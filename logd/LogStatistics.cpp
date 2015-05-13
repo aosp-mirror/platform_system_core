@@ -83,6 +83,7 @@ void LogStatistics::add(LogBufferElement *e) {
     }
 
     pidTable.add(e->getPid(), e);
+    tidTable.add(e->getTid(), e);
 
     uint32_t tag = e->getTag();
     if (tag) {
@@ -107,6 +108,7 @@ void LogStatistics::subtract(LogBufferElement *e) {
     }
 
     pidTable.subtract(e->getPid(), e);
+    tidTable.subtract(e->getTid(), e);
 
     uint32_t tag = e->getTag();
     if (tag) {
@@ -128,6 +130,7 @@ void LogStatistics::drop(LogBufferElement *e) {
     }
 
     pidTable.drop(e->getPid(), e);
+    tidTable.drop(e->getTid(), e);
 }
 
 // caller must own and free character string
@@ -375,6 +378,63 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
                     name.appendFormat("%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", un);
                     free(un);
                 }
+            }
+
+            android::String8 size("");
+            size.appendFormat("%zu", entry->getSizes());
+
+            android::String8 pruned("");
+            size_t dropped = entry->getDropped();
+            if (dropped) {
+                pruned.appendFormat("%zu", dropped);
+            }
+
+            format_line(output, name, size, pruned);
+        }
+    }
+
+    if (enable) {
+        // Tid table
+        bool headerPrinted = false;
+        // sort() returns list of references, unique_ptr makes sure self-delete
+        std::unique_ptr<const TidEntry *[]> sorted = tidTable.sort(maximum_sorted_entries);
+        ssize_t index = -1;
+        while ((index = tidTable.next(index, sorted, maximum_sorted_entries)) >= 0) {
+            const TidEntry *entry = sorted[index];
+            uid_t u = entry->getUid();
+            if ((uid != AID_ROOT) && (u != uid)) {
+                continue;
+            }
+
+            if (!headerPrinted) { // Only print header if we have table to print
+                output.appendFormat("\n\n");
+                android::String8 name("Chattiest TIDs:");
+                android::String8 size("Size");
+                android::String8 pruned("Pruned");
+                format_line(output, name, size, pruned);
+
+                name.setTo("  TID/UID   COMM");
+                size.setTo("BYTES");
+                pruned.setTo("LINES");
+                format_line(output, name, size, pruned);
+
+                headerPrinted = true;
+            }
+
+            android::String8 name("");
+            name.appendFormat("%5u/%u", entry->getKey(), u);
+            const char *n = entry->getName();
+            if (n) {
+                name.appendFormat("%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", n);
+            } else {
+                // if we do not have a PID name, lets punt to try UID name?
+                char *un = uidToName(u);
+                if (un) {
+                    name.appendFormat("%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", un);
+                    free(un);
+                }
+                // We tried, better to not have a name at all, we still
+                // have TID/UID by number to report in any case.
             }
 
             android::String8 size("");
