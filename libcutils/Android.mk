@@ -106,9 +106,6 @@ LOCAL_SRC_FILES := $(commonSources) \
         trace-dev.c \
         uevent.c \
 
-# arch-arm/memset32.S does not compile with Clang.
-LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
-
 LOCAL_SRC_FILES_arm += arch-arm/memset32.S
 LOCAL_SRC_FILES_arm64 += arch-arm64/android_memset.S
 
