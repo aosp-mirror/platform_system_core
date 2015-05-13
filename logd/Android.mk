@@ -18,6 +18,7 @@ LOCAL_SRC_FILES := \
     LogWhiteBlackList.cpp \
     libaudit.c \
     LogAudit.cpp \
+    LogKlog.cpp \
     event.logtags
 
 LOCAL_SHARED_LIBRARIES := \

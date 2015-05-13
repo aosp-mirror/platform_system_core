@@ -29,6 +29,7 @@
 
 #include "libaudit.h"
 #include "LogAudit.h"
+#include "LogKlog.h"
 
 #define KMSG_PRIORITY(PRI)                          \
     '<',                                            \
@@ -36,12 +37,12 @@
     '0' + LOG_MAKEPRI(LOG_AUTH, LOG_PRI(PRI)) % 10, \
     '>'
 
-LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg)
-        : SocketListener(getLogSocket(), false)
-        , logbuf(buf)
-        , reader(reader)
-        , fdDmesg(fdDmesg)
-        , initialized(false) {
+LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg) :
+        SocketListener(getLogSocket(), false),
+        logbuf(buf),
+        reader(reader),
+        fdDmesg(fdDmesg),
+        initialized(false) {
     static const char auditd_message[] = { KMSG_PRIORITY(LOG_INFO),
         'l', 'o', 'g', 'd', '.', 'a', 'u', 'd', 'i', 't', 'd', ':',
         ' ', 's', 't', 'a', 'r', 't', '\n' };
@@ -121,6 +122,15 @@ int LogAudit::logPrint(const char *fmt, ...) {
             && (*cp == ':')) {
         memcpy(timeptr + sizeof(audit_str) - 1, "0.0", 3);
         memmove(timeptr + sizeof(audit_str) - 1 + 3, cp, strlen(cp) + 1);
+        //
+        // We are either in 1970ish (MONOTONIC) or 2015+ish (REALTIME) so to
+        // differentiate without prejudice, we use 1980 to delineate, earlier
+        // is monotonic, later is real.
+        //
+#       define EPOCH_PLUS_10_YEARS (10 * 1461 / 4 * 24 * 60 * 60)
+        if (now.tv_sec < EPOCH_PLUS_10_YEARS) {
+            LogKlog::convertMonotonicToReal(now);
+        }
     } else {
         now.strptime("", ""); // side effect of setting CLOCK_REALTIME
     }
@@ -223,7 +233,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
 int LogAudit::log(char *buf) {
     char *audit = strstr(buf, " audit(");
     if (!audit) {
-        return -EXDEV;
+        return 0;
     }
 
     *audit = '\0';

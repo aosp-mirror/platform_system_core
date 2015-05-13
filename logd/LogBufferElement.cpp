@@ -34,14 +34,14 @@ atomic_int_fast64_t LogBufferElement::sequence;
 
 LogBufferElement::LogBufferElement(log_id_t log_id, log_time realtime,
                                    uid_t uid, pid_t pid, pid_t tid,
-                                   const char *msg, unsigned short len)
-        : mLogId(log_id)
-        , mUid(uid)
-        , mPid(pid)
-        , mTid(tid)
-        , mMsgLen(len)
-        , mSequence(sequence.fetch_add(1, memory_order_relaxed))
-        , mRealTime(realtime) {
+                                   const char *msg, unsigned short len) :
+        mLogId(log_id),
+        mUid(uid),
+        mPid(pid),
+        mTid(tid),
+        mMsgLen(len),
+        mSequence(sequence.fetch_add(1, memory_order_relaxed)),
+        mRealTime(realtime) {
     mMsg = new char[len];
     memcpy(mMsg, msg, len);
 }
