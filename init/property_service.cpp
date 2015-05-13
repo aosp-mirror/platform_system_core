@@ -420,6 +420,7 @@ static void load_properties_from_file(const char* filename, const char* filter) 
     Timer t;
     std::string data;
     if (read_file(filename, &data)) {
+        data.push_back('\n');
         load_properties(&data[0], filter);
     }
     NOTICE("(Loading properties from %s took %.2fs.)\n", filename, t.duration());
