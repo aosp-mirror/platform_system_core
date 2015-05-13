@@ -172,9 +172,6 @@ bool read_file(const char* path, std::string* content) {
 
     bool okay = android::base::ReadFdToString(fd, content);
     TEMP_FAILURE_RETRY(close(fd));
-    if (okay) {
-        content->append("\n", 1);
-    }
     return okay;
 }
 
@@ -460,4 +457,3 @@ std::string bytes_to_hex(const uint8_t* bytes, size_t bytes_len) {
         android::base::StringAppendF(&hex, "%02x", bytes[i]);
     return hex;
 }
-
