@@ -209,6 +209,58 @@ struct PidEntry : public EntryBaseDropped {
     }
 };
 
+struct TidEntry : public EntryBaseDropped {
+    const pid_t tid;
+    uid_t uid;
+    char *name;
+
+    TidEntry(pid_t t):
+        EntryBaseDropped(),
+        tid(t),
+        uid(android::pidToUid(t)),
+        name(android::tidToName(tid)) { }
+    TidEntry(LogBufferElement *e):
+        EntryBaseDropped(e),
+        tid(e->getTid()),
+        uid(e->getUid()),
+        name(android::tidToName(e->getTid())) { }
+    TidEntry(const TidEntry &c):
+        EntryBaseDropped(c),
+        tid(c.tid),
+        uid(c.uid),
+        name(c.name ? strdup(c.name) : NULL) { }
+    ~TidEntry() { free(name); }
+
+    const pid_t&getKey() const { return tid; }
+    const uid_t&getUid() const { return uid; }
+    const char*getName() const { return name; }
+
+    inline void add(pid_t t) {
+        if (name && !strncmp(name, "zygote", 6)) {
+            free(name);
+            name = NULL;
+        }
+        if (!name) {
+            char *n = android::tidToName(t);
+            if (n) {
+                name = n;
+            }
+        }
+    }
+
+    inline void add(LogBufferElement *e) {
+        uid_t u = e->getUid();
+        if (getUid() != u) {
+            uid = u;
+            free(name);
+            name = android::tidToName(e->getTid());
+        } else {
+            add(e->getTid());
+        }
+        EntryBaseDropped::add(e);
+    }
+};
+
 struct TagEntry : public EntryBase {
     const uint32_t tag;
     uid_t uid;
@@ -246,6 +298,10 @@ class LogStatistics {
     // pid to uid list
     typedef LogHashtable<pid_t, PidEntry> pidTable_t;
     pidTable_t pidTable;
+
+    // tid to uid list
+    typedef LogHashtable<pid_t, TidEntry> tidTable_t;
+    tidTable_t tidTable;
 
     // tag list
     typedef LogHashtable<uint32_t, TagEntry> tagTable_t;
