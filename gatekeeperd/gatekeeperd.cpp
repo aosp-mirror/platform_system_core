@@ -38,6 +38,8 @@
 #include <hardware/gatekeeper.h>
 #include <hardware/hw_auth_token.h>
 
+#include "SoftGateKeeperDevice.h"
+
 namespace android {
 
 static const String16 KEYGUARD_PERMISSION("android.permission.ACCESS_KEYGUARD_SECURE_STORAGE");
@@ -47,15 +49,18 @@ class GateKeeperProxy : public BnGateKeeperService {
 public:
     GateKeeperProxy() {
         int ret = hw_get_module_by_class(GATEKEEPER_HARDWARE_MODULE_ID, NULL, &module);
-        if (ret < 0)
-            LOG_ALWAYS_FATAL_IF(ret < 0, "Unable to find GateKeeper HAL");
-        ret = gatekeeper_open(module, &device);
-        if (ret < 0)
-            LOG_ALWAYS_FATAL_IF(ret < 0, "Unable to open GateKeeper HAL");
+        if (ret < 0) {
+            ALOGW("falling back to software GateKeeper");
+            soft_device.reset(new SoftGateKeeperDevice());
+        } else {
+            ret = gatekeeper_open(module, &device);
+            if (ret < 0)
+                LOG_ALWAYS_FATAL_IF(ret < 0, "Unable to open GateKeeper HAL");
+        }
     }
 
     virtual ~GateKeeperProxy() {
-        gatekeeper_close(device);
+        if (device) gatekeeper_close(device);
     }
 
     void store_sid(uint32_t uid, uint64_t sid) {
@@ -111,11 +116,22 @@ public:
 
         // need a desired password to enroll
         if (desired_password_length == 0) return -EINVAL;
-        int ret = device->enroll(device, uid,
-                current_password_handle, current_password_handle_length,
-                current_password, current_password_length,
-                desired_password, desired_password_length,
-                enrolled_password_handle, enrolled_password_handle_length);
+
+        int ret;
+        if (device) {
+            ret = device->enroll(device, uid,
+                    current_password_handle, current_password_handle_length,
+                    current_password, current_password_length,
+                    desired_password, desired_password_length,
+                    enrolled_password_handle, enrolled_password_handle_length);
+        } else {
+            ret = soft_device->enroll(uid,
+                    current_password_handle, current_password_handle_length,
+                    current_password, current_password_length,
+                    desired_password, desired_password_length,
+                    enrolled_password_handle, enrolled_password_handle_length);
+        }
+
         if (ret >= 0) {
             gatekeeper::password_handle_t *handle =
                     reinterpret_cast<gatekeeper::password_handle_t *>(*enrolled_password_handle);
@@ -150,9 +166,16 @@ public:
         if ((enrolled_password_handle_length | provided_password_length) == 0)
             return -EINVAL;
 
-        int ret = device->verify(device, uid, challenge,
+        int ret;
+        if (device) {
+            ret = device->verify(device, uid, challenge,
                 enrolled_password_handle, enrolled_password_handle_length,
                 provided_password, provided_password_length, auth_token, auth_token_length);
+        } else {
+            ret = soft_device->verify(uid, challenge,
+                enrolled_password_handle, enrolled_password_handle_length,
+                provided_password, provided_password_length, auth_token, auth_token_length);
+        }
 
         if (ret >= 0 && *auth_token != NULL && *auth_token_length > 0) {
             // TODO: cache service?
@@ -214,6 +237,7 @@ public:
 
 private:
     gatekeeper_device_t *device;
+    UniquePtr<SoftGateKeeperDevice> soft_device;
     const hw_module_t *module;
 };
 }// namespace android
