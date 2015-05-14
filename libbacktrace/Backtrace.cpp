@@ -114,7 +114,9 @@ std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
 }
 
 void Backtrace::FillInMap(uintptr_t pc, backtrace_map_t* map) {
-  map_->FillIn(pc, map);
+  if (map_ != nullptr) {
+    map_->FillIn(pc, map);
+  }
 }
 
 Backtrace* Backtrace::Create(pid_t pid, pid_t tid, BacktraceMap* map) {

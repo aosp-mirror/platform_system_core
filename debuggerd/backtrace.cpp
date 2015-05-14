@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "DEBUG"
+
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +29,8 @@
 #include <sys/ptrace.h>
 
 #include <backtrace/Backtrace.h>
+
+#include <log/log.h>
 #include <UniquePtr.h>
 
 #include "backtrace.h"
@@ -95,6 +99,8 @@ static void dump_thread(
   UniquePtr<Backtrace> backtrace(Backtrace::Create(tid, BACKTRACE_CURRENT_THREAD));
   if (backtrace->Unwind(0)) {
     dump_backtrace_to_log(backtrace.get(), log, "  ");
+  } else {
+    ALOGE("Unwind failed: tid = %d", tid);
   }
 
   if (!attached && ptrace(PTRACE_DETACH, tid, 0, 0) != 0) {

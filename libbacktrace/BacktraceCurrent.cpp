@@ -65,6 +65,11 @@ size_t BacktraceCurrent::Read(uintptr_t addr, uint8_t* buffer, size_t bytes) {
 }
 
 bool BacktraceCurrent::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
+  if (GetMap() == nullptr) {
+    // Without a map object, we can't do anything.
+    return false;
+  }
+
   if (ucontext) {
     return UnwindFromContext(num_ignore_frames, ucontext);
   }
