@@ -18,14 +18,16 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 LOCAL_CFLAGS := -Wall -Wextra -Werror -Wunused
-LOCAL_SRC_FILES := IGateKeeperService.cpp gatekeeperd.cpp
+LOCAL_SRC_FILES := SoftGateKeeperDevice.cpp IGateKeeperService.cpp gatekeeperd.cpp
 LOCAL_MODULE := gatekeeperd
 LOCAL_SHARED_LIBRARIES := \
 	libbinder \
+	libgatekeeper \
 	liblog \
 	libhardware \
 	libutils \
+	libcrypto \
 	libkeystore_binder
-LOCAL_C_INCLUDES := \
-	system/gatekeeper/include
+LOCAL_STATIC_LIBRARIES := libscrypt_static
+LOCAL_C_INCLUDES := external/scrypt/lib/crypto
 include $(BUILD_EXECUTABLE)
