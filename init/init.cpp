@@ -618,7 +618,10 @@ static int wait_for_coldboot_done_action(int nargs, char **args) {
     Timer t;
 
     NOTICE("Waiting for %s...\n", COLDBOOT_DONE);
-    if (wait_for_file(COLDBOOT_DONE, COMMAND_RETRY_TIMEOUT)) {
+    // Any longer than 1s is an unreasonable length of time to delay booting.
+    // If you're hitting this timeout, check that you didn't make your
+    // sepolicy regular expressions too expensive (http://b/19899875).
+    if (wait_for_file(COLDBOOT_DONE, 1)) {
         ERROR("Timed out waiting for %s\n", COLDBOOT_DONE);
     }
 
