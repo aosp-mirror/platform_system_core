@@ -156,6 +156,10 @@ int adb_main(int is_daemon, int server_port) {
         // TODO(danalbert): Why do we use stdout for Windows?
 #if defined(_WIN32)
         int reply_fd = STDOUT_FILENO;
+        // Change stdout mode to binary so \n => \r\n translation does not
+        // occur. In a moment stdout will be reopened to the daemon log file
+        // anyway.
+        _setmode(reply_fd, _O_BINARY);
 #else
         int reply_fd = STDERR_FILENO;
 #endif
