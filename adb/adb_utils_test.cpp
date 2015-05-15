@@ -30,21 +30,21 @@ TEST(adb_utils, escape_arg) {
   ASSERT_EQ(R"('abc')", escape_arg("abc"));
 
   ASSERT_EQ(R"(' abc')", escape_arg(" abc"));
-  ASSERT_EQ(R"('\'abc')", escape_arg("'abc"));
+  ASSERT_EQ(R"(''\''abc')", escape_arg("'abc"));
   ASSERT_EQ(R"('"abc')", escape_arg("\"abc"));
   ASSERT_EQ(R"('\abc')", escape_arg("\\abc"));
   ASSERT_EQ(R"('(abc')", escape_arg("(abc"));
   ASSERT_EQ(R"(')abc')", escape_arg(")abc"));
 
   ASSERT_EQ(R"('abc abc')", escape_arg("abc abc"));
-  ASSERT_EQ(R"('abc\'abc')", escape_arg("abc'abc"));
+  ASSERT_EQ(R"('abc'\''abc')", escape_arg("abc'abc"));
   ASSERT_EQ(R"('abc"abc')", escape_arg("abc\"abc"));
   ASSERT_EQ(R"('abc\abc')", escape_arg("abc\\abc"));
   ASSERT_EQ(R"('abc(abc')", escape_arg("abc(abc"));
   ASSERT_EQ(R"('abc)abc')", escape_arg("abc)abc"));
 
   ASSERT_EQ(R"('abc ')", escape_arg("abc "));
-  ASSERT_EQ(R"('abc\'')", escape_arg("abc'"));
+  ASSERT_EQ(R"('abc'\''')", escape_arg("abc'"));
   ASSERT_EQ(R"('abc"')", escape_arg("abc\""));
   ASSERT_EQ(R"('abc\')", escape_arg("abc\\"));
   ASSERT_EQ(R"('abc(')", escape_arg("abc("));

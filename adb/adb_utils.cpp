@@ -45,11 +45,16 @@ bool directory_exists(const std::string& path) {
 std::string escape_arg(const std::string& s) {
   std::string result = s;
 
-  // Insert a \ before any ' in the string.
-  for (auto it = result.begin(); it != result.end(); ++it) {
-      if (*it == '\'') {
-          it = result.insert(it, '\\') + 1;
-      }
+  // Escape any ' in the string (before we single-quote the whole thing).
+  // The correct way to do this for the shell is to replace ' with '\'' --- that is,
+  // close the existing single-quoted string, escape a single single-quote, and start
+  // a new single-quoted string. Like the C preprocessor, the shell will concatenate
+  // these pieces into one string.
+  for (size_t i = 0; i < s.size(); ++i) {
+    if (s[i] == '\'') {
+      result.insert(i, "'\\'");
+      i += 2;
+    }
   }
 
   // Prefix and suffix the whole string with '.
