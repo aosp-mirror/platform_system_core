@@ -145,8 +145,8 @@ bool adb_status(int fd, std::string* error) {
 int _adb_connect(const std::string& service, std::string* error) {
     D("_adb_connect: %s\n", service.c_str());
     if (service.empty() || service.size() > 1024) {
-        *error = android::base::StringPrintf("bad service name length (%d)",
-                                             static_cast<int>(service.size()));
+        *error = android::base::StringPrintf("bad service name length (%zd)",
+                                             service.size());
         return -1;
     }
 
