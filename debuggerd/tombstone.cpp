@@ -448,6 +448,8 @@ static bool dump_sibling_thread_report(
     UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, new_tid, map));
     if (backtrace->Unwind(0)) {
       dump_backtrace_and_stack(backtrace.get(), log);
+    } else {
+      ALOGE("Unwind of sibling failed: pid = %d, tid = %d", pid, new_tid);
     }
 
     log->current_tid = log->crashed_tid;
@@ -650,9 +652,13 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, int si_code
   dump_registers(log, tid);
   if (backtrace->Unwind(0)) {
     dump_backtrace_and_stack(backtrace.get(), log);
+  } else {
+    ALOGE("Unwind failed: pid = %d, tid = %d", pid, tid);
   }
   dump_memory_and_code(log, tid);
-  dump_all_maps(backtrace.get(), map.get(), log, tid);
+  if (map.get() != nullptr) {
+    dump_all_maps(backtrace.get(), map.get(), log, tid);
+  }
 
   if (want_logs) {
     dump_logs(log, pid, 5);
