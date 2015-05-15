@@ -51,7 +51,8 @@ static void *suspend_thread_func(void *arg __attribute__((unused)))
         usleep(100000);
         ALOGV("%s: read wakeup_count\n", __func__);
         lseek(wakeup_count_fd, 0, SEEK_SET);
-        wakeup_count_len = read(wakeup_count_fd, wakeup_count, sizeof(wakeup_count));
+        wakeup_count_len = TEMP_FAILURE_RETRY(read(wakeup_count_fd, wakeup_count,
+                sizeof(wakeup_count)));
         if (wakeup_count_len < 0) {
             strerror_r(errno, buf, sizeof(buf));
             ALOGE("Error reading from %s: %s\n", SYS_POWER_WAKEUP_COUNT, buf);
@@ -72,13 +73,13 @@ static void *suspend_thread_func(void *arg __attribute__((unused)))
         }
 
         ALOGV("%s: write %*s to wakeup_count\n", __func__, wakeup_count_len, wakeup_count);
-        ret = write(wakeup_count_fd, wakeup_count, wakeup_count_len);
+        ret = TEMP_FAILURE_RETRY(write(wakeup_count_fd, wakeup_count, wakeup_count_len));
         if (ret < 0) {
             strerror_r(errno, buf, sizeof(buf));
             ALOGE("Error writing to %s: %s\n", SYS_POWER_WAKEUP_COUNT, buf);
         } else {
             ALOGV("%s: write %s to %s\n", __func__, sleep_state, SYS_POWER_STATE);
-            ret = write(state_fd, sleep_state, strlen(sleep_state));
+            ret = TEMP_FAILURE_RETRY(write(state_fd, sleep_state, strlen(sleep_state)));
             if (ret < 0) {
                 strerror_r(errno, buf, sizeof(buf));
                 ALOGE("Error writing to %s: %s\n", SYS_POWER_STATE, buf);
@@ -157,14 +158,14 @@ struct autosuspend_ops *autosuspend_wakeup_count_init(void)
     int ret;
     char buf[80];
 
-    state_fd = open(SYS_POWER_STATE, O_RDWR);
+    state_fd = TEMP_FAILURE_RETRY(open(SYS_POWER_STATE, O_RDWR));
     if (state_fd < 0) {
         strerror_r(errno, buf, sizeof(buf));
         ALOGE("Error opening %s: %s\n", SYS_POWER_STATE, buf);
         goto err_open_state;
     }
 
-    wakeup_count_fd = open(SYS_POWER_WAKEUP_COUNT, O_RDWR);
+    wakeup_count_fd = TEMP_FAILURE_RETRY(open(SYS_POWER_WAKEUP_COUNT, O_RDWR));
     if (wakeup_count_fd < 0) {
         strerror_r(errno, buf, sizeof(buf));
         ALOGE("Error opening %s: %s\n", SYS_POWER_WAKEUP_COUNT, buf);
