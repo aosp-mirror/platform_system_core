@@ -16,6 +16,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,13 +64,12 @@ static void END()
             total_bytes, (t / 1000000LL), (t % 1000000LL) / 1000LL);
 }
 
-static const char* transfer_progress_format = "\rTransferring: %llu/%llu (%d%%)";
-
-static void print_transfer_progress(unsigned long long bytes_current,
-                                    unsigned long long bytes_total) {
+static void print_transfer_progress(uint64_t bytes_current,
+                                    uint64_t bytes_total) {
     if (bytes_total == 0) return;
 
-    fprintf(stderr, transfer_progress_format, bytes_current, bytes_total,
+    fprintf(stderr, "\rTransferring: %" PRIu64 "/%" PRIu64 " (%d%%)",
+            bytes_current, bytes_total,
             (int) (bytes_current * 100 / bytes_total));
 
     if (bytes_current == bytes_total) {
