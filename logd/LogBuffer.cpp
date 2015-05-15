@@ -295,7 +295,8 @@ public:
         ssize_t index = -1;
         while((index = next(index)) >= 0) {
             LogBufferElement *l = editEntryAt(index).getLast();
-            if ((l->getDropped() >= 4) && (current > l->getRealTime().nsec())) {
+            if ((l->getDropped() >= EXPIRE_THRESHOLD)
+                    && (current > l->getRealTime().nsec())) {
                 removeAt(index);
                 index = -1;
             }
@@ -387,6 +388,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         bool kick = false;
         bool leading = true;
         LogBufferElementLast last;
+        log_time start(log_time::EPOCH);
         for(it = mLogElements.begin(); it != mLogElements.end();) {
             LogBufferElement *e = *it;
 
@@ -446,9 +448,27 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             }
 
             if (e->getUid() != worst) {
+                if (start != log_time::EPOCH) {
+                    static const timespec too_old = {
+                        EXPIRE_HOUR_THRESHOLD * 60 * 60, 0
+                    };
+                    start = e->getRealTime() + too_old;
+                }
                 last.clear(e);
                 ++it;
                 continue;
+            }
+
+            if ((start != log_time::EPOCH) && (e->getRealTime() > start)) {
+                // KISS. Really a heuristic rather than algorithmically strong,
+                // a crude mechanism, the following loops will move the oldest
+                // watermark possibly wiping out the extra EXPIRE_HOUR_THRESHOLD
+                // we just thought we were preserving. We count on the typical
+                // pruneRows of 10% of total not being a sledgehammer.
+                // A stronger algorithm would have us loop back to the top if
+                // we have worst-UID enabled and we start expiring messages
+                // below less than EXPIRE_HOUR_THRESHOLD old.
+                break;
             }
 
             pruneRows--;
