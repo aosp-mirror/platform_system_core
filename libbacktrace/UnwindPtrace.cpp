@@ -48,6 +48,11 @@ UnwindPtrace::~UnwindPtrace() {
 }
 
 bool UnwindPtrace::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
+  if (GetMap() == nullptr) {
+    // Without a map object, we can't do anything.
+    return false;
+  }
+
   if (ucontext) {
     BACK_LOGW("Unwinding from a specified context not supported yet.");
     return false;
