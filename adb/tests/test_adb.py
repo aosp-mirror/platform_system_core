@@ -6,6 +6,7 @@ tests that attempt to touch all accessible attached devices.
 """
 import hashlib
 import os
+import pipes
 import random
 import re
 import shlex
@@ -162,6 +163,9 @@ class AdbWrapper(object):
     def shell_nocheck(self, cmd):
         return call_combined(self.adb_cmd + "shell " + cmd)
 
+    def install(self, filename):
+        return call_checked(self.adb_cmd + "install {}".format(pipes.quote(filename)))
+
     def push(self, local, remote):
         return call_checked(self.adb_cmd + "push {} {}".format(local, remote))
 
@@ -289,6 +293,18 @@ class AdbBasic(unittest.TestCase):
         # http://b/20564385
         self.assertEqual('t', adb.shell("FOO=a BAR=b echo t").strip())
         self.assertEqual('123Linux', adb.shell("echo -n 123\;uname").strip())
+
+    def test_install_argument_escaping(self):
+        """Make sure that install argument escaping works."""
+        adb = AdbWrapper()
+
+        # http://b/20323053
+        tf = tempfile.NamedTemporaryFile("w", suffix="-text;ls;1.apk")
+        self.assertIn("-text;ls;1.apk", adb.install(tf.name))
+
+        # http://b/3090932
+        tf = tempfile.NamedTemporaryFile("w", suffix="-Live Hold'em.apk")
+        self.assertIn("-Live Hold'em.apk", adb.install(tf.name))
 
 
 class AdbFile(unittest.TestCase):
