@@ -32,6 +32,9 @@
 #include <sys/stat.h>
 #include <sys/un.h>
 
+#include <memory>
+#include <string>
+
 #include <private/android_filesystem_config.h>
 
 #include <base/stringprintf.h>
@@ -44,10 +47,6 @@
 #include <backtrace/BacktraceMap.h>
 
 #include <selinux/android.h>
-
-#include <UniquePtr.h>
-
-#include <string>
 
 #include "backtrace.h"
 #include "elf_utils.h"
@@ -445,7 +444,7 @@ static bool dump_sibling_thread_report(
     dump_thread_info(log, pid, new_tid);
 
     dump_registers(log, new_tid);
-    UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, new_tid, map));
+    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, new_tid, map));
     if (backtrace->Unwind(0)) {
       dump_backtrace_and_stack(backtrace.get(), log);
     } else {
@@ -646,8 +645,8 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, int si_code
     dump_signal_info(log, tid, signal, si_code);
   }
 
-  UniquePtr<BacktraceMap> map(BacktraceMap::Create(pid));
-  UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, tid, map.get()));
+  std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(pid));
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map.get()));
   dump_abort_message(backtrace.get(), log, abort_msg_address);
   dump_registers(log, tid);
   if (backtrace->Unwind(0)) {
