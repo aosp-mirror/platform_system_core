@@ -68,7 +68,7 @@ static int make_dump_request(debugger_action_t action, pid_t tid, int timeout_se
   }
 
   if (send_request(sock_fd, &msg, sizeof(msg)) < 0) {
-    TEMP_FAILURE_RETRY(close(sock_fd));
+    close(sock_fd);
     return -1;
   }
 
@@ -95,7 +95,7 @@ int dump_backtrace_to_file_timeout(pid_t tid, int fd, int timeout_secs) {
       break;
     }
   }
-  TEMP_FAILURE_RETRY(close(sock_fd));
+  close(sock_fd);
   return result;
 }
 
@@ -124,6 +124,6 @@ int dump_tombstone_timeout(pid_t tid, char* pathbuf, size_t pathlen, int timeout
       memcpy(pathbuf, buffer, n + 1);
     }
   }
-  TEMP_FAILURE_RETRY(close(sock_fd));
+  close(sock_fd);
   return result;
 }

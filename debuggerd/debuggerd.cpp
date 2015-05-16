@@ -279,7 +279,7 @@ static bool is32bit(pid_t tid) {
 
   char ehdr[EI_NIDENT];
   ssize_t bytes = TEMP_FAILURE_RETRY(read(fd, &ehdr, sizeof(ehdr)));
-  TEMP_FAILURE_RETRY(close(fd));
+  close(fd);
   if (bytes != (ssize_t) sizeof(ehdr) || memcmp(ELFMAG, ehdr, SELFMAG) != 0) {
     return false;
   }
@@ -304,14 +304,14 @@ static void redirect_to_32(int fd, debugger_request_t* request) {
 
   if (TEMP_FAILURE_RETRY(write(sock_fd, &msg, sizeof(msg))) != (ssize_t) sizeof(msg)) {
     ALOGE("Failed to write request to debuggerd32 socket: %s", strerror(errno));
-    TEMP_FAILURE_RETRY(close(sock_fd));
+    close(sock_fd);
     return;
   }
 
   char ack;
   if (TEMP_FAILURE_RETRY(read(sock_fd, &ack, 1)) == -1) {
     ALOGE("Failed to read ack from debuggerd32 socket: %s", strerror(errno));
-    TEMP_FAILURE_RETRY(close(sock_fd));
+    close(sock_fd);
     return;
   }
 
@@ -338,7 +338,7 @@ static void redirect_to_32(int fd, debugger_request_t* request) {
         break;
     }
   }
-  TEMP_FAILURE_RETRY(close(sock_fd));
+  close(sock_fd);
 }
 #endif
 
@@ -365,7 +365,7 @@ static void handle_request(int fd) {
         ALOGE("debuggerd: Not allowed to redirect action %d to 32 bit debuggerd\n",
               request.action);
       }
-      TEMP_FAILURE_RETRY(close(fd));
+      close(fd);
       return;
     }
 #endif
