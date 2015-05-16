@@ -164,7 +164,8 @@ class AdbWrapper(object):
         return call_combined(self.adb_cmd + "shell " + cmd)
 
     def install(self, filename):
-        return call_checked(self.adb_cmd + "install {}".format(pipes.quote(filename)))
+        return call_checked(
+            self.adb_cmd + "install {}".format(pipes.quote(filename)))
 
     def push(self, local, remote):
         return call_checked(self.adb_cmd + "push {} {}".format(local, remote))
@@ -283,7 +284,7 @@ class AdbBasic(unittest.TestCase):
         result = adb.shell("sh -c 'echo hello; echo world'").splitlines()
         self.assertEqual(["", "world"], result)
         # If you really wanted "hello" and "world", here's what you'd do:
-        result = adb.shell("echo hello\;echo world").splitlines()
+        result = adb.shell(r"echo hello\;echo world").splitlines()
         self.assertEqual(["hello", "world"], result)
 
         # http://b/15479704
@@ -292,7 +293,7 @@ class AdbBasic(unittest.TestCase):
 
         # http://b/20564385
         self.assertEqual('t', adb.shell("FOO=a BAR=b echo t").strip())
-        self.assertEqual('123Linux', adb.shell("echo -n 123\;uname").strip())
+        self.assertEqual('123Linux', adb.shell(r"echo -n 123\;uname").strip())
 
     def test_install_argument_escaping(self):
         """Make sure that install argument escaping works."""
@@ -305,6 +306,13 @@ class AdbBasic(unittest.TestCase):
         # http://b/3090932
         tf = tempfile.NamedTemporaryFile("w", suffix="-Live Hold'em.apk")
         self.assertIn("-Live Hold'em.apk", adb.install(tf.name))
+
+    def test_line_endings(self):
+        """Ensure that line ending translation is not happening in the pty.
+
+        Bug: http://b/19735063
+        """
+        self.assertFalse(AdbWrapper().shell("uname").endswith("\r\n"))
 
 
 class AdbFile(unittest.TestCase):
