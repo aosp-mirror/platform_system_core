@@ -45,6 +45,7 @@ OUR_TOOLS := \
     ioctl \
     ionice \
     log \
+    ls \
     lsof \
     mount \
     nandread \
