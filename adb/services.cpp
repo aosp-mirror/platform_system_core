@@ -24,6 +24,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if !ADB_HOST
+#include <pty.h>
+#include <termios.h>
+#endif
+
 #ifndef _WIN32
 #include <netdb.h>
 #include <netinet/in.h>
@@ -238,30 +243,14 @@ static void init_subproc_child()
     }
 }
 
-static int create_subproc_pty(const char *cmd, const char *arg0, const char *arg1, pid_t *pid)
-{
+#if !ADB_HOST
+static int create_subproc_pty(const char* cmd, const char* arg0,
+                              const char* arg1, pid_t* pid) {
     D("create_subproc_pty(cmd=%s, arg0=%s, arg1=%s)\n", cmd, arg0, arg1);
-#if defined(_WIN32)
-    fprintf(stderr, "error: create_subproc_pty not implemented on Win32 (%s %s %s)\n", cmd, arg0, arg1);
-    return -1;
-#else
+    char pts_name[PATH_MAX];
     int ptm;
-
-    ptm = unix_open("/dev/ptmx", O_RDWR | O_CLOEXEC); // | O_NOCTTY);
-    if(ptm < 0){
-        printf("[ cannot open /dev/ptmx - %s ]\n",strerror(errno));
-        return -1;
-    }
-
-    char devname[64];
-    if(grantpt(ptm) || unlockpt(ptm) || ptsname_r(ptm, devname, sizeof(devname)) != 0) {
-        printf("[ trouble with /dev/ptmx - %s ]\n", strerror(errno));
-        adb_close(ptm);
-        return -1;
-    }
-
-    *pid = fork();
-    if(*pid < 0) {
+    *pid = forkpty(&ptm, pts_name, nullptr, nullptr);
+    if (*pid == -1) {
         printf("- fork failed: %s -\n", strerror(errno));
         adb_close(ptm);
         return -1;
@@ -270,10 +259,31 @@ static int create_subproc_pty(const char *cmd, const char *arg0, const char *arg
     if (*pid == 0) {
         init_subproc_child();
 
-        int pts = unix_open(devname, O_RDWR | O_CLOEXEC);
-        if (pts < 0) {
-            fprintf(stderr, "child failed to open pseudo-term slave: %s\n", devname);
+        int pts = unix_open(pts_name, O_RDWR | O_CLOEXEC);
+        if (pts == -1) {
+            fprintf(stderr, "child failed to open pseudo-term slave %s: %s\n",
+                    pts_name, strerror(errno));
+            adb_close(ptm);
             exit(-1);
+        }
+
+        // arg0 is "-c" in batch mode and "-" in interactive mode.
+        if (strcmp(arg0, "-c") == 0) {
+            termios tattr;
+            if (tcgetattr(pts, &tattr) == -1) {
+                fprintf(stderr, "tcgetattr failed: %s\n", strerror(errno));
+                adb_close(pts);
+                adb_close(ptm);
+                exit(-1);
+            }
+
+            cfmakeraw(&tattr);
+            if (tcsetattr(pts, TCSADRAIN, &tattr) == -1) {
+                fprintf(stderr, "tcsetattr failed: %s\n", strerror(errno));
+                adb_close(pts);
+                adb_close(ptm);
+                exit(-1);
+            }
         }
 
         dup2(pts, STDIN_FILENO);
@@ -283,15 +293,15 @@ static int create_subproc_pty(const char *cmd, const char *arg0, const char *arg
         adb_close(pts);
         adb_close(ptm);
 
-        execl(cmd, cmd, arg0, arg1, NULL);
+        execl(cmd, cmd, arg0, arg1, nullptr);
         fprintf(stderr, "- exec '%s' failed: %s (%d) -\n",
                 cmd, strerror(errno), errno);
         exit(-1);
     } else {
         return ptm;
     }
-#endif /* !defined(_WIN32) */
 }
+#endif // !ADB_HOST
 
 static int create_subproc_raw(const char *cmd, const char *arg0, const char *arg1, pid_t *pid)
 {
