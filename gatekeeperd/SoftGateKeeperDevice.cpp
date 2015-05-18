@@ -13,8 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <gatekeeper/soft_gatekeeper.h>
-
+#include "SoftGateKeeper.h"
 #include "SoftGateKeeperDevice.h"
 
 namespace android {
@@ -58,8 +57,11 @@ int SoftGateKeeperDevice::enroll(uint32_t uid,
 
     impl_->Enroll(request, &response);
 
-    if (response.error != ERROR_NONE)
+    if (response.error == ERROR_RETRY) {
+        return response.retry_timeout;
+    } else if (response.error != ERROR_NONE) {
         return -EINVAL;
+    }
 
     *enrolled_password_handle = response.enrolled_password_handle.buffer.release();
     *enrolled_password_handle_length = response.enrolled_password_handle.length;
@@ -69,7 +71,8 @@ int SoftGateKeeperDevice::enroll(uint32_t uid,
 int SoftGateKeeperDevice::verify(uint32_t uid,
         uint64_t challenge, const uint8_t *enrolled_password_handle,
         uint32_t enrolled_password_handle_length, const uint8_t *provided_password,
-        uint32_t provided_password_length, uint8_t **auth_token, uint32_t *auth_token_length) {
+        uint32_t provided_password_length, uint8_t **auth_token, uint32_t *auth_token_length,
+        bool *request_reenroll) {
 
     if (enrolled_password_handle == NULL ||
             provided_password == NULL) {
@@ -87,12 +90,19 @@ int SoftGateKeeperDevice::verify(uint32_t uid,
 
     impl_->Verify(request, &response);
 
-    if (response.error != ERROR_NONE)
-       return -EINVAL;
+    if (response.error == ERROR_RETRY) {
+        return response.retry_timeout;
+    } else if (response.error != ERROR_NONE) {
+        return -EINVAL;
+    }
 
     if (auth_token != NULL && auth_token_length != NULL) {
        *auth_token = response.auth_token.buffer.release();
        *auth_token_length = response.auth_token.length;
+    }
+
+    if (request_reenroll != NULL) {
+        *request_reenroll = response.request_reenroll;
     }
 
     return 0;
