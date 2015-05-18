@@ -16,6 +16,7 @@ adb_version := $(shell git -C $(LOCAL_PATH) rev-parse --short=12 HEAD 2>/dev/nul
 ADB_COMMON_CFLAGS := \
     -Wall -Werror \
     -Wno-unused-parameter \
+    -Wno-missing-field-initializers \
     -DADB_REVISION='"$(adb_version)"' \
 
 # libadb
@@ -45,7 +46,6 @@ LIBADB_TEST_SRCS := \
 
 LIBADB_CFLAGS := \
     $(ADB_COMMON_CFLAGS) \
-    -Wno-missing-field-initializers \
     -fvisibility=hidden \
 
 LIBADB_darwin_SRC_FILES := \
