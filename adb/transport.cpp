@@ -578,7 +578,7 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
     }
 
     /* don't create transport threads for inaccessible devices */
-    if (t->connection_state != CS_NOPERM) {
+    if (t->connection_state != kCsNoPerm) {
         /* initial references are the two threads */
         t->ref_count = 2;
 
@@ -738,9 +738,8 @@ static int qual_match(const char *to_test,
     return !*to_test;
 }
 
-atransport* acquire_one_transport(int state, TransportType type,
-                                  const char* serial, std::string* error_out)
-{
+atransport* acquire_one_transport(ConnectionState state, TransportType type,
+                                  const char* serial, std::string* error_out) {
     atransport *t;
     atransport *result = NULL;
     int ambiguous = 0;
@@ -750,7 +749,7 @@ retry:
 
     adb_mutex_lock(&transport_lock);
     for (t = transport_list.next; t != &transport_list; t = t->next) {
-        if (t->connection_state == CS_NOPERM) {
+        if (t->connection_state == kCsNoPerm) {
             if (error_out) *error_out = "insufficient permissions for device";
             continue;
         }
@@ -801,7 +800,7 @@ retry:
     adb_mutex_unlock(&transport_lock);
 
     if (result) {
-        if (result->connection_state == CS_UNAUTHORIZED) {
+        if (result->connection_state == kCsUnauthorized) {
             if (error_out) {
                 *error_out = "device unauthorized.\n";
                 char* ADB_VENDOR_KEYS = getenv("ADB_VENDOR_KEYS");
@@ -814,13 +813,13 @@ retry:
         }
 
         /* offline devices are ignored -- they are either being born or dying */
-        if (result && result->connection_state == CS_OFFLINE) {
+        if (result && result->connection_state == kCsOffline) {
             if (error_out) *error_out = "device offline";
             result = NULL;
         }
 
         /* check for required connection state */
-        if (result && state != CS_ANY && result->connection_state != state) {
+        if (result && state != kCsAny && result->connection_state != state) {
             if (error_out) *error_out = "invalid device state";
             result = NULL;
         }
@@ -829,7 +828,7 @@ retry:
     if (result) {
         /* found one that we can take */
         if (error_out) *error_out = "success";
-    } else if (state != CS_ANY && (serial || !ambiguous)) {
+    } else if (state != kCsAny && (serial || !ambiguous)) {
         adb_sleep_ms(1000);
         goto retry;
     }
@@ -839,14 +838,14 @@ retry:
 
 const char* atransport::connection_state_name() const {
     switch (connection_state) {
-    case CS_OFFLINE: return "offline";
-    case CS_BOOTLOADER: return "bootloader";
-    case CS_DEVICE: return "device";
-    case CS_HOST: return "host";
-    case CS_RECOVERY: return "recovery";
-    case CS_NOPERM: return "no permissions";
-    case CS_SIDELOAD: return "sideload";
-    case CS_UNAUTHORIZED: return "unauthorized";
+    case kCsOffline: return "offline";
+    case kCsBootloader: return "bootloader";
+    case kCsDevice: return "device";
+    case kCsHost: return "host";
+    case kCsRecovery: return "recovery";
+    case kCsNoPerm: return "no permissions";
+    case kCsSideload: return "sideload";
+    case kCsUnauthorized: return "unauthorized";
     default: return "unknown";
     }
 }
@@ -1021,7 +1020,7 @@ void register_usb_transport(usb_handle *usb, const char *serial, const char *dev
     if (t == nullptr) fatal("cannot allocate USB atransport");
     D("transport: %p init'ing for usb_handle %p (sn='%s')\n", t, usb,
       serial ? serial : "");
-    init_usb_transport(t, usb, (writeable ? CS_OFFLINE : CS_NOPERM));
+    init_usb_transport(t, usb, (writeable ? kCsOffline : kCsNoPerm));
     if(serial) {
         t->serial = strdup(serial);
     }
@@ -1039,18 +1038,17 @@ void register_usb_transport(usb_handle *usb, const char *serial, const char *dev
     register_transport(t);
 }
 
-/* this should only be used for transports with connection_state == CS_NOPERM */
-void unregister_usb_transport(usb_handle *usb)
-{
-    atransport *t;
+// This should only be used for transports with connection_state == kCsNoPerm.
+void unregister_usb_transport(usb_handle* usb) {
     adb_mutex_lock(&transport_lock);
-    for(t = transport_list.next; t != &transport_list; t = t->next) {
-        if (t->usb == usb && t->connection_state == CS_NOPERM) {
+    for (atransport* t = transport_list.next; t != &transport_list;
+         t = t->next) {
+        if (t->usb == usb && t->connection_state == kCsNoPerm) {
             t->next->prev = t->prev;
             t->prev->next = t->next;
             break;
         }
-     }
+    }
     adb_mutex_unlock(&transport_lock);
 }
 
