@@ -14,23 +14,16 @@
 # limitations under the License.
 #
 
-LOCAL_PATH := $(call my-dir)
+LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
-LOCAL_CFLAGS := -Wall -Wextra -Werror -Wunused
-LOCAL_SRC_FILES := SoftGateKeeperDevice.cpp IGateKeeperService.cpp gatekeeperd.cpp
-LOCAL_MODULE := gatekeeperd
-LOCAL_SHARED_LIBRARIES := \
-	libbinder \
-	libgatekeeper \
-	liblog \
-	libhardware \
-	libbase \
-	libutils \
-	libcrypto \
-	libkeystore_binder
+LOCAL_MODULE := gatekeeperd-unit-tests
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
+LOCAL_CFLAGS += -g -Wall -Werror -std=gnu++11 -Wno-missing-field-initializers
+LOCAL_SHARED_LIBRARIES := libgatekeeper libcrypto
 LOCAL_STATIC_LIBRARIES := libscrypt_static
 LOCAL_C_INCLUDES := external/scrypt/lib/crypto
-include $(BUILD_EXECUTABLE)
+LOCAL_SRC_FILES := \
+	gatekeeper_test.cpp \
+include $(BUILD_NATIVE_TEST)
 
-include $(call first-makefiles-under,$(LOCAL_PATH))
