@@ -185,6 +185,12 @@ private:
         // mNumEntries is number of cache entries following the header in the
         // data.
         size_t mNumEntries;
+
+        // mBuildId is the build id of the device when the cache was created.
+        // When an update to the build happens (via an OTA or other update) this
+        // is used to invalidate the cache.
+        int mBuildIdLength;
+        char mBuildId[];
     };
 
     // An EntryHeader is the header for a serialized cache entry.  No need to

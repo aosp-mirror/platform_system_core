@@ -16,7 +16,6 @@ LOCAL_PATH:= $(call my-dir)
 
 commonSources:= \
 	BasicHashtable.cpp \
-	BlobCache.cpp \
 	CallStack.cpp \
 	FileMap.cpp \
 	JenkinsHash.cpp \
@@ -74,6 +73,7 @@ include $(CLEAR_VARS)
 # we have the common sources, plus some device-specific stuff
 LOCAL_SRC_FILES:= \
 	$(commonSources) \
+	BlobCache.cpp \
 	Looper.cpp \
 	Trace.cpp
 
@@ -83,7 +83,8 @@ endif
 LOCAL_CFLAGS += -Werror
 
 LOCAL_STATIC_LIBRARIES := \
-	libcutils
+	libcutils \
+	libc
 
 LOCAL_SHARED_LIBRARIES := \
         libbacktrace \
