@@ -21,8 +21,9 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+#include <unordered_map>
+
 #include <log/log.h>
-#include <utils/BasicHashtable.h>
 
 #include "LogBufferElement.h"
 
@@ -30,8 +31,14 @@
     for (log_id_t i = LOG_ID_MIN; i < LOG_ID_MAX; i = (log_id_t) (i + 1))
 
 template <typename TKey, typename TEntry>
-class LogHashtable : public android::BasicHashtable<TKey, TEntry> {
+class LogHashtable {
+
+    std::unordered_map<TKey, TEntry> map;
+
 public:
+
+    typedef typename std::unordered_map<TKey, TEntry>::iterator iterator;
+
     std::unique_ptr<const TEntry *[]> sort(size_t n) {
         if (!n) {
             std::unique_ptr<const TEntry *[]> sorted(NULL);
@@ -41,9 +48,8 @@ public:
         const TEntry **retval = new const TEntry* [n];
         memset(retval, 0, sizeof(*retval) * n);
 
-        ssize_t index = -1;
-        while ((index = android::BasicHashtable<TKey, TEntry>::next(index)) >= 0) {
-            const TEntry &entry = android::BasicHashtable<TKey, TEntry>::entryAt(index);
+        for(iterator it = map.begin(); it != map.end(); ++it) {
+            const TEntry &entry = it->second;
             size_t s = entry.getSizes();
             ssize_t i = n - 1;
             while ((!retval[i] || (s > retval[i]->getSizes())) && (--i >= 0))
@@ -70,44 +76,42 @@ public:
         return index;
     }
 
-    ssize_t next(ssize_t index) {
-        return android::BasicHashtable<TKey, TEntry>::next(index);
+    inline iterator add(TKey key, LogBufferElement *e) {
+        iterator it = map.find(key);
+        if (it == map.end()) {
+            it = map.insert(std::make_pair(key, TEntry(e))).first;
+        } else {
+            it->second.add(e);
+        }
+        return it;
     }
 
-    size_t add(TKey key, LogBufferElement *e) {
-        android::hash_t hash = android::hash_type(key);
-        ssize_t index = android::BasicHashtable<TKey, TEntry>::find(-1, hash, key);
-        if (index == -1) {
-            return android::BasicHashtable<TKey, TEntry>::add(hash, TEntry(e));
+    inline iterator add(TKey key) {
+        iterator it = map.find(key);
+        if (it == map.end()) {
+            it = map.insert(std::make_pair(key, TEntry(key))).first;
+        } else {
+            it->second.add(key);
         }
-        android::BasicHashtable<TKey, TEntry>::editEntryAt(index).add(e);
-        return index;
-    }
-
-    inline size_t add(TKey key) {
-        android::hash_t hash = android::hash_type(key);
-        ssize_t index = android::BasicHashtable<TKey, TEntry>::find(-1, hash, key);
-        if (index == -1) {
-            return android::BasicHashtable<TKey, TEntry>::add(hash, TEntry(key));
-        }
-        android::BasicHashtable<TKey, TEntry>::editEntryAt(index).add(key);
-        return index;
+        return it;
     }
 
     void subtract(TKey key, LogBufferElement *e) {
-        ssize_t index = android::BasicHashtable<TKey, TEntry>::find(-1, android::hash_type(key), key);
-        if ((index != -1)
-         && android::BasicHashtable<TKey, TEntry>::editEntryAt(index).subtract(e)) {
-            android::BasicHashtable<TKey, TEntry>::removeAt(index);
+        iterator it = map.find(key);
+        if ((it != map.end()) && it->second.subtract(e)) {
+            map.erase(it);
         }
     }
 
     inline void drop(TKey key, LogBufferElement *e) {
-        ssize_t index = android::BasicHashtable<TKey, TEntry>::find(-1, android::hash_type(key), key);
-        if (index != -1) {
-            android::BasicHashtable<TKey, TEntry>::editEntryAt(index).drop(e);
+        iterator it = map.find(key);
+        if (it != map.end()) {
+            it->second.drop(e);
         }
     }
+
+    inline iterator begin() { return map.begin(); }
+    inline iterator end() { return map.end(); }
 
 };
 
