@@ -280,6 +280,17 @@ void usage(void)
             "  flashall                                 flash boot, system, vendor and if found,\n"
             "                                           recovery\n"
             "  flash <partition> [ <filename> ]         write a file to a flash partition\n"
+            "  flashing lock                            locks the device. Prevents flashing"
+            "                                           partitions\n"
+            "  flashing unlock                          unlocks the device. Allows user to"
+            "                                           flash any partition except the ones"
+            "                                           that are related to bootloader\n"
+            "  flashing lock_critical                   Prevents flashing bootloader related"
+            "                                           partitions\n"
+            "  flashing unlock_critical                 Enables flashing bootloader related"
+            "                                           partitions\n"
+            "  flashing get_unlock_ability              Queries bootloader to see if the"
+            "                                           device is unlocked\n"
             "  erase <partition>                        erase a flash partition\n"
             "  format[:[<fs type>][:[<size>]] <partition> format a flash partition.\n"
             "                                           Can override the fs type and/or\n"
@@ -1185,6 +1196,16 @@ int main(int argc, char **argv)
             wants_reboot = 1;
         } else if(!strcmp(*argv, "oem")) {
             argc = do_oem_command(argc, argv);
+        } else if(!strcmp(*argv, "flashing") && argc == 2) {
+            if(!strcmp(*(argv+1), "unlock") || !strcmp(*(argv+1), "lock")
+               || !strcmp(*(argv+1), "unlock_critical")
+               || !strcmp(*(argv+1), "lock_critical")
+               || !strcmp(*(argv+1), "get_unlock_ability")) {
+              argc = do_oem_command(argc, argv);
+            } else {
+              usage();
+              return 1;
+            }
         } else {
             usage();
             return 1;
