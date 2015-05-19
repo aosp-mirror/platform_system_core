@@ -387,7 +387,7 @@ int init_socket_transport(atransport *t, int s, int adb_port, int local)
     t->write_to_remote = remote_write;
     t->sfd = s;
     t->sync_token = 1;
-    t->connection_state = CS_OFFLINE;
+    t->connection_state = kCsOffline;
     t->type = kTransportLocal;
     t->adb_port = 0;
 

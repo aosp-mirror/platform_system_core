@@ -80,7 +80,7 @@ static void remote_kick(atransport *t)
     usb_kick(t->usb);
 }
 
-void init_usb_transport(atransport *t, usb_handle *h, int state)
+void init_usb_transport(atransport *t, usb_handle *h, ConnectionState state)
 {
     D("transport: usb\n");
     t->close = remote_close;
