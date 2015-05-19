@@ -369,24 +369,24 @@ void parse_banner(const char* banner, atransport* t) {
 
     const std::string& type = pieces[0];
     if (type == "bootloader") {
-        D("setting connection_state to CS_BOOTLOADER\n");
-        t->connection_state = CS_BOOTLOADER;
+        D("setting connection_state to kCsBootloader\n");
+        t->connection_state = kCsBootloader;
         update_transports();
     } else if (type == "device") {
-        D("setting connection_state to CS_DEVICE\n");
-        t->connection_state = CS_DEVICE;
+        D("setting connection_state to kCsDevice\n");
+        t->connection_state = kCsDevice;
         update_transports();
     } else if (type == "recovery") {
-        D("setting connection_state to CS_RECOVERY\n");
-        t->connection_state = CS_RECOVERY;
+        D("setting connection_state to kCsRecovery\n");
+        t->connection_state = kCsRecovery;
         update_transports();
     } else if (type == "sideload") {
-        D("setting connection_state to CS_SIDELOAD\n");
-        t->connection_state = CS_SIDELOAD;
+        D("setting connection_state to kCsSideload\n");
+        t->connection_state = kCsSideload;
         update_transports();
     } else {
-        D("setting connection_state to CS_HOST\n");
-        t->connection_state = CS_HOST;
+        D("setting connection_state to kCsHost\n");
+        t->connection_state = kCsHost;
     }
 }
 
@@ -406,7 +406,7 @@ void handle_packet(apacket *p, atransport *t)
             send_packet(p, t);
             if(HOST) send_connect(t);
         } else {
-            t->connection_state = CS_OFFLINE;
+            t->connection_state = kCsOffline;
             handle_offline(t);
             send_packet(p, t);
         }
@@ -414,8 +414,8 @@ void handle_packet(apacket *p, atransport *t)
 
     case A_CNXN: /* CONNECT(version, maxdata, "system-id-string") */
             /* XXX verify version, etc */
-        if(t->connection_state != CS_OFFLINE) {
-            t->connection_state = CS_OFFLINE;
+        if(t->connection_state != kCsOffline) {
+            t->connection_state = kCsOffline;
             handle_offline(t);
         }
 
@@ -431,7 +431,7 @@ void handle_packet(apacket *p, atransport *t)
 
     case A_AUTH:
         if (p->msg.arg0 == ADB_AUTH_TOKEN) {
-            t->connection_state = CS_UNAUTHORIZED;
+            t->connection_state = kCsUnauthorized;
             t->key = adb_auth_nextkey(t->key);
             if (t->key) {
                 send_auth_response(p->data, p->msg.data_length, t);
@@ -757,7 +757,7 @@ int handle_forward_request(const char* service, TransportType type, const char* 
         }
 
         std::string error_msg;
-        transport = acquire_one_transport(CS_ANY, type, serial, &error_msg);
+        transport = acquire_one_transport(kCsAny, type, serial, &error_msg);
         if (!transport) {
             SendFail(reply_fd, error_msg);
             return 1;
@@ -826,7 +826,7 @@ int handle_host_request(const char* service, TransportType type,
         }
 
         std::string error_msg = "unknown failure";
-        transport = acquire_one_transport(CS_ANY, type, serial, &error_msg);
+        transport = acquire_one_transport(kCsAny, type, serial, &error_msg);
 
         if (transport) {
             s->transport = transport;
@@ -889,7 +889,7 @@ int handle_host_request(const char* service, TransportType type,
 
     if(!strncmp(service,"get-serialno",strlen("get-serialno"))) {
         const char *out = "unknown";
-        transport = acquire_one_transport(CS_ANY, type, serial, NULL);
+        transport = acquire_one_transport(kCsAny, type, serial, NULL);
         if (transport && transport->serial) {
             out = transport->serial;
         }
@@ -899,7 +899,7 @@ int handle_host_request(const char* service, TransportType type,
     }
     if(!strncmp(service,"get-devpath",strlen("get-devpath"))) {
         const char *out = "unknown";
-        transport = acquire_one_transport(CS_ANY, type, serial, NULL);
+        transport = acquire_one_transport(kCsAny, type, serial, NULL);
         if (transport && transport->devpath) {
             out = transport->devpath;
         }
@@ -916,7 +916,7 @@ int handle_host_request(const char* service, TransportType type,
     }
 
     if(!strncmp(service,"get-state",strlen("get-state"))) {
-        transport = acquire_one_transport(CS_ANY, type, serial, NULL);
+        transport = acquire_one_transport(kCsAny, type, serial, NULL);
         SendOkay(reply_fd);
         SendProtocolString(reply_fd, transport->connection_state_name());
         return 0;

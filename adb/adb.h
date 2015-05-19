@@ -170,6 +170,18 @@ enum TransportType {
 
 #define TOKEN_SIZE 20
 
+enum ConnectionState {
+    kCsAny = -1,
+    kCsOffline = 0,
+    kCsBootloader,
+    kCsDevice,
+    kCsHost,
+    kCsRecovery,
+    kCsNoPerm,  // Insufficient permissions to communicate with the device.
+    kCsSideload,
+    kCsUnauthorized,
+};
+
 struct atransport
 {
     atransport *next;
@@ -266,7 +278,7 @@ int adb_main(int is_daemon, int server_port);
 int get_available_local_transport_index();
 #endif
 int  init_socket_transport(atransport *t, int s, int port, int local);
-void init_usb_transport(atransport *t, usb_handle *usb, int state);
+void init_usb_transport(atransport *t, usb_handle *usb, ConnectionState state);
 
 #if ADB_HOST
 atransport* find_emulator_transport_by_adb_port(int adb_port);
@@ -336,17 +348,7 @@ int is_adb_interface(int vid, int pid, int usb_class, int usb_subclass, int usb_
 
 int adb_commandline(int argc, const char **argv);
 
-int connection_state(atransport *t);
-
-#define CS_ANY       -1
-#define CS_OFFLINE    0
-#define CS_BOOTLOADER 1
-#define CS_DEVICE     2
-#define CS_HOST       3
-#define CS_RECOVERY   4
-#define CS_NOPERM     5 /* Insufficient permissions to communicate with the device */
-#define CS_SIDELOAD   6
-#define CS_UNAUTHORIZED 7
+ConnectionState connection_state(atransport *t);
 
 extern const char *adb_device_banner;
 extern int HOST;
