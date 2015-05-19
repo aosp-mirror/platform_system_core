@@ -40,7 +40,7 @@ static int autosuspend_autosleep_enable(void)
 
     ALOGV("autosuspend_autosleep_enable\n");
 
-    ret = write(autosleep_fd, sleep_state, strlen(sleep_state));
+    ret = TEMP_FAILURE_RETRY(write(autosleep_fd, sleep_state, strlen(sleep_state)));
     if (ret < 0) {
         strerror_r(errno, buf, sizeof(buf));
         ALOGE("Error writing to %s: %s\n", SYS_POWER_AUTOSLEEP, buf);
@@ -62,7 +62,7 @@ static int autosuspend_autosleep_disable(void)
 
     ALOGV("autosuspend_autosleep_disable\n");
 
-    ret = write(autosleep_fd, on_state, strlen(on_state));
+    ret = TEMP_FAILURE_RETRY(write(autosleep_fd, on_state, strlen(on_state)));
     if (ret < 0) {
         strerror_r(errno, buf, sizeof(buf));
         ALOGE("Error writing to %s: %s\n", SYS_POWER_AUTOSLEEP, buf);
@@ -86,7 +86,7 @@ struct autosuspend_ops *autosuspend_autosleep_init(void)
 {
     char buf[80];
 
-    autosleep_fd = open(SYS_POWER_AUTOSLEEP, O_WRONLY);
+    autosleep_fd = TEMP_FAILURE_RETRY(open(SYS_POWER_AUTOSLEEP, O_WRONLY));
     if (autosleep_fd < 0) {
         strerror_r(errno, buf, sizeof(buf));
         ALOGE("Error opening %s: %s\n", SYS_POWER_AUTOSLEEP, buf);
