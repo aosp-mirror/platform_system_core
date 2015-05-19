@@ -161,9 +161,8 @@ char *LogStatistics::uidToName(uid_t uid) {
     }
 
     // report uid -> pid(s) -> pidToName if unique
-    ssize_t index = -1;
-    while ((index = pidTable.next(index)) != -1) {
-        const PidEntry &entry = pidTable.entryAt(index);
+    for(pidTable_t::iterator it = pidTable.begin(); it != pidTable.end(); ++it) {
+        const PidEntry &entry = it->second;
 
         if (entry.getUid() == uid) {
             const char *n = entry.getName();
@@ -520,12 +519,12 @@ uid_t pidToUid(pid_t pid) {
 }
 
 uid_t LogStatistics::pidToUid(pid_t pid) {
-    return pidTable.entryAt(pidTable.add(pid)).getUid();
+    return pidTable.add(pid)->second.getUid();
 }
 
 // caller must free character string
 char *LogStatistics::pidToName(pid_t pid) {
-    const char *name = pidTable.entryAt(pidTable.add(pid)).getName();
+    const char *name = pidTable.add(pid)->second.getName();
     if (!name) {
         return NULL;
     }
