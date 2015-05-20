@@ -16,11 +16,6 @@
 
 #define TRACE_TAG TRACE_AUTH
 
-#ifdef _WIN32
-// This blocks some definitions we need on Windows.
-#undef NOGDI
-#endif
-
 #include "sysdeps.h"
 #include "adb_auth.h"
 

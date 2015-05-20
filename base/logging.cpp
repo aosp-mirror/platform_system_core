@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include "base/logging.h"
 
 #include <libgen.h>
@@ -34,8 +38,6 @@
 
 #ifndef _WIN32
 #include <mutex>
-#else
-#include <windows.h>
 #endif
 
 #include "base/macros.h"
