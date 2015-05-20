@@ -48,6 +48,11 @@ static inline bool worstUidEnabledForLogid(log_id_t id) {
 
 class LogBuffer;
 
+#define EXPIRE_HOUR_THRESHOLD 24 // Only expire chatty UID logs to preserve
+                                 // non-chatty UIDs less than this age in hours
+#define EXPIRE_THRESHOLD 4       // A smaller expire count is considered too
+                                 // chatty for the temporal expire messages
+
 class LogBufferElement {
     const log_id_t mLogId;
     const uid_t mUid;
