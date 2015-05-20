@@ -13,18 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #ifndef BASE_LOGGING_H
 #define BASE_LOGGING_H
 
-#ifdef ERROR
-#error ERROR is already defined. If this is Windows code, #define NOGDI before \
-including anything.
-#endif
-
+// NOTE: For Windows, you must include logging.h after windows.h to allow the
+// following code to suppress the evil ERROR macro:
 #ifdef _WIN32
-#ifndef NOGDI
-#define NOGDI // Suppress the evil ERROR macro.
+// windows.h includes wingdi.h which defines an evil macro ERROR.
+#ifdef ERROR
+#undef ERROR
 #endif
 #endif
 
