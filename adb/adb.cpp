@@ -545,6 +545,7 @@ int launch_server(int server_port)
     /* we create a PIPE that will be used to wait for the server's "OK" */
     /* message since the pipe handles must be inheritable, we use a     */
     /* security attribute                                               */
+    HANDLE                nul_read, nul_write;
     HANDLE                pipe_read, pipe_write;
     HANDLE                stdout_handle, stderr_handle;
     SECURITY_ATTRIBUTES   sa;
@@ -557,10 +558,40 @@ int launch_server(int server_port)
     sa.lpSecurityDescriptor = NULL;
     sa.bInheritHandle = TRUE;
 
+    /* Redirect stdin and stderr to Windows /dev/null. If we instead pass our
+     * stdin/stderr handles and they are console handles, when the adb server
+     * starts up, the C Runtime will see console handles for a process that
+     * isn't connected to a console and it will configure stderr to be closed.
+     * At that point, freopen() could be used to reopen stderr, but it would
+     * take more massaging to fixup the file descriptor number that freopen()
+     * uses. It's simplest to avoid all of this complexity by just redirecting
+     * stdin/stderr to `nul' and then the C Runtime acts as expected.
+     */
+    nul_read = CreateFileW(L"nul", GENERIC_READ,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (nul_read == INVALID_HANDLE_VALUE) {
+        fprintf(stderr, "CreateFileW(nul, GENERIC_READ) failure, error %ld\n",
+                GetLastError());
+        return -1;
+    }
+
+    nul_write = CreateFileW(L"nul", GENERIC_WRITE,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
+                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (nul_write == INVALID_HANDLE_VALUE) {
+        fprintf(stderr, "CreateFileW(nul, GENERIC_WRITE) failure, error %ld\n",
+                GetLastError());
+        CloseHandle(nul_read);
+        return -1;
+    }
+
     /* create pipe, and ensure its read handle isn't inheritable */
     ret = CreatePipe( &pipe_read, &pipe_write, &sa, 0 );
     if (!ret) {
         fprintf(stderr, "CreatePipe() failure, error %ld\n", GetLastError() );
+        CloseHandle(nul_read);
+        CloseHandle(nul_write);
         return -1;
     }
 
@@ -588,9 +619,9 @@ int launch_server(int server_port)
 
     ZeroMemory( &startup, sizeof(startup) );
     startup.cb = sizeof(startup);
-    startup.hStdInput  = GetStdHandle( STD_INPUT_HANDLE );
+    startup.hStdInput  = nul_read;
     startup.hStdOutput = pipe_write;
-    startup.hStdError  = GetStdHandle( STD_ERROR_HANDLE );
+    startup.hStdError  = nul_write;
     startup.dwFlags    = STARTF_USESTDHANDLES;
 
     ZeroMemory( &pinfo, sizeof(pinfo) );
@@ -613,6 +644,8 @@ int launch_server(int server_port)
             &startup,                 /* startup info, i.e. std handles */
             &pinfo );
 
+    CloseHandle( nul_read );
+    CloseHandle( nul_write );
     CloseHandle( pipe_write );
 
     if (!ret) {
