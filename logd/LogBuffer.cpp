@@ -524,7 +524,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             break;
         }
 
-        if (hasWhitelist && mPrune.nice(e)) { // WhiteListed
+        if (hasWhitelist && !e->getDropped() && mPrune.nice(e)) { // WhiteListed
             whitelist = true;
             it++;
             continue;
