@@ -320,6 +320,9 @@ on post-fs-data
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/user 0711 system system
 
+    # Set up the crypto policies on /data/user
+    exec -- /system/bin/vdc cryptfs setusercryptopolicies /data/user
+
     # Reload policy from /data/security if present.
     setprop selinux.reload_policy 1
 
