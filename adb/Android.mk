@@ -14,7 +14,7 @@ endif
 adb_version := $(shell git -C $(LOCAL_PATH) rev-parse --short=12 HEAD 2>/dev/null)-android
 
 ADB_COMMON_CFLAGS := \
-    -Wall -Werror \
+    -Wall -Wextra -Werror \
     -Wno-unused-parameter \
     -DADB_REVISION='"$(adb_version)"' \
 
