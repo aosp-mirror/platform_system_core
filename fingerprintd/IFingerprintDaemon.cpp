@@ -16,7 +16,6 @@
 
 #include <inttypes.h>
 
-#include <android_runtime/AndroidRuntime.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/PermissionCache.h>
