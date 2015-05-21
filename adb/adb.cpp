@@ -34,6 +34,7 @@
 #include <vector>
 #include <unordered_map>
 
+#include <base/logging.h>
 #include <base/stringprintf.h>
 #include <base/strings.h>
 
@@ -50,16 +51,25 @@
 #include <sys/mount.h>
 #endif
 
-ADB_MUTEX_DEFINE( D_lock );
+ADB_MUTEX_DEFINE(D_lock);
 
 int HOST = 0;
 
 #if !ADB_HOST
-const char *adb_device_banner = "device";
+const char* adb_device_banner = "device";
+static android::base::LogdLogger gLogdLogger;
 #endif
 
-void fatal(const char *fmt, ...)
-{
+void AdbLogger(android::base::LogId id, android::base::LogSeverity severity,
+               const char* tag, const char* file, unsigned int line,
+               const char* message) {
+    android::base::StderrLogger(id, severity, tag, file, line, message);
+#if !ADB_HOST
+    gLogdLogger(id, severity, tag, file, line, message);
+#endif
+}
+
+void fatal(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     fprintf(stderr, "error: ");
@@ -69,8 +79,7 @@ void fatal(const char *fmt, ...)
     exit(-1);
 }
 
-void fatal_errno(const char *fmt, ...)
-{
+void fatal_errno(const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     fprintf(stderr, "error: %s: ", strerror(errno));
@@ -81,7 +90,7 @@ void fatal_errno(const char *fmt, ...)
 }
 
 #if !ADB_HOST
-void start_device_log(void) {
+static std::string get_log_file_name() {
     struct tm now;
     time_t t;
     tzset();
@@ -91,13 +100,18 @@ void start_device_log(void) {
     char timestamp[PATH_MAX];
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%d-%H-%M-%S", &now);
 
-    std::string path = android::base::StringPrintf("/data/adb/adb-%s-%d", timestamp, getpid());
-    int fd = unix_open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0640);
+    return android::base::StringPrintf("/data/adb/adb-%s-%d", timestamp,
+                                       getpid());
+}
+
+void start_device_log(void) {
+    int fd = unix_open(get_log_file_name().c_str(),
+                       O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0640);
     if (fd == -1) {
         return;
     }
 
-    // redirect stdout and stderr to the log file
+    // Redirect stdout and stderr to the log file.
     dup2(fd, STDOUT_FILENO);
     dup2(fd, STDERR_FILENO);
     fprintf(stderr, "--- adb starting (pid %d) ---\n", getpid());
@@ -138,7 +152,7 @@ std::string get_trace_setting() {
 //
 // adb's trace setting comes from the ADB_TRACE environment variable, whereas
 // adbd's comes from the system property persist.adb.trace_mask.
-void adb_trace_init() {
+static void setup_trace_mask() {
     const std::string trace_setting = get_trace_setting();
 
     std::unordered_map<std::string, int> trace_flags = {
@@ -173,10 +187,17 @@ void adb_trace_init() {
             adb_trace_mask |= 1 << flag->second;
         }
     }
+}
 
+void adb_trace_init(char** argv) {
 #if !ADB_HOST
-    start_device_log();
+    if (isatty(STDOUT_FILENO) == 0) {
+        start_device_log();
+    }
 #endif
+
+    setup_trace_mask();
+    android::base::InitLogging(argv, AdbLogger);
 }
 
 apacket* get_apacket(void)
