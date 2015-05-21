@@ -31,6 +31,8 @@
 #include <time.h>
 
 #include <string>
+#include <vector>
+#include <unordered_map>
 
 #include <base/stringprintf.h>
 #include <base/strings.h>
@@ -130,66 +132,46 @@ std::string get_trace_setting() {
 #endif
 }
 
-// Split the comma/space/colum/semi-column separated list of tags from the trace
-// setting and build the trace mask from it. note that '1' and 'all' are special
-// cases to enable all tracing.
+// Split the space separated list of tags from the trace setting and build the
+// trace mask from it. note that '1' and 'all' are special cases to enable all
+// tracing.
 //
 // adb's trace setting comes from the ADB_TRACE environment variable, whereas
 // adbd's comes from the system property persist.adb.trace_mask.
 void adb_trace_init() {
     const std::string trace_setting = get_trace_setting();
 
-    static const struct {
-        const char*  tag;
-        int           flag;
-    } tags[] = {
-        { "1", 0 },
-        { "all", 0 },
-        { "adb", TRACE_ADB },
-        { "sockets", TRACE_SOCKETS },
-        { "packets", TRACE_PACKETS },
-        { "rwx", TRACE_RWX },
-        { "usb", TRACE_USB },
-        { "sync", TRACE_SYNC },
-        { "sysdeps", TRACE_SYSDEPS },
-        { "transport", TRACE_TRANSPORT },
-        { "jdwp", TRACE_JDWP },
-        { "services", TRACE_SERVICES },
-        { "auth", TRACE_AUTH },
-        { NULL, 0 }
-    };
+    std::unordered_map<std::string, int> trace_flags = {
+        {"1", 0},
+        {"all", 0},
+        {"adb", TRACE_ADB},
+        {"sockets", TRACE_SOCKETS},
+        {"packets", TRACE_PACKETS},
+        {"rwx", TRACE_RWX},
+        {"usb", TRACE_USB},
+        {"sync", TRACE_SYNC},
+        {"sysdeps", TRACE_SYSDEPS},
+        {"transport", TRACE_TRANSPORT},
+        {"jdwp", TRACE_JDWP},
+        {"services", TRACE_SERVICES},
+        {"auth", TRACE_AUTH}};
 
-    if (trace_setting.empty()) {
-        return;
-    }
-
-    // Use a comma/colon/semi-colon/space separated list
-    const char* p = trace_setting.c_str();
-    while (*p) {
-        int  len, tagn;
-
-        const char* q = strpbrk(p, " ,:;");
-        if (q == NULL) {
-            q = p + strlen(p);
+    std::vector<std::string> elements = android::base::Split(trace_setting, " ");
+    for (const auto& elem : elements) {
+        const auto& flag = trace_flags.find(elem);
+        if (flag == trace_flags.end()) {
+            D("Unknown trace flag: %s", flag->first.c_str());
+            continue;
         }
-        len = q - p;
 
-        for (tagn = 0; tags[tagn].tag != NULL; tagn++) {
-            int  taglen = strlen(tags[tagn].tag);
-
-            if (len == taglen && !memcmp(tags[tagn].tag, p, len)) {
-                int  flag = tags[tagn].flag;
-                if (flag == 0) {
-                    adb_trace_mask = ~0;
-                    return;
-                }
-                adb_trace_mask |= (1 << flag);
-                break;
-            }
+        if (flag->second == 0) {
+            // 0 is used for the special values "1" and "all" that enable all
+            // tracing.
+            adb_trace_mask = ~0;
+            return;
+        } else {
+            adb_trace_mask |= 1 << flag->second;
         }
-        p = q;
-        if (*p)
-            p++;
     }
 
 #if !ADB_HOST
