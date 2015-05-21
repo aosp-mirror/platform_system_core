@@ -57,9 +57,9 @@ void adb_qemu_trace(const char* fmt, ...);
 #define DQ(...) ((void)0)
 #endif  /* !ADB_HOST */
 
-extern int     adb_trace_mask;
-extern unsigned char    adb_trace_output_count;
-void    adb_trace_init(void);
+extern int adb_trace_mask;
+extern unsigned char adb_trace_output_count;
+void adb_trace_init(char**);
 
 #  define ADB_TRACING  ((adb_trace_mask & (1 << TRACE_TAG)) != 0)
 

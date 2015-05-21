@@ -230,8 +230,6 @@ static void close_stdin() {
 }
 
 int main(int argc, char** argv) {
-    android::base::InitLogging(argv);
-
     while (true) {
         static struct option opts[] = {
             {"root_seclabel", required_argument, nullptr, 's'},
@@ -265,7 +263,7 @@ int main(int argc, char** argv) {
 
     close_stdin();
 
-    adb_trace_init();
+    adb_trace_init(argv);
 
     /* If adbd runs inside the emulator this will enable adb tracing via
      * adb-debug qemud service in the emulator. */
