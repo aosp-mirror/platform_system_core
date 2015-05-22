@@ -270,7 +270,6 @@ on post-fs-data
     chmod 0660 /data/misc/wifi/wpa_supplicant.conf
     mkdir /data/local 0751 root root
     mkdir /data/misc/media 0700 media media
-    mkdir /data/misc/vold 0700 root root
 
     # For security reasons, /data/local/tmp should always be empty.
     # Do not place files or directories in /data/local/tmp
@@ -319,9 +318,6 @@ on post-fs-data
     mkdir /data/system 0775 system system
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/user 0711 system system
-
-    # Set up the crypto policies on /data/user
-    exec -- /system/bin/vdc cryptfs setusercryptopolicies /data/user
 
     # Reload policy from /data/security if present.
     setprop selinux.reload_policy 1
