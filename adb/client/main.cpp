@@ -176,9 +176,7 @@ int adb_main(int is_daemon, int server_port) {
 
 int main(int argc, char** argv) {
     adb_sysdeps_init();
-
-    android::base::InitLogging(argv);
-    adb_trace_init();
+    adb_trace_init(argv);
     D("Handling commandline()\n");
     return adb_commandline(argc - 1, const_cast<const char**>(argv + 1));
 }
