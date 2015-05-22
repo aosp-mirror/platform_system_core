@@ -417,8 +417,6 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
-            leading = false;
-
             if (hasBlacklist && mPrune.naughty(e)) {
                 last.clear(e);
                 it = erase(it);
@@ -448,6 +446,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             }
 
             if (e->getUid() != worst) {
+                leading = false;
                 if (start != log_time::EPOCH) {
                     static const timespec too_old = {
                         EXPIRE_HOUR_THRESHOLD * 60 * 60, 0
@@ -479,15 +478,21 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             kick = true;
 
             unsigned short len = e->getMsgLen();
-            stats.drop(e);
-            e->setDropped(1);
-            if (last.merge(e, 1)) {
-                it = mLogElements.erase(it);
-                stats.erase(e);
-                delete e;
+
+            // do not create any leading drops
+            if (leading) {
+                it = erase(it);
             } else {
-                last.add(e);
-                ++it;
+                stats.drop(e);
+                e->setDropped(1);
+                if (last.merge(e, 1)) {
+                    it = mLogElements.erase(it);
+                    stats.erase(e);
+                    delete e;
+                } else {
+                    last.add(e);
+                    ++it;
+                }
             }
             if (worst_sizes < second_worst_sizes) {
                 break;
