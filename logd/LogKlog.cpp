@@ -36,6 +36,140 @@
 
 static const char priority_message[] = { KMSG_PRIORITY(LOG_INFO), '\0' };
 
+// Parsing is hard
+
+// called if we see a '<', s is the next character, returns pointer after '>'
+static char *is_prio(char *s) {
+    if (!isdigit(*s++)) {
+        return NULL;
+    }
+    char c;
+    while ((c = *s++)) {
+        if (!isdigit(c) && (c == '>')) {
+            return s;
+        }
+    }
+    return NULL;
+}
+
+// called if we see a '[', s is the next character, returns pointer after ']'
+static char *is_timestamp(char *s) {
+    while (*s == ' ') {
+        ++s;
+    }
+    if (!isdigit(*s++)) {
+        return NULL;
+    }
+    bool first_period = true;
+    char c;
+    while ((c = *s++)) {
+        if ((c == '.') && first_period) {
+            first_period = false;
+            continue;
+        }
+        if (!isdigit(c) && (c == ']')) {
+            return s;
+        }
+    }
+    return NULL;
+}
+
+// Like strtok_r with "\r\n" except that we look for log signatures (regex)
+//   \(\(<[0-9]+>\)\([[] *[0-9]+[]]\)\{0,1\}\|[[] *[0-9]+[]]\)
+// and split if we see a second one without a newline.
+
+#define SIGNATURE_MASK     0xF0
+// <digit> following ('0' to '9' masked with ~SIGNATURE_MASK) added to signature
+#define LESS_THAN_SIG      SIGNATURE_MASK
+#define OPEN_BRACKET_SIG   ((SIGNATURE_MASK << 1) & SIGNATURE_MASK)
+// space is one more than <digit> of 9
+#define OPEN_BRACKET_SPACE (OPEN_BRACKET_SIG | 10)
+
+char *log_strtok_r(char *s, char **last) {
+    if (!s) {
+        if (!(s = *last)) {
+            return NULL;
+        }
+        // fixup for log signature split <,
+        // LESS_THAN_SIG + <digit>
+        if ((*s & SIGNATURE_MASK) == LESS_THAN_SIG) {
+            *s = (*s & ~SIGNATURE_MASK) + '0';
+            *--s = '<';
+        }
+        // fixup for log signature split [,
+        // OPEN_BRACKET_SPACE is space, OPEN_BRACKET_SIG + <digit>
+        if ((*s & SIGNATURE_MASK) == OPEN_BRACKET_SIG) {
+            if (*s == OPEN_BRACKET_SPACE) {
+                *s = ' ';
+            } else {
+                *s = (*s & ~SIGNATURE_MASK) + '0';
+            }
+            *--s = '[';
+        }
+    }
+
+    s += strspn(s, "\r\n");
+
+    if (!*s) { // no non-delimiter characters
+        *last = NULL;
+        return NULL;
+    }
+    char *peek, *tok = s;
+
+    for (;;) {
+        char c = *s++;
+        switch (c) {
+        case '\0':
+            *last = NULL;
+            return tok;
+
+        case '\r':
+        case '\n':
+            s[-1] = '\0';
+            *last = s;
+            return tok;
+
+        case '<':
+            peek = is_prio(s);
+            if (!peek) {
+                break;
+            }
+            if (s != (tok + 1)) { // not first?
+                s[-1] = '\0';
+                *s &= ~SIGNATURE_MASK;
+                *s |= LESS_THAN_SIG; // signature for '<'
+                *last = s;
+                return tok;
+            }
+            s = peek;
+            if ((*s == '[') && ((peek = is_timestamp(s + 1)))) {
+                s = peek;
+            }
+            break;
+
+        case '[':
+            peek = is_timestamp(s);
+            if (!peek) {
+                break;
+            }
+            if (s != (tok + 1)) { // not first?
+                s[-1] = '\0';
+                if (*s == ' ') {
+                    *s = OPEN_BRACKET_SPACE;
+                } else {
+                    *s &= ~SIGNATURE_MASK;
+                    *s |= OPEN_BRACKET_SIG; // signature for '['
+                }
+                *last = s;
+                return tok;
+            }
+            s = peek;
+            break;
+        }
+    }
+    /* NOTREACHED */
+}
+
 log_time LogKlog::correction = log_time(CLOCK_REALTIME) - log_time(CLOCK_MONOTONIC);
 
 LogKlog::LogKlog(LogBuffer *buf, LogReader *reader, int fdWrite, int fdRead, bool auditd) :
@@ -81,8 +215,8 @@ bool LogKlog::onDataAvailable(SocketClient *cli) {
         char *ep = buffer + len;
         *ep = '\0';
         len = 0;
-        for(char *ptr, *tok = buffer;
-                ((tok = strtok_r(tok, "\r\n", &ptr)));
+        for(char *ptr = NULL, *tok = buffer;
+                ((tok = log_strtok_r(tok, &ptr)));
                 tok = NULL) {
             if (((tok + strlen(tok)) == ep) && (retval != 0) && full) {
                 len = strlen(tok);

@@ -417,8 +417,8 @@ int main(int argc, char *argv[]) {
                 kl->synchronize(buf);
             }
 
-            for (char *ptr, *tok = buf;
-                 (rc >= 0) && ((tok = strtok_r(tok, "\r\n", &ptr)));
+            for (char *ptr = NULL, *tok = buf;
+                 (rc >= 0) && ((tok = log_strtok_r(tok, &ptr)));
                  tok = NULL) {
                 if (al) {
                     rc = al->log(tok);
