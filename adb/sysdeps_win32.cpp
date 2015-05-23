@@ -172,14 +172,15 @@ static  FHRec        _win32_fhs[ WIN32_MAX_FHS ];
 static  int          _win32_fh_count;
 
 static FH
-_fh_from_int( int   fd )
+_fh_from_int( int   fd, const char*   func )
 {
     FH  f;
 
     fd -= WIN32_FH_BASE;
 
     if (fd < 0 || fd >= _win32_fh_count) {
-        D( "_fh_from_int: invalid fd %d\n", fd + WIN32_FH_BASE );
+        D( "_fh_from_int: invalid fd %d passed to %s\n", fd + WIN32_FH_BASE,
+           func );
         errno = EBADF;
         return NULL;
     }
@@ -187,7 +188,8 @@ _fh_from_int( int   fd )
     f = &_win32_fhs[fd];
 
     if (f->used == 0) {
-        D( "_fh_from_int: invalid fd %d\n", fd + WIN32_FH_BASE );
+        D( "_fh_from_int: invalid fd %d passed to %s\n", fd + WIN32_FH_BASE,
+           func );
         errno = EBADF;
         return NULL;
     }
@@ -427,7 +429,7 @@ int  adb_creat(const char*  path, int  mode)
 
 int  adb_read(int  fd, void* buf, int len)
 {
-    FH     f = _fh_from_int(fd);
+    FH     f = _fh_from_int(fd, __func__);
 
     if (f == NULL) {
         return -1;
@@ -439,7 +441,7 @@ int  adb_read(int  fd, void* buf, int len)
 
 int  adb_write(int  fd, const void*  buf, int  len)
 {
-    FH     f = _fh_from_int(fd);
+    FH     f = _fh_from_int(fd, __func__);
 
     if (f == NULL) {
         return -1;
@@ -451,7 +453,7 @@ int  adb_write(int  fd, const void*  buf, int  len)
 
 int  adb_lseek(int  fd, int  pos, int  where)
 {
-    FH     f = _fh_from_int(fd);
+    FH     f = _fh_from_int(fd, __func__);
 
     if (!f) {
         return -1;
@@ -463,7 +465,7 @@ int  adb_lseek(int  fd, int  pos, int  where)
 
 int  adb_shutdown(int  fd)
 {
-    FH   f = _fh_from_int(fd);
+    FH   f = _fh_from_int(fd, __func__);
 
     if (!f || f->clazz != &_fh_socket_class) {
         D("adb_shutdown: invalid fd %d\n", fd);
@@ -478,7 +480,7 @@ int  adb_shutdown(int  fd)
 
 int  adb_close(int  fd)
 {
-    FH   f = _fh_from_int(fd);
+    FH   f = _fh_from_int(fd, __func__);
 
     if (!f) {
         return -1;
@@ -763,7 +765,7 @@ int socket_inaddr_any_server(int port, int type)
 #undef accept
 int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrlen)
 {
-    FH   serverfh = _fh_from_int(serverfd);
+    FH   serverfh = _fh_from_int(serverfd, __func__);
     FH   fh;
 
     if ( !serverfh || serverfh->clazz != &_fh_socket_class ) {
@@ -792,7 +794,7 @@ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrle
 
 int  adb_setsockopt( int  fd, int  level, int  optname, const void*  optval, socklen_t  optlen )
 {
-    FH   fh = _fh_from_int(fd);
+    FH   fh = _fh_from_int(fd, __func__);
 
     if ( !fh || fh->clazz != &_fh_socket_class ) {
         D("adb_setsockopt: invalid fd %d\n", fd);
@@ -1386,7 +1388,7 @@ event_looper_find_p( EventLooper  looper, FH  fh )
 static void
 event_looper_hook( EventLooper  looper, int  fd, int  events )
 {
-    FH          f = _fh_from_int(fd);
+    FH          f = _fh_from_int(fd, __func__);
     EventHook  *pnode;
     EventHook   node;
 
@@ -1418,7 +1420,7 @@ event_looper_hook( EventLooper  looper, int  fd, int  events )
 static void
 event_looper_unhook( EventLooper  looper, int  fd, int  events )
 {
-    FH          fh    = _fh_from_int(fd);
+    FH          fh    = _fh_from_int(fd, __func__);
     EventHook  *pnode = event_looper_find_p( looper, fh );
     EventHook   node  = *pnode;
 
@@ -3036,7 +3038,7 @@ void stdin_raw_restore(const int fd) {
     }
 }
 
-// Called by 'adb shell' command to read from stdin.
+// Called by 'adb shell' and 'adb exec-in' to read from stdin.
 int unix_read(int fd, void* buf, size_t len) {
     if ((fd == STDIN_FILENO) && (_console_handle != NULL)) {
         // If it is a request to read from stdin, and stdin_raw_init() has been
@@ -3046,8 +3048,12 @@ int unix_read(int fd, void* buf, size_t len) {
         return _console_read(_console_handle, buf, len);
     } else {
         // Just call into C Runtime which can read from pipes/files and which
-        // can do LF/CR translation.
+        // can do LF/CR translation (which is overridable with _setmode()).
+        // Undefine the macro that is set in sysdeps.h which bans calls to
+        // plain read() in favor of unix_read() or adb_read().
+#pragma push_macro("read")
 #undef read
         return read(fd, buf, len);
+#pragma pop_macro("read")
     }
 }

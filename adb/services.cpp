@@ -252,7 +252,7 @@ static int create_subproc_pty(const char* cmd, const char* arg0,
     *pid = forkpty(&ptm, pts_name, nullptr, nullptr);
     if (*pid == -1) {
         printf("- fork failed: %s -\n", strerror(errno));
-        adb_close(ptm);
+        unix_close(ptm);
         return -1;
     }
 
@@ -263,7 +263,7 @@ static int create_subproc_pty(const char* cmd, const char* arg0,
         if (pts == -1) {
             fprintf(stderr, "child failed to open pseudo-term slave %s: %s\n",
                     pts_name, strerror(errno));
-            adb_close(ptm);
+            unix_close(ptm);
             exit(-1);
         }
 
@@ -272,16 +272,16 @@ static int create_subproc_pty(const char* cmd, const char* arg0,
             termios tattr;
             if (tcgetattr(pts, &tattr) == -1) {
                 fprintf(stderr, "tcgetattr failed: %s\n", strerror(errno));
-                adb_close(pts);
-                adb_close(ptm);
+                unix_close(pts);
+                unix_close(ptm);
                 exit(-1);
             }
 
             cfmakeraw(&tattr);
             if (tcsetattr(pts, TCSADRAIN, &tattr) == -1) {
                 fprintf(stderr, "tcsetattr failed: %s\n", strerror(errno));
-                adb_close(pts);
-                adb_close(ptm);
+                unix_close(pts);
+                unix_close(ptm);
                 exit(-1);
             }
         }
@@ -290,8 +290,8 @@ static int create_subproc_pty(const char* cmd, const char* arg0,
         dup2(pts, STDOUT_FILENO);
         dup2(pts, STDERR_FILENO);
 
-        adb_close(pts);
-        adb_close(ptm);
+        unix_close(pts);
+        unix_close(ptm);
 
         execl(cmd, cmd, arg0, arg1, nullptr);
         fprintf(stderr, "- exec '%s' failed: %s (%d) -\n",

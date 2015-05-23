@@ -125,6 +125,7 @@ static __inline__ int  adb_mkdir(const char*  path, int mode)
 #undef   mkdir
 #define  mkdir  ___xxx_mkdir
 
+// See the comments for the !defined(_WIN32) versions of adb_*().
 extern int  adb_open(const char*  path, int  options);
 extern int  adb_creat(const char*  path, int  mode);
 extern int  adb_read(int  fd, void* buf, int len);
@@ -133,6 +134,7 @@ extern int  adb_lseek(int  fd, int  pos, int  where);
 extern int  adb_shutdown(int  fd);
 extern int  adb_close(int  fd);
 
+// See the comments for the !defined(_WIN32) version of unix_close().
 static __inline__ int  unix_close(int fd)
 {
     return close(fd);
@@ -140,11 +142,13 @@ static __inline__ int  unix_close(int fd)
 #undef   close
 #define  close   ____xxx_close
 
+// See the comments for the !defined(_WIN32) version of unix_read().
 extern int  unix_read(int  fd, void*  buf, size_t  len);
 
 #undef   read
 #define  read  ___xxx_read
 
+// See the comments for the !defined(_WIN32) version of unix_write().
 static __inline__  int  unix_write(int  fd, const void*  buf, size_t  len)
 {
     return write(fd, buf, len);
@@ -152,11 +156,13 @@ static __inline__  int  unix_write(int  fd, const void*  buf, size_t  len)
 #undef   write
 #define  write  ___xxx_write
 
+// See the comments for the !defined(_WIN32) version of adb_open_mode().
 static __inline__ int  adb_open_mode(const char* path, int options, int mode)
 {
     return adb_open(path, options);
 }
 
+// See the comments for the !defined(_WIN32) version of unix_open().
 static __inline__ int  unix_open(const char*  path, int options,...)
 {
     if ((options & O_CREAT) == 0)
@@ -314,6 +320,15 @@ static __inline__ void  close_on_exec(int  fd)
     fcntl( fd, F_SETFD, FD_CLOEXEC );
 }
 
+// Open a file and return a file descriptor that may be used with unix_read(),
+// unix_write(), unix_close(), but not adb_read(), adb_write(), adb_close().
+//
+// On Unix, this is based on open(), so the file descriptor is a real OS file
+// descriptor, but the Windows implementation (in sysdeps_win32.cpp) returns a
+// file descriptor that can only be used with C Runtime APIs (which are wrapped
+// by unix_read(), unix_write(), unix_close()). Also, the C Runtime has
+// configurable CR/LF translation which defaults to text mode, but is settable
+// with _setmode().
 static __inline__ int  unix_open(const char*  path, int options,...)
 {
     if ((options & O_CREAT) == 0)
@@ -331,12 +346,21 @@ static __inline__ int  unix_open(const char*  path, int options,...)
     }
 }
 
+// Similar to the two-argument adb_open(), but takes a mode parameter for file
+// creation. See adb_open() for more info.
 static __inline__ int  adb_open_mode( const char*  pathname, int  options, int  mode )
 {
     return TEMP_FAILURE_RETRY( open( pathname, options, mode ) );
 }
 
 
+// Open a file and return a file descriptor that may be used with adb_read(),
+// adb_write(), adb_close(), but not unix_read(), unix_write(), unix_close().
+//
+// On Unix, this is based on open(), but the Windows implementation (in
+// sysdeps_win32.cpp) uses Windows native file I/O and bypasses the C Runtime
+// and its CR/LF translation. The returned file descriptor should be used with
+// adb_read(), adb_write(), adb_close(), etc.
 static __inline__ int  adb_open( const char*  pathname, int  options )
 {
     int  fd = TEMP_FAILURE_RETRY( open( pathname, options ) );
@@ -355,6 +379,9 @@ static __inline__ int  adb_shutdown(int fd)
 #undef   shutdown
 #define  shutdown   ____xxx_shutdown
 
+// Closes a file descriptor that came from adb_open() or adb_open_mode(), but
+// not designed to take a file descriptor from unix_open(). See the comments
+// for adb_open() for more info.
 static __inline__ int  adb_close(int fd)
 {
     return close(fd);
@@ -419,6 +446,14 @@ static __inline__ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, 
 #undef   accept
 #define  accept  ___xxx_accept
 
+// Operate on a file descriptor returned from unix_open() or a well-known file
+// descriptor such as STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO.
+//
+// On Unix, unix_read(), unix_write(), unix_close() map to adb_read(),
+// adb_write(), adb_close() (which all map to Unix system calls), but the
+// Windows implementations (in the ifdef above and in sysdeps_win32.cpp) call
+// into the C Runtime and its configurable CR/LF translation (which is settable
+// via _setmode()).
 #define  unix_read   adb_read
 #define  unix_write  adb_write
 #define  unix_close  adb_close
