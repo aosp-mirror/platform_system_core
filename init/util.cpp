@@ -367,10 +367,10 @@ void remove_link(const char *oldpath, const char *newpath)
 int wait_for_file(const char *filename, int timeout)
 {
     struct stat info;
-    time_t timeout_time = gettime() + timeout;
+    uint64_t timeout_time_ns = gettime_ns() + timeout * UINT64_C(1000000000);
     int ret = -1;
 
-    while (gettime() < timeout_time && ((ret = stat(filename, &info)) < 0))
+    while (gettime_ns() < timeout_time_ns && ((ret = stat(filename, &info)) < 0))
         usleep(10000);
 
     return ret;
