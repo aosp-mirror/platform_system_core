@@ -51,7 +51,7 @@ bool ReadFileToString(const std::string& path, std::string* content) {
     return false;
   }
   bool result = ReadFdToString(fd, content);
-  TEMP_FAILURE_RETRY(close(fd));
+  close(fd);
   return result;
 }
 
@@ -102,7 +102,7 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
     ALOGE("android::WriteStringToFile write failed: %s", strerror(errno));
     return CleanUpAfterFailedWrite(path);
   }
-  TEMP_FAILURE_RETRY(close(fd));
+  close(fd);
   return true;
 }
 #endif
@@ -116,7 +116,7 @@ bool WriteStringToFile(const std::string& content, const std::string& path) {
   }
 
   bool result = WriteStringToFd(content, fd);
-  TEMP_FAILURE_RETRY(close(fd));
+  close(fd);
   return result || CleanUpAfterFailedWrite(path);
 }
 
