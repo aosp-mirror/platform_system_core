@@ -1,0 +1,36 @@
+#! /system/bin/sh
+# logpersist cat start and stop handlers
+data=/data/misc/logd
+property=persist.logd.logpersistd
+service=logcatd
+progname="${0##*/}"
+if [ X"${1}" = "-h" -o X"${1}" = X"--help" ]; then
+  echo "${progname%.*}.cat            - dump current ${service%d} logs"
+  echo "${progname%.*}.start          - start ${service} service"
+  echo "${progname%.*}.stop [--clear] - stop ${service} service"
+  exit 0
+fi
+case ${progname} in
+*.cat)
+  su 1036 ls "${data}" |
+  tr -d '\r' |
+  sort -ru |
+  sed "s#^#${data}/#" |
+  su 1036 xargs cat
+  ;;
+*.start)
+  su 0 setprop ${property} ${service}
+  getprop ${property}
+  sleep 1
+  ps -t | grep "${data##*/}.*${service%d}"
+  ;;
+*.stop)
+  su 0 stop ${service}
+  su 0 setprop ${property} ""
+  [ X"${1}" != X"-c" -a X"${1}" != X"--clear" ] ||
+  ( sleep 1 ; su 1036,9998 rm -rf "${data}" )
+  ;;
+*)
+  echo "Unexpected command ${0##*/} ${@}" >&2
+  exit 1
+esac
