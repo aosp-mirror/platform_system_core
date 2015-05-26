@@ -10,6 +10,8 @@ ro.config.low_ram           bool  false  if true, logd.statistics & logd.klogd
                                          default false
 ro.build.type               string       if user, logd.statistics & logd.klogd
                                          default false
+persist.logd.logpersistd    string       Enable logpersist daemon, "logcatd"
+                                         turns on logcat -f in logd context
 persist.logd.size          number 256K   default size of the buffer for all
                                          log ids at initial startup, at runtime
                                          use: logcat -b all -G <value>
