@@ -22,7 +22,7 @@
 
 #include <log/log_read.h>
 
-const char log_time::default_format[] = "%m-%d %H:%M:%S.%3q";
+const char log_time::default_format[] = "%m-%d %H:%M:%S.%q";
 const timespec log_time::EPOCH = { 0, 0 };
 
 // Add %#q for fractional seconds to standard strptime function
