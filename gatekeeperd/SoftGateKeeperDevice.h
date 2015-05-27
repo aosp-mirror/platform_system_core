@@ -17,7 +17,8 @@
 #ifndef SOFT_GATEKEEPER_DEVICE_H_
 #define SOFT_GATEKEEPER_DEVICE_H_
 
-#include <gatekeeper/soft_gatekeeper.h>
+#include "SoftGateKeeper.h"
+
 #include <UniquePtr.h>
 
 using namespace gatekeeper;
@@ -65,7 +66,7 @@ public:
     int verify(uint32_t uid, uint64_t challenge,
             const uint8_t *enrolled_password_handle, uint32_t enrolled_password_handle_length,
             const uint8_t *provided_password, uint32_t provided_password_length,
-            uint8_t **auth_token, uint32_t *auth_token_length);
+            uint8_t **auth_token, uint32_t *auth_token_length, bool *request_reenroll);
 private:
     UniquePtr<GateKeeper> impl_;
 };

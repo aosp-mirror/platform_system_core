@@ -102,7 +102,7 @@ public:
         }
     }
 
-    virtual status_t enroll(uint32_t uid,
+    virtual int enroll(uint32_t uid,
             const uint8_t *current_password_handle, uint32_t current_password_handle_length,
             const uint8_t *current_password, uint32_t current_password_length,
             const uint8_t *desired_password, uint32_t desired_password_length,
@@ -132,29 +132,29 @@ public:
                     enrolled_password_handle, enrolled_password_handle_length);
         }
 
-        if (ret >= 0) {
+        if (ret == 0) {
             gatekeeper::password_handle_t *handle =
                     reinterpret_cast<gatekeeper::password_handle_t *>(*enrolled_password_handle);
             store_sid(uid, handle->user_id);
-            return NO_ERROR;
         }
-        return UNKNOWN_ERROR;
+
+        return ret;
     }
 
-    virtual status_t verify(uint32_t uid,
+    virtual int verify(uint32_t uid,
             const uint8_t *enrolled_password_handle, uint32_t enrolled_password_handle_length,
-            const uint8_t *provided_password, uint32_t provided_password_length) {
+            const uint8_t *provided_password, uint32_t provided_password_length, bool *request_reenroll) {
         uint8_t *auth_token;
         uint32_t auth_token_length;
         return verifyChallenge(uid, 0, enrolled_password_handle, enrolled_password_handle_length,
                 provided_password, provided_password_length,
-                &auth_token, &auth_token_length);
+                &auth_token, &auth_token_length, request_reenroll);
     }
 
-    virtual status_t verifyChallenge(uint32_t uid, uint64_t challenge,
+    virtual int verifyChallenge(uint32_t uid, uint64_t challenge,
             const uint8_t *enrolled_password_handle, uint32_t enrolled_password_handle_length,
             const uint8_t *provided_password, uint32_t provided_password_length,
-            uint8_t **auth_token, uint32_t *auth_token_length) {
+            uint8_t **auth_token, uint32_t *auth_token_length, bool *request_reenroll) {
         IPCThreadState* ipc = IPCThreadState::self();
         const int calling_pid = ipc->getCallingPid();
         const int calling_uid = ipc->getCallingUid();
@@ -170,14 +170,16 @@ public:
         if (device) {
             ret = device->verify(device, uid, challenge,
                 enrolled_password_handle, enrolled_password_handle_length,
-                provided_password, provided_password_length, auth_token, auth_token_length);
+                provided_password, provided_password_length, auth_token, auth_token_length,
+                request_reenroll);
         } else {
             ret = soft_device->verify(uid, challenge,
                 enrolled_password_handle, enrolled_password_handle_length,
-                provided_password, provided_password_length, auth_token, auth_token_length);
+                provided_password, provided_password_length, auth_token, auth_token_length,
+                request_reenroll);
         }
 
-        if (ret >= 0 && *auth_token != NULL && *auth_token_length > 0) {
+        if (ret == 0 && *auth_token != NULL && *auth_token_length > 0) {
             // TODO: cache service?
             sp<IServiceManager> sm = defaultServiceManager();
             sp<IBinder> binder = sm->getService(String16("android.security.keystore"));
@@ -192,13 +194,12 @@ public:
             }
         }
 
-        if (ret >= 0) {
+        if (ret == 0) {
             maybe_store_sid(uid, reinterpret_cast<const gatekeeper::password_handle_t *>(
                         enrolled_password_handle)->user_id);
-            return NO_ERROR;
         }
 
-        return UNKNOWN_ERROR;
+        return ret;
     }
 
     virtual uint64_t getSecureUserId(uint32_t uid) {

@@ -50,18 +50,25 @@ status_t BnGateKeeperService::onTransact(
 
             uint8_t *out = NULL;
             uint32_t outSize = 0;
-            status_t ret = enroll(uid, currentPasswordHandle, currentPasswordHandleSize,
+            int ret = enroll(uid, currentPasswordHandle, currentPasswordHandleSize,
                     currentPassword, currentPasswordSize, desiredPassword,
                     desiredPasswordSize, &out, &outSize);
 
             reply->writeNoException();
-            if (ret == NO_ERROR && outSize > 0 && out != NULL) {
+            reply->writeInt32(1);
+            if (ret == 0 && outSize > 0 && out != NULL) {
+                reply->writeInt32(GATEKEEPER_RESPONSE_OK);
+                reply->writeInt32(0);
+                reply->writeInt32(outSize);
                 reply->writeInt32(outSize);
                 void *buf = reply->writeInplace(outSize);
                 memcpy(buf, out, outSize);
-                free(out);
+                delete[] out;
+            } else if (ret > 0) {
+                reply->writeInt32(GATEKEEPER_RESPONSE_RETRY);
+                reply->writeInt32(ret);
             } else {
-                reply->writeInt32(-1);
+                reply->writeInt32(GATEKEEPER_RESPONSE_ERROR);
             }
             return NO_ERROR;
         }
@@ -78,10 +85,23 @@ status_t BnGateKeeperService::onTransact(
                 static_cast<const uint8_t *>(data.readInplace(currentPasswordSize));
             if (!currentPassword) currentPasswordSize = 0;
 
-            status_t ret = verify(uid, (uint8_t *) currentPasswordHandle,
-                    currentPasswordHandleSize, (uint8_t *) currentPassword, currentPasswordSize);
+            bool request_reenroll = false;
+            int ret = verify(uid, (uint8_t *) currentPasswordHandle,
+                    currentPasswordHandleSize, (uint8_t *) currentPassword, currentPasswordSize,
+                    &request_reenroll);
+
             reply->writeNoException();
-            reply->writeInt32(ret == NO_ERROR ? 1 : 0);
+            reply->writeInt32(1);
+            if (ret == 0) {
+                reply->writeInt32(GATEKEEPER_RESPONSE_OK);
+                reply->writeInt32(request_reenroll ? 1 : 0);
+                reply->writeInt32(0); // no payload returned from this call
+            } else if (ret > 0) {
+                reply->writeInt32(GATEKEEPER_RESPONSE_RETRY);
+                reply->writeInt32(ret);
+            } else {
+                reply->writeInt32(GATEKEEPER_RESPONSE_ERROR);
+            }
             return NO_ERROR;
         }
         case VERIFY_CHALLENGE: {
@@ -101,17 +121,25 @@ status_t BnGateKeeperService::onTransact(
 
             uint8_t *out = NULL;
             uint32_t outSize = 0;
-            status_t ret = verifyChallenge(uid, challenge, (uint8_t *) currentPasswordHandle,
+            bool request_reenroll = false;
+            int ret = verifyChallenge(uid, challenge, (uint8_t *) currentPasswordHandle,
                     currentPasswordHandleSize, (uint8_t *) currentPassword, currentPasswordSize,
-                    &out, &outSize);
+                    &out, &outSize, &request_reenroll);
             reply->writeNoException();
-            if (ret == NO_ERROR && outSize > 0 && out != NULL) {
+            reply->writeInt32(1);
+            if (ret == 0 && outSize > 0 && out != NULL) {
+                reply->writeInt32(GATEKEEPER_RESPONSE_OK);
+                reply->writeInt32(request_reenroll ? 1 : 0);
+                reply->writeInt32(outSize);
                 reply->writeInt32(outSize);
                 void *buf = reply->writeInplace(outSize);
                 memcpy(buf, out, outSize);
-                free(out);
+                delete[] out;
+            } else if (ret > 0) {
+                reply->writeInt32(GATEKEEPER_RESPONSE_RETRY);
+                reply->writeInt32(ret);
             } else {
-                reply->writeInt32(-1);
+                reply->writeInt32(GATEKEEPER_RESPONSE_ERROR);
             }
             return NO_ERROR;
         }
