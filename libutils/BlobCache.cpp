@@ -25,13 +25,15 @@
 #include <utils/Errors.h>
 #include <utils/Log.h>
 
+#include <cutils/properties.h>
+
 namespace android {
 
 // BlobCache::Header::mMagicNumber value
 static const uint32_t blobCacheMagic = ('_' << 24) + ('B' << 16) + ('b' << 8) + '$';
 
 // BlobCache::Header::mBlobCacheVersion value
-static const uint32_t blobCacheVersion = 2;
+static const uint32_t blobCacheVersion = 3;
 
 // BlobCache::Header::mDeviceVersion value
 static const uint32_t blobCacheDeviceVersion = 1;
@@ -165,7 +167,7 @@ static inline size_t align4(size_t size) {
 }
 
 size_t BlobCache::getFlattenedSize() const {
-    size_t size = align4(sizeof(Header));
+    size_t size = align4(sizeof(Header) + PROPERTY_VALUE_MAX);
     for (size_t i = 0; i < mCacheEntries.size(); i++) {
         const CacheEntry& e(mCacheEntries[i]);
         sp<Blob> keyBlob = e.getKey();
@@ -187,10 +189,13 @@ status_t BlobCache::flatten(void* buffer, size_t size) const {
     header->mBlobCacheVersion = blobCacheVersion;
     header->mDeviceVersion = blobCacheDeviceVersion;
     header->mNumEntries = mCacheEntries.size();
+    char buildId[PROPERTY_VALUE_MAX];
+    header->mBuildIdLength = property_get("ro.build.id", buildId, "");
+    memcpy(header->mBuildId, buildId, header->mBuildIdLength);
 
     // Write cache entries
     uint8_t* byteBuffer = reinterpret_cast<uint8_t*>(buffer);
-    off_t byteOffset = align4(sizeof(Header));
+    off_t byteOffset = align4(sizeof(Header) + header->mBuildIdLength);
     for (size_t i = 0; i < mCacheEntries.size(); i++) {
         const CacheEntry& e(mCacheEntries[i]);
         sp<Blob> keyBlob = e.getKey();
@@ -239,15 +244,19 @@ status_t BlobCache::unflatten(void const* buffer, size_t size) {
         ALOGE("unflatten: bad magic number: %" PRIu32, header->mMagicNumber);
         return BAD_VALUE;
     }
+    char buildId[PROPERTY_VALUE_MAX];
+    int len = property_get("ro.build.id", buildId, "");
     if (header->mBlobCacheVersion != blobCacheVersion ||
-            header->mDeviceVersion != blobCacheDeviceVersion) {
+            header->mDeviceVersion != blobCacheDeviceVersion ||
+            len != header->mBuildIdLength ||
+            strncmp(buildId, header->mBuildId, len)) {
         // We treat version mismatches as an empty cache.
         return OK;
     }
 
     // Read cache entries
     const uint8_t* byteBuffer = reinterpret_cast<const uint8_t*>(buffer);
-    off_t byteOffset = align4(sizeof(Header));
+    off_t byteOffset = align4(sizeof(Header) + header->mBuildIdLength);
     size_t numEntries = header->mNumEntries;
     for (size_t i = 0; i < numEntries; i++) {
         if (byteOffset + sizeof(EntryHeader) > size) {
