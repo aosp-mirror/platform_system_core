@@ -18,8 +18,9 @@
 #include <UniquePtr.h>
 #include <iostream>
 
-#include <gatekeeper/soft_gatekeeper.h>
 #include <hardware/hw_auth_token.h>
+
+#include "../SoftGateKeeper.h"
 
 using ::gatekeeper::SizedBuffer;
 using ::testing::Test;
@@ -82,7 +83,7 @@ TEST(GateKeeperTest, VerifySuccess) {
     hw_auth_token_t *auth_token =
         reinterpret_cast<hw_auth_token_t *>(response.auth_token.buffer.get());
 
-    ASSERT_EQ((uint32_t) HW_AUTH_PASSWORD, auth_token->authenticator_type);
+    ASSERT_EQ((uint32_t) HW_AUTH_PASSWORD, ntohl(auth_token->authenticator_type));
     ASSERT_EQ((uint64_t) 1, auth_token->challenge);
     ASSERT_NE(~((uint32_t) 0), auth_token->timestamp);
     ASSERT_NE((uint64_t) 0, auth_token->user_id);

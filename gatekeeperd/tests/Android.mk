@@ -24,6 +24,6 @@ LOCAL_SHARED_LIBRARIES := libgatekeeper libcrypto
 LOCAL_STATIC_LIBRARIES := libscrypt_static
 LOCAL_C_INCLUDES := external/scrypt/lib/crypto
 LOCAL_SRC_FILES := \
-	gatekeeper_test.cpp \
+	gatekeeper_test.cpp
 include $(BUILD_NATIVE_TEST)
 
