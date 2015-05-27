@@ -25,14 +25,22 @@
 #include <cutils/log.h>
 #include <cutils/native_handle.h>
 
+static const int kMaxNativeFds = 1024;
+static const int kMaxNativeInts = 1024;
+
 native_handle_t* native_handle_create(int numFds, int numInts)
 {
-    native_handle_t* h = malloc(
-            sizeof(native_handle_t) + sizeof(int)*(numFds+numInts));
+    if (numFds < 0 || numInts < 0 || numFds > kMaxNativeFds || numInts > kMaxNativeInts) {
+        return NULL;
+    }
 
-    h->version = sizeof(native_handle_t);
-    h->numFds = numFds;
-    h->numInts = numInts;
+    size_t mallocSize = sizeof(native_handle_t) + (sizeof(int) * (numFds + numInts));
+    native_handle_t* h = malloc(mallocSize);
+    if (h) {
+        h->version = sizeof(native_handle_t);
+        h->numFds = numFds;
+        h->numInts = numInts;
+    }
     return h;
 }
 
