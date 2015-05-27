@@ -169,20 +169,20 @@ static int ext4_get_target_device_size(char *blk_device, uint64_t *device_size)
 
     if (TEMP_FAILURE_RETRY(lseek64(data_device, 1024, SEEK_SET)) < 0) {
         ERROR("Error seeking to superblock");
-        TEMP_FAILURE_RETRY(close(data_device));
+        close(data_device);
         return -1;
     }
 
     if (TEMP_FAILURE_RETRY(read(data_device, &sb, sizeof(sb))) != sizeof(sb)) {
         ERROR("Error reading superblock");
-        TEMP_FAILURE_RETRY(close(data_device));
+        close(data_device);
         return -1;
     }
 
     ext4_parse_sb(&sb, &info);
     *device_size = info.len;
 
-    TEMP_FAILURE_RETRY(close(data_device));
+    close(data_device);
     return 0;
 }
 
@@ -301,7 +301,7 @@ static int read_verity_metadata(uint64_t device_size, char *block_device, char *
 
 out:
     if (device != -1)
-        TEMP_FAILURE_RETRY(close(device));
+        close(device);
 
     if (retval != FS_MGR_SETUP_VERITY_SUCCESS) {
         free(*signature);
@@ -470,7 +470,7 @@ static int check_verity_restart(const char *fname)
 
 out:
     if (fd != -1) {
-        TEMP_FAILURE_RETRY(close(fd));
+        close(fd);
     }
 
     return rc;
@@ -622,7 +622,7 @@ static int write_verity_state(const char *fname, off64_t offset, int32_t mode)
 
 out:
     if (fd != -1) {
-        TEMP_FAILURE_RETRY(close(fd));
+        close(fd);
     }
 
     return rc;
@@ -670,7 +670,7 @@ static int read_verity_state(const char *fname, off64_t offset, int *mode)
 
 out:
     if (fd != -1) {
-        TEMP_FAILURE_RETRY(close(fd));
+        close(fd);
     }
 
     return rc;
@@ -745,7 +745,7 @@ out:
     free(signature);
 
     if (fd != -1) {
-        TEMP_FAILURE_RETRY(close(fd));
+        close(fd);
     }
 
     return rc;
@@ -913,7 +913,7 @@ out:
     }
 
     if (fd) {
-        TEMP_FAILURE_RETRY(close(fd));
+        close(fd);
     }
 
     return rc;

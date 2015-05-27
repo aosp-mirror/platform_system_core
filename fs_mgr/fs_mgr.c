@@ -203,7 +203,7 @@ int fs_mgr_set_blk_ro(const char *blockdev)
     }
 
     rc = ioctl(fd, BLKROSET, &ON);
-    TEMP_FAILURE_RETRY(close(fd));
+    close(fd);
 
     return rc;
 }
