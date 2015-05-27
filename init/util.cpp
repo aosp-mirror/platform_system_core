@@ -171,7 +171,7 @@ bool read_file(const char* path, std::string* content) {
     }
 
     bool okay = android::base::ReadFdToString(fd, content);
-    TEMP_FAILURE_RETRY(close(fd));
+    close(fd);
     return okay;
 }
 
@@ -185,7 +185,7 @@ int write_file(const char* path, const char* content) {
     if (result == -1) {
         NOTICE("write_file: Unable to write to '%s': %s\n", path, strerror(errno));
     }
-    TEMP_FAILURE_RETRY(close(fd));
+    close(fd);
     return result;
 }
 
