@@ -35,6 +35,12 @@ public:
         CLEAR_SECURE_USER_ID = IBinder::FIRST_CALL_TRANSACTION + 4,
     };
 
+    enum {
+        GATEKEEPER_RESPONSE_OK = 0,
+        GATEKEEPER_RESPONSE_RETRY = 1,
+        GATEKEEPER_RESPONSE_ERROR = -1,
+    };
+
     // DECLARE_META_INTERFACE - C++ client interface not needed
     static const android::String16 descriptor;
     virtual const android::String16& getInterfaceDescriptor() const;
@@ -43,8 +49,13 @@ public:
 
     /**
      * Enrolls a password with the GateKeeper. Returns 0 on success, negative on failure.
+     * Returns:
+     * - 0 on success
+     * - A timestamp T > 0 if the call has failed due to throttling and should not
+     *   be reattempted until T milliseconds have elapsed
+     * - -1 on failure
      */
-    virtual status_t enroll(uint32_t uid,
+    virtual int enroll(uint32_t uid,
             const uint8_t *current_password_handle, uint32_t current_password_handle_length,
             const uint8_t *current_password, uint32_t current_password_length,
             const uint8_t *desired_password, uint32_t desired_password_length,
@@ -52,21 +63,29 @@ public:
 
     /**
      * Verifies a password previously enrolled with the GateKeeper.
-     * Returns 0 on success, negative on failure.
+     * Returns:
+     * - 0 on success
+     * - A timestamp T > 0 if the call has failed due to throttling and should not
+     *   be reattempted until T milliseconds have elapsed
+     * - -1 on failure
      */
-    virtual status_t verify(uint32_t uid, const uint8_t *enrolled_password_handle,
+    virtual int verify(uint32_t uid, const uint8_t *enrolled_password_handle,
             uint32_t enrolled_password_handle_length,
-            const uint8_t *provided_password, uint32_t provided_password_length) = 0;
+            const uint8_t *provided_password, uint32_t provided_password_length,
+            bool *request_reenroll) = 0;
 
     /**
      * Verifies a password previously enrolled with the GateKeeper.
-     * Returns 0 on success, negative on failure.
+     * Returns:
+     * - 0 on success
+     * - A timestamp T > 0 if the call has failed due to throttling and should not
+     *   be reattempted until T milliseconds have elapsed
+     * - -1 on failure
      */
-    virtual status_t verifyChallenge(uint32_t uid, uint64_t challenge,
+    virtual int verifyChallenge(uint32_t uid, uint64_t challenge,
             const uint8_t *enrolled_password_handle, uint32_t enrolled_password_handle_length,
             const uint8_t *provided_password, uint32_t provided_password_length,
-            uint8_t **auth_token, uint32_t *auth_token_length) = 0;
-
+            uint8_t **auth_token, uint32_t *auth_token_length, bool *request_reenroll) = 0;
     /**
      * Returns the secure user ID for the provided android user
      */
