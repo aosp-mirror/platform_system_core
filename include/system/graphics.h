@@ -147,7 +147,8 @@ enum {
      * When used with ANativeWindow, the dataSpace field describes the color
      * space of the buffer, except that dataSpace field
      * HAL_DATASPACE_DEPTH indicates that this buffer contains a depth
-     * image where each sample is a distance value measured by a depth camera.
+     * image where each sample is a distance value measured by a depth camera,
+     * plus an associated confidence value.
      */
     HAL_PIXEL_FORMAT_Y16    = 0x20363159,
 
@@ -481,25 +482,31 @@ struct android_ycbcr {
  * When locking a native buffer of the above format and dataSpace value,
  * the vaddr pointer can be cast to this structure.
  *
- * A variable-length list of (x,y,z) 3D points, as floats.
+ * A variable-length list of (x,y,z, confidence) 3D points, as floats.  (x, y,
+ * z) represents a measured point's position, with the coordinate system defined
+ * by the data source.  Confidence represents the estimated likelihood that this
+ * measurement is correct. It is between 0.f and 1.f, inclusive, with 1.f ==
+ * 100% confidence.
  *
  * @num_points is the number of points in the list
  *
  * @xyz_points is the flexible array of floating-point values.
- *   It contains (num_points) * 3 floats.
+ *   It contains (num_points) * 4 floats.
  *
  *   For example:
  *     android_depth_points d = get_depth_buffer();
  *     struct {
- *       float x; float y; float z;
+ *       float x; float y; float z; float confidence;
  *     } firstPoint, lastPoint;
  *
- *     firstPoint.x = d.xyz_points[0];
- *     firstPoint.y = d.xyz_points[1];
- *     firstPoint.z = d.xyz_points[2];
- *     lastPoint.x = d.xyz_points[(d.num_points - 1) * 3 + 0];
- *     lastPoint.y = d.xyz_points[(d.num_points - 1) * 3 + 1];
- *     lastPoint.z = d.xyz_points[(d.num_points - 1) * 3 + 2];
+ *     firstPoint.x = d.xyzc_points[0];
+ *     firstPoint.y = d.xyzc_points[1];
+ *     firstPoint.z = d.xyzc_points[2];
+ *     firstPoint.confidence = d.xyzc_points[3];
+ *     lastPoint.x = d.xyzc_points[(d.num_points - 1) * 4 + 0];
+ *     lastPoint.y = d.xyzc_points[(d.num_points - 1) * 4 + 1];
+ *     lastPoint.z = d.xyzc_points[(d.num_points - 1) * 4 + 2];
+ *     lastPoint.confidence = d.xyzc_points[(d.num_points - 1) * 4 + 3];
  */
 
 struct android_depth_points {
@@ -508,7 +515,7 @@ struct android_depth_points {
     /** reserved for future use, set to 0 by gralloc's (*lock)() */
     uint32_t reserved[8];
 
-    float xyz_points[];
+    float xyzc_points[];
 };
 
 /**
@@ -730,9 +737,18 @@ typedef enum android_dataspace {
     /*
      * The buffer contains depth ranging measurements from a depth camera.
      * This value is valid with formats:
-     *    HAL_PIXEL_FORMAT_Y16: 16-bit single channel depth image.
+     *    HAL_PIXEL_FORMAT_Y16: 16-bit samples, consisting of a depth measurement
+     *       and an associated confidence value. The 3 MSBs of the sample make
+     *       up the confidence value, and the low 13 LSBs of the sample make up
+     *       the depth measurement.
+     *       For the confidence section, 0 means 100% confidence, 1 means 0%
+     *       confidence. The mapping to a linear float confidence value between
+     *       0.f and 1.f can be obtained with
+     *         float confidence = (((depthSample >> 13) - 1) & 0x7) / 7.0f;
+     *       The depth measurement can be extracted simply with
+     *         uint16_t range = (depthSample & 0x1FFF);
      *    HAL_PIXEL_FORMAT_BLOB: A depth point cloud, as
-     *       a variable-length float (x,y,z) coordinate point list.
+     *       a variable-length float (x,y,z, confidence) coordinate point list.
      *       The point cloud will be represented with the android_depth_points
      *       structure.
      */
