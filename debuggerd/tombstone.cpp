@@ -654,7 +654,7 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, int si_code
   } else {
     ALOGE("Unwind failed: pid = %d, tid = %d", pid, tid);
   }
-  dump_memory_and_code(log, tid);
+  dump_memory_and_code(log, backtrace.get());
   if (map.get() != nullptr) {
     dump_all_maps(backtrace.get(), map.get(), log, tid);
   }

@@ -16,53 +16,39 @@
  */
 
 #include <errno.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/ptrace.h>
-#include <sys/types.h>
-#include <sys/user.h>
 
-#include "../utility.h"
-#include "../machine.h"
+#include <backtrace/Backtrace.h>
 
-void dump_memory_and_code(log_t* log, pid_t tid) {
+#include "machine.h"
+#include "utility.h"
+
+void dump_memory_and_code(log_t* log, Backtrace* backtrace) {
   pt_regs regs;
-  if (ptrace(PTRACE_GETREGS, tid, 0, &regs)) {
+  if (ptrace(PTRACE_GETREGS, backtrace->Tid(), 0, &regs)) {
+    _LOG(log, logtype::ERROR, "cannot get registers: %s\n", strerror(errno));
     return;
   }
 
-  static const char REG_NAMES[] = "r0r1r2r3r4r5r6r7r8r9slfpipsp";
+  static const char reg_names[] = "r0r1r2r3r4r5r6r7r8r9slfpipsp";
 
   for (int reg = 0; reg < 14; reg++) {
-    // this may not be a valid way to access, but it'll do for now
-    uintptr_t addr = regs.uregs[reg];
-
-    // Don't bother if it looks like a small int or ~= null, or if
-    // it's in the kernel area.
-    if (addr < 4096 || addr >= 0xc0000000) {
-      continue;
-    }
-
-    _LOG(log, logtype::MEMORY, "\nmemory near %.2s:\n", &REG_NAMES[reg * 2]);
-    dump_memory(log, tid, addr);
+    dump_memory(log, backtrace, regs.uregs[reg], "memory near %.2s:", &reg_names[reg * 2]);
   }
 
-  // explicitly allow upload of code dump logging
-  _LOG(log, logtype::MEMORY, "\ncode around pc:\n");
-  dump_memory(log, tid, static_cast<uintptr_t>(regs.ARM_pc));
+  dump_memory(log, backtrace, static_cast<uintptr_t>(regs.ARM_pc), "code around pc:");
 
   if (regs.ARM_pc != regs.ARM_lr) {
-    _LOG(log, logtype::MEMORY, "\ncode around lr:\n");
-    dump_memory(log, tid, static_cast<uintptr_t>(regs.ARM_lr));
+    dump_memory(log, backtrace, static_cast<uintptr_t>(regs.ARM_lr), "code around lr:");
   }
 }
 
 void dump_registers(log_t* log, pid_t tid) {
   pt_regs r;
   if (ptrace(PTRACE_GETREGS, tid, 0, &r)) {
-    _LOG(log, logtype::REGISTERS, "cannot get registers: %s\n", strerror(errno));
+    _LOG(log, logtype::ERROR, "cannot get registers: %s\n", strerror(errno));
     return;
   }
 
@@ -82,7 +68,7 @@ void dump_registers(log_t* log, pid_t tid) {
 
   user_vfp vfp_regs;
   if (ptrace(PTRACE_GETVFPREGS, tid, 0, &vfp_regs)) {
-    _LOG(log, logtype::FP_REGISTERS, "cannot get FP registers: %s\n", strerror(errno));
+    _LOG(log, logtype::ERROR, "cannot get FP registers: %s\n", strerror(errno));
     return;
   }
 
