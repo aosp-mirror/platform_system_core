@@ -22,6 +22,7 @@ int do_rm(int nargs, char **args);
 int do_rmdir(int nargs, char **args);
 int do_setprop(int nargs, char **args);
 int do_setrlimit(int nargs, char **args);
+int do_setusercryptopolicies(int nargs, char **args);
 int do_start(int nargs, char **args);
 int do_stop(int nargs, char **args);
 int do_swapon_all(int nargs, char **args);
@@ -78,6 +79,7 @@ enum {
     KEYWORD(setenv,      OPTION,  2, 0)
     KEYWORD(setprop,     COMMAND, 2, do_setprop)
     KEYWORD(setrlimit,   COMMAND, 3, do_setrlimit)
+    KEYWORD(setusercryptopolicies,   COMMAND, 1, do_setusercryptopolicies)
     KEYWORD(socket,      OPTION,  0, 0)
     KEYWORD(start,       COMMAND, 1, do_start)
     KEYWORD(stop,        COMMAND, 1, do_stop)
