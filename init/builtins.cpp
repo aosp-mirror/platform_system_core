@@ -591,7 +591,13 @@ int do_powerctl(int nargs, char **args)
 
 int do_trigger(int nargs, char **args)
 {
-    action_for_each_trigger(args[1], action_add_queue_tail);
+    char prop_val[PROP_VALUE_MAX];
+    int res = expand_props(prop_val, args[1], sizeof(prop_val));
+    if (res) {
+        ERROR("trigger: cannot expand '%s'\n", args[1]);
+        return -EINVAL;
+    }
+    action_for_each_trigger(prop_val, action_add_queue_tail);
     return 0;
 }
 
