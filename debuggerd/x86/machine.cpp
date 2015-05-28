@@ -14,18 +14,31 @@
  * limitations under the License.
  */
 
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
 #include <errno.h>
-#include <sys/types.h>
+#include <stdint.h>
+#include <string.h>
 #include <sys/ptrace.h>
 
-#include "../utility.h"
-#include "../machine.h"
+#include <backtrace/Backtrace.h>
 
-void dump_memory_and_code(log_t*, pid_t) {
+#include "machine.h"
+#include "utility.h"
+
+void dump_memory_and_code(log_t* log, Backtrace* backtrace) {
+  struct pt_regs r;
+  if (ptrace(PTRACE_GETREGS, backtrace->Tid(), 0, &r) == -1) {
+    _LOG(log, logtype::ERROR, "cannot get registers: %s\n", strerror(errno));
+    return;
+  }
+
+  dump_memory(log, backtrace, static_cast<uintptr_t>(r.eax), "memory near eax:");
+  dump_memory(log, backtrace, static_cast<uintptr_t>(r.ebx), "memory near ebx:");
+  dump_memory(log, backtrace, static_cast<uintptr_t>(r.ecx), "memory near ecx:");
+  dump_memory(log, backtrace, static_cast<uintptr_t>(r.edx), "memory near edx:");
+  dump_memory(log, backtrace, static_cast<uintptr_t>(r.esi), "memory near esi:");
+  dump_memory(log, backtrace, static_cast<uintptr_t>(r.edi), "memory near edi:");
+
+  dump_memory(log, backtrace, static_cast<uintptr_t>(r.eip), "code around eip:");
 }
 
 void dump_registers(log_t* log, pid_t tid) {
@@ -34,6 +47,7 @@ void dump_registers(log_t* log, pid_t tid) {
     _LOG(log, logtype::ERROR, "cannot get registers: %s\n", strerror(errno));
     return;
   }
+
   _LOG(log, logtype::REGISTERS, "    eax %08lx  ebx %08lx  ecx %08lx  edx %08lx\n",
        r.eax, r.ebx, r.ecx, r.edx);
   _LOG(log, logtype::REGISTERS, "    esi %08lx  edi %08lx\n",
