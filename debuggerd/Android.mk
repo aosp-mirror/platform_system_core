@@ -1,4 +1,12 @@
-LOCAL_PATH:= $(call my-dir)
+LOCAL_PATH := $(call my-dir)
+
+common_cppflags := \
+    -std=gnu++11 \
+    -W \
+    -Wall \
+    -Wextra \
+    -Wunused \
+    -Werror \
 
 include $(CLEAR_VARS)
 
@@ -17,11 +25,7 @@ LOCAL_SRC_FILES_mips64 := mips64/machine.cpp
 LOCAL_SRC_FILES_x86    := x86/machine.cpp
 LOCAL_SRC_FILES_x86_64 := x86_64/machine.cpp
 
-LOCAL_CPPFLAGS := \
-    -std=gnu++11 \
-    -W -Wall -Wextra \
-    -Wunused \
-    -Werror \
+LOCAL_CPPFLAGS := $(common_cppflags)
 
 ifeq ($(TARGET_IS_64_BIT),true)
 LOCAL_CPPFLAGS += -DTARGET_IS_64_BIT
@@ -70,3 +74,47 @@ LOCAL_MODULE_STEM_64 := crasher64
 LOCAL_MULTILIB := both
 
 include $(BUILD_EXECUTABLE)
+
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES := \
+    utility.cpp \
+    test/dump_memory_test.cpp \
+    test/log_fake.cpp \
+
+LOCAL_MODULE := debuggerd_test
+
+LOCAL_SHARED_LIBRARIES := \
+    libbacktrace \
+    libbase \
+
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/test
+LOCAL_CPPFLAGS := $(common_cppflags)
+
+LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
+LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
+LOCAL_MULTILIB := both
+
+include $(BUILD_HOST_NATIVE_TEST)
+
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES := \
+    utility.cpp \
+    test/dump_memory_test.cpp \
+    test/log_fake.cpp \
+
+LOCAL_MODULE := debuggerd_test
+
+LOCAL_SHARED_LIBRARIES := \
+    libbacktrace \
+    libbase \
+
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/test
+LOCAL_CPPFLAGS := $(common_cppflags)
+
+LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
+LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
+LOCAL_MULTILIB := both
+
+include $(BUILD_NATIVE_TEST)
