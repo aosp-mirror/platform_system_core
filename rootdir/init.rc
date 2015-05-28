@@ -645,10 +645,7 @@ service pre-recovery /system/bin/uncrypt
     disabled
     oneshot
 
-on property:ro.debuggable=1
-    start perfprofd
-
 service perfprofd /system/xbin/perfprofd
-    disabled
+    class late_start
     user root
     oneshot
