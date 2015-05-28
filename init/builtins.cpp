@@ -833,18 +833,31 @@ static int do_installkeys_ensure_dir_exists(const char* dir)
     return 0;
 }
 
+static bool is_file_crypto() {
+    char prop_value[PROP_VALUE_MAX] = {0};
+    property_get("ro.crypto.type", prop_value);
+    return strcmp(prop_value, "file") == 0;
+}
+
 int do_installkey(int nargs, char **args)
 {
     if (nargs != 2) {
         return -1;
     }
-
-    char prop_value[PROP_VALUE_MAX] = {0};
-    property_get("ro.crypto.type", prop_value);
-    if (strcmp(prop_value, "file")) {
+    if (!is_file_crypto()) {
         return 0;
     }
-
     return e4crypt_create_device_key(args[1],
                                      do_installkeys_ensure_dir_exists);
+}
+
+int do_setusercryptopolicies(int nargs, char **args)
+{
+    if (nargs != 2) {
+        return -1;
+    }
+    if (!is_file_crypto()) {
+        return 0;
+    }
+    return e4crypt_set_user_crypto_policies(args[1]);
 }
