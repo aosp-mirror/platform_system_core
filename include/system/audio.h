@@ -1354,7 +1354,7 @@ static inline size_t audio_bytes_per_sample(audio_format_t format)
 }
 
 /* converts device address to string sent to audio HAL via set_parameters */
-static char *audio_device_address_to_parameter(audio_devices_t device, const char *address)
+static inline char *audio_device_address_to_parameter(audio_devices_t device, const char *address)
 {
     const size_t kSize = AUDIO_DEVICE_MAX_ADDRESS_LEN + sizeof("a2dp_sink_address=");
     char param[kSize];
