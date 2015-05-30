@@ -680,14 +680,7 @@ static bool wait_for_device(const char* service, TransportType t, const char* se
     }
 
     std::string cmd = format_host_command(service, t, serial);
-    std::string error;
-    if (adb_command(cmd, &error)) {
-        D("failure: %s *\n", error.c_str());
-        fprintf(stderr,"error: %s\n", error.c_str());
-        return false;
-    }
-
-    return true;
+    return adb_command(cmd);
 }
 
 static int send_shell_command(TransportType transport_type, const char* serial,
@@ -1249,90 +1242,50 @@ int adb_commandline(int argc, const char **argv) {
         if (argc != 1) return usage();
         return send_shell_command(transport_type, serial, "shell:bugreport");
     }
-    /* adb_command() wrapper commands */
     else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
-        std::string cmd;
-        char host_prefix[64];
-        char reverse = (char) !strcmp(argv[0], "reverse");
-        char remove = 0;
-        char remove_all = 0;
-        char list = 0;
-        char no_rebind = 0;
-
-        // Parse options here.
-        while (argc > 1 && argv[1][0] == '-') {
-            if (!strcmp(argv[1], "--list"))
-                list = 1;
-            else if (!strcmp(argv[1], "--remove"))
-                remove = 1;
-            else if (!strcmp(argv[1], "--remove-all"))
-                remove_all = 1;
-            else if (!strcmp(argv[1], "--no-rebind"))
-                no_rebind = 1;
-            else {
-                return usage();
-            }
-            argc--;
-            argv++;
-        }
-
-        // Ensure we can only use one option at a time.
-        if (list + remove + remove_all + no_rebind > 1) {
-            return usage();
-        }
+        bool reverse = !strcmp(argv[0], "reverse");
+        ++argv;
+        --argc;
+        if (argc < 1) return usage();
 
         // Determine the <host-prefix> for this command.
+        std::string host_prefix;
         if (reverse) {
-            snprintf(host_prefix, sizeof host_prefix, "reverse");
+            host_prefix = "reverse";
         } else {
             if (serial) {
-                snprintf(host_prefix, sizeof host_prefix, "host-serial:%s",
-                        serial);
+                host_prefix = android::base::StringPrintf("host-serial:%s", serial);
             } else if (transport_type == kTransportUsb) {
-                snprintf(host_prefix, sizeof host_prefix, "host-usb");
+                host_prefix = "host-usb";
             } else if (transport_type == kTransportLocal) {
-                snprintf(host_prefix, sizeof host_prefix, "host-local");
+                host_prefix = "host-local";
             } else {
-                snprintf(host_prefix, sizeof host_prefix, "host");
+                host_prefix = "host";
             }
         }
 
-        // Implement forward --list
-        if (list) {
-            if (argc != 1) {
-                return usage();
-            }
-
-            std::string query = android::base::StringPrintf("%s:list-forward", host_prefix);
-            return adb_query_command(query);
-        }
-
-        // Implement forward --remove-all
-        else if (remove_all) {
+        std::string cmd;
+        if (strcmp(argv[0], "--list") == 0) {
             if (argc != 1) return usage();
-            cmd = android::base::StringPrintf("%s:killforward-all", host_prefix);
-        }
-
-        // Implement forward --remove <local>
-        else if (remove) {
+            return adb_query_command(host_prefix + ":list-forward");
+        } else if (strcmp(argv[0], "--remove-all") == 0) {
+            if (argc != 1) return usage();
+            cmd = host_prefix + ":killforward-all";
+        } else if (strcmp(argv[0], "--remove") == 0) {
+            // forward --remove <local>
             if (argc != 2) return usage();
-            cmd = android::base::StringPrintf("%s:killforward:%s", host_prefix, argv[1]);
-        }
-        // Or implement one of:
-        //    forward <local> <remote>
-        //    forward --no-rebind <local> <remote>
-        else {
+            cmd = host_prefix + ":killforward:" + argv[1];
+        } else if (strcmp(argv[0], "--no-rebind") == 0) {
+            // forward --no-rebind <local> <remote>
             if (argc != 3) return usage();
-            const char* command = no_rebind ? "forward:norebind" : "forward";
-            cmd = android::base::StringPrintf("%s:%s:%s;%s", host_prefix, command, argv[1], argv[2]);
+            cmd = host_prefix + ":forward:norebind:" + argv[1] + ";" + argv[2];
+        } else {
+            // forward <local> <remote>
+            if (argc != 2) return usage();
+            cmd = host_prefix + ":forward:" + argv[0] + ";" + argv[1];
         }
 
-        std::string error;
-        if (adb_command(cmd, &error)) {
-            fprintf(stderr, "error: %s\n", error.c_str());
-            return 1;
-        }
-        return 0;
+        return adb_command(cmd) ? 0 : 1;
     }
     /* do_sync_*() commands */
     else if (!strcmp(argv[0], "ls")) {
