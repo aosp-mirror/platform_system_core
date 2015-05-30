@@ -26,13 +26,12 @@
 
 int gListenAll = 0; /* Not static because it is used in commandline.c. */
 
-alistener listener_list = {
+static alistener listener_list = {
     .next = &listener_list,
     .prev = &listener_list,
 };
 
-void ss_listener_event_func(int _fd, unsigned ev, void *_l)
-{
+static void ss_listener_event_func(int _fd, unsigned ev, void *_l) {
     asocket *s;
 
     if(ev & FDE_READ) {
@@ -56,7 +55,7 @@ void ss_listener_event_func(int _fd, unsigned ev, void *_l)
     }
 }
 
-void listener_event_func(int _fd, unsigned ev, void* _l)
+static void listener_event_func(int _fd, unsigned ev, void* _l)
 {
     alistener* listener = reinterpret_cast<alistener*>(_l);
     asocket *s;
@@ -106,38 +105,27 @@ static void  free_listener(alistener*  l)
     free(l);
 }
 
-void listener_disconnect(void* listener, atransport*  t)
-{
+static void listener_disconnect(void* listener, atransport* t) {
     free_listener(reinterpret_cast<alistener*>(listener));
 }
 
-int local_name_to_fd(const char *name)
-{
-    int port;
-
-    if(!strncmp("tcp:", name, 4)){
-        int  ret;
-        port = atoi(name + 4);
-
+static int local_name_to_fd(const char* name) {
+    if (!strncmp("tcp:", name, 4)) {
+        int port = atoi(name + 4);
         if (gListenAll > 0) {
-            ret = socket_inaddr_any_server(port, SOCK_STREAM);
+            return socket_inaddr_any_server(port, SOCK_STREAM);
         } else {
-            ret = socket_loopback_server(port, SOCK_STREAM);
+            return socket_loopback_server(port, SOCK_STREAM);
         }
-
-        return ret;
     }
 #ifndef HAVE_WIN32_IPC  /* no Unix-domain sockets on Win32 */
-    // It's non-sensical to support the "reserved" space on the adb host side
-    if(!strncmp(name, "local:", 6)) {
-        return socket_local_server(name + 6,
-                ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
-    } else if(!strncmp(name, "localabstract:", 14)) {
-        return socket_local_server(name + 14,
-                ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
-    } else if(!strncmp(name, "localfilesystem:", 16)) {
-        return socket_local_server(name + 16,
-                ANDROID_SOCKET_NAMESPACE_FILESYSTEM, SOCK_STREAM);
+    // It's nonsensical to support the "reserved" space on the adb host side
+    if (!strncmp(name, "local:", 6)) {
+        return socket_local_server(name + 6, ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
+    } else if (!strncmp(name, "localabstract:", 14)) {
+        return socket_local_server(name + 14, ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
+    } else if (!strncmp(name, "localfilesystem:", 16)) {
+        return socket_local_server(name + 16, ANDROID_SOCKET_NAMESPACE_FILESYSTEM, SOCK_STREAM);
     }
 
 #endif
