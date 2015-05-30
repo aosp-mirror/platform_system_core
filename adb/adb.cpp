@@ -721,56 +721,50 @@ int handle_forward_request(const char* service, TransportType type, const char* 
         return 1;
     }
 
-    if (!strncmp(service, "forward:",8) ||
-        !strncmp(service, "killforward:",12)) {
-        char *local, *remote;
-        atransport *transport;
-
-        int createForward = strncmp(service, "kill", 4);
-        int no_rebind = 0;
-
-        local = strchr(service, ':') + 1;
-
-        // Handle forward:norebind:<local>... here
-        if (createForward && !strncmp(local, "norebind:", 9)) {
-            no_rebind = 1;
-            local = strchr(local, ':') + 1;
+    if (!strncmp(service, "forward:", 8) || !strncmp(service, "killforward:", 12)) {
+        // killforward:local
+        // forward:(norebind:)?local;remote
+        bool kill_forward = false;
+        bool no_rebind = false;
+        if (android::base::StartsWith(service, "killforward:")) {
+            kill_forward = true;
+            service += 12;
+            if (android::base::StartsWith(service, "norebind:")) {
+                no_rebind = true;
+                service += 9;
+            }
+        } else {
+            service += 8;
         }
 
-        remote = strchr(local,';');
+        std::vector<std::string> pieces = android::base::Split(service, ";");
 
-        if (createForward) {
-            // Check forward: parameter format: '<local>;<remote>'
-            if(remote == 0) {
-                SendFail(reply_fd, "malformed forward spec");
-                return 1;
-            }
-
-            *remote++ = 0;
-            if((local[0] == 0) || (remote[0] == 0) || (remote[0] == '*')) {
-                SendFail(reply_fd, "malformed forward spec");
+        if (kill_forward) {
+            // Check killforward: parameter format: '<local>'
+            if (pieces.size() != 1 || pieces[0].empty()) {
+                SendFail(reply_fd, android::base::StringPrintf("bad killforward: %s", service));
                 return 1;
             }
         } else {
-            // Check killforward: parameter format: '<local>'
-            if (local[0] == 0) {
-                SendFail(reply_fd, "malformed forward spec");
+            // Check forward: parameter format: '<local>;<remote>'
+            if (pieces.size() != 2 || pieces[0].empty() || pieces[1].empty() || pieces[1][0] == '*') {
+                SendFail(reply_fd, android::base::StringPrintf("bad forward: %s", service));
                 return 1;
             }
         }
 
         std::string error_msg;
-        transport = acquire_one_transport(kCsAny, type, serial, &error_msg);
+        atransport* transport = acquire_one_transport(kCsAny, type, serial, &error_msg);
         if (!transport) {
             SendFail(reply_fd, error_msg);
             return 1;
         }
 
         InstallStatus r;
-        if (createForward) {
-            r = install_listener(local, remote, transport, no_rebind);
+        if (kill_forward) {
+            r = remove_listener(pieces[0].c_str(), transport);
         } else {
-            r = remove_listener(local, transport);
+            r = install_listener(pieces[0], pieces[1].c_str(), transport, no_rebind);
         }
         if (r == INSTALL_STATUS_OK) {
 #if ADB_HOST
@@ -783,7 +777,7 @@ int handle_forward_request(const char* service, TransportType type, const char* 
 
         std::string message;
         switch (r) {
-          case INSTALL_STATUS_OK: message = " "; break;
+          case INSTALL_STATUS_OK: message = "success (!)"; break;
           case INSTALL_STATUS_INTERNAL_ERROR: message = "internal error"; break;
           case INSTALL_STATUS_CANNOT_BIND:
             message = android::base::StringPrintf("cannot bind to socket: %s", strerror(errno));
@@ -791,7 +785,9 @@ int handle_forward_request(const char* service, TransportType type, const char* 
           case INSTALL_STATUS_CANNOT_REBIND:
             message = android::base::StringPrintf("cannot rebind existing socket: %s", strerror(errno));
             break;
-          case INSTALL_STATUS_LISTENER_NOT_FOUND: message = "listener not found"; break;
+          case INSTALL_STATUS_LISTENER_NOT_FOUND:
+            message = android::base::StringPrintf("listener '%s' not found", service);
+            break;
         }
         SendFail(reply_fd, message);
         return 1;
