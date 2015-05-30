@@ -567,7 +567,12 @@ int Looper::removeFd(int fd, int seq) {
 #endif
                 scheduleEpollRebuildLocked();
             } else {
+                // Some other error occurred.  This is really weird because it means
+                // our list of callbacks got out of sync with the epoll set somehow.
+                // We defensively rebuild the epoll set to avoid getting spurious
+                // notifications with nowhere to go.
                 ALOGE("Error removing epoll events for fd %d, errno=%d", fd, errno);
+                scheduleEpollRebuildLocked();
                 return -1;
             }
         }
