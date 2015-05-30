@@ -30,12 +30,6 @@ enum InstallStatus {
   INSTALL_STATUS_LISTENER_NOT_FOUND = -4,
 };
 
-extern alistener listener_list;
-
-void listener_disconnect(void*  _l, atransport*  t);
-void listener_event_func(int _fd, unsigned ev, void *_l);
-void ss_listener_event_func(int _fd, unsigned ev, void *_l);
-
 InstallStatus install_listener(const std::string& local_name,
                                const char* connect_to,
                                atransport* transport,

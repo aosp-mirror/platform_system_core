@@ -256,19 +256,21 @@ error:
 }
 
 
-int adb_command(const std::string& service, std::string* error) {
-    int fd = adb_connect(service, error);
+bool adb_command(const std::string& service) {
+    std::string error;
+    int fd = adb_connect(service, &error);
     if (fd < 0) {
-        fprintf(stderr, "error: %s\n", error->c_str());
-        return -1;
+        fprintf(stderr, "error: %s\n", error.c_str());
+        return false;
     }
 
-    if (!adb_status(fd, error)) {
+    if (!adb_status(fd, &error)) {
+        fprintf(stderr, "error: %s\n", error.c_str());
         adb_close(fd);
-        return -1;
+        return false;
     }
 
-    return 0;
+    return true;
 }
 
 bool adb_query(const std::string& service, std::string* result, std::string* error) {
