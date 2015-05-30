@@ -42,8 +42,8 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
-LOCAL_STATIC_LIBRARIES := libutils
-LOCAL_SHARED_LIBRARIES := libz-host liblog libbase
+LOCAL_STATIC_LIBRARIES := libz libutils
+LOCAL_SHARED_LIBRARIES := liblog libbase
 LOCAL_MODULE:= libziparchive-host
 LOCAL_CFLAGS := -Werror
 LOCAL_MULTILIB := both
