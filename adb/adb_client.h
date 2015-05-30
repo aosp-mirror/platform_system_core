@@ -26,9 +26,9 @@
 int adb_connect(const std::string& service, std::string* error);
 int _adb_connect(const std::string& service, std::string* error);
 
-// Connect to adb, connect to the named service, return 0 if the connection
-// succeeded AND the service returned OKAY.
-int adb_command(const std::string& service, std::string* error);
+// Connect to adb, connect to the named service, returns true if the connection
+// succeeded AND the service returned OKAY. Outputs any returned error otherwise.
+bool adb_command(const std::string& service);
 
 // Connects to the named adb service and fills 'result' with the response.
 // Returns true on success; returns false and fills 'error' on failure.
