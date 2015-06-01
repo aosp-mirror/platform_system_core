@@ -69,7 +69,7 @@ ThreadEntry* ThreadEntry::Get(pid_t pid, pid_t tid, bool create) {
 }
 
 void ThreadEntry::Remove(ThreadEntry* entry) {
-  pthread_mutex_unlock(&entry->mutex_);
+  entry->Unlock();
 
   pthread_mutex_lock(&ThreadEntry::list_mutex_);
   if (--entry->ref_count_ == 0) {
@@ -96,20 +96,24 @@ ThreadEntry::~ThreadEntry() {
   pthread_cond_destroy(&wait_cond_);
 }
 
-void ThreadEntry::Wait(int value) {
+bool ThreadEntry::Wait(int value) {
   timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
-  ts.tv_sec += 10;
+  ts.tv_sec += 5;
 
+  bool wait_completed = true;
   pthread_mutex_lock(&wait_mutex_);
   while (wait_value_ != value) {
     int ret = pthread_cond_timedwait(&wait_cond_, &wait_mutex_, &ts);
     if (ret != 0) {
-      BACK_LOGW("pthread_cond_timedwait failed: %s", strerror(ret));
+      BACK_LOGW("pthread_cond_timedwait for value %d failed: %s", value, strerror(ret));
+      wait_completed = false;
       break;
     }
   }
   pthread_mutex_unlock(&wait_mutex_);
+
+  return wait_completed;
 }
 
 void ThreadEntry::Wake() {

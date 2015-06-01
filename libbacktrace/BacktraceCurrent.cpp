@@ -96,7 +96,7 @@ static pthread_mutex_t g_sigaction_mutex = PTHREAD_MUTEX_INITIALIZER;
 static void SignalHandler(int, siginfo_t*, void* sigcontext) {
   ThreadEntry* entry = ThreadEntry::Get(getpid(), gettid(), false);
   if (!entry) {
-    BACK_LOGW("Unable to find pid %d tid %d information", getpid(), gettid());
+    BACK_LOGE("pid %d, tid %d entry not found", getpid(), gettid());
     return;
   }
 
@@ -109,9 +109,14 @@ static void SignalHandler(int, siginfo_t*, void* sigcontext) {
   // the thread run ahead causing problems.
   // The number indicates that we are waiting for the second Wake() call
   // overall which is made by the thread requesting an unwind.
-  entry->Wait(2);
-
-  ThreadEntry::Remove(entry);
+  if (entry->Wait(2)) {
+    // Do not remove the entry here because that can result in a deadlock
+    // if the code cannot properly send a signal to the thread under test.
+    entry->Wake();
+  } else {
+    // At this point, it is possible that entry has been freed, so just exit.
+    BACK_LOGE("Timed out waiting for unwind thread to indicate it completed.");
+  }
 }
 
 bool BacktraceCurrent::UnwindThread(size_t num_ignore_frames) {
@@ -128,17 +133,15 @@ bool BacktraceCurrent::UnwindThread(size_t num_ignore_frames) {
   act.sa_flags = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
   sigemptyset(&act.sa_mask);
   if (sigaction(THREAD_SIGNAL, &act, &oldact) != 0) {
-    BACK_LOGW("sigaction failed %s", strerror(errno));
-    entry->Unlock();
+    BACK_LOGE("sigaction failed: %s", strerror(errno));
     ThreadEntry::Remove(entry);
     pthread_mutex_unlock(&g_sigaction_mutex);
     return false;
   }
 
   if (tgkill(Pid(), Tid(), THREAD_SIGNAL) != 0) {
-    BACK_LOGW("tgkill %d failed: %s", Tid(), strerror(errno));
+    BACK_LOGE("tgkill %d failed: %s", Tid(), strerror(errno));
     sigaction(THREAD_SIGNAL, &oldact, nullptr);
-    entry->Unlock();
     ThreadEntry::Remove(entry);
     pthread_mutex_unlock(&g_sigaction_mutex);
     return false;
@@ -146,17 +149,30 @@ bool BacktraceCurrent::UnwindThread(size_t num_ignore_frames) {
 
   // Wait for the thread to get the ucontext. The number indicates
   // that we are waiting for the first Wake() call made by the thread.
-  entry->Wait(1);
+  bool wait_completed = entry->Wait(1);
 
   // After the thread has received the signal, allow other unwinders to
   // continue.
   sigaction(THREAD_SIGNAL, &oldact, nullptr);
   pthread_mutex_unlock(&g_sigaction_mutex);
 
-  bool unwind_done = UnwindFromContext(num_ignore_frames, entry->GetUcontext());
+  bool unwind_done = false;
+  if (wait_completed) {
+    unwind_done = UnwindFromContext(num_ignore_frames, entry->GetUcontext());
 
-  // Tell the signal handler to exit and release the entry.
-  entry->Wake();
+    // Tell the signal handler to exit and release the entry.
+    entry->Wake();
+
+    // Wait for the thread to indicate it is done with the ThreadEntry.
+    if (!entry->Wait(3)) {
+      // Send a warning, but do not mark as a failure to unwind.
+      BACK_LOGW("Timed out waiting for signal handler to indicate it finished.");
+    }
+  } else {
+    BACK_LOGE("Timed out waiting for signal handler to get ucontext data.");
+  }
+
+  ThreadEntry::Remove(entry);
 
   return unwind_done;
 }
