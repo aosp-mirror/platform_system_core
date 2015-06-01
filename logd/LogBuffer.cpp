@@ -388,7 +388,6 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         bool kick = false;
         bool leading = true;
         LogBufferElementLast last;
-        log_time start(log_time::EPOCH);
         for(it = mLogElements.begin(); it != mLogElements.end();) {
             LogBufferElement *e = *it;
 
@@ -416,8 +415,6 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 delete e;
                 continue;
             }
-
-            leading = false;
 
             if (hasBlacklist && mPrune.naughty(e)) {
                 last.clear(e);
@@ -448,27 +445,22 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             }
 
             if (e->getUid() != worst) {
-                if (start != log_time::EPOCH) {
+                if (leading) {
                     static const timespec too_old = {
                         EXPIRE_HOUR_THRESHOLD * 60 * 60, 0
                     };
-                    start = e->getRealTime() + too_old;
+                    LogBufferElementCollection::iterator last;
+                    last = mLogElements.end();
+                    --last;
+                    if ((e->getRealTime() < ((*last)->getRealTime() - too_old))
+                            || (e->getRealTime() > (*last)->getRealTime())) {
+                        break;
+                    }
                 }
+                leading = false;
                 last.clear(e);
                 ++it;
                 continue;
-            }
-
-            if ((start != log_time::EPOCH) && (e->getRealTime() > start)) {
-                // KISS. Really a heuristic rather than algorithmically strong,
-                // a crude mechanism, the following loops will move the oldest
-                // watermark possibly wiping out the extra EXPIRE_HOUR_THRESHOLD
-                // we just thought we were preserving. We count on the typical
-                // pruneRows of 10% of total not being a sledgehammer.
-                // A stronger algorithm would have us loop back to the top if
-                // we have worst-UID enabled and we start expiring messages
-                // below less than EXPIRE_HOUR_THRESHOLD old.
-                break;
             }
 
             pruneRows--;
@@ -479,15 +471,21 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             kick = true;
 
             unsigned short len = e->getMsgLen();
-            stats.drop(e);
-            e->setDropped(1);
-            if (last.merge(e, 1)) {
-                it = mLogElements.erase(it);
-                stats.erase(e);
-                delete e;
+
+            // do not create any leading drops
+            if (leading) {
+                it = erase(it);
             } else {
-                last.add(e);
-                ++it;
+                stats.drop(e);
+                e->setDropped(1);
+                if (last.merge(e, 1)) {
+                    it = mLogElements.erase(it);
+                    stats.erase(e);
+                    delete e;
+                } else {
+                    last.add(e);
+                    ++it;
+                }
             }
             if (worst_sizes < second_worst_sizes) {
                 break;
