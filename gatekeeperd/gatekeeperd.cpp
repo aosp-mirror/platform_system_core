@@ -136,6 +136,12 @@ public:
             gatekeeper::password_handle_t *handle =
                     reinterpret_cast<gatekeeper::password_handle_t *>(*enrolled_password_handle);
             store_sid(uid, handle->user_id);
+            bool rr;
+
+            // immediately verify this password so we don't ask the user to enter it again
+            // if they just created it.
+            verify(uid, *enrolled_password_handle, sizeof(password_handle_t), desired_password,
+                    desired_password_length, &rr);
         }
 
         return ret;
