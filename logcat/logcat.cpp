@@ -1,36 +1,38 @@
 // Copyright 2006-2015 The Android Open Source Project
 
+#include <arpa/inet.h>
 #include <assert.h>
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <math.h>
+#include <sched.h>
+#include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdarg.h>
 #include <string.h>
-#include <signal.h>
-#include <time.h>
-#include <unistd.h>
 #include <sys/cdefs.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <arpa/inet.h>
+#include <time.h>
+#include <unistd.h>
 
 #include <memory>
 #include <string>
 
 #include <base/file.h>
 #include <base/strings.h>
+#include <cutils/sched_policy.h>
 #include <cutils/sockets.h>
+#include <log/event_tag_map.h>
 #include <log/log.h>
 #include <log/log_read.h>
-#include <log/logger.h>
 #include <log/logd.h>
+#include <log/logger.h>
 #include <log/logprint.h>
-#include <log/event_tag_map.h>
 
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
@@ -209,7 +211,15 @@ static void setupOutput()
         g_outFD = STDOUT_FILENO;
 
     } else {
-        struct stat statbuf;
+        if (set_sched_policy(0, SP_BACKGROUND) < 0) {
+            fprintf(stderr, "failed to set background scheduling policy\n");
+        }
+
+        struct sched_param param;
+        memset(&param, 0, sizeof(param));
+        if (sched_setscheduler((pid_t) 0, SCHED_BATCH, &param) < 0) {
+            fprintf(stderr, "failed to set to batch scheduler\n");
+        }
 
         g_outFD = openLogFile (g_outputFileName);
 
@@ -217,6 +227,7 @@ static void setupOutput()
             logcat_panic(false, "couldn't open output file");
         }
 
+        struct stat statbuf;
         if (fstat(g_outFD, &statbuf) == -1) {
             close(g_outFD);
             logcat_panic(false, "couldn't get output file stat\n");
