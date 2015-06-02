@@ -1,6 +1,6 @@
 ## Permissions to allow system-wide tracing to the kernel trace buffer.
 ##
-on early-boot
+on boot
 
 # Allow writing to the kernel trace log.
     chmod 0222 /sys/kernel/debug/tracing/trace_marker
