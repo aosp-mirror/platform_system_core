@@ -1,29 +1,38 @@
 // Copyright 2006-2015 The Android Open Source Project
 
+#include <arpa/inet.h>
 #include <assert.h>
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <math.h>
+#include <sched.h>
+#include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdarg.h>
 #include <string.h>
-#include <signal.h>
-#include <time.h>
-#include <unistd.h>
 #include <sys/cdefs.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <arpa/inet.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
+#include <memory>
+#include <string>
+
+#include <base/file.h>
+#include <base/strings.h>
+#include <cutils/sched_policy.h>
 #include <cutils/sockets.h>
+#include <log/event_tag_map.h>
 #include <log/log.h>
 #include <log/log_read.h>
-#include <log/logger.h>
 #include <log/logd.h>
+#include <log/logger.h>
 #include <log/logprint.h>
-#include <log/event_tag_map.h>
 
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
@@ -202,7 +211,15 @@ static void setupOutput()
         g_outFD = STDOUT_FILENO;
 
     } else {
-        struct stat statbuf;
+        if (set_sched_policy(0, SP_BACKGROUND) < 0) {
+            fprintf(stderr, "failed to set background scheduling policy\n");
+        }
+
+        struct sched_param param;
+        memset(&param, 0, sizeof(param));
+        if (sched_setscheduler((pid_t) 0, SCHED_BATCH, &param) < 0) {
+            fprintf(stderr, "failed to set to batch scheduler\n");
+        }
 
         g_outFD = openLogFile (g_outputFileName);
 
@@ -210,6 +227,7 @@ static void setupOutput()
             logcat_panic(false, "couldn't open output file");
         }
 
+        struct stat statbuf;
         if (fstat(g_outFD, &statbuf) == -1) {
             close(g_outFD);
             logcat_panic(false, "couldn't get output file stat\n");
@@ -231,7 +249,7 @@ static void show_help(const char *cmd)
     fprintf(stderr, "options include:\n"
                     "  -s              Set default filter to silent.\n"
                     "                  Like specifying filterspec '*:S'\n"
-                    "  -f <filename>   Log to file. Default to stdout\n"
+                    "  -f <filename>   Log to file. Default is stdout\n"
                     "  -r <kbytes>     Rotate log every kbytes. Requires -f\n"
                     "  -n <count>      Sets max number of rotated logs to <count>, default 4\n"
                     "  -v <format>     Sets the log print format, where <format> is:\n\n"
@@ -352,6 +370,86 @@ static void logcat_panic(bool showHelp, const char *fmt, ...)
     exit(EXIT_FAILURE);
 }
 
+static const char g_defaultTimeFormat[] = "%m-%d %H:%M:%S.%q";
+
+// Find last logged line in gestalt of all matching existing output files
+static log_time lastLogTime(char *outputFileName) {
+    log_time retval(log_time::EPOCH);
+    if (!outputFileName) {
+        return retval;
+    }
+
+    log_time now(CLOCK_REALTIME);
+
+    std::string directory;
+    char *file = strrchr(outputFileName, '/');
+    if (!file) {
+        directory = ".";
+        file = outputFileName;
+    } else {
+        *file = '\0';
+        directory = outputFileName;
+        *file = '/';
+        ++file;
+    }
+    size_t len = strlen(file);
+    log_time modulo(0, NS_PER_SEC);
+    std::unique_ptr<DIR, int(*)(DIR*)>dir(opendir(directory.c_str()), closedir);
+    struct dirent *dp;
+    while ((dp = readdir(dir.get())) != NULL) {
+        if ((dp->d_type != DT_REG)
+                || strncmp(dp->d_name, file, len)
+                || (dp->d_name[len]
+                    && ((dp->d_name[len] != '.')
+                        || !isdigit(dp->d_name[len+1])))) {
+            continue;
+        }
+
+        std::string file_name = directory;
+        file_name += "/";
+        file_name += dp->d_name;
+        std::string file;
+        if (!android::base::ReadFileToString(file_name, &file)) {
+            continue;
+        }
+
+        bool found = false;
+        for (const auto& line : android::base::Split(file, "\n")) {
+            log_time t(log_time::EPOCH);
+            char *ep = t.strptime(line.c_str(), g_defaultTimeFormat);
+            if (!ep || (*ep != ' ')) {
+                continue;
+            }
+            // determine the time precision of the logs (eg: msec or usec)
+            for (unsigned long mod = 1UL; mod < modulo.tv_nsec; mod *= 10) {
+                if (t.tv_nsec % (mod * 10)) {
+                    modulo.tv_nsec = mod;
+                    break;
+                }
+            }
+            // We filter any times later than current as we may not have the
+            // year stored with each log entry. Also, since it is possible for
+            // entries to be recorded out of order (very rare) we select the
+            // maximum we find just in case.
+            if ((t < now) && (t > retval)) {
+                retval = t;
+                found = true;
+            }
+        }
+        // We count on the basename file to be the definitive end, so stop here.
+        if (!dp->d_name[len] && found) {
+            break;
+        }
+    }
+    if (retval == log_time::EPOCH) {
+        return retval;
+    }
+    // tail_time prints matching or higher, round up by the modulo to prevent
+    // a replay of the last entry we have just checked.
+    retval += modulo;
+    return retval;
+}
+
 } /* namespace android */
 
 
@@ -417,12 +515,11 @@ int main(int argc, char **argv)
                 /* FALLTHRU */
             case 'T':
                 if (strspn(optarg, "0123456789") != strlen(optarg)) {
-                    char *cp = tail_time.strptime(optarg,
-                                                  log_time::default_format);
+                    char *cp = tail_time.strptime(optarg, g_defaultTimeFormat);
                     if (!cp) {
                         logcat_panic(false,
                                     "-%c \"%s\" not in \"%s\" time format\n",
-                                    ret, optarg, log_time::default_format);
+                                    ret, optarg, g_defaultTimeFormat);
                     }
                     if (*cp) {
                         char c = *cp;
@@ -545,9 +642,11 @@ int main(int argc, char **argv)
             break;
 
             case 'f':
+                if ((tail_time == log_time::EPOCH) && (tail_lines != 0)) {
+                    tail_time = lastLogTime(optarg);
+                }
                 // redirect output to a file
                 g_outputFileName = optarg;
-
             break;
 
             case 'r':
