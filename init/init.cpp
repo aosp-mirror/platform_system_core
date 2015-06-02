@@ -380,7 +380,8 @@ void service_start(struct service *svc, const char *dynamic_args)
 
     if ((svc->flags & SVC_EXEC) != 0) {
         INFO("SVC_EXEC pid %d (uid %d gid %d+%zu context %s) started; waiting...\n",
-             svc->pid, svc->uid, svc->gid, svc->nr_supp_gids, svc->seclabel);
+             svc->pid, svc->uid, svc->gid, svc->nr_supp_gids,
+             svc->seclabel ? : "default");
         waiting_for_exec = true;
     }
 

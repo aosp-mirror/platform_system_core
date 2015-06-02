@@ -180,7 +180,7 @@ exec [ <seclabel> [ <user> [ <group> ]* ] ] -- <command> [ <argument> ]*
    Fork and execute command with the given arguments. The command starts
    after "--" so that an optional security context, user, and supplementary
    groups can be provided. No other commands will be run until this one
-   finishes.
+   finishes. <seclabel> can be a - to denote default.
 
 export <name> <value>
    Set the environment variable <name> equal to <value> in the
