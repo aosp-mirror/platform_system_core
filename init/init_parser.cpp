@@ -664,6 +664,7 @@ int action_queue_empty()
 
 service* make_exec_oneshot_service(int nargs, char** args) {
     // Parse the arguments: exec [SECLABEL [UID [GID]*] --] COMMAND ARGS...
+    // SECLABEL can be a - to denote default
     int command_arg = 1;
     for (int i = 1; i < nargs; ++i) {
         if (strcmp(args[i], "--") == 0) {
@@ -689,7 +690,7 @@ service* make_exec_oneshot_service(int nargs, char** args) {
         return NULL;
     }
 
-    if (command_arg > 2) {
+    if ((command_arg > 2) && strcmp(args[1], "-")) {
         svc->seclabel = args[1];
     }
     if (command_arg > 3) {
