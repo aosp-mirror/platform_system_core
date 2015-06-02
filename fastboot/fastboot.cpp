@@ -971,8 +971,9 @@ int main(int argc, char **argv)
         {"page_size", required_argument, 0, 'n'},
         {"ramdisk_offset", required_argument, 0, 'r'},
         {"tags_offset", required_argument, 0, 't'},
-        {"help", 0, 0, 'h'},
-        {"unbuffered", 0, 0, 0},
+        {"help", no_argument, 0, 'h'},
+        {"unbuffered", no_argument, 0, 0},
+        {"version", no_argument, 0, 0},
         {0, 0, 0, 0}
     };
 
@@ -1044,6 +1045,9 @@ int main(int argc, char **argv)
             if (strcmp("unbuffered", longopts[longindex].name) == 0) {
                 setvbuf(stdout, NULL, _IONBF, 0);
                 setvbuf(stderr, NULL, _IONBF, 0);
+            } else if (strcmp("version", longopts[longindex].name) == 0) {
+                fprintf(stdout, "fastboot version %s\n", FASTBOOT_REVISION);
+                return 0;
             }
             break;
         default:
