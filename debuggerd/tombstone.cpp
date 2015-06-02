@@ -317,16 +317,28 @@ static void dump_stack(Backtrace* backtrace, log_t* log) {
   }
 }
 
+static std::string get_addr_string(uintptr_t addr) {
+  std::string addr_str;
+#if defined(__LP64__)
+  addr_str = android::base::StringPrintf("%08x'%08x",
+                                         static_cast<uint32_t>(addr >> 32),
+                                         static_cast<uint32_t>(addr & 0xffffffff));
+#else
+  addr_str = android::base::StringPrintf("%08x", addr);
+#endif
+  return addr_str;
+}
+
 static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, pid_t tid) {
   bool print_fault_address_marker = false;
   uintptr_t addr = 0;
   siginfo_t si;
   memset(&si, 0, sizeof(si));
-  if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si)) {
-    _LOG(log, logtype::ERROR, "cannot get siginfo for %d: %s\n", tid, strerror(errno));
-  } else {
+  if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si) != -1) {
     print_fault_address_marker = signal_has_si_addr(si.si_signo);
     addr = reinterpret_cast<uintptr_t>(si.si_addr);
+  } else {
+    _LOG(log, logtype::ERROR, "Cannot get siginfo for %d: %s\n", tid, strerror(errno));
   }
 
   _LOG(log, logtype::MAPS, "\n");
@@ -335,8 +347,8 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
   } else {
     _LOG(log, logtype::MAPS, "memory map: (fault address prefixed with --->)\n");
     if (map->begin() != map->end() && addr < map->begin()->start) {
-      _LOG(log, logtype::MAPS, "--->Fault address falls at %" PRIPTR " before any mapped regions\n",
-           addr);
+      _LOG(log, logtype::MAPS, "--->Fault address falls at %s before any mapped regions\n",
+           get_addr_string(addr).c_str());
       print_fault_address_marker = false;
     }
   }
@@ -346,15 +358,15 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
     line = "    ";
     if (print_fault_address_marker) {
       if (addr < it->start) {
-        _LOG(log, logtype::MAPS, "--->Fault address falls at %" PRIPTR " between mapped regions\n",
-             addr);
+        _LOG(log, logtype::MAPS, "--->Fault address falls at %s between mapped regions\n",
+             get_addr_string(addr).c_str());
         print_fault_address_marker = false;
       } else if (addr >= it->start && addr < it->end) {
         line = "--->";
         print_fault_address_marker = false;
       }
     }
-    line += android::base::StringPrintf("%" PRIPTR "-%" PRIPTR " ", it->start, it->end - 1);
+    line += get_addr_string(it->start) + '-' + get_addr_string(it->end - 1) + ' ';
     if (it->flags & PROT_READ) {
       line += 'r';
     } else {
@@ -372,7 +384,9 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
     }
     line += android::base::StringPrintf("  %8" PRIxPTR "  %8" PRIxPTR,
                                         it->offset, it->end - it->start);
+    bool space_needed = true;
     if (it->name.length() > 0) {
+      space_needed = false;
       line += "  " + it->name;
       std::string build_id;
       if ((it->flags & PROT_READ) && elf_get_build_id(backtrace, it->start, &build_id)) {
@@ -380,13 +394,16 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
       }
     }
     if (it->load_base != 0) {
+      if (space_needed) {
+        line += ' ';
+      }
       line += android::base::StringPrintf(" (load base 0x%" PRIxPTR ")", it->load_base);
     }
     _LOG(log, logtype::MAPS, "%s\n", line.c_str());
   }
   if (print_fault_address_marker) {
-    _LOG(log, logtype::MAPS, "--->Fault address falls at %" PRIPTR " after any mapped regions\n",
-        addr);
+    _LOG(log, logtype::MAPS, "--->Fault address falls at %s after any mapped regions\n",
+         get_addr_string(addr).c_str());
   }
 }
 
