@@ -25,7 +25,7 @@ LOCAL_SRC_FILES := protocol.c engine.c bootimg_utils.cpp fastboot.cpp util.c fs.
 LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
 LOCAL_CONLYFLAGS += -std=gnu99
-LOCAL_CFLAGS += -Wall -Wextra -Werror
+LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
 
 LOCAL_CFLAGS += -DFASTBOOT_REVISION='"$(fastboot_version)"'
 

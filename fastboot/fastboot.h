@@ -69,7 +69,7 @@ int fb_queue_is_empty(void);
 /* util stuff */
 double now();
 char *mkmsg(const char *fmt, ...);
-void die(const char *fmt, ...);
+__attribute__((__noreturn__)) void die(const char *fmt, ...);
 
 void get_my_path(char *path);
 
