@@ -33,13 +33,11 @@
 #include <string>
 
 struct backtrace_map_t {
-  backtrace_map_t(): start(0), end(0), flags(0) {}
-
-  uintptr_t start;
-  uintptr_t end;
-  uintptr_t offset;
-  uintptr_t load_base;
-  int flags;
+  uintptr_t start = 0;
+  uintptr_t end = 0;
+  uintptr_t offset = 0;
+  uintptr_t load_base = 0;
+  int flags = 0;
   std::string name;
 };
 

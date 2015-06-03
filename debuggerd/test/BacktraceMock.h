@@ -32,6 +32,10 @@ class BacktraceMapMock : public BacktraceMap {
  public:
   BacktraceMapMock() : BacktraceMap(0) {}
   virtual ~BacktraceMapMock() {}
+
+  void AddMap(backtrace_map_t& map) {
+    maps_.push_back(map);
+  }
 };
 
 
