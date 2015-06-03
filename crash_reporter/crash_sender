@@ -419,7 +419,18 @@ send_crash() {
   # double-quotes are necessary due to a bug in dash with the "local"
   # builtin command and values that have spaces in them (see
   # "https://bugs.launchpad.net/ubuntu/+source/dash/+bug/139097").
-  local proxy="`${LIST_PROXIES} -quiet "${url}" | head -1`"
+  if [ -f "${LIST_PROXIES}" ]; then
+    local proxy ret
+    proxy=$("${LIST_PROXIES}" --quiet "${url}")
+    ret=$?
+    if [ ${ret} -ne 0 ]; then
+      proxy=''
+      lecho -psyslog.warn \
+        "Listing proxies failed with exit code ${ret}"
+    else
+      proxy=$(echo "${proxy}" | head -1)
+    fi
+  fi
   # if a direct connection should be used, unset the proxy variable.
   [ "${proxy}" = "direct://" ] && proxy=
   local report_id="${TMP_DIR}/report_id"
