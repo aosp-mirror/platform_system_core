@@ -767,8 +767,24 @@ static int get_verity_state_offset(struct fstab_rec *fstab, off64_t *offset)
 
 static int load_verity_state(struct fstab_rec *fstab, int *mode)
 {
-    off64_t offset = 0;
+    char propbuf[PROPERTY_VALUE_MAX];
     int match = 0;
+    off64_t offset = 0;
+
+    /* use the kernel parameter if set */
+    property_get("ro.boot.veritymode", propbuf, "");
+
+    if (*propbuf != '\0') {
+        if (!strcmp(propbuf, "enforcing")) {
+            *mode = VERITY_MODE_DEFAULT;
+            return 0;
+        } else if (!strcmp(propbuf, "logging")) {
+            *mode = VERITY_MODE_LOGGING;
+            return 0;
+        } else {
+            INFO("Unknown value %s for veritymode; ignoring", propbuf);
+        }
+    }
 
     if (get_verity_state_offset(fstab, &offset) < 0) {
         /* fall back to stateless behavior */
@@ -854,6 +870,13 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
     off64_t offset = 0;
     struct dm_ioctl *io = (struct dm_ioctl *) buffer;
     struct fstab *fstab = NULL;
+
+    /* check if we need to store the state */
+    property_get("ro.boot.veritymode", propbuf, "");
+
+    if (*propbuf != '\0') {
+        return 0; /* state is kept by the bootloader */
+    }
 
     fd = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));
 
