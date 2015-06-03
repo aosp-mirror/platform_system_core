@@ -102,13 +102,14 @@ panic(const char* format, ...)
 static void
 usage(void)
 {
-    panic("Usage:\n    " PROGNAME " <package-name> <command> [<args>]\n");
+    panic("Usage:\n    " PROGNAME " <package-name> [--user <uid>] <command> [<args>]\n");
 }
 
 int main(int argc, char **argv)
 {
     const char* pkgname;
-    int myuid, uid, gid;
+    uid_t myuid, uid, gid, userAppId = 0;
+    int commandArgvOfs = 2, userId = 0;
     PackageInfo info;
     struct __user_cap_header_struct capheader;
     struct __user_cap_data_struct capdata[2];
@@ -136,14 +137,31 @@ int main(int argc, char **argv)
         panic("Could not set capabilities: %s\n", strerror(errno));
     }
 
-    /* retrieve package information from system (does setegid) */
     pkgname = argv[1];
-    if (get_package_info(pkgname, &info) < 0) {
+
+    /* get user_id from command line if provided */
+    if ((argc >= 4) && !strcmp(argv[2], "--user")) {
+        userId = atoi(argv[3]);
+        if (userId < 0)
+            panic("Negative user id %d is provided\n", userId);
+        commandArgvOfs += 2;
+    }
+
+    /* retrieve package information from system (does setegid) */
+    if (get_package_info(pkgname, userId, &info) < 0) {
         panic("Package '%s' is unknown\n", pkgname);
     }
 
+    /* verify that user id is not too big. */
+    if ((UID_MAX - info.uid) / AID_USER < (uid_t)userId) {
+        panic("User id %d is too big\n", userId);
+    }
+
+    /* calculate user app ID. */
+    userAppId = (AID_USER * userId) + info.uid;
+
     /* reject system packages */
-    if (info.uid < AID_APP) {
+    if (userAppId < AID_APP) {
         panic("Package '%s' is not an application\n", pkgname);
     }
 
@@ -153,14 +171,14 @@ int main(int argc, char **argv)
     }
 
     /* check that the data directory path is valid */
-    if (check_data_path(info.dataDir, info.uid) < 0) {
+    if (check_data_path(info.dataDir, userAppId) < 0) {
         panic("Package '%s' has corrupt installation\n", pkgname);
     }
 
     /* Ensure that we change all real/effective/saved IDs at the
      * same time to avoid nasty surprises.
      */
-    uid = gid = info.uid;
+    uid = gid = userAppId;
     if(setresgid(gid,gid,gid) || setresuid(uid,uid,uid)) {
         panic("Permission denied\n");
     }
@@ -181,8 +199,9 @@ int main(int argc, char **argv)
     }
 
     /* User specified command for exec. */
-    if ((argc >= 3) && (execvp(argv[2], argv+2) < 0)) {
-        panic("exec failed for %s: %s\n", argv[2], strerror(errno));
+    if ((argc >= commandArgvOfs + 1) &&
+        (execvp(argv[commandArgvOfs], argv+commandArgvOfs) < 0)) {
+        panic("exec failed for %s: %s\n", argv[commandArgvOfs], strerror(errno));
     }
 
     /* Default exec shell. */
