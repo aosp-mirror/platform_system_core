@@ -732,12 +732,13 @@ void do_update(usb_handle *usb, const char *filename, int erase_first)
 
     setup_requirements(reinterpret_cast<char*>(data), sz);
 
-    for (size_t i = 0; i < ARRAY_SIZE(images); i++) {
+    for (size_t i = 0; i < ARRAY_SIZE(images); ++i) {
         int fd = unzip_to_file(zip, images[i].img_name);
-        if (fd < 0) {
-            if (images[i].is_optional)
+        if (fd == -1) {
+            if (images[i].is_optional) {
                 continue;
-            die("update package missing %s", images[i].img_name);
+            }
+            exit(1); // unzip_to_file already explained why.
         }
         fastboot_buffer buf;
         int rc = load_buf_fd(usb, fd, &buf);
