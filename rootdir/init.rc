@@ -546,6 +546,7 @@ service vold /system/bin/vold \
         --fsck_context=u:r:fsck:s0 --fsck_untrusted_context=u:r:fsck_untrusted:s0
     class core
     socket vold stream 0660 root mount
+    socket cryptd stream 0660 root mount
     ioprio be 2
 
 service netd /system/bin/netd
