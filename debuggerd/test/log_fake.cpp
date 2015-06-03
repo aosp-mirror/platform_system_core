@@ -19,6 +19,13 @@
 #include <string>
 
 #include <base/stringprintf.h>
+#include <log/log.h>
+#include <log/logger.h>
+
+// Forward declarations.
+class Backtrace;
+struct EventTagMap;
+struct AndroidLogEntry;
 
 std::string g_fake_log_buf;
 
@@ -29,15 +36,19 @@ void resetLogs() {
   g_fake_log_print = "";
 }
 
+std::string getFakeLogBuf() {
+  return g_fake_log_buf;
+}
+
+std::string getFakeLogPrint() {
+  return g_fake_log_print;
+}
+
 extern "C" int __android_log_buf_write(int, int, const char* tag, const char* msg) {
   g_fake_log_buf += tag;
   g_fake_log_buf += ' ';
   g_fake_log_buf += msg;
   return 1;
-}
-
-std::string getFakeLogBuf() {
-  return g_fake_log_buf;
 }
 
 extern "C" int __android_log_print(int, const char* tag, const char* fmt, ...) {
@@ -54,6 +65,27 @@ extern "C" int __android_log_print(int, const char* tag, const char* fmt, ...) {
   return 1;
 }
 
-std::string getFakeLogPrint() {
-  return g_fake_log_print;
+extern "C" log_id_t android_name_to_log_id(const char*) {
+  return LOG_ID_SYSTEM;
+}
+
+extern "C" struct logger_list* android_logger_list_open(log_id_t, int, unsigned int, pid_t) {
+  return nullptr;
+}
+
+extern "C" int android_logger_list_read(struct logger_list*, struct log_msg*) {
+  return 0;
+}
+
+extern "C" EventTagMap* android_openEventTagMap(const char*) {
+  return nullptr;
+}
+
+extern "C" int android_log_processBinaryLogBuffer(
+    struct logger_entry*,
+    AndroidLogEntry*, const EventTagMap*, char*, int) {
+  return 0;
+}
+
+extern "C" void android_logger_list_free(struct logger_list*) {
 }
