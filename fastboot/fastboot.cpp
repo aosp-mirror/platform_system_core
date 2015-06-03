@@ -721,12 +721,14 @@ void do_update(usb_handle *usb, const char *filename, int erase_first)
     ZipArchiveHandle zip;
     int error = OpenArchive(filename, &zip);
     if (error != 0) {
+        CloseArchive(zip);
         die("failed to open zip file '%s': %s", filename, ErrorCodeString(error));
     }
 
     unsigned sz;
     void* data = unzip_file(zip, "android-info.txt", &sz);
     if (data == 0) {
+        CloseArchive(zip);
         die("update package '%s' has no android-info.txt", filename);
     }
 
@@ -738,6 +740,7 @@ void do_update(usb_handle *usb, const char *filename, int erase_first)
             if (images[i].is_optional) {
                 continue;
             }
+            CloseArchive(zip);
             exit(1); // unzip_to_file already explained why.
         }
         fastboot_buffer buf;
