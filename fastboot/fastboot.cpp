@@ -416,6 +416,35 @@ static void* unzip_file(ZipArchiveHandle zip, const char* entry_name, unsigned* 
     return data;
 }
 
+#if defined(_WIN32)
+
+// TODO: move this to somewhere it can be shared.
+
+#include <windows.h>
+
+// Windows' tmpfile(3) requires administrator rights because
+// it creates temporary files in the root directory.
+static FILE* win32_tmpfile() {
+    char temp_path[PATH_MAX];
+    DWORD nchars = GetTempPath(sizeof(temp_path), temp_path);
+    if (nchars == 0 || nchars >= sizeof(temp_path)) {
+        fprintf(stderr, "GetTempPath failed, error %ld\n", GetLastError());
+        return nullptr;
+    }
+
+    char filename[PATH_MAX];
+    if (GetTempFileName(temp_path, "fastboot", 0, filename) == 0) {
+        fprintf(stderr, "GetTempFileName failed, error %ld\n", GetLastError());
+        return nullptr;
+    }
+
+    return fopen(filename, "w+bTD");
+}
+
+#define tmpfile win32_tmpfile
+
+#endif
+
 static int unzip_to_file(ZipArchiveHandle zip, char* entry_name) {
     FILE* fp = tmpfile();
     if (fp == NULL) {
