@@ -94,7 +94,7 @@ def write_padded_file(f_out, f_in, padding):
 
 
 def parse_int(x):
-    return int(x,0)
+    return int(x, 0)
 
 
 def parse_cmdline():
@@ -106,7 +106,7 @@ def parse_cmdline():
     parser.add_argument('--cmdline', help='extra arguments to be passed on the '
                         'kernel command line', default='', action=ValidateStrLenAction, maxlen=1536)
     parser.add_argument('--base', help='base address', type=parse_int, default=0x10000000)
-    parser.add_argument('----kernel_offset', help='kernel offset', type=parse_int, default=0x00008000)
+    parser.add_argument('--kernel_offset', help='kernel offset', type=parse_int, default=0x00008000)
     parser.add_argument('--ramdisk_offset', help='ramdisk offset', type=parse_int, default=0x01000000)
     parser.add_argument('--second_offset', help='2nd bootloader offset', type=parse_int,
                         default=0x00f00000)
