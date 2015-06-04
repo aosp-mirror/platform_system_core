@@ -53,14 +53,20 @@ public:
     virtual bool GetAuthTokenKey(const uint8_t **auth_token_key,
             uint32_t *length) const {
         if (auth_token_key == NULL || length == NULL) return false;
-        *auth_token_key = const_cast<const uint8_t *>(key_.get());
+        uint8_t *auth_token_key_copy = new uint8_t[SIGNATURE_LENGTH_BYTES];
+        memcpy(auth_token_key_copy, key_.get(), SIGNATURE_LENGTH_BYTES);
+
+        *auth_token_key = auth_token_key_copy;
         *length = SIGNATURE_LENGTH_BYTES;
         return true;
     }
 
     virtual void GetPasswordKey(const uint8_t **password_key, uint32_t *length) {
         if (password_key == NULL || length == NULL) return;
-        *password_key = const_cast<const uint8_t *>(key_.get());
+        uint8_t *password_key_copy = new uint8_t[SIGNATURE_LENGTH_BYTES];
+        memcpy(password_key_copy, key_.get(), SIGNATURE_LENGTH_BYTES);
+
+        *password_key = password_key_copy;
         *length = SIGNATURE_LENGTH_BYTES;
     }
 
@@ -94,7 +100,8 @@ public:
         return false;
     }
 
-    virtual bool GetFailureRecord(uint32_t uid, secure_id_t user_id, failure_record_t *record) {
+    virtual bool GetFailureRecord(uint32_t uid, secure_id_t user_id, failure_record_t *record,
+            bool /* secure */) {
         failure_record_t *stored = &failure_map_[uid];
         if (user_id != stored->secure_user_id) {
             stored->secure_user_id = user_id;
@@ -105,20 +112,21 @@ public:
         return true;
     }
 
-    virtual void ClearFailureRecord(uint32_t uid, secure_id_t user_id) {
+    virtual bool ClearFailureRecord(uint32_t uid, secure_id_t user_id, bool /* secure */) {
         failure_record_t *stored = &failure_map_[uid];
         stored->secure_user_id = user_id;
         stored->last_checked_timestamp = 0;
         stored->failure_counter = 0;
+        return true;
     }
 
-    virtual bool WriteFailureRecord(uint32_t uid, failure_record_t *record) {
+    virtual bool WriteFailureRecord(uint32_t uid, failure_record_t *record, bool /* secure */) {
         failure_map_[uid] = *record;
         return true;
     }
 
 private:
-    UniquePtr<uint8_t> key_;
+    UniquePtr<uint8_t[]> key_;
     std::unordered_map<uint32_t, failure_record_t> failure_map_;
 };
 }
