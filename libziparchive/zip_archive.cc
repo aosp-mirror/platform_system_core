@@ -473,7 +473,7 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
     return kEmptyArchive;
   }
 
-  ALOGV("+++ num_entries=%" PRIu32 "dir_size=%" PRIu32 " dir_offset=%" PRIu32,
+  ALOGV("+++ num_entries=%" PRIu32 " dir_size=%" PRIu32 " dir_offset=%" PRIu32,
         eocd->num_records, eocd->cd_size, eocd->cd_start_offset);
 
   /*
