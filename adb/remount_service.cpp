@@ -58,7 +58,7 @@ bool make_block_device_writable(const std::string& dev) {
 
     int OFF = 0;
     bool result = (ioctl(fd, BLKROSET, &OFF) != -1);
-    adb_close(fd);
+    unix_close(fd);
     return result;
 }
 
