@@ -59,7 +59,6 @@
 
 char cur_product[FB_RESPONSE_SZ + 1];
 
-static usb_handle *usb = 0;
 static const char *serial = 0;
 static const char *product = 0;
 static const char *cmdline = 0;
@@ -609,7 +608,7 @@ static int64_t get_sparse_limit(struct usb_handle *usb, int64_t size)
  * erase partitions of type ext4 before flashing a filesystem so no stale
  * inodes are left lying around.  Otherwise, e2fsck gets very upset.
  */
-static int needs_erase(const char *part)
+static int needs_erase(usb_handle* usb, const char *part)
 {
     /* The function fb_format_supported() currently returns the value
      * we want, so just call it.
@@ -725,19 +724,20 @@ void do_update(usb_handle *usb, const char *filename, int erase_first)
 
     setup_requirements(reinterpret_cast<char*>(data), sz);
 
-    for (size_t i = 0; i < ARRAY_SIZE(images); i++) {
+    for (size_t i = 0; i < ARRAY_SIZE(images); ++i) {
         int fd = unzip_to_file(zip, images[i].img_name);
-        if (fd < 0) {
-            if (images[i].is_optional)
+        if (fd == -1) {
+            if (images[i].is_optional) {
                 continue;
+            }
             CloseArchive(zip);
-            die("update package missing %s", images[i].img_name);
+            exit(1); // unzip_to_file already explained why.
         }
         fastboot_buffer buf;
         int rc = load_buf_fd(usb, fd, &buf);
         if (rc) die("cannot load %s from flash", images[i].img_name);
         do_update_signature(zip, images[i].sig_name);
-        if (erase_first && needs_erase(images[i].part_name)) {
+        if (erase_first && needs_erase(usb, images[i].part_name)) {
             fb_queue_erase(images[i].part_name);
         }
         flash_buf(images[i].part_name, &buf);
@@ -792,7 +792,7 @@ void do_flashall(usb_handle *usb, int erase_first)
             die("could not load %s\n", images[i].img_name);
         }
         do_send_signature(fname);
-        if (erase_first && needs_erase(images[i].part_name)) {
+        if (erase_first && needs_erase(usb, images[i].part_name)) {
             fb_queue_erase(images[i].part_name);
         }
         flash_buf(images[i].part_name, &buf);
@@ -860,7 +860,8 @@ static int64_t parse_num(const char *arg)
     return num;
 }
 
-void fb_perform_format(const char *partition, int skip_if_not_supported,
+void fb_perform_format(usb_handle* usb,
+                       const char *partition, int skip_if_not_supported,
                        const char *type_override, const char *size_override)
 {
     char pTypeBuff[FB_RESPONSE_SZ + 1], pSizeBuff[FB_RESPONSE_SZ + 1];
@@ -964,8 +965,9 @@ int main(int argc, char **argv)
         {"page_size", required_argument, 0, 'n'},
         {"ramdisk_offset", required_argument, 0, 'r'},
         {"tags_offset", required_argument, 0, 't'},
-        {"help", 0, 0, 'h'},
-        {"unbuffered", 0, 0, 0},
+        {"help", no_argument, 0, 'h'},
+        {"unbuffered", no_argument, 0, 0},
+        {"version", no_argument, 0, 0},
         {0, 0, 0, 0}
     };
 
@@ -1037,6 +1039,9 @@ int main(int argc, char **argv)
             if (strcmp("unbuffered", longopts[longindex].name) == 0) {
                 setvbuf(stdout, NULL, _IONBF, 0);
                 setvbuf(stderr, NULL, _IONBF, 0);
+            } else if (strcmp("version", longopts[longindex].name) == 0) {
+                fprintf(stdout, "fastboot version %s\n", FASTBOOT_REVISION);
+                return 0;
             }
             break;
         default:
@@ -1063,7 +1068,7 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    usb = open_device();
+    usb_handle* usb = open_device();
 
     while (argc > 0) {
         if(!strcmp(*argv, "getvar")) {
@@ -1105,10 +1110,10 @@ int main(int argc, char **argv)
             }
             if (type_override && !type_override[0]) type_override = NULL;
             if (size_override && !size_override[0]) size_override = NULL;
-            if (erase_first && needs_erase(argv[1])) {
+            if (erase_first && needs_erase(usb, argv[1])) {
                 fb_queue_erase(argv[1]);
             }
-            fb_perform_format(argv[1], 0, type_override, size_override);
+            fb_perform_format(usb, argv[1], 0, type_override, size_override);
             skip(2);
         } else if(!strcmp(*argv, "signature")) {
             require(2);
@@ -1163,7 +1168,7 @@ int main(int argc, char **argv)
                 skip(2);
             }
             if (fname == 0) die("cannot determine image filename for '%s'", pname);
-            if (erase_first && needs_erase(pname)) {
+            if (erase_first && needs_erase(usb, pname)) {
                 fb_queue_erase(pname);
             }
             do_flash(usb, pname, fname);
@@ -1214,9 +1219,9 @@ int main(int argc, char **argv)
 
     if (wants_wipe) {
         fb_queue_erase("userdata");
-        fb_perform_format("userdata", 1, NULL, NULL);
+        fb_perform_format(usb, "userdata", 1, NULL, NULL);
         fb_queue_erase("cache");
-        fb_perform_format("cache", 1, NULL, NULL);
+        fb_perform_format(usb, "cache", 1, NULL, NULL);
     }
     if (wants_reboot) {
         fb_queue_reboot();

@@ -14,6 +14,8 @@
 
 LOCAL_PATH:= $(call my-dir)
 
+fastboot_version := $(shell git -C $(LOCAL_PATH) rev-parse --short=12 HEAD 2>/dev/null)-android
+
 include $(CLEAR_VARS)
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/../mkbootimg \
@@ -25,14 +27,15 @@ LOCAL_MODULE_TAGS := debug
 LOCAL_CONLYFLAGS += -std=gnu99
 LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
 
+LOCAL_CFLAGS += -DFASTBOOT_REVISION='"$(fastboot_version)"'
+
 ifeq ($(HOST_OS),linux)
   LOCAL_SRC_FILES += usb_linux.c util_linux.c
 endif
 
 ifeq ($(HOST_OS),darwin)
   LOCAL_SRC_FILES += usb_osx.c util_osx.c
-  LOCAL_LDLIBS += -lpthread -framework CoreFoundation -framework IOKit \
-	-framework Carbon
+  LOCAL_LDLIBS += -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
   LOCAL_CFLAGS += -Wno-unused-parameter
 endif
 
@@ -58,7 +61,8 @@ LOCAL_STATIC_LIBRARIES := \
     libsparse_host \
     libutils \
     liblog \
-    libz
+    libz \
+    libbase
 
 ifneq ($(HOST_OS),windows)
 LOCAL_STATIC_LIBRARIES += libselinux
