@@ -420,6 +420,9 @@ int adb_auth_get_userkey(unsigned char *data, size_t len)
     strcat(path, ".pub");
 
     // TODO(danalbert): ReadFileToString
+    // Note that on Windows, load_file() does not do CR/LF translation, but
+    // ReadFileToString() uses the C Runtime which uses CR/LF translation by
+    // default (by is overridable with _setmode()).
     unsigned size;
     char* file_data = reinterpret_cast<char*>(load_file(path, &size));
     if (file_data == nullptr) {

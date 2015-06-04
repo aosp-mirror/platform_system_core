@@ -226,7 +226,7 @@ static void close_stdin() {
         return;
     }
     dup2(fd, STDIN_FILENO);
-    adb_close(fd);
+    unix_close(fd);
 }
 
 int main(int argc, char** argv) {
