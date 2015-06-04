@@ -22,6 +22,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <unordered_map>
+
 #include <cutils/properties.h>
 #include <log/logger.h>
 
@@ -246,31 +248,21 @@ public:
     uint64_t getKey() { return value; }
 };
 
-class LogBufferElementEntry {
-    const uint64_t key;
-    LogBufferElement *last;
+class LogBufferElementLast {
+
+    typedef std::unordered_map<uint64_t, LogBufferElement *> LogBufferElementMap;
+    LogBufferElementMap map;
 
 public:
-    LogBufferElementEntry(const uint64_t &k, LogBufferElement *e):key(k),last(e) { }
 
-    const uint64_t&getKey() const { return key; }
-
-    LogBufferElement *getLast() { return last; }
-};
-
-class LogBufferElementLast : public android::BasicHashtable<uint64_t, LogBufferElementEntry> {
-
-public:
     bool merge(LogBufferElement *e, unsigned short dropped) {
         LogBufferElementKey key(e->getUid(), e->getPid(), e->getTid());
-        android::hash_t hash = android::hash_type(key.getKey());
-        ssize_t index = find(-1, hash, key.getKey());
-        if (index != -1) {
-            LogBufferElementEntry &entry = editEntryAt(index);
-            LogBufferElement *l = entry.getLast();
+        LogBufferElementMap::iterator it = map.find(key.getKey());
+        if (it != map.end()) {
+            LogBufferElement *l = it->second;
             unsigned short d = l->getDropped();
             if ((dropped + d) > USHRT_MAX) {
-                removeAt(index);
+                map.erase(it);
             } else {
                 l->setDropped(dropped + d);
                 return true;
@@ -279,26 +271,24 @@ public:
         return false;
     }
 
-    size_t add(LogBufferElement *e) {
+    void add(LogBufferElement *e) {
         LogBufferElementKey key(e->getUid(), e->getPid(), e->getTid());
-        android::hash_t hash = android::hash_type(key.getKey());
-        return android::BasicHashtable<uint64_t, LogBufferElementEntry>::
-            add(hash, LogBufferElementEntry(key.getKey(), e));
+        map[key.getKey()] = e;
     }
 
     inline void clear() {
-        android::BasicHashtable<uint64_t, LogBufferElementEntry>::clear();
+        map.clear();
     }
 
     void clear(LogBufferElement *e) {
         uint64_t current = e->getRealTime().nsec() - NS_PER_SEC;
-        ssize_t index = -1;
-        while((index = next(index)) >= 0) {
-            LogBufferElement *l = editEntryAt(index).getLast();
+        for(LogBufferElementMap::iterator it = map.begin(); it != map.end();) {
+            LogBufferElement *l = it->second;
             if ((l->getDropped() >= EXPIRE_THRESHOLD)
                     && (current > l->getRealTime().nsec())) {
-                removeAt(index);
-                index = -1;
+                it = map.erase(it);
+            } else {
+                ++it;
             }
         }
     }
