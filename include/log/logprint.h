@@ -36,9 +36,10 @@ typedef enum {
     FORMAT_TIME,
     FORMAT_THREADTIME,
     FORMAT_LONG,
-    /* The following two are modifiers to above formats */
+    /* The following three are modifiers to above formats */
     FORMAT_MODIFIER_COLOR,     /* converts priority to color */
     FORMAT_MODIFIER_TIME_USEC, /* switches from msec to usec time precision */
+    FORMAT_MODIFIER_PRINTABLE, /* converts non-printable to printable escapes */
 } AndroidLogPrintFormat;
 
 typedef struct AndroidLogFormat_t AndroidLogFormat;
