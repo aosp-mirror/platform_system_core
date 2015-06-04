@@ -32,6 +32,7 @@ class LogTimeEntry {
     bool mRelease;
     bool mError;
     bool threadRunning;
+    bool leadingDropped;
     pthread_cond_t threadTriggeredCondition;
     pthread_t mThread;
     LogReader &mReader;
