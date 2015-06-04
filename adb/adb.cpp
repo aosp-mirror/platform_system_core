@@ -115,7 +115,7 @@ void start_device_log(void) {
     dup2(fd, STDOUT_FILENO);
     dup2(fd, STDERR_FILENO);
     fprintf(stderr, "--- adb starting (pid %d) ---\n", getpid());
-    adb_close(fd);
+    unix_close(fd);
 }
 #endif
 

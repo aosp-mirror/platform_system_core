@@ -168,13 +168,13 @@ static void find_usb_device(const char *base,
                 continue;
             }
 
-            desclength = adb_read(fd, devdesc, sizeof(devdesc));
+            desclength = unix_read(fd, devdesc, sizeof(devdesc));
             bufend = bufptr + desclength;
 
                 // should have device and configuration descriptors, and atleast two endpoints
             if (desclength < USB_DT_DEVICE_SIZE + USB_DT_CONFIG_SIZE) {
                 D("desclength %zu is too small\n", desclength);
-                adb_close(fd);
+                unix_close(fd);
                 continue;
             }
 
@@ -182,7 +182,7 @@ static void find_usb_device(const char *base,
             bufptr += USB_DT_DEVICE_SIZE;
 
             if((device->bLength != USB_DT_DEVICE_SIZE) || (device->bDescriptorType != USB_DT_DEVICE)) {
-                adb_close(fd);
+                unix_close(fd);
                 continue;
             }
 
@@ -195,7 +195,7 @@ static void find_usb_device(const char *base,
             bufptr += USB_DT_CONFIG_SIZE;
             if (config->bLength != USB_DT_CONFIG_SIZE || config->bDescriptorType != USB_DT_CONFIG) {
                 D("usb_config_descriptor not found\n");
-                adb_close(fd);
+                unix_close(fd);
                 continue;
             }
 
@@ -303,7 +303,7 @@ static void find_usb_device(const char *base,
                 }
             } // end of while
 
-            adb_close(fd);
+            unix_close(fd);
         } // end of devdir while
         closedir(devdir);
     } //end of busdir while
@@ -555,7 +555,7 @@ int usb_close(usb_handle *h)
     h->prev = 0;
     h->next = 0;
 
-    adb_close(h->desc);
+    unix_close(h->desc);
     D("-- usb closed %p (fd = %d) --\n", h, h->desc);
     adb_mutex_unlock(&usb_lock);
 
@@ -618,7 +618,7 @@ static void register_device(const char* dev_name, const char* dev_path,
         if (ioctl(usb->desc, USBDEVFS_CLAIMINTERFACE, &interface) != 0) {
             D("[ usb ioctl(%d, USBDEVFS_CLAIMINTERFACE) failed: %s]\n",
               usb->desc, strerror(errno));
-            adb_close(usb->desc);
+            unix_close(usb->desc);
             free(usb);
             return;
         }
