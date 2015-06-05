@@ -7,6 +7,7 @@ tests that attempt to touch all accessible attached devices.
 import hashlib
 import os
 import pipes
+import posixpath
 import random
 import re
 import shlex
@@ -98,7 +99,7 @@ class DeviceFile(object):
     def __init__(self, md5, full_path):
         self.md5 = md5
         self.full_path = full_path
-        self.base_name = os.path.basename(self.full_path)
+        self.base_name = posixpath.basename(self.full_path)
 
 
 def make_random_host_files(in_dir, num_files, rand_size=True):
@@ -108,7 +109,7 @@ def make_random_host_files(in_dir, num_files, rand_size=True):
     fixed_size = min_size
 
     for _ in range(num_files):
-        file_handle = tempfile.NamedTemporaryFile(dir=in_dir)
+        file_handle = tempfile.NamedTemporaryFile(dir=in_dir, delete=False)
 
         if rand_size:
             size = random.randrange(min_size, max_size, 1024)
@@ -117,6 +118,7 @@ def make_random_host_files(in_dir, num_files, rand_size=True):
         rand_str = os.urandom(size)
         file_handle.write(rand_str)
         file_handle.flush()
+        file_handle.close()
 
         md5 = compute_md5(rand_str)
         files[file_handle.name] = HostFile(file_handle, md5)
@@ -153,9 +155,9 @@ class AdbWrapper(object):
         self.out_dir = out_dir
         self.adb_cmd = "adb "
         if self.device:
-            self.adb_cmd += "-s {} ".format(device)
+            self.adb_cmd += "-s {} ".format(pipes.quote(device))
         if self.out_dir:
-            self.adb_cmd += "-p {} ".format(out_dir)
+            self.adb_cmd += "-p {} ".format(pipes.quote(out_dir))
 
     def shell(self, cmd):
         return call_checked(self.adb_cmd + "shell " + cmd)
@@ -168,13 +170,16 @@ class AdbWrapper(object):
             self.adb_cmd + "install {}".format(pipes.quote(filename)))
 
     def push(self, local, remote):
-        return call_checked(self.adb_cmd + "push {} {}".format(local, remote))
+        return call_checked(self.adb_cmd + "push {} {}".format(
+            pipes.quote(local), pipes.quote(remote)))
 
     def pull(self, remote, local):
-        return call_checked(self.adb_cmd + "pull {} {}".format(remote, local))
+        return call_checked(self.adb_cmd + "pull {} {}".format(
+            pipes.quote(remote), pipes.quote(local)))
 
     def sync(self, directory=""):
-        return call_checked(self.adb_cmd + "sync {}".format(directory))
+        return call_checked(self.adb_cmd + "sync {}".format(
+            pipes.quote(directory) if directory else directory))
 
     def forward(self, local, remote):
         return call_checked(self.adb_cmd + "forward {} {}".format(local,
@@ -300,11 +305,11 @@ class AdbBasic(unittest.TestCase):
         adb = AdbWrapper()
 
         # http://b/20323053
-        tf = tempfile.NamedTemporaryFile("w", suffix="-text;ls;1.apk")
+        tf = tempfile.NamedTemporaryFile("wb", suffix="-text;ls;1.apk")
         self.assertIn("-text;ls;1.apk", adb.install(tf.name))
 
         # http://b/3090932
-        tf = tempfile.NamedTemporaryFile("w", suffix="-Live Hold'em.apk")
+        tf = tempfile.NamedTemporaryFile("wb", suffix="-Live Hold'em.apk")
         self.assertIn("-Live Hold'em.apk", adb.install(tf.name))
 
     def test_line_endings(self):
@@ -312,7 +317,16 @@ class AdbBasic(unittest.TestCase):
 
         Bug: http://b/19735063
         """
-        self.assertFalse(AdbWrapper().shell("uname").endswith("\r\n"))
+        output = AdbWrapper().shell("uname");
+        if sys.platform == 'win32':
+            # adb.exe running on Windows does translation to the Windows \r\n
+            # convention, so we should expect those chars.
+            self.assertTrue(output.endswith("\r\n"));
+            # If the server outputs \r\n and adb.exe translates that to \r\r\n
+            # we want to catch that server problem.
+            self.assertFalse(output.endswith("\r\r\n"));
+        else:
+            self.assertFalse(output.endswith("\r\n"))
 
 
 class AdbFile(unittest.TestCase):
@@ -324,20 +338,24 @@ class AdbFile(unittest.TestCase):
         """Push a randomly generated file to specified device."""
         kbytes = 512
         adb = AdbWrapper()
-        with tempfile.NamedTemporaryFile(mode="w") as tmp:
-            rand_str = os.urandom(1024 * kbytes)
-            tmp.write(rand_str)
-            tmp.flush()
-
-            host_md5 = compute_md5(rand_str)
-            adb.shell_nocheck("rm -r {}".format(AdbFile.DEVICE_TEMP_FILE))
+        with tempfile.NamedTemporaryFile(mode="wb", delete=False) as tmp:
             try:
-                adb.push(local=tmp.name, remote=AdbFile.DEVICE_TEMP_FILE)
-                dev_md5, _ = adb.shell(
-                    "md5sum {}".format(AdbFile.DEVICE_TEMP_FILE)).split()
-                self.assertEqual(host_md5, dev_md5)
+                rand_str = os.urandom(1024 * kbytes)
+                tmp.write(rand_str)
+                tmp.flush()
+                tmp.close()
+
+                host_md5 = compute_md5(rand_str)
+                adb.shell_nocheck("rm -r {}".format(AdbFile.DEVICE_TEMP_FILE))
+                try:
+                    adb.push(local=tmp.name, remote=AdbFile.DEVICE_TEMP_FILE)
+                    dev_md5, _ = adb.shell(
+                        "md5sum {}".format(AdbFile.DEVICE_TEMP_FILE)).split()
+                    self.assertEqual(host_md5, dev_md5)
+                finally:
+                    adb.shell_nocheck("rm {}".format(AdbFile.DEVICE_TEMP_FILE))
             finally:
-                adb.shell_nocheck("rm {}".format(AdbFile.DEVICE_TEMP_FILE))
+                os.remove(tmp.name)
 
     # TODO: write push directory test.
 
@@ -352,12 +370,18 @@ class AdbFile(unittest.TestCase):
             dev_md5, _ = adb.shell(
                 "md5sum {}".format(AdbFile.DEVICE_TEMP_FILE)).split()
 
-            with tempfile.NamedTemporaryFile(mode="w") as tmp_write:
-                adb.pull(remote=AdbFile.DEVICE_TEMP_FILE, local=tmp_write.name)
-                with open(tmp_write.name) as tmp_read:
-                    host_contents = tmp_read.read()
-                    host_md5 = compute_md5(host_contents)
-                self.assertEqual(dev_md5, host_md5)
+            with tempfile.NamedTemporaryFile(mode="wb", delete=False) \
+                as tmp_write:
+                try:
+                    tmp_write.close()
+                    adb.pull(remote=AdbFile.DEVICE_TEMP_FILE,
+                             local=tmp_write.name)
+                    with open(tmp_write.name, "rb") as tmp_read:
+                        host_contents = tmp_read.read()
+                        host_md5 = compute_md5(host_contents)
+                    self.assertEqual(dev_md5, host_md5)
+                finally:
+                    os.remove(tmp_write.name)
         finally:
             adb.shell_nocheck("rm {}".format(AdbFile.DEVICE_TEMP_FILE))
 
@@ -383,7 +407,7 @@ class AdbFile(unittest.TestCase):
             for device_full_path in temp_files:
                 host_path = os.path.join(
                     host_dir, temp_files[device_full_path].base_name)
-                with open(host_path) as host_file:
+                with open(host_path, "rb") as host_file:
                     host_md5 = compute_md5(host_file.read())
                     self.assertEqual(host_md5,
                                      temp_files[device_full_path].md5)
@@ -421,7 +445,7 @@ class AdbFile(unittest.TestCase):
 
             # confirm that every file on the device mirrors that on the host
             for host_full_path in temp_files.keys():
-                device_full_path = os.path.join(
+                device_full_path = posixpath.join(
                     AdbFile.DEVICE_TEMP_DIR,
                     temp_files[host_full_path].base_name)
                 dev_md5, _ = adb.shell(
@@ -432,7 +456,7 @@ class AdbFile(unittest.TestCase):
             adb.shell_nocheck("rm -r {}".format(AdbFile.DEVICE_TEMP_DIR))
             if temp_files:
                 for tf in temp_files.values():
-                    tf.handle.close()
+                    os.remove(tf.full_path)
             if base_dir:
                 os.removedirs(base_dir + AdbFile.DEVICE_TEMP_DIR)
 
