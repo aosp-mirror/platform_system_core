@@ -123,7 +123,7 @@ int32_t FingerprintDaemonProxy::enroll(const uint8_t* token, ssize_t tokenSize, 
         int32_t timeout) {
     ALOG(LOG_VERBOSE, LOG_TAG, "enroll(gid=%d, timeout=%d)\n", groupId, timeout);
     if (tokenSize != sizeof(hw_auth_token_t) ) {
-        ALOG(LOG_VERBOSE, LOG_TAG, "enroll() : invalid token size %" PRId64 "\n", tokenSize);
+        ALOG(LOG_VERBOSE, LOG_TAG, "enroll() : invalid token size %zu\n", tokenSize);
         return -1;
     }
     const hw_auth_token_t* authToken = reinterpret_cast<const hw_auth_token_t*>(token);
@@ -171,7 +171,7 @@ int32_t FingerprintDaemonProxy::setActiveGroup(int32_t groupId, const uint8_t* p
     char path_name[PATH_MAX];
     memcpy(path_name, path, pathlen);
     path_name[pathlen] = '\0';
-    ALOG(LOG_VERBOSE, LOG_TAG, "setActiveGroup(%d, %s, %" PRId64 ")", groupId, path_name, pathlen);
+    ALOG(LOG_VERBOSE, LOG_TAG, "setActiveGroup(%d, %s, %zu)", groupId, path_name, pathlen);
     return mDevice->set_active_group(mDevice, groupId, path_name);
     return -1;
 }
