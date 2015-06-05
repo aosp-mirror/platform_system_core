@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <math.h>
 #include <sched.h>
 #include <signal.h>
@@ -286,7 +287,8 @@ static void show_help(const char *cmd)
                     "                  represents an automatic quicker pruning for the noisiest\n"
                     "                  UID as determined by the current statistics.\n"
                     "  -P '<list> ...' set prune white and ~black list, using same format as\n"
-                    "                  printed above. Must be quoted.\n");
+                    "                  printed above. Must be quoted.\n"
+                    "  --pid=<pid>     Only prints logs from the given pid.\n");
 
     fprintf(stderr,"\nfilterspecs are a series of \n"
                    "  <tag>[:priority]\n\n"
@@ -348,15 +350,19 @@ static const char *multiplier_of_size(unsigned long value)
 static bool getSizeTArg(char *ptr, size_t *val, size_t min = 0,
                         size_t max = SIZE_MAX)
 {
-    char *endp;
-    errno = 0;
-    size_t ret = (size_t) strtoll(ptr, &endp, 0);
-
-    if (endp[0] != '\0' || errno != 0 ) {
+    if (!ptr) {
         return false;
     }
 
-    if (ret >  max || ret <  min) {
+    char *endp;
+    errno = 0;
+    size_t ret = (size_t)strtoll(ptr, &endp, 0);
+
+    if (endp[0] || errno) {
+        return false;
+    }
+
+    if ((ret > max) || (ret < min)) {
         return false;
     }
 
@@ -497,6 +503,7 @@ int main(int argc, char **argv)
     struct logger_list *logger_list;
     size_t tail_lines = 0;
     log_time tail_time(log_time::EPOCH);
+    size_t pid = 0;
 
     signal(SIGPIPE, exit);
 
@@ -510,13 +517,33 @@ int main(int argc, char **argv)
     for (;;) {
         int ret;
 
-        ret = getopt(argc, argv, ":cdDLt:T:gG:sQf:r:n:v:b:BSpP:");
+        int option_index = 0;
+        static const char pid_str[] = "pid";
+        static const struct option long_options[] = {
+          { pid_str,         required_argument, NULL,   0 },
+          { NULL,            0,                 NULL,   0 }
+        };
+
+        ret = getopt_long(argc, argv, ":cdDLt:T:gG:sQf:r:n:v:b:BSpP:",
+                          long_options, &option_index);
 
         if (ret < 0) {
             break;
         }
 
-        switch(ret) {
+        switch (ret) {
+            case 0:
+                // One of the long options
+                if (long_options[option_index].name == pid_str) {
+                    // ToDo: determine runtime PID_MAX?
+                    if (!getSizeTArg(optarg, &pid, 1)) {
+                        logcat_panic(true, "%s %s out of range\n",
+                                     long_options[option_index].name, optarg);
+                    }
+                    break;
+                }
+            break;
+
             case 's':
                 // default to all silent
                 android_log_addFilterRule(g_logformat, "*:s");
@@ -838,9 +865,9 @@ int main(int argc, char **argv)
 
     dev = devices;
     if (tail_time != log_time::EPOCH) {
-        logger_list = android_logger_list_alloc_time(mode, tail_time, 0);
+        logger_list = android_logger_list_alloc_time(mode, tail_time, pid);
     } else {
-        logger_list = android_logger_list_alloc(mode, tail_lines, 0);
+        logger_list = android_logger_list_alloc(mode, tail_lines, pid);
     }
     const char *openDeviceFail = NULL;
     const char *clearFail = NULL;
