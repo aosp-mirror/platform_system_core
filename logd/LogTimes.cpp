@@ -31,6 +31,7 @@ LogTimeEntry::LogTimeEntry(LogReader &reader, SocketClient *client,
         mRelease(false),
         mError(false),
         threadRunning(false),
+        leadingDropped(false),
         mReader(reader),
         mLogMask(logMask),
         mPid(pid),
@@ -123,6 +124,8 @@ void *LogTimeEntry::threadStart(void *obj) {
 
     bool privileged = FlushCommand::hasReadLogs(client);
 
+    me->leadingDropped = true;
+
     lock();
 
     while (me->threadRunning && !me->isError_Locked()) {
@@ -132,6 +135,7 @@ void *LogTimeEntry::threadStart(void *obj) {
 
         if (me->mTail) {
             logbuf.flushTo(client, start, privileged, FilterFirstPass, me);
+            me->leadingDropped = true;
         }
         start = logbuf.flushTo(client, start, privileged, FilterSecondPass, me);
 
@@ -163,6 +167,14 @@ int LogTimeEntry::FilterFirstPass(const LogBufferElement *element, void *obj) {
 
     LogTimeEntry::lock();
 
+    if (me->leadingDropped) {
+        if (element->getDropped()) {
+            LogTimeEntry::unlock();
+            return false;
+        }
+        me->leadingDropped = false;
+    }
+
     if (me->mCount == 0) {
         me->mStart = element->getSequence();
     }
@@ -188,6 +200,13 @@ int LogTimeEntry::FilterSecondPass(const LogBufferElement *element, void *obj) {
     if (me->skipAhead[element->getLogId()]) {
         me->skipAhead[element->getLogId()]--;
         goto skip;
+    }
+
+    if (me->leadingDropped) {
+        if (element->getDropped()) {
+            goto skip;
+        }
+        me->leadingDropped = false;
     }
 
     // Truncate to close race between first and second pass

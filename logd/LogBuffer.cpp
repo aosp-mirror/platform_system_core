@@ -281,7 +281,8 @@ public:
     }
 
     void clear(LogBufferElement *e) {
-        uint64_t current = e->getRealTime().nsec() - NS_PER_SEC;
+        uint64_t current = e->getRealTime().nsec()
+                         - (EXPIRE_RATELIMIT * NS_PER_SEC);
         for(LogBufferElementMap::iterator it = map.begin(); it != map.end();) {
             LogBufferElement *l = it->second;
             if ((l->getDropped() >= EXPIRE_THRESHOLD)
