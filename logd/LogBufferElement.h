@@ -50,8 +50,9 @@ class LogBuffer;
 
 #define EXPIRE_HOUR_THRESHOLD 24 // Only expire chatty UID logs to preserve
                                  // non-chatty UIDs less than this age in hours
-#define EXPIRE_THRESHOLD 4       // A smaller expire count is considered too
+#define EXPIRE_THRESHOLD 10      // A smaller expire count is considered too
                                  // chatty for the temporal expire messages
+#define EXPIRE_RATELIMIT 10      // maximum rate in seconds to report expiration
 
 class LogBufferElement {
     const log_id_t mLogId;
