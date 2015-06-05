@@ -104,8 +104,8 @@ char *android::tidToName(pid_t tid) {
 // assumption: mMsg == NULL
 size_t LogBufferElement::populateDroppedMessage(char *&buffer,
         LogBuffer *parent) {
-    static const char tag[] = "logd";
-    static const char format_uid[] = "uid=%u%s too chatty%s, expire %u line%s";
+    static const char tag[] = "chatty";
+    static const char format_uid[] = "uid=%u%s%s expire %u line%s";
 
     char *name = parent->uidToName(mUid);
     char *commName = android::tidToName(mTid);
@@ -115,9 +115,15 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
     if (!commName) {
         commName = parent->pidToName(mPid);
     }
-    if (name && commName && !strcmp(name, commName)) {
-        free(commName);
-        commName = NULL;
+    size_t len = name ? strlen(name) : 0;
+    if (len && commName && !strncmp(name, commName, len)) {
+        if (commName[len] == '\0') {
+            free(commName);
+            commName = NULL;
+        } else {
+            free(name);
+            name = NULL;
+        }
     }
     if (name) {
         char *p = NULL;
@@ -129,16 +135,16 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
     }
     if (commName) {
         char *p = NULL;
-        asprintf(&p, " comm=%s", commName);
+        asprintf(&p, " %s", commName);
         if (p) {
             free(commName);
             commName = p;
         }
     }
     // identical to below to calculate the buffer size required
-    size_t len = snprintf(NULL, 0, format_uid, mUid, name ? name : "",
-                          commName ? commName : "",
-                          mDropped, (mDropped > 1) ? "s" : "");
+    len = snprintf(NULL, 0, format_uid, mUid, name ? name : "",
+                   commName ? commName : "",
+                   mDropped, (mDropped > 1) ? "s" : "");
 
     size_t hdrLen;
     if (mLogId == LOG_ID_EVENTS) {
