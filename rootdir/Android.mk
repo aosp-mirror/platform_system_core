@@ -26,7 +26,7 @@ LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 #
 # create some directories (some are mount points)
 LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
-    sbin dev proc sys system data oem)
+    sbin dev proc sys system data oem acct config storage mnt root)
 
 include $(BUILD_SYSTEM)/base_rules.mk
 
