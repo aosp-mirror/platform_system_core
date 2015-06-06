@@ -2,7 +2,6 @@ LOCAL_PATH:= $(call my-dir)
 
 
 common_cflags := \
-    -std=gnu99 \
     -Werror -Wno-unused-parameter \
     -I$(LOCAL_PATH)/upstream-netbsd/include/ \
     -include bsd-compatibility.h \
@@ -63,10 +62,12 @@ OUR_TOOLS := \
 ALL_TOOLS = $(BSD_TOOLS) $(OUR_TOOLS)
 
 LOCAL_SRC_FILES := \
+    start_stop.cpp \
     toolbox.c \
     $(patsubst %,%.c,$(OUR_TOOLS)) \
 
 LOCAL_CFLAGS += $(common_cflags)
+LOCAL_CONLYFLAGS += -std=gnu99
 
 LOCAL_SHARED_LIBRARIES := \
     libcutils \
