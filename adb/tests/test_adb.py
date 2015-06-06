@@ -249,7 +249,8 @@ class AdbBasic(unittest.TestCase):
 
     def _test_root(self):
         adb = AdbWrapper()
-        adb.root()
+        if "adbd cannot run as root in production builds" in adb.root():
+            return
         adb.wait()
         self.assertEqual("root", adb.shell("id -un").strip())
 
@@ -317,16 +318,13 @@ class AdbBasic(unittest.TestCase):
 
         Bug: http://b/19735063
         """
-        output = AdbWrapper().shell("uname");
+        output = AdbWrapper().shell("uname")
         if sys.platform == 'win32':
             # adb.exe running on Windows does translation to the Windows \r\n
             # convention, so we should expect those chars.
-            self.assertTrue(output.endswith("\r\n"));
-            # If the server outputs \r\n and adb.exe translates that to \r\r\n
-            # we want to catch that server problem.
-            self.assertFalse(output.endswith("\r\r\n"));
+            self.assertEqual(output, "Linux\r\n")
         else:
-            self.assertFalse(output.endswith("\r\n"))
+            self.assertEqual(output, "Linux\n")
 
 
 class AdbFile(unittest.TestCase):
