@@ -20,7 +20,7 @@ LOCAL_MODULE := $(module)
 LOCAL_MODULE_TAGS := $(module_tag)
 LOCAL_MULTILIB := $($(module)_multilib)
 ifeq ($(LOCAL_MULTILIB),both)
-ifneq ($(build_target),$(filter $(build_target),SHARED_LIBRARY STATIC_LIBRRARY))
+ifneq ($(build_target),$(filter $(build_target),SHARED_LIBRARY STATIC_LIBRARY))
   LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
   LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
 endif
