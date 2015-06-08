@@ -21,6 +21,8 @@
 #include <log/log_read.h>
 #include "LogReader.h"
 
+char *log_strtok_r(char *str, char **saveptr);
+
 class LogKlog : public SocketListener {
     LogBuffer *logbuf;
     LogReader *reader;
