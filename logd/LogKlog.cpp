@@ -83,7 +83,7 @@ static char *is_timestamp(char *s) {
 #define LESS_THAN_SIG      SIGNATURE_MASK
 #define OPEN_BRACKET_SIG   ((SIGNATURE_MASK << 1) & SIGNATURE_MASK)
 // space is one more than <digit> of 9
-#define OPEN_BRACKET_SPACE (OPEN_BRACKET_SIG | 10)
+#define OPEN_BRACKET_SPACE ((char)(OPEN_BRACKET_SIG | 10))
 
 char *log_strtok_r(char *s, char **last) {
     if (!s) {
