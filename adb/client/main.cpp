@@ -110,7 +110,7 @@ static void close_stdin() {
     int fd = unix_open(kNullFileName, O_RDONLY);
     CHECK_NE(fd, -1);
     dup2(fd, STDIN_FILENO);
-    adb_close(fd);
+    unix_close(fd);
 }
 
 static void setup_daemon_logging(void) {
@@ -121,7 +121,13 @@ static void setup_daemon_logging(void) {
     }
     dup2(fd, STDOUT_FILENO);
     dup2(fd, STDERR_FILENO);
-    adb_close(fd);
+    unix_close(fd);
+
+#ifdef _WIN32
+    // On Windows, stderr is buffered by default, so switch to non-buffered
+    // to match Linux.
+    setvbuf(stderr, NULL, _IONBF, 0);
+#endif
     fprintf(stderr, "--- adb starting (pid %d) ---\n", getpid());
 }
 
@@ -153,7 +159,15 @@ int adb_main(int is_daemon, int server_port) {
         // Inform our parent that we are up and running.
         // TODO(danalbert): Can't use SendOkay because we're sending "OK\n", not
         // "OKAY".
-        // TODO(danalbert): Why do we use stdout for Windows?
+        // TODO(danalbert): Why do we use stdout for Windows? There is a
+        // comment in launch_server() that suggests that non-Windows uses
+        // stderr because it is non-buffered. So perhaps the history is that
+        // stdout was preferred for all platforms, but it was discovered that
+        // non-Windows needed a non-buffered fd, so stderr was used there.
+        // Note that using stderr on unix means that if you do
+        // `ADB_TRACE=all adb start-server`, it will say "ADB server didn't ACK"
+        // and "* failed to start daemon *" because the adb server will write
+        // logging to stderr, obscuring the OK\n output that is sent to stderr.
 #if defined(_WIN32)
         int reply_fd = STDOUT_FILENO;
         // Change stdout mode to binary so \n => \r\n translation does not
