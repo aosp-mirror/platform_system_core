@@ -174,6 +174,22 @@ enum {
      * count is non-positive or too big to be realized.
      */
     CAMERA_CMD_SET_VIDEO_BUFFER_COUNT = 10,
+
+    /**
+     * Configure an explicit format to use for video recording metadata mode.
+     * This can be used to switch the format from the
+     * default IMPLEMENTATION_DEFINED gralloc format to some other
+     * device-supported format, and the default dataspace from the BT_709 color
+     * space to some other device-supported dataspace. arg1 is the HAL pixel
+     * format, and arg2 is the HAL dataSpace. This command returns
+     * INVALID_OPERATION error if it is sent after video recording is started,
+     * or the command is not supported at all.
+     *
+     * If the gralloc format is set to a format other than
+     * IMPLEMENTATION_DEFINED, then HALv3 devices will use gralloc usage flags
+     * of SW_READ_OFTEN.
+     */
+    CAMERA_CMD_SET_VIDEO_FORMAT = 11
 };
 
 /** camera fatal errors */
