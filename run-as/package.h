@@ -33,9 +33,11 @@ typedef struct {
     char   seinfo[PATH_MAX];
 } PackageInfo;
 
-/* see documentation in package.c for these functiosn */
+/* see documentation in package.c for these functions */
 
-extern int  get_package_info(const char* packageName, PackageInfo*  info);
+extern int  get_package_info(const char* packageName,
+                             uid_t userId,
+                             PackageInfo*  info);
 
 extern int  check_data_path(const char* dataDir, uid_t uid);
 
