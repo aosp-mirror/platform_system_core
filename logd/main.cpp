@@ -27,6 +27,7 @@
 #include <sys/capability.h>
 #include <sys/klog.h>
 #include <sys/prctl.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <syslog.h>
@@ -37,6 +38,7 @@
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
 #include <private/android_filesystem_config.h>
+#include <utils/threads.h>
 
 #include "CommandListener.h"
 #include "LogBuffer.h"
@@ -88,6 +90,10 @@ static int drop_privs() {
     }
 
     if (sched_setscheduler((pid_t) 0, SCHED_BATCH, &param) < 0) {
+        return -1;
+    }
+
+    if (setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND) < 0) {
         return -1;
     }
 
@@ -156,6 +162,7 @@ static LogBuffer *logBuf = NULL;
 static void *reinit_thread_start(void * /*obj*/) {
     prctl(PR_SET_NAME, "logd.daemon");
     set_sched_policy(0, SP_BACKGROUND);
+    setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND);
 
     setgid(AID_SYSTEM);
     setuid(AID_SYSTEM);
