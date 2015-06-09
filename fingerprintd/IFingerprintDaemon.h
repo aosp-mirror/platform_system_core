@@ -65,7 +65,7 @@ class IFingerprintDaemon : public IInterface, public IBinder::DeathRecipient {
 
         // DECLARE_META_INTERFACE - C++ client interface not needed
         static const android::String16 descriptor;
-        static void hal_notify_callback(fingerprint_msg_t msg);
+        static void hal_notify_callback(const fingerprint_msg_t *msg);
 };
 
 // ----------------------------------------------------------------------------
