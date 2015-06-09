@@ -205,6 +205,16 @@ static int property_set_impl(const char* name, const char* value) {
     if (!is_legal_property_name(name, namelen)) return -1;
     if (valuelen >= PROP_VALUE_MAX) return -1;
 
+    if (strcmp("selinux.reload_policy", name) == 0 && strcmp("1", value) == 0) {
+        if (selinux_reload_policy() != 0) {
+            ERROR("Failed to reload policy\n");
+        }
+    } else if (strcmp("selinux.restorecon_recursive", name) == 0 && valuelen > 0) {
+        if (restorecon_recursive(value) != 0) {
+            ERROR("Failed to restorecon_recursive %s\n", value);
+        }
+    }
+
     prop_info* pi = (prop_info*) __system_property_find(name);
 
     if(pi != 0) {
@@ -236,9 +246,6 @@ static int property_set_impl(const char* name, const char* value) {
          * to prevent them from being overwritten by default values.
          */
         write_persistent_property(name, value);
-    } else if (strcmp("selinux.reload_policy", name) == 0 &&
-               strcmp("1", value) == 0) {
-        selinux_reload_policy();
     }
     property_changed(name, value);
     return 0;
