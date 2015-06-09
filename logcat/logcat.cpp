@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/cdefs.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -33,6 +34,7 @@
 #include <log/logd.h>
 #include <log/logger.h>
 #include <log/logprint.h>
+#include <utils/threads.h>
 
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
@@ -219,6 +221,10 @@ static void setupOutput()
         memset(&param, 0, sizeof(param));
         if (sched_setscheduler((pid_t) 0, SCHED_BATCH, &param) < 0) {
             fprintf(stderr, "failed to set to batch scheduler\n");
+        }
+
+        if (setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND) < 0) {
+            fprintf(stderr, "failed set to priority\n");
         }
 
         g_outFD = openLogFile (g_outputFileName);
