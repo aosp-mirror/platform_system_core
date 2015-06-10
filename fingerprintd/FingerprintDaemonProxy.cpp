@@ -41,7 +41,7 @@ FingerprintDaemonProxy::~FingerprintDaemonProxy() {
     closeHal();
 }
 
-void FingerprintDaemonProxy::hal_notify_callback(fingerprint_msg_t msg) {
+void FingerprintDaemonProxy::hal_notify_callback(const fingerprint_msg_t *msg) {
     FingerprintDaemonProxy* instance = FingerprintDaemonProxy::getInstance();
     const sp<IFingerprintDaemonCallback> callback = instance->mCallback;
     if (callback == NULL) {
@@ -49,52 +49,52 @@ void FingerprintDaemonProxy::hal_notify_callback(fingerprint_msg_t msg) {
         return;
     }
     const int64_t device = (int64_t) instance->mDevice;
-    switch (msg.type) {
+    switch (msg->type) {
         case FINGERPRINT_ERROR:
-            ALOGD("onError(%d)", msg.data.error);
-            callback->onError(device, msg.data.error);
+            ALOGD("onError(%d)", msg->data.error);
+            callback->onError(device, msg->data.error);
             break;
         case FINGERPRINT_ACQUIRED:
-            ALOGD("onAcquired(%d)", msg.data.acquired.acquired_info);
-            callback->onAcquired(device, msg.data.acquired.acquired_info);
+            ALOGD("onAcquired(%d)", msg->data.acquired.acquired_info);
+            callback->onAcquired(device, msg->data.acquired.acquired_info);
             break;
         case FINGERPRINT_AUTHENTICATED:
             ALOGD("onAuthenticated(fid=%d, gid=%d)",
-                    msg.data.authenticated.finger.fid,
-                    msg.data.authenticated.finger.gid);
-            if (msg.data.authenticated.finger.fid != 0) {
-                uint8_t* hat = reinterpret_cast<uint8_t *>(&msg.data.authenticated.hat);
-                instance->notifyKeystore(hat, sizeof(msg.data.authenticated.hat));
+                    msg->data.authenticated.finger.fid,
+                    msg->data.authenticated.finger.gid);
+            if (msg->data.authenticated.finger.fid != 0) {
+                const uint8_t* hat = reinterpret_cast<const uint8_t *>(&msg->data.authenticated.hat);
+                instance->notifyKeystore(hat, sizeof(msg->data.authenticated.hat));
             }
             callback->onAuthenticated(device,
-                    msg.data.authenticated.finger.fid,
-                    msg.data.authenticated.finger.gid);
+                    msg->data.authenticated.finger.fid,
+                    msg->data.authenticated.finger.gid);
             break;
         case FINGERPRINT_TEMPLATE_ENROLLING:
             ALOGD("onEnrollResult(fid=%d, gid=%d, rem=%d)",
-                    msg.data.enroll.finger.fid,
-                    msg.data.enroll.finger.gid,
-                    msg.data.enroll.samples_remaining);
+                    msg->data.enroll.finger.fid,
+                    msg->data.enroll.finger.gid,
+                    msg->data.enroll.samples_remaining);
             callback->onEnrollResult(device,
-                    msg.data.enroll.finger.fid,
-                    msg.data.enroll.finger.gid,
-                    msg.data.enroll.samples_remaining);
+                    msg->data.enroll.finger.fid,
+                    msg->data.enroll.finger.gid,
+                    msg->data.enroll.samples_remaining);
             break;
         case FINGERPRINT_TEMPLATE_REMOVED:
             ALOGD("onRemove(fid=%d, gid=%d)",
-                    msg.data.removed.finger.fid,
-                    msg.data.removed.finger.gid);
+                    msg->data.removed.finger.fid,
+                    msg->data.removed.finger.gid);
             callback->onRemoved(device,
-                    msg.data.removed.finger.fid,
-                    msg.data.removed.finger.gid);
+                    msg->data.removed.finger.fid,
+                    msg->data.removed.finger.gid);
             break;
         default:
-            ALOGE("invalid msg: %d", msg.type);
+            ALOGE("invalid msg type: %d", msg->type);
             return;
     }
 }
 
-void FingerprintDaemonProxy::notifyKeystore(uint8_t *auth_token, size_t auth_token_length) {
+void FingerprintDaemonProxy::notifyKeystore(const uint8_t *auth_token, const size_t auth_token_length) {
     if (auth_token != NULL && auth_token_length > 0) {
         // TODO: cache service?
         sp < IServiceManager > sm = defaultServiceManager();
@@ -151,10 +151,7 @@ int32_t FingerprintDaemonProxy::stopAuthentication() {
 
 int32_t FingerprintDaemonProxy::remove(int32_t fingerId, int32_t groupId) {
     ALOG(LOG_VERBOSE, LOG_TAG, "remove(fid=%d, gid=%d)\n", fingerId, groupId);
-    fingerprint_finger_id_t finger;
-    finger.fid = fingerId;
-    finger.gid = groupId;
-    return mDevice->remove(mDevice, finger);
+    return mDevice->remove(mDevice, groupId, fingerId);
 }
 
 uint64_t FingerprintDaemonProxy::getAuthenticatorId() {
