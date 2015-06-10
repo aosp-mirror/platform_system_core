@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-#include <gtest/gtest.h>
-#include <UniquePtr.h>
+#include <arpa/inet.h>
 #include <iostream>
 
+#include <gtest/gtest.h>
 #include <hardware/hw_auth_token.h>
+#include <UniquePtr.h>
 
 #include "../SoftGateKeeper.h"
 
