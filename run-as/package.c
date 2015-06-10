@@ -16,6 +16,7 @@
 */
 #include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -421,7 +422,7 @@ parse_positive_decimal(const char** pp, const char* end)
  * If the package database is corrupted, return -1 and set errno to EINVAL
  */
 int
-get_package_info(const char* pkgName, PackageInfo *info)
+get_package_info(const char* pkgName, uid_t userId, PackageInfo *info)
 {
     char*        buffer;
     size_t       buffer_len;
@@ -506,7 +507,20 @@ get_package_info(const char* pkgName, PackageInfo *info)
         if (q == p)
             goto BAD_FORMAT;
 
-        p = string_copy(info->dataDir, sizeof info->dataDir, p, q - p);
+        /* If userId == 0 (i.e. user is device owner) we can use dataDir value
+         * from packages.list, otherwise compose data directory as
+         * /data/user/$uid/$packageId
+         */
+        if (userId == 0) {
+            p = string_copy(info->dataDir, sizeof info->dataDir, p, q - p);
+        } else {
+            snprintf(info->dataDir,
+                     sizeof info->dataDir,
+                     "/data/user/%d/%s",
+                     userId,
+                     pkgName);
+            p = q;
+        }
 
         /* skip spaces */
         if (parse_spaces(&p, end) < 0)
