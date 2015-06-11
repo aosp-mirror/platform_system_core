@@ -95,7 +95,7 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
     int status;
     int ret;
     long tmpmnt_flags = MS_NOATIME | MS_NOEXEC | MS_NOSUID;
-    char *tmpmnt_opts = "nomblk_io_submit,errors=remount-ro";
+    char tmpmnt_opts[64] = "errors=remount-ro";
     char *e2fsck_argv[] = {
         E2FSCK_BIN,
         "-y",
@@ -118,6 +118,10 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
          * fix the filesystem.
          */
         errno = 0;
+        if (!strcmp(fs_type, "ext4")) {
+            // This option is only valid with ext4
+            strlcat(tmpmnt_opts, ",nomblk_io_submit", sizeof(tmpmnt_opts));
+        }
         ret = mount(blk_device, target, fs_type, tmpmnt_flags, tmpmnt_opts);
         INFO("%s(): mount(%s,%s,%s)=%d: %s\n",
              __func__, blk_device, target, fs_type, ret, strerror(errno));
