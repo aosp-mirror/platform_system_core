@@ -18,8 +18,6 @@ init_cflags += \
     -Wno-unused-parameter \
     -Werror \
 
-init_clang := true
-
 # --
 
 include $(CLEAR_VARS)
@@ -32,7 +30,7 @@ LOCAL_SRC_FILES:= \
 
 LOCAL_STATIC_LIBRARIES := libbase
 LOCAL_MODULE := libinit
-LOCAL_CLANG := $(init_clang)
+LOCAL_CLANG := true
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -79,7 +77,7 @@ LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT)/sbin; \
     ln -sf ../init $(TARGET_ROOT_OUT)/sbin/ueventd; \
     ln -sf ../init $(TARGET_ROOT_OUT)/sbin/watchdogd
 
-LOCAL_CLANG := $(init_clang)
+LOCAL_CLANG := true
 include $(BUILD_EXECUTABLE)
 
 
@@ -96,5 +94,5 @@ LOCAL_SHARED_LIBRARIES += \
     libbase \
 
 LOCAL_STATIC_LIBRARIES := libinit
-LOCAL_CLANG := $(init_clang)
+LOCAL_CLANG := true
 include $(BUILD_NATIVE_TEST)
