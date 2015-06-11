@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
+#include <arpa/inet.h>
+#include <iostream>
+
 #include <gtest/gtest.h>
 #include <UniquePtr.h>
-#include <iostream>
 
 #include <hardware/hw_auth_token.h>
 
