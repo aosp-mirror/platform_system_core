@@ -68,6 +68,7 @@ ifeq ($(strip $(HOST_OS)),linux)
 LOCAL_LDLIBS := -lrt
 endif
 LOCAL_MULTILIB := both
+LOCAL_CXX_STL := none
 include $(BUILD_HOST_SHARED_LIBRARY)
 
 
@@ -77,6 +78,8 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_SRC_FILES := $(liblog_target_sources)
 LOCAL_CFLAGS := -Werror $(liblog_cflags)
+# AddressSanitizer runtime library depends on liblog.
+LOCAL_SANITIZE := never
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -86,6 +89,9 @@ LOCAL_CFLAGS := -Werror $(liblog_cflags)
 
 # TODO: This is to work around b/19059885. Remove after root cause is fixed
 LOCAL_LDFLAGS_arm := -Wl,--hash-style=both
+
+LOCAL_SANITIZE := never
+LOCAL_CXX_STL := none
 
 include $(BUILD_SHARED_LIBRARY)
 
