@@ -125,6 +125,28 @@ on init
     write /dev/cpuctl/bg_non_interactive/cpu.rt_runtime_us 700000
     write /dev/cpuctl/bg_non_interactive/cpu.rt_period_us 1000000
 
+    # sets up initial cpusets for ActivityManager
+    mkdir /dev/cpuset
+    mount cpuset none /dev/cpuset
+    mkdir /dev/cpuset/foreground
+    mkdir /dev/cpuset/background
+    # this ensures that the cpusets are present and usable, but the device's
+    # init.rc must actually set the correct cpus
+    write /dev/cpuset/foreground/cpus 0
+    write /dev/cpuset/background/cpus 0
+    write /dev/cpuset/foreground/mems 0
+    write /dev/cpuset/background/mems 0
+    chown system system /dev/cpuset
+    chown system system /dev/cpuset/foreground
+    chown system system /dev/cpuset/background
+    chown system system /dev/cpuset/tasks
+    chown system system /dev/cpuset/foreground/tasks
+    chown system system /dev/cpuset/background/tasks
+    chmod 0644 /dev/cpuset/foreground/tasks
+    chmod 0644 /dev/cpuset/background/tasks
+    chmod 0644 /dev/cpuset/tasks
+
+
     # qtaguid will limit access to specific data based on group memberships.
     #   net_bw_acct grants impersonation of socket owners.
     #   net_bw_stats grants access to other apps' detailed tagged-socket stats.
