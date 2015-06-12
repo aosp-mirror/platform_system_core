@@ -91,7 +91,7 @@ LOCAL_SHARED_LIBRARIES := \
         liblog \
         libdl
 
-LOCAL_MODULE:= libutils
+LOCAL_MODULE := libutils
 include $(BUILD_STATIC_LIBRARY)
 
 # For the device, shared
