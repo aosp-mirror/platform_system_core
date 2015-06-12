@@ -76,6 +76,7 @@ static inline uint64_t get8LE(const uint8_t* src)
 
 static const struct fs_path_config android_dirs[] = {
     { 00770, AID_SYSTEM, AID_CACHE,  0, "cache" },
+    { 00500, AID_ROOT,   AID_ROOT,   0, "config" },
     { 00771, AID_SYSTEM, AID_SYSTEM, 0, "data/app" },
     { 00771, AID_SYSTEM, AID_SYSTEM, 0, "data/app-private" },
     { 00771, AID_ROOT,   AID_ROOT,   0, "data/dalvik-cache" },
@@ -88,7 +89,10 @@ static const struct fs_path_config android_dirs[] = {
     { 00775, AID_MEDIA_RW, AID_MEDIA_RW, 0, "data/media" },
     { 00775, AID_MEDIA_RW, AID_MEDIA_RW, 0, "data/media/Music" },
     { 00771, AID_SYSTEM, AID_SYSTEM, 0, "data" },
+    { 00755, AID_ROOT,   AID_SYSTEM, 0, "mnt" },
+    { 00755, AID_ROOT,   AID_ROOT,   0, "root" },
     { 00750, AID_ROOT,   AID_SHELL,  0, "sbin" },
+    { 00755, AID_ROOT,   AID_ROOT, 0, "storage" },
     { 00755, AID_ROOT,   AID_SHELL,  0, "system/bin" },
     { 00755, AID_ROOT,   AID_SHELL,  0, "system/vendor" },
     { 00755, AID_ROOT,   AID_SHELL,  0, "system/xbin" },
