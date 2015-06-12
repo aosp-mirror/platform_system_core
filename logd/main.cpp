@@ -33,6 +33,8 @@
 #include <syslog.h>
 #include <unistd.h>
 
+#include <memory>
+
 #include <cutils/properties.h>
 #include <cutils/sched_policy.h>
 #include <cutils/sockets.h>
@@ -275,6 +277,45 @@ static bool property_get_bool_svelte(const char *key) {
             && !property_get_bool("ro.config.low_ram", false));
 }
 
+static void readDmesg(LogAudit *al, LogKlog *kl) {
+    if (!al && !kl) {
+        return;
+    }
+
+    int len = klogctl(KLOG_SIZE_BUFFER, NULL, 0);
+    if (len <= 0) {
+        return;
+    }
+
+    len += 1024; // Margin for additional input race or trailing nul
+    std::unique_ptr<char []> buf(new char[len]);
+
+    int rc = klogctl(KLOG_READ_ALL, buf.get(), len);
+    if (rc <= 0) {
+        return;
+    }
+
+    if (rc < len) {
+        len = rc + 1;
+    }
+    buf[len - 1] = '\0';
+
+    if (kl) {
+        kl->synchronize(buf.get());
+    }
+
+    for (char *ptr = NULL, *tok = buf.get();
+         (rc >= 0) && ((tok = log_strtok_r(tok, &ptr)));
+         tok = NULL) {
+        if (al) {
+            rc = al->log(tok);
+        }
+        if (kl) {
+            rc = kl->log(tok);
+        }
+    }
+}
+
 // Foreground waits for exit of the main persistent threads
 // that are started here. The threads are created to manage
 // UNIX domain client sockets for writing, reading and
@@ -410,41 +451,16 @@ int main(int argc, char *argv[]) {
         kl = new LogKlog(logBuf, reader, fdDmesg, fdPmesg, al != NULL);
     }
 
-    if (al || kl) {
-        int len = klogctl(KLOG_SIZE_BUFFER, NULL, 0);
-        if (len > 0) {
-            len++;
-            char buf[len];
+    readDmesg(al, kl);
 
-            int rc = klogctl(KLOG_READ_ALL, buf, len);
+    // failure is an option ... messages are in dmesg (required by standard)
 
-            buf[len - 1] = '\0';
+    if (kl && kl->startListener()) {
+        delete kl;
+    }
 
-            if ((rc >= 0) && kl) {
-                kl->synchronize(buf);
-            }
-
-            for (char *ptr = NULL, *tok = buf;
-                 (rc >= 0) && ((tok = log_strtok_r(tok, &ptr)));
-                 tok = NULL) {
-                if (al) {
-                    rc = al->log(tok);
-                }
-                if (kl) {
-                    rc = kl->log(tok);
-                }
-            }
-        }
-
-        // failure is an option ... messages are in dmesg (required by standard)
-
-        if (kl && kl->startListener()) {
-            delete kl;
-        }
-
-        if (al && al->startListener()) {
-            delete al;
-        }
+    if (al && al->startListener()) {
+        delete al;
     }
 
     TEMP_FAILURE_RETRY(pause());
