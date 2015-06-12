@@ -1,16 +1,16 @@
 /*
 ** Copyright 2007, The Android Open Source Project
 **
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
 **
-**     http://www.apache.org/licenses/LICENSE-2.0 
+**     http://www.apache.org/licenses/LICENSE-2.0
 **
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
 ** limitations under the License.
 */
 
@@ -59,27 +59,16 @@ static int __sys_supports_schedgroups = -1;
 static int bg_cgroup_fd = -1;
 static int fg_cgroup_fd = -1;
 
+// File descriptors open to /dev/cpuset/../tasks, setup by initialize, or -1 on error
+static int bg_cpuset_fd = -1;
+static int fg_cpuset_fd = -1;
+
 /* Add tid to the scheduling group defined by the policy */
-static int add_tid_to_cgroup(int tid, SchedPolicy policy)
+static int add_tid_to_cgroup(int tid, int fd)
 {
-    int fd;
-
-    switch (policy) {
-    case SP_BACKGROUND:
-        fd = bg_cgroup_fd;
-        break;
-    case SP_FOREGROUND:
-    case SP_AUDIO_APP:
-    case SP_AUDIO_SYS:
-        fd = fg_cgroup_fd;
-        break;
-    default:
-        fd = -1;
-        break;
-    }
-
     if (fd < 0) {
-        SLOGE("add_tid_to_cgroup failed; policy=%d\n", policy);
+        SLOGE("add_tid_to_cgroup failed; fd=%d\n", fd);
+        errno = EINVAL;
         return -1;
     }
 
@@ -100,8 +89,9 @@ static int add_tid_to_cgroup(int tid, SchedPolicy policy)
          */
         if (errno == ESRCH)
                 return 0;
-        SLOGW("add_tid_to_cgroup failed to write '%s' (%s); policy=%d\n",
-              ptr, strerror(errno), policy);
+        SLOGW("add_tid_to_cgroup failed to write '%s' (%s); fd=%d\n",
+              ptr, strerror(errno), fd);
+        errno = EINVAL;
         return -1;
     }
 
@@ -127,6 +117,17 @@ static void __initialize(void) {
     } else {
         __sys_supports_schedgroups = 0;
     }
+
+#ifdef USE_CPUSETS
+    if (!access("/dev/cpuset/tasks", F_OK)) {
+
+        filename = "/dev/cpuset/foreground/tasks";
+        fg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
+        filename = "/dev/cpuset/background/tasks";
+        bg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
+    }
+#endif
+
 }
 
 /*
@@ -236,6 +237,45 @@ int get_sched_policy(int tid, SchedPolicy *policy)
     return 0;
 }
 
+int set_cpuset_policy(int tid, SchedPolicy policy)
+{
+    // in the absence of cpusets, use the old sched policy
+#ifndef USE_CPUSETS
+    return set_sched_policy(tid, policy);
+#else
+    if (tid == 0) {
+        tid = gettid();
+    }
+    policy = _policy(policy);
+    pthread_once(&the_once, __initialize);
+
+    int fd;
+    switch (policy) {
+    case SP_BACKGROUND:
+        fd = bg_cpuset_fd;
+        break;
+    case SP_FOREGROUND:
+    case SP_AUDIO_APP:
+    case SP_AUDIO_SYS:
+        fd = fg_cpuset_fd;
+        break;
+    default:
+        fd = -1;
+        break;
+    }
+
+    if (add_tid_to_cgroup(tid, fd) != 0) {
+        if (errno != ESRCH && errno != ENOENT)
+            return -errno;
+    }
+
+    // we do both setting of cpuset and setting of cgroup
+    // ensures that backgrounded apps are actually deprioritized
+    // including on core 0
+    return set_sched_policy(tid, policy);
+#endif
+}
+
 int set_sched_policy(int tid, SchedPolicy policy)
 {
     if (tid == 0) {
@@ -286,7 +326,23 @@ int set_sched_policy(int tid, SchedPolicy policy)
 #endif
 
     if (__sys_supports_schedgroups) {
-        if (add_tid_to_cgroup(tid, policy)) {
+        int fd;
+        switch (policy) {
+        case SP_BACKGROUND:
+            fd = bg_cgroup_fd;
+            break;
+        case SP_FOREGROUND:
+        case SP_AUDIO_APP:
+        case SP_AUDIO_SYS:
+            fd = fg_cgroup_fd;
+            break;
+        default:
+            fd = -1;
+            break;
+        }
+
+
+        if (add_tid_to_cgroup(tid, fd) != 0) {
             if (errno != ESRCH && errno != ENOENT)
                 return -errno;
         }
@@ -296,7 +352,7 @@ int set_sched_policy(int tid, SchedPolicy policy)
         param.sched_priority = 0;
         sched_setscheduler(tid,
                            (policy == SP_BACKGROUND) ?
-                            SCHED_BATCH : SCHED_NORMAL,
+                           SCHED_BATCH : SCHED_NORMAL,
                            &param);
     }
 
@@ -337,4 +393,3 @@ const char *get_sched_policy_name(SchedPolicy policy)
     else
         return "error";
 }
-

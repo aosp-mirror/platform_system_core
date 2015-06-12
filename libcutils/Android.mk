@@ -122,6 +122,9 @@ LOCAL_SRC_FILES_x86_64 += \
 
 LOCAL_C_INCLUDES := $(libcutils_c_includes)
 LOCAL_STATIC_LIBRARIES := liblog
+ifneq ($(ENABLE_CPUSETS),)
+LOCAL_CFLAGS += -DUSE_CPUSETS
+endif
 LOCAL_CFLAGS += -Werror -std=gnu90
 include $(BUILD_STATIC_LIBRARY)
 
@@ -131,6 +134,9 @@ LOCAL_MODULE := libcutils
 # liblog symbols present in libcutils.
 LOCAL_WHOLE_STATIC_LIBRARIES := libcutils liblog
 LOCAL_SHARED_LIBRARIES := liblog
+ifneq ($(ENABLE_CPUSETS),)
+LOCAL_CFLAGS += -DUSE_CPUSETS
+endif
 LOCAL_CFLAGS += -Werror
 LOCAL_C_INCLUDES := $(libcutils_c_includes)
 include $(BUILD_SHARED_LIBRARY)
