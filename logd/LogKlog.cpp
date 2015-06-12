@@ -68,9 +68,6 @@ static char *is_timestamp(char *s) {
             continue;
         }
         if (!isdigit(c) && (c == ']')) {
-            if (first_period || (*s != ' ')) {
-                break;
-            }
             return s;
         }
     }
@@ -78,7 +75,7 @@ static char *is_timestamp(char *s) {
 }
 
 // Like strtok_r with "\r\n" except that we look for log signatures (regex)
-// \(\(<[0-9]+>\)\([[] *[0-9]+[.][0-9]+[]] \)\{0,1\}\|[[] *[0-9]+[.][0-9]+[]] \)
+//   \(\(<[0-9]+>\)\([[] *[0-9]+[]]\)\{0,1\}\|[[] *[0-9]+[]]\)
 // and split if we see a second one without a newline.
 
 #define SIGNATURE_MASK     0xF0
