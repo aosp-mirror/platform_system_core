@@ -171,7 +171,7 @@ int adbd_main(int server_port) {
 
         D("Local port disabled\n");
     } else {
-        if ((root_seclabel != nullptr) && (is_selinux_enabled() > 0)) {
+        if (root_seclabel != nullptr) {
             if (setcon(root_seclabel) < 0) {
                 LOG(FATAL) << "Could not set selinux context";
             }
