@@ -19,6 +19,9 @@
 
 #include <sys/types.h>
 
+#include <string>
+#include <vector>
+
 #include <cutils/list.h>
 #include <cutils/iosched_policy.h>
 
@@ -115,6 +118,8 @@ struct service {
     struct svcenvinfo *envvars;
 
     struct action onrestart;  /* Actions to execute on restart. */
+
+    std::vector<std::string>* writepid_files_;
 
     /* keycodes for triggering this service via /dev/keychord */
     int *keycodes;
