@@ -206,6 +206,7 @@ static int lookup_keyword(const char *s)
         break;
     case 'w':
         if (!strcmp(s, "rite")) return K_write;
+        if (!strcmp(s, "ritepid")) return K_writepid;
         if (!strcmp(s, "ait")) return K_wait;
         break;
     }
@@ -924,6 +925,16 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
             parse_error(state, "seclabel option requires a label string\n");
         } else {
             svc->seclabel = args[1];
+        }
+        break;
+    case K_writepid:
+        if (nargs < 2) {
+            parse_error(state, "writepid option requires at least one filename\n");
+            break;
+        }
+        svc->writepid_files_ = new std::vector<std::string>;
+        for (int i = 1; i < nargs; ++i) {
+            svc->writepid_files_->push_back(args[i]);
         }
         break;
 
