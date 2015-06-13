@@ -37,8 +37,6 @@ static bool PtraceRead(pid_t tid, uintptr_t addr, word_t* out_value) {
   errno = 0;
   *out_value = ptrace(PTRACE_PEEKTEXT, tid, reinterpret_cast<void*>(addr), nullptr);
   if (*out_value == static_cast<word_t>(-1) && errno) {
-    BACK_LOGW("invalid pointer %p reading from tid %d, ptrace() strerror(errno)=%s",
-              reinterpret_cast<void*>(addr), tid, strerror(errno));
     return false;
   }
   return true;
