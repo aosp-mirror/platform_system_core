@@ -134,8 +134,6 @@ static int get_process_info(pid_t tid, pid_t* out_pid, uid_t* out_uid, uid_t* ou
   return fields == 7 ? 0 : -1;
 }
 
-static int selinux_enabled;
-
 /*
  * Corresponds with debugger_action_t enum type in
  * include/cutils/debugger.h.
@@ -152,9 +150,6 @@ static bool selinux_action_allowed(int s, pid_t tid, debugger_action_t action)
   const char *tclass = "debuggerd";
   const char *perm;
   bool allowed = false;
-
-  if (selinux_enabled <= 0)
-    return true;
 
   if (action <= 0 || action >= (sizeof(debuggerd_perms)/sizeof(debuggerd_perms[0]))) {
     ALOGE("SELinux:  No permission defined for debugger action %d", action);
@@ -589,7 +584,6 @@ static void usage() {
 int main(int argc, char** argv) {
   union selinux_callback cb;
   if (argc == 1) {
-    selinux_enabled = is_selinux_enabled();
     cb.func_log = selinux_log_callback;
     selinux_set_callback(SELINUX_CB_LOG, cb);
     return do_server();

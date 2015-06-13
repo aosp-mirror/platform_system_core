@@ -220,40 +220,38 @@ void service_start(struct service *svc, const char *dynamic_args)
     }
 
     char* scon = NULL;
-    if (is_selinux_enabled() > 0) {
-        if (svc->seclabel) {
-            scon = strdup(svc->seclabel);
-            if (!scon) {
-                ERROR("Out of memory while starting '%s'\n", svc->name);
-                return;
-            }
-        } else {
-            char *mycon = NULL, *fcon = NULL;
+    if (svc->seclabel) {
+        scon = strdup(svc->seclabel);
+        if (!scon) {
+            ERROR("Out of memory while starting '%s'\n", svc->name);
+            return;
+        }
+    } else {
+        char *mycon = NULL, *fcon = NULL;
 
-            INFO("computing context for service '%s'\n", svc->args[0]);
-            int rc = getcon(&mycon);
-            if (rc < 0) {
-                ERROR("could not get context while starting '%s'\n", svc->name);
-                return;
-            }
+        INFO("computing context for service '%s'\n", svc->args[0]);
+        int rc = getcon(&mycon);
+        if (rc < 0) {
+            ERROR("could not get context while starting '%s'\n", svc->name);
+            return;
+        }
 
-            rc = getfilecon(svc->args[0], &fcon);
-            if (rc < 0) {
-                ERROR("could not get context while starting '%s'\n", svc->name);
-                freecon(mycon);
-                return;
-            }
-
-            rc = security_compute_create(mycon, fcon, string_to_security_class("process"), &scon);
-            if (rc == 0 && !strcmp(scon, mycon)) {
-                ERROR("Warning!  Service %s needs a SELinux domain defined; please fix!\n", svc->name);
-            }
+        rc = getfilecon(svc->args[0], &fcon);
+        if (rc < 0) {
+            ERROR("could not get context while starting '%s'\n", svc->name);
             freecon(mycon);
-            freecon(fcon);
-            if (rc < 0) {
-                ERROR("could not get context while starting '%s'\n", svc->name);
-                return;
-            }
+            return;
+        }
+
+        rc = security_compute_create(mycon, fcon, string_to_security_class("process"), &scon);
+        if (rc == 0 && !strcmp(scon, mycon)) {
+            ERROR("Warning!  Service %s needs a SELinux domain defined; please fix!\n", svc->name);
+        }
+        freecon(mycon);
+        freecon(fcon);
+        if (rc < 0) {
+            ERROR("could not get context while starting '%s'\n", svc->name);
+            return;
         }
     }
 
@@ -335,7 +333,7 @@ void service_start(struct service *svc, const char *dynamic_args)
             }
         }
         if (svc->seclabel) {
-            if (is_selinux_enabled() > 0 && setexeccon(svc->seclabel) < 0) {
+            if (setexeccon(svc->seclabel) < 0) {
                 ERROR("cannot setexeccon('%s'): %s\n", svc->seclabel, strerror(errno));
                 _exit(127);
             }
