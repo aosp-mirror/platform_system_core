@@ -347,6 +347,29 @@ running at 0s. You'll have to look at dmesg to work out when the kernel
 actually started init.
 
 
+Comparing two bootcharts
+------------------------
+A handy script named compare-bootcharts.py can be used to compare the
+start/end time of selected processes. The aforementioned grab-bootchart.sh
+will leave a bootchart tarball named bootchart.tgz at /tmp/android-bootchart.
+If two such barballs are preserved on the host machine under different
+directories, the script can list the timestamps differences. For example:
+
+Usage: system/core/init/compare-bootcharts.py base_bootchart_dir
+       exp_bootchart_dir
+
+process: baseline experiment (delta)
+ - Unit is ms (a jiffy is 10 ms on the system)
+------------------------------------
+/init: 50 40 (-10)
+/system/bin/surfaceflinger: 4320 4470 (+150)
+/system/bin/bootanimation: 6980 6990 (+10)
+zygote64: 10410 10640 (+230)
+zygote: 10410 10640 (+230)
+system_server: 15350 15150 (-200)
+bootanimation ends at: 33790 31230 (-2560)
+
+
 Debugging init
 --------------
 By default, programs executed by init will drop stdout and stderr into
