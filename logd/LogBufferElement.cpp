@@ -105,8 +105,12 @@ char *android::tidToName(pid_t tid) {
 size_t LogBufferElement::populateDroppedMessage(char *&buffer,
         LogBuffer *parent) {
     static const char tag[] = "chatty";
-    static const char format_uid[] = "uid=%u%s%s expire %u line%s";
 
+    if (!__android_log_is_loggable(ANDROID_LOG_INFO, tag, ANDROID_LOG_VERBOSE)) {
+        return 0;
+    }
+
+    static const char format_uid[] = "uid=%u%s%s expire %u line%s";
     char *name = parent->uidToName(mUid);
     char *commName = android::tidToName(mTid);
     if (!commName && (mTid != mPid)) {
