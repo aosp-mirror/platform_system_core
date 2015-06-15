@@ -30,7 +30,7 @@
 #include "LogReader.h"
 
 const uint64_t LogBufferElement::FLUSH_ERROR(0);
-atomic_int_fast64_t LogBufferElement::sequence;
+atomic_int_fast64_t LogBufferElement::sequence(1);
 
 LogBufferElement::LogBufferElement(log_id_t log_id, log_time realtime,
                                    uid_t uid, pid_t pid, pid_t tid,
