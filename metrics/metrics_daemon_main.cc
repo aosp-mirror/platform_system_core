@@ -33,7 +33,7 @@ const std::string MetricsMainDiskStatsPath() {
   }
   dev_path = dev_path_cstr;
   // Check that rootdev begins with "/dev/".
-  if (!StartsWithASCII(dev_path, dev_prefix, false)) {
+  if (!base::StartsWithASCII(dev_path, dev_prefix, false)) {
     LOG(WARNING) << "unexpected root device " << dev_path;
     return "";
   }
