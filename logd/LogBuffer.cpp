@@ -140,8 +140,26 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
     if ((log_id >= LOG_ID_MAX) || (log_id < 0)) {
         return -EINVAL;
     }
+
     LogBufferElement *elem = new LogBufferElement(log_id, realtime,
                                                   uid, pid, tid, msg, len);
+    int prio = ANDROID_LOG_INFO;
+    const char *tag = NULL;
+    if (log_id == LOG_ID_EVENTS) {
+        tag = android::tagToName(elem->getTag());
+    } else {
+        prio = *msg;
+        tag = msg + 1;
+    }
+    if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
+        // Log traffic received to total
+        pthread_mutex_lock(&mLogElementsLock);
+        stats.add(elem);
+        stats.subtract(elem);
+        pthread_mutex_unlock(&mLogElementsLock);
+        delete elem;
+        return -EACCES;
+    }
 
     pthread_mutex_lock(&mLogElementsLock);
 
