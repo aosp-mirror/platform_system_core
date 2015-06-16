@@ -252,14 +252,15 @@ static int killProcessGroupOnce(uid_t uid, int initialPid, int signal)
 int killProcessGroup(uid_t uid, int initialPid, int signal)
 {
     int processes;
-    int sleep_us = 100;
+    const int sleep_us = 5 * 1000;  // 5ms
     int64_t startTime = android::uptimeMillis();
+    int retry = 40;
 
     while ((processes = killProcessGroupOnce(uid, initialPid, signal)) > 0) {
         SLOGV("killed %d processes for processgroup %d\n", processes, initialPid);
-        if (sleep_us < 128000) {
+        if (retry > 0) {
             usleep(sleep_us);
-            sleep_us *= 2;
+            --retry;
         } else {
             SLOGE("failed to kill %d processes for processgroup %d\n",
                     processes, initialPid);
