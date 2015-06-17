@@ -455,18 +455,20 @@ bool NetlinkEvent::parseNdUserOptMessage(const struct nlmsghdr *nh) {
             SLOGE("Invalid optlen %d for RDNSS option\n", optlen);
             return false;
         }
-        int numaddrs = (optlen - 1) / 2;
+        const int numaddrs = (optlen - 1) / 2;
 
         // Find the lifetime.
         struct nd_opt_rdnss *rndss_opt = (struct nd_opt_rdnss *) opthdr;
-        uint32_t lifetime = ntohl(rndss_opt->nd_opt_rdnss_lifetime);
+        const uint32_t lifetime = ntohl(rndss_opt->nd_opt_rdnss_lifetime);
 
         // Construct "SERVERS=<comma-separated string of DNS addresses>".
-        // Reserve (INET6_ADDRSTRLEN + 1) chars for each address: all but the
-        // the last address are followed by ','; the last is followed by '\0'.
         static const char kServerTag[] = "SERVERS=";
-        static const int kTagLength = sizeof(kServerTag) - 1;
-        int bufsize = kTagLength + numaddrs * (INET6_ADDRSTRLEN + 1);
+        static const int kTagLength = strlen(kServerTag);
+        // Reserve sufficient space for an IPv6 link-local address: all but the
+        // last address are followed by ','; the last is followed by '\0'.
+        static const int kMaxSingleAddressLength =
+                INET6_ADDRSTRLEN + strlen("%") + IFNAMSIZ + strlen(",");
+        const int bufsize = kTagLength + numaddrs * (INET6_ADDRSTRLEN + 1);
         char *buf = (char *) malloc(bufsize);
         if (!buf) {
             SLOGE("RDNSS option: out of memory\n");
@@ -482,6 +484,10 @@ bool NetlinkEvent::parseNdUserOptMessage(const struct nlmsghdr *nh) {
             }
             inet_ntop(AF_INET6, addrs + i, buf + pos, bufsize - pos);
             pos += strlen(buf + pos);
+            if (IN6_IS_ADDR_LINKLOCAL(addrs + i)) {
+                buf[pos++] = '%';
+                pos += strlcpy(buf + pos, ifname, bufsize - pos);
+            }
         }
         buf[pos] = '\0';
 
