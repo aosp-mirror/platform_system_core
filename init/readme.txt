@@ -60,36 +60,36 @@ Options are modifiers to services.  They affect how and when init
 runs the service.
 
 critical
-   This is a device-critical service. If it exits more than four times in
-   four minutes, the device will reboot into recovery mode.
+  This is a device-critical service. If it exits more than four times in
+  four minutes, the device will reboot into recovery mode.
 
 disabled
-   This service will not automatically start with its class.
-   It must be explicitly started by name.
+  This service will not automatically start with its class.
+  It must be explicitly started by name.
 
 setenv <name> <value>
-   Set the environment variable <name> to <value> in the launched process.
+  Set the environment variable <name> to <value> in the launched process.
 
 socket <name> <type> <perm> [ <user> [ <group> [ <seclabel> ] ] ]
-   Create a unix domain socket named /dev/socket/<name> and pass
-   its fd to the launched process.  <type> must be "dgram", "stream" or "seqpacket".
-   User and group default to 0.
-   'seclabel' is the SELinux security context for the socket.
-   It defaults to the service security context, as specified by seclabel or
-   computed based on the service executable file security context.
+  Create a unix domain socket named /dev/socket/<name> and pass
+  its fd to the launched process.  <type> must be "dgram", "stream" or "seqpacket".
+  User and group default to 0.
+  'seclabel' is the SELinux security context for the socket.
+  It defaults to the service security context, as specified by seclabel or
+  computed based on the service executable file security context.
 
 user <username>
-   Change to username before exec'ing this service.
-   Currently defaults to root.  (??? probably should default to nobody)
-   Currently, if your process requires linux capabilities then you cannot use
-   this command. You must instead request the capabilities in-process while
-   still root, and then drop to your desired uid.
+  Change to username before exec'ing this service.
+  Currently defaults to root.  (??? probably should default to nobody)
+  Currently, if your process requires linux capabilities then you cannot use
+  this command. You must instead request the capabilities in-process while
+  still root, and then drop to your desired uid.
 
 group <groupname> [ <groupname> ]*
-   Change to groupname before exec'ing this service.  Additional
-   groupnames beyond the (required) first one are used to set the
-   supplemental groups of the process (via setgroups()).
-   Currently defaults to root.  (??? probably should default to nobody)
+  Change to groupname before exec'ing this service.  Additional
+  groupnames beyond the (required) first one are used to set the
+  supplemental groups of the process (via setgroups()).
+  Currently defaults to root.  (??? probably should default to nobody)
 
 seclabel <seclabel>
   Change to 'seclabel' before exec'ing this service.
@@ -99,22 +99,26 @@ seclabel <seclabel>
   If not specified and no transition is defined in policy, defaults to the init context.
 
 oneshot
-   Do not restart the service when it exits.
+  Do not restart the service when it exits.
 
 class <name>
-   Specify a class name for the service.  All services in a
-   named class may be started or stopped together.  A service
-   is in the class "default" if one is not specified via the
-   class option.
+  Specify a class name for the service.  All services in a
+  named class may be started or stopped together.  A service
+  is in the class "default" if one is not specified via the
+  class option.
 
 onrestart
-    Execute a Command (see below) when service restarts.
+  Execute a Command (see below) when service restarts.
+
+writepid <file...>
+  Write the child's pid to the given files when it forks. Meant for
+  cgroup/cpuset usage.
 
 
 Triggers
 --------
-   Triggers are strings which can be used to match certain kinds
-   of events and used to cause an action to occur.
+Triggers are strings which can be used to match certain kinds
+of events and used to cause an action to occur.
 
 boot
    This is the first trigger that will occur when init starts
