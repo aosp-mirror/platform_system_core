@@ -30,8 +30,6 @@ LOCAL_SRC_FILES:= \
 
 LOCAL_STATIC_LIBRARIES := libbase
 LOCAL_MODULE := libinit
-
-LOCAL_DETECT_INTEGER_OVERFLOWS := true
 LOCAL_CLANG := true
 include $(BUILD_STATIC_LIBRARY)
 
@@ -81,7 +79,6 @@ LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT)/sbin; \
     ln -sf ../init $(TARGET_ROOT_OUT)/sbin/ueventd; \
     ln -sf ../init $(TARGET_ROOT_OUT)/sbin/watchdogd
 
-LOCAL_DETECT_INTEGER_OVERFLOWS := true
 LOCAL_CLANG := true
 include $(BUILD_EXECUTABLE)
 
@@ -99,6 +96,5 @@ LOCAL_SHARED_LIBRARIES += \
     libbase \
 
 LOCAL_STATIC_LIBRARIES := libinit
-LOCAL_DETECT_INTEGER_OVERFLOWS := true
 LOCAL_CLANG := true
 include $(BUILD_NATIVE_TEST)
