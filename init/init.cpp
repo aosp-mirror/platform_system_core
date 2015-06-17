@@ -288,6 +288,16 @@ void service_start(struct service *svc, const char *dynamic_args)
         freecon(scon);
         scon = NULL;
 
+        if (svc->writepid_files_) {
+            std::string pid_str = android::base::StringPrintf("%d", pid);
+            for (auto& file : *svc->writepid_files_) {
+                if (!android::base::WriteStringToFile(pid_str, file)) {
+                    ERROR("couldn't write %s to %s: %s\n",
+                          pid_str.c_str(), file.c_str(), strerror(errno));
+                }
+            }
+        }
+
         if (svc->ioprio_class != IoSchedClass_NONE) {
             if (android_set_ioprio(getpid(), svc->ioprio_class, svc->ioprio_pri)) {
                 ERROR("Failed to set pid %d ioprio = %d,%d: %s\n",
