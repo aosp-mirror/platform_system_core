@@ -19,7 +19,7 @@
 
 #include "adb.h"
 
-extern int auth_enabled;
+extern bool auth_required;
 
 int adb_auth_keygen(const char* filename);
 void adb_auth_verified(atransport *t);
