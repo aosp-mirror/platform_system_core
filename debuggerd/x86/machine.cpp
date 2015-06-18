@@ -14,12 +14,15 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "DEBUG"
+
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/ptrace.h>
 
 #include <backtrace/Backtrace.h>
+#include <log/log.h>
 
 #include "machine.h"
 #include "utility.h"
@@ -27,7 +30,7 @@
 void dump_memory_and_code(log_t* log, Backtrace* backtrace) {
   struct pt_regs r;
   if (ptrace(PTRACE_GETREGS, backtrace->Tid(), 0, &r) == -1) {
-    _LOG(log, logtype::ERROR, "cannot get registers: %s\n", strerror(errno));
+    ALOGE("cannot get registers: %s\n", strerror(errno));
     return;
   }
 
@@ -44,7 +47,7 @@ void dump_memory_and_code(log_t* log, Backtrace* backtrace) {
 void dump_registers(log_t* log, pid_t tid) {
   struct pt_regs r;
   if (ptrace(PTRACE_GETREGS, tid, 0, &r) == -1) {
-    _LOG(log, logtype::ERROR, "cannot get registers: %s\n", strerror(errno));
+    ALOGE("cannot get registers: %s\n", strerror(errno));
     return;
   }
 

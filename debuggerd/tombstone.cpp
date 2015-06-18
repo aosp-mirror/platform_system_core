@@ -180,7 +180,7 @@ static void dump_signal_info(log_t* log, pid_t tid, int signal, int si_code) {
   siginfo_t si;
   memset(&si, 0, sizeof(si));
   if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si) == -1) {
-    _LOG(log, logtype::HEADER, "cannot get siginfo: %s\n", strerror(errno));
+    ALOGE("cannot get siginfo: %s\n", strerror(errno));
     return;
   }
 
@@ -338,7 +338,7 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
     print_fault_address_marker = signal_has_si_addr(si.si_signo);
     addr = reinterpret_cast<uintptr_t>(si.si_addr);
   } else {
-    _LOG(log, logtype::ERROR, "Cannot get siginfo for %d: %s\n", tid, strerror(errno));
+    ALOGE("Cannot get siginfo for %d: %s\n", tid, strerror(errno));
   }
 
   _LOG(log, logtype::MAPS, "\n");
@@ -448,7 +448,7 @@ static bool dump_sibling_thread_report(
 
     // Skip this thread if cannot ptrace it
     if (ptrace(PTRACE_ATTACH, new_tid, 0, 0) < 0) {
-      _LOG(log, logtype::ERROR, "ptrace attach to %d failed: %s\n", new_tid, strerror(errno));
+      ALOGE("ptrace attach to %d failed: %s\n", new_tid, strerror(errno));
       continue;
     }
 
@@ -471,7 +471,7 @@ static bool dump_sibling_thread_report(
     log->current_tid = log->crashed_tid;
 
     if (ptrace(PTRACE_DETACH, new_tid, 0, 0) != 0) {
-      _LOG(log, logtype::ERROR, "ptrace detach from %d failed: %s\n", new_tid, strerror(errno));
+      ALOGE("ptrace detach from %d failed: %s\n", new_tid, strerror(errno));
       detach_failed = true;
     }
   }
@@ -517,13 +517,11 @@ static void dump_log_file(
         // non-blocking EOF; we're done
         break;
       } else {
-        _LOG(log, logtype::ERROR, "Error while reading log: %s\n",
-          strerror(-actual));
+        ALOGE("Error while reading log: %s\n", strerror(-actual));
         break;
       }
     } else if (actual == 0) {
-      _LOG(log, logtype::ERROR, "Got zero bytes while reading log: %s\n",
-        strerror(errno));
+      ALOGE("Got zero bytes while reading log: %s\n", strerror(errno));
       break;
     }
 
@@ -789,11 +787,11 @@ char* engrave_tombstone(pid_t pid, pid_t tid, int signal, int original_si_code,
   log.crashed_tid = tid;
 
   if ((mkdir(TOMBSTONE_DIR, 0755) == -1) && (errno != EEXIST)) {
-    _LOG(&log, logtype::ERROR, "failed to create %s: %s\n", TOMBSTONE_DIR, strerror(errno));
+    ALOGE("failed to create %s: %s\n", TOMBSTONE_DIR, strerror(errno));
   }
 
   if (chown(TOMBSTONE_DIR, AID_SYSTEM, AID_SYSTEM) == -1) {
-    _LOG(&log, logtype::ERROR, "failed to change ownership of %s: %s\n", TOMBSTONE_DIR, strerror(errno));
+    ALOGE("failed to change ownership of %s: %s\n", TOMBSTONE_DIR, strerror(errno));
   }
 
   int fd = -1;
@@ -801,11 +799,11 @@ char* engrave_tombstone(pid_t pid, pid_t tid, int signal, int original_si_code,
   if (selinux_android_restorecon(TOMBSTONE_DIR, 0) == 0) {
     path = find_and_open_tombstone(&fd);
   } else {
-    _LOG(&log, logtype::ERROR, "Failed to restore security context, not writing tombstone.\n");
+    ALOGE("Failed to restore security context, not writing tombstone.\n");
   }
 
   if (fd < 0) {
-    _LOG(&log, logtype::ERROR, "Skipping tombstone write, nothing to do.\n");
+    ALOGE("Skipping tombstone write, nothing to do.\n");
     *detach_failed = false;
     return NULL;
   }
