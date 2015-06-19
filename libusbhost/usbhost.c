@@ -56,6 +56,9 @@
 #define USB_FS_ID_SCANNER   USB_FS_DIR "/%d/%d"
 #define USB_FS_ID_FORMAT    USB_FS_DIR "/%03d/%03d"
 
+// Some devices fail to send string descriptors if we attempt reading > 255 bytes
+#define MAX_STRING_DESCRIPTOR_LENGTH    255
+
 // From drivers/usb/core/devio.c
 // I don't know why this isn't in a kernel header
 #define MAX_USBFS_BUFFER_SIZE   16384
@@ -449,8 +452,8 @@ const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_
 char* usb_device_get_string(struct usb_device *device, int id)
 {
     char string[256];
-    __u16 buffer[128];
-    __u16 languages[128];
+    __u16 buffer[MAX_STRING_DESCRIPTOR_LENGTH / sizeof(__u16)];
+    __u16 languages[MAX_STRING_DESCRIPTOR_LENGTH / sizeof(__u16)];
     int i, result;
     int languageCount = 0;
 
