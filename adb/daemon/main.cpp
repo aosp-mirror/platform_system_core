@@ -125,10 +125,11 @@ int adbd_main(int server_port) {
     // descriptor will always be open.
     adbd_cloexec_auth_socket();
 
-    auth_enabled = property_get_bool("ro.adb.secure", 0) != 0;
-    if (auth_enabled) {
-        adbd_auth_init();
+    if (ALLOW_ADBD_NO_AUTH && property_get_bool("ro.adb.secure", 0) == 0) {
+        auth_required = false;
     }
+
+    adbd_auth_init();
 
     // Our external storage path may be different than apps, since
     // we aren't able to bind mount after dropping root.
