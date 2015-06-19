@@ -28,7 +28,7 @@
 #include "adb.h"
 #include "transport.h"
 
-int auth_enabled = 0;
+bool auth_required = true;
 
 void send_auth_request(atransport *t)
 {
