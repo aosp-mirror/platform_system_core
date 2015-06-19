@@ -47,7 +47,7 @@
 
 /*
  * android_name_to_id - returns the integer uid/gid associated with the given
- * name, or -1U on error.
+ * name, or UINT_MAX on error.
  */
 static unsigned int android_name_to_id(const char *name)
 {
@@ -59,27 +59,35 @@ static unsigned int android_name_to_id(const char *name)
             return info[n].aid;
     }
 
-    return -1U;
+    return UINT_MAX;
 }
 
-/*
- * decode_uid - decodes and returns the given string, which can be either the
- * numeric or name representation, into the integer uid or gid. Returns -1U on
- * error.
- */
-unsigned int decode_uid(const char *s)
+static unsigned int do_decode_uid(const char *s)
 {
     unsigned int v;
 
     if (!s || *s == '\0')
-        return -1U;
+        return UINT_MAX;
     if (isalpha(s[0]))
         return android_name_to_id(s);
 
     errno = 0;
     v = (unsigned int) strtoul(s, 0, 0);
     if (errno)
-        return -1U;
+        return UINT_MAX;
+    return v;
+}
+
+/*
+ * decode_uid - decodes and returns the given string, which can be either the
+ * numeric or name representation, into the integer uid or gid. Returns
+ * UINT_MAX on error.
+ */
+unsigned int decode_uid(const char *s) {
+    unsigned int v = do_decode_uid(s);
+    if (v == UINT_MAX) {
+        ERROR("decode_uid: Unable to find UID for '%s'. Returning UINT_MAX\n", s);
+    }
     return v;
 }
 
