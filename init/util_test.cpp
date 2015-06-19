@@ -38,6 +38,6 @@ TEST(util, read_file_success) {
 
 TEST(util, decode_uid) {
   EXPECT_EQ(0U, decode_uid("root"));
-  EXPECT_EQ(-1U, decode_uid("toot"));
+  EXPECT_EQ(UINT_MAX, decode_uid("toot"));
   EXPECT_EQ(123U, decode_uid("123"));
 }
