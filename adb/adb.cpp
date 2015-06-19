@@ -431,9 +431,9 @@ void handle_packet(apacket *p, atransport *t)
 
         parse_banner(reinterpret_cast<const char*>(p->data), t);
 
-        if (HOST || !auth_enabled) {
+        if (HOST || !auth_required) {
             handle_online(t);
-            if(!HOST) send_connect(t);
+            if (!HOST) send_connect(t);
         } else {
             send_auth_request(t);
         }
