@@ -153,7 +153,9 @@ int32_t FindEntry(const ZipArchiveHandle handle, const ZipEntryName& entryName,
  * Returns 0 on success and negative values on failure.
  */
 int32_t StartIteration(ZipArchiveHandle handle, void** cookie_ptr,
-                       const ZipEntryName* optional_prefix);
+                       const ZipEntryName* optional_prefix,
+                       // TODO: Remove the default parameter.
+                       const ZipEntryName* optional_suffix = NULL);
 
 /*
  * Advance to the next element in the zipfile in iteration order.
