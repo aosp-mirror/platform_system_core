@@ -31,6 +31,7 @@
 #include <binder/IServiceManager.h>
 #include <binder/PermissionCache.h>
 #include <utils/String16.h>
+#include <utils/Log.h>
 
 #include <keystore/IKeystoreService.h>
 #include <keystore/keystore.h> // For error code
@@ -119,8 +120,19 @@ public:
 
         int ret;
         if (device) {
-            ret = device->enroll(device, uid,
-                    current_password_handle, current_password_handle_length,
+            const gatekeeper::password_handle_t *handle =
+                    reinterpret_cast<const gatekeeper::password_handle_t *>(current_password_handle);
+
+            if (handle != NULL && !handle->hardware_backed) {
+                // handle is being re-enrolled from a software version. HAL probably won't accept
+                // the handle as valid, so we nullify it and enroll from scratch
+                current_password_handle = NULL;
+                current_password_handle_length = 0;
+                current_password = NULL;
+                current_password_length = 0;
+            }
+
+            ret = device->enroll(device, uid, current_password_handle, current_password_handle_length,
                     current_password, current_password_length,
                     desired_password, desired_password_length,
                     enrolled_password_handle, enrolled_password_handle_length);
@@ -174,10 +186,26 @@ public:
 
         int ret;
         if (device) {
-            ret = device->verify(device, uid, challenge,
-                enrolled_password_handle, enrolled_password_handle_length,
-                provided_password, provided_password_length, auth_token, auth_token_length,
-                request_reenroll);
+            const gatekeeper::password_handle_t *handle =
+                    reinterpret_cast<const gatekeeper::password_handle_t *>(enrolled_password_handle);
+            if (handle->hardware_backed) {
+                ret = device->verify(device, uid, challenge,
+                    enrolled_password_handle, enrolled_password_handle_length,
+                    provided_password, provided_password_length, auth_token, auth_token_length,
+                    request_reenroll);
+            } else {
+                // upgrade scenario, a HAL has been added to this device where there was none before
+                SoftGateKeeperDevice soft_dev;
+                ret = soft_dev.verify(uid, challenge,
+                    enrolled_password_handle, enrolled_password_handle_length,
+                    provided_password, provided_password_length, auth_token, auth_token_length,
+                    request_reenroll);
+
+                if (ret == 0) {
+                    // success! re-enroll with HAL
+                    *request_reenroll = true;
+                }
+            }
         } else {
             ret = soft_device->verify(uid, challenge,
                 enrolled_password_handle, enrolled_password_handle_length,
