@@ -20,6 +20,8 @@
 
 extern "C" {
 #include <openssl/rand.h>
+#include <openssl/sha.h>
+
 #include <crypto_scrypt.h>
 }
 
@@ -30,6 +32,10 @@ extern "C" {
 
 namespace gatekeeper {
 
+struct fast_hash_t {
+    uint64_t salt;
+    uint8_t digest[SHA256_DIGEST_LENGTH];
+};
 
 class SoftGateKeeper : public GateKeeper {
 public:
@@ -125,9 +131,48 @@ public:
         return true;
     }
 
+    fast_hash_t ComputeFastHash(const SizedBuffer &password, uint64_t salt) {
+        fast_hash_t fast_hash;
+        size_t digest_size = password.length + sizeof(salt);
+        std::unique_ptr<uint8_t[]> digest(new uint8_t[digest_size]);
+        memcpy(digest.get(), &salt, sizeof(salt));
+        memcpy(digest.get() + sizeof(salt), password.buffer.get(), password.length);
+
+        SHA256(digest.get(), digest_size, (uint8_t *) &fast_hash.digest);
+
+        fast_hash.salt = salt;
+        return fast_hash;
+    }
+
+    bool VerifyFast(const fast_hash_t &fast_hash, const SizedBuffer &password) {
+        fast_hash_t computed = ComputeFastHash(password, fast_hash.salt);
+        return memcmp(computed.digest, fast_hash.digest, SHA256_DIGEST_LENGTH) == 0;
+    }
+
+    bool DoVerify(const password_handle_t *expected_handle, const SizedBuffer &password) {
+        FastHashMap::const_iterator it = fast_hash_map_.find(expected_handle->user_id);
+        if (it != fast_hash_map_.end()) {
+            return VerifyFast(it->second, password);
+        } else {
+            if (GateKeeper::DoVerify(expected_handle, password)) {
+                uint64_t salt;
+                GetRandom(&salt, sizeof(salt));
+                fast_hash_map_[expected_handle->user_id] = ComputeFastHash(password, salt);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
 private:
+
+    typedef std::unordered_map<uint32_t, failure_record_t> FailureRecordMap;
+    typedef std::unordered_map<uint64_t, fast_hash_t> FastHashMap;
+
     UniquePtr<uint8_t[]> key_;
-    std::unordered_map<uint32_t, failure_record_t> failure_map_;
+    FailureRecordMap failure_map_;
+    FastHashMap fast_hash_map_;
 };
 }
 
