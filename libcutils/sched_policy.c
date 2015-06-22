@@ -269,10 +269,7 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
             return -errno;
     }
 
-    // we do both setting of cpuset and setting of cgroup
-    // ensures that backgrounded apps are actually deprioritized
-    // including on core 0
-    return set_sched_policy(tid, policy);
+    return 0;
 #endif
 }
 
