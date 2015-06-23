@@ -151,8 +151,8 @@ public:
 
     bool DoVerify(const password_handle_t *expected_handle, const SizedBuffer &password) {
         FastHashMap::const_iterator it = fast_hash_map_.find(expected_handle->user_id);
-        if (it != fast_hash_map_.end()) {
-            return VerifyFast(it->second, password);
+        if (it != fast_hash_map_.end() && VerifyFast(it->second, password)) {
+            return true;
         } else {
             if (GateKeeper::DoVerify(expected_handle, password)) {
                 uint64_t salt;
