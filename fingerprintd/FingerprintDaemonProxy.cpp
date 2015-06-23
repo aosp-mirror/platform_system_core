@@ -160,8 +160,8 @@ uint64_t FingerprintDaemonProxy::getAuthenticatorId() {
 
 int32_t FingerprintDaemonProxy::setActiveGroup(int32_t groupId, const uint8_t* path,
         ssize_t pathlen) {
-    if (pathlen >= PATH_MAX) {
-        ALOGE("Path name is too long\n");
+    if (pathlen >= PATH_MAX || pathlen <= 0) {
+        ALOGE("Bad path length: %zd", pathlen);
         return -1;
     }
     // Convert to null-terminated string
@@ -170,7 +170,6 @@ int32_t FingerprintDaemonProxy::setActiveGroup(int32_t groupId, const uint8_t* p
     path_name[pathlen] = '\0';
     ALOG(LOG_VERBOSE, LOG_TAG, "setActiveGroup(%d, %s, %zu)", groupId, path_name, pathlen);
     return mDevice->set_active_group(mDevice, groupId, path_name);
-    return -1;
 }
 
 int64_t FingerprintDaemonProxy::openHal() {
