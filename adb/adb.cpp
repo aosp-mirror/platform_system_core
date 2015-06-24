@@ -835,6 +835,14 @@ int handle_forward_request(const char* service, TransportType type, const char* 
     return 0;
 }
 
+#if ADB_HOST
+static int SendOkay(int fd, const std::string& s) {
+    SendOkay(fd);
+    SendProtocolString(fd, s);
+    return 0;
+}
+#endif
+
 int handle_host_request(const char* service, TransportType type,
                         const char* serial, int reply_fd, asocket* s) {
     if (strcmp(service, "kill") == 0) {
@@ -845,7 +853,6 @@ int handle_host_request(const char* service, TransportType type,
     }
 
 #if ADB_HOST
-    atransport *transport = NULL;
     // "transport:" is used for switching transport with a specified serial number
     // "transport-usb:" is used for switching transport to the only USB transport
     // "transport-local:" is used for switching transport to the only local transport
@@ -864,11 +871,10 @@ int handle_host_request(const char* service, TransportType type,
             serial = service;
         }
 
-        std::string error_msg = "unknown failure";
-        transport = acquire_one_transport(kCsAny, type, serial, &error_msg);
-
-        if (transport) {
-            s->transport = transport;
+        std::string error_msg;
+        atransport* t = acquire_one_transport(kCsAny, type, serial, &error_msg);
+        if (t != nullptr) {
+            s->transport = t;
             SendOkay(reply_fd);
         } else {
             SendFail(reply_fd, error_msg);
@@ -883,9 +889,7 @@ int handle_host_request(const char* service, TransportType type,
             D("Getting device list...\n");
             std::string device_list = list_transports(long_listing);
             D("Sending device list...\n");
-            SendOkay(reply_fd);
-            SendProtocolString(reply_fd, device_list);
-            return 0;
+            return SendOkay(reply_fd, device_list);
         }
         return 1;
     }
@@ -905,8 +909,7 @@ int handle_host_request(const char* service, TransportType type,
                 snprintf(hostbuf, sizeof(hostbuf) - 1, "%s:5555", serial);
                 serial = hostbuf;
             }
-            atransport *t = find_transport(serial);
-
+            atransport* t = find_transport(serial);
             if (t) {
                 unregister_transport(t);
             } else {
@@ -914,50 +917,36 @@ int handle_host_request(const char* service, TransportType type,
             }
         }
 
-        SendOkay(reply_fd);
-        SendProtocolString(reply_fd, buffer);
-        return 0;
+        return SendOkay(reply_fd, buffer);
     }
 
     // returns our value for ADB_SERVER_VERSION
     if (!strcmp(service, "version")) {
-        SendOkay(reply_fd);
-        SendProtocolString(reply_fd, android::base::StringPrintf("%04x", ADB_SERVER_VERSION));
-        return 0;
+        return SendOkay(reply_fd, android::base::StringPrintf("%04x", ADB_SERVER_VERSION));
     }
 
-    if(!strncmp(service,"get-serialno",strlen("get-serialno"))) {
-        const char *out = "unknown";
-        transport = acquire_one_transport(kCsAny, type, serial, NULL);
-        if (transport && transport->serial) {
-            out = transport->serial;
-        }
-        SendOkay(reply_fd);
-        SendProtocolString(reply_fd, out);
-        return 0;
+    // These always report "unknown" rather than the actual error, for scripts.
+    if (!strcmp(service, "get-serialno")) {
+        std::string ignored;
+        atransport* t = acquire_one_transport(kCsAny, type, serial, &ignored);
+        return SendOkay(reply_fd, (t && t->serial) ? t->serial : "unknown");
     }
-    if(!strncmp(service,"get-devpath",strlen("get-devpath"))) {
-        const char *out = "unknown";
-        transport = acquire_one_transport(kCsAny, type, serial, NULL);
-        if (transport && transport->devpath) {
-            out = transport->devpath;
-        }
-        SendOkay(reply_fd);
-        SendProtocolString(reply_fd, out);
-        return 0;
+    if (!strcmp(service, "get-devpath")) {
+        std::string ignored;
+        atransport* t = acquire_one_transport(kCsAny, type, serial, &ignored);
+        return SendOkay(reply_fd, (t && t->devpath) ? t->devpath : "unknown");
     }
+    if (!strcmp(service, "get-state")) {
+        std::string ignored;
+        atransport* t = acquire_one_transport(kCsAny, type, serial, &ignored);
+        return SendOkay(reply_fd, t ? t->connection_state_name() : "unknown");
+    }
+
     // indicates a new emulator instance has started
-    if (!strncmp(service,"emulator:",9)) {
+    if (!strncmp(service, "emulator:", 9)) {
         int  port = atoi(service+9);
         local_connect(port);
         /* we don't even need to send a reply */
-        return 0;
-    }
-
-    if(!strncmp(service,"get-state",strlen("get-state"))) {
-        transport = acquire_one_transport(kCsAny, type, serial, NULL);
-        SendOkay(reply_fd);
-        SendProtocolString(reply_fd, transport->connection_state_name());
         return 0;
     }
 #endif // ADB_HOST
