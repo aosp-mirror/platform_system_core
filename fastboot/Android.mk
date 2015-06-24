@@ -34,7 +34,7 @@ ifeq ($(HOST_OS),linux)
 endif
 
 ifeq ($(HOST_OS),darwin)
-  LOCAL_SRC_FILES += usb_osx.c util_osx.c
+  LOCAL_SRC_FILES += usb_osx.cpp util_osx.cpp
   LOCAL_LDLIBS += -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
   LOCAL_CFLAGS += -Wno-unused-parameter
 endif
