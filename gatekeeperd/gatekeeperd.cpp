@@ -58,6 +58,13 @@ public:
             if (ret < 0)
                 LOG_ALWAYS_FATAL_IF(ret < 0, "Unable to open GateKeeper HAL");
         }
+
+        if (mark_cold_boot()) {
+            ALOGI("cold boot: clearing state");
+            if (device != NULL && device->delete_all_users != NULL) {
+                device->delete_all_users(device);
+            }
+        }
     }
 
     virtual ~GateKeeperProxy() {
@@ -74,6 +81,20 @@ public:
         }
         write(fd, &sid, sizeof(sid));
         close(fd);
+    }
+
+    bool mark_cold_boot() {
+        const char *filename = ".coldboot";
+        if (access(filename, F_OK) == -1) {
+            int fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR);
+            if (fd < 0) {
+                ALOGE("could not open file: %s : %s", filename, strerror(errno));
+                return false;
+            }
+            close(fd);
+            return true;
+        }
+        return false;
     }
 
     void maybe_store_sid(uint32_t uid, uint64_t sid) {
@@ -249,6 +270,10 @@ public:
             return;
         }
         clear_sid(uid);
+
+        if (device != NULL && device->delete_user != NULL) {
+            device->delete_user(device, uid);
+        }
     }
 
     virtual status_t dump(int fd, const Vector<String16> &) {
