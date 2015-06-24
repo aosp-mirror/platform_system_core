@@ -26,6 +26,7 @@
  * SUCH DAMAGE.
  */
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/IOKitLib.h>
@@ -121,7 +122,7 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
         result = (*plugInInterface)->QueryInterface(
                 plugInInterface,
                 CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID),
-                (LPVOID) &interface);
+                (LPVOID*) &interface);
 
         // No longer need the intermediate plugin
         (*plugInInterface)->Release(plugInInterface);
@@ -279,7 +280,7 @@ static int try_device(io_service_t device, usb_handle *handle) {
 
     // Now create the device interface.
     result = (*plugin)->QueryInterface(plugin,
-            CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID), (LPVOID) &dev);
+            CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID), (LPVOID*) &dev);
     if ((result != 0) || (dev == NULL)) {
         ERR("Couldn't create a device interface (%08x)\n", (int) result);
         goto error;
@@ -432,7 +433,7 @@ static int init_usb(ifc_match_func callback, usb_handle **handle) {
         }
 
         if (h.success) {
-            *handle = calloc(1, sizeof(usb_handle));
+            *handle = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
             memcpy(*handle, &h, sizeof(usb_handle));
             ret = 0;
             break;
