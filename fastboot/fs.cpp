@@ -38,7 +38,7 @@ static int generate_f2fs_image(int fd, long long partSize)
 
 static const struct fs_generator {
 
-    char *fs_type;  //must match what fastboot reports for partition type
+    const char* fs_type;  //must match what fastboot reports for partition type
     int (*generate)(int fd, long long partSize); //returns 0 or error value
 
 } generators[] = {
