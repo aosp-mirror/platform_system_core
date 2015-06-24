@@ -40,7 +40,7 @@ ifeq ($(HOST_OS),darwin)
 endif
 
 ifeq ($(HOST_OS),windows)
-  LOCAL_SRC_FILES += usb_windows.c util_windows.c
+  LOCAL_SRC_FILES += usb_windows.cpp util_windows.cpp
   EXTRA_STATIC_LIBS := AdbWinApi
   ifneq ($(strip $(USE_CYGWIN)),)
     # Pure cygwin case
