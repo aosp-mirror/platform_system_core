@@ -223,9 +223,9 @@ static int usb_buf_len;
 static int fb_download_data_sparse_write(void *priv, const void *data, int len)
 {
     int r;
-    usb_handle *usb = priv;
+    usb_handle* usb = reinterpret_cast<usb_handle*>(priv);
     int to_write;
-    const char *ptr = data;
+    const char* ptr = reinterpret_cast<const char*>(data);
 
     if (usb_buf_len) {
         to_write = min(USB_BUF_SIZE - usb_buf_len, len);

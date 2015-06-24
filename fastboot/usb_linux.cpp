@@ -340,7 +340,7 @@ static usb_handle *find_usb_device(const char *base, ifc_match_func callback)
 
             if(filter_usb_device(de->d_name, desc, n, writable, callback,
                                  &in, &out, &ifc) == 0) {
-                usb = calloc(1, sizeof(usb_handle));
+                usb = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
                 strcpy(usb->fname, devname);
                 usb->ep_in = in;
                 usb->ep_out = out;
