@@ -45,10 +45,6 @@
 #include <sys/mman.h>
 #endif
 
-#ifndef __unused
-#define __unused __attribute__((__unused__))
-#endif
-
 #define ARRAY_SIZE(x)           (sizeof(x)/sizeof(x[0]))
 
 #define OP_DOWNLOAD   1
@@ -73,7 +69,7 @@ struct Action
     unsigned size;
 
     const char *msg;
-    int (*func)(Action *a, int status, char *resp);
+    int (*func)(Action* a, int status, const char* resp);
 
     double start;
 };
@@ -121,8 +117,7 @@ int fb_format_supported(usb_handle *usb, const char *partition, const char *type
     return !!fs_get_generator(fs_type);
 }
 
-static int cb_default(Action *a, int status, char *resp)
-{
+static int cb_default(Action* a, int status, const char* resp) {
     if (status) {
         fprintf(stderr,"FAILED (%s)\n", resp);
     } else {
@@ -135,12 +130,11 @@ static int cb_default(Action *a, int status, char *resp)
 
 static Action *queue_action(unsigned op, const char *fmt, ...)
 {
-    Action *a;
     va_list ap;
     size_t cmdsize;
 
-    a = calloc(1, sizeof(Action));
-    if (a == 0) die("out of memory");
+    Action* a = reinterpret_cast<Action*>(calloc(1, sizeof(Action)));
+    if (a == nullptr) die("out of memory");
 
     va_start(ap, fmt);
     cmdsize = vsnprintf(a->cmd, sizeof(a->cmd), fmt, ap);
@@ -198,8 +192,7 @@ void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, unsigned sz)
     a->msg = mkmsg("writing '%s'", ptn);
 }
 
-static int match(char *str, const char **value, unsigned count)
-{
+static int match(const char* str, const char** value, unsigned count) {
     unsigned n;
 
     for (n = 0; n < count; n++) {
@@ -222,9 +215,9 @@ static int match(char *str, const char **value, unsigned count)
 
 
 
-static int cb_check(Action *a, int status, char *resp, int invert)
+static int cb_check(Action* a, int status, const char* resp, int invert)
 {
-    const char **value = a->data;
+    const char** value = reinterpret_cast<const char**>(a->data);
     unsigned count = a->size;
     unsigned n;
     int yes;
@@ -265,18 +258,16 @@ static int cb_check(Action *a, int status, char *resp, int invert)
     return -1;
 }
 
-static int cb_require(Action *a, int status, char *resp)
-{
+static int cb_require(Action*a, int status, const char* resp) {
     return cb_check(a, status, resp, 0);
 }
 
-static int cb_reject(Action *a, int status, char *resp)
-{
+static int cb_reject(Action* a, int status, const char* resp) {
     return cb_check(a, status, resp, 1);
 }
 
 void fb_queue_require(const char *prod, const char *var,
-		int invert, unsigned nvalues, const char **value)
+                      int invert, unsigned nvalues, const char **value)
 {
     Action *a;
     a = queue_action(OP_QUERY, "getvar:%s", var);
@@ -285,11 +276,10 @@ void fb_queue_require(const char *prod, const char *var,
     a->size = nvalues;
     a->msg = mkmsg("checking %s", var);
     a->func = invert ? cb_reject : cb_require;
-    if (a->data == 0) die("out of memory");
+    if (a->data == nullptr) die("out of memory");
 }
 
-static int cb_display(Action *a, int status, char *resp)
-{
+static int cb_display(Action* a, int status, const char* resp) {
     if (status) {
         fprintf(stderr, "%s FAILED (%s)\n", a->cmd, resp);
         return status;
@@ -303,17 +293,16 @@ void fb_queue_display(const char *var, const char *prettyname)
     Action *a;
     a = queue_action(OP_QUERY, "getvar:%s", var);
     a->data = strdup(prettyname);
-    if (a->data == 0) die("out of memory");
+    if (a->data == nullptr) die("out of memory");
     a->func = cb_display;
 }
 
-static int cb_save(Action *a, int status, char *resp)
-{
+static int cb_save(Action* a, int status, const char* resp) {
     if (status) {
         fprintf(stderr, "%s FAILED (%s)\n", a->cmd, resp);
         return status;
     }
-    strncpy(a->data, resp, a->size);
+    strncpy(reinterpret_cast<char*>(a->data), resp, a->size);
     return 0;
 }
 
@@ -326,8 +315,7 @@ void fb_queue_query_save(const char *var, char *dest, unsigned dest_size)
     a->func = cb_save;
 }
 
-static int cb_do_nothing(Action *a __unused, int status __unused, char *resp __unused)
-{
+static int cb_do_nothing(Action*, int , const char*) {
     fprintf(stderr,"\n");
     return 0;
 }
@@ -398,7 +386,7 @@ int fb_execute_queue(usb_handle *usb)
         } else if (a->op == OP_NOTICE) {
             fprintf(stderr,"%s\n",(char*)a->data);
         } else if (a->op == OP_DOWNLOAD_SPARSE) {
-            status = fb_download_data_sparse(usb, a->data);
+            status = fb_download_data_sparse(usb, reinterpret_cast<sparse_file*>(a->data));
             status = a->func(a, status, status ? fb_get_error() : "");
             if (status) break;
         } else if (a->op == OP_WAIT_FOR_DISCONNECT) {
@@ -414,5 +402,5 @@ int fb_execute_queue(usb_handle *usb)
 
 int fb_queue_is_empty(void)
 {
-    return (action_list == NULL);
+    return (action_list == nullptr);
 }
