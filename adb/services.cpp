@@ -528,7 +528,7 @@ static void wait_for_state(int fd, void* cookie)
     std::string error_msg = "unknown error";
     atransport* t = acquire_one_transport(sinfo->state, sinfo->transport_type, sinfo->serial,
                                           &error_msg);
-    if (t != 0) {
+    if (t != nullptr) {
         SendOkay(fd);
     } else {
         SendFail(fd, error_msg);

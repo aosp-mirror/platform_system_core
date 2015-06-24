@@ -731,12 +731,12 @@ atransport* acquire_one_transport(ConnectionState state, TransportType type,
     int ambiguous = 0;
 
 retry:
-    if (error_out) *error_out = android::base::StringPrintf("device '%s' not found", serial);
+    *error_out = serial ? android::base::StringPrintf("device '%s' not found", serial) : "no devices found";
 
     adb_mutex_lock(&transport_lock);
     for (auto t : transport_list) {
         if (t->connection_state == kCsNoPerm) {
-            if (error_out) *error_out = "insufficient permissions for device";
+            *error_out = "insufficient permissions for device";
             continue;
         }
 
@@ -748,7 +748,7 @@ retry:
                 qual_match(serial, "model:", t->model, true) ||
                 qual_match(serial, "device:", t->device, false)) {
                 if (result) {
-                    if (error_out) *error_out = "more than one device";
+                    *error_out = "more than one device";
                     ambiguous = 1;
                     result = NULL;
                     break;
@@ -758,7 +758,7 @@ retry:
         } else {
             if (type == kTransportUsb && t->type == kTransportUsb) {
                 if (result) {
-                    if (error_out) *error_out = "more than one device";
+                    *error_out = "more than one device";
                     ambiguous = 1;
                     result = NULL;
                     break;
@@ -766,7 +766,7 @@ retry:
                 result = t;
             } else if (type == kTransportLocal && t->type == kTransportLocal) {
                 if (result) {
-                    if (error_out) *error_out = "more than one emulator";
+                    *error_out = "more than one emulator";
                     ambiguous = 1;
                     result = NULL;
                     break;
@@ -774,7 +774,7 @@ retry:
                 result = t;
             } else if (type == kTransportAny) {
                 if (result) {
-                    if (error_out) *error_out = "more than one device/emulator";
+                    *error_out = "more than one device/emulator";
                     ambiguous = 1;
                     result = NULL;
                     break;
@@ -787,33 +787,31 @@ retry:
 
     if (result) {
         if (result->connection_state == kCsUnauthorized) {
-            if (error_out) {
-                *error_out = "device unauthorized.\n";
-                char* ADB_VENDOR_KEYS = getenv("ADB_VENDOR_KEYS");
-                *error_out += "This adbd's $ADB_VENDOR_KEYS is ";
-                *error_out += ADB_VENDOR_KEYS ? ADB_VENDOR_KEYS : "not set";
-                *error_out += "; try 'adb kill-server' if that seems wrong.\n";
-                *error_out += "Otherwise check for a confirmation dialog on your device.";
-            }
+            *error_out = "device unauthorized.\n";
+            char* ADB_VENDOR_KEYS = getenv("ADB_VENDOR_KEYS");
+            *error_out += "This adbd's $ADB_VENDOR_KEYS is ";
+            *error_out += ADB_VENDOR_KEYS ? ADB_VENDOR_KEYS : "not set";
+            *error_out += "; try 'adb kill-server' if that seems wrong.\n";
+            *error_out += "Otherwise check for a confirmation dialog on your device.";
             result = NULL;
         }
 
         /* offline devices are ignored -- they are either being born or dying */
         if (result && result->connection_state == kCsOffline) {
-            if (error_out) *error_out = "device offline";
+            *error_out = "device offline";
             result = NULL;
         }
 
         /* check for required connection state */
         if (result && state != kCsAny && result->connection_state != state) {
-            if (error_out) *error_out = "invalid device state";
+            *error_out = "invalid device state";
             result = NULL;
         }
     }
 
     if (result) {
         /* found one that we can take */
-        if (error_out) *error_out = "success";
+        *error_out = "success";
     } else if (state != kCsAny && (serial || !ambiguous)) {
         adb_sleep_ms(1000);
         goto retry;
