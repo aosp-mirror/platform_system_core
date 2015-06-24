@@ -21,7 +21,7 @@ include $(CLEAR_VARS)
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/../mkbootimg \
   $(LOCAL_PATH)/../../extras/ext4_utils \
   $(LOCAL_PATH)/../../extras/f2fs_utils
-LOCAL_SRC_FILES := protocol.c engine.c bootimg_utils.cpp fastboot.cpp util.c fs.c
+LOCAL_SRC_FILES := protocol.cpp engine.cpp bootimg_utils.cpp fastboot.cpp util.cpp fs.cpp
 LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
 LOCAL_CONLYFLAGS += -std=gnu99
@@ -30,7 +30,7 @@ LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
 LOCAL_CFLAGS += -DFASTBOOT_REVISION='"$(fastboot_version)"'
 
 ifeq ($(HOST_OS),linux)
-  LOCAL_SRC_FILES += usb_linux.c util_linux.c
+  LOCAL_SRC_FILES += usb_linux.cpp util_linux.cpp
 endif
 
 ifeq ($(HOST_OS),darwin)
@@ -97,10 +97,9 @@ endif
 $(call dist-for-goals,dist_files sdk,$(my_dist_files))
 my_dist_files :=
 
-
 ifeq ($(HOST_OS),linux)
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := usbtest.c usb_linux.c util.c
+LOCAL_SRC_FILES := usbtest.cpp usb_linux.cpp util.cpp
 LOCAL_MODULE := usbtest
 LOCAL_CFLAGS := -Werror
 include $(BUILD_HOST_EXECUTABLE)
