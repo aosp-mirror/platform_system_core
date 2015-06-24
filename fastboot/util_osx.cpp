@@ -26,6 +26,8 @@
  * SUCH DAMAGE.
  */
 
+#include "fastboot.h"
+
 #import <Carbon/Carbon.h>
 #include <unistd.h>
 
