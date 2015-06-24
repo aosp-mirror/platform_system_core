@@ -30,6 +30,11 @@ LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
 
 include $(BUILD_SYSTEM)/base_rules.mk
 
+EXPORT_GLOBAL_ASAN_OPTIONS :=
+ifeq (address,$(strip $(SANITIZE_TARGET)))
+  EXPORT_GLOBAL_ASAN_OPTIONS := export ASAN_OPTIONS allow_user_segv_handler=1:detect_odr_violation=0:alloc_dealloc_mismatch=0
+endif
+
 # Regenerate init.environ.rc if PRODUCT_BOOTCLASSPATH has changed.
 bcp_md5 := $(word 1, $(shell echo $(PRODUCT_BOOTCLASSPATH) $(PRODUCT_SYSTEM_SERVER_CLASSPATH) | $(MD5SUM)))
 bcp_dep := $(intermediates)/$(bcp_md5).bcp.dep
@@ -41,6 +46,7 @@ $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in $(bcp_dep)
 	@mkdir -p $(dir $@)
 	$(hide) sed -e 's?%BOOTCLASSPATH%?$(PRODUCT_BOOTCLASSPATH)?g' $< >$@
 	$(hide) sed -i -e 's?%SYSTEMSERVERCLASSPATH%?$(PRODUCT_SYSTEM_SERVER_CLASSPATH)?g' $@
+	$(hide) sed -i -e 's?%EXPORT_GLOBAL_ASAN_OPTIONS%?$(EXPORT_GLOBAL_ASAN_OPTIONS)?g' $@
 
 bcp_md5 :=
 bcp_dep :=
