@@ -111,13 +111,17 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
     }
 
     static const char format_uid[] = "uid=%u%s%s expire %u line%s";
+    parent->lock();
     char *name = parent->uidToName(mUid);
+    parent->unlock();
     char *commName = android::tidToName(mTid);
     if (!commName && (mTid != mPid)) {
         commName = android::tidToName(mPid);
     }
     if (!commName) {
+        parent->lock();
         commName = parent->pidToName(mPid);
+        parent->unlock();
     }
     size_t len = name ? strlen(name) : 0;
     if (len && commName && !strncmp(name, commName, len)) {
