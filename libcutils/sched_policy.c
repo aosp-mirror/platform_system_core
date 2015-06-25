@@ -50,6 +50,7 @@ static inline SchedPolicy _policy(SchedPolicy p)
 
 // timer slack value in nS enforced when the thread moves to background
 #define TIMER_SLACK_BG 40000000
+#define TIMER_SLACK_FG 50000
 
 static pthread_once_t the_once = PTHREAD_ONCE_INIT;
 
@@ -356,7 +357,8 @@ int set_sched_policy(int tid, SchedPolicy policy)
                            &param);
     }
 
-    prctl(PR_SET_TIMERSLACK_PID, policy == SP_BACKGROUND ? TIMER_SLACK_BG : 0, tid);
+    prctl(PR_SET_TIMERSLACK_PID,
+          policy == SP_BACKGROUND ? TIMER_SLACK_BG : TIMER_SLACK_FG, tid);
 
     return 0;
 }
