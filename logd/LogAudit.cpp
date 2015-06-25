@@ -145,7 +145,9 @@ int LogAudit::logPrint(const char *fmt, ...) {
             ++cp;
         }
         tid = pid;
+        logbuf->lock();
         uid = logbuf->pidToUid(pid);
+        logbuf->unlock();
         memmove(pidptr, cp, strlen(cp) + 1);
     }
 
@@ -180,14 +182,20 @@ int LogAudit::logPrint(const char *fmt, ...) {
     static const char comm_str[] = " comm=\"";
     const char *comm = strstr(str, comm_str);
     const char *estr = str + strlen(str);
+    char *commfree = NULL;
     if (comm) {
         estr = comm;
         comm += sizeof(comm_str) - 1;
     } else if (pid == getpid()) {
         pid = tid;
         comm = "auditd";
-    } else if (!(comm = logbuf->pidToName(pid))) {
-        comm = "unknown";
+    } else {
+        logbuf->lock();
+        comm = commfree = logbuf->pidToName(pid);
+        logbuf->unlock();
+        if (!comm) {
+            comm = "unknown";
+        }
     }
 
     const char *ecomm = strchr(comm, '"');
@@ -218,6 +226,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
         }
     }
 
+    free(commfree);
     free(str);
 
     if (notify) {
