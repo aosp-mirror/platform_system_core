@@ -115,7 +115,7 @@ TEST(ziparchive, Iteration) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   void* iteration_cookie;
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, NULL));
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, NULL, NULL));
 
   ZipEntry data;
   ZipEntryName name;
@@ -139,6 +139,116 @@ TEST(ziparchive, Iteration) {
   // b/
   ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
   AssertNameEquals("b/", name);
+
+  // End of iteration.
+  ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
+
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, IterationWithPrefix) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
+
+  void* iteration_cookie;
+  ZipEntryName prefix("b/");
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, &prefix, NULL));
+
+  ZipEntry data;
+  ZipEntryName name;
+
+  // b/c.txt
+  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
+  AssertNameEquals("b/c.txt", name);
+
+  // b/d.txt
+  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
+  AssertNameEquals("b/d.txt", name);
+
+  // b/
+  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
+  AssertNameEquals("b/", name);
+
+  // End of iteration.
+  ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
+
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, IterationWithSuffix) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
+
+  void* iteration_cookie;
+  ZipEntryName suffix(".txt");
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, NULL, &suffix));
+
+  ZipEntry data;
+  ZipEntryName name;
+
+  // b/c.txt
+  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
+  AssertNameEquals("b/c.txt", name);
+
+  // b/d.txt
+  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
+  AssertNameEquals("b/d.txt", name);
+
+  // a.txt
+  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
+  AssertNameEquals("a.txt", name);
+
+  // b.txt
+  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
+  AssertNameEquals("b.txt", name);
+
+  // End of iteration.
+  ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
+
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, IterationWithPrefixAndSuffix) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
+
+  void* iteration_cookie;
+  ZipEntryName prefix("b");
+  ZipEntryName suffix(".txt");
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, &prefix, &suffix));
+
+  ZipEntry data;
+  ZipEntryName name;
+
+  // b/c.txt
+  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
+  AssertNameEquals("b/c.txt", name);
+
+  // b/d.txt
+  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
+  AssertNameEquals("b/d.txt", name);
+
+  // b.txt
+  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
+  AssertNameEquals("b.txt", name);
+
+  // End of iteration.
+  ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
+
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, IterationWithBadPrefixAndSuffix) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
+
+  void* iteration_cookie;
+  ZipEntryName prefix("x");
+  ZipEntryName suffix("y");
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, &prefix, &suffix));
+
+  ZipEntry data;
+  ZipEntryName name;
 
   // End of iteration.
   ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
