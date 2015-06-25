@@ -134,6 +134,10 @@ uint64_t FingerprintDaemonProxy::preEnroll() {
     return mDevice->pre_enroll(mDevice);
 }
 
+int32_t FingerprintDaemonProxy::postEnroll() {
+    return mDevice->post_enroll(mDevice);
+}
+
 int32_t FingerprintDaemonProxy::stopEnrollment() {
     ALOG(LOG_VERBOSE, LOG_TAG, "stopEnrollment()\n");
     return mDevice->cancel(mDevice);

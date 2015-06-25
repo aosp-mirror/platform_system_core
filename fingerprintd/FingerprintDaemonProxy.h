@@ -35,6 +35,7 @@ class FingerprintDaemonProxy : public BnFingerprintDaemon {
         virtual void init(const sp<IFingerprintDaemonCallback>& callback);
         virtual int32_t enroll(const uint8_t* token, ssize_t tokenLength, int32_t groupId, int32_t timeout);
         virtual uint64_t preEnroll();
+        virtual int32_t postEnroll();
         virtual int32_t stopEnrollment();
         virtual int32_t authenticate(uint64_t sessionId, uint32_t groupId);
         virtual int32_t stopAuthentication();
