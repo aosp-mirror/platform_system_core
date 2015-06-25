@@ -71,10 +71,12 @@ public:
     // *strp uses malloc, use free to release.
     void formatPrune(char **strp) { mPrune.format(strp); }
 
-    // helper
+    // helper must be protected directly or implicitly by lock()/unlock()
     char *pidToName(pid_t pid) { return stats.pidToName(pid); }
     uid_t pidToUid(pid_t pid) { return stats.pidToUid(pid); }
     char *uidToName(uid_t uid) { return stats.uidToName(uid); }
+    void lock() { pthread_mutex_lock(&mLogElementsLock); }
+    void unlock() { pthread_mutex_unlock(&mLogElementsLock); }
 
 private:
     void maybePrune(log_id_t id);
