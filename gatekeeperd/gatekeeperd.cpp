@@ -144,7 +144,7 @@ public:
             const gatekeeper::password_handle_t *handle =
                     reinterpret_cast<const gatekeeper::password_handle_t *>(current_password_handle);
 
-            if (handle != NULL && !handle->hardware_backed) {
+            if (handle != NULL && handle->version != 0 && !handle->hardware_backed) {
                 // handle is being re-enrolled from a software version. HAL probably won't accept
                 // the handle as valid, so we nullify it and enroll from scratch
                 current_password_handle = NULL;
@@ -209,7 +209,9 @@ public:
         if (device) {
             const gatekeeper::password_handle_t *handle =
                     reinterpret_cast<const gatekeeper::password_handle_t *>(enrolled_password_handle);
-            if (handle->hardware_backed) {
+            // handle version 0 does not have hardware backed flag, and thus cannot be upgraded to
+            // a HAL if there was none before
+            if (handle->version == 0 || handle->hardware_backed) {
                 ret = device->verify(device, uid, challenge,
                     enrolled_password_handle, enrolled_password_handle_length,
                     provided_password, provided_password_length, auth_token, auth_token_length,
