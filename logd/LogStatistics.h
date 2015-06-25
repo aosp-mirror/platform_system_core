@@ -334,7 +334,7 @@ public:
     // *strp = malloc, balance with free
     void format(char **strp, uid_t uid, unsigned int logMask);
 
-    // helper
+    // helper (must be locked directly or implicitly by mLogElementsLock)
     char *pidToName(pid_t pid);
     uid_t pidToUid(pid_t pid);
     char *uidToName(uid_t uid);
