@@ -67,15 +67,18 @@ on init
     mkdir /mnt/user/0 0755 root root
     mkdir /mnt/expand 0771 system system
 
-    # sdcard_r is GID 1028
-    mkdir /storage 0751 root sdcard_r
-    mount tmpfs tmpfs /storage mode=0751,uid=0,gid=1028
-    restorecon_recursive /storage
+    # Storage views to support runtime permissions
+    mkdir /storage 0755 root root
+    mkdir /mnt/runtime_default 0755 root root
+    mkdir /mnt/runtime_default/self 0755 root root
+    mkdir /mnt/runtime_read 0755 root root
+    mkdir /mnt/runtime_read/self 0755 root root
+    mkdir /mnt/runtime_write 0755 root root
+    mkdir /mnt/runtime_write/self 0755 root root
 
     # Symlink to keep legacy apps working in multi-user world
-    mkdir /storage/self 0751 root sdcard_r
     symlink /storage/self/primary /sdcard
-    symlink /mnt/user/0/primary /storage/self/primary
+    symlink /mnt/user/0/primary /mnt/runtime_default/self/primary
 
     # memory control cgroup
     mkdir /dev/memcg 0700 root system
@@ -210,8 +213,10 @@ on post-fs
     start logd
     # once everything is setup, no need to modify /
     mount rootfs rootfs / ro remount
-    # mount shared so changes propagate into child namespaces
+    # Mount shared so changes propagate into child namespaces
     mount rootfs rootfs / shared rec
+    # Mount default storage into root namespace
+    mount none /mnt/runtime_default /storage slave bind rec
 
     # We chown/chmod /cache again so because mount is run as root + defaults
     chown system cache /cache
