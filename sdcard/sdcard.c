@@ -184,14 +184,6 @@ static bool str_icase_equals(void *keyA, void *keyB) {
     return strcasecmp(keyA, keyB) == 0;
 }
 
-static int int_hash(void *key) {
-    return (int) (uintptr_t) key;
-}
-
-static bool int_equals(void *keyA, void *keyB) {
-    return keyA == keyB;
-}
-
 /* Global data for all FUSE mounts */
 struct fuse_global {
     pthread_mutex_t lock;
@@ -1561,12 +1553,6 @@ static bool remove_str_to_int(void *key, void *value, void *context) {
     Hashmap* map = context;
     hashmapRemove(map, key);
     free(key);
-    return true;
-}
-
-static bool remove_int_to_null(void *key, void *value, void *context) {
-    Hashmap* map = context;
-    hashmapRemove(map, key);
     return true;
 }
 
