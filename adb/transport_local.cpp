@@ -331,7 +331,11 @@ static void remote_kick(atransport *t)
 
 static void remote_close(atransport *t)
 {
-    adb_close(t->fd);
+    int fd = t->sfd;
+    if (fd != -1) {
+        t->sfd = -1;
+        adb_close(fd);
+    }
 }
 
 
