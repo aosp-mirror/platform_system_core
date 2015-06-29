@@ -852,25 +852,38 @@ struct IterationHandle {
   // We're not using vector here because this code is used in the Windows SDK
   // where the STL is not available.
   const uint8_t* prefix;
-  uint16_t prefix_len;
+  const uint16_t prefix_len;
+  const uint8_t* suffix;
+  const uint16_t suffix_len;
   ZipArchive* archive;
 
-  IterationHandle() : prefix(NULL), prefix_len(0) {}
-
-  IterationHandle(const ZipEntryName& prefix_name)
-      : prefix_len(prefix_name.name_length) {
-    uint8_t* prefix_copy = new uint8_t[prefix_len];
-    memcpy(prefix_copy, prefix_name.name, prefix_len);
-    prefix = prefix_copy;
+  IterationHandle(const ZipEntryName* prefix_name,
+                  const ZipEntryName* suffix_name)
+    : prefix(NULL),
+      prefix_len(prefix_name ? prefix_name->name_length : 0),
+      suffix(NULL),
+      suffix_len(suffix_name ? suffix_name->name_length : 0) {
+    if (prefix_name) {
+      uint8_t* prefix_copy = new uint8_t[prefix_len];
+      memcpy(prefix_copy, prefix_name->name, prefix_len);
+      prefix = prefix_copy;
+    }
+    if (suffix_name) {
+      uint8_t* suffix_copy = new uint8_t[suffix_len];
+      memcpy(suffix_copy, suffix_name->name, suffix_len);
+      suffix = suffix_copy;
+    }
   }
 
   ~IterationHandle() {
     delete[] prefix;
+    delete[] suffix;
   }
 };
 
 int32_t StartIteration(ZipArchiveHandle handle, void** cookie_ptr,
-                       const ZipEntryName* optional_prefix) {
+                       const ZipEntryName* optional_prefix,
+                       const ZipEntryName* optional_suffix) {
   ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle);
 
   if (archive == NULL || archive->hash_table == NULL) {
@@ -878,8 +891,7 @@ int32_t StartIteration(ZipArchiveHandle handle, void** cookie_ptr,
     return kInvalidHandle;
   }
 
-  IterationHandle* cookie =
-      optional_prefix != NULL ? new IterationHandle(*optional_prefix) : new IterationHandle();
+  IterationHandle* cookie = new IterationHandle(optional_prefix, optional_suffix);
   cookie->position = 0;
   cookie->archive = archive;
 
@@ -929,7 +941,13 @@ int32_t Next(void* cookie, ZipEntry* data, ZipEntryName* name) {
   for (uint32_t i = currentOffset; i < hash_table_length; ++i) {
     if (hash_table[i].name != NULL &&
         (handle->prefix_len == 0 ||
-         (memcmp(handle->prefix, hash_table[i].name, handle->prefix_len) == 0))) {
+         (hash_table[i].name_length >= handle->prefix_len &&
+          memcmp(handle->prefix, hash_table[i].name, handle->prefix_len) == 0)) &&
+        (handle->suffix_len == 0 ||
+         (hash_table[i].name_length >= handle->suffix_len &&
+          memcmp(handle->suffix,
+                 hash_table[i].name + hash_table[i].name_length - handle->suffix_len,
+                 handle->suffix_len) == 0))) {
       handle->position = (i + 1);
       const int error = FindEntry(archive, i, data);
       if (!error) {
@@ -1265,4 +1283,3 @@ const char* ErrorCodeString(int32_t error_code) {
 int GetFileDescriptor(const ZipArchiveHandle handle) {
   return reinterpret_cast<ZipArchive*>(handle)->fd;
 }
-
