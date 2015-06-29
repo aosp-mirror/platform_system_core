@@ -70,7 +70,7 @@ static int32_t OpenArchiveWrapper(const std::string& name,
 }
 
 static void AssertNameEquals(const std::string& name_str,
-                             const ZipEntryName& name) {
+                             const ZipString& name) {
   ASSERT_EQ(name_str.size(), name.name_length);
   ASSERT_EQ(0, memcmp(name_str.c_str(), name.name, name.name_length));
 }
@@ -118,7 +118,7 @@ TEST(ziparchive, Iteration) {
   ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, NULL, NULL));
 
   ZipEntry data;
-  ZipEntryName name;
+  ZipString name;
 
   // b/c.txt
   ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
@@ -151,11 +151,11 @@ TEST(ziparchive, IterationWithPrefix) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   void* iteration_cookie;
-  ZipEntryName prefix("b/");
+  ZipString prefix("b/");
   ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, &prefix, NULL));
 
   ZipEntry data;
-  ZipEntryName name;
+  ZipString name;
 
   // b/c.txt
   ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
@@ -180,11 +180,11 @@ TEST(ziparchive, IterationWithSuffix) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   void* iteration_cookie;
-  ZipEntryName suffix(".txt");
+  ZipString suffix(".txt");
   ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, NULL, &suffix));
 
   ZipEntry data;
-  ZipEntryName name;
+  ZipString name;
 
   // b/c.txt
   ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
@@ -213,12 +213,12 @@ TEST(ziparchive, IterationWithPrefixAndSuffix) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   void* iteration_cookie;
-  ZipEntryName prefix("b");
-  ZipEntryName suffix(".txt");
+  ZipString prefix("b");
+  ZipString suffix(".txt");
   ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, &prefix, &suffix));
 
   ZipEntry data;
-  ZipEntryName name;
+  ZipString name;
 
   // b/c.txt
   ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
@@ -243,12 +243,12 @@ TEST(ziparchive, IterationWithBadPrefixAndSuffix) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   void* iteration_cookie;
-  ZipEntryName prefix("x");
-  ZipEntryName suffix("y");
+  ZipString prefix("x");
+  ZipString suffix("y");
   ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, &prefix, &suffix));
 
   ZipEntry data;
-  ZipEntryName name;
+  ZipString name;
 
   // End of iteration.
   ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
@@ -261,7 +261,7 @@ TEST(ziparchive, FindEntry) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   ZipEntry data;
-  ZipEntryName name;
+  ZipString name;
   name.name = kATxtName;
   name.name_length = kATxtNameLength;
   ASSERT_EQ(0, FindEntry(handle, name, &data));
@@ -274,7 +274,7 @@ TEST(ziparchive, FindEntry) {
   ASSERT_EQ(0x950821c5, data.crc32);
 
   // An entry that doesn't exist. Should be a negative return code.
-  ZipEntryName absent_name;
+  ZipString absent_name;
   absent_name.name = kNonexistentTxtName;
   absent_name.name_length = kNonexistentTxtNameLength;
   ASSERT_LT(FindEntry(handle, absent_name, &data), 0);
@@ -287,9 +287,9 @@ TEST(ziparchive, TestInvalidDeclaredLength) {
   ASSERT_EQ(0, OpenArchiveWrapper("declaredlength.zip", &handle));
 
   void* iteration_cookie;
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, NULL));
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, NULL, NULL));
 
-  ZipEntryName name;
+  ZipString name;
   ZipEntry data;
 
   ASSERT_EQ(Next(iteration_cookie, &data, &name), 0);
@@ -304,7 +304,7 @@ TEST(ziparchive, ExtractToMemory) {
 
   // An entry that's deflated.
   ZipEntry data;
-  ZipEntryName a_name;
+  ZipString a_name;
   a_name.name = kATxtName;
   a_name.name_length = kATxtNameLength;
   ASSERT_EQ(0, FindEntry(handle, a_name, &data));
@@ -316,7 +316,7 @@ TEST(ziparchive, ExtractToMemory) {
   delete[] buffer;
 
   // An entry that's stored.
-  ZipEntryName b_name;
+  ZipString b_name;
   b_name.name = kBTxtName;
   b_name.name_length = kBTxtNameLength;
   ASSERT_EQ(0, FindEntry(handle, b_name, &data));
@@ -403,7 +403,7 @@ TEST(ziparchive, EmptyEntries) {
   ASSERT_EQ(0, OpenArchiveFd(fd, "EmptyEntriesTest", &handle));
 
   ZipEntry entry;
-  ZipEntryName empty_name;
+  ZipString empty_name;
   empty_name.name = kEmptyTxtName;
   empty_name.name_length = kEmptyTxtNameLength;
   ASSERT_EQ(0, FindEntry(handle, empty_name, &entry));
@@ -434,7 +434,7 @@ TEST(ziparchive, EntryLargerThan32K) {
   ASSERT_EQ(0, OpenArchiveFd(fd, "EntryLargerThan32KTest", &handle));
 
   ZipEntry entry;
-  ZipEntryName ab_name;
+  ZipString ab_name;
   ab_name.name = kAbTxtName;
   ab_name.name_length = kAbTxtNameLength;
   ASSERT_EQ(0, FindEntry(handle, ab_name, &entry));
@@ -502,7 +502,7 @@ TEST(ziparchive, ExtractToFile) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   ZipEntry entry;
-  ZipEntryName name;
+  ZipString name;
   name.name = kATxtName;
   name.name_length = kATxtNameLength;
   ASSERT_EQ(0, FindEntry(handle, name, &entry));

@@ -391,7 +391,7 @@ void *load_bootable_image(const char *kernel, const char *ramdisk,
 
 static void* unzip_file(ZipArchiveHandle zip, const char* entry_name, unsigned* sz)
 {
-    ZipEntryName zip_entry_name(entry_name);
+    ZipString zip_entry_name(entry_name);
     ZipEntry zip_entry;
     if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
         fprintf(stderr, "archive does not contain '%s'\n", entry_name);
@@ -453,7 +453,7 @@ static int unzip_to_file(ZipArchiveHandle zip, char* entry_name) {
         return -1;
     }
 
-    ZipEntryName zip_entry_name(entry_name);
+    ZipString zip_entry_name(entry_name);
     ZipEntry zip_entry;
     if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
         fprintf(stderr, "archive does not contain '%s'\n", entry_name);
