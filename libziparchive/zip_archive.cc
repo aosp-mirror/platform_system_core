@@ -307,7 +307,7 @@ struct ZipArchive {
    * ((4 * UINT16_MAX) / 3 + 1) which can safely fit into a uint32_t.
    */
   uint32_t hash_table_size;
-  ZipEntryName* hash_table;
+  ZipString* hash_table;
 
   ZipArchive(const int fd, bool assume_ownership) :
       fd(fd),
@@ -343,7 +343,7 @@ static uint32_t RoundUpPower2(uint32_t val) {
   return val;
 }
 
-static uint32_t ComputeHash(const ZipEntryName& name) {
+static uint32_t ComputeHash(const ZipString& name) {
   uint32_t hash = 0;
   uint16_t len = name.name_length;
   const uint8_t* str = name.name;
@@ -359,16 +359,15 @@ static uint32_t ComputeHash(const ZipEntryName& name) {
  * Convert a ZipEntry to a hash table index, verifying that it's in a
  * valid range.
  */
-static int64_t EntryToIndex(const ZipEntryName* hash_table,
+static int64_t EntryToIndex(const ZipString* hash_table,
                             const uint32_t hash_table_size,
-                            const ZipEntryName& name) {
+                            const ZipString& name) {
   const uint32_t hash = ComputeHash(name);
 
   // NOTE: (hash_table_size - 1) is guaranteed to be non-negative.
   uint32_t ent = hash & (hash_table_size - 1);
   while (hash_table[ent].name != NULL) {
-    if (hash_table[ent].name_length == name.name_length &&
-        memcmp(hash_table[ent].name, name.name, name.name_length) == 0) {
+    if (hash_table[ent] == name) {
       return ent;
     }
 
@@ -382,8 +381,8 @@ static int64_t EntryToIndex(const ZipEntryName* hash_table,
 /*
  * Add a new entry to the hash table.
  */
-static int32_t AddToHash(ZipEntryName *hash_table, const uint64_t hash_table_size,
-                         const ZipEntryName& name) {
+static int32_t AddToHash(ZipString *hash_table, const uint64_t hash_table_size,
+                         const ZipString& name) {
   const uint64_t hash = ComputeHash(name);
   uint32_t ent = hash & (hash_table_size - 1);
 
@@ -392,8 +391,7 @@ static int32_t AddToHash(ZipEntryName *hash_table, const uint64_t hash_table_siz
    * Further, we guarantee that the hashtable size is not 0.
    */
   while (hash_table[ent].name != NULL) {
-    if (hash_table[ent].name_length == name.name_length &&
-        memcmp(hash_table[ent].name, name.name, name.name_length) == 0) {
+    if (hash_table[ent] == name) {
       // We've found a duplicate entry. We don't accept it
       ALOGW("Zip: Found duplicate entry %.*s", name.name_length, name.name);
       return kDuplicateEntry;
@@ -565,8 +563,8 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
    * least one unused entry to avoid an infinite loop during creation.
    */
   archive->hash_table_size = RoundUpPower2(1 + (num_entries * 4) / 3);
-  archive->hash_table = reinterpret_cast<ZipEntryName*>(calloc(archive->hash_table_size,
-      sizeof(ZipEntryName)));
+  archive->hash_table = reinterpret_cast<ZipString*>(calloc(archive->hash_table_size,
+      sizeof(ZipString)));
 
   /*
    * Walk through the central directory, adding entries to the hash
@@ -605,7 +603,7 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
     }
 
     /* add the CDE filename to the hash table */
-    ZipEntryName entry_name;
+    ZipString entry_name;
     entry_name.name = file_name;
     entry_name.name_length = file_name_length;
     const int add_result = AddToHash(archive->hash_table,
@@ -851,39 +849,41 @@ struct IterationHandle {
   uint32_t position;
   // We're not using vector here because this code is used in the Windows SDK
   // where the STL is not available.
-  const uint8_t* prefix;
-  const uint16_t prefix_len;
-  const uint8_t* suffix;
-  const uint16_t suffix_len;
+  ZipString prefix;
+  ZipString suffix;
   ZipArchive* archive;
 
-  IterationHandle(const ZipEntryName* prefix_name,
-                  const ZipEntryName* suffix_name)
-    : prefix(NULL),
-      prefix_len(prefix_name ? prefix_name->name_length : 0),
-      suffix(NULL),
-      suffix_len(suffix_name ? suffix_name->name_length : 0) {
-    if (prefix_name) {
-      uint8_t* prefix_copy = new uint8_t[prefix_len];
-      memcpy(prefix_copy, prefix_name->name, prefix_len);
-      prefix = prefix_copy;
+  IterationHandle(const ZipString* in_prefix,
+                  const ZipString* in_suffix) {
+    if (in_prefix) {
+      uint8_t* name_copy = new uint8_t[in_prefix->name_length];
+      memcpy(name_copy, in_prefix->name, in_prefix->name_length);
+      prefix.name = name_copy;
+      prefix.name_length = in_prefix->name_length;
+    } else {
+      prefix.name = NULL;
+      prefix.name_length = 0;
     }
-    if (suffix_name) {
-      uint8_t* suffix_copy = new uint8_t[suffix_len];
-      memcpy(suffix_copy, suffix_name->name, suffix_len);
-      suffix = suffix_copy;
+    if (in_suffix) {
+      uint8_t* name_copy = new uint8_t[in_suffix->name_length];
+      memcpy(name_copy, in_suffix->name, in_suffix->name_length);
+      suffix.name = name_copy;
+      suffix.name_length = in_suffix->name_length;
+    } else {
+      suffix.name = NULL;
+      suffix.name_length = 0;
     }
   }
 
   ~IterationHandle() {
-    delete[] prefix;
-    delete[] suffix;
+    delete[] prefix.name;
+    delete[] suffix.name;
   }
 };
 
 int32_t StartIteration(ZipArchiveHandle handle, void** cookie_ptr,
-                       const ZipEntryName* optional_prefix,
-                       const ZipEntryName* optional_suffix) {
+                       const ZipString* optional_prefix,
+                       const ZipString* optional_suffix) {
   ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle);
 
   if (archive == NULL || archive->hash_table == NULL) {
@@ -903,7 +903,7 @@ void EndIteration(void* cookie) {
   delete reinterpret_cast<IterationHandle*>(cookie);
 }
 
-int32_t FindEntry(const ZipArchiveHandle handle, const ZipEntryName& entryName,
+int32_t FindEntry(const ZipArchiveHandle handle, const ZipString& entryName,
                   ZipEntry* data) {
   const ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle);
   if (entryName.name_length == 0) {
@@ -922,7 +922,7 @@ int32_t FindEntry(const ZipArchiveHandle handle, const ZipEntryName& entryName,
   return FindEntry(archive, ent, data);
 }
 
-int32_t Next(void* cookie, ZipEntry* data, ZipEntryName* name) {
+int32_t Next(void* cookie, ZipEntry* data, ZipString* name) {
   IterationHandle* handle = reinterpret_cast<IterationHandle*>(cookie);
   if (handle == NULL) {
     return kInvalidHandle;
@@ -936,18 +936,14 @@ int32_t Next(void* cookie, ZipEntry* data, ZipEntryName* name) {
 
   const uint32_t currentOffset = handle->position;
   const uint32_t hash_table_length = archive->hash_table_size;
-  const ZipEntryName *hash_table = archive->hash_table;
+  const ZipString* hash_table = archive->hash_table;
 
   for (uint32_t i = currentOffset; i < hash_table_length; ++i) {
     if (hash_table[i].name != NULL &&
-        (handle->prefix_len == 0 ||
-         (hash_table[i].name_length >= handle->prefix_len &&
-          memcmp(handle->prefix, hash_table[i].name, handle->prefix_len) == 0)) &&
-        (handle->suffix_len == 0 ||
-         (hash_table[i].name_length >= handle->suffix_len &&
-          memcmp(handle->suffix,
-                 hash_table[i].name + hash_table[i].name_length - handle->suffix_len,
-                 handle->suffix_len) == 0))) {
+        (handle->prefix.name_length == 0 ||
+         hash_table[i].StartsWith(handle->prefix)) &&
+        (handle->suffix.name_length == 0 ||
+         hash_table[i].EndsWith(handle->suffix))) {
       handle->position = (i + 1);
       const int error = FindEntry(archive, i, data);
       if (!error) {
