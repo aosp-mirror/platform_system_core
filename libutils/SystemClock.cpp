@@ -29,7 +29,6 @@
 #include <sys/time.h>
 #include <limits.h>
 #include <fcntl.h>
-#include <errno.h>
 #include <string.h>
 
 #include <utils/SystemClock.h>
