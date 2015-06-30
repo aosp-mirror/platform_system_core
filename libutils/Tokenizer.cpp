@@ -56,12 +56,12 @@ status_t Tokenizer::open(const String8& filename, Tokenizer** outTokenizer) {
     int fd = ::open(filename.string(), O_RDONLY);
     if (fd < 0) {
         result = -errno;
-        ALOGE("Error opening file '%s', %s.", filename.string(), strerror(errno));
+        ALOGE("Error opening file '%s': %s", filename.string(), strerror(errno));
     } else {
         struct stat stat;
         if (fstat(fd, &stat)) {
             result = -errno;
-            ALOGE("Error getting size of file '%s', %s.", filename.string(), strerror(errno));
+            ALOGE("Error getting size of file '%s': %s", filename.string(), strerror(errno));
         } else {
             size_t length = size_t(stat.st_size);
 
@@ -83,7 +83,7 @@ status_t Tokenizer::open(const String8& filename, Tokenizer** outTokenizer) {
                 ssize_t nrd = read(fd, buffer, length);
                 if (nrd < 0) {
                     result = -errno;
-                    ALOGE("Error reading file '%s', %s.", filename.string(), strerror(errno));
+                    ALOGE("Error reading file '%s': %s", filename.string(), strerror(errno));
                     delete[] buffer;
                     buffer = NULL;
                 } else {
