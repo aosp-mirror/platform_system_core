@@ -1510,6 +1510,10 @@ static void handle_fuse_requests(struct fuse_handler* handler)
             if (errno != EINTR) {
                 ERROR("[%d] handle_fuse_requests: errno=%d\n", handler->token, errno);
             }
+            if (errno == ENODEV) {
+                ERROR("[%d] someone stole our marbles!\n", handler->token);
+                exit(2);
+            }
             continue;
         }
 
