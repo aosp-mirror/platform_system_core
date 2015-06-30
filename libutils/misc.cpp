@@ -24,7 +24,6 @@
 
 #include <sys/stat.h>
 #include <string.h>
-#include <errno.h>
 #include <stdio.h>
 
 #if !defined(_WIN32)

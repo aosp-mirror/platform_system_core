@@ -17,9 +17,11 @@
 #include <utils/Looper.h>
 #include <utils/Timers.h>
 
-#include <unistd.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <string.h>
+#include <unistd.h>
 
 
 namespace android {
@@ -71,32 +73,32 @@ Looper::Looper(bool allowNonCallbacks) :
         mResponseIndex(0), mNextMessageUptime(LLONG_MAX) {
     int wakeFds[2];
     int result = pipe(wakeFds);
-    LOG_ALWAYS_FATAL_IF(result != 0, "Could not create wake pipe.  errno=%d", errno);
+    LOG_ALWAYS_FATAL_IF(result != 0, "Could not create wake pipe: %s", strerror(errno));
 
     mWakeReadPipeFd = wakeFds[0];
     mWakeWritePipeFd = wakeFds[1];
 
     result = fcntl(mWakeReadPipeFd, F_SETFL, O_NONBLOCK);
-    LOG_ALWAYS_FATAL_IF(result != 0, "Could not make wake read pipe non-blocking.  errno=%d",
-            errno);
+    LOG_ALWAYS_FATAL_IF(result != 0, "Could not make wake read pipe non-blocking: %s",
+            strerror(errno));
 
     result = fcntl(mWakeWritePipeFd, F_SETFL, O_NONBLOCK);
-    LOG_ALWAYS_FATAL_IF(result != 0, "Could not make wake write pipe non-blocking.  errno=%d",
-            errno);
+    LOG_ALWAYS_FATAL_IF(result != 0, "Could not make wake write pipe non-blocking: %s",
+            strerror(errno));
 
     mIdling = false;
 
     // Allocate the epoll instance and register the wake pipe.
     mEpollFd = epoll_create(EPOLL_SIZE_HINT);
-    LOG_ALWAYS_FATAL_IF(mEpollFd < 0, "Could not create epoll instance.  errno=%d", errno);
+    LOG_ALWAYS_FATAL_IF(mEpollFd < 0, "Could not create epoll instance: %s", strerror(errno));
 
     struct epoll_event eventItem;
     memset(& eventItem, 0, sizeof(epoll_event)); // zero out unused members of data field union
     eventItem.events = EPOLLIN;
     eventItem.data.fd = mWakeReadPipeFd;
     result = epoll_ctl(mEpollFd, EPOLL_CTL_ADD, mWakeReadPipeFd, & eventItem);
-    LOG_ALWAYS_FATAL_IF(result != 0, "Could not add wake read pipe to epoll instance.  errno=%d",
-            errno);
+    LOG_ALWAYS_FATAL_IF(result != 0, "Could not add wake read pipe to epoll instance: %s",
+            strerror(errno));
 }
 
 Looper::~Looper() {
@@ -233,7 +235,7 @@ int Looper::pollInner(int timeoutMillis) {
         if (errno == EINTR) {
             goto Done;
         }
-        ALOGW("Poll failed with an unexpected error, errno=%d", errno);
+        ALOGW("Poll failed with an unexpected error: %s", strerror(errno));
         result = POLL_ERROR;
         goto Done;
     }
@@ -377,7 +379,7 @@ void Looper::wake() {
 
     if (nWrite != 1) {
         if (errno != EAGAIN) {
-            ALOGW("Could not write wake signal, errno=%d", errno);
+            ALOGW("Could not write wake signal: %s", strerror(errno));
         }
     }
 }
@@ -447,14 +449,14 @@ int Looper::addFd(int fd, int ident, int events, const sp<LooperCallback>& callb
         if (requestIndex < 0) {
             int epollResult = epoll_ctl(mEpollFd, EPOLL_CTL_ADD, fd, & eventItem);
             if (epollResult < 0) {
-                ALOGE("Error adding epoll events for fd %d, errno=%d", fd, errno);
+                ALOGE("Error adding epoll events for fd %d: %s", fd, strerror(errno));
                 return -1;
             }
             mRequests.add(fd, request);
         } else {
             int epollResult = epoll_ctl(mEpollFd, EPOLL_CTL_MOD, fd, & eventItem);
             if (epollResult < 0) {
-                ALOGE("Error modifying epoll events for fd %d, errno=%d", fd, errno);
+                ALOGE("Error modifying epoll events for fd %d: %s", fd, strerror(errno));
                 return -1;
             }
             mRequests.replaceValueAt(requestIndex, request);
@@ -477,7 +479,7 @@ int Looper::removeFd(int fd) {
 
         int epollResult = epoll_ctl(mEpollFd, EPOLL_CTL_DEL, fd, NULL);
         if (epollResult < 0) {
-            ALOGE("Error removing epoll events for fd %d, errno=%d", fd, errno);
+            ALOGE("Error removing epoll events for fd %d: %s", fd, strerror(errno));
             return -1;
         }
 

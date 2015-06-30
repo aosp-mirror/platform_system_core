@@ -22,6 +22,7 @@
 #include <memory.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #if !defined(_WIN32)
@@ -160,9 +161,9 @@ int androidCreateRawThreadEtc(android_thread_func_t entryFunction,
                     (android_pthread_entry)entryFunction, userData);
     pthread_attr_destroy(&attr);
     if (result != 0) {
-        ALOGE("androidCreateRawThreadEtc failed (entry=%p, res=%d, errno=%d)\n"
+        ALOGE("androidCreateRawThreadEtc failed (entry=%p, res=%d, %s)\n"
              "(android threadPriority=%d)",
-            entryFunction, result, errno, threadPriority);
+            entryFunction, result, strerror(errno), threadPriority);
         return 0;
     }
 
