@@ -43,6 +43,7 @@ class IFingerprintDaemon : public IInterface, public IBinder::DeathRecipient {
            OPEN_HAL = IBinder::FIRST_CALL_TRANSACTION + 8,
            CLOSE_HAL = IBinder::FIRST_CALL_TRANSACTION + 9,
            INIT = IBinder::FIRST_CALL_TRANSACTION + 10,
+           POST_ENROLL = IBinder::FIRST_CALL_TRANSACTION + 11,
         };
 
         IFingerprintDaemon() { }
@@ -54,6 +55,7 @@ class IFingerprintDaemon : public IInterface, public IBinder::DeathRecipient {
         virtual int32_t enroll(const uint8_t* token, ssize_t tokenLength, int32_t groupId,
                 int32_t timeout) = 0;
         virtual uint64_t preEnroll() = 0;
+        virtual int32_t postEnroll() = 0;
         virtual int32_t stopEnrollment() = 0;
         virtual int32_t authenticate(uint64_t sessionId, uint32_t groupId) = 0;
         virtual int32_t stopAuthentication() = 0;
