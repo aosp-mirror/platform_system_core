@@ -103,6 +103,16 @@ status_t BnFingerprintDaemon::onTransact(uint32_t code, const Parcel& data, Parc
             reply->writeInt64(ret);
             return NO_ERROR;
         }
+        case POST_ENROLL: {
+            CHECK_INTERFACE(IFingerprintDaemon, data, reply);
+            if (!checkPermission(HAL_FINGERPRINT_PERMISSION)) {
+                return PERMISSION_DENIED;
+            }
+            const int32_t ret = postEnroll();
+            reply->writeNoException();
+            reply->writeInt32(ret);
+            return NO_ERROR;
+        }
         case REMOVE: {
             CHECK_INTERFACE(IFingerprintDaemon, data, reply);
             if (!checkPermission(HAL_FINGERPRINT_PERMISSION)) {
