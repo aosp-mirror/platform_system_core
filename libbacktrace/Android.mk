@@ -68,6 +68,14 @@ include $(LOCAL_PATH)/Android.build.mk
 build_type := host
 libbacktrace_multilib := both
 include $(LOCAL_PATH)/Android.build.mk
+libbacktrace_static_libraries := \
+	libbase \
+	liblog \
+	libunwind \
+
+build_target := STATIC_LIBRARY
+include $(LOCAL_PATH)/Android.build.mk
+libbacktrace_static_libraries :=
 
 #-------------------------------------------------------------------------
 # The libbacktrace_test library needed by backtrace_test.
