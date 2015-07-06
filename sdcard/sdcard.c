@@ -1513,16 +1513,14 @@ static void handle_fuse_requests(struct fuse_handler* handler)
 {
     struct fuse* fuse = handler->fuse;
     for (;;) {
-        ssize_t len = read(fuse->fd,
-                handler->request_buffer, sizeof(handler->request_buffer));
+        ssize_t len = TEMP_FAILURE_RETRY(read(fuse->fd,
+                handler->request_buffer, sizeof(handler->request_buffer)));
         if (len < 0) {
-            if (errno != EINTR) {
-                ERROR("[%d] handle_fuse_requests: errno=%d\n", handler->token, errno);
-            }
             if (errno == ENODEV) {
                 ERROR("[%d] someone stole our marbles!\n", handler->token);
                 exit(2);
             }
+            ERROR("[%d] handle_fuse_requests: errno=%d\n", handler->token, errno);
             continue;
         }
 
