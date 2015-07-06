@@ -444,7 +444,16 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
         /* Legacy internal layout places users at top level */
         node->perm = PERM_ROOT;
         node->userid = strtoul(node->name, NULL, 10);
-        node->gid = multiuser_get_uid(node->userid, fuse->gid);
+        if (fuse->gid == AID_SDCARD_RW) {
+            /* As an optimization, certain trusted system components only run
+             * as owner but operate across all users. Since we're now handing
+             * out the sdcard_rw GID only to trusted apps, we're okay relaxing
+             * the user boundary enforcement for the default view. The UIDs
+             * assigned to app directories are still multiuser aware. */
+            node->gid = fuse->gid;
+        } else {
+            node->gid = multiuser_get_uid(node->userid, fuse->gid);
+        }
         node->mode = 0771;
         break;
     case PERM_ROOT:
