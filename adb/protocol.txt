@@ -133,7 +133,7 @@ not change on later READY messages sent to the same stream.
 
 
 
---- WRITE(0, remote-id, "data") ----------------------------------------
+--- WRITE(local-id, remote-id, "data") ---------------------------------
 
 The WRITE message sends data to the recipient's stream identified by
 remote-id.  The payload MUST be <= maxdata in length.
