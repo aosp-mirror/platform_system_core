@@ -803,9 +803,9 @@ int do_load_persist_props(int nargs, char **args) {
     return -1;
 }
 
-int do_load_system_props(int nargs, char **args) {
+int do_load_all_props(int nargs, char **args) {
     if (nargs == 1) {
-        load_system_props();
+        load_all_props();
         return 0;
     }
     return -1;
