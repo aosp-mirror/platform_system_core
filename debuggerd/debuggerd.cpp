@@ -63,32 +63,18 @@ struct debugger_request_t {
   int32_t original_si_code;
 };
 
-static void wait_for_user_action(const debugger_request_t &request) {
-  // Find out the name of the process that crashed.
-  char path[64];
-  snprintf(path, sizeof(path), "/proc/%d/exe", request.pid);
-
-  char exe[PATH_MAX];
-  int count;
-  if ((count = readlink(path, exe, sizeof(exe) - 1)) == -1) {
-    ALOGE("readlink('%s') failed: %s", path, strerror(errno));
-    strlcpy(exe, "unknown", sizeof(exe));
-  } else {
-    exe[count] = '\0';
-  }
-
+static void wait_for_user_action(const debugger_request_t& request) {
   // Explain how to attach the debugger.
-  ALOGI("********************************************************\n"
+  ALOGI("***********************************************************\n"
         "* Process %d has been suspended while crashing.\n"
-        "* To attach gdbserver for a gdb connection on port 5039\n"
-        "* and start gdbclient:\n"
+        "* To attach gdbserver and start gdb, run this on the host:\n"
         "*\n"
-        "*     gdbclient %s :5039 %d\n"
+        "*     gdbclient %d\n"
         "*\n"
         "* Wait for gdb to start, then press the VOLUME DOWN key\n"
         "* to let the process continue crashing.\n"
-        "********************************************************",
-        request.pid, exe, request.tid);
+        "***********************************************************",
+        request.pid, request.tid);
 
   // Wait for VOLUME DOWN.
   if (init_getevent() == 0) {
