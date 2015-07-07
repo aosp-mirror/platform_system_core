@@ -652,7 +652,7 @@ service bootanim /system/bin/bootanimation
     oneshot
 
 service gatekeeperd /system/bin/gatekeeperd /data/misc/gatekeeper
-    class main
+    class late_start
     user system
 
 service installd /system/bin/installd
