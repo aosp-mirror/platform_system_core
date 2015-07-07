@@ -35,7 +35,7 @@ int do_chown(int nargs, char **args);
 int do_chmod(int nargs, char **args);
 int do_loglevel(int nargs, char **args);
 int do_load_persist_props(int nargs, char **args);
-int do_load_system_props(int nargs, char **args);
+int do_load_all_props(int nargs, char **args);
 int do_verity_load_state(int nargs, char **args);
 int do_verity_update_state(int nargs, char **args);
 int do_wait(int nargs, char **args);
@@ -67,7 +67,7 @@ enum {
     KEYWORD(installkey,  COMMAND, 1, do_installkey)
     KEYWORD(ioprio,      OPTION,  0, 0)
     KEYWORD(keycodes,    OPTION,  0, 0)
-    KEYWORD(load_system_props,     COMMAND, 0, do_load_system_props)
+    KEYWORD(load_all_props,        COMMAND, 0, do_load_all_props)
     KEYWORD(load_persist_props,    COMMAND, 0, do_load_persist_props)
     KEYWORD(loglevel,    COMMAND, 1, do_loglevel)
     KEYWORD(mkdir,       COMMAND, 1, do_mkdir)
