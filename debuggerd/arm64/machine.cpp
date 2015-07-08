@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "DEBUG"
+
 #include <elf.h>
 #include <errno.h>
 #include <stdint.h>
@@ -23,6 +25,7 @@
 #include <sys/uio.h>
 
 #include <backtrace/Backtrace.h>
+#include <log/log.h>
 
 #include "machine.h"
 #include "utility.h"
@@ -34,8 +37,7 @@ void dump_memory_and_code(log_t* log, Backtrace* backtrace) {
   io.iov_len = sizeof(regs);
 
   if (ptrace(PTRACE_GETREGSET, backtrace->Tid(), reinterpret_cast<void*>(NT_PRSTATUS), &io) == -1) {
-    _LOG(log, logtype::ERROR, "%s: ptrace failed to get registers: %s",
-         __func__, strerror(errno));
+    ALOGE("ptrace failed to get registers: %s", strerror(errno));
     return;
   }
 
@@ -57,7 +59,7 @@ void dump_registers(log_t* log, pid_t tid) {
   io.iov_len = sizeof(r);
 
   if (ptrace(PTRACE_GETREGSET, tid, (void*) NT_PRSTATUS, (void*) &io) == -1) {
-    _LOG(log, logtype::ERROR, "ptrace error: %s\n", strerror(errno));
+    ALOGE("ptrace error: %s\n", strerror(errno));
     return;
   }
 
@@ -81,7 +83,7 @@ void dump_registers(log_t* log, pid_t tid) {
   io.iov_len = sizeof(f);
 
   if (ptrace(PTRACE_GETREGSET, tid, (void*) NT_PRFPREG, (void*) &io) == -1) {
-    _LOG(log, logtype::ERROR, "ptrace error: %s\n", strerror(errno));
+    ALOGE("ptrace error: %s\n", strerror(errno));
     return;
   }
 

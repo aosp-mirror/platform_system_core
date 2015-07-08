@@ -35,8 +35,7 @@ const int MAX_TOTAL_SLEEP_USEC = 10000000; // 10 seconds
 
 // Whitelist output desired in the logcat output.
 bool is_allowed_in_logcat(enum logtype ltype) {
-  if ((ltype == ERROR)
-   || (ltype == HEADER)
+  if ((ltype == HEADER)
    || (ltype == REGISTERS)
    || (ltype == BACKTRACE)) {
     return true;
