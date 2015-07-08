@@ -24,7 +24,6 @@
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
 #include <chromeos/cryptohome.h>
-#include <chromeos/dbus/dbus.h>
 #include <chromeos/dbus/service_constants.h>
 #include <chromeos/key_value_store.h>
 #include <chromeos/process.h>

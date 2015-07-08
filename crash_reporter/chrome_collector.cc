@@ -16,7 +16,6 @@
 #include <base/strings/string_number_conversions.h>
 #include <base/strings/string_util.h>
 #include <chromeos/data_encoding.h>
-#include <chromeos/dbus/dbus.h>
 #include <chromeos/dbus/service_constants.h>
 #include <chromeos/process.h>
 #include <chromeos/syslog_logging.h>
