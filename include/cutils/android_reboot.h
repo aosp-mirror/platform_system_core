@@ -17,6 +17,8 @@
 #ifndef __CUTILS_ANDROID_REBOOT_H__
 #define __CUTILS_ANDROID_REBOOT_H__
 
+#include <mntent.h>
+
 __BEGIN_DECLS
 
 /* Commands */
@@ -28,6 +30,9 @@ __BEGIN_DECLS
 #define ANDROID_RB_PROPERTY "sys.powerctl"
 
 int android_reboot(int cmd, int flags, const char *arg);
+int android_reboot_with_callback(
+    int cmd, int flags, const char *arg,
+    void (*cb_on_remount)(const struct mntent*));
 
 __END_DECLS
 
