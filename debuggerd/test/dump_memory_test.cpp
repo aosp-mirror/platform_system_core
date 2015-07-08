@@ -288,9 +288,9 @@ TEST_F(DumpMemoryTest, memory_partially_unreadable_unaligned_return) {
   ASSERT_STREQ(g_expected_partial_dump, tombstone_contents.c_str());
 
 #if defined(__LP64__)
-  ASSERT_STREQ("DEBUG Bytes read 102, is not a multiple of 8\n", getFakeLogPrint().c_str());
+  ASSERT_STREQ("6 DEBUG Bytes read 102, is not a multiple of 8\n", getFakeLogPrint().c_str());
 #else
-  ASSERT_STREQ("DEBUG Bytes read 102, is not a multiple of 4\n", getFakeLogPrint().c_str());
+  ASSERT_STREQ("6 DEBUG Bytes read 102, is not a multiple of 4\n", getFakeLogPrint().c_str());
 #endif
 
   // Verify that the log buf is empty, and no error messages.
@@ -313,12 +313,12 @@ TEST_F(DumpMemoryTest, memory_partially_unreadable_two_unaligned_reads) {
   ASSERT_STREQ(g_expected_partial_dump, tombstone_contents.c_str());
 
 #if defined(__LP64__)
-  ASSERT_STREQ("DEBUG Bytes read 45, is not a multiple of 8\n"
-               "DEBUG Bytes after second read 106, is not a multiple of 8\n",
+  ASSERT_STREQ("6 DEBUG Bytes read 45, is not a multiple of 8\n"
+               "6 DEBUG Bytes after second read 106, is not a multiple of 8\n",
                getFakeLogPrint().c_str());
 #else
-  ASSERT_STREQ("DEBUG Bytes read 45, is not a multiple of 4\n"
-               "DEBUG Bytes after second read 106, is not a multiple of 4\n",
+  ASSERT_STREQ("6 DEBUG Bytes read 45, is not a multiple of 4\n"
+               "6 DEBUG Bytes after second read 106, is not a multiple of 4\n",
                getFakeLogPrint().c_str());
 #endif
 
