@@ -105,7 +105,7 @@ static void dump_thread(
   }
 
   if (!attached && ptrace(PTRACE_DETACH, tid, 0, 0) != 0) {
-    _LOG(log, logtype::ERROR, "ptrace detach from %d failed: %s\n", tid, strerror(errno));
+    ALOGE("ptrace detach from %d failed: %s\n", tid, strerror(errno));
     *detach_failed = true;
   }
 }

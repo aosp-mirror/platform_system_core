@@ -77,12 +77,12 @@ include $(BUILD_EXECUTABLE)
 
 debuggerd_test_src_files := \
     utility.cpp \
-    test/dump_maps_test.cpp \
     test/dump_memory_test.cpp \
     test/elf_fake.cpp \
     test/log_fake.cpp \
     test/property_fake.cpp \
     test/ptrace_fake.cpp \
+    test/tombstone_test.cpp \
     test/selinux_fake.cpp \
 
 debuggerd_shared_libraries := \

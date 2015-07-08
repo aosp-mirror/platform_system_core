@@ -45,7 +45,7 @@ void dump_memory_and_code(log_t*, Backtrace*) {
 void dump_backtrace_to_log(Backtrace*, log_t*, char const*) {
 }
 
-class DumpMapsTest : public ::testing::Test {
+class TombstoneTest : public ::testing::Test {
  protected:
   virtual void SetUp() {
     map_mock_.reset(new BacktraceMapMock());
@@ -92,7 +92,7 @@ class DumpMapsTest : public ::testing::Test {
   log_t log_;
 };
 
-TEST_F(DumpMapsTest, single_map) {
+TEST_F(TombstoneTest, single_map) {
   backtrace_map_t map;
 #if defined(__LP64__)
   map.start = 0x123456789abcd000UL;
@@ -122,7 +122,7 @@ TEST_F(DumpMapsTest, single_map) {
   ASSERT_STREQ("", getFakeLogPrint().c_str());
 }
 
-TEST_F(DumpMapsTest, single_map_elf_build_id) {
+TEST_F(TombstoneTest, single_map_elf_build_id) {
   backtrace_map_t map;
 #if defined(__LP64__)
   map.start = 0x123456789abcd000UL;
@@ -157,7 +157,7 @@ TEST_F(DumpMapsTest, single_map_elf_build_id) {
 
 // Even though build id is present, it should not be printed in either of
 // these cases.
-TEST_F(DumpMapsTest, single_map_no_build_id) {
+TEST_F(TombstoneTest, single_map_no_build_id) {
   backtrace_map_t map;
 #if defined(__LP64__)
   map.start = 0x123456789abcd000UL;
@@ -194,7 +194,7 @@ TEST_F(DumpMapsTest, single_map_no_build_id) {
   ASSERT_STREQ("", getFakeLogPrint().c_str());
 }
 
-TEST_F(DumpMapsTest, multiple_maps) {
+TEST_F(TombstoneTest, multiple_maps) {
   backtrace_map_t map;
 
   map.start = 0xa234000;
@@ -256,7 +256,7 @@ TEST_F(DumpMapsTest, multiple_maps) {
   ASSERT_STREQ("", getFakeLogPrint().c_str());
 }
 
-TEST_F(DumpMapsTest, multiple_maps_fault_address_before) {
+TEST_F(TombstoneTest, multiple_maps_fault_address_before) {
   backtrace_map_t map;
 
   map.start = 0xa434000;
@@ -310,7 +310,7 @@ TEST_F(DumpMapsTest, multiple_maps_fault_address_before) {
   ASSERT_STREQ("", getFakeLogPrint().c_str());
 }
 
-TEST_F(DumpMapsTest, multiple_maps_fault_address_between) {
+TEST_F(TombstoneTest, multiple_maps_fault_address_between) {
   backtrace_map_t map;
 
   map.start = 0xa434000;
@@ -364,7 +364,7 @@ TEST_F(DumpMapsTest, multiple_maps_fault_address_between) {
   ASSERT_STREQ("", getFakeLogPrint().c_str());
 }
 
-TEST_F(DumpMapsTest, multiple_maps_fault_address_in_map) {
+TEST_F(TombstoneTest, multiple_maps_fault_address_in_map) {
   backtrace_map_t map;
 
   map.start = 0xa434000;
@@ -416,7 +416,7 @@ TEST_F(DumpMapsTest, multiple_maps_fault_address_in_map) {
   ASSERT_STREQ("", getFakeLogPrint().c_str());
 }
 
-TEST_F(DumpMapsTest, multiple_maps_fault_address_after) {
+TEST_F(TombstoneTest, multiple_maps_fault_address_after) {
   backtrace_map_t map;
 
   map.start = 0xa434000;
@@ -474,7 +474,7 @@ TEST_F(DumpMapsTest, multiple_maps_fault_address_after) {
   ASSERT_STREQ("", getFakeLogPrint().c_str());
 }
 
-TEST_F(DumpMapsTest, multiple_maps_getsiginfo_fail) {
+TEST_F(TombstoneTest, multiple_maps_getsiginfo_fail) {
   backtrace_map_t map;
 
   map.start = 0xa434000;
@@ -493,7 +493,6 @@ TEST_F(DumpMapsTest, multiple_maps_getsiginfo_fail) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
   const char* expected_dump = \
-"Cannot get siginfo for 100: Bad address\n"
 "\nmemory map:\n"
 #if defined(__LP64__)
 "    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load base 0xd000)\n";
@@ -503,12 +502,11 @@ TEST_F(DumpMapsTest, multiple_maps_getsiginfo_fail) {
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
 
   // Verify that the log buf is empty, and no error messages.
-  ASSERT_STREQ("DEBUG Cannot get siginfo for 100: Bad address\n",
-               getFakeLogBuf().c_str());
-  ASSERT_STREQ("", getFakeLogPrint().c_str());
+  ASSERT_STREQ("", getFakeLogBuf().c_str());
+  ASSERT_STREQ("6 DEBUG Cannot get siginfo for 100: Bad address\n\n", getFakeLogPrint().c_str());
 }
 
-TEST_F(DumpMapsTest, multiple_maps_check_signal_has_si_addr) {
+TEST_F(TombstoneTest, multiple_maps_check_signal_has_si_addr) {
   backtrace_map_t map;
 
   map.start = 0xa434000;
@@ -568,4 +566,34 @@ TEST_F(DumpMapsTest, multiple_maps_check_signal_has_si_addr) {
     ASSERT_STREQ("", getFakeLogBuf().c_str());
     ASSERT_STREQ("", getFakeLogPrint().c_str());
   }
+}
+
+TEST_F(TombstoneTest, dump_signal_info_error) {
+  siginfo_t si;
+  si.si_signo = 0;
+  ptrace_set_fake_getsiginfo(si);
+
+  dump_signal_info(&log_, 123, SIGSEGV, 10);
+
+  std::string tombstone_contents;
+  ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
+  ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
+  ASSERT_STREQ("", tombstone_contents.c_str());
+
+  ASSERT_STREQ("", getFakeLogBuf().c_str());
+  ASSERT_STREQ("6 DEBUG cannot get siginfo: Bad address\n\n", getFakeLogPrint().c_str());
+}
+
+TEST_F(TombstoneTest, dump_log_file_error) {
+  log_.should_retrieve_logcat = true;
+  dump_log_file(&log_, 123, "/fake/filename", 10);
+
+  std::string tombstone_contents;
+  ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
+  ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
+  ASSERT_STREQ("", tombstone_contents.c_str());
+
+  ASSERT_STREQ("", getFakeLogBuf().c_str());
+  ASSERT_STREQ("6 DEBUG Unable to open /fake/filename: Permission denied\n\n",
+               getFakeLogPrint().c_str());
 }
