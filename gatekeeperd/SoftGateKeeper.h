@@ -25,8 +25,10 @@ extern "C" {
 #include <crypto_scrypt.h>
 }
 
+#include <base/memory.h>
 #include <UniquePtr.h>
 #include <gatekeeper/gatekeeper.h>
+
 #include <iostream>
 #include <unordered_map>
 
@@ -150,14 +152,15 @@ public:
     }
 
     bool DoVerify(const password_handle_t *expected_handle, const SizedBuffer &password) {
-        FastHashMap::const_iterator it = fast_hash_map_.find(expected_handle->user_id);
+        uint64_t user_id = android::base::get_unaligned(&expected_handle->user_id);
+        FastHashMap::const_iterator it = fast_hash_map_.find(user_id);
         if (it != fast_hash_map_.end() && VerifyFast(it->second, password)) {
             return true;
         } else {
             if (GateKeeper::DoVerify(expected_handle, password)) {
                 uint64_t salt;
                 GetRandom(&salt, sizeof(salt));
-                fast_hash_map_[expected_handle->user_id] = ComputeFastHash(password, salt);
+                fast_hash_map_[user_id] = ComputeFastHash(password, salt);
                 return true;
             }
         }
