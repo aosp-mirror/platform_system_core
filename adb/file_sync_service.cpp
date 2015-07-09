@@ -57,7 +57,7 @@ static int mkdirs(char *name)
         if(x == 0) return 0;
         *x = 0;
         if (should_use_fs_config(name)) {
-            fs_config(name, 1, &uid, &gid, &mode, &cap);
+            fs_config(name, 1, NULL, &uid, &gid, &mode, &cap);
         }
         ret = adb_mkdir(name, mode);
         if((ret < 0) && (errno != EEXIST)) {
@@ -366,7 +366,7 @@ static int do_send(int s, char *path, char *buffer)
         tmp++;
     }
     if (should_use_fs_config(path)) {
-        fs_config(tmp, 0, &uid, &gid, &mode, &cap);
+        fs_config(tmp, 0, NULL, &uid, &gid, &mode, &cap);
     }
     return handle_send_file(s, path, uid, gid, mode, buffer, do_unlink);
 }
