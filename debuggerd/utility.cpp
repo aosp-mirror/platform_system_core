@@ -156,13 +156,28 @@ void dump_memory(log_t* log, Backtrace* backtrace, uintptr_t addr, const char* f
     bytes &= ~(sizeof(uintptr_t) - 1);
   }
 
-  if (bytes < MEMORY_BYTES_TO_DUMP && bytes > 0) {
-    // Try to do one more read. This could happen if a read crosses a map, but
-    // the maps do not have any break between them. Only requires one extra
-    // read because a map has to contain at least one page, and the total
-    // number of bytes to dump is smaller than a page.
-    size_t bytes2 = backtrace->Read(addr + bytes, reinterpret_cast<uint8_t*>(data) + bytes,
-                                    sizeof(data) - bytes);
+  uintptr_t start = 0;
+  bool skip_2nd_read = false;
+  if (bytes == 0) {
+    // In this case, we might want to try another read at the beginning of
+    // the next page only if it's within the amount of memory we would have
+    // read.
+    size_t page_size = sysconf(_SC_PAGE_SIZE);
+    start = ((addr + (page_size - 1)) & ~(page_size - 1)) - addr;
+    if (start == 0 || start >= MEMORY_BYTES_TO_DUMP) {
+      skip_2nd_read = true;
+    }
+  }
+
+  if (bytes < MEMORY_BYTES_TO_DUMP && !skip_2nd_read) {
+    // Try to do one more read. This could happen if a read crosses a map,
+    // but the maps do not have any break between them. Or it could happen
+    // if reading from an unreadable map, but the read would cross back
+    // into a readable map. Only requires one extra read because a map has
+    // to contain at least one page, and the total number of bytes to dump
+    // is smaller than a page.
+    size_t bytes2 = backtrace->Read(addr + start + bytes, reinterpret_cast<uint8_t*>(data) + bytes,
+                                    sizeof(data) - bytes - start);
     bytes += bytes2;
     if (bytes2 > 0 && bytes % sizeof(uintptr_t) != 0) {
       // This should never happen, but we'll try and continue any way.
@@ -178,15 +193,16 @@ void dump_memory(log_t* log, Backtrace* backtrace, uintptr_t addr, const char* f
   // On 32-bit machines, there are still 16 bytes per line but addresses and
   // words are of course presented differently.
   uintptr_t* data_ptr = data;
+  size_t current = 0;
+  size_t total_bytes = start + bytes;
   for (size_t line = 0; line < MEMORY_BYTES_TO_DUMP / MEMORY_BYTES_PER_LINE; line++) {
     std::string logline;
     android::base::StringAppendF(&logline, "    %" PRIPTR, addr);
 
     addr += MEMORY_BYTES_PER_LINE;
     std::string ascii;
-    for (size_t i = 0; i < MEMORY_BYTES_PER_LINE / sizeof(uintptr_t); i++, data_ptr++) {
-      if (bytes >= sizeof(uintptr_t)) {
-        bytes -= sizeof(uintptr_t);
+    for (size_t i = 0; i < MEMORY_BYTES_PER_LINE / sizeof(uintptr_t); i++) {
+      if (current >= start && current + sizeof(uintptr_t) <= total_bytes) {
         android::base::StringAppendF(&logline, " %" PRIPTR, *data_ptr);
 
         // Fill out the ascii string from the data.
@@ -198,10 +214,12 @@ void dump_memory(log_t* log, Backtrace* backtrace, uintptr_t addr, const char* f
             ascii += '.';
           }
         }
+        data_ptr++;
       } else {
         logline += ' ' + std::string(sizeof(uintptr_t) * 2, '-');
         ascii += std::string(sizeof(uintptr_t), '.');
       }
+      current += sizeof(uintptr_t);
     }
     _LOG(log, logtype::MEMORY, "%s  %s\n", logline.c_str(), ascii.c_str());
   }
