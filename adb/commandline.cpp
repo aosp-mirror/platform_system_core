@@ -1447,8 +1447,7 @@ static int uninstall_app(TransportType transport, const char* serial, int argc, 
     return pm_command(transport, serial, argc, argv);
 }
 
-static int delete_file(TransportType transport, const char* serial,
-                       const char* filename) {
+static int delete_file(TransportType transport, const char* serial, char* filename) {
     std::string cmd = "shell:rm -f " + escape_arg(filename);
     return send_shell_command(transport, serial, cmd);
 }
@@ -1465,8 +1464,8 @@ static const char* get_basename(const char* filename)
 }
 
 static int install_app(TransportType transport, const char* serial, int argc, const char** argv) {
-    static const char *const DATA_DEST = "/data/local/tmp";
-    static const char *const SD_DEST = "/sdcard/tmp";
+    static const char *const DATA_DEST = "/data/local/tmp/%s";
+    static const char *const SD_DEST = "/sdcard/tmp/%s";
     const char* where = DATA_DEST;
     int i;
     struct stat sb;
@@ -1500,20 +1499,19 @@ static int install_app(TransportType transport, const char* serial, int argc, co
     }
 
     const char* apk_file = argv[last_apk];
-    const std::string apk_dest =
-        android::base::StringPrintf("%s/%s", where, get_basename(apk_file));
-    int err = do_sync_push(apk_file, apk_dest.c_str(), /* show_progress = */ 0);
+    char apk_dest[PATH_MAX];
+    snprintf(apk_dest, sizeof apk_dest, where, get_basename(apk_file));
+    int err = do_sync_push(apk_file, apk_dest, 0 /* no show progress */);
     if (err) {
         goto cleanup_apk;
     } else {
-        // Destination name, not source location.
-        argv[last_apk] = apk_dest.c_str();
+        argv[last_apk] = apk_dest; /* destination name, not source location */
     }
 
     err = pm_command(transport, serial, argc, argv);
 
 cleanup_apk:
-    delete_file(transport, serial, apk_dest.c_str());
+    delete_file(transport, serial, apk_dest);
     return err;
 }
 

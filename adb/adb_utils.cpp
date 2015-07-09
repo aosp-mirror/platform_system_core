@@ -42,11 +42,6 @@ bool directory_exists(const std::string& path) {
   return lstat(path.c_str(), &sb) != -1 && S_ISDIR(sb.st_mode);
 }
 
-bool file_exists(const std::string& path) {
-  struct stat sb;
-  return lstat(path.c_str(), &sb) != -1 && S_ISREG(sb.st_mode);
-}
-
 std::string escape_arg(const std::string& s) {
   std::string result = s;
 
