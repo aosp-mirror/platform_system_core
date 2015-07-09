@@ -212,18 +212,6 @@ TEST_F(MetricsDaemonTest, CheckSystemCrash) {
   base::DeleteFile(crash_detected, false);
 }
 
-TEST_F(MetricsDaemonTest, ReportDailyUse) {
-  ExpectSample("Logging.DailyUseTime", 2);
-  daemon_.ReportDailyUse(90);
-
-  ExpectSample("Logging.DailyUseTime", 1);
-  daemon_.ReportDailyUse(89);
-
-  // There should be no metrics generated for the calls below.
-  daemon_.ReportDailyUse(0);
-  daemon_.ReportDailyUse(-5);
-}
-
 TEST_F(MetricsDaemonTest, MessageFilter) {
   // Ignore calls to SendToUMA.
   EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AnyNumber());

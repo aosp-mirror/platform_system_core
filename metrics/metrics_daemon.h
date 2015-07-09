@@ -75,7 +75,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   FRIEND_TEST(MetricsDaemonTest, ProcessUserCrash);
   FRIEND_TEST(MetricsDaemonTest, ReportCrashesDailyFrequency);
   FRIEND_TEST(MetricsDaemonTest, ReadFreqToInt);
-  FRIEND_TEST(MetricsDaemonTest, ReportDailyUse);
   FRIEND_TEST(MetricsDaemonTest, ReportDiskStats);
   FRIEND_TEST(MetricsDaemonTest, ReportKernelCrashInterval);
   FRIEND_TEST(MetricsDaemonTest, ReportUncleanShutdownInterval);
@@ -178,9 +177,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   // |crash_file| exists.  It removes the file immediately if it
   // exists, so it must not be called more than once.
   bool CheckSystemCrash(const std::string& crash_file);
-
-  // Report daily use through UMA.
-  void ReportDailyUse(int use_seconds);
 
   // Sends a regular (exponential) histogram sample to Chrome for
   // transport to UMA. See MetricsLibrary::SendToUMA in

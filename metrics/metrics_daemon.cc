@@ -243,37 +243,37 @@ void MetricsDaemon::Init(bool testing,
   ticks_per_second_ = sysconf(_SC_CLK_TCK);
 
   daily_active_use_.reset(
-      new PersistentInteger("Logging.DailyUseTime"));
+      new PersistentInteger("Platform.DailyUseTime"));
   version_cumulative_active_use_.reset(
-      new PersistentInteger("Logging.CumulativeDailyUseTime"));
+      new PersistentInteger("Platform.CumulativeDailyUseTime"));
   version_cumulative_cpu_use_.reset(
-      new PersistentInteger("Logging.CumulativeCpuTime"));
+      new PersistentInteger("Platform.CumulativeCpuTime"));
 
   kernel_crash_interval_.reset(
-      new PersistentInteger("Logging.KernelCrashInterval"));
+      new PersistentInteger("Platform.KernelCrashInterval"));
   unclean_shutdown_interval_.reset(
-      new PersistentInteger("Logging.UncleanShutdownInterval"));
+      new PersistentInteger("Platform.UncleanShutdownInterval"));
   user_crash_interval_.reset(
-      new PersistentInteger("Logging.UserCrashInterval"));
+      new PersistentInteger("Platform.UserCrashInterval"));
 
   any_crashes_daily_count_.reset(
-      new PersistentInteger("Logging.AnyCrashesDaily"));
+      new PersistentInteger("Platform.AnyCrashesDaily"));
   any_crashes_weekly_count_.reset(
-      new PersistentInteger("Logging.AnyCrashesWeekly"));
+      new PersistentInteger("Platform.AnyCrashesWeekly"));
   user_crashes_daily_count_.reset(
-      new PersistentInteger("Logging.UserCrashesDaily"));
+      new PersistentInteger("Platform.UserCrashesDaily"));
   user_crashes_weekly_count_.reset(
-      new PersistentInteger("Logging.UserCrashesWeekly"));
+      new PersistentInteger("Platform.UserCrashesWeekly"));
   kernel_crashes_daily_count_.reset(
-      new PersistentInteger("Logging.KernelCrashesDaily"));
+      new PersistentInteger("Platform.KernelCrashesDaily"));
   kernel_crashes_weekly_count_.reset(
-      new PersistentInteger("Logging.KernelCrashesWeekly"));
+      new PersistentInteger("Platform.KernelCrashesWeekly"));
   kernel_crashes_version_count_.reset(
-      new PersistentInteger("Logging.KernelCrashesSinceUpdate"));
+      new PersistentInteger("Platform.KernelCrashesSinceUpdate"));
   unclean_shutdowns_daily_count_.reset(
-      new PersistentInteger("Logging.UncleanShutdownsDaily"));
+      new PersistentInteger("Platform.UncleanShutdownsDaily"));
   unclean_shutdowns_weekly_count_.reset(
-      new PersistentInteger("Logging.UncleanShutdownsWeekly"));
+      new PersistentInteger("Platform.UncleanShutdownsWeekly"));
 
   daily_cycle_.reset(new PersistentInteger("daily.cycle"));
   weekly_cycle_.reset(new PersistentInteger("weekly.cycle"));
@@ -1037,18 +1037,6 @@ bool MetricsDaemon::ProcessMemuse(const string& meminfo_raw) {
   SendLinearSample(metrics_name, (active_anon + inactive_anon) * 100 / total,
                    100, 101);
   return true;
-}
-
-void MetricsDaemon::ReportDailyUse(int use_seconds) {
-  if (use_seconds <= 0)
-    return;
-
-  int minutes = (use_seconds + kSecondsPerMinute / 2) / kSecondsPerMinute;
-  SendSample("Logging.DailyUseTime",
-             minutes,
-             1,
-             kMinutesPerDay * 30 * 2,  // cumulative---two months worth
-             50);
 }
 
 void MetricsDaemon::SendSample(const string& name, int sample,

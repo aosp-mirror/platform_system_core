@@ -52,7 +52,7 @@ Histogram Naming Convention
 
 Use TrackerArea.MetricName. For example:
 
-Logging.CrashCounter
+Platform.DailyUseTime
 Network.TimeToDrop
 
 
