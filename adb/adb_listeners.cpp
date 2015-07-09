@@ -118,7 +118,7 @@ static int local_name_to_fd(const char* name) {
             return socket_loopback_server(port, SOCK_STREAM);
         }
     }
-#ifndef HAVE_WIN32_IPC  /* no Unix-domain sockets on Win32 */
+#if !defined(_WIN32)  // No Unix-domain sockets on Windows.
     // It's nonsensical to support the "reserved" space on the adb host side
     if (!strncmp(name, "local:", 6)) {
         return socket_local_server(name + 6, ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
