@@ -185,17 +185,4 @@ void UNUSED(const T&...) {
   } while (0)
 #endif
 
-// These printf-like functions are implemented in terms of vsnprintf, so they
-// use the same attribute for compile-time format string checking. On Windows,
-// if the mingw version of vsnprintf is used, so use `gnu_printf' which allows z
-// in %zd and PRIu64 (and related) to be recognized by the compile-time
-// checking.
-#if defined(__USE_MINGW_ANSI_STDIO) && __USE_MINGW_ANSI_STDIO
-#define ATTRIBUTE_FORMAT(fmt, args) \
-  __attribute__((format(gnu_printf, fmt, args)))
-#else
-#define ATTRIBUTE_FORMAT(fmt, args) \
-  __attribute__((format(__printf__, fmt, args)))
-#endif
-
 #endif  // UTILS_MACROS_H
