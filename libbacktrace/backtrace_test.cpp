@@ -974,8 +974,8 @@ void RunReadTest(Backtrace* backtrace, uintptr_t read_addr) {
           << "Offset at " << i << " length " << j << " wrote too much data";
     }
   }
-  delete data;
-  delete expected;
+  delete[] data;
+  delete[] expected;
 }
 
 TEST(libbacktrace, thread_read) {
