@@ -43,7 +43,6 @@
 #include "mincrypt/rsa.h"
 #undef RSA_verify
 
-#include <base/logging.h>
 #include <base/strings.h>
 #include <cutils/list.h>
 
@@ -57,10 +56,8 @@
 #include <openssl/base64.h>
 #endif
 
-#include "adb_utils.h"
-
-const char kAndroidPath[] = ".android";
-const char kAdbKeyFile[] = "adbkey";
+#define ANDROID_PATH   ".android"
+#define ADB_KEY_FILE   "adbkey"
 
 struct adb_private_key {
     struct listnode node;
@@ -298,58 +295,64 @@ static int read_key(const char *file, struct listnode *list)
     return 1;
 }
 
-static bool get_user_keyfilepath(std::string* filename) {
-    CHECK(filename != nullptr);
-
+static int get_user_keyfilepath(char *filename, size_t len)
+{
+    const char *format, *home;
+    char android_dir[PATH_MAX];
+    struct stat buf;
 #ifdef _WIN32
-    const char* home = getenv("ANDROID_SDK_HOME");
-    if (home == nullptr) {
-        char path[PATH_MAX];
+    char path[PATH_MAX];
+    home = getenv("ANDROID_SDK_HOME");
+    if (!home) {
         SHGetFolderPath(NULL, CSIDL_PROFILE, NULL, 0, path);
         home = path;
     }
+    format = "%s\\%s";
 #else
-    const char* home = getenv("HOME");
-    if (home == nullptr)
-        return false;
+    home = getenv("HOME");
+    if (!home)
+        return -1;
+    format = "%s/%s";
 #endif
 
     D("home '%s'\n", home);
 
-    const std::string android_dir = android::base::Join(
-        std::vector<std::string>({home, kAndroidPath}), OS_PATH_SEPARATOR);
+    if (snprintf(android_dir, sizeof(android_dir), format, home,
+                        ANDROID_PATH) >= (int)sizeof(android_dir))
+        return -1;
 
-    if (!directory_exists(android_dir)) {
-        if (adb_mkdir(android_dir.c_str(), 0750) == -1) {
-            D("Cannot mkdir '%s'", android_dir.c_str());
-            return false;
+    if (stat(android_dir, &buf)) {
+        if (adb_mkdir(android_dir, 0750) < 0) {
+            D("Cannot mkdir '%s'", android_dir);
+            return -1;
         }
     }
 
-    *filename = android::base::Join(
-        std::vector<std::string>({android_dir, kAdbKeyFile}),
-        OS_PATH_SEPARATOR);
-    return true;
+    return snprintf(filename, len, format, android_dir, ADB_KEY_FILE);
 }
 
 static int get_user_key(struct listnode *list)
 {
-    std::string path;
-    if (!get_user_keyfilepath(&path)) {
+    struct stat buf;
+    char path[PATH_MAX];
+    int ret;
+
+    ret = get_user_keyfilepath(path, sizeof(path));
+    if (ret < 0 || ret >= (signed)sizeof(path)) {
         D("Error getting user key filename");
         return 0;
     }
 
-    D("user key '%s'\n", path.c_str());
+    D("user key '%s'\n", path);
 
-    if (!file_exists(path)) {
-        if (!generate_key(path.c_str())) {
+    if (stat(path, &buf) == -1) {
+        if (!generate_key(path)) {
             D("Failed to generate new key\n");
             return 0;
         }
     }
 
-    return read_key(path.c_str(), list);
+    return read_key(path, list);
 }
 
 static void get_vendor_keys(struct listnode* key_list) {
@@ -408,26 +411,27 @@ void *adb_auth_nextkey(void *current)
 
 int adb_auth_get_userkey(unsigned char *data, size_t len)
 {
-    std::string path;
-    if (!get_user_keyfilepath(&path)) {
+    char path[PATH_MAX];
+    int ret = get_user_keyfilepath(path, sizeof(path) - 4);
+    if (ret < 0 || ret >= (signed)(sizeof(path) - 4)) {
         D("Error getting user key filename");
         return 0;
     }
-    path += ".pub";
+    strcat(path, ".pub");
 
     // TODO(danalbert): ReadFileToString
     // Note that on Windows, load_file() does not do CR/LF translation, but
     // ReadFileToString() uses the C Runtime which uses CR/LF translation by
     // default (by is overridable with _setmode()).
     unsigned size;
-    void* file_data = load_file(path.c_str(), &size);
+    char* file_data = reinterpret_cast<char*>(load_file(path, &size));
     if (file_data == nullptr) {
-        D("Can't load '%s'\n", path.c_str());
+        D("Can't load '%s'\n", path);
         return 0;
     }
 
     if (len < (size_t)(size + 1)) {
-        D("%s: Content too large ret=%d\n", path.c_str(), size);
+        D("%s: Content too large ret=%d\n", path, size);
         free(file_data);
         return 0;
     }
