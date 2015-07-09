@@ -21,6 +21,7 @@
 
 bool getcwd(std::string* cwd);
 bool directory_exists(const std::string& path);
+bool file_exists(const std::string& path);
 
 std::string escape_arg(const std::string& s);
 

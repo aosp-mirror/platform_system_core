@@ -21,6 +21,8 @@
 
 #include <string>
 
+#include "base/macros.h"
+
 // Sends the protocol "OKAY" message.
 bool SendOkay(int fd);
 
@@ -54,6 +56,6 @@ bool WriteFdExactly(int fd, const char* s);
 bool WriteFdExactly(int fd, const std::string& s);
 
 // Same as above, but formats the string to send.
-bool WriteFdFmt(int fd, const char* fmt, ...) __attribute__((__format__(__printf__, 2, 3)));
+bool WriteFdFmt(int fd, const char* fmt, ...) ATTRIBUTE_FORMAT(2, 3);
 
 #endif /* ADB_IO_H */
