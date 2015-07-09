@@ -15,9 +15,8 @@ adb_version := $(shell git -C $(LOCAL_PATH) rev-parse --short=12 HEAD 2>/dev/nul
 
 ADB_COMMON_CFLAGS := \
     -Wall -Wextra -Werror \
-    -Wformat-nonliteral \
-    -Wno-missing-field-initializers \
     -Wno-unused-parameter \
+    -Wno-missing-field-initializers \
     -DADB_REVISION='"$(adb_version)"' \
 
 # libadb
