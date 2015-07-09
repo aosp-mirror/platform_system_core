@@ -30,6 +30,8 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#include "base/macros.h"
+
 #include "adb_io.h"
 #include "adb_trace.h"
 
@@ -44,6 +46,7 @@
 // of the shell's pseudo-tty master. I.e. force close it.
 int SHELL_EXIT_NOTIFY_FD = -1;
 
+static void fatal(const char *fn, const char *fmt, ...) ATTRIBUTE_FORMAT(2, 3);
 static void fatal(const char *fn, const char *fmt, ...)
 {
     va_list ap;
