@@ -225,11 +225,26 @@ int64_t FingerprintDaemonProxy::openHal() {
 }
 
 int32_t FingerprintDaemonProxy::closeHal() {
-    return -ENOSYS; // TODO
+    ALOG(LOG_VERBOSE, LOG_TAG, "nativeCloseHal()\n");
+    if (mDevice == NULL) {
+        ALOGE("No valid device");
+        return -ENOSYS;
+    }
+    int err;
+    if (0 != (err = mDevice->common.close(reinterpret_cast<hw_device_t*>(mDevice)))) {
+        ALOGE("Can't close fingerprint module, error: %d", err);
+        return err;
+    }
+    mDevice = NULL;
+    return 0;
 }
 
 void FingerprintDaemonProxy::binderDied(const wp<IBinder>& who) {
     ALOGD("binder died");
+    int err;
+    if (0 != (err = closeHal())) {
+        ALOGE("Can't close fingerprint device, error: %d", err);
+    }
     if (IInterface::asBinder(mCallback) == who) {
         mCallback = NULL;
     }
