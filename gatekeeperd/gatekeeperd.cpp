@@ -50,6 +50,8 @@ class GateKeeperProxy : public BnGateKeeperService {
 public:
     GateKeeperProxy() {
         int ret = hw_get_module_by_class(GATEKEEPER_HARDWARE_MODULE_ID, NULL, &module);
+        device = NULL;
+
         if (ret < 0) {
             ALOGW("falling back to software GateKeeper");
             soft_device.reset(new SoftGateKeeperDevice());
