@@ -41,6 +41,7 @@ struct fs_config_entry {
 };
 
 static struct fs_config_entry* canned_config = NULL;
+static char *target_out_path = NULL;
 
 /* Each line in the canned file should be a path plus three ints (uid,
  * gid, mode). */
@@ -79,7 +80,8 @@ static void fix_stat(const char *path, struct stat *s)
     } else {
         // Use the compiled-in fs_config() function.
         unsigned st_mode = s->st_mode;
-        fs_config(path, S_ISDIR(s->st_mode), &s->st_uid, &s->st_gid, &st_mode, &capabilities);
+        fs_config(path, S_ISDIR(s->st_mode), target_out_path,
+                       &s->st_uid, &s->st_gid, &st_mode, &capabilities);
         s->st_mode = (typeof(s->st_mode)) st_mode;
     }
 }
@@ -327,6 +329,12 @@ int main(int argc, char *argv[])
 {
     argc--;
     argv++;
+
+    if (argc > 1 && strcmp(argv[0], "-d") == 0) {
+        target_out_path = argv[1];
+        argc -= 2;
+        argv += 2;
+    }
 
     if (argc > 1 && strcmp(argv[0], "-f") == 0) {
         read_canned_config(argv[1]);
