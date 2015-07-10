@@ -112,6 +112,7 @@ public:
         int fd = open(filename, O_RDONLY);
         if (fd < 0) return 0;
         read(fd, &sid, sizeof(sid));
+        close(fd);
         return sid;
     }
 
