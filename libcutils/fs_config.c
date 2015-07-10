@@ -149,14 +149,21 @@ static const struct fs_path_config android_files[] = {
     { 00644, AID_ROOT,      AID_ROOT,      0, 0 },
 };
 
-static int fs_config_open(int dir)
+static int fs_config_open(int dir, const char *target_out_path)
 {
     int fd = -1;
 
-    const char *out = getenv("OUT");
-    if (out && *out) {
+    if (target_out_path && *target_out_path) {
+        /* target_out_path is the path to the directory holding content of system partition
+           but as we cannot guaranty it ends with '/system' we need this below skip_len logic */
         char *name = NULL;
-        asprintf(&name, "%s%s", out, dir ? conf_dir : conf_file);
+        int target_out_path_len = strlen(target_out_path);
+        int skip_len = strlen("/system");
+
+        if (target_out_path[target_out_path_len] == '/') {
+            skip_len++;
+        }
+        asprintf(&name, "%s%s", target_out_path, (dir ? conf_dir : conf_file) + skip_len);
         if (name) {
             fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY | O_BINARY));
             free(name);
@@ -187,7 +194,7 @@ static bool fs_config_cmp(bool dir, const char *prefix, size_t len,
     return !strncmp(prefix, path, len);
 }
 
-void fs_config(const char *path, int dir,
+void fs_config(const char *path, int dir, const char *target_out_path,
                unsigned *uid, unsigned *gid, unsigned *mode, uint64_t *capabilities)
 {
     const struct fs_path_config *pc;
@@ -199,7 +206,7 @@ void fs_config(const char *path, int dir,
 
     plen = strlen(path);
 
-    fd = fs_config_open(dir);
+    fd = fs_config_open(dir, target_out_path);
     if (fd >= 0) {
         struct fs_path_config_from_file header;
 
