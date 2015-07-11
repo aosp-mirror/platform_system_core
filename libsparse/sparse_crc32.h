@@ -14,7 +14,19 @@
  * limitations under the License.
  */
 
+#ifndef _LIBSPARSE_SPARSE_CRC32_H_
+#define _LIBSPARSE_SPARSE_CRC32_H_
+
 #include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 uint32_t sparse_crc32(uint32_t crc, const void *buf, size_t size);
 
+#ifdef __cplusplus
+}
+#endif
+
+#endif
