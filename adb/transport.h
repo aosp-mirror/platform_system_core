@@ -57,7 +57,7 @@ void unregister_usb_transport(usb_handle* usb);
 void unregister_transport(atransport* t);
 void unregister_all_tcp_transports();
 
-int check_header(apacket* p);
+int check_header(apacket* p, atransport* t);
 int check_data(apacket* p);
 
 /* for MacOS X cleanup */
