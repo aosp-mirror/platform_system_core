@@ -358,6 +358,8 @@ on post-fs-data
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/user 0711 system system
 
+    setusercryptopolicies /data/user
+
     # Reload policy from /data/security if present.
     setprop selinux.reload_policy 1
 
