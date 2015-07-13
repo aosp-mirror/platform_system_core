@@ -109,6 +109,13 @@ static bool CharacterAllowed(char c, bool first) {
   }
 }
 
+static void ReleaseAppCodeCacheDir() {
+  if (app_code_cache_dir != nullptr) {
+    delete[] app_code_cache_dir;
+    app_code_cache_dir = nullptr;
+  }
+}
+
 // We only allow simple names for the library. It is supposed to be a file in
 // /system/lib or /vendor/lib. Only allow a small range of characters, that is
 // names consisting of [a-zA-Z0-9._-] and starting with [a-zA-Z].
@@ -162,8 +169,7 @@ static bool VersionCheck(const NativeBridgeCallbacks* cb) {
 static void CloseNativeBridge(bool with_error) {
   state = NativeBridgeState::kClosed;
   had_error |= with_error;
-  delete[] app_code_cache_dir;
-  app_code_cache_dir = nullptr;
+  ReleaseAppCodeCacheDir();
 }
 
 bool LoadNativeBridge(const char* nb_library_filename,
@@ -406,16 +412,16 @@ bool InitializeNativeBridge(JNIEnv* env, const char* instruction_set) {
     if (stat(app_code_cache_dir, &st) == -1) {
       if (errno == ENOENT) {
         if (mkdir(app_code_cache_dir, S_IRWXU | S_IRWXG | S_IXOTH) == -1) {
-          ALOGE("Cannot create code cache directory %s: %s.", app_code_cache_dir, strerror(errno));
-          CloseNativeBridge(true);
+          ALOGW("Cannot create code cache directory %s: %s.", app_code_cache_dir, strerror(errno));
+          ReleaseAppCodeCacheDir();
         }
       } else {
-        ALOGE("Cannot stat code cache directory %s: %s.", app_code_cache_dir, strerror(errno));
-        CloseNativeBridge(true);
+        ALOGW("Cannot stat code cache directory %s: %s.", app_code_cache_dir, strerror(errno));
+        ReleaseAppCodeCacheDir();
       }
     } else if (!S_ISDIR(st.st_mode)) {
-      ALOGE("Code cache is not a directory %s.", app_code_cache_dir);
-      CloseNativeBridge(true);
+      ALOGW("Code cache is not a directory %s.", app_code_cache_dir);
+      ReleaseAppCodeCacheDir();
     }
 
     // If we're still PreInitialized (dind't fail the code cache checks) try to initialize.
@@ -424,8 +430,7 @@ bool InitializeNativeBridge(JNIEnv* env, const char* instruction_set) {
         SetupEnvironment(callbacks, env, instruction_set);
         state = NativeBridgeState::kInitialized;
         // We no longer need the code cache path, release the memory.
-        delete[] app_code_cache_dir;
-        app_code_cache_dir = nullptr;
+        ReleaseAppCodeCacheDir();
       } else {
         // Unload the library.
         dlclose(native_bridge_handle);
