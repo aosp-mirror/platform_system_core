@@ -9,6 +9,7 @@ include $(CLEAR_VARS)
 test_src_files := \
     CodeCacheCreate_test.cpp \
     CodeCacheExists_test.cpp \
+    CodeCacheStatFail_test.cpp \
     CompleteFlow_test.cpp \
     InvalidCharsNativeBridge_test.cpp \
     NativeBridge2Signal_test.cpp \
