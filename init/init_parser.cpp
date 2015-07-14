@@ -187,6 +187,7 @@ static int lookup_keyword(const char *s)
         if (!strcmp(s, "etenv")) return K_setenv;
         if (!strcmp(s, "etprop")) return K_setprop;
         if (!strcmp(s, "etrlimit")) return K_setrlimit;
+        if (!strcmp(s, "etusercryptopolicies")) return K_setusercryptopolicies;
         if (!strcmp(s, "ocket")) return K_socket;
         if (!strcmp(s, "tart")) return K_start;
         if (!strcmp(s, "top")) return K_stop;
