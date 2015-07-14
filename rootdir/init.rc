@@ -19,9 +19,6 @@ on early-init
 
     start ueventd
 
-    # create mountpoints
-    mkdir /mnt 0775 root system
-
 on init
     sysclktz 0
 
@@ -32,8 +29,7 @@ on init
     # Link /vendor to /system/vendor for devices without a vendor partition.
     symlink /system/vendor /vendor
 
-    # Create cgroup mount point for cpu accounting
-    mkdir /acct
+    # Mount cgroup mount point for cpu accounting
     mount cgroup none /acct cpuacct
     mkdir /acct/uid
 
@@ -49,11 +45,6 @@ on init
     write /sys/fs/cgroup/memory/sw/memory.move_charge_at_immigrate 1
     chown root system /sys/fs/cgroup/memory/sw/tasks
     chmod 0660 /sys/fs/cgroup/memory/sw/tasks
-
-    mkdir /system
-    mkdir /data 0771 system system
-    mkdir /cache 0770 system cache
-    mkdir /config 0500 root root
 
     # See storage config details at http://source.android.com/tech/storage/
     mkdir /mnt/shell 0700 shell shell
