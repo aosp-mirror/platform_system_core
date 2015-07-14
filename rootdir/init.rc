@@ -29,8 +29,7 @@ on init
     # Link /vendor to /system/vendor for devices without a vendor partition.
     symlink /system/vendor /vendor
 
-    # Create cgroup mount point for cpu accounting
-    mkdir /acct
+    # Mount cgroup mount point for cpu accounting
     mount cgroup none /acct cpuacct
     mkdir /acct/uid
 
@@ -47,14 +46,8 @@ on init
     chown root system /sys/fs/cgroup/memory/sw/tasks
     chmod 0660 /sys/fs/cgroup/memory/sw/tasks
 
-    mkdir /system
-    mkdir /data 0771 system system
-    mkdir /cache 0770 system cache
-    mkdir /config 0500 root root
-
     # Mount staging areas for devices managed by vold
     # See storage config details at http://source.android.com/tech/storage/
-    mkdir /mnt 0755 root system
     mount tmpfs tmpfs /mnt mode=0755,uid=0,gid=1000
     restorecon_recursive /mnt
 
@@ -68,7 +61,6 @@ on init
     mkdir /mnt/expand 0771 system system
 
     # Storage views to support runtime permissions
-    mkdir /storage 0755 root root
     mkdir /mnt/runtime_default 0755 root root
     mkdir /mnt/runtime_default/self 0755 root root
     mkdir /mnt/runtime_read 0755 root root
