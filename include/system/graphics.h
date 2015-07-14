@@ -370,7 +370,7 @@ enum {
      * struct android_ycbcr (below) is the the struct used to describe it.
      *
      * This format must be accepted by the gralloc module when
-     * USAGE_HW_CAMERA_WRITE and USAGE_SW_READ_* are set.
+     * USAGE_SW_WRITE_* or USAGE_SW_READ_* are set.
      *
      * This format is locked for use by gralloc's (*lock_ycbcr) method, and
      * locking with the (*lock) method will return an error.
