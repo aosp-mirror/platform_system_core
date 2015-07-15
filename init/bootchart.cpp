@@ -164,10 +164,11 @@ static int bootchart_init() {
         // timeout. this is useful when using -wipe-data since the /data
         // partition is fresh.
         std::string cmdline;
+        const char* s;
         android::base::ReadFileToString("/proc/cmdline", &cmdline);
 #define KERNEL_OPTION  "androidboot.bootchart="
-        if (strstr(cmdline.c_str(), KERNEL_OPTION) != NULL) {
-            timeout = atoi(cmdline.c_str() + sizeof(KERNEL_OPTION) - 1);
+        if ((s = strstr(cmdline.c_str(), KERNEL_OPTION)) != NULL) {
+            timeout = atoi(s + sizeof(KERNEL_OPTION) - 1);
         }
     }
     if (timeout == 0)
