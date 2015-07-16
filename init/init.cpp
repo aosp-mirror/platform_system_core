@@ -239,16 +239,20 @@ void service_start(struct service *svc, const char *dynamic_args)
         rc = getfilecon(svc->args[0], &fcon);
         if (rc < 0) {
             ERROR("could not get context while starting '%s'\n", svc->name);
-            freecon(mycon);
+            free(mycon);
             return;
         }
 
         rc = security_compute_create(mycon, fcon, string_to_security_class("process"), &scon);
         if (rc == 0 && !strcmp(scon, mycon)) {
-            ERROR("Warning!  Service %s needs a SELinux domain defined; please fix!\n", svc->name);
+            ERROR("Service %s does not have a SELinux domain defined.\n", svc->name);
+            free(mycon);
+            free(fcon);
+            free(scon);
+            return;
         }
-        freecon(mycon);
-        freecon(fcon);
+        free(mycon);
+        free(fcon);
         if (rc < 0) {
             ERROR("could not get context while starting '%s'\n", svc->name);
             return;
@@ -285,7 +289,7 @@ void service_start(struct service *svc, const char *dynamic_args)
             }
         }
 
-        freecon(scon);
+        free(scon);
         scon = NULL;
 
         if (svc->writepid_files_) {
@@ -374,7 +378,7 @@ void service_start(struct service *svc, const char *dynamic_args)
         _exit(127);
     }
 
-    freecon(scon);
+    free(scon);
 
     if (pid < 0) {
         ERROR("failed to start '%s'\n", svc->name);
