@@ -32,6 +32,7 @@
 #include "adb.h"
 #include "adb_client.h"
 #include "adb_io.h"
+#include "adb_utils.h"
 #include "file_sync_service.h"
 
 static unsigned long long total_bytes;
@@ -393,25 +394,6 @@ fail:
     fprintf(stderr,"protocol failure\n");
     adb_close(fd);
     return -1;
-}
-
-static int mkdirs(const char *name)
-{
-    int ret;
-    char *x = (char *)name + 1;
-
-    for(;;) {
-        x = adb_dirstart(x);
-        if(x == 0) return 0;
-        *x = 0;
-        ret = adb_mkdir(name, 0775);
-        *x = OS_PATH_SEPARATOR;
-        if((ret < 0) && (errno != EEXIST)) {
-            return ret;
-        }
-        x++;
-    }
-    return 0;
 }
 
 static int sync_recv(int fd, const char* rpath, const char* lpath, int show_progress) {
