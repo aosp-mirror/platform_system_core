@@ -63,6 +63,25 @@ std::string escape_arg(const std::string& s) {
   return result;
 }
 
+int mkdirs(const char *path)
+{
+    int ret;
+    char *x = (char *)path + 1;
+
+    for(;;) {
+        x = adb_dirstart(x);
+        if(x == 0) return 0;
+        *x = 0;
+        ret = adb_mkdir(path, 0775);
+        *x = OS_PATH_SEPARATOR;
+        if((ret < 0) && (errno != EEXIST)) {
+            return ret;
+        }
+        x++;
+    }
+    return 0;
+}
+
 void dump_hex(const void* data, size_t byte_count) {
     byte_count = std::min(byte_count, size_t(16));
 
