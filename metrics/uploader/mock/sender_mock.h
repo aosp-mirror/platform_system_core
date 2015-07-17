@@ -8,7 +8,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
-#include "components/metrics/proto/chrome_user_metrics_extension.pb.h"
+#include "metrics/uploader/proto/chrome_user_metrics_extension.pb.h"
 #include "uploader/sender.h"
 
 class SenderMock : public Sender {

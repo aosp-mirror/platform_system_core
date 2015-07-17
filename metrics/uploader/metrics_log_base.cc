@@ -6,10 +6,10 @@
 
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_samples.h"
-#include "components/metrics/proto/histogram_event.pb.h"
-#include "components/metrics/proto/system_profile.pb.h"
-#include "components/metrics/proto/user_action_event.pb.h"
 #include "metrics/uploader/metrics_hashes.h"
+#include "metrics/uploader/proto/histogram_event.pb.h"
+#include "metrics/uploader/proto/system_profile.pb.h"
+#include "metrics/uploader/proto/user_action_event.pb.h"
 
 using base::Histogram;
 using base::HistogramBase;
