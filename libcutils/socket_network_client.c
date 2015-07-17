@@ -29,77 +29,78 @@
 
 #include <cutils/sockets.h>
 
-/* Connect to port on the IP interface. type is
- * SOCK_STREAM or SOCK_DGRAM. 
- * return is a file descriptor or -1 on error
- */
-int socket_network_client(const char *host, int port, int type)
-{
-    return socket_network_client_timeout(host, port, type, 0);
+static int fix_O_NONBLOCK(int s, int type) {
+    // If the caller actually wanted a non-blocking socket, fine.
+    if ((type & SOCK_NONBLOCK)) return s;
+
+    // Otherwise clear the O_NONBLOCK flag.
+    int flags = fcntl(s, F_GETFL);
+    if (flags == -1 || fcntl(s, F_SETFL, flags & ~O_NONBLOCK) == -1) {
+        close(s);
+        return -1;
+    }
+
+    return s;
 }
 
-/* Connect to port on the IP interface. type is SOCK_STREAM or SOCK_DGRAM.
- * timeout in seconds return is a file descriptor or -1 on error
- */
-int socket_network_client_timeout(const char *host, int port, int type, int timeout)
-{
-    struct hostent *hp;
-    struct sockaddr_in addr;
-    int s;
-    int flags = 0, error = 0, ret = 0;
-    fd_set rset, wset;
-    socklen_t len = sizeof(error);
-    struct timeval ts;
+// Connect to the given host and port.
+// 'timeout' is in seconds (0 for no timeout).
+// Returns a file descriptor or -1 on error.
+int socket_network_client_timeout(const char* host, int port, int type, int timeout) {
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = type;
 
+    char port_str[16];
+    snprintf(port_str, sizeof(port_str), "%d", port);
+
+    struct addrinfo* addrs;
+    if (getaddrinfo(host, port_str, &hints, &addrs) != 0) {
+        return -1;
+    }
+
+    // TODO: try all the addresses if there's more than one?
+    int family = addrs[0].ai_family;
+    int protocol = addrs[0].ai_protocol;
+    socklen_t addr_len = addrs[0].ai_addrlen;
+    struct sockaddr_storage addr;
+    memcpy(&addr, addrs[0].ai_addr, addr_len);
+
+    freeaddrinfo(addrs);
+
+    int s = socket(family, type | SOCK_NONBLOCK, protocol);
+    if (s == -1) return -1;
+
+    int rc = connect(s, (const struct sockaddr*) &addr, addr_len);
+    if (rc == 0) {
+        return fix_O_NONBLOCK(s, type);
+    } else if (rc == -1 && errno != EINPROGRESS) {
+        close(s);
+        return -1;
+    }
+
+    fd_set r_set;
+    FD_ZERO(&r_set);
+    FD_SET(s, &r_set);
+    fd_set w_set = r_set;
+
+    struct timeval ts;
     ts.tv_sec = timeout;
     ts.tv_usec = 0;
-
-    hp = gethostbyname(host);
-    if (hp == 0) return -1;
-
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = hp->h_addrtype;
-    addr.sin_port = htons(port);
-    memcpy(&addr.sin_addr, hp->h_addr, hp->h_length);
-
-    s = socket(hp->h_addrtype, type, 0);
-    if (s < 0) return -1;
-
-    if ((flags = fcntl(s, F_GETFL, 0)) < 0) {
+    if ((rc = select(s + 1, &r_set, &w_set, NULL, (timeout != 0) ? &ts : NULL)) == -1) {
         close(s);
         return -1;
     }
-
-    if (fcntl(s, F_SETFL, flags | O_NONBLOCK) < 0) {
-        close(s);
-        return -1;
-    }
-
-    if ((ret = connect(s, (struct sockaddr *) &addr, sizeof(addr))) < 0) {
-        if (errno != EINPROGRESS) {
-            close(s);
-            return -1;
-        }
-    }
-
-    if (ret == 0)
-        goto done;
-
-    FD_ZERO(&rset);
-    FD_SET(s, &rset);
-    wset = rset;
-
-    if ((ret = select(s + 1, &rset, &wset, NULL, (timeout) ? &ts : NULL)) < 0) {
-        close(s);
-        return -1;
-    }
-    if (ret == 0) {   // we had a timeout
+    if (rc == 0) {   // we had a timeout
         errno = ETIMEDOUT;
         close(s);
         return -1;
     }
 
-    if (FD_ISSET(s, &rset) || FD_ISSET(s, &wset)) {
+    int error = 0;
+    socklen_t len = sizeof(error);
+    if (FD_ISSET(s, &r_set) || FD_ISSET(s, &w_set)) {
         if (getsockopt(s, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
             close(s);
             return -1;
@@ -115,11 +116,9 @@ int socket_network_client_timeout(const char *host, int port, int type, int time
         return -1;
     }
 
-done:
-    if (fcntl(s, F_SETFL, flags) < 0) {
-        close(s);
-        return -1;
-    }
+    return fix_O_NONBLOCK(s, type);
+}
 
-    return s;
+int socket_network_client(const char* host, int port, int type) {
+    return socket_network_client_timeout(host, port, type, 0);
 }
