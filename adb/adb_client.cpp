@@ -277,8 +277,7 @@ bool adb_query(const std::string& service, std::string* result, std::string* err
     D("adb_query: %s\n", service.c_str());
     int fd = adb_connect(service, error);
     if (fd < 0) {
-        fprintf(stderr,"error: %s\n", error->c_str());
-        return 0;
+        return false;
     }
 
     result->clear();

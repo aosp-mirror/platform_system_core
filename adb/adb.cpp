@@ -41,6 +41,7 @@
 #include "adb_auth.h"
 #include "adb_io.h"
 #include "adb_listeners.h"
+#include "adb_utils.h"
 #include "transport.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
@@ -896,28 +897,28 @@ int handle_host_request(const char* service, TransportType type,
 
     // remove TCP transport
     if (!strncmp(service, "disconnect:", 11)) {
-        char buffer[4096];
-        memset(buffer, 0, sizeof(buffer));
-        const char* serial = service + 11;
-        if (serial[0] == 0) {
+        const std::string address(service + 11);
+        if (address.empty()) {
             // disconnect from all TCP devices
             unregister_all_tcp_transports();
-        } else {
-            char hostbuf[100];
-            // assume port 5555 if no port is specified
-            if (!strchr(serial, ':')) {
-                snprintf(hostbuf, sizeof(hostbuf) - 1, "%s:5555", serial);
-                serial = hostbuf;
-            }
-            atransport* t = find_transport(serial);
-            if (t) {
-                unregister_transport(t);
-            } else {
-                snprintf(buffer, sizeof(buffer), "No such device %s", serial);
-            }
+            return SendOkay(reply_fd, "disconnected everything");
         }
 
-        return SendOkay(reply_fd, buffer);
+        std::string serial;
+        std::string host;
+        int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
+        std::string error;
+        if (!parse_host_and_port(address, &serial, &host, &port, &error)) {
+            return SendFail(reply_fd, android::base::StringPrintf("couldn't parse '%s': %s",
+                                                                  address.c_str(), error.c_str()));
+        }
+        atransport* t = find_transport(serial.c_str());
+        if (t == nullptr) {
+            return SendFail(reply_fd, android::base::StringPrintf("no such device '%s'",
+                                                                  serial.c_str()));
+        }
+        unregister_transport(t);
+        return SendOkay(reply_fd, android::base::StringPrintf("disconnected %s", address.c_str()));
     }
 
     // returns our value for ADB_SERVER_VERSION
