@@ -29,17 +29,12 @@
 
 #include <cutils/sockets.h>
 
-static int fix_O_NONBLOCK(int s, int type) {
-    // If the caller actually wanted a non-blocking socket, fine.
-    if ((type & SOCK_NONBLOCK)) return s;
-
-    // Otherwise clear the O_NONBLOCK flag.
+static int toggle_O_NONBLOCK(int s) {
     int flags = fcntl(s, F_GETFL);
-    if (flags == -1 || fcntl(s, F_SETFL, flags & ~O_NONBLOCK) == -1) {
+    if (flags == -1 || fcntl(s, F_SETFL, flags ^ O_NONBLOCK) == -1) {
         close(s);
         return -1;
     }
-
     return s;
 }
 
@@ -69,12 +64,13 @@ int socket_network_client_timeout(const char* host, int port, int type, int time
 
     freeaddrinfo(addrs);
 
-    int s = socket(family, type | SOCK_NONBLOCK, protocol);
-    if (s == -1) return -1;
+    // The Mac doesn't have SOCK_NONBLOCK.
+    int s = socket(family, type, protocol);
+    if (s == -1 || toggle_O_NONBLOCK(s) == -1) return -1;
 
     int rc = connect(s, (const struct sockaddr*) &addr, addr_len);
     if (rc == 0) {
-        return fix_O_NONBLOCK(s, type);
+        return toggle_O_NONBLOCK(s);
     } else if (rc == -1 && errno != EINPROGRESS) {
         close(s);
         return -1;
@@ -116,7 +112,7 @@ int socket_network_client_timeout(const char* host, int port, int type, int time
         return -1;
     }
 
-    return fix_O_NONBLOCK(s, type);
+    return toggle_O_NONBLOCK(s);
 }
 
 int socket_network_client(const char* host, int port, int type) {
