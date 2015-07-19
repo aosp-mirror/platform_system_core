@@ -118,6 +118,7 @@ static const struct fs_path_config android_files[] = {
     { 00550, AID_DHCP,      AID_SHELL,     0, "system/etc/dhcpcd/dhcpcd-run-hooks" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/ppp/*" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/rc.*" },
+    { 00440, AID_ROOT,      AID_ROOT,      0, "system/etc/recovery.img" },
     { 00444, AID_ROOT,      AID_ROOT,      0, conf_dir + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, conf_file + 1 },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app/*" },
