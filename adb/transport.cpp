@@ -789,9 +789,10 @@ retry:
         if (result->connection_state == kCsUnauthorized) {
             *error_out = "device unauthorized.\n";
             char* ADB_VENDOR_KEYS = getenv("ADB_VENDOR_KEYS");
-            *error_out += "This adbd's $ADB_VENDOR_KEYS is ";
+            *error_out += "This adb server's $ADB_VENDOR_KEYS is ";
             *error_out += ADB_VENDOR_KEYS ? ADB_VENDOR_KEYS : "not set";
-            *error_out += "; try 'adb kill-server' if that seems wrong.\n";
+            *error_out += "\n";
+            *error_out += "Try 'adb kill-server' if that seems wrong.\n";
             *error_out += "Otherwise check for a confirmation dialog on your device.";
             result = NULL;
         }
