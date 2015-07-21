@@ -283,7 +283,7 @@ static void *output_thread(void *_t)
     p->msg.magic = A_SYNC ^ 0xffffffff;
     if(write_packet(t->fd, t->serial, &p)) {
         put_apacket(p);
-        D("%s: failed to write SYNC apacket to transport", t->serial);
+        D("%s: failed to write SYNC apacket to transport\n", t->serial);
     }
 
 oops:
@@ -579,7 +579,7 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
             fatal_errno("cannot open transport socketpair");
         }
 
-        D("transport: %s socketpair: (%d,%d) starting", t->serial, s[0], s[1]);
+        D("transport: %s socketpair: (%d,%d) starting\n", t->serial, s[0], s[1]);
 
         t->transport_socket = s[0];
         t->fd = s[1];
@@ -617,7 +617,7 @@ void init_transport_registration(void)
     if(adb_socketpair(s)){
         fatal_errno("cannot open transport registration socketpair");
     }
-    D("socketpair: (%d,%d)", s[0], s[1]);
+    D("socketpair: (%d,%d)\n", s[0], s[1]);
 
     transport_registration_send = s[0];
     transport_registration_recv = s[1];

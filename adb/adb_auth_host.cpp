@@ -183,7 +183,7 @@ static int write_public_keyfile(RSA *private_key, const char *private_key_path)
 
 #if defined(OPENSSL_IS_BORINGSSL)
     if (!EVP_EncodedLength(&encoded_length, sizeof(pkey))) {
-        D("Public key too large to base64 encode");
+        D("Public key too large to base64 encode\n");
         goto out;
     }
 #else
@@ -194,7 +194,7 @@ static int write_public_keyfile(RSA *private_key, const char *private_key_path)
 
     encoded = new uint8_t[encoded_length];
     if (encoded == nullptr) {
-        D("Allocation failure");
+        D("Allocation failure\n");
         goto out;
     }
 
@@ -203,7 +203,7 @@ static int write_public_keyfile(RSA *private_key, const char *private_key_path)
 
     if (fwrite(encoded, encoded_length, 1, outfile) != 1 ||
         fwrite(info, strlen(info), 1, outfile) != 1) {
-        D("Write error while writing public key");
+        D("Write error while writing public key\n");
         goto out;
     }
 
@@ -323,7 +323,7 @@ static int get_user_keyfilepath(char *filename, size_t len)
 
     if (stat(android_dir, &buf)) {
         if (adb_mkdir(android_dir, 0750) < 0) {
-            D("Cannot mkdir '%s'", android_dir);
+            D("Cannot mkdir '%s'\n", android_dir);
             return -1;
         }
     }
@@ -339,7 +339,7 @@ static int get_user_key(struct listnode *list)
 
     ret = get_user_keyfilepath(path, sizeof(path));
     if (ret < 0 || ret >= (signed)sizeof(path)) {
-        D("Error getting user key filename");
+        D("Error getting user key filename\n");
         return 0;
     }
 
@@ -414,7 +414,7 @@ int adb_auth_get_userkey(unsigned char *data, size_t len)
     char path[PATH_MAX];
     int ret = get_user_keyfilepath(path, sizeof(path) - 4);
     if (ret < 0 || ret >= (signed)(sizeof(path) - 4)) {
-        D("Error getting user key filename");
+        D("Error getting user key filename\n");
         return 0;
     }
     strcat(path, ".pub");

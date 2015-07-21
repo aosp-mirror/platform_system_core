@@ -276,6 +276,7 @@ static __inline__  int  adb_is_absolute_host_path( const char*  path )
 #include "fdevent.h"
 #include <cutils/sockets.h>
 #include <cutils/misc.h>
+#include <cutils/threads.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -544,7 +545,7 @@ static __inline__  int  adb_is_absolute_host_path( const char*  path )
 
 static __inline__ unsigned long adb_thread_id()
 {
-    return (unsigned long)pthread_self();
+    return (unsigned long)gettid();
 }
 
 #endif /* !_WIN32 */

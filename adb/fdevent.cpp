@@ -578,7 +578,7 @@ void fdevent_subproc_setup()
     if(adb_socketpair(s)) {
         FATAL("cannot create shell-exit socket-pair\n");
     }
-    D("socketpair: (%d,%d)", s[0], s[1]);
+    D("socketpair: (%d,%d)\n", s[0], s[1]);
 
     SHELL_EXIT_NOTIFY_FD = s[0];
     fdevent *fde;
