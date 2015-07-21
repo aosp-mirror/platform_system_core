@@ -486,7 +486,7 @@ int service_to_fd(const char *name)
     } else if(!strncmp(name, "tcpip:", 6)) {
         int port;
         if (sscanf(name + 6, "%d", &port) != 1) {
-            port = 0;
+            return -1;
         }
         ret = create_service_thread(restart_tcp_service, (void *) (uintptr_t) port);
     } else if(!strncmp(name, "usb:", 4)) {
