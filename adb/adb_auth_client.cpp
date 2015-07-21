@@ -212,7 +212,7 @@ void adb_auth_confirm_key(unsigned char *key, size_t len, atransport *t)
 
     ret = snprintf(msg, sizeof(msg), "PK%s", key);
     if (ret >= (signed)sizeof(msg)) {
-        D("Key too long. ret=%d", ret);
+        D("Key too long. ret=%d\n", ret);
         return;
     }
     D("Sending '%s'\n", msg);

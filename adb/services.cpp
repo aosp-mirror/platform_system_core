@@ -205,7 +205,7 @@ static int create_service_thread(void (*func)(int, void *), void *cookie)
         printf("cannot create service socket pair\n");
         return -1;
     }
-    D("socketpair: (%d,%d)", s[0], s[1]);
+    D("socketpair: (%d,%d)\n", s[0], s[1]);
 
     stinfo* sti = reinterpret_cast<stinfo*>(malloc(sizeof(stinfo)));
     if (sti == nullptr) {
@@ -317,7 +317,7 @@ static int create_subproc_raw(const char *cmd, const char *arg0, const char *arg
         printf("[ cannot create socket pair - %s ]\n", strerror(errno));
         return -1;
     }
-    D("socketpair: (%d,%d)", sv[0], sv[1]);
+    D("socketpair: (%d,%d)\n", sv[0], sv[1]);
 
     *pid = fork();
     if (*pid < 0) {
