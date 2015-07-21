@@ -174,7 +174,7 @@ static void setup_trace_mask() {
     for (const auto& elem : elements) {
         const auto& flag = trace_flags.find(elem);
         if (flag == trace_flags.end()) {
-            D("Unknown trace flag: %s", flag->first.c_str());
+            D("Unknown trace flag: %s\n", flag->first.c_str());
             continue;
         }
 
