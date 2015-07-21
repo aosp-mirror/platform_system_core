@@ -42,7 +42,9 @@
 // This socket is used when a subproc shell service exists.
 // It wakes up the fdevent_loop() and cause the correct handling
 // of the shell's pseudo-tty master. I.e. force close it.
+#if !ADB_HOST
 int SHELL_EXIT_NOTIFY_FD = -1;
+#endif // !ADB_HOST
 
 static void fatal(const char *fn, const char *fmt, ...)
 {
@@ -81,7 +83,6 @@ static void dump_fde(fdevent *fde, const char *info)
 static void fdevent_plist_enqueue(fdevent *node);
 static void fdevent_plist_remove(fdevent *node);
 static fdevent *fdevent_plist_dequeue(void);
-static void fdevent_subproc_event_func(int fd, unsigned events, void *userdata);
 
 static fdevent list_pending = {
     .next = &list_pending,
@@ -510,6 +511,7 @@ static void fdevent_call_fdfunc(fdevent* fde)
     fde->func(fde->fd, events, fde->arg);
 }
 
+#if !ADB_HOST
 static void fdevent_subproc_event_func(int fd, unsigned ev,
                                        void* /* userdata */)
 {
@@ -568,6 +570,24 @@ static void fdevent_subproc_event_func(int fd, unsigned ev,
       fdevent_call_fdfunc(subproc_fde);
     }
 }
+
+void fdevent_subproc_setup()
+{
+    int s[2];
+
+    if(adb_socketpair(s)) {
+        FATAL("cannot create shell-exit socket-pair\n");
+    }
+    D("socketpair: (%d,%d)", s[0], s[1]);
+
+    SHELL_EXIT_NOTIFY_FD = s[0];
+    fdevent *fde;
+    fde = fdevent_create(s[1], fdevent_subproc_event_func, NULL);
+    if(!fde)
+      FATAL("cannot create fdevent for shell-exit handler\n");
+    fdevent_add(fde, FDE_READ);
+}
+#endif // !ADB_HOST
 
 fdevent *fdevent_create(int fd, fd_func func, void *arg)
 {
@@ -661,27 +681,12 @@ void fdevent_del(fdevent *fde, unsigned events)
         fde, (fde->state & FDE_EVENTMASK) & (~(events & FDE_EVENTMASK)));
 }
 
-void fdevent_subproc_setup()
-{
-    int s[2];
-
-    if(adb_socketpair(s)) {
-        FATAL("cannot create shell-exit socket-pair\n");
-    }
-    D("socketpair: (%d,%d)", s[0], s[1]);
-
-    SHELL_EXIT_NOTIFY_FD = s[0];
-    fdevent *fde;
-    fde = fdevent_create(s[1], fdevent_subproc_event_func, NULL);
-    if(!fde)
-      FATAL("cannot create fdevent for shell-exit handler\n");
-    fdevent_add(fde, FDE_READ);
-}
-
 void fdevent_loop()
 {
     fdevent *fde;
+#if !ADB_HOST
     fdevent_subproc_setup();
+#endif // !ADB_HOST
 
     for(;;) {
         D("--- ---- waiting for events\n");
