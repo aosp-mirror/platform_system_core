@@ -243,7 +243,7 @@ int adb_connect(const std::string& service, std::string* error) {
 
     fd = _adb_connect(service, error);
     if (fd == -1) {
-        D("_adb_connect error: %s", error->c_str());
+        D("_adb_connect error: %s\n", error->c_str());
     } else if(fd == -2) {
         fprintf(stderr,"** daemon still not running\n");
     }
