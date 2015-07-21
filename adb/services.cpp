@@ -47,6 +47,7 @@
 
 #include "adb.h"
 #include "adb_io.h"
+#include "adb_utils.h"
 #include "file_sync_service.h"
 #include "remount_service.h"
 #include "transport.h"
@@ -541,35 +542,27 @@ static void wait_for_state(int fd, void* cookie)
     D("wait_for_state is done\n");
 }
 
-static void connect_device(const std::string& host, std::string* response) {
-    if (host.empty()) {
-        *response = "empty host name";
+static void connect_device(const std::string& address, std::string* response) {
+    if (address.empty()) {
+        *response = "empty address";
         return;
     }
 
-    std::vector<std::string> pieces = android::base::Split(host, ":");
-    const std::string& hostname = pieces[0];
-
+    std::string serial;
+    std::string host;
     int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
-    if (pieces.size() > 1) {
-        if (sscanf(pieces[1].c_str(), "%d", &port) != 1) {
-            *response = android::base::StringPrintf("bad port number %s", pieces[1].c_str());
-            return;
-        }
-    }
-
-    // This may look like we're putting 'host' back together,
-    // but we're actually inserting the default port if necessary.
-    std::string serial = android::base::StringPrintf("%s:%d", hostname.c_str(), port);
-
-    int fd = socket_network_client_timeout(hostname.c_str(), port, SOCK_STREAM, 10);
-    if (fd < 0) {
-        *response = android::base::StringPrintf("unable to connect to %s:%d",
-                                                hostname.c_str(), port);
+    if (!parse_host_and_port(address, &serial, &host, &port, response)) {
         return;
     }
 
-    D("client: connected on remote on fd %d\n", fd);
+    int fd = socket_network_client_timeout(host.c_str(), port, SOCK_STREAM, 10);
+    if (fd == -1) {
+        *response = android::base::StringPrintf("unable to connect to %s: %s",
+                                                serial.c_str(), strerror(errno));
+        return;
+    }
+
+    D("client: connected %s remote on fd %d\n", serial.c_str(), fd);
     close_on_exec(fd);
     disable_tcp_nagle(fd);
 
