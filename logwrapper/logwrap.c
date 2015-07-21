@@ -355,7 +355,8 @@ static int parent(const char *tag, int parent_read, pid_t pid,
         }
 
         if (poll_fds[0].revents & POLLIN) {
-            sz = read(parent_read, &buffer[b], sizeof(buffer) - 1 - b);
+            sz = TEMP_FAILURE_RETRY(
+                read(parent_read, &buffer[b], sizeof(buffer) - 1 - b));
 
             sz += b;
             // Log one line at a time
@@ -490,7 +491,7 @@ int android_fork_execvp_ext(int argc, char* argv[], int *status, bool ignore_int
     }
 
     /* Use ptty instead of socketpair so that STDOUT is not buffered */
-    parent_ptty = open("/dev/ptmx", O_RDWR);
+    parent_ptty = TEMP_FAILURE_RETRY(open("/dev/ptmx", O_RDWR));
     if (parent_ptty < 0) {
         ERROR("Cannot create parent ptty\n");
         rc = -1;
@@ -505,7 +506,7 @@ int android_fork_execvp_ext(int argc, char* argv[], int *status, bool ignore_int
         goto err_ptty;
     }
 
-    child_ptty = open(child_devname, O_RDWR);
+    child_ptty = TEMP_FAILURE_RETRY(open(child_devname, O_RDWR));
     if (child_ptty < 0) {
         ERROR("Cannot open child_ptty\n");
         rc = -1;
