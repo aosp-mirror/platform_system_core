@@ -361,9 +361,10 @@ int  adb_open(const char*  path, int  options)
                                0, NULL );
 
     if ( f->fh_handle == INVALID_HANDLE_VALUE ) {
+        const DWORD err = GetLastError();
         _fh_close(f);
-        D( "adb_open: could not open '%s':", path );
-        switch (GetLastError()) {
+        D( "adb_open: could not open '%s': ", path );
+        switch (err) {
             case ERROR_FILE_NOT_FOUND:
                 D( "file not found\n" );
                 errno = ENOENT;
@@ -375,7 +376,7 @@ int  adb_open(const char*  path, int  options)
                 return -1;
 
             default:
-                D( "unknown error\n" );
+                D( "unknown error: %ld\n", err );
                 errno = ENOENT;
                 return -1;
         }
@@ -402,9 +403,10 @@ int  adb_creat(const char*  path, int  mode)
                                NULL );
 
     if ( f->fh_handle == INVALID_HANDLE_VALUE ) {
+        const DWORD err = GetLastError();
         _fh_close(f);
-        D( "adb_creat: could not open '%s':", path );
-        switch (GetLastError()) {
+        D( "adb_creat: could not open '%s': ", path );
+        switch (err) {
             case ERROR_FILE_NOT_FOUND:
                 D( "file not found\n" );
                 errno = ENOENT;
@@ -416,7 +418,7 @@ int  adb_creat(const char*  path, int  mode)
                 return -1;
 
             default:
-                D( "unknown error\n" );
+                D( "unknown error: %ld\n", err );
                 errno = ENOENT;
                 return -1;
         }
@@ -781,8 +783,9 @@ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrle
 
     fh->fh_socket = accept( serverfh->fh_socket, addr, addrlen );
     if (fh->fh_socket == INVALID_SOCKET) {
+        const DWORD err = WSAGetLastError();
         _fh_close( fh );
-        D( "adb_socket_accept: accept on fd %d return error %ld\n", serverfd, GetLastError() );
+        D( "adb_socket_accept: accept on fd %d return error %ld\n", serverfd, err );
         return -1;
     }
 
@@ -1546,7 +1549,7 @@ _wait_for_all(HANDLE* handles, int handles_count)
     threads = (WaitForAllParam*)malloc((chunks + (remains ? 1 : 0)) *
                                         sizeof(WaitForAllParam));
     if (threads == NULL) {
-        D("Unable to allocate thread array for %d handles.", handles_count);
+        D("Unable to allocate thread array for %d handles.\n", handles_count);
         return (int)WAIT_FAILED;
     }
 
@@ -1554,7 +1557,7 @@ _wait_for_all(HANDLE* handles, int handles_count)
      * reset" event that will remain set once it was set. */
     main_event = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (main_event == NULL) {
-        D("Unable to create main event. Error: %d", (int)GetLastError());
+        D("Unable to create main event. Error: %ld\n", GetLastError());
         free(threads);
         return (int)WAIT_FAILED;
     }
@@ -1587,7 +1590,7 @@ _wait_for_all(HANDLE* handles, int handles_count)
                                                        &threads[chunk], 0, NULL);
         if (threads[chunk].thread == NULL) {
             /* Unable to create a waiter thread. Collapse. */
-            D("Unable to create a waiting thread %d of %d. errno=%d",
+            D("Unable to create a waiting thread %d of %d. errno=%d\n",
               chunk, chunks, errno);
             chunks = chunk;
             SetEvent(main_event);
