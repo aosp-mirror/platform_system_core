@@ -43,8 +43,10 @@ static char *is_prio(char *s) {
     if (!isdigit(*s++)) {
         return NULL;
     }
+    static const size_t max_prio_len = 4;
+    size_t len = 0;
     char c;
-    while ((c = *s++)) {
+    while (((c = *s++)) && (++len <= max_prio_len)) {
         if (!isdigit(c)) {
             return (c == '>') ? s : NULL;
         }
@@ -73,7 +75,7 @@ static char *is_timestamp(char *s) {
 }
 
 // Like strtok_r with "\r\n" except that we look for log signatures (regex)
-// \(\(<[0-9]+>\)\([[] *[0-9]+[.][0-9]+[]] \)\{0,1\}\|[[] *[0-9]+[.][0-9]+[]] \)
+//  \(\(<[0-9]\{1,4\}>\)\([[] *[0-9]+[.][0-9]+[]] \)\{0,1\}\|[[] *[0-9]+[.][0-9]+[]] \)
 // and split if we see a second one without a newline.
 
 #define SIGNATURE_MASK     0xF0
@@ -165,7 +167,7 @@ char *log_strtok_r(char *s, char **last) {
             break;
         }
     }
-    /* NOTREACHED */
+    // NOTREACHED
 }
 
 log_time LogKlog::correction = log_time(CLOCK_REALTIME) - log_time(CLOCK_MONOTONIC);
@@ -465,7 +467,7 @@ int LogKlog::log(const char *buf) {
             if (strncmp(bt, cp, size)) {
                 // <PRI>[<TIME>] <tag>_host '<tag>.<num>' : message
                 if (!strncmp(bt + size - 5, "_host", 5)
-                 && !strncmp(bt, cp, size - 5)) {
+                        && !strncmp(bt, cp, size - 5)) {
                     const char *b = cp;
                     cp += size - 5;
                     if (*cp == '.') {
@@ -535,11 +537,15 @@ int LogKlog::log(const char *buf) {
         }
         size = etag - tag;
         if ((size <= 1)
-         || ((size == 2) && (isdigit(tag[0]) || isdigit(tag[1])))
-         || ((size == 3) && !strncmp(tag, "CPU", 3))
-         || ((size == 7) && !strncmp(tag, "WARNING", 7))
-         || ((size == 5) && !strncmp(tag, "ERROR", 5))
-         || ((size == 4) && !strncmp(tag, "INFO", 4))) {
+            // register names like x9
+                || ((size == 2) && (isdigit(tag[0]) || isdigit(tag[1])))
+            // register names like x18 but not driver names like en0
+                || ((size == 3) && (isdigit(tag[1]) && isdigit(tag[2])))
+            // blacklist
+                || ((size == 3) && !strncmp(tag, "CPU", 3))
+                || ((size == 7) && !strncmp(tag, "WARNING", 7))
+                || ((size == 5) && !strncmp(tag, "ERROR", 5))
+                || ((size == 4) && !strncmp(tag, "INFO", 4))) {
             buf = start;
             etag = tag = "";
         }
