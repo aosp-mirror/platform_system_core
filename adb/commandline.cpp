@@ -1208,10 +1208,12 @@ int adb_commandline(int argc, const char **argv) {
             return 0;
         }
     }
+    else if (!strcmp(argv[0], "tcpip") && argc > 1) {
+        return adb_connect_command(android::base::StringPrintf("tcpip:%s", argv[1]));
+    }
     else if (!strcmp(argv[0], "remount") ||
              !strcmp(argv[0], "reboot") ||
              !strcmp(argv[0], "reboot-bootloader") ||
-             !strcmp(argv[0], "tcpip") ||
              !strcmp(argv[0], "usb") ||
              !strcmp(argv[0], "root") ||
              !strcmp(argv[0], "unroot") ||
