@@ -439,36 +439,21 @@ fail:
 
 int usb_write(usb_handle *h, const void *_data, int len)
 {
-    unsigned char *data = (unsigned char*) _data;
-    int n;
-    int need_zero = 0;
-
     D("++ usb_write ++\n");
-    if(h->zero_mask) {
+
+    unsigned char *data = (unsigned char*) _data;
+    int n = usb_bulk_write(h, data, len);
+    if(n != len) {
+        D("ERROR: n = %d, errno = %d (%s)\n",
+            n, errno, strerror(errno));
+        return -1;
+    }
+
+    if(h->zero_mask && !(len & h->zero_mask)) {
             /* if we need 0-markers and our transfer
             ** is an even multiple of the packet size,
-            ** we make note of it
+            ** then send the zero markers.
             */
-        if(!(len & h->zero_mask)) {
-            need_zero = 1;
-        }
-    }
-
-    while(len > 0) {
-        int xfer = (len > 4096) ? 4096 : len;
-
-        n = usb_bulk_write(h, data, xfer);
-        if(n != xfer) {
-            D("ERROR: n = %d, errno = %d (%s)\n",
-                n, errno, strerror(errno));
-            return -1;
-        }
-
-        len -= xfer;
-        data += xfer;
-    }
-
-    if(need_zero){
         n = usb_bulk_write(h, _data, 0);
         return n;
     }
@@ -484,7 +469,7 @@ int usb_read(usb_handle *h, void *_data, int len)
 
     D("++ usb_read ++\n");
     while(len > 0) {
-        int xfer = (len > 4096) ? 4096 : len;
+        int xfer = len;
 
         D("[ usb read %d fd = %d], fname=%s\n", xfer, h->desc, h->fname);
         n = usb_bulk_read(h, data, xfer);
