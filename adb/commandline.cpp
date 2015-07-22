@@ -302,12 +302,31 @@ static void copy_to_file(int inFd, int outFd) {
     if (buf == nullptr) fatal("couldn't allocate buffer for copy_to_file");
     int len;
     long total = 0;
+#ifdef _WIN32
+    int old_stdin_mode = -1;
+    int old_stdout_mode = -1;
+#endif
 
     D("copy_to_file(%d -> %d)\n", inFd, outFd);
 
     if (inFd == STDIN_FILENO) {
         stdin_raw_init(STDIN_FILENO);
+#ifdef _WIN32
+        old_stdin_mode = _setmode(STDIN_FILENO, _O_BINARY);
+        if (old_stdin_mode == -1) {
+            fatal_errno("could not set stdin to binary");
+        }
+#endif
     }
+
+#ifdef _WIN32
+    if (outFd == STDOUT_FILENO) {
+        old_stdout_mode = _setmode(STDOUT_FILENO, _O_BINARY);
+        if (old_stdout_mode == -1) {
+            fatal_errno("could not set stdout to binary");
+        }
+    }
+#endif
 
     while (true) {
         if (inFd == STDIN_FILENO) {
@@ -338,7 +357,20 @@ static void copy_to_file(int inFd, int outFd) {
 
     if (inFd == STDIN_FILENO) {
         stdin_raw_restore(STDIN_FILENO);
+#ifdef _WIN32
+        if (_setmode(STDIN_FILENO, old_stdin_mode) == -1) {
+            fatal_errno("could not restore stdin mode");
+        }
+#endif
     }
+
+#ifdef _WIN32
+    if (outFd == STDOUT_FILENO) {
+        if (_setmode(STDOUT_FILENO, old_stdout_mode) == -1) {
+            fatal_errno("could not restore stdout mode");
+        }
+    }
+#endif
 
     D("copy_to_file() finished after %lu bytes\n", total);
     free(buf);
