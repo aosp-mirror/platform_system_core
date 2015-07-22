@@ -142,8 +142,10 @@ std::string format_listeners() {
             continue;
         }
         //  <device-serial> " " <local-name> " " <remote-name> "\n"
+        // Entries from "adb reverse" have no serial.
         android::base::StringAppendF(&result, "%s %s %s\n",
-                                     l->transport->serial, l->local_name, l->connect_to);
+                                     l->transport->serial ? l->transport->serial : "(reverse)",
+                                     l->local_name, l->connect_to);
     }
     return result;
 }
