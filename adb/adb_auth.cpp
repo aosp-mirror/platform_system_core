@@ -75,7 +75,7 @@ void send_auth_publickey(atransport *t)
     apacket *p = get_apacket();
     int ret;
 
-    ret = adb_auth_get_userkey(p->data, sizeof(p->data));
+    ret = adb_auth_get_userkey(p->data, MAX_PAYLOAD_V1);
     if (!ret) {
         D("Failed to get user public key\n");
         put_apacket(p);

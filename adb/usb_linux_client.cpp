@@ -213,14 +213,20 @@ static int usb_adb_write(usb_handle *h, const void *data, int len)
 
 static int usb_adb_read(usb_handle *h, void *data, int len)
 {
-    int n;
-
     D("about to read (fd=%d, len=%d)\n", h->fd, len);
-    n = unix_read(h->fd, data, len);
-    if(n != len) {
-        D("ERROR: fd = %d, n = %d, errno = %d (%s)\n",
-            h->fd, n, errno, strerror(errno));
-        return -1;
+    while (len > 0) {
+        // The kernel implementation of adb_read in f_adb.c doesn't support
+        // reads larger then 4096 bytes. Read the data in 4096 byte chunks to
+        // avoid the issue. (The ffs implementation doesn't have this limit.)
+        int bytes_to_read = len < 4096 ? len : 4096;
+        int n = unix_read(h->fd, data, bytes_to_read);
+        if (n != bytes_to_read) {
+            D("ERROR: fd = %d, n = %d, errno = %d (%s)\n",
+                h->fd, n, errno, strerror(errno));
+            return -1;
+        }
+        len -= n;
+        data = ((char*)data) + n;
     }
     D("[ done fd=%d ]\n", h->fd);
     return 0;
