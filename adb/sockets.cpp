@@ -330,8 +330,9 @@ static void local_socket_event_func(int fd, unsigned ev, void* _s)
     if (ev & FDE_READ) {
         apacket *p = get_apacket();
         unsigned char *x = p->data;
-        size_t avail = MAX_PAYLOAD;
-        int r;
+        const size_t max_payload = s->get_max_payload();
+        size_t avail = max_payload;
+        int r = 0;
         int is_eof = 0;
 
         while (avail > 0) {
@@ -354,10 +355,10 @@ static void local_socket_event_func(int fd, unsigned ev, void* _s)
         }
         D("LS(%d): fd=%d post avail loop. r=%d is_eof=%d forced_eof=%d\n",
           s->id, s->fd, r, is_eof, s->fde.force_eof);
-        if ((avail == MAX_PAYLOAD) || (s->peer == 0)) {
+        if ((avail == max_payload) || (s->peer == 0)) {
             put_apacket(p);
         } else {
-            p->len = MAX_PAYLOAD - avail;
+            p->len = max_payload - avail;
 
             r = s->peer->enqueue(s->peer, p);
             D("LS(%d): fd=%d post peer->enqueue(). r=%d\n", s->id, s->fd,
@@ -569,9 +570,9 @@ void connect_to_remote(asocket *s, const char *destination)
 {
     D("Connect_to_remote call RS(%d) fd=%d\n", s->id, s->fd);
     apacket *p = get_apacket();
-    int len = strlen(destination) + 1;
+    size_t len = strlen(destination) + 1;
 
-    if(len > (MAX_PAYLOAD-1)) {
+    if(len > (s->get_max_payload()-1)) {
         fatal("destination oversized");
     }
 
@@ -700,7 +701,7 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
         s->pkt_first = p;
         s->pkt_last = p;
     } else {
-        if((s->pkt_first->len + p->len) > MAX_PAYLOAD) {
+        if((s->pkt_first->len + p->len) > s->get_max_payload()) {
             D("SS(%d): overflow\n", s->id);
             put_apacket(p);
             goto fail;
@@ -900,4 +901,15 @@ void connect_to_smartsocket(asocket *s)
     s->peer = ss;
     ss->peer = s;
     s->ready(s);
+}
+
+size_t asocket::get_max_payload() const {
+    size_t max_payload = MAX_PAYLOAD;
+    if (transport) {
+        max_payload = std::min(max_payload, transport->get_max_payload());
+    }
+    if (peer && peer->transport) {
+        max_payload = std::min(max_payload, peer->transport->get_max_payload());
+    }
+    return max_payload;
 }
