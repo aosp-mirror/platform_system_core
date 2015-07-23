@@ -298,20 +298,13 @@ int usb_write(usb_handle* handle, const void* data, int len) {
 int usb_read(usb_handle *handle, void* data, int len) {
   unsigned long time_out = 0;
   unsigned long read = 0;
-  int ret;
 
   D("usb_read %d\n", len);
-  if (NULL != handle) {
+  if (handle != nullptr) {
     while (len > 0) {
-      int xfer = (len > 4096) ? 4096 : len;
-
-      ret = AdbReadEndpointSync(handle->adb_read_pipe,
-                                  data,
-                                  (unsigned long)xfer,
-                                  &read,
-                                  time_out);
+      int ret = AdbReadEndpointSync(handle->adb_read_pipe, data, len, &read, time_out);
       int saved_errno = GetLastError();
-      D("usb_write got: %ld, expected: %d, errno: %d\n", read, xfer, saved_errno);
+      D("usb_write got: %ld, expected: %d, errno: %d\n", read, len, saved_errno);
       if (ret) {
         data = (char *)data + read;
         len -= read;
