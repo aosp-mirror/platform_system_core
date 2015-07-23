@@ -54,7 +54,7 @@ static bool needs_retry = false;
 static void read_keys(const char *file, struct listnode *list)
 {
     FILE *f;
-    char buf[MAX_PAYLOAD];
+    char buf[MAX_PAYLOAD_V1];
     char *sep;
     int ret;
 
@@ -191,7 +191,7 @@ static void adb_auth_event(int fd, unsigned events, void *data)
 
 void adb_auth_confirm_key(unsigned char *key, size_t len, atransport *t)
 {
-    char msg[MAX_PAYLOAD];
+    char msg[MAX_PAYLOAD_V1];
     int ret;
 
     if (!usb_transport) {
