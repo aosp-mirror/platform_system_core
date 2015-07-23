@@ -5,7 +5,7 @@
 #ifndef CRASH_REPORTER_KERNEL_COLLECTOR_TEST_H_
 #define CRASH_REPORTER_KERNEL_COLLECTOR_TEST_H_
 
-#include "crash-reporter/kernel_collector.h"
+#include "kernel_collector.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>

@@ -10,7 +10,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "crash-reporter/udev_collector.h"
+#include "udev_collector.h"
 
 using base::FilePath;
 
