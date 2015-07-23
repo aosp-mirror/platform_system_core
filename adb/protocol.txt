@@ -60,11 +60,14 @@ The version is used to ensure protocol compatibility and maxdata
 declares the maximum message body size that the remote system
 is willing to accept.
 
-Currently, version=0x01000000 and maxdata=4096
+Currently, version=0x01000000 and maxdata=256*1024. Older versions of adb
+hard-coded maxdata=4096, so CONNECT and AUTH packets sent to a device must not
+be larger than that because they're sent before the CONNECT from the device
+that tells the adb server what maxdata the device can support.
 
 Both sides send a CONNECT message when the connection between them is
 established.  Until a CONNECT message is received no other messages may
-be sent.  Any messages received before a CONNECT message MUST be ignored.
+be sent. Any messages received before a CONNECT message MUST be ignored.
 
 If a CONNECT message is received with an unknown version or insufficiently
 large maxdata value, the connection with the other side must be closed.

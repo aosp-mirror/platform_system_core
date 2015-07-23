@@ -608,7 +608,7 @@ jdwp_socket_ready( asocket*  s )
     */
     if (jdwp->pass == 0) {
         apacket*  p = get_apacket();
-        p->len = jdwp_process_list((char*)p->data, MAX_PAYLOAD);
+        p->len = jdwp_process_list((char*)p->data, s->get_max_payload());
         peer->enqueue(peer, p);
         jdwp->pass = 1;
     }
@@ -695,7 +695,7 @@ jdwp_tracker_ready( asocket*  s )
     if (t->need_update) {
         apacket*  p = get_apacket();
         t->need_update = 0;
-        p->len = jdwp_process_list_msg((char*)p->data, sizeof(p->data));
+        p->len = jdwp_process_list_msg((char*)p->data, s->get_max_payload());
         s->peer->enqueue(s->peer, p);
     }
 }

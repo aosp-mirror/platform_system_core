@@ -53,7 +53,7 @@ static int remote_read(apacket *p, atransport *t)
         return -1;
     }
 
-    if(check_header(p)) {
+    if(check_header(p, t)) {
         D("bad header: terminated (data)\n");
         return -1;
     }

@@ -157,7 +157,7 @@ static int write_public_keyfile(RSA *private_key, const char *private_key_path)
 {
     RSAPublicKey pkey;
     FILE *outfile = NULL;
-    char path[PATH_MAX], info[MAX_PAYLOAD];
+    char path[PATH_MAX], info[MAX_PAYLOAD_V1];
     uint8_t* encoded = nullptr;
     size_t encoded_length;
     int ret = 0;
