@@ -18,7 +18,6 @@
 
 #include "adb_utils.h"
 
-#include <netdb.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -33,6 +32,12 @@
 
 #include "adb_trace.h"
 #include "sysdeps.h"
+
+#if defined(_WIN32)
+#include <ws2tcpip.h>
+#else
+#include <netdb.h>
+#endif
 
 bool getcwd(std::string* s) {
   char* cwd = getcwd(nullptr, 0);
@@ -168,7 +173,7 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
         return fd;
     }
     if (getaddrinfo_error != 0) {
-        // TODO: not thread safe on Win32.
+        // TODO: gai_strerror is not thread safe on Win32.
         *error = gai_strerror(getaddrinfo_error);
     } else {
         *error = strerror(errno);
