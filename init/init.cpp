@@ -76,7 +76,7 @@ static struct action *cur_action = NULL;
 static struct command *cur_command = NULL;
 
 static int have_console;
-static char console_name[PROP_VALUE_MAX] = "/dev/console";
+static std::string console_name = "/dev/console";
 static time_t process_needs_restart;
 
 static const char *ENV[32];
@@ -160,7 +160,7 @@ void zap_stdio(void)
 static void open_console()
 {
     int fd;
-    if ((fd = open(console_name, O_RDWR)) < 0) {
+    if ((fd = open(console_name.c_str(), O_RDWR)) < 0) {
         fd = open("/dev/null", O_RDWR);
     }
     ioctl(fd, TIOCSCTTY, 0);
@@ -727,12 +727,12 @@ static int keychord_init_action(int nargs, char **args)
 
 static int console_init_action(int nargs, char **args)
 {
-    char console[PROP_VALUE_MAX];
-    if (property_get("ro.boot.console", console) > 0) {
-        snprintf(console_name, sizeof(console_name), "/dev/%s", console);
+    std::string console = property_get("ro.boot.console");
+    if (!console.empty()) {
+        console_name = "/dev/" + console;
     }
 
-    int fd = open(console_name, O_RDWR | O_CLOEXEC);
+    int fd = open(console_name.c_str(), O_RDWR | O_CLOEXEC);
     if (fd >= 0)
         have_console = 1;
     close(fd);
@@ -793,9 +793,8 @@ static void export_kernel_boot_props() {
         { "ro.boot.revision",   "ro.revision",   "0", },
     };
     for (size_t i = 0; i < ARRAY_SIZE(prop_map); i++) {
-        char value[PROP_VALUE_MAX];
-        int rc = property_get(prop_map[i].src_prop, value);
-        property_set(prop_map[i].dst_prop, (rc > 0) ? value : prop_map[i].default_value);
+        std::string value = property_get(prop_map[i].src_prop);
+        property_set(prop_map[i].dst_prop, (!value.empty()) ? value.c_str() : prop_map[i].default_value);
     }
 }
 
@@ -1054,8 +1053,8 @@ int main(int argc, char** argv) {
     queue_builtin_action(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
 
     // Don't mount filesystems or start core system services in charger mode.
-    char bootmode[PROP_VALUE_MAX];
-    if (property_get("ro.bootmode", bootmode) > 0 && strcmp(bootmode, "charger") == 0) {
+    std::string bootmode = property_get("ro.bootmode");
+    if (bootmode == "charger") {
         action_for_each_trigger("charger", action_add_queue_tail);
     } else {
         action_for_each_trigger("late-init", action_add_queue_tail);
