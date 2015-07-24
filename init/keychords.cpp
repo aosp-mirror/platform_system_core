@@ -64,19 +64,18 @@ void add_service_keycodes(struct service *svc)
 
 static void handle_keychord() {
     struct service *svc;
-    char adb_enabled[PROP_VALUE_MAX];
     int ret;
     __u16 id;
 
-    // Only handle keychords if adb is enabled.
-    property_get("init.svc.adbd", adb_enabled);
     ret = read(keychord_fd, &id, sizeof(id));
     if (ret != sizeof(id)) {
         ERROR("could not read keychord id\n");
         return;
     }
 
-    if (!strcmp(adb_enabled, "running")) {
+    // Only handle keychords if adb is enabled.
+    std::string adb_enabled = property_get("init.svc.adbd");
+    if (adb_enabled == "running") {
         svc = service_find_by_keychord(id);
         if (svc) {
             INFO("Starting service %s from keychord\n", svc->name);

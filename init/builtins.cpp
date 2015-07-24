@@ -920,9 +920,8 @@ int do_installkey(int nargs, char **args)
         return -1;
     }
 
-    char prop_value[PROP_VALUE_MAX] = {0};
-    property_get("ro.crypto.type", prop_value);
-    if (strcmp(prop_value, "file")) {
+    std::string prop_value = property_get("ro.crypto.type");
+    if (prop_value != "file") {
         return 0;
     }
 
