@@ -138,7 +138,7 @@ extern bool waiting_for_exec;
 extern struct selabel_handle *sehandle;
 extern struct selabel_handle *sehandle_prop;
 
-void build_triggers_string(char *name_str, int length, struct action *cur_action);
+std::string build_triggers_string(struct action *cur_action);
 
 void handle_control_message(const char *msg, const char *arg);
 
