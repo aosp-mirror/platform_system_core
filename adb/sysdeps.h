@@ -24,6 +24,8 @@
 #  undef _WIN32
 #endif
 
+#include <errno.h>
+
 /*
  * TEMP_FAILURE_RETRY is defined by some, but not all, versions of
  * <unistd.h>. (Alas, it is not as standard as we'd hoped!) So, if it's
@@ -187,9 +189,6 @@ extern void*  load_file(const char*  pathname, unsigned*  psize);
 
 /* normally provided by <cutils/sockets.h> */
 extern int socket_loopback_client(int port, int type);
-extern int socket_network_client(const char *host, int port, int type);
-extern int socket_network_client_timeout(const char *host, int port, int type,
-                                         int timeout);
 extern int socket_loopback_server(int port, int type);
 extern int socket_inaddr_any_server(int port, int type);
 
@@ -274,7 +273,6 @@ static __inline__  int  adb_is_absolute_host_path( const char*  path )
 #else /* !_WIN32 a.k.a. Unix */
 
 #include "fdevent.h"
-#include <cutils/sockets.h>
 #include <cutils/misc.h>
 #include <cutils/threads.h>
 #include <signal.h>
