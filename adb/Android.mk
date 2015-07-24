@@ -47,6 +47,7 @@ LIBADB_TEST_SRCS := \
 LIBADB_CFLAGS := \
     $(ADB_COMMON_CFLAGS) \
     -fvisibility=hidden \
+    -std=c++14 \
 
 LIBADB_darwin_SRC_FILES := \
     fdevent.cpp \
