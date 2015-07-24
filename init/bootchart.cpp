@@ -77,8 +77,8 @@ static void log_header() {
         return;
     }
 
-    char fingerprint[PROP_VALUE_MAX];
-    if (property_get("ro.build.fingerprint", fingerprint) == -1) {
+    std::string fingerprint = property_get("ro.build.fingerprint");
+    if (fingerprint.empty()) {
         return;
     }
 
@@ -92,7 +92,7 @@ static void log_header() {
     fprintf(out, "version = Android init 0.8 " __TIME__  "\n");
     fprintf(out, "title = Boot chart for Android (%s)\n", date);
     fprintf(out, "system.uname = %s %s %s %s\n", uts.sysname, uts.release, uts.version, uts.machine);
-    fprintf(out, "system.release = %s\n", fingerprint);
+    fprintf(out, "system.release = %s\n", fingerprint.c_str());
     // TODO: use /proc/cpuinfo "model name" line for x86, "Processor" line for arm.
     fprintf(out, "system.cpu = %s\n", uts.machine);
     fprintf(out, "system.kernel.options = %s\n", kernel_cmdline.c_str());
