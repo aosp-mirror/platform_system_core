@@ -39,6 +39,7 @@
 #include <base/file.h>
 #include <base/stringprintf.h>
 #include <base/strings.h>
+#include <cutils/sockets.h>
 
 #if !ADB_HOST
 #include "cutils/android_reboot.h"
@@ -436,7 +437,8 @@ int service_to_fd(const char *name)
                 disable_tcp_nagle(ret);
         } else {
 #if ADB_HOST
-            ret = socket_network_client(name + 1, port, SOCK_STREAM);
+            std::string error;
+            ret = network_connect(name + 1, port, SOCK_STREAM, 0, &error);
 #else
             return -1;
 #endif
@@ -555,10 +557,11 @@ static void connect_device(const std::string& address, std::string* response) {
         return;
     }
 
-    int fd = socket_network_client_timeout(host.c_str(), port, SOCK_STREAM, 10);
+    std::string error;
+    int fd = network_connect(host.c_str(), port, SOCK_STREAM, 10, &error);
     if (fd == -1) {
         *response = android::base::StringPrintf("unable to connect to %s: %s",
-                                                serial.c_str(), strerror(errno));
+                                                serial.c_str(), error.c_str());
         return;
     }
 
@@ -612,12 +615,13 @@ void connect_emulator(const std::string& port_spec, std::string* response) {
     }
 
     // Preconditions met, try to connect to the emulator.
-    if (!local_connect_arbitrary_ports(console_port, adb_port)) {
+    std::string error;
+    if (!local_connect_arbitrary_ports(console_port, adb_port, &error)) {
         *response = android::base::StringPrintf("Connected to emulator on ports %d,%d",
                                                 console_port, adb_port);
     } else {
-        *response = android::base::StringPrintf("Could not connect to emulator on ports %d,%d",
-                                                console_port, adb_port);
+        *response = android::base::StringPrintf("Could not connect to emulator on ports %d,%d: %s",
+                                                console_port, adb_port, error.c_str());
     }
 }
 
