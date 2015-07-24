@@ -915,9 +915,8 @@ static int do_installkeys_ensure_dir_exists(const char* dir)
 }
 
 static bool is_file_crypto() {
-    char prop_value[PROP_VALUE_MAX] = {0};
-    property_get("ro.crypto.type", prop_value);
-    return strcmp(prop_value, "file") == 0;
+    std::string value = property_get("ro.crypto.type");
+    return value == "file";
 }
 
 int do_installkey(int nargs, char **args)

@@ -248,9 +248,7 @@ int expand_props(char *dst, const char *src, int dst_size)
     while (*src_ptr && left > 0) {
         char *c;
         char prop[PROP_NAME_MAX + 1];
-        char prop_val[PROP_VALUE_MAX];
         int prop_len = 0;
-        int prop_val_len;
 
         c = strchr(src_ptr, '$');
         if (!c) {
@@ -308,14 +306,14 @@ int expand_props(char *dst, const char *src, int dst_size)
             goto err;
         }
 
-        prop_val_len = property_get(prop, prop_val);
-        if (!prop_val_len) {
+        std::string prop_val = property_get(prop);
+        if (prop_val.empty()) {
             ERROR("property '%s' doesn't exist while expanding '%s'\n",
                   prop, src);
             goto err;
         }
 
-        ret = push_chars(&dst_ptr, &left, prop_val, prop_val_len);
+        ret = push_chars(&dst_ptr, &left, prop_val.c_str(), prop_val.size());
         if (ret < 0)
             goto err_nospace;
         src_ptr = c;
@@ -587,17 +585,13 @@ void queue_property_triggers(const char *name, const char *value)
                 } else {
                      const char* equals = strchr(test, '=');
                      if (equals) {
-                         char prop_name[PROP_NAME_MAX + 1];
-                         char value[PROP_VALUE_MAX];
                          int length = equals - test;
                          if (length <= PROP_NAME_MAX) {
-                             int ret;
-                             memcpy(prop_name, test, length);
-                             prop_name[length] = 0;
+                             std::string prop_name(test, length);
+                             std::string value = property_get(prop_name.c_str());
 
                              /* does the property exist, and match the trigger value? */
-                             ret = property_get(prop_name, value);
-                             if (ret > 0 && (!strcmp(equals + 1, value) ||
+                             if (!value.empty() && (!strcmp(equals + 1, value.c_str()) ||
                                 !strcmp(equals + 1, "*"))) {
                                  continue;
                              }
