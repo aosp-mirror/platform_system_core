@@ -187,11 +187,6 @@ static __inline__ int  unix_open(const char*  path, int options,...)
 /* normally provided by <cutils/misc.h> */
 extern void*  load_file(const char*  pathname, unsigned*  psize);
 
-/* normally provided by <cutils/sockets.h> */
-extern int socket_loopback_client(int port, int type);
-extern int socket_loopback_server(int port, int type);
-extern int socket_inaddr_any_server(int port, int type);
-
 /* normally provided by "fdevent.h" */
 
 #define FDE_READ              0x0001
