@@ -25,6 +25,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <cutils/sockets.h>
+
 #include "adb.h"
 
 extern void fatal(const char *fmt, ...);
@@ -669,7 +671,7 @@ int socket_loopback_server(int port, int type)
 
 
 int socket_network_client_timeout(const char *host, int port, int type, int timeout,
-                                  std::string* error) {
+                                  int* getaddrinfo_error) {
     FH  f = _fh_alloc( &_fh_socket_class );
     if (!f) return -1;
 
