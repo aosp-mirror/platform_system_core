@@ -18,47 +18,17 @@
 #define _INIT_INIT_H
 
 #include <sys/types.h>
+#include <stdlib.h>
 
+#include <list>
+#include <map>
 #include <string>
 #include <vector>
 
 #include <cutils/list.h>
 #include <cutils/iosched_policy.h>
 
-struct command
-{
-        /* list of commands in an action */
-    struct listnode clist;
-
-    int (*func)(int nargs, char **args);
-
-    int line;
-    const char *filename;
-
-    int nargs;
-    char *args[1];
-};
-
-struct trigger {
-    struct listnode nlist;
-    const char *name;
-};
-
-struct action {
-        /* node in list of all actions */
-    struct listnode alist;
-        /* node in the queue of pending actions */
-    struct listnode qlist;
-        /* node in list of actions for a trigger */
-    struct listnode tlist;
-
-    unsigned hash;
-
-        /* list of actions which triggers the commands*/
-    struct listnode triggers;
-    struct listnode commands;
-    struct command *current;
-};
+class Action;
 
 struct socketinfo {
     struct socketinfo *next;
@@ -117,7 +87,7 @@ struct service {
     struct socketinfo *sockets;
     struct svcenvinfo *envvars;
 
-    struct action onrestart;  /* Actions to execute on restart. */
+    Action* onrestart;  /* Commands to execute on restart. */
 
     std::vector<std::string>* writepid_files_;
 
@@ -137,8 +107,6 @@ struct service {
 extern bool waiting_for_exec;
 extern struct selabel_handle *sehandle;
 extern struct selabel_handle *sehandle_prop;
-
-std::string build_triggers_string(struct action *cur_action);
 
 void handle_control_message(const char *msg, const char *arg);
 
@@ -161,6 +129,5 @@ int selinux_reload_policy(void);
 void zap_stdio(void);
 
 void register_epoll_handler(int fd, void (*fn)());
-bool expand_command_arguments(int nargs, char** args, std::vector<std::string>* expanded_args);
 
-#endif	/* _INIT_INIT_H */
+#endif  /* _INIT_INIT_H */

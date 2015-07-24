@@ -28,6 +28,7 @@
 #include <cutils/list.h>
 #include <cutils/sockets.h>
 
+#include "action.h"
 #include "init.h"
 #include "log.h"
 #include "util.h"
@@ -133,18 +134,8 @@ static bool wait_for_one_process() {
     svc->flags |= SVC_RESTARTING;
 
     // Execute all onrestart commands for this service.
-    struct listnode* node;
-    list_for_each(node, &svc->onrestart.commands) {
-        command* cmd = node_to_item(node, struct command, clist);
-        std::vector<std::string> arg_strs;
-        if (expand_command_arguments(cmd->nargs, cmd->args, &arg_strs)) {
-            std::vector<char*> args;
-            for (auto& s : arg_strs) {
-                args.push_back(&s[0]);
-            }
-            cmd->func(args.size(), &args[0]);
-        }
-    }
+    svc->onrestart->ExecuteAllCommands();
+
     svc->NotifyStateChange("restarting");
     return true;
 }
