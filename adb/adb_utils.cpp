@@ -18,6 +18,7 @@
 
 #include "adb_utils.h"
 
+#include <netdb.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -28,6 +29,7 @@
 #include <base/logging.h>
 #include <base/stringprintf.h>
 #include <base/strings.h>
+#include <cutils/sockets.h>
 
 #include "adb_trace.h"
 #include "sysdeps.h"
@@ -157,4 +159,19 @@ bool parse_host_and_port(const std::string& address,
     LOG(DEBUG) << "parsed " << address << " as " << *host << " and " << *port
                << " (" << *canonical_address << ")";
     return true;
+}
+
+int network_connect(const std::string& host, int port, int type, int timeout, std::string* error) {
+    int getaddrinfo_error = 0;
+    int fd = socket_network_client_timeout(host.c_str(), port, type, timeout, &getaddrinfo_error);
+    if (fd != -1) {
+        return fd;
+    }
+    if (getaddrinfo_error != 0) {
+        // TODO: not thread safe on Win32.
+        *error = gai_strerror(getaddrinfo_error);
+    } else {
+        *error = strerror(errno);
+    }
+    return -1;
 }

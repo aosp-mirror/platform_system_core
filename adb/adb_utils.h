@@ -39,4 +39,6 @@ bool parse_host_and_port(const std::string& address,
                          std::string* host, int* port,
                          std::string* error);
 
+int network_connect(const std::string& host, int port, int type, int timeout, std::string* error);
+
 #endif

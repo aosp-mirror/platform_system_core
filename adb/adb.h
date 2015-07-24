@@ -22,6 +22,8 @@
 
 #include <base/macros.h>
 
+#include <string>
+
 #include "adb_trace.h"
 #include "fdevent.h"
 
@@ -357,8 +359,8 @@ void put_apacket(apacket *p);
 
 
 void local_init(int port);
-int  local_connect(int  port);
-int  local_connect_arbitrary_ports(int console_port, int adb_port);
+void local_connect(int port);
+int  local_connect_arbitrary_ports(int console_port, int adb_port, std::string* error);
 
 /* usb host/client interface */
 void usb_init();
