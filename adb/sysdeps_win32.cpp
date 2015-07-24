@@ -668,36 +668,33 @@ int socket_loopback_server(int port, int type)
 }
 
 
-int socket_network_client(const char *host, int port, int type)
-{
+int socket_network_client_timeout(const char *host, int port, int type, int timeout,
+                                  std::string* error) {
     FH  f = _fh_alloc( &_fh_socket_class );
-    struct hostent *hp;
-    struct sockaddr_in addr;
-    SOCKET s;
+    if (!f) return -1;
 
-    if (!f)
-        return -1;
+    if (!_winsock_init) _init_winsock();
 
-    if (!_winsock_init)
-        _init_winsock();
-
-    hp = gethostbyname(host);
+    hostent* hp = gethostbyname(host);
     if(hp == 0) {
         _fh_close(f);
         return -1;
     }
 
+    sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = hp->h_addrtype;
     addr.sin_port = htons(port);
     memcpy(&addr.sin_addr, hp->h_addr, hp->h_length);
 
-    s = socket(hp->h_addrtype, type, 0);
+    SOCKET s = socket(hp->h_addrtype, type, 0);
     if(s == INVALID_SOCKET) {
         _fh_close(f);
         return -1;
     }
     f->fh_socket = s;
+
+    // TODO: implement timeouts for Windows.
 
     if(connect(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         _fh_close(f);
@@ -705,15 +702,8 @@ int socket_network_client(const char *host, int port, int type)
     }
 
     snprintf( f->name, sizeof(f->name), "%d(net-client:%s%d)", _fh_to_int(f), type != SOCK_STREAM ? "udp:" : "", port );
-    D( "socket_network_client: host '%s' port %d type %s => fd %d\n", host, port, type != SOCK_STREAM ? "udp" : "tcp", _fh_to_int(f) );
+    D( "socket_network_client_timeout: host '%s' port %d type %s => fd %d\n", host, port, type != SOCK_STREAM ? "udp" : "tcp", _fh_to_int(f) );
     return _fh_to_int(f);
-}
-
-
-int socket_network_client_timeout(const char *host, int port, int type, int timeout)
-{
-    // TODO: implement timeouts for Windows.
-    return socket_network_client(host, port, type);
 }
 
 

@@ -26,6 +26,7 @@
 #include <sys/types.h>
 
 #include <base/stringprintf.h>
+#include <cutils/sockets.h>
 
 #if !ADB_HOST
 #include "cutils/properties.h"
@@ -33,6 +34,7 @@
 
 #include "adb.h"
 #include "adb_io.h"
+#include "adb_utils.h"
 
 #if ADB_HOST
 /* we keep a list of opened transports. The atransport struct knows to which
@@ -83,19 +85,18 @@ static int remote_write(apacket *p, atransport *t)
     return 0;
 }
 
-
-int local_connect(int port) {
-    return local_connect_arbitrary_ports(port-1, port);
+void local_connect(int port) {
+    std::string dummy;
+    local_connect_arbitrary_ports(port-1, port, &dummy);
 }
 
-int local_connect_arbitrary_ports(int console_port, int adb_port)
-{
-    int  fd = -1;
+int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* error) {
+    int fd = -1;
 
 #if ADB_HOST
     const char *host = getenv("ADBHOST");
     if (host) {
-        fd = socket_network_client(host, adb_port, SOCK_STREAM);
+        fd = network_connect(host, adb_port, SOCK_STREAM, 0, error);
     }
 #endif
     if (fd < 0) {
@@ -126,7 +127,7 @@ static void *client_socket_thread(void *x)
     /* this is only done when ADB starts up. later, each new emulator */
     /* will send a message to ADB to indicate that is is starting up  */
     for ( ; count > 0; count--, port += 2 ) {
-        (void) local_connect(port);
+        local_connect(port);
     }
 #endif
     return 0;

@@ -20,6 +20,7 @@
 #include <stdlib.h>
 
 #include <base/stringprintf.h>
+#include <cutils/sockets.h>
 
 #include "sysdeps.h"
 #include "transport.h"
