@@ -141,9 +141,10 @@ static int check_perms(const char *name, char *sctx)
     return check_mac_perms(name, sctx);
 }
 
-int __property_get(const char *name, char *value)
-{
-    return __system_property_get(name, value);
+std::string property_get(const char* name) {
+    char value[PROP_VALUE_MAX] = {0};
+    __system_property_get(name, value);
+    return value;
 }
 
 static void write_persistent_property(const char *name, const char *value)
@@ -491,9 +492,8 @@ bool properties_initialized() {
 
 static void load_override_properties() {
     if (ALLOW_LOCAL_PROP_OVERRIDE) {
-        char debuggable[PROP_VALUE_MAX];
-        int ret = property_get("ro.debuggable", debuggable);
-        if (ret && (strcmp(debuggable, "1") == 0)) {
+        std::string debuggable = property_get("ro.debuggable");
+        if (debuggable == "1") {
             load_properties_from_file(PROP_PATH_LOCAL_OVERRIDE, NULL);
         }
     }
@@ -511,19 +511,17 @@ void load_persist_props(void) {
 }
 
 void load_recovery_id_prop() {
-    char fstab_filename[PROP_VALUE_MAX + sizeof(FSTAB_PREFIX)];
-    char propbuf[PROP_VALUE_MAX];
-    int ret = property_get("ro.hardware", propbuf);
-    if (!ret) {
+    std::string ro_hardware = property_get("ro.hardware");
+    if (ro_hardware.empty()) {
         ERROR("ro.hardware not set - unable to load recovery id\n");
         return;
     }
-    snprintf(fstab_filename, sizeof(fstab_filename), FSTAB_PREFIX "%s", propbuf);
+    std::string fstab_filename = FSTAB_PREFIX + ro_hardware;
 
-    std::unique_ptr<fstab, void(*)(fstab*)> tab(fs_mgr_read_fstab(fstab_filename),
+    std::unique_ptr<fstab, void(*)(fstab*)> tab(fs_mgr_read_fstab(fstab_filename.c_str()),
             fs_mgr_free_fstab);
     if (!tab) {
-        ERROR("unable to read fstab %s: %s\n", fstab_filename, strerror(errno));
+        ERROR("unable to read fstab %s: %s\n", fstab_filename.c_str(), strerror(errno));
         return;
     }
 
