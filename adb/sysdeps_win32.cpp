@@ -201,7 +201,7 @@ typedef struct FHRec_
 
 static adb_mutex_t   _win32_lock;
 static  FHRec        _win32_fhs[ WIN32_MAX_FHS ];
-static  int          _win32_fh_count;
+static  int          _win32_fh_next;  // where to start search for free FHRec
 
 static FH
 _fh_from_int( int   fd, const char*   func )
@@ -210,7 +210,7 @@ _fh_from_int( int   fd, const char*   func )
 
     fd -= WIN32_FH_BASE;
 
-    if (fd < 0 || fd >= _win32_fh_count) {
+    if (fd < 0 || fd >= WIN32_MAX_FHS) {
         D( "_fh_from_int: invalid fd %d passed to %s\n", fd + WIN32_FH_BASE,
            func );
         errno = EBADF;
@@ -242,28 +242,32 @@ _fh_to_int( FH  f )
 static FH
 _fh_alloc( FHClass  clazz )
 {
-    int  nn;
     FH   f = NULL;
 
     adb_mutex_lock( &_win32_lock );
 
-    if (_win32_fh_count < WIN32_MAX_FHS) {
-        f = &_win32_fhs[ _win32_fh_count++ ];
-        goto Exit;
-    }
-
-    for (nn = 0; nn < WIN32_MAX_FHS; nn++) {
-        if ( _win32_fhs[nn].clazz == NULL) {
-            f = &_win32_fhs[nn];
+    // Search entire array, starting from _win32_fh_next.
+    for (int nn = 0; nn < WIN32_MAX_FHS; nn++) {
+        // Keep incrementing _win32_fh_next to avoid giving out an index that
+        // was recently closed, to try to avoid use-after-free.
+        const int index = _win32_fh_next++;
+        // Handle wrap-around of _win32_fh_next.
+        if (_win32_fh_next == WIN32_MAX_FHS) {
+            _win32_fh_next = 0;
+        }
+        if (_win32_fhs[index].clazz == NULL) {
+            f = &_win32_fhs[index];
             goto Exit;
         }
     }
     D( "_fh_alloc: no more free file descriptors\n" );
+    errno = EMFILE;   // Too many open files
 Exit:
     if (f) {
-        f->clazz = clazz;
-        f->used  = 1;
-        f->eof   = 0;
+        f->clazz   = clazz;
+        f->used    = 1;
+        f->eof     = 0;
+        f->name[0] = '\0';
         clazz->_fh_init(f);
     }
     adb_mutex_unlock( &_win32_lock );
@@ -274,12 +278,17 @@ Exit:
 static int
 _fh_close( FH   f )
 {
-    if ( f->used ) {
+    // Use lock so that closing only happens once and so that _fh_alloc can't
+    // allocate a FH that we're in the middle of closing.
+    adb_mutex_lock(&_win32_lock);
+    if (f->used) {
         f->clazz->_fh_close( f );
-        f->used = 0;
-        f->eof  = 0;
-        f->clazz = NULL;
+        f->name[0] = '\0';
+        f->eof     = 0;
+        f->used    = 0;
+        f->clazz   = NULL;
     }
+    adb_mutex_unlock(&_win32_lock);
     return 0;
 }
 
@@ -402,7 +411,6 @@ int  adb_open(const char*  path, int  options)
 
     f = _fh_alloc( &_fh_file_class );
     if ( !f ) {
-        errno = ENOMEM;
         return -1;
     }
 
@@ -443,7 +451,6 @@ int  adb_creat(const char*  path, int  mode)
 
     f = _fh_alloc( &_fh_file_class );
     if ( !f ) {
-        errno = ENOMEM;
         return -1;
     }
 
