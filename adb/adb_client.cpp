@@ -33,8 +33,10 @@
 
 #include <base/stringprintf.h>
 #include <base/strings.h>
+#include <cutils/sockets.h>
 
 #include "adb_io.h"
+#include "adb_utils.h"
 
 static TransportType __adb_transport = kTransportAny;
 static const char* __adb_serial = NULL;
@@ -152,13 +154,20 @@ int _adb_connect(const std::string& service, std::string* error) {
 
     int fd;
     if (__adb_server_name) {
-        fd = socket_network_client(__adb_server_name, __adb_server_port, SOCK_STREAM);
+        std::string reason;
+        fd = network_connect(__adb_server_name, __adb_server_port, SOCK_STREAM, 0, &reason);
+        if (fd == -1) {
+            *error = android::base::StringPrintf("can't connect to %s:%d: %s",
+                                                 __adb_server_name, __adb_server_port,
+                                                 reason.c_str());
+            return -2;
+        }
     } else {
         fd = socket_loopback_client(__adb_server_port, SOCK_STREAM);
-    }
-    if (fd < 0) {
-        *error = perror_str("cannot connect to daemon");
-        return -2;
+        if (fd == -1) {
+            *error = perror_str("cannot connect to daemon");
+            return -2;
+        }
     }
 
     if (memcmp(&service[0],"host",4) != 0 && switch_socket_transport(fd, error)) {
