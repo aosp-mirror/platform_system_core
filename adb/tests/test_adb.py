@@ -1,4 +1,6 @@
 #!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+
 """Simple conformance test for adb.
 
 This script will use the available adb in path and run simple
@@ -335,6 +337,21 @@ class AdbBasic(unittest.TestCase):
         output, status_code = AdbWrapper().tcpip("blah")
         self.assertEqual(1, status_code)
         self.assertIn("error", output)
+
+    def test_unicode_paths(self):
+        """Ensure that we can support non-ASCII paths, even on Windows."""
+        adb = AdbWrapper()
+        name = u'로보카 폴리'.encode('utf-8')
+
+        # push.
+        tf = tempfile.NamedTemporaryFile("wb", suffix=name)
+        adb.push(tf.name, "/data/local/tmp/adb-test-{}".format(name))
+
+        # pull.
+        adb.shell("rm \"'/data/local/tmp/adb-test-*'\"".format(name))
+        adb.shell("touch \"'/data/local/tmp/adb-test-{}'\"".format(name))
+        tf = tempfile.NamedTemporaryFile("wb", suffix=name)
+        adb.pull("/data/local/tmp/adb-test-{}".format(name), tf.name)
 
 
 class AdbFile(unittest.TestCase):
