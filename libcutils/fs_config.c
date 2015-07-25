@@ -168,8 +168,7 @@ static int fs_config_open(int dir, const char *target_out_path)
         if (target_out_path[target_out_path_len] == '/') {
             skip_len++;
         }
-        asprintf(&name, "%s%s", target_out_path, (dir ? conf_dir : conf_file) + skip_len);
-        if (name) {
+        if (asprintf(&name, "%s%s", target_out_path, (dir ? conf_dir : conf_file) + skip_len) != -1) {
             fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY | O_BINARY));
             free(name);
         }
