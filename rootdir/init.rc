@@ -152,9 +152,9 @@ on init
     chown system system /dev/cpuset/tasks
     chown system system /dev/cpuset/foreground/tasks
     chown system system /dev/cpuset/background/tasks
-    chmod 0644 /dev/cpuset/foreground/tasks
-    chmod 0644 /dev/cpuset/background/tasks
-    chmod 0644 /dev/cpuset/tasks
+    chmod 0664 /dev/cpuset/foreground/tasks
+    chmod 0664 /dev/cpuset/background/tasks
+    chmod 0664 /dev/cpuset/tasks
 
 
     # qtaguid will limit access to specific data based on group memberships.
@@ -539,6 +539,7 @@ service logd /system/bin/logd
     socket logd stream 0666 logd logd
     socket logdr seqpacket 0666 logd logd
     socket logdw dgram 0222 logd logd
+    group root system
 
 service logd-reinit /system/bin/logd --reinit
     oneshot
