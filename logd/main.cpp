@@ -103,6 +103,10 @@ static int drop_privs() {
         return -1;
     }
 
+    if (setgroups(0, NULL) == -1) {
+        return -1;
+    }
+
     if (setgid(AID_LOGD) != 0) {
         return -1;
     }
