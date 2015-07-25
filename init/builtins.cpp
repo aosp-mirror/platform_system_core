@@ -62,14 +62,8 @@ extern "C" int init_module(void *, unsigned long, const char *);
 
 static int insmod(const char *filename, char *options)
 {
-    char filename_val[PROP_VALUE_MAX];
-    if (expand_props(filename_val, filename, sizeof(filename_val)) == -1) {
-        ERROR("insmod: cannot expand '%s'\n", filename);
-        return -EINVAL;
-    }
-
     std::string module;
-    if (!read_file(filename_val, &module)) {
+    if (!read_file(filename, &module)) {
         return -1;
     }
 
@@ -468,17 +462,11 @@ int do_mount_all(int nargs, char **args)
     int child_ret = -1;
     int status;
     struct fstab *fstab;
-    char fstabfile[PROP_VALUE_MAX];
 
     if (nargs != 2) {
         return -1;
     }
-
-    if (expand_props(fstabfile, args[1], sizeof(fstabfile)) == -1) {
-        ERROR("mount_all: cannot expand '%s' \n", args[1]);
-        return -EINVAL;
-    }
-
+    const char* fstabfile = args[1];
     /*
      * Call fs_mgr_mount_all() to mount all filesystems.  We fork(2) and
      * do the call in the child to provide protection to the main init
@@ -572,15 +560,7 @@ int do_setprop(int nargs, char **args)
 {
     const char *name = args[1];
     const char *value = args[2];
-    char prop_val[PROP_VALUE_MAX];
-    int ret;
-
-    ret = expand_props(prop_val, value, sizeof(prop_val));
-    if (ret) {
-        ERROR("cannot expand '%s' while assigning to '%s'\n", value, name);
-        return -EINVAL;
-    }
-    property_set(name, prop_val);
+    property_set(name, value);
     return 0;
 }
 
@@ -626,18 +606,11 @@ int do_restart(int nargs, char **args)
 
 int do_powerctl(int nargs, char **args)
 {
-    char command[PROP_VALUE_MAX];
-    int res;
+    const char* command = args[1];
     int len = 0;
     int cmd = 0;
     const char *reboot_target;
     void (*callback_on_ro_remount)(const struct mntent*) = NULL;
-
-    res = expand_props(command, args[1], sizeof(command));
-    if (res) {
-        ERROR("powerctl: cannot expand '%s'\n", args[1]);
-        return -EINVAL;
-    }
 
     if (strncmp(command, "shutdown", 8) == 0) {
         cmd = ANDROID_RB_POWEROFF;
@@ -666,13 +639,7 @@ int do_powerctl(int nargs, char **args)
 
 int do_trigger(int nargs, char **args)
 {
-    char prop_val[PROP_VALUE_MAX];
-    int res = expand_props(prop_val, args[1], sizeof(prop_val));
-    if (res) {
-        ERROR("trigger: cannot expand '%s'\n", args[1]);
-        return -EINVAL;
-    }
-    action_for_each_trigger(prop_val, action_add_queue_tail);
+    action_for_each_trigger(args[1], action_add_queue_tail);
     return 0;
 }
 
@@ -727,13 +694,7 @@ int do_write(int nargs, char **args)
 {
     const char *path = args[1];
     const char *value = args[2];
-
-    char expanded_value[256];
-    if (expand_props(expanded_value, value, sizeof(expanded_value))) {
-        ERROR("cannot expand '%s' while writing to '%s'\n", value, path);
-        return -EINVAL;
-    }
-    return write_file(path, expanded_value);
+    return write_file(path, value);
 }
 
 int do_copy(int nargs, char **args)
@@ -856,18 +817,12 @@ int do_restorecon_recursive(int nargs, char **args) {
 }
 
 int do_loglevel(int nargs, char **args) {
-    int log_level;
-    char log_level_str[PROP_VALUE_MAX] = "";
     if (nargs != 2) {
         ERROR("loglevel: missing argument\n");
         return -EINVAL;
     }
 
-    if (expand_props(log_level_str, args[1], sizeof(log_level_str))) {
-        ERROR("loglevel: cannot expand '%s'\n", args[1]);
-        return -EINVAL;
-    }
-    log_level = atoi(log_level_str);
+    int log_level = atoi(args[1]);
     if (log_level < KLOG_ERROR_LEVEL || log_level > KLOG_DEBUG_LEVEL) {
         ERROR("loglevel: invalid log level'%d'\n", log_level);
         return -EINVAL;

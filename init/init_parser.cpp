@@ -95,9 +95,8 @@ void dump_parser_state() {
         list_for_each(node, &action_list) {
             action* act = node_to_item(node, struct action, alist);
             INFO("on ");
-            char name_str[256] = "";
-            build_triggers_string(name_str, sizeof(name_str), act);
-            INFO("%s", name_str);
+            std::string trigger_name = build_triggers_string(act);
+            INFO("%s", trigger_name.c_str());
             INFO("\n");
 
             struct listnode* node2;
@@ -217,27 +216,12 @@ static int lookup_keyword(const char *s)
 static void parse_line_no_op(struct parse_state*, int, char**) {
 }
 
-static int push_chars(char **dst, int *len, const char *chars, int cnt)
-{
-    if (cnt > *len)
-        return -1;
-
-    memcpy(*dst, chars, cnt);
-    *dst += cnt;
-    *len -= cnt;
-
-    return 0;
-}
-
-int expand_props(char *dst, const char *src, int dst_size)
-{
-    char *dst_ptr = dst;
+int expand_props(const char *src, std::string *dst) {
     const char *src_ptr = src;
-    int ret = 0;
-    int left = dst_size - 1;
 
-    if (!src || !dst || dst_size == 0)
+    if (!src || !dst) {
         return -1;
+    }
 
     /* - variables can either be $x.y or ${x.y}, in case they are only part
      *   of the string.
@@ -245,102 +229,75 @@ int expand_props(char *dst, const char *src, int dst_size)
      * - no nested property expansion, i.e. ${foo.${bar}} is not supported,
      *   bad things will happen
      */
-    while (*src_ptr && left > 0) {
-        char *c;
-        char prop[PROP_NAME_MAX + 1];
-        int prop_len = 0;
+    while (*src_ptr) {
+        const char *c;
 
         c = strchr(src_ptr, '$');
         if (!c) {
-            while (left-- > 0 && *src_ptr)
-                *(dst_ptr++) = *(src_ptr++);
+            dst->append(src_ptr);
             break;
         }
 
-        memset(prop, 0, sizeof(prop));
-
-        ret = push_chars(&dst_ptr, &left, src_ptr, c - src_ptr);
-        if (ret < 0)
-            goto err_nospace;
+        dst->append(src_ptr, c);
         c++;
 
         if (*c == '$') {
-            *(dst_ptr++) = *(c++);
+            dst->push_back(*(c++));
             src_ptr = c;
-            left--;
             continue;
         } else if (*c == '\0') {
             break;
         }
 
+        std::string prop_name;
         if (*c == '{') {
             c++;
-            while (*c && *c != '}' && prop_len < PROP_NAME_MAX)
-                prop[prop_len++] = *(c++);
-            if (*c != '}') {
-                /* failed to find closing brace, abort. */
-                if (prop_len == PROP_NAME_MAX)
-                    ERROR("prop name too long during expansion of '%s'\n",
-                          src);
-                else if (*c == '\0')
-                    ERROR("unexpected end of string in '%s', looking for }\n",
-                          src);
+            const char* end = strchr(c, '}');
+            if (!end) {
+                // failed to find closing brace, abort.
+                ERROR("unexpected end of string in '%s', looking for }\n", src);
                 goto err;
             }
-            prop[prop_len] = '\0';
-            c++;
-        } else if (*c) {
-            while (*c && prop_len < PROP_NAME_MAX)
-                prop[prop_len++] = *(c++);
-            if (prop_len == PROP_NAME_MAX && *c != '\0') {
-                ERROR("prop name too long in '%s'\n", src);
-                goto err;
-            }
-            prop[prop_len] = '\0';
+            prop_name = std::string(c, end);
+            c = end + 1;
+        } else {
+            prop_name = c;
             ERROR("using deprecated syntax for specifying property '%s', use ${name} instead\n",
-                  prop);
+                  c);
+            c += prop_name.size();
         }
 
-        if (prop_len == 0) {
+        if (prop_name.empty()) {
             ERROR("invalid zero-length prop name in '%s'\n", src);
             goto err;
         }
 
-        std::string prop_val = property_get(prop);
+        std::string prop_val = property_get(prop_name.c_str());
         if (prop_val.empty()) {
             ERROR("property '%s' doesn't exist while expanding '%s'\n",
-                  prop, src);
+                  prop_name.c_str(), src);
             goto err;
         }
 
-        ret = push_chars(&dst_ptr, &left, prop_val.c_str(), prop_val.size());
-        if (ret < 0)
-            goto err_nospace;
+        dst->append(prop_val);
         src_ptr = c;
         continue;
     }
 
-    *dst_ptr = '\0';
     return 0;
-
-err_nospace:
-    ERROR("destination buffer overflow while expanding '%s'\n", src);
 err:
     return -1;
 }
 
 static void parse_import(struct parse_state *state, int nargs, char **args)
 {
-    struct listnode *import_list = (listnode*) state->priv;
-    char conf_file[PATH_MAX];
-    int ret;
-
     if (nargs != 2) {
         ERROR("single argument needed for import\n");
         return;
     }
 
-    ret = expand_props(conf_file, args[1], sizeof(conf_file));
+    std::string conf_file;
+    int ret = expand_props(args[1], &conf_file);
     if (ret) {
         ERROR("error while handling import on line '%d' in '%s'\n",
               state->line, state->filename);
@@ -348,7 +305,9 @@ static void parse_import(struct parse_state *state, int nargs, char **args)
     }
 
     struct import* import = (struct import*) calloc(1, sizeof(struct import));
-    import->filename = strdup(conf_file);
+    import->filename = strdup(conf_file.c_str());
+
+    struct listnode *import_list = (listnode*) state->priv;
     list_add_tail(import_list, &import->list);
     INFO("Added '%s' to import list\n", import->filename);
 }
