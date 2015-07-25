@@ -55,7 +55,7 @@ int socket_network_client_timeout(const char* host, int port, int type, int time
 
     struct addrinfo* addrs;
     *getaddrinfo_error = getaddrinfo(host, port_str, &hints, &addrs);
-    if (getaddrinfo_error != 0) {
+    if (*getaddrinfo_error != 0) {
         return -1;
     }
 
