@@ -136,7 +136,14 @@ static bool wait_for_one_process() {
     struct listnode* node;
     list_for_each(node, &svc->onrestart.commands) {
         command* cmd = node_to_item(node, struct command, clist);
-        cmd->func(cmd->nargs, cmd->args);
+        std::vector<std::string> arg_strs;
+        if (expand_command_arguments(cmd->nargs, cmd->args, &arg_strs)) {
+            std::vector<char*> args;
+            for (auto& s : arg_strs) {
+                args.push_back(&s[0]);
+            }
+            cmd->func(args.size(), &args[0]);
+        }
     }
     svc->NotifyStateChange("restarting");
     return true;
