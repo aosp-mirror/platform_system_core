@@ -161,5 +161,6 @@ int selinux_reload_policy(void);
 void zap_stdio(void);
 
 void register_epoll_handler(int fd, void (*fn)());
+bool expand_command_arguments(int nargs, char** args, std::vector<std::string>* expanded_args);
 
 #endif	/* _INIT_INIT_H */

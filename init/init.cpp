@@ -585,6 +585,19 @@ std::string build_triggers_string(struct action *cur_action) {
     return result;
 }
 
+bool expand_command_arguments(int nargs, char** args, std::vector<std::string>* expanded_args) {
+    std::vector<std::string>& strs = *expanded_args;
+    strs.resize(nargs);
+    strs[0] = args[0];
+    for (int i = 1; i < nargs; ++i) {
+        if (expand_props(args[i], &strs[i]) == -1) {
+            ERROR("%s: cannot expand '%s'\n", args[0], args[i]);
+            return false;
+        }
+    }
+    return true;
+}
+
 void execute_one_command() {
     Timer t;
 
@@ -606,14 +619,9 @@ void execute_one_command() {
         return;
     }
     int result = 0;
-    std::vector<std::string> arg_strs(cur_command->nargs);
-    arg_strs[0] = cur_command->args[0];
-    for (int i = 1; i < cur_command->nargs; ++i) {
-        if (expand_props(cur_command->args[i], &arg_strs[i]) == -1) {
-            ERROR("%s: cannot expand '%s'\n", cur_command->args[0], cur_command->args[i]);
-            result = -EINVAL;
-            break;
-        }
+    std::vector<std::string> arg_strs;
+    if (!expand_command_arguments(cur_command->nargs, cur_command->args, &arg_strs)) {
+        result = -EINVAL;
     }
     if (result == 0) {
         std::vector<char*> args;
