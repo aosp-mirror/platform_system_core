@@ -60,9 +60,11 @@ static int __sys_supports_schedgroups = -1;
 static int bg_cgroup_fd = -1;
 static int fg_cgroup_fd = -1;
 
+#ifdef USE_CPUSETS
 // File descriptors open to /dev/cpuset/../tasks, setup by initialize, or -1 on error
 static int bg_cpuset_fd = -1;
 static int fg_cpuset_fd = -1;
+#endif
 
 /* Add tid to the scheduling group defined by the policy */
 static int add_tid_to_cgroup(int tid, int fd)
