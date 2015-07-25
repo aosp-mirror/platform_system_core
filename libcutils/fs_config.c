@@ -160,8 +160,7 @@ static int fs_config_open(int dir)
     const char *out = getenv("OUT");
     if (out && *out) {
         char *name = NULL;
-        asprintf(&name, "%s%s", out, dir ? conf_dir : conf_file);
-        if (name) {
+        if (asprintf(&name, "%s%s", out, dir ? conf_dir : conf_file) != -1) {
             fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY | O_BINARY));
             free(name);
         }
