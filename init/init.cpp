@@ -570,24 +570,23 @@ static int is_last_command(struct action *act, struct command *cmd)
 }
 
 
-void build_triggers_string(char *name_str, int length, struct action *cur_action) {
+std::string build_triggers_string(struct action *cur_action) {
+    std::string result;
     struct listnode *node;
     struct trigger *cur_trigger;
 
     list_for_each(node, &cur_action->triggers) {
         cur_trigger = node_to_item(node, struct trigger, nlist);
         if (node != cur_action->triggers.next) {
-            strlcat(name_str, " " , length);
+            result.push_back(' ');
         }
-        strlcat(name_str, cur_trigger->name , length);
+        result += cur_trigger->name;
     }
+    return result;
 }
 
 void execute_one_command() {
     Timer t;
-
-    char cmd_str[256] = "";
-    char name_str[256] = "";
 
     if (!cur_action || !cur_command || is_last_command(cur_action, cur_command)) {
         cur_action = action_remove_queue_head();
@@ -596,9 +595,8 @@ void execute_one_command() {
             return;
         }
 
-        build_triggers_string(name_str, sizeof(name_str), cur_action);
-
-        INFO("processing action %p (%s)\n", cur_action, name_str);
+        std::string trigger_name = build_triggers_string(cur_action);
+        INFO("processing action %p (%s)\n", cur_action, trigger_name.c_str());
         cur_command = get_first_command(cur_action);
     } else {
         cur_command = get_next_command(cur_action, cur_command);
@@ -607,23 +605,40 @@ void execute_one_command() {
     if (!cur_command) {
         return;
     }
-
-    int result = cur_command->func(cur_command->nargs, cur_command->args);
+    int result = 0;
+    std::vector<std::string> arg_strs(cur_command->nargs);
+    arg_strs[0] = cur_command->args[0];
+    for (int i = 1; i < cur_command->nargs; ++i) {
+        if (expand_props(cur_command->args[i], &arg_strs[i]) == -1) {
+            ERROR("%s: cannot expand '%s'\n", cur_command->args[0], cur_command->args[i]);
+            result = -EINVAL;
+            break;
+        }
+    }
+    if (result == 0) {
+        std::vector<char*> args;
+        for (auto& s : arg_strs) {
+            args.push_back(&s[0]);
+        }
+        result = cur_command->func(args.size(), &args[0]);
+    }
     if (klog_get_level() >= KLOG_INFO_LEVEL) {
-        for (int i = 0; i < cur_command->nargs; i++) {
-            strlcat(cmd_str, cur_command->args[i], sizeof(cmd_str));
-            if (i < cur_command->nargs - 1) {
-                strlcat(cmd_str, " ", sizeof(cmd_str));
+        std::string cmd_str;
+        for (int i = 0; i < cur_command->nargs; ++i) {
+            if (i > 0) {
+                cmd_str.push_back(' ');
             }
+            cmd_str += cur_command->args[i];
         }
-        char source[256];
+        std::string trigger_name = build_triggers_string(cur_action);
+
+        std::string source;
         if (cur_command->filename) {
-            snprintf(source, sizeof(source), " (%s:%d)", cur_command->filename, cur_command->line);
-        } else {
-            *source = '\0';
+            source = android::base::StringPrintf(" (%s:%d)", cur_command->filename, cur_command->line);
         }
+
         INFO("Command '%s' action=%s%s returned %d took %.2fs\n",
-             cmd_str, cur_action ? name_str : "", source, result, t.duration());
+             cmd_str.c_str(), trigger_name.c_str(), source.c_str(), result, t.duration());
     }
 }
 

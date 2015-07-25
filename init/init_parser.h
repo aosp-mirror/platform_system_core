@@ -17,6 +17,8 @@
 #ifndef _INIT_INIT_PARSER_H_
 #define _INIT_INIT_PARSER_H_
 
+#include <string>
+
 #define INIT_PARSER_MAXARGS 64
 
 struct action;
@@ -32,7 +34,7 @@ void queue_all_property_triggers();
 void queue_builtin_action(int (*func)(int nargs, char **args), const char *name);
 
 bool init_parse_config_file(const char* path);
-int expand_props(char *dst, const char *src, int len);
+int expand_props(const char *src, std::string *dst);
 
 service* make_exec_oneshot_service(int argc, char** argv);
 
