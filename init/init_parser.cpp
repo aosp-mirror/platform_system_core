@@ -15,6 +15,7 @@
  */
 
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -32,6 +33,7 @@
 #include "property_service.h"
 #include "util.h"
 
+#include <base/stringprintf.h>
 #include <cutils/iosched_policy.h>
 #include <cutils/list.h>
 
@@ -385,15 +387,15 @@ static void parse_config(const char *fn, const std::string& data)
 parser_done:
     list_for_each(node, &import_list) {
          struct import* import = node_to_item(node, struct import, list);
-         if (!init_parse_config_file(import->filename)) {
+         if (!init_parse_config(import->filename)) {
              ERROR("could not import file '%s' from '%s': %s\n",
                    import->filename, fn, strerror(errno));
          }
     }
 }
 
-bool init_parse_config_file(const char* path) {
-    INFO("Parsing %s...\n", path);
+static bool init_parse_config_file(const char* path) {
+    INFO("Parsing file %s...\n", path);
     Timer t;
     std::string data;
     if (!read_file(path, &data)) {
@@ -406,6 +408,34 @@ bool init_parse_config_file(const char* path) {
 
     NOTICE("(Parsing %s took %.2fs.)\n", path, t.duration());
     return true;
+}
+
+static bool init_parse_config_dir(const char* path) {
+    INFO("Parsing directory %s...\n", path);
+    std::unique_ptr<DIR, int(*)(DIR*)> config_dir(opendir(path), closedir);
+    if (!config_dir) {
+        ERROR("Could not import directory '%s'\n", path);
+        return false;
+    }
+    dirent* current_file;
+    while ((current_file = readdir(config_dir.get()))) {
+        std::string current_path =
+            android::base::StringPrintf("%s/%s", path, current_file->d_name);
+        // Ignore directories and only process regular files.
+        if (current_file->d_type == DT_REG) {
+            if (!init_parse_config_file(current_path.c_str())) {
+                ERROR("could not import file '%s'\n", current_path.c_str());
+            }
+        }
+    }
+    return true;
+}
+
+bool init_parse_config(const char* path) {
+    if (is_dir(path)) {
+        return init_parse_config_dir(path);
+    }
+    return init_parse_config_file(path);
 }
 
 static int valid_name(const char *name)
