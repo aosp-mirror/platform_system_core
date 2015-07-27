@@ -177,8 +177,6 @@ LogKlog::LogKlog(LogBuffer *buf, LogReader *reader, int fdWrite, int fdRead, boo
         logbuf(buf),
         reader(reader),
         signature(CLOCK_MONOTONIC),
-        fdWrite(fdWrite),
-        fdRead(fdRead),
         initialized(false),
         enableLogging(true),
         auditd(auditd) {
@@ -525,7 +523,6 @@ int LogKlog::log(const char *buf) {
                     }
                 }
             } else if (isspace(cp[size])) {
-                const char *b = cp;
                 cp += size;
                 while (isspace(*++cp));
                 // <PRI>[<TIME>] <tag> <tag> : message
