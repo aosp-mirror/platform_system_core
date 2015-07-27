@@ -465,3 +465,14 @@ std::string bytes_to_hex(const uint8_t* bytes, size_t bytes_len) {
         android::base::StringAppendF(&hex, "%02x", bytes[i]);
     return hex;
 }
+
+/*
+ * Returns true is pathname is a directory
+ */
+bool is_dir(const char* pathname) {
+    struct stat info;
+    if (stat(pathname, &info) == -1) {
+        return false;
+    }
+    return S_ISDIR(info.st_mode);
+}
