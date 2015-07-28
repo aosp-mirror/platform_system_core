@@ -1,0 +1,23 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+// Stores information about an event that occurs in response to a user action,
+// e.g. an interaction with a browser UI element.
+
+syntax = "proto2";
+
+option optimize_for = LITE_RUNTIME;
+option java_outer_classname = "UserActionEventProtos";
+option java_package = "org.chromium.components.metrics";
+
+package metrics;
+
+// Next tag: 3
+message UserActionEventProto {
+  // The name of the action, hashed.
+  optional fixed64 name_hash = 1;
+
+  // The timestamp for the event, in seconds since the epoch.
+  optional int64 time = 2;
+}
