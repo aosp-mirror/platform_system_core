@@ -34,10 +34,6 @@ test_c_flags := \
     -Werror \
     -fno-builtin \
 
-ifneq ($(TARGET_USES_LOGD),false)
-test_c_flags += -DTARGET_USES_LOGD=1
-endif
-
 test_src_files := \
     logd_test.cpp
 

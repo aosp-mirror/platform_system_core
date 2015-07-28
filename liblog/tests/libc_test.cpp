@@ -25,9 +25,7 @@
 #define _ANDROID_LOG_H // Priorities redefined
 #define _LIBS_LOG_LOG_H // log ids redefined
 typedef unsigned char log_id_t; // log_id_t missing as a result
-#ifdef TARGET_USES_LOGD
 #define _LIBS_LOG_LOG_READ_H // log_time redefined
-#endif
 
 #include <log/log.h>
 #include <log/logger.h>

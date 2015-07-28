@@ -137,13 +137,7 @@ TEST(logd, statistics) {
 
     alloc_statistics(&buf, &len);
 
-#ifdef TARGET_USES_LOGD
     ASSERT_TRUE(NULL != buf);
-#else
-    if (!buf) {
-        return;
-    }
-#endif
 
     // remove trailing FF
     char *cp = buf + len - 1;
@@ -167,7 +161,6 @@ TEST(logd, statistics) {
 
     EXPECT_EQ(0, truncated);
 
-#ifdef TARGET_USES_LOGD
     char *main_logs = strstr(cp, "\nChattiest UIDs in main ");
     EXPECT_TRUE(NULL != main_logs);
 
@@ -179,7 +172,6 @@ TEST(logd, statistics) {
 
     char *events_logs = strstr(cp, "\nChattiest UIDs in events ");
     EXPECT_TRUE(NULL != events_logs);
-#endif
 
     delete [] buf;
 }
@@ -419,37 +411,17 @@ TEST(logd, benchmark) {
         return;
     }
 
-#ifdef TARGET_USES_LOGD
     EXPECT_GE(200000UL, ns[log_maximum_retry]); // 104734 user
-#else
-    EXPECT_GE(10000UL, ns[log_maximum_retry]); // 5636 kernel
-#endif
 
-#ifdef TARGET_USES_LOGD
     EXPECT_GE(90000UL, ns[log_maximum]); // 46913 user
-#else
-    EXPECT_GE(10000UL, ns[log_maximum]); // 5637 kernel
-#endif
 
     EXPECT_GE(4096UL, ns[clock_overhead]); // 4095
 
-#ifdef TARGET_USES_LOGD
     EXPECT_GE(250000UL, ns[log_overhead]); // 126886 user
-#else
-    EXPECT_GE(100000UL, ns[log_overhead]); // 50945 kernel
-#endif
 
-#ifdef TARGET_USES_LOGD
     EXPECT_GE(10000UL, ns[log_latency]); // 5669 user space
-#else
-    EXPECT_GE(500000UL, ns[log_latency]); // 254200 kernel
-#endif
 
-#ifdef TARGET_USES_LOGD
     EXPECT_GE(20000000UL, ns[log_delay]); // 10500289 user
-#else
-    EXPECT_GE(55000UL, ns[log_delay]); // 27341 kernel
-#endif
 
     for (unsigned i = 0; i < sizeof(ns) / sizeof(ns[0]); ++i) {
         EXPECT_NE(0UL, ns[i]);
@@ -457,14 +429,8 @@ TEST(logd, benchmark) {
 
     alloc_statistics(&buf, &len);
 
-#ifdef TARGET_USES_LOGD
     bool collected_statistics = !!buf;
     EXPECT_EQ(true, collected_statistics);
-#else
-    if (!buf) {
-        return;
-    }
-#endif
 
     ASSERT_TRUE(NULL != buf);
 
