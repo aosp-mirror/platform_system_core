@@ -197,8 +197,11 @@ hostname <name>
 ifup <interface>
    Bring the network interface <interface> online.
 
-import <filename>
+import <path>
    Parse an init config file, extending the current configuration.
+   If <path> is a directory, each file in the directory is parsed as
+   a config file. It is not recursive, nested directories will
+   not be parsed.
 
 insmod <path>
    Install the module at <path>

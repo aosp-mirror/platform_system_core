@@ -1057,7 +1057,7 @@ int main(int argc, char** argv) {
     property_load_boot_defaults();
     start_property_service();
 
-    init_parse_config_file("/init.rc");
+    init_parse_config("/init.rc");
 
     action_for_each_trigger("early-init", action_add_queue_tail);
 
