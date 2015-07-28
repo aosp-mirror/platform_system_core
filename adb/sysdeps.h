@@ -247,10 +247,10 @@ static __inline__  char*  adb_dirstart( const char*  path )
     return p;
 }
 
-static __inline__  char*  adb_dirstop( const char*  path )
+static __inline__  const char*  adb_dirstop( const char*  path )
 {
-    char*  p  = strrchr(path, '/');
-    char*  p2 = strrchr(path, '\\');
+    const char*  p  = strrchr(path, '/');
+    const char*  p2 = strrchr(path, '\\');
 
     if ( !p )
         p = p2;
@@ -521,12 +521,12 @@ static __inline__ void  adb_sysdeps_init(void)
 {
 }
 
-static __inline__ char*  adb_dirstart(const char*  path)
+static __inline__ const char*  adb_dirstart(const char*  path)
 {
     return strchr(path, '/');
 }
 
-static __inline__ char*  adb_dirstop(const char*  path)
+static __inline__ const char*  adb_dirstop(const char*  path)
 {
     return strrchr(path, '/');
 }

@@ -22,7 +22,7 @@
 bool getcwd(std::string* cwd);
 bool directory_exists(const std::string& path);
 
-int mkdirs(const char *path);
+int mkdirs(const std::string& path);
 
 std::string escape_arg(const std::string& s);
 

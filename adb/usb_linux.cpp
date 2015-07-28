@@ -264,14 +264,12 @@ static void find_usb_device(const std::string& base,
 
                             // Determine the device path
                         if (!fstat(fd, &st) && S_ISCHR(st.st_mode)) {
-                            char *slash;
-                            ssize_t link_len;
                             snprintf(pathbuf, sizeof(pathbuf), "/sys/dev/char/%d:%d",
                                      major(st.st_rdev), minor(st.st_rdev));
-                            link_len = readlink(pathbuf, link, sizeof(link) - 1);
+                            ssize_t link_len = readlink(pathbuf, link, sizeof(link) - 1);
                             if (link_len > 0) {
                                 link[link_len] = '\0';
-                                slash = strrchr(link, '/');
+                                const char* slash = strrchr(link, '/');
                                 if (slash) {
                                     snprintf(pathbuf, sizeof(pathbuf),
                                              "usb:%s", slash + 1);

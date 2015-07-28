@@ -495,8 +495,8 @@ static int adb_download_buffer(const char *service, const char *fn, const void* 
     const uint8_t* ptr = reinterpret_cast<const uint8_t*>(data);
 
     if (show_progress) {
-        char *x = strrchr(service, ':');
-        if(x) service = x + 1;
+        const char* x = strrchr(service, ':');
+        if (x) service = x + 1;
     }
 
     while (sz > 0) {
@@ -1504,7 +1504,7 @@ static int install_app(TransportType transport, const char* serial, int argc, co
     int last_apk = -1;
     for (i = argc - 1; i >= 0; i--) {
         const char* file = argv[i];
-        char* dot = strrchr(file, '.');
+        const char* dot = strrchr(file, '.');
         if (dot && !strcasecmp(dot, ".apk")) {
             if (stat(file, &sb) == -1 || !S_ISREG(sb.st_mode)) {
                 fprintf(stderr, "Invalid APK file: %s\n", file);
@@ -1550,7 +1550,7 @@ static int install_multiple_app(TransportType transport, const char* serial, int
     int first_apk = -1;
     for (i = argc - 1; i >= 0; i--) {
         const char* file = argv[i];
-        char* dot = strrchr(file, '.');
+        const char* dot = strrchr(file, '.');
         if (dot && !strcasecmp(dot, ".apk")) {
             if (stat(file, &sb) == -1 || !S_ISREG(sb.st_mode)) {
                 fprintf(stderr, "Invalid APK file: %s\n", file);
