@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "metrics/uploader/system_profile_cache.h"
+#include "uploader/system_profile_cache.h"
 
 #include <string>
 #include <vector>
@@ -13,9 +13,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
-#include "metrics/persistent_integer.h"
-#include "metrics/uploader/metrics_log_base.h"
-#include "metrics/uploader/proto/chrome_user_metrics_extension.pb.h"
+#include "persistent_integer.h"
+#include "uploader/metrics_log_base.h"
+#include "uploader/proto/chrome_user_metrics_extension.pb.h"
 #include "vboot/crossystem.h"
 
 namespace {

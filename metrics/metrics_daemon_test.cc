@@ -15,9 +15,9 @@
 #include <chromeos/dbus/service_constants.h>
 #include <gtest/gtest.h>
 
-#include "metrics/metrics_daemon.h"
-#include "metrics/metrics_library_mock.h"
-#include "metrics/persistent_integer_mock.h"
+#include "metrics_daemon.h"
+#include "metrics_library_mock.h"
+#include "persistent_integer_mock.h"
 
 using base::FilePath;
 using base::StringPrintf;

@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "metrics/uploader/metrics_log_base.h"
+#include "uploader/metrics_log_base.h"
 
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_samples.h"
-#include "metrics/uploader/metrics_hashes.h"
-#include "metrics/uploader/proto/histogram_event.pb.h"
-#include "metrics/uploader/proto/system_profile.pb.h"
-#include "metrics/uploader/proto/user_action_event.pb.h"
+#include "uploader/metrics_hashes.h"
+#include "uploader/proto/histogram_event.pb.h"
+#include "uploader/proto/system_profile.pb.h"
+#include "uploader/proto/user_action_event.pb.h"
 
 using base::Histogram;
 using base::HistogramBase;
