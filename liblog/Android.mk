@@ -24,11 +24,7 @@ include $(CLEAR_VARS)
 # so make sure we do not regret hard-coding it as follows:
 liblog_cflags := -DLIBLOG_LOG_TAG=1005
 
-ifneq ($(TARGET_USES_LOGD),false)
 liblog_sources := logd_write.c
-else
-liblog_sources := logd_write_kern.c
-endif
 
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
@@ -47,11 +43,7 @@ liblog_target_sources := $(liblog_sources) log_time.cpp log_is_loggable.c
 ifeq ($(strip $(USE_MINGW)),)
 liblog_target_sources += logprint.c
 endif
-ifneq ($(TARGET_USES_LOGD),false)
 liblog_target_sources += log_read.c
-else
-liblog_target_sources += log_read_kern.c
-endif
 
 # Shared and static library for host
 # ========================================================
