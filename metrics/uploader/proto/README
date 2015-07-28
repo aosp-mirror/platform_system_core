@@ -1,0 +1,25 @@
+Copyright 2015 The Chromium OS Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+
+
+This directory contains the protocol buffers used by the standalone metrics
+uploader. Those protobuffers are copied from the chromium protobuffers from
+https://chromium.googlesource.com/chromium/src/+/master/components/metrics/proto/
+at 3bfe5f2b4c03d2cac718d137ed14cd2c6354bfed.
+
+Any change to this protobuf must first be made to the backend's protobuf and be
+compatible with the chromium protobuffers.
+
+
+Q: Why fork the chromium protobuffers ?
+A: The standalone metrics uploader needs chromium os fields that are not defined
+by the chromium protobufs. Instead of pushing chromium os specific changes to
+chromium, we can add them only to chromium os (and to the backend of course).
+
+
+Q: What's the difference between those protobuffers and chromium's protobuffers?
+A: When the protobuffers were copied, some chromium specific protobuffers were
+not imported:
+* omnibox related protobuffers.
+* performance profiling protobuffers (not used in chromium os).
