@@ -72,16 +72,17 @@ std::string escape_arg(const std::string& s) {
   return result;
 }
 
-int mkdirs(const char *path)
-{
+int mkdirs(const std::string& path) {
+    // TODO: rewrite this function and merge it with the *other* mkdirs in adb.
+    std::unique_ptr<char> path_rw(strdup(path.c_str()));
     int ret;
-    char *x = (char *)path + 1;
+    char* x = path_rw.get() + 1;
 
     for(;;) {
-        x = adb_dirstart(x);
+        x = const_cast<char*>(adb_dirstart(x));
         if(x == 0) return 0;
         *x = 0;
-        ret = adb_mkdir(path, 0775);
+        ret = adb_mkdir(path_rw.get(), 0775);
         *x = OS_PATH_SEPARATOR;
         if((ret < 0) && (errno != EEXIST)) {
             return ret;
