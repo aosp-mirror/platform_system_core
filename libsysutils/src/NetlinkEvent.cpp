@@ -463,19 +463,19 @@ bool NetlinkEvent::parseNdUserOptMessage(const struct nlmsghdr *nh) {
 
         // Construct "SERVERS=<comma-separated string of DNS addresses>".
         static const char kServerTag[] = "SERVERS=";
-        static const int kTagLength = strlen(kServerTag);
+        static const size_t kTagLength = strlen(kServerTag);
         // Reserve sufficient space for an IPv6 link-local address: all but the
         // last address are followed by ','; the last is followed by '\0'.
-        static const int kMaxSingleAddressLength =
+        static const size_t kMaxSingleAddressLength =
                 INET6_ADDRSTRLEN + strlen("%") + IFNAMSIZ + strlen(",");
-        const int bufsize = kTagLength + numaddrs * (INET6_ADDRSTRLEN + 1);
+        const size_t bufsize = kTagLength + numaddrs * kMaxSingleAddressLength;
         char *buf = (char *) malloc(bufsize);
         if (!buf) {
             SLOGE("RDNSS option: out of memory\n");
             return false;
         }
         strcpy(buf, kServerTag);
-        int pos = kTagLength;
+        size_t pos = kTagLength;
 
         struct in6_addr *addrs = (struct in6_addr *) (rndss_opt + 1);
         for (int i = 0; i < numaddrs; i++) {
