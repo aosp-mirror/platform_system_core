@@ -27,8 +27,6 @@ class LogKlog : public SocketListener {
     LogBuffer *logbuf;
     LogReader *reader;
     const log_time signature;
-    const int fdWrite; // /dev/kmsg
-    const int fdRead;  // /proc/kmsg
     // Set once thread is started, separates KLOG_ACTION_READ_ALL
     // and KLOG_ACTION_READ phases.
     bool initialized;

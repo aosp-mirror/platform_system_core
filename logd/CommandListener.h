@@ -27,7 +27,6 @@
 void reinit_signal_handler(int /*signal*/);
 
 class CommandListener : public FrameworkListener {
-    LogBuffer &mBuf;
 
 public:
     CommandListener(LogBuffer *buf, LogReader *reader, LogListener *swl);
@@ -37,12 +36,11 @@ private:
     static int getLogSocket();
 
     class ShutdownCmd : public LogCommand {
-        LogBuffer &mBuf;
         LogReader &mReader;
         LogListener &mSwl;
 
     public:
-        ShutdownCmd(LogBuffer *buf, LogReader *reader, LogListener *swl);
+        ShutdownCmd(LogReader *reader, LogListener *swl);
         virtual ~ShutdownCmd() {}
         int runCommand(SocketClient *c, int argc, char ** argv);
     };
