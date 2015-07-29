@@ -60,6 +60,7 @@ def _get_unique_device(product=None):
         raise NoUniqueDeviceError()
     return AndroidDevice(devices[0], product)
 
+
 def _get_device_by_serial(serial, product=None):
     for device in get_devices():
         if device == serial:
@@ -220,7 +221,7 @@ class AndroidDevice(object):
         return self._simple_call(['wait-for-device'])
 
     def get_prop(self, prop_name):
-        output = self.shell(['getprop', prop_name])
+        output = self.shell(['getprop', prop_name]).splitlines()
         if len(output) != 1:
             raise RuntimeError('Too many lines in getprop output:\n' +
                                '\n'.join(output))
