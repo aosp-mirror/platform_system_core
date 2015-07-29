@@ -32,6 +32,26 @@ import mock
 import adb
 
 
+def requires_root(func):
+    def wrapper(self, *args):
+        if self.device.get_prop('ro.debuggable') != '1':
+            raise unittest.SkipTest('requires rootable build')
+
+        was_root = self.device.shell(['id', '-un']).strip() == 'root'
+        if not was_root:
+            self.device.root()
+            self.device.wait()
+
+        try:
+            func(self, *args)
+        finally:
+            if not was_root:
+                self.device.unroot()
+                self.device.wait()
+
+    return wrapper
+
+
 class GetDeviceTest(unittest.TestCase):
     def setUp(self):
         self.android_serial = os.getenv('ANDROID_SERIAL')
@@ -188,6 +208,9 @@ class RootUnrootTest(DeviceTest):
 
     def test_root_unroot(self):
         """Make sure that adb root and adb unroot work, using id(1)."""
+        if self.device.get_prop('ro.debuggable') != '1':
+            raise unittest.SkipTest('requires rootable build')
+
         original_user = self.device.shell(['id', '-un']).strip()
         try:
             if original_user == 'root':
@@ -214,6 +237,20 @@ class TcpIpTest(DeviceTest):
             subprocess.CalledProcessError, self.device.tcpip, '')
         self.assertRaises(
             subprocess.CalledProcessError, self.device.tcpip, 'foo')
+
+
+class SystemPropertiesTest(DeviceTest):
+    def test_get_prop(self):
+        self.assertEqual(self.device.get_prop('init.svc.adbd'), 'running')
+
+    @requires_root
+    def test_set_prop(self):
+        prop_name = 'foo.bar'
+        self.device.shell(['setprop', prop_name, '""'])
+
+        self.device.set_prop(prop_name, 'qux')
+        self.assertEqual(
+            self.device.shell(['getprop', prop_name]).strip(), 'qux')
 
 
 def compute_md5(string):
@@ -392,7 +429,6 @@ class FileOperationsTest(DeviceTest):
         finally:
             self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
             shutil.rmtree(base_dir + self.DEVICE_TEMP_DIR)
-
 
     def test_unicode_paths(self):
         """Ensure that we can support non-ASCII paths, even on Windows."""
