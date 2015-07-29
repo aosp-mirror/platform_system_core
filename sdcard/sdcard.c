@@ -151,7 +151,7 @@ struct node {
     perm_t perm;
     userid_t userid;
     uid_t uid;
-    mode_t mode;
+    bool under_android;
 
     struct node *next;          /* per-dir sibling list */
     struct node *child;         /* first contained file by this dir */
@@ -419,11 +419,20 @@ static void attr_from_stat(struct fuse* fuse, struct fuse_attr *attr,
         attr->gid = multiuser_get_uid(node->userid, fuse->gid);
     }
 
-    /* Filter requested mode based on underlying file, and
-     * pass through file type. */
-    int visible_mode = node->mode;
-    if (node->perm != PERM_PRE_ROOT) {
-        visible_mode = visible_mode & ~fuse->mask;
+    int visible_mode = 0775 & ~fuse->mask;
+    if (node->perm == PERM_PRE_ROOT) {
+        /* Top of multi-user view should always be visible to ensure
+         * secondary users can traverse inside. */
+        visible_mode = 0711;
+    } else if (node->under_android) {
+        /* Block "other" access to Android directories, since only apps
+         * belonging to a specific user should be in there; we still
+         * leave +x open for the default view. */
+        if (fuse->gid == AID_SDCARD_RW) {
+            visible_mode = visible_mode & ~0006;
+        } else {
+            visible_mode = visible_mode & ~0007;
+        }
     }
     int owner_mode = s->st_mode & 0700;
     int filtered_mode = visible_mode & (owner_mode | (owner_mode >> 3) | (owner_mode >> 6));
@@ -452,7 +461,7 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
     node->perm = PERM_INHERIT;
     node->userid = parent->userid;
     node->uid = parent->uid;
-    node->mode = parent->mode;
+    node->under_android = parent->under_android;
 
     /* Derive custom permissions based on parent and current node */
     switch (parent->perm) {
@@ -463,33 +472,28 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
         /* Legacy internal layout places users at top level */
         node->perm = PERM_ROOT;
         node->userid = strtoul(node->name, NULL, 10);
-        node->mode = 0771;
         break;
     case PERM_ROOT:
         /* Assume masked off by default. */
-        node->mode = 0770;
         if (!strcasecmp(node->name, "Android")) {
             /* App-specific directories inside; let anyone traverse */
             node->perm = PERM_ANDROID;
-            node->mode = 0771;
+            node->under_android = true;
         }
         break;
     case PERM_ANDROID:
         if (!strcasecmp(node->name, "data")) {
             /* App-specific directories inside; let anyone traverse */
             node->perm = PERM_ANDROID_DATA;
-            node->mode = 0771;
         } else if (!strcasecmp(node->name, "obb")) {
             /* App-specific directories inside; let anyone traverse */
             node->perm = PERM_ANDROID_OBB;
-            node->mode = 0771;
             /* Single OBB directory is always shared */
             node->graft_path = fuse->global->obb_path;
             node->graft_pathlen = strlen(fuse->global->obb_path);
         } else if (!strcasecmp(node->name, "media")) {
             /* App-specific directories inside; let anyone traverse */
             node->perm = PERM_ANDROID_MEDIA;
-            node->mode = 0771;
         }
         break;
     case PERM_ANDROID_DATA:
@@ -499,7 +503,6 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
         if (appid != 0) {
             node->uid = multiuser_get_uid(parent->userid, appid);
         }
-        node->mode = 0770;
         break;
     }
 }
@@ -1730,6 +1733,7 @@ static int usage() {
     ERROR("usage: sdcard [OPTIONS] <source_path> <label>\n"
             "    -u: specify UID to run as\n"
             "    -g: specify GID to run as\n"
+            "    -U: specify user ID that owns device\n"
             "    -m: source_path is multi-user\n"
             "    -w: runtime_write mount has full write access\n"
             "\n");
@@ -1763,7 +1767,7 @@ static int fuse_setup(struct fuse* fuse, gid_t gid, mode_t mask) {
 }
 
 static void run(const char* source_path, const char* label, uid_t uid,
-        gid_t gid, bool multi_user, bool full_write) {
+        gid_t gid, userid_t userid, bool multi_user, bool full_write) {
     struct fuse_global global;
     struct fuse fuse_default;
     struct fuse fuse_read;
@@ -1796,18 +1800,17 @@ static void run(const char* source_path, const char* label, uid_t uid,
     global.root.refcount = 2;
     global.root.namelen = strlen(source_path);
     global.root.name = strdup(source_path);
-    global.root.userid = 0;
+    global.root.userid = userid;
     global.root.uid = AID_ROOT;
+    global.root.under_android = false;
 
     strcpy(global.source_path, source_path);
 
     if (multi_user) {
         global.root.perm = PERM_PRE_ROOT;
-        global.root.mode = 0711;
         snprintf(global.obb_path, sizeof(global.obb_path), "%s/obb", source_path);
     } else {
         global.root.perm = PERM_ROOT;
-        global.root.mode = 0771;
         snprintf(global.obb_path, sizeof(global.obb_path), "%s/Android/obb", source_path);
     }
 
@@ -1833,11 +1836,25 @@ static void run(const char* source_path, const char* label, uid_t uid,
 
     umask(0);
 
-    if (fuse_setup(&fuse_default, AID_SDCARD_RW, 0006)
-            || fuse_setup(&fuse_read, AID_EVERYBODY, 0027)
-            || fuse_setup(&fuse_write, AID_EVERYBODY, full_write ? 0007 : 0027)) {
-        ERROR("failed to fuse_setup\n");
-        exit(1);
+    if (multi_user) {
+        /* Multi-user storage is fully isolated per user, so "other"
+         * permissions are completely masked off. */
+        if (fuse_setup(&fuse_default, AID_SDCARD_RW, 0006)
+                || fuse_setup(&fuse_read, AID_EVERYBODY, 0027)
+                || fuse_setup(&fuse_write, AID_EVERYBODY, full_write ? 0007 : 0027)) {
+            ERROR("failed to fuse_setup\n");
+            exit(1);
+        }
+    } else {
+        /* Physical storage is readable by all users on device, but
+         * the Android directories are masked off to a single user
+         * deep inside attr_from_stat(). */
+        if (fuse_setup(&fuse_default, AID_SDCARD_RW, 0006)
+                || fuse_setup(&fuse_read, AID_EVERYBODY, full_write ? 0027 : 0022)
+                || fuse_setup(&fuse_write, AID_EVERYBODY, full_write ? 0007 : 0022)) {
+            ERROR("failed to fuse_setup\n");
+            exit(1);
+        }
     }
 
     /* Drop privs */
@@ -1875,6 +1892,7 @@ int main(int argc, char **argv) {
     const char *label = NULL;
     uid_t uid = 0;
     gid_t gid = 0;
+    userid_t userid = 0;
     bool multi_user = false;
     bool full_write = false;
     int i;
@@ -1882,13 +1900,16 @@ int main(int argc, char **argv) {
     int fs_version;
 
     int opt;
-    while ((opt = getopt(argc, argv, "u:g:mw")) != -1) {
+    while ((opt = getopt(argc, argv, "u:g:U:mw")) != -1) {
         switch (opt) {
             case 'u':
                 uid = strtoul(optarg, NULL, 10);
                 break;
             case 'g':
                 gid = strtoul(optarg, NULL, 10);
+                break;
+            case 'U':
+                userid = strtoul(optarg, NULL, 10);
                 break;
             case 'm':
                 multi_user = true;
@@ -1938,6 +1959,6 @@ int main(int argc, char **argv) {
         sleep(1);
     }
 
-    run(source_path, label, uid, gid, multi_user, full_write);
+    run(source_path, label, uid, gid, userid, multi_user, full_write);
     return 1;
 }
