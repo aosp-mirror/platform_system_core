@@ -75,4 +75,10 @@ static inline ssize_t pread64(int fd, void* buf, size_t nbytes, off64_t offset) 
     _rc; })
 #endif
 
+#if defined(_WIN32)
+#define OS_PATH_SEPARATOR '\\'
+#else
+#define OS_PATH_SEPARATOR '/'
+#endif
+
 #endif /* __LIB_UTILS_COMPAT_H */
