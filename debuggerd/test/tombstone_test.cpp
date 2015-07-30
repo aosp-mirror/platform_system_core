@@ -76,7 +76,7 @@ class TombstoneTest : public ::testing::Test {
     resetLogs();
     elf_set_fake_build_id("");
     siginfo_t si;
-    si.si_signo = SIGPIPE;
+    si.si_signo = SIGABRT;
     ptrace_set_fake_getsiginfo(si);
   }
 
