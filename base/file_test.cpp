@@ -24,7 +24,7 @@
 
 #include <string>
 
-#include "test_utils.h"
+#include "base/test_utils.h"
 
 TEST(file, ReadFileToString_ENOENT) {
   std::string s("hello");
@@ -47,10 +47,10 @@ TEST(file, ReadFileToString_success) {
 TEST(file, WriteStringToFile) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
-  ASSERT_TRUE(android::base::WriteStringToFile("abc", tf.filename))
+  ASSERT_TRUE(android::base::WriteStringToFile("abc", tf.path))
     << strerror(errno);
   std::string s;
-  ASSERT_TRUE(android::base::ReadFileToString(tf.filename, &s))
+  ASSERT_TRUE(android::base::ReadFileToString(tf.path, &s))
     << strerror(errno);
   EXPECT_EQ("abc", s);
 }
@@ -61,16 +61,16 @@ TEST(file, WriteStringToFile) {
 TEST(file, WriteStringToFile2) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
-  ASSERT_TRUE(android::base::WriteStringToFile("abc", tf.filename, 0660,
+  ASSERT_TRUE(android::base::WriteStringToFile("abc", tf.path, 0660,
                                                getuid(), getgid()))
       << strerror(errno);
   struct stat sb;
-  ASSERT_EQ(0, stat(tf.filename, &sb));
+  ASSERT_EQ(0, stat(tf.path, &sb));
   ASSERT_EQ(0660U, static_cast<unsigned int>(sb.st_mode & ~S_IFMT));
   ASSERT_EQ(getuid(), sb.st_uid);
   ASSERT_EQ(getgid(), sb.st_gid);
   std::string s;
-  ASSERT_TRUE(android::base::ReadFileToString(tf.filename, &s))
+  ASSERT_TRUE(android::base::ReadFileToString(tf.path, &s))
     << strerror(errno);
   EXPECT_EQ("abc", s);
 }
@@ -109,7 +109,7 @@ TEST(file, WriteFully) {
   ASSERT_TRUE(tf.fd != -1);
   ASSERT_TRUE(android::base::WriteFully(tf.fd, "abc", 3));
   std::string s;
-  ASSERT_TRUE(android::base::ReadFileToString(tf.filename, &s))
+  ASSERT_TRUE(android::base::ReadFileToString(tf.path, &s))
     << strerror(errno);
   EXPECT_EQ("abc", s);
 }

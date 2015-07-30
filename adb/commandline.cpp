@@ -867,7 +867,7 @@ static std::string find_product_out_path(const char* hint) {
 
     // If there are any slashes in it, assume it's a relative path;
     // make it absolute.
-    if (adb_dirstart(hint) != nullptr) {
+    if (adb_dirstart(hint) != std::string::npos) {
         std::string cwd;
         if (!getcwd(&cwd)) {
             fprintf(stderr, "adb: getcwd failed: %s\n", strerror(errno));
@@ -1475,15 +1475,15 @@ static int delete_file(TransportType transport, const char* serial, char* filena
     return send_shell_command(transport, serial, cmd);
 }
 
-static const char* get_basename(const char* filename)
+static const char* get_basename(const std::string& filename)
 {
-    const char* basename = adb_dirstop(filename);
-    if (basename) {
-        basename++;
-        return basename;
+    size_t base = adb_dirstop(filename);
+    if (base != std::string::npos) {
+        ++base;
     } else {
-        return filename;
+        base = 0;
     }
+    return filename.c_str() + base;
 }
 
 static int install_app(TransportType transport, const char* serial, int argc, const char** argv) {
