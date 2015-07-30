@@ -157,12 +157,6 @@ static int do_action(const char* arg)
     } else if (!strcmp(arg, "SIGFPE")) {
         raise(SIGFPE);
         return EXIT_SUCCESS;
-    } else if (!strcmp(arg, "SIGPIPE")) {
-        int pipe_fds[2];
-        pipe(pipe_fds);
-        close(pipe_fds[0]);
-        write(pipe_fds[1], "oops", 4);
-        return EXIT_SUCCESS;
     } else if (!strcmp(arg, "SIGTRAP")) {
         raise(SIGTRAP);
         return EXIT_SUCCESS;
@@ -189,7 +183,6 @@ static int do_action(const char* arg)
     fprintf(stderr, "  LOG_ALWAYS_FATAL      call LOG_ALWAYS_FATAL\n");
     fprintf(stderr, "  LOG_ALWAYS_FATAL_IF   call LOG_ALWAYS_FATAL\n");
     fprintf(stderr, "  SIGFPE                cause a SIGFPE\n");
-    fprintf(stderr, "  SIGPIPE               cause a SIGPIPE\n");
     fprintf(stderr, "  SIGSEGV               cause a SIGSEGV at address 0x0 (synonym: crash)\n");
     fprintf(stderr, "  SIGSEGV-non-null      cause a SIGSEGV at a non-zero address\n");
     fprintf(stderr, "  SIGSEGV-unmapped      mmap/munmap a region of memory and then attempt to access it\n");
