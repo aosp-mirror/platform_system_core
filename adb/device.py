@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import logging
 import os
 import re
 import subprocess
@@ -146,10 +147,12 @@ class AndroidDevice(object):
         return result, out
 
     def _simple_call(self, cmd):
+        logging.info(' '.join(self.adb_cmd + cmd))
         return subprocess.check_output(
             self.adb_cmd + cmd, stderr=subprocess.STDOUT)
 
     def shell(self, cmd):
+        logging.info(' '.join(self.adb_cmd + ['shell'] + cmd))
         cmd = self._make_shell_cmd(cmd)
         out = subprocess.check_output(cmd)
         rc, out = self._parse_shell_output(out)
@@ -161,6 +164,7 @@ class AndroidDevice(object):
 
     def shell_nocheck(self, cmd):
         cmd = self._make_shell_cmd(cmd)
+        logging.info(' '.join(cmd))
         p = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         out, _ = p.communicate()
@@ -189,6 +193,9 @@ class AndroidDevice(object):
 
     def usb(self):
         return self._simple_call(['usb'])
+
+    def reboot(self):
+        return self._simple_call(['reboot'])
 
     def root(self):
         return self._simple_call(['root'])
