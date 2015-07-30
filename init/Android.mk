@@ -44,6 +44,7 @@ endif
 include $(CLEAR_VARS)
 LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES:= \
+    action.cpp \
     init_parser.cpp \
     log.cpp \
     parser.cpp \
