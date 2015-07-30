@@ -408,7 +408,6 @@ static void handle_request(int fd) {
             case SIGBUS:
             case SIGFPE:
             case SIGILL:
-            case SIGPIPE:
             case SIGSEGV:
 #ifdef SIGSTKFLT
             case SIGSTKFLT:
