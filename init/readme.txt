@@ -377,6 +377,29 @@ system_server: 15350 15150 (-200)
 bootanimation ends at: 33790 31230 (-2560)
 
 
+Systrace
+--------
+Systrace [1] can be used for obtaining performance analysis reports during boot
+time on userdebug or eng builds.
+Here is an example of trace events of "wm" and "am" categories:
+
+  $ANDROID_BUILD_TOP/external/chromium-trace/systrace.py wm am --boot
+
+This command will cause the device to reboot. After the device is rebooted and
+the boot sequence has finished, the trace report is obtained from the device
+and written as trace.html on the host by hitting Ctrl+C.
+
+LIMITATION
+Recording trace events is started after persistent properties are loaded, so
+the trace events that are emitted before that are not recorded. Several
+services such as vold, surfaceflinger, and servicemanager are affected by this
+limitation since they are started before persistent properties are loaded.
+Zygote initialization and the processes that are forked from the zygote are not
+affected.
+
+[1] http://developer.android.com/tools/help/systrace.html
+
+
 Debugging init
 --------------
 By default, programs executed by init will drop stdout and stderr into
