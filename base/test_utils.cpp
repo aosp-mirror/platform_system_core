@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "test_utils.h"
+#include "base/test_utils.h"
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -26,34 +26,55 @@
 #include <windows.h>
 #endif
 
-TemporaryFile::TemporaryFile() {
+#include <string>
+
+static std::string GetSystemTempDir() {
 #if defined(__ANDROID__)
-  init("/data/local/tmp");
+  return "/data/local/tmp";
 #elif defined(_WIN32)
   char wd[MAX_PATH] = {};
   _getcwd(wd, sizeof(wd));
-  init(wd);
+  return wd;
 #else
-  init("/tmp");
+  return "/tmp";
 #endif
+}
+
+TemporaryFile::TemporaryFile() {
+  init(GetSystemTempDir());
 }
 
 TemporaryFile::~TemporaryFile() {
   close(fd);
-  unlink(filename);
+  unlink(path);
 }
 
-void TemporaryFile::init(const char* tmp_dir) {
-  snprintf(filename, sizeof(filename), "%s/TemporaryFile-XXXXXX", tmp_dir);
+void TemporaryFile::init(const std::string& tmp_dir) {
+  snprintf(path, sizeof(path), "%s/TemporaryFile-XXXXXX", tmp_dir.c_str());
 #if !defined(_WIN32)
-  fd = mkstemp(filename);
+  fd = mkstemp(path);
 #else
   // Windows doesn't have mkstemp, and tmpfile creates the file in the root
   // directory, requiring root (?!) permissions. We have to settle for mktemp.
-  if (mktemp(filename) == nullptr) {
+  if (mktemp(path) == nullptr) {
     abort();
   }
 
-  fd = open(filename, O_RDWR | O_NOINHERIT | O_CREAT, _S_IREAD | _S_IWRITE);
+  fd = open(path, O_RDWR | O_NOINHERIT | O_CREAT, _S_IREAD | _S_IWRITE);
 #endif
 }
+
+#if !defined(_WIN32)
+TemporaryDir::TemporaryDir() {
+  init(GetSystemTempDir());
+}
+
+TemporaryDir::~TemporaryDir() {
+  rmdir(path);
+}
+
+bool TemporaryDir::init(const std::string& tmp_dir) {
+  snprintf(path, sizeof(path), "%s/TemporaryDir-XXXXXX", tmp_dir.c_str());
+  return (mkdtemp(path) != nullptr);
+}
+#endif
