@@ -21,7 +21,7 @@
 
 #include "base/file.h"
 #include "base/stringprintf.h"
-#include "test_utils.h"
+#include "base/test_utils.h"
 
 #include <gtest/gtest.h>
 

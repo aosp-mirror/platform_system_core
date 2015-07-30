@@ -28,30 +28,7 @@
 #include <string>
 
 #include "base/file.h"
-
-class TemporaryFile {
- public:
-  TemporaryFile() {
-    init("/data/local/tmp");
-    if (fd == -1) {
-      init("/tmp");
-    }
-  }
-
-  ~TemporaryFile() {
-    close(fd);
-    unlink(filename);
-  }
-
-  int fd;
-  char filename[1024];
-
- private:
-  void init(const char* tmp_dir) {
-    snprintf(filename, sizeof(filename), "%s/TemporaryFile-XXXXXX", tmp_dir);
-    fd = mkstemp(filename);
-  }
-};
+#include "base/test_utils.h"
 
 TEST(io, ReadFdExactly_whole) {
   const char expected[] = "Foobar";

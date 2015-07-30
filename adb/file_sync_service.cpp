@@ -41,40 +41,31 @@ static bool should_use_fs_config(const char* path) {
            strncmp("/oem/", path, strlen("/oem/")) == 0;
 }
 
-static int mkdirs(char *name)
-{
-    int ret;
-    char *x = name + 1;
+static bool secure_mkdirs(const std::string& path) {
     uid_t uid = -1;
     gid_t gid = -1;
     unsigned int mode = 0775;
     uint64_t cap = 0;
 
-    if(name[0] != '/') return -1;
+    if (path[0] != '/') return false;
 
-    for(;;) {
-        x = const_cast<char*>(adb_dirstart(x));
-        if(x == 0) return 0;
-        *x = 0;
-        if (should_use_fs_config(name)) {
-            fs_config(name, 1, &uid, &gid, &mode, &cap);
+    for (size_t i = adb_dirstart(path, 1); i != std::string::npos; i = adb_dirstart(path, i + 1)) {
+        std::string name(path.substr(0, i));
+        if (should_use_fs_config(name.c_str())) {
+            fs_config(name.c_str(), 1, &uid, &gid, &mode, &cap);
         }
-        ret = adb_mkdir(name, mode);
-        if((ret < 0) && (errno != EEXIST)) {
-            D("mkdir(\"%s\") -> %s\n", name, strerror(errno));
-            *x = '/';
-            return ret;
-        } else if(ret == 0) {
-            ret = chown(name, uid, gid);
-            if (ret < 0) {
-                *x = '/';
-                return ret;
+        if (adb_mkdir(name.c_str(), mode) == -1) {
+            if (errno != EEXIST) {
+                return false;
             }
-            selinux_android_restorecon(name, 0);
+        } else {
+            if (chown(name.c_str(), uid, gid) == -1) {
+                return false;
+            }
+            selinux_android_restorecon(name.c_str(), 0);
         }
-        *x++ = '/';
     }
-    return 0;
+    return true;
 }
 
 static int do_stat(int s, const char *path)
@@ -182,7 +173,7 @@ static int handle_send_file(int s, char *path, uid_t uid,
 
     fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
     if(fd < 0 && errno == ENOENT) {
-        if(mkdirs(path) != 0) {
+        if (!secure_mkdirs(path)) {
             if(fail_errno(s))
                 return -1;
             fd = -1;
@@ -294,7 +285,7 @@ static int handle_send_link(int s, char *path, char *buffer)
 
     ret = symlink(buffer, path);
     if(ret && errno == ENOENT) {
-        if(mkdirs(path) != 0) {
+        if (!secure_mkdirs(path)) {
             fail_errno(s);
             return -1;
         }

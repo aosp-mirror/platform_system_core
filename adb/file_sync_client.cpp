@@ -746,12 +746,9 @@ int do_sync_push(const char *lpath, const char *rpath, int show_progress)
                 /* if we're copying a local file to a remote directory,
                 ** we *really* want to copy to remotedir + "/" + localfilename
                 */
-            const char *name = adb_dirstop(lpath);
-            if(name == 0) {
-                name = lpath;
-            } else {
-                name++;
-            }
+            size_t slash = adb_dirstop(lpath);
+            const char *name = (slash == std::string::npos) ? lpath : lpath + slash + 1;
+
             int  tmplen = strlen(name) + strlen(rpath) + 2;
             char *tmp = reinterpret_cast<char*>(
                 malloc(strlen(name) + strlen(rpath) + 2));
@@ -960,12 +957,9 @@ int do_sync_pull(const char *rpath, const char *lpath, int show_progress, int co
                     /* if we're copying a remote file to a local directory,
                     ** we *really* want to copy to localdir + "/" + remotefilename
                     */
-                const char *name = adb_dirstop(rpath);
-                if(name == 0) {
-                    name = rpath;
-                } else {
-                    name++;
-                }
+                size_t slash = adb_dirstop(rpath);
+                const char *name = (slash == std::string::npos) ? rpath : rpath + slash + 1;
+
                 int  tmplen = strlen(name) + strlen(lpath) + 2;
                 char *tmp = reinterpret_cast<char*>(malloc(tmplen));
                 if(tmp == 0) return 1;
