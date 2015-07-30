@@ -33,3 +33,11 @@ on boot
 # Allow only the shell group to read and truncate the kernel trace.
     chown root shell /sys/kernel/debug/tracing/trace
     chmod 0660 /sys/kernel/debug/tracing/trace
+
+on property:persist.debug.atrace.boottrace=1
+    start boottrace
+
+# Run atrace with the categories written in a file
+service boottrace /system/bin/atrace --async_start -f /data/misc/boottrace/categories
+    disabled
+    oneshot
