@@ -23,7 +23,7 @@
 #include <sys/time.h>
 #include <time.h>
 
-#if defined(HAVE_ANDROID_OS)
+#if defined(__ANDROID__)
 nsecs_t systemTime(int clock)
 {
     static const clockid_t clocks[] = {
