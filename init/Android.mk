@@ -20,6 +20,27 @@ init_cflags += \
 
 # --
 
+# If building on Linux, then build unit test for the host.
+ifeq ($(HOST_OS),linux)
+include $(CLEAR_VARS)
+LOCAL_CPPFLAGS := $(init_cflags)
+LOCAL_SRC_FILES:= \
+    parser/tokenizer.cpp \
+
+LOCAL_MODULE := libinit_parser
+LOCAL_CLANG := true
+include $(BUILD_HOST_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := init_parser_tests
+LOCAL_SRC_FILES := \
+    parser/tokenizer_test.cpp \
+
+LOCAL_STATIC_LIBRARIES := libinit_parser
+LOCAL_CLANG := true
+include $(BUILD_HOST_NATIVE_TEST)
+endif
+
 include $(CLEAR_VARS)
 LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES:= \
