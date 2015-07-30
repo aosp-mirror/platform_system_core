@@ -23,7 +23,7 @@
 
 #include <cutils/iosched_policy.h>
 
-#ifdef HAVE_ANDROID_OS
+#if defined(__ANDROID__)
 #include <linux/ioprio.h>
 #include <sys/syscall.h>
 #define __android_unused
@@ -32,7 +32,7 @@
 #endif
 
 int android_set_ioprio(int pid __android_unused, IoSchedClass clazz __android_unused, int ioprio __android_unused) {
-#ifdef HAVE_ANDROID_OS
+#if defined(__ANDROID__)
     if (syscall(SYS_ioprio_set, IOPRIO_WHO_PROCESS, pid, ioprio | (clazz << IOPRIO_CLASS_SHIFT))) {
         return -1;
     }
@@ -41,7 +41,7 @@ int android_set_ioprio(int pid __android_unused, IoSchedClass clazz __android_un
 }
 
 int android_get_ioprio(int pid __android_unused, IoSchedClass *clazz, int *ioprio) {
-#ifdef HAVE_ANDROID_OS
+#if defined(__ANDROID__)
     int rc;
 
     if ((rc = syscall(SYS_ioprio_get, IOPRIO_WHO_PROCESS, pid)) < 0) {

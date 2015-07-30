@@ -32,8 +32,8 @@ static constexpr const char* kTestData = "PreInitializeNativeBridge test.";
 
 TEST_F(NativeBridgeTest, PreInitializeNativeBridge) {
     ASSERT_TRUE(LoadNativeBridge(kNativeBridgeLibrary, nullptr));
-#ifndef __APPLE__         // Mac OS does not support bind-mount.
-#ifndef HAVE_ANDROID_OS   // Cannot write into the hard-wired location.
+#if !defined(__APPLE__)         // Mac OS does not support bind-mount.
+#if !defined(__ANDROID__)       // Cannot write into the hard-wired location.
     // Try to create our mount namespace.
     if (unshare(CLONE_NEWNS) != -1) {
         // Create a dummy file.
