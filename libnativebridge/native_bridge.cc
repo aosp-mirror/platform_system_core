@@ -295,13 +295,13 @@ bool PreInitializeNativeBridge(const char* app_data_dir_in, const char* instruct
   // so we save the extra file existence check.
   char cpuinfo_path[1024];
 
-#ifdef HAVE_ANDROID_OS
+#if defined(__ANDROID__)
   snprintf(cpuinfo_path, sizeof(cpuinfo_path), "/system/lib"
 #ifdef __LP64__
       "64"
 #endif  // __LP64__
       "/%s/cpuinfo", instruction_set);
-#else   // !HAVE_ANDROID_OS
+#else   // !__ANDROID__
   // To be able to test on the host, we hardwire a relative path.
   snprintf(cpuinfo_path, sizeof(cpuinfo_path), "./cpuinfo");
 #endif
