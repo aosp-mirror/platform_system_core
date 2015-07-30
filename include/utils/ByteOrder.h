@@ -21,7 +21,7 @@
 
 #include <stdint.h>
 #include <sys/types.h>
-#ifdef HAVE_WINSOCK
+#if defined(_WIN32)
 #include <winsock2.h>
 #else
 #include <netinet/in.h>

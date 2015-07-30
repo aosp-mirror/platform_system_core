@@ -37,7 +37,7 @@
 /* branchless on many architectures. */
 #define min(x,y) ((y) ^ (((x) ^ (y)) & -((x) < (y))))
 
-#if (defined(USE_MINGW) || defined(HAVE_WINSOCK))
+#if defined(_WIN32)
 #define WEAK static
 #else
 #define WEAK __attribute__((weak))
@@ -48,7 +48,7 @@
 
 /* Private copy of ../libcutils/socket_local_client.c prevent library loops */
 
-#ifdef HAVE_WINSOCK
+#if defined(_WIN32)
 
 int WEAK socket_local_client(const char *name, int namespaceId, int type)
 {
@@ -56,7 +56,7 @@ int WEAK socket_local_client(const char *name, int namespaceId, int type)
     return -ENOSYS;
 }
 
-#else /* !HAVE_WINSOCK */
+#else /* !_WIN32 */
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -193,7 +193,7 @@ int WEAK socket_local_client(const char *name, int namespaceId, int type)
     return s;
 }
 
-#endif /* !HAVE_WINSOCK */
+#endif /* !_WIN32 */
 /* End of ../libcutils/socket_local_client.c */
 
 #define logger_for_each(logger, logger_list) \
