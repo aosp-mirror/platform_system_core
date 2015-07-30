@@ -50,7 +50,7 @@
 #define ALOGW printf
 #endif
 
-#ifdef HAVE_ANDROID_OS
+#if defined(__ANDROID__)
 /* SIOCKILLADDR is an Android extension. */
 #define SIOCKILLADDR 0x8939
 #endif
@@ -596,7 +596,7 @@ int ifc_disable(const char *ifname)
 
 int ifc_reset_connections(const char *ifname, const int reset_mask)
 {
-#ifdef HAVE_ANDROID_OS
+#if defined(__ANDROID__)
     int result, success;
     in_addr_t myaddr = 0;
     struct ifreq ifr;
