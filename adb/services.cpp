@@ -443,7 +443,7 @@ int service_to_fd(const char *name)
             return -1;
 #endif
         }
-#ifndef HAVE_WINSOCK   /* winsock doesn't implement unix domain sockets */
+#if !defined(_WIN32)   /* winsock doesn't implement unix domain sockets */
     } else if(!strncmp(name, "local:", 6)) {
         ret = socket_local_client(name + 6,
                 ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM);

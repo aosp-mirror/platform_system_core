@@ -23,7 +23,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-#ifdef HAVE_WINSOCK
+#if defined(_WIN32)
 #include <winsock2.h>
 typedef int  socklen_t;
 #else
