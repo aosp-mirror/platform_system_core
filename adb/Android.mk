@@ -11,6 +11,9 @@ else
     adb_host_clang := true
 endif
 
+adb_host_sanitize :=
+adb_target_sanitize :=
+
 adb_version := $(shell git -C $(LOCAL_PATH) rev-parse --short=12 HEAD 2>/dev/null)-android
 
 ADB_COMMON_CFLAGS := \
@@ -80,6 +83,7 @@ LOCAL_SRC_FILES := \
     qemu_tracing.cpp \
     usb_linux_client.cpp \
 
+LOCAL_SANITIZE := $(adb_target_sanitize)
 LOCAL_SHARED_LIBRARIES := libbase
 
 # Even though we're building a static library (and thus there's no link step for
@@ -97,6 +101,7 @@ LOCAL_SRC_FILES := \
     $(LIBADB_$(HOST_OS)_SRC_FILES) \
     adb_auth_host.cpp \
 
+LOCAL_SANITIZE := $(adb_host_sanitize)
 LOCAL_SHARED_LIBRARIES := libbase
 
 # Even though we're building a static library (and thus there's no link step for
@@ -114,6 +119,7 @@ LOCAL_CLANG := true
 LOCAL_MODULE := adbd_test
 LOCAL_CFLAGS := -DADB_HOST=0 $(LIBADB_CFLAGS)
 LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS)
+LOCAL_SANITIZE := $(adb_target_sanitize)
 LOCAL_STATIC_LIBRARIES := libadbd
 LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
 include $(BUILD_NATIVE_TEST)
@@ -124,6 +130,7 @@ LOCAL_CLANG := $(adb_host_clang)
 LOCAL_MODULE := adb_test
 LOCAL_CFLAGS := -DADB_HOST=1 $(LIBADB_CFLAGS)
 LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS) services.cpp
+LOCAL_SANITIZE := $(adb_host_sanitize)
 LOCAL_SHARED_LIBRARIES := liblog libbase
 LOCAL_STATIC_LIBRARIES := \
     libadb \
@@ -150,6 +157,7 @@ LOCAL_CLANG := $(adb_host_clang)
 LOCAL_MODULE := adb_device_tracker_test
 LOCAL_CFLAGS := -DADB_HOST=1 $(LIBADB_CFLAGS)
 LOCAL_SRC_FILES := test_track_devices.cpp
+LOCAL_SANITIZE := $(adb_host_sanitize)
 LOCAL_SHARED_LIBRARIES := liblog libbase
 LOCAL_STATIC_LIBRARIES := libadb libcrypto_static libcutils
 LOCAL_LDLIBS += -lrt -ldl -lpthread
@@ -193,6 +201,7 @@ LOCAL_CFLAGS += \
 LOCAL_MODULE := adb
 LOCAL_MODULE_TAGS := debug
 
+LOCAL_SANITIZE := $(adb_host_sanitize)
 LOCAL_STATIC_LIBRARIES := \
     libadb \
     libbase \
@@ -257,6 +266,7 @@ LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT_SBIN)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
 LOCAL_C_INCLUDES += system/extras/ext4_utils
 
+LOCAL_SANITIZE := $(adb_target_sanitize)
 LOCAL_STATIC_LIBRARIES := \
     libadbd \
     libbase \
