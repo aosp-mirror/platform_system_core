@@ -43,6 +43,7 @@
 #include <logwrap/logwrap.h>
 #include <private/android_filesystem_config.h>
 
+#include "action.h"
 #include "init.h"
 #include "keywords.h"
 #include "property_service.h"
@@ -513,7 +514,7 @@ int do_mount_all(int nargs, char **args)
         /* If fs_mgr determined this is an unencrypted device, then trigger
          * that action.
          */
-        action_for_each_trigger("nonencrypted", action_add_queue_tail);
+        ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
     } else if (ret == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
         /* Setup a wipe via recovery, and reboot into recovery */
         ERROR("fs_mgr_mount_all suggested recovery, so wiping data via recovery.\n");
@@ -528,7 +529,7 @@ int do_mount_all(int nargs, char **args)
 
         // Although encrypted, we have device key, so we do not need to
         // do anything different from the nonencrypted case.
-        action_for_each_trigger("nonencrypted", action_add_queue_tail);
+        ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
     } else if (ret == FS_MGR_MNTALL_DEV_NON_DEFAULT_FILE_ENCRYPTED) {
         if (e4crypt_install_keyring()) {
             return -1;
@@ -639,7 +640,7 @@ int do_powerctl(int nargs, char **args)
 
 int do_trigger(int nargs, char **args)
 {
-    action_for_each_trigger(args[1], action_add_queue_tail);
+    ActionManager::GetInstance().QueueEventTrigger(args[1]);
     return 0;
 }
 
@@ -676,7 +677,7 @@ int do_verity_load_state(int nargs, char **args) {
     int mode = -1;
     int rc = fs_mgr_load_verity_state(&mode);
     if (rc == 0 && mode == VERITY_MODE_LOGGING) {
-        action_for_each_trigger("verity-logging", action_add_queue_tail);
+        ActionManager::GetInstance().QueueEventTrigger("verity-logging");
     }
     return rc;
 }
