@@ -16,6 +16,7 @@
 
 #include <utils/String8.h>
 
+#include <utils/Compat.h>
 #include <utils/Log.h>
 #include <utils/Unicode.h>
 #include <utils/SharedBuffer.h>
