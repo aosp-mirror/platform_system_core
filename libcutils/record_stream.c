@@ -22,7 +22,7 @@
 #include <cutils/record_stream.h>
 #include <string.h>
 #include <stdint.h>
-#ifdef HAVE_WINSOCK
+#if defined(_WIN32)
 #include <winsock2.h>   /* for ntohl */
 #else
 #include <netinet/in.h>

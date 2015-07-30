@@ -234,7 +234,7 @@ static void fdevent_process()
 
 #else /* USE_SELECT */
 
-#ifdef HAVE_WINSOCK
+#if defined(_WIN32)
 #include <winsock2.h>
 #else
 #include <sys/select.h>
@@ -617,7 +617,7 @@ void fdevent_install(fdevent *fde, int fd, fd_func func, void *arg)
     fde->func = func;
     fde->arg = arg;
 
-#ifndef HAVE_WINSOCK
+#if !defined(_WIN32)
     fcntl(fd, F_SETFL, O_NONBLOCK);
 #endif
     fdevent_register(fde);
