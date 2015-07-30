@@ -55,10 +55,15 @@ def requires_root(func):
 class GetDeviceTest(unittest.TestCase):
     def setUp(self):
         self.android_serial = os.getenv('ANDROID_SERIAL')
-        del os.environ['ANDROID_SERIAL']
+        if 'ANDROID_SERIAL' in os.environ:
+            del os.environ['ANDROID_SERIAL']
 
     def tearDown(self):
-        os.environ['ANDROID_SERIAL'] = self.android_serial
+        if self.android_serial is not None:
+            os.environ['ANDROID_SERIAL'] = self.android_serial
+        else:
+            if 'ANDROID_SERIAL' in os.environ:
+                del os.environ['ANDROID_SERIAL']
 
     @mock.patch('adb.device.get_devices')
     def test_explicit(self, mock_get_devices):
@@ -311,7 +316,7 @@ def make_random_device_files(device, in_dir, num_files):
         size = random.randrange(min_size, max_size, 1024)
 
         base_name = 'device_tmpfile' + str(file_num)
-        full_path = os.path.join(in_dir, base_name)
+        full_path = posixpath.join(in_dir, base_name)
 
         device.shell(['dd', 'if=/dev/urandom', 'of={}'.format(full_path),
                       'bs={}'.format(size), 'count=1'])
