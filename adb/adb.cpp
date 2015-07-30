@@ -770,12 +770,12 @@ int handle_forward_request(const char* service, TransportType type, const char* 
         if (android::base::StartsWith(service, "killforward:")) {
             kill_forward = true;
             service += 12;
+        } else {
+            service += 8;   // skip past "forward:"
             if (android::base::StartsWith(service, "norebind:")) {
                 no_rebind = true;
                 service += 9;
             }
-        } else {
-            service += 8;
         }
 
         std::vector<std::string> pieces = android::base::Split(service, ";");
@@ -824,7 +824,7 @@ int handle_forward_request(const char* service, TransportType type, const char* 
             message = android::base::StringPrintf("cannot bind to socket: %s", strerror(errno));
             break;
           case INSTALL_STATUS_CANNOT_REBIND:
-            message = android::base::StringPrintf("cannot rebind existing socket: %s", strerror(errno));
+            message = android::base::StringPrintf("cannot rebind existing socket");
             break;
           case INSTALL_STATUS_LISTENER_NOT_FOUND:
             message = android::base::StringPrintf("listener '%s' not found", service);
