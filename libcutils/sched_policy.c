@@ -37,7 +37,7 @@ static inline SchedPolicy _policy(SchedPolicy p)
    return p == SP_DEFAULT ? SP_SYSTEM_DEFAULT : p;
 }
 
-#if defined(HAVE_ANDROID_OS)
+#if defined(__ANDROID__)
 
 #include <pthread.h>
 #include <sched.h>
@@ -146,7 +146,7 @@ static void __initialize(void) {
  */
 static int getSchedulerGroup(int tid, char* buf, size_t bufLen)
 {
-#ifdef HAVE_ANDROID_OS
+#if defined(__ANDROID__)
     char pathBuf[32];
     char lineBuf[256];
     FILE *fp;
