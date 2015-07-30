@@ -72,24 +72,13 @@ std::string escape_arg(const std::string& s) {
   return result;
 }
 
-int mkdirs(const std::string& path) {
-    // TODO: rewrite this function and merge it with the *other* mkdirs in adb.
-    std::unique_ptr<char> path_rw(strdup(path.c_str()));
-    int ret;
-    char* x = path_rw.get() + 1;
-
-    for(;;) {
-        x = const_cast<char*>(adb_dirstart(x));
-        if(x == 0) return 0;
-        *x = 0;
-        ret = adb_mkdir(path_rw.get(), 0775);
-        *x = OS_PATH_SEPARATOR;
-        if((ret < 0) && (errno != EEXIST)) {
-            return ret;
+bool mkdirs(const std::string& path) {
+    for (size_t i = adb_dirstart(path, 1); i != std::string::npos; i = adb_dirstart(path, i + 1)) {
+        if (adb_mkdir(path.substr(0, i), 0775) == -1 && errno != EEXIST) {
+            return false;
         }
-        x++;
     }
-    return 0;
+    return true;
 }
 
 void dump_hex(const void* data, size_t byte_count) {
