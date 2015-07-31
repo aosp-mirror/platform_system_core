@@ -82,21 +82,22 @@ static BOOL WINAPI ctrlc_handler(DWORD type) {
 
 static std::string GetLogFilePath() {
     const char log_name[] = "adb.log";
-    char temp_path[MAX_PATH - sizeof(log_name) + 1];
+    WCHAR temp_path[MAX_PATH];
 
     // https://msdn.microsoft.com/en-us/library/windows/desktop/aa364992%28v=vs.85%29.aspx
-    DWORD nchars = GetTempPath(sizeof(temp_path), temp_path);
-    CHECK_LE(nchars, sizeof(temp_path));
-    if (nchars == 0) {
-        // TODO(danalbert): Log the error message from FormatError().
-        // Windows unfortunately has two errnos, errno and GetLastError(), so
-        // I'm not sure what to do about PLOG here. Probably better to just
-        // ignore it and add a simplified version of FormatError() for use in
-        // log messages.
+    DWORD nchars = GetTempPathW(arraysize(temp_path), temp_path);
+    if ((nchars >= arraysize(temp_path)) || (nchars == 0)) {
+        // If string truncation or some other error.
+        // TODO(danalbert): Log the error message from
+        // FormatMessage(GetLastError()). Pure Windows APIs only touch
+        // GetLastError(), C Runtime APIs touch errno, so maybe there should be
+        // WPLOG or PLOGW (which would read GetLastError() instead of errno),
+        // in addition to PLOG, or maybe better to just ignore it and add a
+        // simplified version of FormatMessage() for use in log messages.
         LOG(ERROR) << "Error creating log file";
     }
 
-    return std::string(temp_path) + log_name;
+    return narrow(temp_path) + log_name;
 }
 #else
 static const char kNullFileName[] = "/dev/null";
@@ -189,9 +190,35 @@ int adb_main(int is_daemon, int server_port) {
     return 0;
 }
 
+#ifdef _WIN32
+static bool _argv_is_utf8 = false;
+#endif
+
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    if (!_argv_is_utf8) {
+        fatal("_argv_is_utf8 is not set, suggesting that wmain was not "
+              "called. Did you forget to link with -municode?");
+    }
+#endif
+
     adb_sysdeps_init();
     adb_trace_init(argv);
     D("Handling commandline()\n");
     return adb_commandline(argc - 1, const_cast<const char**>(argv + 1));
 }
+
+#ifdef _WIN32
+
+extern "C"
+int wmain(int argc, wchar_t **argv) {
+    // Set diagnostic flag to try to detect if the build system was not
+    // configured to call wmain.
+    _argv_is_utf8 = true;
+
+    // Convert args from UTF-16 to UTF-8 and pass that to main().
+    NarrowArgs narrow_args(argc, argv);
+    return main(argc, narrow_args.data());
+}
+
+#endif

@@ -43,20 +43,35 @@
     _rc; })
 #endif
 
+// Some printf-like functions are implemented in terms of
+// android::base::StringAppendV, so they should use the same attribute for
+// compile-time format string checking. On Windows, if the mingw version of
+// vsnprintf is used in StringAppendV, use `gnu_printf' which allows z in %zd
+// and PRIu64 (and related) to be recognized by the compile-time checking.
+#define ADB_FORMAT_ARCHETYPE __printf__
+#ifdef __USE_MINGW_ANSI_STDIO
+#if __USE_MINGW_ANSI_STDIO
+#undef ADB_FORMAT_ARCHETYPE
+#define ADB_FORMAT_ARCHETYPE gnu_printf
+#endif
+#endif
+
 #ifdef _WIN32
 
 #include <ctype.h>
 #include <direct.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <io.h>
 #include <process.h>
 #include <sys/stat.h>
+#include <utime.h>
 #include <winsock2.h>
 #include <windows.h>
 #include <ws2tcpip.h>
 
-#include <string>
+#include <string>   // Prototypes for narrow() and widen() use std::(w)string.
 
 #include "fdevent.h"
 
@@ -109,25 +124,11 @@ static __inline__ void  close_on_exec(int  fd)
 
 #define  S_ISLNK(m)   0   /* no symlinks on Win32 */
 
-static __inline__  int    adb_unlink(const char*  path)
-{
-    int  rc = unlink(path);
-
-    if (rc == -1 && errno == EACCES) {
-        /* unlink returns EACCES when the file is read-only, so we first */
-        /* try to make it writable, then unlink again...                  */
-        rc = chmod(path, _S_IREAD|_S_IWRITE );
-        if (rc == 0)
-            rc = unlink(path);
-    }
-    return rc;
-}
+extern int  adb_unlink(const char*  path);
 #undef  unlink
 #define unlink  ___xxx_unlink
 
-static __inline__ int adb_mkdir(const std::string& path, int mode) {
-	return _mkdir(path.c_str());
-}
+extern int adb_mkdir(const std::string& path, int mode);
 #undef   mkdir
 #define  mkdir  ___xxx_mkdir
 
@@ -169,22 +170,7 @@ static __inline__ int  adb_open_mode(const char* path, int options, int mode)
 }
 
 // See the comments for the !defined(_WIN32) version of unix_open().
-static __inline__ int  unix_open(const char*  path, int options,...)
-{
-    if ((options & O_CREAT) == 0)
-    {
-        return  open(path, options);
-    }
-    else
-    {
-        int      mode;
-        va_list  args;
-        va_start( args, options );
-        mode = va_arg( args, int );
-        va_end( args );
-        return open(path, options, mode);
-    }
-}
+extern int unix_open(const char* path, int options, ...);
 #define  open    ___xxx_unix_open
 
 
@@ -250,6 +236,107 @@ static __inline__ int adb_is_absolute_host_path(const char* path) {
 
 // Like strerror(), but for Win32 error codes.
 std::string SystemErrorCodeToString(DWORD error_code);
+
+// We later define a macro mapping 'stat' to 'adb_stat'. This causes:
+//   struct stat s;
+//   stat(filename, &s);
+// To turn into the following:
+//   struct adb_stat s;
+//   adb_stat(filename, &s);
+// To get this to work, we need to make 'struct adb_stat' the same as
+// 'struct stat'. Note that this definition of 'struct adb_stat' uses the
+// *current* macro definition of stat, so it may actually be inheriting from
+// struct _stat32i64 (or some other remapping).
+struct adb_stat : public stat {};
+
+static_assert(sizeof(struct adb_stat) == sizeof(struct stat),
+    "structures should be the same");
+
+extern int adb_stat(const char* f, struct adb_stat* s);
+
+// stat is already a macro, undefine it so we can redefine it.
+#undef stat
+#define stat adb_stat
+
+// UTF-8 versions of POSIX APIs.
+extern DIR* adb_opendir(const char* dirname);
+extern struct dirent* adb_readdir(DIR* dir);
+extern int adb_closedir(DIR* dir);
+
+extern int adb_utime(const char *, struct utimbuf *);
+extern int adb_chmod(const char *, int);
+
+extern int adb_vfprintf(FILE *stream, const char *format, va_list ap)
+    __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 0)));
+extern int adb_fprintf(FILE *stream, const char *format, ...)
+    __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3)));
+extern int adb_printf(const char *format, ...)
+    __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 1, 2)));
+
+extern int adb_fputs(const char* buf, FILE* stream);
+extern int adb_fputc(int ch, FILE* stream);
+extern size_t adb_fwrite(const void* ptr, size_t size, size_t nmemb,
+                         FILE* stream);
+
+extern FILE* adb_fopen(const char* f, const char* m);
+
+extern char* adb_getenv(const char* name);
+
+extern char* adb_getcwd(char* buf, int size);
+
+// Remap calls to POSIX APIs to our UTF-8 versions.
+#define opendir adb_opendir
+#define readdir adb_readdir
+#define closedir adb_closedir
+#define rewinddir rewinddir_utf8_not_yet_implemented
+#define telldir telldir_utf8_not_yet_implemented
+#define seekdir seekdir_utf8_not_yet_implemented
+
+#define utime adb_utime
+#define chmod adb_chmod
+
+#define vfprintf adb_vfprintf
+#define fprintf adb_fprintf
+#define printf adb_printf
+#define fputs adb_fputs
+#define fputc adb_fputc
+#define fwrite adb_fwrite
+
+#define fopen adb_fopen
+
+#define getenv adb_getenv
+#define putenv putenv_utf8_not_yet_implemented
+#define setenv setenv_utf8_not_yet_implemented
+#define unsetenv unsetenv_utf8_not_yet_implemented
+
+#define getcwd adb_getcwd
+
+// Convert from UTF-8 to UTF-16, typically used to convert char strings into
+// wchar_t strings that can be passed to wchar_t-based OS and C Runtime APIs
+// on Windows.
+extern std::wstring widen(const std::string& utf8);
+extern std::wstring widen(const char* utf8);
+
+// Convert from UTF-16 to UTF-8, typically used to convert strings from OS and
+// C Runtime APIs that return wchar_t, to a format for our char-based data
+// structures.
+extern std::string narrow(const std::wstring& utf16);
+extern std::string narrow(const wchar_t* utf16);
+
+// Helper class to convert UTF-16 argv from wmain() to UTF-8 args that can be
+// passed to main().
+class NarrowArgs {
+public:
+    NarrowArgs(int argc, wchar_t** argv);
+    ~NarrowArgs();
+
+    inline char** data() {
+        return narrow_args;
+    }
+
+private:
+    char** narrow_args;
+};
 
 #else /* !_WIN32 a.k.a. Unix */
 

@@ -179,6 +179,8 @@ ifeq ($(HOST_OS),darwin)
 endif
 
 ifeq ($(HOST_OS),windows)
+    # Use wmain instead of main
+    LOCAL_LDFLAGS += -municode
     LOCAL_LDLIBS += -lws2_32 -lgdi32
     EXTRA_STATIC_LIBS := AdbWinApi
 endif
