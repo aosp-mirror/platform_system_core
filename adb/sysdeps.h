@@ -58,6 +58,7 @@
 
 #include "fdevent.h"
 
+#define OS_PATH_SEPARATORS "\\/"
 #define OS_PATH_SEPARATOR '\\'
 #define OS_PATH_SEPARATOR_STR "\\"
 #define ENV_PATH_SEPARATOR_STR ";"
@@ -122,9 +123,8 @@ static __inline__  int    adb_unlink(const char*  path)
 #undef  unlink
 #define unlink  ___xxx_unlink
 
-static __inline__ int  adb_mkdir(const std::string&  path, int mode)
-{
-	return _mkdir(path);
+static __inline__ int adb_mkdir(const std::string& path, int mode) {
+	return _mkdir(path.c_str());
 }
 #undef   mkdir
 #define  mkdir  ___xxx_mkdir
@@ -236,32 +236,7 @@ static __inline__ void  disable_tcp_nagle( int  fd )
 
 extern int  adb_socketpair( int  sv[2] );
 
-static __inline__ size_t adb_dirstart(const std::string& path, size_t pos = 0) {
-    size_t p  = path.find('/', pos);
-    size_t p2 = path.find('\\', pos);
-
-    if ( p == std::string::npos )
-        p = p2;
-    else if ( p2 != std::string::npos && p2 > p )
-        p = p2;
-
-    return p;
-}
-
-static __inline__ size_t adb_dirstop(const std::string& path) {
-    size_t p  = path.rfind('/');
-    size_t p2 = path.rfind('\\');
-
-    if ( p == std::string::npos )
-        p = p2;
-    else if ( p2 != std::string::npos && p2 > p )
-        p = p2;
-
-    return p;
-}
-
-static __inline__  int  adb_is_absolute_host_path( const char*  path )
-{
+static __inline__ int adb_is_absolute_host_path(const char* path) {
     return isalpha(path[0]) && path[1] == ':' && path[2] == '\\';
 }
 
@@ -286,6 +261,7 @@ static __inline__  int  adb_is_absolute_host_path( const char*  path )
 
 #include <string>
 
+#define OS_PATH_SEPARATORS "/"
 #define OS_PATH_SEPARATOR '/'
 #define OS_PATH_SEPARATOR_STR "/"
 #define ENV_PATH_SEPARATOR_STR ":"
@@ -522,14 +498,6 @@ static __inline__ int  adb_mkdir(const std::string& path, int mode)
 
 static __inline__ void  adb_sysdeps_init(void)
 {
-}
-
-static __inline__ size_t adb_dirstart(const std::string& path, size_t pos = 0) {
-    return path.find('/', pos);
-}
-
-static __inline__ size_t adb_dirstop(const std::string& path) {
-    return path.rfind('/');
 }
 
 static __inline__ int adb_is_absolute_host_path(const char* path) {
