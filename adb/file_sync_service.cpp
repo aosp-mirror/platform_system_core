@@ -34,11 +34,13 @@
 #include "adb_io.h"
 #include "private/android_filesystem_config.h"
 
-static bool should_use_fs_config(const char* path) {
+#include <base/strings.h>
+
+static bool should_use_fs_config(const std::string& path) {
     // TODO: use fs_config to configure permissions on /data.
-    return strncmp("/system/", path, strlen("/system/")) == 0 ||
-           strncmp("/vendor/", path, strlen("/vendor/")) == 0 ||
-           strncmp("/oem/", path, strlen("/oem/")) == 0;
+    return android::base::StartsWith(path, "/system/") ||
+           android::base::StartsWith(path, "/vendor/") ||
+           android::base::StartsWith(path, "/oem/");
 }
 
 static bool secure_mkdirs(const std::string& path) {
@@ -49,20 +51,26 @@ static bool secure_mkdirs(const std::string& path) {
 
     if (path[0] != '/') return false;
 
-    for (size_t i = adb_dirstart(path, 1); i != std::string::npos; i = adb_dirstart(path, i + 1)) {
-        std::string name(path.substr(0, i));
-        if (should_use_fs_config(name.c_str())) {
-            fs_config(name.c_str(), 1, &uid, &gid, &mode, &cap);
+    std::vector<std::string> path_components = android::base::Split(path, "/");
+    path_components.pop_back(); // For "/system/bin/sh", only create "/system/bin".
+
+    std::string partial_path;
+    for (auto& path_component : path_components) {
+        if (partial_path.back() != OS_PATH_SEPARATOR) partial_path += OS_PATH_SEPARATOR;
+        partial_path += path_component;
+
+        if (should_use_fs_config(partial_path)) {
+            fs_config(partial_path.c_str(), 1, &uid, &gid, &mode, &cap);
         }
-        if (adb_mkdir(name.c_str(), mode) == -1) {
+        if (adb_mkdir(partial_path.c_str(), mode) == -1) {
             if (errno != EEXIST) {
                 return false;
             }
         } else {
-            if (chown(name.c_str(), uid, gid) == -1) {
+            if (chown(partial_path.c_str(), uid, gid) == -1) {
                 return false;
             }
-            selinux_android_restorecon(name.c_str(), 0);
+            selinux_android_restorecon(partial_path.c_str(), 0);
         }
     }
     return true;
@@ -90,26 +98,24 @@ static int do_stat(int s, const char *path)
 
 static int do_list(int s, const char *path)
 {
-    DIR *d;
     struct dirent *de;
     struct stat st;
-    syncmsg msg;
-    int len;
 
     char tmp[1024 + 256 + 1];
     char *fname;
 
-    len = strlen(path);
+    size_t len = strlen(path);
     memcpy(tmp, path, len);
     tmp[len] = '/';
     fname = tmp + len + 1;
 
+    syncmsg msg;
     msg.dent.id = ID_DENT;
 
-    d = opendir(path);
-    if(d == 0) goto done;
+    std::unique_ptr<DIR, int(*)(DIR*)> d(opendir(path), closedir);
+    if (!d) goto done;
 
-    while((de = readdir(d))) {
+    while ((de = readdir(d.get()))) {
         int len = strlen(de->d_name);
 
             /* not supposed to be possible, but
@@ -125,13 +131,10 @@ static int do_list(int s, const char *path)
 
             if(!WriteFdExactly(s, &msg.dent, sizeof(msg.dent)) ||
                !WriteFdExactly(s, de->d_name, len)) {
-                closedir(d);
                 return -1;
             }
         }
     }
-
-    closedir(d);
 
 done:
     msg.dent.id = ID_DONE;

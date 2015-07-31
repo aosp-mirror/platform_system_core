@@ -21,6 +21,7 @@
 
 bool getcwd(std::string* cwd);
 bool directory_exists(const std::string& path);
+std::string adb_basename(const std::string& path);
 
 bool mkdirs(const std::string& path);
 

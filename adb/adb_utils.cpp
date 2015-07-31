@@ -72,13 +72,36 @@ std::string escape_arg(const std::string& s) {
   return result;
 }
 
-bool mkdirs(const std::string& path) {
-    for (size_t i = adb_dirstart(path, 1); i != std::string::npos; i = adb_dirstart(path, i + 1)) {
-        if (adb_mkdir(path.substr(0, i), 0775) == -1 && errno != EEXIST) {
+std::string adb_basename(const std::string& path) {
+    size_t base = path.find_last_of(OS_PATH_SEPARATORS);
+    return (base != std::string::npos) ? path.substr(base + 1) : path;
+}
+
+static bool real_mkdirs(const std::string& path) {
+    std::vector<std::string> path_components = android::base::Split(path, OS_PATH_SEPARATOR_STR);
+    // TODO: all the callers do unlink && mkdirs && adb_creat ---
+    // that's probably the operation we should expose.
+    path_components.pop_back();
+    std::string partial_path;
+    for (const auto& path_component : path_components) {
+        if (partial_path.back() != OS_PATH_SEPARATOR) partial_path += OS_PATH_SEPARATOR;
+        partial_path += path_component;
+        if (adb_mkdir(partial_path.c_str(), 0775) == -1 && errno != EEXIST) {
             return false;
         }
     }
     return true;
+}
+
+bool mkdirs(const std::string& path) {
+#if defined(_WIN32)
+    // Replace '/' with '\\' so we can share the code.
+    std::string clean_path = path;
+    std::replace(clean_path.begin(), clean_path.end(), '/', '\\');
+    return real_mkdirs(clean_path);
+#else
+    return real_mkdirs(path);
+#endif
 }
 
 void dump_hex(const void* data, size_t byte_count) {
