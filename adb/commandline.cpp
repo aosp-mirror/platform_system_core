@@ -990,7 +990,7 @@ int adb_commandline(int argc, const char **argv) {
             /* this is a special flag used only when the ADB client launches the ADB Server */
             is_daemon = 1;
         } else if (!strncmp(argv[0], "-p", 2)) {
-            const char *product = NULL;
+            const char* product = nullptr;
             if (argv[0][2] == '\0') {
                 if (argc < 2) return usage();
                 product = argv[1];
@@ -999,7 +999,7 @@ int adb_commandline(int argc, const char **argv) {
             } else {
                 product = argv[0] + 2;
             }
-            if (product) gProductOutPath = find_product_out_path(product);
+            gProductOutPath = find_product_out_path(product);
             if (gProductOutPath.empty()) {
                 fprintf(stderr, "adb: could not resolve \"-p %s\"\n", product);
                 return usage();
