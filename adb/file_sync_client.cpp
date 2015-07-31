@@ -35,6 +35,8 @@
 #include "adb_utils.h"
 #include "file_sync_service.h"
 
+#include <base/stringprintf.h>
+
 static unsigned long long total_bytes;
 static long long start_time;
 
@@ -92,36 +94,30 @@ static void sync_quit(int fd) {
 typedef void (*sync_ls_cb)(unsigned mode, unsigned size, unsigned time, const char *name, void *cookie);
 
 static int sync_ls(int fd, const char* path, sync_ls_cb func, void* cookie) {
+    int len = strlen(path);
+    if (len > 1024) goto fail;
+
     syncmsg msg;
-    char buf[257];
-    int len;
-
-    len = strlen(path);
-    if(len > 1024) goto fail;
-
     msg.req.id = ID_LIST;
     msg.req.namelen = htoll(len);
 
-    if(!WriteFdExactly(fd, &msg.req, sizeof(msg.req)) ||
-       !WriteFdExactly(fd, path, len)) {
+    if (!WriteFdExactly(fd, &msg.req, sizeof(msg.req)) || !WriteFdExactly(fd, path, len)) {
         goto fail;
     }
 
-    for(;;) {
-        if(!ReadFdExactly(fd, &msg.dent, sizeof(msg.dent))) break;
-        if(msg.dent.id == ID_DONE) return 0;
-        if(msg.dent.id != ID_DENT) break;
+    for (;;) {
+        if (!ReadFdExactly(fd, &msg.dent, sizeof(msg.dent))) break;
+        if (msg.dent.id == ID_DONE) return 0;
+        if (msg.dent.id != ID_DENT) break;
 
         len = ltohl(msg.dent.namelen);
-        if(len > 256) break;
+        if (len > 256) break;
 
-        if(!ReadFdExactly(fd, buf, len)) break;
+        char buf[257];
+        if (!ReadFdExactly(fd, buf, len)) break;
         buf[len] = 0;
 
-        func(ltohl(msg.dent.mode),
-             ltohl(msg.dent.size),
-             ltohl(msg.dent.time),
-             buf, cookie);
+        func(ltohl(msg.dent.mode), ltohl(msg.dent.size), ltohl(msg.dent.time), buf, cookie);
     }
 
 fail:
@@ -220,7 +216,7 @@ static int sync_readmode(int fd, const char* path, unsigned* mode) {
     return 0;
 }
 
-static int write_data_file(int fd, const char *path, syncsendbuf *sbuf, int show_progress)
+static int write_data_file(int fd, const char *path, syncsendbuf *sbuf, bool show_progress)
 {
     int lfd, err = 0;
     unsigned long long size = 0;
@@ -274,7 +270,7 @@ static int write_data_file(int fd, const char *path, syncsendbuf *sbuf, int show
 }
 
 static int write_data_buffer(int fd, char* file_buffer, int size, syncsendbuf *sbuf,
-                             int show_progress)
+                             bool show_progress)
 {
     int err = 0;
     int total = 0;
@@ -308,10 +304,8 @@ extern int write_data_link(int fd, const char *path, syncsendbuf *sbuf) __attrib
 #else
 static int write_data_link(int fd, const char *path, syncsendbuf *sbuf)
 {
-    int len, ret;
-
-    len = readlink(path, sbuf->data, SYNC_DATA_MAX-1);
-    if(len < 0) {
+    int len = readlink(path, sbuf->data, SYNC_DATA_MAX-1);
+    if (len < 0) {
         fprintf(stderr, "error reading link '%s': %s\n", path, strerror(errno));
         return -1;
     }
@@ -320,9 +314,9 @@ static int write_data_link(int fd, const char *path, syncsendbuf *sbuf)
     sbuf->size = htoll(len + 1);
     sbuf->id = ID_DATA;
 
-    ret = !WriteFdExactly(fd, sbuf, sizeof(unsigned) * 2 + len + 1);
-    if(ret)
+    if (!WriteFdExactly(fd, sbuf, sizeof(unsigned) * 2 + len + 1)) {
         return -1;
+    }
 
     total_bytes += len + 1;
 
@@ -331,7 +325,7 @@ static int write_data_link(int fd, const char *path, syncsendbuf *sbuf)
 #endif
 
 static int sync_send(int fd, const char *lpath, const char *rpath,
-                     unsigned mtime, mode_t mode, int show_progress)
+                     unsigned mtime, mode_t mode, bool show_progress)
 {
     syncmsg msg;
     int len, r;
@@ -396,7 +390,7 @@ fail:
     return -1;
 }
 
-static int sync_recv(int fd, const char* rpath, const char* lpath, int show_progress) {
+static int sync_recv(int fd, const char* rpath, const char* lpath, bool show_progress) {
     syncmsg msg;
     int len;
     int lfd = -1;
@@ -523,12 +517,12 @@ int do_sync_ls(const char* path) {
         return 1;
     }
 
-    if(sync_ls(fd, path, do_sync_ls_cb, 0)) {
+    if (sync_ls(fd, path, do_sync_ls_cb, 0)) {
         return 1;
-    } else {
-        sync_quit(fd);
-        return 0;
     }
+
+    sync_quit(fd);
+    return 0;
 }
 
 struct copyinfo
@@ -712,11 +706,7 @@ static int copy_local_dir_remote(int fd, const char *lpath, const char *rpath, i
 }
 
 
-int do_sync_push(const char *lpath, const char *rpath, int show_progress)
-{
-    struct stat st;
-    unsigned mode;
-
+int do_sync_push(const char* lpath, const char* rpath, bool show_progress) {
     std::string error;
     int fd = adb_connect("sync:", &error);
     if (fd < 0) {
@@ -724,48 +714,38 @@ int do_sync_push(const char *lpath, const char *rpath, int show_progress)
         return 1;
     }
 
-    if(stat(lpath, &st)) {
+    struct stat st;
+    if (stat(lpath, &st)) {
         fprintf(stderr,"cannot stat '%s': %s\n", lpath, strerror(errno));
         sync_quit(fd);
         return 1;
     }
 
-    if(S_ISDIR(st.st_mode)) {
+    if (S_ISDIR(st.st_mode)) {
         BEGIN();
-        if(copy_local_dir_remote(fd, lpath, rpath, 0, 0)) {
+        if (copy_local_dir_remote(fd, lpath, rpath, 0, 0)) {
             return 1;
-        } else {
-            END();
-            sync_quit(fd);
         }
     } else {
-        if(sync_readmode(fd, rpath, &mode)) {
+        unsigned mode;
+        if (sync_readmode(fd, rpath, &mode)) {
             return 1;
         }
-        if((mode != 0) && S_ISDIR(mode)) {
-                /* if we're copying a local file to a remote directory,
-                ** we *really* want to copy to remotedir + "/" + localfilename
-                */
-            size_t slash = adb_dirstop(lpath);
-            const char *name = (slash == std::string::npos) ? lpath : lpath + slash + 1;
-
-            int  tmplen = strlen(name) + strlen(rpath) + 2;
-            char *tmp = reinterpret_cast<char*>(
-                malloc(strlen(name) + strlen(rpath) + 2));
-            if(tmp == 0) return 1;
-            snprintf(tmp, tmplen, "%s/%s", rpath, name);
-            rpath = tmp;
+        std::string path_holder;
+        if ((mode != 0) && S_ISDIR(mode)) {
+            // If we're copying a local file to a remote directory,
+            // we really want to copy to remote_dir + "/" + local_filename.
+            path_holder = android::base::StringPrintf("%s/%s", rpath, adb_basename(lpath).c_str());
+            rpath = path_holder.c_str();
         }
         BEGIN();
-        if(sync_send(fd, lpath, rpath, st.st_mtime, st.st_mode, show_progress)) {
+        if (sync_send(fd, lpath, rpath, st.st_mtime, st.st_mode, show_progress)) {
             return 1;
-        } else {
-            END();
-            sync_quit(fd);
-            return 0;
         }
     }
 
+    END();
+    sync_quit(fd);
     return 0;
 }
 
@@ -931,11 +911,7 @@ finish:
     return ret;
 }
 
-int do_sync_pull(const char *rpath, const char *lpath, int show_progress, int copy_attrs)
-{
-    unsigned mode, time;
-    struct stat st;
-
+int do_sync_pull(const char* rpath, const char* lpath, bool show_progress, int copy_attrs) {
     std::string error;
     int fd = adb_connect("sync:", &error);
     if (fd < 0) {
@@ -943,53 +919,46 @@ int do_sync_pull(const char *rpath, const char *lpath, int show_progress, int co
         return 1;
     }
 
-    if(sync_readtime(fd, rpath, &time, &mode)) {
+    unsigned mode, time;
+    if (sync_readtime(fd, rpath, &time, &mode)) {
         return 1;
     }
-    if(mode == 0) {
+    if (mode == 0) {
         fprintf(stderr,"remote object '%s' does not exist\n", rpath);
         return 1;
     }
 
-    if(S_ISREG(mode) || S_ISLNK(mode) || S_ISCHR(mode) || S_ISBLK(mode)) {
-        if(stat(lpath, &st) == 0) {
-            if(S_ISDIR(st.st_mode)) {
-                    /* if we're copying a remote file to a local directory,
-                    ** we *really* want to copy to localdir + "/" + remotefilename
-                    */
-                size_t slash = adb_dirstop(rpath);
-                const char *name = (slash == std::string::npos) ? rpath : rpath + slash + 1;
-
-                int  tmplen = strlen(name) + strlen(lpath) + 2;
-                char *tmp = reinterpret_cast<char*>(malloc(tmplen));
-                if(tmp == 0) return 1;
-                snprintf(tmp, tmplen, "%s/%s", lpath, name);
-                lpath = tmp;
+    if (S_ISREG(mode) || S_ISLNK(mode) || S_ISCHR(mode) || S_ISBLK(mode)) {
+        std::string path_holder;
+        struct stat st;
+        if (stat(lpath, &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                // If we're copying a remote file to a local directory,
+                // we really want to copy to local_dir + "/" + basename(remote).
+                path_holder = android::base::StringPrintf("%s/%s", lpath, adb_basename(rpath).c_str());
+                lpath = path_holder.c_str();
             }
         }
         BEGIN();
         if (sync_recv(fd, rpath, lpath, show_progress)) {
             return 1;
         } else {
-            if (copy_attrs && set_time_and_mode(lpath, time, mode))
+            if (copy_attrs && set_time_and_mode(lpath, time, mode)) {
                 return 1;
-            END();
-            sync_quit(fd);
-            return 0;
+            }
         }
     } else if(S_ISDIR(mode)) {
         BEGIN();
         if (copy_remote_dir_local(fd, rpath, lpath, copy_attrs)) {
             return 1;
-        } else {
-            END();
-            sync_quit(fd);
-            return 0;
         }
     } else {
         fprintf(stderr,"remote object '%s' not a file or directory\n", rpath);
         return 1;
     }
+    END();
+    sync_quit(fd);
+    return 0;
 }
 
 int do_sync_sync(const std::string& lpath, const std::string& rpath, bool list_only)
@@ -1006,9 +975,8 @@ int do_sync_sync(const std::string& lpath, const std::string& rpath, bool list_o
     BEGIN();
     if (copy_local_dir_remote(fd, lpath.c_str(), rpath.c_str(), 1, list_only)) {
         return 1;
-    } else {
-        END();
-        sync_quit(fd);
-        return 0;
     }
+    END();
+    sync_quit(fd);
+    return 0;
 }
