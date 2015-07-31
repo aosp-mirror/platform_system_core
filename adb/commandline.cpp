@@ -855,25 +855,25 @@ static int restore(int argc, const char** argv) {
  * Given <hint>, try to construct an absolute path to the
  * ANDROID_PRODUCT_OUT dir.
  */
-static std::string find_product_out_path(const char* hint) {
-    if (hint == NULL || hint[0] == '\0') {
+static std::string find_product_out_path(const std::string& hint) {
+    if (hint.empty()) {
         return "";
     }
 
     // If it's already absolute, don't bother doing any work.
-    if (adb_is_absolute_host_path(hint)) {
+    if (adb_is_absolute_host_path(hint.c_str())) {
         return hint;
     }
 
     // If there are any slashes in it, assume it's a relative path;
     // make it absolute.
-    if (adb_dirstart(hint) != std::string::npos) {
+    if (hint.find_first_of(OS_PATH_SEPARATORS) != std::string::npos) {
         std::string cwd;
         if (!getcwd(&cwd)) {
             fprintf(stderr, "adb: getcwd failed: %s\n", strerror(errno));
             return "";
         }
-        return android::base::StringPrintf("%s%s%s", cwd.c_str(), OS_PATH_SEPARATOR_STR, hint);
+        return android::base::StringPrintf("%s%c%s", cwd.c_str(), OS_PATH_SEPARATOR, hint.c_str());
     }
 
     // It's a string without any slashes.  Try to do something with it.
@@ -897,7 +897,7 @@ static std::string find_product_out_path(const char* hint) {
     path += hint;
     if (!directory_exists(path)) {
         fprintf(stderr, "adb: Couldn't find a product dir based on -p %s; "
-                        "\"%s\" doesn't exist\n", hint, path.c_str());
+                        "\"%s\" doesn't exist\n", hint.c_str(), path.c_str());
         return "";
     }
     return path;
@@ -1007,7 +1007,7 @@ int adb_commandline(int argc, const char **argv) {
             } else {
                 product = argv[0] + 2;
             }
-            gProductOutPath = find_product_out_path(product);
+            if (product) gProductOutPath = find_product_out_path(product);
             if (gProductOutPath.empty()) {
                 fprintf(stderr, "adb: could not resolve \"-p %s\"\n", product);
                 return usage();
@@ -1470,20 +1470,9 @@ static int uninstall_app(TransportType transport, const char* serial, int argc, 
     return pm_command(transport, serial, argc, argv);
 }
 
-static int delete_file(TransportType transport, const char* serial, char* filename) {
+static int delete_file(TransportType transport, const char* serial, const std::string& filename) {
     std::string cmd = "shell:rm -f " + escape_arg(filename);
     return send_shell_command(transport, serial, cmd);
-}
-
-static const char* get_basename(const std::string& filename)
-{
-    size_t base = adb_dirstop(filename);
-    if (base != std::string::npos) {
-        ++base;
-    } else {
-        base = 0;
-    }
-    return filename.c_str() + base;
 }
 
 static int install_app(TransportType transport, const char* serial, int argc, const char** argv) {
@@ -1522,13 +1511,12 @@ static int install_app(TransportType transport, const char* serial, int argc, co
     }
 
     const char* apk_file = argv[last_apk];
-    char apk_dest[PATH_MAX];
-    snprintf(apk_dest, sizeof apk_dest, where, get_basename(apk_file));
-    int err = do_sync_push(apk_file, apk_dest, 0 /* no show progress */);
+    std::string apk_dest = android::base::StringPrintf(where, adb_basename(apk_file).c_str());
+    int err = do_sync_push(apk_file, apk_dest.c_str(), 0 /* no show progress */);
     if (err) {
         goto cleanup_apk;
     } else {
-        argv[last_apk] = apk_dest; /* destination name, not source location */
+        argv[last_apk] = apk_dest.c_str(); /* destination name, not source location */
     }
 
     err = pm_command(transport, serial, argc, argv);
@@ -1612,7 +1600,7 @@ static int install_multiple_app(TransportType transport, const char* serial, int
 
         std::string cmd = android::base::StringPrintf(
                 "exec:pm install-write -S %" PRIu64 " %d %d_%s -",
-                static_cast<uint64_t>(sb.st_size), session_id, i, get_basename(file));
+                static_cast<uint64_t>(sb.st_size), session_id, i, adb_basename(file).c_str());
 
         int localFd = adb_open(file, O_RDONLY);
         if (localFd < 0) {
