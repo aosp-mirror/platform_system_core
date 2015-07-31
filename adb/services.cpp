@@ -432,7 +432,8 @@ int service_to_fd(const char *name)
         int port = atoi(name + 4);
         name = strchr(name + 4, ':');
         if(name == 0) {
-            ret = socket_loopback_client(port, SOCK_STREAM);
+            std::string error;
+            ret = network_loopback_client(port, SOCK_STREAM, &error);
             if (ret >= 0)
                 disable_tcp_nagle(ret);
         } else {

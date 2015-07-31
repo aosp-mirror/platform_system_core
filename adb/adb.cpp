@@ -801,11 +801,13 @@ int handle_forward_request(const char* service, TransportType type, const char* 
             return 1;
         }
 
+        std::string error;
         InstallStatus r;
         if (kill_forward) {
             r = remove_listener(pieces[0].c_str(), transport);
         } else {
-            r = install_listener(pieces[0], pieces[1].c_str(), transport, no_rebind);
+            r = install_listener(pieces[0], pieces[1].c_str(), transport,
+                                 no_rebind, &error);
         }
         if (r == INSTALL_STATUS_OK) {
 #if ADB_HOST
@@ -821,7 +823,8 @@ int handle_forward_request(const char* service, TransportType type, const char* 
           case INSTALL_STATUS_OK: message = "success (!)"; break;
           case INSTALL_STATUS_INTERNAL_ERROR: message = "internal error"; break;
           case INSTALL_STATUS_CANNOT_BIND:
-            message = android::base::StringPrintf("cannot bind to socket: %s", strerror(errno));
+            message = android::base::StringPrintf("cannot bind to socket: %s",
+                                                  error.c_str());
             break;
           case INSTALL_STATUS_CANNOT_REBIND:
             message = android::base::StringPrintf("cannot rebind existing socket");

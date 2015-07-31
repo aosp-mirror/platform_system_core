@@ -150,9 +150,10 @@ int adb_main(int is_daemon, int server_port) {
     local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
     adb_auth_init();
 
+    std::string error;
     std::string local_name = android::base::StringPrintf("tcp:%d", server_port);
-    if (install_listener(local_name, "*smartsocket*", nullptr, 0)) {
-        LOG(FATAL) << "Could not install *smartsocket* listener";
+    if (install_listener(local_name, "*smartsocket*", nullptr, 0, &error)) {
+        LOG(FATAL) << "Could not install *smartsocket* listener: " << error;
     }
 
     if (is_daemon) {
