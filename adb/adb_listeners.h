@@ -33,7 +33,8 @@ enum InstallStatus {
 InstallStatus install_listener(const std::string& local_name,
                                const char* connect_to,
                                atransport* transport,
-                               int no_rebind);
+                               int no_rebind,
+                               std::string* error);
 
 std::string format_listeners();
 

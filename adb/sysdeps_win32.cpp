@@ -25,7 +25,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <memory>
+#include <string>
+
 #include <cutils/sockets.h>
+
+#include <base/logging.h>
+#include <base/stringprintf.h>
+#include <base/strings.h>
 
 #include "adb.h"
 
@@ -79,6 +86,29 @@ static const FHClassRec _fh_socket_class = {
 };
 
 #define assert(cond)  do { if (!(cond)) fatal( "assertion failed '%s' on %s:%ld\n", #cond, __FILE__, __LINE__ ); } while (0)
+
+std::string SystemErrorCodeToString(const DWORD error_code) {
+  const int kErrorMessageBufferSize = 256;
+  char msgbuf[kErrorMessageBufferSize];
+  DWORD flags = FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS;
+  DWORD len = FormatMessageA(flags, nullptr, error_code, 0, msgbuf,
+                             arraysize(msgbuf), nullptr);
+  if (len == 0) {
+    return android::base::StringPrintf(
+        "Error (%lu) while retrieving error. (%lu)", GetLastError(),
+        error_code);
+  }
+
+  std::string msg(msgbuf);
+  // Messages returned by the system end with line breaks.
+  msg = android::base::Trim(msg);
+  // There are many Windows error messages compared to POSIX, so include the
+  // numeric error code for easier, quicker, accurate identification. Use
+  // decimal instead of hex because there are decimal ranges like 10000-11999
+  // for Winsock.
+  android::base::StringAppendF(&msg, " (%lu)", error_code);
+  return msg;
+}
 
 /**************************************************************************/
 /**************************************************************************/
@@ -252,6 +282,23 @@ _fh_close( FH   f )
     }
     return 0;
 }
+
+// Deleter for unique_fh.
+class fh_deleter {
+ public:
+  void operator()(struct FHRec_* fh) {
+    // We're called from a destructor and destructors should not overwrite
+    // errno because callers may do:
+    //   errno = EBLAH;
+    //   return -1; // calls destructor, which should not overwrite errno
+    const int saved_errno = errno;
+    _fh_close(fh);
+    errno = saved_errno;
+  }
+};
+
+// Like std::unique_ptr, but calls _fh_close() instead of operator delete().
+typedef std::unique_ptr<struct FHRec_, fh_deleter> unique_fh;
 
 /**************************************************************************/
 /**************************************************************************/
@@ -467,21 +514,6 @@ int  adb_lseek(int  fd, int  pos, int  where)
 }
 
 
-int  adb_shutdown(int  fd)
-{
-    FH   f = _fh_from_int(fd, __func__);
-
-    if (!f || f->clazz != &_fh_socket_class) {
-        D("adb_shutdown: invalid fd %d\n", fd);
-        return -1;
-    }
-
-    D( "adb_shutdown: %s\n", f->name);
-    shutdown( f->fh_socket, SD_BOTH );
-    return 0;
-}
-
-
 int  adb_close(int  fd)
 {
     FH   f = _fh_from_int(fd, __func__);
@@ -505,29 +537,63 @@ int  adb_close(int  fd)
 
 #undef setsockopt
 
-static void _socket_set_errno( void ) {
-    switch (WSAGetLastError()) {
+static void _socket_set_errno( const DWORD err ) {
+    // The Windows C Runtime (MSVCRT.DLL) strerror() does not support a lot of
+    // POSIX and socket error codes, so this can only meaningfully map so much.
+    switch ( err ) {
     case 0:              errno = 0; break;
     case WSAEWOULDBLOCK: errno = EAGAIN; break;
     case WSAEINTR:       errno = EINTR; break;
+    case WSAEFAULT:      errno = EFAULT; break;
+    case WSAEINVAL:      errno = EINVAL; break;
+    case WSAEMFILE:      errno = EMFILE; break;
     default:
-        D( "_socket_set_errno: unhandled value %d\n", WSAGetLastError() );
         errno = EINVAL;
+        D( "_socket_set_errno: mapping Windows error code %lu to errno %d\n",
+           err, errno );
     }
 }
 
 static void _fh_socket_init( FH  f ) {
     f->fh_socket = INVALID_SOCKET;
     f->event     = WSACreateEvent();
+    if (f->event == WSA_INVALID_EVENT) {
+        D("WSACreateEvent failed: %s\n",
+          SystemErrorCodeToString(WSAGetLastError()).c_str());
+
+        // _event_socket_start assumes that this field is INVALID_HANDLE_VALUE
+        // on failure, instead of NULL which is what Windows really returns on
+        // error. It might be better to change all the other code to look for
+        // NULL, but that is a much riskier change.
+        f->event = INVALID_HANDLE_VALUE;
+    }
     f->mask      = 0;
 }
 
 static int _fh_socket_close( FH  f ) {
-    /* gently tell any peer that we're closing the socket */
-    shutdown( f->fh_socket, SD_BOTH );
-    closesocket( f->fh_socket );
-    f->fh_socket = INVALID_SOCKET;
-    CloseHandle( f->event );
+    if (f->fh_socket != INVALID_SOCKET) {
+        /* gently tell any peer that we're closing the socket */
+        if (shutdown(f->fh_socket, SD_BOTH) == SOCKET_ERROR) {
+            // If the socket is not connected, this returns an error. We want to
+            // minimize logging spam, so don't log these errors for now.
+#if 0
+            D("socket shutdown failed: %s\n",
+              SystemErrorCodeToString(WSAGetLastError()).c_str());
+#endif
+        }
+        if (closesocket(f->fh_socket) == SOCKET_ERROR) {
+            D("closesocket failed: %s\n",
+              SystemErrorCodeToString(WSAGetLastError()).c_str());
+        }
+        f->fh_socket = INVALID_SOCKET;
+    }
+    if (f->event != NULL) {
+        if (!CloseHandle(f->event)) {
+            D("CloseHandle failed: %s\n",
+              SystemErrorCodeToString(GetLastError()).c_str());
+        }
+        f->event = NULL;
+    }
     f->mask = 0;
     return 0;
 }
@@ -540,7 +606,10 @@ static int _fh_socket_lseek( FH  f, int pos, int origin ) {
 static int _fh_socket_read(FH f, void* buf, int len) {
     int  result = recv(f->fh_socket, reinterpret_cast<char*>(buf), len, 0);
     if (result == SOCKET_ERROR) {
-        _socket_set_errno();
+        const DWORD err = WSAGetLastError();
+        D("recv fd %d failed: %s\n", _fh_to_int(f),
+          SystemErrorCodeToString(err).c_str());
+        _socket_set_errno(err);
         result = -1;
     }
     return  result;
@@ -549,7 +618,10 @@ static int _fh_socket_read(FH f, void* buf, int len) {
 static int _fh_socket_write(FH f, const void* buf, int len) {
     int  result = send(f->fh_socket, reinterpret_cast<const char*>(buf), len, 0);
     if (result == SOCKET_ERROR) {
-        _socket_set_errno();
+        const DWORD err = WSAGetLastError();
+        D("send fd %d failed: %s\n", _fh_to_int(f),
+          SystemErrorCodeToString(err).c_str());
+        _socket_set_errno(err);
         result = -1;
     }
     return result;
@@ -570,31 +642,39 @@ static int  _winsock_init;
 static void
 _cleanup_winsock( void )
 {
+    // TODO: WSAStartup() might be called multiple times and this won't properly
+    // cleanup the right number of times. Plus, WSACleanup() probably doesn't
+    // make sense since it might interrupt other threads using Winsock (since
+    // our various threads are not explicitly cleanly shutdown at process exit).
     WSACleanup();
 }
 
 static void
 _init_winsock( void )
 {
+    // TODO: Multiple threads calling this may potentially cause multiple calls
+    // to WSAStartup() and multiple atexit() calls.
     if (!_winsock_init) {
         WSADATA  wsaData;
         int      rc = WSAStartup( MAKEWORD(2,2), &wsaData);
         if (rc != 0) {
-            fatal( "adb: could not initialize Winsock\n" );
+            fatal( "adb: could not initialize Winsock: %s",
+                   SystemErrorCodeToString( rc ).c_str());
         }
         atexit( _cleanup_winsock );
         _winsock_init = 1;
     }
 }
 
-int socket_loopback_client(int port, int type)
-{
-    FH  f = _fh_alloc( &_fh_socket_class );
+int network_loopback_client(int port, int type, std::string* error) {
     struct sockaddr_in addr;
     SOCKET  s;
 
-    if (!f)
+    unique_fh  f(_fh_alloc(&_fh_socket_class));
+    if (!f) {
+        *error = strerror(errno);
         return -1;
+    }
 
     if (!_winsock_init)
         _init_winsock();
@@ -606,32 +686,40 @@ int socket_loopback_client(int port, int type)
 
     s = socket(AF_INET, type, 0);
     if(s == INVALID_SOCKET) {
-        D("socket_loopback_client: could not create socket\n" );
-        _fh_close(f);
+        *error = SystemErrorCodeToString(WSAGetLastError());
+        D("could not create socket: %s\n", error->c_str());
+        return -1;
+    }
+    f->fh_socket = s;
+
+    if(connect(s, (struct sockaddr *) &addr, sizeof(addr)) == SOCKET_ERROR) {
+        *error = SystemErrorCodeToString(WSAGetLastError());
+        D("could not connect to %s:%d: %s\n",
+          type != SOCK_STREAM ? "udp" : "tcp", port, error->c_str());
         return -1;
     }
 
-    f->fh_socket = s;
-    if(connect(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-        D("socket_loopback_client: could not connect to %s:%d\n", type != SOCK_STREAM ? "udp" : "tcp", port );
-        _fh_close(f);
-        return -1;
-    }
-    snprintf( f->name, sizeof(f->name), "%d(lo-client:%s%d)", _fh_to_int(f), type != SOCK_STREAM ? "udp:" : "", port );
-    D( "socket_loopback_client: port %d type %s => fd %d\n", port, type != SOCK_STREAM ? "udp" : "tcp", _fh_to_int(f) );
-    return _fh_to_int(f);
+    const int fd = _fh_to_int(f.get());
+    snprintf( f->name, sizeof(f->name), "%d(lo-client:%s%d)", fd,
+              type != SOCK_STREAM ? "udp:" : "", port );
+    D( "port %d type %s => fd %d\n", port, type != SOCK_STREAM ? "udp" : "tcp",
+       fd );
+    f.release();
+    return fd;
 }
 
 #define LISTEN_BACKLOG 4
 
-int socket_loopback_server(int port, int type)
-{
-    FH   f = _fh_alloc( &_fh_socket_class );
+// interface_address is INADDR_LOOPBACK or INADDR_ANY.
+static int _network_server(int port, int type, u_long interface_address,
+                           std::string* error) {
     struct sockaddr_in addr;
     SOCKET  s;
     int  n;
 
+    unique_fh   f(_fh_alloc(&_fh_socket_class));
     if (!f) {
+        *error = strerror(errno);
         return -1;
     }
 
@@ -641,149 +729,151 @@ int socket_loopback_server(int port, int type)
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_addr.s_addr = htonl(interface_address);
 
+    // TODO: Consider using dual-stack socket that can simultaneously listen on
+    // IPv4 and IPv6.
     s = socket(AF_INET, type, 0);
-    if(s == INVALID_SOCKET) return -1;
+    if (s == INVALID_SOCKET) {
+        *error = SystemErrorCodeToString(WSAGetLastError());
+        D("could not create socket: %s\n", error->c_str());
+        return -1;
+    }
 
     f->fh_socket = s;
 
     n = 1;
-    setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (const char*)&n, sizeof(n));
+    if (setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (const char*)&n,
+                   sizeof(n)) == SOCKET_ERROR) {
+        *error = SystemErrorCodeToString(WSAGetLastError());
+        D("setsockopt level %d optname %d failed: %s\n",
+          SOL_SOCKET, SO_EXCLUSIVEADDRUSE, error->c_str());
+        return -1;
+    }
 
-    if(bind(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-        _fh_close(f);
+    if(bind(s, (struct sockaddr *) &addr, sizeof(addr)) == SOCKET_ERROR) {
+        *error = SystemErrorCodeToString(WSAGetLastError());
+        D("could not bind to %s:%d: %s\n",
+          type != SOCK_STREAM ? "udp" : "tcp", port, error->c_str());
         return -1;
     }
     if (type == SOCK_STREAM) {
-        int ret;
-
-        ret = listen(s, LISTEN_BACKLOG);
-        if (ret < 0) {
-            _fh_close(f);
+        if (listen(s, LISTEN_BACKLOG) == SOCKET_ERROR) {
+            *error = SystemErrorCodeToString(WSAGetLastError());
+            D("could not listen on %s:%d: %s\n",
+              type != SOCK_STREAM ? "udp" : "tcp", port, error->c_str());
             return -1;
         }
     }
-    snprintf( f->name, sizeof(f->name), "%d(lo-server:%s%d)", _fh_to_int(f), type != SOCK_STREAM ? "udp:" : "", port );
-    D( "socket_loopback_server: port %d type %s => fd %d\n", port, type != SOCK_STREAM ? "udp" : "tcp", _fh_to_int(f) );
-    return _fh_to_int(f);
+    const int fd = _fh_to_int(f.get());
+    snprintf( f->name, sizeof(f->name), "%d(%s-server:%s%d)", fd,
+              interface_address == INADDR_LOOPBACK ? "lo" : "any",
+              type != SOCK_STREAM ? "udp:" : "", port );
+    D( "port %d type %s => fd %d\n", port, type != SOCK_STREAM ? "udp" : "tcp",
+       fd );
+    f.release();
+    return fd;
 }
 
+int network_loopback_server(int port, int type, std::string* error) {
+    return _network_server(port, type, INADDR_LOOPBACK, error);
+}
 
-int socket_network_client_timeout(const char *host, int port, int type, int timeout,
-                                  int* getaddrinfo_error) {
-    FH  f = _fh_alloc( &_fh_socket_class );
-    if (!f) return -1;
+int network_inaddr_any_server(int port, int type, std::string* error) {
+    return _network_server(port, type, INADDR_ANY, error);
+}
+
+int network_connect(const std::string& host, int port, int type, int timeout, std::string* error) {
+    unique_fh f(_fh_alloc(&_fh_socket_class));
+    if (!f) {
+        *error = strerror(errno);
+        return -1;
+    }
 
     if (!_winsock_init) _init_winsock();
 
-    hostent* hp = gethostbyname(host);
-    if(hp == 0) {
-        _fh_close(f);
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = type;
+
+    char port_str[16];
+    snprintf(port_str, sizeof(port_str), "%d", port);
+
+    struct addrinfo* addrinfo_ptr = nullptr;
+    if (getaddrinfo(host.c_str(), port_str, &hints, &addrinfo_ptr) != 0) {
+        *error = SystemErrorCodeToString(WSAGetLastError());
+        D("could not resolve host '%s' and port %s: %s\n", host.c_str(),
+          port_str, error->c_str());
         return -1;
     }
+    std::unique_ptr<struct addrinfo, decltype(freeaddrinfo)*>
+        addrinfo(addrinfo_ptr, freeaddrinfo);
+    addrinfo_ptr = nullptr;
 
-    sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = hp->h_addrtype;
-    addr.sin_port = htons(port);
-    memcpy(&addr.sin_addr, hp->h_addr, hp->h_length);
-
-    SOCKET s = socket(hp->h_addrtype, type, 0);
+    // TODO: Try all the addresses if there's more than one? This just uses
+    // the first. Or, could call WSAConnectByName() (Windows Vista and newer)
+    // which tries all addresses, takes a timeout and more.
+    SOCKET s = socket(addrinfo->ai_family, addrinfo->ai_socktype,
+                      addrinfo->ai_protocol);
     if(s == INVALID_SOCKET) {
-        _fh_close(f);
+        *error = SystemErrorCodeToString(WSAGetLastError());
+        D("could not create socket: %s\n", error->c_str());
         return -1;
     }
     f->fh_socket = s;
 
-    // TODO: implement timeouts for Windows.
-
-    if(connect(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-        _fh_close(f);
+    // TODO: Implement timeouts for Windows. Seems like the default in theory
+    // (according to http://serverfault.com/a/671453) and in practice is 21 sec.
+    if(connect(s, addrinfo->ai_addr, addrinfo->ai_addrlen) == SOCKET_ERROR) {
+        *error = SystemErrorCodeToString(WSAGetLastError());
+        D("could not connect to %s:%s:%s: %s\n",
+          type != SOCK_STREAM ? "udp" : "tcp", host.c_str(), port_str,
+          error->c_str());
         return -1;
     }
 
-    snprintf( f->name, sizeof(f->name), "%d(net-client:%s%d)", _fh_to_int(f), type != SOCK_STREAM ? "udp:" : "", port );
-    D( "socket_network_client_timeout: host '%s' port %d type %s => fd %d\n", host, port, type != SOCK_STREAM ? "udp" : "tcp", _fh_to_int(f) );
-    return _fh_to_int(f);
-}
-
-
-int socket_inaddr_any_server(int port, int type)
-{
-    FH  f = _fh_alloc( &_fh_socket_class );
-    struct sockaddr_in addr;
-    SOCKET  s;
-    int n;
-
-    if (!f)
-        return -1;
-
-    if (!_winsock_init)
-        _init_winsock();
-
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-
-    s = socket(AF_INET, type, 0);
-    if(s == INVALID_SOCKET) {
-        _fh_close(f);
-        return -1;
-    }
-
-    f->fh_socket = s;
-    n = 1;
-    setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (const char*)&n, sizeof(n));
-
-    if(bind(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-        _fh_close(f);
-        return -1;
-    }
-
-    if (type == SOCK_STREAM) {
-        int ret;
-
-        ret = listen(s, LISTEN_BACKLOG);
-        if (ret < 0) {
-            _fh_close(f);
-            return -1;
-        }
-    }
-    snprintf( f->name, sizeof(f->name), "%d(any-server:%s%d)", _fh_to_int(f), type != SOCK_STREAM ? "udp:" : "", port );
-    D( "socket_inaddr_server: port %d type %s => fd %d\n", port, type != SOCK_STREAM ? "udp" : "tcp", _fh_to_int(f) );
-    return _fh_to_int(f);
+    const int fd = _fh_to_int(f.get());
+    snprintf( f->name, sizeof(f->name), "%d(net-client:%s%d)", fd,
+              type != SOCK_STREAM ? "udp:" : "", port );
+    D( "host '%s' port %d type %s => fd %d\n", host.c_str(), port,
+       type != SOCK_STREAM ? "udp" : "tcp", fd );
+    f.release();
+    return fd;
 }
 
 #undef accept
 int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrlen)
 {
     FH   serverfh = _fh_from_int(serverfd, __func__);
-    FH   fh;
 
     if ( !serverfh || serverfh->clazz != &_fh_socket_class ) {
-        D( "adb_socket_accept: invalid fd %d\n", serverfd );
+        D("adb_socket_accept: invalid fd %d\n", serverfd);
+        errno = EBADF;
         return -1;
     }
 
-    fh = _fh_alloc( &_fh_socket_class );
+    unique_fh fh(_fh_alloc( &_fh_socket_class ));
     if (!fh) {
-        D( "adb_socket_accept: not enough memory to allocate accepted socket descriptor\n" );
+        PLOG(ERROR) << "adb_socket_accept: failed to allocate accepted socket "
+                       "descriptor";
         return -1;
     }
 
     fh->fh_socket = accept( serverfh->fh_socket, addr, addrlen );
     if (fh->fh_socket == INVALID_SOCKET) {
         const DWORD err = WSAGetLastError();
-        _fh_close( fh );
-        D( "adb_socket_accept: accept on fd %d return error %ld\n", serverfd, err );
+        LOG(ERROR) << "adb_socket_accept: accept on fd " << serverfd <<
+                      " failed: " + SystemErrorCodeToString(err);
+        _socket_set_errno( err );
         return -1;
     }
 
-    snprintf( fh->name, sizeof(fh->name), "%d(accept:%s)", _fh_to_int(fh), serverfh->name );
-    D( "adb_socket_accept on fd %d returns fd %d\n", serverfd, _fh_to_int(fh) );
-    return  _fh_to_int(fh);
+    const int fd = _fh_to_int(fh.get());
+    snprintf( fh->name, sizeof(fh->name), "%d(accept:%s)", fd, serverfh->name );
+    D( "adb_socket_accept on fd %d returns fd %d\n", serverfd, fd );
+    fh.release();
+    return  fd;
 }
 
 
@@ -793,10 +883,42 @@ int  adb_setsockopt( int  fd, int  level, int  optname, const void*  optval, soc
 
     if ( !fh || fh->clazz != &_fh_socket_class ) {
         D("adb_setsockopt: invalid fd %d\n", fd);
+        errno = EBADF;
+        return -1;
+    }
+    int result = setsockopt( fh->fh_socket, level, optname,
+                             reinterpret_cast<const char*>(optval), optlen );
+    if ( result == SOCKET_ERROR ) {
+        const DWORD err = WSAGetLastError();
+        D( "adb_setsockopt: setsockopt on fd %d level %d optname %d "
+           "failed: %s\n", fd, level, optname,
+           SystemErrorCodeToString(err).c_str() );
+        _socket_set_errno( err );
+        result = -1;
+    }
+    return result;
+}
+
+
+int  adb_shutdown(int  fd)
+{
+    FH   f = _fh_from_int(fd, __func__);
+
+    if (!f || f->clazz != &_fh_socket_class) {
+        D("adb_shutdown: invalid fd %d\n", fd);
+        errno = EBADF;
         return -1;
     }
 
-    return setsockopt( fh->fh_socket, level, optname, reinterpret_cast<const char*>(optval), optlen );
+    D( "adb_shutdown: %s\n", f->name);
+    if (shutdown(f->fh_socket, SD_BOTH) == SOCKET_ERROR) {
+        const DWORD err = WSAGetLastError();
+        D("socket shutdown fd %d failed: %s\n", fd,
+          SystemErrorCodeToString(err).c_str());
+        _socket_set_errno(err);
+        return -1;
+    }
+    return 0;
 }
 
 /**************************************************************************/
@@ -1199,16 +1321,19 @@ static const FHClassRec  _fh_socketpair_class =
 int  adb_socketpair(int sv[2]) {
     SocketPair pair;
 
-    FH fa = _fh_alloc(&_fh_socketpair_class);
-    FH fb = _fh_alloc(&_fh_socketpair_class);
-
-    if (!fa || !fb)
-        goto Fail;
+    unique_fh fa(_fh_alloc(&_fh_socketpair_class));
+    if (!fa) {
+        return -1;
+    }
+    unique_fh fb(_fh_alloc(&_fh_socketpair_class));
+    if (!fb) {
+        return -1;
+    }
 
     pair = reinterpret_cast<SocketPair>(malloc(sizeof(*pair)));
     if (pair == NULL) {
         D("adb_socketpair: not enough memory to allocate pipes\n" );
-        goto Fail;
+        return -1;
     }
 
     bip_buffer_init( &pair->a2b_bip );
@@ -1217,10 +1342,10 @@ int  adb_socketpair(int sv[2]) {
     fa->fh_pair = pair;
     fb->fh_pair = pair;
     pair->used  = 2;
-    pair->a_fd  = fa;
+    pair->a_fd  = fa.get();
 
-    sv[0] = _fh_to_int(fa);
-    sv[1] = _fh_to_int(fb);
+    sv[0] = _fh_to_int(fa.get());
+    sv[1] = _fh_to_int(fb.get());
 
     pair->a2b_bip.fdin  = sv[0];
     pair->a2b_bip.fdout = sv[1];
@@ -1230,12 +1355,9 @@ int  adb_socketpair(int sv[2]) {
     snprintf( fa->name, sizeof(fa->name), "%d(pair:%d)", sv[0], sv[1] );
     snprintf( fb->name, sizeof(fb->name), "%d(pair:%d)", sv[1], sv[0] );
     D( "adb_socketpair: returns (%d, %d)\n", sv[0], sv[1] );
+    fa.release();
+    fb.release();
     return 0;
-
-Fail:
-    _fh_close(fb);
-    _fh_close(fa);
-    return -1;
 }
 
 /**************************************************************************/
@@ -2083,6 +2205,7 @@ static void  _fh_socket_hook( FH  f, int  events, EventHook  hook )
     hook->check   = _event_socket_check;
     hook->peek    = _event_socket_peek;
 
+    // TODO: check return value?
     _event_socket_start( hook );
 }
 

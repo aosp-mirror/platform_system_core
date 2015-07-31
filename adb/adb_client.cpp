@@ -153,8 +153,8 @@ int _adb_connect(const std::string& service, std::string* error) {
     }
 
     int fd;
+    std::string reason;
     if (__adb_server_name) {
-        std::string reason;
         fd = network_connect(__adb_server_name, __adb_server_port, SOCK_STREAM, 0, &reason);
         if (fd == -1) {
             *error = android::base::StringPrintf("can't connect to %s:%d: %s",
@@ -163,9 +163,10 @@ int _adb_connect(const std::string& service, std::string* error) {
             return -2;
         }
     } else {
-        fd = socket_loopback_client(__adb_server_port, SOCK_STREAM);
+        fd = network_loopback_client(__adb_server_port, SOCK_STREAM, &reason);
         if (fd == -1) {
-            *error = perror_str("cannot connect to daemon");
+            *error = android::base::StringPrintf("cannot connect to daemon: %s",
+                                                 reason.c_str());
             return -2;
         }
     }
