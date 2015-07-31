@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef _INIT_PARSER_TOKENIZER_H
+#define _INIT_PARSER_TOKENIZER_H
+
 #include <string>
 
 namespace init {
@@ -67,3 +70,5 @@ class Tokenizer {
 };
 
 }  // namespace init
+
+#endif
