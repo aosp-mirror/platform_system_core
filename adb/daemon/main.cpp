@@ -177,10 +177,13 @@ int adbd_main(int server_port) {
                 LOG(FATAL) << "Could not set selinux context";
             }
         }
+        std::string error;
         std::string local_name =
             android::base::StringPrintf("tcp:%d", server_port);
-        if (install_listener(local_name, "*smartsocket*", nullptr, 0)) {
-            LOG(FATAL) << "Could not install *smartsocket* listener";
+        if (install_listener(local_name, "*smartsocket*", nullptr, 0,
+                             &error)) {
+            LOG(FATAL) << "Could not install *smartsocket* listener: "
+                << error;
         }
     }
 

@@ -26,6 +26,8 @@
 
 #include <errno.h>
 
+#include <string>
+
 /*
  * TEMP_FAILURE_RETRY is defined by some, but not all, versions of
  * <unistd.h>. (Alas, it is not as standard as we'd hoped!) So, if it's
@@ -212,6 +214,12 @@ static __inline__ void  adb_sleep_ms( int  mseconds )
     Sleep( mseconds );
 }
 
+int network_loopback_client(int port, int type, std::string* error);
+int network_loopback_server(int port, int type, std::string* error);
+int network_inaddr_any_server(int port, int type, std::string* error);
+int network_connect(const std::string& host, int port, int type, int timeout,
+                    std::string* error);
+
 extern int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrlen);
 
 #undef   accept
@@ -240,10 +248,14 @@ static __inline__ int adb_is_absolute_host_path(const char* path) {
     return isalpha(path[0]) && path[1] == ':' && path[2] == '\\';
 }
 
+// Like strerror(), but for Win32 error codes.
+std::string SystemErrorCodeToString(DWORD error_code);
+
 #else /* !_WIN32 a.k.a. Unix */
 
 #include "fdevent.h"
 #include <cutils/misc.h>
+#include <cutils/sockets.h>
 #include <cutils/threads.h>
 #include <signal.h>
 #include <sys/wait.h>
@@ -254,6 +266,7 @@ static __inline__ int adb_is_absolute_host_path(const char* path) {
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdarg.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <string.h>
@@ -403,6 +416,48 @@ static __inline__  int  adb_creat(const char*  path, int  mode)
 }
 #undef   creat
 #define  creat  ___xxx_creat
+
+// Helper for network_* functions.
+inline int _fd_set_error_str(int fd, std::string* error) {
+  if (fd == -1) {
+    *error = strerror(errno);
+  }
+  return fd;
+}
+
+inline int network_loopback_client(int port, int type, std::string* error) {
+  return _fd_set_error_str(socket_loopback_client(port, type), error);
+}
+
+inline int network_loopback_server(int port, int type, std::string* error) {
+  return _fd_set_error_str(socket_loopback_server(port, type), error);
+}
+
+inline int network_inaddr_any_server(int port, int type, std::string* error) {
+  return _fd_set_error_str(socket_inaddr_any_server(port, type), error);
+}
+
+inline int network_local_server(const char *name, int namespace_id, int type,
+                                std::string* error) {
+  return _fd_set_error_str(socket_local_server(name, namespace_id, type),
+                           error);
+}
+
+inline int network_connect(const std::string& host, int port, int type,
+                           int timeout, std::string* error) {
+  int getaddrinfo_error = 0;
+  int fd = socket_network_client_timeout(host.c_str(), port, type, timeout,
+                                         &getaddrinfo_error);
+  if (fd != -1) {
+    return fd;
+  }
+  if (getaddrinfo_error != 0) {
+    *error = gai_strerror(getaddrinfo_error);
+  } else {
+    *error = strerror(errno);
+  }
+  return -1;
+}
 
 static __inline__ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrlen)
 {

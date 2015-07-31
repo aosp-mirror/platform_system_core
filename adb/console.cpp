@@ -71,9 +71,11 @@ static int connect_to_console(const char* serial) {
         return -1;
     }
 
-    int fd = socket_loopback_client(port, SOCK_STREAM);
+    std::string error;
+    int fd = network_loopback_client(port, SOCK_STREAM, &error);
     if (fd == -1) {
-        fprintf(stderr, "error: could not connect to TCP port %d\n", port);
+        fprintf(stderr, "error: could not connect to TCP port %d: %s\n", port,
+                error.c_str());
         return -1;
     }
     return fd;
