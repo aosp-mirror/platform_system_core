@@ -27,6 +27,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include <cutils/sockets.h>
 
@@ -124,13 +125,13 @@ void *load_file(const char *fn, unsigned *_sz)
     char     *data;
     DWORD     file_size;
 
-    file = CreateFile( fn,
-                       GENERIC_READ,
-                       FILE_SHARE_READ,
-                       NULL,
-                       OPEN_EXISTING,
-                       0,
-                       NULL );
+    file = CreateFileW( widen(fn).c_str(),
+                        GENERIC_READ,
+                        FILE_SHARE_READ,
+                        NULL,
+                        OPEN_EXISTING,
+                        0,
+                        NULL );
 
     if (file == INVALID_HANDLE_VALUE)
         return NULL;
@@ -406,8 +407,8 @@ int  adb_open(const char*  path, int  options)
         return -1;
     }
 
-    f->fh_handle = CreateFile( path, desiredAccess, shareMode, NULL, OPEN_EXISTING,
-                               0, NULL );
+    f->fh_handle = CreateFileW( widen(path).c_str(), desiredAccess, shareMode,
+                                NULL, OPEN_EXISTING, 0, NULL );
 
     if ( f->fh_handle == INVALID_HANDLE_VALUE ) {
         const DWORD err = GetLastError();
@@ -447,9 +448,10 @@ int  adb_creat(const char*  path, int  mode)
         return -1;
     }
 
-    f->fh_handle = CreateFile( path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                               NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
-                               NULL );
+    f->fh_handle = CreateFileW( widen(path).c_str(), GENERIC_WRITE,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
+                                NULL );
 
     if ( f->fh_handle == INVALID_HANDLE_VALUE ) {
         const DWORD err = GetLastError();
@@ -3174,4 +3176,616 @@ int unix_read(int fd, void* buf, size_t len) {
         return read(fd, buf, len);
 #pragma pop_macro("read")
     }
+}
+
+/**************************************************************************/
+/**************************************************************************/
+/*****                                                                *****/
+/*****      Unicode support                                           *****/
+/*****                                                                *****/
+/**************************************************************************/
+/**************************************************************************/
+
+// This implements support for using files with Unicode filenames and for
+// outputting Unicode text to a Win32 console window. This is inspired from
+// http://utf8everywhere.org/.
+//
+// Background
+// ----------
+//
+// On POSIX systems, to deal with files with Unicode filenames, just pass UTF-8
+// filenames to APIs such as open(). This works because filenames are largely
+// opaque 'cookies' (perhaps excluding path separators).
+//
+// On Windows, the native file APIs such as CreateFileW() take 2-byte wchar_t
+// UTF-16 strings. There is an API, CreateFileA() that takes 1-byte char
+// strings, but the strings are in the ANSI codepage and not UTF-8. (The
+// CreateFile() API is really just a macro that adds the W/A based on whether
+// the UNICODE preprocessor symbol is defined).
+//
+// Options
+// -------
+//
+// Thus, to write a portable program, there are a few options:
+//
+// 1. Write the program with wchar_t filenames (wchar_t path[256];).
+//    For Windows, just call CreateFileW(). For POSIX, write a wrapper openW()
+//    that takes a wchar_t string, converts it to UTF-8 and then calls the real
+//    open() API.
+//
+// 2. Write the program with a TCHAR typedef that is 2 bytes on Windows and
+//    1 byte on POSIX. Make T-* wrappers for various OS APIs and call those,
+//    potentially touching a lot of code.
+//
+// 3. Write the program with a 1-byte char filenames (char path[256];) that are
+//    UTF-8. For POSIX, just call open(). For Windows, write a wrapper that
+//    takes a UTF-8 string, converts it to UTF-16 and then calls the real OS
+//    or C Runtime API.
+//
+// The Choice
+// ----------
+//
+// The code below chooses option 3, the UTF-8 everywhere strategy. It
+// introduces narrow() which converts UTF-16 to UTF-8. This is used by the
+// NarrowArgs helper class that is used to convert wmain() args into UTF-8
+// args that are passed to main() at the beginning of program startup. We also
+// introduce widen() which converts from UTF-8 to UTF-16. This is used to
+// implement wrappers below that call UTF-16 OS and C Runtime APIs.
+//
+// Unicode console output
+// ----------------------
+//
+// The way to output Unicode to a Win32 console window is to call
+// WriteConsoleW() with UTF-16 text. (The user must also choose a proper font
+// such as Lucida Console or Consolas, and in the case of Chinese, must go to
+// the Control Panel and change the "system locale" to Chinese, which allows
+// a Chinese font to be used in console windows.)
+//
+// The problem is getting the C Runtime to make fprintf and related APIs call
+// WriteConsoleW() under the covers. The C Runtime API, _setmode() sounds
+// promising, but the various modes have issues:
+//
+// 1. _setmode(_O_TEXT) (the default) does not use WriteConsoleW() so UTF-8 and
+//    UTF-16 do not display properly.
+// 2. _setmode(_O_BINARY) does not use WriteConsoleW() and the text comes out
+//    totally wrong.
+// 3. _setmode(_O_U8TEXT) seems to cause the C Runtime _invalid_parameter
+//    handler to be called (upon a later I/O call), aborting the process.
+// 4. _setmode(_O_U16TEXT) and _setmode(_O_WTEXT) cause non-wide printf/fprintf
+//    to output nothing.
+//
+// So the only solution is to write our own adb_fprintf() that converts UTF-8
+// to UTF-16 and then calls WriteConsoleW().
+
+
+// Function prototype because attributes cannot be placed on func definitions.
+static void _widen_fatal(const char *fmt, ...)
+    __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 1, 2)));
+
+// A version of fatal() that does not call adb_(v)fprintf(), so it can be
+// called from those functions.
+static void _widen_fatal(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    // If (v)fprintf are macros that point to adb_(v)fprintf, when random adb
+    // code calls (v)fprintf, it may end up calling adb_(v)fprintf, which then
+    // calls _widen_fatal(). So then how does _widen_fatal() output a error?
+    // By directly calling real C Runtime APIs that don't properly output
+    // Unicode, but will be able to get a comprehendible message out. To do
+    // this, make sure we don't call (v)fprintf macros by undefining them.
+#pragma push_macro("fprintf")
+#pragma push_macro("vfprintf")
+#undef fprintf
+#undef vfprintf
+    fprintf(stderr, "error: ");
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+#pragma pop_macro("vfprintf")
+#pragma pop_macro("fprintf")
+    va_end(ap);
+    exit(-1);
+}
+
+// TODO: Consider implementing widen() and narrow() out of std::wstring_convert
+// once libcxx is supported on Windows. Or, consider libutils/Unicode.cpp.
+
+// Convert from UTF-8 to UTF-16. A size of -1 specifies a NULL terminated
+// string. Any other size specifies the number of chars to convert, excluding
+// any NULL terminator (if you're passing an explicit size, you probably don't
+// have a NULL terminated string in the first place).
+std::wstring widen(const char* utf8, const int size) {
+    const int chars_to_convert = MultiByteToWideChar(CP_UTF8, 0, utf8, size,
+                                                     NULL, 0);
+    if (chars_to_convert <= 0) {
+        // UTF-8 to UTF-16 should be lossless, so we don't expect this to fail.
+        _widen_fatal("MultiByteToWideChar failed counting: %d, "
+                     "GetLastError: %lu", chars_to_convert, GetLastError());
+    }
+
+    std::wstring utf16;
+    size_t chars_to_allocate = chars_to_convert;
+    if (size == -1) {
+        // chars_to_convert includes a NULL terminator, so subtract space
+        // for that because resize() includes that itself.
+        --chars_to_allocate;
+    }
+    utf16.resize(chars_to_allocate);
+
+    // This uses &string[0] to get write-access to the entire string buffer
+    // which may be assuming that the chars are all contiguous, but it seems
+    // to work and saves us the hassle of using a temporary
+    // std::vector<wchar_t>.
+    const int result = MultiByteToWideChar(CP_UTF8, 0, utf8, size, &utf16[0],
+                                           chars_to_convert);
+    if (result != chars_to_convert) {
+        // UTF-8 to UTF-16 should be lossless, so we don't expect this to fail.
+        _widen_fatal("MultiByteToWideChar failed conversion: %d, "
+                     "GetLastError: %lu", result, GetLastError());
+    }
+
+    // If a size was passed in (size != -1), then the string is NULL terminated
+    // by a NULL char that was written by std::string::resize(). If size == -1,
+    // then MultiByteToWideChar() read a NULL terminator from the original
+    // string and converted it to a NULL UTF-16 char in the output.
+
+    return utf16;
+}
+
+// Convert a NULL terminated string from UTF-8 to UTF-16.
+std::wstring widen(const char* utf8) {
+    // Pass -1 to let widen() determine the string length.
+    return widen(utf8, -1);
+}
+
+// Convert from UTF-8 to UTF-16.
+std::wstring widen(const std::string& utf8) {
+    return widen(utf8.c_str(), utf8.length());
+}
+
+// Convert from UTF-16 to UTF-8.
+std::string narrow(const std::wstring& utf16) {
+    return narrow(utf16.c_str());
+}
+
+// Convert from UTF-16 to UTF-8.
+std::string narrow(const wchar_t* utf16) {
+    const int chars_required = WideCharToMultiByte(CP_UTF8, 0, utf16, -1, NULL,
+                                                   0, NULL, NULL);
+    if (chars_required <= 0) {
+        // UTF-16 to UTF-8 should be lossless, so we don't expect this to fail.
+        fatal("WideCharToMultiByte failed counting: %d, GetLastError: %d",
+              chars_required, GetLastError());
+    }
+
+    std::string utf8;
+    // Subtract space for the NULL terminator because resize() includes
+    // that itself. Note that this could potentially throw a std::bad_alloc
+    // exception.
+    utf8.resize(chars_required - 1);
+
+    // This uses &string[0] to get write-access to the entire string buffer
+    // which may be assuming that the chars are all contiguous, but it seems
+    // to work and saves us the hassle of using a temporary
+    // std::vector<char>.
+    const int result = WideCharToMultiByte(CP_UTF8, 0, utf16, -1, &utf8[0],
+                                           chars_required, NULL, NULL);
+    if (result != chars_required) {
+        // UTF-16 to UTF-8 should be lossless, so we don't expect this to fail.
+        fatal("WideCharToMultiByte failed conversion: %d, GetLastError: %d",
+              result, GetLastError());
+    }
+
+    return utf8;
+}
+
+// Constructor for helper class to convert wmain() UTF-16 args to UTF-8 to
+// be passed to main().
+NarrowArgs::NarrowArgs(const int argc, wchar_t** const argv) {
+    narrow_args = new char*[argc + 1];
+
+    for (int i = 0; i < argc; ++i) {
+        narrow_args[i] = strdup(narrow(argv[i]).c_str());
+    }
+    narrow_args[argc] = nullptr;   // terminate
+}
+
+NarrowArgs::~NarrowArgs() {
+    if (narrow_args != nullptr) {
+        for (char** argp = narrow_args; *argp != nullptr; ++argp) {
+            free(*argp);
+        }
+        delete[] narrow_args;
+        narrow_args = nullptr;
+    }
+}
+
+int unix_open(const char* path, int options, ...) {
+    if ((options & O_CREAT) == 0) {
+        return _wopen(widen(path).c_str(), options);
+    } else {
+        int      mode;
+        va_list  args;
+        va_start(args, options);
+        mode = va_arg(args, int);
+        va_end(args);
+        return _wopen(widen(path).c_str(), options, mode);
+    }
+}
+
+// Version of stat() that takes a UTF-8 path.
+int adb_stat(const char* f, struct adb_stat* s) {
+#pragma push_macro("wstat")
+// This definition of wstat seems to be missing from <sys/stat.h>.
+#if defined(_FILE_OFFSET_BITS) && (_FILE_OFFSET_BITS == 64)
+#ifdef _USE_32BIT_TIME_T
+#define wstat _wstat32i64
+#else
+#define wstat _wstat64
+#endif
+#else
+// <sys/stat.h> has a function prototype for wstat() that should be available.
+#endif
+
+    return wstat(widen(f).c_str(), s);
+
+#pragma pop_macro("wstat")
+}
+
+// Version of opendir() that takes a UTF-8 path.
+DIR* adb_opendir(const char* name) {
+    // Just cast _WDIR* to DIR*. This doesn't work if the caller reads any of
+    // the fields, but right now all the callers treat the structure as
+    // opaque.
+    return reinterpret_cast<DIR*>(_wopendir(widen(name).c_str()));
+}
+
+// Version of readdir() that returns UTF-8 paths.
+struct dirent* adb_readdir(DIR* dir) {
+    _WDIR* const wdir = reinterpret_cast<_WDIR*>(dir);
+    struct _wdirent* const went = _wreaddir(wdir);
+    if (went == nullptr) {
+        return nullptr;
+    }
+    // Convert from UTF-16 to UTF-8.
+    const std::string name_utf8(narrow(went->d_name));
+
+    // Cast the _wdirent* to dirent* and overwrite the d_name field (which has
+    // space for UTF-16 wchar_t's) with UTF-8 char's.
+    struct dirent* ent = reinterpret_cast<struct dirent*>(went);
+
+    if (name_utf8.length() + 1 > sizeof(went->d_name)) {
+        // Name too big to fit in existing buffer.
+        errno = ENOMEM;
+        return nullptr;
+    }
+
+    // Note that sizeof(_wdirent::d_name) is bigger than sizeof(dirent::d_name)
+    // because _wdirent contains wchar_t instead of char. So even if name_utf8
+    // can fit in _wdirent::d_name, the resulting dirent::d_name field may be
+    // bigger than the caller expects because they expect a dirent structure
+    // which has a smaller d_name field. Ignore this since the caller should be
+    // resilient.
+
+    // Rewrite the UTF-16 d_name field to UTF-8.
+    strcpy(ent->d_name, name_utf8.c_str());
+
+    return ent;
+}
+
+// Version of closedir() to go with our version of adb_opendir().
+int adb_closedir(DIR* dir) {
+    return _wclosedir(reinterpret_cast<_WDIR*>(dir));
+}
+
+// Version of unlink() that takes a UTF-8 path.
+int adb_unlink(const char* path) {
+    const std::wstring wpath(widen(path));
+
+    int  rc = _wunlink(wpath.c_str());
+
+    if (rc == -1 && errno == EACCES) {
+        /* unlink returns EACCES when the file is read-only, so we first */
+        /* try to make it writable, then unlink again...                 */
+        rc = _wchmod(wpath.c_str(), _S_IREAD | _S_IWRITE);
+        if (rc == 0)
+            rc = _wunlink(wpath.c_str());
+    }
+    return rc;
+}
+
+// Version of mkdir() that takes a UTF-8 path.
+int adb_mkdir(const std::string& path, int mode) {
+    return _wmkdir(widen(path.c_str()).c_str());
+}
+
+// Version of utime() that takes a UTF-8 path.
+int adb_utime(const char* path, struct utimbuf* u) {
+    static_assert(sizeof(struct utimbuf) == sizeof(struct _utimbuf),
+        "utimbuf and _utimbuf should be the same size because they both "
+        "contain the same types, namely time_t");
+    return _wutime(widen(path).c_str(), reinterpret_cast<struct _utimbuf*>(u));
+}
+
+// Version of chmod() that takes a UTF-8 path.
+int adb_chmod(const char* path, int mode) {
+    return _wchmod(widen(path).c_str(), mode);
+}
+
+// Internal function to get a Win32 console HANDLE from a C Runtime FILE*.
+static HANDLE _get_console_handle(FILE* const stream) {
+    // Get a C Runtime file descriptor number from the FILE* structure.
+    const int fd = fileno(stream);
+    if (fd < 0) {
+        return NULL;
+    }
+
+    // If it is not a "character device", it is probably a file and not a
+    // console. Do this check early because it is probably cheap. Still do more
+    // checks after this since there are devices that pass this test, but are
+    // not a console, such as NUL, the Windows /dev/null equivalent (I think).
+    if (!isatty(fd)) {
+        return NULL;
+    }
+
+    // Given a C Runtime file descriptor number, get the underlying OS
+    // file handle.
+    const intptr_t osfh = _get_osfhandle(fd);
+    if (osfh == -1) {
+        return NULL;
+    }
+
+    const HANDLE h = reinterpret_cast<const HANDLE>(osfh);
+
+    DWORD old_mode = 0;
+    if (!GetConsoleMode(h, &old_mode)) {
+        return NULL;
+    }
+
+    // If GetConsoleMode() was successful, assume this is a console.
+    return h;
+}
+
+// Internal helper function to write UTF-8 bytes to a console. Returns -1
+// on error.
+static int _console_write_utf8(const char* buf, size_t size, FILE* stream,
+                               HANDLE console) {
+    // Convert from UTF-8 to UTF-16.
+    // This could throw std::bad_alloc.
+    const std::wstring output(widen(buf, size));
+
+    // Note that this does not do \n => \r\n translation because that
+    // doesn't seem necessary for the Windows console. For the Windows
+    // console \r moves to the beginning of the line and \n moves to a new
+    // line.
+
+    // Flush any stream buffering so that our output is afterwards which
+    // makes sense because our call is afterwards.
+    (void)fflush(stream);
+
+    // Write UTF-16 to the console.
+    DWORD written = 0;
+    if (!WriteConsoleW(console, output.c_str(), output.length(), &written,
+                       NULL)) {
+        errno = EIO;
+        return -1;
+    }
+
+    // This is the number of UTF-16 chars written, which might be different
+    // than the number of UTF-8 chars passed in. It doesn't seem practical to
+    // get this count correct.
+    return written;
+}
+
+// Function prototype because attributes cannot be placed on func definitions.
+static int _console_vfprintf(const HANDLE console, FILE* stream,
+                             const char *format, va_list ap)
+    __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 3, 0)));
+
+// Internal function to format a UTF-8 string and write it to a Win32 console.
+// Returns -1 on error.
+static int _console_vfprintf(const HANDLE console, FILE* stream,
+                             const char *format, va_list ap) {
+    std::string output_utf8;
+
+    // Format the string.
+    // This could throw std::bad_alloc.
+    android::base::StringAppendV(&output_utf8, format, ap);
+
+    return _console_write_utf8(output_utf8.c_str(), output_utf8.length(),
+                               stream, console);
+}
+
+// Version of vfprintf() that takes UTF-8 and can write Unicode to a
+// Windows console.
+int adb_vfprintf(FILE *stream, const char *format, va_list ap) {
+    const HANDLE console = _get_console_handle(stream);
+
+    // If there is an associated Win32 console, write to it specially,
+    // otherwise defer to the regular C Runtime, passing it UTF-8.
+    if (console != NULL) {
+        return _console_vfprintf(console, stream, format, ap);
+    } else {
+        // If vfprintf is a macro, undefine it, so we can call the real
+        // C Runtime API.
+#pragma push_macro("vfprintf")
+#undef vfprintf
+        return vfprintf(stream, format, ap);
+#pragma pop_macro("vfprintf")
+    }
+}
+
+// Version of fprintf() that takes UTF-8 and can write Unicode to a
+// Windows console.
+int adb_fprintf(FILE *stream, const char *format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    const int result = adb_vfprintf(stream, format, ap);
+    va_end(ap);
+
+    return result;
+}
+
+// Version of printf() that takes UTF-8 and can write Unicode to a
+// Windows console.
+int adb_printf(const char *format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    const int result = adb_vfprintf(stdout, format, ap);
+    va_end(ap);
+
+    return result;
+}
+
+// Version of fputs() that takes UTF-8 and can write Unicode to a
+// Windows console.
+int adb_fputs(const char* buf, FILE* stream) {
+    // adb_fprintf returns -1 on error, which is conveniently the same as EOF
+    // which fputs (and hence adb_fputs) should return on error.
+    return adb_fprintf(stream, "%s", buf);
+}
+
+// Version of fputc() that takes UTF-8 and can write Unicode to a
+// Windows console.
+int adb_fputc(int ch, FILE* stream) {
+    const int result = adb_fprintf(stream, "%c", ch);
+    if (result <= 0) {
+        // If there was an error, or if nothing was printed (which should be an
+        // error), return an error, which fprintf signifies with EOF.
+        return EOF;
+    }
+    // For success, fputc returns the char, cast to unsigned char, then to int.
+    return static_cast<unsigned char>(ch);
+}
+
+// Internal function to write UTF-8 to a Win32 console. Returns the number of
+// items (of length size) written. On error, returns a short item count or 0.
+static size_t _console_fwrite(const void* ptr, size_t size, size_t nmemb,
+                              FILE* stream, HANDLE console) {
+    // TODO: Note that a Unicode character could be several UTF-8 bytes. But
+    // if we're passed only some of the bytes of a character (for example, from
+    // the network socket for adb shell), we won't be able to convert the char
+    // to a complete UTF-16 char (or surrogate pair), so the output won't look
+    // right.
+    //
+    // To fix this, see libutils/Unicode.cpp for hints on decoding UTF-8.
+    //
+    // For now we ignore this problem because the alternative is that we'd have
+    // to parse UTF-8 and buffer things up (doable). At least this is better
+    // than what we had before -- always incorrect multi-byte UTF-8 output.
+    int result = _console_write_utf8(reinterpret_cast<const char*>(ptr),
+                                     size * nmemb, stream, console);
+    if (result == -1) {
+        return 0;
+    }
+    return result / size;
+}
+
+// Version of fwrite() that takes UTF-8 and can write Unicode to a
+// Windows console.
+size_t adb_fwrite(const void* ptr, size_t size, size_t nmemb, FILE* stream) {
+    const HANDLE console = _get_console_handle(stream);
+
+    // If there is an associated Win32 console, write to it specially,
+    // otherwise defer to the regular C Runtime, passing it UTF-8.
+    if (console != NULL) {
+        return _console_fwrite(ptr, size, nmemb, stream, console);
+    } else {
+        // If fwrite is a macro, undefine it, so we can call the real
+        // C Runtime API.
+#pragma push_macro("fwrite")
+#undef fwrite
+        return fwrite(ptr, size, nmemb, stream);
+#pragma pop_macro("fwrite")
+    }
+}
+
+// Version of fopen() that takes a UTF-8 filename and can access a file with
+// a Unicode filename.
+FILE* adb_fopen(const char* f, const char* m) {
+    return _wfopen(widen(f).c_str(), widen(m).c_str());
+}
+
+// Shadow UTF-8 environment variable name/value pairs that are created from
+// _wenviron the first time that adb_getenv() is called. Note that this is not
+// currently updated if putenv, setenv, unsetenv are called.
+static std::unordered_map<std::string, char*> g_environ_utf8;
+
+// Make sure that shadow UTF-8 environment variables are setup.
+static void _ensure_env_setup() {
+    // If some name/value pairs exist, then we've already done the setup below.
+    if (g_environ_utf8.size() != 0) {
+        return;
+    }
+
+    // Read name/value pairs from UTF-16 _wenviron and write new name/value
+    // pairs to UTF-8 g_environ_utf8. Note that it probably does not make sense
+    // to use the D() macro here because that tracing only works if the
+    // ADB_TRACE environment variable is setup, but that env var can't be read
+    // until this code completes.
+    for (wchar_t** env = _wenviron; *env != nullptr; ++env) {
+        wchar_t* const equal = wcschr(*env, L'=');
+        if (equal == nullptr) {
+            // Malformed environment variable with no equal sign. Shouldn't
+            // really happen, but we should be resilient to this.
+            continue;
+        }
+
+        const std::string name_utf8(narrow(std::wstring(*env, equal - *env)));
+        char* const value_utf8 = strdup(narrow(equal + 1).c_str());
+
+        // Overwrite any duplicate name, but there shouldn't be a dup in the
+        // first place.
+        g_environ_utf8[name_utf8] = value_utf8;
+    }
+}
+
+// Version of getenv() that takes a UTF-8 environment variable name and
+// retrieves a UTF-8 value.
+char* adb_getenv(const char* name) {
+    _ensure_env_setup();
+
+    std::unordered_map<std::string, char*>::const_iterator it =
+        g_environ_utf8.find(std::string(name));
+    if (it == g_environ_utf8.end()) {
+        return nullptr;
+    }
+
+    return it->second;
+}
+
+// Version of getcwd() that returns the current working directory in UTF-8.
+char* adb_getcwd(char* buf, int size) {
+    wchar_t* wbuf = _wgetcwd(nullptr, 0);
+    if (wbuf == nullptr) {
+        return nullptr;
+    }
+
+    const std::string buf_utf8(narrow(wbuf));
+    free(wbuf);
+    wbuf = nullptr;
+
+    // If size was specified, make sure all the chars will fit.
+    if (size != 0) {
+        if (size < static_cast<int>(buf_utf8.length() + 1)) {
+            errno = ERANGE;
+            return nullptr;
+        }
+    }
+
+    // If buf was not specified, allocate storage.
+    if (buf == nullptr) {
+        if (size == 0) {
+            size = buf_utf8.length() + 1;
+        }
+        buf = reinterpret_cast<char*>(malloc(size));
+        if (buf == nullptr) {
+            return nullptr;
+        }
+    }
+
+    // Destination buffer was allocated with enough space, or we've already
+    // checked an existing buffer size for enough space.
+    strcpy(buf, buf_utf8.c_str());
+
+    return buf;
 }
