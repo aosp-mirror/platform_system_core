@@ -94,6 +94,10 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
     int fd = -1;
 
 #if ADB_HOST
+    if (find_emulator_transport_by_adb_port(adb_port) != nullptr) {
+        return -1;
+    }
+
     const char *host = getenv("ADBHOST");
     if (host) {
         fd = network_connect(host, adb_port, SOCK_STREAM, 0, error);
@@ -108,8 +112,10 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
         close_on_exec(fd);
         disable_tcp_nagle(fd);
         std::string serial = android::base::StringPrintf("emulator-%d", console_port);
-        register_socket_transport(fd, serial.c_str(), adb_port, 1);
-        return 0;
+        if (register_socket_transport(fd, serial.c_str(), adb_port, 1) == 0) {
+            return 0;
+        }
+        adb_close(fd);
     }
     return -1;
 }
@@ -118,16 +124,16 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
 static void *client_socket_thread(void *x)
 {
 #if ADB_HOST
-    int  port  = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
-    int  count = ADB_LOCAL_TRANSPORT_MAX;
-
     D("transport: client_socket_thread() starting\n");
+    while (true) {
+        int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
+        int count = ADB_LOCAL_TRANSPORT_MAX;
 
-    /* try to connect to any number of running emulator instances     */
-    /* this is only done when ADB starts up. later, each new emulator */
-    /* will send a message to ADB to indicate that is is starting up  */
-    for ( ; count > 0; count--, port += 2 ) {
-        local_connect(port);
+        // Try to connect to any number of running emulator instances.
+        for ( ; count > 0; count--, port += 2 ) {
+            local_connect(port);
+        }
+        sleep(1);
     }
 #endif
     return 0;
