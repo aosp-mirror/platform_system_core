@@ -35,7 +35,6 @@ class TemporaryFile {
   DISALLOW_COPY_AND_ASSIGN(TemporaryFile);
 };
 
-#if !defined(_WIN32)
 class TemporaryDir {
  public:
   TemporaryDir();
@@ -48,6 +47,5 @@ class TemporaryDir {
 
   DISALLOW_COPY_AND_ASSIGN(TemporaryDir);
 };
-#endif
 
 #endif // TEST_UTILS_H
