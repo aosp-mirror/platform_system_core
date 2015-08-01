@@ -126,19 +126,18 @@ static void dump_packet(const char* name, const char* func, apacket* p) {
 static int
 read_packet(int  fd, const char* name, apacket** ppacket)
 {
-    char *p = (char*)ppacket;  /* really read a packet address */
-    int   r;
-    int   len = sizeof(*ppacket);
-    char  buff[8];
+    char buff[8];
     if (!name) {
         snprintf(buff, sizeof buff, "fd=%d", fd);
         name = buff;
     }
+    char* p = reinterpret_cast<char*>(ppacket);  /* really read a packet address */
+    int len = sizeof(apacket*);
     while(len > 0) {
-        r = adb_read(fd, p, len);
+        int r = adb_read(fd, p, len);
         if(r > 0) {
             len -= r;
-            p   += r;
+            p += r;
         } else {
             D("%s: read_packet (fd=%d), error ret=%d errno=%d: %s\n", name, fd, r, errno, strerror(errno));
             if((r < 0) && (errno == EINTR)) continue;
@@ -155,20 +154,18 @@ read_packet(int  fd, const char* name, apacket** ppacket)
 static int
 write_packet(int  fd, const char* name, apacket** ppacket)
 {
-    char *p = (char*) ppacket;  /* we really write the packet address */
-    int r, len = sizeof(ppacket);
     char buff[8];
     if (!name) {
         snprintf(buff, sizeof buff, "fd=%d", fd);
         name = buff;
     }
-
     if (ADB_TRACING) {
         dump_packet(name, "to remote", *ppacket);
     }
-    len = sizeof(ppacket);
+    char* p = reinterpret_cast<char*>(ppacket);  /* we really write the packet address */
+    int len = sizeof(apacket*);
     while(len > 0) {
-        r = adb_write(fd, p, len);
+        int r = adb_write(fd, p, len);
         if(r > 0) {
             len -= r;
             p += r;
