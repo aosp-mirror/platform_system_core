@@ -100,7 +100,7 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
     }
 #endif
     if (fd < 0) {
-        fd = socket_loopback_client(adb_port, SOCK_STREAM);
+        fd = network_loopback_client(adb_port, SOCK_STREAM, error);
     }
 
     if (fd >= 0) {
@@ -144,9 +144,10 @@ static void *server_socket_thread(void * arg)
     serverfd = -1;
     for(;;) {
         if(serverfd == -1) {
-            serverfd = socket_inaddr_any_server(port, SOCK_STREAM);
+            std::string error;
+            serverfd = network_inaddr_any_server(port, SOCK_STREAM, &error);
             if(serverfd < 0) {
-                D("server: cannot bind socket yet: %s\n", strerror(errno));
+                D("server: cannot bind socket yet: %s\n", error.c_str());
                 adb_sleep_ms(1000);
                 continue;
             }

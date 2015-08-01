@@ -110,27 +110,30 @@ static void listener_disconnect(void* listener, atransport* t) {
     free_listener(reinterpret_cast<alistener*>(listener));
 }
 
-static int local_name_to_fd(const char* name) {
+static int local_name_to_fd(const char* name, std::string* error) {
     if (!strncmp("tcp:", name, 4)) {
         int port = atoi(name + 4);
         if (gListenAll > 0) {
-            return socket_inaddr_any_server(port, SOCK_STREAM);
+            return network_inaddr_any_server(port, SOCK_STREAM, error);
         } else {
-            return socket_loopback_server(port, SOCK_STREAM);
+            return network_loopback_server(port, SOCK_STREAM, error);
         }
     }
 #if !defined(_WIN32)  // No Unix-domain sockets on Windows.
     // It's nonsensical to support the "reserved" space on the adb host side
     if (!strncmp(name, "local:", 6)) {
-        return socket_local_server(name + 6, ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
+        return network_local_server(name + 6,
+                ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM, error);
     } else if (!strncmp(name, "localabstract:", 14)) {
-        return socket_local_server(name + 14, ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
+        return network_local_server(name + 14,
+                ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM, error);
     } else if (!strncmp(name, "localfilesystem:", 16)) {
-        return socket_local_server(name + 16, ANDROID_SOCKET_NAMESPACE_FILESYSTEM, SOCK_STREAM);
+        return network_local_server(name + 16,
+                ANDROID_SOCKET_NAMESPACE_FILESYSTEM, SOCK_STREAM, error);
     }
 
 #endif
-    printf("unknown local portname '%s'\n", name);
+    *error = android::base::StringPrintf("unknown local portname '%s'", name);
     return -1;
 }
 
@@ -178,7 +181,8 @@ void remove_all_listeners(void)
 InstallStatus install_listener(const std::string& local_name,
                                   const char *connect_to,
                                   atransport* transport,
-                                  int no_rebind)
+                                  int no_rebind,
+                                  std::string* error)
 {
     for (alistener* l = listener_list.next; l != &listener_list; l = l->next) {
         if (local_name == l->local_name) {
@@ -226,9 +230,9 @@ InstallStatus install_listener(const std::string& local_name,
         goto nomem;
     }
 
-    listener->fd = local_name_to_fd(listener->local_name);
+    listener->fd = local_name_to_fd(listener->local_name, error);
     if (listener->fd < 0) {
-        printf("cannot bind '%s': %s\n", listener->local_name, strerror(errno));
+        printf("cannot bind '%s': %s\n", listener->local_name, error->c_str());
         free(listener->local_name);
         free(listener->connect_to);
         free(listener);
