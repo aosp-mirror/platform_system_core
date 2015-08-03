@@ -186,10 +186,19 @@ TEST(adb_utils, parse_host_and_port) {
   EXPECT_FALSE(parse_host_and_port("1.2.3.4:65536", &canonical_address, &host, &port, &error));
 }
 
+void test_mkdirs(const std::string basepath) {
+  EXPECT_TRUE(mkdirs(basepath));
+  EXPECT_NE(-1, adb_creat(basepath.c_str(), 0600));
+  EXPECT_FALSE(mkdirs(basepath + "/subdir/"));
+}
+
 TEST(adb_utils, mkdirs) {
   TemporaryDir td;
-  std::string path = std::string(td.path) + "/dir/subdir/file";
-  EXPECT_TRUE(mkdirs(path));
-  EXPECT_NE(-1, adb_creat(path.c_str(), 0600));
-  EXPECT_FALSE(mkdirs(path + "/subdir/"));
+
+  // Absolute paths.
+  test_mkdirs(std::string(td.path) + "/dir/subdir/file");
+
+  // Relative paths.
+  ASSERT_EQ(0, chdir(td.path)) << strerror(errno);
+  test_mkdirs(std::string("relative/subrel/file"));
 }

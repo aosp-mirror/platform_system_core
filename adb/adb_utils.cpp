@@ -18,6 +18,7 @@
 
 #include "adb_utils.h"
 
+#include <libgen.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -31,6 +32,8 @@
 
 #include "adb_trace.h"
 #include "sysdeps.h"
+
+ADB_MUTEX_DEFINE(dirname_lock);
 
 bool getcwd(std::string* s) {
   char* cwd = getcwd(nullptr, 0);
@@ -66,35 +69,86 @@ std::string escape_arg(const std::string& s) {
 }
 
 std::string adb_basename(const std::string& path) {
-    size_t base = path.find_last_of(OS_PATH_SEPARATORS);
-    return (base != std::string::npos) ? path.substr(base + 1) : path;
+  size_t base = path.find_last_of(OS_PATH_SEPARATORS);
+  return (base != std::string::npos) ? path.substr(base + 1) : path;
 }
 
-static bool real_mkdirs(const std::string& path) {
-    std::vector<std::string> path_components = android::base::Split(path, OS_PATH_SEPARATOR_STR);
-    // TODO: all the callers do unlink && mkdirs && adb_creat ---
-    // that's probably the operation we should expose.
-    path_components.pop_back();
-    std::string partial_path;
-    for (const auto& path_component : path_components) {
-        if (partial_path.back() != OS_PATH_SEPARATOR) partial_path += OS_PATH_SEPARATOR;
-        partial_path += path_component;
-        if (adb_mkdir(partial_path.c_str(), 0775) == -1 && errno != EEXIST) {
-            return false;
-        }
-    }
-    return true;
+std::string adb_dirname(const std::string& path) {
+  // Copy path because dirname may modify the string passed in.
+  std::string parent_storage(path);
+
+  // Use lock because dirname() may write to a process global and return a
+  // pointer to that. Note that this locking strategy only works if all other
+  // callers to dirname in the process also grab this same lock.
+  adb_mutex_lock(&dirname_lock);
+
+  // Note that if std::string uses copy-on-write strings, &str[0] will cause
+  // the copy to be made, so there is no chance of us accidentally writing to
+  // the storage for 'path'.
+  char* parent = dirname(&parent_storage[0]);
+
+  // In case dirname returned a pointer to a process global, copy that string
+  // before leaving the lock.
+  const std::string result(parent);
+
+  adb_mutex_unlock(&dirname_lock);
+
+  return result;
 }
 
+// Given a relative or absolute filepath, create the parent directory hierarchy
+// as needed. Returns true if the hierarchy is/was setup.
 bool mkdirs(const std::string& path) {
-#if defined(_WIN32)
-    // Replace '/' with '\\' so we can share the code.
-    std::string clean_path = path;
-    std::replace(clean_path.begin(), clean_path.end(), '/', '\\');
-    return real_mkdirs(clean_path);
-#else
-    return real_mkdirs(path);
-#endif
+  // TODO: all the callers do unlink && mkdirs && adb_creat ---
+  // that's probably the operation we should expose.
+
+  // Implementation Notes:
+  //
+  // Pros:
+  // - Uses dirname, so does not need to deal with OS_PATH_SEPARATOR.
+  // - On Windows, uses mingw dirname which accepts '/' and '\\', drive letters
+  //   (C:\foo), UNC paths (\\server\share\dir\dir\file), and Unicode (when
+  //   combined with our adb_mkdir() which takes UTF-8).
+  // - Is optimistic wrt thinking that a deep directory hierarchy will exist.
+  //   So it does as few stat()s as possible before doing mkdir()s.
+  // Cons:
+  // - Recursive, so it uses stack space relative to number of directory
+  //   components.
+
+  const std::string parent(adb_dirname(path));
+
+  if (directory_exists(parent)) {
+    return true;
+  }
+
+  // If dirname returned the same path as what we passed in, don't go recursive.
+  // This can happen on Windows when walking up the directory hierarchy and not
+  // finding anything that already exists (unlike POSIX that will eventually
+  // find . or /).
+  if (parent == path) {
+    errno = ENOENT;
+    return false;
+  }
+
+  // Recursively make parent directories of 'parent'.
+  if (!mkdirs(parent)) {
+    return false;
+  }
+
+  // Now that the parent directory hierarchy of 'parent' has been ensured,
+  // create parent itself.
+  if (adb_mkdir(parent, 0775) == -1) {
+    // Can't just check for errno == EEXIST because it might be a file that
+    // exists.
+    const int saved_errno = errno;
+    if (directory_exists(parent)) {
+      return true;
+    }
+    errno = saved_errno;
+    return false;
+  }
+
+  return true;
 }
 
 void dump_hex(const void* data, size_t byte_count) {
