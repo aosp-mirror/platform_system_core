@@ -21,7 +21,11 @@
 
 bool getcwd(std::string* cwd);
 bool directory_exists(const std::string& path);
+
+// Like the regular basename and dirname, but thread-safe on all
+// platforms and capable of correctly handling exotic Windows paths.
 std::string adb_basename(const std::string& path);
+std::string adb_dirname(const std::string& path);
 
 bool mkdirs(const std::string& path);
 
