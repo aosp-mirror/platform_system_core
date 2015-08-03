@@ -62,7 +62,7 @@ static void parse_line_action(struct parse_state *state, int nargs, char **args)
 
 static struct {
     const char *name;
-    int (*func)(int nargs, char **args);
+    int (*func)(const std::vector<std::string>& args);
     unsigned char nargs;
     unsigned char flags;
 } keyword_info[KEYWORD_COUNT] = {
