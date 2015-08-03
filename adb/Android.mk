@@ -67,7 +67,6 @@ LIBADB_linux_SRC_FILES := \
     usb_linux.cpp \
 
 LIBADB_windows_SRC_FILES := \
-    get_my_path_windows.cpp \
     sysdeps_win32.cpp \
     usb_windows.cpp \
 
