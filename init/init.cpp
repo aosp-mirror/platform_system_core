@@ -540,7 +540,7 @@ void handle_control_message(const char *msg, const char *arg)
     }
 }
 
-static int wait_for_coldboot_done_action(int nargs, char **args) {
+static int wait_for_coldboot_done_action(const std::vector<std::string>& args) {
     Timer t;
 
     NOTICE("Waiting for %s...\n", COLDBOOT_DONE);
@@ -570,7 +570,7 @@ static int wait_for_coldboot_done_action(int nargs, char **args) {
  * time. We do not reboot or halt on failures, as this is a best-effort
  * attempt.
  */
-static int mix_hwrng_into_linux_rng_action(int nargs, char **args)
+static int mix_hwrng_into_linux_rng_action(const std::vector<std::string>& args)
 {
     int result = -1;
     int hwrandom_fd = -1;
@@ -632,13 +632,13 @@ ret:
     return result;
 }
 
-static int keychord_init_action(int nargs, char **args)
+static int keychord_init_action(const std::vector<std::string>& args)
 {
     keychord_init();
     return 0;
 }
 
-static int console_init_action(int nargs, char **args)
+static int console_init_action(const std::vector<std::string>& args)
 {
     std::string console = property_get("ro.boot.console");
     if (!console.empty()) {
@@ -753,7 +753,7 @@ static void process_kernel_cmdline() {
     if (qemu[0]) import_kernel_cmdline(true, import_kernel_nv);
 }
 
-static int queue_property_triggers_action(int nargs, char **args)
+static int queue_property_triggers_action(const std::vector<std::string>& args)
 {
     ActionManager::GetInstance().QueueAllPropertyTriggers();
     /* enable property triggers */
