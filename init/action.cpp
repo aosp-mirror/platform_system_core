@@ -30,7 +30,7 @@
 class Action::Command
 {
 public:
-    Command(int (*f)(int nargs, char** args),
+    Command(int (*f)(const std::vector<std::string>& args),
             const std::vector<std::string>& args,
             const std::string& filename,
             int line);
@@ -40,13 +40,13 @@ public:
     std::string BuildSourceString() const;
 
 private:
-    int (*func_)(int nargs, char** args);
+    int (*func_)(const std::vector<std::string>& args);
     const std::vector<std::string> args_;
     const std::string filename_;
     int line_;
 };
 
-Action::Command::Command(int (*f)(int nargs, char** args),
+Action::Command::Command(int (*f)(const std::vector<std::string>& args),
                          const std::vector<std::string>& args,
                          const std::string& filename,
                          int line) :
@@ -56,22 +56,17 @@ Action::Command::Command(int (*f)(int nargs, char** args),
 
 int Action::Command::InvokeFunc() const
 {
-    std::vector<std::string> strs;
-    strs.resize(args_.size());
-    strs[0] = args_[0];
+    std::vector<std::string> expanded_args;
+    expanded_args.resize(args_.size());
+    expanded_args[0] = args_[0];
     for (std::size_t i = 1; i < args_.size(); ++i) {
-        if (expand_props(args_[i], &strs[i]) == -1) {
+        if (expand_props(args_[i], &expanded_args[i]) == -1) {
             ERROR("%s: cannot expand '%s'\n", args_[0].c_str(), args_[i].c_str());
             return -EINVAL;
         }
     }
 
-    std::vector<char*> args;
-    for (auto& s : strs) {
-        args.push_back(&s[0]);
-    }
-
-    return func_(args.size(), &args[0]);
+    return func_(expanded_args);
 }
 
 std::string Action::Command::BuildCommandString() const
@@ -92,7 +87,7 @@ Action::Action()
 {
 }
 
-void Action::AddCommand(int (*f)(int nargs, char** args),
+void Action::AddCommand(int (*f)(const std::vector<std::string>& args),
                         const std::vector<std::string>& args,
                         const std::string& filename, int line)
 {
@@ -305,7 +300,7 @@ void ActionManager::QueueAllPropertyTriggers()
     QueuePropertyTrigger("", "");
 }
 
-void ActionManager::QueueBuiltinAction(int (*func)(int nargs, char** args),
+void ActionManager::QueueBuiltinAction(int (*func)(const std::vector<std::string>& args),
                                        const std::string& name)
 {
     Action* act = new Action();
