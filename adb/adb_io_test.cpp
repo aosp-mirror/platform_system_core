@@ -30,6 +30,12 @@
 #include "base/file.h"
 #include "base/test_utils.h"
 
+// All of these tests fail on Windows because they use the C Runtime open(),
+// but the adb_io APIs expect file descriptors from adb_open(). Also, the
+// android::base file APIs use the C Runtime which uses CR/LF translation by
+// default (changeable with _setmode()), but the adb_io APIs use adb_read()
+// and adb_write() which do no translation.
+
 TEST(io, ReadFdExactly_whole) {
   const char expected[] = "Foobar";
   TemporaryFile tf;
