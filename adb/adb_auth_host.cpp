@@ -301,11 +301,15 @@ static int get_user_keyfilepath(char *filename, size_t len)
     char android_dir[PATH_MAX];
     struct stat buf;
 #ifdef _WIN32
-    char path[PATH_MAX];
+    std::string home_str;
     home = getenv("ANDROID_SDK_HOME");
     if (!home) {
-        SHGetFolderPath(NULL, CSIDL_PROFILE, NULL, 0, path);
-        home = path;
+        WCHAR path[MAX_PATH];
+        if (FAILED(SHGetFolderPathW(NULL, CSIDL_PROFILE, NULL, 0, path))) {
+            return -1;
+        }
+        home_str = narrow(path);
+        home = home_str.c_str();
     }
     format = "%s\\%s";
 #else

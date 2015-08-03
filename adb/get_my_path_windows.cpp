@@ -14,21 +14,33 @@
  * limitations under the License.
  */
 
+#include "sysdeps.h"
+
 #include <assert.h>
 #include <limits.h>
 #include <windows.h>
 
+#include <base/macros.h>
+
 #include "adb.h"
 
-void get_my_path(char *exe, size_t maxLen)
-{
-    char  *r;
+// This is not currently called on Windows. Code that only runs on Windows
+// should probably deal with UTF-16 WCHAR/wchar_t since Windows APIs natively
+// work in that format.
+void get_my_path(char *exe, size_t maxLen) {
+    WCHAR wexe[MAX_PATH];
 
-    /* XXX: should be GetModuleFileNameA */
-    if (GetModuleFileName(NULL, exe, maxLen) > 0) {
-        r = strrchr(exe, '\\');
-        if (r != NULL)
-            *r = '\0';
+    DWORD module_result = GetModuleFileNameW(NULL, wexe, arraysize(wexe));
+    if ((module_result == arraysize(wexe)) || (module_result == 0)) {
+        // String truncation or other error.
+        wexe[0] = '\0';
+    }
+
+    // Convert from UTF-16 to UTF-8.
+    const std::string exe_str(narrow(wexe));
+
+    if (exe_str.length() + 1 <= maxLen) {
+        strcpy(exe, exe_str.c_str());
     } else {
         exe[0] = '\0';
     }
