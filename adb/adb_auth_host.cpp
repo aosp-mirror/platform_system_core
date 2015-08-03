@@ -305,7 +305,10 @@ static int get_user_keyfilepath(char *filename, size_t len)
     home = getenv("ANDROID_SDK_HOME");
     if (!home) {
         WCHAR path[MAX_PATH];
-        if (FAILED(SHGetFolderPathW(NULL, CSIDL_PROFILE, NULL, 0, path))) {
+        const HRESULT hr = SHGetFolderPathW(NULL, CSIDL_PROFILE, NULL, 0, path);
+        if (FAILED(hr)) {
+            D("SHGetFolderPathW failed: %s\n",
+              SystemErrorCodeToString(hr).c_str());
             return -1;
         }
         home_str = narrow(path);
