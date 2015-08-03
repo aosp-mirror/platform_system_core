@@ -99,6 +99,10 @@
 #define AID_NET_BW_ACCT   3007  /* change bandwidth statistics accounting */
 #define AID_NET_BT_STACK  3008  /* bluetooth: access config files */
 
+/* The range 5000-5999 is also reserved for OEM, and must never be used here. */
+#define AID_OEM_RESERVED_2_START 5000
+#define AID_OEM_RESERVED_2_END   5999
+
 #define AID_EVERYBODY     9997  /* shared between all apps in the same profile */
 #define AID_MISC          9998  /* access to misc storage */
 #define AID_NOBODY        9999
