@@ -26,7 +26,6 @@
 
 #define ID_STAT MKID('S','T','A','T')
 #define ID_LIST MKID('L','I','S','T')
-#define ID_ULNK MKID('U','L','N','K')
 #define ID_SEND MKID('S','E','N','D')
 #define ID_RECV MKID('R','E','C','V')
 #define ID_DENT MKID('D','E','N','T')
@@ -36,41 +35,41 @@
 #define ID_FAIL MKID('F','A','I','L')
 #define ID_QUIT MKID('Q','U','I','T')
 
+struct SyncRequest {
+    uint32_t id;  // ID_STAT, et cetera.
+    uint32_t path_length;  // <= 1024
+    // Followed by 'path_length' bytes of path (not NUL-terminated).
+} __attribute__((packed)) ;
+
 union syncmsg {
-    unsigned id;
-    struct {
-        unsigned id;
-        unsigned namelen;
-    } req;
-    struct {
+    struct __attribute__((packed)) {
         unsigned id;
         unsigned mode;
         unsigned size;
         unsigned time;
     } stat;
-    struct {
+    struct __attribute__((packed)) {
         unsigned id;
         unsigned mode;
         unsigned size;
         unsigned time;
         unsigned namelen;
     } dent;
-    struct {
+    struct __attribute__((packed)) {
         unsigned id;
         unsigned size;
     } data;
-    struct {
+    struct __attribute__((packed)) {
         unsigned id;
         unsigned msglen;
     } status;
-} ;
+};
 
-
-void file_sync_service(int fd, void *cookie);
-int do_sync_ls(const char *path);
-int do_sync_push(const char *lpath, const char *rpath, bool show_progress);
-int do_sync_sync(const std::string& lpath, const std::string& rpath, bool list_only);
-int do_sync_pull(const char *rpath, const char *lpath, bool show_progress, int pullTime);
+void file_sync_service(int fd, void* cookie);
+bool do_sync_ls(const char* path);
+bool do_sync_push(const char* lpath, const char* rpath, bool show_progress);
+bool do_sync_sync(const std::string& lpath, const std::string& rpath, bool list_only);
+bool do_sync_pull(const char* rpath, const char* lpath, bool show_progress, int copy_attrs);
 
 #define SYNC_DATA_MAX (64*1024)
 

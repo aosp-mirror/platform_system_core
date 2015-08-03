@@ -32,7 +32,27 @@ bool SendProtocolString(int fd, const std::string& s) {
         length = 0xffff;
     }
 
-    return WriteFdFmt(fd, "%04x", length) && WriteFdExactly(fd, s);
+    // The cost of sending two strings outweighs the cost of formatting.
+    // "adb sync" performance is affected by this.
+    return WriteFdFmt(fd, "%04x%.*s", length, length, s.c_str());
+}
+
+bool ReadProtocolString(int fd, std::string* s, std::string* error) {
+    char buf[5];
+    if (!ReadFdExactly(fd, buf, 4)) {
+        *error = perror_str("protocol fault (couldn't read status length)");
+        return false;
+    }
+    buf[4] = 0;
+
+    unsigned long len = strtoul(buf, 0, 16);
+    s->resize(len, '\0');
+    if (!ReadFdExactly(fd, &(*s)[0], len)) {
+        *error = perror_str("protocol fault (couldn't read status message)");
+        return false;
+    }
+
+    return true;
 }
 
 bool SendOkay(int fd) {

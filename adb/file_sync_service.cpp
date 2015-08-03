@@ -34,6 +34,7 @@
 #include "adb_io.h"
 #include "private/android_filesystem_config.h"
 
+#include <base/stringprintf.h>
 #include <base/strings.h>
 
 static bool should_use_fs_config(const std::string& path) {
@@ -76,38 +77,23 @@ static bool secure_mkdirs(const std::string& path) {
     return true;
 }
 
-static int do_stat(int s, const char *path)
-{
+static bool do_stat(int s, const char* path) {
     syncmsg msg;
-    struct stat st;
-
     msg.stat.id = ID_STAT;
 
-    if(lstat(path, &st)) {
-        msg.stat.mode = 0;
-        msg.stat.size = 0;
-        msg.stat.time = 0;
-    } else {
-        msg.stat.mode = htoll(st.st_mode);
-        msg.stat.size = htoll(st.st_size);
-        msg.stat.time = htoll(st.st_mtime);
-    }
+    struct stat st;
+    memset(&st, 0, sizeof(st));
+    // TODO: add a way to report that the stat failed!
+    lstat(path, &st);
+    msg.stat.mode = htoll(st.st_mode);
+    msg.stat.size = htoll(st.st_size);
+    msg.stat.time = htoll(st.st_mtime);
 
-    return WriteFdExactly(s, &msg.stat, sizeof(msg.stat)) ? 0 : -1;
+    return WriteFdExactly(s, &msg.stat, sizeof(msg.stat));
 }
 
-static int do_list(int s, const char *path)
-{
-    struct dirent *de;
-    struct stat st;
-
-    char tmp[1024 + 256 + 1];
-    char *fname;
-
-    size_t len = strlen(path);
-    memcpy(tmp, path, len);
-    tmp[len] = '/';
-    fname = tmp + len + 1;
+static bool do_list(int s, const char* path) {
+    dirent* de;
 
     syncmsg msg;
     msg.dent.id = ID_DENT;
@@ -116,22 +102,19 @@ static int do_list(int s, const char *path)
     if (!d) goto done;
 
     while ((de = readdir(d.get()))) {
-        int len = strlen(de->d_name);
+        std::string filename(android::base::StringPrintf("%s/%s", path, de->d_name));
 
-            /* not supposed to be possible, but
-               if it does happen, let's not buffer overrun */
-        if(len > 256) continue;
-
-        strcpy(fname, de->d_name);
-        if(lstat(tmp, &st) == 0) {
+        struct stat st;
+        if (lstat(filename.c_str(), &st) == 0) {
+            size_t d_name_length = strlen(de->d_name);
             msg.dent.mode = htoll(st.st_mode);
             msg.dent.size = htoll(st.st_size);
             msg.dent.time = htoll(st.st_mtime);
-            msg.dent.namelen = htoll(len);
+            msg.dent.namelen = htoll(d_name_length);
 
-            if(!WriteFdExactly(s, &msg.dent, sizeof(msg.dent)) ||
-               !WriteFdExactly(s, de->d_name, len)) {
-                return -1;
+            if (!WriteFdExactly(s, &msg.dent, sizeof(msg.dent)) ||
+                    !WriteFdExactly(s, de->d_name, d_name_length)) {
+                return false;
             }
         }
     }
@@ -142,43 +125,33 @@ done:
     msg.dent.size = 0;
     msg.dent.time = 0;
     msg.dent.namelen = 0;
-    return WriteFdExactly(s, &msg.dent, sizeof(msg.dent)) ? 0 : -1;
+    return WriteFdExactly(s, &msg.dent, sizeof(msg.dent));
 }
 
-static int fail_message(int s, const char *reason)
-{
+static bool fail_message(int s, const std::string& reason) {
+    D("sync: failure: %s\n", reason.c_str());
+
     syncmsg msg;
-    int len = strlen(reason);
-
-    D("sync: failure: %s\n", reason);
-
     msg.data.id = ID_FAIL;
-    msg.data.size = htoll(len);
-    if(!WriteFdExactly(s, &msg.data, sizeof(msg.data)) ||
-       !WriteFdExactly(s, reason, len)) {
-        return -1;
-    } else {
-        return 0;
-    }
+    msg.data.size = htoll(reason.size());
+    return WriteFdExactly(s, &msg.data, sizeof(msg.data)) && WriteFdExactly(s, reason);
 }
 
-static int fail_errno(int s)
-{
+// TODO: callers of this have already failed, and should probably ignore its
+// return value (http://b/23437039).
+static bool fail_errno(int s) {
     return fail_message(s, strerror(errno));
 }
 
-static int handle_send_file(int s, char *path, uid_t uid,
-        gid_t gid, mode_t mode, char *buffer, bool do_unlink)
-{
+static bool handle_send_file(int s, char *path, uid_t uid,
+                             gid_t gid, mode_t mode, std::vector<char>& buffer, bool do_unlink) {
     syncmsg msg;
     unsigned int timestamp = 0;
-    int fd;
 
-    fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
+    int fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
     if(fd < 0 && errno == ENOENT) {
         if (!secure_mkdirs(path)) {
-            if(fail_errno(s))
-                return -1;
+            if (fail_errno(s)) return false;
             fd = -1;
         } else {
             fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
@@ -188,8 +161,7 @@ static int handle_send_file(int s, char *path, uid_t uid,
         fd = adb_open_mode(path, O_WRONLY | O_CLOEXEC, mode);
     }
     if(fd < 0) {
-        if(fail_errno(s))
-            return -1;
+        if (fail_errno(s)) return false;
         fd = -1;
     } else {
         if(fchown(fd, uid, gid) != 0) {
@@ -205,7 +177,7 @@ static int handle_send_file(int s, char *path, uid_t uid,
         fchmod(fd, mode);
     }
 
-    for(;;) {
+    while (true) {
         unsigned int len;
 
         if(!ReadFdExactly(s, &msg.data, sizeof(msg.data)))
@@ -220,22 +192,21 @@ static int handle_send_file(int s, char *path, uid_t uid,
             goto fail;
         }
         len = ltohl(msg.data.size);
-        if(len > SYNC_DATA_MAX) {
+        if (len > buffer.size()) { // TODO: resize buffer?
             fail_message(s, "oversize data message");
             goto fail;
         }
-        if(!ReadFdExactly(s, buffer, len))
-            goto fail;
+        if (!ReadFdExactly(s, &buffer[0], len)) goto fail;
 
-        if(fd < 0)
-            continue;
-        if(!WriteFdExactly(fd, buffer, len)) {
+        if (fd < 0) continue;
+
+        if (!WriteFdExactly(fd, &buffer[0], len)) {
             int saved_errno = errno;
             adb_close(fd);
             if (do_unlink) adb_unlink(path);
             fd = -1;
             errno = saved_errno;
-            if(fail_errno(s)) return -1;
+            if (fail_errno(s)) return false;
         }
     }
 
@@ -249,75 +220,67 @@ static int handle_send_file(int s, char *path, uid_t uid,
 
         msg.status.id = ID_OKAY;
         msg.status.msglen = 0;
-        if(!WriteFdExactly(s, &msg.status, sizeof(msg.status)))
-            return -1;
+        if (!WriteFdExactly(s, &msg.status, sizeof(msg.status))) return false;
     }
-    return 0;
+    return true;
 
 fail:
-    if(fd >= 0)
-        adb_close(fd);
+    if (fd >= 0) adb_close(fd);
     if (do_unlink) adb_unlink(path);
-    return -1;
+    return false;
 }
 
 #if defined(_WIN32)
-extern int handle_send_link(int s, char *path, char *buffer) __attribute__((error("no symlinks on Windows")));
+extern bool handle_send_link(int s, char *path, std::vector<char>& buffer) __attribute__((error("no symlinks on Windows")));
 #else
-static int handle_send_link(int s, char *path, char *buffer)
-{
+static bool handle_send_link(int s, char *path, std::vector<char>& buffer) {
     syncmsg msg;
     unsigned int len;
     int ret;
 
-    if(!ReadFdExactly(s, &msg.data, sizeof(msg.data)))
-        return -1;
+    if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) return false;
 
-    if(msg.data.id != ID_DATA) {
+    if (msg.data.id != ID_DATA) {
         fail_message(s, "invalid data message: expected ID_DATA");
-        return -1;
+        return false;
     }
 
     len = ltohl(msg.data.size);
-    if(len > SYNC_DATA_MAX) {
+    if (len > buffer.size()) { // TODO: resize buffer?
         fail_message(s, "oversize data message");
-        return -1;
+        return false;
     }
-    if(!ReadFdExactly(s, buffer, len))
-        return -1;
+    if (!ReadFdExactly(s, &buffer[0], len)) return false;
 
-    ret = symlink(buffer, path);
-    if(ret && errno == ENOENT) {
+    ret = symlink(&buffer[0], path);
+    if (ret && errno == ENOENT) {
         if (!secure_mkdirs(path)) {
             fail_errno(s);
-            return -1;
+            return false;
         }
-        ret = symlink(buffer, path);
+        ret = symlink(&buffer[0], path);
     }
-    if(ret) {
+    if (ret) {
         fail_errno(s);
-        return -1;
+        return false;
     }
 
-    if(!ReadFdExactly(s, &msg.data, sizeof(msg.data)))
-        return -1;
+    if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) return false;
 
-    if(msg.data.id == ID_DONE) {
+    if (msg.data.id == ID_DONE) {
         msg.status.id = ID_OKAY;
         msg.status.msglen = 0;
-        if(!WriteFdExactly(s, &msg.status, sizeof(msg.status)))
-            return -1;
+        if (!WriteFdExactly(s, &msg.status, sizeof(msg.status))) return false;
     } else {
         fail_message(s, "invalid data message: expected ID_DONE");
-        return -1;
+        return false;
     }
 
-    return 0;
+    return true;
 }
 #endif
 
-static int do_send(int s, char *path, char *buffer)
-{
+static bool do_send(int s, char* path, std::vector<char>& buffer) {
     unsigned int mode;
     bool is_link = false;
     bool do_unlink;
@@ -365,32 +328,28 @@ static int do_send(int s, char *path, char *buffer)
     return handle_send_file(s, path, uid, gid, mode, buffer, do_unlink);
 }
 
-static int do_recv(int s, const char *path, char *buffer)
-{
-    syncmsg msg;
-    int fd, r;
-
-    fd = adb_open(path, O_RDONLY | O_CLOEXEC);
-    if(fd < 0) {
-        if(fail_errno(s)) return -1;
-        return 0;
+static bool do_recv(int s, const char* path, std::vector<char>& buffer) {
+    int fd = adb_open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        if (fail_errno(s)) return false;
+        return true;
     }
 
+    syncmsg msg;
     msg.data.id = ID_DATA;
-    for(;;) {
-        r = adb_read(fd, buffer, SYNC_DATA_MAX);
-        if(r <= 0) {
-            if(r == 0) break;
-            if(errno == EINTR) continue;
-            r = fail_errno(s);
+    while (true) {
+        int r = adb_read(fd, &buffer[0], buffer.size());
+        if (r <= 0) {
+            if (r == 0) break;
+            if (errno == EINTR) continue;
+            bool status = fail_errno(s);
             adb_close(fd);
-            return r;
+            return status;
         }
         msg.data.size = htoll(r);
-        if(!WriteFdExactly(s, &msg.data, sizeof(msg.data)) ||
-           !WriteFdExactly(s, buffer, r)) {
+        if (!WriteFdExactly(s, &msg.data, sizeof(msg.data)) || !WriteFdExactly(s, &buffer[0], r)) {
             adb_close(fd);
-            return -1;
+            return false;
         }
     }
 
@@ -398,66 +357,62 @@ static int do_recv(int s, const char *path, char *buffer)
 
     msg.data.id = ID_DONE;
     msg.data.size = 0;
-    if(!WriteFdExactly(s, &msg.data, sizeof(msg.data))) {
-        return -1;
-    }
-
-    return 0;
+    return WriteFdExactly(s, &msg.data, sizeof(msg.data));
 }
 
-void file_sync_service(int fd, void *cookie)
-{
-    syncmsg msg;
+static bool handle_sync_command(int fd, std::vector<char>& buffer) {
+    D("sync: waiting for request\n");
+
+    SyncRequest request;
+    if (!ReadFdExactly(fd, &request, sizeof(request))) {
+        fail_message(fd, "command read failure");
+        return false;
+    }
+    size_t path_length = ltohl(request.path_length);
+    if (path_length > 1024) {
+        fail_message(fd, "path too long");
+        return false;
+    }
     char name[1025];
-    unsigned namelen;
+    if (!ReadFdExactly(fd, name, path_length)) {
+        fail_message(fd, "filename read failure");
+        return false;
+    }
+    name[path_length] = 0;
 
-    char *buffer = reinterpret_cast<char*>(malloc(SYNC_DATA_MAX));
-    if(buffer == 0) goto fail;
+    const char* id = reinterpret_cast<const char*>(&request.id);
+    D("sync: '%.4s' '%s'\n", id, name);
 
-    for(;;) {
-        D("sync: waiting for command\n");
-
-        if(!ReadFdExactly(fd, &msg.req, sizeof(msg.req))) {
-            fail_message(fd, "command read failure");
-            break;
-        }
-        namelen = ltohl(msg.req.namelen);
-        if(namelen > 1024) {
-            fail_message(fd, "invalid namelen");
-            break;
-        }
-        if(!ReadFdExactly(fd, name, namelen)) {
-            fail_message(fd, "filename read failure");
-            break;
-        }
-        name[namelen] = 0;
-
-        msg.req.namelen = 0;
-        D("sync: '%s' '%s'\n", (char*) &msg.req, name);
-
-        switch(msg.req.id) {
-        case ID_STAT:
-            if(do_stat(fd, name)) goto fail;
-            break;
-        case ID_LIST:
-            if(do_list(fd, name)) goto fail;
-            break;
-        case ID_SEND:
-            if(do_send(fd, name, buffer)) goto fail;
-            break;
-        case ID_RECV:
-            if(do_recv(fd, name, buffer)) goto fail;
-            break;
-        case ID_QUIT:
-            goto fail;
-        default:
-            fail_message(fd, "unknown command");
-            goto fail;
-        }
+    switch (request.id) {
+      case ID_STAT:
+        if (!do_stat(fd, name)) return false;
+        break;
+      case ID_LIST:
+        if (!do_list(fd, name)) return false;
+        break;
+      case ID_SEND:
+        if (!do_send(fd, name, buffer)) return false;
+        break;
+      case ID_RECV:
+        if (!do_recv(fd, name, buffer)) return false;
+        break;
+      case ID_QUIT:
+        return false;
+      default:
+        fail_message(fd, android::base::StringPrintf("unknown command '%.4s' (%08x)",
+                                                     id, request.id));
+        return false;
     }
 
-fail:
-    if(buffer != 0) free(buffer);
+    return true;
+}
+
+void file_sync_service(int fd, void* cookie) {
+    std::vector<char> buffer(SYNC_DATA_MAX);
+
+    while (handle_sync_command(fd, buffer)) {
+    }
+
     D("sync: done\n");
     adb_close(fd);
 }
