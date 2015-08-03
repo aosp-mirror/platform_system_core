@@ -123,7 +123,9 @@ LOCAL_STATIC_LIBRARIES := libadbd
 LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
 include $(BUILD_NATIVE_TEST)
 
-ifneq ($(HOST_OS),windows)
+# adb_test
+# =========================================================
+
 include $(CLEAR_VARS)
 LOCAL_CLANG := $(adb_host_clang)
 LOCAL_MODULE := adb_test
@@ -144,8 +146,12 @@ ifeq ($(HOST_OS),darwin)
     LOCAL_LDLIBS += -framework CoreFoundation -framework IOKit
 endif
 
-include $(BUILD_HOST_NATIVE_TEST)
+ifeq ($(HOST_OS),windows)
+    LOCAL_LDLIBS += -lws2_32 -luserenv
+    LOCAL_STATIC_LIBRARIES += AdbWinApi
 endif
+
+include $(BUILD_HOST_NATIVE_TEST)
 
 # adb device tracker (used by ddms) test tool
 # =========================================================
