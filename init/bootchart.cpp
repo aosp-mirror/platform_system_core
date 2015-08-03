@@ -203,7 +203,7 @@ static int bootchart_init() {
     return count;
 }
 
-int do_bootchart_init(int nargs, char** args) {
+int do_bootchart_init(const std::vector<std::string>& args) {
     g_remaining_samples = bootchart_init();
     if (g_remaining_samples < 0) {
         ERROR("Bootcharting init failure: %s\n", strerror(errno));
