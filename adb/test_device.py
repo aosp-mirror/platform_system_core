@@ -333,107 +333,96 @@ class FileOperationsTest(DeviceTest):
 
     def _test_push(self, local_file, checksum):
         self.device.shell(['rm', '-rf', self.DEVICE_TEMP_FILE])
-        try:
-            self.device.push(
-                local=local_file, remote=self.DEVICE_TEMP_FILE)
-            dev_md5, _ = self.device.shell(
-                [get_md5_prog(self.device), self.DEVICE_TEMP_FILE]).split()
-            self.assertEqual(checksum, dev_md5)
-        finally:
-            self.device.shell(['rm', '-f', self.DEVICE_TEMP_FILE])
+        self.device.push(local=local_file, remote=self.DEVICE_TEMP_FILE)
+        dev_md5, _ = self.device.shell([get_md5_prog(self.device),
+                                       self.DEVICE_TEMP_FILE]).split()
+        self.assertEqual(checksum, dev_md5)
+        self.device.shell(['rm', '-f', self.DEVICE_TEMP_FILE])
 
     def test_push(self):
         """Push a randomly generated file to specified device."""
         kbytes = 512
         tmp = tempfile.NamedTemporaryFile(mode='wb', delete=False)
-        try:
-            rand_str = os.urandom(1024 * kbytes)
-            tmp.write(rand_str)
-            tmp.close()
-            self._test_push(tmp.name, compute_md5(rand_str))
-        finally:
-            os.remove(tmp.name)
+        rand_str = os.urandom(1024 * kbytes)
+        tmp.write(rand_str)
+        tmp.close()
+        self._test_push(tmp.name, compute_md5(rand_str))
+        os.remove(tmp.name)
 
     # TODO: write push directory test.
 
     def _test_pull(self, remote_file, checksum):
         tmp_write = tempfile.NamedTemporaryFile(mode='wb', delete=False)
-        try:
-            tmp_write.close()
-            self.device.pull(remote=remote_file, local=tmp_write.name)
-            with open(tmp_write.name, 'rb') as tmp_read:
-                host_contents = tmp_read.read()
-                host_md5 = compute_md5(host_contents)
-            self.assertEqual(checksum, host_md5)
-        finally:
-            os.remove(tmp_write.name)
+        tmp_write.close()
+        self.device.pull(remote=remote_file, local=tmp_write.name)
+        with open(tmp_write.name, 'rb') as tmp_read:
+            host_contents = tmp_read.read()
+            host_md5 = compute_md5(host_contents)
+        self.assertEqual(checksum, host_md5)
+        os.remove(tmp_write.name)
 
     def test_pull(self):
         """Pull a randomly generated file from specified device."""
         kbytes = 512
         self.device.shell(['rm', '-rf', self.DEVICE_TEMP_FILE])
-        try:
-            cmd = ['dd', 'if=/dev/urandom',
-                   'of={}'.format(self.DEVICE_TEMP_FILE), 'bs=1024',
-                   'count={}'.format(kbytes)]
-            self.device.shell(cmd)
-            dev_md5, _ = self.device.shell(
-                [get_md5_prog(self.device), self.DEVICE_TEMP_FILE]).split()
-            self._test_pull(self.DEVICE_TEMP_FILE, dev_md5)
-        finally:
-            self.device.shell_nocheck(['rm', self.DEVICE_TEMP_FILE])
+        cmd = ['dd', 'if=/dev/urandom',
+               'of={}'.format(self.DEVICE_TEMP_FILE), 'bs=1024',
+               'count={}'.format(kbytes)]
+        self.device.shell(cmd)
+        dev_md5, _ = self.device.shell(
+            [get_md5_prog(self.device), self.DEVICE_TEMP_FILE]).split()
+        self._test_pull(self.DEVICE_TEMP_FILE, dev_md5)
+        self.device.shell_nocheck(['rm', self.DEVICE_TEMP_FILE])
 
     def test_pull_dir(self):
         """Pull a randomly generated directory of files from the device."""
         host_dir = tempfile.mkdtemp()
-        try:
-            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
-            self.device.shell(['mkdir', '-p', self.DEVICE_TEMP_DIR])
+        self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+        self.device.shell(['mkdir', '-p', self.DEVICE_TEMP_DIR])
 
-            # Populate device directory with random files.
-            temp_files = make_random_device_files(
-                self.device, in_dir=self.DEVICE_TEMP_DIR, num_files=32)
+        # Populate device directory with random files.
+        temp_files = make_random_device_files(
+            self.device, in_dir=self.DEVICE_TEMP_DIR, num_files=32)
 
-            self.device.pull(remote=self.DEVICE_TEMP_DIR, local=host_dir)
+        self.device.pull(remote=self.DEVICE_TEMP_DIR, local=host_dir)
 
-            for temp_file in temp_files:
-                host_path = os.path.join(host_dir, temp_file.base_name)
-                with open(host_path, 'rb') as host_file:
-                    host_md5 = compute_md5(host_file.read())
-                    self.assertEqual(host_md5, temp_file.checksum)
-        finally:
-            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
-            if host_dir is not None:
-                shutil.rmtree(host_dir)
+        for temp_file in temp_files:
+            host_path = os.path.join(host_dir, temp_file.base_name)
+            with open(host_path, 'rb') as host_file:
+                host_md5 = compute_md5(host_file.read())
+                self.assertEqual(host_md5, temp_file.checksum)
+
+        self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+        if host_dir is not None:
+            shutil.rmtree(host_dir)
 
     def test_sync(self):
         """Sync a randomly generated directory of files to specified device."""
         base_dir = tempfile.mkdtemp()
-        try:
-            # Create mirror device directory hierarchy within base_dir.
-            full_dir_path = base_dir + self.DEVICE_TEMP_DIR
-            os.makedirs(full_dir_path)
 
-            # Create 32 random files within the host mirror.
-            temp_files = make_random_host_files(in_dir=full_dir_path,
-                                                num_files=32)
+        # Create mirror device directory hierarchy within base_dir.
+        full_dir_path = base_dir + self.DEVICE_TEMP_DIR
+        os.makedirs(full_dir_path)
 
-            # Clean up any trash on the device.
-            device = adb.get_device(product=base_dir)
-            device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+        # Create 32 random files within the host mirror.
+        temp_files = make_random_host_files(in_dir=full_dir_path, num_files=32)
 
-            device.sync('data')
+        # Clean up any trash on the device.
+        device = adb.get_device(product=base_dir)
+        device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
 
-            # Confirm that every file on the device mirrors that on the host.
-            for temp_file in temp_files:
-                device_full_path = posixpath.join(
-                    self.DEVICE_TEMP_DIR, temp_file.base_name)
-                dev_md5, _ = device.shell(
-                    [get_md5_prog(self.device), device_full_path]).split()
-                self.assertEqual(temp_file.checksum, dev_md5)
-        finally:
-            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
-            shutil.rmtree(base_dir + self.DEVICE_TEMP_DIR)
+        device.sync('data')
+
+        # Confirm that every file on the device mirrors that on the host.
+        for temp_file in temp_files:
+            device_full_path = posixpath.join(self.DEVICE_TEMP_DIR,
+                                              temp_file.base_name)
+            dev_md5, _ = device.shell(
+                [get_md5_prog(self.device), device_full_path]).split()
+            self.assertEqual(temp_file.checksum, dev_md5)
+
+        self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+        shutil.rmtree(base_dir + self.DEVICE_TEMP_DIR)
 
     def test_unicode_paths(self):
         """Ensure that we can support non-ASCII paths, even on Windows."""
