@@ -26,7 +26,7 @@ class Action {
 public:
     Action();
 
-    void AddCommand(int (*f)(int nargs, char** args),
+    void AddCommand(int (*f)(const std::vector<std::string>& args),
                     const std::vector<std::string>& args,
                     const std::string& filename = "", int line = 0);
     bool InitTriggers(const std::vector<std::string>& args, std::string* err);
@@ -60,7 +60,7 @@ public:
     void QueueEventTrigger(const std::string& trigger);
     void QueuePropertyTrigger(const std::string& name, const std::string& value);
     void QueueAllPropertyTriggers();
-    void QueueBuiltinAction(int (*func)(int nargs, char** args),
+    void QueueBuiltinAction(int (*func)(const std::vector<std::string>& args),
                             const std::string& name);
     void ExecuteOneCommand();
     bool HasMoreCommands() const;
