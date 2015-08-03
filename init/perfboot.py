@@ -205,6 +205,16 @@ def init_perf(device, output, record_list, tags):
     atexit.register(cleanup)
 
 
+def check_dm_verity_settings(device):
+    device.wait()
+    for partition in ['system', 'vendor']:
+        verity_mode = device.get_prop('partition.%s.verified' % partition)
+        if verity_mode is None:
+            logging.warning('dm-verity is not enabled for /%s. Did you run '
+                            'adb disable-verity? That may skew the result.',
+                            partition)
+
+
 def read_event_tags(tags_file):
     """Reads event tags from |tags_file|."""
     if not tags_file:
@@ -393,6 +403,7 @@ def main():
         args.output = 'perf-%s-%s.tsv' % (
             device.get_prop('ro.build.flavor'),
             device.get_prop('ro.build.version.incremental'))
+    check_dm_verity_settings(device)
 
     record_list = []
     event_tags = read_event_tags(args.tags)
