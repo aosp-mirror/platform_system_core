@@ -34,17 +34,7 @@ TEST(file, ReadFileToString_ENOENT) {
   EXPECT_EQ("", s);  // s was cleared.
 }
 
-TEST(file, ReadFileToString_success) {
-  std::string s("hello");
-  ASSERT_TRUE(android::base::ReadFileToString("/proc/version", &s))
-    << strerror(errno);
-  EXPECT_GT(s.length(), 6U);
-  EXPECT_EQ('\n', s[s.length() - 1]);
-  s[5] = 0;
-  EXPECT_STREQ("Linux", s.c_str());
-}
-
-TEST(file, WriteStringToFile) {
+TEST(file, ReadFileToString_WriteStringToFile) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
   ASSERT_TRUE(android::base::WriteStringToFile("abc", tf.path))
@@ -89,13 +79,23 @@ TEST(file, WriteStringToFd) {
 }
 
 TEST(file, ReadFully) {
-  int fd = open("/proc/version", O_RDONLY);
+#ifdef _WIN32
+  VersionFile ver;
+  ASSERT_NE(ver.filename, nullptr);
+  const char* filename = ver.filename;
+  // Note that ReadFully() does CR/LF translation, so we expect \n, not \r\n.
+  const char expected[] = "\nMicrosoft Windows";
+#else
+  const char* filename = "/proc/version";
+  const char expected[] = "Linux";
+#endif
+  int fd = open(filename, O_RDONLY);
   ASSERT_NE(-1, fd) << strerror(errno);
 
   char buf[1024];
   memset(buf, 0, sizeof(buf));
-  ASSERT_TRUE(android::base::ReadFully(fd, buf, 5));
-  ASSERT_STREQ("Linux", buf);
+  ASSERT_TRUE(android::base::ReadFully(fd, buf, sizeof(expected) - 1));
+  ASSERT_STREQ(expected, buf);
 
   ASSERT_EQ(0, lseek(fd, 0, SEEK_SET)) << strerror(errno);
 
