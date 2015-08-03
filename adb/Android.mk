@@ -22,6 +22,15 @@ ADB_COMMON_CFLAGS := \
     -Wno-missing-field-initializers \
     -DADB_REVISION='"$(adb_version)"' \
 
+# Define windows.h and tchar.h Unicode preprocessor symbols so that
+# CreateFile(), _tfopen(), etc. map to versions that take wchar_t*, breaking the
+# build if you accidentally pass char*. Fix by calling like:
+# CreateFileW(widen(utf8).c_str()).
+ADB_COMMON_windows_CFLAGS := \
+    -DUNICODE=1 -D_UNICODE=1 \
+
+ADB_COMMON_CFLAGS += $(ADB_COMMON_$(HOST_OS)_CFLAGS)
+
 # libadb
 # =========================================================
 

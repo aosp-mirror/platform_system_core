@@ -90,9 +90,9 @@ static const FHClassRec _fh_socket_class = {
 
 std::string SystemErrorCodeToString(const DWORD error_code) {
   const int kErrorMessageBufferSize = 256;
-  char msgbuf[kErrorMessageBufferSize];
+  WCHAR msgbuf[kErrorMessageBufferSize];
   DWORD flags = FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS;
-  DWORD len = FormatMessageA(flags, nullptr, error_code, 0, msgbuf,
+  DWORD len = FormatMessageW(flags, nullptr, error_code, 0, msgbuf,
                              arraysize(msgbuf), nullptr);
   if (len == 0) {
     return android::base::StringPrintf(
@@ -100,7 +100,8 @@ std::string SystemErrorCodeToString(const DWORD error_code) {
         error_code);
   }
 
-  std::string msg(msgbuf);
+  // Convert UTF-16 to UTF-8.
+  std::string msg(narrow(msgbuf));
   // Messages returned by the system end with line breaks.
   msg = android::base::Trim(msg);
   // There are many Windows error messages compared to POSIX, so include the
@@ -803,6 +804,14 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
     snprintf(port_str, sizeof(port_str), "%d", port);
 
     struct addrinfo* addrinfo_ptr = nullptr;
+
+#if (NTDDI_VERSION >= NTDDI_WINXPSP2) || (_WIN32_WINNT >= _WIN32_WINNT_WS03)
+    // TODO: When the Android SDK tools increases the Windows system
+    // requirements >= WinXP SP2, switch to GetAddrInfoW(widen(host).c_str()).
+#else
+    // Otherwise, keep using getaddrinfo(), or do runtime API detection
+    // with GetProcAddress("GetAddrInfoW").
+#endif
     if (getaddrinfo(host.c_str(), port_str, &hints, &addrinfo_ptr) != 0) {
         *error = SystemErrorCodeToString(WSAGetLastError());
         D("could not resolve host '%s' and port %s: %s\n", host.c_str(),
@@ -3237,9 +3246,10 @@ int unix_read(int fd, void* buf, size_t len) {
 //
 // The way to output Unicode to a Win32 console window is to call
 // WriteConsoleW() with UTF-16 text. (The user must also choose a proper font
-// such as Lucida Console or Consolas, and in the case of Chinese, must go to
-// the Control Panel and change the "system locale" to Chinese, which allows
-// a Chinese font to be used in console windows.)
+// such as Lucida Console or Consolas, and in the case of East Asian languages
+// (such as Chinese, Japanese, Korean), the user must go to the Control Panel
+// and change the "system locale" to Chinese, etc., which allows a Chinese, etc.
+// font to be used in console windows.)
 //
 // The problem is getting the C Runtime to make fprintf and related APIs call
 // WriteConsoleW() under the covers. The C Runtime API, _setmode() sounds
@@ -3294,6 +3304,10 @@ static void _widen_fatal(const char *fmt, ...) {
 // any NULL terminator (if you're passing an explicit size, you probably don't
 // have a NULL terminated string in the first place).
 std::wstring widen(const char* utf8, const int size) {
+    // Note: Do not call SystemErrorCodeToString() from widen() because
+    // SystemErrorCodeToString() calls narrow() which may call fatal() which
+    // calls adb_vfprintf() which calls widen(), potentially causing infinite
+    // recursion.
     const int chars_to_convert = MultiByteToWideChar(CP_UTF8, 0, utf8, size,
                                                      NULL, 0);
     if (chars_to_convert <= 0) {
@@ -3349,11 +3363,14 @@ std::string narrow(const std::wstring& utf16) {
 
 // Convert from UTF-16 to UTF-8.
 std::string narrow(const wchar_t* utf16) {
+    // Note: Do not call SystemErrorCodeToString() from narrow() because
+    // SystemErrorCodeToString() calls narrows() and we don't want potential
+    // infinite recursion.
     const int chars_required = WideCharToMultiByte(CP_UTF8, 0, utf16, -1, NULL,
                                                    0, NULL, NULL);
     if (chars_required <= 0) {
         // UTF-16 to UTF-8 should be lossless, so we don't expect this to fail.
-        fatal("WideCharToMultiByte failed counting: %d, GetLastError: %d",
+        fatal("WideCharToMultiByte failed counting: %d, GetLastError: %lu",
               chars_required, GetLastError());
     }
 
@@ -3371,7 +3388,7 @@ std::string narrow(const wchar_t* utf16) {
                                            chars_required, NULL, NULL);
     if (result != chars_required) {
         // UTF-16 to UTF-8 should be lossless, so we don't expect this to fail.
-        fatal("WideCharToMultiByte failed conversion: %d, GetLastError: %d",
+        fatal("WideCharToMultiByte failed conversion: %d, GetLastError: %lu",
               result, GetLastError());
     }
 
@@ -3707,7 +3724,9 @@ FILE* adb_fopen(const char* f, const char* m) {
 
 // Shadow UTF-8 environment variable name/value pairs that are created from
 // _wenviron the first time that adb_getenv() is called. Note that this is not
-// currently updated if putenv, setenv, unsetenv are called.
+// currently updated if putenv, setenv, unsetenv are called. Note that no
+// thread synchronization is done, but we're called early enough in
+// single-threaded startup that things work ok.
 static std::unordered_map<std::string, char*> g_environ_utf8;
 
 // Make sure that shadow UTF-8 environment variables are setup.
@@ -3744,8 +3763,7 @@ static void _ensure_env_setup() {
 char* adb_getenv(const char* name) {
     _ensure_env_setup();
 
-    std::unordered_map<std::string, char*>::const_iterator it =
-        g_environ_utf8.find(std::string(name));
+    const auto it = g_environ_utf8.find(std::string(name));
     if (it == g_environ_utf8.end()) {
         return nullptr;
     }
