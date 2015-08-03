@@ -580,8 +580,8 @@ int launch_server(int server_port)
                            FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (nul_read == INVALID_HANDLE_VALUE) {
-        fprintf(stderr, "CreateFileW(nul, GENERIC_READ) failure, error %ld\n",
-                GetLastError());
+        fprintf(stderr, "CreateFileW(nul, GENERIC_READ) failed: %s\n",
+                SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
 
@@ -589,8 +589,8 @@ int launch_server(int server_port)
                             FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
                             OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (nul_write == INVALID_HANDLE_VALUE) {
-        fprintf(stderr, "CreateFileW(nul, GENERIC_WRITE) failure, error %ld\n",
-                GetLastError());
+        fprintf(stderr, "CreateFileW(nul, GENERIC_WRITE) failed: %s\n",
+                SystemErrorCodeToString(GetLastError()).c_str());
         CloseHandle(nul_read);
         return -1;
     }
@@ -598,7 +598,8 @@ int launch_server(int server_port)
     /* create pipe, and ensure its read handle isn't inheritable */
     ret = CreatePipe( &pipe_read, &pipe_write, &sa, 0 );
     if (!ret) {
-        fprintf(stderr, "CreatePipe() failure, error %ld\n", GetLastError() );
+        fprintf(stderr, "CreatePipe() failed: %s\n",
+                SystemErrorCodeToString(GetLastError()).c_str());
         CloseHandle(nul_read);
         CloseHandle(nul_write);
         return -1;
@@ -640,8 +641,8 @@ int launch_server(int server_port)
                                              arraysize(program_path));
     if ((module_result == arraysize(program_path)) || (module_result == 0)) {
         // String truncation or some other error.
-        fprintf(stderr, "GetModuleFileNameW() failure, error %ld\n",
-                GetLastError());
+        fprintf(stderr, "GetModuleFileNameW() failed: %s\n",
+                SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
     WCHAR args[64];
@@ -666,7 +667,8 @@ int launch_server(int server_port)
     CloseHandle( pipe_write );
 
     if (!ret) {
-        fprintf(stderr, "CreateProcess failure, error %ld\n", GetLastError() );
+        fprintf(stderr, "CreateProcess failed: %s\n",
+                SystemErrorCodeToString(GetLastError()).c_str());
         CloseHandle( pipe_read );
         return -1;
     }
@@ -682,7 +684,8 @@ int launch_server(int server_port)
         ret = ReadFile( pipe_read, temp, 3, &count, NULL );
         CloseHandle( pipe_read );
         if ( !ret ) {
-            fprintf(stderr, "could not read ok from ADB Server, error = %ld\n", GetLastError() );
+            fprintf(stderr, "could not read ok from ADB Server, error: %s\n",
+                    SystemErrorCodeToString(GetLastError()).c_str());
             return -1;
         }
         if (count != 3 || temp[0] != 'O' || temp[1] != 'K' || temp[2] != '\n') {

@@ -426,7 +426,8 @@ int  adb_open(const char*  path, int  options)
                 return -1;
 
             default:
-                D( "unknown error: %ld\n", err );
+                D( "unknown error: %s\n",
+                   SystemErrorCodeToString( err ).c_str() );
                 errno = ENOENT;
                 return -1;
         }
@@ -469,7 +470,8 @@ int  adb_creat(const char*  path, int  mode)
                 return -1;
 
             default:
-                D( "unknown error: %ld\n", err );
+                D( "unknown error: %s\n",
+                   SystemErrorCodeToString( err ).c_str() );
                 errno = ENOENT;
                 return -1;
         }
@@ -2315,7 +2317,7 @@ static bool _get_interesting_input_record_uncached(const HANDLE console,
         memset(input_record, 0, sizeof(*input_record));
         if (!ReadConsoleInputA(console, input_record, 1, &read_count)) {
             D("_get_interesting_input_record_uncached: ReadConsoleInputA() "
-              "failure, error %ld\n", GetLastError());
+              "failed: %s\n", SystemErrorCodeToString(GetLastError()).c_str());
             errno = EIO;
             return false;
         }
@@ -3129,8 +3131,8 @@ void stdin_raw_init(const int fd) {
         if (!SetConsoleMode(in, _old_console_mode & ~(ENABLE_PROCESSED_INPUT |
             ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT))) {
             // This really should not fail.
-            D("stdin_raw_init: SetConsoleMode() failure, error %ld\n",
-                GetLastError());
+            D("stdin_raw_init: SetConsoleMode() failed: %s\n",
+              SystemErrorCodeToString(GetLastError()).c_str());
         }
 
         // Once this is set, it means that stdin has been configured for
@@ -3151,8 +3153,8 @@ void stdin_raw_restore(const int fd) {
 
             if (!SetConsoleMode(in, _old_console_mode)) {
                 // This really should not fail.
-                D("stdin_raw_restore: SetConsoleMode() failure, error %ld\n",
-                    GetLastError());
+                D("stdin_raw_restore: SetConsoleMode() failed: %s\n",
+                  SystemErrorCodeToString(GetLastError()).c_str());
             }
         }
     }
