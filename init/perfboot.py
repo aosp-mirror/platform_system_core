@@ -66,6 +66,8 @@ _DEFAULT_EVENT_TAGS = [
     'boot_progress_pms_ready',
     'boot_progress_ams_ready',
     'boot_progress_enable_screen',
+    'sf_stop_bootanim',
+    'wm_boot_animation_done',
 ]
 
 
