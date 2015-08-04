@@ -48,7 +48,7 @@ TEST(adb_utils, directory_exists) {
   DWORD cch = arraysize(profiles_dir);
 
   // On typical Windows 7, returns C:\Users
-  ASSERT_TRUE(GetProfilesDirectory(profiles_dir, &cch));
+  ASSERT_TRUE(GetProfilesDirectoryA(profiles_dir, &cch));
 
   ASSERT_TRUE(directory_exists(profiles_dir));
 
