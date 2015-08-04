@@ -3373,7 +3373,7 @@ std::string narrow(const std::wstring& utf16) {
 // Convert from UTF-16 to UTF-8.
 std::string narrow(const wchar_t* utf16) {
     // Note: Do not call SystemErrorCodeToString() from narrow() because
-    // SystemErrorCodeToString() calls narrows() and we don't want potential
+    // SystemErrorCodeToString() calls narrow() and we don't want potential
     // infinite recursion.
     const int chars_required = WideCharToMultiByte(CP_UTF8, 0, utf16, -1, NULL,
                                                    0, NULL, NULL);
