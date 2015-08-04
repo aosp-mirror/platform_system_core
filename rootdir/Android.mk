@@ -24,9 +24,18 @@ LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 # Put it here instead of in init.rc module definition,
 # because init.rc is conditionally included.
 #
-# create some directories (some are mount points)
-LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
-    sbin dev proc sys system data oem acct cache config storage mnt root)
+# create some directories (some are mount points) and symlinks
+local_post_install_cmd_base := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
+    sbin dev proc sys system data oem acct cache config storage mnt root); \
+    ln -sf /system/etc $(TARGET_ROOT_OUT)/etc; \
+    ln -sf /sys/kernel/debug $(TARGET_ROOT_OUT)/d; \
+    ln -sf /storage/self/primary $(TARGET_ROOT_OUT)/sdcard
+ifdef BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE
+  LOCAL_POST_INSTALL_CMD := $(local_post_install_cmd_base); mkdir -p $(TARGET_ROOT_OUT)/vendor
+else
+  LOCAL_POST_INSTALL_CMD := $(local_post_install_cmd_base)
+endif
+local_post_install_cmd_base :=
 
 include $(BUILD_SYSTEM)/base_rules.mk
 
