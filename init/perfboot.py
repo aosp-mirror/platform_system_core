@@ -238,6 +238,23 @@ def make_event_tags_re(tags):
                       '|'.join(tags))
 
 
+def filter_event_tags(tags, device):
+    """Drop unknown tags not listed in device's event-log-tags file."""
+    device.wait()
+    supported_tags = set()
+    for l in device.shell(['cat', '/system/etc/event-log-tags']).splitlines():
+        tokens = l.split(' ')
+        if len(tokens) >= 2:
+            supported_tags.add(tokens[1])
+    filtered = []
+    for tag in tags:
+        if tag in supported_tags:
+            filtered.append(tag)
+        else:
+            logging.warning('Unknown tag \'%s\'. Ignoring...', tag)
+    return filtered
+
+
 def get_values(record, tag):
     """Gets values that matches |tag| from |record|."""
     keys = [key for key in record.keys() if key[0] == tag]
@@ -408,7 +425,7 @@ def main():
     check_dm_verity_settings(device)
 
     record_list = []
-    event_tags = read_event_tags(args.tags)
+    event_tags = filter_event_tags(read_event_tags(args.tags), device)
     init_perf(device, args.output, record_list, event_tags)
     interval_adjuster = IntervalAdjuster(args.interval, device)
     event_tags_re = make_event_tags_re(event_tags)
