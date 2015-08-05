@@ -40,6 +40,7 @@ $ ./perfboot.py --iterations=30 -v --output=data.tsv --tags=eventtags.txt
 import argparse
 import atexit
 import cStringIO
+import glob
 import inspect
 import logging
 import math
@@ -408,7 +409,15 @@ def parse_args():
                         'event tags are read. Every line contains one event '
                         'tag and the last event tag is used to detect that '
                         'the device has finished booting.')
+    parser.add_argument('--apk-dir', help='Specify the directory which contains '
+                        'APK files to be installed before measuring boot time.')
     return parser.parse_args()
+
+
+def install_apks(device, apk_dir):
+    for apk in glob.glob(os.path.join(apk_dir, '*.apk')):
+        print 'Installing: ' + apk
+        device.install(apk, replace=True)
 
 
 def main():
@@ -424,6 +433,9 @@ def main():
             device.get_prop('ro.build.flavor'),
             device.get_prop('ro.build.version.incremental'))
     check_dm_verity_settings(device)
+
+    if args.apk_dir:
+        install_apks(device, args.apk_dir)
 
     record_list = []
     event_tags = filter_event_tags(read_event_tags(args.tags), device)
