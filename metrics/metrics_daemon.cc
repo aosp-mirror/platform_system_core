@@ -210,6 +210,7 @@ uint32_t MetricsDaemon::GetOsVersionHash() {
 
 void MetricsDaemon::Init(bool testing,
                          bool uploader_active,
+                         bool dbus_enabled,
                          MetricsLibraryInterface* metrics_lib,
                          const string& vmstats_path,
                          const string& scaling_max_freq_path,
@@ -220,6 +221,7 @@ void MetricsDaemon::Init(bool testing,
                          const string& config_root) {
   testing_ = testing;
   uploader_active_ = uploader_active;
+  dbus_enabled_ = dbus_enabled;
   config_root_ = config_root;
   DCHECK(metrics_lib != nullptr);
   metrics_lib_ = metrics_lib;
@@ -275,36 +277,39 @@ void MetricsDaemon::Init(bool testing,
 }
 
 int MetricsDaemon::OnInit() {
-  int return_code = chromeos::DBusDaemon::OnInit();
+  int return_code = dbus_enabled_ ? chromeos::DBusDaemon::OnInit() :
+      chromeos::Daemon::OnInit();
   if (return_code != EX_OK)
     return return_code;
 
   if (testing_)
     return EX_OK;
 
-  bus_->AssertOnDBusThread();
-  CHECK(bus_->SetUpAsyncOperations());
+  if (dbus_enabled_) {
+    bus_->AssertOnDBusThread();
+    CHECK(bus_->SetUpAsyncOperations());
 
-  if (bus_->is_connected()) {
-    const std::string match_rule =
-        base::StringPrintf(kCrashReporterMatchRule,
-                           kCrashReporterInterface,
-                           kCrashReporterUserCrashSignal);
+    if (bus_->is_connected()) {
+      const std::string match_rule =
+          base::StringPrintf(kCrashReporterMatchRule,
+                             kCrashReporterInterface,
+                             kCrashReporterUserCrashSignal);
 
-    bus_->AddFilterFunction(&MetricsDaemon::MessageFilter, this);
+      bus_->AddFilterFunction(&MetricsDaemon::MessageFilter, this);
 
-    DBusError error;
-    dbus_error_init(&error);
-    bus_->AddMatch(match_rule, &error);
+      DBusError error;
+      dbus_error_init(&error);
+      bus_->AddMatch(match_rule, &error);
 
-    if (dbus_error_is_set(&error)) {
-      LOG(ERROR) << "Failed to add match rule \"" << match_rule << "\". Got "
-          << error.name << ": " << error.message;
-      return EX_SOFTWARE;
+      if (dbus_error_is_set(&error)) {
+        LOG(ERROR) << "Failed to add match rule \"" << match_rule << "\". Got "
+            << error.name << ": " << error.message;
+        return EX_SOFTWARE;
+      }
+    } else {
+      LOG(ERROR) << "DBus isn't connected.";
+      return EX_UNAVAILABLE;
     }
-  } else {
-    LOG(ERROR) << "DBus isn't connected.";
-    return EX_UNAVAILABLE;
   }
 
   if (uploader_active_) {
@@ -317,7 +322,7 @@ int MetricsDaemon::OnInit() {
 }
 
 void MetricsDaemon::OnShutdown(int* return_code) {
-  if (!testing_ && bus_->is_connected()) {
+  if (!testing_ && dbus_enabled_ && bus_->is_connected()) {
     const std::string match_rule =
         base::StringPrintf(kCrashReporterMatchRule,
                            kCrashReporterInterface,
