@@ -203,7 +203,7 @@ def init_perf(device, output, record_list, tags):
                 output_results(output, record_list, tags)
             if original_dropbox_max_files is not None:
                 restore_dropbox(device, original_dropbox_max_files)
-        except subprocess.CalledProcessError, RuntimeError:
+        except (subprocess.CalledProcessError, RuntimeError):
             pass
     atexit.register(cleanup)
 
