@@ -141,6 +141,7 @@ class WatchdogTimer(object):
         def notify_timeout():
             self._timedout = True
         self._timer = threading.Timer(timeout, notify_timeout)
+        self._timer.daemon = True
         self._timer.start()
 
     def is_timedout(self):
