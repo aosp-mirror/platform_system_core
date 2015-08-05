@@ -12,10 +12,7 @@
 
 #include <base/files/file_path.h>
 #include <base/macros.h>
-#include <base/memory/scoped_ptr.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
-
-#include "session_manager/dbus-proxies.h"
 
 // User crash collector.
 class CrashCollector {
@@ -44,7 +41,6 @@ class CrashCollector {
   FRIEND_TEST(CrashCollectorTest, ForkExecAndPipe);
   FRIEND_TEST(CrashCollectorTest, FormatDumpBasename);
   FRIEND_TEST(CrashCollectorTest, Initialize);
-  FRIEND_TEST(CrashCollectorTest, IsUserSpecificDirectoryEnabled);
   FRIEND_TEST(CrashCollectorTest, MetaData);
   FRIEND_TEST(CrashCollectorTest, Sanitize);
   FRIEND_TEST(CrashCollectorTest, WriteNewFile);
@@ -61,9 +57,6 @@ class CrashCollector {
   // Set maximum enqueued crashes in a crash directory.
   static const int kMaxCrashDirectorySize;
 
-  // Set up D-Bus.
-  virtual void SetUpDBus();
-
   // Writes |data| of |size| to |filename|, which must be a new file.
   // If the file already exists or writing fails, return a negative value.
   // Otherwise returns the number of bytes written.
@@ -79,9 +72,6 @@ class CrashCollector {
     forced_crash_directory_ = forced_directory;
   }
 
-  virtual bool GetActiveUserSessions(
-      std::map<std::string, std::string> *sessions);
-  base::FilePath GetUserCrashPath();
   base::FilePath GetCrashDirectoryInfo(uid_t process_euid,
                                  uid_t default_user_id,
                                  gid_t default_user_group,
@@ -154,10 +144,6 @@ class CrashCollector {
   // Returns true if we should consider ourselves to be running on a
   // developer image.
   bool IsDeveloperImage();
-  // Returns true if chrome crashes should be handled.
-  bool ShouldHandleChromeCrashes();
-  // Returns true if user crash directory may be used.
-  bool IsUserSpecificDirectoryEnabled();
 
   CountCrashFunction count_crash_function_;
   IsFeedbackAllowedFunction is_feedback_allowed_function_;
@@ -166,13 +152,7 @@ class CrashCollector {
   std::string lsb_release_;
   base::FilePath log_config_path_;
 
-  scoped_refptr<dbus::Bus> bus_;
-
  private:
-  // D-Bus proxy for session manager interface.
-  std::unique_ptr<org::chromium::SessionManagerInterfaceProxy>
-      session_manager_proxy_;
-
   DISALLOW_COPY_AND_ASSIGN(CrashCollector);
 };
 
