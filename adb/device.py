@@ -170,8 +170,12 @@ class AndroidDevice(object):
         out, _ = p.communicate()
         return self._parse_shell_output(out)
 
-    def install(self, filename):
-        return self._simple_call(['install', filename])
+    def install(self, filename, replace=False):
+        cmd = ['install']
+        if replace:
+            cmd.append('-r')
+        cmd.append(filename)
+        return self._simple_call(cmd)
 
     def push(self, local, remote):
         return self._simple_call(['push', local, remote])
