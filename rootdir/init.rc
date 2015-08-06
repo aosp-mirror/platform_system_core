@@ -64,16 +64,18 @@ on init
     mkdir /mnt/expand 0771 system system
 
     # Storage views to support runtime permissions
-    mkdir /mnt/runtime_default 0755 root root
-    mkdir /mnt/runtime_default/self 0755 root root
-    mkdir /mnt/runtime_read 0755 root root
-    mkdir /mnt/runtime_read/self 0755 root root
-    mkdir /mnt/runtime_write 0755 root root
-    mkdir /mnt/runtime_write/self 0755 root root
+    mkdir /storage 0755 root root
+    mkdir /mnt/runtime 0700 root root
+    mkdir /mnt/runtime/default 0755 root root
+    mkdir /mnt/runtime/default/self 0755 root root
+    mkdir /mnt/runtime/read 0755 root root
+    mkdir /mnt/runtime/read/self 0755 root root
+    mkdir /mnt/runtime/write 0755 root root
+    mkdir /mnt/runtime/write/self 0755 root root
 
     # Symlink to keep legacy apps working in multi-user world
     symlink /storage/self/primary /sdcard
-    symlink /mnt/user/0/primary /mnt/runtime_default/self/primary
+    symlink /mnt/user/0/primary /mnt/runtime/default/self/primary
 
     # memory control cgroup
     mkdir /dev/memcg 0700 root system
@@ -211,7 +213,7 @@ on post-fs
     # Mount shared so changes propagate into child namespaces
     mount rootfs rootfs / shared rec
     # Mount default storage into root namespace
-    mount none /mnt/runtime_default /storage slave bind rec
+    mount none /mnt/runtime/default /storage slave bind rec
 
     # We chown/chmod /cache again so because mount is run as root + defaults
     chown system cache /cache
