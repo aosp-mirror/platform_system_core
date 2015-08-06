@@ -34,6 +34,10 @@
 
 #define  DBG   D
 
+// There's no strerror equivalent for the errors returned by IOKit.
+// https://developer.apple.com/library/mac/documentation/DeviceDrivers/Conceptual/AccessingHardware/AH_Handling_Errors/AH_Handling_Errors.html
+// Search the web for "IOReturn.h" to find a complete up to date list.
+
 static IONotificationPortRef    notificationPort = 0;
 static io_iterator_t            notificationIterator;
 
@@ -362,7 +366,7 @@ CheckInterface(IOUSBInterfaceInterface **interface, UInt16 vendor, UInt16 produc
 
             handle->zero_mask = maxPacketSize - 1;
         } else {
-            DBG("ERR: FindDeviceInterface - could not get pipe properties\n");
+            DBG("ERR: FindDeviceInterface - could not get pipe properties (%08x)\n", kr);
             goto err_get_pipe_props;
         }
     }
