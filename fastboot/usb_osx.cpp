@@ -210,7 +210,7 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
                     handle->zero_mask = maxPacketSize - 1;
                 }
             } else {
-                ERR("could not get pipe properties\n");
+                ERR("could not get pipe properties (%08x)\n", kr);
             }
 
             if (handle->info.has_bulk_in && handle->info.has_bulk_out) {
