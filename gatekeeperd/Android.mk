@@ -18,7 +18,12 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 LOCAL_CFLAGS := -Wall -Wextra -Werror -Wunused
-LOCAL_SRC_FILES := SoftGateKeeperDevice.cpp IGateKeeperService.cpp gatekeeperd.cpp
+LOCAL_SRC_FILES := \
+	SoftGateKeeperDevice.cpp \
+	IGateKeeperService.cpp \
+	gatekeeperd.cpp \
+	IUserManager.cpp
+
 LOCAL_MODULE := gatekeeperd
 LOCAL_SHARED_LIBRARIES := \
 	libbinder \
