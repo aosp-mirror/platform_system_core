@@ -1735,7 +1735,7 @@ static int usage() {
             "    -g: specify GID to run as\n"
             "    -U: specify user ID that owns device\n"
             "    -m: source_path is multi-user\n"
-            "    -w: runtime_write mount has full write access\n"
+            "    -w: runtime write mount has full write access\n"
             "\n");
     return 1;
 }
@@ -1822,9 +1822,9 @@ static void run(const char* source_path, const char* label, uid_t uid,
     global.fuse_read = &fuse_read;
     global.fuse_write = &fuse_write;
 
-    snprintf(fuse_default.dest_path, PATH_MAX, "/mnt/runtime_default/%s", label);
-    snprintf(fuse_read.dest_path, PATH_MAX, "/mnt/runtime_read/%s", label);
-    snprintf(fuse_write.dest_path, PATH_MAX, "/mnt/runtime_write/%s", label);
+    snprintf(fuse_default.dest_path, PATH_MAX, "/mnt/runtime/default/%s", label);
+    snprintf(fuse_read.dest_path, PATH_MAX, "/mnt/runtime/read/%s", label);
+    snprintf(fuse_write.dest_path, PATH_MAX, "/mnt/runtime/write/%s", label);
 
     handler_default.fuse = &fuse_default;
     handler_read.fuse = &fuse_read;
