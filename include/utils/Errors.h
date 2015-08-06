@@ -58,7 +58,6 @@ enum {
     ALREADY_EXISTS      = -EEXIST,
     DEAD_OBJECT         = -EPIPE,
     FAILED_TRANSACTION  = (UNKNOWN_ERROR + 2),
-    JPARKS_BROKE_IT     = -EPIPE,
 #if !defined(HAVE_MS_C_RUNTIME)
     BAD_INDEX           = -EOVERFLOW,
     NOT_ENOUGH_DATA     = -ENODATA,
