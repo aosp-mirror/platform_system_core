@@ -698,7 +698,7 @@ int launch_server(int server_port)
     int     fd[2];
 
     // set up a pipe so the child can tell us when it is ready.
-    // fd[0] will be parent's end, and fd[1] will get mapped to stderr in the child.
+    // fd[0] will be parent's end, and the child will write on fd[1]
     if (pipe(fd)) {
         fprintf(stderr, "pipe failed in launch_server, errno: %d\n", errno);
         return -1;
@@ -710,16 +710,14 @@ int launch_server(int server_port)
     if (pid == 0) {
         // child side of the fork
 
-        // redirect stderr to the pipe
-        // we use stderr instead of stdout due to stdout's buffering behavior.
         adb_close(fd[0]);
-        dup2(fd[1], STDERR_FILENO);
-        adb_close(fd[1]);
 
         char str_port[30];
-        snprintf(str_port, sizeof(str_port), "%d",  server_port);
+        snprintf(str_port, sizeof(str_port), "%d", server_port);
+        char reply_fd[30];
+        snprintf(reply_fd, sizeof(reply_fd), "%d", fd[1]);
         // child process
-        int result = execl(path, "adb", "-P", str_port, "fork-server", "server", NULL);
+        int result = execl(path, "adb", "-P", str_port, "fork-server", "server", "--reply-fd", reply_fd, NULL);
         // this should not return
         fprintf(stderr, "OOPS! execl returned %d, errno: %d\n", result, errno);
     } else  {
