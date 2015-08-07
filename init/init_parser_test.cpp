@@ -17,96 +17,97 @@
 #include "init_parser.h"
 
 #include "init.h"
+#include "service.h"
 #include "util.h"
 
 #include <errno.h>
 #include <gtest/gtest.h>
 
-TEST(init_parser, make_exec_oneshot_service_invalid_syntax) {
-    char* argv[10];
-    memset(argv, 0, sizeof(argv));
+#include <string>
+#include <vector>
 
+TEST(init_parser, make_exec_oneshot_service_invalid_syntax) {
+    ServiceManager& sm = ServiceManager::GetInstance();
+    std::vector<std::string> args;
     // Nothing.
-    ASSERT_EQ(nullptr, make_exec_oneshot_service(0, argv));
+    ASSERT_EQ(nullptr, sm.MakeExecOneshotService(args));
 
     // No arguments to 'exec'.
-    argv[0] = const_cast<char*>("exec");
-    ASSERT_EQ(nullptr, make_exec_oneshot_service(1, argv));
+    args.push_back("exec");
+    ASSERT_EQ(nullptr, sm.MakeExecOneshotService(args));
 
     // No command in "exec --".
-    argv[1] = const_cast<char*>("--");
-    ASSERT_EQ(nullptr, make_exec_oneshot_service(2, argv));
+    args.push_back("--");
+    ASSERT_EQ(nullptr, sm.MakeExecOneshotService(args));
 }
 
 TEST(init_parser, make_exec_oneshot_service_too_many_supplementary_gids) {
-    int argc = 0;
-    char* argv[4 + NR_SVC_SUPP_GIDS + 3];
-    argv[argc++] = const_cast<char*>("exec");
-    argv[argc++] = const_cast<char*>("seclabel");
-    argv[argc++] = const_cast<char*>("root"); // uid.
-    argv[argc++] = const_cast<char*>("root"); // gid.
+    ServiceManager& sm = ServiceManager::GetInstance();
+    std::vector<std::string> args;
+    args.push_back("exec");
+    args.push_back("seclabel");
+    args.push_back("root"); // uid.
+    args.push_back("root"); // gid.
     for (int i = 0; i < NR_SVC_SUPP_GIDS; ++i) {
-        argv[argc++] = const_cast<char*>("root"); // Supplementary gid.
+        args.push_back("root"); // Supplementary gid.
     }
-    argv[argc++] = const_cast<char*>("--");
-    argv[argc++] = const_cast<char*>("/system/bin/id");
-    argv[argc] = nullptr;
-    ASSERT_EQ(nullptr, make_exec_oneshot_service(argc, argv));
+    args.push_back("--");
+    args.push_back("/system/bin/id");
+    ASSERT_EQ(nullptr, sm.MakeExecOneshotService(args));
 }
 
-static void Test_make_exec_oneshot_service(bool dash_dash, bool seclabel, bool uid, bool gid, bool supplementary_gids) {
-    int argc = 0;
-    char* argv[10];
-    argv[argc++] = const_cast<char*>("exec");
+static void Test_make_exec_oneshot_service(bool dash_dash, bool seclabel, bool uid,
+                                           bool gid, bool supplementary_gids) {
+    ServiceManager& sm = ServiceManager::GetInstance();
+    std::vector<std::string> args;
+    args.push_back("exec");
     if (seclabel) {
-        argv[argc++] = const_cast<char*>("u:r:su:s0"); // seclabel
+        args.push_back("u:r:su:s0"); // seclabel
         if (uid) {
-            argv[argc++] = const_cast<char*>("log");      // uid
+            args.push_back("log");      // uid
             if (gid) {
-                argv[argc++] = const_cast<char*>("shell");     // gid
+                args.push_back("shell");     // gid
                 if (supplementary_gids) {
-                    argv[argc++] = const_cast<char*>("system");    // supplementary gid 0
-                    argv[argc++] = const_cast<char*>("adb");       // supplementary gid 1
+                    args.push_back("system");    // supplementary gid 0
+                    args.push_back("adb");       // supplementary gid 1
                 }
             }
         }
     }
     if (dash_dash) {
-        argv[argc++] = const_cast<char*>("--");
+        args.push_back("--");
     }
-    argv[argc++] = const_cast<char*>("/system/bin/toybox");
-    argv[argc++] = const_cast<char*>("id");
-    argv[argc] = nullptr;
-    service* svc = make_exec_oneshot_service(argc, argv);
+    args.push_back("/system/bin/toybox");
+    args.push_back("id");
+    Service* svc = sm.MakeExecOneshotService(args);
     ASSERT_NE(nullptr, svc);
 
     if (seclabel) {
-        ASSERT_STREQ("u:r:su:s0", svc->seclabel);
+        ASSERT_EQ("u:r:su:s0", svc->seclabel());
     } else {
-        ASSERT_EQ(nullptr, svc->seclabel);
+        ASSERT_EQ("", svc->seclabel());
     }
     if (uid) {
-        ASSERT_EQ(decode_uid("log"), svc->uid);
+        ASSERT_EQ(decode_uid("log"), svc->uid());
     } else {
-        ASSERT_EQ(0U, svc->uid);
+        ASSERT_EQ(0U, svc->uid());
     }
     if (gid) {
-        ASSERT_EQ(decode_uid("shell"), svc->gid);
+        ASSERT_EQ(decode_uid("shell"), svc->gid());
     } else {
-        ASSERT_EQ(0U, svc->gid);
+        ASSERT_EQ(0U, svc->gid());
     }
     if (supplementary_gids) {
-        ASSERT_EQ(2U, svc->nr_supp_gids);
-        ASSERT_EQ(decode_uid("system"), svc->supp_gids[0]);
-        ASSERT_EQ(decode_uid("adb"), svc->supp_gids[1]);
+        ASSERT_EQ(2U, svc->supp_gids().size());
+        ASSERT_EQ(decode_uid("system"), svc->supp_gids()[0]);
+        ASSERT_EQ(decode_uid("adb"), svc->supp_gids()[1]);
     } else {
-        ASSERT_EQ(0U, svc->nr_supp_gids);
+        ASSERT_EQ(0U, svc->supp_gids().size());
     }
 
-    ASSERT_EQ(2, svc->nargs);
-    ASSERT_EQ("/system/bin/toybox", svc->args[0]);
-    ASSERT_EQ("id", svc->args[1]);
-    ASSERT_EQ(nullptr, svc->args[2]);
+    ASSERT_EQ(static_cast<std::size_t>(2), svc->args().size());
+    ASSERT_EQ("/system/bin/toybox", svc->args()[0]);
+    ASSERT_EQ("id", svc->args()[1]);
 }
 
 TEST(init_parser, make_exec_oneshot_service_with_everything) {
