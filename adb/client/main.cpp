@@ -132,7 +132,7 @@ static void setup_daemon_logging(void) {
     fprintf(stderr, "--- adb starting (pid %d) ---\n", getpid());
 }
 
-int adb_main(int is_daemon, int server_port) {
+int adb_main(int is_daemon, int server_port, int ack_reply_fd) {
     HOST = 1;
 
 #if defined(_WIN32)
@@ -157,29 +157,20 @@ int adb_main(int is_daemon, int server_port) {
         LOG(FATAL) << "Could not install *smartsocket* listener: " << error;
     }
 
+    // Inform our parent that we are up and running.
     if (is_daemon) {
-        // Inform our parent that we are up and running.
-        // TODO(danalbert): Can't use SendOkay because we're sending "OK\n", not
-        // "OKAY".
-        // TODO(danalbert): Why do we use stdout for Windows? There is a
-        // comment in launch_server() that suggests that non-Windows uses
-        // stderr because it is non-buffered. So perhaps the history is that
-        // stdout was preferred for all platforms, but it was discovered that
-        // non-Windows needed a non-buffered fd, so stderr was used there.
-        // Note that using stderr on unix means that if you do
-        // `ADB_TRACE=all adb start-server`, it will say "ADB server didn't ACK"
-        // and "* failed to start daemon *" because the adb server will write
-        // logging to stderr, obscuring the OK\n output that is sent to stderr.
 #if defined(_WIN32)
-        int reply_fd = STDOUT_FILENO;
         // Change stdout mode to binary so \n => \r\n translation does not
         // occur. In a moment stdout will be reopened to the daemon log file
         // anyway.
-        _setmode(reply_fd, _O_BINARY);
-#else
-        int reply_fd = STDERR_FILENO;
+        _setmode(ack_reply_fd, _O_BINARY);
 #endif
-        android::base::WriteStringToFd("OK\n", reply_fd);
+        // TODO(danalbert): Can't use SendOkay because we're sending "OK\n", not
+        // "OKAY".
+        android::base::WriteStringToFd("OK\n", ack_reply_fd);
+#if !defined(_WIN32)
+        adb_close(ack_reply_fd);
+#endif
         close_stdin();
         setup_daemon_logging();
     }
@@ -204,7 +195,6 @@ int main(int argc, char** argv) {
 
     adb_sysdeps_init();
     adb_trace_init(argv);
-    D("Handling commandline()\n");
     return adb_commandline(argc - 1, const_cast<const char**>(argv + 1));
 }
 
