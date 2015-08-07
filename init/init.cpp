@@ -32,7 +32,6 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
-#include <termios.h>
 #include <unistd.h>
 
 #include <mtd/mtd-user.h>
@@ -54,16 +53,17 @@
 #include <memory>
 
 #include "action.h"
+#include "bootchart.h"
 #include "devices.h"
 #include "init.h"
+#include "init_parser.h"
+#include "keychords.h"
 #include "log.h"
 #include "property_service.h"
-#include "bootchart.h"
+#include "service.h"
 #include "signal_handler.h"
-#include "keychords.h"
-#include "init_parser.h"
-#include "util.h"
 #include "ueventd.h"
+#include "util.h"
 #include "watchdogd.h"
 
 struct selabel_handle *sehandle;
@@ -73,11 +73,11 @@ static int property_triggers_enabled = 0;
 
 static char qemu[32];
 
-static int have_console;
-static std::string console_name = "/dev/console";
+int have_console;
+std::string console_name = "/dev/console";
 static time_t process_needs_restart;
 
-static const char *ENV[32];
+const char *ENV[32];
 
 bool waiting_for_exec = false;
 
@@ -90,27 +90,6 @@ void register_epoll_handler(int fd, void (*fn)()) {
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev) == -1) {
         ERROR("epoll_ctl failed: %s\n", strerror(errno));
     }
-}
-
-void service::NotifyStateChange(const char* new_state) {
-    if (!properties_initialized()) {
-        // If properties aren't available yet, we can't set them.
-        return;
-    }
-
-    if ((flags & SVC_EXEC) != 0) {
-        // 'exec' commands don't have properties tracking their state.
-        return;
-    }
-
-    char prop_name[PROP_NAME_MAX];
-    if (snprintf(prop_name, sizeof(prop_name), "init.svc.%s", name) >= PROP_NAME_MAX) {
-        // If the property name would be too long, we can't set it.
-        ERROR("Property name \"init.svc.%s\" too long; not setting to %s\n", name, new_state);
-        return;
-    }
-
-    property_set(prop_name, new_state);
 }
 
 /* add_environment - add "key=value" to the current environment */
@@ -145,398 +124,76 @@ int add_environment(const char *key, const char *val)
     return -1;
 }
 
-void zap_stdio(void)
-{
-    int fd;
-    fd = open("/dev/null", O_RDWR);
-    dup2(fd, 0);
-    dup2(fd, 1);
-    dup2(fd, 2);
-    close(fd);
-}
-
-static void open_console()
-{
-    int fd;
-    if ((fd = open(console_name.c_str(), O_RDWR)) < 0) {
-        fd = open("/dev/null", O_RDWR);
-    }
-    ioctl(fd, TIOCSCTTY, 0);
-    dup2(fd, 0);
-    dup2(fd, 1);
-    dup2(fd, 2);
-    close(fd);
-}
-
-static void publish_socket(const char *name, int fd)
-{
-    char key[64] = ANDROID_SOCKET_ENV_PREFIX;
-    char val[64];
-
-    strlcpy(key + sizeof(ANDROID_SOCKET_ENV_PREFIX) - 1,
-            name,
-            sizeof(key) - sizeof(ANDROID_SOCKET_ENV_PREFIX));
-    snprintf(val, sizeof(val), "%d", fd);
-    add_environment(key, val);
-
-    /* make sure we don't close-on-exec */
-    fcntl(fd, F_SETFD, 0);
-}
-
-void service_start(struct service *svc, const char *dynamic_args)
-{
-    // Starting a service removes it from the disabled or reset state and
-    // immediately takes it out of the restarting state if it was in there.
-    svc->flags &= (~(SVC_DISABLED|SVC_RESTARTING|SVC_RESET|SVC_RESTART|SVC_DISABLED_START));
-    svc->time_started = 0;
-
-    // Running processes require no additional work --- if they're in the
-    // process of exiting, we've ensured that they will immediately restart
-    // on exit, unless they are ONESHOT.
-    if (svc->flags & SVC_RUNNING) {
-        return;
-    }
-
-    bool needs_console = (svc->flags & SVC_CONSOLE);
-    if (needs_console && !have_console) {
-        ERROR("service '%s' requires console\n", svc->name);
-        svc->flags |= SVC_DISABLED;
-        return;
-    }
-
-    struct stat sb;
-    if (stat(svc->args[0], &sb) == -1) {
-        ERROR("cannot find '%s' (%s), disabling '%s'\n", svc->args[0], strerror(errno), svc->name);
-        svc->flags |= SVC_DISABLED;
-        return;
-    }
-
-    if ((!(svc->flags & SVC_ONESHOT)) && dynamic_args) {
-        ERROR("service '%s' must be one-shot to use dynamic args, disabling\n", svc->args[0]);
-        svc->flags |= SVC_DISABLED;
-        return;
-    }
-
-    char* scon = NULL;
-    if (svc->seclabel) {
-        scon = strdup(svc->seclabel);
-        if (!scon) {
-            ERROR("Out of memory while starting '%s'\n", svc->name);
-            return;
-        }
-    } else {
-        char *mycon = NULL, *fcon = NULL;
-
-        INFO("computing context for service '%s'\n", svc->args[0]);
-        int rc = getcon(&mycon);
-        if (rc < 0) {
-            ERROR("could not get context while starting '%s'\n", svc->name);
-            return;
-        }
-
-        rc = getfilecon(svc->args[0], &fcon);
-        if (rc < 0) {
-            ERROR("could not get context while starting '%s'\n", svc->name);
-            free(mycon);
-            return;
-        }
-
-        rc = security_compute_create(mycon, fcon, string_to_security_class("process"), &scon);
-        if (rc == 0 && !strcmp(scon, mycon)) {
-            ERROR("Service %s does not have a SELinux domain defined.\n", svc->name);
-            free(mycon);
-            free(fcon);
-            free(scon);
-            return;
-        }
-        free(mycon);
-        free(fcon);
-        if (rc < 0) {
-            ERROR("could not get context while starting '%s'\n", svc->name);
-            return;
-        }
-    }
-
-    NOTICE("Starting service '%s'...\n", svc->name);
-
-    pid_t pid = fork();
-    if (pid == 0) {
-        struct socketinfo *si;
-        struct svcenvinfo *ei;
-        char tmp[32];
-        int fd, sz;
-
-        umask(077);
-        if (properties_initialized()) {
-            get_property_workspace(&fd, &sz);
-            snprintf(tmp, sizeof(tmp), "%d,%d", dup(fd), sz);
-            add_environment("ANDROID_PROPERTY_WORKSPACE", tmp);
-        }
-
-        for (ei = svc->envvars; ei; ei = ei->next)
-            add_environment(ei->name, ei->value);
-
-        for (si = svc->sockets; si; si = si->next) {
-            int socket_type = (
-                    !strcmp(si->type, "stream") ? SOCK_STREAM :
-                        (!strcmp(si->type, "dgram") ? SOCK_DGRAM : SOCK_SEQPACKET));
-            int s = create_socket(si->name, socket_type,
-                                  si->perm, si->uid, si->gid, si->socketcon ?: scon);
-            if (s >= 0) {
-                publish_socket(si->name, s);
-            }
-        }
-
-        free(scon);
-        scon = NULL;
-
-        if (svc->writepid_files_) {
-            std::string pid_str = android::base::StringPrintf("%d", pid);
-            for (auto& file : *svc->writepid_files_) {
-                if (!android::base::WriteStringToFile(pid_str, file)) {
-                    ERROR("couldn't write %s to %s: %s\n",
-                          pid_str.c_str(), file.c_str(), strerror(errno));
-                }
-            }
-        }
-
-        if (svc->ioprio_class != IoSchedClass_NONE) {
-            if (android_set_ioprio(getpid(), svc->ioprio_class, svc->ioprio_pri)) {
-                ERROR("Failed to set pid %d ioprio = %d,%d: %s\n",
-                      getpid(), svc->ioprio_class, svc->ioprio_pri, strerror(errno));
-            }
-        }
-
-        if (needs_console) {
-            setsid();
-            open_console();
-        } else {
-            zap_stdio();
-        }
-
-        if (false) {
-            for (size_t n = 0; svc->args[n]; n++) {
-                INFO("args[%zu] = '%s'\n", n, svc->args[n]);
-            }
-            for (size_t n = 0; ENV[n]; n++) {
-                INFO("env[%zu] = '%s'\n", n, ENV[n]);
-            }
-        }
-
-        setpgid(0, getpid());
-
-        // As requested, set our gid, supplemental gids, and uid.
-        if (svc->gid) {
-            if (setgid(svc->gid) != 0) {
-                ERROR("setgid failed: %s\n", strerror(errno));
-                _exit(127);
-            }
-        }
-        if (svc->nr_supp_gids) {
-            if (setgroups(svc->nr_supp_gids, svc->supp_gids) != 0) {
-                ERROR("setgroups failed: %s\n", strerror(errno));
-                _exit(127);
-            }
-        }
-        if (svc->uid) {
-            if (setuid(svc->uid) != 0) {
-                ERROR("setuid failed: %s\n", strerror(errno));
-                _exit(127);
-            }
-        }
-        if (svc->seclabel) {
-            if (setexeccon(svc->seclabel) < 0) {
-                ERROR("cannot setexeccon('%s'): %s\n", svc->seclabel, strerror(errno));
-                _exit(127);
-            }
-        }
-
-        if (!dynamic_args) {
-            if (execve(svc->args[0], (char**) svc->args, (char**) ENV) < 0) {
-                ERROR("cannot execve('%s'): %s\n", svc->args[0], strerror(errno));
-            }
-        } else {
-            char *arg_ptrs[INIT_PARSER_MAXARGS+1];
-            int arg_idx = svc->nargs;
-            char *tmp = strdup(dynamic_args);
-            char *next = tmp;
-            char *bword;
-
-            /* Copy the static arguments */
-            memcpy(arg_ptrs, svc->args, (svc->nargs * sizeof(char *)));
-
-            while((bword = strsep(&next, " "))) {
-                arg_ptrs[arg_idx++] = bword;
-                if (arg_idx == INIT_PARSER_MAXARGS)
-                    break;
-            }
-            arg_ptrs[arg_idx] = NULL;
-            execve(svc->args[0], (char**) arg_ptrs, (char**) ENV);
-        }
-        _exit(127);
-    }
-
-    free(scon);
-
-    if (pid < 0) {
-        ERROR("failed to start '%s'\n", svc->name);
-        svc->pid = 0;
-        return;
-    }
-
-    svc->time_started = gettime();
-    svc->pid = pid;
-    svc->flags |= SVC_RUNNING;
-
-    if ((svc->flags & SVC_EXEC) != 0) {
-        INFO("SVC_EXEC pid %d (uid %d gid %d+%zu context %s) started; waiting...\n",
-             svc->pid, svc->uid, svc->gid, svc->nr_supp_gids,
-             svc->seclabel ? : "default");
-        waiting_for_exec = true;
-    }
-
-    svc->NotifyStateChange("running");
-}
-
-/* The how field should be either SVC_DISABLED, SVC_RESET, or SVC_RESTART */
-static void service_stop_or_reset(struct service *svc, int how)
-{
-    /* The service is still SVC_RUNNING until its process exits, but if it has
-     * already exited it shoudn't attempt a restart yet. */
-    svc->flags &= ~(SVC_RESTARTING | SVC_DISABLED_START);
-
-    if ((how != SVC_DISABLED) && (how != SVC_RESET) && (how != SVC_RESTART)) {
-        /* Hrm, an illegal flag.  Default to SVC_DISABLED */
-        how = SVC_DISABLED;
-    }
-        /* if the service has not yet started, prevent
-         * it from auto-starting with its class
-         */
-    if (how == SVC_RESET) {
-        svc->flags |= (svc->flags & SVC_RC_DISABLED) ? SVC_DISABLED : SVC_RESET;
-    } else {
-        svc->flags |= how;
-    }
-
-    if (svc->pid) {
-        NOTICE("Service '%s' is being killed...\n", svc->name);
-        kill(-svc->pid, SIGKILL);
-        svc->NotifyStateChange("stopping");
-    } else {
-        svc->NotifyStateChange("stopped");
-    }
-}
-
-void service_reset(struct service *svc)
-{
-    service_stop_or_reset(svc, SVC_RESET);
-}
-
-void service_stop(struct service *svc)
-{
-    service_stop_or_reset(svc, SVC_DISABLED);
-}
-
-void service_restart(struct service *svc)
-{
-    if (svc->flags & SVC_RUNNING) {
-        /* Stop, wait, then start the service. */
-        service_stop_or_reset(svc, SVC_RESTART);
-    } else if (!(svc->flags & SVC_RESTARTING)) {
-        /* Just start the service since it's not running. */
-        service_start(svc, NULL);
-    } /* else: Service is restarting anyways. */
-}
-
 void property_changed(const char *name, const char *value)
 {
     if (property_triggers_enabled)
         ActionManager::GetInstance().QueuePropertyTrigger(name, value);
 }
 
-static void restart_service_if_needed(struct service *svc)
-{
-    time_t next_start_time = svc->time_started + 5;
-
-    if (next_start_time <= gettime()) {
-        svc->flags &= (~SVC_RESTARTING);
-        service_start(svc, NULL);
-        return;
-    }
-
-    if ((next_start_time < process_needs_restart) ||
-        (process_needs_restart == 0)) {
-        process_needs_restart = next_start_time;
-    }
-}
-
 static void restart_processes()
 {
     process_needs_restart = 0;
-    service_for_each_flags(SVC_RESTARTING,
-                           restart_service_if_needed);
+    ServiceManager::GetInstance().
+        ForEachServiceWithFlags(SVC_RESTARTING, [] (Service* s) {
+                s->RestartIfNeeded(process_needs_restart);
+            });
 }
 
-static void msg_start(const char *name)
+static void msg_start(const std::string& name)
 {
-    struct service *svc = NULL;
-    char *tmp = NULL;
-    char *args = NULL;
+    Service* svc = nullptr;
+    std::vector<std::string> vargs;
 
-    if (!strchr(name, ':'))
-        svc = service_find_by_name(name);
-    else {
-        tmp = strdup(name);
-        if (tmp) {
-            args = strchr(tmp, ':');
-            *args = '\0';
-            args++;
+    size_t colon_pos = name.find(':');
+    if (colon_pos == std::string::npos) {
+        svc = ServiceManager::GetInstance().FindServiceByName(name);
+    } else {
+        std::string service_name(name.substr(0, colon_pos));
+        std::string args(name.substr(colon_pos + 1));
+        vargs = android::base::Split(args, " ");
 
-            svc = service_find_by_name(tmp);
-        }
+        svc = ServiceManager::GetInstance().FindServiceByName(service_name);
     }
 
     if (svc) {
-        service_start(svc, args);
+        svc->Start(vargs);
     } else {
-        ERROR("no such service '%s'\n", name);
+        ERROR("no such service '%s'\n", name.c_str());
     }
-    if (tmp)
-        free(tmp);
 }
 
-static void msg_stop(const char *name)
+static void msg_stop(const std::string& name)
 {
-    struct service *svc = service_find_by_name(name);
+    Service* svc = ServiceManager::GetInstance().FindServiceByName(name);
 
     if (svc) {
-        service_stop(svc);
+        svc->Stop();
     } else {
-        ERROR("no such service '%s'\n", name);
+        ERROR("no such service '%s'\n", name.c_str());
     }
 }
 
-static void msg_restart(const char *name)
+static void msg_restart(const std::string& name)
 {
-    struct service *svc = service_find_by_name(name);
+    Service* svc = ServiceManager::GetInstance().FindServiceByName(name);
 
     if (svc) {
-        service_restart(svc);
+        svc->Restart();
     } else {
-        ERROR("no such service '%s'\n", name);
+        ERROR("no such service '%s'\n", name.c_str());
     }
 }
 
-void handle_control_message(const char *msg, const char *arg)
+void handle_control_message(const std::string& msg, const std::string& arg)
 {
-    if (!strcmp(msg,"start")) {
+    if (msg == "start") {
         msg_start(arg);
-    } else if (!strcmp(msg,"stop")) {
+    } else if (msg == "stop") {
         msg_stop(arg);
-    } else if (!strcmp(msg,"restart")) {
+    } else if (msg == "restart") {
         msg_restart(arg);
     } else {
-        ERROR("unknown control msg '%s'\n", msg);
+        ERROR("unknown control msg '%s'\n", msg.c_str());
     }
 }
 
