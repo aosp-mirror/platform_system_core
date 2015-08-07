@@ -75,7 +75,6 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
     HRESULT result;
     SInt32 score;
     UInt8 interfaceNumEndpoints;
-    UInt8 endpoint;
     UInt8 configuration;
 
     // Placing the constant KIOUSBFindInterfaceDontCare into the following
@@ -182,7 +181,7 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
 
         // Iterate over the endpoints for this interface and see if there
         // are any that do bulk in/out.
-        for (endpoint = 0; endpoint <= interfaceNumEndpoints; endpoint++) {
+        for (UInt8 endpoint = 0; endpoint <= interfaceNumEndpoints; endpoint++) {
             UInt8   transferType;
             UInt16  maxPacketSize;
             UInt8   interval;
@@ -210,7 +209,7 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
                     handle->zero_mask = maxPacketSize - 1;
                 }
             } else {
-                ERR("could not get pipe properties (%08x)\n", kr);
+                ERR("could not get pipe properties for endpoint %u (%08x)\n", endpoint, kr);
             }
 
             if (handle->info.has_bulk_in && handle->info.has_bulk_out) {
