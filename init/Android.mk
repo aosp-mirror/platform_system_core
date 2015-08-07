@@ -48,6 +48,7 @@ LOCAL_SRC_FILES:= \
     init_parser.cpp \
     log.cpp \
     parser.cpp \
+    service.cpp \
     util.cpp \
 
 LOCAL_STATIC_LIBRARIES := libbase
