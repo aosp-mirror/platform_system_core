@@ -18,14 +18,15 @@
 #define _INIT_INIT_PARSER_H_
 
 #include <string>
+#include <vector>
 
 #define INIT_PARSER_MAXARGS 64
 
-struct service;
+class Action;
 
 bool init_parse_config(const char* path);
 int expand_props(const std::string& src, std::string* dst);
-
-service* make_exec_oneshot_service(int argc, char** argv);
+bool add_command_to_action(Action* action, const std::vector<std::string>& args,
+                           const std::string& filename, int line, std::string* err);
 
 #endif
