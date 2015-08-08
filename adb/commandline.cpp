@@ -962,6 +962,14 @@ int adb_commandline(int argc, const char **argv) {
     int r;
     TransportType transport_type = kTransportAny;
 
+#if defined(_WIN32)
+    // TODO(compareandswap): Windows should use a separate reply fd too.
+    int ack_reply_fd = STDOUT_FILENO;
+#else
+    int ack_reply_fd = -1;
+#endif
+
+
     // If defined, this should be an absolute path to
     // the directory containing all of the various system images
     // for a particular product.  If not defined, and the adb
@@ -979,7 +987,7 @@ int adb_commandline(int argc, const char **argv) {
     const char* server_port_str = getenv("ANDROID_ADB_SERVER_PORT");
     int server_port = DEFAULT_ADB_PORT;
     if (server_port_str && strlen(server_port_str) > 0) {
-        server_port = (int) strtol(server_port_str, NULL, 0);
+        server_port = strtol(server_port_str, nullptr, 0);
         if (server_port <= 0 || server_port > 65535) {
             fprintf(stderr,
                     "adb: Env var ANDROID_ADB_SERVER_PORT must be a positive number less than 65535. Got \"%s\"\n",
@@ -997,6 +1005,16 @@ int adb_commandline(int argc, const char **argv) {
         } else if (!strcmp(argv[0], "fork-server")) {
             /* this is a special flag used only when the ADB client launches the ADB Server */
             is_daemon = 1;
+        } else if (!strcmp(argv[0], "--reply-fd")) {
+            if (argc < 2) return usage();
+            const char* reply_fd_str = argv[1];
+            argc--;
+            argv++;
+            ack_reply_fd = strtol(reply_fd_str, nullptr, 10);
+            if (ack_reply_fd <= 2) { // Disallow stdin, stdout, and stderr.
+                fprintf(stderr, "adb: invalid reply fd \"%s\"\n", reply_fd_str);
+                return usage();
+            }
         } else if (!strncmp(argv[0], "-p", 2)) {
             const char* product = nullptr;
             if (argv[0][2] == '\0') {
@@ -1074,7 +1092,11 @@ int adb_commandline(int argc, const char **argv) {
 
     if (is_server) {
         if (no_daemon || is_daemon) {
-            r = adb_main(is_daemon, server_port);
+            if (ack_reply_fd == -1) {
+                fprintf(stderr, "reply fd for adb server to client communication not specified.\n");
+                return usage();
+            }
+            r = adb_main(is_daemon, server_port, ack_reply_fd);
         } else {
             r = launch_server(server_port);
         }
