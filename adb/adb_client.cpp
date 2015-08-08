@@ -229,8 +229,9 @@ int adb_connect(const std::string& service, std::string* error) {
             }
         } else {
             // if fd is -1, then check for "unknown host service",
-            // which would indicate a version of adb that does not support the version command
-            if (*error == "unknown host service") {
+            // which would indicate a version of adb that does not support the
+            // version command, in which case we should fall-through to kill it.
+            if (*error != "unknown host service") {
                 return fd;
             }
         }
