@@ -44,19 +44,18 @@
 #include <private/android_filesystem_config.h>
 
 #include "action.h"
-#include "init.h"
-#include "keywords.h"
-#include "property_service.h"
 #include "devices.h"
+#include "init.h"
 #include "init_parser.h"
-#include "util.h"
+#include "keywords.h"
 #include "log.h"
+#include "property_service.h"
+#include "service.h"
+#include "util.h"
 
 #define chmod DO_NOT_USE_CHMOD_USE_FCHMODAT_SYMLINK_NOFOLLOW
 #define UNMOUNT_CHECK_MS 5000
 #define UNMOUNT_CHECK_TIMES 10
-
-int add_environment(const char *name, const char *value);
 
 // System call provided by bionic but not in any header file.
 extern "C" int init_module(void *, unsigned long, const char *);
@@ -100,15 +99,6 @@ done:
     return ret;
 }
 
-static void service_start_if_not_disabled(struct service *svc)
-{
-    if (!(svc->flags & SVC_DISABLED)) {
-        service_start(svc, NULL);
-    } else {
-        svc->flags |= SVC_DISABLED_START;
-    }
-}
-
 static void unmount_and_fsck(const struct mntent *entry)
 {
     if (strcmp(entry->mnt_type, "f2fs") && strcmp(entry->mnt_type, "ext4"))
@@ -131,7 +121,7 @@ static void unmount_and_fsck(const struct mntent *entry)
      * automatically restart after kill(), but that is not really a problem
      * because |entry->mnt_dir| is no longer visible to such new processes.
      */
-    service_for_each(service_stop);
+    ServiceManager::GetInstance().ForEachService([] (Service* s) { s->Stop(); });
     TEMP_FAILURE_RETRY(kill(-1, SIGKILL));
 
     int count = 0;
@@ -176,19 +166,22 @@ int do_class_start(const std::vector<std::string>& args)
          * which are explicitly disabled.  They must
          * be started individually.
          */
-    service_for_each_class(args[1].c_str(), service_start_if_not_disabled);
+    ServiceManager::GetInstance().
+        ForEachServiceInClass(args[1], [] (Service* s) { s->StartIfNotDisabled(); });
     return 0;
 }
 
 int do_class_stop(const std::vector<std::string>& args)
 {
-    service_for_each_class(args[1].c_str(), service_stop);
+    ServiceManager::GetInstance().
+        ForEachServiceInClass(args[1], [] (Service* s) { s->Stop(); });
     return 0;
 }
 
 int do_class_reset(const std::vector<std::string>& args)
 {
-    service_for_each_class(args[1].c_str(), service_reset);
+    ServiceManager::GetInstance().
+        ForEachServiceInClass(args[1], [] (Service* s) { s->Reset(); });
     return 0;
 }
 
@@ -199,30 +192,22 @@ int do_domainname(const std::vector<std::string>& args)
 
 int do_enable(const std::vector<std::string>& args)
 {
-    struct service *svc;
-    svc = service_find_by_name(args[1].c_str());
-    if (svc) {
-        svc->flags &= ~(SVC_DISABLED | SVC_RC_DISABLED);
-        if (svc->flags & SVC_DISABLED_START) {
-            service_start(svc, NULL);
-        }
-    } else {
+    Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
+    if (!svc) {
         return -1;
     }
-    return 0;
+    return svc->Enable();
 }
 
 int do_exec(const std::vector<std::string>& args) {
-    std::vector<char*> strs;
-    strs.reserve(args.size());
-    for (const auto& s : args) {
-        strs.push_back(const_cast<char*>(s.c_str()));
-    }
-    service* svc = make_exec_oneshot_service(strs.size(), &strs[0]);
-    if (svc == NULL) {
+    Service* svc = ServiceManager::GetInstance().MakeExecOneshotService(args);
+    if (!svc) {
         return -1;
     }
-    service_start(svc, NULL);
+    if (!svc->Start()) {
+        return -1;
+    }
+    waiting_for_exec = true;
     return 0;
 }
 
@@ -567,31 +552,35 @@ int do_setrlimit(const std::vector<std::string>& args)
 
 int do_start(const std::vector<std::string>& args)
 {
-    struct service *svc;
-    svc = service_find_by_name(args[1].c_str());
-    if (svc) {
-        service_start(svc, NULL);
+    Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
+    if (!svc) {
+        ERROR("do_start: Service %s not found\n", args[1].c_str());
+        return -1;
     }
+    if (!svc->Start())
+        return -1;
     return 0;
 }
 
 int do_stop(const std::vector<std::string>& args)
 {
-    struct service *svc;
-    svc = service_find_by_name(args[1].c_str());
-    if (svc) {
-        service_stop(svc);
+    Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
+    if (!svc) {
+        ERROR("do_stop: Service %s not found\n", args[1].c_str());
+        return -1;
     }
+    svc->Stop();
     return 0;
 }
 
 int do_restart(const std::vector<std::string>& args)
 {
-    struct service *svc;
-    svc = service_find_by_name(args[1].c_str());
-    if (svc) {
-        service_restart(svc);
+    Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
+    if (!svc) {
+        ERROR("do_restart: Service %s not found\n", args[1].c_str());
+        return -1;
     }
+    svc->Restart();
     return 0;
 }
 

@@ -28,10 +28,11 @@
 
 #include "action.h"
 #include "init.h"
-#include "parser.h"
 #include "init_parser.h"
 #include "log.h"
+#include "parser.h"
 #include "property_service.h"
+#include "service.h"
 #include "util.h"
 
 #include <base/stringprintf.h>
@@ -63,7 +64,7 @@ static void parse_line_action(struct parse_state *state, int nargs, char **args)
 static struct {
     const char *name;
     int (*func)(const std::vector<std::string>& args);
-    unsigned char nargs;
+    size_t nargs;
     unsigned char flags;
 } keyword_info[KEYWORD_COUNT] = {
     [ K_UNKNOWN ] = { "unknown", 0, 0, 0 },
@@ -77,23 +78,8 @@ static struct {
 #define kw_nargs(kw) (keyword_info[kw].nargs)
 
 void dump_parser_state() {
-    if (false) {
-        struct listnode* node;
-        list_for_each(node, &service_list) {
-            service* svc = node_to_item(node, struct service, slist);
-            INFO("service %s\n", svc->name);
-            INFO("  class '%s'\n", svc->classname);
-            INFO("  exec");
-            for (int n = 0; n < svc->nargs; n++) {
-                INFO(" '%s'", svc->args[n]);
-            }
-            INFO("\n");
-            for (socketinfo* si = svc->sockets; si; si = si->next) {
-                INFO("  socket %s %s 0%o\n", si->name, si->type, si->perm);
-            }
-        }
-        ActionManager::GetInstance().DumpState();
-    }
+    ServiceManager::GetInstance().DumpState();
+    ActionManager::GetInstance().DumpState();
 }
 
 static int lookup_keyword(const char *s)
@@ -420,363 +406,38 @@ bool init_parse_config(const char* path) {
     return init_parse_config_file(path);
 }
 
-static int valid_name(const char *name)
-{
-    if (strlen(name) > 16) {
-        return 0;
-    }
-    while (*name) {
-        if (!isalnum(*name) && (*name != '_') && (*name != '-')) {
-            return 0;
-        }
-        name++;
-    }
-    return 1;
-}
-
-struct service *service_find_by_name(const char *name)
-{
-    struct listnode *node;
-    struct service *svc;
-    list_for_each(node, &service_list) {
-        svc = node_to_item(node, struct service, slist);
-        if (!strcmp(svc->name, name)) {
-            return svc;
-        }
-    }
-    return 0;
-}
-
-struct service *service_find_by_pid(pid_t pid)
-{
-    struct listnode *node;
-    struct service *svc;
-    list_for_each(node, &service_list) {
-        svc = node_to_item(node, struct service, slist);
-        if (svc->pid == pid) {
-            return svc;
-        }
-    }
-    return 0;
-}
-
-struct service *service_find_by_keychord(int keychord_id)
-{
-    struct listnode *node;
-    struct service *svc;
-    list_for_each(node, &service_list) {
-        svc = node_to_item(node, struct service, slist);
-        if (svc->keychord_id == keychord_id) {
-            return svc;
-        }
-    }
-    return 0;
-}
-
-void service_for_each(void (*func)(struct service *svc))
-{
-    struct listnode *node;
-    struct service *svc;
-    list_for_each(node, &service_list) {
-        svc = node_to_item(node, struct service, slist);
-        func(svc);
-    }
-}
-
-void service_for_each_class(const char *classname,
-                            void (*func)(struct service *svc))
-{
-    struct listnode *node;
-    struct service *svc;
-    list_for_each(node, &service_list) {
-        svc = node_to_item(node, struct service, slist);
-        if (!strcmp(svc->classname, classname)) {
-            func(svc);
-        }
-    }
-}
-
-void service_for_each_flags(unsigned matchflags,
-                            void (*func)(struct service *svc))
-{
-    struct listnode *node;
-    struct service *svc;
-    list_for_each(node, &service_list) {
-        svc = node_to_item(node, struct service, slist);
-        if (svc->flags & matchflags) {
-            func(svc);
-        }
-    }
-}
-
-service* make_exec_oneshot_service(int nargs, char** args) {
-    // Parse the arguments: exec [SECLABEL [UID [GID]*] --] COMMAND ARGS...
-    // SECLABEL can be a - to denote default
-    int command_arg = 1;
-    for (int i = 1; i < nargs; ++i) {
-        if (strcmp(args[i], "--") == 0) {
-            command_arg = i + 1;
-            break;
-        }
-    }
-    if (command_arg > 4 + NR_SVC_SUPP_GIDS) {
-        ERROR("exec called with too many supplementary group ids\n");
-        return NULL;
-    }
-
-    int argc = nargs - command_arg;
-    char** argv = (args + command_arg);
-    if (argc < 1) {
-        ERROR("exec called without command\n");
-        return NULL;
-    }
-
-    service* svc = (service*) calloc(1, sizeof(*svc) + sizeof(char*) * argc);
-    if (svc == NULL) {
-        ERROR("Couldn't allocate service for exec of '%s': %s", argv[0], strerror(errno));
-        return NULL;
-    }
-
-    if ((command_arg > 2) && strcmp(args[1], "-")) {
-        svc->seclabel = args[1];
-    }
-    if (command_arg > 3) {
-        svc->uid = decode_uid(args[2]);
-    }
-    if (command_arg > 4) {
-        svc->gid = decode_uid(args[3]);
-        svc->nr_supp_gids = command_arg - 1 /* -- */ - 4 /* exec SECLABEL UID GID */;
-        for (size_t i = 0; i < svc->nr_supp_gids; ++i) {
-            svc->supp_gids[i] = decode_uid(args[4 + i]);
-        }
-    }
-
-    static int exec_count; // Every service needs a unique name.
-    char* name = NULL;
-    asprintf(&name, "exec %d (%s)", exec_count++, argv[0]);
-    if (name == NULL) {
-        ERROR("Couldn't allocate name for exec service '%s'\n", argv[0]);
-        free(svc);
-        return NULL;
-    }
-    svc->name = name;
-    svc->classname = "default";
-    svc->flags = SVC_EXEC | SVC_ONESHOT;
-    svc->nargs = argc;
-    memcpy(svc->args, argv, sizeof(char*) * svc->nargs);
-    svc->args[argc] = NULL;
-    list_add_tail(&service_list, &svc->slist);
-    return svc;
-}
-
 static void *parse_service(struct parse_state *state, int nargs, char **args)
 {
     if (nargs < 3) {
         parse_error(state, "services must have a name and a program\n");
-        return 0;
+        return nullptr;
     }
-    if (!valid_name(args[1])) {
-        parse_error(state, "invalid service name '%s'\n", args[1]);
-        return 0;
-    }
+    std::vector<std::string> str_args(args + 2, args + nargs);
+    std::string ret_err;
+    Service* svc = ServiceManager::GetInstance().AddNewService(args[1], "default",
+                                                               str_args, &ret_err);
 
-    service* svc = (service*) service_find_by_name(args[1]);
-    if (svc) {
-        parse_error(state, "ignored duplicate definition of service '%s'\n", args[1]);
-        return 0;
-    }
-
-    nargs -= 2;
-    svc = (service*) calloc(1, sizeof(*svc) + sizeof(char*) * nargs);
     if (!svc) {
-        parse_error(state, "out of memory\n");
-        return 0;
+        parse_error(state, "%s\n", ret_err.c_str());
     }
-    svc->name = strdup(args[1]);
-    svc->classname = "default";
-    memcpy(svc->args, args + 2, sizeof(char*) * nargs);
-    svc->args[nargs] = 0;
-    svc->nargs = nargs;
-    svc->onrestart = new Action();
-    svc->onrestart->InitSingleTrigger("onrestart");
-    list_add_tail(&service_list, &svc->slist);
+
     return svc;
 }
 
 static void parse_line_service(struct parse_state *state, int nargs, char **args)
 {
-    struct service *svc = (service*) state->context;
-    int i, kw, kw_nargs;
-    std::vector<std::string> str_args;
-
     if (nargs == 0) {
         return;
     }
 
-    svc->ioprio_class = IoSchedClass_NONE;
+    Service* svc = static_cast<Service*>(state->context);
+    int kw = lookup_keyword(args[0]);
+    std::vector<std::string> str_args(args, args + nargs);
+    std::string ret_err;
+    bool ret = svc->HandleLine(kw, str_args, &ret_err);
 
-    kw = lookup_keyword(args[0]);
-    switch (kw) {
-    case K_class:
-        if (nargs != 2) {
-            parse_error(state, "class option requires a classname\n");
-        } else {
-            svc->classname = args[1];
-        }
-        break;
-    case K_console:
-        svc->flags |= SVC_CONSOLE;
-        break;
-    case K_disabled:
-        svc->flags |= SVC_DISABLED;
-        svc->flags |= SVC_RC_DISABLED;
-        break;
-    case K_ioprio:
-        if (nargs != 3) {
-            parse_error(state, "ioprio optin usage: ioprio <rt|be|idle> <ioprio 0-7>\n");
-        } else {
-            svc->ioprio_pri = strtoul(args[2], 0, 8);
-
-            if (svc->ioprio_pri < 0 || svc->ioprio_pri > 7) {
-                parse_error(state, "priority value must be range 0 - 7\n");
-                break;
-            }
-
-            if (!strcmp(args[1], "rt")) {
-                svc->ioprio_class = IoSchedClass_RT;
-            } else if (!strcmp(args[1], "be")) {
-                svc->ioprio_class = IoSchedClass_BE;
-            } else if (!strcmp(args[1], "idle")) {
-                svc->ioprio_class = IoSchedClass_IDLE;
-            } else {
-                parse_error(state, "ioprio option usage: ioprio <rt|be|idle> <0-7>\n");
-            }
-        }
-        break;
-    case K_group:
-        if (nargs < 2) {
-            parse_error(state, "group option requires a group id\n");
-        } else if (nargs > NR_SVC_SUPP_GIDS + 2) {
-            parse_error(state, "group option accepts at most %d supp. groups\n",
-                        NR_SVC_SUPP_GIDS);
-        } else {
-            int n;
-            svc->gid = decode_uid(args[1]);
-            for (n = 2; n < nargs; n++) {
-                svc->supp_gids[n-2] = decode_uid(args[n]);
-            }
-            svc->nr_supp_gids = n - 2;
-        }
-        break;
-    case K_keycodes:
-        if (nargs < 2) {
-            parse_error(state, "keycodes option requires atleast one keycode\n");
-        } else {
-            svc->keycodes = (int*) malloc((nargs - 1) * sizeof(svc->keycodes[0]));
-            if (!svc->keycodes) {
-                parse_error(state, "could not allocate keycodes\n");
-            } else {
-                svc->nkeycodes = nargs - 1;
-                for (i = 1; i < nargs; i++) {
-                    svc->keycodes[i - 1] = atoi(args[i]);
-                }
-            }
-        }
-        break;
-    case K_oneshot:
-        svc->flags |= SVC_ONESHOT;
-        break;
-    case K_onrestart:
-        nargs--;
-        args++;
-        kw = lookup_keyword(args[0]);
-        if (!kw_is(kw, COMMAND)) {
-            parse_error(state, "invalid command '%s'\n", args[0]);
-            break;
-        }
-        kw_nargs = kw_nargs(kw);
-        if (nargs < kw_nargs) {
-            parse_error(state, "%s requires %d %s\n", args[0], kw_nargs - 1,
-                kw_nargs > 2 ? "arguments" : "argument");
-            break;
-        }
-        str_args.assign(args, args + nargs);
-        svc->onrestart->AddCommand(kw_func(kw), str_args);
-        break;
-    case K_critical:
-        svc->flags |= SVC_CRITICAL;
-        break;
-    case K_setenv: { /* name value */
-        if (nargs < 3) {
-            parse_error(state, "setenv option requires name and value arguments\n");
-            break;
-        }
-        svcenvinfo* ei = (svcenvinfo*) calloc(1, sizeof(*ei));
-        if (!ei) {
-            parse_error(state, "out of memory\n");
-            break;
-        }
-        ei->name = args[1];
-        ei->value = args[2];
-        ei->next = svc->envvars;
-        svc->envvars = ei;
-        break;
-    }
-    case K_socket: {/* name type perm [ uid gid context ] */
-        if (nargs < 4) {
-            parse_error(state, "socket option requires name, type, perm arguments\n");
-            break;
-        }
-        if (strcmp(args[2],"dgram") && strcmp(args[2],"stream")
-                && strcmp(args[2],"seqpacket")) {
-            parse_error(state, "socket type must be 'dgram', 'stream' or 'seqpacket'\n");
-            break;
-        }
-        socketinfo* si = (socketinfo*) calloc(1, sizeof(*si));
-        if (!si) {
-            parse_error(state, "out of memory\n");
-            break;
-        }
-        si->name = args[1];
-        si->type = args[2];
-        si->perm = strtoul(args[3], 0, 8);
-        if (nargs > 4)
-            si->uid = decode_uid(args[4]);
-        if (nargs > 5)
-            si->gid = decode_uid(args[5]);
-        if (nargs > 6)
-            si->socketcon = args[6];
-        si->next = svc->sockets;
-        svc->sockets = si;
-        break;
-    }
-    case K_user:
-        if (nargs != 2) {
-            parse_error(state, "user option requires a user id\n");
-        } else {
-            svc->uid = decode_uid(args[1]);
-        }
-        break;
-    case K_seclabel:
-        if (nargs != 2) {
-            parse_error(state, "seclabel option requires a label string\n");
-        } else {
-            svc->seclabel = args[1];
-        }
-        break;
-    case K_writepid:
-        if (nargs < 2) {
-            parse_error(state, "writepid option requires at least one filename\n");
-            break;
-        }
-        svc->writepid_files_ = new std::vector<std::string>;
-        for (int i = 1; i < nargs; ++i) {
-            svc->writepid_files_->push_back(args[i]);
-        }
-        break;
-
-    default:
-        parse_error(state, "invalid option '%s'\n", args[0]);
+    if (!ret) {
+        parse_error(state, "%s\n", ret_err.c_str());
     }
 }
 
@@ -793,28 +454,42 @@ static void *parse_action(struct parse_state* state, int nargs, char **args)
     return ret;
 }
 
+bool add_command_to_action(Action* action, const std::vector<std::string>& args,
+                           const std::string& filename, int line, std::string* err)
+{
+    int kw;
+    size_t n;
+
+    kw = lookup_keyword(args[0].c_str());
+    if (!kw_is(kw, COMMAND)) {
+        *err = android::base::StringPrintf("invalid command '%s'\n", args[0].c_str());
+        return false;
+    }
+
+    n = kw_nargs(kw);
+    if (args.size() < n) {
+        *err = android::base::StringPrintf("%s requires %zu %s\n",
+                                           args[0].c_str(), n - 1,
+                                           n > 2 ? "arguments" : "argument");
+        return false;
+    }
+
+    action->AddCommand(kw_func(kw), args, filename, line);
+    return true;
+}
+
 static void parse_line_action(struct parse_state* state, int nargs, char **args)
 {
-    Action* act = (Action*) state->context;
-    int kw, n;
-
     if (nargs == 0) {
         return;
     }
 
-    kw = lookup_keyword(args[0]);
-    if (!kw_is(kw, COMMAND)) {
-        parse_error(state, "invalid command '%s'\n", args[0]);
-        return;
-    }
-
-    n = kw_nargs(kw);
-    if (nargs < n) {
-        parse_error(state, "%s requires %d %s\n", args[0], n - 1,
-            n > 2 ? "arguments" : "argument");
-        return;
-    }
-
+    Action* action = static_cast<Action*>(state->context);
     std::vector<std::string> str_args(args, args + nargs);
-    act->AddCommand(kw_func(kw), str_args, state->filename, state->line);
+    std::string ret_err;
+    bool ret = add_command_to_action(action, str_args, state->filename,
+                                     state->line, &ret_err);
+    if (!ret) {
+        parse_error(state, "%s\n", ret_err.c_str());
+    }
 }
