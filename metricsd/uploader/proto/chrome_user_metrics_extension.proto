@@ -14,9 +14,9 @@ option java_package = "org.chromium.components.metrics";
 
 package metrics;
 
-import "system/core/metrics/uploader/proto/histogram_event.proto";
-import "system/core/metrics/uploader/proto/system_profile.proto";
-import "system/core/metrics/uploader/proto/user_action_event.proto";
+import "system/core/metricsd/uploader/proto/histogram_event.proto";
+import "system/core/metricsd/uploader/proto/system_profile.proto";
+import "system/core/metricsd/uploader/proto/user_action_event.proto";
 
 // Next tag: 13
 message ChromeUserMetricsExtension {
