@@ -9,6 +9,7 @@
 #include <chromeos/flag_helper.h>
 #include <chromeos/syslog_logging.h>
 
+#include "constants.h"
 #include "metrics_daemon.h"
 
 const char kScalingMaxFreqPath[] =
@@ -34,10 +35,10 @@ int main(int argc, char** argv) {
                "Interval at which metrics_daemon sends the metrics. (needs "
                "-uploader)");
   DEFINE_string(server,
-                "https://clients4.google.com/uma/v2",
+                metrics::kMetricsServer,
                 "Server to upload the metrics to. (needs -uploader)");
   DEFINE_string(metrics_file,
-                "/var/lib/metrics/uma-events",
+                metrics::kMetricsEventsFilePath,
                 "File to use as a proxy for uploading the metrics");
   DEFINE_string(config_root,
                 "/", "Root of the configuration files (testing only)");

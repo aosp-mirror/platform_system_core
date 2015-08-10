@@ -4,24 +4,23 @@
 
 #include "uploader/system_profile_cache.h"
 
+#include <base/files/file_util.h>
+#include <base/guid.h>
+#include <base/logging.h>
+#include <base/strings/string_number_conversions.h>
+#include <base/strings/string_util.h>
+#include <base/sys_info.h>
 #include <string>
 #include <vector>
 
-#include "base/files/file_util.h"
-#include "base/guid.h"
-#include "base/logging.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
-#include "base/sys_info.h"
+#include "constants.h"
 #include "persistent_integer.h"
 #include "uploader/metrics_log_base.h"
 #include "uploader/proto/chrome_user_metrics_extension.pb.h"
 
 namespace {
 
-const char kPersistentGUIDFile[] = "/var/lib/metrics/Sysinfo.GUID";
 const char kPersistentSessionIdFilename[] = "Sysinfo.SessionId";
-const char kProductIdFieldName[] = "GOOGLE_METRICS_PRODUCT_ID";
 
 }  // namespace
 
