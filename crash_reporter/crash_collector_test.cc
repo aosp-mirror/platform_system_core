@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "crash-reporter/crash_collector_test.h"
+#include "crash_collector_test.h"
 
 #include <unistd.h>
 #include <utility>
@@ -13,7 +13,7 @@
 #include <chromeos/syslog_logging.h>
 #include <gtest/gtest.h>
 
-#include "crash-reporter/crash_collector.h"
+#include "crash_collector.h"
 
 using base::FilePath;
 using base::StringPrintf;
