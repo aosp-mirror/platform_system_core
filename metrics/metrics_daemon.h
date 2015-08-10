@@ -32,7 +32,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   void Init(bool testing,
             bool uploader_active,
             MetricsLibraryInterface* metrics_lib,
-            const std::string& diskstats_path,
             const std::string& vmstats_path,
             const std::string& cpuinfo_max_freq_path,
             const std::string& scaling_max_freq_path,
@@ -356,7 +355,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   scoped_ptr<PersistentInteger> unclean_shutdowns_daily_count_;
   scoped_ptr<PersistentInteger> unclean_shutdowns_weekly_count_;
 
-  std::string diskstats_path_;
   std::string vmstats_path_;
   std::string scaling_max_freq_path_;
   std::string cpuinfo_max_freq_path_;
