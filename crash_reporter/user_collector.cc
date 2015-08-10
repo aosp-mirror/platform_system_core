@@ -4,13 +4,13 @@
 
 #include "user_collector.h"
 
-#include <bits/wordsize.h>
 #include <elf.h>
 #include <fcntl.h>
 #include <grp.h>  // For struct group.
 #include <pcrecpp.h>
 #include <pwd.h>  // For struct passwd.
 #include <stdint.h>
+#include <sys/cdefs.h>  // For __WORDSIZE
 #include <sys/types.h>  // For getpwuid_r, getgrnam_r, WEXITSTATUS.
 
 #include <string>
