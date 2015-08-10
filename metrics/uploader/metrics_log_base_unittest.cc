@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "metrics/uploader/metrics_log_base.h"
+#include "uploader/metrics_log_base.h"
 
 #include <string>
 
@@ -10,7 +10,7 @@
 #include <base/metrics/sample_vector.h>
 #include <gtest/gtest.h>
 
-#include "metrics/uploader/proto/chrome_user_metrics_extension.pb.h"
+#include "uploader/proto/chrome_user_metrics_extension.pb.h"
 
 namespace metrics {
 

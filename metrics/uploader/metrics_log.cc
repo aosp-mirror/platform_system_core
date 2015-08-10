@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "metrics/uploader/proto/system_profile.pb.h"
+#include "uploader/proto/system_profile.pb.h"
 #include "uploader/system_profile_setter.h"
 
 // We use default values for the MetricsLogBase constructor as the setter will
