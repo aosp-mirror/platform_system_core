@@ -44,8 +44,6 @@ static const uint64_t kFakeWriteSectors[] = {3000, 4000};
 static const char kFakeVmStatsName[] = "fake-vm-stats";
 static const char kFakeScalingMaxFreqPath[] = "fake-scaling-max-freq";
 static const char kFakeCpuinfoMaxFreqPath[] = "fake-cpuinfo-max-freq";
-static const char kMetricsServer[] = "https://clients4.google.com/uma/v2";
-static const char kMetricsFilePath[] = "/var/lib/metrics/uma-events";
 
 class MetricsDaemonTest : public testing::Test {
  protected:

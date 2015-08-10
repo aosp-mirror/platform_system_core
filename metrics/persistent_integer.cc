@@ -9,14 +9,9 @@
 #include <base/logging.h>
 #include <base/posix/eintr_wrapper.h>
 
+#include "constants.h"
 #include "metrics/metrics_library.h"
 
-namespace {
-
-// The directory for the persistent storage.
-const char kBackingFilesDirectory[] = "/var/lib/metrics/";
-
-}
 
 namespace chromeos_metrics {
 
@@ -31,7 +26,7 @@ PersistentInteger::PersistentInteger(const std::string& name) :
   if (testing_) {
     backing_file_name_ = name_;
   } else {
-    backing_file_name_ = kBackingFilesDirectory + name_;
+    backing_file_name_ = metrics::kMetricsDirectory + name_;
   }
 }
 
