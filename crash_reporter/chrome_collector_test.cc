@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "crash-reporter/chrome_collector.h"
+#include "chrome_collector.h"
 
 #include <stdio.h>
 
