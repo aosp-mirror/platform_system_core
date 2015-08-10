@@ -189,26 +189,16 @@ static void *load_file(const char *fn, unsigned *_sz)
     return load_fd(fd, _sz);
 }
 
-int match_fastboot_with_serial(usb_ifc_info *info, const char *local_serial)
-{
-    if(!(vendor_id && (info->dev_vendor == vendor_id)) &&
-       (info->dev_vendor != 0x18d1) &&  // Google
-       (info->dev_vendor != 0x8087) &&  // Intel
-       (info->dev_vendor != 0x0451) &&
-       (info->dev_vendor != 0x0502) &&
-       (info->dev_vendor != 0x0fce) &&  // Sony Ericsson
-       (info->dev_vendor != 0x05c6) &&  // Qualcomm
-       (info->dev_vendor != 0x22b8) &&  // Motorola
-       (info->dev_vendor != 0x0955) &&  // Nvidia
-       (info->dev_vendor != 0x413c) &&  // DELL
-       (info->dev_vendor != 0x2314) &&  // INQ Mobile
-       (info->dev_vendor != 0x0b05) &&  // Asus
-       (info->dev_vendor != 0x0bb4) &&  // HTC
-       (info->dev_vendor != 0x07cf))    // CASIO
-            return -1;
-    if(info->ifc_class != 0xff) return -1;
-    if(info->ifc_subclass != 0x42) return -1;
-    if(info->ifc_protocol != 0x03) return -1;
+int match_fastboot_with_serial(usb_ifc_info* info, const char* local_serial) {
+    // Require a matching vendor id if the user specified one with -i.
+    if (vendor_id != 0  && info->dev_vendor != vendor_id) {
+        return -1;
+    }
+
+    if (info->ifc_class != 0xff || info->ifc_subclass != 0x42 || info->ifc_protocol != 0x03) {
+        return -1;
+    }
+
     // require matching serial number or device path if requested
     // at the command line with the -s option.
     if (local_serial && (strcmp(local_serial, info->serial_number) != 0 &&
