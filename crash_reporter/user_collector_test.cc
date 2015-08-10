@@ -4,8 +4,8 @@
 
 #include "user_collector.h"
 
-#include <bits/wordsize.h>
 #include <elf.h>
+#include <sys/cdefs.h>  // For __WORDSIZE
 #include <unistd.h>
 
 #include <base/files/file_util.h>

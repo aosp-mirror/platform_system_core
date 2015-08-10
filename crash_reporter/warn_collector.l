@@ -11,6 +11,8 @@
  * shipment to the crash server.
  */
 
+%option noyywrap
+
 %{
 #include <fcntl.h>
 #include <inttypes.h>
@@ -122,6 +124,7 @@ static void SetHashSeen(uint32_t hash) {
   hash_bitmap[word_index] |= 1 << bit_index;
 }
 
+#pragma GCC diagnostic ignored "-Wwrite-strings"
 int WarnStart(void) {
   uint32_t hash;
   char *spacep;
@@ -140,7 +143,7 @@ int WarnStart(void) {
   yyout = fopen(warn_dump_path, "w");
   if (yyout == NULL)
     Die("fopen %s failed: %s\n", warn_dump_path, strerror(errno));
-  spacep = index(yytext, ' ');
+  spacep = strchr(yytext, ' ');
   if (spacep == NULL || spacep[1] == '\0')
     spacep = "unknown-function";
   fprintf(yyout, "%08x-%s\n", hash, spacep + 1);
@@ -318,5 +321,4 @@ int main(int argc, char **argv) {
  */
 void UnusedFunctionWarningSuppressor(void) {
   yyunput(0, 0);
-  (void) input();
 }
