@@ -16,12 +16,12 @@
 #include <chromeos/syslog_logging.h>
 #include <metrics/metrics_library.h>
 
-#include "crash-reporter/chrome_collector.h"
-#include "crash-reporter/kernel_collector.h"
-#include "crash-reporter/kernel_warning_collector.h"
-#include "crash-reporter/udev_collector.h"
-#include "crash-reporter/unclean_shutdown_collector.h"
-#include "crash-reporter/user_collector.h"
+#include "chrome_collector.h"
+#include "kernel_collector.h"
+#include "kernel_warning_collector.h"
+#include "udev_collector.h"
+#include "unclean_shutdown_collector.h"
+#include "user_collector.h"
 
 static const char kCrashCounterHistogram[] = "Logging.CrashCounter";
 static const char kUserCrashSignal[] =
