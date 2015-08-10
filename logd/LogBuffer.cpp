@@ -218,18 +218,25 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
 }
 
 // If we're using more than 256K of memory for log entries, prune
-// at least 10% of the log entries.
+// at least 10% of the log entries. For sizes above 1M, prune at
+// least 1% of the log entries.
 //
 // mLogElementsLock must be held when this function is called.
 void LogBuffer::maybePrune(log_id_t id) {
     size_t sizes = stats.sizes(id);
-    if (sizes > log_buffer_size(id)) {
-        size_t sizeOver90Percent = sizes - ((log_buffer_size(id) * 9) / 10);
-        size_t elements = stats.elements(id);
-        unsigned long pruneRows = elements * sizeOver90Percent / sizes;
-        elements /= 10;
-        if (pruneRows <= elements) {
-            pruneRows = elements;
+    unsigned long maxSize = log_buffer_size(id);
+    if (sizes > maxSize) {
+        size_t sizeOver, minElements, elements = stats.elements(id);
+        if (maxSize > (4 * LOG_BUFFER_SIZE)) {
+            sizeOver = sizes - ((maxSize * 99) / 100);
+            minElements = elements / 100;
+        } else {
+            sizeOver = sizes - ((maxSize * 9) / 10);
+            minElements = elements / 10;
+        }
+        unsigned long pruneRows = elements * sizeOver / sizes;
+        if (pruneRows <= minElements) {
+            pruneRows = minElements;
         }
         prune(id, pruneRows);
     }
