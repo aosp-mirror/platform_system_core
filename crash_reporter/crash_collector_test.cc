@@ -32,13 +32,6 @@ bool IsMetrics() {
   return false;
 }
 
-bool GetActiveUserSessionsImpl(std::map<std::string, std::string> *sessions) {
-  char kUser[] = "chicken@butt.com";
-  char kHash[] = "hashcakes";
-  sessions->insert(std::pair<std::string, std::string>(kUser, kHash));
-  return true;
-}
-
 }  // namespace
 
 class CrashCollectorTest : public ::testing::Test {
@@ -126,18 +119,13 @@ TEST_F(CrashCollectorTest, GetCrashDirectoryInfo) {
   EXPECT_EQ(kRootUid, directory_owner);
   EXPECT_EQ(kRootGid, directory_group);
 
-  EXPECT_CALL(collector_, GetActiveUserSessions(testing::_))
-      .WillOnce(Invoke(&GetActiveUserSessionsImpl));
-
-  EXPECT_EQ(collector_.IsUserSpecificDirectoryEnabled(), true);
-
   path = collector_.GetCrashDirectoryInfo(kChronosUid,
                                           kChronosUid,
                                           kChronosGid,
                                           &directory_mode,
                                           &directory_owner,
                                           &directory_group);
-  EXPECT_EQ("/home/user/hashcakes/crash", path.value());
+  EXPECT_EQ("/var/spool/crash", path.value());
   EXPECT_EQ(kExpectedUserMode, directory_mode);
   EXPECT_EQ(kChronosUid, directory_owner);
   EXPECT_EQ(kChronosGid, directory_group);

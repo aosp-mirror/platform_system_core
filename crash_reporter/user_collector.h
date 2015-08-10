@@ -169,8 +169,6 @@ class UserCollector : public CrashCollector {
 
   bool ShouldDump(bool has_owner_consent,
                   bool is_developer,
-                  bool handle_chrome_crashes,
-                  const std::string &exec,
                   std::string *reason);
 
   bool generate_diagnostics_;
