@@ -16,8 +16,6 @@
 #include "serialization/metric_sample.h"
 #include "serialization/serialization_utils.h"
 
-#include "policy/device_policy.h"
-
 static const char kAutotestPath[] = "/var/log/metrics/autotest-events";
 static const char kUMAEventsPath[] = "/var/lib/metrics/uma-events";
 static const char kConsentFile[] = "/home/chronos/Consent To Send Stats";
@@ -123,29 +121,7 @@ bool MetricsLibrary::AreMetricsEnabled() {
   time_t this_check_time = time(nullptr);
   if (this_check_time != cached_enabled_time_) {
     cached_enabled_time_ = this_check_time;
-
-    if (!policy_provider_.get())
-      policy_provider_.reset(new policy::PolicyProvider());
-    policy_provider_->Reload();
-    // We initialize with the default value which is false and will be preserved
-    // if the policy is not set.
-    bool enabled = false;
-    bool has_policy = false;
-    if (policy_provider_->device_policy_is_loaded()) {
-      has_policy =
-          policy_provider_->GetDevicePolicy().GetMetricsEnabled(&enabled);
-    }
-    // If policy couldn't be loaded or the metrics policy is not set we should
-    // still respect the consent file if it is present for migration purposes.
-    // TODO(pastarmovj)
-    if (!has_policy) {
-      enabled = stat(consent_file_.c_str(), &stat_buffer) >= 0;
-    }
-
-    if (enabled && !IsGuestMode())
-      cached_enabled_ = true;
-    else
-      cached_enabled_ = false;
+    cached_enabled_ = stat(consent_file_.c_str(), &stat_buffer) >= 0;
   }
   return cached_enabled_;
 }
@@ -198,10 +174,6 @@ bool MetricsLibrary::SendUserActionToUMA(const std::string& action) {
 bool MetricsLibrary::SendCrashToUMA(const char *crash_kind) {
   return metrics::SerializationUtils::WriteMetricToFile(
       *metrics::MetricSample::CrashSample(crash_kind).get(), kUMAEventsPath);
-}
-
-void MetricsLibrary::SetPolicyProvider(policy::PolicyProvider* provider) {
-  policy_provider_.reset(provider);
 }
 
 bool MetricsLibrary::SendCrosEventToUMA(const std::string& event) {
