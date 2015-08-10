@@ -21,7 +21,7 @@
 #include "serialization/serialization_utils.h"
 #include "uploader/metrics_log.h"
 #include "uploader/sender_http.h"
-#include "uploader/system_profile_cache.h"
+#include "uploader/system_profile_setter.h"
 
 const int UploadService::kMaxFailedUpload = 10;
 
