@@ -128,18 +128,6 @@ void MetricsLibrary::Init() {
   uma_events_file_ = metrics::kMetricsEventsFilePath;
 }
 
-bool MetricsLibrary::SendToAutotest(const std::string& name, int value) {
-  FILE* autotest_file = fopen(kAutotestPath, "a+");
-  if (autotest_file == nullptr) {
-    PLOG(ERROR) << kAutotestPath << ": fopen";
-    return false;
-  }
-
-  fprintf(autotest_file, "%s=%d\n", name.c_str(), value);
-  fclose(autotest_file);
-  return true;
-}
-
 bool MetricsLibrary::SendToUMA(const std::string& name,
                                int sample,
                                int min,

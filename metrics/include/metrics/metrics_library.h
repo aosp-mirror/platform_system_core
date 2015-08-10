@@ -26,7 +26,7 @@ class MetricsLibraryInterface {
   virtual ~MetricsLibraryInterface() {}
 };
 
-// Library used to send metrics to both Autotest and Chrome/UMA.
+// Library used to send metrics to Chrome/UMA.
 class MetricsLibrary : public MetricsLibraryInterface {
  public:
   MetricsLibrary();
@@ -106,9 +106,6 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // the addition of events (at the cost of having to look them up by
   // number in the histograms dashboard).
   bool SendCrosEventToUMA(const std::string& event);
-
-  // Sends to Autotest and returns true on success.
-  static bool SendToAutotest(const std::string& name, int value);
 
  private:
   friend class CMetricsLibraryTest;
