@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "crash-reporter/crash_collector.h"
+#include "crash_collector.h"
 
 #include <dirent.h>
 #include <fcntl.h>  // For file creation modes.

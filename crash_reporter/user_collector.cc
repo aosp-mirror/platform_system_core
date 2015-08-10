@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "crash-reporter/user_collector.h"
+#include "user_collector.h"
 
 #include <bits/wordsize.h>
 #include <elf.h>

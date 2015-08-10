@@ -12,7 +12,7 @@
 #include <base/macros.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
-#include "crash-reporter/crash_collector.h"
+#include "crash_collector.h"
 #include "debugd/dbus-proxies.h"
 
 class SystemLogging;
