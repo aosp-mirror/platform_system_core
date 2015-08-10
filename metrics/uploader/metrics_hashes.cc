@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "metrics/uploader/metrics_hashes.h"
+#include "uploader/metrics_hashes.h"
 
 #include "base/logging.h"
 #include "base/md5.h"

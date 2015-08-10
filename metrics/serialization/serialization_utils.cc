@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "metrics/serialization/serialization_utils.h"
+#include "serialization/serialization_utils.h"
 
 #include <sys/file.h>
 
@@ -17,7 +17,7 @@
 #include "base/memory/scoped_vector.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "metrics/serialization/metric_sample.h"
+#include "serialization/metric_sample.h"
 
 #define READ_WRITE_ALL_FILE_FLAGS \
   (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)

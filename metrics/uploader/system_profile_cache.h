@@ -12,10 +12,9 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_ptr.h"
-#include "chromeos/osrelease_reader.h"
-#include "metrics/persistent_integer.h"
-#include "metrics/uploader/proto/system_profile.pb.h"
-#include "metrics/uploader/system_profile_setter.h"
+#include "persistent_integer.h"
+#include "uploader/proto/system_profile.pb.h"
+#include "uploader/system_profile_setter.h"
 
 namespace metrics {
 class ChromeUserMetricsExtension;

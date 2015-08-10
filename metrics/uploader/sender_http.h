@@ -9,7 +9,7 @@
 
 #include <base/macros.h>
 
-#include "metrics/uploader/sender.h"
+#include "uploader/sender.h"
 
 // Sender implemented using http_utils from libchromeos
 class HttpSender : public Sender {

@@ -9,7 +9,7 @@
 
 #include <gmock/gmock.h>
 
-#include "metrics/timer.h"
+#include "timer.h"
 
 namespace chromeos_metrics {
 

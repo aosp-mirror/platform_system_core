@@ -18,7 +18,7 @@
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 #include "metrics/metrics_library.h"
-#include "metrics/persistent_integer.h"
+#include "persistent_integer.h"
 #include "uploader/upload_service.h"
 
 using chromeos_metrics::PersistentInteger;

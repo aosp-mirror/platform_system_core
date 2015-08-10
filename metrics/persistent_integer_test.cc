@@ -8,7 +8,7 @@
 #include <base/files/file_enumerator.h>
 #include <base/files/file_util.h>
 
-#include "metrics/persistent_integer.h"
+#include "persistent_integer.h"
 
 const char kBackingFileName[] = "1.pibakf";
 const char kBackingFilePattern[] = "*.pibakf";
