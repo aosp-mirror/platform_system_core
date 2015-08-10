@@ -13,12 +13,10 @@
 #include <cstdio>
 #include <cstring>
 
+#include "constants.h"
 #include "serialization/metric_sample.h"
 #include "serialization/serialization_utils.h"
 
-static const char kAutotestPath[] = "/var/log/metrics/autotest-events";
-static const char kUMAEventsPath[] = "/var/lib/metrics/uma-events";
-static const char kConsentFile[] = "/home/chronos/Consent To Send Stats";
 static const char kCrosEventHistogramName[] = "Platform.CrOSEvent";
 static const int kCrosEventHistogramMax = 100;
 
@@ -46,7 +44,7 @@ static const char *kCrosEventNames[] = {
 time_t MetricsLibrary::cached_enabled_time_ = 0;
 bool MetricsLibrary::cached_enabled_ = false;
 
-MetricsLibrary::MetricsLibrary() : consent_file_(kConsentFile) {}
+MetricsLibrary::MetricsLibrary() : consent_file_(metrics::kConsentFilePath) {}
 MetricsLibrary::~MetricsLibrary() {}
 
 // We take buffer and buffer_size as parameters in order to simplify testing
@@ -127,7 +125,7 @@ bool MetricsLibrary::AreMetricsEnabled() {
 }
 
 void MetricsLibrary::Init() {
-  uma_events_file_ = kUMAEventsPath;
+  uma_events_file_ = metrics::kMetricsEventsFilePath;
 }
 
 bool MetricsLibrary::SendToAutotest(const std::string& name, int value) {
@@ -150,30 +148,30 @@ bool MetricsLibrary::SendToUMA(const std::string& name,
   return metrics::SerializationUtils::WriteMetricToFile(
       *metrics::MetricSample::HistogramSample(name, sample, min, max, nbuckets)
            .get(),
-      kUMAEventsPath);
+      metrics::kMetricsEventsFilePath);
 }
 
 bool MetricsLibrary::SendEnumToUMA(const std::string& name, int sample,
                                    int max) {
   return metrics::SerializationUtils::WriteMetricToFile(
       *metrics::MetricSample::LinearHistogramSample(name, sample, max).get(),
-      kUMAEventsPath);
+      metrics::kMetricsEventsFilePath);
 }
 
 bool MetricsLibrary::SendSparseToUMA(const std::string& name, int sample) {
   return metrics::SerializationUtils::WriteMetricToFile(
       *metrics::MetricSample::SparseHistogramSample(name, sample).get(),
-      kUMAEventsPath);
+      metrics::kMetricsEventsFilePath);
 }
 
 bool MetricsLibrary::SendUserActionToUMA(const std::string& action) {
   return metrics::SerializationUtils::WriteMetricToFile(
-      *metrics::MetricSample::UserActionSample(action).get(), kUMAEventsPath);
+      *metrics::MetricSample::UserActionSample(action).get(), metrics::kMetricsEventsFilePath);
 }
 
 bool MetricsLibrary::SendCrashToUMA(const char *crash_kind) {
   return metrics::SerializationUtils::WriteMetricToFile(
-      *metrics::MetricSample::CrashSample(crash_kind).get(), kUMAEventsPath);
+      *metrics::MetricSample::CrashSample(crash_kind).get(), metrics::kMetricsEventsFilePath);
 }
 
 bool MetricsLibrary::SendCrosEventToUMA(const std::string& event) {

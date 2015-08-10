@@ -20,9 +20,6 @@
 #include "uploader/system_profile_cache.h"
 #include "uploader/upload_service.h"
 
-static const char kMetricsServer[] = "https://clients4.google.com/uma/v2";
-static const char kMetricsFilePath[] = "/var/run/metrics/uma-events";
-
 class UploadServiceTest : public testing::Test {
  protected:
   UploadServiceTest()
