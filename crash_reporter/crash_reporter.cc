@@ -16,7 +16,6 @@
 #include <chromeos/syslog_logging.h>
 #include <metrics/metrics_library.h>
 
-#include "chrome_collector.h"
 #include "kernel_collector.h"
 #include "kernel_warning_collector.h"
 #include "udev_collector.h"
@@ -97,12 +96,6 @@ static void CountUserCrash() {
   LOG_IF(WARNING, status != 0) << "dbus-send running failed";
 }
 
-static void CountChromeCrash() {
-  // For now, consider chrome crashes the same as user crashes for reporting
-  // purposes.
-  CountUserCrash();
-}
-
 
 static int Initialize(KernelCollector *kernel_collector,
                       UserCollector *user_collector,
@@ -158,25 +151,6 @@ static int HandleUserCrash(UserCollector *user_collector,
   chromeos::LogToString(true);
   // Handle the crash, get the name of the process from procfs.
   bool handled = user_collector->HandleCrash(user, nullptr);
-  chromeos::LogToString(false);
-  if (!handled)
-    return 1;
-  return 0;
-}
-
-static int HandleChromeCrash(ChromeCollector *chrome_collector,
-                             const std::string& chrome_dump_file,
-                             const std::string& pid,
-                             const std::string& uid,
-                             const std::string& exe) {
-  CHECK(!chrome_dump_file.empty()) << "--chrome= must be set";
-  CHECK(!pid.empty()) << "--pid= must be set";
-  CHECK(!uid.empty()) << "--uid= must be set";
-  CHECK(!exe.empty()) << "--exe= must be set";
-
-  chromeos::LogToString(true);
-  bool handled = chrome_collector->HandleCrash(FilePath(chrome_dump_file),
-                                               pid, uid, exe);
   chromeos::LogToString(false);
   if (!handled)
     return 1;
@@ -258,7 +232,6 @@ int main(int argc, char *argv[]) {
   DEFINE_bool(unclean_check, true, "Check for unclean shutdown");
   DEFINE_string(udev, "", "Udev event description (type:device:subsystem)");
   DEFINE_bool(kernel_warning, false, "Report collected kernel warning");
-  DEFINE_string(chrome, "", "Chrome crash dump file");
   DEFINE_string(pid, "", "PID of crashing process");
   DEFINE_string(uid, "", "UID of crashing process");
   DEFINE_string(exe, "", "Executable name of crashing process");
@@ -289,8 +262,6 @@ int main(int argc, char *argv[]) {
                                         IsFeedbackAllowed);
   UdevCollector udev_collector;
   udev_collector.Initialize(CountUdevCrash, IsFeedbackAllowed);
-  ChromeCollector chrome_collector;
-  chrome_collector.Initialize(CountChromeCrash, IsFeedbackAllowed);
 
   KernelWarningCollector kernel_warning_collector;
   kernel_warning_collector.Initialize(CountUdevCrash, IsFeedbackAllowed);
@@ -320,14 +291,6 @@ int main(int argc, char *argv[]) {
 
   if (FLAGS_kernel_warning) {
     return HandleKernelWarning(&kernel_warning_collector);
-  }
-
-  if (!FLAGS_chrome.empty()) {
-    return HandleChromeCrash(&chrome_collector,
-                             FLAGS_chrome,
-                             FLAGS_pid,
-                             FLAGS_uid,
-                             FLAGS_exe);
   }
 
   return HandleUserCrash(&user_collector, FLAGS_user, FLAGS_crash_test);
