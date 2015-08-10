@@ -19,17 +19,15 @@ enum Mode {
 
 void ShowUsage() {
   fprintf(stderr,
-          "Usage:  metrics_client [-ab] [-t] name sample min max nbuckets\n"
-          "        metrics_client [-ab] -e   name sample max\n"
-          "        metrics_client [-ab] -s   name sample\n"
-          "        metrics_client [-ab] -v   event\n"
+          "Usage:  metrics_client [-t] name sample min max nbuckets\n"
+          "        metrics_client -e   name sample max\n"
+          "        metrics_client -s   name sample\n"
+          "        metrics_client -v   event\n"
           "        metrics_client -u action\n"
           "        metrics_client [-cg]\n"
           "\n"
-          "  default: send metric with integer values to Chrome only\n"
+          "  default: send metric with integer values \n"
           "           |min| > 0, |min| <= sample < |max|\n"
-          "  -a: send metric (name/sample) to Autotest only\n"
-          "  -b: send metric to both Chrome and Autotest\n"
           "  -c: return exit status 0 if user consents to stats, 1 otherwise,\n"
           "      in guest mode always return 1\n"
           "  -e: send linear/enumeration histogram data\n"
@@ -64,9 +62,7 @@ static double ParseDouble(const char *arg) {
 static int SendStats(char* argv[],
                      int name_index,
                      enum Mode mode,
-                     bool secs_to_msecs,
-                     bool send_to_autotest,
-                     bool send_to_chrome) {
+                     bool secs_to_msecs) {
   const char* name = argv[name_index];
   int sample;
   if (secs_to_msecs) {
@@ -75,25 +71,18 @@ static int SendStats(char* argv[],
     sample = ParseInt(argv[name_index + 1]);
   }
 
-  // Send metrics
-  if (send_to_autotest) {
-    MetricsLibrary::SendToAutotest(name, sample);
-  }
-
-  if (send_to_chrome) {
-    MetricsLibrary metrics_lib;
-    metrics_lib.Init();
-    if (mode == kModeSendSparseSample) {
-      metrics_lib.SendSparseToUMA(name, sample);
-    } else if (mode == kModeSendEnumSample) {
-      int max = ParseInt(argv[name_index + 2]);
-      metrics_lib.SendEnumToUMA(name, sample, max);
-    } else {
-      int min = ParseInt(argv[name_index + 2]);
-      int max = ParseInt(argv[name_index + 3]);
-      int nbuckets = ParseInt(argv[name_index + 4]);
-      metrics_lib.SendToUMA(name, sample, min, max, nbuckets);
-    }
+  MetricsLibrary metrics_lib;
+  metrics_lib.Init();
+  if (mode == kModeSendSparseSample) {
+    metrics_lib.SendSparseToUMA(name, sample);
+  } else if (mode == kModeSendEnumSample) {
+    int max = ParseInt(argv[name_index + 2]);
+    metrics_lib.SendEnumToUMA(name, sample, max);
+  } else {
+    int min = ParseInt(argv[name_index + 2]);
+    int max = ParseInt(argv[name_index + 3]);
+    int nbuckets = ParseInt(argv[name_index + 4]);
+    metrics_lib.SendToUMA(name, sample, min, max, nbuckets);
   }
   return 0;
 }
@@ -133,22 +122,12 @@ static int IsGuestMode() {
 
 int main(int argc, char** argv) {
   enum Mode mode = kModeSendSample;
-  bool send_to_autotest = false;
-  bool send_to_chrome = true;
   bool secs_to_msecs = false;
 
   // Parse arguments
   int flag;
   while ((flag = getopt(argc, argv, "abcegstuv")) != -1) {
     switch (flag) {
-      case 'a':
-        send_to_autotest = true;
-        send_to_chrome = false;
-        break;
-      case 'b':
-        send_to_chrome = true;
-        send_to_autotest = true;
-        break;
       case 'c':
         mode = kModeHasConsent;
         break;
@@ -203,9 +182,7 @@ int main(int argc, char** argv) {
       return SendStats(argv,
                        arg_index,
                        mode,
-                       secs_to_msecs,
-                       send_to_autotest,
-                       send_to_chrome);
+                       secs_to_msecs);
     case kModeSendUserAction:
       return SendUserAction(argv, arg_index);
     case kModeSendCrosEvent:
