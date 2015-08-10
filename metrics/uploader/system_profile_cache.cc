@@ -16,7 +16,6 @@
 #include "persistent_integer.h"
 #include "uploader/metrics_log_base.h"
 #include "uploader/proto/chrome_user_metrics_extension.pb.h"
-#include "vboot/crossystem.h"
 
 namespace {
 
@@ -63,43 +62,24 @@ bool SystemProfileCache::Initialize() {
   CHECK(!initialized_)
       << "this should be called only once in the metrics_daemon lifetime.";
 
-  std::string chromeos_version;
-  std::string board;
-  std::string build_type;
-  if (!base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_NAME",
-                                         &profile_.os_name) ||
-      !base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_VERSION",
-                                         &profile_.os_version) ||
-      !base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_BOARD", &board) ||
-      !base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_BUILD_TYPE",
-                                         &build_type) ||
-      !GetChromeOSVersion(&chromeos_version) ||
-      !GetHardwareId(&profile_.hardware_class)) {
-    DLOG(ERROR) << "failing to initialize profile cache";
+  std::string channel;
+  if (!base::SysInfo::GetLsbReleaseValue("BRILLO_CHANNEL", &channel) ||
+      !base::SysInfo::GetLsbReleaseValue("BRILLO_VERSION", &profile_.version) ||
+      !base::SysInfo::GetLsbReleaseValue("BRILLO_BUILD_TARGET_ID",
+                                         &profile_.build_target_id)) {
+    LOG(ERROR) << "Could not initialize system profile.";
     return false;
   }
 
-  std::string channel_string;
-  base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_TRACK", &channel_string);
-  profile_.channel = ProtoChannelFromString(channel_string);
-
-  profile_.app_version = chromeos_version + " (" + build_type + ")" +
-      ChannelToString(profile_.channel) + " " + board;
-
-  // If the product id is not defined, use the default one from the protobuf.
-  profile_.product_id = metrics::ChromeUserMetricsExtension::CHROME;
-  if (GetProductId(&profile_.product_id)) {
-    DLOG(INFO) << "Set the product id to " << profile_.product_id;
-  }
-
   profile_.client_id =
-      testing_ ? "client_id_test" : GetPersistentGUID(kPersistentGUIDFile);
+      testing_ ? "client_id_test" :
+      GetPersistentGUID(metrics::kMetricsGUIDFilePath);
+  profile_.hardware_class = "unknown";
+  profile_.channel = ProtoChannelFromString(channel);
 
   // Increment the session_id everytime we initialize this. If metrics_daemon
   // does not crash, this should correspond to the number of reboots of the
   // system.
-  // TODO(bsimonnet): Change this to map to the number of time system-services
-  // is started.
   session_id_->Add(1);
   profile_.session_id = static_cast<int32_t>(session_id_->Get());
 
@@ -123,21 +103,21 @@ void SystemProfileCache::Populate(
   metrics_proto->set_session_id(profile_.session_id);
 
   // Sets the product id.
-  metrics_proto->set_product(profile_.product_id);
+  metrics_proto->set_product(9);
 
   metrics::SystemProfileProto* profile_proto =
       metrics_proto->mutable_system_profile();
   profile_proto->mutable_hardware()->set_hardware_class(
       profile_.hardware_class);
-  profile_proto->set_app_version(profile_.app_version);
+  profile_proto->set_app_version(profile_.version);
   profile_proto->set_channel(profile_.channel);
-
-  metrics::SystemProfileProto_OS* os = profile_proto->mutable_os();
-  os->set_name(profile_.os_name);
-  os->set_version(profile_.os_version);
+  metrics::SystemProfileProto_BrilloDeviceData* device_data =
+      profile_proto->mutable_brillo();
+  device_data->set_build_target_id(profile_.build_target_id);
 }
 
-std::string SystemProfileCache::GetPersistentGUID(const std::string& filename) {
+std::string SystemProfileCache::GetPersistentGUID(
+    const std::string& filename) {
   std::string guid;
   base::FilePath filepath(filename);
   if (!base::ReadFileToString(filepath, &guid)) {
@@ -149,87 +129,15 @@ std::string SystemProfileCache::GetPersistentGUID(const std::string& filename) {
   return guid;
 }
 
-bool SystemProfileCache::GetChromeOSVersion(std::string* version) {
-  if (testing_) {
-    *version = "0.0.0.0";
-    return true;
-  }
-
-  std::string milestone, build, branch, patch;
-  unsigned tmp;
-  if (base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_CHROME_MILESTONE",
-                                        &milestone) &&
-      base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_BUILD_NUMBER",
-                                        &build) &&
-      base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_BRANCH_NUMBER",
-                                        &branch) &&
-      base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_PATCH_NUMBER",
-                                        &patch)) {
-    // Convert to uint to ensure those fields are positive numbers.
-    if (base::StringToUint(milestone, &tmp) &&
-        base::StringToUint(build, &tmp) &&
-        base::StringToUint(branch, &tmp) &&
-        base::StringToUint(patch, &tmp)) {
-      std::vector<std::string> parts = {milestone, build, branch, patch};
-      *version = JoinString(parts, '.');
-      return true;
-    }
-    DLOG(INFO) << "The milestone, build, branch or patch is not a positive "
-               << "number.";
-    return false;
-  }
-  DLOG(INFO) << "Field missing from /etc/lsb-release";
-  return false;
-}
-
-bool SystemProfileCache::GetHardwareId(std::string* hwid) {
-  CHECK(hwid);
-
-  if (testing_) {
-    // if we are in test mode, we do not call crossystem directly.
-    DLOG(INFO) << "skipping hardware id";
-    *hwid = "";
-    return true;
-  }
-
-  char buffer[128];
-  if (buffer != VbGetSystemPropertyString("hwid", buffer, sizeof(buffer))) {
-    LOG(ERROR) << "error getting hwid";
-    return false;
-  }
-
-  *hwid = std::string(buffer);
-  return true;
-}
-
-bool SystemProfileCache::GetProductId(int* product_id) const {
-  chromeos::OsReleaseReader reader;
-  if (testing_) {
-    base::FilePath root(config_root_);
-    reader.LoadTestingOnly(root);
-  } else {
-    reader.Load();
-  }
-
-  std::string id;
-  if (reader.GetString(kProductIdFieldName, &id)) {
-    CHECK(base::StringToInt(id, product_id)) << "Failed to convert product_id "
-                                             << id << " to int.";
-    return true;
-  }
-  return false;
-}
-
 metrics::SystemProfileProto_Channel SystemProfileCache::ProtoChannelFromString(
     const std::string& channel) {
-
-  if (channel == "stable-channel") {
+  if (channel == "stable") {
     return metrics::SystemProfileProto::CHANNEL_STABLE;
-  } else if (channel == "dev-channel") {
+  } else if (channel == "dev") {
     return metrics::SystemProfileProto::CHANNEL_DEV;
-  } else if (channel == "beta-channel") {
+  } else if (channel == "beta") {
     return metrics::SystemProfileProto::CHANNEL_BETA;
-  } else if (channel == "canary-channel") {
+  } else if (channel == "canary") {
     return metrics::SystemProfileProto::CHANNEL_CANARY;
   }
 
