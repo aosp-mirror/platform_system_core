@@ -9,7 +9,7 @@
 
 #include <gmock/gmock.h>
 
-#include "metrics/persistent_integer.h"
+#include "persistent_integer.h"
 
 namespace chromeos_metrics {
 

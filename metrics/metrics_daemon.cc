@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "metrics/metrics_daemon.h"
+#include "metrics_daemon.h"
 
 #include <fcntl.h>
 #include <inttypes.h>
@@ -11,6 +11,7 @@
 #include <sysexits.h>
 #include <time.h>
 
+#include <base/bind.h>
 #include <base/files/file_path.h>
 #include <base/files/file_util.h>
 #include <base/hash.h>
@@ -20,7 +21,6 @@
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
 #include <base/sys_info.h>
-#include <chromeos/dbus/service_constants.h>
 #include <dbus/dbus.h>
 #include <dbus/message.h>
 #include "uploader/upload_service.h"

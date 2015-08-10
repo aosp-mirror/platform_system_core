@@ -10,7 +10,7 @@
 #include <chromeos/syslog_logging.h>
 #include <rootdev/rootdev.h>
 
-#include "metrics/metrics_daemon.h"
+#include "metrics_daemon.h"
 
 const char kScalingMaxFreqPath[] =
     "/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq";
