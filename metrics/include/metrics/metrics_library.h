@@ -14,8 +14,6 @@
 #include <base/memory/scoped_ptr.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
-#include "policy/libpolicy.h"
-
 class MetricsLibraryInterface {
  public:
   virtual void Init() = 0;
@@ -130,9 +128,6 @@ class MetricsLibrary : public MetricsLibraryInterface {
                        char* buffer, int buffer_size,
                        bool* result);
 
-  // This function is used by tests only to mock the device policies.
-  void SetPolicyProvider(policy::PolicyProvider* provider);
-
   // Time at which we last checked if metrics were enabled.
   static time_t cached_enabled_time_;
 
@@ -141,8 +136,6 @@ class MetricsLibrary : public MetricsLibraryInterface {
 
   std::string uma_events_file_;
   std::string consent_file_;
-
-  scoped_ptr<policy::PolicyProvider> policy_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(MetricsLibrary);
 };
