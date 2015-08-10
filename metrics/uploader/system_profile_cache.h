@@ -21,14 +21,12 @@ class ChromeUserMetricsExtension;
 }
 
 struct SystemProfile {
-  std::string os_name;
-  std::string os_version;
-  metrics::SystemProfileProto::Channel channel;
-  std::string app_version;
+  std::string version;
   std::string hardware_class;
   std::string client_id;
-  int32_t session_id;
-  int32_t product_id;
+  int session_id;
+  metrics::SystemProfileProto::Channel channel;
+  std::string build_target_id;
 };
 
 // Retrieves general system informations needed by the protobuf for context and
@@ -42,9 +40,9 @@ class SystemProfileCache : public SystemProfileSetter {
   SystemProfileCache(bool testing, const std::string& config_root);
 
   // Populates the ProfileSystem protobuf with system information.
-  void Populate(metrics::ChromeUserMetricsExtension* profile_proto) override;
+  void Populate(metrics::ChromeUserMetricsExtension* metrics_proto) override;
 
-  // Converts a string representation of the channel (|channel|-channel) to a
+  // Converts a string representation of the channel to a
   // SystemProfileProto_Channel
   static metrics::SystemProfileProto_Channel ProtoChannelFromString(
       const std::string& channel);
@@ -64,21 +62,6 @@ class SystemProfileCache : public SystemProfileSetter {
 
   // Initializes |profile_| only if it has not been yet initialized.
   bool InitializeOrCheck();
-
-  // Gets the hardware ID using crossystem
-  bool GetHardwareId(std::string* hwid);
-
-  // Gets the product ID from the GOOGLE_METRICS_PRODUCT_ID field.
-  bool GetProductId(int* product_id) const;
-
-  // Generate the formatted chromeos version from the fields in
-  // /etc/lsb-release. The format is A.B.C.D where A, B, C and D are positive
-  // integer representing:
-  // * the chrome milestone
-  // * the build number
-  // * the branch number
-  // * the patch number
-  bool GetChromeOSVersion(std::string* version);
 
   bool initialized_;
   bool testing_;
