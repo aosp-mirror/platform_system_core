@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "metrics/uploader/upload_service.h"
+#include "uploader/upload_service.h"
 
 #include <string>
 
@@ -17,11 +17,11 @@
 #include <base/metrics/statistics_recorder.h>
 #include <base/sha1.h>
 
-#include "metrics/serialization/metric_sample.h"
-#include "metrics/serialization/serialization_utils.h"
-#include "metrics/uploader/metrics_log.h"
-#include "metrics/uploader/sender_http.h"
-#include "metrics/uploader/system_profile_cache.h"
+#include "serialization/metric_sample.h"
+#include "serialization/serialization_utils.h"
+#include "uploader/metrics_log.h"
+#include "uploader/sender_http.h"
+#include "uploader/system_profile_cache.h"
 
 const int UploadService::kMaxFailedUpload = 10;
 
