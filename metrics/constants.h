@@ -23,6 +23,7 @@ static const char kMetricsEventsFilePath[] = "/data/misc/metrics/uma-events";
 static const char kMetricsGUIDFilePath[] = "/data/misc/metrics/Sysinfo.GUID";
 static const char kMetricsServer[] = "http://clients4.google.com/uma/v2";
 static const char kConsentFilePath[] = "/data/misc/metrics/enabled";
+static const char kDefaultVersion[] = "0.0.0.0";
 }  // namespace metrics
 
 #endif  // METRICS_CONSTANTS_H_
