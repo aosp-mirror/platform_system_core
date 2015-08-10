@@ -13,8 +13,8 @@
 #include <cstdio>
 #include <cstring>
 
-#include "metrics/serialization/metric_sample.h"
-#include "metrics/serialization/serialization_utils.h"
+#include "serialization/metric_sample.h"
+#include "serialization/serialization_utils.h"
 
 #include "policy/device_policy.h"
 

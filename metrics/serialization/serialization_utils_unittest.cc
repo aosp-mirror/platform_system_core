@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "metrics/serialization/serialization_utils.h"
+#include "serialization/serialization_utils.h"
 
 #include <base/files/file_util.h>
 #include <base/files/scoped_temp_dir.h>
@@ -10,7 +10,7 @@
 #include <base/strings/stringprintf.h>
 #include <gtest/gtest.h>
 
-#include "metrics/serialization/metric_sample.h"
+#include "serialization/metric_sample.h"
 
 namespace metrics {
 namespace {
