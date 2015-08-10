@@ -220,7 +220,6 @@ bool MetricsDaemon::IsOnOfficialBuild() const {
 void MetricsDaemon::Init(bool testing,
                          bool uploader_active,
                          MetricsLibraryInterface* metrics_lib,
-                         const string& diskstats_path,
                          const string& vmstats_path,
                          const string& scaling_max_freq_path,
                          const string& cpuinfo_max_freq_path,
@@ -279,27 +278,15 @@ void MetricsDaemon::Init(bool testing,
   weekly_cycle_.reset(new PersistentInteger("weekly.cycle"));
   version_cycle_.reset(new PersistentInteger("version.cycle"));
 
-  diskstats_path_ = diskstats_path;
   vmstats_path_ = vmstats_path;
   scaling_max_freq_path_ = scaling_max_freq_path;
   cpuinfo_max_freq_path_ = cpuinfo_max_freq_path;
-
-  // If testing, initialize Stats Reporter without connecting DBus
-  if (testing_)
-    StatsReporterInit();
 }
 
 int MetricsDaemon::OnInit() {
   int return_code = chromeos::DBusDaemon::OnInit();
   if (return_code != EX_OK)
     return return_code;
-
-  StatsReporterInit();
-
-  // Start collecting meminfo stats.
-  ScheduleMeminfoCallback(kMetricMeminfoInterval);
-  memuse_final_time_ = GetActiveTime() + kMemuseIntervals[0];
-  ScheduleMemuseCallback(kMemuseIntervals[0]);
 
   if (testing_)
     return EX_OK;
@@ -328,11 +315,6 @@ int MetricsDaemon::OnInit() {
     LOG(ERROR) << "DBus isn't connected.";
     return EX_UNAVAILABLE;
   }
-
-  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-      base::Bind(&MetricsDaemon::HandleUpdateStatsTimeout,
-                 base::Unretained(this)),
-      base::TimeDelta::FromMilliseconds(kUpdateStatsIntervalMs));
 
   if (uploader_active_) {
     if (IsOnOfficialBuild()) {
@@ -518,41 +500,6 @@ void MetricsDaemon::ScheduleStatsCallback(int wait) {
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
       base::Bind(&MetricsDaemon::StatsCallback, base::Unretained(this)),
       base::TimeDelta::FromSeconds(wait));
-}
-
-bool MetricsDaemon::DiskStatsReadStats(uint64_t* read_sectors,
-                                       uint64_t* write_sectors) {
-  int nchars;
-  int nitems;
-  bool success = false;
-  char line[200];
-  if (diskstats_path_.empty()) {
-    return false;
-  }
-  int file = HANDLE_EINTR(open(diskstats_path_.c_str(), O_RDONLY));
-  if (file < 0) {
-    PLOG(WARNING) << "cannot open " << diskstats_path_;
-    return false;
-  }
-  nchars = HANDLE_EINTR(read(file, line, sizeof(line)));
-  if (nchars < 0) {
-    PLOG(WARNING) << "cannot read from " << diskstats_path_;
-    return false;
-  } else {
-    LOG_IF(WARNING, nchars == sizeof(line))
-        << "line too long in " << diskstats_path_;
-    line[nchars] = '\0';
-    nitems = sscanf(line, "%*d %*d %" PRIu64 " %*d %*d %*d %" PRIu64,
-                    read_sectors, write_sectors);
-    if (nitems == 2) {
-      success = true;
-    } else {
-      LOG(WARNING) << "found " << nitems << " items in "
-                   << diskstats_path_ << ", expected 2";
-    }
-  }
-  IGNORE_EINTR(close(file));
-  return success;
 }
 
 bool MetricsDaemon::VmStatsParseStats(const char* stats,
