@@ -23,8 +23,6 @@
 #include <base/strings/string_split.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
-#include <chromeos/cryptohome.h>
-#include <chromeos/dbus/service_constants.h>
 #include <chromeos/key_value_store.h>
 #include <chromeos/process.h>
 
@@ -87,8 +85,6 @@ CrashCollector::CrashCollector()
 }
 
 CrashCollector::~CrashCollector() {
-  if (bus_)
-    bus_->ShutdownAndBlock();
 }
 
 void CrashCollector::Initialize(
@@ -99,21 +95,6 @@ void CrashCollector::Initialize(
 
   count_crash_function_ = count_crash_function;
   is_feedback_allowed_function_ = is_feedback_allowed_function;
-
-  SetUpDBus();
-}
-
-void CrashCollector::SetUpDBus() {
-  dbus::Bus::Options options;
-  options.bus_type = dbus::Bus::SYSTEM;
-
-  bus_ = new dbus::Bus(options);
-  CHECK(bus_->Connect());
-
-  session_manager_proxy_.reset(
-      new org::chromium::SessionManagerInterfaceProxy(
-          bus_,
-          login_manager::kSessionManagerServiceName));
 }
 
 int CrashCollector::WriteNewFile(const FilePath &filename,
@@ -166,38 +147,6 @@ FilePath CrashCollector::GetCrashPath(const FilePath &crash_directory,
                                              extension.c_str()));
 }
 
-bool CrashCollector::GetActiveUserSessions(
-    std::map<std::string, std::string> *sessions) {
-  chromeos::ErrorPtr error;
-  session_manager_proxy_->RetrieveActiveSessions(sessions, &error);
-
-  if (error) {
-    LOG(ERROR) << "Error calling D-Bus proxy call to interface "
-               << "'" << session_manager_proxy_->GetObjectPath().value() << "':"
-               << error->GetMessage();
-    return false;
-  }
-
-  return true;
-}
-
-FilePath CrashCollector::GetUserCrashPath() {
-  // In this multiprofile world, there is no one-specific user dir anymore.
-  // Ask the session manager for the active ones, then just run with the
-  // first result we get back.
-  FilePath user_path = FilePath(kFallbackUserCrashPath);
-  std::map<std::string, std::string> active_sessions;
-  if (!GetActiveUserSessions(&active_sessions) || active_sessions.empty()) {
-    LOG(ERROR) << "Could not get active user sessions, using default.";
-    return user_path;
-  }
-
-  user_path = chromeos::cryptohome::home::GetHashedUserPath(
-      active_sessions.begin()->second).Append("crash");
-
-  return user_path;
-}
-
 FilePath CrashCollector::GetCrashDirectoryInfo(
     uid_t process_euid,
     uid_t default_user_id,
@@ -205,17 +154,11 @@ FilePath CrashCollector::GetCrashDirectoryInfo(
     mode_t *mode,
     uid_t *directory_owner,
     gid_t *directory_group) {
-  // TODO(mkrebs): This can go away once Chrome crashes are handled
-  // normally (see crosbug.com/5872).
-  // Check if the user crash directory should be used.  If we are
-  // collecting chrome crashes during autotesting, we want to put them in
-  // the system crash directory so they are outside the cryptohome -- in
-  // case we are being run during logout (see crosbug.com/18637).
-  if (process_euid == default_user_id && IsUserSpecificDirectoryEnabled()) {
+  if (process_euid == default_user_id) {
     *mode = kUserCrashPathMode;
     *directory_owner = default_user_id;
     *directory_group = default_user_group;
-    return GetUserCrashPath();
+    return FilePath(kFallbackUserCrashPath);
   } else {
     *mode = kSystemCrashPathMode;
     *directory_owner = kRootOwner;
@@ -490,23 +433,4 @@ bool CrashCollector::IsDeveloperImage() {
   if (IsCrashTestInProgress())
     return false;
   return base::PathExists(FilePath(kLeaveCoreFile));
-}
-
-bool CrashCollector::ShouldHandleChromeCrashes() {
-  // If we're testing crash reporter itself, we don't want to allow an
-  // override for chrome crashes.  And, let's be conservative and only
-  // allow an override for developer images.
-  if (!IsCrashTestInProgress() && IsDeveloperImage()) {
-    // Check if there's an override to indicate we should indeed collect
-    // chrome crashes.  This allows the crashes to still be tracked when
-    // they occur in autotests.  See "crosbug.com/17987".
-    if (base::PathExists(FilePath(kCollectChromeFile)))
-      return true;
-  }
-  // We default to ignoring chrome crashes.
-  return false;
-}
-
-bool CrashCollector::IsUserSpecificDirectoryEnabled() {
-  return !ShouldHandleChromeCrashes();
 }
