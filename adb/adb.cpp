@@ -630,7 +630,7 @@ int launch_server(int server_port)
     ZeroMemory( &startup, sizeof(startup) );
     startup.cb = sizeof(startup);
     startup.hStdInput  = nul_read;
-    startup.hStdOutput = pipe_write;
+    startup.hStdOutput = nul_write;
     startup.hStdError  = nul_write;
     startup.dwFlags    = STARTF_USESTDHANDLES;
 
@@ -645,9 +645,23 @@ int launch_server(int server_port)
                 SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
+
+    // Verify that the pipe_write handle value can be passed on the command line
+    // as %d and that the rest of adb code can pass it around in an int.
+    const int pipe_write_as_int = cast_handle_to_int(pipe_write);
+    if (cast_int_to_handle(pipe_write_as_int) != pipe_write) {
+        // If this fires, either handle values are larger than 32-bits or else
+        // there is a bug in our casting.
+        // https://msdn.microsoft.com/en-us/library/windows/desktop/aa384203%28v=vs.85%29.aspx
+        fprintf(stderr, "CreatePipe handle value too large: 0x%p\n",
+                pipe_write);
+        return -1;
+    }
+
     WCHAR args[64];
     snwprintf(args, arraysize(args),
-              L"adb -P %d fork-server server", server_port);
+              L"adb -P %d fork-server server --reply-fd %d", server_port,
+              pipe_write_as_int);
     ret = CreateProcessW(
             program_path,                              /* program path  */
             args,

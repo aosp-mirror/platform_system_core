@@ -961,14 +961,7 @@ int adb_commandline(int argc, const char **argv) {
     int is_server = 0;
     int r;
     TransportType transport_type = kTransportAny;
-
-#if defined(_WIN32)
-    // TODO(compareandswap): Windows should use a separate reply fd too.
-    int ack_reply_fd = STDOUT_FILENO;
-#else
     int ack_reply_fd = -1;
-#endif
-
 
     // If defined, this should be an absolute path to
     // the directory containing all of the various system images
@@ -1011,7 +1004,14 @@ int adb_commandline(int argc, const char **argv) {
             argc--;
             argv++;
             ack_reply_fd = strtol(reply_fd_str, nullptr, 10);
+#ifdef _WIN32
+            const HANDLE ack_reply_handle = cast_int_to_handle(ack_reply_fd);
+            if ((GetStdHandle(STD_INPUT_HANDLE) == ack_reply_handle) ||
+                (GetStdHandle(STD_OUTPUT_HANDLE) == ack_reply_handle) ||
+                (GetStdHandle(STD_ERROR_HANDLE) == ack_reply_handle)) {
+#else
             if (ack_reply_fd <= 2) { // Disallow stdin, stdout, and stderr.
+#endif
                 fprintf(stderr, "adb: invalid reply fd \"%s\"\n", reply_fd_str);
                 return usage();
             }
@@ -1092,7 +1092,7 @@ int adb_commandline(int argc, const char **argv) {
 
     if (is_server) {
         if (no_daemon || is_daemon) {
-            if (ack_reply_fd == -1) {
+            if (is_daemon && (ack_reply_fd == -1)) {
                 fprintf(stderr, "reply fd for adb server to client communication not specified.\n");
                 return usage();
             }
