@@ -338,6 +338,23 @@ private:
     char** narrow_args;
 };
 
+// Windows HANDLE values only use 32-bits of the type, even on 64-bit machines,
+// so they can fit in an int. To convert back, we just need to sign-extend.
+// https://msdn.microsoft.com/en-us/library/windows/desktop/aa384203%28v=vs.85%29.aspx
+// Note that this does not make a HANDLE value work with APIs like open(), nor
+// does this make a value from open() passable to APIs taking a HANDLE. This
+// just lets you take a HANDLE, pass it around as an int, and then use it again
+// as a HANDLE.
+inline int cast_handle_to_int(const HANDLE h) {
+    // truncate
+    return static_cast<int>(reinterpret_cast<INT_PTR>(h));
+}
+
+inline HANDLE cast_int_to_handle(const int fd) {
+    // sign-extend
+    return reinterpret_cast<HANDLE>(static_cast<INT_PTR>(fd));
+}
+
 #else /* !_WIN32 a.k.a. Unix */
 
 #include "fdevent.h"
