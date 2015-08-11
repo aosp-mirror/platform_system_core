@@ -14,6 +14,8 @@
 
 LOCAL_PATH := $(call my-dir)
 
+ifeq ($(HOST_OS),linux)
+
 metrics_cpp_extension := .cc
 libmetrics_sources := \
   c_metrics_library.cc \
@@ -110,3 +112,5 @@ LOCAL_SHARED_LIBRARIES := $(metrics_shared_libraries) \
 LOCAL_SRC_FILES := $(metrics_daemon_sources)
 LOCAL_STATIC_LIBRARIES := metrics_daemon_protos
 include $(BUILD_EXECUTABLE)
+
+endif # HOST_OS == linux
