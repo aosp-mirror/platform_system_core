@@ -160,16 +160,24 @@ int adb_main(int is_daemon, int server_port, int ack_reply_fd) {
     // Inform our parent that we are up and running.
     if (is_daemon) {
 #if defined(_WIN32)
-        // Change stdout mode to binary so \n => \r\n translation does not
-        // occur. In a moment stdout will be reopened to the daemon log file
-        // anyway.
-        _setmode(ack_reply_fd, _O_BINARY);
-#endif
+        const HANDLE ack_reply_handle = cast_int_to_handle(ack_reply_fd);
+        const CHAR ack[] = "OK\n";
+        const DWORD bytes_to_write = arraysize(ack) - 1;
+        DWORD written = 0;
+        if (!WriteFile(ack_reply_handle, ack, bytes_to_write, &written, NULL)) {
+            fatal("adb: cannot write ACK to handle 0x%p: %s", ack_reply_handle,
+                  SystemErrorCodeToString(GetLastError()).c_str());
+        }
+        if (written != bytes_to_write) {
+            fatal("adb: cannot write %lu bytes of ACK: only wrote %lu bytes",
+                  bytes_to_write, written);
+        }
+        CloseHandle(ack_reply_handle);
+#else
         // TODO(danalbert): Can't use SendOkay because we're sending "OK\n", not
         // "OKAY".
         android::base::WriteStringToFd("OK\n", ack_reply_fd);
-#if !defined(_WIN32)
-        adb_close(ack_reply_fd);
+        unix_close(ack_reply_fd);
 #endif
         close_stdin();
         setup_daemon_logging();
