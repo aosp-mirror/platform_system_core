@@ -379,7 +379,6 @@ int adb_commandline(int argc, const char **argv);
 ConnectionState connection_state(atransport *t);
 
 extern const char *adb_device_banner;
-extern int HOST;
 #if !ADB_HOST
 extern int SHELL_EXIT_NOTIFY_FD;
 #endif // !ADB_HOST
