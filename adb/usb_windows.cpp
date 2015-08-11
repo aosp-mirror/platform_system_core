@@ -33,6 +33,10 @@
 /** Structure usb_handle describes our connection to the usb device via
   AdbWinApi.dll. This structure is returned from usb_open() routine and
   is expected in each subsequent call that is accessing the device.
+
+  Most members are protected by usb_lock, except for adb_{read,write}_pipe which
+  rely on AdbWinApi.dll's handle validation and AdbCloseHandle(endpoint)'s
+  ability to break a thread out of pipe IO.
 */
 struct usb_handle {
   /// Previous entry in the list of opened usb handles
@@ -86,6 +90,9 @@ int recognized_device(usb_handle* handle);
 /// registers usb transport for them.
 void find_devices();
 
+/// Kicks all USB devices
+static void kick_devices();
+
 /// Entry point for thread that polls (every second) for new usb interfaces.
 /// This routine calls find_devices in infinite loop.
 void* device_poll_thread(void* unused);
@@ -110,9 +117,6 @@ void usb_kick(usb_handle* handle);
 
 /// Closes opened usb handle
 int usb_close(usb_handle* handle);
-
-/// Gets interface (device) name for an opened usb handle
-const char *usb_name(usb_handle* handle);
 
 int known_device_locked(const char* dev_name) {
   usb_handle* usb;
@@ -177,17 +181,99 @@ void* device_poll_thread(void* unused) {
   return NULL;
 }
 
+static LRESULT CALLBACK _power_window_proc(HWND hwnd, UINT uMsg, WPARAM wParam,
+                                           LPARAM lParam) {
+  switch (uMsg) {
+  case WM_POWERBROADCAST:
+    switch (wParam) {
+    case PBT_APMRESUMEAUTOMATIC:
+      // Resuming from sleep or hibernation, so kick all existing USB devices
+      // and then allow the device_poll_thread to redetect USB devices from
+      // scratch. If we don't do this, existing USB devices will never respond
+      // to us because they'll be waiting for the connect/auth handshake.
+      D("Received (WM_POWERBROADCAST, PBT_APMRESUMEAUTOMATIC) notification, "
+        "so kicking all USB devices\n");
+      kick_devices();
+      return TRUE;
+    }
+  }
+  return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+}
+
+static void* _power_notification_thread(void* unused) {
+  // This uses a thread with its own window message pump to get power
+  // notifications. If adb runs from a non-interactive service account, this
+  // might not work (not sure). If that happens to not work, we could use
+  // heavyweight WMI APIs to get power notifications. But for the common case
+  // of a developer's interactive session, a window message pump is more
+  // appropriate.
+  D("Created power notification thread\n");
+
+  // Window class names are process specific.
+  static const WCHAR kPowerNotificationWindowClassName[] =
+    L"PowerNotificationWindow";
+
+  // Get the HINSTANCE corresponding to the module that _power_window_proc
+  // is in (the main module).
+  const HINSTANCE instance = GetModuleHandleW(NULL);
+  if (!instance) {
+    // This is such a common API call that this should never fail.
+    fatal("GetModuleHandleW failed: %s",
+          SystemErrorCodeToString(GetLastError()).c_str());
+  }
+
+  WNDCLASSEXW wndclass;
+  memset(&wndclass, 0, sizeof(wndclass));
+  wndclass.cbSize = sizeof(wndclass);
+  wndclass.lpfnWndProc = _power_window_proc;
+  wndclass.hInstance = instance;
+  wndclass.lpszClassName = kPowerNotificationWindowClassName;
+  if (!RegisterClassExW(&wndclass)) {
+    fatal("RegisterClassExW failed: %s",
+          SystemErrorCodeToString(GetLastError()).c_str());
+  }
+
+  if (!CreateWindowExW(WS_EX_NOACTIVATE, kPowerNotificationWindowClassName,
+                       L"ADB Power Notification Window", WS_POPUP, 0, 0, 0, 0,
+                       NULL, NULL, instance, NULL)) {
+    fatal("CreateWindowExW failed: %s",
+          SystemErrorCodeToString(GetLastError()).c_str());
+  }
+
+  MSG msg;
+  while (GetMessageW(&msg, NULL, 0, 0)) {
+    TranslateMessage(&msg);
+    DispatchMessageW(&msg);
+  }
+
+  // GetMessageW() will return false if a quit message is posted. We don't
+  // do that, but it might be possible for that to occur when logging off or
+  // shutting down. Not a big deal since the whole process will be going away
+  // soon anyway.
+  D("Power notification thread exiting\n");
+
+  return NULL;
+}
+
 void usb_init() {
   if (!adb_thread_create(device_poll_thread, nullptr)) {
-    fatal_errno("cannot create input thread");
+    fatal_errno("cannot create device poll thread");
+  }
+  if (!adb_thread_create(_power_notification_thread, nullptr)) {
+    fatal_errno("cannot create power notification thread");
   }
 }
 
 usb_handle* do_usb_open(const wchar_t* interface_name) {
+  unsigned long name_len = 0;
+
   // Allocate our handle
-  usb_handle* ret = (usb_handle*)malloc(sizeof(usb_handle));
-  if (NULL == ret)
-    return NULL;
+  usb_handle* ret = (usb_handle*)calloc(1, sizeof(usb_handle));
+  if (NULL == ret) {
+    D("Could not allocate %u bytes for usb_handle: %s\n", sizeof(usb_handle),
+      strerror(errno));
+    goto fail;
+  }
 
   // Set linkers back to the handle
   ret->next = ret;
@@ -195,11 +281,10 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
 
   // Create interface.
   ret->adb_interface = AdbCreateInterfaceByName(interface_name);
-
   if (NULL == ret->adb_interface) {
-    free(ret);
-    errno = GetLastError();
-    return NULL;
+    D("AdbCreateInterfaceByName failed: %s\n",
+      SystemErrorCodeToString(GetLastError()).c_str());
+    goto fail;
   }
 
   // Open read pipe (endpoint)
@@ -207,45 +292,60 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
     AdbOpenDefaultBulkReadEndpoint(ret->adb_interface,
                                    AdbOpenAccessTypeReadWrite,
                                    AdbOpenSharingModeReadWrite);
-  if (NULL != ret->adb_read_pipe) {
-    // Open write pipe (endpoint)
-    ret->adb_write_pipe =
-      AdbOpenDefaultBulkWriteEndpoint(ret->adb_interface,
-                                      AdbOpenAccessTypeReadWrite,
-                                      AdbOpenSharingModeReadWrite);
-    if (NULL != ret->adb_write_pipe) {
-      // Save interface name
-      unsigned long name_len = 0;
-
-      // First get expected name length
-      AdbGetInterfaceName(ret->adb_interface,
-                          NULL,
-                          &name_len,
-                          true);
-      if (0 != name_len) {
-        ret->interface_name = (char*)malloc(name_len);
-
-        if (NULL != ret->interface_name) {
-          // Now save the name
-          if (AdbGetInterfaceName(ret->adb_interface,
-                                  ret->interface_name,
-                                  &name_len,
-                                  true)) {
-            // We're done at this point
-            return ret;
-          }
-        } else {
-          SetLastError(ERROR_OUTOFMEMORY);
-        }
-      }
-    }
+  if (NULL == ret->adb_read_pipe) {
+    D("AdbOpenDefaultBulkReadEndpoint failed: %s\n",
+      SystemErrorCodeToString(GetLastError()).c_str());
+    goto fail;
   }
 
-  // Something went wrong.
-  int saved_errno = GetLastError();
-  usb_cleanup_handle(ret);
-  free(ret);
-  SetLastError(saved_errno);
+  // Open write pipe (endpoint)
+  ret->adb_write_pipe =
+    AdbOpenDefaultBulkWriteEndpoint(ret->adb_interface,
+                                    AdbOpenAccessTypeReadWrite,
+                                    AdbOpenSharingModeReadWrite);
+  if (NULL == ret->adb_write_pipe) {
+    D("AdbOpenDefaultBulkWriteEndpoint failed: %s\n",
+      SystemErrorCodeToString(GetLastError()).c_str());
+    goto fail;
+  }
+
+  // Save interface name
+  // First get expected name length
+  AdbGetInterfaceName(ret->adb_interface,
+                      NULL,
+                      &name_len,
+                      true);
+  if (0 == name_len) {
+    D("AdbGetInterfaceName returned name length of zero: %s\n",
+      SystemErrorCodeToString(GetLastError()).c_str());
+    goto fail;
+  }
+
+  ret->interface_name = (char*)malloc(name_len);
+  if (NULL == ret->interface_name) {
+    D("Could not allocate %lu bytes for interface_name: %s\n", name_len,
+      strerror(errno));
+    goto fail;
+  }
+
+  // Now save the name
+  if (!AdbGetInterfaceName(ret->adb_interface,
+                           ret->interface_name,
+                           &name_len,
+                           true)) {
+    D("AdbGetInterfaceName failed: %s\n",
+      SystemErrorCodeToString(GetLastError()).c_str());
+    goto fail;
+  }
+
+  // We're done at this point
+  return ret;
+
+fail:
+  if (NULL != ret) {
+    usb_cleanup_handle(ret);
+    free(ret);
+  }
 
   return NULL;
 }
@@ -253,92 +353,130 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
 int usb_write(usb_handle* handle, const void* data, int len) {
   unsigned long time_out = 5000;
   unsigned long written = 0;
-  int ret;
+  int err = 0;
 
   D("usb_write %d\n", len);
-  if (NULL != handle) {
-    // Perform write
-    ret = AdbWriteEndpointSync(handle->adb_write_pipe,
-                               (void*)data,
-                               (unsigned long)len,
-                               &written,
-                               time_out);
-    int saved_errno = GetLastError();
-
-    if (ret) {
-      // Make sure that we've written what we were asked to write
-      D("usb_write got: %ld, expected: %d\n", written, len);
-      if (written == (unsigned long)len) {
-        if(handle->zero_mask && (len & handle->zero_mask) == 0) {
-          // Send a zero length packet
-          AdbWriteEndpointSync(handle->adb_write_pipe,
-                               (void*)data,
-                               0,
-                               &written,
-                               time_out);
-        }
-        return 0;
-      }
-    } else {
-      // assume ERROR_INVALID_HANDLE indicates we are disconnected
-      if (saved_errno == ERROR_INVALID_HANDLE)
-        usb_kick(handle);
-    }
-    errno = saved_errno;
-  } else {
-    D("usb_write NULL handle\n");
-    SetLastError(ERROR_INVALID_HANDLE);
+  if (NULL == handle) {
+    D("usb_write was passed NULL handle\n");
+    err = EINVAL;
+    goto fail;
   }
 
-  D("usb_write failed: %d\n", errno);
+  // Perform write
+  if (!AdbWriteEndpointSync(handle->adb_write_pipe,
+                            (void*)data,
+                            (unsigned long)len,
+                            &written,
+                            time_out)) {
+    D("AdbWriteEndpointSync failed: %s\n",
+      SystemErrorCodeToString(GetLastError()).c_str());
+    err = EIO;
+    goto fail;
+  }
 
+  // Make sure that we've written what we were asked to write
+  D("usb_write got: %ld, expected: %d\n", written, len);
+  if (written != (unsigned long)len) {
+    // If this occurs, this code should be changed to repeatedly call
+    // AdbWriteEndpointSync() until all bytes are written.
+    D("AdbWriteEndpointSync was supposed to write %d, but only wrote %ld\n",
+      len, written);
+    err = EIO;
+    goto fail;
+  }
+
+  if (handle->zero_mask && (len & handle->zero_mask) == 0) {
+    // Send a zero length packet
+    if (!AdbWriteEndpointSync(handle->adb_write_pipe,
+                              (void*)data,
+                              0,
+                              &written,
+                              time_out)) {
+      D("AdbWriteEndpointSync of zero length packet failed: %s\n",
+        SystemErrorCodeToString(GetLastError()).c_str());
+      err = EIO;
+      goto fail;
+    }
+  }
+
+  return 0;
+
+fail:
+  // Any failure should cause us to kick the device instead of leaving it a
+  // zombie state with potential to hang.
+  if (NULL != handle) {
+    D("Kicking device due to error in usb_write\n");
+    usb_kick(handle);
+  }
+
+  D("usb_write failed\n");
+  errno = err;
   return -1;
 }
 
 int usb_read(usb_handle *handle, void* data, int len) {
   unsigned long time_out = 0;
   unsigned long read = 0;
+  int err = 0;
 
   D("usb_read %d\n", len);
-  if (handle != nullptr) {
-    while (len > 0) {
-      int ret = AdbReadEndpointSync(handle->adb_read_pipe, data, len, &read, time_out);
-      int saved_errno = GetLastError();
-      D("usb_write got: %ld, expected: %d, errno: %d\n", read, len, saved_errno);
-      if (ret) {
-        data = (char *)data + read;
-        len -= read;
-
-        if (len == 0)
-          return 0;
-      } else {
-        // assume ERROR_INVALID_HANDLE indicates we are disconnected
-        if (saved_errno == ERROR_INVALID_HANDLE)
-          usb_kick(handle);
-        break;
-      }
-      errno = saved_errno;
-    }
-  } else {
-    D("usb_read NULL handle\n");
-    SetLastError(ERROR_INVALID_HANDLE);
+  if (NULL == handle) {
+    D("usb_read was passed NULL handle\n");
+    err = EINVAL;
+    goto fail;
   }
 
-  D("usb_read failed: %d\n", errno);
+  while (len > 0) {
+    if (!AdbReadEndpointSync(handle->adb_read_pipe, data, len, &read,
+                             time_out)) {
+      D("AdbReadEndpointSync failed: %s\n",
+        SystemErrorCodeToString(GetLastError()).c_str());
+      err = EIO;
+      goto fail;
+    }
+    D("usb_read got: %ld, expected: %d\n", read, len);
 
+    data = (char *)data + read;
+    len -= read;
+  }
+
+  return 0;
+
+fail:
+  // Any failure should cause us to kick the device instead of leaving it a
+  // zombie state with potential to hang.
+  if (NULL != handle) {
+    D("Kicking device due to error in usb_read\n");
+    usb_kick(handle);
+  }
+
+  D("usb_read failed\n");
+  errno = err;
   return -1;
 }
 
+// Wrapper around AdbCloseHandle() that logs diagnostics.
+static void _adb_close_handle(ADBAPIHANDLE adb_handle) {
+  if (!AdbCloseHandle(adb_handle)) {
+    D("AdbCloseHandle(%p) failed: %s\n", adb_handle,
+      SystemErrorCodeToString(GetLastError()).c_str());
+  }
+}
+
 void usb_cleanup_handle(usb_handle* handle) {
+  D("usb_cleanup_handle\n");
   if (NULL != handle) {
     if (NULL != handle->interface_name)
       free(handle->interface_name);
+    // AdbCloseHandle(pipe) will break any threads out of pending IO calls and
+    // wait until the pipe no longer uses the interface. Then we can
+    // AdbCloseHandle() the interface.
     if (NULL != handle->adb_write_pipe)
-      AdbCloseHandle(handle->adb_write_pipe);
+      _adb_close_handle(handle->adb_write_pipe);
     if (NULL != handle->adb_read_pipe)
-      AdbCloseHandle(handle->adb_read_pipe);
+      _adb_close_handle(handle->adb_read_pipe);
     if (NULL != handle->adb_interface)
-      AdbCloseHandle(handle->adb_interface);
+      _adb_close_handle(handle->adb_interface);
 
     handle->interface_name = NULL;
     handle->adb_write_pipe = NULL;
@@ -347,16 +485,22 @@ void usb_cleanup_handle(usb_handle* handle) {
   }
 }
 
+static void usb_kick_locked(usb_handle* handle) {
+  // The reason the lock must be acquired before calling this function is in
+  // case multiple threads are trying to kick the same device at the same time.
+  usb_cleanup_handle(handle);
+}
+
 void usb_kick(usb_handle* handle) {
+  D("usb_kick\n");
   if (NULL != handle) {
     adb_mutex_lock(&usb_lock);
 
-    usb_cleanup_handle(handle);
+    usb_kick_locked(handle);
 
     adb_mutex_unlock(&usb_lock);
   } else {
-    SetLastError(ERROR_INVALID_HANDLE);
-    errno = ERROR_INVALID_HANDLE;
+    errno = EINVAL;
   }
 }
 
@@ -384,16 +528,6 @@ int usb_close(usb_handle* handle) {
   return 0;
 }
 
-const char *usb_name(usb_handle* handle) {
-  if (NULL == handle) {
-    SetLastError(ERROR_INVALID_HANDLE);
-    errno = ERROR_INVALID_HANDLE;
-    return NULL;
-  }
-
-  return (const char*)handle->interface_name;
-}
-
 int recognized_device(usb_handle* handle) {
   if (NULL == handle)
     return 0;
@@ -403,6 +537,8 @@ int recognized_device(usb_handle* handle) {
 
   if (!AdbGetUsbDeviceDescriptor(handle->adb_interface,
                                  &device_desc)) {
+    D("AdbGetUsbDeviceDescriptor failed: %s\n",
+      SystemErrorCodeToString(GetLastError()).c_str());
     return 0;
   }
 
@@ -411,6 +547,8 @@ int recognized_device(usb_handle* handle) {
 
   if (!AdbGetUsbInterfaceDescriptor(handle->adb_interface,
                                     &interf_desc)) {
+    D("AdbGetUsbInterfaceDescriptor failed: %s\n",
+      SystemErrorCodeToString(GetLastError()).c_str());
     return 0;
   }
 
@@ -427,6 +565,10 @@ int recognized_device(usb_handle* handle) {
       // assuming zero is a valid bulk endpoint ID
       if (AdbGetEndpointInformation(handle->adb_interface, 0, &endpoint_info)) {
         handle->zero_mask = endpoint_info.max_packet_size - 1;
+        D("device zero_mask: 0x%x\n", handle->zero_mask);
+      } else {
+        D("AdbGetEndpointInformation failed: %s\n",
+          SystemErrorCodeToString(GetLastError()).c_str());
       }
     }
 
@@ -448,8 +590,11 @@ void find_devices() {
   ADBAPIHANDLE enum_handle =
     AdbEnumInterfaces(usb_class_id, true, true, true);
 
-  if (NULL == enum_handle)
+  if (NULL == enum_handle) {
+    D("AdbEnumInterfaces failed: %s\n",
+      SystemErrorCodeToString(GetLastError()).c_str());
     return;
+  }
 
   while (AdbNextInterface(enum_handle, next_interface, &entry_buffer_size)) {
     // TODO: FIXME - temp hack converting wchar_t into char.
@@ -486,7 +631,8 @@ void find_devices() {
               free(handle);
             }
           } else {
-            D("cannot get serial number\n");
+            D("cannot get serial number: %s\n",
+              SystemErrorCodeToString(GetLastError()).c_str());
             usb_cleanup_handle(handle);
             free(handle);
           }
@@ -500,5 +646,21 @@ void find_devices() {
     entry_buffer_size = sizeof(entry_buffer);
   }
 
-  AdbCloseHandle(enum_handle);
+  if (GetLastError() != ERROR_NO_MORE_ITEMS) {
+    // Only ERROR_NO_MORE_ITEMS is expected at the end of enumeration.
+    D("AdbNextInterface failed: %s\n",
+      SystemErrorCodeToString(GetLastError()).c_str());
+  }
+
+  _adb_close_handle(enum_handle);
+}
+
+static void kick_devices() {
+  // Need to acquire lock to safely walk the list which might be modified
+  // by another thread.
+  adb_mutex_lock(&usb_lock);
+  for (usb_handle* usb = handle_list.next; usb != &handle_list; usb = usb->next) {
+    usb_kick_locked(usb);
+  }
+  adb_mutex_unlock(&usb_lock);
 }
