@@ -1,12 +1,13 @@
 // TODO: replace this with a shell/python script.
 
 /* a simple test program, connects to ADB server, and opens a track-devices session */
-#include <netdb.h>
-#include <sys/socket.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <errno.h>
 #include <memory.h>
+#include <netdb.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include <base/file.h>
 
