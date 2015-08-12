@@ -192,16 +192,13 @@ static void setup_trace_mask() {
 }
 
 void adb_trace_init(char** argv) {
+#if !ADB_HOST
     // Don't open log file if no tracing, since this will block
     // the crypto unmount of /data
-    const std::string trace_setting = get_trace_setting();
-    if (trace_setting.empty()) {
-        return;
-    }
-
-#if !ADB_HOST
-    if (isatty(STDOUT_FILENO) == 0) {
-        start_device_log();
+    if (!get_trace_setting().empty()) {
+        if (isatty(STDOUT_FILENO) == 0) {
+            start_device_log();
+        }
     }
 #endif
 
