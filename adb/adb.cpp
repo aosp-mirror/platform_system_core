@@ -71,6 +71,14 @@ void AdbLogger(android::base::LogId id, android::base::LogSeverity severity,
 #endif
 }
 
+std::string adb_version() {
+    // Don't change the format of this --- it's parsed by ddmlib.
+    return android::base::StringPrintf("Android Debug Bridge version %d.%d.%d\n"
+                                       "Revision %s\n",
+                                       ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION,
+                                       ADB_REVISION);
+}
+
 void fatal(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
@@ -204,6 +212,8 @@ void adb_trace_init(char** argv) {
 
     setup_trace_mask();
     android::base::InitLogging(argv, AdbLogger);
+
+    D("%s", adb_version().c_str());
 }
 
 apacket* get_apacket(void)

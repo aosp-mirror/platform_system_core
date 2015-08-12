@@ -65,16 +65,9 @@ static std::string product_file(const char *extra) {
                                        gProductOutPath.c_str(), OS_PATH_SEPARATOR_STR, extra);
 }
 
-static void version(FILE* out) {
-    fprintf(out, "Android Debug Bridge version %d.%d.%d\nRevision %s\n",
-            ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION, ADB_REVISION);
-}
-
 static void help() {
-    version(stderr);
-
+    fprintf(stderr, "%s\n", adb_version().c_str());
     fprintf(stderr,
-        "\n"
         " -a                            - directs adb to listen on all interfaces for a connection\n"
         " -d                            - directs command to the only connected USB device\n"
         "                                 returns an error if more than one USB device is present.\n"
@@ -1449,7 +1442,7 @@ int adb_commandline(int argc, const char **argv) {
         return 0;
     }
     else if (!strcmp(argv[0], "version")) {
-        version(stdout);
+        fprintf(stdout, "%s", adb_version().c_str());
         return 0;
     }
 
