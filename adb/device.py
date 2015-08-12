@@ -101,6 +101,19 @@ def get_device(serial=None, product=None):
 
 
 class AndroidDevice(object):
+    # Delimiter string to indicate the start of the exit code.
+    _RETURN_CODE_DELIMITER = 'x'
+
+    # Follow any shell command with this string to get the exit
+    # status of a program since this isn't propagated by adb.
+    #
+    # The delimiter is needed because `printf 1; echo $?` would print
+    # "10", and we wouldn't be able to distinguish the exit code.
+    _RETURN_CODE_PROBE_STRING = 'echo "{0}$?"'.format(_RETURN_CODE_DELIMITER)
+
+    # Maximum search distance from the output end to find the delimiter.
+    _RETURN_CODE_SEARCH_LENGTH = len('{0}255\n'.format(_RETURN_CODE_DELIMITER))
+
     def __init__(self, serial, product=None):
         self.serial = serial
         self.product = product
@@ -110,40 +123,44 @@ class AndroidDevice(object):
         if self.product is not None:
             self.adb_cmd.extend(['-p', product])
         self._linesep = None
-        self._shell_result_pattern = None
 
     @property
     def linesep(self):
         if self._linesep is None:
-            self._linesep = subprocess.check_output(['adb', 'shell', 'echo'])
+            self._linesep = subprocess.check_output(self.adb_cmd +
+                                                    ['shell', 'echo'])
         return self._linesep
 
     def _make_shell_cmd(self, user_cmd):
-        # Follow any shell command with `; echo; echo $?` to get the exit
-        # status of a program since this isn't propagated by adb.
-        #
-        # The leading newline is needed because `printf 1; echo $?` would print
-        # "10", and we wouldn't be able to distinguish the exit code.
-        rc_probe = '; echo "\n$?"'
-        return self.adb_cmd + ['shell'] + user_cmd + [rc_probe]
+        return (self.adb_cmd + ['shell'] + user_cmd +
+                ['; ' + self._RETURN_CODE_PROBE_STRING])
 
-    def _parse_shell_output(self, out):  # pylint: disable=no-self-use
+    def _parse_shell_output(self, out):
+        """Finds the exit code string from shell output.
+
+        Args:
+            out: Shell output string.
+
+        Returns:
+            An (exit_code, output_string) tuple. The output string is
+            cleaned of any additional stuff we appended to find the
+            exit code.
+
+        Raises:
+            RuntimeError: Could not find the exit code in |out|.
+        """
         search_text = out
-        max_result_len = len('{0}255{0}'.format(self.linesep))
-        if len(search_text) > max_result_len:
-            # We don't want to regex match over massive amounts of data when we
-            # know the part we want is right at the end.
-            search_text = search_text[-max_result_len:]
-        if self._shell_result_pattern is None:
-            self._shell_result_pattern = re.compile(
-                r'({0}\d+{0})$'.format(self.linesep), re.MULTILINE)
-        m = self._shell_result_pattern.search(search_text)
-        if m is None:
+        if len(search_text) > self._RETURN_CODE_SEARCH_LENGTH:
+            # We don't want to search over massive amounts of data when we know
+            # the part we want is right at the end.
+            search_text = search_text[-self._RETURN_CODE_SEARCH_LENGTH:]
+        partition = search_text.rpartition(self._RETURN_CODE_DELIMITER)
+        if partition[1] == '':
             raise RuntimeError('Could not find exit status in shell output.')
-
-        result_text = m.group(1)
-        result = int(result_text.strip())
-        out = out[:-len(result_text)]  # Trim the result text from the output.
+        result = int(partition[2])
+        # partition[0] won't contain the full text if search_text was truncated,
+        # pull from the original string instead.
+        out = out[:-len(partition[1]) - len(partition[2])]
         return result, out
 
     def _simple_call(self, cmd):
