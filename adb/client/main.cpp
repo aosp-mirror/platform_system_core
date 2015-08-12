@@ -137,8 +137,6 @@ static void setup_daemon_logging(void) {
 }
 
 int adb_main(int is_daemon, int server_port, int ack_reply_fd) {
-    HOST = 1;
-
 #if defined(_WIN32)
     SetConsoleCtrlHandler(ctrlc_handler, TRUE);
 #else

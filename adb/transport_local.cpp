@@ -120,10 +120,9 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
     return -1;
 }
 
-
+#if ADB_HOST
 static void *client_socket_thread(void *x)
 {
-#if ADB_HOST
     D("transport: client_socket_thread() starting\n");
     while (true) {
         int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
@@ -135,9 +134,10 @@ static void *client_socket_thread(void *x)
         }
         sleep(1);
     }
-#endif
     return 0;
 }
+
+#else // ADB_HOST
 
 static void *server_socket_thread(void * arg)
 {
@@ -175,7 +175,6 @@ static void *server_socket_thread(void * arg)
 }
 
 /* This is relevant only for ADB daemon running inside the emulator. */
-#if !ADB_HOST
 /*
  * Redefine open and write for qemu_pipe.h that contains inlined references
  * to those routines. We will redifine them back after qemu_pipe.h inclusion.
@@ -287,31 +286,29 @@ static const char _ok_resp[]    = "ok";
 void local_init(int port)
 {
     void* (*func)(void *);
+    const char* debug_name = "";
 
-    if(HOST) {
-        func = client_socket_thread;
-    } else {
 #if ADB_HOST
-        func = server_socket_thread;
+    func = client_socket_thread;
+    debug_name = "client";
 #else
-        /* For the adbd daemon in the system image we need to distinguish
-         * between the device, and the emulator. */
-        char is_qemu[PROPERTY_VALUE_MAX];
-        property_get("ro.kernel.qemu", is_qemu, "");
-        if (!strcmp(is_qemu, "1")) {
-            /* Running inside the emulator: use QEMUD pipe as the transport. */
-            func = qemu_socket_thread;
-        } else {
-            /* Running inside the device: use TCP socket as the transport. */
-            func = server_socket_thread;
-        }
-#endif // !ADB_HOST
+    /* For the adbd daemon in the system image we need to distinguish
+     * between the device, and the emulator. */
+    char is_qemu[PROPERTY_VALUE_MAX];
+    property_get("ro.kernel.qemu", is_qemu, "");
+    if (!strcmp(is_qemu, "1")) {
+        /* Running inside the emulator: use QEMUD pipe as the transport. */
+        func = qemu_socket_thread;
+    } else {
+        /* Running inside the device: use TCP socket as the transport. */
+        func = server_socket_thread;
     }
+    debug_name = "server";
+#endif // !ADB_HOST
 
-    D("transport: local %s init\n", HOST ? "client" : "server");
-
+    D("transport: local %s init\n", debug_name);
     if (!adb_thread_create(func, (void *) (uintptr_t) port)) {
-        fatal_errno("cannot create local socket %s thread", HOST ? "client" : "server");
+        fatal_errno("cannot create local socket %s thread", debug_name);
     }
 }
 
@@ -323,17 +320,15 @@ static void remote_kick(atransport *t)
     adb_close(fd);
 
 #if ADB_HOST
-    if(HOST) {
-        int  nn;
-        adb_mutex_lock( &local_transports_lock );
-        for (nn = 0; nn < ADB_LOCAL_TRANSPORT_MAX; nn++) {
-            if (local_transports[nn] == t) {
-                local_transports[nn] = NULL;
-                break;
-            }
+    int  nn;
+    adb_mutex_lock( &local_transports_lock );
+    for (nn = 0; nn < ADB_LOCAL_TRANSPORT_MAX; nn++) {
+        if (local_transports[nn] == t) {
+            local_transports[nn] = NULL;
+            break;
         }
-        adb_mutex_unlock( &local_transports_lock );
     }
+    adb_mutex_unlock( &local_transports_lock );
 #endif
 }
 
@@ -404,7 +399,7 @@ int init_socket_transport(atransport *t, int s, int adb_port, int local)
     t->adb_port = 0;
 
 #if ADB_HOST
-    if (HOST && local) {
+    if (local) {
         adb_mutex_lock( &local_transports_lock );
         {
             t->adb_port = adb_port;
