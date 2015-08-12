@@ -24,11 +24,13 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include <unistd.h>
+
 #include <batteryservice/BatteryService.h>
 #include <cutils/klog.h>
 #include <cutils/properties.h>
-#include <sys/types.h>
+#include <log/log_read.h>
 #include <utils/Errors.h>
 #include <utils/String8.h>
 #include <utils/Vector.h>
@@ -275,10 +277,32 @@ bool BatteryMonitor::update(void) {
                  "battery none");
         }
 
-        KLOG_WARNING(LOG_TAG, "%s chg=%s%s%s\n", dmesgline,
-                     props.chargerAcOnline ? "a" : "",
-                     props.chargerUsbOnline ? "u" : "",
-                     props.chargerWirelessOnline ? "w" : "");
+        size_t len = strlen(dmesgline);
+        snprintf(dmesgline + len, sizeof(dmesgline) - len, " chg=%s%s%s",
+                 props.chargerAcOnline ? "a" : "",
+                 props.chargerUsbOnline ? "u" : "",
+                 props.chargerWirelessOnline ? "w" : "");
+
+        log_time realtime(CLOCK_REALTIME);
+        time_t t = realtime.tv_sec;
+        struct tm *tmp = gmtime(&t);
+        if (tmp) {
+            static const char fmt[] = " %Y-%m-%d %H:%M:%S.XXXXXXXXX UTC";
+            len = strlen(dmesgline);
+            if ((len < (sizeof(dmesgline) - sizeof(fmt) - 8)) // margin
+                    && strftime(dmesgline + len, sizeof(dmesgline) - len,
+                                fmt, tmp)) {
+                char *usec = strchr(dmesgline + len, 'X');
+                if (usec) {
+                    len = usec - dmesgline;
+                    snprintf(dmesgline + len, sizeof(dmesgline) - len,
+                             "%09u", realtime.tv_nsec);
+                    usec[9] = ' ';
+                }
+            }
+        }
+
+        KLOG_WARNING(LOG_TAG, "%s\n", dmesgline);
     }
 
     healthd_mode_ops->battery_update(&props);
