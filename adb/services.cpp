@@ -465,9 +465,9 @@ int service_to_fd(const char *name)
         ret = create_service_thread(framebuffer_service, 0);
     } else if (!strncmp(name, "jdwp:", 5)) {
         ret = create_jdwp_connection_fd(atoi(name+5));
-    } else if(!HOST && !strncmp(name, "shell:", 6)) {
+    } else if(!strncmp(name, "shell:", 6)) {
         ret = create_subproc_thread(name + 6, true);
-    } else if(!HOST && !strncmp(name, "exec:", 5)) {
+    } else if(!strncmp(name, "exec:", 5)) {
         ret = create_subproc_thread(name + 5);
     } else if(!strncmp(name, "sync:", 5)) {
         ret = create_service_thread(file_sync_service, NULL);
