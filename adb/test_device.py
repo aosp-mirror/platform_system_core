@@ -155,6 +155,31 @@ class ShellTest(DeviceTest):
         output = self.device.shell(['uname'])
         self.assertEqual(output, 'Linux' + self.device.linesep)
 
+    def test_pty_logic(self):
+        """Verify PTY logic for shells.
+
+        Interactive shells should use a PTY, non-interactive should not.
+
+        Bug: http://b/21215503
+        """
+        proc = subprocess.Popen(
+                self.device.adb_cmd + ['shell'], stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        # [ -t 0 ] is used (rather than `tty`) to provide portability. This
+        # gives an exit code of 0 iff stdin is connected to a terminal.
+        #
+        # Closing host-side stdin doesn't currently trigger the interactive
+        # shell to exit so we need to explicitly add an exit command to
+        # close the session from the device side, and append \n to complete
+        # the interactive command.
+        result = proc.communicate('[ -t 0 ]; echo x$?; exit 0\n')[0]
+        partition = result.rpartition('x')
+        self.assertEqual(partition[1], 'x')
+        self.assertEqual(int(partition[2]), 0)
+
+        exit_code = self.device.shell_nocheck(['[ -t 0 ]'])[0]
+        self.assertEqual(exit_code, 1)
+
 
 class ArgumentEscapingTest(DeviceTest):
     def test_shell_escaping(self):
