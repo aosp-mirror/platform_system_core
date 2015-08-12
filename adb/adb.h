@@ -46,6 +46,8 @@ constexpr size_t MAX_PAYLOAD = MAX_PAYLOAD_V2;
 #define ADB_VERSION_MAJOR 1
 #define ADB_VERSION_MINOR 0
 
+std::string adb_version();
+
 // Increment this when we want to force users to start a new adb server.
 #define ADB_SERVER_VERSION 32
 
