@@ -88,13 +88,8 @@ static std::string GetLogFilePath() {
     DWORD nchars = GetTempPathW(arraysize(temp_path), temp_path);
     if ((nchars >= arraysize(temp_path)) || (nchars == 0)) {
         // If string truncation or some other error.
-        // TODO(danalbert): Log the error message from
-        // FormatMessage(GetLastError()). Pure Windows APIs only touch
-        // GetLastError(), C Runtime APIs touch errno, so maybe there should be
-        // WPLOG or PLOGW (which would read GetLastError() instead of errno),
-        // in addition to PLOG, or maybe better to just ignore it and add a
-        // simplified version of FormatMessage() for use in log messages.
-        LOG(ERROR) << "Error creating log file";
+        fatal("cannot retrieve temporary file path: %s\n",
+              SystemErrorCodeToString(GetLastError()).c_str());
     }
 
     return narrow(temp_path) + log_name;
@@ -109,19 +104,28 @@ static std::string GetLogFilePath() {
 
 static void close_stdin() {
     int fd = unix_open(kNullFileName, O_RDONLY);
-    CHECK_NE(fd, -1);
-    dup2(fd, STDIN_FILENO);
+    if (fd == -1) {
+        fatal("cannot open '%s': %s", kNullFileName, strerror(errno));
+    }
+    if (dup2(fd, STDIN_FILENO) == -1) {
+        fatal("cannot redirect stdin: %s", strerror(errno));
+    }
     unix_close(fd);
 }
 
 static void setup_daemon_logging(void) {
-    int fd = unix_open(GetLogFilePath().c_str(), O_WRONLY | O_CREAT | O_APPEND,
+    const std::string log_file_path(GetLogFilePath());
+    int fd = unix_open(log_file_path.c_str(), O_WRONLY | O_CREAT | O_APPEND,
                        0640);
     if (fd == -1) {
-        fd = unix_open(kNullFileName, O_WRONLY);
+        fatal("cannot open '%s': %s", log_file_path.c_str(), strerror(errno));
     }
-    dup2(fd, STDOUT_FILENO);
-    dup2(fd, STDERR_FILENO);
+    if (dup2(fd, STDOUT_FILENO) == -1) {
+        fatal("cannot redirect stdout: %s", strerror(errno));
+    }
+    if (dup2(fd, STDERR_FILENO) == -1) {
+        fatal("cannot redirect stderr: %s", strerror(errno));
+    }
     unix_close(fd);
 
 #ifdef _WIN32
