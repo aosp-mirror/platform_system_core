@@ -652,20 +652,10 @@ static int _fh_socket_write(FH f, const void* buf, int len) {
 static int  _winsock_init;
 
 static void
-_cleanup_winsock( void )
-{
-    // TODO: WSAStartup() might be called multiple times and this won't properly
-    // cleanup the right number of times. Plus, WSACleanup() probably doesn't
-    // make sense since it might interrupt other threads using Winsock (since
-    // our various threads are not explicitly cleanly shutdown at process exit).
-    WSACleanup();
-}
-
-static void
 _init_winsock( void )
 {
     // TODO: Multiple threads calling this may potentially cause multiple calls
-    // to WSAStartup() and multiple atexit() calls.
+    // to WSAStartup() which offers no real benefit.
     if (!_winsock_init) {
         WSADATA  wsaData;
         int      rc = WSAStartup( MAKEWORD(2,2), &wsaData);
@@ -673,8 +663,21 @@ _init_winsock( void )
             fatal( "adb: could not initialize Winsock: %s",
                    SystemErrorCodeToString( rc ).c_str());
         }
-        atexit( _cleanup_winsock );
         _winsock_init = 1;
+
+        // Note that we do not call atexit() to register WSACleanup to be called
+        // at normal process termination because:
+        // 1) When exit() is called, there are still threads actively using
+        //    Winsock because we don't cleanly shutdown all threads, so it
+        //    doesn't make sense to call WSACleanup() and may cause problems
+        //    with those threads.
+        // 2) A deadlock can occur when exit() holds a C Runtime lock, then it
+        //    calls WSACleanup() which tries to unload a DLL, which tries to
+        //    grab the LoaderLock. This conflicts with the device_poll_thread
+        //    which holds the LoaderLock because AdbWinApi.dll calls
+        //    setupapi.dll which tries to load wintrust.dll which tries to load
+        //    crypt32.dll which calls atexit() which tries to acquire the C
+        //    Runtime lock that the other thread holds.
     }
 }
 
