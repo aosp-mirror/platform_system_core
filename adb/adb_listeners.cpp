@@ -190,16 +190,19 @@ InstallStatus install_listener(const std::string& local_name,
 
             /* can't repurpose a smartsocket */
             if(l->connect_to[0] == '*') {
+                *error = "cannot repurpose smartsocket";
                 return INSTALL_STATUS_INTERNAL_ERROR;
             }
 
             /* can't repurpose a listener if 'no_rebind' is true */
             if (no_rebind) {
+                *error = "cannot rebind";
                 return INSTALL_STATUS_CANNOT_REBIND;
             }
 
             cto = strdup(connect_to);
             if(cto == 0) {
+                *error = "cannot duplicate string";
                 return INSTALL_STATUS_INTERNAL_ERROR;
             }
 
@@ -232,7 +235,6 @@ InstallStatus install_listener(const std::string& local_name,
 
     listener->fd = local_name_to_fd(listener->local_name, error);
     if (listener->fd < 0) {
-        printf("cannot bind '%s': %s\n", listener->local_name, error->c_str());
         free(listener->local_name);
         free(listener->connect_to);
         free(listener);
