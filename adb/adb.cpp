@@ -858,7 +858,7 @@ int handle_forward_request(const char* service, TransportType type, const char* 
           case INSTALL_STATUS_OK: message = "success (!)"; break;
           case INSTALL_STATUS_INTERNAL_ERROR: message = "internal error"; break;
           case INSTALL_STATUS_CANNOT_BIND:
-            message = android::base::StringPrintf("cannot bind to socket: %s",
+            message = android::base::StringPrintf("cannot bind listener: %s",
                                                   error.c_str());
             break;
           case INSTALL_STATUS_CANNOT_REBIND:
