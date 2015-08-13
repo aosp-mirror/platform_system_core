@@ -976,7 +976,7 @@ int adb_commandline(int argc, const char **argv) {
         server_port = strtol(server_port_str, nullptr, 0);
         if (server_port <= 0 || server_port > 65535) {
             fprintf(stderr,
-                    "adb: Env var ANDROID_ADB_SERVER_PORT must be a positive number less than 65535. Got \"%s\"\n",
+                    "adb: Env var ANDROID_ADB_SERVER_PORT must be a positive number less than 65536. Got \"%s\"\n",
                     server_port_str);
             return usage();
         }
@@ -1241,11 +1241,22 @@ int adb_commandline(int argc, const char **argv) {
     else if (!strcmp(argv[0], "kill-server")) {
         std::string error;
         int fd = _adb_connect("host:kill", &error);
-        if (fd == -1) {
+        if (fd == -2) {
+            // Failed to make network connection to server. Don't output the
+            // network error since that is expected.
             fprintf(stderr,"* server not running *\n");
+            // Successful exit code because the server is already "killed".
+            return 0;
+        } else if (fd == -1) {
+            // Some other error.
+            fprintf(stderr, "error: %s\n", error.c_str());
             return 1;
+        } else {
+            // Successfully connected, kill command sent, okay status came back.
+            // Server should exit() in a moment, if not already.
+            adb_close(fd);
+            return 0;
         }
-        return 0;
     }
     else if (!strcmp(argv[0], "sideload")) {
         if (argc != 2) return usage();
@@ -1429,7 +1440,11 @@ int adb_commandline(int argc, const char **argv) {
     }
     else if (!strcmp(argv[0], "start-server")) {
         std::string error;
-        return adb_connect("host:start-server", &error);
+        const int result = adb_connect("host:start-server", &error);
+        if (result < 0) {
+            fprintf(stderr, "error: %s\n", error.c_str());
+        }
+        return result;
     }
     else if (!strcmp(argv[0], "backup")) {
         return backup(argc, argv);
