@@ -43,11 +43,11 @@ static io_iterator_t            notificationIterator;
 
 struct usb_handle
 {
-    UInt8                     bulkIn;
-    UInt8                     bulkOut;
-    IOUSBInterfaceInterface   **interface;
-    io_object_t               usbNotification;
-    unsigned int              zero_mask;
+    UInt8 bulkIn;
+    UInt8 bulkOut;
+    IOUSBInterfaceInterface190** interface;
+    io_object_t usbNotification;
+    unsigned int zero_mask;
 };
 
 static CFRunLoopRef currentRunLoop = 0;
@@ -59,7 +59,7 @@ static void AndroidInterfaceAdded(void *refCon, io_iterator_t iterator);
 static void AndroidInterfaceNotify(void *refCon, io_iterator_t iterator,
                                    natural_t messageType,
                                    void *messageArgument);
-static usb_handle* CheckInterface(IOUSBInterfaceInterface **iface,
+static usb_handle* CheckInterface(IOUSBInterfaceInterface190 **iface,
                                   UInt16 vendor, UInt16 product);
 
 static int
@@ -256,7 +256,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         DBG("INFO: Found vid=%04x pid=%04x serial=%s\n", vendor, product,
             serial);
 
-        usb_handle* handle = CheckInterface((IOUSBInterfaceInterface**)iface,
+        usb_handle* handle = CheckInterface((IOUSBInterfaceInterface190**)iface,
                                             vendor, product);
         if (handle == NULL) {
             DBG("ERR: Could not find device interface: %08x\n", kr);
@@ -299,10 +299,22 @@ AndroidInterfaceNotify(void *refCon, io_service_t service, natural_t messageType
     }
 }
 
+// Used to clear both the endpoints before starting.
+// When adb quits, we might clear the host endpoint but not the device.
+// So we make sure both sides are clear before starting up.
+static bool ClearPipeStallBothEnds(IOUSBInterfaceInterface190** interface, UInt8 bulkEp) {
+    IOReturn rc = (*interface)->ClearPipeStallBothEnds(interface, bulkEp);
+    if (rc != kIOReturnSuccess) {
+        DBG("ERR: Could not clear pipe: (%08x)\n",  rc);
+        return false;
+    }
+    return true;
+}
+
 //* TODO: simplify this further since we only register to get ADB interface
 //* subclass+protocol events
 static usb_handle*
-CheckInterface(IOUSBInterfaceInterface **interface, UInt16 vendor, UInt16 product)
+CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 product)
 {
     usb_handle*                 handle = NULL;
     IOReturn                    kr;
@@ -335,9 +347,9 @@ CheckInterface(IOUSBInterfaceInterface **interface, UInt16 vendor, UInt16 produc
 
     //* check to make sure interface class, subclass and protocol match ADB
     //* avoid opening mass storage endpoints
-    if (!is_adb_interface(vendor, product, interfaceClass,
-                interfaceSubClass, interfaceProtocol))
+    if (!is_adb_interface(vendor, product, interfaceClass, interfaceSubClass, interfaceProtocol)) {
         goto err_bad_adb_interface;
+    }
 
     handle = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
     if (handle == nullptr) goto err_bad_adb_interface;
@@ -353,22 +365,24 @@ CheckInterface(IOUSBInterfaceInterface **interface, UInt16 vendor, UInt16 produc
 
         kr = (*interface)->GetPipeProperties(interface, endpoint, &direction,
                 &number, &transferType, &maxPacketSize, &interval);
-
-        if (kIOReturnSuccess == kr) {
-            if (kUSBBulk != transferType)
-                continue;
-
-            if (kUSBIn == direction)
-                handle->bulkIn = endpoint;
-
-            if (kUSBOut == direction)
-                handle->bulkOut = endpoint;
-
-            handle->zero_mask = maxPacketSize - 1;
-        } else {
+        if (kr != kIOReturnSuccess) {
             DBG("ERR: FindDeviceInterface - could not get pipe properties (%08x)\n", kr);
             goto err_get_pipe_props;
         }
+
+        if (kUSBBulk != transferType) continue;
+
+        if (kUSBIn == direction) {
+            handle->bulkIn = endpoint;
+            if (!ClearPipeStallBothEnds(interface, handle->bulkIn)) goto err_get_pipe_props;
+        }
+
+        if (kUSBOut == direction) {
+            handle->bulkOut = endpoint;
+            if (!ClearPipeStallBothEnds(interface, handle->bulkOut)) goto err_get_pipe_props;
+        }
+
+        handle->zero_mask = maxPacketSize - 1;
     }
 
     handle->interface = interface;
