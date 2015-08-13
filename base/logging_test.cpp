@@ -76,10 +76,10 @@ std::string make_log_pattern(android::base::LogSeverity severity,
                              const char* message) {
   static const char* log_characters = "VDIWEF";
   char log_char = log_characters[severity];
+  std::string holder(__FILE__);
   return android::base::StringPrintf(
-      "%c[[:space:]]+[[:digit:]]+[[:space:]]+[[:digit:]]+ " __FILE__
-      ":[[:digit:]]+] %s",
-      log_char, message);
+      "%c[[:space:]]+[[:digit:]]+[[:space:]]+[[:digit:]]+ %s:[[:digit:]]+] %s",
+      log_char, basename(&holder[0]), message);
 }
 
 TEST(logging, LOG) {
@@ -100,7 +100,7 @@ TEST(logging, LOG) {
 #if !defined(_WIN32)
     std::regex message_regex(
         make_log_pattern(android::base::WARNING, "foobar"));
-    ASSERT_TRUE(std::regex_search(output, message_regex));
+    ASSERT_TRUE(std::regex_search(output, message_regex)) << output;
 #endif
   }
 
@@ -116,7 +116,7 @@ TEST(logging, LOG) {
 #if !defined(_WIN32)
     std::regex message_regex(
         make_log_pattern(android::base::INFO, "foobar"));
-    ASSERT_TRUE(std::regex_search(output, message_regex));
+    ASSERT_TRUE(std::regex_search(output, message_regex)) << output;
 #endif
   }
 
@@ -143,7 +143,7 @@ TEST(logging, LOG) {
 #if !defined(_WIN32)
     std::regex message_regex(
         make_log_pattern(android::base::DEBUG, "foobar"));
-    ASSERT_TRUE(std::regex_search(output, message_regex));
+    ASSERT_TRUE(std::regex_search(output, message_regex)) << output;
 #endif
   }
 }
@@ -162,7 +162,7 @@ TEST(logging, PLOG) {
 #if !defined(_WIN32)
     std::regex message_regex(make_log_pattern(
         android::base::INFO, "foobar: No such file or directory"));
-    ASSERT_TRUE(std::regex_search(output, message_regex));
+    ASSERT_TRUE(std::regex_search(output, message_regex)) << output;
 #endif
   }
 }
@@ -183,7 +183,7 @@ TEST(logging, UNIMPLEMENTED) {
         android::base::StringPrintf("%s unimplemented ", __PRETTY_FUNCTION__);
     std::regex message_regex(
         make_log_pattern(android::base::ERROR, expected_message.c_str()));
-    ASSERT_TRUE(std::regex_search(output, message_regex));
+    ASSERT_TRUE(std::regex_search(output, message_regex)) << output;
 #endif
   }
 }
