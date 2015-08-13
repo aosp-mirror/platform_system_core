@@ -888,6 +888,12 @@ int handle_host_request(const char* service, TransportType type,
         fprintf(stderr, "adb server killed by remote request\n");
         fflush(stdout);
         SendOkay(reply_fd);
+
+        // At least on Windows, if we exit() without shutdown(SD_SEND) or
+        // closesocket(), the client's next recv() will error-out with
+        // WSAECONNRESET and they'll never read the OKAY.
+        adb_shutdown(reply_fd);
+
         exit(0);
     }
 
