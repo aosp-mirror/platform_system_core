@@ -531,6 +531,12 @@ typedef enum {
 #define android_btWriteLog(tag, type, payload, len) \
     __android_log_btwrite(tag, type, payload, len)
 
+#define android_errorWriteLog(tag, subTag) \
+    __android_log_error_write(tag, subTag, -1, NULL, 0)
+
+#define android_errorWriteWithInfoLog(tag, subTag, uid, data, dataLen) \
+    __android_log_error_write(tag, subTag, uid, data, dataLen)
+
 // TODO: remove these prototypes and their users
 #define android_testLog(prio, tag) (1)
 #define android_writevLog(vec,num) do{}while(0)
@@ -548,6 +554,9 @@ typedef enum {
 
     LOG_ID_MAX
 } log_id_t;
+
+int __android_log_error_write(int tag, const char *subTag, int32_t uid, const char *data,
+                              uint32_t dataLen);
 
 /*
  * Send a simple string to the log.
