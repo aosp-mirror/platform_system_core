@@ -178,7 +178,9 @@ int adb_main(int is_daemon, int server_port, int ack_reply_fd) {
 #else
         // TODO(danalbert): Can't use SendOkay because we're sending "OK\n", not
         // "OKAY".
-        android::base::WriteStringToFd("OK\n", ack_reply_fd);
+        if (!android::base::WriteStringToFd("OK\n", ack_reply_fd)) {
+            fatal_errno("error writing ACK to fd %d", ack_reply_fd);
+        }
         unix_close(ack_reply_fd);
 #endif
         close_stdin();
