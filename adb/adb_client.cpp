@@ -197,6 +197,7 @@ int adb_connect(const std::string& service, std::string* error) {
     D("adb_connect: service %s\n", service.c_str());
     if (fd == -2 && __adb_server_name) {
         fprintf(stderr,"** Cannot start server on remote host\n");
+        // error is the original network connection error
         return fd;
     } else if (fd == -2) {
         fprintf(stdout,"* daemon not running. starting it now on port %d *\n",
@@ -204,6 +205,10 @@ int adb_connect(const std::string& service, std::string* error) {
     start_server:
         if (launch_server(__adb_server_port)) {
             fprintf(stderr,"* failed to start daemon *\n");
+            // launch_server() has already printed detailed error info, so just
+            // return a generic error string about the overall adb_connect()
+            // that the caller requested.
+            *error = "cannot connect to daemon";
             return -1;
         } else {
             fprintf(stdout,"* daemon started successfully *\n");
@@ -225,7 +230,10 @@ int adb_connect(const std::string& service, std::string* error) {
             adb_close(fd);
 
             if (sscanf(&version_string[0], "%04x", &version) != 1) {
-                goto error;
+                *error = android::base::StringPrintf(
+                        "cannot parse version string: %s",
+                        version_string.c_str());
+                return -1;
             }
         } else {
             // if fd is -1, then check for "unknown host service",
@@ -239,7 +247,13 @@ int adb_connect(const std::string& service, std::string* error) {
         if (version != ADB_SERVER_VERSION) {
             printf("adb server is out of date.  killing...\n");
             fd = _adb_connect("host:kill", error);
-            adb_close(fd);
+            if (fd >= 0) {
+                adb_close(fd);
+            } else {
+                // If we couldn't connect to the server or had some other error,
+                // report it, but still try to start the server.
+                fprintf(stderr, "error: %s\n", error->c_str());
+            }
 
             /* XXX can we better detect its death? */
             adb_sleep_ms(2000);
