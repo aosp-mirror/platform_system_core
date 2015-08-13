@@ -37,19 +37,7 @@ commonSources := \
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
 # which are also hard or even impossible to port to native Win32
-WINDOWS_HOST_ONLY :=
-ifeq ($(HOST_OS),windows)
-    ifeq ($(strip $(USE_CYGWIN)),)
-        WINDOWS_HOST_ONLY := 1
-    endif
-endif
-# USE_MINGW is defined when we build against Mingw on Linux
-ifneq ($(strip $(USE_MINGW)),)
-    WINDOWS_HOST_ONLY := 1
-endif
-
-ifneq ($(WINDOWS_HOST_ONLY),1)
-    commonSources += \
+nonWindowsSources := \
         fs.c \
         multiuser.c \
         socket_inaddr_any_server.c \
@@ -60,31 +48,32 @@ ifneq ($(WINDOWS_HOST_ONLY),1)
         socket_network_client.c \
         sockets.c \
 
-    commonHostSources += \
+nonWindowsHostSources := \
         ashmem-host.c \
         trace-host.c
-
-endif
 
 
 # Shared and static library for host
 # ========================================================
 LOCAL_MODULE := libcutils
-LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
+LOCAL_SRC_FILES := $(commonSources) dlmalloc_stubs.c
+LOCAL_SRC_FILES_darwin := $(nonWindowsSources) $(nonWindowsHostSources)
+LOCAL_SRC_FILES_linux := $(nonWindowsSources) $(nonWindowsHostSources)
 LOCAL_STATIC_LIBRARIES := liblog
-ifneq ($(HOST_OS),windows)
-LOCAL_CFLAGS += -Werror -Wall -Wextra
-endif
+LOCAL_CFLAGS_darwin := -Werror -Wall -Wextra
+LOCAL_CFLAGS_linux := -Werror -Wall -Wextra
 LOCAL_MULTILIB := both
+LOCAL_MODULE_HOST_OS := darwin linux windows
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils
-LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
+LOCAL_SRC_FILES := $(commonSources) dlmalloc_stubs.c
+LOCAL_SRC_FILES_darwin := $(nonWindowsSources) $(nonWindowsHostSources)
+LOCAL_SRC_FILES_linux := $(nonWindowsSources) $(nonWindowsHostSources)
 LOCAL_SHARED_LIBRARIES := liblog
-ifneq ($(HOST_OS),windows)
-LOCAL_CFLAGS += -Werror -Wall -Wextra
-endif
+LOCAL_CFLAGS_darwin := -Werror -Wall -Wextra
+LOCAL_CFLAGS_linux := -Werror -Wall -Wextra
 LOCAL_MULTILIB := both
 include $(BUILD_HOST_SHARED_LIBRARY)
 
@@ -96,6 +85,7 @@ include $(BUILD_HOST_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils
 LOCAL_SRC_FILES := $(commonSources) \
+        $(nonWindowsSources) \
         android_reboot.c \
         ashmem-dev.c \
         debugger.c \

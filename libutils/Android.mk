@@ -43,27 +43,19 @@ commonSources:= \
 
 host_commonCflags := -DLIBUTILS_NATIVE=1 $(TOOL_CFLAGS) -Werror
 
-ifeq ($(HOST_OS),windows)
-ifeq ($(strip $(USE_CYGWIN),),)
-# Under MinGW, ctype.h doesn't need multi-byte support
-host_commonCflags += -DMB_CUR_MAX=1
-endif
-endif
-
 # For the host
 # =====================================================
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= $(commonSources)
-ifeq ($(HOST_OS), linux)
-LOCAL_SRC_FILES += Looper.cpp
-endif
-ifeq ($(HOST_OS),darwin)
-LOCAL_CFLAGS += -Wno-unused-parameter
-endif
+LOCAL_SRC_FILES_linux := Looper.cpp
+LOCAL_CFLAGS_darwin := -Wno-unused-parameter
 LOCAL_MODULE:= libutils
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(host_commonCflags)
+# Under MinGW, ctype.h doesn't need multi-byte support
+LOCAL_CFLAGS_windows := -DMB_CUR_MAX=1
 LOCAL_MULTILIB := both
+LOCAL_MODULE_HOST_OS := darwin linux windows
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
