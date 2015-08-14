@@ -16,6 +16,8 @@
 
 #include "base/logging.h"
 
+#include <libgen.h>
+
 #include <regex>
 #include <string>
 
