@@ -151,8 +151,8 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
             INFO("Running %s on %s\n", E2FSCK_BIN, blk_device);
 
             ret = android_fork_execvp_ext(ARRAY_SIZE(e2fsck_argv), e2fsck_argv,
-                                        &status, true, LOG_KLOG | LOG_FILE,
-                                        true, FSCK_LOG_FILE);
+                                          &status, true, LOG_KLOG | LOG_FILE,
+                                          true, FSCK_LOG_FILE, NULL, 0);
 
             if (ret < 0) {
                 /* No need to check for error in fork, we can't really handle it now */
@@ -169,7 +169,7 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
 
         ret = android_fork_execvp_ext(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv,
                                       &status, true, LOG_KLOG | LOG_FILE,
-                                      true, FSCK_LOG_FILE);
+                                      true, FSCK_LOG_FILE, NULL, 0);
         if (ret < 0) {
             /* No need to check for error in fork, we can't really handle it now */
             ERROR("Failed trying to run %s\n", F2FS_FSCK_BIN);
@@ -795,7 +795,8 @@ int fs_mgr_swapon_all(struct fstab *fstab)
         /* Initialize the swap area */
         mkswap_argv[1] = fstab->recs[i].blk_device;
         err = android_fork_execvp_ext(ARRAY_SIZE(mkswap_argv), mkswap_argv,
-                                      &status, true, LOG_KLOG, false, NULL);
+                                      &status, true, LOG_KLOG, false, NULL,
+                                      NULL, 0);
         if (err) {
             ERROR("mkswap failed for %s\n", fstab->recs[i].blk_device);
             ret = -1;
