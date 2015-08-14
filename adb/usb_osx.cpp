@@ -316,11 +316,10 @@ static bool ClearPipeStallBothEnds(IOUSBInterfaceInterface190** interface, UInt8
 static usb_handle*
 CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 product)
 {
-    usb_handle*                 handle = NULL;
-    IOReturn                    kr;
-    UInt8  interfaceNumEndpoints, interfaceClass, interfaceSubClass, interfaceProtocol;
-    UInt8  endpoint;
-
+    usb_handle* handle;
+    IOReturn kr;
+    UInt8 interfaceNumEndpoints, interfaceClass, interfaceSubClass, interfaceProtocol;
+    UInt8 endpoint;
 
     //* Now open the interface.  This will cause the pipes associated with
     //* the endpoints in the interface descriptor to be instantiated
@@ -356,7 +355,7 @@ CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 pro
 
     //* Iterate over the endpoints for this interface and find the first
     //* bulk in/out pipes available.  These will be our read/write pipes.
-    for (endpoint = 0; endpoint <= interfaceNumEndpoints; endpoint++) {
+    for (endpoint = 1; endpoint <= interfaceNumEndpoints; endpoint++) {
         UInt8   transferType;
         UInt16  maxPacketSize;
         UInt8   interval;
