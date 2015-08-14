@@ -181,7 +181,7 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
 
         // Iterate over the endpoints for this interface and see if there
         // are any that do bulk in/out.
-        for (UInt8 endpoint = 0; endpoint <= interfaceNumEndpoints; endpoint++) {
+        for (UInt8 endpoint = 1; endpoint <= interfaceNumEndpoints; endpoint++) {
             UInt8   transferType;
             UInt16  maxPacketSize;
             UInt8   interval;
