@@ -20,9 +20,9 @@
 #include <limits.h>
 #include <sys/types.h>
 
-#include <base/macros.h>
-
 #include <string>
+
+#include <base/macros.h>
 
 #include "adb_trace.h"
 #include "fdevent.h"
@@ -191,71 +191,6 @@ enum ConnectionState {
     kCsUnauthorized,
 };
 
-class atransport {
-public:
-    // TODO(danalbert): We expose waaaaaaay too much stuff because this was
-    // historically just a struct, but making the whole thing a more idiomatic
-    // class in one go is a very large change. Given how bad our testing is,
-    // it's better to do this piece by piece.
-
-    atransport() {
-        auth_fde = {};
-        transport_fde = {};
-        protocol_version = A_VERSION;
-        max_payload = MAX_PAYLOAD;
-    }
-
-    virtual ~atransport() {}
-
-    int (*read_from_remote)(apacket* p, atransport* t) = nullptr;
-    int (*write_to_remote)(apacket* p, atransport* t) = nullptr;
-    void (*close)(atransport* t) = nullptr;
-    void (*kick)(atransport* t) = nullptr;
-
-    int fd = -1;
-    int transport_socket = -1;
-    fdevent transport_fde;
-    int ref_count = 0;
-    uint32_t sync_token = 0;
-    ConnectionState connection_state = kCsOffline;
-    bool online = false;
-    TransportType type = kTransportAny;
-
-    // USB handle or socket fd as needed.
-    usb_handle* usb = nullptr;
-    int sfd = -1;
-
-    // Used to identify transports for clients.
-    char* serial = nullptr;
-    char* product = nullptr;
-    char* model = nullptr;
-    char* device = nullptr;
-    char* devpath = nullptr;
-    int adb_port = -1;  // Use for emulators (local transport)
-    bool kicked = false;
-
-    // A list of adisconnect callbacks called when the transport is kicked.
-    adisconnect disconnects = {};
-
-    void* key = nullptr;
-    unsigned char token[TOKEN_SIZE] = {};
-    fdevent auth_fde;
-    size_t failed_auth_attempts = 0;
-
-    const char* connection_state_name() const;
-
-    void update_version(int version, size_t payload);
-    int get_protocol_version() const;
-    size_t get_max_payload() const;
-
-private:
-    int protocol_version;
-    size_t max_payload;
-
-    DISALLOW_COPY_AND_ASSIGN(atransport);
-};
-
-
 /* A listener is an entity which binds to a local port
 ** and, upon receiving a connection on that port, creates
 ** an asocket to connect the new local connection to a
@@ -380,7 +315,8 @@ int adb_commandline(int argc, const char **argv);
 
 ConnectionState connection_state(atransport *t);
 
-extern const char *adb_device_banner;
+extern const char* adb_device_banner;
+
 #if !ADB_HOST
 extern int SHELL_EXIT_NOTIFY_FD;
 #endif // !ADB_HOST
@@ -404,5 +340,7 @@ void handle_online(atransport *t);
 void handle_offline(atransport *t);
 
 void send_connect(atransport *t);
+
+void parse_banner(const std::string&, atransport* t);
 
 #endif
