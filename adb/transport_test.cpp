@@ -59,6 +59,8 @@ public:
         EXPECT_EQ(0, memcmp(&auth_fde, &rhs.auth_fde, sizeof(fdevent)));
         EXPECT_EQ(failed_auth_attempts, rhs.failed_auth_attempts);
 
+        EXPECT_EQ(features(), rhs.features());
+
         return true;
     }
 };
@@ -120,6 +122,73 @@ TEST(transport, kick_transport_already_kicked) {
 // want to make sure I understand how this is working at all before I try fixing
 // that.
 TEST(transport, DISABLED_run_transport_disconnects_zeroed_atransport) {
-  atransport t;
-  run_transport_disconnects(&t);
+    atransport t;
+    run_transport_disconnects(&t);
+}
+
+TEST(transport, add_feature) {
+    atransport t;
+    ASSERT_EQ(0U, t.features().size());
+
+    t.add_feature("foo");
+    ASSERT_EQ(1U, t.features().size());
+    ASSERT_TRUE(t.has_feature("foo"));
+
+    t.add_feature("bar");
+    ASSERT_EQ(2U, t.features().size());
+    ASSERT_TRUE(t.has_feature("foo"));
+    ASSERT_TRUE(t.has_feature("bar"));
+
+    t.add_feature("foo");
+    ASSERT_EQ(2U, t.features().size());
+    ASSERT_TRUE(t.has_feature("foo"));
+    ASSERT_TRUE(t.has_feature("bar"));
+}
+
+TEST(transport, parse_banner_no_features) {
+    atransport t;
+
+    parse_banner("host::", &t);
+
+    ASSERT_EQ(0U, t.features().size());
+    ASSERT_EQ(kCsHost, t.connection_state);
+
+    ASSERT_EQ(nullptr, t.product);
+    ASSERT_EQ(nullptr, t.model);
+    ASSERT_EQ(nullptr, t.device);
+}
+
+TEST(transport, parse_banner_product_features) {
+    atransport t;
+
+    const char banner[] =
+        "host::ro.product.name=foo;ro.product.model=bar;ro.product.device=baz;";
+    parse_banner(banner, &t);
+
+    ASSERT_EQ(kCsHost, t.connection_state);
+
+    ASSERT_EQ(0U, t.features().size());
+
+    ASSERT_EQ(std::string("foo"), t.product);
+    ASSERT_EQ(std::string("bar"), t.model);
+    ASSERT_EQ(std::string("baz"), t.device);
+}
+
+TEST(transport, parse_banner_features) {
+    atransport t;
+
+    const char banner[] =
+        "host::ro.product.name=foo;ro.product.model=bar;ro.product.device=baz;"
+        "features=woodly,doodly";
+    parse_banner(banner, &t);
+
+    ASSERT_EQ(kCsHost, t.connection_state);
+
+    ASSERT_EQ(2U, t.features().size());
+    ASSERT_TRUE(t.has_feature("woodly"));
+    ASSERT_TRUE(t.has_feature("doodly"));
+
+    ASSERT_EQ(std::string("foo"), t.product);
+    ASSERT_EQ(std::string("bar"), t.model);
+    ASSERT_EQ(std::string("baz"), t.device);
 }
