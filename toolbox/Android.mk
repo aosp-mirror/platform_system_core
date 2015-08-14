@@ -42,7 +42,6 @@ OUR_TOOLS := \
     getevent \
     iftop \
     ioctl \
-    ionice \
     log \
     ls \
     lsof \
@@ -50,7 +49,6 @@ OUR_TOOLS := \
     newfs_msdos \
     ps \
     prlimit \
-    renice \
     sendevent \
     start \
     stop \
