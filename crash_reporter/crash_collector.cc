@@ -36,7 +36,7 @@ const char kDefaultUserName[] = "chronos";
 const char kLeaveCoreFile[] = "/root/.leave_core";
 const char kLsbRelease[] = "/etc/lsb-release";
 const char kShellPath[] = "/bin/sh";
-const char kSystemCrashPath[] = "/var/spool/crash";
+const char kSystemCrashPath[] = "/data/misc/crash_reporter/crash";
 const char kUploadVarPrefix[] = "upload_var_";
 const char kUploadFilePrefix[] = "upload_file_";
 
@@ -148,23 +148,13 @@ FilePath CrashCollector::GetCrashPath(const FilePath &crash_directory,
 }
 
 FilePath CrashCollector::GetCrashDirectoryInfo(
-    uid_t process_euid,
-    uid_t default_user_id,
-    gid_t default_user_group,
     mode_t *mode,
     uid_t *directory_owner,
     gid_t *directory_group) {
-  if (process_euid == default_user_id) {
-    *mode = kUserCrashPathMode;
-    *directory_owner = default_user_id;
-    *directory_group = default_user_group;
-    return FilePath(kFallbackUserCrashPath);
-  } else {
-    *mode = kSystemCrashPathMode;
-    *directory_owner = kRootOwner;
-    *directory_group = kRootGroup;
-    return FilePath(kSystemCrashPath);
-  }
+  *mode = kSystemCrashPathMode;
+  *directory_owner = kRootOwner;
+  *directory_group = kRootGroup;
+  return FilePath(kSystemCrashPath);
 }
 
 bool CrashCollector::GetUserInfoFromName(const std::string &name,
@@ -188,9 +178,6 @@ bool CrashCollector::GetUserInfoFromName(const std::string &name,
 bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
                                                     FilePath *crash_directory,
                                                     bool *out_of_capacity) {
-  uid_t default_user_id;
-  gid_t default_user_group;
-
   if (out_of_capacity) *out_of_capacity = false;
 
   // For testing.
@@ -199,20 +186,11 @@ bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
     return true;
   }
 
-  if (!GetUserInfoFromName(kDefaultUserName,
-                           &default_user_id,
-                           &default_user_group)) {
-    LOG(ERROR) << "Could not find default user info";
-    return false;
-  }
   mode_t directory_mode;
   uid_t directory_owner;
   gid_t directory_group;
   *crash_directory =
-      GetCrashDirectoryInfo(euid,
-                            default_user_id,
-                            default_user_group,
-                            &directory_mode,
+      GetCrashDirectoryInfo(&directory_mode,
                             &directory_owner,
                             &directory_group);
 
@@ -238,6 +216,8 @@ bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
 
   if (!CheckHasCapacity(*crash_directory)) {
     if (out_of_capacity) *out_of_capacity = true;
+    LOG(ERROR) << "Directory " << crash_directory->value()
+               << " is out of capacity.";
     return false;
   }
 
@@ -309,6 +289,8 @@ bool CrashCollector::GetExecutableBaseNameFromPid(pid_t pid,
 bool CrashCollector::CheckHasCapacity(const FilePath &crash_directory) {
   DIR* dir = opendir(crash_directory.value().c_str());
   if (!dir) {
+    LOG(WARNING) << "Unable to open crash directory "
+                 << crash_directory.value();
     return false;
   }
   struct dirent ent_buf;
