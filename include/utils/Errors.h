@@ -23,7 +23,7 @@
 namespace android {
 
 // use this type to return error codes
-#ifdef HAVE_MS_C_RUNTIME
+#ifdef _WIN32
 typedef int         status_t;
 #else
 typedef int32_t     status_t;
