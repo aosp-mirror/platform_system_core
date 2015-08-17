@@ -13,6 +13,20 @@ LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 
 include $(BUILD_PREBUILT)
 endif
+
+#######################################
+# asan.options
+ifeq (address,$(strip $(SANITIZE_TARGET)))
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := asan.options
+LOCAL_MODULE_CLASS := ETC
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_PATH := $(TARGET_OUT)
+
+include $(BUILD_PREBUILT)
+endif
+
 #######################################
 # init.environ.rc
 
@@ -21,6 +35,11 @@ LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE := init.environ.rc
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 
+EXPORT_GLOBAL_ASAN_OPTIONS :=
+ifeq (address,$(strip $(SANITIZE_TARGET)))
+  EXPORT_GLOBAL_ASAN_OPTIONS := export ASAN_OPTIONS include=/system/asan.options
+  LOCAL_REQUIRED_MODULES := asan.options
+endif
 # Put it here instead of in init.rc module definition,
 # because init.rc is conditionally included.
 #
@@ -38,11 +57,6 @@ endif
 local_post_install_cmd_base :=
 
 include $(BUILD_SYSTEM)/base_rules.mk
-
-EXPORT_GLOBAL_ASAN_OPTIONS :=
-ifeq (address,$(strip $(SANITIZE_TARGET)))
-  EXPORT_GLOBAL_ASAN_OPTIONS := export ASAN_OPTIONS allow_user_segv_handler=1:detect_odr_violation=0:alloc_dealloc_mismatch=0
-endif
 
 # Regenerate init.environ.rc if PRODUCT_BOOTCLASSPATH has changed.
 bcp_md5 := $(word 1, $(shell echo $(PRODUCT_BOOTCLASSPATH) $(PRODUCT_SYSTEM_SERVER_CLASSPATH) | $(MD5SUM)))
