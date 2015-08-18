@@ -45,26 +45,26 @@ TEST_F(VectorTest, CopyOnWrite_CopyAndAddElements) {
     vector.add(2);
     vector.add(3);
 
-    EXPECT_EQ(vector.size(), 3);
+    EXPECT_EQ(3U, vector.size());
 
     // copy the vector
     other = vector;
 
-    EXPECT_EQ(other.size(), 3);
+    EXPECT_EQ(3U, other.size());
 
     // add an element to the first vector
     vector.add(4);
 
     // make sure the sizes are correct
-    EXPECT_EQ(vector.size(), 4);
-    EXPECT_EQ(other.size(), 3);
+    EXPECT_EQ(4U, vector.size());
+    EXPECT_EQ(3U, other.size());
 
     // add an element to the copy
     other.add(5);
 
     // make sure the sizes are correct
-    EXPECT_EQ(vector.size(), 4);
-    EXPECT_EQ(other.size(), 4);
+    EXPECT_EQ(4U, vector.size());
+    EXPECT_EQ(4U, other.size());
 
     // make sure the content of both vectors are correct
     EXPECT_EQ(vector[3], 4);
