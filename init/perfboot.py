@@ -408,7 +408,10 @@ def parse_args():
     parser.add_argument('-t', '--tags', help='Specify the filename from which '
                         'event tags are read. Every line contains one event '
                         'tag and the last event tag is used to detect that '
-                        'the device has finished booting.')
+                        'the device has finished booting unless --end-tag is '
+                        'specified.')
+    parser.add_argument('--end-tag', help='An event tag on which the script '
+                        'stops measuring the boot time.')
     parser.add_argument('--apk-dir', help='Specify the directory which contains '
                         'APK files to be installed before measuring boot time.')
     return parser.parse_args()
@@ -439,10 +442,14 @@ def main():
 
     record_list = []
     event_tags = filter_event_tags(read_event_tags(args.tags), device)
+    end_tag = args.end_tag or event_tags[-1]
+    if end_tag not in event_tags:
+        sys.exit('%s is not a valid tag.' % end_tag)
+    event_tags = event_tags[0 : event_tags.index(end_tag) + 1]
     init_perf(device, args.output, record_list, event_tags)
     interval_adjuster = IntervalAdjuster(args.interval, device)
     event_tags_re = make_event_tags_re(event_tags)
-    end_tag = event_tags[-1]
+
     for i in range(args.iterations):
         print 'Run #%d ' % i
         record = do_iteration(
