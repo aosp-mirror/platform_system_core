@@ -134,6 +134,7 @@ static void setup_daemon_logging(void) {
     setvbuf(stderr, NULL, _IONBF, 0);
 #endif
     fprintf(stderr, "--- adb starting (pid %d) ---\n", getpid());
+    LOG(INFO) << adb_version();
 }
 
 int adb_main(int is_daemon, int server_port, int ack_reply_fd) {
