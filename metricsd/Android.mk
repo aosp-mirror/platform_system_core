@@ -42,7 +42,6 @@ metrics_daemon_sources := \
   serialization/serialization_utils.cc
 
 metrics_CFLAGS := -Wall \
-  -D__BRILLO__ \
   -Wno-char-subscripts \
   -Wno-missing-field-initializers \
   -Wno-unused-function \
