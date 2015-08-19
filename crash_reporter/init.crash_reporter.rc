@@ -1,0 +1,19 @@
+on property:crash_reporter.coredump.enabled=1
+    write /proc/sys/kernel/core_pattern \
+          "|/system/bin/crash_reporter --user=%P:%s:%u:%e"
+
+on property:crash_reporter.coredump.enabled=0
+    write /proc/sys/kernel/core_pattern "core"
+
+on boot
+    # Allow catching multiple unrelated concurrent crashes, but use a finite
+    # number to prevent infinitely recursing on crash handling.
+    write /proc/sys/kernel/core_pipe_limit 4
+
+    # Create crash directories.
+    mkdir /data/misc/crash_reporter 0700 root root
+    mkdir /data/local/tmp/crash_reporter 0700 root root
+
+service crash_reporter /system/bin/crash_reporter --init
+    class late_start
+    oneshot
