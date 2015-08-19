@@ -24,20 +24,16 @@
 #include <base/strings/stringprintf.h>
 #include <chromeos/process.h>
 #include <chromeos/syslog_logging.h>
+#include <cutils/properties.h>
 
 static const char kCollectionErrorSignature[] =
     "crash_reporter-user-collection";
-// This procfs file is used to cause kernel core file writing to
-// instead pipe the core file into a user space process.  See
-// core(5) man page.
-static const char kCorePatternFile[] = "/proc/sys/kernel/core_pattern";
-static const char kCorePipeLimitFile[] = "/proc/sys/kernel/core_pipe_limit";
-// Set core_pipe_limit to 4 so that we can catch a few unrelated concurrent
-// crashes, but finite to avoid infinitely recursing on crash handling.
-static const char kCorePipeLimit[] = "4";
-static const char kCoreToMinidumpConverterPath[] = "/usr/bin/core2md";
+static const char kCorePatternProperty[] = "crash_reporter.coredump.enabled";
+static const char kCoreToMinidumpConverterPath[] = "/system/bin/core2md";
 
 static const char kStatePrefix[] = "State:\t";
+
+static const char kCoreTempFolder[] = "/data/local/tmp/crash_reporter";
 
 // Define an otherwise invalid value that represents an unknown UID.
 static const uid_t kUnknownUid = -1;
@@ -50,8 +46,6 @@ using base::StringPrintf;
 
 UserCollector::UserCollector()
     : generate_diagnostics_(false),
-      core_pattern_file_(kCorePatternFile),
-      core_pipe_limit_file_(kCorePipeLimitFile),
       initialized_(false) {
 }
 
@@ -115,18 +109,8 @@ bool UserCollector::SetUpInternal(bool enabled) {
   CHECK(initialized_);
   LOG(INFO) << (enabled ? "Enabling" : "Disabling") << " user crash handling";
 
-  if (base::WriteFile(FilePath(core_pipe_limit_file_), kCorePipeLimit,
-                      strlen(kCorePipeLimit)) !=
-      static_cast<int>(strlen(kCorePipeLimit))) {
-    PLOG(ERROR) << "Unable to write " << core_pipe_limit_file_;
-    return false;
-  }
-  std::string pattern = GetPattern(enabled);
-  if (base::WriteFile(FilePath(core_pattern_file_), pattern.c_str(),
-                      pattern.length()) != static_cast<int>(pattern.length())) {
-    PLOG(ERROR) << "Unable to write " << core_pattern_file_;
-    return false;
-  }
+  property_set(kCorePatternProperty, enabled ? "1" : "0");
+
   return true;
 }
 
@@ -342,7 +326,7 @@ bool UserCollector::GetCreatedCrashDirectory(pid_t pid, uid_t supplied_ruid,
 
 bool UserCollector::CopyStdinToCoreFile(const FilePath &core_path) {
   // Copy off all stdin to a core file.
-  FilePath stdin_path("/dev/fd/0");
+  FilePath stdin_path("/proc/self/fd/0");
   if (base::CopyFile(stdin_path, core_path)) {
     return true;
   }
@@ -438,7 +422,7 @@ UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
 
   // Directory like /tmp/crash_reporter/1234 which contains the
   // procfs entries and other temporary files used during conversion.
-  FilePath container_dir(StringPrintf("/tmp/crash_reporter/%d", pid));
+  FilePath container_dir(StringPrintf("%s/%d", kCoreTempFolder, pid));
   // Delete a pre-existing directory from crash reporter that may have
   // been left around for diagnostics from a failed conversion attempt.
   // If we don't, existing files can cause forking to fail.
