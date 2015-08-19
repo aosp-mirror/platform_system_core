@@ -25,7 +25,7 @@ LOCAL_SHARED_LIBRARIES := \
     libsysutils \
     liblog \
     libcutils \
-    libutils
+    libbase
 
 # This is what we want to do:
 #  event_logtags = $(shell \

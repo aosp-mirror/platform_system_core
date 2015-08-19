@@ -20,9 +20,11 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <string>
+
+#include <base/stringprintf.h>
 #include <log/logger.h>
 #include <private/android_filesystem_config.h>
-#include <utils/String8.h>
 
 #include "LogStatistics.h"
 
@@ -183,8 +185,10 @@ char *LogStatistics::uidToName(uid_t uid) {
     return name;
 }
 
-static void format_line(android::String8 &output,
-        android::String8 &name, android::String8 &size, android::String8 &pruned) {
+static std::string format_line(
+        const std::string &name,
+        const std::string &size,
+        const std::string &pruned) {
     static const size_t pruned_len = 6;
     static const size_t total_len = 70 + pruned_len;
 
@@ -193,12 +197,12 @@ static void format_line(android::String8 &output,
                                 total_len - name.length() - drop_len - 1);
 
     if (pruned.length()) {
-        output.appendFormat("%s%*s%*s\n", name.string(),
-                                          (int)size_len, size.string(),
-                                          (int)drop_len, pruned.string());
+        return android::base::StringPrintf("%s%*s%*s\n", name.c_str(),
+                                           (int)size_len, size.c_str(),
+                                           (int)drop_len, pruned.c_str());
     } else {
-        output.appendFormat("%s%*s\n", name.string(),
-                                       (int)size_len, size.string());
+        return android::base::StringPrintf("%s%*s\n", name.c_str(),
+                                           (int)size_len, size.c_str());
     }
 }
 
@@ -212,7 +216,7 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
 
     // Report on total logging, current and for all time
 
-    android::String8 output("size/num");
+    std::string output = "size/num";
     size_t oldLength;
     short spaces = 1;
 
@@ -224,12 +228,13 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
         if (spaces < 0) {
             spaces = 0;
         }
-        output.appendFormat("%*s%s", spaces, "", android_log_id_to_name(id));
+        output += android::base::StringPrintf("%*s%s", spaces, "",
+                                              android_log_id_to_name(id));
         spaces += spaces_total + oldLength - output.length();
     }
 
     spaces = 4;
-    output.appendFormat("\nTotal");
+    output += android::base::StringPrintf("\nTotal");
 
     log_id_for_each(id) {
         if (!(logMask & (1 << id))) {
@@ -239,13 +244,14 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
         if (spaces < 0) {
             spaces = 0;
         }
-        output.appendFormat("%*s%zu/%zu", spaces, "",
-                            sizesTotal(id), elementsTotal(id));
+        output += android::base::StringPrintf("%*s%zu/%zu", spaces, "",
+                                              sizesTotal(id),
+                                              elementsTotal(id));
         spaces += spaces_total + oldLength - output.length();
     }
 
     spaces = 6;
-    output.appendFormat("\nNow");
+    output += android::base::StringPrintf("\nNow");
 
     log_id_for_each(id) {
         if (!(logMask & (1 << id))) {
@@ -258,7 +264,8 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
             if (spaces < 0) {
                 spaces = 0;
             }
-            output.appendFormat("%*s%zu/%zu", spaces, "", sizes(id), els);
+            output += android::base::StringPrintf("%*s%zu/%zu", spaces, "",
+                                                  sizes(id), els);
             spaces -= output.length() - oldLength;
         }
         spaces += spaces_total;
@@ -284,53 +291,54 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
             }
 
             if (!headerPrinted) {
-                output.appendFormat("\n\n");
-                android::String8 name("");
+                output += android::base::StringPrintf("\n\n");
+                std::string name;
                 if (uid == AID_ROOT) {
-                    name.appendFormat(
+                    name = android::base::StringPrintf(
                         "Chattiest UIDs in %s log buffer:",
                         android_log_id_to_name(id));
                 } else {
-                    name.appendFormat(
+                    name = android::base::StringPrintf(
                         "Logging for your UID in %s log buffer:",
                         android_log_id_to_name(id));
                 }
-                android::String8 size("Size");
-                android::String8 pruned("Pruned");
+                std::string size = "Size";
+                std::string pruned = "Pruned";
                 if (!worstUidEnabledForLogid(id)) {
-                    pruned.setTo("");
+                    pruned = "";
                 }
-                format_line(output, name, size, pruned);
+                output += format_line(name, size, pruned);
 
-                name.setTo("UID   PACKAGE");
-                size.setTo("BYTES");
-                pruned.setTo("LINES");
+                name = "UID   PACKAGE";
+                size = "BYTES";
+                pruned = "LINES";
                 if (!worstUidEnabledForLogid(id)) {
-                    pruned.setTo("");
+                    pruned = "";
                 }
-                format_line(output, name, size, pruned);
+                output += format_line(name, size, pruned);
 
                 headerPrinted = true;
             }
 
-            android::String8 name("");
-            name.appendFormat("%u", u);
+            std::string name = android::base::StringPrintf("%u", u);
             char *n = uidToName(u);
             if (n) {
-                name.appendFormat("%*s%s", (int)std::max(6 - name.length(), (size_t)1), "", n);
+                name += android::base::StringPrintf(
+                    "%*s%s", (int)std::max(6 - name.length(), (size_t)1),
+                    "", n);
                 free(n);
             }
 
-            android::String8 size("");
-            size.appendFormat("%zu", entry->getSizes());
+            std::string size = android::base::StringPrintf("%zu",
+                                                           entry->getSizes());
 
-            android::String8 pruned("");
+            std::string pruned = "";
             size_t dropped = entry->getDropped();
             if (dropped) {
-                pruned.appendFormat("%zu", dropped);
+                pruned = android::base::StringPrintf("%zu", dropped);
             }
 
-            format_line(output, name, size, pruned);
+            output += format_line(name, size, pruned);
         }
     }
 
@@ -347,48 +355,52 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
             }
 
             if (!headerPrinted) {
-                output.appendFormat("\n\n");
-                android::String8 name("");
+                output += android::base::StringPrintf("\n\n");
+                std::string name;
                 if (uid == AID_ROOT) {
-                    name.appendFormat("Chattiest PIDs:");
+                    name = android::base::StringPrintf("Chattiest PIDs:");
                 } else {
-                    name.appendFormat("Logging for this PID:");
+                    name = android::base::StringPrintf("Logging for this PID:");
                 }
-                android::String8 size("Size");
-                android::String8 pruned("Pruned");
-                format_line(output, name, size, pruned);
+                std::string size = "Size";
+                std::string pruned = "Pruned";
+                output += format_line(name, size, pruned);
 
-                name.setTo("  PID/UID   COMMAND LINE");
-                size.setTo("BYTES");
-                pruned.setTo("LINES");
-                format_line(output, name, size, pruned);
+                name = "  PID/UID   COMMAND LINE";
+                size = "BYTES";
+                pruned = "LINES";
+                output += format_line(name, size, pruned);
 
                 headerPrinted = true;
             }
 
-            android::String8 name("");
-            name.appendFormat("%5u/%u", entry->getKey(), u);
+            std::string name = android::base::StringPrintf("%5u/%u",
+                                                           entry->getKey(), u);
             const char *n = entry->getName();
             if (n) {
-                name.appendFormat("%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", n);
+                name += android::base::StringPrintf(
+                    "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
+                    "", n);
             } else {
                 char *un = uidToName(u);
                 if (un) {
-                    name.appendFormat("%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", un);
+                    name += android::base::StringPrintf(
+                        "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
+                        "", un);
                     free(un);
                 }
             }
 
-            android::String8 size("");
-            size.appendFormat("%zu", entry->getSizes());
+            std::string size = android::base::StringPrintf("%zu",
+                                                           entry->getSizes());
 
-            android::String8 pruned("");
+            std::string pruned = "";
             size_t dropped = entry->getDropped();
             if (dropped) {
-                pruned.appendFormat("%zu", dropped);
+                pruned = android::base::StringPrintf("%zu", dropped);
             }
 
-            format_line(output, name, size, pruned);
+            output += format_line(name, size, pruned);
         }
     }
 
@@ -406,46 +418,50 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
             }
 
             if (!headerPrinted) { // Only print header if we have table to print
-                output.appendFormat("\n\n");
-                android::String8 name("Chattiest TIDs:");
-                android::String8 size("Size");
-                android::String8 pruned("Pruned");
-                format_line(output, name, size, pruned);
+                output += android::base::StringPrintf("\n\n");
+                std::string name = "Chattiest TIDs:";
+                std::string size = "Size";
+                std::string pruned = "Pruned";
+                output += format_line(name, size, pruned);
 
-                name.setTo("  TID/UID   COMM");
-                size.setTo("BYTES");
-                pruned.setTo("LINES");
-                format_line(output, name, size, pruned);
+                name = "  TID/UID   COMM";
+                size = "BYTES";
+                pruned = "LINES";
+                output += format_line(name, size, pruned);
 
                 headerPrinted = true;
             }
 
-            android::String8 name("");
-            name.appendFormat("%5u/%u", entry->getKey(), u);
+            std::string name = android::base::StringPrintf("%5u/%u",
+                                                           entry->getKey(), u);
             const char *n = entry->getName();
             if (n) {
-                name.appendFormat("%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", n);
+                name += android::base::StringPrintf(
+                    "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
+                    "", n);
             } else {
                 // if we do not have a PID name, lets punt to try UID name?
                 char *un = uidToName(u);
                 if (un) {
-                    name.appendFormat("%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", un);
+                    name += android::base::StringPrintf(
+                        "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
+                        "", un);
                     free(un);
                 }
                 // We tried, better to not have a name at all, we still
                 // have TID/UID by number to report in any case.
             }
 
-            android::String8 size("");
-            size.appendFormat("%zu", entry->getSizes());
+            std::string size = android::base::StringPrintf("%zu",
+                                                           entry->getSizes());
 
-            android::String8 pruned("");
+            std::string pruned = "";
             size_t dropped = entry->getDropped();
             if (dropped) {
-                pruned.appendFormat("%zu", dropped);
+                pruned = android::base::StringPrintf("%zu", dropped);
             }
 
-            format_line(output, name, size, pruned);
+            output += format_line(name, size, pruned);
         }
     }
 
@@ -461,40 +477,44 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
                 continue;
             }
 
-            android::String8 pruned("");
+            std::string pruned = "";
 
             if (!headerPrinted) {
-                output.appendFormat("\n\n");
-                android::String8 name("Chattiest events log buffer TAGs:");
-                android::String8 size("Size");
-                format_line(output, name, size, pruned);
+                output += android::base::StringPrintf("\n\n");
+                std::string name = "Chattiest events log buffer TAGs:";
+                std::string size = "Size";
+                output += format_line(name, size, pruned);
 
-                name.setTo("    TAG/UID   TAGNAME");
-                size.setTo("BYTES");
-                format_line(output, name, size, pruned);
+                name = "    TAG/UID   TAGNAME";
+                size = "BYTES";
+                output += format_line(name, size, pruned);
 
                 headerPrinted = true;
             }
 
-            android::String8 name("");
+            std::string name;
             if (u == (uid_t)-1) {
-                name.appendFormat("%7u", entry->getKey());
+                name = android::base::StringPrintf("%7u",
+                                                   entry->getKey());
             } else {
-                name.appendFormat("%7u/%u", entry->getKey(), u);
+                name = android::base::StringPrintf("%7u/%u",
+                                                   entry->getKey(), u);
             }
             const char *n = entry->getName();
             if (n) {
-                name.appendFormat("%*s%s", (int)std::max(14 - name.length(), (size_t)1), "", n);
+                name += android::base::StringPrintf(
+                    "%*s%s", (int)std::max(14 - name.length(), (size_t)1),
+                    "", n);
             }
 
-            android::String8 size("");
-            size.appendFormat("%zu", entry->getSizes());
+            std::string size = android::base::StringPrintf("%zu",
+                                                           entry->getSizes());
 
-            format_line(output, name, size, pruned);
+            output += format_line(name, size, pruned);
         }
     }
 
-    *buf = strdup(output.string());
+    *buf = strdup(output.c_str());
 }
 
 namespace android {
