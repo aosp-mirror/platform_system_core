@@ -19,6 +19,7 @@
 #define __LIBS_LOGWRAP_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 __BEGIN_DECLS
 
@@ -53,6 +54,9 @@ __BEGIN_DECLS
  *           the specified log until the child has exited.
  *   file_path: if log_target has the LOG_FILE bit set, then this parameter
  *           must be set to the pathname of the file to log to.
+ *   opts: set to non-NULL if you want to use one or more of the
+ *           FORK_EXECVP_OPTION_* features.
+ *   opts_len: the length of the opts array. When opts is NULL, pass 0.
  *
  * Return value:
  *   0 when logwrap successfully run the child process and captured its status
@@ -68,8 +72,22 @@ __BEGIN_DECLS
 #define LOG_KLOG        2
 #define LOG_FILE        4
 
+/* Write data to child's stdin. */
+#define FORK_EXECVP_OPTION_INPUT    0
+
+struct AndroidForkExecvpOption {
+    int opt_type;
+    union {
+        struct {
+            const uint8_t* input;
+            size_t input_len;
+        } opt_input;
+    };
+};
+
 int android_fork_execvp_ext(int argc, char* argv[], int *status, bool ignore_int_quit,
-        int log_target, bool abbreviated, char *file_path);
+        int log_target, bool abbreviated, char *file_path,
+        const struct AndroidForkExecvpOption* opts, size_t opts_len);
 
 /* Similar to above, except abbreviated logging is not available, and if logwrap
  * is true, logging is to the Android system log, and if false, there is no
@@ -79,7 +97,8 @@ static inline int android_fork_execvp(int argc, char* argv[], int *status,
                                      bool ignore_int_quit, bool logwrap)
 {
     return android_fork_execvp_ext(argc, argv, status, ignore_int_quit,
-                                   (logwrap ? LOG_ALOG : LOG_NONE), false, NULL);
+                                   (logwrap ? LOG_ALOG : LOG_NONE), false, NULL,
+                                   NULL, 0);
 }
 
 __END_DECLS
