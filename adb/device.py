@@ -112,7 +112,8 @@ class AndroidDevice(object):
     _RETURN_CODE_PROBE_STRING = 'echo "{0}$?"'.format(_RETURN_CODE_DELIMITER)
 
     # Maximum search distance from the output end to find the delimiter.
-    _RETURN_CODE_SEARCH_LENGTH = len('{0}255\n'.format(_RETURN_CODE_DELIMITER))
+    # adb on Windows returns \r\n even if adbd returns \n.
+    _RETURN_CODE_SEARCH_LENGTH = len('{0}255\r\n'.format(_RETURN_CODE_DELIMITER))
 
     def __init__(self, serial, product=None):
         self.serial = serial
