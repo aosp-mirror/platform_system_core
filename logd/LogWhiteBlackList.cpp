@@ -16,7 +16,9 @@
 
 #include <ctype.h>
 
-#include <utils/String8.h>
+#include <string>
+
+#include <base/stringprintf.h>
 
 #include "LogWhiteBlackList.h"
 
@@ -176,10 +178,10 @@ void PruneList::format(char **strp) {
     static const char nice_format[] = " %s";
     const char *fmt = nice_format + 1;
 
-    android::String8 string;
+    std::string string;
 
     if (mWorstUidEnabled) {
-        string.setTo("~!");
+        string = "~!";
         fmt = nice_format;
     }
 
@@ -189,7 +191,7 @@ void PruneList::format(char **strp) {
         char *a = NULL;
         (*it).format(&a);
 
-        string.appendFormat(fmt, a);
+        string += android::base::StringPrintf(fmt, a);
         fmt = nice_format;
 
         free(a);
@@ -201,13 +203,13 @@ void PruneList::format(char **strp) {
         char *a = NULL;
         (*it).format(&a);
 
-        string.appendFormat(fmt, a);
+        string += android::base::StringPrintf(fmt, a);
         fmt = naughty_format;
 
         free(a);
     }
 
-    *strp = strdup(string.string());
+    *strp = strdup(string.c_str());
 }
 
 // ToDo: Lists are in sorted order, Prune->cmp() returns + or -
