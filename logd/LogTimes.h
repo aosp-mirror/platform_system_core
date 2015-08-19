@@ -20,8 +20,10 @@
 #include <pthread.h>
 #include <time.h>
 #include <sys/types.h>
+
+#include <list>
+
 #include <sysutils/SocketClient.h>
-#include <utils/List.h>
 #include <log/log.h>
 
 class LogReader;
@@ -107,6 +109,6 @@ public:
     static int FilterSecondPass(const LogBufferElement *element, void *me);
 };
 
-typedef android::List<LogTimeEntry *> LastLogTimes;
+typedef std::list<LogTimeEntry *> LastLogTimes;
 
-#endif
+#endif // _LOGD_LOG_TIMES_H__
