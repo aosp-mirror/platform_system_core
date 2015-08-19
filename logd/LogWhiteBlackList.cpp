@@ -50,18 +50,14 @@ void Prune::format(char **strp) {
 }
 
 PruneList::PruneList() : mWorstUidEnabled(true) {
-    mNaughty.clear();
-    mNice.clear();
 }
 
 PruneList::~PruneList() {
     PruneCollection::iterator it;
     for (it = mNice.begin(); it != mNice.end();) {
-        delete (*it);
         it = mNice.erase(it);
     }
     for (it = mNaughty.begin(); it != mNaughty.end();) {
-        delete (*it);
         it = mNaughty.erase(it);
     }
 }
@@ -70,11 +66,9 @@ int PruneList::init(char *str) {
     mWorstUidEnabled = true;
     PruneCollection::iterator it;
     for (it = mNice.begin(); it != mNice.end();) {
-        delete (*it);
         it = mNice.erase(it);
     }
     for (it = mNaughty.begin(); it != mNaughty.end();) {
-        delete (*it);
         it = mNaughty.erase(it);
     }
 
@@ -142,28 +136,28 @@ int PruneList::init(char *str) {
         // insert sequentially into list
         PruneCollection::iterator it = list->begin();
         while (it != list->end()) {
-            Prune *p = *it;
-            int m = uid - p->mUid;
+            Prune &p = *it;
+            int m = uid - p.mUid;
             if (m == 0) {
-                if (p->mPid == p->pid_all) {
+                if (p.mPid == p.pid_all) {
                     break;
                 }
-                if ((pid == p->pid_all) && (p->mPid != p->pid_all)) {
+                if ((pid == p.pid_all) && (p.mPid != p.pid_all)) {
                     it = list->erase(it);
                     continue;
                 }
-                m = pid - p->mPid;
+                m = pid - p.mPid;
             }
             if (m <= 0) {
                 if (m < 0) {
-                    list->insert(it, new Prune(uid,pid));
+                    list->insert(it, Prune(uid,pid));
                 }
                 break;
             }
             ++it;
         }
         if (it == list->end()) {
-            list->push_back(new Prune(uid,pid));
+            list->push_back(Prune(uid,pid));
         }
         if (!*str) {
             break;
@@ -193,7 +187,7 @@ void PruneList::format(char **strp) {
 
     for (it = mNice.begin(); it != mNice.end(); ++it) {
         char *a = NULL;
-        (*it)->format(&a);
+        (*it).format(&a);
 
         string.appendFormat(fmt, a);
         fmt = nice_format;
@@ -205,7 +199,7 @@ void PruneList::format(char **strp) {
     fmt = naughty_format + (*fmt != ' ');
     for (it = mNaughty.begin(); it != mNaughty.end(); ++it) {
         char *a = NULL;
-        (*it)->format(&a);
+        (*it).format(&a);
 
         string.appendFormat(fmt, a);
         fmt = naughty_format;
@@ -223,7 +217,7 @@ void PruneList::format(char **strp) {
 bool PruneList::naughty(LogBufferElement *element) {
     PruneCollection::iterator it;
     for (it = mNaughty.begin(); it != mNaughty.end(); ++it) {
-        if (!(*it)->cmp(element)) {
+        if (!(*it).cmp(element)) {
             return true;
         }
     }
@@ -233,7 +227,7 @@ bool PruneList::naughty(LogBufferElement *element) {
 bool PruneList::nice(LogBufferElement *element) {
     PruneCollection::iterator it;
     for (it = mNice.begin(); it != mNice.end(); ++it) {
-        if (!(*it)->cmp(element)) {
+        if (!(*it).cmp(element)) {
             return true;
         }
     }
