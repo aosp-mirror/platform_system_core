@@ -60,8 +60,6 @@ class UserCollectorTest : public ::testing::Test {
                           "");
     base::DeleteFile(FilePath("test"), true);
     mkdir("test", 0777);
-    collector_.set_core_pattern_file("test/core_pattern");
-    collector_.set_core_pipe_limit_file("test/core_pipe_limit");
     pid_ = getpid();
     chromeos::ClearLog();
   }
@@ -83,49 +81,6 @@ class UserCollectorTest : public ::testing::Test {
   UserCollectorMock collector_;
   pid_t pid_;
 };
-
-TEST_F(UserCollectorTest, EnableOK) {
-  ASSERT_TRUE(collector_.Enable());
-  ExpectFileEquals("|/my/path --user=%P:%s:%u:%e",
-                   FilePath("test/core_pattern"));
-  ExpectFileEquals("4", FilePath("test/core_pipe_limit"));
-  ASSERT_EQ(s_crashes, 0);
-  EXPECT_TRUE(FindLog("Enabling user crash handling"));
-}
-
-TEST_F(UserCollectorTest, EnableNoPatternFileAccess) {
-  collector_.set_core_pattern_file("/does_not_exist");
-  ASSERT_FALSE(collector_.Enable());
-  ASSERT_EQ(s_crashes, 0);
-  EXPECT_TRUE(FindLog("Enabling user crash handling"));
-  EXPECT_TRUE(FindLog("Unable to write /does_not_exist"));
-}
-
-TEST_F(UserCollectorTest, EnableNoPipeLimitFileAccess) {
-  collector_.set_core_pipe_limit_file("/does_not_exist");
-  ASSERT_FALSE(collector_.Enable());
-  ASSERT_EQ(s_crashes, 0);
-  // Core pattern should not be written if we cannot access the pipe limit
-  // or otherwise we may set a pattern that results in infinite recursion.
-  ASSERT_FALSE(base::PathExists(FilePath("test/core_pattern")));
-  EXPECT_TRUE(FindLog("Enabling user crash handling"));
-  EXPECT_TRUE(FindLog("Unable to write /does_not_exist"));
-}
-
-TEST_F(UserCollectorTest, DisableOK) {
-  ASSERT_TRUE(collector_.Disable());
-  ExpectFileEquals("core", FilePath("test/core_pattern"));
-  ASSERT_EQ(s_crashes, 0);
-  EXPECT_TRUE(FindLog("Disabling user crash handling"));
-}
-
-TEST_F(UserCollectorTest, DisableNoFileAccess) {
-  collector_.set_core_pattern_file("/does_not_exist");
-  ASSERT_FALSE(collector_.Disable());
-  ASSERT_EQ(s_crashes, 0);
-  EXPECT_TRUE(FindLog("Disabling user crash handling"));
-  EXPECT_TRUE(FindLog("Unable to write /does_not_exist"));
-}
 
 TEST_F(UserCollectorTest, ParseCrashAttributes) {
   pid_t pid;
