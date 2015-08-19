@@ -72,12 +72,9 @@ class CrashCollector {
     forced_crash_directory_ = forced_directory;
   }
 
-  base::FilePath GetCrashDirectoryInfo(uid_t process_euid,
-                                 uid_t default_user_id,
-                                 gid_t default_user_group,
-                                 mode_t *mode,
-                                 uid_t *directory_owner,
-                                 gid_t *directory_group);
+  base::FilePath GetCrashDirectoryInfo(mode_t *mode,
+                                       uid_t *directory_owner,
+                                       gid_t *directory_group);
   bool GetUserInfoFromName(const std::string &name,
                            uid_t *uid,
                            gid_t *gid);
