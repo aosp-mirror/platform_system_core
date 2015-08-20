@@ -19,9 +19,10 @@
 
 #include <sys/types.h>
 
+#include <list>
+
 #include <log/log.h>
 #include <sysutils/SocketClient.h>
-#include <utils/List.h>
 
 #include <private/android_filesystem_config.h>
 
@@ -30,7 +31,7 @@
 #include "LogStatistics.h"
 #include "LogWhiteBlackList.h"
 
-typedef android::List<LogBufferElement *> LogBufferElementCollection;
+typedef std::list<LogBufferElement *> LogBufferElementCollection;
 
 class LogBuffer {
     LogBufferElementCollection mLogElements;
