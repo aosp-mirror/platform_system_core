@@ -40,6 +40,11 @@ class LogBuffer {
     LogStatistics stats;
 
     PruneList mPrune;
+    // watermark of any worst/chatty uid processing
+    typedef std::unordered_map<uid_t,
+                               LogBufferElementCollection::iterator>
+                LogBufferIteratorMap;
+    LogBufferIteratorMap mLastWorstUid[LOG_ID_MAX];
 
     unsigned long mMaxSize[LOG_ID_MAX];
 
