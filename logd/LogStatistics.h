@@ -331,8 +331,7 @@ public:
     size_t sizesTotal(log_id_t id) const { return mSizesTotal[id]; }
     size_t elementsTotal(log_id_t id) const { return mElementsTotal[id]; }
 
-    // *strp = malloc, balance with free
-    void format(char **strp, uid_t uid, unsigned int logMask);
+    std::string format(uid_t uid, unsigned int logMask);
 
     // helper (must be locked directly or implicitly by mLogElementsLock)
     char *pidToName(pid_t pid);

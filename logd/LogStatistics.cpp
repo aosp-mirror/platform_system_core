@@ -20,8 +20,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <string>
-
 #include <base/stringprintf.h>
 #include <log/logger.h>
 #include <private/android_filesystem_config.h>
@@ -206,13 +204,8 @@ static std::string format_line(
     }
 }
 
-void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
+std::string LogStatistics::format(uid_t uid, unsigned int logMask) {
     static const unsigned short spaces_total = 19;
-
-    if (*buf) {
-        free(*buf);
-        *buf = NULL;
-    }
 
     // Report on total logging, current and for all time
 
@@ -514,7 +507,7 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
         }
     }
 
-    *buf = strdup(output.c_str());
+    return output;
 }
 
 namespace android {

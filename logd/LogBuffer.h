@@ -20,6 +20,7 @@
 #include <sys/types.h>
 
 #include <list>
+#include <string>
 
 #include <log/log.h>
 #include <sysutils/SocketClient.h>
@@ -67,15 +68,14 @@ public:
     int setSize(log_id_t id, unsigned long size);
     unsigned long getSizeUsed(log_id_t id);
     // *strp uses malloc, use free to release.
-    void formatStatistics(char **strp, uid_t uid, unsigned int logMask);
+    std::string formatStatistics(uid_t uid, unsigned int logMask);
 
     void enableStatistics() {
         stats.enableStatistics();
     }
 
-    int initPrune(char *cp) { return mPrune.init(cp); }
-    // *strp uses malloc, use free to release.
-    void formatPrune(char **strp) { mPrune.format(strp); }
+    int initPrune(const char *cp) { return mPrune.init(cp); }
+    std::string formatPrune() { return mPrune.format(); }
 
     // helper must be protected directly or implicitly by lock()/unlock()
     char *pidToName(pid_t pid) { return stats.pidToName(pid); }
