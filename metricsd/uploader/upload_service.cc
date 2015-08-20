@@ -73,7 +73,6 @@ void UploadService::StartNewLog() {
   CHECK(!staged_log_) << "the staged log should be discarded before starting "
                          "a new metrics log";
   MetricsLog* log = new MetricsLog();
-  log->PopulateSystemProfile(system_profile_setter_.get());
   current_log_.reset(log);
 }
 
@@ -97,13 +96,12 @@ void UploadService::UploadEvent() {
   // Previous upload successful, reading metrics sample from the file.
   ReadMetrics();
   GatherHistograms();
-
-  // No samples found. Exit to avoid sending an empty log.
-  if (!current_log_)
-    return;
-
   StageCurrentLog();
-  SendStagedLog();
+
+  // If a log is available for upload, upload it.
+  if (staged_log_) {
+    SendStagedLog();
+  }
 }
 
 void UploadService::SendStagedLog() {
@@ -225,6 +223,11 @@ void UploadService::StageCurrentLog() {
 
   staged_log_.swap(current_log_);
   staged_log_->CloseLog();
+  if (!staged_log_->PopulateSystemProfile(system_profile_setter_.get())) {
+    LOG(WARNING) << "Error while adding metadata to the log. Discarding the "
+                 << "log.";
+    staged_log_.reset();
+  }
   failed_upload_count_ = 0;
 }
 
