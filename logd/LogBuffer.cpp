@@ -240,7 +240,12 @@ void LogBuffer::maybePrune(log_id_t id) {
 
 LogBufferElementCollection::iterator LogBuffer::erase(LogBufferElementCollection::iterator it) {
     LogBufferElement *e = *it;
+    log_id_t id = e->getLogId();
+    LogBufferIteratorMap::iterator f = mLastWorstUid[id].find(e->getUid());
 
+    if ((f != mLastWorstUid[id].end()) && (it == f->second)) {
+        mLastWorstUid[id].erase(f);
+    }
     it = mLogElements.erase(it);
     stats.subtract(e);
     delete e;
@@ -399,8 +404,17 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
         bool kick = false;
         bool leading = true;
+        it = mLogElements.begin();
+        if (worst != (uid_t) -1) {
+            LogBufferIteratorMap::iterator f = mLastWorstUid[id].find(worst);
+            if ((f != mLastWorstUid[id].end())
+                    && (f->second != mLogElements.end())) {
+                leading = false;
+                it = f->second;
+            }
+        }
         LogBufferElementLast last;
-        for(it = mLogElements.begin(); it != mLogElements.end();) {
+        while (it != mLogElements.end()) {
             LogBufferElement *e = *it;
 
             if (oldest && (oldest->mStart <= e->getSequence())) {
@@ -450,8 +464,10 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
+            // unmerged drop message
             if (dropped) {
                 last.add(e);
+                mLastWorstUid[id][e->getUid()] = it;
                 ++it;
                 continue;
             }
@@ -496,6 +512,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                     delete e;
                 } else {
                     last.add(e);
+                    mLastWorstUid[id][e->getUid()] = it;
                     ++it;
                 }
             }
