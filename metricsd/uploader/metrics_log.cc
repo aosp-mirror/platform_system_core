@@ -48,6 +48,6 @@ void MetricsLog::IncrementUncleanShutdownCount() {
   stability->set_unclean_system_shutdown_count(current + 1);
 }
 
-void MetricsLog::PopulateSystemProfile(SystemProfileSetter* profile_setter) {
-  profile_setter->Populate(uma_proto());
+bool MetricsLog::PopulateSystemProfile(SystemProfileSetter* profile_setter) {
+  return profile_setter->Populate(uma_proto());
 }
