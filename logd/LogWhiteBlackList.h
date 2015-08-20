@@ -19,7 +19,7 @@
 
 #include <sys/types.h>
 
-#include <utils/List.h>
+#include <list>
 
 #include <LogBufferElement.h>
 
@@ -47,7 +47,7 @@ public:
     void format(char **strp);
 };
 
-typedef android::List<Prune *> PruneCollection;
+typedef std::list<Prune> PruneCollection;
 
 class PruneList {
     PruneCollection mNaughty;

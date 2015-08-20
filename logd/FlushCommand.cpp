@@ -72,7 +72,7 @@ void FlushCommand::runSocketCommand(SocketClient *client) {
             return;
         }
         entry = new LogTimeEntry(mReader, client, mNonBlock, mTail, mLogMask, mPid, mStart);
-        times.push_back(entry);
+        times.push_front(entry);
     }
 
     client->incRef();
