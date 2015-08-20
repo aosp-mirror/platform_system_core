@@ -825,6 +825,15 @@ TEST(libbacktrace, format_test) {
   EXPECT_EQ("#01 pc 123456dc  MapFake (ProcFake+645)",
 #endif
             backtrace->FormatFrameData(&frame));
+
+  // Check a non-zero map offset.
+  frame.map.offset = 0x1000;
+#if defined(__LP64__)
+  EXPECT_EQ("#01 pc 00000000123456dc  MapFake (offset 0x1000) (ProcFake+645)",
+#else
+  EXPECT_EQ("#01 pc 123456dc  MapFake (offset 0x1000) (ProcFake+645)",
+#endif
+            backtrace->FormatFrameData(&frame));
 }
 
 struct map_test_t {
