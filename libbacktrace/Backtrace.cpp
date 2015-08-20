@@ -102,6 +102,11 @@ std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
   uintptr_t relative_pc = BacktraceMap::GetRelativePc(frame->map, frame->pc);
 
   std::string line(StringPrintf("#%02zu pc %" PRIPTR "  %s", frame->num, relative_pc, map_name));
+  // Special handling for non-zero offset maps, we need to print that
+  // information.
+  if (frame->map.offset != 0) {
+    line += " (offset " + StringPrintf("0x%" PRIxPTR, frame->map.offset) + ")";
+  }
   if (!frame->func_name.empty()) {
     line += " (" + frame->func_name;
     if (frame->func_offset) {
