@@ -110,6 +110,7 @@ LOCAL_SHARED_LIBRARIES := $(metrics_shared_libraries) \
   libprotobuf-cpp-lite \
   libchromeos-http \
   libchromeos-dbus \
+  libcutils \
   libdbus
 LOCAL_SRC_FILES := $(metrics_daemon_sources)
 LOCAL_STATIC_LIBRARIES := metrics_daemon_protos
