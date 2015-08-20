@@ -39,7 +39,7 @@ class MetricsLog : public metrics::MetricsLogBase {
   void IncrementUncleanShutdownCount();
 
   // Populate the system profile with system information using setter.
-  void PopulateSystemProfile(SystemProfileSetter* setter);
+  bool PopulateSystemProfile(SystemProfileSetter* setter);
 
  private:
   FRIEND_TEST(UploadServiceTest, LogContainsAggregatedValues);
