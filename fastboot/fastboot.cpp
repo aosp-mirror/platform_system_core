@@ -191,7 +191,7 @@ static void *load_file(const char *fn, unsigned *_sz)
 
 int match_fastboot_with_serial(usb_ifc_info* info, const char* local_serial) {
     // Require a matching vendor id if the user specified one with -i.
-    if (vendor_id != 0  && info->dev_vendor != vendor_id) {
+    if (vendor_id != 0 && info->dev_vendor != vendor_id) {
         return -1;
     }
 
@@ -246,7 +246,7 @@ usb_handle *open_device(void)
         if(usb) return usb;
         if(announce) {
             announce = 0;
-            fprintf(stderr,"< waiting for device >\n");
+            fprintf(stderr, "< waiting for %s >\n", serial ? serial : "any device");
         }
         usleep(1000);
     }
