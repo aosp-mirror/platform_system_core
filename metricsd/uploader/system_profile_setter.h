@@ -27,7 +27,7 @@ class SystemProfileSetter {
  public:
   virtual ~SystemProfileSetter() {}
   // Populates the protobuf with system informations.
-  virtual void Populate(metrics::ChromeUserMetricsExtension* profile_proto) = 0;
+  virtual bool Populate(metrics::ChromeUserMetricsExtension* profile_proto) = 0;
 };
 
 #endif  // METRICS_UPLOADER_SYSTEM_PROFILE_SETTER_H_

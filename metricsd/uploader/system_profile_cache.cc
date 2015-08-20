@@ -75,7 +75,7 @@ bool SystemProfileCache::Initialize() {
 
   if (!base::SysInfo::GetLsbReleaseValue("BRILLO_BUILD_TARGET_ID",
                                          &profile_.build_target_id)) {
-    LOG(ERROR) << "Could not initialize system profile.";
+    LOG(ERROR) << "BRILLO_BUILD_TARGET_ID is not set in /etc/lsb-release.";
     return false;
   }
 
@@ -109,11 +109,12 @@ bool SystemProfileCache::InitializeOrCheck() {
   return initialized_ || Initialize();
 }
 
-void SystemProfileCache::Populate(
+bool SystemProfileCache::Populate(
     metrics::ChromeUserMetricsExtension* metrics_proto) {
   CHECK(metrics_proto);
-  CHECK(InitializeOrCheck())
-      << "failed to initialize system information.";
+  if (not InitializeOrCheck()) {
+    return false;
+  }
 
   // The client id is hashed before being sent.
   metrics_proto->set_client_id(
@@ -132,6 +133,8 @@ void SystemProfileCache::Populate(
   metrics::SystemProfileProto_BrilloDeviceData* device_data =
       profile_proto->mutable_brillo();
   device_data->set_build_target_id(profile_.build_target_id);
+
+  return true;
 }
 
 std::string SystemProfileCache::GetPersistentGUID(
