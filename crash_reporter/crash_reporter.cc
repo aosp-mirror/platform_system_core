@@ -74,7 +74,7 @@ static void CountUncleanShutdown() {
 static void CountUserCrash() {
   SendCrashMetrics(kCrashKindUser, "user");
   std::string command = StringPrintf(
-      "/usr/bin/dbus-send --type=signal --system / \"%s\" &",
+      "/system/bin/dbus-send --type=signal --system / \"%s\" &",
       kUserCrashSignal);
   // Announce through D-Bus whenever a user crash happens. This is
   // used by the metrics daemon to log active use time between
