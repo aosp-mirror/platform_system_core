@@ -70,10 +70,6 @@ LOCAL_SHARED_LIBRARIES := libcutils liblog
 # libhardware, but this at least gets us built.
 LOCAL_SHARED_LIBRARIES += libhardware_legacy
 LOCAL_CFLAGS += -DWITH_LIB_HARDWARE
-# t32cb16blend.S does not compile with Clang.
-LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
-# arch-arm64/col32cb16blend.S does not compile with Clang.
-LOCAL_CLANG_ASFLAGS_arm64 += -no-integrated-as
 include $(BUILD_SHARED_LIBRARY)
 
 include $(call all-makefiles-under,$(LOCAL_PATH))
