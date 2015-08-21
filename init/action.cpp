@@ -154,7 +154,7 @@ bool Action::InitTriggers(const std::vector<std::string>& args, std::string* err
     const static std::string prop_str("property:");
     for (std::size_t i = 0; i < args.size(); ++i) {
         if (i % 2) {
-            if (args[i].compare("&&")) {
+            if (args[i] != "&&") {
                 *err = "&& is the only symbol allowed to concatenate actions";
                 return false;
             } else {
@@ -189,24 +189,24 @@ bool Action::InitSingleTrigger(const std::string& trigger)
 bool Action::CheckPropertyTriggers(const std::string& name,
                                    const std::string& value) const
 {
-    bool found = !name.compare("");
+    bool found = name.empty();
     if (property_triggers_.empty()) {
         return true;
     }
 
     for (const auto& t : property_triggers_) {
-        if (!t.first.compare(name)) {
-            if (t.second.compare("*") &&
-                t.second.compare(value)) {
+        const auto& trigger_name = t.first;
+        const auto& trigger_value = t.second;
+        if (trigger_name == name) {
+            if (trigger_value != "*" && trigger_value != value) {
                 return false;
             } else {
                 found = true;
             }
         } else {
-            std::string prop_val = property_get(t.first.c_str());
-            if (prop_val.empty() ||
-                (t.second.compare("*") &&
-                 t.second.compare(prop_val))) {
+            std::string prop_val = property_get(trigger_name.c_str());
+            if (prop_val.empty() || (trigger_value != "*" &&
+                                     trigger_value != prop_val)) {
                 return false;
             }
         }
@@ -217,7 +217,7 @@ bool Action::CheckPropertyTriggers(const std::string& name,
 bool Action::CheckEventTrigger(const std::string& trigger) const
 {
     return !event_trigger_.empty() &&
-        !trigger.compare(event_trigger_) &&
+        trigger == event_trigger_ &&
         CheckPropertyTriggers();
 }
 
@@ -229,10 +229,8 @@ bool Action::CheckPropertyTrigger(const std::string& name,
 
 bool Action::TriggersEqual(const class Action& other) const
 {
-    return property_triggers_.size() == other.property_triggers_.size() &&
-        std::equal(property_triggers_.begin(), property_triggers_.end(),
-                   other.property_triggers_.begin()) &&
-        !event_trigger_.compare(other.event_trigger_);
+    return property_triggers_ == other.property_triggers_ &&
+        event_trigger_ == other.event_trigger_;
 }
 
 std::string Action::BuildTriggersString() const
@@ -255,19 +253,53 @@ std::string Action::BuildTriggersString() const
 
 void Action::DumpState() const
 {
-    INFO("on ");
     std::string trigger_name = BuildTriggersString();
-    INFO("%s", trigger_name.c_str());
-    INFO("\n");
+    INFO("on %s\n", trigger_name.c_str());
 
     for (const auto& c : commands_) {
         std::string cmd_str = c->BuildCommandString();
-        INFO(" %s", cmd_str.c_str());
+        INFO(" %s\n", cmd_str.c_str());
     }
     INFO("\n");
 }
 
-ActionManager::ActionManager() : cur_command_(0)
+
+class EventTrigger : public Trigger {
+public:
+    EventTrigger(const std::string& trigger) : trigger_(trigger) {
+    }
+    bool CheckTriggers(const Action* action) override {
+        return action->CheckEventTrigger(trigger_);
+    }
+private:
+    std::string trigger_;
+};
+
+class PropertyTrigger : public Trigger {
+public:
+    PropertyTrigger(const std::string& name, const std::string& value)
+        : name_(name), value_(value) {
+    }
+    bool CheckTriggers(const Action* action) override {
+        return action->CheckPropertyTrigger(name_, value_);
+    }
+private:
+    std::string name_;
+    std::string value_;
+};
+
+class BuiltinTrigger : public Trigger {
+public:
+    BuiltinTrigger(Action* action) : action_(action) {
+    }
+    bool CheckTriggers(const Action* action) override {
+        return action == action_;
+    }
+private:
+    Action* action_;
+};
+
+ActionManager::ActionManager() : current_command_(0)
 {
 }
 
@@ -278,21 +310,13 @@ ActionManager& ActionManager::GetInstance() {
 
 void ActionManager::QueueEventTrigger(const std::string& trigger)
 {
-    for (const auto& a : action_list_) {
-        if (a->CheckEventTrigger(trigger)) {
-            action_queue_.push(a);
-        }
-    }
+    trigger_queue_.push(std::make_unique<EventTrigger>(trigger));
 }
 
 void ActionManager::QueuePropertyTrigger(const std::string& name,
                                          const std::string& value)
 {
-    for (const auto& a : action_list_) {
-        if (a->CheckPropertyTrigger(name, value)) {
-            action_queue_.push(a);
-        }
-    }
+    trigger_queue_.push(std::make_unique<PropertyTrigger>(name, value));
 }
 
 void ActionManager::QueueAllPropertyTriggers()
@@ -312,35 +336,45 @@ void ActionManager::QueueBuiltinAction(int (*func)(const std::vector<std::string
 
     act->AddCommand(func, name_vector);
 
-    action_queue_.push(act);
+    actions_.push_back(act);
+    trigger_queue_.push(std::make_unique<BuiltinTrigger>(act));
 }
 
 void ActionManager::ExecuteOneCommand() {
-    if (action_queue_.empty()) {
+    while (current_executing_actions_.empty() && !trigger_queue_.empty()) {
+        std::copy_if(actions_.begin(), actions_.end(),
+                     std::back_inserter(current_executing_actions_),
+                     [this] (Action* act) {
+                         return trigger_queue_.front()->CheckTriggers(act);
+                     });
+        trigger_queue_.pop();
+    }
+
+    if (current_executing_actions_.empty()) {
         return;
     }
 
-    Action* action = action_queue_.front();
+    Action* action = current_executing_actions_.back();
     if (!action->NumCommands()) {
-        action_queue_.pop();
+        current_executing_actions_.pop_back();
         return;
     }
 
-    if (cur_command_ == 0) {
+    if (current_command_ == 0) {
         std::string trigger_name = action->BuildTriggersString();
         INFO("processing action %p (%s)\n", action, trigger_name.c_str());
     }
 
-    action->ExecuteOneCommand(cur_command_++);
-    if (cur_command_ == action->NumCommands()) {
-        cur_command_ = 0;
-        action_queue_.pop();
+    action->ExecuteOneCommand(current_command_++);
+    if (current_command_ == action->NumCommands()) {
+        current_command_ = 0;
+        current_executing_actions_.pop_back();
     }
 }
 
 bool ActionManager::HasMoreCommands() const
 {
-    return !action_queue_.empty();
+    return !current_executing_actions_.empty() || !trigger_queue_.empty();
 }
 
 Action* ActionManager::AddNewAction(const std::vector<std::string>& triggers,
@@ -357,21 +391,21 @@ Action* ActionManager::AddNewAction(const std::vector<std::string>& triggers,
     }
 
     auto old_act_it =
-        std::find_if(action_list_.begin(), action_list_.end(),
+        std::find_if(actions_.begin(), actions_.end(),
                      [&act] (Action* a) { return act->TriggersEqual(*a); });
 
-    if (old_act_it != action_list_.end()) {
+    if (old_act_it != actions_.end()) {
         delete act;
         return *old_act_it;
     }
 
-    action_list_.push_back(act);
+    actions_.push_back(act);
     return act;
 }
 
 void ActionManager::DumpState() const
 {
-    for (const auto& a : action_list_) {
+    for (const auto& a : actions_) {
         a->DumpState();
     }
     INFO("\n");

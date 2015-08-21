@@ -27,6 +27,9 @@ LOCAL_SRC_FILES_x86_64 := x86_64/machine.cpp
 
 LOCAL_CPPFLAGS := $(common_cppflags)
 
+LOCAL_INIT_RC_32 := debuggerd.rc
+LOCAL_INIT_RC_64 := debuggerd64.rc
+
 ifeq ($(TARGET_IS_64_BIT),true)
 LOCAL_CPPFLAGS += -DTARGET_IS_64_BIT
 endif

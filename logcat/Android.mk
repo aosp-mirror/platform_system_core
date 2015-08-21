@@ -11,6 +11,8 @@ LOCAL_MODULE := logcat
 
 LOCAL_CFLAGS := -Werror
 
+LOCAL_INIT_RC := logcatd.rc
+
 include $(BUILD_EXECUTABLE)
 
 include $(call first-makefiles-under,$(LOCAL_PATH))
