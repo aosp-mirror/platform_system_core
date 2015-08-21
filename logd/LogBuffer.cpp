@@ -690,10 +690,12 @@ uint64_t LogBuffer::flushTo(
     return max;
 }
 
-void LogBuffer::formatStatistics(char **strp, uid_t uid, unsigned int logMask) {
+std::string LogBuffer::formatStatistics(uid_t uid, unsigned int logMask) {
     pthread_mutex_lock(&mLogElementsLock);
 
-    stats.format(strp, uid, logMask);
+    std::string ret = stats.format(uid, logMask);
 
     pthread_mutex_unlock(&mLogElementsLock);
+
+    return ret;
 }

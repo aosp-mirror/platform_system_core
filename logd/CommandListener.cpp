@@ -25,6 +25,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include <string>
+
+#include <base/stringprintf.h>
 #include <cutils/sockets.h>
 #include <private/android_filesystem_config.h>
 #include <sysutils/SocketClient.h>
@@ -189,22 +192,13 @@ CommandListener::GetStatisticsCmd::GetStatisticsCmd(LogBuffer *buf) :
         mBuf(*buf) {
 }
 
-static void package_string(char **strp) {
-    const char *a = *strp;
-    if (!a) {
-        a = "";
-    }
-
+static std::string package_string(const std::string &str) {
     // Calculate total buffer size prefix, count is the string length w/o nul
     char fmt[32];
-    for(size_t l = strlen(a), y = 0, x = 6; y != x; y = x, x = strlen(fmt) - 2) {
+    for(size_t l = str.length(), y = 0, x = 6; y != x; y = x, x = strlen(fmt) - 2) {
         snprintf(fmt, sizeof(fmt), "%zu\n%%s\n\f", l + x);
     }
-
-    char *b = *strp;
-    *strp = NULL;
-    asprintf(strp, fmt, a);
-    free(b);
+    return android::base::StringPrintf(fmt, str.c_str());
 }
 
 int CommandListener::GetStatisticsCmd::runCommand(SocketClient *cli,
@@ -228,16 +222,7 @@ int CommandListener::GetStatisticsCmd::runCommand(SocketClient *cli,
         }
     }
 
-    char *buf = NULL;
-
-    mBuf.formatStatistics(&buf, uid, logMask);
-    if (!buf) {
-        cli->sendMsg("Failed");
-    } else {
-        package_string(&buf);
-        cli->sendMsg(buf);
-        free(buf);
-    }
+    cli->sendMsg(package_string(mBuf.formatStatistics(uid, logMask)).c_str());
     return 0;
 }
 
@@ -249,15 +234,7 @@ CommandListener::GetPruneListCmd::GetPruneListCmd(LogBuffer *buf) :
 int CommandListener::GetPruneListCmd::runCommand(SocketClient *cli,
                                          int /*argc*/, char ** /*argv*/) {
     setname();
-    char *buf = NULL;
-    mBuf.formatPrune(&buf);
-    if (!buf) {
-        cli->sendMsg("Failed");
-    } else {
-        package_string(&buf);
-        cli->sendMsg(buf);
-        free(buf);
-    }
+    cli->sendMsg(package_string(mBuf.formatPrune()).c_str());
     return 0;
 }
 
@@ -274,20 +251,15 @@ int CommandListener::SetPruneListCmd::runCommand(SocketClient *cli,
         return 0;
     }
 
-    char *cp = NULL;
+    std::string str;
     for (int i = 1; i < argc; ++i) {
-        char *p = cp;
-        if (p) {
-            cp = NULL;
-            asprintf(&cp, "%s %s", p, argv[i]);
-            free(p);
-        } else {
-            asprintf(&cp, "%s", argv[i]);
+        if (str.length()) {
+            str += " ";
         }
+        str += argv[i];
     }
 
-    int ret = mBuf.initPrune(cp);
-    free(cp);
+    int ret = mBuf.initPrune(str.c_str());
 
     if (ret) {
         cli->sendMsg("Invalid");
