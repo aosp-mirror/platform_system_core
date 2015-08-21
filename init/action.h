@@ -54,6 +54,12 @@ private:
     std::vector<Command*> commands_;
 };
 
+class Trigger {
+public:
+    virtual ~Trigger() { }
+    virtual bool CheckTriggers(const Action* action) = 0;
+};
+
 class ActionManager {
 public:
     static ActionManager& GetInstance();
@@ -74,9 +80,10 @@ private:
     ActionManager(ActionManager const&) = delete;
     void operator=(ActionManager const&) = delete;
 
-    std::vector<Action*> action_list_;
-    std::queue<Action*> action_queue_;
-    std::size_t cur_command_;
+    std::vector<Action*> actions_;
+    std::queue<std::unique_ptr<Trigger>> trigger_queue_;
+    std::vector<Action*> current_executing_actions_;
+    std::size_t current_command_;
 };
 
 #endif
