@@ -1,0 +1,2 @@
+service debuggerd64 /system/bin/debuggerd64
+    class main
