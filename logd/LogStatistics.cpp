@@ -14,15 +14,12 @@
  * limitations under the License.
  */
 
-#include <algorithm> // std::max
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
-#include <base/stringprintf.h>
 #include <log/logger.h>
-#include <private/android_filesystem_config.h>
 
 #include "LogStatistics.h"
 
@@ -63,9 +60,9 @@ char *pidToName(pid_t pid) {
 
 }
 
-void LogStatistics::add(LogBufferElement *e) {
-    log_id_t log_id = e->getLogId();
-    unsigned short size = e->getMsgLen();
+void LogStatistics::add(LogBufferElement *element) {
+    log_id_t log_id = element->getLogId();
+    unsigned short size = element->getMsgLen();
     mSizes[log_id] += size;
     ++mElements[log_id];
 
@@ -76,24 +73,24 @@ void LogStatistics::add(LogBufferElement *e) {
         return;
     }
 
-    uidTable[log_id].add(e->getUid(), e);
+    uidTable[log_id].add(element->getUid(), element);
 
     if (!enable) {
         return;
     }
 
-    pidTable.add(e->getPid(), e);
-    tidTable.add(e->getTid(), e);
+    pidTable.add(element->getPid(), element);
+    tidTable.add(element->getTid(), element);
 
-    uint32_t tag = e->getTag();
+    uint32_t tag = element->getTag();
     if (tag) {
-        tagTable.add(tag, e);
+        tagTable.add(tag, element);
     }
 }
 
-void LogStatistics::subtract(LogBufferElement *e) {
-    log_id_t log_id = e->getLogId();
-    unsigned short size = e->getMsgLen();
+void LogStatistics::subtract(LogBufferElement *element) {
+    log_id_t log_id = element->getLogId();
+    unsigned short size = element->getMsgLen();
     mSizes[log_id] -= size;
     --mElements[log_id];
 
@@ -101,40 +98,40 @@ void LogStatistics::subtract(LogBufferElement *e) {
         return;
     }
 
-    uidTable[log_id].subtract(e->getUid(), e);
+    uidTable[log_id].subtract(element->getUid(), element);
 
     if (!enable) {
         return;
     }
 
-    pidTable.subtract(e->getPid(), e);
-    tidTable.subtract(e->getTid(), e);
+    pidTable.subtract(element->getPid(), element);
+    tidTable.subtract(element->getTid(), element);
 
-    uint32_t tag = e->getTag();
+    uint32_t tag = element->getTag();
     if (tag) {
-        tagTable.subtract(tag, e);
+        tagTable.subtract(tag, element);
     }
 }
 
 // Atomically set an entry to drop
 // entry->setDropped(1) must follow this call, caller should do this explicitly.
-void LogStatistics::drop(LogBufferElement *e) {
-    log_id_t log_id = e->getLogId();
-    unsigned short size = e->getMsgLen();
+void LogStatistics::drop(LogBufferElement *element) {
+    log_id_t log_id = element->getLogId();
+    unsigned short size = element->getMsgLen();
     mSizes[log_id] -= size;
 
-    uidTable[log_id].drop(e->getUid(), e);
+    uidTable[log_id].drop(element->getUid(), element);
 
     if (!enable) {
         return;
     }
 
-    pidTable.drop(e->getPid(), e);
-    tidTable.drop(e->getTid(), e);
+    pidTable.drop(element->getPid(), element);
+    tidTable.drop(element->getTid(), element);
 }
 
 // caller must own and free character string
-char *LogStatistics::uidToName(uid_t uid) {
+const char *LogStatistics::uidToName(uid_t uid) const {
     // Local hard coded favourites
     if (uid == AID_LOGD) {
         return strdup("auditd");
@@ -152,7 +149,7 @@ char *LogStatistics::uidToName(uid_t uid) {
 
     // Parse /data/system/packages.list
     uid_t userId = uid % AID_USER;
-    char *name = android::uidToName(userId);
+    const char *name = android::uidToName(userId);
     if (!name && (userId > (AID_SHARED_GID_START - AID_APP))) {
         name = android::uidToName(userId - (AID_SHARED_GID_START - AID_APP));
     }
@@ -161,17 +158,17 @@ char *LogStatistics::uidToName(uid_t uid) {
     }
 
     // report uid -> pid(s) -> pidToName if unique
-    for(pidTable_t::iterator it = pidTable.begin(); it != pidTable.end(); ++it) {
+    for(pidTable_t::const_iterator it = pidTable.begin(); it != pidTable.end(); ++it) {
         const PidEntry &entry = it->second;
 
         if (entry.getUid() == uid) {
-            const char *n = entry.getName();
+            const char *nameTmp = entry.getName();
 
-            if (n) {
+            if (nameTmp) {
                 if (!name) {
-                    name = strdup(n);
-                } else if (fast<strcmp>(name, n)) {
-                    free(name);
+                    name = strdup(nameTmp);
+                } else if (fast<strcmp>(name, nameTmp)) {
+                    free(const_cast<char *>(name));
                     name = NULL;
                     break;
                 }
@@ -183,28 +180,152 @@ char *LogStatistics::uidToName(uid_t uid) {
     return name;
 }
 
-static std::string format_line(
-        const std::string &name,
-        const std::string &size,
-        const std::string &pruned) {
-    static const size_t pruned_len = 6;
-    static const size_t total_len = 70 + pruned_len;
-
-    ssize_t drop_len = std::max(pruned.length() + 1, pruned_len);
-    ssize_t size_len = std::max(size.length() + 1,
-                                total_len - name.length() - drop_len - 1);
-
-    if (pruned.length()) {
-        return android::base::StringPrintf("%s%*s%*s\n", name.c_str(),
-                                           (int)size_len, size.c_str(),
-                                           (int)drop_len, pruned.c_str());
-    } else {
-        return android::base::StringPrintf("%s%*s\n", name.c_str(),
-                                           (int)size_len, size.c_str());
-    }
+std::string UidEntry::formatHeader(const std::string &name, log_id_t id) const {
+    bool isprune = worstUidEnabledForLogid(id);
+    return formatLine(android::base::StringPrintf(
+                          name.c_str(), android_log_id_to_name(id)),
+                      std::string("Size"),
+                      std::string(isprune ? "Pruned" : ""))
+         + formatLine(std::string("UID   PACKAGE"),
+                      std::string("BYTES"),
+                      std::string(isprune ? "NUM" : ""));
 }
 
-std::string LogStatistics::format(uid_t uid, unsigned int logMask) {
+std::string UidEntry::format(const LogStatistics &stat, log_id_t /* id */) const {
+    uid_t uid = getKey();
+    std::string name = android::base::StringPrintf("%u", uid);
+    const char *nameTmp = stat.uidToName(uid);
+    if (nameTmp) {
+        name += android::base::StringPrintf(
+            "%*s%s", (int)std::max(6 - name.length(), (size_t)1),
+            "", nameTmp);
+        free(const_cast<char *>(nameTmp));
+    }
+
+    std::string size = android::base::StringPrintf("%zu", getSizes());
+
+    std::string pruned = "";
+    size_t dropped = getDropped();
+    if (dropped) {
+        pruned = android::base::StringPrintf("%zu", dropped);
+    }
+
+    return formatLine(name, size, pruned);
+}
+
+std::string PidEntry::formatHeader(const std::string &name, log_id_t /* id */) const {
+    return formatLine(name,
+                      std::string("Size"),
+                      std::string("Pruned"))
+         + formatLine(std::string("  PID/UID   COMMAND LINE"),
+                      std::string("BYTES"),
+                      std::string("NUM"));
+}
+
+std::string PidEntry::format(const LogStatistics &stat, log_id_t /* id */) const {
+    uid_t uid = getUid();
+    std::string name = android::base::StringPrintf("%5u/%u",
+                                                   getKey(), uid);
+    const char *nameTmp = getName();
+    if (nameTmp) {
+        name += android::base::StringPrintf(
+            "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
+            "", nameTmp);
+    } else if ((nameTmp = stat.uidToName(uid))) {
+        name += android::base::StringPrintf(
+            "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
+            "", nameTmp);
+        free(const_cast<char *>(nameTmp));
+    }
+
+    std::string size = android::base::StringPrintf("%zu",
+                                                   getSizes());
+
+    std::string pruned = "";
+    size_t dropped = getDropped();
+    if (dropped) {
+        pruned = android::base::StringPrintf("%zu", dropped);
+    }
+
+    return formatLine(name, size, pruned);
+}
+
+std::string TidEntry::formatHeader(const std::string &name, log_id_t /* id */) const {
+    return formatLine(name,
+                      std::string("Size"),
+                      std::string("Pruned"))
+         + formatLine(std::string("  TID/UID   COMM"),
+                      std::string("BYTES"),
+                      std::string("NUM"));
+}
+
+std::string TidEntry::format(const LogStatistics &stat, log_id_t /* id */) const {
+    uid_t uid = getUid();
+    std::string name = android::base::StringPrintf("%5u/%u",
+                                                   getKey(), uid);
+    const char *nameTmp = getName();
+    if (nameTmp) {
+        name += android::base::StringPrintf(
+            "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
+            "", nameTmp);
+    } else if ((nameTmp = stat.uidToName(uid))) {
+        // if we do not have a PID name, lets punt to try UID name?
+        name += android::base::StringPrintf(
+            "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
+            "", nameTmp);
+        free(const_cast<char *>(nameTmp));
+        // We tried, better to not have a name at all, we still
+        // have TID/UID by number to report in any case.
+    }
+
+    std::string size = android::base::StringPrintf("%zu",
+                                                   getSizes());
+
+    std::string pruned = "";
+    size_t dropped = getDropped();
+    if (dropped) {
+        pruned = android::base::StringPrintf("%zu", dropped);
+    }
+
+    return formatLine(name, size, pruned);
+}
+
+std::string TagEntry::formatHeader(const std::string &name, log_id_t id) const {
+    bool isprune = worstUidEnabledForLogid(id);
+    return formatLine(name,
+                      std::string("Size"),
+                      std::string(isprune ? "Prune" : ""))
+         + formatLine(std::string("    TAG/UID   TAGNAME"),
+                      std::string("BYTES"),
+                      std::string(isprune ? "NUM" : ""));
+}
+
+std::string TagEntry::format(const LogStatistics & /* stat */, log_id_t /* id */) const {
+    std::string name;
+    uid_t uid = getUid();
+    if (uid == (uid_t)-1) {
+        name = android::base::StringPrintf("%7u",
+                                           getKey());
+    } else {
+        name = android::base::StringPrintf("%7u/%u",
+                                           getKey(), uid);
+    }
+    const char *nameTmp = getName();
+    if (nameTmp) {
+        name += android::base::StringPrintf(
+            "%*s%s", (int)std::max(14 - name.length(), (size_t)1),
+            "", nameTmp);
+    }
+
+    std::string size = android::base::StringPrintf("%zu",
+                                                   getSizes());
+
+    std::string pruned = "";
+
+    return formatLine(name, size, pruned);
+}
+
+std::string LogStatistics::format(uid_t uid, unsigned int logMask) const {
     static const unsigned short spaces_total = 19;
 
     // Report on total logging, current and for all time
@@ -227,7 +348,7 @@ std::string LogStatistics::format(uid_t uid, unsigned int logMask) {
     }
 
     spaces = 4;
-    output += android::base::StringPrintf("\nTotal");
+    output += "\nTotal";
 
     log_id_for_each(id) {
         if (!(logMask & (1 << id))) {
@@ -244,7 +365,7 @@ std::string LogStatistics::format(uid_t uid, unsigned int logMask) {
     }
 
     spaces = 6;
-    output += android::base::StringPrintf("\nNow");
+    output += "\nNow";
 
     log_id_for_each(id) {
         if (!(logMask & (1 << id))) {
@@ -266,245 +387,30 @@ std::string LogStatistics::format(uid_t uid, unsigned int logMask) {
 
     // Report on Chattiest
 
+    std::string name;
+
     // Chattiest by application (UID)
-    static const size_t maximum_sorted_entries = 32;
     log_id_for_each(id) {
         if (!(logMask & (1 << id))) {
             continue;
         }
 
-        bool headerPrinted = false;
-        std::unique_ptr<const UidEntry *[]> sorted = sort(maximum_sorted_entries, id);
-        ssize_t index = -1;
-        while ((index = uidTable_t::next(index, sorted, maximum_sorted_entries)) >= 0) {
-            const UidEntry *entry = sorted[index];
-            uid_t u = entry->getKey();
-            if ((uid != AID_ROOT) && (u != uid)) {
-                continue;
-            }
-
-            if (!headerPrinted) {
-                output += android::base::StringPrintf("\n\n");
-                std::string name;
-                if (uid == AID_ROOT) {
-                    name = android::base::StringPrintf(
-                        "Chattiest UIDs in %s log buffer:",
-                        android_log_id_to_name(id));
-                } else {
-                    name = android::base::StringPrintf(
-                        "Logging for your UID in %s log buffer:",
-                        android_log_id_to_name(id));
-                }
-                std::string size = "Size";
-                std::string pruned = "Pruned";
-                if (!worstUidEnabledForLogid(id)) {
-                    pruned = "";
-                }
-                output += format_line(name, size, pruned);
-
-                name = "UID   PACKAGE";
-                size = "BYTES";
-                pruned = "LINES";
-                if (!worstUidEnabledForLogid(id)) {
-                    pruned = "";
-                }
-                output += format_line(name, size, pruned);
-
-                headerPrinted = true;
-            }
-
-            std::string name = android::base::StringPrintf("%u", u);
-            char *n = uidToName(u);
-            if (n) {
-                name += android::base::StringPrintf(
-                    "%*s%s", (int)std::max(6 - name.length(), (size_t)1),
-                    "", n);
-                free(n);
-            }
-
-            std::string size = android::base::StringPrintf("%zu",
-                                                           entry->getSizes());
-
-            std::string pruned = "";
-            size_t dropped = entry->getDropped();
-            if (dropped) {
-                pruned = android::base::StringPrintf("%zu", dropped);
-            }
-
-            output += format_line(name, size, pruned);
-        }
+        name = (uid == AID_ROOT)
+            ? "Chattiest UIDs in %s log buffer:"
+            : "Logging for your UID in %s log buffer:";
+        output += uidTable[id].format(*this, uid, name, id);
     }
 
     if (enable) {
-        // Pid table
-        bool headerPrinted = false;
-        std::unique_ptr<const PidEntry *[]> sorted = pidTable.sort(maximum_sorted_entries);
-        ssize_t index = -1;
-        while ((index = pidTable.next(index, sorted, maximum_sorted_entries)) >= 0) {
-            const PidEntry *entry = sorted[index];
-            uid_t u = entry->getUid();
-            if ((uid != AID_ROOT) && (u != uid)) {
-                continue;
-            }
-
-            if (!headerPrinted) {
-                output += android::base::StringPrintf("\n\n");
-                std::string name;
-                if (uid == AID_ROOT) {
-                    name = android::base::StringPrintf("Chattiest PIDs:");
-                } else {
-                    name = android::base::StringPrintf("Logging for this PID:");
-                }
-                std::string size = "Size";
-                std::string pruned = "Pruned";
-                output += format_line(name, size, pruned);
-
-                name = "  PID/UID   COMMAND LINE";
-                size = "BYTES";
-                pruned = "LINES";
-                output += format_line(name, size, pruned);
-
-                headerPrinted = true;
-            }
-
-            std::string name = android::base::StringPrintf("%5u/%u",
-                                                           entry->getKey(), u);
-            const char *n = entry->getName();
-            if (n) {
-                name += android::base::StringPrintf(
-                    "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
-                    "", n);
-            } else {
-                char *un = uidToName(u);
-                if (un) {
-                    name += android::base::StringPrintf(
-                        "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
-                        "", un);
-                    free(un);
-                }
-            }
-
-            std::string size = android::base::StringPrintf("%zu",
-                                                           entry->getSizes());
-
-            std::string pruned = "";
-            size_t dropped = entry->getDropped();
-            if (dropped) {
-                pruned = android::base::StringPrintf("%zu", dropped);
-            }
-
-            output += format_line(name, size, pruned);
-        }
-    }
-
-    if (enable) {
-        // Tid table
-        bool headerPrinted = false;
-        // sort() returns list of references, unique_ptr makes sure self-delete
-        std::unique_ptr<const TidEntry *[]> sorted = tidTable.sort(maximum_sorted_entries);
-        ssize_t index = -1;
-        while ((index = tidTable.next(index, sorted, maximum_sorted_entries)) >= 0) {
-            const TidEntry *entry = sorted[index];
-            uid_t u = entry->getUid();
-            if ((uid != AID_ROOT) && (u != uid)) {
-                continue;
-            }
-
-            if (!headerPrinted) { // Only print header if we have table to print
-                output += android::base::StringPrintf("\n\n");
-                std::string name = "Chattiest TIDs:";
-                std::string size = "Size";
-                std::string pruned = "Pruned";
-                output += format_line(name, size, pruned);
-
-                name = "  TID/UID   COMM";
-                size = "BYTES";
-                pruned = "LINES";
-                output += format_line(name, size, pruned);
-
-                headerPrinted = true;
-            }
-
-            std::string name = android::base::StringPrintf("%5u/%u",
-                                                           entry->getKey(), u);
-            const char *n = entry->getName();
-            if (n) {
-                name += android::base::StringPrintf(
-                    "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
-                    "", n);
-            } else {
-                // if we do not have a PID name, lets punt to try UID name?
-                char *un = uidToName(u);
-                if (un) {
-                    name += android::base::StringPrintf(
-                        "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
-                        "", un);
-                    free(un);
-                }
-                // We tried, better to not have a name at all, we still
-                // have TID/UID by number to report in any case.
-            }
-
-            std::string size = android::base::StringPrintf("%zu",
-                                                           entry->getSizes());
-
-            std::string pruned = "";
-            size_t dropped = entry->getDropped();
-            if (dropped) {
-                pruned = android::base::StringPrintf("%zu", dropped);
-            }
-
-            output += format_line(name, size, pruned);
-        }
+        name = (uid == AID_ROOT) ? "Chattiest PIDs:" : "Logging for this PID:";
+        output += pidTable.format(*this, uid, name);
+        name = "Chattiest TIDs:";
+        output += tidTable.format(*this, uid, name);
     }
 
     if (enable && (logMask & (1 << LOG_ID_EVENTS))) {
-        // Tag table
-        bool headerPrinted = false;
-        std::unique_ptr<const TagEntry *[]> sorted = tagTable.sort(maximum_sorted_entries);
-        ssize_t index = -1;
-        while ((index = tagTable.next(index, sorted, maximum_sorted_entries)) >= 0) {
-            const TagEntry *entry = sorted[index];
-            uid_t u = entry->getUid();
-            if ((uid != AID_ROOT) && (u != uid)) {
-                continue;
-            }
-
-            std::string pruned = "";
-
-            if (!headerPrinted) {
-                output += android::base::StringPrintf("\n\n");
-                std::string name = "Chattiest events log buffer TAGs:";
-                std::string size = "Size";
-                output += format_line(name, size, pruned);
-
-                name = "    TAG/UID   TAGNAME";
-                size = "BYTES";
-                output += format_line(name, size, pruned);
-
-                headerPrinted = true;
-            }
-
-            std::string name;
-            if (u == (uid_t)-1) {
-                name = android::base::StringPrintf("%7u",
-                                                   entry->getKey());
-            } else {
-                name = android::base::StringPrintf("%7u/%u",
-                                                   entry->getKey(), u);
-            }
-            const char *n = entry->getName();
-            if (n) {
-                name += android::base::StringPrintf(
-                    "%*s%s", (int)std::max(14 - name.length(), (size_t)1),
-                    "", n);
-            }
-
-            std::string size = android::base::StringPrintf("%zu",
-                                                           entry->getSizes());
-
-            output += format_line(name, size, pruned);
-        }
+        name = "Chattiest events log buffer TAGs:";
+        output += tagTable.format(*this, uid, name, LOG_ID_EVENTS);
     }
 
     return output;
@@ -536,8 +442,10 @@ uid_t LogStatistics::pidToUid(pid_t pid) {
 }
 
 // caller must free character string
-char *LogStatistics::pidToName(pid_t pid) {
-    const char *name = pidTable.add(pid)->second.getName();
+const char *LogStatistics::pidToName(pid_t pid) const {
+    // An inconvenient truth ... getName() can alter the object
+    pidTable_t &writablePidTable = const_cast<pidTable_t &>(pidTable);
+    const char *name = writablePidTable.add(pid)->second.getName();
     if (!name) {
         return NULL;
     }
