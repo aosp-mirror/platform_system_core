@@ -285,7 +285,6 @@ on post-fs-data
 
     # create basic filesystem structure
     mkdir /data/misc 01771 system misc
-    mkdir /data/misc/adb 02750 system shell
     mkdir /data/misc/bluedroid 02770 bluetooth net_bt_stack
     # Fix the access permissions and group ownership for 'bt_config.conf'
     chmod 0660 /data/misc/bluedroid/bt_config.conf
@@ -346,7 +345,6 @@ on post-fs-data
     # the following directory.
     mkdir /data/mediadrm 0770 mediadrm mediadrm
 
-    mkdir /data/adb 0700 root root
     mkdir /data/anr 0775 system system
 
     # symlink to bugreport storage location
@@ -533,17 +531,6 @@ service ueventd /sbin/ueventd
     critical
     seclabel u:r:ueventd:s0
 
-service logd /system/bin/logd
-    class core
-    socket logd stream 0666 logd logd
-    socket logdr seqpacket 0666 logd logd
-    socket logdw dgram 0222 logd logd
-    group root system
-
-service logd-reinit /system/bin/logd --reinit
-    oneshot
-    disabled
-
 service healthd /sbin/healthd
     class core
     critical
@@ -561,152 +548,8 @@ service console /system/bin/sh
 on property:ro.debuggable=1
     start console
 
-# adbd is controlled via property triggers in init.<platform>.usb.rc
-service adbd /sbin/adbd --root_seclabel=u:r:su:s0
-    class core
-    socket adbd stream 660 system system
-    disabled
-    seclabel u:r:adbd:s0
-
-# adbd on at boot in emulator
-on property:ro.kernel.qemu=1
-    start adbd
-
-service lmkd /system/bin/lmkd
-    class core
-    critical
-    socket lmkd seqpacket 0660 system system
-
-service servicemanager /system/bin/servicemanager
-    class core
-    user system
-    group system
-    critical
-    onrestart restart healthd
-    onrestart restart zygote
-    onrestart restart media
-    onrestart restart surfaceflinger
-    onrestart restart inputflinger
-    onrestart restart drm
-
-service vold /system/bin/vold \
-        --blkid_context=u:r:blkid:s0 --blkid_untrusted_context=u:r:blkid_untrusted:s0 \
-        --fsck_context=u:r:fsck:s0 --fsck_untrusted_context=u:r:fsck_untrusted:s0
-    class core
-    socket vold stream 0660 root mount
-    socket cryptd stream 0660 root mount
-    ioprio be 2
-
-service netd /system/bin/netd
-    class main
-    socket netd stream 0660 root system
-    socket dnsproxyd stream 0660 root inet
-    socket mdns stream 0660 root system
-    socket fwmarkd stream 0660 root inet
-
-service debuggerd /system/bin/debuggerd
-    class main
-
-service debuggerd64 /system/bin/debuggerd64
-    class main
-
-service ril-daemon /system/bin/rild
-    class main
-    socket rild stream 660 root radio
-    socket sap_uim_socket1 stream 660 bluetooth bluetooth
-    socket rild-debug stream 660 radio system
-    user root
-    group radio cache inet misc audio log
-
-service surfaceflinger /system/bin/surfaceflinger
-    class core
-    user system
-    group graphics drmrpc
-    onrestart restart zygote
-
-service inputflinger /system/bin/inputflinger
-    class main
-    user system
-    group input
-#    onrestart restart zygote
-
-service drm /system/bin/drmserver
-    class main
-    user drm
-    group drm system inet drmrpc
-
-service media /system/bin/mediaserver
-    class main
-    user media
-    group audio camera inet net_bt net_bt_admin net_bw_acct drmrpc mediadrm
-    ioprio rt 4
-
-# One shot invocation to deal with encrypted volume.
-service defaultcrypto /system/bin/vdc --wait cryptfs mountdefaultencrypted
-    disabled
-    oneshot
-    # vold will set vold.decrypt to trigger_restart_framework (default
-    # encryption) or trigger_restart_min_framework (other encryption)
-
-# One shot invocation to encrypt unencrypted volumes
-service encrypt /system/bin/vdc --wait cryptfs enablecrypto inplace default
-    disabled
-    oneshot
-    # vold will set vold.decrypt to trigger_restart_framework (default
-    # encryption)
-
-service bootanim /system/bin/bootanimation
-    class core
-    user graphics
-    group graphics audio
-    disabled
-    oneshot
-
-service gatekeeperd /system/bin/gatekeeperd /data/misc/gatekeeper
-    class late_start
-    user system
-
-service installd /system/bin/installd
-    class main
-    socket installd stream 600 system system
-
 service flash_recovery /system/bin/install-recovery.sh
     class main
-    oneshot
-
-service racoon /system/bin/racoon
-    class main
-    socket racoon stream 600 system system
-    # IKE uses UDP port 500. Racoon will setuid to vpn after binding the port.
-    group vpn net_admin inet
-    disabled
-    oneshot
-
-service mtpd /system/bin/mtpd
-    class main
-    socket mtpd stream 600 system system
-    user vpn
-    group vpn net_admin inet net_raw
-    disabled
-    oneshot
-
-service keystore /system/bin/keystore /data/misc/keystore
-    class main
-    user keystore
-    group keystore drmrpc
-
-service dumpstate /system/bin/dumpstate -s
-    class main
-    socket dumpstate stream 0660 shell log
-    disabled
-    oneshot
-
-service mdnsd /system/bin/mdnsd
-    class main
-    user mdnsr
-    group inet net_raw
-    socket mdnsd stream 0660 mdnsr inet
-    disabled
     oneshot
 
 service uncrypt /system/bin/uncrypt
@@ -718,22 +561,3 @@ service pre-recovery /system/bin/uncrypt --reboot
     class main
     disabled
     oneshot
-
-service perfprofd /system/xbin/perfprofd
-    class late_start
-    user root
-    oneshot
-
-on property:persist.logd.logpersistd=logcatd
-    # all exec/services are called with umask(077), so no gain beyond 0700
-    mkdir /data/misc/logd 0700 logd log
-    # logd for write to /data/misc/logd, log group for read from pstore (-L)
-    exec - logd log -- /system/bin/logcat -L -b all -v threadtime -v usec -v printable -D -f /data/misc/logd/logcat -r 64 -n 256
-    start logcatd
-
-service logcatd /system/bin/logcat -b all -v threadtime -v usec -v printable -D -f /data/misc/logd/logcat -r 64 -n 256
-    class late_start
-    disabled
-    # logd for write to /data/misc/logd, log group for read from log daemon
-    user logd
-    group log
