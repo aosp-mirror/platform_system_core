@@ -36,6 +36,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libkeystore_binder
 LOCAL_STATIC_LIBRARIES := libscrypt_static
 LOCAL_C_INCLUDES := external/scrypt/lib/crypto
+LOCAL_INIT_RC := gatekeeperd.rc
 include $(BUILD_EXECUTABLE)
 
 include $(call first-makefiles-under,$(LOCAL_PATH))
