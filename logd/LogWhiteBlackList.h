@@ -20,6 +20,7 @@
 #include <sys/types.h>
 
 #include <list>
+#include <string.h>
 
 #include <LogBufferElement.h>
 
@@ -43,8 +44,7 @@ public:
 
     int cmp(LogBufferElement *e) const { return cmp(e->getUid(), e->getPid()); }
 
-    // *strp is malloc'd, use free to release
-    void format(char **strp);
+    std::string format();
 };
 
 typedef std::list<Prune> PruneCollection;
@@ -58,7 +58,7 @@ public:
     PruneList();
     ~PruneList();
 
-    int init(char *str);
+    int init(const char *str);
 
     bool naughty(LogBufferElement *element);
     bool naughty(void) { return !mNaughty.empty(); }
@@ -66,8 +66,7 @@ public:
     bool nice(void) { return !mNice.empty(); }
     bool worstUidEnabled() const { return mWorstUidEnabled; }
 
-    // *strp is malloc'd, use free to release
-    void format(char **strp);
+    std::string format();
 };
 
 #endif // _LOGD_LOG_WHITE_BLACK_LIST_H__

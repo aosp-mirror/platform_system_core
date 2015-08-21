@@ -16,8 +16,6 @@
 
 #include <ctype.h>
 
-#include <string>
-
 #include <base/stringprintf.h>
 
 #include "LogWhiteBlackList.h"
@@ -37,18 +35,18 @@ int Prune::cmp(uid_t uid, pid_t pid) const {
     return uid - mUid;
 }
 
-void Prune::format(char **strp) {
+std::string Prune::format() {
     if (mUid != uid_all) {
         if (mPid != pid_all) {
-            asprintf(strp, "%u/%u", mUid, mPid);
-        } else {
-            asprintf(strp, "%u", mUid);
+            return android::base::StringPrintf("%u/%u", mUid, mPid);
         }
-    } else if (mPid != pid_all) {
-        asprintf(strp, "/%u", mPid);
-    } else { // NB: mPid == pid_all can not happen if mUid == uid_all
-        asprintf(strp, "/");
+        return android::base::StringPrintf("%u", mUid);
     }
+    if (mPid != pid_all) {
+        return android::base::StringPrintf("/%u", mPid);
+    }
+    // NB: mPid == pid_all can not happen if mUid == uid_all
+    return std::string("/");
 }
 
 PruneList::PruneList() : mWorstUidEnabled(true) {
@@ -64,7 +62,7 @@ PruneList::~PruneList() {
     }
 }
 
-int PruneList::init(char *str) {
+int PruneList::init(const char *str) {
     mWorstUidEnabled = true;
     PruneCollection::iterator it;
     for (it = mNice.begin(); it != mNice.end();) {
@@ -169,12 +167,7 @@ int PruneList::init(char *str) {
     return 0;
 }
 
-void PruneList::format(char **strp) {
-    if (*strp) {
-        free(*strp);
-        *strp = NULL;
-    }
-
+std::string PruneList::format() {
     static const char nice_format[] = " %s";
     const char *fmt = nice_format + 1;
 
@@ -188,28 +181,18 @@ void PruneList::format(char **strp) {
     PruneCollection::iterator it;
 
     for (it = mNice.begin(); it != mNice.end(); ++it) {
-        char *a = NULL;
-        (*it).format(&a);
-
-        string += android::base::StringPrintf(fmt, a);
+        string += android::base::StringPrintf(fmt, (*it).format().c_str());
         fmt = nice_format;
-
-        free(a);
     }
 
     static const char naughty_format[] = " ~%s";
     fmt = naughty_format + (*fmt != ' ');
     for (it = mNaughty.begin(); it != mNaughty.end(); ++it) {
-        char *a = NULL;
-        (*it).format(&a);
-
-        string += android::base::StringPrintf(fmt, a);
+        string += android::base::StringPrintf(fmt, (*it).format().c_str());
         fmt = naughty_format;
-
-        free(a);
     }
 
-    *strp = strdup(string.c_str());
+    return string;
 }
 
 // ToDo: Lists are in sorted order, Prune->cmp() returns + or -
