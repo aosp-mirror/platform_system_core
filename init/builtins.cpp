@@ -427,6 +427,19 @@ static int wipe_data_via_recovery()
     while (1) { pause(); }  // never reached
 }
 
+void import_late()
+{
+    static const std::vector<std::string> init_directories = {
+        "/system/etc/init",
+        "/vendor/etc/init",
+        "/odm/etc/init"
+    };
+
+    for (const auto& dir : init_directories) {
+        init_parse_config(dir.c_str());
+    }
+}
+
 /*
  * This function might request a reboot, in which case it will
  * not return.
@@ -477,6 +490,8 @@ int do_mount_all(const std::vector<std::string>& args)
         /* fork failed, return an error */
         return -1;
     }
+
+    import_late();
 
     if (ret == FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION) {
         property_set("vold.decrypt", "trigger_encryption");
