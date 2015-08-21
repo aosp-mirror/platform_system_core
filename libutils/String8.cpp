@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
+
 #include <utils/String8.h>
 
 #include <utils/Log.h>
