@@ -19,10 +19,14 @@
  * should still be quite good.
  **/
 
+#include <stdlib.h>
 #include <utils/JenkinsHash.h>
 
 namespace android {
 
+#ifdef __clang__
+__attribute__((no_sanitize("integer")))
+#endif
 hash_t JenkinsHashWhiten(uint32_t hash) {
     hash += (hash << 3);
     hash ^= (hash >> 11);
@@ -31,6 +35,9 @@ hash_t JenkinsHashWhiten(uint32_t hash) {
 }
 
 uint32_t JenkinsHashMixBytes(uint32_t hash, const uint8_t* bytes, size_t size) {
+    if (size > UINT32_MAX) {
+        abort();
+    }
     hash = JenkinsHashMix(hash, (uint32_t)size);
     size_t i;
     for (i = 0; i < (size & -4); i += 4) {
@@ -47,6 +54,9 @@ uint32_t JenkinsHashMixBytes(uint32_t hash, const uint8_t* bytes, size_t size) {
 }
 
 uint32_t JenkinsHashMixShorts(uint32_t hash, const uint16_t* shorts, size_t size) {
+    if (size > UINT32_MAX) {
+        abort();
+    }
     hash = JenkinsHashMix(hash, (uint32_t)size);
     size_t i;
     for (i = 0; i < (size & -2); i += 2) {
