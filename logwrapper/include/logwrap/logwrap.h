@@ -73,7 +73,9 @@ __BEGIN_DECLS
 #define LOG_FILE        4
 
 /* Write data to child's stdin. */
-#define FORK_EXECVP_OPTION_INPUT    0
+#define FORK_EXECVP_OPTION_INPUT             0
+/* Capture data from child's stdout and stderr. */
+#define FORK_EXECVP_OPTION_CAPTURE_OUTPUT    1
 
 struct AndroidForkExecvpOption {
     int opt_type;
@@ -82,6 +84,12 @@ struct AndroidForkExecvpOption {
             const uint8_t* input;
             size_t input_len;
         } opt_input;
+        struct {
+            void (*on_output)(const uint8_t* /*output*/,
+                              size_t /*output_len*/,
+                              void* /* user_pointer */);
+            void* user_pointer;
+        } opt_capture_output;
     };
 };
 
