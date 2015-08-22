@@ -291,7 +291,8 @@ static void print_abbr_buf(struct log_info *log_info) {
 }
 
 static int parent(const char *tag, int parent_read, pid_t pid,
-        int *chld_sts, int log_target, bool abbreviated, char *file_path) {
+        int *chld_sts, int log_target, bool abbreviated, char *file_path,
+        const struct AndroidForkExecvpOption* opts, size_t opts_len) {
     int status = 0;
     char buffer[4096];
     struct pollfd poll_fds[] = {
@@ -357,6 +358,13 @@ static int parent(const char *tag, int parent_read, pid_t pid,
         if (poll_fds[0].revents & POLLIN) {
             sz = TEMP_FAILURE_RETRY(
                 read(parent_read, &buffer[b], sizeof(buffer) - 1 - b));
+
+            for (size_t i = 0; sz > 0 && i < opts_len; ++i) {
+                if (opts[i].opt_type == FORK_EXECVP_OPTION_CAPTURE_OUTPUT) {
+                  opts[i].opt_capture_output.on_output(
+                      (uint8_t*)&buffer[b], sz, opts[i].opt_capture_output.user_pointer);
+                }
+            }
 
             sz += b;
             // Log one line at a time
@@ -484,7 +492,6 @@ int android_fork_execvp_ext(int argc, char* argv[], int *status, bool ignore_int
     sigset_t blockset;
     sigset_t oldset;
     int rc = 0;
-    size_t i;
 
     rc = pthread_mutex_lock(&fd_mutex);
     if (rc) {
@@ -532,7 +539,7 @@ int android_fork_execvp_ext(int argc, char* argv[], int *status, bool ignore_int
         close(parent_ptty);
 
         // redirect stdin, stdout and stderr
-        for (i = 0; i < opts_len; ++i) {
+        for (size_t i = 0; i < opts_len; ++i) {
             if (opts[i].opt_type == FORK_EXECVP_OPTION_INPUT) {
                 dup2(child_ptty, 0);
                 break;
@@ -554,7 +561,7 @@ int android_fork_execvp_ext(int argc, char* argv[], int *status, bool ignore_int
             sigaction(SIGQUIT, &ignact, &quitact);
         }
 
-        for (i = 0; i < opts_len; ++i) {
+        for (size_t i = 0; i < opts_len; ++i) {
             if (opts[i].opt_type == FORK_EXECVP_OPTION_INPUT) {
                 size_t left = opts[i].opt_input.input_len;
                 const uint8_t* input = opts[i].opt_input.input;
@@ -571,7 +578,7 @@ int android_fork_execvp_ext(int argc, char* argv[], int *status, bool ignore_int
         }
 
         rc = parent(argv[0], parent_ptty, pid, status, log_target,
-                    abbreviated, file_path);
+                    abbreviated, file_path, opts, opts_len);
     }
 
     if (ignore_int_quit) {
