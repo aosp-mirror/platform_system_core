@@ -741,8 +741,10 @@ static int logcat(transport_type transport, const char* serial, int argc, const 
 
 static int mkdirs(const char *path)
 {
+    std::string holder(path);
+
     int ret;
-    char *x = (char *)path + 1;
+    char *x = &holder[1];
 
     for(;;) {
         x = adb_dirstart(x);
@@ -759,7 +761,7 @@ static int mkdirs(const char *path)
 }
 
 static int backup(int argc, const char** argv) {
-    const char* filename = "./backup.ab";
+    const char* filename = "backup.ab";
 
     /* find, extract, and use any -f argument */
     for (int i = 1; i < argc; i++) {
