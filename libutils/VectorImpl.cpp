@@ -551,6 +551,10 @@ size_t SortedVectorImpl::orderOf(const void* item) const
 
 ssize_t SortedVectorImpl::_indexOrderOf(const void* item, size_t* order) const
 {
+    if (order) *order = 0;
+    if (isEmpty()) {
+        return NAME_NOT_FOUND;
+    }
     // binary search
     ssize_t err = NAME_NOT_FOUND;
     ssize_t l = 0;
