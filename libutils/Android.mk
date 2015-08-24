@@ -92,6 +92,8 @@ LOCAL_SHARED_LIBRARIES := \
         libdl
 
 LOCAL_MODULE := libutils
+LOCAL_CLANG := true
+LOCAL_SANITIZE := integer
 include $(BUILD_STATIC_LIBRARY)
 
 # For the device, shared
@@ -106,6 +108,8 @@ LOCAL_SHARED_LIBRARIES := \
         liblog
 LOCAL_CFLAGS := -Werror
 
+LOCAL_CLANG := true
+LOCAL_SANITIZE := integer
 include $(BUILD_SHARED_LIBRARY)
 
 
