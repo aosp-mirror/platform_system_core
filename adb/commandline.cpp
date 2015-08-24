@@ -381,7 +381,7 @@ static void *stdin_read_thread(void *x)
     fdi = fds[1];
     free(fds);
 
-    for(;;) {
+    while (true) {
         /* fdi is really the client's stdin, so use read, not adb_read here */
         D("stdin_read_thread(): pre unix_read(fdi=%d,...)\n", fdi);
         r = unix_read(fdi, buf, 1024);
@@ -889,14 +889,14 @@ static std::string find_product_out_path(const std::string& hint) {
 }
 
 static void parse_push_pull_args(const char **arg, int narg, char const **path1,
-                                 char const **path2, int *show_progress,
+                                 char const **path2, bool* show_progress,
                                  int *copy_attrs) {
-    *show_progress = 0;
+    *show_progress = false;
     *copy_attrs = 0;
 
     while (narg > 0) {
         if (!strcmp(*arg, "-p")) {
-            *show_progress = 1;
+            *show_progress = true;
         } else if (!strcmp(*arg, "-a")) {
             *copy_attrs = 1;
         } else {
@@ -1331,33 +1331,25 @@ int adb_commandline(int argc, const char **argv) {
     /* do_sync_*() commands */
     else if (!strcmp(argv[0], "ls")) {
         if (argc != 2) return usage();
-        return do_sync_ls(argv[1]);
+        return do_sync_ls(argv[1]) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "push")) {
-        int show_progress = 0;
-        int copy_attrs = 0; // unused
+        bool show_progress = false;
+        int copy_attrs = 0;
         const char* lpath = NULL, *rpath = NULL;
 
         parse_push_pull_args(&argv[1], argc - 1, &lpath, &rpath, &show_progress, &copy_attrs);
-
-        if ((lpath != NULL) && (rpath != NULL)) {
-            return do_sync_push(lpath, rpath, show_progress);
-        }
-
-        return usage();
+        if (!lpath || !rpath || copy_attrs != 0) return usage();
+        return do_sync_push(lpath, rpath, show_progress) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "pull")) {
-        int show_progress = 0;
+        bool show_progress = false;
         int copy_attrs = 0;
         const char* rpath = NULL, *lpath = ".";
 
         parse_push_pull_args(&argv[1], argc - 1, &rpath, &lpath, &show_progress, &copy_attrs);
-
-        if (rpath != NULL) {
-            return do_sync_pull(rpath, lpath, show_progress, copy_attrs);
-        }
-
-        return usage();
+        if (!rpath) return usage();
+        return do_sync_pull(rpath, lpath, show_progress, copy_attrs) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "install")) {
         if (argc < 2) return usage();
@@ -1401,20 +1393,20 @@ int adb_commandline(int argc, const char **argv) {
         std::string vendor_src_path = product_file("vendor");
         std::string oem_src_path = product_file("oem");
 
-        int rc = 0;
-        if (rc == 0 && (src.empty() || src == "system")) {
-            rc = do_sync_sync(system_src_path, "/system", list_only);
+        bool okay = true;
+        if (okay && (src.empty() || src == "system")) {
+            okay = do_sync_sync(system_src_path, "/system", list_only);
         }
-        if (rc == 0 && (src.empty() || src == "vendor") && directory_exists(vendor_src_path)) {
-            rc = do_sync_sync(vendor_src_path, "/vendor", list_only);
+        if (okay && (src.empty() || src == "vendor") && directory_exists(vendor_src_path)) {
+            okay = do_sync_sync(vendor_src_path, "/vendor", list_only);
         }
-        if (rc == 0 && (src.empty() || src == "oem") && directory_exists(oem_src_path)) {
-            rc = do_sync_sync(oem_src_path, "/oem", list_only);
+        if (okay && (src.empty() || src == "oem") && directory_exists(oem_src_path)) {
+            okay = do_sync_sync(oem_src_path, "/oem", list_only);
         }
-        if (rc == 0 && (src.empty() || src == "data")) {
-            rc = do_sync_sync(data_src_path, "/data", list_only);
+        if (okay && (src.empty() || src == "data")) {
+            okay = do_sync_sync(data_src_path, "/data", list_only);
         }
-        return rc;
+        return okay ? 0 : 1;
     }
     /* passthrough commands */
     else if (!strcmp(argv[0],"get-state") ||
@@ -1535,20 +1527,16 @@ static int install_app(TransportType transport, const char* serial, int argc, co
         return -1;
     }
 
+    int result = -1;
     const char* apk_file = argv[last_apk];
     std::string apk_dest = android::base::StringPrintf(where, adb_basename(apk_file).c_str());
-    int err = do_sync_push(apk_file, apk_dest.c_str(), 0 /* no show progress */);
-    if (err) {
-        goto cleanup_apk;
-    } else {
-        argv[last_apk] = apk_dest.c_str(); /* destination name, not source location */
-    }
-
-    err = pm_command(transport, serial, argc, argv);
+    if (!do_sync_push(apk_file, apk_dest.c_str(), false)) goto cleanup_apk;
+    argv[last_apk] = apk_dest.c_str(); /* destination name, not source location */
+    result = pm_command(transport, serial, argc, argv);
 
 cleanup_apk:
     delete_file(transport, serial, apk_dest);
-    return err;
+    return result;
 }
 
 static int install_multiple_app(TransportType transport, const char* serial, int argc,

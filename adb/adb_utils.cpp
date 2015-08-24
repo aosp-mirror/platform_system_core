@@ -225,3 +225,7 @@ bool parse_host_and_port(const std::string& address,
                << " (" << *canonical_address << ")";
     return true;
 }
+
+std::string perror_str(const char* msg) {
+    return android::base::StringPrintf("%s: %s", msg, strerror(errno));
+}

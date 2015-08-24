@@ -25,12 +25,9 @@ follows as described in SERVICES.TXT.
 
 The following sync requests are accepted:
 LIST - List the files in a folder
+RECV - Retrieve a file from device
 SEND - Send a file to device
-RECV - Retreive a file from device
-
-Not yet documented:
 STAT - Stat a file
-ULNK - Unlink (remove) a file. (Not currently supported)
 
 For all of the sync request above the must be followed by length number of
 bytes containing an utf-8 string with a remote filename.
@@ -40,7 +37,7 @@ Lists files in the directory specified by the remote filename. The server will
 respond with zero or more directory entries or "dents".
 
 The directory entries will be returned in the following form
-1. A four-byte sync response id beeing "DENT"
+1. A four-byte sync response id "DENT"
 2. A four-byte integer representing file mode.
 3. A four-byte integer representing file size.
 4. A four-byte integer representing last modified time.
@@ -60,13 +57,13 @@ the transfer fails. Some file types will not be deleted, which allows
   adb push disk_image /some_block_device
 to work.
 
-After this the actual file is sent in chunks. Each chucks has the following
+After this the actual file is sent in chunks. Each chunk has the following
 format.
 A sync request with id "DATA" and length equal to the chunk size. After
 follows chunk size number of bytes. This is repeated until the file is
-transfered. Each chunk must not be larger than 64k.
+transferred. Each chunk must not be larger than 64k.
 
-When the file is tranfered a sync request "DONE" is sent, where length is set
+When the file is transferred a sync request "DONE" is sent, where length is set
 to the last modified time for the file. The server responds to this last
 request (but not to chuck requests) with an "OKAY" sync response (length can
 be ignored).
@@ -77,8 +74,8 @@ Retrieves a file from device to a local file. The remote path is the path to
 the file that will be returned. Just as for the SEND sync request the file
 received is split up into chunks. The sync response id is "DATA" and length is
 the chuck size. After follows chunk size number of bytes. This is repeated
-until the file is transfered. Each chuck will not be larger than 64k.
+until the file is transferred. Each chuck will not be larger than 64k.
 
-When the file is transfered a sync resopnse "DONE" is retrieved where the
+When the file is transferred a sync response "DONE" is retrieved where the
 length can be ignored.
 

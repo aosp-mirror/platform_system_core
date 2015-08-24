@@ -30,23 +30,22 @@ bool SendFail(int fd, const std::string& reason);
 // Writes a protocol-format string; a four hex digit length followed by the string data.
 bool SendProtocolString(int fd, const std::string& s);
 
-/*
- * Reads exactly len bytes from fd into buf.
- *
- * Returns false if there is an error or if EOF was reached before len bytes
- * were read. If EOF was found, errno will be set to 0.
- *
- * If this function fails, the contents of buf are undefined.
- */
-bool ReadFdExactly(int fd, void *buf, size_t len);
+// Reads a protocol-format string; a four hex digit length followed by the string data.
+bool ReadProtocolString(int fd, std::string* s, std::string* error);
 
-/*
- * Writes exactly len bytes from buf to fd.
- *
- * Returns false if there is an error or if the fd was closed before the write
- * completed. If the other end of the fd (such as in a socket, pipe, or fifo),
- * is closed, errno will be set to 0.
- */
+// Reads exactly len bytes from fd into buf.
+//
+// Returns false if there is an error or if EOF was reached before len bytes
+// were read. If EOF was found, errno will be set to 0.
+//
+// If this function fails, the contents of buf are undefined.
+bool ReadFdExactly(int fd, void* buf, size_t len);
+
+// Writes exactly len bytes from buf to fd.
+//
+// Returns false if there is an error or if the fd was closed before the write
+// completed. If the other end of the fd (such as in a socket, pipe, or fifo),
+// is closed, errno will be set to 0.
 bool WriteFdExactly(int fd, const void* buf, size_t len);
 
 // Same as above, but for strings.
