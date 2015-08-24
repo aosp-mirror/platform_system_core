@@ -44,28 +44,6 @@ static const char* __adb_serial = NULL;
 static int __adb_server_port = DEFAULT_ADB_PORT;
 static const char* __adb_server_name = NULL;
 
-static std::string perror_str(const char* msg) {
-    return android::base::StringPrintf("%s: %s", msg, strerror(errno));
-}
-
-static bool ReadProtocolString(int fd, std::string* s, std::string* error) {
-    char buf[5];
-    if (!ReadFdExactly(fd, buf, 4)) {
-        *error = perror_str("protocol fault (couldn't read status length)");
-        return false;
-    }
-    buf[4] = 0;
-
-    unsigned long len = strtoul(buf, 0, 16);
-    s->resize(len, '\0');
-    if (!ReadFdExactly(fd, &(*s)[0], len)) {
-        *error = perror_str("protocol fault (couldn't read status message)");
-        return false;
-    }
-
-    return true;
-}
-
 void adb_set_transport(TransportType type, const char* serial)
 {
     __adb_transport = type;
@@ -175,7 +153,7 @@ int _adb_connect(const std::string& service, std::string* error) {
         return -1;
     }
 
-    if(!SendProtocolString(fd, service)) {
+    if (!SendProtocolString(fd, service)) {
         *error = perror_str("write failure during connection");
         adb_close(fd);
         return -1;
