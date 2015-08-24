@@ -45,7 +45,7 @@ static const char kCoreToMinidumpConverterPath[] = "/system/bin/core2md";
 
 static const char kStatePrefix[] = "State:\t";
 
-static const char kCoreTempFolder[] = "/data/local/tmp/crash_reporter";
+static const char kCoreTempFolder[] = "/data/misc/crash_reporter/tmp";
 
 // Define an otherwise invalid value that represents an unknown UID.
 static const uid_t kUnknownUid = -1;
