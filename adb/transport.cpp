@@ -865,8 +865,7 @@ void atransport::add_feature(const std::string& feature) {
 }
 
 bool atransport::CanUseFeature(const std::string& feature) const {
-    return has_feature(feature) &&
-           supported_features().count(feature) > 0;
+    return has_feature(feature) && supported_features().count(feature) > 0;
 }
 
 #if ADB_HOST

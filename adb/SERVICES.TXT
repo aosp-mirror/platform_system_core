@@ -237,7 +237,7 @@ track-jdwp
     Note that there is no single-shot service to retrieve the list only once.
 
 sync:
-    This starts the file synchronisation service, used to implement "adb push"
+    This starts the file synchronization service, used to implement "adb push"
     and "adb pull". Since this service is pretty complex, it will be detailed
     in a companion document named SYNC.TXT
 
