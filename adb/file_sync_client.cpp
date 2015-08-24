@@ -79,7 +79,7 @@ static bool SendRequest(int fd, int id, const char* path) {
     char buf[sizeof(SyncRequest) + path_length] __attribute__((aligned(8)));
     SyncRequest* req = reinterpret_cast<SyncRequest*>(buf);
     req->id = id;
-    req->path_length = htoll(path_length);
+    req->path_length = path_length;
     char* data = reinterpret_cast<char*>(req + 1);
     memcpy(data, path, path_length);
 
@@ -143,14 +143,14 @@ static bool sync_ls(int fd, const char* path, sync_ls_cb func, void* cookie) {
         if (msg.dent.id == ID_DONE) return true;
         if (msg.dent.id != ID_DENT) return false;
 
-        size_t len = ltohl(msg.dent.namelen);
+        size_t len = msg.dent.namelen;
         if (len > 256) return false; // TODO: resize buffer? continue?
 
         char buf[257];
         if (!ReadFdExactly(fd, buf, len)) return false;
         buf[len] = 0;
 
-        func(ltohl(msg.dent.mode), ltohl(msg.dent.size), ltohl(msg.dent.time), buf, cookie);
+        func(msg.dent.mode, msg.dent.size, msg.dent.time, buf, cookie);
     }
 }
 
@@ -165,9 +165,9 @@ static bool sync_finish_stat(SyncConnection& sc, unsigned int* timestamp,
         return false;
     }
 
-    if (timestamp) *timestamp = ltohl(msg.stat.time);
-    if (mode) *mode = ltohl(msg.stat.mode);
-    if (size) *size = ltohl(msg.stat.size);
+    if (timestamp) *timestamp = msg.stat.time;
+    if (mode) *mode = msg.stat.mode;
+    if (size) *size = msg.stat.size;
 
     return true;
 }
@@ -211,7 +211,7 @@ static int write_data_file(SyncConnection& sc, const char* path, syncsendbuf* sb
             break;
         }
 
-        sbuf->size = htoll(ret);
+        sbuf->size = ret;
         if (!WriteFdExactly(sc.fd, sbuf, sizeof(unsigned) * 2 + ret)) {
             err = -1;
             break;
@@ -238,7 +238,7 @@ static int write_data_link(SyncConnection& sc, const char* path, syncsendbuf* sb
     }
     sbuf->data[len] = '\0';
 
-    sbuf->size = htoll(len + 1);
+    sbuf->size = len + 1;
     sbuf->id = ID_DATA;
 
     if (!WriteFdExactly(sc.fd, sbuf, sizeof(unsigned) * 2 + len + 1)) {
@@ -269,14 +269,14 @@ static bool sync_send(SyncConnection& sc, const char *lpath, const char *rpath,
 
     syncmsg msg;
     msg.data.id = ID_DONE;
-    msg.data.size = htoll(mtime);
+    msg.data.size = mtime;
     if (!WriteFdExactly(sc.fd, &msg.data, sizeof(msg.data))) goto fail;
 
     if (!ReadFdExactly(sc.fd, &msg.status, sizeof(msg.status))) goto fail;
 
     if (msg.status.id != ID_OKAY) {
         if (msg.status.id == ID_FAIL) {
-            size_t len = ltohl(msg.status.msglen);
+            size_t len = msg.status.msglen;
             if (len > 256) len = 256;
             if (!ReadFdExactly(sc.fd, sbuf->data, len)) goto fail;
             sbuf->data[len] = 0;
@@ -333,7 +333,7 @@ static int sync_recv(SyncConnection& sc, const char* rpath, const char* lpath, b
         id = msg.data.id;
 
     handle_data:
-        len = ltohl(msg.data.size);
+        len = msg.data.size;
         if (id == ID_DONE) break;
         if (id != ID_DATA) goto remote_error;
         if (len > sc.max) {
@@ -368,7 +368,7 @@ remote_error:
     adb_unlink(lpath);
 
     if(id == ID_FAIL) {
-        len = ltohl(msg.data.size);
+        len = msg.data.size;
         if(len > 256) len = 256;
         if(!ReadFdExactly(sc.fd, buffer, len)) {
             return -1;
