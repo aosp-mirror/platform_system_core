@@ -217,19 +217,22 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
     return len;
 }
 
-// If we're using more than 256K of memory for log entries, prune
-// at least 10% of the log entries.
+// Prune at most 10% of the log entries or 256, whichever is less.
 //
 // mLogElementsLock must be held when this function is called.
 void LogBuffer::maybePrune(log_id_t id) {
     size_t sizes = stats.sizes(id);
-    if (sizes > log_buffer_size(id)) {
-        size_t sizeOver90Percent = sizes - ((log_buffer_size(id) * 9) / 10);
+    unsigned long maxSize = log_buffer_size(id);
+    if (sizes > maxSize) {
+        size_t sizeOver = sizes - ((maxSize * 9) / 10);
         size_t elements = stats.elements(id);
-        unsigned long pruneRows = elements * sizeOver90Percent / sizes;
-        elements /= 10;
-        if (pruneRows <= elements) {
-            pruneRows = elements;
+        size_t minElements = elements / 10;
+        unsigned long pruneRows = elements * sizeOver / sizes;
+        if (pruneRows <= minElements) {
+            pruneRows = minElements;
+        }
+        if (pruneRows > 256) {
+            pruneRows = 256;
         }
         prune(id, pruneRows);
     }
@@ -237,7 +240,12 @@ void LogBuffer::maybePrune(log_id_t id) {
 
 LogBufferElementCollection::iterator LogBuffer::erase(LogBufferElementCollection::iterator it) {
     LogBufferElement *e = *it;
+    log_id_t id = e->getLogId();
+    LogBufferIteratorMap::iterator f = mLastWorstUid[id].find(e->getUid());
 
+    if ((f != mLastWorstUid[id].end()) && (it == f->second)) {
+        mLastWorstUid[id].erase(f);
+    }
     it = mLogElements.erase(it);
     stats.subtract(e);
     delete e;
@@ -396,8 +404,17 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
         bool kick = false;
         bool leading = true;
+        it = mLogElements.begin();
+        if (worst != (uid_t) -1) {
+            LogBufferIteratorMap::iterator f = mLastWorstUid[id].find(worst);
+            if ((f != mLastWorstUid[id].end())
+                    && (f->second != mLogElements.end())) {
+                leading = false;
+                it = f->second;
+            }
+        }
         LogBufferElementLast last;
-        for(it = mLogElements.begin(); it != mLogElements.end();) {
+        while (it != mLogElements.end()) {
             LogBufferElement *e = *it;
 
             if (oldest && (oldest->mStart <= e->getSequence())) {
@@ -447,8 +464,10 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
+            // unmerged drop message
             if (dropped) {
                 last.add(e);
+                mLastWorstUid[id][e->getUid()] = it;
                 ++it;
                 continue;
             }
@@ -493,6 +512,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                     delete e;
                 } else {
                     last.add(e);
+                    mLastWorstUid[id][e->getUid()] = it;
                     ++it;
                 }
             }
