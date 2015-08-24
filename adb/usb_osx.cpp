@@ -29,6 +29,9 @@
 #include <inttypes.h>
 #include <stdio.h>
 
+#include <base/logging.h>
+#include <base/stringprintf.h>
+
 #include "adb.h"
 #include "transport.h"
 
@@ -81,7 +84,7 @@ InitUSB()
     matchingDict = IOServiceMatching(kIOUSBInterfaceClassName);
 
     if (!matchingDict) {
-        DBG("ERR: Couldn't create USB matching dictionary.\n");
+        LOG(ERROR) << "Couldn't create USB matching dictionary.";
         return -1;
     }
 
@@ -132,7 +135,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
                                                &plugInInterface, &score);
         IOObjectRelease(usbInterface);
         if ((kIOReturnSuccess != kr) || (!plugInInterface)) {
-            DBG("ERR: Unable to create an interface plug-in (%08x)\n", kr);
+            LOG(ERROR) << "Unable to create an interface plug-in (" << std::hex << kr << ")";
             continue;
         }
 
@@ -143,7 +146,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         //* We only needed the plugin to get the interface, so discard it
         (*plugInInterface)->Release(plugInInterface);
         if (result || !iface) {
-            DBG("ERR: Couldn't query the interface (%08x)\n", (int) result);
+            LOG(ERROR) << "Couldn't query the interface (" << std::hex << result << ")";
             continue;
         }
 
@@ -152,7 +155,8 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         kr = (*iface)->GetInterfaceProtocol(iface, &protocol);
         if(if_class != ADB_CLASS || subclass != ADB_SUBCLASS || protocol != ADB_PROTOCOL) {
             // Ignore non-ADB devices.
-            DBG("Ignoring interface with incorrect class/subclass/protocol - %d, %d, %d\n", if_class, subclass, protocol);
+            LOG(DEBUG) << "Ignoring interface with incorrect class/subclass/protocol - " << if_class
+                       << ", " << subclass << ", " << protocol;
             (*iface)->Release(iface);
             continue;
         }
@@ -163,7 +167,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         //* Gotta love OS X
         kr = (*iface)->GetDevice(iface, &usbDevice);
         if (kIOReturnSuccess != kr || !usbDevice) {
-            DBG("ERR: Couldn't grab device from interface (%08x)\n", kr);
+            LOG(ERROR) << "Couldn't grab device from interface (" << std::hex << kr << ")";
             continue;
         }
 
@@ -177,7 +181,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         //* only needed this to find the plugin
         (void)IOObjectRelease(usbDevice);
         if ((kIOReturnSuccess != kr) || (!plugInInterface)) {
-            DBG("ERR: Unable to create a device plug-in (%08x)\n", kr);
+            LOG(ERROR) << "Unable to create a device plug-in (" << std::hex << kr << ")";
             continue;
         }
 
@@ -186,8 +190,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         //* only needed this to query the plugin
         (*plugInInterface)->Release(plugInInterface);
         if (result || !dev) {
-            DBG("ERR: Couldn't create a device interface (%08x)\n",
-                (int) result);
+            LOG(ERROR) << "Couldn't create a device interface (" << std::hex << result << ")";
             continue;
         }
 
@@ -197,74 +200,74 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         kr = (*dev)->GetDeviceProduct(dev, &product);
         kr = (*dev)->GetLocationID(dev, &locationId);
         if (kr == 0) {
-            snprintf(devpathBuf, sizeof(devpathBuf), "usb:%" PRIu32 "X",
-	             (unsigned int)locationId);
+            snprintf(devpathBuf, sizeof(devpathBuf), "usb:%" PRIu32 "X", locationId);
             devpath = devpathBuf;
         }
         kr = (*dev)->USBGetSerialNumberStringIndex(dev, &serialIndex);
 
-	if (serialIndex > 0) {
-		IOUSBDevRequest req;
-		UInt16          buffer[256];
-		UInt16          languages[128];
+        if (serialIndex > 0) {
+            IOUSBDevRequest req;
+            UInt16          buffer[256];
+            UInt16          languages[128];
 
-		memset(languages, 0, sizeof(languages));
+            memset(languages, 0, sizeof(languages));
 
-		req.bmRequestType =
-			USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice);
-		req.bRequest = kUSBRqGetDescriptor;
-		req.wValue = (kUSBStringDesc << 8) | 0;
-		req.wIndex = 0;
-		req.pData = languages;
-		req.wLength = sizeof(languages);
-		kr = (*dev)->DeviceRequest(dev, &req);
+            req.bmRequestType =
+                    USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice);
+            req.bRequest = kUSBRqGetDescriptor;
+            req.wValue = (kUSBStringDesc << 8) | 0;
+            req.wIndex = 0;
+            req.pData = languages;
+            req.wLength = sizeof(languages);
+            kr = (*dev)->DeviceRequest(dev, &req);
 
-		if (kr == kIOReturnSuccess && req.wLenDone > 0) {
+            if (kr == kIOReturnSuccess && req.wLenDone > 0) {
 
-			int langCount = (req.wLenDone - 2) / 2, lang;
+                int langCount = (req.wLenDone - 2) / 2, lang;
 
-			for (lang = 1; lang <= langCount; lang++) {
+                for (lang = 1; lang <= langCount; lang++) {
 
-                                memset(buffer, 0, sizeof(buffer));
-                                memset(&req, 0, sizeof(req));
+                    memset(buffer, 0, sizeof(buffer));
+                    memset(&req, 0, sizeof(req));
 
-				req.bmRequestType =
-					USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice);
-				req.bRequest = kUSBRqGetDescriptor;
-				req.wValue = (kUSBStringDesc << 8) | serialIndex;
-				req.wIndex = languages[lang];
-				req.pData = buffer;
-				req.wLength = sizeof(buffer);
-				kr = (*dev)->DeviceRequest(dev, &req);
+                    req.bmRequestType =
+                            USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice);
+                    req.bRequest = kUSBRqGetDescriptor;
+                    req.wValue = (kUSBStringDesc << 8) | serialIndex;
+                    req.wIndex = languages[lang];
+                    req.pData = buffer;
+                    req.wLength = sizeof(buffer);
+                    kr = (*dev)->DeviceRequest(dev, &req);
 
-				if (kr == kIOReturnSuccess && req.wLenDone > 0) {
-					int i, count;
+                    if (kr == kIOReturnSuccess && req.wLenDone > 0) {
+                        int i, count;
 
-					// skip first word, and copy the rest to the serial string,
-					// changing shorts to bytes.
-					count = (req.wLenDone - 1) / 2;
-					for (i = 0; i < count; i++)
-						serial[i] = buffer[i + 1];
-					serial[i] = 0;
-                                        break;
-				}
-			}
-		}
-	}
+                        // skip first word, and copy the rest to the serial string,
+                        // changing shorts to bytes.
+                        count = (req.wLenDone - 1) / 2;
+                        for (i = 0; i < count; i++)
+                                serial[i] = buffer[i + 1];
+                        serial[i] = 0;
+                        break;
+                    }
+                }
+            }
+        }
+
         (*dev)->Release(dev);
 
-        DBG("INFO: Found vid=%04x pid=%04x serial=%s\n", vendor, product,
-            serial);
+        LOG(INFO) << android::base::StringPrintf("Found vid=%04x pid=%04x serial=%s\n",
+                        vendor, product, serial);
 
         usb_handle* handle = CheckInterface((IOUSBInterfaceInterface190**)iface,
                                             vendor, product);
         if (handle == NULL) {
-            DBG("ERR: Could not find device interface: %08x\n", kr);
+            LOG(ERROR) << "Could not find device interface";
             (*iface)->Release(iface);
             continue;
         }
 
-        DBG("AndroidDeviceAdded calling register_usb_transport\n");
+        LOG(DEBUG) << "AndroidDeviceAdded calling register_usb_transport";
         register_usb_transport(handle, (serial[0] ? serial : NULL), devpath, 1);
 
         // Register for an interest notification of this device being removed.
@@ -278,7 +281,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
                 &handle->usbNotification);
 
         if (kIOReturnSuccess != kr) {
-            DBG("ERR: Unable to create interest notification (%08x)\n", kr);
+            LOG(ERROR) << "Unable to create interest notification (" << std::hex << kr << ")";
         }
     }
 }
@@ -290,10 +293,10 @@ AndroidInterfaceNotify(void *refCon, io_service_t service, natural_t messageType
 
     if (messageType == kIOMessageServiceIsTerminated) {
         if (!handle) {
-            DBG("ERR: NULL handle\n");
+            LOG(ERROR) << "NULL handle";
             return;
         }
-        DBG("AndroidInterfaceNotify\n");
+        LOG(DEBUG) << "AndroidInterfaceNotify";
         IOObjectRelease(handle->usbNotification);
         usb_kick(handle);
     }
@@ -305,7 +308,7 @@ AndroidInterfaceNotify(void *refCon, io_service_t service, natural_t messageType
 static bool ClearPipeStallBothEnds(IOUSBInterfaceInterface190** interface, UInt8 bulkEp) {
     IOReturn rc = (*interface)->ClearPipeStallBothEnds(interface, bulkEp);
     if (rc != kIOReturnSuccess) {
-        DBG("ERR: Could not clear pipe: (%08x)\n",  rc);
+        LOG(ERROR) << "Could not clear pipe stall both ends: " << std::hex << rc;
         return false;
     }
     return true;
@@ -325,14 +328,14 @@ CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 pro
     //* the endpoints in the interface descriptor to be instantiated
     kr = (*interface)->USBInterfaceOpen(interface);
     if (kr != kIOReturnSuccess) {
-        DBG("ERR: Could not open interface: (%08x)\n", kr);
+        LOG(ERROR) << "Could not open interface: " << std::hex << kr;
         return NULL;
     }
 
     //* Get the number of endpoints associated with this interface
     kr = (*interface)->GetNumEndpoints(interface, &interfaceNumEndpoints);
     if (kr != kIOReturnSuccess) {
-        DBG("ERR: Unable to get number of endpoints: (%08x)\n", kr);
+        LOG(ERROR) << "Unable to get number of endpoints: " << std::hex << kr;
         goto err_get_num_ep;
     }
 
@@ -340,7 +343,7 @@ CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 pro
     if ((*interface)->GetInterfaceClass(interface, &interfaceClass) != kIOReturnSuccess ||
             (*interface)->GetInterfaceSubClass(interface, &interfaceSubClass) != kIOReturnSuccess ||
             (*interface)->GetInterfaceProtocol(interface, &interfaceProtocol) != kIOReturnSuccess) {
-            DBG("ERR: Unable to get interface class, subclass and protocol\n");
+            LOG(ERROR) << "Unable to get interface class, subclass and protocol";
             goto err_get_interface_class;
     }
 
@@ -365,7 +368,8 @@ CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 pro
         kr = (*interface)->GetPipeProperties(interface, endpoint, &direction,
                 &number, &transferType, &maxPacketSize, &interval);
         if (kr != kIOReturnSuccess) {
-            DBG("ERR: FindDeviceInterface - could not get pipe properties (%08x)\n", kr);
+            LOG(ERROR) << "FindDeviceInterface - could not get pipe properties: "
+                       << std::hex << kr;
             goto err_get_pipe_props;
         }
 
@@ -414,12 +418,12 @@ void* RunLoopThread(void* unused)
     IOObjectRelease(notificationIterator);
     IONotificationPortDestroy(notificationPort);
 
-    DBG("RunLoopThread done\n");
+    LOG(DEBUG) << "RunLoopThread done";
     return NULL;
 }
 
 static void usb_cleanup() {
-    DBG("usb_cleanup\n");
+    LOG(DEBUG) << "usb_cleanup";
     close_usb_devices();
     if (currentRunLoop)
         CFRunLoopStop(currentRunLoop);
@@ -460,18 +464,17 @@ int usb_write(usb_handle *handle, const void *buf, int len)
         return -1;
 
     if (NULL == handle->interface) {
-        DBG("ERR: usb_write interface was null\n");
+        LOG(ERROR) << "usb_write interface was null";
         return -1;
     }
 
     if (0 == handle->bulkOut) {
-        DBG("ERR: bulkOut endpoint not assigned\n");
+        LOG(ERROR) << "bulkOut endpoint not assigned";
         return -1;
     }
 
     result =
-        (*handle->interface)->WritePipe(
-                              handle->interface, handle->bulkOut, (void *)buf, len);
+        (*handle->interface)->WritePipe(handle->interface, handle->bulkOut, (void *)buf, len);
 
     if ((result == 0) && (handle->zero_mask)) {
         /* we need 0-markers and our transfer */
@@ -485,7 +488,7 @@ int usb_write(usb_handle *handle, const void *buf, int len)
     if (0 == result)
         return 0;
 
-    DBG("ERR: usb_write failed with status %d\n", result);
+    LOG(ERROR) << "usb_write failed with status: " << std::hex << result;
     return -1;
 }
 
@@ -503,19 +506,19 @@ int usb_read(usb_handle *handle, void *buf, int len)
     }
 
     if (NULL == handle->interface) {
-        DBG("ERR: usb_read interface was null\n");
+        LOG(ERROR) << "usb_read interface was null";
         return -1;
     }
 
     if (0 == handle->bulkIn) {
-        DBG("ERR: bulkIn endpoint not assigned\n");
+        LOG(ERROR) << "bulkIn endpoint not assigned";
         return -1;
     }
 
     result = (*handle->interface)->ReadPipe(handle->interface, handle->bulkIn, buf, &numBytes);
 
     if (kIOUSBPipeStalled == result) {
-        DBG(" Pipe stalled, clearing stall.\n");
+        LOG(ERROR) << "Pipe stalled, clearing stall.\n";
         (*handle->interface)->ClearPipeStall(handle->interface, handle->bulkIn);
         result = (*handle->interface)->ReadPipe(handle->interface, handle->bulkIn, buf, &numBytes);
     }
@@ -523,7 +526,7 @@ int usb_read(usb_handle *handle, void *buf, int len)
     if (kIOReturnSuccess == result)
         return 0;
     else {
-        DBG("ERR: usb_read failed with status %x\n", result);
+        LOG(ERROR) << "usb_read failed with status: " << std::hex << result;
     }
 
     return -1;
@@ -536,6 +539,7 @@ int usb_close(usb_handle *handle)
 
 void usb_kick(usb_handle *handle)
 {
+    LOG(INFO) << "Kicking handle";
     /* release the interface */
     if (!handle)
         return;
