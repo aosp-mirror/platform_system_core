@@ -19,9 +19,6 @@
 
 #include <string>
 
-#define htoll(x) (x)
-#define ltohl(x) (x)
-
 #define MKID(a,b,c,d) ((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
 
 #define ID_STAT MKID('S','T','A','T')
