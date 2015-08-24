@@ -12,7 +12,6 @@ on boot
 
     # Create crash directories.
     mkdir /data/misc/crash_reporter 0700 root root
-    mkdir /data/local/tmp/crash_reporter 0700 root root
 
 service crash_reporter /system/bin/crash_reporter --init
     class late_start
