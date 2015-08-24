@@ -438,8 +438,7 @@ static int create_subproc_thread(const char *name, SubprocessType type) {
 }
 #endif
 
-int service_to_fd(const char *name)
-{
+int service_to_fd(const char* name) {
     int ret = -1;
 
     if(!strncmp(name, "tcp:", 4)) {
@@ -503,13 +502,11 @@ int service_to_fd(const char *name)
     } else if(!strncmp(name, "unroot:", 7)) {
         ret = create_service_thread(restart_unroot_service, NULL);
     } else if(!strncmp(name, "backup:", 7)) {
-        ret = create_subproc_thread(
-                android::base::StringPrintf("/system/bin/bu backup %s",
-                                            (name + 7)).c_str(),
-                SubprocessType::kRaw);
-    } else if(!strncmp(name, "restore:", 8)) {
-        ret = create_subproc_thread("/system/bin/bu restore",
+        ret = create_subproc_thread(android::base::StringPrintf("/system/bin/bu backup %s",
+                                                                (name + 7)).c_str(),
                                     SubprocessType::kRaw);
+    } else if(!strncmp(name, "restore:", 8)) {
+        ret = create_subproc_thread("/system/bin/bu restore", SubprocessType::kRaw);
     } else if(!strncmp(name, "tcpip:", 6)) {
         int port;
         if (sscanf(name + 6, "%d", &port) != 1) {
@@ -667,8 +664,7 @@ static void connect_service(int fd, void* data) {
 #endif
 
 #if ADB_HOST
-asocket*  host_service_to_socket(const char*  name, const char *serial)
-{
+asocket* host_service_to_socket(const char* name, const char* serial) {
     if (!strcmp(name,"track-devices")) {
         return create_device_tracker();
     } else if (!strncmp(name, "wait-for-", strlen("wait-for-"))) {
