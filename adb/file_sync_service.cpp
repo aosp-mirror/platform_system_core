@@ -85,9 +85,9 @@ static bool do_stat(int s, const char* path) {
     memset(&st, 0, sizeof(st));
     // TODO: add a way to report that the stat failed!
     lstat(path, &st);
-    msg.stat.mode = htoll(st.st_mode);
-    msg.stat.size = htoll(st.st_size);
-    msg.stat.time = htoll(st.st_mtime);
+    msg.stat.mode = st.st_mode;
+    msg.stat.size = st.st_size;
+    msg.stat.time = st.st_mtime;
 
     return WriteFdExactly(s, &msg.stat, sizeof(msg.stat));
 }
@@ -107,10 +107,10 @@ static bool do_list(int s, const char* path) {
         struct stat st;
         if (lstat(filename.c_str(), &st) == 0) {
             size_t d_name_length = strlen(de->d_name);
-            msg.dent.mode = htoll(st.st_mode);
-            msg.dent.size = htoll(st.st_size);
-            msg.dent.time = htoll(st.st_mtime);
-            msg.dent.namelen = htoll(d_name_length);
+            msg.dent.mode = st.st_mode;
+            msg.dent.size = st.st_size;
+            msg.dent.time = st.st_mtime;
+            msg.dent.namelen = d_name_length;
 
             if (!WriteFdExactly(s, &msg.dent, sizeof(msg.dent)) ||
                     !WriteFdExactly(s, de->d_name, d_name_length)) {
@@ -133,7 +133,7 @@ static bool fail_message(int s, const std::string& reason) {
 
     syncmsg msg;
     msg.data.id = ID_FAIL;
-    msg.data.size = htoll(reason.size());
+    msg.data.size = reason.size();
     return WriteFdExactly(s, &msg.data, sizeof(msg.data)) && WriteFdExactly(s, reason);
 }
 
@@ -185,13 +185,13 @@ static bool handle_send_file(int s, char *path, uid_t uid,
 
         if(msg.data.id != ID_DATA) {
             if(msg.data.id == ID_DONE) {
-                timestamp = ltohl(msg.data.size);
+                timestamp = msg.data.size;
                 break;
             }
             fail_message(s, "invalid data message");
             goto fail;
         }
-        len = ltohl(msg.data.size);
+        len = msg.data.size;
         if (len > buffer.size()) { // TODO: resize buffer?
             fail_message(s, "oversize data message");
             goto fail;
@@ -245,7 +245,7 @@ static bool handle_send_link(int s, char *path, std::vector<char>& buffer) {
         return false;
     }
 
-    len = ltohl(msg.data.size);
+    len = msg.data.size;
     if (len > buffer.size()) { // TODO: resize buffer?
         fail_message(s, "oversize data message");
         return false;
@@ -346,7 +346,7 @@ static bool do_recv(int s, const char* path, std::vector<char>& buffer) {
             adb_close(fd);
             return status;
         }
-        msg.data.size = htoll(r);
+        msg.data.size = r;
         if (!WriteFdExactly(s, &msg.data, sizeof(msg.data)) || !WriteFdExactly(s, &buffer[0], r)) {
             adb_close(fd);
             return false;
@@ -368,7 +368,7 @@ static bool handle_sync_command(int fd, std::vector<char>& buffer) {
         fail_message(fd, "command read failure");
         return false;
     }
-    size_t path_length = ltohl(request.path_length);
+    size_t path_length = request.path_length;
     if (path_length > 1024) {
         fail_message(fd, "path too long");
         return false;
