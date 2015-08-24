@@ -27,6 +27,8 @@
 #include <time.h>
 #include <utime.h>
 
+#include <memory>
+
 #include "sysdeps.h"
 
 #include "adb.h"
