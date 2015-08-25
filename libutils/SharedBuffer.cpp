@@ -14,9 +14,12 @@
  * limitations under the License.
  */
 
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include <log/log.h>
 #include <utils/SharedBuffer.h>
 #include <utils/Atomic.h>
 
@@ -26,6 +29,11 @@ namespace android {
 
 SharedBuffer* SharedBuffer::alloc(size_t size)
 {
+    // Don't overflow if the combined size of the buffer / header is larger than
+    // size_max.
+    LOG_ALWAYS_FATAL_IF((size >= (SIZE_MAX - sizeof(SharedBuffer))),
+                        "Invalid buffer size %zu", size);
+
     SharedBuffer* sb = static_cast<SharedBuffer *>(malloc(sizeof(SharedBuffer) + size));
     if (sb) {
         sb->mRefs = 1;
@@ -52,7 +60,7 @@ SharedBuffer* SharedBuffer::edit() const
         memcpy(sb->data(), data(), size());
         release();
     }
-    return sb;    
+    return sb;
 }
 
 SharedBuffer* SharedBuffer::editResize(size_t newSize) const
@@ -60,6 +68,11 @@ SharedBuffer* SharedBuffer::editResize(size_t newSize) const
     if (onlyOwner()) {
         SharedBuffer* buf = const_cast<SharedBuffer*>(this);
         if (buf->mSize == newSize) return buf;
+        // Don't overflow if the combined size of the new buffer / header is larger than
+        // size_max.
+        LOG_ALWAYS_FATAL_IF((newSize >= (SIZE_MAX - sizeof(SharedBuffer))),
+                            "Invalid buffer size %zu", newSize);
+
         buf = (SharedBuffer*)realloc(buf, sizeof(SharedBuffer) + newSize);
         if (buf != NULL) {
             buf->mSize = newSize;
