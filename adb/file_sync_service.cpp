@@ -166,9 +166,14 @@ static bool handle_send_file(int s, const char* path, uid_t uid,
             goto fail;
         }
 
-         // fchown clears the setuid bit - restore it if present.
-         // Ignore the result of calling fchmod. It's not supported
-         // by all filesystems. b/12441485
+        if (selinux_android_restorecon(path, 0) == -1) {
+            SendSyncFailErrno(s, "selinux_android_restorecon failed");
+            goto fail;
+        }
+
+        // fchown clears the setuid bit - restore it if present.
+        // Ignore the result of calling fchmod. It's not supported
+        // by all filesystems. b/12441485
         fchmod(fd, mode);
     }
 
@@ -200,8 +205,6 @@ static bool handle_send_file(int s, const char* path, uid_t uid,
     }
 
     adb_close(fd);
-
-    selinux_android_restorecon(path, 0);
 
     utimbuf u;
     u.actime = timestamp;
