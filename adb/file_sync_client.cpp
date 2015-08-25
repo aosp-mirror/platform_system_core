@@ -203,13 +203,8 @@ static int write_data_file(SyncConnection& sc, const char* path, syncsendbuf* sb
     sbuf->id = ID_DATA;
     while (true) {
         int ret = adb_read(lfd, sbuf->data, sc.max);
-        if (!ret)
-            break;
-
-        if (ret < 0) {
-            if(errno == EINTR)
-                continue;
-            fprintf(stderr, "cannot read '%s': %s\n", path, strerror(errno));
+        if (ret <= 0) {
+            if (ret < 0) fprintf(stderr, "cannot read '%s': %s\n", path, strerror(errno));
             break;
         }
 

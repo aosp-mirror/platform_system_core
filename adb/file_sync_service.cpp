@@ -325,7 +325,6 @@ static bool do_recv(int s, const char* path, std::vector<char>& buffer) {
         int r = adb_read(fd, &buffer[0], buffer.size());
         if (r <= 0) {
             if (r == 0) break;
-            if (errno == EINTR) continue;
             SendSyncFailErrno(s, "read failed");
             adb_close(fd);
             return false;
