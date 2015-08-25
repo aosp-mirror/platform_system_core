@@ -205,8 +205,8 @@ static void fdevent_process()
 
     n = epoll_wait(epoll_fd, events, 256, -1);
 
-    if(n < 0) {
-        if(errno == EINTR) return;
+    if (n < 0) {
+        if (errno == EINTR) return;
         perror("epoll_wait");
         exit(1);
     }
