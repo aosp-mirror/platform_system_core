@@ -140,8 +140,7 @@ read_packet(int  fd, const char* name, apacket** ppacket)
             len -= r;
             p += r;
         } else {
-            D("%s: read_packet (fd=%d), error ret=%d errno=%d: %s\n", name, fd, r, errno, strerror(errno));
-            if((r < 0) && (errno == EINTR)) continue;
+            D("%s: read_packet (fd=%d), error ret=%d: %s\n", name, fd, r, strerror(errno));
             return -1;
         }
     }
@@ -171,8 +170,7 @@ write_packet(int  fd, const char* name, apacket** ppacket)
             len -= r;
             p += r;
         } else {
-            D("%s: write_packet (fd=%d) error ret=%d errno=%d: %s\n", name, fd, r, errno, strerror(errno));
-            if((r < 0) && (errno == EINTR)) continue;
+            D("%s: write_packet (fd=%d) error ret=%d: %s\n", name, fd, r, strerror(errno));
             return -1;
         }
     }
@@ -489,9 +487,7 @@ transport_read_action(int  fd, struct tmsg*  m)
             len -= r;
             p   += r;
         } else {
-            if((r < 0) && (errno == EINTR)) continue;
-            D("transport_read_action: on fd %d, error %d: %s\n",
-              fd, errno, strerror(errno));
+            D("transport_read_action: on fd %d: %s\n", fd, strerror(errno));
             return -1;
         }
     }
@@ -511,9 +507,7 @@ transport_write_action(int  fd, struct tmsg*  m)
             len -= r;
             p   += r;
         } else {
-            if((r < 0) && (errno == EINTR)) continue;
-            D("transport_write_action: on fd %d, error %d: %s\n",
-              fd, errno, strerror(errno));
+            D("transport_write_action: on fd %d: %s\n", fd, strerror(errno));
             return -1;
         }
     }
