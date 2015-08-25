@@ -128,101 +128,89 @@ done:
     return WriteFdExactly(s, &msg.dent, sizeof(msg.dent));
 }
 
-static bool fail_message(int s, const std::string& reason) {
+static bool SendSyncFail(int fd, const std::string& reason) {
     D("sync: failure: %s\n", reason.c_str());
 
     syncmsg msg;
     msg.data.id = ID_FAIL;
     msg.data.size = reason.size();
-    return WriteFdExactly(s, &msg.data, sizeof(msg.data)) && WriteFdExactly(s, reason);
+    return WriteFdExactly(fd, &msg.data, sizeof(msg.data)) && WriteFdExactly(fd, reason);
 }
 
-// TODO: callers of this have already failed, and should probably ignore its
-// return value (http://b/23437039).
-static bool fail_errno(int s) {
-    return fail_message(s, strerror(errno));
+static bool SendSyncFailErrno(int fd, const std::string& reason) {
+    return SendSyncFail(fd, android::base::StringPrintf("%s: %s", reason.c_str(), strerror(errno)));
 }
 
-static bool handle_send_file(int s, char *path, uid_t uid,
+static bool handle_send_file(int s, const char* path, uid_t uid,
                              gid_t gid, mode_t mode, std::vector<char>& buffer, bool do_unlink) {
     syncmsg msg;
     unsigned int timestamp = 0;
 
     int fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
-    if(fd < 0 && errno == ENOENT) {
+    if (fd < 0 && errno == ENOENT) {
         if (!secure_mkdirs(path)) {
-            if (fail_errno(s)) return false;
-            fd = -1;
-        } else {
-            fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
+            SendSyncFailErrno(s, "secure_mkdirs failed");
+            goto fail;
         }
+        fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
     }
-    if(fd < 0 && errno == EEXIST) {
+    if (fd < 0 && errno == EEXIST) {
         fd = adb_open_mode(path, O_WRONLY | O_CLOEXEC, mode);
     }
-    if(fd < 0) {
-        if (fail_errno(s)) return false;
-        fd = -1;
+    if (fd < 0) {
+        SendSyncFailErrno(s, "couldn't create file");
+        goto fail;
     } else {
-        if(fchown(fd, uid, gid) != 0) {
-            fail_errno(s);
-            errno = 0;
+        if (fchown(fd, uid, gid) == -1) {
+            SendSyncFailErrno(s, "fchown failed");
+            goto fail;
         }
 
-        /*
-         * fchown clears the setuid bit - restore it if present.
-         * Ignore the result of calling fchmod. It's not supported
-         * by all filesystems. b/12441485
-         */
+         // fchown clears the setuid bit - restore it if present.
+         // Ignore the result of calling fchmod. It's not supported
+         // by all filesystems. b/12441485
         fchmod(fd, mode);
     }
 
     while (true) {
         unsigned int len;
 
-        if(!ReadFdExactly(s, &msg.data, sizeof(msg.data)))
-            goto fail;
+        if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) goto fail;
 
-        if(msg.data.id != ID_DATA) {
-            if(msg.data.id == ID_DONE) {
+        if (msg.data.id != ID_DATA) {
+            if (msg.data.id == ID_DONE) {
                 timestamp = msg.data.size;
                 break;
             }
-            fail_message(s, "invalid data message");
+            SendSyncFail(s, "invalid data message");
             goto fail;
         }
         len = msg.data.size;
         if (len > buffer.size()) { // TODO: resize buffer?
-            fail_message(s, "oversize data message");
+            SendSyncFail(s, "oversize data message");
             goto fail;
         }
+
         if (!ReadFdExactly(s, &buffer[0], len)) goto fail;
 
-        if (fd < 0) continue;
-
         if (!WriteFdExactly(fd, &buffer[0], len)) {
-            int saved_errno = errno;
-            adb_close(fd);
-            if (do_unlink) adb_unlink(path);
-            fd = -1;
-            errno = saved_errno;
-            if (fail_errno(s)) return false;
+            SendSyncFailErrno(s, "write failed");
+            goto fail;
         }
     }
 
-    if(fd >= 0) {
-        struct utimbuf u;
-        adb_close(fd);
-        selinux_android_restorecon(path, 0);
-        u.actime = timestamp;
-        u.modtime = timestamp;
-        utime(path, &u);
+    adb_close(fd);
 
-        msg.status.id = ID_OKAY;
-        msg.status.msglen = 0;
-        if (!WriteFdExactly(s, &msg.status, sizeof(msg.status))) return false;
-    }
-    return true;
+    selinux_android_restorecon(path, 0);
+
+    utimbuf u;
+    u.actime = timestamp;
+    u.modtime = timestamp;
+    utime(path, &u);
+
+    msg.status.id = ID_OKAY;
+    msg.status.msglen = 0;
+    return WriteFdExactly(s, &msg.status, sizeof(msg.status));
 
 fail:
     if (fd >= 0) adb_close(fd);
@@ -231,9 +219,9 @@ fail:
 }
 
 #if defined(_WIN32)
-extern bool handle_send_link(int s, char *path, std::vector<char>& buffer) __attribute__((error("no symlinks on Windows")));
+extern bool handle_send_link(int s, const std::string& path, std::vector<char>& buffer) __attribute__((error("no symlinks on Windows")));
 #else
-static bool handle_send_link(int s, char *path, std::vector<char>& buffer) {
+static bool handle_send_link(int s, const std::string& path, std::vector<char>& buffer) {
     syncmsg msg;
     unsigned int len;
     int ret;
@@ -241,27 +229,27 @@ static bool handle_send_link(int s, char *path, std::vector<char>& buffer) {
     if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) return false;
 
     if (msg.data.id != ID_DATA) {
-        fail_message(s, "invalid data message: expected ID_DATA");
+        SendSyncFail(s, "invalid data message: expected ID_DATA");
         return false;
     }
 
     len = msg.data.size;
     if (len > buffer.size()) { // TODO: resize buffer?
-        fail_message(s, "oversize data message");
+        SendSyncFail(s, "oversize data message");
         return false;
     }
     if (!ReadFdExactly(s, &buffer[0], len)) return false;
 
-    ret = symlink(&buffer[0], path);
+    ret = symlink(&buffer[0], path.c_str());
     if (ret && errno == ENOENT) {
         if (!secure_mkdirs(path)) {
-            fail_errno(s);
+            SendSyncFailErrno(s, "secure_mkdirs failed");
             return false;
         }
-        ret = symlink(&buffer[0], path);
+        ret = symlink(&buffer[0], path.c_str());
     }
     if (ret) {
-        fail_errno(s);
+        SendSyncFailErrno(s, "symlink failed");
         return false;
     }
 
@@ -272,7 +260,7 @@ static bool handle_send_link(int s, char *path, std::vector<char>& buffer) {
         msg.status.msglen = 0;
         if (!WriteFdExactly(s, &msg.status, sizeof(msg.status))) return false;
     } else {
-        fail_message(s, "invalid data message: expected ID_DONE");
+        SendFail(s, "invalid data message: expected ID_DONE");
         return false;
     }
 
@@ -280,59 +268,53 @@ static bool handle_send_link(int s, char *path, std::vector<char>& buffer) {
 }
 #endif
 
-static bool do_send(int s, char* path, std::vector<char>& buffer) {
-    unsigned int mode;
-    bool is_link = false;
-    bool do_unlink;
-
-    char* tmp = strrchr(path,',');
-    if(tmp) {
-        *tmp = 0;
-        errno = 0;
-        mode = strtoul(tmp + 1, NULL, 0);
-        is_link = S_ISLNK((mode_t) mode);
-        mode &= 0777;
-    }
-    if(!tmp || errno) {
-        mode = 0644;
-        is_link = 0;
-        do_unlink = true;
-    } else {
-        struct stat st;
-        /* Don't delete files before copying if they are not "regular" */
-        do_unlink = lstat(path, &st) || S_ISREG(st.st_mode) || S_ISLNK(st.st_mode);
-        if (do_unlink) {
-            adb_unlink(path);
-        }
+static bool do_send(int s, const std::string& spec, std::vector<char>& buffer) {
+    // 'spec' is of the form "/some/path,0755". Break it up.
+    size_t comma = spec.find_last_of(',');
+    if (comma == std::string::npos) {
+        SendFail(s, "missing , in ID_SEND");
+        return false;
     }
 
-    if (is_link) {
-        return handle_send_link(s, path, buffer);
+    std::string path = spec.substr(0, comma);
+
+    errno = 0;
+    mode_t mode = strtoul(spec.substr(comma + 1).c_str(), nullptr, 0);
+    if (errno != 0) {
+        SendFail(s, "bad mode");
+        return false;
     }
+
+    // Don't delete files before copying if they are not "regular" or symlinks.
+    struct stat st;
+    bool do_unlink = (lstat(path.c_str(), &st) == -1) || S_ISREG(st.st_mode) || S_ISLNK(st.st_mode);
+    if (do_unlink) {
+        adb_unlink(path.c_str());
+    }
+
+    if (S_ISLNK(mode)) {
+        return handle_send_link(s, path.c_str(), buffer);
+    }
+
+    // Copy user permission bits to "group" and "other" permissions.
+    mode &= 0777;
+    mode |= ((mode >> 3) & 0070);
+    mode |= ((mode >> 3) & 0007);
 
     uid_t uid = -1;
     gid_t gid = -1;
     uint64_t cap = 0;
-
-    /* copy user permission bits to "group" and "other" permissions */
-    mode |= ((mode >> 3) & 0070);
-    mode |= ((mode >> 3) & 0007);
-
-    tmp = path;
-    if(*tmp == '/') {
-        tmp++;
-    }
     if (should_use_fs_config(path)) {
-        fs_config(tmp, 0, NULL, &uid, &gid, &mode, &cap);
+        fs_config(path.c_str(), 0, nullptr, &uid, &gid, &mode, &cap);
     }
-    return handle_send_file(s, path, uid, gid, mode, buffer, do_unlink);
+    return handle_send_file(s, path.c_str(), uid, gid, mode, buffer, do_unlink);
 }
 
 static bool do_recv(int s, const char* path, std::vector<char>& buffer) {
     int fd = adb_open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
-        if (fail_errno(s)) return false;
-        return true;
+        SendSyncFailErrno(s, "open failed");
+        return false;
     }
 
     syncmsg msg;
@@ -342,9 +324,9 @@ static bool do_recv(int s, const char* path, std::vector<char>& buffer) {
         if (r <= 0) {
             if (r == 0) break;
             if (errno == EINTR) continue;
-            bool status = fail_errno(s);
+            SendSyncFailErrno(s, "read failed");
             adb_close(fd);
-            return status;
+            return false;
         }
         msg.data.size = r;
         if (!WriteFdExactly(s, &msg.data, sizeof(msg.data)) || !WriteFdExactly(s, &buffer[0], r)) {
@@ -365,17 +347,17 @@ static bool handle_sync_command(int fd, std::vector<char>& buffer) {
 
     SyncRequest request;
     if (!ReadFdExactly(fd, &request, sizeof(request))) {
-        fail_message(fd, "command read failure");
+        SendSyncFail(fd, "command read failure");
         return false;
     }
     size_t path_length = request.path_length;
     if (path_length > 1024) {
-        fail_message(fd, "path too long");
+        SendSyncFail(fd, "path too long");
         return false;
     }
     char name[1025];
     if (!ReadFdExactly(fd, name, path_length)) {
-        fail_message(fd, "filename read failure");
+        SendSyncFail(fd, "filename read failure");
         return false;
     }
     name[path_length] = 0;
@@ -399,7 +381,7 @@ static bool handle_sync_command(int fd, std::vector<char>& buffer) {
       case ID_QUIT:
         return false;
       default:
-        fail_message(fd, android::base::StringPrintf("unknown command '%.4s' (%08x)",
+        SendSyncFail(fd, android::base::StringPrintf("unknown command '%.4s' (%08x)",
                                                      id, request.id));
         return false;
     }
