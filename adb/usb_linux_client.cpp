@@ -431,17 +431,12 @@ static void *usb_ffs_open_thread(void *x)
 static int bulk_write(int bulk_in, const uint8_t* buf, size_t length)
 {
     size_t count = 0;
-    int ret;
 
-    do {
-        ret = adb_write(bulk_in, buf + count, length - count);
-        if (ret < 0) {
-            if (errno != EINTR)
-                return ret;
-        } else {
-            count += ret;
-        }
-    } while (count < length);
+    while (count < length) {
+        int ret = adb_write(bulk_in, buf + count, length - count);
+        if (ret < 0) return -1;
+        count += ret;
+    }
 
     D("[ bulk_write done fd=%d ]\n", bulk_in);
     return count;
@@ -462,20 +457,15 @@ static int usb_ffs_write(usb_handle* h, const void* data, int len)
 static int bulk_read(int bulk_out, uint8_t* buf, size_t length)
 {
     size_t count = 0;
-    int ret;
 
-    do {
-        ret = adb_read(bulk_out, buf + count, length - count);
+    while (count < length) {
+        int ret = adb_read(bulk_out, buf + count, length - count);
         if (ret < 0) {
-            if (errno != EINTR) {
-                D("[ bulk_read failed fd=%d length=%zu count=%zu ]\n",
-                                           bulk_out, length, count);
-                return ret;
-            }
-        } else {
-            count += ret;
+            D("[ bulk_read failed fd=%d length=%zu count=%zu ]\n", bulk_out, length, count);
+            return -1;
         }
-    } while (count < length);
+        count += ret;
+    }
 
     return count;
 }

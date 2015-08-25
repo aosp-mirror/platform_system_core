@@ -276,10 +276,7 @@ static void read_status_line(int fd, char* buf, size_t count)
     count--;
     while (count > 0) {
         int len = adb_read(fd, buf, count);
-        if (len == 0) {
-            break;
-        } else if (len < 0) {
-            if (errno == EINTR) continue;
+        if (len <= 0) {
             break;
         }
 
@@ -332,11 +329,7 @@ static void copy_to_file(int inFd, int outFd) {
             break;
         }
         if (len < 0) {
-            if (errno == EINTR) {
-                D("copy_to_file() : EINTR, retrying\n");
-                continue;
-            }
-            D("copy_to_file() : error %d\n", errno);
+            D("copy_to_file(): read failed: %s\n", strerror(errno));
             break;
         }
         if (outFd == STDOUT_FILENO) {
@@ -386,12 +379,8 @@ static void *stdin_read_thread(void *x)
         D("stdin_read_thread(): pre unix_read(fdi=%d,...)\n", fdi);
         r = unix_read(fdi, buf, 1024);
         D("stdin_read_thread(): post unix_read(fdi=%d,...)\n", fdi);
-        if(r == 0) break;
-        if(r < 0) {
-            if(errno == EINTR) continue;
-            break;
-        }
-        for(n = 0; n < r; n++){
+        if (r <= 0) break;
+        for (n = 0; n < r; n++){
             switch(buf[n]) {
             case '\n':
                 state = 1;
