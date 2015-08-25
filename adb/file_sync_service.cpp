@@ -305,7 +305,7 @@ static bool do_send(int s, const std::string& spec, std::vector<char>& buffer) {
     gid_t gid = -1;
     uint64_t cap = 0;
     if (should_use_fs_config(path)) {
-        unsigned int broken_api_hack;
+        unsigned int broken_api_hack = mode;
         fs_config(path.c_str(), 0, &uid, &gid, &broken_api_hack, &cap);
         mode = broken_api_hack;
     }
