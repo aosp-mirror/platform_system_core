@@ -29,6 +29,7 @@
  * SUCH DAMAGE.
  */
 
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -57,7 +58,7 @@ struct pid_info_t {
 
 static void print_header()
 {
-    printf("%-9s %5s %10s %4s %9s %18s %9s %10s %s\n",
+    printf("%-9s %5s %10s %4s   %9s %18s %9s %10s %s\n",
             "COMMAND",
             "PID",
             "USER",
@@ -69,12 +70,12 @@ static void print_header()
             "NAME");
 }
 
-static void print_type(char *type, struct pid_info_t* info)
+static void print_symlink(const char* name, const char* path, struct pid_info_t* info)
 {
     static ssize_t link_dest_size;
     static char link_dest[PATH_MAX];
 
-    strlcat(info->path, type, sizeof(info->path));
+    strlcat(info->path, path, sizeof(info->path));
     if ((link_dest_size = readlink(info->path, link_dest, sizeof(link_dest)-1)) < 0) {
         if (errno == ENOENT)
             goto out;
@@ -88,9 +89,53 @@ static void print_type(char *type, struct pid_info_t* info)
     if (!strcmp(link_dest, "/"))
         goto out;
 
-    printf("%-9s %5d %10s %4s %9s %18s %9s %10s %s\n",
-            info->cmdline, info->pid, info->user, type,
-            "???", "???", "???", "???", link_dest);
+    const char* fd = name;
+    char rw = ' ';
+    char locks = ' '; // TODO: read /proc/locks
+
+    const char* type = "unknown";
+    char device[32] = "?";
+    char size_off[32] = "?";
+    char node[32] = "?";
+
+    struct stat sb;
+    if (lstat(link_dest, &sb) != -1) {
+        switch ((sb.st_mode & S_IFMT)) {
+          case S_IFSOCK: type = "sock"; break; // TODO: what domain?
+          case S_IFLNK: type = "LINK"; break;
+          case S_IFREG: type = "REG"; break;
+          case S_IFBLK: type = "BLK"; break;
+          case S_IFDIR: type = "DIR"; break;
+          case S_IFCHR: type = "CHR"; break;
+          case S_IFIFO: type = "FIFO"; break;
+        }
+        snprintf(device, sizeof(device), "%d,%d", (int) sb.st_dev, (int) sb.st_rdev);
+        snprintf(node, sizeof(node), "%d", (int) sb.st_ino);
+        snprintf(size_off, sizeof(size_off), "%d", (int) sb.st_size);
+    }
+
+    if (!name) {
+        // We're looking at an fd, so read its flags.
+        fd = path;
+        char fdinfo_path[PATH_MAX];
+        snprintf(fdinfo_path, sizeof(fdinfo_path), "/proc/%d/fdinfo/%s", info->pid, path);
+        FILE* fp = fopen(fdinfo_path, "r");
+        if (fp != NULL) {
+            int pos;
+            unsigned flags;
+
+            if (fscanf(fp, "pos: %d flags: %o", &pos, &flags) == 2) {
+                flags &= O_ACCMODE;
+                if (flags == O_RDONLY) rw = 'r';
+                else if (flags == O_WRONLY) rw = 'w';
+                else rw = 'u';
+            }
+            fclose(fp);
+        }
+    }
+
+    printf("%-9s %5d %10s %4s%c%c %9s %18s %9s %10s %s\n",
+            info->cmdline, info->pid, info->user, fd, rw, locks, type, device, size_off, node, link_dest);
 
 out:
     info->path[info->parent_length] = '\0';
@@ -111,15 +156,14 @@ static void print_maps(struct pid_info_t* info)
     if (!maps)
         goto out;
 
-    while (fscanf(maps, "%*x-%*x %*s %zx %s %ld %s\n", &offset, device, &inode,
-            file) == 4) {
+    while (fscanf(maps, "%*x-%*x %*s %zx %s %ld %s\n", &offset, device, &inode, file) == 4) {
         // We don't care about non-file maps
         if (inode == 0 || !strcmp(device, "00:00"))
             continue;
 
-        printf("%-9s %5d %10s %4s %9s %18s %9zd %10ld %s\n",
+        printf("%-9s %5d %10s %4s   %9s %18s %9zd %10ld %s\n",
                 info->cmdline, info->pid, info->user, "mem",
-                "???", device, offset, inode, file);
+                "REG", device, offset, inode, file);
     }
 
     fclose(maps);
@@ -141,7 +185,7 @@ static void print_fds(struct pid_info_t* info)
     if (dir == NULL) {
         char msg[BUF_MAX];
         snprintf(msg, sizeof(msg), "%s (opendir: %s)", info->path, strerror(errno));
-        printf("%-9s %5d %10s %4s %9s %18s %9s %10s %s\n",
+        printf("%-9s %5d %10s %4s   %9s %18s %9s %10s %s\n",
                 info->cmdline, info->pid, info->user, "FDS",
                 "", "", "", "", msg);
         goto out;
@@ -152,7 +196,7 @@ static void print_fds(struct pid_info_t* info)
         if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
             continue;
 
-        print_type(de->d_name, info);
+        print_symlink(NULL, de->d_name, info);
     }
     closedir(dir);
 
@@ -207,10 +251,9 @@ static void lsof_dumpinfo(pid_t pid)
     strlcpy(info.cmdline, basename(cmdline), sizeof(info.cmdline));
 
     // Read each of these symlinks
-    print_type("cwd", &info);
-    print_type("exe", &info);
-    print_type("root", &info);
-
+    print_symlink("cwd", "cwd", &info);
+    print_symlink("txt", "exe", &info);
+    print_symlink("rtd", "root", &info);
     print_fds(&info);
     print_maps(&info);
 }
