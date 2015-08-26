@@ -467,7 +467,11 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             // unmerged drop message
             if (dropped) {
                 last.add(e);
-                mLastWorstUid[id][e->getUid()] = it;
+                if ((e->getUid() == worst)
+                        || (mLastWorstUid[id].find(e->getUid())
+                            == mLastWorstUid[id].end())) {
+                    mLastWorstUid[id][e->getUid()] = it;
+                }
                 ++it;
                 continue;
             }
