@@ -42,6 +42,9 @@ static bool str_eq(void *key_a, void *key_b)
 }
 
 /* use djb hash unless we find it inadequate */
+#ifdef __clang__
+__attribute__((no_sanitize("integer")))
+#endif
 static int str_hash_fn(void *str)
 {
     uint32_t hash = 5381;
