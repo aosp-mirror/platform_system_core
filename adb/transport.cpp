@@ -43,7 +43,7 @@ ADB_MUTEX_DEFINE( transport_lock );
 
 void kick_transport(atransport* t)
 {
-    if (t && !t->kicked)
+    if (t != nullptr)
     {
         int  kicked;
 
