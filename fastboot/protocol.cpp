@@ -26,8 +26,6 @@
  * SUCH DAMAGE.
  */
 
-#define min(a, b) \
-    ({ typeof(a) _a = (a); typeof(b) _b = (b); (_a < _b) ? _a : _b; })
 #define round_down(a, b) \
     ({ typeof(a) _a = (a); typeof(b) _b = (b); _a - (_a % _b); })
 
@@ -35,6 +33,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+
+#include <algorithm>
 
 #include <sparse/sparse.h>
 
@@ -47,40 +47,38 @@ char *fb_get_error(void)
     return ERROR;
 }
 
-static int check_response(usb_handle *usb, unsigned int size, char *response)
-{
-    unsigned char status[65];
-    int r;
+static int check_response(usb_handle* usb, uint32_t size, char* response) {
+    char status[65];
 
-    for(;;) {
-        r = usb_read(usb, status, 64);
-        if(r < 0) {
+    while (true) {
+        int r = usb_read(usb, status, 64);
+        if (r < 0) {
             sprintf(ERROR, "status read failed (%s)", strerror(errno));
             usb_close(usb);
             return -1;
         }
         status[r] = 0;
 
-        if(r < 4) {
+        if (r < 4) {
             sprintf(ERROR, "status malformed (%d bytes)", r);
             usb_close(usb);
             return -1;
         }
 
-        if(!memcmp(status, "INFO", 4)) {
+        if (!memcmp(status, "INFO", 4)) {
             fprintf(stderr,"(bootloader) %s\n", status + 4);
             continue;
         }
 
-        if(!memcmp(status, "OKAY", 4)) {
-            if(response) {
+        if (!memcmp(status, "OKAY", 4)) {
+            if (response) {
                 strcpy(response, (char*) status + 4);
             }
             return 0;
         }
 
-        if(!memcmp(status, "FAIL", 4)) {
-            if(r > 4) {
+        if (!memcmp(status, "FAIL", 4)) {
+            if (r > 4) {
                 sprintf(ERROR, "remote: %s", status + 4);
             } else {
                 strcpy(ERROR, "remote failure");
@@ -88,9 +86,9 @@ static int check_response(usb_handle *usb, unsigned int size, char *response)
             return -1;
         }
 
-        if(!memcmp(status, "DATA", 4) && size > 0){
-            unsigned dsize = strtoul((char*) status + 4, 0, 16);
-            if(dsize > size) {
+        if (!memcmp(status, "DATA", 4) && size > 0){
+            uint32_t dsize = strtol(status + 4, 0, 16);
+            if (dsize > size) {
                 strcpy(ERROR, "data size too large");
                 usb_close(usb);
                 return -1;
@@ -106,22 +104,19 @@ static int check_response(usb_handle *usb, unsigned int size, char *response)
     return -1;
 }
 
-static int _command_start(usb_handle *usb, const char *cmd, unsigned size,
-                          char *response)
-{
-    int cmdsize = strlen(cmd);
-
-    if(response) {
-        response[0] = 0;
-    }
-
-    if(cmdsize > 64) {
-        sprintf(ERROR,"command too large");
+static int _command_start(usb_handle* usb, const char* cmd, uint32_t size, char* response) {
+    size_t cmdsize = strlen(cmd);
+    if (cmdsize > 64) {
+        sprintf(ERROR, "command too large");
         return -1;
     }
 
-    if(usb_write(usb, cmd, cmdsize) != cmdsize) {
-        sprintf(ERROR,"command write failed (%s)", strerror(errno));
+    if (response) {
+        response[0] = 0;
+    }
+
+    if (usb_write(usb, cmd, cmdsize) != static_cast<int>(cmdsize)) {
+        sprintf(ERROR, "command write failed (%s)", strerror(errno));
         usb_close(usb);
         return -1;
     }
@@ -129,45 +124,32 @@ static int _command_start(usb_handle *usb, const char *cmd, unsigned size,
     return check_response(usb, size, response);
 }
 
-static int _command_data(usb_handle *usb, const void *data, unsigned size)
-{
-    int r;
-
-    r = usb_write(usb, data, size);
-    if(r < 0) {
+static int _command_data(usb_handle* usb, const void* data, uint32_t size) {
+    int r = usb_write(usb, data, size);
+    if (r < 0) {
         sprintf(ERROR, "data transfer failure (%s)", strerror(errno));
         usb_close(usb);
         return -1;
     }
-    if(r != ((int) size)) {
+    if (r != ((int) size)) {
         sprintf(ERROR, "data transfer failure (short transfer)");
         usb_close(usb);
         return -1;
     }
-
     return r;
 }
 
-static int _command_end(usb_handle *usb)
-{
-    int r;
-    r = check_response(usb, 0, 0);
-    if(r < 0) {
-        return -1;
-    }
-    return 0;
+static int _command_end(usb_handle* usb) {
+    return check_response(usb, 0, 0) < 0 ? -1 : 0;
 }
 
-static int _command_send(usb_handle *usb, const char *cmd,
-                         const void *data, unsigned size,
-                         char *response)
-{
-    int r;
+static int _command_send(usb_handle* usb, const char* cmd, const void* data, uint32_t size,
+                         char* response) {
     if (size == 0) {
         return -1;
     }
 
-    r = _command_start(usb, cmd, size, response);
+    int r = _command_start(usb, cmd, size, response);
     if (r < 0) {
         return -1;
     }
@@ -178,42 +160,29 @@ static int _command_send(usb_handle *usb, const char *cmd,
     }
 
     r = _command_end(usb);
-    if(r < 0) {
+    if (r < 0) {
         return -1;
     }
 
     return size;
 }
 
-static int _command_send_no_data(usb_handle *usb, const char *cmd,
-                                 char *response)
-{
+static int _command_send_no_data(usb_handle* usb, const char* cmd, char* response) {
     return _command_start(usb, cmd, 0, response);
 }
 
-int fb_command(usb_handle *usb, const char *cmd)
-{
+int fb_command(usb_handle* usb, const char* cmd) {
     return _command_send_no_data(usb, cmd, 0);
 }
 
-int fb_command_response(usb_handle *usb, const char *cmd, char *response)
-{
+int fb_command_response(usb_handle* usb, const char* cmd, char* response) {
     return _command_send_no_data(usb, cmd, response);
 }
 
-int fb_download_data(usb_handle *usb, const void *data, unsigned size)
-{
+int fb_download_data(usb_handle* usb, const void* data, uint32_t size) {
     char cmd[64];
-    int r;
-
     sprintf(cmd, "download:%08x", size);
-    r = _command_send(usb, cmd, data, size, 0);
-
-    if(r < 0) {
-        return -1;
-    } else {
-        return 0;
-    }
+    return _command_send(usb, cmd, data, size, 0) < 0 ? -1 : 0;
 }
 
 #define USB_BUF_SIZE 1024
@@ -228,7 +197,7 @@ static int fb_download_data_sparse_write(void *priv, const void *data, int len)
     const char* ptr = reinterpret_cast<const char*>(data);
 
     if (usb_buf_len) {
-        to_write = min(USB_BUF_SIZE - usb_buf_len, len);
+        to_write = std::min(USB_BUF_SIZE - usb_buf_len, len);
 
         memcpy(usb_buf + usb_buf_len, ptr, to_write);
         usb_buf_len += to_write;
@@ -270,32 +239,25 @@ static int fb_download_data_sparse_write(void *priv, const void *data, int len)
     return 0;
 }
 
-static int fb_download_data_sparse_flush(usb_handle *usb)
-{
-    int r;
-
+static int fb_download_data_sparse_flush(usb_handle* usb) {
     if (usb_buf_len > 0) {
-        r = _command_data(usb, usb_buf, usb_buf_len);
-        if (r != usb_buf_len) {
+        if (_command_data(usb, usb_buf, usb_buf_len) != usb_buf_len) {
             return -1;
         }
         usb_buf_len = 0;
     }
-
     return 0;
 }
 
-int fb_download_data_sparse(usb_handle *usb, struct sparse_file *s)
-{
-    char cmd[64];
-    int r;
+int fb_download_data_sparse(usb_handle* usb, struct sparse_file* s) {
     int size = sparse_file_len(s, true, false);
     if (size <= 0) {
         return -1;
     }
 
+    char cmd[64];
     sprintf(cmd, "download:%08x", size);
-    r = _command_start(usb, cmd, size, 0);
+    int r = _command_start(usb, cmd, size, 0);
     if (r < 0) {
         return -1;
     }

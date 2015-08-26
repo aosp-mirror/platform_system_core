@@ -30,20 +30,12 @@
 #include "fs.h"
 
 #include <errno.h>
-#include <stdarg.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-#ifdef USE_MINGW
-#include <fcntl.h>
-#else
-#include <sys/mman.h>
-#endif
 
 #define ARRAY_SIZE(x)           (sizeof(x)/sizeof(x[0]))
 
@@ -58,15 +50,17 @@ typedef struct Action Action;
 
 #define CMD_SIZE 64
 
-struct Action
-{
+struct Action {
     unsigned op;
-    Action *next;
+    Action* next;
 
     char cmd[CMD_SIZE];
-    const char *prod;
-    void *data;
-    unsigned size;
+    const char* prod;
+    void* data;
+
+    // The protocol only supports 32-bit sizes, so you'll have to break
+    // anything larger into chunks.
+    uint32_t size;
 
     const char *msg;
     int (*func)(Action* a, int status, const char* resp);
@@ -267,7 +261,7 @@ static int cb_reject(Action* a, int status, const char* resp) {
 }
 
 void fb_queue_require(const char *prod, const char *var,
-                      int invert, unsigned nvalues, const char **value)
+                      bool invert, size_t nvalues, const char **value)
 {
     Action *a;
     a = queue_action(OP_QUERY, "getvar:%s", var);
