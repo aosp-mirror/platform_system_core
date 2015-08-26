@@ -71,6 +71,7 @@ static bool secure_mkdirs(const std::string& path) {
             if (chown(partial_path.c_str(), uid, gid) == -1) {
                 return false;
             }
+            // Not all filesystems support setting SELinux labels. http://b/23530370.
             selinux_android_restorecon(partial_path.c_str(), 0);
         }
     }
@@ -166,10 +167,8 @@ static bool handle_send_file(int s, const char* path, uid_t uid,
             goto fail;
         }
 
-        if (selinux_android_restorecon(path, 0) == -1) {
-            SendSyncFailErrno(s, "selinux_android_restorecon failed");
-            goto fail;
-        }
+        // Not all filesystems support setting SELinux labels. http://b/23530370.
+        selinux_android_restorecon(path, 0);
 
         // fchown clears the setuid bit - restore it if present.
         // Ignore the result of calling fchmod. It's not supported
