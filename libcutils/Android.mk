@@ -123,6 +123,8 @@ LOCAL_SRC_FILES_x86_64 += \
 LOCAL_C_INCLUDES := $(libcutils_c_includes)
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += -Werror -Wall -Wextra -std=gnu90
+LOCAL_CLANG := true
+LOCAL_SANITIZE := integer
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -133,6 +135,8 @@ LOCAL_WHOLE_STATIC_LIBRARIES := libcutils liblog
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_CFLAGS += -Werror -Wall -Wextra
 LOCAL_C_INCLUDES := $(libcutils_c_includes)
+LOCAL_CLANG := true
+LOCAL_SANITIZE := integer
 include $(BUILD_SHARED_LIBRARY)
 
 include $(call all-makefiles-under,$(LOCAL_PATH))
