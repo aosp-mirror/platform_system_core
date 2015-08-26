@@ -71,7 +71,7 @@ __BEGIN_DECLS
 #define ATRACE_TAG_LAST             ATRACE_TAG_PACKAGE_MANAGER
 
 // Reserved for initialization.
-#define ATRACE_TAG_NOT_READY        (1LL<<63)
+#define ATRACE_TAG_NOT_READY        (1ULL<<63)
 
 #define ATRACE_TAG_VALID_MASK ((ATRACE_TAG_LAST - 1) | ATRACE_TAG_LAST)
 
