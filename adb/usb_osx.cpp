@@ -118,7 +118,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
     IOUSBDeviceInterface197  **dev = NULL;
     HRESULT                  result;
     SInt32                   score;
-    UInt32                   locationId;
+    uint32_t                 locationId;
     UInt8                    if_class, subclass, protocol;
     UInt16                   vendor;
     UInt16                   product;
