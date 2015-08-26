@@ -126,6 +126,8 @@ ifneq ($(ENABLE_CPUSETS),)
 LOCAL_CFLAGS += -DUSE_CPUSETS
 endif
 LOCAL_CFLAGS += -Werror -Wall -Wextra -std=gnu90
+LOCAL_CLANG := true
+LOCAL_SANITIZE := integer
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -139,6 +141,8 @@ LOCAL_CFLAGS += -DUSE_CPUSETS
 endif
 LOCAL_CFLAGS += -Werror -Wall -Wextra
 LOCAL_C_INCLUDES := $(libcutils_c_includes)
+LOCAL_CLANG := true
+LOCAL_SANITIZE := integer
 include $(BUILD_SHARED_LIBRARY)
 
 include $(call all-makefiles-under,$(LOCAL_PATH))
