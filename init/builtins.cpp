@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "builtins.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <mntent.h>
@@ -44,10 +46,10 @@
 #include <private/android_filesystem_config.h>
 
 #include "action.h"
+#include "bootchart.h"
 #include "devices.h"
 #include "init.h"
 #include "init_parser.h"
-#include "keywords.h"
 #include "log.h"
 #include "property_service.h"
 #include "service.h"
@@ -60,8 +62,7 @@
 // System call provided by bionic but not in any header file.
 extern "C" int init_module(void *, unsigned long, const char *);
 
-static int insmod(const char *filename, const char *options)
-{
+static int insmod(const char *filename, const char *options) {
     std::string module;
     if (!read_file(filename, &module)) {
         return -1;
@@ -71,8 +72,7 @@ static int insmod(const char *filename, const char *options)
     return init_module(&module[0], module.size(), options);
 }
 
-static int __ifupdown(const char *interface, int up)
-{
+static int __ifupdown(const char *interface, int up) {
     struct ifreq ifr;
     int s, ret;
 
@@ -99,8 +99,7 @@ done:
     return ret;
 }
 
-static void unmount_and_fsck(const struct mntent *entry)
-{
+static void unmount_and_fsck(const struct mntent *entry) {
     if (strcmp(entry->mnt_type, "f2fs") && strcmp(entry->mnt_type, "ext4"))
         return;
 
@@ -160,8 +159,7 @@ static void unmount_and_fsck(const struct mntent *entry)
     }
 }
 
-int do_class_start(const std::vector<std::string>& args)
-{
+static int do_class_start(const std::vector<std::string>& args) {
         /* Starting a class does not start services
          * which are explicitly disabled.  They must
          * be started individually.
@@ -171,27 +169,23 @@ int do_class_start(const std::vector<std::string>& args)
     return 0;
 }
 
-int do_class_stop(const std::vector<std::string>& args)
-{
+static int do_class_stop(const std::vector<std::string>& args) {
     ServiceManager::GetInstance().
         ForEachServiceInClass(args[1], [] (Service* s) { s->Stop(); });
     return 0;
 }
 
-int do_class_reset(const std::vector<std::string>& args)
-{
+static int do_class_reset(const std::vector<std::string>& args) {
     ServiceManager::GetInstance().
         ForEachServiceInClass(args[1], [] (Service* s) { s->Reset(); });
     return 0;
 }
 
-int do_domainname(const std::vector<std::string>& args)
-{
+static int do_domainname(const std::vector<std::string>& args) {
     return write_file("/proc/sys/kernel/domainname", args[1].c_str());
 }
 
-int do_enable(const std::vector<std::string>& args)
-{
+static int do_enable(const std::vector<std::string>& args) {
     Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
     if (!svc) {
         return -1;
@@ -199,7 +193,7 @@ int do_enable(const std::vector<std::string>& args)
     return svc->Enable();
 }
 
-int do_exec(const std::vector<std::string>& args) {
+static int do_exec(const std::vector<std::string>& args) {
     Service* svc = ServiceManager::GetInstance().MakeExecOneshotService(args);
     if (!svc) {
         return -1;
@@ -211,23 +205,19 @@ int do_exec(const std::vector<std::string>& args) {
     return 0;
 }
 
-int do_export(const std::vector<std::string>& args)
-{
+static int do_export(const std::vector<std::string>& args) {
     return add_environment(args[1].c_str(), args[2].c_str());
 }
 
-int do_hostname(const std::vector<std::string>& args)
-{
+static int do_hostname(const std::vector<std::string>& args) {
     return write_file("/proc/sys/kernel/hostname", args[1].c_str());
 }
 
-int do_ifup(const std::vector<std::string>& args)
-{
+static int do_ifup(const std::vector<std::string>& args) {
     return __ifupdown(args[1].c_str(), 1);
 }
 
-int do_insmod(const std::vector<std::string>& args)
-{
+static int do_insmod(const std::vector<std::string>& args) {
     std::string options;
 
     if (args.size() > 2) {
@@ -241,8 +231,7 @@ int do_insmod(const std::vector<std::string>& args)
     return insmod(args[1].c_str(), options.c_str());
 }
 
-int do_mkdir(const std::vector<std::string>& args)
-{
+static int do_mkdir(const std::vector<std::string>& args) {
     mode_t mode = 0755;
     int ret;
 
@@ -310,8 +299,7 @@ static struct {
 #define DATA_MNT_POINT "/data"
 
 /* mount <type> <device> <path> <flags ...> <options> */
-int do_mount(const std::vector<std::string>& args)
-{
+static int do_mount(const std::vector<std::string>& args) {
     char tmp[64];
     const char *source, *target, *system;
     const char *options = NULL;
@@ -411,8 +399,7 @@ exit_success:
 
 }
 
-static int wipe_data_via_recovery()
-{
+static int wipe_data_via_recovery() {
     mkdir("/cache/recovery", 0700);
     int fd = open("/cache/recovery/command", O_RDWR|O_CREAT|O_TRUNC|O_CLOEXEC, 0600);
     if (fd >= 0) {
@@ -427,16 +414,16 @@ static int wipe_data_via_recovery()
     while (1) { pause(); }  // never reached
 }
 
-void import_late()
-{
+static void import_late() {
     static const std::vector<std::string> init_directories = {
         "/system/etc/init",
         "/vendor/etc/init",
         "/odm/etc/init"
     };
 
+    Parser& parser = Parser::GetInstance();
     for (const auto& dir : init_directories) {
-        init_parse_config(dir.c_str());
+        parser.ParseConfig(dir.c_str());
     }
 }
 
@@ -444,17 +431,13 @@ void import_late()
  * This function might request a reboot, in which case it will
  * not return.
  */
-int do_mount_all(const std::vector<std::string>& args)
-{
+static int do_mount_all(const std::vector<std::string>& args) {
     pid_t pid;
     int ret = -1;
     int child_ret = -1;
     int status;
     struct fstab *fstab;
 
-    if (args.size() != 2) {
-        return -1;
-    }
     const char* fstabfile = args[1].c_str();
     /*
      * Call fs_mgr_mount_all() to mount all filesystems.  We fork(2) and
@@ -535,8 +518,7 @@ int do_mount_all(const std::vector<std::string>& args)
     return ret;
 }
 
-int do_swapon_all(const std::vector<std::string>& args)
-{
+static int do_swapon_all(const std::vector<std::string>& args) {
     struct fstab *fstab;
     int ret;
 
@@ -547,16 +529,14 @@ int do_swapon_all(const std::vector<std::string>& args)
     return ret;
 }
 
-int do_setprop(const std::vector<std::string>& args)
-{
+static int do_setprop(const std::vector<std::string>& args) {
     const char* name = args[1].c_str();
     const char* value = args[2].c_str();
     property_set(name, value);
     return 0;
 }
 
-int do_setrlimit(const std::vector<std::string>& args)
-{
+static int do_setrlimit(const std::vector<std::string>& args) {
     struct rlimit limit;
     int resource;
     resource = std::stoi(args[1]);
@@ -565,8 +545,7 @@ int do_setrlimit(const std::vector<std::string>& args)
     return setrlimit(resource, &limit);
 }
 
-int do_start(const std::vector<std::string>& args)
-{
+static int do_start(const std::vector<std::string>& args) {
     Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
     if (!svc) {
         ERROR("do_start: Service %s not found\n", args[1].c_str());
@@ -577,8 +556,7 @@ int do_start(const std::vector<std::string>& args)
     return 0;
 }
 
-int do_stop(const std::vector<std::string>& args)
-{
+static int do_stop(const std::vector<std::string>& args) {
     Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
     if (!svc) {
         ERROR("do_stop: Service %s not found\n", args[1].c_str());
@@ -588,8 +566,7 @@ int do_stop(const std::vector<std::string>& args)
     return 0;
 }
 
-int do_restart(const std::vector<std::string>& args)
-{
+static int do_restart(const std::vector<std::string>& args) {
     Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
     if (!svc) {
         ERROR("do_restart: Service %s not found\n", args[1].c_str());
@@ -599,8 +576,7 @@ int do_restart(const std::vector<std::string>& args)
     return 0;
 }
 
-int do_powerctl(const std::vector<std::string>& args)
-{
+static int do_powerctl(const std::vector<std::string>& args) {
     const char* command = args[1].c_str();
     int len = 0;
     unsigned int cmd = 0;
@@ -636,33 +612,25 @@ int do_powerctl(const std::vector<std::string>& args)
                                         callback_on_ro_remount);
 }
 
-int do_trigger(const std::vector<std::string>& args)
-{
+static int do_trigger(const std::vector<std::string>& args) {
     ActionManager::GetInstance().QueueEventTrigger(args[1]);
     return 0;
 }
 
-int do_symlink(const std::vector<std::string>& args)
-{
+static int do_symlink(const std::vector<std::string>& args) {
     return symlink(args[1].c_str(), args[2].c_str());
 }
 
-int do_rm(const std::vector<std::string>& args)
-{
+static int do_rm(const std::vector<std::string>& args) {
     return unlink(args[1].c_str());
 }
 
-int do_rmdir(const std::vector<std::string>& args)
-{
+static int do_rmdir(const std::vector<std::string>& args) {
     return rmdir(args[1].c_str());
 }
 
-int do_sysclktz(const std::vector<std::string>& args)
-{
+static int do_sysclktz(const std::vector<std::string>& args) {
     struct timezone tz;
-
-    if (args.size() != 2)
-        return -1;
 
     memset(&tz, 0, sizeof(tz));
     tz.tz_minuteswest = std::stoi(args[1]);
@@ -671,7 +639,7 @@ int do_sysclktz(const std::vector<std::string>& args)
     return 0;
 }
 
-int do_verity_load_state(const std::vector<std::string>& args) {
+static int do_verity_load_state(const std::vector<std::string>& args) {
     int mode = -1;
     int rc = fs_mgr_load_verity_state(&mode);
     if (rc == 0 && mode == VERITY_MODE_LOGGING) {
@@ -680,33 +648,29 @@ int do_verity_load_state(const std::vector<std::string>& args) {
     return rc;
 }
 
-static void verity_update_property(fstab_rec *fstab, const char *mount_point, int mode, int status) {
+static void verity_update_property(fstab_rec *fstab, const char *mount_point,
+                                   int mode, int status) {
     property_set(android::base::StringPrintf("partition.%s.verified", mount_point).c_str(),
                  android::base::StringPrintf("%d", mode).c_str());
 }
 
-int do_verity_update_state(const std::vector<std::string>& args) {
+static int do_verity_update_state(const std::vector<std::string>& args) {
     return fs_mgr_update_verity_state(verity_update_property);
 }
 
-int do_write(const std::vector<std::string>& args)
-{
+static int do_write(const std::vector<std::string>& args) {
     const char* path = args[1].c_str();
     const char* value = args[2].c_str();
     return write_file(path, value);
 }
 
-int do_copy(const std::vector<std::string>& args)
-{
+static int do_copy(const std::vector<std::string>& args) {
     char *buffer = NULL;
     int rc = 0;
     int fd1 = -1, fd2 = -1;
     struct stat info;
     int brtw, brtr;
     char *p;
-
-    if (args.size() != 3)
-        return -1;
 
     if (stat(args[1].c_str(), &info) < 0)
         return -1;
@@ -758,7 +722,7 @@ out:
     return rc;
 }
 
-int do_chown(const std::vector<std::string>& args) {
+static int do_chown(const std::vector<std::string>& args) {
     /* GID is optional. */
     if (args.size() == 3) {
         if (lchown(args[2].c_str(), decode_uid(args[1].c_str()), -1) == -1)
@@ -786,7 +750,7 @@ static mode_t get_mode(const char *s) {
     return mode;
 }
 
-int do_chmod(const std::vector<std::string>& args) {
+static int do_chmod(const std::vector<std::string>& args) {
     mode_t mode = get_mode(args[1].c_str());
     if (fchmodat(AT_FDCWD, args[2].c_str(), mode, AT_SYMLINK_NOFOLLOW) < 0) {
         return -errno;
@@ -794,7 +758,7 @@ int do_chmod(const std::vector<std::string>& args) {
     return 0;
 }
 
-int do_restorecon(const std::vector<std::string>& args) {
+static int do_restorecon(const std::vector<std::string>& args) {
     int ret = 0;
 
     for (auto it = std::next(args.begin()); it != args.end(); ++it) {
@@ -804,7 +768,7 @@ int do_restorecon(const std::vector<std::string>& args) {
     return ret;
 }
 
-int do_restorecon_recursive(const std::vector<std::string>& args) {
+static int do_restorecon_recursive(const std::vector<std::string>& args) {
     int ret = 0;
 
     for (auto it = std::next(args.begin()); it != args.end(); ++it) {
@@ -814,12 +778,7 @@ int do_restorecon_recursive(const std::vector<std::string>& args) {
     return ret;
 }
 
-int do_loglevel(const std::vector<std::string>& args) {
-    if (args.size() != 2) {
-        ERROR("loglevel: missing argument\n");
-        return -EINVAL;
-    }
-
+static int do_loglevel(const std::vector<std::string>& args) {
     int log_level = std::stoi(args[1]);
     if (log_level < KLOG_ERROR_LEVEL || log_level > KLOG_DEBUG_LEVEL) {
         ERROR("loglevel: invalid log level'%d'\n", log_level);
@@ -830,23 +789,16 @@ int do_loglevel(const std::vector<std::string>& args) {
 }
 
 int do_load_persist_props(const std::vector<std::string>& args) {
-    if (args.size() == 1) {
-        load_persist_props();
-        return 0;
-    }
-    return -1;
+    load_persist_props();
+    return 0;
 }
 
-int do_load_all_props(const std::vector<std::string>& args) {
-    if (args.size() == 1) {
-        load_all_props();
-        return 0;
-    }
-    return -1;
+static int do_load_all_props(const std::vector<std::string>& args) {
+    load_all_props();
+    return 0;
 }
 
-int do_wait(const std::vector<std::string>& args)
-{
+static int do_wait(const std::vector<std::string>& args) {
     if (args.size() == 2) {
         return wait_for_file(args[1].c_str(), COMMAND_RETRY_TIMEOUT);
     } else if (args.size() == 3) {
@@ -858,8 +810,7 @@ int do_wait(const std::vector<std::string>& args)
 /*
  * Callback to make a directory from the ext4 code
  */
-static int do_installkeys_ensure_dir_exists(const char* dir)
-{
+static int do_installkeys_ensure_dir_exists(const char* dir) {
     if (make_dir(dir, 0700) && errno != EEXIST) {
         return -1;
     }
@@ -867,12 +818,7 @@ static int do_installkeys_ensure_dir_exists(const char* dir)
     return 0;
 }
 
-int do_installkey(const std::vector<std::string>& args)
-{
-    if (args.size() != 2) {
-        return -1;
-    }
-
+static int do_installkey(const std::vector<std::string>& args) {
     std::string prop_value = property_get("ro.crypto.type");
     if (prop_value != "file") {
         return 0;
@@ -880,4 +826,50 @@ int do_installkey(const std::vector<std::string>& args)
 
     return e4crypt_create_device_key(args[1].c_str(),
                                      do_installkeys_ensure_dir_exists);
+}
+
+BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
+    constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
+    static const Map builtin_functions = {
+        {"bootchart_init",          {0,     0,    do_bootchart_init}},
+        {"chmod",                   {2,     2,    do_chmod}},
+        {"chown",                   {2,     3,    do_chown}},
+        {"class_reset",             {1,     1,    do_class_reset}},
+        {"class_start",             {1,     1,    do_class_start}},
+        {"class_stop",              {1,     1,    do_class_stop}},
+        {"copy",                    {2,     2,    do_copy}},
+        {"domainname",              {1,     1,    do_domainname}},
+        {"enable",                  {1,     1,    do_enable}},
+        {"exec",                    {1,     kMax, do_exec}},
+        {"export",                  {2,     2,    do_export}},
+        {"hostname",                {1,     1,    do_hostname}},
+        {"ifup",                    {1,     1,    do_ifup}},
+        {"insmod",                  {1,     kMax, do_insmod}},
+        {"installkey",              {1,     1,    do_installkey}},
+        {"load_all_props",          {0,     0,    do_load_all_props}},
+        {"load_persist_props",      {0,     0,    do_load_persist_props}},
+        {"loglevel",                {1,     1,    do_loglevel}},
+        {"mkdir",                   {1,     4,    do_mkdir}},
+        {"mount_all",               {1,     1,    do_mount_all}},
+        {"mount",                   {3,     kMax, do_mount}},
+        {"powerctl",                {1,     1,    do_powerctl}},
+        {"restart",                 {1,     1,    do_restart}},
+        {"restorecon",              {1,     kMax, do_restorecon}},
+        {"restorecon_recursive",    {1,     kMax, do_restorecon_recursive}},
+        {"rm",                      {1,     1,    do_rm}},
+        {"rmdir",                   {1,     1,    do_rmdir}},
+        {"setprop",                 {2,     2,    do_setprop}},
+        {"setrlimit",               {3,     3,    do_setrlimit}},
+        {"start",                   {1,     1,    do_start}},
+        {"stop",                    {1,     1,    do_stop}},
+        {"swapon_all",              {1,     1,    do_swapon_all}},
+        {"symlink",                 {2,     2,    do_symlink}},
+        {"sysclktz",                {1,     1,    do_sysclktz}},
+        {"trigger",                 {1,     1,    do_trigger}},
+        {"verity_load_state",       {0,     0,    do_verity_load_state}},
+        {"verity_update_state",     {0,     0,    do_verity_update_state}},
+        {"wait",                    {1,     2,    do_wait}},
+        {"write",                   {2,     2,    do_write}},
+    };
+    return builtin_functions;
 }

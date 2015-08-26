@@ -32,10 +32,12 @@
 #include "action.h"
 #include "init.h"
 #include "init_parser.h"
-#include "keywords.h"
 #include "log.h"
 #include "property_service.h"
 #include "util.h"
+
+using android::base::StringPrintf;
+using android::base::WriteStringToFile;
 
 #define CRITICAL_CRASH_THRESHOLD    4       // if we crash >4 times ...
 #define CRITICAL_CRASH_WINDOW       (4*60)  // ... in 4 minutes, goto recovery
@@ -84,7 +86,7 @@ void Service::NotifyStateChange(const std::string& new_state) const {
         return;
     }
 
-    std::string prop_name = android::base::StringPrintf("init.svc.%s", name_.c_str());
+    std::string prop_name = StringPrintf("init.svc.%s", name_.c_str());
     if (prop_name.length() >= PROP_NAME_MAX) {
         // If the property name would be too long, we can't set it.
         ERROR("Property name \"init.svc.%s\" too long; not setting to %s\n",
@@ -104,8 +106,7 @@ bool Service::Reap() {
 
     // Remove any sockets we may have created.
     for (const auto& si : sockets_) {
-        std::string tmp = android::base::StringPrintf(ANDROID_SOCKET_DIR "/%s",
-                                                      si.name.c_str());
+        std::string tmp = StringPrintf(ANDROID_SOCKET_DIR "/%s", si.name.c_str());
         unlink(tmp.c_str());
     }
 
@@ -168,146 +169,154 @@ void Service::DumpState() const {
     }
 }
 
-bool Service::HandleLine(int kw, const std::vector<std::string>& args, std::string* err) {
-    std::vector<std::string> str_args;
+bool Service::HandleClass(const std::vector<std::string>& args, std::string* err) {
+    classname_ = args[1];
+    return true;
+}
 
-    ioprio_class_ = IoSchedClass_NONE;
+bool Service::HandleConsole(const std::vector<std::string>& args, std::string* err) {
+    flags_ |= SVC_CONSOLE;
+    return true;
+}
 
-    switch (kw) {
-    case K_class:
-        if (args.size() != 2) {
-            *err = "class option requires a classname\n";
-            return false;
-        } else {
-            classname_ = args[1];
-        }
-        break;
-    case K_console:
-        flags_ |= SVC_CONSOLE;
-        break;
-    case K_disabled:
-        flags_ |= SVC_DISABLED;
-        flags_ |= SVC_RC_DISABLED;
-        break;
-    case K_ioprio:
-        if (args.size() != 3) {
-            *err = "ioprio optin usage: ioprio <rt|be|idle> <ioprio 0-7>\n";
-            return false;
-        } else {
-            ioprio_pri_ = std::stoul(args[2], 0, 8);
+bool Service::HandleCritical(const std::vector<std::string>& args, std::string* err) {
+    flags_ |= SVC_CRITICAL;
+    return true;
+}
 
-            if (ioprio_pri_ < 0 || ioprio_pri_ > 7) {
-                *err = "priority value must be range 0 - 7\n";
-                return false;
-            }
+bool Service::HandleDisabled(const std::vector<std::string>& args, std::string* err) {
+    flags_ |= SVC_DISABLED;
+    flags_ |= SVC_RC_DISABLED;
+    return true;
+}
 
-            if (args[1] == "rt") {
-                ioprio_class_ = IoSchedClass_RT;
-            } else if (args[1] == "be") {
-                ioprio_class_ = IoSchedClass_BE;
-            } else if (args[1] == "idle") {
-                ioprio_class_ = IoSchedClass_IDLE;
-            } else {
-                *err = "ioprio option usage: ioprio <rt|be|idle> <0-7>\n";
-                return false;
-            }
-        }
-        break;
-    case K_group:
-        if (args.size() < 2) {
-            *err = "group option requires a group id\n";
-            return false;
-        } else if (args.size() > NR_SVC_SUPP_GIDS + 2) {
-            *err = android::base::StringPrintf("group option accepts at most %d supp. groups\n",
-                                               NR_SVC_SUPP_GIDS);
-            return false;
-        } else {
-            gid_ = decode_uid(args[1].c_str());
-            for (std::size_t n = 2; n < args.size(); n++) {
-                supp_gids_.push_back(decode_uid(args[n].c_str()));
-            }
-        }
-        break;
-    case K_keycodes:
-        if (args.size() < 2) {
-            *err = "keycodes option requires atleast one keycode\n";
-            return false;
-        } else {
-            for (std::size_t i = 1; i < args.size(); i++) {
-                keycodes_.push_back(std::stoi(args[i]));
-            }
-        }
-        break;
-    case K_oneshot:
-        flags_ |= SVC_ONESHOT;
-        break;
-    case K_onrestart:
-        if (args.size() < 2) {
-            return false;
-        }
-        str_args.assign(args.begin() + 1, args.end());
-        add_command_to_action(&onrestart_, str_args, "", 0, err);
-        break;
-    case K_critical:
-        flags_ |= SVC_CRITICAL;
-        break;
-    case K_setenv: { /* name value */
-        if (args.size() < 3) {
-            *err = "setenv option requires name and value arguments\n";
-            return false;
-        }
-
-        envvars_.push_back({args[1], args[2]});
-        break;
-    }
-    case K_socket: {/* name type perm [ uid gid context ] */
-        if (args.size() < 4) {
-            *err = "socket option requires name, type, perm arguments\n";
-            return false;
-        }
-        if (args[2] != "dgram" && args[2] != "stream" &&
-            args[2] != "seqpacket") {
-            *err = "socket type must be 'dgram', 'stream' or 'seqpacket'\n";
-            return false;
-        }
-
-        int perm = std::stoul(args[3], 0, 8);
-        uid_t uid = args.size() > 4 ? decode_uid(args[4].c_str()) : 0;
-        gid_t gid = args.size() > 5 ? decode_uid(args[5].c_str()) : 0;
-        std::string socketcon = args.size() > 6 ? args[6] : "";
-
-        sockets_.push_back({args[1], args[2], uid, gid, perm, socketcon});
-        break;
-    }
-    case K_user:
-        if (args.size() != 2) {
-            *err = "user option requires a user id\n";
-            return false;
-        } else {
-            uid_ = decode_uid(args[1].c_str());
-        }
-        break;
-    case K_seclabel:
-        if (args.size() != 2) {
-            *err = "seclabel option requires a label string\n";
-            return false;
-        } else {
-            seclabel_ = args[1];
-        }
-        break;
-    case K_writepid:
-        if (args.size() < 2) {
-            *err = "writepid option requires at least one filename\n";
-            return false;
-        }
-        writepid_files_.assign(args.begin() + 1, args.end());
-        break;
-
-    default:
-        *err = android::base::StringPrintf("invalid option '%s'\n", args[0].c_str());
-        return false;
+bool Service::HandleGroup(const std::vector<std::string>& args, std::string* err) {
+    gid_ = decode_uid(args[1].c_str());
+    for (std::size_t n = 2; n < args.size(); n++) {
+        supp_gids_.emplace_back(decode_uid(args[n].c_str()));
     }
     return true;
+}
+
+bool Service::HandleIoprio(const std::vector<std::string>& args, std::string* err) {
+    ioprio_pri_ = std::stoul(args[2], 0, 8);
+
+    if (ioprio_pri_ < 0 || ioprio_pri_ > 7) {
+        *err = "priority value must be range 0 - 7";
+        return false;
+    }
+
+    if (args[1] == "rt") {
+        ioprio_class_ = IoSchedClass_RT;
+    } else if (args[1] == "be") {
+        ioprio_class_ = IoSchedClass_BE;
+    } else if (args[1] == "idle") {
+        ioprio_class_ = IoSchedClass_IDLE;
+    } else {
+        *err = "ioprio option usage: ioprio <rt|be|idle> <0-7>";
+        return false;
+    }
+
+    return true;
+}
+
+bool Service::HandleKeycodes(const std::vector<std::string>& args, std::string* err) {
+    for (std::size_t i = 1; i < args.size(); i++) {
+        keycodes_.emplace_back(std::stoi(args[i]));
+    }
+    return true;
+}
+
+bool Service::HandleOneshot(const std::vector<std::string>& args, std::string* err) {
+    flags_ |= SVC_ONESHOT;
+    return true;
+}
+
+bool Service::HandleOnrestart(const std::vector<std::string>& args, std::string* err) {
+    std::vector<std::string> str_args(args.begin() + 1, args.end());
+    onrestart_.AddCommand(str_args, "", 0, err);
+    return true;
+}
+
+bool Service::HandleSeclabel(const std::vector<std::string>& args, std::string* err) {
+    seclabel_ = args[1];
+    return true;
+}
+
+bool Service::HandleSetenv(const std::vector<std::string>& args, std::string* err) {
+    envvars_.emplace_back(args[1], args[2]);
+    return true;
+}
+
+/* name type perm [ uid gid context ] */
+bool Service::HandleSocket(const std::vector<std::string>& args, std::string* err) {
+    if (args[2] != "dgram" && args[2] != "stream" && args[2] != "seqpacket") {
+        *err = "socket type must be 'dgram', 'stream' or 'seqpacket'";
+        return false;
+    }
+
+    int perm = std::stoul(args[3], 0, 8);
+    uid_t uid = args.size() > 4 ? decode_uid(args[4].c_str()) : 0;
+    gid_t gid = args.size() > 5 ? decode_uid(args[5].c_str()) : 0;
+    std::string socketcon = args.size() > 6 ? args[6] : "";
+
+    sockets_.emplace_back(args[1], args[2], uid, gid, perm, socketcon);
+    return true;
+}
+
+bool Service::HandleUser(const std::vector<std::string>& args, std::string* err) {
+    uid_ = decode_uid(args[1].c_str());
+    return true;
+}
+
+bool Service::HandleWritepid(const std::vector<std::string>& args, std::string* err) {
+    writepid_files_.assign(args.begin() + 1, args.end());
+    return true;
+}
+
+class Service::OptionHandlerMap : public KeywordMap<OptionHandler> {
+public:
+    OptionHandlerMap() {
+    }
+private:
+    Map& map() const override;
+};
+
+Service::OptionHandlerMap::Map& Service::OptionHandlerMap::map() const {
+    constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
+    static const Map option_handlers = {
+        {"class",       {1,     1,    &Service::HandleClass}},
+        {"console",     {0,     0,    &Service::HandleConsole}},
+        {"critical",    {0,     0,    &Service::HandleCritical}},
+        {"disabled",    {0,     0,    &Service::HandleDisabled}},
+        {"group",       {1,     NR_SVC_SUPP_GIDS + 1, &Service::HandleGroup}},
+        {"ioprio",      {2,     2,    &Service::HandleIoprio}},
+        {"keycodes",    {1,     kMax, &Service::HandleKeycodes}},
+        {"oneshot",     {0,     0,    &Service::HandleOneshot}},
+        {"onrestart",   {1,     kMax, &Service::HandleOnrestart}},
+        {"seclabel",    {1,     1,    &Service::HandleSeclabel}},
+        {"setenv",      {2,     2,    &Service::HandleSetenv}},
+        {"socket",      {3,     6,    &Service::HandleSocket}},
+        {"user",        {1,     1,    &Service::HandleUser}},
+        {"writepid",    {1,     kMax, &Service::HandleWritepid}},
+    };
+    return option_handlers;
+}
+
+bool Service::HandleLine(const std::vector<std::string>& args, std::string* err) {
+    if (args.empty()) {
+        *err = "option needed, but not provided";
+        return false;
+    }
+
+    static const OptionHandlerMap handler_map;
+    auto handler = handler_map.FindFunction(args[0], args.size() - 1, err);
+
+    if (!handler) {
+        return false;
+    }
+
+    return (this->*handler)(args, err);
 }
 
 bool Service::Start(const std::vector<std::string>& dynamic_args) {
@@ -396,7 +405,7 @@ bool Service::Start(const std::vector<std::string>& dynamic_args) {
         umask(077);
         if (properties_initialized()) {
             get_property_workspace(&fd, &sz);
-            std::string tmp = android::base::StringPrintf("%d,%d", dup(fd), sz);
+            std::string tmp = StringPrintf("%d,%d", dup(fd), sz);
             add_environment("ANDROID_PROPERTY_WORKSPACE", tmp.c_str());
         }
 
@@ -418,9 +427,9 @@ bool Service::Start(const std::vector<std::string>& dynamic_args) {
             }
         }
 
-        std::string pid_str = android::base::StringPrintf("%d", pid);
+        std::string pid_str = StringPrintf("%d", pid);
         for (const auto& file : writepid_files_) {
-            if (!android::base::WriteStringToFile(pid_str, file)) {
+            if (!WriteStringToFile(pid_str, file)) {
                 ERROR("couldn't write %s to %s: %s\n",
                       pid_str.c_str(), file.c_str(), strerror(errno));
             }
@@ -609,9 +618,8 @@ void Service::OpenConsole() const {
 }
 
 void Service::PublishSocket(const std::string& name, int fd) const {
-    std::string key = android::base::StringPrintf(ANDROID_SOCKET_ENV_PREFIX "%s",
-                                                  name.c_str());
-    std::string val = android::base::StringPrintf("%d", fd);
+    std::string key = StringPrintf(ANDROID_SOCKET_ENV_PREFIX "%s", name.c_str());
+    std::string val = StringPrintf("%d", fd);
     add_environment(key.c_str(), val.c_str());
 
     /* make sure we don't close-on-exec */
@@ -628,31 +636,14 @@ ServiceManager& ServiceManager::GetInstance() {
     return instance;
 }
 
-Service* ServiceManager::AddNewService(const std::string& name,
-                                       const std::string& classname,
-                                       const std::vector<std::string>& args,
-                                       std::string* err) {
-    if (!IsValidName(name)) {
-        *err = android::base::StringPrintf("invalid service name '%s'\n", name.c_str());
-        return nullptr;
+void ServiceManager::AddService(std::unique_ptr<Service> service) {
+    Service* old_service = FindServiceByName(service->name());
+    if (old_service) {
+        ERROR("ignored duplicate definition of service '%s'",
+              service->name().c_str());
+        return;
     }
-
-    Service* svc = ServiceManager::GetInstance().FindServiceByName(name);
-    if (svc) {
-        *err = android::base::StringPrintf("ignored duplicate definition of service '%s'\n",
-                                           name.c_str());
-        return nullptr;
-    }
-
-    std::unique_ptr<Service> svc_p(new Service(name, classname, args));
-    if (!svc_p) {
-        ERROR("Couldn't allocate service for service '%s'", name.c_str());
-        return nullptr;
-    }
-    svc = svc_p.get();
-    services_.push_back(std::move(svc_p));
-
-    return svc;
+    services_.emplace_back(std::move(service));
 }
 
 Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& args) {
@@ -677,8 +668,7 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
     std::vector<std::string> str_args(args.begin() + command_arg, args.end());
 
     exec_count_++;
-    std::string name = android::base::StringPrintf("exec %d (%s)", exec_count_,
-                                                   str_args[0].c_str());
+    std::string name = StringPrintf("exec %d (%s)", exec_count_, str_args[0].c_str());
     unsigned flags = SVC_EXEC | SVC_ONESHOT;
 
     std::string seclabel = "";
@@ -770,8 +760,7 @@ void ServiceManager::ForEachServiceWithFlags(unsigned matchflags,
     }
 }
 
-void ServiceManager::RemoveService(const Service& svc)
-{
+void ServiceManager::RemoveService(const Service& svc) {
     auto svc_it = std::find_if(services_.begin(), services_.end(),
                                [&svc] (const std::unique_ptr<Service>& s) {
                                    return svc.name() == s->name();
@@ -783,8 +772,44 @@ void ServiceManager::RemoveService(const Service& svc)
     services_.erase(svc_it);
 }
 
-bool ServiceManager::IsValidName(const std::string& name) const
-{
+void ServiceManager::DumpState() const {
+    for (const auto& s : services_) {
+        s->DumpState();
+    }
+    INFO("\n");
+}
+
+bool ServiceParser::ParseSection(const std::vector<std::string>& args,
+                                 std::string* err) {
+    if (args.size() < 3) {
+        *err = "services must have a name and a program";
+        return false;
+    }
+
+    const std::string& name = args[1];
+    if (!IsValidName(name)) {
+        *err = StringPrintf("invalid service name '%s'", name.c_str());
+        return false;
+    }
+
+    std::vector<std::string> str_args(args.begin() + 2, args.end());
+    service_ = std::make_unique<Service>(name, "default", str_args);
+    return true;
+}
+
+bool ServiceParser::ParseLineSection(const std::vector<std::string>& args,
+                                     const std::string& filename, int line,
+                                     std::string* err) const {
+    return service_ ? service_->HandleLine(args, err) : false;
+}
+
+void ServiceParser::EndSection() {
+    if (service_) {
+        ServiceManager::GetInstance().AddService(std::move(service_));
+    }
+}
+
+bool ServiceParser::IsValidName(const std::string& name) const {
     if (name.size() > 16) {
         return false;
     }
@@ -794,12 +819,4 @@ bool ServiceManager::IsValidName(const std::string& name) const
         }
     }
     return true;
-}
-
-void ServiceManager::DumpState() const
-{
-    for (const auto& s : services_) {
-        s->DumpState();
-    }
-    INFO("\n");
 }

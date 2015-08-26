@@ -22,13 +22,36 @@
 #include <string>
 #include <vector>
 
+#include "builtins.h"
+#include "init_parser.h"
+#include "keyword_map.h"
+
+class Command {
+public:
+    Command(BuiltinFunction f, const std::vector<std::string>& args,
+            const std::string& filename, int line);
+
+    int InvokeFunc() const;
+    std::string BuildCommandString() const;
+    std::string BuildSourceString() const;
+
+private:
+    BuiltinFunction func_;
+    std::vector<std::string> args_;
+    std::string filename_;
+    int line_;
+};
+
 class Action {
 public:
-    Action();
+    Action(bool oneshot = false);
 
-    void AddCommand(int (*f)(const std::vector<std::string>& args),
+    bool AddCommand(const std::vector<std::string>& args,
+                    const std::string& filename, int line, std::string* err);
+    void AddCommand(BuiltinFunction f,
                     const std::vector<std::string>& args,
                     const std::string& filename = "", int line = 0);
+    void CombineAction(const Action& action);
     bool InitTriggers(const std::vector<std::string>& args, std::string* err);
     bool InitSingleTrigger(const std::string& trigger);
     std::size_t NumCommands() const;
@@ -37,13 +60,17 @@ public:
     bool CheckEventTrigger(const std::string& trigger) const;
     bool CheckPropertyTrigger(const std::string& name,
                               const std::string& value) const;
-    bool TriggersEqual(const class Action& other) const;
+    bool TriggersEqual(const Action& other) const;
     std::string BuildTriggersString() const;
     void DumpState() const;
 
-private:
-    class Command;
+    bool oneshot() const { return oneshot_; }
+    static void set_function_map(const KeywordMap<BuiltinFunction>* function_map) {
+        function_map_ = function_map;
+    }
 
+
+private:
     void ExecuteCommand(const Command& command) const;
     bool CheckPropertyTriggers(const std::string& name = "",
                                const std::string& value = "") const;
@@ -51,27 +78,28 @@ private:
 
     std::map<std::string, std::string> property_triggers_;
     std::string event_trigger_;
-    std::vector<Command*> commands_;
+    std::vector<Command> commands_;
+    bool oneshot_;
+    static const KeywordMap<BuiltinFunction>* function_map_;
 };
 
 class Trigger {
 public:
     virtual ~Trigger() { }
-    virtual bool CheckTriggers(const Action* action) = 0;
+    virtual bool CheckTriggers(const Action& action) const = 0;
 };
 
 class ActionManager {
 public:
     static ActionManager& GetInstance();
+
+    void AddAction(std::unique_ptr<Action> action);
     void QueueEventTrigger(const std::string& trigger);
     void QueuePropertyTrigger(const std::string& name, const std::string& value);
     void QueueAllPropertyTriggers();
-    void QueueBuiltinAction(int (*func)(const std::vector<std::string>& args),
-                            const std::string& name);
+    void QueueBuiltinAction(BuiltinFunction func, const std::string& name);
     void ExecuteOneCommand();
     bool HasMoreCommands() const;
-    Action* AddNewAction(const std::vector<std::string>& triggers,
-                         std::string* err);
     void DumpState() const;
 
 private:
@@ -80,10 +108,26 @@ private:
     ActionManager(ActionManager const&) = delete;
     void operator=(ActionManager const&) = delete;
 
-    std::vector<Action*> actions_;
+    std::vector<std::unique_ptr<Action>> actions_;
     std::queue<std::unique_ptr<Trigger>> trigger_queue_;
-    std::vector<Action*> current_executing_actions_;
+    std::queue<const Action*> current_executing_actions_;
     std::size_t current_command_;
+};
+
+class ActionParser : public SectionParser {
+public:
+    ActionParser() : action_(nullptr) {
+    }
+    bool ParseSection(const std::vector<std::string>& args,
+                      std::string* err) override;
+    bool ParseLineSection(const std::vector<std::string>& args,
+                          const std::string& filename, int line,
+                          std::string* err) const override;
+    void EndSection() override;
+    void EndFile(const std::string&) override {
+    }
+private:
+    std::unique_ptr<Action> action_;
 };
 
 #endif
