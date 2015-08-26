@@ -34,7 +34,6 @@
 #include <getopt.h>
 #include <inttypes.h>
 #include <limits.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,12 +66,12 @@ static int long_listing = 0;
 static int64_t sparse_limit = -1;
 static int64_t target_sparse_limit = -1;
 
-unsigned page_size = 2048;
-unsigned base_addr      = 0x10000000;
-unsigned kernel_offset  = 0x00008000;
-unsigned ramdisk_offset = 0x01000000;
-unsigned second_offset  = 0x00f00000;
-unsigned tags_offset    = 0x00000100;
+static unsigned page_size = 2048;
+static unsigned base_addr      = 0x10000000;
+static unsigned kernel_offset  = 0x00008000;
+static unsigned ramdisk_offset = 0x01000000;
+static unsigned second_offset  = 0x00f00000;
+static unsigned tags_offset    = 0x00000100;
 
 enum fb_buffer_type {
     FB_BUFFER,
@@ -81,8 +80,8 @@ enum fb_buffer_type {
 
 struct fastboot_buffer {
     enum fb_buffer_type type;
-    void *data;
-    unsigned int sz;
+    void* data;
+    int64_t sz;
 };
 
 static struct {
@@ -97,8 +96,7 @@ static struct {
     {"vendor.img", "vendor.sig", "vendor", true},
 };
 
-char *find_item(const char *item, const char *product)
-{
+static char* find_item(const char* item, const char* product) {
     char *dir;
     const char *fn;
     char path[PATH_MAX + 128];
@@ -139,36 +137,26 @@ char *find_item(const char *item, const char *product)
     return strdup(path);
 }
 
-static int64_t file_size(int fd)
-{
-    struct stat st;
-    int ret;
-
-    ret = fstat(fd, &st);
-
-    return ret ? -1 : st.st_size;
+static int64_t get_file_size(int fd) {
+    struct stat sb;
+    return fstat(fd, &sb) == -1 ? -1 : sb.st_size;
 }
 
-static void *load_fd(int fd, unsigned *_sz)
-{
-    char *data;
-    int sz;
+static void* load_fd(int fd, int64_t* sz) {
     int errno_tmp;
+    char* data = nullptr;
 
-    data = 0;
-
-    sz = file_size(fd);
-    if (sz < 0) {
+    *sz = get_file_size(fd);
+    if (*sz < 0) {
         goto oops;
     }
 
-    data = (char*) malloc(sz);
-    if(data == 0) goto oops;
+    data = (char*) malloc(*sz);
+    if (data == nullptr) goto oops;
 
-    if(read(fd, data, sz) != sz) goto oops;
+    if(read(fd, data, *sz) != *sz) goto oops;
     close(fd);
 
-    if(_sz) *_sz = sz;
     return data;
 
 oops:
@@ -179,17 +167,13 @@ oops:
     return 0;
 }
 
-static void *load_file(const char *fn, unsigned *_sz)
-{
-    int fd;
-
-    fd = open(fn, O_RDONLY | O_BINARY);
-    if(fd < 0) return 0;
-
-    return load_fd(fd, _sz);
+static void* load_file(const char* fn, int64_t* sz) {
+    int fd = open(fn, O_RDONLY | O_BINARY);
+    if (fd == -1) return nullptr;
+    return load_fd(fd, sz);
 }
 
-int match_fastboot_with_serial(usb_ifc_info* info, const char* local_serial) {
+static int match_fastboot_with_serial(usb_ifc_info* info, const char* local_serial) {
     // Require a matching vendor id if the user specified one with -i.
     if (vendor_id != 0 && info->dev_vendor != vendor_id) {
         return -1;
@@ -206,14 +190,12 @@ int match_fastboot_with_serial(usb_ifc_info* info, const char* local_serial) {
     return 0;
 }
 
-int match_fastboot(usb_ifc_info *info)
-{
+static int match_fastboot(usb_ifc_info* info) {
     return match_fastboot_with_serial(info, serial);
 }
 
-int list_devices_callback(usb_ifc_info *info)
-{
-    if (match_fastboot_with_serial(info, NULL) == 0) {
+static int list_devices_callback(usb_ifc_info* info) {
+    if (match_fastboot_with_serial(info, nullptr) == 0) {
         const char* serial = info->serial_number;
         if (!info->writable) {
             serial = "no permissions"; // like "adb devices"
@@ -234,8 +216,7 @@ int list_devices_callback(usb_ifc_info *info)
     return -1;
 }
 
-usb_handle *open_device(void)
-{
+static usb_handle* open_device() {
     static usb_handle *usb = 0;
     int announce = 1;
 
@@ -252,15 +233,14 @@ usb_handle *open_device(void)
     }
 }
 
-void list_devices(void) {
+static void list_devices() {
     // We don't actually open a USB device here,
     // just getting our callback called so we can
     // list all the connected devices.
     usb_open(list_devices_callback);
 }
 
-void usage(void)
-{
+static void usage() {
     fprintf(stderr,
 /*           1234567890123456789012345678901234567890123456789012345678901234567890123456 */
             "usage: fastboot [ <option> ] <command>\n"
@@ -315,31 +295,26 @@ void usage(void)
         );
 }
 
-void *load_bootable_image(const char *kernel, const char *ramdisk,
-                          const char *secondstage, unsigned *sz,
-                          const char *cmdline)
-{
-    void *kdata = 0, *rdata = 0, *sdata = 0;
-    unsigned ksize = 0, rsize = 0, ssize = 0;
-    void *bdata;
-    unsigned bsize;
-
-    if(kernel == 0) {
+static void* load_bootable_image(const char* kernel, const char* ramdisk,
+                                 const char* secondstage, int64_t* sz,
+                                 const char* cmdline) {
+    if (kernel == nullptr) {
         fprintf(stderr, "no image specified\n");
         return 0;
     }
 
-    kdata = load_file(kernel, &ksize);
-    if(kdata == 0) {
+    int64_t ksize;
+    void* kdata = load_file(kernel, &ksize);
+    if (kdata == nullptr) {
         fprintf(stderr, "cannot load '%s': %s\n", kernel, strerror(errno));
         return 0;
     }
 
-        /* is this actually a boot image? */
+    // Is this actually a boot image?
     if(!memcmp(kdata, BOOT_MAGIC, BOOT_MAGIC_SIZE)) {
-        if(cmdline) bootimg_set_cmdline((boot_img_hdr*) kdata, cmdline);
+        if (cmdline) bootimg_set_cmdline((boot_img_hdr*) kdata, cmdline);
 
-        if(ramdisk) {
+        if (ramdisk) {
             fprintf(stderr, "cannot boot a boot.img *and* ramdisk\n");
             return 0;
         }
@@ -348,39 +323,44 @@ void *load_bootable_image(const char *kernel, const char *ramdisk,
         return kdata;
     }
 
-    if(ramdisk) {
+    void* rdata = nullptr;
+    int64_t rsize = 0;
+    if (ramdisk) {
         rdata = load_file(ramdisk, &rsize);
-        if(rdata == 0) {
+        if (rdata == nullptr) {
             fprintf(stderr,"cannot load '%s': %s\n", ramdisk, strerror(errno));
             return  0;
         }
     }
 
+    void* sdata = nullptr;
+    int64_t ssize = 0;
     if (secondstage) {
         sdata = load_file(secondstage, &ssize);
-        if(sdata == 0) {
+        if (sdata == nullptr) {
             fprintf(stderr,"cannot load '%s': %s\n", secondstage, strerror(errno));
             return  0;
         }
     }
 
     fprintf(stderr,"creating boot image...\n");
-    bdata = mkbootimg(kdata, ksize, kernel_offset,
+    int64_t bsize = 0;
+    void* bdata = mkbootimg(kdata, ksize, kernel_offset,
                       rdata, rsize, ramdisk_offset,
                       sdata, ssize, second_offset,
                       page_size, base_addr, tags_offset, &bsize);
-    if(bdata == 0) {
+    if (bdata == nullptr) {
         fprintf(stderr,"failed to create boot.img\n");
         return 0;
     }
-    if(cmdline) bootimg_set_cmdline((boot_img_hdr*) bdata, cmdline);
-    fprintf(stderr,"creating boot image - %d bytes\n", bsize);
+    if (cmdline) bootimg_set_cmdline((boot_img_hdr*) bdata, cmdline);
+    fprintf(stderr, "creating boot image - %" PRId64 " bytes\n", bsize);
     *sz = bsize;
 
     return bdata;
 }
 
-static void* unzip_file(ZipArchiveHandle zip, const char* entry_name, unsigned* sz)
+static void* unzip_file(ZipArchiveHandle zip, const char* entry_name, int64_t* sz)
 {
     ZipString zip_entry_name(entry_name);
     ZipEntry zip_entry;
@@ -392,8 +372,8 @@ static void* unzip_file(ZipArchiveHandle zip, const char* entry_name, unsigned* 
     *sz = zip_entry.uncompressed_length;
 
     uint8_t* data = reinterpret_cast<uint8_t*>(malloc(zip_entry.uncompressed_length));
-    if (data == NULL) {
-        fprintf(stderr, "failed to allocate %u bytes for '%s'\n", *sz, entry_name);
+    if (data == nullptr) {
+        fprintf(stderr, "failed to allocate %" PRId64 " bytes for '%s'\n", *sz, entry_name);
         return 0;
     }
 
@@ -438,7 +418,7 @@ static FILE* win32_tmpfile() {
 
 static int unzip_to_file(ZipArchiveHandle zip, char* entry_name) {
     FILE* fp = tmpfile();
-    if (fp == NULL) {
+    if (fp == nullptr) {
         fprintf(stderr, "failed to create temporary file for '%s': %s\n",
                 entry_name, strerror(errno));
         return -1;
@@ -478,7 +458,7 @@ static char *strip(char *s)
 static int setup_requirement_line(char *name)
 {
     char *val[MAX_OPTIONS];
-    char *prod = NULL;
+    char *prod = nullptr;
     unsigned n, count;
     char *x;
     int invert = 0;
@@ -539,13 +519,10 @@ static int setup_requirement_line(char *name)
     return 0;
 }
 
-static void setup_requirements(char *data, unsigned sz)
-{
-    char *s;
-
-    s = data;
+static void setup_requirements(char* data, int64_t sz) {
+    char* s = data;
     while (sz-- > 0) {
-        if(*s == '\n') {
+        if (*s == '\n') {
             *s++ = 0;
             if (setup_requirement_line(data)) {
                 die("out of memory");
@@ -557,8 +534,7 @@ static void setup_requirements(char *data, unsigned sz)
     }
 }
 
-void queue_info_dump(void)
-{
+static void queue_info_dump() {
     fb_queue_notice("--------------------------------------------");
     fb_queue_display("version-bootloader", "Bootloader Version...");
     fb_queue_display("version-baseband",   "Baseband Version.....");
@@ -573,7 +549,7 @@ static struct sparse_file **load_sparse_files(int fd, int max_size)
         die("cannot sparse read file\n");
     }
 
-    int files = sparse_file_resparse(s, max_size, NULL, 0);
+    int files = sparse_file_resparse(s, max_size, nullptr, 0);
     if (files < 0) {
         die("Failed to resparse\n");
     }
@@ -598,7 +574,7 @@ static int64_t get_target_sparse_limit(struct usb_handle *usb)
     int status = fb_getvar(usb, response, "max-download-size");
 
     if (!status) {
-        limit = strtoul(response, NULL, 0);
+        limit = strtoul(response, nullptr, 0);
         if (limit > 0) {
             fprintf(stderr, "target reported max download size of %" PRId64 " bytes\n",
                     limit);
@@ -643,35 +619,27 @@ static int needs_erase(usb_handle* usb, const char *part)
     /* The function fb_format_supported() currently returns the value
      * we want, so just call it.
      */
-     return fb_format_supported(usb, part, NULL);
+     return fb_format_supported(usb, part, nullptr);
 }
 
-static int load_buf_fd(usb_handle *usb, int fd,
-        struct fastboot_buffer *buf)
-{
-    int64_t sz64;
-    void *data;
-    int64_t limit;
-
-
-    sz64 = file_size(fd);
-    if (sz64 < 0) {
+static int load_buf_fd(usb_handle* usb, int fd, struct fastboot_buffer* buf) {
+    int64_t sz = get_file_size(fd);
+    if (sz == -1) {
         return -1;
     }
 
-    lseek(fd, 0, SEEK_SET);
-    limit = get_sparse_limit(usb, sz64);
+    lseek64(fd, 0, SEEK_SET);
+    int64_t limit = get_sparse_limit(usb, sz);
     if (limit) {
-        struct sparse_file **s = load_sparse_files(fd, limit);
-        if (s == NULL) {
+        sparse_file** s = load_sparse_files(fd, limit);
+        if (s == nullptr) {
             return -1;
         }
         buf->type = FB_BUFFER_SPARSE;
         buf->data = s;
     } else {
-        unsigned int sz;
-        data = load_fd(fd, &sz);
-        if (data == 0) return -1;
+        void* data = load_fd(fd, &sz);
+        if (data == nullptr) return -1;
         buf->type = FB_BUFFER;
         buf->data = data;
         buf->sz = sz;
@@ -701,8 +669,8 @@ static void flash_buf(const char *pname, struct fastboot_buffer *buf)
         case FB_BUFFER_SPARSE:
             s = reinterpret_cast<sparse_file**>(buf->data);
             while (*s) {
-                int64_t sz64 = sparse_file_len(*s, true, false);
-                fb_queue_flash_sparse(pname, *s++, sz64);
+                int64_t sz = sparse_file_len(*s, true, false);
+                fb_queue_flash_sparse(pname, *s++, sz);
             }
             break;
         case FB_BUFFER:
@@ -713,8 +681,7 @@ static void flash_buf(const char *pname, struct fastboot_buffer *buf)
     }
 }
 
-void do_flash(usb_handle *usb, const char *pname, const char *fname)
-{
+static void do_flash(usb_handle* usb, const char* pname, const char* fname) {
     struct fastboot_buffer buf;
 
     if (load_buf(usb, fname, &buf)) {
@@ -723,17 +690,15 @@ void do_flash(usb_handle *usb, const char *pname, const char *fname)
     flash_buf(pname, &buf);
 }
 
-void do_update_signature(ZipArchiveHandle zip, char *fn)
-{
-    unsigned sz;
+static void do_update_signature(ZipArchiveHandle zip, char* fn) {
+    int64_t sz;
     void* data = unzip_file(zip, fn, &sz);
-    if (data == 0) return;
+    if (data == nullptr) return;
     fb_queue_download("signature", data, sz);
     fb_queue_command("signature", "installing signature");
 }
 
-void do_update(usb_handle *usb, const char *filename, int erase_first)
-{
+static void do_update(usb_handle* usb, const char* filename, bool erase_first) {
     queue_info_dump();
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
@@ -745,9 +710,9 @@ void do_update(usb_handle *usb, const char *filename, int erase_first)
         die("failed to open zip file '%s': %s", filename, ErrorCodeString(error));
     }
 
-    unsigned sz;
+    int64_t sz;
     void* data = unzip_file(zip, "android-info.txt", &sz);
-    if (data == 0) {
+    if (data == nullptr) {
         CloseArchive(zip);
         die("update package '%s' has no android-info.txt", filename);
     }
@@ -780,36 +745,33 @@ void do_update(usb_handle *usb, const char *filename, int erase_first)
     CloseArchive(zip);
 }
 
-void do_send_signature(char *fn)
-{
-    void *data;
-    unsigned sz;
-    char *xtn;
-
-    xtn = strrchr(fn, '.');
+static void do_send_signature(char* fn) {
+    char* xtn = strrchr(fn, '.');
     if (!xtn) return;
+
     if (strcmp(xtn, ".img")) return;
 
-    strcpy(xtn,".sig");
-    data = load_file(fn, &sz);
-    strcpy(xtn,".img");
-    if (data == 0) return;
+    strcpy(xtn, ".sig");
+
+    int64_t sz;
+    void* data = load_file(fn, &sz);
+    strcpy(xtn, ".img");
+    if (data == nullptr) return;
     fb_queue_download("signature", data, sz);
     fb_queue_command("signature", "installing signature");
 }
 
-void do_flashall(usb_handle *usb, int erase_first)
-{
+static void do_flashall(usb_handle* usb, int erase_first) {
     queue_info_dump();
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
     char* fname = find_item("info", product);
-    if (fname == 0) die("cannot find android-info.txt");
+    if (fname == nullptr) die("cannot find android-info.txt");
 
-    unsigned sz;
+    int64_t sz;
     void* data = load_file(fname, &sz);
-    if (data == 0) die("could not load android-info.txt: %s", strerror(errno));
+    if (data == nullptr) die("could not load android-info.txt: %s", strerror(errno));
 
     setup_requirements(reinterpret_cast<char*>(data), sz);
 
@@ -832,8 +794,7 @@ void do_flashall(usb_handle *usb, int erase_first)
 #define skip(n) do { argc -= (n); argv += (n); } while (0)
 #define require(n) do { if (argc < (n)) {usage(); exit(1);}} while (0)
 
-int do_oem_command(int argc, char **argv)
-{
+static int do_oem_command(int argc, char** argv) {
     char command[256];
     if (argc <= 1) return 0;
 
@@ -890,16 +851,15 @@ static int64_t parse_num(const char *arg)
     return num;
 }
 
-void fb_perform_format(usb_handle* usb,
-                       const char *partition, int skip_if_not_supported,
-                       const char *type_override, const char *size_override)
-{
+static void fb_perform_format(usb_handle* usb,
+                              const char *partition, int skip_if_not_supported,
+                              const char *type_override, const char *size_override) {
     char pTypeBuff[FB_RESPONSE_SZ + 1], pSizeBuff[FB_RESPONSE_SZ + 1];
     char *pType = pTypeBuff;
     char *pSize = pSizeBuff;
     unsigned int limit = INT_MAX;
     struct fastboot_buffer buf;
-    const char *errMsg = NULL;
+    const char *errMsg = nullptr;
     const struct fs_generator *gen;
     uint64_t pSz;
     int status;
@@ -949,7 +909,7 @@ void fb_perform_format(usb_handle* usb,
         return;
     }
 
-    pSz = strtoll(pSize, (char **)NULL, 16);
+    pSz = strtoll(pSize, (char **)nullptr, 16);
 
     fd = fileno(tmpfile());
     if (fs_generator_generate(gen, fd, pSz)) {
@@ -982,9 +942,9 @@ int main(int argc, char **argv)
     int wants_wipe = 0;
     int wants_reboot = 0;
     int wants_reboot_bootloader = 0;
-    int erase_first = 1;
+    bool erase_first = true;
     void *data;
-    unsigned sz;
+    int64_t sz;
     int status;
     int c;
     int longindex;
@@ -1020,7 +980,7 @@ int main(int argc, char **argv)
             usage();
             return 1;
         case 'i': {
-                char *endptr = NULL;
+                char *endptr = nullptr;
                 unsigned long val;
 
                 val = strtoul(optarg, &endptr, 0);
@@ -1036,7 +996,7 @@ int main(int argc, char **argv)
             long_listing = 1;
             break;
         case 'n':
-            page_size = (unsigned)strtoul(optarg, NULL, 0);
+            page_size = (unsigned)strtoul(optarg, nullptr, 0);
             if (!page_size) die("invalid page size");
             break;
         case 'p':
@@ -1058,7 +1018,7 @@ int main(int argc, char **argv)
             }
             break;
         case 'u':
-            erase_first = 0;
+            erase_first = false;
             break;
         case 'w':
             wants_wipe = 1;
@@ -1067,8 +1027,8 @@ int main(int argc, char **argv)
             return 1;
         case 0:
             if (strcmp("unbuffered", longopts[longindex].name) == 0) {
-                setvbuf(stdout, NULL, _IONBF, 0);
-                setvbuf(stderr, NULL, _IONBF, 0);
+                setvbuf(stdout, nullptr, _IONBF, 0);
+                setvbuf(stderr, nullptr, _IONBF, 0);
             } else if (strcmp("version", longopts[longindex].name) == 0) {
                 fprintf(stdout, "fastboot version %s\n", FASTBOOT_REVISION);
                 return 0;
@@ -1108,7 +1068,7 @@ int main(int argc, char **argv)
         } else if(!strcmp(*argv, "erase")) {
             require(2);
 
-            if (fb_format_supported(usb, argv[1], NULL)) {
+            if (fb_format_supported(usb, argv[1], nullptr)) {
                 fprintf(stderr, "******** Did you mean to fastboot format this partition?\n");
             }
 
@@ -1116,8 +1076,8 @@ int main(int argc, char **argv)
             skip(2);
         } else if(!strncmp(*argv, "format", strlen("format"))) {
             char *overrides;
-            char *type_override = NULL;
-            char *size_override = NULL;
+            char *type_override = nullptr;
+            char *size_override = nullptr;
             require(2);
             /*
              * Parsing for: "format[:[type][:[size]]]"
@@ -1138,8 +1098,8 @@ int main(int argc, char **argv)
                 }
                 type_override = overrides;
             }
-            if (type_override && !type_override[0]) type_override = NULL;
-            if (size_override && !size_override[0]) size_override = NULL;
+            if (type_override && !type_override[0]) type_override = nullptr;
+            if (size_override && !size_override[0]) size_override = nullptr;
             if (erase_first && needs_erase(usb, argv[1])) {
                 fb_queue_erase(argv[1]);
             }
@@ -1148,7 +1108,7 @@ int main(int argc, char **argv)
         } else if(!strcmp(*argv, "signature")) {
             require(2);
             data = load_file(argv[1], &sz);
-            if (data == 0) die("could not load '%s': %s", argv[1], strerror(errno));
+            if (data == nullptr) die("could not load '%s': %s", argv[1], strerror(errno));
             if (sz != 256) die("signature must be 256 bytes");
             fb_queue_download("signature", data, sz);
             fb_queue_command("signature", "installing signature");
@@ -1258,9 +1218,9 @@ int main(int argc, char **argv)
 
     if (wants_wipe) {
         fb_queue_erase("userdata");
-        fb_perform_format(usb, "userdata", 1, NULL, NULL);
+        fb_perform_format(usb, "userdata", 1, nullptr, nullptr);
         fb_queue_erase("cache");
-        fb_perform_format(usb, "cache", 1, NULL, NULL);
+        fb_perform_format(usb, "cache", 1, nullptr, nullptr);
     }
     if (wants_reboot) {
         fb_queue_reboot();
