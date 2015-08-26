@@ -330,10 +330,6 @@ static void *input_thread(void *_t)
         put_apacket(p);
     }
 
-    // this is necessary to avoid a race condition that occured when a transport closes
-    // while a client socket is still active.
-    close_all_sockets(t);
-
     D("%s: transport input thread is exiting, fd %d\n", t->serial, t->fd);
     kick_transport(t);
     transport_unref(t);
