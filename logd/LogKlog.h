@@ -49,6 +49,7 @@ public:
 
 protected:
     void sniffTime(log_time &now, const char **buf, bool reverse);
+    pid_t sniffPid(const char *buf);
     void calculateCorrection(const log_time &monotonic, const char *real_string);
     virtual bool onDataAvailable(SocketClient *cli);
 
