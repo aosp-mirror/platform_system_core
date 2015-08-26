@@ -108,6 +108,21 @@ LOCAL_CFLAGS := -Werror
 
 include $(BUILD_SHARED_LIBRARY)
 
+# Include subdirectory makefiles
+# ============================================================
+include $(CLEAR_VARS)
+LOCAL_MODULE := SharedBufferTest
+LOCAL_STATIC_LIBRARIES := libutils libcutils
+LOCAL_SHARED_LIBRARIES := liblog
+LOCAL_SRC_FILES := SharedBufferTest.cpp
+include $(BUILD_NATIVE_TEST)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := SharedBufferTest
+LOCAL_STATIC_LIBRARIES := libutils libcutils
+LOCAL_SHARED_LIBRARIES := liblog
+LOCAL_SRC_FILES := SharedBufferTest.cpp
+include $(BUILD_HOST_NATIVE_TEST)
 
 # Build the tests in the tests/ subdirectory.
 include $(call first-makefiles-under,$(LOCAL_PATH))
