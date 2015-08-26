@@ -77,6 +77,9 @@ Hashmap* hashmapCreate(size_t initialCapacity,
 /**
  * Hashes the given key.
  */
+#ifdef __clang__
+__attribute__((no_sanitize("integer")))
+#endif
 static inline int hashKey(Hashmap* map, void* key) {
     int h = map->hash(key);
 
@@ -152,6 +155,10 @@ void hashmapFree(Hashmap* map) {
     free(map);
 }
 
+#ifdef __clang__
+__attribute__((no_sanitize("integer")))
+#endif
+/* FIXME: relies on signed integer overflow, which is undefined behavior */
 int hashmapHash(void* key, size_t keySize) {
     int h = keySize;
     char* data = (char*) key;
