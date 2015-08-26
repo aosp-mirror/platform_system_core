@@ -118,6 +118,8 @@ LOCAL_STATIC_LIBRARIES := libcrypto_static libbase
 
 ifeq ($(HOST_OS),windows)
     LOCAL_C_INCLUDES += development/host/windows/usb/api/
+else
+    LOCAL_MULTILIB := 64
 endif
 
 include $(BUILD_HOST_STATIC_LIBRARY)
