@@ -243,6 +243,11 @@ void handle_offline(atransport *t)
     D("adb: offline\n");
     //Close the associated usb
     t->online = 0;
+
+    // This is necessary to avoid a race condition that occured when a transport closes
+    // while a client socket is still active.
+    close_all_sockets(t);
+
     run_transport_disconnects(t);
 }
 
