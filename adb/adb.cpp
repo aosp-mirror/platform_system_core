@@ -580,6 +580,105 @@ void handle_packet(apacket *p, atransport *t)
 
 #if ADB_HOST
 
+#ifdef _WIN32
+
+static bool _make_handle_noninheritable(HANDLE h) {
+    if (h != INVALID_HANDLE_VALUE && h != NULL) {
+        if (!SetHandleInformation(h, HANDLE_FLAG_INHERIT, 0)) {
+            // Show the handle value to give us a clue in case we have problems
+            // with pseudo-handle values.
+            fprintf(stderr, "Cannot make handle 0x%p non-inheritable: %s\n",
+                    h, SystemErrorCodeToString(GetLastError()).c_str());
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Create anonymous pipe, preventing inheritance of the read pipe and setting
+// security of the write pipe to sa.
+static bool _create_anonymous_pipe(unique_handle* pipe_read_out,
+                                   unique_handle* pipe_write_out,
+                                   SECURITY_ATTRIBUTES* sa) {
+    HANDLE pipe_read_raw = NULL;
+    HANDLE pipe_write_raw = NULL;
+    if (!CreatePipe(&pipe_read_raw, &pipe_write_raw, sa, 0)) {
+        fprintf(stderr, "Cannot create pipe: %s\n",
+                SystemErrorCodeToString(GetLastError()).c_str());
+        return false;
+    }
+
+    unique_handle pipe_read(pipe_read_raw);
+    pipe_read_raw = NULL;
+    unique_handle pipe_write(pipe_write_raw);
+    pipe_write_raw = NULL;
+
+    if (!_make_handle_noninheritable(pipe_read.get())) {
+        return false;
+    }
+
+    *pipe_read_out = std::move(pipe_read);
+    *pipe_write_out = std::move(pipe_write);
+
+    return true;
+}
+
+// Read from a pipe (that we take ownership of) and write what is returned to
+// GetStdHandle(nStdHandle). Return on error or when the pipe is closed.
+static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
+    // Take ownership of the HANDLE and close when we're done.
+    unique_handle   read_pipe(h);
+    const HANDLE    write_handle = GetStdHandle(nStdHandle);
+    const char*     output_name = nStdHandle == STD_OUTPUT_HANDLE ?
+                                      "stdout" : "stderr";
+
+    while (true) {
+        char    buf[64 * 1024];
+        DWORD   bytes_read = 0;
+        if (!ReadFile(read_pipe.get(), buf, sizeof(buf), &bytes_read, NULL)) {
+            const DWORD err = GetLastError();
+            // ERROR_BROKEN_PIPE is expected when the subprocess closes
+            // the other end of the pipe.
+            if (err == ERROR_BROKEN_PIPE) {
+                return EXIT_SUCCESS;
+            } else {
+                fprintf(stderr, "Failed to read from %s: %s\n", output_name,
+                        SystemErrorCodeToString(err).c_str());
+                return EXIT_FAILURE;
+            }
+        }
+
+        // Don't try to write if our stdout/stderr was not setup by the
+        // parent process.
+        if (write_handle != NULL && write_handle != INVALID_HANDLE_VALUE) {
+            DWORD   bytes_written = 0;
+            if (!WriteFile(write_handle, buf, bytes_read, &bytes_written,
+                           NULL)) {
+                fprintf(stderr, "Failed to write to %s: %s\n", output_name,
+                        SystemErrorCodeToString(GetLastError()).c_str());
+                return EXIT_FAILURE;
+            }
+
+            if (bytes_written != bytes_read) {
+                fprintf(stderr, "Only wrote %lu of %lu bytes to %s\n",
+                        bytes_written, bytes_read, output_name);
+                return EXIT_FAILURE;
+            }
+        }
+    }
+}
+
+static unsigned __stdcall _redirect_stdout_thread(HANDLE h) {
+    return _redirect_pipe_thread(h, STD_OUTPUT_HANDLE);
+}
+
+static unsigned __stdcall _redirect_stderr_thread(HANDLE h) {
+    return _redirect_pipe_thread(h, STD_ERROR_HANDLE);
+}
+
+#endif
+
 int launch_server(int server_port)
 {
 #if defined(_WIN32)
@@ -587,58 +686,42 @@ int launch_server(int server_port)
     /* we create a PIPE that will be used to wait for the server's "OK" */
     /* message since the pipe handles must be inheritable, we use a     */
     /* security attribute                                               */
-    HANDLE                nul_read, nul_write;
-    HANDLE                pipe_read, pipe_write;
-    HANDLE                stdout_handle, stderr_handle;
     SECURITY_ATTRIBUTES   sa;
-    STARTUPINFOW          startup;
-    PROCESS_INFORMATION   pinfo;
-    WCHAR                 program_path[ MAX_PATH ];
-    int                   ret;
-
     sa.nLength = sizeof(sa);
     sa.lpSecurityDescriptor = NULL;
     sa.bInheritHandle = TRUE;
 
-    /* Redirect stdin and stderr to Windows /dev/null. If we instead pass our
-     * stdin/stderr handles and they are console handles, when the adb server
-     * starts up, the C Runtime will see console handles for a process that
-     * isn't connected to a console and it will configure stderr to be closed.
-     * At that point, freopen() could be used to reopen stderr, but it would
-     * take more massaging to fixup the file descriptor number that freopen()
-     * uses. It's simplest to avoid all of this complexity by just redirecting
-     * stdin/stderr to `nul' and then the C Runtime acts as expected.
-     */
-    nul_read = CreateFileW(L"nul", GENERIC_READ,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
-                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (nul_read == INVALID_HANDLE_VALUE) {
-        fprintf(stderr, "CreateFileW(nul, GENERIC_READ) failed: %s\n",
+    // Redirect stdin to Windows /dev/null. If we instead pass an original
+    // stdin/stdout/stderr handle and it is a console handle, when the adb
+    // server starts up, the C Runtime will see a console handle for a process
+    // that isn't connected to a console and it will configure
+    // stdin/stdout/stderr to be closed. At that point, freopen() could be used
+    // to reopen stderr/out, but it would take more massaging to fixup the file
+    // descriptor number that freopen() uses. It's simplest to avoid all of this
+    // complexity by just redirecting stdin to `nul' and then the C Runtime acts
+    // as expected.
+    unique_handle   nul_read(CreateFileW(L"nul", GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL, NULL));
+    if (nul_read.get() == INVALID_HANDLE_VALUE) {
+        fprintf(stderr, "Cannot open 'nul': %s\n",
                 SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
 
-    nul_write = CreateFileW(L"nul", GENERIC_WRITE,
-                            FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
-                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (nul_write == INVALID_HANDLE_VALUE) {
-        fprintf(stderr, "CreateFileW(nul, GENERIC_WRITE) failed: %s\n",
-                SystemErrorCodeToString(GetLastError()).c_str());
-        CloseHandle(nul_read);
+    // create pipes with non-inheritable read handle, inheritable write handle
+    unique_handle   ack_read, ack_write;
+    if (!_create_anonymous_pipe(&ack_read, &ack_write, &sa)) {
         return -1;
     }
-
-    /* create pipe, and ensure its read handle isn't inheritable */
-    ret = CreatePipe( &pipe_read, &pipe_write, &sa, 0 );
-    if (!ret) {
-        fprintf(stderr, "CreatePipe() failed: %s\n",
-                SystemErrorCodeToString(GetLastError()).c_str());
-        CloseHandle(nul_read);
-        CloseHandle(nul_write);
+    unique_handle   stdout_read, stdout_write;
+    if (!_create_anonymous_pipe(&stdout_read, &stdout_write, &sa)) {
         return -1;
     }
-
-    SetHandleInformation( pipe_read, HANDLE_FLAG_INHERIT, 0 );
+    unique_handle   stderr_read, stderr_write;
+    if (!_create_anonymous_pipe(&stderr_read, &stderr_write, &sa)) {
+        return -1;
+    }
 
     /* Some programs want to launch an adb command and collect its output by
      * calling CreateProcess with inheritable stdout/stderr handles, then
@@ -650,52 +733,64 @@ int launch_server(int server_port)
      * the calling process is stuck while read()-ing from the stdout/stderr
      * descriptors, because they're connected to corresponding handles in the
      * adb server process (even if the latter never uses/writes to them).
+     * Note that even if we don't pass these handles in the STARTUPINFO struct,
+     * if they're marked inheritable, they're still inherited, requiring us to
+     * deal with this.
+     *
+     * If we're still having problems with inheriting random handles in the
+     * future, consider using PROC_THREAD_ATTRIBUTE_HANDLE_LIST to explicitly
+     * specify which handles should be inherited: http://blogs.msdn.com/b/oldnewthing/archive/2011/12/16/10248328.aspx
      */
-    stdout_handle = GetStdHandle( STD_OUTPUT_HANDLE );
-    stderr_handle = GetStdHandle( STD_ERROR_HANDLE );
-    if (stdout_handle != INVALID_HANDLE_VALUE) {
-        SetHandleInformation( stdout_handle, HANDLE_FLAG_INHERIT, 0 );
+    if (!_make_handle_noninheritable(GetStdHandle(STD_INPUT_HANDLE))) {
+        return -1;
     }
-    if (stderr_handle != INVALID_HANDLE_VALUE) {
-        SetHandleInformation( stderr_handle, HANDLE_FLAG_INHERIT, 0 );
+    if (!_make_handle_noninheritable(GetStdHandle(STD_OUTPUT_HANDLE))) {
+        return -1;
+    }
+    if (!_make_handle_noninheritable(GetStdHandle(STD_ERROR_HANDLE))) {
+        return -1;
     }
 
+    STARTUPINFOW    startup;
     ZeroMemory( &startup, sizeof(startup) );
     startup.cb = sizeof(startup);
-    startup.hStdInput  = nul_read;
-    startup.hStdOutput = nul_write;
-    startup.hStdError  = nul_write;
+    startup.hStdInput  = nul_read.get();
+    startup.hStdOutput = stdout_write.get();
+    startup.hStdError  = stderr_write.get();
     startup.dwFlags    = STARTF_USESTDHANDLES;
 
-    ZeroMemory( &pinfo, sizeof(pinfo) );
+    // Verify that the pipe_write handle value can be passed on the command line
+    // as %d and that the rest of adb code can pass it around in an int.
+    const int ack_write_as_int = cast_handle_to_int(ack_write.get());
+    if (cast_int_to_handle(ack_write_as_int) != ack_write.get()) {
+        // If this fires, either handle values are larger than 32-bits or else
+        // there is a bug in our casting.
+        // https://msdn.microsoft.com/en-us/library/windows/desktop/aa384203%28v=vs.85%29.aspx
+        fprintf(stderr, "Cannot fit pipe handle value into 32-bits: 0x%p\n",
+                ack_write.get());
+        return -1;
+    }
 
-    /* get path of current program */
-    DWORD module_result = GetModuleFileNameW(NULL, program_path,
-                                             arraysize(program_path));
-    if ((module_result == arraysize(program_path)) || (module_result == 0)) {
+    // get path of current program
+    WCHAR       program_path[MAX_PATH];
+    const DWORD module_result = GetModuleFileNameW(NULL, program_path,
+                                                   arraysize(program_path));
+    if ((module_result >= arraysize(program_path)) || (module_result == 0)) {
         // String truncation or some other error.
-        fprintf(stderr, "GetModuleFileNameW() failed: %s\n",
+        fprintf(stderr, "Cannot get executable path: %s\n",
                 SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
 
-    // Verify that the pipe_write handle value can be passed on the command line
-    // as %d and that the rest of adb code can pass it around in an int.
-    const int pipe_write_as_int = cast_handle_to_int(pipe_write);
-    if (cast_int_to_handle(pipe_write_as_int) != pipe_write) {
-        // If this fires, either handle values are larger than 32-bits or else
-        // there is a bug in our casting.
-        // https://msdn.microsoft.com/en-us/library/windows/desktop/aa384203%28v=vs.85%29.aspx
-        fprintf(stderr, "CreatePipe handle value too large: 0x%p\n",
-                pipe_write);
-        return -1;
-    }
-
-    WCHAR args[64];
+    WCHAR   args[64];
     snwprintf(args, arraysize(args),
               L"adb -P %d fork-server server --reply-fd %d", server_port,
-              pipe_write_as_int);
-    ret = CreateProcessW(
+              ack_write_as_int);
+
+    PROCESS_INFORMATION   pinfo;
+    ZeroMemory(&pinfo, sizeof(pinfo));
+
+    if (!CreateProcessW(
             program_path,                              /* program path  */
             args,
                                     /* the fork-server argument will set the
@@ -707,38 +802,113 @@ int launch_server(int server_port)
             NULL,                     /* use parent's environment block */
             NULL,                    /* use parent's starting directory */
             &startup,                 /* startup info, i.e. std handles */
-            &pinfo );
-
-    CloseHandle( nul_read );
-    CloseHandle( nul_write );
-    CloseHandle( pipe_write );
-
-    if (!ret) {
-        fprintf(stderr, "CreateProcess failed: %s\n",
+            &pinfo )) {
+        fprintf(stderr, "Cannot create process: %s\n",
                 SystemErrorCodeToString(GetLastError()).c_str());
-        CloseHandle( pipe_read );
         return -1;
     }
 
-    CloseHandle( pinfo.hProcess );
-    CloseHandle( pinfo.hThread );
+    unique_handle   process_handle(pinfo.hProcess);
+    pinfo.hProcess = NULL;
 
-    /* wait for the "OK\n" message */
+    // Close handles that we no longer need to complete the rest.
+    CloseHandle(pinfo.hThread);
+    pinfo.hThread = NULL;
+
+    nul_read.reset();
+    ack_write.reset();
+    stdout_write.reset();
+    stderr_write.reset();
+
+    // Start threads to read from subprocess stdout/stderr and write to ours
+    // to make subprocess errors easier to diagnose.
+
+    // In the past, reading from a pipe before the child process's C Runtime
+    // started up and called GetFileType() caused a hang: http://blogs.msdn.com/b/oldnewthing/archive/2011/12/02/10243553.aspx#10244216
+    // This is reportedly fixed in Windows Vista: https://support.microsoft.com/en-us/kb/2009703
+    // I was unable to reproduce the problem on Windows XP. It sounds like a
+    // Windows Update may have fixed this: https://www.duckware.com/tech/peeknamedpipe.html
+    unique_handle   stdout_thread(reinterpret_cast<HANDLE>(
+            _beginthreadex(NULL, 0, _redirect_stdout_thread, stdout_read.get(),
+                           0, NULL)));
+    if (stdout_thread.get() == nullptr) {
+        fprintf(stderr, "Cannot create thread: %s\n", strerror(errno));
+        return -1;
+    }
+    stdout_read.release();  // Transfer ownership to new thread
+
+    unique_handle   stderr_thread(reinterpret_cast<HANDLE>(
+            _beginthreadex(NULL, 0, _redirect_stderr_thread, stderr_read.get(),
+                           0, NULL)));
+    if (stderr_thread.get() == nullptr) {
+        fprintf(stderr, "Cannot create thread: %s\n", strerror(errno));
+        return -1;
+    }
+    stderr_read.release();  // Transfer ownership to new thread
+
+    bool    got_ack = false;
+
+    // Wait for the "OK\n" message, for the pipe to be closed, or other error.
     {
-        char  temp[3];
-        DWORD  count;
+        char    temp[3];
+        DWORD   count = 0;
 
-        ret = ReadFile( pipe_read, temp, 3, &count, NULL );
-        CloseHandle( pipe_read );
-        if ( !ret ) {
-            fprintf(stderr, "could not read ok from ADB Server, error: %s\n",
-                    SystemErrorCodeToString(GetLastError()).c_str());
-            return -1;
+        if (ReadFile(ack_read.get(), temp, sizeof(temp), &count, NULL)) {
+            const CHAR  expected[] = "OK\n";
+            const DWORD expected_length = arraysize(expected) - 1;
+            if (count == expected_length &&
+                memcmp(temp, expected, expected_length) == 0) {
+                got_ack = true;
+            } else {
+                fprintf(stderr, "ADB server didn't ACK\n");
+            }
+        } else {
+            const DWORD err = GetLastError();
+            // If the ACK was not written and the process exited, GetLastError()
+            // is probably ERROR_BROKEN_PIPE, in which case that info is not
+            // useful to the user.
+            fprintf(stderr, "could not read ok from ADB Server%s\n",
+                    err == ERROR_BROKEN_PIPE ? "" :
+                    android::base::StringPrintf(": %s",
+                            SystemErrorCodeToString(err).c_str()).c_str());
         }
-        if (count != 3 || temp[0] != 'O' || temp[1] != 'K' || temp[2] != '\n') {
-            fprintf(stderr, "ADB server didn't ACK\n" );
-            return -1;
+    }
+
+    // Always try to wait a bit for threads reading stdout/stderr to finish.
+    // If the process started ok, it should close the pipes causing the threads
+    // to finish. If the process had an error, it should exit, also causing
+    // the pipes to be closed. In that case we want to read all of the output
+    // and write it out so that the user can diagnose failures.
+    const DWORD     thread_timeout_ms = 15 * 1000;
+    const HANDLE    threads[] = { stdout_thread.get(), stderr_thread.get() };
+    const DWORD     wait_result = WaitForMultipleObjects(arraysize(threads),
+            threads, TRUE, thread_timeout_ms);
+    if (wait_result == WAIT_TIMEOUT) {
+        // Threads did not finish after waiting a little while. Perhaps the
+        // server didn't close pipes, or it is hung.
+        fprintf(stderr, "Timed-out waiting for threads to finish reading from "
+                "ADB Server\n");
+        // Process handles are signaled when the process exits, so if we wait
+        // on the handle for 0 seconds and it returns 'timeout', that means that
+        // the process is still running.
+        if (WaitForSingleObject(process_handle.get(), 0) == WAIT_TIMEOUT) {
+            // We could TerminateProcess(), but that seems somewhat presumptive.
+            fprintf(stderr, "ADB Server is running: process id %lu\n",
+                    pinfo.dwProcessId);
         }
+        return -1;
+    }
+
+    if (wait_result != WAIT_OBJECT_0) {
+        fprintf(stderr, "Unexpected result waiting for threads: %lu: %s\n",
+                wait_result, SystemErrorCodeToString(GetLastError()).c_str());
+        return -1;
+    }
+
+    // For now ignore the thread exit codes and assume they worked properly.
+
+    if (!got_ack) {
+        return -1;
     }
 #else /* !defined(_WIN32) */
     char    path[PATH_MAX];
