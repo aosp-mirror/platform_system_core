@@ -48,7 +48,7 @@ static char *is_prio(char *s) {
     char c;
     while (((c = *s++)) && (++len <= max_prio_len)) {
         if (!isdigit(c)) {
-            return (c == '>') ? s : NULL;
+            return ((c == '>') && (*s == '[')) ? s : NULL;
         }
     }
     return NULL;
@@ -294,6 +294,22 @@ void LogKlog::sniffTime(log_time &now, const char **buf, bool reverse) {
     }
 }
 
+pid_t LogKlog::sniffPid(const char *cp) {
+    while (*cp) {
+        // Mediatek kernels with modified printk
+        if (*cp == '[') {
+            int pid = 0;
+            char dummy;
+            if (sscanf(cp, "[%d:%*[a-z_./0-9:A-Z]]%c", &pid, &dummy) == 2) {
+                return pid;
+            }
+            break; // Only the first one
+        }
+        ++cp;
+    }
+    return 0;
+}
+
 // Passed the entire SYSLOG_ACTION_READ_ALL buffer and interpret a
 // compensated start time.
 void LogKlog::synchronize(const char *buf) {
@@ -417,9 +433,9 @@ int LogKlog::log(const char *buf) {
 
     // sniff for start marker
     const char klogd_message[] = "logd.klogd: ";
-    if (!strncmp(buf, klogd_message, sizeof(klogd_message) - 1)) {
-        char *endp;
-        uint64_t sig = strtoll(buf + sizeof(klogd_message) - 1, &endp, 10);
+    const char *start = strstr(buf, klogd_message);
+    if (start) {
+        uint64_t sig = strtoll(start + sizeof(klogd_message) - 1, NULL, 10);
         if (sig == signature.nsec()) {
             if (initialized) {
                 enableLogging = true;
@@ -435,10 +451,10 @@ int LogKlog::log(const char *buf) {
         return 0;
     }
 
-    // Parse pid, tid and uid (not possible)
-    const pid_t pid = 0;
-    const pid_t tid = 0;
-    const uid_t uid = 0;
+    // Parse pid, tid and uid
+    const pid_t pid = sniffPid(buf);
+    const pid_t tid = pid;
+    const uid_t uid = pid ? logbuf->pidToUid(pid) : 0;
 
     // Parse (rules at top) to pull out a tag from the incoming kernel message.
     // Some may view the following as an ugly heuristic, the desire is to
@@ -450,7 +466,7 @@ int LogKlog::log(const char *buf) {
     if (!*buf) {
         return 0;
     }
-    const char *start = buf;
+    start = buf;
     const char *tag = "";
     const char *etag = tag;
     if (!isspace(*buf)) {
@@ -461,7 +477,14 @@ int LogKlog::log(const char *buf) {
             // <PRI>[<TIME>] "[INFO]"<tag> ":" message
             bt = buf + 6;
         }
-        for(et = bt; *et && (*et != ':') && !isspace(*et); ++et);
+        for(et = bt; *et && (*et != ':') && !isspace(*et); ++et) {
+           // skip ':' within [ ... ]
+           if (*et == '[') {
+               while (*et && *et != ']') {
+                   ++et;
+               }
+            }
+        }
         for(cp = et; isspace(*cp); ++cp);
         size_t size;
 
@@ -557,7 +580,17 @@ int LogKlog::log(const char *buf) {
             etag = tag = "";
         }
     }
-    size_t l = etag - tag;
+    // Suppress additional stutter in tag:
+    //   eg: [143:healthd]healthd -> [143:healthd]
+    size_t taglen = etag - tag;
+    // Mediatek-special printk induced stutter
+    char *np = strrchr(tag, ']');
+    if (np && (++np < etag)) {
+        size_t s = etag - np;
+        if (((s + s) < taglen) && !strncmp(np, np - 1 - s, s)) {
+            taglen = np - tag;
+        }
+    }
     // skip leading space
     while (isspace(*buf)) {
         ++buf;
@@ -568,11 +601,11 @@ int LogKlog::log(const char *buf) {
         --b;
     }
     // trick ... allow tag with empty content to be logged. log() drops empty
-    if (!b && l) {
+    if (!b && taglen) {
         buf = " ";
         b = 1;
     }
-    size_t n = 1 + l + 1 + b + 1;
+    size_t n = 1 + taglen + 1 + b + 1;
 
     // Allocate a buffer to hold the interpreted log message
     int rc = n;
@@ -581,15 +614,15 @@ int LogKlog::log(const char *buf) {
         rc = -ENOMEM;
         return rc;
     }
-    char *np = newstr;
+    np = newstr;
 
     // Convert priority into single-byte Android logger priority
     *np = convertKernelPrioToAndroidPrio(pri);
     ++np;
 
     // Copy parsed tag following priority
-    strncpy(np, tag, l);
-    np += l;
+    strncpy(np, tag, taglen);
+    np += taglen;
     *np = '\0';
     ++np;
 
