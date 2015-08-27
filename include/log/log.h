@@ -563,6 +563,12 @@ typedef enum {
 #define android_btWriteLog(tag, type, payload, len) \
     __android_log_btwrite(tag, type, payload, len)
 
+#define android_errorWriteLog(tag, subTag) \
+    __android_log_error_write(tag, subTag, -1, NULL, 0)
+
+#define android_errorWriteWithInfoLog(tag, subTag, uid, data, dataLen) \
+    __android_log_error_write(tag, subTag, uid, data, dataLen)
+
 /*
  *    IF_ALOG uses android_testLog, but IF_ALOG can be overridden.
  *    android_testLog will remain constant in its purpose as a wrapper
@@ -611,6 +617,9 @@ typedef enum log_id {
  * result of non-zero to expose a log.
  */
 int __android_log_is_loggable(int prio, const char *tag, int def);
+
+int __android_log_error_write(int tag, const char *subTag, int32_t uid, const char *data,
+                              uint32_t dataLen);
 
 /*
  * Send a simple string to the log.
