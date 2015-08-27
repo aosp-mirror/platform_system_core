@@ -24,7 +24,7 @@ include $(CLEAR_VARS)
 # so make sure we do not regret hard-coding it as follows:
 liblog_cflags := -DLIBLOG_LOG_TAG=1005
 
-liblog_sources := logd_write.c
+liblog_sources := logd_write.c log_event_write.c
 
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
