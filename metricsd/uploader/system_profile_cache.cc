@@ -21,7 +21,7 @@
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
 #include <base/strings/string_util.h>
-#include <base/sys_info.h>
+#include <cutils/properties.h>
 #include <string>
 #include <vector>
 
@@ -73,21 +73,28 @@ bool SystemProfileCache::Initialize() {
   CHECK(!initialized_)
       << "this should be called only once in the metrics_daemon lifetime.";
 
-  if (!base::SysInfo::GetLsbReleaseValue("BRILLO_BUILD_TARGET_ID",
-                                         &profile_.build_target_id)) {
-    LOG(ERROR) << "BRILLO_BUILD_TARGET_ID is not set in /etc/lsb-release.";
+  char property_value[PROPERTY_VALUE_MAX];
+  property_get(metrics::kBuildTargetIdProperty, property_value, "");
+  profile_.build_target_id = std::string(property_value);
+
+  if (profile_.build_target_id.empty()) {
+    LOG(ERROR) << "System property " << metrics::kBuildTargetIdProperty
+               << " is not set.";
     return false;
   }
 
-  std::string channel;
-  if (!base::SysInfo::GetLsbReleaseValue("BRILLO_CHANNEL", &channel) ||
-      !base::SysInfo::GetLsbReleaseValue("BRILLO_VERSION", &profile_.version)) {
+  property_get(metrics::kChannelProperty, property_value, "");
+  std::string channel(property_value);
+
+  property_get(metrics::kProductVersionProperty, property_value, "");
+  profile_.version = std::string(property_value);
+
+  if (channel.empty() || profile_.version.empty()) {
     // If the channel or version is missing, the image is not official.
     // In this case, set the channel to unknown and the version to 0.0.0.0 to
     // avoid polluting the production data.
     channel = "";
     profile_.version = metrics::kDefaultVersion;
-
   }
   profile_.client_id =
       testing_ ? "client_id_test" :
