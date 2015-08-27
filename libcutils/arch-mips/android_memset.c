@@ -30,6 +30,9 @@
 
 #include <cutils/memory.h>
 
+#ifdef __clang__
+__attribute__((no_sanitize("integer")))
+#endif
 void android_memset16(uint16_t* dst, uint16_t value, size_t size)
 {
    /* optimized version of
@@ -54,6 +57,9 @@ void android_memset16(uint16_t* dst, uint16_t value, size_t size)
 }
 
 
+#ifdef __clang__
+__attribute__((no_sanitize("integer")))
+#endif
 void android_memset32(uint32_t* dst, uint32_t value, size_t size)
 {
    /* optimized version of
@@ -86,7 +92,8 @@ void android_memset32(uint32_t* dst, uint32_t value, size_t size)
 
    /* fill remainder with original 32-bit single-elem loop */
    dst = (uint32_t*) dst64;
-   while (size--) {
+   while (size != 0) {
+       size--;
       *dst++ = value;
    }
 
