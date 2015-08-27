@@ -972,8 +972,7 @@ int handle_host_request(const char* service, TransportType type,
     if (!strncmp(service, "disconnect:", 11)) {
         const std::string address(service + 11);
         if (address.empty()) {
-            // disconnect from all TCP devices
-            unregister_all_tcp_transports();
+            kick_all_tcp_devices();
             return SendOkay(reply_fd, "disconnected everything");
         }
 
@@ -990,7 +989,7 @@ int handle_host_request(const char* service, TransportType type,
             return SendFail(reply_fd, android::base::StringPrintf("no such device '%s'",
                                                                   serial.c_str()));
         }
-        unregister_transport(t);
+        kick_transport(t);
         return SendOkay(reply_fd, android::base::StringPrintf("disconnected %s", address.c_str()));
     }
 
