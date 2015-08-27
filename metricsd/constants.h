@@ -24,6 +24,11 @@ static const char kMetricsGUIDFilePath[] = "/data/misc/metrics/Sysinfo.GUID";
 static const char kMetricsServer[] = "https://clients4.google.com/uma/v2";
 static const char kConsentFilePath[] = "/data/misc/metrics/enabled";
 static const char kDefaultVersion[] = "0.0.0.0";
+
+// System properties used.
+static const char kBuildTargetIdProperty[] = "ro.product.build_target_id";
+static const char kChannelProperty[] = "ro.product.channel";
+static const char kProductVersionProperty[] = "ro.product.version";
 }  // namespace metrics
 
 #endif  // METRICS_CONSTANTS_H_
