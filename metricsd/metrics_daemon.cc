@@ -32,7 +32,7 @@
 #include <base/strings/string_split.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
-#include <base/sys_info.h>
+#include <cutils/properties.h>
 #include <dbus/dbus.h>
 #include <dbus/message.h>
 
@@ -209,10 +209,13 @@ uint32_t MetricsDaemon::GetOsVersionHash() {
   if (version_hash_is_cached)
     return cached_version_hash;
   version_hash_is_cached = true;
-  std::string version = metrics::kDefaultVersion;
+
+  char version[PROPERTY_VALUE_MAX];
   // The version might not be set for development devices. In this case, use the
   // zero version.
-  base::SysInfo::GetLsbReleaseValue("BRILLO_VERSION", &version);
+  property_get(metrics::kProductVersionProperty, version,
+               metrics::kDefaultVersion);
+
   cached_version_hash = base::Hash(version);
   if (testing_) {
     cached_version_hash = 42;  // return any plausible value for the hash
