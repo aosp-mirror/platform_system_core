@@ -471,14 +471,6 @@ static asocket *create_host_service_socket(const char *name, const char* serial)
 }
 #endif /* ADB_HOST */
 
-/* a Remote socket is used to send/receive data to/from a given transport object
-** it needs to be closed when the transport is forcibly destroyed by the user
-*/
-struct aremotesocket {
-    asocket      socket;
-    adisconnect  disconnect;
-};
-
 static int remote_socket_enqueue(asocket *s, apacket *p)
 {
     D("entered remote_socket_enqueue RS(%d) WRITE fd=%d peer.fd=%d\n",
@@ -526,33 +518,17 @@ static void remote_socket_close(asocket *s)
     D("entered remote_socket_close RS(%d) CLOSE fd=%d peer->fd=%d\n",
       s->id, s->fd, s->peer?s->peer->fd:-1);
     D("RS(%d): closed\n", s->id);
-    remove_transport_disconnect( s->transport, &((aremotesocket*)s)->disconnect );
     free(s);
 }
 
-static void remote_socket_disconnect(void*  _s, atransport*  t)
-{
-    asocket* s = reinterpret_cast<asocket*>(_s);
-    asocket* peer = s->peer;
-
-    D("remote_socket_disconnect RS(%d)\n", s->id);
-    if (peer) {
-        peer->peer = NULL;
-        peer->close(peer);
-    }
-    remove_transport_disconnect( s->transport, &((aremotesocket*)s)->disconnect );
-    free(s);
-}
-
-/* Create an asocket to exchange packets with a remote service through transport
-  |t|. Where |id| is the socket id of the corresponding service on the other
-   side of the transport (it is allocated by the remote side and _cannot_ be 0).
-   Returns a new non-NULL asocket handle. */
+// Create a remote socket to exchange packets with a remote service through transport
+// |t|. Where |id| is the socket id of the corresponding service on the other
+//  side of the transport (it is allocated by the remote side and _cannot_ be 0).
+// Returns a new non-NULL asocket handle.
 asocket *create_remote_socket(unsigned id, atransport *t)
 {
     if (id == 0) fatal("invalid remote socket id (0)");
-    asocket* s = reinterpret_cast<asocket*>(calloc(1, sizeof(aremotesocket)));
-    adisconnect* dis = &reinterpret_cast<aremotesocket*>(s)->disconnect;
+    asocket* s = reinterpret_cast<asocket*>(calloc(1, sizeof(asocket)));
 
     if (s == NULL) fatal("cannot allocate socket");
     s->id = id;
@@ -562,9 +538,6 @@ asocket *create_remote_socket(unsigned id, atransport *t)
     s->close = remote_socket_close;
     s->transport = t;
 
-    dis->func   = remote_socket_disconnect;
-    dis->opaque = s;
-    add_transport_disconnect( t, dis );
     D("RS(%d): created\n", s->id);
     return s;
 }
