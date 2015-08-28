@@ -248,6 +248,7 @@ LOCAL_SRC_FILES := \
     framebuffer_service.cpp \
     remount_service.cpp \
     set_verity_enable_state_service.cpp \
+    shell_service.cpp \
 
 LOCAL_CFLAGS := \
     $(ADB_COMMON_CFLAGS) \

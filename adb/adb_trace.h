@@ -37,6 +37,7 @@ enum AdbTrace {
     TRACE_SERVICES,
     TRACE_AUTH,
     TRACE_FDEVENT,
+    TRACE_SHELL
 };
 
 extern int adb_trace_mask;
