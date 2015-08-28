@@ -374,6 +374,8 @@ static void *stdin_read_thread(void *x)
     fdi = fds[1];
     free(fds);
 
+    adb_thread_setname("stdin reader");
+
     while (true) {
         /* fdi is really the client's stdin, so use read, not adb_read here */
         D("stdin_read_thread(): pre unix_read(fdi=%d,...)\n", fdi);

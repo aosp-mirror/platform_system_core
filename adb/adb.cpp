@@ -670,10 +670,12 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
 }
 
 static unsigned __stdcall _redirect_stdout_thread(HANDLE h) {
+    adb_thread_setname("stdout redirect");
     return _redirect_pipe_thread(h, STD_OUTPUT_HANDLE);
 }
 
 static unsigned __stdcall _redirect_stderr_thread(HANDLE h) {
+    adb_thread_setname("stderr redirect");
     return _redirect_pipe_thread(h, STD_ERROR_HANDLE);
 }
 

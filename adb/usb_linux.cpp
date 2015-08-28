@@ -572,6 +572,7 @@ static void register_device(const char* dev_name, const char* dev_path,
 }
 
 static void* device_poll_thread(void* unused) {
+    adb_thread_setname("device poll");
     D("Created device thread\n");
     while (true) {
         // TODO: Use inotify.
