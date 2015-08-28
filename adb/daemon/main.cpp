@@ -35,7 +35,6 @@
 #include "adb_auth.h"
 #include "adb_listeners.h"
 #include "transport.h"
-#include "qemu_tracing.h"
 
 static const char* root_seclabel = nullptr;
 
@@ -261,10 +260,6 @@ int main(int argc, char** argv) {
     close_stdin();
 
     adb_trace_init(argv);
-
-    /* If adbd runs inside the emulator this will enable adb tracing via
-     * adb-debug qemud service in the emulator. */
-    adb_qemu_trace_init();
 
     D("Handling main()\n");
     return adbd_main(DEFAULT_ADB_PORT);
