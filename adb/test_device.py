@@ -215,12 +215,18 @@ class ArgumentEscapingTest(DeviceTest):
     def test_install_argument_escaping(self):
         """Make sure that install argument escaping works."""
         # http://b/20323053
-        tf = tempfile.NamedTemporaryFile('wb', suffix='-text;ls;1.apk')
+        tf = tempfile.NamedTemporaryFile('wb', suffix='-text;ls;1.apk',
+                                         delete=False)
+        tf.close()
         self.assertIn("-text;ls;1.apk", self.device.install(tf.name))
+        os.remove(tf.name)
 
         # http://b/3090932
-        tf = tempfile.NamedTemporaryFile('wb', suffix="-Live Hold'em.apk")
+        tf = tempfile.NamedTemporaryFile('wb', suffix="-Live Hold'em.apk",
+                                         delete=False)
+        tf.close()
         self.assertIn("-Live Hold'em.apk", self.device.install(tf.name))
+        os.remove(tf.name)
 
 
 class RootUnrootTest(DeviceTest):
