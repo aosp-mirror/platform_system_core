@@ -22,7 +22,7 @@
 #include <list>
 #include <string.h>
 
-#include <LogBufferElement.h>
+#include "LogBufferElement.h"
 
 // White and Blacklist
 
