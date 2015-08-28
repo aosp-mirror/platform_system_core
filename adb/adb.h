@@ -157,8 +157,6 @@ struct  adisconnect
 {
     void        (*func)(void*  opaque, atransport*  t);
     void*         opaque;
-    adisconnect*  next;
-    adisconnect*  prev;
 };
 
 
