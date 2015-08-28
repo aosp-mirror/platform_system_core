@@ -572,7 +572,7 @@ void queue_property_triggers(const char *name, const char *value)
 
     list_for_each(node, &action_list) {
         act = node_to_item(node, struct action, alist);
-            match = !name;
+        match = !name;
         list_for_each(node2, &act->triggers) {
             cur_trigger = node_to_item(node2, struct trigger, nlist);
             if (!strncmp(cur_trigger->name, "property:", strlen("property:"))) {
@@ -586,29 +586,28 @@ void queue_property_triggers(const char *name, const char *value)
                         match = true;
                         continue;
                     }
-                } else {
-                     const char* equals = strchr(test, '=');
-                     if (equals) {
-                         char prop_name[PROP_NAME_MAX + 1];
-                         char value[PROP_VALUE_MAX];
-                         int length = equals - test;
-                         if (length <= PROP_NAME_MAX) {
-                             int ret;
-                             memcpy(prop_name, test, length);
-                             prop_name[length] = 0;
+                }
+                const char* equals = strchr(test, '=');
+                if (equals) {
+                    char prop_name[PROP_NAME_MAX + 1];
+                    char value[PROP_VALUE_MAX];
+                    int length = equals - test;
+                    if (length <= PROP_NAME_MAX) {
+                        int ret;
+                        memcpy(prop_name, test, length);
+                        prop_name[length] = 0;
 
-                             /* does the property exist, and match the trigger value? */
-                             ret = property_get(prop_name, value);
-                             if (ret > 0 && (!strcmp(equals + 1, value) ||
-                                !strcmp(equals + 1, "*"))) {
-                                 continue;
-                             }
-                         }
-                     }
-                 }
-             }
-             match = false;
-             break;
+                        /* does the property exist, and match the trigger value? */
+                        ret = property_get(prop_name, value);
+                        if (ret > 0 && (!strcmp(equals + 1, value) ||
+                                        !strcmp(equals + 1, "*"))) {
+                            continue;
+                        }
+                    }
+                }
+            }
+            match = false;
+            break;
         }
         if (match) {
             action_add_queue_tail(act);
