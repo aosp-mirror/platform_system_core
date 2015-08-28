@@ -457,19 +457,24 @@ class FileOperationsTest(DeviceTest):
 
     def test_unicode_paths(self):
         """Ensure that we can support non-ASCII paths, even on Windows."""
-        name = u'로보카 폴리'.encode('utf-8')
+        name = u'로보카 폴리'
 
         ## push.
-        tf = tempfile.NamedTemporaryFile('wb', suffix=name)
-        self.device.push(tf.name, '/data/local/tmp/adb-test-{}'.format(name))
+        tf = tempfile.NamedTemporaryFile('wb', suffix=name, delete=False)
+        tf.close()
+        self.device.push(tf.name, u'/data/local/tmp/adb-test-{}'.format(name))
+        os.remove(tf.name)
         self.device.shell(['rm', '-f', '/data/local/tmp/adb-test-*'])
 
         # pull.
-        cmd = ['touch', '"/data/local/tmp/adb-test-{}"'.format(name)]
+        cmd = ['touch', u'"/data/local/tmp/adb-test-{}"'.format(name)]
         self.device.shell(cmd)
 
-        tf = tempfile.NamedTemporaryFile('wb', suffix=name)
-        self.device.pull('/data/local/tmp/adb-test-{}'.format(name), tf.name)
+        tf = tempfile.NamedTemporaryFile('wb', suffix=name, delete=False)
+        tf.close()
+        self.device.pull(u'/data/local/tmp/adb-test-{}'.format(name), tf.name)
+        os.remove(tf.name)
+        self.device.shell(['rm', '-f', '/data/local/tmp/adb-test-*'])
 
 
 def main():
