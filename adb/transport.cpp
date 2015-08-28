@@ -536,8 +536,6 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
         transport_list.remove(t);
         adb_mutex_unlock(&transport_lock);
 
-        run_transport_disconnects(t);
-
         if (t->product)
             free(t->product);
         if (t->serial)
