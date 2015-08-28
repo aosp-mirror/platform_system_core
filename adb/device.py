@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import subprocess
+import tempfile
 
 
 class FindDeviceError(RuntimeError):
@@ -99,6 +100,36 @@ def get_device(serial=None, product=None):
 
     return _get_unique_device(product)
 
+# Call this instead of subprocess.check_output() to work-around issue in Python
+# 2's subprocess class on Windows where it doesn't support Unicode. This
+# writes the command line to a UTF-8 batch file that is properly interpreted
+# by cmd.exe.
+def _subprocess_check_output(*popenargs, **kwargs):
+    # Only do this slow work-around if Unicode is in the cmd line.
+    if (os.name == 'nt' and
+            any(isinstance(arg, unicode) for arg in popenargs[0])):
+        # cmd.exe requires a suffix to know that it is running a batch file
+        tf = tempfile.NamedTemporaryFile('wb', suffix='.cmd', delete=False)
+        # @ in batch suppresses echo of the current line.
+        # Change the codepage to 65001, the UTF-8 codepage.
+        tf.write('@chcp 65001 > nul\r\n')
+        tf.write('@')
+        # Properly quote all the arguments and encode in UTF-8.
+        tf.write(subprocess.list2cmdline(popenargs[0]).encode('utf-8'))
+        tf.close()
+
+        try:
+            result = subprocess.check_output(['cmd.exe', '/c', tf.name],
+                                             **kwargs)
+        except subprocess.CalledProcessError as e:
+            # Show real command line instead of the cmd.exe command line.
+            raise subprocess.CalledProcessError(e.returncode, popenargs[0],
+                                                output=e.output)
+        finally:
+            os.remove(tf.name)
+        return result
+    else:
+        return subprocess.check_output(*popenargs, **kwargs)
 
 class AndroidDevice(object):
     # Delimiter string to indicate the start of the exit code.
@@ -166,13 +197,13 @@ class AndroidDevice(object):
 
     def _simple_call(self, cmd):
         logging.info(' '.join(self.adb_cmd + cmd))
-        return subprocess.check_output(
+        return _subprocess_check_output(
             self.adb_cmd + cmd, stderr=subprocess.STDOUT)
 
     def shell(self, cmd):
         logging.info(' '.join(self.adb_cmd + ['shell'] + cmd))
         cmd = self._make_shell_cmd(cmd)
-        out = subprocess.check_output(cmd)
+        out = _subprocess_check_output(cmd)
         rc, out = self._parse_shell_output(out)
         if rc != 0:
             error = subprocess.CalledProcessError(rc, cmd)
