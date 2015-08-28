@@ -88,7 +88,6 @@ LOCAL_SRC_FILES := \
     adb_auth_client.cpp \
     fdevent.cpp \
     jdwp_service.cpp \
-    qemu_tracing.cpp \
     usb_linux_client.cpp \
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
