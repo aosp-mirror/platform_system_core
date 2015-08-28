@@ -16,8 +16,6 @@ PIXELFLINGER_SRC_FILES:= \
     codeflinger/blending.cpp \
     codeflinger/texturing.cpp \
     codeflinger/disassem.c \
-	codeflinger/tinyutils/SharedBuffer.cpp \
-	codeflinger/tinyutils/VectorImpl.cpp \
 	fixed.cpp.arm \
 	picker.cpp.arm \
 	pixelflinger.cpp.arm \
@@ -59,6 +57,8 @@ LOCAL_SHARED_LIBRARIES := libcutils liblog
 LOCAL_MODULE:= libpixelflinger
 LOCAL_SRC_FILES := $(PIXELFLINGER_SRC_FILES)
 LOCAL_CFLAGS := $(PIXELFLINGER_CFLAGS)
+LOCAL_C_INCLUDES += external/safe-iop/include
+LOCAL_SHARED_LIBRARIES := libcutils liblog libutils
 
 ifneq ($(BUILD_TINY_ANDROID),true)
 # Really this should go away entirely or at least not depend on
