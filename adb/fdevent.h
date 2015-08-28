@@ -23,7 +23,6 @@
 #define FDE_READ              0x0001
 #define FDE_WRITE             0x0002
 #define FDE_ERROR             0x0004
-#define FDE_TIMEOUT           0x0008
 
 /* features that may be set (via the events set/add/del interface) */
 #define FDE_DONT_CLOSE        0x0080
