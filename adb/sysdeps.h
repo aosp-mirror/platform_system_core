@@ -71,6 +71,7 @@
 #include <windows.h>
 #include <ws2tcpip.h>
 
+#include <memory>   // unique_ptr
 #include <string>   // Prototypes for narrow() and widen() use std::(w)string.
 
 #include "fdevent.h"
@@ -354,6 +355,21 @@ inline HANDLE cast_int_to_handle(const int fd) {
     // sign-extend
     return reinterpret_cast<HANDLE>(static_cast<INT_PTR>(fd));
 }
+
+// Deleter for unique_handle. Adapted from many sources, including:
+// http://stackoverflow.com/questions/14841396/stdunique-ptr-deleters-and-the-win32-api
+// https://visualstudiomagazine.com/articles/2013/09/01/get-a-handle-on-the-windows-api.aspx
+class handle_deleter {
+public:
+    typedef HANDLE pointer;
+
+    void operator()(HANDLE h);
+};
+
+// Like std::unique_ptr, but for Windows HANDLE objects that should be
+// CloseHandle()'d. Operator bool() only checks if the handle != nullptr,
+// but does not check if the handle != INVALID_HANDLE_VALUE.
+typedef std::unique_ptr<HANDLE, handle_deleter> unique_handle;
 
 #else /* !_WIN32 a.k.a. Unix */
 

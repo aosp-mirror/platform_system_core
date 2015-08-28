@@ -112,6 +112,22 @@ std::string SystemErrorCodeToString(const DWORD error_code) {
   return msg;
 }
 
+void handle_deleter::operator()(HANDLE h) {
+    // CreateFile() is documented to return INVALID_HANDLE_FILE on error,
+    // implying that NULL is a valid handle, but this is probably impossible.
+    // Other APIs like CreateEvent() are documented to return NULL on error,
+    // implying that INVALID_HANDLE_VALUE is a valid handle, but this is also
+    // probably impossible. Thus, consider both NULL and INVALID_HANDLE_VALUE
+    // as invalid handles. std::unique_ptr won't call a deleter with NULL, so we
+    // only need to check for INVALID_HANDLE_VALUE.
+    if (h != INVALID_HANDLE_VALUE) {
+        if (!CloseHandle(h)) {
+            D("CloseHandle(%p) failed: %s\n", h,
+              SystemErrorCodeToString(GetLastError()).c_str());
+        }
+    }
+}
+
 /**************************************************************************/
 /**************************************************************************/
 /*****                                                                *****/
