@@ -19,6 +19,7 @@
 
 #include <sys/types.h>
 
+#include <list>
 #include <string>
 #include <unordered_set>
 
@@ -71,9 +72,6 @@ public:
     int adb_port = -1;  // Use for emulators (local transport)
     bool kicked = false;
 
-    // A list of adisconnect callbacks called when the transport is kicked.
-    adisconnect disconnects = {};
-
     void* key = nullptr;
     unsigned char token[TOKEN_SIZE] = {};
     fdevent auth_fde;
@@ -96,12 +94,19 @@ public:
     // feature.
     bool CanUseFeature(const std::string& feature) const;
 
+    void AddDisconnect(adisconnect* disconnect);
+    void RemoveDisconnect(adisconnect* disconnect);
+    void RunDisconnects();
+
 private:
     // A set of features transmitted in the banner with the initial connection.
     // This is stored in the banner as 'features=feature0,feature1,etc'.
     FeatureSet features_;
     int protocol_version;
     size_t max_payload;
+
+    // A list of adisconnect callbacks called when the transport is kicked.
+    std::list<adisconnect*> disconnects_;
 
     DISALLOW_COPY_AND_ASSIGN(atransport);
 };
@@ -114,10 +119,7 @@ private:
  */
 atransport* acquire_one_transport(ConnectionState state, TransportType type,
                                   const char* serial, std::string* error_out);
-void add_transport_disconnect(atransport* t, adisconnect* dis);
-void remove_transport_disconnect(atransport* t, adisconnect* dis);
 void kick_transport(atransport* t);
-void run_transport_disconnects(atransport* t);
 void update_transports(void);
 
 void init_transport_registration(void);
