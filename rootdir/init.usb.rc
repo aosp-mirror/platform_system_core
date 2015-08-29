@@ -9,8 +9,11 @@ on post-fs-data
     chown system system /sys/class/android_usb/android0/f_rndis/ethaddr
     chmod 0660 /sys/class/android_usb/android0/f_rndis/ethaddr
 
+on boot
+    setprop sys.usb.configfs 0
+
 # Used to disable USB when switching states
-on property:sys.usb.config=none
+on property:sys.usb.config=none && property:sys.usb.configfs=0
     stop adbd
     write /sys/class/android_usb/android0/enable 0
     write /sys/class/android_usb/android0/bDeviceClass 0
@@ -19,7 +22,7 @@ on property:sys.usb.config=none
 # adb only USB configuration
 # This is the fallback configuration if the
 # USB manager fails to set a standard configuration
-on property:sys.usb.config=adb
+on property:sys.usb.config=adb && property:sys.usb.configfs=0
     write /sys/class/android_usb/android0/enable 0
     write /sys/class/android_usb/android0/idVendor 18d1
     write /sys/class/android_usb/android0/idProduct 4EE7
@@ -29,7 +32,7 @@ on property:sys.usb.config=adb
     setprop sys.usb.state ${sys.usb.config}
 
 # USB accessory configuration
-on property:sys.usb.config=accessory
+on property:sys.usb.config=accessory && property:sys.usb.configfs=0
     write /sys/class/android_usb/android0/enable 0
     write /sys/class/android_usb/android0/idVendor 18d1
     write /sys/class/android_usb/android0/idProduct 2d00
@@ -38,7 +41,7 @@ on property:sys.usb.config=accessory
     setprop sys.usb.state ${sys.usb.config}
 
 # USB accessory configuration, with adb
-on property:sys.usb.config=accessory,adb
+on property:sys.usb.config=accessory,adb && property:sys.usb.configfs=0
     write /sys/class/android_usb/android0/enable 0
     write /sys/class/android_usb/android0/idVendor 18d1
     write /sys/class/android_usb/android0/idProduct 2d01
@@ -48,7 +51,7 @@ on property:sys.usb.config=accessory,adb
     setprop sys.usb.state ${sys.usb.config}
 
 # audio accessory configuration
-on property:sys.usb.config=audio_source
+on property:sys.usb.config=audio_source && property:sys.usb.configfs=0
     write /sys/class/android_usb/android0/enable 0
     write /sys/class/android_usb/android0/idVendor 18d1
     write /sys/class/android_usb/android0/idProduct 2d02
@@ -57,7 +60,7 @@ on property:sys.usb.config=audio_source
     setprop sys.usb.state ${sys.usb.config}
 
 # audio accessory configuration, with adb
-on property:sys.usb.config=audio_source,adb
+on property:sys.usb.config=audio_source,adb && property:sys.usb.configfs=0
     write /sys/class/android_usb/android0/enable 0
     write /sys/class/android_usb/android0/idVendor 18d1
     write /sys/class/android_usb/android0/idProduct 2d03
@@ -67,7 +70,7 @@ on property:sys.usb.config=audio_source,adb
     setprop sys.usb.state ${sys.usb.config}
 
 # USB and audio accessory configuration
-on property:sys.usb.config=accessory,audio_source
+on property:sys.usb.config=accessory,audio_source && property:sys.usb.configfs=0
     write /sys/class/android_usb/android0/enable 0
     write /sys/class/android_usb/android0/idVendor 18d1
     write /sys/class/android_usb/android0/idProduct 2d04
@@ -76,7 +79,7 @@ on property:sys.usb.config=accessory,audio_source
     setprop sys.usb.state ${sys.usb.config}
 
 # USB and audio accessory configuration, with adb
-on property:sys.usb.config=accessory,audio_source,adb
+on property:sys.usb.config=accessory,audio_source,adb && property:sys.usb.configfs=0
     write /sys/class/android_usb/android0/enable 0
     write /sys/class/android_usb/android0/idVendor 18d1
     write /sys/class/android_usb/android0/idProduct 2d05
