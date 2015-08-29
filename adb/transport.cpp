@@ -42,36 +42,6 @@ static std::list<atransport*> pending_list;
 
 ADB_MUTEX_DEFINE( transport_lock );
 
-// Each atransport contains a list of adisconnects (t->disconnects).
-// An adisconnect contains a link to the next/prev adisconnect, a function
-// pointer to a disconnect callback which takes a void* piece of user data and
-// the atransport, and some user data for the callback (helpfully named
-// "opaque").
-//
-// The list is circular. New items are added to the entry member of the list
-// (t->disconnects) by add_transport_disconnect.
-//
-// run_transport_disconnects invokes each function in the list.
-//
-// Gotchas:
-//   * run_transport_disconnects assumes that t->disconnects is non-null, so
-//     this can't be run on a zeroed atransport.
-//   * The callbacks in this list are not removed when called, and this function
-//     is not guarded against running more than once. As such, ensure that this
-//     function is not called multiple times on the same atransport.
-//     TODO(danalbert): Just fix this so that it is guarded once you have tests.
-void run_transport_disconnects(atransport* t)
-{
-    adisconnect*  dis = t->disconnects.next;
-
-    D("%s: run_transport_disconnects\n", t->serial);
-    while (dis != &t->disconnects) {
-        adisconnect*  next = dis->next;
-        dis->func( dis->opaque, t );
-        dis = next;
-    }
-}
-
 static void dump_packet(const char* name, const char* func, apacket* p) {
     unsigned  command = p->msg.command;
     int       len     = p->msg.data_length;
@@ -588,8 +558,6 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
     transport_list.push_front(t);
     adb_mutex_unlock(&transport_lock);
 
-    t->disconnects.next = t->disconnects.prev = &t->disconnects;
-
     update_transports();
 }
 
@@ -651,23 +619,6 @@ static void transport_unref(atransport* t) {
         D("transport: %s unref (count=%zu)\n", t->serial, t->ref_count);
     }
     adb_mutex_unlock(&transport_lock);
-}
-
-void add_transport_disconnect(atransport*  t, adisconnect*  dis)
-{
-    adb_mutex_lock(&transport_lock);
-    dis->next       = &t->disconnects;
-    dis->prev       = dis->next->prev;
-    dis->prev->next = dis;
-    dis->next->prev = dis;
-    adb_mutex_unlock(&transport_lock);
-}
-
-void remove_transport_disconnect(atransport*  t, adisconnect*  dis)
-{
-    dis->prev->next = dis->next;
-    dis->next->prev = dis->prev;
-    dis->next = dis->prev = dis;
 }
 
 static int qual_match(const char *to_test,
@@ -842,6 +793,21 @@ void atransport::add_feature(const std::string& feature) {
 
 bool atransport::CanUseFeature(const std::string& feature) const {
     return has_feature(feature) && supported_features().count(feature) > 0;
+}
+
+void atransport::AddDisconnect(adisconnect* disconnect) {
+    disconnects_.push_back(disconnect);
+}
+
+void atransport::RemoveDisconnect(adisconnect* disconnect) {
+    disconnects_.remove(disconnect);
+}
+
+void atransport::RunDisconnects() {
+    for (auto& disconnect : disconnects_) {
+        disconnect->func(disconnect->opaque, this);
+    }
+    disconnects_.clear();
 }
 
 #if ADB_HOST
