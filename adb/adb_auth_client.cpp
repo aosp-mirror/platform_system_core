@@ -47,7 +47,7 @@ static fdevent listener_fde;
 static int framework_fd = -1;
 
 static void usb_disconnected(void* unused, atransport* t);
-static struct adisconnect usb_disconnect = { usb_disconnected, 0, 0, 0 };
+static struct adisconnect usb_disconnect = { usb_disconnected, nullptr};
 static atransport* usb_transport;
 static bool needs_retry = false;
 
@@ -164,7 +164,6 @@ int adb_auth_verify(uint8_t* token, uint8_t* sig, int siglen)
 static void usb_disconnected(void* unused, atransport* t)
 {
     D("USB disconnect\n");
-    remove_transport_disconnect(usb_transport, &usb_disconnect);
     usb_transport = NULL;
     needs_retry = false;
 }
@@ -196,7 +195,7 @@ void adb_auth_confirm_key(unsigned char *key, size_t len, atransport *t)
 
     if (!usb_transport) {
         usb_transport = t;
-        add_transport_disconnect(t, &usb_disconnect);
+        t->AddDisconnect(&usb_disconnect);
     }
 
     if (framework_fd < 0) {
