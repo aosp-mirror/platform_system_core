@@ -51,9 +51,6 @@ public:
         EXPECT_EQ(adb_port, rhs.adb_port);
         EXPECT_EQ(kicked, rhs.kicked);
 
-        EXPECT_EQ(
-            0, memcmp(&disconnects, &rhs.disconnects, sizeof(adisconnect)));
-
         EXPECT_EQ(key, rhs.key);
         EXPECT_EQ(0, memcmp(token, rhs.token, TOKEN_SIZE));
         EXPECT_EQ(0, memcmp(&auth_fde, &rhs.auth_fde, sizeof(fdevent)));
@@ -118,12 +115,33 @@ TEST(transport, kick_transport_already_kicked) {
   ASSERT_EQ(expected, t);
 }
 
-// Disabled because the function currently segfaults for a zeroed atransport. I
-// want to make sure I understand how this is working at all before I try fixing
-// that.
-TEST(transport, DISABLED_run_transport_disconnects_zeroed_atransport) {
+static void DisconnectFunc(void* arg, atransport*) {
+    int* count = reinterpret_cast<int*>(arg);
+    ++*count;
+}
+
+TEST(transport, RunDisconnects) {
     atransport t;
-    run_transport_disconnects(&t);
+    // RunDisconnects() can be called with an empty atransport.
+    t.RunDisconnects();
+
+    int count = 0;
+    adisconnect disconnect;
+    disconnect.func = DisconnectFunc;
+    disconnect.opaque = &count;
+    t.AddDisconnect(&disconnect);
+    t.RunDisconnects();
+    ASSERT_EQ(1, count);
+
+    // disconnect should have been removed automatically.
+    t.RunDisconnects();
+    ASSERT_EQ(1, count);
+
+    count = 0;
+    t.AddDisconnect(&disconnect);
+    t.RemoveDisconnect(&disconnect);
+    t.RunDisconnects();
+    ASSERT_EQ(0, count);
 }
 
 TEST(transport, add_feature) {

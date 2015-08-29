@@ -101,13 +101,15 @@ static void  free_listener(alistener*  l)
         free((char*)l->connect_to);
 
     if (l->transport) {
-        remove_transport_disconnect(l->transport, &l->disconnect);
+        l->transport->RemoveDisconnect(&l->disconnect);
     }
     free(l);
 }
 
-static void listener_disconnect(void* listener, atransport* t) {
-    free_listener(reinterpret_cast<alistener*>(listener));
+static void listener_disconnect(void* arg, atransport*) {
+    alistener* listener = reinterpret_cast<alistener*>(arg);
+    listener->transport = nullptr;
+    free_listener(listener);
 }
 
 static int local_name_to_fd(const char* name, std::string* error) {
@@ -159,7 +161,7 @@ InstallStatus remove_listener(const char *local_name, atransport* transport) {
 
     for (l = listener_list.next; l != &listener_list; l = l->next) {
         if (!strcmp(local_name, l->local_name)) {
-            listener_disconnect(l, l->transport);
+            free_listener(l);
             return INSTALL_STATUS_OK;
         }
     }
@@ -174,7 +176,7 @@ void remove_all_listeners(void)
         // Never remove smart sockets.
         if (l->connect_to[0] == '*')
             continue;
-        listener_disconnect(l, l->transport);
+        free_listener(l);
     }
 }
 
@@ -209,9 +211,9 @@ InstallStatus install_listener(const std::string& local_name,
             free((void*) l->connect_to);
             l->connect_to = cto;
             if (l->transport != transport) {
-                remove_transport_disconnect(l->transport, &l->disconnect);
+                l->transport->RemoveDisconnect(&l->disconnect);
                 l->transport = transport;
-                add_transport_disconnect(l->transport, &l->disconnect);
+                l->transport->AddDisconnect(&l->disconnect);
             }
             return INSTALL_STATUS_OK;
         }
@@ -260,7 +262,7 @@ InstallStatus install_listener(const std::string& local_name,
     if (transport) {
         listener->disconnect.opaque = listener;
         listener->disconnect.func   = listener_disconnect;
-        add_transport_disconnect(transport, &listener->disconnect);
+        transport->AddDisconnect(&listener->disconnect);
     }
     return INSTALL_STATUS_OK;
 
