@@ -259,8 +259,8 @@ static void show_help(const char *cmd)
                     "  -r <kbytes>     Rotate log every kbytes. Requires -f\n"
                     "  -n <count>      Sets max number of rotated logs to <count>, default 4\n"
                     "  -v <format>     Sets the log print format, where <format> is:\n\n"
-                    "                      brief color long printable process raw tag thread\n"
-                    "                      threadtime time usec UTC year zone\n\n"
+                    "                      brief color epoch long monotonic printable process raw\n"
+                    "                      tag thread threadtime time usec UTC year zone\n\n"
                     "  -D              print dividers between each log buffer\n"
                     "  -c              clear (flush) the entire log and exit\n"
                     "  -d              dump the log and then exit (don't block)\n"
@@ -269,7 +269,7 @@ static void show_help(const char *cmd)
                     "  -T <count>      print only the most recent <count> lines (does not imply -d)\n"
                     "  -T '<time>'     print most recent lines since specified time (not imply -d)\n"
                     "                  count is pure numerical, time is 'MM-DD hh:mm:ss.mmm...'\n"
-                    "                  or 'YYYY-MM-DD hh:mm:ss.mmm...' format\n"
+                    "                  'YYYY-MM-DD hh:mm:ss.mmm...' or 'sssss.mmm...' format\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
                     "  -L              dump logs from prior to last reboot\n"
                     "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio',\n"
@@ -384,7 +384,11 @@ static char *parseTime(log_time &t, const char *cp) {
     if (ep) {
         return ep;
     }
-    return t.strptime(cp, "%Y-%m-%d %H:%M:%S.%q");
+    ep = t.strptime(cp, "%Y-%m-%d %H:%M:%S.%q");
+    if (ep) {
+        return ep;
+    }
+    return t.strptime(cp, "%s.%q");
 }
 
 // Find last logged line in gestalt of all matching existing output files

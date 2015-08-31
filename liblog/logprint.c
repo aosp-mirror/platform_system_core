@@ -29,8 +29,12 @@
 #include <inttypes.h>
 #include <sys/param.h>
 
+#include <cutils/list.h>
 #include <log/logd.h>
 #include <log/logprint.h>
+
+#define MS_PER_NSEC 1000000
+#define US_PER_NSEC 1000
 
 /* open coded fragment, prevent circular dependencies */
 #define WEAK static
@@ -50,6 +54,8 @@ struct AndroidLogFormat_t {
     bool printable_output;
     bool year_output;
     bool zone_output;
+    bool epoch_output;
+    bool monotonic_output;
 };
 
 /*
@@ -196,9 +202,13 @@ AndroidLogFormat *android_log_format_new()
     p_ret->printable_output = false;
     p_ret->year_output = false;
     p_ret->zone_output = false;
+    p_ret->epoch_output = false;
+    p_ret->monotonic_output = false;
 
     return p_ret;
 }
+
+static list_declare(convertHead);
 
 void android_log_format_free(AndroidLogFormat *p_format)
 {
@@ -214,9 +224,14 @@ void android_log_format_free(AndroidLogFormat *p_format)
     }
 
     free(p_format);
+
+    /* Free conversion resource, can always be reconstructed */
+    while (!list_empty(&convertHead)) {
+        struct listnode *node = list_head(&convertHead);
+        list_remove(node);
+        free(node);
+    }
 }
-
-
 
 int android_log_setPrintFormat(AndroidLogFormat *p_format,
         AndroidLogPrintFormat format)
@@ -236,6 +251,12 @@ int android_log_setPrintFormat(AndroidLogFormat *p_format,
         return 0;
     case FORMAT_MODIFIER_ZONE:
         p_format->zone_output = !p_format->zone_output;
+        return 0;
+    case FORMAT_MODIFIER_EPOCH:
+        p_format->epoch_output = true;
+        return 0;
+    case FORMAT_MODIFIER_MONOTONIC:
+        p_format->monotonic_output = true;
         return 0;
     default:
         break;
@@ -267,6 +288,8 @@ AndroidLogPrintFormat android_log_formatFromString(const char * formatString)
     else if (strcmp(formatString, "printable") == 0) format = FORMAT_MODIFIER_PRINTABLE;
     else if (strcmp(formatString, "year") == 0) format = FORMAT_MODIFIER_YEAR;
     else if (strcmp(formatString, "zone") == 0) format = FORMAT_MODIFIER_ZONE;
+    else if (strcmp(formatString, "epoch") == 0) format = FORMAT_MODIFIER_EPOCH;
+    else if (strcmp(formatString, "monotonic") == 0) format = FORMAT_MODIFIER_MONOTONIC;
     else {
         extern char *tzname[2];
         static const char gmt[] = "GMT";
@@ -913,6 +936,285 @@ static size_t convertPrintable(char *p, const char *message, size_t messageLen)
     return p - begin;
 }
 
+char *readSeconds(char *e, struct timespec *t)
+{
+    unsigned long multiplier;
+    char *p;
+    t->tv_sec = strtoul(e, &p, 10);
+    if (*p != '.') {
+        return NULL;
+    }
+    t->tv_nsec = 0;
+    multiplier = NS_PER_SEC;
+    while (isdigit(*++p) && (multiplier /= 10)) {
+        t->tv_nsec += (*p - '0') * multiplier;
+    }
+    return p;
+}
+
+static struct timespec *sumTimespec(struct timespec *left,
+                                    struct timespec *right)
+{
+    left->tv_nsec += right->tv_nsec;
+    left->tv_sec += right->tv_sec;
+    if (left->tv_nsec >= (long)NS_PER_SEC) {
+        left->tv_nsec -= NS_PER_SEC;
+        left->tv_sec += 1;
+    }
+    return left;
+}
+
+static struct timespec *subTimespec(struct timespec *result,
+                                    struct timespec *left,
+                                    struct timespec *right)
+{
+    result->tv_nsec = left->tv_nsec - right->tv_nsec;
+    result->tv_sec = left->tv_sec - right->tv_sec;
+    if (result->tv_nsec < 0) {
+        result->tv_nsec += NS_PER_SEC;
+        result->tv_sec -= 1;
+    }
+    return result;
+}
+
+static long long nsecTimespec(struct timespec *now)
+{
+    return (long long)now->tv_sec * NS_PER_SEC + now->tv_nsec;
+}
+
+static void convertMonotonic(struct timespec *result,
+                             const AndroidLogEntry *entry)
+{
+    struct listnode *node;
+    struct conversionList {
+        struct listnode node; /* first */
+        struct timespec time;
+        struct timespec convert;
+    } *list, *next;
+    struct timespec time, convert;
+
+    /* If we do not have a conversion list, build one up */
+    if (list_empty(&convertHead)) {
+        bool suspended_pending = false;
+        struct timespec suspended_monotonic = { 0, 0 };
+        struct timespec suspended_diff = { 0, 0 };
+
+        /*
+         * Read dmesg for _some_ synchronization markers and insert
+         * Anything in the Android Logger before the dmesg logging span will
+         * be highly suspect regarding the monotonic time calculations.
+         */
+        FILE *p = popen("/system/bin/dmesg", "r");
+        if (p) {
+            char *line = NULL;
+            size_t len = 0;
+            while (getline(&line, &len, p) > 0) {
+                static const char suspend[] = "PM: suspend entry ";
+                static const char resume[] = "PM: suspend exit ";
+                static const char healthd[] = "healthd";
+                static const char battery[] = ": battery ";
+                static const char suspended[] = "Suspended for ";
+                struct timespec monotonic;
+                struct tm tm;
+                char *cp, *e = line;
+                bool add_entry = true;
+
+                if (*e == '<') {
+                    while (*e && (*e != '>')) {
+                        ++e;
+                    }
+                    if (*e != '>') {
+                        continue;
+                    }
+                }
+                if (*e != '[') {
+                    continue;
+                }
+                while (*++e == ' ') {
+                    ;
+                }
+                e = readSeconds(e, &monotonic);
+                if (!e || (*e != ']')) {
+                    continue;
+                }
+
+                if ((e = strstr(e, suspend))) {
+                    e += sizeof(suspend) - 1;
+                } else if ((e = strstr(line, resume))) {
+                    e += sizeof(resume) - 1;
+                } else if (((e = strstr(line, healthd)))
+                        && ((e = strstr(e + sizeof(healthd) - 1, battery)))) {
+                    /* NB: healthd is roughly 150us late, worth the price to
+                     * deal with ntp-induced or hardware clock drift. */
+                    e += sizeof(battery) - 1;
+                } else if ((e = strstr(line, suspended))) {
+                    e += sizeof(suspended) - 1;
+                    e = readSeconds(e, &time);
+                    if (!e) {
+                        continue;
+                    }
+                    add_entry = false;
+                    suspended_pending = true;
+                    suspended_monotonic = monotonic;
+                    suspended_diff = time;
+                } else {
+                    continue;
+                }
+                if (add_entry) {
+                    /* look for "????-??-?? ??:??:??.????????? UTC" */
+                    cp = strstr(e, " UTC");
+                    if (!cp || ((cp - e) < 29) || (cp[-10] != '.')) {
+                        continue;
+                    }
+                    e = cp - 29;
+                    cp = readSeconds(cp - 10, &time);
+                    if (!cp) {
+                        continue;
+                    }
+                    cp = strptime(e, "%Y-%m-%d %H:%M:%S.", &tm);
+                    if (!cp) {
+                        continue;
+                    }
+                    cp = getenv(tz);
+                    if (cp) {
+                        cp = strdup(cp);
+                    }
+                    setenv(tz, utc, 1);
+                    time.tv_sec = mktime(&tm);
+                    if (cp) {
+                        setenv(tz, cp, 1);
+                        free(cp);
+                    } else {
+                        unsetenv(tz);
+                    }
+                    list = calloc(1, sizeof(struct conversionList));
+                    list_init(&list->node);
+                    list->time = time;
+                    subTimespec(&list->convert, &time, &monotonic);
+                    list_add_tail(&convertHead, &list->node);
+                }
+                if (suspended_pending && !list_empty(&convertHead)) {
+                    list = node_to_item(list_tail(&convertHead),
+                                        struct conversionList, node);
+                    if (subTimespec(&time,
+                                    subTimespec(&time,
+                                                &list->time,
+                                                &list->convert),
+                                    &suspended_monotonic)->tv_sec > 0) {
+                        /* resume, what is convert factor before? */
+                        subTimespec(&convert, &list->convert, &suspended_diff);
+                    } else {
+                        /* suspend */
+                        convert = list->convert;
+                    }
+                    time = suspended_monotonic;
+                    sumTimespec(&time, &convert);
+                    /* breakpoint just before sleep */
+                    list = calloc(1, sizeof(struct conversionList));
+                    list_init(&list->node);
+                    list->time = time;
+                    list->convert = convert;
+                    list_add_tail(&convertHead, &list->node);
+                    /* breakpoint just after sleep */
+                    list = calloc(1, sizeof(struct conversionList));
+                    list_init(&list->node);
+                    list->time = time;
+                    sumTimespec(&list->time, &suspended_diff);
+                    list->convert = convert;
+                    sumTimespec(&list->convert, &suspended_diff);
+                    list_add_tail(&convertHead, &list->node);
+                    suspended_pending = false;
+                }
+            }
+            pclose(p);
+        }
+        /* last entry is our current time conversion */
+        list = calloc(1, sizeof(struct conversionList));
+        list_init(&list->node);
+        clock_gettime(CLOCK_REALTIME, &list->time);
+        clock_gettime(CLOCK_MONOTONIC, &convert);
+        clock_gettime(CLOCK_MONOTONIC, &time);
+        /* Correct for instant clock_gettime latency (syscall or ~30ns) */
+        subTimespec(&time, &convert, subTimespec(&time, &time, &convert));
+        /* Calculate conversion factor */
+        subTimespec(&list->convert, &list->time, &time);
+        list_add_tail(&convertHead, &list->node);
+        if (suspended_pending) {
+            /* manufacture a suspend @ point before */
+            subTimespec(&convert, &list->convert, &suspended_diff);
+            time = suspended_monotonic;
+            sumTimespec(&time, &convert);
+            /* breakpoint just after sleep */
+            list = calloc(1, sizeof(struct conversionList));
+            list_init(&list->node);
+            list->time = time;
+            sumTimespec(&list->time, &suspended_diff);
+            list->convert = convert;
+            sumTimespec(&list->convert, &suspended_diff);
+            list_add_head(&convertHead, &list->node);
+            /* breakpoint just before sleep */
+            list = calloc(1, sizeof(struct conversionList));
+            list_init(&list->node);
+            list->time = time;
+            list->convert = convert;
+            list_add_head(&convertHead, &list->node);
+        }
+    }
+
+    /* Find the breakpoint in the conversion list */
+    list = node_to_item(list_head(&convertHead), struct conversionList, node);
+    next = NULL;
+    list_for_each(node, &convertHead) {
+        next = node_to_item(node, struct conversionList, node);
+        if (entry->tv_sec < next->time.tv_sec) {
+            break;
+        } else if (entry->tv_sec == next->time.tv_sec) {
+            if (entry->tv_nsec < next->time.tv_nsec) {
+                break;
+            }
+        }
+        list = next;
+    }
+
+    /* blend time from one breakpoint to the next */
+    convert = list->convert;
+    if (next) {
+        unsigned long long total, run;
+
+        total = nsecTimespec(subTimespec(&time, &next->time, &list->time));
+        time.tv_sec = entry->tv_sec;
+        time.tv_nsec = entry->tv_nsec;
+        run = nsecTimespec(subTimespec(&time, &time, &list->time));
+        if (run < total) {
+            long long crun;
+
+            float f = nsecTimespec(subTimespec(&time, &next->convert, &convert));
+            f *= run;
+            f /= total;
+            crun = f;
+            convert.tv_sec += crun / (long long)NS_PER_SEC;
+            if (crun < 0) {
+                convert.tv_nsec -= (-crun) % NS_PER_SEC;
+                if (convert.tv_nsec < 0) {
+                    convert.tv_nsec += NS_PER_SEC;
+                    convert.tv_sec -= 1;
+                }
+            } else {
+                convert.tv_nsec += crun % NS_PER_SEC;
+                if (convert.tv_nsec >= (long)NS_PER_SEC) {
+                    convert.tv_nsec -= NS_PER_SEC;
+                    convert.tv_sec += 1;
+                }
+            }
+        }
+    }
+
+    /* Apply the correction factor */
+    result->tv_sec = entry->tv_sec;
+    result->tv_nsec = entry->tv_nsec;
+    subTimespec(result, result, &convert);
+}
+
 /**
  * Formats a log message into a buffer
  *
@@ -936,7 +1238,9 @@ char *android_log_formatLogLine (
     char prefixBuf[128], suffixBuf[128];
     char priChar;
     int prefixSuffixIsHeaderFooter = 0;
-    char * ret = NULL;
+    char *ret = NULL;
+    time_t now;
+    unsigned long nsec;
 
     priChar = filterPriToChar(entry->priority);
     size_t prefixLen = 0, suffixLen = 0;
@@ -954,23 +1258,41 @@ char *android_log_formatLogLine (
      * The caller may have affected the timezone environment, this is
      * expected to be sensitive to that.
      */
+    now = entry->tv_sec;
+    nsec = entry->tv_nsec;
+    if (p_format->monotonic_output) {
+        struct timespec time;
+        convertMonotonic(&time, entry);
+        now = time.tv_sec;
+        nsec = time.tv_nsec;
+    }
+    if (now < 0) {
+        nsec = NS_PER_SEC - nsec;
+    }
+    if (p_format->epoch_output || p_format->monotonic_output) {
+        ptm = NULL;
+        snprintf(timeBuf, sizeof(timeBuf),
+                 p_format->monotonic_output ? "%6lld" : "%19lld",
+                 (long long)now);
+    } else {
 #if !defined(_WIN32)
-    ptm = localtime_r(&(entry->tv_sec), &tmBuf);
+        ptm = localtime_r(&now, &tmBuf);
 #else
-    ptm = localtime(&(entry->tv_sec));
+        ptm = localtime(&now);
 #endif
-    strftime(timeBuf, sizeof(timeBuf),
-             &"%Y-%m-%d %H:%M:%S"[p_format->year_output ? 0 : 3],
-             ptm);
+        strftime(timeBuf, sizeof(timeBuf),
+                 &"%Y-%m-%d %H:%M:%S"[p_format->year_output ? 0 : 3],
+                 ptm);
+    }
     len = strlen(timeBuf);
     if (p_format->usec_time_output) {
         len += snprintf(timeBuf + len, sizeof(timeBuf) - len,
-                        ".%06ld", entry->tv_nsec / 1000);
+                        ".%06ld", nsec / US_PER_NSEC);
     } else {
         len += snprintf(timeBuf + len, sizeof(timeBuf) - len,
-                        ".%03ld", entry->tv_nsec / 1000000);
+                        ".%03ld", nsec / MS_PER_NSEC);
     }
-    if (p_format->zone_output) {
+    if (p_format->zone_output && ptm) {
         strftime(timeBuf + len, sizeof(timeBuf) - len, " %z", ptm);
     }
 

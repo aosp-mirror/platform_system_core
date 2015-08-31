@@ -42,6 +42,8 @@ typedef enum {
     FORMAT_MODIFIER_PRINTABLE, /* converts non-printable to printable escapes */
     FORMAT_MODIFIER_YEAR,      /* Adds year to date */
     FORMAT_MODIFIER_ZONE,      /* Adds zone to date */
+    FORMAT_MODIFIER_EPOCH,     /* Print time as seconds since Jan 1 1970 */
+    FORMAT_MODIFIER_MONOTONIC, /* Print cpu time as seconds since start */
 } AndroidLogPrintFormat;
 
 typedef struct AndroidLogFormat_t AndroidLogFormat;
