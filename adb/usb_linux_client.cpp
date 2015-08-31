@@ -209,6 +209,8 @@ static void *usb_adb_open_thread(void *x)
     struct usb_handle *usb = (struct usb_handle *)x;
     int fd;
 
+    adb_thread_setname("usb open");
+
     while (true) {
         // wait until the USB device needs opening
         adb_mutex_lock(&usb->lock);
@@ -402,6 +404,8 @@ err:
 static void *usb_ffs_open_thread(void *x)
 {
     struct usb_handle *usb = (struct usb_handle *)x;
+
+    adb_thread_setname("usb ffs open");
 
     while (true) {
         // wait until the USB device needs opening
