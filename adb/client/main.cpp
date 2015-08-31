@@ -36,42 +36,6 @@
 #include "adb_listeners.h"
 #include "transport.h"
 
-#if defined(WORKAROUND_BUG6558362) && defined(__linux__)
-static const bool kWorkaroundBug6558362 = true;
-#else
-static const bool kWorkaroundBug6558362 = false;
-#endif
-
-static void adb_workaround_affinity(void) {
-#if defined(__linux__)
-    const char affinity_env[] = "ADB_CPU_AFFINITY_BUG6558362";
-    const char* cpunum_str = getenv(affinity_env);
-    if (cpunum_str == nullptr || *cpunum_str == '\0') {
-        return;
-    }
-
-    char* strtol_res;
-    int cpu_num = strtol(cpunum_str, &strtol_res, 0);
-    if (*strtol_res != '\0') {
-        fatal("bad number (%s) in env var %s. Expecting 0..n.\n", cpunum_str,
-              affinity_env);
-    }
-
-    cpu_set_t cpu_set;
-    sched_getaffinity(0, sizeof(cpu_set), &cpu_set);
-    D("orig cpu_set[0]=0x%08lx\n", cpu_set.__bits[0]);
-
-    CPU_ZERO(&cpu_set);
-    CPU_SET(cpu_num, &cpu_set);
-    sched_setaffinity(0, sizeof(cpu_set), &cpu_set);
-
-    sched_getaffinity(0, sizeof(cpu_set), &cpu_set);
-    D("new cpu_set[0]=0x%08lx\n", cpu_set.__bits[0]);
-#else
-    // No workaround was ever implemented for the other platforms.
-#endif
-}
-
 #if defined(_WIN32)
 static const char kNullFileName[] = "NUL";
 
@@ -156,10 +120,6 @@ int adb_main(int is_daemon, int server_port, int ack_reply_fd) {
 #endif
 
     init_transport_registration();
-
-    if (kWorkaroundBug6558362 && is_daemon) {
-        adb_workaround_affinity();
-    }
 
     usb_init();
     local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
