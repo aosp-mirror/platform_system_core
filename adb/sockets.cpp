@@ -422,7 +422,8 @@ asocket *create_local_socket(int fd)
     return s;
 }
 
-asocket *create_local_service_socket(const char *name)
+asocket *create_local_service_socket(const char *name,
+                                     const atransport* transport)
 {
 #if !ADB_HOST
     if (!strcmp(name,"jdwp")) {
@@ -432,7 +433,7 @@ asocket *create_local_service_socket(const char *name)
         return create_jdwp_tracker_service_socket();
     }
 #endif
-    int fd = service_to_fd(name);
+    int fd = service_to_fd(name, transport);
     if(fd < 0) return 0;
 
     asocket* s = create_local_socket(fd);

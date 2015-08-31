@@ -221,7 +221,8 @@ void remove_socket(asocket *s);
 void close_all_sockets(atransport *t);
 
 asocket *create_local_socket(int fd);
-asocket *create_local_service_socket(const char *destination);
+asocket *create_local_service_socket(const char* destination,
+                                     const atransport* transport);
 
 asocket *create_remote_socket(unsigned id, atransport *t);
 void connect_to_remote(asocket *s, const char *destination);
@@ -247,7 +248,7 @@ void init_usb_transport(atransport *t, usb_handle *usb, ConnectionState state);
 atransport* find_emulator_transport_by_adb_port(int adb_port);
 #endif
 
-int service_to_fd(const char *name);
+int service_to_fd(const char* name, const atransport* transport);
 #if ADB_HOST
 asocket *host_service_to_socket(const char*  name, const char *serial);
 #endif

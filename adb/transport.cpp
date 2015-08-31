@@ -779,6 +779,11 @@ size_t atransport::get_max_payload() const {
     return max_payload;
 }
 
+// Do not use any of [:;=,] in feature strings, they have special meaning
+// in the connection banner.
+// TODO(dpursell): add this in once we can pass features through to the client.
+const char kFeatureShell2[] = "shell_2";
+
 // The list of features supported by the current system. Will be sent to the
 // other side of the connection in the banner.
 static const FeatureSet gSupportedFeatures = {

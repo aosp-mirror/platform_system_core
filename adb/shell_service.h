@@ -124,11 +124,17 @@ enum class SubprocessType {
     kRaw,
 };
 
+enum class SubprocessProtocol {
+    kNone,
+    kShell,
+};
+
 // Forks and starts a new shell subprocess. If |name| is empty an interactive
 // shell is started, otherwise |name| is executed non-interactively.
 //
 // Returns an open FD connected to the subprocess or -1 on failure.
-int StartSubprocess(const char* name, SubprocessType type);
+int StartSubprocess(const char* name, SubprocessType type,
+                    SubprocessProtocol protocol);
 
 #endif  // !ADB_HOST
 
