@@ -260,7 +260,7 @@ static void show_help(const char *cmd)
                     "  -n <count>      Sets max number of rotated logs to <count>, default 4\n"
                     "  -v <format>     Sets the log print format, where <format> is:\n\n"
                     "                      brief color long printable process raw tag thread\n"
-                    "                      threadtime time usec\n\n"
+                    "                      threadtime time usec UTC year zone\n\n"
                     "  -D              print dividers between each log buffer\n"
                     "  -c              clear (flush) the entire log and exit\n"
                     "  -d              dump the log and then exit (don't block)\n"
@@ -268,7 +268,8 @@ static void show_help(const char *cmd)
                     "  -t '<time>'     print most recent lines since specified time (implies -d)\n"
                     "  -T <count>      print only the most recent <count> lines (does not imply -d)\n"
                     "  -T '<time>'     print most recent lines since specified time (not imply -d)\n"
-                    "                  count is pure numerical, time is 'MM-DD hh:mm:ss.mmm'\n"
+                    "                  count is pure numerical, time is 'MM-DD hh:mm:ss.mmm...'\n"
+                    "                  or 'YYYY-MM-DD hh:mm:ss.mmm...' format\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
                     "  -L              dump logs from prior to last reboot\n"
                     "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio',\n"
@@ -377,7 +378,14 @@ static void logcat_panic(bool showHelp, const char *fmt, ...)
     exit(EXIT_FAILURE);
 }
 
-static const char g_defaultTimeFormat[] = "%m-%d %H:%M:%S.%q";
+static char *parseTime(log_time &t, const char *cp) {
+
+    char *ep = t.strptime(cp, "%m-%d %H:%M:%S.%q");
+    if (ep) {
+        return ep;
+    }
+    return t.strptime(cp, "%Y-%m-%d %H:%M:%S.%q");
+}
 
 // Find last logged line in gestalt of all matching existing output files
 static log_time lastLogTime(char *outputFileName) {
@@ -423,7 +431,7 @@ static log_time lastLogTime(char *outputFileName) {
         bool found = false;
         for (const auto& line : android::base::Split(file, "\n")) {
             log_time t(log_time::EPOCH);
-            char *ep = t.strptime(line.c_str(), g_defaultTimeFormat);
+            char *ep = parseTime(t, line.c_str());
             if (!ep || (*ep != ' ')) {
                 continue;
             }
@@ -522,11 +530,10 @@ int main(int argc, char **argv)
                 /* FALLTHRU */
             case 'T':
                 if (strspn(optarg, "0123456789") != strlen(optarg)) {
-                    char *cp = tail_time.strptime(optarg, g_defaultTimeFormat);
+                    char *cp = parseTime(tail_time, optarg);
                     if (!cp) {
-                        logcat_panic(false,
-                                    "-%c \"%s\" not in \"%s\" time format\n",
-                                    ret, optarg, g_defaultTimeFormat);
+                        logcat_panic(false, "-%c \"%s\" not in time format\n",
+                                     ret, optarg);
                     }
                     if (*cp) {
                         char c = *cp;

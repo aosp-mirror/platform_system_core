@@ -48,6 +48,8 @@ struct AndroidLogFormat_t {
     bool colored_output;
     bool usec_time_output;
     bool printable_output;
+    bool year_output;
+    bool zone_output;
 };
 
 /*
@@ -192,6 +194,8 @@ AndroidLogFormat *android_log_format_new()
     p_ret->colored_output = false;
     p_ret->usec_time_output = false;
     p_ret->printable_output = false;
+    p_ret->year_output = false;
+    p_ret->zone_output = false;
 
     return p_ret;
 }
@@ -227,12 +231,21 @@ int android_log_setPrintFormat(AndroidLogFormat *p_format,
     case FORMAT_MODIFIER_PRINTABLE:
         p_format->printable_output = true;
         return 0;
+    case FORMAT_MODIFIER_YEAR:
+        p_format->year_output = true;
+        return 0;
+    case FORMAT_MODIFIER_ZONE:
+        p_format->zone_output = !p_format->zone_output;
+        return 0;
     default:
         break;
     }
     p_format->format = format;
     return 1;
 }
+
+static const char tz[] = "TZ";
+static const char utc[] = "UTC";
 
 /**
  * Returns FORMAT_OFF on invalid string
@@ -252,7 +265,39 @@ AndroidLogPrintFormat android_log_formatFromString(const char * formatString)
     else if (strcmp(formatString, "color") == 0) format = FORMAT_MODIFIER_COLOR;
     else if (strcmp(formatString, "usec") == 0) format = FORMAT_MODIFIER_TIME_USEC;
     else if (strcmp(formatString, "printable") == 0) format = FORMAT_MODIFIER_PRINTABLE;
-    else format = FORMAT_OFF;
+    else if (strcmp(formatString, "year") == 0) format = FORMAT_MODIFIER_YEAR;
+    else if (strcmp(formatString, "zone") == 0) format = FORMAT_MODIFIER_ZONE;
+    else {
+        extern char *tzname[2];
+        static const char gmt[] = "GMT";
+        char *cp = getenv(tz);
+        if (cp) {
+            cp = strdup(cp);
+        }
+        setenv(tz, formatString, 1);
+        /*
+         * Run tzset here to determine if the timezone is legitimate. If the
+         * zone is GMT, check if that is what was asked for, if not then
+         * did not match any on the system; report an error to caller.
+         */
+        tzset();
+        if (!tzname[0]
+                || ((!strcmp(tzname[0], utc)
+                        || !strcmp(tzname[0], gmt)) /* error? */
+                    && strcasecmp(formatString, utc)
+                    && strcasecmp(formatString, gmt))) { /* ok */
+            if (cp) {
+                setenv(tz, cp, 1);
+            } else {
+                unsetenv(tz);
+            }
+            tzset();
+            format = FORMAT_OFF;
+        } else {
+            format = FORMAT_MODIFIER_ZONE;
+        }
+        free(cp);
+    }
 
     return format;
 }
@@ -887,7 +932,7 @@ char *android_log_formatLogLine (
     struct tm tmBuf;
 #endif
     struct tm* ptm;
-    char timeBuf[32]; /* good margin, 23+nul for msec, 26+nul for usec */
+    char timeBuf[64]; /* good margin, 23+nul for msec, 26+nul for usec */
     char prefixBuf[128], suffixBuf[128];
     char priChar;
     int prefixSuffixIsHeaderFooter = 0;
@@ -905,21 +950,28 @@ char *android_log_formatLogLine (
      * For this reason it's very annoying to have regexp meta characters
      * in the time stamp.  Don't use forward slashes, parenthesis,
      * brackets, asterisks, or other special chars here.
+     *
+     * The caller may have affected the timezone environment, this is
+     * expected to be sensitive to that.
      */
 #if !defined(_WIN32)
     ptm = localtime_r(&(entry->tv_sec), &tmBuf);
 #else
     ptm = localtime(&(entry->tv_sec));
 #endif
-    /* strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", ptm); */
-    strftime(timeBuf, sizeof(timeBuf), "%m-%d %H:%M:%S", ptm);
+    strftime(timeBuf, sizeof(timeBuf),
+             &"%Y-%m-%d %H:%M:%S"[p_format->year_output ? 0 : 3],
+             ptm);
     len = strlen(timeBuf);
     if (p_format->usec_time_output) {
-        snprintf(timeBuf + len, sizeof(timeBuf) - len,
-                 ".%06ld", entry->tv_nsec / 1000);
+        len += snprintf(timeBuf + len, sizeof(timeBuf) - len,
+                        ".%06ld", entry->tv_nsec / 1000);
     } else {
-        snprintf(timeBuf + len, sizeof(timeBuf) - len,
-                 ".%03ld", entry->tv_nsec / 1000000);
+        len += snprintf(timeBuf + len, sizeof(timeBuf) - len,
+                        ".%03ld", entry->tv_nsec / 1000000);
+    }
+    if (p_format->zone_output) {
+        strftime(timeBuf + len, sizeof(timeBuf) - len, " %z", ptm);
     }
 
     /*

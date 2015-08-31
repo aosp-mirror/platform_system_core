@@ -74,6 +74,90 @@ TEST(logcat, buckets) {
     EXPECT_EQ(4, count);
 }
 
+TEST(logcat, year) {
+    FILE *fp;
+
+    char needle[32];
+    time_t now;
+    time(&now);
+    struct tm *ptm;
+#if !defined(_WIN32)
+    struct tm tmBuf;
+    ptm = localtime_r(&now, &tmBuf);
+#else
+    ptm = localtime(&&now);
+#endif
+    strftime(needle, sizeof(needle), "[ %Y-", ptm);
+
+    ASSERT_TRUE(NULL != (fp = popen(
+      "logcat -v long -v year -b all -t 3 2>/dev/null",
+      "r")));
+
+    char buffer[5120];
+
+    int count = 0;
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        if (!strncmp(buffer, needle, strlen(needle))) {
+            ++count;
+        }
+    }
+
+    pclose(fp);
+
+    ASSERT_EQ(3, count);
+}
+
+TEST(logcat, tz) {
+    FILE *fp;
+
+    ASSERT_TRUE(NULL != (fp = popen(
+      "logcat -v long -v America/Los_Angeles -b all -t 3 2>/dev/null",
+      "r")));
+
+    char buffer[5120];
+
+    int count = 0;
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        if ((buffer[0] == '[') && (buffer[1] == ' ')
+         && isdigit(buffer[2]) && isdigit(buffer[3])
+         && (buffer[4] == '-')
+         && (strstr(buffer, " -0700 ") || strstr(buffer, " -0800 "))) {
+            ++count;
+        }
+    }
+
+    pclose(fp);
+
+    ASSERT_EQ(3, count);
+}
+
+TEST(logcat, ntz) {
+    FILE *fp;
+
+    ASSERT_TRUE(NULL != (fp = popen(
+      "logcat -v long -v America/Los_Angeles -v zone -b all -t 3 2>/dev/null",
+      "r")));
+
+    char buffer[5120];
+
+    int count = 0;
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        if ((buffer[0] == '[') && (buffer[1] == ' ')
+         && isdigit(buffer[2]) && isdigit(buffer[3])
+         && (buffer[4] == '-')
+         && (strstr(buffer, " -0700 ") || strstr(buffer, " -0800 "))) {
+            ++count;
+        }
+    }
+
+    pclose(fp);
+
+    ASSERT_EQ(0, count);
+}
+
 TEST(logcat, tail_3) {
     FILE *fp;
 
