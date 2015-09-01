@@ -79,6 +79,12 @@ LIBADB_windows_SRC_FILES := \
     sysdeps_win32.cpp \
     usb_windows.cpp \
 
+LIBADB_TEST_linux_SRCS := \
+    fdevent_test.cpp \
+
+LIBADB_TEST_darwin_SRCS := \
+    fdevent_test.cpp \
+
 include $(CLEAR_VARS)
 LOCAL_CLANG := true
 LOCAL_MODULE := libadbd
@@ -127,7 +133,10 @@ include $(CLEAR_VARS)
 LOCAL_CLANG := true
 LOCAL_MODULE := adbd_test
 LOCAL_CFLAGS := -DADB_HOST=0 $(LIBADB_CFLAGS)
-LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS)
+LOCAL_SRC_FILES := \
+    $(LIBADB_TEST_SRCS) \
+    $(LIBADB_TEST_linux_SRCS) \
+
 LOCAL_SANITIZE := $(adb_target_sanitize)
 LOCAL_STATIC_LIBRARIES := libadbd
 LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
@@ -140,7 +149,11 @@ include $(CLEAR_VARS)
 LOCAL_CLANG := $(adb_host_clang)
 LOCAL_MODULE := adb_test
 LOCAL_CFLAGS := -DADB_HOST=1 $(LIBADB_CFLAGS)
-LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS) services.cpp
+LOCAL_SRC_FILES := \
+    $(LIBADB_TEST_SRCS) \
+    $(LIBADB_TEST_$(HOST_OS)_SRCS) \
+    services.cpp \
+
 LOCAL_SANITIZE := $(adb_host_sanitize)
 LOCAL_SHARED_LIBRARIES := liblog libbase
 LOCAL_STATIC_LIBRARIES := \
