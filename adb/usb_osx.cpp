@@ -439,7 +439,7 @@ void usb_init() {
         adb_cond_init(&start_cond, NULL);
 
         if (!adb_thread_create(RunLoopThread, nullptr)) {
-            fatal_errno("cannot create input thread");
+            fatal_errno("cannot create RunLoop thread");
         }
 
         // Wait for initialization to finish
