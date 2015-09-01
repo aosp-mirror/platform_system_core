@@ -413,6 +413,12 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 it = f->second;
             }
         }
+        static const timespec too_old = {
+            EXPIRE_HOUR_THRESHOLD * 60 * 60, 0
+        };
+        LogBufferElementCollection::iterator lastt;
+        lastt = mLogElements.end();
+        --lastt;
         LogBufferElementLast last;
         while (it != mLogElements.end()) {
             LogBufferElement *e = *it;
@@ -464,6 +470,11 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
+            if ((e->getRealTime() < ((*lastt)->getRealTime() - too_old))
+                    || (e->getRealTime() > (*lastt)->getRealTime())) {
+                break;
+            }
+
             // unmerged drop message
             if (dropped) {
                 last.add(e);
@@ -477,18 +488,6 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             }
 
             if (e->getUid() != worst) {
-                if (leading) {
-                    static const timespec too_old = {
-                        EXPIRE_HOUR_THRESHOLD * 60 * 60, 0
-                    };
-                    LogBufferElementCollection::iterator last;
-                    last = mLogElements.end();
-                    --last;
-                    if ((e->getRealTime() < ((*last)->getRealTime() - too_old))
-                            || (e->getRealTime() > (*last)->getRealTime())) {
-                        break;
-                    }
-                }
                 leading = false;
                 last.clear(e);
                 ++it;
