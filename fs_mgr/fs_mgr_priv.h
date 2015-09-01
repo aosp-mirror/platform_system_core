@@ -79,6 +79,7 @@
 #define MF_NOTRIM       0x1000
 #define MF_FILEENCRYPTION 0x2000
 #define MF_FORMATTABLE  0x4000
+#define MF_SLOTSELECT   0x8000
 
 #define DM_BUF_SIZE 4096
 
