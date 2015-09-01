@@ -111,6 +111,13 @@ static __inline__ bool adb_thread_create(adb_thread_func_t func, void* arg) {
     return (tid != static_cast<uintptr_t>(-1L));
 }
 
+static __inline__ int adb_thread_setname(const std::string& name) {
+    // TODO: See https://msdn.microsoft.com/en-us/library/xcb2z8hs.aspx for how to set
+    // the thread name in Windows. Unfortunately, it only works during debugging, but
+    // our build process doesn't generate PDB files needed for debugging.
+    return 0;
+}
+
 static __inline__  unsigned long adb_thread_id()
 {
     return GetCurrentThreadId();
@@ -617,7 +624,26 @@ static __inline__ bool adb_thread_create(adb_thread_func_t start, void* arg) {
     return (errno == 0);
 }
 
-static __inline__  int  adb_socket_setbufsize( int   fd, int  bufsize )
+static __inline__ int adb_thread_setname(const std::string& name) {
+#ifdef __APPLE__
+    return pthread_setname_np(name.c_str());
+#else
+    const char *s = name.c_str();
+
+    // pthread_setname_np fails rather than truncating long strings.
+    const int max_task_comm_len = 16; // including the null terminator
+    if (name.length() > (max_task_comm_len - 1)) {
+        char buf[max_task_comm_len];
+        strncpy(buf, name.c_str(), sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+        s = buf;
+    }
+
+    return pthread_setname_np(pthread_self(), s) ;
+#endif
+}
+
+static __inline__  int  adb_socket_setbufsize(int fd, int  bufsize )
 {
     int opt = bufsize;
     return setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &opt, sizeof(opt));

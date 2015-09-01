@@ -123,6 +123,7 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
 #if ADB_HOST
 static void *client_socket_thread(void *x)
 {
+    adb_thread_setname("client_socket_thread");
     D("transport: client_socket_thread() starting\n");
     while (true) {
         int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
@@ -146,6 +147,7 @@ static void *server_socket_thread(void * arg)
     socklen_t alen;
     int port = (int) (uintptr_t) arg;
 
+    adb_thread_setname("server socket");
     D("transport: server_socket_thread() starting\n");
     serverfd = -1;
     for(;;) {
@@ -231,6 +233,7 @@ static const char _ok_resp[]    = "ok";
     char tmp[256];
     char con_name[32];
 
+    adb_thread_setname("qemu socket");
     D("transport: qemu_socket_thread() starting\n");
 
     /* adb QEMUD service connection request. */
