@@ -185,7 +185,6 @@ include $(CLEAR_VARS)
 
 ifeq ($(HOST_OS),linux)
     LOCAL_LDLIBS += -lrt -ldl -lpthread
-    LOCAL_CFLAGS += -DWORKAROUND_BUG6558362
 endif
 
 ifeq ($(HOST_OS),darwin)
