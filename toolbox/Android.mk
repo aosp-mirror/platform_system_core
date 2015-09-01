@@ -53,7 +53,6 @@ OUR_TOOLS := \
     start \
     stop \
     top \
-    uptime \
 
 ALL_TOOLS = $(BSD_TOOLS) $(OUR_TOOLS)
 
