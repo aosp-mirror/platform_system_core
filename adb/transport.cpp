@@ -175,26 +175,27 @@ void send_packet(apacket *p, atransport *t)
     }
 }
 
-/* The transport is opened by transport_register_func before
-** the input and output threads are started.
-**
-** The output thread issues a SYNC(1, token) message to let
-** the input thread know to start things up.  In the event
-** of transport IO failure, the output thread will post a
-** SYNC(0,0) message to ensure shutdown.
-**
-** The transport will not actually be closed until both
-** threads exit, but the input thread will kick the transport
-** on its way out to disconnect the underlying device.
-*/
-
-static void *output_thread(void *_t)
+// The transport is opened by transport_register_func before
+// the read_transport and write_transport threads are started.
+//
+// The read_transport thread issues a SYNC(1, token) message to let
+// the write_transport thread know to start things up.  In the event
+// of transport IO failure, the read_transport thread will post a
+// SYNC(0,0) message to ensure shutdown.
+//
+// The transport will not actually be closed until both threads exit, but the threads
+// will kick the transport on their way out to disconnect the underlying device.
+//
+// read_transport thread reads data from a transport (representing a usb/tcp connection),
+// and makes the main thread call handle_packet().
+static void *read_transport_thread(void *_t)
 {
     atransport *t = reinterpret_cast<atransport*>(_t);
     apacket *p;
 
-    adb_thread_setname(android::base::StringPrintf("->%s", t->serial));
-    D("%s: starting transport output thread on fd %d, SYNC online (%d)\n",
+    adb_thread_setname(android::base::StringPrintf("<-%s",
+                                                   (t->serial != nullptr ? t->serial : "transport")));
+    D("%s: starting read_transport thread on fd %d, SYNC online (%d)\n",
        t->serial, t->fd, t->sync_token + 1);
     p = get_apacket();
     p->msg.command = A_SYNC;
@@ -238,20 +239,23 @@ static void *output_thread(void *_t)
     }
 
 oops:
-    D("%s: transport output thread is exiting\n", t->serial);
+    D("%s: read_transport thread is exiting\n", t->serial);
     kick_transport(t);
     transport_unref(t);
     return 0;
 }
 
-static void *input_thread(void *_t)
+// write_transport thread gets packets sent by the main thread (through send_packet()),
+// and writes to a transport (representing a usb/tcp connection).
+static void *write_transport_thread(void *_t)
 {
     atransport *t = reinterpret_cast<atransport*>(_t);
     apacket *p;
     int active = 0;
 
-    adb_thread_setname(android::base::StringPrintf("<-%s", t->serial));
-    D("%s: starting transport input thread, reading from fd %d\n",
+    adb_thread_setname(android::base::StringPrintf("->%s",
+                                                   (t->serial != nullptr ? t->serial : "transport")));
+    D("%s: starting write_transport thread, reading from fd %d\n",
        t->serial, t->fd);
 
     for(;;){
@@ -286,7 +290,7 @@ static void *input_thread(void *_t)
         put_apacket(p);
     }
 
-    D("%s: transport input thread is exiting, fd %d\n", t->serial, t->fd);
+    D("%s: write_transport thread is exiting, fd %d\n", t->serial, t->fd);
     kick_transport(t);
     transport_unref(t);
     return 0;
@@ -546,12 +550,12 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
 
         fdevent_set(&(t->transport_fde), FDE_READ);
 
-        if (!adb_thread_create(input_thread, t)) {
-            fatal_errno("cannot create input thread");
+        if (!adb_thread_create(write_transport_thread, t)) {
+            fatal_errno("cannot create write_transport thread");
         }
 
-        if (!adb_thread_create(output_thread, t)) {
-            fatal_errno("cannot create output thread");
+        if (!adb_thread_create(read_transport_thread, t)) {
+            fatal_errno("cannot create read_transport thread");
         }
     }
 
@@ -937,9 +941,9 @@ void kick_all_tcp_devices() {
     for (auto& t : transport_list) {
         // TCP/IP devices have adb_port == 0.
         if (t->type == kTransportLocal && t->adb_port == 0) {
-            // Kicking breaks the output thread of this transport out of any read, then
-            // the output thread will notify the main thread to make this transport
-            // offline. Then the main thread will notify the input thread to exit.
+            // Kicking breaks the read_transport thread of this transport out of any read, then
+            // the read_transport thread will notify the main thread to make this transport
+            // offline. Then the main thread will notify the write_transport thread to exit.
             // Finally, this transport will be closed and freed in the main thread.
             kick_transport_locked(t);
         }
