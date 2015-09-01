@@ -37,9 +37,9 @@ int mkstemp(char* template_name) {
     return -1;
   }
   // Use open() to match the close() that TemporaryFile's destructor does.
-  // Note that on Windows, this does CR/LF translation and _setmode() should
-  // be used to change that if appropriate.
-  return open(template_name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR);
+  // Use O_BINARY to match base file APIs.
+  return open(template_name, O_CREAT | O_EXCL | O_RDWR | O_BINARY,
+              S_IRUSR | S_IWUSR);
 }
 
 char* mkdtemp(char* template_name) {

@@ -31,10 +31,11 @@
 #include "base/test_utils.h"
 
 // All of these tests fail on Windows because they use the C Runtime open(),
-// but the adb_io APIs expect file descriptors from adb_open(). Also, the
-// android::base file APIs use the C Runtime which uses CR/LF translation by
-// default (changeable with _setmode()), but the adb_io APIs use adb_read()
-// and adb_write() which do no translation.
+// but the adb_io APIs expect file descriptors from adb_open(). This could
+// theoretically be fixed by making adb_read()/adb_write() fallback to using
+// read()/write() if an unrecognized fd is used, and by making adb_open() return
+// fds far from the range that open() returns. But all of that might defeat the
+// purpose of the tests.
 
 TEST(io, ReadFdExactly_whole) {
   const char expected[] = "Foobar";
