@@ -193,7 +193,7 @@ static void *output_thread(void *_t)
     atransport *t = reinterpret_cast<atransport*>(_t);
     apacket *p;
 
-    adb_thread_setname("to transport");
+    adb_thread_setname(android::base::StringPrintf("->%s", t->serial));
     D("%s: starting transport output thread on fd %d, SYNC online (%d)\n",
        t->serial, t->fd, t->sync_token + 1);
     p = get_apacket();
@@ -250,7 +250,7 @@ static void *input_thread(void *_t)
     apacket *p;
     int active = 0;
 
-    adb_thread_setname("from transport");
+    adb_thread_setname(android::base::StringPrintf("<-%s", t->serial));
     D("%s: starting transport input thread, reading from fd %d\n",
        t->serial, t->fd);
 
