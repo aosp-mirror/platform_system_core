@@ -592,6 +592,6 @@ void usb_init() {
     sigaction(SIGALRM, &actions, nullptr);
 
     if (!adb_thread_create(device_poll_thread, nullptr)) {
-        fatal_errno("cannot create input thread");
+        fatal_errno("cannot create device_poll thread");
     }
 }
