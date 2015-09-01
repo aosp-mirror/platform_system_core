@@ -171,6 +171,7 @@ int register_new_device(usb_handle* handle) {
 }
 
 void* device_poll_thread(void* unused) {
+  adb_thread_setname("Device Poll");
   D("Created device thread\n");
 
   while(1) {
@@ -208,6 +209,7 @@ static void* _power_notification_thread(void* unused) {
   // of a developer's interactive session, a window message pump is more
   // appropriate.
   D("Created power notification thread\n");
+  adb_thread_setname("Power Notifier");
 
   // Window class names are process specific.
   static const WCHAR kPowerNotificationWindowClassName[] =
