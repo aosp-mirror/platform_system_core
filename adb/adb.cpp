@@ -919,7 +919,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     if(!strncmp(service,"get-state",strlen("get-state"))) {
         transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
         SendOkay(reply_fd);
-        SendProtocolString(reply_fd, transport->connection_state_name());
+        SendProtocolString(reply_fd, transport ? transport->connection_state_name() : "unknown");
         return 0;
     }
 #endif // ADB_HOST
