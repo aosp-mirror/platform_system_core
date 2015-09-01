@@ -55,6 +55,7 @@
 #include "action.h"
 #include "bootchart.h"
 #include "devices.h"
+#include "import_parser.h"
 #include "init.h"
 #include "init_parser.h"
 #include "keychords.h"
@@ -604,7 +605,14 @@ int main(int argc, char** argv) {
     property_load_boot_defaults();
     start_property_service();
 
-    init_parse_config("/init.rc");
+    const BuiltinFunctionMap function_map;
+    Action::set_function_map(&function_map);
+
+    Parser& parser = Parser::GetInstance();
+    parser.AddSectionParser("service",std::make_unique<ServiceParser>());
+    parser.AddSectionParser("on", std::make_unique<ActionParser>());
+    parser.AddSectionParser("import", std::make_unique<ImportParser>());
+    parser.ParseConfig("/init.rc");
 
     ActionManager& am = ActionManager::GetInstance();
 

@@ -26,6 +26,8 @@
 #include <vector>
 
 #include "action.h"
+#include "init_parser.h"
+#include "keyword_map.h"
 
 #define SVC_DISABLED       0x001  // do not autostart with class
 #define SVC_ONESHOT        0x002  // do not restart on exit
@@ -73,7 +75,7 @@ public:
             unsigned flags, uid_t uid, gid_t gid, const std::vector<gid_t>& supp_gids,
             const std::string& seclabel,  const std::vector<std::string>& args);
 
-    bool HandleLine(int kw, const std::vector<std::string>& args, std::string* err);
+    bool HandleLine(const std::vector<std::string>& args, std::string* err);
     bool Start(const std::vector<std::string>& dynamic_args);
     bool Start();
     bool StartIfNotDisabled();
@@ -99,11 +101,30 @@ public:
     const std::vector<std::string>& args() const { return args_; }
 
 private:
+    using OptionHandler = bool (Service::*) (const std::vector<std::string>& args,
+                                             std::string* err);
+    class OptionHandlerMap;
+
     void NotifyStateChange(const std::string& new_state) const;
     void StopOrReset(int how);
     void ZapStdio() const;
     void OpenConsole() const;
     void PublishSocket(const std::string& name, int fd) const;
+
+    bool HandleClass(const std::vector<std::string>& args, std::string* err);
+    bool HandleConsole(const std::vector<std::string>& args, std::string* err);
+    bool HandleCritical(const std::vector<std::string>& args, std::string* err);
+    bool HandleDisabled(const std::vector<std::string>& args, std::string* err);
+    bool HandleGroup(const std::vector<std::string>& args, std::string* err);
+    bool HandleIoprio(const std::vector<std::string>& args, std::string* err);
+    bool HandleKeycodes(const std::vector<std::string>& args, std::string* err);
+    bool HandleOneshot(const std::vector<std::string>& args, std::string* err);
+    bool HandleOnrestart(const std::vector<std::string>& args, std::string* err);
+    bool HandleSeclabel(const std::vector<std::string>& args, std::string* err);
+    bool HandleSetenv(const std::vector<std::string>& args, std::string* err);
+    bool HandleSocket(const std::vector<std::string>& args, std::string* err);
+    bool HandleUser(const std::vector<std::string>& args, std::string* err);
+    bool HandleWritepid(const std::vector<std::string>& args, std::string* err);
 
     std::string name_;
     std::string classname_;
@@ -141,9 +162,7 @@ class ServiceManager {
 public:
     static ServiceManager& GetInstance();
 
-    Service* AddNewService(const std::string& name, const std::string& classname,
-                                           const std::vector<std::string>& args,
-                                           std::string* err);
+    void AddService(std::unique_ptr<Service> service);
     Service* MakeExecOneshotService(const std::vector<std::string>& args);
     Service* FindServiceByName(const std::string& name) const;
     Service* FindServiceByPid(pid_t pid) const;
@@ -155,13 +174,30 @@ public:
                              void (*func)(Service* svc)) const;
     void RemoveService(const Service& svc);
     void DumpState() const;
+
 private:
     ServiceManager();
 
-    bool IsValidName(const std::string& name) const;
-
     static int exec_count_; // Every service needs a unique name.
     std::vector<std::unique_ptr<Service>> services_;
+};
+
+class ServiceParser : public SectionParser {
+public:
+    ServiceParser() : service_(nullptr) {
+    }
+    bool ParseSection(const std::vector<std::string>& args,
+                      std::string* err) override;
+    bool ParseLineSection(const std::vector<std::string>& args,
+                          const std::string& filename, int line,
+                          std::string* err) const override;
+    void EndSection() override;
+    void EndFile(const std::string&) override {
+    }
+private:
+    bool IsValidName(const std::string& name) const;
+
+    std::unique_ptr<Service> service_;
 };
 
 #endif

@@ -43,6 +43,7 @@
 
 #include "init.h"
 #include "log.h"
+#include "property_service.h"
 #include "util.h"
 
 /*
@@ -475,4 +476,74 @@ bool is_dir(const char* pathname) {
         return false;
     }
     return S_ISDIR(info.st_mode);
+}
+
+bool expand_props(const std::string& src, std::string* dst) {
+    const char* src_ptr = src.c_str();
+
+    if (!dst) {
+        return false;
+    }
+
+    /* - variables can either be $x.y or ${x.y}, in case they are only part
+     *   of the string.
+     * - will accept $$ as a literal $.
+     * - no nested property expansion, i.e. ${foo.${bar}} is not supported,
+     *   bad things will happen
+     */
+    while (*src_ptr) {
+        const char* c;
+
+        c = strchr(src_ptr, '$');
+        if (!c) {
+            dst->append(src_ptr);
+            return true;
+        }
+
+        dst->append(src_ptr, c);
+        c++;
+
+        if (*c == '$') {
+            dst->push_back(*(c++));
+            src_ptr = c;
+            continue;
+        } else if (*c == '\0') {
+            return true;
+        }
+
+        std::string prop_name;
+        if (*c == '{') {
+            c++;
+            const char* end = strchr(c, '}');
+            if (!end) {
+                // failed to find closing brace, abort.
+                ERROR("unexpected end of string in '%s', looking for }\n", src.c_str());
+                return false;
+            }
+            prop_name = std::string(c, end);
+            c = end + 1;
+        } else {
+            prop_name = c;
+            ERROR("using deprecated syntax for specifying property '%s', use ${name} instead\n",
+                  c);
+            c += prop_name.size();
+        }
+
+        if (prop_name.empty()) {
+            ERROR("invalid zero-length prop name in '%s'\n", src.c_str());
+            return false;
+        }
+
+        std::string prop_val = property_get(prop_name.c_str());
+        if (prop_val.empty()) {
+            ERROR("property '%s' doesn't exist while expanding '%s'\n",
+                  prop_name.c_str(), src.c_str());
+            return false;
+        }
+
+        dst->append(prop_val);
+        src_ptr = c;
+    }
+
+    return true;
 }
