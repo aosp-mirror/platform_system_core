@@ -249,36 +249,47 @@ void LogKlog::calculateCorrection(const log_time &monotonic,
     correction = real - monotonic;
 }
 
+static const char suspendStr[] = "PM: suspend entry ";
+static const char resumeStr[] = "PM: suspend exit ";
+static const char suspendedStr[] = "Suspended for ";
+
 void LogKlog::sniffTime(log_time &now, const char **buf, bool reverse) {
     const char *cp;
     if ((cp = now.strptime(*buf, "[ %s.%q]"))) {
-        static const char suspend[] = "PM: suspend entry ";
-        static const char resume[] = "PM: suspend exit ";
-        static const char healthd[] = "healthd: battery ";
-        static const char suspended[] = "Suspended for ";
+        static const char healthd[] = "healthd";
+        static const char battery[] = ": battery ";
 
         if (isspace(*cp)) {
             ++cp;
         }
-        if (!strncmp(cp, suspend, sizeof(suspend) - 1)) {
-            calculateCorrection(now, cp + sizeof(suspend) - 1);
-        } else if (!strncmp(cp, resume, sizeof(resume) - 1)) {
-            calculateCorrection(now, cp + sizeof(resume) - 1);
-        } else if (!strncmp(cp, healthd, sizeof(healthd) - 1)) {
+        *buf = cp;
+
+        const char *b;
+        if ((b = strstr(cp, suspendStr))) {
+            calculateCorrection(now, b + sizeof(suspendStr) - 1);
+        } else if ((b = strstr(cp, resumeStr))) {
+            calculateCorrection(now, b + sizeof(resumeStr) - 1);
+        } else if (((b = strstr(cp, healthd))) && ((b = strstr(b, battery)))) {
+            // NB: healthd is roughly 150us late, worth the price to deal with
+            //     ntp-induced or hardware clock drift.
             // look for " 2???-??-?? ??:??:??.????????? ???"
             const char *tp;
-            for (tp = cp + sizeof(healthd) - 1; *tp && (*tp != '\n'); ++tp) {
+            for (tp = b + sizeof(battery) - 1; *tp && (*tp != '\n'); ++tp) {
                 if ((tp[0] == ' ') && (tp[1] == '2') && (tp[5] == '-')) {
                     calculateCorrection(now, tp + 1);
                     break;
                 }
             }
-        } else if (!strncmp(cp, suspended, sizeof(suspended) - 1)) {
+        } else if ((b = strstr(cp, suspendedStr))) {
             log_time real;
             char *endp;
-            real.tv_sec = strtol(cp + sizeof(suspended) - 1, &endp, 10);
+            real.tv_sec = strtol(b + sizeof(suspendedStr) - 1, &endp, 10);
             if (*endp == '.') {
-                real.tv_nsec = strtol(endp + 1, &endp, 10) * 1000000L;
+                unsigned long multiplier = NS_PER_SEC;
+                real.tv_nsec = 0;
+                while (isdigit(*++endp) && (multiplier /= 10)) {
+                    real.tv_nsec += (*endp - '0') * multiplier;
+                }
                 if (reverse) {
                     correction -= real;
                 } else {
@@ -288,7 +299,6 @@ void LogKlog::sniffTime(log_time &now, const char **buf, bool reverse) {
         }
 
         convertMonotonicToReal(now);
-        *buf = cp;
     } else {
         now = log_time(CLOCK_REALTIME);
     }
@@ -310,34 +320,6 @@ pid_t LogKlog::sniffPid(const char *cp) {
     return 0;
 }
 
-// Passed the entire SYSLOG_ACTION_READ_ALL buffer and interpret a
-// compensated start time.
-void LogKlog::synchronize(const char *buf) {
-    const char *cp = strstr(buf, "] PM: suspend e");
-    if (!cp) {
-        return;
-    }
-
-    do {
-        --cp;
-    } while ((cp > buf) && (isdigit(*cp) || isspace(*cp) || (*cp == '.')));
-
-    log_time now;
-    sniffTime(now, &cp, true);
-
-    char *suspended = strstr(buf, "] Suspended for ");
-    if (!suspended || (suspended > cp)) {
-        return;
-    }
-    cp = suspended;
-
-    do {
-        --cp;
-    } while ((cp > buf) && (isdigit(*cp) || isspace(*cp) || (*cp == '.')));
-
-    sniffTime(now, &cp, true);
-}
-
 // kernel log prefix, convert to a kernel log priority number
 static int parseKernelPrio(const char **buf) {
     int pri = LOG_USER | LOG_INFO;
@@ -356,6 +338,50 @@ static int parseKernelPrio(const char **buf) {
         *buf = cp;
     }
     return pri;
+}
+
+// Passed the entire SYSLOG_ACTION_READ_ALL buffer and interpret a
+// compensated start time.
+void LogKlog::synchronize(const char *buf) {
+    const char *cp = strstr(buf, suspendStr);
+    if (!cp) {
+        cp = strstr(buf, resumeStr);
+        if (!cp) {
+            return;
+        }
+    } else {
+        const char *rp = strstr(buf, resumeStr);
+        if (rp && (rp < cp)) {
+            cp = rp;
+        }
+    }
+
+    do {
+        --cp;
+    } while ((cp > buf) && (*cp != '\n'));
+    if (*cp == '\n') {
+        ++cp;
+    }
+    parseKernelPrio(&cp);
+
+    log_time now;
+    sniffTime(now, &cp, true);
+
+    char *suspended = strstr(buf, suspendedStr);
+    if (!suspended || (suspended > cp)) {
+        return;
+    }
+    cp = suspended;
+
+    do {
+        --cp;
+    } while ((cp > buf) && (*cp != '\n'));
+    if (*cp == '\n') {
+        ++cp;
+    }
+    parseKernelPrio(&cp);
+
+    sniffTime(now, &cp, true);
 }
 
 // Convert kernel log priority number into an Android Logger priority number
