@@ -749,7 +749,7 @@ static int logcat(TransportType transport, const char* serial, int argc, const c
 }
 
 static int backup(int argc, const char** argv) {
-    const char* filename = "./backup.ab";
+    const char* filename = "backup.ab";
 
     /* find, extract, and use any -f argument */
     for (int i = 1; i < argc; i++) {
