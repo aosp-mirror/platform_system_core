@@ -15,7 +15,6 @@
  */
 
 #include "bootchart.h"
-#include "keywords.h"
 #include "log.h"
 #include "property_service.h"
 
@@ -32,6 +31,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <base/file.h>
 
