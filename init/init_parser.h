@@ -17,16 +17,39 @@
 #ifndef _INIT_INIT_PARSER_H_
 #define _INIT_INIT_PARSER_H_
 
+#include <map>
 #include <string>
 #include <vector>
 
-#define INIT_PARSER_MAXARGS 64
+class SectionParser {
+public:
+    virtual ~SectionParser() {
+    }
+    virtual bool ParseSection(const std::vector<std::string>& args,
+                              std::string* err) = 0;
+    virtual bool ParseLineSection(const std::vector<std::string>& args,
+                                  const std::string& filename, int line,
+                                  std::string* err) const = 0;
+    virtual void EndSection() = 0;
+    virtual void EndFile(const std::string& filename) = 0;
+};
 
-class Action;
+class Parser {
+public:
+    static Parser& GetInstance();
+    void DumpState() const;
+    bool ParseConfig(const std::string& path);
+    void AddSectionParser(const std::string& name,
+                          std::unique_ptr<SectionParser> parser);
 
-bool init_parse_config(const char* path);
-int expand_props(const std::string& src, std::string* dst);
-bool add_command_to_action(Action* action, const std::vector<std::string>& args,
-                           const std::string& filename, int line, std::string* err);
+private:
+    Parser();
+
+    void ParseData(const std::string& filename, const std::string& data);
+    bool ParseConfigFile(const std::string& path);
+    bool ParseConfigDir(const std::string& path);
+
+    std::map<std::string, std::unique_ptr<SectionParser>> section_parsers_;
+};
 
 #endif
