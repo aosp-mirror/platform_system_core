@@ -28,6 +28,10 @@
 #include "cutils/log.h"
 #include "utils/Compat.h"
 
+#if !defined(_WIN32)
+#define O_BINARY 0
+#endif
+
 namespace android {
 namespace base {
 
@@ -45,8 +49,7 @@ bool ReadFdToString(int fd, std::string* content) {
 bool ReadFileToString(const std::string& path, std::string* content) {
   content->clear();
 
-  int fd =
-      TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
+  int fd = TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_BINARY));
   if (fd == -1) {
     return false;
   }
@@ -80,9 +83,8 @@ static bool CleanUpAfterFailedWrite(const std::string& path) {
 #if !defined(_WIN32)
 bool WriteStringToFile(const std::string& content, const std::string& path,
                        mode_t mode, uid_t owner, gid_t group) {
-  int fd = TEMP_FAILURE_RETRY(
-      open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW,
-           mode));
+  int flags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_BINARY;
+  int fd = TEMP_FAILURE_RETRY(open(path.c_str(), flags, mode));
   if (fd == -1) {
     ALOGE("android::WriteStringToFile open failed: %s", strerror(errno));
     return false;
@@ -108,9 +110,8 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
 #endif
 
 bool WriteStringToFile(const std::string& content, const std::string& path) {
-  int fd = TEMP_FAILURE_RETRY(
-      open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW,
-           DEFFILEMODE));
+  int flags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_BINARY;
+  int fd = TEMP_FAILURE_RETRY(open(path.c_str(), flags, DEFFILEMODE));
   if (fd == -1) {
     return false;
   }
