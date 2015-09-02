@@ -41,6 +41,28 @@ metrics_daemon_sources := \
   serialization/metric_sample.cc \
   serialization/serialization_utils.cc
 
+metrics_tests_sources := \
+  metrics_daemon.cc \
+  metrics_daemon_test.cc \
+  metrics_library_test.cc \
+  persistent_integer.cc \
+  persistent_integer_test.cc \
+  serialization/metric_sample.cc \
+  serialization/serialization_utils.cc \
+  serialization/serialization_utils_unittest.cc \
+  timer.cc \
+  timer_test.cc \
+  uploader/metrics_hashes.cc \
+  uploader/metrics_hashes_unittest.cc \
+  uploader/metrics_log_base.cc \
+  uploader/metrics_log_base_unittest.cc \
+  uploader/metrics_log.cc \
+  uploader/mock/sender_mock.cc \
+  uploader/sender_http.cc \
+  uploader/system_profile_cache.cc \
+  uploader/upload_service.cc \
+  uploader/upload_service_test.cc \
+
 metrics_CFLAGS := -Wall \
   -Wno-char-subscripts \
   -Wno-missing-field-initializers \
@@ -124,5 +146,26 @@ LOCAL_MODULE_PATH := $(PRODUCT_OUT)/$(TARGET_COPY_OUT_INITRCD)
 LOCAL_SRC_FILES := init.$(LOCAL_INIT_SERVICE).rc
 include $(BUILD_PREBUILT)
 endif # INITRC_TEMPLATE
+
+# Unit tests for metrics.
+# ========================================================
+include $(CLEAR_VARS)
+LOCAL_MODULE := metrics_tests
+LOCAL_CFLAGS := $(metrics_CFLAGS)
+LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
+LOCAL_CPPFLAGS := $(metrics_CPPFLAGS) -Wno-sign-compare
+LOCAL_RTTI_FLAG := -frtti
+LOCAL_SHARED_LIBRARIES := $(metrics_shared_libraries) \
+  libmetrics \
+  libprotobuf-cpp-lite \
+  libchromeos-http \
+  libchromeos-dbus \
+  libcutils \
+  libdbus \
+
+LOCAL_SRC_FILES := $(metrics_tests_sources)
+LOCAL_STATIC_LIBRARIES := libBionicGtestMain libgmock metrics_daemon_protos
+
+include $(BUILD_NATIVE_TEST)
 
 endif # HOST_OS == linux

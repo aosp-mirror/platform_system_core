@@ -129,6 +129,9 @@ class MetricsLibrary : public MetricsLibraryInterface {
   FRIEND_TEST(MetricsLibraryTest, SendMessageToChrome);
   FRIEND_TEST(MetricsLibraryTest, SendMessageToChromeUMAEventsBadFileLocation);
 
+  void InitForTest(const std::string& uma_events_file,
+                   const std::string& consent_file);
+
   // Sets |*result| to whether or not the |mounts_file| indicates that
   // the |device_name| is currently mounted.  Uses |buffer| of
   // |buffer_size| to read the file.  Returns false if any error.
