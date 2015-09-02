@@ -286,30 +286,31 @@ static void readDmesg(LogAudit *al, LogKlog *kl) {
         return;
     }
 
-    int len = klogctl(KLOG_SIZE_BUFFER, NULL, 0);
-    if (len <= 0) {
-        return;
-    }
-
-    len += 1024; // Margin for additional input race or trailing nul
-    std::unique_ptr<char []> buf(new char[len]);
-
-    int rc = klogctl(KLOG_READ_ALL, buf.get(), len);
+    int rc = klogctl(KLOG_SIZE_BUFFER, NULL, 0);
     if (rc <= 0) {
         return;
     }
 
-    if (rc < len) {
+    size_t len = rc + 1024; // Margin for additional input race or trailing nul
+    std::unique_ptr<char []> buf(new char[len]);
+
+    rc = klogctl(KLOG_READ_ALL, buf.get(), len);
+    if (rc <= 0) {
+        return;
+    }
+
+    if ((size_t)rc < len) {
         len = rc + 1;
     }
-    buf[len - 1] = '\0';
+    buf[--len] = '\0';
 
     if (kl) {
         kl->synchronize(buf.get());
     }
 
+    size_t sublen;
     for (char *ptr = NULL, *tok = buf.get();
-         (rc >= 0) && ((tok = log_strtok_r(tok, &ptr)));
+         (rc >= 0) && ((tok = log_strntok_r(tok, &len, &ptr, &sublen)));
          tok = NULL) {
         if (al) {
             rc = al->log(tok);
