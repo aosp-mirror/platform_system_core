@@ -82,7 +82,6 @@ class MetricsDaemonTest : public testing::Test {
                  false,
                  true,
                  &metrics_lib_,
-                 disk_stats_path_.value(),
                  scaling_max_freq_path_.value(),
                  cpu_max_freq_path_.value(),
                  base::TimeDelta::FromMinutes(30),

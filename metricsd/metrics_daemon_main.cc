@@ -75,7 +75,6 @@ int main(int argc, char** argv) {
               FLAGS_uploader | FLAGS_uploader_test,
               FLAGS_withdbus,
               &metrics_lib,
-              "/proc/vmstat",
               kScalingMaxFreqPath,
               kCpuinfoMaxFreqPath,
               base::TimeDelta::FromSeconds(FLAGS_upload_interval_secs),
