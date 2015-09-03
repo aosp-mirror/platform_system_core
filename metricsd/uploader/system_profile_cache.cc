@@ -61,7 +61,7 @@ SystemProfileCache::SystemProfileCache()
 }
 
 SystemProfileCache::SystemProfileCache(bool testing,
-                                       const std::string& config_root)
+                                       const base::FilePath& config_root)
     : initialized_(false),
       testing_(testing),
       config_root_(config_root),
@@ -73,9 +73,7 @@ bool SystemProfileCache::Initialize() {
   CHECK(!initialized_)
       << "this should be called only once in the metrics_daemon lifetime.";
 
-  char property_value[PROPERTY_VALUE_MAX];
-  property_get(metrics::kBuildTargetIdProperty, property_value, "");
-  profile_.build_target_id = std::string(property_value);
+  profile_.build_target_id = GetProperty(metrics::kBuildTargetIdProperty);
 
   if (profile_.build_target_id.empty()) {
     LOG(ERROR) << "System property " << metrics::kBuildTargetIdProperty
@@ -83,11 +81,8 @@ bool SystemProfileCache::Initialize() {
     return false;
   }
 
-  property_get(metrics::kChannelProperty, property_value, "");
-  std::string channel(property_value);
-
-  property_get(metrics::kProductVersionProperty, property_value, "");
-  profile_.version = std::string(property_value);
+  std::string channel = GetProperty(metrics::kChannelProperty);
+  profile_.version = GetProperty(metrics::kProductVersionProperty);
 
   if (channel.empty() || profile_.version.empty()) {
     // If the channel or version is missing, the image is not official.
@@ -155,6 +150,18 @@ std::string SystemProfileCache::GetPersistentGUID(
     CHECK(base::WriteFile(filepath, guid.c_str(), guid.size()));
   }
   return guid;
+}
+
+std::string SystemProfileCache::GetProperty(const std::string& name) {
+  if (testing_) {
+    std::string content;
+    base::ReadFileToString(config_root_.Append(name), &content);
+    return content;
+  } else {
+    char value[PROPERTY_VALUE_MAX];
+    property_get(name.data(), value, "");
+    return std::string(value);
+  }
 }
 
 metrics::SystemProfileProto_Channel SystemProfileCache::ProtoChannelFromString(

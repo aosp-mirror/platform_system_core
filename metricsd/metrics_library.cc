@@ -140,6 +140,12 @@ void MetricsLibrary::Init() {
   uma_events_file_ = metrics::kMetricsEventsFilePath;
 }
 
+void MetricsLibrary::InitForTest(const std::string& uma_events_file,
+                                 const std::string& consent_file) {
+  uma_events_file_ = uma_events_file;
+  consent_file_ = consent_file;
+}
+
 bool MetricsLibrary::SendToUMA(const std::string& name,
                                int sample,
                                int min,

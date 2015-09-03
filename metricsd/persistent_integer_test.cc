@@ -19,6 +19,7 @@
 #include <base/compiler_specific.h>
 #include <base/files/file_enumerator.h>
 #include <base/files/file_util.h>
+#include <base/files/scoped_temp_dir.h>
 
 #include "persistent_integer.h"
 
@@ -30,7 +31,9 @@ using chromeos_metrics::PersistentInteger;
 class PersistentIntegerTest : public testing::Test {
   void SetUp() override {
     // Set testing mode.
-    chromeos_metrics::PersistentInteger::SetTestingMode(true);
+    ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+    chromeos_metrics::PersistentInteger::SetMetricsDirectory(
+        temp_dir_.path().value());
   }
 
   void TearDown() override {
@@ -45,6 +48,8 @@ class PersistentIntegerTest : public testing::Test {
       base::DeleteFile(name, false);
     }
   }
+
+  base::ScopedTempDir temp_dir_;
 };
 
 TEST_F(PersistentIntegerTest, BasicChecks) {
@@ -70,9 +75,4 @@ TEST_F(PersistentIntegerTest, BasicChecks) {
   // Another persistence test.
   pi.reset(new PersistentInteger(kBackingFileName));
   EXPECT_EQ(0, pi->Get());
-}
-
-int main(int argc, char** argv) {
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
