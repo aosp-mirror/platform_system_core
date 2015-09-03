@@ -32,6 +32,8 @@
 #include "android_filesystem_capability.h"
 #endif
 
+#define CAP_MASK_LONG(cap_name)  (1ULL << (cap_name))
+
 /* This is the master Users and Groups config for the platform.
  * DO NOT EVER RENUMBER
  */
