@@ -73,7 +73,7 @@ uint64_t MetricsLogBase::Hash(const std::string& value) {
   // name.  We can then use this logging to find out what histogram name was
   // being hashed to a given MD5 value by just running the version of Chromium
   // in question with --enable-logging.
-  DVLOG(1) << "Metrics: Hash numeric [" << value << "]=[" << hash << "]";
+  VLOG(1) << "Metrics: Hash numeric [" << value << "]=[" << hash << "]";
 
   return hash;
 }
