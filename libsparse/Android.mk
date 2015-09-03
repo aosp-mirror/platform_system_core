@@ -18,6 +18,7 @@ LOCAL_MODULE := libsparse_host
 LOCAL_STATIC_LIBRARIES := libz
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_CFLAGS := -Werror
+LOCAL_MODULE_HOST_OS := darwin linux windows
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
