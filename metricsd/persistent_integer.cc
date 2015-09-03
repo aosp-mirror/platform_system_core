@@ -28,18 +28,14 @@
 namespace chromeos_metrics {
 
 // Static class member instantiation.
-bool PersistentInteger::testing_ = false;
+std::string PersistentInteger::metrics_directory_ = metrics::kMetricsDirectory;
 
 PersistentInteger::PersistentInteger(const std::string& name) :
       value_(0),
       version_(kVersion),
       name_(name),
       synced_(false) {
-  if (testing_) {
-    backing_file_name_ = name_;
-  } else {
-    backing_file_name_ = metrics::kMetricsDirectory + name_;
-  }
+  backing_file_name_ = metrics_directory_ + name_;
 }
 
 PersistentInteger::~PersistentInteger() {}
@@ -100,8 +96,8 @@ bool PersistentInteger::Read() {
   return read_succeeded;
 }
 
-void PersistentInteger::SetTestingMode(bool testing) {
-  testing_ = testing;
+void PersistentInteger::SetMetricsDirectory(const std::string& directory) {
+  metrics_directory_ = directory;
 }
 
 

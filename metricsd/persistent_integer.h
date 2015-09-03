@@ -50,10 +50,9 @@ class PersistentInteger {
   // Virtual only because of mock.
   virtual void Add(int64_t x);
 
-  // After calling with |testing| = true, changes some behavior for the purpose
-  // of testing.  For instance: instances created while testing use the current
-  // directory for the backing files.
-  static void SetTestingMode(bool testing);
+  // Sets the directory path for all persistent integers.
+  // This is used in unittests to change where the counters are stored.
+  static void SetMetricsDirectory(const std::string& directory);
 
  private:
   static const int kVersion = 1001;
@@ -70,8 +69,8 @@ class PersistentInteger {
   int32_t version_;
   std::string name_;
   std::string backing_file_name_;
+  static std::string metrics_directory_;
   bool synced_;
-  static bool testing_;
 };
 
 }  // namespace chromeos_metrics
