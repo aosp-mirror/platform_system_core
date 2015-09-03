@@ -801,9 +801,6 @@ static void do_flashall(usb_handle* usb, int erase_first) {
 
 static int do_bypass_unlock_command(int argc, char **argv)
 {
-    unsigned sz;
-    void *data;
-
     if (argc <= 2) return 0;
     skip(2);
 
@@ -812,8 +809,10 @@ static int do_bypass_unlock_command(int argc, char **argv)
      * and send that to the remote device.
      */
     require(1);
-    data = load_file(*argv, &sz);
-    if (data == 0) die("could not load '%s': %s", *argv, strerror(errno));
+
+    int64_t sz;
+    void* data = load_file(*argv, &sz);
+    if (data == nullptr) die("could not load '%s': %s", *argv, strerror(errno));
     fb_queue_download("unlock_message", data, sz);
     fb_queue_command("flashing unlock_bootloader", "unlocking bootloader");
     skip(1);
