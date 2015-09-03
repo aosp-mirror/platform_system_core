@@ -162,7 +162,7 @@ int adbd_main(int server_port) {
             PLOG(FATAL) << "Could not setuid";
         }
 
-        D("Local port disabled\n");
+        D("Local port disabled");
     } else {
         if (root_seclabel != nullptr) {
             if (setcon(root_seclabel) < 0) {
@@ -197,7 +197,7 @@ int adbd_main(int server_port) {
 
     int port;
     if (sscanf(prop_port, "%d", &port) == 1 && port > 0) {
-        printf("using port=%d\n", port);
+        D("using port=%d", port);
         // Listen on TCP port specified by service.adb.tcp.port property.
         local_init(port);
     } else if (!is_usb) {
@@ -205,11 +205,11 @@ int adbd_main(int server_port) {
         local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
     }
 
-    D("adbd_main(): pre init_jdwp()\n");
+    D("adbd_main(): pre init_jdwp()");
     init_jdwp();
-    D("adbd_main(): post init_jdwp()\n");
+    D("adbd_main(): post init_jdwp()");
 
-    D("Event loop starting\n");
+    D("Event loop starting");
     fdevent_loop();
 
     return 0;
@@ -261,6 +261,6 @@ int main(int argc, char** argv) {
 
     adb_trace_init(argv);
 
-    D("Handling main()\n");
+    D("Handling main()");
     return adbd_main(DEFAULT_ADB_PORT);
 }

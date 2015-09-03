@@ -172,7 +172,7 @@ int register_new_device(usb_handle* handle) {
 
 void* device_poll_thread(void* unused) {
   adb_thread_setname("Device Poll");
-  D("Created device thread\n");
+  D("Created device thread");
 
   while(1) {
     find_devices();
@@ -208,7 +208,7 @@ static void* _power_notification_thread(void* unused) {
   // heavyweight WMI APIs to get power notifications. But for the common case
   // of a developer's interactive session, a window message pump is more
   // appropriate.
-  D("Created power notification thread\n");
+  D("Created power notification thread");
   adb_thread_setname("Power Notifier");
 
   // Window class names are process specific.
@@ -252,7 +252,7 @@ static void* _power_notification_thread(void* unused) {
   // do that, but it might be possible for that to occur when logging off or
   // shutting down. Not a big deal since the whole process will be going away
   // soon anyway.
-  D("Power notification thread exiting\n");
+  D("Power notification thread exiting");
 
   return NULL;
 }
@@ -272,7 +272,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
   // Allocate our handle
   usb_handle* ret = (usb_handle*)calloc(1, sizeof(usb_handle));
   if (NULL == ret) {
-    D("Could not allocate %u bytes for usb_handle: %s\n", sizeof(usb_handle),
+    D("Could not allocate %u bytes for usb_handle: %s", sizeof(usb_handle),
       strerror(errno));
     goto fail;
   }
@@ -284,7 +284,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
   // Create interface.
   ret->adb_interface = AdbCreateInterfaceByName(interface_name);
   if (NULL == ret->adb_interface) {
-    D("AdbCreateInterfaceByName failed: %s\n",
+    D("AdbCreateInterfaceByName failed: %s",
       SystemErrorCodeToString(GetLastError()).c_str());
     goto fail;
   }
@@ -295,7 +295,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
                                    AdbOpenAccessTypeReadWrite,
                                    AdbOpenSharingModeReadWrite);
   if (NULL == ret->adb_read_pipe) {
-    D("AdbOpenDefaultBulkReadEndpoint failed: %s\n",
+    D("AdbOpenDefaultBulkReadEndpoint failed: %s",
       SystemErrorCodeToString(GetLastError()).c_str());
     goto fail;
   }
@@ -306,7 +306,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
                                     AdbOpenAccessTypeReadWrite,
                                     AdbOpenSharingModeReadWrite);
   if (NULL == ret->adb_write_pipe) {
-    D("AdbOpenDefaultBulkWriteEndpoint failed: %s\n",
+    D("AdbOpenDefaultBulkWriteEndpoint failed: %s",
       SystemErrorCodeToString(GetLastError()).c_str());
     goto fail;
   }
@@ -318,14 +318,14 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
                       &name_len,
                       true);
   if (0 == name_len) {
-    D("AdbGetInterfaceName returned name length of zero: %s\n",
+    D("AdbGetInterfaceName returned name length of zero: %s",
       SystemErrorCodeToString(GetLastError()).c_str());
     goto fail;
   }
 
   ret->interface_name = (char*)malloc(name_len);
   if (NULL == ret->interface_name) {
-    D("Could not allocate %lu bytes for interface_name: %s\n", name_len,
+    D("Could not allocate %lu bytes for interface_name: %s", name_len,
       strerror(errno));
     goto fail;
   }
@@ -335,7 +335,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
                            ret->interface_name,
                            &name_len,
                            true)) {
-    D("AdbGetInterfaceName failed: %s\n",
+    D("AdbGetInterfaceName failed: %s",
       SystemErrorCodeToString(GetLastError()).c_str());
     goto fail;
   }
@@ -357,9 +357,9 @@ int usb_write(usb_handle* handle, const void* data, int len) {
   unsigned long written = 0;
   int err = 0;
 
-  D("usb_write %d\n", len);
+  D("usb_write %d", len);
   if (NULL == handle) {
-    D("usb_write was passed NULL handle\n");
+    D("usb_write was passed NULL handle");
     err = EINVAL;
     goto fail;
   }
@@ -370,18 +370,18 @@ int usb_write(usb_handle* handle, const void* data, int len) {
                             (unsigned long)len,
                             &written,
                             time_out)) {
-    D("AdbWriteEndpointSync failed: %s\n",
+    D("AdbWriteEndpointSync failed: %s",
       SystemErrorCodeToString(GetLastError()).c_str());
     err = EIO;
     goto fail;
   }
 
   // Make sure that we've written what we were asked to write
-  D("usb_write got: %ld, expected: %d\n", written, len);
+  D("usb_write got: %ld, expected: %d", written, len);
   if (written != (unsigned long)len) {
     // If this occurs, this code should be changed to repeatedly call
     // AdbWriteEndpointSync() until all bytes are written.
-    D("AdbWriteEndpointSync was supposed to write %d, but only wrote %ld\n",
+    D("AdbWriteEndpointSync was supposed to write %d, but only wrote %ld",
       len, written);
     err = EIO;
     goto fail;
@@ -394,7 +394,7 @@ int usb_write(usb_handle* handle, const void* data, int len) {
                               0,
                               &written,
                               time_out)) {
-      D("AdbWriteEndpointSync of zero length packet failed: %s\n",
+      D("AdbWriteEndpointSync of zero length packet failed: %s",
         SystemErrorCodeToString(GetLastError()).c_str());
       err = EIO;
       goto fail;
@@ -407,11 +407,11 @@ fail:
   // Any failure should cause us to kick the device instead of leaving it a
   // zombie state with potential to hang.
   if (NULL != handle) {
-    D("Kicking device due to error in usb_write\n");
+    D("Kicking device due to error in usb_write");
     usb_kick(handle);
   }
 
-  D("usb_write failed\n");
+  D("usb_write failed");
   errno = err;
   return -1;
 }
@@ -421,9 +421,9 @@ int usb_read(usb_handle *handle, void* data, int len) {
   unsigned long read = 0;
   int err = 0;
 
-  D("usb_read %d\n", len);
+  D("usb_read %d", len);
   if (NULL == handle) {
-    D("usb_read was passed NULL handle\n");
+    D("usb_read was passed NULL handle");
     err = EINVAL;
     goto fail;
   }
@@ -431,12 +431,12 @@ int usb_read(usb_handle *handle, void* data, int len) {
   while (len > 0) {
     if (!AdbReadEndpointSync(handle->adb_read_pipe, data, len, &read,
                              time_out)) {
-      D("AdbReadEndpointSync failed: %s\n",
+      D("AdbReadEndpointSync failed: %s",
         SystemErrorCodeToString(GetLastError()).c_str());
       err = EIO;
       goto fail;
     }
-    D("usb_read got: %ld, expected: %d\n", read, len);
+    D("usb_read got: %ld, expected: %d", read, len);
 
     data = (char *)data + read;
     len -= read;
@@ -448,11 +448,11 @@ fail:
   // Any failure should cause us to kick the device instead of leaving it a
   // zombie state with potential to hang.
   if (NULL != handle) {
-    D("Kicking device due to error in usb_read\n");
+    D("Kicking device due to error in usb_read");
     usb_kick(handle);
   }
 
-  D("usb_read failed\n");
+  D("usb_read failed");
   errno = err;
   return -1;
 }
@@ -460,13 +460,13 @@ fail:
 // Wrapper around AdbCloseHandle() that logs diagnostics.
 static void _adb_close_handle(ADBAPIHANDLE adb_handle) {
   if (!AdbCloseHandle(adb_handle)) {
-    D("AdbCloseHandle(%p) failed: %s\n", adb_handle,
+    D("AdbCloseHandle(%p) failed: %s", adb_handle,
       SystemErrorCodeToString(GetLastError()).c_str());
   }
 }
 
 void usb_cleanup_handle(usb_handle* handle) {
-  D("usb_cleanup_handle\n");
+  D("usb_cleanup_handle");
   if (NULL != handle) {
     if (NULL != handle->interface_name)
       free(handle->interface_name);
@@ -494,7 +494,7 @@ static void usb_kick_locked(usb_handle* handle) {
 }
 
 void usb_kick(usb_handle* handle) {
-  D("usb_kick\n");
+  D("usb_kick");
   if (NULL != handle) {
     adb_mutex_lock(&usb_lock);
 
@@ -507,7 +507,7 @@ void usb_kick(usb_handle* handle) {
 }
 
 int usb_close(usb_handle* handle) {
-  D("usb_close\n");
+  D("usb_close");
 
   if (NULL != handle) {
     // Remove handle from the list
@@ -539,7 +539,7 @@ int recognized_device(usb_handle* handle) {
 
   if (!AdbGetUsbDeviceDescriptor(handle->adb_interface,
                                  &device_desc)) {
-    D("AdbGetUsbDeviceDescriptor failed: %s\n",
+    D("AdbGetUsbDeviceDescriptor failed: %s",
       SystemErrorCodeToString(GetLastError()).c_str());
     return 0;
   }
@@ -549,7 +549,7 @@ int recognized_device(usb_handle* handle) {
 
   if (!AdbGetUsbInterfaceDescriptor(handle->adb_interface,
                                     &interf_desc)) {
-    D("AdbGetUsbInterfaceDescriptor failed: %s\n",
+    D("AdbGetUsbInterfaceDescriptor failed: %s",
       SystemErrorCodeToString(GetLastError()).c_str());
     return 0;
   }
@@ -567,9 +567,9 @@ int recognized_device(usb_handle* handle) {
       // assuming zero is a valid bulk endpoint ID
       if (AdbGetEndpointInformation(handle->adb_interface, 0, &endpoint_info)) {
         handle->zero_mask = endpoint_info.max_packet_size - 1;
-        D("device zero_mask: 0x%x\n", handle->zero_mask);
+        D("device zero_mask: 0x%x", handle->zero_mask);
       } else {
-        D("AdbGetEndpointInformation failed: %s\n",
+        D("AdbGetEndpointInformation failed: %s",
           SystemErrorCodeToString(GetLastError()).c_str());
       }
     }
@@ -593,7 +593,7 @@ void find_devices() {
     AdbEnumInterfaces(usb_class_id, true, true, true);
 
   if (NULL == enum_handle) {
-    D("AdbEnumInterfaces failed: %s\n",
+    D("AdbEnumInterfaces failed: %s",
       SystemErrorCodeToString(GetLastError()).c_str());
     return;
   }
@@ -617,7 +617,7 @@ void find_devices() {
         if (NULL != handle) {
         // Lets see if this interface (device) belongs to us
         if (recognized_device(handle)) {
-          D("adding a new device %s\n", interf_name);
+          D("adding a new device %s", interf_name);
           char serial_number[512];
           unsigned long serial_number_len = sizeof(serial_number);
           if (AdbGetSerialNumber(handle->adb_interface,
@@ -628,12 +628,12 @@ void find_devices() {
             if (register_new_device(handle)) {
               register_usb_transport(handle, serial_number, NULL, 1);
             } else {
-              D("register_new_device failed for %s\n", interf_name);
+              D("register_new_device failed for %s", interf_name);
               usb_cleanup_handle(handle);
               free(handle);
             }
           } else {
-            D("cannot get serial number: %s\n",
+            D("cannot get serial number: %s",
               SystemErrorCodeToString(GetLastError()).c_str());
             usb_cleanup_handle(handle);
             free(handle);
@@ -650,7 +650,7 @@ void find_devices() {
 
   if (GetLastError() != ERROR_NO_MORE_ITEMS) {
     // Only ERROR_NO_MORE_ITEMS is expected at the end of enumeration.
-    D("AdbNextInterface failed: %s\n",
+    D("AdbNextInterface failed: %s",
       SystemErrorCodeToString(GetLastError()).c_str());
   }
 
