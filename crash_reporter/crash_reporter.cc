@@ -25,6 +25,7 @@
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
 #include <chromeos/flag_helper.h>
+#include <chromeos/process.h>
 #include <chromeos/syslog_logging.h>
 #include <metrics/metrics_library.h>
 
@@ -85,27 +86,32 @@ static void CountUncleanShutdown() {
 
 static void CountUserCrash() {
   SendCrashMetrics(kCrashKindUser, "user");
-  std::string command = StringPrintf(
-      "/system/bin/dbus-send --type=signal --system / \"%s\" &",
-      kUserCrashSignal);
   // Announce through D-Bus whenever a user crash happens. This is
   // used by the metrics daemon to log active use time between
   // crashes.
   //
-  // This could be done more efficiently by explicit fork/exec or
-  // using a dbus library directly. However, this should run
-  // relatively rarely and longer term we may need to implement a
-  // better way to do this that doesn't rely on D-Bus.
-  //
-  // We run in the background in case dbus daemon itself is crashed
+  // We run in the background in case dbus-daemon itself is crashed
   // and not responding.  This allows us to not block and potentially
   // deadlock on a dbus-daemon crash.  If dbus-daemon crashes without
   // restarting, each crash will fork off a lot of dbus-send
   // processes.  Such a system is in a unusable state and will need
   // to be restarted anyway.
+  //
+  // Note: This will mean that the dbus-send process will become a zombie and
+  // reparent to init for reaping, but that's OK -- see above.
 
-  int status = system(command.c_str());
-  LOG_IF(WARNING, status != 0) << "dbus-send running failed";
+  chromeos::ProcessImpl dbus_send;
+  dbus_send.AddArg("/system/bin/dbus-send");
+  dbus_send.AddArg("--type=signal");
+  dbus_send.AddArg("--system");
+  dbus_send.AddArg("/");
+  dbus_send.AddArg(kUserCrashSignal);
+  bool status = dbus_send.Start();
+  if (status) {
+    dbus_send.Release();
+  } else {
+    PLOG(WARNING) << "Sending UserCrash DBus signal failed";
+  }
 }
 
 
