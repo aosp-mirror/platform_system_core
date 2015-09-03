@@ -136,20 +136,26 @@ on init
     mkdir /dev/cpuset
     mount cpuset none /dev/cpuset
     mkdir /dev/cpuset/foreground
+    mkdir /dev/cpuset/foreground/boost
     mkdir /dev/cpuset/background
     # this ensures that the cpusets are present and usable, but the device's
     # init.rc must actually set the correct cpus
     write /dev/cpuset/foreground/cpus 0
+    write /dev/cpuset/foreground/boost/cpus 0
     write /dev/cpuset/background/cpus 0
     write /dev/cpuset/foreground/mems 0
+    write /dev/cpuset/foreground/boost/mems 0
     write /dev/cpuset/background/mems 0
     chown system system /dev/cpuset
     chown system system /dev/cpuset/foreground
+    chown system system /dev/cpuset/foreground/boost
     chown system system /dev/cpuset/background
     chown system system /dev/cpuset/tasks
     chown system system /dev/cpuset/foreground/tasks
+    chown system system /dev/cpuset/foreground/boost/tasks
     chown system system /dev/cpuset/background/tasks
     chmod 0664 /dev/cpuset/foreground/tasks
+    chmod 0664 /dev/cpuset/foreground/boost/tasks
     chmod 0664 /dev/cpuset/background/tasks
     chmod 0664 /dev/cpuset/tasks
 
