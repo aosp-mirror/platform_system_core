@@ -20,7 +20,6 @@
 #include <base/strings/string_util.h>
 #include <chromeos/flag_helper.h>
 #include <chromeos/syslog_logging.h>
-#include <rootdev.h>
 
 #include "constants.h"
 #include "metrics_daemon.h"
@@ -29,28 +28,6 @@ const char kScalingMaxFreqPath[] =
     "/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq";
 const char kCpuinfoMaxFreqPath[] =
     "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq";
-
-// Returns the path to the disk stats in the sysfs.  Returns the null string if
-// it cannot find the disk stats file.
-static
-const std::string MetricsMainDiskStatsPath() {
-  char dev_path_cstr[PATH_MAX];
-  std::string dev_prefix = "/dev/block/";
-  std::string dev_path;
-
-  int ret = rootdev(dev_path_cstr, sizeof(dev_path_cstr), true, true);
-  if (ret != 0) {
-    LOG(WARNING) << "error " << ret << " determining root device";
-    return "";
-  }
-  dev_path = dev_path_cstr;
-  // Check that rootdev begins with "/dev/block/".
-  if (!base::StartsWithASCII(dev_path, dev_prefix, false)) {
-    LOG(WARNING) << "unexpected root device " << dev_path;
-    return "";
-  }
-  return "/sys/class/block/" + dev_path.substr(dev_prefix.length()) + "/stat";
-}
 
 int main(int argc, char** argv) {
   DEFINE_bool(daemon, true, "run as daemon (use -nodaemon for debugging)");
@@ -98,7 +75,6 @@ int main(int argc, char** argv) {
               FLAGS_uploader | FLAGS_uploader_test,
               FLAGS_withdbus,
               &metrics_lib,
-              MetricsMainDiskStatsPath(),
               kScalingMaxFreqPath,
               kCpuinfoMaxFreqPath,
               base::TimeDelta::FromSeconds(FLAGS_upload_interval_secs),
