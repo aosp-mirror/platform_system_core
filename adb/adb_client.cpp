@@ -90,14 +90,14 @@ static int switch_socket_transport(int fd, std::string* error) {
         adb_close(fd);
         return -1;
     }
-    D("Switch transport in progress\n");
+    D("Switch transport in progress");
 
     if (!adb_status(fd, error)) {
         adb_close(fd);
-        D("Switch transport failed: %s\n", error->c_str());
+        D("Switch transport failed: %s", error->c_str());
         return -1;
     }
-    D("Switch transport success\n");
+    D("Switch transport success");
     return 0;
 }
 
@@ -123,7 +123,7 @@ bool adb_status(int fd, std::string* error) {
 }
 
 int _adb_connect(const std::string& service, std::string* error) {
-    D("_adb_connect: %s\n", service.c_str());
+    D("_adb_connect: %s", service.c_str());
     if (service.empty() || service.size() > 1024) {
         *error = android::base::StringPrintf("bad service name length (%zd)",
                                              service.size());
@@ -164,7 +164,7 @@ int _adb_connect(const std::string& service, std::string* error) {
         return -1;
     }
 
-    D("_adb_connect: return fd %d\n", fd);
+    D("_adb_connect: return fd %d", fd);
     return fd;
 }
 
@@ -172,7 +172,7 @@ int adb_connect(const std::string& service, std::string* error) {
     // first query the adb server's version
     int fd = _adb_connect("host:version", error);
 
-    D("adb_connect: service %s\n", service.c_str());
+    D("adb_connect: service %s", service.c_str());
     if (fd == -2 && __adb_server_name) {
         fprintf(stderr,"** Cannot start server on remote host\n");
         // error is the original network connection error
@@ -246,11 +246,11 @@ int adb_connect(const std::string& service, std::string* error) {
 
     fd = _adb_connect(service, error);
     if (fd == -1) {
-        D("_adb_connect error: %s\n", error->c_str());
+        D("_adb_connect error: %s", error->c_str());
     } else if(fd == -2) {
         fprintf(stderr,"** daemon still not running\n");
     }
-    D("adb_connect: return fd %d\n", fd);
+    D("adb_connect: return fd %d", fd);
 
     return fd;
 error:
@@ -277,7 +277,7 @@ bool adb_command(const std::string& service) {
 }
 
 bool adb_query(const std::string& service, std::string* result, std::string* error) {
-    D("adb_query: %s\n", service.c_str());
+    D("adb_query: %s", service.c_str());
     int fd = adb_connect(service, error);
     if (fd < 0) {
         return false;

@@ -94,7 +94,7 @@ read_packet(int  fd, const char* name, apacket** ppacket)
             len -= r;
             p += r;
         } else {
-            D("%s: read_packet (fd=%d), error ret=%d: %s\n", name, fd, r, strerror(errno));
+            D("%s: read_packet (fd=%d), error ret=%d: %s", name, fd, r, strerror(errno));
             return -1;
         }
     }
@@ -124,7 +124,7 @@ write_packet(int  fd, const char* name, apacket** ppacket)
             len -= r;
             p += r;
         } else {
-            D("%s: write_packet (fd=%d) error ret=%d: %s\n", name, fd, r, strerror(errno));
+            D("%s: write_packet (fd=%d) error ret=%d: %s", name, fd, r, strerror(errno));
             return -1;
         }
     }
@@ -134,11 +134,11 @@ write_packet(int  fd, const char* name, apacket** ppacket)
 static void transport_socket_events(int fd, unsigned events, void *_t)
 {
     atransport *t = reinterpret_cast<atransport*>(_t);
-    D("transport_socket_events(fd=%d, events=%04x,...)\n", fd, events);
+    D("transport_socket_events(fd=%d, events=%04x,...)", fd, events);
     if(events & FDE_READ){
         apacket *p = 0;
         if(read_packet(fd, t->serial, &p)){
-            D("%s: failed to read packet from transport socket on fd %d\n", t->serial, fd);
+            D("%s: failed to read packet from transport socket on fd %d", t->serial, fd);
         } else {
             handle_packet(p, (atransport *) _t);
         }
@@ -164,7 +164,7 @@ void send_packet(apacket *p, atransport *t)
     print_packet("send", p);
 
     if (t == NULL) {
-        D("Transport is null \n");
+        D("Transport is null");
         // Zap errno because print_packet() and other stuff have errno effect.
         errno = 0;
         fatal_errno("Transport is null");
@@ -195,7 +195,7 @@ static void *read_transport_thread(void *_t)
 
     adb_thread_setname(android::base::StringPrintf("<-%s",
                                                    (t->serial != nullptr ? t->serial : "transport")));
-    D("%s: starting read_transport thread on fd %d, SYNC online (%d)\n",
+    D("%s: starting read_transport thread on fd %d, SYNC online (%d)",
        t->serial, t->fd, t->sync_token + 1);
     p = get_apacket();
     p->msg.command = A_SYNC;
@@ -204,30 +204,30 @@ static void *read_transport_thread(void *_t)
     p->msg.magic = A_SYNC ^ 0xffffffff;
     if(write_packet(t->fd, t->serial, &p)) {
         put_apacket(p);
-        D("%s: failed to write SYNC packet\n", t->serial);
+        D("%s: failed to write SYNC packet", t->serial);
         goto oops;
     }
 
-    D("%s: data pump started\n", t->serial);
+    D("%s: data pump started", t->serial);
     for(;;) {
         p = get_apacket();
 
         if(t->read_from_remote(p, t) == 0){
-            D("%s: received remote packet, sending to transport\n",
+            D("%s: received remote packet, sending to transport",
               t->serial);
             if(write_packet(t->fd, t->serial, &p)){
                 put_apacket(p);
-                D("%s: failed to write apacket to transport\n", t->serial);
+                D("%s: failed to write apacket to transport", t->serial);
                 goto oops;
             }
         } else {
-            D("%s: remote read failed for transport\n", t->serial);
+            D("%s: remote read failed for transport", t->serial);
             put_apacket(p);
             break;
         }
     }
 
-    D("%s: SYNC offline for transport\n", t->serial);
+    D("%s: SYNC offline for transport", t->serial);
     p = get_apacket();
     p->msg.command = A_SYNC;
     p->msg.arg0 = 0;
@@ -235,11 +235,11 @@ static void *read_transport_thread(void *_t)
     p->msg.magic = A_SYNC ^ 0xffffffff;
     if(write_packet(t->fd, t->serial, &p)) {
         put_apacket(p);
-        D("%s: failed to write SYNC apacket to transport\n", t->serial);
+        D("%s: failed to write SYNC apacket to transport", t->serial);
     }
 
 oops:
-    D("%s: read_transport thread is exiting\n", t->serial);
+    D("%s: read_transport thread is exiting", t->serial);
     kick_transport(t);
     transport_unref(t);
     return 0;
@@ -255,42 +255,42 @@ static void *write_transport_thread(void *_t)
 
     adb_thread_setname(android::base::StringPrintf("->%s",
                                                    (t->serial != nullptr ? t->serial : "transport")));
-    D("%s: starting write_transport thread, reading from fd %d\n",
+    D("%s: starting write_transport thread, reading from fd %d",
        t->serial, t->fd);
 
     for(;;){
         if(read_packet(t->fd, t->serial, &p)) {
-            D("%s: failed to read apacket from transport on fd %d\n",
+            D("%s: failed to read apacket from transport on fd %d",
                t->serial, t->fd );
             break;
         }
         if(p->msg.command == A_SYNC){
             if(p->msg.arg0 == 0) {
-                D("%s: transport SYNC offline\n", t->serial);
+                D("%s: transport SYNC offline", t->serial);
                 put_apacket(p);
                 break;
             } else {
                 if(p->msg.arg1 == t->sync_token) {
-                    D("%s: transport SYNC online\n", t->serial);
+                    D("%s: transport SYNC online", t->serial);
                     active = 1;
                 } else {
-                    D("%s: transport ignoring SYNC %d != %d\n",
+                    D("%s: transport ignoring SYNC %d != %d",
                       t->serial, p->msg.arg1, t->sync_token);
                 }
             }
         } else {
             if(active) {
-                D("%s: transport got packet, sending to remote\n", t->serial);
+                D("%s: transport got packet, sending to remote", t->serial);
                 t->write_to_remote(p, t);
             } else {
-                D("%s: transport ignoring packet while offline\n", t->serial);
+                D("%s: transport ignoring packet while offline", t->serial);
             }
         }
 
         put_apacket(p);
     }
 
-    D("%s: write_transport thread is exiting, fd %d\n", t->serial, t->fd);
+    D("%s: write_transport thread is exiting, fd %d", t->serial, t->fd);
     kick_transport(t);
     transport_unref(t);
     return 0;
@@ -355,7 +355,7 @@ device_tracker_close( asocket*  socket )
     device_tracker*  tracker = (device_tracker*) socket;
     asocket*         peer    = socket->peer;
 
-    D( "device tracker %p removed\n", tracker);
+    D( "device tracker %p removed", tracker);
     if (peer) {
         peer->peer = NULL;
         peer->close(peer);
@@ -402,7 +402,7 @@ create_device_tracker(void)
     device_tracker* tracker = reinterpret_cast<device_tracker*>(calloc(1, sizeof(*tracker)));
     if (tracker == nullptr) fatal("cannot allocate device tracker");
 
-    D( "device tracker %p created\n", tracker);
+    D( "device tracker %p created", tracker);
 
     tracker->socket.enqueue = device_tracker_enqueue;
     tracker->socket.ready   = device_tracker_ready;
@@ -456,7 +456,7 @@ transport_read_action(int  fd, struct tmsg*  m)
             len -= r;
             p   += r;
         } else {
-            D("transport_read_action: on fd %d: %s\n", fd, strerror(errno));
+            D("transport_read_action: on fd %d: %s", fd, strerror(errno));
             return -1;
         }
     }
@@ -476,7 +476,7 @@ transport_write_action(int  fd, struct tmsg*  m)
             len -= r;
             p   += r;
         } else {
-            D("transport_write_action: on fd %d: %s\n", fd, strerror(errno));
+            D("transport_write_action: on fd %d: %s", fd, strerror(errno));
             return -1;
         }
     }
@@ -500,7 +500,7 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
     t = m.transport;
 
     if (m.action == 0) {
-        D("transport: %s removing and free'ing %d\n", t->serial, t->transport_socket);
+        D("transport: %s removing and free'ing %d", t->serial, t->transport_socket);
 
             /* IMPORTANT: the remove closes one half of the
             ** socket pair.  The close closes the other half.
@@ -538,7 +538,7 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
             fatal_errno("cannot open transport socketpair");
         }
 
-        D("transport: %s socketpair: (%d,%d) starting\n", t->serial, s[0], s[1]);
+        D("transport: %s socketpair: (%d,%d) starting", t->serial, s[0], s[1]);
 
         t->transport_socket = s[0];
         t->fd = s[1];
@@ -574,7 +574,7 @@ void init_transport_registration(void)
     if(adb_socketpair(s)){
         fatal_errno("cannot open transport registration socketpair");
     }
-    D("socketpair: (%d,%d)\n", s[0], s[1]);
+    D("socketpair: (%d,%d)", s[0], s[1]);
 
     transport_registration_send = s[0];
     transport_registration_recv = s[1];
@@ -593,7 +593,7 @@ static void register_transport(atransport *transport)
     tmsg m;
     m.transport = transport;
     m.action = 1;
-    D("transport: %s registered\n", transport->serial);
+    D("transport: %s registered", transport->serial);
     if(transport_write_action(transport_registration_send, &m)) {
         fatal_errno("cannot write transport registration socket\n");
     }
@@ -604,7 +604,7 @@ static void remove_transport(atransport *transport)
     tmsg m;
     m.transport = transport;
     m.action = 0;
-    D("transport: %s removed\n", transport->serial);
+    D("transport: %s removed", transport->serial);
     if(transport_write_action(transport_registration_send, &m)) {
         fatal_errno("cannot write transport registration socket\n");
     }
@@ -617,12 +617,12 @@ static void transport_unref(atransport* t) {
     CHECK_GT(t->ref_count, 0u);
     t->ref_count--;
     if (t->ref_count == 0) {
-        D("transport: %s unref (kicking and closing)\n", t->serial);
+        D("transport: %s unref (kicking and closing)", t->serial);
         kick_transport_locked(t);
         t->close(t);
         remove_transport(t);
     } else {
-        D("transport: %s unref (count=%zu)\n", t->serial, t->ref_count);
+        D("transport: %s unref (count=%zu)", t->serial, t->ref_count);
     }
     adb_mutex_unlock(&transport_lock);
 }
@@ -889,7 +889,7 @@ int register_socket_transport(int s, const char *serial, int port, int local) {
         serial = buf;
     }
 
-    D("transport: %s init'ing for socket %d, on port %d\n", serial, s, port);
+    D("transport: %s init'ing for socket %d, on port %d", serial, s, port);
     if (init_socket_transport(t, s, port, local) < 0) {
         delete t;
         return -1;
@@ -957,7 +957,7 @@ void register_usb_transport(usb_handle* usb, const char* serial,
                             const char* devpath, unsigned writeable) {
     atransport* t = new atransport();
 
-    D("transport: %p init'ing for usb_handle %p (sn='%s')\n", t, usb,
+    D("transport: %p init'ing for usb_handle %p (sn='%s')", t, usb,
       serial ? serial : "");
     init_usb_transport(t, usb, (writeable ? kCsOffline : kCsNoPerm));
     if(serial) {
@@ -990,12 +990,12 @@ void unregister_usb_transport(usb_handle *usb) {
 int check_header(apacket *p, atransport *t)
 {
     if(p->msg.magic != (p->msg.command ^ 0xffffffff)) {
-        D("check_header(): invalid magic\n");
+        D("check_header(): invalid magic");
         return -1;
     }
 
     if(p->msg.data_length > t->get_max_payload()) {
-        D("check_header(): %u > atransport::max_payload = %zu\n",
+        D("check_header(): %u > atransport::max_payload = %zu",
             p->msg.data_length, t->get_max_payload());
         return -1;
     }

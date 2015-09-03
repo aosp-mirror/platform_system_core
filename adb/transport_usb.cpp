@@ -28,24 +28,24 @@
 static int remote_read(apacket *p, atransport *t)
 {
     if(usb_read(t->usb, &p->msg, sizeof(amessage))){
-        D("remote usb: read terminated (message)\n");
+        D("remote usb: read terminated (message)");
         return -1;
     }
 
     if(check_header(p, t)) {
-        D("remote usb: check_header failed\n");
+        D("remote usb: check_header failed");
         return -1;
     }
 
     if(p->msg.data_length) {
         if(usb_read(t->usb, p->data, p->msg.data_length)){
-            D("remote usb: terminated (data)\n");
+            D("remote usb: terminated (data)");
             return -1;
         }
     }
 
     if(check_data(p)) {
-        D("remote usb: check_data failed\n");
+        D("remote usb: check_data failed");
         return -1;
     }
 
@@ -57,12 +57,12 @@ static int remote_write(apacket *p, atransport *t)
     unsigned size = p->msg.data_length;
 
     if(usb_write(t->usb, &p->msg, sizeof(amessage))) {
-        D("remote usb: 1 - write terminated\n");
+        D("remote usb: 1 - write terminated");
         return -1;
     }
     if(p->msg.data_length == 0) return 0;
     if(usb_write(t->usb, &p->data, size)) {
-        D("remote usb: 2 - write terminated\n");
+        D("remote usb: 2 - write terminated");
         return -1;
     }
 
@@ -82,7 +82,7 @@ static void remote_kick(atransport *t)
 
 void init_usb_transport(atransport *t, usb_handle *h, ConnectionState state)
 {
-    D("transport: usb\n");
+    D("transport: usb");
     t->close = remote_close;
     t->kick = remote_kick;
     t->read_from_remote = remote_read;
