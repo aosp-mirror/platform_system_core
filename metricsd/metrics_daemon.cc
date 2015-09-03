@@ -51,8 +51,6 @@ using std::vector;
 
 namespace {
 
-#define SAFE_MESSAGE(e) (e.message ? e.message : "unknown error")
-
 const char kCrashReporterInterface[] = "org.chromium.CrashReporter";
 const char kCrashReporterUserCrashSignal[] = "UserCrash";
 const char kCrashReporterMatchRule[] =
@@ -73,62 +71,54 @@ const char kKernelCrashDetectedFile[] = "/var/run/kernel-crash-detected";
 const char kUncleanShutdownDetectedFile[] =
     "/var/run/unclean-shutdown-detected";
 
-}  // namespace
-
 // disk stats metrics
 
 // The {Read,Write}Sectors numbers are in sectors/second.
 // A sector is usually 512 bytes.
 
-const char MetricsDaemon::kMetricReadSectorsLongName[] =
-    "Platform.ReadSectorsLong";
-const char MetricsDaemon::kMetricWriteSectorsLongName[] =
-    "Platform.WriteSectorsLong";
-const char MetricsDaemon::kMetricReadSectorsShortName[] =
-    "Platform.ReadSectorsShort";
-const char MetricsDaemon::kMetricWriteSectorsShortName[] =
-    "Platform.WriteSectorsShort";
+const char kMetricReadSectorsLongName[] = "Platform.ReadSectorsLong";
+const char kMetricWriteSectorsLongName[] = "Platform.WriteSectorsLong";
+const char kMetricReadSectorsShortName[] = "Platform.ReadSectorsShort";
+const char kMetricWriteSectorsShortName[] = "Platform.WriteSectorsShort";
 
-const int MetricsDaemon::kMetricStatsShortInterval = 1;  // seconds
-const int MetricsDaemon::kMetricStatsLongInterval = 30;  // seconds
+const int kMetricStatsShortInterval = 1;  // seconds
+const int kMetricStatsLongInterval = 30;  // seconds
 
-const int MetricsDaemon::kMetricMeminfoInterval = 30;        // seconds
+const int kMetricMeminfoInterval = 30;        // seconds
 
 // Assume a max rate of 250Mb/s for reads (worse for writes) and 512 byte
 // sectors.
-const int MetricsDaemon::kMetricSectorsIOMax = 500000;  // sectors/second
-const int MetricsDaemon::kMetricSectorsBuckets = 50;    // buckets
+const int kMetricSectorsIOMax = 500000;  // sectors/second
+const int kMetricSectorsBuckets = 50;    // buckets
 // Page size is 4k, sector size is 0.5k.  We're not interested in page fault
 // rates that the disk cannot sustain.
-const int MetricsDaemon::kMetricPageFaultsMax = kMetricSectorsIOMax / 8;
-const int MetricsDaemon::kMetricPageFaultsBuckets = 50;
+const int kMetricPageFaultsMax = kMetricSectorsIOMax / 8;
+const int kMetricPageFaultsBuckets = 50;
 
 // Major page faults, i.e. the ones that require data to be read from disk.
 
-const char MetricsDaemon::kMetricPageFaultsLongName[] =
-    "Platform.PageFaultsLong";
-const char MetricsDaemon::kMetricPageFaultsShortName[] =
-    "Platform.PageFaultsShort";
+const char kMetricPageFaultsLongName[] = "Platform.PageFaultsLong";
+const char kMetricPageFaultsShortName[] = "Platform.PageFaultsShort";
 
 // Swap in and Swap out
 
-const char MetricsDaemon::kMetricSwapInLongName[] =
-    "Platform.SwapInLong";
-const char MetricsDaemon::kMetricSwapInShortName[] =
-    "Platform.SwapInShort";
+const char kMetricSwapInLongName[] = "Platform.SwapInLong";
+const char kMetricSwapInShortName[] = "Platform.SwapInShort";
 
-const char MetricsDaemon::kMetricSwapOutLongName[] =
-    "Platform.SwapOutLong";
-const char MetricsDaemon::kMetricSwapOutShortName[] =
-    "Platform.SwapOutShort";
+const char kMetricSwapOutLongName[] = "Platform.SwapOutLong";
+const char kMetricSwapOutShortName[] = "Platform.SwapOutShort";
 
-const char MetricsDaemon::kMetricsProcStatFileName[] = "/proc/stat";
-const int MetricsDaemon::kMetricsProcStatFirstLineItemsCount = 11;
+const char kMetricsProcStatFileName[] = "/proc/stat";
+const char kVmStatFileName[] = "/proc/vmstat";
+const char kMeminfoFileName[] = "/proc/meminfo";
+const int kMetricsProcStatFirstLineItemsCount = 11;
 
 // Thermal CPU throttling.
 
-const char MetricsDaemon::kMetricScaledCpuFrequencyName[] =
+const char kMetricScaledCpuFrequencyName[] =
     "Platform.CpuFrequencyThermalScaling";
+
+}  // namespace
 
 // Zram sysfs entries.
 
@@ -227,18 +217,17 @@ void MetricsDaemon::Init(bool testing,
                          bool uploader_active,
                          bool dbus_enabled,
                          MetricsLibraryInterface* metrics_lib,
-                         const string& vmstats_path,
                          const string& scaling_max_freq_path,
                          const string& cpuinfo_max_freq_path,
                          const base::TimeDelta& upload_interval,
                          const string& server,
                          const string& metrics_file,
                          const string& config_root) {
+  CHECK(metrics_lib);
   testing_ = testing;
   uploader_active_ = uploader_active;
   dbus_enabled_ = dbus_enabled;
   config_root_ = config_root;
-  DCHECK(metrics_lib != nullptr);
   metrics_lib_ = metrics_lib;
 
   upload_interval_ = upload_interval;
@@ -286,7 +275,6 @@ void MetricsDaemon::Init(bool testing,
   weekly_cycle_.reset(new PersistentInteger("weekly.cycle"));
   version_cycle_.reset(new PersistentInteger("version.cycle"));
 
-  vmstats_path_ = vmstats_path;
   scaling_max_freq_path_ = scaling_max_freq_path;
   cpuinfo_max_freq_path_ = cpuinfo_max_freq_path;
 }
@@ -510,48 +498,22 @@ void MetricsDaemon::ScheduleStatsCallback(int wait) {
 
 bool MetricsDaemon::VmStatsParseStats(const char* stats,
                                       struct VmstatRecord* record) {
-  // a mapping of string name to field in VmstatRecord and whether we found it
-  struct mapping {
-    const string name;
-    uint64_t* value_p;
-    bool found;
-  } map[] =
-      { { .name = "pgmajfault",
-          .value_p = &record->page_faults_,
-          .found = false },
-        { .name = "pswpin",
-          .value_p = &record->swap_in_,
-          .found = false },
-        { .name = "pswpout",
-          .value_p = &record->swap_out_,
-          .found = false }, };
+  CHECK(stats);
+  CHECK(record);
+  base::StringPairs pairs;
+  base::SplitStringIntoKeyValuePairs(stats, ' ', '\n', &pairs);
 
-  // Each line in the file has the form
-  // <ID> <VALUE>
-  // for instance:
-  // nr_free_pages 213427
-  vector<string> lines;
-  Tokenize(stats, "\n", &lines);
-  for (vector<string>::iterator it = lines.begin();
-       it != lines.end(); ++it) {
-    vector<string> tokens;
-    base::SplitString(*it, ' ', &tokens);
-    if (tokens.size() == 2) {
-      for (unsigned int i = 0; i < sizeof(map)/sizeof(struct mapping); i++) {
-        if (!tokens[0].compare(map[i].name)) {
-          if (!base::StringToUint64(tokens[1], map[i].value_p))
-            return false;
-          map[i].found = true;
-        }
-      }
-    } else {
-      LOG(WARNING) << "unexpected vmstat format";
+  for (base::StringPairs::iterator it = pairs.begin(); it != pairs.end(); ++it) {
+    if (it->first == "pgmajfault" &&
+        !base::StringToUint64(it->second, &record->page_faults_)) {
+      return false;
     }
-  }
-  // make sure we got all the stats
-  for (unsigned i = 0; i < sizeof(map)/sizeof(struct mapping); i++) {
-    if (map[i].found == false) {
-      LOG(WARNING) << "vmstat missing " << map[i].name;
+    if (it->first == "pswpin" &&
+        !base::StringToUint64(it->second, &record->swap_in_)) {
+      return false;
+    }
+    if (it->first == "pswpout" &&
+        !base::StringToUint64(it->second, &record->swap_out_)) {
       return false;
     }
   }
@@ -559,14 +521,12 @@ bool MetricsDaemon::VmStatsParseStats(const char* stats,
 }
 
 bool MetricsDaemon::VmStatsReadStats(struct VmstatRecord* stats) {
+  CHECK(stats);
   string value_string;
-  FilePath* path = new FilePath(vmstats_path_);
-  if (!base::ReadFileToString(*path, &value_string)) {
-    delete path;
-    LOG(WARNING) << "cannot read " << vmstats_path_;
+  if (!base::ReadFileToString(base::FilePath(kVmStatFileName), &value_string)) {
+    LOG(WARNING) << "cannot read " << kVmStatFileName;
     return false;
   }
-  delete path;
   return VmStatsParseStats(value_string.c_str(), stats);
 }
 
@@ -748,7 +708,7 @@ void MetricsDaemon::ScheduleMeminfoCallback(int wait) {
 
 void MetricsDaemon::MeminfoCallback(base::TimeDelta wait) {
   string meminfo_raw;
-  const FilePath meminfo_path("/proc/meminfo");
+  const FilePath meminfo_path(kMeminfoFileName);
   if (!base::ReadFileToString(meminfo_path, &meminfo_raw)) {
     LOG(WARNING) << "cannot read " << meminfo_path.value().c_str();
     return;
@@ -907,11 +867,8 @@ bool MetricsDaemon::FillMeminfo(const string& meminfo_raw,
     Tokenize(lines[iline], ": ", &tokens);
     if (strcmp((*fields)[ifield].match, tokens[0].c_str()) == 0) {
       // Name matches. Parse value and save.
-      char* rest;
-      (*fields)[ifield].value =
-          static_cast<int>(strtol(tokens[1].c_str(), &rest, 10));
-      if (*rest != '\0') {
-        LOG(WARNING) << "missing meminfo value";
+      if (!base::StringToInt(tokens[1], &(*fields)[ifield].value)) {
+        LOG(WARNING) << "Cound not convert " << tokens[1] << " to int";
         return false;
       }
       ifield++;
@@ -958,7 +915,7 @@ void MetricsDaemon::MemuseCallback() {
 
 bool MetricsDaemon::MemuseCallbackWork() {
   string meminfo_raw;
-  const FilePath meminfo_path("/proc/meminfo");
+  const FilePath meminfo_path(kMeminfoFileName);
   if (!base::ReadFileToString(meminfo_path, &meminfo_raw)) {
     LOG(WARNING) << "cannot read " << meminfo_path.value().c_str();
     return false;
