@@ -260,6 +260,11 @@ static void usage() {
             "                                           partitions.\n"
             "  flashing get_unlock_ability              Queries bootloader to see if the\n"
             "                                           device is unlocked.\n"
+            "  flashing get_unlock_bootloader_nonce     Queries the bootloader to get the\n"
+            "                                           unlock nonce.\n"
+            "  flashing unlock_bootloader <request>     Issue unlock bootloader using request.\n"
+            "  flashing lock_bootloader                 Locks the bootloader to prevent\n"
+            "                                           bootloader version rollback.\n"
             "  erase <partition>                        Erase a flash partition.\n"
             "  format[:[<fs type>][:[<size>]] <partition>\n"
             "                                           Format a flash partition. Can\n"
@@ -794,7 +799,29 @@ static void do_flashall(usb_handle* usb, int erase_first) {
 #define skip(n) do { argc -= (n); argv += (n); } while (0)
 #define require(n) do { if (argc < (n)) {usage(); exit(1);}} while (0)
 
-static int do_oem_command(int argc, char** argv) {
+static int do_bypass_unlock_command(int argc, char **argv)
+{
+    unsigned sz;
+    void *data;
+
+    if (argc <= 2) return 0;
+    skip(2);
+
+    /*
+     * Process unlock_bootloader, we have to load the message file
+     * and send that to the remote device.
+     */
+    require(1);
+    data = load_file(*argv, &sz);
+    if (data == 0) die("could not load '%s': %s", *argv, strerror(errno));
+    fb_queue_download("unlock_message", data, sz);
+    fb_queue_command("flashing unlock_bootloader", "unlocking bootloader");
+    skip(1);
+    return 0;
+}
+
+static int do_oem_command(int argc, char **argv)
+{
     char command[256];
     if (argc <= 1) return 0;
 
@@ -1200,12 +1227,18 @@ int main(int argc, char **argv)
             wants_reboot = 1;
         } else if(!strcmp(*argv, "oem")) {
             argc = do_oem_command(argc, argv);
-        } else if(!strcmp(*argv, "flashing") && argc == 2) {
-            if(!strcmp(*(argv+1), "unlock") || !strcmp(*(argv+1), "lock")
-               || !strcmp(*(argv+1), "unlock_critical")
-               || !strcmp(*(argv+1), "lock_critical")
-               || !strcmp(*(argv+1), "get_unlock_ability")) {
-              argc = do_oem_command(argc, argv);
+        } else if(!strcmp(*argv, "flashing")) {
+            if (argc == 2 && (!strcmp(*(argv+1), "unlock") ||
+                              !strcmp(*(argv+1), "lock") ||
+                              !strcmp(*(argv+1), "unlock_critical") ||
+                              !strcmp(*(argv+1), "lock_critical") ||
+                              !strcmp(*(argv+1), "get_unlock_ability") ||
+                              !strcmp(*(argv+1), "get_unlock_bootloader_nonce") ||
+                              !strcmp(*(argv+1), "lock_bootloader"))) {
+                argc = do_oem_command(argc, argv);
+            } else
+            if (argc == 3 && !strcmp(*(argv+1), "unlock_bootloader")) {
+                argc = do_bypass_unlock_command(argc, argv);
             } else {
               usage();
               return 1;
