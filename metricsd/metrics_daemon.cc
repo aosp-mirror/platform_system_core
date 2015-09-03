@@ -112,7 +112,6 @@ const char kMetricsProcStatFileName[] = "/proc/stat";
 const char kVmStatFileName[] = "/proc/vmstat";
 const char kMeminfoFileName[] = "/proc/meminfo";
 const int kMetricsProcStatFirstLineItemsCount = 11;
-const int kDiskMetricsStatItemCount = 11;
 
 // Thermal CPU throttling.
 
@@ -218,7 +217,6 @@ void MetricsDaemon::Init(bool testing,
                          bool uploader_active,
                          bool dbus_enabled,
                          MetricsLibraryInterface* metrics_lib,
-                         const string& diskstats_path,
                          const string& scaling_max_freq_path,
                          const string& cpuinfo_max_freq_path,
                          const base::TimeDelta& upload_interval,
@@ -277,13 +275,8 @@ void MetricsDaemon::Init(bool testing,
   weekly_cycle_.reset(new PersistentInteger("weekly.cycle"));
   version_cycle_.reset(new PersistentInteger("version.cycle"));
 
-  diskstats_path_ = diskstats_path;
   scaling_max_freq_path_ = scaling_max_freq_path;
   cpuinfo_max_freq_path_ = cpuinfo_max_freq_path;
-
-  // If testing, initialize Stats Reporter without connecting DBus
-  if (testing_)
-    StatsReporterInit();
 }
 
 int MetricsDaemon::OnInit() {
@@ -291,13 +284,6 @@ int MetricsDaemon::OnInit() {
       chromeos::Daemon::OnInit();
   if (return_code != EX_OK)
     return return_code;
-
-  StatsReporterInit();
-
-  // Start collecting meminfo stats.
-  ScheduleMeminfoCallback(kMetricMeminfoInterval);
-  memuse_final_time_ = GetActiveTime() + kMemuseIntervals[0];
-  ScheduleMemuseCallback(kMemuseIntervals[0]);
 
   if (testing_)
     return EX_OK;
@@ -328,11 +314,6 @@ int MetricsDaemon::OnInit() {
       return EX_UNAVAILABLE;
     }
   }
-
-  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-      base::Bind(&MetricsDaemon::HandleUpdateStatsTimeout,
-                 base::Unretained(this)),
-      base::TimeDelta::FromMilliseconds(kUpdateStatsIntervalMs));
 
   if (uploader_active_) {
     upload_service_.reset(
@@ -513,40 +494,6 @@ void MetricsDaemon::ScheduleStatsCallback(int wait) {
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
       base::Bind(&MetricsDaemon::StatsCallback, base::Unretained(this)),
       base::TimeDelta::FromSeconds(wait));
-}
-
-bool MetricsDaemon::DiskStatsReadStats(uint64_t* read_sectors,
-                                       uint64_t* write_sectors) {
-  CHECK(read_sectors);
-  CHECK(write_sectors);
-  std::string line;
-  if (diskstats_path_.empty()) {
-    return false;
-  }
-
-  if (!base::ReadFileToString(base::FilePath(diskstats_path_), &line)) {
-    PLOG(WARNING) << "Could not read disk stats from " << diskstats_path_;
-    return false;
-  }
-
-  std::vector<std::string> parts = base::SplitString(
-      line, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  if (parts.size() != kDiskMetricsStatItemCount) {
-    LOG(ERROR) << "Could not parse disk stat correctly. Expected "
-               << kDiskMetricsStatItemCount << " elements but got "
-               << parts.size();
-    return false;
-  }
-  if (!base::StringToUint64(parts[2], read_sectors)) {
-    LOG(ERROR) << "Couldn't convert read sectors " << parts[2] << " to uint64";
-    return false;
-  }
-  if (!base::StringToUint64(parts[6], write_sectors)) {
-    LOG(ERROR) << "Couldn't convert write sectors " << parts[6] << " to uint64";
-    return false;
-  }
-
-  return true;
 }
 
 bool MetricsDaemon::VmStatsParseStats(const char* stats,
@@ -768,7 +715,10 @@ void MetricsDaemon::MeminfoCallback(base::TimeDelta wait) {
   }
   // Make both calls even if the first one fails.
   bool success = ProcessMeminfo(meminfo_raw);
-  if (ProcessMeminfo(meminfo_raw)) {
+  bool reschedule =
+      ReportZram(base::FilePath(FILE_PATH_LITERAL("/sys/block/zram0"))) &&
+      success;
+  if (reschedule) {
     base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
         base::Bind(&MetricsDaemon::MeminfoCallback, base::Unretained(this),
                    wait),
