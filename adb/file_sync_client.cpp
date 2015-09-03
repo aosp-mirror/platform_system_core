@@ -73,6 +73,7 @@ static bool SendRequest(int fd, int id, const char* path) {
     size_t path_length = strlen(path);
     if (path_length > 1024) {
         fprintf(stderr, "SendRequest failed: path too long: %zu", path_length);
+        errno = ENAMETOOLONG;
         return false;
     }
 
@@ -256,28 +257,41 @@ static bool sync_send(SyncConnection& sc, const char *lpath, const char *rpath,
     syncsendbuf* sbuf = &send_buffer;
 
     std::string path_and_mode = android::base::StringPrintf("%s,%d", rpath, mode);
-    if (!SendRequest(sc.fd, ID_SEND, path_and_mode.c_str())) goto fail;
+    if (!SendRequest(sc.fd, ID_SEND, path_and_mode.c_str())) {
+        fprintf(stderr, "failed to send ID_SEND message '%s': %s\n",
+                path_and_mode.c_str(), strerror(errno));
+        return false;
+    }
 
     if (S_ISREG(mode)) {
         if (!write_data_file(sc, lpath, sbuf, show_progress)) return false;
     } else if (S_ISLNK(mode)) {
         if (!write_data_link(sc, lpath, sbuf)) return false;
     } else {
-        goto fail;
+        fprintf(stderr, "local file '%s' has unsupported mode: 0o%o\n", lpath, mode);
+        return false;
     }
 
     syncmsg msg;
     msg.data.id = ID_DONE;
     msg.data.size = mtime;
-    if (!WriteFdExactly(sc.fd, &msg.data, sizeof(msg.data))) goto fail;
+    if (!WriteFdExactly(sc.fd, &msg.data, sizeof(msg.data))) {
+        fprintf(stderr, "failed to send ID_DONE message for '%s': %s\n", lpath, strerror(errno));
+        return false;
+    }
 
-    if (!ReadFdExactly(sc.fd, &msg.status, sizeof(msg.status))) goto fail;
-
+    if (!ReadFdExactly(sc.fd, &msg.status, sizeof(msg.status))) {
+        fprintf(stderr, "failed to read ID_DONE response for '%s': %s\n", lpath, strerror(errno));
+        return false;
+    }
     if (msg.status.id != ID_OKAY) {
         if (msg.status.id == ID_FAIL) {
             size_t len = msg.status.msglen;
             if (len > 256) len = 256;
-            if (!ReadFdExactly(sc.fd, sbuf->data, len)) goto fail;
+            if (!ReadFdExactly(sc.fd, sbuf->data, len)) {
+                fprintf(stderr, "failed to read failure reason (!): %s\n", strerror(errno));
+                return false;
+            }
             sbuf->data[len] = 0;
         } else {
             strcpy(sbuf->data, "unknown reason");
@@ -287,10 +301,6 @@ static bool sync_send(SyncConnection& sc, const char *lpath, const char *rpath,
     }
 
     return true;
-
-fail:
-    fprintf(stderr, "protocol failure\n");
-    return false;
 }
 
 static int sync_recv(SyncConnection& sc, const char* rpath, const char* lpath, bool show_progress) {
