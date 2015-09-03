@@ -32,13 +32,13 @@ bool auth_required = true;
 
 void send_auth_request(atransport *t)
 {
-    D("Calling send_auth_request\n");
+    D("Calling send_auth_request");
     apacket *p;
     int ret;
 
     ret = adb_auth_generate_token(t->token, sizeof(t->token));
     if (ret != sizeof(t->token)) {
-        D("Error generating token ret=%d\n", ret);
+        D("Error generating token ret=%d", ret);
         return;
     }
 
@@ -52,13 +52,13 @@ void send_auth_request(atransport *t)
 
 void send_auth_response(uint8_t *token, size_t token_size, atransport *t)
 {
-    D("Calling send_auth_response\n");
+    D("Calling send_auth_response");
     apacket *p = get_apacket();
     int ret;
 
     ret = adb_auth_sign(t->key, token, token_size, p->data);
     if (!ret) {
-        D("Error signing the token\n");
+        D("Error signing the token");
         put_apacket(p);
         return;
     }
@@ -71,13 +71,13 @@ void send_auth_response(uint8_t *token, size_t token_size, atransport *t)
 
 void send_auth_publickey(atransport *t)
 {
-    D("Calling send_auth_publickey\n");
+    D("Calling send_auth_publickey");
     apacket *p = get_apacket();
     int ret;
 
     ret = adb_auth_get_userkey(p->data, MAX_PAYLOAD_V1);
     if (!ret) {
-        D("Failed to get user public key\n");
+        D("Failed to get user public key");
         put_apacket(p);
         return;
     }

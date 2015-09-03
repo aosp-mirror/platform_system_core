@@ -170,7 +170,7 @@ void dump_hex(const void* data, size_t byte_count) {
         line.push_back(c);
     }
 
-    DR("%s\n", line.c_str());
+    D("%s", line.c_str());
 }
 
 bool parse_host_and_port(const std::string& address,
