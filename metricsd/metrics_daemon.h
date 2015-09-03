@@ -45,7 +45,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
             bool uploader_active,
             bool dbus_enabled,
             MetricsLibraryInterface* metrics_lib,
-            const std::string& diskstats_path,
             const std::string& cpuinfo_max_freq_path,
             const std::string& scaling_max_freq_path,
             const base::TimeDelta& upload_interval,
@@ -79,7 +78,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   FRIEND_TEST(MetricsDaemonTest, GetHistogramPath);
   FRIEND_TEST(MetricsDaemonTest, IsNewEpoch);
   FRIEND_TEST(MetricsDaemonTest, MessageFilter);
-  FRIEND_TEST(MetricsDaemonTest, ParseDiskStats);
   FRIEND_TEST(MetricsDaemonTest, ParseVmStats);
   FRIEND_TEST(MetricsDaemonTest, ProcessKernelCrash);
   FRIEND_TEST(MetricsDaemonTest, ProcessMeminfo);
@@ -88,6 +86,7 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   FRIEND_TEST(MetricsDaemonTest, ProcessUserCrash);
   FRIEND_TEST(MetricsDaemonTest, ReportCrashesDailyFrequency);
   FRIEND_TEST(MetricsDaemonTest, ReadFreqToInt);
+  FRIEND_TEST(MetricsDaemonTest, ReportDiskStats);
   FRIEND_TEST(MetricsDaemonTest, ReportKernelCrashInterval);
   FRIEND_TEST(MetricsDaemonTest, ReportUncleanShutdownInterval);
   FRIEND_TEST(MetricsDaemonTest, ReportUserCrashInterval);
@@ -325,7 +324,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   scoped_ptr<PersistentInteger> unclean_shutdowns_daily_count_;
   scoped_ptr<PersistentInteger> unclean_shutdowns_weekly_count_;
 
-  std::string diskstats_path_;
   std::string scaling_max_freq_path_;
   std::string cpuinfo_max_freq_path_;
 
