@@ -133,7 +133,9 @@ LOCAL_SHARED_LIBRARIES := $(metrics_shared_libraries) \
   libchromeos-http \
   libchromeos-dbus \
   libcutils \
-  libdbus
+  libdbus \
+  librootdev
+
 LOCAL_SRC_FILES := $(metrics_daemon_sources)
 LOCAL_STATIC_LIBRARIES := metrics_daemon_protos
 include $(BUILD_EXECUTABLE)
