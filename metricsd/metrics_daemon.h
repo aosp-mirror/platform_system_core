@@ -45,7 +45,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
             bool uploader_active,
             bool dbus_enabled,
             MetricsLibraryInterface* metrics_lib,
-            const std::string& vmstats_path,
             const std::string& cpuinfo_max_freq_path,
             const std::string& scaling_max_freq_path,
             const base::TimeDelta& upload_interval,
@@ -101,14 +100,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
     kStatsLong,     // final wait before new collection
   };
 
-  // Data record for aggregating daily usage.
-  class UseRecord {
-   public:
-    UseRecord() : day_(0), seconds_(0) {}
-    int day_;
-    int seconds_;
-  };
-
   // Type of scale to use for meminfo histograms.  For most of them we use
   // percent of total RAM, but for some we use absolute numbers, usually in
   // megabytes, on a log scale from 0 to 4000, and 0 to 8000 for compressed
@@ -135,30 +126,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
     uint64_t swap_out_;       // pages swapped out
   };
 
-  // Metric parameters.
-  static const char kMetricReadSectorsLongName[];
-  static const char kMetricReadSectorsShortName[];
-  static const char kMetricWriteSectorsLongName[];
-  static const char kMetricWriteSectorsShortName[];
-  static const char kMetricPageFaultsShortName[];
-  static const char kMetricPageFaultsLongName[];
-  static const char kMetricSwapInLongName[];
-  static const char kMetricSwapInShortName[];
-  static const char kMetricSwapOutLongName[];
-  static const char kMetricSwapOutShortName[];
-  static const char kMetricScaledCpuFrequencyName[];
-  static const int kMetricStatsShortInterval;
-  static const int kMetricStatsLongInterval;
-  static const int kMetricMeminfoInterval;
-  static const int kMetricSectorsIOMax;
-  static const int kMetricSectorsBuckets;
-  static const int kMetricPageFaultsMax;
-  static const int kMetricPageFaultsBuckets;
-  static const char kMetricsDiskStatsPath[];
-  static const char kMetricsVmStatsPath[];
-  static const char kMetricsProcStatFileName[];
-  static const int kMetricsProcStatFirstLineItemsCount;
-
   // Returns the active time since boot (uptime minus sleep time) in seconds.
   double GetActiveTime();
 
@@ -166,13 +133,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   static DBusHandlerResult MessageFilter(DBusConnection* connection,
                                          DBusMessage* message,
                                          void* user_data);
-
-  // Updates the daily usage file, if necessary, by adding |seconds|
-  // of active use to the |day| since Epoch. If there's usage data for
-  // day in the past in the usage file, that data is sent to UMA and
-  // removed from the file. If there's already usage data for |day| in
-  // the usage file, the |seconds| are accumulated.
-  void LogDailyUseRecord(int day, int seconds);
 
   // Updates the active use time and logs time between user-space
   // process crashes.
@@ -312,11 +272,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   // The metrics library handle.
   MetricsLibraryInterface* metrics_lib_;
 
-  // Timestamps last network state update.  This timestamp is used to
-  // sample the time from the network going online to going offline so
-  // TimeTicks ensures a monotonically increasing TimeDelta.
-  base::TimeTicks network_state_last_;
-
   // The last time that UpdateStats() was called.
   base::TimeTicks last_update_stats_time_;
 
@@ -369,7 +324,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   scoped_ptr<PersistentInteger> unclean_shutdowns_daily_count_;
   scoped_ptr<PersistentInteger> unclean_shutdowns_weekly_count_;
 
-  std::string vmstats_path_;
   std::string scaling_max_freq_path_;
   std::string cpuinfo_max_freq_path_;
 
