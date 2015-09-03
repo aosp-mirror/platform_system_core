@@ -84,8 +84,6 @@ const char kMetricWriteSectorsShortName[] = "Platform.WriteSectorsShort";
 const int kMetricStatsShortInterval = 1;  // seconds
 const int kMetricStatsLongInterval = 30;  // seconds
 
-const int kMetricMeminfoInterval = 30;        // seconds
-
 // Assume a max rate of 250Mb/s for reads (worse for writes) and 512 byte
 // sectors.
 const int kMetricSectorsIOMax = 500000;  // sectors/second
