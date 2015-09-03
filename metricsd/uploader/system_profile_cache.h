@@ -22,6 +22,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_ptr.h"
 #include "persistent_integer.h"
@@ -49,7 +50,7 @@ class SystemProfileCache : public SystemProfileSetter {
  public:
   SystemProfileCache();
 
-  SystemProfileCache(bool testing, const std::string& config_root);
+  SystemProfileCache(bool testing, const base::FilePath& config_root);
 
   // Populates the ProfileSystem protobuf with system information.
   bool Populate(metrics::ChromeUserMetricsExtension* metrics_proto) override;
@@ -75,9 +76,14 @@ class SystemProfileCache : public SystemProfileSetter {
   // Initializes |profile_| only if it has not been yet initialized.
   bool InitializeOrCheck();
 
+  // Gets a system property as a string.
+  // When |testing_| is true, reads the value from |config_root_|/|name|
+  // instead.
+  std::string GetProperty(const std::string& name);
+
   bool initialized_;
   bool testing_;
-  std::string config_root_;
+  base::FilePath config_root_;
   scoped_ptr<chromeos_metrics::PersistentInteger> session_id_;
   SystemProfile profile_;
 };
