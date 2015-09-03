@@ -33,10 +33,9 @@ LOCAL_SRC_FILES := ${source_files}
 LOCAL_STATIC_LIBRARIES := libz libutils libbase
 LOCAL_MODULE:= libziparchive-host
 LOCAL_CFLAGS := -Werror
-ifneq ($(strip $(USE_MINGW)),)
-	LOCAL_CFLAGS += -mno-ms-bitfields
-endif
+LOCAL_CFLAGS_windows := -mno-ms-bitfields
 LOCAL_MULTILIB := both
+LOCAL_MODULE_HOST_OS := darwin linux windows
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
