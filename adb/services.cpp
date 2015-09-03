@@ -147,7 +147,7 @@ static bool reboot_service_impl(int fd, const char* arg) {
         const char* const command_file = "/cache/recovery/command";
         // Ensure /cache/recovery exists.
         if (adb_mkdir(recovery_dir, 0770) == -1 && errno != EEXIST) {
-            D("Failed to create directory '%s': %s\n", recovery_dir, strerror(errno));
+            D("Failed to create directory '%s': %s", recovery_dir, strerror(errno));
             return false;
         }
 
@@ -212,7 +212,7 @@ static int create_service_thread(void (*func)(int, void *), void *cookie)
         printf("cannot create service socket pair\n");
         return -1;
     }
-    D("socketpair: (%d,%d)\n", s[0], s[1]);
+    D("socketpair: (%d,%d)", s[0], s[1]);
 
     stinfo* sti = reinterpret_cast<stinfo*>(malloc(sizeof(stinfo)));
     if (sti == nullptr) {
@@ -230,7 +230,7 @@ static int create_service_thread(void (*func)(int, void *), void *cookie)
         return -1;
     }
 
-    D("service thread started, %d:%d\n",s[0], s[1]);
+    D("service thread started, %d:%d",s[0], s[1]);
     return s[0];
 }
 
@@ -246,14 +246,14 @@ static void init_subproc_child()
         adb_write(fd, "0", 1);
         adb_close(fd);
     } else {
-       D("adb: unable to update oom_score_adj\n");
+       D("adb: unable to update oom_score_adj");
     }
 }
 
 #if !ADB_HOST
 static int create_subproc_pty(const char* cmd, const char* arg0,
                               const char* arg1, pid_t* pid) {
-    D("create_subproc_pty(cmd=%s, arg0=%s, arg1=%s)\n", cmd, arg0, arg1);
+    D("create_subproc_pty(cmd=%s, arg0=%s, arg1=%s)", cmd, arg0, arg1);
     char pts_name[PATH_MAX];
     int ptm;
     *pid = forkpty(&ptm, pts_name, nullptr, nullptr);
@@ -312,7 +312,7 @@ static int create_subproc_pty(const char* cmd, const char* arg0,
 
 static int create_subproc_raw(const char *cmd, const char *arg0, const char *arg1, pid_t *pid)
 {
-    D("create_subproc_raw(cmd=%s, arg0=%s, arg1=%s)\n", cmd, arg0, arg1);
+    D("create_subproc_raw(cmd=%s, arg0=%s, arg1=%s)", cmd, arg0, arg1);
 #if defined(_WIN32)
     fprintf(stderr, "error: create_subproc_raw not implemented on Win32 (%s %s %s)\n", cmd, arg0, arg1);
     return -1;
@@ -324,7 +324,7 @@ static int create_subproc_raw(const char *cmd, const char *arg0, const char *arg
         printf("[ cannot create socket pair - %s ]\n", strerror(errno));
         return -1;
     }
-    D("socketpair: (%d,%d)\n", sv[0], sv[1]);
+    D("socketpair: (%d,%d)", sv[0], sv[1]);
 
     *pid = fork();
     if (*pid < 0) {
@@ -367,29 +367,29 @@ static void subproc_waiter_service(int fd, void *cookie)
 {
     pid_t pid = (pid_t) (uintptr_t) cookie;
 
-    D("entered. fd=%d of pid=%d\n", fd, pid);
+    D("entered. fd=%d of pid=%d", fd, pid);
     while (true) {
         int status;
         pid_t p = waitpid(pid, &status, 0);
         if (p == pid) {
-            D("fd=%d, post waitpid(pid=%d) status=%04x\n", fd, p, status);
+            D("fd=%d, post waitpid(pid=%d) status=%04x", fd, p, status);
             if (WIFSIGNALED(status)) {
-                D("*** Killed by signal %d\n", WTERMSIG(status));
+                D("*** Killed by signal %d", WTERMSIG(status));
                 break;
             } else if (!WIFEXITED(status)) {
-                D("*** Didn't exit!!. status %d\n", status);
+                D("*** Didn't exit!!. status %d", status);
                 break;
             } else if (WEXITSTATUS(status) >= 0) {
-                D("*** Exit code %d\n", WEXITSTATUS(status));
+                D("*** Exit code %d", WEXITSTATUS(status));
                 break;
             }
          }
     }
-    D("shell exited fd=%d of pid=%d err=%d\n", fd, pid, errno);
+    D("shell exited fd=%d of pid=%d err=%d", fd, pid, errno);
     if (SHELL_EXIT_NOTIFY_FD >=0) {
       int res;
       res = WriteFdExactly(SHELL_EXIT_NOTIFY_FD, &fd, sizeof(fd)) ? 0 : -1;
-      D("notified shell exit via fd=%d for pid=%d res=%d errno=%d\n",
+      D("notified shell exit via fd=%d for pid=%d res=%d errno=%d",
         SHELL_EXIT_NOTIFY_FD, pid, res, errno);
     }
 }
@@ -419,7 +419,7 @@ static int create_subproc_thread(const char *name, SubprocessType type) {
     } else {
         ret_fd = create_subproc_raw(SHELL_COMMAND, arg0, arg1, &pid);
     }
-    D("create_subproc ret_fd=%d pid=%d\n", ret_fd, pid);
+    D("create_subproc ret_fd=%d pid=%d", ret_fd, pid);
 
     stinfo* sti = reinterpret_cast<stinfo*>(malloc(sizeof(stinfo)));
     if(sti == 0) fatal("cannot allocate stinfo");
@@ -434,7 +434,7 @@ static int create_subproc_thread(const char *name, SubprocessType type) {
         return -1;
     }
 
-    D("service thread started, fd=%d pid=%d\n", ret_fd, pid);
+    D("service thread started, fd=%d pid=%d", ret_fd, pid);
     return ret_fd;
 }
 #endif
@@ -549,7 +549,7 @@ static void wait_for_state(int fd, void* cookie)
 {
     state_info* sinfo = reinterpret_cast<state_info*>(cookie);
 
-    D("wait_for_state %d\n", sinfo->state);
+    D("wait_for_state %d", sinfo->state);
 
     std::string error_msg = "unknown error";
     atransport* t = acquire_one_transport(sinfo->state, sinfo->transport_type, sinfo->serial,
@@ -564,7 +564,7 @@ static void wait_for_state(int fd, void* cookie)
         free(sinfo->serial);
     free(sinfo);
     adb_close(fd);
-    D("wait_for_state is done\n");
+    D("wait_for_state is done");
 }
 
 static void connect_device(const std::string& address, std::string* response) {
@@ -588,7 +588,7 @@ static void connect_device(const std::string& address, std::string* response) {
         return;
     }
 
-    D("client: connected %s remote on fd %d\n", serial.c_str(), fd);
+    D("client: connected %s remote on fd %d", serial.c_str(), fd);
     close_on_exec(fd);
     disable_tcp_nagle(fd);
 
