@@ -43,7 +43,6 @@ OUR_TOOLS := \
     iftop \
     ioctl \
     log \
-    ls \
     lsof \
     nandread \
     newfs_msdos \
