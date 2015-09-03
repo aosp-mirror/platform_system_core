@@ -266,10 +266,10 @@ static void stdin_raw_restore(int fd) {
 
 static void read_and_dump(int fd) {
     while (fd >= 0) {
-        D("read_and_dump(): pre adb_read(fd=%d)\n", fd);
+        D("read_and_dump(): pre adb_read(fd=%d)", fd);
         char buf[BUFSIZ];
         int len = adb_read(fd, buf, sizeof(buf));
-        D("read_and_dump(): post adb_read(fd=%d): len=%d\n", fd, len);
+        D("read_and_dump(): post adb_read(fd=%d): len=%d", fd, len);
         if (len <= 0) {
             break;
         }
@@ -305,7 +305,7 @@ static void copy_to_file(int inFd, int outFd) {
     int old_stdout_mode = -1;
 #endif
 
-    D("copy_to_file(%d -> %d)\n", inFd, outFd);
+    D("copy_to_file(%d -> %d)", inFd, outFd);
 
     if (inFd == STDIN_FILENO) {
         stdin_raw_init(STDIN_FILENO);
@@ -333,11 +333,11 @@ static void copy_to_file(int inFd, int outFd) {
             len = adb_read(inFd, buf, BUFSIZE);
         }
         if (len == 0) {
-            D("copy_to_file() : read 0 bytes; exiting\n");
+            D("copy_to_file() : read 0 bytes; exiting");
             break;
         }
         if (len < 0) {
-            D("copy_to_file(): read failed: %s\n", strerror(errno));
+            D("copy_to_file(): read failed: %s", strerror(errno));
             break;
         }
         if (outFd == STDOUT_FILENO) {
@@ -366,7 +366,7 @@ static void copy_to_file(int inFd, int outFd) {
     }
 #endif
 
-    D("copy_to_file() finished after %lu bytes\n", total);
+    D("copy_to_file() finished after %lu bytes", total);
     free(buf);
 }
 
@@ -386,9 +386,9 @@ static void *stdin_read_thread(void *x)
 
     while (true) {
         /* fdi is really the client's stdin, so use read, not adb_read here */
-        D("stdin_read_thread(): pre unix_read(fdi=%d,...)\n", fdi);
+        D("stdin_read_thread(): pre unix_read(fdi=%d,...)", fdi);
         r = unix_read(fdi, buf, 1024);
-        D("stdin_read_thread(): post unix_read(fdi=%d,...)\n", fdi);
+        D("stdin_read_thread(): post unix_read(fdi=%d,...)", fdi);
         if (r <= 0) break;
         for (n = 0; n < r; n++){
             switch(buf[n]) {
@@ -785,7 +785,7 @@ static int backup(int argc, const char** argv) {
         cmd += " " + escape_arg(*argv++);
     }
 
-    D("backup. filename=%s cmd=%s\n", filename, cmd.c_str());
+    D("backup. filename=%s cmd=%s", filename, cmd.c_str());
     std::string error;
     int fd = adb_connect(cmd, &error);
     if (fd < 0) {
@@ -1160,7 +1160,7 @@ int adb_commandline(int argc, const char **argv) {
         }
 
         if (argc < 2) {
-            D("starting interactive shell\n");
+            D("starting interactive shell");
             r = interactive_shell();
             if (h) {
                 printf("\x1b[0m");
@@ -1179,14 +1179,14 @@ int adb_commandline(int argc, const char **argv) {
         }
 
         while (true) {
-            D("interactive shell loop. cmd=%s\n", cmd.c_str());
+            D("interactive shell loop. cmd=%s", cmd.c_str());
             std::string error;
             int fd = adb_connect(cmd, &error);
             int r;
             if (fd >= 0) {
-                D("about to read_and_dump(fd=%d)\n", fd);
+                D("about to read_and_dump(fd=%d)", fd);
                 read_and_dump(fd);
-                D("read_and_dump() done.\n");
+                D("read_and_dump() done.");
                 adb_close(fd);
                 r = 0;
             } else {
@@ -1198,7 +1198,7 @@ int adb_commandline(int argc, const char **argv) {
                 printf("\x1b[0m");
                 fflush(stdout);
             }
-            D("interactive shell loop. return r=%d\n", r);
+            D("interactive shell loop. return r=%d", r);
             return r;
         }
     }

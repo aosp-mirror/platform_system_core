@@ -331,11 +331,11 @@ int i;
     do {                                                                     \
         printed_out = snprintf(pb, max_chars, __VA_ARGS__);                  \
         if (printed_out <= 0) {                                              \
-            D("... snprintf failed.\n");                                     \
+            D("... snprintf failed.");                                     \
             return;                                                          \
         }                                                                    \
         if (max_chars < (unsigned int)printed_out) {                         \
-            D("... snprintf out of space.\n");                               \
+            D("... snprintf out of space.");                               \
             return;                                                          \
         }                                                                    \
         pb += printed_out;                                                   \
@@ -354,7 +354,7 @@ int i;
         }
         SAFE_SPRINTF(" ");
     }
-    D("%s fd_table[]->fd = {%s}\n", extra_msg, msg_buff);
+    D("%s fd_table[]->fd = {%s}", extra_msg, msg_buff);
 }
 #endif
 
@@ -373,7 +373,7 @@ static void fdevent_process()
 
     n = select(select_n, &rfd, &wfd, &efd, NULL);
     int saved_errno = errno;
-    D("select() returned n=%d, errno=%d\n", n, n<0?saved_errno:0);
+    D("select() returned n=%d, errno=%d", n, n<0?saved_errno:0);
 
     dump_all_fds("post select()");
 
@@ -387,7 +387,7 @@ static void fdevent_process()
             FD_ZERO(&rfd);
             break;
         default:
-            D("Unexpected select() error=%d\n", saved_errno);
+            D("Unexpected select() error=%d", saved_errno);
             return;
         }
     }
@@ -410,7 +410,7 @@ static void fdevent_process()
 
             fde->events |= events;
 
-            D("got events fde->fd=%d events=%04x, state=%04x\n",
+            D("got events fde->fd=%d events=%04x, state=%04x",
                 fde->fd, fde->events, fde->state);
             if(fde->state & FDE_PENDING) continue;
             fde->state |= FDE_PENDING;
@@ -516,7 +516,7 @@ static void fdevent_subproc_event_func(int fd, unsigned ev,
                                        void* /* userdata */)
 {
 
-    D("subproc handling on fd=%d ev=%04x\n", fd, ev);
+    D("subproc handling on fd=%d ev=%04x", fd, ev);
 
     // Hook oneself back into the fde's suitable for select() on read.
     if((fd < 0) || (fd >= fd_table_max)) {
@@ -532,18 +532,18 @@ static void fdevent_subproc_event_func(int fd, unsigned ev,
           FATAL("Failed to read the subproc's fd from fd=%d\n", fd);
       }
       if((subproc_fd < 0) || (subproc_fd >= fd_table_max)) {
-          D("subproc_fd %d out of range 0, fd_table_max=%d\n",
+          D("subproc_fd %d out of range 0, fd_table_max=%d",
             subproc_fd, fd_table_max);
           return;
       }
       fdevent *subproc_fde = fd_table[subproc_fd];
       if(!subproc_fde) {
-          D("subproc_fd %d cleared from fd_table\n", subproc_fd);
+          D("subproc_fd %d cleared from fd_table", subproc_fd);
           return;
       }
       if(subproc_fde->fd != subproc_fd) {
           // Already reallocated?
-          D("subproc_fd %d != fd_table[].fd %d\n", subproc_fd, subproc_fde->fd);
+          D("subproc_fd %d != fd_table[].fd %d", subproc_fd, subproc_fde->fd);
           return;
       }
 
@@ -551,7 +551,7 @@ static void fdevent_subproc_event_func(int fd, unsigned ev,
 
       int rcount = 0;
       ioctl(subproc_fd, FIONREAD, &rcount);
-      D("subproc with fd=%d  has rcount=%d err=%d\n",
+      D("subproc with fd=%d  has rcount=%d err=%d",
         subproc_fd, rcount, errno);
 
       if(rcount) {
@@ -561,7 +561,7 @@ static void fdevent_subproc_event_func(int fd, unsigned ev,
         return;
       }
 
-      D("subproc_fde.state=%04x\n", subproc_fde->state);
+      D("subproc_fde.state=%04x", subproc_fde->state);
       subproc_fde->events |= FDE_READ;
       if(subproc_fde->state & FDE_PENDING) {
         return;
@@ -578,7 +578,7 @@ void fdevent_subproc_setup()
     if(adb_socketpair(s)) {
         FATAL("cannot create shell-exit socket-pair\n");
     }
-    D("socketpair: (%d,%d)\n", s[0], s[1]);
+    D("socketpair: (%d,%d)", s[0], s[1]);
 
     SHELL_EXIT_NOTIFY_FD = s[0];
     fdevent *fde;
@@ -689,7 +689,7 @@ void fdevent_loop()
 #endif // !ADB_HOST
 
     while (true) {
-        D("--- ---- waiting for events\n");
+        D("--- ---- waiting for events");
 
         fdevent_process();
 

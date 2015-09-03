@@ -17,11 +17,8 @@
 #ifndef __ADB_TRACE_H
 #define __ADB_TRACE_H
 
-#if !ADB_HOST
-#include <android/log.h>
-#else
-#include <stdio.h>
-#endif
+#include <base/logging.h>
+#include <base/stringprintf.h>
 
 /* IMPORTANT: if you change the following list, don't
  * forget to update the corresponding 'tags' table in
@@ -46,48 +43,16 @@ extern int adb_trace_mask;
 extern unsigned char adb_trace_output_count;
 void adb_trace_init(char**);
 
-#  define ADB_TRACING  ((adb_trace_mask & (1 << TRACE_TAG)) != 0)
+#define ADB_TRACING  ((adb_trace_mask & (1 << TRACE_TAG)) != 0)
 
-/* you must define TRACE_TAG before using this macro */
-#if ADB_HOST
-#  define D(fmt, ...) \
+// You must define TRACE_TAG before using this macro.
+#define D(...) \
         do { \
             if (ADB_TRACING) { \
                 int saved_errno = errno; \
-                adb_mutex_lock(&D_lock); \
-                errno = saved_errno; \
-                fprintf(stderr, "%5d:%5lu %s | " fmt, \
-                        getpid(), adb_thread_id(), __FUNCTION__, ## __VA_ARGS__); \
-                fflush(stderr); \
-                adb_mutex_unlock(&D_lock); \
+                LOG(INFO) << android::base::StringPrintf(__VA_ARGS__); \
                 errno = saved_errno; \
            } \
         } while (0)
-#  define DR(...) \
-        do { \
-            if (ADB_TRACING) { \
-                int saved_errno = errno; \
-                adb_mutex_lock(&D_lock); \
-                errno = saved_errno; \
-                fprintf(stderr, __VA_ARGS__); \
-                fflush(stderr); \
-                adb_mutex_unlock(&D_lock); \
-                errno = saved_errno; \
-           } \
-        } while (0)
-#else
-#  define D(...) \
-        do { \
-            if (ADB_TRACING) { \
-                __android_log_print(ANDROID_LOG_INFO, __FUNCTION__, __VA_ARGS__); \
-            } \
-        } while (0)
-#  define DR(...) \
-        do { \
-            if (ADB_TRACING) { \
-                __android_log_print(ANDROID_LOG_INFO, __FUNCTION__, __VA_ARGS__); \
-            } \
-        } while (0)
-#endif /* ADB_HOST */
 
 #endif /* __ADB_TRACE_H */

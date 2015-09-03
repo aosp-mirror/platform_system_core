@@ -163,7 +163,7 @@ int adb_main(int is_daemon, int server_port, int ack_reply_fd) {
 #endif
     }
 
-    D("Event loop starting\n");
+    D("Event loop starting");
     fdevent_loop();
 
     return 0;
