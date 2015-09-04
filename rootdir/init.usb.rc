@@ -108,18 +108,18 @@ on property:sys.usb.typec.mode=ufp
 
 # USB data role changes
 on property:sys.usb.typec.data_role=device
-    write /sys/class/dual_role_usb/otg_default/data_role ${sys.usb.typec.data}
+    write /sys/class/dual_role_usb/otg_default/data_role ${sys.usb.typec.data_role}
     setprop sys.usb.typec.state ${sys.usb.typec.data_role}
 
 on property:sys.usb.typec.data_role=host
-    write /sys/class/dual_role_usb/otg_default/data_role ${sys.usb.typec.data}
+    write /sys/class/dual_role_usb/otg_default/data_role ${sys.usb.typec.data_role}
     setprop sys.usb.typec.state ${sys.usb.typec.data_role}
 
 # USB power role changes
 on property:sys.usb.typec.power_role=source
-    write /sys/class/dual_role_usb/otg_default/power_role ${sys.usb.typec.power}
+    write /sys/class/dual_role_usb/otg_default/power_role ${sys.usb.typec.power_role}
     setprop sys.usb.typec.state ${sys.usb.typec.power_role}
 
 on property:sys.usb.typec.power_role=sink
-    write /sys/class/dual_role_usb/otg_default/power_role ${sys.usb.typec.power}
+    write /sys/class/dual_role_usb/otg_default/power_role ${sys.usb.typec.power_role}
     setprop sys.usb.typec.state ${sys.usb.typec.power_role}
