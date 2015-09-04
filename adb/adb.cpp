@@ -177,6 +177,7 @@ static void setup_trace_mask() {
         {"jdwp", TRACE_JDWP},
         {"services", TRACE_SERVICES},
         {"auth", TRACE_AUTH},
+        {"fdevent", TRACE_FDEVENT},
         {"shell", TRACE_SHELL}};
 
     std::vector<std::string> elements = android::base::Split(trace_setting, " ");
