@@ -40,15 +40,16 @@ class LogKlog : public SocketListener {
 
 public:
     LogKlog(LogBuffer *buf, LogReader *reader, int fdWrite, int fdRead, bool auditd);
-    int log(const char *buf);
-    void synchronize(const char *buf);
+    int log(const char *buf, size_t len);
+    void synchronize(const char *buf, size_t len);
 
     static void convertMonotonicToReal(log_time &real) { real += correction; }
 
 protected:
-    void sniffTime(log_time &now, const char **buf, bool reverse);
-    pid_t sniffPid(const char *buf);
-    void calculateCorrection(const log_time &monotonic, const char *real_string);
+    void sniffTime(log_time &now, const char **buf, size_t len, bool reverse);
+    pid_t sniffPid(const char *buf, size_t len);
+    void calculateCorrection(const log_time &monotonic,
+                             const char *real_string, size_t len);
     virtual bool onDataAvailable(SocketClient *cli);
 
 };

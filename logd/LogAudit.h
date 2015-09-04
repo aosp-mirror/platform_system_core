@@ -28,7 +28,7 @@ class LogAudit : public SocketListener {
 
 public:
     LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg);
-    int log(char *buf);
+    int log(char *buf, size_t len);
 
 protected:
     virtual bool onDataAvailable(SocketClient *cli);
