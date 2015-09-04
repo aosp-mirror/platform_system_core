@@ -8,6 +8,19 @@ on post-fs-data
     chmod 0660 /sys/class/android_usb/android0/f_mass_storage/lun/file
     chown system system /sys/class/android_usb/android0/f_rndis/ethaddr
     chmod 0660 /sys/class/android_usb/android0/f_rndis/ethaddr
+    mkdir /data/misc/adb 02750 system shell
+    mkdir /data/adb 0700 root root
+
+# adbd is controlled via property triggers in init.<platform>.usb.rc
+service adbd /sbin/adbd --root_seclabel=u:r:su:s0
+    class core
+    socket adbd stream 660 system system
+    disabled
+    seclabel u:r:adbd:s0
+
+# adbd on at boot in emulator
+on property:ro.kernel.qemu=1
+    start adbd
 
 on boot
     setprop sys.usb.configfs 0
