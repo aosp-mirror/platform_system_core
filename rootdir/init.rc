@@ -555,13 +555,3 @@ on property:ro.debuggable=1
 service flash_recovery /system/bin/install-recovery.sh
     class main
     oneshot
-
-service uncrypt /system/bin/uncrypt
-    class main
-    disabled
-    oneshot
-
-service pre-recovery /system/bin/uncrypt --reboot
-    class main
-    disabled
-    oneshot
