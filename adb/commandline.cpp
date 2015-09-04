@@ -1444,7 +1444,7 @@ int adb_commandline(int argc, const char **argv) {
         return 0;
     }
     else if (!strcmp(argv[0], "features")) {
-        return adb_query_command("host:features");
+        return adb_query_command(format_host_command("features", transport_type, serial));
     }
 
     usage();
