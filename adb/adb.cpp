@@ -1133,9 +1133,27 @@ int handle_host_request(const char* service, TransportType type,
     }
 
     if (!strcmp(service, "features")) {
-        SendOkay(reply_fd);
-        SendProtocolString(
-            reply_fd, android::base::Join(supported_features(), '\n'));
+        std::string error_msg;
+        atransport* t = acquire_one_transport(kCsAny, type, serial, &error_msg);
+        if (t != nullptr) {
+            SendOkay(reply_fd, android::base::Join(t->features(), '\n'));
+        } else {
+            SendFail(reply_fd, error_msg);
+        }
+        return 0;
+    }
+
+    if (!strncmp(service, "check-feature:", strlen("check-feature:"))) {
+        std::string error_msg;
+        atransport* t = acquire_one_transport(kCsAny, type, serial, &error_msg);
+        if (t && t->CanUseFeature(service + strlen("check-feature:"))) {
+            // We could potentially extend this to reply with the feature
+            // version if that becomes necessary.
+            SendOkay(reply_fd, "1");
+        } else {
+            // Empty response means unsupported feature.
+            SendOkay(reply_fd, "");
+        }
         return 0;
     }
 
