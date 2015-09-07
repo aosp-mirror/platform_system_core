@@ -72,4 +72,9 @@ TEST_F(String8Test, OperatorPlusEquals) {
     EXPECT_STREQ(src3, " Verify me.");
 }
 
+TEST_F(String8Test, SetToSizeMaxReturnsNoMemory) {
+    const char *in = "some string";
+    EXPECT_EQ(NO_MEMORY, String8("").setTo(in, SIZE_MAX));
+}
+
 }
