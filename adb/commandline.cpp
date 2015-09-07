@@ -931,6 +931,18 @@ static int adb_query_command(const std::string& command) {
     return 0;
 }
 
+// Disallow stdin, stdout, and stderr.
+static bool _is_valid_ack_reply_fd(const int ack_reply_fd) {
+#ifdef _WIN32
+    const HANDLE ack_reply_handle = cast_int_to_handle(ack_reply_fd);
+    return (GetStdHandle(STD_INPUT_HANDLE) != ack_reply_handle) &&
+           (GetStdHandle(STD_OUTPUT_HANDLE) != ack_reply_handle) &&
+           (GetStdHandle(STD_ERROR_HANDLE) != ack_reply_handle);
+#else
+    return ack_reply_fd > 2;
+#endif
+}
+
 int adb_commandline(int argc, const char **argv) {
     int no_daemon = 0;
     int is_daemon = 0;
@@ -980,14 +992,7 @@ int adb_commandline(int argc, const char **argv) {
             argc--;
             argv++;
             ack_reply_fd = strtol(reply_fd_str, nullptr, 10);
-#ifdef _WIN32
-            const HANDLE ack_reply_handle = cast_int_to_handle(ack_reply_fd);
-            if ((GetStdHandle(STD_INPUT_HANDLE) == ack_reply_handle) ||
-                (GetStdHandle(STD_OUTPUT_HANDLE) == ack_reply_handle) ||
-                (GetStdHandle(STD_ERROR_HANDLE) == ack_reply_handle)) {
-#else
-            if (ack_reply_fd <= 2) { // Disallow stdin, stdout, and stderr.
-#endif
+            if (!_is_valid_ack_reply_fd(ack_reply_fd)) {
                 fprintf(stderr, "adb: invalid reply fd \"%s\"\n", reply_fd_str);
                 return usage();
             }
