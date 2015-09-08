@@ -25,6 +25,10 @@ persist.logd.filter         string       Pruning filter to optimize content,
                                          "~!" which means to prune the oldest
                                          entries of chattiest UID. At runtime
                                          use: logcat -P "<string>"
+persist.logd.timestamp      string       The recording timestamp source. Default
+                                         is ro.logd.timestamp. "m[onotonic]" is
+                                         the only supported key character,
+                                         otherwise assumes realtime.
 
 NB:
 - Number support multipliers (K or M) for convenience. Range is limited
