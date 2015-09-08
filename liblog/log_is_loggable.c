@@ -176,3 +176,28 @@ int __android_log_is_loggable(int prio, const char *tag, int def)
     int logLevel = __android_log_level(tag, def);
     return logLevel >= 0 && prio >= logLevel;
 }
+
+char android_log_timestamp()
+{
+    static struct cache r_time_cache = { NULL, -1, 0 };
+    static struct cache p_time_cache = { NULL, -1, 0 };
+    static uint32_t serial;
+    uint32_t current_serial;
+    char retval;
+
+    pthread_mutex_lock(&lock);
+
+    current_serial = __system_property_area_serial();
+    if (current_serial != serial) {
+        refresh_cache(&r_time_cache, "ro.logd.timestamp");
+        refresh_cache(&p_time_cache, "persist.logd.timestamp");
+        serial = current_serial;
+    }
+    if (!(retval = p_time_cache.c)) {
+        retval = r_time_cache.c;
+    }
+
+    pthread_mutex_unlock(&lock);
+
+    return tolower(retval ?: 'r');
+}

@@ -183,6 +183,8 @@ struct logger_list *android_logger_list_open(log_id_t id,
                                              pid_t pid);
 #define android_logger_list_close android_logger_list_free
 
+char android_log_timestamp();
+
 /*
  * log_id_t helpers
  */
