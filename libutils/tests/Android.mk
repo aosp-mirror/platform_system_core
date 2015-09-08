@@ -38,3 +38,11 @@ LOCAL_SHARED_LIBRARIES := \
     libutils \
 
 include $(BUILD_NATIVE_TEST)
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := libutils_tests_host
+LOCAL_SRC_FILES := Vector_test.cpp
+LOCAL_STATIC_LIBRARIES := libutils liblog
+
+include $(BUILD_HOST_NATIVE_TEST)
