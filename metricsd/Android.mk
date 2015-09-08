@@ -113,7 +113,6 @@ generated_sources_dir := $(call local-generated-sources-dir)
 LOCAL_EXPORT_C_INCLUDE_DIRS += \
     $(generated_sources_dir)/proto/system/core/metricsd
 LOCAL_SRC_FILES :=  $(call all-proto-files-under,uploader/proto)
-LOCAL_STATIC_LIBRARIES := libprotobuf-cpp-lite
 include $(BUILD_STATIC_LIBRARY)
 
 # metrics daemon.
