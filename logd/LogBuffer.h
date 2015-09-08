@@ -32,6 +32,21 @@
 #include "LogStatistics.h"
 #include "LogWhiteBlackList.h"
 
+//
+// We are either in 1970ish (MONOTONIC) or 2015+ish (REALTIME) so to
+// differentiate without prejudice, we use 1980 to delineate, earlier
+// is monotonic, later is real.
+//
+namespace android {
+
+static bool isMonotonic(const log_time &mono) {
+    static const uint32_t EPOCH_PLUS_10_YEARS = 10 * 1461 / 4 * 24 * 60 * 60;
+
+    return mono.tv_sec < EPOCH_PLUS_10_YEARS;
+}
+
+}
+
 typedef std::list<LogBufferElement *> LogBufferElementCollection;
 
 class LogBuffer {
@@ -49,11 +64,14 @@ class LogBuffer {
 
     unsigned long mMaxSize[LOG_ID_MAX];
 
+    bool monotonic;
+
 public:
     LastLogTimes &mTimes;
 
     LogBuffer(LastLogTimes *times);
     void init();
+    bool isMonotonic() { return monotonic; }
 
     int log(log_id_t log_id, log_time realtime,
             uid_t uid, pid_t pid, pid_t tid,

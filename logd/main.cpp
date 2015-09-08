@@ -306,7 +306,7 @@ static void readDmesg(LogAudit *al, LogKlog *kl) {
     }
     buf[--len] = '\0';
 
-    if (kl) {
+    if (kl && kl->isMonotonic()) {
         kl->synchronize(buf.get(), len);
     }
 

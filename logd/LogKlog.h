@@ -43,7 +43,9 @@ public:
     int log(const char *buf, size_t len);
     void synchronize(const char *buf, size_t len);
 
+    bool isMonotonic() { return logbuf->isMonotonic(); }
     static void convertMonotonicToReal(log_time &real) { real += correction; }
+    static void convertRealToMonotonic(log_time &real) { real -= correction; }
 
 protected:
     void sniffTime(log_time &now, const char **buf, size_t len, bool reverse);

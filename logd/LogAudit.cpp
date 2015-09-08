@@ -123,17 +123,19 @@ int LogAudit::logPrint(const char *fmt, ...) {
             && (*cp == ':')) {
         memcpy(timeptr + sizeof(audit_str) - 1, "0.0", 3);
         memmove(timeptr + sizeof(audit_str) - 1 + 3, cp, strlen(cp) + 1);
-        //
-        // We are either in 1970ish (MONOTONIC) or 2015+ish (REALTIME) so to
-        // differentiate without prejudice, we use 1980 to delineate, earlier
-        // is monotonic, later is real.
-        //
-#       define EPOCH_PLUS_10_YEARS (10 * 1461 / 4 * 24 * 60 * 60)
-        if (now.tv_sec < EPOCH_PLUS_10_YEARS) {
-            LogKlog::convertMonotonicToReal(now);
+        if (!isMonotonic()) {
+            if (android::isMonotonic(now)) {
+                LogKlog::convertMonotonicToReal(now);
+            }
+        } else {
+            if (!android::isMonotonic(now)) {
+                LogKlog::convertRealToMonotonic(now);
+            }
         }
+    } else if (isMonotonic()) {
+        now = log_time(CLOCK_MONOTONIC);
     } else {
-        now.strptime("", ""); // side effect of setting CLOCK_REALTIME
+        now = log_time(CLOCK_REALTIME);
     }
 
     static const char pid_str[] = " pid=";

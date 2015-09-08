@@ -28,6 +28,7 @@
 #include <log/logger.h>
 
 #include "LogBuffer.h"
+#include "LogKlog.h"
 #include "LogReader.h"
 
 // Default
@@ -126,9 +127,48 @@ void LogBuffer::init() {
             setSize(i, LOG_BUFFER_MIN_SIZE);
         }
     }
+    bool lastMonotonic = monotonic;
+    monotonic = android_log_timestamp() == 'm';
+    if (lastMonotonic == monotonic) {
+        return;
+    }
+
+    //
+    // Fixup all timestamps, may not be 100% accurate, but better than
+    // throwing what we have away when we get 'surprised' by a change.
+    // In-place element fixup so no need to check reader-lock. Entries
+    // should already be in timestamp order, but we could end up with a
+    // few out-of-order entries if new monotonics come in before we
+    // are notified of the reinit change in status. A Typical example would
+    // be:
+    //  --------- beginning of system
+    //      10.494082   184   201 D Cryptfs : Just triggered post_fs_data
+    //  --------- beginning of kernel
+    //       0.000000     0     0 I         : Initializing cgroup subsys cpuacct
+    // as the act of mounting /data would trigger persist.logd.timestamp to
+    // be corrected. 1/30 corner case YMMV.
+    //
+    pthread_mutex_lock(&mLogElementsLock);
+    LogBufferElementCollection::iterator it = mLogElements.begin();
+    while((it != mLogElements.end())) {
+        LogBufferElement *e = *it;
+        if (monotonic) {
+            if (!android::isMonotonic(e->mRealTime)) {
+                LogKlog::convertRealToMonotonic(e->mRealTime);
+            }
+        } else {
+            if (android::isMonotonic(e->mRealTime)) {
+                LogKlog::convertMonotonicToReal(e->mRealTime);
+            }
+        }
+        ++it;
+    }
+    pthread_mutex_unlock(&mLogElementsLock);
 }
 
-LogBuffer::LogBuffer(LastLogTimes *times) : mTimes(*times) {
+LogBuffer::LogBuffer(LastLogTimes *times):
+        monotonic(android_log_timestamp() == 'm'),
+        mTimes(*times) {
     pthread_mutex_init(&mLogElementsLock, NULL);
 
     init();

@@ -330,6 +330,10 @@ void LogKlog::sniffTime(log_time &now,
         }
         *buf = cp;
 
+        if (isMonotonic()) {
+            return;
+        }
+
         const char *b;
         if (((b = strnstr(cp, len, suspendStr)))
                 && ((size_t)((b += sizeof(suspendStr) - 1) - cp) < len)) {
@@ -376,7 +380,11 @@ void LogKlog::sniffTime(log_time &now,
 
         convertMonotonicToReal(now);
     } else {
-        now = log_time(CLOCK_REALTIME);
+        if (isMonotonic()) {
+            now = log_time(CLOCK_MONOTONIC);
+        } else {
+            now = log_time(CLOCK_REALTIME);
+        }
     }
 }
 
