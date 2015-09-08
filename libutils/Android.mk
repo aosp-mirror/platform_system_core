@@ -54,6 +54,7 @@ LOCAL_CFLAGS += $(host_commonCflags)
 LOCAL_CFLAGS_windows := -DMB_CUR_MAX=1
 LOCAL_MULTILIB := both
 LOCAL_MODULE_HOST_OS := darwin linux windows
+LOCAL_C_INCLUDES += external/safe-iop/include
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
@@ -86,6 +87,7 @@ LOCAL_SHARED_LIBRARIES := \
 LOCAL_MODULE := libutils
 LOCAL_CLANG := true
 LOCAL_SANITIZE := integer
+LOCAL_C_INCLUDES += external/safe-iop/include
 include $(BUILD_STATIC_LIBRARY)
 
 # For the device, shared
@@ -99,6 +101,7 @@ LOCAL_SHARED_LIBRARIES := \
         libdl \
         liblog
 LOCAL_CFLAGS := -Werror
+LOCAL_C_INCLUDES += external/safe-iop/include
 
 LOCAL_CLANG := true
 LOCAL_SANITIZE := integer
