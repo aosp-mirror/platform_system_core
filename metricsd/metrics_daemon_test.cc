@@ -82,6 +82,7 @@ class MetricsDaemonTest : public testing::Test {
                  false,
                  true,
                  &metrics_lib_,
+                 disk_stats_path_.value(),
                  scaling_max_freq_path_.value(),
                  cpu_max_freq_path_.value(),
                  base::TimeDelta::FromMinutes(30),
@@ -196,6 +197,21 @@ TEST_F(MetricsDaemonTest, SendSample) {
   ExpectSample("Dummy.Metric", 3);
   daemon_.SendSample("Dummy.Metric", /* sample */ 3,
                      /* min */ 1, /* max */ 100, /* buckets */ 50);
+}
+
+TEST_F(MetricsDaemonTest, ParseDiskStats) {
+  uint64_t read_sectors_now, write_sectors_now;
+  CreateFakeDiskStatsFile(kFakeDiskStats0);
+  ASSERT_TRUE(daemon_.DiskStatsReadStats(&read_sectors_now,
+                                         &write_sectors_now));
+  EXPECT_EQ(read_sectors_now, kFakeReadSectors[0]);
+  EXPECT_EQ(write_sectors_now, kFakeWriteSectors[0]);
+
+  CreateFakeDiskStatsFile(kFakeDiskStats1);
+  ASSERT_TRUE(daemon_.DiskStatsReadStats(&read_sectors_now,
+                                         &write_sectors_now));
+  EXPECT_EQ(read_sectors_now, kFakeReadSectors[1]);
+  EXPECT_EQ(write_sectors_now, kFakeWriteSectors[1]);
 }
 
 TEST_F(MetricsDaemonTest, ProcessMeminfo) {
