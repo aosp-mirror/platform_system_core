@@ -140,11 +140,13 @@ static int IsGuestMode() {
 }
 
 static int DumpLogs() {
-  printf("Metrics from %s\n\n", metrics::kMetricsEventsFilePath);
+  base::FilePath events_file = base::FilePath(
+      metrics::kMetricsDirectory).Append(metrics::kMetricsEventsFileName);
+  printf("Metrics from %s\n\n", events_file.value().data());
 
   ScopedVector<metrics::MetricSample> metrics;
-  metrics::SerializationUtils::ReadMetricsFromFile(
-      metrics::kMetricsEventsFilePath, &metrics);
+  metrics::SerializationUtils::ReadMetricsFromFile(events_file.value(),
+                                                   &metrics);
 
   for (ScopedVector<metrics::MetricSample>::const_iterator i = metrics.begin();
        i != metrics.end(); ++i) {

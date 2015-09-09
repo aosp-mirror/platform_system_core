@@ -87,8 +87,7 @@ class MetricsDaemonTest : public testing::Test {
                  cpu_max_freq_path_.value(),
                  base::TimeDelta::FromMinutes(30),
                  metrics::kMetricsServer,
-                 metrics::kMetricsEventsFilePath,
-                 "/");
+                 temp_dir_.path());
   }
 
   // Adds a metrics library mock expectation that the specified metric

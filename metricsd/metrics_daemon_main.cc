@@ -75,11 +75,9 @@ int main(int argc, char** argv) {
   DEFINE_string(server,
                 metrics::kMetricsServer,
                 "Server to upload the metrics to. (needs -uploader)");
-  DEFINE_string(metrics_file,
-                metrics::kMetricsEventsFilePath,
-                "File to use as a proxy for uploading the metrics");
-  DEFINE_string(config_root,
-                "/", "Root of the configuration files (testing only)");
+  DEFINE_string(metrics_directory,
+                metrics::kMetricsDirectory,
+                "Root of the configuration files (testing only)");
 
   chromeos::FlagHelper::Init(argc, argv, "Chromium OS Metrics Daemon");
 
@@ -103,8 +101,7 @@ int main(int argc, char** argv) {
               kCpuinfoMaxFreqPath,
               base::TimeDelta::FromSeconds(FLAGS_upload_interval_secs),
               FLAGS_server,
-              FLAGS_metrics_file,
-              FLAGS_config_root);
+              base::FilePath(FLAGS_metrics_directory));
 
   if (FLAGS_uploader_test) {
     daemon.RunUploaderTest();
