@@ -20,8 +20,6 @@
 #include <string.h>
 #include <sys/mount.h>
 
-#include <cutils/properties.h>
-
 #include "fs_mgr_priv.h"
 
 struct fs_mgr_flag_values {
@@ -310,24 +308,11 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
         fstab->recs[cnt].partnum = flag_vals.partnum;
         fstab->recs[cnt].swap_prio = flag_vals.swap_prio;
         fstab->recs[cnt].zram_size = flag_vals.zram_size;
-
-        /* If an A/B partition, modify block device to be the real block device */
-        if (fstab->recs[cnt].fs_mgr_flags & MF_SLOTSELECT) {
-            char propbuf[PROPERTY_VALUE_MAX];
-            char *tmp;
-
-            /* use the kernel parameter if set */
-            property_get("ro.boot.slot_suffix", propbuf, "");
-
-            if (asprintf(&tmp, "%s%s", fstab->recs[cnt].blk_device, propbuf) > 0) {
-                free(fstab->recs[cnt].blk_device);
-                fstab->recs[cnt].blk_device = tmp;
-            } else {
-                ERROR("Error updating block device name\n");
-                goto err;
-            }
-        }
         cnt++;
+    }
+    /* If an A/B partition, modify block device to be the real block device */
+    if (fs_mgr_update_for_slotselect(fstab) != 0) {
+        ERROR("Error updating for slotselect\n");
     }
     fclose(fstab_file);
     free(line);

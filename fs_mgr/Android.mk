@@ -3,13 +3,14 @@
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES:= fs_mgr.c fs_mgr_verity.c fs_mgr_fstab.c
+LOCAL_SRC_FILES:= fs_mgr.c fs_mgr_verity.c fs_mgr_fstab.c fs_mgr_slotselect.c
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 
 LOCAL_MODULE:= libfs_mgr
 LOCAL_STATIC_LIBRARIES := liblogwrap libmincrypt libext4_utils_static libsquashfs_utils
-LOCAL_C_INCLUDES += system/extras/ext4_utils system/extras/squashfs_utils
+LOCAL_C_INCLUDES += system/extras/ext4_utils system/extras/squashfs_utils \
+	bootable/recovery
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_CFLAGS := -Werror
 
