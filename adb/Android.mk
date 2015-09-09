@@ -134,7 +134,7 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
 LOCAL_STATIC_LIBRARIES := libadbd
-LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
+LOCAL_SHARED_LIBRARIES := libbase libcutils
 include $(BUILD_NATIVE_TEST)
 
 # adb_test
@@ -149,7 +149,7 @@ LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS) services.cpp
 LOCAL_SRC_FILES_linux := $(LIBADB_TEST_linux_SRCS)
 LOCAL_SRC_FILES_darwin := $(LIBADB_TEST_darwin_SRCS)
 LOCAL_SANITIZE := $(adb_host_sanitize)
-LOCAL_SHARED_LIBRARIES := liblog libbase
+LOCAL_SHARED_LIBRARIES := libbase
 LOCAL_STATIC_LIBRARIES := \
     libadb \
     libcrypto_static \
@@ -173,7 +173,7 @@ LOCAL_CFLAGS_windows := $(LIBADB_windows_CFLAGS)
 LOCAL_CFLAGS_linux := $(LIBADB_linux_CFLAGS)
 LOCAL_SRC_FILES := test_track_devices.cpp
 LOCAL_SANITIZE := $(adb_host_sanitize)
-LOCAL_SHARED_LIBRARIES := liblog libbase
+LOCAL_SHARED_LIBRARIES := libbase
 LOCAL_STATIC_LIBRARIES := libadb libcrypto_static libcutils
 LOCAL_LDLIBS += -lrt -ldl -lpthread
 include $(BUILD_HOST_EXECUTABLE)
