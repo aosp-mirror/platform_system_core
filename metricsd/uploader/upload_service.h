@@ -107,6 +107,7 @@ class UploadService : public base::HistogramFlattener {
   FRIEND_TEST(UploadServiceTest, LogContainsAggregatedValues);
   FRIEND_TEST(UploadServiceTest, LogEmptyAfterUpload);
   FRIEND_TEST(UploadServiceTest, LogEmptyByDefault);
+  FRIEND_TEST(UploadServiceTest, LogFromTheMetricsLibrary);
   FRIEND_TEST(UploadServiceTest, LogKernelCrash);
   FRIEND_TEST(UploadServiceTest, LogUncleanShutdown);
   FRIEND_TEST(UploadServiceTest, LogUserCrash);
