@@ -787,7 +787,7 @@ const char kFeatureShell2[] = "shell_2";
 // The list of features supported by the current system. Will be sent to the
 // other side of the connection in the banner.
 static const FeatureSet gSupportedFeatures = {
-    // None yet.
+        kFeatureShell2,
 };
 
 const FeatureSet& supported_features() {

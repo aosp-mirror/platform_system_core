@@ -31,8 +31,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <memory>
 #include <string>
 
+#include <base/logging.h>
 #include <base/stringprintf.h>
 
 #if !defined(_WIN32)
@@ -46,6 +48,8 @@
 #include "adb_io.h"
 #include "adb_utils.h"
 #include "file_sync_service.h"
+#include "shell_service.h"
+#include "transport.h"
 
 static int install_app(TransportType t, const char* serial, int argc, const char** argv);
 static int install_multiple_app(TransportType t, const char* serial, int argc, const char** argv);
@@ -256,19 +260,60 @@ static void stdin_raw_restore(int fd) {
 }
 #endif
 
-static void read_and_dump(int fd) {
+// Reads from |fd| and prints received data. If |use_shell_protocol| is true
+// this expects that incoming data will use the shell protocol, in which case
+// stdout/stderr are routed independently and the remote exit code will be
+// returned.
+static int read_and_dump(int fd, bool use_shell_protocol=false) {
+    int exit_code = 0;
+    std::unique_ptr<ShellProtocol> protocol;
+    int length = 0;
+    FILE* outfile = stdout;
+
+    char raw_buffer[BUFSIZ];
+    char* buffer_ptr = raw_buffer;
+    if (use_shell_protocol) {
+        protocol.reset(new ShellProtocol(fd));
+        if (!protocol) {
+            LOG(ERROR) << "failed to allocate memory for ShellProtocol object";
+            return 1;
+        }
+        buffer_ptr = protocol->data();
+    }
+
     while (fd >= 0) {
-        D("read_and_dump(): pre adb_read(fd=%d)", fd);
-        char buf[BUFSIZ];
-        int len = adb_read(fd, buf, sizeof(buf));
-        D("read_and_dump(): post adb_read(fd=%d): len=%d", fd, len);
-        if (len <= 0) {
-            break;
+        if (use_shell_protocol) {
+            if (!protocol->Read()) {
+                break;
+            }
+            switch (protocol->id()) {
+                case ShellProtocol::kIdStdout:
+                    outfile = stdout;
+                    break;
+                case ShellProtocol::kIdStderr:
+                    outfile = stderr;
+                    break;
+                case ShellProtocol::kIdExit:
+                    exit_code = protocol->data()[0];
+                    continue;
+                default:
+                    continue;
+            }
+            length = protocol->data_length();
+        } else {
+            D("read_and_dump(): pre adb_read(fd=%d)", fd);
+            length = adb_read(fd, raw_buffer, sizeof(raw_buffer));
+            D("read_and_dump(): post adb_read(fd=%d): length=%d", fd, length);
+            if (length <= 0) {
+                break;
+            }
         }
 
-        fwrite(buf, 1, len, stdout);
-        fflush(stdout);
+        fwrite(buffer_ptr, 1, length, outfile);
+        fflush(outfile);
     }
+
+    return exit_code;
 }
 
 static void read_status_line(int fd, char* buf, size_t count)
@@ -362,28 +407,41 @@ static void copy_to_file(int inFd, int outFd) {
     free(buf);
 }
 
-static void *stdin_read_thread(void *x)
-{
-    int fd, fdi;
-    unsigned char buf[1024];
-    int r, n;
-    int state = 0;
+namespace {
 
-    int *fds = (int*) x;
-    fd = fds[0];
-    fdi = fds[1];
-    free(fds);
+// Used to pass multiple values to the stdin read thread.
+struct StdinReadArgs {
+    int stdin_fd, write_fd;
+    std::unique_ptr<ShellProtocol> protocol;
+};
+
+}  // namespace
+
+// Loops to read from stdin and push the data to the given FD.
+// The argument should be a pointer to a StdinReadArgs object. This function
+// will take ownership of the object and delete it when finished.
+static void* stdin_read_thread(void* x) {
+    std::unique_ptr<StdinReadArgs> args(reinterpret_cast<StdinReadArgs*>(x));
+    int state = 0;
 
     adb_thread_setname("stdin reader");
 
+    char raw_buffer[1024];
+    char* buffer_ptr = raw_buffer;
+    size_t buffer_size = sizeof(raw_buffer);
+    if (args->protocol) {
+        buffer_ptr = args->protocol->data();
+        buffer_size = args->protocol->data_capacity();
+    }
+
     while (true) {
-        /* fdi is really the client's stdin, so use read, not adb_read here */
-        D("stdin_read_thread(): pre unix_read(fdi=%d,...)", fdi);
-        r = unix_read(fdi, buf, 1024);
-        D("stdin_read_thread(): post unix_read(fdi=%d,...)", fdi);
+        // Use unix_read() rather than adb_read() for stdin.
+        D("stdin_read_thread(): pre unix_read(fdi=%d,...)", args->stdin_fd);
+        int r = unix_read(args->stdin_fd, buffer_ptr, buffer_size);
+        D("stdin_read_thread(): post unix_read(fdi=%d,...)", args->stdin_fd);
         if (r <= 0) break;
-        for (n = 0; n < r; n++){
-            switch(buf[n]) {
+        for (int n = 0; n < r; n++){
+            switch(buffer_ptr[n]) {
             case '\n':
                 state = 1;
                 break;
@@ -396,47 +454,59 @@ static void *stdin_read_thread(void *x)
             case '.':
                 if(state == 2) {
                     fprintf(stderr,"\n* disconnect *\n");
-                    stdin_raw_restore(fdi);
+                    stdin_raw_restore(args->stdin_fd);
                     exit(0);
                 }
             default:
                 state = 0;
             }
         }
-        r = adb_write(fd, buf, r);
-        if(r <= 0) {
-            break;
+        if (args->protocol) {
+            if (!args->protocol->Write(ShellProtocol::kIdStdin, r)) {
+                break;
+            }
+        } else {
+            if (!WriteFdExactly(args->write_fd, buffer_ptr, r)) {
+                break;
+            }
         }
     }
-    return 0;
+
+    return nullptr;
 }
 
-static int interactive_shell() {
-    int fdi;
-
+static int interactive_shell(bool use_shell_protocol) {
     std::string error;
     int fd = adb_connect("shell:", &error);
     if (fd < 0) {
         fprintf(stderr,"error: %s\n", error.c_str());
         return 1;
     }
-    fdi = 0; //dup(0);
 
-    int* fds = reinterpret_cast<int*>(malloc(sizeof(int) * 2));
-    if (fds == nullptr) {
-        fprintf(stderr, "couldn't allocate fds array: %s\n", strerror(errno));
+    StdinReadArgs* args = new StdinReadArgs;
+    if (!args) {
+        LOG(ERROR) << "couldn't allocate StdinReadArgs object";
         return 1;
     }
+    args->stdin_fd = 0;
+    args->write_fd = fd;
+    if (use_shell_protocol) {
+        args->protocol.reset(new ShellProtocol(args->write_fd));
+    }
 
-    fds[0] = fd;
-    fds[1] = fdi;
+    stdin_raw_init(args->stdin_fd);
 
-    stdin_raw_init(fdi);
+    int exit_code = 0;
+    if (!adb_thread_create(stdin_read_thread, args)) {
+        PLOG(ERROR) << "error starting stdin read thread";
+        exit_code = 1;
+        delete args;
+    } else {
+        exit_code = read_and_dump(fd, use_shell_protocol);
+    }
 
-    adb_thread_create(stdin_read_thread, fds);
-    read_and_dump(fd);
-    stdin_raw_restore(fdi);
-    return 0;
+    stdin_raw_restore(args->stdin_fd);
+    return exit_code;
 }
 
 
@@ -943,6 +1013,20 @@ static bool _is_valid_ack_reply_fd(const int ack_reply_fd) {
 #endif
 }
 
+// Checks whether the device indicated by |transport_type| and |serial| supports
+// |feature|. Returns the response string, which will be empty if the device
+// could not be found or the feature is not supported.
+static std::string CheckFeature(const std::string& feature,
+                                TransportType transport_type,
+                                const char* serial) {
+    std::string result, error, command("check-feature:" + feature);
+    if (!adb_query(format_host_command(command.c_str(), transport_type, serial),
+                   &result, &error)) {
+        return "";
+    }
+    return result;
+}
+
 int adb_commandline(int argc, const char **argv) {
     int no_daemon = 0;
     int is_daemon = 0;
@@ -1156,9 +1240,19 @@ int adb_commandline(int argc, const char **argv) {
             fflush(stdout);
         }
 
+        bool use_shell_protocol;
+        if (CheckFeature(kFeatureShell2, transport_type, serial).empty()) {
+            D("shell protocol not supported, using raw data transfer");
+            use_shell_protocol = false;
+        } else {
+            D("using shell protocol");
+            use_shell_protocol = true;
+        }
+
+
         if (argc < 2) {
             D("starting interactive shell");
-            r = interactive_shell();
+            r = interactive_shell(use_shell_protocol);
             if (h) {
                 printf("\x1b[0m");
                 fflush(stdout);
@@ -1176,16 +1270,15 @@ int adb_commandline(int argc, const char **argv) {
         }
 
         while (true) {
-            D("interactive shell loop. cmd=%s", cmd.c_str());
+            D("non-interactive shell loop. cmd=%s", cmd.c_str());
             std::string error;
             int fd = adb_connect(cmd, &error);
             int r;
             if (fd >= 0) {
                 D("about to read_and_dump(fd=%d)", fd);
-                read_and_dump(fd);
+                r = read_and_dump(fd, use_shell_protocol);
                 D("read_and_dump() done.");
                 adb_close(fd);
-                r = 0;
             } else {
                 fprintf(stderr,"error: %s\n", error.c_str());
                 r = -1;
@@ -1195,7 +1288,7 @@ int adb_commandline(int argc, const char **argv) {
                 printf("\x1b[0m");
                 fflush(stdout);
             }
-            D("interactive shell loop. return r=%d", r);
+            D("non-interactive shell loop. return r=%d", r);
             return r;
         }
     }
