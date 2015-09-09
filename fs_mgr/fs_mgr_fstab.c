@@ -335,6 +335,7 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
     /* If an A/B partition, modify block device to be the real block device */
     if (fs_mgr_update_for_slotselect(fstab) != 0) {
         ERROR("Error updating for slotselect\n");
+        goto err;
     }
     fclose(fstab_file);
     free(line);
