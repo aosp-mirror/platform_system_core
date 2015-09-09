@@ -84,5 +84,6 @@
 #define DM_BUF_SIZE 4096
 
 int fs_mgr_set_blk_ro(const char *blockdev);
+int fs_mgr_update_for_slotselect(struct fstab *fstab);
 
 #endif /* __CORE_FS_MGR_PRIV_H */
