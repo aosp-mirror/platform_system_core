@@ -118,9 +118,7 @@ LOCAL_SANITIZE := $(adb_host_sanitize)
 LOCAL_STATIC_LIBRARIES := libcrypto_static libbase
 
 LOCAL_C_INCLUDES_windows := development/host/windows/usb/api/
-ifneq ($(HOST_OS),windows)
-    LOCAL_MULTILIB := 64
-endif
+LOCAL_MULTILIB := first
 
 include $(BUILD_HOST_STATIC_LIBRARY)
 
