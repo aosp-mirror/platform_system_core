@@ -1121,6 +1121,11 @@ bip_buffer_write( BipBuffer  bip, const void* src, int  len )
     BIPD(( "bip_buffer_write: enter %d->%d len %d", bip->fdin, bip->fdout, len ));
     BIPDUMP( src, len );
 
+    if (bip->closed) {
+        errno = EPIPE;
+        return -1;
+    }
+
     EnterCriticalSection( &bip->lock );
 
     while (!bip->can_write) {

@@ -72,13 +72,17 @@ class ShellProtocolTest : public ::testing::Test {
         read_protocol_->buffer_end_ = read_protocol_->data() + size;
     }
 
+#if !defined(_WIN32)
     static sig_t saved_sigpipe_handler_;
+#endif
 
     int read_fd_ = -1, write_fd_ = -1;
     ShellProtocol *read_protocol_ = nullptr, *write_protocol_ = nullptr;
 };
 
+#if !defined(_WIN32)
 sig_t ShellProtocolTest::saved_sigpipe_handler_ = nullptr;
+#endif
 
 namespace {
 
