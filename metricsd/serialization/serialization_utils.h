@@ -35,7 +35,11 @@ namespace SerializationUtils {
 // deserialization was successful) or a NULL scoped_ptr.
 scoped_ptr<MetricSample> ParseSample(const std::string& sample);
 
-// Reads all samples from a file and truncate the file when done.
+// Reads all samples from a file. The file contents remain unchanged.
+void ReadMetricsFromFile(const std::string& filename,
+                         ScopedVector<MetricSample>* metrics);
+
+// Reads all samples from a file and truncates the file when done.
 void ReadAndTruncateMetricsFromFile(const std::string& filename,
                                     ScopedVector<MetricSample>* metrics);
 
