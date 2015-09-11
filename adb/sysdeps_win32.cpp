@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -3776,6 +3777,29 @@ FILE* adb_fopen(const char* f, const char* m) {
     return _wfopen(widen(f).c_str(), widen(m).c_str());
 }
 
+// Return a lowercase version of the argument. Uses C Runtime tolower() on
+// each byte which is not UTF-8 aware, and theoretically uses the current C
+// Runtime locale (which in practice is not changed, so this becomes a ASCII
+// conversion).
+static std::string ToLower(const std::string& anycase) {
+    // copy string
+    std::string str(anycase);
+    // transform the copy
+    std::transform(str.begin(), str.end(), str.begin(), tolower);
+    return str;
+}
+
+extern "C" int main(int argc, char** argv);
+
+// Link with -municode to cause this wmain() to be used as the program
+// entrypoint. It will convert the args from UTF-16 to UTF-8 and call the
+// regular main() with UTF-8 args.
+extern "C" int wmain(int argc, wchar_t **argv) {
+    // Convert args from UTF-16 to UTF-8 and pass that to main().
+    NarrowArgs narrow_args(argc, argv);
+    return main(argc, narrow_args.data());
+}
+
 // Shadow UTF-8 environment variable name/value pairs that are created from
 // _wenviron the first time that adb_getenv() is called. Note that this is not
 // currently updated if putenv, setenv, unsetenv are called. Note that no
@@ -3788,6 +3812,13 @@ static void _ensure_env_setup() {
     // If some name/value pairs exist, then we've already done the setup below.
     if (g_environ_utf8.size() != 0) {
         return;
+    }
+
+    if (_wenviron == nullptr) {
+        // If _wenviron is null, then -municode probably wasn't used. That
+        // linker flag will cause the entry point to setup _wenviron. It will
+        // also require an implementation of wmain() (which we provide above).
+        fatal("_wenviron is not set, did you link with -municode?");
     }
 
     // Read name/value pairs from UTF-16 _wenviron and write new name/value
@@ -3803,21 +3834,26 @@ static void _ensure_env_setup() {
             continue;
         }
 
-        const std::string name_utf8(narrow(std::wstring(*env, equal - *env)));
+        // Store lowercase name so that we can do case-insensitive searches.
+        const std::string name_utf8(ToLower(narrow(
+                std::wstring(*env, equal - *env))));
         char* const value_utf8 = strdup(narrow(equal + 1).c_str());
 
-        // Overwrite any duplicate name, but there shouldn't be a dup in the
-        // first place.
-        g_environ_utf8[name_utf8] = value_utf8;
+        // Don't overwrite a previus env var with the same name. In reality,
+        // the system probably won't let two env vars with the same name exist
+        // in _wenviron.
+        g_environ_utf8.insert({name_utf8, value_utf8});
     }
 }
 
 // Version of getenv() that takes a UTF-8 environment variable name and
-// retrieves a UTF-8 value.
+// retrieves a UTF-8 value. Case-insensitive to match getenv() on Windows.
 char* adb_getenv(const char* name) {
     _ensure_env_setup();
 
-    const auto it = g_environ_utf8.find(std::string(name));
+    // Case-insensitive search by searching for lowercase name in a map of
+    // lowercase names.
+    const auto it = g_environ_utf8.find(ToLower(std::string(name)));
     if (it == g_environ_utf8.end()) {
         return nullptr;
     }
