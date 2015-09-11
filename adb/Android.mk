@@ -129,6 +129,8 @@ LOCAL_CFLAGS := -DADB_HOST=0 $(LIBADB_CFLAGS)
 LOCAL_SRC_FILES := \
     $(LIBADB_TEST_SRCS) \
     $(LIBADB_TEST_linux_SRCS) \
+    shell_service_protocol.cpp \
+    shell_service_protocol_test.cpp \
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
 LOCAL_STATIC_LIBRARIES := libadbd
@@ -143,7 +145,12 @@ LOCAL_MODULE := adb_test
 LOCAL_CFLAGS := -DADB_HOST=1 $(LIBADB_CFLAGS)
 LOCAL_CFLAGS_windows := $(LIBADB_windows_CFLAGS)
 LOCAL_CFLAGS_linux := $(LIBADB_linux_CFLAGS)
-LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS) services.cpp
+LOCAL_SRC_FILES := \
+    $(LIBADB_TEST_SRCS) \
+    services.cpp \
+    shell_service_protocol.cpp \
+    shell_service_protocol_test.cpp \
+
 LOCAL_SRC_FILES_linux := $(LIBADB_TEST_linux_SRCS)
 LOCAL_SRC_FILES_darwin := $(LIBADB_TEST_darwin_SRCS)
 LOCAL_SANITIZE := $(adb_host_sanitize)
@@ -199,6 +206,7 @@ LOCAL_SRC_FILES := \
     adb_client.cpp \
     services.cpp \
     file_sync_client.cpp \
+    shell_service_protocol.cpp \
 
 LOCAL_CFLAGS += \
     $(ADB_COMMON_CFLAGS) \
@@ -247,6 +255,7 @@ LOCAL_SRC_FILES := \
     remount_service.cpp \
     set_verity_enable_state_service.cpp \
     shell_service.cpp \
+    shell_service_protocol.cpp \
 
 LOCAL_CFLAGS := \
     $(ADB_COMMON_CFLAGS) \
