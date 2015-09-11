@@ -169,34 +169,8 @@ int adb_main(int is_daemon, int server_port, int ack_reply_fd) {
     return 0;
 }
 
-#ifdef _WIN32
-static bool _argv_is_utf8 = false;
-#endif
-
 int main(int argc, char** argv) {
-#ifdef _WIN32
-    if (!_argv_is_utf8) {
-        fatal("_argv_is_utf8 is not set, suggesting that wmain was not "
-              "called. Did you forget to link with -municode?");
-    }
-#endif
-
     adb_sysdeps_init();
     adb_trace_init(argv);
     return adb_commandline(argc - 1, const_cast<const char**>(argv + 1));
 }
-
-#ifdef _WIN32
-
-extern "C"
-int wmain(int argc, wchar_t **argv) {
-    // Set diagnostic flag to try to detect if the build system was not
-    // configured to call wmain.
-    _argv_is_utf8 = true;
-
-    // Convert args from UTF-16 to UTF-8 and pass that to main().
-    NarrowArgs narrow_args(argc, argv);
-    return main(argc, narrow_args.data());
-}
-
-#endif
