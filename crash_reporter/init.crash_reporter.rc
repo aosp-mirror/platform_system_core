@@ -10,9 +10,20 @@ on boot
     # number to prevent infinitely recursing on crash handling.
     write /proc/sys/kernel/core_pipe_limit 4
 
+    # Remove any previous orphaned locks.
+    rmdir /data/misc/crash_reporter/lock/crash_sender
+
     # Create crash directories.
     mkdir /data/misc/crash_reporter 0700 root root
+    mkdir /data/misc/crash_reporter/lock 0700 root root
+    mkdir /data/misc/crash_reporter/log 0700 root root
+    mkdir /data/misc/crash_reporter/run 0700 root root
+    mkdir /data/misc/crash_reporter/tmp 0700 root root
 
 service crash_reporter /system/bin/crash_reporter --init
     class late_start
     oneshot
+
+service crash_sender /system/bin/periodic_scheduler 3600 14400 crash_sender \
+    /system/bin/crash_sender
+    class late_start

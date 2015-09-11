@@ -81,6 +81,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := crash_sender
 LOCAL_MODULE_CLASS := EXECUTABLES
 LOCAL_MODULE_PATH := $(TARGET_OUT_EXECUTABLES)
+LOCAL_REQUIRED_MODULES := curl periodic_scheduler
 LOCAL_SRC_FILES := crash_sender
 include $(BUILD_PREBUILT)
 
@@ -111,6 +112,15 @@ LOCAL_MODULE := crash_reporter_logs.conf
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(PRODUCT_OUT)/system/etc
 LOCAL_SRC_FILES := crash_reporter_logs.conf
+include $(BUILD_PREBUILT)
+
+# Periodic Scheduler.
+# ========================================================
+include $(CLEAR_VARS)
+LOCAL_MODULE := periodic_scheduler
+LOCAL_MODULE_CLASS := EXECUTABLES
+LOCAL_MODULE_PATH := $(TARGET_OUT_EXECUTABLES)
+LOCAL_SRC_FILES := periodic_scheduler
 include $(BUILD_PREBUILT)
 
 # Crash reporter tests.

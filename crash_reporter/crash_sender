@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/system/bin/sh
 
 # Copyright (C) 2010 The Android Open Source Project
 #
@@ -17,20 +17,20 @@
 set -e
 
 # Default product ID in crash report (used if GOOGLE_CRASH_* is undefined).
-CHROMEOS_PRODUCT=ChromeOS
+BRILLO_PRODUCT=Brillo
+
+# Base directory that contains any crash reporter state files.
+CRASH_STATE_DIR="/data/misc/crash_reporter"
 
 # File whose existence implies crash reports may be sent, and whose
 # contents includes our machine's anonymized guid.
-CONSENT_ID="/home/chronos/Consent To Send Stats"
+CONSENT_ID="/data/misc/metrics/enabled"
 
 # Crash sender lock in case the sender is already running.
-CRASH_SENDER_LOCK="/var/lock/crash_sender"
+CRASH_SENDER_LOCK="${CRASH_STATE_DIR}/lock/crash_sender"
 
 # Path to file that indicates a crash test is currently running.
-CRASH_TEST_IN_PROGRESS_FILE="/tmp/crash-test-in-progress"
-
-# Path to find which is required for computing the crash rate.
-FIND="/usr/bin/find"
+CRASH_TEST_IN_PROGRESS_FILE="${CRASH_STATE_DIR}/tmp/crash-test-in-progress"
 
 # Set this to 1 in the environment to allow uploading crash reports
 # for unofficial versions.
@@ -40,20 +40,17 @@ FORCE_OFFICIAL=${FORCE_OFFICIAL:-0}
 HWCLASS_PATH="/sys/devices/platform/chromeos_acpi/HWID"
 
 # Path to file that indicates this is a developer image.
-LEAVE_CORE_FILE="/root/.leave_core"
+LEAVE_CORE_FILE="${CRASH_STATE_DIR}/.leave_core"
 
 # Path to list_proxies.
-LIST_PROXIES="/usr/bin/list_proxies"
+LIST_PROXIES="list_proxies"
 
 # Maximum crashes to send per day.
 MAX_CRASH_RATE=${MAX_CRASH_RATE:-32}
 
-# Path to metrics_client.
-METRICS_CLIENT="/usr/bin/metrics_client"
-
 # File whose existence mocks crash sending.  If empty we pretend the
 # crash sending was successful, otherwise unsuccessful.
-MOCK_CRASH_SENDING="/tmp/mock-crash-sending"
+MOCK_CRASH_SENDING="${CRASH_STATE_DIR}/tmp/mock-crash-sending"
 
 # Set this to 1 in the environment to pretend to have booted in developer
 # mode.  This is used by autotests.
@@ -64,40 +61,39 @@ OVERRIDE_PAUSE_SENDING=${OVERRIDE_PAUSE_SENDING:-0}
 
 # File whose existence causes crash sending to be delayed (for testing).
 # Must be stateful to enable testing kernel crashes.
-PAUSE_CRASH_SENDING="/var/lib/crash_sender_paused"
+PAUSE_CRASH_SENDING="${CRASH_STATE_DIR}/lock/crash_sender_paused"
 
 # URL to send official build crash reports to.
 REPORT_UPLOAD_PROD_URL="https://clients2.google.com/cr/report"
 
 # Path to a directory of restricted certificates which includes
 # a certificate for ${REPORT_UPLOAD_PROD_URL}.
-RESTRICTED_CERTIFICATES_PATH="/usr/share/chromeos-ca-certificates"
+RESTRICTED_CERTIFICATES_PATH="/system/etc/security/cacerts"
 
 # File whose existence implies we're running and not to start again.
-RUN_FILE="/var/run/crash_sender.pid"
+RUN_FILE="${CRASH_STATE_DIR}/run/crash_sender.pid"
 
 # Maximum time to sleep between sends.
 SECONDS_SEND_SPREAD=${SECONDS_SEND_SPREAD:-600}
 
 # Set this to 1 to allow uploading of device coredumps.
-DEVCOREDUMP_UPLOAD_FLAG_FILE=\
-"/var/lib/crash_reporter/device_coredump_upload_allowed"
+DEVCOREDUMP_UPLOAD_FLAG_FILE="${CRASH_STATE_DIR}/device_coredump_upload_allowed"
 
 # The syslog tag for all logging we emit.
 TAG="$(basename $0)[$$]"
 
 # Directory to store timestamp files indicating the uploads in the past 24
 # hours.
-TIMESTAMPS_DIR="/var/lib/crash_sender"
+TIMESTAMPS_DIR="${CRASH_STATE_DIR}/crash_sender"
 
 # Temp directory for this process.
 TMP_DIR=""
 
-# Chrome's crash report log file.
-CHROME_CRASH_LOG="/var/log/chrome/Crash Reports/uploads.log"
+# Crash report log file.
+CRASH_LOG="${CRASH_STATE_DIR}/log/uploads.log"
 
 lecho() {
-  logger -t "${TAG}" "$@"
+  log -t "${TAG}" "$@"
 }
 
 # Returns true if mock is enabled.
@@ -117,6 +113,9 @@ cleanup() {
     rm -rf "${TMP_DIR}"
   fi
   rm -f "${RUN_FILE}"
+  if [ -n "${CRASH_SENDER_LOCK}" ]; then
+    rm -rf "${CRASH_SENDER_LOCK}"
+  fi
   crash_done
 }
 
@@ -130,7 +129,7 @@ crash_done() {
 
 is_official_image() {
   [ ${FORCE_OFFICIAL} -ne 0 ] && return 0
-  grep ^CHROMEOS_RELEASE_DESCRIPTION /etc/lsb-release | grep -q Official
+  getprop ro.product.description | grep -q Official
 }
 
 # Returns 0 if the a crash test is currently running.  NOTE: Mirrors
@@ -167,7 +166,11 @@ is_developer_mode() {
   # If we're testing crash reporter itself, we don't want to special-case
   # for developer mode.
   is_crash_test_in_progress && return 1
-  crossystem "devsw_boot?1"  # exit status will be accurate
+  if [ "$(getprop ro.build.type)" = "eng" ]; then
+    return 0
+  else
+    return 1
+  fi
 }
 
 # Return 0 if the uploading of device coredumps is allowed.
@@ -188,7 +191,7 @@ generate_uniform_random() {
 check_rate() {
   mkdir -p ${TIMESTAMPS_DIR}
   # Only consider minidumps written in the past 24 hours by removing all older.
-  ${FIND} "${TIMESTAMPS_DIR}" -mindepth 1 -mmin +$((24 * 60)) \
+  find "${TIMESTAMPS_DIR}" -mindepth 1 -mtime +1 \
       -exec rm -- '{}' ';'
   local sends_in_24hrs=$(echo "${TIMESTAMPS_DIR}"/* | wc -w)
   lecho "Current send rate: ${sends_in_24hrs}sends/24hrs"
@@ -198,7 +201,7 @@ check_rate() {
           "max ${MAX_CRASH_RATE}send/24hrs"
     return 1
   fi
-  mktemp "${TIMESTAMPS_DIR}"/XXXX > /dev/null
+  mktemp "${TIMESTAMPS_DIR}"/XXXXXX > /dev/null
   return 0
 }
 
@@ -252,27 +255,18 @@ get_key_value() {
 get_keys() {
   local file="$1" regex="$2"
 
-  awk -F'[[:space:]=]' -vregex="${regex}" \
-      'match($1, regex) { print $1 }' "${file}"
-}
-
-# Return the board name.
-get_board() {
-  get_key_value "/etc/lsb-release" "CHROMEOS_RELEASE_BOARD"
+  cut -d '=' -f1 "${file}" | grep --color=never "${regex}"
 }
 
 # Return the channel name (sans "-channel" suffix).
 get_channel() {
-  get_key_value "/etc/lsb-release" "CHROMEOS_RELEASE_TRACK" |
-    sed 's:-channel$::'
+  getprop ro.product.channel | sed 's:-channel$::'
 }
 
 # Return the hardware class or "undefined".
 get_hardware_class() {
   if [ -r "${HWCLASS_PATH}" ]; then
     cat "${HWCLASS_PATH}"
-  elif crossystem hwid > /dev/null 2>&1; then
-    echo "$(crossystem hwid)"
   else
     echo "undefined"
   fi
@@ -284,13 +278,12 @@ send_crash() {
   local kind="$(get_kind "${meta_path}")"
   local exec_name="$(get_key_value "${meta_path}" "exec_name")"
   local url="${REPORT_UPLOAD_PROD_URL}"
-  local chromeos_version="$(get_key_value "${meta_path}" "ver")"
-  local board="$(get_board)"
+  local brillo_version="$(get_key_value "${meta_path}" "ver")"
   local hwclass="$(get_hardware_class)"
   local write_payload_size="$(get_key_value "${meta_path}" "payload_size")"
   local log="$(get_key_value "${meta_path}" "log")"
   local sig="$(get_key_value "${meta_path}" "sig")"
-  local send_payload_size="$(stat --printf=%s "${report_payload}" 2>/dev/null)"
+  local send_payload_size="$(stat -c "%s" "${report_payload}" 2>/dev/null)"
   local product="$(get_key_value "${meta_path}" "upload_var_prod")"
   local version="$(get_key_value "${meta_path}" "upload_var_ver")"
   local upload_prefix="$(get_key_value "${meta_path}" "upload_prefix")"
@@ -358,10 +351,10 @@ send_crash() {
   # If ID or VERSION_ID is undefined, we use the default product name
   # and CHROMEOS_RELEASE_VERSION from /etc/lsb-release.
   if [ "${product}" = "undefined" ]; then
-    product="${CHROMEOS_PRODUCT}"
+    product="${BRILLO_PRODUCT}"
   fi
   if [ "${version}" = "undefined" ]; then
-    version="${chromeos_version}"
+    version="${brillo_version}"
   fi
 
   local image_type
@@ -376,11 +369,7 @@ send_crash() {
   fi
 
   local boot_mode
-  if ! crossystem "cros_debug" > /dev/null 2>&1; then
-    # Sanity-check failed that makes sure crossystem exists.
-    lecho "Cannot determine boot mode due to error running crossystem command"
-    boot_mode="missing-crossystem"
-  elif is_developer_mode; then
+  if is_developer_mode; then
     boot_mode="dev"
   fi
 
@@ -392,7 +381,7 @@ send_crash() {
   [ "${error_type}" = "undefined" ] && error_type=
 
   lecho "Sending crash:"
-  if [ "${product}" != "${CHROMEOS_PRODUCT}" ]; then
+  if [ "${product}" != "${BRILLO_PRODUCT}" ]; then
     lecho "  Sending crash report on behalf of ${product}"
   fi
   lecho "  Metadata: ${meta_path} (${kind})"
@@ -403,7 +392,6 @@ send_crash() {
   if is_mock; then
     lecho "  Product: ${product}"
     lecho "  URL: ${url}"
-    lecho "  Board: ${board}"
     lecho "  HWClass: ${hwclass}"
     lecho "  write_payload_size: ${write_payload_size}"
     lecho "  send_payload_size: ${send_payload_size}"
@@ -451,7 +439,6 @@ send_crash() {
     --capath "${RESTRICTED_CERTIFICATES_PATH}" --ciphers HIGH \
     -F "prod=${product}" \
     -F "ver=${version}" \
-    -F "board=${board}" \
     -F "hwclass=${hwclass}" \
     -F "exec_name=${exec_name}" \
     ${image_type:+-F "image_type=${image_type}"} \
@@ -477,15 +464,11 @@ send_crash() {
       fi
       ;;
     *)
-      if is_official_image; then
-        product_name="ChromeOS"
-      else
-        product_name="ChromiumOS"
-      fi
+      product_name="Brillo"
       ;;
     esac
     printf '%s,%s,%s\n' \
-      "${timestamp}" "${id}" "${product_name}" >> "${CHROME_CRASH_LOG}"
+      "${timestamp}" "${id}" "${product_name}" >> "${CRASH_LOG}"
     lecho "Crash report receipt ID ${id}"
   else
     lecho "Crash sending failed with exit code ${curl_result}: " \
@@ -512,6 +495,7 @@ remove_report() {
 # 3G connection (see crosbug.com/3304 for discussion).
 send_crashes() {
   local dir="$1"
+  lecho "Sending crashes for ${dir}"
 
   if [ ! -d "${dir}" ]; then
     return
@@ -519,8 +503,8 @@ send_crashes() {
 
   # Consider any old files which still have no corresponding meta file
   # as orphaned, and remove them.
-  for old_file in $(${FIND} "${dir}" -mindepth 1 \
-                    -mmin +$((24 * 60)) -type f); do
+  for old_file in $(find "${dir}" -mindepth 1 \
+                    -mtime +1 -type f); do
     if [ ! -e "$(get_base "${old_file}").meta" ]; then
       lecho "Removing old orphaned file: ${old_file}."
       rm -f -- "${old_file}"
@@ -548,8 +532,8 @@ send_crashes() {
 
     if ! is_complete_metadata "${meta_path}"; then
       # This report is incomplete, so if it's old, just remove it.
-      local old_meta=$(${FIND} "${dir}" -mindepth 1 -name \
-        $(basename "${meta_path}") -mmin +$((24 * 60)) -type f)
+      local old_meta=$(find "${dir}" -mindepth 1 -name \
+        $(basename "${meta_path}") -mtime +1 -type f)
       if [ -n "${old_meta}" ]; then
         lecho "Removing old incomplete metadata."
         remove_report "${meta_path}"
@@ -571,19 +555,10 @@ send_crashes() {
       continue
     fi
 
-    # Don't send crash reports from previous sessions while we're in guest mode
-    # to avoid the impression that crash reporting was enabled, which it isn't.
-    # (Don't exit right now because subsequent reports may be candidates for
-    # deletion.)
-    if ${METRICS_CLIENT} -g; then
-      lecho "Guest mode has been entered.  Delaying crash sending until exited."
-      continue
-    fi
-
     # Remove existing crashes in case user consent has not (yet) been given or
     # has been revoked.  This must come after the guest mode check because
-    # ${METRICS_CLIENT} always returns "not consented" in guest mode.
-    if ! ${METRICS_CLIENT} -c; then
+    # metrics_client always returns "not consented" in guest mode.
+    if ! metrics_client -c; then
       lecho "Crash reporting is disabled.  Removing crash."
       remove_report "${meta_path}"
       continue
@@ -602,7 +577,7 @@ send_crashes() {
     # reports is spread out randomly by up to SECONDS_SEND_SPREAD.  Thus, for
     # the sleep call the greater of the two delays is used.
     local now=$(date +%s)
-    local holdoff_time=$(($(stat --format=%Y "${meta_path}") + 30 - ${now}))
+    local holdoff_time=$(($(stat -c "%Y" "${meta_path}") + 30 - ${now}))
     local spread_time=$(generate_uniform_random "${SECONDS_SEND_SPREAD}")
     local sleep_time
     if [ ${spread_time} -gt ${holdoff_time} ]; then
@@ -673,8 +648,6 @@ parseargs() {
 }
 
 main() {
-  trap cleanup EXIT INT TERM
-
   parseargs "$@"
 
   if [ -e "${PAUSE_CRASH_SENDING}" ] && \
@@ -693,31 +666,25 @@ main() {
   # (like with autotests) that we're still running.
   echo $$ > "${RUN_FILE}"
 
-  for dependency in "${FIND}" "${METRICS_CLIENT}" \
-                    "${RESTRICTED_CERTIFICATES_PATH}"; do
+  for dependency in "${RESTRICTED_CERTIFICATES_PATH}"; do
     if [ ! -x "${dependency}" ]; then
       lecho "Fatal: Crash sending disabled: ${dependency} not found."
       exit 1
     fi
   done
 
-  TMP_DIR="$(mktemp -d /tmp/crash_sender.XXXXXX)"
+  TMP_DIR="$(mktemp -d "${CRASH_STATE_DIR}/tmp/crash_sender.XXXXXX")"
 
   # Send system-wide crashes
-  send_crashes "/var/spool/crash"
-
-  # Send user-specific crashes
-  local d
-  for d in /home/chronos/crash /home/chronos/u-*/crash; do
-    send_crashes "${d}"
-  done
+  send_crashes "${CRASH_STATE_DIR}/crash"
 }
 
-(
-if ! flock -n 9; then
+trap cleanup EXIT INT TERM
+
+#TODO(http://b/23937249): Change the locking logic back to using flock.
+if ! mkdir "${CRASH_SENDER_LOCK}" 2>/dev/null; then
   lecho "Already running; quitting."
   crash_done
   exit 1
 fi
 main "$@"
-) 9>"${CRASH_SENDER_LOCK}"
