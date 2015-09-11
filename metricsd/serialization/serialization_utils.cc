@@ -96,6 +96,50 @@ bool ReadMessage(int fd, std::string* message) {
   return true;
 }
 
+
+// Opens the metrics log file at |filename| in the given |mode|.
+//
+// Returns the file descriptor wrapped in a valid ScopedFD on success.
+base::ScopedFD OpenMetricsFile(const std::string& filename, mode_t mode) {
+  struct stat stat_buf;
+  int result;
+
+  result = stat(filename.c_str(), &stat_buf);
+  if (result < 0) {
+    if (errno != ENOENT)
+      DPLOG(ERROR) << filename << ": bad metrics file stat";
+
+    // Nothing to collect---try later.
+    return base::ScopedFD();
+  }
+  if (stat_buf.st_size == 0) {
+    // Also nothing to collect.
+    return base::ScopedFD();
+  }
+  base::ScopedFD fd(open(filename.c_str(), mode));
+  if (fd.get() < 0) {
+    DPLOG(ERROR) << filename << ": cannot open";
+    return base::ScopedFD();
+  }
+
+  return fd.Pass();
+}
+
+
+// Parses the contents of the metrics log file descriptor |fd| into |metrics|.
+void ReadAllMetricsFromFd(int fd, ScopedVector<MetricSample>* metrics) {
+  for (;;) {
+    std::string message;
+
+    if (!ReadMessage(fd, &message))
+      break;
+
+    scoped_ptr<MetricSample> sample = SerializationUtils::ParseSample(message);
+    if (sample)
+      metrics->push_back(sample.release());
+  }
+}
+
 }  // namespace
 
 scoped_ptr<MetricSample> SerializationUtils::ParseSample(
@@ -131,30 +175,27 @@ scoped_ptr<MetricSample> SerializationUtils::ParseSample(
   return scoped_ptr<MetricSample>();
 }
 
+void SerializationUtils::ReadMetricsFromFile(
+    const std::string& filename,
+    ScopedVector<MetricSample>* metrics) {
+  base::ScopedFD fd(OpenMetricsFile(filename, O_RDONLY));
+  if (!fd.is_valid()) {
+    return;
+  }
+
+  // This processes all messages in the log.
+  ReadAllMetricsFromFd(fd.get(), metrics);
+}
+
 void SerializationUtils::ReadAndTruncateMetricsFromFile(
     const std::string& filename,
     ScopedVector<MetricSample>* metrics) {
-  struct stat stat_buf;
-  int result;
+  base::ScopedFD fd(OpenMetricsFile(filename, O_RDWR));
+  if (!fd.is_valid()) {
+    return;
+  }
 
-  result = stat(filename.c_str(), &stat_buf);
-  if (result < 0) {
-    if (errno != ENOENT)
-      DPLOG(ERROR) << filename << ": bad metrics file stat";
-
-    // Nothing to collect---try later.
-    return;
-  }
-  if (stat_buf.st_size == 0) {
-    // Also nothing to collect.
-    return;
-  }
-  base::ScopedFD fd(open(filename.c_str(), O_RDWR));
-  if (fd.get() < 0) {
-    DPLOG(ERROR) << filename << ": cannot open";
-    return;
-  }
-  result = flock(fd.get(), LOCK_EX);
+  int result = flock(fd.get(), LOCK_EX);
   if (result < 0) {
     DPLOG(ERROR) << filename << ": cannot lock";
     return;
@@ -162,16 +203,7 @@ void SerializationUtils::ReadAndTruncateMetricsFromFile(
 
   // This processes all messages in the log. When all messages are
   // read and processed, or an error occurs, truncate the file to zero size.
-  for (;;) {
-    std::string message;
-
-    if (!ReadMessage(fd.get(), &message))
-      break;
-
-    scoped_ptr<MetricSample> sample = ParseSample(message);
-    if (sample)
-      metrics->push_back(sample.release());
-  }
+  ReadAllMetricsFromFd(fd.get(), metrics);
 
   result = ftruncate(fd.get(), 0);
   if (result < 0)
