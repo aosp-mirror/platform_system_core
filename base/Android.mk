@@ -26,6 +26,7 @@ libbase_src_files := \
 libbase_test_src_files := \
     file_test.cpp \
     logging_test.cpp \
+    parseint_test.cpp \
     stringprintf_test.cpp \
     strings_test.cpp \
     test_main.cpp \
