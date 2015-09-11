@@ -42,12 +42,13 @@ namespace {
 
 const char kCollectChromeFile[] =
     "/mnt/stateful_partition/etc/collect_chrome_crashes";
-const char kCrashTestInProgressPath[] = "/tmp/crash-test-in-progress";
+const char kCrashTestInProgressPath[] =
+    "/data/misc/crash_reporter/tmp/crash-test-in-progress";
 const char kDefaultLogConfig[] = "/etc/crash_reporter_logs.conf";
 const char kDefaultUserName[] = "chronos";
-const char kLeaveCoreFile[] = "/root/.leave_core";
+const char kLeaveCoreFile[] = "/data/misc/crash_reporter/.leave_core";
 const char kLsbRelease[] = "/etc/lsb-release";
-const char kShellPath[] = "/bin/sh";
+const char kShellPath[] = "/system/bin/sh";
 const char kSystemCrashPath[] = "/data/misc/crash_reporter/crash";
 const char kUploadVarPrefix[] = "upload_var_";
 const char kUploadFilePrefix[] = "upload_file_";
