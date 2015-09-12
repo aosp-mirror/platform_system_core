@@ -180,10 +180,21 @@ is_device_coredump_upload_allowed() {
 }
 
 # Generate a uniform random number in 0..max-1.
+# POSIX arithmetic expansion requires support of at least signed long integers.
+# On 32-bit systems, that may mean 32-bit signed integers, in which case the
+# 32-bit random number read from /dev/urandom may be interpreted as negative
+# when used inside an arithmetic expansion (since the high bit might be set).
+# mksh at least is known to behave this way.
+# For this case, simply take the absolute value, which will still give a
+# roughly uniform random distribution for the modulo (as we are merely ignoring
+# the high/sign bit).
+# See corresponding Arithmetic Expansion and Arithmetic Expression sections:
+# POSIX: http://pubs.opengroup.org/onlinepubs/009695399/utilities/xcu_chap02.html#tag_02_06_04
+# mksh: http://linux.die.net/man/1/mksh
 generate_uniform_random() {
   local max=$1
   local random="$(od -An -N4 -tu /dev/urandom)"
-  echo $((random % max))
+  echo $(((random < 0 ? -random : random) % max))
 }
 
 # Check if sending a crash now does not exceed the maximum 24hr rate and
