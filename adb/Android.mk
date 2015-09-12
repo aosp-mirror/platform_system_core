@@ -133,8 +133,6 @@ LOCAL_SRC_FILES := \
     $(LIBADB_TEST_SRCS) \
     $(LIBADB_TEST_linux_SRCS) \
     shell_service_protocol.cpp \
-
-LOCAL_SRC_FILES_linux := \
     shell_service_protocol_test.cpp \
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
@@ -155,11 +153,9 @@ LOCAL_SRC_FILES := \
     $(LIBADB_TEST_SRCS) \
     services.cpp \
     shell_service_protocol.cpp \
-
-LOCAL_SRC_FILES_linux := \
-    $(LIBADB_TEST_linux_SRCS) \
     shell_service_protocol_test.cpp \
 
+LOCAL_SRC_FILES_linux := $(LIBADB_TEST_linux_SRCS)
 LOCAL_SRC_FILES_darwin := $(LIBADB_TEST_darwin_SRCS)
 LOCAL_SRC_FILES_windows := $(LIBADB_TEST_windows_SRCS)
 LOCAL_SANITIZE := $(adb_host_sanitize)
