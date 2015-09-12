@@ -98,6 +98,7 @@ include $(BUILD_NATIVE_TEST)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libbase_test
+LOCAL_MODULE_HOST_OS := darwin linux windows
 LOCAL_SRC_FILES := $(libbase_test_src_files)
 LOCAL_C_INCLUDES := $(LOCAL_PATH)
 LOCAL_CPPFLAGS := $(libbase_cppflags)
