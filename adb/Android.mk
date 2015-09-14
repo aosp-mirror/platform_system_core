@@ -132,8 +132,10 @@ LOCAL_CFLAGS := -DADB_HOST=0 $(LIBADB_CFLAGS)
 LOCAL_SRC_FILES := \
     $(LIBADB_TEST_SRCS) \
     $(LIBADB_TEST_linux_SRCS) \
+    shell_service.cpp \
     shell_service_protocol.cpp \
     shell_service_protocol_test.cpp \
+    shell_service_test.cpp \
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
 LOCAL_STATIC_LIBRARIES := libadbd
