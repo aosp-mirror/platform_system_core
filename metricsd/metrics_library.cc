@@ -56,7 +56,7 @@ static const char *kCrosEventNames[] = {
 time_t MetricsLibrary::cached_enabled_time_ = 0;
 bool MetricsLibrary::cached_enabled_ = false;
 
-MetricsLibrary::MetricsLibrary() : consent_file_(metrics::kConsentFilePath) {}
+MetricsLibrary::MetricsLibrary() {}
 MetricsLibrary::~MetricsLibrary() {}
 
 // We take buffer and buffer_size as parameters in order to simplify testing
@@ -131,19 +131,20 @@ bool MetricsLibrary::AreMetricsEnabled() {
   time_t this_check_time = time(nullptr);
   if (this_check_time != cached_enabled_time_) {
     cached_enabled_time_ = this_check_time;
-    cached_enabled_ = stat(consent_file_.c_str(), &stat_buffer) >= 0;
+    cached_enabled_ = stat(consent_file_.value().data(), &stat_buffer) >= 0;
   }
   return cached_enabled_;
 }
 
 void MetricsLibrary::Init() {
-  uma_events_file_ = metrics::kMetricsEventsFilePath;
+  base::FilePath dir = base::FilePath(metrics::kMetricsDirectory);
+  uma_events_file_ = dir.Append(metrics::kMetricsEventsFileName);
+  consent_file_ = dir.Append(metrics::kConsentFileName);
 }
 
-void MetricsLibrary::InitForTest(const std::string& uma_events_file,
-                                 const std::string& consent_file) {
-  uma_events_file_ = uma_events_file;
-  consent_file_ = consent_file;
+void MetricsLibrary::InitForTest(const base::FilePath& metrics_directory) {
+  uma_events_file_ = metrics_directory.Append(metrics::kMetricsEventsFileName);
+  consent_file_ = metrics_directory.Append(metrics::kConsentFileName);
 }
 
 bool MetricsLibrary::SendToUMA(const std::string& name,
@@ -154,30 +155,32 @@ bool MetricsLibrary::SendToUMA(const std::string& name,
   return metrics::SerializationUtils::WriteMetricToFile(
       *metrics::MetricSample::HistogramSample(name, sample, min, max, nbuckets)
            .get(),
-      metrics::kMetricsEventsFilePath);
+      uma_events_file_.value());
 }
 
 bool MetricsLibrary::SendEnumToUMA(const std::string& name, int sample,
                                    int max) {
   return metrics::SerializationUtils::WriteMetricToFile(
       *metrics::MetricSample::LinearHistogramSample(name, sample, max).get(),
-      metrics::kMetricsEventsFilePath);
+      uma_events_file_.value());
 }
 
 bool MetricsLibrary::SendSparseToUMA(const std::string& name, int sample) {
   return metrics::SerializationUtils::WriteMetricToFile(
       *metrics::MetricSample::SparseHistogramSample(name, sample).get(),
-      metrics::kMetricsEventsFilePath);
+      uma_events_file_.value());
 }
 
 bool MetricsLibrary::SendUserActionToUMA(const std::string& action) {
   return metrics::SerializationUtils::WriteMetricToFile(
-      *metrics::MetricSample::UserActionSample(action).get(), metrics::kMetricsEventsFilePath);
+      *metrics::MetricSample::UserActionSample(action).get(),
+      uma_events_file_.value());
 }
 
 bool MetricsLibrary::SendCrashToUMA(const char *crash_kind) {
   return metrics::SerializationUtils::WriteMetricToFile(
-      *metrics::MetricSample::CrashSample(crash_kind).get(), metrics::kMetricsEventsFilePath);
+      *metrics::MetricSample::CrashSample(crash_kind).get(),
+      uma_events_file_.value());
 }
 
 bool MetricsLibrary::SendCrosEventToUMA(const std::string& event) {

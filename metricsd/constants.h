@@ -19,10 +19,10 @@
 
 namespace metrics {
 static const char kMetricsDirectory[] = "/data/misc/metrics/";
-static const char kMetricsEventsFilePath[] = "/data/misc/metrics/uma-events";
-static const char kMetricsGUIDFilePath[] = "/data/misc/metrics/Sysinfo.GUID";
+static const char kMetricsEventsFileName[] = "uma-events";
+static const char kMetricsGUIDFileName[] = "Sysinfo.GUID";
 static const char kMetricsServer[] = "https://clients4.google.com/uma/v2";
-static const char kConsentFilePath[] = "/data/misc/metrics/enabled";
+static const char kConsentFileName[] = "enabled";
 static const char kDefaultVersion[] = "0.0.0.0";
 
 // System properties used.

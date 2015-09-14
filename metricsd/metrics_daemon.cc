@@ -187,10 +187,10 @@ int MetricsDaemon::Run() {
 
 void MetricsDaemon::RunUploaderTest() {
   upload_service_.reset(new UploadService(
-      new SystemProfileCache(true, base::FilePath(config_root_)),
+      new SystemProfileCache(true, metrics_directory_),
       metrics_lib_,
       server_));
-  upload_service_->Init(upload_interval_, metrics_file_);
+  upload_service_->Init(upload_interval_, metrics_directory_);
   upload_service_->UploadEvent();
 }
 
@@ -223,18 +223,16 @@ void MetricsDaemon::Init(bool testing,
                          const string& cpuinfo_max_freq_path,
                          const base::TimeDelta& upload_interval,
                          const string& server,
-                         const string& metrics_file,
-                         const string& config_root) {
+                         const base::FilePath& metrics_directory) {
   CHECK(metrics_lib);
   testing_ = testing;
   uploader_active_ = uploader_active;
   dbus_enabled_ = dbus_enabled;
-  config_root_ = config_root;
+  metrics_directory_ = metrics_directory;
   metrics_lib_ = metrics_lib;
 
   upload_interval_ = upload_interval;
   server_ = server;
-  metrics_file_ = metrics_file;
 
   // Get ticks per second (HZ) on this system.
   // Sysconf cannot fail, so no sanity checks are needed.
@@ -337,7 +335,7 @@ int MetricsDaemon::OnInit() {
   if (uploader_active_) {
     upload_service_.reset(
         new UploadService(new SystemProfileCache(), metrics_lib_, server_));
-    upload_service_->Init(upload_interval_, metrics_file_);
+    upload_service_->Init(upload_interval_, metrics_directory_);
   }
 
   return EX_OK;
