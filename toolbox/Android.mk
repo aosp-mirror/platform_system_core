@@ -24,18 +24,11 @@ LOCAL_CFLAGS += $(common_cflags) -Dmain=dd_main -DNO_CONV
 LOCAL_MODULE := libtoolbox_dd
 include $(BUILD_STATIC_LIBRARY)
 
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES := upstream-netbsd/usr.bin/du/du.c
-LOCAL_CFLAGS += $(common_cflags) -Dmain=du_main
-LOCAL_MODULE := libtoolbox_du
-include $(BUILD_STATIC_LIBRARY)
-
 
 include $(CLEAR_VARS)
 
 BSD_TOOLS := \
     dd \
-    du \
 
 OUR_TOOLS := \
     df \
