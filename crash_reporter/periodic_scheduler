@@ -22,8 +22,7 @@
 set -e -u
 
 SCRIPT_NAME="$(basename "$0")"
-#CHECK_DELAY=300  # Check every 5 minutes.
-CHECK_DELAY=15  # Check every 5 minutes.
+CHECK_DELAY=300  # Check every 5 minutes.
 KILL_DELAY=10    # How long to let the job clean up after a timeout.
 # Let the unittests override.
 : ${SPOOL_DIR:=/data/misc/crash_reporter/spool/cron-lite}
