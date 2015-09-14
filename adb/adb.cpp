@@ -501,7 +501,7 @@ void handle_packet(apacket *p, atransport *t)
         if (t->online && p->msg.arg0 != 0 && p->msg.arg1 == 0) {
             char *name = (char*) p->data;
             name[p->msg.data_length > 0 ? p->msg.data_length - 1 : 0] = 0;
-            s = create_local_service_socket(name);
+            s = create_local_service_socket(name, t);
             if(s == 0) {
                 send_close(0, p->msg.arg0, t);
             } else {

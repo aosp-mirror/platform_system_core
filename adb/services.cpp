@@ -225,7 +225,7 @@ static int create_service_thread(void (*func)(int, void *), void *cookie)
     return s[0];
 }
 
-int service_to_fd(const char* name) {
+int service_to_fd(const char* name, const atransport* transport) {
     int ret = -1;
 
     if(!strncmp(name, "tcp:", 4)) {
@@ -267,15 +267,15 @@ int service_to_fd(const char* name) {
         ret = create_jdwp_connection_fd(atoi(name+5));
     } else if(!strncmp(name, "shell:", 6)) {
         const char* args = name + 6;
-        if (*args) {
-            // Non-interactive session uses a raw subprocess.
-            ret = StartSubprocess(args, SubprocessType::kRaw);
-        } else {
-            // Interactive session uses a PTY subprocess.
-            ret = StartSubprocess(args, SubprocessType::kPty);
-        }
+        // Use raw for non-interactive, PTY for interactive.
+        SubprocessType type = (*args ? SubprocessType::kRaw : SubprocessType::kPty);
+        SubprocessProtocol protocol =
+                (transport->CanUseFeature(kFeatureShell2) ? SubprocessProtocol::kShell
+                                                          : SubprocessProtocol::kNone);
+        ret = StartSubprocess(args, type, protocol);
     } else if(!strncmp(name, "exec:", 5)) {
-        ret = StartSubprocess(name + 5, SubprocessType::kRaw);
+        ret = StartSubprocess(name + 5, SubprocessType::kRaw,
+                              SubprocessProtocol::kNone);
     } else if(!strncmp(name, "sync:", 5)) {
         ret = create_service_thread(file_sync_service, NULL);
     } else if(!strncmp(name, "remount:", 8)) {
@@ -291,9 +291,10 @@ int service_to_fd(const char* name) {
     } else if(!strncmp(name, "backup:", 7)) {
         ret = StartSubprocess(android::base::StringPrintf("/system/bin/bu backup %s",
                                                           (name + 7)).c_str(),
-                              SubprocessType::kRaw);
+                              SubprocessType::kRaw, SubprocessProtocol::kNone);
     } else if(!strncmp(name, "restore:", 8)) {
-        ret = StartSubprocess("/system/bin/bu restore", SubprocessType::kRaw);
+        ret = StartSubprocess("/system/bin/bu restore", SubprocessType::kRaw,
+                              SubprocessProtocol::kNone);
     } else if(!strncmp(name, "tcpip:", 6)) {
         int port;
         if (sscanf(name + 6, "%d", &port) != 1) {
