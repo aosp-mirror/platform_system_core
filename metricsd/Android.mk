@@ -84,6 +84,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libmetrics
 LOCAL_C_INCLUDES := $(metrics_includes)
 LOCAL_CFLAGS := $(metrics_CFLAGS)
+LOCAL_CLANG := true
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
@@ -97,6 +98,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := metrics_client
 LOCAL_C_INCLUDES := $(metrics_includes)
 LOCAL_CFLAGS := $(metrics_CFLAGS)
+LOCAL_CLANG := true
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS)
 LOCAL_SHARED_LIBRARIES := $(metrics_shared_libraries) \
@@ -132,7 +134,10 @@ LOCAL_SHARED_LIBRARIES := $(metrics_shared_libraries) \
   libchromeos-http \
   libchromeos-dbus \
   libcutils \
-  libdbus
+  libdbus \
+  librootdev
+
+LOCAL_CLANG := true
 LOCAL_SRC_FILES := $(metrics_daemon_sources)
 LOCAL_STATIC_LIBRARIES := metrics_daemon_protos
 include $(BUILD_EXECUTABLE)
