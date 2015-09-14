@@ -27,3 +27,4 @@ service crash_reporter /system/bin/crash_reporter --init
 service crash_sender /system/bin/periodic_scheduler 3600 14400 crash_sender \
     /system/bin/crash_sender
     class late_start
+    group system
