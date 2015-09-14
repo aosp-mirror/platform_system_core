@@ -36,6 +36,16 @@ class NoUniqueDeviceError(FindDeviceError):
         super(NoUniqueDeviceError, self).__init__('No unique device')
 
 
+class ShellError(RuntimeError):
+    def __init__(self, cmd, stdout, stderr, exit_code):
+        super(ShellError, self).__init__(
+                '`{0}` exited with code {1}'.format(cmd, exit_code))
+        self.cmd = cmd
+        self.stdout = stdout
+        self.stderr = stderr
+        self.exit_code = exit_code
+
+
 def get_devices():
     with open(os.devnull, 'wb') as devnull:
         subprocess.check_call(['adb', 'start-server'], stdout=devnull,
@@ -146,6 +156,9 @@ class AndroidDevice(object):
     # adb on Windows returns \r\n even if adbd returns \n.
     _RETURN_CODE_SEARCH_LENGTH = len('{0}255\r\n'.format(_RETURN_CODE_DELIMITER))
 
+    # Shell protocol feature string.
+    SHELL_PROTOCOL_FEATURE = 'shell_2'
+
     def __init__(self, serial, product=None):
         self.serial = serial
         self.product = product
@@ -155,6 +168,7 @@ class AndroidDevice(object):
         if self.product is not None:
             self.adb_cmd.extend(['-p', product])
         self._linesep = None
+        self._features = None
 
     @property
     def linesep(self):
@@ -163,9 +177,20 @@ class AndroidDevice(object):
                                                     ['shell', 'echo'])
         return self._linesep
 
+    @property
+    def features(self):
+        if self._features is None:
+            try:
+                self._features = self._simple_call(['features']).splitlines()
+            except subprocess.CalledProcessError:
+                self._features = []
+        return self._features
+
     def _make_shell_cmd(self, user_cmd):
-        return (self.adb_cmd + ['shell'] + user_cmd +
-                ['; ' + self._RETURN_CODE_PROBE_STRING])
+        command = self.adb_cmd + ['shell'] + user_cmd
+        if self.SHELL_PROTOCOL_FEATURE not in self.features:
+            command.append('; ' + self._RETURN_CODE_PROBE_STRING)
+        return command
 
     def _parse_shell_output(self, out):
         """Finds the exit code string from shell output.
@@ -201,23 +226,43 @@ class AndroidDevice(object):
             self.adb_cmd + cmd, stderr=subprocess.STDOUT)
 
     def shell(self, cmd):
-        logging.info(' '.join(self.adb_cmd + ['shell'] + cmd))
-        cmd = self._make_shell_cmd(cmd)
-        out = _subprocess_check_output(cmd)
-        rc, out = self._parse_shell_output(out)
-        if rc != 0:
-            error = subprocess.CalledProcessError(rc, cmd)
-            error.out = out
-            raise error
-        return out
+        """Calls `adb shell`
+
+        Args:
+            cmd: string shell command to execute.
+
+        Returns:
+            A (stdout, stderr) tuple. Stderr may be combined into stdout
+            if the device doesn't support separate streams.
+
+        Raises:
+            ShellError: the exit code was non-zero.
+        """
+        exit_code, stdout, stderr = self.shell_nocheck(cmd)
+        if exit_code != 0:
+            raise ShellError(cmd, stdout, stderr, exit_code)
+        return stdout, stderr
 
     def shell_nocheck(self, cmd):
+        """Calls `adb shell`
+
+        Args:
+            cmd: string shell command to execute.
+
+        Returns:
+            An (exit_code, stdout, stderr) tuple. Stderr may be combined
+            into stdout if the device doesn't support separate streams.
+        """
         cmd = self._make_shell_cmd(cmd)
         logging.info(' '.join(cmd))
         p = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        out, _ = p.communicate()
-        return self._parse_shell_output(out)
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = p.communicate()
+        if self.SHELL_PROTOCOL_FEATURE in self.features:
+            exit_code = p.returncode
+        else:
+            exit_code, stdout = self._parse_shell_output(stdout)
+        return exit_code, stdout, stderr
 
     def install(self, filename, replace=False):
         cmd = ['install']
@@ -281,7 +326,7 @@ class AndroidDevice(object):
         return self._simple_call(['wait-for-device'])
 
     def get_prop(self, prop_name):
-        output = self.shell(['getprop', prop_name]).splitlines()
+        output = self.shell(['getprop', prop_name])[0].splitlines()
         if len(output) != 1:
             raise RuntimeError('Too many lines in getprop output:\n' +
                                '\n'.join(output))
