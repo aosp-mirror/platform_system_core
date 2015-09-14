@@ -78,10 +78,11 @@ static int get_active_slot_suffix_from_misc(struct fstab *fstab,
     return 0;
 }
 
-// Gets slot_suffix from either the kernel cmdline / firmware, the
-// misc partition or built-in fallback.
-static void get_active_slot_suffix(struct fstab *fstab, char *out_suffix,
-                                   size_t suffix_len)
+// Gets slot_suffix from either the kernel cmdline / firmware or the
+// misc partition. Sets |out_suffix| on success and returns 0. Returns
+// -1 if slot_suffix could not be determined.
+static int get_active_slot_suffix(struct fstab *fstab, char *out_suffix,
+                                  size_t suffix_len)
 {
     char propbuf[PROPERTY_VALUE_MAX];
 
@@ -91,30 +92,19 @@ static void get_active_slot_suffix(struct fstab *fstab, char *out_suffix,
     property_get("ro.boot.slot_suffix", propbuf, "");
     if (propbuf[0] != '\0') {
         strncpy(out_suffix, propbuf, suffix_len);
-        return;
+        return 0;
     }
 
     // If we couldn't get the suffix from the kernel cmdline, try the
     // the misc partition.
     if (get_active_slot_suffix_from_misc(fstab, out_suffix, suffix_len) == 0) {
         INFO("Using slot suffix \"%s\" from misc\n", out_suffix);
-        return;
+        return 0;
     }
 
-    // If that didn't work, fall back to _a. The reasoning here is
-    // that since the fstab has the slotselect option set (otherwise
-    // we wouldn't end up here) we must assume that partitions are
-    // indeed set up for A/B. This corner-case is important because we
-    // may be on this codepath on newly provisioned A/B devices where
-    // misc isn't set up properly (it's just zeroes) and the
-    // bootloader does not (yet) natively support A/B.
-    //
-    // Why '_a'? Because that's what system/extras/boot_control_copy
-    // is using and since the bootloader isn't A/B aware we assume
-    // slots are set up this way.
-    WARNING("Could not determine slot suffix, falling back to \"_a\"\n");
-    strncpy(out_suffix, "_a", suffix_len);
-    return;
+    ERROR("Error determining slot_suffix\n");
+
+    return -1;
 }
 
 // Updates |fstab| for slot_suffix. Returns 0 on success, -1 on error.
@@ -130,7 +120,10 @@ int fs_mgr_update_for_slotselect(struct fstab *fstab)
 
             if (!got_suffix) {
                 memset(suffix, '\0', sizeof(suffix));
-                get_active_slot_suffix(fstab, suffix, sizeof(suffix) - 1);
+                if (get_active_slot_suffix(fstab, suffix,
+                                           sizeof(suffix) - 1) != 0) {
+                  return -1;
+                }
                 got_suffix = 1;
             }
 
