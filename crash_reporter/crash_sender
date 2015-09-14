@@ -63,11 +63,8 @@ OVERRIDE_PAUSE_SENDING=${OVERRIDE_PAUSE_SENDING:-0}
 # Must be stateful to enable testing kernel crashes.
 PAUSE_CRASH_SENDING="${CRASH_STATE_DIR}/lock/crash_sender_paused"
 
-# URL to send official build crash reports to.
-REPORT_UPLOAD_PROD_URL="https://clients2.google.com/cr/report"
-
 # Path to a directory of restricted certificates which includes
-# a certificate for ${REPORT_UPLOAD_PROD_URL}.
+# a certificate for the crash server.
 RESTRICTED_CERTIFICATES_PATH="/system/etc/security/cacerts"
 
 # File whose existence implies we're running and not to start again.
@@ -277,7 +274,7 @@ send_crash() {
   local report_payload="$(get_key_value "${meta_path}" "payload")"
   local kind="$(get_kind "${meta_path}")"
   local exec_name="$(get_key_value "${meta_path}" "exec_name")"
-  local url="${REPORT_UPLOAD_PROD_URL}"
+  local url="$(getprop crash_reporter.server)"
   local brillo_version="$(get_key_value "${meta_path}" "ver")"
   local hwclass="$(get_hardware_class)"
   local write_payload_size="$(get_key_value "${meta_path}" "payload_size")"
@@ -288,6 +285,12 @@ send_crash() {
   local version="$(get_key_value "${meta_path}" "upload_var_ver")"
   local upload_prefix="$(get_key_value "${meta_path}" "upload_prefix")"
   local guid
+
+  # If crash_reporter.server is not set return with an error.
+  if [ -z "${url}" ]; then
+    lecho "Configuration error: crash_reporter.server not set."
+    return 1
+  fi
 
   set -- \
     -F "write_payload_size=${write_payload_size}" \
