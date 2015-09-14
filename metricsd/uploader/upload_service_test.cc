@@ -24,6 +24,7 @@
 
 #include "constants.h"
 #include "metrics_library_mock.h"
+#include "persistent_integer.h"
 #include "serialization/metric_sample.h"
 #include "uploader/metrics_log.h"
 #include "uploader/mock/mock_system_profile_setter.h"
@@ -38,6 +39,8 @@ class UploadServiceTest : public testing::Test {
  protected:
   virtual void SetUp() {
     CHECK(dir_.CreateUniqueTempDir());
+    chromeos_metrics::PersistentInteger::SetMetricsDirectory(
+        dir_.path().value());
     upload_service_.reset(new UploadService(new MockSystemProfileSetter(),
                                             &metrics_lib_, "", true));
 
@@ -45,9 +48,6 @@ class UploadServiceTest : public testing::Test {
     upload_service_->Init(base::TimeDelta::FromMinutes(30), dir_.path());
     upload_service_->GatherHistograms();
     upload_service_->Reset();
-
-    chromeos_metrics::PersistentInteger::SetMetricsDirectory(
-        dir_.path().value());
   }
 
   scoped_ptr<metrics::MetricSample> Crash(const std::string& name) {
@@ -132,9 +132,17 @@ TEST_F(UploadServiceTest, DiscardLogsAfterTooManyFailedUpload) {
     upload_service_->UploadEvent();
   }
 
-  EXPECT_TRUE(upload_service_->staged_log_);
+  EXPECT_TRUE(upload_service_->HasStagedLog());
   upload_service_->UploadEvent();
-  EXPECT_FALSE(upload_service_->staged_log_);
+  EXPECT_FALSE(upload_service_->HasStagedLog());
+
+  // Log a new sample. The failed upload counter should be reset.
+  upload_service_->AddSample(*Crash("user"));
+  for (int i = 0; i < UploadService::kMaxFailedUpload; i++) {
+    upload_service_->UploadEvent();
+  }
+  // The log is not discarded after multiple failed uploads.
+  EXPECT_TRUE(upload_service_->HasStagedLog());
 }
 
 TEST_F(UploadServiceTest, EmptyLogsAreNotSent) {
