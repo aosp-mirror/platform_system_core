@@ -19,6 +19,7 @@
 #include <string>
 
 #include <base/bind.h>
+#include <base/files/file_util.h>
 #include <base/logging.h>
 #include <base/memory/scoped_vector.h>
 #include <base/message_loop/message_loop.h>
@@ -45,6 +46,7 @@ UploadService::UploadService(SystemProfileSetter* setter,
       metrics_lib_(metrics_lib),
       histogram_snapshot_manager_(this),
       sender_(new HttpSender(server)),
+      failed_upload_count_(metrics::kFailedUploadCountName),
       testing_(false) {
 }
 
@@ -60,6 +62,7 @@ void UploadService::Init(const base::TimeDelta& upload_interval,
                          const base::FilePath& metrics_directory) {
   base::StatisticsRecorder::Initialize();
   metrics_file_ = metrics_directory.Append(metrics::kMetricsEventsFileName);
+  staged_log_path_ = metrics_directory.Append(metrics::kStagedLogName);
 
   if (!testing_) {
     base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
@@ -71,8 +74,8 @@ void UploadService::Init(const base::TimeDelta& upload_interval,
 }
 
 void UploadService::StartNewLog() {
-  CHECK(!staged_log_) << "the staged log should be discarded before starting "
-                         "a new metrics log";
+  CHECK(!HasStagedLog()) << "the staged log should be discarded before "
+                         << "starting a new metrics log";
   MetricsLog* log = new MetricsLog();
   current_log_.reset(log);
 }
@@ -88,7 +91,11 @@ void UploadService::UploadEventCallback(const base::TimeDelta& interval) {
 }
 
 void UploadService::UploadEvent() {
-  if (staged_log_) {
+  // If the system shutdown or crashed while uploading a report, we may not have
+  // deleted an old log.
+  RemoveFailedLog();
+
+  if (HasStagedLog()) {
     // Previous upload failed, retry sending the logs.
     SendStagedLog();
     return;
@@ -100,47 +107,44 @@ void UploadService::UploadEvent() {
   StageCurrentLog();
 
   // If a log is available for upload, upload it.
-  if (staged_log_) {
+  if (HasStagedLog()) {
     SendStagedLog();
   }
 }
 
 void UploadService::SendStagedLog() {
-  CHECK(staged_log_) << "staged_log_ must exist to be sent";
-
   // If metrics are not enabled, discard the log and exit.
   if (!metrics_lib_->AreMetricsEnabled()) {
     LOG(INFO) << "Metrics disabled. Don't upload metrics samples.";
-    staged_log_.reset();
+    base::DeleteFile(staged_log_path_, false);
     return;
   }
 
-  std::string log_text;
-  staged_log_->GetEncodedLog(&log_text);
-  if (!sender_->Send(log_text, base::SHA1HashString(log_text))) {
-    ++failed_upload_count_;
-    if (failed_upload_count_ <= kMaxFailedUpload) {
-      LOG(WARNING) << "log upload failed " << failed_upload_count_
-                   << " times. It will be retried later.";
-      return;
-    }
-    LOG(WARNING) << "log failed more than " << kMaxFailedUpload << " times.";
+  std::string staged_log;
+  CHECK(base::ReadFileToString(staged_log_path_, &staged_log));
+
+  // Increase the failed count in case the daemon crashes while sending the log.
+  failed_upload_count_.Add(1);
+
+  if (!sender_->Send(staged_log, base::SHA1HashString(staged_log))) {
+    LOG(WARNING) << "log failed to upload";
   } else {
-    LOG(INFO) << "uploaded " << log_text.length() << " bytes";
+    VLOG(1) << "uploaded " << staged_log.length() << " bytes";
+    base::DeleteFile(staged_log_path_, false);
   }
-  // Discard staged log.
-  staged_log_.reset();
+
+  RemoveFailedLog();
 }
 
 void UploadService::Reset() {
-  staged_log_.reset();
+  base::DeleteFile(staged_log_path_, false);
   current_log_.reset();
-  failed_upload_count_ = 0;
+  failed_upload_count_.Set(0);
 }
 
 void UploadService::ReadMetrics() {
-  CHECK(!staged_log_)
-      << "cannot read metrics until the old logs have been discarded";
+  CHECK(!HasStagedLog()) << "cannot read metrics until the old logs have been "
+                         << "discarded";
 
   ScopedVector<metrics::MetricSample> vector;
   metrics::SerializationUtils::ReadAndTruncateMetricsFromFile(
@@ -153,7 +157,7 @@ void UploadService::ReadMetrics() {
     AddSample(*sample);
     i++;
   }
-  DLOG(INFO) << i << " samples read";
+  VLOG(1) << i << " samples read";
 }
 
 void UploadService::AddSample(const metrics::MetricSample& sample) {
@@ -217,19 +221,27 @@ void UploadService::RecordDelta(const base::HistogramBase& histogram,
 }
 
 void UploadService::StageCurrentLog() {
-  CHECK(!staged_log_)
-      << "staged logs must be discarded before another log can be staged";
+  // If we haven't logged anything since the last upload, don't upload an empty
+  // report.
+  if (!current_log_)
+    return;
 
-  if (!current_log_) return;
-
-  staged_log_.swap(current_log_);
-  staged_log_->CloseLog();
-  if (!staged_log_->PopulateSystemProfile(system_profile_setter_.get())) {
+  scoped_ptr<MetricsLog> staged_log;
+  staged_log.swap(current_log_);
+  staged_log->CloseLog();
+  if (!staged_log->PopulateSystemProfile(system_profile_setter_.get())) {
     LOG(WARNING) << "Error while adding metadata to the log. Discarding the "
                  << "log.";
-    staged_log_.reset();
+    return;
   }
-  failed_upload_count_ = 0;
+  std::string encoded_log;
+  staged_log->GetEncodedLog(&encoded_log);
+
+  failed_upload_count_.Set(0);
+  if (static_cast<int>(encoded_log.size()) != base::WriteFile(
+      staged_log_path_, encoded_log.data(), encoded_log.size())) {
+    LOG(ERROR) << "failed to persist to " << staged_log_path_.value();
+  }
 }
 
 MetricsLog* UploadService::GetOrCreateCurrentLog() {
@@ -237,4 +249,17 @@ MetricsLog* UploadService::GetOrCreateCurrentLog() {
     StartNewLog();
   }
   return current_log_.get();
+}
+
+bool UploadService::HasStagedLog() {
+  return base::PathExists(staged_log_path_);
+}
+
+void UploadService::RemoveFailedLog() {
+  if (failed_upload_count_.Get() > kMaxFailedUpload) {
+    LOG(INFO) << "log failed more than " << kMaxFailedUpload << " times.";
+    CHECK(base::DeleteFile(staged_log_path_, false))
+        << "failed to delete staged log at " << staged_log_path_.value();
+    failed_upload_count_.Set(0);
+  }
 }

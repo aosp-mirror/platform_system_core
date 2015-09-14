@@ -24,6 +24,7 @@
 #include "base/metrics/histogram_snapshot_manager.h"
 
 #include "metrics/metrics_library.h"
+#include "persistent_integer.h"
 #include "uploader/metrics_log.h"
 #include "uploader/sender.h"
 #include "uploader/system_profile_cache.h"
@@ -146,6 +147,12 @@ class UploadService : public base::HistogramFlattener {
   // system information.
   void StageCurrentLog();
 
+  // Returns true iff a log is staged.
+  bool HasStagedLog();
+
+  // Remove the staged log iff the upload failed more than |kMaxFailedUpload|.
+  void RemoveFailedLog();
+
   // Returns the current log. If there is no current log, creates it first.
   MetricsLog* GetOrCreateCurrentLog();
 
@@ -153,11 +160,11 @@ class UploadService : public base::HistogramFlattener {
   MetricsLibraryInterface* metrics_lib_;
   base::HistogramSnapshotManager histogram_snapshot_manager_;
   scoped_ptr<Sender> sender_;
-  int failed_upload_count_;
+  chromeos_metrics::PersistentInteger failed_upload_count_;
   scoped_ptr<MetricsLog> current_log_;
-  scoped_ptr<MetricsLog> staged_log_;
 
   base::FilePath metrics_file_;
+  base::FilePath staged_log_path_;
 
   bool testing_;
 };
