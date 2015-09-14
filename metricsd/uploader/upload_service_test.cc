@@ -41,6 +41,7 @@ class UploadServiceTest : public testing::Test {
     CHECK(dir_.CreateUniqueTempDir());
     chromeos_metrics::PersistentInteger::SetMetricsDirectory(
         dir_.path().value());
+    metrics_lib_.InitForTest(dir_.path());
     upload_service_.reset(new UploadService(new MockSystemProfileSetter(),
                                             &metrics_lib_, "", true));
 
@@ -62,7 +63,7 @@ class UploadServiceTest : public testing::Test {
 
   base::ScopedTempDir dir_;
   scoped_ptr<UploadService> upload_service_;
-  MetricsLibraryMock metrics_lib_;
+  MetricsLibrary metrics_lib_;
 
   scoped_ptr<base::AtExitManager> exit_manager_;
 };
@@ -273,4 +274,19 @@ TEST_F(UploadServiceTest, SessionIdIncrementedAtInitialization) {
   cache.initialized_ = false;
   cache.Initialize();
   EXPECT_EQ(cache.profile_.session_id, session_id + 1);
+}
+
+// Test that we can log metrics from the metrics library and have the uploader
+// upload them.
+TEST_F(UploadServiceTest, LogFromTheMetricsLibrary) {
+  SenderMock* sender = new SenderMock();
+  upload_service_->sender_.reset(sender);
+
+  upload_service_->UploadEvent();
+  EXPECT_EQ(0, sender->send_call_count());
+
+  metrics_lib_.SendEnumToUMA("testname", 2, 10);
+  upload_service_->UploadEvent();
+
+  EXPECT_EQ(1, sender->send_call_count());
 }

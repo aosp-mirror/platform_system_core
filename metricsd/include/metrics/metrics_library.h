@@ -123,6 +123,7 @@ class MetricsLibrary : public MetricsLibraryInterface {
  private:
   friend class CMetricsLibraryTest;
   friend class MetricsLibraryTest;
+  friend class UploadServiceTest;
   FRIEND_TEST(MetricsLibraryTest, AreMetricsEnabled);
   FRIEND_TEST(MetricsLibraryTest, FormatChromeMessage);
   FRIEND_TEST(MetricsLibraryTest, FormatChromeMessageTooLong);
