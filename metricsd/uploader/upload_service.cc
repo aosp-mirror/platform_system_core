@@ -29,6 +29,7 @@
 #include <base/metrics/statistics_recorder.h>
 #include <base/sha1.h>
 
+#include "constants.h"
 #include "serialization/metric_sample.h"
 #include "serialization/serialization_utils.h"
 #include "uploader/metrics_log.h"
@@ -56,9 +57,9 @@ UploadService::UploadService(SystemProfileSetter* setter,
 }
 
 void UploadService::Init(const base::TimeDelta& upload_interval,
-                         const std::string& metrics_file) {
+                         const base::FilePath& metrics_directory) {
   base::StatisticsRecorder::Initialize();
-  metrics_file_ = metrics_file;
+  metrics_file_ = metrics_directory.Append(metrics::kMetricsEventsFileName);
 
   if (!testing_) {
     base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
@@ -143,7 +144,7 @@ void UploadService::ReadMetrics() {
 
   ScopedVector<metrics::MetricSample> vector;
   metrics::SerializationUtils::ReadAndTruncateMetricsFromFile(
-      metrics_file_, &vector);
+      metrics_file_.value(), &vector);
 
   int i = 0;
   for (ScopedVector<metrics::MetricSample>::iterator it = vector.begin();

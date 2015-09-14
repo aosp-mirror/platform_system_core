@@ -50,8 +50,7 @@ class MetricsDaemon : public chromeos::DBusDaemon {
             const std::string& scaling_max_freq_path,
             const base::TimeDelta& upload_interval,
             const std::string& server,
-            const std::string& metrics_file,
-            const std::string& config_root);
+            const base::FilePath& metrics_directory);
 
   // Initializes DBus and MessageLoop variables before running the MessageLoop.
   int OnInit() override;
@@ -268,7 +267,7 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   bool dbus_enabled_;
 
   // Root of the configuration files to use.
-  std::string config_root_;
+  base::FilePath metrics_directory_;
 
   // The metrics library handle.
   MetricsLibraryInterface* metrics_lib_;
@@ -331,7 +330,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
 
   base::TimeDelta upload_interval_;
   std::string server_;
-  std::string metrics_file_;
 
   scoped_ptr<UploadService> upload_service_;
 };
