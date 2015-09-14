@@ -81,7 +81,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := crash_sender
 LOCAL_MODULE_CLASS := EXECUTABLES
 LOCAL_MODULE_PATH := $(TARGET_OUT_EXECUTABLES)
-LOCAL_REQUIRED_MODULES := curl periodic_scheduler
+LOCAL_REQUIRED_MODULES := curl grep periodic_scheduler
 LOCAL_SRC_FILES := crash_sender
 include $(BUILD_PREBUILT)
 
