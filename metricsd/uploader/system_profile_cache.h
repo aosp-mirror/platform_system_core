@@ -50,7 +50,7 @@ class SystemProfileCache : public SystemProfileSetter {
  public:
   SystemProfileCache();
 
-  SystemProfileCache(bool testing, const base::FilePath& config_root);
+  SystemProfileCache(bool testing, const base::FilePath& metrics_directory);
 
   // Populates the ProfileSystem protobuf with system information.
   bool Populate(metrics::ChromeUserMetricsExtension* metrics_proto) override;
@@ -77,13 +77,13 @@ class SystemProfileCache : public SystemProfileSetter {
   bool InitializeOrCheck();
 
   // Gets a system property as a string.
-  // When |testing_| is true, reads the value from |config_root_|/|name|
+  // When |testing_| is true, reads the value from |metrics_directory_|/|name|
   // instead.
   std::string GetProperty(const std::string& name);
 
   bool initialized_;
   bool testing_;
-  base::FilePath config_root_;
+  base::FilePath metrics_directory_;
   scoped_ptr<chromeos_metrics::PersistentInteger> session_id_;
   SystemProfile profile_;
 };

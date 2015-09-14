@@ -55,16 +55,16 @@ std::string ChannelToString(
 SystemProfileCache::SystemProfileCache()
     : initialized_(false),
     testing_(false),
-    config_root_("/"),
+    metrics_directory_(metrics::kMetricsDirectory),
     session_id_(new chromeos_metrics::PersistentInteger(
         kPersistentSessionIdFilename)) {
 }
 
 SystemProfileCache::SystemProfileCache(bool testing,
-                                       const base::FilePath& config_root)
+                                       const base::FilePath& metrics_directory)
     : initialized_(false),
       testing_(testing),
-      config_root_(config_root),
+      metrics_directory_(metrics_directory),
       session_id_(new chromeos_metrics::PersistentInteger(
           kPersistentSessionIdFilename)) {
 }
@@ -91,9 +91,11 @@ bool SystemProfileCache::Initialize() {
     channel = "";
     profile_.version = metrics::kDefaultVersion;
   }
-  profile_.client_id =
-      testing_ ? "client_id_test" :
-      GetPersistentGUID(metrics::kMetricsGUIDFilePath);
+  std::string guid_path = metrics_directory_.Append(
+      metrics::kMetricsGUIDFileName).value();
+  profile_.client_id = testing_ ?
+      "client_id_test" :
+      GetPersistentGUID(guid_path);
   profile_.hardware_class = "unknown";
   profile_.channel = ProtoChannelFromString(channel);
 
@@ -155,7 +157,7 @@ std::string SystemProfileCache::GetPersistentGUID(
 std::string SystemProfileCache::GetProperty(const std::string& name) {
   if (testing_) {
     std::string content;
-    base::ReadFileToString(config_root_.Append(name), &content);
+    base::ReadFileToString(metrics_directory_.Append(name), &content);
     return content;
   } else {
     char value[PROPERTY_VALUE_MAX];

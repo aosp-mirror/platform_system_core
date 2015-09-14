@@ -22,6 +22,7 @@
 #include <unistd.h>
 
 #include <base/compiler_specific.h>
+#include <base/files/file_path.h>
 #include <base/macros.h>
 #include <base/memory/scoped_ptr.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
@@ -129,8 +130,7 @@ class MetricsLibrary : public MetricsLibraryInterface {
   FRIEND_TEST(MetricsLibraryTest, SendMessageToChrome);
   FRIEND_TEST(MetricsLibraryTest, SendMessageToChromeUMAEventsBadFileLocation);
 
-  void InitForTest(const std::string& uma_events_file,
-                   const std::string& consent_file);
+  void InitForTest(const base::FilePath& metrics_directory);
 
   // Sets |*result| to whether or not the |mounts_file| indicates that
   // the |device_name| is currently mounted.  Uses |buffer| of
@@ -146,8 +146,8 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // Cached state of whether or not metrics were enabled.
   static bool cached_enabled_;
 
-  std::string uma_events_file_;
-  std::string consent_file_;
+  base::FilePath uma_events_file_;
+  base::FilePath consent_file_;
 
   DISALLOW_COPY_AND_ASSIGN(MetricsLibrary);
 };

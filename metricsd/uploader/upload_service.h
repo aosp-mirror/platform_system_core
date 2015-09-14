@@ -73,7 +73,7 @@ class UploadService : public base::HistogramFlattener {
                          const std::string& server);
 
   void Init(const base::TimeDelta& upload_interval,
-            const std::string& metrics_file);
+            const base::FilePath& metrics_directory);
 
   // Starts a new log. The log needs to be regenerated after each successful
   // launch as it is destroyed when staging the log.
@@ -157,7 +157,7 @@ class UploadService : public base::HistogramFlattener {
   scoped_ptr<MetricsLog> current_log_;
   scoped_ptr<MetricsLog> staged_log_;
 
-  std::string metrics_file_;
+  base::FilePath metrics_file_;
 
   bool testing_;
 };

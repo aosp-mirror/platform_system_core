@@ -28,19 +28,17 @@ class MetricsLibraryTest : public testing::Test {
  protected:
   virtual void SetUp() {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-    consent_file_ = temp_dir_.path().Append("consent");
-    uma_events_file_ = temp_dir_.path().Append("events");
-    lib_.InitForTest(uma_events_file_.value(), consent_file_.value());
-    EXPECT_EQ(0, WriteFile(uma_events_file_, "", 0));
+    lib_.InitForTest(temp_dir_.path());
+    EXPECT_EQ(0, WriteFile(lib_.uma_events_file_, "", 0));
     // Defeat metrics enabled caching between tests.
     lib_.cached_enabled_time_ = 0;
   }
 
   void SetMetricsConsent(bool enabled) {
     if (enabled) {
-      ASSERT_EQ(base::WriteFile(consent_file_, "", 0), 0);
+      ASSERT_EQ(base::WriteFile(lib_.consent_file_, "", 0), 0);
     } else {
-      ASSERT_TRUE(base::DeleteFile(consent_file_, false));
+      ASSERT_TRUE(base::DeleteFile(lib_.consent_file_, false));
     }
   }
 
@@ -49,8 +47,6 @@ class MetricsLibraryTest : public testing::Test {
 
   MetricsLibrary lib_;
   base::ScopedTempDir temp_dir_;
-  base::FilePath consent_file_;
-  base::FilePath uma_events_file_;
 };
 
 TEST_F(MetricsLibraryTest, AreMetricsEnabledFalse) {
