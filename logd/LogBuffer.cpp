@@ -242,8 +242,8 @@ LogBufferElementCollection::iterator LogBuffer::erase(
         LogBufferElementCollection::iterator it, bool engageStats) {
     LogBufferElement *e = *it;
     log_id_t id = e->getLogId();
-    LogBufferIteratorMap::iterator f = mLastWorstUid[id].find(e->getUid());
 
+    LogBufferIteratorMap::iterator f = mLastWorstUid[id].find(e->getUid());
     if ((f != mLastWorstUid[id].end()) && (it == f->second)) {
         mLastWorstUid[id].erase(f);
     }
@@ -329,7 +329,51 @@ public:
 
 // prune "pruneRows" of type "id" from the buffer.
 //
+// This garbage collection task is used to expire log entries. It is called to
+// remove all logs (clear), all UID logs (unprivileged clear), or every
+// 256 or 10% of the total logs (whichever is less) to prune the logs.
+//
+// First there is a prep phase where we discover the reader region lock that
+// acts as a backstop to any pruning activity to stop there and go no further.
+//
+// There are three major pruning loops that follow. All expire from the oldest
+// entries. Since there are multiple log buffers, the Android logging facility
+// will appear to drop entries 'in the middle' when looking at multiple log
+// sources and buffers. This effect is slightly more prominent when we prune
+// the worst offender by logging source. Thus the logs slowly loose content
+// and value as you move back in time. This is preferred since chatty sources
+// invariably move the logs value down faster as less chatty sources would be
+// expired in the noise.
+//
+// The first loop performs blacklisting and worst offender pruning. Falling
+// through when there are no notable worst offenders and have not hit the
+// region lock preventing further worst offender pruning. This loop also looks
+// after managing the chatty log entries and merging to help provide
+// statistical basis for blame. The chatty entries are not a notification of
+// how much logs you may have, but instead represent how much logs you would
+// have had in a virtual log buffer that is extended to cover all the in-memory
+// logs without loss. They last much longer than the represented pruned logs
+// since they get multiplied by the gains in the non-chatty log sources.
+//
+// The second loop get complicated because an algorithm of watermarks and
+// history is maintained to reduce the order and keep processing time
+// down to a minimum at scale. These algorithms can be costly in the face
+// of larger log buffers, or severly limited processing time granted to a
+// background task at lowest priority.
+//
+// This second loop does straight-up expiration from the end of the logs
+// (again, remember for the specified log buffer id) but does some whitelist
+// preservation. Thus whitelist is a Hail Mary low priority, blacklists and
+// spam filtration all take priority. This second loop also checks if a region
+// lock is causing us to buffer too much in the logs to help the reader(s),
+// and will tell the slowest reader thread to skip log entries, and if
+// persistent and hits a further threshold, kill the reader thread.
+//
+// The third thread is optional, and only gets hit if there was a whitelist
+// and more needs to be pruned against the backstop of the region lock.
+//
 // mLogElementsLock must be held when this function is called.
+//
 void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     LogTimeEntry *oldest = NULL;
 
@@ -410,7 +454,12 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         bool kick = false;
         bool leading = true;
         it = mLogElements.begin();
-        if (worst != (uid_t) -1) {
+        // Perform at least one mandatory garbage collection cycle in following
+        // - clear leading chatty tags
+        // - merge chatty tags
+        // - check age-out of preserved logs
+        bool gc = pruneRows <= 1;
+        if (!gc && (worst != (uid_t) -1)) {
             LogBufferIteratorMap::iterator f = mLastWorstUid[id].find(worst);
             if ((f != mLastWorstUid[id].end())
                     && (f->second != mLogElements.end())) {
@@ -481,7 +530,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             // unmerged drop message
             if (dropped) {
                 last.add(e);
-                if ((e->getUid() == worst)
+                if ((!gc && (e->getUid() == worst))
                         || (mLastWorstUid[id].find(e->getUid())
                             == mLastWorstUid[id].end())) {
                     mLastWorstUid[id][e->getUid()] = it;
@@ -516,7 +565,10 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                     it = erase(it, false);
                 } else {
                     last.add(e);
-                    mLastWorstUid[id][e->getUid()] = it;
+                    if (!gc || (mLastWorstUid[id].find(worst)
+                                == mLastWorstUid[id].end())) {
+                        mLastWorstUid[id][worst] = it;
+                    }
                     ++it;
                 }
             }
