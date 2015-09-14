@@ -42,8 +42,7 @@ class UploadServiceTest : public testing::Test {
                                             &metrics_lib_, "", true));
 
     upload_service_->sender_.reset(new SenderMock);
-    event_file_ = dir_.path().Append("event");
-    upload_service_->Init(base::TimeDelta::FromMinutes(30), event_file_.value());
+    upload_service_->Init(base::TimeDelta::FromMinutes(30), dir_.path());
     upload_service_->GatherHistograms();
     upload_service_->Reset();
 
@@ -60,8 +59,6 @@ class UploadServiceTest : public testing::Test {
         value.size(),
         base::WriteFile(dir_.path().Append(name), value.data(), value.size()));
   }
-
-  base::FilePath event_file_;
 
   base::ScopedTempDir dir_;
   scoped_ptr<UploadService> upload_service_;
