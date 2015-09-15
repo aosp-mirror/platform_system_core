@@ -64,6 +64,7 @@ void fb_queue_download(const char *name, void *data, uint32_t size);
 void fb_queue_notice(const char *notice);
 void fb_queue_wait_for_disconnect(void);
 int fb_execute_queue(usb_handle *usb);
+void fb_set_active(const char *slot);
 
 /* util stuff */
 double now();
