@@ -470,7 +470,8 @@ class FileOperationsTest(DeviceTest):
             self.assertEqual(temp_file.checksum, dev_md5)
 
         self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
-        shutil.rmtree(base_dir + self.DEVICE_TEMP_DIR)
+        if base_dir is not None:
+            shutil.rmtree(base_dir)
 
     def test_unicode_paths(self):
         """Ensure that we can support non-ASCII paths, even on Windows."""
