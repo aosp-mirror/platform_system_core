@@ -162,6 +162,9 @@ std::string get_trace_setting() {
 // adbd's comes from the system property persist.adb.trace_mask.
 static void setup_trace_mask() {
     const std::string trace_setting = get_trace_setting();
+    if (trace_setting.empty()) {
+        return;
+    }
 
     std::unordered_map<std::string, int> trace_flags = {
         {"1", 0},
@@ -184,7 +187,7 @@ static void setup_trace_mask() {
     for (const auto& elem : elements) {
         const auto& flag = trace_flags.find(elem);
         if (flag == trace_flags.end()) {
-            D("Unknown trace flag: %s", flag->first.c_str());
+            D("Unknown trace flag: %s", elem.c_str());
             continue;
         }
 
