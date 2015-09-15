@@ -413,6 +413,14 @@ void Subprocess::PassDataStreams() {
             D("closing FD %d", dead_sfd->fd());
             FD_CLR(dead_sfd->fd(), &master_read_set);
             FD_CLR(dead_sfd->fd(), &master_write_set);
+            if (dead_sfd == &protocol_sfd_) {
+                // Using SIGHUP is a decent general way to indicate that the
+                // controlling process is going away. If specific signals are
+                // needed (e.g. SIGINT), pass those through the shell protocol
+                // and only fall back on this for unexpected closures.
+                D("protocol FD died, sending SIGHUP to pid %d", pid_);
+                kill(pid_, SIGHUP);
+            }
             dead_sfd->Reset();
         }
     }
