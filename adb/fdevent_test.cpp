@@ -18,6 +18,7 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <queue>
 #include <string>
 #include <vector>
@@ -50,9 +51,13 @@ class FdHandler {
   public:
     FdHandler(int read_fd, int write_fd) : read_fd_(read_fd), write_fd_(write_fd) {
         fdevent_install(&read_fde_, read_fd_, FdEventCallback, this);
-        fdevent_add(&read_fde_, FDE_READ | FDE_ERROR);
+        fdevent_add(&read_fde_, FDE_READ);
         fdevent_install(&write_fde_, write_fd_, FdEventCallback, this);
-        fdevent_add(&write_fde_, FDE_ERROR);
+    }
+
+    ~FdHandler() {
+        fdevent_remove(&read_fde_);
+        fdevent_remove(&write_fde_);
     }
 
   private:
@@ -148,5 +153,46 @@ TEST(fdevent, smoke) {
     }
 
     ASSERT_EQ(0, pthread_kill(thread, SIGUSR1));
+    ASSERT_EQ(0, pthread_join(thread, nullptr));
+}
+
+struct InvalidFdArg {
+    fdevent fde;
+    unsigned expected_events;
+    size_t* happened_event_count;
+};
+
+static void InvalidFdEventCallback(int fd, unsigned events, void* userdata) {
+    InvalidFdArg* arg = reinterpret_cast<InvalidFdArg*>(userdata);
+    ASSERT_EQ(arg->expected_events, events);
+    fdevent_remove(&arg->fde);
+    if (++*(arg->happened_event_count) == 2) {
+        pthread_exit(nullptr);
+    }
+}
+
+void InvalidFdThreadFunc(void*) {
+    const int INVALID_READ_FD = std::numeric_limits<int>::max() - 1;
+    size_t happened_event_count = 0;
+    InvalidFdArg read_arg;
+    read_arg.expected_events = FDE_READ | FDE_ERROR;
+    read_arg.happened_event_count = &happened_event_count;
+    fdevent_install(&read_arg.fde, INVALID_READ_FD, InvalidFdEventCallback, &read_arg);
+    fdevent_add(&read_arg.fde, FDE_READ);
+
+    const int INVALID_WRITE_FD = std::numeric_limits<int>::max();
+    InvalidFdArg write_arg;
+    write_arg.expected_events = FDE_READ | FDE_ERROR;
+    write_arg.happened_event_count = &happened_event_count;
+    fdevent_install(&write_arg.fde, INVALID_WRITE_FD, InvalidFdEventCallback, &write_arg);
+    fdevent_add(&write_arg.fde, FDE_WRITE);
+    fdevent_loop();
+}
+
+TEST(fdevent, invalid_fd) {
+    pthread_t thread;
+    ASSERT_EQ(0, pthread_create(&thread, nullptr,
+                                reinterpret_cast<void* (*)(void*)>(InvalidFdThreadFunc),
+                                nullptr));
     ASSERT_EQ(0, pthread_join(thread, nullptr));
 }
