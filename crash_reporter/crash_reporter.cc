@@ -20,6 +20,7 @@
 #include <vector>
 
 #include <base/files/file_util.h>
+#include <base/guid.h>
 #include <base/logging.h>
 #include <base/strings/string_split.h>
 #include <base/strings/string_util.h>
@@ -41,6 +42,7 @@ static const char kUserCrashSignal[] =
 static const char kKernelCrashDetected[] = "/var/run/kernel-crash-detected";
 static const char kUncleanShutdownDetected[] =
     "/var/run/unclean-shutdown-detected";
+static const char kGUIDFileName[] = "/data/misc/crash_reporter/guid";
 
 // Enumeration of kinds of crashes to be used in the CrashCounter histogram.
 enum CrashKinds {
@@ -121,6 +123,21 @@ static int Initialize(KernelCollector *kernel_collector,
                       const bool unclean_check,
                       const bool clean_shutdown) {
   CHECK(!clean_shutdown) << "Incompatible options";
+
+  // Try to read the GUID from kGUIDFileName.  If the file doesn't exist, is
+  // blank, or the read fails, generate a new GUID and write it to the file.
+  std::string guid;
+  base::FilePath filepath(kGUIDFileName);
+  if (!base::ReadFileToString(filepath, &guid) || guid.empty()) {
+    guid = base::GenerateGUID();
+    // If we can't read or write the file, log an error.  However it is not
+    // a fatal error, as the crash server will assign a random GUID based
+    // on a hash of the IP address if one is not provided in the report.
+    if (base::WriteFile(filepath, guid.c_str(), guid.size()) <= 0) {
+      LOG(ERROR) << "Could not write guid " << guid << " to file "
+                 << filepath.value();
+    }
+  }
 
   bool was_kernel_crash = false;
   bool was_unclean_shutdown = false;
