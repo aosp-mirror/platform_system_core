@@ -130,6 +130,13 @@ static Action *queue_action(unsigned op, const char *fmt, ...)
     return a;
 }
 
+void fb_set_active(const char *slot)
+{
+    Action *a;
+    a = queue_action(OP_COMMAND, "set_active:%s", slot);
+    a->msg = mkmsg("Setting current slot to '%s'", slot);
+}
+
 void fb_queue_erase(const char *ptn)
 {
     Action *a;
