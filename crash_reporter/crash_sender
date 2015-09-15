@@ -76,6 +76,9 @@ SECONDS_SEND_SPREAD=${SECONDS_SEND_SPREAD:-600}
 # Set this to 1 to allow uploading of device coredumps.
 DEVCOREDUMP_UPLOAD_FLAG_FILE="${CRASH_STATE_DIR}/device_coredump_upload_allowed"
 
+# The weave configuration file.
+WEAVE_CONF_FILE="/etc/weaved/weaved.conf"
+
 # The syslog tag for all logging we emit.
 TAG="$(basename $0)[$$]"
 
@@ -296,6 +299,7 @@ send_crash() {
   local version="$(get_key_value "${meta_path}" "upload_var_ver")"
   local upload_prefix="$(get_key_value "${meta_path}" "upload_prefix")"
   local guid
+  local model_manifest_id="$(get_key_value "${WEAVE_CONF_FILE}" "model_id")"
 
   # If crash_reporter.server is not set return with an error.
   if [ -z "${url}" ]; then
@@ -455,6 +459,7 @@ send_crash() {
     -F "ver=${version}" \
     -F "hwclass=${hwclass}" \
     -F "exec_name=${exec_name}" \
+    -F "model_manifest_id=${model_manifest_id}" \
     ${image_type:+-F "image_type=${image_type}"} \
     ${boot_mode:+-F "boot_mode=${boot_mode}"} \
     ${error_type:+-F "error_type=${error_type}"} \
