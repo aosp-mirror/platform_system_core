@@ -23,6 +23,7 @@ import posixpath
 import random
 import shlex
 import shutil
+import signal
 import subprocess
 import tempfile
 import unittest
@@ -195,6 +196,34 @@ class ShellTest(DeviceTest):
         self.assertEqual(17, result[0])
         self.assertEqual('foo' + self.device.linesep, result[1])
         self.assertEqual('bar' + self.device.linesep, result[2])
+
+    def test_non_interactive_sigint(self):
+        """Tests that SIGINT in a non-interactive shell kills the process.
+
+        This requires the shell protocol in order to detect the broken
+        pipe; raw data transfer mode will only see the break once the
+        subprocess tries to read or write.
+
+        Bug: http://b/23825725
+        """
+        if self.device.SHELL_PROTOCOL_FEATURE not in self.device.features:
+            raise unittest.SkipTest('shell protocol unsupported on this device')
+
+        # Start a long-running process.
+        sleep_proc = subprocess.Popen(
+                self.device.adb_cmd + shlex.split('shell echo $$; sleep 60'),
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT)
+        remote_pid = sleep_proc.stdout.readline().strip()
+        self.assertIsNone(sleep_proc.returncode, 'subprocess terminated early')
+        proc_query = shlex.split('ps {0} | grep {0}'.format(remote_pid))
+
+        # Verify that the process is running, send signal, verify it stopped.
+        self.device.shell(proc_query)
+        os.kill(sleep_proc.pid, signal.SIGINT)
+        sleep_proc.communicate()
+        self.assertEqual(1, self.device.shell_nocheck(proc_query)[0],
+                         'subprocess failed to terminate')
 
 
 class ArgumentEscapingTest(DeviceTest):
