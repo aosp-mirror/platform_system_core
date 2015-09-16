@@ -128,9 +128,9 @@ void *LogTimeEntry::threadStart(void *obj) {
 
     lock();
 
-    while (me->threadRunning && !me->isError_Locked()) {
-        uint64_t start = me->mStart;
+    uint64_t start = me->mStart;
 
+    while (me->threadRunning && !me->isError_Locked()) {
         unlock();
 
         if (me->mTail) {
@@ -143,7 +143,10 @@ void *LogTimeEntry::threadStart(void *obj) {
 
         if (start == LogBufferElement::FLUSH_ERROR) {
             me->error_Locked();
+            break;
         }
+
+        me->mStart = start + 1;
 
         if (me->mNonBlock || !me->threadRunning || me->isError_Locked()) {
             break;
