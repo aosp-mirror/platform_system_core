@@ -23,7 +23,8 @@ libmetrics_sources := \
   c_metrics_library.cc \
   metrics_library.cc \
   serialization/metric_sample.cc \
-  serialization/serialization_utils.cc
+  serialization/serialization_utils.cc \
+  timer.cc
 
 metrics_client_sources := \
   metrics_client.cc
