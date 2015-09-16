@@ -377,6 +377,7 @@ public:
 bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     LogTimeEntry *oldest = NULL;
     bool busy = false;
+    bool clearAll = pruneRows == ULONG_MAX;
 
     LogTimeEntry::lock();
 
@@ -394,8 +395,14 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     LogBufferElementCollection::iterator it;
 
     if (caller_uid != AID_ROOT) {
+        // Only here if clearAll condition (pruneRows == ULONG_MAX)
         for(it = mLogElements.begin(); it != mLogElements.end();) {
             LogBufferElement *e = *it;
+
+            if ((e->getLogId() != id) || (e->getUid() != caller_uid)) {
+                ++it;
+                continue;
+            }
 
             if (oldest && (oldest->mStart <= e->getSequence())) {
                 oldest->triggerSkip_Locked(id, pruneRows);
@@ -403,20 +410,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 break;
             }
 
-            if (e->getLogId() != id) {
-                ++it;
-                continue;
-            }
-
-            if (e->getUid() == caller_uid) {
-                it = erase(it);
-                pruneRows--;
-                if (pruneRows == 0) {
-                    break;
-                }
-            } else {
-                ++it;
-            }
+            it = erase(it);
+            pruneRows--;
         }
         LogTimeEntry::unlock();
         return busy;
@@ -424,7 +419,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
     // prune by worst offender by uid
     bool hasBlacklist = mPrune.naughty();
-    while (pruneRows > 0) {
+    while (!clearAll && (pruneRows > 0)) {
         // recalculate the worst offender on every batched pass
         uid_t worst = (uid_t) -1;
         size_t worst_sizes = 0;
@@ -589,7 +584,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     }
 
     bool whitelist = false;
-    bool hasWhitelist = mPrune.nice();
+    bool hasWhitelist = mPrune.nice() && !clearAll;
     it = mLogElements.begin();
     while((pruneRows > 0) && (it != mLogElements.end())) {
         LogBufferElement *e = *it;
