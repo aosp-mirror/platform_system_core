@@ -20,8 +20,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "metrics/timer.h"
 #include "metrics_library_mock.h"
-#include "timer.h"
 #include "timer_mock.h"
 
 using ::testing::_;
