@@ -92,7 +92,7 @@ class IntervalAdjuster(object):
         self._interval = interval
         self._device = device
         self._temp_paths = device.shell(
-            ['ls', '/sys/class/thermal/thermal_zone*/temp']).splitlines()
+            ['ls', '/sys/class/thermal/thermal_zone*/temp'])[0].splitlines()
         self._product = device.get_prop('ro.build.product')
         self._waited = False
 
@@ -109,7 +109,7 @@ class IntervalAdjuster(object):
     def _get_cpu_temp(self, threshold):
         max_temp = 0
         for temp_path in self._temp_paths:
-            temp = int(self._device.shell(['cat', temp_path]).rstrip())
+            temp = int(self._device.shell(['cat', temp_path])[0].rstrip())
             max_temp = max(max_temp, temp)
             if temp >= threshold:
                 return temp
@@ -173,7 +173,7 @@ def disable_dropbox(device):
     device.wait()
     device.shell(['rm', '-rf', '/system/data/dropbox'])
     original_dropbox_max_files = device.shell(
-        ['settings', 'get', 'global', 'dropbox_max_files']).rstrip()
+        ['settings', 'get', 'global', 'dropbox_max_files'])[0].rstrip()
     device.shell(['settings', 'put', 'global', 'dropbox_max_files', '0'])
     return original_dropbox_max_files
 
@@ -244,7 +244,8 @@ def filter_event_tags(tags, device):
     """Drop unknown tags not listed in device's event-log-tags file."""
     device.wait()
     supported_tags = set()
-    for l in device.shell(['cat', '/system/etc/event-log-tags']).splitlines():
+    for l in device.shell(
+        ['cat', '/system/etc/event-log-tags'])[0].splitlines():
         tokens = l.split(' ')
         if len(tokens) >= 2:
             supported_tags.add(tokens[1])
