@@ -63,7 +63,7 @@ public:
                      int (*filter)(const LogBufferElement *element, void *arg) = NULL,
                      void *arg = NULL);
 
-    void clear(log_id_t id, uid_t uid = AID_ROOT);
+    bool clear(log_id_t id, uid_t uid = AID_ROOT);
     unsigned long getSize(log_id_t id);
     int setSize(log_id_t id, unsigned long size);
     unsigned long getSizeUsed(log_id_t id);
@@ -86,7 +86,7 @@ public:
 
 private:
     void maybePrune(log_id_t id);
-    void prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT);
+    bool prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT);
     LogBufferElementCollection::iterator erase(
         LogBufferElementCollection::iterator it, bool engageStats = true);
 };

@@ -96,8 +96,7 @@ int CommandListener::ClearCmd::runCommand(SocketClient *cli,
         return 0;
     }
 
-    mBuf.clear((log_id_t) id, uid);
-    cli->sendMsg("success");
+    cli->sendMsg(mBuf.clear((log_id_t) id, uid) ? "busy" : "success");
     return 0;
 }
 
