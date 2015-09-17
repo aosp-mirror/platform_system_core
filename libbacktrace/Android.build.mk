@@ -69,7 +69,14 @@ LOCAL_LDLIBS := \
     $($(module)_ldlibs) \
     $($(module)_ldlibs_$(build_type)) \
 
+LOCAL_STRIP_MODULE := $($(module)_strip_module)
+
 ifeq ($(build_type),target)
+  ifneq (,$(filter $(LOCAL_SHARED_LIBRARIES),libLLVM))
+    LLVM_ROOT_PATH := external/llvm
+    include $(LLVM_ROOT_PATH)/llvm.mk
+    include $(LLVM_DEVICE_BUILD_MK)
+  endif
   include $(BUILD_$(build_target))
 endif
 
@@ -77,6 +84,11 @@ ifeq ($(build_type),host)
   # Only build if host builds are supported.
   ifeq ($(build_host),true)
     LOCAL_CFLAGS += -Wno-extern-c-compat -fno-omit-frame-pointer
+    ifneq (,$(filter $(LOCAL_SHARED_LIBRARIES),libLLVM))
+      LLVM_ROOT_PATH := external/llvm
+      include $(LLVM_ROOT_PATH)/llvm.mk
+      include $(LLVM_HOST_BUILD_MK)
+    endif
     include $(BUILD_HOST_$(build_target))
   endif
 endif
