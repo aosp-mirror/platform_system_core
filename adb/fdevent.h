@@ -17,6 +17,7 @@
 #ifndef __FDEVENT_H
 #define __FDEVENT_H
 
+#include <stddef.h>
 #include <stdint.h>  /* for int64_t */
 
 /* events that may be observed */
@@ -27,9 +28,21 @@
 /* features that may be set (via the events set/add/del interface) */
 #define FDE_DONT_CLOSE        0x0080
 
-struct fdevent;
-
 typedef void (*fd_func)(int fd, unsigned events, void *userdata);
+
+struct fdevent {
+    fdevent *next;
+    fdevent *prev;
+
+    int fd;
+    int force_eof;
+
+    uint16_t state;
+    uint16_t events;
+
+    fd_func func;
+    void *arg;
+};
 
 /* Allocate and initialize a new fdevent object
  * Note: use FD_TIMER as 'fd' to create a fd-less object
@@ -63,18 +76,9 @@ void fdevent_set_timeout(fdevent *fde, int64_t  timeout_ms);
 */
 void fdevent_loop();
 
-struct fdevent {
-    fdevent *next;
-    fdevent *prev;
-
-    int fd;
-    int force_eof;
-
-    uint16_t state;
-    uint16_t events;
-
-    fd_func func;
-    void *arg;
-};
+// For debugging only.
+size_t fdevent_installed_count();
+// For debugging only.
+void fdevent_reset();
 
 #endif
