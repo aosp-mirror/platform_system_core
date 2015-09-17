@@ -74,9 +74,11 @@ LIBADB_windows_SRC_FILES := \
 
 LIBADB_TEST_linux_SRCS := \
     fdevent_test.cpp \
+    socket_test.cpp \
 
 LIBADB_TEST_darwin_SRCS := \
     fdevent_test.cpp \
+    socket_test.cpp \
 
 LIBADB_TEST_windows_SRCS := \
     sysdeps_win32_test.cpp \

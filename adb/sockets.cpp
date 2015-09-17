@@ -157,6 +157,8 @@ static int local_socket_enqueue(asocket *s, apacket *p)
         }
         if((r == 0) || (errno != EAGAIN)) {
             D( "LS(%d): not ready, errno=%d: %s", s->id, errno, strerror(errno) );
+            put_apacket(p);
+            s->has_write_error = true;
             s->close(s);
             return 1; /* not ready (error) */
         } else {
@@ -252,7 +254,7 @@ static void local_socket_close_locked(asocket *s)
         /* If we are already closing, or if there are no
         ** pending packets, destroy immediately
         */
-    if (s->closing || s->pkt_first == NULL) {
+    if (s->closing || s->has_write_error || s->pkt_first == NULL) {
         int   id = s->id;
         local_socket_destroy(s);
         D("LS(%d): closed", id);
@@ -267,6 +269,7 @@ static void local_socket_close_locked(asocket *s)
     remove_socket(s);
     D("LS(%d): put on socket_closing_list fd=%d", s->id, s->fd);
     insert_local_socket(s, &local_socket_closing_list);
+    CHECK_EQ(FDE_WRITE, s->fde.state & FDE_WRITE);
 }
 
 static void local_socket_event_func(int fd, unsigned ev, void* _s)
@@ -296,6 +299,7 @@ static void local_socket_event_func(int fd, unsigned ev, void* _s)
                 }
 
                 D(" closing after write because r=%d and errno is %d", r, errno);
+                s->has_write_error = true;
                 s->close(s);
                 return;
             }
@@ -392,6 +396,7 @@ static void local_socket_event_func(int fd, unsigned ev, void* _s)
             D(" closing because is_eof=%d r=%d s->fde.force_eof=%d",
               is_eof, r, s->fde.force_eof);
             s->close(s);
+            return;
         }
     }
 
@@ -401,7 +406,6 @@ static void local_socket_event_func(int fd, unsigned ev, void* _s)
             ** bytes of readable data.
             */
         D("LS(%d): FDE_ERROR (fd=%d)", s->id, s->fd);
-
         return;
     }
 }
