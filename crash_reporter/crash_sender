@@ -22,9 +22,8 @@ BRILLO_PRODUCT=Brillo
 # Base directory that contains any crash reporter state files.
 CRASH_STATE_DIR="/data/misc/crash_reporter"
 
-# File whose existence implies crash reports may be sent, and whose
-# contents includes our machine's anonymized guid.
-CONSENT_ID="/data/misc/metrics/enabled"
+# File containing crash_reporter's anonymized guid.
+GUID_FILE="${CRASH_STATE_DIR}/guid"
 
 # Crash sender lock in case the sender is already running.
 CRASH_SENDER_LOCK="${CRASH_STATE_DIR}/lock/crash_sender"
@@ -393,7 +392,7 @@ send_crash() {
 
   # Need to strip dashes ourselves as Chrome preserves it in the file
   # nowadays.  This is also what the Chrome breakpad client does.
-  guid=$(tr -d '-' < "${CONSENT_ID}")
+  guid=$(tr -d '-' < "${GUID_FILE}")
 
   local error_type="$(get_key_value "${meta_path}" "error_type")"
   [ "${error_type}" = "undefined" ] && error_type=
