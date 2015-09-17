@@ -21,8 +21,10 @@ things. Most of these tests involve specific error messages or the help text.
 """
 from __future__ import print_function
 
+import os
 import random
 import subprocess
+import threading
 import unittest
 
 import adb
@@ -63,6 +65,80 @@ class NonApiTest(unittest.TestCase):
         self.assertEqual(1, p.returncode)
         self.assertIn('error', out)
 
+    # Helper method that reads a pipe until it is closed, then sets the event.
+    def _read_pipe_and_set_event(self, pipe, event):
+        x = pipe.read()
+        event.set()
+
+    # Test that launch_server() does not let the adb server inherit
+    # stdin/stdout/stderr handles which can cause callers of adb.exe to hang.
+    # This test also runs fine on unix even though the impetus is an issue
+    # unique to Windows.
+    def test_handle_inheritance(self):
+        # This test takes 5 seconds to run on Windows: if there is no adb server
+        # running on the the port used below, adb kill-server tries to make a
+        # TCP connection to a closed port and that takes 1 second on Windows;
+        # adb start-server does the same TCP connection which takes another
+        # second, and it waits 3 seconds after starting the server.
+
+        # Start adb client with redirected stdin/stdout/stderr to check if it
+        # passes those redirections to the adb server that it starts. To do
+        # this, run an instance of the adb server on a non-default port so we
+        # don't conflict with a pre-existing adb server that may already be
+        # setup with adb TCP/emulator connections. If there is a pre-existing
+        # adb server, this also tests whether multiple instances of the adb
+        # server conflict on adb.log.
+
+        port = 5038
+        # Kill any existing server on this non-default port.
+        subprocess.check_output(['adb', '-P', str(port), 'kill-server'],
+                                stderr=subprocess.STDOUT)
+
+        try:
+            # Run the adb client and have it start the adb server.
+            p = subprocess.Popen(['adb', '-P', str(port), 'start-server'],
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+
+            # Start threads that set events when stdout/stderr are closed.
+            stdout_event = threading.Event()
+            stdout_thread = threading.Thread(
+                    target=self._read_pipe_and_set_event,
+                    args=(p.stdout, stdout_event))
+            stdout_thread.daemon = True
+            stdout_thread.start()
+
+            stderr_event = threading.Event()
+            stderr_thread = threading.Thread(
+                    target=self._read_pipe_and_set_event,
+                    args=(p.stderr, stderr_event))
+            stderr_thread.daemon = True
+            stderr_thread.start()
+
+            # Wait for the adb client to finish. Once that has occurred, if
+            # stdin/stderr/stdout are still open, it must be open in the adb
+            # server.
+            p.wait()
+
+            # Try to write to stdin which we expect is closed. If it isn't
+            # closed, we should get an IOError. If we don't get an IOError,
+            # stdin must still be open in the adb server. The adb client is
+            # probably letting the adb server inherit stdin which would be
+            # wrong.
+            with self.assertRaises(IOError):
+                p.stdin.write('x')
+
+            # Wait a few seconds for stdout/stderr to be closed (in the success
+            # case, this won't wait at all). If there is a timeout, that means
+            # stdout/stderr were not closed and and they must be open in the adb
+            # server, suggesting that the adb client is letting the adb server
+            # inherit stdout/stderr which would be wrong.
+            self.assertTrue(stdout_event.wait(5), "adb stdout not closed")
+            self.assertTrue(stderr_event.wait(5), "adb stderr not closed")
+        finally:
+            # If we started a server, kill it.
+            subprocess.check_output(['adb', '-P', str(port), 'kill-server'],
+                                    stderr=subprocess.STDOUT)
 
 def main():
     random.seed(0)
