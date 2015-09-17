@@ -582,15 +582,27 @@ void handle_packet(apacket *p, atransport *t)
 
 #ifdef _WIN32
 
-static bool _make_handle_noninheritable(HANDLE h) {
+// Try to make a handle non-inheritable and if there is an error, don't output
+// any error info, but leave GetLastError() for the caller to read. This is
+// convenient if the caller is expecting that this may fail and they'd like to
+// ignore such a failure.
+static bool _try_make_handle_noninheritable(HANDLE h) {
     if (h != INVALID_HANDLE_VALUE && h != NULL) {
-        if (!SetHandleInformation(h, HANDLE_FLAG_INHERIT, 0)) {
-            // Show the handle value to give us a clue in case we have problems
-            // with pseudo-handle values.
-            fprintf(stderr, "Cannot make handle 0x%p non-inheritable: %s\n",
-                    h, SystemErrorCodeToString(GetLastError()).c_str());
-            return false;
-        }
+        return SetHandleInformation(h, HANDLE_FLAG_INHERIT, 0) ? true : false;
+    }
+
+    return true;
+}
+
+// Try to make a handle non-inheritable with the expectation that this should
+// succeed, so if this fails, output error info.
+static bool _make_handle_noninheritable(HANDLE h) {
+    if (!_try_make_handle_noninheritable(h)) {
+        // Show the handle value to give us a clue in case we have problems
+        // with pseudo-handle values.
+        fprintf(stderr, "Cannot make handle 0x%p non-inheritable: %s\n",
+                h, SystemErrorCodeToString(GetLastError()).c_str());
+        return false;
     }
 
     return true;
@@ -742,16 +754,13 @@ int launch_server(int server_port)
      * If we're still having problems with inheriting random handles in the
      * future, consider using PROC_THREAD_ATTRIBUTE_HANDLE_LIST to explicitly
      * specify which handles should be inherited: http://blogs.msdn.com/b/oldnewthing/archive/2011/12/16/10248328.aspx
+     *
+     * Older versions of Windows return console pseudo-handles that cannot be
+     * made non-inheritable, so ignore those failures.
      */
-    if (!_make_handle_noninheritable(GetStdHandle(STD_INPUT_HANDLE))) {
-        return -1;
-    }
-    if (!_make_handle_noninheritable(GetStdHandle(STD_OUTPUT_HANDLE))) {
-        return -1;
-    }
-    if (!_make_handle_noninheritable(GetStdHandle(STD_ERROR_HANDLE))) {
-        return -1;
-    }
+    _try_make_handle_noninheritable(GetStdHandle(STD_INPUT_HANDLE));
+    _try_make_handle_noninheritable(GetStdHandle(STD_OUTPUT_HANDLE));
+    _try_make_handle_noninheritable(GetStdHandle(STD_ERROR_HANDLE));
 
     STARTUPINFOW    startup;
     ZeroMemory( &startup, sizeof(startup) );
