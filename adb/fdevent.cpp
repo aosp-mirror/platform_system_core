@@ -119,10 +119,10 @@ void fdevent_install(fdevent* fde, int fd, fd_func func, void* arg) {
     fde->func = func;
     fde->arg = arg;
     if (fcntl(fd, F_SETFL, O_NONBLOCK) != 0) {
-      // Here is not proper to handle the error. If it fails here, some error is
-      // likely to be detected by poll(), then we can let the callback function
-      // to handle it.
-      LOG(ERROR) << "failed to fcntl(" << fd << ") to be nonblock";
+        // Here is not proper to handle the error. If it fails here, some error is
+        // likely to be detected by poll(), then we can let the callback function
+        // to handle it.
+        LOG(ERROR) << "failed to fcntl(" << fd << ") to be nonblock";
     }
     auto pair = g_poll_node_map.emplace(fde->fd, PollNode(fde));
     CHECK(pair.second) << "install existing fd " << fd;
@@ -215,10 +215,13 @@ static void fdevent_process() {
     D("poll(), pollfds = %s", dump_pollfds(pollfds).c_str());
     int ret = TEMP_FAILURE_RETRY(poll(&pollfds[0], pollfds.size(), -1));
     if (ret == -1) {
-      PLOG(ERROR) << "poll(), ret = " << ret;
-      return;
+        PLOG(ERROR) << "poll(), ret = " << ret;
+        return;
     }
     for (auto& pollfd : pollfds) {
+        if (pollfd.revents != 0) {
+            D("for fd %d, revents = %x", pollfd.fd, pollfd.revents);
+        }
         unsigned events = 0;
         if (pollfd.revents & POLLIN) {
             events |= FDE_READ;
@@ -336,4 +339,13 @@ void fdevent_loop()
             fdevent_call_fdfunc(fde);
         }
     }
+}
+
+size_t fdevent_installed_count() {
+    return g_poll_node_map.size();
+}
+
+void fdevent_reset() {
+    g_poll_node_map.clear();
+    g_pending_list.clear();
 }

@@ -28,25 +28,6 @@
 
 #include "adb_io.h"
 
-class SignalHandlerRegister {
-  public:
-    SignalHandlerRegister(const std::vector<int>& signums, void (*handler)(int)) {
-        for (auto& sig : signums) {
-            sig_t old_handler = signal(sig, handler);
-            saved_signal_handlers_.push_back(std::make_pair(sig, old_handler));
-        }
-    }
-
-    ~SignalHandlerRegister() {
-        for (auto& pair : saved_signal_handlers_) {
-            signal(pair.first, pair.second);
-        }
-    }
-
-  private:
-    std::vector<std::pair<int, sig_t>> saved_signal_handlers_;
-};
-
 class FdHandler {
   public:
     FdHandler(int read_fd, int write_fd) : read_fd_(read_fd), write_fd_(write_fd) {
@@ -95,6 +76,19 @@ static void signal_handler(int) {
     pthread_exit(nullptr);
 }
 
+class FdeventTest : public ::testing::Test {
+  protected:
+    static void SetUpTestCase() {
+        ASSERT_NE(SIG_ERR, signal(SIGUSR1, signal_handler));
+        ASSERT_NE(SIG_ERR, signal(SIGPIPE, SIG_IGN));
+    }
+
+    virtual void SetUp() {
+        fdevent_reset();
+        ASSERT_EQ(0u, fdevent_installed_count());
+    }
+};
+
 struct ThreadArg {
     int first_read_fd;
     int last_write_fd;
@@ -102,8 +96,6 @@ struct ThreadArg {
 };
 
 static void FdEventThreadFunc(ThreadArg* arg) {
-    SignalHandlerRegister signal_handler_register({SIGUSR1}, signal_handler);
-
     std::vector<int> read_fds;
     std::vector<int> write_fds;
 
@@ -124,7 +116,7 @@ static void FdEventThreadFunc(ThreadArg* arg) {
     fdevent_loop();
 }
 
-TEST(fdevent, smoke) {
+TEST_F(FdeventTest, smoke) {
     const size_t PIPE_COUNT = 10;
     const size_t MESSAGE_LOOP_COUNT = 100;
     const std::string MESSAGE = "fdevent_test";
@@ -154,6 +146,8 @@ TEST(fdevent, smoke) {
 
     ASSERT_EQ(0, pthread_kill(thread, SIGUSR1));
     ASSERT_EQ(0, pthread_join(thread, nullptr));
+    ASSERT_EQ(0, close(writer));
+    ASSERT_EQ(0, close(reader));
 }
 
 struct InvalidFdArg {
@@ -171,7 +165,7 @@ static void InvalidFdEventCallback(int fd, unsigned events, void* userdata) {
     }
 }
 
-void InvalidFdThreadFunc(void*) {
+static void InvalidFdThreadFunc(void*) {
     const int INVALID_READ_FD = std::numeric_limits<int>::max() - 1;
     size_t happened_event_count = 0;
     InvalidFdArg read_arg;
@@ -189,7 +183,7 @@ void InvalidFdThreadFunc(void*) {
     fdevent_loop();
 }
 
-TEST(fdevent, invalid_fd) {
+TEST_F(FdeventTest, invalid_fd) {
     pthread_t thread;
     ASSERT_EQ(0, pthread_create(&thread, nullptr,
                                 reinterpret_cast<void* (*)(void*)>(InvalidFdThreadFunc),
