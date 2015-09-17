@@ -171,15 +171,19 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   base::TimeDelta GetIncrementalCpuUse();
 
   // Sends a sample representing the number of seconds of active use
-  // for a 24-hour period.
-  void SendDailyUseSample(const scoped_ptr<PersistentInteger>& use);
+  // for a 24-hour period and reset |use|.
+  void SendAndResetDailyUseSample(
+      const scoped_ptr<PersistentInteger>& use);
 
   // Sends a sample representing a time interval between two crashes of the
-  // same type.
-  void SendCrashIntervalSample(const scoped_ptr<PersistentInteger>& interval);
+  // same type and reset |interval|.
+  void SendAndResetCrashIntervalSample(
+      const scoped_ptr<PersistentInteger>& interval);
 
-  // Sends a sample representing a frequency of crashes of some type.
-  void SendCrashFrequencySample(const scoped_ptr<PersistentInteger>& frequency);
+  // Sends a sample representing a frequency of crashes of some type and reset
+  // |frequency|.
+  void SendAndResetCrashFrequencySample(
+      const scoped_ptr<PersistentInteger>& frequency);
 
   // Initializes vm and disk stats reporting.
   void StatsReporterInit();

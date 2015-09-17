@@ -241,7 +241,7 @@ void MetricsDaemon::Init(bool testing,
   daily_active_use_.reset(
       new PersistentInteger("Platform.DailyUseTime"));
   version_cumulative_active_use_.reset(
-      new PersistentInteger("Platform.CumulativeDailyUseTime"));
+      new PersistentInteger("Platform.CumulativeUseTime"));
   version_cumulative_cpu_use_.reset(
       new PersistentInteger("Platform.CumulativeCpuTime"));
 
@@ -444,7 +444,7 @@ void MetricsDaemon::ProcessUserCrash() {
   UpdateStats(TimeTicks::Now(), Time::Now());
 
   // Reports the active use time since the last crash and resets it.
-  SendCrashIntervalSample(user_crash_interval_);
+  SendAndResetCrashIntervalSample(user_crash_interval_);
 
   any_crashes_daily_count_->Add(1);
   any_crashes_weekly_count_->Add(1);
@@ -457,7 +457,7 @@ void MetricsDaemon::ProcessKernelCrash() {
   UpdateStats(TimeTicks::Now(), Time::Now());
 
   // Reports the active use time since the last crash and resets it.
-  SendCrashIntervalSample(kernel_crash_interval_);
+  SendAndResetCrashIntervalSample(kernel_crash_interval_);
 
   any_crashes_daily_count_->Add(1);
   any_crashes_weekly_count_->Add(1);
@@ -472,7 +472,7 @@ void MetricsDaemon::ProcessUncleanShutdown() {
   UpdateStats(TimeTicks::Now(), Time::Now());
 
   // Reports the active use time since the last crash and resets it.
-  SendCrashIntervalSample(unclean_shutdown_interval_);
+  SendAndResetCrashIntervalSample(unclean_shutdown_interval_);
 
   unclean_shutdowns_daily_count_->Add(1);
   unclean_shutdowns_weekly_count_->Add(1);
@@ -1033,7 +1033,7 @@ void MetricsDaemon::SendKernelCrashesCumulativeCountStats() {
   int64_t active_use_seconds = version_cumulative_active_use_->Get();
   if (active_use_seconds > 0) {
     SendSample(version_cumulative_active_use_->Name(),
-               active_use_seconds / 1000,  // stat is in seconds
+               active_use_seconds,
                1,                          // device may be used very little...
                8 * 1000 * 1000,            // ... or a lot (about 90 days)
                100);
@@ -1046,7 +1046,7 @@ void MetricsDaemon::SendKernelCrashesCumulativeCountStats() {
   }
 }
 
-void MetricsDaemon::SendDailyUseSample(
+void MetricsDaemon::SendAndResetDailyUseSample(
     const scoped_ptr<PersistentInteger>& use) {
   SendSample(use->Name(),
              use->GetAndClear(),
@@ -1055,7 +1055,7 @@ void MetricsDaemon::SendDailyUseSample(
              50);                      // number of buckets
 }
 
-void MetricsDaemon::SendCrashIntervalSample(
+void MetricsDaemon::SendAndResetCrashIntervalSample(
     const scoped_ptr<PersistentInteger>& interval) {
   SendSample(interval->Name(),
              interval->GetAndClear(),
@@ -1064,7 +1064,7 @@ void MetricsDaemon::SendCrashIntervalSample(
              50);                      // number of buckets
 }
 
-void MetricsDaemon::SendCrashFrequencySample(
+void MetricsDaemon::SendAndResetCrashFrequencySample(
     const scoped_ptr<PersistentInteger>& frequency) {
   SendSample(frequency->Name(),
              frequency->GetAndClear(),
@@ -1097,21 +1097,20 @@ void MetricsDaemon::UpdateStats(TimeTicks now_ticks,
 
   if (daily_cycle_->Get() != day) {
     daily_cycle_->Set(day);
-    SendDailyUseSample(daily_active_use_);
-    SendDailyUseSample(version_cumulative_active_use_);
-    SendCrashFrequencySample(any_crashes_daily_count_);
-    SendCrashFrequencySample(user_crashes_daily_count_);
-    SendCrashFrequencySample(kernel_crashes_daily_count_);
-    SendCrashFrequencySample(unclean_shutdowns_daily_count_);
+    SendAndResetDailyUseSample(daily_active_use_);
+    SendAndResetCrashFrequencySample(any_crashes_daily_count_);
+    SendAndResetCrashFrequencySample(user_crashes_daily_count_);
+    SendAndResetCrashFrequencySample(kernel_crashes_daily_count_);
+    SendAndResetCrashFrequencySample(unclean_shutdowns_daily_count_);
     SendKernelCrashesCumulativeCountStats();
   }
 
   if (weekly_cycle_->Get() != week) {
     weekly_cycle_->Set(week);
-    SendCrashFrequencySample(any_crashes_weekly_count_);
-    SendCrashFrequencySample(user_crashes_weekly_count_);
-    SendCrashFrequencySample(kernel_crashes_weekly_count_);
-    SendCrashFrequencySample(unclean_shutdowns_weekly_count_);
+    SendAndResetCrashFrequencySample(any_crashes_weekly_count_);
+    SendAndResetCrashFrequencySample(user_crashes_weekly_count_);
+    SendAndResetCrashFrequencySample(kernel_crashes_weekly_count_);
+    SendAndResetCrashFrequencySample(unclean_shutdowns_weekly_count_);
   }
 }
 
