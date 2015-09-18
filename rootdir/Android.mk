@@ -13,7 +13,7 @@ include $(BUILD_PREBUILT)
 
 #######################################
 # asan.options
-ifeq (address,$(strip $(SANITIZE_TARGET)))
+ifneq ($(filter address,$(SANITIZE_TARGET)),)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := asan.options
@@ -33,7 +33,7 @@ LOCAL_MODULE := init.environ.rc
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 
 EXPORT_GLOBAL_ASAN_OPTIONS :=
-ifeq (address,$(strip $(SANITIZE_TARGET)))
+ifneq ($(filter address,$(SANITIZE_TARGET)),)
   EXPORT_GLOBAL_ASAN_OPTIONS := export ASAN_OPTIONS include=/system/asan.options
   LOCAL_REQUIRED_MODULES := asan.options
 endif
