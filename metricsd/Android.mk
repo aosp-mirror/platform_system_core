@@ -30,6 +30,7 @@ metrics_client_sources := \
   metrics_client.cc
 
 metrics_daemon_sources := \
+  collectors/disk_usage_collector.cc \
   metrics_daemon.cc \
   metrics_daemon_main.cc \
   persistent_integer.cc \
@@ -43,6 +44,7 @@ metrics_daemon_sources := \
   serialization/serialization_utils.cc
 
 metrics_tests_sources := \
+  collectors/disk_usage_collector.cc \
   metrics_daemon.cc \
   metrics_daemon_test.cc \
   metrics_library_test.cc \
