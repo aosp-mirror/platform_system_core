@@ -139,6 +139,10 @@ static bool gInitialized = false;
 static LogSeverity gMinimumLogSeverity = INFO;
 static std::unique_ptr<std::string> gProgramInvocationName;
 
+LogSeverity GetMinimumLogSeverity() {
+  return gMinimumLogSeverity;
+}
+
 static const char* ProgramInvocationName() {
   if (gProgramInvocationName == nullptr) {
     gProgramInvocationName.reset(new std::string(getprogname()));
@@ -199,20 +203,6 @@ void InitLogging(char* argv[], LogFunction&& logger) {
   SetLogger(std::forward<LogFunction>(logger));
   InitLogging(argv);
 }
-
-// TODO: make this public; it's independently useful.
-class ErrnoRestorer {
- public:
-  ErrnoRestorer(int saved_errno) : saved_errno_(saved_errno) {
-  }
-
-  ~ErrnoRestorer() {
-    errno = saved_errno_;
-  }
-
- private:
-  const int saved_errno_;
-};
 
 void InitLogging(char* argv[]) {
   if (gInitialized) {
@@ -286,13 +276,12 @@ static const char* GetFileBasename(const char* file) {
 class LogMessageData {
  public:
   LogMessageData(const char* file, unsigned int line, LogId id,
-                 LogSeverity severity, int error, int saved_errno)
+                 LogSeverity severity, int error)
       : file_(GetFileBasename(file)),
         line_number_(line),
         id_(id),
         severity_(severity),
-        error_(error),
-        errno_restorer_(saved_errno) {
+        error_(error) {
   }
 
   const char* GetFile() const {
@@ -330,39 +319,38 @@ class LogMessageData {
   const LogId id_;
   const LogSeverity severity_;
   const int error_;
-  ErrnoRestorer errno_restorer_;
 
   DISALLOW_COPY_AND_ASSIGN(LogMessageData);
 };
 
 LogMessage::LogMessage(const char* file, unsigned int line, LogId id,
                        LogSeverity severity, int error)
-    : data_(new LogMessageData(file, line, id, severity, error, errno)) {
+    : data_(new LogMessageData(file, line, id, severity, error)) {
 }
 
 LogMessage::~LogMessage() {
-  if (data_->GetSeverity() < gMinimumLogSeverity) {
-    return;  // No need to format something we're not going to output.
-  }
-
   // Finish constructing the message.
   if (data_->GetError() != -1) {
     data_->GetBuffer() << ": " << strerror(data_->GetError());
   }
   std::string msg(data_->ToString());
 
-  if (msg.find('\n') == std::string::npos) {
-    LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetId(),
-            data_->GetSeverity(), msg.c_str());
-  } else {
-    msg += '\n';
-    size_t i = 0;
-    while (i < msg.size()) {
-      size_t nl = msg.find('\n', i);
-      msg[nl] = '\0';
+  {
+    // Do the actual logging with the lock held.
+    lock_guard<mutex> lock(logging_lock);
+    if (msg.find('\n') == std::string::npos) {
       LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetId(),
-              data_->GetSeverity(), &msg[i]);
-      i = nl + 1;
+              data_->GetSeverity(), msg.c_str());
+    } else {
+      msg += '\n';
+      size_t i = 0;
+      while (i < msg.size()) {
+        size_t nl = msg.find('\n', i);
+        msg[nl] = '\0';
+        LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetId(),
+                data_->GetSeverity(), &msg[i]);
+        i = nl + 1;
+      }
     }
   }
 
@@ -382,7 +370,6 @@ std::ostream& LogMessage::stream() {
 void LogMessage::LogLine(const char* file, unsigned int line, LogId id,
                          LogSeverity severity, const char* message) {
   const char* tag = ProgramInvocationName();
-  lock_guard<mutex> lock(logging_lock);
   gLogger(id, severity, tag, file, line, message);
 }
 
