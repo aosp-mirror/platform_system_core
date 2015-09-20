@@ -16,6 +16,8 @@
 
 #define LOG_TAG "Vector_test"
 
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
 #include <utils/Vector.h>
 #include <cutils/log.h>
 #include <gtest/gtest.h>
