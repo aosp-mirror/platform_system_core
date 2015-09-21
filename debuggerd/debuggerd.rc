@@ -1,2 +1,3 @@
 service debuggerd /system/bin/debuggerd
     class main
+    writepid /dev/cpuset/system-background/tasks
