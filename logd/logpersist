@@ -1,9 +1,15 @@
 #! /system/bin/sh
 # logpersist cat start and stop handlers
+progname="${0##*/}"
+case `getprop ro.build.type` in
+userdebug|eng) ;;
+*) echo "${progname} - Permission denied"
+   exit 1
+   ;;
+esac
 data=/data/misc/logd
 property=persist.logd.logpersistd
 service=logcatd
-progname="${0##*/}"
 if [ X"${1}" = "-h" -o X"${1}" = X"--help" ]; then
   echo "${progname%.*}.cat            - dump current ${service%d} logs"
   echo "${progname%.*}.start          - start ${service} service"
