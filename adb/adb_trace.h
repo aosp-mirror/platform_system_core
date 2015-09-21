@@ -50,9 +50,7 @@ void adb_trace_init(char**);
 #define D(...) \
         do { \
             if (ADB_TRACING) { \
-                int saved_errno = errno; \
                 LOG(INFO) << android::base::StringPrintf(__VA_ARGS__); \
-                errno = saved_errno; \
            } \
         } while (0)
 
