@@ -99,6 +99,7 @@ debuggerd_c_includes := \
 debuggerd_cpp_flags := \
     $(common_cppflags) \
     -Wno-missing-field-initializers \
+    -fno-rtti \
 
 # Only build the host tests on linux.
 ifeq ($(HOST_OS),linux)
