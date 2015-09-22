@@ -36,6 +36,7 @@
 
 #include <base/logging.h>
 #include <base/stringprintf.h>
+#include <base/strings.h>
 
 #if !defined(_WIN32)
 #include <termios.h>
@@ -108,7 +109,9 @@ static void help() {
         "  adb sync [ <directory> ]     - copy host->device only if changed\n"
         "                                 (-l means list but don't copy)\n"
         "  adb shell                    - run remote shell interactively\n"
-        "  adb shell <command>          - run remote shell command\n"
+        "  adb shell [-Tt] <command>    - run remote shell command\n"
+        "                                 (-T disables PTY allocation)\n"
+        "                                 (-t forces PTY allocation)\n"
         "  adb emu <command>            - run emulator console command\n"
         "  adb logcat [ <filter-spec> ] - View device log\n"
         "  adb forward --list           - list all forward socket connections.\n"
@@ -475,9 +478,10 @@ static void* stdin_read_thread(void* x) {
     return nullptr;
 }
 
-static int interactive_shell(bool use_shell_protocol) {
+static int interactive_shell(const std::string& service_string,
+                             bool use_shell_protocol) {
     std::string error;
-    int fd = adb_connect("shell:", &error);
+    int fd = adb_connect(service_string, &error);
     if (fd < 0) {
         fprintf(stderr,"error: %s\n", error.c_str());
         return 1;
@@ -524,18 +528,16 @@ static std::string format_host_command(const char* command, TransportType type, 
     return android::base::StringPrintf("%s:%s", prefix, command);
 }
 
-// Checks whether the device indicated by |transport_type| and |serial| supports
-// |feature|. Returns the response string, which will be empty if the device
-// could not be found or the feature is not supported.
-static std::string CheckFeature(const std::string& feature,
-                                TransportType transport_type,
+// Returns the FeatureSet for the indicated transport.
+static FeatureSet GetFeatureSet(TransportType transport_type,
                                 const char* serial) {
-    std::string result, error, command("check-feature:" + feature);
-    if (!adb_query(format_host_command(command.c_str(), transport_type, serial),
-                   &result, &error)) {
-        return "";
+    std::string result, error;
+
+    if (adb_query(format_host_command("features", transport_type, serial),
+                  &result, &error)) {
+        return StringToFeatureSet(result);
     }
-    return result;
+    return FeatureSet();
 }
 
 static int adb_download_buffer(const char *service, const char *fn, const void* data, unsigned sz,
@@ -797,9 +799,8 @@ static int send_shell_command(TransportType transport_type, const char* serial,
         wait_for_device("wait-for-device", transport_type, serial);
     }
 
-    bool use_shell_protocol = !CheckFeature(kFeatureShell2, transport_type,
-                                            serial).empty();
-    int exit_code = read_and_dump(fd, use_shell_protocol);
+    FeatureSet features = GetFeatureSet(transport_type, serial);
+    int exit_code = read_and_dump(fd, features.count(kFeatureShell2) > 0);
 
     if (adb_close(fd) < 0) {
         PLOG(ERROR) << "failure closing FD " << fd;
@@ -1238,24 +1239,44 @@ int adb_commandline(int argc, const char **argv) {
     else if (!strcmp(argv[0], "shell") || !strcmp(argv[0], "hell")) {
         char h = (argv[0][0] == 'h');
 
+        FeatureSet features = GetFeatureSet(transport_type, serial);
+
+        bool use_shell_protocol = (features.count(kFeatureShell2) > 0);
+        if (!use_shell_protocol) {
+            D("shell protocol not supported, using raw data transfer");
+        } else {
+            D("using shell protocol");
+        }
+
+        // Parse shell-specific command-line options.
+        // argv[0] is always "shell".
+        --argc;
+        ++argv;
+        std::string shell_type_arg;
+        while (argc) {
+            if (!strcmp(argv[0], "-T") || !strcmp(argv[0], "-t")) {
+                if (features.count(kFeatureShell2) == 0) {
+                    fprintf(stderr, "error: target doesn't support PTY args -Tt\n");
+                    return 1;
+                }
+                shell_type_arg = argv[0];
+                --argc;
+                ++argv;
+            } else {
+                break;
+            }
+        }
+        std::string service_string = android::base::StringPrintf(
+                "shell%s:", shell_type_arg.c_str());
+
         if (h) {
             printf("\x1b[41;33m");
             fflush(stdout);
         }
 
-        bool use_shell_protocol;
-        if (CheckFeature(kFeatureShell2, transport_type, serial).empty()) {
-            D("shell protocol not supported, using raw data transfer");
-            use_shell_protocol = false;
-        } else {
-            D("using shell protocol");
-            use_shell_protocol = true;
-        }
-
-
-        if (argc < 2) {
+        if (!argc) {
             D("starting interactive shell");
-            r = interactive_shell(use_shell_protocol);
+            r = interactive_shell(service_string, use_shell_protocol);
             if (h) {
                 printf("\x1b[0m");
                 fflush(stdout);
@@ -1263,19 +1284,14 @@ int adb_commandline(int argc, const char **argv) {
             return r;
         }
 
-        std::string cmd = "shell:";
-        --argc;
-        ++argv;
-        while (argc-- > 0) {
-            // We don't escape here, just like ssh(1). http://b/20564385.
-            cmd += *argv++;
-            if (*argv) cmd += " ";
-        }
+        // We don't escape here, just like ssh(1). http://b/20564385.
+        service_string += android::base::Join(
+                std::vector<const char*>(argv, argv + argc), ' ');
 
         while (true) {
-            D("non-interactive shell loop. cmd=%s", cmd.c_str());
+            D("non-interactive shell loop. cmd=%s", service_string.c_str());
             std::string error;
-            int fd = adb_connect(cmd, &error);
+            int fd = adb_connect(service_string, &error);
             int r;
             if (fd >= 0) {
                 D("about to read_and_dump(fd=%d)", fd);
@@ -1545,7 +1561,14 @@ int adb_commandline(int argc, const char **argv) {
         return 0;
     }
     else if (!strcmp(argv[0], "features")) {
-        return adb_query_command(format_host_command("features", transport_type, serial));
+        // Only list the features common to both the adb client and the device.
+        FeatureSet features = GetFeatureSet(transport_type, serial);
+        for (const std::string& name : features) {
+            if (supported_features().count(name) > 0) {
+                printf("%s\n", name.c_str());
+            }
+        }
+        return 0;
     }
 
     usage();
