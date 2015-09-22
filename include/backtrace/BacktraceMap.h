@@ -31,6 +31,7 @@
 
 #include <deque>
 #include <string>
+#include <vector>
 
 struct backtrace_map_t {
   uintptr_t start = 0;
@@ -47,6 +48,8 @@ public:
   // Passing a map created with uncached set to true to Backtrace::Create()
   // is unsupported.
   static BacktraceMap* Create(pid_t pid, bool uncached = false);
+
+  static BacktraceMap* Create(pid_t pid, const std::vector<backtrace_map_t>& maps);
 
   virtual ~BacktraceMap();
 
