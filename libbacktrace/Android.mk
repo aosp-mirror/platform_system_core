@@ -25,7 +25,6 @@ libbacktrace_common_conlyflags := \
 
 libbacktrace_common_cppflags := \
 	-std=gnu++11 \
-	-I external/libunwind/include/tdep \
 
 # The latest clang (r230699) does not allow SP/PC to be declared in inline asm lists.
 libbacktrace_common_clang_cflags += \
@@ -38,9 +37,6 @@ build_host := true
 endif
 endif
 
-LLVM_ROOT_PATH := external/llvm
-include $(LLVM_ROOT_PATH)/llvm.mk
-
 #-------------------------------------------------------------------------
 # The libbacktrace library.
 #-------------------------------------------------------------------------
@@ -48,7 +44,6 @@ libbacktrace_src_files := \
 	Backtrace.cpp \
 	BacktraceCurrent.cpp \
 	BacktraceMap.cpp \
-	BacktraceOffline.cpp \
 	BacktracePtrace.cpp \
 	thread_utils.c \
 	ThreadEntry.cpp \
@@ -60,20 +55,6 @@ libbacktrace_shared_libraries := \
 	libbase \
 	liblog \
 	libunwind \
-
-# Use shared llvm library on device to save space.
-libbacktrace_shared_libraries_target := \
-	libLLVM \
-
-# Use static llvm libraries on host to remove dependency on 32-bit llvm shared library
-# which is not included in the prebuilt.
-libbacktrace_static_libraries_host := \
-	libLLVMObject \
-	libLLVMBitReader \
-	libLLVMMC \
-	libLLVMMCParser \
-	libLLVMCore \
-	libLLVMSupport \
 
 libbacktrace_ldlibs_host := \
 	-lpthread \
@@ -105,8 +86,6 @@ libbacktrace_test_cflags := \
 libbacktrace_test_src_files := \
 	backtrace_testlib.c \
 
-libbacktrace_test_strip_module := false
-
 module := libbacktrace_test
 module_tag := debug
 build_type := target
@@ -128,7 +107,6 @@ backtrace_test_cflags_target := \
 	-DENABLE_PSS_TESTS \
 
 backtrace_test_src_files := \
-	backtrace_offline_test.cpp \
 	backtrace_test.cpp \
 	GetPss.cpp \
 	thread_utils.c \
@@ -142,15 +120,12 @@ backtrace_test_shared_libraries := \
 	libbacktrace \
 	libbase \
 	libcutils \
-	libunwind \
 
 backtrace_test_shared_libraries_target += \
 	libdl \
 
 backtrace_test_ldlibs_host += \
 	-ldl \
-
-backtrace_test_strip_module := false
 
 module := backtrace_test
 module_tag := debug
