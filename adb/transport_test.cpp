@@ -144,23 +144,29 @@ TEST(transport, RunDisconnects) {
     ASSERT_EQ(0, count);
 }
 
-TEST(transport, add_feature) {
+TEST(transport, SetFeatures) {
     atransport t;
     ASSERT_EQ(0U, t.features().size());
 
-    t.add_feature("foo");
+    t.SetFeatures(FeatureSetToString(FeatureSet{"foo"}));
     ASSERT_EQ(1U, t.features().size());
     ASSERT_TRUE(t.has_feature("foo"));
 
-    t.add_feature("bar");
+    t.SetFeatures(FeatureSetToString(FeatureSet{"foo", "bar"}));
     ASSERT_EQ(2U, t.features().size());
     ASSERT_TRUE(t.has_feature("foo"));
     ASSERT_TRUE(t.has_feature("bar"));
 
-    t.add_feature("foo");
+    t.SetFeatures(FeatureSetToString(FeatureSet{"foo", "bar", "foo"}));
     ASSERT_EQ(2U, t.features().size());
     ASSERT_TRUE(t.has_feature("foo"));
     ASSERT_TRUE(t.has_feature("bar"));
+
+    t.SetFeatures(FeatureSetToString(FeatureSet{"bar", "baz"}));
+    ASSERT_EQ(2U, t.features().size());
+    ASSERT_FALSE(t.has_feature("foo"));
+    ASSERT_TRUE(t.has_feature("bar"));
+    ASSERT_TRUE(t.has_feature("baz"));
 }
 
 TEST(transport, parse_banner_no_features) {

@@ -779,27 +779,37 @@ size_t atransport::get_max_payload() const {
     return max_payload;
 }
 
-// Do not use any of [:;=,] in feature strings, they have special meaning
-// in the connection banner.
-// TODO(dpursell): add this in once we can pass features through to the client.
-const char kFeatureShell2[] = "shell_2";
+namespace {
 
-// The list of features supported by the current system. Will be sent to the
-// other side of the connection in the banner.
-static const FeatureSet gSupportedFeatures = {
-        kFeatureShell2,
-};
+constexpr char kFeatureStringDelimiter = ',';
+
+}  // namespace
 
 const FeatureSet& supported_features() {
-    return gSupportedFeatures;
+    // Local static allocation to avoid global non-POD variables.
+    static const FeatureSet* features = new FeatureSet{
+        kFeatureShell2
+    };
+
+    return *features;
+}
+
+std::string FeatureSetToString(const FeatureSet& features) {
+    return android::base::Join(features, kFeatureStringDelimiter);
+}
+
+FeatureSet StringToFeatureSet(const std::string& features_string) {
+    auto names = android::base::Split(features_string,
+                                      {kFeatureStringDelimiter});
+    return FeatureSet(names.begin(), names.end());
 }
 
 bool atransport::has_feature(const std::string& feature) const {
     return features_.count(feature) > 0;
 }
 
-void atransport::add_feature(const std::string& feature) {
-    features_.insert(feature);
+void atransport::SetFeatures(const std::string& features_string) {
+    features_ = StringToFeatureSet(features_string);
 }
 
 bool atransport::CanUseFeature(const std::string& feature) const {
@@ -855,9 +865,6 @@ static void append_transport(const atransport* t, std::string* result,
         append_transport_info(result, "product:", t->product, false);
         append_transport_info(result, "model:", t->model, true);
         append_transport_info(result, "device:", t->device, false);
-        append_transport_info(result, "features:",
-                              android::base::Join(t->features(), ',').c_str(),
-                              false);
     }
     *result += '\n';
 }

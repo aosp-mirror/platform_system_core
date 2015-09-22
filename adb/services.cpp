@@ -194,7 +194,39 @@ void reverse_service(int fd, void* arg)
     adb_close(fd);
 }
 
-#endif
+// Shell service string can look like:
+//   shell[args]:[command]
+// Currently the only supported args are -T (force raw) and -t (force PTY).
+static int ShellService(const std::string& args, const atransport* transport) {
+    size_t delimiter_index = args.find(':');
+    if (delimiter_index == std::string::npos) {
+        LOG(ERROR) << "No ':' found in shell service arguments: " << args;
+        return -1;
+    }
+    const std::string service_args = args.substr(0, delimiter_index);
+    const std::string command = args.substr(delimiter_index + 1);
+
+    SubprocessType type;
+    if (service_args.empty()) {
+        // Default: use PTY for interactive, raw for non-interactive.
+        type = (command.empty() ? SubprocessType::kPty : SubprocessType::kRaw);
+    } else if (service_args == "-T") {
+        type = SubprocessType::kRaw;
+    } else if (service_args == "-t") {
+        type = SubprocessType::kPty;
+    } else {
+        LOG(ERROR) << "Unsupported shell service arguments: " << args;
+        return -1;
+    }
+
+    SubprocessProtocol protocol =
+            (transport->CanUseFeature(kFeatureShell2) ? SubprocessProtocol::kShell
+                                                      : SubprocessProtocol::kNone);
+
+    return StartSubprocess(command.c_str(), type, protocol);
+}
+
+#endif  // !ADB_HOST
 
 static int create_service_thread(void (*func)(int, void *), void *cookie)
 {
@@ -265,14 +297,8 @@ int service_to_fd(const char* name, const atransport* transport) {
         ret = create_service_thread(framebuffer_service, 0);
     } else if (!strncmp(name, "jdwp:", 5)) {
         ret = create_jdwp_connection_fd(atoi(name+5));
-    } else if(!strncmp(name, "shell:", 6)) {
-        const char* args = name + 6;
-        // Use raw for non-interactive, PTY for interactive.
-        SubprocessType type = (*args ? SubprocessType::kRaw : SubprocessType::kPty);
-        SubprocessProtocol protocol =
-                (transport->CanUseFeature(kFeatureShell2) ? SubprocessProtocol::kShell
-                                                          : SubprocessProtocol::kNone);
-        ret = StartSubprocess(args, type, protocol);
+    } else if(!strncmp(name, "shell", 5)) {
+        ret = ShellService(name + 5, transport);
     } else if(!strncmp(name, "exec:", 5)) {
         ret = StartSubprocess(name + 5, SubprocessType::kRaw,
                               SubprocessProtocol::kNone);
