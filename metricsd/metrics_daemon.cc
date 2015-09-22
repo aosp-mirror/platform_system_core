@@ -76,13 +76,13 @@ const char kUncleanShutdownDetectedFile[] =
 // The {Read,Write}Sectors numbers are in sectors/second.
 // A sector is usually 512 bytes.
 
-const char kMetricReadSectorsLongName[] = "Platform.ReadSectorsLong";
-const char kMetricWriteSectorsLongName[] = "Platform.WriteSectorsLong";
-const char kMetricReadSectorsShortName[] = "Platform.ReadSectorsShort";
-const char kMetricWriteSectorsShortName[] = "Platform.WriteSectorsShort";
+const char kMetricReadSectorsLongName[] = "Platform.ReadSectors.PerMinute";
+const char kMetricWriteSectorsLongName[] = "Platform.WriteSectors.PerMinute";
+const char kMetricReadSectorsShortName[] = "Platform.ReadSectors.PerSecond";
+const char kMetricWriteSectorsShortName[] = "Platform.WriteSectors.PerSecond";
 
 const int kMetricStatsShortInterval = 1;  // seconds
-const int kMetricStatsLongInterval = 30;  // seconds
+const int kMetricStatsLongInterval = 60;  // seconds
 
 const int kMetricMeminfoInterval = 30;    // seconds
 
@@ -97,16 +97,16 @@ const int kMetricPageFaultsBuckets = 50;
 
 // Major page faults, i.e. the ones that require data to be read from disk.
 
-const char kMetricPageFaultsLongName[] = "Platform.PageFaultsLong";
-const char kMetricPageFaultsShortName[] = "Platform.PageFaultsShort";
+const char kMetricPageFaultsLongName[] = "Platform.PageFaults.PerMinute";
+const char kMetricPageFaultsShortName[] = "Platform.PageFaults.PerSecond";
 
 // Swap in and Swap out
 
-const char kMetricSwapInLongName[] = "Platform.SwapInLong";
-const char kMetricSwapInShortName[] = "Platform.SwapInShort";
+const char kMetricSwapInLongName[] = "Platform.SwapIn.PerMinute";
+const char kMetricSwapInShortName[] = "Platform.SwapIn.PerSecond";
 
-const char kMetricSwapOutLongName[] = "Platform.SwapOutLong";
-const char kMetricSwapOutShortName[] = "Platform.SwapOutShort";
+const char kMetricSwapOutLongName[] = "Platform.SwapOut.PerMinute";
+const char kMetricSwapOutShortName[] = "Platform.SwapOut.PerSecond";
 
 const char kMetricsProcStatFileName[] = "/proc/stat";
 const char kVmStatFileName[] = "/proc/vmstat";
@@ -892,7 +892,7 @@ bool MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
     int swap_used = swap_total - swap_free;
     int swap_used_percent = swap_used * 100 / swap_total;
     SendSample("Platform.MeminfoSwapUsed", swap_used, 1, 8 * 1000 * 1000, 100);
-    SendLinearSample("Platform.MeminfoSwapUsedPercent", swap_used_percent,
+    SendLinearSample("Platform.MeminfoSwapUsed.Percent", swap_used_percent,
                      100, 101);
   }
   return true;
