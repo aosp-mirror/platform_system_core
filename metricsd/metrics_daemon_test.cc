@@ -25,6 +25,7 @@
 #include <base/files/scoped_temp_dir.h>
 #include <base/strings/string_number_conversions.h>
 #include <base/strings/stringprintf.h>
+#include <chromeos/flag_helper.h>
 #include <gtest/gtest.h>
 
 #include "constants.h"
@@ -60,6 +61,7 @@ class MetricsDaemonTest : public testing::Test {
   std::string kFakeDiskStats1;
 
   virtual void SetUp() {
+    chromeos::FlagHelper::Init(0, nullptr, "");
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
     scaling_max_freq_path_ = temp_dir_.path().Append("scaling_max");
     cpu_max_freq_path_ = temp_dir_.path().Append("cpu_freq_max");
