@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG TRACE_ADB
+#define TRACE_TAG ADB
 
 #include "adb_utils.h"
 
@@ -151,7 +151,7 @@ bool mkdirs(const std::string& path) {
   return true;
 }
 
-void dump_hex(const void* data, size_t byte_count) {
+std::string dump_hex(const void* data, size_t byte_count) {
     byte_count = std::min(byte_count, size_t(16));
 
     const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
@@ -170,7 +170,7 @@ void dump_hex(const void* data, size_t byte_count) {
         line.push_back(c);
     }
 
-    D("%s", line.c_str());
+    return line;
 }
 
 bool parse_host_and_port(const std::string& address,

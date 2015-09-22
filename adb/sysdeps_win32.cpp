@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG TRACE_SYSDEPS
+#define TRACE_TAG SYSDEPS
 
 #include "sysdeps.h"
 
