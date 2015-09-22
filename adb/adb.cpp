@@ -334,7 +334,7 @@ std::string get_connection_string() {
 #endif
 
     connection_properties.push_back(android::base::StringPrintf(
-        "features=%s", android::base::Join(supported_features(), ',').c_str()));
+        "features=%s", FeatureSetToString(supported_features()).c_str()));
 
     return android::base::StringPrintf(
         "%s::%s", adb_device_banner,
@@ -396,9 +396,7 @@ void parse_banner(const std::string& banner, atransport* t) {
             } else if (key == "ro.product.device") {
                 qual_overwrite(&t->device, value);
             } else if (key == "features") {
-                for (const auto& feature : android::base::Split(value, ",")) {
-                    t->add_feature(feature);
-                }
+                t->SetFeatures(value);
             }
         }
     }
@@ -1149,23 +1147,9 @@ int handle_host_request(const char* service, TransportType type,
         std::string error_msg;
         atransport* t = acquire_one_transport(kCsAny, type, serial, &error_msg);
         if (t != nullptr) {
-            SendOkay(reply_fd, android::base::Join(t->features(), '\n'));
+            SendOkay(reply_fd, FeatureSetToString(t->features()));
         } else {
             SendFail(reply_fd, error_msg);
-        }
-        return 0;
-    }
-
-    if (!strncmp(service, "check-feature:", strlen("check-feature:"))) {
-        std::string error_msg;
-        atransport* t = acquire_one_transport(kCsAny, type, serial, &error_msg);
-        if (t && t->CanUseFeature(service + strlen("check-feature:"))) {
-            // We could potentially extend this to reply with the feature
-            // version if that becomes necessary.
-            SendOkay(reply_fd, "1");
-        } else {
-            // Empty response means unsupported feature.
-            SendOkay(reply_fd, "");
         }
         return 0;
     }

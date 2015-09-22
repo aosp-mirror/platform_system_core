@@ -29,7 +29,13 @@ typedef std::unordered_set<std::string> FeatureSet;
 
 const FeatureSet& supported_features();
 
-const extern char kFeatureShell2[];
+// Encodes and decodes FeatureSet objects into human-readable strings.
+std::string FeatureSetToString(const FeatureSet& features);
+FeatureSet StringToFeatureSet(const std::string& features_string);
+
+// Do not use any of [:;=,] in feature strings, they have special meaning
+// in the connection banner.
+constexpr char kFeatureShell2[] = "shell_2";
 
 class atransport {
 public:
@@ -85,12 +91,14 @@ public:
     int get_protocol_version() const;
     size_t get_max_payload() const;
 
-    inline const FeatureSet features() const {
+    const FeatureSet& features() const {
         return features_;
     }
 
     bool has_feature(const std::string& feature) const;
-    void add_feature(const std::string& feature);
+
+    // Loads the transport's feature set from the given string.
+    void SetFeatures(const std::string& features_string);
 
     // Returns true if both we and the other end of the transport support the
     // feature.
