@@ -79,8 +79,13 @@ endif
 ifeq ($(build_type),host)
   # Only build if host builds are supported.
   ifeq ($(build_host),true)
-    LOCAL_CFLAGS += -Wno-extern-c-compat -fno-omit-frame-pointer
     include $(LLVM_HOST_BUILD_MK)
+    # -fno-omit-frame-pointer should be set for host build. Because currently
+    # libunwind can't recognize .debug_frame using dwarf version 4, and it relies
+    # on stack frame pointer to do unwinding on x86.
+    # $(LLVM_HOST_BUILD_MK) overwrites -fno-omit-frame-pointer. so the below line
+    # must be after the include.
+    LOCAL_CFLAGS += -Wno-extern-c-compat -fno-omit-frame-pointer
     include $(BUILD_HOST_$(build_target))
   endif
 endif
