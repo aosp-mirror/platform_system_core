@@ -19,7 +19,6 @@
 
 #include <stdint.h>
 #include <sys/types.h>
-#include <utils/SharedBuffer.h>
 #include <utils/TypeHelpers.h>
 
 namespace android {
@@ -55,13 +54,7 @@ protected:
     virtual ~BasicHashtableImpl();
 
     void dispose();
-
-    inline void edit() {
-        if (mBuckets && !SharedBuffer::bufferFromData(mBuckets)->onlyOwner()) {
-            clone();
-        }
-    }
-
+    void edit();
     void setTo(const BasicHashtableImpl& other);
     void clear();
 
