@@ -16,7 +16,7 @@
 
 /* implement the "debug-ports" and "track-debug-ports" device services */
 
-#define TRACE_TAG TRACE_JDWP
+#define TRACE_TAG JDWP
 
 #include "sysdeps.h"
 
@@ -324,8 +324,9 @@ jdwp_process_event( int  socket, unsigned  events, void*  _proc )
             }
 
         CloseProcess:
-            if (proc->pid >= 0)
+            if (proc->pid >= 0) {
                 D( "remove pid %d to jdwp process list", proc->pid );
+            }
             jdwp_process_free(proc);
             return;
         }

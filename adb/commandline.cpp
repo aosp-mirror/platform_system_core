@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG TRACE_ADB
+#define TRACE_TAG ADB
 
 #include "sysdeps.h"
 
@@ -1554,6 +1554,8 @@ int adb_commandline(int argc, const char **argv) {
     }
     else if (!strcmp(argv[0], "keygen")) {
         if (argc < 2) return usage();
+        // Always print key generation information for keygen command.
+        adb_trace_enable(AUTH);
         return adb_auth_keygen(argv[1]);
     }
     else if (!strcmp(argv[0], "jdwp")) {

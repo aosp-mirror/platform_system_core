@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG TRACE_RWX
+#define TRACE_TAG RWX
 
 #include "adb_io.h"
 
@@ -84,10 +84,8 @@ bool ReadFdExactly(int fd, void* buf, size_t len) {
         }
     }
 
-    D("readx: fd=%d wanted=%zu got=%zu", fd, len0, len0 - len);
-    if (ADB_TRACING) {
-        dump_hex(reinterpret_cast<const unsigned char*>(buf), len0);
-    }
+    VLOG(RWX) << "readx: fd=" << fd << " wanted=" << len0 << " got=" << (len0 - len)
+              << " " << dump_hex(reinterpret_cast<const unsigned char*>(buf), len0);
 
     return true;
 }
@@ -96,10 +94,8 @@ bool WriteFdExactly(int fd, const void* buf, size_t len) {
     const char* p = reinterpret_cast<const char*>(buf);
     int r;
 
-    D("writex: fd=%d len=%d: ", fd, (int)len);
-    if (ADB_TRACING) {
-        dump_hex(reinterpret_cast<const unsigned char*>(buf), len);
-    }
+    VLOG(RWX) << "writex: fd=" << fd << " len=" << len
+              << " " << dump_hex(reinterpret_cast<const unsigned char*>(buf), len);
 
     while (len > 0) {
         r = adb_write(fd, p, len);

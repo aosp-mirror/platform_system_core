@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG TRACE_AUTH
+#define TRACE_TAG AUTH
 
 #include "sysdeps.h"
 #include "adb_auth.h"
@@ -452,7 +452,6 @@ int adb_auth_get_userkey(unsigned char *data, size_t len)
 }
 
 int adb_auth_keygen(const char* filename) {
-    adb_trace_mask |= (1 << TRACE_AUTH);
     return (generate_key(filename) == 0);
 }
 

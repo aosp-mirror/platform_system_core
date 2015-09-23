@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG TRACE_TRANSPORT
+#define TRACE_TAG TRANSPORT
 
 #include "sysdeps.h"
 #include "transport.h"
@@ -42,7 +42,7 @@ static std::list<atransport*> pending_list;
 
 ADB_MUTEX_DEFINE( transport_lock );
 
-static void dump_packet(const char* name, const char* func, apacket* p) {
+static std::string dump_packet(const char* name, const char* func, apacket* p) {
     unsigned  command = p->msg.command;
     int       len     = p->msg.data_length;
     char      cmd[9];
@@ -73,9 +73,10 @@ static void dump_packet(const char* name, const char* func, apacket* p) {
     else
         snprintf(arg1, sizeof arg1, "0x%x", p->msg.arg1);
 
-    D("%s: %s: [%s] arg0=%s arg1=%s (len=%d) ",
-        name, func, cmd, arg0, arg1, len);
-    dump_hex(p->data, len);
+    std::string result = android::base::StringPrintf("%s: %s: [%s] arg0=%s arg1=%s (len=%d) ",
+                                                     name, func, cmd, arg0, arg1, len);
+    result += dump_hex(p->data, len);
+    return result;
 }
 
 static int
@@ -99,9 +100,7 @@ read_packet(int  fd, const char* name, apacket** ppacket)
         }
     }
 
-    if (ADB_TRACING) {
-        dump_packet(name, "from remote", *ppacket);
-    }
+    VLOG(TRANSPORT) << dump_packet(name, "from remote", *ppacket);
     return 0;
 }
 
@@ -113,9 +112,7 @@ write_packet(int  fd, const char* name, apacket** ppacket)
         snprintf(buff, sizeof buff, "fd=%d", fd);
         name = buff;
     }
-    if (ADB_TRACING) {
-        dump_packet(name, "to remote", *ppacket);
-    }
+    VLOG(TRANSPORT) << dump_packet(name, "to remote", *ppacket);
     char* p = reinterpret_cast<char*>(ppacket);  /* we really write the packet address */
     int len = sizeof(apacket*);
     while(len > 0) {
@@ -996,19 +993,16 @@ void unregister_usb_transport(usb_handle *usb) {
     adb_mutex_unlock(&transport_lock);
 }
 
-#undef TRACE_TAG
-#define TRACE_TAG  TRACE_RWX
-
 int check_header(apacket *p, atransport *t)
 {
     if(p->msg.magic != (p->msg.command ^ 0xffffffff)) {
-        D("check_header(): invalid magic");
+        VLOG(RWX) << "check_header(): invalid magic";
         return -1;
     }
 
     if(p->msg.data_length > t->get_max_payload()) {
-        D("check_header(): %u > atransport::max_payload = %zu",
-            p->msg.data_length, t->get_max_payload());
+        VLOG(RWX) << "check_header(): " << p->msg.data_length << " atransport::max_payload = "
+                  << t->get_max_payload();
         return -1;
     }
 
