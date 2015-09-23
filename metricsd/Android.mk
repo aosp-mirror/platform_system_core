@@ -88,6 +88,7 @@ LOCAL_CFLAGS := $(metrics_CFLAGS)
 LOCAL_CLANG := true
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS)
+LOCAL_RTTI_FLAG := -frtti
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_SHARED_LIBRARIES := $(metrics_shared_libraries)
 LOCAL_SRC_FILES := $(libmetrics_sources)
