@@ -18,7 +18,6 @@
 #define ANDROID_STRING8_H
 
 #include <utils/Errors.h>
-#include <utils/SharedBuffer.h>
 #include <utils/Unicode.h>
 #include <utils/TypeHelpers.h>
 
@@ -29,6 +28,7 @@
 
 namespace android {
 
+class SharedBuffer;
 class String16;
 class TextOutput;
 
@@ -65,11 +65,11 @@ public:
 
     inline  const char*         string() const;
     inline  size_t              size() const;
-    inline  size_t              length() const;
     inline  size_t              bytes() const;
     inline  bool                isEmpty() const;
     
-    inline  const SharedBuffer* sharedBuffer() const;
+            size_t              length() const;
+            const SharedBuffer* sharedBuffer() const;
     
             void                clear();
 
@@ -263,11 +263,6 @@ inline const char* String8::string() const
     return mString;
 }
 
-inline size_t String8::length() const
-{
-    return SharedBuffer::sizeFromData(mString)-1;
-}
-
 inline size_t String8::size() const
 {
     return length();
@@ -280,12 +275,7 @@ inline bool String8::isEmpty() const
 
 inline size_t String8::bytes() const
 {
-    return SharedBuffer::sizeFromData(mString)-1;
-}
-
-inline const SharedBuffer* String8::sharedBuffer() const
-{
-    return SharedBuffer::bufferFromData(mString);
+    return length();
 }
 
 inline bool String8::contains(const char* other) const
