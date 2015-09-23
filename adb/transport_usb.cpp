@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG TRACE_TRANSPORT
+#define TRACE_TAG TRANSPORT
 
 #include "sysdeps.h"
 #include "transport.h"

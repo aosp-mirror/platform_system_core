@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG TRACE_USB
+#define TRACE_TAG USB
 
 #include "sysdeps.h"
 
@@ -491,12 +491,14 @@ static void usb_ffs_kick(usb_handle *h)
     int err;
 
     err = ioctl(h->bulk_in, FUNCTIONFS_CLEAR_HALT);
-    if (err < 0)
+    if (err < 0) {
         D("[ kick: source (fd=%d) clear halt failed (%d) ]", h->bulk_in, errno);
+    }
 
     err = ioctl(h->bulk_out, FUNCTIONFS_CLEAR_HALT);
-    if (err < 0)
+    if (err < 0) {
         D("[ kick: sink (fd=%d) clear halt failed (%d) ]", h->bulk_out, errno);
+    }
 
     adb_mutex_lock(&h->lock);
 
