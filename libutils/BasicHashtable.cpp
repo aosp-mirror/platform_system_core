@@ -22,6 +22,8 @@
 #include <utils/BasicHashtable.h>
 #include <utils/misc.h>
 
+#include "SharedBuffer.h"
+
 namespace android {
 
 BasicHashtableImpl::BasicHashtableImpl(size_t entrySize, bool hasTrivialDestructor,
@@ -44,6 +46,12 @@ BasicHashtableImpl::BasicHashtableImpl(const BasicHashtableImpl& other) :
 
 BasicHashtableImpl::~BasicHashtableImpl()
 {
+}
+
+void BasicHashtableImpl::edit() {
+    if (mBuckets && !SharedBuffer::bufferFromData(mBuckets)->onlyOwner()) {
+        clone();
+    }
 }
 
 void BasicHashtableImpl::dispose() {

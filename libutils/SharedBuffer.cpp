@@ -18,8 +18,9 @@
 #include <string.h>
 
 #include <log/log.h>
-#include <utils/SharedBuffer.h>
 #include <utils/Atomic.h>
+
+#include "SharedBuffer.h"
 
 // ---------------------------------------------------------------------------
 
