@@ -16,12 +16,12 @@
 
 #define __STDC_LIMIT_MACROS
 
-#include <utils/SharedBuffer.h>
-
 #include <gtest/gtest.h>
 
 #include <memory>
 #include <stdint.h>
+
+#include "SharedBuffer.h"
 
 TEST(SharedBufferTest, TestAlloc) {
   EXPECT_DEATH(android::SharedBuffer::alloc(SIZE_MAX), "");
