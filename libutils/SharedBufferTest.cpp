@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-#include <utils/SharedBuffer.h>
+#define __STDC_LIMIT_MACROS
 
 #include <gtest/gtest.h>
 
 #include <memory>
 #include <stdint.h>
+
+#include "SharedBuffer.h"
 
 TEST(SharedBufferTest, TestAlloc) {
   EXPECT_DEATH(android::SharedBuffer::alloc(SIZE_MAX), "");
