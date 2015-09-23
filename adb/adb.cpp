@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG TRACE_ADB
+#define TRACE_TAG ADB
 
 #include "sysdeps.h"
 #include "adb.h"
@@ -32,7 +32,6 @@
 
 #include <string>
 #include <vector>
-#include <unordered_map>
 
 #include <base/logging.h>
 #include <base/macros.h>
@@ -52,22 +51,6 @@
 #include <sys/capability.h>
 #include <sys/mount.h>
 #endif
-
-#if !ADB_HOST
-const char* adb_device_banner = "device";
-static android::base::LogdLogger gLogdLogger;
-#else
-const char* adb_device_banner = "host";
-#endif
-
-void AdbLogger(android::base::LogId id, android::base::LogSeverity severity,
-               const char* tag, const char* file, unsigned int line,
-               const char* message) {
-    android::base::StderrLogger(id, severity, tag, file, line, message);
-#if !ADB_HOST
-    gLogdLogger(id, severity, tag, file, line, message);
-#endif
-}
 
 std::string adb_version() {
     // Don't change the format of this --- it's parsed by ddmlib.
@@ -95,128 +78,6 @@ void fatal_errno(const char* fmt, ...) {
     fprintf(stderr, "\n");
     va_end(ap);
     exit(-1);
-}
-
-#if !ADB_HOST
-static std::string get_log_file_name() {
-    struct tm now;
-    time_t t;
-    tzset();
-    time(&t);
-    localtime_r(&t, &now);
-
-    char timestamp[PATH_MAX];
-    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d-%H-%M-%S", &now);
-
-    return android::base::StringPrintf("/data/adb/adb-%s-%d", timestamp,
-                                       getpid());
-}
-
-void start_device_log(void) {
-    int fd = unix_open(get_log_file_name().c_str(),
-                       O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0640);
-    if (fd == -1) {
-        return;
-    }
-
-    // Redirect stdout and stderr to the log file.
-    dup2(fd, STDOUT_FILENO);
-    dup2(fd, STDERR_FILENO);
-    fprintf(stderr, "--- adb starting (pid %d) ---\n", getpid());
-    unix_close(fd);
-}
-#endif
-
-int adb_trace_mask;
-
-std::string get_trace_setting_from_env() {
-    const char* setting = getenv("ADB_TRACE");
-    if (setting == nullptr) {
-        setting = "";
-    }
-
-    return std::string(setting);
-}
-
-#if !ADB_HOST
-std::string get_trace_setting_from_prop() {
-    char buf[PROPERTY_VALUE_MAX];
-    property_get("persist.adb.trace_mask", buf, "");
-    return std::string(buf);
-}
-#endif
-
-std::string get_trace_setting() {
-#if ADB_HOST
-    return get_trace_setting_from_env();
-#else
-    return get_trace_setting_from_prop();
-#endif
-}
-
-// Split the space separated list of tags from the trace setting and build the
-// trace mask from it. note that '1' and 'all' are special cases to enable all
-// tracing.
-//
-// adb's trace setting comes from the ADB_TRACE environment variable, whereas
-// adbd's comes from the system property persist.adb.trace_mask.
-static void setup_trace_mask() {
-    const std::string trace_setting = get_trace_setting();
-    if (trace_setting.empty()) {
-        return;
-    }
-
-    std::unordered_map<std::string, int> trace_flags = {
-        {"1", 0},
-        {"all", 0},
-        {"adb", TRACE_ADB},
-        {"sockets", TRACE_SOCKETS},
-        {"packets", TRACE_PACKETS},
-        {"rwx", TRACE_RWX},
-        {"usb", TRACE_USB},
-        {"sync", TRACE_SYNC},
-        {"sysdeps", TRACE_SYSDEPS},
-        {"transport", TRACE_TRANSPORT},
-        {"jdwp", TRACE_JDWP},
-        {"services", TRACE_SERVICES},
-        {"auth", TRACE_AUTH},
-        {"fdevent", TRACE_FDEVENT},
-        {"shell", TRACE_SHELL}};
-
-    std::vector<std::string> elements = android::base::Split(trace_setting, " ");
-    for (const auto& elem : elements) {
-        const auto& flag = trace_flags.find(elem);
-        if (flag == trace_flags.end()) {
-            D("Unknown trace flag: %s", elem.c_str());
-            continue;
-        }
-
-        if (flag->second == 0) {
-            // 0 is used for the special values "1" and "all" that enable all
-            // tracing.
-            adb_trace_mask = ~0;
-            return;
-        } else {
-            adb_trace_mask |= 1 << flag->second;
-        }
-    }
-}
-
-void adb_trace_init(char** argv) {
-#if !ADB_HOST
-    // Don't open log file if no tracing, since this will block
-    // the crypto unmount of /data
-    if (!get_trace_setting().empty()) {
-        if (isatty(STDOUT_FILENO) == 0) {
-            start_device_log();
-        }
-    }
-#endif
-
-    setup_trace_mask();
-    android::base::InitLogging(argv, AdbLogger);
-
-    D("%s", adb_version().c_str());
 }
 
 apacket* get_apacket(void)

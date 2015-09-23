@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG TRACE_SYNC
+#define TRACE_TAG SYNC
 
 #include "sysdeps.h"
 #include "file_sync_service.h"

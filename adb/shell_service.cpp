@@ -75,7 +75,7 @@
 // to be more complex due to partial reads and non-blocking I/O so this model
 // was chosen instead.
 
-#define TRACE_TAG TRACE_SHELL
+#define TRACE_TAG SHELL
 
 #include "shell_service.h"
 

@@ -15,7 +15,7 @@
 ** limitations under the License.
 */
 
-#define TRACE_TAG TRACE_FDEVENT
+#define TRACE_TAG FDEVENT
 
 #include "sysdeps.h"
 #include "fdevent.h"

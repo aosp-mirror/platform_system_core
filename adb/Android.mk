@@ -37,6 +37,7 @@ LIBADB_SRC_FILES := \
     adb_auth.cpp \
     adb_io.cpp \
     adb_listeners.cpp \
+    adb_trace.cpp \
     adb_utils.cpp \
     sockets.cpp \
     transport.cpp \

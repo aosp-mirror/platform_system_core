@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG TRACE_AUTH
+#define TRACE_TAG AUTH
 
 #include "sysdeps.h"
 #include "adb_auth.h"
