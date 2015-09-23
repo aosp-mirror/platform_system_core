@@ -31,7 +31,7 @@ bool mkdirs(const std::string& path);
 
 std::string escape_arg(const std::string& s);
 
-void dump_hex(const void* ptr, size_t byte_count);
+std::string dump_hex(const void* ptr, size_t byte_count);
 
 // Parses 'address' into 'host' and 'port'.
 // If no port is given, takes the default from *port.
