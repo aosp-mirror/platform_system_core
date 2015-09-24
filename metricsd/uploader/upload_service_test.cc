@@ -23,7 +23,7 @@
 #include <base/sys_info.h>
 
 #include "constants.h"
-#include "metrics_library_mock.h"
+#include "metrics/metrics_library_mock.h"
 #include "persistent_integer.h"
 #include "serialization/metric_sample.h"
 #include "uploader/metrics_log.h"
