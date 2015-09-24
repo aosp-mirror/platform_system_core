@@ -224,7 +224,7 @@ TEST_F(UploadServiceTest, ValuesInConfigFileAreSent) {
   upload_service_->sender_.reset(sender);
 
   SetTestingProperty(metrics::kChannelProperty, "beta");
-  SetTestingProperty(metrics::kBuildTargetIdProperty, "hello");
+  SetTestingProperty(metrics::kProductIdProperty, "hello");
   SetTestingProperty(metrics::kProductVersionProperty, "1.2.3.4");
 
   scoped_ptr<metrics::MetricSample> histogram =
@@ -267,7 +267,7 @@ TEST_F(UploadServiceTest, PersistentGUID) {
 }
 
 TEST_F(UploadServiceTest, SessionIdIncrementedAtInitialization) {
-  SetTestingProperty(metrics::kBuildTargetIdProperty, "hello");
+  SetTestingProperty(metrics::kProductIdProperty, "hello");
   SystemProfileCache cache(true, dir_.path());
   cache.Initialize();
   int session_id = cache.profile_.session_id;
