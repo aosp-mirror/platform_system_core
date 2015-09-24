@@ -30,7 +30,7 @@
 
 #include "constants.h"
 #include "metrics_daemon.h"
-#include "metrics_library_mock.h"
+#include "metrics/metrics_library_mock.h"
 #include "persistent_integer_mock.h"
 
 using base::FilePath;
