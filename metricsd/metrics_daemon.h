@@ -29,6 +29,7 @@
 #include <chromeos/daemons/dbus_daemon.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
+#include "collectors/disk_usage_collector.h"
 #include "metrics/metrics_library.h"
 #include "persistent_integer.h"
 #include "uploader/upload_service.h"
@@ -327,6 +328,7 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   scoped_ptr<PersistentInteger> kernel_crashes_version_count_;
   scoped_ptr<PersistentInteger> unclean_shutdowns_daily_count_;
   scoped_ptr<PersistentInteger> unclean_shutdowns_weekly_count_;
+  scoped_ptr<DiskUsageCollector> disk_usage_collector_;
 
   std::string diskstats_path_;
   std::string scaling_max_freq_path_;
