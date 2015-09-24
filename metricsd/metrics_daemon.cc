@@ -278,6 +278,7 @@ void MetricsDaemon::Init(bool testing,
   diskstats_path_ = diskstats_path;
   scaling_max_freq_path_ = scaling_max_freq_path;
   cpuinfo_max_freq_path_ = cpuinfo_max_freq_path;
+  disk_usage_collector_.reset(new DiskUsageCollector(metrics_lib_));
 
   // If testing, initialize Stats Reporter without connecting DBus
   if (testing_)
@@ -492,6 +493,7 @@ bool MetricsDaemon::CheckSystemCrash(const string& crash_file) {
 }
 
 void MetricsDaemon::StatsReporterInit() {
+  disk_usage_collector_->Schedule();
   DiskStatsReadStats(&read_sectors_, &write_sectors_);
   VmStatsReadStats(&vmstats_);
   // The first time around just run the long stat, so we don't delay boot.
