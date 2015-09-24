@@ -73,10 +73,10 @@ bool SystemProfileCache::Initialize() {
   CHECK(!initialized_)
       << "this should be called only once in the metrics_daemon lifetime.";
 
-  profile_.build_target_id = GetProperty(metrics::kBuildTargetIdProperty);
+  profile_.product_id = GetProperty(metrics::kProductIdProperty);
 
-  if (profile_.build_target_id.empty()) {
-    LOG(ERROR) << "System property " << metrics::kBuildTargetIdProperty
+  if (profile_.product_id.empty()) {
+    LOG(ERROR) << "System property " << metrics::kProductIdProperty
                << " is not set.";
     return false;
   }
@@ -136,7 +136,7 @@ bool SystemProfileCache::Populate(
   profile_proto->set_channel(profile_.channel);
   metrics::SystemProfileProto_BrilloDeviceData* device_data =
       profile_proto->mutable_brillo();
-  device_data->set_build_target_id(profile_.build_target_id);
+  device_data->set_build_target_id(profile_.product_id);
 
   return true;
 }
