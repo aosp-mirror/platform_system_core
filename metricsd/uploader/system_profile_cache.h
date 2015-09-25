@@ -39,7 +39,7 @@ struct SystemProfile {
   std::string client_id;
   int session_id;
   metrics::SystemProfileProto::Channel channel;
-  std::string build_target_id;
+  std::string product_id;
 };
 
 // Retrieves general system informations needed by the protobuf for context and
