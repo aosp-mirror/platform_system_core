@@ -26,11 +26,17 @@ ifneq ($(build_target),$(filter $(build_target),SHARED_LIBRARY STATIC_LIBRARY))
 endif
 endif
 
-LOCAL_ADDITIONAL_DEPENDENCIES := \
+ifeq ($(build_type),target)
+  include $(LLVM_DEVICE_BUILD_MK)
+else
+  include $(LLVM_HOST_BUILD_MK)
+endif
+
+LOCAL_ADDITIONAL_DEPENDENCIES += \
     $(LOCAL_PATH)/Android.mk \
     $(LOCAL_PATH)/Android.build.mk \
 
-LOCAL_CFLAGS := \
+LOCAL_CFLAGS += \
     $(libbacktrace_common_cflags) \
     $($(module)_cflags) \
     $($(module)_cflags_$(build_type)) \
@@ -48,7 +54,7 @@ LOCAL_CPPFLAGS += \
     $($(module)_cppflags) \
     $($(module)_cppflags_$(build_type)) \
 
-LOCAL_C_INCLUDES := \
+LOCAL_C_INCLUDES += \
     $(libbacktrace_common_c_includes) \
     $($(module)_c_includes) \
     $($(module)_c_includes_$(build_type)) \
@@ -57,29 +63,27 @@ LOCAL_SRC_FILES := \
     $($(module)_src_files) \
     $($(module)_src_files_$(build_type)) \
 
-LOCAL_STATIC_LIBRARIES := \
+LOCAL_STATIC_LIBRARIES += \
     $($(module)_static_libraries) \
     $($(module)_static_libraries_$(build_type)) \
 
-LOCAL_SHARED_LIBRARIES := \
+LOCAL_SHARED_LIBRARIES += \
     $($(module)_shared_libraries) \
     $($(module)_shared_libraries_$(build_type)) \
 
-LOCAL_LDLIBS := \
+LOCAL_LDLIBS += \
     $($(module)_ldlibs) \
     $($(module)_ldlibs_$(build_type)) \
 
 LOCAL_STRIP_MODULE := $($(module)_strip_module)
 
 ifeq ($(build_type),target)
-  include $(LLVM_DEVICE_BUILD_MK)
   include $(BUILD_$(build_target))
 endif
 
 ifeq ($(build_type),host)
   # Only build if host builds are supported.
   ifeq ($(build_host),true)
-    include $(LLVM_HOST_BUILD_MK)
     # -fno-omit-frame-pointer should be set for host build. Because currently
     # libunwind can't recognize .debug_frame using dwarf version 4, and it relies
     # on stack frame pointer to do unwinding on x86.
