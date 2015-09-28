@@ -39,6 +39,7 @@
 #define POWER_SUPPLY_SYSFS_PATH "/sys/class/" POWER_SUPPLY_SUBSYSTEM
 #define FAKE_BATTERY_CAPACITY 42
 #define FAKE_BATTERY_TEMPERATURE 424
+#define ALWAYS_PLUGGED_CAPACITY 100
 
 namespace android {
 
@@ -207,6 +208,15 @@ bool BatteryMonitor::update(void) {
     props.batteryTemperature = mBatteryFixedTemperature ?
         mBatteryFixedTemperature :
         getIntField(mHealthdConfig->batteryTemperaturePath);
+
+    // For devices which do not have battery and are always plugged
+    // into power souce.
+    if (mAlwaysPluggedDevice) {
+        props.chargerAcOnline = true;
+        props.batteryPresent = true;
+        props.batteryStatus = BATTERY_STATUS_CHARGING;
+        props.batteryHealth = BATTERY_HEALTH_GOOD;
+    }
 
     const int SIZE = 128;
     char buf[SIZE];
@@ -590,8 +600,12 @@ void BatteryMonitor::init(struct healthd_config *hc) {
         closedir(dir);
     }
 
-    if (!mChargerNames.size())
+    if (!mChargerNames.size()) {
         KLOG_ERROR(LOG_TAG, "No charger supplies found\n");
+        mBatteryFixedCapacity = ALWAYS_PLUGGED_CAPACITY;
+        mBatteryFixedTemperature = FAKE_BATTERY_TEMPERATURE;
+        mAlwaysPluggedDevice = true;
+    }
     if (!mBatteryDevicePresent) {
         KLOG_WARNING(LOG_TAG, "No battery devices found\n");
         hc->periodic_chores_interval_fast = -1;
@@ -611,7 +625,7 @@ void BatteryMonitor::init(struct healthd_config *hc) {
             KLOG_WARNING(LOG_TAG, "BatteryTemperaturePath not found\n");
         if (mHealthdConfig->batteryTechnologyPath.isEmpty())
             KLOG_WARNING(LOG_TAG, "BatteryTechnologyPath not found\n");
-	if (mHealthdConfig->batteryCurrentNowPath.isEmpty())
+        if (mHealthdConfig->batteryCurrentNowPath.isEmpty())
             KLOG_WARNING(LOG_TAG, "BatteryCurrentNowPath not found\n");
         if (mHealthdConfig->batteryFullChargePath.isEmpty())
             KLOG_WARNING(LOG_TAG, "BatteryFullChargePath not found\n");
