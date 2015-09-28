@@ -167,6 +167,9 @@ TEST(transport, SetFeatures) {
     ASSERT_FALSE(t.has_feature("foo"));
     ASSERT_TRUE(t.has_feature("bar"));
     ASSERT_TRUE(t.has_feature("baz"));
+
+    t.SetFeatures("");
+    ASSERT_EQ(0U, t.features().size());
 }
 
 TEST(transport, parse_banner_no_features) {
