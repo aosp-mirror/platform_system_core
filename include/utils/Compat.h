@@ -33,6 +33,10 @@ static inline ssize_t pread64(int fd, void* buf, size_t nbytes, off64_t offset) 
     return pread(fd, buf, nbytes, offset);
 }
 
+static inline ssize_t pwrite64(int fd, const void* buf, size_t nbytes, off64_t offset) {
+    return pwrite(fd, buf, nbytes, offset);
+}
+
 #endif /* __APPLE__ */
 
 #if defined(_WIN32)
