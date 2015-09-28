@@ -14,8 +14,6 @@
 
 LOCAL_PATH := $(call my-dir)
 
-ifeq ($(HOST_OS),linux)
-
 metrics_cpp_extension := .cc
 libmetrics_sources := \
   c_metrics_library.cc \
@@ -164,5 +162,3 @@ LOCAL_SRC_FILES := $(metrics_tests_sources)
 LOCAL_STATIC_LIBRARIES := libBionicGtestMain libgmock metrics_daemon_protos
 
 include $(BUILD_NATIVE_TEST)
-
-endif # HOST_OS == linux
