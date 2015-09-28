@@ -14,8 +14,6 @@
 
 LOCAL_PATH := $(call my-dir)
 
-ifeq ($(HOST_OS),linux)
-
 crash_reporter_cpp_extension := .cc
 
 crash_reporter_src := crash_collector.cc \
@@ -124,5 +122,3 @@ LOCAL_SHARED_LIBRARIES := libchrome \
 LOCAL_SRC_FILES := $(crash_reporter_test_src)
 LOCAL_STATIC_LIBRARIES := libcrash libgmock
 include $(BUILD_NATIVE_TEST)
-
-endif # HOST_OS == linux
