@@ -239,7 +239,7 @@ void MetricsDaemon::Init(bool testing,
   ticks_per_second_ = sysconf(_SC_CLK_TCK);
 
   daily_active_use_.reset(
-      new PersistentInteger("Platform.DailyUseTime"));
+      new PersistentInteger("Platform.UseTime.PerDay"));
   version_cumulative_active_use_.reset(
       new PersistentInteger("Platform.CumulativeUseTime"));
   version_cumulative_cpu_use_.reset(
@@ -253,23 +253,23 @@ void MetricsDaemon::Init(bool testing,
       new PersistentInteger("Platform.UserCrashInterval"));
 
   any_crashes_daily_count_.reset(
-      new PersistentInteger("Platform.AnyCrashesDaily"));
+      new PersistentInteger("Platform.AnyCrashes.PerDay"));
   any_crashes_weekly_count_.reset(
-      new PersistentInteger("Platform.AnyCrashesWeekly"));
+      new PersistentInteger("Platform.AnyCrashes.PerWeek"));
   user_crashes_daily_count_.reset(
-      new PersistentInteger("Platform.UserCrashesDaily"));
+      new PersistentInteger("Platform.UserCrashes.PerDay"));
   user_crashes_weekly_count_.reset(
-      new PersistentInteger("Platform.UserCrashesWeekly"));
+      new PersistentInteger("Platform.UserCrashes.PerWeek"));
   kernel_crashes_daily_count_.reset(
-      new PersistentInteger("Platform.KernelCrashesDaily"));
+      new PersistentInteger("Platform.KernelCrashes.PerDay"));
   kernel_crashes_weekly_count_.reset(
-      new PersistentInteger("Platform.KernelCrashesWeekly"));
+      new PersistentInteger("Platform.KernelCrashes.PerWeek"));
   kernel_crashes_version_count_.reset(
       new PersistentInteger("Platform.KernelCrashesSinceUpdate"));
   unclean_shutdowns_daily_count_.reset(
-      new PersistentInteger("Platform.UncleanShutdownsDaily"));
+      new PersistentInteger("Platform.UncleanShutdown.PerDay"));
   unclean_shutdowns_weekly_count_.reset(
-      new PersistentInteger("Platform.UncleanShutdownsWeekly"));
+      new PersistentInteger("Platform.UncleanShutdowns.PerWeek"));
 
   daily_cycle_.reset(new PersistentInteger("daily.cycle"));
   weekly_cycle_.reset(new PersistentInteger("weekly.cycle"));
