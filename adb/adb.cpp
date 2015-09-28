@@ -239,6 +239,10 @@ void parse_banner(const std::string& banner, atransport* t) {
     // "device::ro.product.name=x;ro.product.model=y;ro.product.device=z;".
     std::vector<std::string> pieces = android::base::Split(banner, ":");
 
+    // Reset the features list or else if the server sends no features we may
+    // keep the existing feature set (http://b/24405971).
+    t->SetFeatures("");
+
     if (pieces.size() > 2) {
         const std::string& props = pieces[2];
         for (auto& prop : android::base::Split(props, ";")) {
