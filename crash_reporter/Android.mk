@@ -62,8 +62,8 @@ LOCAL_C_INCLUDES := $(crash_reporter_includes)
 LOCAL_REQUIRED_MODULES := core2md \
     crash_reporter_logs.conf \
     crash_sender \
-    dbus-send \
-    init.crash_reporter.rc
+    dbus-send
+LOCAL_INIT_RC := crash_reporter.rc
 LOCAL_RTTI_FLAG := -frtti
 LOCAL_SHARED_LIBRARIES := libchrome \
     libchromeos \
@@ -93,17 +93,6 @@ LOCAL_CPP_EXTENSION := $(crash_reporter_cpp_extension)
 LOCAL_SHARED_LIBRARIES := libmetrics
 LOCAL_SRC_FILES := $(warn_collector_src)
 include $(BUILD_EXECUTABLE)
-
-# Crash reporter init script.
-# ========================================================
-ifdef TARGET_COPY_OUT_INITRCD
-include $(CLEAR_VARS)
-LOCAL_MODULE := init.crash_reporter.rc
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(PRODUCT_OUT)/$(TARGET_COPY_OUT_INITRCD)
-LOCAL_SRC_FILES := init.crash_reporter.rc
-include $(BUILD_PREBUILT)
-endif
 
 # Crash reporter logs conf file.
 # ========================================================
