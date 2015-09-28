@@ -796,6 +796,10 @@ std::string FeatureSetToString(const FeatureSet& features) {
 }
 
 FeatureSet StringToFeatureSet(const std::string& features_string) {
+    if (features_string.empty()) {
+        return FeatureSet();
+    }
+
     auto names = android::base::Split(features_string,
                                       {kFeatureStringDelimiter});
     return FeatureSet(names.begin(), names.end());
