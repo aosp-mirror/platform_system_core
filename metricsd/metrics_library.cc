@@ -53,9 +53,6 @@ static const char *kCrosEventNames[] = {
   "TPM.EarlyResetDuringCommand",  // 12
 };
 
-time_t MetricsLibrary::cached_enabled_time_ = 0;
-bool MetricsLibrary::cached_enabled_ = false;
-
 MetricsLibrary::MetricsLibrary() {}
 MetricsLibrary::~MetricsLibrary() {}
 
@@ -140,11 +137,15 @@ void MetricsLibrary::Init() {
   base::FilePath dir = base::FilePath(metrics::kMetricsDirectory);
   uma_events_file_ = dir.Append(metrics::kMetricsEventsFileName);
   consent_file_ = dir.Append(metrics::kConsentFileName);
+  cached_enabled_ = false;
+  cached_enabled_time_ = 0;
 }
 
 void MetricsLibrary::InitForTest(const base::FilePath& metrics_directory) {
   uma_events_file_ = metrics_directory.Append(metrics::kMetricsEventsFileName);
   consent_file_ = metrics_directory.Append(metrics::kConsentFileName);
+  cached_enabled_ = false;
+  cached_enabled_time_ = 0;
 }
 
 bool MetricsLibrary::SendToUMA(const std::string& name,
