@@ -69,7 +69,7 @@ LOCAL_MODULE := liblog
 LOCAL_WHOLE_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS := -Werror $(liblog_cflags)
 
-# TODO: This is to work around b/19059885. Remove after root cause is fixed
+# TODO: This is to work around b/24465209. Remove after root cause is fixed
 LOCAL_LDFLAGS_arm := -Wl,--hash-style=both
 
 LOCAL_SANITIZE := never
