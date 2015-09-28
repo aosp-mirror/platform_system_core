@@ -426,7 +426,7 @@ int main(int argc, char *argv[]) {
 
     LogListener *swl = new LogListener(logBuf, reader);
     // Backlog and /proc/sys/net/unix/max_dgram_qlen set to large value
-    if (swl->startListener(300)) {
+    if (swl->startListener(600)) {
         exit(1);
     }
 
