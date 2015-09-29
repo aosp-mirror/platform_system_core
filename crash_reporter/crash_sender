@@ -165,7 +165,7 @@ is_developer_mode() {
   # If we're testing crash reporter itself, we don't want to special-case
   # for developer mode.
   is_crash_test_in_progress && return 1
-  if [ "$(getprop ro.build.type)" = "eng" ]; then
+  if [ "$(getprop ro.debuggable)" = "1" ]; then
     return 0
   else
     return 1
