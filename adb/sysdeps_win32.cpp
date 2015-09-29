@@ -659,6 +659,12 @@ static int _fh_socket_write(FH f, const void* buf, int len) {
           SystemErrorCodeToString(err).c_str());
         _socket_set_errno(err);
         result = -1;
+    } else {
+        // According to https://code.google.com/p/chromium/issues/detail?id=27870
+        // Winsock Layered Service Providers may cause this.
+        CHECK_LE(result, len) << "Tried to write " << len << " bytes to "
+                              << f->name << ", but " << result
+                              << " bytes reportedly written";
     }
     return result;
 }
@@ -705,6 +711,23 @@ _init_winsock( void )
     }
 }
 
+// Map a socket type to an explicit socket protocol instead of using the socket
+// protocol of 0. Explicit socket protocols are used by most apps and we should
+// do the same to reduce the chance of exercising uncommon code-paths that might
+// have problems or that might load different Winsock service providers that
+// have problems.
+static int GetSocketProtocolFromSocketType(int type) {
+    switch (type) {
+        case SOCK_STREAM:
+            return IPPROTO_TCP;
+        case SOCK_DGRAM:
+            return IPPROTO_UDP;
+        default:
+            LOG(FATAL) << "Unknown socket type: " << type;
+            return 0;
+    }
+}
+
 int network_loopback_client(int port, int type, std::string* error) {
     struct sockaddr_in addr;
     SOCKET  s;
@@ -723,7 +746,7 @@ int network_loopback_client(int port, int type, std::string* error) {
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
-    s = socket(AF_INET, type, 0);
+    s = socket(AF_INET, type, GetSocketProtocolFromSocketType(type));
     if(s == INVALID_SOCKET) {
         *error = android::base::StringPrintf("cannot create socket: %s",
                 SystemErrorCodeToString(WSAGetLastError()).c_str());
@@ -777,7 +800,7 @@ static int _network_server(int port, int type, u_long interface_address,
 
     // TODO: Consider using dual-stack socket that can simultaneously listen on
     // IPv4 and IPv6.
-    s = socket(AF_INET, type, 0);
+    s = socket(AF_INET, type, GetSocketProtocolFromSocketType(type));
     if (s == INVALID_SOCKET) {
         *error = android::base::StringPrintf("cannot create socket: %s",
                 SystemErrorCodeToString(WSAGetLastError()).c_str());
@@ -849,6 +872,7 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = type;
+    hints.ai_protocol = GetSocketProtocolFromSocketType(type);
 
     char port_str[16];
     snprintf(port_str, sizeof(port_str), "%d", port);
@@ -952,6 +976,11 @@ int  adb_setsockopt( int  fd, int  level, int  optname, const void*  optval, soc
         errno = EBADF;
         return -1;
     }
+
+    // TODO: Once we can assume Windows Vista or later, if the caller is trying
+    // to set SOL_SOCKET, SO_SNDBUF/SO_RCVBUF, ignore it since the OS has
+    // auto-tuning.
+
     int result = setsockopt( fh->fh_socket, level, optname,
                              reinterpret_cast<const char*>(optval), optlen );
     if ( result == SOCKET_ERROR ) {
