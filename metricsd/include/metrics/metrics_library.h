@@ -142,10 +142,10 @@ class MetricsLibrary : public MetricsLibraryInterface {
                        bool* result);
 
   // Time at which we last checked if metrics were enabled.
-  static time_t cached_enabled_time_;
+  time_t cached_enabled_time_;
 
   // Cached state of whether or not metrics were enabled.
-  static bool cached_enabled_;
+  bool cached_enabled_;
 
   base::FilePath uma_events_file_;
   base::FilePath consent_file_;
