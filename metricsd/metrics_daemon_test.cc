@@ -14,17 +14,12 @@
  * limitations under the License.
  */
 
-#include <inttypes.h>
-#include <utime.h>
-
-#include <string>
 #include <vector>
 
 #include <base/at_exit.h>
 #include <base/files/file_util.h>
 #include <base/files/scoped_temp_dir.h>
 #include <base/strings/string_number_conversions.h>
-#include <base/strings/stringprintf.h>
 #include <chromeos/flag_helper.h>
 #include <gtest/gtest.h>
 
@@ -34,10 +29,7 @@
 #include "persistent_integer_mock.h"
 
 using base::FilePath;
-using base::StringPrintf;
-using base::Time;
 using base::TimeDelta;
-using base::TimeTicks;
 using std::string;
 using std::vector;
 using ::testing::_;
@@ -47,34 +39,15 @@ using ::testing::Return;
 using ::testing::StrictMock;
 using chromeos_metrics::PersistentIntegerMock;
 
-static const char kFakeDiskStatsFormat[] =
-    "    1793     1788    %" PRIu64 "   105580    "
-    "    196      175     %" PRIu64 "    30290    "
-    "    0    44060   135850\n";
-static const uint64_t kFakeReadSectors[] = {80000, 100000};
-static const uint64_t kFakeWriteSectors[] = {3000, 4000};
-
 
 class MetricsDaemonTest : public testing::Test {
  protected:
-  std::string kFakeDiskStats0;
-  std::string kFakeDiskStats1;
-
   virtual void SetUp() {
     chromeos::FlagHelper::Init(0, nullptr, "");
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
     scaling_max_freq_path_ = temp_dir_.path().Append("scaling_max");
     cpu_max_freq_path_ = temp_dir_.path().Append("cpu_freq_max");
-    disk_stats_path_ = temp_dir_.path().Append("disk_stats");
 
-    kFakeDiskStats0 = base::StringPrintf(kFakeDiskStatsFormat,
-                                           kFakeReadSectors[0],
-                                           kFakeWriteSectors[0]);
-    kFakeDiskStats1 = base::StringPrintf(kFakeDiskStatsFormat,
-                                           kFakeReadSectors[1],
-                                           kFakeWriteSectors[1]);
-
-    CreateFakeDiskStatsFile(kFakeDiskStats0);
     CreateUint64ValueFile(cpu_max_freq_path_, 10000000);
     CreateUint64ValueFile(scaling_max_freq_path_, 10000000);
 
@@ -84,7 +57,7 @@ class MetricsDaemonTest : public testing::Test {
                  false,
                  true,
                  &metrics_lib_,
-                 disk_stats_path_.value(),
+                 "",
                  scaling_max_freq_path_.value(),
                  cpu_max_freq_path_.value(),
                  base::TimeDelta::FromMinutes(30),
@@ -131,12 +104,6 @@ class MetricsDaemonTest : public testing::Test {
     dbus_message_unref(msg);
   }
 
-  // Creates or overwrites an input file containing fake disk stats.
-  void CreateFakeDiskStatsFile(const string& fake_stats) {
-    EXPECT_EQ(base::WriteFile(disk_stats_path_,
-                              fake_stats.data(), fake_stats.size()),
-              fake_stats.size());
-  }
 
   // Creates or overwrites the file in |path| so that it contains the printable
   // representation of |value|.
@@ -156,7 +123,6 @@ class MetricsDaemonTest : public testing::Test {
   // Path for the fake files.
   base::FilePath scaling_max_freq_path_;
   base::FilePath cpu_max_freq_path_;
-  base::FilePath disk_stats_path_;
 
   // Mocks. They are strict mock so that all unexpected
   // calls are marked as failures.
@@ -200,21 +166,6 @@ TEST_F(MetricsDaemonTest, SendSample) {
                      /* min */ 1, /* max */ 100, /* buckets */ 50);
 }
 
-TEST_F(MetricsDaemonTest, ParseDiskStats) {
-  uint64_t read_sectors_now, write_sectors_now;
-  CreateFakeDiskStatsFile(kFakeDiskStats0);
-  ASSERT_TRUE(daemon_.DiskStatsReadStats(&read_sectors_now,
-                                         &write_sectors_now));
-  EXPECT_EQ(read_sectors_now, kFakeReadSectors[0]);
-  EXPECT_EQ(write_sectors_now, kFakeWriteSectors[0]);
-
-  CreateFakeDiskStatsFile(kFakeDiskStats1);
-  ASSERT_TRUE(daemon_.DiskStatsReadStats(&read_sectors_now,
-                                         &write_sectors_now));
-  EXPECT_EQ(read_sectors_now, kFakeReadSectors[1]);
-  EXPECT_EQ(write_sectors_now, kFakeWriteSectors[1]);
-}
-
 TEST_F(MetricsDaemonTest, ProcessMeminfo) {
   string meminfo =
       "MemTotal:        2000000 kB\nMemFree:          500000 kB\n"
@@ -256,16 +207,6 @@ TEST_F(MetricsDaemonTest, ProcessMeminfo2) {
   string meminfo = "MemTotal:        2000000 kB\nMemFree:         1000000 kB\n";
   // Not enough fields.
   EXPECT_FALSE(daemon_.ProcessMeminfo(meminfo));
-}
-
-TEST_F(MetricsDaemonTest, ParseVmStats) {
-  static char kVmStats[] = "pswpin 1345\npswpout 8896\n"
-    "foo 100\nbar 200\npgmajfault 42\netcetc 300\n";
-  struct MetricsDaemon::VmstatRecord stats;
-  EXPECT_TRUE(daemon_.VmStatsParseStats(kVmStats, &stats));
-  EXPECT_EQ(stats.page_faults_, 42);
-  EXPECT_EQ(stats.swap_in_, 1345);
-  EXPECT_EQ(stats.swap_out_, 8896);
 }
 
 TEST_F(MetricsDaemonTest, ReadFreqToInt) {

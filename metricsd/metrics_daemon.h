@@ -29,6 +29,7 @@
 #include <chromeos/daemons/dbus_daemon.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
+#include "collectors/averaged_statistics_collector.h"
 #include "collectors/disk_usage_collector.h"
 #include "metrics/metrics_library.h"
 #include "persistent_integer.h"
@@ -65,6 +66,9 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   // Triggers an upload event and exit. (Used to test UploadService)
   void RunUploaderTest();
 
+  // Returns the active time since boot (uptime minus sleep time) in seconds.
+  static double GetActiveTime();
+
  protected:
   // Used also by the unit tests.
   static const char kComprDataSizeName[];
@@ -79,8 +83,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   FRIEND_TEST(MetricsDaemonTest, GetHistogramPath);
   FRIEND_TEST(MetricsDaemonTest, IsNewEpoch);
   FRIEND_TEST(MetricsDaemonTest, MessageFilter);
-  FRIEND_TEST(MetricsDaemonTest, ParseDiskStats);
-  FRIEND_TEST(MetricsDaemonTest, ParseVmStats);
   FRIEND_TEST(MetricsDaemonTest, ProcessKernelCrash);
   FRIEND_TEST(MetricsDaemonTest, ProcessMeminfo);
   FRIEND_TEST(MetricsDaemonTest, ProcessMeminfo2);
@@ -94,12 +96,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   FRIEND_TEST(MetricsDaemonTest, SendSample);
   FRIEND_TEST(MetricsDaemonTest, SendCpuThrottleMetrics);
   FRIEND_TEST(MetricsDaemonTest, SendZramMetrics);
-
-  // State for disk stats collector callback.
-  enum StatsState {
-    kStatsShort,    // short wait before short interval collection
-    kStatsLong,     // final wait before new collection
-  };
 
   // Type of scale to use for meminfo histograms.  For most of them we use
   // percent of total RAM, but for some we use absolute numbers, usually in
@@ -119,16 +115,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
     MeminfoOp op;            // histogram scale selector, or other operator
     int value;               // value from /proc/meminfo
   };
-
-  // Record for retrieving and reporting values from /proc/vmstat
-  struct VmstatRecord {
-    uint64_t page_faults_;    // major faults
-    uint64_t swap_in_;        // pages swapped in
-    uint64_t swap_out_;       // pages swapped out
-  };
-
-  // Returns the active time since boot (uptime minus sleep time) in seconds.
-  double GetActiveTime();
 
   // D-Bus filter callback.
   static DBusHandlerResult MessageFilter(DBusConnection* connection,
@@ -188,21 +174,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
 
   // Initializes vm and disk stats reporting.
   void StatsReporterInit();
-
-  // Schedules a callback for the next vm and disk stats collection.
-  void ScheduleStatsCallback(int wait);
-
-  // Reads cumulative disk statistics from sysfs.  Returns true for success.
-  bool DiskStatsReadStats(uint64_t* read_sectors, uint64_t* write_sectors);
-
-  // Reads cumulative vm statistics from procfs.  Returns true for success.
-  bool VmStatsReadStats(struct VmstatRecord* stats);
-
-  // Parse cumulative vm statistics from a C string.  Returns true for success.
-  bool VmStatsParseStats(const char* stats, struct VmstatRecord* record);
-
-  // Reports disk and vm statistics.
-  void StatsCallback();
 
   // Schedules meminfo collection callback.
   void ScheduleMeminfoCallback(int wait);
@@ -286,14 +257,6 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   // Selects the wait time for the next memory use callback.
   unsigned int memuse_interval_index_;
 
-  // Contain the most recent disk and vm cumulative stats.
-  uint64_t read_sectors_;
-  uint64_t write_sectors_;
-  struct VmstatRecord vmstats_;
-
-  StatsState stats_state_;
-  double stats_initial_time_;
-
   // The system "HZ", or frequency of ticks.  Some system data uses ticks as a
   // unit, and this is used to convert to standard time units.
   uint32_t ticks_per_second_;
@@ -329,8 +292,8 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   scoped_ptr<PersistentInteger> unclean_shutdowns_daily_count_;
   scoped_ptr<PersistentInteger> unclean_shutdowns_weekly_count_;
   scoped_ptr<DiskUsageCollector> disk_usage_collector_;
+  scoped_ptr<AveragedStatisticsCollector> averaged_stats_collector_;
 
-  std::string diskstats_path_;
   std::string scaling_max_freq_path_;
   std::string cpuinfo_max_freq_path_;
 
