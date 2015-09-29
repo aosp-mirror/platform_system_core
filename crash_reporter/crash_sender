@@ -128,7 +128,11 @@ crash_done() {
 
 is_official_image() {
   [ ${FORCE_OFFICIAL} -ne 0 ] && return 0
-  getprop ro.product.description | grep -q Official
+  if [ "$(getprop ro.secure)" = "1" ]; then
+    return 0
+  else
+    return 1
+  fi
 }
 
 # Returns 0 if the a crash test is currently running.  NOTE: Mirrors
