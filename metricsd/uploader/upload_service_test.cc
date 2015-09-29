@@ -42,6 +42,8 @@ class UploadServiceTest : public testing::Test {
     chromeos_metrics::PersistentInteger::SetMetricsDirectory(
         dir_.path().value());
     metrics_lib_.InitForTest(dir_.path());
+    ASSERT_EQ(0, base::WriteFile(
+        dir_.path().Append(metrics::kConsentFileName), "", 0));
     upload_service_.reset(new UploadService(new MockSystemProfileSetter(),
                                             &metrics_lib_, "", true));
 
