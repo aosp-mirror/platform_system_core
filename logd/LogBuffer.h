@@ -85,10 +85,13 @@ public:
     void unlock() { pthread_mutex_unlock(&mLogElementsLock); }
 
 private:
+
+    static constexpr size_t maxPrune = 256;
+
     void maybePrune(log_id_t id);
     bool prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT);
     LogBufferElementCollection::iterator erase(
-        LogBufferElementCollection::iterator it, bool engageStats = true);
+        LogBufferElementCollection::iterator it, bool coalesce = false);
 };
 
 #endif // _LOGD_LOG_BUFFER_H__
