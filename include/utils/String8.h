@@ -28,7 +28,6 @@
 
 namespace android {
 
-class SharedBuffer;
 class String16;
 class TextOutput;
 
@@ -69,7 +68,6 @@ public:
     inline  bool                isEmpty() const;
     
             size_t              length() const;
-            const SharedBuffer* sharedBuffer() const;
     
             void                clear();
 

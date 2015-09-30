@@ -171,11 +171,6 @@ size_t String16::size() const
     return SharedBuffer::sizeFromData(mString)/sizeof(char16_t)-1;
 }
 
-const SharedBuffer* String16::sharedBuffer() const
-{
-    return SharedBuffer::bufferFromData(mString);
-}
-
 void String16::setTo(const String16& other)
 {
     SharedBuffer::bufferFromData(other.mString)->acquire();
