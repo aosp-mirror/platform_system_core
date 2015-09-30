@@ -221,7 +221,7 @@ TEST_F(LruCacheTest, NoLeak) {
     cache.put(ComplexKey(0), ComplexValue(0));
     cache.put(ComplexKey(1), ComplexValue(1));
     EXPECT_EQ(2U, cache.size());
-    assertInstanceCount(2, 3);  // the null value counts as an instance
+    assertInstanceCount(2, 3);  // the member mNullValue counts as an instance
 }
 
 TEST_F(LruCacheTest, Clear) {
