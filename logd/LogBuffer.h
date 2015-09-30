@@ -86,6 +86,7 @@ public:
 
 private:
 
+    static constexpr size_t minPrune = 4;
     static constexpr size_t maxPrune = 256;
 
     void maybePrune(log_id_t id);
