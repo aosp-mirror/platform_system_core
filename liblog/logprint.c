@@ -774,7 +774,7 @@ WEAK ssize_t utf8_character_length(const char *src, size_t len)
     uint32_t utf32;
 
     if ((first_char & 0x80) == 0) { /* ASCII */
-        return 1;
+        return first_char ? 1 : -1;
     }
 
     /*
