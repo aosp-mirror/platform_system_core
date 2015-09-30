@@ -403,7 +403,7 @@ public:
     void subtract(LogBufferElement *entry);
     // entry->setDropped(1) must follow this call
     void drop(LogBufferElement *entry);
-    // Correct for merging two entries referencing dropped content
+    // Correct for coalescing two entries referencing dropped content
     void erase(LogBufferElement *e) { --mElements[e->getLogId()]; }
 
     std::unique_ptr<const UidEntry *[]> sort(size_t len, log_id id) {

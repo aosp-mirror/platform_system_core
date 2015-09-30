@@ -217,7 +217,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
     return len;
 }
 
-// Prune at most 10% of the log entries or 256, whichever is less.
+// Prune at most 10% of the log entries or maxPrune, whichever is less.
 //
 // mLogElementsLock must be held when this function is called.
 void LogBuffer::maybePrune(log_id_t id) {
@@ -228,18 +228,18 @@ void LogBuffer::maybePrune(log_id_t id) {
         size_t elements = stats.elements(id);
         size_t minElements = elements / 10;
         unsigned long pruneRows = elements * sizeOver / sizes;
-        if (pruneRows <= minElements) {
+        if (pruneRows < minElements) {
             pruneRows = minElements;
         }
-        if (pruneRows > 256) {
-            pruneRows = 256;
+        if (pruneRows > maxPrune) {
+            pruneRows = maxPrune;
         }
         prune(id, pruneRows);
     }
 }
 
 LogBufferElementCollection::iterator LogBuffer::erase(
-        LogBufferElementCollection::iterator it, bool engageStats) {
+        LogBufferElementCollection::iterator it, bool coalesce) {
     LogBufferElement *e = *it;
     log_id_t id = e->getLogId();
 
@@ -248,10 +248,10 @@ LogBufferElementCollection::iterator LogBuffer::erase(
         mLastWorstUid[id].erase(f);
     }
     it = mLogElements.erase(it);
-    if (engageStats) {
-        stats.subtract(e);
-    } else {
+    if (coalesce) {
         stats.erase(e);
+    } else {
+        stats.subtract(e);
     }
     delete e;
 
@@ -286,7 +286,7 @@ class LogBufferElementLast {
 
 public:
 
-    bool merge(LogBufferElement *e, unsigned short dropped) {
+    bool coalesce(LogBufferElement *e, unsigned short dropped) {
         LogBufferElementKey key(e->getUid(), e->getPid(), e->getTid());
         LogBufferElementMap::iterator it = map.find(key.getKey());
         if (it != map.end()) {
@@ -457,7 +457,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         it = mLogElements.begin();
         // Perform at least one mandatory garbage collection cycle in following
         // - clear leading chatty tags
-        // - merge chatty tags
+        // - coalesce chatty tags
         // - check age-out of preserved logs
         bool gc = pruneRows <= 1;
         if (!gc && (worst != (uid_t) -1)) {
@@ -496,9 +496,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
-            // merge any drops
-            if (dropped && last.merge(e, dropped)) {
-                it = erase(it, false);
+            if (dropped && last.coalesce(e, dropped)) {
+                it = erase(it, true);
                 continue;
             }
 
@@ -529,7 +528,6 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 break;
             }
 
-            // unmerged drop message
             if (dropped) {
                 last.add(e);
                 if ((!gc && (e->getUid() == worst))
@@ -563,8 +561,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             } else {
                 stats.drop(e);
                 e->setDropped(1);
-                if (last.merge(e, 1)) {
-                    it = erase(it, false);
+                if (last.coalesce(e, 1)) {
+                    it = erase(it, true);
                 } else {
                     last.add(e);
                     if (!gc || (mLastWorstUid[id].find(worst)
