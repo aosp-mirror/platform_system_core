@@ -388,6 +388,16 @@ static int convertKernelPrioToAndroidPrio(int pri) {
     return ANDROID_LOG_INFO;
 }
 
+static const char *strnrchr(const char *s, size_t len, char c) {
+  const char *save = NULL;
+  for (;len; ++s, len--) {
+    if (*s == c) {
+      save = s;
+    }
+  }
+  return save;
+}
+
 //
 // log a message into the kernel log buffer
 //
@@ -584,11 +594,11 @@ int LogKlog::log(const char *buf) {
     //   eg: [143:healthd]healthd -> [143:healthd]
     size_t taglen = etag - tag;
     // Mediatek-special printk induced stutter
-    char *np = strrchr(tag, ']');
-    if (np && (++np < etag)) {
-        size_t s = etag - np;
-        if (((s + s) < taglen) && !strncmp(np, np - 1 - s, s)) {
-            taglen = np - tag;
+    const char *mp = strnrchr(tag, ']', taglen);
+    if (mp && (++mp < etag)) {
+        size_t s = etag - mp;
+        if (((s + s) < taglen) && !memcmp(mp, mp - 1 - s, s)) {
+            taglen = mp - tag;
         }
     }
     // skip leading space
@@ -606,15 +616,19 @@ int LogKlog::log(const char *buf) {
         b = 1;
     }
     size_t n = 1 + taglen + 1 + b + 1;
+    int rc = n;
+    if ((taglen > n) || (b > n)) { // Can not happen ...
+        rc = -EINVAL;
+        return rc;
+    }
 
     // Allocate a buffer to hold the interpreted log message
-    int rc = n;
     char *newstr = reinterpret_cast<char *>(malloc(n));
     if (!newstr) {
         rc = -ENOMEM;
         return rc;
     }
-    np = newstr;
+    char *np = newstr;
 
     // Convert priority into single-byte Android logger priority
     *np = convertKernelPrioToAndroidPrio(pri);
