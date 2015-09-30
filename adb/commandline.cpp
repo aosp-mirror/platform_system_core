@@ -49,6 +49,7 @@
 #include "adb_io.h"
 #include "adb_utils.h"
 #include "file_sync_service.h"
+#include "services.h"
 #include "shell_service.h"
 #include "transport.h"
 
@@ -108,10 +109,11 @@ static void help() {
         "                                 ('-a' means copy timestamp and mode)\n"
         "  adb sync [ <directory> ]     - copy host->device only if changed\n"
         "                                 (-l means list but don't copy)\n"
-        "  adb shell                    - run remote shell interactively\n"
-        "  adb shell [-Tt] <command>    - run remote shell command\n"
+        "  adb shell [-Ttx]             - run remote shell interactively\n"
+        "  adb shell [-Ttx] <command>   - run remote shell command\n"
         "                                 (-T disables PTY allocation)\n"
         "                                 (-t forces PTY allocation)\n"
+        "                                 (-x disables remote exit codes and stdout/stderr separation)\n"
         "  adb emu <command>            - run emulator console command\n"
         "  adb logcat [ <filter-spec> ] - View device log\n"
         "  adb forward --list           - list all forward socket connections.\n"
@@ -785,12 +787,45 @@ static bool wait_for_device(const char* service, TransportType t, const char* se
     return adb_command(cmd);
 }
 
+// Returns a shell service string with the indicated arguments and command.
+static std::string ShellServiceString(bool use_shell_protocol,
+                                      const std::string& type_arg,
+                                      const std::string& command) {
+    std::vector<std::string> args;
+    if (use_shell_protocol) {
+        args.push_back(kShellServiceArgShellProtocol);
+    }
+    if (!type_arg.empty()) {
+        args.push_back(type_arg);
+    }
+
+    // Shell service string can look like: shell[,arg1,arg2,...]:[command].
+    return android::base::StringPrintf("shell%s%s:%s",
+                                       args.empty() ? "" : ",",
+                                       android::base::Join(args, ',').c_str(),
+                                       command.c_str());
+}
+
+// Connects to the device "shell" service with |command| and prints the
+// resulting output.
 static int send_shell_command(TransportType transport_type, const char* serial,
-                              const std::string& command) {
+                              const std::string& command,
+                              bool disable_shell_protocol) {
+    // Only use shell protocol if it's supported and the caller doesn't want
+    // to explicitly disable it.
+    bool use_shell_protocol = false;
+    if (!disable_shell_protocol) {
+        FeatureSet features = GetFeatureSet(transport_type, serial);
+        use_shell_protocol = CanUseFeature(features, kFeatureShell2);
+    }
+
+    std::string service_string = ShellServiceString(use_shell_protocol, "",
+                                                    command);
+
     int fd;
     while (true) {
         std::string error;
-        fd = adb_connect(command, &error);
+        fd = adb_connect(service_string, &error);
         if (fd >= 0) {
             break;
         }
@@ -799,8 +834,7 @@ static int send_shell_command(TransportType transport_type, const char* serial,
         wait_for_device("wait-for-device", transport_type, serial);
     }
 
-    FeatureSet features = GetFeatureSet(transport_type, serial);
-    int exit_code = read_and_dump(fd, features.count(kFeatureShell2) > 0);
+    int exit_code = read_and_dump(fd, use_shell_protocol);
 
     if (adb_close(fd) < 0) {
         PLOG(ERROR) << "failure closing FD " << fd;
@@ -813,7 +847,7 @@ static int logcat(TransportType transport, const char* serial, int argc, const c
     char* log_tags = getenv("ANDROID_LOG_TAGS");
     std::string quoted = escape_arg(log_tags == nullptr ? "" : log_tags);
 
-    std::string cmd = "shell:export ANDROID_LOG_TAGS=\"" + quoted + "\"; exec logcat";
+    std::string cmd = "export ANDROID_LOG_TAGS=\"" + quoted + "\"; exec logcat";
 
     if (!strcmp(argv[0], "longcat")) {
         cmd += " -v long";
@@ -825,7 +859,8 @@ static int logcat(TransportType transport, const char* serial, int argc, const c
         cmd += " " + escape_arg(*argv++);
     }
 
-    return send_shell_command(transport, serial, cmd);
+    // No need for shell protocol with logcat, always disable for simplicity.
+    return send_shell_command(transport, serial, cmd, true);
 }
 
 static int backup(int argc, const char** argv) {
@@ -1241,7 +1276,7 @@ int adb_commandline(int argc, const char **argv) {
 
         FeatureSet features = GetFeatureSet(transport_type, serial);
 
-        bool use_shell_protocol = (features.count(kFeatureShell2) > 0);
+        bool use_shell_protocol = CanUseFeature(features, kFeatureShell2);
         if (!use_shell_protocol) {
             D("shell protocol not supported, using raw data transfer");
         } else {
@@ -1255,19 +1290,22 @@ int adb_commandline(int argc, const char **argv) {
         std::string shell_type_arg;
         while (argc) {
             if (!strcmp(argv[0], "-T") || !strcmp(argv[0], "-t")) {
-                if (features.count(kFeatureShell2) == 0) {
+                if (!CanUseFeature(features, kFeatureShell2)) {
                     fprintf(stderr, "error: target doesn't support PTY args -Tt\n");
                     return 1;
                 }
-                shell_type_arg = argv[0];
+                shell_type_arg = (argv[0][1] == 'T') ? kShellServiceArgRaw
+                                                     : kShellServiceArgPty;
+                --argc;
+                ++argv;
+            } else if (!strcmp(argv[0], "-x")) {
+                use_shell_protocol = false;
                 --argc;
                 ++argv;
             } else {
                 break;
             }
         }
-        std::string service_string = android::base::StringPrintf(
-                "shell%s:", shell_type_arg.c_str());
 
         if (h) {
             printf("\x1b[41;33m");
@@ -1276,6 +1314,8 @@ int adb_commandline(int argc, const char **argv) {
 
         if (!argc) {
             D("starting interactive shell");
+            std::string service_string =
+                    ShellServiceString(use_shell_protocol, shell_type_arg, "");
             r = interactive_shell(service_string, use_shell_protocol);
             if (h) {
                 printf("\x1b[0m");
@@ -1285,8 +1325,10 @@ int adb_commandline(int argc, const char **argv) {
         }
 
         // We don't escape here, just like ssh(1). http://b/20564385.
-        service_string += android::base::Join(
+        std::string command = android::base::Join(
                 std::vector<const char*>(argv, argv + argc), ' ');
+        std::string service_string =
+                ShellServiceString(use_shell_protocol, shell_type_arg, command);
 
         while (true) {
             D("non-interactive shell loop. cmd=%s", service_string.c_str());
@@ -1389,7 +1431,9 @@ int adb_commandline(int argc, const char **argv) {
     }
     else if (!strcmp(argv[0], "bugreport")) {
         if (argc != 1) return usage();
-        return send_shell_command(transport_type, serial, "shell:bugreport");
+        // No need for shell protocol with bugreport, always disable for
+        // simplicity.
+        return send_shell_command(transport_type, serial, "bugreport", true);
     }
     else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
         bool reverse = !strcmp(argv[0], "reverse");
@@ -1566,7 +1610,7 @@ int adb_commandline(int argc, const char **argv) {
         // Only list the features common to both the adb client and the device.
         FeatureSet features = GetFeatureSet(transport_type, serial);
         for (const std::string& name : features) {
-            if (supported_features().count(name) > 0) {
+            if (CanUseFeature(features, name)) {
                 printf("%s\n", name.c_str());
             }
         }
@@ -1578,13 +1622,15 @@ int adb_commandline(int argc, const char **argv) {
 }
 
 static int pm_command(TransportType transport, const char* serial, int argc, const char** argv) {
-    std::string cmd = "shell:pm";
+    std::string cmd = "pm";
 
     while (argc-- > 0) {
         cmd += " " + escape_arg(*argv++);
     }
 
-    return send_shell_command(transport, serial, cmd);
+    // TODO(dpursell): add command-line arguments to install/uninstall to
+    // manually disable shell protocol if needed.
+    return send_shell_command(transport, serial, cmd, false);
 }
 
 static int uninstall_app(TransportType transport, const char* serial, int argc, const char** argv) {
@@ -1605,8 +1651,8 @@ static int uninstall_app(TransportType transport, const char* serial, int argc, 
 }
 
 static int delete_file(TransportType transport, const char* serial, const std::string& filename) {
-    std::string cmd = "shell:rm -f " + escape_arg(filename);
-    return send_shell_command(transport, serial, cmd);
+    std::string cmd = "rm -f " + escape_arg(filename);
+    return send_shell_command(transport, serial, cmd, false);
 }
 
 static int install_app(TransportType transport, const char* serial, int argc, const char** argv) {
