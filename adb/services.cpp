@@ -46,6 +46,7 @@
 #include "adb_utils.h"
 #include "file_sync_service.h"
 #include "remount_service.h"
+#include "services.h"
 #include "shell_service.h"
 #include "transport.h"
 
@@ -195,33 +196,37 @@ void reverse_service(int fd, void* arg)
 }
 
 // Shell service string can look like:
-//   shell[args]:[command]
-// Currently the only supported args are -T (force raw) and -t (force PTY).
+//   shell[,arg1,arg2,...]:[command]
 static int ShellService(const std::string& args, const atransport* transport) {
     size_t delimiter_index = args.find(':');
     if (delimiter_index == std::string::npos) {
         LOG(ERROR) << "No ':' found in shell service arguments: " << args;
         return -1;
     }
+
     const std::string service_args = args.substr(0, delimiter_index);
     const std::string command = args.substr(delimiter_index + 1);
 
-    SubprocessType type;
-    if (service_args.empty()) {
-        // Default: use PTY for interactive, raw for non-interactive.
-        type = (command.empty() ? SubprocessType::kPty : SubprocessType::kRaw);
-    } else if (service_args == "-T") {
-        type = SubprocessType::kRaw;
-    } else if (service_args == "-t") {
-        type = SubprocessType::kPty;
-    } else {
-        LOG(ERROR) << "Unsupported shell service arguments: " << args;
-        return -1;
-    }
+    // Defaults:
+    //   PTY for interactive, raw for non-interactive.
+    //   No protocol.
+    SubprocessType type(command.empty() ? SubprocessType::kPty
+                                        : SubprocessType::kRaw);
+    SubprocessProtocol protocol = SubprocessProtocol::kNone;
 
-    SubprocessProtocol protocol =
-            (transport->CanUseFeature(kFeatureShell2) ? SubprocessProtocol::kShell
-                                                      : SubprocessProtocol::kNone);
+    for (const std::string& arg : android::base::Split(service_args, ",")) {
+        if (arg == kShellServiceArgRaw) {
+            type = SubprocessType::kRaw;
+        } else if (arg == kShellServiceArgPty) {
+            type = SubprocessType::kPty;
+        } else if (arg == kShellServiceArgShellProtocol) {
+            protocol = SubprocessProtocol::kShell;
+        }
+        else if (!arg.empty()) {
+            LOG(ERROR) << "Unsupported shell service arguments: " << args;
+            return -1;
+        }
+    }
 
     return StartSubprocess(command.c_str(), type, protocol);
 }
