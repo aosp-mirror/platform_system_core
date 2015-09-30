@@ -39,14 +39,15 @@ static const char priority_message[] = { KMSG_PRIORITY(LOG_INFO), '\0' };
 // Parsing is hard
 
 // called if we see a '<', s is the next character, returns pointer after '>'
-static char *is_prio(char *s) {
-    if (!isdigit(*s++)) {
+static char *is_prio(char *s, size_t len) {
+    if (!len || !isdigit(*s++)) {
         return NULL;
     }
-    static const size_t max_prio_len = 4;
-    size_t len = 0;
+    --len;
+    static const size_t max_prio_len = (len < 4) ? len : 4;
+    size_t priolen = 0;
     char c;
-    while (((c = *s++)) && (++len <= max_prio_len)) {
+    while (((c = *s++)) && (++priolen <= max_prio_len)) {
         if (!isdigit(c)) {
             return ((c == '>') && (*s == '[')) ? s : NULL;
         }
@@ -55,16 +56,19 @@ static char *is_prio(char *s) {
 }
 
 // called if we see a '[', s is the next character, returns pointer after ']'
-static char *is_timestamp(char *s) {
-    while (*s == ' ') {
+static char *is_timestamp(char *s, size_t len) {
+    while (len && (*s == ' ')) {
         ++s;
+        --len;
     }
-    if (!isdigit(*s++)) {
+    if (!len || !isdigit(*s++)) {
         return NULL;
     }
+    --len;
     bool first_period = true;
     char c;
-    while ((c = *s++)) {
+    while (len && ((c = *s++))) {
+        --len;
         if ((c == '.') && first_period) {
             first_period = false;
         } else if (!isdigit(c)) {
@@ -77,6 +81,8 @@ static char *is_timestamp(char *s) {
 // Like strtok_r with "\r\n" except that we look for log signatures (regex)
 //  \(\(<[0-9]\{1,4\}>\)\([[] *[0-9]+[.][0-9]+[]] \)\{0,1\}\|[[] *[0-9]+[.][0-9]+[]] \)
 // and split if we see a second one without a newline.
+// We allow nuls in content, monitoring the overall length and sub-length of
+// the discovered tokens.
 
 #define SIGNATURE_MASK     0xF0
 // <digit> following ('0' to '9' masked with ~SIGNATURE_MASK) added to signature
@@ -85,7 +91,11 @@ static char *is_timestamp(char *s) {
 // space is one more than <digit> of 9
 #define OPEN_BRACKET_SPACE ((char)(OPEN_BRACKET_SIG | 10))
 
-char *log_strtok_r(char *s, char **last) {
+char *log_strntok_r(char *s, size_t *len, char **last, size_t *sublen) {
+    *sublen = 0;
+    if (!*len) {
+        return NULL;
+    }
     if (!s) {
         if (!(s = *last)) {
             return NULL;
@@ -95,6 +105,7 @@ char *log_strtok_r(char *s, char **last) {
         if ((*s & SIGNATURE_MASK) == LESS_THAN_SIG) {
             *s = (*s & ~SIGNATURE_MASK) + '0';
             *--s = '<';
+            ++*len;
         }
         // fixup for log signature split [,
         // OPEN_BRACKET_SPACE is space, OPEN_BRACKET_SIG + <digit>
@@ -105,24 +116,30 @@ char *log_strtok_r(char *s, char **last) {
                 *s = (*s & ~SIGNATURE_MASK) + '0';
             }
             *--s = '[';
+            ++*len;
         }
     }
 
-    s += strspn(s, "\r\n");
+    while (*len && ((*s == '\r') || (*s == '\n'))) {
+        ++s;
+        --*len;
+    }
 
-    if (!*s) { // no non-delimiter characters
+    if (!*len) {
         *last = NULL;
         return NULL;
     }
     char *peek, *tok = s;
 
     for (;;) {
-        char c = *s++;
-        switch (c) {
-        case '\0':
+        if (*len == 0) {
             *last = NULL;
             return tok;
-
+        }
+        char c = *s++;
+        --*len;
+        size_t adjust;
+        switch (c) {
         case '\r':
         case '\n':
             s[-1] = '\0';
@@ -130,7 +147,7 @@ char *log_strtok_r(char *s, char **last) {
             return tok;
 
         case '<':
-            peek = is_prio(s);
+            peek = is_prio(s, *len);
             if (!peek) {
                 break;
             }
@@ -141,14 +158,26 @@ char *log_strtok_r(char *s, char **last) {
                 *last = s;
                 return tok;
             }
+            adjust = peek - s;
+            if (adjust > *len) {
+                adjust = *len;
+            }
+            *sublen += adjust;
+            *len -= adjust;
             s = peek;
-            if ((*s == '[') && ((peek = is_timestamp(s + 1)))) {
+            if ((*s == '[') && ((peek = is_timestamp(s + 1, *len - 1)))) {
+                adjust = peek - s;
+                if (adjust > *len) {
+                    adjust = *len;
+                }
+                *sublen += adjust;
+                *len -= adjust;
                 s = peek;
             }
             break;
 
         case '[':
-            peek = is_timestamp(s);
+            peek = is_timestamp(s, *len);
             if (!peek) {
                 break;
             }
@@ -163,9 +192,16 @@ char *log_strtok_r(char *s, char **last) {
                 *last = s;
                 return tok;
             }
+            adjust = peek - s;
+            if (adjust > *len) {
+                adjust = *len;
+            }
+            *sublen += adjust;
+            *len -= adjust;
             s = peek;
             break;
         }
+        ++*sublen;
     }
     // NOTREACHED
 }
@@ -212,17 +248,17 @@ bool LogKlog::onDataAvailable(SocketClient *cli) {
         bool full = len == (sizeof(buffer) - 1);
         char *ep = buffer + len;
         *ep = '\0';
-        len = 0;
+        size_t sublen;
         for(char *ptr = NULL, *tok = buffer;
-                ((tok = log_strtok_r(tok, &ptr)));
+                ((tok = log_strntok_r(tok, &len, &ptr, &sublen)));
                 tok = NULL) {
-            if (((tok + strlen(tok)) == ep) && (retval != 0) && full) {
-                len = strlen(tok);
-                memmove(buffer, tok, len);
+            if (((tok + sublen) >= ep) && (retval != 0) && full) {
+                memmove(buffer, tok, sublen);
+                len = sublen;
                 break;
             }
             if (*tok) {
-                log(tok);
+                log(tok, sublen);
             }
         }
     }
@@ -232,9 +268,11 @@ bool LogKlog::onDataAvailable(SocketClient *cli) {
 
 
 void LogKlog::calculateCorrection(const log_time &monotonic,
-                                  const char *real_string) {
+                                  const char *real_string,
+                                  size_t len) {
     log_time real;
-    if (!real.strptime(real_string, "%Y-%m-%d %H:%M:%S.%09q UTC")) {
+    const char *ep = real.strptime(real_string, "%Y-%m-%d %H:%M:%S.%09q UTC");
+    if (!ep || (ep > &real_string[len])) {
         return;
     }
     // kernel report UTC, log_time::strptime is localtime from calendar.
@@ -249,36 +287,85 @@ void LogKlog::calculateCorrection(const log_time &monotonic,
     correction = real - monotonic;
 }
 
-void LogKlog::sniffTime(log_time &now, const char **buf, bool reverse) {
-    const char *cp;
-    if ((cp = now.strptime(*buf, "[ %s.%q]"))) {
-        static const char suspend[] = "PM: suspend entry ";
-        static const char resume[] = "PM: suspend exit ";
-        static const char healthd[] = "healthd: battery ";
-        static const char suspended[] = "Suspended for ";
+static const char suspendStr[] = "PM: suspend entry ";
+static const char resumeStr[] = "PM: suspend exit ";
+static const char suspendedStr[] = "Suspended for ";
 
-        if (isspace(*cp)) {
+static const char *strnstr(const char *s, size_t len, const char *needle) {
+    char c;
+
+    if (!len) {
+        return NULL;
+    }
+    if ((c = *needle++) != 0) {
+        size_t needleLen = strlen(needle);
+        do {
+            do {
+                if (len <= needleLen) {
+                    return NULL;
+                }
+                --len;
+            } while (*s++ != c);
+        } while (memcmp(s, needle, needleLen) != 0);
+        s--;
+    }
+    return s;
+}
+
+void LogKlog::sniffTime(log_time &now,
+                        const char **buf, size_t len,
+                        bool reverse) {
+    const char *cp = now.strptime(*buf, "[ %s.%q]");
+    if (cp && (cp >= &(*buf)[len])) {
+        cp = NULL;
+    }
+    len -= cp - *buf;
+    if (cp) {
+        static const char healthd[] = "healthd";
+        static const char battery[] = ": battery ";
+
+        if (len && isspace(*cp)) {
             ++cp;
+            --len;
         }
-        if (!strncmp(cp, suspend, sizeof(suspend) - 1)) {
-            calculateCorrection(now, cp + sizeof(suspend) - 1);
-        } else if (!strncmp(cp, resume, sizeof(resume) - 1)) {
-            calculateCorrection(now, cp + sizeof(resume) - 1);
-        } else if (!strncmp(cp, healthd, sizeof(healthd) - 1)) {
+        *buf = cp;
+
+        const char *b;
+        if (((b = strnstr(cp, len, suspendStr)))
+                && ((size_t)((b += sizeof(suspendStr) - 1) - cp) < len)) {
+            len -= b - cp;
+            calculateCorrection(now, b, len);
+        } else if (((b = strnstr(cp, len, resumeStr)))
+                && ((size_t)((b += sizeof(resumeStr) - 1) - cp) < len)) {
+            len -= b - cp;
+            calculateCorrection(now, b, len);
+        } else if (((b = strnstr(cp, len, healthd)))
+                && ((size_t)((b += sizeof(healthd) - 1) - cp) < len)
+                && ((b = strnstr(b, len -= b - cp, battery)))
+                && ((size_t)((b += sizeof(battery) - 1) - cp) < len)) {
+            len -= b - cp;
+            // NB: healthd is roughly 150us late, worth the price to deal with
+            //     ntp-induced or hardware clock drift.
             // look for " 2???-??-?? ??:??:??.????????? ???"
-            const char *tp;
-            for (tp = cp + sizeof(healthd) - 1; *tp && (*tp != '\n'); ++tp) {
-                if ((tp[0] == ' ') && (tp[1] == '2') && (tp[5] == '-')) {
-                    calculateCorrection(now, tp + 1);
+            for (; len && *b && (*b != '\n'); ++b, --len) {
+                if ((b[0] == ' ') && (b[1] == '2') && (b[5] == '-')) {
+                    calculateCorrection(now, b + 1, len - 1);
                     break;
                 }
             }
-        } else if (!strncmp(cp, suspended, sizeof(suspended) - 1)) {
+        } else if (((b = strnstr(cp, len, suspendedStr)))
+                && ((size_t)((b += sizeof(suspendStr) - 1) - cp) < len)) {
+            len -= b - cp;
             log_time real;
             char *endp;
-            real.tv_sec = strtol(cp + sizeof(suspended) - 1, &endp, 10);
-            if (*endp == '.') {
-                real.tv_nsec = strtol(endp + 1, &endp, 10) * 1000000L;
+            real.tv_sec = strtol(b, &endp, 10);
+            if ((*endp == '.') && ((size_t)(endp - b) < len)) {
+                unsigned long multiplier = NS_PER_SEC;
+                real.tv_nsec = 0;
+                len -= endp - b;
+                while (--len && isdigit(*++endp) && (multiplier /= 10)) {
+                    real.tv_nsec += (*endp - '0') * multiplier;
+                }
                 if (reverse) {
                     correction -= real;
                 } else {
@@ -288,14 +375,13 @@ void LogKlog::sniffTime(log_time &now, const char **buf, bool reverse) {
         }
 
         convertMonotonicToReal(now);
-        *buf = cp;
     } else {
         now = log_time(CLOCK_REALTIME);
     }
 }
 
-pid_t LogKlog::sniffPid(const char *cp) {
-    while (*cp) {
+pid_t LogKlog::sniffPid(const char *cp, size_t len) {
+    while (len) {
         // Mediatek kernels with modified printk
         if (*cp == '[') {
             int pid = 0;
@@ -306,48 +392,21 @@ pid_t LogKlog::sniffPid(const char *cp) {
             break; // Only the first one
         }
         ++cp;
+        --len;
     }
     return 0;
 }
 
-// Passed the entire SYSLOG_ACTION_READ_ALL buffer and interpret a
-// compensated start time.
-void LogKlog::synchronize(const char *buf) {
-    const char *cp = strstr(buf, "] PM: suspend e");
-    if (!cp) {
-        return;
-    }
-
-    do {
-        --cp;
-    } while ((cp > buf) && (isdigit(*cp) || isspace(*cp) || (*cp == '.')));
-
-    log_time now;
-    sniffTime(now, &cp, true);
-
-    char *suspended = strstr(buf, "] Suspended for ");
-    if (!suspended || (suspended > cp)) {
-        return;
-    }
-    cp = suspended;
-
-    do {
-        --cp;
-    } while ((cp > buf) && (isdigit(*cp) || isspace(*cp) || (*cp == '.')));
-
-    sniffTime(now, &cp, true);
-}
-
 // kernel log prefix, convert to a kernel log priority number
-static int parseKernelPrio(const char **buf) {
+static int parseKernelPrio(const char **buf, size_t len) {
     int pri = LOG_USER | LOG_INFO;
     const char *cp = *buf;
-    if (*cp == '<') {
+    if (len && (*cp == '<')) {
         pri = 0;
-        while(isdigit(*++cp)) {
+        while(--len && isdigit(*++cp)) {
             pri = (pri * 10) + *cp - '0';
         }
-        if (*cp == '>') {
+        if (len && (*cp == '>')) {
             ++cp;
         } else {
             cp = *buf;
@@ -356,6 +415,50 @@ static int parseKernelPrio(const char **buf) {
         *buf = cp;
     }
     return pri;
+}
+
+// Passed the entire SYSLOG_ACTION_READ_ALL buffer and interpret a
+// compensated start time.
+void LogKlog::synchronize(const char *buf, size_t len) {
+    const char *cp = strnstr(buf, len, suspendStr);
+    if (!cp) {
+        cp = strnstr(buf, len, resumeStr);
+        if (!cp) {
+            return;
+        }
+    } else {
+        const char *rp = strnstr(buf, len, resumeStr);
+        if (rp && (rp < cp)) {
+            cp = rp;
+        }
+    }
+
+    do {
+        --cp;
+    } while ((cp > buf) && (*cp != '\n'));
+    if (*cp == '\n') {
+        ++cp;
+    }
+    parseKernelPrio(&cp, len - (cp - buf));
+
+    log_time now;
+    sniffTime(now, &cp, len - (cp - buf), true);
+
+    const char *suspended = strnstr(buf, len, suspendedStr);
+    if (!suspended || (suspended > cp)) {
+        return;
+    }
+    cp = suspended;
+
+    do {
+        --cp;
+    } while ((cp > buf) && (*cp != '\n'));
+    if (*cp == '\n') {
+        ++cp;
+    }
+    parseKernelPrio(&cp, len - (cp - buf));
+
+    sniffTime(now, &cp, len - (cp - buf), true);
 }
 
 // Convert kernel log priority number into an Android Logger priority number
@@ -431,19 +534,20 @@ static const char *strnrchr(const char *s, size_t len, char c) {
 //  logd.klogd:
 // return -1 if message logd.klogd: <signature>
 //
-int LogKlog::log(const char *buf) {
-    if (auditd && strstr(buf, " audit(")) {
+int LogKlog::log(const char *buf, size_t len) {
+    if (auditd && strnstr(buf, len, " audit(")) {
         return 0;
     }
 
-    int pri = parseKernelPrio(&buf);
+    const char *p = buf;
+    int pri = parseKernelPrio(&p, len);
 
     log_time now;
-    sniffTime(now, &buf, false);
+    sniffTime(now, &p, len - (p - buf), false);
 
     // sniff for start marker
     const char klogd_message[] = "logd.klogd: ";
-    const char *start = strstr(buf, klogd_message);
+    const char *start = strnstr(p, len - (p - buf), klogd_message);
     if (start) {
         uint64_t sig = strtoll(start + sizeof(klogd_message) - 1, NULL, 10);
         if (sig == signature.nsec()) {
@@ -462,7 +566,7 @@ int LogKlog::log(const char *buf) {
     }
 
     // Parse pid, tid and uid
-    const pid_t pid = sniffPid(buf);
+    const pid_t pid = sniffPid(p, len - (p - buf));
     const pid_t tid = pid;
     const uid_t uid = pid ? logbuf->pidToUid(pid) : 0;
 
@@ -470,40 +574,43 @@ int LogKlog::log(const char *buf) {
     // Some may view the following as an ugly heuristic, the desire is to
     // beautify the kernel logs into an Android Logging format; the goal is
     // admirable but costly.
-    while (isspace(*buf)) {
-        ++buf;
+    while ((isspace(*p) || !*p) && (p < &buf[len])) {
+        ++p;
     }
-    if (!*buf) {
+    if (p >= &buf[len]) { // timestamp, no content
         return 0;
     }
-    start = buf;
+    start = p;
     const char *tag = "";
     const char *etag = tag;
-    if (!isspace(*buf)) {
+    size_t taglen = len - (p - buf);
+    if (!isspace(*p) && *p) {
         const char *bt, *et, *cp;
 
-        bt = buf;
-        if (!strncmp(buf, "[INFO]", 6)) {
+        bt = p;
+        if (!strncmp(p, "[INFO]", 6)) {
             // <PRI>[<TIME>] "[INFO]"<tag> ":" message
-            bt = buf + 6;
+            bt = p + 6;
+            taglen -= 6;
         }
-        for(et = bt; *et && (*et != ':') && !isspace(*et); ++et) {
+        for(et = bt; taglen && *et && (*et != ':') && !isspace(*et); ++et, --taglen) {
            // skip ':' within [ ... ]
            if (*et == '[') {
-               while (*et && *et != ']') {
+               while (taglen && *et && *et != ']') {
                    ++et;
+                   --taglen;
                }
             }
         }
-        for(cp = et; isspace(*cp); ++cp);
+        for(cp = et; taglen && isspace(*cp); ++cp, --taglen);
         size_t size;
 
         if (*cp == ':') {
             // One Word
             tag = bt;
             etag = et;
-            buf = cp + 1;
-        } else {
+            p = cp + 1;
+        } else if (taglen) {
             size = et - bt;
             if (strncmp(bt, cp, size)) {
                 // <PRI>[<TIME>] <tag>_host '<tag>.<num>' : message
@@ -511,67 +618,72 @@ int LogKlog::log(const char *buf) {
                         && !strncmp(bt, cp, size - 5)) {
                     const char *b = cp;
                     cp += size - 5;
+                    taglen -= size - 5;
                     if (*cp == '.') {
-                        while (!isspace(*++cp) && (*cp != ':'));
+                        while (--taglen && !isspace(*++cp) && (*cp != ':'));
                         const char *e;
-                        for(e = cp; isspace(*cp); ++cp);
+                        for(e = cp; taglen && isspace(*cp); ++cp, --taglen);
                         if (*cp == ':') {
                             tag = b;
                             etag = e;
-                            buf = cp + 1;
+                            p = cp + 1;
                         }
                     }
                 } else {
-                    while (!isspace(*++cp) && (*cp != ':'));
+                    while (--taglen && !isspace(*++cp) && (*cp != ':'));
                     const char *e;
-                    for(e = cp; isspace(*cp); ++cp);
+                    for(e = cp; taglen && isspace(*cp); ++cp, --taglen);
                     // Two words
                     if (*cp == ':') {
                         tag = bt;
                         etag = e;
-                        buf = cp + 1;
+                        p = cp + 1;
                     }
                 }
             } else if (isspace(cp[size])) {
                 cp += size;
-                while (isspace(*++cp));
+                taglen -= size;
+                while (--taglen && isspace(*++cp));
                 // <PRI>[<TIME>] <tag> <tag> : message
                 if (*cp == ':') {
                     tag = bt;
                     etag = et;
-                    buf = cp + 1;
+                    p = cp + 1;
                 }
             } else if (cp[size] == ':') {
                 // <PRI>[<TIME>] <tag> <tag> : message
                 tag = bt;
                 etag = et;
-                buf = cp + size + 1;
+                p = cp + size + 1;
             } else if ((cp[size] == '.') || isdigit(cp[size])) {
                 // <PRI>[<TIME>] <tag> '<tag>.<num>' : message
                 // <PRI>[<TIME>] <tag> '<tag><num>' : message
                 const char *b = cp;
                 cp += size;
-                while (!isspace(*++cp) && (*cp != ':'));
+                taglen -= size;
+                while (--taglen && !isspace(*++cp) && (*cp != ':'));
                 const char *e = cp;
-                while (isspace(*cp)) {
+                while (taglen && isspace(*cp)) {
                     ++cp;
+                    --taglen;
                 }
                 if (*cp == ':') {
                     tag = b;
                     etag = e;
-                    buf = cp + 1;
+                    p = cp + 1;
                 }
             } else {
-                while (!isspace(*++cp) && (*cp != ':'));
+                while (--taglen && !isspace(*++cp) && (*cp != ':'));
                 const char *e = cp;
-                while (isspace(*cp)) {
+                while (taglen && isspace(*cp)) {
                     ++cp;
+                    --taglen;
                 }
                 // Two words
                 if (*cp == ':') {
                     tag = bt;
                     etag = e;
-                    buf = cp + 1;
+                    p = cp + 1;
                 }
             }
         }
@@ -583,16 +695,16 @@ int LogKlog::log(const char *buf) {
                 || ((size == 3) && (isdigit(tag[1]) && isdigit(tag[2])))
             // blacklist
                 || ((size == 3) && !strncmp(tag, "CPU", 3))
-                || ((size == 7) && !strncmp(tag, "WARNING", 7))
-                || ((size == 5) && !strncmp(tag, "ERROR", 5))
-                || ((size == 4) && !strncmp(tag, "INFO", 4))) {
-            buf = start;
+                || ((size == 7) && !strncasecmp(tag, "WARNING", 7))
+                || ((size == 5) && !strncasecmp(tag, "ERROR", 5))
+                || ((size == 4) && !strncasecmp(tag, "INFO", 4))) {
+            p = start;
             etag = tag = "";
         }
     }
     // Suppress additional stutter in tag:
     //   eg: [143:healthd]healthd -> [143:healthd]
-    size_t taglen = etag - tag;
+    taglen = etag - tag;
     // Mediatek-special printk induced stutter
     const char *mp = strnrchr(tag, ']', taglen);
     if (mp && (++mp < etag)) {
@@ -602,17 +714,17 @@ int LogKlog::log(const char *buf) {
         }
     }
     // skip leading space
-    while (isspace(*buf)) {
-        ++buf;
+    while ((isspace(*p) || !*p) && (p < &buf[len])) {
+        ++p;
     }
-    // truncate trailing space
-    size_t b = strlen(buf);
-    while (b && isspace(buf[b-1])) {
+    // truncate trailing space or nuls
+    size_t b = len - (p - buf);
+    while (b && (isspace(p[b-1]) || !p[b-1])) {
         --b;
     }
     // trick ... allow tag with empty content to be logged. log() drops empty
     if (!b && taglen) {
-        buf = " ";
+        p = " ";
         b = 1;
     }
     size_t n = 1 + taglen + 1 + b + 1;
@@ -635,13 +747,13 @@ int LogKlog::log(const char *buf) {
     ++np;
 
     // Copy parsed tag following priority
-    strncpy(np, tag, taglen);
+    memcpy(np, tag, taglen);
     np += taglen;
     *np = '\0';
     ++np;
 
     // Copy main message to the remainder
-    strncpy(np, buf, b);
+    memcpy(np, p, b);
     np[b] = '\0';
 
     // Log message
