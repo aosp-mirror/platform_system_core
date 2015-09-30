@@ -217,11 +217,6 @@ size_t String8::length() const
     return SharedBuffer::sizeFromData(mString)-1;
 }
 
-const SharedBuffer* String8::sharedBuffer() const
-{
-    return SharedBuffer::bufferFromData(mString);
-}
-
 String8 String8::format(const char* fmt, ...)
 {
     va_list args;
