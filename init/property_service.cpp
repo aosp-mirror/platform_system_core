@@ -90,10 +90,11 @@ void property_init() {
     }
 }
 
-static int check_mac_perms(const char *name, char *sctx)
+static int check_mac_perms(const char *name, char *sctx, struct ucred *cr)
 {
     char *tctx = NULL;
     int result = 0;
+    property_audit_data audit_data;
 
     if (!sctx)
         goto err;
@@ -104,7 +105,10 @@ static int check_mac_perms(const char *name, char *sctx)
     if (selabel_lookup(sehandle_prop, &tctx, name, 1) != 0)
         goto err;
 
-    if (selinux_check_access(sctx, tctx, "property_service", "set", (void*) name) == 0)
+    audit_data.name = name;
+    audit_data.cr = cr;
+
+    if (selinux_check_access(sctx, tctx, "property_service", "set", reinterpret_cast<void*>(&audit_data)) == 0)
         result = 1;
 
     freecon(tctx);
@@ -112,7 +116,7 @@ static int check_mac_perms(const char *name, char *sctx)
     return result;
 }
 
-static int check_control_mac_perms(const char *name, char *sctx)
+static int check_control_mac_perms(const char *name, char *sctx, struct ucred *cr)
 {
     /*
      *  Create a name prefix out of ctl.<service name>
@@ -126,19 +130,19 @@ static int check_control_mac_perms(const char *name, char *sctx)
     if (ret < 0 || (size_t) ret >= sizeof(ctl_name))
         return 0;
 
-    return check_mac_perms(ctl_name, sctx);
+    return check_mac_perms(ctl_name, sctx, cr);
 }
 
 /*
  * Checks permissions for setting system properties.
  * Returns 1 if uid allowed, 0 otherwise.
  */
-static int check_perms(const char *name, char *sctx)
+static int check_perms(const char *name, char *sctx, struct ucred *cr)
 {
     if(!strncmp(name, "ro.", 3))
         name +=3;
 
-    return check_mac_perms(name, sctx);
+    return check_mac_perms(name, sctx, cr);
 }
 
 std::string property_get(const char* name) {
@@ -314,14 +318,14 @@ static void handle_property_set_fd()
             // Keep the old close-socket-early behavior when handling
             // ctl.* properties.
             close(s);
-            if (check_control_mac_perms(msg.value, source_ctx)) {
+            if (check_control_mac_perms(msg.value, source_ctx, &cr)) {
                 handle_control_message((char*) msg.name + 4, (char*) msg.value);
             } else {
                 ERROR("sys_prop: Unable to %s service ctl [%s] uid:%d gid:%d pid:%d\n",
                         msg.name + 4, msg.value, cr.uid, cr.gid, cr.pid);
             }
         } else {
-            if (check_perms(msg.name, source_ctx)) {
+            if (check_perms(msg.name, source_ctx, &cr)) {
                 property_set((char*) msg.name, (char*) msg.value);
             } else {
                 ERROR("sys_prop: permission denied uid:%d  name:%s\n",
