@@ -117,6 +117,7 @@ LOCAL_MODULE := crash_reporter_tests
 LOCAL_CPP_EXTENSION := $(crash_reporter_cpp_extension)
 LOCAL_SHARED_LIBRARIES := libchrome \
     libchromeos \
+    libcutils \
     libdbus \
     libpcrecpp
 LOCAL_SRC_FILES := $(crash_reporter_test_src)

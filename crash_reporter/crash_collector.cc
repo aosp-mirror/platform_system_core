@@ -53,9 +53,6 @@ const char kSystemCrashPath[] = "/data/misc/crash_reporter/crash";
 const char kUploadVarPrefix[] = "upload_var_";
 const char kUploadFilePrefix[] = "upload_file_";
 
-// Key of the lsb-release entry containing the OS version.
-const char kLsbVersionKey[] = "CHROMEOS_RELEASE_VERSION";
-
 // Normally this path is not used.  Unfortunately, there are a few edge cases
 // where we need this.  Any process that runs as kDefaultUserName that crashes
 // is consider a "user crash".  That includes the initial Chrome browser that
@@ -387,27 +384,14 @@ void CrashCollector::AddCrashMetaUploadData(const std::string &key,
 void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
                                         const std::string &exec_name,
                                         const std::string &payload_path) {
-  chromeos::KeyValueStore store;
-  if (!store.Load(FilePath(lsb_release_))) {
-    LOG(ERROR) << "Problem parsing " << lsb_release_;
-    // Even though there was some failure, take as much as we could read.
-  }
-
-  std::string version("unknown");
-  if (!store.GetString(kLsbVersionKey, &version)) {
-    LOG(ERROR) << "Unable to read " << kLsbVersionKey << " from "
-               << lsb_release_;
-  }
   int64_t payload_size = -1;
   base::GetFileSize(FilePath(payload_path), &payload_size);
   std::string meta_data = StringPrintf("%sexec_name=%s\n"
-                                       "ver=%s\n"
                                        "payload=%s\n"
                                        "payload_size=%" PRId64 "\n"
                                        "done=1\n",
                                        extra_metadata_.c_str(),
                                        exec_name.c_str(),
-                                       version.c_str(),
                                        payload_path.c_str(),
                                        payload_size);
   // We must use WriteNewFile instead of base::WriteFile as we
