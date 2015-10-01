@@ -15,7 +15,6 @@
 LOCAL_PATH:= $(call my-dir)
 
 commonSources:= \
-	BasicHashtable.cpp \
 	BlobCache.cpp \
 	CallStack.cpp \
 	FileMap.cpp \
