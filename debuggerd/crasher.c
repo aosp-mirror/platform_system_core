@@ -51,6 +51,9 @@ __attribute__ ((noinline)) static int smash_stack(volatile int* plen) {
     return 0;
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winfinite-recursion"
+
 static void* global = 0; // So GCC doesn't optimize the tail recursion out of overflow_stack.
 
 __attribute__((noinline)) static void overflow_stack(void* p) {
@@ -59,6 +62,8 @@ __attribute__((noinline)) static void overflow_stack(void* p) {
     global = buf;
     overflow_stack(&buf);
 }
+
+#pragma clang diagnostic pop
 
 static void *noisy(void *x)
 {
