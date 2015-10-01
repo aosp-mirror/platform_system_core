@@ -395,6 +395,11 @@ void handle_packet(apacket *p, atransport *t)
                     D("Invalid A_OKAY(%d,%d), expected A_OKAY(%d,%d) on transport %s",
                       p->msg.arg0, p->msg.arg1, s->peer->id, p->msg.arg1, t->serial);
                 }
+            } else {
+                // When receiving A_OKAY from device for A_OPEN request, the host server may
+                // have closed the local socket because of client disconnection. Then we need
+                // to send A_CLSE back to device to close the service on device.
+                send_close(p->msg.arg1, p->msg.arg0, t);
             }
         }
         break;
