@@ -174,17 +174,16 @@ void fdevent_set(fdevent* fde, unsigned events) {
     if ((fde->state & FDE_EVENTMASK) == events) {
         return;
     }
-    if (fde->state & FDE_ACTIVE) {
-        fdevent_update(fde, events);
-        D("fdevent_set: %s, events = %u", dump_fde(fde).c_str(), events);
+    CHECK(fde->state & FDE_ACTIVE);
+    fdevent_update(fde, events);
+    D("fdevent_set: %s, events = %u", dump_fde(fde).c_str(), events);
 
-        if (fde->state & FDE_PENDING) {
-            // If we are pending, make sure we don't signal an event that is no longer wanted.
-            fde->events &= ~events;
-            if (fde->events == 0) {
-                g_pending_list.remove(fde);
-                fde->state &= ~FDE_PENDING;
-            }
+    if (fde->state & FDE_PENDING) {
+        // If we are pending, make sure we don't signal an event that is no longer wanted.
+        fde->events &= events;
+        if (fde->events == 0) {
+            g_pending_list.remove(fde);
+            fde->state &= ~FDE_PENDING;
         }
     }
 }
@@ -262,7 +261,7 @@ static void fdevent_call_fdfunc(fdevent* fde)
 {
     unsigned events = fde->events;
     fde->events = 0;
-    if(!(fde->state & FDE_PENDING)) return;
+    CHECK(fde->state & FDE_PENDING);
     fde->state &= (~FDE_PENDING);
     D("fdevent_call_fdfunc %s", dump_fde(fde).c_str());
     fde->func(fde->fd, events, fde->arg);
