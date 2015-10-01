@@ -168,7 +168,7 @@ static void CloseWithPacketThreadFunc(CloseWithPacketArg* arg) {
 // The socket is closing but having some packets, so it is not closed. Then
 // some write error happens in the socket's file handler, e.g., the file
 // handler is closed.
-TEST_F(LocalSocketTest, close_with_packet) {
+TEST_F(LocalSocketTest, close_socket_with_packet) {
     int socket_fd[2];
     ASSERT_EQ(0, adb_socketpair(socket_fd));
     int cause_close_fd[2];
@@ -193,13 +193,8 @@ TEST_F(LocalSocketTest, close_with_packet) {
     ASSERT_EQ(0, pthread_join(thread, nullptr));
 }
 
-#undef shutdown
-
 // This test checks if we can read packets from a closing local socket.
-// The socket's file handler may be non readable if the other side has
-// called shutdown(SHUT_WR). But we should always write packets
-// successfully to the other side.
-TEST_F(LocalSocketTest, half_close_with_packet) {
+TEST_F(LocalSocketTest, read_from_closing_socket) {
     int socket_fd[2];
     ASSERT_EQ(0, adb_socketpair(socket_fd));
     int cause_close_fd[2];
@@ -217,7 +212,6 @@ TEST_F(LocalSocketTest, half_close_with_packet) {
     ASSERT_EQ(0, adb_close(cause_close_fd[0]));
     sleep(1);
     ASSERT_EQ(2u, fdevent_installed_count());
-    ASSERT_EQ(0, shutdown(socket_fd[0], SHUT_WR));
 
     // Verify if we can read successfully.
     std::vector<char> buf(arg.bytes_written);
@@ -260,41 +254,56 @@ TEST_F(LocalSocketTest, write_error_when_having_packets) {
     ASSERT_EQ(0, pthread_join(thread, nullptr));
 }
 
-struct CloseNoEventsArg {
-    int socket_fd;
+#if defined(__linux__)
+
+static void ClientThreadFunc() {
+    std::string error;
+    int fd = network_loopback_client(5038, SOCK_STREAM, &error);
+    ASSERT_GE(fd, 0) << error;
+    sleep(2);
+    ASSERT_EQ(0, adb_close(fd));
+}
+
+struct CloseRdHupSocketArg {
+  int socket_fd;
 };
 
-static void CloseNoEventsThreadFunc(CloseNoEventsArg* arg) {
-    asocket* s = create_local_socket(arg->socket_fd);
-    ASSERT_TRUE(s != nullptr);
+static void CloseRdHupSocketThreadFunc(CloseRdHupSocketArg* arg) {
+  asocket* s = create_local_socket(arg->socket_fd);
+  ASSERT_TRUE(s != nullptr);
 
-    InstallDummySocket();
-    fdevent_loop();
+  InstallDummySocket();
+  fdevent_loop();
 }
 
-// This test checks when a local socket doesn't enable FDE_READ/FDE_WRITE/FDE_ERROR, it
-// can still be closed when some error happens on its file handler.
-// This test successes on linux but fails on mac because of different implementation of
-// poll(). I think the function tested here is useful to make adb server more stable on
-// linux.
-TEST_F(LocalSocketTest, close_with_no_events_installed) {
-    int socket_fd[2];
-    ASSERT_EQ(0, adb_socketpair(socket_fd));
+// This test checks if we can close sockets in CLOSE_WAIT state.
+TEST_F(LocalSocketTest, close_socket_in_CLOSE_WAIT_state) {
+  std::string error;
+  int listen_fd = network_inaddr_any_server(5038, SOCK_STREAM, &error);
+  ASSERT_GE(listen_fd, 0);
+  pthread_t client_thread;
+  ASSERT_EQ(0, pthread_create(&client_thread, nullptr,
+                              reinterpret_cast<void* (*)(void*)>(ClientThreadFunc), nullptr));
 
-    CloseNoEventsArg arg;
-    arg.socket_fd = socket_fd[1];
-    pthread_t thread;
-    ASSERT_EQ(0, pthread_create(&thread, nullptr,
-                                reinterpret_cast<void* (*)(void*)>(CloseNoEventsThreadFunc),
-                                &arg));
-    // Wait until the fdevent_loop() starts.
-    sleep(1);
-    ASSERT_EQ(2u, fdevent_installed_count());
-    ASSERT_EQ(0, adb_close(socket_fd[0]));
-
-    // Wait until the socket is closed.
-    sleep(1);
-
-    ASSERT_EQ(0, pthread_kill(thread, SIGUSR1));
-    ASSERT_EQ(0, pthread_join(thread, nullptr));
+  struct sockaddr addr;
+  socklen_t alen;
+  alen = sizeof(addr);
+  int accept_fd = adb_socket_accept(listen_fd, &addr, &alen);
+  ASSERT_GE(accept_fd, 0);
+  CloseRdHupSocketArg arg;
+  arg.socket_fd = accept_fd;
+  pthread_t thread;
+  ASSERT_EQ(0, pthread_create(&thread, nullptr,
+                              reinterpret_cast<void* (*)(void*)>(CloseRdHupSocketThreadFunc),
+                              &arg));
+  // Wait until the fdevent_loop() starts.
+  sleep(1);
+  ASSERT_EQ(2u, fdevent_installed_count());
+  // Wait until the client closes its socket.
+  ASSERT_EQ(0, pthread_join(client_thread, nullptr));
+  sleep(2);
+  ASSERT_EQ(0, pthread_kill(thread, SIGUSR1));
+  ASSERT_EQ(0, pthread_join(thread, nullptr));
 }
+
+#endif  // defined(__linux__)

@@ -58,6 +58,12 @@ struct PollNode {
   PollNode(fdevent* fde) : fde(fde) {
       memset(&pollfd, 0, sizeof(pollfd));
       pollfd.fd = fde->fd;
+
+#if defined(__linux__)
+      // Always enable POLLRDHUP, so the host server can take action when some clients disconnect.
+      // Then we can avoid leaving many sockets in CLOSE_WAIT state. See http://b/23314034.
+      pollfd.events = POLLRDHUP;
+#endif
   }
 };
 
@@ -234,6 +240,11 @@ static void fdevent_process() {
             // be detected at that point.
             events |= FDE_READ | FDE_ERROR;
         }
+#if defined(__linux__)
+        if (pollfd.revents & POLLRDHUP) {
+            events |= FDE_READ | FDE_ERROR;
+        }
+#endif
         if (events != 0) {
             auto it = g_poll_node_map.find(pollfd.fd);
             CHECK(it != g_poll_node_map.end());
