@@ -55,6 +55,13 @@ static const uid_t kUnknownUid = -1;
 const char *UserCollector::kUserId = "Uid:\t";
 const char *UserCollector::kGroupId = "Gid:\t";
 
+// The property containing the OS version.
+const char kVersionProperty[] = "ro.build.id";
+
+// The property containing the product id.
+const char kProductIDProperty[] = "ro.product.product_id";
+
+
 using base::FilePath;
 using base::StringPrintf;
 
@@ -454,6 +461,12 @@ UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
 
   if (GetLogContents(FilePath(log_config_path_), exec, log_path))
     AddCrashMetaData("log", log_path.value());
+
+  char value[PROPERTY_VALUE_MAX];
+  property_get(kVersionProperty, value, "undefined");
+  AddCrashMetaUploadData("ver", value);
+  property_get(kProductIDProperty, value, "undefined");
+  AddCrashMetaUploadData("prod", value);
 
   ErrorType error_type =
       ConvertCoreToMinidump(pid, container_dir, core_path, minidump_path);
