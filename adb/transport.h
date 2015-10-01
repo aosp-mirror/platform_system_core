@@ -33,9 +33,12 @@ const FeatureSet& supported_features();
 std::string FeatureSetToString(const FeatureSet& features);
 FeatureSet StringToFeatureSet(const std::string& features_string);
 
+// Returns true if both local features and |feature_set| support |feature|.
+bool CanUseFeature(const FeatureSet& feature_set, const std::string& feature);
+
 // Do not use any of [:;=,] in feature strings, they have special meaning
 // in the connection banner.
-constexpr char kFeatureShell2[] = "shell_2";
+constexpr char kFeatureShell2[] = "shell_v2";
 
 class atransport {
 public:
@@ -99,10 +102,6 @@ public:
 
     // Loads the transport's feature set from the given string.
     void SetFeatures(const std::string& features_string);
-
-    // Returns true if both we and the other end of the transport support the
-    // feature.
-    bool CanUseFeature(const std::string& feature) const;
 
     void AddDisconnect(adisconnect* disconnect);
     void RemoveDisconnect(adisconnect* disconnect);

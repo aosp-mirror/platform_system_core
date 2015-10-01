@@ -808,16 +808,17 @@ FeatureSet StringToFeatureSet(const std::string& features_string) {
     return FeatureSet(names.begin(), names.end());
 }
 
+bool CanUseFeature(const FeatureSet& feature_set, const std::string& feature) {
+    return feature_set.count(feature) > 0 &&
+            supported_features().count(feature) > 0;
+}
+
 bool atransport::has_feature(const std::string& feature) const {
     return features_.count(feature) > 0;
 }
 
 void atransport::SetFeatures(const std::string& features_string) {
     features_ = StringToFeatureSet(features_string);
-}
-
-bool atransport::CanUseFeature(const std::string& feature) const {
-    return has_feature(feature) && supported_features().count(feature) > 0;
 }
 
 void atransport::AddDisconnect(adisconnect* disconnect) {
