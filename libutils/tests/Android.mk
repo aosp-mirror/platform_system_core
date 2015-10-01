@@ -22,6 +22,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libutils_tests
 
 LOCAL_SRC_FILES := \
+    BasicHashtable_test.cpp \
     BlobCache_test.cpp \
     BitSet_test.cpp \
     Looper_test.cpp \

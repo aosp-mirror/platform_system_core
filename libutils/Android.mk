@@ -15,6 +15,7 @@
 LOCAL_PATH:= $(call my-dir)
 
 commonSources:= \
+	BasicHashtable.cpp \
 	CallStack.cpp \
 	FileMap.cpp \
 	JenkinsHash.cpp \
