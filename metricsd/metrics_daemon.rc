@@ -5,4 +5,3 @@ service metrics_daemon /system/bin/metrics_daemon --uploader -nodaemon
     class late_start
     user system
     group system dbus inet
-    seclabel u:r:brillo:s0
