@@ -80,6 +80,7 @@
 #define AID_LOGD          1036  /* log daemon */
 #define AID_SHARED_RELRO  1037  /* creator of shared GNU RELRO files */
 #define AID_DBUS          1038  /* dbus-daemon IPC broker process */
+#define AID_TLSDATE       1039  /* tlsdate unprivileged user */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -176,6 +177,7 @@ static const struct android_id_info android_ids[] = {
     { "logd",          AID_LOGD, },
     { "shared_relro",  AID_SHARED_RELRO, },
     { "dbus",          AID_DBUS, },
+    { "tlsdate",       AID_TLSDATE, },
 
     { "shell",         AID_SHELL, },
     { "cache",         AID_CACHE, },
