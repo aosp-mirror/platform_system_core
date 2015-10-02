@@ -189,7 +189,7 @@ struct PidEntry : public EntryBaseDropped {
     const char*getName() const { return name; }
 
     inline void add(pid_t p) {
-        if (name && !strncmp(name, "zygote", 6)) {
+        if (name && !fast<strncmp>(name, "zygote", 6)) {
             free(name);
             name = NULL;
         }
@@ -241,7 +241,7 @@ struct TidEntry : public EntryBaseDropped {
     const char*getName() const { return name; }
 
     inline void add(pid_t t) {
-        if (name && !strncmp(name, "zygote", 6)) {
+        if (name && !fast<strncmp>(name, "zygote", 6)) {
             free(name);
             name = NULL;
         }

@@ -64,7 +64,7 @@ public:
     unsigned short getDropped(void) const { return mMsg ? 0 : mDropped; }
     unsigned short setDropped(unsigned short value) {
         if (mMsg) {
-            free(mMsg);
+            delete [] mMsg;
             mMsg = NULL;
         }
         return mDropped = value;
