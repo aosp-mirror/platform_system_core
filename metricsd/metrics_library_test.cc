@@ -93,3 +93,16 @@ TEST_F(MetricsLibraryTest, AreMetricsEnabledCaching) {
   VerifyEnabledCacheEviction(false);
   VerifyEnabledCacheEviction(true);
 }
+
+TEST_F(MetricsLibraryTest, AreMetricsEnabledNoCaching) {
+  // disable caching.
+  lib_.use_caching_ = false;
+
+  // Checking the consent repeatedly should return the right result.
+  for (int i=0; i<100; ++i) {
+    SetMetricsConsent(true);
+    ASSERT_EQ(true, lib_.AreMetricsEnabled());
+    SetMetricsConsent(false);
+    ASSERT_EQ(false, lib_.AreMetricsEnabled());
+  }
+}
