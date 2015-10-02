@@ -16,10 +16,6 @@
 
 #include "metrics_daemon.h"
 
-#include <fcntl.h>
-#include <inttypes.h>
-#include <math.h>
-#include <string.h>
 #include <sysexits.h>
 #include <time.h>
 
@@ -71,48 +67,12 @@ const char kKernelCrashDetectedFile[] = "/var/run/kernel-crash-detected";
 const char kUncleanShutdownDetectedFile[] =
     "/var/run/unclean-shutdown-detected";
 
-// disk stats metrics
-
-// The {Read,Write}Sectors numbers are in sectors/second.
-// A sector is usually 512 bytes.
-
-const char kMetricReadSectorsLongName[] = "Platform.ReadSectors.PerMinute";
-const char kMetricWriteSectorsLongName[] = "Platform.WriteSectors.PerMinute";
-const char kMetricReadSectorsShortName[] = "Platform.ReadSectors.PerSecond";
-const char kMetricWriteSectorsShortName[] = "Platform.WriteSectors.PerSecond";
-
-const int kMetricStatsShortInterval = 1;  // seconds
-const int kMetricStatsLongInterval = 60;  // seconds
-
 const int kMetricMeminfoInterval = 30;    // seconds
 
-// Assume a max rate of 250Mb/s for reads (worse for writes) and 512 byte
-// sectors.
-const int kMetricSectorsIOMax = 500000;  // sectors/second
-const int kMetricSectorsBuckets = 50;    // buckets
-// Page size is 4k, sector size is 0.5k.  We're not interested in page fault
-// rates that the disk cannot sustain.
-const int kMetricPageFaultsMax = kMetricSectorsIOMax / 8;
-const int kMetricPageFaultsBuckets = 50;
-
-// Major page faults, i.e. the ones that require data to be read from disk.
-
-const char kMetricPageFaultsLongName[] = "Platform.PageFaults.PerMinute";
-const char kMetricPageFaultsShortName[] = "Platform.PageFaults.PerSecond";
-
-// Swap in and Swap out
-
-const char kMetricSwapInLongName[] = "Platform.SwapIn.PerMinute";
-const char kMetricSwapInShortName[] = "Platform.SwapIn.PerSecond";
-
-const char kMetricSwapOutLongName[] = "Platform.SwapOut.PerMinute";
-const char kMetricSwapOutShortName[] = "Platform.SwapOut.PerSecond";
-
 const char kMetricsProcStatFileName[] = "/proc/stat";
-const char kVmStatFileName[] = "/proc/vmstat";
 const char kMeminfoFileName[] = "/proc/meminfo";
+const char kVmStatFileName[] = "/proc/vmstat";
 const int kMetricsProcStatFirstLineItemsCount = 11;
-const int kDiskMetricsStatItemCount = 11;
 
 // Thermal CPU throttling.
 
@@ -142,17 +102,13 @@ static const int kMemuseIntervals[] = {
 MetricsDaemon::MetricsDaemon()
     : memuse_final_time_(0),
       memuse_interval_index_(0),
-      read_sectors_(0),
-      write_sectors_(0),
-      vmstats_(),
-      stats_state_(kStatsShort),
-      stats_initial_time_(0),
       ticks_per_second_(0),
       latest_cpu_use_ticks_(0) {}
 
 MetricsDaemon::~MetricsDaemon() {
 }
 
+// static
 double MetricsDaemon::GetActiveTime() {
   struct timespec ts;
   int r = clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -275,14 +231,12 @@ void MetricsDaemon::Init(bool testing,
   weekly_cycle_.reset(new PersistentInteger("weekly.cycle"));
   version_cycle_.reset(new PersistentInteger("version.cycle"));
 
-  diskstats_path_ = diskstats_path;
   scaling_max_freq_path_ = scaling_max_freq_path;
   cpuinfo_max_freq_path_ = cpuinfo_max_freq_path;
   disk_usage_collector_.reset(new DiskUsageCollector(metrics_lib_));
-
-  // If testing, initialize Stats Reporter without connecting DBus
-  if (testing_)
-    StatsReporterInit();
+  averaged_stats_collector_.reset(
+      new AveragedStatisticsCollector(metrics_lib_, diskstats_path,
+                                      kVmStatFileName));
 }
 
 int MetricsDaemon::OnInit() {
@@ -494,94 +448,12 @@ bool MetricsDaemon::CheckSystemCrash(const string& crash_file) {
 
 void MetricsDaemon::StatsReporterInit() {
   disk_usage_collector_->Schedule();
-  DiskStatsReadStats(&read_sectors_, &write_sectors_);
-  VmStatsReadStats(&vmstats_);
-  // The first time around just run the long stat, so we don't delay boot.
-  stats_state_ = kStatsLong;
-  stats_initial_time_ = GetActiveTime();
-  if (stats_initial_time_ < 0) {
-    LOG(WARNING) << "not collecting disk stats";
-  } else {
-    ScheduleStatsCallback(kMetricStatsLongInterval);
-  }
+
+  // Don't start a collection cycle during the first run to avoid delaying the
+  // boot.
+  averaged_stats_collector_->ScheduleWait();
 }
 
-void MetricsDaemon::ScheduleStatsCallback(int wait) {
-  if (testing_) {
-    return;
-  }
-  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-      base::Bind(&MetricsDaemon::StatsCallback, base::Unretained(this)),
-      base::TimeDelta::FromSeconds(wait));
-}
-
-bool MetricsDaemon::DiskStatsReadStats(uint64_t* read_sectors,
-                                       uint64_t* write_sectors) {
-  CHECK(read_sectors);
-  CHECK(write_sectors);
-  std::string line;
-  if (diskstats_path_.empty()) {
-    return false;
-  }
-
-  if (!base::ReadFileToString(base::FilePath(diskstats_path_), &line)) {
-    PLOG(WARNING) << "Could not read disk stats from " << diskstats_path_;
-    return false;
-  }
-
-  std::vector<std::string> parts = base::SplitString(
-      line, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  if (parts.size() != kDiskMetricsStatItemCount) {
-    LOG(ERROR) << "Could not parse disk stat correctly. Expected "
-               << kDiskMetricsStatItemCount << " elements but got "
-               << parts.size();
-    return false;
-  }
-  if (!base::StringToUint64(parts[2], read_sectors)) {
-    LOG(ERROR) << "Couldn't convert read sectors " << parts[2] << " to uint64";
-    return false;
-  }
-  if (!base::StringToUint64(parts[6], write_sectors)) {
-    LOG(ERROR) << "Couldn't convert write sectors " << parts[6] << " to uint64";
-    return false;
-  }
-
-  return true;
-}
-
-bool MetricsDaemon::VmStatsParseStats(const char* stats,
-                                      struct VmstatRecord* record) {
-  CHECK(stats);
-  CHECK(record);
-  base::StringPairs pairs;
-  base::SplitStringIntoKeyValuePairs(stats, ' ', '\n', &pairs);
-
-  for (base::StringPairs::iterator it = pairs.begin(); it != pairs.end(); ++it) {
-    if (it->first == "pgmajfault" &&
-        !base::StringToUint64(it->second, &record->page_faults_)) {
-      return false;
-    }
-    if (it->first == "pswpin" &&
-        !base::StringToUint64(it->second, &record->swap_in_)) {
-      return false;
-    }
-    if (it->first == "pswpout" &&
-        !base::StringToUint64(it->second, &record->swap_out_)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool MetricsDaemon::VmStatsReadStats(struct VmstatRecord* stats) {
-  CHECK(stats);
-  string value_string;
-  if (!base::ReadFileToString(base::FilePath(kVmStatFileName), &value_string)) {
-    LOG(WARNING) << "cannot read " << kVmStatFileName;
-    return false;
-  }
-  return VmStatsParseStats(value_string.c_str(), stats);
-}
 
 bool MetricsDaemon::ReadFreqToInt(const string& sysfs_file_name, int* value) {
   const FilePath sysfs_path(sysfs_file_name);
@@ -637,115 +509,6 @@ void MetricsDaemon::SendCpuThrottleMetrics() {
   // with a 101% value.
   int percent = scaled_freq > max_freq ? 101 : scaled_freq / (max_freq / 100);
   SendLinearSample(kMetricScaledCpuFrequencyName, percent, 101, 102);
-}
-
-// Collects disk and vm stats alternating over a short and a long interval.
-
-void MetricsDaemon::StatsCallback() {
-  uint64_t read_sectors_now, write_sectors_now;
-  struct VmstatRecord vmstats_now;
-  double time_now = GetActiveTime();
-  double delta_time = time_now - stats_initial_time_;
-  if (testing_) {
-    // Fake the time when testing.
-    delta_time = stats_state_ == kStatsShort ?
-        kMetricStatsShortInterval : kMetricStatsLongInterval;
-  }
-  bool diskstats_success = DiskStatsReadStats(&read_sectors_now,
-                                              &write_sectors_now);
-  int delta_read = read_sectors_now - read_sectors_;
-  int delta_write = write_sectors_now - write_sectors_;
-  int read_sectors_per_second = delta_read / delta_time;
-  int write_sectors_per_second = delta_write / delta_time;
-  bool vmstats_success = VmStatsReadStats(&vmstats_now);
-  uint64_t delta_faults = vmstats_now.page_faults_ - vmstats_.page_faults_;
-  uint64_t delta_swap_in = vmstats_now.swap_in_ - vmstats_.swap_in_;
-  uint64_t delta_swap_out = vmstats_now.swap_out_ - vmstats_.swap_out_;
-  uint64_t page_faults_per_second = delta_faults / delta_time;
-  uint64_t swap_in_per_second = delta_swap_in / delta_time;
-  uint64_t swap_out_per_second = delta_swap_out / delta_time;
-
-  switch (stats_state_) {
-    case kStatsShort:
-      if (diskstats_success) {
-        SendSample(kMetricReadSectorsShortName,
-                   read_sectors_per_second,
-                   1,
-                   kMetricSectorsIOMax,
-                   kMetricSectorsBuckets);
-        SendSample(kMetricWriteSectorsShortName,
-                   write_sectors_per_second,
-                   1,
-                   kMetricSectorsIOMax,
-                   kMetricSectorsBuckets);
-      }
-      if (vmstats_success) {
-        SendSample(kMetricPageFaultsShortName,
-                   page_faults_per_second,
-                   1,
-                   kMetricPageFaultsMax,
-                   kMetricPageFaultsBuckets);
-        SendSample(kMetricSwapInShortName,
-                   swap_in_per_second,
-                   1,
-                   kMetricPageFaultsMax,
-                   kMetricPageFaultsBuckets);
-        SendSample(kMetricSwapOutShortName,
-                   swap_out_per_second,
-                   1,
-                   kMetricPageFaultsMax,
-                   kMetricPageFaultsBuckets);
-      }
-      // Schedule long callback.
-      stats_state_ = kStatsLong;
-      ScheduleStatsCallback(kMetricStatsLongInterval -
-                            kMetricStatsShortInterval);
-      break;
-    case kStatsLong:
-      if (diskstats_success) {
-        SendSample(kMetricReadSectorsLongName,
-                   read_sectors_per_second,
-                   1,
-                   kMetricSectorsIOMax,
-                   kMetricSectorsBuckets);
-        SendSample(kMetricWriteSectorsLongName,
-                   write_sectors_per_second,
-                   1,
-                   kMetricSectorsIOMax,
-                   kMetricSectorsBuckets);
-        // Reset sector counters.
-        read_sectors_ = read_sectors_now;
-        write_sectors_ = write_sectors_now;
-      }
-      if (vmstats_success) {
-        SendSample(kMetricPageFaultsLongName,
-                   page_faults_per_second,
-                   1,
-                   kMetricPageFaultsMax,
-                   kMetricPageFaultsBuckets);
-        SendSample(kMetricSwapInLongName,
-                   swap_in_per_second,
-                   1,
-                   kMetricPageFaultsMax,
-                   kMetricPageFaultsBuckets);
-        SendSample(kMetricSwapOutLongName,
-                   swap_out_per_second,
-                   1,
-                   kMetricPageFaultsMax,
-                   kMetricPageFaultsBuckets);
-
-        vmstats_ = vmstats_now;
-      }
-      SendCpuThrottleMetrics();
-      // Set start time for new cycle.
-      stats_initial_time_ = time_now;
-      // Schedule short callback.
-      stats_state_ = kStatsShort;
-      ScheduleStatsCallback(kMetricStatsShortInterval);
-      break;
-    default:
-      LOG(FATAL) << "Invalid stats state";
-  }
 }
 
 void MetricsDaemon::ScheduleMeminfoCallback(int wait) {

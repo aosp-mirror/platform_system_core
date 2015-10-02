@@ -26,6 +26,7 @@ metrics_client_sources := \
   metrics_client.cc
 
 metrics_daemon_sources := \
+  collectors/averaged_statistics_collector.cc \
   collectors/disk_usage_collector.cc \
   metrics_daemon.cc \
   metrics_daemon_main.cc \
@@ -40,6 +41,8 @@ metrics_daemon_sources := \
   serialization/serialization_utils.cc
 
 metrics_tests_sources := \
+  collectors/averaged_statistics_collector.cc \
+  collectors/averaged_statistics_collector_test.cc \
   collectors/disk_usage_collector.cc \
   metrics_daemon.cc \
   metrics_daemon_test.cc \
@@ -146,6 +149,7 @@ include $(BUILD_EXECUTABLE)
 # ========================================================
 include $(CLEAR_VARS)
 LOCAL_MODULE := metrics_tests
+LOCAL_CLANG := true
 LOCAL_CFLAGS := $(metrics_CFLAGS)
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS) -Wno-sign-compare
