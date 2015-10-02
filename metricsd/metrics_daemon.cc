@@ -41,6 +41,8 @@ using base::Time;
 using base::TimeDelta;
 using base::TimeTicks;
 using chromeos_metrics::PersistentInteger;
+using com::android::Weave::CommandProxy;
+using com::android::Weave::ManagerProxy;
 using std::map;
 using std::string;
 using std::vector;
@@ -280,6 +282,12 @@ int MetricsDaemon::OnInit() {
       LOG(ERROR) << "DBus isn't connected.";
       return EX_UNAVAILABLE;
     }
+
+    weaved_object_mgr_.reset(new com::android::Weave::ObjectManagerProxy{bus_});
+    weaved_object_mgr_->SetCommandAddedCallback(
+        base::Bind(&MetricsDaemon::OnWeaveCommand, base::Unretained(this)));
+    weaved_object_mgr_->SetManagerAddedCallback(
+        base::Bind(&MetricsDaemon::UpdateWeaveState, base::Unretained(this)));
   }
 
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
@@ -315,6 +323,60 @@ void MetricsDaemon::OnShutdown(int* return_code) {
     }
   }
   chromeos::DBusDaemon::OnShutdown(return_code);
+}
+
+void MetricsDaemon::OnWeaveCommand(CommandProxy* command) {
+  if (command->category() != "metrics" || command->status() != "queued") {
+    return;
+  }
+
+  VLOG(1) << "received weave command: " << command->name();
+  if (command->name() == "_metrics._enableAnalyticsReporting") {
+    OnEnableMetrics(command);
+  } else if (command->name() == "_metrics._disableAnalyticsReporting") {
+    OnDisableMetrics(command);
+  }
+}
+
+void MetricsDaemon::OnEnableMetrics(CommandProxy* command) {
+  if (base::WriteFile(metrics_directory_.Append(metrics::kConsentFileName),
+                      "", 0) != 0) {
+    PLOG(ERROR) << "Could not create the consent file.";
+    command->Abort(nullptr);
+    return;
+  }
+
+  NotifyStateChanged();
+  command->Done(nullptr);
+}
+
+void MetricsDaemon::OnDisableMetrics(CommandProxy* command) {
+  if (!base::DeleteFile(metrics_directory_.Append(metrics::kConsentFileName),
+                        false)) {
+    PLOG(ERROR) << "Cound not delete the consent file.";
+    command->Abort(nullptr);
+    return;
+  }
+
+  NotifyStateChanged();
+  command->Done(nullptr);
+}
+
+void MetricsDaemon::NotifyStateChanged() {
+  ManagerProxy* manager = weaved_object_mgr_->GetManagerProxy();
+  if (manager)
+    UpdateWeaveState(manager);
+}
+
+void MetricsDaemon::UpdateWeaveState(ManagerProxy* manager) {
+  chromeos::VariantDictionary state_change{
+    { "_metrics._AnalyticsReportingState",
+      metrics_lib_->AreMetricsEnabled() ? "enabled" : "disabled" }
+  };
+
+  if (!manager->UpdateState(state_change, nullptr)) {
+    LOG(ERROR) << "failed to update weave's state";
+  }
 }
 
 // static

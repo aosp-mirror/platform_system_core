@@ -1,0 +1,10 @@
+{
+  "_metrics": {
+    "_enableAnalyticsReporting": {
+      "minimalRole": "manager"
+    },
+    "_disableAnalyticsReporting": {
+      "minimalRole": "manager"
+    }
+  }
+}
