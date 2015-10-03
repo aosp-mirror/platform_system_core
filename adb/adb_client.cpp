@@ -195,14 +195,15 @@ int adb_connect(const std::string& service, std::string* error) {
         adb_sleep_ms(3000);
         // fall through to _adb_connect
     } else {
-        // if server was running, check its version to make sure it is not out of date
+        // If a server is already running, check its version matches.
         int version = ADB_SERVER_VERSION - 1;
 
-        // if we have a file descriptor, then parse version result
+        // If we have a file descriptor, then parse version result.
         if (fd >= 0) {
             std::string version_string;
             if (!ReadProtocolString(fd, &version_string, error)) {
-                goto error;
+                adb_close(fd);
+                return -1;
             }
 
             adb_close(fd);
@@ -214,8 +215,8 @@ int adb_connect(const std::string& service, std::string* error) {
                 return -1;
             }
         } else {
-            // if fd is -1, then check for "unknown host service",
-            // which would indicate a version of adb that does not support the
+            // If fd is -1 check for "unknown host service" which would
+            // indicate a version of adb that does not support the
             // version command, in which case we should fall-through to kill it.
             if (*error != "unknown host service") {
                 return fd;
@@ -223,7 +224,8 @@ int adb_connect(const std::string& service, std::string* error) {
         }
 
         if (version != ADB_SERVER_VERSION) {
-            printf("adb server is out of date.  killing...\n");
+            printf("adb server version (%d) doesn't match this client (%d); killing...\n",
+                   version, ADB_SERVER_VERSION);
             fd = _adb_connect("host:kill", error);
             if (fd >= 0) {
                 adb_close(fd);
@@ -253,9 +255,6 @@ int adb_connect(const std::string& service, std::string* error) {
     D("adb_connect: return fd %d", fd);
 
     return fd;
-error:
-    adb_close(fd);
-    return -1;
 }
 
 
