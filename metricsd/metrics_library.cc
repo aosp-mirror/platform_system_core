@@ -126,7 +126,7 @@ bool MetricsLibrary::IsGuestMode() {
 bool MetricsLibrary::AreMetricsEnabled() {
   static struct stat stat_buffer;
   time_t this_check_time = time(nullptr);
-  if (this_check_time != cached_enabled_time_) {
+  if (!use_caching_ || this_check_time != cached_enabled_time_) {
     cached_enabled_time_ = this_check_time;
     cached_enabled_ = stat(consent_file_.value().data(), &stat_buffer) >= 0;
   }
@@ -139,6 +139,12 @@ void MetricsLibrary::Init() {
   consent_file_ = dir.Append(metrics::kConsentFileName);
   cached_enabled_ = false;
   cached_enabled_time_ = 0;
+  use_caching_ = true;
+}
+
+void MetricsLibrary::InitWithNoCaching() {
+  Init();
+  use_caching_ = false;
 }
 
 void MetricsLibrary::InitForTest(const base::FilePath& metrics_directory) {
@@ -146,6 +152,7 @@ void MetricsLibrary::InitForTest(const base::FilePath& metrics_directory) {
   consent_file_ = metrics_directory.Append(metrics::kConsentFileName);
   cached_enabled_ = false;
   cached_enabled_time_ = 0;
+  use_caching_ = true;
 }
 
 bool MetricsLibrary::SendToUMA(const std::string& name,
