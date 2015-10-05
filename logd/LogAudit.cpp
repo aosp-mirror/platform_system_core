@@ -24,6 +24,7 @@
 #include <sys/uio.h>
 #include <syslog.h>
 
+#include <log/logger.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
@@ -153,15 +154,16 @@ int LogAudit::logPrint(const char *fmt, ...) {
 
     // log to events
 
-    size_t l = strlen(str);
+    size_t l = strnlen(str, LOGGER_ENTRY_MAX_PAYLOAD);
     size_t n = l + sizeof(android_log_event_string_t);
 
     bool notify = false;
 
-    android_log_event_string_t *event = static_cast<android_log_event_string_t *>(malloc(n));
-    if (!event) {
-        rc = -ENOMEM;
-    } else {
+    {   // begin scope for event buffer
+        uint32_t buffer[(n + sizeof(uint32_t) - 1) / sizeof(uint32_t)];
+
+        android_log_event_string_t *event
+            = reinterpret_cast<android_log_event_string_t *>(buffer);
         event->header.tag = htole32(AUDITD_LOG_TAG);
         event->type = EVENT_TYPE_STRING;
         event->length = htole32(l);
@@ -170,11 +172,10 @@ int LogAudit::logPrint(const char *fmt, ...) {
         rc = logbuf->log(LOG_ID_EVENTS, now, uid, pid, tid,
                          reinterpret_cast<char *>(event),
                          (n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
-        free(event);
-
         if (rc >= 0) {
             notify = true;
         }
+        // end scope for event buffer
     }
 
     // log to main
@@ -206,24 +207,28 @@ int LogAudit::logPrint(const char *fmt, ...) {
         l = strlen(comm) + 1;
         ecomm = "";
     }
-    n = (estr - str) + strlen(ecomm) + l + 2;
+    size_t b = estr - str;
+    if (b > LOGGER_ENTRY_MAX_PAYLOAD) {
+        b = LOGGER_ENTRY_MAX_PAYLOAD;
+    }
+    size_t e = strnlen(ecomm, LOGGER_ENTRY_MAX_PAYLOAD - b);
+    n = b + e + l + 2;
 
-    char *newstr = static_cast<char *>(malloc(n));
-    if (!newstr) {
-        rc = -ENOMEM;
-    } else {
+    {   // begin scope for main buffer
+        char newstr[n];
+
         *newstr = info ? ANDROID_LOG_INFO : ANDROID_LOG_WARN;
         strlcpy(newstr + 1, comm, l);
-        strncpy(newstr + 1 + l, str, estr - str);
-        strcpy(newstr + 1 + l + (estr - str), ecomm);
+        strncpy(newstr + 1 + l, str, b);
+        strncpy(newstr + 1 + l + b, ecomm, e);
 
         rc = logbuf->log(LOG_ID_MAIN, now, uid, pid, tid, newstr,
                          (n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
-        free(newstr);
 
         if (rc >= 0) {
             notify = true;
         }
+        // end scope for main buffer
     }
 
     free(commfree);
