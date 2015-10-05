@@ -93,7 +93,7 @@ static int __android_log_level(const char *tag, int def)
     if (taglen) {
         uint32_t current_local_serial = current_global_serial;
 
-        if (!last_tag || strcmp(last_tag, tag)) {
+        if (!last_tag || (last_tag[0] != tag[0]) || strcmp(last_tag + 1, tag + 1)) {
             /* invalidate log.tag.<tag> cache */
             for(i = 0; i < (sizeof(tag_cache) / sizeof(tag_cache[0])); ++i) {
                 tag_cache[i].pinfo = NULL;
