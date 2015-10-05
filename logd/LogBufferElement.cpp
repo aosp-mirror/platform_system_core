@@ -91,7 +91,8 @@ char *android::tidToName(pid_t tid) {
         size_t retval_len = strlen(retval);
         size_t name_len = strlen(name);
         // KISS: ToDo: Only checks prefix truncated, not suffix, or both
-        if ((retval_len < name_len) && !strcmp(retval, name + name_len - retval_len)) {
+        if ((retval_len < name_len)
+                && !fast<strcmp>(retval, name + name_len - retval_len)) {
             free(retval);
             retval = name;
         } else {
@@ -123,14 +124,16 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
         commName = parent->pidToName(mPid);
         parent->unlock();
     }
-    size_t len = name ? strlen(name) : 0;
-    if (len && commName && !strncmp(name, commName, len)) {
-        if (commName[len] == '\0') {
-            free(commName);
-            commName = NULL;
-        } else {
-            free(name);
-            name = NULL;
+    if (name && name[0] && commName && (name[0] == commName[0])) {
+        size_t len = strlen(name + 1);
+        if (!strncmp(name + 1, commName + 1, len)) {
+            if (commName[len + 1] == '\0') {
+                free(commName);
+                commName = NULL;
+            } else {
+                free(name);
+                name = NULL;
+            }
         }
     }
     if (name) {
@@ -150,9 +153,9 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
         }
     }
     // identical to below to calculate the buffer size required
-    len = snprintf(NULL, 0, format_uid, mUid, name ? name : "",
-                   commName ? commName : "",
-                   mDropped, (mDropped > 1) ? "s" : "");
+    size_t len = snprintf(NULL, 0, format_uid, mUid, name ? name : "",
+                          commName ? commName : "",
+                          mDropped, (mDropped > 1) ? "s" : "");
 
     size_t hdrLen;
     if (mLogId == LOG_ID_EVENTS) {
