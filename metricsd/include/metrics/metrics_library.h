@@ -48,6 +48,12 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // Initializes the library.
   void Init() override;
 
+  // Initializes the library and disables the cache of whether or not the
+  // metrics collection is enabled.
+  // By disabling this, we may have to check for the metrics status more often
+  // but the result will never be stale.
+  void InitWithNoCaching();
+
   // Returns whether or not the machine is running in guest mode.
   bool IsGuestMode();
 
@@ -125,6 +131,7 @@ class MetricsLibrary : public MetricsLibraryInterface {
   friend class MetricsLibraryTest;
   friend class UploadServiceTest;
   FRIEND_TEST(MetricsLibraryTest, AreMetricsEnabled);
+  FRIEND_TEST(MetricsLibraryTest, AreMetricsEnabledNoCaching);
   FRIEND_TEST(MetricsLibraryTest, FormatChromeMessage);
   FRIEND_TEST(MetricsLibraryTest, FormatChromeMessageTooLong);
   FRIEND_TEST(MetricsLibraryTest, IsDeviceMounted);
@@ -146,6 +153,9 @@ class MetricsLibrary : public MetricsLibraryInterface {
 
   // Cached state of whether or not metrics were enabled.
   bool cached_enabled_;
+
+  // True iff we should cache the enabled/disabled status.
+  bool use_caching_;
 
   base::FilePath uma_events_file_;
   base::FilePath consent_file_;
