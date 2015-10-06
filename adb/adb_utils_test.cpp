@@ -202,3 +202,19 @@ TEST(adb_utils, mkdirs) {
   ASSERT_EQ(0, chdir(td.path)) << strerror(errno);
   test_mkdirs(std::string("relative/subrel/file"));
 }
+
+#if !defined(_WIN32)
+TEST(adb_utils, set_file_block_mode) {
+  int fd = adb_open("/dev/null", O_RDWR | O_APPEND);
+  ASSERT_GE(fd, 0);
+  int flags = fcntl(fd, F_GETFL, 0);
+  ASSERT_EQ(O_RDWR | O_APPEND, (flags & (O_RDWR | O_APPEND)));
+  ASSERT_TRUE(set_file_block_mode(fd, false));
+  int new_flags = fcntl(fd, F_GETFL, 0);
+  ASSERT_EQ(flags | O_NONBLOCK, new_flags);
+  ASSERT_TRUE(set_file_block_mode(fd, true));
+  new_flags = fcntl(fd, F_GETFL, 0);
+  ASSERT_EQ(flags, new_flags);
+  ASSERT_EQ(0, adb_close(fd));
+}
+#endif

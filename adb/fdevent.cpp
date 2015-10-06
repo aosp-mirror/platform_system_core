@@ -36,6 +36,7 @@
 
 #include "adb_io.h"
 #include "adb_trace.h"
+#include "adb_utils.h"
 
 #if !ADB_HOST
 // This socket is used when a subproc shell service exists.
@@ -124,11 +125,11 @@ void fdevent_install(fdevent* fde, int fd, fd_func func, void* arg) {
     fde->fd = fd;
     fde->func = func;
     fde->arg = arg;
-    if (fcntl(fd, F_SETFL, O_NONBLOCK) != 0) {
+    if (!set_file_block_mode(fd, false)) {
         // Here is not proper to handle the error. If it fails here, some error is
         // likely to be detected by poll(), then we can let the callback function
         // to handle it.
-        LOG(ERROR) << "failed to fcntl(" << fd << ") to be nonblock";
+        LOG(ERROR) << "failed to set non-blocking mode for fd " << fd;
     }
     auto pair = g_poll_node_map.emplace(fde->fd, PollNode(fde));
     CHECK(pair.second) << "install existing fd " << fd;

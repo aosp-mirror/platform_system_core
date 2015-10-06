@@ -229,3 +229,19 @@ bool parse_host_and_port(const std::string& address,
 std::string perror_str(const char* msg) {
     return android::base::StringPrintf("%s: %s", msg, strerror(errno));
 }
+
+#if !defined(_WIN32)
+bool set_file_block_mode(int fd, bool block) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1) {
+        PLOG(ERROR) << "failed to fcntl(F_GETFL) for fd " << fd;
+        return false;
+    }
+    flags = block ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
+    if (fcntl(fd, F_SETFL, flags) != 0) {
+        PLOG(ERROR) << "failed to fcntl(F_SETFL) for fd " << fd << ", flags " << flags;
+        return false;
+    }
+    return true;
+}
+#endif
