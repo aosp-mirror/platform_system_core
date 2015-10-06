@@ -18,16 +18,22 @@
 #include "zip_archive_common.h"
 #include "ziparchive/zip_writer.h"
 
+#include <utils/Log.h>
+
 #include <cassert>
 #include <cstdio>
 #include <memory>
 #include <zlib.h>
+#define DEF_MEM_LEVEL 8                // normally in zutil.h?
 
 /* Zip compression methods we support */
 enum {
   kCompressStored     = 0,        // no compression
   kCompressDeflated   = 8,        // standard deflate
 };
+
+// Size of the output buffer used for compression.
+static const size_t kBufSize = 32768u;
 
 // No error, operation completed successfully.
 static const int32_t kNoError = 0;
@@ -41,10 +47,14 @@ static const int32_t kIoError = -2;
 // The zip entry name was invalid.
 static const int32_t kInvalidEntryName = -3;
 
+// An error occurred in zlib.
+static const int32_t kZlibError = -4;
+
 static const char* sErrorCodes[] = {
     "Invalid state",
     "IO error",
     "Invalid entry name",
+    "Zlib error",
 };
 
 const char* ZipWriter::ErrorCodeString(int32_t error_code) {
@@ -54,13 +64,21 @@ const char* ZipWriter::ErrorCodeString(int32_t error_code) {
   return nullptr;
 }
 
-ZipWriter::ZipWriter(FILE* f) : file_(f), current_offset_(0), state_(State::kWritingZip) {
+static void DeleteZStream(z_stream* stream) {
+  deflateEnd(stream);
+  delete stream;
+}
+
+ZipWriter::ZipWriter(FILE* f) : file_(f), current_offset_(0), state_(State::kWritingZip),
+                                z_stream_(nullptr, DeleteZStream), buffer_(kBufSize) {
 }
 
 ZipWriter::ZipWriter(ZipWriter&& writer) : file_(writer.file_),
                                            current_offset_(writer.current_offset_),
                                            state_(writer.state_),
-                                           files_(std::move(writer.files_)) {
+                                           files_(std::move(writer.files_)),
+                                           z_stream_(std::move(writer.z_stream_)),
+                                           buffer_(std::move(writer.buffer_)){
   writer.file_ = nullptr;
   writer.state_ = State::kError;
 }
@@ -70,6 +88,8 @@ ZipWriter& ZipWriter::operator=(ZipWriter&& writer) {
   current_offset_ = writer.current_offset_;
   state_ = writer.state_;
   files_ = std::move(writer.files_);
+  z_stream_ = std::move(writer.z_stream_);
+  buffer_ = std::move(writer.buffer_);
   writer.file_ = nullptr;
   writer.state_ = State::kError;
   return *this;
@@ -77,6 +97,7 @@ ZipWriter& ZipWriter::operator=(ZipWriter&& writer) {
 
 int32_t ZipWriter::HandleError(int32_t error_code) {
   state_ = State::kError;
+  z_stream_.reset();
   return error_code;
 }
 
@@ -126,8 +147,16 @@ int32_t ZipWriter::StartEntryWithTime(const char* path, size_t flags, time_t tim
   // containing the crc and size fields.
   header.gpb_flags |= kGPBDDFlagMask;
 
-  // For now, ignore the ZipWriter::kCompress flag.
-  fileInfo.compression_method = kCompressStored;
+  if (flags & ZipWriter::kCompress) {
+    fileInfo.compression_method = kCompressDeflated;
+
+    int32_t result = PrepareDeflate();
+    if (result != kNoError) {
+      return result;
+    }
+  } else {
+    fileInfo.compression_method = kCompressStored;
+  }
   header.compression_method = fileInfo.compression_method;
 
   ExtractTimeAndDate(time, &fileInfo.last_mod_time, &fileInfo.last_mod_date);
@@ -163,25 +192,116 @@ int32_t ZipWriter::StartEntryWithTime(const char* path, size_t flags, time_t tim
   return kNoError;
 }
 
+int32_t ZipWriter::PrepareDeflate() {
+  assert(state_ == State::kWritingZip);
+
+  // Initialize the z_stream for compression.
+  z_stream_ = std::unique_ptr<z_stream, void(*)(z_stream*)>(new z_stream(), DeleteZStream);
+
+  int zerr = deflateInit2(z_stream_.get(), Z_BEST_COMPRESSION, Z_DEFLATED, -MAX_WBITS,
+                          DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY);
+  if (zerr != Z_OK) {
+    if (zerr == Z_VERSION_ERROR) {
+      ALOGE("Installed zlib is not compatible with linked version (%s)", ZLIB_VERSION);
+      return HandleError(kZlibError);
+    } else {
+      ALOGE("deflateInit2 failed (zerr=%d)", zerr);
+      return HandleError(kZlibError);
+    }
+  }
+
+  z_stream_->next_out = buffer_.data();
+  z_stream_->avail_out = buffer_.size();
+  return kNoError;
+}
+
 int32_t ZipWriter::WriteBytes(const void* data, size_t len) {
   if (state_ != State::kWritingEntry) {
     return HandleError(kInvalidState);
   }
 
   FileInfo& currentFile = files_.back();
+  int32_t result = kNoError;
   if (currentFile.compression_method & kCompressDeflated) {
-    // TODO(adamlesinski): Implement compression using zlib deflate.
-    assert(false);
+    result = CompressBytes(&currentFile, data, len);
   } else {
-    if (fwrite(data, 1, len, file_) != len) {
-      return HandleError(kIoError);
-    }
-    currentFile.crc32 = crc32(currentFile.crc32, reinterpret_cast<const Bytef*>(data), len);
-    currentFile.compressed_size += len;
-    current_offset_ += len;
+    result = StoreBytes(&currentFile, data, len);
   }
 
+  if (result != kNoError) {
+    return result;
+  }
+
+  currentFile.crc32 = crc32(currentFile.crc32, reinterpret_cast<const Bytef*>(data), len);
   currentFile.uncompressed_size += len;
+  return kNoError;
+}
+
+int32_t ZipWriter::StoreBytes(FileInfo* file, const void* data, size_t len) {
+  assert(state_ == State::kWritingEntry);
+
+  if (fwrite(data, 1, len, file_) != len) {
+    return HandleError(kIoError);
+  }
+  file->compressed_size += len;
+  current_offset_ += len;
+  return kNoError;
+}
+
+int32_t ZipWriter::CompressBytes(FileInfo* file, const void* data, size_t len) {
+  assert(state_ == State::kWritingEntry);
+  assert(z_stream_);
+  assert(z_stream_->next_out != nullptr);
+  assert(z_stream_->avail_out != 0);
+
+  // Prepare the input.
+  z_stream_->next_in = reinterpret_cast<const uint8_t*>(data);
+  z_stream_->avail_in = len;
+
+  while (z_stream_->avail_in > 0) {
+    // We have more data to compress.
+    int zerr = deflate(z_stream_.get(), Z_NO_FLUSH);
+    if (zerr != Z_OK) {
+      return HandleError(kZlibError);
+    }
+
+    if (z_stream_->avail_out == 0) {
+      // The output is full, let's write it to disk.
+      size_t dataToWrite = z_stream_->next_out - buffer_.data();
+      if (fwrite(buffer_.data(), 1, dataToWrite, file_) != dataToWrite) {
+        return HandleError(kIoError);
+      }
+      file->compressed_size += dataToWrite;
+      current_offset_ += dataToWrite;
+
+      // Reset the output buffer for the next input.
+      z_stream_->next_out = buffer_.data();
+      z_stream_->avail_out = buffer_.size();
+    }
+  }
+  return kNoError;
+}
+
+int32_t ZipWriter::FlushCompressedBytes(FileInfo* file) {
+  assert(state_ == State::kWritingEntry);
+  assert(z_stream_);
+  assert(z_stream_->next_out != nullptr);
+  assert(z_stream_->avail_out != 0);
+
+  int zerr = deflate(z_stream_.get(), Z_FINISH);
+  if (zerr != Z_STREAM_END) {
+    return HandleError(kZlibError);
+  }
+
+  size_t dataToWrite = z_stream_->next_out - buffer_.data();
+  if (dataToWrite != 0) {
+    if (fwrite(buffer_.data(), 1, dataToWrite, file_) != dataToWrite) {
+      return HandleError(kIoError);
+    }
+    file->compressed_size += dataToWrite;
+    current_offset_ += dataToWrite;
+  }
+  z_stream_.reset();
   return kNoError;
 }
 
@@ -190,13 +310,20 @@ int32_t ZipWriter::FinishEntry() {
     return kInvalidState;
   }
 
+  FileInfo& currentFile = files_.back();
+  if (currentFile.compression_method & kCompressDeflated) {
+    int32_t result = FlushCompressedBytes(&currentFile);
+    if (result != kNoError) {
+      return result;
+    }
+  }
+
   const uint32_t sig = DataDescriptor::kOptSignature;
   if (fwrite(&sig, sizeof(sig), 1, file_) != 1) {
     state_ = State::kError;
     return kIoError;
   }
 
-  FileInfo& currentFile = files_.back();
   DataDescriptor dd = {};
   dd.crc32 = currentFile.crc32;
   dd.compressed_size = currentFile.compressed_size;

@@ -44,26 +44,26 @@ TEST_F(zipwriter, WriteUncompressedZipWithOneFile) {
 
   const char* expected = "hello";
 
-  ASSERT_EQ(writer.StartEntry("file.txt", 0), 0);
-  ASSERT_EQ(writer.WriteBytes("he", 2), 0);
-  ASSERT_EQ(writer.WriteBytes("llo", 3), 0);
-  ASSERT_EQ(writer.FinishEntry(), 0);
-  ASSERT_EQ(writer.Finish(), 0);
+  ASSERT_EQ(0, writer.StartEntry("file.txt", 0));
+  ASSERT_EQ(0, writer.WriteBytes("he", 2));
+  ASSERT_EQ(0, writer.WriteBytes("llo", 3));
+  ASSERT_EQ(0, writer.FinishEntry());
+  ASSERT_EQ(0, writer.Finish());
 
-  ASSERT_GE(lseek(fd_, 0, SEEK_SET), 0);
+  ASSERT_GE(0, lseek(fd_, 0, SEEK_SET));
 
   ZipArchiveHandle handle;
-  ASSERT_EQ(OpenArchiveFd(fd_, "temp", &handle, false), 0);
+  ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
 
   ZipEntry data;
-  ASSERT_EQ(FindEntry(handle, ZipString("file.txt"), &data), 0);
-  EXPECT_EQ(data.compressed_length, strlen(expected));
-  EXPECT_EQ(data.uncompressed_length, strlen(expected));
-  EXPECT_EQ(data.method, kCompressStored);
+  ASSERT_EQ(0, FindEntry(handle, ZipString("file.txt"), &data));
+  EXPECT_EQ(strlen(expected), data.compressed_length);
+  EXPECT_EQ(strlen(expected), data.uncompressed_length);
+  EXPECT_EQ(kCompressStored, data.method);
 
   char buffer[6];
-  EXPECT_EQ(ExtractToMemory(handle, &data, reinterpret_cast<uint8_t*>(&buffer), sizeof(buffer)),
-            0);
+  EXPECT_EQ(0,
+            ExtractToMemory(handle, &data, reinterpret_cast<uint8_t*>(&buffer), sizeof(buffer)));
   buffer[5] = 0;
 
   EXPECT_STREQ(expected, buffer);
@@ -74,49 +74,49 @@ TEST_F(zipwriter, WriteUncompressedZipWithOneFile) {
 TEST_F(zipwriter, WriteUncompressedZipWithMultipleFiles) {
   ZipWriter writer(file_);
 
-  ASSERT_EQ(writer.StartEntry("file.txt", 0), 0);
-  ASSERT_EQ(writer.WriteBytes("he", 2), 0);
-  ASSERT_EQ(writer.FinishEntry(), 0);
+  ASSERT_EQ(0, writer.StartEntry("file.txt", 0));
+  ASSERT_EQ(0, writer.WriteBytes("he", 2));
+  ASSERT_EQ(0, writer.FinishEntry());
 
-  ASSERT_EQ(writer.StartEntry("file/file.txt", 0), 0);
-  ASSERT_EQ(writer.WriteBytes("llo", 3), 0);
-  ASSERT_EQ(writer.FinishEntry(), 0);
+  ASSERT_EQ(0, writer.StartEntry("file/file.txt", 0));
+  ASSERT_EQ(0, writer.WriteBytes("llo", 3));
+  ASSERT_EQ(0, writer.FinishEntry());
 
-  ASSERT_EQ(writer.StartEntry("file/file2.txt", 0), 0);
-  ASSERT_EQ(writer.FinishEntry(), 0);
+  ASSERT_EQ(0, writer.StartEntry("file/file2.txt", 0));
+  ASSERT_EQ(0, writer.FinishEntry());
 
-  ASSERT_EQ(writer.Finish(), 0);
+  ASSERT_EQ(0, writer.Finish());
 
-  ASSERT_GE(lseek(fd_, 0, SEEK_SET), 0);
+  ASSERT_GE(0, lseek(fd_, 0, SEEK_SET));
 
   ZipArchiveHandle handle;
-  ASSERT_EQ(OpenArchiveFd(fd_, "temp", &handle, false), 0);
+  ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
 
   char buffer[4];
   ZipEntry data;
 
-  ASSERT_EQ(FindEntry(handle, ZipString("file.txt"), &data), 0);
-  EXPECT_EQ(data.method, kCompressStored);
-  EXPECT_EQ(data.compressed_length, 2u);
-  EXPECT_EQ(data.uncompressed_length, 2u);
-  ASSERT_EQ(ExtractToMemory(handle, &data, reinterpret_cast<uint8_t*>(buffer), arraysize(buffer)),
-            0);
+  ASSERT_EQ(0, FindEntry(handle, ZipString("file.txt"), &data));
+  EXPECT_EQ(kCompressStored, data.method);
+  EXPECT_EQ(2u, data.compressed_length);
+  EXPECT_EQ(2u, data.uncompressed_length);
+  ASSERT_EQ(0,
+            ExtractToMemory(handle, &data, reinterpret_cast<uint8_t*>(buffer), arraysize(buffer)));
   buffer[2] = 0;
   EXPECT_STREQ("he", buffer);
 
-  ASSERT_EQ(FindEntry(handle, ZipString("file/file.txt"), &data), 0);
-  EXPECT_EQ(data.method, kCompressStored);
-  EXPECT_EQ(data.compressed_length, 3u);
-  EXPECT_EQ(data.uncompressed_length, 3u);
-  ASSERT_EQ(ExtractToMemory(handle, &data, reinterpret_cast<uint8_t*>(buffer), arraysize(buffer)),
-            0);
+  ASSERT_EQ(0, FindEntry(handle, ZipString("file/file.txt"), &data));
+  EXPECT_EQ(kCompressStored, data.method);
+  EXPECT_EQ(3u, data.compressed_length);
+  EXPECT_EQ(3u, data.uncompressed_length);
+  ASSERT_EQ(0,
+            ExtractToMemory(handle, &data, reinterpret_cast<uint8_t*>(buffer), arraysize(buffer)));
   buffer[3] = 0;
   EXPECT_STREQ("llo", buffer);
 
-  ASSERT_EQ(FindEntry(handle, ZipString("file/file2.txt"), &data), 0);
-  EXPECT_EQ(data.method, kCompressStored);
-  EXPECT_EQ(data.compressed_length, 0u);
-  EXPECT_EQ(data.uncompressed_length, 0u);
+  ASSERT_EQ(0, FindEntry(handle, ZipString("file/file2.txt"), &data));
+  EXPECT_EQ(kCompressStored, data.method);
+  EXPECT_EQ(0u, data.compressed_length);
+  EXPECT_EQ(0u, data.uncompressed_length);
 
   CloseArchive(handle);
 }
@@ -124,17 +124,47 @@ TEST_F(zipwriter, WriteUncompressedZipWithMultipleFiles) {
 TEST_F(zipwriter, WriteUncompressedZipWithAlignedFile) {
   ZipWriter writer(file_);
 
-  ASSERT_EQ(writer.StartEntry("align.txt", ZipWriter::kAlign32), 0);
-  ASSERT_EQ(writer.WriteBytes("he", 2), 0);
-  ASSERT_EQ(writer.FinishEntry(), 0);
-  ASSERT_EQ(writer.Finish(), 0);
+  ASSERT_EQ(0, writer.StartEntry("align.txt", ZipWriter::kAlign32));
+  ASSERT_EQ(0, writer.WriteBytes("he", 2));
+  ASSERT_EQ(0, writer.FinishEntry());
+  ASSERT_EQ(0, writer.Finish());
 
-  ASSERT_GE(lseek(fd_, 0, SEEK_SET), 0);
+  ASSERT_GE(0, lseek(fd_, 0, SEEK_SET));
 
   ZipArchiveHandle handle;
-  ASSERT_EQ(OpenArchiveFd(fd_, "temp", &handle, false), 0);
+  ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
 
   ZipEntry data;
-  ASSERT_EQ(FindEntry(handle, ZipString("align.txt"), &data), 0);
-  EXPECT_EQ(data.offset & 0x03, 0);
+  ASSERT_EQ(0, FindEntry(handle, ZipString("align.txt"), &data));
+  EXPECT_EQ(0, data.offset & 0x03);
+
+  CloseArchive(handle);
+}
+
+TEST_F(zipwriter, WriteCompressedZipWithOneFile) {
+  ZipWriter writer(file_);
+
+  ASSERT_EQ(0, writer.StartEntry("file.txt", ZipWriter::kCompress));
+  ASSERT_EQ(0, writer.WriteBytes("helo", 4));
+  ASSERT_EQ(0, writer.FinishEntry());
+  ASSERT_EQ(0, writer.Finish());
+
+  ASSERT_GE(0, lseek(fd_, 0, SEEK_SET));
+
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
+
+  ZipEntry data;
+  ASSERT_EQ(0, FindEntry(handle, ZipString("file.txt"), &data));
+  EXPECT_EQ(kCompressDeflated, data.method);
+  EXPECT_EQ(4u, data.uncompressed_length);
+
+  char buffer[5];
+  ASSERT_EQ(0,
+            ExtractToMemory(handle, &data, reinterpret_cast<uint8_t*>(buffer), arraysize(buffer)));
+  buffer[4] = 0;
+
+  EXPECT_STREQ("helo", buffer);
+
+  CloseArchive(handle);
 }
