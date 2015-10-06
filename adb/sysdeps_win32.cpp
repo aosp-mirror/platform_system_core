@@ -3265,6 +3265,15 @@ int unix_read(int fd, void* buf, size_t len) {
         // terminal.
         return _console_read(_console_handle, buf, len);
     } else {
+        // On older versions of Windows (definitely 7, definitely not 10),
+        // ReadConsole() with a size >= 31367 fails, so if |fd| is a console
+        // we need to limit the read size. This may also catch devices like NUL,
+        // but that is OK as we just want to avoid capping pipes and files which
+        // don't need size limiting. This isatty() test is very simple and quick
+        // and doesn't call the OS.
+        if (isatty(fd) && len > 4096) {
+            len = 4096;
+        }
         // Just call into C Runtime which can read from pipes/files and which
         // can do LF/CR translation (which is overridable with _setmode()).
         // Undefine the macro that is set in sysdeps.h which bans calls to
