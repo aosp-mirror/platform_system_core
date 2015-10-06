@@ -77,9 +77,9 @@
 
 #define TRACE_TAG SHELL
 
-#include "shell_service.h"
+#include "sysdeps.h"
 
-#if !ADB_HOST
+#include "shell_service.h"
 
 #include <errno.h>
 #include <pty.h>
@@ -95,7 +95,7 @@
 #include "adb.h"
 #include "adb_io.h"
 #include "adb_trace.h"
-#include "sysdeps.h"
+#include "adb_utils.h"
 
 namespace {
 
@@ -327,9 +327,8 @@ bool Subprocess::ForkAndExec() {
         // the pipe fills up.
         for (int fd : {stdinout_sfd_.fd(), stderr_sfd_.fd()}) {
             if (fd >= 0) {
-                int flags = fcntl(fd, F_GETFL, 0);
-                if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
-                    PLOG(ERROR) << "error making FD " << fd << " non-blocking";
+                if (!set_file_block_mode(fd, false)) {
+                    LOG(ERROR) << "failed to set non-blocking mode for fd " << fd;
                     return false;
                 }
             }
@@ -624,5 +623,3 @@ int StartSubprocess(const char *name, SubprocessType type,
       subprocess->local_socket_fd(), subprocess->pid());
     return subprocess->local_socket_fd();
 }
-
-#endif  // !ADB_HOST

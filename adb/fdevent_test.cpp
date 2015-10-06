@@ -18,13 +18,13 @@
 
 #include <gtest/gtest.h>
 
+#include <pthread.h>
+#include <signal.h>
+
 #include <limits>
 #include <queue>
 #include <string>
 #include <vector>
-
-#include <pthread.h>
-#include <signal.h>
 
 #include "adb_io.h"
 

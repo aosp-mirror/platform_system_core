@@ -46,4 +46,6 @@ bool parse_host_and_port(const std::string& address,
 
 std::string perror_str(const char* msg);
 
+bool set_file_block_mode(int fd, bool block);
+
 #endif
