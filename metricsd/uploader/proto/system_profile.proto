@@ -88,7 +88,7 @@ message SystemProfileProto {
   optional string application_locale = 4;
 
   message BrilloDeviceData {
-    optional string build_target_id = 1;
+    optional string product_id = 1;
   }
   optional BrilloDeviceData brillo = 21;
 
