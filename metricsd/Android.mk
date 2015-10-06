@@ -25,44 +25,30 @@ libmetrics_sources := \
 metrics_client_sources := \
   metrics_client.cc
 
-metrics_daemon_sources := \
+metrics_daemon_common := \
   collectors/averaged_statistics_collector.cc \
   collectors/disk_usage_collector.cc \
   metrics_daemon.cc \
-  metrics_daemon_main.cc \
   persistent_integer.cc \
-  uploader/metrics_hashes.cc \
-  uploader/metrics_log_base.cc \
-  uploader/metrics_log.cc \
-  uploader/sender_http.cc \
-  uploader/system_profile_cache.cc \
-  uploader/upload_service.cc \
-  serialization/metric_sample.cc \
-  serialization/serialization_utils.cc
-
-metrics_tests_sources := \
-  collectors/averaged_statistics_collector.cc \
-  collectors/averaged_statistics_collector_test.cc \
-  collectors/disk_usage_collector.cc \
-  metrics_daemon.cc \
-  metrics_daemon_test.cc \
-  metrics_library_test.cc \
-  persistent_integer.cc \
-  persistent_integer_test.cc \
   serialization/metric_sample.cc \
   serialization/serialization_utils.cc \
-  serialization/serialization_utils_unittest.cc \
-  timer.cc \
-  timer_test.cc \
   uploader/metrics_hashes.cc \
-  uploader/metrics_hashes_unittest.cc \
   uploader/metrics_log_base.cc \
-  uploader/metrics_log_base_unittest.cc \
   uploader/metrics_log.cc \
-  uploader/mock/sender_mock.cc \
   uploader/sender_http.cc \
   uploader/system_profile_cache.cc \
   uploader/upload_service.cc \
+
+metrics_tests_sources := \
+  collectors/averaged_statistics_collector_test.cc \
+  metrics_daemon_test.cc \
+  metrics_library_test.cc \
+  persistent_integer_test.cc \
+  serialization/serialization_utils_unittest.cc \
+  timer_test.cc \
+  uploader/metrics_hashes_unittest.cc \
+  uploader/metrics_log_base_unittest.cc \
+  uploader/mock/sender_mock.cc \
   uploader/upload_service_test.cc \
 
 metrics_CFLAGS := -Wall \
@@ -78,7 +64,17 @@ metrics_CPPFLAGS := -Wno-non-virtual-dtor \
   -fvisibility=default
 metrics_includes := external/gtest/include \
   $(LOCAL_PATH)/include
-metrics_shared_libraries := libchrome libchromeos
+libmetrics_shared_libraries := libchrome libchromeos
+metrics_daemon_shared_libraries := $(libmetrics_shared_libraries) \
+  libchrome-dbus \
+  libchromeos-http \
+  libchromeos-dbus \
+  libcutils \
+  libdbus \
+  libmetrics \
+  libprotobuf-cpp-lite \
+  librootdev \
+  libweaved-client \
 
 # Shared library for metrics.
 # ========================================================
@@ -91,7 +87,7 @@ LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS)
 LOCAL_RTTI_FLAG := -frtti
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
-LOCAL_SHARED_LIBRARIES := $(metrics_shared_libraries)
+LOCAL_SHARED_LIBRARIES := $(libmetrics_shared_libraries)
 LOCAL_SRC_FILES := $(libmetrics_sources)
 include $(BUILD_SHARED_LIBRARY)
 
@@ -104,7 +100,7 @@ LOCAL_CFLAGS := $(metrics_CFLAGS)
 LOCAL_CLANG := true
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS)
-LOCAL_SHARED_LIBRARIES := $(metrics_shared_libraries) \
+LOCAL_SHARED_LIBRARIES := $(libmetrics_shared_libraries) \
   libmetrics
 LOCAL_SRC_FILES := $(metrics_client_sources)
 include $(BUILD_EXECUTABLE)
@@ -130,18 +126,15 @@ LOCAL_CFLAGS := $(metrics_CFLAGS)
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS)
 LOCAL_INIT_RC := metrics_daemon.rc
-LOCAL_RTTI_FLAG := -frtti
-LOCAL_SHARED_LIBRARIES := $(metrics_shared_libraries) \
-  libmetrics \
-  libprotobuf-cpp-lite \
-  libchromeos-http \
-  libchromeos-dbus \
-  libcutils \
-  libdbus \
-  librootdev
+LOCAL_REQUIRED_MODULES := \
+  metrics.json \
+  metrics.schema.json \
 
+LOCAL_RTTI_FLAG := -frtti
+LOCAL_SHARED_LIBRARIES := $(metrics_daemon_shared_libraries)
 LOCAL_CLANG := true
-LOCAL_SRC_FILES := $(metrics_daemon_sources)
+LOCAL_SRC_FILES := $(metrics_daemon_common) \
+  metrics_daemon_main.cc
 LOCAL_STATIC_LIBRARIES := metrics_daemon_protos
 include $(BUILD_EXECUTABLE)
 
@@ -154,15 +147,24 @@ LOCAL_CFLAGS := $(metrics_CFLAGS)
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS) -Wno-sign-compare
 LOCAL_RTTI_FLAG := -frtti
-LOCAL_SHARED_LIBRARIES := $(metrics_shared_libraries) \
-  libmetrics \
-  libprotobuf-cpp-lite \
-  libchromeos-http \
-  libchromeos-dbus \
-  libcutils \
-  libdbus \
-
-LOCAL_SRC_FILES := $(metrics_tests_sources)
+LOCAL_SHARED_LIBRARIES := $(metrics_daemon_shared_libraries)
+LOCAL_SRC_FILES := $(metrics_tests_sources) $(metrics_daemon_common)
 LOCAL_STATIC_LIBRARIES := libBionicGtestMain libgmock metrics_daemon_protos
 
 include $(BUILD_NATIVE_TEST)
+
+# Weave schema files
+# ========================================================
+include $(CLEAR_VARS)
+LOCAL_MODULE := metrics.json
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/weaved/commands
+LOCAL_SRC_FILES := etc/weaved/commands/$(LOCAL_MODULE)
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := metrics.schema.json
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/weaved/states
+LOCAL_SRC_FILES := etc/weaved/states/$(LOCAL_MODULE)
+include $(BUILD_PREBUILT)
