@@ -671,8 +671,8 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
 {
     unsigned len;
 #if ADB_HOST
-    char *service = NULL;
-    char* serial = NULL;
+    char *service = nullptr;
+    char* serial = nullptr;
     TransportType type = kTransportAny;
 #endif
 
@@ -739,7 +739,7 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
         type = kTransportAny;
         service += strlen("host:");
     } else {
-        service = NULL;
+        service = nullptr;
     }
 
     if (service) {
@@ -782,7 +782,7 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
         SendOkay(s->peer->fd);
 
         s->peer->ready = local_socket_ready;
-        s->peer->shutdown = NULL;
+        s->peer->shutdown = nullptr;
         s->peer->close = local_socket_close;
         s->peer->peer = s2;
         s2->peer = s->peer;
@@ -795,12 +795,10 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
         return 0;
     }
 #else /* !ADB_HOST */
-    if (s->transport == NULL) {
+    if (s->transport == nullptr) {
         std::string error_msg = "unknown failure";
-        s->transport =
-            acquire_one_transport(kCsAny, kTransportAny, NULL, &error_msg);
-
-        if (s->transport == NULL) {
+        s->transport = acquire_one_transport(kTransportAny, nullptr, nullptr, &error_msg);
+        if (s->transport == nullptr) {
             SendFail(s->peer->fd, error_msg);
             goto fail;
         }
@@ -822,7 +820,7 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
         ** tear down
         */
     s->peer->ready = local_socket_ready_notify;
-    s->peer->shutdown = NULL;
+    s->peer->shutdown = nullptr;
     s->peer->close = local_socket_close_notify;
     s->peer->peer = 0;
         /* give him our transport and upref it */

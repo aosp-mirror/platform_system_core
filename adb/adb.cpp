@@ -904,7 +904,7 @@ int handle_forward_request(const char* service, TransportType type, const char* 
         }
 
         std::string error_msg;
-        atransport* transport = acquire_one_transport(kCsAny, type, serial, &error_msg);
+        atransport* transport = acquire_one_transport(type, serial, nullptr, &error_msg);
         if (!transport) {
             SendFail(reply_fd, error_msg);
             return 1;
@@ -990,13 +990,13 @@ int handle_host_request(const char* service, TransportType type,
             serial = service;
         }
 
-        std::string error_msg;
-        atransport* t = acquire_one_transport(kCsAny, type, serial, &error_msg);
+        std::string error;
+        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
         if (t != nullptr) {
             s->transport = t;
             SendOkay(reply_fd);
         } else {
-            SendFail(reply_fd, error_msg);
+            SendFail(reply_fd, error);
         }
         return 1;
     }
@@ -1014,12 +1014,12 @@ int handle_host_request(const char* service, TransportType type,
     }
 
     if (!strcmp(service, "features")) {
-        std::string error_msg;
-        atransport* t = acquire_one_transport(kCsAny, type, serial, &error_msg);
+        std::string error;
+        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
         if (t != nullptr) {
             SendOkay(reply_fd, FeatureSetToString(t->features()));
         } else {
-            SendFail(reply_fd, error_msg);
+            SendFail(reply_fd, error);
         }
         return 0;
     }
@@ -1049,29 +1049,41 @@ int handle_host_request(const char* service, TransportType type,
         return SendOkay(reply_fd, android::base::StringPrintf("disconnected %s", address.c_str()));
     }
 
-    // returns our value for ADB_SERVER_VERSION
+    // Returns our value for ADB_SERVER_VERSION.
     if (!strcmp(service, "version")) {
         return SendOkay(reply_fd, android::base::StringPrintf("%04x", ADB_SERVER_VERSION));
     }
 
     // These always report "unknown" rather than the actual error, for scripts.
     if (!strcmp(service, "get-serialno")) {
-        std::string ignored;
-        atransport* t = acquire_one_transport(kCsAny, type, serial, &ignored);
-        return SendOkay(reply_fd, (t && t->serial) ? t->serial : "unknown");
+        std::string error;
+        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
+        if (t) {
+            return SendOkay(reply_fd, t->serial ? t->serial : "unknown");
+        } else {
+            return SendFail(reply_fd, error);
+        }
     }
     if (!strcmp(service, "get-devpath")) {
-        std::string ignored;
-        atransport* t = acquire_one_transport(kCsAny, type, serial, &ignored);
-        return SendOkay(reply_fd, (t && t->devpath) ? t->devpath : "unknown");
+        std::string error;
+        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
+        if (t) {
+            return SendOkay(reply_fd, t->devpath ? t->devpath : "unknown");
+        } else {
+            return SendFail(reply_fd, error);
+        }
     }
     if (!strcmp(service, "get-state")) {
-        std::string ignored;
-        atransport* t = acquire_one_transport(kCsAny, type, serial, &ignored);
-        return SendOkay(reply_fd, t ? t->connection_state_name() : "unknown");
+        std::string error;
+        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
+        if (t) {
+            return SendOkay(reply_fd, t->connection_state_name());
+        } else {
+            return SendFail(reply_fd, error);
+        }
     }
 
-    // indicates a new emulator instance has started
+    // Indicates a new emulator instance has started.
     if (!strncmp(service, "emulator:", 9)) {
         int  port = atoi(service+9);
         local_connect(port);

@@ -363,23 +363,31 @@ struct state_info {
     ConnectionState state;
 };
 
-static void wait_for_state(int fd, void* cookie)
-{
+static void wait_for_state(int fd, void* cookie) {
     state_info* sinfo = reinterpret_cast<state_info*>(cookie);
 
     D("wait_for_state %d", sinfo->state);
 
-    std::string error_msg = "unknown error";
-    atransport* t = acquire_one_transport(sinfo->state, sinfo->transport_type, sinfo->serial,
-                                          &error_msg);
-    if (t != nullptr) {
-        SendOkay(fd);
-    } else {
-        SendFail(fd, error_msg);
+    while (true) {
+        bool is_ambiguous = false;
+        std::string error = "unknown error";
+        atransport* t = acquire_one_transport(sinfo->transport_type, sinfo->serial,
+                                              &is_ambiguous, &error);
+        if (t != nullptr && t->connection_state == sinfo->state) {
+            SendOkay(fd);
+            break;
+        } else if (!is_ambiguous) {
+            adb_sleep_ms(1000);
+            // Try again...
+        } else {
+            SendFail(fd, error);
+            break;
+        }
     }
 
-    if (sinfo->serial)
+    if (sinfo->serial) {
         free(sinfo->serial);
+    }
     free(sinfo);
     adb_close(fd);
     D("wait_for_state is done");

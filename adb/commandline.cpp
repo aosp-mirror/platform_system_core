@@ -1093,8 +1093,6 @@ int adb_commandline(int argc, const char **argv) {
     }
     // TODO: also try TARGET_PRODUCT/TARGET_DEVICE as a hint
 
-    const char* serial = getenv("ANDROID_SERIAL");
-
     /* Validate and assign the server port */
     const char* server_port_str = getenv("ANDROID_ADB_SERVER_PORT");
     int server_port = DEFAULT_ADB_PORT;
@@ -1108,7 +1106,9 @@ int adb_commandline(int argc, const char **argv) {
         }
     }
 
-    /* modifiers and flags */
+    // We need to check for -d and -e before we look at $ANDROID_SERIAL.
+    const char* serial = nullptr;
+
     while (argc > 0) {
         if (!strcmp(argv[0],"server")) {
             is_server = 1;
@@ -1197,6 +1197,11 @@ int adb_commandline(int argc, const char **argv) {
         }
         argc--;
         argv++;
+    }
+
+    // If none of -d, -e, or -s were specified, try $ANDROID_SERIAL.
+    if (transport_type == kTransportAny && serial == nullptr) {
+        serial = getenv("ANDROID_SERIAL");
     }
 
     adb_set_transport(transport_type, serial);
