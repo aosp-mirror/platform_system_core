@@ -825,7 +825,7 @@ void atransport::RemoveDisconnect(adisconnect* disconnect) {
 }
 
 void atransport::RunDisconnects() {
-    for (auto& disconnect : disconnects_) {
+    for (const auto& disconnect : disconnects_) {
         disconnect->func(disconnect->opaque, this);
     }
     disconnects_.clear();
@@ -872,7 +872,7 @@ static void append_transport(const atransport* t, std::string* result,
 std::string list_transports(bool long_listing) {
     std::string result;
     adb_mutex_lock(&transport_lock);
-    for (const auto t : transport_list) {
+    for (const auto& t : transport_list) {
         append_transport(t, &result, long_listing);
     }
     adb_mutex_unlock(&transport_lock);
@@ -882,7 +882,7 @@ std::string list_transports(bool long_listing) {
 /* hack for osx */
 void close_usb_devices() {
     adb_mutex_lock(&transport_lock);
-    for (auto t : transport_list) {
+    for (const auto& t : transport_list) {
         if (!t->kicked) {
             t->kicked = 1;
             t->kick(t);
@@ -908,7 +908,7 @@ int register_socket_transport(int s, const char *serial, int port, int local) {
     }
 
     adb_mutex_lock(&transport_lock);
-    for (auto transport : pending_list) {
+    for (const auto& transport : pending_list) {
         if (transport->serial && strcmp(serial, transport->serial) == 0) {
             adb_mutex_unlock(&transport_lock);
             delete t;
@@ -916,7 +916,7 @@ int register_socket_transport(int s, const char *serial, int port, int local) {
         }
     }
 
-    for (auto transport : transport_list) {
+    for (const auto& transport : transport_list) {
         if (transport->serial && strcmp(serial, transport->serial) == 0) {
             adb_mutex_unlock(&transport_lock);
             delete t;
