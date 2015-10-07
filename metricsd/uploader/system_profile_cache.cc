@@ -136,7 +136,7 @@ bool SystemProfileCache::Populate(
   profile_proto->set_channel(profile_.channel);
   metrics::SystemProfileProto_BrilloDeviceData* device_data =
       profile_proto->mutable_brillo();
-  device_data->set_build_target_id(profile_.product_id);
+  device_data->set_product_id(profile_.product_id);
 
   return true;
 }
