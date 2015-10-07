@@ -209,9 +209,8 @@ int adb_connect(const std::string& service, std::string* error) {
             adb_close(fd);
 
             if (sscanf(&version_string[0], "%04x", &version) != 1) {
-                *error = android::base::StringPrintf(
-                        "cannot parse version string: %s",
-                        version_string.c_str());
+                *error = android::base::StringPrintf("cannot parse version string: %s",
+                                                     version_string.c_str());
                 return -1;
             }
         } else {
