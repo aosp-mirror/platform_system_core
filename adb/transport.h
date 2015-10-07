@@ -122,12 +122,13 @@ private:
 
 /*
  * Obtain a transport from the available transports.
- * If state is != kCsAny, only transports in that state are considered.
- * If serial is non-NULL then only the device with that serial will be chosen.
- * If no suitable transport is found, error is set.
+ * If serial is non-null then only the device with that serial will be chosen.
+ * If multiple devices/emulators would match, *is_ambiguous (if non-null)
+ * is set to true and nullptr returned.
+ * If no suitable transport is found, error is set and nullptr returned.
  */
-atransport* acquire_one_transport(ConnectionState state, TransportType type,
-                                  const char* serial, std::string* error_out);
+atransport* acquire_one_transport(TransportType type, const char* serial,
+                                  bool* is_ambiguous, std::string* error_out);
 void kick_transport(atransport* t);
 void update_transports(void);
 

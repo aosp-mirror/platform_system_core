@@ -653,22 +653,28 @@ static int qual_match(const char *to_test,
     return !*to_test;
 }
 
-atransport* acquire_one_transport(ConnectionState state, TransportType type,
-                                  const char* serial, std::string* error_out) {
-    atransport *result = NULL;
-    int ambiguous = 0;
+atransport* acquire_one_transport(TransportType type, const char* serial,
+                                  bool* is_ambiguous, std::string* error_out) {
+    atransport* result = nullptr;
 
-retry:
-    *error_out = serial ? android::base::StringPrintf("device '%s' not found", serial) : "no devices found";
+    if (serial) {
+        *error_out = android::base::StringPrintf("device '%s' not found", serial);
+    } else if (type == kTransportLocal) {
+        *error_out = "no emulators found";
+    } else if (type == kTransportAny) {
+        *error_out = "no devices/emulators found";
+    } else {
+        *error_out = "no devices found";
+    }
 
     adb_mutex_lock(&transport_lock);
-    for (auto t : transport_list) {
+    for (const auto& t : transport_list) {
         if (t->connection_state == kCsNoPerm) {
             *error_out = "insufficient permissions for device";
             continue;
         }
 
-        /* check for matching serial number */
+        // Check for matching serial number.
         if (serial) {
             if ((t->serial && !strcmp(serial, t->serial)) ||
                 (t->devpath && !strcmp(serial, t->devpath)) ||
@@ -677,8 +683,8 @@ retry:
                 qual_match(serial, "device:", t->device, false)) {
                 if (result) {
                     *error_out = "more than one device";
-                    ambiguous = 1;
-                    result = NULL;
+                    if (is_ambiguous) *is_ambiguous = true;
+                    result = nullptr;
                     break;
                 }
                 result = t;
@@ -687,24 +693,24 @@ retry:
             if (type == kTransportUsb && t->type == kTransportUsb) {
                 if (result) {
                     *error_out = "more than one device";
-                    ambiguous = 1;
-                    result = NULL;
+                    if (is_ambiguous) *is_ambiguous = true;
+                    result = nullptr;
                     break;
                 }
                 result = t;
             } else if (type == kTransportLocal && t->type == kTransportLocal) {
                 if (result) {
                     *error_out = "more than one emulator";
-                    ambiguous = 1;
-                    result = NULL;
+                    if (is_ambiguous) *is_ambiguous = true;
+                    result = nullptr;
                     break;
                 }
                 result = t;
             } else if (type == kTransportAny) {
                 if (result) {
                     *error_out = "more than one device/emulator";
-                    ambiguous = 1;
-                    result = NULL;
+                    if (is_ambiguous) *is_ambiguous = true;
+                    result = nullptr;
                     break;
                 }
                 result = t;
@@ -713,37 +719,26 @@ retry:
     }
     adb_mutex_unlock(&transport_lock);
 
-    if (result) {
-        if (result->connection_state == kCsUnauthorized) {
-            *error_out = "device unauthorized.\n";
-            char* ADB_VENDOR_KEYS = getenv("ADB_VENDOR_KEYS");
-            *error_out += "This adb server's $ADB_VENDOR_KEYS is ";
-            *error_out += ADB_VENDOR_KEYS ? ADB_VENDOR_KEYS : "not set";
-            *error_out += "\n";
-            *error_out += "Try 'adb kill-server' if that seems wrong.\n";
-            *error_out += "Otherwise check for a confirmation dialog on your device.";
-            result = NULL;
-        }
+    // Don't return unauthorized devices; the caller can't do anything with them.
+    if (result && result->connection_state == kCsUnauthorized) {
+        *error_out = "device unauthorized.\n";
+        char* ADB_VENDOR_KEYS = getenv("ADB_VENDOR_KEYS");
+        *error_out += "This adb server's $ADB_VENDOR_KEYS is ";
+        *error_out += ADB_VENDOR_KEYS ? ADB_VENDOR_KEYS : "not set";
+        *error_out += "\n";
+        *error_out += "Try 'adb kill-server' if that seems wrong.\n";
+        *error_out += "Otherwise check for a confirmation dialog on your device.";
+        result = nullptr;
+    }
 
-        /* offline devices are ignored -- they are either being born or dying */
-        if (result && result->connection_state == kCsOffline) {
-            *error_out = "device offline";
-            result = NULL;
-        }
-
-        /* check for required connection state */
-        if (result && state != kCsAny && result->connection_state != state) {
-            *error_out = "invalid device state";
-            result = NULL;
-        }
+    // Don't return offline devices; the caller can't do anything with them.
+    if (result && result->connection_state == kCsOffline) {
+        *error_out = "device offline";
+        result = nullptr;
     }
 
     if (result) {
-        /* found one that we can take */
         *error_out = "success";
-    } else if (state != kCsAny && (serial || !ambiguous)) {
-        adb_sleep_ms(1000);
-        goto retry;
     }
 
     return result;
