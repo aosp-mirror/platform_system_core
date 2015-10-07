@@ -199,7 +199,7 @@ void fdevent_del(fdevent* fde, unsigned events) {
 
 static std::string dump_pollfds(const std::vector<pollfd>& pollfds) {
     std::string result;
-    for (auto& pollfd : pollfds) {
+    for (const auto& pollfd : pollfds) {
         std::string op;
         if (pollfd.events & POLLIN) {
             op += "R";
@@ -214,8 +214,8 @@ static std::string dump_pollfds(const std::vector<pollfd>& pollfds) {
 
 static void fdevent_process() {
     std::vector<pollfd> pollfds;
-    for (auto it = g_poll_node_map.begin(); it != g_poll_node_map.end(); ++it) {
-        pollfds.push_back(it->second.pollfd);
+    for (const auto& pair : g_poll_node_map) {
+        pollfds.push_back(pair.second.pollfd);
     }
     CHECK_GT(pollfds.size(), 0u);
     D("poll(), pollfds = %s", dump_pollfds(pollfds).c_str());
@@ -224,7 +224,7 @@ static void fdevent_process() {
         PLOG(ERROR) << "poll(), ret = " << ret;
         return;
     }
-    for (auto& pollfd : pollfds) {
+    for (const auto& pollfd : pollfds) {
         if (pollfd.revents != 0) {
             D("for fd %d, revents = %x", pollfd.fd, pollfd.revents);
         }

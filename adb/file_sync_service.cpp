@@ -56,7 +56,7 @@ static bool secure_mkdirs(const std::string& path) {
     path_components.pop_back(); // For "/system/bin/sh", only create "/system/bin".
 
     std::string partial_path;
-    for (auto& path_component : path_components) {
+    for (const auto& path_component : path_components) {
         if (partial_path.back() != OS_PATH_SEPARATOR) partial_path += OS_PATH_SEPARATOR;
         partial_path += path_component;
 
