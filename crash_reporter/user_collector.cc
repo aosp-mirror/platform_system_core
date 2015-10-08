@@ -23,9 +23,11 @@
 #include <pwd.h>  // For struct passwd.
 #include <stdint.h>
 #include <sys/cdefs.h>  // For __WORDSIZE
+#include <sys/fsuid.h>
 #include <sys/types.h>  // For getpwuid_r, getgrnam_r, WEXITSTATUS.
 #include <unistd.h>  // For setgroups
 
+#include <iostream>  // For std::oct
 #include <string>
 #include <vector>
 
@@ -87,9 +89,9 @@ void UserCollector::Initialize(
   directory_failure_ = directory_failure;
   filter_in_ = filter_in;
 
-  gid_t groups[] = { AID_SYSTEM, AID_DBUS };
+  gid_t groups[] = { AID_ROOT, AID_SYSTEM, AID_DBUS };
   if (setgroups(arraysize(groups), groups) != 0) {
-    PLOG(FATAL) << "Unable to set groups to system and dbus";
+    PLOG(FATAL) << "Unable to set groups to root, system, and dbus";
   }
 }
 
@@ -227,7 +229,19 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
 bool UserCollector::CopyOffProcFiles(pid_t pid,
                                      const FilePath &container_dir) {
   if (!base::CreateDirectory(container_dir)) {
-    PLOG(ERROR) << "Could not create " << container_dir.value().c_str();
+    PLOG(ERROR) << "Could not create " << container_dir.value();
+    return false;
+  }
+  int dir_mask = base::FILE_PERMISSION_READ_BY_USER
+                 | base::FILE_PERMISSION_WRITE_BY_USER
+                 | base::FILE_PERMISSION_EXECUTE_BY_USER
+                 | base::FILE_PERMISSION_READ_BY_GROUP
+                 | base::FILE_PERMISSION_WRITE_BY_GROUP;
+  if (!base::SetPosixFilePermissions(container_dir,
+                                     base::FILE_PERMISSION_MASK & dir_mask)) {
+    PLOG(ERROR) << "Could not set permissions for " << container_dir.value()
+                << " to " << std::oct
+                << (base::FILE_PERMISSION_MASK & dir_mask);
     return false;
   }
   FilePath process_path = GetProcessPath(pid);
@@ -410,6 +424,43 @@ UserCollector::ErrorType UserCollector::ConvertCoreToMinidump(
   bool proc_files_usable =
       CopyOffProcFiles(pid, container_dir) && ValidateProcFiles(container_dir);
 
+  // Switch back to the original UID/GID.
+  gid_t rgid, egid, sgid;
+  if (getresgid(&rgid, &egid, &sgid) != 0) {
+    PLOG(FATAL) << "Unable to read saved gid";
+  }
+  if (setresgid(sgid, sgid, -1) != 0) {
+    PLOG(FATAL) << "Unable to set real group ID back to saved gid";
+  } else {
+    if (getresgid(&rgid, &egid, &sgid) != 0) {
+      // If the groups cannot be read at this point, the rgid variable will
+      // contain the previously read group ID from before changing it.  This
+      // will cause the chown call below to set the incorrect group for
+      // non-root crashes.  But do not treat this as a fatal error, so that
+      // the rest of the collection will continue for potential manual
+      // collection by a developer.
+      PLOG(ERROR) << "Unable to read real group ID after setting it";
+    }
+  }
+
+  uid_t ruid, euid, suid;
+  if (getresuid(&ruid, &euid, &suid) != 0) {
+    PLOG(FATAL) << "Unable to read saved uid";
+  }
+  if (setresuid(suid, suid, -1) != 0) {
+    PLOG(FATAL) << "Unable to set real user ID back to saved uid";
+  } else {
+    if (getresuid(&ruid, &euid, &suid) != 0) {
+      // If the user ID cannot be read at this point, the ruid variable will
+      // contain the previously read user ID from before changing it.  This
+      // will cause the chown call below to set the incorrect user for
+      // non-root crashes.  But do not treat this as a fatal error, so that
+      // the rest of the collection will continue for potential manual
+      // collection by a developer.
+      PLOG(ERROR) << "Unable to read real user ID after setting it";
+    }
+  }
+
   if (!CopyStdinToCoreFile(core_path)) {
     return kErrorReadCoreData;
   }
@@ -423,6 +474,13 @@ UserCollector::ErrorType UserCollector::ConvertCoreToMinidump(
   ErrorType error = ValidateCoreFile(core_path);
   if (error != kErrorNone) {
     return error;
+  }
+
+  // Chown the temp container directory back to the original user/group that
+  // crash_reporter is run as, so that additional files can be written to
+  // the temp folder.
+  if (chown(container_dir.value().c_str(), ruid, rgid) < 0) {
+    PLOG(ERROR) << "Could not set owner for " << container_dir.value();
   }
 
   if (!RunCoreToMinidump(core_path,
@@ -543,6 +601,16 @@ bool UserCollector::HandleCrash(const std::string &crash_attributes,
                             &kernel_supplied_name)) {
     LOG(ERROR) << "Invalid parameter: --user=" <<  crash_attributes;
     return false;
+  }
+
+  // Switch to the group and user that ran the crashing binary in order to
+  // access their /proc files.  Do not set suid/sgid, so that we can switch
+  // back after copying the necessary files.
+  if (setresgid(supplied_ruid, supplied_ruid, -1) != 0) {
+    PLOG(FATAL) << "Unable to set real group ID to access process files";
+  }
+  if (setresuid(supplied_ruid, supplied_ruid, -1) != 0) {
+    PLOG(FATAL) << "Unable to set real user ID to access process files";
   }
 
   std::string exec;
