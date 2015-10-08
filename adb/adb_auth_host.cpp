@@ -368,7 +368,7 @@ static void get_vendor_keys(struct listnode* key_list) {
         return;
     }
 
-    for (auto& path : android::base::Split(adb_keys_path, ENV_PATH_SEPARATOR_STR)) {
+    for (const auto& path : android::base::Split(adb_keys_path, ENV_PATH_SEPARATOR_STR)) {
         if (!read_key(path.c_str(), key_list)) {
             D("Failed to read '%s'", path.c_str());
         }
