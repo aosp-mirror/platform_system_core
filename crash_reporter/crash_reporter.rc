@@ -14,11 +14,14 @@ on boot
     rmdir /data/misc/crash_reporter/lock/crash_sender
 
     # Create crash directories.
-    mkdir /data/misc/crash_reporter 0700 root root
+    # These directories are group-writable by root so that crash_reporter can
+    # still access them when it switches users.
+    mkdir /data/misc/crash_reporter 0770 root root
+    mkdir /data/misc/crash_reporter/crash 0770 root root
     mkdir /data/misc/crash_reporter/lock 0700 root root
     mkdir /data/misc/crash_reporter/log 0700 root root
     mkdir /data/misc/crash_reporter/run 0700 root root
-    mkdir /data/misc/crash_reporter/tmp 0700 root root
+    mkdir /data/misc/crash_reporter/tmp 0770 root root
 
 service crash_reporter /system/bin/crash_reporter --init
     class late_start
