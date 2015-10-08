@@ -832,48 +832,65 @@ int main(int argc, char **argv)
     } else {
         logger_list = android_logger_list_alloc(mode, tail_lines, 0);
     }
+    const char *openDeviceFail = NULL;
+    const char *clearFail = NULL;
+    const char *setSizeFail = NULL;
+    const char *getSizeFail = NULL;
+    // We have three orthogonal actions below to clear, set log size and
+    // get log size. All sharing the same iteration loop.
     while (dev) {
         dev->logger_list = logger_list;
         dev->logger = android_logger_open(logger_list,
                                           android_name_to_log_id(dev->device));
         if (!dev->logger) {
-            logcat_panic(false, "Unable to open log device '%s'\n",
-                         dev->device);
+            openDeviceFail = openDeviceFail ?: dev->device;
+            dev = dev->next;
+            continue;
         }
 
         if (clearLog) {
-            int ret;
-            ret = android_logger_clear(dev->logger);
-            if (ret) {
-                logcat_panic(false, "failed to clear the log");
+            if (android_logger_clear(dev->logger)) {
+                clearFail = clearFail ?: dev->device;
             }
         }
 
-        if (setLogSize && android_logger_set_log_size(dev->logger, setLogSize)) {
-            logcat_panic(false, "failed to set the log size");
+        if (setLogSize) {
+            if (android_logger_set_log_size(dev->logger, setLogSize)) {
+                setSizeFail = setSizeFail ?: dev->device;
+            }
         }
 
         if (getLogSize) {
-            long size, readable;
+            long size = android_logger_get_log_size(dev->logger);
+            long readable = android_logger_get_log_readable_size(dev->logger);
 
-            size = android_logger_get_log_size(dev->logger);
-            if (size < 0) {
-                logcat_panic(false, "failed to get the log size");
+            if ((size < 0) || (readable < 0)) {
+                getSizeFail = getSizeFail ?: dev->device;
+            } else {
+                printf("%s: ring buffer is %ld%sb (%ld%sb consumed), "
+                       "max entry is %db, max payload is %db\n", dev->device,
+                       value_of_size(size), multiplier_of_size(size),
+                       value_of_size(readable), multiplier_of_size(readable),
+                       (int) LOGGER_ENTRY_MAX_LEN,
+                       (int) LOGGER_ENTRY_MAX_PAYLOAD);
             }
-
-            readable = android_logger_get_log_readable_size(dev->logger);
-            if (readable < 0) {
-                logcat_panic(false, "failed to get the readable log size");
-            }
-
-            printf("%s: ring buffer is %ld%sb (%ld%sb consumed), "
-                   "max entry is %db, max payload is %db\n", dev->device,
-                   value_of_size(size), multiplier_of_size(size),
-                   value_of_size(readable), multiplier_of_size(readable),
-                   (int) LOGGER_ENTRY_MAX_LEN, (int) LOGGER_ENTRY_MAX_PAYLOAD);
         }
 
         dev = dev->next;
+    }
+    // report any errors in the above loop and exit
+    if (openDeviceFail) {
+        logcat_panic(false, "Unable to open log device '%s'\n", openDeviceFail);
+    }
+    if (clearFail) {
+        logcat_panic(false, "failed to clear the '%s' log\n", clearFail);
+    }
+    if (setSizeFail) {
+        logcat_panic(false, "failed to set the '%s' log size\n", setSizeFail);
+    }
+    if (getSizeFail) {
+        logcat_panic(false, "failed to get the readable '%s' log size",
+                     getSizeFail);
     }
 
     if (setPruneList) {

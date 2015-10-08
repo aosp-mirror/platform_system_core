@@ -42,7 +42,6 @@ LogCommand::LogCommand(const char *cmd) : FrameworkCommand(cmd) {
 static bool groupIsLog(char *buf) {
     char *ptr;
     static const char ws[] = " \n";
-    bool ret = false;
 
     for (buf = strtok_r(buf, ws, &ptr); buf; buf = strtok_r(NULL, ws, &ptr)) {
         errno = 0;
@@ -51,10 +50,10 @@ static bool groupIsLog(char *buf) {
             return false;
         }
         if (Gid == AID_LOG) {
-            ret = true;
+            return true;
         }
     }
-    return ret;
+    return false;
 }
 
 bool clientHasLogCredentials(SocketClient * cli) {
@@ -69,61 +68,79 @@ bool clientHasLogCredentials(SocketClient * cli) {
     }
 
     // FYI We will typically be here for 'adb logcat'
-    bool ret = false;
+    char filename[256];
+    snprintf(filename, sizeof(filename), "/proc/%u/status", cli->getPid());
 
-    char filename[1024];
-    snprintf(filename, sizeof(filename), "/proc/%d/status", cli->getPid());
-
-    FILE *file = fopen(filename, "r");
-    if (!file) {
-        return ret;
-    }
-
+    bool ret;
+    bool foundLog = false;
     bool foundGid = false;
     bool foundUid = false;
 
-    char line[1024];
-    while (fgets(line, sizeof(line), file)) {
-        static const char groups_string[] = "Groups:\t";
-        static const char uid_string[] = "Uid:\t";
-        static const char gid_string[] = "Gid:\t";
-
-        if (strncmp(groups_string, line, strlen(groups_string)) == 0) {
-            ret = groupIsLog(line + strlen(groups_string));
-            if (!ret) {
-                break;
-            }
-        } else if (strncmp(uid_string, line, strlen(uid_string)) == 0) {
-            uid_t u[4] = { (uid_t) -1, (uid_t) -1, (uid_t) -1, (uid_t) -1};
-
-            sscanf(line + strlen(uid_string), "%u\t%u\t%u\t%u",
-                   &u[0], &u[1], &u[2], &u[3]);
-
-            // Protect against PID reuse by checking that the UID is the same
-            if ((uid != u[0]) || (uid != u[1]) || (uid != u[2]) || (uid != u[3])) {
-                ret = false;
-                break;
-            }
-            foundUid = true;
-        } else if (strncmp(gid_string, line, strlen(gid_string)) == 0) {
-            gid_t g[4] = { (gid_t) -1, (gid_t) -1, (gid_t) -1, (gid_t) -1};
-
-            sscanf(line + strlen(gid_string), "%u\t%u\t%u\t%u",
-                   &g[0], &g[1], &g[2], &g[3]);
-
-            // Protect against PID reuse by checking that the GID is the same
-            if ((gid != g[0]) || (gid != g[1]) || (gid != g[2]) || (gid != g[3])) {
-                ret = false;
-                break;
-            }
-            foundGid = true;
+    //
+    // Reading /proc/<pid>/status is rife with race conditions. All of /proc
+    // suffers from this and its use should be minimized. However, we have no
+    // choice.
+    //
+    // Notably the content from one 4KB page to the next 4KB page can be from a
+    // change in shape even if we are gracious enough to attempt to read
+    // atomically. getline can not even guarantee a page read is not split up
+    // and in effect can read from different vintages of the content.
+    //
+    // We are finding out in the field that a 'logcat -c' via adb occasionally
+    // is returned with permission denied when we did only one pass and thus
+    // breaking scripts. For security we still err on denying access if in
+    // doubt, but we expect the falses  should be reduced significantly as
+    // three times is a charm.
+    //
+    for (int retry = 3;
+            !(ret = foundGid && foundUid && foundLog) && retry;
+            --retry) {
+        FILE *file = fopen(filename, "r");
+        if (!file) {
+            continue;
         }
-    }
 
-    fclose(file);
+        char *line = NULL;
+        size_t len = 0;
+        while (getline(&line, &len, file) > 0) {
+            static const char groups_string[] = "Groups:\t";
+            static const char uid_string[] = "Uid:\t";
+            static const char gid_string[] = "Gid:\t";
 
-    if (!foundGid || !foundUid) {
-        ret = false;
+            if (strncmp(groups_string, line, sizeof(groups_string) - 1) == 0) {
+                if (groupIsLog(line + sizeof(groups_string) - 1)) {
+                    foundLog = true;
+                }
+            } else if (strncmp(uid_string, line, sizeof(uid_string) - 1) == 0) {
+                uid_t u[4] = { (uid_t) -1, (uid_t) -1, (uid_t) -1, (uid_t) -1};
+
+                sscanf(line + sizeof(uid_string) - 1, "%u\t%u\t%u\t%u",
+                       &u[0], &u[1], &u[2], &u[3]);
+
+                // Protect against PID reuse by checking that UID is the same
+                if ((uid == u[0])
+                        && (uid == u[1])
+                        && (uid == u[2])
+                        && (uid == u[3])) {
+                    foundUid = true;
+                }
+            } else if (strncmp(gid_string, line, sizeof(gid_string) - 1) == 0) {
+                gid_t g[4] = { (gid_t) -1, (gid_t) -1, (gid_t) -1, (gid_t) -1};
+
+                sscanf(line + sizeof(gid_string) - 1, "%u\t%u\t%u\t%u",
+                       &g[0], &g[1], &g[2], &g[3]);
+
+                // Protect against PID reuse by checking that GID is the same
+                if ((gid == g[0])
+                        && (gid == g[1])
+                        && (gid == g[2])
+                        && (gid == g[3])) {
+                    foundGid = true;
+                }
+            }
+        }
+        free(line);
+        fclose(file);
     }
 
     return ret;
