@@ -374,8 +374,10 @@ public:
 //
 // mLogElementsLock must be held when this function is called.
 //
-void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
+bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     LogTimeEntry *oldest = NULL;
+    bool busy = false;
+    bool clearAll = pruneRows == ULONG_MAX;
 
     LogTimeEntry::lock();
 
@@ -393,35 +395,31 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     LogBufferElementCollection::iterator it;
 
     if (caller_uid != AID_ROOT) {
+        // Only here if clearAll condition (pruneRows == ULONG_MAX)
         for(it = mLogElements.begin(); it != mLogElements.end();) {
             LogBufferElement *e = *it;
 
-            if (oldest && (oldest->mStart <= e->getSequence())) {
-                break;
-            }
-
-            if (e->getLogId() != id) {
+            if ((e->getLogId() != id) || (e->getUid() != caller_uid)) {
                 ++it;
                 continue;
             }
 
-            if (e->getUid() == caller_uid) {
-                it = erase(it);
-                pruneRows--;
-                if (pruneRows == 0) {
-                    break;
-                }
-            } else {
-                ++it;
+            if (oldest && (oldest->mStart <= e->getSequence())) {
+                oldest->triggerSkip_Locked(id, pruneRows);
+                busy = true;
+                break;
             }
+
+            it = erase(it);
+            pruneRows--;
         }
         LogTimeEntry::unlock();
-        return;
+        return busy;
     }
 
     // prune by worst offender by uid
     bool hasBlacklist = mPrune.naughty();
-    while (pruneRows > 0) {
+    while (!clearAll && (pruneRows > 0)) {
         // recalculate the worst offender on every batched pass
         uid_t worst = (uid_t) -1;
         size_t worst_sizes = 0;
@@ -478,6 +476,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             LogBufferElement *e = *it;
 
             if (oldest && (oldest->mStart <= e->getSequence())) {
+                busy = true;
                 break;
             }
 
@@ -585,7 +584,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     }
 
     bool whitelist = false;
-    bool hasWhitelist = mPrune.nice();
+    bool hasWhitelist = mPrune.nice() && !clearAll;
     it = mLogElements.begin();
     while((pruneRows > 0) && (it != mLogElements.end())) {
         LogBufferElement *e = *it;
@@ -596,6 +595,8 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         }
 
         if (oldest && (oldest->mStart <= e->getSequence())) {
+            busy = true;
+
             if (whitelist) {
                 break;
             }
@@ -631,6 +632,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             }
 
             if (oldest && (oldest->mStart <= e->getSequence())) {
+                busy = true;
                 if (stats.sizes(id) > (2 * log_buffer_size(id))) {
                     // kick a misbehaving log reader client off the island
                     oldest->release_Locked();
@@ -646,13 +648,50 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     }
 
     LogTimeEntry::unlock();
+
+    return (pruneRows > 0) && busy;
 }
 
 // clear all rows of type "id" from the buffer.
-void LogBuffer::clear(log_id_t id, uid_t uid) {
-    pthread_mutex_lock(&mLogElementsLock);
-    prune(id, ULONG_MAX, uid);
-    pthread_mutex_unlock(&mLogElementsLock);
+bool LogBuffer::clear(log_id_t id, uid_t uid) {
+    bool busy = true;
+    // If it takes more than 4 tries (seconds) to clear, then kill reader(s)
+    for (int retry = 4;;) {
+        if (retry == 1) { // last pass
+            // Check if it is still busy after the sleep, we say prune
+            // one entry, not another clear run, so we are looking for
+            // the quick side effect of the return value to tell us if
+            // we have a _blocked_ reader.
+            pthread_mutex_lock(&mLogElementsLock);
+            busy = prune(id, 1, uid);
+            pthread_mutex_unlock(&mLogElementsLock);
+            // It is still busy, blocked reader(s), lets kill them all!
+            // otherwise, lets be a good citizen and preserve the slow
+            // readers and let the clear run (below) deal with determining
+            // if we are still blocked and return an error code to caller.
+            if (busy) {
+                LogTimeEntry::lock();
+                LastLogTimes::iterator times = mTimes.begin();
+                while (times != mTimes.end()) {
+                    LogTimeEntry *entry = (*times);
+                    // Killer punch
+                    if (entry->owned_Locked() && entry->isWatching(id)) {
+                        entry->release_Locked();
+                    }
+                    times++;
+                }
+                LogTimeEntry::unlock();
+            }
+        }
+        pthread_mutex_lock(&mLogElementsLock);
+        busy = prune(id, ULONG_MAX, uid);
+        pthread_mutex_unlock(&mLogElementsLock);
+        if (!busy || !--retry) {
+            break;
+        }
+        sleep (1); // Let reader(s) catch up after notification
+    }
+    return busy;
 }
 
 // get the used space associated with "id".
