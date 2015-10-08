@@ -11,3 +11,4 @@ service logcatd /system/bin/logcat -b all -v threadtime -v usec -v printable -D 
     # logd for write to /data/misc/logd, log group for read from log daemon
     user logd
     group log
+    writepid /dev/cpuset/system-background/tasks

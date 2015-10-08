@@ -788,13 +788,13 @@ static int do_loglevel(const std::vector<std::string>& args) {
     return 0;
 }
 
-int do_load_persist_props(const std::vector<std::string>& args) {
+static int do_load_persist_props(const std::vector<std::string>& args) {
     load_persist_props();
     return 0;
 }
 
-static int do_load_all_props(const std::vector<std::string>& args) {
-    load_all_props();
+static int do_load_system_props(const std::vector<std::string>& args) {
+    load_system_props();
     return 0;
 }
 
@@ -818,14 +818,24 @@ static int do_installkeys_ensure_dir_exists(const char* dir) {
     return 0;
 }
 
+static bool is_file_crypto() {
+    std::string value = property_get("ro.crypto.type");
+    return value == "file";
+}
+
 static int do_installkey(const std::vector<std::string>& args) {
-    std::string prop_value = property_get("ro.crypto.type");
-    if (prop_value != "file") {
+    if (!is_file_crypto()) {
         return 0;
     }
-
     return e4crypt_create_device_key(args[1].c_str(),
                                      do_installkeys_ensure_dir_exists);
+}
+
+static int do_setusercryptopolicies(const std::vector<std::string>& args) {
+    if (!is_file_crypto()) {
+        return 0;
+    }
+    return e4crypt_set_user_crypto_policies(args[1].c_str());
 }
 
 BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
@@ -846,8 +856,8 @@ BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"ifup",                    {1,     1,    do_ifup}},
         {"insmod",                  {1,     kMax, do_insmod}},
         {"installkey",              {1,     1,    do_installkey}},
-        {"load_all_props",          {0,     0,    do_load_all_props}},
         {"load_persist_props",      {0,     0,    do_load_persist_props}},
+        {"load_system_props",       {0,     0,    do_load_system_props}},
         {"loglevel",                {1,     1,    do_loglevel}},
         {"mkdir",                   {1,     4,    do_mkdir}},
         {"mount_all",               {1,     1,    do_mount_all}},
@@ -860,6 +870,7 @@ BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"rmdir",                   {1,     1,    do_rmdir}},
         {"setprop",                 {2,     2,    do_setprop}},
         {"setrlimit",               {3,     3,    do_setrlimit}},
+        {"setusercryptopolicies",   {1,     1,    do_setusercryptopolicies}},
         {"start",                   {1,     1,    do_start}},
         {"stop",                    {1,     1,    do_stop}},
         {"swapon_all",              {1,     1,    do_swapon_all}},
