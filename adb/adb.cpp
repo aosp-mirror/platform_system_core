@@ -245,7 +245,7 @@ void parse_banner(const std::string& banner, atransport* t) {
 
     if (pieces.size() > 2) {
         const std::string& props = pieces[2];
-        for (auto& prop : android::base::Split(props, ";")) {
+        for (const auto& prop : android::base::Split(props, ";")) {
             // The list of properties was traditionally ;-terminated rather than ;-separated.
             if (prop.empty()) continue;
 
