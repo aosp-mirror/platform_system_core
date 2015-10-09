@@ -105,7 +105,10 @@ bool Parser::ParseConfigFile(const std::string& path) {
     for (const auto& sp : section_parsers_) {
         sp.second->EndFile(path);
     }
-    DumpState();
+
+    // Turning this on and letting the INFO logging be discarded adds 0.2s to
+    // Nexus 9 boot time, so it's disabled by default.
+    if (false) DumpState();
 
     NOTICE("(Parsing %s took %.2fs.)\n", path.c_str(), t.duration());
     return true;
