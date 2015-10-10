@@ -51,8 +51,9 @@ static const char kStatePrefix[] = "State:\t";
 
 static const char kCoreTempFolder[] = "/data/misc/crash_reporter/tmp";
 
-// Define an otherwise invalid value that represents an unknown UID.
+// Define an otherwise invalid value that represents an unknown UID and GID.
 static const uid_t kUnknownUid = -1;
+static const gid_t kUnknownGid = -1;
 
 const char *UserCollector::kUserId = "Uid:\t";
 const char *UserCollector::kGroupId = "Gid:\t";
@@ -114,22 +115,6 @@ std::string UserCollector::GetErrorTypeSignature(ErrorType error_type) const {
       return "core2md-conversion";
     default:
       return "";
-  }
-}
-
-// Return the string that should be used for the kernel's core_pattern file.
-// Note that if you change the format of the enabled pattern, you'll probably
-// also need to change the ParseCrashAttributes() function below, the
-// user_collector_test.cc unittest, and the logging_UserCrash.py autotest.
-std::string UserCollector::GetPattern(bool enabled) const {
-  if (enabled) {
-    // Combine the four crash attributes into one parameter to try to reduce
-    // the size of the invocation line for crash_reporter, since the kernel
-    // has a fixed-sized (128B) buffer for it (before parameter expansion).
-    // Note that the kernel does not support quoted arguments in core_pattern.
-    return StringPrintf("|%s --user=%%P:%%s:%%u:%%e", our_path_.c_str());
-  } else {
-    return "core";
   }
 }
 
@@ -554,15 +539,18 @@ UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
 
 bool UserCollector::ParseCrashAttributes(const std::string &crash_attributes,
                                          pid_t *pid, int *signal, uid_t *uid,
+                                         gid_t *gid,
                                          std::string *kernel_supplied_name) {
-  pcrecpp::RE re("(\\d+):(\\d+):(\\d+):(.*)");
-  if (re.FullMatch(crash_attributes, pid, signal, uid, kernel_supplied_name))
+  pcrecpp::RE re("(\\d+):(\\d+):(\\d+):(\\d+):(.*)");
+  if (re.FullMatch(crash_attributes, pid, signal, uid, gid,
+                   kernel_supplied_name))
     return true;
 
   LOG(INFO) << "Falling back to parsing crash attributes '"
-            << crash_attributes << "' without UID";
+            << crash_attributes << "' without UID and GID";
   pcrecpp::RE re_without_uid("(\\d+):(\\d+):(.*)");
   *uid = kUnknownUid;
+  *gid = kUnknownGid;
   return re_without_uid.FullMatch(crash_attributes, pid, signal,
       kernel_supplied_name);
 }
@@ -595,10 +583,11 @@ bool UserCollector::HandleCrash(const std::string &crash_attributes,
   pid_t pid = 0;
   int signal = 0;
   uid_t supplied_ruid = kUnknownUid;
+  gid_t supplied_rgid = kUnknownGid;
   std::string kernel_supplied_name;
 
   if (!ParseCrashAttributes(crash_attributes, &pid, &signal, &supplied_ruid,
-                            &kernel_supplied_name)) {
+                            &supplied_rgid, &kernel_supplied_name)) {
     LOG(ERROR) << "Invalid parameter: --user=" <<  crash_attributes;
     return false;
   }
@@ -606,7 +595,7 @@ bool UserCollector::HandleCrash(const std::string &crash_attributes,
   // Switch to the group and user that ran the crashing binary in order to
   // access their /proc files.  Do not set suid/sgid, so that we can switch
   // back after copying the necessary files.
-  if (setresgid(supplied_ruid, supplied_ruid, -1) != 0) {
+  if (setresgid(supplied_rgid, supplied_rgid, -1) != 0) {
     PLOG(FATAL) << "Unable to set real group ID to access process files";
   }
   if (setresuid(supplied_ruid, supplied_ruid, -1) != 0) {
