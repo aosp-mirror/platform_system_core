@@ -1,6 +1,6 @@
 on property:crash_reporter.coredump.enabled=1
     write /proc/sys/kernel/core_pattern \
-          "|/system/bin/crash_reporter --user=%P:%s:%u:%e"
+          "|/system/bin/crash_reporter --user=%P:%s:%u:%g:%e"
 
 on property:crash_reporter.coredump.enabled=0
     write /proc/sys/kernel/core_pattern "core"
