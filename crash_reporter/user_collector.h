@@ -105,7 +105,6 @@ class UserCollector : public CrashCollector {
   // crash_reporter-user-collection signature.
   std::string GetErrorTypeSignature(ErrorType error_type) const;
 
-  std::string GetPattern(bool enabled) const;
   bool SetUpInternal(bool enabled);
 
   // Returns, via |line|, the first line in |lines| that starts with |prefix|.
@@ -166,7 +165,7 @@ class UserCollector : public CrashCollector {
   ErrorType ConvertAndEnqueueCrash(pid_t pid, const std::string &exec_name,
                                    uid_t supplied_ruid, bool *out_of_capacity);
   bool ParseCrashAttributes(const std::string &crash_attributes,
-                            pid_t *pid, int *signal, uid_t *uid,
+                            pid_t *pid, int *signal, uid_t *uid, gid_t *gid,
                             std::string *kernel_supplied_name);
 
   bool ShouldDump(bool has_owner_consent,

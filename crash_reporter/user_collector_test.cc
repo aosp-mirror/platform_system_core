@@ -98,35 +98,38 @@ TEST_F(UserCollectorTest, ParseCrashAttributes) {
   pid_t pid;
   int signal;
   uid_t uid;
+  gid_t gid;
   std::string exec_name;
-  EXPECT_TRUE(collector_.ParseCrashAttributes("123456:11:1000:foobar",
-      &pid, &signal, &uid, &exec_name));
+  EXPECT_TRUE(collector_.ParseCrashAttributes("123456:11:1000:2000:foobar",
+      &pid, &signal, &uid, &gid, &exec_name));
   EXPECT_EQ(123456, pid);
   EXPECT_EQ(11, signal);
   EXPECT_EQ(1000, uid);
+  EXPECT_EQ(2000, gid);
   EXPECT_EQ("foobar", exec_name);
   EXPECT_TRUE(collector_.ParseCrashAttributes("4321:6:barfoo",
-      &pid, &signal, &uid, &exec_name));
+      &pid, &signal, &uid, &gid, &exec_name));
   EXPECT_EQ(4321, pid);
   EXPECT_EQ(6, signal);
   EXPECT_EQ(-1, uid);
+  EXPECT_EQ(-1, gid);
   EXPECT_EQ("barfoo", exec_name);
 
   EXPECT_FALSE(collector_.ParseCrashAttributes("123456:11",
-      &pid, &signal, &uid, &exec_name));
+      &pid, &signal, &uid, &gid, &exec_name));
 
   EXPECT_TRUE(collector_.ParseCrashAttributes("123456:11:exec:extra",
-      &pid, &signal, &uid, &exec_name));
+      &pid, &signal, &uid, &gid, &exec_name));
   EXPECT_EQ("exec:extra", exec_name);
 
   EXPECT_FALSE(collector_.ParseCrashAttributes("12345p:11:foobar",
-      &pid, &signal, &uid, &exec_name));
+      &pid, &signal, &uid, &gid, &exec_name));
 
   EXPECT_FALSE(collector_.ParseCrashAttributes("123456:1 :foobar",
-      &pid, &signal, &uid, &exec_name));
+      &pid, &signal, &uid, &gid, &exec_name));
 
   EXPECT_FALSE(collector_.ParseCrashAttributes("123456::foobar",
-      &pid, &signal, &uid, &exec_name));
+      &pid, &signal, &uid, &gid, &exec_name));
 }
 
 TEST_F(UserCollectorTest, ShouldDumpDeveloperImageOverridesConsent) {
