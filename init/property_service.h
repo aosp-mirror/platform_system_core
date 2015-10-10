@@ -18,8 +18,14 @@
 #define _INIT_PROPERTY_H
 
 #include <stddef.h>
+#include <sys/socket.h>
 #include <sys/system_properties.h>
 #include <string>
+
+struct property_audit_data {
+    ucred *cr;
+    const char* name;
+};
 
 extern void property_init(void);
 extern void property_load_boot_defaults(void);
