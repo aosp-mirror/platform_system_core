@@ -467,7 +467,16 @@ int selinux_reload_policy(void)
 }
 
 static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_t len) {
-    snprintf(buf, len, "property=%s", !data ? "NULL" : (char *)data);
+
+    property_audit_data *d = reinterpret_cast<property_audit_data*>(data);
+
+    if (!d || !d->name || !d->cr) {
+        ERROR("audit_callback invoked with null data arguments!");
+        return 0;
+    }
+
+    snprintf(buf, len, "property=%s pid=%d uid=%d gid=%d", d->name,
+            d->cr->pid, d->cr->uid, d->cr->gid);
     return 0;
 }
 
