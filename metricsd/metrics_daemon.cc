@@ -326,7 +326,7 @@ void MetricsDaemon::OnShutdown(int* return_code) {
 }
 
 void MetricsDaemon::OnWeaveCommand(CommandProxy* command) {
-  if (command->category() != "metrics" || command->status() != "queued") {
+  if (command->state() != "queued") {
     return;
   }
 
@@ -342,24 +342,26 @@ void MetricsDaemon::OnEnableMetrics(CommandProxy* command) {
   if (base::WriteFile(metrics_directory_.Append(metrics::kConsentFileName),
                       "", 0) != 0) {
     PLOG(ERROR) << "Could not create the consent file.";
-    command->Abort(nullptr);
+    command->Abort("metrics_error", "Could not create the consent file",
+                   nullptr);
     return;
   }
 
   NotifyStateChanged();
-  command->Done(nullptr);
+  command->Complete({}, nullptr);
 }
 
 void MetricsDaemon::OnDisableMetrics(CommandProxy* command) {
   if (!base::DeleteFile(metrics_directory_.Append(metrics::kConsentFileName),
                         false)) {
-    PLOG(ERROR) << "Cound not delete the consent file.";
-    command->Abort(nullptr);
+    PLOG(ERROR) << "Could not delete the consent file.";
+    command->Abort("metrics_error", "Could not delete the consent file",
+                   nullptr);
     return;
   }
 
   NotifyStateChanged();
-  command->Done(nullptr);
+  command->Complete({}, nullptr);
 }
 
 void MetricsDaemon::NotifyStateChanged() {
