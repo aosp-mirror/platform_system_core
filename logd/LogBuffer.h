@@ -78,9 +78,9 @@ public:
     std::string formatPrune() { return mPrune.format(); }
 
     // helper must be protected directly or implicitly by lock()/unlock()
-    char *pidToName(pid_t pid) { return stats.pidToName(pid); }
+    const char *pidToName(pid_t pid) { return stats.pidToName(pid); }
     uid_t pidToUid(pid_t pid) { return stats.pidToUid(pid); }
-    char *uidToName(uid_t uid) { return stats.uidToName(uid); }
+    const char *uidToName(uid_t uid) { return stats.uidToName(uid); }
     void lock() { pthread_mutex_lock(&mLogElementsLock); }
     void unlock() { pthread_mutex_unlock(&mLogElementsLock); }
 
