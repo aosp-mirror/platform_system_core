@@ -113,9 +113,9 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
 
     static const char format_uid[] = "uid=%u%s%s expire %u line%s";
     parent->lock();
-    char *name = parent->uidToName(mUid);
+    const char *name = parent->uidToName(mUid);
     parent->unlock();
-    char *commName = android::tidToName(mTid);
+    const char *commName = android::tidToName(mTid);
     if (!commName && (mTid != mPid)) {
         commName = android::tidToName(mPid);
     }
@@ -128,28 +128,28 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
         size_t len = strlen(name + 1);
         if (!strncmp(name + 1, commName + 1, len)) {
             if (commName[len + 1] == '\0') {
-                free(commName);
+                free(const_cast<char *>(commName));
                 commName = NULL;
             } else {
-                free(name);
+                free(const_cast<char *>(name));
                 name = NULL;
             }
         }
     }
     if (name) {
-        char *p = NULL;
-        asprintf(&p, "(%s)", name);
-        if (p) {
-            free(name);
-            name = p;
+        char *buf = NULL;
+        asprintf(&buf, "(%s)", name);
+        if (buf) {
+            free(const_cast<char *>(name));
+            name = buf;
         }
     }
     if (commName) {
-        char *p = NULL;
-        asprintf(&p, " %s", commName);
-        if (p) {
-            free(commName);
-            commName = p;
+        char *buf = NULL;
+        asprintf(&buf, " %s", commName);
+        if (buf) {
+            free(const_cast<char *>(commName));
+            commName = buf;
         }
     }
     // identical to below to calculate the buffer size required
@@ -166,18 +166,19 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
 
     buffer = static_cast<char *>(calloc(1, hdrLen + len + 1));
     if (!buffer) {
-        free(name);
-        free(commName);
+        free(const_cast<char *>(name));
+        free(const_cast<char *>(commName));
         return 0;
     }
 
     size_t retval = hdrLen + len;
     if (mLogId == LOG_ID_EVENTS) {
-        android_log_event_string_t *e = reinterpret_cast<android_log_event_string_t *>(buffer);
+        android_log_event_string_t *event =
+            reinterpret_cast<android_log_event_string_t *>(buffer);
 
-        e->header.tag = htole32(LOGD_LOG_TAG);
-        e->type = EVENT_TYPE_STRING;
-        e->length = htole32(len);
+        event->header.tag = htole32(LOGD_LOG_TAG);
+        event->type = EVENT_TYPE_STRING;
+        event->length = htole32(len);
     } else {
         ++retval;
         buffer[0] = ANDROID_LOG_INFO;
@@ -187,8 +188,8 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
     snprintf(buffer + hdrLen, len + 1, format_uid, mUid, name ? name : "",
              commName ? commName : "",
              mDropped, (mDropped > 1) ? "s" : "");
-    free(name);
-    free(commName);
+    free(const_cast<char *>(name));
+    free(const_cast<char *>(commName));
 
     return retval;
 }
