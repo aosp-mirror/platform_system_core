@@ -74,7 +74,7 @@ metrics_daemon_shared_libraries := $(libmetrics_shared_libraries) \
   libmetrics \
   libprotobuf-cpp-lite \
   librootdev \
-  libweaved-client \
+  libweaved \
 
 # Shared library for metrics.
 # ========================================================

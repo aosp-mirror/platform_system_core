@@ -283,11 +283,15 @@ int MetricsDaemon::OnInit() {
       return EX_UNAVAILABLE;
     }
 
-    weaved_object_mgr_.reset(new com::android::Weave::ObjectManagerProxy{bus_});
-    weaved_object_mgr_->SetCommandAddedCallback(
-        base::Bind(&MetricsDaemon::OnWeaveCommand, base::Unretained(this)));
-    weaved_object_mgr_->SetManagerAddedCallback(
+    device_ = weaved::Device::CreateInstance(
+        bus_,
         base::Bind(&MetricsDaemon::UpdateWeaveState, base::Unretained(this)));
+    device_->AddCommandHandler(
+        "_metrics._enableAnalyticsReporting",
+        base::Bind(&MetricsDaemon::OnEnableMetrics, base::Unretained(this)));
+    device_->AddCommandHandler(
+        "_metrics._disableAnalyticsReporting",
+        base::Bind(&MetricsDaemon::OnDisableMetrics, base::Unretained(this)));
   }
 
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
@@ -325,20 +329,11 @@ void MetricsDaemon::OnShutdown(int* return_code) {
   chromeos::DBusDaemon::OnShutdown(return_code);
 }
 
-void MetricsDaemon::OnWeaveCommand(CommandProxy* command) {
-  if (command->state() != "queued") {
+void MetricsDaemon::OnEnableMetrics(const std::weak_ptr<weaved::Command>& cmd) {
+  auto command = cmd.lock();
+  if (!command)
     return;
-  }
 
-  VLOG(1) << "received weave command: " << command->name();
-  if (command->name() == "_metrics._enableAnalyticsReporting") {
-    OnEnableMetrics(command);
-  } else if (command->name() == "_metrics._disableAnalyticsReporting") {
-    OnDisableMetrics(command);
-  }
-}
-
-void MetricsDaemon::OnEnableMetrics(CommandProxy* command) {
   if (base::WriteFile(metrics_directory_.Append(metrics::kConsentFileName),
                       "", 0) != 0) {
     PLOG(ERROR) << "Could not create the consent file.";
@@ -347,11 +342,16 @@ void MetricsDaemon::OnEnableMetrics(CommandProxy* command) {
     return;
   }
 
-  NotifyStateChanged();
+  UpdateWeaveState();
   command->Complete({}, nullptr);
 }
 
-void MetricsDaemon::OnDisableMetrics(CommandProxy* command) {
+void MetricsDaemon::OnDisableMetrics(
+    const std::weak_ptr<weaved::Command>& cmd) {
+  auto command = cmd.lock();
+  if (!command)
+    return;
+
   if (!base::DeleteFile(metrics_directory_.Append(metrics::kConsentFileName),
                         false)) {
     PLOG(ERROR) << "Could not delete the consent file.";
@@ -360,23 +360,20 @@ void MetricsDaemon::OnDisableMetrics(CommandProxy* command) {
     return;
   }
 
-  NotifyStateChanged();
+  UpdateWeaveState();
   command->Complete({}, nullptr);
 }
 
-void MetricsDaemon::NotifyStateChanged() {
-  ManagerProxy* manager = weaved_object_mgr_->GetManagerProxy();
-  if (manager)
-    UpdateWeaveState(manager);
-}
+void MetricsDaemon::UpdateWeaveState() {
+  if (!device_)
+    return;
 
-void MetricsDaemon::UpdateWeaveState(ManagerProxy* manager) {
   chromeos::VariantDictionary state_change{
     { "_metrics._AnalyticsReportingState",
       metrics_lib_->AreMetricsEnabled() ? "enabled" : "disabled" }
   };
 
-  if (!manager->UpdateState(state_change, nullptr)) {
+  if (!device_->SetStateProperties(state_change, nullptr)) {
     LOG(ERROR) << "failed to update weave's state";
   }
 }

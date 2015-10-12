@@ -26,8 +26,9 @@
 #include <base/files/file_path.h>
 #include <base/memory/scoped_ptr.h>
 #include <base/time/time.h>
-#include <buffet/dbus-proxies.h>
 #include <chromeos/daemons/dbus_daemon.h>
+#include <libweaved/command.h>
+#include <libweaved/device.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 #include "collectors/averaged_statistics_collector.h"
@@ -122,20 +123,14 @@ class MetricsDaemon : public chromeos::DBusDaemon {
                                          DBusMessage* message,
                                          void* user_data);
 
-  // Callback for Weave commands.
-  void OnWeaveCommand(com::android::Weave::CommandProxy* command);
-
   // Enables metrics reporting.
-  void OnEnableMetrics(com::android::Weave::CommandProxy* command);
+  void OnEnableMetrics(const std::weak_ptr<weaved::Command>& cmd);
 
   // Disables metrics reporting.
-  void OnDisableMetrics(com::android::Weave::CommandProxy* command);
+  void OnDisableMetrics(const std::weak_ptr<weaved::Command>& cmd);
 
   // Updates the weave device state.
-  void UpdateWeaveState(com::android::Weave::ManagerProxy* manager);
-
-  // Tells Weave that the state has changed.
-  void NotifyStateChanged();
+  void UpdateWeaveState();
 
   // Updates the active use time and logs time between user-space
   // process crashes.
@@ -317,7 +312,7 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   std::string server_;
 
   scoped_ptr<UploadService> upload_service_;
-  scoped_ptr<com::android::Weave::ObjectManagerProxy> weaved_object_mgr_;
+  std::unique_ptr<weaved::Device> device_;
 };
 
 #endif  // METRICS_METRICS_DAEMON_H_
