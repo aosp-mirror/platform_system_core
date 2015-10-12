@@ -183,7 +183,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
     static const char comm_str[] = " comm=\"";
     const char *comm = strstr(str, comm_str);
     const char *estr = str + strlen(str);
-    char *commfree = NULL;
+    const char *commfree = NULL;
     if (comm) {
         estr = comm;
         comm += sizeof(comm_str) - 1;
@@ -231,7 +231,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
         // end scope for main buffer
     }
 
-    free(commfree);
+    free(const_cast<char *>(commfree));
     free(str);
 
     if (notify) {
