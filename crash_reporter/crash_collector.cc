@@ -35,8 +35,8 @@
 #include <base/strings/string_split.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
-#include <chromeos/key_value_store.h>
-#include <chromeos/process.h>
+#include <brillo/key_value_store.h>
+#include <brillo/process.h>
 
 namespace {
 
@@ -340,7 +340,7 @@ bool CrashCollector::CheckHasCapacity(const FilePath &crash_directory) {
 bool CrashCollector::GetLogContents(const FilePath &config_path,
                                     const std::string &exec_name,
                                     const FilePath &output_file) {
-  chromeos::KeyValueStore store;
+  brillo::KeyValueStore store;
   if (!store.Load(config_path)) {
     LOG(INFO) << "Unable to read log configuration file "
               << config_path.value();
@@ -351,7 +351,7 @@ bool CrashCollector::GetLogContents(const FilePath &config_path,
   if (!store.GetString(exec_name, &command))
     return false;
 
-  chromeos::ProcessImpl diag_process;
+  brillo::ProcessImpl diag_process;
   diag_process.AddArg(kShellPath);
   diag_process.AddStringOption("-c", command);
   diag_process.RedirectOutput(output_file.value());

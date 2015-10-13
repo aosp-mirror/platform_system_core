@@ -140,7 +140,7 @@ int MetricsDaemon::Run() {
     version_cumulative_cpu_use_->Set(0);
   }
 
-  return chromeos::DBusDaemon::Run();
+  return brillo::DBusDaemon::Run();
 }
 
 void MetricsDaemon::RunUploaderTest() {
@@ -242,8 +242,8 @@ void MetricsDaemon::Init(bool testing,
 }
 
 int MetricsDaemon::OnInit() {
-  int return_code = dbus_enabled_ ? chromeos::DBusDaemon::OnInit() :
-      chromeos::Daemon::OnInit();
+  int return_code = dbus_enabled_ ? brillo::DBusDaemon::OnInit() :
+      brillo::Daemon::OnInit();
   if (return_code != EX_OK)
     return return_code;
 
@@ -326,7 +326,7 @@ void MetricsDaemon::OnShutdown(int* return_code) {
           << error.name << ": " << error.message;
     }
   }
-  chromeos::DBusDaemon::OnShutdown(return_code);
+  brillo::DBusDaemon::OnShutdown(return_code);
 }
 
 void MetricsDaemon::OnEnableMetrics(const std::weak_ptr<weaved::Command>& cmd) {
@@ -368,7 +368,7 @@ void MetricsDaemon::UpdateWeaveState() {
   if (!device_)
     return;
 
-  chromeos::VariantDictionary state_change{
+  brillo::VariantDictionary state_change{
     { "_metrics._AnalyticsReportingState",
       metrics_lib_->AreMetricsEnabled() ? "enabled" : "disabled" }
   };

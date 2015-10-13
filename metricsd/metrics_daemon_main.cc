@@ -18,8 +18,8 @@
 #include <base/command_line.h>
 #include <base/logging.h>
 #include <base/strings/string_util.h>
-#include <chromeos/flag_helper.h>
-#include <chromeos/syslog_logging.h>
+#include <brillo/flag_helper.h>
+#include <brillo/syslog_logging.h>
 #include <rootdev.h>
 
 #include "constants.h"
@@ -79,11 +79,11 @@ int main(int argc, char** argv) {
                 metrics::kMetricsDirectory,
                 "Root of the configuration files (testing only)");
 
-  chromeos::FlagHelper::Init(argc, argv, "Chromium OS Metrics Daemon");
+  brillo::FlagHelper::Init(argc, argv, "Chromium OS Metrics Daemon");
 
   // Also log to stderr when not running as daemon.
-  chromeos::InitLog(chromeos::kLogToSyslog | chromeos::kLogHeader |
-                    (FLAGS_daemon ? 0 : chromeos::kLogToStderr));
+  brillo::InitLog(brillo::kLogToSyslog | brillo::kLogHeader |
+                  (FLAGS_daemon ? 0 : brillo::kLogToStderr));
 
   if (FLAGS_daemon && daemon(0, 0) != 0) {
     return errno;
