@@ -37,6 +37,7 @@
 #include <base/strings/string_split.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
+#include "chromeos/osrelease_reader.h"
 #include <chromeos/process.h>
 #include <chromeos/syslog_logging.h>
 #include <cutils/properties.h>
@@ -63,6 +64,8 @@ const char kVersionProperty[] = "ro.build.id";
 
 // The property containing the product id.
 const char kProductIDProperty[] = "ro.product.product_id";
+
+static const char kBdkVersionKey[] = "bdk_version";
 
 
 using base::FilePath;
@@ -510,6 +513,15 @@ UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
   AddCrashMetaUploadData("ver", value);
   property_get(kProductIDProperty, value, "undefined");
   AddCrashMetaUploadData("prod", value);
+
+  chromeos::OsReleaseReader reader;
+  reader.Load();
+  std::string bdk_version = "undefined";
+  if (!reader.GetString(kBdkVersionKey, &bdk_version)) {
+    LOG(ERROR) << "Could not read " << kBdkVersionKey
+               << " from /etc/os-release.d/";
+  }
+  AddCrashMetaData(kBdkVersionKey, bdk_version);
 
   ErrorType error_type =
       ConvertCoreToMinidump(pid, container_dir, core_path, minidump_path);
