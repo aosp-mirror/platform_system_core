@@ -225,8 +225,11 @@ void LogBuffer::maybePrune(log_id_t id) {
     unsigned long maxSize = log_buffer_size(id);
     if (sizes > maxSize) {
         size_t sizeOver = sizes - ((maxSize * 9) / 10);
-        size_t elements = stats.elements(id);
-        size_t minElements = elements / 10;
+        size_t elements = stats.realElements(id);
+        size_t minElements = elements / 100;
+        if (minElements < minPrune) {
+            minElements = minPrune;
+        }
         unsigned long pruneRows = elements * sizeOver / sizes;
         if (pruneRows < minElements) {
             pruneRows = minElements;
