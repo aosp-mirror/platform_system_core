@@ -870,8 +870,9 @@ int fs_mgr_load_verity_state(int *mode)
             continue;
         }
 
-        if (current == VERITY_MODE_LOGGING) {
+        if (current != VERITY_MODE_DEFAULT) {
             *mode = current;
+            break;
         }
     }
 
@@ -905,10 +906,11 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
     property_get("ro.boot.veritymode", propbuf, "");
 
     if (*propbuf != '\0') {
-        if (fs_mgr_load_verity_state(&mode) == -1) {
-            return -1;
-        }
         use_state = false; /* state is kept by the bootloader */
+    }
+
+    if (fs_mgr_load_verity_state(&mode) == -1) {
+        return -1;
     }
 
     fd = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));
@@ -931,13 +933,6 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
     for (i = 0; i < fstab->num_entries; i++) {
         if (!fs_mgr_is_verified(&fstab->recs[i])) {
             continue;
-        }
-
-        if (use_state) {
-            if (get_verity_state_offset(&fstab->recs[i], &offset) < 0 ||
-                read_verity_state(fstab->recs[i].verity_loc, offset, &mode) < 0) {
-                continue;
-            }
         }
 
         mount_point = basename(fstab->recs[i].mount_point);
