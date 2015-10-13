@@ -292,7 +292,7 @@ send_crash() {
   local kind="$(get_kind "${meta_path}")"
   local exec_name="$(get_key_value "${meta_path}" "exec_name")"
   local url="$(getprop crash_reporter.server)"
-  local brillo_version="$(get_key_value "${meta_path}" "ver")"
+  local bdk_version="$(get_key_value "${meta_path}" "bdk_version")"
   local hwclass="$(get_hardware_class)"
   local write_payload_size="$(get_key_value "${meta_path}" "payload_size")"
   local log="$(get_key_value "${meta_path}" "log")"
@@ -370,12 +370,12 @@ send_crash() {
   fi
 
   # If ID or VERSION_ID is undefined, we use the default product name
-  # and CHROMEOS_RELEASE_VERSION from /etc/lsb-release.
+  # and bdk_version from /etc/os-release.d.
   if [ "${product}" = "undefined" ]; then
     product="${BRILLO_PRODUCT}"
   fi
   if [ "${version}" = "undefined" ]; then
-    version="${brillo_version}"
+    version="${bdk_version}"
   fi
 
   local image_type
@@ -460,6 +460,7 @@ send_crash() {
     --capath "${RESTRICTED_CERTIFICATES_PATH}" --ciphers HIGH \
     -F "prod=${product}" \
     -F "ver=${version}" \
+    -F "bdk_version=${bdk_version}" \
     -F "hwclass=${hwclass}" \
     -F "exec_name=${exec_name}" \
     -F "model_manifest_id=${model_manifest_id}" \
