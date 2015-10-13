@@ -14,7 +14,14 @@
  * limitations under the License.
  */
 
+#include <sys/cdefs.h>
+
 #define FS_MGR_SETUP_VERITY_DISABLED -2
 #define FS_MGR_SETUP_VERITY_FAIL -1
 #define FS_MGR_SETUP_VERITY_SUCCESS 0
+
+__BEGIN_DECLS
+
 int fs_mgr_setup_verity(struct fstab_rec *fstab);
+
+__END_DECLS
