@@ -27,6 +27,7 @@ LogStatistics::LogStatistics() : enable(false) {
     log_id_for_each(id) {
         mSizes[id] = 0;
         mElements[id] = 0;
+        mDroppedElements[id] = 0;
         mSizesTotal[id] = 0;
         mElementsTotal[id] = 0;
     }
@@ -93,6 +94,9 @@ void LogStatistics::subtract(LogBufferElement *element) {
     unsigned short size = element->getMsgLen();
     mSizes[log_id] -= size;
     --mElements[log_id];
+    if (element->getDropped()) {
+        --mDroppedElements[log_id];
+    }
 
     if (log_id == LOG_ID_KERNEL) {
         return;
@@ -119,6 +123,7 @@ void LogStatistics::drop(LogBufferElement *element) {
     log_id_t log_id = element->getLogId();
     unsigned short size = element->getMsgLen();
     mSizes[log_id] -= size;
+    ++mDroppedElements[log_id];
 
     uidTable[log_id].drop(element->getUid(), element);
 
