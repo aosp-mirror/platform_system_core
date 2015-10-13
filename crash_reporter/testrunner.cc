@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <chromeos/test_helpers.h>
+#include <brillo/test_helpers.h>
 #include <gtest/gtest.h>
 
 int main(int argc, char** argv) {

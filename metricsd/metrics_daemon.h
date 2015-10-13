@@ -26,7 +26,7 @@
 #include <base/files/file_path.h>
 #include <base/memory/scoped_ptr.h>
 #include <base/time/time.h>
-#include <chromeos/daemons/dbus_daemon.h>
+#include <brillo/daemons/dbus_daemon.h>
 #include <libweaved/command.h>
 #include <libweaved/device.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
@@ -39,7 +39,7 @@
 
 using chromeos_metrics::PersistentInteger;
 
-class MetricsDaemon : public chromeos::DBusDaemon {
+class MetricsDaemon : public brillo::DBusDaemon {
  public:
   MetricsDaemon();
   ~MetricsDaemon();

@@ -27,7 +27,7 @@
 #include <base/strings/string_split.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
-#include <chromeos/process.h>
+#include <brillo/process.h>
 
 using base::FilePath;
 
@@ -120,7 +120,7 @@ bool UdevCollector::ProcessUdevCrashLogs(const FilePath& crash_directory,
   }
 
   // Compress the output using gzip.
-  chromeos::ProcessImpl gzip_process;
+  brillo::ProcessImpl gzip_process;
   gzip_process.AddArg(kGzipPath);
   gzip_process.AddArg(crash_path.value());
   int process_result = gzip_process.Run();

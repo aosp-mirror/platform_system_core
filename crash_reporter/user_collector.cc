@@ -37,9 +37,9 @@
 #include <base/strings/string_split.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
-#include "chromeos/osrelease_reader.h"
-#include <chromeos/process.h>
-#include <chromeos/syslog_logging.h>
+#include <brillo/osrelease_reader.h>
+#include <brillo/process.h>
+#include <brillo/syslog_logging.h>
 #include <cutils/properties.h>
 #include <private/android_filesystem_config.h>
 
@@ -190,7 +190,7 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
   AddCrashMetaData("sig", kCollectionErrorSignature);
   AddCrashMetaData("error_type", GetErrorTypeSignature(error_type));
   std::string dump_basename = FormatDumpBasename(exec, time(nullptr), pid);
-  std::string error_log = chromeos::GetLog();
+  std::string error_log = brillo::GetLog();
   FilePath diag_log_path = GetCrashPath(crash_path, dump_basename, "diaglog");
   if (GetLogContents(FilePath(log_config_path_), kCollectionErrorSignature,
                      diag_log_path)) {
@@ -370,7 +370,7 @@ bool UserCollector::RunCoreToMinidump(const FilePath &core_path,
                                       const FilePath &minidump_path,
                                       const FilePath &temp_directory) {
   FilePath output_path = temp_directory.Append("output");
-  chromeos::ProcessImpl core2md;
+  brillo::ProcessImpl core2md;
   core2md.RedirectOutput(output_path.value());
   core2md.AddArg(kCoreToMinidumpConverterPath);
   core2md.AddArg(core_path.value());
@@ -514,7 +514,7 @@ UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
   property_get(kProductIDProperty, value, "undefined");
   AddCrashMetaUploadData("prod", value);
 
-  chromeos::OsReleaseReader reader;
+  brillo::OsReleaseReader reader;
   reader.Load();
   std::string bdk_version = "undefined";
   if (!reader.GetString(kBdkVersionKey, &bdk_version)) {
