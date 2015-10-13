@@ -3,7 +3,7 @@
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES:= fs_mgr.c fs_mgr_verity.c fs_mgr_fstab.c
+LOCAL_SRC_FILES:= fs_mgr.c fs_mgr_verity.cpp fs_mgr_fstab.c
 LOCAL_SRC_FILES += fs_mgr_format.c fs_mgr_slotselect.c
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include \
