@@ -18,7 +18,7 @@
 #include <base/files/file_util.h>
 #include <base/files/scoped_temp_dir.h>
 #include <base/strings/stringprintf.h>
-#include <chromeos/syslog_logging.h>
+#include <brillo/syslog_logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -141,7 +141,7 @@ class UdevCollectorTest : public ::testing::Test {
                               kLogConfigFileContents,
                               strlen(kLogConfigFileContents)));
 
-    chromeos::ClearLog();
+    brillo::ClearLog();
   }
 
   UdevCollectorMock collector_;

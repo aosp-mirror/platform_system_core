@@ -20,7 +20,7 @@
 #include <base/files/file_util.h>
 #include <base/files/scoped_temp_dir.h>
 #include <base/strings/string_number_conversions.h>
-#include <chromeos/flag_helper.h>
+#include <brillo/flag_helper.h>
 #include <gtest/gtest.h>
 
 #include "constants.h"
@@ -43,7 +43,7 @@ using chromeos_metrics::PersistentIntegerMock;
 class MetricsDaemonTest : public testing::Test {
  protected:
   virtual void SetUp() {
-    chromeos::FlagHelper::Init(0, nullptr, "");
+    brillo::FlagHelper::Init(0, nullptr, "");
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
     scaling_max_freq_path_ = temp_dir_.path().Append("scaling_max");
     cpu_max_freq_path_ = temp_dir_.path().Append("cpu_freq_max");

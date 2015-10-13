@@ -17,7 +17,7 @@
 #include <string>
 
 #include <base/files/file_path.h>
-#include <chromeos/key_value_store.h>
+#include <brillo/key_value_store.h>
 #include <gtest/gtest.h>
 
 namespace {
@@ -32,7 +32,7 @@ const char kChromeExecName[] = "chrome";
 
 // Tests that the config file is parsable and that Chrome is listed.
 TEST(CrashReporterLogsTest, ReadConfig) {
-  chromeos::KeyValueStore store;
+  brillo::KeyValueStore store;
   ASSERT_TRUE(store.Load(base::FilePath(kConfigFile)));
   std::string command;
   EXPECT_TRUE(store.GetString(kChromeExecName, &command));
