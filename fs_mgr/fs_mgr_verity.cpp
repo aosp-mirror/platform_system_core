@@ -29,6 +29,7 @@
 #include <libgen.h>
 #include <time.h>
 
+#include <base/file.h>
 #include <private/android_filesystem_config.h>
 #include <cutils/properties.h>
 #include <logwrap/logwrap.h>
@@ -200,7 +201,7 @@ static int ext4_get_target_device_size(char *blk_device, uint64_t *device_size)
         return -1;
     }
 
-    if (TEMP_FAILURE_RETRY(read(data_device, &sb, sizeof(sb))) != sizeof(sb)) {
+    if (!android::base::ReadFully(data_device, &sb, sizeof(sb))) {
         ERROR("Error reading superblock");
         close(data_device);
         return -1;
@@ -256,10 +257,8 @@ static int read_verity_metadata(uint64_t device_size, char *block_device, char *
         ERROR("Could not seek to start of verity metadata block.\n");
         goto out;
     }
-
     // check the magic number
-    if (TEMP_FAILURE_RETRY(read(device, &magic_number, sizeof(magic_number))) !=
-            sizeof(magic_number)) {
+    if (!android::base::ReadFully(device, &magic_number, sizeof(magic_number))) {
         ERROR("Couldn't read magic number!\n");
         goto out;
     }
@@ -278,8 +277,8 @@ static int read_verity_metadata(uint64_t device_size, char *block_device, char *
     }
 
     // check the protocol version
-    if (TEMP_FAILURE_RETRY(read(device, &protocol_version,
-            sizeof(protocol_version))) != sizeof(protocol_version)) {
+    if (!android::base::ReadFully(device, &protocol_version,
+            sizeof(protocol_version))) {
         ERROR("Couldn't read verity metadata protocol version!\n");
         goto out;
     }
@@ -294,7 +293,7 @@ static int read_verity_metadata(uint64_t device_size, char *block_device, char *
         ERROR("Couldn't allocate memory for signature!\n");
         goto out;
     }
-    if (TEMP_FAILURE_RETRY(read(device, *signature, RSANUMBYTES)) != RSANUMBYTES) {
+    if (!android::base::ReadFully(device, *signature, RSANUMBYTES)) {
         ERROR("Couldn't read signature from verity metadata!\n");
         goto out;
     }
@@ -305,8 +304,7 @@ static int read_verity_metadata(uint64_t device_size, char *block_device, char *
     }
 
     // get the size of the table
-    if (TEMP_FAILURE_RETRY(read(device, &table_length, sizeof(table_length))) !=
-            sizeof(table_length)) {
+    if (!android::base::ReadFully(device, &table_length, sizeof(table_length))) {
         ERROR("Couldn't get the size of the verity table from metadata!\n");
         goto out;
     }
@@ -317,8 +315,7 @@ static int read_verity_metadata(uint64_t device_size, char *block_device, char *
         ERROR("Couldn't allocate memory for verity table!\n");
         goto out;
     }
-    if (TEMP_FAILURE_RETRY(read(device, *table, table_length)) !=
-            (ssize_t)table_length) {
+    if (!android::base::ReadFully(device, *table, table_length)) {
         ERROR("Couldn't read the verity table from metadata!\n");
         goto out;
     }
@@ -483,7 +480,7 @@ static int check_verity_restart(const char *fname)
         goto out;
     }
 
-    if (TEMP_FAILURE_RETRY(read(fd, buffer, size)) != size) {
+    if (!android::base::ReadFully(fd, buffer, size)) {
         ERROR("Failed to read %zd bytes from %s (%s)\n", size, fname,
             strerror(errno));
         goto out;
