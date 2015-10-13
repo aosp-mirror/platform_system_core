@@ -600,6 +600,9 @@ void BatteryMonitor::init(struct healthd_config *hc) {
         closedir(dir);
     }
 
+    // This indicates that there is no charger driver registered.
+    // Typically the case for devices which do not have a battery and
+    // and are always plugged into AC mains.
     if (!mChargerNames.size()) {
         KLOG_ERROR(LOG_TAG, "No charger supplies found\n");
         mBatteryFixedCapacity = ALWAYS_PLUGGED_CAPACITY;
