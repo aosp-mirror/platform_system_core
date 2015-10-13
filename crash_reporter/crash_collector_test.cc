@@ -22,14 +22,14 @@
 #include <base/files/file_util.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
-#include <chromeos/syslog_logging.h>
+#include <brillo/syslog_logging.h>
 #include <gtest/gtest.h>
 
 #include "crash_collector.h"
 
 using base::FilePath;
 using base::StringPrintf;
-using chromeos::FindLog;
+using brillo::FindLog;
 using ::testing::Invoke;
 using ::testing::Return;
 
@@ -54,7 +54,7 @@ class CrashCollectorTest : public ::testing::Test {
     collector_.Initialize(CountCrash, IsMetrics);
     test_dir_ = FilePath("test");
     base::CreateDirectory(test_dir_);
-    chromeos::ClearLog();
+    brillo::ClearLog();
   }
 
   void TearDown() {
@@ -208,7 +208,7 @@ TEST_F(CrashCollectorTest, MetaData) {
             symlink(kMetaFileBasename,
                     meta_symlink_path.value().c_str()));
   ASSERT_TRUE(base::PathExists(meta_symlink_path));
-  chromeos::ClearLog();
+  brillo::ClearLog();
   collector_.WriteCrashMetaData(meta_symlink_path,
                                 "kernel",
                                 payload_file.value());
@@ -221,7 +221,7 @@ TEST_F(CrashCollectorTest, MetaData) {
   // Test target of dangling symlink is not created.
   base::DeleteFile(meta_file, false);
   ASSERT_FALSE(base::PathExists(meta_file));
-  chromeos::ClearLog();
+  brillo::ClearLog();
   collector_.WriteCrashMetaData(meta_symlink_path, "kernel",
                                 payload_file.value());
   EXPECT_FALSE(base::PathExists(meta_file));

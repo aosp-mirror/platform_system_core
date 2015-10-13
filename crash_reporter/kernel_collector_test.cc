@@ -22,13 +22,13 @@
 #include <base/files/scoped_temp_dir.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
-#include <chromeos/syslog_logging.h>
+#include <brillo/syslog_logging.h>
 #include <gtest/gtest.h>
 
 using base::FilePath;
 using base::StringPrintf;
-using chromeos::FindLog;
-using chromeos::GetLog;
+using brillo::FindLog;
+using brillo::GetLog;
 
 namespace {
 
@@ -78,7 +78,7 @@ class KernelCollectorTest : public ::testing::Test {
 
     test_crash_directory_ = scoped_temp_dir_.path().Append("crash_directory");
     ASSERT_TRUE(base::CreateDirectory(test_crash_directory_));
-    chromeos::ClearLog();
+    brillo::ClearLog();
   }
 
   FilePath test_kcrash_;
@@ -282,7 +282,7 @@ TEST_F(KernelCollectorTest, CollectOK) {
   ASSERT_EQ(1, s_crashes);
   ASSERT_TRUE(FindLog("(handling)"));
   static const char kNamePrefix[] = "Stored kcrash to ";
-  std::string log = chromeos::GetLog();
+  std::string log = brillo::GetLog();
   size_t pos = log.find(kNamePrefix);
   ASSERT_NE(std::string::npos, pos)
       << "Did not find string \"" << kNamePrefix << "\" in log: {\n"

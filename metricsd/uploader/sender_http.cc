@@ -20,8 +20,8 @@
 
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
-#include <chromeos/http/http_utils.h>
-#include <chromeos/mime_utils.h>
+#include <brillo/http/http_utils.h>
+#include <brillo/mime_utils.h>
 
 HttpSender::HttpSender(const std::string server_url)
     : server_url_(server_url) {}
@@ -31,14 +31,14 @@ bool HttpSender::Send(const std::string& content,
   const std::string hash =
       base::HexEncode(content_hash.data(), content_hash.size());
 
-  chromeos::http::HeaderList headers = {{"X-Chrome-UMA-Log-SHA1", hash}};
-  chromeos::ErrorPtr error;
-  auto response = chromeos::http::PostTextAndBlock(
+  brillo::http::HeaderList headers = {{"X-Chrome-UMA-Log-SHA1", hash}};
+  brillo::ErrorPtr error;
+  auto response = brillo::http::PostTextAndBlock(
       server_url_,
       content,
-      chromeos::mime::application::kWwwFormUrlEncoded,
+      brillo::mime::application::kWwwFormUrlEncoded,
       headers,
-      chromeos::http::Transport::CreateDefault(),
+      brillo::http::Transport::CreateDefault(),
       &error);
   if (!response || response->ExtractDataAsString() != "OK") {
     if (error) {
