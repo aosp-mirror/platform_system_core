@@ -298,8 +298,8 @@ send_crash() {
   local log="$(get_key_value "${meta_path}" "log")"
   local sig="$(get_key_value "${meta_path}" "sig")"
   local send_payload_size="$(stat -c "%s" "${report_payload}" 2>/dev/null)"
-  local product="$(get_key_value "${meta_path}" "upload_var_prod")"
-  local version="$(get_key_value "${meta_path}" "upload_var_ver")"
+  local product="$(get_key_value "${meta_path}" "product_id")"
+  local version="$(get_key_value "${meta_path}" "product_version")"
   local upload_prefix="$(get_key_value "${meta_path}" "upload_prefix")"
   local guid
   local model_manifest_id="$(get_key_value "${WEAVE_CONF_FILE}" "model_id")"
@@ -350,25 +350,6 @@ send_crash() {
     esac
   done
 
-  # When uploading Chrome reports we need to report the right product and
-  # version. If the meta file does not specify it, use GOOGLE_CRASH_ID
-  # as the product and GOOGLE_CRASH_VERSION_ID as the version.
-  if [ "${product}" = "undefined" ]; then
-    product="$(get_key_value /etc/os-release 'GOOGLE_CRASH_ID')"
-  fi
-  if [ "${version}" = "undefined" ]; then
-    version="$(get_key_value /etc/os-release 'GOOGLE_CRASH_VERSION_ID')"
-  fi
-
-  # If GOOGLE_CRASH_* is undefined, we look for ID and VERSION_ID in
-  # /etc/os-release.
-  if [ "${product}" = "undefined" ]; then
-    product="$(get_key_value /etc/os-release 'ID')"
-  fi
-  if [ "${version}" = "undefined" ]; then
-    version="$(get_key_value /etc/os-release 'VERSION_ID')"
-  fi
-
   # If ID or VERSION_ID is undefined, we use the default product name
   # and bdk_version from /etc/os-release.d.
   if [ "${product}" = "undefined" ]; then
@@ -408,6 +389,7 @@ send_crash() {
   lecho "  Metadata: ${meta_path} (${kind})"
   lecho "  Payload: ${report_payload}"
   lecho "  Version: ${version}"
+  lecho "  Bdk Version: ${bdk_version}"
   [ -n "${image_type}" ] && lecho "  Image type: ${image_type}"
   [ -n "${boot_mode}" ] && lecho "  Boot mode: ${boot_mode}"
   if is_mock; then
