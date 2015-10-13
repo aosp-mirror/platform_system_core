@@ -40,6 +40,7 @@
 #include "ext4_sb.h"
 #include "squashfs_utils.h"
 
+#include "fs_mgr.h"
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_verity.h"
 
@@ -74,18 +75,15 @@ struct verity_state {
 
 extern struct fs_info info;
 
-static RSAPublicKey *load_key(char *path)
+static RSAPublicKey *load_key(const char *path)
 {
-    FILE *f;
-    RSAPublicKey *key;
-
-    key = malloc(sizeof(RSAPublicKey));
+    RSAPublicKey* key = static_cast<RSAPublicKey*>(malloc(sizeof(RSAPublicKey)));
     if (!key) {
         ERROR("Can't malloc key\n");
         return NULL;
     }
 
-    f = fopen(path, "r");
+    FILE* f = fopen(path, "r");
     if (!f) {
         ERROR("Can't open '%s'\n", path);
         free(key);
@@ -275,7 +273,7 @@ static int read_verity_metadata(uint64_t device_size, char *block_device, char *
 #endif
 
     if (magic_number != VERITY_METADATA_MAGIC_NUMBER) {
-        ERROR("Couldn't find verity metadata at offset %"PRIu64"!\n", device_size);
+        ERROR("Couldn't find verity metadata at offset %" PRIu64 "!\n", device_size);
         goto out;
     }
 
@@ -314,7 +312,7 @@ static int read_verity_metadata(uint64_t device_size, char *block_device, char *
     }
 
     // get the table + null terminator
-    *table = malloc(table_length + 1);
+    *table = static_cast<char*>(malloc(table_length + 1));
     if (!*table) {
         ERROR("Couldn't allocate memory for verity table!\n");
         goto out;
@@ -887,7 +885,7 @@ out:
 
 int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
 {
-    _Alignas(struct dm_ioctl) char buffer[DM_BUF_SIZE];
+    alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
     bool use_state = true;
     char fstab_filename[PROPERTY_VALUE_MAX + sizeof(FSTAB_PREFIX)];
     char *mount_point;
@@ -989,7 +987,7 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
     int verity_table_length = 0;
     uint64_t device_size = 0;
 
-    _Alignas(struct dm_ioctl) char buffer[DM_BUF_SIZE];
+    alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
     struct dm_ioctl *io = (struct dm_ioctl *) buffer;
     char *mount_point = basename(fstab->mount_point);
 
