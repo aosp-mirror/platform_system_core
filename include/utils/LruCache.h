@@ -99,17 +99,29 @@ private:
     TValue mNullValue;
 
 public:
+    // To be used like:
+    // while (it.next()) {
+    //   it.value(); it.key();
+    // }
     class Iterator {
     public:
-        Iterator(const LruCache<TKey, TValue>& cache): mCache(cache), mIterator(mCache.mSet->begin()) {
+        Iterator(const LruCache<TKey, TValue>& cache):
+                mCache(cache), mIterator(mCache.mSet->begin()), mBeginReturned(false) {
         }
 
         bool next() {
             if (mIterator == mCache.mSet->end()) {
                 return false;
             }
-            std::advance(mIterator, 1);
-            return mIterator != mCache.mSet->end();
+            if (!mBeginReturned) {
+                // mIterator has been initialized to the beginning and
+                // hasn't been returned. Do not advance:
+                mBeginReturned = true;
+            } else {
+                std::advance(mIterator, 1);
+            }
+            bool ret = (mIterator != mCache.mSet->end());
+            return ret;
         }
 
         const TValue& value() const {
@@ -122,6 +134,7 @@ public:
     private:
         const LruCache<TKey, TValue>& mCache;
         typename LruCacheSet::iterator mIterator;
+        bool mBeginReturned;
     };
 };
 
