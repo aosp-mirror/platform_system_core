@@ -84,6 +84,8 @@ LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
 LOCAL_STATIC_LIBRARIES := \
     libinit \
     libfs_mgr \
+    libfec \
+    libfec_rs \
     libsquashfs_utils \
     liblogwrap \
     libcutils \
@@ -94,6 +96,7 @@ LOCAL_STATIC_LIBRARIES := \
     libc \
     libselinux \
     libmincrypt \
+    libcrypto_static \
     libc++_static \
     libdl \
     libsparse_static \
