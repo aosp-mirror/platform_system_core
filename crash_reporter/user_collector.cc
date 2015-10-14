@@ -59,13 +59,10 @@ static const gid_t kUnknownGid = -1;
 const char *UserCollector::kUserId = "Uid:\t";
 const char *UserCollector::kGroupId = "Gid:\t";
 
-// The property containing the OS version.
-const char kVersionProperty[] = "ro.build.id";
-
-// The property containing the product id.
-const char kProductIDProperty[] = "ro.product.product_id";
-
+// Product information keys in the /etc/os-release.d folder.
 static const char kBdkVersionKey[] = "bdk_version";
+static const char kProductIDKey[] = "product_id";
+static const char kProductVersionKey[] = "product_version";
 
 
 using base::FilePath;
@@ -508,20 +505,28 @@ UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
   if (GetLogContents(FilePath(log_config_path_), exec, log_path))
     AddCrashMetaData("log", log_path.value());
 
-  char value[PROPERTY_VALUE_MAX];
-  property_get(kVersionProperty, value, "undefined");
-  AddCrashMetaUploadData("ver", value);
-  property_get(kProductIDProperty, value, "undefined");
-  AddCrashMetaUploadData("prod", value);
-
   brillo::OsReleaseReader reader;
   reader.Load();
-  std::string bdk_version = "undefined";
-  if (!reader.GetString(kBdkVersionKey, &bdk_version)) {
+  std::string value = "undefined";
+  if (!reader.GetString(kBdkVersionKey, &value)) {
     LOG(ERROR) << "Could not read " << kBdkVersionKey
                << " from /etc/os-release.d/";
   }
-  AddCrashMetaData(kBdkVersionKey, bdk_version);
+  AddCrashMetaData(kBdkVersionKey, value);
+
+  value = "undefined";
+  if (!reader.GetString(kProductIDKey, &value)) {
+    LOG(ERROR) << "Could not read " << kProductIDKey
+               << " from /etc/os-release.d/";
+  }
+  AddCrashMetaData(kProductIDKey, value);
+
+  value = "undefined";
+  if (!reader.GetString(kProductVersionKey, &value)) {
+    LOG(ERROR) << "Could not read " << kProductVersionKey
+               << " from /etc/os-release.d/";
+  }
+  AddCrashMetaData(kProductVersionKey, value);
 
   ErrorType error_type =
       ConvertCoreToMinidump(pid, container_dir, core_path, minidump_path);
