@@ -88,8 +88,11 @@ struct desc_v2 {
     __le32 fs_count;
     __le32 hs_count;
     __le32 ss_count;
+    __le32 os_count;
     struct func_desc fs_descs, hs_descs;
     struct ss_func_desc ss_descs;
+    struct usb_os_desc_header os_header;
+    struct usb_ext_compat_desc os_desc;
 } __attribute__((packed));
 
 static struct func_desc fs_descriptors = {
@@ -180,6 +183,24 @@ static struct ss_func_desc ss_descriptors = {
         .bDescriptorType = USB_DT_SS_ENDPOINT_COMP,
     },
 };
+
+struct usb_ext_compat_desc os_desc_compat = {
+    .bFirstInterfaceNumber = 0,
+    .Reserved1 = cpu_to_le32(1),
+    .CompatibleID = {0},
+    .SubCompatibleID = {0},
+    .Reserved2 = {0},
+};
+
+static struct usb_os_desc_header os_desc_header = {
+    .interface = cpu_to_le32(1),
+    .dwLength = cpu_to_le32(sizeof(os_desc_header) + sizeof(os_desc_compat)),
+    .bcdVersion = cpu_to_le32(1),
+    .wIndex = cpu_to_le32(4),
+    .bCount = cpu_to_le32(1),
+    .Reserved = cpu_to_le32(0),
+};
+
 
 #define STR_INTERFACE_ "ADB Interface"
 
@@ -332,13 +353,16 @@ static void init_functionfs(struct usb_handle *h)
     v2_descriptor.header.magic = cpu_to_le32(FUNCTIONFS_DESCRIPTORS_MAGIC_V2);
     v2_descriptor.header.length = cpu_to_le32(sizeof(v2_descriptor));
     v2_descriptor.header.flags = FUNCTIONFS_HAS_FS_DESC | FUNCTIONFS_HAS_HS_DESC |
-                                 FUNCTIONFS_HAS_SS_DESC;
+                                 FUNCTIONFS_HAS_SS_DESC | FUNCTIONFS_HAS_MS_OS_DESC;
     v2_descriptor.fs_count = 3;
     v2_descriptor.hs_count = 3;
     v2_descriptor.ss_count = 5;
+    v2_descriptor.os_count = 1;
     v2_descriptor.fs_descs = fs_descriptors;
     v2_descriptor.hs_descs = hs_descriptors;
     v2_descriptor.ss_descs = ss_descriptors;
+    v2_descriptor.os_header = os_desc_header;
+    v2_descriptor.os_desc = os_desc_compat;
 
     if (h->control < 0) { // might have already done this before
         D("OPENING %s", USB_FFS_ADB_EP0);
