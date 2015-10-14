@@ -20,6 +20,8 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 
+#include <memory>
+
 #include <cutils/memory.h>
 #include <gtest/gtest.h>
 
@@ -127,14 +129,14 @@ void RunMemsetTests(test_e test_type, uint32_t value, int align[][2], size_t num
     min_incr = 2;
     value |= value << 16;
   }
-  uint32_t* expected_buf = new uint32_t[MAX_TEST_SIZE/sizeof(uint32_t)];
+  std::unique_ptr<uint32_t[]> expected_buf(new uint32_t[MAX_TEST_SIZE/sizeof(uint32_t)]);
   for (size_t i = 0; i < MAX_TEST_SIZE/sizeof(uint32_t); i++) {
     expected_buf[i] = value;
   }
 
   // Allocate one large buffer with lots of extra space so that we can
   // guarantee that all possible alignments will fit.
-  uint8_t *buf = new uint8_t[3*MAX_TEST_SIZE];
+  std::unique_ptr<uint8_t[]> buf(new uint8_t[3*MAX_TEST_SIZE]);
   uint8_t *buf_align;
   for (size_t i = 0; i < num_aligns; i++) {
     size_t incr = min_incr;
@@ -142,7 +144,7 @@ void RunMemsetTests(test_e test_type, uint32_t value, int align[][2], size_t num
       incr = GetIncrement(len, min_incr);
 
       buf_align = reinterpret_cast<uint8_t*>(GetAlignedPtr(
-          buf+FENCEPOST_LENGTH, align[i][0], align[i][1]));
+          buf.get()+FENCEPOST_LENGTH, align[i][0], align[i][1]));
 
       SetFencepost(&buf_align[-FENCEPOST_LENGTH]);
       SetFencepost(&buf_align[len]);
@@ -153,15 +155,13 @@ void RunMemsetTests(test_e test_type, uint32_t value, int align[][2], size_t num
       } else {
         android_memset32(reinterpret_cast<uint32_t*>(buf_align), value, len);
       }
-      ASSERT_EQ(0, memcmp(expected_buf, buf_align, len))
+      ASSERT_EQ(0, memcmp(expected_buf.get(), buf_align, len))
           << "Failed size " << len << " align " << align[i][0] << " " << align[i][1] << "\n";
 
       VerifyFencepost(&buf_align[-FENCEPOST_LENGTH]);
       VerifyFencepost(&buf_align[len]);
     }
   }
-  delete expected_buf;
-  delete buf;
 }
 
 TEST(libcutils, android_memset16_non_zero) {
