@@ -1,4 +1,4 @@
-on boot
+on post-fs-data
     mkdir /data/misc/metrics 0770 system system
 
 service metrics_daemon /system/bin/metrics_daemon --uploader -nodaemon
