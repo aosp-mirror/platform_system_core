@@ -58,9 +58,11 @@ class UploadServiceTest : public testing::Test {
   }
 
   void SetTestingProperty(const std::string& name, const std::string& value) {
+    base::FilePath filepath = dir_.path().Append("etc/os-release.d").Append(name);
+    ASSERT_TRUE(base::CreateDirectory(filepath.DirName()));
     ASSERT_EQ(
         value.size(),
-        base::WriteFile(dir_.path().Append(name), value.data(), value.size()));
+        base::WriteFile(filepath, value.data(), value.size()));
   }
 
   base::ScopedTempDir dir_;
@@ -225,9 +227,8 @@ TEST_F(UploadServiceTest, ValuesInConfigFileAreSent) {
   SenderMock* sender = new SenderMock();
   upload_service_->sender_.reset(sender);
 
-  SetTestingProperty(metrics::kChannelProperty, "beta");
-  SetTestingProperty(metrics::kProductIdProperty, "hello");
-  SetTestingProperty(metrics::kProductVersionProperty, "1.2.3.4");
+  SetTestingProperty(metrics::kProductId, "hello");
+  SetTestingProperty(metrics::kProductVersion, "1.2.3.4");
 
   scoped_ptr<metrics::MetricSample> histogram =
       metrics::MetricSample::SparseHistogramSample("myhistogram", 1);
@@ -242,8 +243,6 @@ TEST_F(UploadServiceTest, ValuesInConfigFileAreSent) {
   EXPECT_TRUE(sender->is_good_proto());
   EXPECT_EQ(1, sender->last_message_proto().histogram_event().size());
 
-  EXPECT_EQ(metrics::SystemProfileProto::CHANNEL_BETA,
-            sender->last_message_proto().system_profile().channel());
   EXPECT_NE(0, sender->last_message_proto().client_id());
   EXPECT_NE(0, sender->last_message_proto().system_profile().build_timestamp());
   EXPECT_NE(0, sender->last_message_proto().session_id());
@@ -269,7 +268,7 @@ TEST_F(UploadServiceTest, PersistentGUID) {
 }
 
 TEST_F(UploadServiceTest, SessionIdIncrementedAtInitialization) {
-  SetTestingProperty(metrics::kProductIdProperty, "hello");
+  SetTestingProperty(metrics::kProductId, "hello");
   SystemProfileCache cache(true, dir_.path());
   cache.Initialize();
   int session_id = cache.profile_.session_id;
