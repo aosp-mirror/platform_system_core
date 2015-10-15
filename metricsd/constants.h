@@ -27,10 +27,9 @@ static const char kStagedLogName[] = "staged_log";
 static const char kFailedUploadCountName[] = "failed_upload_count";
 static const char kDefaultVersion[] = "0.0.0.0";
 
-// System properties used.
-static const char kProductIdProperty[] = "ro.product.product_id";
-static const char kChannelProperty[] = "ro.product.channel";
-static const char kProductVersionProperty[] = "ro.product.version";
+// Build time properties name.
+static const char kProductId[] = "product_id";
+static const char kProductVersion[] = "product_version";
 }  // namespace metrics
 
 #endif  // METRICS_CONSTANTS_H_
