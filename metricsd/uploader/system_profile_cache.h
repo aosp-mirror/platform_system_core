@@ -76,11 +76,6 @@ class SystemProfileCache : public SystemProfileSetter {
   // Initializes |profile_| only if it has not been yet initialized.
   bool InitializeOrCheck();
 
-  // Gets a system property as a string.
-  // When |testing_| is true, reads the value from |metrics_directory_|/|name|
-  // instead.
-  std::string GetProperty(const std::string& name);
-
   bool initialized_;
   bool testing_;
   base::FilePath metrics_directory_;
