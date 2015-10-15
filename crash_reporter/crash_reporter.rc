@@ -5,7 +5,7 @@ on property:crash_reporter.coredump.enabled=1
 on property:crash_reporter.coredump.enabled=0
     write /proc/sys/kernel/core_pattern "core"
 
-on boot
+on post-fs-data
     # Allow catching multiple unrelated concurrent crashes, but use a finite
     # number to prevent infinitely recursing on crash handling.
     write /proc/sys/kernel/core_pipe_limit 4
