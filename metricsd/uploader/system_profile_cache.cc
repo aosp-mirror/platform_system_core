@@ -21,8 +21,9 @@
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
 #include <base/strings/string_util.h>
-#include <cutils/properties.h>
+#include <brillo/osrelease_reader.h>
 #include <string>
+#include <update_engine/client.h>
 #include <vector>
 
 #include "constants.h"
@@ -73,16 +74,27 @@ bool SystemProfileCache::Initialize() {
   CHECK(!initialized_)
       << "this should be called only once in the metrics_daemon lifetime.";
 
-  profile_.product_id = GetProperty(metrics::kProductIdProperty);
+  brillo::OsReleaseReader reader;
+  std::string channel;
+  if (testing_) {
+    reader.LoadTestingOnly(metrics_directory_);
+    channel = "unknown";
+  } else {
+    reader.Load();
+    auto client = update_engine::UpdateEngineClient::CreateInstance();
+    if (!client->GetChannel(&channel)) {
+      LOG(ERROR) << "failed to read the current channel from update engine.";
+    }
+  }
 
-  if (profile_.product_id.empty()) {
-    LOG(ERROR) << "System property " << metrics::kProductIdProperty
-               << " is not set.";
+  if (!reader.GetString(metrics::kProductId, &profile_.product_id)) {
+    LOG(ERROR) << "product_id is not set.";
     return false;
   }
 
-  std::string channel = GetProperty(metrics::kChannelProperty);
-  profile_.version = GetProperty(metrics::kProductVersionProperty);
+  if (!reader.GetString(metrics::kProductVersion, &profile_.version)) {
+    LOG(ERROR) << "failed to read the product version";
+  }
 
   if (channel.empty() || profile_.version.empty()) {
     // If the channel or version is missing, the image is not official.
@@ -152,18 +164,6 @@ std::string SystemProfileCache::GetPersistentGUID(
     CHECK(base::WriteFile(filepath, guid.c_str(), guid.size()));
   }
   return guid;
-}
-
-std::string SystemProfileCache::GetProperty(const std::string& name) {
-  if (testing_) {
-    std::string content;
-    base::ReadFileToString(metrics_directory_.Append(name), &content);
-    return content;
-  } else {
-    char value[PROPERTY_VALUE_MAX];
-    property_get(name.data(), value, "");
-    return std::string(value);
-  }
 }
 
 metrics::SystemProfileProto_Channel SystemProfileCache::ProtoChannelFromString(

@@ -28,7 +28,7 @@
 #include <base/strings/string_split.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
-#include <cutils/properties.h>
+#include <brillo/osrelease_reader.h>
 #include <dbus/dbus.h>
 #include <dbus/message.h>
 
@@ -153,23 +153,19 @@ void MetricsDaemon::RunUploaderTest() {
 }
 
 uint32_t MetricsDaemon::GetOsVersionHash() {
-  static uint32_t cached_version_hash = 0;
-  static bool version_hash_is_cached = false;
-  if (version_hash_is_cached)
-    return cached_version_hash;
-  version_hash_is_cached = true;
-
-  char version[PROPERTY_VALUE_MAX];
-  // The version might not be set for development devices. In this case, use the
-  // zero version.
-  property_get(metrics::kProductVersionProperty, version,
-               metrics::kDefaultVersion);
-
-  cached_version_hash = base::Hash(version);
-  if (testing_) {
-    cached_version_hash = 42;  // return any plausible value for the hash
+  brillo::OsReleaseReader reader;
+  reader.Load();
+  string version;
+  if (!reader.GetString(metrics::kProductVersion, &version)) {
+    LOG(ERROR) << "failed to read the product version.";
+    version = metrics::kDefaultVersion;
   }
-  return cached_version_hash;
+
+  uint32_t version_hash = base::Hash(version);
+  if (testing_) {
+    version_hash = 42;  // return any plausible value for the hash
+  }
+  return version_hash;
 }
 
 void MetricsDaemon::Init(bool testing,

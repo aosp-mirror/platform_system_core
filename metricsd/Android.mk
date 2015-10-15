@@ -69,11 +69,11 @@ metrics_daemon_shared_libraries := $(libmetrics_shared_libraries) \
   libchrome-dbus \
   libchromeos-http \
   libchromeos-dbus \
-  libcutils \
   libdbus \
   libmetrics \
   libprotobuf-cpp-lite \
   librootdev \
+  libupdate_engine_client \
   libweaved \
 
 # Shared library for metrics.
