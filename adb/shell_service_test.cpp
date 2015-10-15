@@ -245,6 +245,25 @@ TEST_F(ShellServiceTest, InteractivePtySubprocess) {
     EXPECT_FALSE(stdout.find("--abc123--") == std::string::npos);
 }
 
+// Tests closing raw subprocess stdin.
+TEST_F(ShellServiceTest, CloseClientStdin) {
+    ASSERT_NO_FATAL_FAILURE(StartTestSubprocess(
+            "cat; echo TEST_DONE",
+            SubprocessType::kRaw, SubprocessProtocol::kShell));
+
+    std::string input = "foo\nbar";
+    ShellProtocol* protocol = new ShellProtocol(subprocess_fd_);
+    memcpy(protocol->data(), input.data(), input.length());
+    ASSERT_TRUE(protocol->Write(ShellProtocol::kIdStdin, input.length()));
+    ASSERT_TRUE(protocol->Write(ShellProtocol::kIdCloseStdin, 0));
+    delete protocol;
+
+    std::string stdout, stderr;
+    EXPECT_EQ(0, ReadShellProtocol(subprocess_fd_, &stdout, &stderr));
+    ExpectLinesEqual(stdout, {"foo", "barTEST_DONE"});
+    ExpectLinesEqual(stderr, {});
+}
+
 // Tests that nothing breaks when the stdin/stdout pipe closes.
 TEST_F(ShellServiceTest, CloseStdinStdoutSubprocess) {
     ASSERT_NO_FATAL_FAILURE(StartTestSubprocess(

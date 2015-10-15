@@ -382,7 +382,7 @@ void* Subprocess::ThreadHandler(void* userdata) {
     subprocess->PassDataStreams();
     subprocess->WaitForExit();
 
-    D("deleting Subprocess");
+    D("deleting Subprocess for PID %d", subprocess->pid());
     delete subprocess;
 
     return nullptr;
@@ -501,11 +501,31 @@ ScopedFd* Subprocess::PassInput() {
             return &protocol_sfd_;
         }
 
-        // We only care about stdin packets.
-        if (stdinout_sfd_.valid() && input_->id() == ShellProtocol::kIdStdin) {
-            input_bytes_left_ = input_->data_length();
-        } else {
-            input_bytes_left_ = 0;
+        if (stdinout_sfd_.valid()) {
+            switch (input_->id()) {
+                case ShellProtocol::kIdStdin:
+                    input_bytes_left_ = input_->data_length();
+                    break;
+                case ShellProtocol::kIdCloseStdin:
+                    if (type_ == SubprocessType::kRaw) {
+                        if (adb_shutdown(stdinout_sfd_.fd(), SHUT_WR) == 0) {
+                            return nullptr;
+                        }
+                        PLOG(ERROR) << "failed to shutdown writes to FD "
+                                    << stdinout_sfd_.fd();
+                        return &stdinout_sfd_;
+                    } else {
+                        // PTYs can't close just input, so rather than close the
+                        // FD and risk losing subprocess output, leave it open.
+                        // This only happens if the client starts a PTY shell
+                        // non-interactively which is rare and unsupported.
+                        // If necessary, the client can manually close the shell
+                        // with `exit` or by killing the adb client process.
+                        D("can't close input for PTY FD %d",
+                          stdinout_sfd_.fd());
+                    }
+                    break;
+            }
         }
     }
 
@@ -532,7 +552,9 @@ ScopedFd* Subprocess::PassInput() {
 ScopedFd* Subprocess::PassOutput(ScopedFd* sfd, ShellProtocol::Id id) {
     int bytes = adb_read(sfd->fd(), output_->data(), output_->data_capacity());
     if (bytes == 0 || (bytes < 0 && errno != EAGAIN)) {
-        if (bytes < 0) {
+        // read() returns EIO if a PTY closes; don't report this as an error,
+        // it just means the subprocess completed.
+        if (bytes < 0 && !(type_ == SubprocessType::kPty && errno == EIO)) {
             PLOG(ERROR) << "error reading output FD " << sfd->fd();
         }
         return sfd;
