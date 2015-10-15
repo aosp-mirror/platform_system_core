@@ -137,3 +137,43 @@ bool WriteFdFmt(int fd, const char* fmt, ...) {
 
     return WriteFdExactly(fd, str);
 }
+
+bool ReadOrderlyShutdown(int fd) {
+    char buf[16];
+
+    // Only call this function if you're sure that the peer does
+    // orderly/graceful shutdown of the socket, closing the socket so that
+    // adb_read() will return 0. If the peer keeps the socket open, adb_read()
+    // will never return.
+    int result = adb_read(fd, buf, sizeof(buf));
+    if (result == -1) {
+        // If errno is EAGAIN, that means this function was called on a
+        // nonblocking socket and it would have blocked (which would be bad
+        // because we'd probably block the main thread where nonblocking IO is
+        // done). Don't do that. If you have a nonblocking socket, use the
+        // fdevent APIs to get called on FDE_READ, and then call this function
+        // if you really need to, but it shouldn't be needed for server sockets.
+        CHECK_NE(errno, EAGAIN);
+
+        // Note that on Windows, orderly shutdown sometimes causes
+        // recv() == SOCKET_ERROR && WSAGetLastError() == WSAECONNRESET. That
+        // can be ignored.
+        return false;
+    } else if (result == 0) {
+        // Peer has performed an orderly/graceful shutdown.
+        return true;
+    } else {
+        // Unexpectedly received data. This is essentially a protocol error
+        // because you should not call this function unless you expect no more
+        // data. We don't repeatedly call adb_read() until we get zero because
+        // we don't know how long that would take, but we do know that the
+        // caller wants to close the socket soon.
+        VLOG(RWX) << "ReadOrderlyShutdown(" << fd << ") unexpectedly read "
+                  << dump_hex(buf, result);
+        // Shutdown the socket to prevent the caller from reading or writing to
+        // it which doesn't make sense if we just read and discarded some data.
+        adb_shutdown(fd);
+        errno = EINVAL;
+        return false;
+    }
+}
