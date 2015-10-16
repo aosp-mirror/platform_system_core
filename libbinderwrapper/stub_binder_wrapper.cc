@@ -22,7 +22,9 @@
 
 namespace android {
 
-StubBinderWrapper::StubBinderWrapper() = default;
+StubBinderWrapper::StubBinderWrapper()
+    : calling_uid_(-1),
+      calling_pid_(-1) {}
 
 StubBinderWrapper::~StubBinderWrapper() = default;
 
@@ -71,6 +73,14 @@ bool StubBinderWrapper::UnregisterForDeathNotifications(
     const sp<IBinder>& binder) {
   death_callbacks_.erase(binder);
   return true;
+}
+
+uid_t StubBinderWrapper::GetCallingUid() {
+  return calling_uid_;
+}
+
+pid_t StubBinderWrapper::GetCallingPid() {
+  return calling_pid_;
 }
 
 }  // namespace android
