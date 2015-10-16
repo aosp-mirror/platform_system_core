@@ -19,6 +19,7 @@
 #include <base/logging.h>
 #include <binder/Binder.h>
 #include <binder/IBinder.h>
+#include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 
 namespace android {
@@ -109,6 +110,14 @@ bool RealBinderWrapper::UnregisterForDeathNotifications(
   }
   death_recipients_.erase(it);
   return true;
+}
+
+uid_t RealBinderWrapper::GetCallingUid() {
+  return IPCThreadState::self()->getCallingUid();
+}
+
+pid_t RealBinderWrapper::GetCallingPid() {
+  return IPCThreadState::self()->getCallingPid();
 }
 
 }  // namespace android

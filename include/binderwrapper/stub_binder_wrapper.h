@@ -77,6 +77,9 @@ class StubBinderWrapper : public BinderWrapper {
   }
   void clear_local_binders() { local_binders_.clear(); }
 
+  void set_calling_uid(uid_t uid) { calling_uid_ = uid; }
+  void set_calling_pid(pid_t pid) { calling_pid_ = pid; }
+
   // Sets the binder to return when |service_name| is passed to GetService() or
   // WaitForService().
   void SetBinderForService(const std::string& service_name,
@@ -97,6 +100,8 @@ class StubBinderWrapper : public BinderWrapper {
   bool RegisterForDeathNotifications(const sp<IBinder>& binder,
                                      const base::Closure& callback) override;
   bool UnregisterForDeathNotifications(const sp<IBinder>& binder) override;
+  uid_t GetCallingUid() override;
+  pid_t GetCallingPid() override;
 
  private:
   using ServiceMap = std::map<std::string, sp<IBinder>>;
@@ -115,6 +120,10 @@ class StubBinderWrapper : public BinderWrapper {
   // Map from binder handle to the callback that should be invoked on binder
   // death.
   std::map<sp<IBinder>, base::Closure> death_callbacks_;
+
+  // Values to return from GetCallingUid() and GetCallingPid();
+  uid_t calling_uid_;
+  pid_t calling_pid_;
 
   DISALLOW_COPY_AND_ASSIGN(StubBinderWrapper);
 };
