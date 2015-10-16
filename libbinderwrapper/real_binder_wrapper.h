@@ -38,6 +38,8 @@ class RealBinderWrapper : public BinderWrapper {
   bool RegisterForDeathNotifications(const sp<IBinder>& binder,
                                      const base::Closure& callback) override;
   bool UnregisterForDeathNotifications(const sp<IBinder>& binder) override;
+  uid_t GetCallingUid() override;
+  pid_t GetCallingPid() override;
 
  private:
   class DeathRecipient;

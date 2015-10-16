@@ -17,6 +17,8 @@
 #ifndef SYSTEM_CORE_INCLUDE_BINDERWRAPPER_BINDER_WRAPPER_H_
 #define SYSTEM_CORE_INCLUDE_BINDERWRAPPER_BINDER_WRAPPER_H_
 
+#include <sys/types.h>
+
 #include <string>
 
 #include <base/callback.h>
@@ -67,6 +69,10 @@ class BinderWrapper {
 
   // Unregisters the callback, if any, for |binder|.
   virtual bool UnregisterForDeathNotifications(const sp<IBinder>& binder) = 0;
+
+  // When called while in a transaction, returns the caller's UID or PID.
+  virtual uid_t GetCallingUid() = 0;
+  virtual pid_t GetCallingPid() = 0;
 
  private:
   static BinderWrapper* instance_;
