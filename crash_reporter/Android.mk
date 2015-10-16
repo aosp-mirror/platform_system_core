@@ -60,6 +60,7 @@ LOCAL_C_INCLUDES := $(crash_reporter_includes)
 LOCAL_REQUIRED_MODULES := core2md \
     crash_reporter_logs.conf \
     crash_sender \
+    crash_server \
     dbus-send
 LOCAL_INIT_RC := crash_reporter.rc
 LOCAL_RTTI_FLAG := -frtti
@@ -91,6 +92,22 @@ LOCAL_CPP_EXTENSION := $(crash_reporter_cpp_extension)
 LOCAL_SHARED_LIBRARIES := libmetrics
 LOCAL_SRC_FILES := $(warn_collector_src)
 include $(BUILD_EXECUTABLE)
+
+# /etc/os-release.d/crash_server configuration file.
+# ========================================================
+ifdef OSRELEASED_DIRECTORY
+include $(CLEAR_VARS)
+LOCAL_MODULE := crash_server
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/$(OSRELEASED_DIRECTORY)
+include $(BUILD_SYSTEM)/base_rules.mk
+
+# If the crash server isn't set, use a blank value.  crash_sender
+# will log it as a configuration error.
+$(LOCAL_BUILT_MODULE): BRILLO_CRASH_SERVER ?= ""
+$(LOCAL_BUILT_MODULE):
+	echo $(BRILLO_CRASH_SERVER) > $@
+endif
 
 # Crash reporter logs conf file.
 # ========================================================

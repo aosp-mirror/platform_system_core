@@ -78,6 +78,9 @@ DEVCOREDUMP_UPLOAD_FLAG_FILE="${CRASH_STATE_DIR}/device_coredump_upload_allowed"
 # The weave configuration file.
 WEAVE_CONF_FILE="/etc/weaved/weaved.conf"
 
+# The os-release.d folder.
+OSRELEASED_FOLDER="/etc/os-release.d"
+
 # The syslog tag for all logging we emit.
 TAG="$(basename $0)[$$]"
 
@@ -256,7 +259,12 @@ get_kind() {
 get_key_value() {
   local file="$1" key="$2" value
 
-  if [ -f "${file}" ]; then
+  if [ -f "${file}/${key}" ]; then
+    # Get the value from a folder where each key is its own file.  The key
+    # file's entire contents is the value.
+    value=$(cat "${file}/${key}")
+  elif [ -f "${file}" ]; then
+    # Get the value from a file that has multiple key=value combinations.
     # Return the first entry.  There shouldn't be more than one anyways.
     # Substr at length($1) + 2 skips past the key and following = sign (awk
     # uses 1-based indexes), but preserves embedded = characters.
@@ -291,7 +299,7 @@ send_crash() {
   local report_payload="$(get_key_value "${meta_path}" "payload")"
   local kind="$(get_kind "${meta_path}")"
   local exec_name="$(get_key_value "${meta_path}" "exec_name")"
-  local url="$(getprop crash_reporter.server)"
+  local url="$(get_key_value "${OSRELEASED_FOLDER}" "crash_server")"
   local bdk_version="$(get_key_value "${meta_path}" "bdk_version")"
   local hwclass="$(get_hardware_class)"
   local write_payload_size="$(get_key_value "${meta_path}" "payload_size")"
