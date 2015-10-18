@@ -67,3 +67,29 @@ TEST(sysdeps_win32, adb_getenv) {
         EXPECT_GT(strlen(path_val), 0);
     }
 }
+
+void TestAdbStrError(int err, const char* expected) {
+    errno = 12345;
+    const char* result = adb_strerror(err);
+    // Check that errno is not overwritten.
+    EXPECT_EQ(12345, errno);
+    EXPECT_STREQ(expected, result);
+}
+
+TEST(sysdeps_win32, adb_strerror) {
+    // Test an error code that should not have a mapped string. Use an error
+    // code that is not used by the internal implementation of adb_strerror().
+    TestAdbStrError(-2, "Unknown error");
+    // adb_strerror() uses -1 internally, so test that it can still be passed
+    // as a parameter.
+    TestAdbStrError(-1, "Unknown error");
+    // Test very big, positive unknown error.
+    TestAdbStrError(1000000, "Unknown error");
+    // Test success case.
+    TestAdbStrError(0, "No error");
+    // Test error that regular strerror() should have a string for.
+    TestAdbStrError(EPERM, "Operation not permitted");
+    // Test error that regular strerror() doesn't have a string for, but that
+    // adb_strerror() returns.
+    TestAdbStrError(ECONNRESET, "Connection reset by peer");
+}

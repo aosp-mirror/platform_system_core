@@ -556,6 +556,82 @@ int  adb_close(int  fd)
     return 0;
 }
 
+// Overrides strerror() to handle error codes not supported by the Windows C
+// Runtime (MSVCRT.DLL).
+char* adb_strerror(int err) {
+    // sysdeps.h defines strerror to adb_strerror, but in this function, we
+    // want to call the real C Runtime strerror().
+#pragma push_macro("strerror")
+#undef strerror
+    const int saved_err = errno;      // Save because we overwrite it later.
+
+    // Lookup the string for an unknown error.
+    char* errmsg = strerror(-1);
+    char unknown_error[(errmsg == nullptr ? 0 : strlen(errmsg)) + 1];
+    strcpy(unknown_error, errmsg == nullptr ? "" : errmsg);
+
+    // Lookup the string for this error to see if the C Runtime has it.
+    errmsg = strerror(err);
+    if ((errmsg != nullptr) && strcmp(errmsg, unknown_error)) {
+        // The CRT returned an error message and it is different than the error
+        // message for an unknown error, so it is probably valid, so use it.
+    } else {
+        // Check if we have a string for this error code.
+        const char* custom_msg = nullptr;
+        switch (err) {
+#pragma push_macro("ERR")
+#undef ERR
+#define ERR(errnum, desc) case errnum: custom_msg = desc; break
+            // These error strings are from AOSP bionic/libc/include/sys/_errdefs.h.
+            // Note that these cannot be longer than 94 characters because we
+            // pass this to _strerror() which has that requirement.
+            ERR(ECONNRESET,    "Connection reset by peer");
+            ERR(EHOSTUNREACH,  "No route to host");
+            ERR(ENETDOWN,      "Network is down");
+            ERR(ENETRESET,     "Network dropped connection because of reset");
+            ERR(ENOBUFS,       "No buffer space available");
+            ERR(ENOPROTOOPT,   "Protocol not available");
+            ERR(ENOTCONN,      "Transport endpoint is not connected");
+            ERR(ENOTSOCK,      "Socket operation on non-socket");
+            ERR(EOPNOTSUPP,    "Operation not supported on transport endpoint");
+#pragma pop_macro("ERR")
+        }
+
+        if (custom_msg != nullptr) {
+            // Use _strerror() to write our string into the writable per-thread
+            // buffer used by strerror()/_strerror(). _strerror() appends the
+            // msg for the current value of errno, so set errno to a consistent
+            // value for every call so that our code-path is always the same.
+            errno = 0;
+            errmsg = _strerror(custom_msg);
+            const size_t custom_msg_len = strlen(custom_msg);
+            // Just in case _strerror() returned a read-only string, check if
+            // the returned string starts with our custom message because that
+            // implies that the string is not read-only.
+            if ((errmsg != nullptr) &&
+                !strncmp(custom_msg, errmsg, custom_msg_len)) {
+                // _strerror() puts other text after our custom message, so
+                // remove that by terminating after our message.
+                errmsg[custom_msg_len] = '\0';
+            } else {
+                // For some reason nullptr was returned or a pointer to a
+                // read-only string was returned, so fallback to whatever
+                // strerror() can muster (probably "Unknown error" or some
+                // generic CRT error string).
+                errmsg = strerror(err);
+            }
+        } else {
+            // We don't have a custom message, so use whatever strerror(err)
+            // returned earlier.
+        }
+    }
+
+    errno = saved_err;  // restore
+
+    return errmsg;
+#pragma pop_macro("strerror")
+}
+
 /**************************************************************************/
 /**************************************************************************/
 /*****                                                                *****/
@@ -567,18 +643,38 @@ int  adb_close(int  fd)
 #undef setsockopt
 
 static void _socket_set_errno( const DWORD err ) {
-    // The Windows C Runtime (MSVCRT.DLL) strerror() does not support a lot of
-    // POSIX and socket error codes, so this can only meaningfully map so much.
+    // Because the Windows C Runtime (MSVCRT.DLL) strerror() does not support a
+    // lot of POSIX and socket error codes, some of the resulting error codes
+    // are mapped to strings by adb_strerror() above.
     switch ( err ) {
     case 0:              errno = 0; break;
+    // Don't map WSAEINTR since that is only for Winsock 1.1 which we don't use.
+    // case WSAEINTR:    errno = EINTR; break;
+    case WSAEFAULT:      errno = EFAULT; break;
+    case WSAEINVAL:      errno = EINVAL; break;
+    case WSAEMFILE:      errno = EMFILE; break;
     // Mapping WSAEWOULDBLOCK to EAGAIN is absolutely critical because
     // non-blocking sockets can cause an error code of WSAEWOULDBLOCK and
     // callers check specifically for EAGAIN.
     case WSAEWOULDBLOCK: errno = EAGAIN; break;
-    case WSAEINTR:       errno = EINTR; break;
-    case WSAEFAULT:      errno = EFAULT; break;
-    case WSAEINVAL:      errno = EINVAL; break;
-    case WSAEMFILE:      errno = EMFILE; break;
+    case WSAENOTSOCK:    errno = ENOTSOCK; break;
+    case WSAENOPROTOOPT: errno = ENOPROTOOPT; break;
+    case WSAEOPNOTSUPP:  errno = EOPNOTSUPP; break;
+    case WSAENETDOWN:    errno = ENETDOWN; break;
+    case WSAENETRESET:   errno = ENETRESET; break;
+    // Map WSAECONNABORTED to EPIPE instead of ECONNABORTED because POSIX seems
+    // to use EPIPE for these situations and there are some callers that look
+    // for EPIPE.
+    case WSAECONNABORTED: errno = EPIPE; break;
+    case WSAECONNRESET:  errno = ECONNRESET; break;
+    case WSAENOBUFS:     errno = ENOBUFS; break;
+    case WSAENOTCONN:    errno = ENOTCONN; break;
+    // Don't map WSAETIMEDOUT because we don't currently use SO_RCVTIMEO or
+    // SO_SNDTIMEO which would cause WSAETIMEDOUT to be returned. Future
+    // considerations: Reportedly send() can return zero on timeout, and POSIX
+    // code may expect EAGAIN instead of ETIMEDOUT on timeout.
+    // case WSAETIMEDOUT: errno = ETIMEDOUT; break;
+    case WSAEHOSTUNREACH: errno = EHOSTUNREACH; break;
     default:
         errno = EINVAL;
         D( "_socket_set_errno: mapping Windows error code %lu to errno %d",
@@ -655,8 +751,12 @@ static int _fh_socket_write(FH f, const void* buf, int len) {
     int  result = send(f->fh_socket, reinterpret_cast<const char*>(buf), len, 0);
     if (result == SOCKET_ERROR) {
         const DWORD err = WSAGetLastError();
-        D("send fd %d failed: %s", _fh_to_int(f),
-          SystemErrorCodeToString(err).c_str());
+        // WSAEWOULDBLOCK is normal with a non-blocking socket, so don't trace
+        // that to reduce spam and confusion.
+        if (err != WSAEWOULDBLOCK) {
+            D("send fd %d failed: %s", _fh_to_int(f),
+              SystemErrorCodeToString(err).c_str());
+        }
         _socket_set_errno(err);
         result = -1;
     } else {
