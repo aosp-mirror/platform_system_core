@@ -25,6 +25,7 @@
 #include <sys/cdefs.h>
 #include <system/graphics.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #ifndef __UNUSED
 #define __UNUSED __attribute__((__unused__))
@@ -311,6 +312,7 @@ enum {
     NATIVE_WINDOW_SET_SIDEBAND_STREAM       = 18,
     NATIVE_WINDOW_SET_BUFFERS_DATASPACE     = 19,
     NATIVE_WINDOW_SET_SURFACE_DAMAGE        = 20,   /* private */
+    NATIVE_WINDOW_SET_SINGLE_BUFFER_MODE    = 21,
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -947,6 +949,18 @@ static inline int native_window_set_surface_damage(
 {
     return window->perform(window, NATIVE_WINDOW_SET_SURFACE_DAMAGE,
             rects, numRects);
+}
+
+/*
+ * native_window_set_single_buffer_mode(..., bool singleBufferMode)
+ * Enable/disable single buffer mode
+ */
+static inline int native_window_set_single_buffer_mode(
+        struct ANativeWindow* window,
+        bool singleBufferMode)
+{
+    return window->perform(window, NATIVE_WINDOW_SET_SINGLE_BUFFER_MODE,
+            singleBufferMode);
 }
 
 __END_DECLS
