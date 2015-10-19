@@ -42,7 +42,7 @@ inline uint32_t GGL_HOST_TO_RGBA(uint32_t v) {
 #else
 
 inline uint32_t GGL_RGBA_TO_HOST(uint32_t v) {
-#if defined(__mips__) && __mips==32 && __mips_isa_rev>=2
+#if defined(__mips__) && __mips_isa_rev>=2
     uint32_t r;
     __asm__("wsbh %0, %1;"
         "rotr %0, %0, 16"
@@ -55,7 +55,7 @@ inline uint32_t GGL_RGBA_TO_HOST(uint32_t v) {
 #endif
 }
 inline uint32_t GGL_HOST_TO_RGBA(uint32_t v) {
-#if defined(__mips__) && __mips==32 && __mips_isa_rev>=2
+#if defined(__mips__) && __mips_isa_rev>=2
     uint32_t r;
     __asm__("wsbh %0, %1;"
         "rotr %0, %0, 16"

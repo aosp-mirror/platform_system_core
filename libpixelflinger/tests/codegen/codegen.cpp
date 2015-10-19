@@ -11,16 +11,18 @@
 #include "codeflinger/ARMAssembler.h"
 #if defined(__mips__) && !defined(__LP64__) && __mips_isa_rev < 6
 #include "codeflinger/MIPSAssembler.h"
+#elif defined(__mips__) && defined(__LP64__) && __mips_isa_rev == 6
+#include "codeflinger/MIPS64Assembler.h"
 #endif
 #include "codeflinger/Arm64Assembler.h"
 
-#if defined(__arm__) || (defined(__mips__) && !defined(__LP64__) && __mips_isa_rev < 6) || defined(__aarch64__)
+#if defined(__arm__) || (defined(__mips__) && ((!defined(__LP64__) && __mips_isa_rev < 6) || (defined(__LP64__) && __mips_isa_rev == 6))) || defined(__aarch64__)
 #   define ANDROID_ARM_CODEGEN  1
 #else
 #   define ANDROID_ARM_CODEGEN  0
 #endif
 
-#if defined(__mips__) && !defined(__LP64__) && __mips_isa_rev < 6
+#if defined(__mips__) && ((!defined(__LP64__) && __mips_isa_rev < 6) || (defined(__LP64__) && __mips_isa_rev == 6))
 #define ASSEMBLY_SCRATCH_SIZE   4096
 #elif defined(__aarch64__)
 #define ASSEMBLY_SCRATCH_SIZE   8192
@@ -56,6 +58,10 @@ static void ggl_test_codegen(uint32_t n, uint32_t p, uint32_t t0, uint32_t t1)
 
 #if defined(__mips__) && !defined(__LP64__) && __mips_isa_rev < 6
     GGLAssembler assembler( new ArmToMipsAssembler(a) );
+#endif
+
+#if defined(__mips__) && defined(__LP64__) && __mips_isa_rev == 6
+    GGLAssembler assembler( new ArmToMips64Assembler(a) );
 #endif
 
 #if defined(__aarch64__)

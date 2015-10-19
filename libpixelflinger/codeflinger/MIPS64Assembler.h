@@ -1,6 +1,6 @@
-/* libs/pixelflinger/codeflinger/MIPSAssembler.h
+/* libs/pixelflinger/codeflinger/MIPS64Assembler.h
 **
-** Copyright 2012, The Android Open Source Project
+** Copyright 2015, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
 ** limitations under the License.
 */
 
-#ifndef ANDROID_MIPSASSEMBLER_H
-#define ANDROID_MIPSASSEMBLER_H
+#ifndef ANDROID_MIPS64ASSEMBLER_H
+#define ANDROID_MIPS64ASSEMBLER_H
 
 #include <stdint.h>
 #include <sys/types.h>
@@ -26,21 +26,23 @@
 #include "tinyutils/smartpointer.h"
 
 #include "ARMAssemblerInterface.h"
+#include "MIPSAssembler.h"
 #include "CodeCache.h"
 
 namespace android {
 
-class MIPSAssembler;    // forward reference
+class MIPS64Assembler;    // forward reference
 
 // this class mimics ARMAssembler interface
-//  intent is to translate each ARM instruction to 1 or more MIPS instr
-//  implementation calls MIPSAssembler class to generate mips code
-class ArmToMipsAssembler : public ARMAssemblerInterface
+// intent is to translate each ARM instruction to 1 or more MIPS instr
+// implementation calls MIPS64Assembler class to generate mips code
+class ArmToMips64Assembler : public ARMAssemblerInterface
 {
 public:
-                ArmToMipsAssembler(const sp<Assembly>& assembly,
+                ArmToMips64Assembler(const sp<Assembly>& assembly,
                         char *abuf = 0, int linesz = 0, int instr_count = 0);
-    virtual     ~ArmToMipsAssembler();
+                ArmToMips64Assembler(void* assembly);
+    virtual     ~ArmToMips64Assembler();
 
     uint32_t*   base() const;
     uint32_t*   pc() const;
@@ -54,6 +56,9 @@ public:
     virtual void    prolog();
     virtual void    epilog(uint32_t touched);
     virtual void    comment(const char* string);
+    // for testing purposes
+    void        fix_branches();
+    void        set_condition(int mode, int R1, int R2);
 
 
     // -----------------------------------------------------------------------
@@ -161,7 +166,13 @@ public:
     // bit manipulation...
     virtual void UBFX(int cc, int Rd, int Rn, int lsb, int width);
 
-    // this is some crap to share is MIPSAssembler class for debug
+    // Address loading/storing/manipulation
+    virtual void ADDR_LDR(int cc, int Rd, int Rn, uint32_t offset = __immed12_pre(0));
+    virtual void ADDR_STR(int cc, int Rd, int Rn, uint32_t offset = __immed12_pre(0));
+    virtual void ADDR_ADD(int cc, int s, int Rd, int Rn, uint32_t Op2);
+    virtual void ADDR_SUB(int cc, int s, int Rd, int Rn, uint32_t Op2);
+
+    // this is some crap to share is MIPS64Assembler class for debug
     char *      mArmDisassemblyBuffer;
     int         mArmLineLength;
     int         mArmInstrCount;
@@ -172,8 +183,8 @@ public:
 
 
 private:
-    ArmToMipsAssembler(const ArmToMipsAssembler& rhs);
-    ArmToMipsAssembler& operator = (const ArmToMipsAssembler& rhs);
+    ArmToMips64Assembler(const ArmToMips64Assembler& rhs);
+    ArmToMips64Assembler& operator = (const ArmToMips64Assembler& rhs);
 
     void init_conditional_labels(void);
 
@@ -183,7 +194,7 @@ private:
     int dataProcAdrModes(int op, int& source, bool sign = false, int reg_tmp = 1);
 
     sp<Assembly>        mAssembly;
-    MIPSAssembler*      mMips;
+    MIPS64Assembler*    mMips;
 
 
     enum misc_constants_t {
@@ -225,7 +236,6 @@ private:
         int         labelnum;
         char        label[100][10];
     } cond;
-
 };
 
 
@@ -235,33 +245,24 @@ private:
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 
-// This is the basic MIPS assembler, which just creates the opcodes in memory.
-// All the more complicated work is done in ArmToMipsAssember above.
+// This is the basic MIPS64 assembler, which just creates the opcodes in memory.
+// All the more complicated work is done in ArmToMips64Assember above.
+// Inherits MIPSAssembler class, and overrides only MIPS64r6 specific stuff
 
-class MIPSAssembler
+class MIPS64Assembler : public MIPSAssembler
 {
 public:
-                MIPSAssembler(const sp<Assembly>& assembly, ArmToMipsAssembler *parent);
-    virtual     ~MIPSAssembler();
+                MIPS64Assembler(const sp<Assembly>& assembly, ArmToMips64Assembler *parent);
+                MIPS64Assembler(void* assembly, ArmToMips64Assembler *parent);
+    virtual     ~MIPS64Assembler();
 
-    virtual uint32_t*   base() const;
-    virtual uint32_t*   pc() const;
     virtual void        reset();
-
     virtual void        disassemble(const char* name);
 
-    virtual void        prolog();
-    virtual void        epilog(uint32_t touched);
-    virtual int         generate(const char* name);
-    virtual void        comment(const char* string);
-    virtual void        label(const char* string);
-
-    // valid only after generate() has been called
-    virtual uint32_t*   pcForLabel(const char* label);
-
+    void        fix_branches();
 
     // ------------------------------------------------------------------------
-    // MIPSAssemblerInterface...
+    // MIPS64AssemblerInterface...
     // ------------------------------------------------------------------------
 
 #if 0
@@ -269,141 +270,43 @@ public:
 #pragma mark Arithmetic...
 #endif
 
-    void ADDU(int Rd, int Rs, int Rt);
-    void ADDIU(int Rt, int Rs, int16_t imm);
-    void SUBU(int Rd, int Rs, int Rt);
-    void SUBIU(int Rt, int Rs, int16_t imm);
-    void NEGU(int Rd, int Rs);
-    void MUL(int Rd, int Rs, int Rt);
-    void MULT(int Rs, int Rt);      // dest is hi,lo
-    void MULTU(int Rs, int Rt);     // dest is hi,lo
-    void MADD(int Rs, int Rt);      // hi,lo = hi,lo + Rs * Rt
-    void MADDU(int Rs, int Rt);     // hi,lo = hi,lo + Rs * Rt
-    void MSUB(int Rs, int Rt);      // hi,lo = hi,lo - Rs * Rt
-    void MSUBU(int Rs, int Rt);     // hi,lo = hi,lo - Rs * Rt
-    void SEB(int Rd, int Rt);       // sign-extend byte (mips32r2)
-    void SEH(int Rd, int Rt);       // sign-extend half-word (mips32r2)
-
-
-#if 0
-#pragma mark -
-#pragma mark Comparisons...
-#endif
-
-    void SLT(int Rd, int Rs, int Rt);
-    void SLTI(int Rt, int Rs, int16_t imm);
-    void SLTU(int Rd, int Rs, int Rt);
-    void SLTIU(int Rt, int Rs, int16_t imm);
-
+    void DADDU(int Rd, int Rs, int Rt);
+    void DADDIU(int Rt, int Rs, int16_t imm);
+    void DSUBU(int Rd, int Rs, int Rt);
+    void DSUBIU(int Rt, int Rs, int16_t imm);
+    virtual void MUL(int Rd, int Rs, int Rt);
+    void MUH(int Rd, int Rs, int Rt);
 
 #if 0
 #pragma mark -
 #pragma mark Logical...
 #endif
 
-    void AND(int Rd, int Rs, int Rt);
-    void ANDI(int Rd, int Rs, uint16_t imm);
-    void OR(int Rd, int Rs, int Rt);
-    void ORI(int Rt, int Rs, uint16_t imm);
-    void NOR(int Rd, int Rs, int Rt);
-    void NOT(int Rd, int Rs);
-    void XOR(int Rd, int Rs, int Rt);
-    void XORI(int Rt, int Rs, uint16_t imm);
-
-    void SLL(int Rd, int Rt, int shft);
-    void SLLV(int Rd, int Rt, int Rs);
-    void SRL(int Rd, int Rt, int shft);
-    void SRLV(int Rd, int Rt, int Rs);
-    void SRA(int Rd, int Rt, int shft);
-    void SRAV(int Rd, int Rt, int Rs);
-    void ROTR(int Rd, int Rt, int shft);    // mips32r2
-    void ROTRV(int Rd, int Rt, int Rs);     // mips32r2
-    void RORsyn(int Rd, int Rs, int Rt);    // synthetic: d = s rotated by t
-    void RORIsyn(int Rd, int Rt, int rot);  // synthetic: d = s rotated by immed
-
-    void CLO(int Rd, int Rs);
-    void CLZ(int Rd, int Rs);
-    void WSBH(int Rd, int Rt);
-
+    virtual void CLO(int Rd, int Rs);
+    virtual void CLZ(int Rd, int Rs);
 
 #if 0
 #pragma mark -
 #pragma mark Load/store...
 #endif
 
-    void LW(int Rt, int Rbase, int16_t offset);
-    void SW(int Rt, int Rbase, int16_t offset);
-    void LB(int Rt, int Rbase, int16_t offset);
-    void LBU(int Rt, int Rbase, int16_t offset);
-    void SB(int Rt, int Rbase, int16_t offset);
-    void LH(int Rt, int Rbase, int16_t offset);
-    void LHU(int Rt, int Rbase, int16_t offset);
-    void SH(int Rt, int Rbase, int16_t offset);
-    void LUI(int Rt, int16_t offset);
-
-#if 0
-#pragma mark -
-#pragma mark Register moves...
-#endif
-
-    void MOVE(int Rd, int Rs);
-    void MOVN(int Rd, int Rs, int Rt);
-    void MOVZ(int Rd, int Rs, int Rt);
-    void MFHI(int Rd);
-    void MFLO(int Rd);
-    void MTHI(int Rs);
-    void MTLO(int Rs);
+    void LD(int Rt, int Rbase, int16_t offset);
+    void SD(int Rt, int Rbase, int16_t offset);
+    virtual void LUI(int Rt, int16_t offset);
 
 #if 0
 #pragma mark -
 #pragma mark Branch...
 #endif
 
-    void B(const char* label);
-    void BEQ(int Rs, int Rt, const char* label);
-    void BNE(int Rs, int Rt, const char* label);
-    void BGEZ(int Rs, const char* label);
-    void BGTZ(int Rs, const char* label);
-    void BLEZ(int Rs, const char* label);
-    void BLTZ(int Rs, const char* label);
     void JR(int Rs);
 
 
-#if 0
-#pragma mark -
-#pragma mark Synthesized Branch...
-#endif
-
-    // synthetic variants of above (using slt & friends)
-    void BEQZ(int Rs, const char* label);
-    void BNEZ(int Rs, const char* label);
-    void BGE(int Rs, int Rt, const char* label);
-    void BGEU(int Rs, int Rt, const char* label);
-    void BGT(int Rs, int Rt, const char* label);
-    void BGTU(int Rs, int Rt, const char* label);
-    void BLE(int Rs, int Rt, const char* label);
-    void BLEU(int Rs, int Rt, const char* label);
-    void BLT(int Rs, int Rt, const char* label);
-    void BLTU(int Rs, int Rt, const char* label);
-
-#if 0
-#pragma mark -
-#pragma mark Misc...
-#endif
-
-    void NOP(void);
-    void NOP2(void);
-    void UNIMPL(void);
-
-
-
-
-
 protected:
-    virtual void string_detab(char *s);
-    virtual void string_pad(char *s, int padded_len);
+    // void string_detab(char *s);
+    // void string_pad(char *s, int padded_len);
 
-    ArmToMipsAssembler *mParent;
+    ArmToMips64Assembler *mParent;
     sp<Assembly>    mAssembly;
     uint32_t*       mBase;
     uint32_t*       mPC;
@@ -427,92 +330,78 @@ protected:
     KeyedVector< uint32_t*, const char* >   mComments;
 
 
-
-
     // opcode field of all instructions
     enum opcode_field {
-        spec_op, regimm_op, j_op, jal_op,           // 00
-        beq_op, bne_op, blez_op, bgtz_op,
-        addi_op, addiu_op, slti_op, sltiu_op,       // 08
-        andi_op, ori_op, xori_op, lui_op,
-        cop0_op, cop1_op, cop2_op, cop1x_op,        // 10
-        beql_op, bnel_op, blezl_op, bgtzl_op,
-        daddi_op, daddiu_op, ldl_op, ldr_op,        // 18
-        spec2_op, jalx_op, mdmx_op, spec3_op,
-        lb_op, lh_op, lwl_op, lw_op,                // 20
-        lbu_op, lhu_op, lwr_op, lwu_op,
-        sb_op, sh_op, swl_op, sw_op,                // 28
-        sdl_op, sdr_op, swr_op, cache_op,
-        ll_op, lwc1_op, lwc2_op, pref_op,           // 30
-        lld_op, ldc1_op, ldc2_op, ld_op,
-        sc_op, swc1_op, swc2_op, rsrv_3b_op,        // 38
-        scd_op, sdc1_op, sdc2_op, sd_op
+        spec_op, regimm_op, j_op, jal_op,                  // 0x00 - 0x03
+        beq_op, bne_op, pop06_op, pop07_op,                // 0x04 - 0x07
+        pop10_op, addiu_op, slti_op, sltiu_op,             // 0x08 - 0x0b
+        andi_op, ori_op, xori_op, aui_op,                  // 0x0c - 0x0f
+        cop0_op, cop1_op, cop2_op, rsrv_opc_0,             // 0x10 - 0x13
+        rsrv_opc_1, rsrv_opc_2, pop26_op, pop27_op,        // 0x14 - 0x17
+        pop30_op, daddiu_op, rsrv_opc_3, rsrv_opc_4,       // 0x18 - 0x1b
+        rsrv_opc_5, daui_op, msa_op, spec3_op,             // 0x1c - 0x1f
+        lb_op, lh_op, rsrv_opc_6, lw_op,                   // 0x20 - 0x23
+        lbu_op, lhu_op, rsrv_opc_7, lwu_op,                // 0x24 - 0x27
+        sb_op, sh_op, rsrv_opc_8, sw_op,                   // 0x28 - 0x2b
+        rsrv_opc_9, rsrv_opc_10, rsrv_opc_11, rsrv_opc_12, // 0x2c - 0x2f
+        rsrv_opc_13, lwc1_op, bc_op, rsrv_opc_14,          // 0x2c - 0x2f
+        rsrv_opc_15, ldc1_op, pop66_op, ld_op,             // 0x30 - 0x33
+        rsrv_opc_16, swc1_op, balc_op, pcrel_op,           // 0x34 - 0x37
+        rsrv_opc_17, sdc1_op, pop76_op, sd_op              // 0x38 - 0x3b
     };
 
 
     // func field for special opcode
     enum func_spec_op {
-        sll_fn, movc_fn, srl_fn, sra_fn,            // 00
-        sllv_fn, pmon_fn, srlv_fn, srav_fn,
-        jr_fn, jalr_fn, movz_fn, movn_fn,           // 08
-        syscall_fn, break_fn, spim_fn, sync_fn,
-        mfhi_fn, mthi_fn, mflo_fn, mtlo_fn,         // 10
-        dsllv_fn, rsrv_spec_2, dsrlv_fn, dsrav_fn,
-        mult_fn, multu_fn, div_fn, divu_fn,         // 18
-        dmult_fn, dmultu_fn, ddiv_fn, ddivu_fn,
-        add_fn, addu_fn, sub_fn, subu_fn,           // 20
+        sll_fn, rsrv_spec_0, srl_fn, sra_fn,
+        sllv_fn, lsa_fn, srlv_fn, srav_fn,
+        rsrv_spec_1, jalr_fn, rsrv_spec_2, rsrv_spec_3,
+        syscall_fn, break_fn, sdbbp_fn, sync_fn,
+        clz_fn, clo_fn, dclz_fn, dclo_fn,
+        dsllv_fn, dlsa_fn, dsrlv_fn, dsrav_fn,
+        sop30_fn, sop31_fn, sop32_fn, sop33_fn,
+        sop34_fn, sop35_fn, sop36_fn, sop37_fn,
+        add_fn, addu_fn, sub_fn, subu_fn,
         and_fn, or_fn, xor_fn, nor_fn,
-        rsrv_spec_3, rsrv_spec_4, slt_fn, sltu_fn,  // 28
+        rsrv_spec_4, rsrv_spec_5, slt_fn, sltu_fn,
         dadd_fn, daddu_fn, dsub_fn, dsubu_fn,
-        tge_fn, tgeu_fn, tlt_fn, tltu_fn,           // 30
-        teq_fn, rsrv_spec_5, tne_fn, rsrv_spec_6,
-        dsll_fn, rsrv_spec_7, dsrl_fn, dsra_fn,     // 38
-        dsll32_fn, rsrv_spec_8, dsrl32_fn, dsra32_fn
-    };
-
-    // func field for spec2 opcode
-    enum func_spec2_op {
-        madd_fn, maddu_fn, mul_fn, rsrv_spec2_3,
-        msub_fn, msubu_fn,
-        clz_fn = 0x20, clo_fn,
-        dclz_fn = 0x24, dclo_fn,
-        sdbbp_fn = 0x3f
+        tge_fn, tgeu_fn, tlt_fn, tltu_fn,
+        teq_fn, seleqz_fn, tne_fn, selnez_fn,
+        dsll_fn, rsrv_spec_6, dsrl_fn, dsra_fn,
+        dsll32_fn, rsrv_spec_7, dsrl32_fn, dsra32_fn
     };
 
     // func field for spec3 opcode
     enum func_spec3_op {
         ext_fn, dextm_fn, dextu_fn, dext_fn,
         ins_fn, dinsm_fn, dinsu_fn, dins_fn,
-        bshfl_fn = 0x20,
-        dbshfl_fn = 0x24,
-        rdhwr_fn = 0x3b
+        cachee_fn = 0x1b, sbe_fn, she_fn, sce_fn, swe_fn,
+        bshfl_fn, prefe_fn = 0x23, dbshfl_fn, cache_fn, sc_fn, scd_fn,
+        lbue_fn, lhue_fn, lbe_fn = 0x2c, lhe_fn, lle_fn, lwe_fn,
+        pref_fn = 0x35, ll_fn, lld_fn, rdhwr_fn = 0x3b
     };
 
     // sa field for spec3 opcodes, with BSHFL function
     enum func_spec3_bshfl {
+        bitswap_fn,
         wsbh_fn = 0x02,
+        dshd_fn = 0x05,
         seb_fn = 0x10,
         seh_fn = 0x18
     };
 
     // rt field of regimm opcodes.
     enum regimm_fn {
-        bltz_fn, bgez_fn, bltzl_fn, bgezl_fn,
-        rsrv_ri_fn4, rsrv_ri_fn5, rsrv_ri_fn6, rsrv_ri_fn7,
-        tgei_fn, tgeiu_fn, tlti_fn, tltiu_fn,
-        teqi_fn, rsrv_ri_fn_0d, tnei_fn, rsrv_ri_fn0f,
-        bltzal_fn, bgezal_fn, bltzall_fn, bgezall_fn,
-        bposge32_fn= 0x1c,
-        synci_fn = 0x1f
+        bltz_fn, bgez_fn,
+        dahi_fn = 0x6,
+        nal_fn = 0x10, bal_fn, bltzall_fn, bgezall_fn,
+        sigrie_fn = 0x17,
+        dati_fn = 0x1e, synci_fn
     };
 
-
-    // func field for mad opcodes (MIPS IV).
-    enum mad_func {
-        madd_fp_op      = 0x08, msub_fp_op      = 0x0a,
-        nmadd_fp_op     = 0x0c, nmsub_fp_op     = 0x0e
+    enum muldiv_fn {
+        mul_fn = 0x02, muh_fn
     };
-
 
     enum mips_inst_shifts {
         OP_SHF       = 26,
@@ -534,26 +423,7 @@ protected:
     };
 };
 
-enum mips_regnames {
-    R_zero = 0,
-            R_at,   R_v0,   R_v1,   R_a0,   R_a1,   R_a2,   R_a3,
-#if __mips_isa_rev < 6
-    R_t0,   R_t1,   R_t2,   R_t3,   R_t4,   R_t5,   R_t6,   R_t7,
-#else
-    R_a4,   R_a5,   R_a6,   R_a7,   R_t0,   R_t1,   R_t2,   R_t3,
-#endif
-    R_s0,   R_s1,   R_s2,   R_s3,   R_s4,   R_s5,   R_s6,   R_s7,
-    R_t8,   R_t9,   R_k0,   R_k1,   R_gp,   R_sp,   R_s8,   R_ra,
-    R_lr = R_s8,
-
-    // arm regs 0-15 are mips regs 2-17 (meaning s0 & s1 are used)
-    R_at2  = R_s2,    // R_at2 = 18 = s2
-    R_cmp  = R_s3,    // R_cmp = 19 = s3
-    R_cmp2 = R_s4     // R_cmp2 = 20 = s4
-};
-
-
 
 }; // namespace android
 
-#endif //ANDROID_MIPSASSEMBLER_H
+#endif //ANDROID_MIPS64ASSEMBLER_H
