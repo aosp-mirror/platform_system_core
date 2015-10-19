@@ -319,6 +319,9 @@ extern char* adb_getcwd(char* buf, int size);
 
 #define getcwd adb_getcwd
 
+char* adb_strerror(int err);
+#define strerror adb_strerror
+
 // Convert from UTF-8 to UTF-16, typically used to convert char strings into
 // wchar_t strings that can be passed to wchar_t-based OS and C Runtime APIs
 // on Windows.
