@@ -294,11 +294,15 @@ LOCAL_STATIC_LIBRARIES := \
     libadbd \
     libbase \
     libfs_mgr \
+    libfec \
+    libfec_rs \
     liblog \
     libmincrypt \
     libselinux \
     libext4_utils_static \
+    libsquashfs_utils \
     libcutils \
     libbase \
+    libcrypto_static
 
 include $(BUILD_EXECUTABLE)

@@ -28,9 +28,10 @@
 
 #include "adb.h"
 #include "adb_io.h"
-#include "ext4_sb.h"
 #include "fs_mgr.h"
 #include "remount_service.h"
+
+#include "fec/io.h"
 
 #define FSTAB_PREFIX "/fstab."
 struct fstab *fstab;
@@ -41,115 +42,50 @@ static const bool kAllowDisableVerity = true;
 static const bool kAllowDisableVerity = false;
 #endif
 
-static int get_target_device_size(int fd, const char *blk_device,
-                                  uint64_t *device_size)
-{
-    int data_device;
-    struct ext4_super_block sb;
-    struct fs_info info;
-
-    info.len = 0;  /* Only len is set to 0 to ask the device for real size. */
-
-    data_device = adb_open(blk_device, O_RDONLY | O_CLOEXEC);
-    if (data_device < 0) {
-        WriteFdFmt(fd, "Error opening block device (%s)\n", strerror(errno));
-        return -1;
-    }
-
-    if (lseek64(data_device, 1024, SEEK_SET) < 0) {
-        WriteFdFmt(fd, "Error seeking to superblock\n");
-        adb_close(data_device);
-        return -1;
-    }
-
-    if (adb_read(data_device, &sb, sizeof(sb)) != sizeof(sb)) {
-        WriteFdFmt(fd, "Error reading superblock\n");
-        adb_close(data_device);
-        return -1;
-    }
-
-    ext4_parse_sb(&sb, &info);
-    *device_size = info.len;
-
-    adb_close(data_device);
-    return 0;
-}
-
 /* Turn verity on/off */
 static int set_verity_enabled_state(int fd, const char *block_device,
                                     const char* mount_point, bool enable)
 {
-    uint32_t magic_number;
-    const uint32_t new_magic = enable ? VERITY_METADATA_MAGIC_NUMBER
-                                      : VERITY_METADATA_MAGIC_DISABLE;
-    uint64_t device_length = 0;
-    int device = -1;
-    int retval = -1;
-
     if (!make_block_device_writable(block_device)) {
         WriteFdFmt(fd, "Could not make block device %s writable (%s).\n",
                    block_device, strerror(errno));
-        goto errout;
+        return -1;
     }
 
-    device = adb_open(block_device, O_RDWR | O_CLOEXEC);
-    if (device == -1) {
+    fec::io fh(block_device, O_RDWR);
+
+    if (!fh) {
         WriteFdFmt(fd, "Could not open block device %s (%s).\n", block_device, strerror(errno));
-        WriteFdFmt(fd, "Maybe run adb remount?\n");
-        goto errout;
+        WriteFdFmt(fd, "Maybe run adb root?\n");
+        return -1;
     }
 
-    // find the start of the verity metadata
-    if (get_target_device_size(fd, (char*)block_device, &device_length) < 0) {
-        WriteFdFmt(fd, "Could not get target device size.\n");
-        goto errout;
+    fec_verity_metadata metadata;
+
+    if (!fh.get_verity_metadata(metadata)) {
+        WriteFdFmt(fd, "Couldn't find verity metadata!\n");
+        return -1;
     }
 
-    if (lseek64(device, device_length, SEEK_SET) < 0) {
-        WriteFdFmt(fd, "Could not seek to start of verity metadata block.\n");
-        goto errout;
-    }
-
-    // check the magic number
-    if (adb_read(device, &magic_number, sizeof(magic_number)) != sizeof(magic_number)) {
-        WriteFdFmt(fd, "Couldn't read magic number!\n");
-        goto errout;
-    }
-
-    if (!enable && magic_number == VERITY_METADATA_MAGIC_DISABLE) {
+    if (!enable && metadata.disabled) {
         WriteFdFmt(fd, "Verity already disabled on %s\n", mount_point);
-        goto errout;
+        return -1;
     }
 
-    if (enable && magic_number == VERITY_METADATA_MAGIC_NUMBER) {
+    if (enable && !metadata.disabled) {
         WriteFdFmt(fd, "Verity already enabled on %s\n", mount_point);
-        goto errout;
+        return -1;
     }
 
-    if (magic_number != VERITY_METADATA_MAGIC_NUMBER
-            && magic_number != VERITY_METADATA_MAGIC_DISABLE) {
-        WriteFdFmt(fd, "Couldn't find verity metadata at offset %" PRIu64 "!\n", device_length);
-        goto errout;
-    }
-
-    if (lseek64(device, device_length, SEEK_SET) < 0) {
-        WriteFdFmt(fd, "Could not seek to start of verity metadata block.\n");
-        goto errout;
-    }
-
-    if (adb_write(device, &new_magic, sizeof(new_magic)) != sizeof(new_magic)) {
+    if (!fh.set_verity_status(enable)) {
         WriteFdFmt(fd, "Could not set verity %s flag on device %s with error %s\n",
                    enable ? "enabled" : "disabled",
                    block_device, strerror(errno));
-        goto errout;
+        return -1;
     }
 
     WriteFdFmt(fd, "Verity %s on %s\n", enable ? "enabled" : "disabled", mount_point);
-    retval = 0;
-errout:
-    if (device != -1)
-        adb_close(device);
-    return retval;
+    return 0;
 }
 
 void set_verity_enabled_state_service(int fd, void* cookie)
