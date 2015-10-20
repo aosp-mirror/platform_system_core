@@ -98,6 +98,10 @@ lecho() {
   log -t "${TAG}" "$@"
 }
 
+lwarn() {
+  lecho -psyslog.warn "$@"
+}
+
 # Returns true if mock is enabled.
 is_mock() {
   [ -f "${MOCK_CRASH_SENDING}" ] && return 0
@@ -294,6 +298,11 @@ get_hardware_class() {
   fi
 }
 
+# Return the log string filtered with only JSON-safe white-listed characters.
+filter_log_string() {
+  echo "$1" | tr -cd '[:alnum:]_.\-:;'
+}
+
 send_crash() {
   local meta_path="$1"
   local report_payload="$(get_key_value "${meta_path}" "payload")"
@@ -434,8 +443,7 @@ send_crash() {
     ret=$?
     if [ ${ret} -ne 0 ]; then
       proxy=''
-      lecho -psyslog.warn \
-        "Listing proxies failed with exit code ${ret}"
+      lwarn "Listing proxies failed with exit code ${ret}"
     else
       proxy=$(echo "${proxy}" | head -1)
     fi
@@ -466,22 +474,17 @@ send_crash() {
 
   if [ ${curl_result} -eq 0 ]; then
     local id="$(cat "${report_id}")"
-    local product_name
     local timestamp="$(date +%s)"
-    case ${product} in
-    Chrome_ChromeOS)
-      if is_official_image; then
-        product_name="Chrome"
-      else
-        product_name="Chromium"
-      fi
-      ;;
-    *)
-      product_name="Brillo"
-      ;;
-    esac
-    printf '%s,%s,%s\n' \
-      "${timestamp}" "${id}" "${product_name}" >> "${CRASH_LOG}"
+    local filter_prod="$(filter_log_string "${product}")"
+    local filter_exec="$(filter_log_string "${exec_name}")"
+    if [ "${filter_prod}" != "${product}" ]; then
+      lwarn "Product name filtered to: ${filter_prod}."
+    fi
+    if [ "${filter_exec}" != "${exec_name}" ]; then
+      lwarn "Exec name filtered to: ${filter_exec}."
+    fi
+    printf "{'time':%s,'id':'%s','product':'%s','exec_name':'%s'}\n" \
+      "${timestamp}" "${id}" "${filter_prod}" "${filter_exec}" >> "${CRASH_LOG}"
     lecho "Crash report receipt ID ${id}"
   else
     lecho "Crash sending failed with exit code ${curl_result}: " \
