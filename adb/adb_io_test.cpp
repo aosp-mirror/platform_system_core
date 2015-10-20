@@ -43,7 +43,7 @@ TEST(io, ReadFdExactly_whole) {
   ASSERT_NE(-1, tf.fd);
 
   ASSERT_TRUE(android::base::WriteStringToFd(expected, tf.fd)) << strerror(errno);
-  ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
+  ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET));
 
   // Test reading the whole file.
   char buf[sizeof(expected)] = {};
@@ -57,7 +57,7 @@ TEST(io, ReadFdExactly_eof) {
   ASSERT_NE(-1, tf.fd);
 
   ASSERT_TRUE(android::base::WriteStringToFd(expected, tf.fd)) << strerror(errno);
-  ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
+  ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET));
 
   // Test that not having enough data will fail.
   char buf[sizeof(expected) + 1] = {};
@@ -71,7 +71,7 @@ TEST(io, ReadFdExactly_partial) {
   ASSERT_NE(-1, tf.fd);
 
   ASSERT_TRUE(android::base::WriteStringToFd(input, tf.fd)) << strerror(errno);
-  ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
+  ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET));
 
   // Test reading a partial file.
   char buf[sizeof(input) - 1] = {};
@@ -90,7 +90,7 @@ TEST(io, WriteFdExactly_whole) {
   // Test writing the whole string to the file.
   ASSERT_TRUE(WriteFdExactly(tf.fd, expected, sizeof(expected)))
     << strerror(errno);
-  ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
+  ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET));
 
   std::string s;
   ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s));
@@ -104,7 +104,7 @@ TEST(io, WriteFdExactly_partial) {
 
   // Test writing a partial string to the file.
   ASSERT_TRUE(WriteFdExactly(tf.fd, buf, sizeof(buf) - 2)) << strerror(errno);
-  ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
+  ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET));
 
   std::string expected(buf);
   expected.pop_back();
@@ -130,7 +130,7 @@ TEST(io, WriteFdExactly_string) {
 
   // Test writing a partial string to the file.
   ASSERT_TRUE(WriteFdExactly(tf.fd, str)) << strerror(errno);
-  ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
+  ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET));
 
   std::string s;
   ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s));
@@ -143,7 +143,7 @@ TEST(io, WriteFdFmt) {
 
     // Test writing a partial string to the file.
     ASSERT_TRUE(WriteFdFmt(tf.fd, "Foo%s%d", "bar", 123)) << strerror(errno);
-    ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
+    ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET));
 
     std::string s;
     ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s));
