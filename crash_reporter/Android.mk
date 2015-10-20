@@ -106,6 +106,7 @@ include $(BUILD_SYSTEM)/base_rules.mk
 # will log it as a configuration error.
 $(LOCAL_BUILT_MODULE): BRILLO_CRASH_SERVER ?= ""
 $(LOCAL_BUILT_MODULE):
+	$(hide)mkdir -p $(dir $@)
 	echo $(BRILLO_CRASH_SERVER) > $@
 endif
 
