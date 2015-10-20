@@ -368,8 +368,8 @@ int32_t ZipWriter::Finish() {
 
   EocdRecord er = {};
   er.eocd_signature = EocdRecord::kSignature;
-  er.disk_num = 1;
-  er.cd_start_disk = 1;
+  er.disk_num = 0;
+  er.cd_start_disk = 0;
   er.num_records_on_disk = files_.size();
   er.num_records = files_.size();
   er.cd_size = current_offset_ - startOfCdr;
