@@ -139,7 +139,7 @@ TEST(logging, LOG) {
   {
     CapturedStderr cap;
     LOG(WARNING) << "foobar";
-    ASSERT_EQ(0, lseek(cap.fd(), SEEK_SET, 0));
+    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
 
     std::string output;
     android::base::ReadFdToString(cap.fd(), &output);
@@ -155,7 +155,7 @@ TEST(logging, LOG) {
   {
     CapturedStderr cap;
     LOG(INFO) << "foobar";
-    ASSERT_EQ(0, lseek(cap.fd(), SEEK_SET, 0));
+    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
 
     std::string output;
     android::base::ReadFdToString(cap.fd(), &output);
@@ -171,7 +171,7 @@ TEST(logging, LOG) {
   {
     CapturedStderr cap;
     LOG(DEBUG) << "foobar";
-    ASSERT_EQ(0, lseek(cap.fd(), SEEK_SET, 0));
+    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
 
     std::string output;
     android::base::ReadFdToString(cap.fd(), &output);
@@ -182,7 +182,7 @@ TEST(logging, LOG) {
     android::base::ScopedLogSeverity severity(android::base::DEBUG);
     CapturedStderr cap;
     LOG(DEBUG) << "foobar";
-    ASSERT_EQ(0, lseek(cap.fd(), SEEK_SET, 0));
+    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
 
     std::string output;
     android::base::ReadFdToString(cap.fd(), &output);
@@ -202,7 +202,7 @@ TEST(logging, LOG) {
     LOG(INFO) << (errno = 67890);
     EXPECT_EQ(12345, errno) << "errno was not restored";
 
-    ASSERT_EQ(0, lseek(cap.fd(), SEEK_SET, 0));
+    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
 
     std::string output;
     android::base::ReadFdToString(cap.fd(), &output);
@@ -245,7 +245,7 @@ TEST(logging, PLOG) {
     CapturedStderr cap;
     errno = ENOENT;
     PLOG(INFO) << "foobar";
-    ASSERT_EQ(0, lseek(cap.fd(), SEEK_SET, 0));
+    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
 
     std::string output;
     android::base::ReadFdToString(cap.fd(), &output);
@@ -264,7 +264,7 @@ TEST(logging, UNIMPLEMENTED) {
     CapturedStderr cap;
     errno = ENOENT;
     UNIMPLEMENTED(ERROR);
-    ASSERT_EQ(0, lseek(cap.fd(), SEEK_SET, 0));
+    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
 
     std::string output;
     android::base::ReadFdToString(cap.fd(), &output);
