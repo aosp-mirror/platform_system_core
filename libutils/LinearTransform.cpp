@@ -21,11 +21,24 @@
 
 #include <utils/LinearTransform.h>
 
+// disable sanitize as these functions may intentionally overflow (see comments below).
+// the ifdef can be removed when host builds use clang.
+#if defined(__clang__)
+#define ATTRIBUTE_NO_SANITIZE_INTEGER __attribute__((no_sanitize("integer")))
+#else
+#define ATTRIBUTE_NO_SANITIZE_INTEGER
+#endif
+
 namespace android {
 
-template<class T> static inline T ABS(T x) { return (x < 0) ? -x : x; }
+// sanitize failure with T = int32_t and x = 0x80000000
+template<class T>
+ATTRIBUTE_NO_SANITIZE_INTEGER
+static inline T ABS(T x) { return (x < 0) ? -x : x; }
 
 // Static math methods involving linear transformations
+// remote sanitize failure on overflow case.
+ATTRIBUTE_NO_SANITIZE_INTEGER
 static bool scale_u64_to_u64(
         uint64_t val,
         uint32_t N,
@@ -109,6 +122,8 @@ static bool scale_u64_to_u64(
     return true;
 }
 
+// at least one known sanitize failure (see comment below)
+ATTRIBUTE_NO_SANITIZE_INTEGER
 static bool linear_transform_s64_to_s64(
         int64_t  val,
         int64_t  basis1,
@@ -172,7 +187,7 @@ static bool linear_transform_s64_to_s64(
         // (scaled_signbit XOR res_signbit)
 
         if (is_neg)
-            scaled = -scaled;
+            scaled = -scaled; // known sanitize failure
         res = scaled + basis2;
 
         if ((scaled ^ basis2 ^ INT64_MIN) & (scaled ^ res) & INT64_MIN)
@@ -250,6 +265,8 @@ template <class T> void LinearTransform::reduce(T* N, T* D) {
 template void LinearTransform::reduce<uint64_t>(uint64_t* N, uint64_t* D);
 template void LinearTransform::reduce<uint32_t>(uint32_t* N, uint32_t* D);
 
+// sanitize failure if *N = 0x80000000
+ATTRIBUTE_NO_SANITIZE_INTEGER
 void LinearTransform::reduce(int32_t* N, uint32_t* D) {
     if (N && D && *D) {
         if (*N < 0) {
