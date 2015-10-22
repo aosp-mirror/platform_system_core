@@ -77,12 +77,7 @@ static int ctrl_dfd_reopened; /* did we reopen ctrl conn on this loop? */
 static int epollfd;
 static int maxevents;
 
-#define OOM_DISABLE (-17)
-/* inclusive */
-#define OOM_ADJUST_MIN (-16)
-#define OOM_ADJUST_MAX 15
-
-/* kernel OOM score values */
+/* OOM score values used by both kernel and framework */
 #define OOM_SCORE_ADJ_MIN       (-1000)
 #define OOM_SCORE_ADJ_MAX       1000
 
@@ -114,8 +109,8 @@ struct proc {
 static struct proc *pidhash[PIDHASH_SZ];
 #define pid_hashfn(x) ((((x) >> 8) ^ (x)) & (PIDHASH_SZ - 1))
 
-#define ADJTOSLOT(adj) (adj + -OOM_ADJUST_MIN)
-static struct adjslot_list procadjslot_list[ADJTOSLOT(OOM_ADJUST_MAX) + 1];
+#define ADJTOSLOT(adj) (adj + -OOM_SCORE_ADJ_MIN)
+static struct adjslot_list procadjslot_list[ADJTOSLOT(OOM_SCORE_ADJ_MAX) + 1];
 
 /*
  * Wait 1-2 seconds for the death report of a killed process prior to
@@ -146,14 +141,6 @@ static ssize_t read_all(int fd, char *buf, size_t max_len)
     }
 
     return ret;
-}
-
-static int lowmem_oom_adj_to_oom_score_adj(int oom_adj)
-{
-    if (oom_adj == OOM_ADJUST_MAX)
-        return OOM_SCORE_ADJ_MAX;
-    else
-        return (oom_adj * OOM_SCORE_ADJ_MAX) / -OOM_DISABLE;
 }
 
 static struct proc *pid_lookup(int pid) {
@@ -254,13 +241,13 @@ static void cmd_procprio(int pid, int uid, int oomadj) {
     char path[80];
     char val[20];
 
-    if (oomadj < OOM_DISABLE || oomadj > OOM_ADJUST_MAX) {
+    if (oomadj < OOM_SCORE_ADJ_MIN || oomadj > OOM_SCORE_ADJ_MAX) {
         ALOGE("Invalid PROCPRIO oomadj argument %d", oomadj);
         return;
     }
 
     snprintf(path, sizeof(path), "/proc/%d/oom_score_adj", pid);
-    snprintf(val, sizeof(val), "%d", lowmem_oom_adj_to_oom_score_adj(oomadj));
+    snprintf(val, sizeof(val), "%d", oomadj);
     writefilestring(path, val);
 
     if (use_inkernel_interface)
@@ -607,7 +594,7 @@ static int kill_one_process(struct proc *procp, int other_free, int other_file,
 static int find_and_kill_process(int other_free, int other_file, bool first)
 {
     int i;
-    int min_score_adj = OOM_ADJUST_MAX + 1;
+    int min_score_adj = OOM_SCORE_ADJ_MAX + 1;
     int minfree = 0;
     int killed_size = 0;
 
@@ -619,10 +606,10 @@ static int find_and_kill_process(int other_free, int other_file, bool first)
         }
     }
 
-    if (min_score_adj == OOM_ADJUST_MAX + 1)
+    if (min_score_adj == OOM_SCORE_ADJ_MAX + 1)
         return 0;
 
-    for (i = OOM_ADJUST_MAX; i >= min_score_adj; i--) {
+    for (i = OOM_SCORE_ADJ_MAX; i >= min_score_adj; i--) {
         struct proc *procp;
 
 retry:
@@ -783,7 +770,7 @@ static int init(void) {
             ALOGE("Kernel does not support memory pressure events or in-kernel low memory killer");
     }
 
-    for (i = 0; i <= ADJTOSLOT(OOM_ADJUST_MAX); i++) {
+    for (i = 0; i <= ADJTOSLOT(OOM_SCORE_ADJ_MAX); i++) {
         procadjslot_list[i].next = &procadjslot_list[i];
         procadjslot_list[i].prev = &procadjslot_list[i];
     }
