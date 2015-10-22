@@ -63,10 +63,10 @@ static bool get_build_id(
         if (nhdr.n_type == NT_GNU_BUILD_ID) {
           // Skip the name (which is the owner and should be "GNU").
           addr += NOTE_ALIGN(nhdr.n_namesz);
-          uint8_t build_id_data[128];
-          if (nhdr.n_namesz > sizeof(build_id_data)) {
-            ALOGE("Possible corrupted note, name size value is too large: %u",
-                  nhdr.n_namesz);
+          uint8_t build_id_data[160];
+          if (nhdr.n_descsz > sizeof(build_id_data)) {
+            ALOGE("Possible corrupted note, desc size value is too large: %u",
+                  nhdr.n_descsz);
             return false;
           }
           if (backtrace->Read(addr, build_id_data, nhdr.n_descsz) != nhdr.n_descsz) {
