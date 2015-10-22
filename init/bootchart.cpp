@@ -89,7 +89,7 @@ static void log_header() {
     if (out == NULL) {
         return;
     }
-    fprintf(out, "version = Android init 0.8 " __TIME__  "\n");
+    fprintf(out, "version = Android init 0.8\n");
     fprintf(out, "title = Boot chart for Android (%s)\n", date);
     fprintf(out, "system.uname = %s %s %s %s\n", uts.sysname, uts.release, uts.version, uts.machine);
     fprintf(out, "system.release = %s\n", fingerprint);
