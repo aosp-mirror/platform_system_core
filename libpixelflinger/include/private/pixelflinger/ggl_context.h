@@ -234,7 +234,7 @@ enum {
 
 // ----------------------------------------------------------------------------
 
-class needs_filter_t;
+struct needs_filter_t;
 struct needs_t {
     inline int match(const needs_filter_t& filter);
     inline bool operator == (const needs_t& rhs) const {
