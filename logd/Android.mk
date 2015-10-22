@@ -4,8 +4,6 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE:= logd
 
-LOCAL_INIT_RC := logd.rc
-
 LOCAL_SRC_FILES := \
     main.cpp \
     LogCommand.cpp \
@@ -27,7 +25,8 @@ LOCAL_SHARED_LIBRARIES := \
     libsysutils \
     liblog \
     libcutils \
-    libbase
+    libbase \
+    libpackagelistparser
 
 # This is what we want to do:
 #  event_logtags = $(shell \
