@@ -49,7 +49,8 @@ LOCAL_STATIC_LIBRARIES := \
     libutils \
     liblog \
     libz \
-    libbase
+    libbase \
+    libcutils
 
 LOCAL_STATIC_LIBRARIES_darwin := libselinux
 LOCAL_STATIC_LIBRARIES_linux := libselinux
