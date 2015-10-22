@@ -563,10 +563,10 @@ void trianglex_small(void* con,
     
     c->init_y(c, miny);
     for (int32_t y = miny; y < maxy; y++) {
-        register int32_t ex0 = ey0;
-        register int32_t ex1 = ey1;
-        register int32_t ex2 = ey2;    
-        register int32_t xl, xr;
+        int32_t ex0 = ey0;
+        int32_t ex1 = ey1;
+        int32_t ex2 = ey2;    
+        int32_t xl, xr;
         for (xl=minx ; xl<maxx ; xl++) {
             if (ex0>0 && ex1>0 && ex2>0)
                 break; // all strictly positive
