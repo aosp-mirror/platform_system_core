@@ -31,7 +31,6 @@ BSD_TOOLS := \
     dd \
 
 OUR_TOOLS := \
-    df \
     getevent \
     iftop \
     ioctl \
