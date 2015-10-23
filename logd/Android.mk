@@ -4,6 +4,8 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE:= logd
 
+LOCAL_INIT_RC := logd.rc
+
 LOCAL_SRC_FILES := \
     main.cpp \
     LogCommand.cpp \
