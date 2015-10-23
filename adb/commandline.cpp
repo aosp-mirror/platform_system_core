@@ -39,6 +39,7 @@
 #include <base/strings.h>
 
 #if !defined(_WIN32)
+#include <signal.h>
 #include <termios.h>
 #include <unistd.h>
 #endif
@@ -439,6 +440,14 @@ static void* stdin_read_thread(void* x) {
     int state = 0;
 
     adb_thread_setname("stdin reader");
+
+#ifndef __WIN32
+    // Mask SIGTTIN in case we're in a backgrounded process
+    sigset_t sigset;
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGTTIN);
+    pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
+#endif
 
     char raw_buffer[1024];
     char* buffer_ptr = raw_buffer;
