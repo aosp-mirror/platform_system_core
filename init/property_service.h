@@ -21,6 +21,8 @@
 
 #include <string>
 
+#include "epoll.h"
+
 namespace android {
 namespace init {
 
@@ -40,7 +42,7 @@ void property_init(void);
 void property_load_boot_defaults(void);
 void load_persist_props(void);
 void load_system_props(void);
-void start_property_service(void);
+void StartPropertyService(Epoll* epoll);
 
 }  // namespace init
 }  // namespace android
