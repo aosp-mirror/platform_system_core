@@ -43,7 +43,7 @@ LOCAL_CPP_EXTENSION := $(crash_reporter_cpp_extension)
 LOCAL_C_INCLUDES := $(crash_reporter_includes)
 LOCAL_RTTI_FLAG := -frtti
 LOCAL_SHARED_LIBRARIES := libchrome \
-    libchromeos \
+    libbrillo \
     libcutils \
     libdbus \
     libmetrics \
@@ -65,7 +65,7 @@ LOCAL_REQUIRED_MODULES := core2md \
 LOCAL_INIT_RC := crash_reporter.rc
 LOCAL_RTTI_FLAG := -frtti
 LOCAL_SHARED_LIBRARIES := libchrome \
-    libchromeos \
+    libbrillo \
     libcutils \
     libdbus \
     libmetrics \
@@ -134,7 +134,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := crash_reporter_tests
 LOCAL_CPP_EXTENSION := $(crash_reporter_cpp_extension)
 LOCAL_SHARED_LIBRARIES := libchrome \
-    libchromeos \
+    libbrillo \
     libcutils \
     libdbus \
     libpcrecpp
