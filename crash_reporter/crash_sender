@@ -446,7 +446,7 @@ send_crash() {
   local curl_stderr="${TMP_DIR}/curl_stderr"
 
   set +e
-  curl "${url}" -v ${proxy:+--proxy "$proxy"} \
+  curl "${url}" -f -v ${proxy:+--proxy "$proxy"} \
     --capath "${RESTRICTED_CERTIFICATES_PATH}" --ciphers HIGH \
     -F "prod=${product}" \
     -F "ver=${version}" \
