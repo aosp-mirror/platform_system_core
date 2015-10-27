@@ -487,7 +487,11 @@ static void* stdin_read_thread(void* x) {
                     state = 1;
                     break;
                 case '~':
-                    if(state == 1) state++;
+                    if(state == 1) {
+                        state++;
+                    } else {
+                        state = 0;
+                    }
                     break;
                 case '.':
                     if(state == 2) {
@@ -1351,15 +1355,20 @@ int adb_commandline(int argc, const char **argv) {
         // argv[0] is always "shell".
         --argc;
         ++argv;
-        std::string shell_type_arg;
+        int t_arg_count = 0;
         while (argc) {
             if (!strcmp(argv[0], "-T") || !strcmp(argv[0], "-t")) {
                 if (!CanUseFeature(features, kFeatureShell2)) {
                     fprintf(stderr, "error: target doesn't support PTY args -Tt\n");
                     return 1;
                 }
-                shell_type_arg = (argv[0][1] == 'T') ? kShellServiceArgRaw
-                                                     : kShellServiceArgPty;
+                // Like ssh, -t arguments are cumulative so that multiple -t's
+                // are needed to force a PTY.
+                if (argv[0][1] == 't') {
+                    ++t_arg_count;
+                } else {
+                    t_arg_count = -1;
+                }
                 --argc;
                 ++argv;
             } else if (!strcmp(argv[0], "-x")) {
@@ -1368,6 +1377,33 @@ int adb_commandline(int argc, const char **argv) {
                 ++argv;
             } else {
                 break;
+            }
+        }
+
+        std::string shell_type_arg;
+        if (CanUseFeature(features, kFeatureShell2)) {
+            if (t_arg_count < 0) {
+                shell_type_arg = kShellServiceArgRaw;
+            } else if (t_arg_count == 0) {
+                // If stdin isn't a TTY, default to a raw shell; this lets
+                // things like `adb shell < my_script.sh` work as expected.
+                // Otherwise leave |shell_type_arg| blank which uses PTY for
+                // interactive shells and raw for non-interactive.
+                if (!isatty(STDIN_FILENO)) {
+                    shell_type_arg = kShellServiceArgRaw;
+                }
+            } else if (t_arg_count == 1) {
+                // A single -t arg isn't enough to override implicit -T.
+                if (!isatty(STDIN_FILENO)) {
+                    fprintf(stderr,
+                            "Remote PTY will not be allocated because stdin is not a terminal.\n"
+                            "Use multiple -t options to force remote PTY allocation.\n");
+                    shell_type_arg = kShellServiceArgRaw;
+                } else {
+                    shell_type_arg = kShellServiceArgPty;
+                }
+            } else {
+                shell_type_arg = kShellServiceArgPty;
             }
         }
 
