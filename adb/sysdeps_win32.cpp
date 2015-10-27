@@ -567,12 +567,11 @@ char* adb_strerror(int err) {
 
     // Lookup the string for an unknown error.
     char* errmsg = strerror(-1);
-    char unknown_error[(errmsg == nullptr ? 0 : strlen(errmsg)) + 1];
-    strcpy(unknown_error, errmsg == nullptr ? "" : errmsg);
+    const std::string unknown_error = (errmsg == nullptr) ? "" : errmsg;
 
     // Lookup the string for this error to see if the C Runtime has it.
     errmsg = strerror(err);
-    if ((errmsg != nullptr) && strcmp(errmsg, unknown_error)) {
+    if (errmsg != nullptr && unknown_error != errmsg) {
         // The CRT returned an error message and it is different than the error
         // message for an unknown error, so it is probably valid, so use it.
     } else {

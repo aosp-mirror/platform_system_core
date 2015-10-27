@@ -14,6 +14,7 @@ ADB_COMMON_CFLAGS := \
     -Wall -Wextra -Werror \
     -Wno-unused-parameter \
     -Wno-missing-field-initializers \
+    -Wvla \
     -DADB_REVISION='"$(adb_version)"' \
 
 # Define windows.h and tchar.h Unicode preprocessor symbols so that

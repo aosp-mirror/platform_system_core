@@ -29,6 +29,7 @@
 #include <utime.h>
 
 #include <memory>
+#include <vector>
 
 #include "sysdeps.h"
 
@@ -101,14 +102,14 @@ class SyncConnection {
 
         // Sending header and payload in a single write makes a noticeable
         // difference to "adb sync" performance.
-        char buf[sizeof(SyncRequest) + path_length];
-        SyncRequest* req = reinterpret_cast<SyncRequest*>(buf);
+        std::vector<char> buf(sizeof(SyncRequest) + path_length);
+        SyncRequest* req = reinterpret_cast<SyncRequest*>(&buf[0]);
         req->id = id;
         req->path_length = path_length;
         char* data = reinterpret_cast<char*>(req + 1);
         memcpy(data, path_and_mode, path_length);
 
-        return WriteFdExactly(fd, buf, sizeof(buf));
+        return WriteFdExactly(fd, &buf[0], buf.size());
     }
 
     // Sending header, payload, and footer in a single write makes a huge
@@ -123,10 +124,10 @@ class SyncConnection {
             return false;
         }
 
-        char buf[sizeof(SyncRequest) + path_length +
+        std::vector<char> buf(sizeof(SyncRequest) + path_length +
                  sizeof(SyncRequest) + data_length +
-                 sizeof(SyncRequest)];
-        char* p = buf;
+                 sizeof(SyncRequest));
+        char* p = &buf[0];
 
         SyncRequest* req_send = reinterpret_cast<SyncRequest*>(p);
         req_send->id = ID_SEND;
@@ -147,7 +148,7 @@ class SyncConnection {
         req_done->path_length = mtime;
         p += sizeof(SyncRequest);
 
-        if (!WriteFdExactly(fd, buf, (p-buf))) return false;
+        if (!WriteFdExactly(fd, &buf[0], (p - &buf[0]))) return false;
 
         total_bytes += data_length;
         return true;
@@ -172,14 +173,14 @@ class SyncConnection {
     }
 
     bool ReportCopyFailure(const char* from, const char* to, const syncmsg& msg) {
-        char buffer[msg.status.msglen + 1];
-        if (!ReadFdExactly(fd, buffer, msg.status.msglen)) {
+        std::vector<char> buf(msg.status.msglen + 1);
+        if (!ReadFdExactly(fd, &buf[0], msg.status.msglen)) {
             fprintf(stderr, "adb: failed to copy '%s' to '%s'; failed to read reason (!): %s\n",
                     from, to, strerror(errno));
             return false;
         }
-        buffer[msg.status.msglen] = 0;
-        fprintf(stderr, "adb: failed to copy '%s' to '%s': %s\n", from, to, buffer);
+        buf[msg.status.msglen] = 0;
+        fprintf(stderr, "adb: failed to copy '%s' to '%s': %s\n", from, to, &buf[0]);
         return false;
     }
 
