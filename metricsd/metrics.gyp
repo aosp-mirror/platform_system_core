@@ -3,8 +3,8 @@
     'variables': {
       'deps': [
         'dbus-1',
+        'libbrillo-<(libbase_ver)',
         'libchrome-<(libbase_ver)',
-        'libchromeos-<(libbase_ver)',
       ]
     },
     'cflags_cc': [

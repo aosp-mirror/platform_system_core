@@ -64,11 +64,11 @@ metrics_CPPFLAGS := -Wno-non-virtual-dtor \
   -fvisibility=default
 metrics_includes := external/gtest/include \
   $(LOCAL_PATH)/include
-libmetrics_shared_libraries := libchrome libchromeos
+libmetrics_shared_libraries := libchrome libbrillo
 metrics_daemon_shared_libraries := $(libmetrics_shared_libraries) \
+  libbrillo-http \
+  libbrillo-dbus \
   libchrome-dbus \
-  libchromeos-http \
-  libchromeos-dbus \
   libdbus \
   libmetrics \
   libprotobuf-cpp-lite \
@@ -120,8 +120,7 @@ include $(BUILD_STATIC_LIBRARY)
 # ========================================================
 include $(CLEAR_VARS)
 LOCAL_MODULE := metrics_daemon
-LOCAL_C_INCLUDES := $(metrics_includes) \
-  external/libchromeos
+LOCAL_C_INCLUDES := $(metrics_includes)
 LOCAL_CFLAGS := $(metrics_CFLAGS)
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS)
