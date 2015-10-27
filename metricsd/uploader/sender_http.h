@@ -23,7 +23,7 @@
 
 #include "uploader/sender.h"
 
-// Sender implemented using http_utils from libchromeos
+// Sender implemented using http_utils from libbrillo
 class HttpSender : public Sender {
  public:
   explicit HttpSender(std::string server_url);
