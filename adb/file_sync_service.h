@@ -64,9 +64,9 @@ union syncmsg {
 
 void file_sync_service(int fd, void* cookie);
 bool do_sync_ls(const char* path);
-bool do_sync_push(const char* lpath, const char* rpath, bool show_progress);
+bool do_sync_push(const char* lpath, const char* rpath);
 bool do_sync_sync(const std::string& lpath, const std::string& rpath, bool list_only);
-bool do_sync_pull(const char* rpath, const char* lpath, bool show_progress, int copy_attrs);
+bool do_sync_pull(const char* rpath, const char* lpath, int copy_attrs);
 
 #define SYNC_DATA_MAX (64*1024)
 
