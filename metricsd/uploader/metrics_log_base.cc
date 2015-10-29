@@ -16,6 +16,7 @@
 
 #include "uploader/metrics_log_base.h"
 
+#include "base/build_time.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_samples.h"
 #include "uploader/metrics_hashes.h"
@@ -82,10 +83,7 @@ uint64_t MetricsLogBase::Hash(const std::string& value) {
 int64_t MetricsLogBase::GetBuildTime() {
   static int64_t integral_build_time = 0;
   if (!integral_build_time) {
-    Time time;
-    const char* kDateTime = __DATE__ " " __TIME__ " GMT";
-    bool result = Time::FromString(kDateTime, &time);
-    DCHECK(result);
+    Time time = base::GetBuildTime();
     integral_build_time = static_cast<int64_t>(time.ToTimeT());
   }
   return integral_build_time;
