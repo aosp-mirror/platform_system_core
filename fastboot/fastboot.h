@@ -32,6 +32,8 @@
 #include <inttypes.h>
 #include <stdlib.h>
 
+#include <string>
+
 #include "usb.h"
 
 struct sparse_file;
@@ -47,8 +49,8 @@ char *fb_get_error(void);
 #define FB_RESPONSE_SZ 64
 
 /* engine.c - high level command queue engine */
-int fb_getvar(struct usb_handle *usb, char *response, const char *fmt, ...);
-int fb_format_supported(usb_handle *usb, const char *partition, const char *type_override);
+bool fb_getvar(usb_handle* usb, const std::string& key, std::string* value);
+bool fb_format_supported(usb_handle* usb, const char* partition, const char* type_override);
 void fb_queue_flash(const char *ptn, void *data, uint32_t sz);
 void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, uint32_t sz);
 void fb_queue_erase(const char *ptn);
@@ -63,7 +65,6 @@ void fb_queue_download(const char *name, void *data, uint32_t size);
 void fb_queue_notice(const char *notice);
 void fb_queue_wait_for_disconnect(void);
 int fb_execute_queue(usb_handle *usb);
-int fb_queue_is_empty(void);
 
 /* util stuff */
 double now();
