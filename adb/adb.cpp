@@ -963,9 +963,11 @@ int handle_host_request(const char* service, TransportType type,
         fflush(stdout);
         SendOkay(reply_fd);
 
-        // At least on Windows, if we exit() without shutdown(SD_SEND) or
-        // closesocket(), the client's next recv() will error-out with
-        // WSAECONNRESET and they'll never read the OKAY.
+        // On Windows, if the process exits with open sockets that
+        // shutdown(SD_SEND) has not been called on, TCP RST segments will be
+        // sent to the peers which will cause their next recv() to error-out
+        // with WSAECONNRESET. In the case of this code, that means the client
+        // may not read the OKAY sent above.
         adb_shutdown(reply_fd);
 
         exit(0);
