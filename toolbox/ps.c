@@ -167,8 +167,7 @@ static int ps_line(int pid, int tid)
             if (r > 0)
                 macline[r] = 0;
         }
-        printf("%-30s %-9s %-5d %-5d %s\n", macline, user, pid, ppid, cmdline[0] ? cmdline : name);
-        return 0;
+        printf("%-30s ", macline);
     }
 
     printf("%-9s %-5d %-5d %-6d %-5d", user, pid, ppid, vss / 1024, rss * 4);
@@ -305,15 +304,15 @@ int ps_main(int argc, char **argv)
     }
 
     if (display_flags & SHOW_MACLABEL) {
-        printf("LABEL                          USER      PID   PPID  NAME\n");
-    } else {
-        printf("USER      PID   PPID  VSIZE  RSS  %s%s %sWCHAN      %*s  %sNAME\n",
-               (display_flags&SHOW_CPU)?"CPU ":"",
-               (display_flags&SHOW_PRIO)?"PRIO  NICE  RTPRI SCHED ":"",
-               (display_flags&SHOW_POLICY)?"PCY " : "",
-               (int) PC_WIDTH, "PC",
-               (display_flags&SHOW_ABI)?"ABI " : "");
+        printf("LABEL                          ");
     }
+    printf("USER      PID   PPID  VSIZE  RSS  %s%s %sWCHAN      %*s  %sNAME\n",
+           (display_flags&SHOW_CPU)?"CPU ":"",
+           (display_flags&SHOW_PRIO)?"PRIO  NICE  RTPRI SCHED ":"",
+           (display_flags&SHOW_POLICY)?"PCY " : "",
+           (int) PC_WIDTH, "PC",
+           (display_flags&SHOW_ABI)?"ABI " : "");
+
     while((de = readdir(d)) != 0){
         if(isdigit(de->d_name[0])){
             int pid = atoi(de->d_name);
