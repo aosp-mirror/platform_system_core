@@ -272,6 +272,7 @@ TEST(ziparchive, FindEntry) {
   ASSERT_EQ(static_cast<uint32_t>(17), data.uncompressed_length);
   ASSERT_EQ(static_cast<uint32_t>(13), data.compressed_length);
   ASSERT_EQ(0x950821c5, data.crc32);
+  ASSERT_EQ(static_cast<uint32_t>(0x438a8005), data.mod_time);
 
   // An entry that doesn't exist. Should be a negative return code.
   ZipString absent_name;

@@ -588,7 +588,7 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   // and other interesting attributes from the central directory. These
   // will later be compared against values from the local file header.
   data->method = cdr->compression_method;
-  data->mod_time = cdr->last_mod_time;
+  data->mod_time = cdr->last_mod_date << 16 | cdr->last_mod_time;
   data->crc32 = cdr->crc32;
   data->compressed_length = cdr->compressed_size;
   data->uncompressed_length = cdr->uncompressed_size;
