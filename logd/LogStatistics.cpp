@@ -190,13 +190,13 @@ std::string UidEntry::formatHeader(const std::string &name, log_id_t id) const {
     return formatLine(android::base::StringPrintf(
                           name.c_str(), android_log_id_to_name(id)),
                       std::string("Size"),
-                      std::string(isprune ? "Pruned" : ""))
+                      std::string(isprune ? "+/-  Pruned" : ""))
          + formatLine(std::string("UID   PACKAGE"),
                       std::string("BYTES"),
                       std::string(isprune ? "NUM" : ""));
 }
 
-std::string UidEntry::format(const LogStatistics &stat, log_id_t /* id */) const {
+std::string UidEntry::format(const LogStatistics &stat, log_id_t id) const {
     uid_t uid = getKey();
     std::string name = android::base::StringPrintf("%u", uid);
     const char *nameTmp = stat.uidToName(uid);
@@ -210,9 +210,59 @@ std::string UidEntry::format(const LogStatistics &stat, log_id_t /* id */) const
     std::string size = android::base::StringPrintf("%zu", getSizes());
 
     std::string pruned = "";
-    size_t dropped = getDropped();
-    if (dropped) {
-        pruned = android::base::StringPrintf("%zu", dropped);
+    if (worstUidEnabledForLogid(id)) {
+        size_t totalDropped = 0;
+        for (LogStatistics::uidTable_t::const_iterator it = stat.uidTable[id].begin();
+                it != stat.uidTable[id].end(); ++it) {
+            totalDropped += it->second.getDropped();
+        }
+        size_t sizes = stat.sizes(id);
+        size_t totalSize = stat.sizesTotal(id);
+        size_t totalElements = stat.elementsTotal(id);
+        float totalVirtualSize = (float)sizes + (float)totalDropped * totalSize
+                                / totalElements;
+        size_t entrySize = getSizes();
+        float virtualEntrySize = entrySize;
+        int realPermille = virtualEntrySize * 1000.0 / sizes;
+        size_t dropped = getDropped();
+        if (dropped) {
+            pruned = android::base::StringPrintf("%zu", dropped);
+            virtualEntrySize += (float)dropped * totalSize / totalElements;
+        }
+        int virtualPermille = virtualEntrySize * 1000.0 / totalVirtualSize;
+        int permille = (realPermille - virtualPermille) * 1000L
+                     / (virtualPermille ?: 1);
+        if ((permille < -1) || (1 < permille)) {
+            std::string change;
+            const char *units = "%";
+            const char *prefix = (permille > 0) ? "+" : "";
+
+            if (permille > 999) {
+                permille = (permille + 1000) / 100; // Now tenths fold
+                units = "X";
+                prefix = "";
+            }
+            if ((-99 < permille) && (permille < 99)) {
+                change = android::base::StringPrintf("%s%d.%u%s",
+                    prefix,
+                    permille / 10,
+                    ((permille < 0) ? (-permille % 10) : (permille % 10)),
+                    units);
+            } else {
+                change = android::base::StringPrintf("%s%d%s",
+                    prefix,
+                    (permille + 5) / 10, units);
+            }
+            ssize_t spaces = EntryBaseConstants::pruned_len
+                           - 2 - pruned.length() - change.length();
+            if ((spaces <= 0) && pruned.length()) {
+                spaces = 1;
+            }
+            if (spaces > 0) {
+                change += android::base::StringPrintf("%*s", (int)spaces, "");
+            }
+            pruned = change + pruned;
+        }
     }
 
     return formatLine(name, size, pruned);
