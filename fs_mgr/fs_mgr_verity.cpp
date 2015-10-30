@@ -765,8 +765,9 @@ int fs_mgr_load_verity_state(int *mode)
             continue;
         }
 
-        if (current == VERITY_MODE_LOGGING) {
+        if (current != VERITY_MODE_DEFAULT) {
             *mode = current;
+            break;
         }
     }
 
@@ -784,7 +785,6 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
 {
     alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
     bool use_state = true;
-    bool use_state_for_device = true;
     char fstab_filename[PROPERTY_VALUE_MAX + sizeof(FSTAB_PREFIX)];
     char *mount_point;
     char propbuf[PROPERTY_VALUE_MAX];
@@ -801,10 +801,11 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
     property_get("ro.boot.veritymode", propbuf, "");
 
     if (*propbuf != '\0') {
-        if (fs_mgr_load_verity_state(&mode) == -1) {
-            return -1;
-        }
         use_state = false; /* state is kept by the bootloader */
+    }
+
+    if (fs_mgr_load_verity_state(&mode) == -1) {
+        return -1;
     }
 
     fd = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));
@@ -829,15 +830,6 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
             continue;
         }
 
-        use_state_for_device = use_state;
-
-        if (use_state) {
-            if (get_verity_state_offset(&fstab->recs[i], &offset) < 0 ||
-                read_verity_state(fstab->recs[i].verity_loc, offset, &mode) < 0) {
-                use_state_for_device = false;
-            }
-        }
-
         mount_point = basename(fstab->recs[i].mount_point);
         verity_ioctl_init(io, mount_point, 0);
 
@@ -849,7 +841,7 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
 
         status = &buffer[io->data_start + sizeof(struct dm_target_spec)];
 
-        if (use_state_for_device && *status == 'C') {
+        if (use_state && *status == 'C') {
             if (write_verity_state(fstab->recs[i].verity_loc, offset,
                     VERITY_MODE_LOGGING) < 0) {
                 continue;
