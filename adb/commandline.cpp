@@ -33,6 +33,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <base/logging.h>
 #include <base/stringprintf.h>
@@ -101,11 +102,11 @@ static void help() {
         "                                 will disconnect from all connected TCP/IP devices.\n"
         "\n"
         "device commands:\n"
-        "  adb push <local> <remote>\n"
-        "                               - copy file/dir to device\n"
-        "  adb pull [-a] <remote> [<local>]\n"
-        "                               - copy file/dir from device\n"
-        "                                 ('-a' means copy timestamp and mode)\n"
+        "  adb push <local>... <remote>\n"
+        "                               - copy files/dirs to device\n"
+        "  adb pull [-a] <remote>... <local>\n"
+        "                               - copy files/dirs from device\n"
+        "                                 (-a preserves file timestamp and mode)\n"
         "  adb sync [ <directory> ]     - copy host->device only if changed\n"
         "                                 (-l means list but don't copy)\n"
         "  adb shell [-Ttx]             - run remote shell interactively\n"
@@ -1065,31 +1066,35 @@ static std::string find_product_out_path(const std::string& hint) {
     return path;
 }
 
-static void parse_push_pull_args(const char **arg, int narg,
-                                 char const **path1, char const **path2,
-                                 int *copy_attrs) {
-    *copy_attrs = 0;
+static void parse_push_pull_args(const char** arg, int narg,
+                                 std::vector<const char*>* srcs,
+                                 const char** dst, bool* copy_attrs) {
+    *copy_attrs = false;
 
+    srcs->clear();
+    bool ignore_flags = false;
     while (narg > 0) {
-        if (!strcmp(*arg, "-p")) {
-            // Silently ignore for backwards compatibility.
-        } else if (!strcmp(*arg, "-a")) {
-            *copy_attrs = 1;
+        if (ignore_flags || *arg[0] != '-') {
+            srcs->push_back(*arg);
         } else {
-            break;
+            if (!strcmp(*arg, "-p")) {
+                // Silently ignore for backwards compatibility.
+            } else if (!strcmp(*arg, "-a")) {
+                *copy_attrs = true;
+            } else if (!strcmp(*arg, "--")) {
+                ignore_flags = true;
+            } else {
+                fprintf(stderr, "adb: unrecognized option '%s'\n", *arg);
+                exit(1);
+            }
         }
         ++arg;
         --narg;
     }
 
-    if (narg > 0) {
-        *path1 = *arg;
-        ++arg;
-        --narg;
-    }
-
-    if (narg > 0) {
-        *path2 = *arg;
+    if (srcs->size() > 1) {
+        *dst = srcs->back();
+        srcs->pop_back();
     }
 }
 
@@ -1561,20 +1566,22 @@ int adb_commandline(int argc, const char **argv) {
         return do_sync_ls(argv[1]) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "push")) {
-        int copy_attrs = 0;
-        const char* lpath = NULL, *rpath = NULL;
+        bool copy_attrs = false;
+        std::vector<const char*> srcs;
+        const char* dst = nullptr;
 
-        parse_push_pull_args(&argv[1], argc - 1, &lpath, &rpath, &copy_attrs);
-        if (!lpath || !rpath || copy_attrs != 0) return usage();
-        return do_sync_push(lpath, rpath) ? 0 : 1;
+        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs);
+        if (srcs.empty() || !dst) return usage();
+        return do_sync_push(srcs, dst) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "pull")) {
-        int copy_attrs = 0;
-        const char* rpath = NULL, *lpath = ".";
+        bool copy_attrs = false;
+        std::vector<const char*> srcs;
+        const char* dst = ".";
 
-        parse_push_pull_args(&argv[1], argc - 1, &rpath, &lpath, &copy_attrs);
-        if (!rpath) return usage();
-        return do_sync_pull(rpath, lpath, copy_attrs) ? 0 : 1;
+        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs);
+        if (srcs.empty()) return usage();
+        return do_sync_pull(srcs, dst, copy_attrs) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "install")) {
         if (argc < 2) return usage();
@@ -1764,8 +1771,9 @@ static int install_app(TransportType transport, const char* serial, int argc, co
     }
 
     int result = -1;
-    const char* apk_file = argv[last_apk];
-    std::string apk_dest = android::base::StringPrintf(where, adb_basename(apk_file).c_str());
+    std::vector<const char*> apk_file = {argv[last_apk]};
+    std::string apk_dest = android::base::StringPrintf(
+        where, adb_basename(argv[last_apk]).c_str());
     if (!do_sync_push(apk_file, apk_dest.c_str())) goto cleanup_apk;
     argv[last_apk] = apk_dest.c_str(); /* destination name, not source location */
     result = pm_command(transport, serial, argc, argv);
