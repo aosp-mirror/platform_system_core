@@ -101,12 +101,10 @@ static void help() {
         "                                 will disconnect from all connected TCP/IP devices.\n"
         "\n"
         "device commands:\n"
-        "  adb push [-p] <local> <remote>\n"
+        "  adb push <local> <remote>\n"
         "                               - copy file/dir to device\n"
-        "                                 ('-p' to display the transfer progress)\n"
-        "  adb pull [-p] [-a] <remote> [<local>]\n"
+        "  adb pull [-a] <remote> [<local>]\n"
         "                               - copy file/dir from device\n"
-        "                                 ('-p' to display the transfer progress)\n"
         "                                 ('-a' means copy timestamp and mode)\n"
         "  adb sync [ <directory> ]     - copy host->device only if changed\n"
         "                                 (-l means list but don't copy)\n"
@@ -1065,15 +1063,14 @@ static std::string find_product_out_path(const std::string& hint) {
     return path;
 }
 
-static void parse_push_pull_args(const char **arg, int narg, char const **path1,
-                                 char const **path2, bool* show_progress,
+static void parse_push_pull_args(const char **arg, int narg,
+                                 char const **path1, char const **path2,
                                  int *copy_attrs) {
-    *show_progress = false;
     *copy_attrs = 0;
 
     while (narg > 0) {
         if (!strcmp(*arg, "-p")) {
-            *show_progress = true;
+            // Silently ignore for backwards compatibility.
         } else if (!strcmp(*arg, "-a")) {
             *copy_attrs = 1;
         } else {
@@ -1561,22 +1558,20 @@ int adb_commandline(int argc, const char **argv) {
         return do_sync_ls(argv[1]) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "push")) {
-        bool show_progress = false;
         int copy_attrs = 0;
         const char* lpath = NULL, *rpath = NULL;
 
-        parse_push_pull_args(&argv[1], argc - 1, &lpath, &rpath, &show_progress, &copy_attrs);
+        parse_push_pull_args(&argv[1], argc - 1, &lpath, &rpath, &copy_attrs);
         if (!lpath || !rpath || copy_attrs != 0) return usage();
-        return do_sync_push(lpath, rpath, show_progress) ? 0 : 1;
+        return do_sync_push(lpath, rpath) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "pull")) {
-        bool show_progress = false;
         int copy_attrs = 0;
         const char* rpath = NULL, *lpath = ".";
 
-        parse_push_pull_args(&argv[1], argc - 1, &rpath, &lpath, &show_progress, &copy_attrs);
+        parse_push_pull_args(&argv[1], argc - 1, &rpath, &lpath, &copy_attrs);
         if (!rpath) return usage();
-        return do_sync_pull(rpath, lpath, show_progress, copy_attrs) ? 0 : 1;
+        return do_sync_pull(rpath, lpath, copy_attrs) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "install")) {
         if (argc < 2) return usage();
@@ -1768,7 +1763,7 @@ static int install_app(TransportType transport, const char* serial, int argc, co
     int result = -1;
     const char* apk_file = argv[last_apk];
     std::string apk_dest = android::base::StringPrintf(where, adb_basename(apk_file).c_str());
-    if (!do_sync_push(apk_file, apk_dest.c_str(), false)) goto cleanup_apk;
+    if (!do_sync_push(apk_file, apk_dest.c_str())) goto cleanup_apk;
     argv[last_apk] = apk_dest.c_str(); /* destination name, not source location */
     result = pm_command(transport, serial, argc, argv);
 
