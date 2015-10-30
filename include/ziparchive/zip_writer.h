@@ -21,9 +21,11 @@
 #include <utils/Compat.h>
 
 #include <cstdio>
-#include <string>
 #include <ctime>
+#include <memory>
+#include <string>
 #include <vector>
+#include <zlib.h>
 
 /**
  * Writes a Zip file via a stateful interface.
@@ -112,8 +114,6 @@ public:
 private:
   DISALLOW_COPY_AND_ASSIGN(ZipWriter);
 
-  int32_t HandleError(int32_t error_code);
-
   struct FileInfo {
     std::string path;
     uint16_t compression_method;
@@ -124,6 +124,12 @@ private:
     uint16_t last_mod_date;
     uint32_t local_file_header_offset;
   };
+
+  int32_t HandleError(int32_t error_code);
+  int32_t PrepareDeflate();
+  int32_t StoreBytes(FileInfo* file, const void* data, size_t len);
+  int32_t CompressBytes(FileInfo* file, const void* data, size_t len);
+  int32_t FlushCompressedBytes(FileInfo* file);
 
   enum class State {
     kWritingZip,
@@ -136,6 +142,9 @@ private:
   off64_t current_offset_;
   State state_;
   std::vector<FileInfo> files_;
+
+  std::unique_ptr<z_stream, void(*)(z_stream*)> z_stream_;
+  std::vector<uint8_t> buffer_;
 };
 
 #endif /* LIBZIPARCHIVE_ZIPWRITER_H_ */
