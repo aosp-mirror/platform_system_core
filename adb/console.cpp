@@ -25,6 +25,7 @@
 
 #include "adb.h"
 #include "adb_client.h"
+#include "adb_io.h"
 
 // Return the console port of the currently connected emulator (if any) or -1 if
 // there is no emulator, and -2 if there is more than one.
@@ -87,14 +88,20 @@ int adb_send_emulator_command(int argc, const char** argv, const char* serial) {
         return 1;
     }
 
+    std::string commands;
+
     for (int i = 1; i < argc; i++) {
-        adb_write(fd, argv[i], strlen(argv[i]));
-        adb_write(fd, i == argc - 1 ? "\n" : " ", 1);
+        commands.append(argv[i]);
+        commands.append(i == argc - 1 ? "\n" : " ");
     }
 
-    const char disconnect_command[] = "quit\n";
-    if (adb_write(fd, disconnect_command, sizeof(disconnect_command) - 1) == -1) {
-        LOG(FATAL) << "Could not finalize emulator command";
+    commands.append("quit\n");
+
+    if (!WriteFdExactly(fd, commands)) {
+        fprintf(stderr, "error: cannot write to emulator: %s\n",
+                strerror(errno));
+        adb_close(fd);
+        return 1;
     }
 
     // Drain output that the emulator console has sent us to prevent a problem
@@ -106,11 +113,14 @@ int adb_send_emulator_command(int argc, const char** argv, const char* serial) {
     do {
         char buf[BUFSIZ];
         result = adb_read(fd, buf, sizeof(buf));
-        // Keep reading until zero bytes (EOF) or an error. If 'adb emu kill'
-        // is executed, the emulator calls exit() which causes adb to get
-        // ECONNRESET. Any other emu command is followed by the quit command
-        // that we sent above, and that causes the emulator to close the socket
-        // which should cause zero bytes (EOF) to be returned.
+        // Keep reading until zero bytes (orderly/graceful shutdown) or an
+        // error. If 'adb emu kill' is executed, the emulator calls exit() with
+        // the socket open (and shutdown(SD_SEND) was not called), which causes
+        // Windows to send a TCP RST segment which causes adb to get ECONNRESET.
+        // Any other emu command is followed by the quit command that we
+        // appended above, and that causes the emulator to close the socket
+        // which should cause zero bytes (orderly/graceful shutdown) to be
+        // returned.
     } while (result > 0);
 
     adb_close(fd);
