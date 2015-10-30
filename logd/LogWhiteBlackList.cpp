@@ -17,6 +17,7 @@
 #include <ctype.h>
 
 #include <base/stringprintf.h>
+#include <cutils/properties.h>
 
 #include "LogWhiteBlackList.h"
 
@@ -49,7 +50,8 @@ std::string Prune::format() {
     return std::string("/");
 }
 
-PruneList::PruneList() : mWorstUidEnabled(true) {
+PruneList::PruneList() {
+    init(NULL);
 }
 
 PruneList::~PruneList() {
@@ -72,13 +74,44 @@ int PruneList::init(const char *str) {
         it = mNaughty.erase(it);
     }
 
-    if (!str) {
-        return 0;
+    static const char _default[] = "default";
+    // default here means take ro.logd.filter, persist.logd.filter then
+    // internal default in that order.
+    if (str && !strcmp(str, _default)) {
+        str = NULL;
+    }
+    static const char _disable[] = "disable";
+    if (str && !strcmp(str, _disable)) {
+        str = "";
+    }
+
+    std::string filter;
+
+    if (str) {
+        filter = str;
+    } else {
+        char property[PROPERTY_VALUE_MAX];
+        property_get("ro.logd.filter", property, _default);
+        filter = property;
+        property_get("persist.logd.filter", property, filter.c_str());
+        // default here means take ro.logd.filter
+        if (strcmp(property, _default)) {
+            filter = property;
+        }
+    }
+
+    // default here means take internal default.
+    if (filter == _default) {
+        // See README.property for description of filter format
+        filter = "~!";
+    }
+    if (filter == _disable) {
+        filter = "";
     }
 
     mWorstUidEnabled = false;
 
-    for(; *str; ++str) {
+    for(str = filter.c_str(); *str; ++str) {
         if (isspace(*str)) {
             continue;
         }
