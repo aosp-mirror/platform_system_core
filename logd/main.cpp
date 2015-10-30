@@ -212,6 +212,7 @@ static void *reinit_thread_start(void * /*obj*/) {
         // Anything that reads persist.<property>
         if (logBuf) {
             logBuf->init();
+            logBuf->initPrune(NULL);
         }
     }
 
