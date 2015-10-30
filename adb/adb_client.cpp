@@ -206,6 +206,7 @@ int adb_connect(const std::string& service, std::string* error) {
                 return -1;
             }
 
+            ReadOrderlyShutdown(fd);
             adb_close(fd);
 
             if (sscanf(&version_string[0], "%04x", &version) != 1) {
@@ -227,6 +228,7 @@ int adb_connect(const std::string& service, std::string* error) {
                    version, ADB_SERVER_VERSION);
             fd = _adb_connect("host:kill", error);
             if (fd >= 0) {
+                ReadOrderlyShutdown(fd);
                 adb_close(fd);
             } else {
                 // If we couldn't connect to the server or had some other error,
@@ -271,6 +273,8 @@ bool adb_command(const std::string& service) {
         return false;
     }
 
+    ReadOrderlyShutdown(fd);
+    adb_close(fd);
     return true;
 }
 
@@ -286,5 +290,8 @@ bool adb_query(const std::string& service, std::string* result, std::string* err
         adb_close(fd);
         return false;
     }
+
+    ReadOrderlyShutdown(fd);
+    adb_close(fd);
     return true;
 }
