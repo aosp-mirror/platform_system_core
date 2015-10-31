@@ -83,6 +83,8 @@ std::string Trim(const std::string& s) {
 // aid compile time and binary size.
 template std::string Join(const std::vector<std::string>&, char);
 template std::string Join(const std::vector<const char*>&, char);
+template std::string Join(const std::vector<std::string>&, const std::string&);
+template std::string Join(const std::vector<const char*>&, const std::string&);
 
 bool StartsWith(const std::string& s, const char* prefix) {
   return s.compare(0, strlen(prefix), prefix) == 0;
