@@ -439,7 +439,7 @@ static void* stdin_read_thread(void* x) {
 
     adb_thread_setname("stdin reader");
 
-#ifndef __WIN32
+#ifndef _WIN32
     // Mask SIGTTIN in case we're in a backgrounded process
     sigset_t sigset;
     sigemptyset(&sigset);
