@@ -72,6 +72,19 @@ struct PollNode {
 // That's why we don't need a lock for fdevent.
 static std::unordered_map<int, PollNode> g_poll_node_map;
 static std::list<fdevent*> g_pending_list;
+static bool main_thread_valid;
+static pthread_t main_thread;
+
+static void check_main_thread() {
+    if (main_thread_valid) {
+        CHECK_NE(0, pthread_equal(main_thread, pthread_self()));
+    }
+}
+
+static void set_main_thread() {
+    main_thread_valid = true;
+    main_thread = pthread_self();
+}
 
 static std::string dump_fde(const fdevent* fde) {
     std::string state;
@@ -101,6 +114,7 @@ static std::string dump_fde(const fdevent* fde) {
 
 fdevent *fdevent_create(int fd, fd_func func, void *arg)
 {
+    check_main_thread();
     fdevent *fde = (fdevent*) malloc(sizeof(fdevent));
     if(fde == 0) return 0;
     fdevent_install(fde, fd, func, arg);
@@ -110,6 +124,7 @@ fdevent *fdevent_create(int fd, fd_func func, void *arg)
 
 void fdevent_destroy(fdevent *fde)
 {
+    check_main_thread();
     if(fde == 0) return;
     if(!(fde->state & FDE_CREATED)) {
         LOG(FATAL) << "destroying fde not created by fdevent_create(): " << dump_fde(fde);
@@ -119,6 +134,7 @@ void fdevent_destroy(fdevent *fde)
 }
 
 void fdevent_install(fdevent* fde, int fd, fd_func func, void* arg) {
+    check_main_thread();
     CHECK_GE(fd, 0);
     memset(fde, 0, sizeof(fdevent));
     fde->state = FDE_ACTIVE;
@@ -137,6 +153,7 @@ void fdevent_install(fdevent* fde, int fd, fd_func func, void* arg) {
 }
 
 void fdevent_remove(fdevent* fde) {
+    check_main_thread();
     D("fdevent_remove %s", dump_fde(fde).c_str());
     if (fde->state & FDE_ACTIVE) {
         g_poll_node_map.erase(fde->fd);
@@ -171,6 +188,7 @@ static void fdevent_update(fdevent* fde, unsigned events) {
 }
 
 void fdevent_set(fdevent* fde, unsigned events) {
+    check_main_thread();
     events &= FDE_EVENTMASK;
     if ((fde->state & FDE_EVENTMASK) == events) {
         return;
@@ -190,10 +208,12 @@ void fdevent_set(fdevent* fde, unsigned events) {
 }
 
 void fdevent_add(fdevent* fde, unsigned events) {
+    check_main_thread();
     fdevent_set(fde, (fde->state & FDE_EVENTMASK) | events);
 }
 
 void fdevent_del(fdevent* fde, unsigned events) {
+    check_main_thread();
     fdevent_set(fde, (fde->state & FDE_EVENTMASK) & ~events);
 }
 
@@ -335,6 +355,7 @@ void fdevent_subproc_setup()
 
 void fdevent_loop()
 {
+    set_main_thread();
 #if !ADB_HOST
     fdevent_subproc_setup();
 #endif // !ADB_HOST
@@ -359,4 +380,5 @@ size_t fdevent_installed_count() {
 void fdevent_reset() {
     g_poll_node_map.clear();
     g_pending_list.clear();
+    main_thread_valid = false;
 }
