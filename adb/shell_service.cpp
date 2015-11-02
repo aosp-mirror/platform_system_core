@@ -83,6 +83,7 @@
 
 #include <errno.h>
 #include <pty.h>
+#include <pwd.h>
 #include <sys/select.h>
 #include <termios.h>
 
@@ -280,6 +281,15 @@ bool Subprocess::ForkAndExec() {
         child_stderr_sfd.Reset();
         parent_error_sfd.Reset();
         close_on_exec(child_error_sfd.fd());
+
+        // TODO: $HOSTNAME? Normally bash automatically sets that, but mksh doesn't.
+        passwd* pw = getpwuid(getuid());
+        if (pw != nullptr) {
+            setenv("HOME", pw->pw_dir, 1);
+            setenv("LOGNAME", pw->pw_name, 1);
+            setenv("SHELL", pw->pw_shell, 1);
+            setenv("USER", pw->pw_name, 1);
+        }
 
         if (is_interactive()) {
             execl(_PATH_BSHELL, _PATH_BSHELL, "-", nullptr);
