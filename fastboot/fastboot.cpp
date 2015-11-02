@@ -614,8 +614,12 @@ static int64_t get_sparse_limit(usb_handle* usb, int64_t size) {
 // Until we get lazy inode table init working in make_ext4fs, we need to
 // erase partitions of type ext4 before flashing a filesystem so no stale
 // inodes are left lying around.  Otherwise, e2fsck gets very upset.
-static bool needs_erase(usb_handle* usb, const char* part) {
-    return !fb_format_supported(usb, part, nullptr);
+static bool needs_erase(usb_handle* usb, const char* partition) {
+    std::string partition_type;
+    if (!fb_getvar(usb, std::string("partition-type:") + partition, &partition_type)) {
+        return false;
+    }
+    return partition_type == "ext4";
 }
 
 static int load_buf_fd(usb_handle* usb, int fd, struct fastboot_buffer* buf) {
@@ -889,7 +893,7 @@ static void fb_perform_format(usb_handle* usb,
         partition_size = size_override;
     }
 
-    gen = fs_get_generator(partition_type.c_str());
+    gen = fs_get_generator(partition_type);
     if (!gen) {
         if (skip_if_not_supported) {
             fprintf(stderr, "Erase successful, but not automatically formatting.\n");
@@ -1059,8 +1063,11 @@ int main(int argc, char **argv)
         } else if(!strcmp(*argv, "erase")) {
             require(2);
 
-            if (!fb_format_supported(usb, argv[1], nullptr)) {
-                fprintf(stderr, "******** Did you mean to fastboot format this partition?\n");
+            std::string partition_type;
+            if (fb_getvar(usb, std::string("partition-type:") + argv[1], &partition_type) &&
+                fs_get_generator(partition_type) != nullptr) {
+                fprintf(stderr, "******** Did you mean to fastboot format this %s partition?\n",
+                        partition_type.c_str());
             }
 
             fb_queue_erase(argv[1]);
