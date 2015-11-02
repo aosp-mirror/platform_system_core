@@ -125,6 +125,8 @@ static const struct fs_path_config android_files[] = {
     { 00644, AID_MEDIA_RW,  AID_MEDIA_RW,  0, "data/media/*" },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app-private/*" },
     { 00644, AID_APP,       AID_APP,       0, "data/data/*" },
+    { 00750, AID_ROOT,      AID_SHELL,     0, "data/nativetest/*" },
+    { 00750, AID_ROOT,      AID_SHELL,     0, "data/nativetest64/*" },
 
     /* the following four files are INTENTIONALLY set-uid, but they
      * are NOT included on user builds. */
