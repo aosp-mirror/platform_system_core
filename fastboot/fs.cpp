@@ -39,9 +39,9 @@ static const struct fs_generator {
 #endif
 };
 
-const struct fs_generator* fs_get_generator(const char* fs_type) {
+const struct fs_generator* fs_get_generator(const std::string& fs_type) {
     for (size_t i = 0; i < sizeof(generators) / sizeof(*generators); i++) {
-        if (strcmp(generators[i].fs_type, fs_type) == 0) {
+        if (fs_type == generators[i].fs_type) {
             return generators + i;
         }
     }
