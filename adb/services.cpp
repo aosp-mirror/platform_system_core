@@ -184,15 +184,18 @@ void reboot_service(int fd, void* arg)
     adb_close(fd);
 }
 
-void reverse_service(int fd, void* arg)
-{
-    const char* command = reinterpret_cast<const char*>(arg);
-
-    if (handle_forward_request(command, kTransportAny, NULL, fd) < 0) {
-        SendFail(fd, "not a reverse forwarding command");
+int reverse_service(const char* command) {
+    int s[2];
+    if (adb_socketpair(s)) {
+        PLOG(ERROR) << "cannot create service socket pair.";
+        return -1;
     }
-    free(arg);
-    adb_close(fd);
+    VLOG(SERVICES) << "service socketpair: " << s[0] << ", " << s[1];
+    if (handle_forward_request(command, kTransportAny, nullptr, s[1]) < 0) {
+        SendFail(s[1], "not a reverse forwarding command");
+    }
+    adb_close(s[1]);
+    return s[0];
 }
 
 // Shell service string can look like:
@@ -335,15 +338,7 @@ int service_to_fd(const char* name, const atransport* transport) {
     } else if(!strncmp(name, "usb:", 4)) {
         ret = create_service_thread(restart_usb_service, NULL);
     } else if (!strncmp(name, "reverse:", 8)) {
-        char* cookie = strdup(name + 8);
-        if (cookie == NULL) {
-            ret = -1;
-        } else {
-            ret = create_service_thread(reverse_service, cookie);
-            if (ret < 0) {
-                free(cookie);
-            }
-        }
+        ret = reverse_service(name + 8);
     } else if(!strncmp(name, "disable-verity:", 15)) {
         ret = create_service_thread(set_verity_enabled_state_service, (void*)0);
     } else if(!strncmp(name, "enable-verity:", 15)) {
