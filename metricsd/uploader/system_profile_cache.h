@@ -35,7 +35,7 @@ class ChromeUserMetricsExtension;
 
 struct SystemProfile {
   std::string version;
-  std::string hardware_class;
+  std::string model_manifest_id;
   std::string client_id;
   int session_id;
   metrics::SystemProfileProto::Channel channel;
