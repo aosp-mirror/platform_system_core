@@ -30,6 +30,10 @@ static const char kDefaultVersion[] = "0.0.0.0";
 // Build time properties name.
 static const char kProductId[] = "product_id";
 static const char kProductVersion[] = "product_version";
+
+// Weave configuration.
+static const char kWeaveConfigurationFile[] = "/system/etc/weaved/weaved.conf";
+static const char kModelManifestId[] = "model_id";
 }  // namespace metrics
 
 #endif  // METRICS_CONSTANTS_H_
