@@ -46,8 +46,8 @@ class SystemProfileSetter;
 //
 // The two states are the presence or not of a staged log.
 // A staged log is a compressed protobuffer containing both the aggregated
-// metrics and event and information about the client. (product, hardware id,
-// etc...).
+// metrics and event and information about the client. (product,
+// model_manifest_id, etc...).
 //
 // At regular intervals, the upload event will be triggered and the following
 // will happen:
