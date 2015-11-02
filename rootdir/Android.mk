@@ -41,17 +41,21 @@ endif
 # because init.rc is conditionally included.
 #
 # create some directories (some are mount points) and symlinks
-local_post_install_cmd_base := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
-    sbin dev proc sys system data oem acct cache config storage mnt root); \
+LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
+    sbin dev proc sys system data oem acct cache config storage mnt root $(BOARD_ROOT_EXTRA_FOLDERS)); \
     ln -sf /system/etc $(TARGET_ROOT_OUT)/etc; \
     ln -sf /sys/kernel/debug $(TARGET_ROOT_OUT)/d; \
     ln -sf /storage/self/primary $(TARGET_ROOT_OUT)/sdcard
 ifdef BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE
-  LOCAL_POST_INSTALL_CMD := $(local_post_install_cmd_base); mkdir -p $(TARGET_ROOT_OUT)/vendor
-else
-  LOCAL_POST_INSTALL_CMD := $(local_post_install_cmd_base)
+  LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/vendor
 endif
-local_post_install_cmd_base :=
+ifdef BOARD_ROOT_EXTRA_SYMLINKS
+# BOARD_ROOT_EXTRA_SYMLINKS is a list of <target>:<link_name>.
+  LOCAL_POST_INSTALL_CMD += $(foreach s, $(BOARD_ROOT_EXTRA_SYMLINKS),\
+    $(eval p := $(subst :,$(space),$(s)))\
+    ; mkdir -p $(dir $(TARGET_ROOT_OUT)/$(word 2,$(p))) \
+    ; ln -sf $(word 1,$(p)) $(TARGET_ROOT_OUT)/$(word 2,$(p)))
+endif
 
 include $(BUILD_SYSTEM)/base_rules.mk
 
