@@ -108,7 +108,18 @@ bool SystemProfileCache::Initialize() {
   profile_.client_id = testing_ ?
       "client_id_test" :
       GetPersistentGUID(guid_path);
-  profile_.hardware_class = "unknown";
+  profile_.model_manifest_id = "unknown";
+  if (!testing_) {
+    brillo::KeyValueStore weave_config;
+    if (!weave_config.Load(base::FilePath(metrics::kWeaveConfigurationFile))) {
+      LOG(ERROR) << "Failed to load the weave configuration file.";
+    } else if (!weave_config.GetString(metrics::kModelManifestId,
+                                       &profile_.model_manifest_id)) {
+      LOG(ERROR) << "The model manifest id (model_id) is undefined in "
+                 << metrics::kWeaveConfigurationFile;
+    }
+  }
+
   profile_.channel = ProtoChannelFromString(channel);
 
   // Increment the session_id everytime we initialize this. If metrics_daemon
@@ -143,7 +154,7 @@ bool SystemProfileCache::Populate(
   metrics::SystemProfileProto* profile_proto =
       metrics_proto->mutable_system_profile();
   profile_proto->mutable_hardware()->set_hardware_class(
-      profile_.hardware_class);
+      profile_.model_manifest_id);
   profile_proto->set_app_version(profile_.version);
   profile_proto->set_channel(profile_.channel);
   metrics::SystemProfileProto_BrilloDeviceData* device_data =
