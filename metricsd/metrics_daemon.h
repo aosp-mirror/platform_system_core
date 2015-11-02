@@ -32,6 +32,7 @@
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 #include "collectors/averaged_statistics_collector.h"
+#include "collectors/cpu_usage_collector.h"
 #include "collectors/disk_usage_collector.h"
 #include "metrics/metrics_library.h"
 #include "persistent_integer.h"
@@ -164,10 +165,6 @@ class MetricsDaemon : public brillo::DBusDaemon {
   // total number of kernel crashes since the last version update.
   void SendKernelCrashesCumulativeCountStats();
 
-  // Returns the total (system-wide) CPU usage between the time of the most
-  // recent call to this function and now.
-  base::TimeDelta GetIncrementalCpuUse();
-
   // Sends a sample representing the number of seconds of active use
   // for a 24-hour period and reset |use|.
   void SendAndResetDailyUseSample(
@@ -268,12 +265,9 @@ class MetricsDaemon : public brillo::DBusDaemon {
   // Selects the wait time for the next memory use callback.
   unsigned int memuse_interval_index_;
 
-  // The system "HZ", or frequency of ticks.  Some system data uses ticks as a
-  // unit, and this is used to convert to standard time units.
-  uint32_t ticks_per_second_;
   // Used internally by GetIncrementalCpuUse() to return the CPU utilization
   // between calls.
-  uint64_t latest_cpu_use_ticks_;
+  base::TimeDelta latest_cpu_use_microseconds_;
 
   // Persistent values and accumulators for crash statistics.
   scoped_ptr<PersistentInteger> daily_cycle_;
@@ -302,6 +296,8 @@ class MetricsDaemon : public brillo::DBusDaemon {
   scoped_ptr<PersistentInteger> kernel_crashes_version_count_;
   scoped_ptr<PersistentInteger> unclean_shutdowns_daily_count_;
   scoped_ptr<PersistentInteger> unclean_shutdowns_weekly_count_;
+
+  scoped_ptr<CpuUsageCollector> cpu_usage_collector_;
   scoped_ptr<DiskUsageCollector> disk_usage_collector_;
   scoped_ptr<AveragedStatisticsCollector> averaged_stats_collector_;
 
