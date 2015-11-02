@@ -44,6 +44,7 @@
 #include <unistd.h>
 
 #include <base/parseint.h>
+#include <base/strings.h>
 #include <sparse/sparse.h>
 #include <ziparchive/zip_archive.h>
 
@@ -574,6 +575,9 @@ static int64_t get_target_sparse_limit(usb_handle* usb) {
         fprintf(stderr, "target didn't report max-download-size\n");
         return 0;
     }
+
+    // Some bootloaders (angler, for example) send spurious whitespace too.
+    max_download_size = android::base::Trim(max_download_size);
 
     uint64_t limit;
     if (!android::base::ParseUint(max_download_size.c_str(), &limit)) {
