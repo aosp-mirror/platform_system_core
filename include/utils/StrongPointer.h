@@ -62,8 +62,10 @@ public:
 
     sp(T* other);
     sp(const sp<T>& other);
+    sp(sp<T>&& other);
     template<typename U> sp(U* other);
     template<typename U> sp(const sp<U>& other);
+    template<typename U> sp(sp<U>&& other);
 
     ~sp();
 
@@ -71,8 +73,10 @@ public:
 
     sp& operator = (T* other);
     sp& operator = (const sp<T>& other);
+    sp& operator = (sp<T>&& other);
 
     template<typename U> sp& operator = (const sp<U>& other);
+    template<typename U> sp& operator = (sp<U>&& other);
     template<typename U> sp& operator = (U* other);
 
     //! Special optimization for use by ProcessState (and nobody else).
@@ -123,6 +127,12 @@ sp<T>::sp(const sp<T>& other)
         m_ptr->incStrong(this);
 }
 
+template<typename T>
+sp<T>::sp(sp<T>&& other)
+        : m_ptr(other.m_ptr) {
+    other.m_ptr = nullptr;
+}
+
 template<typename T> template<typename U>
 sp<T>::sp(U* other)
         : m_ptr(other) {
@@ -135,6 +145,12 @@ sp<T>::sp(const sp<U>& other)
         : m_ptr(other.m_ptr) {
     if (m_ptr)
         m_ptr->incStrong(this);
+}
+
+template<typename T> template<typename U>
+sp<T>::sp(sp<U>&& other)
+        : m_ptr(other.m_ptr) {
+    other.m_ptr = nullptr;
 }
 
 template<typename T>
@@ -151,6 +167,15 @@ sp<T>& sp<T>::operator =(const sp<T>& other) {
     if (m_ptr)
         m_ptr->decStrong(this);
     m_ptr = otherPtr;
+    return *this;
+}
+
+template<typename T>
+sp<T>& sp<T>::operator =(sp<T>&& other) {
+    if (m_ptr)
+        m_ptr->decStrong(this);
+    m_ptr = other.m_ptr;
+    other.m_ptr = nullptr;
     return *this;
 }
 
@@ -172,6 +197,15 @@ sp<T>& sp<T>::operator =(const sp<U>& other) {
     if (m_ptr)
         m_ptr->decStrong(this);
     m_ptr = otherPtr;
+    return *this;
+}
+
+template<typename T> template<typename U>
+sp<T>& sp<T>::operator =(sp<U>&& other) {
+    if (m_ptr)
+        m_ptr->decStrong(this);
+    m_ptr = other.m_ptr;
+    other.m_ptr = nullptr;
     return *this;
 }
 
