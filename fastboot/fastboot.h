@@ -50,7 +50,6 @@ char *fb_get_error(void);
 
 /* engine.c - high level command queue engine */
 bool fb_getvar(usb_handle* usb, const std::string& key, std::string* value);
-bool fb_format_supported(usb_handle* usb, const char* partition, const char* type_override);
 void fb_queue_flash(const char *ptn, void *data, uint32_t sz);
 void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, uint32_t sz);
 void fb_queue_erase(const char *ptn);

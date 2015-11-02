@@ -5,8 +5,7 @@
 
 struct fs_generator;
 
-const struct fs_generator* fs_get_generator(const char *fs_type);
+const struct fs_generator* fs_get_generator(const std::string& fs_type);
 int fs_generator_generate(const struct fs_generator* gen, int tmpFileNo, long long partSize);
 
 #endif
-
