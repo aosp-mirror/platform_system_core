@@ -576,11 +576,13 @@ static struct sparse_file **load_sparse_files(int fd, int max_size)
 static int64_t get_target_sparse_limit(usb_handle* usb) {
     std::string max_download_size;
     if (!fb_getvar(usb, "max-download-size", &max_download_size)) {
+        fprintf(stderr, "target didn't report max-download-size\n");
         return 0;
     }
 
     uint64_t limit;
     if (!android::base::ParseUint(max_download_size.c_str(), &limit)) {
+        fprintf(stderr, "couldn't parse max-download-size '%s'\n", max_download_size.c_str());
         return 0;
     }
     if (limit > 0) {
