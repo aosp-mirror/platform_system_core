@@ -66,3 +66,13 @@ TEST(parseint, no_implicit_octal) {
   ASSERT_TRUE(android::base::ParseUint("0123", &u));
   ASSERT_EQ(123u, u);
 }
+
+TEST(parseint, explicit_hex) {
+  int i;
+  ASSERT_TRUE(android::base::ParseInt("0x123", &i));
+  ASSERT_EQ(0x123, i);
+
+  unsigned int u;
+  ASSERT_TRUE(android::base::ParseUint("0x123", &u));
+  ASSERT_EQ(0x123u, u);
+}
