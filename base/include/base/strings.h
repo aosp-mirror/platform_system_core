@@ -36,8 +36,8 @@ std::vector<std::string> Split(const std::string& s,
 std::string Trim(const std::string& s);
 
 // Joins a container of things into a single string, using the given separator.
-template <typename ContainerT>
-std::string Join(const ContainerT& things, char separator) {
+template <typename ContainerT, typename SeparatorT>
+std::string Join(const ContainerT& things, SeparatorT separator) {
   if (things.empty()) {
     return "";
   }
@@ -53,6 +53,8 @@ std::string Join(const ContainerT& things, char separator) {
 // We instantiate the common cases in strings.cpp.
 extern template std::string Join(const std::vector<std::string>&, char);
 extern template std::string Join(const std::vector<const char*>&, char);
+extern template std::string Join(const std::vector<std::string>&, const std::string&);
+extern template std::string Join(const std::vector<const char*>&, const std::string&);
 
 // Tests whether 's' starts with 'prefix'.
 bool StartsWith(const std::string& s, const char* prefix);
