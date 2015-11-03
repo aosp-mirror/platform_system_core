@@ -18,6 +18,8 @@
 
 #include "sysdeps.h"
 
+#include "base/test_utils.h"
+
 TEST(sysdeps_win32, adb_getenv) {
     // Insert all test env vars before first call to adb_getenv() which will
     // read the env var block only once.
@@ -92,4 +94,46 @@ TEST(sysdeps_win32, adb_strerror) {
     // Test error that regular strerror() doesn't have a string for, but that
     // adb_strerror() returns.
     TestAdbStrError(ECONNRESET, "Connection reset by peer");
+}
+
+TEST(sysdeps_win32, unix_isatty) {
+    // stdin and stdout should be consoles. Use CONIN$ and CONOUT$ special files
+    // so that we can test this even if stdin/stdout have been redirected. Read
+    // permissions are required for unix_isatty().
+    int conin_fd = unix_open("CONIN$", O_RDONLY);
+    int conout_fd = unix_open("CONOUT$", O_RDWR);
+    for (const int fd : {conin_fd, conout_fd}) {
+        EXPECT_TRUE(fd >= 0);
+        EXPECT_EQ(1, unix_isatty(fd));
+        EXPECT_EQ(0, unix_close(fd));
+    }
+
+    // nul returns 1 from isatty(), make sure unix_isatty() corrects that.
+    for (auto flags : {O_RDONLY, O_RDWR}) {
+        int nul_fd = unix_open("nul", flags);
+        EXPECT_TRUE(nul_fd >= 0);
+        EXPECT_EQ(0, unix_isatty(nul_fd));
+        EXPECT_EQ(0, unix_close(nul_fd));
+    }
+
+    // Check a real file, both read-write and read-only.
+    TemporaryFile temp_file;
+    EXPECT_TRUE(temp_file.fd >= 0);
+    EXPECT_EQ(0, unix_isatty(temp_file.fd));
+
+    int temp_file_ro_fd = unix_open(temp_file.path, O_RDONLY);
+    EXPECT_TRUE(temp_file_ro_fd >= 0);
+    EXPECT_EQ(0, unix_isatty(temp_file_ro_fd));
+    EXPECT_EQ(0, unix_close(temp_file_ro_fd));
+
+    // Check a real OS pipe.
+    int pipe_fds[2];
+    EXPECT_EQ(0, _pipe(pipe_fds, 64, _O_BINARY));
+    EXPECT_EQ(0, unix_isatty(pipe_fds[0]));
+    EXPECT_EQ(0, unix_isatty(pipe_fds[1]));
+    EXPECT_EQ(0, _close(pipe_fds[0]));
+    EXPECT_EQ(0, _close(pipe_fds[1]));
+
+    // Make sure an invalid FD is handled correctly.
+    EXPECT_EQ(0, unix_isatty(-1));
 }
