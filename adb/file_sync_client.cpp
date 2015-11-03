@@ -467,7 +467,7 @@ struct copyinfo
     unsigned int time;
     unsigned int mode;
     uint64_t size;
-    int flag;
+    bool skip;
 };
 
 static copyinfo mkcopyinfo(const char* spath, const char* dpath, const char* name, bool isdir) {
@@ -477,7 +477,7 @@ static copyinfo mkcopyinfo(const char* spath, const char* dpath, const char* nam
     result.time = 0;
     result.mode = 0;
     result.size = 0;
-    result.flag = 0;
+    result.skip = false;
     return result;
 }
 
@@ -572,14 +572,14 @@ static bool copy_local_dir_remote(SyncConnection& sc, const char* lpath, const c
                 /* for links, we cannot update the atime/mtime */
                 if ((S_ISREG(ci.mode & mode) && timestamp == ci.time) ||
                         (S_ISLNK(ci.mode & mode) && timestamp >= ci.time)) {
-                    ci.flag = 1;
+                    ci.skip = true;
                 }
             }
         }
     }
 
     for (const copyinfo& ci : filelist) {
-        if (ci.flag == 0) {
+        if (!ci.skip) {
             if (list_only) {
                 fprintf(stderr, "would push: %s -> %s\n", ci.src.c_str(),
                         ci.dst.c_str());
@@ -726,7 +726,7 @@ static bool copy_remote_dir_local(SyncConnection& sc, const char* rpath, const c
     int pulled = 0;
     int skipped = 0;
     for (const copyinfo &ci : filelist) {
-        if (ci.flag == 0) {
+        if (!ci.skip) {
             sc.Printf("pull: %s -> %s", ci.src.c_str(), ci.dst.c_str());
             if (!sync_recv(sc, ci.src.c_str(), ci.dst.c_str())) {
                 return false;
