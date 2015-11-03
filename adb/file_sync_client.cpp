@@ -495,13 +495,14 @@ static bool IsDotOrDotDot(const char* name) {
     return name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
 }
 
-static int local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist,
-                            const std::string& lpath, const std::string& rpath) {
+static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist,
+                             const std::string& lpath,
+                             const std::string& rpath) {
     std::vector<copyinfo> dirlist;
     std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(lpath.c_str()), closedir);
     if (!dir) {
         sc.Error("cannot open '%s': %s", lpath.c_str(), strerror(errno));
-        return -1;
+        return false;
     }
 
     dirent* de;
@@ -537,7 +538,7 @@ static int local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist,
         local_build_list(sc, filelist, ci.src.c_str(), ci.dst.c_str());
     }
 
-    return 0;
+    return true;
 }
 
 static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
@@ -558,7 +559,7 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
     std::vector<copyinfo> filelist;
     int pushed = 0;
     int skipped = 0;
-    if (local_build_list(sc, &filelist, lpath, rpath)) {
+    if (!local_build_list(sc, &filelist, lpath, rpath)) {
         return false;
     }
 
