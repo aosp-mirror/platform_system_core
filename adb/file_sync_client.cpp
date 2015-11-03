@@ -625,32 +625,55 @@ static bool copy_local_dir_remote(SyncConnection& sc, const char* lpath, const c
     return true;
 }
 
-bool do_sync_push(const char* lpath, const char* rpath) {
+bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
     SyncConnection sc;
     if (!sc.IsValid()) return false;
 
-    struct stat st;
-    if (stat(lpath, &st)) {
-        sc.Error("cannot stat '%s': %s", lpath, strerror(errno));
-        return false;
-    }
-
-    if (S_ISDIR(st.st_mode)) {
-        return copy_local_dir_remote(sc, lpath, rpath, false, false);
-    }
-
+    bool success = true;
     unsigned mode;
-    if (!sync_stat(sc, rpath, nullptr, &mode, nullptr)) return false;
-    std::string path_holder;
-    if (mode != 0 && S_ISDIR(mode)) {
-        // If we're copying a local file to a remote directory,
-        // we really want to copy to remote_dir + "/" + local_filename.
-        path_holder = android::base::StringPrintf("%s/%s", rpath, adb_basename(lpath).c_str());
-        rpath = path_holder.c_str();
+    if (!sync_stat(sc, dst, nullptr, &mode, nullptr)) return false;
+    bool dst_isdir = mode != 0 && S_ISDIR(mode);
+
+    if (!dst_isdir) {
+        if (srcs.size() > 1) {
+            sc.Error("target '%s' is not a directory", dst);
+            return false;
+        } else {
+            size_t dst_len = strlen(dst);
+            if (dst[dst_len - 1] == '/') {
+                sc.Error("failed to access '%s': Not a directory", dst);
+                return false;
+            }
+        }
     }
-    bool result = sync_send(sc, lpath, rpath, st.st_mtime, st.st_mode);
+
+    for (const char* src_path : srcs) {
+        const char* dst_path = dst;
+        struct stat st;
+        if (stat(src_path, &st)) {
+            sc.Error("cannot stat '%s': %s", src_path, strerror(errno));
+            success = false;
+            continue;
+        }
+
+        if (S_ISDIR(st.st_mode)) {
+            success &= copy_local_dir_remote(sc, src_path, dst, false, false);
+            continue;
+        }
+
+        std::string path_holder;
+        if (mode != 0 && S_ISDIR(mode)) {
+            // If we're copying a local file to a remote directory,
+            // we really want to copy to remote_dir + "/" + local_filename.
+            path_holder = android::base::StringPrintf(
+                "%s/%s", dst_path, adb_basename(src_path).c_str());
+            dst_path = path_holder.c_str();
+        }
+        success &= sync_send(sc, src_path, dst_path, st.st_mtime, st.st_mode);
+    }
+
     sc.Print("\n");
-    return result;
+    return success;
 }
 
 struct sync_ls_build_list_cb_args {
@@ -733,7 +756,7 @@ static int set_time_and_mode(const char *lpath, time_t time, unsigned int mode)
 }
 
 static bool copy_remote_dir_local(SyncConnection& sc, const char* rpath, const char* lpath,
-                                  int copy_attrs) {
+                                  bool copy_attrs) {
     // Make sure that both directory paths end in a slash.
     std::string rpath_clean(rpath);
     std::string lpath_clean(lpath);
@@ -774,43 +797,80 @@ static bool copy_remote_dir_local(SyncConnection& sc, const char* rpath, const c
     return true;
 }
 
-bool do_sync_pull(const char* rpath, const char* lpath, int copy_attrs) {
+bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
+                  bool copy_attrs) {
     SyncConnection sc;
     if (!sc.IsValid()) return false;
 
+    bool success = true;
     unsigned mode, time;
-    if (!sync_stat(sc, rpath, &time, &mode, nullptr)) return false;
-    if (mode == 0) {
-        sc.Error("remote object '%s' does not exist", rpath);
-        return false;
+    struct stat st;
+    if (stat(dst, &st)) {
+        // If we're only pulling one file, the destination path might point to
+        // a path that doesn't exist yet.
+        if (srcs.size() != 1 || errno != ENOENT) {
+            sc.Error("cannot stat '%s': %s", dst, strerror(errno));
+            return false;
+        }
     }
 
-    if (S_ISREG(mode) || S_ISLNK(mode) || S_ISCHR(mode) || S_ISBLK(mode)) {
-        std::string path_holder;
-        struct stat st;
-        if (stat(lpath, &st) == 0) {
-            if (S_ISDIR(st.st_mode)) {
-                // If we're copying a remote file to a local directory,
-                // we really want to copy to local_dir + "/" + basename(remote).
-                path_holder = android::base::StringPrintf("%s/%s", lpath, adb_basename(rpath).c_str());
-                lpath = path_holder.c_str();
-            }
-        }
-        if (!sync_recv(sc, rpath, lpath)) {
+    bool dst_isdir = S_ISDIR(st.st_mode);
+    if (!dst_isdir) {
+        if (srcs.size() > 1) {
+            sc.Error("target '%s' is not a directory", dst);
             return false;
         } else {
-            if (copy_attrs && set_time_and_mode(lpath, time, mode)) {
+            size_t dst_len = strlen(dst);
+            if (dst[dst_len - 1] == '/') {
+                sc.Error("failed to access '%s': Not a directory", dst);
                 return false;
             }
         }
-        sc.Print("\n");
-        return true;
-    } else if (S_ISDIR(mode)) {
-        return copy_remote_dir_local(sc, rpath, lpath, copy_attrs);
     }
 
-    sc.Error("remote object '%s' not a file or directory", rpath);
-    return false;
+    for (const char* src_path : srcs) {
+        const char* dst_path = dst;
+        if (!sync_stat(sc, src_path, &time, &mode, nullptr)) return false;
+        if (mode == 0) {
+            sc.Error("remote object '%s' does not exist", src_path);
+            success = false;
+            continue;
+        }
+
+        if (S_ISREG(mode) || S_ISLNK(mode) || S_ISCHR(mode) || S_ISBLK(mode)) {
+            std::string path_holder;
+            struct stat st;
+            if (stat(dst_path, &st) == 0) {
+                if (S_ISDIR(st.st_mode)) {
+                    // If we're copying a remote file to a local directory,
+                    // we really want to copy to local_dir + "/" +
+                    // basename(remote).
+                    path_holder = android::base::StringPrintf(
+                        "%s/%s", dst_path, adb_basename(src_path).c_str());
+                    dst_path = path_holder.c_str();
+                }
+            }
+            if (!sync_recv(sc, src_path, dst_path)) {
+                success = false;
+                continue;
+            } else {
+                if (copy_attrs && set_time_and_mode(dst_path, time, mode)) {
+                    success = false;
+                    continue;
+                }
+            }
+        } else if (S_ISDIR(mode)) {
+            success &= copy_remote_dir_local(sc, src_path, dst_path, copy_attrs);
+            continue;
+        } else {
+            sc.Error("remote object '%s' not a file or directory", src_path);
+            success = false;
+            continue;
+        }
+    }
+
+    sc.Print("\n");
+    return success;
 }
 
 bool do_sync_sync(const std::string& lpath, const std::string& rpath, bool list_only) {
