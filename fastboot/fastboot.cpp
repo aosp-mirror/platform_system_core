@@ -571,7 +571,7 @@ static struct sparse_file **load_sparse_files(int fd, int max_size)
 
 static int64_t get_target_sparse_limit(usb_handle* usb) {
     std::string max_download_size;
-    if (!fb_getvar(usb, "max-download-size", &max_download_size)) {
+    if (!fb_getvar(usb, "max-download-size", &max_download_size) || max_download_size.empty()) {
         fprintf(stderr, "target didn't report max-download-size\n");
         return 0;
     }
@@ -908,6 +908,10 @@ static void fb_perform_format(usb_handle* usb,
                 partition_type.c_str());
         return;
     }
+
+    // Some bootloaders (hammerhead, for example) use implicit hex.
+    // This code used to use strtol with base 16.
+    if (!android::base::StartsWith(partition_size, "0x")) partition_size = "0x" + partition_size;
 
     int64_t size;
     if (!android::base::ParseInt(partition_size.c_str(), &size)) {
