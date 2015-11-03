@@ -88,24 +88,6 @@ bool fb_getvar(usb_handle* usb, const std::string& key, std::string* value) {
     return true;
 }
 
-
-// Return true if this partition is supported by the fastboot format command.
-// It is also used to determine if we should first erase a partition before
-// flashing it with an ext4 filesystem.  See needs_erase()
-//
-// Not all devices report the filesystem type, so don't report any errors,
-// just return false.
-bool fb_format_supported(usb_handle *usb, const char *partition, const char *type_override) {
-    if (type_override) {
-        return fs_get_generator(type_override) != nullptr;
-    }
-    std::string partition_type;
-    if (!fb_getvar(usb, std::string("partition-type:") + partition, &partition_type)) {
-        return false;
-    }
-    return fs_get_generator(partition_type.c_str()) != nullptr;
-}
-
 static int cb_default(Action* a, int status, const char* resp) {
     if (status) {
         fprintf(stderr,"FAILED (%s)\n", resp);
