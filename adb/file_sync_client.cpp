@@ -187,6 +187,16 @@ class SyncConnection {
         line_printer_.Print(s, LinePrinter::ELIDE);
     }
 
+    void Printf(const char* fmt, ...) __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3))) {
+        std::string s;
+        va_list ap;
+        va_start(ap, fmt);
+        android::base::StringAppendV(&s, fmt, ap);
+        va_end(ap);
+
+        Print(s);
+    }
+
     void Error(const char* fmt, ...) __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3))) {
         std::string s = "adb: error: ";
 
@@ -308,7 +318,7 @@ static bool SendLargeFile(SyncConnection& sc, const char* path_and_mode,
         bytes_copied += ret;
 
         int percentage = static_cast<int>(bytes_copied * 100 / total_size);
-        sc.Print(android::base::StringPrintf("%s: %d%%", rpath, percentage));
+        sc.Printf("%s: %d%%", rpath, percentage);
     }
 
     adb_close(lfd);
@@ -431,7 +441,7 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath) 
         bytes_copied += msg.data.size;
 
         int percentage = static_cast<int>(bytes_copied * 100 / size);
-        sc.Print(android::base::StringPrintf("%s: %d%%", rpath, percentage));
+        sc.Printf("%s: %d%%", rpath, percentage);
     }
 
     adb_close(lfd);
@@ -609,11 +619,9 @@ static bool copy_local_dir_remote(SyncConnection& sc, const char* lpath, const c
         free(ci);
     }
 
-    sc.Print(android::base::StringPrintf("%s: %d file%s pushed. %d file%s skipped.%s\n",
-                                         rpath,
-                                         pushed, (pushed == 1) ? "" : "s",
-                                         skipped, (skipped == 1) ? "" : "s",
-                                         sc.TransferRate().c_str()));
+    sc.Printf("%s: %d file%s pushed. %d file%s skipped.%s\n", rpath, pushed,
+              (pushed == 1) ? "" : "s", skipped, (skipped == 1) ? "" : "s",
+              sc.TransferRate().c_str());
     return true;
 }
 
@@ -678,7 +686,7 @@ static void sync_ls_build_list_cb(unsigned mode, unsigned size, unsigned time,
         ci->next = *filelist;
         *filelist = ci;
     } else {
-        args->sc->Print(android::base::StringPrintf("skipping special file '%s'\n", name));
+        args->sc->Printf("skipping special file '%s'\n", name);
     }
 }
 
@@ -744,7 +752,7 @@ static bool copy_remote_dir_local(SyncConnection& sc, const char* rpath, const c
     while (ci) {
         copyinfo* next = ci->next;
         if (ci->flag == 0) {
-            sc.Print(android::base::StringPrintf("pull: %s -> %s", ci->src, ci->dst));
+            sc.Printf("pull: %s -> %s", ci->src, ci->dst);
             if (!sync_recv(sc, ci->src, ci->dst)) {
                 return false;
             }
@@ -760,11 +768,9 @@ static bool copy_remote_dir_local(SyncConnection& sc, const char* rpath, const c
         ci = next;
     }
 
-    sc.Print(android::base::StringPrintf("%s: %d file%s pulled. %d file%s skipped.%s\n",
-                                         rpath,
-                                         pulled, (pulled == 1) ? "" : "s",
-                                         skipped, (skipped == 1) ? "" : "s",
-                                         sc.TransferRate().c_str()));
+    sc.Printf("%s: %d file%s pulled. %d file%s skipped.%s\n", rpath, pulled,
+              (pulled == 1) ? "" : "s", skipped, (skipped == 1) ? "" : "s",
+              sc.TransferRate().c_str());
     return true;
 }
 
