@@ -41,6 +41,7 @@
 
 #if !defined(_WIN32)
 #include <signal.h>
+#include <termio.h>
 #include <termios.h>
 #include <unistd.h>
 #endif
@@ -247,17 +248,17 @@ static int usage() {
 #if defined(_WIN32)
 
 // Implemented in sysdeps_win32.cpp.
-void stdin_raw_init(int fd);
-void stdin_raw_restore(int fd);
+void stdin_raw_init();
+void stdin_raw_restore();
 
 #else
 static termios g_saved_terminal_state;
 
-static void stdin_raw_init(int fd) {
-    if (tcgetattr(fd, &g_saved_terminal_state)) return;
+static void stdin_raw_init() {
+    if (tcgetattr(STDIN_FILENO, &g_saved_terminal_state)) return;
 
     termios tio;
-    if (tcgetattr(fd, &tio)) return;
+    if (tcgetattr(STDIN_FILENO, &tio)) return;
 
     cfmakeraw(&tio);
 
@@ -265,11 +266,11 @@ static void stdin_raw_init(int fd) {
     tio.c_cc[VTIME] = 0;
     tio.c_cc[VMIN] = 1;
 
-    tcsetattr(fd, TCSAFLUSH, &tio);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &tio);
 }
 
-static void stdin_raw_restore(int fd) {
-    tcsetattr(fd, TCSAFLUSH, &g_saved_terminal_state);
+static void stdin_raw_restore() {
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &g_saved_terminal_state);
 }
 #endif
 
@@ -358,7 +359,7 @@ static void copy_to_file(int inFd, int outFd) {
     D("copy_to_file(%d -> %d)", inFd, outFd);
 
     if (inFd == STDIN_FILENO) {
-        stdin_raw_init(STDIN_FILENO);
+        stdin_raw_init();
 #ifdef _WIN32
         old_stdin_mode = _setmode(STDIN_FILENO, _O_BINARY);
         if (old_stdin_mode == -1) {
@@ -400,7 +401,7 @@ static void copy_to_file(int inFd, int outFd) {
     }
 
     if (inFd == STDIN_FILENO) {
-        stdin_raw_restore(STDIN_FILENO);
+        stdin_raw_restore();
 #ifdef _WIN32
         if (_setmode(STDIN_FILENO, old_stdin_mode) == -1) {
             fatal_errno("could not restore stdin mode");
@@ -420,7 +421,44 @@ static void copy_to_file(int inFd, int outFd) {
     free(buf);
 }
 
-namespace {
+static std::string format_host_command(const char* command,
+                                       TransportType type, const char* serial) {
+    if (serial) {
+        return android::base::StringPrintf("host-serial:%s:%s", serial, command);
+    }
+
+    const char* prefix = "host";
+    if (type == kTransportUsb) {
+        prefix = "host-usb";
+    } else if (type == kTransportLocal) {
+        prefix = "host-local";
+    }
+    return android::base::StringPrintf("%s:%s", prefix, command);
+}
+
+// Returns the FeatureSet for the indicated transport.
+static FeatureSet GetFeatureSet(TransportType transport_type, const char* serial) {
+    std::string result, error;
+    if (adb_query(format_host_command("features", transport_type, serial), &result, &error)) {
+        return StringToFeatureSet(result);
+    }
+    return FeatureSet();
+}
+
+static void send_window_size_change(int fd, std::unique_ptr<ShellProtocol>& shell) {
+#if !defined(_WIN32)
+    // Old devices can't handle window size changes.
+    if (shell == nullptr) return;
+
+    winsize ws;
+    if (ioctl(fd, TIOCGWINSZ, &ws) == -1) return;
+
+    // Send the new window size as human-readable ASCII for debugging convenience.
+    size_t l = snprintf(shell->data(), shell->data_capacity(), "%dx%d,%dx%d",
+                        ws.ws_row, ws.ws_col, ws.ws_xpixel, ws.ws_ypixel);
+    shell->Write(ShellProtocol::kIdWindowSizeChange, l + 1);
+#endif
+}
 
 // Used to pass multiple values to the stdin read thread.
 struct StdinReadArgs {
@@ -429,38 +467,56 @@ struct StdinReadArgs {
     std::unique_ptr<ShellProtocol> protocol;
 };
 
-}  // namespace
-
 // Loops to read from stdin and push the data to the given FD.
 // The argument should be a pointer to a StdinReadArgs object. This function
 // will take ownership of the object and delete it when finished.
-static void* stdin_read_thread(void* x) {
+static void* stdin_read_thread_loop(void* x) {
     std::unique_ptr<StdinReadArgs> args(reinterpret_cast<StdinReadArgs*>(x));
     int state = 0;
 
-    adb_thread_setname("stdin reader");
-
-#ifndef _WIN32
-    // Mask SIGTTIN in case we're in a backgrounded process
+#if !defined(_WIN32)
+    // Mask SIGTTIN in case we're in a backgrounded process.
     sigset_t sigset;
     sigemptyset(&sigset);
     sigaddset(&sigset, SIGTTIN);
     pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
 #endif
 
+#if !defined(_WIN32)
+    // Unblock SIGWINCH for this thread, so our read(2) below will be
+    // interrupted if the window size changes.
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGWINCH);
+    pthread_sigmask(SIG_UNBLOCK, &mask, nullptr);
+#endif
+
+    // Set up the initial window size.
+    send_window_size_change(args->stdin_fd, args->protocol);
+
     char raw_buffer[1024];
     char* buffer_ptr = raw_buffer;
     size_t buffer_size = sizeof(raw_buffer);
-    if (args->protocol) {
+    if (args->protocol != nullptr) {
         buffer_ptr = args->protocol->data();
         buffer_size = args->protocol->data_capacity();
     }
 
     while (true) {
         // Use unix_read() rather than adb_read() for stdin.
-        D("stdin_read_thread(): pre unix_read(fdi=%d,...)", args->stdin_fd);
+        D("stdin_read_thread_loop(): pre unix_read(fdi=%d,...)", args->stdin_fd);
+#if !defined(_WIN32)
+#undef read
+        int r = read(args->stdin_fd, buffer_ptr, buffer_size);
+        if (r == -1 && errno == EINTR) {
+            send_window_size_change(args->stdin_fd, args->protocol);
+            continue;
+        }
+#define read ___xxx_read
+#else
         int r = unix_read(args->stdin_fd, buffer_ptr, buffer_size);
-        D("stdin_read_thread(): post unix_read(fdi=%d,...)", args->stdin_fd);
+#endif
+        D("stdin_read_thread_loop(): post unix_read(fdi=%d,...)", args->stdin_fd);
         if (r <= 0) {
             // Only devices using the shell protocol know to close subprocess
             // stdin. For older devices we want to just leave the connection
@@ -477,8 +533,8 @@ static void* stdin_read_thread(void* x) {
         // process starts ignoring the signal. SSH also does this, see the
         // "escape characters" section on the ssh man page for more info.
         if (args->raw_stdin) {
-            for (int n = 0; n < r; n++){
-                switch(buffer_ptr[n]) {
+            for (int n = 0; n < r; n++) {
+                switch (buffer_ptr[n]) {
                 case '\n':
                     state = 1;
                     break;
@@ -486,16 +542,16 @@ static void* stdin_read_thread(void* x) {
                     state = 1;
                     break;
                 case '~':
-                    if(state == 1) {
+                    if (state == 1) {
                         state++;
                     } else {
                         state = 0;
                     }
                     break;
                 case '.':
-                    if(state == 2) {
-                        stdin_raw_restore(args->stdin_fd);
-                        fprintf(stderr,"\n* disconnect *\n");
+                    if (state == 2) {
+                        fprintf(stderr,"\r\n* disconnect *\r\n");
+                        stdin_raw_restore();
                         exit(0);
                     }
                 default:
@@ -574,53 +630,121 @@ static int RemoteShell(bool use_shell_protocol, const std::string& type_arg,
         args->protocol.reset(new ShellProtocol(args->write_fd));
     }
 
-    if (raw_stdin) {
-        stdin_raw_init(STDIN_FILENO);
-    }
+    if (raw_stdin) stdin_raw_init();
 
-    int exit_code = 0;
-    if (!adb_thread_create(stdin_read_thread, args)) {
+#if !defined(_WIN32)
+    // Ensure our process is notified if the local window size changes.
+    // We use sigaction(2) to ensure that the SA_RESTART flag is not set,
+    // because the whole reason we're sending signals is to unblock the read(2)!
+    // That also means we don't need to do anything in the signal handler:
+    // the side effect of delivering the signal is all we need.
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = [](int) {};
+    sa.sa_flags = 0;
+    sigaction(SIGWINCH, &sa, nullptr);
+
+    // Now block SIGWINCH in this thread (the main thread) and all threads spawned
+    // from it. The stdin read thread will unblock this signal to ensure that it's
+    // the thread that receives the signal.
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGWINCH);
+    pthread_sigmask(SIG_BLOCK, &mask, nullptr);
+#endif
+
+    // TODO: combine read_and_dump with stdin_read_thread to make life simpler?
+    int exit_code = 1;
+    if (!adb_thread_create(stdin_read_thread_loop, args)) {
         PLOG(ERROR) << "error starting stdin read thread";
-        exit_code = 1;
         delete args;
     } else {
         exit_code = read_and_dump(fd, use_shell_protocol);
     }
 
-    if (raw_stdin) {
-        stdin_raw_restore(STDIN_FILENO);
-    }
+    // TODO: properly exit stdin_read_thread_loop and close |fd|.
 
-    // TODO(dpursell): properly exit stdin_read_thread and close |fd|.
+    // TODO: we should probably install signal handlers for this.
+    // TODO: can we use atexit? even on Windows?
+    if (raw_stdin) stdin_raw_restore();
 
     return exit_code;
 }
 
+static int adb_shell(int argc, const char** argv,
+                     TransportType transport_type, const char* serial) {
+    FeatureSet features = GetFeatureSet(transport_type, serial);
 
-static std::string format_host_command(const char* command, TransportType type, const char* serial) {
-    if (serial) {
-        return android::base::StringPrintf("host-serial:%s:%s", serial, command);
+    bool use_shell_protocol = CanUseFeature(features, kFeatureShell2);
+    if (!use_shell_protocol) {
+        D("shell protocol not supported, using raw data transfer");
+    } else {
+        D("using shell protocol");
     }
 
-    const char* prefix = "host";
-    if (type == kTransportUsb) {
-        prefix = "host-usb";
-    } else if (type == kTransportLocal) {
-        prefix = "host-local";
+    // Parse shell-specific command-line options.
+    // argv[0] is always "shell".
+    --argc;
+    ++argv;
+    int t_arg_count = 0;
+    while (argc) {
+        if (!strcmp(argv[0], "-T") || !strcmp(argv[0], "-t")) {
+            if (!CanUseFeature(features, kFeatureShell2)) {
+                fprintf(stderr, "error: target doesn't support PTY args -Tt\n");
+                return 1;
+            }
+            // Like ssh, -t arguments are cumulative so that multiple -t's
+            // are needed to force a PTY.
+            if (argv[0][1] == 't') {
+                ++t_arg_count;
+            } else {
+                t_arg_count = -1;
+            }
+            --argc;
+            ++argv;
+        } else if (!strcmp(argv[0], "-x")) {
+            use_shell_protocol = false;
+            --argc;
+            ++argv;
+        } else {
+            break;
+        }
     }
-    return android::base::StringPrintf("%s:%s", prefix, command);
-}
 
-// Returns the FeatureSet for the indicated transport.
-static FeatureSet GetFeatureSet(TransportType transport_type,
-                                const char* serial) {
-    std::string result, error;
-
-    if (adb_query(format_host_command("features", transport_type, serial),
-                  &result, &error)) {
-        return StringToFeatureSet(result);
+    std::string shell_type_arg;
+    if (CanUseFeature(features, kFeatureShell2)) {
+        if (t_arg_count < 0) {
+            shell_type_arg = kShellServiceArgRaw;
+        } else if (t_arg_count == 0) {
+            // If stdin isn't a TTY, default to a raw shell; this lets
+            // things like `adb shell < my_script.sh` work as expected.
+            // Otherwise leave |shell_type_arg| blank which uses PTY for
+            // interactive shells and raw for non-interactive.
+            if (!unix_isatty(STDIN_FILENO)) {
+                shell_type_arg = kShellServiceArgRaw;
+            }
+        } else if (t_arg_count == 1) {
+            // A single -t arg isn't enough to override implicit -T.
+            if (!unix_isatty(STDIN_FILENO)) {
+                fprintf(stderr,
+                        "Remote PTY will not be allocated because stdin is not a terminal.\n"
+                        "Use multiple -t options to force remote PTY allocation.\n");
+                shell_type_arg = kShellServiceArgRaw;
+            } else {
+                shell_type_arg = kShellServiceArgPty;
+            }
+        } else {
+            shell_type_arg = kShellServiceArgPty;
+        }
     }
-    return FeatureSet();
+
+    std::string command;
+    if (argc) {
+        // We don't escape here, just like ssh(1). http://b/20564385.
+        command = android::base::Join(std::vector<const char*>(argv, argv + argc), ' ');
+    }
+
+    return RemoteShell(use_shell_protocol, shell_type_arg, command);
 }
 
 static int adb_download_buffer(const char *service, const char *fn, const void* data, unsigned sz,
@@ -1343,94 +1467,8 @@ int adb_commandline(int argc, const char **argv) {
     else if (!strcmp(argv[0], "emu")) {
         return adb_send_emulator_command(argc, argv, serial);
     }
-    else if (!strcmp(argv[0], "shell") || !strcmp(argv[0], "hell")) {
-        char h = (argv[0][0] == 'h');
-
-        FeatureSet features = GetFeatureSet(transport_type, serial);
-
-        bool use_shell_protocol = CanUseFeature(features, kFeatureShell2);
-        if (!use_shell_protocol) {
-            D("shell protocol not supported, using raw data transfer");
-        } else {
-            D("using shell protocol");
-        }
-
-        // Parse shell-specific command-line options.
-        // argv[0] is always "shell".
-        --argc;
-        ++argv;
-        int t_arg_count = 0;
-        while (argc) {
-            if (!strcmp(argv[0], "-T") || !strcmp(argv[0], "-t")) {
-                if (!CanUseFeature(features, kFeatureShell2)) {
-                    fprintf(stderr, "error: target doesn't support PTY args -Tt\n");
-                    return 1;
-                }
-                // Like ssh, -t arguments are cumulative so that multiple -t's
-                // are needed to force a PTY.
-                if (argv[0][1] == 't') {
-                    ++t_arg_count;
-                } else {
-                    t_arg_count = -1;
-                }
-                --argc;
-                ++argv;
-            } else if (!strcmp(argv[0], "-x")) {
-                use_shell_protocol = false;
-                --argc;
-                ++argv;
-            } else {
-                break;
-            }
-        }
-
-        std::string shell_type_arg;
-        if (CanUseFeature(features, kFeatureShell2)) {
-            if (t_arg_count < 0) {
-                shell_type_arg = kShellServiceArgRaw;
-            } else if (t_arg_count == 0) {
-                // If stdin isn't a TTY, default to a raw shell; this lets
-                // things like `adb shell < my_script.sh` work as expected.
-                // Otherwise leave |shell_type_arg| blank which uses PTY for
-                // interactive shells and raw for non-interactive.
-                if (!unix_isatty(STDIN_FILENO)) {
-                    shell_type_arg = kShellServiceArgRaw;
-                }
-            } else if (t_arg_count == 1) {
-                // A single -t arg isn't enough to override implicit -T.
-                if (!unix_isatty(STDIN_FILENO)) {
-                    fprintf(stderr,
-                            "Remote PTY will not be allocated because stdin is not a terminal.\n"
-                            "Use multiple -t options to force remote PTY allocation.\n");
-                    shell_type_arg = kShellServiceArgRaw;
-                } else {
-                    shell_type_arg = kShellServiceArgPty;
-                }
-            } else {
-                shell_type_arg = kShellServiceArgPty;
-            }
-        }
-
-        std::string command;
-        if (argc) {
-            // We don't escape here, just like ssh(1). http://b/20564385.
-            command = android::base::Join(
-                    std::vector<const char*>(argv, argv + argc), ' ');
-        }
-
-        if (h) {
-            printf("\x1b[41;33m");
-            fflush(stdout);
-        }
-
-        r = RemoteShell(use_shell_protocol, shell_type_arg, command);
-
-        if (h) {
-            printf("\x1b[0m");
-            fflush(stdout);
-        }
-
-        return r;
+    else if (!strcmp(argv[0], "shell")) {
+        return adb_shell(argc, argv, transport_type, serial);
     }
     else if (!strcmp(argv[0], "exec-in") || !strcmp(argv[0], "exec-out")) {
         int exec_in = !strcmp(argv[0], "exec-in");
