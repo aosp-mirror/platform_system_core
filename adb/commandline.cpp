@@ -139,7 +139,7 @@ static void help() {
         "                                   localabstract:<unix domain socket name>\n"
         "                                   localreserved:<unix domain socket name>\n"
         "                                   localfilesystem:<unix domain socket name>\n"
-        "  adb reverse --norebind <remote> <local>\n"
+        "  adb reverse --no-rebind <remote> <local>\n"
         "                               - same as 'adb reverse <remote> <local>' but fails\n"
         "                                 if <remote> is already reversed.\n"
         "  adb reverse --remove <remote>\n"
