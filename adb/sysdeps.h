@@ -181,6 +181,17 @@ static __inline__ int  adb_open_mode(const char* path, int options, int mode)
 extern int unix_open(const char* path, int options, ...);
 #define  open    ___xxx_unix_open
 
+// Checks if |fd| corresponds to a console.
+// Standard Windows isatty() returns 1 for both console FDs and character
+// devices like NUL. unix_isatty() performs some extra checking to only match
+// console FDs.
+// |fd| must be a real file descriptor, meaning STDxx_FILENO or unix_open() FDs
+// will work but adb_open() FDs will not. Additionally the OS handle associated
+// with |fd| must have GENERIC_READ access (which console FDs have by default).
+// Returns 1 if |fd| is a console FD, 0 otherwise. The value of errno after
+// calling this function is unreliable and should not be used.
+int unix_isatty(int fd);
+#define  isatty  ___xxx_isatty
 
 /* normally provided by <cutils/misc.h> */
 extern void*  load_file(const char*  pathname, unsigned*  psize);
@@ -550,6 +561,11 @@ static __inline__  int  adb_creat(const char*  path, int  mode)
 }
 #undef   creat
 #define  creat  ___xxx_creat
+
+static __inline__ int unix_isatty(int fd) {
+    return isatty(fd);
+}
+#define  isatty  ___xxx_isatty
 
 // Helper for network_* functions.
 inline int _fd_set_error_str(int fd, std::string* error) {

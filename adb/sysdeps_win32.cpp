@@ -2499,10 +2499,52 @@ adb_sysdeps_init( void )
 //
 // Code organization:
 //
+// * _get_console_handle() and unix_isatty() provide console information.
 // * stdin_raw_init() and stdin_raw_restore() reconfigure the console.
 // * unix_read() detects console windows (as opposed to pipes, files, etc.).
 // * _console_read() is the main code of the emulation.
 
+// Returns a console HANDLE if |fd| is a console, otherwise returns nullptr.
+// If a valid HANDLE is returned and |mode| is not null, |mode| is also filled
+// with the console mode. Requires GENERIC_READ access to the underlying HANDLE.
+static HANDLE _get_console_handle(int fd, DWORD* mode=nullptr) {
+    // First check isatty(); this is very fast and eliminates most non-console
+    // FDs, but returns 1 for both consoles and character devices like NUL.
+#pragma push_macro("isatty")
+#undef isatty
+    if (!isatty(fd)) {
+        return nullptr;
+    }
+#pragma pop_macro("isatty")
+
+    // To differentiate between character devices and consoles we need to get
+    // the underlying HANDLE and use GetConsoleMode(), which is what requires
+    // GENERIC_READ permissions.
+    const intptr_t intptr_handle = _get_osfhandle(fd);
+    if (intptr_handle == -1) {
+        return nullptr;
+    }
+    const HANDLE handle = reinterpret_cast<const HANDLE>(intptr_handle);
+    DWORD temp_mode = 0;
+    if (!GetConsoleMode(handle, mode ? mode : &temp_mode)) {
+        return nullptr;
+    }
+
+    return handle;
+}
+
+// Returns a console handle if |stream| is a console, otherwise returns nullptr.
+static HANDLE _get_console_handle(FILE* const stream) {
+    const int fd = fileno(stream);
+    if (fd < 0) {
+        return nullptr;
+    }
+    return _get_console_handle(fd);
+}
+
+int unix_isatty(int fd) {
+    return _get_console_handle(fd) ? 1 : 0;
+}
 
 // Read an input record from the console; one that should be processed.
 static bool _get_interesting_input_record_uncached(const HANDLE console,
@@ -3302,20 +3344,7 @@ static HANDLE _console_handle;  // when set, console mode should be restored
 
 void stdin_raw_init(const int fd) {
     if (STDIN_FILENO == fd) {
-        const HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
-        if ((in == INVALID_HANDLE_VALUE) || (in == NULL)) {
-            return;
-        }
-
-        if (GetFileType(in) != FILE_TYPE_CHAR) {
-            // stdin might be a file or pipe.
-            return;
-        }
-
-        if (!GetConsoleMode(in, &_old_console_mode)) {
-            // If GetConsoleMode() fails, stdin is probably is not a console.
-            return;
-        }
+        const HANDLE in = _get_console_handle(fd, &_old_console_mode);
 
         // Disable ENABLE_PROCESSED_INPUT so that Ctrl-C is read instead of
         // calling the process Ctrl-C routine (configured by
@@ -3366,11 +3395,8 @@ int unix_read(int fd, void* buf, size_t len) {
     } else {
         // On older versions of Windows (definitely 7, definitely not 10),
         // ReadConsole() with a size >= 31367 fails, so if |fd| is a console
-        // we need to limit the read size. This may also catch devices like NUL,
-        // but that is OK as we just want to avoid capping pipes and files which
-        // don't need size limiting. This isatty() test is very simple and quick
-        // and doesn't call the OS.
-        if (isatty(fd) && len > 4096) {
+        // we need to limit the read size.
+        if (len > 4096 && unix_isatty(fd)) {
             len = 4096;
         }
         // Just call into C Runtime which can read from pipes/files and which
@@ -3723,40 +3749,6 @@ int adb_utime(const char* path, struct utimbuf* u) {
 // Version of chmod() that takes a UTF-8 path.
 int adb_chmod(const char* path, int mode) {
     return _wchmod(widen(path).c_str(), mode);
-}
-
-// Internal function to get a Win32 console HANDLE from a C Runtime FILE*.
-static HANDLE _get_console_handle(FILE* const stream) {
-    // Get a C Runtime file descriptor number from the FILE* structure.
-    const int fd = fileno(stream);
-    if (fd < 0) {
-        return NULL;
-    }
-
-    // If it is not a "character device", it is probably a file and not a
-    // console. Do this check early because it is probably cheap. Still do more
-    // checks after this since there are devices that pass this test, but are
-    // not a console, such as NUL, the Windows /dev/null equivalent (I think).
-    if (!isatty(fd)) {
-        return NULL;
-    }
-
-    // Given a C Runtime file descriptor number, get the underlying OS
-    // file handle.
-    const intptr_t osfh = _get_osfhandle(fd);
-    if (osfh == -1) {
-        return NULL;
-    }
-
-    const HANDLE h = reinterpret_cast<const HANDLE>(osfh);
-
-    DWORD old_mode = 0;
-    if (!GetConsoleMode(h, &old_mode)) {
-        return NULL;
-    }
-
-    // If GetConsoleMode() was successful, assume this is a console.
-    return h;
 }
 
 // Internal helper function to write UTF-8 bytes to a console. Returns -1

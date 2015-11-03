@@ -157,7 +157,7 @@ void adb_trace_init(char** argv) {
     // Don't open log file if no tracing, since this will block
     // the crypto unmount of /data
     if (!get_trace_setting().empty()) {
-        if (isatty(STDOUT_FILENO) == 0) {
+        if (unix_isatty(STDOUT_FILENO) == 0) {
             start_device_log();
         }
     }
