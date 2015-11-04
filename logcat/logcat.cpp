@@ -399,6 +399,10 @@ static log_time lastLogTime(char *outputFileName) {
     }
 
     log_time now(CLOCK_REALTIME);
+    bool monotonic = android_log_timestamp() == 'm';
+    if (monotonic) {
+        now = log_time(CLOCK_MONOTONIC);
+    }
 
     std::string directory;
     char *file = strrchr(outputFileName, '/');
@@ -417,7 +421,11 @@ static log_time lastLogTime(char *outputFileName) {
     struct dirent *dp;
     while ((dp = readdir(dir.get())) != NULL) {
         if ((dp->d_type != DT_REG)
-                || strncmp(dp->d_name, file, len)
+                // If we are using realtime, check all files that match the
+                // basename for latest time. If we are using monotonic time
+                // then only check the main file because time cycles on
+                // every reboot.
+                || strncmp(dp->d_name, file, len + monotonic)
                 || (dp->d_name[len]
                     && ((dp->d_name[len] != '.')
                         || !isdigit(dp->d_name[len+1])))) {
