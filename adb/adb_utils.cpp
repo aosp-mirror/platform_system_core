@@ -115,9 +115,7 @@ bool mkdirs(const std::string& path) {
   // - Recursive, so it uses stack space relative to number of directory
   //   components.
 
-  const std::string parent(adb_dirname(path));
-
-  if (directory_exists(parent)) {
+  if (directory_exists(path)) {
     return true;
   }
 
@@ -125,19 +123,21 @@ bool mkdirs(const std::string& path) {
   // This can happen on Windows when walking up the directory hierarchy and not
   // finding anything that already exists (unlike POSIX that will eventually
   // find . or /).
+  const std::string parent(adb_dirname(path));
+
   if (parent == path) {
     errno = ENOENT;
     return false;
   }
 
-  // Recursively make parent directories of 'parent'.
+  // Recursively make parent directories of 'path'.
   if (!mkdirs(parent)) {
     return false;
   }
 
-  // Now that the parent directory hierarchy of 'parent' has been ensured,
+  // Now that the parent directory hierarchy of 'path' has been ensured,
   // create parent itself.
-  if (adb_mkdir(parent, 0775) == -1) {
+  if (adb_mkdir(path, 0775) == -1) {
     // Can't just check for errno == EEXIST because it might be a file that
     // exists.
     const int saved_errno = errno;
