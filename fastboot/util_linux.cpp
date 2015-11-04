@@ -26,6 +26,8 @@
  * SUCH DAMAGE.
  */
 
+#include "fastboot.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

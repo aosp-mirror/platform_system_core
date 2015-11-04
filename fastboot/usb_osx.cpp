@@ -26,6 +26,7 @@
  * SUCH DAMAGE.
  */
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/IOKitLib.h>
@@ -74,7 +75,6 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
     HRESULT result;
     SInt32 score;
     UInt8 interfaceNumEndpoints;
-    UInt8 endpoint;
     UInt8 configuration;
 
     // Placing the constant KIOUSBFindInterfaceDontCare into the following
@@ -121,7 +121,7 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
         result = (*plugInInterface)->QueryInterface(
                 plugInInterface,
                 CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID),
-                (LPVOID) &interface);
+                (LPVOID*) &interface);
 
         // No longer need the intermediate plugin
         (*plugInInterface)->Release(plugInInterface);
@@ -181,7 +181,7 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
 
         // Iterate over the endpoints for this interface and see if there
         // are any that do bulk in/out.
-        for (endpoint = 0; endpoint <= interfaceNumEndpoints; endpoint++) {
+        for (UInt8 endpoint = 1; endpoint <= interfaceNumEndpoints; endpoint++) {
             UInt8   transferType;
             UInt16  maxPacketSize;
             UInt8   interval;
@@ -209,7 +209,7 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
                     handle->zero_mask = maxPacketSize - 1;
                 }
             } else {
-                ERR("could not get pipe properties\n");
+                ERR("could not get pipe properties for endpoint %u (%08x)\n", endpoint, kr);
             }
 
             if (handle->info.has_bulk_in && handle->info.has_bulk_out) {
@@ -279,7 +279,7 @@ static int try_device(io_service_t device, usb_handle *handle) {
 
     // Now create the device interface.
     result = (*plugin)->QueryInterface(plugin,
-            CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID), (LPVOID) &dev);
+            CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID), (LPVOID*) &dev);
     if ((result != 0) || (dev == NULL)) {
         ERR("Couldn't create a device interface (%08x)\n", (int) result);
         goto error;
@@ -292,6 +292,13 @@ static int try_device(io_service_t device, usb_handle *handle) {
     IODestroyPlugInInterface(plugin);
 
     // So, we have a device, finally. Grab its vitals.
+
+
+    kr = (*dev)->USBDeviceOpen(dev);
+    if (kr != 0) {
+        WARN("USBDeviceOpen");
+        goto out;
+    }
 
     kr = (*dev)->GetDeviceVendor(dev, &handle->info.dev_vendor);
     if (kr != 0) {
@@ -365,12 +372,16 @@ static int try_device(io_service_t device, usb_handle *handle) {
         goto error;
     }
 
+    out:
+
+    (*dev)->USBDeviceClose(dev);
     (*dev)->Release(dev);
     return 0;
 
     error:
 
     if (dev != NULL) {
+        (*dev)->USBDeviceClose(dev);
         (*dev)->Release(dev);
     }
 
@@ -432,7 +443,7 @@ static int init_usb(ifc_match_func callback, usb_handle **handle) {
         }
 
         if (h.success) {
-            *handle = calloc(1, sizeof(usb_handle));
+            *handle = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
             memcpy(*handle, &h, sizeof(usb_handle));
             ret = 0;
             break;

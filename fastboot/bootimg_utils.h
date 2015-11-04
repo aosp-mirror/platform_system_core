@@ -30,20 +30,14 @@
 #define _FASTBOOT_BOOTIMG_UTILS_H_
 
 #include <bootimg.h>
+#include <inttypes.h>
+#include <sys/types.h>
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
-
-void bootimg_set_cmdline(boot_img_hdr *h, const char *cmdline);
-boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size, unsigned kernel_offset,
-                        void *ramdisk, unsigned ramdisk_size, unsigned ramdisk_offset,
-                        void *second, unsigned second_size, unsigned second_offset,
-                        unsigned page_size, unsigned base, unsigned tags_offset,
-                        unsigned *bootimg_size);
-
-#if defined(__cplusplus)
-}
-#endif
+void bootimg_set_cmdline(boot_img_hdr* h, const char* cmdline);
+boot_img_hdr* mkbootimg(void* kernel, int64_t kernel_size, off_t kernel_offset,
+                        void* ramdisk, int64_t ramdisk_size, off_t ramdisk_offset,
+                        void* second, int64_t second_size, off_t second_offset,
+                        size_t page_size, size_t base, off_t tags_offset,
+                        int64_t* bootimg_size);
 
 #endif

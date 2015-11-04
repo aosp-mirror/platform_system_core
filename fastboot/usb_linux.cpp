@@ -26,29 +26,22 @@
  * SUCH DAMAGE.
  */
 
+#include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <pthread.h>
-#include <ctype.h>
+#include <unistd.h>
 
 #include <linux/usbdevice_fs.h>
-#include <linux/usbdevice_fs.h>
 #include <linux/version.h>
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
 #include <linux/usb/ch9.h>
-#else
-#include <linux/usb_ch9.h>
-#endif
-#include <asm/byteorder.h>
 
 #include "fastboot.h"
 #include "usb.h"
@@ -69,9 +62,19 @@
 #define DBG1(x...)
 #endif
 
-/* The max bulk size for linux is 16384 which is defined
- * in drivers/usb/core/devio.c.
- */
+// Kernels before 3.3 have a 16KiB transfer limit. That limit was replaced
+// with a 16MiB global limit in 3.3, but each URB submitted required a
+// contiguous kernel allocation, so you would get ENOMEM if you tried to
+// send something larger than the biggest available contiguous kernel
+// memory region. 256KiB contiguous allocations are generally not reliable
+// on a device kernel that has been running for a while fragmenting its
+// memory, but that shouldn't be a problem for fastboot on the host.
+// In 3.6, the contiguous buffer limit was removed by allocating multiple
+// 16KiB chunks and having the USB driver stitch them back together while
+// transmitting using a scatter-gather list, so 256KiB bulk transfers should
+// be reliable.
+// 256KiB seems to work, but 1MiB bulk transfers lock up my z620 with a 3.13
+// kernel.
 #define MAX_USBFS_BULK_SIZE (16 * 1024)
 
 struct usb_handle
@@ -340,7 +343,7 @@ static usb_handle *find_usb_device(const char *base, ifc_match_func callback)
 
             if(filter_usb_device(de->d_name, desc, n, writable, callback,
                                  &in, &out, &ifc) == 0) {
-                usb = calloc(1, sizeof(usb_handle));
+                usb = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
                 strcpy(usb->fname, devname);
                 usb->ep_in = in;
                 usb->ep_out = out;

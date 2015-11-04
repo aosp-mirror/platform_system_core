@@ -26,22 +26,26 @@
  * SUCH DAMAGE.
  */
 
-#import <Carbon/Carbon.h>
+#include "fastboot.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <unistd.h>
+#include <limits.h>
 
-void get_my_path(char s[PATH_MAX])
+#include <windows.h>
+
+void get_my_path(char exe[PATH_MAX])
 {
-    CFBundleRef mainBundle = CFBundleGetMainBundle();
-    CFURLRef executableURL = CFBundleCopyExecutableURL(mainBundle);
-    CFStringRef executablePathString = CFURLCopyFileSystemPath(executableURL, kCFURLPOSIXPathStyle);
-    CFRelease(executableURL);
+	char*  r;
 
-    CFStringGetFileSystemRepresentation(executablePathString, s, PATH_MAX-1);
-    CFRelease(executablePathString);
-
-	char *x;
-    x = strrchr(s, '/');
-    if(x) x[1] = 0;
+	GetModuleFileName( NULL, exe, PATH_MAX-1 );
+	exe[PATH_MAX-1] = 0;
+	r = strrchr( exe, '\\' );
+	if (r)
+		*r = 0;
 }
-
 

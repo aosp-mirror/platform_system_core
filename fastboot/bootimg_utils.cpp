@@ -32,32 +32,27 @@
 #include <stdlib.h>
 #include <string.h>
 
-void bootimg_set_cmdline(boot_img_hdr *h, const char *cmdline)
+void bootimg_set_cmdline(boot_img_hdr* h, const char* cmdline)
 {
     strcpy((char*) h->cmdline, cmdline);
 }
 
-boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size, unsigned kernel_offset,
-                        void *ramdisk, unsigned ramdisk_size, unsigned ramdisk_offset,
-                        void *second, unsigned second_size, unsigned second_offset,
-                        unsigned page_size, unsigned base, unsigned tags_offset,
-                        unsigned *bootimg_size)
+boot_img_hdr* mkbootimg(void* kernel, int64_t kernel_size, off_t kernel_offset,
+                        void* ramdisk, int64_t ramdisk_size, off_t ramdisk_offset,
+                        void* second, int64_t second_size, off_t second_offset,
+                        size_t page_size, size_t base, off_t tags_offset,
+                        int64_t* bootimg_size)
 {
-    unsigned kernel_actual;
-    unsigned ramdisk_actual;
-    unsigned second_actual;
-    unsigned page_mask;
+    size_t page_mask = page_size - 1;
 
-    page_mask = page_size - 1;
-
-    kernel_actual = (kernel_size + page_mask) & (~page_mask);
-    ramdisk_actual = (ramdisk_size + page_mask) & (~page_mask);
-    second_actual = (second_size + page_mask) & (~page_mask);
+    int64_t kernel_actual = (kernel_size + page_mask) & (~page_mask);
+    int64_t ramdisk_actual = (ramdisk_size + page_mask) & (~page_mask);
+    int64_t second_actual = (second_size + page_mask) & (~page_mask);
 
     *bootimg_size = page_size + kernel_actual + ramdisk_actual + second_actual;
 
     boot_img_hdr* hdr = reinterpret_cast<boot_img_hdr*>(calloc(*bootimg_size, 1));
-    if (hdr == 0) {
+    if (hdr == nullptr) {
         return hdr;
     }
 
@@ -74,12 +69,9 @@ boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size, unsigned kernel_offs
 
     hdr->page_size =    page_size;
 
+    memcpy(hdr->magic + page_size, kernel, kernel_size);
+    memcpy(hdr->magic + page_size + kernel_actual, ramdisk, ramdisk_size);
+    memcpy(hdr->magic + page_size + kernel_actual + ramdisk_actual, second, second_size);
 
-    memcpy(hdr->magic + page_size,
-           kernel, kernel_size);
-    memcpy(hdr->magic + page_size + kernel_actual,
-           ramdisk, ramdisk_size);
-    memcpy(hdr->magic + page_size + kernel_actual + ramdisk_actual,
-           second, second_size);
     return hdr;
 }

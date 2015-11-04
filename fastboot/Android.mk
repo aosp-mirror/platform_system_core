@@ -21,7 +21,7 @@ include $(CLEAR_VARS)
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/../mkbootimg \
   $(LOCAL_PATH)/../../extras/ext4_utils \
   $(LOCAL_PATH)/../../extras/f2fs_utils
-LOCAL_SRC_FILES := protocol.c engine.c bootimg_utils.cpp fastboot.cpp util.c fs.c
+LOCAL_SRC_FILES := protocol.cpp engine.cpp bootimg_utils.cpp fastboot.cpp util.cpp fs.cpp
 LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
 LOCAL_CONLYFLAGS += -std=gnu99
@@ -29,33 +29,7 @@ LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
 
 LOCAL_CFLAGS += -DFASTBOOT_REVISION='"$(fastboot_version)"'
 
-ifeq ($(HOST_OS),linux)
-  LOCAL_SRC_FILES += usb_linux.c util_linux.c
-endif
-
-ifeq ($(HOST_OS),darwin)
-  LOCAL_SRC_FILES += usb_osx.c util_osx.c
-  LOCAL_LDLIBS += -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
-  LOCAL_CFLAGS += -Wno-unused-parameter
-endif
-
-ifeq ($(HOST_OS),windows)
-  LOCAL_SRC_FILES += usb_windows.c util_windows.c
-  EXTRA_STATIC_LIBS := AdbWinApi
-  ifneq ($(strip $(USE_CYGWIN)),)
-    # Pure cygwin case
-    LOCAL_LDLIBS += -lpthread
-  endif
-  ifneq ($(strip $(USE_MINGW)),)
-    # MinGW under Linux case
-    LOCAL_LDLIBS += -lws2_32
-    USE_SYSDEPS_WIN32 := 1
-  endif
-  LOCAL_C_INCLUDES += development/host/windows/usb/api
-endif
-
-LOCAL_STATIC_LIBRARIES := \
-    $(EXTRA_STATIC_LIBS) \
+LOCAL_STATIC_LIBRARIES += \
     libziparchive-host \
     libext4_utils_host \
     libsparse_host \
@@ -64,23 +38,37 @@ LOCAL_STATIC_LIBRARIES := \
     libz \
     libbase
 
-ifneq ($(HOST_OS),windows)
-LOCAL_STATIC_LIBRARIES += libselinux
-endif # HOST_OS != windows
-
 ifeq ($(HOST_OS),linux)
-# libf2fs_dlutils_host will dlopen("libf2fs_fmt_host_dyn")
-LOCAL_CFLAGS += -DUSE_F2FS
-LOCAL_LDFLAGS += -ldl -rdynamic -Wl,-rpath,.
-LOCAL_REQUIRED_MODULES := libf2fs_fmt_host_dyn
-# The following libf2fs_* are from system/extras/f2fs_utils,
-# and do not use code in external/f2fs-tools.
-LOCAL_STATIC_LIBRARIES += libf2fs_utils_host libf2fs_ioutils_host libf2fs_dlutils_host
+  LOCAL_SRC_FILES += usb_linux.cpp util_linux.cpp
+  LOCAL_STATIC_LIBRARIES += libselinux
+
+  # libf2fs_dlutils_host will dlopen("libf2fs_fmt_host_dyn")
+  LOCAL_CFLAGS += -DUSE_F2FS
+  LOCAL_LDFLAGS += -ldl -rdynamic -Wl,-rpath,.
+  LOCAL_REQUIRED_MODULES += libf2fs_fmt_host_dyn
+  # The following libf2fs_* are from system/extras/f2fs_utils,
+  # and do not use code in external/f2fs-tools.
+  LOCAL_STATIC_LIBRARIES += libf2fs_utils_host libf2fs_ioutils_host libf2fs_dlutils_host
 endif
 
-# libc++ not available on windows yet
+ifeq ($(HOST_OS),darwin)
+  LOCAL_SRC_FILES += usb_osx.cpp util_osx.cpp
+  LOCAL_LDLIBS += -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
+  LOCAL_CFLAGS += -Wno-unused-parameter
+  LOCAL_STATIC_LIBRARIES += libselinux
+endif
+
+ifeq ($(HOST_OS),windows)
+  LOCAL_SRC_FILES += usb_windows.cpp util_windows.cpp
+  LOCAL_STATIC_LIBRARIES += AdbWinApi
+  LOCAL_REQUIRED_MODULES += AdbWinApi
+  LOCAL_LDLIBS += -lws2_32
+  LOCAL_C_INCLUDES += development/host/windows/usb/api
+endif
+
+# libc++ not available on windows yet.
 ifneq ($(HOST_OS),windows)
-    LOCAL_CXX_STL := libc++_static
+  LOCAL_CXX_STL := libc++_static
 endif
 
 # Don't add anything here, we don't want additional shared dependencies
@@ -97,10 +85,9 @@ endif
 $(call dist-for-goals,dist_files sdk,$(my_dist_files))
 my_dist_files :=
 
-
 ifeq ($(HOST_OS),linux)
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := usbtest.c usb_linux.c util.c
+LOCAL_SRC_FILES := usbtest.cpp usb_linux.cpp util.cpp
 LOCAL_MODULE := usbtest
 LOCAL_CFLAGS := -Werror
 include $(BUILD_HOST_EXECUTABLE)
