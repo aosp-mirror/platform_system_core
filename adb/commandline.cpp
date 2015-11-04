@@ -41,7 +41,7 @@
 
 #if !defined(_WIN32)
 #include <signal.h>
-#include <termio.h>
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 #endif
