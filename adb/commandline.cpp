@@ -58,6 +58,8 @@
 static int install_app(TransportType t, const char* serial, int argc, const char** argv);
 static int install_multiple_app(TransportType t, const char* serial, int argc, const char** argv);
 static int uninstall_app(TransportType t, const char* serial, int argc, const char** argv);
+static int install_app_legacy(TransportType t, const char* serial, int argc, const char** argv);
+static int uninstall_app_legacy(TransportType t, const char* serial, int argc, const char** argv);
 
 static std::string gProductOutPath;
 extern int gListenAll;
@@ -1585,7 +1587,11 @@ int adb_commandline(int argc, const char **argv) {
     }
     else if (!strcmp(argv[0], "install")) {
         if (argc < 2) return usage();
-        return install_app(transport_type, serial, argc, argv);
+        FeatureSet features = GetFeatureSet(transport_type, serial);
+        if (CanUseFeature(features, kFeatureCmd)) {
+            return install_app(transport_type, serial, argc, argv);
+        }
+        return install_app_legacy(transport_type, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "install-multiple")) {
         if (argc < 2) return usage();
@@ -1593,7 +1599,11 @@ int adb_commandline(int argc, const char **argv) {
     }
     else if (!strcmp(argv[0], "uninstall")) {
         if (argc < 2) return usage();
-        return uninstall_app(transport_type, serial, argc, argv);
+        FeatureSet features = GetFeatureSet(transport_type, serial);
+        if (CanUseFeature(features, kFeatureCmd)) {
+            return uninstall_app(transport_type, serial, argc, argv);
+        }
+        return uninstall_app_legacy(transport_type, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "sync")) {
         std::string src;
@@ -1701,86 +1711,83 @@ int adb_commandline(int argc, const char **argv) {
     return 1;
 }
 
-static int pm_command(TransportType transport, const char* serial, int argc, const char** argv) {
-    std::string cmd = "pm";
-
+static int uninstall_app(TransportType transport, const char* serial, int argc, const char** argv) {
+    // 'adb uninstall' takes the same arguments as 'cmd package uninstall' on device
+    std::string cmd = "cmd package";
     while (argc-- > 0) {
+        // deny the '-k' option until the remaining data/cache can be removed with adb/UI
+        if (strcmp(*argv, "-k") == 0) {
+            printf(
+                "The -k option uninstalls the application while retaining the data/cache.\n"
+                "At the moment, there is no way to remove the remaining data.\n"
+                "You will have to reinstall the application with the same signature, and fully uninstall it.\n"
+                "If you truly wish to continue, execute 'adb shell cmd package uninstall -k'.\n");
+            return EXIT_FAILURE;
+        }
         cmd += " " + escape_arg(*argv++);
     }
 
-    // TODO(dpursell): add command-line arguments to install/uninstall to
-    // manually disable shell protocol if needed.
-    return send_shell_command(transport, serial, cmd, false);
-}
-
-static int uninstall_app(TransportType transport, const char* serial, int argc, const char** argv) {
-    /* if the user choose the -k option, we refuse to do it until devices are
-       out with the option to uninstall the remaining data somehow (adb/ui) */
-    if (argc == 3 && strcmp(argv[1], "-k") == 0)
-    {
-        printf(
-            "The -k option uninstalls the application while retaining the data/cache.\n"
-            "At the moment, there is no way to remove the remaining data.\n"
-            "You will have to reinstall the application with the same signature, and fully uninstall it.\n"
-            "If you truly wish to continue, execute 'adb shell pm uninstall -k %s'\n", argv[2]);
-        return -1;
-    }
-
-    /* 'adb uninstall' takes the same arguments as 'pm uninstall' on device */
-    return pm_command(transport, serial, argc, argv);
-}
-
-static int delete_file(TransportType transport, const char* serial, const std::string& filename) {
-    std::string cmd = "rm -f " + escape_arg(filename);
     return send_shell_command(transport, serial, cmd, false);
 }
 
 static int install_app(TransportType transport, const char* serial, int argc, const char** argv) {
-    static const char *const DATA_DEST = "/data/local/tmp/%s";
-    static const char *const SD_DEST = "/sdcard/tmp/%s";
-    const char* where = DATA_DEST;
-    int i;
+    // The last argument must be the APK file
+    const char* file = argv[argc - 1];
+    const char* dot = strrchr(file, '.');
+    bool found_apk = false;
     struct stat sb;
-
-    for (i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-s")) {
-            where = SD_DEST;
+    if (dot && !strcasecmp(dot, ".apk")) {
+        if (stat(file, &sb) == -1 || !S_ISREG(sb.st_mode)) {
+            fprintf(stderr, "Invalid APK file: %s\n", file);
+            return EXIT_FAILURE;
         }
+        found_apk = true;
     }
 
-    // Find last APK argument.
-    // All other arguments passed through verbatim.
-    int last_apk = -1;
-    for (i = argc - 1; i >= 0; i--) {
-        const char* file = argv[i];
-        const char* dot = strrchr(file, '.');
-        if (dot && !strcasecmp(dot, ".apk")) {
-            if (stat(file, &sb) == -1 || !S_ISREG(sb.st_mode)) {
-                fprintf(stderr, "Invalid APK file: %s\n", file);
-                return -1;
-            }
-
-            last_apk = i;
-            break;
-        }
-    }
-
-    if (last_apk == -1) {
+    if (!found_apk) {
         fprintf(stderr, "Missing APK file\n");
-        return -1;
+        return EXIT_FAILURE;
     }
 
-    int result = -1;
-    std::vector<const char*> apk_file = {argv[last_apk]};
-    std::string apk_dest = android::base::StringPrintf(
-        where, adb_basename(argv[last_apk]).c_str());
-    if (!do_sync_push(apk_file, apk_dest.c_str())) goto cleanup_apk;
-    argv[last_apk] = apk_dest.c_str(); /* destination name, not source location */
-    result = pm_command(transport, serial, argc, argv);
+    int localFd = adb_open(file, O_RDONLY);
+    if (localFd < 0) {
+        fprintf(stderr, "Failed to open %s: %s\n", file, strerror(errno));
+        return 1;
+    }
 
-cleanup_apk:
-    delete_file(transport, serial, apk_dest);
-    return result;
+    std::string error;
+    std::string cmd = "exec:cmd package";
+
+    // don't copy the APK name, but, copy the rest of the arguments as-is
+    while (argc-- > 1) {
+        cmd += " " + escape_arg(std::string(*argv++));
+    }
+
+    // add size parameter [required for streaming installs]
+    // do last to override any user specified value
+    cmd += " " + android::base::StringPrintf("-S %" PRIu64, static_cast<uint64_t>(sb.st_size));
+
+    int remoteFd = adb_connect(cmd, &error);
+    if (remoteFd < 0) {
+        fprintf(stderr, "Connect error for write: %s\n", error.c_str());
+        adb_close(localFd);
+        return 1;
+    }
+
+    char buf[BUFSIZ];
+    copy_to_file(localFd, remoteFd);
+    read_status_line(remoteFd, buf, sizeof(buf));
+
+    adb_close(localFd);
+    adb_close(remoteFd);
+
+    if (strncmp("Success", buf, 7)) {
+        fprintf(stderr, "Failed to write %s\n", file);
+        fputs(buf, stderr);
+        return 1;
+    }
+    fputs(buf, stderr);
+    return 0;
 }
 
 static int install_multiple_app(TransportType transport, const char* serial, int argc,
@@ -1799,7 +1806,7 @@ static int install_multiple_app(TransportType transport, const char* serial, int
         if (dot && !strcasecmp(dot, ".apk")) {
             if (stat(file, &sb) == -1 || !S_ISREG(sb.st_mode)) {
                 fprintf(stderr, "Invalid APK file: %s\n", file);
-                return -1;
+                return EXIT_FAILURE;
             }
 
             total_size += sb.st_size;
@@ -1824,7 +1831,7 @@ static int install_multiple_app(TransportType transport, const char* serial, int
     int fd = adb_connect(cmd, &error);
     if (fd < 0) {
         fprintf(stderr, "Connect error for create: %s\n", error.c_str());
-        return -1;
+        return EXIT_FAILURE;
     }
     char buf[BUFSIZ];
     read_status_line(fd, buf, sizeof(buf));
@@ -1842,7 +1849,7 @@ static int install_multiple_app(TransportType transport, const char* serial, int
     if (session_id < 0) {
         fprintf(stderr, "Failed to create session\n");
         fputs(buf, stderr);
-        return -1;
+        return EXIT_FAILURE;
     }
 
     // Valid session, now stream the APKs
@@ -1897,7 +1904,7 @@ finalize_session:
     fd = adb_connect(service, &error);
     if (fd < 0) {
         fprintf(stderr, "Connect error for finalize: %s\n", error.c_str());
-        return -1;
+        return EXIT_FAILURE;
     }
     read_status_line(fd, buf, sizeof(buf));
     adb_close(fd);
@@ -1908,6 +1915,88 @@ finalize_session:
     } else {
         fprintf(stderr, "Failed to finalize session\n");
         fputs(buf, stderr);
-        return -1;
+        return EXIT_FAILURE;
     }
+}
+
+static int pm_command(TransportType transport, const char* serial, int argc, const char** argv) {
+    std::string cmd = "pm";
+
+    while (argc-- > 0) {
+        cmd += " " + escape_arg(*argv++);
+    }
+
+    return send_shell_command(transport, serial, cmd, false);
+}
+
+static int uninstall_app_legacy(TransportType transport, const char* serial, int argc, const char** argv) {
+    /* if the user choose the -k option, we refuse to do it until devices are
+       out with the option to uninstall the remaining data somehow (adb/ui) */
+    int i;
+    for (i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-k")) {
+            printf(
+                "The -k option uninstalls the application while retaining the data/cache.\n"
+                "At the moment, there is no way to remove the remaining data.\n"
+                "You will have to reinstall the application with the same signature, and fully uninstall it.\n"
+                "If you truly wish to continue, execute 'adb shell pm uninstall -k'\n.");
+            return EXIT_FAILURE;
+        }
+    }
+
+    /* 'adb uninstall' takes the same arguments as 'pm uninstall' on device */
+    return pm_command(transport, serial, argc, argv);
+}
+
+static int delete_file(TransportType transport, const char* serial, const std::string& filename) {
+    std::string cmd = "rm -f " + escape_arg(filename);
+    return send_shell_command(transport, serial, cmd, false);
+}
+
+static int install_app_legacy(TransportType transport, const char* serial, int argc, const char** argv) {
+    static const char *const DATA_DEST = "/data/local/tmp/%s";
+    static const char *const SD_DEST = "/sdcard/tmp/%s";
+    const char* where = DATA_DEST;
+    int i;
+    struct stat sb;
+
+    for (i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-s")) {
+            where = SD_DEST;
+        }
+    }
+
+    // Find last APK argument.
+    // All other arguments passed through verbatim.
+    int last_apk = -1;
+    for (i = argc - 1; i >= 0; i--) {
+        const char* file = argv[i];
+        const char* dot = strrchr(file, '.');
+        if (dot && !strcasecmp(dot, ".apk")) {
+            if (stat(file, &sb) == -1 || !S_ISREG(sb.st_mode)) {
+                fprintf(stderr, "Invalid APK file: %s\n", file);
+                return EXIT_FAILURE;
+            }
+
+            last_apk = i;
+            break;
+        }
+    }
+
+    if (last_apk == -1) {
+        fprintf(stderr, "Missing APK file\n");
+        return EXIT_FAILURE;
+    }
+
+    int result = -1;
+    std::vector<const char*> apk_file = {argv[last_apk]};
+    std::string apk_dest = android::base::StringPrintf(
+        where, adb_basename(argv[last_apk]).c_str());
+    if (!do_sync_push(apk_file, apk_dest.c_str())) goto cleanup_apk;
+    argv[last_apk] = apk_dest.c_str(); /* destination name, not source location */
+    result = pm_command(transport, serial, argc, argv);
+
+cleanup_apk:
+    delete_file(transport, serial, apk_dest);
+    return result;
 }
