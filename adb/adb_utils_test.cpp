@@ -102,6 +102,13 @@ TEST(adb_utils, escape_arg) {
 TEST(adb_utils, adb_basename) {
   EXPECT_EQ("sh", adb_basename("/system/bin/sh"));
   EXPECT_EQ("sh", adb_basename("sh"));
+  EXPECT_EQ("sh", adb_basename("/system/bin/sh/"));
+}
+
+TEST(adb_utils, adb_dirname) {
+  EXPECT_EQ("/system/bin", adb_dirname("/system/bin/sh"));
+  EXPECT_EQ(".", adb_dirname("sh"));
+  EXPECT_EQ("/system/bin", adb_dirname("/system/bin/sh/"));
 }
 
 TEST(adb_utils, parse_host_and_port) {
