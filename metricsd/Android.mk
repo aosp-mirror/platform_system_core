@@ -27,6 +27,7 @@ metrics_client_sources := \
 
 metrics_daemon_common := \
   collectors/averaged_statistics_collector.cc \
+  collectors/cpu_usage_collector.cc \
   collectors/disk_usage_collector.cc \
   metrics_daemon.cc \
   persistent_integer.cc \
@@ -41,6 +42,7 @@ metrics_daemon_common := \
 
 metrics_tests_sources := \
   collectors/averaged_statistics_collector_test.cc \
+  collectors/cpu_usage_collector_test.cc \
   metrics_daemon_test.cc \
   metrics_library_test.cc \
   persistent_integer_test.cc \
