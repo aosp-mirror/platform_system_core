@@ -54,7 +54,7 @@ int SHELL_EXIT_NOTIFY_FD = -1;
 
 struct PollNode {
   fdevent* fde;
-  pollfd pollfd;
+  ::pollfd pollfd;
 
   PollNode(fdevent* fde) : fde(fde) {
       memset(&pollfd, 0, sizeof(pollfd));
