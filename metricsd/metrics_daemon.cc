@@ -71,10 +71,8 @@ const char kUncleanShutdownDetectedFile[] =
 
 const int kMetricMeminfoInterval = 30;    // seconds
 
-const char kMetricsProcStatFileName[] = "/proc/stat";
 const char kMeminfoFileName[] = "/proc/meminfo";
 const char kVmStatFileName[] = "/proc/vmstat";
-const int kMetricsProcStatFirstLineItemsCount = 11;
 
 // Thermal CPU throttling.
 
@@ -103,9 +101,7 @@ static const int kMemuseIntervals[] = {
 
 MetricsDaemon::MetricsDaemon()
     : memuse_final_time_(0),
-      memuse_interval_index_(0),
-      ticks_per_second_(0),
-      latest_cpu_use_ticks_(0) {}
+      memuse_interval_index_(0) {}
 
 MetricsDaemon::~MetricsDaemon() {
 }
@@ -188,10 +184,6 @@ void MetricsDaemon::Init(bool testing,
   upload_interval_ = upload_interval;
   server_ = server;
 
-  // Get ticks per second (HZ) on this system.
-  // Sysconf cannot fail, so no sanity checks are needed.
-  ticks_per_second_ = sysconf(_SC_CLK_TCK);
-
   daily_active_use_.reset(
       new PersistentInteger("Platform.UseTime.PerDay"));
   version_cumulative_active_use_.reset(
@@ -235,6 +227,7 @@ void MetricsDaemon::Init(bool testing,
   averaged_stats_collector_.reset(
       new AveragedStatisticsCollector(metrics_lib_, diskstats_path,
                                       kVmStatFileName));
+  cpu_usage_collector_.reset(new CpuUsageCollector(metrics_lib_));
 }
 
 int MetricsDaemon::OnInit() {
@@ -290,6 +283,7 @@ int MetricsDaemon::OnInit() {
         base::Bind(&MetricsDaemon::OnDisableMetrics, base::Unretained(this)));
   }
 
+  latest_cpu_use_microseconds_ = cpu_usage_collector_->GetCumulativeCpuUse();
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
       base::Bind(&MetricsDaemon::HandleUpdateStatsTimeout,
                  base::Unretained(this)),
@@ -404,53 +398,6 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
   return DBUS_HANDLER_RESULT_HANDLED;
 }
 
-// One might argue that parts of this should go into
-// chromium/src/base/sys_info_chromeos.c instead, but put it here for now.
-
-TimeDelta MetricsDaemon::GetIncrementalCpuUse() {
-  FilePath proc_stat_path = FilePath(kMetricsProcStatFileName);
-  std::string proc_stat_string;
-  if (!base::ReadFileToString(proc_stat_path, &proc_stat_string)) {
-    LOG(WARNING) << "cannot open " << kMetricsProcStatFileName;
-    return TimeDelta();
-  }
-
-  std::vector<std::string> proc_stat_lines;
-  base::SplitString(proc_stat_string, '\n', &proc_stat_lines);
-  if (proc_stat_lines.empty()) {
-    LOG(WARNING) << "cannot parse " << kMetricsProcStatFileName
-                 << ": " << proc_stat_string;
-    return TimeDelta();
-  }
-  std::vector<std::string> proc_stat_totals;
-  base::SplitStringAlongWhitespace(proc_stat_lines[0], &proc_stat_totals);
-
-  uint64_t user_ticks, user_nice_ticks, system_ticks;
-  if (proc_stat_totals.size() != kMetricsProcStatFirstLineItemsCount ||
-      proc_stat_totals[0] != "cpu" ||
-      !base::StringToUint64(proc_stat_totals[1], &user_ticks) ||
-      !base::StringToUint64(proc_stat_totals[2], &user_nice_ticks) ||
-      !base::StringToUint64(proc_stat_totals[3], &system_ticks)) {
-    LOG(WARNING) << "cannot parse first line: " << proc_stat_lines[0];
-    return TimeDelta(base::TimeDelta::FromSeconds(0));
-  }
-
-  uint64_t total_cpu_use_ticks = user_ticks + user_nice_ticks + system_ticks;
-
-  // Sanity check.
-  if (total_cpu_use_ticks < latest_cpu_use_ticks_) {
-    LOG(WARNING) << "CPU time decreasing from " << latest_cpu_use_ticks_
-                 << " to " << total_cpu_use_ticks;
-    return TimeDelta();
-  }
-
-  uint64_t diff = total_cpu_use_ticks - latest_cpu_use_ticks_;
-  latest_cpu_use_ticks_ = total_cpu_use_ticks;
-  // Use microseconds to avoid significant truncations.
-  return base::TimeDelta::FromMicroseconds(
-      diff * 1000 * 1000 / ticks_per_second_);
-}
-
 void MetricsDaemon::ProcessUserCrash() {
   // Counts the active time up to now.
   UpdateStats(TimeTicks::Now(), Time::Now());
@@ -505,6 +452,9 @@ bool MetricsDaemon::CheckSystemCrash(const string& crash_file) {
 
 void MetricsDaemon::StatsReporterInit() {
   disk_usage_collector_->Schedule();
+
+  cpu_usage_collector_->Init();
+  cpu_usage_collector_->Schedule();
 
   // Don't start a collection cycle during the first run to avoid delaying the
   // boot.
@@ -910,7 +860,10 @@ void MetricsDaemon::UpdateStats(TimeTicks now_ticks,
   version_cumulative_active_use_->Add(elapsed_seconds);
   user_crash_interval_->Add(elapsed_seconds);
   kernel_crash_interval_->Add(elapsed_seconds);
-  version_cumulative_cpu_use_->Add(GetIncrementalCpuUse().InMilliseconds());
+  TimeDelta cpu_use = cpu_usage_collector_->GetCumulativeCpuUse();
+  version_cumulative_cpu_use_->Add(
+      (cpu_use - latest_cpu_use_microseconds_).InMilliseconds());
+  latest_cpu_use_microseconds_ = cpu_use;
   last_update_stats_time_ = now_ticks;
 
   const TimeDelta since_epoch = now_wall_time - Time::UnixEpoch();
