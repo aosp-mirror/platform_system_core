@@ -513,6 +513,18 @@ ScopedFd* Subprocess::PassInput() {
 
         if (stdinout_sfd_.valid()) {
             switch (input_->id()) {
+                case ShellProtocol::kIdWindowSizeChange:
+                    int rows, cols, x_pixels, y_pixels;
+                    if (sscanf(input_->data(), "%dx%d,%dx%d",
+                               &rows, &cols, &x_pixels, &y_pixels) == 4) {
+                        winsize ws;
+                        ws.ws_row = rows;
+                        ws.ws_col = cols;
+                        ws.ws_xpixel = x_pixels;
+                        ws.ws_ypixel = y_pixels;
+                        ioctl(stdinout_sfd_.fd(), TIOCSWINSZ, &ws);
+                    }
+                    break;
                 case ShellProtocol::kIdStdin:
                     input_bytes_left_ = input_->data_length();
                     break;
@@ -531,8 +543,7 @@ ScopedFd* Subprocess::PassInput() {
                         // non-interactively which is rare and unsupported.
                         // If necessary, the client can manually close the shell
                         // with `exit` or by killing the adb client process.
-                        D("can't close input for PTY FD %d",
-                          stdinout_sfd_.fd());
+                        D("can't close input for PTY FD %d", stdinout_sfd_.fd());
                     }
                     break;
             }
