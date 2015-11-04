@@ -54,8 +54,15 @@ class ShellProtocol {
         kIdStdout = 1,
         kIdStderr = 2,
         kIdExit = 3,
-        kIdCloseStdin = 4,  // Close subprocess stdin if possible.
-        kIdInvalid = 255,  // Indicates an invalid or unknown packet.
+
+        // Close subprocess stdin if possible.
+        kIdCloseStdin = 4,
+
+        // Window size change (an ASCII version of struct winsize).
+        kIdWindowSizeChange = 5,
+
+        // Indicates an invalid or unknown packet.
+        kIdInvalid = 255,
     };
 
     // ShellPackets will probably be too large to allocate on the stack so they
