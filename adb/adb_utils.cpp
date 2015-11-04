@@ -33,6 +33,7 @@
 #include "adb_trace.h"
 #include "sysdeps.h"
 
+ADB_MUTEX_DEFINE(basename_lock);
 ADB_MUTEX_DEFINE(dirname_lock);
 
 bool getcwd(std::string* s) {
@@ -69,13 +70,31 @@ std::string escape_arg(const std::string& s) {
 }
 
 std::string adb_basename(const std::string& path) {
-  size_t base = path.find_last_of(OS_PATH_SEPARATORS);
-  return (base != std::string::npos) ? path.substr(base + 1) : path;
+  // Copy path because basename may modify the string passed in.
+  std::string result(path);
+
+  // Use lock because basename() may write to a process global and return a
+  // pointer to that. Note that this locking strategy only works if all other
+  // callers to dirname in the process also grab this same lock.
+  adb_mutex_lock(&basename_lock);
+
+  // Note that if std::string uses copy-on-write strings, &str[0] will cause
+  // the copy to be made, so there is no chance of us accidentally writing to
+  // the storage for 'path'.
+  char* name = basename(&result[0]);
+
+  // In case dirname returned a pointer to a process global, copy that string
+  // before leaving the lock.
+  result.assign(name);
+
+  adb_mutex_unlock(&basename_lock);
+
+  return result;
 }
 
 std::string adb_dirname(const std::string& path) {
   // Copy path because dirname may modify the string passed in.
-  std::string parent_storage(path);
+  std::string result(path);
 
   // Use lock because dirname() may write to a process global and return a
   // pointer to that. Note that this locking strategy only works if all other
@@ -85,11 +104,11 @@ std::string adb_dirname(const std::string& path) {
   // Note that if std::string uses copy-on-write strings, &str[0] will cause
   // the copy to be made, so there is no chance of us accidentally writing to
   // the storage for 'path'.
-  char* parent = dirname(&parent_storage[0]);
+  char* parent = dirname(&result[0]);
 
   // In case dirname returned a pointer to a process global, copy that string
   // before leaving the lock.
-  const std::string result(parent);
+  result.assign(parent);
 
   adb_mutex_unlock(&dirname_lock);
 
