@@ -950,7 +950,6 @@ static int backup(int argc, const char** argv) {
     if (argc < 2) return usage();
 
     adb_unlink(filename);
-    mkdirs(filename);
     int outFd = adb_creat(filename, 0640);
     if (outFd < 0) {
         fprintf(stderr, "adb: unable to open file %s\n", filename);
