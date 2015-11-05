@@ -392,7 +392,12 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath) 
     if (!sc.SendRequest(ID_RECV, rpath)) return false;
 
     adb_unlink(lpath);
-    mkdirs(lpath);
+    if (!mkdirs(adb_dirname(lpath))) {
+        sc.Error("failed to create parent directory '%s': %s",
+                 adb_dirname(lpath).c_str(), strerror(errno));
+        return false;
+    }
+
     int lfd = adb_creat(lpath, 0644);
     if (lfd < 0) {
         sc.Error("cannot create '%s': %s", lpath, strerror(errno));
