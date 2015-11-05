@@ -102,9 +102,13 @@ LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/$(OSRELEASED_DIRECTORY)
 include $(BUILD_SYSTEM)/base_rules.mk
 
+# Optionally populate the BRILLO_CRASH_SERVER variable from a product
+# configuration file: brillo/crash_server.
+LOADED_BRILLO_CRASH_SERVER := $(call cfgtree-get-if-exists,brillo/crash_server)
+
 # If the crash server isn't set, use a blank value.  crash_sender
 # will log it as a configuration error.
-$(LOCAL_BUILT_MODULE): BRILLO_CRASH_SERVER ?= ""
+$(LOCAL_BUILT_MODULE): BRILLO_CRASH_SERVER ?= "$(LOADED_BRILLO_CRASH_SERVER)"
 $(LOCAL_BUILT_MODULE):
 	$(hide)mkdir -p $(dir $@)
 	echo $(BRILLO_CRASH_SERVER) > $@
