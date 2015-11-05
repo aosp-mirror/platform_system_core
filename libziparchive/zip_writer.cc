@@ -267,12 +267,12 @@ int32_t ZipWriter::CompressBytes(FileInfo* file, const void* data, size_t len) {
 
     if (z_stream_->avail_out == 0) {
       // The output is full, let's write it to disk.
-      size_t dataToWrite = z_stream_->next_out - buffer_.data();
-      if (fwrite(buffer_.data(), 1, dataToWrite, file_) != dataToWrite) {
+      size_t write_bytes = z_stream_->next_out - buffer_.data();
+      if (fwrite(buffer_.data(), 1, write_bytes, file_) != write_bytes) {
         return HandleError(kIoError);
       }
-      file->compressed_size += dataToWrite;
-      current_offset_ += dataToWrite;
+      file->compressed_size += write_bytes;
+      current_offset_ += write_bytes;
 
       // Reset the output buffer for the next input.
       z_stream_->next_out = buffer_.data();
@@ -288,18 +288,32 @@ int32_t ZipWriter::FlushCompressedBytes(FileInfo* file) {
   assert(z_stream_->next_out != nullptr);
   assert(z_stream_->avail_out != 0);
 
-  int zerr = deflate(z_stream_.get(), Z_FINISH);
+  // Keep deflating while there isn't enough space in the buffer to
+  // to complete the compress.
+  int zerr;
+  while ((zerr = deflate(z_stream_.get(), Z_FINISH)) == Z_OK) {
+    assert(z_stream_->avail_out == 0);
+    size_t write_bytes = z_stream_->next_out - buffer_.data();
+    if (fwrite(buffer_.data(), 1, write_bytes, file_) != write_bytes) {
+      return HandleError(kIoError);
+    }
+    file->compressed_size += write_bytes;
+    current_offset_ += write_bytes;
+
+    z_stream_->next_out = buffer_.data();
+    z_stream_->avail_out = buffer_.size();
+  }
   if (zerr != Z_STREAM_END) {
     return HandleError(kZlibError);
   }
 
-  size_t dataToWrite = z_stream_->next_out - buffer_.data();
-  if (dataToWrite != 0) {
-    if (fwrite(buffer_.data(), 1, dataToWrite, file_) != dataToWrite) {
+  size_t write_bytes = z_stream_->next_out - buffer_.data();
+  if (write_bytes != 0) {
+    if (fwrite(buffer_.data(), 1, write_bytes, file_) != write_bytes) {
       return HandleError(kIoError);
     }
-    file->compressed_size += dataToWrite;
-    current_offset_ += dataToWrite;
+    file->compressed_size += write_bytes;
+    current_offset_ += write_bytes;
   }
   z_stream_.reset();
   return kNoError;
