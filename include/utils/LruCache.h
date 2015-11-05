@@ -17,9 +17,8 @@
 #ifndef ANDROID_UTILS_LRU_CACHE_H
 #define ANDROID_UTILS_LRU_CACHE_H
 
+#include <memory>
 #include <unordered_set>
-
-#include <UniquePtr.h>
 
 #include "utils/TypeHelpers.h"  // hash_t
 
@@ -91,7 +90,7 @@ private:
         return result;
     }
 
-    UniquePtr<LruCacheSet> mSet;
+    std::unique_ptr<LruCacheSet> mSet;
     OnEntryRemoved<TKey, TValue>* mListener;
     Entry* mOldest;
     Entry* mYoungest;
