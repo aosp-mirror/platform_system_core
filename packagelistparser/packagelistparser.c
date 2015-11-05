@@ -29,7 +29,7 @@
 #define LOG_TAG "packagelistparser"
 #include <utils/Log.h>
 
-#include "packagelistparser.h"
+#include <packagelistparser/packagelistparser.h>
 
 #define CLOGE(fmt, ...) \
     do {\
