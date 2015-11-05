@@ -444,6 +444,7 @@ static int handle_encryptable(struct fstab *fstab, const struct fstab_rec* rec)
 {
     /* If this is block encryptable, need to trigger encryption */
     if (   (rec->fs_mgr_flags & MF_FORCECRYPT)
+        || (rec->fs_mgr_flags & MF_FORCEFDEORFBE)
         || (device_is_force_encrypted() && fs_mgr_is_encryptable(rec))) {
         if (umount(rec->mount_point) == 0) {
             return FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION;
@@ -881,7 +882,8 @@ int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc, char *real_blk_dev
         if (fstab->recs[i].fs_mgr_flags & MF_VOLDMANAGED) {
             continue;
         }
-        if (!(fstab->recs[i].fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT))) {
+        if (!(fstab->recs[i].fs_mgr_flags
+              & (MF_CRYPT | MF_FORCECRYPT | MF_FORCEFDEORFBE))) {
             continue;
         }
 

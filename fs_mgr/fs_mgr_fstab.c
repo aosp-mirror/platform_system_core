@@ -64,6 +64,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "encryptable=",MF_CRYPT },
     { "forceencrypt=",MF_FORCECRYPT },
     { "fileencryption",MF_FILEENCRYPTION },
+    { "forcefdeorfbe=",MF_FORCEFDEORFBE },
     { "nonremovable",MF_NONREMOVABLE },
     { "voldmanaged=",MF_VOLDMANAGED},
     { "length=",     MF_LENGTH },
@@ -137,6 +138,11 @@ static int parse_flags(char *flags, struct flag_list *fl,
                     }
                 } else if ((fl[i].flag == MF_FORCECRYPT) && flag_vals) {
                     /* The forceencrypt flag is followed by an = and the
+                     * location of the keys.  Get it and return it.
+                     */
+                    flag_vals->key_loc = strdup(strchr(p, '=') + 1);
+                } else if ((fl[i].flag == MF_FORCEFDEORFBE) && flag_vals) {
+                    /* The forcefdeorfbe flag is followed by an = and the
                      * location of the keys.  Get it and return it.
                      */
                     flag_vals->key_loc = strdup(strchr(p, '=') + 1);
@@ -464,12 +470,17 @@ int fs_mgr_is_verified(const struct fstab_rec *fstab)
 
 int fs_mgr_is_encryptable(const struct fstab_rec *fstab)
 {
-    return fstab->fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT);
+    return fstab->fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT | MF_FORCEFDEORFBE);
 }
 
 int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_FILEENCRYPTION;
+}
+
+int fs_mgr_is_convertible_to_fbe(const struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_FORCEFDEORFBE;
 }
 
 int fs_mgr_is_noemulatedsd(const struct fstab_rec *fstab)
