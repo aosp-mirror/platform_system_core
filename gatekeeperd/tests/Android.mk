@@ -20,7 +20,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := gatekeeperd-unit-tests
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_CFLAGS += -g -Wall -Werror -std=gnu++11 -Wno-missing-field-initializers
-LOCAL_SHARED_LIBRARIES := libgatekeeper libcrypto
+LOCAL_SHARED_LIBRARIES := libgatekeeper libcrypto libbase
 LOCAL_STATIC_LIBRARIES := libscrypt_static
 LOCAL_C_INCLUDES := external/scrypt/lib/crypto
 LOCAL_SRC_FILES := \
