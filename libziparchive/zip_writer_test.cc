@@ -20,6 +20,7 @@
 #include <base/test_utils.h>
 #include <gtest/gtest.h>
 #include <memory>
+#include <vector>
 
 struct zipwriter : public ::testing::Test {
   TemporaryFile* temp_file_;
@@ -165,6 +166,43 @@ TEST_F(zipwriter, WriteCompressedZipWithOneFile) {
   buffer[4] = 0;
 
   EXPECT_STREQ("helo", buffer);
+
+  CloseArchive(handle);
+}
+
+TEST_F(zipwriter, WriteCompressedZipFlushFull) {
+  // This exact data will cause the Finish() to require multiple calls
+  // to deflate() because the ZipWriter buffer isn't big enough to hold
+  // the entire compressed data buffer.
+  constexpr size_t kBufSize = 10000000;
+  std::vector<uint8_t> buffer(kBufSize);
+  size_t prev = 1;
+  for (size_t i = 0; i < kBufSize; i++) {
+    buffer[i] = i + prev;
+    prev = i;
+  }
+
+  ZipWriter writer(file_);
+  ASSERT_EQ(0, writer.StartEntry("file.txt", ZipWriter::kCompress));
+  ASSERT_EQ(0, writer.WriteBytes(buffer.data(), buffer.size()));
+  ASSERT_EQ(0, writer.FinishEntry());
+  ASSERT_EQ(0, writer.Finish());
+
+  ASSERT_GE(0, lseek(fd_, 0, SEEK_SET));
+
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
+
+  ZipEntry data;
+  ASSERT_EQ(0, FindEntry(handle, ZipString("file.txt"), &data));
+  EXPECT_EQ(kCompressDeflated, data.method);
+  EXPECT_EQ(kBufSize, data.uncompressed_length);
+
+  std::vector<uint8_t> decompress(kBufSize);
+  memset(decompress.data(), 0, kBufSize);
+  ASSERT_EQ(0, ExtractToMemory(handle, &data, decompress.data(), decompress.size()));
+  EXPECT_EQ(0, memcmp(decompress.data(), buffer.data(), kBufSize))
+      << "Input buffer and output buffer are different.";
 
   CloseArchive(handle);
 }
