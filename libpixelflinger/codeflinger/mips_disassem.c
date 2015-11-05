@@ -323,14 +323,14 @@ db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
             db_printf("ext\t%s,%s,%d,%d",
                     reg_name[i.RType.rt],
                     reg_name[i.RType.rs],
-                    i.RType.shamt,
-                    i.RType.rd+1);
+                    i.RType.rd+1,
+                    i.RType.shamt);
         else if (i.RType.func == OP_INS)
             db_printf("ins\t%s,%s,%d,%d",
                     reg_name[i.RType.rt],
                     reg_name[i.RType.rs],
-                    i.RType.shamt,
-                    i.RType.rd-i.RType.shamt+1);
+                    i.RType.rd+1,
+                    i.RType.shamt);
         else if (i.RType.func == OP_BSHFL && i.RType.shamt == OP_WSBH)
             db_printf("wsbh\t%s,%s",
                 reg_name[i.RType.rd],
