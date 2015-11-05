@@ -520,6 +520,252 @@ inline int64_t gglMulii(int32_t x, int32_t y)
     return res;
 }
 
+#elif defined(__mips__) && __mips_isa_rev == 6
+
+/*inline MIPS implementations*/
+inline GGLfixed gglMulx(GGLfixed a, GGLfixed b, int shift) CONST;
+inline GGLfixed gglMulx(GGLfixed a, GGLfixed b, int shift) {
+    GGLfixed result,tmp,tmp1,tmp2;
+
+    if (__builtin_constant_p(shift)) {
+        if (shift == 0) {
+            asm ("mul %[res], %[a], %[b] \t\n"
+            : [res]"=&r"(result)
+            : [a]"r"(a),[b]"r"(b)
+            );
+        } else if (shift == 32)
+        {
+            asm ("mul %[res], %[a], %[b] \t\n"
+            "li  %[tmp],1\t\n"
+            "sll  %[tmp],%[tmp],0x1f\t\n"
+            "addu %[tmp1],%[tmp],%[res] \t\n"
+            "muh %[res], %[a], %[b] \t\n"
+            "sltu %[tmp1],%[tmp1],%[tmp]\t\n"   /*obit*/
+            "sra %[tmp],%[tmp],0x1f \t\n"
+            "addu %[res],%[res],%[tmp]\t\n"
+            "addu %[res],%[res],%[tmp1]\t\n"
+            : [res]"=&r"(result),[tmp]"=&r"(tmp),[tmp1]"=&r"(tmp1)
+            : [a]"r"(a),[b]"r"(b),[shift]"I"(shift)
+            );
+        } else if ((shift >0) && (shift < 32))
+        {
+            asm ("mul %[res], %[a], %[b] \t\n"
+            "li  %[tmp],1 \t\n"
+            "sll  %[tmp],%[tmp],%[shiftm1] \t\n"
+            "addu %[tmp1],%[tmp],%[res] \t\n"
+            "sltu %[tmp1],%[tmp1],%[tmp] \t\n"  /*obit?*/
+            "addu  %[res],%[res],%[tmp] \t\n"
+            "muh %[tmp], %[a], %[b] \t\n"
+            "addu  %[tmp],%[tmp],%[tmp1] \t\n"
+            "sll   %[tmp],%[tmp],%[lshift] \t\n"
+            "srl   %[res],%[res],%[rshift]    \t\n"
+            "or    %[res],%[res],%[tmp] \t\n"
+            : [res]"=&r"(result),[tmp]"=&r"(tmp),[tmp1]"=&r"(tmp1),[tmp2]"=&r"(tmp2)
+            : [a]"r"(a),[b]"r"(b),[lshift]"I"(32-shift),[rshift]"I"(shift),[shiftm1]"I"(shift-1)
+            );
+        } else {
+            asm ("mul %[res], %[a], %[b] \t\n"
+            "li  %[tmp],1 \t\n"
+            "sll  %[tmp],%[tmp],%[shiftm1] \t\n"
+            "addu %[tmp1],%[tmp],%[res] \t\n"
+            "sltu %[tmp1],%[tmp1],%[tmp] \t\n"  /*obit?*/
+            "sra  %[tmp2],%[tmp],0x1f \t\n"
+            "addu  %[res],%[res],%[tmp] \t\n"
+            "muh  %[tmp], %[a], %[b]   \t\n"
+            "addu  %[tmp],%[tmp],%[tmp2] \t\n"
+            "addu  %[tmp],%[tmp],%[tmp1] \t\n"            /*tmp=hi*/
+            "srl   %[tmp2],%[res],%[rshift]    \t\n"
+            "srav  %[res], %[tmp],%[rshift]\t\n"
+            "sll   %[tmp],%[tmp],1 \t\n"
+            "sll   %[tmp],%[tmp],%[norbits] \t\n"
+            "or    %[tmp],%[tmp],%[tmp2] \t\n"
+            "seleqz  %[tmp],%[tmp],%[bit5] \t\n"
+            "selnez  %[res],%[res],%[bit5] \t\n"
+            "or    %[res],%[res],%[tmp] \t\n"
+            : [res]"=&r"(result),[tmp]"=&r"(tmp),[tmp1]"=&r"(tmp1),[tmp2]"=&r"(tmp2)
+            : [a]"r"(a),[b]"r"(b),[norbits]"I"(~(shift)),[rshift]"I"(shift),[shiftm1] "I"(shift-1),[bit5]"I"(shift & 0x20)
+            );
+        }
+    } else {
+        asm ("mul %[res], %[a], %[b] \t\n"
+        "li  %[tmp],1 \t\n"
+        "sll  %[tmp],%[tmp],%[shiftm1] \t\n"
+        "addu %[tmp1],%[tmp],%[res] \t\n"
+        "sltu %[tmp1],%[tmp1],%[tmp] \t\n"  /*obit?*/
+        "sra  %[tmp2],%[tmp],0x1f \t\n"
+        "addu  %[res],%[res],%[tmp] \t\n"
+        "muh  %[tmp], %[a], %[b] \t\n"
+        "addu  %[tmp],%[tmp],%[tmp2] \t\n"
+        "addu  %[tmp],%[tmp],%[tmp1] \t\n"            /*tmp=hi*/
+        "srl   %[tmp2],%[res],%[rshift]    \t\n"
+        "srav  %[res], %[tmp],%[rshift]\t\n"
+        "sll   %[tmp],%[tmp],1 \t\n"
+        "sll   %[tmp],%[tmp],%[norbits] \t\n"
+        "or    %[tmp],%[tmp],%[tmp2] \t\n"
+        "seleqz  %[tmp],%[tmp],%[bit5] \t\n"
+        "selnez  %[res],%[res],%[bit5] \t\n"
+        "or    %[res],%[res],%[tmp] \t\n"
+         : [res]"=&r"(result),[tmp]"=&r"(tmp),[tmp1]"=&r"(tmp1),[tmp2]"=&r"(tmp2)
+         : [a]"r"(a),[b]"r"(b),[norbits]"r"(~(shift)),[rshift] "r"(shift),[shiftm1]"r"(shift-1),[bit5] "r"(shift & 0x20)
+         );
+        }
+        return result;
+}
+
+inline GGLfixed gglMulAddx(GGLfixed a, GGLfixed b, GGLfixed c, int shift) CONST;
+inline GGLfixed gglMulAddx(GGLfixed a, GGLfixed b, GGLfixed c, int shift) {
+    GGLfixed result,t,tmp1,tmp2;
+
+    if (__builtin_constant_p(shift)) {
+        if (shift == 0) {
+                 asm ("mul %[lo], %[a], %[b] \t\n"
+                 "addu  %[lo],%[lo],%[c]    \t\n"
+                 : [lo]"=&r"(result)
+                 : [a]"r"(a),[b]"r"(b),[c]"r"(c)
+                 );
+                } else if (shift == 32) {
+                    asm ("muh %[lo], %[a], %[b] \t\n"
+                    "addu  %[lo],%[lo],%[c]    \t\n"
+                    : [lo]"=&r"(result)
+                    : [a]"r"(a),[b]"r"(b),[c]"r"(c)
+                    );
+                } else if ((shift>0) && (shift<32)) {
+                    asm ("mul %[res], %[a], %[b] \t\n"
+                    "muh  %[t], %[a], %[b] \t\n"
+                    "srl   %[res],%[res],%[rshift]    \t\n"
+                    "sll   %[t],%[t],%[lshift]     \t\n"
+                    "or  %[res],%[res],%[t]    \t\n"
+                    "addu  %[res],%[res],%[c]    \t\n"
+                    : [res]"=&r"(result),[t]"=&r"(t)
+                    : [a]"r"(a),[b]"r"(b),[c]"r"(c),[lshift]"I"(32-shift),[rshift]"I"(shift)
+                    );
+                } else {
+                    asm ("mul %[res], %[a], %[b] \t\n"
+                    "muh %[t], %[a], %[b] \t\n"
+                    "nor %[tmp1],$zero,%[shift]\t\n"
+                    "srl   %[res],%[res],%[shift]    \t\n"
+                    "sll   %[tmp2],%[t],1     \t\n"
+                    "sllv  %[tmp2],%[tmp2],%[tmp1]     \t\n"
+                    "or  %[tmp1],%[tmp2],%[res]    \t\n"
+                    "srav  %[res],%[t],%[shift]     \t\n"
+                    "andi %[tmp2],%[shift],0x20\t\n"
+                    "seleqz %[tmp1],%[tmp1],%[tmp2]\t\n"
+                    "selnez %[res],%[res],%[tmp2]\t\n"
+                    "or %[res],%[res],%[tmp1]\t\n"
+                    "addu  %[res],%[res],%[c]    \t\n"
+                    : [res]"=&r"(result),[t]"=&r"(t),[tmp1]"=&r"(tmp1),[tmp2]"=&r"(tmp2)
+                    : [a]"r"(a),[b]"r"(b),[c]"r"(c),[shift]"I"(shift)
+                    );
+                }
+            } else {
+                asm ("mul %[res], %[a], %[b] \t\n"
+                "muh %[t], %[a], %[b] \t\n"
+                "nor %[tmp1],$zero,%[shift]\t\n"
+                "srl   %[res],%[res],%[shift]    \t\n"
+                "sll   %[tmp2],%[t],1     \t\n"
+                "sllv  %[tmp2],%[tmp2],%[tmp1]     \t\n"
+                "or  %[tmp1],%[tmp2],%[res]    \t\n"
+                "srav  %[res],%[t],%[shift]     \t\n"
+                "andi %[tmp2],%[shift],0x20\t\n"
+                "seleqz %[tmp1],%[tmp1],%[tmp2]\t\n"
+                "selnez %[res],%[res],%[tmp2]\t\n"
+                "or %[res],%[res],%[tmp1]\t\n"
+                "addu  %[res],%[res],%[c]    \t\n"
+                : [res]"=&r"(result),[t]"=&r"(t),[tmp1]"=&r"(tmp1),[tmp2]"=&r"(tmp2)
+                : [a]"r"(a),[b]"r"(b),[c]"r"(c),[shift]"r"(shift)
+                );
+            }
+            return result;
+}
+
+inline GGLfixed gglMulSubx(GGLfixed a, GGLfixed b, GGLfixed c, int shift) CONST;
+inline GGLfixed gglMulSubx(GGLfixed a, GGLfixed b, GGLfixed c, int shift) {
+    GGLfixed result,t,tmp1,tmp2;
+
+    if (__builtin_constant_p(shift)) {
+        if (shift == 0) {
+                 asm ("mul %[lo], %[a], %[b] \t\n"
+                 "subu  %[lo],%[lo],%[c]    \t\n"
+                 : [lo]"=&r"(result)
+                 : [a]"r"(a),[b]"r"(b),[c]"r"(c)
+                 );
+                } else if (shift == 32) {
+                    asm ("muh %[lo], %[a], %[b] \t\n"
+                    "subu  %[lo],%[lo],%[c]    \t\n"
+                    : [lo]"=&r"(result)
+                    : [a]"r"(a),[b]"r"(b),[c]"r"(c)
+                    );
+                } else if ((shift>0) && (shift<32)) {
+                    asm ("mul %[res], %[a], %[b] \t\n"
+                    "muh %[t], %[a], %[b] \t\n"
+                    "srl   %[res],%[res],%[rshift]    \t\n"
+                    "sll   %[t],%[t],%[lshift]     \t\n"
+                    "or  %[res],%[res],%[t]    \t\n"
+                    "subu  %[res],%[res],%[c]    \t\n"
+                    : [res]"=&r"(result),[t]"=&r"(t)
+                    : [a]"r"(a),[b]"r"(b),[c]"r"(c),[lshift]"I"(32-shift),[rshift]"I"(shift)
+                    );
+                } else {
+                    asm ("mul %[res], %[a], %[b] \t\n"
+                    "muh %[t], %[a], %[b] \t\n"
+                    "nor %[tmp1],$zero,%[shift]\t\n"
+                    "srl   %[res],%[res],%[shift]    \t\n"
+                    "sll   %[tmp2],%[t],1     \t\n"
+                    "sllv  %[tmp2],%[tmp2],%[tmp1]     \t\n"
+                    "or  %[tmp1],%[tmp2],%[res]    \t\n"
+                    "srav  %[res],%[t],%[shift]     \t\n"
+                    "andi %[tmp2],%[shift],0x20\t\n"
+                    "seleqz %[tmp1],%[tmp1],%[tmp2]\t\n"
+                    "selnez %[res],%[res],%[tmp2]\t\n"
+                    "or %[res],%[res],%[tmp1]\t\n"
+                    "subu  %[res],%[res],%[c]    \t\n"
+                    : [res]"=&r"(result),[t]"=&r"(t),[tmp1]"=&r"(tmp1),[tmp2]"=&r"(tmp2)
+                    : [a]"r"(a),[b]"r"(b),[c]"r"(c),[shift]"I"(shift)
+                     );
+                    }
+                } else {
+                asm ("mul %[res], %[a], %[b] \t\n"
+                "muh %[t], %[a], %[b] \t\n"
+                "nor %[tmp1],$zero,%[shift]\t\n"
+                "srl   %[res],%[res],%[shift]    \t\n"
+                "sll   %[tmp2],%[t],1     \t\n"
+                "sllv  %[tmp2],%[tmp2],%[tmp1]     \t\n"
+                "or  %[tmp1],%[tmp2],%[res]    \t\n"
+                "srav  %[res],%[t],%[shift]     \t\n"
+                "andi %[tmp2],%[shift],0x20\t\n"
+                "seleqz %[tmp1],%[tmp1],%[tmp2]\t\n"
+                "selnez %[res],%[res],%[tmp2]\t\n"
+                "or %[res],%[res],%[tmp1]\t\n"
+                "subu  %[res],%[res],%[c]    \t\n"
+                : [res]"=&r"(result),[t]"=&r"(t),[tmp1]"=&r"(tmp1),[tmp2]"=&r"(tmp2)
+                : [a]"r"(a),[b]"r"(b),[c]"r"(c),[shift]"r"(shift)
+                );
+            }
+    return result;
+}
+
+inline int64_t gglMulii(int32_t x, int32_t y) CONST;
+inline int64_t gglMulii(int32_t x, int32_t y) {
+    union {
+        struct {
+#if defined(__MIPSEL__)
+            int32_t lo;
+            int32_t hi;
+#elif defined(__MIPSEB__)
+            int32_t hi;
+            int32_t lo;
+#endif
+        } s;
+        int64_t res;
+    }u;
+    asm("mul %0, %2, %3 \t\n"
+        "muh %1, %2, %3 \t\n"
+        : "=r"(u.s.lo), "=&r"(u.s.hi)
+        : "%r"(x), "r"(y)
+        );
+    return u.res;
+}
+
 #else // ----------------------------------------------------------------------
 
 inline GGLfixed gglMulx(GGLfixed a, GGLfixed b, int shift) CONST;

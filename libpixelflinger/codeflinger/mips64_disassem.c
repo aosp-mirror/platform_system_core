@@ -43,66 +43,42 @@
 #include <sys/types.h>
 #include "mips_opcode.h"
 
-
-// #include <sys/systm.h>
-// #include <sys/param.h>
-
-// #include <machine/reg.h>
-// #include <machine/cpu.h>
-/*#include <machine/param.h>*/
-// #include <machine/db_machdep.h>
-
-// #include <ddb/db_interface.h>
-// #include <ddb/db_output.h>
-// #include <ddb/db_extern.h>
-// #include <ddb/db_sym.h>
-
+#include <cutils/log.h>
 
 static char *sprintf_buffer;
 static int sprintf_buf_len;
 
 
-typedef uint32_t db_addr_t;
+typedef uint64_t db_addr_t;
 static void db_printf(const char* fmt, ...);
 
 static const char * const op_name[64] = {
-/* 0 */ "spec", "bcond","j  ",    "jal",  "beq",  "bne",  "blez", "bgtz",
-/* 8 */ "addi", "addiu","slti", "sltiu","andi", "ori",  "xori", "lui",
-/*16 */ "cop0", "cop1", "cop2", "cop3", "beql", "bnel", "blezl","bgtzl",
-/*24 */ "daddi","daddiu","ldl", "ldr",  "op34", "op35", "op36", "op37",
-/*32 */ "lb ",   "lh ",   "lwl",  "lw ",   "lbu",  "lhu",  "lwr",  "lwu",
-/*40 */ "sb ",   "sh ",   "swl",  "sw ",   "sdl",  "sdr",  "swr",  "cache",
-/*48 */ "ll ",   "lwc1", "lwc2", "lwc3", "lld",  "ldc1", "ldc2", "ld ",
-/*56 */ "sc ",   "swc1", "swc2", "swc3", "scd",  "sdc1", "sdc2", "sd "
+/* 0 */ "spec", "bcond", "j", "jal", "beq", "bne", "blez", "bgtz",
+/* 8 */ "pop10", "addiu", "slti", "sltiu", "andi", "ori", "xori", "aui",
+/*16 */ "cop0", "cop1", "cop2", "?", "?", "?", "pop26", "pop27",
+/*24 */ "pop30", "daddiu", "?", "?", "?", "daui", "msa", "op37",
+/*32 */ "lb", "lh", "?",  "lw", "lbu", "lhu", "?", "lwu",
+/*40 */ "sb", "sh", "?", "sw", "?", "?", "?", "?",
+/*48 */ "?", "lwc1", "bc", "?", "?",  "ldc1", "pop66", "ld",
+/*56 */ "?", "swc1", "balc", "pcrel", "?", "sdc1", "pop76", "sd"
 };
 
 static const char * const spec_name[64] = {
-/* 0 */ "sll",  "spec01","srl", "sra",  "sllv", "spec05","srlv","srav",
-/* 8 */ "jr",   "jalr", "movz","movn","syscall","break","spec16","sync",
-/*16 */ "mfhi", "mthi", "mflo", "mtlo", "dsllv","spec25","dsrlv","dsrav",
-/*24 */ "mult", "multu","div",  "divu", "dmult","dmultu","ddiv","ddivu",
-/*32 */ "add",  "addu", "sub",  "subu", "and",  "or ",   "xor",  "nor",
-/*40 */ "spec50","spec51","slt","sltu", "dadd","daddu","dsub","dsubu",
-/*48 */ "tge","tgeu","tlt","tltu","teq","spec65","tne","spec67",
-/*56 */ "dsll","spec71","dsrl","dsra","dsll32","spec75","dsrl32","dsra32"
-};
-
-static const char * const spec2_name[64] = {     /* QED RM4650, R5000, etc. */
-/* 0x00 */ "madd", "maddu", "mul", "spec3", "msub", "msubu", "rsrv6", "rsrv7",
-/* 0x08 */ "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv",
-/* 0x10 */ "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv",
-/* 0x18 */ "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv",
-/* 0x20 */ "clz",  "clo",  "rsrv", "rsrv", "dclz", "dclo", "rsrv", "rsrv",
-/* 0x28 */ "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv",
-/* 0x30 */ "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv", "rsrv",
-/* 0x38 */ "rsrv", "rsrv", "rsrv", "resv", "rsrv", "rsrv", "rsrv", "sdbbp"
+/* 0 */ "sll", "?", "srl", "sra", "sllv", "?", "srlv", "srav",
+/* 8 */ "?", "jalr", "?", "?", "syscall", "break", "sdbpp", "sync",
+/*16 */ "clz", "clo", "dclz", "dclo", "dsllv", "dlsa", "dsrlv", "dsrav",
+/*24 */ "sop30", "sop31", "sop32", "sop33", "sop34", "sop35", "sop36", "sop37",
+/*32 */ "add", "addu", "sub", "subu", "and", "or", "xor", "nor",
+/*40 */ "?", "?", "slt", "sltu", "dadd", "daddu", "dsub", "dsubu",
+/*48 */ "tge", "tgeu", "tlt", "tltu", "teq", "seleqz", "tne", "selnez",
+/*56 */ "dsll", "?", "dsrl", "dsra", "dsll32", "?", "dsrl32", "dsra32"
 };
 
 static const char * const bcond_name[32] = {
-/* 0 */ "bltz", "bgez", "bltzl", "bgezl", "?", "?", "?", "?",
-/* 8 */ "tgei", "tgeiu", "tlti", "tltiu", "teqi", "?", "tnei", "?",
-/*16 */ "bltzal", "bgezal", "bltzall", "bgezall", "?", "?", "?", "?",
-/*24 */ "?", "?", "?", "?", "?", "?", "?", "?",
+/* 0 */ "bltz", "bgez", "?", "?", "?", "?", "dahi", "?",
+/* 8 */ "?", "?", "?", "?", "?", "?", "?", "?",
+/*16 */ "nal", "bal", "?", "?", "?", "?", "?", "sigrie",
+/*24 */ "?", "?", "?", "?", "?", "?", "dati", "synci",
 };
 
 static const char * const cop1_name[64] = {
@@ -125,14 +101,12 @@ static const char * const fmt_name[16] = {
     "fmtc", "fmtd", "fmte", "fmtf"
 };
 
-#if defined(__mips_n32) || defined(__mips_n64)
-static char * const reg_name[32] = {
+static char * const mips_reg_name[32] = {
     "zero", "at",   "v0",   "v1",   "a0",   "a1",   "a2",   "a3",
     "a4",   "a5",   "a6",   "a7",   "t0",   "t1",   "t2",   "t3",
     "s0",   "s1",   "s2",   "s3",   "s4",   "s5",   "s6",   "s7",
     "t8",   "t9",   "k0",   "k1",   "gp",   "sp",   "s8",   "ra"
 };
-#else
 
 static char * alt_arm_reg_name[32] = {  // hacked names for comparison with ARM code
     "zero", "at",   "r0",   "r1",   "r2",   "r3",   "r4",   "r5",
@@ -141,16 +115,7 @@ static char * alt_arm_reg_name[32] = {  // hacked names for comparison with ARM 
     "t8",   "t9",   "k0",   "k1",   "gp",   "sp",   "s8",   "ra"
 };
 
-static char * mips_reg_name[32] = {
-    "zero", "at",   "v0",   "v1",   "a0",   "a1",   "a2",   "a3",
-    "t0",   "t1",   "t2",   "t3",   "t4",   "t5",   "t6",   "t7",
-    "s0",   "s1",   "s2",   "s3",   "s4",   "s5",   "s6",   "s7",
-    "t8",   "t9",   "k0",   "k1",   "gp",   "sp",   "s8",   "ra"
-};
-
 static char ** reg_name =  &mips_reg_name[0];
-
-#endif /* __mips_n32 || __mips_n64 */
 
 static const char * const c0_opname[64] = {
     "c0op00","tlbr",  "tlbwi", "c0op03","c0op04","c0op05","tlbwr", "c0op07",
@@ -215,7 +180,7 @@ db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
                 reg_name[i.RType.rs]);
             break;
         }
-        // mips32r2, rotr & rotrv
+
         if (i.RType.func == OP_SRL && (i.RType.rs & 1) == 1) {
             db_printf("rotr\t%s,%s,%d", reg_name[i.RType.rd],
                 reg_name[i.RType.rt], i.RType.shamt);
@@ -227,6 +192,32 @@ db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
             break;
         }
 
+        if (i.RType.func == OP_SOP30) {
+            if (i.RType.shamt == OP_MUL) {
+                db_printf("mul");
+            } else if (i.RType.shamt == OP_MUH) {
+                db_printf("muh");
+            }
+            db_printf("\t%s,%s,%s", reg_name[i.RType.rd],
+                reg_name[i.RType.rs], reg_name[i.RType.rt]);
+            break;
+        }
+        if (i.RType.func == OP_SOP31) {
+            if (i.RType.shamt == OP_MUL) {
+                db_printf("mulu");
+            } else if (i.RType.shamt == OP_MUH) {
+                db_printf("muhu");
+            }
+            db_printf("\t%s,%s,%s", reg_name[i.RType.rd],
+                reg_name[i.RType.rs], reg_name[i.RType.rt]);
+            break;
+        }
+
+        if (i.RType.func == OP_JALR && i.RType.rd == 0) {
+            db_printf("jr\t%s", reg_name[i.RType.rs]);
+            bdslot = true;
+            break;
+        }
 
         db_printf("%s", spec_name[i.RType.func]);
         switch (i.RType.func) {
@@ -258,34 +249,23 @@ db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
                 reg_name[i.RType.rs]);
             break;
 
-        case OP_MFHI:
-        case OP_MFLO:
-            db_printf("\t%s", reg_name[i.RType.rd]);
+        case OP_CLZ:
+        case OP_CLO:
+        case OP_DCLZ:
+        case OP_DCLO:
+            db_printf("\t%s,%s",
+                reg_name[i.RType.rd],
+                reg_name[i.RType.rs]);
             break;
 
-        case OP_JR:
         case OP_JALR:
-            db_printf("\t%s", reg_name[i.RType.rs]);
+            db_printf("\t");
+            if (i.RType.rd != 31) {
+                db_printf("%s,", reg_name[i.RType.rd]);
+            }
+            db_printf("%s", reg_name[i.RType.rs]);
             bdslot = true;
             break;
-        case OP_MTLO:
-        case OP_MTHI:
-            db_printf("\t%s", reg_name[i.RType.rs]);
-            break;
-
-        case OP_MULT:
-        case OP_MULTU:
-        case OP_DMULT:
-        case OP_DMULTU:
-        case OP_DIV:
-        case OP_DIVU:
-        case OP_DDIV:
-        case OP_DDIVU:
-            db_printf("\t%s,%s",
-                reg_name[i.RType.rs],
-                reg_name[i.RType.rt]);
-            break;
-
 
         case OP_SYSCALL:
         case OP_SYNC:
@@ -303,21 +283,6 @@ db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
         }
         break;
 
-    case OP_SPECIAL2:
-        if (i.RType.func == OP_MUL)
-            db_printf("%s\t%s,%s,%s",
-                spec2_name[i.RType.func & 0x3f],
-                    reg_name[i.RType.rd],
-                    reg_name[i.RType.rs],
-                    reg_name[i.RType.rt]);
-        else
-            db_printf("%s\t%s,%s",
-                spec2_name[i.RType.func & 0x3f],
-                    reg_name[i.RType.rs],
-                    reg_name[i.RType.rt]);
-
-        break;
-
     case OP_SPECIAL3:
         if (i.RType.func == OP_EXT)
             db_printf("ext\t%s,%s,%d,%d",
@@ -325,11 +290,47 @@ db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
                     reg_name[i.RType.rs],
                     i.RType.shamt,
                     i.RType.rd+1);
+        else if (i.RType.func == OP_DEXT)
+            db_printf("dext\t%s,%s,%d,%d",
+                    reg_name[i.RType.rt],
+                    reg_name[i.RType.rs],
+                    i.RType.shamt,
+                    i.RType.rd+1);
+        else if (i.RType.func == OP_DEXTM)
+            db_printf("dextm\t%s,%s,%d,%d",
+                    reg_name[i.RType.rt],
+                    reg_name[i.RType.rs],
+                    i.RType.shamt,
+                    i.RType.rd+33);
+        else if (i.RType.func == OP_DEXTU)
+            db_printf("dextu\t%s,%s,%d,%d",
+                    reg_name[i.RType.rt],
+                    reg_name[i.RType.rs],
+                    i.RType.shamt+32,
+                    i.RType.rd+1);
         else if (i.RType.func == OP_INS)
             db_printf("ins\t%s,%s,%d,%d",
                     reg_name[i.RType.rt],
                     reg_name[i.RType.rs],
                     i.RType.shamt,
+                    i.RType.rd-i.RType.shamt+1);
+        else if (i.RType.func == OP_DINS)
+            db_printf("dins\t%s,%s,%d,%d",
+                    reg_name[i.RType.rt],
+                    reg_name[i.RType.rs],
+                    i.RType.shamt,
+                    i.RType.rd-i.RType.shamt+1);
+        else if (i.RType.func == OP_DINSM)
+            db_printf("dinsm\t%s,%s,%d,%d",
+                    reg_name[i.RType.rt],
+                    reg_name[i.RType.rs],
+                    i.RType.shamt,
+                    i.RType.rd-i.RType.shamt+33);
+        else if (i.RType.func == OP_DINSU)
+            db_printf("dinsu\t%s,%s,%d,%d",
+                    reg_name[i.RType.rt],
+                    reg_name[i.RType.rs],
+                    i.RType.shamt+32,
                     i.RType.rd-i.RType.shamt+1);
         else if (i.RType.func == OP_BSHFL && i.RType.shamt == OP_WSBH)
             db_printf("wsbh\t%s,%s",
@@ -343,6 +344,10 @@ db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
             db_printf("seh\t%s,%s",
                 reg_name[i.RType.rd],
                 reg_name[i.RType.rt]);
+        else if (i.RType.func == OP_RDHWR)
+            db_printf("rdhwr\t%s,%s",
+                reg_name[i.RType.rd],
+                reg_name[i.RType.rt]);
         else
             db_printf("Unknown");
         break;
@@ -353,22 +358,18 @@ db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
         goto pr_displ;
 
     case OP_BLEZ:
-    case OP_BLEZL:
     case OP_BGTZ:
-    case OP_BGTZL:
         db_printf("%s\t%s,", op_name[i.IType.op],
             reg_name[i.IType.rs]);
         goto pr_displ;
 
     case OP_BEQ:
-    case OP_BEQL:
         if (i.IType.rs == 0 && i.IType.rt == 0) {
-            db_printf("b  \t");
+            db_printf("b\t");
             goto pr_displ;
         }
         /* FALLTHROUGH */
     case OP_BNE:
-    case OP_BNEL:
         db_printf("%s\t%s,%s,", op_name[i.IType.op],
             reg_name[i.IType.rs],
             reg_name[i.IType.rt]);
@@ -458,7 +459,7 @@ db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
     case OP_J:
     case OP_JAL:
         db_printf("%s\t", op_name[i.JType.op]);
-        print_addr((loc & 0xF0000000) | (i.JType.target << 2));
+        print_addr((loc & 0xFFFFFFFFF0000000) | (i.JType.target << 2));
         bdslot = true;
         break;
 
@@ -502,22 +503,17 @@ db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
             i.IType.imm);
         break;
 
-    case OP_LUI:
-        db_printf("%s\t%s,0x%x", op_name[i.IType.op],
-            reg_name[i.IType.rt],
-            i.IType.imm);
+    case OP_AUI:
+        if (i.IType.rs == 0) {
+            db_printf("lui\t%s,0x%x", reg_name[i.IType.rt],
+                i.IType.imm);
+        } else {
+            db_printf("%s\t%s,%s,%d", op_name[i.IType.op],
+            reg_name[i.IType.rt], reg_name[i.IType.rs],
+            (short)i.IType.imm);
+        }
         break;
 
-    case OP_CACHE:
-        db_printf("%s\t0x%x,0x%x(%s)",
-            op_name[i.IType.op],
-            i.IType.rt,
-            i.IType.imm,
-            reg_name[i.IType.rs]);
-        break;
-
-    case OP_ADDI:
-    case OP_DADDI:
     case OP_ADDIU:
     case OP_DADDIU:
         if (i.IType.rs == 0) {
@@ -545,10 +541,8 @@ db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
 static void
 print_addr(db_addr_t loc)
 {
-    db_printf("0x%08x", loc);
+    db_printf("0x%08lx", loc);
 }
-
-
 
 static void db_printf(const char* fmt, ...)
 {
@@ -563,7 +557,6 @@ static void db_printf(const char* fmt, ...)
         vprintf(fmt, argp);
     }
 }
-
 
 /*
  * Disassemble instruction at 'loc'.
@@ -587,4 +580,3 @@ mips_disassem(db_addr_t loc, char *di_buffer, int alt_dis_format)
     instr =  *(u_int32_t *)loc;
     return (db_disasm_insn(instr, loc, false));
 }
-
