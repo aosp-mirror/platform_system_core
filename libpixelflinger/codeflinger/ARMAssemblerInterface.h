@@ -63,7 +63,7 @@ public:
     };
 
     enum {
-        CODEGEN_ARCH_ARM = 1, CODEGEN_ARCH_MIPS, CODEGEN_ARCH_ARM64
+        CODEGEN_ARCH_ARM = 1, CODEGEN_ARCH_MIPS, CODEGEN_ARCH_ARM64, CODEGEN_ARCH_MIPS64
     };
 
     // -----------------------------------------------------------------------
@@ -115,7 +115,8 @@ public:
     // data processing...
     enum {
         opAND, opEOR, opSUB, opRSB, opADD, opADC, opSBC, opRSC, 
-        opTST, opTEQ, opCMP, opCMN, opORR, opMOV, opBIC, opMVN
+        opTST, opTEQ, opCMP, opCMN, opORR, opMOV, opBIC, opMVN,
+        opADD64, opSUB64
     };
 
     virtual void
