@@ -32,6 +32,7 @@
 
 #include "adb.h"
 #include "adb_io.h"
+#include "adb_utils.h"
 #include "private/android_filesystem_config.h"
 
 #include <base/stringprintf.h>
@@ -53,8 +54,6 @@ static bool secure_mkdirs(const std::string& path) {
     if (path[0] != '/') return false;
 
     std::vector<std::string> path_components = android::base::Split(path, "/");
-    path_components.pop_back(); // For "/system/bin/sh", only create "/system/bin".
-
     std::string partial_path;
     for (const auto& path_component : path_components) {
         if (partial_path.back() != OS_PATH_SEPARATOR) partial_path += OS_PATH_SEPARATOR;
@@ -149,7 +148,7 @@ static bool handle_send_file(int s, const char* path, uid_t uid,
 
     int fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
     if (fd < 0 && errno == ENOENT) {
-        if (!secure_mkdirs(path)) {
+        if (!secure_mkdirs(adb_dirname(path))) {
             SendSyncFailErrno(s, "secure_mkdirs failed");
             goto fail;
         }
@@ -244,7 +243,7 @@ static bool handle_send_link(int s, const std::string& path, std::vector<char>& 
 
     ret = symlink(&buffer[0], path.c_str());
     if (ret && errno == ENOENT) {
-        if (!secure_mkdirs(path)) {
+        if (!secure_mkdirs(adb_dirname(path))) {
             SendSyncFailErrno(s, "secure_mkdirs failed");
             return false;
         }
