@@ -53,7 +53,7 @@ const std::string MetricsMainDiskStatsPath() {
 }
 
 int main(int argc, char** argv) {
-  DEFINE_bool(daemon, true, "run as daemon (use -nodaemon for debugging)");
+  DEFINE_bool(foreground, false, "Don't daemonize");
 
   // The uploader is disabled by default on ChromeOS as Chrome is responsible
   // for sending the metrics.
@@ -79,13 +79,28 @@ int main(int argc, char** argv) {
                 metrics::kMetricsDirectory,
                 "Root of the configuration files (testing only)");
 
+  DEFINE_bool(logtostderr, false, "Log to standard error");
+  DEFINE_bool(logtosyslog, false, "Log to syslog");
+
   brillo::FlagHelper::Init(argc, argv, "Chromium OS Metrics Daemon");
 
-  // Also log to stderr when not running as daemon.
-  brillo::InitLog(brillo::kLogToSyslog | brillo::kLogHeader |
-                  (FLAGS_daemon ? 0 : brillo::kLogToStderr));
+  int logging_location = (FLAGS_foreground ? brillo::kLogToStderr
+                          : brillo::kLogToSyslog);
+  if (FLAGS_logtosyslog)
+    logging_location = brillo::kLogToSyslog;
 
-  if (FLAGS_daemon && daemon(0, 0) != 0) {
+  if (FLAGS_logtostderr)
+    logging_location = brillo::kLogToStderr;
+
+  // Also log to stderr when not running as daemon.
+  brillo::InitLog(logging_location | brillo::kLogHeader);
+
+  if (FLAGS_logtostderr && FLAGS_logtosyslog) {
+    LOG(ERROR) << "only one of --logtosyslog and --logtostderr can be set";
+    return 1;
+  }
+
+  if (!FLAGS_foreground && daemon(0, 0) != 0) {
     return errno;
   }
 
