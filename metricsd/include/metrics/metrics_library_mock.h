@@ -32,6 +32,7 @@ class MetricsLibraryMock : public MetricsLibraryInterface {
                                int min, int max, int nbuckets));
   MOCK_METHOD3(SendEnumToUMA, bool(const std::string& name, int sample,
                                    int max));
+  MOCK_METHOD2(SendBoolToUMA, bool(const std::string& name, bool sample));
   MOCK_METHOD2(SendSparseToUMA, bool(const std::string& name, int sample));
   MOCK_METHOD1(SendUserActionToUMA, bool(const std::string& action));
 
