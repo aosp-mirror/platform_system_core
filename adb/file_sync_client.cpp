@@ -475,10 +475,15 @@ struct copyinfo
     bool skip;
 };
 
-static copyinfo mkcopyinfo(const char* spath, const char* dpath, const char* name, bool isdir) {
+static copyinfo mkcopyinfo(const std::string& spath, const std::string& dpath,
+                           const char* name, bool isdir) {
     copyinfo result;
-    result.src = android::base::StringPrintf(isdir ? "%s%s/" : "%s%s", spath, name);
-    result.dst = android::base::StringPrintf(isdir ? "%s%s/" : "%s%s", dpath, name);
+    result.src = spath + name;
+    result.dst = dpath + name;
+    if (isdir) {
+        result.src.push_back('/');
+        result.dst.push_back('/');
+    }
     result.time = 0;
     result.mode = 0;
     result.size = 0;
@@ -490,34 +495,29 @@ static bool IsDotOrDotDot(const char* name) {
     return name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
 }
 
-static int local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist,
-                            const char* lpath, const char* rpath) {
+static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist,
+                             const std::string& lpath,
+                             const std::string& rpath) {
     std::vector<copyinfo> dirlist;
-    std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(lpath), closedir);
+    std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(lpath.c_str()), closedir);
     if (!dir) {
-        sc.Error("cannot open '%s': %s", lpath, strerror(errno));
-        return -1;
+        sc.Error("cannot open '%s': %s", lpath.c_str(), strerror(errno));
+        return false;
     }
 
     dirent* de;
     while ((de = readdir(dir.get()))) {
         if (IsDotOrDotDot(de->d_name)) continue;
 
-        char stat_path[PATH_MAX];
-        if (strlen(lpath) + strlen(de->d_name) + 1 > sizeof(stat_path)) {
-            sc.Error("skipping long path '%s%s'", lpath, de->d_name);
-            continue;
-        }
-        strcpy(stat_path, lpath);
-        strcat(stat_path, de->d_name);
+        std::string stat_path = lpath + de->d_name;
 
         struct stat st;
-        if (!lstat(stat_path, &st)) {
+        if (!lstat(stat_path.c_str(), &st)) {
             if (S_ISDIR(st.st_mode)) {
                 dirlist.push_back(mkcopyinfo(lpath, rpath, de->d_name, 1));
             } else {
                 if (!S_ISREG(st.st_mode) && !S_ISLNK(st.st_mode)) {
-                    sc.Error("skipping special file '%s'", lpath);
+                    sc.Error("skipping special file '%s'", lpath.c_str());
                 } else {
                     copyinfo ci = mkcopyinfo(lpath, rpath, de->d_name, 0);
                     ci.time = st.st_mtime;
@@ -527,7 +527,8 @@ static int local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist,
                 }
             }
         } else {
-            sc.Error("cannot lstat '%s': %s", stat_path, strerror(errno));
+            sc.Error("cannot lstat '%s': %s", stat_path.c_str(),
+                     strerror(errno));
         }
     }
 
@@ -537,42 +538,42 @@ static int local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist,
         local_build_list(sc, filelist, ci.src.c_str(), ci.dst.c_str());
     }
 
-    return 0;
+    return true;
 }
 
-static bool copy_local_dir_remote(SyncConnection& sc, const char* lpath, const char* rpath,
-                                  bool check_timestamps, bool list_only) {
+static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
+                                  std::string rpath, bool check_timestamps,
+                                  bool list_only) {
+    // Make sure that both directory paths end in a slash.
+    if (lpath.empty() || rpath.empty()) {
+        return false;
+    }
+    if (lpath.back() != '/') {
+        lpath.push_back('/');
+    }
+    if (rpath.back() != '/') {
+        rpath.push_back('/');
+    }
+
+    // Recursively build the list of files to copy.
     std::vector<copyinfo> filelist;
     int pushed = 0;
     int skipped = 0;
-
-    if ((lpath[0] == 0) || (rpath[0] == 0)) return false;
-    if (lpath[strlen(lpath) - 1] != '/') {
-        int  tmplen = strlen(lpath)+2;
-        char *tmp = reinterpret_cast<char*>(malloc(tmplen));
-        if(tmp == 0) return false;
-        snprintf(tmp, tmplen, "%s/",lpath);
-        lpath = tmp;
-    }
-    if (rpath[strlen(rpath) - 1] != '/') {
-        int tmplen = strlen(rpath)+2;
-        char *tmp = reinterpret_cast<char*>(malloc(tmplen));
-        if(tmp == 0) return false;
-        snprintf(tmp, tmplen, "%s/",rpath);
-        rpath = tmp;
-    }
-
-    if (local_build_list(sc, &filelist, lpath, rpath)) {
+    if (!local_build_list(sc, &filelist, lpath, rpath)) {
         return false;
     }
 
     if (check_timestamps) {
         for (const copyinfo& ci : filelist) {
-            if (!sc.SendRequest(ID_STAT, ci.dst.c_str())) return false;
+            if (!sc.SendRequest(ID_STAT, ci.dst.c_str())) {
+                return false;
+            }
         }
         for (copyinfo& ci : filelist) {
             unsigned int timestamp, mode, size;
-            if (!sync_finish_stat(sc, &timestamp, &mode, &size)) return false;
+            if (!sync_finish_stat(sc, &timestamp, &mode, &size)) {
+                return false;
+            }
             if (size == ci.size) {
                 /* for links, we cannot update the atime/mtime */
                 if ((S_ISREG(ci.mode & mode) && timestamp == ci.time) ||
@@ -586,11 +587,12 @@ static bool copy_local_dir_remote(SyncConnection& sc, const char* lpath, const c
     for (const copyinfo& ci : filelist) {
         if (!ci.skip) {
             if (list_only) {
-                fprintf(stderr, "would push: %s -> %s\n", ci.src.c_str(),
-                        ci.dst.c_str());
+                sc.Error("would push: %s -> %s", ci.src.c_str(),
+                         ci.dst.c_str());
             } else {
-                if (!sync_send(sc, ci.src.c_str(), ci.dst.c_str(), ci.time, ci.mode)) {
-                  return false;
+                if (!sync_send(sc, ci.src.c_str(), ci.dst.c_str(), ci.time,
+                               ci.mode)) {
+                    return false;
                 }
             }
             pushed++;
@@ -599,9 +601,9 @@ static bool copy_local_dir_remote(SyncConnection& sc, const char* lpath, const c
         }
     }
 
-    sc.Printf("%s: %d file%s pushed. %d file%s skipped.%s\n", rpath, pushed,
-              (pushed == 1) ? "" : "s", skipped, (skipped == 1) ? "" : "s",
-              sc.TransferRate().c_str());
+    sc.Printf("%s: %d file%s pushed. %d file%s skipped.%s\n", rpath.c_str(),
+              pushed, (pushed == 1) ? "" : "s", skipped,
+              (skipped == 1) ? "" : "s", sc.TransferRate().c_str());
     return true;
 }
 
@@ -658,7 +660,8 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
 
 static bool remote_build_list(SyncConnection& sc,
                               std::vector<copyinfo>* filelist,
-                              const char* rpath, const char* lpath) {
+                              const std::string& rpath,
+                              const std::string& lpath) {
     std::vector<copyinfo> dirlist;
 
     // Put the files/dirs in rpath on the lists.
@@ -681,7 +684,7 @@ static bool remote_build_list(SyncConnection& sc,
         }
     };
 
-    if (!sync_ls(sc, rpath, callback)) {
+    if (!sync_ls(sc, rpath.c_str(), callback)) {
         return false;
     }
 
@@ -711,20 +714,23 @@ static int set_time_and_mode(const char *lpath, time_t time, unsigned int mode)
     return r1 ? : r2;
 }
 
-static bool copy_remote_dir_local(SyncConnection& sc, const char* rpath, const char* lpath,
-                                  bool copy_attrs) {
+static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
+                                  std::string lpath, bool copy_attrs) {
     // Make sure that both directory paths end in a slash.
-    std::string rpath_clean(rpath);
-    std::string lpath_clean(lpath);
-    if (rpath_clean.empty() || lpath_clean.empty()) return false;
-    if (rpath_clean.back() != '/') rpath_clean.push_back('/');
-    if (lpath_clean.back() != '/') lpath_clean.push_back('/');
+    if (rpath.empty() || lpath.empty()) {
+        return false;
+    }
+    if (rpath.back() != '/') {
+        rpath.push_back('/');
+    }
+    if (lpath.back() != '/') {
+        lpath.push_back('/');
+    }
 
     // Recursively build the list of files to copy.
     sc.Print("pull: building file list...");
     std::vector<copyinfo> filelist;
-    if (!remote_build_list(sc, &filelist, rpath_clean.c_str(),
-                           lpath_clean.c_str())) {
+    if (!remote_build_list(sc, &filelist, rpath.c_str(), lpath.c_str())) {
         return false;
     }
 
@@ -747,9 +753,9 @@ static bool copy_remote_dir_local(SyncConnection& sc, const char* rpath, const c
         }
     }
 
-    sc.Printf("%s: %d file%s pulled. %d file%s skipped.%s\n", rpath, pulled,
-              (pulled == 1) ? "" : "s", skipped, (skipped == 1) ? "" : "s",
-              sc.TransferRate().c_str());
+    sc.Printf("%s: %d file%s pulled. %d file%s skipped.%s\n", rpath.c_str(),
+              pulled, (pulled == 1) ? "" : "s", skipped,
+              (skipped == 1) ? "" : "s", sc.TransferRate().c_str());
     return true;
 }
 
@@ -833,5 +839,5 @@ bool do_sync_sync(const std::string& lpath, const std::string& rpath, bool list_
     SyncConnection sc;
     if (!sc.IsValid()) return false;
 
-    return copy_local_dir_remote(sc, lpath.c_str(), rpath.c_str(), true, list_only);
+    return copy_local_dir_remote(sc, lpath, rpath, true, list_only);
 }
