@@ -614,9 +614,11 @@ typedef enum log_id {
 
 /*
  * Use the per-tag properties "log.tag.<tagname>" to generate a runtime
- * result of non-zero to expose a log.
+ * result of non-zero to expose a log. prio is ANDROID_LOG_VERBOSE to
+ * ANDROID_LOG_FATAL. default_prio if no property. Undefined behavior if
+ * any other value.
  */
-int __android_log_is_loggable(int prio, const char *tag, int def);
+int __android_log_is_loggable(int prio, const char *tag, int default_prio);
 
 int __android_log_error_write(int tag, const char *subTag, int32_t uid, const char *data,
                               uint32_t dataLen);
