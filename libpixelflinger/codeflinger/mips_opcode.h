@@ -125,69 +125,118 @@ typedef union {
 #define OP_BLEZ     006
 #define OP_BGTZ     007
 
+#if __mips_isa_rev < 6
 #define OP_ADDI     010
+#else
+#define OP_POP10    010
+#endif
+
 #define OP_ADDIU    011
 #define OP_SLTI     012
 #define OP_SLTIU    013
 #define OP_ANDI     014
 #define OP_ORI      015
 #define OP_XORI     016
+
+#if __mips_isa_rev < 6
 #define OP_LUI      017
+#else
+#define OP_AUI      017
+#endif
 
 #define OP_COP0     020
 #define OP_COP1     021
 #define OP_COP2     022
+
+#if __mips_isa_rev < 6
 #define OP_COP3     023
-#define OP_BEQL     024     /* MIPS-II, for r4000 port */
-#define OP_BNEL     025     /* MIPS-II, for r4000 port */
-#define OP_BLEZL    026     /* MIPS-II, for r4000 port */
-#define OP_BGTZL    027     /* MIPS-II, for r4000 port */
+#define OP_BEQL     024
+#define OP_BNEL     025
+#define OP_BLEZL    026
+#define OP_BGTZL    027
+#define OP_DADDI    030
+#else
+#define OP_POP26    026
+#define OP_POP27    027
+#define OP_POP30    030
+#endif
 
-#define OP_DADDI    030     /* MIPS-II, for r4000 port */
-#define OP_DADDIU   031     /* MIPS-II, for r4000 port */
-#define OP_LDL      032     /* MIPS-II, for r4000 port */
-#define OP_LDR      033     /* MIPS-II, for r4000 port */
+#define OP_DADDIU   031
 
-#define OP_SPECIAL2 034     /* QED opcodes */
-#define OP_SPECIAL3 037     /* mips32r2 opcodes */
+#if __mips_isa_rev < 6
+#define OP_LDL      032
+#define OP_LDR      033
+#define OP_SPECIAL2 034
+#else
+#define OP_DAUI     035
+#endif
+
+#define OP_SPECIAL3 037
 
 #define OP_LB       040
 #define OP_LH       041
+
+#if __mips_isa_rev < 6
 #define OP_LWL      042
+#endif
+
 #define OP_LW       043
 #define OP_LBU      044
 #define OP_LHU      045
 #define OP_LWR      046
 #define OP_LHU      045
+
+#if __mips_isa_rev < 6
 #define OP_LWR      046
-#define OP_LWU      047     /* MIPS-II, for r4000 port */
+#endif
+
+#define OP_LWU      047
 
 #define OP_SB       050
 #define OP_SH       051
-#define OP_SWL      052
-#define OP_SW       053
-#define OP_SDL      054     /* MIPS-II, for r4000 port */
-#define OP_SDR      055     /* MIPS-II, for r4000 port */
-#define OP_SWR      056
-#define OP_CACHE    057     /* MIPS-II, for r4000 port */
 
+#if __mips_isa_rev < 6
+#define OP_SWL      052
+#endif
+
+#define OP_SW       053
+
+#if __mips_isa_rev < 6
+#define OP_SDL      054
+#define OP_SDR      055
+#define OP_SWR      056
+#define OP_CACHE    057
 #define OP_LL       060
-#define OP_LWC0     OP_LL   /* backwards source compatibility */
+#define OP_LWC0     OP_LL
 #define OP_LWC1     061
 #define OP_LWC2     062
 #define OP_LWC3     063
-#define OP_LLD      064     /* MIPS-II, for r4000 port */
-#define OP_LDC1     065
-#define OP_LD       067     /* MIPS-II, for r4000 port */
+#define OP_LLD      064
+#else
+#define OP_LWC1     061
+#define OP_BC       062
+#endif
 
+#define OP_LDC1     065
+#define OP_LD       067
+
+#if __mips_isa_rev < 6
 #define OP_SC       070
-#define OP_SWC0     OP_SC   /* backwards source compatibility */
+#define OP_SWC0     OP_SC
+#endif
+
 #define OP_SWC1     071
+
+#if __mips_isa_rev < 6
 #define OP_SWC2     072
 #define OP_SWC3     073
-#define OP_SCD      074     /* MIPS-II, for r4000 port */
+#define OP_SCD      074
+#else
+#define OP_BALC     072
+#endif
+
 #define OP_SDC1     075
-#define OP_SD       077     /* MIPS-II, for r4000 port */
+#define OP_SD       077
 
 /*
  * Values for the 'func' field when 'op' == OP_SPECIAL.
@@ -199,28 +248,50 @@ typedef union {
 #define OP_SRLV     006
 #define OP_SRAV     007
 
+#if __mips_isa_rev < 6
 #define OP_JR       010
+#endif
+
 #define OP_JALR     011
 #define OP_SYSCALL  014
 #define OP_BREAK    015
-#define OP_SYNC     017     /* MIPS-II, for r4000 port */
+#define OP_SYNC     017
 
+#if __mips_isa_rev < 6
 #define OP_MFHI     020
 #define OP_MTHI     021
 #define OP_MFLO     022
 #define OP_MTLO     023
-#define OP_DSLLV    024     /* MIPS-II, for r4000 port */
-#define OP_DSRLV    026     /* MIPS-II, for r4000 port */
-#define OP_DSRAV    027     /* MIPS-II, for r4000 port */
+#else
+#define OP_CLZ      020
+#define OP_CLO      021
+#define OP_DCLZ     022
+#define OP_DCLO     023
+#endif
 
+#define OP_DSLLV    024
+#define OP_DSRLV    026
+#define OP_DSRAV    027
+
+#if __mips_isa_rev < 6
 #define OP_MULT     030
 #define OP_MULTU    031
 #define OP_DIV      032
 #define OP_DIVU     033
-#define OP_DMULT    034     /* MIPS-II, for r4000 port */
-#define OP_DMULTU   035     /* MIPS-II, for r4000 port */
-#define OP_DDIV     036     /* MIPS-II, for r4000 port */
-#define OP_DDIVU    037     /* MIPS-II, for r4000 port */
+#define OP_DMULT    034
+#define OP_DMULTU   035
+#define OP_DDIV     036
+#define OP_DDIVU    037
+#else
+#define OP_SOP30    030
+#define OP_SOP31    031
+#define OP_SOP32    032
+#define OP_SOP33    033
+#define OP_SOP34    034
+#define OP_SOP35    035
+#define OP_SOP36    036
+#define OP_SOP37    037
+#endif
 
 #define OP_ADD      040
 #define OP_ADDU     041
@@ -233,73 +304,96 @@ typedef union {
 
 #define OP_SLT      052
 #define OP_SLTU     053
-#define OP_DADD     054     /* MIPS-II, for r4000 port */
-#define OP_DADDU    055     /* MIPS-II, for r4000 port */
-#define OP_DSUB     056     /* MIPS-II, for r4000 port */
-#define OP_DSUBU    057     /* MIPS-II, for r4000 port */
+#define OP_DADD     054
+#define OP_DADDU    055
+#define OP_DSUB     056
+#define OP_DSUBU    057
 
-#define OP_TGE      060     /* MIPS-II, for r4000 port */
-#define OP_TGEU     061     /* MIPS-II, for r4000 port */
-#define OP_TLT      062     /* MIPS-II, for r4000 port */
-#define OP_TLTU     063     /* MIPS-II, for r4000 port */
-#define OP_TEQ      064     /* MIPS-II, for r4000 port */
-#define OP_TNE      066     /* MIPS-II, for r4000 port */
+#define OP_TGE      060
+#define OP_TGEU     061
+#define OP_TLT      062
+#define OP_TLTU     063
+#define OP_TEQ      064
+#define OP_TNE      066
 
-#define OP_DSLL     070     /* MIPS-II, for r4000 port */
-#define OP_DSRL     072     /* MIPS-II, for r4000 port */
-#define OP_DSRA     073     /* MIPS-II, for r4000 port */
-#define OP_DSLL32   074     /* MIPS-II, for r4000 port */
-#define OP_DSRL32   076     /* MIPS-II, for r4000 port */
-#define OP_DSRA32   077     /* MIPS-II, for r4000 port */
+#define OP_DSLL     070
+#define OP_DSRL     072
+#define OP_DSRA     073
+#define OP_DSLL32   074
+#define OP_DSRL32   076
+#define OP_DSRA32   077
 
+#if __mips_isa_rev < 6
 /*
  * Values for the 'func' field when 'op' == OP_SPECIAL2.
+ * OP_SPECIAL2 opcodes are removed in mips32r6
  */
 #define OP_MAD      000     /* QED */
 #define OP_MADU     001     /* QED */
 #define OP_MUL      002     /* QED */
+#endif
 
 /*
  * Values for the 'func' field when 'op' == OP_SPECIAL3.
  */
 #define OP_EXT      000
+#define OP_DEXTM    001
+#define OP_DEXTU    002
+#define OP_DEXT     003
 #define OP_INS      004
+#define OP_DINSM    005
+#define OP_DINSU    006
+#define OP_DINS     007
 #define OP_BSHFL    040
+#define OP_RDHWR    073
 
 /*
  * Values for the 'shamt' field when OP_SPECIAL3 && func OP_BSHFL.
  */
+
 #define OP_WSBH     002
 #define OP_SEB      020
 #define OP_SEH      030
+
+#if __mips_isa_rev == 6
+/*
+ * Values for the 'shamt' field when OP_SOP30.
+ */
+#define OP_MUL      002
+#define OP_MUH      003
+#endif
 
 /*
  * Values for the 'func' field when 'op' == OP_BCOND.
  */
 #define OP_BLTZ     000
 #define OP_BGEZ     001
-#define OP_BLTZL    002     /* MIPS-II, for r4000 port */
-#define OP_BGEZL    003     /* MIPS-II, for r4000 port */
 
-#define OP_TGEI     010     /* MIPS-II, for r4000 port */
-#define OP_TGEIU    011     /* MIPS-II, for r4000 port */
-#define OP_TLTI     012     /* MIPS-II, for r4000 port */
-#define OP_TLTIU    013     /* MIPS-II, for r4000 port */
-#define OP_TEQI     014     /* MIPS-II, for r4000 port */
-#define OP_TNEI     016     /* MIPS-II, for r4000 port */
-
-#define OP_BLTZAL   020     /* MIPS-II, for r4000 port */
+#if __mips_isa_rev < 6
+#define OP_BLTZL    002
+#define OP_BGEZL    003
+#define OP_TGEI     010
+#define OP_TGEIU    011
+#define OP_TLTI     012
+#define OP_TLTIU    013
+#define OP_TEQI     014
+#define OP_TNEI     016
+#define OP_BLTZAL   020
 #define OP_BGEZAL   021
 #define OP_BLTZALL  022
 #define OP_BGEZALL  023
+#else
+#define OP_NAL      020
+#define OP_BAL      021
+#endif
 
 /*
  * Values for the 'rs' field when 'op' == OP_COPz.
  */
 #define OP_MF       000
-#define OP_DMF      001     /* MIPS-II, for r4000 port */
+#define OP_DMF      001
 #define OP_MT       004
-#define OP_DMT      005     /* MIPS-II, for r4000 port */
+#define OP_DMT      005
 #define OP_BCx      010
 #define OP_BCy      014
 #define OP_CF       002
@@ -311,6 +405,6 @@ typedef union {
 #define COPz_BC_TF_MASK 0x01
 #define COPz_BC_TRUE    0x01
 #define COPz_BC_FALSE   0x00
-#define COPz_BCL_TF_MASK    0x02        /* MIPS-II, for r4000 port */
-#define COPz_BCL_TRUE   0x02        /* MIPS-II, for r4000 port */
-#define COPz_BCL_FALSE  0x00        /* MIPS-II, for r4000 port */
+#define COPz_BCL_TF_MASK    0x02
+#define COPz_BCL_TRUE   0x02
+#define COPz_BCL_FALSE  0x00
