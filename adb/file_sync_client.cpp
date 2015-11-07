@@ -545,9 +545,7 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
                                   std::string rpath, bool check_timestamps,
                                   bool list_only) {
     // Make sure that both directory paths end in a slash.
-    if (lpath.empty() || rpath.empty()) {
-        return false;
-    }
+    // Both paths are known to exist, so they cannot be empty.
     if (lpath.back() != '/') {
         lpath.push_back('/');
     }
@@ -717,9 +715,7 @@ static int set_time_and_mode(const char *lpath, time_t time, unsigned int mode)
 static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
                                   std::string lpath, bool copy_attrs) {
     // Make sure that both directory paths end in a slash.
-    if (rpath.empty() || lpath.empty()) {
-        return false;
-    }
+    // Both paths are known to exist, so they cannot be empty.
     if (rpath.back() != '/') {
         rpath.push_back('/');
     }
