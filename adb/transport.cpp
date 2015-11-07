@@ -784,9 +784,7 @@ const FeatureSet& supported_features() {
     // Local static allocation to avoid global non-POD variables.
     static const FeatureSet* features = new FeatureSet{
         kFeatureShell2,
-        // Internal master has 'cmd'. AOSP master doesn't.
-        // kFeatureCmd
-
+        kFeatureCmd
         // Increment ADB_SERVER_VERSION whenever the feature list changes to
         // make sure that the adb client and server features stay in sync
         // (http://b/24370690).
