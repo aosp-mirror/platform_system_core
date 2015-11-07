@@ -476,16 +476,27 @@ struct copyinfo
 };
 
 static copyinfo mkcopyinfo(const std::string& spath, const std::string& dpath,
-                           const char* name, bool isdir) {
+                           const std::string& name, unsigned int mode) {
     copyinfo result;
-    result.src = spath + name;
-    result.dst = dpath + name;
+    result.src = spath;
+    result.dst = dpath;
+    if (result.src.back() != '/') {
+      result.src.push_back('/');
+    }
+    if (result.dst.back() != '/') {
+      result.dst.push_back('/');
+    }
+    result.src.append(name);
+    result.dst.append(name);
+
+    bool isdir = S_ISDIR(mode);
     if (isdir) {
         result.src.push_back('/');
         result.dst.push_back('/');
     }
+
     result.time = 0;
-    result.mode = 0;
+    result.mode = mode;
     result.size = 0;
     result.skip = false;
     return result;
@@ -505,23 +516,26 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist
         return false;
     }
 
+    bool empty_dir = true;
     dirent* de;
     while ((de = readdir(dir.get()))) {
-        if (IsDotOrDotDot(de->d_name)) continue;
+        if (IsDotOrDotDot(de->d_name)) {
+            continue;
+        }
 
+        empty_dir = false;
         std::string stat_path = lpath + de->d_name;
 
         struct stat st;
         if (!lstat(stat_path.c_str(), &st)) {
+            copyinfo ci = mkcopyinfo(lpath, rpath, de->d_name, st.st_mode);
             if (S_ISDIR(st.st_mode)) {
-                dirlist.push_back(mkcopyinfo(lpath, rpath, de->d_name, 1));
+                dirlist.push_back(ci);
             } else {
                 if (!S_ISREG(st.st_mode) && !S_ISLNK(st.st_mode)) {
                     sc.Error("skipping special file '%s'", lpath.c_str());
                 } else {
-                    copyinfo ci = mkcopyinfo(lpath, rpath, de->d_name, 0);
                     ci.time = st.st_mtime;
-                    ci.mode = st.st_mode;
                     ci.size = st.st_size;
                     filelist->push_back(ci);
                 }
@@ -534,6 +548,20 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist
 
     // Close this directory and recurse.
     dir.reset();
+
+    // Add the current directory to the list if it was empty, to ensure that
+    // it gets created.
+    if (empty_dir) {
+        // TODO(b/25566053): Make pushing empty directories work.
+        // TODO(b/25457350): We don't preserve permissions on directories.
+        sc.Error("skipping empty directory '%s'", lpath.c_str());
+        copyinfo ci = mkcopyinfo(adb_dirname(lpath), adb_dirname(rpath),
+                                 adb_basename(lpath), S_IFDIR);
+        ci.skip = true;
+        filelist->push_back(ci);
+        return true;
+    }
+
     for (const copyinfo& ci : dirlist) {
         local_build_list(sc, filelist, ci.src.c_str(), ci.dst.c_str());
     }
@@ -661,19 +689,23 @@ static bool remote_build_list(SyncConnection& sc,
                               const std::string& rpath,
                               const std::string& lpath) {
     std::vector<copyinfo> dirlist;
+    bool empty_dir = true;
 
     // Put the files/dirs in rpath on the lists.
     auto callback = [&](unsigned mode, unsigned size, unsigned time,
                         const char* name) {
-        if (S_ISDIR(mode)) {
-            // Don't try recursing down "." or "..".
-            if (IsDotOrDotDot(name)) return;
+        if (IsDotOrDotDot(name)) {
+            return;
+        }
 
-            dirlist.push_back(mkcopyinfo(rpath, lpath, name, 1));
+        // We found a child that isn't '.' or '..'.
+        empty_dir = false;
+
+        copyinfo ci = mkcopyinfo(rpath, lpath, name, mode);
+        if (S_ISDIR(mode)) {
+            dirlist.push_back(ci);
         } else if (S_ISREG(mode) || S_ISLNK(mode)) {
-            copyinfo ci = mkcopyinfo(rpath, lpath, name, 0);
             ci.time = time;
-            ci.mode = mode;
             ci.size = size;
             filelist->push_back(ci);
         } else {
@@ -684,6 +716,18 @@ static bool remote_build_list(SyncConnection& sc,
 
     if (!sync_ls(sc, rpath.c_str(), callback)) {
         return false;
+    }
+
+    // Add the current directory to the list if it was empty, to ensure that
+    // it gets created.
+    if (empty_dir) {
+        auto rdname = adb_dirname(rpath);
+        auto ldname = adb_dirname(lpath);
+        auto rbasename = adb_basename(rpath);
+        auto lbasename = adb_basename(lpath);
+        filelist->push_back(mkcopyinfo(adb_dirname(rpath), adb_dirname(lpath),
+                                       adb_basename(rpath), S_IFDIR));
+        return true;
     }
 
     // Recurse into each directory we found.
@@ -735,6 +779,19 @@ static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
     for (const copyinfo &ci : filelist) {
         if (!ci.skip) {
             sc.Printf("pull: %s -> %s", ci.src.c_str(), ci.dst.c_str());
+
+            if (S_ISDIR(ci.mode)) {
+                // Entry is for an empty directory, create it and continue.
+                // TODO(b/25457350): We don't preserve permissions on directories.
+                if (!mkdirs(ci.dst))  {
+                    sc.Error("failed to create directory '%s': %s",
+                             ci.dst.c_str(), strerror(errno));
+                    return false;
+                }
+                pulled++;
+                continue;
+            }
+
             if (!sync_recv(sc, ci.src.c_str(), ci.dst.c_str())) {
                 return false;
             }
