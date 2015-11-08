@@ -164,8 +164,13 @@ static __inline__ int  unix_close(int fd)
 #undef   close
 #define  close   ____xxx_close
 
+// Like unix_read(), but may return EINTR.
+extern int  unix_read_interruptible(int  fd, void*  buf, size_t  len);
+
 // See the comments for the !defined(_WIN32) version of unix_read().
-extern int  unix_read(int  fd, void*  buf, size_t  len);
+static __inline__ int unix_read(int fd, void* buf, size_t len) {
+    return TEMP_FAILURE_RETRY(unix_read_interruptible(fd, buf, len));
+}
 
 #undef   read
 #define  read  ___xxx_read
@@ -515,6 +520,11 @@ static __inline__ int  adb_close(int fd)
 static __inline__  int  adb_read(int  fd, void*  buf, size_t  len)
 {
     return TEMP_FAILURE_RETRY( read( fd, buf, len ) );
+}
+
+// Like unix_read(), but does not handle EINTR.
+static __inline__ int unix_read_interruptible(int fd, void* buf, size_t len) {
+    return read(fd, buf, len);
 }
 
 #undef   read

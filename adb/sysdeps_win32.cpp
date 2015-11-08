@@ -2588,6 +2588,18 @@ static bool _get_key_event_record(const HANDLE console, INPUT_RECORD* const inpu
             fatal("ReadConsoleInputA did not return one input record");
         }
 
+        // If the console window is resized, emulate SIGWINCH by breaking out
+        // of read() with errno == EINTR. Note that there is no event on
+        // vertical resize because we don't give the console our own custom
+        // screen buffer (with CreateConsoleScreenBuffer() +
+        // SetConsoleActiveScreenBuffer()). Instead, we use the default which
+        // supports scrollback, but doesn't seem to raise an event for vertical
+        // window resize.
+        if (input_record->EventType == WINDOW_BUFFER_SIZE_EVENT) {
+            errno = EINTR;
+            return false;
+        }
+
         if ((input_record->EventType == KEY_EVENT) &&
             (input_record->Event.KeyEvent.bKeyDown)) {
             if (input_record->Event.KeyEvent.wRepeatCount == 0) {
@@ -3323,9 +3335,13 @@ void stdin_raw_init() {
     // Disable ENABLE_LINE_INPUT so that input is immediately sent.
     // Disable ENABLE_ECHO_INPUT to disable local echo. Disabling this
     // flag also seems necessary to have proper line-ending processing.
-    if (!SetConsoleMode(in, _old_console_mode & ~(ENABLE_PROCESSED_INPUT |
-                                                  ENABLE_LINE_INPUT |
-                                                  ENABLE_ECHO_INPUT))) {
+    DWORD new_console_mode = _old_console_mode & ~(ENABLE_PROCESSED_INPUT |
+                                                   ENABLE_LINE_INPUT |
+                                                   ENABLE_ECHO_INPUT);
+    // Enable ENABLE_WINDOW_INPUT to get window resizes.
+    new_console_mode |= ENABLE_WINDOW_INPUT;
+
+    if (!SetConsoleMode(in, new_console_mode)) {
         // This really should not fail.
         D("stdin_raw_init: SetConsoleMode() failed: %s",
           SystemErrorCodeToString(GetLastError()).c_str());
@@ -3353,8 +3369,8 @@ void stdin_raw_restore() {
     }
 }
 
-// Called by 'adb shell' and 'adb exec-in' to read from stdin.
-int unix_read(int fd, void* buf, size_t len) {
+// Called by 'adb shell' and 'adb exec-in' (via unix_read()) to read from stdin.
+int unix_read_interruptible(int fd, void* buf, size_t len) {
     if ((fd == STDIN_FILENO) && (_console_handle != NULL)) {
         // If it is a request to read from stdin, and stdin_raw_init() has been
         // called, and it successfully configured the console, then read from
