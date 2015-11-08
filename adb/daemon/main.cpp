@@ -142,9 +142,11 @@ int adbd_main(int server_port) {
     // AID_SDCARD_R to allow reading from the SD card
     // AID_SDCARD_RW to allow writing to the SD card
     // AID_NET_BW_STATS to read out qtaguid statistics
+    // AID_READPROC for reading /proc entries across UID boundaries
     gid_t groups[] = {AID_ADB,      AID_LOG,       AID_INPUT,
                       AID_INET,     AID_NET_BT,    AID_NET_BT_ADMIN,
-                      AID_SDCARD_R, AID_SDCARD_RW, AID_NET_BW_STATS};
+                      AID_SDCARD_R, AID_SDCARD_RW, AID_NET_BW_STATS,
+                      AID_READPROC };
     if (setgroups(sizeof(groups) / sizeof(groups[0]), groups) != 0) {
         PLOG(FATAL) << "Could not set supplental groups";
     }
