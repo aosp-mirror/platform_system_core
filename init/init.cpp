@@ -386,7 +386,7 @@ static void process_kernel_dt() {
 
     struct dirent *dp;
     while ((dp = readdir(dir.get())) != NULL) {
-        if (dp->d_type != DT_REG || !strcmp(dp->d_name, "compatible")) {
+        if (dp->d_type != DT_REG || !strcmp(dp->d_name, "compatible") || !strcmp(dp->d_name, "name")) {
             continue;
         }
 
