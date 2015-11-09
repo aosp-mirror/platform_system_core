@@ -50,7 +50,7 @@ public:
     bool isValid() const {
         if (m_fdInitialized) {
             int status = fcntl(m_fd, F_GETFD, 0);
-            if (status == 0)
+            if (status >= 0)
                 return true;
             else
                 return false;
@@ -92,7 +92,7 @@ public:
     bool isValid() const {
         if (m_fdInitialized) {
             int status = fcntl(m_fd, F_GETFD, 0);
-            if (status == 0)
+            if (status >= 0)
                 return true;
             else
                 return false;
