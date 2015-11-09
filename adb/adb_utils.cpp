@@ -182,11 +182,8 @@ std::string dump_hex(const void* data, size_t byte_count) {
     line.push_back(' ');
 
     for (size_t i = 0; i < byte_count; ++i) {
-        int c = p[i];
-        if (c < 32 || c > 127) {
-            c = '.';
-        }
-        line.push_back(c);
+        int ch = p[i];
+        line.push_back(isprint(ch) ? ch : '.');
     }
 
     return line;

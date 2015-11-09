@@ -25,6 +25,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <algorithm>
+
 #if !ADB_HOST
 #include "cutils/properties.h"
 #endif

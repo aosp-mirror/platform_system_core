@@ -309,7 +309,12 @@ extern char* adb_getcwd(char* buf, int size);
 #define closedir adb_closedir
 #define rewinddir rewinddir_utf8_not_yet_implemented
 #define telldir telldir_utf8_not_yet_implemented
-#define seekdir seekdir_utf8_not_yet_implemented
+// Some compiler's C++ headers have members named seekdir, so we can't do the
+// macro technique and instead cause a link error if seekdir is called.
+inline void seekdir(DIR*, long) {
+    extern int seekdir_utf8_not_yet_implemented;
+    seekdir_utf8_not_yet_implemented = 1;
+}
 
 #define utime adb_utime
 #define chmod adb_chmod
