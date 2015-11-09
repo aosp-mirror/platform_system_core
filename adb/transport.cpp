@@ -42,9 +42,6 @@ static std::list<atransport*> pending_list;
 
 ADB_MUTEX_DEFINE( transport_lock );
 
-const char* const kFeatureShell2 = "shell_v2";
-const char* const kFeatureCmd = "cmd";
-
 static std::string dump_packet(const char* name, const char* func, apacket* p) {
     unsigned  command = p->msg.command;
     int       len     = p->msg.data_length;
@@ -783,8 +780,7 @@ constexpr char kFeatureStringDelimiter = ',';
 const FeatureSet& supported_features() {
     // Local static allocation to avoid global non-POD variables.
     static const FeatureSet* features = new FeatureSet{
-        kFeatureShell2,
-        kFeatureCmd
+        kFeatureShell2
         // Increment ADB_SERVER_VERSION whenever the feature list changes to
         // make sure that the adb client and server features stay in sync
         // (http://b/24370690).
