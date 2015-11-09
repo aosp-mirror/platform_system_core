@@ -26,6 +26,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <list>
 
 #include <base/logging.h>
