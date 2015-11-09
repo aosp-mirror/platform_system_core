@@ -163,7 +163,7 @@ void adb_trace_init(char** argv) {
     }
 #endif
 
-    android::base::InitLogging(argv, AdbLogger);
+    android::base::InitLogging(argv, &AdbLogger);
     setup_trace_mask();
 
     VLOG(ADB) << adb_version();

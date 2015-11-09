@@ -212,8 +212,8 @@ void InitLogging(char* argv[]) {
   gInitialized = true;
 
   // Stash the command line for later use. We can use /proc/self/cmdline on
-  // Linux to recover this, but we don't have that luxury on the Mac, and there
-  // are a couple of argv[0] variants that are commonly used.
+  // Linux to recover this, but we don't have that luxury on the Mac/Windows,
+  // and there are a couple of argv[0] variants that are commonly used.
   if (argv != nullptr) {
     gProgramInvocationName.reset(new std::string(basename(argv[0])));
   }
@@ -264,11 +264,20 @@ void SetLogger(LogFunction&& logger) {
   gLogger = std::move(logger);
 }
 
-// We can't use basename(3) because this code runs on the Mac, which doesn't
-// have a non-modifying basename.
 static const char* GetFileBasename(const char* file) {
+  // We can't use basename(3) even on Unix because the Mac doesn't
+  // have a non-modifying basename.
   const char* last_slash = strrchr(file, '/');
-  return (last_slash == nullptr) ? file : last_slash + 1;
+  if (last_slash != nullptr) {
+    return last_slash + 1;
+  }
+#if defined(_WIN32)
+  const char* last_backslash = strrchr(file, '\\');
+  if (last_backslash != nullptr) {
+    return last_backslash + 1;
+  }
+#endif
+  return file;
 }
 
 // This indirection greatly reduces the stack impact of having lots of

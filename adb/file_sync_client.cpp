@@ -753,7 +753,7 @@ static int set_time_and_mode(const char *lpath, time_t time, unsigned int mode)
     umask(mask);
     int r2 = chmod(lpath, mode & ~mask);
 
-    return r1 ? : r2;
+    return r1 ? r1 : r2;
 }
 
 static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
