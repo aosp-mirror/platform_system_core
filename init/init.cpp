@@ -832,8 +832,9 @@ static void process_kernel_dt(void)
 
     struct dirent *dp;
     while ((dp = readdir(dir.get())) != NULL) {
-        if (dp->d_type != DT_REG || !strcmp(dp->d_name, "compatible"))
+        if (dp->d_type != DT_REG || !strcmp(dp->d_name, "compatible") || !strcmp(dp->d_name, "name")) {
             continue;
+        }
 
         file_name = android::base::StringPrintf("%s/%s", android_dir, dp->d_name);
 
