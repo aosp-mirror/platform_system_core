@@ -467,6 +467,7 @@ struct StdinReadArgs {
     int stdin_fd, write_fd;
     bool raw_stdin;
     std::unique_ptr<ShellProtocol> protocol;
+    char escape_char;
 };
 
 // Loops to read from stdin and push the data to the given FD.
@@ -474,7 +475,6 @@ struct StdinReadArgs {
 // will take ownership of the object and delete it when finished.
 static void* stdin_read_thread_loop(void* x) {
     std::unique_ptr<StdinReadArgs> args(reinterpret_cast<StdinReadArgs*>(x));
-    int state = 0;
 
 #if !defined(_WIN32)
     // Mask SIGTTIN in case we're in a backgrounded process.
@@ -496,13 +496,21 @@ static void* stdin_read_thread_loop(void* x) {
     // Set up the initial window size.
     send_window_size_change(args->stdin_fd, args->protocol);
 
-    char raw_buffer[1024];
+    char raw_buffer[BUFSIZ];
     char* buffer_ptr = raw_buffer;
     size_t buffer_size = sizeof(raw_buffer);
     if (args->protocol != nullptr) {
         buffer_ptr = args->protocol->data();
         buffer_size = args->protocol->data_capacity();
     }
+
+    // If we need to parse escape sequences, make life easy.
+    if (args->raw_stdin && args->escape_char != '\0') {
+        buffer_size = 1;
+    }
+
+    enum EscapeState { kMidFlow, kStartOfLine, kInEscape };
+    EscapeState state = kStartOfLine;
 
     while (true) {
         // Use unix_read() rather than adb_read() for stdin.
@@ -529,36 +537,36 @@ static void* stdin_read_thread_loop(void* x) {
             }
             break;
         }
-        // If we made stdin raw, check input for the "~." escape sequence. In
+        // If we made stdin raw, check input for escape sequences. In
         // this situation signals like Ctrl+C are sent remotely rather than
         // interpreted locally so this provides an emergency out if the remote
         // process starts ignoring the signal. SSH also does this, see the
         // "escape characters" section on the ssh man page for more info.
-        if (args->raw_stdin) {
-            for (int n = 0; n < r; n++) {
-                switch (buffer_ptr[n]) {
-                case '\n':
-                    state = 1;
-                    break;
-                case '\r':
-                    state = 1;
-                    break;
-                case '~':
-                    if (state == 1) {
-                        state++;
-                    } else {
-                        state = 0;
-                    }
-                    break;
-                case '.':
-                    if (state == 2) {
-                        fprintf(stderr,"\r\n* disconnect *\r\n");
+        if (args->raw_stdin && args->escape_char != '\0') {
+            char ch = buffer_ptr[0];
+            if (ch == args->escape_char) {
+                if (state == kStartOfLine) {
+                    state = kInEscape;
+                    // Swallow the escape character.
+                    continue;
+                } else {
+                    state = kMidFlow;
+                }
+            } else {
+                if (state == kInEscape) {
+                    if (ch == '.') {
+                        fprintf(stderr,"\r\n[ disconnected ]\r\n");
                         stdin_raw_restore();
                         exit(0);
+                    } else {
+                        // We swallowed an escape character that wasn't part of
+                        // a valid escape sequence; time to cough it up.
+                        buffer_ptr[0] = args->escape_char;
+                        buffer_ptr[1] = ch;
+                        ++r;
                     }
-                default:
-                    state = 0;
                 }
+                state = (ch == '\n' || ch == '\r') ? kStartOfLine : kMidFlow;
             }
         }
         if (args->protocol) {
@@ -603,6 +611,7 @@ static std::string ShellServiceString(bool use_shell_protocol,
 // On success returns the remote exit code if |use_shell_protocol| is true,
 // 0 otherwise. On failure returns 1.
 static int RemoteShell(bool use_shell_protocol, const std::string& type_arg,
+                       char escape_char,
                        const std::string& command) {
     std::string service_string = ShellServiceString(use_shell_protocol,
                                                     type_arg, command);
@@ -628,6 +637,7 @@ static int RemoteShell(bool use_shell_protocol, const std::string& type_arg,
     args->stdin_fd = STDIN_FILENO;
     args->write_fd = fd;
     args->raw_stdin = raw_stdin;
+    args->escape_char = escape_char;
     if (use_shell_protocol) {
         args->protocol.reset(new ShellProtocol(args->write_fd));
     }
@@ -689,8 +699,17 @@ static int adb_shell(int argc, const char** argv,
     --argc;
     ++argv;
     int t_arg_count = 0;
+    char escape_char = '~';
     while (argc) {
-        if (!strcmp(argv[0], "-T") || !strcmp(argv[0], "-t")) {
+        if (!strcmp(argv[0], "-e")) {
+            if (argc < 2 || !(strlen(argv[1]) == 1 || strcmp(argv[1], "none") == 0)) {
+                fprintf(stderr, "error: -e requires a single-character argument or 'none'\n");
+                return 1;
+            }
+            escape_char = (strcmp(argv[1], "none") == 0) ? 0 : argv[1][0];
+            argc -= 2;
+            argv += 2;
+        } else if (!strcmp(argv[0], "-T") || !strcmp(argv[0], "-t")) {
             if (!CanUseFeature(features, kFeatureShell2)) {
                 fprintf(stderr, "error: target doesn't support PTY args -Tt\n");
                 return 1;
@@ -746,7 +765,7 @@ static int adb_shell(int argc, const char** argv,
         command = android::base::Join(std::vector<const char*>(argv, argv + argc), ' ');
     }
 
-    return RemoteShell(use_shell_protocol, shell_type_arg, command);
+    return RemoteShell(use_shell_protocol, shell_type_arg, escape_char, command);
 }
 
 static int adb_download_buffer(const char *service, const char *fn, const void* data, unsigned sz,
