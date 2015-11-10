@@ -209,6 +209,17 @@ class SyncConnection {
         line_printer_.Print(s, LinePrinter::FULL);
     }
 
+    void Warning(const char* fmt, ...) __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3))) {
+        std::string s = "adb: warning: ";
+
+        va_list ap;
+        va_start(ap, fmt);
+        android::base::StringAppendV(&s, fmt, ap);
+        va_end(ap);
+
+        line_printer_.Print(s, LinePrinter::FULL);
+    }
+
     uint64_t total_bytes;
 
     // TODO: add a char[max] buffer here, to replace syncsendbuf...
@@ -533,7 +544,7 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist
                 dirlist.push_back(ci);
             } else {
                 if (!S_ISREG(st.st_mode) && !S_ISLNK(st.st_mode)) {
-                    sc.Error("skipping special file '%s'", lpath.c_str());
+                    sc.Warning("skipping special file '%s'", lpath.c_str());
                 } else {
                     ci.time = st.st_mtime;
                     ci.size = st.st_size;
@@ -554,7 +565,7 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist
     if (empty_dir) {
         // TODO(b/25566053): Make pushing empty directories work.
         // TODO(b/25457350): We don't preserve permissions on directories.
-        sc.Error("skipping empty directory '%s'", lpath.c_str());
+        sc.Warning("skipping empty directory '%s'", lpath.c_str());
         copyinfo ci = mkcopyinfo(adb_dirname(lpath), adb_dirname(rpath),
                                  adb_basename(lpath), S_IFDIR);
         ci.skip = true;
@@ -709,8 +720,7 @@ static bool remote_build_list(SyncConnection& sc,
             ci.size = size;
             filelist->push_back(ci);
         } else {
-            sc.Print(android::base::StringPrintf("skipping special file '%s'\n",
-                                                 name));
+            sc.Warning("skipping special file '%s'\n", name);
         }
     };
 
