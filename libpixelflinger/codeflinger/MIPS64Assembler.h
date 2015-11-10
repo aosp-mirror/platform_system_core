@@ -303,32 +303,7 @@ public:
 
 
 protected:
-    // void string_detab(char *s);
-    // void string_pad(char *s, int padded_len);
-
     ArmToMips64Assembler *mParent;
-    sp<Assembly>    mAssembly;
-    uint32_t*       mBase;
-    uint32_t*       mPC;
-    uint32_t*       mPrologPC;
-    int64_t         mDuration;
-#if defined(WITH_LIB_HARDWARE)
-    bool            mQemuTracing;
-#endif
-
-    struct branch_target_t {
-        inline branch_target_t() : label(0), pc(0) { }
-        inline branch_target_t(const char* l, uint32_t* p)
-            : label(l), pc(p) { }
-        const char* label;
-        uint32_t*   pc;
-    };
-
-    Vector<branch_target_t>                 mBranchTargets;
-    KeyedVector< const char*, uint32_t* >   mLabels;
-    KeyedVector< uint32_t*, const char* >   mLabelsInverseMapping;
-    KeyedVector< uint32_t*, const char* >   mComments;
-
 
     // opcode field of all instructions
     enum opcode_field {
