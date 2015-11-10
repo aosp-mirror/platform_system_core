@@ -38,7 +38,9 @@ bool CanUseFeature(const FeatureSet& feature_set, const std::string& feature);
 
 // Do not use any of [:;=,] in feature strings, they have special meaning
 // in the connection banner.
-constexpr char kFeatureShell2[] = "shell_v2";
+extern const char* const kFeatureShell2;
+// The 'cmd' command is available
+extern const char* const kFeatureCmd;
 
 class atransport {
 public:
