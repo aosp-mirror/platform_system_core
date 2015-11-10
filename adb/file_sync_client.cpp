@@ -862,7 +862,8 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
             continue;
         }
 
-        if (S_ISREG(mode) || S_ISLNK(mode) || S_ISCHR(mode) || S_ISBLK(mode)) {
+        if (S_ISREG(mode) || S_ISLNK(mode)) {
+            // TODO(b/25601283): symlinks shouldn't be handled as files.
             std::string path_holder;
             struct stat st;
             if (stat(dst_path, &st) == 0) {
