@@ -16,7 +16,7 @@
 LOCAL_PATH := $(my-dir)
 include $(CLEAR_VARS)
 
-liblog_sources := logd_write.c
+liblog_sources := logd_write.c log_event_write.c
 
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
