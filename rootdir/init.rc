@@ -331,6 +331,7 @@ on post-fs-data
     mkdir /data/misc/media 0700 media media
     mkdir /data/misc/boottrace 0771 system shell
     mkdir /data/misc/update_engine 0700 root root
+    mkdir /data/misc/trace 0700 root root
 
     # For security reasons, /data/local/tmp should always be empty.
     # Do not place files or directories in /data/local/tmp
@@ -564,6 +565,9 @@ service console /system/bin/sh
     seclabel u:r:shell:s0
 
 on property:ro.debuggable=1
+    # Give writes to anyone for the trace folder on debug builds.
+    # The folder is used to store method traces.
+    chmod 0773 /data/misc/trace
     start console
 
 service flash_recovery /system/bin/install-recovery.sh
