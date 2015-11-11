@@ -53,6 +53,33 @@
 #include <unistd.h>
 #endif
 
+// For gettid.
+#if defined(__APPLE__)
+#include "AvailabilityMacros.h"  // For MAC_OS_X_VERSION_MAX_ALLOWED
+#include <stdint.h>
+#include <stdlib.h>
+#include <sys/syscall.h>
+#include <sys/time.h>
+#include <unistd.h>
+#elif defined(__linux__) && !defined(__ANDROID__)
+#include <syscall.h>
+#include <unistd.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#endif
+
+static pid_t GetThreadId() {
+#if defined(__BIONIC__)
+  return gettid();
+#elif defined(__APPLE__)
+  return syscall(SYS_thread_selfid);
+#elif defined(__linux__)
+  return syscall(__NR_gettid);
+#elif defined(_WIN32)
+  return GetCurrentThreadId();
+#endif
+}
+
 namespace {
 #ifndef _WIN32
 using std::mutex;
@@ -158,7 +185,7 @@ void StderrLogger(LogId, LogSeverity severity, const char*, const char* file,
                 "Mismatch in size of log_characters and values in LogSeverity");
   char severity_char = log_characters[severity];
   fprintf(stderr, "%s %c %5d %5d %s:%u] %s\n", ProgramInvocationName(),
-          severity_char, getpid(), gettid(), file, line, message);
+          severity_char, getpid(), GetThreadId(), file, line, message);
 }
 
 
