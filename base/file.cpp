@@ -24,7 +24,6 @@
 #include <string>
 
 #include "base/macros.h"  // For TEMP_FAILURE_RETRY on Darwin.
-#include "base/utf8.h"
 #define LOG_TAG "base.file"
 #include "cutils/log.h"
 #include "utils/Compat.h"
@@ -35,9 +34,6 @@
 
 namespace android {
 namespace base {
-
-// Versions of standard library APIs that support UTF-8 strings.
-using namespace android::base::utf8;
 
 bool ReadFdToString(int fd, std::string* content) {
   content->clear();
