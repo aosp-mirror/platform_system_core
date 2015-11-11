@@ -491,6 +491,8 @@ static copyinfo mkcopyinfo(const std::string& spath, const std::string& dpath,
     copyinfo result;
     result.src = spath;
     result.dst = dpath;
+
+    // FIXME(b/25573669): This is probably broken on win32?
     if (result.src.back() != '/') {
       result.src.push_back('/');
     }
@@ -538,22 +540,23 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist
         std::string stat_path = lpath + de->d_name;
 
         struct stat st;
-        if (!lstat(stat_path.c_str(), &st)) {
-            copyinfo ci = mkcopyinfo(lpath, rpath, de->d_name, st.st_mode);
-            if (S_ISDIR(st.st_mode)) {
-                dirlist.push_back(ci);
-            } else {
-                if (!S_ISREG(st.st_mode) && !S_ISLNK(st.st_mode)) {
-                    sc.Warning("skipping special file '%s'", lpath.c_str());
-                } else {
-                    ci.time = st.st_mtime;
-                    ci.size = st.st_size;
-                    filelist->push_back(ci);
-                }
-            }
-        } else {
+        if (lstat(stat_path.c_str(), &st) == -1) {
             sc.Error("cannot lstat '%s': %s", stat_path.c_str(),
                      strerror(errno));
+            continue;
+        }
+
+        copyinfo ci = mkcopyinfo(lpath, rpath, de->d_name, st.st_mode);
+        if (S_ISDIR(st.st_mode)) {
+            dirlist.push_back(ci);
+        } else {
+            if (!S_ISREG(st.st_mode) && !S_ISLNK(st.st_mode)) {
+                sc.Error("skipping special file '%s'", lpath.c_str());
+            } else {
+                ci.time = st.st_mtime;
+                ci.size = st.st_size;
+                filelist->push_back(ci);
+            }
         }
     }
 
@@ -584,7 +587,9 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
                                   std::string rpath, bool check_timestamps,
                                   bool list_only) {
     // Make sure that both directory paths end in a slash.
-    // Both paths are known to exist, so they cannot be empty.
+    // Both paths are known to be nonempty.
+    //
+    // FIXME(b/25573669): This is probably broken on win32?
     if (lpath.back() != '/') {
         lpath.push_back('/');
     }
@@ -649,9 +654,10 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
     if (!sc.IsValid()) return false;
 
     bool success = true;
-    unsigned mode;
-    if (!sync_stat(sc, dst, nullptr, &mode, nullptr)) return false;
-    bool dst_isdir = mode != 0 && S_ISDIR(mode);
+    unsigned dst_mode;
+    if (!sync_stat(sc, dst, nullptr, &dst_mode, nullptr)) return false;
+    bool dst_exists = (dst_mode != 0);
+    bool dst_isdir = S_ISDIR(dst_mode);
 
     if (!dst_isdir) {
         if (srcs.size() > 1) {
@@ -659,7 +665,10 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
             return false;
         } else {
             size_t dst_len = strlen(dst);
-            if (dst[dst_len - 1] == '/') {
+
+            // A path that ends with a slash doesn't have to be a directory if
+            // it doesn't exist yet.
+            if (dst[dst_len - 1] == '/' && dst_exists) {
                 sc.Error("failed to access '%s': Not a directory", dst);
                 return false;
             }
@@ -669,19 +678,37 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
     for (const char* src_path : srcs) {
         const char* dst_path = dst;
         struct stat st;
-        if (stat(src_path, &st)) {
+        if (stat(src_path, &st) == -1) {
             sc.Error("cannot stat '%s': %s", src_path, strerror(errno));
             success = false;
             continue;
         }
 
         if (S_ISDIR(st.st_mode)) {
-            success &= copy_local_dir_remote(sc, src_path, dst, false, false);
+            std::string dst_dir = dst;
+
+            // If the destination path existed originally, the source directory
+            // should be copied as a child of the destination.
+            if (dst_exists) {
+                if (!dst_isdir) {
+                    sc.Error("target '%s' is not a directory", dst);
+                    return false;
+                }
+                // dst is a POSIX path, so we don't want to use the sysdeps
+                // helpers here.
+                if (dst_dir.back() != '/') {
+                    dst_dir.push_back('/');
+                }
+                dst_dir.append(adb_basename(src_path));
+            }
+
+            success &= copy_local_dir_remote(sc, src_path, dst_dir.c_str(),
+                                             false, false);
             continue;
         }
 
         std::string path_holder;
-        if (mode != 0 && S_ISDIR(mode)) {
+        if (dst_isdir) {
             // If we're copying a local file to a remote directory,
             // we really want to copy to remote_dir + "/" + local_filename.
             path_holder = android::base::StringPrintf(
@@ -769,10 +796,12 @@ static int set_time_and_mode(const char *lpath, time_t time, unsigned int mode)
 static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
                                   std::string lpath, bool copy_attrs) {
     // Make sure that both directory paths end in a slash.
-    // Both paths are known to exist, so they cannot be empty.
+    // Both paths are known to be nonempty, so we don't need to check.
     if (rpath.back() != '/') {
         rpath.push_back('/');
     }
+
+    // FIXME(b/25573669): This is probably broken on win32?
     if (lpath.back() != '/') {
         lpath.push_back('/');
     }
@@ -828,25 +857,38 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
     if (!sc.IsValid()) return false;
 
     bool success = true;
-    unsigned mode, time;
     struct stat st;
-    if (stat(dst, &st)) {
-        // If we're only pulling one file, the destination path might point to
+    bool dst_exists = true;
+
+    if (stat(dst, &st) == -1) {
+        dst_exists = false;
+
+        // If we're only pulling one path, the destination path might point to
         // a path that doesn't exist yet.
-        if (srcs.size() != 1 || errno != ENOENT) {
-            sc.Error("cannot stat '%s': %s", dst, strerror(errno));
+        if (srcs.size() == 1 && errno == ENOENT) {
+            // However, its parent must exist.
+            struct stat parent_st;
+            if (stat(adb_dirname(dst).c_str(), &parent_st) == -1) {
+                sc.Error("cannot create file/directory '%s': %s", dst, strerror(errno));
+                return false;
+            }
+        } else {
+            sc.Error("failed to access '%s': %s", dst, strerror(errno));
             return false;
         }
     }
 
-    bool dst_isdir = S_ISDIR(st.st_mode);
+    bool dst_isdir = dst_exists && S_ISDIR(st.st_mode);
     if (!dst_isdir) {
         if (srcs.size() > 1) {
             sc.Error("target '%s' is not a directory", dst);
             return false;
         } else {
             size_t dst_len = strlen(dst);
-            if (dst[dst_len - 1] == '/') {
+
+            // A path that ends with a slash doesn't have to be a directory if
+            // it doesn't exist yet.
+            if (dst[dst_len - 1] == '/' && dst_exists) {
                 sc.Error("failed to access '%s': Not a directory", dst);
                 return false;
             }
@@ -855,38 +897,54 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
 
     for (const char* src_path : srcs) {
         const char* dst_path = dst;
-        if (!sync_stat(sc, src_path, &time, &mode, nullptr)) return false;
-        if (mode == 0) {
+        unsigned src_mode, src_time;
+        if (!sync_stat(sc, src_path, &src_time, &src_mode, nullptr)) {
+            return false;
+        }
+        if (src_mode == 0) {
             sc.Error("remote object '%s' does not exist", src_path);
             success = false;
             continue;
         }
 
-        if (S_ISREG(mode) || S_ISLNK(mode)) {
+        if (S_ISREG(src_mode) || S_ISLNK(src_mode)) {
             // TODO(b/25601283): symlinks shouldn't be handled as files.
             std::string path_holder;
-            struct stat st;
-            if (stat(dst_path, &st) == 0) {
-                if (S_ISDIR(st.st_mode)) {
-                    // If we're copying a remote file to a local directory,
-                    // we really want to copy to local_dir + "/" +
-                    // basename(remote).
-                    path_holder = android::base::StringPrintf(
-                        "%s/%s", dst_path, adb_basename(src_path).c_str());
-                    dst_path = path_holder.c_str();
-                }
+            if (dst_isdir) {
+                // If we're copying a remote file to a local directory, we
+                // really want to copy to local_dir + "/" + basename(remote).
+                path_holder = android::base::StringPrintf(
+                    "%s/%s", dst_path, adb_basename(src_path).c_str());
+                dst_path = path_holder.c_str();
             }
             if (!sync_recv(sc, src_path, dst_path)) {
                 success = false;
                 continue;
             } else {
-                if (copy_attrs && set_time_and_mode(dst_path, time, mode)) {
+                if (copy_attrs &&
+                    set_time_and_mode(dst_path, src_time, src_mode) != 0) {
                     success = false;
                     continue;
                 }
             }
-        } else if (S_ISDIR(mode)) {
-            success &= copy_remote_dir_local(sc, src_path, dst_path, copy_attrs);
+        } else if (S_ISDIR(src_mode)) {
+            std::string dst_dir = dst;
+
+            // If the destination path existed originally, the source directory
+            // should be copied as a child of the destination.
+            if (dst_exists) {
+                if (!dst_isdir) {
+                    sc.Error("target '%s' is not a directory", dst);
+                    return false;
+                }
+                if (!adb_is_separator(dst_dir.back())) {
+                    dst_dir.push_back(OS_PATH_SEPARATOR);
+                }
+                dst_dir.append(adb_basename(src_path));
+            }
+
+            success &= copy_remote_dir_local(sc, src_path, dst_dir.c_str(),
+                                             copy_attrs);
             continue;
         } else {
             sc.Error("remote object '%s' not a file or directory", src_path);
