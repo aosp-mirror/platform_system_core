@@ -35,6 +35,7 @@
 #include <base/logging.h>
 #include <base/stringprintf.h>
 #include <base/strings.h>
+#include <base/utf8.h>
 
 #include "adb.h"
 
@@ -3516,100 +3517,61 @@ static void _widen_fatal(const char *fmt, ...) {
     exit(-1);
 }
 
-// TODO: Consider implementing widen() and narrow() out of std::wstring_convert
-// once libcxx is supported on Windows. Or, consider libutils/Unicode.cpp.
-
-// Convert from UTF-8 to UTF-16. A size of -1 specifies a NULL terminated
-// string. Any other size specifies the number of chars to convert, excluding
-// any NULL terminator (if you're passing an explicit size, you probably don't
-// have a NULL terminated string in the first place).
-std::wstring widen(const char* utf8, const int size) {
-    // Note: Do not call SystemErrorCodeToString() from widen() because
-    // SystemErrorCodeToString() calls narrow() which may call fatal() which
-    // calls adb_vfprintf() which calls widen(), potentially causing infinite
-    // recursion.
-    const int chars_to_convert = MultiByteToWideChar(CP_UTF8, 0, utf8, size,
-                                                     NULL, 0);
-    if (chars_to_convert <= 0) {
-        // UTF-8 to UTF-16 should be lossless, so we don't expect this to fail.
-        _widen_fatal("MultiByteToWideChar failed counting: %d, "
-                     "GetLastError: %lu", chars_to_convert, GetLastError());
-    }
-
+// Convert size number of UTF-8 char's to UTF-16. Fatal exit on error.
+std::wstring widen(const char* utf8, const size_t size) {
     std::wstring utf16;
-    size_t chars_to_allocate = chars_to_convert;
-    if (size == -1) {
-        // chars_to_convert includes a NULL terminator, so subtract space
-        // for that because resize() includes that itself.
-        --chars_to_allocate;
+    if (!android::base::UTF8ToWide(utf8, size, &utf16)) {
+        // If we call fatal() here and fatal() calls widen(), then there may be
+        // infinite recursion. To avoid this, call _widen_fatal() instead.
+        _widen_fatal("cannot convert from UTF-8 to UTF-16");
     }
-    utf16.resize(chars_to_allocate);
-
-    // This uses &string[0] to get write-access to the entire string buffer
-    // which may be assuming that the chars are all contiguous, but it seems
-    // to work and saves us the hassle of using a temporary
-    // std::vector<wchar_t>.
-    const int result = MultiByteToWideChar(CP_UTF8, 0, utf8, size, &utf16[0],
-                                           chars_to_convert);
-    if (result != chars_to_convert) {
-        // UTF-8 to UTF-16 should be lossless, so we don't expect this to fail.
-        _widen_fatal("MultiByteToWideChar failed conversion: %d, "
-                     "GetLastError: %lu", result, GetLastError());
-    }
-
-    // If a size was passed in (size != -1), then the string is NULL terminated
-    // by a NULL char that was written by std::string::resize(). If size == -1,
-    // then MultiByteToWideChar() read a NULL terminator from the original
-    // string and converted it to a NULL UTF-16 char in the output.
 
     return utf16;
 }
 
-// Convert a NULL terminated string from UTF-8 to UTF-16.
+// Convert a NULL-terminated string of UTF-8 characters to UTF-16. Fatal exit
+// on error.
 std::wstring widen(const char* utf8) {
-    // Pass -1 to let widen() determine the string length.
-    return widen(utf8, -1);
-}
-
-// Convert from UTF-8 to UTF-16.
-std::wstring widen(const std::string& utf8) {
-    return widen(utf8.c_str(), utf8.length());
-}
-
-// Convert from UTF-16 to UTF-8.
-std::string narrow(const std::wstring& utf16) {
-    return narrow(utf16.c_str());
-}
-
-// Convert from UTF-16 to UTF-8.
-std::string narrow(const wchar_t* utf16) {
-    // Note: Do not call SystemErrorCodeToString() from narrow() because
-    // SystemErrorCodeToString() calls narrow() and we don't want potential
-    // infinite recursion.
-    const int chars_required = WideCharToMultiByte(CP_UTF8, 0, utf16, -1, NULL,
-                                                   0, NULL, NULL);
-    if (chars_required <= 0) {
-        // UTF-16 to UTF-8 should be lossless, so we don't expect this to fail.
-        fatal("WideCharToMultiByte failed counting: %d, GetLastError: %lu",
-              chars_required, GetLastError());
+    std::wstring utf16;
+    if (!android::base::UTF8ToWide(utf8, &utf16)) {
+        // If we call fatal() here and fatal() calls widen(), then there may be
+        // infinite recursion. To avoid this, call _widen_fatal() instead.
+        _widen_fatal("cannot convert from UTF-8 to UTF-16");
     }
 
-    std::string utf8;
-    // Subtract space for the NULL terminator because resize() includes
-    // that itself. Note that this could potentially throw a std::bad_alloc
-    // exception.
-    utf8.resize(chars_required - 1);
+    return utf16;
+}
 
-    // This uses &string[0] to get write-access to the entire string buffer
-    // which may be assuming that the chars are all contiguous, but it seems
-    // to work and saves us the hassle of using a temporary
-    // std::vector<char>.
-    const int result = WideCharToMultiByte(CP_UTF8, 0, utf16, -1, &utf8[0],
-                                           chars_required, NULL, NULL);
-    if (result != chars_required) {
-        // UTF-16 to UTF-8 should be lossless, so we don't expect this to fail.
-        fatal("WideCharToMultiByte failed conversion: %d, GetLastError: %lu",
-              result, GetLastError());
+// Convert a UTF-8 std::string (including any embedded NULL characters) to
+// UTF-16. Fatal exit on error.
+std::wstring widen(const std::string& utf8) {
+    std::wstring utf16;
+    if (!android::base::UTF8ToWide(utf8, &utf16)) {
+        // If we call fatal() here and fatal() calls widen(), then there may be
+        // infinite recursion. To avoid this, call _widen_fatal() instead.
+        _widen_fatal("cannot convert from UTF-8 to UTF-16");
+    }
+
+    return utf16;
+}
+
+// Convert a UTF-16 std::wstring (including any embedded NULL characters) to
+// UTF-8. Fatal exit on error.
+std::string narrow(const std::wstring& utf16) {
+    std::string utf8;
+    if (!android::base::WideToUTF8(utf16, &utf8)) {
+        fatal("cannot convert from UTF-16 to UTF-8");
+    }
+
+    return utf8;
+}
+
+// Convert a NULL-terminated string of UTF-16 characters to UTF-8. Fatal exit
+// on error.
+std::string narrow(const wchar_t* utf16) {
+    std::string utf8;
+    if (!android::base::WideToUTF8(utf16, &utf8)) {
+        fatal("cannot convert from UTF-16 to UTF-8");
     }
 
     return utf8;
@@ -3752,9 +3714,12 @@ int adb_chmod(const char* path, int mode) {
 // on error.
 static int _console_write_utf8(const char* buf, size_t size, FILE* stream,
                                HANDLE console) {
-    // Convert from UTF-8 to UTF-16.
+    std::wstring output;
+
+    // Try to convert from data that might be UTF-8 to UTF-16, ignoring errors.
+    // Data might not be UTF-8 if the user cat's random data, runs dmesg, etc.
     // This could throw std::bad_alloc.
-    const std::wstring output(widen(buf, size));
+    (void)android::base::UTF8ToWide(buf, size, &output);
 
     // Note that this does not do \n => \r\n translation because that
     // doesn't seem necessary for the Windows console. For the Windows
