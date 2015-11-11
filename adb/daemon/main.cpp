@@ -148,7 +148,7 @@ int adbd_main(int server_port) {
                       AID_SDCARD_R, AID_SDCARD_RW, AID_NET_BW_STATS,
                       AID_READPROC };
     if (setgroups(sizeof(groups) / sizeof(groups[0]), groups) != 0) {
-        PLOG(FATAL) << "Could not set supplental groups";
+        PLOG(FATAL) << "Could not set supplemental groups";
     }
 
     /* don't listen on a port (default 5037) if running in secure mode */
@@ -168,7 +168,7 @@ int adbd_main(int server_port) {
     } else {
         if (root_seclabel != nullptr) {
             if (setcon(root_seclabel) < 0) {
-                LOG(FATAL) << "Could not set selinux context";
+                LOG(FATAL) << "Could not set SELinux context";
             }
         }
         std::string error;
