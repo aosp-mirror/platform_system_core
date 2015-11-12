@@ -90,9 +90,9 @@ void UserCollector::Initialize(
   directory_failure_ = directory_failure;
   filter_in_ = filter_in;
 
-  gid_t groups[] = { AID_ROOT, AID_SYSTEM, AID_DBUS };
+  gid_t groups[] = { AID_ROOT, AID_SYSTEM, AID_DBUS, AID_READPROC };
   if (setgroups(arraysize(groups), groups) != 0) {
-    PLOG(FATAL) << "Unable to set groups to root, system, and dbus";
+    PLOG(FATAL) << "Unable to set groups to root, system, dbus, and readproc";
   }
 }
 
