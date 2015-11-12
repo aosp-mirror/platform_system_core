@@ -297,9 +297,15 @@ static void usage() {
             "  -p <product>                             Specify product name.\n"
             "  -c <cmdline>                             Override kernel commandline.\n"
             "  -i <vendor id>                           Specify a custom USB vendor id.\n"
-            "  -b <base_addr>                           Specify a custom kernel base\n"
+            "  -b, --base <base_addr>                   Specify a custom kernel base\n"
             "                                           address (default: 0x10000000).\n"
-            "  -n <page size>                           Specify the nand page size\n"
+            "  --kernel-offset                          Specify a custom kernel offset.\n"
+            "                                           (default: 0x00008000)\n"
+            "  --ramdisk-offset                         Specify a custom ramdisk offset.\n"
+            "                                           (default: 0x01000000)\n"
+            "  --tags-offset                            Specify a custom tags offset.\n"
+            "                                           (default: 0x00000100)\n"
+            "  -n, --page-size <page size>              Specify the nand page size\n"
             "                                           (default: 2048).\n"
             "  -S <size>[K|M|G]                         Automatically sparse files greater\n"
             "                                           than 'size'. 0 to disable.\n"
@@ -310,10 +316,13 @@ static void usage() {
             "                                           to all slots. If this is not given,\n"
             "                                           slotted partitions will default to\n"
             "                                           the current active slot.\n"
-            "  --set_active[=<suffix>]                  Sets the active slot. If no suffix is\n"
+            "  -a, --set-active[=<suffix>]              Sets the active slot. If no suffix is\n"
             "                                           provided, this will default to the value\n"
             "                                           given by --slot. If slots are not\n"
             "                                           supported, this does nothing.\n"
+            "  --unbuffered                             Do not buffer input or output.\n"
+            "  --version                                Display version.\n"
+            "  -h, --help                               show this message.\n"
         );
 }
 static void* load_bootable_image(const char* kernel, const char* ramdisk,
@@ -1080,14 +1089,19 @@ int main(int argc, char **argv)
     const struct option longopts[] = {
         {"base", required_argument, 0, 'b'},
         {"kernel_offset", required_argument, 0, 'k'},
+        {"kernel-offset", required_argument, 0, 'k'},
         {"page_size", required_argument, 0, 'n'},
+        {"page-size", required_argument, 0, 'n'},
         {"ramdisk_offset", required_argument, 0, 'r'},
+        {"ramdisk-offset", required_argument, 0, 'r'},
         {"tags_offset", required_argument, 0, 't'},
+        {"tags-offset", required_argument, 0, 't'},
         {"help", no_argument, 0, 'h'},
         {"unbuffered", no_argument, 0, 0},
         {"version", no_argument, 0, 0},
         {"slot", required_argument, 0, 0},
         {"set_active", optional_argument, 0, 'a'},
+        {"set-active", optional_argument, 0, 'a'},
         {0, 0, 0, 0}
     };
 
