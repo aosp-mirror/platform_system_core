@@ -17,6 +17,14 @@ ADB_COMMON_CFLAGS := \
     -Wvla \
     -DADB_REVISION='"$(adb_version)"' \
 
+ADB_COMMON_linux_CFLAGS := \
+    -std=c++14 \
+    -Wexit-time-destructors \
+
+ADB_COMMON_darwin_CFLAGS := \
+    -std=c++14 \
+    -Wexit-time-destructors \
+
 # Define windows.h and tchar.h Unicode preprocessor symbols so that
 # CreateFile(), _tfopen(), etc. map to versions that take wchar_t*, breaking the
 # build if you accidentally pass char*. Fix by calling like:
@@ -55,7 +63,10 @@ LIBADB_CFLAGS := \
     -fvisibility=hidden \
 
 LIBADB_linux_CFLAGS := \
-    -std=c++14 \
+    $(ADB_COMMON_linux_CFLAGS) \
+
+LIBADB_darwin_CFLAGS := \
+    $(ADB_COMMON_darwin_CFLAGS) \
 
 LIBADB_windows_CFLAGS := \
     $(ADB_COMMON_windows_CFLAGS) \
@@ -110,6 +121,7 @@ LOCAL_MODULE_HOST_OS := darwin linux windows
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=1
 LOCAL_CFLAGS_windows := $(LIBADB_windows_CFLAGS)
 LOCAL_CFLAGS_linux := $(LIBADB_linux_CFLAGS)
+LOCAL_CFLAGS_darwin := $(LIBADB_darwin_CFLAGS)
 LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
     adb_auth_host.cpp \
@@ -155,6 +167,7 @@ LOCAL_MODULE_HOST_OS := darwin linux windows
 LOCAL_CFLAGS := -DADB_HOST=1 $(LIBADB_CFLAGS)
 LOCAL_CFLAGS_windows := $(LIBADB_windows_CFLAGS)
 LOCAL_CFLAGS_linux := $(LIBADB_linux_CFLAGS)
+LOCAL_CFLAGS_darwin := $(LIBADB_darwin_CFLAGS)
 LOCAL_SRC_FILES := \
     $(LIBADB_TEST_SRCS) \
     services.cpp \
@@ -189,6 +202,7 @@ LOCAL_MODULE := adb_device_tracker_test
 LOCAL_CFLAGS := -DADB_HOST=1 $(LIBADB_CFLAGS)
 LOCAL_CFLAGS_windows := $(LIBADB_windows_CFLAGS)
 LOCAL_CFLAGS_linux := $(LIBADB_linux_CFLAGS)
+LOCAL_CFLAGS_darwin := $(LIBADB_darwin_CFLAGS)
 LOCAL_SRC_FILES := test_track_devices.cpp
 LOCAL_SANITIZE := $(adb_host_sanitize)
 LOCAL_SHARED_LIBRARIES := libbase
@@ -204,7 +218,6 @@ include $(CLEAR_VARS)
 LOCAL_LDLIBS_linux := -lrt -ldl -lpthread
 
 LOCAL_LDLIBS_darwin := -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
-LOCAL_CFLAGS_darwin := -Wno-sizeof-pointer-memaccess -Wno-unused-parameter
 
 # Use wmain instead of main
 LOCAL_LDFLAGS_windows := -municode
@@ -229,6 +242,13 @@ LOCAL_CFLAGS += \
 
 LOCAL_CFLAGS_windows := \
     $(ADB_COMMON_windows_CFLAGS)
+
+LOCAL_CFLAGS_linux := \
+    $(ADB_COMMON_linux_CFLAGS) \
+
+LOCAL_CFLAGS_darwin := \
+    $(ADB_COMMON_darwin_CFLAGS) \
+    -Wno-sizeof-pointer-memaccess -Wno-unused-parameter \
 
 LOCAL_MODULE := adb
 LOCAL_MODULE_TAGS := debug
@@ -273,6 +293,7 @@ LOCAL_SRC_FILES := \
 
 LOCAL_CFLAGS := \
     $(ADB_COMMON_CFLAGS) \
+    $(ADB_COMMON_linux_CFLAGS) \
     -DADB_HOST=0 \
     -D_GNU_SOURCE \
     -Wno-deprecated-declarations \

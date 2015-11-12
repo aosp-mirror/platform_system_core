@@ -35,8 +35,6 @@
 #include "cutils/properties.h"
 #include "fs_mgr.h"
 
-const std::string kFstab_Prefix = "/fstab.";
-
 // Returns the device used to mount a directory in /proc/mounts.
 static std::string find_proc_mount(const char* dir) {
     std::unique_ptr<FILE, int(*)(FILE*)> fp(setmntent("/proc/mounts", "r"), endmntent);
@@ -58,7 +56,7 @@ static std::string find_fstab_mount(const char* dir) {
     char propbuf[PROPERTY_VALUE_MAX];
 
     property_get("ro.hardware", propbuf, "");
-    std::string fstab_filename = kFstab_Prefix + propbuf;
+    std::string fstab_filename = std::string("/fstab.") + propbuf;
     struct fstab* fstab = fs_mgr_read_fstab(fstab_filename.c_str());
     struct fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab, dir);
     std::string dev = rec ? std::string(rec->blk_device) : "";

@@ -62,7 +62,7 @@ static int uninstall_app(TransportType t, const char* serial, int argc, const ch
 static int install_app_legacy(TransportType t, const char* serial, int argc, const char** argv);
 static int uninstall_app_legacy(TransportType t, const char* serial, int argc, const char** argv);
 
-static std::string gProductOutPath;
+static auto& gProductOutPath = *new std::string();
 extern int gListenAll;
 
 static std::string product_file(const char *extra) {

@@ -70,8 +70,8 @@ struct PollNode {
 
 // All operations to fdevent should happen only in the main thread.
 // That's why we don't need a lock for fdevent.
-static std::unordered_map<int, PollNode> g_poll_node_map;
-static std::list<fdevent*> g_pending_list;
+static auto& g_poll_node_map = *new std::unordered_map<int, PollNode>();
+static auto& g_pending_list = *new std::list<fdevent*>();
 static bool main_thread_valid;
 static pthread_t main_thread;
 
