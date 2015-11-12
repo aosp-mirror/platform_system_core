@@ -179,13 +179,13 @@ std::string SystemProfileCache::GetPersistentGUID(
 
 metrics::SystemProfileProto_Channel SystemProfileCache::ProtoChannelFromString(
     const std::string& channel) {
-  if (channel == "stable") {
+  if (channel == "stable-channel") {
     return metrics::SystemProfileProto::CHANNEL_STABLE;
-  } else if (channel == "dev") {
+  } else if (channel == "dev-channel") {
     return metrics::SystemProfileProto::CHANNEL_DEV;
-  } else if (channel == "beta") {
+  } else if (channel == "beta-channel") {
     return metrics::SystemProfileProto::CHANNEL_BETA;
-  } else if (channel == "canary") {
+  } else if (channel == "canary-channel") {
     return metrics::SystemProfileProto::CHANNEL_CANARY;
   }
 
