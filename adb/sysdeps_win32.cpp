@@ -2546,15 +2546,14 @@ int unix_isatty(int fd) {
     return _get_console_handle(fd) ? 1 : 0;
 }
 
-// Read an input record from the console; one that should be processed.
-static bool _get_interesting_input_record_uncached(const HANDLE console,
-    INPUT_RECORD* const input_record) {
+// Get the next KEY_EVENT_RECORD that should be processed.
+static bool _get_key_event_record(const HANDLE console, INPUT_RECORD* const input_record) {
     for (;;) {
         DWORD read_count = 0;
         memset(input_record, 0, sizeof(*input_record));
         if (!ReadConsoleInputA(console, input_record, 1, &read_count)) {
-            D("_get_interesting_input_record_uncached: ReadConsoleInputA() "
-              "failed: %s\n", SystemErrorCodeToString(GetLastError()).c_str());
+            D("_get_key_event_record: ReadConsoleInputA() failed: %s\n",
+              SystemErrorCodeToString(GetLastError()).c_str());
             errno = EIO;
             return false;
         }
@@ -2578,28 +2577,6 @@ static bool _get_interesting_input_record_uncached(const HANDLE console,
             return true;
         }
     }
-}
-
-// Cached input record (in case _console_read() is passed a buffer that doesn't
-// have enough space to fit wRepeatCount number of key sequences). A non-zero
-// wRepeatCount indicates that a record is cached.
-static INPUT_RECORD _win32_input_record;
-
-// Get the next KEY_EVENT_RECORD that should be processed.
-static KEY_EVENT_RECORD* _get_key_event_record(const HANDLE console) {
-    // If nothing cached, read directly from the console until we get an
-    // interesting record.
-    if (_win32_input_record.Event.KeyEvent.wRepeatCount == 0) {
-        if (!_get_interesting_input_record_uncached(console,
-            &_win32_input_record)) {
-            // There was an error, so make sure wRepeatCount is zero because
-            // that signifies no cached input record.
-            _win32_input_record.Event.KeyEvent.wRepeatCount = 0;
-            return NULL;
-        }
-    }
-
-    return &_win32_input_record.Event.KeyEvent;
 }
 
 static __inline__ bool _is_shift_pressed(const DWORD control_key_state) {
@@ -2946,16 +2923,34 @@ size_t _escape_prefix(char* const buf, const size_t len) {
     return len + 1;
 }
 
-// Writes to buffer buf (of length len), returning number of bytes written or
-// -1 on error. Never returns zero because Win32 consoles are never 'closed'
-// (as far as I can tell).
+// Internal buffer to satisfy future _console_read() calls.
+static std::vector<char> g_console_input_buffer;
+
+// Writes to buffer buf (of length len), returning number of bytes written or -1 on error. Never
+// returns zero on console closure because Win32 consoles are never 'closed' (as far as I can tell).
 static int _console_read(const HANDLE console, void* buf, size_t len) {
     for (;;) {
-        KEY_EVENT_RECORD* const key_event = _get_key_event_record(console);
-        if (key_event == NULL) {
+        // Read of zero bytes should not block waiting for something from the console.
+        if (len == 0) {
+            return 0;
+        }
+
+        // Flush as much as possible from input buffer.
+        if (!g_console_input_buffer.empty()) {
+            const int bytes_read = std::min(len, g_console_input_buffer.size());
+            memcpy(buf, g_console_input_buffer.data(), bytes_read);
+            const auto begin = g_console_input_buffer.begin();
+            g_console_input_buffer.erase(begin, begin + bytes_read);
+            return bytes_read;
+        }
+
+        // Read from the actual console. This may block until input.
+        INPUT_RECORD input_record;
+        if (!_get_key_event_record(console, &input_record)) {
             return -1;
         }
 
+        KEY_EVENT_RECORD* const key_event = &input_record.Event.KeyEvent;
         const WORD vk = key_event->wVirtualKeyCode;
         const CHAR ch = key_event->uChar.AsciiChar;
         const DWORD control_key_state = _normalize_altgr_control_key_state(
@@ -3133,27 +3128,13 @@ static int _console_read(const HANDLE console, void* buf, size_t len) {
                 break;
 
                 case 0x32:          // 2
+                case 0x33:          // 3
+                case 0x34:          // 4
+                case 0x35:          // 5
                 case 0x36:          // 6
+                case 0x37:          // 7
+                case 0x38:          // 8
                 case VK_OEM_MINUS:  // -_
-                {
-                    seqbuflen = _get_control_character(seqbuf, key_event,
-                        control_key_state);
-
-                    // If Alt is pressed and it isn't Ctrl-Alt-ShiftUp, then
-                    // prefix with escape.
-                    if (_is_alt_pressed(control_key_state) &&
-                        !(_is_ctrl_pressed(control_key_state) &&
-                        !_is_shift_pressed(control_key_state))) {
-                        seqbuflen = _escape_prefix(seqbuf, seqbuflen);
-                    }
-                }
-                break;
-
-                case 0x33:  // 3
-                case 0x34:  // 4
-                case 0x35:  // 5
-                case 0x37:  // 7
-                case 0x38:  // 8
                 {
                     seqbuflen = _get_control_character(seqbuf, key_event,
                         control_key_state);
@@ -3296,46 +3277,15 @@ static int _console_read(const HANDLE console, void* buf, size_t len) {
             // event.
             D("_console_read: unknown virtual key code: %d, enhanced: %s",
                 vk, _is_enhanced_key(control_key_state) ? "true" : "false");
-            key_event->wRepeatCount = 0;
             continue;
         }
 
-        int bytesRead = 0;
-
-        // put output wRepeatCount times into buf/len
-        while (key_event->wRepeatCount > 0) {
-            if (len >= outlen) {
-                // Write to buf/len
-                memcpy(buf, out, outlen);
-                buf = (void*)((char*)buf + outlen);
-                len -= outlen;
-                bytesRead += outlen;
-
-                // consume the input
-                --key_event->wRepeatCount;
-            } else {
-                // Not enough space, so just leave it in _win32_input_record
-                // for a subsequent retrieval.
-                if (bytesRead == 0) {
-                    // We didn't write anything because there wasn't enough
-                    // space to even write one sequence. This should never
-                    // happen if the caller uses sensible buffer sizes
-                    // (i.e. >= maximum sequence length which is probably a
-                    // few bytes long).
-                    D("_console_read: no buffer space to write one sequence; "
-                        "buffer: %ld, sequence: %ld\n", (long)len,
-                        (long)outlen);
-                    errno = ENOMEM;
-                    return -1;
-                } else {
-                    // Stop trying to write to buf/len, just return whatever
-                    // we wrote so far.
-                    break;
-                }
-            }
+        // put output wRepeatCount times into g_console_input_buffer
+        while (key_event->wRepeatCount-- > 0) {
+            g_console_input_buffer.insert(g_console_input_buffer.end(), out, out + outlen);
         }
 
-        return bytesRead;
+        // Loop around and try to flush g_console_input_buffer
     }
 }
 
