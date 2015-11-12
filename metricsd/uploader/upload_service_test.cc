@@ -214,10 +214,10 @@ TEST_F(UploadServiceTest, ExtractChannelFromString) {
       metrics::SystemProfileProto::CHANNEL_UNKNOWN);
 
   EXPECT_EQ(metrics::SystemProfileProto::CHANNEL_DEV,
-            SystemProfileCache::ProtoChannelFromString("dev"));
+            SystemProfileCache::ProtoChannelFromString("dev-channel"));
 
   EXPECT_EQ(metrics::SystemProfileProto::CHANNEL_STABLE,
-            SystemProfileCache::ProtoChannelFromString("stable"));
+            SystemProfileCache::ProtoChannelFromString("stable-channel"));
 
   EXPECT_EQ(metrics::SystemProfileProto::CHANNEL_UNKNOWN,
             SystemProfileCache::ProtoChannelFromString("this is a test"));
