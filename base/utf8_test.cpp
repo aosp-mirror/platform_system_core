@@ -26,11 +26,15 @@ namespace base {
 TEST(UTFStringConversionsTest, ConvertInvalidUTF8) {
   std::wstring wide;
 
+  errno = 0;
+
   // Standalone \xa2 is an invalid UTF-8 sequence, so this should return an
   // error. Concatenate two C/C++ literal string constants to prevent the
   // compiler from giving an error about "\xa2af" containing a "hex escape
   // sequence out of range".
   EXPECT_FALSE(android::base::UTF8ToWide("before\xa2" "after", &wide));
+
+  EXPECT_EQ(EILSEQ, errno);
 
   // Even if an invalid character is encountered, UTF8ToWide() should still do
   // its best to convert the rest of the string. sysdeps_win32.cpp:
@@ -161,6 +165,7 @@ TEST(UTFStringConversionsTest, ConvertUTF8ToWide) {
 
   for (size_t i = 0; i < arraysize(convert_cases); i++) {
     std::wstring converted;
+    errno = 0;
     const bool success = UTF8ToWide(convert_cases[i].utf8,
                                     strlen(convert_cases[i].utf8),
                                     &converted);
@@ -171,6 +176,8 @@ TEST(UTFStringConversionsTest, ConvertUTF8ToWide) {
     if (success) {
       std::wstring expected(convert_cases[i].wide);
       EXPECT_EQ(expected, converted);
+    } else {
+      EXPECT_EQ(EILSEQ, errno);
     }
   }
 
@@ -227,6 +234,7 @@ TEST(UTFStringConversionsTest, ConvertUTF16ToUTF8) {
 
   for (size_t i = 0; i < arraysize(convert_cases); i++) {
     std::string converted;
+    errno = 0;
     const bool success = WideToUTF8(convert_cases[i].utf16,
                                     wcslen(convert_cases[i].utf16),
                                     &converted);
@@ -237,6 +245,8 @@ TEST(UTFStringConversionsTest, ConvertUTF16ToUTF8) {
     if (success) {
       std::string expected(convert_cases[i].utf8);
       EXPECT_EQ(expected, converted);
+    } else {
+      EXPECT_EQ(EILSEQ, errno);
     }
   }
 }
