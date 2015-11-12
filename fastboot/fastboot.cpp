@@ -1027,6 +1027,11 @@ static void fb_perform_format(usb_handle* usb,
         }
         partition_size = size_override;
     }
+    // Some bootloaders (angler, for example), send spurious leading whitespace.
+    partition_size = android::base::Trim(partition_size);
+    // Some bootloaders (hammerhead, for example) use implicit hex.
+    // This code used to use strtol with base 16.
+    if (!android::base::StartsWith(partition_size, "0x")) partition_size = "0x" + partition_size;
 
     gen = fs_get_generator(partition_type);
     if (!gen) {
@@ -1039,10 +1044,6 @@ static void fb_perform_format(usb_handle* usb,
                 partition_type.c_str());
         return;
     }
-
-    // Some bootloaders (hammerhead, for example) use implicit hex.
-    // This code used to use strtol with base 16.
-    if (!android::base::StartsWith(partition_size, "0x")) partition_size = "0x" + partition_size;
 
     int64_t size;
     if (!android::base::ParseInt(partition_size.c_str(), &size)) {
