@@ -721,7 +721,7 @@ static std::string verify_slot(usb_handle* usb, const char *slot) {
         if (suffix == slot)
             return slot;
     }
-    fprintf(stderr, "Slot %s does not exist. supported slots are:", slot);
+    fprintf(stderr, "Slot %s does not exist. supported slots are:\n", slot);
     for (const std::string &suffix : suffixes) {
         fprintf(stderr, "%s\n", suffix.c_str());
     }
@@ -729,14 +729,14 @@ static std::string verify_slot(usb_handle* usb, const char *slot) {
 }
 
 static void do_for_partition(usb_handle* usb, const char *part, const char *slot, std::function<void(const std::string&)> func, bool force_slot) {
-    std::string partition_slot;
+    std::string has_slot;
     std::string current_slot;
 
-    if (!fb_getvar(usb, std::string("partition-slot:")+part, &partition_slot)) {
-        /* If partition-slot is not supported, the answer is no. */
-        partition_slot = "";
+    if (!fb_getvar(usb, std::string("has-slot:")+part, &has_slot)) {
+        /* If has-slot is not supported, the answer is no. */
+        has_slot = "no";
     }
-    if (partition_slot == "1") {
+    if (has_slot == "yes") {
         if (!slot || slot[0] == 0) {
             if (!fb_getvar(usb, "current-slot", &current_slot)) {
                 die("Failed to identify current slot.\n");
@@ -758,13 +758,13 @@ static void do_for_partition(usb_handle* usb, const char *part, const char *slot
  * If force_slot is true, it will fail if a slot is specified, and the given partition does not support slots.
  */
 static void do_for_partitions(usb_handle* usb, const char *part, const char *slot, std::function<void(const std::string&)> func, bool force_slot) {
-    std::string partition_slot;
+    std::string has_slot;
 
     if (slot && strcmp(slot, "all") == 0) {
-        if (!fb_getvar(usb, std::string("partition-slot:") + part, &partition_slot)) {
+        if (!fb_getvar(usb, std::string("has-slot:") + part, &has_slot)) {
             die("Could not check if partition %s has slot.", part);
         }
-        if (partition_slot == "1") {
+        if (has_slot == "yes") {
             std::vector<std::string> suffixes = get_suffixes(usb);
             for (std::string &suffix : suffixes) {
                 do_for_partition(usb, part, suffix.c_str(), func, force_slot);
