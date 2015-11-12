@@ -277,8 +277,6 @@ static void usage() {
             "                                           override the fs type and/or size\n"
             "                                           the bootloader reports.\n"
             "  getvar <variable>                        Display a bootloader variable.\n"
-            "  set_active <suffix>                      Sets the active slot. If slots are\n"
-            "                                           not supported, this does nothing.\n"
             "  boot <kernel> [ <ramdisk> [ <second> ] ] Download and boot kernel.\n"
             "  flash:raw boot <kernel> [ <ramdisk> [ <second> ] ]\n"
             "                                           Create bootimage and flash it.\n"
@@ -312,9 +310,12 @@ static void usage() {
             "                                           to all slots. If this is not given,\n"
             "                                           slotted partitions will default to\n"
             "                                           the current active slot.\n"
+            "  --set_active[=<suffix>]                  Sets the active slot. If no suffix is\n"
+            "                                           provided, this will default to the value\n"
+            "                                           given by --slot. If slots are not\n"
+            "                                           supported, this does nothing.\n"
         );
 }
-
 static void* load_bootable_image(const char* kernel, const char* ramdisk,
                                  const char* secondstage, int64_t* sz,
                                  const char* cmdline) {
@@ -1065,14 +1066,16 @@ failed:
 
 int main(int argc, char **argv)
 {
-    int wants_wipe = 0;
-    int wants_reboot = 0;
-    int wants_reboot_bootloader = 0;
+    bool wants_wipe = false;
+    bool wants_reboot = false;
+    bool wants_reboot_bootloader = false;
+    bool wants_set_active = false;
     bool erase_first = true;
     void *data;
     int64_t sz;
     int longindex;
     std::string slot_override;
+    std::string next_active;
 
     const struct option longopts[] = {
         {"base", required_argument, 0, 'b'},
@@ -1084,18 +1087,24 @@ int main(int argc, char **argv)
         {"unbuffered", no_argument, 0, 0},
         {"version", no_argument, 0, 0},
         {"slot", required_argument, 0, 0},
+        {"set_active", optional_argument, 0, 'a'},
         {0, 0, 0, 0}
     };
 
     serial = getenv("ANDROID_SERIAL");
 
     while (1) {
-        int c = getopt_long(argc, argv, "wub:k:n:r:t:s:S:lp:c:i:m:h", longopts, &longindex);
+        int c = getopt_long(argc, argv, "wub:k:n:r:t:s:S:lp:c:i:m:ha::", longopts, &longindex);
         if (c < 0) {
             break;
         }
         /* Alphabetical cases */
         switch (c) {
+        case 'a':
+            wants_set_active = true;
+            if (optarg)
+                next_active = optarg;
+            break;
         case 'b':
             base_addr = strtoul(optarg, 0, 16);
             break;
@@ -1147,7 +1156,7 @@ int main(int argc, char **argv)
             erase_first = false;
             break;
         case 'w':
-            wants_wipe = 1;
+            wants_wipe = true;
             break;
         case '?':
             return 1;
@@ -1170,7 +1179,7 @@ int main(int argc, char **argv)
     argc -= optind;
     argv += optind;
 
-    if (argc == 0 && !wants_wipe) {
+    if (argc == 0 && !wants_wipe && !wants_set_active) {
         usage();
         return 1;
     }
@@ -1189,6 +1198,18 @@ int main(int argc, char **argv)
     usb_handle* usb = open_device();
     if (slot_override != "")
         slot_override = verify_slot(usb, slot_override.c_str());
+    if (next_active != "")
+        next_active = verify_slot(usb, next_active.c_str());
+
+    if (wants_set_active) {
+        if (next_active == "") {
+            if (slot_override == "") {
+                wants_set_active = false;
+            } else {
+                next_active = slot_override;
+            }
+        }
+    }
 
     while (argc > 0) {
         if (!strcmp(*argv, "getvar")) {
@@ -1254,18 +1275,18 @@ int main(int argc, char **argv)
             fb_queue_command("signature", "installing signature");
             skip(2);
         } else if(!strcmp(*argv, "reboot")) {
-            wants_reboot = 1;
+            wants_reboot = true;
             skip(1);
             if (argc > 0) {
                 if (!strcmp(*argv, "bootloader")) {
-                    wants_reboot = 0;
-                    wants_reboot_bootloader = 1;
+                    wants_reboot = false;
+                    wants_reboot_bootloader = true;
                     skip(1);
                 }
             }
             require(0);
         } else if(!strcmp(*argv, "reboot-bootloader")) {
-            wants_reboot_bootloader = 1;
+            wants_reboot_bootloader = true;
             skip(1);
         } else if (!strcmp(*argv, "continue")) {
             fb_queue_command("continue", "resuming boot");
@@ -1334,7 +1355,7 @@ int main(int argc, char **argv)
         } else if(!strcmp(*argv, "flashall")) {
             skip(1);
             do_flashall(usb, slot_override.c_str(), erase_first);
-            wants_reboot = 1;
+            wants_reboot = true;
         } else if(!strcmp(*argv, "update")) {
             if (argc > 1) {
                 do_update(usb, argv[1], slot_override.c_str(), erase_first);
@@ -1343,11 +1364,7 @@ int main(int argc, char **argv)
                 do_update(usb, "update.zip", slot_override.c_str(), erase_first);
                 skip(1);
             }
-            wants_reboot = 1;
-        } else if(!strcmp(*argv, "set_active")) {
-            require(2);
-            fb_set_active(argv[1]);
-            skip(2);
+            wants_reboot = true;
         } else if(!strcmp(*argv, "oem")) {
             argc = do_oem_command(argc, argv);
         } else if(!strcmp(*argv, "flashing")) {
@@ -1383,6 +1400,9 @@ int main(int argc, char **argv)
             fb_queue_erase("cache");
             fb_perform_format(usb, "cache", 1, nullptr, nullptr);
         }
+    }
+    if (wants_set_active) {
+        fb_set_active(next_active.c_str());
     }
     if (wants_reboot) {
         fb_queue_reboot();
