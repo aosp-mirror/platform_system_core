@@ -478,34 +478,34 @@ bool do_sync_ls(const char* path) {
 
 struct copyinfo
 {
-    std::string src;
-    std::string dst;
+    std::string lpath;
+    std::string rpath;
     unsigned int time;
     unsigned int mode;
     uint64_t size;
     bool skip;
 };
 
-static copyinfo mkcopyinfo(const std::string& spath, const std::string& dpath,
+static void ensure_trailing_separator(std::string& lpath, std::string& rpath) {
+    if (!adb_is_separator(lpath.back())) {
+        lpath.push_back(OS_PATH_SEPARATOR);
+    }
+    if (rpath.back() != '/') {
+        rpath.push_back('/');
+    }
+}
+
+static copyinfo mkcopyinfo(std::string lpath, std::string rpath,
                            const std::string& name, unsigned int mode) {
     copyinfo result;
-    result.src = spath;
-    result.dst = dpath;
+    result.lpath = std::move(lpath);
+    result.rpath = std::move(rpath);
+    ensure_trailing_separator(result.lpath, result.rpath);
+    result.lpath.append(name);
+    result.rpath.append(name);
 
-    // FIXME(b/25573669): This is probably broken on win32?
-    if (result.src.back() != '/') {
-      result.src.push_back('/');
-    }
-    if (result.dst.back() != '/') {
-      result.dst.push_back('/');
-    }
-    result.src.append(name);
-    result.dst.append(name);
-
-    bool isdir = S_ISDIR(mode);
-    if (isdir) {
-        result.src.push_back('/');
-        result.dst.push_back('/');
+    if (S_ISDIR(mode)) {
+        ensure_trailing_separator(result.lpath, result.rpath);
     }
 
     result.time = 0;
@@ -577,7 +577,7 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist
     }
 
     for (const copyinfo& ci : dirlist) {
-        local_build_list(sc, filelist, ci.src.c_str(), ci.dst.c_str());
+        local_build_list(sc, filelist, ci.lpath, ci.rpath);
     }
 
     return true;
@@ -587,15 +587,8 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
                                   std::string rpath, bool check_timestamps,
                                   bool list_only) {
     // Make sure that both directory paths end in a slash.
-    // Both paths are known to be nonempty.
-    //
-    // FIXME(b/25573669): This is probably broken on win32?
-    if (lpath.back() != '/') {
-        lpath.push_back('/');
-    }
-    if (rpath.back() != '/') {
-        rpath.push_back('/');
-    }
+    // Both paths are known to be nonempty, so we don't need to check.
+    ensure_trailing_separator(lpath, rpath);
 
     // Recursively build the list of files to copy.
     std::vector<copyinfo> filelist;
@@ -607,7 +600,7 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
 
     if (check_timestamps) {
         for (const copyinfo& ci : filelist) {
-            if (!sc.SendRequest(ID_STAT, ci.dst.c_str())) {
+            if (!sc.SendRequest(ID_STAT, ci.rpath.c_str())) {
                 return false;
             }
         }
@@ -629,10 +622,10 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
     for (const copyinfo& ci : filelist) {
         if (!ci.skip) {
             if (list_only) {
-                sc.Error("would push: %s -> %s", ci.src.c_str(),
-                         ci.dst.c_str());
+                sc.Error("would push: %s -> %s", ci.lpath.c_str(),
+                         ci.rpath.c_str());
             } else {
-                if (!sync_send(sc, ci.src.c_str(), ci.dst.c_str(), ci.time,
+                if (!sync_send(sc, ci.lpath.c_str(), ci.rpath.c_str(), ci.time,
                                ci.mode)) {
                     return false;
                 }
@@ -739,7 +732,7 @@ static bool remote_build_list(SyncConnection& sc,
         // We found a child that isn't '.' or '..'.
         empty_dir = false;
 
-        copyinfo ci = mkcopyinfo(rpath, lpath, name, mode);
+        copyinfo ci = mkcopyinfo(lpath, rpath, name, mode);
         if (S_ISDIR(mode)) {
             dirlist.push_back(ci);
         } else if (S_ISREG(mode) || S_ISLNK(mode)) {
@@ -758,11 +751,7 @@ static bool remote_build_list(SyncConnection& sc,
     // Add the current directory to the list if it was empty, to ensure that
     // it gets created.
     if (empty_dir) {
-        auto rdname = adb_dirname(rpath);
-        auto ldname = adb_dirname(lpath);
-        auto rbasename = adb_basename(rpath);
-        auto lbasename = adb_basename(lpath);
-        filelist->push_back(mkcopyinfo(adb_dirname(rpath), adb_dirname(lpath),
+        filelist->push_back(mkcopyinfo(adb_dirname(lpath), adb_dirname(rpath),
                                        adb_basename(rpath), S_IFDIR));
         return true;
     }
@@ -771,8 +760,7 @@ static bool remote_build_list(SyncConnection& sc,
     while (!dirlist.empty()) {
         copyinfo current = dirlist.back();
         dirlist.pop_back();
-        if (!remote_build_list(sc, filelist, current.src.c_str(),
-                               current.dst.c_str())) {
+        if (!remote_build_list(sc, filelist, current.rpath, current.lpath)) {
             return false;
         }
     }
@@ -780,15 +768,15 @@ static bool remote_build_list(SyncConnection& sc,
     return true;
 }
 
-static int set_time_and_mode(const char *lpath, time_t time, unsigned int mode)
-{
+static int set_time_and_mode(const std::string& lpath, time_t time,
+                             unsigned int mode) {
     struct utimbuf times = { time, time };
-    int r1 = utime(lpath, &times);
+    int r1 = utime(lpath.c_str(), &times);
 
     /* use umask for permissions */
     mode_t mask = umask(0000);
     umask(mask);
-    int r2 = chmod(lpath, mode & ~mask);
+    int r2 = chmod(lpath.c_str(), mode & ~mask);
 
     return r1 ? r1 : r2;
 }
@@ -797,14 +785,7 @@ static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
                                   std::string lpath, bool copy_attrs) {
     // Make sure that both directory paths end in a slash.
     // Both paths are known to be nonempty, so we don't need to check.
-    if (rpath.back() != '/') {
-        rpath.push_back('/');
-    }
-
-    // FIXME(b/25573669): This is probably broken on win32?
-    if (lpath.back() != '/') {
-        lpath.push_back('/');
-    }
+    ensure_trailing_separator(lpath, rpath);
 
     // Recursively build the list of files to copy.
     sc.Print("pull: building file list...");
@@ -817,26 +798,25 @@ static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
     int skipped = 0;
     for (const copyinfo &ci : filelist) {
         if (!ci.skip) {
-            sc.Printf("pull: %s -> %s", ci.src.c_str(), ci.dst.c_str());
+            sc.Printf("pull: %s -> %s", ci.rpath.c_str(), ci.lpath.c_str());
 
             if (S_ISDIR(ci.mode)) {
                 // Entry is for an empty directory, create it and continue.
                 // TODO(b/25457350): We don't preserve permissions on directories.
-                if (!mkdirs(ci.dst))  {
+                if (!mkdirs(ci.lpath))  {
                     sc.Error("failed to create directory '%s': %s",
-                             ci.dst.c_str(), strerror(errno));
+                             ci.lpath.c_str(), strerror(errno));
                     return false;
                 }
                 pulled++;
                 continue;
             }
 
-            if (!sync_recv(sc, ci.src.c_str(), ci.dst.c_str())) {
+            if (!sync_recv(sc, ci.rpath.c_str(), ci.lpath.c_str())) {
                 return false;
             }
 
-            if (copy_attrs &&
-                set_time_and_mode(ci.dst.c_str(), ci.time, ci.mode)) {
+            if (copy_attrs && set_time_and_mode(ci.lpath, ci.time, ci.mode)) {
                 return false;
             }
             pulled++;
@@ -888,7 +868,7 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
 
             // A path that ends with a slash doesn't have to be a directory if
             // it doesn't exist yet.
-            if (dst[dst_len - 1] == '/' && dst_exists) {
+            if (adb_is_separator(dst[dst_len - 1]) && dst_exists) {
                 sc.Error("failed to access '%s': Not a directory", dst);
                 return false;
             }
@@ -912,9 +892,11 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
             std::string path_holder;
             if (dst_isdir) {
                 // If we're copying a remote file to a local directory, we
-                // really want to copy to local_dir + "/" + basename(remote).
+                // really want to copy to local_dir + OS_PATH_SEPARATOR +
+                // basename(remote).
                 path_holder = android::base::StringPrintf(
-                    "%s/%s", dst_path, adb_basename(src_path).c_str());
+                    "%s%c%s", dst_path, OS_PATH_SEPARATOR,
+                    adb_basename(src_path).c_str());
                 dst_path = path_holder.c_str();
             }
             if (!sync_recv(sc, src_path, dst_path)) {
