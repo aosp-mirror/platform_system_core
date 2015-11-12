@@ -277,8 +277,6 @@ static void usage() {
             "                                           override the fs type and/or size\n"
             "                                           the bootloader reports.\n"
             "  getvar <variable>                        Display a bootloader variable.\n"
-            "  set_active <suffix>                      Sets the active slot. If slots are\n"
-            "                                           not supported, this does nothing.\n"
             "  boot <kernel> [ <ramdisk> [ <second> ] ] Download and boot kernel.\n"
             "  flash:raw boot <kernel> [ <ramdisk> [ <second> ] ]\n"
             "                                           Create bootimage and flash it.\n"
@@ -299,9 +297,15 @@ static void usage() {
             "  -p <product>                             Specify product name.\n"
             "  -c <cmdline>                             Override kernel commandline.\n"
             "  -i <vendor id>                           Specify a custom USB vendor id.\n"
-            "  -b <base_addr>                           Specify a custom kernel base\n"
+            "  -b, --base <base_addr>                   Specify a custom kernel base\n"
             "                                           address (default: 0x10000000).\n"
-            "  -n <page size>                           Specify the nand page size\n"
+            "  --kernel-offset                          Specify a custom kernel offset.\n"
+            "                                           (default: 0x00008000)\n"
+            "  --ramdisk-offset                         Specify a custom ramdisk offset.\n"
+            "                                           (default: 0x01000000)\n"
+            "  --tags-offset                            Specify a custom tags offset.\n"
+            "                                           (default: 0x00000100)\n"
+            "  -n, --page-size <page size>              Specify the nand page size\n"
             "                                           (default: 2048).\n"
             "  -S <size>[K|M|G]                         Automatically sparse files greater\n"
             "                                           than 'size'. 0 to disable.\n"
@@ -312,9 +316,15 @@ static void usage() {
             "                                           to all slots. If this is not given,\n"
             "                                           slotted partitions will default to\n"
             "                                           the current active slot.\n"
+            "  -a, --set-active[=<suffix>]              Sets the active slot. If no suffix is\n"
+            "                                           provided, this will default to the value\n"
+            "                                           given by --slot. If slots are not\n"
+            "                                           supported, this does nothing.\n"
+            "  --unbuffered                             Do not buffer input or output.\n"
+            "  --version                                Display version.\n"
+            "  -h, --help                               show this message.\n"
         );
 }
-
 static void* load_bootable_image(const char* kernel, const char* ramdisk,
                                  const char* secondstage, int64_t* sz,
                                  const char* cmdline) {
@@ -721,7 +731,7 @@ static std::string verify_slot(usb_handle* usb, const char *slot) {
         if (suffix == slot)
             return slot;
     }
-    fprintf(stderr, "Slot %s does not exist. supported slots are:", slot);
+    fprintf(stderr, "Slot %s does not exist. supported slots are:\n", slot);
     for (const std::string &suffix : suffixes) {
         fprintf(stderr, "%s\n", suffix.c_str());
     }
@@ -729,14 +739,14 @@ static std::string verify_slot(usb_handle* usb, const char *slot) {
 }
 
 static void do_for_partition(usb_handle* usb, const char *part, const char *slot, std::function<void(const std::string&)> func, bool force_slot) {
-    std::string partition_slot;
+    std::string has_slot;
     std::string current_slot;
 
-    if (!fb_getvar(usb, std::string("partition-slot:")+part, &partition_slot)) {
-        /* If partition-slot is not supported, the answer is no. */
-        partition_slot = "";
+    if (!fb_getvar(usb, std::string("has-slot:")+part, &has_slot)) {
+        /* If has-slot is not supported, the answer is no. */
+        has_slot = "no";
     }
-    if (partition_slot == "1") {
+    if (has_slot == "yes") {
         if (!slot || slot[0] == 0) {
             if (!fb_getvar(usb, "current-slot", &current_slot)) {
                 die("Failed to identify current slot.\n");
@@ -758,13 +768,13 @@ static void do_for_partition(usb_handle* usb, const char *part, const char *slot
  * If force_slot is true, it will fail if a slot is specified, and the given partition does not support slots.
  */
 static void do_for_partitions(usb_handle* usb, const char *part, const char *slot, std::function<void(const std::string&)> func, bool force_slot) {
-    std::string partition_slot;
+    std::string has_slot;
 
     if (slot && strcmp(slot, "all") == 0) {
-        if (!fb_getvar(usb, std::string("partition-slot:") + part, &partition_slot)) {
+        if (!fb_getvar(usb, std::string("has-slot:") + part, &has_slot)) {
             die("Could not check if partition %s has slot.", part);
         }
-        if (partition_slot == "1") {
+        if (has_slot == "yes") {
             std::vector<std::string> suffixes = get_suffixes(usb);
             for (std::string &suffix : suffixes) {
                 do_for_partition(usb, part, suffix.c_str(), func, force_slot);
@@ -1066,37 +1076,50 @@ failed:
 
 int main(int argc, char **argv)
 {
-    int wants_wipe = 0;
-    int wants_reboot = 0;
-    int wants_reboot_bootloader = 0;
+    bool wants_wipe = false;
+    bool wants_reboot = false;
+    bool wants_reboot_bootloader = false;
+    bool wants_set_active = false;
     bool erase_first = true;
     void *data;
     int64_t sz;
     int longindex;
     std::string slot_override;
+    std::string next_active;
 
     const struct option longopts[] = {
         {"base", required_argument, 0, 'b'},
         {"kernel_offset", required_argument, 0, 'k'},
+        {"kernel-offset", required_argument, 0, 'k'},
         {"page_size", required_argument, 0, 'n'},
+        {"page-size", required_argument, 0, 'n'},
         {"ramdisk_offset", required_argument, 0, 'r'},
+        {"ramdisk-offset", required_argument, 0, 'r'},
         {"tags_offset", required_argument, 0, 't'},
+        {"tags-offset", required_argument, 0, 't'},
         {"help", no_argument, 0, 'h'},
         {"unbuffered", no_argument, 0, 0},
         {"version", no_argument, 0, 0},
         {"slot", required_argument, 0, 0},
+        {"set_active", optional_argument, 0, 'a'},
+        {"set-active", optional_argument, 0, 'a'},
         {0, 0, 0, 0}
     };
 
     serial = getenv("ANDROID_SERIAL");
 
     while (1) {
-        int c = getopt_long(argc, argv, "wub:k:n:r:t:s:S:lp:c:i:m:h", longopts, &longindex);
+        int c = getopt_long(argc, argv, "wub:k:n:r:t:s:S:lp:c:i:m:ha::", longopts, &longindex);
         if (c < 0) {
             break;
         }
         /* Alphabetical cases */
         switch (c) {
+        case 'a':
+            wants_set_active = true;
+            if (optarg)
+                next_active = optarg;
+            break;
         case 'b':
             base_addr = strtoul(optarg, 0, 16);
             break;
@@ -1148,7 +1171,7 @@ int main(int argc, char **argv)
             erase_first = false;
             break;
         case 'w':
-            wants_wipe = 1;
+            wants_wipe = true;
             break;
         case '?':
             return 1;
@@ -1171,7 +1194,7 @@ int main(int argc, char **argv)
     argc -= optind;
     argv += optind;
 
-    if (argc == 0 && !wants_wipe) {
+    if (argc == 0 && !wants_wipe && !wants_set_active) {
         usage();
         return 1;
     }
@@ -1190,6 +1213,18 @@ int main(int argc, char **argv)
     usb_handle* usb = open_device();
     if (slot_override != "")
         slot_override = verify_slot(usb, slot_override.c_str());
+    if (next_active != "")
+        next_active = verify_slot(usb, next_active.c_str());
+
+    if (wants_set_active) {
+        if (next_active == "") {
+            if (slot_override == "") {
+                wants_set_active = false;
+            } else {
+                next_active = slot_override;
+            }
+        }
+    }
 
     while (argc > 0) {
         if (!strcmp(*argv, "getvar")) {
@@ -1255,18 +1290,18 @@ int main(int argc, char **argv)
             fb_queue_command("signature", "installing signature");
             skip(2);
         } else if(!strcmp(*argv, "reboot")) {
-            wants_reboot = 1;
+            wants_reboot = true;
             skip(1);
             if (argc > 0) {
                 if (!strcmp(*argv, "bootloader")) {
-                    wants_reboot = 0;
-                    wants_reboot_bootloader = 1;
+                    wants_reboot = false;
+                    wants_reboot_bootloader = true;
                     skip(1);
                 }
             }
             require(0);
         } else if(!strcmp(*argv, "reboot-bootloader")) {
-            wants_reboot_bootloader = 1;
+            wants_reboot_bootloader = true;
             skip(1);
         } else if (!strcmp(*argv, "continue")) {
             fb_queue_command("continue", "resuming boot");
@@ -1335,7 +1370,7 @@ int main(int argc, char **argv)
         } else if(!strcmp(*argv, "flashall")) {
             skip(1);
             do_flashall(usb, slot_override.c_str(), erase_first);
-            wants_reboot = 1;
+            wants_reboot = true;
         } else if(!strcmp(*argv, "update")) {
             if (argc > 1) {
                 do_update(usb, argv[1], slot_override.c_str(), erase_first);
@@ -1344,11 +1379,7 @@ int main(int argc, char **argv)
                 do_update(usb, "update.zip", slot_override.c_str(), erase_first);
                 skip(1);
             }
-            wants_reboot = 1;
-        } else if(!strcmp(*argv, "set_active")) {
-            require(2);
-            fb_set_active(argv[1]);
-            skip(2);
+            wants_reboot = true;
         } else if(!strcmp(*argv, "oem")) {
             argc = do_oem_command(argc, argv);
         } else if(!strcmp(*argv, "flashing")) {
@@ -1384,6 +1415,9 @@ int main(int argc, char **argv)
             fb_queue_erase("cache");
             fb_perform_format(usb, "cache", 1, nullptr, nullptr);
         }
+    }
+    if (wants_set_active) {
+        fb_set_active(next_active.c_str());
     }
     if (wants_reboot) {
         fb_queue_reboot();
