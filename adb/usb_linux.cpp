@@ -81,8 +81,8 @@ struct usb_handle {
     pthread_t reaper_thread = 0;
 };
 
-static std::mutex g_usb_handles_mutex;
-static std::list<usb_handle*> g_usb_handles;
+static auto& g_usb_handles_mutex = *new std::mutex();
+static auto& g_usb_handles = *new std::list<usb_handle*>();
 
 static int is_known_device(const char* dev_name) {
     std::lock_guard<std::mutex> lock(g_usb_handles_mutex);

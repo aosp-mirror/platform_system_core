@@ -38,8 +38,8 @@
 
 static void transport_unref(atransport *t);
 
-static std::list<atransport*> transport_list;
-static std::list<atransport*> pending_list;
+static auto& transport_list = *new std::list<atransport*>();
+static auto& pending_list = *new std::list<atransport*>();
 
 ADB_MUTEX_DEFINE( transport_lock );
 
