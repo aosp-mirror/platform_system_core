@@ -15,10 +15,12 @@
  */
 
 #include <ctype.h>
+#include <dirent.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 
 #include <gtest/gtest.h>
 #include <log/log.h>
@@ -284,7 +286,7 @@ TEST(logcat, get_size) {
 
     while (fgets(buffer, sizeof(buffer), fp)) {
         int size, consumed, max, payload;
-        char size_mult[2], consumed_mult[2];
+        char size_mult[3], consumed_mult[3];
         long full_size, full_consumed;
 
         size = consumed = max = payload = 0;
@@ -489,12 +491,12 @@ TEST(logcat, logrotate) {
     static const char comm[] = "logcat -b radio -b events -b system -b main"
                                      " -d -f %s/log.txt -n 7 -r 1";
     char command[sizeof(buf) + sizeof(comm)];
-    sprintf(command, comm, buf);
+    snprintf(command, sizeof(command), comm, buf);
 
     int ret;
     EXPECT_FALSE((ret = system(command)));
     if (!ret) {
-        sprintf(command, "ls -s %s 2>/dev/null", buf);
+        snprintf(command, sizeof(command), "ls -s %s 2>/dev/null", buf);
 
         FILE *fp;
         EXPECT_TRUE(NULL != (fp = popen(command, "r")));
@@ -503,16 +505,12 @@ TEST(logcat, logrotate) {
             int count = 0;
 
             while (fgets(buffer, sizeof(buffer), fp)) {
-                static const char match_1[] = "4 log.txt";
-                static const char match_2[] = "8 log.txt";
-                static const char match_3[] = "12 log.txt";
-                static const char match_4[] = "16 log.txt";
                 static const char total[] = "total ";
+                int num;
+                char c;
 
-                if (!strncmp(buffer, match_1, sizeof(match_1) - 1)
-                 || !strncmp(buffer, match_2, sizeof(match_2) - 1)
-                 || !strncmp(buffer, match_3, sizeof(match_3) - 1)
-                 || !strncmp(buffer, match_4, sizeof(match_4) - 1)) {
+                if ((2 == sscanf(buffer, "%d log.tx%c", &num, &c)) &&
+                        (num <= 24)) {
                     ++count;
                 } else if (strncmp(buffer, total, sizeof(total) - 1)) {
                     fprintf(stderr, "WARNING: Parse error: %s", buffer);
@@ -522,7 +520,7 @@ TEST(logcat, logrotate) {
             EXPECT_TRUE(count == 7 || count == 8);
         }
     }
-    sprintf(command, "rm -rf %s", buf);
+    snprintf(command, sizeof(command), "rm -rf %s", buf);
     EXPECT_FALSE(system(command));
 }
 
@@ -534,12 +532,12 @@ TEST(logcat, logrotate_suffix) {
     static const char logcat_cmd[] = "logcat -b radio -b events -b system -b main"
                                      " -d -f %s/log.txt -n 10 -r 1";
     char command[sizeof(tmp_out_dir) + sizeof(logcat_cmd)];
-    sprintf(command, logcat_cmd, tmp_out_dir);
+    snprintf(command, sizeof(command), logcat_cmd, tmp_out_dir);
 
     int ret;
     EXPECT_FALSE((ret = system(command)));
     if (!ret) {
-        sprintf(command, "ls %s 2>/dev/null", tmp_out_dir);
+        snprintf(command, sizeof(command), "ls %s 2>/dev/null", tmp_out_dir);
 
         FILE *fp;
         EXPECT_TRUE(NULL != (fp = popen(command, "r")));
@@ -575,7 +573,113 @@ TEST(logcat, logrotate_suffix) {
         pclose(fp);
         EXPECT_EQ(11, log_file_count);
     }
-    sprintf(command, "rm -rf %s", tmp_out_dir);
+    snprintf(command, sizeof(command), "rm -rf %s", tmp_out_dir);
+    EXPECT_FALSE(system(command));
+}
+
+TEST(logcat, logrotate_continue) {
+    static const char tmp_out_dir_form[] = "/data/local/tmp/logcat.logrotate.XXXXXX";
+    char tmp_out_dir[sizeof(tmp_out_dir_form)];
+    ASSERT_TRUE(NULL != mkdtemp(strcpy(tmp_out_dir, tmp_out_dir_form)));
+
+    static const char log_filename[] = "log.txt";
+    static const char logcat_cmd[] = "logcat -b all -d -f %s/%s -n 256 -r 1024";
+    static const char cleanup_cmd[] = "rm -rf %s";
+    char command[sizeof(tmp_out_dir) + sizeof(logcat_cmd) + sizeof(log_filename)];
+    snprintf(command, sizeof(command), logcat_cmd, tmp_out_dir, log_filename);
+
+    int ret;
+    EXPECT_FALSE((ret = system(command)));
+    if (ret) {
+        snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
+        EXPECT_FALSE(system(command));
+        return;
+    }
+    FILE *fp;
+    snprintf(command, sizeof(command), "%s/%s", tmp_out_dir, log_filename);
+    EXPECT_TRUE(NULL != ((fp = fopen(command, "r"))));
+    if (!fp) {
+        snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
+        EXPECT_FALSE(system(command));
+        return;
+    }
+    char *line = NULL;
+    char *last_line = NULL; // this line is allowed to stutter, one-line overlap
+    char *second_last_line = NULL;
+    size_t len = 0;
+    while (getline(&line, &len, fp) != -1) {
+        free(second_last_line);
+        second_last_line = last_line;
+        last_line = line;
+        line = NULL;
+    }
+    fclose(fp);
+    free(line);
+    if (second_last_line == NULL) {
+        fprintf(stderr, "No second to last line, using last, test may fail\n");
+        second_last_line = last_line;
+        last_line = NULL;
+    }
+    free(last_line);
+    EXPECT_TRUE(NULL != second_last_line);
+    if (!second_last_line) {
+        snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
+        EXPECT_FALSE(system(command));
+        return;
+    }
+    // re-run the command, it should only add a few lines more content if it
+    // continues where it left off.
+    snprintf(command, sizeof(command), logcat_cmd, tmp_out_dir, log_filename);
+    EXPECT_FALSE((ret = system(command)));
+    if (ret) {
+        snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
+        EXPECT_FALSE(system(command));
+        return;
+    }
+    DIR *dir;
+    EXPECT_TRUE(NULL != (dir = opendir(tmp_out_dir)));
+    if (!dir) {
+        snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
+        EXPECT_FALSE(system(command));
+        return;
+    }
+    struct dirent *entry;
+    unsigned count = 0;
+    while ((entry = readdir(dir))) {
+        if (strncmp(entry->d_name, log_filename, sizeof(log_filename) - 1)) {
+            continue;
+        }
+        snprintf(command, sizeof(command), "%s/%s", tmp_out_dir, entry->d_name);
+        EXPECT_TRUE(NULL != ((fp = fopen(command, "r"))));
+        if (!fp) {
+            fprintf(stderr, "%s ?\n", command);
+            continue;
+        }
+        line = NULL;
+        size_t number = 0;
+        while (getline(&line, &len, fp) != -1) {
+            ++number;
+            if (!strcmp(line, second_last_line)) {
+                EXPECT_TRUE(++count <= 1);
+                fprintf(stderr, "%s(%zu):\n", entry->d_name, number);
+            }
+        }
+        fclose(fp);
+        free(line);
+        unlink(command);
+    }
+    closedir(dir);
+    if (count > 1) {
+        char *brk = strpbrk(second_last_line, "\r\n");
+        if (!brk) {
+            brk = second_last_line + strlen(second_last_line);
+        }
+        fprintf(stderr, "\"%.*s\" occured %u times\n",
+            (int)(brk - second_last_line), second_last_line, count);
+    }
+    free(second_last_line);
+
+    snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
     EXPECT_FALSE(system(command));
 }
 

@@ -649,7 +649,7 @@ int main(int argc, char **argv)
             break;
 
             case 'f':
-                if ((tail_time == log_time::EPOCH) && (tail_lines != 0)) {
+                if ((tail_time == log_time::EPOCH) && (tail_lines == 0)) {
                     tail_time = lastLogTime(optarg);
                 }
                 // redirect output to a file
