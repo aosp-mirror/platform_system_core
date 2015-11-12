@@ -2924,7 +2924,7 @@ size_t _escape_prefix(char* const buf, const size_t len) {
 }
 
 // Internal buffer to satisfy future _console_read() calls.
-static std::vector<char> g_console_input_buffer;
+static auto& g_console_input_buffer = *new std::vector<char>();
 
 // Writes to buffer buf (of length len), returning number of bytes written or -1 on error. Never
 // returns zero on console closure because Win32 consoles are never 'closed' (as far as I can tell).
@@ -3886,7 +3886,7 @@ extern "C" int wmain(int argc, wchar_t **argv) {
 // currently updated if putenv, setenv, unsetenv are called. Note that no
 // thread synchronization is done, but we're called early enough in
 // single-threaded startup that things work ok.
-static std::unordered_map<std::string, char*> g_environ_utf8;
+static auto& g_environ_utf8 = *new std::unordered_map<std::string, char*>();
 
 // Make sure that shadow UTF-8 environment variables are setup.
 static void _ensure_env_setup() {
