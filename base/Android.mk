@@ -36,6 +36,12 @@ libbase_cppflags := \
     -Wextra \
     -Werror \
 
+libbase_linux_cppflags := \
+    -Wexit-time-destructors \
+
+libbase_darwin_cppflags := \
+    -Wexit-time-destructors \
+
 # Device
 # ------------------------------------------------------------------------------
 include $(CLEAR_VARS)
@@ -43,7 +49,7 @@ LOCAL_MODULE := libbase
 LOCAL_CLANG := true
 LOCAL_SRC_FILES := $(libbase_src_files)
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
-LOCAL_CPPFLAGS := $(libbase_cppflags)
+LOCAL_CPPFLAGS := $(libbase_cppflags) $(libbase_linux_cppflags)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_STATIC_LIBRARIES := libcutils
 LOCAL_MULTILIB := both
@@ -66,6 +72,8 @@ LOCAL_MODULE := libbase
 LOCAL_SRC_FILES := $(libbase_src_files)
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_CPPFLAGS := $(libbase_cppflags)
+LOCAL_CPPFLAGS_darwin := $(libbase_darwin_cppflags)
+LOCAL_CPPFLAGS_linux := $(libbase_linux_cppflags)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_STATIC_LIBRARIES := libcutils
 LOCAL_MULTILIB := both

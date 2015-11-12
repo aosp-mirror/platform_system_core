@@ -127,17 +127,17 @@ class lock_guard {
 namespace android {
 namespace base {
 
-static mutex logging_lock;
+static auto& logging_lock = *new mutex();
 
 #ifdef __ANDROID__
-static LogFunction gLogger = LogdLogger();
+static auto& gLogger = *new LogFunction(LogdLogger());
 #else
-static LogFunction gLogger = StderrLogger;
+static auto& gLogger = *new LogFunction(StderrLogger);
 #endif
 
 static bool gInitialized = false;
 static LogSeverity gMinimumLogSeverity = INFO;
-static std::unique_ptr<std::string> gProgramInvocationName;
+static auto& gProgramInvocationName = *new std::unique_ptr<std::string>();
 
 LogSeverity GetMinimumLogSeverity() {
   return gMinimumLogSeverity;
