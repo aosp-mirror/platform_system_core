@@ -58,7 +58,12 @@ static std::string GetLogFilePath() {
               SystemErrorCodeToString(GetLastError()).c_str());
     }
 
-    return narrow(temp_path) + log_name;
+    std::string temp_path_utf8;
+    if (!android::base::WideToUTF8(temp_path, &temp_path_utf8)) {
+        fatal_errno("cannot convert temporary file path from UTF-16 to UTF-8");
+    }
+
+    return temp_path_utf8 + log_name;
 }
 #else
 static const char kNullFileName[] = "/dev/null";

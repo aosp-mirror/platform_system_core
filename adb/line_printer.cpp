@@ -77,7 +77,7 @@ void LinePrinter::Print(string to_print, LineType type) {
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     GetConsoleScreenBufferInfo(console_, &csbi);
 
-    // TODO: const std::wstring to_print_wide = widen(to_print);
+    // TODO: std::wstring to_print_wide; if (!android::base::UTF8ToWide(to_print, &to_print_wide)...
     // TODO: wstring ElideMiddle.
     to_print = ElideMiddle(to_print, static_cast<size_t>(csbi.dwSize.X));
     // We don't want to have the cursor spamming back and forth, so instead of

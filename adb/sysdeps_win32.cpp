@@ -103,7 +103,13 @@ std::string SystemErrorCodeToString(const DWORD error_code) {
   }
 
   // Convert UTF-16 to UTF-8.
-  std::string msg(narrow(msgbuf));
+  std::string msg;
+  if (!android::base::WideToUTF8(msgbuf, &msg)) {
+      return android::base::StringPrintf(
+          "Error (%d) converting from UTF-16 to UTF-8 while retrieving error. (%lu)", errno,
+          error_code);
+  }
+
   // Messages returned by the system end with line breaks.
   msg = android::base::Trim(msg);
   // There are many Windows error messages compared to POSIX, so include the
@@ -144,7 +150,11 @@ void *load_file(const char *fn, unsigned *_sz)
     char     *data;
     DWORD     file_size;
 
-    file = CreateFileW( widen(fn).c_str(),
+    std::wstring fn_wide;
+    if (!android::base::UTF8ToWide(fn, &fn_wide))
+        return NULL;
+
+    file = CreateFileW( fn_wide.c_str(),
                         GENERIC_READ,
                         FILE_SHARE_READ,
                         NULL,
@@ -434,7 +444,11 @@ int  adb_open(const char*  path, int  options)
         return -1;
     }
 
-    f->fh_handle = CreateFileW( widen(path).c_str(), desiredAccess, shareMode,
+    std::wstring path_wide;
+    if (!android::base::UTF8ToWide(path, &path_wide)) {
+        return -1;
+    }
+    f->fh_handle = CreateFileW( path_wide.c_str(), desiredAccess, shareMode,
                                 NULL, OPEN_EXISTING, 0, NULL );
 
     if ( f->fh_handle == INVALID_HANDLE_VALUE ) {
@@ -475,7 +489,11 @@ int  adb_creat(const char*  path, int  mode)
         return -1;
     }
 
-    f->fh_handle = CreateFileW( widen(path).c_str(), GENERIC_WRITE,
+    std::wstring path_wide;
+    if (!android::base::UTF8ToWide(path, &path_wide)) {
+        return -1;
+    }
+    f->fh_handle = CreateFileW( path_wide.c_str(), GENERIC_WRITE,
                                 FILE_SHARE_READ | FILE_SHARE_WRITE,
                                 NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                                 NULL );
@@ -981,7 +999,7 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
 
 #if (NTDDI_VERSION >= NTDDI_WINXPSP2) || (_WIN32_WINNT >= _WIN32_WINNT_WS03)
     // TODO: When the Android SDK tools increases the Windows system
-    // requirements >= WinXP SP2, switch to GetAddrInfoW(widen(host).c_str()).
+    // requirements >= WinXP SP2, switch to android::base::UTF8ToWide() + GetAddrInfoW().
 #else
     // Otherwise, keep using getaddrinfo(), or do runtime API detection
     // with GetProcAddress("GetAddrInfoW").
@@ -3405,11 +3423,11 @@ int unix_read(int fd, void* buf, size_t len) {
 // The Choice
 // ----------
 //
-// The code below chooses option 3, the UTF-8 everywhere strategy. It
-// introduces narrow() which converts UTF-16 to UTF-8. This is used by the
+// The code below chooses option 3, the UTF-8 everywhere strategy. It uses
+// android::base::WideToUTF8() which converts UTF-16 to UTF-8. This is used by the
 // NarrowArgs helper class that is used to convert wmain() args into UTF-8
-// args that are passed to main() at the beginning of program startup. We also
-// introduce widen() which converts from UTF-8 to UTF-16. This is used to
+// args that are passed to main() at the beginning of program startup. We also use
+// android::base::UTF8ToWide() which converts from UTF-8 to UTF-16. This is used to
 // implement wrappers below that call UTF-16 OS and C Runtime APIs.
 //
 // Unicode console output
@@ -3439,101 +3457,17 @@ int unix_read(int fd, void* buf, size_t len) {
 // to UTF-16 and then calls WriteConsoleW().
 
 
-// Function prototype because attributes cannot be placed on func definitions.
-static void _widen_fatal(const char *fmt, ...)
-    __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 1, 2)));
-
-// A version of fatal() that does not call adb_(v)fprintf(), so it can be
-// called from those functions.
-static void _widen_fatal(const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    // If (v)fprintf are macros that point to adb_(v)fprintf, when random adb
-    // code calls (v)fprintf, it may end up calling adb_(v)fprintf, which then
-    // calls _widen_fatal(). So then how does _widen_fatal() output a error?
-    // By directly calling real C Runtime APIs that don't properly output
-    // Unicode, but will be able to get a comprehendible message out. To do
-    // this, make sure we don't call (v)fprintf macros by undefining them.
-#pragma push_macro("fprintf")
-#pragma push_macro("vfprintf")
-#undef fprintf
-#undef vfprintf
-    fprintf(stderr, "error: ");
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
-#pragma pop_macro("vfprintf")
-#pragma pop_macro("fprintf")
-    va_end(ap);
-    exit(-1);
-}
-
-// Convert size number of UTF-8 char's to UTF-16. Fatal exit on error.
-std::wstring widen(const char* utf8, const size_t size) {
-    std::wstring utf16;
-    if (!android::base::UTF8ToWide(utf8, size, &utf16)) {
-        // If we call fatal() here and fatal() calls widen(), then there may be
-        // infinite recursion. To avoid this, call _widen_fatal() instead.
-        _widen_fatal("cannot convert from UTF-8 to UTF-16");
-    }
-
-    return utf16;
-}
-
-// Convert a NULL-terminated string of UTF-8 characters to UTF-16. Fatal exit
-// on error.
-std::wstring widen(const char* utf8) {
-    std::wstring utf16;
-    if (!android::base::UTF8ToWide(utf8, &utf16)) {
-        // If we call fatal() here and fatal() calls widen(), then there may be
-        // infinite recursion. To avoid this, call _widen_fatal() instead.
-        _widen_fatal("cannot convert from UTF-8 to UTF-16");
-    }
-
-    return utf16;
-}
-
-// Convert a UTF-8 std::string (including any embedded NULL characters) to
-// UTF-16. Fatal exit on error.
-std::wstring widen(const std::string& utf8) {
-    std::wstring utf16;
-    if (!android::base::UTF8ToWide(utf8, &utf16)) {
-        // If we call fatal() here and fatal() calls widen(), then there may be
-        // infinite recursion. To avoid this, call _widen_fatal() instead.
-        _widen_fatal("cannot convert from UTF-8 to UTF-16");
-    }
-
-    return utf16;
-}
-
-// Convert a UTF-16 std::wstring (including any embedded NULL characters) to
-// UTF-8. Fatal exit on error.
-std::string narrow(const std::wstring& utf16) {
-    std::string utf8;
-    if (!android::base::WideToUTF8(utf16, &utf8)) {
-        fatal("cannot convert from UTF-16 to UTF-8");
-    }
-
-    return utf8;
-}
-
-// Convert a NULL-terminated string of UTF-16 characters to UTF-8. Fatal exit
-// on error.
-std::string narrow(const wchar_t* utf16) {
-    std::string utf8;
-    if (!android::base::WideToUTF8(utf16, &utf8)) {
-        fatal("cannot convert from UTF-16 to UTF-8");
-    }
-
-    return utf8;
-}
-
 // Constructor for helper class to convert wmain() UTF-16 args to UTF-8 to
 // be passed to main().
 NarrowArgs::NarrowArgs(const int argc, wchar_t** const argv) {
     narrow_args = new char*[argc + 1];
 
     for (int i = 0; i < argc; ++i) {
-        narrow_args[i] = strdup(narrow(argv[i]).c_str());
+        std::string arg_narrow;
+        if (!android::base::WideToUTF8(argv[i], &arg_narrow)) {
+            fatal_errno("cannot convert argument from UTF-16 to UTF-8");
+        }
+        narrow_args[i] = strdup(arg_narrow.c_str());
     }
     narrow_args[argc] = nullptr;   // terminate
 }
@@ -3549,20 +3483,24 @@ NarrowArgs::~NarrowArgs() {
 }
 
 int unix_open(const char* path, int options, ...) {
+    std::wstring path_wide;
+    if (!android::base::UTF8ToWide(path, &path_wide)) {
+        return -1;
+    }
     if ((options & O_CREAT) == 0) {
-        return _wopen(widen(path).c_str(), options);
+        return _wopen(path_wide.c_str(), options);
     } else {
         int      mode;
         va_list  args;
         va_start(args, options);
         mode = va_arg(args, int);
         va_end(args);
-        return _wopen(widen(path).c_str(), options, mode);
+        return _wopen(path_wide.c_str(), options, mode);
     }
 }
 
 // Version of stat() that takes a UTF-8 path.
-int adb_stat(const char* f, struct adb_stat* s) {
+int adb_stat(const char* path, struct adb_stat* s) {
 #pragma push_macro("wstat")
 // This definition of wstat seems to be missing from <sys/stat.h>.
 #if defined(_FILE_OFFSET_BITS) && (_FILE_OFFSET_BITS == 64)
@@ -3575,17 +3513,27 @@ int adb_stat(const char* f, struct adb_stat* s) {
 // <sys/stat.h> has a function prototype for wstat() that should be available.
 #endif
 
-    return wstat(widen(f).c_str(), s);
+    std::wstring path_wide;
+    if (!android::base::UTF8ToWide(path, &path_wide)) {
+        return -1;
+    }
+
+    return wstat(path_wide.c_str(), s);
 
 #pragma pop_macro("wstat")
 }
 
 // Version of opendir() that takes a UTF-8 path.
-DIR* adb_opendir(const char* name) {
+DIR* adb_opendir(const char* path) {
+    std::wstring path_wide;
+    if (!android::base::UTF8ToWide(path, &path_wide)) {
+        return nullptr;
+    }
+
     // Just cast _WDIR* to DIR*. This doesn't work if the caller reads any of
     // the fields, but right now all the callers treat the structure as
     // opaque.
-    return reinterpret_cast<DIR*>(_wopendir(widen(name).c_str()));
+    return reinterpret_cast<DIR*>(_wopendir(path_wide.c_str()));
 }
 
 // Version of readdir() that returns UTF-8 paths.
@@ -3595,8 +3543,12 @@ struct dirent* adb_readdir(DIR* dir) {
     if (went == nullptr) {
         return nullptr;
     }
+
     // Convert from UTF-16 to UTF-8.
-    const std::string name_utf8(narrow(went->d_name));
+    std::string name_utf8;
+    if (!android::base::WideToUTF8(went->d_name, &name_utf8)) {
+        return nullptr;
+    }
 
     // Cast the _wdirent* to dirent* and overwrite the d_name field (which has
     // space for UTF-16 wchar_t's) with UTF-8 char's.
@@ -3628,7 +3580,10 @@ int adb_closedir(DIR* dir) {
 
 // Version of unlink() that takes a UTF-8 path.
 int adb_unlink(const char* path) {
-    const std::wstring wpath(widen(path));
+    std::wstring wpath;
+    if (!android::base::UTF8ToWide(path, &wpath)) {
+        return -1;
+    }
 
     int  rc = _wunlink(wpath.c_str());
 
@@ -3644,20 +3599,35 @@ int adb_unlink(const char* path) {
 
 // Version of mkdir() that takes a UTF-8 path.
 int adb_mkdir(const std::string& path, int mode) {
-    return _wmkdir(widen(path.c_str()).c_str());
+    std::wstring path_wide;
+    if (!android::base::UTF8ToWide(path, &path_wide)) {
+        return -1;
+    }
+
+    return _wmkdir(path_wide.c_str());
 }
 
 // Version of utime() that takes a UTF-8 path.
 int adb_utime(const char* path, struct utimbuf* u) {
+    std::wstring path_wide;
+    if (!android::base::UTF8ToWide(path, &path_wide)) {
+        return -1;
+    }
+
     static_assert(sizeof(struct utimbuf) == sizeof(struct _utimbuf),
         "utimbuf and _utimbuf should be the same size because they both "
         "contain the same types, namely time_t");
-    return _wutime(widen(path).c_str(), reinterpret_cast<struct _utimbuf*>(u));
+    return _wutime(path_wide.c_str(), reinterpret_cast<struct _utimbuf*>(u));
 }
 
 // Version of chmod() that takes a UTF-8 path.
 int adb_chmod(const char* path, int mode) {
-    return _wchmod(widen(path).c_str(), mode);
+    std::wstring path_wide;
+    if (!android::base::UTF8ToWide(path, &path_wide)) {
+        return -1;
+    }
+
+    return _wchmod(path_wide.c_str(), mode);
 }
 
 // Internal helper function to write UTF-8 bytes to a console. Returns -1
@@ -3819,8 +3789,18 @@ size_t adb_fwrite(const void* ptr, size_t size, size_t nmemb, FILE* stream) {
 
 // Version of fopen() that takes a UTF-8 filename and can access a file with
 // a Unicode filename.
-FILE* adb_fopen(const char* f, const char* m) {
-    return _wfopen(widen(f).c_str(), widen(m).c_str());
+FILE* adb_fopen(const char* path, const char* mode) {
+    std::wstring path_wide;
+    if (!android::base::UTF8ToWide(path, &path_wide)) {
+        return nullptr;
+    }
+
+    std::wstring mode_wide;
+    if (!android::base::UTF8ToWide(mode, &mode_wide)) {
+        return nullptr;
+    }
+
+    return _wfopen(path_wide.c_str(), mode_wide.c_str());
 }
 
 // Return a lowercase version of the argument. Uses C Runtime tolower() on
@@ -3880,15 +3860,27 @@ static void _ensure_env_setup() {
             continue;
         }
 
+        // If we encounter an error converting UTF-16, don't error-out on account of a single env
+        // var because the program might never even read this particular variable.
+        std::string name_utf8;
+        if (!android::base::WideToUTF8(*env, equal - *env, &name_utf8)) {
+            continue;
+        }
+
         // Store lowercase name so that we can do case-insensitive searches.
-        const std::string name_utf8(ToLower(narrow(
-                std::wstring(*env, equal - *env))));
-        char* const value_utf8 = strdup(narrow(equal + 1).c_str());
+        name_utf8 = ToLower(name_utf8);
+
+        std::string value_utf8;
+        if (!android::base::WideToUTF8(equal + 1, &value_utf8)) {
+            continue;
+        }
+
+        char* const value_dup = strdup(value_utf8.c_str());
 
         // Don't overwrite a previus env var with the same name. In reality,
         // the system probably won't let two env vars with the same name exist
         // in _wenviron.
-        g_environ_utf8.insert({name_utf8, value_utf8});
+        g_environ_utf8.insert({name_utf8, value_dup});
     }
 }
 
@@ -3914,9 +3906,14 @@ char* adb_getcwd(char* buf, int size) {
         return nullptr;
     }
 
-    const std::string buf_utf8(narrow(wbuf));
+    std::string buf_utf8;
+    const bool narrow_result = android::base::WideToUTF8(wbuf, &buf_utf8);
     free(wbuf);
     wbuf = nullptr;
+
+    if (!narrow_result) {
+        return nullptr;
+    }
 
     // If size was specified, make sure all the chars will fit.
     if (size != 0) {
