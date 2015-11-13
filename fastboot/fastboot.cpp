@@ -751,9 +751,9 @@ static void do_for_partition(usb_handle* usb, const char *part, const char *slot
             if (!fb_getvar(usb, "current-slot", &current_slot)) {
                 die("Failed to identify current slot.\n");
             }
-            func(std::string(part) + '-' + current_slot);
+            func(std::string(part) + current_slot);
         } else {
-            func(std::string(part) + '-' + slot);
+            func(std::string(part) + slot);
         }
     } else {
         if (force_slot && slot && slot[0]) {
