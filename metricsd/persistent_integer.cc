@@ -22,7 +22,6 @@
 #include <base/posix/eintr_wrapper.h>
 
 #include "constants.h"
-#include "metrics/metrics_library.h"
 
 
 namespace chromeos_metrics {

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "metrics_daemon.h"
+#include "metrics_collector.h"
 
 #include <sysexits.h>
 #include <time.h>
@@ -33,7 +33,6 @@
 #include <dbus/message.h>
 
 #include "constants.h"
-#include "uploader/upload_service.h"
 
 using base::FilePath;
 using base::StringPrintf;
@@ -78,9 +77,9 @@ const char kVmStatFileName[] = "/proc/vmstat";
 
 // Zram sysfs entries.
 
-const char MetricsDaemon::kComprDataSizeName[] = "compr_data_size";
-const char MetricsDaemon::kOrigDataSizeName[] = "orig_data_size";
-const char MetricsDaemon::kZeroPagesName[] = "zero_pages";
+const char MetricsCollector::kComprDataSizeName[] = "compr_data_size";
+const char MetricsCollector::kOrigDataSizeName[] = "orig_data_size";
+const char MetricsCollector::kZeroPagesName[] = "zero_pages";
 
 // Memory use stats collection intervals.  We collect some memory use interval
 // at these intervals after boot, and we stop collecting after the last one,
@@ -94,15 +93,15 @@ static const int kMemuseIntervals[] = {
   600 * kSecondsPerMinute,  // 12.5 hour mark
 };
 
-MetricsDaemon::MetricsDaemon()
+MetricsCollector::MetricsCollector()
     : memuse_final_time_(0),
       memuse_interval_index_(0) {}
 
-MetricsDaemon::~MetricsDaemon() {
+MetricsCollector::~MetricsCollector() {
 }
 
 // static
-double MetricsDaemon::GetActiveTime() {
+double MetricsCollector::GetActiveTime() {
   struct timespec ts;
   int r = clock_gettime(CLOCK_MONOTONIC, &ts);
   if (r < 0) {
@@ -113,7 +112,7 @@ double MetricsDaemon::GetActiveTime() {
   }
 }
 
-int MetricsDaemon::Run() {
+int MetricsCollector::Run() {
   if (CheckSystemCrash(kKernelCrashDetectedFile)) {
     ProcessKernelCrash();
   }
@@ -134,16 +133,7 @@ int MetricsDaemon::Run() {
   return brillo::DBusDaemon::Run();
 }
 
-void MetricsDaemon::RunUploaderTest() {
-  upload_service_.reset(new UploadService(
-      new SystemProfileCache(true, metrics_directory_),
-      metrics_lib_,
-      server_));
-  upload_service_->Init(upload_interval_, metrics_directory_);
-  upload_service_->UploadEvent();
-}
-
-uint32_t MetricsDaemon::GetOsVersionHash() {
+uint32_t MetricsCollector::GetOsVersionHash() {
   brillo::OsReleaseReader reader;
   reader.Load();
   string version;
@@ -159,23 +149,14 @@ uint32_t MetricsDaemon::GetOsVersionHash() {
   return version_hash;
 }
 
-void MetricsDaemon::Init(bool testing,
-                         bool uploader_active,
-                         bool dbus_enabled,
+void MetricsCollector::Init(bool testing,
                          MetricsLibraryInterface* metrics_lib,
                          const string& diskstats_path,
-                         const base::TimeDelta& upload_interval,
-                         const string& server,
                          const base::FilePath& metrics_directory) {
   CHECK(metrics_lib);
   testing_ = testing;
-  uploader_active_ = uploader_active;
-  dbus_enabled_ = dbus_enabled;
   metrics_directory_ = metrics_directory;
   metrics_lib_ = metrics_lib;
-
-  upload_interval_ = upload_interval;
-  server_ = server;
 
   daily_active_use_.reset(
       new PersistentInteger("Platform.UseTime.PerDay"));
@@ -221,9 +202,8 @@ void MetricsDaemon::Init(bool testing,
   cpu_usage_collector_.reset(new CpuUsageCollector(metrics_lib_));
 }
 
-int MetricsDaemon::OnInit() {
-  int return_code = dbus_enabled_ ? brillo::DBusDaemon::OnInit() :
-      brillo::Daemon::OnInit();
+int MetricsCollector::OnInit() {
+  int return_code = brillo::DBusDaemon::OnInit();
   if (return_code != EX_OK)
     return return_code;
 
@@ -237,66 +217,58 @@ int MetricsDaemon::OnInit() {
   if (testing_)
     return EX_OK;
 
-  if (dbus_enabled_) {
-    bus_->AssertOnDBusThread();
-    CHECK(bus_->SetUpAsyncOperations());
+  bus_->AssertOnDBusThread();
+  CHECK(bus_->SetUpAsyncOperations());
 
-    if (bus_->is_connected()) {
-      const std::string match_rule =
-          base::StringPrintf(kCrashReporterMatchRule,
-                             kCrashReporterInterface,
-                             kCrashReporterUserCrashSignal);
-
-      bus_->AddFilterFunction(&MetricsDaemon::MessageFilter, this);
-
-      DBusError error;
-      dbus_error_init(&error);
-      bus_->AddMatch(match_rule, &error);
-
-      if (dbus_error_is_set(&error)) {
-        LOG(ERROR) << "Failed to add match rule \"" << match_rule << "\". Got "
-            << error.name << ": " << error.message;
-        return EX_SOFTWARE;
-      }
-    } else {
-      LOG(ERROR) << "DBus isn't connected.";
-      return EX_UNAVAILABLE;
-    }
-
-    device_ = weaved::Device::CreateInstance(
-        bus_,
-        base::Bind(&MetricsDaemon::UpdateWeaveState, base::Unretained(this)));
-    device_->AddCommandHandler(
-        "_metrics._enableAnalyticsReporting",
-        base::Bind(&MetricsDaemon::OnEnableMetrics, base::Unretained(this)));
-    device_->AddCommandHandler(
-        "_metrics._disableAnalyticsReporting",
-        base::Bind(&MetricsDaemon::OnDisableMetrics, base::Unretained(this)));
-  }
-
-  latest_cpu_use_microseconds_ = cpu_usage_collector_->GetCumulativeCpuUse();
-  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-      base::Bind(&MetricsDaemon::HandleUpdateStatsTimeout,
-                 base::Unretained(this)),
-      base::TimeDelta::FromMilliseconds(kUpdateStatsIntervalMs));
-
-  if (uploader_active_) {
-    upload_service_.reset(
-        new UploadService(new SystemProfileCache(), metrics_lib_, server_));
-    upload_service_->Init(upload_interval_, metrics_directory_);
-  }
-
-  return EX_OK;
-}
-
-void MetricsDaemon::OnShutdown(int* return_code) {
-  if (!testing_ && dbus_enabled_ && bus_->is_connected()) {
+  if (bus_->is_connected()) {
     const std::string match_rule =
         base::StringPrintf(kCrashReporterMatchRule,
                            kCrashReporterInterface,
                            kCrashReporterUserCrashSignal);
 
-    bus_->RemoveFilterFunction(&MetricsDaemon::MessageFilter, this);
+    bus_->AddFilterFunction(&MetricsCollector::MessageFilter, this);
+
+    DBusError error;
+    dbus_error_init(&error);
+    bus_->AddMatch(match_rule, &error);
+
+    if (dbus_error_is_set(&error)) {
+      LOG(ERROR) << "Failed to add match rule \"" << match_rule << "\". Got "
+          << error.name << ": " << error.message;
+      return EX_SOFTWARE;
+    }
+  } else {
+    LOG(ERROR) << "DBus isn't connected.";
+    return EX_UNAVAILABLE;
+  }
+
+  device_ = weaved::Device::CreateInstance(
+      bus_,
+      base::Bind(&MetricsCollector::UpdateWeaveState, base::Unretained(this)));
+  device_->AddCommandHandler(
+      "_metrics._enableAnalyticsReporting",
+      base::Bind(&MetricsCollector::OnEnableMetrics, base::Unretained(this)));
+  device_->AddCommandHandler(
+      "_metrics._disableAnalyticsReporting",
+      base::Bind(&MetricsCollector::OnDisableMetrics, base::Unretained(this)));
+
+  latest_cpu_use_microseconds_ = cpu_usage_collector_->GetCumulativeCpuUse();
+  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
+      base::Bind(&MetricsCollector::HandleUpdateStatsTimeout,
+                 base::Unretained(this)),
+      base::TimeDelta::FromMilliseconds(kUpdateStatsIntervalMs));
+
+  return EX_OK;
+}
+
+void MetricsCollector::OnShutdown(int* return_code) {
+  if (!testing_ && bus_->is_connected()) {
+    const std::string match_rule =
+        base::StringPrintf(kCrashReporterMatchRule,
+                           kCrashReporterInterface,
+                           kCrashReporterUserCrashSignal);
+
+    bus_->RemoveFilterFunction(&MetricsCollector::MessageFilter, this);
 
     DBusError error;
     dbus_error_init(&error);
@@ -310,7 +282,8 @@ void MetricsDaemon::OnShutdown(int* return_code) {
   brillo::DBusDaemon::OnShutdown(return_code);
 }
 
-void MetricsDaemon::OnEnableMetrics(const std::weak_ptr<weaved::Command>& cmd) {
+void MetricsCollector::OnEnableMetrics(
+    const std::weak_ptr<weaved::Command>& cmd) {
   auto command = cmd.lock();
   if (!command)
     return;
@@ -327,7 +300,7 @@ void MetricsDaemon::OnEnableMetrics(const std::weak_ptr<weaved::Command>& cmd) {
   command->Complete({}, nullptr);
 }
 
-void MetricsDaemon::OnDisableMetrics(
+void MetricsCollector::OnDisableMetrics(
     const std::weak_ptr<weaved::Command>& cmd) {
   auto command = cmd.lock();
   if (!command)
@@ -345,7 +318,7 @@ void MetricsDaemon::OnDisableMetrics(
   command->Complete({}, nullptr);
 }
 
-void MetricsDaemon::UpdateWeaveState() {
+void MetricsCollector::UpdateWeaveState() {
   if (!device_)
     return;
 
@@ -360,9 +333,9 @@ void MetricsDaemon::UpdateWeaveState() {
 }
 
 // static
-DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
-                                               DBusMessage* message,
-                                               void* user_data) {
+DBusHandlerResult MetricsCollector::MessageFilter(DBusConnection* connection,
+                                                   DBusMessage* message,
+                                                   void* user_data) {
   int message_type = dbus_message_get_type(message);
   if (message_type != DBUS_MESSAGE_TYPE_SIGNAL) {
     DLOG(WARNING) << "unexpected message type " << message_type;
@@ -374,7 +347,7 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
   const std::string member(dbus_message_get_member(message));
   DLOG(INFO) << "Got " << interface << "." << member << " D-Bus signal";
 
-  MetricsDaemon* daemon = static_cast<MetricsDaemon*>(user_data);
+  MetricsCollector* daemon = static_cast<MetricsCollector*>(user_data);
 
   DBusMessageIter iter;
   dbus_message_iter_init(message, &iter);
@@ -389,7 +362,7 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
   return DBUS_HANDLER_RESULT_HANDLED;
 }
 
-void MetricsDaemon::ProcessUserCrash() {
+void MetricsCollector::ProcessUserCrash() {
   // Counts the active time up to now.
   UpdateStats(TimeTicks::Now(), Time::Now());
 
@@ -402,7 +375,7 @@ void MetricsDaemon::ProcessUserCrash() {
   user_crashes_weekly_count_->Add(1);
 }
 
-void MetricsDaemon::ProcessKernelCrash() {
+void MetricsCollector::ProcessKernelCrash() {
   // Counts the active time up to now.
   UpdateStats(TimeTicks::Now(), Time::Now());
 
@@ -417,7 +390,7 @@ void MetricsDaemon::ProcessKernelCrash() {
   kernel_crashes_version_count_->Add(1);
 }
 
-void MetricsDaemon::ProcessUncleanShutdown() {
+void MetricsCollector::ProcessUncleanShutdown() {
   // Counts the active time up to now.
   UpdateStats(TimeTicks::Now(), Time::Now());
 
@@ -430,7 +403,7 @@ void MetricsDaemon::ProcessUncleanShutdown() {
   any_crashes_weekly_count_->Add(1);
 }
 
-bool MetricsDaemon::CheckSystemCrash(const string& crash_file) {
+bool MetricsCollector::CheckSystemCrash(const string& crash_file) {
   FilePath crash_detected(crash_file);
   if (!base::PathExists(crash_detected))
     return false;
@@ -441,7 +414,7 @@ bool MetricsDaemon::CheckSystemCrash(const string& crash_file) {
   return true;
 }
 
-void MetricsDaemon::StatsReporterInit() {
+void MetricsCollector::StatsReporterInit() {
   disk_usage_collector_->Schedule();
 
   cpu_usage_collector_->Init();
@@ -452,18 +425,18 @@ void MetricsDaemon::StatsReporterInit() {
   averaged_stats_collector_->ScheduleWait();
 }
 
-void MetricsDaemon::ScheduleMeminfoCallback(int wait) {
+void MetricsCollector::ScheduleMeminfoCallback(int wait) {
   if (testing_) {
     return;
   }
   base::TimeDelta waitDelta = base::TimeDelta::FromSeconds(wait);
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-      base::Bind(&MetricsDaemon::MeminfoCallback, base::Unretained(this),
+      base::Bind(&MetricsCollector::MeminfoCallback, base::Unretained(this),
                  waitDelta),
       waitDelta);
 }
 
-void MetricsDaemon::MeminfoCallback(base::TimeDelta wait) {
+void MetricsCollector::MeminfoCallback(base::TimeDelta wait) {
   string meminfo_raw;
   const FilePath meminfo_path(kMeminfoFileName);
   if (!base::ReadFileToString(meminfo_path, &meminfo_raw)) {
@@ -473,15 +446,15 @@ void MetricsDaemon::MeminfoCallback(base::TimeDelta wait) {
   // Make both calls even if the first one fails.
   if (ProcessMeminfo(meminfo_raw)) {
     base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-        base::Bind(&MetricsDaemon::MeminfoCallback, base::Unretained(this),
+        base::Bind(&MetricsCollector::MeminfoCallback, base::Unretained(this),
                    wait),
         wait);
   }
 }
 
 // static
-bool MetricsDaemon::ReadFileToUint64(const base::FilePath& path,
-                                     uint64_t* value) {
+bool MetricsCollector::ReadFileToUint64(const base::FilePath& path,
+                                         uint64_t* value) {
   std::string content;
   if (!base::ReadFileToString(path, &content)) {
     PLOG(WARNING) << "cannot read " << path.MaybeAsASCII();
@@ -496,7 +469,7 @@ bool MetricsDaemon::ReadFileToUint64(const base::FilePath& path,
   return true;
 }
 
-bool MetricsDaemon::ReportZram(const base::FilePath& zram_dir) {
+bool MetricsCollector::ReportZram(const base::FilePath& zram_dir) {
   // Data sizes are in bytes.  |zero_pages| is in number of pages.
   uint64_t compr_data_size, orig_data_size, zero_pages;
   const size_t page_size = 4096;
@@ -533,7 +506,7 @@ bool MetricsDaemon::ReportZram(const base::FilePath& zram_dir) {
   return true;
 }
 
-bool MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
+bool MetricsCollector::ProcessMeminfo(const string& meminfo_raw) {
   static const MeminfoRecord fields_array[] = {
     { "MemTotal", "MemTotal" },  // SPECIAL CASE: total system memory
     { "MemFree", "MemFree" },
@@ -604,8 +577,8 @@ bool MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
   return true;
 }
 
-bool MetricsDaemon::FillMeminfo(const string& meminfo_raw,
-                                vector<MeminfoRecord>* fields) {
+bool MetricsCollector::FillMeminfo(const string& meminfo_raw,
+                                    vector<MeminfoRecord>* fields) {
   vector<string> lines;
   unsigned int nlines = Tokenize(meminfo_raw, "\n", &lines);
 
@@ -636,16 +609,16 @@ bool MetricsDaemon::FillMeminfo(const string& meminfo_raw,
   return true;
 }
 
-void MetricsDaemon::ScheduleMemuseCallback(double interval) {
+void MetricsCollector::ScheduleMemuseCallback(double interval) {
   if (testing_) {
     return;
   }
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-      base::Bind(&MetricsDaemon::MemuseCallback, base::Unretained(this)),
+      base::Bind(&MetricsCollector::MemuseCallback, base::Unretained(this)),
       base::TimeDelta::FromSeconds(interval));
 }
 
-void MetricsDaemon::MemuseCallback() {
+void MetricsCollector::MemuseCallback() {
   // Since we only care about active time (i.e. uptime minus sleep time) but
   // the callbacks are driven by real time (uptime), we check if we should
   // reschedule this callback due to intervening sleep periods.
@@ -666,7 +639,7 @@ void MetricsDaemon::MemuseCallback() {
   }
 }
 
-bool MetricsDaemon::MemuseCallbackWork() {
+bool MetricsCollector::MemuseCallbackWork() {
   string meminfo_raw;
   const FilePath meminfo_path(kMeminfoFileName);
   if (!base::ReadFileToString(meminfo_path, &meminfo_raw)) {
@@ -676,7 +649,7 @@ bool MetricsDaemon::MemuseCallbackWork() {
   return ProcessMemuse(meminfo_raw);
 }
 
-bool MetricsDaemon::ProcessMemuse(const string& meminfo_raw) {
+bool MetricsCollector::ProcessMemuse(const string& meminfo_raw) {
   static const MeminfoRecord fields_array[] = {
     { "MemTotal", "MemTotal" },  // SPECIAL CASE: total system memory
     { "ActiveAnon", "Active(anon)" },
@@ -702,12 +675,12 @@ bool MetricsDaemon::ProcessMemuse(const string& meminfo_raw) {
   return true;
 }
 
-void MetricsDaemon::SendSample(const string& name, int sample,
-                               int min, int max, int nbuckets) {
+void MetricsCollector::SendSample(const string& name, int sample,
+                                   int min, int max, int nbuckets) {
   metrics_lib_->SendToUMA(name, sample, min, max, nbuckets);
 }
 
-void MetricsDaemon::SendKernelCrashesCumulativeCountStats() {
+void MetricsCollector::SendKernelCrashesCumulativeCountStats() {
   // Report the number of crashes for this OS version, but don't clear the
   // counter.  It is cleared elsewhere on version change.
   int64_t crashes_count = kernel_crashes_version_count_->Get();
@@ -752,7 +725,7 @@ void MetricsDaemon::SendKernelCrashesCumulativeCountStats() {
   }
 }
 
-void MetricsDaemon::SendAndResetDailyUseSample(
+void MetricsCollector::SendAndResetDailyUseSample(
     const scoped_ptr<PersistentInteger>& use) {
   SendSample(use->Name(),
              use->GetAndClear(),
@@ -761,7 +734,7 @@ void MetricsDaemon::SendAndResetDailyUseSample(
              50);                      // number of buckets
 }
 
-void MetricsDaemon::SendAndResetCrashIntervalSample(
+void MetricsCollector::SendAndResetCrashIntervalSample(
     const scoped_ptr<PersistentInteger>& interval) {
   SendSample(interval->Name(),
              interval->GetAndClear(),
@@ -770,7 +743,7 @@ void MetricsDaemon::SendAndResetCrashIntervalSample(
              50);                      // number of buckets
 }
 
-void MetricsDaemon::SendAndResetCrashFrequencySample(
+void MetricsCollector::SendAndResetCrashFrequencySample(
     const scoped_ptr<PersistentInteger>& frequency) {
   SendSample(frequency->Name(),
              frequency->GetAndClear(),
@@ -779,16 +752,16 @@ void MetricsDaemon::SendAndResetCrashFrequencySample(
              50);                      // number of buckets
 }
 
-void MetricsDaemon::SendLinearSample(const string& name, int sample,
-                                     int max, int nbuckets) {
+void MetricsCollector::SendLinearSample(const string& name, int sample,
+                                         int max, int nbuckets) {
   // TODO(semenzato): add a proper linear histogram to the Chrome external
   // metrics API.
   LOG_IF(FATAL, nbuckets != max + 1) << "unsupported histogram scale";
   metrics_lib_->SendEnumToUMA(name, sample, max);
 }
 
-void MetricsDaemon::UpdateStats(TimeTicks now_ticks,
-                                Time now_wall_time) {
+void MetricsCollector::UpdateStats(TimeTicks now_ticks,
+                                    Time now_wall_time) {
   const int elapsed_seconds = (now_ticks - last_update_stats_time_).InSeconds();
   daily_active_use_->Add(elapsed_seconds);
   version_cumulative_active_use_->Add(elapsed_seconds);
@@ -823,10 +796,10 @@ void MetricsDaemon::UpdateStats(TimeTicks now_ticks,
   }
 }
 
-void MetricsDaemon::HandleUpdateStatsTimeout() {
+void MetricsCollector::HandleUpdateStatsTimeout() {
   UpdateStats(TimeTicks::Now(), Time::Now());
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-      base::Bind(&MetricsDaemon::HandleUpdateStatsTimeout,
+      base::Bind(&MetricsCollector::HandleUpdateStatsTimeout,
                  base::Unretained(this)),
       base::TimeDelta::FromMilliseconds(kUpdateStatsIntervalMs));
 }
