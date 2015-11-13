@@ -311,7 +311,9 @@ static int get_user_keyfilepath(char *filename, size_t len)
               SystemErrorCodeToString(hr).c_str());
             return -1;
         }
-        home_str = narrow(path);
+        if (!android::base::WideToUTF8(path, &home_str)) {
+            return -1;
+        }
         home = home_str.c_str();
     }
     format = "%s\\%s";

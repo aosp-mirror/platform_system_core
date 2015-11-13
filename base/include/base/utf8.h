@@ -19,6 +19,10 @@
 
 #ifdef _WIN32
 #include <string>
+#else
+// Bring in prototypes for standard APIs so that we can import them into the utf8 namespace.
+#include <fcntl.h>      // open
+#include <unistd.h>     // unlink
 #endif
 
 namespace android {
