@@ -88,6 +88,8 @@ static const struct fs_path_config android_dirs[] = {
     { 00771, AID_SHARED_RELRO, AID_SHARED_RELRO, 0, "data/misc/shared_relro" },
     { 00775, AID_MEDIA_RW, AID_MEDIA_RW, 0, "data/media" },
     { 00775, AID_MEDIA_RW, AID_MEDIA_RW, 0, "data/media/Music" },
+    { 00750, AID_ROOT,   AID_SHELL,  0, "data/nativetest" },
+    { 00750, AID_ROOT,   AID_SHELL,  0, "data/nativetest64" },
     { 00771, AID_SYSTEM, AID_SYSTEM, 0, "data" },
     { 00755, AID_ROOT,   AID_SYSTEM, 0, "mnt" },
     { 00755, AID_ROOT,   AID_ROOT,   0, "root" },
