@@ -83,5 +83,6 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := usbtest.cpp usb_linux.cpp util.cpp
 LOCAL_MODULE := usbtest
 LOCAL_CFLAGS := -Werror
+LOCAL_STATIC_LIBRARIES := libbase
 include $(BUILD_HOST_EXECUTABLE)
 endif

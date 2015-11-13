@@ -34,22 +34,22 @@
 
 #include <string>
 
-#include "usb.h"
+#include "transport.h"
 
 struct sparse_file;
 
 /* protocol.c - fastboot protocol */
-int fb_command(usb_handle *usb, const char *cmd);
-int fb_command_response(usb_handle *usb, const char *cmd, char *response);
-int fb_download_data(usb_handle *usb, const void *data, uint32_t size);
-int fb_download_data_sparse(usb_handle *usb, struct sparse_file *s);
+int fb_command(Transport* transport, const char* cmd);
+int fb_command_response(Transport* transport, const char* cmd, char* response);
+int fb_download_data(Transport* transport, const void* data, uint32_t size);
+int fb_download_data_sparse(Transport* transport, struct sparse_file* s);
 char *fb_get_error(void);
 
 #define FB_COMMAND_SZ 64
 #define FB_RESPONSE_SZ 64
 
 /* engine.c - high level command queue engine */
-bool fb_getvar(usb_handle* usb, const std::string& key, std::string* value);
+bool fb_getvar(Transport* transport, const std::string& key, std::string* value);
 void fb_queue_flash(const char *ptn, void *data, uint32_t sz);
 void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, uint32_t sz);
 void fb_queue_erase(const char *ptn);
@@ -63,7 +63,7 @@ void fb_queue_command(const char *cmd, const char *msg);
 void fb_queue_download(const char *name, void *data, uint32_t size);
 void fb_queue_notice(const char *notice);
 void fb_queue_wait_for_disconnect(void);
-int fb_execute_queue(usb_handle *usb);
+int fb_execute_queue(Transport* transport);
 void fb_set_active(const char *slot);
 
 /* util stuff */
