@@ -51,8 +51,6 @@ class MetricsDaemon : public brillo::DBusDaemon {
             bool dbus_enabled,
             MetricsLibraryInterface* metrics_lib,
             const std::string& diskstats_path,
-            const std::string& cpuinfo_max_freq_path,
-            const std::string& scaling_max_freq_path,
             const base::TimeDelta& upload_interval,
             const std::string& server,
             const base::FilePath& metrics_directory);
@@ -92,12 +90,10 @@ class MetricsDaemon : public brillo::DBusDaemon {
   FRIEND_TEST(MetricsDaemonTest, ProcessUncleanShutdown);
   FRIEND_TEST(MetricsDaemonTest, ProcessUserCrash);
   FRIEND_TEST(MetricsDaemonTest, ReportCrashesDailyFrequency);
-  FRIEND_TEST(MetricsDaemonTest, ReadFreqToInt);
   FRIEND_TEST(MetricsDaemonTest, ReportKernelCrashInterval);
   FRIEND_TEST(MetricsDaemonTest, ReportUncleanShutdownInterval);
   FRIEND_TEST(MetricsDaemonTest, ReportUserCrashInterval);
   FRIEND_TEST(MetricsDaemonTest, SendSample);
-  FRIEND_TEST(MetricsDaemonTest, SendCpuThrottleMetrics);
   FRIEND_TEST(MetricsDaemonTest, SendZramMetrics);
 
   // Type of scale to use for meminfo histograms.  For most of them we use
@@ -215,12 +211,6 @@ class MetricsDaemon : public brillo::DBusDaemon {
   // Parses meminfo data and sends it to UMA.
   bool ProcessMemuse(const std::string& meminfo_raw);
 
-  // Sends stats for thermal CPU throttling.
-  void SendCpuThrottleMetrics();
-
-  // Reads an integer CPU frequency value from sysfs.
-  bool ReadFreqToInt(const std::string& sysfs_file_name, int* value);
-
   // Reads the current OS version from /etc/lsb-release and hashes it
   // to a unsigned 32-bit int.
   uint32_t GetOsVersionHash();
@@ -300,9 +290,6 @@ class MetricsDaemon : public brillo::DBusDaemon {
   scoped_ptr<CpuUsageCollector> cpu_usage_collector_;
   scoped_ptr<DiskUsageCollector> disk_usage_collector_;
   scoped_ptr<AveragedStatisticsCollector> averaged_stats_collector_;
-
-  std::string scaling_max_freq_path_;
-  std::string cpuinfo_max_freq_path_;
 
   base::TimeDelta upload_interval_;
   std::string server_;
