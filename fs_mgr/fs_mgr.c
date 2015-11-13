@@ -442,9 +442,15 @@ out:
 // Check to see if a mountable volume has encryption requirements
 static int handle_encryptable(struct fstab *fstab, const struct fstab_rec* rec)
 {
+    /* Check for existence of convert_fbe breadcrumb file */
+    char convert_fbe_name[PATH_MAX];
+    snprintf(convert_fbe_name, sizeof(convert_fbe_name),
+             "%s/convert_fbe", rec->mount_point);
+    bool convert_fbe = (access(convert_fbe_name, F_OK) == 0);
+
     /* If this is block encryptable, need to trigger encryption */
     if (   (rec->fs_mgr_flags & MF_FORCECRYPT)
-        || (rec->fs_mgr_flags & MF_FORCEFDEORFBE)
+        || ((rec->fs_mgr_flags & MF_FORCEFDEORFBE) && !convert_fbe)
         || (device_is_force_encrypted() && fs_mgr_is_encryptable(rec))) {
         if (umount(rec->mount_point) == 0) {
             return FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION;
@@ -456,7 +462,8 @@ static int handle_encryptable(struct fstab *fstab, const struct fstab_rec* rec)
     }
 
     // Deal with file level encryption
-    if (rec->fs_mgr_flags & MF_FILEENCRYPTION) {
+    if (   (rec->fs_mgr_flags & MF_FILEENCRYPTION)
+        || ((rec->fs_mgr_flags & MF_FORCEFDEORFBE) && convert_fbe)) {
         // Default or not yet initialized encryption requires no more work here
         if (!e4crypt_non_default_key(rec->mount_point)) {
             INFO("%s is default file encrypted\n", rec->mount_point);
