@@ -1080,8 +1080,8 @@ static int backup(int argc, const char** argv) {
     for (int i = 1; i < argc; i++) {
         if (!strcmp("-f", argv[i])) {
             if (i == argc-1) {
-                fprintf(stderr, "adb: -f passed with no filename\n");
-                return usage();
+                fprintf(stderr, "adb: backup -f passed with no filename.\n");
+                return EXIT_FAILURE;
             }
             filename = argv[i+1];
             for (int j = i+2; j <= argc; ) {
@@ -1092,14 +1092,18 @@ static int backup(int argc, const char** argv) {
         }
     }
 
-    /* bare "adb backup" or "adb backup -f filename" are not valid invocations */
-    if (argc < 2) return usage();
+    // Bare "adb backup" or "adb backup -f filename" are not valid invocations ---
+    // a list of packages is required.
+    if (argc < 2) {
+        fprintf(stderr, "adb: backup either needs a list of packages or -all/-shared.\n");
+        return EXIT_FAILURE;
+    }
 
     adb_unlink(filename);
     int outFd = adb_creat(filename, 0640);
     if (outFd < 0) {
-        fprintf(stderr, "adb: unable to open file %s\n", filename);
-        return -1;
+        fprintf(stderr, "adb: backup unable to create file '%s': %s\n", filename, strerror(errno));
+        return EXIT_FAILURE;
     }
 
     std::string cmd = "backup:";
@@ -1115,15 +1119,17 @@ static int backup(int argc, const char** argv) {
     if (fd < 0) {
         fprintf(stderr, "adb: unable to connect for backup: %s\n", error.c_str());
         adb_close(outFd);
-        return -1;
+        return EXIT_FAILURE;
     }
 
-    printf("Now unlock your device and confirm the backup operation.\n");
+    printf("Now unlock your device and confirm the backup operation...\n");
+    fflush(stdout);
+
     copy_to_file(fd, outFd);
 
     adb_close(fd);
     adb_close(outFd);
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 static int restore(int argc, const char** argv) {
