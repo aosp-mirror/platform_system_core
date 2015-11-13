@@ -887,8 +887,7 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
             continue;
         }
 
-        if (S_ISREG(src_mode) || S_ISLNK(src_mode)) {
-            // TODO(b/25601283): symlinks shouldn't be handled as files.
+        if (S_ISREG(src_mode)) {
             std::string path_holder;
             if (dst_isdir) {
                 // If we're copying a remote file to a local directory, we
