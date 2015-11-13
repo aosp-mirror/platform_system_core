@@ -28,6 +28,9 @@
 
 #include <string>
 
+// Include this before open/unlink are defined as macros below.
+#include <base/utf8.h>
+
 /*
  * TEMP_FAILURE_RETRY is defined by some, but not all, versions of
  * <unistd.h>. (Alas, it is not as standard as we'd hoped!) So, if it's
@@ -72,7 +75,7 @@
 #include <ws2tcpip.h>
 
 #include <memory>   // unique_ptr
-#include <string>   // Prototypes for narrow() and widen() use std::(w)string.
+#include <string>
 
 #include "fdevent.h"
 
@@ -341,18 +344,6 @@ inline void seekdir(DIR*, long) {
 
 char* adb_strerror(int err);
 #define strerror adb_strerror
-
-// Convert from UTF-8 to UTF-16, typically used to convert char strings into
-// wchar_t strings that can be passed to wchar_t-based OS and C Runtime APIs
-// on Windows.
-extern std::wstring widen(const std::string& utf8);
-extern std::wstring widen(const char* utf8);
-
-// Convert from UTF-16 to UTF-8, typically used to convert strings from OS and
-// C Runtime APIs that return wchar_t, to a format for our char-based data
-// structures.
-extern std::string narrow(const std::wstring& utf16);
-extern std::string narrow(const wchar_t* utf16);
 
 // Helper class to convert UTF-16 argv from wmain() to UTF-8 args that can be
 // passed to main().
