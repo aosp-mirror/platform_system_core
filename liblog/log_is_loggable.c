@@ -16,12 +16,39 @@
 
 #include <ctype.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
 #include <android/log.h>
+#include <log/log.h>
+
+static pthread_mutex_t lock_loggable = PTHREAD_MUTEX_INITIALIZER;
+
+static void lock(sigset_t *sigflags)
+{
+    /*
+     * If we trigger a signal handler in the middle of locked activity and the
+     * signal handler logs a message, we could get into a deadlock state.
+     */
+    if (sigflags) {
+        sigset_t all;
+
+        sigfillset(&all);
+        pthread_sigmask(SIG_BLOCK, &all, sigflags);
+    }
+    pthread_mutex_lock(&lock_loggable);
+}
+
+static void unlock(sigset_t *sigflags)
+{
+    pthread_mutex_unlock(&lock_loggable);
+    if (sigflags) {
+        pthread_sigmask(SIG_UNBLOCK, sigflags, NULL);
+    }
+}
 
 struct cache {
     const prop_info *pinfo;
@@ -49,9 +76,7 @@ static void refresh_cache(struct cache *cache, const char *key)
     cache->c = buf[0];
 }
 
-static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-
-static int __android_log_level(const char *tag, int def)
+static int __android_log_level(const char *tag, int flag)
 {
     /* sizeof() is used on this array below */
     static const char log_namespace[] = "persist.log.tag.";
@@ -83,10 +108,11 @@ static int __android_log_level(const char *tag, int def)
         { NULL, -1, 0 },
         { NULL, -1, 0 }
     };
+    sigset_t sigflags;
 
     strcpy(key, log_namespace);
 
-    pthread_mutex_lock(&lock);
+    lock((flag & ANDROID_LOGGABLE_FLAG_NOT_WITHIN_SIGNAL) ? NULL : &sigflags);
 
     current_global_serial = __system_property_area_serial();
 
@@ -156,7 +182,7 @@ static int __android_log_level(const char *tag, int def)
 
     global_serial = current_global_serial;
 
-    pthread_mutex_unlock(&lock);
+    unlock((flag & ANDROID_LOGGABLE_FLAG_NOT_WITHIN_SIGNAL) ? NULL : &sigflags);
 
     switch (toupper(c)) {
     case 'V': return ANDROID_LOG_VERBOSE;
@@ -168,36 +194,46 @@ static int __android_log_level(const char *tag, int def)
     case 'A': return ANDROID_LOG_FATAL;
     case 'S': return -1; /* ANDROID_LOG_SUPPRESS */
     }
-    return def;
+    return flag & ANDROID_LOGGABLE_FLAG_DEFAULT_MASK;
 }
 
-int __android_log_is_loggable(int prio, const char *tag, int def)
+int __android_log_is_loggable(int prio, const char *tag, int flag)
 {
-    int logLevel = __android_log_level(tag, def);
+    int logLevel = __android_log_level(tag, flag);
     return logLevel >= 0 && prio >= logLevel;
 }
+
+/*
+ * Timestamp state generally remains constant, since a change is
+ * rare, we can accept a trylock failure gracefully.
+ */
+static pthread_mutex_t lock_timestamp = PTHREAD_MUTEX_INITIALIZER;
 
 char android_log_timestamp()
 {
     static struct cache r_time_cache = { NULL, -1, 0 };
     static struct cache p_time_cache = { NULL, -1, 0 };
-    static uint32_t serial;
-    uint32_t current_serial;
     char retval;
 
-    pthread_mutex_lock(&lock);
+    if (pthread_mutex_trylock(&lock_timestamp)) {
+        /* We are willing to accept some race in this context */
+        if (!(retval = p_time_cache.c)) {
+            retval = r_time_cache.c;
+        }
+    } else {
+        static uint32_t serial;
+        uint32_t current_serial = __system_property_area_serial();
+        if (current_serial != serial) {
+            refresh_cache(&r_time_cache, "ro.logd.timestamp");
+            refresh_cache(&p_time_cache, "persist.logd.timestamp");
+            serial = current_serial;
+        }
+        if (!(retval = p_time_cache.c)) {
+            retval = r_time_cache.c;
+        }
 
-    current_serial = __system_property_area_serial();
-    if (current_serial != serial) {
-        refresh_cache(&r_time_cache, "ro.logd.timestamp");
-        refresh_cache(&p_time_cache, "persist.logd.timestamp");
-        serial = current_serial;
+        pthread_mutex_unlock(&lock_timestamp);
     }
-    if (!(retval = p_time_cache.c)) {
-        retval = r_time_cache.c;
-    }
-
-    pthread_mutex_unlock(&lock);
 
     return tolower(retval ?: 'r');
 }
