@@ -158,7 +158,7 @@ int top_main(int argc, char *argv[]) {
             fprintf(stderr, "Invalid argument \"%s\" for option -s.\n", argv[i]);
             exit(EXIT_FAILURE);
         }
-        if (!strcmp(argv[i], "-t")) { threads = 1; continue; }
+        if (!strcmp(argv[i], "-H") || !strcmp(argv[i], "-t")) { threads = 1; continue; }
         if (!strcmp(argv[i], "-h")) {
             usage(argv[0]);
             exit(EXIT_SUCCESS);
@@ -187,6 +187,7 @@ int top_main(int argc, char *argv[]) {
         read_procs();
         print_procs();
         free_old_procs();
+        fflush(stdout);
     }
 
     return 0;
@@ -566,7 +567,7 @@ static void usage(char *cmd) {
                     "    -n num  Updates to show before exiting.\n"
                     "    -d num  Seconds to wait between updates.\n"
                     "    -s col  Column to sort by (cpu,vss,rss,thr).\n"
-                    "    -t      Show threads instead of processes.\n"
+                    "    -H      Show threads instead of processes.\n"
                     "    -h      Display this help screen.\n",
         cmd);
 }
