@@ -75,13 +75,13 @@ static Action *action_last = 0;
 
 
 
-bool fb_getvar(usb_handle* usb, const std::string& key, std::string* value) {
+bool fb_getvar(Transport* transport, const std::string& key, std::string* value) {
     std::string cmd = "getvar:";
     cmd += key;
 
     char buf[FB_RESPONSE_SZ + 1];
     memset(buf, 0, sizeof(buf));
-    if (fb_command_response(usb, cmd.c_str(), buf)) {
+    if (fb_command_response(transport, cmd.c_str(), buf)) {
       return false;
     }
     *value = buf;
@@ -330,7 +330,7 @@ void fb_queue_wait_for_disconnect(void)
     queue_action(OP_WAIT_FOR_DISCONNECT, "");
 }
 
-int fb_execute_queue(usb_handle *usb)
+int fb_execute_queue(Transport* transport)
 {
     Action *a;
     char resp[FB_RESPONSE_SZ+1];
@@ -350,25 +350,25 @@ int fb_execute_queue(usb_handle *usb)
             fprintf(stderr,"%s...\n",a->msg);
         }
         if (a->op == OP_DOWNLOAD) {
-            status = fb_download_data(usb, a->data, a->size);
+            status = fb_download_data(transport, a->data, a->size);
             status = a->func(a, status, status ? fb_get_error() : "");
             if (status) break;
         } else if (a->op == OP_COMMAND) {
-            status = fb_command(usb, a->cmd);
+            status = fb_command(transport, a->cmd);
             status = a->func(a, status, status ? fb_get_error() : "");
             if (status) break;
         } else if (a->op == OP_QUERY) {
-            status = fb_command_response(usb, a->cmd, resp);
+            status = fb_command_response(transport, a->cmd, resp);
             status = a->func(a, status, status ? fb_get_error() : resp);
             if (status) break;
         } else if (a->op == OP_NOTICE) {
             fprintf(stderr,"%s\n",(char*)a->data);
         } else if (a->op == OP_DOWNLOAD_SPARSE) {
-            status = fb_download_data_sparse(usb, reinterpret_cast<sparse_file*>(a->data));
+            status = fb_download_data_sparse(transport, reinterpret_cast<sparse_file*>(a->data));
             status = a->func(a, status, status ? fb_get_error() : "");
             if (status) break;
         } else if (a->op == OP_WAIT_FOR_DISCONNECT) {
-            usb_wait_for_disconnect(usb);
+            transport->WaitForDisconnect();
         } else {
             die("bogus action");
         }
