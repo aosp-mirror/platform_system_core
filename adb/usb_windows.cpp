@@ -55,7 +55,7 @@ struct usb_handle {
   ADBAPIHANDLE  adb_write_pipe;
 
   /// Interface name
-  char*         interface_name;
+  wchar_t*      interface_name;
 
   /// Mask for determining when to use zero length packets
   unsigned zero_mask;
@@ -74,11 +74,11 @@ static usb_handle handle_list = {
 ADB_MUTEX_DEFINE( usb_lock );
 
 /// Checks if there is opened usb handle in handle_list for this device.
-int known_device(const char* dev_name);
+int known_device(const wchar_t* dev_name);
 
 /// Checks if there is opened usb handle in handle_list for this device.
 /// usb_lock mutex must be held before calling this routine.
-int known_device_locked(const char* dev_name);
+int known_device_locked(const wchar_t* dev_name);
 
 /// Registers opened usb handle (adds it to handle_list).
 int register_new_device(usb_handle* handle);
@@ -118,7 +118,7 @@ void usb_kick(usb_handle* handle);
 /// Closes opened usb handle
 int usb_close(usb_handle* handle);
 
-int known_device_locked(const char* dev_name) {
+int known_device_locked(const wchar_t* dev_name) {
   usb_handle* usb;
 
   if (NULL != dev_name) {
@@ -126,7 +126,7 @@ int known_device_locked(const char* dev_name) {
     for(usb = handle_list.next; usb != &handle_list; usb = usb->next) {
       // In Windows names are not case sensetive!
       if((NULL != usb->interface_name) &&
-         (0 == stricmp(usb->interface_name, dev_name))) {
+         (0 == wcsicmp(usb->interface_name, dev_name))) {
         return 1;
       }
     }
@@ -135,7 +135,7 @@ int known_device_locked(const char* dev_name) {
   return 0;
 }
 
-int known_device(const char* dev_name) {
+int known_device(const wchar_t* dev_name) {
   int ret = 0;
 
   if (NULL != dev_name) {
@@ -316,17 +316,16 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
   AdbGetInterfaceName(ret->adb_interface,
                       NULL,
                       &name_len,
-                      true);
+                      false);
   if (0 == name_len) {
     D("AdbGetInterfaceName returned name length of zero: %s",
       SystemErrorCodeToString(GetLastError()).c_str());
     goto fail;
   }
 
-  ret->interface_name = (char*)malloc(name_len);
+  ret->interface_name = (wchar_t*)malloc(name_len * sizeof(ret->interface_name[0]));
   if (NULL == ret->interface_name) {
-    D("Could not allocate %lu bytes for interface_name: %s", name_len,
-      strerror(errno));
+    D("Could not allocate %lu characters for interface_name: %s", name_len, strerror(errno));
     goto fail;
   }
 
@@ -334,7 +333,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
   if (!AdbGetInterfaceName(ret->adb_interface,
                            ret->interface_name,
                            &name_len,
-                           true)) {
+                           false)) {
     D("AdbGetInterfaceName failed: %s",
       SystemErrorCodeToString(GetLastError()).c_str());
     goto fail;
@@ -581,12 +580,10 @@ int recognized_device(usb_handle* handle) {
 }
 
 void find_devices() {
-        usb_handle* handle = NULL;
+  usb_handle* handle = NULL;
   char entry_buffer[2048];
-  char interf_name[2048];
   AdbInterfaceInfo* next_interface = (AdbInterfaceInfo*)(&entry_buffer[0]);
   unsigned long entry_buffer_size = sizeof(entry_buffer);
-  char* copy_name;
 
   // Enumerate all present and active interfaces.
   ADBAPIHANDLE enum_handle =
@@ -599,25 +596,21 @@ void find_devices() {
   }
 
   while (AdbNextInterface(enum_handle, next_interface, &entry_buffer_size)) {
-    // TODO: FIXME - temp hack converting wchar_t into char.
-    // It would be better to change AdbNextInterface so it will return
-    // interface name as single char string.
-    const wchar_t* wchar_name = next_interface->device_name;
-    for(copy_name = interf_name;
-        L'\0' != *wchar_name;
-        wchar_name++, copy_name++) {
-      *copy_name = (char)(*wchar_name);
-    }
-    *copy_name = '\0';
-
     // Lets see if we already have this device in the list
-    if (!known_device(interf_name)) {
+    if (!known_device(next_interface->device_name)) {
       // This seems to be a new device. Open it!
-        handle = do_usb_open(next_interface->device_name);
-        if (NULL != handle) {
+      handle = do_usb_open(next_interface->device_name);
+      if (NULL != handle) {
         // Lets see if this interface (device) belongs to us
         if (recognized_device(handle)) {
-          D("adding a new device %s", interf_name);
+          D("adding a new device %ls", next_interface->device_name);
+
+          // We don't request a wchar_t string from AdbGetSerialNumber() because of a bug in
+          // adb_winusb_interface.cpp:CopyMemory(buffer, ser_num->bString, bytes_written) where the
+          // last parameter should be (str_len * sizeof(wchar_t)). The bug reads 2 bytes past the
+          // end of a stack buffer in the best case, and in the unlikely case of a long serial
+          // number, it will read 2 bytes past the end of a heap allocation. This doesn't affect the
+          // resulting string, but we should avoid the bad reads in the first place.
           char serial_number[512];
           unsigned long serial_number_len = sizeof(serial_number);
           if (AdbGetSerialNumber(handle->adb_interface,
@@ -628,7 +621,7 @@ void find_devices() {
             if (register_new_device(handle)) {
               register_usb_transport(handle, serial_number, NULL, 1);
             } else {
-              D("register_new_device failed for %s", interf_name);
+              D("register_new_device failed for %ls", next_interface->device_name);
               usb_cleanup_handle(handle);
               free(handle);
             }
