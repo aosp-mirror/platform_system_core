@@ -261,8 +261,11 @@ LOCAL_STATIC_LIBRARIES := \
     libadb \
     libbase \
     libcrypto_static \
-    libcutils \
     liblog \
+
+# Don't use libcutils on Windows.
+LOCAL_STATIC_LIBRARIES_darwin := libcutils
+LOCAL_STATIC_LIBRARIES_linux := libcutils
 
 LOCAL_CXX_STL := libc++_static
 
