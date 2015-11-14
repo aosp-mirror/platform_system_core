@@ -35,8 +35,6 @@
 #include <IOKit/IOMessage.h>
 #include <mach/mach_port.h>
 
-#include <memory>
-
 #include "usb.h"
 
 
@@ -63,21 +61,6 @@ struct usb_handle
     UInt8 bulkOut;
     IOUSBInterfaceInterface190 **interface;
     unsigned int zero_mask;
-};
-
-class OsxUsbTransport : public Transport {
-  public:
-    OsxUsbTransport(std::unique_ptr<usb_handle> handle) : handle_(std::move(handle)) {}
-    ~OsxUsbTransport() override = default;
-
-    ssize_t Read(void* data, size_t len) override;
-    ssize_t Write(const void* data, size_t len) override;
-    int Close() override;
-
-  private:
-    std::unique_ptr<usb_handle> handle_;
-
-    DISALLOW_COPY_AND_ASSIGN(OsxUsbTransport);
 };
 
 /** Try out all the interfaces and see if there's a match. Returns 0 on
@@ -407,7 +390,7 @@ static int try_device(io_service_t device, usb_handle *handle) {
 
 
 /** Initializes the USB system. Returns 0 on success, -1 on error. */
-static int init_usb(ifc_match_func callback, std::unique_ptr<usb_handle>* handle) {
+static int init_usb(ifc_match_func callback, usb_handle **handle) {
     int ret = -1;
     CFMutableDictionaryRef matchingDict;
     kern_return_t result;
@@ -460,8 +443,8 @@ static int init_usb(ifc_match_func callback, std::unique_ptr<usb_handle>* handle
         }
 
         if (h.success) {
-            handle->reset(new usb_handle);
-            memcpy(handle->get(), &h, sizeof(usb_handle));
+            *handle = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
+            memcpy(*handle, &h, sizeof(usb_handle));
             ret = 0;
             break;
         }
@@ -480,23 +463,28 @@ static int init_usb(ifc_match_func callback, std::unique_ptr<usb_handle>* handle
  * Definitions of this file's public functions.
  */
 
-Transport* usb_open(ifc_match_func callback) {
-    std::unique_ptr<usb_handle> handle;
+usb_handle *usb_open(ifc_match_func callback) {
+    usb_handle *handle = NULL;
 
     if (init_usb(callback, &handle) < 0) {
         /* Something went wrong initializing USB. */
-        return nullptr;
+        return NULL;
     }
 
-    return new OsxUsbTransport(std::move(handle));
+    return handle;
 }
 
-int OsxUsbTransport::Close() {
+int usb_close(usb_handle *h) {
     /* TODO: Something better here? */
     return 0;
 }
 
-ssize_t OsxUsbTransport::Read(void* data, size_t len) {
+int usb_wait_for_disconnect(usb_handle *usb) {
+    /* TODO: Punt for now */
+    return 0;
+}
+
+int usb_read(usb_handle *h, void *data, int len) {
     IOReturn result;
     UInt32 numBytes = len;
 
@@ -504,21 +492,22 @@ ssize_t OsxUsbTransport::Read(void* data, size_t len) {
         return 0;
     }
 
-    if (handle_ == nullptr) {
+    if (h == NULL) {
         return -1;
     }
 
-    if (handle_->interface == nullptr) {
+    if (h->interface == NULL) {
         ERR("usb_read interface was null\n");
         return -1;
     }
 
-    if (handle_->bulkIn == 0) {
+    if (h->bulkIn == 0) {
         ERR("bulkIn endpoint not assigned\n");
         return -1;
     }
 
-    result = (*handle_->interface)->ReadPipe(handle_->interface, handle_->bulkIn, data, &numBytes);
+    result = (*h->interface)->ReadPipe(
+            h->interface, h->bulkIn, data, &numBytes);
 
     if (result == 0) {
         return (int) numBytes;
@@ -529,30 +518,30 @@ ssize_t OsxUsbTransport::Read(void* data, size_t len) {
     return -1;
 }
 
-ssize_t OsxUsbTransport::Write(const void* data, size_t len) {
+int usb_write(usb_handle *h, const void *data, int len) {
     IOReturn result;
 
     if (len == 0) {
         return 0;
     }
 
-    if (handle_ == NULL) {
+    if (h == NULL) {
         return -1;
     }
 
-    if (handle_->interface == NULL) {
+    if (h->interface == NULL) {
         ERR("usb_write interface was null\n");
         return -1;
     }
 
-    if (handle_->bulkOut == 0) {
+    if (h->bulkOut == 0) {
         ERR("bulkOut endpoint not assigned\n");
         return -1;
     }
 
 #if 0
-    result = (*handle_->interface)->WritePipe(
-            handle_->interface, handle_->bulkOut, (void *)data, len);
+    result = (*h->interface)->WritePipe(
+            h->interface, h->bulkOut, (void *)data, len);
 #else
     /* Attempt to work around crashes in the USB driver that may be caused
      * by trying to write too much data at once.  The kernel IOCopyMapper
@@ -565,8 +554,8 @@ ssize_t OsxUsbTransport::Write(const void* data, size_t len) {
         int lenToSend = lenRemaining > maxLenToSend
             ? maxLenToSend : lenRemaining;
 
-        result = (*handle_->interface)->WritePipe(
-                handle_->interface, handle_->bulkOut, (void *)data, lenToSend);
+        result = (*h->interface)->WritePipe(
+                h->interface, h->bulkOut, (void *)data, lenToSend);
         if (result != 0) break;
 
         lenRemaining -= lenToSend;
@@ -575,11 +564,11 @@ ssize_t OsxUsbTransport::Write(const void* data, size_t len) {
 #endif
 
     #if 0
-    if ((result == 0) && (handle_->zero_mask)) {
+    if ((result == 0) && (h->zero_mask)) {
         /* we need 0-markers and our transfer */
-        if(!(len & handle_->zero_mask)) {
-            result = (*handle_->interface)->WritePipe(
-                    handle_->interface, handle_->bulkOut, (void *)data, 0);
+        if(!(len & h->zero_mask)) {
+            result = (*h->interface)->WritePipe(
+                    h->interface, h->bulkOut, (void *)data, 0);
         }
     }
     #endif
