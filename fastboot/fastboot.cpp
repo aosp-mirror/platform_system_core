@@ -55,8 +55,6 @@
 #include "bootimg_utils.h"
 #include "fastboot.h"
 #include "fs.h"
-#include "transport.h"
-#include "usb.h"
 
 #ifndef O_BINARY
 #define O_BINARY 0
@@ -224,16 +222,16 @@ static int list_devices_callback(usb_ifc_info* info) {
     return -1;
 }
 
-static Transport* open_device() {
-    static Transport* transport = nullptr;
+static usb_handle* open_device() {
+    static usb_handle *usb = 0;
     int announce = 1;
 
-    if (transport) return transport;
+    if(usb) return usb;
 
-    for (;;) {
-        transport = usb_open(match_fastboot);
-        if (transport) return transport;
-        if (announce) {
+    for(;;) {
+        usb = usb_open(match_fastboot);
+        if(usb) return usb;
+        if(announce) {
             announce = 0;
             fprintf(stderr, "< waiting for %s >\n", serial ? serial : "any device");
         }
@@ -599,10 +597,9 @@ static struct sparse_file **load_sparse_files(int fd, int max_size)
     return out_s;
 }
 
-static int64_t get_target_sparse_limit(Transport* transport) {
+static int64_t get_target_sparse_limit(usb_handle* usb) {
     std::string max_download_size;
-    if (!fb_getvar(transport, "max-download-size", &max_download_size) ||
-            max_download_size.empty()) {
+    if (!fb_getvar(usb, "max-download-size", &max_download_size) || max_download_size.empty()) {
         fprintf(stderr, "target didn't report max-download-size\n");
         return 0;
     }
@@ -621,7 +618,7 @@ static int64_t get_target_sparse_limit(Transport* transport) {
     return limit;
 }
 
-static int64_t get_sparse_limit(Transport* transport, int64_t size) {
+static int64_t get_sparse_limit(usb_handle* usb, int64_t size) {
     int64_t limit;
 
     if (sparse_limit == 0) {
@@ -630,7 +627,7 @@ static int64_t get_sparse_limit(Transport* transport, int64_t size) {
         limit = sparse_limit;
     } else {
         if (target_sparse_limit == -1) {
-            target_sparse_limit = get_target_sparse_limit(transport);
+            target_sparse_limit = get_target_sparse_limit(usb);
         }
         if (target_sparse_limit > 0) {
             limit = target_sparse_limit;
@@ -649,22 +646,22 @@ static int64_t get_sparse_limit(Transport* transport, int64_t size) {
 // Until we get lazy inode table init working in make_ext4fs, we need to
 // erase partitions of type ext4 before flashing a filesystem so no stale
 // inodes are left lying around.  Otherwise, e2fsck gets very upset.
-static bool needs_erase(Transport* transport, const char* partition) {
+static bool needs_erase(usb_handle* usb, const char* partition) {
     std::string partition_type;
-    if (!fb_getvar(transport, std::string("partition-type:") + partition, &partition_type)) {
+    if (!fb_getvar(usb, std::string("partition-type:") + partition, &partition_type)) {
         return false;
     }
     return partition_type == "ext4";
 }
 
-static int load_buf_fd(Transport* transport, int fd, struct fastboot_buffer* buf) {
+static int load_buf_fd(usb_handle* usb, int fd, struct fastboot_buffer* buf) {
     int64_t sz = get_file_size(fd);
     if (sz == -1) {
         return -1;
     }
 
     lseek64(fd, 0, SEEK_SET);
-    int64_t limit = get_sparse_limit(transport, sz);
+    int64_t limit = get_sparse_limit(usb, sz);
     if (limit) {
         sparse_file** s = load_sparse_files(fd, limit);
         if (s == nullptr) {
@@ -683,7 +680,8 @@ static int load_buf_fd(Transport* transport, int fd, struct fastboot_buffer* buf
     return 0;
 }
 
-static int load_buf(Transport* transport, const char *fname, struct fastboot_buffer *buf)
+static int load_buf(usb_handle *usb, const char *fname,
+        struct fastboot_buffer *buf)
 {
     int fd;
 
@@ -692,7 +690,7 @@ static int load_buf(Transport* transport, const char *fname, struct fastboot_buf
         return -1;
     }
 
-    return load_buf_fd(transport, fd, buf);
+    return load_buf_fd(usb, fd, buf);
 }
 
 static void flash_buf(const char *pname, struct fastboot_buffer *buf)
@@ -715,20 +713,20 @@ static void flash_buf(const char *pname, struct fastboot_buffer *buf)
     }
 }
 
-static std::vector<std::string> get_suffixes(Transport* transport) {
+static std::vector<std::string> get_suffixes(usb_handle* usb) {
     std::vector<std::string> suffixes;
     std::string suffix_list;
-    if (!fb_getvar(transport, "slot-suffixes", &suffix_list)) {
+    if (!fb_getvar(usb, "slot-suffixes", &suffix_list)) {
         die("Could not get suffixes.\n");
     }
     return android::base::Split(suffix_list, ",");
 }
 
-static std::string verify_slot(Transport* transport, const char *slot) {
+static std::string verify_slot(usb_handle* usb, const char *slot) {
     if (strcmp(slot, "all") == 0) {
         return "all";
     }
-    std::vector<std::string> suffixes = get_suffixes(transport);
+    std::vector<std::string> suffixes = get_suffixes(usb);
     for (const std::string &suffix : suffixes) {
         if (suffix == slot)
             return slot;
@@ -740,18 +738,17 @@ static std::string verify_slot(Transport* transport, const char *slot) {
     exit(1);
 }
 
-static void do_for_partition(Transport* transport, const char *part, const char *slot,
-                             std::function<void(const std::string&)> func, bool force_slot) {
+static void do_for_partition(usb_handle* usb, const char *part, const char *slot, std::function<void(const std::string&)> func, bool force_slot) {
     std::string has_slot;
     std::string current_slot;
 
-    if (!fb_getvar(transport, std::string("has-slot:")+part, &has_slot)) {
+    if (!fb_getvar(usb, std::string("has-slot:")+part, &has_slot)) {
         /* If has-slot is not supported, the answer is no. */
         has_slot = "no";
     }
     if (has_slot == "yes") {
         if (!slot || slot[0] == 0) {
-            if (!fb_getvar(transport, "current-slot", &current_slot)) {
+            if (!fb_getvar(usb, "current-slot", &current_slot)) {
                 die("Failed to identify current slot.\n");
             }
             func(std::string(part) + '-' + current_slot);
@@ -760,43 +757,40 @@ static void do_for_partition(Transport* transport, const char *part, const char 
         }
     } else {
         if (force_slot && slot && slot[0]) {
-             fprintf(stderr, "Warning: %s does not support slots, and slot %s was requested.\n",
-                     part, slot);
+             fprintf(stderr, "Warning: %s does not support slots, and slot %s was requested.\n", part, slot);
         }
         func(part);
     }
 }
 
-/* This function will find the real partition name given a base name, and a slot. If slot is NULL or
- * empty, it will use the current slot. If slot is "all", it will return a list of all possible
- * partition names. If force_slot is true, it will fail if a slot is specified, and the given
- * partition does not support slots.
+/* This function will find the real partition name given a base name, and a slot. If slot is NULL or empty,
+ * it will use the current slot. If slot is "all", it will return a list of all possible partition names.
+ * If force_slot is true, it will fail if a slot is specified, and the given partition does not support slots.
  */
-static void do_for_partitions(Transport* transport, const char *part, const char *slot,
-                              std::function<void(const std::string&)> func, bool force_slot) {
+static void do_for_partitions(usb_handle* usb, const char *part, const char *slot, std::function<void(const std::string&)> func, bool force_slot) {
     std::string has_slot;
 
     if (slot && strcmp(slot, "all") == 0) {
-        if (!fb_getvar(transport, std::string("has-slot:") + part, &has_slot)) {
+        if (!fb_getvar(usb, std::string("has-slot:") + part, &has_slot)) {
             die("Could not check if partition %s has slot.", part);
         }
         if (has_slot == "yes") {
-            std::vector<std::string> suffixes = get_suffixes(transport);
+            std::vector<std::string> suffixes = get_suffixes(usb);
             for (std::string &suffix : suffixes) {
-                do_for_partition(transport, part, suffix.c_str(), func, force_slot);
+                do_for_partition(usb, part, suffix.c_str(), func, force_slot);
             }
         } else {
-            do_for_partition(transport, part, "", func, force_slot);
+            do_for_partition(usb, part, "", func, force_slot);
         }
     } else {
-        do_for_partition(transport, part, slot, func, force_slot);
+        do_for_partition(usb, part, slot, func, force_slot);
     }
 }
 
-static void do_flash(Transport* transport, const char* pname, const char* fname) {
+static void do_flash(usb_handle* usb, const char* pname, const char* fname) {
     struct fastboot_buffer buf;
 
-    if (load_buf(transport, fname, &buf)) {
+    if (load_buf(usb, fname, &buf)) {
         die("cannot load '%s'", fname);
     }
     flash_buf(pname, &buf);
@@ -810,7 +804,7 @@ static void do_update_signature(ZipArchiveHandle zip, char* fn) {
     fb_queue_command("signature", "installing signature");
 }
 
-static void do_update(Transport* transport, const char* filename, const char* slot_override, bool erase_first) {
+static void do_update(usb_handle* usb, const char* filename, const char* slot_override, bool erase_first) {
     queue_info_dump();
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
@@ -841,12 +835,12 @@ static void do_update(Transport* transport, const char* filename, const char* sl
             exit(1); // unzip_to_file already explained why.
         }
         fastboot_buffer buf;
-        int rc = load_buf_fd(transport, fd, &buf);
+        int rc = load_buf_fd(usb, fd, &buf);
         if (rc) die("cannot load %s from flash", images[i].img_name);
 
         auto update = [&](const std::string &partition) {
             do_update_signature(zip, images[i].sig_name);
-            if (erase_first && needs_erase(transport, partition.c_str())) {
+            if (erase_first && needs_erase(usb, partition.c_str())) {
                 fb_queue_erase(partition.c_str());
             }
             flash_buf(partition.c_str(), &buf);
@@ -855,7 +849,7 @@ static void do_update(Transport* transport, const char* filename, const char* sl
              * program exits.
              */
         };
-        do_for_partitions(transport, images[i].part_name, slot_override, update, false);
+        do_for_partitions(usb, images[i].part_name, slot_override, update, false);
     }
 
     CloseArchive(zip);
@@ -877,7 +871,7 @@ static void do_send_signature(char* fn) {
     fb_queue_command("signature", "installing signature");
 }
 
-static void do_flashall(Transport* transport, const char* slot_override, int erase_first) {
+static void do_flashall(usb_handle* usb, const char *slot_override, int erase_first) {
     queue_info_dump();
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
@@ -894,7 +888,7 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
     for (size_t i = 0; i < ARRAY_SIZE(images); i++) {
         fname = find_item(images[i].part_name, product);
         fastboot_buffer buf;
-        if (load_buf(transport, fname, &buf)) {
+        if (load_buf(usb, fname, &buf)) {
             if (images[i].is_optional)
                 continue;
             die("could not load %s\n", images[i].img_name);
@@ -902,12 +896,12 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
 
         auto flashall = [&](const std::string &partition) {
             do_send_signature(fname);
-            if (erase_first && needs_erase(transport, partition.c_str())) {
+            if (erase_first && needs_erase(usb, partition.c_str())) {
                 fb_queue_erase(partition.c_str());
             }
             flash_buf(partition.c_str(), &buf);
         };
-        do_for_partitions(transport, images[i].part_name, slot_override, flashall, false);
+        do_for_partitions(usb, images[i].part_name, slot_override, flashall, false);
     }
 }
 
@@ -992,7 +986,7 @@ static int64_t parse_num(const char *arg)
     return num;
 }
 
-static void fb_perform_format(Transport* transport,
+static void fb_perform_format(usb_handle* usb,
                               const char* partition, int skip_if_not_supported,
                               const char* type_override, const char* size_override) {
     std::string partition_type, partition_size;
@@ -1010,7 +1004,7 @@ static void fb_perform_format(Transport* transport,
         limit = sparse_limit;
     }
 
-    if (!fb_getvar(transport, std::string("partition-type:") + partition, &partition_type)) {
+    if (!fb_getvar(usb, std::string("partition-type:") + partition, &partition_type)) {
         errMsg = "Can't determine partition type.\n";
         goto failed;
     }
@@ -1022,7 +1016,7 @@ static void fb_perform_format(Transport* transport,
         partition_type = type_override;
     }
 
-    if (!fb_getvar(transport, std::string("partition-size:") + partition, &partition_size)) {
+    if (!fb_getvar(usb, std::string("partition-size:") + partition, &partition_size)) {
         errMsg = "Unable to get partition size\n";
         goto failed;
     }
@@ -1064,7 +1058,7 @@ static void fb_perform_format(Transport* transport,
         return;
     }
 
-    if (load_buf_fd(transport, fd, &buf)) {
+    if (load_buf_fd(usb, fd, &buf)) {
         fprintf(stderr, "Cannot read image: %s\n", strerror(errno));
         close(fd);
         return;
@@ -1216,11 +1210,11 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    Transport* transport = open_device();
+    usb_handle* usb = open_device();
     if (slot_override != "")
-        slot_override = verify_slot(transport, slot_override.c_str());
+        slot_override = verify_slot(usb, slot_override.c_str());
     if (next_active != "")
-        next_active = verify_slot(transport, next_active.c_str());
+        next_active = verify_slot(usb, next_active.c_str());
 
     if (wants_set_active) {
         if (next_active == "") {
@@ -1241,8 +1235,8 @@ int main(int argc, char **argv)
             require(2);
 
             auto erase = [&](const std::string &partition) {
-                std::string partition_type;
-                if (fb_getvar(transport, std::string("partition-type:") + argv[1], &partition_type) &&
+            std::string partition_type;
+                if (fb_getvar(usb, std::string("partition-type:") + argv[1], &partition_type) &&
                     fs_get_generator(partition_type) != nullptr) {
                     fprintf(stderr, "******** Did you mean to fastboot format this %s partition?\n",
                             partition_type.c_str());
@@ -1250,7 +1244,7 @@ int main(int argc, char **argv)
 
                 fb_queue_erase(partition.c_str());
             };
-            do_for_partitions(transport, argv[1], slot_override.c_str(), erase, true);
+            do_for_partitions(usb, argv[1], slot_override.c_str(), erase, true);
             skip(2);
         } else if(!strncmp(*argv, "format", strlen("format"))) {
             char *overrides;
@@ -1280,12 +1274,12 @@ int main(int argc, char **argv)
             if (size_override && !size_override[0]) size_override = nullptr;
 
             auto format = [&](const std::string &partition) {
-                if (erase_first && needs_erase(transport, partition.c_str())) {
+                if (erase_first && needs_erase(usb, partition.c_str())) {
                     fb_queue_erase(partition.c_str());
                 }
-                fb_perform_format(transport, partition.c_str(), 0, type_override, size_override);
+                fb_perform_format(usb, partition.c_str(), 0, type_override, size_override);
             };
-            do_for_partitions(transport, argv[1], slot_override.c_str(), format, true);
+            do_for_partitions(usb, argv[1], slot_override.c_str(), format, true);
             skip(2);
         } else if(!strcmp(*argv, "signature")) {
             require(2);
@@ -1347,12 +1341,12 @@ int main(int argc, char **argv)
             if (fname == 0) die("cannot determine image filename for '%s'", pname);
 
             auto flash = [&](const std::string &partition) {
-                if (erase_first && needs_erase(transport, partition.c_str())) {
+                if (erase_first && needs_erase(usb, partition.c_str())) {
                     fb_queue_erase(partition.c_str());
                 }
-                do_flash(transport, partition.c_str(), fname);
+                do_flash(usb, partition.c_str(), fname);
             };
-            do_for_partitions(transport, pname, slot_override.c_str(), flash, true);
+            do_for_partitions(usb, pname, slot_override.c_str(), flash, true);
         } else if(!strcmp(*argv, "flash:raw")) {
             char *kname = argv[2];
             char *rname = 0;
@@ -1372,17 +1366,17 @@ int main(int argc, char **argv)
             auto flashraw = [&](const std::string &partition) {
                 fb_queue_flash(partition.c_str(), data, sz);
             };
-            do_for_partitions(transport, argv[1], slot_override.c_str(), flashraw, true);
+            do_for_partitions(usb, argv[1], slot_override.c_str(), flashraw, true);
         } else if(!strcmp(*argv, "flashall")) {
             skip(1);
-            do_flashall(transport, slot_override.c_str(), erase_first);
+            do_flashall(usb, slot_override.c_str(), erase_first);
             wants_reboot = true;
         } else if(!strcmp(*argv, "update")) {
             if (argc > 1) {
-                do_update(transport, argv[1], slot_override.c_str(), erase_first);
+                do_update(usb, argv[1], slot_override.c_str(), erase_first);
                 skip(2);
             } else {
-                do_update(transport, "update.zip", slot_override.c_str(), erase_first);
+                do_update(usb, "update.zip", slot_override.c_str(), erase_first);
                 skip(1);
             }
             wants_reboot = true;
@@ -1413,13 +1407,13 @@ int main(int argc, char **argv)
     if (wants_wipe) {
         fprintf(stderr, "wiping userdata...\n");
         fb_queue_erase("userdata");
-        fb_perform_format(transport, "userdata", 1, nullptr, nullptr);
+        fb_perform_format(usb, "userdata", 1, nullptr, nullptr);
 
         std::string cache_type;
-        if (fb_getvar(transport, "partition-type:cache", &cache_type) && !cache_type.empty()) {
+        if (fb_getvar(usb, "partition-type:cache", &cache_type) && !cache_type.empty()) {
             fprintf(stderr, "wiping cache...\n");
             fb_queue_erase("cache");
-            fb_perform_format(transport, "cache", 1, nullptr, nullptr);
+            fb_perform_format(usb, "cache", 1, nullptr, nullptr);
         }
     }
     if (wants_set_active) {
@@ -1433,5 +1427,5 @@ int main(int argc, char **argv)
         fb_queue_wait_for_disconnect();
     }
 
-    return fb_execute_queue(transport) ? EXIT_FAILURE : EXIT_SUCCESS;
+    return fb_execute_queue(usb) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
