@@ -43,8 +43,6 @@
 #include <linux/version.h>
 #include <linux/usb/ch9.h>
 
-#include <memory>
-
 #include "fastboot.h"
 #include "usb.h"
 
@@ -85,22 +83,6 @@ struct usb_handle
     int desc;
     unsigned char ep_in;
     unsigned char ep_out;
-};
-
-class LinuxUsbTransport : public Transport {
-  public:
-    LinuxUsbTransport(std::unique_ptr<usb_handle> handle) : handle_(std::move(handle)) {}
-    ~LinuxUsbTransport() override = default;
-
-    ssize_t Read(void* data, size_t len) override;
-    ssize_t Write(const void* data, size_t len) override;
-    int Close() override;
-    int WaitForDisconnect() override;
-
-  private:
-    std::unique_ptr<usb_handle> handle_;
-
-    DISALLOW_COPY_AND_ASSIGN(LinuxUsbTransport);
 };
 
 /* True if name isn't a valid name for a USB device in /sys/bus/usb/devices.
@@ -326,9 +308,9 @@ static int convert_to_devfs_name(const char* sysfs_name,
     return 0;
 }
 
-static std::unique_ptr<usb_handle> find_usb_device(const char* base, ifc_match_func callback)
+static usb_handle *find_usb_device(const char *base, ifc_match_func callback)
 {
-    std::unique_ptr<usb_handle> usb;
+    usb_handle *usb = 0;
     char devname[64];
     char desc[1024];
     int n, in, out, ifc;
@@ -339,37 +321,39 @@ static std::unique_ptr<usb_handle> find_usb_device(const char* base, ifc_match_f
     int writable;
 
     busdir = opendir(base);
-    if (busdir == 0) return 0;
+    if(busdir == 0) return 0;
 
-    while ((de = readdir(busdir)) && (usb == nullptr)) {
-        if (badname(de->d_name)) continue;
+    while((de = readdir(busdir)) && (usb == 0)) {
+        if(badname(de->d_name)) continue;
 
-        if (!convert_to_devfs_name(de->d_name, devname, sizeof(devname))) {
+        if(!convert_to_devfs_name(de->d_name, devname, sizeof(devname))) {
 
 //            DBG("[ scanning %s ]\n", devname);
             writable = 1;
-            if ((fd = open(devname, O_RDWR)) < 0) {
+            if((fd = open(devname, O_RDWR)) < 0) {
                 // Check if we have read-only access, so we can give a helpful
                 // diagnostic like "adb devices" does.
                 writable = 0;
-                if ((fd = open(devname, O_RDONLY)) < 0) {
+                if((fd = open(devname, O_RDONLY)) < 0) {
                     continue;
                 }
             }
 
             n = read(fd, desc, sizeof(desc));
 
-            if (filter_usb_device(de->d_name, desc, n, writable, callback, &in, &out, &ifc) == 0) {
-                usb.reset(new usb_handle());
+            if(filter_usb_device(de->d_name, desc, n, writable, callback,
+                                 &in, &out, &ifc) == 0) {
+                usb = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
                 strcpy(usb->fname, devname);
                 usb->ep_in = in;
                 usb->ep_out = out;
                 usb->desc = fd;
 
                 n = ioctl(fd, USBDEVFS_CLAIMINTERFACE, &ifc);
-                if (n != 0) {
+                if(n != 0) {
                     close(fd);
-                    usb.reset();
+                    free(usb);
+                    usb = 0;
                     continue;
                 }
             } else {
@@ -382,14 +366,14 @@ static std::unique_ptr<usb_handle> find_usb_device(const char* base, ifc_match_f
     return usb;
 }
 
-ssize_t LinuxUsbTransport::Write(const void* _data, size_t len)
+int usb_write(usb_handle *h, const void *_data, int len)
 {
     unsigned char *data = (unsigned char*) _data;
     unsigned count = 0;
     struct usbdevfs_bulktransfer bulk;
     int n;
 
-    if (handle_->ep_out == 0 || handle_->desc == -1) {
+    if(h->ep_out == 0 || h->desc == -1) {
         return -1;
     }
 
@@ -397,12 +381,12 @@ ssize_t LinuxUsbTransport::Write(const void* _data, size_t len)
         int xfer;
         xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
 
-        bulk.ep = handle_->ep_out;
+        bulk.ep = h->ep_out;
         bulk.len = xfer;
         bulk.data = data;
         bulk.timeout = 0;
 
-        n = ioctl(handle_->desc, USBDEVFS_BULK, &bulk);
+        n = ioctl(h->desc, USBDEVFS_BULK, &bulk);
         if(n != xfer) {
             DBG("ERROR: n = %d, errno = %d (%s)\n",
                 n, errno, strerror(errno));
@@ -417,30 +401,30 @@ ssize_t LinuxUsbTransport::Write(const void* _data, size_t len)
     return count;
 }
 
-ssize_t LinuxUsbTransport::Read(void* _data, size_t len)
+int usb_read(usb_handle *h, void *_data, int len)
 {
     unsigned char *data = (unsigned char*) _data;
     unsigned count = 0;
     struct usbdevfs_bulktransfer bulk;
     int n, retry;
 
-    if (handle_->ep_in == 0 || handle_->desc == -1) {
+    if(h->ep_in == 0 || h->desc == -1) {
         return -1;
     }
 
     while(len > 0) {
         int xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
 
-        bulk.ep = handle_->ep_in;
+        bulk.ep = h->ep_in;
         bulk.len = xfer;
         bulk.data = data;
         bulk.timeout = 0;
         retry = 0;
 
         do{
-           DBG("[ usb read %d fd = %d], fname=%s\n", xfer, handle_->desc, handle_->fname);
-           n = ioctl(handle_->desc, USBDEVFS_BULK, &bulk);
-           DBG("[ usb read %d ] = %d, fname=%s, Retry %d \n", xfer, n, handle_->fname, retry);
+           DBG("[ usb read %d fd = %d], fname=%s\n", xfer, h->desc, h->fname);
+           n = ioctl(h->desc, USBDEVFS_BULK, &bulk);
+           DBG("[ usb read %d ] = %d, fname=%s, Retry %d \n", xfer, n, h->fname, retry);
 
            if( n < 0 ) {
             DBG1("ERROR: n = %d, errno = %d (%s)\n",n, errno, strerror(errno));
@@ -462,12 +446,24 @@ ssize_t LinuxUsbTransport::Read(void* _data, size_t len)
     return count;
 }
 
-int LinuxUsbTransport::Close()
+void usb_kick(usb_handle *h)
 {
     int fd;
 
-    fd = handle_->desc;
-    handle_->desc = -1;
+    fd = h->desc;
+    h->desc = -1;
+    if(fd >= 0) {
+        close(fd);
+        DBG("[ usb closed %d ]\n", fd);
+    }
+}
+
+int usb_close(usb_handle *h)
+{
+    int fd;
+
+    fd = h->desc;
+    h->desc = -1;
     if(fd >= 0) {
         close(fd);
         DBG("[ usb closed %d ]\n", fd);
@@ -476,21 +472,20 @@ int LinuxUsbTransport::Close()
     return 0;
 }
 
-Transport* usb_open(ifc_match_func callback)
+usb_handle *usb_open(ifc_match_func callback)
 {
-    std::unique_ptr<usb_handle> handle = find_usb_device("/sys/bus/usb/devices", callback);
-    return handle ? new LinuxUsbTransport(std::move(handle)) : nullptr;
+    return find_usb_device("/sys/bus/usb/devices", callback);
 }
 
 /* Wait for the system to notice the device is gone, so that a subsequent
  * fastboot command won't try to access the device before it's rebooted.
  * Returns 0 for success, -1 for timeout.
  */
-int LinuxUsbTransport::WaitForDisconnect()
+int usb_wait_for_disconnect(usb_handle *usb)
 {
   double deadline = now() + WAIT_FOR_DISCONNECT_TIMEOUT;
   while (now() < deadline) {
-    if (access(handle_->fname, F_OK))
+    if (access(usb->fname, F_OK))
       return 0;
     usleep(50000);
   }
