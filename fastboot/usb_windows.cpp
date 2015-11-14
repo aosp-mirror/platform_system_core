@@ -34,9 +34,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <memory>
-#include <string>
-
 #include "usb.h"
 
 //#define TRACE_USB 1
@@ -63,32 +60,24 @@ struct usb_handle {
     ADBAPIHANDLE  adb_write_pipe;
 
     /// Interface name
-    std::string interface_name;
-};
-
-class WindowsUsbTransport : public Transport {
-  public:
-    WindowsUsbTransport(std::unique_ptr<usb_handle> handle) : handle_(std::move(handle)) {}
-    ~WindowsUsbTransport() override = default;
-
-    ssize_t Read(void* data, size_t len) override;
-    ssize_t Write(const void* data, size_t len) override;
-    int Close() override;
-
-  private:
-    std::unique_ptr<usb_handle> handle_;
-
-    DISALLOW_COPY_AND_ASSIGN(WindowsUsbTransport);
+    char*         interface_name;
 };
 
 /// Class ID assigned to the device by androidusb.sys
 static const GUID usb_class_id = ANDROID_USB_CLASS_ID;
 
+
 /// Checks if interface (device) matches certain criteria
 int recognized_device(usb_handle* handle, ifc_match_func callback);
 
 /// Opens usb interface (device) by interface (device) name.
-std::unique_ptr<usb_handle> do_usb_open(const wchar_t* interface_name);
+usb_handle* do_usb_open(const wchar_t* interface_name);
+
+/// Writes data to the opened usb handle
+int usb_write(usb_handle* handle, const void* data, int len);
+
+/// Reads data using the opened usb handle
+int usb_read(usb_handle *handle, void* data, int len);
 
 /// Cleans up opened usb handle
 void usb_cleanup_handle(usb_handle* handle);
@@ -96,17 +85,23 @@ void usb_cleanup_handle(usb_handle* handle);
 /// Cleans up (but don't close) opened usb handle
 void usb_kick(usb_handle* handle);
 
+/// Closes opened usb handle
+int usb_close(usb_handle* handle);
 
-std::unique_ptr<usb_handle> do_usb_open(const wchar_t* interface_name) {
+
+usb_handle* do_usb_open(const wchar_t* interface_name) {
     // Allocate our handle
-    std::unique_ptr<usb_handle> ret = new usb_handle;
+    usb_handle* ret = (usb_handle*)malloc(sizeof(usb_handle));
+    if (NULL == ret)
+        return NULL;
 
     // Create interface.
     ret->adb_interface = AdbCreateInterfaceByName(interface_name);
 
-    if (nullptr == ret->adb_interface) {
+    if (NULL == ret->adb_interface) {
+        free(ret);
         errno = GetLastError();
-        return nullptr;
+        return NULL;
     }
 
     // Open read pipe (endpoint)
@@ -114,30 +109,35 @@ std::unique_ptr<usb_handle> do_usb_open(const wchar_t* interface_name) {
         AdbOpenDefaultBulkReadEndpoint(ret->adb_interface,
                                    AdbOpenAccessTypeReadWrite,
                                    AdbOpenSharingModeReadWrite);
-    if (nullptr != ret->adb_read_pipe) {
+    if (NULL != ret->adb_read_pipe) {
         // Open write pipe (endpoint)
         ret->adb_write_pipe =
             AdbOpenDefaultBulkWriteEndpoint(ret->adb_interface,
                                       AdbOpenAccessTypeReadWrite,
                                       AdbOpenSharingModeReadWrite);
-        if (nullptr != ret->adb_write_pipe) {
+        if (NULL != ret->adb_write_pipe) {
             // Save interface name
             unsigned long name_len = 0;
 
             // First get expected name length
             AdbGetInterfaceName(ret->adb_interface,
-                          nullptr,
+                          NULL,
                           &name_len,
                           true);
             if (0 != name_len) {
-                // Now save the name
-                ret->interface_name.resize(name_len);
-                if (AdbGetInterfaceName(ret->adb_interface,
-                              &ret->interface_name[0],
-                              &name_len,
-                              true)) {
-                    // We're done at this point
-                    return ret;
+                ret->interface_name = (char*)malloc(name_len);
+
+                if (NULL != ret->interface_name) {
+                    // Now save the name
+                    if (AdbGetInterfaceName(ret->adb_interface,
+                                  ret->interface_name,
+                                  &name_len,
+                                  true)) {
+                        // We're done at this point
+                        return ret;
+                    }
+                } else {
+                    SetLastError(ERROR_OUTOFMEMORY);
                 }
             }
         }
@@ -145,31 +145,35 @@ std::unique_ptr<usb_handle> do_usb_open(const wchar_t* interface_name) {
 
     // Something went wrong.
     errno = GetLastError();
-    usb_cleanup_handle(ret.get());
+    usb_cleanup_handle(ret);
+    free(ret);
     SetLastError(errno);
 
-    return nullptr;
+    return NULL;
 }
 
-ssize_t WindowsUsbTransport::Write(const void* data, size_t len) {
+int usb_write(usb_handle* handle, const void* data, int len) {
     unsigned long time_out = 5000;
     unsigned long written = 0;
     unsigned count = 0;
     int ret;
 
     DBG("usb_write %d\n", len);
-    if (nullptr != handle_) {
+    if (NULL != handle) {
         // Perform write
         while(len > 0) {
             int xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
-            ret = AdbWriteEndpointSync(handle_->adb_write_pipe, const_cast<void*>(data), xfer,
-                                       &written, time_out);
+            ret = AdbWriteEndpointSync(handle->adb_write_pipe,
+                                   (void*)data,
+                                   (unsigned long)xfer,
+                                   &written,
+                                   time_out);
             errno = GetLastError();
             DBG("AdbWriteEndpointSync returned %d, errno: %d\n", ret, errno);
             if (ret == 0) {
                 // assume ERROR_INVALID_HANDLE indicates we are disconnected
                 if (errno == ERROR_INVALID_HANDLE)
-                usb_kick(handle_.get());
+                usb_kick(handle);
                 return -1;
             }
 
@@ -190,17 +194,21 @@ ssize_t WindowsUsbTransport::Write(const void* data, size_t len) {
     return -1;
 }
 
-ssize_t WindowsUsbTransport::Read(void* data, size_t len) {
+int usb_read(usb_handle *handle, void* data, int len) {
     unsigned long time_out = 0;
     unsigned long read = 0;
     int ret;
 
     DBG("usb_read %d\n", len);
-    if (nullptr != handle_) {
+    if (NULL != handle) {
         while (1) {
             int xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
 
-            ret = AdbReadEndpointSync(handle_->adb_read_pipe, data, xfer, &read, time_out);
+	        ret = AdbReadEndpointSync(handle->adb_read_pipe,
+	                              (void*)data,
+	                              (unsigned long)xfer,
+	                              &read,
+	                              time_out);
             errno = GetLastError();
             DBG("usb_read got: %ld, expected: %d, errno: %d\n", read, xfer, errno);
             if (ret) {
@@ -208,7 +216,7 @@ ssize_t WindowsUsbTransport::Read(void* data, size_t len) {
             } else {
                 // assume ERROR_INVALID_HANDLE indicates we are disconnected
                 if (errno == ERROR_INVALID_HANDLE)
-                    usb_kick(handle_.get());
+                    usb_kick(handle);
                 break;
             }
             // else we timed out - try again
@@ -225,6 +233,8 @@ ssize_t WindowsUsbTransport::Read(void* data, size_t len) {
 
 void usb_cleanup_handle(usb_handle* handle) {
     if (NULL != handle) {
+        if (NULL != handle->interface_name)
+            free(handle->interface_name);
         if (NULL != handle->adb_write_pipe)
             AdbCloseHandle(handle->adb_write_pipe);
         if (NULL != handle->adb_read_pipe)
@@ -232,7 +242,7 @@ void usb_cleanup_handle(usb_handle* handle) {
         if (NULL != handle->adb_interface)
             AdbCloseHandle(handle->adb_interface);
 
-        handle->interface_name.clear();
+        handle->interface_name = NULL;
         handle->adb_write_pipe = NULL;
         handle->adb_read_pipe = NULL;
         handle->adb_interface = NULL;
@@ -248,15 +258,20 @@ void usb_kick(usb_handle* handle) {
     }
 }
 
-int WindowsUsbTransport::Close() {
+int usb_close(usb_handle* handle) {
     DBG("usb_close\n");
 
-    if (nullptr != handle_) {
+    if (NULL != handle) {
         // Cleanup handle
-        usb_cleanup_handle(handle_.get());
-        handle_.reset();
+        usb_cleanup_handle(handle);
+        free(handle);
     }
 
+    return 0;
+}
+
+int usb_wait_for_disconnect(usb_handle *usb) {
+    /* TODO: Punt for now */
     return 0;
 }
 
@@ -311,8 +326,8 @@ int recognized_device(usb_handle* handle, ifc_match_func callback) {
     return 0;
 }
 
-static std::unique_ptr<usb_handle> find_usb_device(ifc_match_func callback) {
-    std::unique_ptr<usb_handle> handle;
+static usb_handle *find_usb_device(ifc_match_func callback) {
+	usb_handle* handle = NULL;
     char entry_buffer[2048];
     char interf_name[2048];
     AdbInterfaceInfo* next_interface = (AdbInterfaceInfo*)(&entry_buffer[0]);
@@ -341,12 +356,13 @@ static std::unique_ptr<usb_handle> find_usb_device(ifc_match_func callback) {
         handle = do_usb_open(next_interface->device_name);
         if (NULL != handle) {
             // Lets see if this interface (device) belongs to us
-            if (recognized_device(handle.get(), callback)) {
+            if (recognized_device(handle, callback)) {
                 // found it!
                 break;
             } else {
-                usb_cleanup_handle(handle.get());
-                handle.reset();
+                usb_cleanup_handle(handle);
+                free(handle);
+                handle = NULL;
             }
         }
 
@@ -357,10 +373,9 @@ static std::unique_ptr<usb_handle> find_usb_device(ifc_match_func callback) {
     return handle;
 }
 
-Transport* usb_open(ifc_match_func callback)
+usb_handle *usb_open(ifc_match_func callback)
 {
-    std::unique_ptr<usb_handle> handle = find_usb_device(callback);
-    return handle ? new WindowsUsbTransport(std::move(handle)) : nullptr;
+    return find_usb_device(callback);
 }
 
 // called from fastboot.c
