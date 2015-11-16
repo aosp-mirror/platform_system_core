@@ -86,7 +86,7 @@ int match_loop(usb_ifc_info *info)
     return 0;
 }
 
-int test_null(usb_handle *usb)
+int test_null(Transport* usb)
 {
     unsigned i;
     unsigned char buf[4096];
@@ -94,8 +94,8 @@ int test_null(usb_handle *usb)
     long long t0, t1;
 
     t0 = NOW();
-    for(i = 0; i < arg_count; i++) {
-        if(usb_write(usb, buf, arg_size) != (int)arg_size) {
+    for (i = 0; i < arg_count; i++) {
+        if (usb->Write(buf, arg_size) != static_cast<int>(arg_size)) {
             fprintf(stderr,"write failed (%s)\n", strerror(errno));
             return -1;
         }
@@ -105,15 +105,15 @@ int test_null(usb_handle *usb)
     return 0;
 }
 
-int test_zero(usb_handle *usb)
+int test_zero(Transport* usb)
 {
     unsigned i;
     unsigned char buf[4096];
     long long t0, t1;
 
     t0 = NOW();
-    for(i = 0; i < arg_count; i++) {
-        if(usb_read(usb, buf, arg_size) != (int)arg_size) {
+    for (i = 0; i < arg_count; i++) {
+        if (usb->Read(buf, arg_size) != static_cast<int>(arg_size)) {
             fprintf(stderr,"read failed (%s)\n", strerror(errno));
             return -1;
         }
@@ -127,7 +127,7 @@ struct
 {
     const char *cmd;
     ifc_match_func match;
-    int (*test)(usb_handle *usb);
+    int (*test)(Transport* usb);
     const char *help;
 } tests[] = {
     { "list", printifc,   NULL,      "list interfaces" },
@@ -177,7 +177,7 @@ int process_args(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-    usb_handle *usb;
+    Transport* usb;
     int i;
 
     if(argc < 2)

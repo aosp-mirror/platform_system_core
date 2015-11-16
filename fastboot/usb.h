@@ -29,7 +29,7 @@
 #ifndef _USB_H_
 #define _USB_H_
 
-struct usb_handle;
+#include "transport.h"
 
 struct usb_ifc_info {
         /* from device descriptor */
@@ -55,10 +55,6 @@ struct usb_ifc_info {
 
 typedef int (*ifc_match_func)(usb_ifc_info *ifc);
 
-usb_handle *usb_open(ifc_match_func callback);
-int usb_close(usb_handle *h);
-int usb_read(usb_handle *h, void *_data, int len);
-int usb_write(usb_handle *h, const void *_data, int len);
-int usb_wait_for_disconnect(usb_handle *h);
+Transport* usb_open(ifc_match_func callback);
 
 #endif
