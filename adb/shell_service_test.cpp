@@ -69,7 +69,7 @@ void ShellServiceTest::StartTestSubprocess(
     SHELL_EXIT_NOTIFY_FD = fd[0];
     shell_exit_receiver_fd_ = fd[1];
 
-    subprocess_fd_ = StartSubprocess(command, type, protocol);
+    subprocess_fd_ = StartSubprocess(command, nullptr, type, protocol);
     ASSERT_TRUE(subprocess_fd_ >= 0);
 }
 
