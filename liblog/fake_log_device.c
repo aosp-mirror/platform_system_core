@@ -24,7 +24,6 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -98,33 +97,18 @@ typedef struct LogState {
  */
 static pthread_mutex_t fakeLogDeviceLock = PTHREAD_MUTEX_INITIALIZER;
 
-static void lock(sigset_t *sigflags)
+static void lock()
 {
-    /*
-     * If we trigger a signal handler in the middle of locked activity and the
-     * signal handler logs a message, we could get into a deadlock state.
-     */
-    sigset_t all;
-
-    sigfillset(&all);
-    pthread_sigmask(SIG_BLOCK, &all, sigflags);
     pthread_mutex_lock(&fakeLogDeviceLock);
 }
 
-static void unlock(sigset_t *sigflags)
+static void unlock()
 {
     pthread_mutex_unlock(&fakeLogDeviceLock);
-    pthread_sigmask(SIG_UNBLOCK, sigflags, NULL);
 }
-
-#define DECLARE_SIGSET(name) sigset_t name
-
 #else   // !defined(_WIN32)
-
-#define lock(sigflags) ((void)0)
-#define unlock(sigflags) ((void)0)
-#define DECLARE_SIGSET(name)
-
+#define lock() ((void)0)
+#define unlock() ((void)0)
 #endif  // !defined(_WIN32)
 
 
@@ -170,9 +154,8 @@ static LogState *fdToLogState(int fd)
 static void deleteFakeFd(int fd)
 {
     LogState *ls;
-    DECLARE_SIGSET(sigflags);
 
-    lock(&sigflags);
+    lock();
 
     ls = fdToLogState(fd);
     if (ls != NULL) {
@@ -181,7 +164,7 @@ static void deleteFakeFd(int fd)
         free(ls);
     }
 
-    unlock(&sigflags);
+    unlock();
 }
 
 /*
@@ -565,13 +548,12 @@ static void showLog(LogState *state,
 static ssize_t logWritev(int fd, const struct iovec* vector, int count)
 {
     LogState* state;
-    DECLARE_SIGSET(sigflags);
 
     /* Make sure that no-one frees the LogState while we're using it.
      * Also guarantees that only one thread is in showLog() at a given
      * time (if it matters).
      */
-    lock(&sigflags);
+    lock();
 
     state = fdToLogState(fd);
     if (state == NULL) {
@@ -616,10 +598,10 @@ static ssize_t logWritev(int fd, const struct iovec* vector, int count)
     }
 
 bail:
-    unlock(&sigflags);
+    unlock();
     return vector[0].iov_len + vector[1].iov_len + vector[2].iov_len;
 error:
-    unlock(&sigflags);
+    unlock();
     return -1;
 }
 
@@ -639,9 +621,8 @@ static int logOpen(const char* pathName, int flags __unused)
 {
     LogState *logState;
     int fd = -1;
-    DECLARE_SIGSET(sigflags);
 
-    lock(&sigflags);
+    lock();
 
     logState = createLogState();
     if (logState != NULL) {
@@ -651,7 +632,7 @@ static int logOpen(const char* pathName, int flags __unused)
         errno = ENFILE;
     }
 
-    unlock(&sigflags);
+    unlock();
 
     return fd;
 }
