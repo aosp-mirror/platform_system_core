@@ -74,11 +74,6 @@ const int kMetricMeminfoInterval = 30;    // seconds
 const char kMeminfoFileName[] = "/proc/meminfo";
 const char kVmStatFileName[] = "/proc/vmstat";
 
-// Thermal CPU throttling.
-
-const char kMetricScaledCpuFrequencyName[] =
-    "Platform.CpuFrequencyThermalScaling";
-
 }  // namespace
 
 // Zram sysfs entries.
@@ -169,8 +164,6 @@ void MetricsDaemon::Init(bool testing,
                          bool dbus_enabled,
                          MetricsLibraryInterface* metrics_lib,
                          const string& diskstats_path,
-                         const string& scaling_max_freq_path,
-                         const string& cpuinfo_max_freq_path,
                          const base::TimeDelta& upload_interval,
                          const string& server,
                          const base::FilePath& metrics_directory) {
@@ -221,8 +214,6 @@ void MetricsDaemon::Init(bool testing,
   weekly_cycle_.reset(new PersistentInteger("weekly.cycle"));
   version_cycle_.reset(new PersistentInteger("version.cycle"));
 
-  scaling_max_freq_path_ = scaling_max_freq_path;
-  cpuinfo_max_freq_path_ = cpuinfo_max_freq_path;
   disk_usage_collector_.reset(new DiskUsageCollector(metrics_lib_));
   averaged_stats_collector_.reset(
       new AveragedStatisticsCollector(metrics_lib_, diskstats_path,
@@ -459,63 +450,6 @@ void MetricsDaemon::StatsReporterInit() {
   // Don't start a collection cycle during the first run to avoid delaying the
   // boot.
   averaged_stats_collector_->ScheduleWait();
-}
-
-
-bool MetricsDaemon::ReadFreqToInt(const string& sysfs_file_name, int* value) {
-  const FilePath sysfs_path(sysfs_file_name);
-  string value_string;
-  if (!base::ReadFileToString(sysfs_path, &value_string)) {
-    LOG(WARNING) << "cannot read " << sysfs_path.value().c_str();
-    return false;
-  }
-  if (!base::RemoveChars(value_string, "\n", &value_string)) {
-    LOG(WARNING) << "no newline in " << value_string;
-    // Continue even though the lack of newline is suspicious.
-  }
-  if (!base::StringToInt(value_string, value)) {
-    LOG(WARNING) << "cannot convert " << value_string << " to int";
-    return false;
-  }
-  return true;
-}
-
-void MetricsDaemon::SendCpuThrottleMetrics() {
-  // |max_freq| is 0 only the first time through.
-  static int max_freq = 0;
-  if (max_freq == -1)
-    // Give up, as sysfs did not report max_freq correctly.
-    return;
-  if (max_freq == 0 || testing_) {
-    // One-time initialization of max_freq.  (Every time when testing.)
-    if (!ReadFreqToInt(cpuinfo_max_freq_path_, &max_freq)) {
-      max_freq = -1;
-      return;
-    }
-    if (max_freq == 0) {
-      LOG(WARNING) << "sysfs reports 0 max CPU frequency\n";
-      max_freq = -1;
-      return;
-    }
-    if (max_freq % 10000 == 1000) {
-      // Special case: system has turbo mode, and max non-turbo frequency is
-      // max_freq - 1000.  This relies on "normal" (non-turbo) frequencies
-      // being multiples of (at least) 10 MHz.  Although there is no guarantee
-      // of this, it seems a fairly reasonable assumption.  Otherwise we should
-      // read scaling_available_frequencies, sort the frequencies, compare the
-      // two highest ones, and check if they differ by 1000 (kHz) (and that's a
-      // hack too, no telling when it will change).
-      max_freq -= 1000;
-    }
-  }
-  int scaled_freq = 0;
-  if (!ReadFreqToInt(scaling_max_freq_path_, &scaled_freq))
-    return;
-  // Frequencies are in kHz.  If scaled_freq > max_freq, turbo is on, but
-  // scaled_freq is not the actual turbo frequency.  We indicate this situation
-  // with a 101% value.
-  int percent = scaled_freq > max_freq ? 101 : scaled_freq / (max_freq / 100);
-  SendLinearSample(kMetricScaledCpuFrequencyName, percent, 101, 102);
 }
 
 void MetricsDaemon::ScheduleMeminfoCallback(int wait) {

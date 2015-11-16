@@ -45,11 +45,6 @@ class MetricsDaemonTest : public testing::Test {
   virtual void SetUp() {
     brillo::FlagHelper::Init(0, nullptr, "");
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
-    scaling_max_freq_path_ = temp_dir_.path().Append("scaling_max");
-    cpu_max_freq_path_ = temp_dir_.path().Append("cpu_freq_max");
-
-    CreateUint64ValueFile(cpu_max_freq_path_, 10000000);
-    CreateUint64ValueFile(scaling_max_freq_path_, 10000000);
 
     chromeos_metrics::PersistentInteger::SetMetricsDirectory(
         temp_dir_.path().value());
@@ -58,8 +53,6 @@ class MetricsDaemonTest : public testing::Test {
                  true,
                  &metrics_lib_,
                  "",
-                 scaling_max_freq_path_.value(),
-                 cpu_max_freq_path_.value(),
                  base::TimeDelta::FromMinutes(30),
                  metrics::kMetricsServer,
                  temp_dir_.path());
@@ -119,10 +112,6 @@ class MetricsDaemonTest : public testing::Test {
 
   // Temporary directory used for tests.
   base::ScopedTempDir temp_dir_;
-
-  // Path for the fake files.
-  base::FilePath scaling_max_freq_path_;
-  base::FilePath cpu_max_freq_path_;
 
   // Mocks. They are strict mock so that all unexpected
   // calls are marked as failures.
@@ -207,33 +196,6 @@ TEST_F(MetricsDaemonTest, ProcessMeminfo2) {
   string meminfo = "MemTotal:        2000000 kB\nMemFree:         1000000 kB\n";
   // Not enough fields.
   EXPECT_FALSE(daemon_.ProcessMeminfo(meminfo));
-}
-
-TEST_F(MetricsDaemonTest, ReadFreqToInt) {
-  const int fake_scaled_freq = 1666999;
-  const int fake_max_freq = 2000000;
-  int scaled_freq = 0;
-  int max_freq = 0;
-  CreateUint64ValueFile(scaling_max_freq_path_, fake_scaled_freq);
-  CreateUint64ValueFile(cpu_max_freq_path_, fake_max_freq);
-  EXPECT_TRUE(daemon_.testing_);
-  EXPECT_TRUE(daemon_.ReadFreqToInt(scaling_max_freq_path_.value(),
-                                    &scaled_freq));
-  EXPECT_TRUE(daemon_.ReadFreqToInt(cpu_max_freq_path_.value(), &max_freq));
-  EXPECT_EQ(fake_scaled_freq, scaled_freq);
-  EXPECT_EQ(fake_max_freq, max_freq);
-}
-
-TEST_F(MetricsDaemonTest, SendCpuThrottleMetrics) {
-  CreateUint64ValueFile(cpu_max_freq_path_, 2001000);
-  // Test the 101% and 100% cases.
-  CreateUint64ValueFile(scaling_max_freq_path_, 2001000);
-  EXPECT_TRUE(daemon_.testing_);
-  EXPECT_CALL(metrics_lib_, SendEnumToUMA(_, 101, 101));
-  daemon_.SendCpuThrottleMetrics();
-  CreateUint64ValueFile(scaling_max_freq_path_, 2000000);
-  EXPECT_CALL(metrics_lib_, SendEnumToUMA(_, 100, 101));
-  daemon_.SendCpuThrottleMetrics();
 }
 
 TEST_F(MetricsDaemonTest, SendZramMetrics) {

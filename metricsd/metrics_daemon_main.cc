@@ -25,10 +25,6 @@
 #include "constants.h"
 #include "metrics_daemon.h"
 
-const char kScalingMaxFreqPath[] =
-    "/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq";
-const char kCpuinfoMaxFreqPath[] =
-    "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq";
 
 // Returns the path to the disk stats in the sysfs.  Returns the null string if
 // it cannot find the disk stats file.
@@ -112,8 +108,6 @@ int main(int argc, char** argv) {
               FLAGS_withdbus,
               &metrics_lib,
               MetricsMainDiskStatsPath(),
-              kScalingMaxFreqPath,
-              kCpuinfoMaxFreqPath,
               base::TimeDelta::FromSeconds(FLAGS_upload_interval_secs),
               FLAGS_server,
               base::FilePath(FLAGS_metrics_directory));
