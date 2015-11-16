@@ -27,6 +27,7 @@
 #include <errno.h>
 
 #include <string>
+#include <vector>
 
 // Include this before open/unlink are defined as macros below.
 #include <android-base/utf8.h>
@@ -282,6 +283,8 @@ extern int adb_chmod(const char *, int);
 
 extern int adb_vfprintf(FILE *stream, const char *format, va_list ap)
     __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 0)));
+extern int adb_vprintf(const char *format, va_list ap)
+    __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 1, 0)));
 extern int adb_fprintf(FILE *stream, const char *format, ...)
     __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3)));
 extern int adb_printf(const char *format, ...)
@@ -289,6 +292,8 @@ extern int adb_printf(const char *format, ...)
 
 extern int adb_fputs(const char* buf, FILE* stream);
 extern int adb_fputc(int ch, FILE* stream);
+extern int adb_putchar(int ch);
+extern int adb_puts(const char* buf);
 extern size_t adb_fwrite(const void* ptr, size_t size, size_t nmemb,
                          FILE* stream);
 
@@ -315,13 +320,20 @@ inline void seekdir(DIR*, long) {
 #define chmod adb_chmod
 
 #define vfprintf adb_vfprintf
+#define vprintf adb_vprintf
 #define fprintf adb_fprintf
 #define printf adb_printf
 #define fputs adb_fputs
 #define fputc adb_fputc
+// putc may be a macro, so if so, undefine it, so that we can redefine it.
+#undef putc
+#define putc(c, s) adb_fputc(c, s)
+#define putchar adb_putchar
+#define puts adb_puts
 #define fwrite adb_fwrite
 
 #define fopen adb_fopen
+#define freopen freopen_utf8_not_yet_implemented
 
 #define getenv adb_getenv
 #define putenv putenv_utf8_not_yet_implemented
@@ -379,6 +391,12 @@ public:
 // CloseHandle()'d. Operator bool() only checks if the handle != nullptr,
 // but does not check if the handle != INVALID_HANDLE_VALUE.
 typedef std::unique_ptr<HANDLE, handle_deleter> unique_handle;
+
+namespace internal {
+
+size_t ParseCompleteUTF8(const char* first, const char* last, std::vector<char>* remaining_bytes);
+
+}
 
 #else /* !_WIN32 a.k.a. Unix */
 
