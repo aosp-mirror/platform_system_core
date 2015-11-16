@@ -213,9 +213,11 @@ static int ShellService(const std::string& args, const atransport* transport) {
     // Defaults:
     //   PTY for interactive, raw for non-interactive.
     //   No protocol.
+    //   $TERM set to "dumb".
     SubprocessType type(command.empty() ? SubprocessType::kPty
                                         : SubprocessType::kRaw);
     SubprocessProtocol protocol = SubprocessProtocol::kNone;
+    std::string terminal_type = "dumb";
 
     for (const std::string& arg : android::base::Split(service_args, ",")) {
         if (arg == kShellServiceArgRaw) {
@@ -224,14 +226,15 @@ static int ShellService(const std::string& args, const atransport* transport) {
             type = SubprocessType::kPty;
         } else if (arg == kShellServiceArgShellProtocol) {
             protocol = SubprocessProtocol::kShell;
-        }
-        else if (!arg.empty()) {
-            LOG(ERROR) << "Unsupported shell service arguments: " << args;
-            return -1;
+        } else if (android::base::StartsWith(arg, "TERM=")) {
+            terminal_type = arg.substr(5);
+        } else if (!arg.empty()) {
+            // This is not an error to allow for future expansion.
+            LOG(WARNING) << "Ignoring unknown shell service argument: " << arg;
         }
     }
 
-    return StartSubprocess(command.c_str(), type, protocol);
+    return StartSubprocess(command.c_str(), terminal_type.c_str(), type, protocol);
 }
 
 #endif  // !ADB_HOST
@@ -308,8 +311,7 @@ int service_to_fd(const char* name, const atransport* transport) {
     } else if(!strncmp(name, "shell", 5)) {
         ret = ShellService(name + 5, transport);
     } else if(!strncmp(name, "exec:", 5)) {
-        ret = StartSubprocess(name + 5, SubprocessType::kRaw,
-                              SubprocessProtocol::kNone);
+        ret = StartSubprocess(name + 5, nullptr, SubprocessType::kRaw, SubprocessProtocol::kNone);
     } else if(!strncmp(name, "sync:", 5)) {
         ret = create_service_thread(file_sync_service, NULL);
     } else if(!strncmp(name, "remount:", 8)) {
@@ -325,9 +327,9 @@ int service_to_fd(const char* name, const atransport* transport) {
     } else if(!strncmp(name, "backup:", 7)) {
         ret = StartSubprocess(android::base::StringPrintf("/system/bin/bu backup %s",
                                                           (name + 7)).c_str(),
-                              SubprocessType::kRaw, SubprocessProtocol::kNone);
+                              nullptr, SubprocessType::kRaw, SubprocessProtocol::kNone);
     } else if(!strncmp(name, "restore:", 8)) {
-        ret = StartSubprocess("/system/bin/bu restore", SubprocessType::kRaw,
+        ret = StartSubprocess("/system/bin/bu restore", nullptr, SubprocessType::kRaw,
                               SubprocessProtocol::kNone);
     } else if(!strncmp(name, "tcpip:", 6)) {
         int port;

@@ -595,6 +595,10 @@ static std::string ShellServiceString(bool use_shell_protocol,
     if (!type_arg.empty()) {
         args.push_back(type_arg);
     }
+    const char* terminal_type = getenv("TERM");
+    if (terminal_type != nullptr) {
+        args.push_back(std::string("TERM=") + terminal_type);
+    }
 
     // Shell service string can look like: shell[,arg1,arg2,...]:[command].
     return android::base::StringPrintf("shell%s%s:%s",
@@ -1029,8 +1033,7 @@ static int send_shell_command(TransportType transport_type, const char* serial,
         use_shell_protocol = CanUseFeature(features, kFeatureShell2);
     }
 
-    std::string service_string = ShellServiceString(use_shell_protocol, "",
-                                                    command);
+    std::string service_string = ShellServiceString(use_shell_protocol, "", command);
 
     int fd;
     while (true) {
