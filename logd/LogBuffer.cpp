@@ -191,9 +191,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
         prio = *msg;
         tag = msg + 1;
     }
-    if (!__android_log_is_loggable(prio, tag,
-                                   ANDROID_LOG_VERBOSE |
-                                   ANDROID_LOGGABLE_FLAG_NOT_WITHIN_SIGNAL)) {
+    if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
         // Log traffic received to total
         pthread_mutex_lock(&mLogElementsLock);
         stats.add(elem);
