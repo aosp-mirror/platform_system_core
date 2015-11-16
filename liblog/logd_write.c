@@ -20,7 +20,6 @@
 #include <fcntl.h>
 #if !defined(_WIN32)
 #include <pthread.h>
-#include <signal.h>
 #endif
 #include <stdarg.h>
 #include <stdatomic.h>
@@ -55,42 +54,13 @@
 
 static int __write_to_log_init(log_id_t, struct iovec *vec, size_t nr);
 static int (*write_to_log)(log_id_t, struct iovec *vec, size_t nr) = __write_to_log_init;
+#if !defined(_WIN32)
+static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
+#endif
 
 #ifndef __unused
 #define __unused  __attribute__((__unused__))
 #endif
-
-#if !defined(_WIN32)
-static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
-
-static void lock(sigset_t *sigflags)
-{
-    /*
-     * If we trigger a signal handler in the middle of locked activity and the
-     * signal handler logs a message, we could get into a deadlock state.
-     */
-    sigset_t all;
-
-    sigfillset(&all);
-    pthread_sigmask(SIG_BLOCK, &all, sigflags);
-    pthread_mutex_lock(&log_init_lock);
-}
-
-static void unlock(sigset_t *sigflags)
-{
-    pthread_mutex_unlock(&log_init_lock);
-    pthread_sigmask(SIG_UNBLOCK, sigflags, NULL);
-}
-
-#define DECLARE_SIGSET(name) sigset_t name
-
-#else   /* !defined(_WIN32) */
-
-#define lock(sigflags) ((void)0)
-#define unlock(sigflags) ((void)0)
-#define DECLARE_SIGSET(name)
-
-#endif  /* !defined(_WIN32) */
 
 #if FAKE_LOG_DEVICE
 static int log_fds[(int)LOG_ID_MAX] = { -1, -1, -1, -1, -1 };
@@ -305,15 +275,17 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
      */
     ret = TEMP_FAILURE_RETRY(writev(logd_fd, newVec + 1, i - 1));
     if (ret < 0) {
-        DECLARE_SIGSET(sigflags);
-
         ret = -errno;
         if (ret == -ENOTCONN) {
-            lock(&sigflags);
+#if !defined(_WIN32)
+            pthread_mutex_lock(&log_init_lock);
+#endif
             close(logd_fd);
             logd_fd = -1;
             ret = __write_to_log_initialize();
-            unlock(&sigflags);
+#if !defined(_WIN32)
+            pthread_mutex_unlock(&log_init_lock);
+#endif
 
             if (ret < 0) {
                 return ret;
@@ -357,16 +329,18 @@ const char *android_log_id_to_name(log_id_t log_id)
 
 static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
 {
-    DECLARE_SIGSET(sigflags);
-
-    lock(&sigflags);
+#if !defined(_WIN32)
+    pthread_mutex_lock(&log_init_lock);
+#endif
 
     if (write_to_log == __write_to_log_init) {
         int ret;
 
         ret = __write_to_log_initialize();
         if (ret < 0) {
-            unlock(&sigflags);
+#if !defined(_WIN32)
+            pthread_mutex_unlock(&log_init_lock);
+#endif
 #if (FAKE_LOG_DEVICE == 0)
             if (pstore_fd >= 0) {
                 __write_to_log_daemon(log_id, vec, nr);
@@ -378,7 +352,9 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
         write_to_log = __write_to_log_daemon;
     }
 
-    unlock(&sigflags);
+#if !defined(_WIN32)
+    pthread_mutex_unlock(&log_init_lock);
+#endif
 
     return write_to_log(log_id, vec, nr);
 }
