@@ -69,6 +69,7 @@ class SystemProfileCache : public SystemProfileSetter {
   FRIEND_TEST(UploadServiceTest, ReadKeyValueFromFile);
   FRIEND_TEST(UploadServiceTest, SessionIdIncrementedAtInitialization);
   FRIEND_TEST(UploadServiceTest, ValuesInConfigFileAreSent);
+  FRIEND_TEST(UploadServiceTest, ProductIdMandatory);
 
   // Fetches all informations and populates |profile_|
   bool Initialize();

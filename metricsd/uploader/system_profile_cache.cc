@@ -87,7 +87,8 @@ bool SystemProfileCache::Initialize() {
     }
   }
 
-  if (!reader.GetString(metrics::kProductId, &profile_.product_id)) {
+  if (!reader.GetString(metrics::kProductId, &profile_.product_id)
+      || profile_.product_id.empty()) {
     LOG(ERROR) << "product_id is not set.";
     return false;
   }
