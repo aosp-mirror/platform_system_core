@@ -17,15 +17,23 @@
 #ifndef _DEBUGGERD_TOMBSTONE_H
 #define _DEBUGGERD_TOMBSTONE_H
 
-#include <stddef.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <sys/types.h>
+#include <string>
+
+class BacktraceMap;
+
+/* Create and open a tombstone file for writing.
+ * Returns a writable file descriptor, or -1 with errno set appropriately.
+ * If out_path is non-null, *out_path is set to the path of the tombstone file.
+ */
+int open_tombstone(std::string* path);
 
 /* Creates a tombstone file and writes the crash dump to it.
  * Returns the path of the tombstone, which must be freed using free(). */
-char* engrave_tombstone(pid_t pid, pid_t tid, int signal, int original_si_code,
-                        uintptr_t abort_msg_address,
-                        bool dump_sibling_threads, bool* detach_failed,
-                        int* total_sleep_time_usec);
+void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid, int signal,
+                       int original_si_code, uintptr_t abort_msg_address, bool dump_sibling_threads,
+                       bool* detach_failed, int* total_sleep_time_usec);
 
 #endif // _DEBUGGERD_TOMBSTONE_H
