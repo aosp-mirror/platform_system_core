@@ -291,3 +291,14 @@ TEST_F(UploadServiceTest, LogFromTheMetricsLibrary) {
 
   EXPECT_EQ(1, sender->send_call_count());
 }
+
+// The product id must be set for metrics to be uploaded.
+// If it is not set, the system profile cache should fail to initialize.
+TEST_F(UploadServiceTest, ProductIdMandatory) {
+  SystemProfileCache cache(true, dir_.path());
+  ASSERT_FALSE(cache.Initialize());
+  SetTestingProperty(metrics::kProductId, "");
+  ASSERT_FALSE(cache.Initialize());
+  SetTestingProperty(metrics::kProductId, "hello");
+  ASSERT_TRUE(cache.Initialize());
+}
