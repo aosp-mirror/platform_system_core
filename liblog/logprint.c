@@ -908,7 +908,7 @@ static size_t convertPrintable(char *p, const char *message, size_t messageLen)
                 } else if (*message == '\b') {
                     strcpy(buf, "\\b");
                 } else if (*message == '\t') {
-                    strcpy(buf, "\\t");
+                    strcpy(buf, "\t"); // Do not escape tabs
                 } else if (*message == '\v') {
                     strcpy(buf, "\\v");
                 } else if (*message == '\f') {
