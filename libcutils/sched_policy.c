@@ -64,6 +64,8 @@ static int fg_cgroup_fd = -1;
 // File descriptors open to /dev/cpuset/../tasks, setup by initialize, or -1 on error
 static int bg_cpuset_fd = -1;
 static int fg_cpuset_fd = -1;
+static int bg_schedboost_fd = -1;
+static int fg_schedboost_fd = -1;
 #endif
 
 /* Add tid to the scheduling group defined by the policy */
@@ -128,6 +130,12 @@ static void __initialize(void) {
         fg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
         filename = "/dev/cpuset/background/tasks";
         bg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
+#ifdef USE_SCHEDBOOST
+        filename = "/sys/fs/cgroup/stune/foreground/tasks";
+        fg_schedboost_fd = open(filename, O_WRONLY | O_CLOEXEC);
+        filename = "/sys/fs/cgroup/stune/tasks";
+        bg_schedboost_fd = open(filename, O_WRONLY | O_CLOEXEC);
+#endif
     }
 #endif
 
@@ -253,21 +261,29 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
     pthread_once(&the_once, __initialize);
 
     int fd;
+    int boost_fd;
     switch (policy) {
     case SP_BACKGROUND:
         fd = bg_cpuset_fd;
+        boost_fd = bg_schedboost_fd;
         break;
     case SP_FOREGROUND:
     case SP_AUDIO_APP:
     case SP_AUDIO_SYS:
         fd = fg_cpuset_fd;
+        boost_fd = fg_schedboost_fd;
         break;
     default:
-        fd = -1;
+        boost_fd = fd = -1;
         break;
     }
 
     if (add_tid_to_cgroup(tid, fd) != 0) {
+        if (errno != ESRCH && errno != ENOENT)
+            return -errno;
+    }
+
+    if (boost_fd > 0 && add_tid_to_cgroup(tid, boost_fd) != 0) {
         if (errno != ESRCH && errno != ENOENT)
             return -errno;
     }
