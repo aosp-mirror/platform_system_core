@@ -78,7 +78,6 @@ on init
     mkdir /mnt/expand 0771 system system
 
     # Storage views to support runtime permissions
-    mkdir /storage 0755 root root
     mkdir /mnt/runtime 0700 root root
     mkdir /mnt/runtime/default 0755 root root
     mkdir /mnt/runtime/default/self 0755 root root
