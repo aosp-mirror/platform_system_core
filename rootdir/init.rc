@@ -361,7 +361,6 @@ on post-fs-data
 
     # create dalvik-cache, so as to enforce our permissions
     mkdir /data/dalvik-cache 0771 root root
-    mkdir /data/dalvik-cache/profiles 0711 system system
 
     # create resource-cache and double-check the perms
     mkdir /data/resource-cache 0771 system system
