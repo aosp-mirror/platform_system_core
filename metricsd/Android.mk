@@ -25,11 +25,14 @@ libmetrics_sources := \
 metrics_client_sources := \
   metrics_client.cc
 
-metrics_daemon_common := \
+metrics_collector_common := \
   collectors/averaged_statistics_collector.cc \
   collectors/cpu_usage_collector.cc \
   collectors/disk_usage_collector.cc \
-  metrics_daemon.cc \
+  metrics_collector.cc \
+  persistent_integer.cc \
+
+metricsd_common := \
   persistent_integer.cc \
   serialization/metric_sample.cc \
   serialization/serialization_utils.cc \
@@ -40,14 +43,16 @@ metrics_daemon_common := \
   uploader/system_profile_cache.cc \
   uploader/upload_service.cc \
 
-metrics_tests_sources := \
+metrics_collector_tests_sources := \
   collectors/averaged_statistics_collector_test.cc \
   collectors/cpu_usage_collector_test.cc \
-  metrics_daemon_test.cc \
+  metrics_collector_test.cc \
   metrics_library_test.cc \
   persistent_integer_test.cc \
   serialization/serialization_utils_unittest.cc \
   timer_test.cc \
+
+metricsd_tests_sources := \
   uploader/metrics_hashes_unittest.cc \
   uploader/metrics_log_base_unittest.cc \
   uploader/mock/sender_mock.cc \
@@ -56,7 +61,6 @@ metrics_tests_sources := \
 metrics_CFLAGS := -Wall \
   -Wno-char-subscripts \
   -Wno-missing-field-initializers \
-  -Wno-unused-function \
   -Wno-unused-parameter \
   -Werror \
   -fvisibility=default
@@ -67,16 +71,21 @@ metrics_CPPFLAGS := -Wno-non-virtual-dtor \
 metrics_includes := external/gtest/include \
   $(LOCAL_PATH)/include
 libmetrics_shared_libraries := libchrome libbrillo
-metrics_daemon_shared_libraries := $(libmetrics_shared_libraries) \
-  libbrillo-http \
+metrics_collector_shared_libraries := $(libmetrics_shared_libraries) \
   libbrillo-dbus \
+  libbrillo-http \
   libchrome-dbus \
   libdbus \
   libmetrics \
-  libprotobuf-cpp-lite \
   librootdev \
-  libupdate_engine_client \
   libweaved \
+
+metricsd_shared_libraries := \
+  libbrillo \
+  libbrillo-http \
+  libchrome \
+  libprotobuf-cpp-lite \
+  libupdate_engine_client \
 
 # Shared library for metrics.
 # ========================================================
@@ -107,10 +116,10 @@ LOCAL_SHARED_LIBRARIES := $(libmetrics_shared_libraries) \
 LOCAL_SRC_FILES := $(metrics_client_sources)
 include $(BUILD_EXECUTABLE)
 
-# Protobuf library for metrics_daemon.
+# Protobuf library for metricsd.
 # ========================================================
 include $(CLEAR_VARS)
-LOCAL_MODULE := metrics_daemon_protos
+LOCAL_MODULE := metricsd_protos
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 generated_sources_dir := $(call local-generated-sources-dir)
 LOCAL_EXPORT_C_INCLUDE_DIRS += \
@@ -118,40 +127,71 @@ LOCAL_EXPORT_C_INCLUDE_DIRS += \
 LOCAL_SRC_FILES :=  $(call all-proto-files-under,uploader/proto)
 include $(BUILD_STATIC_LIBRARY)
 
-# metrics daemon.
+# metrics_collector daemon.
 # ========================================================
 include $(CLEAR_VARS)
-LOCAL_MODULE := metrics_daemon
+LOCAL_MODULE := metrics_collector
 LOCAL_C_INCLUDES := $(metrics_includes)
 LOCAL_CFLAGS := $(metrics_CFLAGS)
+LOCAL_CLANG := true
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS)
-LOCAL_INIT_RC := metrics_daemon.rc
+LOCAL_INIT_RC := metrics_collector.rc
 LOCAL_REQUIRED_MODULES := \
   metrics.json \
-  metrics.schema.json \
-
+  metrics.schema.json
 LOCAL_RTTI_FLAG := -frtti
-LOCAL_SHARED_LIBRARIES := $(metrics_daemon_shared_libraries)
-LOCAL_CLANG := true
-LOCAL_SRC_FILES := $(metrics_daemon_common) \
-  metrics_daemon_main.cc
-LOCAL_STATIC_LIBRARIES := metrics_daemon_protos
+LOCAL_SHARED_LIBRARIES := $(metrics_collector_shared_libraries)
+LOCAL_SRC_FILES := $(metrics_collector_common) \
+  metrics_collector_main.cc
 include $(BUILD_EXECUTABLE)
 
-# Unit tests for metrics.
+# metricsd daemon.
 # ========================================================
 include $(CLEAR_VARS)
-LOCAL_MODULE := metrics_tests
-LOCAL_CLANG := true
+LOCAL_MODULE := metricsd
+LOCAL_C_INCLUDES := $(metrics_includes)
 LOCAL_CFLAGS := $(metrics_CFLAGS)
+LOCAL_CLANG := true
+LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
+LOCAL_CPPFLAGS := $(metrics_CPPFLAGS)
+LOCAL_INIT_RC := metricsd.rc
+LOCAL_REQUIRED_MODULES := \
+  metrics_collector
+LOCAL_RTTI_FLAG := -frtti
+LOCAL_SHARED_LIBRARIES := $(metricsd_shared_libraries)
+LOCAL_STATIC_LIBRARIES := metricsd_protos
+LOCAL_SRC_FILES := $(metricsd_common) \
+  metricsd_main.cc
+include $(BUILD_EXECUTABLE)
+
+# Unit tests for metricsd.
+# ========================================================
+include $(CLEAR_VARS)
+LOCAL_MODULE := metricsd_tests
+LOCAL_CFLAGS := $(metrics_CFLAGS)
+LOCAL_CLANG := true
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS) -Wno-sign-compare
 LOCAL_RTTI_FLAG := -frtti
-LOCAL_SHARED_LIBRARIES := $(metrics_daemon_shared_libraries)
-LOCAL_SRC_FILES := $(metrics_tests_sources) $(metrics_daemon_common)
-LOCAL_STATIC_LIBRARIES := libBionicGtestMain libgmock metrics_daemon_protos
+LOCAL_SHARED_LIBRARIES := $(metricsd_shared_libraries) libmetrics
+LOCAL_SRC_FILES := $(metricsd_tests_sources) $(metricsd_common)
+LOCAL_STATIC_LIBRARIES := libBionicGtestMain libgmock metricsd_protos
+include $(BUILD_NATIVE_TEST)
 
+# Unit tests for metrics_collector.
+# ========================================================
+include $(CLEAR_VARS)
+LOCAL_MODULE := metrics_collector_tests
+LOCAL_CFLAGS := $(metrics_CFLAGS)
+LOCAL_CLANG := true
+LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
+LOCAL_CPPFLAGS := $(metrics_CPPFLAGS) -Wno-sign-compare
+LOCAL_RTTI_FLAG := -frtti
+LOCAL_SHARED_LIBRARIES := $(metrics_collector_shared_libraries)
+LOCAL_SRC_FILES := $(metrics_collector_tests_sources) \
+  $(metrics_collector_common)
+LOCAL_STATIC_LIBRARIES := libBionicGtestMain libgmock
 include $(BUILD_NATIVE_TEST)
 
 # Weave schema files

@@ -1,7 +1,7 @@
 on post-fs-data
     mkdir /data/misc/metrics 0770 system system
 
-service metrics_daemon /system/bin/metrics_daemon --uploader --foreground --logtosyslog
+service metricsd /system/bin/metricsd --foreground --logtosyslog
     class late_start
     user system
     group system dbus inet
