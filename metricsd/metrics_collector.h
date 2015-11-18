@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef METRICS_METRICS_DAEMON_H_
-#define METRICS_METRICS_DAEMON_H_
+#ifndef METRICS_METRICS_COLLECTOR_H_
+#define METRICS_METRICS_COLLECTOR_H_
 
 #include <stdint.h>
 
@@ -36,23 +36,18 @@
 #include "collectors/disk_usage_collector.h"
 #include "metrics/metrics_library.h"
 #include "persistent_integer.h"
-#include "uploader/upload_service.h"
 
 using chromeos_metrics::PersistentInteger;
 
-class MetricsDaemon : public brillo::DBusDaemon {
+class MetricsCollector : public brillo::DBusDaemon {
  public:
-  MetricsDaemon();
-  ~MetricsDaemon();
+  MetricsCollector();
+  ~MetricsCollector();
 
   // Initializes metrics class variables.
   void Init(bool testing,
-            bool uploader_active,
-            bool dbus_enabled,
             MetricsLibraryInterface* metrics_lib,
             const std::string& diskstats_path,
-            const base::TimeDelta& upload_interval,
-            const std::string& server,
             const base::FilePath& metrics_directory);
 
   // Initializes DBus and MessageLoop variables before running the MessageLoop.
@@ -64,9 +59,6 @@ class MetricsDaemon : public brillo::DBusDaemon {
   // Does all the work.
   int Run() override;
 
-  // Triggers an upload event and exit. (Used to test UploadService)
-  void RunUploaderTest();
-
   // Returns the active time since boot (uptime minus sleep time) in seconds.
   static double GetActiveTime();
 
@@ -77,24 +69,24 @@ class MetricsDaemon : public brillo::DBusDaemon {
   static const char kZeroPagesName[];
 
  private:
-  friend class MetricsDaemonTest;
-  FRIEND_TEST(MetricsDaemonTest, CheckSystemCrash);
-  FRIEND_TEST(MetricsDaemonTest, ComputeEpochNoCurrent);
-  FRIEND_TEST(MetricsDaemonTest, ComputeEpochNoLast);
-  FRIEND_TEST(MetricsDaemonTest, GetHistogramPath);
-  FRIEND_TEST(MetricsDaemonTest, IsNewEpoch);
-  FRIEND_TEST(MetricsDaemonTest, MessageFilter);
-  FRIEND_TEST(MetricsDaemonTest, ProcessKernelCrash);
-  FRIEND_TEST(MetricsDaemonTest, ProcessMeminfo);
-  FRIEND_TEST(MetricsDaemonTest, ProcessMeminfo2);
-  FRIEND_TEST(MetricsDaemonTest, ProcessUncleanShutdown);
-  FRIEND_TEST(MetricsDaemonTest, ProcessUserCrash);
-  FRIEND_TEST(MetricsDaemonTest, ReportCrashesDailyFrequency);
-  FRIEND_TEST(MetricsDaemonTest, ReportKernelCrashInterval);
-  FRIEND_TEST(MetricsDaemonTest, ReportUncleanShutdownInterval);
-  FRIEND_TEST(MetricsDaemonTest, ReportUserCrashInterval);
-  FRIEND_TEST(MetricsDaemonTest, SendSample);
-  FRIEND_TEST(MetricsDaemonTest, SendZramMetrics);
+  friend class MetricsCollectorTest;
+  FRIEND_TEST(MetricsCollectorTest, CheckSystemCrash);
+  FRIEND_TEST(MetricsCollectorTest, ComputeEpochNoCurrent);
+  FRIEND_TEST(MetricsCollectorTest, ComputeEpochNoLast);
+  FRIEND_TEST(MetricsCollectorTest, GetHistogramPath);
+  FRIEND_TEST(MetricsCollectorTest, IsNewEpoch);
+  FRIEND_TEST(MetricsCollectorTest, MessageFilter);
+  FRIEND_TEST(MetricsCollectorTest, ProcessKernelCrash);
+  FRIEND_TEST(MetricsCollectorTest, ProcessMeminfo);
+  FRIEND_TEST(MetricsCollectorTest, ProcessMeminfo2);
+  FRIEND_TEST(MetricsCollectorTest, ProcessUncleanShutdown);
+  FRIEND_TEST(MetricsCollectorTest, ProcessUserCrash);
+  FRIEND_TEST(MetricsCollectorTest, ReportCrashesDailyFrequency);
+  FRIEND_TEST(MetricsCollectorTest, ReportKernelCrashInterval);
+  FRIEND_TEST(MetricsCollectorTest, ReportUncleanShutdownInterval);
+  FRIEND_TEST(MetricsCollectorTest, ReportUserCrashInterval);
+  FRIEND_TEST(MetricsCollectorTest, SendSample);
+  FRIEND_TEST(MetricsCollectorTest, SendZramMetrics);
 
   // Type of scale to use for meminfo histograms.  For most of them we use
   // percent of total RAM, but for some we use absolute numbers, usually in
@@ -233,13 +225,6 @@ class MetricsDaemon : public brillo::DBusDaemon {
   // Test mode.
   bool testing_;
 
-  // Whether the uploader is enabled or disabled.
-  bool uploader_active_;
-
-  // Whether or not dbus should be used.
-  // If disabled, we will not collect the frequency of crashes.
-  bool dbus_enabled_;
-
   // Root of the configuration files to use.
   base::FilePath metrics_directory_;
 
@@ -291,11 +276,7 @@ class MetricsDaemon : public brillo::DBusDaemon {
   scoped_ptr<DiskUsageCollector> disk_usage_collector_;
   scoped_ptr<AveragedStatisticsCollector> averaged_stats_collector_;
 
-  base::TimeDelta upload_interval_;
-  std::string server_;
-
-  scoped_ptr<UploadService> upload_service_;
   std::unique_ptr<weaved::Device> device_;
 };
 
-#endif  // METRICS_METRICS_DAEMON_H_
+#endif  // METRICS_METRICS_COLLECTOR_H_

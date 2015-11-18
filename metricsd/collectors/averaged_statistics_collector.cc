@@ -21,7 +21,7 @@
 #include <base/strings/string_number_conversions.h>
 #include <base/strings/string_split.h>
 
-#include "metrics_daemon.h"
+#include "metrics_collector.h"
 
 namespace {
 
@@ -90,7 +90,7 @@ void AveragedStatisticsCollector::CollectCallback() {
 }
 
 void AveragedStatisticsCollector::ReadInitialValues() {
-  stats_start_time_ = MetricsDaemon::GetActiveTime();
+  stats_start_time_ = MetricsCollector::GetActiveTime();
   DiskStatsReadStats(&read_sectors_, &write_sectors_);
   VmStatsReadStats(&vmstats_);
 }
@@ -168,7 +168,7 @@ bool AveragedStatisticsCollector::VmStatsReadStats(struct VmstatRecord* stats) {
 void AveragedStatisticsCollector::Collect() {
   uint64_t read_sectors_now, write_sectors_now;
   struct VmstatRecord vmstats_now;
-  double time_now = MetricsDaemon::GetActiveTime();
+  double time_now = MetricsCollector::GetActiveTime();
   double delta_time = time_now - stats_start_time_;
   bool diskstats_success = DiskStatsReadStats(&read_sectors_now,
                                               &write_sectors_now);
