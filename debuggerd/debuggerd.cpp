@@ -34,9 +34,10 @@
 
 #include <log/logger.h>
 
-#include <cutils/sockets.h>
-#include <cutils/properties.h>
 #include <cutils/debugger.h>
+#include <cutils/properties.h>
+#include <cutils/sockets.h>
+#include <nativehelper/ScopedFd.h>
 
 #include <linux/input.h>
 
@@ -336,160 +337,146 @@ static void redirect_to_32(int fd, debugger_request_t* request) {
 static void handle_request(int fd) {
   ALOGV("handle_request(%d)\n", fd);
 
+  ScopedFd closer(fd);
   debugger_request_t request;
   memset(&request, 0, sizeof(request));
   int status = read_request(fd, &request);
-  if (!status) {
-    ALOGV("BOOM: pid=%d uid=%d gid=%d tid=%d\n",
-         request.pid, request.uid, request.gid, request.tid);
+  if (status != 0) {
+    return;
+  }
+
+  ALOGV("BOOM: pid=%d uid=%d gid=%d tid=%d\n", request.pid, request.uid, request.gid, request.tid);
 
 #if defined(__LP64__)
-    // On 64 bit systems, requests to dump 32 bit and 64 bit tids come
-    // to the 64 bit debuggerd. If the process is a 32 bit executable,
-    // redirect the request to the 32 bit debuggerd.
-    if (is32bit(request.tid)) {
-      // Only dump backtrace and dump tombstone requests can be redirected.
-      if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE
-          || request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
-        redirect_to_32(fd, &request);
-      } else {
-        ALOGE("debuggerd: Not allowed to redirect action %d to 32 bit debuggerd\n",
-              request.action);
-      }
-      close(fd);
-      return;
-    }
-#endif
-
-    // At this point, the thread that made the request is blocked in
-    // a read() call.  If the thread has crashed, then this gives us
-    // time to PTRACE_ATTACH to it before it has a chance to really fault.
-    //
-    // The PTRACE_ATTACH sends a SIGSTOP to the target process, but it
-    // won't necessarily have stopped by the time ptrace() returns.  (We
-    // currently assume it does.)  We write to the file descriptor to
-    // ensure that it can run as soon as we call PTRACE_CONT below.
-    // See details in bionic/libc/linker/debugger.c, in function
-    // debugger_signal_handler().
-    if (ptrace(PTRACE_ATTACH, request.tid, 0, 0)) {
-      ALOGE("ptrace attach failed: %s\n", strerror(errno));
+  // On 64 bit systems, requests to dump 32 bit and 64 bit tids come
+  // to the 64 bit debuggerd. If the process is a 32 bit executable,
+  // redirect the request to the 32 bit debuggerd.
+  if (is32bit(request.tid)) {
+    // Only dump backtrace and dump tombstone requests can be redirected.
+    if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE ||
+        request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
+      redirect_to_32(fd, &request);
     } else {
-      bool detach_failed = false;
-      bool tid_unresponsive = false;
-      bool attach_gdb = should_attach_gdb(&request);
-      if (TEMP_FAILURE_RETRY(write(fd, "\0", 1)) != 1) {
-        ALOGE("failed responding to client: %s\n", strerror(errno));
-      } else {
-        char* tombstone_path = NULL;
-
-        if (request.action == DEBUGGER_ACTION_CRASH) {
-          close(fd);
-          fd = -1;
-        }
-
-        int total_sleep_time_usec = 0;
-        for (;;) {
-          int signal = wait_for_sigstop(request.tid, &total_sleep_time_usec, &detach_failed);
-          if (signal == -1) {
-            tid_unresponsive = true;
-            break;
-          }
-
-          switch (signal) {
-            case SIGSTOP:
-              if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
-                ALOGV("stopped -- dumping to tombstone\n");
-                tombstone_path = engrave_tombstone(request.pid, request.tid,
-                                                   signal, request.original_si_code,
-                                                   request.abort_msg_address, true,
-                                                   &detach_failed, &total_sleep_time_usec);
-              } else if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE) {
-                ALOGV("stopped -- dumping to fd\n");
-                dump_backtrace(fd, -1, request.pid, request.tid, &detach_failed,
-                               &total_sleep_time_usec);
-              } else {
-                ALOGV("stopped -- continuing\n");
-                status = ptrace(PTRACE_CONT, request.tid, 0, 0);
-                if (status) {
-                  ALOGE("ptrace continue failed: %s\n", strerror(errno));
-                }
-                continue; // loop again
-              }
-              break;
-
-            case SIGABRT:
-            case SIGBUS:
-            case SIGFPE:
-            case SIGILL:
-            case SIGSEGV:
-#ifdef SIGSTKFLT
-            case SIGSTKFLT:
+      ALOGE("debuggerd: Not allowed to redirect action %d to 32 bit debuggerd\n", request.action);
+    }
+    return;
+  }
 #endif
-            case SIGTRAP:
-              ALOGV("stopped -- fatal signal\n");
-              // Send a SIGSTOP to the process to make all of
-              // the non-signaled threads stop moving.  Without
-              // this we get a lot of "ptrace detach failed:
-              // No such process".
-              kill(request.pid, SIGSTOP);
-              // don't dump sibling threads when attaching to GDB because it
-              // makes the process less reliable, apparently...
-              tombstone_path = engrave_tombstone(request.pid, request.tid,
-                                                 signal, request.original_si_code,
-                                                 request.abort_msg_address, !attach_gdb,
-                                                 &detach_failed, &total_sleep_time_usec);
-              break;
 
-            default:
-              ALOGE("process stopped due to unexpected signal %d\n", signal);
-              break;
-          }
-          break;
-        }
+  // At this point, the thread that made the request is blocked in
+  // a read() call.  If the thread has crashed, then this gives us
+  // time to PTRACE_ATTACH to it before it has a chance to really fault.
+  //
+  // The PTRACE_ATTACH sends a SIGSTOP to the target process, but it
+  // won't necessarily have stopped by the time ptrace() returns.  (We
+  // currently assume it does.)  We write to the file descriptor to
+  // ensure that it can run as soon as we call PTRACE_CONT below.
+  // See details in bionic/libc/linker/debugger.c, in function
+  // debugger_signal_handler().
+  if (ptrace(PTRACE_ATTACH, request.tid, 0, 0)) {
+    ALOGE("ptrace attach failed: %s\n", strerror(errno));
+    return;
+  }
 
-        if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
-          if (tombstone_path) {
-            write(fd, tombstone_path, strlen(tombstone_path));
-          }
-          close(fd);
-          fd = -1;
-        }
-        free(tombstone_path);
-      }
+  bool detach_failed = false;
+  bool tid_unresponsive = false;
+  bool attach_gdb = should_attach_gdb(&request);
+  if (TEMP_FAILURE_RETRY(write(fd, "\0", 1)) != 1) {
+    ALOGE("failed responding to client: %s\n", strerror(errno));
+    return;
+  }
 
-      if (!tid_unresponsive) {
-        ALOGV("detaching");
-        if (attach_gdb) {
-          // stop the process so we can debug
-          kill(request.pid, SIGSTOP);
-        }
-        if (ptrace(PTRACE_DETACH, request.tid, 0, 0)) {
-          ALOGE("ptrace detach from %d failed: %s", request.tid, strerror(errno));
-          detach_failed = true;
-        } else if (attach_gdb) {
-          // if debug.db.uid is set, its value indicates if we should wait
-          // for user action for the crashing process.
-          // in this case, we log a message and turn the debug LED on
-          // waiting for a gdb connection (for instance)
-          wait_for_user_action(request);
-        }
-      }
-
-      // resume stopped process (so it can crash in peace).
-      kill(request.pid, SIGCONT);
-
-      // If we didn't successfully detach, we're still the parent, and the
-      // actual parent won't receive a death notification via wait(2).  At this point
-      // there's not much we can do about that.
-      if (detach_failed) {
-        ALOGE("debuggerd committing suicide to free the zombie!\n");
-        kill(getpid(), SIGKILL);
-      }
+  std::unique_ptr<char> tombstone_path;
+  int total_sleep_time_usec = 0;
+  while (true) {
+    int signal = wait_for_sigstop(request.tid, &total_sleep_time_usec, &detach_failed);
+    if (signal == -1) {
+      tid_unresponsive = true;
+      break;
     }
 
+    switch (signal) {
+      case SIGSTOP:
+        if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
+          ALOGV("stopped -- dumping to tombstone\n");
+          tombstone_path.reset(engrave_tombstone(
+            request.pid, request.tid, signal, request.original_si_code, request.abort_msg_address,
+            true, &detach_failed, &total_sleep_time_usec));
+        } else if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE) {
+          ALOGV("stopped -- dumping to fd\n");
+          dump_backtrace(fd, -1, request.pid, request.tid, &detach_failed, &total_sleep_time_usec);
+        } else {
+          ALOGV("stopped -- continuing\n");
+          status = ptrace(PTRACE_CONT, request.tid, 0, 0);
+          if (status) {
+            ALOGE("ptrace continue failed: %s\n", strerror(errno));
+          }
+          continue;  // loop again
+        }
+        break;
+
+      case SIGABRT:
+      case SIGBUS:
+      case SIGFPE:
+      case SIGILL:
+      case SIGSEGV:
+#ifdef SIGSTKFLT
+      case SIGSTKFLT:
+#endif
+      case SIGTRAP:
+        ALOGV("stopped -- fatal signal\n");
+        // Send a SIGSTOP to the process to make all of
+        // the non-signaled threads stop moving.  Without
+        // this we get a lot of "ptrace detach failed:
+        // No such process".
+        kill(request.pid, SIGSTOP);
+        // don't dump sibling threads when attaching to GDB because it
+        // makes the process less reliable, apparently...
+        tombstone_path.reset(engrave_tombstone(
+          request.pid, request.tid, signal, request.original_si_code, request.abort_msg_address,
+          !attach_gdb, &detach_failed, &total_sleep_time_usec));
+        break;
+
+      default:
+        ALOGE("process stopped due to unexpected signal %d\n", signal);
+        break;
+    }
+    break;
   }
-  if (fd >= 0) {
-    close(fd);
+
+  if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
+    if (tombstone_path) {
+      write(fd, tombstone_path.get(), strlen(tombstone_path.get()));
+    }
+  }
+
+  if (!tid_unresponsive) {
+    ALOGV("detaching");
+    if (attach_gdb) {
+      // stop the process so we can debug
+      kill(request.pid, SIGSTOP);
+    }
+    if (ptrace(PTRACE_DETACH, request.tid, 0, 0)) {
+      ALOGE("ptrace detach from %d failed: %s", request.tid, strerror(errno));
+      detach_failed = true;
+    } else if (attach_gdb) {
+      // if debug.db.uid is set, its value indicates if we should wait
+      // for user action for the crashing process.
+      // in this case, we log a message and turn the debug LED on
+      // waiting for a gdb connection (for instance)
+      wait_for_user_action(request);
+    }
+  }
+
+  // resume stopped process (so it can crash in peace).
+  kill(request.pid, SIGCONT);
+
+  // If we didn't successfully detach, we're still the parent, and the
+  // actual parent won't receive a death notification via wait(2).  At this point
+  // there's not much we can do about that.
+  if (detach_failed) {
+    ALOGE("debuggerd committing suicide to free the zombie!\n");
+    kill(getpid(), SIGKILL);
   }
 }
 
