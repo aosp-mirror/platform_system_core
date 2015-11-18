@@ -16,6 +16,8 @@
 
 #include "uploader/upload_service.h"
 
+#include <sysexits.h>
+
 #include <string>
 
 #include <base/bind.h>
@@ -39,38 +41,34 @@
 
 const int UploadService::kMaxFailedUpload = 10;
 
-UploadService::UploadService(SystemProfileSetter* setter,
-                             MetricsLibraryInterface* metrics_lib,
-                             const std::string& server)
-    : system_profile_setter_(setter),
-      metrics_lib_(metrics_lib),
-      histogram_snapshot_manager_(this),
+UploadService::UploadService(const std::string& server,
+                             const base::TimeDelta& upload_interval,
+                             const base::FilePath& metrics_directory)
+    : histogram_snapshot_manager_(this),
       sender_(new HttpSender(server)),
       failed_upload_count_(metrics::kFailedUploadCountName),
-      testing_(false) {
-}
-
-UploadService::UploadService(SystemProfileSetter* setter,
-                             MetricsLibraryInterface* metrics_lib,
-                             const std::string& server,
-                             bool testing)
-    : UploadService(setter, metrics_lib, server) {
-  testing_ = testing;
-}
-
-void UploadService::Init(const base::TimeDelta& upload_interval,
-                         const base::FilePath& metrics_directory) {
-  base::StatisticsRecorder::Initialize();
+      upload_interval_(upload_interval) {
   metrics_file_ = metrics_directory.Append(metrics::kMetricsEventsFileName);
   staged_log_path_ = metrics_directory.Append(metrics::kStagedLogName);
+  consent_file_ = metrics_directory.Append(metrics::kConsentFileName);
+}
 
-  if (!testing_) {
-    base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-        base::Bind(&UploadService::UploadEventCallback,
-                   base::Unretained(this),
-                   upload_interval),
-        upload_interval);
-  }
+int UploadService::OnInit() {
+  base::StatisticsRecorder::Initialize();
+
+  system_profile_setter_.reset(new SystemProfileCache());
+
+  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
+      base::Bind(&UploadService::UploadEventCallback,
+                 base::Unretained(this),
+                 upload_interval_),
+      upload_interval_);
+  return EX_OK;
+}
+
+void UploadService::InitForTest(SystemProfileSetter* setter) {
+  base::StatisticsRecorder::Initialize();
+  system_profile_setter_.reset(setter);
 }
 
 void UploadService::StartNewLog() {
@@ -114,7 +112,7 @@ void UploadService::UploadEvent() {
 
 void UploadService::SendStagedLog() {
   // If metrics are not enabled, discard the log and exit.
-  if (!metrics_lib_->AreMetricsEnabled()) {
+  if (!AreMetricsEnabled()) {
     LOG(INFO) << "Metrics disabled. Don't upload metrics samples.";
     base::DeleteFile(staged_log_path_, false);
     return;
@@ -263,3 +261,8 @@ void UploadService::RemoveFailedLog() {
     failed_upload_count_.Set(0);
   }
 }
+
+bool UploadService::AreMetricsEnabled() {
+  return base::PathExists(consent_file_);
+}
+

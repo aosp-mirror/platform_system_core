@@ -19,11 +19,11 @@
 
 #include <string>
 
-#include "base/metrics/histogram_base.h"
-#include "base/metrics/histogram_flattener.h"
-#include "base/metrics/histogram_snapshot_manager.h"
+#include <base/metrics/histogram_base.h>
+#include <base/metrics/histogram_flattener.h>
+#include <base/metrics/histogram_snapshot_manager.h>
+#include <brillo/daemons/daemon.h>
 
-#include "metrics/metrics_library.h"
 #include "persistent_integer.h"
 #include "uploader/metrics_log.h"
 #include "uploader/sender.h"
@@ -67,14 +67,14 @@ class SystemProfileSetter;
 //    - if the upload fails, we keep the staged log in memory to retry
 //      uploading later.
 //
-class UploadService : public base::HistogramFlattener {
+class UploadService : public base::HistogramFlattener, public brillo::Daemon {
  public:
-  explicit UploadService(SystemProfileSetter* setter,
-                         MetricsLibraryInterface* metrics_lib,
-                         const std::string& server);
+  UploadService(const std::string& server,
+                const base::TimeDelta& upload_interval,
+                const base::FilePath& metrics_directory);
 
-  void Init(const base::TimeDelta& upload_interval,
-            const base::FilePath& metrics_directory);
+  // Initializes the upload service.
+  int OnInit();
 
   // Starts a new log. The log needs to be regenerated after each successful
   // launch as it is destroyed when staging the log.
@@ -114,11 +114,8 @@ class UploadService : public base::HistogramFlattener {
   FRIEND_TEST(UploadServiceTest, UnknownCrashIgnored);
   FRIEND_TEST(UploadServiceTest, ValuesInConfigFileAreSent);
 
-  // Private constructor for use in unit testing.
-  UploadService(SystemProfileSetter* setter,
-                MetricsLibraryInterface* metrics_lib,
-                const std::string& server,
-                bool testing);
+  // Initializes the upload service for testing.
+  void InitForTest(SystemProfileSetter* setter);
 
   // If a staged log fails to upload more than kMaxFailedUpload times, it
   // will be discarded.
@@ -135,6 +132,9 @@ class UploadService : public base::HistogramFlattener {
 
   // Adds a crash to the current log.
   void AddCrash(const std::string& crash_name);
+
+  // Returns true iff metrics reporting is enabled.
+  bool AreMetricsEnabled();
 
   // Aggregates all histogram available in memory and store them in the current
   // log.
@@ -158,12 +158,14 @@ class UploadService : public base::HistogramFlattener {
   MetricsLog* GetOrCreateCurrentLog();
 
   scoped_ptr<SystemProfileSetter> system_profile_setter_;
-  MetricsLibraryInterface* metrics_lib_;
   base::HistogramSnapshotManager histogram_snapshot_manager_;
   scoped_ptr<Sender> sender_;
   chromeos_metrics::PersistentInteger failed_upload_count_;
   scoped_ptr<MetricsLog> current_log_;
+  
+  base::TimeDelta upload_interval_;
 
+  base::FilePath consent_file_;
   base::FilePath metrics_file_;
   base::FilePath staged_log_path_;
 

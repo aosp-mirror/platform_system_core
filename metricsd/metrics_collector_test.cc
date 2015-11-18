@@ -24,7 +24,7 @@
 #include <gtest/gtest.h>
 
 #include "constants.h"
-#include "metrics_daemon.h"
+#include "metrics_collector.h"
 #include "metrics/metrics_library_mock.h"
 #include "persistent_integer_mock.h"
 
@@ -40,7 +40,7 @@ using ::testing::StrictMock;
 using chromeos_metrics::PersistentIntegerMock;
 
 
-class MetricsDaemonTest : public testing::Test {
+class MetricsCollectorTest : public testing::Test {
  protected:
   virtual void SetUp() {
     brillo::FlagHelper::Init(0, nullptr, "");
@@ -48,14 +48,7 @@ class MetricsDaemonTest : public testing::Test {
 
     chromeos_metrics::PersistentInteger::SetMetricsDirectory(
         temp_dir_.path().value());
-    daemon_.Init(true,
-                 false,
-                 true,
-                 &metrics_lib_,
-                 "",
-                 base::TimeDelta::FromMinutes(30),
-                 metrics::kMetricsServer,
-                 temp_dir_.path());
+    daemon_.Init(true, &metrics_lib_, "", temp_dir_.path());
   }
 
   // Adds a metrics library mock expectation that the specified metric
@@ -107,8 +100,8 @@ class MetricsDaemonTest : public testing::Test {
                               value_string.length()));
   }
 
-  // The MetricsDaemon under test.
-  MetricsDaemon daemon_;
+  // The MetricsCollector under test.
+  MetricsCollector daemon_;
 
   // Temporary directory used for tests.
   base::ScopedTempDir temp_dir_;
@@ -118,13 +111,13 @@ class MetricsDaemonTest : public testing::Test {
   StrictMock<MetricsLibraryMock> metrics_lib_;
 };
 
-TEST_F(MetricsDaemonTest, MessageFilter) {
+TEST_F(MetricsCollectorTest, MessageFilter) {
   // Ignore calls to SendToUMA.
   EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AnyNumber());
 
   DBusMessage* msg = dbus_message_new(DBUS_MESSAGE_TYPE_METHOD_CALL);
   DBusHandlerResult res =
-      MetricsDaemon::MessageFilter(/* connection */ nullptr, msg, &daemon_);
+      MetricsCollector::MessageFilter(/* connection */ nullptr, msg, &daemon_);
   EXPECT_EQ(DBUS_HANDLER_RESULT_NOT_YET_HANDLED, res);
   DeleteDBusMessage(msg);
 
@@ -133,7 +126,7 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
                             "org.chromium.CrashReporter",
                             "UserCrash",
                             signal_args);
-  res = MetricsDaemon::MessageFilter(/* connection */ nullptr, msg, &daemon_);
+  res = MetricsCollector::MessageFilter(/* connection */ nullptr, msg, &daemon_);
   EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
   DeleteDBusMessage(msg);
 
@@ -144,18 +137,18 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
                             "org.chromium.UnknownService.Manager",
                             "StateChanged",
                             signal_args);
-  res = MetricsDaemon::MessageFilter(/* connection */ nullptr, msg, &daemon_);
+  res = MetricsCollector::MessageFilter(/* connection */ nullptr, msg, &daemon_);
   EXPECT_EQ(DBUS_HANDLER_RESULT_NOT_YET_HANDLED, res);
   DeleteDBusMessage(msg);
 }
 
-TEST_F(MetricsDaemonTest, SendSample) {
+TEST_F(MetricsCollectorTest, SendSample) {
   ExpectSample("Dummy.Metric", 3);
   daemon_.SendSample("Dummy.Metric", /* sample */ 3,
                      /* min */ 1, /* max */ 100, /* buckets */ 50);
 }
 
-TEST_F(MetricsDaemonTest, ProcessMeminfo) {
+TEST_F(MetricsCollectorTest, ProcessMeminfo) {
   string meminfo =
       "MemTotal:        2000000 kB\nMemFree:          500000 kB\n"
       "Buffers:         1000000 kB\nCached:           213652 kB\n"
@@ -192,13 +185,13 @@ TEST_F(MetricsDaemonTest, ProcessMeminfo) {
   EXPECT_TRUE(daemon_.ProcessMeminfo(meminfo));
 }
 
-TEST_F(MetricsDaemonTest, ProcessMeminfo2) {
+TEST_F(MetricsCollectorTest, ProcessMeminfo2) {
   string meminfo = "MemTotal:        2000000 kB\nMemFree:         1000000 kB\n";
   // Not enough fields.
   EXPECT_FALSE(daemon_.ProcessMeminfo(meminfo));
 }
 
-TEST_F(MetricsDaemonTest, SendZramMetrics) {
+TEST_F(MetricsCollectorTest, SendZramMetrics) {
   EXPECT_TRUE(daemon_.testing_);
 
   // |compr_data_size| is the size in bytes of compressed data.
@@ -210,13 +203,13 @@ TEST_F(MetricsDaemonTest, SendZramMetrics) {
   const uint64_t zero_pages = 10 * 1000 * 1000 / page_size;
 
   CreateUint64ValueFile(
-      temp_dir_.path().Append(MetricsDaemon::kComprDataSizeName),
+      temp_dir_.path().Append(MetricsCollector::kComprDataSizeName),
       compr_data_size);
   CreateUint64ValueFile(
-      temp_dir_.path().Append(MetricsDaemon::kOrigDataSizeName),
+      temp_dir_.path().Append(MetricsCollector::kOrigDataSizeName),
       orig_data_size);
   CreateUint64ValueFile(
-      temp_dir_.path().Append(MetricsDaemon::kZeroPagesName), zero_pages);
+      temp_dir_.path().Append(MetricsCollector::kZeroPagesName), zero_pages);
 
   const uint64_t real_orig_size = orig_data_size + zero_pages * page_size;
   const uint64_t zero_ratio_percent =

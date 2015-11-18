@@ -44,11 +44,11 @@ class UploadServiceTest : public testing::Test {
     metrics_lib_.InitForTest(dir_.path());
     ASSERT_EQ(0, base::WriteFile(
         dir_.path().Append(metrics::kConsentFileName), "", 0));
-    upload_service_.reset(new UploadService(new MockSystemProfileSetter(),
-                                            &metrics_lib_, "", true));
+    upload_service_.reset(new UploadService("", base::TimeDelta(),
+                                            dir_.path()));
 
     upload_service_->sender_.reset(new SenderMock);
-    upload_service_->Init(base::TimeDelta::FromMinutes(30), dir_.path());
+    upload_service_->InitForTest(new MockSystemProfileSetter);
     upload_service_->GatherHistograms();
     upload_service_->Reset();
   }
@@ -58,7 +58,8 @@ class UploadServiceTest : public testing::Test {
   }
 
   void SetTestingProperty(const std::string& name, const std::string& value) {
-    base::FilePath filepath = dir_.path().Append("etc/os-release.d").Append(name);
+    base::FilePath filepath =
+        dir_.path().Append("etc/os-release.d").Append(name);
     ASSERT_TRUE(base::CreateDirectory(filepath.DirName()));
     ASSERT_EQ(
         value.size(),
@@ -159,8 +160,7 @@ TEST_F(UploadServiceTest, EmptyLogsAreNotSent) {
 }
 
 TEST_F(UploadServiceTest, LogEmptyByDefault) {
-  UploadService upload_service(new MockSystemProfileSetter(), &metrics_lib_,
-                               "");
+  UploadService upload_service("", base::TimeDelta(), dir_.path());
 
   // current_log_ should be initialized later as it needs AtExitManager to exit
   // in order to gather system information from SysInfo.
