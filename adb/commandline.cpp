@@ -591,13 +591,14 @@ static std::string ShellServiceString(bool use_shell_protocol,
     std::vector<std::string> args;
     if (use_shell_protocol) {
         args.push_back(kShellServiceArgShellProtocol);
+
+        const char* terminal_type = getenv("TERM");
+        if (terminal_type != nullptr) {
+            args.push_back(std::string("TERM=") + terminal_type);
+        }
     }
     if (!type_arg.empty()) {
         args.push_back(type_arg);
-    }
-    const char* terminal_type = getenv("TERM");
-    if (terminal_type != nullptr) {
-        args.push_back(std::string("TERM=") + terminal_type);
     }
 
     // Shell service string can look like: shell[,arg1,arg2,...]:[command].
