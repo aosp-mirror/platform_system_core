@@ -84,6 +84,7 @@ bool SystemProfileCache::Initialize() {
     auto client = update_engine::UpdateEngineClient::CreateInstance();
     if (!client->GetChannel(&channel)) {
       LOG(ERROR) << "failed to read the current channel from update engine.";
+      return false;
     }
   }
 

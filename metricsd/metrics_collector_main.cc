@@ -23,7 +23,7 @@
 #include <rootdev.h>
 
 #include "constants.h"
-#include "metrics_daemon.h"
+#include "metrics_collector.h"
 
 
 // Returns the path to the disk stats in the sysfs.  Returns the null string if
@@ -51,26 +51,6 @@ const std::string MetricsMainDiskStatsPath() {
 int main(int argc, char** argv) {
   DEFINE_bool(foreground, false, "Don't daemonize");
 
-  // The uploader is disabled by default on ChromeOS as Chrome is responsible
-  // for sending the metrics.
-  DEFINE_bool(uploader, false, "activate the uploader");
-
-  // Upload the metrics once and exit. (used for testing)
-  DEFINE_bool(uploader_test,
-              false,
-              "run the uploader once and exit");
-
-  // Enable dbus.
-  DEFINE_bool(withdbus, true, "Enable dbus");
-
-  // Upload Service flags.
-  DEFINE_int32(upload_interval_secs,
-               1800,
-               "Interval at which metrics_daemon sends the metrics. (needs "
-               "-uploader)");
-  DEFINE_string(server,
-                metrics::kMetricsServer,
-                "Server to upload the metrics to. (needs -uploader)");
   DEFINE_string(metrics_directory,
                 metrics::kMetricsDirectory,
                 "Root of the configuration files (testing only)");
@@ -102,20 +82,11 @@ int main(int argc, char** argv) {
 
   MetricsLibrary metrics_lib;
   metrics_lib.InitWithNoCaching();
-  MetricsDaemon daemon;
-  daemon.Init(FLAGS_uploader_test,
-              FLAGS_uploader | FLAGS_uploader_test,
-              FLAGS_withdbus,
+  MetricsCollector daemon;
+  daemon.Init(false,
               &metrics_lib,
               MetricsMainDiskStatsPath(),
-              base::TimeDelta::FromSeconds(FLAGS_upload_interval_secs),
-              FLAGS_server,
               base::FilePath(FLAGS_metrics_directory));
-
-  if (FLAGS_uploader_test) {
-    daemon.RunUploaderTest();
-    return 0;
-  }
 
   daemon.Run();
 }
