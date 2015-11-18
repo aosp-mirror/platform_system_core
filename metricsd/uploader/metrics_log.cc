@@ -27,25 +27,25 @@ MetricsLog::MetricsLog()
     : MetricsLogBase("", 0, metrics::MetricsLogBase::ONGOING_LOG, "") {
 }
 
-void MetricsLog::IncrementUserCrashCount() {
+void MetricsLog::IncrementUserCrashCount(unsigned int count) {
   metrics::SystemProfileProto::Stability* stability(
       uma_proto()->mutable_system_profile()->mutable_stability());
   int current = stability->other_user_crash_count();
-  stability->set_other_user_crash_count(current + 1);
+  stability->set_other_user_crash_count(current + count);
 }
 
-void MetricsLog::IncrementKernelCrashCount() {
+void MetricsLog::IncrementKernelCrashCount(unsigned int count) {
   metrics::SystemProfileProto::Stability* stability(
       uma_proto()->mutable_system_profile()->mutable_stability());
   int current = stability->kernel_crash_count();
-  stability->set_kernel_crash_count(current + 1);
+  stability->set_kernel_crash_count(current + count);
 }
 
-void MetricsLog::IncrementUncleanShutdownCount() {
+void MetricsLog::IncrementUncleanShutdownCount(unsigned int count) {
   metrics::SystemProfileProto::Stability* stability(
       uma_proto()->mutable_system_profile()->mutable_stability());
   int current = stability->unclean_system_shutdown_count();
-  stability->set_unclean_system_shutdown_count(current + 1);
+  stability->set_unclean_system_shutdown_count(current + count);
 }
 
 bool MetricsLog::PopulateSystemProfile(SystemProfileSetter* profile_setter) {
