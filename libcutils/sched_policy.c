@@ -264,8 +264,8 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
     policy = _policy(policy);
     pthread_once(&the_once, __initialize);
 
-    int fd;
-    int boost_fd;
+    int fd = -1;
+    int boost_fd = -1;
     switch (policy) {
     case SP_BACKGROUND:
         fd = bg_cpuset_fd;
