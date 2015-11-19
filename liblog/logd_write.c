@@ -54,13 +54,34 @@
 
 static int __write_to_log_init(log_id_t, struct iovec *vec, size_t nr);
 static int (*write_to_log)(log_id_t, struct iovec *vec, size_t nr) = __write_to_log_init;
-#if !defined(_WIN32)
-static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
-#endif
 
 #ifndef __unused
 #define __unused  __attribute__((__unused__))
 #endif
+
+#if !defined(_WIN32)
+static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void lock()
+{
+    /*
+     * If we trigger a signal handler in the middle of locked activity and the
+     * signal handler logs a message, we could get into a deadlock state.
+     */
+    pthread_mutex_lock(&log_init_lock);
+}
+
+static void unlock()
+{
+    pthread_mutex_unlock(&log_init_lock);
+}
+
+#else   /* !defined(_WIN32) */
+
+#define lock() ((void)0)
+#define unlock() ((void)0)
+
+#endif  /* !defined(_WIN32) */
 
 #if FAKE_LOG_DEVICE
 static int log_fds[(int)LOG_ID_MAX] = { -1, -1, -1, -1, -1 };
@@ -277,15 +298,11 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
     if (ret < 0) {
         ret = -errno;
         if (ret == -ENOTCONN) {
-#if !defined(_WIN32)
-            pthread_mutex_lock(&log_init_lock);
-#endif
+            lock();
             close(logd_fd);
             logd_fd = -1;
             ret = __write_to_log_initialize();
-#if !defined(_WIN32)
-            pthread_mutex_unlock(&log_init_lock);
-#endif
+            unlock();
 
             if (ret < 0) {
                 return ret;
@@ -329,18 +346,14 @@ const char *android_log_id_to_name(log_id_t log_id)
 
 static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
 {
-#if !defined(_WIN32)
-    pthread_mutex_lock(&log_init_lock);
-#endif
+    lock();
 
     if (write_to_log == __write_to_log_init) {
         int ret;
 
         ret = __write_to_log_initialize();
         if (ret < 0) {
-#if !defined(_WIN32)
-            pthread_mutex_unlock(&log_init_lock);
-#endif
+            unlock();
 #if (FAKE_LOG_DEVICE == 0)
             if (pstore_fd >= 0) {
                 __write_to_log_daemon(log_id, vec, nr);
@@ -352,9 +365,7 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
         write_to_log = __write_to_log_daemon;
     }
 
-#if !defined(_WIN32)
-    pthread_mutex_unlock(&log_init_lock);
-#endif
+    unlock();
 
     return write_to_log(log_id, vec, nr);
 }
