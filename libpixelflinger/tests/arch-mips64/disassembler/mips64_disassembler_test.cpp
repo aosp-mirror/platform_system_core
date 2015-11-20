@@ -123,13 +123,13 @@ struct test_branches_table_entry_t
 };
 
 static test_branches_table_entry_t test_branches_table [] = {
-    { 0x1000ffff, "b\t", 0xffff             },
-    { 0x13df0008, "beq\ts8,ra,", 0x8        },
-    { 0x042100ff, "bgez\tat,", 0xff         },
-    { 0x1c40ff00, "bgtz\tv0,", 0xff00       },
-    { 0x18605555, "blez\tv1,", 0x5555       },
-    { 0x0480aaaa, "bltz\ta0,", 0xaaaa       },
-    { 0x14a68888, "bne\ta1,a2,", 0x8888     },
+    { 0x1000ffff, "b\t", static_cast<int16_t>(0xffff)         },
+    { 0x13df0008, "beq\ts8,ra,", 0x8                          },
+    { 0x042100ff, "bgez\tat,", 0xff                           },
+    { 0x1c40ff00, "bgtz\tv0,", static_cast<int16_t>(0xff00)   },
+    { 0x18605555, "blez\tv1,", 0x5555                         },
+    { 0x0480aaaa, "bltz\ta0,", static_cast<int16_t>(0xaaaa)   },
+    { 0x14a68888, "bne\ta1,a2,", static_cast<int16_t>(0x8888) },
 };
 
 struct test_jump_table_entry_t
