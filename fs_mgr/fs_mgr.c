@@ -448,8 +448,15 @@ static int handle_encryptable(struct fstab *fstab, const struct fstab_rec* rec)
              "%s/convert_fbe", rec->mount_point);
     bool convert_fbe = (access(convert_fbe_name, F_OK) == 0);
 
+    /* Check for existence of convert_fbe breadcrumb file */
+    char convert_fde_name[PATH_MAX];
+    snprintf(convert_fde_name, sizeof(convert_fbe_name),
+             "%s/misc/vold/convert_fde", rec->mount_point);
+    bool convert_fde = (access(convert_fde_name, F_OK) == 0);
+
     /* If this is block encryptable, need to trigger encryption */
     if (   (rec->fs_mgr_flags & MF_FORCECRYPT)
+        || ((rec->fs_mgr_flags & MF_CRYPT) && convert_fde)
         || ((rec->fs_mgr_flags & MF_FORCEFDEORFBE) && !convert_fbe)
         || (device_is_force_encrypted() && fs_mgr_is_encryptable(rec))) {
         if (umount(rec->mount_point) == 0) {
