@@ -34,6 +34,7 @@
 #include "adb.h"
 #include "adb_auth.h"
 #include "adb_listeners.h"
+#include "adb_utils.h"
 #include "transport.h"
 
 static const char* root_seclabel = nullptr;
@@ -215,16 +216,6 @@ int adbd_main(int server_port) {
     fdevent_loop();
 
     return 0;
-}
-
-static void close_stdin() {
-    int fd = unix_open("/dev/null", O_RDONLY);
-    if (fd == -1) {
-        perror("failed to open /dev/null, stdin will remain open");
-        return;
-    }
-    dup2(fd, STDIN_FILENO);
-    unix_close(fd);
 }
 
 int main(int argc, char** argv) {
