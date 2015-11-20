@@ -73,6 +73,13 @@ struct ComplexValue {
 
 ssize_t ComplexValue::instanceCount = 0;
 
+struct KeyWithPointer {
+    int *ptr;
+    bool operator ==(const KeyWithPointer& other) const {
+        return *ptr == *other.ptr;
+    }
+};
+
 } // namespace
 
 
@@ -82,6 +89,10 @@ typedef LruCache<ComplexKey, ComplexValue> ComplexCache;
 
 template<> inline android::hash_t hash_type(const ComplexKey& value) {
     return hash_type(value.k);
+}
+
+template<> inline android::hash_t hash_type(const KeyWithPointer& value) {
+    return hash_type(*value.ptr);
 }
 
 class EntryRemovedCallback : public OnEntryRemoved<SimpleKey, StringValue> {
@@ -96,6 +107,14 @@ public:
     ssize_t callbackCount;
     SimpleKey lastKey;
     StringValue lastValue;
+};
+
+class InvalidateKeyCallback : public OnEntryRemoved<KeyWithPointer, StringValue> {
+public:
+    void operator()(KeyWithPointer& k, StringValue&) {
+        delete k.ptr;
+        k.ptr = nullptr;
+    }
 };
 
 class LruCacheTest : public testing::Test {
@@ -291,6 +310,25 @@ TEST_F(LruCacheTest, CallbackOnClear) {
     EXPECT_EQ(3U, cache.size());
     cache.clear();
     EXPECT_EQ(3, callback.callbackCount);
+}
+
+TEST_F(LruCacheTest, CallbackRemovesKeyWorksOK) {
+    LruCache<KeyWithPointer, StringValue> cache(1);
+    InvalidateKeyCallback callback;
+    cache.setOnEntryRemovedListener(&callback);
+    KeyWithPointer key1;
+    key1.ptr = new int(1);
+    KeyWithPointer key2;
+    key2.ptr = new int(2);
+
+    cache.put(key1, "one");
+    // As the size of the cache is 1, the put will call the callback.
+    // Make sure everything goes smoothly even if the callback invalidates
+    // the key (b/24785286)
+    cache.put(key2, "two");
+    EXPECT_EQ(1U, cache.size());
+    EXPECT_STREQ("two", cache.get(key2));
+    cache.clear();
 }
 
 TEST_F(LruCacheTest, IteratorCheck) {
