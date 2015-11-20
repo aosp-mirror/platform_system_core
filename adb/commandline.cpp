@@ -1296,6 +1296,11 @@ int adb_commandline(int argc, const char **argv) {
     TransportType transport_type = kTransportAny;
     int ack_reply_fd = -1;
 
+#if !defined(_WIN32)
+    // We'd rather have EPIPE than SIGPIPE.
+    signal(SIGPIPE, SIG_IGN);
+#endif
+
     // If defined, this should be an absolute path to
     // the directory containing all of the various system images
     // for a particular product.  If not defined, and the adb
@@ -1427,7 +1432,7 @@ int adb_commandline(int argc, const char **argv) {
                 fprintf(stderr, "reply fd for adb server to client communication not specified.\n");
                 return usage();
             }
-            r = adb_main(is_daemon, server_port, ack_reply_fd);
+            r = adb_server_main(is_daemon, server_port, ack_reply_fd);
         } else {
             r = launch_server(server_port);
         }
