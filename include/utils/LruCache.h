@@ -200,11 +200,11 @@ bool LruCache<TKey, TValue>::remove(const TKey& key) {
         return false;
     }
     Entry* entry = *find_result;
+    mSet->erase(entry);
     if (mListener) {
         (*mListener)(entry->key, entry->value);
     }
     detachFromCache(*entry);
-    mSet->erase(entry);
     delete entry;
     return true;
 }
