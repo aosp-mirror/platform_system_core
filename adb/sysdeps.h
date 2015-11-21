@@ -242,18 +242,6 @@ extern int  adb_setsockopt(int  fd, int  level, int  optname, const void*  optva
 #undef   setsockopt
 #define  setsockopt  ___xxx_setsockopt
 
-static __inline__  int  adb_socket_setbufsize( int   fd, int  bufsize )
-{
-    int opt = bufsize;
-    return adb_setsockopt(fd, SOL_SOCKET, SO_RCVBUF, (const void*)&opt, sizeof(opt));
-}
-
-static __inline__ void  disable_tcp_nagle( int  fd )
-{
-    int  on = 1;
-    adb_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (const void*)&on, sizeof(on));
-}
-
 extern int  adb_socketpair( int  sv[2] );
 
 static __inline__ int adb_is_absolute_host_path(const char* path) {
@@ -670,18 +658,6 @@ static __inline__ int adb_thread_setname(const std::string& name) {
 #endif
 }
 
-static __inline__  int  adb_socket_setbufsize(int fd, int  bufsize )
-{
-    int opt = bufsize;
-    return setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &opt, sizeof(opt));
-}
-
-static __inline__ void  disable_tcp_nagle(int fd)
-{
-    int  on = 1;
-    setsockopt( fd, IPPROTO_TCP, TCP_NODELAY, (void*)&on, sizeof(on) );
-}
-
 static __inline__ int  adb_setsockopt( int  fd, int  level, int  optname, const void*  optval, socklen_t  optlen )
 {
     return setsockopt( fd, level, optname, optval, optlen );
@@ -738,5 +714,10 @@ static __inline__ unsigned long adb_thread_id()
 }
 
 #endif /* !_WIN32 */
+
+static inline void disable_tcp_nagle(int fd) {
+    int off = 1;
+    adb_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &off, sizeof(off));
+}
 
 #endif /* _ADB_SYSDEPS_H */
