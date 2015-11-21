@@ -104,8 +104,8 @@ class SyncConnection {
     // difference to "adb sync" performance.
     bool SendSmallFile(const char* path_and_mode,
                        const char* rpath,
-                       const char* data, size_t data_length,
-                       unsigned mtime) {
+                       unsigned mtime,
+                       const char* data, size_t data_length) {
         Print(rpath);
 
         size_t path_length = strlen(path_and_mode);
@@ -116,8 +116,8 @@ class SyncConnection {
         }
 
         std::vector<char> buf(sizeof(SyncRequest) + path_length +
-                 sizeof(SyncRequest) + data_length +
-                 sizeof(SyncRequest));
+                              sizeof(SyncRequest) + data_length +
+                              sizeof(SyncRequest));
         char* p = &buf[0];
 
         SyncRequest* req_send = reinterpret_cast<SyncRequest*>(p);
@@ -142,6 +142,68 @@ class SyncConnection {
         if (!WriteFdExactly(fd, &buf[0], (p - &buf[0]))) return false;
 
         total_bytes += data_length;
+        return true;
+    }
+
+    bool SendLargeFile(const char* path_and_mode,
+                       const char* lpath, const char* rpath,
+                       unsigned mtime) {
+        if (!SendRequest(ID_SEND, path_and_mode)) {
+            Error("failed to send ID_SEND message '%s': %s", path_and_mode, strerror(errno));
+            return false;
+        }
+
+        struct stat st;
+        if (stat(lpath, &st) == -1) {
+            Error("cannot stat '%s': %s", lpath, strerror(errno));
+            return false;
+        }
+
+        uint64_t total_size = st.st_size;
+        uint64_t bytes_copied = 0;
+
+        int lfd = adb_open(lpath, O_RDONLY);
+        if (lfd < 0) {
+            Error("cannot open '%s': %s", lpath, strerror(errno));
+            return false;
+        }
+
+        syncsendbuf sbuf;
+        sbuf.id = ID_DATA;
+        while (true) {
+            int ret = adb_read(lfd, sbuf.data, max);
+            if (ret <= 0) {
+                if (ret < 0) {
+                    Error("cannot read '%s': %s", lpath, strerror(errno));
+                    adb_close(lfd);
+                    return false;
+                }
+                break;
+            }
+
+            sbuf.size = ret;
+            if (!WriteFdExactly(fd, &sbuf, sizeof(unsigned) * 2 + ret)) {
+                adb_close(lfd);
+                return false;
+            }
+            total_bytes += ret;
+
+            bytes_copied += ret;
+
+            int percentage = static_cast<int>(bytes_copied * 100 / total_size);
+            Printf("%s: %d%%", rpath, percentage);
+        }
+
+        adb_close(lfd);
+
+        syncmsg msg;
+        msg.data.id = ID_DONE;
+        msg.data.size = mtime;
+        if (!WriteFdExactly(fd, &msg.data, sizeof(msg.data))) {
+            Error("failed to send ID_DONE message for '%s': %s", rpath, strerror(errno));
+            return false;
+        }
+
         return true;
     }
 
@@ -285,68 +347,6 @@ static bool sync_stat(SyncConnection& sc, const char* path,
     return sc.SendRequest(ID_STAT, path) && sync_finish_stat(sc, timestamp, mode, size);
 }
 
-static bool SendLargeFile(SyncConnection& sc, const char* path_and_mode,
-                          const char* lpath, const char* rpath,
-                          unsigned mtime) {
-    if (!sc.SendRequest(ID_SEND, path_and_mode)) {
-        sc.Error("failed to send ID_SEND message '%s': %s", path_and_mode, strerror(errno));
-        return false;
-    }
-
-    struct stat st;
-    if (stat(lpath, &st) == -1) {
-        sc.Error("cannot stat '%s': %s", lpath, strerror(errno));
-        return false;
-    }
-
-    uint64_t total_size = st.st_size;
-    uint64_t bytes_copied = 0;
-
-    int lfd = adb_open(lpath, O_RDONLY);
-    if (lfd < 0) {
-        sc.Error("cannot open '%s': %s", lpath, strerror(errno));
-        return false;
-    }
-
-    syncsendbuf sbuf;
-    sbuf.id = ID_DATA;
-    while (true) {
-        int ret = adb_read(lfd, sbuf.data, sc.max);
-        if (ret <= 0) {
-            if (ret < 0) {
-                sc.Error("cannot read '%s': %s", lpath, strerror(errno));
-                adb_close(lfd);
-                return false;
-            }
-            break;
-        }
-
-        sbuf.size = ret;
-        if (!WriteFdExactly(sc.fd, &sbuf, sizeof(unsigned) * 2 + ret)) {
-            adb_close(lfd);
-            return false;
-        }
-        sc.total_bytes += ret;
-
-        bytes_copied += ret;
-
-        int percentage = static_cast<int>(bytes_copied * 100 / total_size);
-        sc.Printf("%s: %d%%", rpath, percentage);
-    }
-
-    adb_close(lfd);
-
-    syncmsg msg;
-    msg.data.id = ID_DONE;
-    msg.data.size = mtime;
-    if (!WriteFdExactly(sc.fd, &msg.data, sizeof(msg.data))) {
-        sc.Error("failed to send ID_DONE message for '%s': %s", rpath, strerror(errno));
-        return false;
-    }
-
-    return true;
-}
-
 static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath,
                       unsigned mtime, mode_t mode)
 {
@@ -362,7 +362,7 @@ static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath,
         }
         buf[data_length++] = '\0';
 
-        if (!sc.SendSmallFile(path_and_mode.c_str(), rpath, buf, data_length, mtime)) return false;
+        if (!sc.SendSmallFile(path_and_mode.c_str(), rpath, mtime, buf, data_length)) return false;
         return sc.CopyDone(lpath, rpath);
 #endif
     }
@@ -383,11 +383,11 @@ static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath,
             sc.Error("failed to read all of '%s': %s", lpath, strerror(errno));
             return false;
         }
-        if (!sc.SendSmallFile(path_and_mode.c_str(), rpath, data.data(), data.size(), mtime)) {
+        if (!sc.SendSmallFile(path_and_mode.c_str(), rpath, mtime, data.data(), data.size())) {
             return false;
         }
     } else {
-        if (!SendLargeFile(sc, path_and_mode.c_str(), lpath, rpath, mtime)) {
+        if (!sc.SendLargeFile(path_and_mode.c_str(), lpath, rpath, mtime)) {
             return false;
         }
     }
