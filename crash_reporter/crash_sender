@@ -65,6 +65,7 @@ PAUSE_CRASH_SENDING="${CRASH_STATE_DIR}/lock/crash_sender_paused"
 # Path to a directory of restricted certificates which includes
 # a certificate for the crash server.
 RESTRICTED_CERTIFICATES_PATH="/system/etc/security/cacerts"
+RESTRICTED_CERTIFICATES_PATH_GOOGLE="/system/etc/security/cacerts_google"
 
 # File whose existence implies we're running and not to start again.
 RUN_FILE="${CRASH_STATE_DIR}/run/crash_sender.pid"
@@ -180,6 +181,18 @@ is_developer_mode() {
     return 0
   else
     return 1
+  fi
+}
+
+# Returns the path of the certificates directory to be used when sending
+# reports to the crash server.
+# If crash_reporter.full_certs=1, return the full certificates path.
+# Otherwise return the Google-specific certificates path.
+get_certificates_path() {
+  if [ "$(getprop crash_reporter.full_certs)" = "1" ]; then
+    echo "${RESTRICTED_CERTIFICATES_PATH}"
+  else
+    echo "${RESTRICTED_CERTIFICATES_PATH_GOOGLE}"
   fi
 }
 
@@ -455,7 +468,7 @@ send_crash() {
 
   set +e
   curl "${url}" -f -v ${proxy:+--proxy "$proxy"} \
-    --capath "${RESTRICTED_CERTIFICATES_PATH}" --ciphers HIGH \
+    --capath "$(get_certificates_path)" --ciphers HIGH \
     -F "prod=${product}" \
     -F "ver=${version}" \
     -F "bdk_version=${bdk_version}" \
@@ -682,7 +695,7 @@ main() {
   # (like with autotests) that we're still running.
   echo $$ > "${RUN_FILE}"
 
-  for dependency in "${RESTRICTED_CERTIFICATES_PATH}"; do
+  for dependency in "$(get_certificates_path)"; do
     if [ ! -x "${dependency}" ]; then
       lecho "Fatal: Crash sending disabled: ${dependency} not found."
       exit 1
