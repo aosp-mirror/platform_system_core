@@ -104,6 +104,7 @@
 #define AID_NET_BW_ACCT   3007  /* change bandwidth statistics accounting */
 #define AID_NET_BT_STACK  3008  /* bluetooth: access config files */
 #define AID_READPROC      3009  /* Allow /proc read access */
+#define AID_WAKELOCK      3010  /* Allow system wakelock read/write access */
 
 /* The range 5000-5999 is also reserved for OEM, and must never be used here. */
 #define AID_OEM_RESERVED_2_START 5000
@@ -197,6 +198,7 @@ static const struct android_id_info android_ids[] = {
     { "net_bw_acct",   AID_NET_BW_ACCT, },
     { "net_bt_stack",  AID_NET_BT_STACK, },
     { "readproc",      AID_READPROC, },
+    { "wakelock",      AID_WAKELOCK, },
 
     { "everybody",     AID_EVERYBODY, },
     { "misc",          AID_MISC, },

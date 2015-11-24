@@ -432,8 +432,8 @@ on boot
     chown system system /sys/power/autosleep
     chown system system /sys/power/state
     chown system system /sys/power/wakeup_count
-    chown radio system /sys/power/wake_lock
-    chown radio system /sys/power/wake_unlock
+    chown radio wakelock /sys/power/wake_lock
+    chown radio wakelock /sys/power/wake_unlock
     chmod 0660 /sys/power/state
     chmod 0660 /sys/power/wake_lock
     chmod 0660 /sys/power/wake_unlock
@@ -562,7 +562,7 @@ service healthd /sbin/healthd
     class core
     critical
     seclabel u:r:healthd:s0
-    group root system
+    group root system wakelock
 
 service console /system/bin/sh
     class core
