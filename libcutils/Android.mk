@@ -31,7 +31,6 @@ libcutils_common_sources := \
         threads.c \
         sched_policy.c \
         iosched_policy.c \
-        str_parms.c \
         fs_config.c
 
 # some files must not be compiled when building against Mingw
@@ -47,6 +46,7 @@ libcutils_nonwindows_sources := \
         socket_loopback_server.c \
         socket_network_client.c \
         sockets.c \
+        str_parms.c \
 
 libcutils_nonwindows_host_sources := \
         ashmem-host.c \
@@ -60,8 +60,7 @@ LOCAL_SRC_FILES := $(libcutils_common_sources) dlmalloc_stubs.c
 LOCAL_SRC_FILES_darwin := $(libcutils_nonwindows_sources) $(libcutils_nonwindows_host_sources)
 LOCAL_SRC_FILES_linux := $(libcutils_nonwindows_sources) $(libcutils_nonwindows_host_sources)
 LOCAL_STATIC_LIBRARIES := liblog
-LOCAL_CFLAGS_darwin := -Werror -Wall -Wextra
-LOCAL_CFLAGS_linux := -Werror -Wall -Wextra
+LOCAL_CFLAGS := -Werror -Wall -Wextra
 LOCAL_MULTILIB := both
 LOCAL_MODULE_HOST_OS := darwin linux windows
 include $(BUILD_HOST_STATIC_LIBRARY)
@@ -72,8 +71,7 @@ LOCAL_SRC_FILES := $(libcutils_common_sources) dlmalloc_stubs.c
 LOCAL_SRC_FILES_darwin := $(libcutils_nonwindows_sources) $(libcutils_nonwindows_host_sources)
 LOCAL_SRC_FILES_linux := $(libcutils_nonwindows_sources) $(libcutils_nonwindows_host_sources)
 LOCAL_SHARED_LIBRARIES := liblog
-LOCAL_CFLAGS_darwin := -Werror -Wall -Wextra
-LOCAL_CFLAGS_linux := -Werror -Wall -Wextra
+LOCAL_CFLAGS := -Werror -Wall -Wextra
 LOCAL_MULTILIB := both
 include $(BUILD_HOST_SHARED_LIBRARY)
 
