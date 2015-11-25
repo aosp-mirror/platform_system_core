@@ -46,7 +46,7 @@ UploadService::UploadService(const std::string& server,
                              const base::FilePath& metrics_directory)
     : histogram_snapshot_manager_(this),
       sender_(new HttpSender(server)),
-      failed_upload_count_(metrics::kFailedUploadCountName),
+      failed_upload_count_(metrics::kFailedUploadCountName, metrics_directory),
       upload_interval_(upload_interval) {
   metrics_file_ = metrics_directory.Append(metrics::kMetricsEventsFileName);
   staged_log_path_ = metrics_directory.Append(metrics::kStagedLogName);

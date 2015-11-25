@@ -39,8 +39,6 @@ class UploadServiceTest : public testing::Test {
  protected:
   virtual void SetUp() {
     CHECK(dir_.CreateUniqueTempDir());
-    chromeos_metrics::PersistentInteger::SetMetricsDirectory(
-        dir_.path().value());
     metrics_lib_.InitForTest(dir_.path());
     ASSERT_EQ(0, base::WriteFile(
         dir_.path().Append(metrics::kConsentFileName), "", 0));
