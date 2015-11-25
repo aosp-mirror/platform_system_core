@@ -51,9 +51,13 @@ const std::string MetricsMainDiskStatsPath() {
 int main(int argc, char** argv) {
   DEFINE_bool(foreground, false, "Don't daemonize");
 
-  DEFINE_string(metrics_directory,
-                metrics::kMetricsDirectory,
-                "Root of the configuration files (testing only)");
+  DEFINE_string(private_directory, metrics::kMetricsCollectorDirectory,
+                "Path to the private directory used by metrics_collector "
+                "(testing only)");
+  DEFINE_string(shared_directory, metrics::kSharedMetricsDirectory,
+                "Path to the shared metrics directory, used by "
+                "metrics_collector, metricsd and all metrics clients "
+                "(testing only)");
 
   DEFINE_bool(logtostderr, false, "Log to standard error");
   DEFINE_bool(logtosyslog, false, "Log to syslog");
@@ -86,7 +90,8 @@ int main(int argc, char** argv) {
   daemon.Init(false,
               &metrics_lib,
               MetricsMainDiskStatsPath(),
-              base::FilePath(FLAGS_metrics_directory));
+              base::FilePath(FLAGS_private_directory),
+              base::FilePath(FLAGS_shared_directory));
 
   daemon.Run();
 }
