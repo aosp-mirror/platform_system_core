@@ -1,7 +1,8 @@
+#include "fs.h"
+
 #include "fastboot.h"
 #include "make_ext4fs.h"
 #include "make_f2fs.h"
-#include "fs.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -13,24 +14,32 @@
 
 #include <sparse/sparse.h>
 
-static int generate_ext4_image(int fd, long long partSize)
+static int generate_ext4_image(int fd, long long partSize, const std::string& initial_dir)
 {
-    make_ext4fs_sparse_fd(fd, partSize, NULL, NULL);
-
+    if (initial_dir.empty()) {
+        make_ext4fs_sparse_fd(fd, partSize, NULL, NULL);
+    } else {
+        make_ext4fs_sparse_fd_directory(fd, partSize, NULL, NULL, initial_dir.c_str());
+    }
     return 0;
 }
 
 #ifdef USE_F2FS
-static int generate_f2fs_image(int fd, long long partSize)
+static int generate_f2fs_image(int fd, long long partSize, const std::string& initial_dir)
 {
+    if (!initial_dir.empty()) {
+        fprintf(stderr, "Unable to set initial directory on F2FS filesystem\n");
+        return -1;
+    }
     return make_f2fs_sparse_fd(fd, partSize, NULL, NULL);
 }
 #endif
 
 static const struct fs_generator {
-
     const char* fs_type;  //must match what fastboot reports for partition type
-    int (*generate)(int fd, long long partSize); //returns 0 or error value
+
+    //returns 0 or error value
+    int (*generate)(int fd, long long partSize, const std::string& initial_dir);
 
 } generators[] = {
     { "ext4", generate_ext4_image},
@@ -48,7 +57,8 @@ const struct fs_generator* fs_get_generator(const std::string& fs_type) {
     return nullptr;
 }
 
-int fs_generator_generate(const struct fs_generator* gen, int tmpFileNo, long long partSize)
+int fs_generator_generate(const struct fs_generator* gen, int tmpFileNo, long long partSize,
+    const std::string& initial_dir)
 {
-    return gen->generate(tmpFileNo, partSize);
+    return gen->generate(tmpFileNo, partSize, initial_dir);
 }

@@ -81,6 +81,8 @@ static unsigned ramdisk_offset = 0x01000000;
 static unsigned second_offset  = 0x00f00000;
 static unsigned tags_offset    = 0x00000100;
 
+static const std::string convert_fbe_marker_filename("convert_fbe");
+
 enum fb_buffer_type {
     FB_BUFFER,
     FB_BUFFER_SPARSE,
@@ -322,11 +324,17 @@ static void usage() {
             "                                           provided, this will default to the value\n"
             "                                           given by --slot. If slots are not\n"
             "                                           supported, this does nothing.\n"
+#if !defined(_WIN32)
+            "  --wipe-and-use-fbe                       On devices which support it,\n"
+            "                                           erase userdata and cache, and\n"
+            "                                           enable file-based encryption\n"
+#endif
             "  --unbuffered                             Do not buffer input or output.\n"
             "  --version                                Display version.\n"
             "  -h, --help                               show this message.\n"
         );
 }
+
 static void* load_bootable_image(const char* kernel, const char* ramdisk,
                                  const char* secondstage, int64_t* sz,
                                  const char* cmdline) {
@@ -446,7 +454,59 @@ static FILE* win32_tmpfile() {
 
 #define tmpfile win32_tmpfile
 
+static std::string make_temporary_directory() {
+    fprintf(stderr, "make_temporary_directory not supported under Windows, sorry!");
+    return "";
+}
+
+#else
+
+static std::string make_temporary_directory() {
+    const char *tmpdir = getenv("TMPDIR");
+    if (tmpdir == nullptr) {
+        tmpdir = P_tmpdir;
+    }
+    std::string result = std::string(tmpdir) + "/fastboot_userdata_XXXXXX";
+    if (mkdtemp(&result[0]) == NULL) {
+        fprintf(stderr, "Unable to create temporary directory: %s\n",
+            strerror(errno));
+        return "";
+    }
+    return result;
+}
+
 #endif
+
+static std::string create_fbemarker_tmpdir() {
+    std::string dir = make_temporary_directory();
+    if (dir.empty()) {
+        fprintf(stderr, "Unable to create local temp directory for FBE marker\n");
+        return "";
+    }
+    std::string marker_file = dir + "/" + convert_fbe_marker_filename;
+    int fd = open(marker_file.c_str(), O_CREAT | O_WRONLY | O_CLOEXEC, 0666);
+    if (fd == -1) {
+        fprintf(stderr, "Unable to create FBE marker file %s locally: %d, %s\n",
+            marker_file.c_str(), errno, strerror(errno));
+        return "";
+    }
+    close(fd);
+    return dir;
+}
+
+static void delete_fbemarker_tmpdir(const std::string& dir) {
+    std::string marker_file = dir + "/" + convert_fbe_marker_filename;
+    if (unlink(marker_file.c_str()) == -1) {
+        fprintf(stderr, "Unable to delete FBE marker file %s locally: %d, %s\n",
+            marker_file.c_str(), errno, strerror(errno));
+        return;
+    }
+    if (rmdir(dir.c_str()) == -1) {
+        fprintf(stderr, "Unable to delete FBE marker directory %s locally: %d, %s\n",
+            dir.c_str(), errno, strerror(errno));
+        return;
+    }
+}
 
 static int unzip_to_file(ZipArchiveHandle zip, char* entry_name) {
     FILE* fp = tmpfile();
@@ -994,7 +1054,8 @@ static int64_t parse_num(const char *arg)
 
 static void fb_perform_format(Transport* transport,
                               const char* partition, int skip_if_not_supported,
-                              const char* type_override, const char* size_override) {
+                              const char* type_override, const char* size_override,
+                              const std::string& initial_dir) {
     std::string partition_type, partition_size;
 
     struct fastboot_buffer buf;
@@ -1058,7 +1119,7 @@ static void fb_perform_format(Transport* transport,
     }
 
     fd = fileno(tmpfile());
-    if (fs_generator_generate(gen, fd, size)) {
+    if (fs_generator_generate(gen, fd, size, initial_dir)) {
         fprintf(stderr, "Cannot generate image: %s\n", strerror(errno));
         close(fd);
         return;
@@ -1087,6 +1148,7 @@ int main(int argc, char **argv)
     bool wants_reboot_bootloader = false;
     bool wants_set_active = false;
     bool erase_first = true;
+    bool set_fbe_marker = false;
     void *data;
     int64_t sz;
     int longindex;
@@ -1109,6 +1171,9 @@ int main(int argc, char **argv)
         {"slot", required_argument, 0, 0},
         {"set_active", optional_argument, 0, 'a'},
         {"set-active", optional_argument, 0, 'a'},
+#if !defined(_WIN32)
+        {"wipe-and-use-fbe", no_argument, 0, 0},
+#endif
         {0, 0, 0, 0}
     };
 
@@ -1190,6 +1255,15 @@ int main(int argc, char **argv)
                 return 0;
             } else if (strcmp("slot", longopts[longindex].name) == 0) {
                 slot_override = std::string(optarg);
+#if !defined(_WIN32)
+            } else if (strcmp("wipe-and-use-fbe", longopts[longindex].name) == 0) {
+                wants_wipe = true;
+                set_fbe_marker = true;
+#endif
+            } else {
+                fprintf(stderr, "Internal error in options processing for %s\n",
+                    longopts[longindex].name);
+                return 1;
             }
             break;
         default:
@@ -1283,7 +1357,8 @@ int main(int argc, char **argv)
                 if (erase_first && needs_erase(transport, partition.c_str())) {
                     fb_queue_erase(partition.c_str());
                 }
-                fb_perform_format(transport, partition.c_str(), 0, type_override, size_override);
+                fb_perform_format(transport, partition.c_str(), 0,
+                    type_override, size_override, "");
             };
             do_for_partitions(transport, argv[1], slot_override.c_str(), format, true);
             skip(2);
@@ -1413,13 +1488,23 @@ int main(int argc, char **argv)
     if (wants_wipe) {
         fprintf(stderr, "wiping userdata...\n");
         fb_queue_erase("userdata");
-        fb_perform_format(transport, "userdata", 1, nullptr, nullptr);
+        if (set_fbe_marker) {
+            fprintf(stderr, "setting FBE marker...\n");
+            std::string initial_userdata_dir = create_fbemarker_tmpdir();
+            if (initial_userdata_dir.empty()) {
+                return 1;
+            }
+            fb_perform_format(transport, "userdata", 1, nullptr, nullptr, initial_userdata_dir);
+            delete_fbemarker_tmpdir(initial_userdata_dir);
+        } else {
+            fb_perform_format(transport, "userdata", 1, nullptr, nullptr, "");
+        }
 
         std::string cache_type;
         if (fb_getvar(transport, "partition-type:cache", &cache_type) && !cache_type.empty()) {
             fprintf(stderr, "wiping cache...\n");
             fb_queue_erase("cache");
-            fb_perform_format(transport, "cache", 1, nullptr, nullptr);
+            fb_perform_format(transport, "cache", 1, nullptr, nullptr, "");
         }
     }
     if (wants_set_active) {
