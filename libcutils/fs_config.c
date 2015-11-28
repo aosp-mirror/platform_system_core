@@ -132,10 +132,9 @@ static const struct fs_path_config android_files[] = {
     { 00750, AID_ROOT,      AID_SHELL,     0, "data/nativetest/*" },
     { 00750, AID_ROOT,      AID_SHELL,     0, "data/nativetest64/*" },
 
-    /* the following four files are INTENTIONALLY set-uid, but they
+    /* the following three files are INTENTIONALLY set-uid, but they
      * are NOT included on user builds. */
     { 04750, AID_ROOT,      AID_SHELL,     0, "system/xbin/su" },
-    { 06755, AID_ROOT,      AID_ROOT,      0, "system/xbin/librank" },
     { 06755, AID_ROOT,      AID_ROOT,      0, "system/xbin/procmem" },
     { 04770, AID_ROOT,      AID_RADIO,     0, "system/bin/pppd-ril" },
 
