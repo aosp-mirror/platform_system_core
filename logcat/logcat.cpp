@@ -257,13 +257,19 @@ static void show_help(const char *cmd)
                     "  -s              Set default filter to silent.\n"
                     "                  Like specifying filterspec '*:S'\n"
                     "  -f <filename>   Log to file. Default is stdout\n"
+                    "  --file=<filename>\n"
                     "  -r <kbytes>     Rotate log every kbytes. Requires -f\n"
+                    "  --rotate_kbytes=<kbytes>\n"
                     "  -n <count>      Sets max number of rotated logs to <count>, default 4\n"
-                    "  -v <format>     Sets the log print format, where <format> is:\n\n"
+                    "  --rotate_count=<count>\n"
+                    "  -v <format>     Sets the log print format, where <format> is:\n"
+                    "  --format=<format>\n"
                     "                      brief color epoch long monotonic printable process raw\n"
                     "                      tag thread threadtime time usec UTC year zone\n\n"
                     "  -D              print dividers between each log buffer\n"
+                    "  --dividers\n"
                     "  -c              clear (flush) the entire log and exit\n"
+                    "  --clear\n"
                     "  -d              dump the log and then exit (don't block)\n"
                     "  -t <count>      print only the most recent <count> lines (implies -d)\n"
                     "  -t '<time>'     print most recent lines since specified time (implies -d)\n"
@@ -272,22 +278,27 @@ static void show_help(const char *cmd)
                     "                  count is pure numerical, time is 'MM-DD hh:mm:ss.mmm...'\n"
                     "                  'YYYY-MM-DD hh:mm:ss.mmm...' or 'sssss.mmm...' format\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
+                    "  --buffer_size\n"
+                    "  -G <size>       set size of log ring buffer, may suffix with K or M.\n"
+                    "  --buffer_size=<size>\n"
                     "  -L              dump logs from prior to last reboot\n"
+                    "  --last\n"
                     "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio',\n"
-                    "                  'events', 'crash' or 'all'. Multiple -b parameters are\n"
+                    "  --buffer=<buffer> 'events', 'crash' or 'all'. Multiple -b parameters are\n"
                     "                  allowed and results are interleaved. The default is\n"
                     "                  -b main -b system -b crash.\n"
                     "  -B              output the log in binary.\n"
+                    "  --binary\n"
                     "  -S              output statistics.\n"
-                    "  -G <size>       set size of log ring buffer, may suffix with K or M.\n"
+                    "  --statistics\n"
                     "  -p              print prune white and ~black list. Service is specified as\n"
-                    "                  UID, UID/PID or /PID. Weighed for quicker pruning if prefix\n"
+                    "  --prune         UID, UID/PID or /PID. Weighed for quicker pruning if prefix\n"
                     "                  with ~, otherwise weighed for longevity if unadorned. All\n"
                     "                  other pruning activity is oldest first. Special case ~!\n"
                     "                  represents an automatic quicker pruning for the noisiest\n"
                     "                  UID as determined by the current statistics.\n"
                     "  -P '<list> ...' set prune white and ~black list, using same format as\n"
-                    "                  printed above. Must be quoted.\n"
+                    "  --prune='<list> ...'  printed above. Must be quoted.\n"
                     "  --pid=<pid>     Only prints logs from the given pid.\n");
 
     fprintf(stderr,"\nfilterspecs are a series of \n"
@@ -520,7 +531,19 @@ int main(int argc, char **argv)
         int option_index = 0;
         static const char pid_str[] = "pid";
         static const struct option long_options[] = {
+          { "binary",        no_argument,       NULL,   'B' },
+          { "buffer",        required_argument, NULL,   'b' },
+          { "buffer_size",   optional_argument, NULL,   'g' },
+          { "clear",         no_argument,       NULL,   'c' },
+          { "dividers",      no_argument,       NULL,   'D' },
+          { "file",          required_argument, NULL,   'f' },
+          { "format",        required_argument, NULL,   'v' },
+          { "last",          no_argument,       NULL,   'L' },
           { pid_str,         required_argument, NULL,   0 },
+          { "prune",         optional_argument, NULL,   'p' },
+          { "rotate_count",  required_argument, NULL,   'n' },
+          { "rotate_kbytes", required_argument, NULL,   'r' },
+          { "statistics",    no_argument,       NULL,   'S' },
           { NULL,            0,                 NULL,   0 }
         };
 
@@ -595,8 +618,11 @@ int main(int argc, char **argv)
             break;
 
             case 'g':
-                getLogSize = 1;
-            break;
+                if (!optarg) {
+                    getLogSize = 1;
+                    break;
+                }
+                // FALLTHRU
 
             case 'G': {
                 char *cp;
@@ -634,8 +660,11 @@ int main(int argc, char **argv)
             break;
 
             case 'p':
-                getPruneList = 1;
-            break;
+                if (!optarg) {
+                    getPruneList = 1;
+                    break;
+                }
+                // FALLTHRU
 
             case 'P':
                 setPruneList = optarg;
