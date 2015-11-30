@@ -552,11 +552,12 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist
         } else {
             if (!S_ISREG(st.st_mode) && !S_ISLNK(st.st_mode)) {
                 sc.Error("skipping special file '%s'", lpath.c_str());
+                ci.skip = true;
             } else {
                 ci.time = st.st_mtime;
                 ci.size = st.st_size;
-                filelist->push_back(ci);
             }
+            filelist->push_back(ci);
         }
     }
 
@@ -723,8 +724,7 @@ static bool remote_build_list(SyncConnection& sc,
     bool empty_dir = true;
 
     // Put the files/dirs in rpath on the lists.
-    auto callback = [&](unsigned mode, unsigned size, unsigned time,
-                        const char* name) {
+    auto callback = [&](unsigned mode, unsigned size, unsigned time, const char* name) {
         if (IsDotOrDotDot(name)) {
             return;
         }
@@ -735,12 +735,15 @@ static bool remote_build_list(SyncConnection& sc,
         copyinfo ci = mkcopyinfo(lpath, rpath, name, mode);
         if (S_ISDIR(mode)) {
             dirlist.push_back(ci);
-        } else if (S_ISREG(mode) || S_ISLNK(mode)) {
-            ci.time = time;
-            ci.size = size;
-            filelist->push_back(ci);
         } else {
-            sc.Warning("skipping special file '%s'\n", name);
+            if (S_ISREG(mode) || S_ISLNK(mode)) {
+                ci.time = time;
+                ci.size = size;
+            } else {
+                sc.Warning("skipping special file '%s'\n", name);
+                ci.skip = true;
+            }
+            filelist->push_back(ci);
         }
     };
 
