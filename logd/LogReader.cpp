@@ -67,6 +67,14 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
         start.strptime(cp + sizeof(_start) - 1, "%s.%q");
     }
 
+    uint64_t timeout = 0;
+    static const char _timeout[] = " timeout=";
+    cp = strstr(buffer, _timeout);
+    if (cp) {
+        timeout = atol(cp + sizeof(_timeout) - 1) * NS_PER_SEC +
+                  log_time(CLOCK_REALTIME).nsec();
+    }
+
     unsigned int logMask = -1;
     static const char _logIds[] = " lids=";
     cp = strstr(buffer, _logIds);
@@ -166,7 +174,7 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
         }
     }
 
-    FlushCommand command(*this, nonBlock, tail, logMask, pid, sequence);
+    FlushCommand command(*this, nonBlock, tail, logMask, pid, sequence, timeout);
     command.runSocketCommand(cli);
     return true;
 }
