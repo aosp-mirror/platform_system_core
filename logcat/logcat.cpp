@@ -299,7 +299,11 @@ static void show_help(const char *cmd)
                     "                  UID as determined by the current statistics.\n"
                     "  -P '<list> ...' set prune white and ~black list, using same format as\n"
                     "  --prune='<list> ...'  printed above. Must be quoted.\n"
-                    "  --pid=<pid>     Only prints logs from the given pid.\n");
+                    "  --pid=<pid>     Only prints logs from the given pid.\n"
+                    // Check ANDROID_LOG_WRAP_DEFAULT_TIMEOUT value
+                    "  --wrap          Sleep for 2 hours or when buffer about to wrap whichever\n"
+                    "                  comes first. Improves efficiency of polling by providing\n"
+                    "                  an about-to-wrap wakeup.\n");
 
     fprintf(stderr,"\nfilterspecs are a series of \n"
                    "  <tag>[:priority]\n\n"
@@ -530,6 +534,7 @@ int main(int argc, char **argv)
 
         int option_index = 0;
         static const char pid_str[] = "pid";
+        static const char wrap_str[] = "wrap";
         static const struct option long_options[] = {
           { "binary",        no_argument,       NULL,   'B' },
           { "buffer",        required_argument, NULL,   'b' },
@@ -544,6 +549,8 @@ int main(int argc, char **argv)
           { "rotate_count",  required_argument, NULL,   'n' },
           { "rotate_kbytes", required_argument, NULL,   'r' },
           { "statistics",    no_argument,       NULL,   'S' },
+          // support, but ignore and do not document, the optional argument
+          { wrap_str,        optional_argument, NULL,   0 },
           { NULL,            0,                 NULL,   0 }
         };
 
@@ -562,6 +569,24 @@ int main(int argc, char **argv)
                     if (!getSizeTArg(optarg, &pid, 1)) {
                         logcat_panic(true, "%s %s out of range\n",
                                      long_options[option_index].name, optarg);
+                    }
+                    break;
+                }
+                if (long_options[option_index].name == wrap_str) {
+                    mode |= ANDROID_LOG_WRAP |
+                            ANDROID_LOG_RDONLY |
+                            ANDROID_LOG_NONBLOCK;
+                    // ToDo: implement API that supports setting a wrap timeout
+                    size_t dummy = ANDROID_LOG_WRAP_DEFAULT_TIMEOUT;
+                    if (optarg && !getSizeTArg(optarg, &dummy, 1)) {
+                        logcat_panic(true, "%s %s out of range\n",
+                                     long_options[option_index].name, optarg);
+                    }
+                    if (dummy != ANDROID_LOG_WRAP_DEFAULT_TIMEOUT) {
+                        fprintf(stderr,
+                                "WARNING: %s %u seconds, ignoring %zu\n",
+                                long_options[option_index].name,
+                                ANDROID_LOG_WRAP_DEFAULT_TIMEOUT, dummy);
                     }
                     break;
                 }
