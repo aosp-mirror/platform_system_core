@@ -12,6 +12,7 @@ on boot
     chown root shell /sys/kernel/debug/tracing/options/print-tgid
     chown root shell /sys/kernel/debug/tracing/events/sched/sched_switch/enable
     chown root shell /sys/kernel/debug/tracing/events/sched/sched_wakeup/enable
+    chown root shell /sys/kernel/debug/tracing/events/sched/sched_blocked_reason/enable
     chown root shell /sys/kernel/debug/tracing/events/power/cpu_frequency/enable
     chown root shell /sys/kernel/debug/tracing/events/power/cpu_idle/enable
     chown root shell /sys/kernel/debug/tracing/events/power/clock_set_rate/enable
@@ -24,6 +25,7 @@ on boot
     chmod 0664 /sys/kernel/debug/tracing/options/print-tgid
     chmod 0664 /sys/kernel/debug/tracing/events/sched/sched_switch/enable
     chmod 0664 /sys/kernel/debug/tracing/events/sched/sched_wakeup/enable
+    chmod 0664 /sys/kernel/debug/tracing/events/sched/sched_blocked_reason/enable
     chmod 0664 /sys/kernel/debug/tracing/events/power/cpu_frequency/enable
     chmod 0664 /sys/kernel/debug/tracing/events/power/cpu_idle/enable
     chmod 0664 /sys/kernel/debug/tracing/events/power/clock_set_rate/enable
