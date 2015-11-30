@@ -740,7 +740,7 @@ static bool remote_build_list(SyncConnection& sc,
                 ci.time = time;
                 ci.size = size;
             } else {
-                sc.Warning("skipping special file '%s'\n", name);
+                sc.Warning("skipping special file '%s'", name);
                 ci.skip = true;
             }
             filelist->push_back(ci);
