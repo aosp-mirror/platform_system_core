@@ -395,6 +395,7 @@ on post-fs-data
     mkdir /data/system 0775 system system
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/system_ce 0770 system system
+    mkdir /data/system_ce/0 0770 system system
 
     mkdir /data/user 0711 system system
     mkdir /data/user_de 0711 system system
