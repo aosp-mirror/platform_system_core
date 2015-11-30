@@ -736,9 +736,12 @@ static bool remote_build_list(SyncConnection& sc,
         if (S_ISDIR(mode)) {
             dirlist.push_back(ci);
         } else {
-            if (S_ISREG(mode) || S_ISLNK(mode)) {
+            if (S_ISREG(mode)) {
                 ci.time = time;
                 ci.size = size;
+            } else if (S_ISLNK(mode)) {
+                sc.Warning("skipping symlink '%s'", name);
+                ci.skip = true;
             } else {
                 sc.Warning("skipping special file '%s'", name);
                 ci.skip = true;
