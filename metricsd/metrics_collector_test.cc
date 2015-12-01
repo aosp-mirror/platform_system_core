@@ -45,9 +45,6 @@ class MetricsCollectorTest : public testing::Test {
   virtual void SetUp() {
     brillo::FlagHelper::Init(0, nullptr, "");
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
-
-    chromeos_metrics::PersistentInteger::SetMetricsDirectory(
-        temp_dir_.path().value());
     daemon_.Init(true, &metrics_lib_, "", temp_dir_.path());
   }
 

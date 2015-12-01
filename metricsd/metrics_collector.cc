@@ -149,51 +149,52 @@ uint32_t MetricsCollector::GetOsVersionHash() {
   return version_hash;
 }
 
-void MetricsCollector::Init(bool testing,
-                         MetricsLibraryInterface* metrics_lib,
-                         const string& diskstats_path,
-                         const base::FilePath& metrics_directory) {
+void MetricsCollector::Init(bool testing, MetricsLibraryInterface* metrics_lib,
+                            const string& diskstats_path,
+                            const base::FilePath& metrics_directory) {
   CHECK(metrics_lib);
   testing_ = testing;
   metrics_directory_ = metrics_directory;
   metrics_lib_ = metrics_lib;
 
   daily_active_use_.reset(
-      new PersistentInteger("Platform.UseTime.PerDay"));
+      new PersistentInteger("Platform.UseTime.PerDay", metrics_directory_));
   version_cumulative_active_use_.reset(
-      new PersistentInteger("Platform.CumulativeUseTime"));
+      new PersistentInteger("Platform.CumulativeUseTime", metrics_directory_));
   version_cumulative_cpu_use_.reset(
-      new PersistentInteger("Platform.CumulativeCpuTime"));
+      new PersistentInteger("Platform.CumulativeCpuTime", metrics_directory_));
 
-  kernel_crash_interval_.reset(
-      new PersistentInteger("Platform.KernelCrashInterval"));
-  unclean_shutdown_interval_.reset(
-      new PersistentInteger("Platform.UncleanShutdownInterval"));
+  kernel_crash_interval_.reset(new PersistentInteger(
+      "Platform.KernelCrashInterval", metrics_directory_));
+  unclean_shutdown_interval_.reset(new PersistentInteger(
+      "Platform.UncleanShutdownInterval", metrics_directory_));
   user_crash_interval_.reset(
-      new PersistentInteger("Platform.UserCrashInterval"));
+      new PersistentInteger("Platform.UserCrashInterval", metrics_directory_));
 
   any_crashes_daily_count_.reset(
-      new PersistentInteger("Platform.AnyCrashes.PerDay"));
+      new PersistentInteger("Platform.AnyCrashes.PerDay", metrics_directory_));
   any_crashes_weekly_count_.reset(
-      new PersistentInteger("Platform.AnyCrashes.PerWeek"));
+      new PersistentInteger("Platform.AnyCrashes.PerWeek", metrics_directory_));
   user_crashes_daily_count_.reset(
-      new PersistentInteger("Platform.UserCrashes.PerDay"));
-  user_crashes_weekly_count_.reset(
-      new PersistentInteger("Platform.UserCrashes.PerWeek"));
-  kernel_crashes_daily_count_.reset(
-      new PersistentInteger("Platform.KernelCrashes.PerDay"));
-  kernel_crashes_weekly_count_.reset(
-      new PersistentInteger("Platform.KernelCrashes.PerWeek"));
-  kernel_crashes_version_count_.reset(
-      new PersistentInteger("Platform.KernelCrashesSinceUpdate"));
-  unclean_shutdowns_daily_count_.reset(
-      new PersistentInteger("Platform.UncleanShutdown.PerDay"));
-  unclean_shutdowns_weekly_count_.reset(
-      new PersistentInteger("Platform.UncleanShutdowns.PerWeek"));
+      new PersistentInteger("Platform.UserCrashes.PerDay", metrics_directory_));
+  user_crashes_weekly_count_.reset(new PersistentInteger(
+      "Platform.UserCrashes.PerWeek", metrics_directory_));
+  kernel_crashes_daily_count_.reset(new PersistentInteger(
+      "Platform.KernelCrashes.PerDay", metrics_directory_));
+  kernel_crashes_weekly_count_.reset(new PersistentInteger(
+      "Platform.KernelCrashes.PerWeek", metrics_directory_));
+  kernel_crashes_version_count_.reset(new PersistentInteger(
+      "Platform.KernelCrashesSinceUpdate", metrics_directory_));
+  unclean_shutdowns_daily_count_.reset(new PersistentInteger(
+      "Platform.UncleanShutdown.PerDay", metrics_directory_));
+  unclean_shutdowns_weekly_count_.reset(new PersistentInteger(
+      "Platform.UncleanShutdowns.PerWeek", metrics_directory_));
 
-  daily_cycle_.reset(new PersistentInteger("daily.cycle"));
-  weekly_cycle_.reset(new PersistentInteger("weekly.cycle"));
-  version_cycle_.reset(new PersistentInteger("version.cycle"));
+  daily_cycle_.reset(new PersistentInteger("daily.cycle", metrics_directory_));
+  weekly_cycle_.reset(
+      new PersistentInteger("weekly.cycle", metrics_directory_));
+  version_cycle_.reset(
+      new PersistentInteger("version.cycle", metrics_directory_));
 
   disk_usage_collector_.reset(new DiskUsageCollector(metrics_lib_));
   averaged_stats_collector_.reset(
