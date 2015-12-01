@@ -1,5 +1,7 @@
 on post-fs-data
     mkdir /data/misc/metrics 0770 system system
+    mkdir /data/misc/metricsd 0700 system system
+    mkdir /data/misc/metrics_collector 0700 system system
 
 service metricsd /system/bin/metricsd --foreground --logtosyslog
     class late_start

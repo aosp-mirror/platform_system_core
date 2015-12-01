@@ -18,7 +18,10 @@
 #define METRICS_CONSTANTS_H_
 
 namespace metrics {
-static const char kMetricsDirectory[] = "/data/misc/metrics/";
+static const char kSharedMetricsDirectory[] = "/data/misc/metrics/";
+static const char kMetricsdDirectory[] = "/data/misc/metricsd/";
+static const char kMetricsCollectorDirectory[] =
+    "/data/misc/metrics_collector/";
 static const char kMetricsEventsFileName[] = "uma-events";
 static const char kMetricsGUIDFileName[] = "Sysinfo.GUID";
 static const char kMetricsServer[] = "https://clients4.google.com/uma/v2";
