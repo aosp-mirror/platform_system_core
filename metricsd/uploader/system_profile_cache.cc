@@ -55,11 +55,10 @@ std::string ChannelToString(
 
 SystemProfileCache::SystemProfileCache()
     : initialized_(false),
-    testing_(false),
-    metrics_directory_(metrics::kMetricsDirectory),
-    session_id_(new chromeos_metrics::PersistentInteger(
-        kPersistentSessionIdFilename)) {
-}
+      testing_(false),
+      metrics_directory_(metrics::kMetricsDirectory),
+      session_id_(new chromeos_metrics::PersistentInteger(
+          kPersistentSessionIdFilename, metrics_directory_)) {}
 
 SystemProfileCache::SystemProfileCache(bool testing,
                                        const base::FilePath& metrics_directory)
@@ -67,8 +66,7 @@ SystemProfileCache::SystemProfileCache(bool testing,
       testing_(testing),
       metrics_directory_(metrics_directory),
       session_id_(new chromeos_metrics::PersistentInteger(
-          kPersistentSessionIdFilename)) {
-}
+          kPersistentSessionIdFilename, metrics_directory)) {}
 
 bool SystemProfileCache::Initialize() {
   CHECK(!initialized_)
