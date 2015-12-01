@@ -439,7 +439,7 @@ TEST(logd, benchmark) {
 
     EXPECT_GE(250000UL, ns[log_overhead]); // 126886 user
 
-    EXPECT_GE(10000UL, ns[log_latency]); // 5669 user space
+    EXPECT_GE(10000000UL, ns[log_latency]); // 1453559 user space (background cgroup)
 
     EXPECT_GE(20000000UL, ns[log_delay]); // 10500289 user
 
