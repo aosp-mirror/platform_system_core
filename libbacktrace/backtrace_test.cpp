@@ -775,16 +775,29 @@ TEST(libbacktrace, format_test) {
             backtrace->FormatFrameData(&frame));
 
   // Check map name empty, but exists.
-  frame.map.start = 1;
-  frame.map.end = 1;
+  frame.pc = 0xb0020;
+  frame.map.start = 0xb0000;
+  frame.map.end = 0xbffff;
   frame.map.load_base = 0;
 #if defined(__LP64__)
-  EXPECT_EQ("#01 pc 0000000000000001  <unknown>",
+  EXPECT_EQ("#01 pc 0000000000000020  <anonymous:00000000000b0000>",
 #else
-  EXPECT_EQ("#01 pc 00000001  <unknown>",
+  EXPECT_EQ("#01 pc 00000020  <anonymous:000b0000>",
 #endif
             backtrace->FormatFrameData(&frame));
 
+  // Check map name begins with a [.
+  frame.pc = 0xc0020;
+  frame.map.start = 0xc0000;
+  frame.map.end = 0xcffff;
+  frame.map.load_base = 0;
+  frame.map.name = "[anon:thread signal stack]";
+#if defined(__LP64__)
+  EXPECT_EQ("#01 pc 0000000000000020  [anon:thread signal stack:00000000000c0000]",
+#else
+  EXPECT_EQ("#01 pc 00000020  [anon:thread signal stack:000c0000]",
+#endif
+            backtrace->FormatFrameData(&frame));
 
   // Check relative pc is set and map name is set.
   frame.pc = 0x12345679;
