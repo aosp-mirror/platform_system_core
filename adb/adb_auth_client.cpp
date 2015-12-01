@@ -228,13 +228,13 @@ void adb_auth_confirm_key(unsigned char *key, size_t len, atransport *t)
 
 static void adb_auth_listener(int fd, unsigned events, void *data)
 {
-    struct sockaddr addr;
+    sockaddr_storage addr;
     socklen_t alen;
     int s;
 
     alen = sizeof(addr);
 
-    s = adb_socket_accept(fd, &addr, &alen);
+    s = adb_socket_accept(fd, reinterpret_cast<sockaddr*>(&addr), &alen);
     if (s < 0) {
         D("Failed to accept: errno=%d", errno);
         return;
