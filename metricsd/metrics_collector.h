@@ -48,7 +48,8 @@ class MetricsCollector : public brillo::DBusDaemon {
   void Init(bool testing,
             MetricsLibraryInterface* metrics_lib,
             const std::string& diskstats_path,
-            const base::FilePath& metrics_directory);
+            const base::FilePath& private_metrics_directory,
+            const base::FilePath& shared_metrics_directory);
 
   // Initializes DBus and MessageLoop variables before running the MessageLoop.
   int OnInit() override;
@@ -225,8 +226,8 @@ class MetricsCollector : public brillo::DBusDaemon {
   // Test mode.
   bool testing_;
 
-  // Root of the configuration files to use.
-  base::FilePath metrics_directory_;
+  // Publicly readable metrics directory.
+  base::FilePath shared_metrics_directory_;
 
   // The metrics library handle.
   MetricsLibraryInterface* metrics_lib_;

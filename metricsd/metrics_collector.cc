@@ -151,50 +151,52 @@ uint32_t MetricsCollector::GetOsVersionHash() {
 
 void MetricsCollector::Init(bool testing, MetricsLibraryInterface* metrics_lib,
                             const string& diskstats_path,
-                            const base::FilePath& metrics_directory) {
+                            const base::FilePath& private_metrics_directory,
+                            const base::FilePath& shared_metrics_directory) {
   CHECK(metrics_lib);
   testing_ = testing;
-  metrics_directory_ = metrics_directory;
+  shared_metrics_directory_ = shared_metrics_directory;
   metrics_lib_ = metrics_lib;
 
-  daily_active_use_.reset(
-      new PersistentInteger("Platform.UseTime.PerDay", metrics_directory_));
-  version_cumulative_active_use_.reset(
-      new PersistentInteger("Platform.CumulativeUseTime", metrics_directory_));
-  version_cumulative_cpu_use_.reset(
-      new PersistentInteger("Platform.CumulativeCpuTime", metrics_directory_));
+  daily_active_use_.reset(new PersistentInteger("Platform.UseTime.PerDay",
+                                                private_metrics_directory));
+  version_cumulative_active_use_.reset(new PersistentInteger(
+      "Platform.CumulativeUseTime", private_metrics_directory));
+  version_cumulative_cpu_use_.reset(new PersistentInteger(
+      "Platform.CumulativeCpuTime", private_metrics_directory));
 
   kernel_crash_interval_.reset(new PersistentInteger(
-      "Platform.KernelCrashInterval", metrics_directory_));
+      "Platform.KernelCrashInterval", private_metrics_directory));
   unclean_shutdown_interval_.reset(new PersistentInteger(
-      "Platform.UncleanShutdownInterval", metrics_directory_));
-  user_crash_interval_.reset(
-      new PersistentInteger("Platform.UserCrashInterval", metrics_directory_));
+      "Platform.UncleanShutdownInterval", private_metrics_directory));
+  user_crash_interval_.reset(new PersistentInteger("Platform.UserCrashInterval",
+                                                   private_metrics_directory));
 
-  any_crashes_daily_count_.reset(
-      new PersistentInteger("Platform.AnyCrashes.PerDay", metrics_directory_));
-  any_crashes_weekly_count_.reset(
-      new PersistentInteger("Platform.AnyCrashes.PerWeek", metrics_directory_));
-  user_crashes_daily_count_.reset(
-      new PersistentInteger("Platform.UserCrashes.PerDay", metrics_directory_));
+  any_crashes_daily_count_.reset(new PersistentInteger(
+      "Platform.AnyCrashes.PerDay", private_metrics_directory));
+  any_crashes_weekly_count_.reset(new PersistentInteger(
+      "Platform.AnyCrashes.PerWeek", private_metrics_directory));
+  user_crashes_daily_count_.reset(new PersistentInteger(
+      "Platform.UserCrashes.PerDay", private_metrics_directory));
   user_crashes_weekly_count_.reset(new PersistentInteger(
-      "Platform.UserCrashes.PerWeek", metrics_directory_));
+      "Platform.UserCrashes.PerWeek", private_metrics_directory));
   kernel_crashes_daily_count_.reset(new PersistentInteger(
-      "Platform.KernelCrashes.PerDay", metrics_directory_));
+      "Platform.KernelCrashes.PerDay", private_metrics_directory));
   kernel_crashes_weekly_count_.reset(new PersistentInteger(
-      "Platform.KernelCrashes.PerWeek", metrics_directory_));
+      "Platform.KernelCrashes.PerWeek", private_metrics_directory));
   kernel_crashes_version_count_.reset(new PersistentInteger(
-      "Platform.KernelCrashesSinceUpdate", metrics_directory_));
+      "Platform.KernelCrashesSinceUpdate", private_metrics_directory));
   unclean_shutdowns_daily_count_.reset(new PersistentInteger(
-      "Platform.UncleanShutdown.PerDay", metrics_directory_));
+      "Platform.UncleanShutdown.PerDay", private_metrics_directory));
   unclean_shutdowns_weekly_count_.reset(new PersistentInteger(
-      "Platform.UncleanShutdowns.PerWeek", metrics_directory_));
+      "Platform.UncleanShutdowns.PerWeek", private_metrics_directory));
 
-  daily_cycle_.reset(new PersistentInteger("daily.cycle", metrics_directory_));
+  daily_cycle_.reset(
+      new PersistentInteger("daily.cycle", private_metrics_directory));
   weekly_cycle_.reset(
-      new PersistentInteger("weekly.cycle", metrics_directory_));
+      new PersistentInteger("weekly.cycle", private_metrics_directory));
   version_cycle_.reset(
-      new PersistentInteger("version.cycle", metrics_directory_));
+      new PersistentInteger("version.cycle", private_metrics_directory));
 
   disk_usage_collector_.reset(new DiskUsageCollector(metrics_lib_));
   averaged_stats_collector_.reset(
@@ -289,8 +291,9 @@ void MetricsCollector::OnEnableMetrics(
   if (!command)
     return;
 
-  if (base::WriteFile(metrics_directory_.Append(metrics::kConsentFileName),
-                      "", 0) != 0) {
+  if (base::WriteFile(
+          shared_metrics_directory_.Append(metrics::kConsentFileName), "", 0) !=
+      0) {
     PLOG(ERROR) << "Could not create the consent file.";
     command->Abort("metrics_error", "Could not create the consent file",
                    nullptr);
@@ -307,8 +310,8 @@ void MetricsCollector::OnDisableMetrics(
   if (!command)
     return;
 
-  if (!base::DeleteFile(metrics_directory_.Append(metrics::kConsentFileName),
-                        false)) {
+  if (!base::DeleteFile(
+          shared_metrics_directory_.Append(metrics::kConsentFileName), false)) {
     PLOG(ERROR) << "Could not delete the consent file.";
     command->Abort("metrics_error", "Could not delete the consent file",
                    nullptr);
