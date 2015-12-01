@@ -243,6 +243,12 @@ static void dump_log_msg(const char *prefix,
     case 3:
         fprintf(stderr, "lid=system ");
         break;
+    case 4:
+        fprintf(stderr, "lid=crash ");
+        break;
+    case 5:
+        fprintf(stderr, "lid=kernel ");
+        break;
     default:
         if (lid >= 0) {
             fprintf(stderr, "lid=%d ", lid);
@@ -518,4 +524,69 @@ TEST(logd, benchmark) {
 
     // 50% threshold for SPAM filter (<20% typical, lots of engineering margin)
     ASSERT_GT(totalSize, nowSpamSize * 2);
+}
+
+TEST(logd, timeout) {
+    log_msg msg_wrap, msg_timeout;
+    bool content_wrap = false, content_timeout = false, written = false;
+    unsigned int alarm_wrap = 0, alarm_timeout = 0;
+    // A few tries to get it right just in case wrap kicks in due to
+    // content providers being active during the test.
+    int i = 3;
+
+    while (--i) {
+        int fd = socket_local_client("logdr",
+                                     ANDROID_SOCKET_NAMESPACE_RESERVED,
+                                     SOCK_SEQPACKET);
+        ASSERT_LT(0, fd);
+
+        struct sigaction ignore, old_sigaction;
+        memset(&ignore, 0, sizeof(ignore));
+        ignore.sa_handler = caught_signal;
+        sigemptyset(&ignore.sa_mask);
+        sigaction(SIGALRM, &ignore, &old_sigaction);
+        unsigned int old_alarm = alarm(3);
+
+        static const char ask[] = "dumpAndClose lids=0,1,2,3,4,5 timeout=6";
+        written = write(fd, ask, sizeof(ask)) == sizeof(ask);
+        if (!written) {
+            alarm(old_alarm);
+            sigaction(SIGALRM, &old_sigaction, NULL);
+            close(fd);
+            continue;
+        }
+
+        content_wrap = recv(fd, msg_wrap.buf, sizeof(msg_wrap), 0) > 0;
+
+        alarm_wrap = alarm(5);
+
+        content_timeout = recv(fd, msg_timeout.buf, sizeof(msg_timeout), 0) > 0;
+
+        alarm_timeout = alarm((old_alarm <= 0)
+            ? old_alarm
+            : (old_alarm > (1 + 3 - alarm_wrap))
+                ? old_alarm - 3 + alarm_wrap
+                : 2);
+        sigaction(SIGALRM, &old_sigaction, NULL);
+
+        close(fd);
+
+        if (!content_wrap && !alarm_wrap && content_timeout && !alarm_timeout) {
+            break;
+        }
+    }
+
+    if (content_wrap) {
+        dump_log_msg("wrap", &msg_wrap, 3, -1);
+    }
+
+    if (content_timeout) {
+        dump_log_msg("timeout", &msg_timeout, 3, -1);
+    }
+
+    EXPECT_TRUE(written);
+    EXPECT_FALSE(content_wrap);
+    EXPECT_EQ(0U, alarm_wrap);
+    EXPECT_TRUE(content_timeout);
+    EXPECT_NE(0U, alarm_timeout);
 }
