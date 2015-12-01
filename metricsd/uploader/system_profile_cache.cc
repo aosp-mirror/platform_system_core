@@ -56,7 +56,7 @@ std::string ChannelToString(
 SystemProfileCache::SystemProfileCache()
     : initialized_(false),
       testing_(false),
-      metrics_directory_(metrics::kMetricsDirectory),
+      metrics_directory_(metrics::kMetricsdDirectory),
       session_id_(new chromeos_metrics::PersistentInteger(
           kPersistentSessionIdFilename, metrics_directory_)) {}
 

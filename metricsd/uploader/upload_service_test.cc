@@ -39,11 +39,18 @@ class UploadServiceTest : public testing::Test {
  protected:
   virtual void SetUp() {
     CHECK(dir_.CreateUniqueTempDir());
-    metrics_lib_.InitForTest(dir_.path());
-    ASSERT_EQ(0, base::WriteFile(
-        dir_.path().Append(metrics::kConsentFileName), "", 0));
-    upload_service_.reset(new UploadService("", base::TimeDelta(),
-                                            dir_.path()));
+
+    base::FilePath private_dir = dir_.path().Append("private");
+    base::FilePath shared_dir = dir_.path().Append("shared");
+
+    EXPECT_TRUE(base::CreateDirectory(private_dir));
+    EXPECT_TRUE(base::CreateDirectory(shared_dir));
+
+    metrics_lib_.InitForTest(shared_dir);
+    ASSERT_EQ(0, base::WriteFile(shared_dir.Append(metrics::kConsentFileName),
+                                 "", 0));
+    upload_service_.reset(
+        new UploadService("", base::TimeDelta(), private_dir, shared_dir));
 
     upload_service_->sender_.reset(new SenderMock);
     upload_service_->InitForTest(new MockSystemProfileSetter);
@@ -158,7 +165,7 @@ TEST_F(UploadServiceTest, EmptyLogsAreNotSent) {
 }
 
 TEST_F(UploadServiceTest, LogEmptyByDefault) {
-  UploadService upload_service("", base::TimeDelta(), dir_.path());
+  UploadService upload_service("", base::TimeDelta(), dir_.path(), dir_.path());
 
   // current_log_ should be initialized later as it needs AtExitManager to exit
   // in order to gather system information from SysInfo.
@@ -193,7 +200,6 @@ TEST_F(UploadServiceTest, LogContainsAggregatedValues) {
   scoped_ptr<metrics::MetricSample> histogram =
       metrics::MetricSample::HistogramSample("foo", 10, 0, 42, 10);
   upload_service_->AddSample(*histogram.get());
-
 
   scoped_ptr<metrics::MetricSample> histogram2 =
       metrics::MetricSample::HistogramSample("foo", 11, 0, 42, 10);

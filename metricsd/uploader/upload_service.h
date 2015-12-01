@@ -71,7 +71,8 @@ class UploadService : public base::HistogramFlattener, public brillo::Daemon {
  public:
   UploadService(const std::string& server,
                 const base::TimeDelta& upload_interval,
-                const base::FilePath& metrics_directory);
+                const base::FilePath& private_metrics_directory,
+                const base::FilePath& shared_metrics_directory);
 
   // Initializes the upload service.
   int OnInit();
@@ -162,7 +163,7 @@ class UploadService : public base::HistogramFlattener, public brillo::Daemon {
   scoped_ptr<Sender> sender_;
   chromeos_metrics::PersistentInteger failed_upload_count_;
   scoped_ptr<MetricsLog> current_log_;
-  
+
   base::TimeDelta upload_interval_;
 
   base::FilePath consent_file_;

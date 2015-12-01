@@ -45,7 +45,14 @@ class MetricsCollectorTest : public testing::Test {
   virtual void SetUp() {
     brillo::FlagHelper::Init(0, nullptr, "");
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
-    daemon_.Init(true, &metrics_lib_, "", temp_dir_.path());
+
+    base::FilePath private_dir = temp_dir_.path().Append("private");
+    base::FilePath shared_dir = temp_dir_.path().Append("shared");
+
+    EXPECT_TRUE(base::CreateDirectory(private_dir));
+    EXPECT_TRUE(base::CreateDirectory(shared_dir));
+
+    daemon_.Init(true, &metrics_lib_, "", private_dir, shared_dir);
   }
 
   // Adds a metrics library mock expectation that the specified metric
