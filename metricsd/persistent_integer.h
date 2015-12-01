@@ -21,6 +21,8 @@
 
 #include <string>
 
+#include <base/files/file_path.h>
+
 namespace chromeos_metrics {
 
 // PersistentIntegers is a named 64-bit integer value backed by a file.
@@ -29,7 +31,7 @@ namespace chromeos_metrics {
 
 class PersistentInteger {
  public:
-  explicit PersistentInteger(const std::string& name);
+  PersistentInteger(const std::string& name, const base::FilePath& directory);
 
   // Virtual only because of mock.
   virtual ~PersistentInteger();
@@ -50,10 +52,6 @@ class PersistentInteger {
   // Virtual only because of mock.
   virtual void Add(int64_t x);
 
-  // Sets the directory path for all persistent integers.
-  // This is used in unittests to change where the counters are stored.
-  static void SetMetricsDirectory(const std::string& directory);
-
  private:
   static const int kVersion = 1001;
 
@@ -68,8 +66,7 @@ class PersistentInteger {
   int64_t value_;
   int32_t version_;
   std::string name_;
-  std::string backing_file_name_;
-  static std::string metrics_directory_;
+  base::FilePath backing_file_path_;
   bool synced_;
 };
 
