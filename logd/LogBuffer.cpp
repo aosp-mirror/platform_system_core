@@ -128,7 +128,7 @@ void LogBuffer::init() {
         }
     }
     bool lastMonotonic = monotonic;
-    monotonic = android_log_timestamp() == 'm';
+    monotonic = android_log_clockid() == CLOCK_MONOTONIC;
     if (lastMonotonic == monotonic) {
         return;
     }
@@ -167,7 +167,7 @@ void LogBuffer::init() {
 }
 
 LogBuffer::LogBuffer(LastLogTimes *times):
-        monotonic(android_log_timestamp() == 'm'),
+        monotonic(android_log_clockid() == CLOCK_MONOTONIC),
         mTimes(*times) {
     pthread_mutex_init(&mLogElementsLock, NULL);
 
