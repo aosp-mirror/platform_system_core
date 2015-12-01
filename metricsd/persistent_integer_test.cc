@@ -24,7 +24,6 @@
 #include "persistent_integer.h"
 
 const char kBackingFileName[] = "1.pibakf";
-const char kBackingFilePattern[] = "*.pibakf";
 
 using chromeos_metrics::PersistentInteger;
 
@@ -32,28 +31,15 @@ class PersistentIntegerTest : public testing::Test {
   void SetUp() override {
     // Set testing mode.
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-    chromeos_metrics::PersistentInteger::SetMetricsDirectory(
-        temp_dir_.path().value());
   }
 
-  void TearDown() override {
-    // Remove backing files.  The convention is that they all end in ".pibakf".
-    base::FileEnumerator f_enum(base::FilePath("."),
-                                false,
-                                base::FileEnumerator::FILES,
-                                FILE_PATH_LITERAL(kBackingFilePattern));
-    for (base::FilePath name = f_enum.Next();
-         !name.empty();
-         name = f_enum.Next()) {
-      base::DeleteFile(name, false);
-    }
-  }
-
+ protected:
   base::ScopedTempDir temp_dir_;
 };
 
 TEST_F(PersistentIntegerTest, BasicChecks) {
-  scoped_ptr<PersistentInteger> pi(new PersistentInteger(kBackingFileName));
+  scoped_ptr<PersistentInteger> pi(
+      new PersistentInteger(kBackingFileName, temp_dir_.path()));
 
   // Test initialization.
   EXPECT_EQ(0, pi->Get());
@@ -65,7 +51,7 @@ TEST_F(PersistentIntegerTest, BasicChecks) {
   EXPECT_EQ(5, pi->Get());
 
   // Test persistence.
-  pi.reset(new PersistentInteger(kBackingFileName));
+  pi.reset(new PersistentInteger(kBackingFileName, temp_dir_.path()));
   EXPECT_EQ(5, pi->Get());
 
   // Test GetAndClear.
@@ -73,6 +59,6 @@ TEST_F(PersistentIntegerTest, BasicChecks) {
   EXPECT_EQ(pi->Get(), 0);
 
   // Another persistence test.
-  pi.reset(new PersistentInteger(kBackingFileName));
+  pi.reset(new PersistentInteger(kBackingFileName, temp_dir_.path()));
   EXPECT_EQ(0, pi->Get());
 }
