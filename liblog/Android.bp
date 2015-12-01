@@ -52,6 +52,7 @@ cc_library {
         },
         windows: {
             srcs: ["uio.c"],
+            enabled: true,
         },
         not_windows: {
             srcs: ["event_tag_map.c"],
