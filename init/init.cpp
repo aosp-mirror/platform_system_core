@@ -602,6 +602,7 @@ int main(int argc, char** argv) {
     restorecon("/dev");
     restorecon("/dev/socket");
     restorecon("/dev/__properties__");
+    restorecon("/property_contexts");
     restorecon_recursive("/sys");
 
     epoll_fd = epoll_create1(EPOLL_CLOEXEC);
