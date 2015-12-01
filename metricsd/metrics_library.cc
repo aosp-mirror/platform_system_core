@@ -134,7 +134,7 @@ bool MetricsLibrary::AreMetricsEnabled() {
 }
 
 void MetricsLibrary::Init() {
-  base::FilePath dir = base::FilePath(metrics::kMetricsDirectory);
+  base::FilePath dir = base::FilePath(metrics::kSharedMetricsDirectory);
   uma_events_file_ = dir.Append(metrics::kMetricsEventsFileName);
   consent_file_ = dir.Append(metrics::kConsentFileName);
   cached_enabled_ = false;

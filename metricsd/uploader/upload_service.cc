@@ -43,14 +43,17 @@ const int UploadService::kMaxFailedUpload = 10;
 
 UploadService::UploadService(const std::string& server,
                              const base::TimeDelta& upload_interval,
-                             const base::FilePath& metrics_directory)
+                             const base::FilePath& private_metrics_directory,
+                             const base::FilePath& shared_metrics_directory)
     : histogram_snapshot_manager_(this),
       sender_(new HttpSender(server)),
-      failed_upload_count_(metrics::kFailedUploadCountName, metrics_directory),
+      failed_upload_count_(metrics::kFailedUploadCountName,
+                           private_metrics_directory),
       upload_interval_(upload_interval) {
-  metrics_file_ = metrics_directory.Append(metrics::kMetricsEventsFileName);
-  staged_log_path_ = metrics_directory.Append(metrics::kStagedLogName);
-  consent_file_ = metrics_directory.Append(metrics::kConsentFileName);
+  metrics_file_ =
+      shared_metrics_directory.Append(metrics::kMetricsEventsFileName);
+  staged_log_path_ = private_metrics_directory.Append(metrics::kStagedLogName);
+  consent_file_ = shared_metrics_directory.Append(metrics::kConsentFileName);
 }
 
 int UploadService::OnInit() {
@@ -265,4 +268,3 @@ void UploadService::RemoveFailedLog() {
 bool UploadService::AreMetricsEnabled() {
   return base::PathExists(consent_file_);
 }
-
