@@ -33,21 +33,17 @@ static alistener listener_list = {
 };
 
 static void ss_listener_event_func(int _fd, unsigned ev, void *_l) {
-    asocket *s;
-
-    if(ev & FDE_READ) {
+    if (ev & FDE_READ) {
         struct sockaddr addr;
-        socklen_t alen;
-        int fd;
+        socklen_t alen = sizeof(addr);
+        int fd = adb_socket_accept(_fd, &addr, &alen);
+        if (fd < 0) return;
 
-        alen = sizeof(addr);
-        fd = adb_socket_accept(_fd, &addr, &alen);
-        if(fd < 0) return;
+        int rcv_buf_size = CHUNK_SIZE;
+        adb_setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcv_buf_size, sizeof(rcv_buf_size));
 
-        adb_socket_setbufsize(fd, CHUNK_SIZE);
-
-        s = create_local_socket(fd);
-        if(s) {
+        asocket* s = create_local_socket(fd);
+        if (s) {
             connect_to_smartsocket(s);
             return;
         }
