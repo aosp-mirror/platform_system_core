@@ -394,6 +394,18 @@ static bool handle_sync_command(int fd, std::vector<char>& buffer) {
 void file_sync_service(int fd, void* cookie) {
     std::vector<char> buffer(SYNC_DATA_MAX);
 
+    // If there's a problem on the device, we'll send an ID_FAIL message and
+    // close the socket. Unfortunately the kernel will sometimes throw that
+    // data away if the other end keeps writing without reading (which is
+    // the normal case with our protocol --- they won't read until the end).
+    // So set SO_LINGER to give the client 20s to get around to reading our
+    // failure response. Without this, the other side's ability to report
+    // useful errors is reduced.
+    struct linger l;
+    l.l_onoff = 1;
+    l.l_linger = 20;
+    adb_setsockopt(fd, SOL_SOCKET, SO_LINGER, &l, sizeof(l));
+
     while (handle_sync_command(fd, buffer)) {
     }
 

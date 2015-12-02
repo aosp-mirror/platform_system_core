@@ -103,7 +103,7 @@ class SyncConnection {
     // Sending header, payload, and footer in a single write makes a huge
     // difference to "adb sync" performance.
     bool SendSmallFile(const char* path_and_mode,
-                       const char* rpath,
+                       const char* lpath, const char* rpath,
                        unsigned mtime,
                        const char* data, size_t data_length) {
         Print(rpath);
@@ -139,8 +139,7 @@ class SyncConnection {
         req_done->path_length = mtime;
         p += sizeof(SyncRequest);
 
-        if (!WriteFdExactly(fd, &buf[0], (p - &buf[0]))) return false;
-
+        WriteOrDie(lpath, rpath, &buf[0], (p - &buf[0]));
         total_bytes += data_length;
         return true;
     }
@@ -164,31 +163,27 @@ class SyncConnection {
 
         int lfd = adb_open(lpath, O_RDONLY);
         if (lfd < 0) {
-            Error("cannot open '%s': %s", lpath, strerror(errno));
+            Error("opening '%s' locally failed: %s", lpath, strerror(errno));
             return false;
         }
 
         syncsendbuf sbuf;
         sbuf.id = ID_DATA;
         while (true) {
-            int ret = adb_read(lfd, sbuf.data, max);
-            if (ret <= 0) {
-                if (ret < 0) {
-                    Error("cannot read '%s': %s", lpath, strerror(errno));
-                    adb_close(lfd);
-                    return false;
-                }
+            int bytes_read = adb_read(lfd, sbuf.data, max);
+            if (bytes_read == -1) {
+                Error("reading '%s' locally failed: %s", lpath, strerror(errno));
+                adb_close(lfd);
+                return false;
+            } else if (bytes_read == 0) {
                 break;
             }
 
-            sbuf.size = ret;
-            if (!WriteFdExactly(fd, &sbuf, sizeof(unsigned) * 2 + ret)) {
-                adb_close(lfd);
-                return false;
-            }
-            total_bytes += ret;
+            sbuf.size = bytes_read;
+            WriteOrDie(lpath, rpath, &sbuf, sizeof(SyncRequest) + bytes_read);
 
-            bytes_copied += ret;
+            total_bytes += bytes_read;
+            bytes_copied += bytes_read;
 
             int percentage = static_cast<int>(bytes_copied * 100 / total_size);
             Printf("%s: %d%%", rpath, percentage);
@@ -199,12 +194,7 @@ class SyncConnection {
         syncmsg msg;
         msg.data.id = ID_DONE;
         msg.data.size = mtime;
-        if (!WriteFdExactly(fd, &msg.data, sizeof(msg.data))) {
-            Error("failed to send ID_DONE message for '%s': %s", rpath, strerror(errno));
-            return false;
-        }
-
-        return true;
+        return WriteOrDie(lpath, rpath, &msg.data, sizeof(msg.data));
     }
 
     bool CopyDone(const char* from, const char* to) {
@@ -297,6 +287,27 @@ class SyncConnection {
         return SendRequest(ID_QUIT, ""); // TODO: add a SendResponse?
     }
 
+    bool WriteOrDie(const char* from, const char* to, const void* data, size_t data_length) {
+        if (!WriteFdExactly(fd, data, data_length)) {
+            if (errno == ECONNRESET) {
+                // Assume adbd told us why it was closing the connection, and
+                // try to read failure reason from adbd.
+                syncmsg msg;
+                if (!ReadFdExactly(fd, &msg.status, sizeof(msg.status))) {
+                    Error("failed to copy '%s' to '%s': no response: %s", from, to, strerror(errno));
+                } else if (msg.status.id != ID_FAIL) {
+                    Error("failed to copy '%s' to '%s': not ID_FAIL: %d", from, to, msg.status.id);
+                } else {
+                    ReportCopyFailure(from, to, msg);
+                }
+            } else {
+                Error("%zu-byte write failed: %s", data_length, strerror(errno));
+            }
+            _exit(1);
+        }
+        return true;
+    }
+
     static uint64_t CurrentTimeMs() {
         struct timeval tv;
         gettimeofday(&tv, 0); // (Not clock_gettime because of Mac/Windows.)
@@ -362,7 +373,9 @@ static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath,
         }
         buf[data_length++] = '\0';
 
-        if (!sc.SendSmallFile(path_and_mode.c_str(), rpath, mtime, buf, data_length)) return false;
+        if (!sc.SendSmallFile(path_and_mode.c_str(), lpath, rpath, mtime, buf, data_length)) {
+            return false;
+        }
         return sc.CopyDone(lpath, rpath);
 #endif
     }
@@ -383,7 +396,8 @@ static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath,
             sc.Error("failed to read all of '%s': %s", lpath, strerror(errno));
             return false;
         }
-        if (!sc.SendSmallFile(path_and_mode.c_str(), rpath, mtime, data.data(), data.size())) {
+        if (!sc.SendSmallFile(path_and_mode.c_str(), lpath, rpath, mtime,
+                              data.data(), data.size())) {
             return false;
         }
     } else {
