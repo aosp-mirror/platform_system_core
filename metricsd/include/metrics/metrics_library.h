@@ -44,7 +44,6 @@ class MetricsLibraryInterface {
   virtual bool SendEnumToUMA(const std::string& name, int sample, int max) = 0;
   virtual bool SendBoolToUMA(const std::string& name, bool sample) = 0;
   virtual bool SendSparseToUMA(const std::string& name, int sample) = 0;
-  virtual bool SendUserActionToUMA(const std::string& action) = 0;
   virtual ~MetricsLibraryInterface() {}
 };
 
@@ -113,18 +112,6 @@ class MetricsLibrary : public MetricsLibraryInterface {
   //
   // |sample| is the 32-bit integer value to be recorded.
   bool SendSparseToUMA(const std::string& name, int sample) override;
-
-  // Sends a user action to Chrome for transport to UMA and returns true on
-  // success. This method results in the equivalent of an asynchronous
-  // non-blocking RPC to UserMetrics::RecordAction.  The new metric must be
-  // added to chrome/tools/extract_actions.py in the Chromium repository, which
-  // should then be run to generate a hash for the new action.
-  //
-  // Until http://crosbug.com/11125 is fixed, the metric must also be added to
-  // chrome/browser/chromeos/external_metrics.cc.
-  //
-  // |action| is the user-generated event (e.g., "MuteKeyPressed").
-  bool SendUserActionToUMA(const std::string& action) override;
 
   // Sends a signal to UMA that a crash of the given |crash_kind|
   // has occurred.  Used by UMA to generate stability statistics.

@@ -200,13 +200,6 @@ bool MetricsLibrary::SendSparseToUMA(const std::string& name, int sample) {
              .isOk();
 }
 
-bool MetricsLibrary::SendUserActionToUMA(const std::string& action) {
-  // Deprecated.
-  // TODO(bsimonnet): Delete this method entirely once all the callers are
-  // removed (b/25818567).
-  return true;
-}
-
 bool MetricsLibrary::SendCrashToUMA(const char* crash_kind) {
   return CheckService() &&
          metricsd_proxy_->recordCrash(String16(crash_kind)).isOk();
