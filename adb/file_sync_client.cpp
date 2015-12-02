@@ -185,8 +185,15 @@ class SyncConnection {
             total_bytes += bytes_read;
             bytes_copied += bytes_read;
 
-            int percentage = static_cast<int>(bytes_copied * 100 / total_size);
-            Printf("%s: %d%%", rpath, percentage);
+            if (total_size == 0) {
+                // This case can happen if we're racing against something that wrote to the file
+                // between our stat and our read, or if we're reading a magic file that lies about
+                // its size.
+                Printf("%s: ?%%", rpath);
+            } else {
+                int percentage = static_cast<int>(bytes_copied * 100 / total_size);
+                Printf("%s: %d%%", rpath, percentage);
+            }
         }
 
         adb_close(lfd);
@@ -472,8 +479,14 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath) 
 
         bytes_copied += msg.data.size;
 
-        int percentage = static_cast<int>(bytes_copied * 100 / size);
-        sc.Printf("%s: %d%%", rpath, percentage);
+        if (size == 0) {
+            // This case can happen if we're racing against something that wrote to the file between
+            // our stat and our read, or if we're reading a magic file that lies about its size.
+            sc.Printf("%s: ?%%", rpath);
+        } else {
+            int percentage = static_cast<int>(bytes_copied * 100 / size);
+            sc.Printf("%s: %d%%", rpath, percentage);
+        }
     }
 
     adb_close(lfd);
