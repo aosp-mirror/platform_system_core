@@ -659,3 +659,12 @@ static void kick_devices() {
   }
   adb_mutex_unlock(&usb_lock);
 }
+
+// kCsNoPerm is Linux-only.
+std::string UsbNoPermissionsShortHelpText() {
+    return "";
+}
+
+std::string UsbNoPermissionsLongHelpText() {
+    return "";
+}

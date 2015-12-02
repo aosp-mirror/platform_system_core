@@ -214,17 +214,22 @@ void local_init(int port);
 void local_connect(int port);
 int  local_connect_arbitrary_ports(int console_port, int adb_port, std::string* error);
 
-/* usb host/client interface */
+// USB host/client interface.
 void usb_init();
 int usb_write(usb_handle *h, const void *data, int len);
 int usb_read(usb_handle *h, void *data, int len);
 int usb_close(usb_handle *h);
 void usb_kick(usb_handle *h);
 
-/* used for USB device detection */
+// USB device detection.
 #if ADB_HOST
 int is_adb_interface(int vid, int pid, int usb_class, int usb_subclass, int usb_protocol);
 #endif
+
+// USB permission error help text. The short version will be one line, long may be multi-line.
+// Returns a string message to print, or an empty string if no problems could be found.
+std::string UsbNoPermissionsShortHelpText();
+std::string UsbNoPermissionsLongHelpText();
 
 int adb_commandline(int argc, const char **argv);
 

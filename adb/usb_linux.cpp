@@ -22,6 +22,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <grp.h>
 #include <linux/usb/ch9.h>
 #include <linux/usbdevice_fs.h>
 #include <linux/version.h>
@@ -594,4 +595,55 @@ void usb_init() {
     if (!adb_thread_create(device_poll_thread, nullptr)) {
         fatal_errno("cannot create device_poll thread");
     }
+}
+
+static const char kPermissionsHelpUrl[] = "developer.android.com/tools/device.html";
+
+// Returns a message describing any potential problems we find with udev, or nullptr if we can't
+// find plugdev information (i.e. udev is not installed).
+static const char* GetUdevProblem() {
+    errno = 0;
+    group* plugdev_group = getgrnam("plugdev");
+
+    if (plugdev_group == nullptr) {
+        if (errno != 0) {
+            D("failed to read plugdev group info: %s", strerror(errno));
+        }
+        // We can't give any generally useful advice here, just let the caller print the help URL.
+        return nullptr;
+    }
+
+    // getgroups(2) indicates that the group_member() may not check the egid so we check it
+    // additionally just to be sure.
+    if (group_member(plugdev_group->gr_gid) || getegid() == plugdev_group->gr_gid) {
+        // The user is in plugdev so the problem is likely with the udev rules.
+        return "verify udev rules";
+    }
+    return "udev requires plugdev group membership";
+}
+
+// Short help text must be a single line, and will look something like:
+//   no permissions (reason); see <URL>
+std::string UsbNoPermissionsShortHelpText() {
+    std::string help_text = "no permissions";
+
+    const char* problem = GetUdevProblem();
+    if (problem != nullptr) {
+        help_text += android::base::StringPrintf(" (%s)", problem);
+    }
+
+    return android::base::StringPrintf("%s; see [%s]", help_text.c_str(), kPermissionsHelpUrl);
+}
+
+// Long help text can span multiple lines and should provide more detailed information.
+std::string UsbNoPermissionsLongHelpText() {
+    std::string header = "USB permission failure";
+
+    const char* problem = GetUdevProblem();
+    if (problem != nullptr) {
+        header += android::base::StringPrintf(": %s", problem);
+    }
+
+    return android::base::StringPrintf("%s.\nSee [%s] for more information.",
+                                       header.c_str(), kPermissionsHelpUrl);
 }
