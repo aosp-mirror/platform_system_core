@@ -1,0 +1,9 @@
+BasedOnStyle: Google
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+BinPackParameters: false
+CommentPragmas: NOLINT:.*
+DerivePointerAlignment: false
+PointerAlignment: Left
+TabWidth: 2
