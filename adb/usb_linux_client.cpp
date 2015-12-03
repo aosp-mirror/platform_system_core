@@ -456,56 +456,40 @@ static void *usb_ffs_open_thread(void *x)
     return 0;
 }
 
-static int bulk_write(int bulk_in, const uint8_t* buf, size_t length)
-{
-    size_t count = 0;
-
-    while (count < length) {
-        int ret = adb_write(bulk_in, buf + count, length - count);
-        if (ret < 0) return -1;
-        count += ret;
-    }
-
-    D("[ bulk_write done fd=%d ]", bulk_in);
-    return count;
-}
-
-static int usb_ffs_write(usb_handle* h, const void* data, int len)
-{
+static int usb_ffs_write(usb_handle* h, const void* data, int len) {
     D("about to write (fd=%d, len=%d)", h->bulk_in, len);
-    int n = bulk_write(h->bulk_in, reinterpret_cast<const uint8_t*>(data), len);
-    if (n != len) {
-        D("ERROR: fd = %d, n = %d: %s", h->bulk_in, n, strerror(errno));
-        return -1;
+
+    // Writes larger than 16k fail on some devices (seed with 3.10.49-g209ea2f in particular).
+    const char* buf = static_cast<const char*>(data);
+    while (len > 0) {
+        int write_len = (len > 16384) ? 16384 : len;
+        int n = adb_write(h->bulk_in, buf, write_len);
+        if (n < 0) {
+            D("ERROR: fd = %d, n = %d: %s", h->bulk_in, n, strerror(errno));
+            return -1;
+        }
+        buf += n;
+        len -= n;
     }
+
     D("[ done fd=%d ]", h->bulk_in);
     return 0;
 }
 
-static int bulk_read(int bulk_out, uint8_t* buf, size_t length)
-{
-    size_t count = 0;
+static int usb_ffs_read(usb_handle* h, void* data, int len) {
+    D("about to read (fd=%d, len=%d)", h->bulk_out, len);
 
-    while (count < length) {
-        int ret = adb_read(bulk_out, buf + count, length - count);
-        if (ret < 0) {
-            D("[ bulk_read failed fd=%d length=%zu count=%zu ]", bulk_out, length, count);
+    char* buf = static_cast<char*>(data);
+    while (len > 0) {
+        int n = adb_read(h->bulk_out, buf, len);
+        if (n < 0) {
+            D("ERROR: fd = %d, n = %d: %s", h->bulk_out, n, strerror(errno));
             return -1;
         }
-        count += ret;
+        buf += n;
+        len -= n;
     }
 
-    return count;
-}
-
-static int usb_ffs_read(usb_handle* h, void* data, int len)
-{
-    D("about to read (fd=%d, len=%d)", h->bulk_out, len);
-    int n = bulk_read(h->bulk_out, reinterpret_cast<uint8_t*>(data), len);
-    if (n != len) {
-        D("ERROR: fd = %d, n = %d: %s", h->bulk_out, n, strerror(errno));
-        return -1;
-    }
     D("[ done fd=%d ]", h->bulk_out);
     return 0;
 }
