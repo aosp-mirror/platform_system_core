@@ -81,7 +81,7 @@ struct logger_entry_v4 {
  * written to the logger. An attempt to write more than
  * this amount will result in a truncated log entry.
  */
-#define LOGGER_ENTRY_MAX_PAYLOAD	4076
+#define LOGGER_ENTRY_MAX_PAYLOAD	4068
 
 /*
  * The maximum size of a log entry which can be read from the
