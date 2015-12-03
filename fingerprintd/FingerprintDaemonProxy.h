@@ -40,6 +40,7 @@ class FingerprintDaemonProxy : public BnFingerprintDaemon {
         virtual int32_t authenticate(uint64_t sessionId, uint32_t groupId);
         virtual int32_t stopAuthentication();
         virtual int32_t remove(int32_t fingerId, int32_t groupId);
+        virtual int32_t enumerate();
         virtual uint64_t getAuthenticatorId();
         virtual int32_t setActiveGroup(int32_t groupId, const uint8_t* path, ssize_t pathLen);
         virtual int64_t openHal();

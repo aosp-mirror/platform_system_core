@@ -44,8 +44,7 @@ class IFingerprintDaemonCallback : public IInterface {
         virtual status_t onAuthenticated(int64_t devId, int32_t fingerId, int32_t groupId) = 0;
         virtual status_t onError(int64_t devId, int32_t error) = 0;
         virtual status_t onRemoved(int64_t devId, int32_t fingerId, int32_t groupId) = 0;
-        virtual status_t onEnumerate(int64_t devId, const int32_t* fpIds, const int32_t* gpIds,
-                int32_t sz) = 0;
+        virtual status_t onEnumerate(int64_t devId, int32_t fingerId, int32_t groupId, int32_t rem) = 0;
 
         DECLARE_META_INTERFACE(FingerprintDaemonCallback);
 };

@@ -88,6 +88,16 @@ void FingerprintDaemonProxy::hal_notify_callback(const fingerprint_msg_t *msg) {
                     msg->data.removed.finger.fid,
                     msg->data.removed.finger.gid);
             break;
+        case FINGERPRINT_TEMPLATE_ENUMERATING:
+            ALOGD("onEnumerate(fid=%d, gid=%d, rem=%d)",
+                    msg->data.enumerated.finger.fid,
+                    msg->data.enumerated.finger.gid,
+                    msg->data.enumerated.remaining_templates);
+            callback->onEnumerate(device,
+                    msg->data.enumerated.finger.fid,
+                    msg->data.enumerated.finger.gid,
+                    msg->data.enumerated.remaining_templates);
+            break;
         default:
             ALOGE("invalid msg type: %d", msg->type);
             return;
@@ -156,6 +166,11 @@ int32_t FingerprintDaemonProxy::stopAuthentication() {
 int32_t FingerprintDaemonProxy::remove(int32_t fingerId, int32_t groupId) {
     ALOG(LOG_VERBOSE, LOG_TAG, "remove(fid=%d, gid=%d)\n", fingerId, groupId);
     return mDevice->remove(mDevice, groupId, fingerId);
+}
+
+int32_t FingerprintDaemonProxy::enumerate() {
+    ALOG(LOG_VERBOSE, LOG_TAG, "enumerate()\n");
+    return mDevice->enumerate(mDevice);
 }
 
 uint64_t FingerprintDaemonProxy::getAuthenticatorId() {
