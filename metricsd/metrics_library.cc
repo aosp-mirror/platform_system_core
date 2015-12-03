@@ -213,3 +213,14 @@ bool MetricsLibrary::SendCrosEventToUMA(const std::string& event) {
   }
   return false;
 }
+
+bool MetricsLibrary::GetHistogramsDump(std::string* dump) {
+  android::String16 temp_dump;
+  if (!CheckService() ||
+      !metricsd_proxy_->getHistogramsDump(&temp_dump).isOk()) {
+    return false;
+  }
+
+  *dump = android::String8(temp_dump).string();
+  return true;
+}

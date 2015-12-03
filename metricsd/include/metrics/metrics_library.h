@@ -125,6 +125,11 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // number in the histograms dashboard).
   bool SendCrosEventToUMA(const std::string& event);
 
+  // Debugging only.
+  // Dumps the histograms aggregated since metricsd started into |dump|.
+  // Returns true iff the dump succeeds.
+  bool GetHistogramsDump(std::string* dump);
+
  private:
   friend class CMetricsLibraryTest;
   friend class MetricsLibraryTest;

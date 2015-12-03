@@ -17,12 +17,11 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include <base/memory/scoped_vector.h>
-
 #include "constants.h"
 #include "metrics/metrics_library.h"
 
 enum Mode {
+    kModeDumpHistograms,
     kModeSendSample,
     kModeSendEnumSample,
     kModeSendSparseSample,
@@ -43,6 +42,7 @@ void ShowUsage() {
           "           |min| > 0, |min| <= sample < |max|\n"
           "  -c: return exit status 0 if user consents to stats, 1 otherwise,\n"
           "      in guest mode always return 1\n"
+          "  -d: dump the histograms recorded by metricsd to stdout\n"
           "  -e: send linear/enumeration histogram data\n"
           "  -g: return exit status 0 if machine in guest mode, 1 otherwise\n"
           "  -s: send a sparse histogram sample\n"
@@ -69,6 +69,20 @@ static double ParseDouble(const char *arg) {
     ShowUsage();
   }
   return value;
+}
+
+static int DumpHistograms() {
+  MetricsLibrary metrics_lib;
+  metrics_lib.Init();
+
+  std::string dump;
+  if (!metrics_lib.GetHistogramsDump(&dump)) {
+    printf("Failed to dump the histograms.");
+    return 1;
+  }
+
+  printf("%s\n", dump.c_str());
+  return 0;
 }
 
 static int SendStats(char* argv[],
@@ -130,10 +144,13 @@ int main(int argc, char** argv) {
 
   // Parse arguments
   int flag;
-  while ((flag = getopt(argc, argv, "abcegstv")) != -1) {
+  while ((flag = getopt(argc, argv, "abcdegstv")) != -1) {
     switch (flag) {
       case 'c':
         mode = kModeHasConsent;
+        break;
+      case 'd':
+        mode = kModeDumpHistograms;
         break;
       case 'e':
         mode = kModeSendEnumSample;
@@ -172,6 +189,8 @@ int main(int argc, char** argv) {
   }
 
   switch (mode) {
+    case kModeDumpHistograms:
+      return DumpHistograms();
     case kModeSendSample:
     case kModeSendEnumSample:
     case kModeSendSparseSample:

@@ -18,6 +18,7 @@
 
 #include <base/metrics/histogram.h>
 #include <base/metrics/sparse_histogram.h>
+#include <base/metrics/statistics_recorder.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <utils/String16.h>
@@ -94,5 +95,12 @@ Status BnMetricsdImpl::recordCrash(const String16& type) {
   } else {
     LOG(ERROR) << "Unknown crash type received: " << type;
   }
+  return Status::ok();
+}
+
+Status BnMetricsdImpl::getHistogramsDump(String16* dump) {
+  std::string str_dump;
+  base::StatisticsRecorder::WriteGraph(std::string(), &str_dump);
+  *dump = String16(str_dump.c_str());
   return Status::ok();
 }
