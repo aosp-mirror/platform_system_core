@@ -593,3 +593,13 @@ on property:ro.debuggable=1
 service flash_recovery /system/bin/install-recovery.sh
     class main
     oneshot
+
+# bugreportplus is an enhanced version of bugreport that provides a better
+# user interface (like displaying progress and allowing user to enter details).
+# It's typically triggered by the power button or developer settings.
+# TODO: remove the -p option when screenshot is taken by Shell
+service bugreportplus /system/bin/dumpstate -d -p -B -P -z \
+        -o /data/data/com.android.shell/files/bugreports/bugreport
+    class main
+    disabled
+    oneshot
