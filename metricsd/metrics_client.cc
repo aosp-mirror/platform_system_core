@@ -21,11 +21,8 @@
 
 #include "constants.h"
 #include "metrics/metrics_library.h"
-#include "serialization/metric_sample.h"
-#include "serialization/serialization_utils.h"
 
 enum Mode {
-    kModeDumpLogs,
     kModeSendSample,
     kModeSendEnumSample,
     kModeSendSparseSample,
@@ -48,7 +45,6 @@ void ShowUsage() {
           "           |min| > 0, |min| <= sample < |max|\n"
           "  -c: return exit status 0 if user consents to stats, 1 otherwise,\n"
           "      in guest mode always return 1\n"
-          "  -d: dump cached logs to the console\n"
           "  -e: send linear/enumeration histogram data\n"
           "  -g: return exit status 0 if machine in guest mode, 1 otherwise\n"
           "  -s: send a sparse histogram sample\n"
@@ -139,58 +135,16 @@ static int IsGuestMode() {
   return metrics_lib.IsGuestMode() ? 0 : 1;
 }
 
-static int DumpLogs() {
-  base::FilePath events_file = base::FilePath(metrics::kSharedMetricsDirectory)
-                                   .Append(metrics::kMetricsEventsFileName);
-  printf("Metrics from %s\n\n", events_file.value().data());
-
-  ScopedVector<metrics::MetricSample> metrics;
-  metrics::SerializationUtils::ReadMetricsFromFile(events_file.value(),
-                                                   &metrics);
-
-  for (ScopedVector<metrics::MetricSample>::const_iterator i = metrics.begin();
-       i != metrics.end(); ++i) {
-    const metrics::MetricSample* sample = *i;
-    printf("name: %s\t", sample->name().c_str());
-    printf("type: ");
-
-    switch (sample->type()) {
-      case metrics::MetricSample::CRASH:
-        printf("CRASH");
-        break;
-      case metrics::MetricSample::HISTOGRAM:
-        printf("HISTOGRAM");
-        break;
-      case metrics::MetricSample::LINEAR_HISTOGRAM:
-        printf("LINEAR_HISTOGRAM");
-        break;
-      case metrics::MetricSample::SPARSE_HISTOGRAM:
-        printf("SPARSE_HISTOGRAM");
-        break;
-      case metrics::MetricSample::USER_ACTION:
-        printf("USER_ACTION");
-        break;
-    }
-
-    printf("\n");
-  }
-
-  return 0;
-}
-
 int main(int argc, char** argv) {
   enum Mode mode = kModeSendSample;
   bool secs_to_msecs = false;
 
   // Parse arguments
   int flag;
-  while ((flag = getopt(argc, argv, "abcdegstuv")) != -1) {
+  while ((flag = getopt(argc, argv, "abcegstuv")) != -1) {
     switch (flag) {
       case 'c':
         mode = kModeHasConsent;
-        break;
-      case 'd':
-        mode = kModeDumpLogs;
         break;
       case 'e':
         mode = kModeSendEnumSample;
@@ -252,8 +206,6 @@ int main(int argc, char** argv) {
       return HasConsent();
     case kModeIsGuestMode:
       return IsGuestMode();
-    case kModeDumpLogs:
-      return DumpLogs();
     default:
       ShowUsage();
       return 0;

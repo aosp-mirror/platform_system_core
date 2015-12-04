@@ -29,7 +29,6 @@ class MetricsLibraryTest : public testing::Test {
   virtual void SetUp() {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     lib_.InitForTest(temp_dir_.path());
-    EXPECT_EQ(0, WriteFile(lib_.uma_events_file_, "", 0));
     // Defeat metrics enabled caching between tests.
     lib_.cached_enabled_time_ = 0;
   }
