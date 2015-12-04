@@ -47,6 +47,9 @@ class BnMetricsdImpl : public android::brillo::metrics::BnMetricsd {
   // Records a crash.
   android::binder::Status recordCrash(const android::String16& type) override;
 
+  // Returns a dump of the histograms aggregated in memory.
+  android::binder::Status getHistogramsDump(android::String16* dump) override;
+
  private:
   std::shared_ptr<CrashCounters> counters_;
 };
