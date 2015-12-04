@@ -20,12 +20,12 @@
 #include <base/files/file_util.h>
 #include <base/files/scoped_temp_dir.h>
 #include <base/logging.h>
+#include <base/metrics/sparse_histogram.h>
+#include <base/metrics/statistics_recorder.h>
 #include <base/sys_info.h>
 
 #include "constants.h"
-#include "metrics/metrics_library_mock.h"
 #include "persistent_integer.h"
-#include "serialization/metric_sample.h"
 #include "uploader/metrics_log.h"
 #include "uploader/mock/mock_system_profile_setter.h"
 #include "uploader/mock/sender_mock.h"
@@ -39,6 +39,10 @@ class UploadServiceTest : public testing::Test {
  protected:
   virtual void SetUp() {
     CHECK(dir_.CreateUniqueTempDir());
+    // Make sure the statistics recorder is inactive (contains no metrics) then
+    // initialize it.
+    ASSERT_FALSE(base::StatisticsRecorder::IsActive());
+    base::StatisticsRecorder::Initialize();
 
     base::FilePath private_dir = dir_.path().Append("private");
     base::FilePath shared_dir = dir_.path().Append("shared");
@@ -46,11 +50,12 @@ class UploadServiceTest : public testing::Test {
     EXPECT_TRUE(base::CreateDirectory(private_dir));
     EXPECT_TRUE(base::CreateDirectory(shared_dir));
 
-    metrics_lib_.InitForTest(shared_dir);
     ASSERT_EQ(0, base::WriteFile(shared_dir.Append(metrics::kConsentFileName),
                                  "", 0));
-    upload_service_.reset(
-        new UploadService("", base::TimeDelta(), private_dir, shared_dir));
+    counters_.reset(new CrashCounters);
+
+    upload_service_.reset(new UploadService("", base::TimeDelta(), private_dir,
+                                            shared_dir, counters_));
 
     upload_service_->sender_.reset(new SenderMock);
     upload_service_->InitForTest(new MockSystemProfileSetter);
@@ -58,8 +63,17 @@ class UploadServiceTest : public testing::Test {
     upload_service_->Reset();
   }
 
-  scoped_ptr<metrics::MetricSample> Crash(const std::string& name) {
-    return metrics::MetricSample::CrashSample(name);
+  void SendSparseHistogram(const std::string& name, int sample) {
+    base::HistogramBase* histogram = base::SparseHistogram::FactoryGet(
+        name, base::Histogram::kUmaTargetedHistogramFlag);
+    histogram->Add(sample);
+  }
+
+  void SendHistogram(
+      const std::string& name, int sample, int min, int max, int nbuckets) {
+    base::HistogramBase* histogram = base::Histogram::FactoryGet(
+        name, min, max, nbuckets, base::Histogram::kUmaTargetedHistogramFlag);
+    histogram->Add(sample);
   }
 
   void SetTestingProperty(const std::string& name, const std::string& value) {
@@ -71,49 +85,18 @@ class UploadServiceTest : public testing::Test {
         base::WriteFile(filepath, value.data(), value.size()));
   }
 
+  const metrics::SystemProfileProto_Stability GetCurrentStability() {
+    EXPECT_TRUE(upload_service_->current_log_);
+
+    return upload_service_->current_log_->uma_proto()->system_profile().stability();
+  }
+
   base::ScopedTempDir dir_;
   scoped_ptr<UploadService> upload_service_;
-  MetricsLibrary metrics_lib_;
 
   scoped_ptr<base::AtExitManager> exit_manager_;
+  std::shared_ptr<CrashCounters> counters_;
 };
-
-// Tests that the right crash increments a values.
-TEST_F(UploadServiceTest, LogUserCrash) {
-  upload_service_->AddSample(*Crash("user").get());
-
-  MetricsLog* log = upload_service_->current_log_.get();
-  metrics::ChromeUserMetricsExtension* proto = log->uma_proto();
-
-  EXPECT_EQ(1, proto->system_profile().stability().other_user_crash_count());
-}
-
-TEST_F(UploadServiceTest, LogUncleanShutdown) {
-  upload_service_->AddSample(*Crash("uncleanshutdown"));
-
-  EXPECT_EQ(1, upload_service_->current_log_
-                   ->uma_proto()
-                   ->system_profile()
-                   .stability()
-                   .unclean_system_shutdown_count());
-}
-
-TEST_F(UploadServiceTest, LogKernelCrash) {
-  upload_service_->AddSample(*Crash("kernel"));
-
-  EXPECT_EQ(1, upload_service_->current_log_
-                   ->uma_proto()
-                   ->system_profile()
-                   .stability()
-                   .kernel_crash_count());
-}
-
-TEST_F(UploadServiceTest, UnknownCrashIgnored) {
-  upload_service_->AddSample(*Crash("foo"));
-
-  // The log should be empty.
-  EXPECT_FALSE(upload_service_->current_log_);
-}
 
 TEST_F(UploadServiceTest, FailedSendAreRetried) {
   SenderMock* sender = new SenderMock();
@@ -121,7 +104,7 @@ TEST_F(UploadServiceTest, FailedSendAreRetried) {
 
   sender->set_should_succeed(false);
 
-  upload_service_->AddSample(*Crash("user"));
+  SendSparseHistogram("hello", 1);
   upload_service_->UploadEvent();
   EXPECT_EQ(1, sender->send_call_count());
   std::string sent_string = sender->last_message();
@@ -137,7 +120,7 @@ TEST_F(UploadServiceTest, DiscardLogsAfterTooManyFailedUpload) {
 
   sender->set_should_succeed(false);
 
-  upload_service_->AddSample(*Crash("user"));
+  SendSparseHistogram("hello", 1);
 
   for (int i = 0; i < UploadService::kMaxFailedUpload; i++) {
     upload_service_->UploadEvent();
@@ -148,7 +131,7 @@ TEST_F(UploadServiceTest, DiscardLogsAfterTooManyFailedUpload) {
   EXPECT_FALSE(upload_service_->HasStagedLog());
 
   // Log a new sample. The failed upload counter should be reset.
-  upload_service_->AddSample(*Crash("user"));
+  SendSparseHistogram("hello", 1);
   for (int i = 0; i < UploadService::kMaxFailedUpload; i++) {
     upload_service_->UploadEvent();
   }
@@ -165,7 +148,8 @@ TEST_F(UploadServiceTest, EmptyLogsAreNotSent) {
 }
 
 TEST_F(UploadServiceTest, LogEmptyByDefault) {
-  UploadService upload_service("", base::TimeDelta(), dir_.path(), dir_.path());
+  UploadService upload_service("", base::TimeDelta(), dir_.path(), dir_.path(),
+                               std::make_shared<CrashCounters>());
 
   // current_log_ should be initialized later as it needs AtExitManager to exit
   // in order to gather system information from SysInfo.
@@ -176,39 +160,64 @@ TEST_F(UploadServiceTest, CanSendMultipleTimes) {
   SenderMock* sender = new SenderMock();
   upload_service_->sender_.reset(sender);
 
-  upload_service_->AddSample(*Crash("user"));
+  SendSparseHistogram("hello", 1);
+
   upload_service_->UploadEvent();
 
   std::string first_message = sender->last_message();
+  SendSparseHistogram("hello", 2);
 
-  upload_service_->AddSample(*Crash("kernel"));
   upload_service_->UploadEvent();
 
   EXPECT_NE(first_message, sender->last_message());
 }
 
 TEST_F(UploadServiceTest, LogEmptyAfterUpload) {
-  upload_service_->AddSample(*Crash("user"));
-
-  EXPECT_TRUE(upload_service_->current_log_);
+  SendSparseHistogram("hello", 2);
 
   upload_service_->UploadEvent();
   EXPECT_FALSE(upload_service_->current_log_);
 }
 
 TEST_F(UploadServiceTest, LogContainsAggregatedValues) {
-  scoped_ptr<metrics::MetricSample> histogram =
-      metrics::MetricSample::HistogramSample("foo", 10, 0, 42, 10);
-  upload_service_->AddSample(*histogram.get());
-
-  scoped_ptr<metrics::MetricSample> histogram2 =
-      metrics::MetricSample::HistogramSample("foo", 11, 0, 42, 10);
-  upload_service_->AddSample(*histogram2.get());
+  SendHistogram("foo", 11, 0, 42, 10);
+  SendHistogram("foo", 12, 0, 42, 10);
 
   upload_service_->GatherHistograms();
   metrics::ChromeUserMetricsExtension* proto =
       upload_service_->current_log_->uma_proto();
   EXPECT_EQ(1, proto->histogram_event().size());
+}
+
+TEST_F(UploadServiceTest, LogContainsCrashCounts) {
+  // By default, there is no current log.
+  upload_service_->GatherHistograms();
+  EXPECT_FALSE(upload_service_->current_log_);
+
+  // If the user crash counter is incremented, we add the count to the current
+  // log.
+  counters_->IncrementUserCrashCount();
+  upload_service_->GatherHistograms();
+  EXPECT_EQ(1, GetCurrentStability().other_user_crash_count());
+
+  // If the kernel crash counter is incremented, we add the count to the current
+  // log.
+  counters_->IncrementKernelCrashCount();
+  upload_service_->GatherHistograms();
+  EXPECT_EQ(1, GetCurrentStability().kernel_crash_count());
+
+  // If the kernel crash counter is incremented, we add the count to the current
+  // log.
+  counters_->IncrementUncleanShutdownCount();
+  counters_->IncrementUncleanShutdownCount();
+  upload_service_->GatherHistograms();
+  EXPECT_EQ(2, GetCurrentStability().unclean_system_shutdown_count());
+
+  // If no counter is incremented, the reported numbers don't change.
+  upload_service_->GatherHistograms();
+  EXPECT_EQ(1, GetCurrentStability().other_user_crash_count());
+  EXPECT_EQ(1, GetCurrentStability().kernel_crash_count());
+  EXPECT_EQ(2, GetCurrentStability().unclean_system_shutdown_count());
 }
 
 TEST_F(UploadServiceTest, ExtractChannelFromString) {
@@ -234,13 +243,12 @@ TEST_F(UploadServiceTest, ValuesInConfigFileAreSent) {
   SetTestingProperty(metrics::kProductId, "hello");
   SetTestingProperty(metrics::kProductVersion, "1.2.3.4");
 
-  scoped_ptr<metrics::MetricSample> histogram =
-      metrics::MetricSample::SparseHistogramSample("myhistogram", 1);
+  SendSparseHistogram("hello", 1);
+
   // Reset to create the new log with the profile setter.
   upload_service_->system_profile_setter_.reset(
       new SystemProfileCache(true, dir_.path()));
   upload_service_->Reset();
-  upload_service_->AddSample(*histogram.get());
   upload_service_->UploadEvent();
 
   EXPECT_EQ(1, sender->send_call_count());
@@ -279,21 +287,6 @@ TEST_F(UploadServiceTest, SessionIdIncrementedAtInitialization) {
   cache.initialized_ = false;
   cache.Initialize();
   EXPECT_EQ(cache.profile_.session_id, session_id + 1);
-}
-
-// Test that we can log metrics from the metrics library and have the uploader
-// upload them.
-TEST_F(UploadServiceTest, LogFromTheMetricsLibrary) {
-  SenderMock* sender = new SenderMock();
-  upload_service_->sender_.reset(sender);
-
-  upload_service_->UploadEvent();
-  EXPECT_EQ(0, sender->send_call_count());
-
-  metrics_lib_.SendEnumToUMA("testname", 2, 10);
-  upload_service_->UploadEvent();
-
-  EXPECT_EQ(1, sender->send_call_count());
 }
 
 // The product id must be set for metrics to be uploaded.

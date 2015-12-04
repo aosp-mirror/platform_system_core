@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef METRICS_UPLOADER_METRICS_LOG_H_
-#define METRICS_UPLOADER_METRICS_LOG_H_
+#ifndef METRICSD_UPLOADER_METRICS_LOG_H_
+#define METRICSD_UPLOADER_METRICS_LOG_H_
 
 #include <string>
 
@@ -34,15 +34,20 @@ class MetricsLog : public metrics::MetricsLogBase {
   // SystemProfileSetter.
   MetricsLog();
 
-  void IncrementUserCrashCount();
-  void IncrementKernelCrashCount();
-  void IncrementUncleanShutdownCount();
+  // Increment the crash counters in the protobuf.
+  // These methods don't have to be thread safe as metrics logs are only
+  // accessed by the uploader thread.
+  void IncrementUserCrashCount(unsigned int count);
+  void IncrementKernelCrashCount(unsigned int count);
+  void IncrementUncleanShutdownCount(unsigned int count);
 
   // Populate the system profile with system information using setter.
   bool PopulateSystemProfile(SystemProfileSetter* setter);
 
  private:
+  friend class UploadServiceTest;
   FRIEND_TEST(UploadServiceTest, LogContainsAggregatedValues);
+  FRIEND_TEST(UploadServiceTest, LogContainsCrashCounts);
   FRIEND_TEST(UploadServiceTest, LogKernelCrash);
   FRIEND_TEST(UploadServiceTest, LogUncleanShutdown);
   FRIEND_TEST(UploadServiceTest, LogUserCrash);
@@ -51,4 +56,4 @@ class MetricsLog : public metrics::MetricsLogBase {
   DISALLOW_COPY_AND_ASSIGN(MetricsLog);
 };
 
-#endif  // METRICS_UPLOADER_METRICS_LOG_H_
+#endif  // METRICSD_UPLOADER_METRICS_LOG_H_
