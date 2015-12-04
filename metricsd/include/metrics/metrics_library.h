@@ -24,8 +24,16 @@
 #include <base/compiler_specific.h>
 #include <base/files/file_path.h>
 #include <base/macros.h>
-#include <base/memory/scoped_ptr.h>
+#include <binder/IServiceManager.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
+
+namespace android {
+namespace brillo {
+namespace metrics {
+class IMetricsd;
+}  // namespace metrics
+}  // namespace brillo
+}  // namespace android
 
 class MetricsLibraryInterface {
  public:
@@ -152,6 +160,10 @@ class MetricsLibrary : public MetricsLibraryInterface {
                        char* buffer, int buffer_size,
                        bool* result);
 
+  // Connects to IMetricsd if the proxy does not exist or is not alive.
+  // Don't block if we fail to get the proxy for any reason.
+  bool CheckService();
+
   // Time at which we last checked if metrics were enabled.
   time_t cached_enabled_time_;
 
@@ -161,7 +173,8 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // True iff we should cache the enabled/disabled status.
   bool use_caching_;
 
-  base::FilePath uma_events_file_;
+  android::sp<android::IServiceManager> manager_;
+  android::sp<android::brillo::metrics::IMetricsd> metricsd_proxy_;
   base::FilePath consent_file_;
 
   DISALLOW_COPY_AND_ASSIGN(MetricsLibrary);
