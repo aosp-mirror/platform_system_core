@@ -200,13 +200,6 @@ bool MetricsLibrary::SendSparseToUMA(const std::string& name, int sample) {
              .isOk();
 }
 
-bool MetricsLibrary::SendUserActionToUMA(const std::string& action) {
-  // Deprecated.
-  // TODO(bsimonnet): Delete this method entirely once all the callers are
-  // removed (b/25818567).
-  return true;
-}
-
 bool MetricsLibrary::SendCrashToUMA(const char* crash_kind) {
   return CheckService() &&
          metricsd_proxy_->recordCrash(String16(crash_kind)).isOk();
@@ -219,4 +212,15 @@ bool MetricsLibrary::SendCrosEventToUMA(const std::string& event) {
     }
   }
   return false;
+}
+
+bool MetricsLibrary::GetHistogramsDump(std::string* dump) {
+  android::String16 temp_dump;
+  if (!CheckService() ||
+      !metricsd_proxy_->getHistogramsDump(&temp_dump).isOk()) {
+    return false;
+  }
+
+  *dump = android::String8(temp_dump).string();
+  return true;
 }

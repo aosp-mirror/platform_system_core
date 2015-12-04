@@ -22,4 +22,5 @@ interface IMetricsd {
   oneway void recordLinearHistogram(String name, int sample, int max);
   oneway void recordSparseHistogram(String name, int sample);
   oneway void recordCrash(String type);
+  String getHistogramsDump();
 }

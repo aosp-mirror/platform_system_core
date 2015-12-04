@@ -17,16 +17,14 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include <base/memory/scoped_vector.h>
-
 #include "constants.h"
 #include "metrics/metrics_library.h"
 
 enum Mode {
+    kModeDumpHistograms,
     kModeSendSample,
     kModeSendEnumSample,
     kModeSendSparseSample,
-    kModeSendUserAction,
     kModeSendCrosEvent,
     kModeHasConsent,
     kModeIsGuestMode,
@@ -38,18 +36,17 @@ void ShowUsage() {
           "        metrics_client -e   name sample max\n"
           "        metrics_client -s   name sample\n"
           "        metrics_client -v   event\n"
-          "        metrics_client -u action\n"
           "        metrics_client [-cdg]\n"
           "\n"
           "  default: send metric with integer values \n"
           "           |min| > 0, |min| <= sample < |max|\n"
           "  -c: return exit status 0 if user consents to stats, 1 otherwise,\n"
           "      in guest mode always return 1\n"
+          "  -d: dump the histograms recorded by metricsd to stdout\n"
           "  -e: send linear/enumeration histogram data\n"
           "  -g: return exit status 0 if machine in guest mode, 1 otherwise\n"
           "  -s: send a sparse histogram sample\n"
           "  -t: convert sample from double seconds to int milliseconds\n"
-          "  -u: send a user action to Chrome\n"
           "  -v: send a Platform.CrOSEvent enum histogram sample\n");
   exit(1);
 }
@@ -72,6 +69,20 @@ static double ParseDouble(const char *arg) {
     ShowUsage();
   }
   return value;
+}
+
+static int DumpHistograms() {
+  MetricsLibrary metrics_lib;
+  metrics_lib.Init();
+
+  std::string dump;
+  if (!metrics_lib.GetHistogramsDump(&dump)) {
+    printf("Failed to dump the histograms.");
+    return 1;
+  }
+
+  printf("%s\n", dump.c_str());
+  return 0;
 }
 
 static int SendStats(char* argv[],
@@ -99,14 +110,6 @@ static int SendStats(char* argv[],
     int nbuckets = ParseInt(argv[name_index + 4]);
     metrics_lib.SendToUMA(name, sample, min, max, nbuckets);
   }
-  return 0;
-}
-
-static int SendUserAction(char* argv[], int action_index) {
-  const char* action = argv[action_index];
-  MetricsLibrary metrics_lib;
-  metrics_lib.Init();
-  metrics_lib.SendUserActionToUMA(action);
   return 0;
 }
 
@@ -141,10 +144,13 @@ int main(int argc, char** argv) {
 
   // Parse arguments
   int flag;
-  while ((flag = getopt(argc, argv, "abcegstuv")) != -1) {
+  while ((flag = getopt(argc, argv, "abcdegstv")) != -1) {
     switch (flag) {
       case 'c':
         mode = kModeHasConsent;
+        break;
+      case 'd':
+        mode = kModeDumpHistograms;
         break;
       case 'e':
         mode = kModeSendEnumSample;
@@ -157,9 +163,6 @@ int main(int argc, char** argv) {
         break;
       case 't':
         secs_to_msecs = true;
-        break;
-      case 'u':
-        mode = kModeSendUserAction;
         break;
       case 'v':
         mode = kModeSendCrosEvent;
@@ -178,8 +181,6 @@ int main(int argc, char** argv) {
     expected_args = 3;
   else if (mode == kModeSendSparseSample)
     expected_args = 2;
-  else if (mode == kModeSendUserAction)
-    expected_args = 1;
   else if (mode == kModeSendCrosEvent)
     expected_args = 1;
 
@@ -188,6 +189,8 @@ int main(int argc, char** argv) {
   }
 
   switch (mode) {
+    case kModeDumpHistograms:
+      return DumpHistograms();
     case kModeSendSample:
     case kModeSendEnumSample:
     case kModeSendSparseSample:
@@ -198,8 +201,6 @@ int main(int argc, char** argv) {
                        arg_index,
                        mode,
                        secs_to_msecs);
-    case kModeSendUserAction:
-      return SendUserAction(argv, arg_index);
     case kModeSendCrosEvent:
       return SendCrosEvent(argv, arg_index);
     case kModeHasConsent:
