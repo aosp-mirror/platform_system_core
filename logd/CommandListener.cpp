@@ -34,6 +34,7 @@
 
 #include "CommandListener.h"
 #include "LogCommand.h"
+#include "LogUtils.h"
 
 CommandListener::CommandListener(LogBuffer *buf, LogReader * /*reader*/,
                                  LogListener * /*swl*/) :

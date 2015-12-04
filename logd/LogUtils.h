@@ -20,6 +20,7 @@
 #include <sys/types.h>
 
 #include <log/log.h>
+#include <sysutils/SocketClient.h>
 
 // Hijack this header as a common include file used by most all sources
 // to report some utilities defined here and there.
@@ -38,8 +39,12 @@ const char *tagToName(uint32_t tag);
 
 }
 
+// Furnished in LogCommand.cpp
+bool clientHasLogCredentials(uid_t uid, gid_t gid, pid_t pid);
+bool clientHasLogCredentials(SocketClient *cli);
+
 static inline bool worstUidEnabledForLogid(log_id_t id) {
-    return (id != LOG_ID_CRASH) && (id != LOG_ID_KERNEL) && (id != LOG_ID_EVENTS);
+    return (id == LOG_ID_MAIN) || (id == LOG_ID_SYSTEM) || (id == LOG_ID_RADIO);
 }
 
 template <int (*cmp)(const char *l, const char *r, const size_t s)>

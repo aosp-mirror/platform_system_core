@@ -51,7 +51,8 @@ LogBufferElement::~LogBufferElement() {
 }
 
 uint32_t LogBufferElement::getTag() const {
-    if ((mLogId != LOG_ID_EVENTS) || !mMsg || (mMsgLen < sizeof(uint32_t))) {
+    if (((mLogId != LOG_ID_EVENTS) && (mLogId != LOG_ID_SECURITY)) ||
+            !mMsg || (mMsgLen < sizeof(uint32_t))) {
         return 0;
     }
     return le32toh(reinterpret_cast<android_event_header_t *>(mMsg)->tag);
@@ -158,7 +159,9 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
                           mDropped, (mDropped > 1) ? "s" : "");
 
     size_t hdrLen;
-    if (mLogId == LOG_ID_EVENTS) {
+    // LOG_ID_SECURITY not strictly needed since spam filter not activated,
+    // but required for accuracy.
+    if ((mLogId == LOG_ID_EVENTS) || (mLogId == LOG_ID_SECURITY)) {
         hdrLen = sizeof(android_log_event_string_t);
     } else {
         hdrLen = 1 + sizeof(tag);
@@ -172,7 +175,7 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
     }
 
     size_t retval = hdrLen + len;
-    if (mLogId == LOG_ID_EVENTS) {
+    if ((mLogId == LOG_ID_EVENTS) || (mLogId == LOG_ID_SECURITY)) {
         android_log_event_string_t *event =
             reinterpret_cast<android_log_event_string_t *>(buffer);
 
