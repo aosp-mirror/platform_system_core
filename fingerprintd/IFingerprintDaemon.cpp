@@ -125,6 +125,16 @@ status_t BnFingerprintDaemon::onTransact(uint32_t code, const Parcel& data, Parc
             reply->writeInt32(ret);
             return NO_ERROR;
         }
+        case ENUMERATE: {
+            CHECK_INTERFACE(IFingerprintDaemon, data, reply);
+            if (!checkPermission(HAL_FINGERPRINT_PERMISSION)) {
+                return PERMISSION_DENIED;
+            }
+            const int32_t ret = enumerate();
+            reply->writeNoException();
+            reply->writeInt32(ret);
+            return NO_ERROR;
+        }
         case GET_AUTHENTICATOR_ID: {
             CHECK_INTERFACE(IFingerprintDaemon, data, reply);
             if (!checkPermission(HAL_FINGERPRINT_PERMISSION)) {

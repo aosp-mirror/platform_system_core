@@ -74,13 +74,13 @@ public:
         return remote()->transact(ON_REMOVED, data, &reply, IBinder::FLAG_ONEWAY);
     }
 
-    virtual status_t onEnumerate(int64_t devId, const int32_t* fpIds, const int32_t* gpIds,
-            int32_t sz) {
+    virtual status_t onEnumerate(int64_t devId, int32_t fpId, int32_t gpId, int32_t rem) {
         Parcel data, reply;
         data.writeInterfaceToken(IFingerprintDaemonCallback::getInterfaceDescriptor());
         data.writeInt64(devId);
-        data.writeInt32Array(sz, fpIds);
-        data.writeInt32Array(sz, gpIds);
+        data.writeInt32(fpId);
+        data.writeInt32(gpId);
+        data.writeInt32(rem);
         return remote()->transact(ON_ENUMERATE, data, &reply, IBinder::FLAG_ONEWAY);
     }
 };
