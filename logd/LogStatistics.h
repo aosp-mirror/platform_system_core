@@ -25,7 +25,7 @@
 #include <string>    // std::string
 #include <unordered_map>
 
-#include <base/stringprintf.h>
+#include <android-base/stringprintf.h>
 #include <log/log.h>
 #include <private/android_filesystem_config.h>
 

@@ -26,9 +26,9 @@
 
 #include <algorithm>
 
-#include <base/logging.h>
-#include <base/stringprintf.h>
-#include <base/strings.h>
+#include <android-base/logging.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 
 #include "adb_trace.h"
 #include "sysdeps.h"

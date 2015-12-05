@@ -31,8 +31,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include <base/logging.h>
-#include <base/stringprintf.h>
+#include <android-base/logging.h>
+#include <android-base/stringprintf.h>
 
 #include "adb_io.h"
 #include "adb_trace.h"

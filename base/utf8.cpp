@@ -16,13 +16,13 @@
 
 #include <windows.h>
 
-#include "base/utf8.h"
+#include "android-base/utf8.h"
 
 #include <fcntl.h>
 
 #include <string>
 
-#include "base/logging.h"
+#include "android-base/logging.h"
 
 namespace android {
 namespace base {

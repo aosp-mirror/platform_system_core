@@ -31,9 +31,9 @@
 #include <unistd.h>
 #endif
 
-#include <base/file.h>
-#include <base/stringprintf.h>
-#include <base/strings.h>
+#include <android-base/file.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <cutils/sockets.h>
 
 #if !ADB_HOST

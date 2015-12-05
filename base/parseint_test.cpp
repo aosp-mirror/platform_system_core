@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "base/parseint.h"
+#include "android-base/parseint.h"
 
 #include <gtest/gtest.h>
 

@@ -27,7 +27,7 @@
 
 #include <stdint.h>
 
-#include <base/macros.h>
+#include <android-base/macros.h>
 
 #include "adb.h"
 

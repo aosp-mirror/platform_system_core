@@ -20,7 +20,7 @@
 
 #include <unistd.h>
 
-#include <base/stringprintf.h>
+#include <android-base/stringprintf.h>
 
 #include "adb_trace.h"
 #include "adb_utils.h"

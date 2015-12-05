@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "base/file.h"
+#include "android-base/file.h"
 
 #include <gtest/gtest.h>
 
@@ -24,7 +24,7 @@
 
 #include <string>
 
-#include "base/test_utils.h"
+#include "android-base/test_utils.h"
 
 TEST(file, ReadFileToString_ENOENT) {
   std::string s("hello");

@@ -18,9 +18,9 @@
 
 #include <stdio.h>
 
-#include <base/file.h>
-#include <base/logging.h>
-#include <base/strings.h>
+#include <android-base/file.h>
+#include <android-base/logging.h>
+#include <android-base/strings.h>
 #include <cutils/sockets.h>
 
 #include "adb.h"
