@@ -50,10 +50,11 @@ class LogTimeEntry {
 public:
     LogTimeEntry(LogReader &reader, SocketClient *client, bool nonBlock,
                  unsigned long tail, unsigned int logMask, pid_t pid,
-                 uint64_t start);
+                 uint64_t start, uint64_t timeout);
 
     SocketClient *mClient;
     uint64_t mStart;
+    struct timespec mTimeout;
     const bool mNonBlock;
     const uint64_t mEnd; // only relevant if mNonBlock
 
