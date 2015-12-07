@@ -14,11 +14,11 @@
 * limitations under the License.
 */
 
-#include "base/utf8.h"
+#include "android-base/utf8.h"
 
 #include <gtest/gtest.h>
 
-#include "base/macros.h"
+#include "android-base/macros.h"
 
 namespace android {
 namespace base {

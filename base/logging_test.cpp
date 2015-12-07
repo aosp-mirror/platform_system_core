@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "base/logging.h"
+#include "android-base/logging.h"
 
 #include <libgen.h>
 
@@ -25,9 +25,9 @@
 #include <regex>
 #include <string>
 
-#include "base/file.h"
-#include "base/stringprintf.h"
-#include "base/test_utils.h"
+#include "android-base/file.h"
+#include "android-base/stringprintf.h"
+#include "android-base/test_utils.h"
 
 #include <gtest/gtest.h>
 

@@ -22,7 +22,7 @@
 
 #include <selinux/selinux.h>
 
-#include <base/stringprintf.h>
+#include <android-base/stringprintf.h>
 
 static void init_klog_vwrite(int level, const char* fmt, va_list ap) {
     static const char* tag = basename(getprogname());

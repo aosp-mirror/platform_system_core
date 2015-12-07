@@ -25,8 +25,8 @@
 #include <getopt.h>
 #include <sys/prctl.h>
 
-#include "base/logging.h"
-#include "base/stringprintf.h"
+#include <android-base/logging.h>
+#include <android-base/stringprintf.h>
 #include "cutils/properties.h"
 #include "private/android_filesystem_config.h"
 #include "selinux/selinux.h"

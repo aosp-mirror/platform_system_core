@@ -29,8 +29,8 @@
 #include <inttypes.h>
 #include <stdio.h>
 
-#include <base/logging.h>
-#include <base/stringprintf.h>
+#include <android-base/logging.h>
+#include <android-base/stringprintf.h>
 
 #include "adb.h"
 #include "transport.h"

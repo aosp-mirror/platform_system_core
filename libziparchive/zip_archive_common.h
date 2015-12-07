@@ -17,7 +17,7 @@
 #ifndef LIBZIPARCHIVE_ZIPARCHIVECOMMON_H_
 #define LIBZIPARCHIVE_ZIPARCHIVECOMMON_H_
 
-#include "base/macros.h"
+#include "android-base/macros.h"
 
 #include <inttypes.h>
 

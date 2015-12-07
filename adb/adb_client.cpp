@@ -31,8 +31,8 @@
 #include <string>
 #include <vector>
 
-#include <base/stringprintf.h>
-#include <base/strings.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <cutils/sockets.h>
 
 #include "adb_io.h"

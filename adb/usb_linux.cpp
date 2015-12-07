@@ -39,9 +39,9 @@
 #include <mutex>
 #include <string>
 
-#include <base/file.h>
-#include <base/stringprintf.h>
-#include <base/strings.h>
+#include <android-base/file.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 
 #include "adb.h"
 #include "transport.h"

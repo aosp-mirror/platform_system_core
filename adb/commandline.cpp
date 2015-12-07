@@ -35,9 +35,9 @@
 #include <string>
 #include <vector>
 
-#include <base/logging.h>
-#include <base/stringprintf.h>
-#include <base/strings.h>
+#include <android-base/logging.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 
 #if !defined(_WIN32)
 #include <signal.h>

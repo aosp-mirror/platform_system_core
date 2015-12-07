@@ -17,7 +17,7 @@
 #ifndef TRANSPORT_H_
 #define TRANSPORT_H_
 
-#include <base/macros.h>
+#include <android-base/macros.h>
 
 // General interface to allow the fastboot protocol to be used over different
 // types of transports.

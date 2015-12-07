@@ -18,7 +18,7 @@
 
 #include "sysdeps.h"
 
-#include "base/test_utils.h"
+#include <android-base/test_utils.h>
 
 TEST(sysdeps_win32, adb_getenv) {
     // Insert all test env vars before first call to adb_getenv() which will
