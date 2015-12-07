@@ -203,7 +203,7 @@ AndroidLogFormat *android_log_format_new()
     p_ret->year_output = false;
     p_ret->zone_output = false;
     p_ret->epoch_output = false;
-    p_ret->monotonic_output = android_log_clockid() == CLOCK_MONOTONIC;
+    p_ret->monotonic_output = android_log_timestamp() == 'm';
 
     return p_ret;
 }
@@ -1262,7 +1262,7 @@ char *android_log_formatLogLine (
     nsec = entry->tv_nsec;
     if (p_format->monotonic_output) {
         // prevent convertMonotonic from being called if logd is monotonic
-        if (android_log_clockid() != CLOCK_MONOTONIC) {
+        if (android_log_timestamp() != 'm') {
             struct timespec time;
             convertMonotonic(&time, entry);
             now = time.tv_sec;
