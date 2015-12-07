@@ -398,9 +398,11 @@ static log_time lastLogTime(char *outputFileName) {
         return retval;
     }
 
-    clockid_t clock_type = android_log_clockid();
-    log_time now(clock_type);
-    bool monotonic = clock_type == CLOCK_MONOTONIC;
+    log_time now(CLOCK_REALTIME);
+    bool monotonic = android_log_timestamp() == 'm';
+    if (monotonic) {
+        now = log_time(CLOCK_MONOTONIC);
+    }
 
     std::string directory;
     char *file = strrchr(outputFileName, '/');

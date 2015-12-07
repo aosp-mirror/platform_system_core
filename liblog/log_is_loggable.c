@@ -196,18 +196,18 @@ int __android_log_is_loggable(int prio, const char *tag, int default_prio)
  * rare, we can accept a trylock failure gracefully. Use a separate
  * lock from is_loggable to keep contention down b/25563384.
  */
-static pthread_mutex_t lock_clockid = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t lock_timestamp = PTHREAD_MUTEX_INITIALIZER;
 
-clockid_t android_log_clockid()
+char android_log_timestamp()
 {
     static struct cache r_time_cache = { NULL, -1, 0 };
     static struct cache p_time_cache = { NULL, -1, 0 };
-    char c;
+    char retval;
 
-    if (pthread_mutex_trylock(&lock_clockid)) {
+    if (pthread_mutex_trylock(&lock_timestamp)) {
         /* We are willing to accept some race in this context */
-        if (!(c = p_time_cache.c)) {
-            c = r_time_cache.c;
+        if (!(retval = p_time_cache.c)) {
+            retval = r_time_cache.c;
         }
     } else {
         static uint32_t serial;
@@ -217,12 +217,12 @@ clockid_t android_log_clockid()
             refresh_cache(&p_time_cache, "persist.logd.timestamp");
             serial = current_serial;
         }
-        if (!(c = p_time_cache.c)) {
-            c = r_time_cache.c;
+        if (!(retval = p_time_cache.c)) {
+            retval = r_time_cache.c;
         }
 
-        pthread_mutex_unlock(&lock_clockid);
+        pthread_mutex_unlock(&lock_timestamp);
     }
 
-    return (tolower(c) == 'm') ? CLOCK_MONOTONIC : CLOCK_REALTIME;
+    return tolower(retval ?: 'r');
 }
