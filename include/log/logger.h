@@ -11,6 +11,10 @@
 #define _LIBS_LOG_LOGGER_H
 
 #include <stdint.h>
+#ifdef __linux__
+#include <time.h> /* clockid_t definition */
+#endif
+
 #include <log/log.h>
 #include <log/log_read.h>
 
@@ -183,7 +187,9 @@ struct logger_list *android_logger_list_open(log_id_t id,
                                              pid_t pid);
 #define android_logger_list_close android_logger_list_free
 
-char android_log_timestamp();
+#ifdef __linux__
+clockid_t android_log_clockid();
+#endif
 
 /*
  * log_id_t helpers
