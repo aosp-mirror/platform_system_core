@@ -611,11 +611,11 @@ TEST(liblog, android_logger_get_) {
         struct logger * logger;
         EXPECT_TRUE(NULL != (logger = android_logger_open(logger_list, id)));
         EXPECT_EQ(id, android_logger_get_id(logger));
+        EXPECT_LT(0, android_logger_get_log_size(logger));
         /* crash buffer is allowed to be empty, that is actually healthy! */
-        if (android_logger_get_log_size(logger) || strcmp("crash", name)) {
-            EXPECT_LT(0, android_logger_get_log_size(logger));
+        if (android_logger_get_log_readable_size(logger) || strcmp("crash", name)) {
+            EXPECT_LT(0, android_logger_get_log_readable_size(logger));
         }
-        EXPECT_LT(0, android_logger_get_log_readable_size(logger));
         EXPECT_LT(0, android_logger_get_log_version(logger));
     }
 
