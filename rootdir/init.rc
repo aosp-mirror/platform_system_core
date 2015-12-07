@@ -353,6 +353,7 @@ on post-fs-data
     mkdir /data/local/tmp 0771 shell shell
     mkdir /data/data 0771 system system
     mkdir /data/app-private 0771 system system
+    mkdir /data/app-ephemeral 0771 system system
     mkdir /data/app-asec 0700 root root
     mkdir /data/app-lib 0771 system system
     mkdir /data/app 0771 system system
