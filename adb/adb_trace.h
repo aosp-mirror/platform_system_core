@@ -17,8 +17,8 @@
 #ifndef __ADB_TRACE_H
 #define __ADB_TRACE_H
 
-#include <base/logging.h>
-#include <base/stringprintf.h>
+#include <android-base/logging.h>
+#include <android-base/stringprintf.h>
 
 /* IMPORTANT: if you change the following list, don't
  * forget to update the corresponding 'tags' table in

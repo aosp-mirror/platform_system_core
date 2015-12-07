@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "base/strings.h"
+#include "android-base/strings.h"
 
 #include <gtest/gtest.h>
 

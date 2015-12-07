@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "base/logging.h"
+#include "android-base/logging.h"
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);

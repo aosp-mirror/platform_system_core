@@ -25,7 +25,7 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include <base/stringprintf.h>
+#include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
 
 #if !ADB_HOST

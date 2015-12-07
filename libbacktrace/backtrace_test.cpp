@@ -42,7 +42,7 @@
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 
-#include <base/stringprintf.h>
+#include <android-base/stringprintf.h>
 #include <cutils/atomic.h>
 #include <cutils/threads.h>
 
@@ -1461,4 +1461,3 @@ TEST(libbacktrace, check_for_leak_remote) {
   ASSERT_EQ(waitpid(pid, nullptr, 0), pid);
 }
 #endif
-

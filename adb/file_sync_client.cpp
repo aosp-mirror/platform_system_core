@@ -41,9 +41,9 @@
 #include "file_sync_service.h"
 #include "line_printer.h"
 
-#include <base/file.h>
-#include <base/strings.h>
-#include <base/stringprintf.h>
+#include <android-base/file.h>
+#include <android-base/strings.h>
+#include <android-base/stringprintf.h>
 
 struct syncsendbuf {
     unsigned id;

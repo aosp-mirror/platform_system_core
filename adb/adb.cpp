@@ -33,10 +33,10 @@
 #include <string>
 #include <vector>
 
-#include <base/logging.h>
-#include <base/macros.h>
-#include <base/stringprintf.h>
-#include <base/strings.h>
+#include <android-base/logging.h>
+#include <android-base/macros.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 
 #include "adb_auth.h"
 #include "adb_io.h"
