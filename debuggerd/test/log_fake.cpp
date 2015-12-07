@@ -19,7 +19,7 @@
 
 #include <string>
 
-#include <base/stringprintf.h>
+#include <android-base/stringprintf.h>
 #include <log/log.h>
 #include <log/logger.h>
 

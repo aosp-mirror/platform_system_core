@@ -18,8 +18,8 @@
 
 #include <errno.h>
 
-#include <base/strings.h>
-#include <base/stringprintf.h>
+#include <android-base/strings.h>
+#include <android-base/stringprintf.h>
 
 #include "builtins.h"
 #include "error.h"

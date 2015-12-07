@@ -22,7 +22,7 @@
 
 #include <string>
 
-#include <base/macros.h>
+#include <android-base/macros.h>
 
 #include "adb_trace.h"
 #include "fdevent.h"

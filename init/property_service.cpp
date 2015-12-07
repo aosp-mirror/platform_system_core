@@ -47,7 +47,7 @@
 #include <selinux/label.h>
 
 #include <fs_mgr.h>
-#include <base/file.h>
+#include <android-base/file.h>
 #include "bootimg.h"
 
 #include "property_service.h"

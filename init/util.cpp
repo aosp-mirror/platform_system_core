@@ -32,12 +32,12 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#include <base/file.h>
-#include <base/strings.h>
+#include <android-base/file.h>
+#include <android-base/strings.h>
 
 /* for ANDROID_SOCKET_* */
 #include <cutils/sockets.h>
-#include <base/stringprintf.h>
+#include <android-base/stringprintf.h>
 
 #include <private/android_filesystem_config.h>
 

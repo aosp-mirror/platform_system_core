@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include <base/strings.h>
+#include <android-base/strings.h>
 
 #include "adb.h"
 #include "adb_io.h"

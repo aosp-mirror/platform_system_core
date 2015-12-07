@@ -32,10 +32,10 @@
 
 #include <cutils/sockets.h>
 
-#include <base/logging.h>
-#include <base/stringprintf.h>
-#include <base/strings.h>
-#include <base/utf8.h>
+#include <android-base/logging.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
+#include <android-base/utf8.h>
 
 #include "adb.h"
 

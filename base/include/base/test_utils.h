@@ -19,7 +19,7 @@
 
 #include <string>
 
-#include <base/macros.h>
+#include <android-base/macros.h>
 
 class TemporaryFile {
  public:

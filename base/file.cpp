@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "base/file.h"
+#include "android-base/file.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -23,8 +23,8 @@
 
 #include <string>
 
-#include "base/macros.h"  // For TEMP_FAILURE_RETRY on Darwin.
-#include "base/utf8.h"
+#include "android-base/macros.h"  // For TEMP_FAILURE_RETRY on Darwin.
+#include "android-base/utf8.h"
 #define LOG_TAG "base.file"
 #include "cutils/log.h"
 #include "utils/Compat.h"

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include "base/logging.h"
-#include "base/test_utils.h"
+#include "android-base/logging.h"
+#include "android-base/test_utils.h"
 #include "utils/Compat.h" // For OS_PATH_SEPARATOR.
 
 #include <fcntl.h>

@@ -17,7 +17,7 @@
 #ifndef LIBZIPARCHIVE_ZIPWRITER_H_
 #define LIBZIPARCHIVE_ZIPWRITER_H_
 
-#include "base/macros.h"
+#include "android-base/macros.h"
 #include <utils/Compat.h>
 
 #include <cstdio>

@@ -89,8 +89,8 @@
 
 #include <memory>
 
-#include <base/logging.h>
-#include <base/stringprintf.h>
+#include <android-base/logging.h>
+#include <android-base/stringprintf.h>
 #include <paths.h>
 
 #include "adb.h"

@@ -25,7 +25,7 @@
 #include "service.h"
 #include "util.h"
 
-#include <base/stringprintf.h>
+#include <android-base/stringprintf.h>
 
 Parser::Parser() {
 }

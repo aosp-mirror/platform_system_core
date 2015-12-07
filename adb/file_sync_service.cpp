@@ -35,8 +35,8 @@
 #include "adb_utils.h"
 #include "private/android_filesystem_config.h"
 
-#include <base/stringprintf.h>
-#include <base/strings.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 
 static bool should_use_fs_config(const std::string& path) {
     // TODO: use fs_config to configure permissions on /data.
