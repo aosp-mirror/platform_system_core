@@ -797,6 +797,14 @@ int android_logger_list_read(struct logger_list *logger_list,
         }
 
         if (logger_list->start.tv_sec || logger_list->start.tv_nsec) {
+            if (logger_list->mode & ANDROID_LOG_WRAP) {
+                // ToDo: alternate API to allow timeout to be adjusted.
+                ret = snprintf(cp, remaining, " timeout=%u",
+                               ANDROID_LOG_WRAP_DEFAULT_TIMEOUT);
+                ret = min(ret, remaining);
+                remaining -= ret;
+                cp += ret;
+            }
             ret = snprintf(cp, remaining, " start=%" PRIu32 ".%09" PRIu32,
                            logger_list->start.tv_sec,
                            logger_list->start.tv_nsec);

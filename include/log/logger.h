@@ -163,6 +163,8 @@ int android_logger_set_prune_list(struct logger_list *logger_list,
 #define ANDROID_LOG_RDWR     O_RDWR
 #define ANDROID_LOG_ACCMODE  O_ACCMODE
 #define ANDROID_LOG_NONBLOCK O_NONBLOCK
+#define ANDROID_LOG_WRAP     0x40000000 /* Block until buffer about to wrap */
+#define ANDROID_LOG_WRAP_DEFAULT_TIMEOUT 7200 /* 2 hour default */
 #define ANDROID_LOG_PSTORE   0x80000000
 
 struct logger_list *android_logger_list_alloc(int mode,

@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <math.h>
 #include <sched.h>
 #include <signal.h>
@@ -256,13 +257,19 @@ static void show_help(const char *cmd)
                     "  -s              Set default filter to silent.\n"
                     "                  Like specifying filterspec '*:S'\n"
                     "  -f <filename>   Log to file. Default is stdout\n"
+                    "  --file=<filename>\n"
                     "  -r <kbytes>     Rotate log every kbytes. Requires -f\n"
+                    "  --rotate_kbytes=<kbytes>\n"
                     "  -n <count>      Sets max number of rotated logs to <count>, default 4\n"
-                    "  -v <format>     Sets the log print format, where <format> is:\n\n"
+                    "  --rotate_count=<count>\n"
+                    "  -v <format>     Sets the log print format, where <format> is:\n"
+                    "  --format=<format>\n"
                     "                      brief color epoch long monotonic printable process raw\n"
                     "                      tag thread threadtime time usec UTC year zone\n\n"
                     "  -D              print dividers between each log buffer\n"
+                    "  --dividers\n"
                     "  -c              clear (flush) the entire log and exit\n"
+                    "  --clear\n"
                     "  -d              dump the log and then exit (don't block)\n"
                     "  -t <count>      print only the most recent <count> lines (implies -d)\n"
                     "  -t '<time>'     print most recent lines since specified time (implies -d)\n"
@@ -271,22 +278,32 @@ static void show_help(const char *cmd)
                     "                  count is pure numerical, time is 'MM-DD hh:mm:ss.mmm...'\n"
                     "                  'YYYY-MM-DD hh:mm:ss.mmm...' or 'sssss.mmm...' format\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
+                    "  --buffer_size\n"
+                    "  -G <size>       set size of log ring buffer, may suffix with K or M.\n"
+                    "  --buffer_size=<size>\n"
                     "  -L              dump logs from prior to last reboot\n"
+                    "  --last\n"
                     "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio',\n"
-                    "                  'events', 'crash' or 'all'. Multiple -b parameters are\n"
+                    "  --buffer=<buffer> 'events', 'crash' or 'all'. Multiple -b parameters are\n"
                     "                  allowed and results are interleaved. The default is\n"
                     "                  -b main -b system -b crash.\n"
                     "  -B              output the log in binary.\n"
+                    "  --binary\n"
                     "  -S              output statistics.\n"
-                    "  -G <size>       set size of log ring buffer, may suffix with K or M.\n"
+                    "  --statistics\n"
                     "  -p              print prune white and ~black list. Service is specified as\n"
-                    "                  UID, UID/PID or /PID. Weighed for quicker pruning if prefix\n"
+                    "  --prune         UID, UID/PID or /PID. Weighed for quicker pruning if prefix\n"
                     "                  with ~, otherwise weighed for longevity if unadorned. All\n"
                     "                  other pruning activity is oldest first. Special case ~!\n"
                     "                  represents an automatic quicker pruning for the noisiest\n"
                     "                  UID as determined by the current statistics.\n"
                     "  -P '<list> ...' set prune white and ~black list, using same format as\n"
-                    "                  printed above. Must be quoted.\n");
+                    "  --prune='<list> ...'  printed above. Must be quoted.\n"
+                    "  --pid=<pid>     Only prints logs from the given pid.\n"
+                    // Check ANDROID_LOG_WRAP_DEFAULT_TIMEOUT value
+                    "  --wrap          Sleep for 2 hours or when buffer about to wrap whichever\n"
+                    "                  comes first. Improves efficiency of polling by providing\n"
+                    "                  an about-to-wrap wakeup.\n");
 
     fprintf(stderr,"\nfilterspecs are a series of \n"
                    "  <tag>[:priority]\n\n"
@@ -348,15 +365,19 @@ static const char *multiplier_of_size(unsigned long value)
 static bool getSizeTArg(char *ptr, size_t *val, size_t min = 0,
                         size_t max = SIZE_MAX)
 {
-    char *endp;
-    errno = 0;
-    size_t ret = (size_t) strtoll(ptr, &endp, 0);
-
-    if (endp[0] != '\0' || errno != 0 ) {
+    if (!ptr) {
         return false;
     }
 
-    if (ret >  max || ret <  min) {
+    char *endp;
+    errno = 0;
+    size_t ret = (size_t)strtoll(ptr, &endp, 0);
+
+    if (endp[0] || errno) {
+        return false;
+    }
+
+    if ((ret > max) || (ret < min)) {
         return false;
     }
 
@@ -497,6 +518,7 @@ int main(int argc, char **argv)
     struct logger_list *logger_list;
     size_t tail_lines = 0;
     log_time tail_time(log_time::EPOCH);
+    size_t pid = 0;
 
     signal(SIGPIPE, exit);
 
@@ -510,13 +532,66 @@ int main(int argc, char **argv)
     for (;;) {
         int ret;
 
-        ret = getopt(argc, argv, ":cdDLt:T:gG:sQf:r:n:v:b:BSpP:");
+        int option_index = 0;
+        static const char pid_str[] = "pid";
+        static const char wrap_str[] = "wrap";
+        static const struct option long_options[] = {
+          { "binary",        no_argument,       NULL,   'B' },
+          { "buffer",        required_argument, NULL,   'b' },
+          { "buffer_size",   optional_argument, NULL,   'g' },
+          { "clear",         no_argument,       NULL,   'c' },
+          { "dividers",      no_argument,       NULL,   'D' },
+          { "file",          required_argument, NULL,   'f' },
+          { "format",        required_argument, NULL,   'v' },
+          { "last",          no_argument,       NULL,   'L' },
+          { pid_str,         required_argument, NULL,   0 },
+          { "prune",         optional_argument, NULL,   'p' },
+          { "rotate_count",  required_argument, NULL,   'n' },
+          { "rotate_kbytes", required_argument, NULL,   'r' },
+          { "statistics",    no_argument,       NULL,   'S' },
+          // support, but ignore and do not document, the optional argument
+          { wrap_str,        optional_argument, NULL,   0 },
+          { NULL,            0,                 NULL,   0 }
+        };
+
+        ret = getopt_long(argc, argv, ":cdDLt:T:gG:sQf:r:n:v:b:BSpP:",
+                          long_options, &option_index);
 
         if (ret < 0) {
             break;
         }
 
-        switch(ret) {
+        switch (ret) {
+            case 0:
+                // One of the long options
+                if (long_options[option_index].name == pid_str) {
+                    // ToDo: determine runtime PID_MAX?
+                    if (!getSizeTArg(optarg, &pid, 1)) {
+                        logcat_panic(true, "%s %s out of range\n",
+                                     long_options[option_index].name, optarg);
+                    }
+                    break;
+                }
+                if (long_options[option_index].name == wrap_str) {
+                    mode |= ANDROID_LOG_WRAP |
+                            ANDROID_LOG_RDONLY |
+                            ANDROID_LOG_NONBLOCK;
+                    // ToDo: implement API that supports setting a wrap timeout
+                    size_t dummy = ANDROID_LOG_WRAP_DEFAULT_TIMEOUT;
+                    if (optarg && !getSizeTArg(optarg, &dummy, 1)) {
+                        logcat_panic(true, "%s %s out of range\n",
+                                     long_options[option_index].name, optarg);
+                    }
+                    if (dummy != ANDROID_LOG_WRAP_DEFAULT_TIMEOUT) {
+                        fprintf(stderr,
+                                "WARNING: %s %u seconds, ignoring %zu\n",
+                                long_options[option_index].name,
+                                ANDROID_LOG_WRAP_DEFAULT_TIMEOUT, dummy);
+                    }
+                    break;
+                }
+            break;
+
             case 's':
                 // default to all silent
                 android_log_addFilterRule(g_logformat, "*:s");
@@ -568,8 +643,11 @@ int main(int argc, char **argv)
             break;
 
             case 'g':
-                getLogSize = 1;
-            break;
+                if (!optarg) {
+                    getLogSize = 1;
+                    break;
+                }
+                // FALLTHRU
 
             case 'G': {
                 char *cp;
@@ -607,8 +685,11 @@ int main(int argc, char **argv)
             break;
 
             case 'p':
-                getPruneList = 1;
-            break;
+                if (!optarg) {
+                    getPruneList = 1;
+                    break;
+                }
+                // FALLTHRU
 
             case 'P':
                 setPruneList = optarg;
@@ -838,9 +919,9 @@ int main(int argc, char **argv)
 
     dev = devices;
     if (tail_time != log_time::EPOCH) {
-        logger_list = android_logger_list_alloc_time(mode, tail_time, 0);
+        logger_list = android_logger_list_alloc_time(mode, tail_time, pid);
     } else {
-        logger_list = android_logger_list_alloc(mode, tail_lines, 0);
+        logger_list = android_logger_list_alloc(mode, tail_lines, pid);
     }
     const char *openDeviceFail = NULL;
     const char *clearFail = NULL;

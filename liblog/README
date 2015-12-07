@@ -116,6 +116,10 @@ DESCRIPTION
        code,  otherwise the  android_logger_list_read  call will block for new
        entries.
 
+       The  ANDROID_LOG_WRAP  mode flag to the  android_logger_list_alloc_time
+       signals  logd to quiesce  the reader until the buffer is about to prune
+       at the start time then proceed to dumping content.
+
        The  ANDROID_LOG_PSTORE mode flag to the android_logger_open is used to
        switch from the active logs to the persistent logs from before the last
        reboot.
