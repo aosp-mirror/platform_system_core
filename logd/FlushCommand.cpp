@@ -27,13 +27,15 @@ FlushCommand::FlushCommand(LogReader &reader,
                            unsigned long tail,
                            unsigned int logMask,
                            pid_t pid,
-                           uint64_t start) :
+                           uint64_t start,
+                           uint64_t timeout) :
         mReader(reader),
         mNonBlock(nonBlock),
         mTail(tail),
         mLogMask(logMask),
         mPid(pid),
-        mStart(start) {
+        mStart(start),
+        mTimeout(timeout) {
 }
 
 // runSocketCommand is called once for every open client on the
@@ -54,6 +56,10 @@ void FlushCommand::runSocketCommand(SocketClient *client) {
     while(it != times.end()) {
         entry = (*it);
         if (entry->mClient == client) {
+            if (entry->mTimeout.tv_sec || entry->mTimeout.tv_nsec) {
+                LogTimeEntry::unlock();
+                return;
+            }
             entry->triggerReader_Locked();
             if (entry->runningReader_Locked()) {
                 LogTimeEntry::unlock();
@@ -71,7 +77,8 @@ void FlushCommand::runSocketCommand(SocketClient *client) {
             LogTimeEntry::unlock();
             return;
         }
-        entry = new LogTimeEntry(mReader, client, mNonBlock, mTail, mLogMask, mPid, mStart);
+        entry = new LogTimeEntry(mReader, client, mNonBlock, mTail, mLogMask,
+                                 mPid, mStart, mTimeout);
         times.push_front(entry);
     }
 
