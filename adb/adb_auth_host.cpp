@@ -43,7 +43,7 @@
 #include "mincrypt/rsa.h"
 #undef RSA_verify
 
-#include <base/strings.h>
+#include <android-base/strings.h>
 #include <cutils/list.h>
 
 #include <openssl/evp.h>

@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <base/stringprintf.h>
+#include <android-base/stringprintf.h>
 #include <private/android_filesystem_config.h>
 #include <selinux/selinux.h>
 

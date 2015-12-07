@@ -44,13 +44,13 @@
 #include <unistd.h>
 #include <functional>
 
-#include <base/parseint.h>
-#include <base/strings.h>
+#include <android-base/parseint.h>
+#include <android-base/strings.h>
 #include <sparse/sparse.h>
 #include <ziparchive/zip_archive.h>
 
-#include <base/strings.h>
-#include <base/parseint.h>
+#include <android-base/strings.h>
+#include <android-base/parseint.h>
 
 #include "bootimg_utils.h"
 #include "fastboot.h"

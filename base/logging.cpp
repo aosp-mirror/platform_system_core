@@ -18,7 +18,7 @@
 #include <windows.h>
 #endif
 
-#include "base/logging.h"
+#include "android-base/logging.h"
 
 #include <libgen.h>
 
@@ -40,8 +40,8 @@
 #include <mutex>
 #endif
 
-#include "base/macros.h"
-#include "base/strings.h"
+#include "android-base/macros.h"
+#include "android-base/strings.h"
 #include "cutils/threads.h"
 
 // Headers for LogMessage::LogLine.

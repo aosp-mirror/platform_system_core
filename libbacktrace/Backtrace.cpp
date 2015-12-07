@@ -22,7 +22,7 @@
 
 #include <string>
 
-#include <base/stringprintf.h>
+#include <android-base/stringprintf.h>
 
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
