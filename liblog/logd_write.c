@@ -212,11 +212,7 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
      *  };
      */
 
-    if (android_log_timestamp() == 'm') {
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-    } else {
-        clock_gettime(CLOCK_REALTIME, &ts);
-    }
+    clock_gettime(android_log_clockid(), &ts);
 
     pmsg_header.magic = LOGGER_MAGIC;
     pmsg_header.len = sizeof(pmsg_header) + sizeof(header);
