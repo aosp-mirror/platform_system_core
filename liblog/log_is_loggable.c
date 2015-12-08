@@ -42,7 +42,7 @@ static void unlock()
 struct cache {
     const prop_info *pinfo;
     uint32_t serial;
-    char c;
+    unsigned char c;
 };
 
 #define BOOLEAN_TRUE 0xFF
