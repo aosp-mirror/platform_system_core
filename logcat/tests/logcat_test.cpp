@@ -76,7 +76,7 @@ TEST(logcat, buckets) {
 
 TEST(logcat, year) {
 
-    if (android_log_clockid() == CLOCK_MONOTONIC) {
+    if (android_log_timestamp() == 'm') {
         fprintf(stderr, "Skipping test, logd is monotonic time\n");
         return;
     }
@@ -147,7 +147,7 @@ char *fgetLongTime(char *buffer, size_t buflen, FILE *fp) {
 
 TEST(logcat, tz) {
 
-    if (android_log_clockid() == CLOCK_MONOTONIC) {
+    if (android_log_timestamp() == 'm') {
         fprintf(stderr, "Skipping test, logd is monotonic time\n");
         return;
     }
