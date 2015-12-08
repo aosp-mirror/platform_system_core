@@ -199,13 +199,14 @@ void SocketListener::runListener() {
             continue;
         }
         if (mListen && FD_ISSET(mSock, &read_fds)) {
-            struct sockaddr addr;
+            sockaddr_storage ss;
+            sockaddr* addrp = reinterpret_cast<sockaddr*>(&ss);
             socklen_t alen;
             int c;
 
             do {
-                alen = sizeof(addr);
-                c = accept(mSock, &addr, &alen);
+                alen = sizeof(ss);
+                c = accept(mSock, addrp, &alen);
                 SLOGV("%s got %d from accept", mSocketName, c);
             } while (c < 0 && errno == EINTR);
             if (c < 0) {
