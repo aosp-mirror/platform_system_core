@@ -158,7 +158,6 @@ class CrashCollector {
   IsFeedbackAllowedFunction is_feedback_allowed_function_;
   std::string extra_metadata_;
   base::FilePath forced_crash_directory_;
-  std::string lsb_release_;
   base::FilePath log_config_path_;
 
  private:

@@ -177,15 +177,8 @@ TEST_F(CrashCollectorTest, CheckHasCapacityStrangeNames) {
 TEST_F(CrashCollectorTest, MetaData) {
   const char kMetaFileBasename[] = "generated.meta";
   FilePath meta_file = test_dir_.Append(kMetaFileBasename);
-  FilePath lsb_release = test_dir_.Append("lsb-release");
   FilePath payload_file = test_dir_.Append("payload-file");
   std::string contents;
-  collector_.lsb_release_ = lsb_release.value();
-  const char kLsbContents[] =
-      "CHROMEOS_RELEASE_BOARD=lumpy\n"
-      "CHROMEOS_RELEASE_VERSION=6727.0.2015_01_26_0853\n"
-      "CHROMEOS_RELEASE_NAME=Chromium OS\n";
-  ASSERT_TRUE(base::WriteFile(lsb_release, kLsbContents, strlen(kLsbContents)));
   const char kPayload[] = "foo";
   ASSERT_TRUE(base::WriteFile(payload_file, kPayload, strlen(kPayload)));
   collector_.AddCrashMetaData("foo", "bar");
@@ -194,7 +187,6 @@ TEST_F(CrashCollectorTest, MetaData) {
   const char kExpectedMeta[] =
       "foo=bar\n"
       "exec_name=kernel\n"
-      "ver=6727.0.2015_01_26_0853\n"
       "payload=test/payload-file\n"
       "payload_size=3\n"
       "done=1\n";

@@ -37,11 +37,6 @@ bool s_metrics = false;
 
 const char kFilePath[] = "/my/path";
 
-// Keep in sync with UserCollector::ShouldDump.
-const char kChromeIgnoreMsg[] =
-    "ignoring call by kernel - chrome crash; "
-    "waiting for chrome to call us directly";
-
 void CountCrash() {
   ++s_crashes;
 }
@@ -167,24 +162,6 @@ TEST_F(UserCollectorTest, HandleNonChromeCrashWithConsent) {
   ASSERT_EQ(s_crashes, 1);
 }
 
-TEST_F(UserCollectorTest, HandleChromeCrashWithConsent) {
-  s_metrics = true;
-  collector_.HandleCrash("5:2:ignored", "chrome");
-  EXPECT_TRUE(FindLog(
-      "Received crash notification for chrome[5] sig 2"));
-  EXPECT_TRUE(FindLog(kChromeIgnoreMsg));
-  ASSERT_EQ(s_crashes, 0);
-}
-
-TEST_F(UserCollectorTest, HandleSuppliedChromeCrashWithConsent) {
-  s_metrics = true;
-  collector_.HandleCrash("0:2:chrome", nullptr);
-  EXPECT_TRUE(FindLog(
-      "Received crash notification for supplied_chrome[0] sig 2"));
-  EXPECT_TRUE(FindLog(kChromeIgnoreMsg));
-  ASSERT_EQ(s_crashes, 0);
-}
-
 TEST_F(UserCollectorTest, GetProcessPath) {
   FilePath path = collector_.GetProcessPath(100);
   ASSERT_EQ("/proc/100", path.value());
@@ -226,7 +203,7 @@ TEST_F(UserCollectorTest, GetExecutableBaseNameFromPid) {
   pid_t my_pid = getpid();
   EXPECT_TRUE(collector_.GetExecutableBaseNameFromPid(my_pid, &base_name));
   EXPECT_FALSE(FindLog("Readlink failed"));
-  EXPECT_EQ("crash_reporter_test", base_name);
+  EXPECT_EQ("crash_reporter_tests", base_name);
 }
 
 TEST_F(UserCollectorTest, GetFirstLineWithPrefix) {
