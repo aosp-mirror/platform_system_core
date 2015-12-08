@@ -460,11 +460,11 @@ jdwp_control_init( JdwpControl*  control,
                    const char*   sockname,
                    int           socknamelen )
 {
-    struct sockaddr_un   addr;
-    socklen_t            addrlen;
-    int                  s;
-    int                  maxpath = sizeof(addr.sun_path);
-    int                  pathlen = socknamelen;
+    sockaddr_un   addr;
+    socklen_t     addrlen;
+    int           s;
+    int           maxpath = sizeof(addr.sun_path);
+    int           pathlen = socknamelen;
 
     if (pathlen >= maxpath) {
         D( "vm debug control socket name too long (%d extra chars)",
@@ -485,7 +485,7 @@ jdwp_control_init( JdwpControl*  control,
 
     addrlen = (pathlen + sizeof(addr.sun_family));
 
-    if (bind(s, (struct sockaddr*)&addr, addrlen) < 0) {
+    if (bind(s, reinterpret_cast<sockaddr*>(&addr), addrlen) < 0) {
         D( "could not bind vm debug control socket: %d: %s",
            errno, strerror(errno) );
         adb_close(s);
@@ -523,13 +523,14 @@ jdwp_control_event( int  s, unsigned  events, void*  _control )
     JdwpControl*  control = (JdwpControl*) _control;
 
     if (events & FDE_READ) {
-        struct sockaddr   addr;
-        socklen_t         addrlen = sizeof(addr);
-        int               s = -1;
-        JdwpProcess*      proc;
+        sockaddr_storage   ss;
+        sockaddr*          addrp = reinterpret_cast<sockaddr*>(&ss);
+        socklen_t          addrlen = sizeof(ss);
+        int                s = -1;
+        JdwpProcess*       proc;
 
         do {
-            s = adb_socket_accept( control->listen_socket, &addr, &addrlen );
+            s = adb_socket_accept(control->listen_socket, addrp, &addrlen);
             if (s < 0) {
                 if (errno == EINTR)
                     continue;
