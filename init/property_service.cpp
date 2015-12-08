@@ -64,13 +64,6 @@ static bool property_area_initialized = false;
 
 static int property_set_fd = -1;
 
-struct workspace {
-    size_t size;
-    int fd;
-};
-
-static workspace pa_workspace;
-
 void property_init() {
     if (property_area_initialized) {
         return;
@@ -81,13 +74,6 @@ void property_init() {
     if (__system_property_area_init()) {
         ERROR("Failed to initialize property area\n");
         exit(1);
-    }
-
-    pa_workspace.size = 0;
-    pa_workspace.fd = open(PROP_FILENAME, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
-    if (pa_workspace.fd == -1) {
-        ERROR("Failed to open %s: %s\n", PROP_FILENAME, strerror(errno));
-        return;
     }
 }
 
@@ -352,12 +338,6 @@ static void handle_property_set_fd()
         close(s);
         break;
     }
-}
-
-void get_property_workspace(int *fd, int *sz)
-{
-    *fd = pa_workspace.fd;
-    *sz = pa_workspace.size;
 }
 
 static void load_properties_from_file(const char *, const char *);
