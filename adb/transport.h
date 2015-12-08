@@ -90,7 +90,7 @@ public:
     fdevent auth_fde;
     size_t failed_auth_attempts = 0;
 
-    const char* connection_state_name() const;
+    const std::string connection_state_name() const;
 
     void update_version(int version, size_t payload);
     int get_protocol_version() const;
