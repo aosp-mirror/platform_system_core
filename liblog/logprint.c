@@ -500,14 +500,14 @@ int android_log_processLogBuffer(struct logger_entry *buf,
     }
     if (msgEnd == -1) {
         /* incoming message not null-terminated; force it */
-        msgEnd = buf->len - 1;
+        msgEnd = buf->len - 1; /* may result in msgEnd < msgStart */
         msg[msgEnd] = '\0';
     }
 
     entry->priority = msg[0];
     entry->tag = msg + 1;
     entry->message = msg + msgStart;
-    entry->messageLen = msgEnd - msgStart;
+    entry->messageLen = (msgEnd < msgStart) ? 0 : (msgEnd - msgStart);
 
     return 0;
 }
