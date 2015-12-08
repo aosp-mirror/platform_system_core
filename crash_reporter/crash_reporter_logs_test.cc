@@ -23,10 +23,11 @@
 namespace {
 
 // Name of the checked-in configuration file containing log-collection commands.
-const char kConfigFile[] = "crash_reporter_logs.conf";
+const char kConfigFile[] = "/system/etc/crash_reporter_logs.conf";
 
-// Executable name for Chrome. kConfigFile is expected to contain this entry.
-const char kChromeExecName[] = "chrome";
+// Signature name for crash_reporter user collection.
+// kConfigFile is expected to contain this entry.
+const char kUserCollectorSignature[] = "crash_reporter-user-collection";
 
 }  // namespace
 
@@ -35,6 +36,6 @@ TEST(CrashReporterLogsTest, ReadConfig) {
   brillo::KeyValueStore store;
   ASSERT_TRUE(store.Load(base::FilePath(kConfigFile)));
   std::string command;
-  EXPECT_TRUE(store.GetString(kChromeExecName, &command));
+  EXPECT_TRUE(store.GetString(kUserCollectorSignature, &command));
   EXPECT_FALSE(command.empty());
 }
