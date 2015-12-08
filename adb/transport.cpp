@@ -674,7 +674,11 @@ atransport* acquire_one_transport(TransportType type, const char* serial,
     adb_mutex_lock(&transport_lock);
     for (const auto& t : transport_list) {
         if (t->connection_state == kCsNoPerm) {
-            *error_out = "insufficient permissions for device";
+            *error_out = UsbNoPermissionsLongHelpText();
+            // If we couldn't figure out a reasonable help message default to something generic.
+            if (error_out->empty()) {
+                *error_out = "insufficient permissions for device";
+            }
             continue;
         }
 
@@ -748,17 +752,20 @@ atransport* acquire_one_transport(TransportType type, const char* serial,
     return result;
 }
 
-const char* atransport::connection_state_name() const {
+const std::string atransport::connection_state_name() const {
     switch (connection_state) {
-    case kCsOffline: return "offline";
-    case kCsBootloader: return "bootloader";
-    case kCsDevice: return "device";
-    case kCsHost: return "host";
-    case kCsRecovery: return "recovery";
-    case kCsNoPerm: return "no permissions";
-    case kCsSideload: return "sideload";
-    case kCsUnauthorized: return "unauthorized";
-    default: return "unknown";
+        case kCsOffline: return "offline";
+        case kCsBootloader: return "bootloader";
+        case kCsDevice: return "device";
+        case kCsHost: return "host";
+        case kCsRecovery: return "recovery";
+        case kCsNoPerm: {
+            std::string message = UsbNoPermissionsShortHelpText();
+            return message.empty() ? "no permissions" : message;
+        }
+        case kCsSideload: return "sideload";
+        case kCsUnauthorized: return "unauthorized";
+        default: return "unknown";
     }
 }
 
@@ -864,7 +871,8 @@ static void append_transport(const atransport* t, std::string* result,
         *result += '\t';
         *result += t->connection_state_name();
     } else {
-        android::base::StringAppendF(result, "%-22s %s", serial, t->connection_state_name());
+        android::base::StringAppendF(result, "%-22s %s", serial,
+                                     t->connection_state_name().c_str());
 
         append_transport_info(result, "", t->devpath, false);
         append_transport_info(result, "product:", t->product, false);
