@@ -129,41 +129,57 @@ void LogBuffer::init() {
     }
     bool lastMonotonic = monotonic;
     monotonic = android_log_clockid() == CLOCK_MONOTONIC;
-    if (lastMonotonic == monotonic) {
-        return;
+    if (lastMonotonic != monotonic) {
+        //
+        // Fixup all timestamps, may not be 100% accurate, but better than
+        // throwing what we have away when we get 'surprised' by a change.
+        // In-place element fixup so no need to check reader-lock. Entries
+        // should already be in timestamp order, but we could end up with a
+        // few out-of-order entries if new monotonics come in before we
+        // are notified of the reinit change in status. A Typical example would
+        // be:
+        //  --------- beginning of system
+        //      10.494082   184   201 D Cryptfs : Just triggered post_fs_data
+        //  --------- beginning of kernel
+        //       0.000000     0     0 I         : Initializing cgroup subsys
+        // as the act of mounting /data would trigger persist.logd.timestamp to
+        // be corrected. 1/30 corner case YMMV.
+        //
+        pthread_mutex_lock(&mLogElementsLock);
+        LogBufferElementCollection::iterator it = mLogElements.begin();
+        while((it != mLogElements.end())) {
+            LogBufferElement *e = *it;
+            if (monotonic) {
+                if (!android::isMonotonic(e->mRealTime)) {
+                    LogKlog::convertRealToMonotonic(e->mRealTime);
+                }
+            } else {
+                if (android::isMonotonic(e->mRealTime)) {
+                    LogKlog::convertMonotonicToReal(e->mRealTime);
+                }
+            }
+            ++it;
+        }
+        pthread_mutex_unlock(&mLogElementsLock);
     }
 
+    // We may have been triggered by a SIGHUP. Release any sleeping reader
+    // threads to dump their current content.
     //
-    // Fixup all timestamps, may not be 100% accurate, but better than
-    // throwing what we have away when we get 'surprised' by a change.
-    // In-place element fixup so no need to check reader-lock. Entries
-    // should already be in timestamp order, but we could end up with a
-    // few out-of-order entries if new monotonics come in before we
-    // are notified of the reinit change in status. A Typical example would
-    // be:
-    //  --------- beginning of system
-    //      10.494082   184   201 D Cryptfs : Just triggered post_fs_data
-    //  --------- beginning of kernel
-    //       0.000000     0     0 I         : Initializing cgroup subsys cpuacct
-    // as the act of mounting /data would trigger persist.logd.timestamp to
-    // be corrected. 1/30 corner case YMMV.
-    //
-    pthread_mutex_lock(&mLogElementsLock);
-    LogBufferElementCollection::iterator it = mLogElements.begin();
-    while((it != mLogElements.end())) {
-        LogBufferElement *e = *it;
-        if (monotonic) {
-            if (!android::isMonotonic(e->mRealTime)) {
-                LogKlog::convertRealToMonotonic(e->mRealTime);
-            }
-        } else {
-            if (android::isMonotonic(e->mRealTime)) {
-                LogKlog::convertMonotonicToReal(e->mRealTime);
-            }
+    // NB: this is _not_ performed in the context of a SIGHUP, it is
+    // performed during startup, and in context of reinit administrative thread
+    LogTimeEntry::lock();
+
+    LastLogTimes::iterator times = mTimes.begin();
+    while(times != mTimes.end()) {
+        LogTimeEntry *entry = (*times);
+        if (entry->owned_Locked()) {
+            entry->triggerReader_Locked();
         }
-        ++it;
+        times++;
     }
-    pthread_mutex_unlock(&mLogElementsLock);
+
+    LogTimeEntry::unlock();
 }
 
 LogBuffer::LogBuffer(LastLogTimes *times):
@@ -429,7 +445,10 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     while(t != mTimes.end()) {
         LogTimeEntry *entry = (*t);
         if (entry->owned_Locked() && entry->isWatching(id)
-                && (!oldest || (oldest->mStart > entry->mStart))) {
+                && (!oldest ||
+                    (oldest->mStart > entry->mStart) ||
+                    ((oldest->mStart == entry->mStart) &&
+                     (entry->mTimeout.tv_sec || entry->mTimeout.tv_nsec)))) {
             oldest = entry;
         }
         t++;
@@ -448,8 +467,12 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             }
 
             if (oldest && (oldest->mStart <= e->getSequence())) {
-                oldest->triggerSkip_Locked(id, pruneRows);
                 busy = true;
+                if (oldest->mTimeout.tv_sec || oldest->mTimeout.tv_nsec) {
+                    oldest->triggerReader_Locked();
+                } else {
+                    oldest->triggerSkip_Locked(id, pruneRows);
+                }
                 break;
             }
 
@@ -523,6 +546,9 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
             if (oldest && (oldest->mStart <= e->getSequence())) {
                 busy = true;
+                if (oldest->mTimeout.tv_sec || oldest->mTimeout.tv_nsec) {
+                    oldest->triggerReader_Locked();
+                }
                 break;
             }
 
@@ -648,6 +674,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             if (stats.sizes(id) > (2 * log_buffer_size(id))) {
                 // kick a misbehaving log reader client off the island
                 oldest->release_Locked();
+            } else if (oldest->mTimeout.tv_sec || oldest->mTimeout.tv_nsec) {
+                oldest->triggerReader_Locked();
             } else {
                 oldest->triggerSkip_Locked(id, pruneRows);
             }
@@ -680,6 +708,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 if (stats.sizes(id) > (2 * log_buffer_size(id))) {
                     // kick a misbehaving log reader client off the island
                     oldest->release_Locked();
+                } else if (oldest->mTimeout.tv_sec || oldest->mTimeout.tv_nsec) {
+                    oldest->triggerReader_Locked();
                 } else {
                     oldest->triggerSkip_Locked(id, pruneRows);
                 }
