@@ -571,3 +571,12 @@ void usb_kick(usb_handle *h)
 {
     h->kick(h);
 }
+
+// kCsNoPerm is a host-side issue, we can just ignore it here.
+std::string UsbNoPermissionsShortHelpText() {
+    return "";
+}
+
+std::string UsbNoPermissionsLongHelpText() {
+    return "";
+}
