@@ -29,8 +29,6 @@
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 
-#include <cutils/threads.h>
-
 #include "BacktraceCurrent.h"
 #include "BacktraceLog.h"
 #include "ThreadEntry.h"

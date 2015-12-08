@@ -68,6 +68,7 @@ libbacktrace_shared_libraries_target := \
 # Use static llvm libraries on host to remove dependency on 32-bit llvm shared library
 # which is not included in the prebuilt.
 libbacktrace_static_libraries_host := \
+	libcutils \
 	libLLVMObject \
 	libLLVMBitReader \
 	libLLVMMC \
