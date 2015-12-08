@@ -19,6 +19,10 @@
 
 #include <unistd.h>
 
+#if !defined(__ANDROID__)
+#include <cutils/threads.h>
+#endif
+
 __BEGIN_DECLS
 
 int tgkill(int tgid, int tid, int sig);
