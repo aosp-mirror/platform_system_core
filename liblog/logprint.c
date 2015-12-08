@@ -32,6 +32,7 @@
 #include <cutils/list.h>
 #include <log/logd.h>
 #include <log/logprint.h>
+#include <private/android_filesystem_config.h>
 
 #define MS_PER_NSEC 1000000
 #define US_PER_NSEC 1000
@@ -1328,7 +1329,21 @@ char *android_log_formatLogLine (
     uid[0] = '\0';
     if (p_format->uid_output) {
         if (entry->uid >= 0) {
-            snprintf(uid, sizeof(uid), "%5d:", entry->uid);
+            const struct android_id_info *info = android_ids;
+            size_t i;
+
+            for (i = 0; i < android_id_count; ++i) {
+                if (info->aid == (unsigned int)entry->uid) {
+                    break;
+                }
+                ++info;
+            }
+            if ((i < android_id_count) && (strlen(info->name) <= 5)) {
+                 snprintf(uid, sizeof(uid), "%5s:", info->name);
+            } else {
+                 // Not worth parsing package list, names all longer than 5
+                 snprintf(uid, sizeof(uid), "%5d:", entry->uid);
+            }
         } else {
             snprintf(uid, sizeof(uid), "      ");
         }
