@@ -28,8 +28,8 @@
 #include <string>
 #include <mutex>
 
-#include "base/macros.h"
-#include "base/strings.h"
+#include "android-base/macros.h"
+#include "android-base/strings.h"
 
 namespace android {
 
