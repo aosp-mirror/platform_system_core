@@ -47,7 +47,6 @@ const char kCrashTestInProgressPath[] =
 const char kDefaultLogConfig[] = "/etc/crash_reporter_logs.conf";
 const char kDefaultUserName[] = "chronos";
 const char kLeaveCoreFile[] = "/data/misc/crash_reporter/.leave_core";
-const char kLsbRelease[] = "/etc/lsb-release";
 const char kShellPath[] = "/system/bin/sh";
 const char kSystemCrashPath[] = "/data/misc/crash_reporter/crash";
 const char kUploadVarPrefix[] = "upload_var_";
@@ -90,8 +89,7 @@ using base::FilePath;
 using base::StringPrintf;
 
 CrashCollector::CrashCollector()
-    : lsb_release_(kLsbRelease),
-      log_config_path_(kDefaultLogConfig) {
+    : log_config_path_(kDefaultLogConfig) {
 }
 
 CrashCollector::~CrashCollector() {
