@@ -76,11 +76,6 @@ Service::Service(const std::string& name, const std::string& classname,
 }
 
 void Service::NotifyStateChange(const std::string& new_state) const {
-    if (!properties_initialized()) {
-        // If properties aren't available yet, we can't set them.
-        return;
-    }
-
     if ((flags_ & SVC_EXEC) != 0) {
         // 'exec' commands don't have properties tracking their state.
         return;
