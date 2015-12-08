@@ -55,10 +55,18 @@ class LibraryNamespaces {
  public:
   LibraryNamespaces() : initialized_(false) { }
 
-  android_namespace_t* GetOrCreate(JNIEnv* env, jobject class_loader, jstring library_path) {
-    ScopedUtfChars libraryPath(env, library_path);
+  android_namespace_t* GetOrCreate(JNIEnv* env, jobject class_loader,
+                                   jstring java_library_path,
+                                   jstring java_permitted_path) {
+    ScopedUtfChars library_path(env, java_library_path);
 
-    if (!initialized_ && !InitPublicNamespace(libraryPath.c_str())) {
+    std::string permitted_path;
+    if (java_permitted_path != nullptr) {
+      ScopedUtfChars path(env, java_permitted_path);
+      permitted_path = path.c_str();
+    }
+
+    if (!initialized_ && !InitPublicNamespace(library_path.c_str())) {
       return nullptr;
     }
 
@@ -73,8 +81,11 @@ class LibraryNamespaces {
     android_namespace_t* ns =
             android_create_namespace("classloader-namespace",
                                      nullptr,
-                                     libraryPath.c_str(),
-                                     true);
+                                     library_path.c_str(),
+                                     true,
+                                     java_permitted_path != nullptr ?
+                                        permitted_path.c_str() :
+                                        nullptr);
 
     namespaces_.push_back(std::make_pair(env->NewWeakGlobalRef(class_loader), ns));
 
@@ -118,13 +129,16 @@ static LibraryNamespaces* g_namespaces = new LibraryNamespaces;
 
 
 void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* path,
-                        jobject class_loader, jstring library_path) {
+                        jobject class_loader, jstring java_library_path,
+                        jstring java_permitted_path) {
 #if defined(__ANDROID__)
   if (target_sdk_version == 0 || class_loader == nullptr) {
     return dlopen(path, RTLD_NOW);
   }
 
-  android_namespace_t* ns = g_namespaces->GetOrCreate(env, class_loader, library_path);
+  android_namespace_t* ns =
+      g_namespaces->GetOrCreate(env, class_loader, java_library_path,
+                                java_permitted_path);
 
   if (ns == nullptr) {
     return nullptr;
@@ -136,7 +150,8 @@ void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* pat
 
   return android_dlopen_ext(path, RTLD_NOW, &extinfo);
 #else
-  UNUSED(env, target_sdk_version, class_loader, library_path);
+  UNUSED(env, target_sdk_version, class_loader,
+         java_library_path, java_permitted_path);
   return dlopen(path, RTLD_NOW);
 #endif
 }
