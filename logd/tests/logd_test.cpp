@@ -112,18 +112,38 @@ static char *find_benchmark_spam(char *cp)
             ++cp;
         }
         benchmark = cp;
+#ifdef DEBUG
+        char *end = strstr(benchmark, "\n");
+        if (end == NULL) {
+            end = benchmark + strlen(benchmark);
+        }
+        fprintf(stderr, "parse for spam counter in \"%.*s\"\n",
+                (int)(end - benchmark), benchmark);
+#endif
+        // content
         while (isdigit(*cp)) {
             ++cp;
         }
         while (isspace(*cp)) {
             ++cp;
         }
+        // optional +/- field?
+        if ((*cp == '-') || (*cp == '+')) {
+            while (isdigit(*++cp) ||
+                   (*cp == '.') || (*cp == '%') || (*cp == 'X')) {
+                ;
+            }
+            while (isspace(*cp)) {
+                ++cp;
+            }
+        }
+        // number of entries pruned
         unsigned long value = 0;
         while (isdigit(*cp)) {
             value = value * 10ULL + *cp - '0';
             ++cp;
         }
-        if (value > 100000UL) {
+        if (value > 10UL) {
             break;
         }
         benchmark = NULL;
