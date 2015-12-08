@@ -45,6 +45,9 @@ struct cache {
     char c;
 };
 
+#define BOOLEAN_TRUE 0xFF
+#define BOOLEAN_FALSE 0xFE
+
 static void refresh_cache(struct cache *cache, const char *key)
 {
     uint32_t serial;
@@ -62,7 +65,16 @@ static void refresh_cache(struct cache *cache, const char *key)
     }
     cache->serial = serial;
     __system_property_read(cache->pinfo, 0, buf);
-    cache->c = buf[0];
+    switch(buf[0]) {
+    case 't': case 'T':
+        cache->c = strcasecmp(buf + 1, "rue") ? buf[0] : BOOLEAN_TRUE;
+        break;
+    case 'f': case 'F':
+        cache->c = strcasecmp(buf + 1, "alse") ? buf[0] : BOOLEAN_FALSE;
+        break;
+    default:
+        cache->c = buf[0];
+    }
 }
 
 static int __android_log_level(const char *tag, int default_prio)
@@ -147,6 +159,7 @@ static int __android_log_level(const char *tag, int default_prio)
     case 'F': /* Not officially supported */
     case 'A':
     case 'S':
+    case BOOLEAN_FALSE: /* Not officially supported */
         break;
     default:
         /* clear '.' after log.tag */
@@ -180,6 +193,7 @@ static int __android_log_level(const char *tag, int default_prio)
     case 'E': return ANDROID_LOG_ERROR;
     case 'F': /* FALLTHRU */ /* Not officially supported */
     case 'A': return ANDROID_LOG_FATAL;
+    case BOOLEAN_FALSE: /* FALLTHRU */ /* Not Officially supported */
     case 'S': return -1; /* ANDROID_LOG_SUPPRESS */
     }
     return default_prio;
@@ -225,4 +239,37 @@ clockid_t android_log_clockid()
     }
 
     return (tolower(c) == 'm') ? CLOCK_MONOTONIC : CLOCK_REALTIME;
+}
+
+/*
+ * security state generally remains constant, since a change is
+ * rare, we can accept a trylock failure gracefully.
+ */
+static pthread_mutex_t lock_security = PTHREAD_MUTEX_INITIALIZER;
+
+int __android_log_security()
+{
+    static struct cache r_do_cache = { NULL, -1, BOOLEAN_FALSE };
+    static struct cache p_security_cache = { NULL, -1, BOOLEAN_FALSE };
+    int retval;
+
+    if (pthread_mutex_trylock(&lock_security)) {
+        /* We are willing to accept some race in this context */
+        retval = (r_do_cache.c != BOOLEAN_FALSE) && r_do_cache.c &&
+                 (p_security_cache.c == BOOLEAN_TRUE);
+    } else {
+        static uint32_t serial;
+        uint32_t current_serial = __system_property_area_serial();
+        if (current_serial != serial) {
+            refresh_cache(&r_do_cache, "ro.device_owner");
+            refresh_cache(&p_security_cache, "persist.logd.security");
+            serial = current_serial;
+        }
+        retval = (r_do_cache.c != BOOLEAN_FALSE) && r_do_cache.c &&
+                 (p_security_cache.c == BOOLEAN_TRUE);
+
+        pthread_mutex_unlock(&lock_security);
+    }
+
+    return retval;
 }
