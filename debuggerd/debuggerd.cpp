@@ -518,11 +518,12 @@ static int do_server() {
   ALOGI("debuggerd: starting\n");
 
   for (;;) {
-    sockaddr addr;
-    socklen_t alen = sizeof(addr);
+    sockaddr_storage ss;
+    sockaddr* addrp = reinterpret_cast<sockaddr*>(&ss);
+    socklen_t alen = sizeof(ss);
 
     ALOGV("waiting for connection\n");
-    int fd = accept(s, &addr, &alen);
+    int fd = accept(s, addrp, &alen);
     if (fd < 0) {
       ALOGV("accept failed: %s\n", strerror(errno));
       continue;
