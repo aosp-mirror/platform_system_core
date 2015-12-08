@@ -106,33 +106,7 @@ static bool should_drop_privileges() {
 #endif // ALLOW_ADBD_ROOT
 }
 
-int adbd_main(int server_port) {
-    umask(0);
-
-    signal(SIGPIPE, SIG_IGN);
-
-    init_transport_registration();
-
-    // We need to call this even if auth isn't enabled because the file
-    // descriptor will always be open.
-    adbd_cloexec_auth_socket();
-
-    if (ALLOW_ADBD_NO_AUTH && property_get_bool("ro.adb.secure", 0) == 0) {
-        auth_required = false;
-    }
-
-    adbd_auth_init();
-
-    // Our external storage path may be different than apps, since
-    // we aren't able to bind mount after dropping root.
-    const char* adb_external_storage = getenv("ADB_EXTERNAL_STORAGE");
-    if (adb_external_storage != nullptr) {
-        setenv("EXTERNAL_STORAGE", adb_external_storage, 1);
-    } else {
-        D("Warning: ADB_EXTERNAL_STORAGE is not set.  Leaving EXTERNAL_STORAGE"
-          " unchanged.\n");
-    }
-
+static void drop_privileges(int server_port) {
     // Add extra groups:
     // AID_ADB to access the USB driver
     // AID_LOG to read system logs (adb logcat)
@@ -180,6 +154,36 @@ int adbd_main(int server_port) {
                 << error;
         }
     }
+}
+
+int adbd_main(int server_port) {
+    umask(0);
+
+    signal(SIGPIPE, SIG_IGN);
+
+    init_transport_registration();
+
+    // We need to call this even if auth isn't enabled because the file
+    // descriptor will always be open.
+    adbd_cloexec_auth_socket();
+
+    if (ALLOW_ADBD_NO_AUTH && property_get_bool("ro.adb.secure", 0) == 0) {
+        auth_required = false;
+    }
+
+    adbd_auth_init();
+
+    // Our external storage path may be different than apps, since
+    // we aren't able to bind mount after dropping root.
+    const char* adb_external_storage = getenv("ADB_EXTERNAL_STORAGE");
+    if (adb_external_storage != nullptr) {
+        setenv("EXTERNAL_STORAGE", adb_external_storage, 1);
+    } else {
+        D("Warning: ADB_EXTERNAL_STORAGE is not set.  Leaving EXTERNAL_STORAGE"
+          " unchanged.\n");
+    }
+
+    drop_privileges(server_port);
 
     bool is_usb = false;
     if (access(USB_ADB_PATH, F_OK) == 0 || access(USB_FFS_ADB_EP0, F_OK) == 0) {
