@@ -829,6 +829,40 @@ class FileOperationsTest(DeviceTest):
             if host_dir is not None:
                 shutil.rmtree(host_dir)
 
+    def test_pull_symlink_dir(self):
+        """Pull a symlink to a directory of symlinks to files."""
+        try:
+            host_dir = tempfile.mkdtemp()
+
+            remote_dir = posixpath.join(self.DEVICE_TEMP_DIR, 'contents')
+            remote_links = posixpath.join(self.DEVICE_TEMP_DIR, 'links')
+            remote_symlink = posixpath.join(self.DEVICE_TEMP_DIR, 'symlink')
+
+            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+            self.device.shell(['mkdir', '-p', remote_dir, remote_links])
+            self.device.shell(['ln', '-s', remote_links, remote_symlink])
+
+            # Populate device directory with random files.
+            temp_files = make_random_device_files(
+                self.device, in_dir=remote_dir, num_files=32)
+
+            for temp_file in temp_files:
+                self.device.shell(
+                    ['ln', '-s', '../contents/{}'.format(temp_file.base_name),
+                     posixpath.join(remote_links, temp_file.base_name)])
+
+            self.device.pull(remote=remote_symlink, local=host_dir)
+
+            for temp_file in temp_files:
+                host_path = os.path.join(
+                    host_dir, 'symlink', temp_file.base_name)
+                self._verify_local(temp_file.checksum, host_path)
+
+            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+        finally:
+            if host_dir is not None:
+                shutil.rmtree(host_dir)
+
     def test_pull_empty(self):
         """Pull a directory containing an empty directory from the device."""
         try:
