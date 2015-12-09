@@ -146,9 +146,7 @@ LOCAL_CLANG := true
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS)
 LOCAL_INIT_RC := metrics_collector.rc
-LOCAL_REQUIRED_MODULES := \
-  metrics.json \
-  metrics.schema.json
+LOCAL_REQUIRED_MODULES := metrics.json
 LOCAL_RTTI_FLAG := -frtti
 LOCAL_SHARED_LIBRARIES := $(metrics_collector_shared_libraries)
 LOCAL_SRC_FILES := $(metrics_collector_common) \
@@ -207,13 +205,6 @@ include $(BUILD_NATIVE_TEST)
 include $(CLEAR_VARS)
 LOCAL_MODULE := metrics.json
 LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/weaved/commands
-LOCAL_SRC_FILES := etc/weaved/commands/$(LOCAL_MODULE)
-include $(BUILD_PREBUILT)
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := metrics.schema.json
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/weaved/states
-LOCAL_SRC_FILES := etc/weaved/states/$(LOCAL_MODULE)
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/weaved/traits
+LOCAL_SRC_FILES := etc/weaved/traits/$(LOCAL_MODULE)
 include $(BUILD_PREBUILT)
