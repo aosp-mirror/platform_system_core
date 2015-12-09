@@ -22,7 +22,9 @@ extern "C" {
 }
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <ucontext.h>
 #include <unistd.h>
@@ -616,7 +618,30 @@ DebugFrameInfo* ReadDebugFrameFromELFFile(const llvm::object::ELFFile<ELFT>* elf
   return debug_frame;
 }
 
+static bool IsValidElfPath(const std::string& filename) {
+  static const char elf_magic[] = {0x7f, 'E', 'L', 'F'};
+
+  struct stat st;
+  if (stat(filename.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) {
+    return false;
+  }
+  FILE* fp = fopen(filename.c_str(), "reb");
+  if (fp == nullptr) {
+    return false;
+  }
+  char buf[4];
+  if (fread(buf, 4, 1, fp) != 1) {
+    fclose(fp);
+    return false;
+  }
+  fclose(fp);
+  return memcmp(buf, elf_magic, 4) == 0;
+}
+
 static DebugFrameInfo* ReadDebugFrameFromFile(const std::string& filename) {
+  if (!IsValidElfPath(filename)) {
+    return nullptr;
+  }
   auto owning_binary = llvm::object::createBinary(llvm::StringRef(filename));
   if (owning_binary.getError()) {
     return nullptr;
