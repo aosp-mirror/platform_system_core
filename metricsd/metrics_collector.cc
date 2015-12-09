@@ -71,6 +71,8 @@ const int kMetricMeminfoInterval = 30;    // seconds
 const char kMeminfoFileName[] = "/proc/meminfo";
 const char kVmStatFileName[] = "/proc/vmstat";
 
+const char kWeaveComponent[] = "metrics";
+
 }  // namespace
 
 // Zram sysfs entries.
@@ -246,10 +248,13 @@ int MetricsCollector::OnInit() {
   device_ = weaved::Device::CreateInstance(
       bus_,
       base::Bind(&MetricsCollector::UpdateWeaveState, base::Unretained(this)));
+  device_->AddComponent(kWeaveComponent, {"_metrics"});
   device_->AddCommandHandler(
+      kWeaveComponent,
       "_metrics._enableAnalyticsReporting",
       base::Bind(&MetricsCollector::OnEnableMetrics, base::Unretained(this)));
   device_->AddCommandHandler(
+      kWeaveComponent,
       "_metrics._disableAnalyticsReporting",
       base::Bind(&MetricsCollector::OnDisableMetrics, base::Unretained(this)));
 
@@ -324,12 +329,13 @@ void MetricsCollector::UpdateWeaveState() {
   if (!device_)
     return;
 
-  brillo::VariantDictionary state_change{
-    { "_metrics._AnalyticsReportingState",
-      metrics_lib_->AreMetricsEnabled() ? "enabled" : "disabled" }
-  };
+  std::string enabled =
+      metrics_lib_->AreMetricsEnabled() ? "enabled" : "disabled";
 
-  if (!device_->SetStateProperties(state_change, nullptr)) {
+  if (!device_->SetStateProperty(kWeaveComponent,
+                                 "_metrics._AnalyticsReportingState",
+                                 enabled,
+                                 nullptr)) {
     LOG(ERROR) << "failed to update weave's state";
   }
 }
