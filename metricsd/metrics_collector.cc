@@ -40,8 +40,6 @@ using base::Time;
 using base::TimeDelta;
 using base::TimeTicks;
 using chromeos_metrics::PersistentInteger;
-using com::android::Weave::CommandProxy;
-using com::android::Weave::ManagerProxy;
 using std::map;
 using std::string;
 using std::vector;
