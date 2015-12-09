@@ -1,0 +1,18 @@
+{
+  "_metrics": {
+    "commands": {
+      "_enableAnalyticsReporting": {
+        "minimalRole": "manager"
+      },
+      "_disableAnalyticsReporting": {
+        "minimalRole": "manager"
+      }
+    },
+    "state": {
+      "_AnalyticsReportingState": {
+        "type": "string",
+        "enum": [ "enabled", "disabled" ]
+      }
+    }
+  }
+}
