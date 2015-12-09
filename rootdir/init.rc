@@ -406,6 +406,7 @@ on post-fs-data
     mkdir /data/user_de/0 0771 system system
 
     setusercryptopolicies /data/user
+    createuserkey 0 0 0
 
     # Reload policy from /data/security if present.
     setprop selinux.reload_policy 1
