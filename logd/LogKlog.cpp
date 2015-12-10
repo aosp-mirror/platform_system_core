@@ -778,6 +778,31 @@ int LogKlog::log(const char *buf, size_t len) {
     memcpy(np, p, b);
     np[b] = '\0';
 
+    if (!isMonotonic()) {
+        // Watch out for singular race conditions with timezone causing near
+        // integer quarter-hour jumps in the time and compensate accordingly.
+        // Entries will be temporal within near_seconds * 2. b/21868540
+        static uint32_t vote_time[3];
+        vote_time[2] = vote_time[1];
+        vote_time[1] = vote_time[0];
+        vote_time[0] = now.tv_sec;
+
+        if (vote_time[1] && vote_time[2]) {
+            static const unsigned near_seconds = 10;
+            static const unsigned timezones_seconds = 900;
+            int diff0 = (vote_time[0] - vote_time[1]) / near_seconds;
+            unsigned abs0 = (diff0 < 0) ? -diff0 : diff0;
+            int diff1 = (vote_time[1] - vote_time[2]) / near_seconds;
+            unsigned abs1 = (diff1 < 0) ? -diff1 : diff1;
+            if ((abs1 <= 1) && // last two were in agreement on timezone
+                    ((abs0 + 1) % (timezones_seconds / near_seconds)) <= 2) {
+                abs0 = (abs0 + 1) / (timezones_seconds / near_seconds) *
+                                     timezones_seconds;
+                now.tv_sec -= (diff0 < 0) ? -abs0 : abs0;
+            }
+        }
+    }
+
     // Log message
     int rc = logbuf->log(LOG_ID_KERNEL, now, uid, pid, tid, newstr,
                          (unsigned short) n);
