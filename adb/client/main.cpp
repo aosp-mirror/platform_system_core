@@ -34,11 +34,10 @@
 #include "adb.h"
 #include "adb_auth.h"
 #include "adb_listeners.h"
+#include "adb_utils.h"
 #include "transport.h"
 
 #if defined(_WIN32)
-static const char kNullFileName[] = "NUL";
-
 static BOOL WINAPI ctrlc_handler(DWORD type) {
     // TODO: Consider trying to kill a starting up adb server (if we're in
     // launch_server) by calling GenerateConsoleCtrlEvent().
@@ -66,23 +65,10 @@ static std::string GetLogFilePath() {
     return temp_path_utf8 + log_name;
 }
 #else
-static const char kNullFileName[] = "/dev/null";
-
 static std::string GetLogFilePath() {
     return std::string("/tmp/adb.log");
 }
 #endif
-
-static void close_stdin() {
-    int fd = unix_open(kNullFileName, O_RDONLY);
-    if (fd == -1) {
-        fatal("cannot open '%s': %s", kNullFileName, strerror(errno));
-    }
-    if (dup2(fd, STDIN_FILENO) == -1) {
-        fatal("cannot redirect stdin: %s", strerror(errno));
-    }
-    unix_close(fd);
-}
 
 static void setup_daemon_logging(void) {
     const std::string log_file_path(GetLogFilePath());
