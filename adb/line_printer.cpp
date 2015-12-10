@@ -43,7 +43,7 @@ string ElideMiddle(const string& str, size_t width) {
   return result;
 }
 
-LinePrinter::LinePrinter() : have_blank_line_(true), console_locked_(false) {
+LinePrinter::LinePrinter() : have_blank_line_(true) {
 #ifndef _WIN32
   const char* term = getenv("TERM");
   smart_terminal_ = unix_isatty(1) && term && string(term) != "dumb";
@@ -59,20 +59,24 @@ LinePrinter::LinePrinter() : have_blank_line_(true), console_locked_(false) {
 #endif
 }
 
+static void Out(const std::string& s) {
+  // Avoid printf and C strings, since the actual output might contain null
+  // bytes like UTF-16 does (yuck).
+  fwrite(s.data(), 1, s.size(), stdout);
+}
+
 void LinePrinter::Print(string to_print, LineType type) {
-  if (console_locked_) {
-    line_buffer_ = to_print;
-    line_type_ = type;
+  if (!smart_terminal_) {
+    Out(to_print);
     return;
   }
 
-  if (smart_terminal_) {
-    printf("\r");  // Print over previous line, if any.
-    // On Windows, calling a C library function writing to stdout also handles
-    // pausing the executable when the "Pause" key or Ctrl-S is pressed.
-  }
+  // Print over previous line, if any.
+  // On Windows, calling a C library function writing to stdout also handles
+  // pausing the executable when the "Pause" key or Ctrl-S is pressed.
+  printf("\r");
 
-  if (smart_terminal_ && type == ELIDE) {
+  if (type == INFO) {
 #ifdef _WIN32
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     GetConsoleScreenBufferInfo(console_, &csbi);
@@ -105,57 +109,19 @@ void LinePrinter::Print(string to_print, LineType type) {
     if ((ioctl(0, TIOCGWINSZ, &size) == 0) && size.ws_col) {
       to_print = ElideMiddle(to_print, size.ws_col);
     }
-    printf("%s", to_print.c_str());
+    Out(to_print);
     printf("\x1B[K");  // Clear to end of line.
     fflush(stdout);
 #endif
 
     have_blank_line_ = false;
   } else {
-    printf("%s\n", to_print.c_str());
+    Out(to_print);
+    Out("\n");
+    have_blank_line_ = true;
   }
 }
 
-void LinePrinter::PrintOrBuffer(const char* data, size_t size) {
-  if (console_locked_) {
-    output_buffer_.append(data, size);
-  } else {
-    // Avoid printf and C strings, since the actual output might contain null
-    // bytes like UTF-16 does (yuck).
-    fwrite(data, 1, size, stdout);
-  }
-}
-
-void LinePrinter::PrintOnNewLine(const string& to_print) {
-  if (console_locked_ && !line_buffer_.empty()) {
-    output_buffer_.append(line_buffer_);
-    output_buffer_.append(1, '\n');
-    line_buffer_.clear();
-  }
-  if (!have_blank_line_) {
-    PrintOrBuffer("\n", 1);
-  }
-  if (!to_print.empty()) {
-    PrintOrBuffer(&to_print[0], to_print.size());
-  }
-  have_blank_line_ = to_print.empty() || *to_print.rbegin() == '\n';
-}
-
-void LinePrinter::SetConsoleLocked(bool locked) {
-  if (locked == console_locked_)
-    return;
-
-  if (locked)
-    PrintOnNewLine("");
-
-  console_locked_ = locked;
-
-  if (!locked) {
-    PrintOnNewLine(output_buffer_);
-    if (!line_buffer_.empty()) {
-      Print(line_buffer_, line_type_);
-    }
-    output_buffer_.clear();
-    line_buffer_.clear();
-  }
+void LinePrinter::KeepInfoLine() {
+  if (!have_blank_line_) Out("\n");
 }
