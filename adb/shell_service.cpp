@@ -289,6 +289,7 @@ bool Subprocess::ForkAndExec() {
         // TODO: $HOSTNAME? Normally bash automatically sets that, but mksh doesn't.
         passwd* pw = getpwuid(getuid());
         if (pw != nullptr) {
+            setenv("HOME", pw->pw_dir, 1);
             setenv("LOGNAME", pw->pw_name, 1);
             setenv("SHELL", pw->pw_shell, 1);
             setenv("USER", pw->pw_name, 1);
@@ -297,8 +298,6 @@ bool Subprocess::ForkAndExec() {
             setenv("TERM", terminal_type_.c_str(), 1);
         }
 
-        setenv("HOME", "/data/local/tmp", 1);
-        chdir(getenv("HOME"));
         if (is_interactive()) {
             execl(_PATH_BSHELL, _PATH_BSHELL, "-", nullptr);
         } else {
