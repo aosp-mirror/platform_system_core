@@ -19,6 +19,8 @@
 
 #include <string>
 
+void close_stdin();
+
 bool getcwd(std::string* cwd);
 bool directory_exists(const std::string& path);
 
