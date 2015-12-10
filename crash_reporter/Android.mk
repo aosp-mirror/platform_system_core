@@ -43,11 +43,12 @@ LOCAL_CPP_EXTENSION := $(crash_reporter_cpp_extension)
 LOCAL_C_INCLUDES := $(crash_reporter_includes)
 LOCAL_RTTI_FLAG := -frtti
 LOCAL_SHARED_LIBRARIES := libchrome \
+    libbinder \
     libbrillo \
     libcutils \
-    libdbus \
     libmetrics \
     libpcrecpp
+LOCAL_STATIC_LIBRARIES := libmetricscollectorservice
 LOCAL_SRC_FILES := $(crash_reporter_src)
 include $(BUILD_STATIC_LIBRARY)
 
@@ -60,18 +61,19 @@ LOCAL_C_INCLUDES := $(crash_reporter_includes)
 LOCAL_REQUIRED_MODULES := core2md \
     crash_reporter_logs.conf \
     crash_sender \
-    crash_server \
-    dbus-send
+    crash_server
 LOCAL_INIT_RC := crash_reporter.rc
 LOCAL_RTTI_FLAG := -frtti
 LOCAL_SHARED_LIBRARIES := libchrome \
+    libbinder \
     libbrillo \
     libcutils \
-    libdbus \
     libmetrics \
-    libpcrecpp
+    libpcrecpp \
+    libutils
 LOCAL_SRC_FILES := crash_reporter.cc
-LOCAL_STATIC_LIBRARIES := libcrash
+LOCAL_STATIC_LIBRARIES := libcrash \
+    libmetricscollectorservice
 include $(BUILD_EXECUTABLE)
 
 # Crash sender script.
@@ -140,7 +142,6 @@ LOCAL_CPP_EXTENSION := $(crash_reporter_cpp_extension)
 LOCAL_SHARED_LIBRARIES := libchrome \
     libbrillo \
     libcutils \
-    libdbus \
     libpcrecpp
 LOCAL_SRC_FILES := $(crash_reporter_test_src)
 LOCAL_STATIC_LIBRARIES := libcrash libgmock
