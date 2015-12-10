@@ -115,37 +115,6 @@ class MetricsCollectorTest : public testing::Test {
   StrictMock<MetricsLibraryMock> metrics_lib_;
 };
 
-TEST_F(MetricsCollectorTest, MessageFilter) {
-  // Ignore calls to SendToUMA.
-  EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AnyNumber());
-
-  DBusMessage* msg = dbus_message_new(DBUS_MESSAGE_TYPE_METHOD_CALL);
-  DBusHandlerResult res =
-      MetricsCollector::MessageFilter(/* connection */ nullptr, msg, &daemon_);
-  EXPECT_EQ(DBUS_HANDLER_RESULT_NOT_YET_HANDLED, res);
-  DeleteDBusMessage(msg);
-
-  vector<string> signal_args;
-  msg = NewDBusSignalString("/",
-                            "org.chromium.CrashReporter",
-                            "UserCrash",
-                            signal_args);
-  res = MetricsCollector::MessageFilter(/* connection */ nullptr, msg, &daemon_);
-  EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
-  DeleteDBusMessage(msg);
-
-  signal_args.clear();
-  signal_args.push_back("randomstate");
-  signal_args.push_back("bob");  // arbitrary username
-  msg = NewDBusSignalString("/",
-                            "org.chromium.UnknownService.Manager",
-                            "StateChanged",
-                            signal_args);
-  res = MetricsCollector::MessageFilter(/* connection */ nullptr, msg, &daemon_);
-  EXPECT_EQ(DBUS_HANDLER_RESULT_NOT_YET_HANDLED, res);
-  DeleteDBusMessage(msg);
-}
-
 TEST_F(MetricsCollectorTest, SendSample) {
   ExpectSample("Dummy.Metric", 3);
   daemon_.SendSample("Dummy.Metric", /* sample */ 3,
