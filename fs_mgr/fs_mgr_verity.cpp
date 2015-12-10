@@ -254,7 +254,7 @@ static bool format_verity_table(char *buf, const size_t bufsize,
         res = snprintf(buf, bufsize, "%s 2 " VERITY_TABLE_OPT_IGNZERO " %s", params->table,
                     mode_flag);
     } else {
-        res = strlcpy(buf, params->table, bufsize);
+        res = snprintf(buf, bufsize, "%s 1 " VERITY_TABLE_OPT_IGNZERO, params->table);
     }
 
     if (res < 0 || (size_t)res >= bufsize) {
@@ -944,12 +944,42 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab)
 
     // load the verity mapping table
     if (load_verity_table(io, mount_point, verity.data_size, fd, &params,
-            format_verity_table) < 0 &&
-        // try the legacy format for backwards compatibility
-        load_verity_table(io, mount_point, verity.data_size, fd, &params,
-            format_legacy_verity_table) < 0) {
-        goto out;
+            format_verity_table) == 0) {
+        goto loaded;
     }
+
+    if (params.ecc.valid) {
+        // kernel may not support error correction, try without
+        INFO("Disabling error correction for %s\n", mount_point);
+        params.ecc.valid = false;
+
+        if (load_verity_table(io, mount_point, verity.data_size, fd, &params,
+                format_verity_table) == 0) {
+            goto loaded;
+        }
+    }
+
+    // try the legacy format for backwards compatibility
+    if (load_verity_table(io, mount_point, verity.data_size, fd, &params,
+            format_legacy_verity_table) == 0) {
+        goto loaded;
+    }
+
+    if (params.mode != VERITY_MODE_EIO) {
+        // as a last resort, EIO mode should always be supported
+        INFO("Falling back to EIO mode for %s\n", mount_point);
+        params.mode = VERITY_MODE_EIO;
+
+        if (load_verity_table(io, mount_point, verity.data_size, fd, &params,
+                format_legacy_verity_table) == 0) {
+            goto loaded;
+        }
+    }
+
+    ERROR("Failed to load verity table for %s\n", mount_point);
+    goto out;
+
+loaded:
 
     // activate the device
     if (resume_verity_table(io, mount_point, fd) < 0) {
