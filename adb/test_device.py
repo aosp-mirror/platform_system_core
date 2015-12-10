@@ -819,7 +819,10 @@ class FileOperationsTest(DeviceTest):
             self.device.pull(remote=self.DEVICE_TEMP_DIR, local=host_dir)
 
             for temp_file in temp_files:
-                host_path = os.path.join(host_dir, temp_file.base_name)
+                host_path = os.path.join(
+                    host_dir, posixpath.basename(self.DEVICE_TEMP_DIR),
+                    temp_file.base_name)
+                self._verify_local(temp_file.checksum, host_path)
 
             self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
         finally:
