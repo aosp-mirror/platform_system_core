@@ -279,6 +279,10 @@ static void usage() {
             "                                           override the fs type and/or size\n"
             "                                           the bootloader reports.\n"
             "  getvar <variable>                        Display a bootloader variable.\n"
+            "  set_active <suffix>                      Sets the active slot. If slots are\n"
+            "                                           not supported, this does nothing.\n"
+            "                                           note: suffixes starting with a '-'\n"
+            "                                           must use set_active -- <suffix>\n"
             "  boot <kernel> [ <ramdisk> [ <second> ] ] Download and boot kernel.\n"
             "  flash:raw boot <kernel> [ <ramdisk> [ <second> ] ]\n"
             "                                           Create bootimage and flash it.\n"
@@ -321,7 +325,8 @@ static void usage() {
             "  -a, --set-active[=<suffix>]              Sets the active slot. If no suffix is\n"
             "                                           provided, this will default to the value\n"
             "                                           given by --slot. If slots are not\n"
-            "                                           supported, this does nothing.\n"
+            "                                           supported, this does nothing. This will\n"
+            "                                           run after all non-reboot commands.\n"
             "  --unbuffered                             Do not buffer input or output.\n"
             "  --version                                Display version.\n"
             "  -h, --help                               show this message.\n"
@@ -724,9 +729,19 @@ static std::vector<std::string> get_suffixes(Transport* transport) {
     return android::base::Split(suffix_list, ",");
 }
 
-static std::string verify_slot(Transport* transport, const char *slot) {
+static std::string verify_slot(Transport* transport, const char *slot, bool allow_all) {
     if (strcmp(slot, "all") == 0) {
-        return "all";
+        if (allow_all) {
+            return "all";
+        } else {
+            std::vector<std::string> suffixes = get_suffixes(transport);
+            if (!suffixes.empty()) {
+                return suffixes[0];
+            } else {
+                fprintf(stderr, "No known slots.\n");
+                exit(1);
+            }
+        }
     }
     std::vector<std::string> suffixes = get_suffixes(transport);
     for (const std::string &suffix : suffixes) {
@@ -738,6 +753,10 @@ static std::string verify_slot(Transport* transport, const char *slot) {
         fprintf(stderr, "%s\n", suffix.c_str());
     }
     exit(1);
+}
+
+static std::string verify_slot(Transport* transport, const char *slot) {
+   return verify_slot(transport, slot, true);
 }
 
 static void do_for_partition(Transport* transport, const char *part, const char *slot,
@@ -1220,14 +1239,14 @@ int main(int argc, char **argv)
     if (slot_override != "")
         slot_override = verify_slot(transport, slot_override.c_str());
     if (next_active != "")
-        next_active = verify_slot(transport, next_active.c_str());
+        next_active = verify_slot(transport, next_active.c_str(), false);
 
     if (wants_set_active) {
         if (next_active == "") {
             if (slot_override == "") {
                 wants_set_active = false;
             } else {
-                next_active = slot_override;
+                next_active = verify_slot(transport, slot_override.c_str(), false);
             }
         }
     }
@@ -1385,6 +1404,12 @@ int main(int argc, char **argv)
                 do_update(transport, "update.zip", slot_override.c_str(), erase_first);
                 skip(1);
             }
+            wants_reboot = 1;
+        } else if(!strcmp(*argv, "set_active")) {
+            require(2);
+            std::string slot = verify_slot(transport, argv[1], false);
+            fb_set_active(slot.c_str());
+            skip(2);
             wants_reboot = true;
         } else if(!strcmp(*argv, "oem")) {
             argc = do_oem_command(argc, argv);
