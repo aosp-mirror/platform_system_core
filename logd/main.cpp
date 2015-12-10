@@ -349,7 +349,7 @@ int main(int argc, char *argv[]) {
         memset(&p, 0, sizeof(p));
         p.fd = sock;
         p.events = POLLIN;
-        ret = TEMP_FAILURE_RETRY(poll(&p, 1, 100));
+        ret = TEMP_FAILURE_RETRY(poll(&p, 1, 1000));
         if (ret < 0) {
             return -errno;
         }
