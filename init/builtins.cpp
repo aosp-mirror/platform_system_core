@@ -838,6 +838,15 @@ static int do_setusercryptopolicies(const std::vector<std::string>& args) {
     return e4crypt_set_user_crypto_policies(args[1].c_str());
 }
 
+static int do_createuserkey(const std::vector<std::string>& args) {
+    if (!is_file_crypto()) {
+        return 0;
+    }
+    return e4crypt_create_user_key(atoi(args[1].c_str()),
+                                   atoi(args[2].c_str()),
+                                   atoi(args[3].c_str()));
+}
+
 BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     static const Map builtin_functions = {
@@ -848,6 +857,7 @@ BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"class_start",             {1,     1,    do_class_start}},
         {"class_stop",              {1,     1,    do_class_stop}},
         {"copy",                    {2,     2,    do_copy}},
+        {"createuserkey",           {3,     3,    do_createuserkey}},
         {"domainname",              {1,     1,    do_domainname}},
         {"enable",                  {1,     1,    do_enable}},
         {"exec",                    {1,     kMax, do_exec}},
