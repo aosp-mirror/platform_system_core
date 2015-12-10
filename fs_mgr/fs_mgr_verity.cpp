@@ -695,31 +695,27 @@ static int load_verity_state(struct fstab_rec *fstab, int *mode)
     int match = 0;
     off64_t offset = 0;
 
+    /* unless otherwise specified, use EIO mode */
+    *mode = VERITY_MODE_EIO;
+
     /* use the kernel parameter if set */
     property_get("ro.boot.veritymode", propbuf, "");
 
     if (*propbuf != '\0') {
         if (!strcmp(propbuf, "enforcing")) {
             *mode = VERITY_MODE_DEFAULT;
-            return 0;
-        } else if (!strcmp(propbuf, "logging")) {
-            *mode = VERITY_MODE_LOGGING;
-            return 0;
-        } else {
-            INFO("Unknown value %s for veritymode; ignoring", propbuf);
         }
+        return 0;
     }
 
     if (get_verity_state_offset(fstab, &offset) < 0) {
         /* fall back to stateless behavior */
-        *mode = VERITY_MODE_EIO;
         return 0;
     }
 
     if (was_verity_restart()) {
         /* device was restarted after dm-verity detected a corrupted
-         * block, so switch to logging mode */
-        *mode = VERITY_MODE_LOGGING;
+         * block, so use EIO mode */
         return write_verity_state(fstab->verity_loc, offset, *mode);
     }
 
@@ -784,7 +780,6 @@ out:
 int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
 {
     alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
-    bool use_state = true;
     char fstab_filename[PROPERTY_VALUE_MAX + sizeof(FSTAB_PREFIX)];
     char *mount_point;
     char propbuf[PROPERTY_VALUE_MAX];
@@ -793,15 +788,11 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
     int i;
     int mode;
     int rc = -1;
-    off64_t offset = 0;
     struct dm_ioctl *io = (struct dm_ioctl *) buffer;
     struct fstab *fstab = NULL;
 
-    /* check if we need to store the state */
-    property_get("ro.boot.veritymode", propbuf, "");
-
-    if (*propbuf != '\0') {
-        use_state = false; /* state is kept by the bootloader */
+    if (!callback) {
+        return -1;
     }
 
     if (fs_mgr_load_verity_state(&mode) == -1) {
@@ -841,16 +832,7 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
 
         status = &buffer[io->data_start + sizeof(struct dm_target_spec)];
 
-        if (use_state && *status == 'C') {
-            if (write_verity_state(fstab->recs[i].verity_loc, offset,
-                    VERITY_MODE_LOGGING) < 0) {
-                continue;
-            }
-        }
-
-        if (callback) {
-            callback(&fstab->recs[i], mount_point, mode, *status);
-        }
+        callback(&fstab->recs[i], mount_point, mode, *status);
     }
 
     rc = 0;
