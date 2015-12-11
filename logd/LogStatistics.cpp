@@ -85,7 +85,11 @@ void LogStatistics::add(LogBufferElement *element) {
 
     uint32_t tag = element->getTag();
     if (tag) {
-        tagTable.add(tag, element);
+        if (log_id == LOG_ID_SECURITY) {
+            securityTagTable.add(tag, element);
+        } else {
+            tagTable.add(tag, element);
+        }
     }
 }
 
@@ -113,7 +117,11 @@ void LogStatistics::subtract(LogBufferElement *element) {
 
     uint32_t tag = element->getTag();
     if (tag) {
-        tagTable.subtract(tag, element);
+        if (log_id == LOG_ID_SECURITY) {
+            securityTagTable.subtract(tag, element);
+        } else {
+            tagTable.subtract(tag, element);
+        }
     }
 }
 
@@ -466,6 +474,11 @@ std::string LogStatistics::format(uid_t uid, unsigned int logMask) const {
     if (enable && (logMask & (1 << LOG_ID_EVENTS))) {
         name = "Chattiest events log buffer TAGs:";
         output += tagTable.format(*this, uid, name, LOG_ID_EVENTS);
+    }
+
+    if (enable && (logMask & (1 << LOG_ID_SECURITY))) {
+        name = "Chattiest security log buffer TAGs:";
+        output += securityTagTable.format(*this, uid, name, LOG_ID_SECURITY);
     }
 
     return output;

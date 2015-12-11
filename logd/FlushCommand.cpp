@@ -21,6 +21,7 @@
 #include "LogCommand.h"
 #include "LogReader.h"
 #include "LogTimes.h"
+#include "LogUtils.h"
 
 FlushCommand::FlushCommand(LogReader &reader,
                            bool nonBlock,

@@ -22,6 +22,7 @@
 #include <private/android_filesystem_config.h>
 
 #include "LogCommand.h"
+#include "LogUtils.h"
 
 LogCommand::LogCommand(const char *cmd) : FrameworkCommand(cmd) {
 }
@@ -56,20 +57,18 @@ static bool groupIsLog(char *buf) {
     return false;
 }
 
-bool clientHasLogCredentials(SocketClient * cli) {
-    uid_t uid = cli->getUid();
-    if (uid == AID_ROOT) {
+bool clientHasLogCredentials(uid_t uid, gid_t gid, pid_t pid) {
+    if ((uid == AID_ROOT) || (uid == AID_SYSTEM) || (uid == AID_LOG)) {
         return true;
     }
 
-    gid_t gid = cli->getGid();
     if ((gid == AID_ROOT) || (gid == AID_SYSTEM) || (gid == AID_LOG)) {
         return true;
     }
 
     // FYI We will typically be here for 'adb logcat'
     char filename[256];
-    snprintf(filename, sizeof(filename), "/proc/%u/status", cli->getPid());
+    snprintf(filename, sizeof(filename), "/proc/%u/status", pid);
 
     bool ret;
     bool foundLog = false;
@@ -144,4 +143,8 @@ bool clientHasLogCredentials(SocketClient * cli) {
     }
 
     return ret;
+}
+
+bool clientHasLogCredentials(SocketClient *cli) {
+    return clientHasLogCredentials(cli->getUid(), cli->getGid(), cli->getPid());
 }
