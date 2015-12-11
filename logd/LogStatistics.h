@@ -397,6 +397,9 @@ class LogStatistics {
     typedef LogHashtable<uint32_t, TagEntry> tagTable_t;
     tagTable_t tagTable;
 
+    // security tag list
+    tagTable_t securityTagTable;
+
 public:
     LogStatistics();
 

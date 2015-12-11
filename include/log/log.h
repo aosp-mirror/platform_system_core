@@ -604,7 +604,8 @@ typedef enum log_id {
     LOG_ID_EVENTS = 2,
     LOG_ID_SYSTEM = 3,
     LOG_ID_CRASH = 4,
-    LOG_ID_KERNEL = 5,
+    LOG_ID_SECURITY = 5,
+    LOG_ID_KERNEL = 6, /* place last, third-parties can not use it */
 #endif
 
     LOG_ID_MAX

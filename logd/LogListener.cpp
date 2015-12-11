@@ -27,6 +27,7 @@
 #include <private/android_logger.h>
 
 #include "LogListener.h"
+#include "LogUtils.h"
 
 LogListener::LogListener(LogBuffer *buf, LogReader *reader) :
         SocketListener(getLogSocket(), false),
@@ -89,6 +90,12 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
 
     android_log_header_t *header = reinterpret_cast<android_log_header_t *>(buffer);
     if (/* header->id < LOG_ID_MIN || */ header->id >= LOG_ID_MAX || header->id == LOG_ID_KERNEL) {
+        return false;
+    }
+
+    if ((header->id == LOG_ID_SECURITY) &&
+            (!__android_log_security() ||
+             !clientHasLogCredentials(cred->uid, cred->gid, cred->pid))) {
         return false;
     }
 
