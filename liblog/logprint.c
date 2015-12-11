@@ -750,12 +750,17 @@ int android_log_processBinaryLogBuffer(struct logger_entry *buf,
     entry->tid = buf->tid;
 
     /*
-     * Pull the tag out.
+     * Pull the tag out, fill in some additional details based on incoming
+     * buffer version (v3 adds lid, v4 adds uid).
      */
     eventData = (const unsigned char*) buf->msg;
     struct logger_entry_v2 *buf2 = (struct logger_entry_v2 *)buf;
     if (buf2->hdr_size) {
         eventData = ((unsigned char *)buf2) + buf2->hdr_size;
+        if ((buf2->hdr_size >= sizeof(struct logger_entry_v3)) &&
+                (((struct logger_entry_v3 *)buf)->lid == LOG_ID_SECURITY)) {
+            entry->priority = ANDROID_LOG_WARN;
+        }
         if (buf2->hdr_size >= sizeof(struct logger_entry_v4)) {
             entry->uid = ((struct logger_entry_v4 *)buf)->uid;
         }
