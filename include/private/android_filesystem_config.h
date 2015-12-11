@@ -82,6 +82,7 @@
 #define AID_DBUS          1038  /* dbus-daemon IPC broker process */
 #define AID_TLSDATE       1039  /* tlsdate unprivileged user */
 #define AID_MEDIA_EX      1040  /* mediaextractor process */
+#define AID_AUDIOSERVER   1041  /* audioserver process */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -181,6 +182,7 @@ static const struct android_id_info android_ids[] = {
     { "dbus",          AID_DBUS, },
     { "tlsdate",       AID_TLSDATE, },
     { "mediaex",       AID_MEDIA_EX, },
+    { "audioserver",   AID_AUDIOSERVER, },
 
     { "shell",         AID_SHELL, },
     { "cache",         AID_CACHE, },
