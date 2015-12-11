@@ -634,6 +634,7 @@ static int android_logger_list_read_pstore(struct logger_list *logger_list,
         android_log_header_t l;
     } buf;
     static uint8_t preread_count;
+    bool is_system;
 
     memset(log_msg, 0, sizeof(*log_msg));
 
@@ -690,12 +691,15 @@ static int android_logger_list_read_pstore(struct logger_list *logger_list,
             }
 
             uid = get_best_effective_uid();
-            if (!uid_has_log_permission(uid) && (uid != buf.p.uid)) {
+            is_system = uid_has_log_permission(uid);
+            if (!is_system && (uid != buf.p.uid)) {
                 break;
             }
 
             ret = TEMP_FAILURE_RETRY(read(logger_list->sock,
-                                          log_msg->entry_v3.msg,
+                                          is_system ?
+                                              log_msg->entry_v4.msg :
+                                              log_msg->entry_v3.msg,
                                           buf.p.len - sizeof(buf)));
             if (ret < 0) {
                 return -errno;
@@ -704,13 +708,18 @@ static int android_logger_list_read_pstore(struct logger_list *logger_list,
                 return -EIO;
             }
 
-            log_msg->entry_v3.len = buf.p.len - sizeof(buf);
-            log_msg->entry_v3.hdr_size = sizeof(log_msg->entry_v3);
-            log_msg->entry_v3.pid = buf.p.pid;
-            log_msg->entry_v3.tid = buf.l.tid;
-            log_msg->entry_v3.sec = buf.l.realtime.tv_sec;
-            log_msg->entry_v3.nsec = buf.l.realtime.tv_nsec;
-            log_msg->entry_v3.lid = buf.l.id;
+            log_msg->entry_v4.len = buf.p.len - sizeof(buf);
+            log_msg->entry_v4.hdr_size = is_system ?
+                sizeof(log_msg->entry_v4) :
+                sizeof(log_msg->entry_v3);
+            log_msg->entry_v4.pid = buf.p.pid;
+            log_msg->entry_v4.tid = buf.l.tid;
+            log_msg->entry_v4.sec = buf.l.realtime.tv_sec;
+            log_msg->entry_v4.nsec = buf.l.realtime.tv_nsec;
+            log_msg->entry_v4.lid = buf.l.id;
+            if (is_system) {
+                log_msg->entry_v4.uid = buf.p.uid;
+            }
 
             return ret;
         }

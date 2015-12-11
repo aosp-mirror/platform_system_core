@@ -80,7 +80,7 @@ public:
     uint32_t getTag(void) const;
 
     static const uint64_t FLUSH_ERROR;
-    uint64_t flushTo(SocketClient *writer, LogBuffer *parent);
+    uint64_t flushTo(SocketClient *writer, LogBuffer *parent, bool privileged);
 };
 
 #endif
