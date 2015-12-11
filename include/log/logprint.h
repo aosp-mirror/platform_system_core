@@ -44,6 +44,7 @@ typedef enum {
     FORMAT_MODIFIER_ZONE,      /* Adds zone to date */
     FORMAT_MODIFIER_EPOCH,     /* Print time as seconds since Jan 1 1970 */
     FORMAT_MODIFIER_MONOTONIC, /* Print cpu time as seconds since start */
+    FORMAT_MODIFIER_UID,       /* Adds uid */
 } AndroidLogPrintFormat;
 
 typedef struct AndroidLogFormat_t AndroidLogFormat;
@@ -52,6 +53,7 @@ typedef struct AndroidLogEntry_t {
     time_t tv_sec;
     long tv_nsec;
     android_LogPriority priority;
+    int32_t uid;
     int32_t pid;
     int32_t tid;
     const char * tag;

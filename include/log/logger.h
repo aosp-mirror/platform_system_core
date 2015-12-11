@@ -64,12 +64,24 @@ struct logger_entry_v3 {
     char        msg[0];    /* the entry's payload */
 } __attribute__((__packed__));
 
+struct logger_entry_v4 {
+    uint16_t    len;       /* length of the payload */
+    uint16_t    hdr_size;  /* sizeof(struct logger_entry_v4) */
+    int32_t     pid;       /* generating process's pid */
+    uint32_t    tid;       /* generating process's tid */
+    uint32_t    sec;       /* seconds since Epoch */
+    uint32_t    nsec;      /* nanoseconds */
+    uint32_t    lid;       /* log id of the payload, bottom 4 bits currently */
+    uint32_t    uid;       /* generating process's uid */
+    char        msg[0];    /* the entry's payload */
+} __attribute__((__packed__));
+
 /*
  * The maximum size of the log entry payload that can be
  * written to the logger. An attempt to write more than
  * this amount will result in a truncated log entry.
  */
-#define LOGGER_ENTRY_MAX_PAYLOAD	4076
+#define LOGGER_ENTRY_MAX_PAYLOAD	4068
 
 /*
  * The maximum size of a log entry which can be read from the
@@ -83,7 +95,8 @@ struct logger_entry_v3 {
 struct log_msg {
     union {
         unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1];
-        struct logger_entry_v3 entry;
+        struct logger_entry_v4 entry;
+        struct logger_entry_v4 entry_v4;
         struct logger_entry_v3 entry_v3;
         struct logger_entry_v2 entry_v2;
         struct logger_entry    entry_v1;

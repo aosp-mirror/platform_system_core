@@ -342,8 +342,9 @@ TEST(liblog, android_logger_list_read__cpu) {
 }
 
 static const char max_payload_tag[] = "TEST_max_payload_XXXX";
-static const char max_payload_buf[LOGGER_ENTRY_MAX_PAYLOAD
-    - sizeof(max_payload_tag) - 1] = "LEONATO\n\
+#define SIZEOF_MAX_PAYLOAD_BUF (LOGGER_ENTRY_MAX_PAYLOAD - \
+                                sizeof(max_payload_tag) - 1)
+static const char max_payload_buf[] = "LEONATO\n\
 I learn in this letter that Don Peter of Arragon\n\
 comes this night to Messina\n\
 MESSENGER\n\
@@ -469,7 +470,7 @@ Good Signior Leonato, you are come to meet your\n\
 trouble: the fashion of the world is to avoid\n\
 cost, and you encounter it\n\
 LEONATO\n\
-Never came trouble to my house in the likeness";
+Never came trouble to my house in the likeness of your grace";
 
 TEST(liblog, max_payload) {
     pid_t pid = getpid();
@@ -528,7 +529,7 @@ TEST(liblog, max_payload) {
 
     EXPECT_EQ(true, matches);
 
-    EXPECT_LE(sizeof(max_payload_buf), static_cast<size_t>(max_len));
+    EXPECT_LE(SIZEOF_MAX_PAYLOAD_BUF, static_cast<size_t>(max_len));
 }
 
 TEST(liblog, too_big_payload) {
@@ -1005,7 +1006,7 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__data_too_l
     const int TAG = 123456782;
     const char SUBTAG[] = "test-subtag";
     const int UID = -1;
-    const int DATA_LEN = sizeof(max_payload_buf);
+    const int DATA_LEN = SIZEOF_MAX_PAYLOAD_BUF;
     struct logger_list *logger_list;
 
     pid_t pid = getpid();
@@ -1076,8 +1077,8 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__data_too_l
         }
         eventData += dataLen;
 
-        // 4 bytes for the tag, and 512 bytes for the log since the max_payload_buf should be
-        // truncated.
+        // 4 bytes for the tag, and 512 bytes for the log since the
+        // max_payload_buf should be truncated.
         ASSERT_EQ(4 + 512, eventData - original);
 
         ++count;
