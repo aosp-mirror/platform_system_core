@@ -504,16 +504,6 @@ bool do_sync_ls(const char* path) {
     });
 }
 
-struct copyinfo
-{
-    std::string lpath;
-    std::string rpath;
-    unsigned int time;
-    unsigned int mode;
-    uint64_t size;
-    bool skip;
-};
-
 static void ensure_trailing_separator(std::string& lpath, std::string& rpath) {
     if (!adb_is_separator(lpath.back())) {
         lpath.push_back(OS_PATH_SEPARATOR);
@@ -523,25 +513,26 @@ static void ensure_trailing_separator(std::string& lpath, std::string& rpath) {
     }
 }
 
-static copyinfo mkcopyinfo(std::string lpath, std::string rpath,
-                           const std::string& name, unsigned int mode) {
-    copyinfo result;
-    result.lpath = std::move(lpath);
-    result.rpath = std::move(rpath);
-    ensure_trailing_separator(result.lpath, result.rpath);
-    result.lpath.append(name);
-    result.rpath.append(name);
+struct copyinfo {
+    std::string lpath;
+    std::string rpath;
+    unsigned int time = 0;
+    unsigned int mode;
+    uint64_t size = 0;
+    bool skip = false;
 
-    if (S_ISDIR(mode)) {
-        ensure_trailing_separator(result.lpath, result.rpath);
+    copyinfo(const std::string& lpath, const std::string& rpath, const std::string& name,
+             unsigned int mode)
+        : lpath(lpath), rpath(rpath), mode(mode) {
+        ensure_trailing_separator(this->lpath, this->rpath);
+        this->lpath.append(name);
+        this->rpath.append(name);
+
+        if (S_ISDIR(mode)) {
+            ensure_trailing_separator(this->lpath, this->rpath);
+        }
     }
-
-    result.time = 0;
-    result.mode = mode;
-    result.size = 0;
-    result.skip = false;
-    return result;
-}
+};
 
 static bool IsDotOrDotDot(const char* name) {
     return name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
@@ -574,7 +565,7 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist
             continue;
         }
 
-        copyinfo ci = mkcopyinfo(lpath, rpath, de->d_name, st.st_mode);
+        copyinfo ci(lpath, rpath, de->d_name, st.st_mode);
         if (S_ISDIR(st.st_mode)) {
             dirlist.push_back(ci);
         } else {
@@ -598,8 +589,7 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* filelist
         // TODO(b/25566053): Make pushing empty directories work.
         // TODO(b/25457350): We don't preserve permissions on directories.
         sc.Warning("skipping empty directory '%s'", lpath.c_str());
-        copyinfo ci = mkcopyinfo(adb_dirname(lpath), adb_dirname(rpath),
-                                 adb_basename(lpath), S_IFDIR);
+        copyinfo ci(adb_dirname(lpath), adb_dirname(rpath), adb_basename(lpath), S_IFDIR);
         ci.skip = true;
         filelist->push_back(ci);
         return true;
@@ -743,11 +733,23 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
     return success;
 }
 
+static bool remote_symlink_isdir(SyncConnection& sc, const std::string& rpath) {
+    unsigned mode;
+    std::string dir_path = rpath;
+    dir_path.push_back('/');
+    if (!sync_stat(sc, dir_path.c_str(), nullptr, &mode, nullptr)) {
+        sc.Error("failed to stat remote symlink '%s'", dir_path.c_str());
+        return false;
+    }
+    return S_ISDIR(mode);
+}
+
 static bool remote_build_list(SyncConnection& sc,
                               std::vector<copyinfo>* filelist,
                               const std::string& rpath,
                               const std::string& lpath) {
     std::vector<copyinfo> dirlist;
+    std::vector<copyinfo> linklist;
     bool empty_dir = true;
 
     // Put the files/dirs in rpath on the lists.
@@ -759,20 +761,14 @@ static bool remote_build_list(SyncConnection& sc,
         // We found a child that isn't '.' or '..'.
         empty_dir = false;
 
-        copyinfo ci = mkcopyinfo(lpath, rpath, name, mode);
+        copyinfo ci(lpath, rpath, name, mode);
         if (S_ISDIR(mode)) {
             dirlist.push_back(ci);
+        } else if (S_ISLNK(mode)) {
+            linklist.push_back(ci);
         } else {
-            if (S_ISREG(mode)) {
-                ci.time = time;
-                ci.size = size;
-            } else if (S_ISLNK(mode)) {
-                sc.Warning("skipping symlink '%s'", name);
-                ci.skip = true;
-            } else {
-                sc.Warning("skipping special file '%s'", name);
-                ci.skip = true;
-            }
+            ci.time = time;
+            ci.size = size;
             filelist->push_back(ci);
         }
     };
@@ -781,12 +777,20 @@ static bool remote_build_list(SyncConnection& sc,
         return false;
     }
 
-    // Add the current directory to the list if it was empty, to ensure that
-    // it gets created.
+    // Add the current directory to the list if it was empty, to ensure that it gets created.
     if (empty_dir) {
-        filelist->push_back(mkcopyinfo(adb_dirname(lpath), adb_dirname(rpath),
-                                       adb_basename(rpath), S_IFDIR));
+        copyinfo ci(adb_dirname(lpath), adb_dirname(rpath), adb_basename(rpath), S_IFDIR);
+        filelist->push_back(ci);
         return true;
+    }
+
+    // Check each symlink we found to see whether it's a file or directory.
+    for (copyinfo& link_ci : linklist) {
+        if (remote_symlink_isdir(sc, link_ci.rpath)) {
+            dirlist.emplace_back(std::move(link_ci));
+        } else {
+            filelist->emplace_back(std::move(link_ci));
+        }
     }
 
     // Recurse into each directory we found.
@@ -912,6 +916,7 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
         const char* dst_path = dst;
         unsigned src_mode, src_time;
         if (!sync_stat(sc, src_path, &src_time, &src_mode, nullptr)) {
+            sc.Error("failed to stat remote object '%s'", src_path);
             return false;
         }
         if (src_mode == 0) {
@@ -920,28 +925,17 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
             continue;
         }
 
-        if (S_ISREG(src_mode)) {
-            std::string path_holder;
-            if (dst_isdir) {
-                // If we're copying a remote file to a local directory, we
-                // really want to copy to local_dir + OS_PATH_SEPARATOR +
-                // basename(remote).
-                path_holder = android::base::StringPrintf(
-                    "%s%c%s", dst_path, OS_PATH_SEPARATOR,
-                    adb_basename(src_path).c_str());
-                dst_path = path_holder.c_str();
-            }
-            if (!sync_recv(sc, src_path, dst_path)) {
-                success = false;
-                continue;
-            } else {
-                if (copy_attrs &&
-                    set_time_and_mode(dst_path, src_time, src_mode) != 0) {
-                    success = false;
-                    continue;
-                }
-            }
-        } else if (S_ISDIR(src_mode)) {
+        bool src_isdir = S_ISDIR(src_mode);
+        if (S_ISLNK(src_mode)) {
+            src_isdir = remote_symlink_isdir(sc, src_path);
+        }
+
+        if ((src_mode & (S_IFREG | S_IFDIR | S_IFBLK | S_IFCHR)) == 0) {
+            sc.Error("skipping remote object '%s' (mode = 0o%o)", src_path, src_mode);
+            continue;
+        }
+
+        if (src_isdir) {
             std::string dst_dir = dst;
 
             // If the destination path existed originally, the source directory
@@ -957,13 +951,28 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
                 dst_dir.append(adb_basename(src_path));
             }
 
-            success &= copy_remote_dir_local(sc, src_path, dst_dir.c_str(),
-                                             copy_attrs);
+            success &= copy_remote_dir_local(sc, src_path, dst_dir.c_str(), copy_attrs);
             continue;
         } else {
-            sc.Error("remote object '%s' not a file or directory", src_path);
-            success = false;
-            continue;
+            std::string path_holder;
+            if (dst_isdir) {
+                // If we're copying a remote file to a local directory, we
+                // really want to copy to local_dir + OS_PATH_SEPARATOR +
+                // basename(remote).
+                path_holder = android::base::StringPrintf("%s%c%s", dst_path, OS_PATH_SEPARATOR,
+                                                          adb_basename(src_path).c_str());
+                dst_path = path_holder.c_str();
+            }
+
+            if (!sync_recv(sc, src_path, dst_path)) {
+                success = false;
+                continue;
+            }
+
+            if (copy_attrs && set_time_and_mode(dst_path, src_time, src_mode) != 0) {
+                success = false;
+                continue;
+            }
         }
     }
 
