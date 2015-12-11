@@ -265,7 +265,7 @@ static void show_help(const char *cmd)
                     "  -v <format>     Sets the log print format, where <format> is:\n"
                     "  --format=<format>\n"
                     "                      brief color epoch long monotonic printable process raw\n"
-                    "                      tag thread threadtime time usec UTC year zone\n\n"
+                    "                      tag thread threadtime time uid usec UTC year zone\n\n"
                     "  -D              print dividers between each log buffer\n"
                     "  --dividers\n"
                     "  -c              clear (flush) the entire log and exit\n"
