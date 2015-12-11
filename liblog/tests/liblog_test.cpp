@@ -25,6 +25,7 @@
 #include <log/logger.h>
 #include <log/log_read.h>
 #include <log/logprint.h>
+#include <private/android_logger.h>
 
 // enhanced version of LOG_FAILURE_RETRY to add support for EAGAIN and
 // non-syscall libs. Since we are only using this in the emergency of
@@ -199,6 +200,96 @@ TEST(liblog, __security) {
     property_set(persist_key, "");
     EXPECT_FALSE(__android_log_security());
     property_set(persist_key, persist);
+}
+
+TEST(liblog, __security_buffer) {
+    struct logger_list *logger_list;
+    android_event_long_t buffer;
+
+    static const char persist_key[] = "persist.logd.security";
+    char persist[PROP_VALUE_MAX];
+    bool set_persist = false;
+    bool allow_security = false;
+
+    if (__android_log_security()) {
+        allow_security = true;
+    } else {
+        property_get(persist_key, persist, "");
+        if (strcasecmp(persist, "true")) {
+            property_set(persist_key, "TRUE");
+            if (__android_log_security()) {
+                allow_security = true;
+                set_persist = true;
+            } else {
+                property_set(persist_key, persist);
+            }
+        }
+    }
+
+    if (!allow_security) {
+        fprintf(stderr, "WARNING: "
+                "security buffer disabled, bypassing end-to-end test\n");
+
+        log_time ts(CLOCK_MONOTONIC);
+
+        buffer.type = EVENT_TYPE_LONG;
+        buffer.data = *(static_cast<uint64_t *>((void *)&ts));
+
+        // expect failure!
+        ASSERT_GE(0, __android_log_security_bwrite(0, &buffer, sizeof(buffer)));
+
+        return;
+    }
+
+    pid_t pid = getpid();
+
+    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
+        LOG_ID_SECURITY, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK,
+        1000, pid)));
+
+    log_time ts(CLOCK_MONOTONIC);
+
+    buffer.type = EVENT_TYPE_LONG;
+    buffer.data = *(static_cast<uint64_t *>((void *)&ts));
+
+    ASSERT_LT(0, __android_log_security_bwrite(0, &buffer, sizeof(buffer)));
+    usleep(1000000);
+
+    int count = 0;
+
+    for (;;) {
+        log_msg log_msg;
+        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
+            break;
+        }
+
+        ASSERT_EQ(log_msg.entry.pid, pid);
+
+        if ((log_msg.entry.len != (4 + 1 + 8))
+         || (log_msg.id() != LOG_ID_SECURITY)) {
+            continue;
+        }
+
+        char *eventData = log_msg.msg();
+
+        if (eventData[4] != EVENT_TYPE_LONG) {
+            continue;
+        }
+
+        log_time tx(eventData + 4 + 1);
+        if (ts == tx) {
+            ++count;
+        }
+    }
+
+    if (set_persist) {
+        property_set(persist_key, persist);
+    }
+
+    android_logger_list_close(logger_list);
+
+    EXPECT_EQ(1, count);
+
 }
 
 static unsigned signaled;
@@ -651,7 +742,8 @@ TEST(liblog, android_logger_get_) {
         EXPECT_EQ(id, android_logger_get_id(logger));
         EXPECT_LT(0, android_logger_get_log_size(logger));
         /* crash buffer is allowed to be empty, that is actually healthy! */
-        if (android_logger_get_log_readable_size(logger) || strcmp("crash", name)) {
+        if (android_logger_get_log_readable_size(logger) ||
+                (strcmp("crash", name) && strcmp("security", name))) {
             EXPECT_LT(0, android_logger_get_log_readable_size(logger));
         }
         EXPECT_LT(0, android_logger_get_log_version(logger));

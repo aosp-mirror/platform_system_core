@@ -26,6 +26,4 @@ public:
     virtual ~LogCommand() {}
 };
 
-bool clientHasLogCredentials(SocketClient * cli);
-
 #endif

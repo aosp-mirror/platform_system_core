@@ -44,6 +44,8 @@ int __android_log_btwrite(int32_t tag, char type, const void *payload,
     size_t len);
 int __android_log_bswrite(int32_t tag, const char *payload);
 
+int __android_log_security_bwrite(int32_t tag, const void *payload, size_t len);
+
 #ifdef __cplusplus
 }
 #endif
