@@ -132,7 +132,7 @@ void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* pat
                         jobject class_loader, jstring java_library_path,
                         jstring java_permitted_path) {
 #if defined(__ANDROID__)
-  if (target_sdk_version == 0 || class_loader == nullptr) {
+  if (target_sdk_version <= INT_MAX || class_loader == nullptr) {
     return dlopen(path, RTLD_NOW);
   }
 
