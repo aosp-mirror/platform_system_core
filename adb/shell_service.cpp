@@ -250,13 +250,18 @@ bool Subprocess::ForkAndExec() {
     // Construct the environment for the child before we fork.
     passwd* pw = getpwuid(getuid());
     std::unordered_map<std::string, std::string> env;
+    if (environ) {
+        char** current = environ;
+        while (char* env_cstr = *current++) {
+            std::string env_string = env_cstr;
+            char* delimiter = strchr(env_string.c_str(), '=');
 
-    char** current = environ;
-    while (char* env_cstr = *current++) {
-        std::string env_string = env_cstr;
-        char* delimiter = strchr(env_string.c_str(), '=');
-        *delimiter++ = '\0';
-        env[env_string.c_str()] = delimiter;
+            // Drop any values that don't contain '='.
+            if (delimiter) {
+                *delimiter++ = '\0';
+                env[env_string.c_str()] = delimiter;
+            }
+        }
     }
 
     if (pw != nullptr) {
