@@ -18,9 +18,12 @@ fastboot_version := $(shell git -C $(LOCAL_PATH) rev-parse --short=12 HEAD 2>/de
 
 include $(CLEAR_VARS)
 
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/../mkbootimg \
+LOCAL_C_INCLUDES := \
+  $(LOCAL_PATH)/../adb \
+  $(LOCAL_PATH)/../mkbootimg \
   $(LOCAL_PATH)/../../extras/ext4_utils \
-  $(LOCAL_PATH)/../../extras/f2fs_utils
+  $(LOCAL_PATH)/../../extras/f2fs_utils \
+
 LOCAL_SRC_FILES := protocol.cpp engine.cpp bootimg_utils.cpp fastboot.cpp util.cpp fs.cpp
 LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
@@ -31,8 +34,10 @@ LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
 LOCAL_CFLAGS += -DFASTBOOT_REVISION='"$(fastboot_version)"'
 
 LOCAL_SRC_FILES_linux := usb_linux.cpp util_linux.cpp
+LOCAL_STATIC_LIBRARIES_linux := libselinux
 
 LOCAL_SRC_FILES_darwin := usb_osx.cpp util_osx.cpp
+LOCAL_STATIC_LIBRARIES_darwin := libselinux
 LOCAL_LDLIBS_darwin := -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
 LOCAL_CFLAGS_darwin := -Wno-unused-parameter
 
@@ -49,10 +54,8 @@ LOCAL_STATIC_LIBRARIES := \
     libutils \
     liblog \
     libz \
+    libdiagnose_usb \
     libbase \
-
-LOCAL_STATIC_LIBRARIES_darwin := libselinux
-LOCAL_STATIC_LIBRARIES_linux := libselinux
 
 # libf2fs_dlutils_host will dlopen("libf2fs_fmt_host_dyn")
 LOCAL_CFLAGS_linux := -DUSE_F2FS
