@@ -160,6 +160,19 @@ LOCAL_STATIC_LIBRARIES := libadbd
 LOCAL_SHARED_LIBRARIES := libbase libcutils
 include $(BUILD_NATIVE_TEST)
 
+# libdiagnose_usb
+# =========================================================
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := libdiagnose_usb
+LOCAL_MODULE_HOST_OS := darwin linux windows
+LOCAL_CFLAGS := $(LIBADB_CFLAGS)
+LOCAL_SRC_FILES := diagnose_usb.cpp
+# Even though we're building a static library (and thus there's no link step for
+# this to take effect), this adds the includes to our path.
+LOCAL_STATIC_LIBRARIES := libbase
+include $(BUILD_HOST_STATIC_LIBRARY)
+
 # adb_test
 # =========================================================
 
@@ -185,6 +198,7 @@ LOCAL_STATIC_LIBRARIES := \
     libadb \
     libcrypto_static \
     libcutils \
+    libdiagnose_usb \
 
 # Set entrypoint to wmain from sysdeps_win32.cpp instead of main
 LOCAL_LDFLAGS_windows := -municode
@@ -261,6 +275,7 @@ LOCAL_STATIC_LIBRARIES := \
     libadb \
     libbase \
     libcrypto_static \
+    libdiagnose_usb \
     liblog \
 
 # Don't use libcutils on Windows.
