@@ -552,12 +552,3 @@ void usb_kick(usb_handle *handle)
         handle->interface = 0;
     }
 }
-
-// kCsNoPerm is Linux-only.
-std::string UsbNoPermissionsShortHelpText() {
-    return "";
-}
-
-std::string UsbNoPermissionsLongHelpText() {
-    return "";
-}

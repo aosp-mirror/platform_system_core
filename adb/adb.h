@@ -226,11 +226,6 @@ void usb_kick(usb_handle *h);
 int is_adb_interface(int vid, int pid, int usb_class, int usb_subclass, int usb_protocol);
 #endif
 
-// USB permission error help text. The short version will be one line, long may be multi-line.
-// Returns a string message to print, or an empty string if no problems could be found.
-std::string UsbNoPermissionsShortHelpText();
-std::string UsbNoPermissionsLongHelpText();
-
 int adb_commandline(int argc, const char **argv);
 
 ConnectionState connection_state(atransport *t);

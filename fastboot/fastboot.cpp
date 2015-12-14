@@ -53,6 +53,7 @@
 #include <android-base/parseint.h>
 
 #include "bootimg_utils.h"
+#include "diagnose_usb.h"
 #include "fastboot.h"
 #include "fs.h"
 #include "transport.h"
@@ -206,21 +207,21 @@ static int match_fastboot(usb_ifc_info* info) {
 
 static int list_devices_callback(usb_ifc_info* info) {
     if (match_fastboot_with_serial(info, nullptr) == 0) {
-        const char* serial = info->serial_number;
+        std::string serial = info->serial_number;
         if (!info->writable) {
-            serial = "no permissions"; // like "adb devices"
+            serial = UsbNoPermissionsShortHelpText();
         }
         if (!serial[0]) {
             serial = "????????????";
         }
         // output compatible with "adb devices"
         if (!long_listing) {
-            printf("%s\tfastboot\n", serial);
-        } else if (strcmp("", info->device_path) == 0) {
-            printf("%-22s fastboot\n", serial);
+            printf("%s\tfastboot", serial.c_str());
         } else {
-            printf("%-22s fastboot %s\n", serial, info->device_path);
+            printf("%-22s fastboot", serial.c_str());
+            if (strlen(info->device_path) > 0) printf(" %s", info->device_path);
         }
+        putchar('\n');
     }
 
     return -1;
