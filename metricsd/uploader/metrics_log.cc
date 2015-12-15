@@ -18,6 +18,8 @@
 
 #include <string>
 
+#include <base/files/file_util.h>
+
 #include "uploader/proto/system_profile.pb.h"
 #include "uploader/system_profile_setter.h"
 
@@ -25,6 +27,40 @@
 // override them.
 MetricsLog::MetricsLog()
     : MetricsLogBase("", 0, metrics::MetricsLogBase::ONGOING_LOG, "") {
+}
+
+bool MetricsLog::LoadFromFile(const base::FilePath& saved_log) {
+  std::string encoded_log;
+  if (!base::ReadFileToString(saved_log, &encoded_log)) {
+    LOG(ERROR) << "Failed to read the metrics log backup from "
+               << saved_log.value();
+    return false;
+  }
+
+  if (!uma_proto()->ParseFromString(encoded_log)) {
+    LOG(ERROR) << "Failed to parse log from " << saved_log.value()
+               << ", deleting the log";
+    base::DeleteFile(saved_log, false);
+    uma_proto()->Clear();
+    return false;
+  }
+
+  VLOG(1) << uma_proto()->histogram_event_size() << " histograms loaded from "
+          << saved_log.value();
+
+  return true;
+}
+
+bool MetricsLog::SaveToFile(const base::FilePath& path) {
+  std::string encoded_log;
+  GetEncodedLog(&encoded_log);
+
+  if (static_cast<int>(encoded_log.size()) !=
+      base::WriteFile(path, encoded_log.data(), encoded_log.size())) {
+    LOG(ERROR) << "Failed to persist the current log to " << path.value();
+    return false;
+  }
+  return true;
 }
 
 void MetricsLog::IncrementUserCrashCount(unsigned int count) {
