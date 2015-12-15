@@ -101,9 +101,10 @@ void LogBuffer::init() {
     if (!default_size) {
         default_size = property_get_size(global_default);
         if (!default_size) {
-            default_size = property_get_bool("ro.config.low_ram", false) ?
-                LOG_BUFFER_MIN_SIZE : // 64K
-                LOG_BUFFER_SIZE;      // 256K
+            default_size = property_get_bool("ro.config.low_ram",
+                                             BOOL_DEFAULT_FALSE)
+                ? LOG_BUFFER_MIN_SIZE // 64K
+                : LOG_BUFFER_SIZE;    // 256K
         }
     }
 

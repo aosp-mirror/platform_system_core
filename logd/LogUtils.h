@@ -44,7 +44,14 @@ bool clientHasLogCredentials(uid_t uid, gid_t gid, pid_t pid);
 bool clientHasLogCredentials(SocketClient *cli);
 
 // Furnished in main.cpp
-bool property_get_bool(const char *key, bool def);
+#define BOOL_DEFAULT_FLAG_TRUE_FALSE 0x1
+#define BOOL_DEFAULT_FALSE       0x0     // false if property not present
+#define BOOL_DEFAULT_TRUE        0x1     // true if property not present
+#define BOOL_DEFAULT_FLAG_PERSIST    0x2 // <key>, persist.<key>, ro.<key>
+#define BOOL_DEFAULT_FLAG_ENG        0x4 // off for user
+#define BOOL_DEFAULT_FLAG_SVELTE     0x8 // off for low_ram
+
+bool property_get_bool(const char *key, int def);
 
 static inline bool worstUidEnabledForLogid(log_id_t id) {
     return (id == LOG_ID_MAIN) || (id == LOG_ID_SYSTEM) || (id == LOG_ID_RADIO);
