@@ -605,7 +605,7 @@ TEST(logcat, logrotate) {
                 char c;
 
                 if ((2 == sscanf(buffer, "%d log.tx%c", &num, &c)) &&
-                        (num <= 24)) {
+                        (num <= 40)) {
                     ++count;
                 } else if (strncmp(buffer, total, sizeof(total) - 1)) {
                     fprintf(stderr, "WARNING: Parse error: %s", buffer);
