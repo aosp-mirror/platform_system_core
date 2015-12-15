@@ -1256,6 +1256,12 @@ MIPSAssembler::MIPSAssembler(const sp<Assembly>& assembly, ArmToMipsAssembler *p
     mDuration = ggl_system_time();
 }
 
+MIPSAssembler::MIPSAssembler(void* assembly)
+    : mParent(NULL), mAssembly(NULL)
+{
+    mBase = mPC = (uint32_t *)assembly;
+}
+
 MIPSAssembler::~MIPSAssembler()
 {
 }
