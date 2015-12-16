@@ -481,7 +481,8 @@ static int usb_ffs_read(usb_handle* h, void* data, int len) {
 
     char* buf = static_cast<char*>(data);
     while (len > 0) {
-        int n = adb_read(h->bulk_out, buf, len);
+        int read_len = (len > 16384) ? 16384 : len;
+        int n = adb_read(h->bulk_out, buf, read_len);
         if (n < 0) {
             D("ERROR: fd = %d, n = %d: %s", h->bulk_out, n, strerror(errno));
             return -1;
