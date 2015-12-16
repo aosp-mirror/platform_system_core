@@ -54,11 +54,7 @@ static void drop_capabilities_bounding_set_if_needed() {
         }
 
         int err = prctl(PR_CAPBSET_DROP, i, 0, 0, 0);
-
-        // Some kernels don't have file capabilities compiled in, and
-        // prctl(PR_CAPBSET_DROP) returns EINVAL. Don't automatically
-        // die when we see such misconfigured kernels.
-        if ((err < 0) && (errno != EINVAL)) {
+        if (err < 0) {
             PLOG(FATAL) << "Could not drop capabilities";
         }
     }
