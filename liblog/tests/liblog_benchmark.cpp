@@ -14,11 +14,17 @@
  * limitations under the License.
  */
 
+#include <fcntl.h>
+#include <sys/endian.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include <cutils/sockets.h>
 #include <log/log.h>
 #include <log/logger.h>
 #include <log/log_read.h>
+#include <private/android_logger.h>
 
 #include "benchmark.h"
 
@@ -83,6 +89,380 @@ static void BM_clock_overhead(int iters) {
     }
 }
 BENCHMARK(BM_clock_overhead);
+
+/*
+ * Measure the time it takes to submit the android logging data to pstore
+ */
+static void BM_pmsg_short(int iters) {
+
+    int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
+    if (pstore_fd < 0) {
+        return;
+    }
+
+    /*
+     *  struct {
+     *      // what we provide to pstore
+     *      android_pmsg_log_header_t pmsg_header;
+     *      // what we provide to socket
+     *      android_log_header_t header;
+     *      // caller provides
+     *      union {
+     *          struct {
+     *              char     prio;
+     *              char     payload[];
+     *          } string;
+     *          struct {
+     *              uint32_t tag
+     *              char     payload[];
+     *          } binary;
+     *      };
+     *  };
+     */
+
+    struct timespec ts;
+    clock_gettime(android_log_clockid(), &ts);
+
+    android_pmsg_log_header_t pmsg_header;
+    pmsg_header.magic = LOGGER_MAGIC;
+    pmsg_header.len = sizeof(android_pmsg_log_header_t)
+                    + sizeof(android_log_header_t);
+    pmsg_header.uid = getuid();
+    pmsg_header.pid = getpid();
+
+    android_log_header_t header;
+    header.tid = gettid();
+    header.realtime.tv_sec = ts.tv_sec;
+    header.realtime.tv_nsec = ts.tv_nsec;
+
+    static const unsigned nr = 1;
+    static const unsigned header_length = 2;
+    struct iovec newVec[nr + header_length];
+
+    newVec[0].iov_base   = (unsigned char *) &pmsg_header;
+    newVec[0].iov_len    = sizeof(pmsg_header);
+    newVec[1].iov_base   = (unsigned char *) &header;
+    newVec[1].iov_len    = sizeof(header);
+
+    android_log_event_int_t buffer;
+
+    header.id = LOG_ID_EVENTS;
+    buffer.header.tag = 0;
+    buffer.payload.type = EVENT_TYPE_INT;
+    uint32_t snapshot = 0;
+    buffer.payload.data = htole32(snapshot);
+
+    newVec[2].iov_base = &buffer;
+    newVec[2].iov_len  = sizeof(buffer);
+
+    StartBenchmarkTiming();
+    for (int i = 0; i < iters; ++i) {
+        ++snapshot;
+        buffer.payload.data = htole32(snapshot);
+        writev(pstore_fd, newVec, nr);
+    }
+    StopBenchmarkTiming();
+    close(pstore_fd);
+}
+BENCHMARK(BM_pmsg_short);
+
+/*
+ * Measure the time it takes to submit the android logging data to pstore
+ * best case aligned single block.
+ */
+static void BM_pmsg_short_aligned(int iters) {
+
+    int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
+    if (pstore_fd < 0) {
+        return;
+    }
+
+    /*
+     *  struct {
+     *      // what we provide to pstore
+     *      android_pmsg_log_header_t pmsg_header;
+     *      // what we provide to socket
+     *      android_log_header_t header;
+     *      // caller provides
+     *      union {
+     *          struct {
+     *              char     prio;
+     *              char     payload[];
+     *          } string;
+     *          struct {
+     *              uint32_t tag
+     *              char     payload[];
+     *          } binary;
+     *      };
+     *  };
+     */
+
+    struct timespec ts;
+    clock_gettime(android_log_clockid(), &ts);
+
+    struct packet {
+        android_pmsg_log_header_t pmsg_header;
+        android_log_header_t header;
+        android_log_event_int_t payload;
+    };
+    char buf[sizeof(struct packet) + 8] __aligned(8);
+    memset(buf, 0, sizeof(buf));
+    struct packet *buffer = (struct packet*)(((uintptr_t)buf + 7) & ~7);
+    if (((uintptr_t)&buffer->pmsg_header) & 7) {
+        fprintf (stderr, "&buffer=0x%p iters=%d\n", &buffer->pmsg_header, iters);
+    }
+
+    buffer->pmsg_header.magic = LOGGER_MAGIC;
+    buffer->pmsg_header.len = sizeof(android_pmsg_log_header_t)
+                            + sizeof(android_log_header_t);
+    buffer->pmsg_header.uid = getuid();
+    buffer->pmsg_header.pid = getpid();
+
+    buffer->header.tid = gettid();
+    buffer->header.realtime.tv_sec = ts.tv_sec;
+    buffer->header.realtime.tv_nsec = ts.tv_nsec;
+
+    buffer->header.id = LOG_ID_EVENTS;
+    buffer->payload.header.tag = 0;
+    buffer->payload.payload.type = EVENT_TYPE_INT;
+    uint32_t snapshot = 0;
+    buffer->payload.payload.data = htole32(snapshot);
+
+    StartBenchmarkTiming();
+    for (int i = 0; i < iters; ++i) {
+        ++snapshot;
+        buffer->payload.payload.data = htole32(snapshot);
+        write(pstore_fd, &buffer->pmsg_header,
+            sizeof(android_pmsg_log_header_t) +
+            sizeof(android_log_header_t) +
+            sizeof(android_log_event_int_t));
+    }
+    StopBenchmarkTiming();
+    close(pstore_fd);
+}
+BENCHMARK(BM_pmsg_short_aligned);
+
+/*
+ * Measure the time it takes to submit the android logging data to pstore
+ * best case aligned single block.
+ */
+static void BM_pmsg_short_unaligned1(int iters) {
+
+    int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
+    if (pstore_fd < 0) {
+        return;
+    }
+
+    /*
+     *  struct {
+     *      // what we provide to pstore
+     *      android_pmsg_log_header_t pmsg_header;
+     *      // what we provide to socket
+     *      android_log_header_t header;
+     *      // caller provides
+     *      union {
+     *          struct {
+     *              char     prio;
+     *              char     payload[];
+     *          } string;
+     *          struct {
+     *              uint32_t tag
+     *              char     payload[];
+     *          } binary;
+     *      };
+     *  };
+     */
+
+    struct timespec ts;
+    clock_gettime(android_log_clockid(), &ts);
+
+    struct packet {
+        android_pmsg_log_header_t pmsg_header;
+        android_log_header_t header;
+        android_log_event_int_t payload;
+    };
+    char buf[sizeof(struct packet) + 8] __aligned(8);
+    memset(buf, 0, sizeof(buf));
+    struct packet *buffer = (struct packet*)((((uintptr_t)buf + 7) & ~7) + 1);
+    if ((((uintptr_t)&buffer->pmsg_header) & 7) != 1) {
+        fprintf (stderr, "&buffer=0x%p iters=%d\n", &buffer->pmsg_header, iters);
+    }
+
+    buffer->pmsg_header.magic = LOGGER_MAGIC;
+    buffer->pmsg_header.len = sizeof(android_pmsg_log_header_t)
+                            + sizeof(android_log_header_t);
+    buffer->pmsg_header.uid = getuid();
+    buffer->pmsg_header.pid = getpid();
+
+    buffer->header.tid = gettid();
+    buffer->header.realtime.tv_sec = ts.tv_sec;
+    buffer->header.realtime.tv_nsec = ts.tv_nsec;
+
+    buffer->header.id = LOG_ID_EVENTS;
+    buffer->payload.header.tag = 0;
+    buffer->payload.payload.type = EVENT_TYPE_INT;
+    uint32_t snapshot = 0;
+    buffer->payload.payload.data = htole32(snapshot);
+
+    StartBenchmarkTiming();
+    for (int i = 0; i < iters; ++i) {
+        ++snapshot;
+        buffer->payload.payload.data = htole32(snapshot);
+        write(pstore_fd, &buffer->pmsg_header,
+            sizeof(android_pmsg_log_header_t) +
+            sizeof(android_log_header_t) +
+            sizeof(android_log_event_int_t));
+    }
+    StopBenchmarkTiming();
+    close(pstore_fd);
+}
+BENCHMARK(BM_pmsg_short_unaligned1);
+
+/*
+ * Measure the time it takes to submit the android logging data to pstore
+ * best case aligned single block.
+ */
+static void BM_pmsg_long_aligned(int iters) {
+
+    int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
+    if (pstore_fd < 0) {
+        return;
+    }
+
+    /*
+     *  struct {
+     *      // what we provide to pstore
+     *      android_pmsg_log_header_t pmsg_header;
+     *      // what we provide to socket
+     *      android_log_header_t header;
+     *      // caller provides
+     *      union {
+     *          struct {
+     *              char     prio;
+     *              char     payload[];
+     *          } string;
+     *          struct {
+     *              uint32_t tag
+     *              char     payload[];
+     *          } binary;
+     *      };
+     *  };
+     */
+
+    struct timespec ts;
+    clock_gettime(android_log_clockid(), &ts);
+
+    struct packet {
+        android_pmsg_log_header_t pmsg_header;
+        android_log_header_t header;
+        android_log_event_int_t payload;
+    };
+    char buf[sizeof(struct packet) + 8 + LOGGER_ENTRY_MAX_PAYLOAD] __aligned(8);
+    memset(buf, 0, sizeof(buf));
+    struct packet *buffer = (struct packet*)(((uintptr_t)buf + 7) & ~7);
+    if (((uintptr_t)&buffer->pmsg_header) & 7) {
+        fprintf (stderr, "&buffer=0x%p iters=%d\n", &buffer->pmsg_header, iters);
+    }
+
+    buffer->pmsg_header.magic = LOGGER_MAGIC;
+    buffer->pmsg_header.len = sizeof(android_pmsg_log_header_t)
+                            + sizeof(android_log_header_t);
+    buffer->pmsg_header.uid = getuid();
+    buffer->pmsg_header.pid = getpid();
+
+    buffer->header.tid = gettid();
+    buffer->header.realtime.tv_sec = ts.tv_sec;
+    buffer->header.realtime.tv_nsec = ts.tv_nsec;
+
+    buffer->header.id = LOG_ID_EVENTS;
+    buffer->payload.header.tag = 0;
+    buffer->payload.payload.type = EVENT_TYPE_INT;
+    uint32_t snapshot = 0;
+    buffer->payload.payload.data = htole32(snapshot);
+
+    StartBenchmarkTiming();
+    for (int i = 0; i < iters; ++i) {
+        ++snapshot;
+        buffer->payload.payload.data = htole32(snapshot);
+        write(pstore_fd, &buffer->pmsg_header, LOGGER_ENTRY_MAX_PAYLOAD);
+    }
+    StopBenchmarkTiming();
+    close(pstore_fd);
+}
+BENCHMARK(BM_pmsg_long_aligned);
+
+/*
+ * Measure the time it takes to submit the android logging data to pstore
+ * best case aligned single block.
+ */
+static void BM_pmsg_long_unaligned1(int iters) {
+
+    int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
+    if (pstore_fd < 0) {
+        return;
+    }
+
+    /*
+     *  struct {
+     *      // what we provide to pstore
+     *      android_pmsg_log_header_t pmsg_header;
+     *      // what we provide to socket
+     *      android_log_header_t header;
+     *      // caller provides
+     *      union {
+     *          struct {
+     *              char     prio;
+     *              char     payload[];
+     *          } string;
+     *          struct {
+     *              uint32_t tag
+     *              char     payload[];
+     *          } binary;
+     *      };
+     *  };
+     */
+
+    struct timespec ts;
+    clock_gettime(android_log_clockid(), &ts);
+
+    struct packet {
+        android_pmsg_log_header_t pmsg_header;
+        android_log_header_t header;
+        android_log_event_int_t payload;
+    };
+    char buf[sizeof(struct packet) + 8 + LOGGER_ENTRY_MAX_PAYLOAD] __aligned(8);
+    memset(buf, 0, sizeof(buf));
+    struct packet *buffer = (struct packet*)((((uintptr_t)buf + 7) & ~7) + 1);
+    if ((((uintptr_t)&buffer->pmsg_header) & 7) != 1) {
+        fprintf (stderr, "&buffer=0x%p iters=%d\n", &buffer->pmsg_header, iters);
+    }
+
+    buffer->pmsg_header.magic = LOGGER_MAGIC;
+    buffer->pmsg_header.len = sizeof(android_pmsg_log_header_t)
+                            + sizeof(android_log_header_t);
+    buffer->pmsg_header.uid = getuid();
+    buffer->pmsg_header.pid = getpid();
+
+    buffer->header.tid = gettid();
+    buffer->header.realtime.tv_sec = ts.tv_sec;
+    buffer->header.realtime.tv_nsec = ts.tv_nsec;
+
+    buffer->header.id = LOG_ID_EVENTS;
+    buffer->payload.header.tag = 0;
+    buffer->payload.payload.type = EVENT_TYPE_INT;
+    uint32_t snapshot = 0;
+    buffer->payload.payload.data = htole32(snapshot);
+
+    StartBenchmarkTiming();
+    for (int i = 0; i < iters; ++i) {
+        ++snapshot;
+        buffer->payload.payload.data = htole32(snapshot);
+        write(pstore_fd, &buffer->pmsg_header, LOGGER_ENTRY_MAX_PAYLOAD);
+    }
+    StopBenchmarkTiming();
+    close(pstore_fd);
+}
+BENCHMARK(BM_pmsg_long_unaligned1);
 
 /*
  *	Measure the time it takes to submit the android logging call using
