@@ -507,6 +507,16 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
     }
 }
 
+static void derive_permissions_recursive_locked(struct fuse* fuse, struct node *parent) {
+    struct node *node;
+    for (node = parent->child; node; node = node->next) {
+        derive_permissions_locked(fuse, parent, node);
+        if (node->child) {
+            derive_permissions_recursive_locked(fuse, node);
+        }
+    }
+}
+
 /* Kernel has already enforced everything we returned through
  * derive_permissions_locked(), so this is used to lock down access
  * even further, such as enforcing that apps hold sdcard_rw. */
@@ -1145,6 +1155,8 @@ static int handle_rename(struct fuse* fuse, struct fuse_handler* handler,
     res = rename_node_locked(child_node, new_name, new_actual_name);
     if (!res) {
         remove_node_from_parent_locked(child_node);
+        derive_permissions_locked(fuse, new_parent_node, child_node);
+        derive_permissions_recursive_locked(fuse, child_node);
         add_node_to_parent_locked(child_node, new_parent_node);
     }
     goto done;
@@ -1663,6 +1675,10 @@ static int read_package_list(struct fuse_global* global) {
     TRACE("read_package_list: found %zu packages\n",
             hashmapSize(global->package_to_appid));
     fclose(file);
+
+    /* Regenerate ownership details using newly loaded mapping */
+    derive_permissions_recursive_locked(global->fuse_default, &global->root);
+
     pthread_mutex_unlock(&global->lock);
     return 0;
 }
