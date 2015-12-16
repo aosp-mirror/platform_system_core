@@ -1304,9 +1304,8 @@ MIPS64Assembler::MIPS64Assembler(const sp<Assembly>& assembly, ArmToMips64Assemb
 
 MIPS64Assembler::MIPS64Assembler(void* assembly, ArmToMips64Assembler *parent)
     : mParent(parent),
-    MIPSAssembler::MIPSAssembler(NULL, NULL)
+    MIPSAssembler::MIPSAssembler(assembly)
 {
-    mBase = mPC = (uint32_t *)assembly;
 }
 
 MIPS64Assembler::~MIPS64Assembler()

@@ -242,6 +242,7 @@ class MIPSAssembler
 {
 public:
                 MIPSAssembler(const sp<Assembly>& assembly, ArmToMipsAssembler *parent);
+                MIPSAssembler(void* assembly);
     virtual     ~MIPSAssembler();
 
     virtual uint32_t*   base() const;
