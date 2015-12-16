@@ -43,11 +43,16 @@ int ashmem_create_region(const char *ignored __unused, size_t size)
     char template[PATH_MAX];
     snprintf(template, sizeof(template), "/tmp/android-ashmem-%d-XXXXXXXXX", getpid());
     int fd = mkstemp(template);
-    if (fd != -1 && TEMP_FAILURE_RETRY(ftruncate(fd, size)) != -1 && unlink(template) != -1) {
-        return fd;
+    if (fd == -1) return -1;
+
+    unlink(template);
+
+    if (TEMP_FAILURE_RETRY(ftruncate(fd, size)) == -1) {
+      close(fd);
+      return -1;
     }
-    close(fd);
-    return -1;
+
+    return fd;
 }
 
 int ashmem_set_prot_region(int fd __unused, int prot __unused)
