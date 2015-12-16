@@ -53,8 +53,7 @@ static void drop_capabilities_bounding_set_if_needed() {
             continue;
         }
 
-        int err = prctl(PR_CAPBSET_DROP, i, 0, 0, 0);
-        if (err < 0) {
+        if (prctl(PR_CAPBSET_DROP, i, 0, 0, 0) == -1) {
             PLOG(FATAL) << "Could not drop capabilities";
         }
     }
