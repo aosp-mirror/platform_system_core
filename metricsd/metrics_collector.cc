@@ -229,11 +229,11 @@ int MetricsCollector::OnInit() {
   device_->AddComponent(kWeaveComponent, {"_metrics"});
   device_->AddCommandHandler(
       kWeaveComponent,
-      "_metrics._enableAnalyticsReporting",
+      "_metrics.enableAnalyticsReporting",
       base::Bind(&MetricsCollector::OnEnableMetrics, base::Unretained(this)));
   device_->AddCommandHandler(
       kWeaveComponent,
-      "_metrics._disableAnalyticsReporting",
+      "_metrics.disableAnalyticsReporting",
       base::Bind(&MetricsCollector::OnDisableMetrics, base::Unretained(this)));
 
   latest_cpu_use_microseconds_ = cpu_usage_collector_->GetCumulativeCpuUse();
@@ -294,7 +294,7 @@ void MetricsCollector::UpdateWeaveState() {
       metrics_lib_->AreMetricsEnabled() ? "enabled" : "disabled";
 
   if (!device_->SetStateProperty(kWeaveComponent,
-                                 "_metrics._AnalyticsReportingState",
+                                 "_metrics.analyticsReportingState",
                                  enabled,
                                  nullptr)) {
     LOG(ERROR) << "failed to update weave's state";
