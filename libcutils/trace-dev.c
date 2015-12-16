@@ -104,7 +104,7 @@ static bool atrace_is_app_tracing_enabled()
 
     if (sys_debuggable || atrace_is_debuggable) {
         // Check whether tracing is enabled for this process.
-        FILE * file = fopen("/proc/self/cmdline", "r");
+        FILE * file = fopen("/proc/self/cmdline", "re");
         if (file) {
             char cmdline[4096];
             if (fgets(cmdline, sizeof(cmdline), file)) {
@@ -173,7 +173,7 @@ void atrace_update_tags()
 
 static void atrace_init_once()
 {
-    atrace_marker_fd = open("/sys/kernel/debug/tracing/trace_marker", O_WRONLY);
+    atrace_marker_fd = open("/sys/kernel/debug/tracing/trace_marker", O_WRONLY | O_CLOEXEC);
     if (atrace_marker_fd == -1) {
         ALOGE("Error opening trace file: %s (%d)", strerror(errno), errno);
         atrace_enabled_tags = 0;
