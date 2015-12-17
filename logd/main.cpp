@@ -143,7 +143,7 @@ static int drop_privs() {
 }
 
 // Property helper
-static bool property_get_bool(const char *key, bool def) {
+bool property_get_bool(const char *key, bool def) {
     char property[PROPERTY_VALUE_MAX];
     property_get(key, property, "");
 
