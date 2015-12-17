@@ -1860,8 +1860,7 @@ static int install_app(TransportType transport, const char* serial, int argc, co
     adb_close(remoteFd);
 
     if (strncmp("Success", buf, 7)) {
-        fprintf(stderr, "Failed to write %s\n", file);
-        fputs(buf, stderr);
+        fprintf(stderr, "Failed to install %s: %s", file, buf);
         return 1;
     }
     fputs(buf, stderr);
