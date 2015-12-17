@@ -356,19 +356,19 @@ int service_to_fd(const char* name, const atransport* transport) {
 #if ADB_HOST
 struct state_info {
     TransportType transport_type;
-    char* serial;
+    std::string serial;
     ConnectionState state;
 };
 
-static void wait_for_state(int fd, void* cookie) {
-    state_info* sinfo = reinterpret_cast<state_info*>(cookie);
+static void wait_for_state(int fd, void* data) {
+    std::unique_ptr<state_info> sinfo(reinterpret_cast<state_info*>(data));
 
     D("wait_for_state %d", sinfo->state);
 
     while (true) {
         bool is_ambiguous = false;
         std::string error = "unknown error";
-        atransport* t = acquire_one_transport(sinfo->transport_type, sinfo->serial,
+        atransport* t = acquire_one_transport(sinfo->transport_type, sinfo->serial.c_str(),
                                               &is_ambiguous, &error);
         if (t != nullptr && t->connection_state == sinfo->state) {
             SendOkay(fd);
@@ -382,10 +382,6 @@ static void wait_for_state(int fd, void* cookie) {
         }
     }
 
-    if (sinfo->serial) {
-        free(sinfo->serial);
-    }
-    free(sinfo);
     adb_close(fd);
     D("wait_for_state is done");
 }
@@ -491,38 +487,43 @@ static void connect_service(int fd, void* data) {
 asocket* host_service_to_socket(const char* name, const char* serial) {
     if (!strcmp(name,"track-devices")) {
         return create_device_tracker();
-    } else if (!strncmp(name, "wait-for-", strlen("wait-for-"))) {
-        auto sinfo = reinterpret_cast<state_info*>(malloc(sizeof(state_info)));
-        if (sinfo == nullptr) {
-            fprintf(stderr, "couldn't allocate state_info: %s", strerror(errno));
-            return NULL;
-        }
-
-        if (serial)
-            sinfo->serial = strdup(serial);
-        else
-            sinfo->serial = NULL;
-
+    } else if (android::base::StartsWith(name, "wait-for-")) {
         name += strlen("wait-for-");
 
-        if (!strncmp(name, "local", strlen("local"))) {
-            sinfo->transport_type = kTransportLocal;
-            sinfo->state = kCsDevice;
-        } else if (!strncmp(name, "usb", strlen("usb"))) {
-            sinfo->transport_type = kTransportUsb;
-            sinfo->state = kCsDevice;
-        } else if (!strncmp(name, "any", strlen("any"))) {
-            sinfo->transport_type = kTransportAny;
-            sinfo->state = kCsDevice;
-        } else {
-            if (sinfo->serial) {
-                free(sinfo->serial);
-            }
-            free(sinfo);
-            return NULL;
+        std::unique_ptr<state_info> sinfo(new state_info);
+        if (sinfo == nullptr) {
+            fprintf(stderr, "couldn't allocate state_info: %s", strerror(errno));
+            return nullptr;
         }
 
-        int fd = create_service_thread(wait_for_state, sinfo);
+        if (serial) sinfo->serial = serial;
+
+        if (android::base::StartsWith(name, "local")) {
+            name += strlen("local");
+            sinfo->transport_type = kTransportLocal;
+        } else if (android::base::StartsWith(name, "usb")) {
+            name += strlen("usb");
+            sinfo->transport_type = kTransportUsb;
+        } else if (android::base::StartsWith(name, "any")) {
+            name += strlen("any");
+            sinfo->transport_type = kTransportAny;
+        } else {
+            return nullptr;
+        }
+
+        if (!strcmp(name, "-device")) {
+            sinfo->state = kCsDevice;
+        } else if (!strcmp(name, "-recovery")) {
+            sinfo->state = kCsRecovery;
+        } else if (!strcmp(name, "-sideload")) {
+            sinfo->state = kCsSideload;
+        } else if (!strcmp(name, "-bootloader")) {
+            sinfo->state = kCsBootloader;
+        } else {
+            return nullptr;
+        }
+
+        int fd = create_service_thread(wait_for_state, sinfo.release());
         return create_local_socket(fd);
     } else if (!strncmp(name, "connect:", 8)) {
         char* host = strdup(name + 8);
