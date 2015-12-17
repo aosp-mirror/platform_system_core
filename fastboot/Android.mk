@@ -33,15 +33,15 @@ LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
 
 LOCAL_CFLAGS += -DFASTBOOT_REVISION='"$(fastboot_version)"'
 
-LOCAL_SRC_FILES_linux := usb_linux.cpp util_linux.cpp
-LOCAL_STATIC_LIBRARIES_linux := libselinux
+LOCAL_SRC_FILES_linux := socket_unix.cpp usb_linux.cpp util_linux.cpp
+LOCAL_STATIC_LIBRARIES_linux := libcutils libselinux
 
-LOCAL_SRC_FILES_darwin := usb_osx.cpp util_osx.cpp
-LOCAL_STATIC_LIBRARIES_darwin := libselinux
+LOCAL_SRC_FILES_darwin := socket_unix.cpp usb_osx.cpp util_osx.cpp
+LOCAL_STATIC_LIBRARIES_darwin := libcutils libselinux
 LOCAL_LDLIBS_darwin := -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
 LOCAL_CFLAGS_darwin := -Wno-unused-parameter
 
-LOCAL_SRC_FILES_windows := usb_windows.cpp util_windows.cpp
+LOCAL_SRC_FILES_windows := socket_windows.cpp usb_windows.cpp util_windows.cpp
 LOCAL_STATIC_LIBRARIES_windows := AdbWinApi
 LOCAL_REQUIRED_MODULES_windows := AdbWinApi
 LOCAL_LDLIBS_windows := -lws2_32
@@ -89,3 +89,28 @@ LOCAL_CFLAGS := -Werror
 LOCAL_STATIC_LIBRARIES := libbase
 include $(BUILD_HOST_EXECUTABLE)
 endif
+
+# fastboot_test
+# =========================================================
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := fastboot_test
+LOCAL_MODULE_HOST_OS := darwin linux windows
+
+LOCAL_SRC_FILES := socket_test.cpp
+LOCAL_STATIC_LIBRARIES := libbase
+
+LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
+
+LOCAL_SRC_FILES_linux := socket_unix.cpp
+LOCAL_STATIC_LIBRARIES_linux := libcutils
+
+LOCAL_SRC_FILES_darwin := socket_unix.cpp
+LOCAL_LDLIBS_darwin := -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
+LOCAL_CFLAGS_darwin := -Wno-unused-parameter
+LOCAL_STATIC_LIBRARIES_darwin := libcutils
+
+LOCAL_SRC_FILES_windows := socket_windows.cpp
+LOCAL_LDLIBS_windows := -lws2_32
+
+include $(BUILD_HOST_NATIVE_TEST)
