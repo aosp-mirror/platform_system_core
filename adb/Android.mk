@@ -346,6 +346,9 @@ LOCAL_STATIC_LIBRARIES := \
     libsquashfs_utils \
     libcutils \
     libbase \
-    libcrypto_static
+    libcrypto_static \
+    libminijail \
+    libminijail_generated \
+    libcap
 
 include $(BUILD_EXECUTABLE)
