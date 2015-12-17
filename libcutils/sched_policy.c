@@ -129,9 +129,6 @@ static void __initialize(void) {
         bg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
         filename = "/dev/cpuset/system-background/tasks";
         system_bg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
-        if (system_bg_cpuset_fd < 0) {
-            SLOGE("initialize of system-bg failed: %s\n", strerror(errno));
-        }
     }
 #endif
 
