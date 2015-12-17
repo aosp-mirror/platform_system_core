@@ -30,12 +30,21 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <algorithm>
+
 #include "adb.h"
 #include "transport.h"
 
 #define MAX_PACKET_SIZE_FS	64
 #define MAX_PACKET_SIZE_HS	512
 #define MAX_PACKET_SIZE_SS	1024
+
+// Writes larger than 16k fail on some devices (seed with 3.10.49-g209ea2f in particular).
+#define USB_FFS_MAX_WRITE 16384
+
+// The kernel allocates a contiguous buffer for reads, which can fail for large ones due to
+// fragmentation. 16k chosen arbitrarily to match the write limit.
+#define USB_FFS_MAX_READ 16384
 
 #define cpu_to_le16(x)  htole16(x)
 #define cpu_to_le32(x)  htole32(x)
@@ -459,10 +468,9 @@ static void *usb_ffs_open_thread(void *x)
 static int usb_ffs_write(usb_handle* h, const void* data, int len) {
     D("about to write (fd=%d, len=%d)", h->bulk_in, len);
 
-    // Writes larger than 16k fail on some devices (seed with 3.10.49-g209ea2f in particular).
     const char* buf = static_cast<const char*>(data);
     while (len > 0) {
-        int write_len = (len > 16384) ? 16384 : len;
+        int write_len = std::min(USB_FFS_MAX_WRITE, len);
         int n = adb_write(h->bulk_in, buf, write_len);
         if (n < 0) {
             D("ERROR: fd = %d, n = %d: %s", h->bulk_in, n, strerror(errno));
@@ -481,7 +489,7 @@ static int usb_ffs_read(usb_handle* h, void* data, int len) {
 
     char* buf = static_cast<char*>(data);
     while (len > 0) {
-        int read_len = (len > 16384) ? 16384 : len;
+        int read_len = std::min(USB_FFS_MAX_READ, len);
         int n = adb_read(h->bulk_out, buf, read_len);
         if (n < 0) {
             D("ERROR: fd = %d, n = %d: %s", h->bulk_out, n, strerror(errno));
