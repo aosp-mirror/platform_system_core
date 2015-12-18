@@ -29,7 +29,7 @@
 #include <android-base/stringprintf.h>
 #include "cutils/properties.h"
 #include "private/android_filesystem_config.h"
-#include "selinux/selinux.h"
+#include "selinux/android.h"
 
 #include "adb.h"
 #include "adb_auth.h"
@@ -137,7 +137,7 @@ static void drop_privileges(int server_port) {
         D("Local port disabled");
     } else {
         if (root_seclabel != nullptr) {
-            if (setcon(root_seclabel) < 0) {
+            if (selinux_android_setcon(root_seclabel) < 0) {
                 LOG(FATAL) << "Could not set SELinux context";
             }
         }
