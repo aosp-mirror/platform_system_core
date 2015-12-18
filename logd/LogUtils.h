@@ -43,6 +43,9 @@ const char *tagToName(uint32_t tag);
 bool clientHasLogCredentials(uid_t uid, gid_t gid, pid_t pid);
 bool clientHasLogCredentials(SocketClient *cli);
 
+// Furnished in main.cpp
+bool property_get_bool(const char *key, bool def);
+
 static inline bool worstUidEnabledForLogid(log_id_t id) {
     return (id == LOG_ID_MAIN) || (id == LOG_ID_SYSTEM) || (id == LOG_ID_RADIO);
 }
