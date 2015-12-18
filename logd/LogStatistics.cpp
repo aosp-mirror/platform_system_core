@@ -205,7 +205,7 @@ std::string UidEntry::formatHeader(const std::string &name, log_id_t id) const {
 }
 
 std::string UidEntry::format(const LogStatistics &stat, log_id_t id) const {
-    uid_t uid = getKey();
+    uid_t uid = getUid();
     std::string name = android::base::StringPrintf("%u", uid);
     const char *nameTmp = stat.uidToName(uid);
     if (nameTmp) {
@@ -287,8 +287,8 @@ std::string PidEntry::formatHeader(const std::string &name, log_id_t /* id */) c
 
 std::string PidEntry::format(const LogStatistics &stat, log_id_t /* id */) const {
     uid_t uid = getUid();
-    std::string name = android::base::StringPrintf("%5u/%u",
-                                                   getKey(), uid);
+    pid_t pid = getPid();
+    std::string name = android::base::StringPrintf("%5u/%u", pid, uid);
     const char *nameTmp = getName();
     if (nameTmp) {
         name += android::base::StringPrintf(
@@ -325,7 +325,7 @@ std::string TidEntry::formatHeader(const std::string &name, log_id_t /* id */) c
 std::string TidEntry::format(const LogStatistics &stat, log_id_t /* id */) const {
     uid_t uid = getUid();
     std::string name = android::base::StringPrintf("%5u/%u",
-                                                   getKey(), uid);
+                                                   getTid(), uid);
     const char *nameTmp = getName();
     if (nameTmp) {
         name += android::base::StringPrintf(
@@ -388,7 +388,8 @@ std::string TagEntry::format(const LogStatistics & /* stat */, log_id_t /* id */
     return formatLine(name, size, pruned);
 }
 
-std::string LogStatistics::format(uid_t uid, unsigned int logMask) const {
+std::string LogStatistics::format(uid_t uid, pid_t pid,
+                                  unsigned int logMask) const {
     static const unsigned short spaces_total = 19;
 
     // Report on total logging, current and for all time
@@ -461,24 +462,38 @@ std::string LogStatistics::format(uid_t uid, unsigned int logMask) const {
         name = (uid == AID_ROOT)
             ? "Chattiest UIDs in %s log buffer:"
             : "Logging for your UID in %s log buffer:";
-        output += uidTable[id].format(*this, uid, name, id);
+        output += uidTable[id].format(*this, uid, pid, name, id);
     }
 
     if (enable) {
-        name = (uid == AID_ROOT) ? "Chattiest PIDs:" : "Logging for this PID:";
-        output += pidTable.format(*this, uid, name);
-        name = "Chattiest TIDs:";
-        output += tidTable.format(*this, uid, name);
+        name = ((uid == AID_ROOT) && !pid)
+            ? "Chattiest PIDs:"
+            : "Logging for this PID:";
+        output += pidTable.format(*this, uid, pid, name);
+        name = "Chattiest TIDs";
+        if (pid) {
+            name += android::base::StringPrintf(" for PID %d", pid);
+        }
+        name += ":";
+        output += tidTable.format(*this, uid, pid, name);
     }
 
     if (enable && (logMask & (1 << LOG_ID_EVENTS))) {
-        name = "Chattiest events log buffer TAGs:";
-        output += tagTable.format(*this, uid, name, LOG_ID_EVENTS);
+        name = "Chattiest events log buffer TAGs";
+        if (pid) {
+            name += android::base::StringPrintf(" for PID %d", pid);
+        }
+        name += ":";
+        output += tagTable.format(*this, uid, pid, name, LOG_ID_EVENTS);
     }
 
     if (enable && (logMask & (1 << LOG_ID_SECURITY))) {
-        name = "Chattiest security log buffer TAGs:";
-        output += securityTagTable.format(*this, uid, name, LOG_ID_SECURITY);
+        name = "Chattiest security log buffer TAGs";
+        if (pid) {
+            name += android::base::StringPrintf(" for PID %d", pid);
+        }
+        name += ":";
+        output += securityTagTable.format(*this, uid, pid, name, LOG_ID_SECURITY);
     }
 
     return output;

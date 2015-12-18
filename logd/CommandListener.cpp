@@ -210,9 +210,20 @@ int CommandListener::GetStatisticsCmd::runCommand(SocketClient *cli,
     }
 
     unsigned int logMask = -1;
+    pid_t pid = 0;
     if (argc > 1) {
         logMask = 0;
         for (int i = 1; i < argc; ++i) {
+            static const char _pid[] = "pid=";
+            if (!strncmp(argv[i], _pid, sizeof(_pid) - 1)) {
+                pid = atol(argv[i] + sizeof(_pid) - 1);
+                if (pid == 0) {
+                    cli->sendMsg("PID Error");
+                    return 0;
+                }
+                continue;
+            }
+
             int id = atoi(argv[i]);
             if ((id < LOG_ID_MIN) || (LOG_ID_MAX <= id)) {
                 cli->sendMsg("Range Error");
@@ -222,7 +233,8 @@ int CommandListener::GetStatisticsCmd::runCommand(SocketClient *cli,
         }
     }
 
-    cli->sendMsg(package_string(mBuf.formatStatistics(uid, logMask)).c_str());
+    cli->sendMsg(package_string(mBuf.formatStatistics(uid, pid,
+                                                      logMask)).c_str());
     return 0;
 }
 

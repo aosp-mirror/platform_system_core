@@ -499,7 +499,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         size_t second_worst_sizes = 0;
 
         if (worstUidEnabledForLogid(id) && mPrune.worstUidEnabled()) {
-            std::unique_ptr<const UidEntry *[]> sorted = stats.sort(2, id);
+            std::unique_ptr<const UidEntry *[]> sorted = stats.sort(
+                AID_ROOT, (pid_t)0, 2, id);
 
             if (sorted.get()) {
                 if (sorted[0] && sorted[1]) {
@@ -866,10 +867,11 @@ uint64_t LogBuffer::flushTo(
     return max;
 }
 
-std::string LogBuffer::formatStatistics(uid_t uid, unsigned int logMask) {
+std::string LogBuffer::formatStatistics(uid_t uid, pid_t pid,
+                                        unsigned int logMask) {
     pthread_mutex_lock(&mLogElementsLock);
 
-    std::string ret = stats.format(uid, logMask);
+    std::string ret = stats.format(uid, pid, logMask);
 
     pthread_mutex_unlock(&mLogElementsLock);
 
