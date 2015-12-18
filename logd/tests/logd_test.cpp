@@ -26,8 +26,6 @@
 #include "log/log.h"
 #include "log/logger.h"
 
-#define __unused __attribute__((__unused__))
-
 /*
  * returns statistics
  */
@@ -196,7 +194,7 @@ TEST(logd, statistics) {
     delete [] buf;
 }
 
-static void caught_signal(int signum __unused) { }
+static void caught_signal(int /* signum */) { }
 
 static void dump_log_msg(const char *prefix,
                          log_msg *msg, unsigned int version, int lid) {
