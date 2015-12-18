@@ -501,6 +501,14 @@ ssize_t android_logger_get_statistics(struct logger_list *logger_list,
         remaining -= n;
         cp += n;
     }
+
+    if (logger_list->pid) {
+        n = snprintf(cp, remaining, " pid=%u", logger_list->pid);
+        n = min(n, remaining);
+        remaining -= n;
+        cp += n;
+    }
+
     return send_log_msg(NULL, NULL, buf, len);
 }
 
