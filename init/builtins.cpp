@@ -39,6 +39,7 @@
 #include <selinux/label.h>
 
 #include <fs_mgr.h>
+#include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <cutils/partition_utils.h>
 #include <cutils/android_reboot.h>
@@ -53,6 +54,7 @@
 #include "log.h"
 #include "property_service.h"
 #include "service.h"
+#include "signal_handler.h"
 #include "util.h"
 
 #define chmod DO_NOT_USE_CHMOD_USE_FCHMODAT_SYMLINK_NOFOLLOW
@@ -61,6 +63,8 @@
 
 // System call provided by bionic but not in any header file.
 extern "C" int init_module(void *, unsigned long, const char *);
+
+static const int kTerminateServiceDelayMicroSeconds = 50000;
 
 static int insmod(const char *filename, const char *options) {
     std::string module;
@@ -606,6 +610,42 @@ static int do_powerctl(const std::vector<std::string>& args) {
     } else if (command[len] != '\0') {
         ERROR("powerctl: unrecognized reboot target '%s'\n", &command[len]);
         return -EINVAL;
+    }
+
+    std::string timeout = property_get("ro.build.shutdown_timeout");
+    unsigned int delay = 0;
+
+    if (android::base::ParseUint(timeout.c_str(), &delay) && delay > 0) {
+        Timer t;
+        // Ask all services to terminate.
+        ServiceManager::GetInstance().ForEachService(
+            [] (Service* s) { s->Terminate(); });
+
+        while (t.duration() < delay) {
+            ServiceManager::GetInstance().ReapAnyOutstandingChildren();
+
+            int service_count = 0;
+            ServiceManager::GetInstance().ForEachService(
+                [&service_count] (Service* s) {
+                    // Count the number of services running.
+                    // Exclude the console as it will ignore the SIGTERM signal
+                    // and not exit.
+                    // Note: SVC_CONSOLE actually means "requires console" but
+                    // it is only used by the shell.
+                    if (s->pid() != 0 && (s->flags() & SVC_CONSOLE) == 0) {
+                        service_count++;
+                    }
+                });
+
+            if (service_count == 0) {
+                // All terminable services terminated. We can exit early.
+                break;
+            }
+
+            // Wait a bit before recounting the number or running services.
+            usleep(kTerminateServiceDelayMicroSeconds);
+        }
+        NOTICE("Terminating running services took %.02f seconds", t.duration());
     }
 
     return android_reboot_with_callback(cmd, 0, reboot_target,

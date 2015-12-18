@@ -37,62 +37,12 @@
 static int signal_write_fd = -1;
 static int signal_read_fd = -1;
 
-static std::string DescribeStatus(int status) {
-    if (WIFEXITED(status)) {
-        return android::base::StringPrintf("exited with status %d", WEXITSTATUS(status));
-    } else if (WIFSIGNALED(status)) {
-        return android::base::StringPrintf("killed by signal %d", WTERMSIG(status));
-    } else if (WIFSTOPPED(status)) {
-        return android::base::StringPrintf("stopped by signal %d", WSTOPSIG(status));
-    } else {
-        return "state changed";
-    }
-}
-
-static bool wait_for_one_process() {
-    int status;
-    pid_t pid = TEMP_FAILURE_RETRY(waitpid(-1, &status, WNOHANG));
-    if (pid == 0) {
-        return false;
-    } else if (pid == -1) {
-        ERROR("waitpid failed: %s\n", strerror(errno));
-        return false;
-    }
-
-    Service* svc = ServiceManager::GetInstance().FindServiceByPid(pid);
-
-    std::string name;
-    if (svc) {
-        name = android::base::StringPrintf("Service '%s' (pid %d)", svc->name().c_str(), pid);
-    } else {
-        name = android::base::StringPrintf("Untracked pid %d", pid);
-    }
-
-    NOTICE("%s %s\n", name.c_str(), DescribeStatus(status).c_str());
-
-    if (!svc) {
-        return true;
-    }
-
-    if (svc->Reap()) {
-        waiting_for_exec = false;
-        ServiceManager::GetInstance().RemoveService(*svc);
-    }
-
-    return true;
-}
-
-static void reap_any_outstanding_children() {
-    while (wait_for_one_process()) {
-    }
-}
-
 static void handle_signal() {
     // Clear outstanding requests.
     char buf[32];
     read(signal_read_fd, buf, sizeof(buf));
 
-    reap_any_outstanding_children();
+    ServiceManager::GetInstance().ReapAnyOutstandingChildren();
 }
 
 static void SIGCHLD_handler(int) {
@@ -119,7 +69,7 @@ void signal_handler_init() {
     act.sa_flags = SA_NOCLDSTOP;
     sigaction(SIGCHLD, &act, 0);
 
-    reap_any_outstanding_children();
+    ServiceManager::GetInstance().ReapAnyOutstandingChildren();
 
     register_epoll_handler(signal_read_fd, handle_signal);
 }
