@@ -880,18 +880,10 @@ int android_logger_list_read(struct logger_list *logger_list,
             sigaction(SIGALRM, &old_sigaction, NULL);
         }
 
-        if (ret <= 0) {
-            if ((ret == -1) && e) {
-                return -e;
-            }
-            return ret;
+        if ((ret == -1) && e) {
+            return -e;
         }
-
-        logger_for_each(logger, logger_list) {
-            if (log_msg->entry.lid == logger->id) {
-                return ret;
-            }
-        }
+        return ret;
     }
     /* NOTREACH */
     return ret;
