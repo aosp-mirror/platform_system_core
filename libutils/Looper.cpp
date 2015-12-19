@@ -74,7 +74,7 @@ Looper::Looper(bool allowNonCallbacks) :
         mAllowNonCallbacks(allowNonCallbacks), mSendingMessage(false),
         mPolling(false), mEpollFd(-1), mEpollRebuildRequired(false),
         mNextRequestSeq(0), mResponseIndex(0), mNextMessageUptime(LLONG_MAX) {
-    mWakeEventFd = eventfd(0, EFD_NONBLOCK);
+    mWakeEventFd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     LOG_ALWAYS_FATAL_IF(mWakeEventFd < 0, "Could not make wake event fd: %s",
                         strerror(errno));
 
