@@ -217,7 +217,7 @@ static int pid_remove(int pid) {
 }
 
 static void writefilestring(char *path, char *s) {
-    int fd = open(path, O_WRONLY);
+    int fd = open(path, O_WRONLY | O_CLOEXEC);
     int len = strlen(s);
     int ret;
 
@@ -474,7 +474,7 @@ static int zoneinfo_parse(struct sysmeminfo *mip) {
 
     memset(mip, 0, sizeof(struct sysmeminfo));
 
-    fd = open(ZONEINFO_PATH, O_RDONLY);
+    fd = open(ZONEINFO_PATH, O_RDONLY | O_CLOEXEC);
     if (fd == -1) {
         ALOGE("%s open: errno=%d", ZONEINFO_PATH, errno);
         return -1;
@@ -505,7 +505,7 @@ static int proc_get_size(int pid) {
     ssize_t ret;
 
     snprintf(path, PATH_MAX, "/proc/%d/statm", pid);
-    fd = open(path, O_RDONLY);
+    fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd == -1)
         return -1;
 
@@ -528,7 +528,7 @@ static char *proc_get_name(int pid) {
     ssize_t ret;
 
     snprintf(path, PATH_MAX, "/proc/%d/cmdline", pid);
-    fd = open(path, O_RDONLY);
+    fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd == -1)
         return NULL;
     ret = read_all(fd, line, sizeof(line) - 1);
@@ -673,19 +673,19 @@ static int init_mp(char *levelstr, void *event_handler)
     struct epoll_event epev;
     int ret;
 
-    mpfd = open(MEMCG_SYSFS_PATH "memory.pressure_level", O_RDONLY);
+    mpfd = open(MEMCG_SYSFS_PATH "memory.pressure_level", O_RDONLY | O_CLOEXEC);
     if (mpfd < 0) {
         ALOGI("No kernel memory.pressure_level support (errno=%d)", errno);
         goto err_open_mpfd;
     }
 
-    evctlfd = open(MEMCG_SYSFS_PATH "cgroup.event_control", O_WRONLY);
+    evctlfd = open(MEMCG_SYSFS_PATH "cgroup.event_control", O_WRONLY | O_CLOEXEC);
     if (evctlfd < 0) {
         ALOGI("No kernel memory cgroup event control (errno=%d)", errno);
         goto err_open_evctlfd;
     }
 
-    evfd = eventfd(0, EFD_NONBLOCK);
+    evfd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (evfd < 0) {
         ALOGE("eventfd failed for level %s; errno=%d", levelstr, errno);
         goto err_eventfd;
