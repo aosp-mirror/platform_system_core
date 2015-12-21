@@ -56,6 +56,7 @@ class LibraryNamespaces {
   LibraryNamespaces() : initialized_(false) { }
 
   android_namespace_t* GetOrCreate(JNIEnv* env, jobject class_loader,
+                                   bool is_shared,
                                    jstring java_library_path,
                                    jstring java_permitted_path) {
     ScopedUtfChars library_path(env, java_library_path);
@@ -78,11 +79,16 @@ class LibraryNamespaces {
       return it->second;
     }
 
+    uint64_t namespace_type = ANDROID_NAMESPACE_TYPE_ISOLATED;
+    if (is_shared) {
+      namespace_type |= ANDROID_NAMESPACE_TYPE_SHARED;
+    }
+
     android_namespace_t* ns =
             android_create_namespace("classloader-namespace",
                                      nullptr,
                                      library_path.c_str(),
-                                     true,
+                                     namespace_type,
                                      java_permitted_path != nullptr ?
                                         permitted_path.c_str() :
                                         nullptr);
@@ -129,7 +135,7 @@ static LibraryNamespaces* g_namespaces = new LibraryNamespaces;
 
 
 void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* path,
-                        jobject class_loader, jstring java_library_path,
+                        jobject class_loader, bool is_shared, jstring java_library_path,
                         jstring java_permitted_path) {
 #if defined(__ANDROID__)
   if (target_sdk_version <= INT_MAX || class_loader == nullptr) {
@@ -137,8 +143,8 @@ void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* pat
   }
 
   android_namespace_t* ns =
-      g_namespaces->GetOrCreate(env, class_loader, java_library_path,
-                                java_permitted_path);
+      g_namespaces->GetOrCreate(env, class_loader, is_shared,
+                                java_library_path, java_permitted_path);
 
   if (ns == nullptr) {
     return nullptr;
@@ -150,7 +156,7 @@ void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* pat
 
   return android_dlopen_ext(path, RTLD_NOW, &extinfo);
 #else
-  UNUSED(env, target_sdk_version, class_loader,
+  UNUSED(env, target_sdk_version, class_loader, is_shared,
          java_library_path, java_permitted_path);
   return dlopen(path, RTLD_NOW);
 #endif
