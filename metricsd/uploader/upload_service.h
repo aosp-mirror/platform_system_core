@@ -34,30 +34,33 @@
 
 class SystemProfileSetter;
 
-// Service responsible for uploading the metrics periodically to the server.
-// This service works as a simple 2-state state-machine.
+// Service responsible for backing up the currently aggregated metrics to disk
+// and uploading them periodically to the server.
 //
-// The two states are the presence or not of a staged log.
-// A staged log is a compressed protobuffer containing both the aggregated
-// metrics and event and information about the client. (product,
-// model_manifest_id, etc...).
+// A given metrics sample can be in one of three locations.
+// * in-memory metrics: in memory aggregated metrics, waiting to be staged for
+//   upload.
+// * saved log: protobuf message, written to disk periodically and on shutdown
+//   to make a backup of metrics data for uploading later.
+// * staged log: protobuf message waiting to be uploaded.
 //
-// At regular intervals, the upload event will be triggered and the following
-// will happen:
-// * if a staged log is present:
-//    The previous upload may have failed for various reason. We then retry to
-//    upload the same log.
-//    - if the upload is successful, we discard the log (therefore
-//      transitioning back to no staged log)
-//    - if the upload fails, we keep the log to try again later.
+// The service works as follows:
+// On startup, we create the in-memory metrics from the saved log if it exists.
 //
-// * if no staged logs are present:
-//    Take a snapshot of the aggregated metrics, save it to disk and try to send
-//    it:
-//    - if the upload succeeds, we discard the staged log (transitioning back
-//      to the no staged log state)
-//    - if the upload fails, we continue and will retry to upload later.
+// Periodically (every |disk_persistence_interval_| seconds), we take a snapshot
+// of the in-memory metrics and save them to disk.
 //
+// Periodically (every |upload_interval| seconds), we:
+// * take a snapshot of the in-memory metrics and create the staged log
+// * save the staged log to disk to avoid losing it if metricsd or the system
+//   crashes between two uploads.
+// * delete the last saved log: all the metrics contained in it are also in the
+//   newly created staged log.
+//
+// On shutdown (SIGINT or SIGTERM), we save the in-memory metrics to disk.
+//
+// Note: the in-memory metrics can be stored in |current_log_| or
+// base::StatisticsRecorder.
 class UploadService : public base::HistogramFlattener, public brillo::Daemon {
  public:
   UploadService(const std::string& server,
