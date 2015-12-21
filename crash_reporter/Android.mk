@@ -41,7 +41,6 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libcrash
 LOCAL_CPP_EXTENSION := $(crash_reporter_cpp_extension)
 LOCAL_C_INCLUDES := $(crash_reporter_includes)
-LOCAL_RTTI_FLAG := -frtti
 LOCAL_SHARED_LIBRARIES := libchrome \
     libbinder \
     libbrillo \
@@ -63,7 +62,6 @@ LOCAL_REQUIRED_MODULES := core2md \
     crash_sender \
     crash_server
 LOCAL_INIT_RC := crash_reporter.rc
-LOCAL_RTTI_FLAG := -frtti
 LOCAL_SHARED_LIBRARIES := libchrome \
     libbinder \
     libbrillo \
