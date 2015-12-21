@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <gtest/gtest.h>
+#include <memory>
 
 #include <base/at_exit.h>
 #include <base/files/file_util.h>
@@ -23,6 +23,7 @@
 #include <base/metrics/sparse_histogram.h>
 #include <base/metrics/statistics_recorder.h>
 #include <base/sys_info.h>
+#include <gtest/gtest.h>
 
 #include "constants.h"
 #include "persistent_integer.h"
@@ -86,15 +87,15 @@ class UploadServiceTest : public testing::Test {
   }
 
   const metrics::SystemProfileProto_Stability GetCurrentStability() {
-    EXPECT_TRUE(upload_service_->current_log_);
+    EXPECT_TRUE(upload_service_->current_log_.get());
 
     return upload_service_->current_log_->uma_proto()->system_profile().stability();
   }
 
   base::ScopedTempDir dir_;
-  scoped_ptr<UploadService> upload_service_;
+  std::unique_ptr<UploadService> upload_service_;
 
-  scoped_ptr<base::AtExitManager> exit_manager_;
+  std::unique_ptr<base::AtExitManager> exit_manager_;
   std::shared_ptr<CrashCounters> counters_;
 };
 
