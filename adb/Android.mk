@@ -207,6 +207,8 @@ LOCAL_LDLIBS_darwin := -framework CoreFoundation -framework IOKit
 LOCAL_LDLIBS_windows := -lws2_32 -luserenv
 LOCAL_STATIC_LIBRARIES_windows := AdbWinApi
 
+LOCAL_MULTILIB := first
+
 include $(BUILD_HOST_NATIVE_TEST)
 
 # adb device tracker (used by ddms) test tool
