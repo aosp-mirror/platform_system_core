@@ -19,10 +19,10 @@
 #ifndef METRICS_TIMER_H_
 #define METRICS_TIMER_H_
 
+#include <memory>
 #include <string>
 
 #include <base/macros.h>
-#include <base/memory/scoped_ptr.h>
 #include <base/time/time.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
@@ -121,7 +121,7 @@ class Timer : public TimerInterface {
   TimerState timer_state_;
 
   // Wrapper for the calls to the system clock.
-  scoped_ptr<ClockWrapper> clock_wrapper_;
+  std::unique_ptr<ClockWrapper> clock_wrapper_;
 
   DISALLOW_COPY_AND_ASSIGN(Timer);
 };

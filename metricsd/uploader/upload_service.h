@@ -17,6 +17,7 @@
 #ifndef METRICS_UPLOADER_UPLOAD_SERVICE_H_
 #define METRICS_UPLOADER_UPLOAD_SERVICE_H_
 
+#include <memory>
 #include <string>
 
 #include <base/metrics/histogram_base.h>
@@ -141,11 +142,11 @@ class UploadService : public base::HistogramFlattener, public brillo::Daemon {
   // Returns the current log. If there is no current log, creates it first.
   MetricsLog* GetOrCreateCurrentLog();
 
-  scoped_ptr<SystemProfileSetter> system_profile_setter_;
+  std::unique_ptr<SystemProfileSetter> system_profile_setter_;
   base::HistogramSnapshotManager histogram_snapshot_manager_;
-  scoped_ptr<Sender> sender_;
+  std::unique_ptr<Sender> sender_;
   chromeos_metrics::PersistentInteger failed_upload_count_;
-  scoped_ptr<MetricsLog> current_log_;
+  std::unique_ptr<MetricsLog> current_log_;
   std::shared_ptr<CrashCounters> counters_;
 
   base::TimeDelta upload_interval_;

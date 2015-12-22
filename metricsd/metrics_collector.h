@@ -20,11 +20,11 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include <base/files/file_path.h>
-#include <base/memory/scoped_ptr.h>
 #include <base/time/time.h>
 #include <brillo/daemons/dbus_daemon.h>
 #include <libweaved/command.h>
@@ -38,6 +38,7 @@
 #include "persistent_integer.h"
 
 using chromeos_metrics::PersistentInteger;
+using std::unique_ptr;
 
 class MetricsCollector : public brillo::DBusDaemon {
  public:
@@ -151,18 +152,17 @@ class MetricsCollector : public brillo::DBusDaemon {
 
   // Sends a sample representing the number of seconds of active use
   // for a 24-hour period and reset |use|.
-  void SendAndResetDailyUseSample(
-      const scoped_ptr<PersistentInteger>& use);
+  void SendAndResetDailyUseSample(const unique_ptr<PersistentInteger>& use);
 
   // Sends a sample representing a time interval between two crashes of the
   // same type and reset |interval|.
   void SendAndResetCrashIntervalSample(
-      const scoped_ptr<PersistentInteger>& interval);
+      const unique_ptr<PersistentInteger>& interval);
 
   // Sends a sample representing a frequency of crashes of some type and reset
   // |frequency|.
   void SendAndResetCrashFrequencySample(
-      const scoped_ptr<PersistentInteger>& frequency);
+      const unique_ptr<PersistentInteger>& frequency);
 
   // Initializes vm and disk stats reporting.
   void StatsReporterInit();
@@ -241,36 +241,36 @@ class MetricsCollector : public brillo::DBusDaemon {
   base::TimeDelta latest_cpu_use_microseconds_;
 
   // Persistent values and accumulators for crash statistics.
-  scoped_ptr<PersistentInteger> daily_cycle_;
-  scoped_ptr<PersistentInteger> weekly_cycle_;
-  scoped_ptr<PersistentInteger> version_cycle_;
+  unique_ptr<PersistentInteger> daily_cycle_;
+  unique_ptr<PersistentInteger> weekly_cycle_;
+  unique_ptr<PersistentInteger> version_cycle_;
 
   // Active use accumulated in a day.
-  scoped_ptr<PersistentInteger> daily_active_use_;
+  unique_ptr<PersistentInteger> daily_active_use_;
   // Active use accumulated since the latest version update.
-  scoped_ptr<PersistentInteger> version_cumulative_active_use_;
+  unique_ptr<PersistentInteger> version_cumulative_active_use_;
 
   // The CPU time accumulator.  This contains the CPU time, in milliseconds,
   // used by the system since the most recent OS version update.
-  scoped_ptr<PersistentInteger> version_cumulative_cpu_use_;
+  unique_ptr<PersistentInteger> version_cumulative_cpu_use_;
 
-  scoped_ptr<PersistentInteger> user_crash_interval_;
-  scoped_ptr<PersistentInteger> kernel_crash_interval_;
-  scoped_ptr<PersistentInteger> unclean_shutdown_interval_;
+  unique_ptr<PersistentInteger> user_crash_interval_;
+  unique_ptr<PersistentInteger> kernel_crash_interval_;
+  unique_ptr<PersistentInteger> unclean_shutdown_interval_;
 
-  scoped_ptr<PersistentInteger> any_crashes_daily_count_;
-  scoped_ptr<PersistentInteger> any_crashes_weekly_count_;
-  scoped_ptr<PersistentInteger> user_crashes_daily_count_;
-  scoped_ptr<PersistentInteger> user_crashes_weekly_count_;
-  scoped_ptr<PersistentInteger> kernel_crashes_daily_count_;
-  scoped_ptr<PersistentInteger> kernel_crashes_weekly_count_;
-  scoped_ptr<PersistentInteger> kernel_crashes_version_count_;
-  scoped_ptr<PersistentInteger> unclean_shutdowns_daily_count_;
-  scoped_ptr<PersistentInteger> unclean_shutdowns_weekly_count_;
+  unique_ptr<PersistentInteger> any_crashes_daily_count_;
+  unique_ptr<PersistentInteger> any_crashes_weekly_count_;
+  unique_ptr<PersistentInteger> user_crashes_daily_count_;
+  unique_ptr<PersistentInteger> user_crashes_weekly_count_;
+  unique_ptr<PersistentInteger> kernel_crashes_daily_count_;
+  unique_ptr<PersistentInteger> kernel_crashes_weekly_count_;
+  unique_ptr<PersistentInteger> kernel_crashes_version_count_;
+  unique_ptr<PersistentInteger> unclean_shutdowns_daily_count_;
+  unique_ptr<PersistentInteger> unclean_shutdowns_weekly_count_;
 
-  scoped_ptr<CpuUsageCollector> cpu_usage_collector_;
-  scoped_ptr<DiskUsageCollector> disk_usage_collector_;
-  scoped_ptr<AveragedStatisticsCollector> averaged_stats_collector_;
+  unique_ptr<CpuUsageCollector> cpu_usage_collector_;
+  unique_ptr<DiskUsageCollector> disk_usage_collector_;
+  unique_ptr<AveragedStatisticsCollector> averaged_stats_collector_;
 
   std::unique_ptr<weaved::Device> device_;
 };
