@@ -1,37 +1,53 @@
 The properties that logd responds to are:
 
 name                       type default  description
-logd.auditd                 bool  true   Enable selinux audit daemon
-logd.auditd.dmesg           bool  true   selinux audit messages duplicated and
+ro.logd.auditd             bool   true   Enable selinux audit daemon
+ro.logd.auditd.dmesg       bool   true   selinux audit messages duplicated and
                                          sent on to dmesg log
-logd.klogd                  bool depends Enable klogd daemon
-logd.statistics             bool depends Enable logcat -S statistics.
-ro.config.low_ram           bool  false  if true, logd.statistics & logd.klogd
-                                         default false
-ro.build.type               string       if user, logd.statistics & logd.klogd
-                                         default false
-persist.logd.logpersistd    string       Enable logpersist daemon, "logcatd"
+persist.logd.security      bool   false  Enable security buffer.
+ro.device_owner            bool   false  Override persist.logd.security to false
+ro.logd.kernel             bool+ svelte+ Enable klogd daemon
+ro.logd.statistics         bool+ svelte+ Enable logcat -S statistics.
+ro.build.type              string        if user, logd.statistics &
+                                         ro.logd.kernel default false.
+persist.logd.logpersistd   string        Enable logpersist daemon, "logcatd"
                                          turns on logcat -f in logd context
-persist.logd.size          number 256K   Global default size of the buffer for
+persist.logd.size          number  ro    Global default size of the buffer for
                                          all log ids at initial startup, at
                                          runtime use: logcat -b all -G <value>
-persist.logd.size.main     number 256K   Size of the buffer for the main log
-persist.logd.size.system   number 256K   Size of the buffer for the system log
-persist.logd.size.radio    number 256K   Size of the buffer for the radio log
-persist.logd.size.event    number 256K   Size of the buffer for the event log
-persist.logd.size.crash    number 256K   Size of the buffer for the crash log
-persist.logd.filter         string       Pruning filter to optimize content,
-                                         default is ro.logd.filter or
-                                         "~!" which means to prune the oldest
-                                         entries of chattiest UID. At runtime
-                                         use: logcat -P "<string>"
-persist.logd.timestamp      string       The recording timestamp source. Default
-                                         is ro.logd.timestamp. "m[onotonic]" is
-                                         the only supported key character,
-                                         otherwise assumes realtime.
+ro.logd.size               number svelte default for persist.logd.size
+persist.logd.size.<buffer> number  ro    Size of the buffer for <buffer> log
+ro.logd.size.<buffer>      number svelte default for persist.logd.size.<buffer>
+ro.config.low_ram          bool   false  if true, logd.statistics, logd.kernel
+                                         default false, logd.size 64K instead
+                                         of 256K.
+persist.logd.filter        string        Pruning filter to optimize content.
+                                         At runtime use: logcat -P "<string>"
+ro.logd.filter             string "~!"   default for persist.logd.filter.
+                                         This default means to prune the
+                                         oldest entries of chattiest UID.
+persist.logd.timestamp     string  ro    The recording timestamp source.
+                                         "m[onotonic]" is the only supported
+                                         key character, otherwise realtime.
+ro.logd.timestamp        string realtime default for persist.logd.timestamp
+log.tag                   string persist The global logging level, VERBOSE,
+                                         DEBUG, INFO, WARN, ERROR, ASSERT or
+                                         SILENT. Only the first character is
+                                         the key character.
+persist.log.tag            string build  default for log.tag
+log.tag.<tag>             string persist The <tag> specific logging level.
+persist.log.tag.<tag>      string build  default for log.tag.<tag>
 
 NB:
-- Number support multipliers (K or M) for convenience. Range is limited
+- bool+ - "true", "false" and comma separated list of "eng" (forced false if
+  ro.build.type is "user") or "svelte" (forced false if ro.config.low_ram is
+  true).
+- svelte - see ro.config.low_ram for details.
+- svelte+ - see ro.config.low_ram and ro.build.type for details.
+- ro - <base property> temporary override, ro.<base property> platform default.
+- persist - <base property> override, persist.<base property> platform default.
+- build - VERBOSE for native, DEBUG for jvm isLoggable, or developer option.
+- number - support multipliers (K or M) for convenience. Range is limited
   to between 64K and 256M for log buffer sizes. Individual log buffer ids
   such as main, system, ... override global default.
 - Pruning filter is of form of a space-separated list of [~][UID][/PID]

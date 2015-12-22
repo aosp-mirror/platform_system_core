@@ -143,18 +143,72 @@ static int drop_privs() {
 }
 
 // Property helper
-bool property_get_bool(const char *key, bool def) {
-    char property[PROPERTY_VALUE_MAX];
-    property_get(key, property, "");
-
-    if (!strcasecmp(property, "true")) {
-        return true;
-    }
-    if (!strcasecmp(property, "false")) {
+static bool check_flag(const char *prop, const char *flag) {
+    const char *cp = strcasestr(prop, flag);
+    if (!cp) {
         return false;
     }
+    // We only will document comma (,)
+    static const char sep[] = ",:;|+ \t\f";
+    if ((cp != prop) && !strchr(sep, cp[-1])) {
+        return false;
+    }
+    cp += strlen(flag);
+    return !*cp || !!strchr(sep, *cp);
+}
 
-    return def;
+bool property_get_bool(const char *key, int flag) {
+    char def[PROPERTY_VALUE_MAX];
+    char property[PROPERTY_VALUE_MAX];
+    def[0] = '\0';
+    if (flag & BOOL_DEFAULT_FLAG_PERSIST) {
+        char newkey[PROPERTY_KEY_MAX];
+        snprintf(newkey, sizeof(newkey), "ro.%s", key);
+        property_get(newkey, property, "");
+        // persist properties set by /data require innoculation with
+        // logd-reinit. They may be set in init.rc early and function, but
+        // otherwise are defunct unless reset. Do not rely on persist
+        // properties for startup-only keys unless you are willing to restart
+        // logd daemon (not advised).
+        snprintf(newkey, sizeof(newkey), "persist.%s", key);
+        property_get(newkey, def, property);
+    }
+
+    property_get(key, property, def);
+
+    if (check_flag(property, "true")) {
+        return true;
+    }
+    if (check_flag(property, "false")) {
+        return false;
+    }
+    if (check_flag(property, "eng")) {
+       flag |= BOOL_DEFAULT_FLAG_ENG;
+    }
+    // this is really a "not" flag
+    if (check_flag(property, "svelte")) {
+       flag |= BOOL_DEFAULT_FLAG_SVELTE;
+    }
+
+    // Sanity Check
+    if (flag & (BOOL_DEFAULT_FLAG_SVELTE | BOOL_DEFAULT_FLAG_ENG)) {
+        flag &= ~BOOL_DEFAULT_FLAG_TRUE_FALSE;
+        flag |= BOOL_DEFAULT_TRUE;
+    }
+
+    if ((flag & BOOL_DEFAULT_FLAG_SVELTE)
+            && property_get_bool("ro.config.low_ram",
+                                 BOOL_DEFAULT_FALSE)) {
+        return false;
+    }
+    if (flag & BOOL_DEFAULT_FLAG_ENG) {
+        property_get("ro.build.type", property, "");
+        if (!strcmp(property, "user")) {
+            return false;
+        }
+    }
+
+    return (flag & BOOL_DEFAULT_FLAG_TRUE_FALSE) != BOOL_DEFAULT_FALSE;
 }
 
 // Remove the static, and use this variable
@@ -266,17 +320,6 @@ const char *android::tagToName(uint32_t tag) {
     return android_lookupEventTag(map, tag);
 }
 
-static bool property_get_bool_svelte(const char *key) {
-    bool not_user;
-    {
-        char property[PROPERTY_VALUE_MAX];
-        property_get("ro.build.type", property, "");
-        not_user = !!strcmp(property, "user");
-    }
-    return property_get_bool(key, not_user
-            && !property_get_bool("ro.config.low_ram", false));
-}
-
 static void readDmesg(LogAudit *al, LogKlog *kl) {
     if (!al && !kl) {
         return;
@@ -325,7 +368,11 @@ static void readDmesg(LogAudit *al, LogKlog *kl) {
 // transitory per-client threads are created for each reader.
 int main(int argc, char *argv[]) {
     int fdPmesg = -1;
-    bool klogd = property_get_bool_svelte("logd.klogd");
+    bool klogd = property_get_bool("logd.kernel",
+                                   BOOL_DEFAULT_TRUE |
+                                   BOOL_DEFAULT_FLAG_PERSIST |
+                                   BOOL_DEFAULT_FLAG_ENG |
+                                   BOOL_DEFAULT_FLAG_SVELTE);
     if (klogd) {
         fdPmesg = open("/proc/kmsg", O_RDONLY | O_NDELAY);
     }
@@ -405,7 +452,11 @@ int main(int argc, char *argv[]) {
 
     signal(SIGHUP, reinit_signal_handler);
 
-    if (property_get_bool_svelte("logd.statistics")) {
+    if (property_get_bool("logd.statistics",
+                          BOOL_DEFAULT_TRUE |
+                          BOOL_DEFAULT_FLAG_PERSIST |
+                          BOOL_DEFAULT_FLAG_ENG |
+                          BOOL_DEFAULT_FLAG_SVELTE)) {
         logBuf->enableStatistics();
     }
 
@@ -439,12 +490,17 @@ int main(int argc, char *argv[]) {
     // initiated log messages. New log entries are added to LogBuffer
     // and LogReader is notified to send updates to connected clients.
 
-    bool auditd = property_get_bool("logd.auditd", true);
-
+    bool auditd = property_get_bool("logd.auditd",
+                                    BOOL_DEFAULT_TRUE |
+                                    BOOL_DEFAULT_FLAG_PERSIST);
     LogAudit *al = NULL;
     if (auditd) {
-        bool dmesg = property_get_bool("logd.auditd.dmesg", true);
-        al = new LogAudit(logBuf, reader, dmesg ? fdDmesg : -1);
+        al = new LogAudit(logBuf, reader,
+                          property_get_bool("logd.auditd.dmesg",
+                                            BOOL_DEFAULT_TRUE |
+                                            BOOL_DEFAULT_FLAG_PERSIST)
+                              ? fdDmesg
+                              : -1);
     }
 
     LogKlog *kl = NULL;
