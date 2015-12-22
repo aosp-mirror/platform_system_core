@@ -16,11 +16,12 @@
 
 #include "averaged_statistics_collector.h"
 
+#include <memory>
+
 #include <inttypes.h>
 
 #include <base/files/file_util.h>
 #include <base/files/scoped_temp_dir.h>
-#include <base/memory/scoped_ptr.h>
 #include <base/strings/stringprintf.h>
 #include <gtest/gtest.h>
 
@@ -62,7 +63,7 @@ class AveragedStatisticsTest : public testing::Test {
   }
 
   // Collector used for tests.
-  scoped_ptr<AveragedStatisticsCollector> collector_;
+  std::unique_ptr<AveragedStatisticsCollector> collector_;
 
   // Temporary directory used for tests.
   base::ScopedTempDir temp_dir_;

@@ -19,12 +19,12 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
-#include "base/memory/scoped_ptr.h"
 #include "persistent_integer.h"
 #include "uploader/proto/system_profile.pb.h"
 #include "uploader/system_profile_setter.h"
@@ -80,7 +80,7 @@ class SystemProfileCache : public SystemProfileSetter {
   bool initialized_;
   bool testing_;
   base::FilePath metrics_directory_;
-  scoped_ptr<chromeos_metrics::PersistentInteger> session_id_;
+  std::unique_ptr<chromeos_metrics::PersistentInteger> session_id_;
   SystemProfile profile_;
 };
 

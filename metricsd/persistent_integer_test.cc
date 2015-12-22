@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-#include <gtest/gtest.h>
+#include <memory>
 
 #include <base/compiler_specific.h>
 #include <base/files/file_enumerator.h>
 #include <base/files/file_util.h>
 #include <base/files/scoped_temp_dir.h>
+#include <gtest/gtest.h>
 
 #include "persistent_integer.h"
 
@@ -38,7 +39,7 @@ class PersistentIntegerTest : public testing::Test {
 };
 
 TEST_F(PersistentIntegerTest, BasicChecks) {
-  scoped_ptr<PersistentInteger> pi(
+  std::unique_ptr<PersistentInteger> pi(
       new PersistentInteger(kBackingFileName, temp_dir_.path()));
 
   // Test initialization.
