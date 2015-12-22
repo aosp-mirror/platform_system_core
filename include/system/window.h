@@ -353,7 +353,8 @@ enum {
     NATIVE_WINDOW_TRANSFORM_INVERSE_DISPLAY = 0x08
 };
 
-/* parameter for NATIVE_WINDOW_SET_SCALING_MODE */
+/* parameter for NATIVE_WINDOW_SET_SCALING_MODE
+ * keep in sync with Surface.java in frameworks/base */
 enum {
     /* the window content is not updated (frozen) until a buffer of
      * the window size is received (enqueued)
