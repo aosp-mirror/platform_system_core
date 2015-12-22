@@ -660,3 +660,31 @@ static void BM_is_loggable(int iters) {
     StopBenchmarkTiming();
 }
 BENCHMARK(BM_is_loggable);
+
+/*
+ *	Measure the time it takes for android_log_clockid.
+ */
+static void BM_clockid(int iters) {
+    StartBenchmarkTiming();
+
+    for (int i = 0; i < iters; ++i) {
+        android_log_clockid();
+    }
+
+    StopBenchmarkTiming();
+}
+BENCHMARK(BM_clockid);
+
+/*
+ *	Measure the time it takes for __android_log_security.
+ */
+static void BM_security(int iters) {
+    StartBenchmarkTiming();
+
+    for (int i = 0; i < iters; ++i) {
+        __android_log_security();
+    }
+
+    StopBenchmarkTiming();
+}
+BENCHMARK(BM_security);
