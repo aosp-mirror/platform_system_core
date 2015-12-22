@@ -112,7 +112,8 @@ static int __android_log_level(const char *tag, int default_prio)
      */
     static char *last_tag;
     static uint32_t global_serial;
-    uint32_t current_global_serial;
+    /* some compilers erroneously see uninitialized use. !not_locked */
+    uint32_t current_global_serial = 0;
     static struct cache tag_cache[2];
     static struct cache global_cache[2];
     int change_detected;
