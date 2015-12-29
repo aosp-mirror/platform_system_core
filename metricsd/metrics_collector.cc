@@ -234,23 +234,15 @@ int MetricsCollector::OnInit() {
   bus_->AssertOnDBusThread();
   CHECK(bus_->SetUpAsyncOperations());
 
-  device_ = weaved::Device::CreateInstance(
-      bus_,
-      base::Bind(&MetricsCollector::UpdateWeaveState, base::Unretained(this)));
-  device_->AddComponent(kWeaveComponent, {"_metrics"});
-  device_->AddCommandHandler(
-      kWeaveComponent,
-      "_metrics.enableAnalyticsReporting",
-      base::Bind(&MetricsCollector::OnEnableMetrics, base::Unretained(this)));
-  device_->AddCommandHandler(
-      kWeaveComponent,
-      "_metrics.disableAnalyticsReporting",
-      base::Bind(&MetricsCollector::OnDisableMetrics, base::Unretained(this)));
+  weave_service_subscription_ = weaved::Service::Connect(
+      brillo::MessageLoop::current(),
+      base::Bind(&MetricsCollector::OnWeaveServiceConnected,
+                 weak_ptr_factory_.GetWeakPtr()));
 
   latest_cpu_use_microseconds_ = cpu_usage_collector_->GetCumulativeCpuUse();
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
       base::Bind(&MetricsCollector::HandleUpdateStatsTimeout,
-                 base::Unretained(this)),
+                 weak_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(kUpdateStatsIntervalMs));
 
   return EX_OK;
@@ -260,12 +252,30 @@ void MetricsCollector::OnShutdown(int* return_code) {
   brillo::DBusDaemon::OnShutdown(return_code);
 }
 
-void MetricsCollector::OnEnableMetrics(
-    const std::weak_ptr<weaved::Command>& cmd) {
-  auto command = cmd.lock();
-  if (!command)
+void MetricsCollector::OnWeaveServiceConnected(
+    const std::weak_ptr<weaved::Service>& service) {
+  service_ = service;
+  auto weave_service = service_.lock();
+  if (!weave_service)
     return;
 
+  weave_service->AddComponent(kWeaveComponent, {"_metrics"}, nullptr);
+  weave_service->AddCommandHandler(
+      kWeaveComponent,
+      "_metrics.enableAnalyticsReporting",
+      base::Bind(&MetricsCollector::OnEnableMetrics,
+                 weak_ptr_factory_.GetWeakPtr()));
+  weave_service->AddCommandHandler(
+      kWeaveComponent,
+      "_metrics.disableAnalyticsReporting",
+      base::Bind(&MetricsCollector::OnDisableMetrics,
+                 weak_ptr_factory_.GetWeakPtr()));
+
+  UpdateWeaveState();
+}
+
+void MetricsCollector::OnEnableMetrics(
+    std::unique_ptr<weaved::Command> command) {
   if (base::WriteFile(
           shared_metrics_directory_.Append(metrics::kConsentFileName), "", 0) !=
       0) {
@@ -280,11 +290,7 @@ void MetricsCollector::OnEnableMetrics(
 }
 
 void MetricsCollector::OnDisableMetrics(
-    const std::weak_ptr<weaved::Command>& cmd) {
-  auto command = cmd.lock();
-  if (!command)
-    return;
-
+    std::unique_ptr<weaved::Command> command) {
   if (!base::DeleteFile(
           shared_metrics_directory_.Append(metrics::kConsentFileName), false)) {
     PLOG(ERROR) << "Could not delete the consent file.";
@@ -298,16 +304,17 @@ void MetricsCollector::OnDisableMetrics(
 }
 
 void MetricsCollector::UpdateWeaveState() {
-  if (!device_)
+  auto weave_service = service_.lock();
+  if (!weave_service)
     return;
 
   std::string enabled =
       metrics_lib_->AreMetricsEnabled() ? "enabled" : "disabled";
 
-  if (!device_->SetStateProperty(kWeaveComponent,
-                                 "_metrics.analyticsReportingState",
-                                 enabled,
-                                 nullptr)) {
+  if (!weave_service->SetStateProperty(kWeaveComponent,
+                                       "_metrics.analyticsReportingState",
+                                       enabled,
+                                       nullptr)) {
     LOG(ERROR) << "failed to update weave's state";
   }
 }
@@ -381,8 +388,8 @@ void MetricsCollector::ScheduleMeminfoCallback(int wait) {
   }
   base::TimeDelta waitDelta = base::TimeDelta::FromSeconds(wait);
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-      base::Bind(&MetricsCollector::MeminfoCallback, base::Unretained(this),
-                 waitDelta),
+      base::Bind(&MetricsCollector::MeminfoCallback,
+                 weak_ptr_factory_.GetWeakPtr(), waitDelta),
       waitDelta);
 }
 
@@ -396,8 +403,8 @@ void MetricsCollector::MeminfoCallback(base::TimeDelta wait) {
   // Make both calls even if the first one fails.
   if (ProcessMeminfo(meminfo_raw)) {
     base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-        base::Bind(&MetricsCollector::MeminfoCallback, base::Unretained(this),
-                   wait),
+        base::Bind(&MetricsCollector::MeminfoCallback,
+                   weak_ptr_factory_.GetWeakPtr(), wait),
         wait);
   }
 }
@@ -564,7 +571,8 @@ void MetricsCollector::ScheduleMemuseCallback(double interval) {
     return;
   }
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-      base::Bind(&MetricsCollector::MemuseCallback, base::Unretained(this)),
+      base::Bind(&MetricsCollector::MemuseCallback,
+                 weak_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromSeconds(interval));
 }
 
@@ -750,6 +758,6 @@ void MetricsCollector::HandleUpdateStatsTimeout() {
   UpdateStats(TimeTicks::Now(), Time::Now());
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
       base::Bind(&MetricsCollector::HandleUpdateStatsTimeout,
-                 base::Unretained(this)),
+                 weak_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(kUpdateStatsIntervalMs));
 }
