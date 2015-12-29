@@ -53,6 +53,7 @@ class PruneList {
     PruneCollection mNaughty;
     PruneCollection mNice;
     bool mWorstUidEnabled;
+    bool mWorstPidOfSystemEnabled;
 
 public:
     PruneList();
@@ -65,6 +66,7 @@ public:
     bool nice(LogBufferElement *element);
     bool nice(void) { return !mNice.empty(); }
     bool worstUidEnabled() const { return mWorstUidEnabled; }
+    bool worstPidOfSystemEnabled() const { return mWorstPidOfSystemEnabled; }
 
     std::string format();
 };

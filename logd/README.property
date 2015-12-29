@@ -23,9 +23,11 @@ ro.config.low_ram          bool   false  if true, logd.statistics, logd.kernel
                                          of 256K.
 persist.logd.filter        string        Pruning filter to optimize content.
                                          At runtime use: logcat -P "<string>"
-ro.logd.filter             string "~!"   default for persist.logd.filter.
+ro.logd.filter       string "~! ~1000/!" default for persist.logd.filter.
                                          This default means to prune the
-                                         oldest entries of chattiest UID.
+                                         oldest entries of chattiest UID, and
+                                         the chattiest PID of system
+                                         (1000, or AID_SYSTEM).
 persist.logd.timestamp     string  ro    The recording timestamp source.
                                          "m[onotonic]" is the only supported
                                          key character, otherwise realtime.
@@ -52,4 +54,6 @@ NB:
   such as main, system, ... override global default.
 - Pruning filter is of form of a space-separated list of [~][UID][/PID]
   references, where '~' prefix means to blacklist otherwise whitelist. For
-  blacklisting, UID may be a '!' to instead reference the chattiest client.
+  blacklisting, UID or PID may be a '!' to instead reference the chattiest
+  client, with the restriction that the PID must be in the UID group 1000
+  (system or AID_SYSTEM).
