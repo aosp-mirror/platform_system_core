@@ -66,6 +66,7 @@ PruneList::~PruneList() {
 
 int PruneList::init(const char *str) {
     mWorstUidEnabled = true;
+    mWorstPidOfSystemEnabled = true;
     PruneCollection::iterator it;
     for (it = mNice.begin(); it != mNice.end();) {
         it = mNice.erase(it);
@@ -103,13 +104,14 @@ int PruneList::init(const char *str) {
     // default here means take internal default.
     if (filter == _default) {
         // See README.property for description of filter format
-        filter = "~!";
+        filter = "~! ~1000/!";
     }
     if (filter == _disable) {
         filter = "";
     }
 
     mWorstUidEnabled = false;
+    mWorstPidOfSystemEnabled = false;
 
     for(str = filter.c_str(); *str; ++str) {
         if (isspace(*str)) {
@@ -123,6 +125,19 @@ int PruneList::init(const char *str) {
             if (*str == '!') {
                 mWorstUidEnabled = true;
                 ++str;
+                if (!*str) {
+                    break;
+                }
+                if (!isspace(*str)) {
+                    return 1;
+                }
+                continue;
+            }
+            // special case, translated to worst PID of System at priority
+            static const char worstPid[] = "1000/!";
+            if (!strncmp(str, worstPid, sizeof(worstPid) - 1)) {
+                mWorstPidOfSystemEnabled = true;
+                str += sizeof(worstPid) - 1;
                 if (!*str) {
                     break;
                 }
@@ -209,6 +224,9 @@ std::string PruneList::format() {
     if (mWorstUidEnabled) {
         string = "~!";
         fmt = nice_format;
+        if (mWorstPidOfSystemEnabled) {
+            string += " ~1000/!";
+        }
     }
 
     PruneCollection::iterator it;

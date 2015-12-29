@@ -61,6 +61,11 @@ class LogBuffer {
                                LogBufferElementCollection::iterator>
                 LogBufferIteratorMap;
     LogBufferIteratorMap mLastWorstUid[LOG_ID_MAX];
+    // watermark of any worst/chatty pid of system processing
+    typedef std::unordered_map<pid_t,
+                               LogBufferElementCollection::iterator>
+                LogBufferPidIteratorMap;
+    LogBufferPidIteratorMap mLastWorstPidOfSystem[LOG_ID_MAX];
 
     unsigned long mMaxSize[LOG_ID_MAX];
 
