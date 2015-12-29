@@ -10,7 +10,7 @@ esac
 data=/data/misc/logd
 property=persist.logd.logpersistd
 service=logcatd
-if [ X"${1}" = "-h" -o X"${1}" = X"--help" ]; then
+if [ X"${1}" = X"-h" -o X"${1}" = X"--help" ]; then
   echo "${progname%.*}.cat            - dump current ${service%d} logs"
   echo "${progname%.*}.start          - start ${service} service"
   echo "${progname%.*}.stop [--clear] - stop ${service} service"
