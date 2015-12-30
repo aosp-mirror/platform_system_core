@@ -38,7 +38,9 @@ LOCAL_SHARED_LIBRARIES := \
 #  event_flag := $(call event_logtags,auditd)
 #  event_flag += $(call event_logtags,logd)
 # so make sure we do not regret hard-coding it as follows:
-event_flag := -DAUDITD_LOG_TAG=1003 -DLOGD_LOG_TAG=1004
+event_flag := -DAUDITD_LOG_TAG=1003 \
+              -DLOGD_LOG_TAG=1004 \
+              -DSNET_EVENT_LOG_TAG=1397638484
 
 LOCAL_CFLAGS := -Werror $(event_flag)
 
