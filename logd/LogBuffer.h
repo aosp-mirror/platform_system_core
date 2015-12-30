@@ -33,16 +33,42 @@
 #include "LogWhiteBlackList.h"
 
 //
-// We are either in 1970ish (MONOTONIC) or 2015+ish (REALTIME) so to
-// differentiate without prejudice, we use 1980 to delineate, earlier
-// is monotonic, later is real.
+// We are either in 1970ish (MONOTONIC) or 2016+ish (REALTIME) so to
+// differentiate without prejudice, we use 1972 to delineate, earlier
+// is likely monotonic, later is real. Otherwise we start using a
+// dividing line between monotonic and realtime if more than a minute
+// difference between them.
 //
 namespace android {
 
 static bool isMonotonic(const log_time &mono) {
-    static const uint32_t EPOCH_PLUS_10_YEARS = 10 * 1461 / 4 * 24 * 60 * 60;
+    static const uint32_t EPOCH_PLUS_2_YEARS = 2 * 24 * 60 * 60 * 1461 / 4;
+    static const uint32_t EPOCH_PLUS_MINUTE = 60;
 
-    return mono.tv_sec < EPOCH_PLUS_10_YEARS;
+    if (mono.tv_sec >= EPOCH_PLUS_2_YEARS) {
+        return false;
+    }
+
+    log_time now(CLOCK_REALTIME);
+
+    /* Timezone and ntp time setup? */
+    if (now.tv_sec >= EPOCH_PLUS_2_YEARS) {
+        return true;
+    }
+
+    /* no way to differentiate realtime from monotonic time */
+    if (now.tv_sec < EPOCH_PLUS_MINUTE) {
+        return false;
+    }
+
+    log_time cpu(CLOCK_MONOTONIC);
+    /* too close to call to differentiate monotonic times from realtime */
+    if ((cpu.tv_sec + EPOCH_PLUS_MINUTE) >= now.tv_sec) {
+        return false;
+    }
+
+    /* dividing line half way between monotonic and realtime */
+    return mono.tv_sec < ((cpu.tv_sec + now.tv_sec) / 2);
 }
 
 }
