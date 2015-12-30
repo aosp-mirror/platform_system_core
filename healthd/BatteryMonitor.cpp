@@ -30,7 +30,6 @@
 #include <batteryservice/BatteryService.h>
 #include <cutils/klog.h>
 #include <cutils/properties.h>
-#include <log/log_read.h>
 #include <utils/Errors.h>
 #include <utils/String8.h>
 #include <utils/Vector.h>
@@ -312,25 +311,6 @@ bool BatteryMonitor::update(void) {
                  props.chargerAcOnline ? "a" : "",
                  props.chargerUsbOnline ? "u" : "",
                  props.chargerWirelessOnline ? "w" : "");
-
-        log_time realtime(CLOCK_REALTIME);
-        time_t t = realtime.tv_sec;
-        struct tm *tmp = gmtime(&t);
-        if (tmp) {
-            static const char fmt[] = " %Y-%m-%d %H:%M:%S.XXXXXXXXX UTC";
-            len = strlen(dmesgline);
-            if ((len < (sizeof(dmesgline) - sizeof(fmt) - 8)) // margin
-                    && strftime(dmesgline + len, sizeof(dmesgline) - len,
-                                fmt, tmp)) {
-                char *usec = strchr(dmesgline + len, 'X');
-                if (usec) {
-                    len = usec - dmesgline;
-                    snprintf(dmesgline + len, sizeof(dmesgline) - len,
-                             "%09u", realtime.tv_nsec);
-                    usec[9] = ' ';
-                }
-            }
-        }
 
         KLOG_WARNING(LOG_TAG, "%s\n", dmesgline);
     }

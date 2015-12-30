@@ -206,7 +206,10 @@ char *log_strntok_r(char *s, size_t *len, char **last, size_t *sublen) {
     // NOTREACHED
 }
 
-log_time LogKlog::correction = log_time(CLOCK_REALTIME) - log_time(CLOCK_MONOTONIC);
+log_time LogKlog::correction =
+    (log_time(CLOCK_REALTIME) < log_time(CLOCK_MONOTONIC))
+        ? log_time::EPOCH
+        : (log_time(CLOCK_REALTIME) - log_time(CLOCK_MONOTONIC));
 
 LogKlog::LogKlog(LogBuffer *buf, LogReader *reader, int fdWrite, int fdRead, bool auditd) :
         SocketListener(fdRead, false),
@@ -272,7 +275,7 @@ void LogKlog::calculateCorrection(const log_time &monotonic,
                                   size_t len) {
     log_time real;
     const char *ep = real.strptime(real_string, "%Y-%m-%d %H:%M:%S.%09q UTC");
-    if (!ep || (ep > &real_string[len])) {
+    if (!ep || (ep > &real_string[len]) || (real > log_time(CLOCK_REALTIME))) {
         return;
     }
     // kernel report UTC, log_time::strptime is localtime from calendar.
@@ -283,8 +286,16 @@ void LogKlog::calculateCorrection(const log_time &monotonic,
     memset(&tm, 0, sizeof(tm));
     tm.tm_isdst = -1;
     localtime_r(&now, &tm);
-    real.tv_sec += tm.tm_gmtoff;
-    correction = real - monotonic;
+    if ((tm.tm_gmtoff < 0) && ((-tm.tm_gmtoff) > real.tv_sec)) {
+        real = log_time::EPOCH;
+    } else {
+        real.tv_sec += tm.tm_gmtoff;
+    }
+    if (monotonic > real) {
+        correction = log_time::EPOCH;
+    } else {
+        correction = real - monotonic;
+    }
 }
 
 static const char suspendStr[] = "PM: suspend entry ";
@@ -319,11 +330,11 @@ void LogKlog::sniffTime(log_time &now,
     if (cp && (cp >= &(*buf)[len])) {
         cp = NULL;
     }
-    len -= cp - *buf;
     if (cp) {
         static const char healthd[] = "healthd";
         static const char battery[] = ": battery ";
 
+        len -= cp - *buf;
         if (len && isspace(*cp)) {
             ++cp;
             --len;
@@ -347,16 +358,11 @@ void LogKlog::sniffTime(log_time &now,
                 && ((size_t)((b += sizeof(healthd) - 1) - cp) < len)
                 && ((b = strnstr(b, len -= b - cp, battery)))
                 && ((size_t)((b += sizeof(battery) - 1) - cp) < len)) {
-            len -= b - cp;
-            // NB: healthd is roughly 150us late, worth the price to deal with
-            //     ntp-induced or hardware clock drift.
-            // look for " 2???-??-?? ??:??:??.????????? ???"
-            for (; len && *b && (*b != '\n'); ++b, --len) {
-                if ((b[0] == ' ') && (b[1] == '2') && (b[5] == '-')) {
-                    calculateCorrection(now, b + 1, len - 1);
-                    break;
-                }
-            }
+            // NB: healthd is roughly 150us late, so we use it instead to
+            //     trigger a check for ntp-induced or hardware clock drift.
+            log_time real(CLOCK_REALTIME);
+            log_time mono(CLOCK_MONOTONIC);
+            correction = (real < mono) ? log_time::EPOCH : (real - mono);
         } else if (((b = strnstr(cp, len, suspendedStr)))
                 && ((size_t)((b += sizeof(suspendStr) - 1) - cp) < len)) {
             len -= b - cp;
@@ -371,7 +377,11 @@ void LogKlog::sniffTime(log_time &now,
                     real.tv_nsec += (*endp - '0') * multiplier;
                 }
                 if (reverse) {
-                    correction -= real;
+                    if (real > correction) {
+                        correction = log_time::EPOCH;
+                    } else {
+                        correction -= real;
+                    }
                 } else {
                     correction += real;
                 }
