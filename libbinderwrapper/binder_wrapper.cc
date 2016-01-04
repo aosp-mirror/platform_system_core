@@ -50,4 +50,11 @@ BinderWrapper* BinderWrapper::Get() {
   return instance_;
 }
 
+// static
+BinderWrapper* BinderWrapper::GetOrCreateInstance() {
+  if (!instance_)
+    instance_ = new RealBinderWrapper();
+  return instance_;
+}
+
 }  // namespace android

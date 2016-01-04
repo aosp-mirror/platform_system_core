@@ -30,6 +30,7 @@ class BBinder;
 class IBinder;
 
 // Wraps libbinder to make it testable.
+// NOTE: Static methods of this class are not thread-safe.
 class BinderWrapper {
  public:
   virtual ~BinderWrapper() {}
@@ -49,6 +50,10 @@ class BinderWrapper {
   // Returns the singleton instance previously created by Create() or set by
   // InitForTesting().
   static BinderWrapper* Get();
+
+  // Returns the singleton instance if it was previously created by Create() or
+  // set by InitForTesting(), or creates a new one by calling Create().
+  static BinderWrapper* GetOrCreateInstance();
 
   // Gets the binder for communicating with the service identified by
   // |service_name|, returning null immediately if it doesn't exist.
