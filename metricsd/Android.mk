@@ -110,7 +110,6 @@ LOCAL_SRC_FILES := \
   aidl/android/brillo/metrics/IMetricsCollectorService.aidl \
   metrics_collector_service_impl.cc \
   metrics_collector_service_client.cc
-LOCAL_RTTI_FLAG := -fno-rtti
 include $(BUILD_STATIC_LIBRARY)
 
 # Shared library for metrics.
@@ -122,7 +121,6 @@ LOCAL_CFLAGS := $(metrics_CFLAGS)
 LOCAL_CLANG := true
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS)
-LOCAL_RTTI_FLAG := -frtti
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_SHARED_LIBRARIES := $(libmetrics_shared_libraries)
 LOCAL_SRC_FILES := $(libmetrics_sources)
@@ -166,7 +164,6 @@ LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS)
 LOCAL_INIT_RC := metrics_collector.rc
 LOCAL_REQUIRED_MODULES := metrics.json
-LOCAL_RTTI_FLAG := -frtti
 LOCAL_SHARED_LIBRARIES := $(metrics_collector_shared_libraries)
 LOCAL_SRC_FILES := $(metrics_collector_common) \
   metrics_collector_main.cc
@@ -213,7 +210,6 @@ LOCAL_CFLAGS := $(metrics_CFLAGS)
 LOCAL_CLANG := true
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_CPPFLAGS := $(metrics_CPPFLAGS) -Wno-sign-compare
-LOCAL_RTTI_FLAG := -frtti
 LOCAL_SHARED_LIBRARIES := $(metrics_collector_shared_libraries)
 LOCAL_SRC_FILES := $(metrics_collector_tests_sources) \
   $(metrics_collector_common)
