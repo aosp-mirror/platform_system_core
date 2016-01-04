@@ -18,45 +18,31 @@
 #define METRICSD_METRICS_COLLECTOR_SERVICE_IMPL_H_
 
 // metrics_collector binder service implementation.  Constructed by
-// MetricsCollectorServiceTrampoline, which we use to call back into
-// MetricsCollector.  The trampoline isolates us from the -frtti code of
-// metrics_collector / libbrillo.
+// MetricsCollector.
 
 #include "android/brillo/metrics/BnMetricsCollectorService.h"
 
-#include <memory>
-
 #include <binder/Status.h>
-#include <brillo/binder_watcher.h>
 
-class MetricsCollectorServiceTrampoline;
-
-//#include "metrics_collector_service_trampoline.h"
+class MetricsCollector;
 
 class BnMetricsCollectorServiceImpl
     : public android::brillo::metrics::BnMetricsCollectorService {
  public:
-  // Passed a this pointer from the MetricsCollectorServiceTrampoline
-  // object that constructs us.
+  // Passed a this pointer from the MetricsCollector object that constructs us.
   explicit BnMetricsCollectorServiceImpl(
-      MetricsCollectorServiceTrampoline* metrics_collector_service_trampoline);
+      MetricsCollector* metrics_collector_service);
 
   virtual ~BnMetricsCollectorServiceImpl() = default;
 
-  // Starts the binder main loop.
-  void Run();
-
   // Called by crash_reporter to report a userspace crash event.  We relay
-  // this to MetricsCollector using the trampoline.
+  // this to MetricsCollector.
   android::binder::Status notifyUserCrash();
 
  private:
-  // Trampoline object that constructs us, we use this to call MetricsCollector
-  // methods via the trampoline.
-  MetricsCollectorServiceTrampoline* metrics_collector_service_trampoline_;
-
-  // BinderWatcher object we construct for handling Binder traffic
-  std::unique_ptr<brillo::BinderWatcher> binder_watcher_;
+  // MetricsCollector object that constructs us, we use this to call back
+  // to it.
+  MetricsCollector* metrics_collector_;
 };
 
 #endif  // METRICSD_METRICS_COLLECTOR_SERVICE_IMPL_H_
