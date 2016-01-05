@@ -15,7 +15,11 @@ persist.logd.logpersistd   string        Enable logpersist daemon, "logcatd"
 persist.logd.size          number  ro    Global default size of the buffer for
                                          all log ids at initial startup, at
                                          runtime use: logcat -b all -G <value>
-ro.logd.size               number svelte default for persist.logd.size
+ro.logd.size               number svelte default for persist.logd.size. Larger
+                                         platform default sizes than 256KB are
+                                         known to not scale well under log spam
+                                         pressure. Address the spam first,
+                                         resist increasing the log buffer.
 persist.logd.size.<buffer> number  ro    Size of the buffer for <buffer> log
 ro.logd.size.<buffer>      number svelte default for persist.logd.size.<buffer>
 ro.config.low_ram          bool   false  if true, logd.statistics, logd.kernel
