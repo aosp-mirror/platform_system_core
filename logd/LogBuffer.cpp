@@ -32,7 +32,7 @@
 #include "LogReader.h"
 
 // Default
-#define LOG_BUFFER_SIZE (256 * 1024) // Tuned on a per-platform basis here?
+#define LOG_BUFFER_SIZE (256 * 1024) // Tuned with ro.logd.size per-platform
 #define log_buffer_size(id) mMaxSize[id]
 #define LOG_BUFFER_MIN_SIZE (64 * 1024UL)
 #define LOG_BUFFER_MAX_SIZE (256 * 1024 * 1024UL)
