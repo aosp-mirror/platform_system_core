@@ -282,8 +282,6 @@ static void usage() {
             "  getvar <variable>                        Display a bootloader variable.\n"
             "  set_active <suffix>                      Sets the active slot. If slots are\n"
             "                                           not supported, this does nothing.\n"
-            "                                           note: suffixes starting with a '-'\n"
-            "                                           must use set_active -- <suffix>\n"
             "  boot <kernel> [ <ramdisk> [ <second> ] ] Download and boot kernel.\n"
             "  flash:raw boot <kernel> [ <ramdisk> [ <second> ] ]\n"
             "                                           Create bootimage and flash it.\n"
@@ -1411,7 +1409,6 @@ int main(int argc, char **argv)
             std::string slot = verify_slot(transport, argv[1], false);
             fb_set_active(slot.c_str());
             skip(2);
-            wants_reboot = true;
         } else if(!strcmp(*argv, "oem")) {
             argc = do_oem_command(argc, argv);
         } else if(!strcmp(*argv, "flashing")) {
