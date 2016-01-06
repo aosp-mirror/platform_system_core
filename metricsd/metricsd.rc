@@ -1,9 +1,9 @@
 on post-fs-data
-    mkdir /data/misc/metrics 0770 system system
-    mkdir /data/misc/metricsd 0700 system system
-    mkdir /data/misc/metrics_collector 0700 system system
+    mkdir /data/misc/metrics 0750 metrics_coll system
+    mkdir /data/misc/metricsd 0700 metricsd metricsd
+    mkdir /data/misc/metrics_collector 0700 metrics_coll metrics_coll
 
 service metricsd /system/bin/metricsd --foreground --logtosyslog
     class late_start
-    user system
+    user metricsd
     group system dbus inet
