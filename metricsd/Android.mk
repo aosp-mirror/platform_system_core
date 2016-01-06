@@ -28,7 +28,6 @@ metrics_collector_common := \
   collectors/cpu_usage_collector.cc \
   collectors/disk_usage_collector.cc \
   metrics_collector.cc \
-  metrics_collector_service_trampoline.cc \
   persistent_integer.cc
 
 metricsd_common := \
@@ -102,13 +101,13 @@ include $(BUILD_STATIC_LIBRARY)
 # ==========================================================
 include $(CLEAR_VARS)
 LOCAL_MODULE := libmetricscollectorservice
+LOCAL_CLANG := true
 LOCAL_SHARED_LIBRARIES := libbinder libbrillo-binder libchrome libutils
 LOCAL_CPP_EXTENSION := $(metrics_cpp_extension)
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_SRC_FILES := \
   aidl/android/brillo/metrics/IMetricsCollectorService.aidl \
-  metrics_collector_service_impl.cc \
   metrics_collector_service_client.cc
 include $(BUILD_STATIC_LIBRARY)
 
@@ -166,7 +165,8 @@ LOCAL_INIT_RC := metrics_collector.rc
 LOCAL_REQUIRED_MODULES := metrics.json
 LOCAL_SHARED_LIBRARIES := $(metrics_collector_shared_libraries)
 LOCAL_SRC_FILES := $(metrics_collector_common) \
-  metrics_collector_main.cc
+  metrics_collector_main.cc \
+  metrics_collector_service_impl.cc
 LOCAL_STATIC_LIBRARIES := metricsd_binder_proxy \
   $(metrics_collector_static_libraries)
 include $(BUILD_EXECUTABLE)

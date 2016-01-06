@@ -18,27 +18,18 @@
 
 #include <binder/IServiceManager.h>
 #include <binder/Status.h>
-#include <brillo/binder_watcher.h>
 #include <utils/Errors.h>
 
-#include "metrics_collector_service_trampoline.h"
+#include "metrics_collector.h"
 
 using namespace android;
 
 BnMetricsCollectorServiceImpl::BnMetricsCollectorServiceImpl(
-    MetricsCollectorServiceTrampoline* metrics_collector_service_trampoline) {
-  metrics_collector_service_trampoline_ = metrics_collector_service_trampoline;
-}
-
-void BnMetricsCollectorServiceImpl::Run() {
-  status_t status =
-      defaultServiceManager()->addService(getInterfaceDescriptor(), this);
-  CHECK(status == OK) << "libmetricscollectorservice: failed to add service";
-  binder_watcher_.reset(new ::brillo::BinderWatcher);
-  CHECK(binder_watcher_->Init()) << "Binder FD watcher init failed";
+    MetricsCollector* metrics_collector)
+    : metrics_collector_(metrics_collector) {
 }
 
 android::binder::Status BnMetricsCollectorServiceImpl::notifyUserCrash() {
-  metrics_collector_service_trampoline_->ProcessUserCrash();
+  metrics_collector_->ProcessUserCrash();
   return android::binder::Status::ok();
 }
