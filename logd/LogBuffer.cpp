@@ -205,20 +205,16 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
 
     LogBufferElement *elem = new LogBufferElement(log_id, realtime,
                                                   uid, pid, tid, msg, len);
-    if (log_id != LOG_ID_SECURITY) { // whitelist LOG_ID_SECURITY
+    if (log_id != LOG_ID_SECURITY) {
         int prio = ANDROID_LOG_INFO;
-        const char *tag = (const char *)-1;
+        const char *tag = NULL;
         if (log_id == LOG_ID_EVENTS) {
-            // whitelist "snet_event_log"
-            if (elem->getTag() != SNET_EVENT_LOG_TAG) {
-                tag = android::tagToName(elem->getTag());
-            }
+            tag = android::tagToName(elem->getTag());
         } else {
             prio = *msg;
             tag = msg + 1;
         }
-        if ((tag != (const char *)-1) &&
-                !__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
+        if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
             // Log traffic received to total
             pthread_mutex_lock(&mLogElementsLock);
             stats.add(elem);
