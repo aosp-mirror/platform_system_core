@@ -632,7 +632,7 @@ static void dump_abort_message(Backtrace* backtrace, log_t* log, uintptr_t addre
 }
 
 // Dumps all information about the specified pid to the tombstone.
-static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, int si_code,
+static bool dump_crash(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid, int signal, int si_code,
                        uintptr_t abort_msg_address, bool dump_sibling_threads,
                        int* total_sleep_time_usec) {
   // don't copy log messages to tombstone unless this is a dev device
@@ -659,8 +659,7 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, int si_code
     dump_signal_info(log, tid, signal, si_code);
   }
 
-  std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(pid));
-  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map.get()));
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map));
   dump_abort_message(backtrace.get(), log, abort_msg_address);
   dump_registers(log, tid);
   if (backtrace->Unwind(0)) {
@@ -669,8 +668,8 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, int si_code
     ALOGE("Unwind failed: pid = %d, tid = %d", pid, tid);
   }
   dump_memory_and_code(log, backtrace.get());
-  if (map.get() != nullptr) {
-    dump_all_maps(backtrace.get(), map.get(), log, tid);
+  if (map) {
+    dump_all_maps(backtrace.get(), map, log, tid);
   }
 
   if (want_logs) {
@@ -679,7 +678,7 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, int si_code
 
   bool detach_failed = false;
   if (dump_sibling_threads) {
-    detach_failed = dump_sibling_thread_report(log, pid, tid, total_sleep_time_usec, map.get());
+    detach_failed = dump_sibling_thread_report(log, pid, tid, total_sleep_time_usec, map);
   }
 
   if (want_logs) {
@@ -698,53 +697,57 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, int si_code
   return detach_failed;
 }
 
-// find_and_open_tombstone - find an available tombstone slot, if any, of the
+// open_tombstone - find an available tombstone slot, if any, of the
 // form tombstone_XX where XX is 00 to MAX_TOMBSTONES-1, inclusive. If no
 // file is available, we reuse the least-recently-modified file.
-//
-// Returns the path of the tombstone file, allocated using malloc().  Caller must free() it.
-static char* find_and_open_tombstone(int* fd) {
+int open_tombstone(std::string* out_path) {
   // In a single pass, find an available slot and, in case none
   // exist, find and record the least-recently-modified file.
   char path[128];
+  int fd = -1;
   int oldest = -1;
   struct stat oldest_sb;
   for (int i = 0; i < MAX_TOMBSTONES; i++) {
     snprintf(path, sizeof(path), TOMBSTONE_TEMPLATE, i);
 
     struct stat sb;
-    if (!stat(path, &sb)) {
+    if (stat(path, &sb) == 0) {
       if (oldest < 0 || sb.st_mtime < oldest_sb.st_mtime) {
         oldest = i;
         oldest_sb.st_mtime = sb.st_mtime;
       }
       continue;
     }
-    if (errno != ENOENT)
-      continue;
+    if (errno != ENOENT) continue;
 
-    *fd = open(path, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW | O_CLOEXEC, 0600);
-    if (*fd < 0)
-      continue;   // raced ?
+    fd = open(path, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW | O_CLOEXEC, 0600);
+    if (fd < 0) continue;  // raced ?
 
-    fchown(*fd, AID_SYSTEM, AID_SYSTEM);
-    return strdup(path);
+    if (out_path) {
+      *out_path = path;
+    }
+    fchown(fd, AID_SYSTEM, AID_SYSTEM);
+    return fd;
   }
 
   if (oldest < 0) {
-    ALOGE("Failed to find a valid tombstone, default to using tombstone 0.\n");
+    ALOGE("debuggerd: failed to find a valid tombstone, default to using tombstone 0.\n");
     oldest = 0;
   }
 
   // we didn't find an available file, so we clobber the oldest one
   snprintf(path, sizeof(path), TOMBSTONE_TEMPLATE, oldest);
-  *fd = open(path, O_CREAT | O_TRUNC | O_WRONLY | O_NOFOLLOW | O_CLOEXEC, 0600);
-  if (*fd < 0) {
-    ALOGE("failed to open tombstone file '%s': %s\n", path, strerror(errno));
-    return NULL;
+  fd = open(path, O_CREAT | O_TRUNC | O_WRONLY | O_NOFOLLOW | O_CLOEXEC, 0600);
+  if (fd < 0) {
+    ALOGE("debuggerd: failed to open tombstone file '%s': %s\n", path, strerror(errno));
+    return -1;
   }
-  fchown(*fd, AID_SYSTEM, AID_SYSTEM);
-  return strdup(path);
+
+  if (out_path) {
+    *out_path = path;
+  }
+  fchown(fd, AID_SYSTEM, AID_SYSTEM);
+  return fd;
 }
 
 static int activity_manager_connect() {
@@ -777,49 +780,27 @@ static int activity_manager_connect() {
   return amfd;
 }
 
-char* engrave_tombstone(pid_t pid, pid_t tid, int signal, int original_si_code,
-                        uintptr_t abort_msg_address, bool dump_sibling_threads,
-                        bool* detach_failed, int* total_sleep_time_usec) {
-
+void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid, int signal,
+                       int original_si_code, uintptr_t abort_msg_address, bool dump_sibling_threads,
+                       bool* detach_failed, int* total_sleep_time_usec) {
   log_t log;
   log.current_tid = tid;
   log.crashed_tid = tid;
 
-  if ((mkdir(TOMBSTONE_DIR, 0755) == -1) && (errno != EEXIST)) {
-    ALOGE("failed to create %s: %s\n", TOMBSTONE_DIR, strerror(errno));
-  }
-
-  if (chown(TOMBSTONE_DIR, AID_SYSTEM, AID_SYSTEM) == -1) {
-    ALOGE("failed to change ownership of %s: %s\n", TOMBSTONE_DIR, strerror(errno));
-  }
-
-  int fd = -1;
-  char* path = NULL;
-  if (selinux_android_restorecon(TOMBSTONE_DIR, 0) == 0) {
-    path = find_and_open_tombstone(&fd);
-  } else {
-    ALOGE("Failed to restore security context, not writing tombstone.\n");
-  }
-
-  if (fd < 0) {
-    ALOGE("Skipping tombstone write, nothing to do.\n");
+  if (tombstone_fd < 0) {
+    ALOGE("debuggerd: skipping tombstone write, nothing to do.\n");
     *detach_failed = false;
-    return NULL;
+    return;
   }
 
-  log.tfd = fd;
+  log.tfd = tombstone_fd;
   // Preserve amfd since it can be modified through the calls below without
   // being closed.
   int amfd = activity_manager_connect();
   log.amfd = amfd;
-  *detach_failed = dump_crash(&log, pid, tid, signal, original_si_code, abort_msg_address,
+  *detach_failed = dump_crash(&log, map, pid, tid, signal, original_si_code, abort_msg_address,
                               dump_sibling_threads, total_sleep_time_usec);
 
-  _LOG(&log, logtype::BACKTRACE, "\nTombstone written to: %s\n", path);
-
-  // Either of these file descriptors can be -1, any error is ignored.
+  // This file descriptor can be -1, any error is ignored.
   close(amfd);
-  close(fd);
-
-  return path;
 }
