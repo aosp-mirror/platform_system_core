@@ -22,7 +22,7 @@ include $(CLEAR_VARS)
 #       's/^\([0-9]*\)[ \t]*liblog[ \t].*/-DLIBLOG_LOG_TAG=\1/p' \
 #       $(LOCAL_PATH)/event.logtags)
 # so make sure we do not regret hard-coding it as follows:
-liblog_cflags := -DLIBLOG_LOG_TAG=1005 -DSNET_EVENT_LOG_TAG=1397638484
+liblog_cflags := -DLIBLOG_LOG_TAG=1005
 
 liblog_host_sources := logd_write.c log_event_write.c fake_log_device.c event.logtags
 liblog_target_sources := logd_write.c log_event_write.c event_tag_map.c log_time.cpp log_is_loggable.c
