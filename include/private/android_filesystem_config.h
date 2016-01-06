@@ -86,6 +86,7 @@
 #define AID_METRICS_COLL  1042  /* metrics_collector process */
 #define AID_METRICSD      1043  /* metricsd process */
 #define AID_WEBSERV       1044  /* webservd process */
+#define AID_DEBUGGERD     1045  /* debuggerd unprivileged user */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -190,6 +191,7 @@ static const struct android_id_info android_ids[] = {
     { "metrics_coll",  AID_METRICS_COLL },
     { "metricsd",      AID_METRICSD },
     { "webserv",       AID_WEBSERV },
+    { "debuggerd",     AID_DEBUGGERD, },
 
     { "shell",         AID_SHELL, },
     { "cache",         AID_CACHE, },
