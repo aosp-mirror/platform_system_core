@@ -28,6 +28,7 @@ metrics_collector_common := \
   collectors/cpu_usage_collector.cc \
   collectors/disk_usage_collector.cc \
   metrics_collector.cc \
+  metrics_collector_service_impl.cc \
   persistent_integer.cc
 
 metricsd_common := \
@@ -165,8 +166,7 @@ LOCAL_INIT_RC := metrics_collector.rc
 LOCAL_REQUIRED_MODULES := metrics.json
 LOCAL_SHARED_LIBRARIES := $(metrics_collector_shared_libraries)
 LOCAL_SRC_FILES := $(metrics_collector_common) \
-  metrics_collector_main.cc \
-  metrics_collector_service_impl.cc
+  metrics_collector_main.cc
 LOCAL_STATIC_LIBRARIES := metricsd_binder_proxy \
   $(metrics_collector_static_libraries)
 include $(BUILD_EXECUTABLE)
