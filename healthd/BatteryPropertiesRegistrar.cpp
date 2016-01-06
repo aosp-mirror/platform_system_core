@@ -30,8 +30,9 @@
 
 namespace android {
 
-void BatteryPropertiesRegistrar::publish() {
-    defaultServiceManager()->addService(String16("batteryproperties"), this);
+void BatteryPropertiesRegistrar::publish(
+    const sp<BatteryPropertiesRegistrar>& service) {
+    defaultServiceManager()->addService(String16("batteryproperties"), service);
 }
 
 void BatteryPropertiesRegistrar::notifyListeners(struct BatteryProperties props) {

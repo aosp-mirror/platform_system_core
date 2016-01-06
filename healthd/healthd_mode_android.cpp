@@ -58,5 +58,5 @@ void healthd_mode_android_init(struct healthd_config* /*config*/) {
     }
 
     gBatteryPropertiesRegistrar = new BatteryPropertiesRegistrar();
-    gBatteryPropertiesRegistrar->publish();
+    gBatteryPropertiesRegistrar->publish(gBatteryPropertiesRegistrar);
 }
