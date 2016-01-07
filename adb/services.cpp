@@ -368,8 +368,9 @@ static void wait_for_state(int fd, void* data) {
     while (true) {
         bool is_ambiguous = false;
         std::string error = "unknown error";
-        atransport* t = acquire_one_transport(sinfo->transport_type, sinfo->serial.c_str(),
-                                              &is_ambiguous, &error);
+        const char* serial = sinfo->serial.length() ? sinfo->serial.c_str() : NULL;
+        atransport* t = acquire_one_transport(sinfo->transport_type, serial, &is_ambiguous, &error);
+
         if (t != nullptr && t->connection_state == sinfo->state) {
             SendOkay(fd);
             break;
