@@ -349,8 +349,6 @@ LOCAL_STATIC_LIBRARIES := \
     libcutils \
     libbase \
     libcrypto_static \
-    libminijail \
-    libminijail_generated \
-    libcap
+    libminijail
 
 include $(BUILD_EXECUTABLE)
