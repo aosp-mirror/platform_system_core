@@ -124,12 +124,9 @@ static void drop_privileges(int server_port) {
                       AID_INET,     AID_NET_BT,    AID_NET_BT_ADMIN,
                       AID_SDCARD_R, AID_SDCARD_RW, AID_NET_BW_STATS,
                       AID_READPROC};
-    if (minijail_set_supplementary_gids(
-            jail.get(),
-            sizeof(groups) / sizeof(groups[0]),
-            groups) != 0) {
-        LOG(FATAL) << "Could not configure supplementary groups";
-    }
+    minijail_set_supplementary_gids(jail.get(),
+                                    sizeof(groups) / sizeof(groups[0]),
+                                    groups);
 
     // Don't listen on a port (default 5037) if running in secure mode.
     // Don't run as root if running in secure mode.
