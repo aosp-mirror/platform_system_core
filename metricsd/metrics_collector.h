@@ -25,10 +25,12 @@
 #include <vector>
 
 #include <base/files/file_path.h>
+#include <base/memory/weak_ptr.h>
 #include <base/time/time.h>
+#include <brillo/binder_watcher.h>
 #include <brillo/daemons/dbus_daemon.h>
 #include <libweaved/command.h>
-#include <libweaved/device.h>
+#include <libweaved/service.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 #include "collectors/averaged_statistics_collector.h"
@@ -114,10 +116,10 @@ class MetricsCollector : public brillo::DBusDaemon {
   };
 
   // Enables metrics reporting.
-  void OnEnableMetrics(const std::weak_ptr<weaved::Command>& cmd);
+  void OnEnableMetrics(std::unique_ptr<weaved::Command> command);
 
   // Disables metrics reporting.
-  void OnDisableMetrics(const std::weak_ptr<weaved::Command>& cmd);
+  void OnDisableMetrics(std::unique_ptr<weaved::Command> command);
 
   // Updates the weave device state.
   void UpdateWeaveState();
@@ -216,6 +218,10 @@ class MetricsCollector : public brillo::DBusDaemon {
   // Reads a string from a file and converts it to uint64_t.
   static bool ReadFileToUint64(const base::FilePath& path, uint64_t* value);
 
+  // Callback invoked when a connection to weaved's service is established
+  // over Binder interface.
+  void OnWeaveServiceConnected(const std::weak_ptr<weaved::Service>& service);
+
   // VARIABLES
 
   // Test mode.
@@ -272,7 +278,10 @@ class MetricsCollector : public brillo::DBusDaemon {
   unique_ptr<DiskUsageCollector> disk_usage_collector_;
   unique_ptr<AveragedStatisticsCollector> averaged_stats_collector_;
 
-  std::unique_ptr<weaved::Device> device_;
+  unique_ptr<weaved::Service::Subscription> weave_service_subscription_;
+  std::weak_ptr<weaved::Service> service_;
+
+  base::WeakPtrFactory<MetricsCollector> weak_ptr_factory_{this};
 };
 
 #endif  // METRICS_METRICS_COLLECTOR_H_
