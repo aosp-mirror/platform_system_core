@@ -67,7 +67,7 @@ static void Out(const std::string& s) {
 
 void LinePrinter::Print(string to_print, LineType type) {
   if (!smart_terminal_) {
-    Out(to_print);
+    Out(to_print + "\n");
     return;
   }
 
