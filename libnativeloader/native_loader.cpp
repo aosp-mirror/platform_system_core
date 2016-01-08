@@ -49,6 +49,7 @@ static const char* kPublicNativeLibraries = "libandroid.so:"
                                             "libOpenMAXAL.so:"
                                             "libOpenSLES.so:"
                                             "libstdc++.so:"
+                                            "libwebviewchromium_plat_support.so:"
                                             "libz.so";
 
 class LibraryNamespaces {
