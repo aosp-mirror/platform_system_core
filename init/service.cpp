@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -531,6 +532,17 @@ void Service::Stop() {
     StopOrReset(SVC_DISABLED);
 }
 
+void Service::Terminate() {
+    flags_ &= ~(SVC_RESTARTING | SVC_DISABLED_START);
+    flags_ |= SVC_DISABLED;
+    if (pid_) {
+        NOTICE("Sending SIGTERM to service '%s' (pid %d)...\n", name_.c_str(),
+               pid_);
+        kill(-pid_, SIGTERM);
+        NotifyStateChange("stopping");
+    }
+}
+
 void Service::Restart() {
     if (flags_ & SVC_RUNNING) {
         /* Stop, wait, then start the service. */
@@ -724,9 +736,9 @@ Service* ServiceManager::FindServiceByKeychord(int keychord_id) const {
     return nullptr;
 }
 
-void ServiceManager::ForEachService(void (*func)(Service* svc)) const {
+void ServiceManager::ForEachService(std::function<void(Service*)> callback) const {
     for (const auto& s : services_) {
-        func(s.get());
+        callback(s.get());
     }
 }
 
@@ -765,6 +777,53 @@ void ServiceManager::DumpState() const {
         s->DumpState();
     }
     INFO("\n");
+}
+
+bool ServiceManager::ReapOneProcess() {
+    int status;
+    pid_t pid = TEMP_FAILURE_RETRY(waitpid(-1, &status, WNOHANG));
+    if (pid == 0) {
+        return false;
+    } else if (pid == -1) {
+        ERROR("waitpid failed: %s\n", strerror(errno));
+        return false;
+    }
+
+    Service* svc = FindServiceByPid(pid);
+
+    std::string name;
+    if (svc) {
+        name = android::base::StringPrintf("Service '%s' (pid %d)",
+                                           svc->name().c_str(), pid);
+    } else {
+        name = android::base::StringPrintf("Untracked pid %d", pid);
+    }
+
+    if (WIFEXITED(status)) {
+        NOTICE("%s exited with status %d\n", name.c_str(), WEXITSTATUS(status));
+    } else if (WIFSIGNALED(status)) {
+        NOTICE("%s killed by signal %d\n", name.c_str(), WTERMSIG(status));
+    } else if (WIFSTOPPED(status)) {
+        NOTICE("%s stopped by signal %d\n", name.c_str(), WSTOPSIG(status));
+    } else {
+        NOTICE("%s state changed", name.c_str());
+    }
+
+    if (!svc) {
+        return true;
+    }
+
+    if (svc->Reap()) {
+        waiting_for_exec = false;
+        RemoveService(*svc);
+    }
+
+    return true;
+}
+
+void ServiceManager::ReapAnyOutstandingChildren() {
+    while (ReapOneProcess()) {
+    }
 }
 
 bool ServiceParser::ParseSection(const std::vector<std::string>& args,
