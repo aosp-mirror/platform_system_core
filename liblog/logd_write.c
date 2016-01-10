@@ -668,3 +668,25 @@ int __android_log_bswrite(int32_t tag, const char *payload)
 
     return write_to_log(LOG_ID_EVENTS, vec, 4);
 }
+
+/*
+ * Like __android_log_security_bwrite, but used for writing strings to the
+ * security log.
+ */
+int __android_log_security_bswrite(int32_t tag, const char *payload)
+{
+    struct iovec vec[4];
+    char type = EVENT_TYPE_STRING;
+    uint32_t len = strlen(payload);
+
+    vec[0].iov_base = &tag;
+    vec[0].iov_len = sizeof(tag);
+    vec[1].iov_base = &type;
+    vec[1].iov_len = sizeof(type);
+    vec[2].iov_base = &len;
+    vec[2].iov_len = sizeof(len);
+    vec[3].iov_base = (void*)payload;
+    vec[3].iov_len = len;
+
+    return write_to_log(LOG_ID_SECURITY, vec, 4);
+}
