@@ -36,6 +36,10 @@ namespace android {
 #ifdef __ANDROID__
 // TODO(dimitry): move this to system properties.
 static const char* kPublicNativeLibraries = "libandroid.so:"
+                                            // TODO (dimitry): This is a workaround for http://b/26436837
+                                            // will be removed before the release.
+                                            "libart.so:"
+                                            // END OF WORKAROUND
                                             "libc.so:"
                                             "libdl.so:"
                                             "libEGL.so:"
