@@ -18,6 +18,8 @@ on early-init
     # Set the security context of /adb_keys if present.
     restorecon /adb_keys
 
+    mount debugfs /sys/kernel/debug /sys/kernel/debug mode=755
+
     start ueventd
 
 on init
