@@ -65,6 +65,7 @@ static int fg_cgroup_fd = -1;
 static int system_bg_cpuset_fd = -1;
 static int bg_cpuset_fd = -1;
 static int fg_cpuset_fd = -1;
+static int ta_cpuset_fd = -1; // special cpuset for top app
 static int bg_schedboost_fd = -1;
 static int fg_schedboost_fd = -1;
 #endif
@@ -133,6 +134,8 @@ static void __initialize(void) {
         bg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
         filename = "/dev/cpuset/system-background/tasks";
         system_bg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
+        filename = "/dev/cpuset/top-app/tasks";
+        ta_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
 
 #ifdef USE_SCHEDBOOST
         filename = "/sys/fs/cgroup/stune/foreground/tasks";
@@ -276,6 +279,10 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
         fd = fg_cpuset_fd;
         boost_fd = fg_schedboost_fd;
         break;
+    case SP_TOP_APP :
+        fd = ta_cpuset_fd;
+        boost_fd = fg_schedboost_fd;
+        break;
     case SP_SYSTEM:
         fd = system_bg_cpuset_fd;
         boost_fd = bg_schedboost_fd;
@@ -337,6 +344,7 @@ int set_sched_policy(int tid, SchedPolicy policy)
     case SP_FOREGROUND:
     case SP_AUDIO_APP:
     case SP_AUDIO_SYS:
+    case SP_TOP_APP:
         SLOGD("^^^ tid %d (%s)", tid, thread_name);
         break;
     case SP_SYSTEM:
@@ -357,6 +365,7 @@ int set_sched_policy(int tid, SchedPolicy policy)
         case SP_FOREGROUND:
         case SP_AUDIO_APP:
         case SP_AUDIO_SYS:
+        case SP_TOP_APP:
             fd = fg_cgroup_fd;
             break;
         default:
@@ -411,6 +420,7 @@ const char *get_sched_policy_name(SchedPolicy policy)
        [SP_SYSTEM]     = "  ",
        [SP_AUDIO_APP]  = "aa",
        [SP_AUDIO_SYS]  = "as",
+       [SP_TOP_APP]    = "ta",
     };
     if ((policy < SP_CNT) && (strings[policy] != NULL))
         return strings[policy];

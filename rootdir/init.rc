@@ -173,17 +173,23 @@ on init
     write /dev/cpuset/system-background/cpus 0
     write /dev/cpuset/system-background/mems 0
 
+    mkdir /dev/cpuset/top-app
+    write /dev/cpuset/top-app/cpus 0
+    write /dev/cpuset/top-app/mems 0
+
     # change permissions for all cpusets we'll touch at runtime
     chown system system /dev/cpuset
     chown system system /dev/cpuset/foreground
     chown system system /dev/cpuset/foreground/boost
     chown system system /dev/cpuset/background
     chown system system /dev/cpuset/system-background
+    chown system system /dev/cpuset/top-app
     chown system system /dev/cpuset/tasks
     chown system system /dev/cpuset/foreground/tasks
     chown system system /dev/cpuset/foreground/boost/tasks
     chown system system /dev/cpuset/background/tasks
     chown system system /dev/cpuset/system-background/tasks
+    chown system system /dev/cpuset/top-app/tasks
 
     # set system-background to 0775 so SurfaceFlinger can touch it
     chmod 0775 /dev/cpuset/system-background
@@ -192,6 +198,7 @@ on init
     chmod 0664 /dev/cpuset/foreground/boost/tasks
     chmod 0664 /dev/cpuset/background/tasks
     chmod 0664 /dev/cpuset/system-background/tasks
+    chmod 0664 /dev/cpuset/top-app/tasks
     chmod 0664 /dev/cpuset/tasks
 
 
