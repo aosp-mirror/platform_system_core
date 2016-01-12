@@ -15,6 +15,7 @@
  */
 
 #include <limits.h>
+#include <sys/cdefs.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -46,7 +47,7 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
         + LOGGER_ENTRY_MAX_PAYLOAD];
     struct iovec iov = { buffer, sizeof(buffer) };
 
-    char control[CMSG_SPACE(sizeof(struct ucred))];
+    char control[CMSG_SPACE(sizeof(struct ucred))] __aligned(4);
     struct msghdr hdr = {
         NULL,
         0,
