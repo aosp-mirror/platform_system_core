@@ -253,6 +253,7 @@ int ifc_act_on_address(int action, const char *name, const char *address,
                        int prefixlen) {
     int ifindex, s, len, ret;
     struct sockaddr_storage ss;
+    int saved_errno;
     void *addr;
     size_t addrlen;
     struct {
@@ -317,15 +318,21 @@ int ifc_act_on_address(int action, const char *name, const char *address,
     memcpy(RTA_DATA(rta), addr, addrlen);
 
     s = socket(PF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
-    if (send(s, &req, req.n.nlmsg_len, 0) < 0) {
-        close(s);
+    if (s < 0) {
         return -errno;
     }
 
+    if (send(s, &req, req.n.nlmsg_len, 0) < 0) {
+        saved_errno = errno;
+        close(s);
+        return -saved_errno;
+    }
+
     len = recv(s, buf, sizeof(buf), 0);
+    saved_errno = errno;
     close(s);
     if (len < 0) {
-        return -errno;
+        return -saved_errno;
     }
 
     // Parse the acknowledgement to find the return code.
