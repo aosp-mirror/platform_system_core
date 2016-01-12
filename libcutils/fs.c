@@ -37,7 +37,8 @@
 #define ALL_PERMS (S_ISUID | S_ISGID | S_ISVTX | S_IRWXU | S_IRWXG | S_IRWXO)
 #define BUF_SIZE 64
 
-int fs_prepare_dir(const char* path, mode_t mode, uid_t uid, gid_t gid) {
+static int fs_prepare_dir_impl(const char* path, mode_t mode, uid_t uid, gid_t gid,
+        int allow_fixup) {
     // Check if path needs to be created
     struct stat sb;
     if (TEMP_FAILURE_RETRY(lstat(path, &sb)) == -1) {
@@ -56,8 +57,11 @@ int fs_prepare_dir(const char* path, mode_t mode, uid_t uid, gid_t gid) {
     }
     if (((sb.st_mode & ALL_PERMS) == mode) && (sb.st_uid == uid) && (sb.st_gid == gid)) {
         return 0;
-    } else {
+    } else if (allow_fixup) {
         goto fixup;
+    } else {
+        ALOGE("Path %s exists with unexpected permissions", path);
+        return -1;
     }
 
 create:
@@ -79,6 +83,14 @@ fixup:
     }
 
     return 0;
+}
+
+int fs_prepare_dir(const char* path, mode_t mode, uid_t uid, gid_t gid) {
+    return fs_prepare_dir_impl(path, mode, uid, gid, 1);
+}
+
+int fs_prepare_dir_strict(const char* path, mode_t mode, uid_t uid, gid_t gid) {
+    return fs_prepare_dir_impl(path, mode, uid, gid, 0);
 }
 
 int fs_read_atomic_int(const char* path, int* out_value) {
