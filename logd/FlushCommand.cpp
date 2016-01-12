@@ -36,7 +36,7 @@ FlushCommand::FlushCommand(LogReader &reader,
         mLogMask(logMask),
         mPid(pid),
         mStart(start),
-        mTimeout(timeout) {
+        mTimeout((start > 1) ? timeout : 0) {
 }
 
 // runSocketCommand is called once for every open client on the
