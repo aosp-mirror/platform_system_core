@@ -57,7 +57,7 @@ static int ps_line(int pid, int tid)
     int prio, nice, rtprio, sched, psr;
     struct passwd *pw;
 
-    sprintf(statline, "/proc/%d", pid);
+    sprintf(statline, "/proc/%d", tid ? tid : pid);
     stat(statline, &stats);
 
     if(tid) {
