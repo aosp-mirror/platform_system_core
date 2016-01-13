@@ -219,6 +219,9 @@ int usb_device_bulk_transfer(struct usb_device *device,
                             int length,
                             unsigned int timeout);
 
+/** Reset USB bus for the device */
+int usb_device_reset(struct usb_device *device);
+
 /* Creates a new usb_request. */
 struct usb_request *usb_request_new(struct usb_device *dev,
         const struct usb_endpoint_descriptor *ep_desc);
