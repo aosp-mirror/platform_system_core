@@ -308,9 +308,6 @@ on post-fs-data
     start vold
     installkey /data
 
-    # Emulated internal storage area
-    mkdir /data/media 0770 media_rw media_rw
-
     # Start bootcharting as soon as possible after the data partition is
     # mounted to collect more data.
     mkdir /data/bootchart 0755 shell shell
@@ -394,7 +391,6 @@ on post-fs-data
     # Create all remaining /data root dirs so that they are made through init
     # and get proper encryption policy installed
     mkdir /data/backup 0700 system system
-    mkdir /data/media 0770 media_rw media_rw
     mkdir /data/ss 0700 system system
 
     mkdir /data/system 0775 system system
@@ -405,6 +401,12 @@ on post-fs-data
     mkdir /data/user 0711 system system
     mkdir /data/user_de 0711 system system
     mkdir /data/user_de/0 0771 system system
+
+    mkdir /data/media 0770 media_rw media_rw
+    mkdir /data/media/0 0770 media_rw media_rw
+    mkdir /data/media/obb 0770 media_rw media_rw
+
+    symlink /data/data /data/user/0
 
     setusercryptopolicies /data/user
     createuserkey 0 0 0
