@@ -113,18 +113,6 @@ static int check_control_mac_perms(const char *name, char *sctx, struct ucred *c
     return check_mac_perms(ctl_name, sctx, cr);
 }
 
-/*
- * Checks permissions for setting system properties.
- * Returns 1 if uid allowed, 0 otherwise.
- */
-static int check_perms(const char *name, char *sctx, struct ucred *cr)
-{
-    if(!strncmp(name, "ro.", 3))
-        name +=3;
-
-    return check_mac_perms(name, sctx, cr);
-}
-
 std::string property_get(const char* name) {
     char value[PROP_VALUE_MAX] = {0};
     __system_property_get(name, value);
@@ -312,7 +300,7 @@ static void handle_property_set_fd()
                         msg.name + 4, msg.value, cr.uid, cr.gid, cr.pid);
             }
         } else {
-            if (check_perms(msg.name, source_ctx, &cr)) {
+            if (check_mac_perms(msg.name, source_ctx, &cr)) {
                 property_set((char*) msg.name, (char*) msg.value);
             } else {
                 ERROR("sys_prop: permission denied uid:%d  name:%s\n",
