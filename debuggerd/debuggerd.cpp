@@ -59,8 +59,6 @@
 #define SOCKET_NAME DEBUGGER_SOCKET_NAME
 #endif
 
-extern "C" int tgkill(int tgid, int tid, int sig);
-
 struct debugger_request_t {
   debugger_action_t action;
   pid_t pid, tid;
@@ -75,7 +73,7 @@ static void wait_for_user_action(const debugger_request_t& request) {
         "* Process %d has been suspended while crashing.\n"
         "* To attach gdbserver and start gdb, run this on the host:\n"
         "*\n"
-        "*     gdbclient %d\n"
+        "*     gdbclient.py -p %d\n"
         "*\n"
         "* Wait for gdb to start, then press the VOLUME DOWN key\n"
         "* to let the process continue crashing.\n"
@@ -83,16 +81,13 @@ static void wait_for_user_action(const debugger_request_t& request) {
         request.pid, request.tid);
 
   // Wait for VOLUME DOWN.
-  if (init_getevent() == 0) {
-    while (true) {
-      input_event e;
-      if (get_event(&e, -1) == 0) {
-        if (e.type == EV_KEY && e.code == KEY_VOLUMEDOWN && e.value == 0) {
-          break;
-        }
+  while (true) {
+    input_event e;
+    if (get_event(&e, -1) == 0) {
+      if (e.type == EV_KEY && e.code == KEY_VOLUMEDOWN && e.value == 0) {
+        break;
       }
     }
-    uninit_getevent();
   }
 
   ALOGI("debuggerd resuming process %d", request.pid);
@@ -454,6 +449,65 @@ static bool drop_privileges() {
   return true;
 }
 
+static bool fork_signal_sender(int* in_fd, int* out_fd, pid_t* sender_pid, pid_t target_pid) {
+  int input_pipe[2];
+  int output_pipe[2];
+  if (pipe(input_pipe) != 0) {
+    ALOGE("debuggerd: failed to create input pipe for signal sender: %s", strerror(errno));
+    return false;
+  }
+
+  if (pipe(output_pipe) != 0) {
+    close(input_pipe[0]);
+    close(input_pipe[1]);
+    ALOGE("debuggerd: failed to create output pipe for signal sender: %s", strerror(errno));
+    return false;
+  }
+
+  pid_t fork_pid = fork();
+  if (fork_pid == -1) {
+    ALOGE("debuggerd: failed to initialize signal sender: fork failed: %s", strerror(errno));
+    return false;
+  } else if (fork_pid == 0) {
+    close(input_pipe[1]);
+    close(output_pipe[0]);
+    auto wait = [=]() {
+      char buf[1];
+      if (TEMP_FAILURE_RETRY(read(input_pipe[0], buf, 1)) != 1) {
+        ALOGE("debuggerd: signal sender failed to read from pipe");
+        exit(1);
+      }
+    };
+    auto notify_done = [=]() {
+      if (TEMP_FAILURE_RETRY(write(output_pipe[1], "", 1)) != 1) {
+        ALOGE("debuggerd: signal sender failed to write to pipe");
+        exit(1);
+      }
+    };
+
+    wait();
+    if (kill(target_pid, SIGSTOP) != 0) {
+      ALOGE("debuggerd: failed to stop target '%d': %s", target_pid, strerror(errno));
+    }
+    notify_done();
+
+    wait();
+    if (kill(target_pid, SIGCONT) != 0) {
+      ALOGE("debuggerd: failed to resume target '%d': %s", target_pid, strerror(errno));
+    }
+    notify_done();
+
+    exit(0);
+  } else {
+    close(input_pipe[0]);
+    close(output_pipe[1]);
+    *in_fd = input_pipe[1];
+    *out_fd = output_pipe[0];
+    *sender_pid = fork_pid;
+    return true;
+  }
+}
+
 static void handle_request(int fd) {
   ALOGV("handle_request(%d)\n", fd);
 
@@ -534,6 +588,31 @@ static void handle_request(int fd) {
   // Don't attach to the sibling threads if we want to attach gdb.
   // Supposedly, it makes the process less reliable.
   bool attach_gdb = should_attach_gdb(&request);
+  int signal_in_fd = -1;
+  int signal_out_fd = -1;
+  pid_t signal_pid = 0;
+  if (attach_gdb) {
+    // Open all of the input devices we need to listen for VOLUMEDOWN before dropping privileges.
+    if (init_getevent() != 0) {
+      ALOGE("debuggerd: failed to initialize input device, not waiting for gdb");
+      attach_gdb = false;
+    }
+
+    // Fork a process that stays root, and listens on a pipe to pause and resume the target.
+    if (!fork_signal_sender(&signal_in_fd, &signal_out_fd, &signal_pid, request.pid)) {
+      attach_gdb = false;
+    }
+  }
+
+  auto notify_signal_sender = [=]() {
+    char buf[1];
+    if (TEMP_FAILURE_RETRY(write(signal_in_fd, "", 1)) != 1) {
+      ALOGE("debuggerd: failed to notify signal process: %s", strerror(errno));
+    } else if (TEMP_FAILURE_RETRY(read(signal_out_fd, buf, 1)) != 1) {
+      ALOGE("debuggerd: failed to read response from signal process: %s", strerror(errno));
+    }
+  };
+
   std::set<pid_t> siblings;
   if (!attach_gdb) {
     ptrace_siblings(request.pid, request.tid, siblings);
@@ -556,8 +635,8 @@ static void handle_request(int fd) {
     }
 
     if (attach_gdb) {
-      // Stop the process so we can debug.
-      tgkill(request.pid, request.tid, SIGSTOP);
+      // Tell the signal process to send SIGSTOP to the target.
+      notify_signal_sender();
     }
   }
 
@@ -569,16 +648,16 @@ static void handle_request(int fd) {
     ptrace(PTRACE_DETACH, sibling, 0, 0);
   }
 
-  if (succeeded && attach_gdb) {
-    // if debug.debuggerd.wait_for_gdb is set, its value indicates if we should wait
-    // for user action for the crashing process.
-    // in this case, we log a message and turn the debug LED on
-    // waiting for a gdb connection (for instance)
+  // Wait for gdb, if requested.
+  if (attach_gdb && succeeded) {
     wait_for_user_action(request);
-  }
 
-  // Resume the stopped process.
-  kill(request.pid, SIGCONT);
+    // Tell the signal process to send SIGCONT to the target.
+    notify_signal_sender();
+
+    uninit_getevent();
+    waitpid(signal_pid, nullptr, 0);
+  }
 
   exit(!succeeded);
 }
