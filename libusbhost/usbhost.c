@@ -617,6 +617,11 @@ int usb_device_bulk_transfer(struct usb_device *device,
     return ioctl(device->fd, USBDEVFS_BULK, &ctrl);
 }
 
+int usb_device_reset(struct usb_device *device)
+{
+    return ioctl(device->fd, USBDEVFS_RESET);
+}
+
 struct usb_request *usb_request_new(struct usb_device *dev,
         const struct usb_endpoint_descriptor *ep_desc)
 {
