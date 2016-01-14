@@ -47,7 +47,7 @@ extern int fs_prepare_dir(const char* path, mode_t mode, uid_t uid, gid_t gid);
 
 /*
  * Ensure that directory exists with given mode and owners.  If it exists
- * with a different mode or owners, they are not fixed and -1 is returned.
+ * with different owners, they are not fixed and -1 is returned.
  */
 extern int fs_prepare_dir_strict(const char* path, mode_t mode, uid_t uid, gid_t gid);
 

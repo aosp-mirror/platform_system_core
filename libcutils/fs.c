@@ -55,13 +55,22 @@ static int fs_prepare_dir_impl(const char* path, mode_t mode, uid_t uid, gid_t g
         ALOGE("Not a directory: %s", path);
         return -1;
     }
-    if (((sb.st_mode & ALL_PERMS) == mode) && (sb.st_uid == uid) && (sb.st_gid == gid)) {
+    int owner_match = ((sb.st_uid == uid) && (sb.st_gid == gid));
+    int mode_match = ((sb.st_mode & ALL_PERMS) == mode);
+    if (owner_match && mode_match) {
         return 0;
     } else if (allow_fixup) {
         goto fixup;
     } else {
-        ALOGE("Path %s exists with unexpected permissions", path);
-        return -1;
+        if (!owner_match) {
+            ALOGE("Expected path %s with owner %d:%d but found %d:%d",
+                    path, uid, gid, sb.st_uid, sb.st_gid);
+            return -1;
+        } else {
+            ALOGW("Expected path %s with mode %o but found %o",
+                    path, mode, (sb.st_mode & ALL_PERMS));
+            return 0;
+        }
     }
 
 create:
