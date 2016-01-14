@@ -35,9 +35,12 @@
 
 #include "kernel_collector.h"
 #include "kernel_warning_collector.h"
-#include "udev_collector.h"
 #include "unclean_shutdown_collector.h"
 #include "user_collector.h"
+
+#if !defined(__ANDROID__)
+#include "udev_collector.h"
+#endif
 
 static const char kCrashCounterHistogram[] = "Logging.CrashCounter";
 static const char kKernelCrashDetected[] = "/var/run/kernel-crash-detected";
@@ -176,6 +179,7 @@ static int HandleUserCrash(UserCollector *user_collector,
   return 0;
 }
 
+#if !defined(__ANDROID__)
 static int HandleUdevCrash(UdevCollector *udev_collector,
                            const std::string& udev_event) {
   // Handle a crash indicated by a udev event.
@@ -189,6 +193,7 @@ static int HandleUdevCrash(UdevCollector *udev_collector,
     return 1;
   return 0;
 }
+#endif
 
 static int HandleKernelWarning(KernelWarningCollector
                                *kernel_warning_collector) {
@@ -249,7 +254,11 @@ int main(int argc, char *argv[]) {
   DEFINE_bool(crash_test, false, "Crash test");
   DEFINE_string(user, "", "User crash info (pid:signal:exec_name)");
   DEFINE_bool(unclean_check, true, "Check for unclean shutdown");
+
+#if !defined(__ANDROID__)
   DEFINE_string(udev, "", "Udev event description (type:device:subsystem)");
+#endif
+
   DEFINE_bool(kernel_warning, false, "Report collected kernel warning");
   DEFINE_string(pid, "", "PID of crashing process");
   DEFINE_string(uid, "", "UID of crashing process");
@@ -279,8 +288,11 @@ int main(int argc, char *argv[]) {
   UncleanShutdownCollector unclean_shutdown_collector;
   unclean_shutdown_collector.Initialize(CountUncleanShutdown,
                                         IsFeedbackAllowed);
+
+#if !defined(__ANDROID__)
   UdevCollector udev_collector;
   udev_collector.Initialize(CountUdevCrash, IsFeedbackAllowed);
+#endif
 
   KernelWarningCollector kernel_warning_collector;
   kernel_warning_collector.Initialize(CountUdevCrash, IsFeedbackAllowed);
@@ -304,9 +316,11 @@ int main(int argc, char *argv[]) {
                                    FLAGS_generate_kernel_signature);
   }
 
+#if !defined(__ANDROID__)
   if (!FLAGS_udev.empty()) {
     return HandleUdevCrash(&udev_collector, FLAGS_udev);
   }
+#endif
 
   if (FLAGS_kernel_warning) {
     return HandleKernelWarning(&kernel_warning_collector);
