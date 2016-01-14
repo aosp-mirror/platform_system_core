@@ -224,16 +224,19 @@ bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
 
     // ptrace all the threads
     if (!thread_capture.CaptureThreads()) {
+      continue_parent_sem.Post();
       return 1;
     }
 
     // collect register contents and stacks
     if (!thread_capture.CapturedThreadInfo(thread_info)) {
+      continue_parent_sem.Post();
       return 1;
     }
 
     // snapshot /proc/pid/maps
     if (!ProcessMappings(parent_pid, mappings)) {
+      continue_parent_sem.Post();
       return 1;
     }
 
@@ -306,7 +309,7 @@ bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
 
     // Wait for the collection thread to signal that it is ready to fork the
     // heap walker process.
-    continue_parent_sem.Wait(100s);
+    continue_parent_sem.Wait(30s);
 
     // Re-enable malloc so the collection thread can fork.
   }
@@ -347,7 +350,7 @@ std::string Leak::ToString(bool log_contents) const {
   std::ostringstream oss;
 
   oss << "  " << std::dec << size;
-  oss << " bytes at ";
+  oss << " bytes unreachable at ";
   oss << std::hex << begin;
   oss << std::endl;
 
@@ -405,7 +408,7 @@ std::string UnreachableMemoryInfo::ToString(bool log_contents) const {
 std::string GetUnreachableMemoryString(bool log_contents, size_t limit) {
   UnreachableMemoryInfo info;
   if (!GetUnreachableMemory(info, limit)) {
-    return "Failed to get unreachable memory";
+    return "Failed to get unreachable memory\n";
   }
 
   return info.ToString(log_contents);
