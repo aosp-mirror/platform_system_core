@@ -36,11 +36,12 @@
 #include "log/log.h"
 #include "utils/Compat.h"
 #include "utils/FileMap.h"
+#include "ziparchive/zip_archive.h"
 #include "zlib.h"
 
 #include "entry_name_utils-inl.h"
 #include "zip_archive_common.h"
-#include "ziparchive/zip_archive.h"
+#include "zip_archive_private.h"
 
 using android::base::get_unaligned;
 
@@ -134,43 +135,6 @@ static const int32_t kErrorMessageLowerBound = -13;
  * every page that the Central Directory touches.  Easier to tuck a copy
  * of the string length into the hash table entry.
  */
-struct ZipArchive {
-  /* open Zip archive */
-  const int fd;
-  const bool close_file;
-
-  /* mapped central directory area */
-  off64_t directory_offset;
-  android::FileMap directory_map;
-
-  /* number of entries in the Zip archive */
-  uint16_t num_entries;
-
-  /*
-   * We know how many entries are in the Zip archive, so we can have a
-   * fixed-size hash table. We define a load factor of 0.75 and overallocat
-   * so the maximum number entries can never be higher than
-   * ((4 * UINT16_MAX) / 3 + 1) which can safely fit into a uint32_t.
-   */
-  uint32_t hash_table_size;
-  ZipString* hash_table;
-
-  ZipArchive(const int fd, bool assume_ownership) :
-      fd(fd),
-      close_file(assume_ownership),
-      directory_offset(0),
-      num_entries(0),
-      hash_table_size(0),
-      hash_table(NULL) {}
-
-  ~ZipArchive() {
-    if (close_file && fd >= 0) {
-      close(fd);
-    }
-
-    free(hash_table);
-  }
-};
 
 /*
  * Round up to the next highest power of 2.
