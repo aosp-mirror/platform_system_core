@@ -698,17 +698,17 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
         p = s->pkt_first;
     }
 
-        /* don't bother if we can't decode the length */
+    /* don't bother if we can't decode the length */
     if(p->len < 4) return 0;
 
     len = unhex(p->data, 4);
-    if((len < 1) ||  (len > 1024)) {
+    if ((len < 1) || (len > MAX_PAYLOAD_V1)) {
         D("SS(%d): bad size (%d)", s->id, len);
         goto fail;
     }
 
     D("SS(%d): len is %d", s->id, len );
-        /* can't do anything until we have the full header */
+    /* can't do anything until we have the full header */
     if((len + 4) > p->len) {
         D("SS(%d): waiting for %d more bytes", s->id, len+4 - p->len);
         return 0;
