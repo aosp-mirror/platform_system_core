@@ -34,6 +34,7 @@
 #include <memory>
 
 #include <android-base/stringprintf.h>
+#include <cutils/sockets.h>
 
 // Windows UDP socket functionality.
 class WindowsUdpSocket : public UdpSocket {
@@ -108,118 +109,9 @@ int WindowsUdpSocket::Close() {
     return result;
 }
 
-static int GetProtocol(int sock_type) {
-    switch (sock_type) {
-        case SOCK_DGRAM:
-            return IPPROTO_UDP;
-        case SOCK_STREAM:
-            return IPPROTO_TCP;
-        default:
-            // 0 lets the system decide which protocol to use.
-            return 0;
-    }
-}
-
-// Windows implementation of this libcutils function. This function does not make any calls to
-// WSAStartup() or WSACleanup() so that must be handled by the caller.
-// TODO(dpursell): share this code with adb.
-static SOCKET socket_network_client(const std::string& host, int port, int type) {
-    // First resolve the host and port parameters into a usable network address.
-    addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_socktype = type;
-    hints.ai_protocol = GetProtocol(type);
-
-    addrinfo* address = nullptr;
-    getaddrinfo(host.c_str(), android::base::StringPrintf("%d", port).c_str(), &hints, &address);
-    if (address == nullptr) {
-        return INVALID_SOCKET;
-    }
-
-    // Now create and connect the socket.
-    SOCKET sock = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
-    if (sock == INVALID_SOCKET) {
-        freeaddrinfo(address);
-        return INVALID_SOCKET;
-    }
-
-    if (connect(sock, address->ai_addr, address->ai_addrlen) == SOCKET_ERROR) {
-        closesocket(sock);
-        freeaddrinfo(address);
-        return INVALID_SOCKET;
-    }
-
-    freeaddrinfo(address);
-    return sock;
-}
-
-// Windows implementation of this libcutils function. This implementation creates a dual-stack
-// server socket that can accept incoming IPv4 or IPv6 packets. This function does not make any
-// calls to WSAStartup() or WSACleanup() so that must be handled by the caller.
-// TODO(dpursell): share this code with adb.
-static SOCKET socket_inaddr_any_server(int port, int type) {
-    SOCKET sock = socket(AF_INET6, type, GetProtocol(type));
-    if (sock == INVALID_SOCKET) {
-        return INVALID_SOCKET;
-    }
-
-    // Enforce exclusive addresses (1), and enable dual-stack so both IPv4 and IPv6 work (2).
-    // (1) https://msdn.microsoft.com/en-us/library/windows/desktop/ms740621(v=vs.85).aspx.
-    // (2) https://msdn.microsoft.com/en-us/library/windows/desktop/bb513665(v=vs.85).aspx.
-    int exclusive = 1;
-    DWORD v6_only = 0;
-    if (setsockopt(sock, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&exclusive),
-                   sizeof(exclusive)) == SOCKET_ERROR ||
-        setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, reinterpret_cast<const char*>(&v6_only),
-                   sizeof(v6_only)) == SOCKET_ERROR) {
-        closesocket(sock);
-        return INVALID_SOCKET;
-    }
-
-    // Bind the socket to our local port.
-    sockaddr_in6 addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin6_family = AF_INET6;
-    addr.sin6_port = htons(port);
-    addr.sin6_addr = in6addr_any;
-    if (bind(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == SOCKET_ERROR) {
-        closesocket(sock);
-        return INVALID_SOCKET;
-    }
-
-    return sock;
-}
-
-// Documentation at https://msdn.microsoft.com/en-us/library/windows/desktop/ms741549(v=vs.85).aspx
-// claims WSACleanup() should be called before program exit, but general consensus seems to be that
-// it hasn't actually been necessary for a long time, possibly since Windows 3.1.
-//
-// Both adb (1) and Chrome (2) purposefully avoid WSACleanup(), and since no adverse affects have
-// been found we may as well do the same here to keep this code simpler.
-// (1) https://android.googlesource.com/platform/system/core.git/+/master/adb/sysdeps_win32.cpp#816
-// (2) https://code.google.com/p/chromium/codesearch#chromium/src/net/base/winsock_init.cc&l=35
-static bool InitWinsock() {
-    static bool init_success = false;
-
-    if (!init_success) {
-        WSADATA wsaData;
-        init_success = (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0);
-    }
-
-    return init_success;
-}
-
 std::unique_ptr<UdpSocket> UdpSocket::NewUdpClient(const std::string& host, int port,
                                                    std::string* error) {
-    if (!InitWinsock()) {
-        if (error) {
-            *error = android::base::StringPrintf("Failed to initialize Winsock (error %d)",
-                                                 WSAGetLastError());
-        }
-        return nullptr;
-    }
-
-    SOCKET sock = socket_network_client(host, port, SOCK_DGRAM);
+    SOCKET sock = socket_network_client(host.c_str(), port, SOCK_DGRAM);
     if (sock == INVALID_SOCKET) {
         if (error) {
             *error = android::base::StringPrintf("Failed to connect to %s:%d (error %d)",
@@ -233,10 +125,6 @@ std::unique_ptr<UdpSocket> UdpSocket::NewUdpClient(const std::string& host, int 
 
 // This functionality is currently only used by tests so we don't need any error messages.
 std::unique_ptr<UdpSocket> UdpSocket::NewUdpServer(int port) {
-    if (!InitWinsock()) {
-        return nullptr;
-    }
-
     SOCKET sock = socket_inaddr_any_server(port, SOCK_DGRAM);
     if (sock == INVALID_SOCKET) {
         return nullptr;

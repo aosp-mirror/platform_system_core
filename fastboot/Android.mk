@@ -34,10 +34,10 @@ LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
 LOCAL_CFLAGS += -DFASTBOOT_REVISION='"$(fastboot_version)"'
 
 LOCAL_SRC_FILES_linux := socket_unix.cpp usb_linux.cpp util_linux.cpp
-LOCAL_STATIC_LIBRARIES_linux := libcutils libselinux
+LOCAL_STATIC_LIBRARIES_linux := libselinux
 
 LOCAL_SRC_FILES_darwin := socket_unix.cpp usb_osx.cpp util_osx.cpp
-LOCAL_STATIC_LIBRARIES_darwin := libcutils libselinux
+LOCAL_STATIC_LIBRARIES_darwin := libselinux
 LOCAL_LDLIBS_darwin := -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
 LOCAL_CFLAGS_darwin := -Wno-unused-parameter
 
@@ -56,6 +56,7 @@ LOCAL_STATIC_LIBRARIES := \
     libz \
     libdiagnose_usb \
     libbase \
+    libcutils \
 
 # libf2fs_dlutils_host will dlopen("libf2fs_fmt_host_dyn")
 LOCAL_CFLAGS_linux := -DUSE_F2FS
@@ -98,17 +99,15 @@ LOCAL_MODULE := fastboot_test
 LOCAL_MODULE_HOST_OS := darwin linux windows
 
 LOCAL_SRC_FILES := socket_test.cpp
-LOCAL_STATIC_LIBRARIES := libbase
+LOCAL_STATIC_LIBRARIES := libbase libcutils
 
 LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
 
 LOCAL_SRC_FILES_linux := socket_unix.cpp
-LOCAL_STATIC_LIBRARIES_linux := libcutils
 
 LOCAL_SRC_FILES_darwin := socket_unix.cpp
 LOCAL_LDLIBS_darwin := -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
 LOCAL_CFLAGS_darwin := -Wno-unused-parameter
-LOCAL_STATIC_LIBRARIES_darwin := libcutils
 
 LOCAL_SRC_FILES_windows := socket_windows.cpp
 LOCAL_LDLIBS_windows := -lws2_32

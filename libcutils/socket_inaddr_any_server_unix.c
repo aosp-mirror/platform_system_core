@@ -20,12 +20,10 @@
 #include <string.h>
 #include <unistd.h>
 
-#if !defined(_WIN32)
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/types.h>
 #include <netinet/in.h>
-#endif
 
 #include <cutils/sockets.h>
 

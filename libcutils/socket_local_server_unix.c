@@ -39,7 +39,7 @@ int socket_local_server(const char *name, int namespaceId, int type)
 #include <sys/types.h>
 #include <netinet/in.h>
 
-#include "socket_local.h"
+#include "socket_local_unix.h"
 
 #define LISTEN_BACKLOG 4
 
