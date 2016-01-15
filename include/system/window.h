@@ -313,6 +313,7 @@ enum {
     NATIVE_WINDOW_SET_BUFFERS_DATASPACE     = 19,
     NATIVE_WINDOW_SET_SURFACE_DAMAGE        = 20,   /* private */
     NATIVE_WINDOW_SET_SINGLE_BUFFER_MODE    = 21,
+    NATIVE_WINDOW_SET_AUTO_REFRESH          = 22,
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -962,6 +963,17 @@ static inline int native_window_set_single_buffer_mode(
 {
     return window->perform(window, NATIVE_WINDOW_SET_SINGLE_BUFFER_MODE,
             singleBufferMode);
+}
+
+/*
+ * native_window_set_auto_refresh(..., autoRefresh)
+ * Enable/disable auto refresh when in single buffer mode
+ */
+static inline int native_window_set_auto_refresh(
+        struct ANativeWindow* window,
+        bool autoRefresh)
+{
+    return window->perform(window, NATIVE_WINDOW_SET_AUTO_REFRESH, autoRefresh);
 }
 
 __END_DECLS
