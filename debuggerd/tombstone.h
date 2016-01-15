@@ -20,6 +20,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <sys/types.h>
+#include <set>
 #include <string>
 
 class BacktraceMap;
@@ -30,10 +31,9 @@ class BacktraceMap;
  */
 int open_tombstone(std::string* path);
 
-/* Creates a tombstone file and writes the crash dump to it.
- * Returns the path of the tombstone, which must be freed using free(). */
-void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid, int signal,
-                       int original_si_code, uintptr_t abort_msg_address, bool dump_sibling_threads,
-                       bool* detach_failed, int* total_sleep_time_usec);
+/* Creates a tombstone file and writes the crash dump to it. */
+void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid,
+                       const std::set<pid_t>& siblings, int signal, int original_si_code,
+                       uintptr_t abort_msg_address);
 
 #endif // _DEBUGGERD_TOMBSTONE_H
