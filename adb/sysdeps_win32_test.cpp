@@ -66,7 +66,7 @@ TEST(sysdeps_win32, adb_getenv) {
     const char* path_val = adb_getenv("PATH");
     EXPECT_NE(nullptr, path_val);
     if (path_val != nullptr) {
-        EXPECT_GT(strlen(path_val), 0);
+        EXPECT_GT(strlen(path_val), 0U);
     }
 }
 

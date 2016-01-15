@@ -44,7 +44,7 @@ TEST(UTFStringConversionsTest, ConvertInvalidUTF8) {
   // specific replacement character that UTF8ToWide() may replace the invalid
   // UTF-8 characters with because we want to allow that to change if the
   // implementation changes.
-  EXPECT_EQ(0, wide.find(L"before"));
+  EXPECT_EQ(0U, wide.find(L"before"));
   const wchar_t after_wide[] = L"after";
   EXPECT_EQ(wide.length() - (arraysize(after_wide) - 1), wide.find(after_wide));
 }
