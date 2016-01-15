@@ -14,184 +14,113 @@
  * limitations under the License.
  */
 
-// Tests UDP functionality using loopback connections. Requires that kDefaultPort is available
+// Tests UDP functionality using loopback connections. Requires that kTestPort is available
 // for loopback communication on the host. These tests also assume that no UDP packets are lost,
 // which should be the case for loopback communication, but is not guaranteed.
 
 #include "socket.h"
 
-#include <errno.h>
-#include <time.h>
-
-#include <memory>
-#include <string>
-#include <vector>
-
 #include <gtest/gtest.h>
 
 enum {
     // This port must be available for loopback communication.
-    kDefaultPort = 54321,
+    kTestPort = 54321,
 
     // Don't wait forever in a unit test.
-    kDefaultTimeoutMs = 3000,
+    kTestTimeoutMs = 3000,
 };
 
-static const char kReceiveStringError[] = "Error receiving string";
-
-// Test fixture to provide some helper functions. Makes each test a little simpler since we can
-// just check a bool for socket creation and don't have to pass hostname or port information.
-class SocketTest : public ::testing::Test {
-  protected:
-    bool StartServer(int port = kDefaultPort) {
-        server_ = UdpSocket::NewUdpServer(port);
-        return server_ != nullptr;
+// Creates connected sockets |server| and |client|. Returns true on success.
+bool MakeConnectedSockets(Socket::Protocol protocol, std::unique_ptr<Socket>* server,
+                          std::unique_ptr<Socket>* client, const std::string hostname = "localhost",
+                          int port = kTestPort) {
+    *server = Socket::NewServer(protocol, port);
+    if (*server == nullptr) {
+        ADD_FAILURE() << "Failed to create server.";
+        return false;
     }
 
-    bool StartClient(const std::string hostname = "localhost", int port = kDefaultPort) {
-        client_ = UdpSocket::NewUdpClient(hostname, port, nullptr);
-        return client_ != nullptr;
+    *client = Socket::NewClient(protocol, hostname, port, nullptr);
+    if (*client == nullptr) {
+        ADD_FAILURE() << "Failed to create client.";
+        return false;
     }
 
-    bool StartClient2(const std::string hostname = "localhost", int port = kDefaultPort) {
-        client2_ = UdpSocket::NewUdpClient(hostname, port, nullptr);
-        return client2_ != nullptr;
+    // TCP passes the client off to a new socket.
+    if (protocol == Socket::Protocol::kTcp) {
+        *server = (*server)->Accept();
+        if (*server == nullptr) {
+            ADD_FAILURE() << "Failed to accept client connection.";
+            return false;
+        }
     }
 
-    std::unique_ptr<UdpSocket> server_, client_, client2_;
-};
+    return true;
+}
 
-// Sends a string over a UdpSocket. Returns true if the full string (without terminating char)
+// Sends a string over a Socket. Returns true if the full string (without terminating char)
 // was sent.
-static bool SendString(UdpSocket* udp, const std::string& message) {
-    return udp->Send(message.c_str(), message.length()) == static_cast<ssize_t>(message.length());
+static bool SendString(Socket* sock, const std::string& message) {
+    return sock->Send(message.c_str(), message.length()) == static_cast<ssize_t>(message.length());
 }
 
-// Receives a string from a UdpSocket. Returns the string, or kReceiveStringError on failure.
-static std::string ReceiveString(UdpSocket* udp, size_t receive_size = 128) {
-    std::vector<char> buffer(receive_size);
-
-    ssize_t result = udp->Receive(buffer.data(), buffer.size(), kDefaultTimeoutMs);
-    if (result >= 0) {
-        return std::string(buffer.data(), result);
-    }
-    return kReceiveStringError;
-}
-
-// Calls Receive() on the UdpSocket with the given timeout. Returns true if the call timed out.
-static bool ReceiveTimeout(UdpSocket* udp, int timeout_ms) {
-    char buffer[1];
-
-    errno = 0;
-    return udp->Receive(buffer, 1, timeout_ms) == -1 && (errno == EAGAIN || errno == EWOULDBLOCK);
+// Receives a string from a Socket. Returns true if the full string (without terminating char)
+// was received.
+static bool ReceiveString(Socket* sock, const std::string& message) {
+    std::string received(message.length(), '\0');
+    ssize_t bytes = sock->ReceiveAll(&received[0], received.length(), kTestTimeoutMs);
+    return static_cast<size_t>(bytes) == received.length() && received == message;
 }
 
 // Tests sending packets client -> server, then server -> client.
-TEST_F(SocketTest, SendAndReceive) {
-    ASSERT_TRUE(StartServer());
-    ASSERT_TRUE(StartClient());
+TEST(SocketTest, TestSendAndReceive) {
+    std::unique_ptr<Socket> server, client;
 
-    EXPECT_TRUE(SendString(client_.get(), "foo"));
-    EXPECT_EQ("foo", ReceiveString(server_.get()));
+    for (Socket::Protocol protocol : {Socket::Protocol::kUdp, Socket::Protocol::kTcp}) {
+        ASSERT_TRUE(MakeConnectedSockets(protocol, &server, &client));
 
-    EXPECT_TRUE(SendString(server_.get(), "bar baz"));
-    EXPECT_EQ("bar baz", ReceiveString(client_.get()));
+        EXPECT_TRUE(SendString(client.get(), "foo"));
+        EXPECT_TRUE(ReceiveString(server.get(), "foo"));
+
+        EXPECT_TRUE(SendString(server.get(), "bar baz"));
+        EXPECT_TRUE(ReceiveString(client.get(), "bar baz"));
+    }
 }
 
 // Tests sending and receiving large packets.
-TEST_F(SocketTest, LargePackets) {
-    std::string message(512, '\0');
+TEST(SocketTest, TestLargePackets) {
+    std::string message(1024, '\0');
+    std::unique_ptr<Socket> server, client;
 
-    ASSERT_TRUE(StartServer());
-    ASSERT_TRUE(StartClient());
+    for (Socket::Protocol protocol : {Socket::Protocol::kUdp, Socket::Protocol::kTcp}) {
+        ASSERT_TRUE(MakeConnectedSockets(protocol, &server, &client));
 
-    // Run through the test a few times.
-    for (int i = 0; i < 10; ++i) {
-        // Use a different message each iteration to prevent false positives.
-        for (size_t j = 0; j < message.length(); ++j) {
-            message[j] = static_cast<char>(i + j);
+        // Run through the test a few times.
+        for (int i = 0; i < 10; ++i) {
+            // Use a different message each iteration to prevent false positives.
+            for (size_t j = 0; j < message.length(); ++j) {
+                message[j] = static_cast<char>(i + j);
+            }
+
+            EXPECT_TRUE(SendString(client.get(), message));
+            EXPECT_TRUE(ReceiveString(server.get(), message));
         }
-
-        EXPECT_TRUE(SendString(client_.get(), message));
-        EXPECT_EQ(message, ReceiveString(server_.get(), message.length()));
     }
 }
 
-// Tests IPv4 client/server.
-TEST_F(SocketTest, IPv4) {
-    ASSERT_TRUE(StartServer());
-    ASSERT_TRUE(StartClient("127.0.0.1"));
+// Tests UDP receive overflow when the UDP packet is larger than the receive buffer.
+TEST(SocketTest, TestUdpReceiveOverflow) {
+    std::unique_ptr<Socket> server, client;
+    ASSERT_TRUE(MakeConnectedSockets(Socket::Protocol::kUdp, &server, &client));
 
-    EXPECT_TRUE(SendString(client_.get(), "foo"));
-    EXPECT_EQ("foo", ReceiveString(server_.get()));
+    EXPECT_TRUE(SendString(client.get(), "1234567890"));
 
-    EXPECT_TRUE(SendString(server_.get(), "bar"));
-    EXPECT_EQ("bar", ReceiveString(client_.get()));
-}
-
-// Tests IPv6 client/server.
-TEST_F(SocketTest, IPv6) {
-    ASSERT_TRUE(StartServer());
-    ASSERT_TRUE(StartClient("::1"));
-
-    EXPECT_TRUE(SendString(client_.get(), "foo"));
-    EXPECT_EQ("foo", ReceiveString(server_.get()));
-
-    EXPECT_TRUE(SendString(server_.get(), "bar"));
-    EXPECT_EQ("bar", ReceiveString(client_.get()));
-}
-
-// Tests receive timeout. The timing verification logic must be very coarse to make sure different
-// systems running different loads can all pass these tests.
-TEST_F(SocketTest, ReceiveTimeout) {
-    time_t start_time;
-
-    ASSERT_TRUE(StartServer());
-
-    // Make sure a 20ms timeout completes in 1 second or less.
-    start_time = time(nullptr);
-    EXPECT_TRUE(ReceiveTimeout(server_.get(), 20));
-    EXPECT_LE(difftime(time(nullptr), start_time), 1.0);
-
-    // Make sure a 1250ms timeout takes 1 second or more.
-    start_time = time(nullptr);
-    EXPECT_TRUE(ReceiveTimeout(server_.get(), 1250));
-    EXPECT_LE(1.0, difftime(time(nullptr), start_time));
-}
-
-// Tests receive overflow (the UDP packet is larger than the receive buffer).
-TEST_F(SocketTest, ReceiveOverflow) {
-    ASSERT_TRUE(StartServer());
-    ASSERT_TRUE(StartClient());
-
-    EXPECT_TRUE(SendString(client_.get(), "1234567890"));
-
-    // This behaves differently on different systems; some give us a truncated UDP packet, others
-    // will error out and not return anything at all.
-    std::string rx_string = ReceiveString(server_.get(), 5);
-
-    // If we didn't get an error then the packet should have been truncated.
-    if (rx_string != kReceiveStringError) {
-        EXPECT_EQ("12345", rx_string);
+    // This behaves differently on different systems, either truncating the packet or returning -1.
+    char buffer[5];
+    ssize_t bytes = server->Receive(buffer, 5, kTestTimeoutMs);
+    if (bytes == 5) {
+        EXPECT_EQ(0, memcmp(buffer, "12345", 5));
+    } else {
+        EXPECT_EQ(-1, bytes);
     }
-}
-
-// Tests multiple clients sending to the same server.
-TEST_F(SocketTest, MultipleClients) {
-    ASSERT_TRUE(StartServer());
-    ASSERT_TRUE(StartClient());
-    ASSERT_TRUE(StartClient2());
-
-    EXPECT_TRUE(SendString(client_.get(), "client"));
-    EXPECT_TRUE(SendString(client2_.get(), "client2"));
-
-    // Receive the packets and send a response for each (note that packets may be received
-    // out-of-order).
-    for (int i = 0; i < 2; ++i) {
-        std::string received = ReceiveString(server_.get());
-        EXPECT_TRUE(SendString(server_.get(), received + " response"));
-    }
-
-    EXPECT_EQ("client response", ReceiveString(client_.get()));
-    EXPECT_EQ("client2 response", ReceiveString(client2_.get()));
 }

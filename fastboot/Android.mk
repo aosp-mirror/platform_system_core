@@ -24,7 +24,15 @@ LOCAL_C_INCLUDES := \
   $(LOCAL_PATH)/../../extras/ext4_utils \
   $(LOCAL_PATH)/../../extras/f2fs_utils \
 
-LOCAL_SRC_FILES := protocol.cpp engine.cpp bootimg_utils.cpp fastboot.cpp util.cpp fs.cpp
+LOCAL_SRC_FILES := \
+    bootimg_utils.cpp \
+    engine.cpp \
+    fastboot.cpp \
+    fs.cpp\
+    protocol.cpp \
+    socket.cpp \
+    util.cpp \
+
 LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
 LOCAL_MODULE_HOST_OS := darwin linux windows
@@ -33,15 +41,15 @@ LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
 
 LOCAL_CFLAGS += -DFASTBOOT_REVISION='"$(fastboot_version)"'
 
-LOCAL_SRC_FILES_linux := socket_unix.cpp usb_linux.cpp util_linux.cpp
+LOCAL_SRC_FILES_linux := usb_linux.cpp util_linux.cpp
 LOCAL_STATIC_LIBRARIES_linux := libselinux
 
-LOCAL_SRC_FILES_darwin := socket_unix.cpp usb_osx.cpp util_osx.cpp
+LOCAL_SRC_FILES_darwin := usb_osx.cpp util_osx.cpp
 LOCAL_STATIC_LIBRARIES_darwin := libselinux
 LOCAL_LDLIBS_darwin := -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
 LOCAL_CFLAGS_darwin := -Wno-unused-parameter
 
-LOCAL_SRC_FILES_windows := socket_windows.cpp usb_windows.cpp util_windows.cpp
+LOCAL_SRC_FILES_windows := usb_windows.cpp util_windows.cpp
 LOCAL_STATIC_LIBRARIES_windows := AdbWinApi
 LOCAL_REQUIRED_MODULES_windows := AdbWinApi
 LOCAL_LDLIBS_windows := -lws2_32
@@ -98,18 +106,14 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := fastboot_test
 LOCAL_MODULE_HOST_OS := darwin linux windows
 
-LOCAL_SRC_FILES := socket_test.cpp
+LOCAL_SRC_FILES := socket.cpp socket_test.cpp
 LOCAL_STATIC_LIBRARIES := libbase libcutils
 
 LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
 
-LOCAL_SRC_FILES_linux := socket_unix.cpp
-
-LOCAL_SRC_FILES_darwin := socket_unix.cpp
 LOCAL_LDLIBS_darwin := -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
 LOCAL_CFLAGS_darwin := -Wno-unused-parameter
 
-LOCAL_SRC_FILES_windows := socket_windows.cpp
 LOCAL_LDLIBS_windows := -lws2_32
 
 include $(BUILD_HOST_NATIVE_TEST)
