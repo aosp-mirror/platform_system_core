@@ -88,7 +88,10 @@ static const FHClassRec _fh_socket_class = {
     _fh_socket_hook
 };
 
-#define assert(cond)  do { if (!(cond)) fatal( "assertion failed '%s' on %s:%ld\n", #cond, __FILE__, __LINE__ ); } while (0)
+#define assert(cond)                                                                       \
+    do {                                                                                   \
+        if (!(cond)) fatal("assertion failed '%s' on %s:%d\n", #cond, __FILE__, __LINE__); \
+    } while (0)
 
 std::string SystemErrorCodeToString(const DWORD error_code) {
   const int kErrorMessageBufferSize = 256;
@@ -1589,7 +1592,7 @@ int  adb_socketpair(int sv[2]) {
 /**************************************************************************/
 /**************************************************************************/
 
-#define FATAL(x...) fatal(__FUNCTION__, x)
+#define FATAL(fmt, ...) fatal("%s: " fmt, __FUNCTION__, ##__VA_ARGS__)
 
 #if DEBUG
 static void dump_fde(fdevent *fde, const char *info)
