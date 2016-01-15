@@ -328,6 +328,33 @@ static std::string get_addr_string(uintptr_t addr) {
   return addr_str;
 }
 
+static void dump_abort_message(Backtrace* backtrace, log_t* log, uintptr_t address) {
+  if (address == 0) {
+    return;
+  }
+
+  address += sizeof(size_t);  // Skip the buffer length.
+
+  char msg[512];
+  memset(msg, 0, sizeof(msg));
+  char* p = &msg[0];
+  while (p < &msg[sizeof(msg)]) {
+    word_t data;
+    size_t len = sizeof(word_t);
+    if (!backtrace->ReadWord(address, &data)) {
+      break;
+    }
+    address += sizeof(word_t);
+
+    while (len > 0 && (*p++ = (data >> (sizeof(word_t) - len) * 8) & 0xff) != 0) {
+      len--;
+    }
+  }
+  msg[sizeof(msg) - 1] = '\0';
+
+  _LOG(log, logtype::HEADER, "Abort message: '%s'\n", msg);
+}
+
 static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, pid_t tid) {
   bool print_fault_address_marker = false;
   uintptr_t addr = 0;
@@ -416,67 +443,37 @@ static void dump_backtrace_and_stack(Backtrace* backtrace, log_t* log) {
   }
 }
 
-// Return true if some thread is not detached cleanly
-static bool dump_sibling_thread_report(
-    log_t* log, pid_t pid, pid_t tid, int* total_sleep_time_usec, BacktraceMap* map) {
-  char task_path[64];
-
-  snprintf(task_path, sizeof(task_path), "/proc/%d/task", pid);
-
-  DIR* d = opendir(task_path);
-  // Bail early if the task directory cannot be opened
-  if (d == NULL) {
-    ALOGE("Cannot open /proc/%d/task\n", pid);
-    return false;
-  }
-
-  bool detach_failed = false;
-  struct dirent* de;
-  while ((de = readdir(d)) != NULL) {
-    // Ignore "." and ".."
-    if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) {
-      continue;
-    }
-
-    // The main thread at fault has been handled individually
-    char* end;
-    pid_t new_tid = strtoul(de->d_name, &end, 10);
-    if (*end || new_tid == tid) {
-      continue;
-    }
-
-    // Skip this thread if cannot ptrace it
-    if (ptrace(PTRACE_ATTACH, new_tid, 0, 0) < 0) {
-      ALOGE("ptrace attach to %d failed: %s\n", new_tid, strerror(errno));
-      continue;
-    }
-
-    if (wait_for_sigstop(new_tid, total_sleep_time_usec, &detach_failed) == -1) {
-      continue;
-    }
-
-    log->current_tid = new_tid;
+static void dump_thread(log_t* log, pid_t pid, pid_t tid, BacktraceMap* map, int signal,
+                        int si_code, uintptr_t abort_msg_address, bool primary_thread) {
+  log->current_tid = tid;
+  if (!primary_thread) {
     _LOG(log, logtype::THREAD, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
-    dump_thread_info(log, pid, new_tid);
+  }
+  dump_thread_info(log, pid, tid);
 
-    dump_registers(log, new_tid);
-    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, new_tid, map));
-    if (backtrace->Unwind(0)) {
-      dump_backtrace_and_stack(backtrace.get(), log);
-    } else {
-      ALOGE("Unwind of sibling failed: pid = %d, tid = %d", pid, new_tid);
-    }
+  if (signal) {
+    dump_signal_info(log, tid, signal, si_code);
+  }
 
-    log->current_tid = log->crashed_tid;
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map));
+  if (primary_thread) {
+    dump_abort_message(backtrace.get(), log, abort_msg_address);
+  }
+  dump_registers(log, tid);
+  if (backtrace->Unwind(0)) {
+    dump_backtrace_and_stack(backtrace.get(), log);
+  } else {
+    ALOGE("Unwind failed: pid = %d, tid = %d", pid, tid);
+  }
 
-    if (ptrace(PTRACE_DETACH, new_tid, 0, 0) != 0) {
-      ALOGE("ptrace detach from %d failed: %s\n", new_tid, strerror(errno));
-      detach_failed = true;
+  if (primary_thread) {
+    dump_memory_and_code(log, backtrace.get());
+    if (map) {
+      dump_all_maps(backtrace.get(), map, log, tid);
     }
   }
 
-  closedir(d);
-  return detach_failed;
+  log->current_tid = log->crashed_tid;
 }
 
 // Reads the contents of the specified log device, filters out the entries
@@ -605,36 +602,10 @@ static void dump_logs(log_t* log, pid_t pid, unsigned int tail) {
   dump_log_file(log, pid, "main", tail);
 }
 
-static void dump_abort_message(Backtrace* backtrace, log_t* log, uintptr_t address) {
-  if (address == 0) {
-    return;
-  }
-
-  address += sizeof(size_t); // Skip the buffer length.
-
-  char msg[512];
-  memset(msg, 0, sizeof(msg));
-  char* p = &msg[0];
-  while (p < &msg[sizeof(msg)]) {
-    word_t data;
-    size_t len = sizeof(word_t);
-    if (!backtrace->ReadWord(address, &data)) {
-      break;
-    }
-    address += sizeof(word_t);
-
-    while (len > 0 && (*p++ = (data >> (sizeof(word_t) - len) * 8) & 0xff) != 0)
-       len--;
-  }
-  msg[sizeof(msg) - 1] = '\0';
-
-  _LOG(log, logtype::HEADER, "Abort message: '%s'\n", msg);
-}
-
 // Dumps all information about the specified pid to the tombstone.
-static bool dump_crash(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid, int signal, int si_code,
-                       uintptr_t abort_msg_address, bool dump_sibling_threads,
-                       int* total_sleep_time_usec) {
+static void dump_crash(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid,
+                       const std::set<pid_t>& siblings, int signal, int si_code,
+                       uintptr_t abort_msg_address) {
   // don't copy log messages to tombstone unless this is a dev device
   char value[PROPERTY_VALUE_MAX];
   property_get("ro.debuggable", value, "0");
@@ -653,32 +624,15 @@ static bool dump_crash(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid, int 
   _LOG(log, logtype::HEADER,
        "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
   dump_header_info(log);
-  dump_thread_info(log, pid, tid);
-
-  if (signal) {
-    dump_signal_info(log, tid, signal, si_code);
-  }
-
-  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map));
-  dump_abort_message(backtrace.get(), log, abort_msg_address);
-  dump_registers(log, tid);
-  if (backtrace->Unwind(0)) {
-    dump_backtrace_and_stack(backtrace.get(), log);
-  } else {
-    ALOGE("Unwind failed: pid = %d, tid = %d", pid, tid);
-  }
-  dump_memory_and_code(log, backtrace.get());
-  if (map) {
-    dump_all_maps(backtrace.get(), map, log, tid);
-  }
-
+  dump_thread(log, pid, tid, map, signal, si_code, abort_msg_address, true);
   if (want_logs) {
     dump_logs(log, pid, 5);
   }
 
-  bool detach_failed = false;
-  if (dump_sibling_threads) {
-    detach_failed = dump_sibling_thread_report(log, pid, tid, total_sleep_time_usec, map);
+  if (!siblings.empty()) {
+    for (pid_t sibling : siblings) {
+      dump_thread(log, pid, sibling, map, 0, 0, 0, false);
+    }
   }
 
   if (want_logs) {
@@ -694,7 +648,7 @@ static bool dump_crash(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid, int 
     TEMP_FAILURE_RETRY( read(log->amfd, &eodMarker, 1) );
   }
 
-  return detach_failed;
+  return;
 }
 
 // open_tombstone - find an available tombstone slot, if any, of the
@@ -780,16 +734,15 @@ static int activity_manager_connect() {
   return amfd;
 }
 
-void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid, int signal,
-                       int original_si_code, uintptr_t abort_msg_address, bool dump_sibling_threads,
-                       bool* detach_failed, int* total_sleep_time_usec) {
+void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid,
+                       const std::set<pid_t>& siblings, int signal, int original_si_code,
+                       uintptr_t abort_msg_address) {
   log_t log;
   log.current_tid = tid;
   log.crashed_tid = tid;
 
   if (tombstone_fd < 0) {
     ALOGE("debuggerd: skipping tombstone write, nothing to do.\n");
-    *detach_failed = false;
     return;
   }
 
@@ -798,8 +751,7 @@ void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid
   // being closed.
   int amfd = activity_manager_connect();
   log.amfd = amfd;
-  *detach_failed = dump_crash(&log, map, pid, tid, signal, original_si_code, abort_msg_address,
-                              dump_sibling_threads, total_sleep_time_usec);
+  dump_crash(&log, map, pid, tid, siblings, signal, original_si_code, abort_msg_address);
 
   // This file descriptor can be -1, any error is ignored.
   close(amfd);
