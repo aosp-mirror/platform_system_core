@@ -22,14 +22,16 @@
 
 #include <android-base/stringprintf.h>
 
+#include "adb.h"
 #include "adb_trace.h"
 #include "adb_utils.h"
 #include "sysdeps.h"
 
 bool SendProtocolString(int fd, const std::string& s) {
-    int length = s.size();
-    if (length > 0xffff) {
-        length = 0xffff;
+    unsigned int length = s.size();
+    if (length > MAX_PAYLOAD_V1 - 4) {
+        errno = EMSGSIZE;
+        return false;
     }
 
     // The cost of sending two strings outweighs the cost of formatting.
