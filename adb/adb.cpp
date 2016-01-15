@@ -857,8 +857,7 @@ int handle_forward_request(const char* service, TransportType type, const char* 
 #if ADB_HOST
         SendOkay(reply_fd);
 #endif
-        SendProtocolString(reply_fd, listeners);
-        return 1;
+        return SendProtocolString(reply_fd, listeners);
     }
 
     if (!strcmp(service, "killforward-all")) {
