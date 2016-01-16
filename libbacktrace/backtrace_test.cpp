@@ -1156,7 +1156,7 @@ TEST(libbacktrace, check_unreadable_elf_local) {
   int fd = open(tmp_so_name, O_RDONLY);
   ASSERT_TRUE(fd != -1);
 
-  void* map = mmap(NULL, map_size, PROT_READ, MAP_PRIVATE, fd, 0);
+  void* map = mmap(NULL, map_size, PROT_READ | PROT_EXEC, MAP_PRIVATE, fd, 0);
   ASSERT_TRUE(map != MAP_FAILED);
   close(fd);
   ASSERT_TRUE(unlink(tmp_so_name) != -1);
@@ -1206,7 +1206,7 @@ TEST(libbacktrace, check_unreadable_elf_remote) {
       exit(0);
     }
 
-    void* map = mmap(NULL, map_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    void* map = mmap(NULL, map_size, PROT_READ | PROT_EXEC, MAP_PRIVATE, fd, 0);
     if (map == MAP_FAILED) {
       fprintf(stderr, "Failed to map in memory: %s\n", strerror(errno));
       unlink(tmp_so_name);
