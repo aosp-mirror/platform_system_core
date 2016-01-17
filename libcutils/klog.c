@@ -62,6 +62,7 @@ void klog_writev(int level, const struct iovec* iov, int iov_count) {
 }
 
 void klog_write(int level, const char* fmt, ...) {
+    if (level > klog_level) return;
     char buf[LOG_BUF_MAX];
     va_list ap;
     va_start(ap, fmt);
