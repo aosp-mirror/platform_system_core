@@ -43,6 +43,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <functional>
+#include <utility>
+#include <vector>
 
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
@@ -765,13 +767,22 @@ static void flash_buf(const char *pname, struct fastboot_buffer *buf)
     sparse_file** s;
 
     switch (buf->type) {
-        case FB_BUFFER_SPARSE:
+        case FB_BUFFER_SPARSE: {
+            std::vector<std::pair<sparse_file*, int64_t>> sparse_files;
             s = reinterpret_cast<sparse_file**>(buf->data);
             while (*s) {
                 int64_t sz = sparse_file_len(*s, true, false);
-                fb_queue_flash_sparse(pname, *s++, sz);
+                sparse_files.emplace_back(*s, sz);
+                ++s;
+            }
+
+            for (size_t i = 0; i < sparse_files.size(); ++i) {
+                const auto& pair = sparse_files[i];
+                fb_queue_flash_sparse(pname, pair.first, pair.second, i + 1, sparse_files.size());
             }
             break;
+        }
+
         case FB_BUFFER:
             fb_queue_flash(pname, buf->data, buf->sz);
             break;
