@@ -53,10 +53,10 @@ class UploadServiceTest : public testing::Test {
 
     ASSERT_EQ(0, base::WriteFile(shared_dir.Append(metrics::kConsentFileName),
                                  "", 0));
-    counters_.reset(new CrashCounters);
 
-    upload_service_.reset(new UploadService("", base::TimeDelta(), private_dir,
-                                            shared_dir, counters_));
+    upload_service_.reset(
+        new UploadService("", base::TimeDelta(), private_dir, shared_dir));
+    counters_ = upload_service_->counters_;
 
     upload_service_->sender_.reset(new SenderMock);
     upload_service_->InitForTest(new MockSystemProfileSetter);
@@ -149,12 +149,9 @@ TEST_F(UploadServiceTest, EmptyLogsAreNotSent) {
 }
 
 TEST_F(UploadServiceTest, LogEmptyByDefault) {
-  UploadService upload_service("", base::TimeDelta(), dir_.path(), dir_.path(),
-                               std::make_shared<CrashCounters>());
-
-  // current_log_ should be initialized later as it needs AtExitManager to exit
+  // current_log_ should be initialized later as it needs AtExitManager to exist
   // in order to gather system information from SysInfo.
-  EXPECT_FALSE(upload_service.current_log_);
+  EXPECT_FALSE(upload_service_->current_log_);
 }
 
 TEST_F(UploadServiceTest, CanSendMultipleTimes) {
