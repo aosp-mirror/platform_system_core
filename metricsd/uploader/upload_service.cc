@@ -42,6 +42,7 @@ const int UploadService::kMaxFailedUpload = 10;
 
 UploadService::UploadService(const std::string& server,
                              const base::TimeDelta& upload_interval,
+                             const base::TimeDelta& disk_persistence_interval,
                              const base::FilePath& private_metrics_directory,
                              const base::FilePath& shared_metrics_directory)
     : brillo::Daemon(),
@@ -51,9 +52,17 @@ UploadService::UploadService(const std::string& server,
                            private_metrics_directory),
       counters_(new CrashCounters),
       upload_interval_(upload_interval),
+      disk_persistence_interval_(disk_persistence_interval),
       metricsd_service_runner_(counters_) {
   staged_log_path_ = private_metrics_directory.Append(metrics::kStagedLogName);
+  saved_log_path_ = private_metrics_directory.Append(metrics::kSavedLogName);
   consent_file_ = shared_metrics_directory.Append(metrics::kConsentFileName);
+}
+
+void UploadService::LoadSavedLog() {
+  if (base::PathExists(saved_log_path_)) {
+    GetOrCreateCurrentLog()->LoadFromFile(saved_log_path_);
+  }
 }
 
 int UploadService::OnInit() {
@@ -64,11 +73,17 @@ int UploadService::OnInit() {
 
   system_profile_setter_.reset(new SystemProfileCache());
 
-  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-      base::Bind(&UploadService::UploadEventCallback,
-                 base::Unretained(this),
-                 upload_interval_),
+  base::MessageLoop::current()->PostDelayedTask(
+      FROM_HERE,
+      base::Bind(&UploadService::UploadEventCallback, base::Unretained(this)),
       upload_interval_);
+
+  base::MessageLoop::current()->PostDelayedTask(
+      FROM_HERE,
+      base::Bind(&UploadService::PersistEventCallback, base::Unretained(this)),
+      disk_persistence_interval_);
+
+  LoadSavedLog();
 
   return EX_OK;
 }
@@ -78,24 +93,37 @@ void UploadService::OnShutdown(int* exit_code) {
 }
 
 void UploadService::InitForTest(SystemProfileSetter* setter) {
+  LoadSavedLog();
   system_profile_setter_.reset(setter);
 }
 
 void UploadService::StartNewLog() {
-  CHECK(!HasStagedLog()) << "the staged log should be discarded before "
-                         << "starting a new metrics log";
-  MetricsLog* log = new MetricsLog();
-  current_log_.reset(log);
+  current_log_.reset(new MetricsLog());
 }
 
-void UploadService::UploadEventCallback(const base::TimeDelta& interval) {
+void UploadService::UploadEventCallback() {
   UploadEvent();
 
-  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-      base::Bind(&UploadService::UploadEventCallback,
-                 base::Unretained(this),
-                 interval),
-      interval);
+  base::MessageLoop::current()->PostDelayedTask(
+      FROM_HERE,
+      base::Bind(&UploadService::UploadEventCallback, base::Unretained(this)),
+      upload_interval_);
+}
+
+void UploadService::PersistEventCallback() {
+  PersistToDisk();
+
+  base::MessageLoop::current()->PostDelayedTask(
+      FROM_HERE,
+      base::Bind(&UploadService::PersistEventCallback, base::Unretained(this)),
+      disk_persistence_interval_);
+}
+
+void UploadService::PersistToDisk() {
+  GatherHistograms();
+  if (current_log_) {
+    current_log_->SaveToFile(saved_log_path_);
+  }
 }
 
 void UploadService::UploadEvent() {
@@ -189,14 +217,16 @@ void UploadService::StageCurrentLog() {
                  << "log.";
     return;
   }
-  std::string encoded_log;
-  staged_log->GetEncodedLog(&encoded_log);
+
+  if (!base::DeleteFile(saved_log_path_, false)) {
+    // There is a chance that we will upload the same metrics twice but, if we
+    // are lucky, the backup should be overridden before that. In doubt, try not
+    // to lose any metrics.
+    LOG(ERROR) << "failed to delete the last backup of the current log.";
+  }
 
   failed_upload_count_.Set(0);
-  if (static_cast<int>(encoded_log.size()) != base::WriteFile(
-      staged_log_path_, encoded_log.data(), encoded_log.size())) {
-    LOG(ERROR) << "failed to persist to " << staged_log_path_.value();
-  }
+  staged_log->SaveToFile(staged_log_path_);
 }
 
 MetricsLog* UploadService::GetOrCreateCurrentLog() {

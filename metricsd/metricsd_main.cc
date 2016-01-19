@@ -33,10 +33,13 @@ int main(int argc, char** argv) {
 
   // Upload Service flags.
   DEFINE_int32(upload_interval_secs, 1800,
-               "Interval at which metrics_daemon sends the metrics. (needs "
-               "-uploader)");
+               "Interval at which metricsd uploads the metrics.");
+  DEFINE_int32(disk_persistence_interval_secs, 300,
+               "Interval at which metricsd saves the aggregated metrics to "
+               "disk to avoid losing them if metricsd stops in between "
+               "two uploads.");
   DEFINE_string(server, metrics::kMetricsServer,
-                "Server to upload the metrics to. (needs -uploader)");
+                "Server to upload the metrics to.");
   DEFINE_string(private_directory, metrics::kMetricsdDirectory,
                 "Path to the private directory used by metricsd "
                 "(testing only)");
@@ -72,6 +75,7 @@ int main(int argc, char** argv) {
 
   UploadService upload_service(
       FLAGS_server, base::TimeDelta::FromSeconds(FLAGS_upload_interval_secs),
+      base::TimeDelta::FromSeconds(FLAGS_disk_persistence_interval_secs),
       base::FilePath(FLAGS_private_directory),
       base::FilePath(FLAGS_shared_directory));
 

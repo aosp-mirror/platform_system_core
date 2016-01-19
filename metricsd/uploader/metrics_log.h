@@ -19,6 +19,7 @@
 
 #include <string>
 
+#include <base/files/file_path.h>
 #include <base/macros.h>
 
 #include "uploader/metrics_log_base.h"
@@ -44,8 +45,15 @@ class MetricsLog : public metrics::MetricsLogBase {
   // Populate the system profile with system information using setter.
   bool PopulateSystemProfile(SystemProfileSetter* setter);
 
+  // Load the log from |path|.
+  bool LoadFromFile(const base::FilePath& path);
+
+  // Save this log to |path|.
+  bool SaveToFile(const base::FilePath& path);
+
  private:
   friend class UploadServiceTest;
+  FRIEND_TEST(UploadServiceTest, CurrentLogSavedAndResumed);
   FRIEND_TEST(UploadServiceTest, LogContainsAggregatedValues);
   FRIEND_TEST(UploadServiceTest, LogContainsCrashCounts);
   FRIEND_TEST(UploadServiceTest, LogKernelCrash);
