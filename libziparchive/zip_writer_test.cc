@@ -19,6 +19,7 @@
 
 #include <android-base/test_utils.h>
 #include <gtest/gtest.h>
+#include <time.h>
 #include <memory>
 #include <vector>
 
@@ -122,7 +123,7 @@ TEST_F(zipwriter, WriteUncompressedZipWithMultipleFiles) {
   CloseArchive(handle);
 }
 
-TEST_F(zipwriter, WriteUncompressedZipWithAlignedFile) {
+TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedFlag) {
   ZipWriter writer(file_);
 
   ASSERT_EQ(0, writer.StartEntry("align.txt", ZipWriter::kAlign32));
@@ -138,6 +139,103 @@ TEST_F(zipwriter, WriteUncompressedZipWithAlignedFile) {
   ZipEntry data;
   ASSERT_EQ(0, FindEntry(handle, ZipString("align.txt"), &data));
   EXPECT_EQ(0, data.offset & 0x03);
+
+  CloseArchive(handle);
+}
+
+void ConvertZipTimeToTm(uint32_t& zip_time, struct tm* tm) {
+  memset(tm, 0, sizeof(struct tm));
+  tm->tm_hour = (zip_time >> 11) & 0x1f;
+  tm->tm_min = (zip_time >> 5) & 0x3f;
+  tm->tm_sec = (zip_time & 0x1f) << 1;
+
+  tm->tm_year = ((zip_time >> 25) & 0x7f) + 80;
+  tm->tm_mon = ((zip_time >> 21) & 0xf) - 1;
+  tm->tm_mday = (zip_time >> 16) & 0x1f;
+}
+
+TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedFlagAndTime) {
+  ZipWriter writer(file_);
+
+  struct tm tm;
+  memset(&tm, 0, sizeof(struct tm));
+  ASSERT_TRUE(strptime("18:30:20 1/12/2001", "%H:%M:%S %d/%m/%Y", &tm) != nullptr);
+  time_t time = mktime(&tm);
+  ASSERT_EQ(0, writer.StartEntryWithTime("align.txt", ZipWriter::kAlign32, time));
+  ASSERT_EQ(0, writer.WriteBytes("he", 2));
+  ASSERT_EQ(0, writer.FinishEntry());
+  ASSERT_EQ(0, writer.Finish());
+
+  ASSERT_GE(0, lseek(fd_, 0, SEEK_SET));
+
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
+
+  ZipEntry data;
+  ASSERT_EQ(0, FindEntry(handle, ZipString("align.txt"), &data));
+  EXPECT_EQ(0, data.offset & 0x03);
+
+  struct tm mod;
+  ConvertZipTimeToTm(data.mod_time, &mod);
+  EXPECT_EQ(tm.tm_sec, mod.tm_sec);
+  EXPECT_EQ(tm.tm_min, mod.tm_min);
+  EXPECT_EQ(tm.tm_hour, mod.tm_hour);
+  EXPECT_EQ(tm.tm_mday, mod.tm_mday);
+  EXPECT_EQ(tm.tm_mon, mod.tm_mon);
+  EXPECT_EQ(tm.tm_year, mod.tm_year);
+
+  CloseArchive(handle);
+}
+
+TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedValue) {
+  ZipWriter writer(file_);
+
+  ASSERT_EQ(0, writer.StartAlignedEntry("align.txt", 0, 4096));
+  ASSERT_EQ(0, writer.WriteBytes("he", 2));
+  ASSERT_EQ(0, writer.FinishEntry());
+  ASSERT_EQ(0, writer.Finish());
+
+  ASSERT_GE(0, lseek(fd_, 0, SEEK_SET));
+
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
+
+  ZipEntry data;
+  ASSERT_EQ(0, FindEntry(handle, ZipString("align.txt"), &data));
+  EXPECT_EQ(0, data.offset & 0xfff);
+
+  CloseArchive(handle);
+}
+
+TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedValueAndTime) {
+  ZipWriter writer(file_);
+
+  struct tm tm;
+  memset(&tm, 0, sizeof(struct tm));
+  ASSERT_TRUE(strptime("18:30:20 1/12/2001", "%H:%M:%S %d/%m/%Y", &tm) != nullptr);
+  time_t time = mktime(&tm);
+  ASSERT_EQ(0, writer.StartAlignedEntryWithTime("align.txt", 0, time, 4096));
+  ASSERT_EQ(0, writer.WriteBytes("he", 2));
+  ASSERT_EQ(0, writer.FinishEntry());
+  ASSERT_EQ(0, writer.Finish());
+
+  ASSERT_GE(0, lseek(fd_, 0, SEEK_SET));
+
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
+
+  ZipEntry data;
+  ASSERT_EQ(0, FindEntry(handle, ZipString("align.txt"), &data));
+  EXPECT_EQ(0, data.offset & 0xfff);
+
+  struct tm mod;
+  ConvertZipTimeToTm(data.mod_time, &mod);
+  EXPECT_EQ(tm.tm_sec, mod.tm_sec);
+  EXPECT_EQ(tm.tm_min, mod.tm_min);
+  EXPECT_EQ(tm.tm_hour, mod.tm_hour);
+  EXPECT_EQ(tm.tm_mday, mod.tm_mday);
+  EXPECT_EQ(tm.tm_mon, mod.tm_mon);
+  EXPECT_EQ(tm.tm_year, mod.tm_year);
 
   CloseArchive(handle);
 }
@@ -205,4 +303,11 @@ TEST_F(zipwriter, WriteCompressedZipFlushFull) {
       << "Input buffer and output buffer are different.";
 
   CloseArchive(handle);
+}
+
+TEST_F(zipwriter, CheckStartEntryErrors) {
+  ZipWriter writer(file_);
+
+  ASSERT_EQ(-5, writer.StartAlignedEntry("align.txt", ZipWriter::kAlign32, 4096));
+  ASSERT_EQ(-6, writer.StartAlignedEntry("align.txt", 0, 3));
 }
