@@ -20,11 +20,18 @@
 
 #include <utils/Log.h>
 
+#include <sys/param.h>
+
 #include <cassert>
 #include <cstdio>
 #include <memory>
+#include <vector>
 #include <zlib.h>
 #define DEF_MEM_LEVEL 8                // normally in zutil.h?
+
+#if !defined(powerof2)
+#define powerof2(x) ((((x)-1)&(x))==0)
+#endif
 
 /* Zip compression methods we support */
 enum {
@@ -49,6 +56,12 @@ static const int32_t kInvalidEntryName = -3;
 
 // An error occurred in zlib.
 static const int32_t kZlibError = -4;
+
+// The start aligned function was called with the aligned flag.
+static const int32_t kInvalidAlign32Flag = -5;
+
+// The alignment parameter is not a power of 2.
+static const int32_t kInvalidAlignment = -6;
 
 static const char* sErrorCodes[] = {
     "Invalid state",
@@ -102,7 +115,25 @@ int32_t ZipWriter::HandleError(int32_t error_code) {
 }
 
 int32_t ZipWriter::StartEntry(const char* path, size_t flags) {
-  return StartEntryWithTime(path, flags, time_t());
+  uint32_t alignment = 0;
+  if (flags & kAlign32) {
+    flags &= ~kAlign32;
+    alignment = 4;
+  }
+  return StartAlignedEntryWithTime(path, flags, time_t(), alignment);
+}
+
+int32_t ZipWriter::StartAlignedEntry(const char* path, size_t flags, uint32_t alignment) {
+  return StartAlignedEntryWithTime(path, flags, time_t(), alignment);
+}
+
+int32_t ZipWriter::StartEntryWithTime(const char* path, size_t flags, time_t time) {
+  uint32_t alignment = 0;
+  if (flags & kAlign32) {
+    flags &= ~kAlign32;
+    alignment = 4;
+  }
+  return StartAlignedEntryWithTime(path, flags, time, alignment);
 }
 
 static void ExtractTimeAndDate(time_t when, uint16_t* out_time, uint16_t* out_date) {
@@ -126,9 +157,18 @@ static void ExtractTimeAndDate(time_t when, uint16_t* out_time, uint16_t* out_da
   *out_time = ptm->tm_hour << 11 | ptm->tm_min << 5 | ptm->tm_sec >> 1;
 }
 
-int32_t ZipWriter::StartEntryWithTime(const char* path, size_t flags, time_t time) {
+int32_t ZipWriter::StartAlignedEntryWithTime(const char* path, size_t flags,
+                                             time_t time, uint32_t alignment) {
   if (state_ != State::kWritingZip) {
     return kInvalidState;
+  }
+
+  if (flags & kAlign32) {
+    return kInvalidAlign32Flag;
+  }
+
+  if (powerof2(alignment) == 0) {
+    return kInvalidAlignment;
   }
 
   FileInfo fileInfo = {};
@@ -166,11 +206,14 @@ int32_t ZipWriter::StartEntryWithTime(const char* path, size_t flags, time_t tim
   header.file_name_length = fileInfo.path.size();
 
   off64_t offset = current_offset_ + sizeof(header) + fileInfo.path.size();
-  if ((flags & ZipWriter::kAlign32) && (offset & 0x03)) {
+  std::vector<char> zero_padding;
+  if (alignment != 0 && (offset & (alignment - 1))) {
     // Pad the extra field so the data will be aligned.
-    uint16_t padding = 4 - (offset % 4);
+    uint16_t padding = alignment - (offset % alignment);
     header.extra_field_length = padding;
     offset += padding;
+    zero_padding.resize(padding);
+    memset(zero_padding.data(), 0, zero_padding.size());
   }
 
   if (fwrite(&header, sizeof(header), 1, file_) != 1) {
@@ -181,7 +224,9 @@ int32_t ZipWriter::StartEntryWithTime(const char* path, size_t flags, time_t tim
     return HandleError(kIoError);
   }
 
-  if (fwrite("\0\0\0", 1, header.extra_field_length, file_) != header.extra_field_length) {
+  if (header.extra_field_length != 0 &&
+      fwrite(zero_padding.data(), 1, header.extra_field_length, file_)
+      != header.extra_field_length) {
     return HandleError(kIoError);
   }
 

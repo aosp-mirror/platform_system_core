@@ -87,9 +87,25 @@ public:
   int32_t StartEntry(const char* path, size_t flags);
 
   /**
+   * Starts a new zip entry with the given path and flags, where the
+   * entry will be aligned to the given alignment.
+   * Flags can only be ZipWriter::kCompress. Using the flag ZipWriter::kAlign32
+   * will result in an error.
+   * Subsequent calls to WriteBytes(const void*, size_t) will add data to this entry.
+   * Returns 0 on success, and an error value < 0 on failure.
+   */
+  int32_t StartAlignedEntry(const char* path, size_t flags, uint32_t alignment);
+
+  /**
    * Same as StartEntry(const char*, size_t), but sets a last modified time for the entry.
    */
   int32_t StartEntryWithTime(const char* path, size_t flags, time_t time);
+
+  /**
+   * Same as StartAlignedEntry(const char*, size_t), but sets a last modified time for the entry.
+   */
+  int32_t StartAlignedEntryWithTime(const char* path, size_t flags, time_t time,
+                                    uint32_t alignment);
 
   /**
    * Writes bytes to the zip file for the previously started zip entry.
