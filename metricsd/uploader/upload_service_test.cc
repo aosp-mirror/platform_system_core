@@ -45,17 +45,17 @@ class UploadServiceTest : public testing::Test {
     ASSERT_FALSE(base::StatisticsRecorder::IsActive());
     base::StatisticsRecorder::Initialize();
 
-    base::FilePath private_dir = dir_.path().Append("private");
-    base::FilePath shared_dir = dir_.path().Append("shared");
+    private_dir_ = dir_.path().Append("private");
+    shared_dir_ = dir_.path().Append("shared");
 
-    EXPECT_TRUE(base::CreateDirectory(private_dir));
-    EXPECT_TRUE(base::CreateDirectory(shared_dir));
+    EXPECT_TRUE(base::CreateDirectory(private_dir_));
+    EXPECT_TRUE(base::CreateDirectory(shared_dir_));
 
-    ASSERT_EQ(0, base::WriteFile(shared_dir.Append(metrics::kConsentFileName),
+    ASSERT_EQ(0, base::WriteFile(shared_dir_.Append(metrics::kConsentFileName),
                                  "", 0));
 
-    upload_service_.reset(
-        new UploadService("", base::TimeDelta(), private_dir, shared_dir));
+    upload_service_.reset(new UploadService(
+        "", base::TimeDelta(), base::TimeDelta(), private_dir_, shared_dir_));
     counters_ = upload_service_->counters_;
 
     upload_service_->sender_.reset(new SenderMock);
@@ -81,15 +81,16 @@ class UploadServiceTest : public testing::Test {
     base::FilePath filepath =
         dir_.path().Append("etc/os-release.d").Append(name);
     ASSERT_TRUE(base::CreateDirectory(filepath.DirName()));
-    ASSERT_EQ(
-        value.size(),
-        base::WriteFile(filepath, value.data(), value.size()));
+    ASSERT_EQ(value.size(),
+              base::WriteFile(filepath, value.data(), value.size()));
   }
 
   const metrics::SystemProfileProto_Stability GetCurrentStability() {
     EXPECT_TRUE(upload_service_->current_log_.get());
 
-    return upload_service_->current_log_->uma_proto()->system_profile().stability();
+    return upload_service_->current_log_->uma_proto()
+        ->system_profile()
+        .stability();
   }
 
   base::ScopedTempDir dir_;
@@ -97,6 +98,8 @@ class UploadServiceTest : public testing::Test {
 
   std::unique_ptr<base::AtExitManager> exit_manager_;
   std::shared_ptr<CrashCounters> counters_;
+  base::FilePath private_dir_;
+  base::FilePath shared_dir_;
 };
 
 TEST_F(UploadServiceTest, FailedSendAreRetried) {
@@ -219,10 +222,8 @@ TEST_F(UploadServiceTest, LogContainsCrashCounts) {
 }
 
 TEST_F(UploadServiceTest, ExtractChannelFromString) {
-  EXPECT_EQ(
-      SystemProfileCache::ProtoChannelFromString(
-          "developer-build"),
-      metrics::SystemProfileProto::CHANNEL_UNKNOWN);
+  EXPECT_EQ(SystemProfileCache::ProtoChannelFromString("developer-build"),
+            metrics::SystemProfileProto::CHANNEL_UNKNOWN);
 
   EXPECT_EQ(metrics::SystemProfileProto::CHANNEL_DEV,
             SystemProfileCache::ProtoChannelFromString("dev-channel"));
@@ -296,4 +297,39 @@ TEST_F(UploadServiceTest, ProductIdMandatory) {
   ASSERT_FALSE(cache.Initialize());
   SetTestingProperty(metrics::kProductId, "hello");
   ASSERT_TRUE(cache.Initialize());
+}
+
+TEST_F(UploadServiceTest, CurrentLogSavedAndResumed) {
+  SendHistogram("hello", 10, 0, 100, 10);
+  upload_service_->PersistToDisk();
+  EXPECT_EQ(
+      1, upload_service_->current_log_->uma_proto()->histogram_event().size());
+  upload_service_.reset(new UploadService(
+      "", base::TimeDelta(), base::TimeDelta(), private_dir_, shared_dir_));
+  upload_service_->InitForTest(nullptr);
+
+  SendHistogram("hello", 10, 0, 100, 10);
+  upload_service_->GatherHistograms();
+  EXPECT_EQ(2, upload_service_->GetOrCreateCurrentLog()
+                   ->uma_proto()
+                   ->histogram_event()
+                   .size());
+}
+
+TEST_F(UploadServiceTest, PersistEmptyLog) {
+  upload_service_->PersistToDisk();
+  EXPECT_FALSE(base::PathExists(upload_service_->saved_log_path_));
+}
+
+TEST_F(UploadServiceTest, CorruptedSavedLog) {
+  // Write a bogus saved log.
+  EXPECT_EQ(5, base::WriteFile(upload_service_->saved_log_path_, "hello", 5));
+
+  upload_service_.reset(new UploadService(
+      "", base::TimeDelta(), base::TimeDelta(), private_dir_, shared_dir_));
+
+  upload_service_->InitForTest(nullptr);
+  // If the log is unreadable, we drop it and continue execution.
+  ASSERT_NE(nullptr, upload_service_->GetOrCreateCurrentLog());
+  ASSERT_FALSE(base::PathExists(upload_service_->saved_log_path_));
 }

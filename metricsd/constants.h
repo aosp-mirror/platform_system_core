@@ -26,6 +26,7 @@ static const char kMetricsGUIDFileName[] = "Sysinfo.GUID";
 static const char kMetricsServer[] = "https://clients4.google.com/uma/v2";
 static const char kConsentFileName[] = "enabled";
 static const char kStagedLogName[] = "staged_log";
+static const char kSavedLogName[] = "saved_log";
 static const char kFailedUploadCountName[] = "failed_upload_count";
 static const char kDefaultVersion[] = "0.0.0.0";
 
