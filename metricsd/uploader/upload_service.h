@@ -28,6 +28,7 @@
 #include "persistent_integer.h"
 #include "uploader/crash_counters.h"
 #include "uploader/metrics_log.h"
+#include "uploader/metricsd_service_runner.h"
 #include "uploader/proto/chrome_user_metrics_extension.pb.h"
 #include "uploader/sender.h"
 #include "uploader/system_profile_cache.h"
@@ -66,11 +67,13 @@ class UploadService : public base::HistogramFlattener, public brillo::Daemon {
   UploadService(const std::string& server,
                 const base::TimeDelta& upload_interval,
                 const base::FilePath& private_metrics_directory,
-                const base::FilePath& shared_metrics_directory,
-                const std::shared_ptr<CrashCounters> counters);
+                const base::FilePath& shared_metrics_directory);
 
   // Initializes the upload service.
-  int OnInit();
+  int OnInit() override;
+
+  // Cleans up the internal state before exiting.
+  void OnShutdown(int* exit_code) override;
 
   // Starts a new log. The log needs to be regenerated after each successful
   // launch as it is destroyed when staging the log.
@@ -153,6 +156,8 @@ class UploadService : public base::HistogramFlattener, public brillo::Daemon {
   std::shared_ptr<CrashCounters> counters_;
 
   base::TimeDelta upload_interval_;
+
+  MetricsdServiceRunner metricsd_service_runner_;
 
   base::FilePath consent_file_;
   base::FilePath staged_log_path_;

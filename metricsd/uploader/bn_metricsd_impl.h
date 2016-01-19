@@ -25,9 +25,6 @@ class BnMetricsdImpl : public android::brillo::metrics::BnMetricsd {
   explicit BnMetricsdImpl(const std::shared_ptr<CrashCounters>& counters);
   virtual ~BnMetricsdImpl() = default;
 
-  // Starts the binder main loop.
-  void Run();
-
   // Records a histogram.
   android::binder::Status recordHistogram(const android::String16& name,
                                           int sample,
