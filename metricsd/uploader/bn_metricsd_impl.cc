@@ -19,8 +19,6 @@
 #include <base/metrics/histogram.h>
 #include <base/metrics/sparse_histogram.h>
 #include <base/metrics/statistics_recorder.h>
-#include <binder/IPCThreadState.h>
-#include <binder/IServiceManager.h>
 #include <utils/Errors.h>
 #include <utils/String16.h>
 #include <utils/String8.h>
@@ -35,16 +33,6 @@ static const char16_t kCrashTypeUser[] = u"user";
 BnMetricsdImpl::BnMetricsdImpl(const std::shared_ptr<CrashCounters>& counters)
     : counters_(counters) {
   CHECK(counters_) << "Invalid counters argument to constructor";
-}
-
-void BnMetricsdImpl::Run() {
-  android::status_t status =
-      android::defaultServiceManager()->addService(getInterfaceDescriptor(),
-                                                   this);
-  CHECK(status == android::OK) << "Metricsd service registration failed";
-  android::ProcessState::self()->setThreadPoolMaxThreadCount(0);
-  android::IPCThreadState::self()->disableBackgroundScheduling(true);
-  android::IPCThreadState::self()->joinThreadPool();
 }
 
 Status BnMetricsdImpl::recordHistogram(

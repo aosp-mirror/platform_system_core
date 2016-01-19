@@ -43,19 +43,25 @@ const int UploadService::kMaxFailedUpload = 10;
 UploadService::UploadService(const std::string& server,
                              const base::TimeDelta& upload_interval,
                              const base::FilePath& private_metrics_directory,
-                             const base::FilePath& shared_metrics_directory,
-                             const std::shared_ptr<CrashCounters> counters)
-    : histogram_snapshot_manager_(this),
+                             const base::FilePath& shared_metrics_directory)
+    : brillo::Daemon(),
+      histogram_snapshot_manager_(this),
       sender_(new HttpSender(server)),
       failed_upload_count_(metrics::kFailedUploadCountName,
                            private_metrics_directory),
-      counters_(counters),
-      upload_interval_(upload_interval) {
+      counters_(new CrashCounters),
+      upload_interval_(upload_interval),
+      metricsd_service_runner_(counters_) {
   staged_log_path_ = private_metrics_directory.Append(metrics::kStagedLogName);
   consent_file_ = shared_metrics_directory.Append(metrics::kConsentFileName);
 }
 
 int UploadService::OnInit() {
+  brillo::Daemon::OnInit();
+
+  base::StatisticsRecorder::Initialize();
+  metricsd_service_runner_.Start();
+
   system_profile_setter_.reset(new SystemProfileCache());
 
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
@@ -63,7 +69,12 @@ int UploadService::OnInit() {
                  base::Unretained(this),
                  upload_interval_),
       upload_interval_);
+
   return EX_OK;
+}
+
+void UploadService::OnShutdown(int* exit_code) {
+  metricsd_service_runner_.Stop();
 }
 
 void UploadService::InitForTest(SystemProfileSetter* setter) {

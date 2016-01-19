@@ -38,6 +38,7 @@ metricsd_common := \
   uploader/metrics_hashes.cc \
   uploader/metrics_log_base.cc \
   uploader/metrics_log.cc \
+  uploader/metricsd_service_runner.cc \
   uploader/sender_http.cc \
   uploader/system_profile_cache.cc \
   uploader/upload_service.cc
@@ -84,6 +85,7 @@ metrics_collector_static_libraries := libmetricscollectorservice
 metricsd_shared_libraries := \
   libbinder \
   libbrillo \
+  libbrillo-binder \
   libbrillo-http \
   libchrome \
   libprotobuf-cpp-lite \
