@@ -585,14 +585,6 @@ typedef enum {
     (__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE) != 0)
 #endif
 
-// TODO: remove these prototypes and their users
-#define android_writevLog(vec,num) do{}while(0)
-#define android_write1Log(str,len) do{}while (0)
-#define android_setMinPriority(tag, prio) do{}while(0)
-//#define android_logToCallback(func) do{}while(0)
-#define android_logToFile(tag, file) (0)
-#define android_logToFd(tag, fd) (0)
-
 typedef enum log_id {
     LOG_ID_MIN = 0,
 
