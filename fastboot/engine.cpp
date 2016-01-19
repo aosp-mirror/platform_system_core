@@ -157,17 +157,17 @@ void fb_queue_flash(const char *ptn, void *data, unsigned sz)
     a->msg = mkmsg("writing '%s'", ptn);
 }
 
-void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, unsigned sz)
-{
+void fb_queue_flash_sparse(const char* ptn, struct sparse_file* s, unsigned sz, size_t current,
+                           size_t total) {
     Action *a;
 
     a = queue_action(OP_DOWNLOAD_SPARSE, "");
     a->data = s;
     a->size = 0;
-    a->msg = mkmsg("sending sparse '%s' (%d KB)", ptn, sz / 1024);
+    a->msg = mkmsg("sending sparse '%s' %zu/%zu (%d KB)", ptn, current, total, sz / 1024);
 
     a = queue_action(OP_COMMAND, "flash:%s", ptn);
-    a->msg = mkmsg("writing '%s'", ptn);
+    a->msg = mkmsg("writing '%s' %zu/%zu", ptn, current, total);
 }
 
 static int match(const char* str, const char** value, unsigned count) {
