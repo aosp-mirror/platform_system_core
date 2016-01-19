@@ -51,7 +51,8 @@ char *fb_get_error(void);
 /* engine.c - high level command queue engine */
 bool fb_getvar(Transport* transport, const std::string& key, std::string* value);
 void fb_queue_flash(const char *ptn, void *data, uint32_t sz);
-void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, uint32_t sz);
+void fb_queue_flash_sparse(const char* ptn, struct sparse_file* s, uint32_t sz, size_t current,
+                           size_t total);
 void fb_queue_erase(const char *ptn);
 void fb_queue_format(const char *ptn, int skip_if_not_supported, int32_t max_chunk_sz);
 void fb_queue_require(const char *prod, const char *var, bool invert,
