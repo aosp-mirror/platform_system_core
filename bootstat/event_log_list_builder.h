@@ -20,7 +20,7 @@
 #include <cstdint>
 #include <memory>
 
-#include <base/macros.h>
+#include <android-base/macros.h>
 
 // EventLogListBuilder provides a mechanism to build an EventLog list
 // consisting of int and string EventLog values.

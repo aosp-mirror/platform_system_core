@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <base/logging.h>
+#include <android-base/logging.h>
 #include <gtest/gtest.h>
 
 int main(int argc, char** argv) {
