@@ -3,19 +3,25 @@ FastBoot  Version  0.4
 ----------------------
 
 The fastboot protocol is a mechanism for communicating with bootloaders
-over USB.  It is designed to be very straightforward to implement, to
-allow it to be used across a wide range of devices and from hosts running
+over USB or ethernet.  It is designed to be very straightforward to implement,
+to allow it to be used across a wide range of devices and from hosts running
 Linux, Windows, or OSX.
 
 
 Basic Requirements
 ------------------
 
-* Two bulk endpoints (in, out) are required
-* Max packet size must be 64 bytes for full-speed, 512 bytes for
-  high-speed and 1024 bytes for Super Speed USB.
-* The protocol is entirely host-driven and synchronous (unlike the
-  multi-channel, bi-directional, asynchronous ADB protocol)
+* USB
+  * Two bulk endpoints (in, out) are required
+  * Max packet size must be 64 bytes for full-speed, 512 bytes for
+    high-speed and 1024 bytes for Super Speed USB.
+  * The protocol is entirely host-driven and synchronous (unlike the
+    multi-channel, bi-directional, asynchronous ADB protocol)
+
+* TCP
+  * Device must be reachable via IP.
+  * Device will act as the TCP server, fastboot will be the client.
+  * Fastboot data is wrapped in a simple protocol; see below for details.
 
 
 Transport and Framing
@@ -171,3 +177,44 @@ specification.  OEM-specific names should not start with lowercase
 characters.
 
 
+TCP Protocol v1
+---------------
+
+The TCP protocol is designed to be a simple way to use the fastboot protocol
+over ethernet if USB is not available.
+
+The device will open a TCP server on port 5554 and wait for a fastboot client
+to connect.
+
+-- Handshake --
+Upon connecting, both sides will send a 4-byte handshake message to ensure they
+are speaking the same protocol. This consists of the ASCII characters "FB"
+followed by a 2-digit base-10 ASCII version number. For example, the version 1
+handshake message will be [FB01].
+
+If either side detects a malformed handshake, it should disconnect.
+
+The protocol version to use must be the minimum of the versions sent by each
+side; if either side cannot speak this protocol version, it should disconnect.
+
+-- Fastboot Data --
+Once the handshake is complete, fastboot data will be sent as follows:
+
+  [data_size][data]
+
+Where data_size is an unsigned 8-byte big-endian binary value, and data is the
+fastboot packet. The 8-byte length is intended to provide future-proofing even
+though currently fastboot packets have a 4-byte maximum length.
+
+-- Example --
+In this example the fastboot host queries the device for two variables,
+"version" and "none".
+
+Host    <connect to the device on port 5555>
+Host    FB01
+Device  FB01
+Host    [0x00][0x00][0x00][0x00][0x00][0x00][0x00][0x0E]getvar:version
+Device  [0x00][0x00][0x00][0x00][0x00][0x00][0x00][0x07]OKAY0.4
+Host    [0x00][0x00][0x00][0x00][0x00][0x00][0x00][0x0B]getvar:none
+Device  [0x00][0x00][0x00][0x00][0x00][0x00][0x00][0x04]OKAY
+Host    <disconnect>
