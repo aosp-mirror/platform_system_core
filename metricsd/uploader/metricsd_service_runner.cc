@@ -54,7 +54,7 @@ void MetricsdServiceRunner::Run() {
 
 void MetricsdServiceRunner::Stop() {
   message_loop_for_io_->PostTask(FROM_HERE,
-                                 message_loop_for_io_->QuitClosure());
+                                 message_loop_for_io_->QuitWhenIdleClosure());
 
   thread_->join();
 }
