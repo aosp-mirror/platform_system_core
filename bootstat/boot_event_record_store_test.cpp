@@ -65,7 +65,7 @@ void DeleteDirectory(const std::string& path) {
     const std::string entry_path = path + "/" + entry_name;
     if (entry->d_type == DT_DIR) {
       DeleteDirectory(entry_path);
-    }  else {
+    } else {
       unlink(entry_path.c_str());
     }
   }

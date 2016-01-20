@@ -34,8 +34,9 @@ To log the persisted boot events, call `bootstat` with the `-l` option.
     $ bootstat -l
 
 bootstat logs all boot events recorded using the `-r` option to the EventLog
-using the Tron histogram. On GMS devices these logs are uploaded via Clearcut
-for aggregation and analysis.
+using the Tron histogram. These logs may be uploaded by interested parties
+for aggregation and analysis of boot time across different devices and
+versions.
 
 ## Printing boot events ##
 
