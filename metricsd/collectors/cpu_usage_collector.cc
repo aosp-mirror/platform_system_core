@@ -104,14 +104,15 @@ bool CpuUsageCollector::ParseProcStat(const std::string& stat_content,
                                       uint64_t *user_ticks,
                                       uint64_t *user_nice_ticks,
                                       uint64_t *system_ticks) {
-  std::vector<std::string> proc_stat_lines;
-  base::SplitString(stat_content, '\n', &proc_stat_lines);
+  std::vector<std::string> proc_stat_lines = base::SplitString(
+      stat_content, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (proc_stat_lines.empty()) {
     LOG(WARNING) << "No lines found in " << kMetricsProcStatFileName;
     return false;
   }
-  std::vector<std::string> proc_stat_totals;
-  base::SplitStringAlongWhitespace(proc_stat_lines[0], &proc_stat_totals);
+  std::vector<std::string> proc_stat_totals =
+      base::SplitString(proc_stat_lines[0], base::kWhitespaceASCII,
+                        base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
   if (proc_stat_totals.size() != kMetricsProcStatFirstLineItemsCount ||
       proc_stat_totals[0] != "cpu" ||
