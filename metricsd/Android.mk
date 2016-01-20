@@ -202,6 +202,9 @@ LOCAL_CPPFLAGS := $(metrics_CPPFLAGS) -Wno-sign-compare
 LOCAL_SHARED_LIBRARIES := $(metricsd_shared_libraries)
 LOCAL_SRC_FILES := $(metricsd_tests_sources) $(metricsd_common)
 LOCAL_STATIC_LIBRARIES := libBionicGtestMain libgmock metricsd_protos metricsd_binder_proxy
+ifdef BRILLO
+LOCAL_MODULE_TAGS := debug
+endif
 include $(BUILD_NATIVE_TEST)
 
 # Unit tests for metrics_collector.
@@ -217,6 +220,9 @@ LOCAL_SRC_FILES := $(metrics_collector_tests_sources) \
   $(metrics_collector_common)
 LOCAL_STATIC_LIBRARIES := libBionicGtestMain libgmock metricsd_binder_proxy \
   $(metrics_collector_static_libraries)
+ifdef BRILLO
+LOCAL_MODULE_TAGS := debug
+endif
 include $(BUILD_NATIVE_TEST)
 
 # Weave schema files
