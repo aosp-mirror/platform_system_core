@@ -332,13 +332,21 @@ LogBufferElementCollection::iterator LogBuffer::erase(
         }
     }
 
-    bool setLast = mLastSet[id] && (it == mLast[id]);
+    bool setLast[LOG_ID_MAX];
+    bool doSetLast = false;
+    log_id_for_each(i) {
+        doSetLast |= setLast[i] = mLastSet[i] && (it == mLast[i]);
+    }
     it = mLogElements.erase(it);
-    if (setLast) {
-        if (it == mLogElements.end()) { // unlikely
-            mLastSet[id] = false;
-        } else {
-            mLast[id] = it;
+    if (doSetLast) {
+        log_id_for_each(i) {
+            if (setLast[i]) {
+                if (it == mLogElements.end()) { // unlikely
+                    mLastSet[i] = false;
+                } else {
+                    mLast[i] = it;
+                }
+            }
         }
     }
     if (coalesce) {
