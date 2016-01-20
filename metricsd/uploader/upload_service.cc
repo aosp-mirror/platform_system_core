@@ -90,6 +90,7 @@ int UploadService::OnInit() {
 
 void UploadService::OnShutdown(int* exit_code) {
   metricsd_service_runner_.Stop();
+  PersistToDisk();
 }
 
 void UploadService::InitForTest(SystemProfileSetter* setter) {
