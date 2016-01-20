@@ -534,18 +534,20 @@ bool MetricsCollector::ProcessMeminfo(const string& meminfo_raw) {
 
 bool MetricsCollector::FillMeminfo(const string& meminfo_raw,
                                     vector<MeminfoRecord>* fields) {
-  vector<string> lines;
-  unsigned int nlines = Tokenize(meminfo_raw, "\n", &lines);
+  vector<std::string> lines =
+      base::SplitString(meminfo_raw, "\n", base::KEEP_WHITESPACE,
+                        base::SPLIT_WANT_NONEMPTY);
 
   // Scan meminfo output and collect field values.  Each field name has to
   // match a meminfo entry (case insensitive) after removing non-alpha
   // characters from the entry.
-  unsigned int ifield = 0;
-  for (unsigned int iline = 0;
-       iline < nlines && ifield < fields->size();
+  size_t ifield = 0;
+  for (size_t iline = 0;
+       iline < lines.size() && ifield < fields->size();
        iline++) {
-    vector<string> tokens;
-    Tokenize(lines[iline], ": ", &tokens);
+    vector<string> tokens =
+        base::SplitString(lines[iline], ": ", base::KEEP_WHITESPACE,
+                          base::SPLIT_WANT_NONEMPTY);
     if (strcmp((*fields)[ifield].match, tokens[0].c_str()) == 0) {
       // Name matches. Parse value and save.
       if (!base::StringToInt(tokens[1], &(*fields)[ifield].value)) {
