@@ -65,8 +65,10 @@ class UserCollectorTest : public ::testing::Test {
                           false,
                           false,
                           "");
-    base::DeleteFile(FilePath("test"), true);
-    mkdir("test", 0777);
+
+    EXPECT_TRUE(test_dir_.CreateUniqueTempDir());
+
+    mkdir(test_dir_.path().Append("test").value().c_str(), 0777);
     pid_ = getpid();
     brillo::ClearLog();
   }
@@ -87,6 +89,7 @@ class UserCollectorTest : public ::testing::Test {
 
   UserCollectorMock collector_;
   pid_t pid_;
+  base::ScopedTempDir test_dir_;
 };
 
 TEST_F(UserCollectorTest, ParseCrashAttributes) {
@@ -173,14 +176,15 @@ TEST_F(UserCollectorTest, GetSymlinkTarget) {
                                            &result));
   ASSERT_TRUE(FindLog(
       "Readlink failed on /does_not_exist with 2"));
-  std::string long_link;
+  std::string long_link = test_dir_.path().value();
   for (int i = 0; i < 50; ++i)
     long_link += "0123456789";
   long_link += "/gold";
 
   for (size_t len = 1; len <= long_link.size(); ++len) {
     std::string this_link;
-    static const char kLink[] = "test/this_link";
+    static const char* kLink =
+        test_dir_.path().Append("test/this_link").value().c_str();
     this_link.assign(long_link.c_str(), len);
     ASSERT_EQ(len, this_link.size());
     unlink(kLink);
@@ -341,13 +345,13 @@ TEST_F(UserCollectorTest, CopyOffProcFilesBadPath) {
 }
 
 TEST_F(UserCollectorTest, CopyOffProcFilesBadPid) {
-  FilePath container_path("test/container");
+  FilePath container_path(test_dir_.path().Append("test/container"));
   ASSERT_FALSE(collector_.CopyOffProcFiles(0, container_path));
   EXPECT_TRUE(FindLog("Path /proc/0 does not exist"));
 }
 
 TEST_F(UserCollectorTest, CopyOffProcFilesOK) {
-  FilePath container_path("test/container");
+  FilePath container_path(test_dir_.path().Append("test/container"));
   ASSERT_TRUE(collector_.CopyOffProcFiles(pid_, container_path));
   EXPECT_FALSE(FindLog("Could not copy"));
   static struct {
@@ -371,9 +375,7 @@ TEST_F(UserCollectorTest, CopyOffProcFilesOK) {
 }
 
 TEST_F(UserCollectorTest, ValidateProcFiles) {
-  base::ScopedTempDir temp_dir;
-  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  FilePath container_dir = temp_dir.path();
+  FilePath container_dir = test_dir_.path();
 
   // maps file not exists (i.e. GetFileSize fails)
   EXPECT_FALSE(collector_.ValidateProcFiles(container_dir));
@@ -392,9 +394,7 @@ TEST_F(UserCollectorTest, ValidateProcFiles) {
 }
 
 TEST_F(UserCollectorTest, ValidateCoreFile) {
-  base::ScopedTempDir temp_dir;
-  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  FilePath container_dir = temp_dir.path();
+  FilePath container_dir = test_dir_.path();
   FilePath core_file = container_dir.Append("core");
 
   // Core file does not exist
