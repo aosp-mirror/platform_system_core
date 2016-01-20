@@ -183,7 +183,6 @@ class Subprocess {
     ~Subprocess();
 
     const std::string& command() const { return command_; }
-    bool is_interactive() const { return command_.empty(); }
 
     int local_socket_fd() const { return local_socket_sfd_.fd(); }
 
@@ -332,7 +331,7 @@ bool Subprocess::ForkAndExec() {
         parent_error_sfd.Reset();
         close_on_exec(child_error_sfd.fd());
 
-        if (is_interactive()) {
+        if (command_.empty()) {
             execle(_PATH_BSHELL, _PATH_BSHELL, "-", nullptr, cenv.data());
         } else {
             execle(_PATH_BSHELL, _PATH_BSHELL, "-c", command_.c_str(), nullptr, cenv.data());
@@ -407,20 +406,6 @@ int Subprocess::OpenPtyChildFd(const char* pts_name, ScopedFd* error_sfd) {
             WriteFdExactly(error_sfd->fd(), message);
         }
         exit(-1);
-    }
-
-    if (!is_interactive()) {
-        termios tattr;
-        if (tcgetattr(child_fd, &tattr) == -1) {
-            WriteFdExactly(error_sfd->fd(), "tcgetattr failed");
-            exit(-1);
-        }
-
-        cfmakeraw(&tattr);
-        if (tcsetattr(child_fd, TCSADRAIN, &tattr) == -1) {
-            WriteFdExactly(error_sfd->fd(), "tcsetattr failed");
-            exit(-1);
-        }
     }
 
     return child_fd;
