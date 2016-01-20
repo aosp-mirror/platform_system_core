@@ -1488,7 +1488,7 @@ char *android_log_formatLogLine (
         strcat(p, suffixBuf);
         p += suffixLen;
     } else {
-        while(pm < (entry->message + entry->messageLen)) {
+        do {
             const char *lineStart;
             size_t lineLen;
             lineStart = pm;
@@ -1510,7 +1510,7 @@ char *android_log_formatLogLine (
             p += suffixLen;
 
             if (*pm == '\n') pm++;
-        }
+        } while (pm < (entry->message + entry->messageLen));
     }
 
     if (p_outLength != NULL) {
