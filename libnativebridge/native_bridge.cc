@@ -413,14 +413,19 @@ bool InitializeNativeBridge(JNIEnv* env, const char* instruction_set) {
       if (errno == ENOENT) {
         if (mkdir(app_code_cache_dir, S_IRWXU | S_IRWXG | S_IXOTH) == -1) {
           ALOGW("Cannot create code cache directory %s: %s.", app_code_cache_dir, strerror(errno));
+          fprintf(stderr, "Cannot create code cache directory %s: %s.",
+              app_code_cache_dir, strerror(errno));
           ReleaseAppCodeCacheDir();
         }
       } else {
         ALOGW("Cannot stat code cache directory %s: %s.", app_code_cache_dir, strerror(errno));
+        fprintf(stderr, "Cannot stat code cache directory %s: %s.",
+            app_code_cache_dir, strerror(errno));
         ReleaseAppCodeCacheDir();
       }
     } else if (!S_ISDIR(st.st_mode)) {
       ALOGW("Code cache is not a directory %s.", app_code_cache_dir);
+      fprintf(stderr, "Code cache is not a directory %s.", app_code_cache_dir);
       ReleaseAppCodeCacheDir();
     }
 
