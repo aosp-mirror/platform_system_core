@@ -306,12 +306,14 @@ static void fdevent_subproc_event_func(int fd, unsigned ev,
         auto it = g_poll_node_map.find(subproc_fd);
         if (it == g_poll_node_map.end()) {
             D("subproc_fd %d cleared from fd_table", subproc_fd);
+            adb_close(subproc_fd);
             return;
         }
         fdevent* subproc_fde = it->second.fde;
         if(subproc_fde->fd != subproc_fd) {
             // Already reallocated?
-            D("subproc_fd(%d) != subproc_fde->fd(%d)", subproc_fd, subproc_fde->fd);
+            LOG(FATAL) << "subproc_fd(" << subproc_fd << ") != subproc_fde->fd(" << subproc_fde->fd
+                       << ")";
             return;
         }
 
