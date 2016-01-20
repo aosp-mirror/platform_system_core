@@ -233,6 +233,7 @@ Subprocess::Subprocess(const std::string& command, const char* terminal_type,
 }
 
 Subprocess::~Subprocess() {
+    WaitForExit();
 }
 
 bool Subprocess::ForkAndExec() {
@@ -432,7 +433,6 @@ void* Subprocess::ThreadHandler(void* userdata) {
             "shell srvc %d", subprocess->local_socket_fd()));
 
     subprocess->PassDataStreams();
-    subprocess->WaitForExit();
 
     D("deleting Subprocess for PID %d", subprocess->pid());
     delete subprocess;
