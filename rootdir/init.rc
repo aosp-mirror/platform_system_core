@@ -408,9 +408,6 @@ on post-fs-data
 
     symlink /data/data /data/user/0
 
-    setusercryptopolicies /data/user
-    createuserkey 0 0 0
-
     # Reload policy from /data/security if present.
     setprop selinux.reload_policy 1
 
