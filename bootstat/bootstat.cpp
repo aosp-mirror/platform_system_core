@@ -25,7 +25,7 @@
 #include <cstdio>
 #include <memory>
 #include <string>
-#include <base/logging.h>
+#include <android-base/logging.h>
 #include <log/log.h>
 #include "boot_event_record_store.h"
 #include "event_log_list_builder.h"
