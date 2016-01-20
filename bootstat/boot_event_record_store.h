@@ -21,7 +21,7 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include <base/macros.h>
+#include <android-base/macros.h>
 #include <gtest/gtest_prod.h>
 
 // BootEventRecordStore manages the persistence of boot events to the record
