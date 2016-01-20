@@ -151,8 +151,8 @@ bool UserCollector::GetIdFromStatus(
     return false;
   }
   std::string id_substring = id_line.substr(strlen(prefix), std::string::npos);
-  std::vector<std::string> ids;
-  base::SplitString(id_substring, '\t', &ids);
+  std::vector<std::string> ids = base::SplitString(
+      id_substring, "\t", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (ids.size() != kIdMax || kind < 0 || kind >= kIdMax) {
     return false;
   }
@@ -313,8 +313,8 @@ bool UserCollector::GetCreatedCrashDirectory(pid_t pid, uid_t supplied_ruid,
 
   uid_t uid;
   if (base::ReadFileToString(process_path.Append("status"), &status)) {
-    std::vector<std::string> status_lines;
-    base::SplitString(status, '\n', &status_lines);
+    std::vector<std::string> status_lines = base::SplitString(
+        status, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
     std::string process_state;
     if (!GetStateFromStatus(status_lines, &process_state)) {

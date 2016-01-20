@@ -68,8 +68,8 @@ const char* const kPCRegex[] = {
   " RIP  \\[<.*>\\] ([^\\+ ]+).*",  // X86_64 uses RIP for the program counter
 };
 
-COMPILE_ASSERT(arraysize(kPCRegex) == KernelCollector::kArchCount,
-               missing_arch_pc_regexp);
+static_assert(arraysize(kPCRegex) == KernelCollector::kArchCount,
+              "Missing Arch PC regexp");
 
 }  // namespace
 

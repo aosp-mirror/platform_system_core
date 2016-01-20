@@ -75,13 +75,12 @@ std::vector<std::string> ParseProxyString(const std::string& input) {
     // Start by finding the first space (if any).
     std::string::iterator space;
     for (space = token.begin(); space != token.end(); ++space) {
-      if (IsAsciiWhitespace(*space)) {
+      if (base::IsAsciiWhitespace(*space)) {
         break;
       }
     }
 
-    std::string scheme = std::string(token.begin(), space);
-    base::StringToLowerASCII(&scheme);
+    std::string scheme = base::ToLowerASCII(std::string(token.begin(), space));
     // Chrome uses "socks" to mean socks4 and "proxy" to mean http.
     if (scheme == "socks")
       scheme += "4";
@@ -183,7 +182,7 @@ class ProxyResolver : public brillo::DBusDaemon {
     timeout_callback_.Cancel();
     proxies_ = ParseProxyString(proxy_info);
     LOG(INFO) << "Found proxies via browser signal: "
-              << JoinString(proxies_, 'x');
+              << base::JoinString(proxies_, "x");
 
     Quit();
   }
