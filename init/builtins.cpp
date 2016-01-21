@@ -418,20 +418,32 @@ static int wipe_data_via_recovery() {
     while (1) { pause(); }  // never reached
 }
 
-static void import_late() {
-    static const std::vector<std::string> init_directories = {
-        "/system/etc/init",
-        "/vendor/etc/init",
-        "/odm/etc/init"
-    };
-
+/* Imports .rc files from the specified paths. Default ones are applied if none is given.
+ *
+ * start_index: index of the first path in the args list
+ */
+static void import_late(const std::vector<std::string>& args, size_t start_index) {
     Parser& parser = Parser::GetInstance();
-    for (const auto& dir : init_directories) {
-        parser.ParseConfig(dir.c_str());
+    if (args.size() <= start_index) {
+        // Use the default set if no path is given
+        static const std::vector<std::string> init_directories = {
+            "/system/etc/init",
+            "/vendor/etc/init",
+            "/odm/etc/init"
+        };
+
+        for (const auto& dir : init_directories) {
+            parser.ParseConfig(dir);
+        }
+    } else {
+        for (size_t i = start_index; i < args.size(); ++i) {
+            parser.ParseConfig(args[i]);
+        }
     }
 }
 
-/*
+/* mount_all <fstab> [ <path> ]*
+ *
  * This function might request a reboot, in which case it will
  * not return.
  */
@@ -478,7 +490,8 @@ static int do_mount_all(const std::vector<std::string>& args) {
         return -1;
     }
 
-    import_late();
+    /* Paths of .rc files are specified at the 2nd argument and beyond */
+    import_late(args, 2);
 
     if (ret == FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION) {
         property_set("vold.decrypt", "trigger_encryption");
@@ -910,7 +923,7 @@ BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"load_system_props",       {0,     0,    do_load_system_props}},
         {"loglevel",                {1,     1,    do_loglevel}},
         {"mkdir",                   {1,     4,    do_mkdir}},
-        {"mount_all",               {1,     1,    do_mount_all}},
+        {"mount_all",               {1,     kMax, do_mount_all}},
         {"mount",                   {3,     kMax, do_mount}},
         {"powerctl",                {1,     1,    do_powerctl}},
         {"restart",                 {1,     1,    do_restart}},

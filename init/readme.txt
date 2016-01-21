@@ -49,6 +49,8 @@ The intention of these directories is as follows
       actions or daemons needed for motion sensor or other peripheral
       functionality.
 
+One may specify paths in the mount_all command line to have it import
+.rc files at the specified paths instead of the default ones described above.
 
 Actions
 -------
@@ -263,8 +265,10 @@ mkdir <path> [mode] [owner] [group]
    owned by the root user and root group. If provided, the mode, owner and group
    will be updated if the directory exists already.
 
-mount_all <fstab>
-   Calls fs_mgr_mount_all on the given fs_mgr-format fstab.
+mount_all <fstab> [ <path> ]*
+   Calls fs_mgr_mount_all on the given fs_mgr-format fstab and imports .rc files
+   at the specified paths (e.g., on the partitions just mounted). Refer to the
+   section of "Init .rc Files" for detail.
 
 mount <type> <device> <dir> [ <flag> ]* [<options>]
    Attempt to mount the named device at the directory <dir>
@@ -358,7 +362,8 @@ import <path>
 
 There are only two times where the init executable imports .rc files,
    1) When it imports /init.rc during initial boot
-   2) When it imports /{system,vendor,odm}/etc/init/ during mount_all
+   2) When it imports /{system,vendor,odm}/etc/init/ or .rc files at specified
+      paths during mount_all
 
 
 Properties
