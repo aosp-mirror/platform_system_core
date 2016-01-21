@@ -39,26 +39,33 @@ libcutils_common_sources := \
 libcutils_nonwindows_sources := \
         fs.c \
         multiuser.c \
-        socket_inaddr_any_server.c \
-        socket_local_client.c \
-        socket_local_server.c \
-        socket_loopback_client.c \
-        socket_loopback_server.c \
-        socket_network_client.c \
-        sockets.c \
+        socket_inaddr_any_server_unix.c \
+        socket_local_client_unix.c \
+        socket_local_server_unix.c \
+        socket_loopback_client_unix.c \
+        socket_loopback_server_unix.c \
+        socket_network_client_unix.c \
+        sockets_unix.c \
         str_parms.c \
 
 libcutils_nonwindows_host_sources := \
         ashmem-host.c \
-        trace-host.c
+        trace-host.c \
 
+libcutils_windows_host_sources := \
+        socket_inaddr_any_server_windows.c \
+        socket_network_client_windows.c \
+        sockets_windows.c \
 
 # Shared and static library for host
+# Note: when linking this library on Windows, you must also link to Winsock2
+# using "LOCAL_LDLIBS_windows := -lws2_32".
 # ========================================================
 LOCAL_MODULE := libcutils
 LOCAL_SRC_FILES := $(libcutils_common_sources) dlmalloc_stubs.c
 LOCAL_SRC_FILES_darwin := $(libcutils_nonwindows_sources) $(libcutils_nonwindows_host_sources)
 LOCAL_SRC_FILES_linux := $(libcutils_nonwindows_sources) $(libcutils_nonwindows_host_sources)
+LOCAL_SRC_FILES_windows := $(libcutils_windows_host_sources)
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS := -Werror -Wall -Wextra
 LOCAL_MULTILIB := both

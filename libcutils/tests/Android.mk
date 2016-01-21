@@ -15,6 +15,9 @@
 LOCAL_PATH := $(call my-dir)
 
 test_src_files := \
+    sockets_test.cpp \
+
+test_src_files_nonwindows := \
     test_str_parms.cpp \
 
 test_target_only_src_files := \
@@ -55,7 +58,7 @@ include $(BUILD_NATIVE_TEST)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils_test
-LOCAL_SRC_FILES := $(test_src_files)
+LOCAL_SRC_FILES := $(test_src_files) $(test_src_files_nonwindows)
 LOCAL_SHARED_LIBRARIES := $(test_libraries)
 LOCAL_MULTILIB := both
 LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
@@ -65,9 +68,13 @@ include $(BUILD_HOST_NATIVE_TEST)
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils_test_static
 LOCAL_SRC_FILES := $(test_src_files)
+LOCAL_SRC_FILES_darwin := $(test_src_files_nonwindows)
+LOCAL_SRC_FILES_linux := $(test_src_files_nonwindows)
 LOCAL_STATIC_LIBRARIES := $(test_libraries)
+LOCAL_LDLIBS_windows := -lws2_32
 LOCAL_CXX_STL := libc++_static
 LOCAL_MULTILIB := both
 LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
 LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
+LOCAL_MODULE_HOST_OS := darwin linux windows
 include $(BUILD_HOST_NATIVE_TEST)
