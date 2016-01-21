@@ -45,3 +45,7 @@ bool socket_peer_is_trusted(int fd __android_unused)
 
     return true;
 }
+
+int socket_close(int sock) {
+  return close(sock);
+}

@@ -37,7 +37,7 @@ int socket_local_client(const char *name, int namespaceId, int type)
 #include <sys/select.h>
 #include <sys/types.h>
 
-#include "socket_local.h"
+#include "socket_local_unix.h"
 
 #define UNUSED __attribute__((unused))
 
