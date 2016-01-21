@@ -135,6 +135,9 @@ include $(BUILD_PREBUILT)
 include $(CLEAR_VARS)
 LOCAL_MODULE := crash_reporter_tests
 LOCAL_CPP_EXTENSION := $(crash_reporter_cpp_extension)
+ifdef BRILLO
+LOCAL_MODULE_TAGS := debug
+endif
 LOCAL_SHARED_LIBRARIES := libchrome \
     libbrillo \
     libcutils \
