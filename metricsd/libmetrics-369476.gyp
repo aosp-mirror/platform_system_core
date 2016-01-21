@@ -1,6 +1,6 @@
 {
   'variables': {
-    'libbase_ver': 334380,
+    'libbase_ver': 369476,
   },
   'includes': [
     'libmetrics.gypi',
