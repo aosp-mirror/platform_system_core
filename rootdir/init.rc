@@ -43,19 +43,6 @@ on init
     mount cgroup none /acct cpuacct
     mkdir /acct/uid
 
-    # Create cgroup mount point for memory
-    mount tmpfs none /sys/fs/cgroup mode=0750,uid=0,gid=1000
-    mkdir /sys/fs/cgroup/memory 0750 root system
-    mount cgroup none /sys/fs/cgroup/memory memory
-    write /sys/fs/cgroup/memory/memory.move_charge_at_immigrate 1
-    chown root system /sys/fs/cgroup/memory/tasks
-    chmod 0660 /sys/fs/cgroup/memory/tasks
-    mkdir /sys/fs/cgroup/memory/sw 0750 root system
-    write /sys/fs/cgroup/memory/sw/memory.swappiness 100
-    write /sys/fs/cgroup/memory/sw/memory.move_charge_at_immigrate 1
-    chown root system /sys/fs/cgroup/memory/sw/tasks
-    chmod 0660 /sys/fs/cgroup/memory/sw/tasks
-
     # Create energy-aware scheduler tuning nodes
     mkdir /sys/fs/cgroup/stune
     mount cgroup none /sys/fs/cgroup/stune schedtune
@@ -95,9 +82,11 @@ on init
     symlink /storage/self/primary /sdcard
     symlink /mnt/user/0/primary /mnt/runtime/default/self/primary
 
-    # memory control cgroup
+    # root memory control cgroup, used by lmkd
     mkdir /dev/memcg 0700 root system
     mount cgroup none /dev/memcg memory
+    # app mem cgroups, used by activity manager and lmkd
+    mkdir /dev/memcg/apps/ 0755 system system
 
     write /proc/sys/kernel/panic_on_oops 1
     write /proc/sys/kernel/hung_task_timeout_secs 0
