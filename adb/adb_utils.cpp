@@ -208,59 +208,6 @@ std::string dump_hex(const void* data, size_t byte_count) {
     return line;
 }
 
-bool parse_host_and_port(const std::string& address,
-                         std::string* canonical_address,
-                         std::string* host, int* port,
-                         std::string* error) {
-    host->clear();
-
-    bool ipv6 = true;
-    bool saw_port = false;
-    size_t colons = std::count(address.begin(), address.end(), ':');
-    size_t dots = std::count(address.begin(), address.end(), '.');
-    std::string port_str;
-    if (address[0] == '[') {
-      // [::1]:123
-      if (address.rfind("]:") == std::string::npos) {
-        *error = android::base::StringPrintf("bad IPv6 address '%s'", address.c_str());
-        return false;
-      }
-      *host = address.substr(1, (address.find("]:") - 1));
-      port_str = address.substr(address.rfind("]:") + 2);
-      saw_port = true;
-    } else if (dots == 0 && colons >= 2 && colons <= 7) {
-      // ::1
-      *host = address;
-    } else if (colons <= 1) {
-      // 1.2.3.4 or some.accidental.domain.com
-      ipv6 = false;
-      std::vector<std::string> pieces = android::base::Split(address, ":");
-      *host = pieces[0];
-      if (pieces.size() > 1) {
-        port_str = pieces[1];
-        saw_port = true;
-      }
-    }
-
-    if (host->empty()) {
-      *error = android::base::StringPrintf("no host in '%s'", address.c_str());
-      return false;
-    }
-
-    if (saw_port) {
-      if (sscanf(port_str.c_str(), "%d", port) != 1 || *port <= 0 || *port > 65535) {
-        *error = android::base::StringPrintf("bad port number '%s' in '%s'",
-                                             port_str.c_str(), address.c_str());
-        return false;
-      }
-    }
-
-    *canonical_address = android::base::StringPrintf(ipv6 ? "[%s]:%d" : "%s:%d", host->c_str(), *port);
-    LOG(DEBUG) << "parsed " << address << " as " << *host << " and " << *port
-               << " (" << *canonical_address << ")";
-    return true;
-}
-
 std::string perror_str(const char* msg) {
     return android::base::StringPrintf("%s: %s", msg, strerror(errno));
 }

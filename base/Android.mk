@@ -19,6 +19,7 @@ LOCAL_PATH := $(call my-dir)
 libbase_src_files := \
     file.cpp \
     logging.cpp \
+    parsenetaddress.cpp \
     stringprintf.cpp \
     strings.cpp \
     test_utils.cpp \
@@ -30,6 +31,7 @@ libbase_test_src_files := \
     file_test.cpp \
     logging_test.cpp \
     parseint_test.cpp \
+    parsenetaddress_test.cpp \
     stringprintf_test.cpp \
     strings_test.cpp \
     test_main.cpp \
