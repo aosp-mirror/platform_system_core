@@ -85,5 +85,6 @@ void MetricsLog::IncrementUncleanShutdownCount(unsigned int count) {
 }
 
 bool MetricsLog::PopulateSystemProfile(SystemProfileSetter* profile_setter) {
+  CHECK(profile_setter);
   return profile_setter->Populate(uma_proto());
 }
