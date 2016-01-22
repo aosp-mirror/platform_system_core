@@ -32,6 +32,7 @@
 #endif
 
 #include <android-base/file.h>
+#include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <cutils/sockets.h>
@@ -396,7 +397,7 @@ static void connect_device(const std::string& address, std::string* response) {
     std::string serial;
     std::string host;
     int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
-    if (!parse_host_and_port(address, &serial, &host, &port, response)) {
+    if (!android::base::ParseNetAddress(address, &host, &port, &serial, response)) {
         return;
     }
 
