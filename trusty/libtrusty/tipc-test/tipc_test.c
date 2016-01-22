@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <sys/uio.h>
 
 #include <trusty/tipc.h>
 
@@ -80,6 +81,8 @@ static const char *usage_long =
 "   ta2ta-ipc    - execute TA to TA unittest\n"
 "   dev-uuid     - print device uuid\n"
 "   ta-access    - test ta-access flags\n"
+"   writev       - writev test\n"
+"   readv        - readv test\n"
 "\n"
 ;
 
@@ -692,6 +695,171 @@ static int ta_access_test(void)
 }
 
 
+static int writev_test(uint repeat, uint msgsz, bool var)
+{
+	uint i;
+	ssize_t rc;
+	size_t  msg_len;
+	int  echo_fd = -1;
+	char tx0_buf[msgsz];
+	char tx1_buf[msgsz];
+	char rx_buf [msgsz];
+	struct iovec iovs[2]= {{tx0_buf, 0}, {tx1_buf, 0}};
+
+	if (!opt_silent) {
+		printf("%s: repeat %u: msgsz %u: variable %s\n",
+			__func__, repeat, msgsz, var ? "true" : "false");
+	}
+
+	echo_fd = tipc_connect(dev_name, echo_name);
+	if (echo_fd < 0) {
+		fprintf(stderr, "Failed to connect to service\n");
+		return echo_fd;
+	}
+
+	for (i = 0; i < repeat; i++) {
+
+		msg_len = msgsz;
+		if (opt_variable && msgsz) {
+			msg_len = rand() % msgsz;
+		}
+
+		iovs[0].iov_len = msg_len / 3;
+		iovs[1].iov_len = msg_len - iovs[0].iov_len;
+
+		memset(tx0_buf, i + 1, iovs[0].iov_len);
+		memset(tx1_buf, i + 2, iovs[1].iov_len);
+		memset(rx_buf,  i + 3, sizeof(rx_buf));
+
+		rc = writev(echo_fd, iovs, 2);
+		if (rc < 0) {
+			perror("writev_test: writev");
+			break;
+		}
+
+		if ((size_t)rc != msg_len) {
+			fprintf(stderr,
+				"%s: %s: data size mismatch (%zd vs. %zd)\n",
+				__func__, "writev", (size_t)rc, msg_len);
+			break;
+		}
+
+		rc = read(echo_fd, rx_buf, sizeof(rx_buf));
+		if (rc < 0) {
+			perror("writev_test: read");
+			break;
+		}
+
+		if ((size_t)rc != msg_len) {
+			fprintf(stderr,
+				"%s: %s: data size mismatch (%zd vs. %zd)\n",
+				__func__, "read", (size_t)rc, msg_len);
+			break;
+		}
+
+		if (memcmp(tx0_buf, rx_buf, iovs[0].iov_len)) {
+			fprintf(stderr, "%s: data mismatch: buf 0\n", __func__);
+			break;
+		}
+
+		if (memcmp(tx1_buf, rx_buf + iovs[0].iov_len, iovs[1].iov_len)) {
+			fprintf(stderr, "%s: data mismatch, buf 1\n", __func__);
+			break;
+		}
+	}
+
+	tipc_close(echo_fd);
+
+	if (!opt_silent) {
+		printf("%s: done\n",__func__);
+	}
+
+	return 0;
+}
+
+static int readv_test(uint repeat, uint msgsz, bool var)
+{
+	uint i;
+	ssize_t rc;
+	size_t  msg_len;
+	int  echo_fd = -1;
+	char tx_buf [msgsz];
+	char rx0_buf[msgsz];
+	char rx1_buf[msgsz];
+	struct iovec iovs[2]= {{rx0_buf, 0}, {rx1_buf, 0}};
+
+	if (!opt_silent) {
+		printf("%s: repeat %u: msgsz %u: variable %s\n",
+			__func__, repeat, msgsz, var ? "true" : "false");
+	}
+
+	echo_fd = tipc_connect(dev_name, echo_name);
+	if (echo_fd < 0) {
+		fprintf(stderr, "Failed to connect to service\n");
+		return echo_fd;
+	}
+
+	for (i = 0; i < repeat; i++) {
+
+		msg_len = msgsz;
+		if (opt_variable && msgsz) {
+			msg_len = rand() % msgsz;
+		}
+
+		iovs[0].iov_len = msg_len / 3;
+		iovs[1].iov_len = msg_len - iovs[0].iov_len;
+
+		memset(tx_buf,  i + 1, sizeof(tx_buf));
+		memset(rx0_buf, i + 2, iovs[0].iov_len);
+		memset(rx1_buf, i + 3, iovs[1].iov_len);
+
+		rc = write(echo_fd, tx_buf, msg_len);
+		if (rc < 0) {
+			perror("readv_test: write");
+			break;
+		}
+
+		if ((size_t)rc != msg_len) {
+			fprintf(stderr,
+				"%s: %s: data size mismatch (%zd vs. %zd)\n",
+				__func__, "write", (size_t)rc, msg_len);
+			break;
+		}
+
+		rc = readv(echo_fd, iovs, 2);
+		if (rc < 0) {
+			perror("readv_test: readv");
+			break;
+		}
+
+		if ((size_t)rc != msg_len) {
+			fprintf(stderr,
+				"%s: %s: data size mismatch (%zd vs. %zd)\n",
+				__func__, "write", (size_t)rc, msg_len);
+			break;
+		}
+
+		if (memcmp(rx0_buf, tx_buf, iovs[0].iov_len)) {
+			fprintf(stderr, "%s: data mismatch: buf 0\n", __func__);
+			break;
+		}
+
+		if (memcmp(rx1_buf, tx_buf + iovs[0].iov_len, iovs[1].iov_len)) {
+			fprintf(stderr, "%s: data mismatch, buf 1\n", __func__);
+			break;
+		}
+	}
+
+	tipc_close(echo_fd);
+
+	if (!opt_silent) {
+		printf("%s: done\n",__func__);
+	}
+
+	return 0;
+}
+
+
 int main(int argc, char **argv)
 {
 	int rc = 0;
@@ -735,6 +903,10 @@ int main(int argc, char **argv)
 		rc = dev_uuid_test();
 	} else if (strcmp(test_name, "ta-access") == 0) {
 		rc = ta_access_test();
+	} else if (strcmp(test_name, "writev") == 0) {
+		rc = writev_test(opt_repeat, opt_msgsize, opt_variable);
+	} else if (strcmp(test_name, "readv") == 0) {
+		rc = readv_test(opt_repeat, opt_msgsize, opt_variable);
 	} else {
 		fprintf(stderr, "Unrecognized test name '%s'\n", test_name);
 		print_usage_and_exit(argv[0], EXIT_FAILURE, true);
