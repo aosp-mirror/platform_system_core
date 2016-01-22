@@ -53,3 +53,8 @@ bool initialize_windows_sockets() {
 int socket_close(cutils_socket_t sock) {
     return closesocket(sock);
 }
+
+int socket_set_receive_timeout(cutils_socket_t sock, int timeout_ms) {
+    return setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout_ms,
+                      sizeof(timeout_ms));
+}

@@ -26,36 +26,41 @@
  * SUCH DAMAGE.
  */
 
-// This file provides a class interface for cross-platform UDP functionality. The main fastboot
+// This file provides a class interface for cross-platform socket functionality. The main fastboot
 // engine should not be using this interface directly, but instead should use a higher-level
-// interface that enforces the fastboot UDP protocol.
+// interface that enforces the fastboot protocol.
 
 #ifndef SOCKET_H_
 #define SOCKET_H_
 
-#include "android-base/macros.h"
-
 #include <memory>
 #include <string>
 
-// UdpSocket interface to be implemented for each platform.
-class UdpSocket {
+#include <android-base/macros.h>
+#include <cutils/sockets.h>
+
+// Socket interface to be implemented for each platform.
+class Socket {
   public:
+    enum class Protocol { kTcp, kUdp };
+
     // Creates a new client connection. Clients are connected to a specific hostname/port and can
     // only send to that destination.
     // On failure, |error| is filled (if non-null) and nullptr is returned.
-    static std::unique_ptr<UdpSocket> NewUdpClient(const std::string& hostname, int port,
-                                                   std::string* error);
+    static std::unique_ptr<Socket> NewClient(Protocol protocol, const std::string& hostname,
+                                             int port, std::string* error);
 
     // Creates a new server bound to local |port|. This is only meant for testing, during normal
     // fastboot operation the device acts as the server.
-    // The server saves sender addresses in Receive(), and uses the most recent address during
+    // A UDP server saves sender addresses in Receive(), and uses the most recent address during
     // calls to Send().
-    static std::unique_ptr<UdpSocket> NewUdpServer(int port);
+    static std::unique_ptr<Socket> NewServer(Protocol protocol, int port);
 
-    virtual ~UdpSocket() = default;
+    // Destructor closes the socket if it's open.
+    virtual ~Socket();
 
-    // Sends |length| bytes of |data|. Returns the number of bytes actually sent or -1 on error.
+    // Sends |length| bytes of |data|. For TCP sockets this will continue trying to send until all
+    // bytes are transmitted. Returns the number of bytes actually sent or -1 on error.
     virtual ssize_t Send(const void* data, size_t length) = 0;
 
     // Waits up to |timeout_ms| to receive up to |length| bytes of data. |timout_ms| of 0 will
@@ -63,14 +68,29 @@ class UdpSocket {
     // errno will be set to EAGAIN or EWOULDBLOCK.
     virtual ssize_t Receive(void* data, size_t length, int timeout_ms) = 0;
 
+    // Calls Receive() until exactly |length| bytes have been received or an error occurs.
+    virtual ssize_t ReceiveAll(void* data, size_t length, int timeout_ms);
+
     // Closes the socket. Returns 0 on success, -1 on error.
-    virtual int Close() = 0;
+    virtual int Close();
+
+    // Accepts an incoming TCP connection. No effect for UDP sockets. Returns a new Socket
+    // connected to the client on success, nullptr on failure.
+    virtual std::unique_ptr<Socket> Accept() { return nullptr; }
 
   protected:
     // Protected constructor to force factory function use.
-    UdpSocket() = default;
+    Socket(cutils_socket_t sock);
 
-    DISALLOW_COPY_AND_ASSIGN(UdpSocket);
+    // Update the socket receive timeout if necessary.
+    bool SetReceiveTimeout(int timeout_ms);
+
+    cutils_socket_t sock_ = INVALID_SOCKET;
+
+  private:
+    int receive_timeout_ms_ = 0;
+
+    DISALLOW_COPY_AND_ASSIGN(Socket);
 };
 
 #endif  // SOCKET_H_
