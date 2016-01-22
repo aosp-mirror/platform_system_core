@@ -17,6 +17,7 @@
 #include "event_log_list_builder.h"
 
 #include <cinttypes>
+#include <memory>
 #include <string>
 #include <android-base/logging.h>
 #include <log/log.h>
