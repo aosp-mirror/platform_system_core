@@ -28,6 +28,10 @@ on early-init
 on init
     sysclktz 0
 
+    # Mix device-specific information into the entropy pool
+    copy /proc/cmdline /dev/urandom
+    copy /default.prop /dev/urandom
+
     # Backward compatibility.
     symlink /system/etc /etc
     symlink /sys/kernel/debug /d
