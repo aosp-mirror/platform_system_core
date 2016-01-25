@@ -15,16 +15,20 @@
  */
 
 #include <fcntl.h>
+#include <inttypes.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
 
+#include <string>
+
 #include <gtest/gtest.h>
 
-#include "cutils/sockets.h"
-#include "log/log.h"
-#include "log/logger.h"
+#include <android-base/stringprintf.h>
+#include <cutils/sockets.h>
+#include <log/log.h>
+#include <log/logger.h>
 
 /*
  * returns statistics
@@ -198,6 +202,10 @@ static void caught_signal(int /* signum */) { }
 
 static void dump_log_msg(const char *prefix,
                          log_msg *msg, unsigned int version, int lid) {
+    std::cout << std::flush;
+    std::cerr << std::flush;
+    fflush(stdout);
+    fflush(stderr);
     switch(msg->entry.hdr_size) {
     case 0:
         version = 1;
@@ -282,6 +290,7 @@ static void dump_log_msg(const char *prefix,
         }
     }
     fprintf(stderr, "}\n");
+    fflush(stderr);
 }
 
 TEST(logd, both) {
@@ -524,7 +533,8 @@ TEST(logd, benchmark) {
     ASSERT_GT(totalSize, nowSpamSize * 2);
 }
 
-TEST(logd, timeout) {
+// b/26447386 confirm fixed
+void timeout_negative(const char *command) {
     log_msg msg_wrap, msg_timeout;
     bool content_wrap = false, content_timeout = false, written = false;
     unsigned int alarm_wrap = 0, alarm_timeout = 0;
@@ -538,6 +548,8 @@ TEST(logd, timeout) {
                                      SOCK_SEQPACKET);
         ASSERT_LT(0, fd);
 
+        std::string ask(command);
+
         struct sigaction ignore, old_sigaction;
         memset(&ignore, 0, sizeof(ignore));
         ignore.sa_handler = caught_signal;
@@ -545,8 +557,8 @@ TEST(logd, timeout) {
         sigaction(SIGALRM, &ignore, &old_sigaction);
         unsigned int old_alarm = alarm(3);
 
-        static const char ask[] = "dumpAndClose lids=0,1,2,3,4,5 timeout=6";
-        written = write(fd, ask, sizeof(ask)) == sizeof(ask);
+        size_t len = ask.length() + 1;
+        written = write(fd, ask.c_str(), len) == (ssize_t)len;
         if (!written) {
             alarm(old_alarm);
             sigaction(SIGALRM, &old_sigaction, NULL);
@@ -559,6 +571,9 @@ TEST(logd, timeout) {
         alarm_wrap = alarm(5);
 
         content_timeout = recv(fd, msg_timeout.buf, sizeof(msg_timeout), 0) > 0;
+        if (!content_timeout) { // make sure we hit dumpAndClose
+            content_timeout = recv(fd, msg_timeout.buf, sizeof(msg_timeout), 0) > 0;
+        }
 
         alarm_timeout = alarm((old_alarm <= 0)
             ? old_alarm
@@ -569,7 +584,7 @@ TEST(logd, timeout) {
 
         close(fd);
 
-        if (!content_wrap && !alarm_wrap && content_timeout && !alarm_timeout) {
+        if (!content_wrap && !alarm_wrap && content_timeout && alarm_timeout) {
             break;
         }
     }
@@ -580,6 +595,113 @@ TEST(logd, timeout) {
 
     if (content_timeout) {
         dump_log_msg("timeout", &msg_timeout, 3, -1);
+    }
+
+    EXPECT_TRUE(written);
+    EXPECT_TRUE(content_wrap);
+    EXPECT_NE(0U, alarm_wrap);
+    EXPECT_TRUE(content_timeout);
+    EXPECT_NE(0U, alarm_timeout);
+}
+
+TEST(logd, timeout_no_start) {
+    timeout_negative("dumpAndClose lids=0,1,2,3,4,5 timeout=6");
+}
+
+TEST(logd, timeout_start_epoch) {
+    timeout_negative("dumpAndClose lids=0,1,2,3,4,5 timeout=6 start=0.000000000");
+}
+
+// b/26447386 refined behavior
+TEST(logd, timeout) {
+    log_msg msg_wrap, msg_timeout;
+    bool content_wrap = false, content_timeout = false, written = false;
+    unsigned int alarm_wrap = 0, alarm_timeout = 0;
+    // A few tries to get it right just in case wrap kicks in due to
+    // content providers being active during the test
+    int i = 5;
+    log_time now(android_log_clockid());
+    now.tv_sec -= 30; // reach back a moderate period of time
+
+    while (--i) {
+        int fd = socket_local_client("logdr",
+                                     ANDROID_SOCKET_NAMESPACE_RESERVED,
+                                     SOCK_SEQPACKET);
+        ASSERT_LT(0, fd);
+
+        std::string ask = android::base::StringPrintf(
+            "dumpAndClose lids=0,1,2,3,4,5 timeout=6 start=%"
+                PRIu32 ".%09" PRIu32,
+            now.tv_sec, now.tv_nsec);
+
+        struct sigaction ignore, old_sigaction;
+        memset(&ignore, 0, sizeof(ignore));
+        ignore.sa_handler = caught_signal;
+        sigemptyset(&ignore.sa_mask);
+        sigaction(SIGALRM, &ignore, &old_sigaction);
+        unsigned int old_alarm = alarm(3);
+
+        size_t len = ask.length() + 1;
+        written = write(fd, ask.c_str(), len) == (ssize_t)len;
+        if (!written) {
+            alarm(old_alarm);
+            sigaction(SIGALRM, &old_sigaction, NULL);
+            close(fd);
+            continue;
+        }
+
+        content_wrap = recv(fd, msg_wrap.buf, sizeof(msg_wrap), 0) > 0;
+
+        alarm_wrap = alarm(5);
+
+        content_timeout = recv(fd, msg_timeout.buf, sizeof(msg_timeout), 0) > 0;
+        if (!content_timeout) { // make sure we hit dumpAndClose
+            content_timeout = recv(fd, msg_timeout.buf, sizeof(msg_timeout), 0) > 0;
+        }
+
+        alarm_timeout = alarm((old_alarm <= 0)
+            ? old_alarm
+            : (old_alarm > (1 + 3 - alarm_wrap))
+                ? old_alarm - 3 + alarm_wrap
+                : 2);
+        sigaction(SIGALRM, &old_sigaction, NULL);
+
+        close(fd);
+
+        if (!content_wrap && !alarm_wrap && content_timeout && alarm_timeout) {
+            break;
+        }
+
+        // modify start time in case content providers are relatively
+        // active _or_ inactive during the test.
+        if (content_timeout) {
+            log_time msg(msg_timeout.entry.sec, msg_timeout.entry.nsec);
+            EXPECT_FALSE(msg < now);
+            if (msg > now) {
+                now = msg;
+                now.tv_sec += 30;
+                msg = log_time(android_log_clockid());
+                if (now > msg) {
+                    now = msg;
+                    --now.tv_sec;
+                }
+            }
+        } else {
+            now.tv_sec -= 120; // inactive, reach further back!
+        }
+    }
+
+    if (content_wrap) {
+        dump_log_msg("wrap", &msg_wrap, 3, -1);
+    }
+
+    if (content_timeout) {
+        dump_log_msg("timeout", &msg_timeout, 3, -1);
+    }
+
+    if (content_wrap || !content_timeout) {
+        fprintf(stderr, "now=%" PRIu32 ".%09" PRIu32 "\n",
+                now.tv_sec, now.tv_nsec);
     }
 
     EXPECT_TRUE(written);
