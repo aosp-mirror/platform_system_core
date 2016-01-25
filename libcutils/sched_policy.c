@@ -62,6 +62,7 @@ static int fg_cgroup_fd = -1;
 
 #ifdef USE_CPUSETS
 // File descriptors open to /dev/cpuset/../tasks, setup by initialize, or -1 on error
+static int system_bg_cpuset_fd = -1;
 static int bg_cpuset_fd = -1;
 static int fg_cpuset_fd = -1;
 static int bg_schedboost_fd = -1;
@@ -130,6 +131,9 @@ static void __initialize(void) {
         fg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
         filename = "/dev/cpuset/background/tasks";
         bg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
+        filename = "/dev/cpuset/system-background/tasks";
+        system_bg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
+
 #ifdef USE_SCHEDBOOST
         filename = "/sys/fs/cgroup/stune/foreground/tasks";
         fg_schedboost_fd = open(filename, O_WRONLY | O_CLOEXEC);
@@ -138,7 +142,6 @@ static void __initialize(void) {
 #endif
     }
 #endif
-
 }
 
 /*
@@ -272,6 +275,10 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
     case SP_AUDIO_SYS:
         fd = fg_cpuset_fd;
         boost_fd = fg_schedboost_fd;
+        break;
+    case SP_SYSTEM:
+        fd = system_bg_cpuset_fd;
+        boost_fd = bg_schedboost_fd;
         break;
     default:
         boost_fd = fd = -1;
