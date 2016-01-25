@@ -40,17 +40,43 @@ files contained within the /{system,vendor,odm}/etc/init/ directories.
 These directories are intended for all Actions and Services used after
 file system mounting.
 
+One may specify paths in the mount_all command line to have it import
+.rc files at the specified paths instead of the default ones listed above.
+This is primarily for supporting factory mode and other non-standard boot
+modes.  The three default paths should be used for the normal boot process.
+
 The intention of these directories is as follows
    1) /system/etc/init/ is for core system items such as
-      SurfaceFlinger and MediaService.
+      SurfaceFlinger, MediaService, and logcatd.
    2) /vendor/etc/init/ is for SoC vendor items such as actions or
       daemons needed for core SoC functionality.
    3) /odm/etc/init/ is for device manufacturer items such as
       actions or daemons needed for motion sensor or other peripheral
       functionality.
 
-One may specify paths in the mount_all command line to have it import
-.rc files at the specified paths instead of the default ones described above.
+All services whose binaries reside on the system, vendor, or odm
+partitions should have their service entries placed into a
+corresponding init .rc file, located in the /etc/init/
+directory of the partition where they reside.  There is a build
+system macro, LOCAL_INIT_RC, that handles this for developers.  Each
+init .rc file should additionally contain any actions associated with
+its service.
+
+An example is the logcatd.rc and Android.mk files located in the
+system/core/logcat directory.  The LOCAL_INIT_RC macro in the
+Android.mk file places logcatd.rc in /system/etc/init/ during the
+build process.  Init loads logcatd.rc during the mount_all command and
+allows the service to be run and the action to be queued when
+appropriate.
+
+This break up of init .rc files according to their daemon is preferred
+to the previously used monolithic init .rc files.  This approach
+ensures that the only service entries that init reads and the only
+actions that init performs correspond to services whose binaries are in
+fact present on the file system, which was not the case with the
+monolithic init .rc files.  This additionally will aid in merge
+conflict resolution when multiple services are added to the system, as
+each one will go into a separate file.
 
 Actions
 -------
