@@ -126,6 +126,7 @@ void *LogTimeEntry::threadStart(void *obj) {
     LogBuffer &logbuf = me->mReader.logbuf();
 
     bool privileged = FlushCommand::hasReadLogs(client);
+    bool security = FlushCommand::hasSecurityLogs(client);
 
     me->leadingDropped = true;
 
@@ -150,10 +151,10 @@ void *LogTimeEntry::threadStart(void *obj) {
         unlock();
 
         if (me->mTail) {
-            logbuf.flushTo(client, start, privileged, FilterFirstPass, me);
+            logbuf.flushTo(client, start, privileged, security, FilterFirstPass, me);
             me->leadingDropped = true;
         }
-        start = logbuf.flushTo(client, start, privileged, FilterSecondPass, me);
+        start = logbuf.flushTo(client, start, privileged, security, FilterSecondPass, me);
 
         lock();
 

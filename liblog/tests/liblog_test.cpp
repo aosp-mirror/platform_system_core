@@ -18,6 +18,8 @@
 #include <inttypes.h>
 #include <signal.h>
 #include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <cutils/properties.h>
 #include <gtest/gtest.h>
@@ -25,6 +27,7 @@
 #include <log/logger.h>
 #include <log/log_read.h>
 #include <log/logprint.h>
+#include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
 // enhanced version of LOG_FAILURE_RETRY to add support for EAGAIN and
@@ -368,6 +371,48 @@ TEST(liblog, __security_buffer) {
         return;
     }
 
+    /* Matches clientHasLogCredentials() in logd */
+    uid_t uid = getuid();
+    gid_t gid = getgid();
+    bool clientHasLogCredentials = true;
+    if ((uid != AID_SYSTEM) && (uid != AID_ROOT) && (uid != AID_LOG)
+     && (gid != AID_SYSTEM) && (gid != AID_ROOT) && (gid != AID_LOG)) {
+        uid_t euid = geteuid();
+        if ((euid != AID_SYSTEM) && (euid != AID_ROOT) && (euid != AID_LOG)) {
+            gid_t egid = getegid();
+            if ((egid != AID_SYSTEM) && (egid != AID_ROOT) && (egid != AID_LOG)) {
+                int num_groups = getgroups(0, NULL);
+                if (num_groups > 0) {
+                    gid_t groups[num_groups];
+                    num_groups = getgroups(num_groups, groups);
+                    while (num_groups > 0) {
+                        if (groups[num_groups - 1] == AID_LOG) {
+                            break;
+                        }
+                        --num_groups;
+                    }
+                }
+                if (num_groups <= 0) {
+                    clientHasLogCredentials = false;
+                }
+            }
+        }
+    }
+    if (!clientHasLogCredentials) {
+        fprintf(stderr, "WARNING: "
+                "not in system context, bypassing end-to-end test\n");
+
+        log_time ts(CLOCK_MONOTONIC);
+
+        buffer.type = EVENT_TYPE_LONG;
+        buffer.data = *(static_cast<uint64_t *>((void *)&ts));
+
+        // expect failure!
+        ASSERT_GE(0, __android_log_security_bwrite(0, &buffer, sizeof(buffer)));
+
+        return;
+    }
+
     pid_t pid = getpid();
 
     ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
@@ -415,7 +460,12 @@ TEST(liblog, __security_buffer) {
 
     android_logger_list_close(logger_list);
 
-    EXPECT_EQ(1, count);
+    bool clientHasSecurityCredentials = (uid == AID_SYSTEM) || (gid == AID_SYSTEM);
+    if (!clientHasSecurityCredentials) {
+        fprintf(stderr, "WARNING: "
+                "not system, content submitted but can not check end-to-end\n");
+    }
+    EXPECT_EQ(clientHasSecurityCredentials ? 1 : 0, count);
 
 }
 
