@@ -41,6 +41,7 @@ static const char* kPublicNativeLibraries = "libandroid.so:"
                                             "libart.so:"
                                             // END OF WORKAROUND
                                             "libc.so:"
+                                            "libcamera2ndk.so:"
                                             "libdl.so:"
                                             "libEGL.so:"
                                             "libGLESv1_CM.so:"
