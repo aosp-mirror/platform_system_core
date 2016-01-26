@@ -659,3 +659,8 @@ static DebugFrameInfo* ReadDebugFrameFromFile(const std::string& filename) {
   }
   return nullptr;
 }
+
+Backtrace* Backtrace::CreateOffline(pid_t pid, pid_t tid, BacktraceMap* map,
+                                    const backtrace_stackinfo_t& stack, bool cache_file) {
+  return new BacktraceOffline(pid, tid, map, stack, cache_file);
+}
