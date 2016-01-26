@@ -204,14 +204,36 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
         if (vec[0].iov_len < 4) {
             return -EINVAL;
         }
-        if ((last_uid != AID_SYSTEM) && (last_uid != AID_ROOT)) {
+        /* Matches clientHasLogCredentials() in logd */
+        if ((last_uid != AID_SYSTEM) && (last_uid != AID_ROOT) && (last_uid != AID_LOG)) {
             uid_t uid = geteuid();
-            if ((uid != AID_SYSTEM) && (uid != AID_ROOT)) {
+            if ((uid != AID_SYSTEM) && (uid != AID_ROOT) && (uid != AID_LOG)) {
                 gid_t gid = getgid();
-                if ((gid != AID_SYSTEM) && (gid != AID_ROOT)) {
+                if ((gid != AID_SYSTEM) && (gid != AID_ROOT) && (gid != AID_LOG)) {
                     gid = getegid();
-                    if ((gid != AID_SYSTEM) && (gid != AID_ROOT)) {
-                        return -EPERM;
+                    if ((gid != AID_SYSTEM) && (gid != AID_ROOT) && (gid != AID_LOG)) {
+                        int num_groups;
+                        gid_t *groups;
+
+                        num_groups = getgroups(0, NULL);
+                        if (num_groups <= 0) {
+                            return -EPERM;
+                        }
+                        groups = calloc(num_groups, sizeof(gid_t));
+                        if (!groups) {
+                            return -ENOMEM;
+                        }
+                        num_groups = getgroups(num_groups, groups);
+                        while (num_groups > 0) {
+                            if (groups[num_groups - 1] == AID_LOG) {
+                                break;
+                            }
+                            --num_groups;
+                        }
+                        free(groups);
+                        if (num_groups <= 0) {
+                            return -EPERM;
+                        }
                     }
                 }
             }
