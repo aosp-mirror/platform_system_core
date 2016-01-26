@@ -36,18 +36,6 @@ LogListener::LogListener(LogBuffer *buf, LogReader *reader) :
         reader(reader) {
 }
 
-static bool clientHasSecurityCredentials(uid_t uid, gid_t gid, pid_t /* pid */) {
-    if (uid == AID_SYSTEM) {
-        return true;
-    }
-
-    if (gid == AID_SYSTEM) {
-        return true;
-    }
-
-    return false;
-}
-
 bool LogListener::onDataAvailable(SocketClient *cli) {
     static bool name_set;
     if (!name_set) {
@@ -110,7 +98,7 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
 
     if ((header->id == LOG_ID_SECURITY) &&
             (!__android_log_security() ||
-             !clientHasSecurityCredentials(cred->uid, cred->gid, cred->pid))) {
+             !clientHasLogCredentials(cred->uid, cred->gid, cred->pid))) {
         return false;
     }
 
