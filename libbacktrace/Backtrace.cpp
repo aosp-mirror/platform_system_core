@@ -28,7 +28,6 @@
 #include <backtrace/BacktraceMap.h>
 
 #include "BacktraceLog.h"
-#include "BacktraceOffline.h"
 #include "thread_utils.h"
 #include "UnwindCurrent.h"
 #include "UnwindPtrace.h"
@@ -148,9 +147,4 @@ Backtrace* Backtrace::Create(pid_t pid, pid_t tid, BacktraceMap* map) {
   } else {
     return new UnwindPtrace(pid, tid, map);
   }
-}
-
-Backtrace* Backtrace::CreateOffline(pid_t pid, pid_t tid, BacktraceMap* map,
-                                    const backtrace_stackinfo_t& stack, bool cache_file) {
-  return new BacktraceOffline(pid, tid, map, stack, cache_file);
 }
