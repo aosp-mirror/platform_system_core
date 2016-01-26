@@ -48,7 +48,6 @@ libbacktrace_src_files := \
 	Backtrace.cpp \
 	BacktraceCurrent.cpp \
 	BacktraceMap.cpp \
-	BacktraceOffline.cpp \
 	BacktracePtrace.cpp \
 	thread_utils.c \
 	ThreadEntry.cpp \
@@ -60,25 +59,6 @@ libbacktrace_shared_libraries := \
 	libbase \
 	liblog \
 	libunwind \
-
-# Use shared llvm library on device to save space.
-libbacktrace_shared_libraries_target := \
-	libLLVM \
-
-# Use static llvm libraries on host to remove dependency on 32-bit llvm shared library
-# which is not included in the prebuilt.
-libbacktrace_static_libraries_host := \
-	libcutils \
-	libLLVMObject \
-	libLLVMBitReader \
-	libLLVMMC \
-	libLLVMMCParser \
-	libLLVMCore \
-	libLLVMSupport \
-
-libbacktrace_ldlibs_host := \
-	-lpthread \
-	-lrt \
 
 module := libbacktrace
 module_tag := optional
@@ -96,6 +76,40 @@ libbacktrace_static_libraries := \
 build_target := STATIC_LIBRARY
 include $(LOCAL_PATH)/Android.build.mk
 libbacktrace_static_libraries :=
+
+#-------------------------------------------------------------------------
+# The libbacktrace_offline shared library.
+#-------------------------------------------------------------------------
+libbacktrace_offline_src_files := \
+	BacktraceOffline.cpp \
+
+libbacktrace_offline_shared_libraries := \
+	libbacktrace \
+	liblog \
+	libunwind \
+
+# Use shared llvm library on device to save space.
+libbacktrace_offline_shared_libraries_target := \
+	libLLVM \
+
+# Use static llvm libraries on host to remove dependency on 32-bit llvm shared library
+# which is not included in the prebuilt.
+libbacktrace_offline_static_libraries_host := \
+	libLLVMObject \
+	libLLVMBitReader \
+	libLLVMMC \
+	libLLVMMCParser \
+	libLLVMCore \
+	libLLVMSupport \
+
+module := libbacktrace_offline
+module_tag := optional
+build_type := target
+build_target := SHARED_LIBRARY
+include $(LOCAL_PATH)/Android.build.mk
+build_type := host
+libbacktrace_multilib := both
+include $(LOCAL_PATH)/Android.build.mk
 
 #-------------------------------------------------------------------------
 # The libbacktrace_test library needed by backtrace_test.
@@ -141,6 +155,7 @@ backtrace_test_ldlibs_host := \
 backtrace_test_shared_libraries := \
 	libbacktrace_test \
 	libbacktrace \
+	libbacktrace_offline \
 	libbase \
 	libcutils \
 	libunwind \
