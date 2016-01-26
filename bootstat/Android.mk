@@ -110,6 +110,7 @@ LOCAL_CPPFLAGS := $(bootstat_cppflags)
 LOCAL_C_INCLUDES := $(bootstat_c_includes)
 LOCAL_SHARED_LIBRARIES := $(bootstat_shared_libs)
 LOCAL_STATIC_LIBRARIES := libbootstat
+LOCAL_INIT_RC := bootstat.rc
 LOCAL_SRC_FILES := $(bootstat_src_files)
 # Clang is required because of C++14
 LOCAL_CLANG := true
