@@ -33,6 +33,7 @@
 #include <string>
 #include <vector>
 
+#include <android-base/errors.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/parsenetaddress.h>
@@ -473,7 +474,7 @@ static bool _make_handle_noninheritable(HANDLE h) {
         // Show the handle value to give us a clue in case we have problems
         // with pseudo-handle values.
         fprintf(stderr, "Cannot make handle 0x%p non-inheritable: %s\n",
-                h, SystemErrorCodeToString(GetLastError()).c_str());
+                h, android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return false;
     }
 
@@ -489,7 +490,7 @@ static bool _create_anonymous_pipe(unique_handle* pipe_read_out,
     HANDLE pipe_write_raw = NULL;
     if (!CreatePipe(&pipe_read_raw, &pipe_write_raw, sa, 0)) {
         fprintf(stderr, "Cannot create pipe: %s\n",
-                SystemErrorCodeToString(GetLastError()).c_str());
+                android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return false;
     }
 
@@ -528,7 +529,7 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
                 return EXIT_SUCCESS;
             } else {
                 fprintf(stderr, "Failed to read from %s: %s\n", output_name,
-                        SystemErrorCodeToString(err).c_str());
+                        android::base::SystemErrorCodeToString(err).c_str());
                 return EXIT_FAILURE;
             }
         }
@@ -540,7 +541,7 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
             if (!WriteFile(write_handle, buf, bytes_read, &bytes_written,
                            NULL)) {
                 fprintf(stderr, "Failed to write to %s: %s\n", output_name,
-                        SystemErrorCodeToString(GetLastError()).c_str());
+                        android::base::SystemErrorCodeToString(GetLastError()).c_str());
                 return EXIT_FAILURE;
             }
 
@@ -591,7 +592,7 @@ int launch_server(int server_port)
             FILE_ATTRIBUTE_NORMAL, NULL));
     if (nul_read.get() == INVALID_HANDLE_VALUE) {
         fprintf(stderr, "Cannot open 'nul': %s\n",
-                SystemErrorCodeToString(GetLastError()).c_str());
+                android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
 
@@ -661,7 +662,7 @@ int launch_server(int server_port)
     if ((module_result >= arraysize(program_path)) || (module_result == 0)) {
         // String truncation or some other error.
         fprintf(stderr, "Cannot get executable path: %s\n",
-                SystemErrorCodeToString(GetLastError()).c_str());
+                android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
 
@@ -687,7 +688,7 @@ int launch_server(int server_port)
             &startup,                 /* startup info, i.e. std handles */
             &pinfo )) {
         fprintf(stderr, "Cannot create process: %s\n",
-                SystemErrorCodeToString(GetLastError()).c_str());
+                android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
 
@@ -753,7 +754,7 @@ int launch_server(int server_port)
             fprintf(stderr, "could not read ok from ADB Server%s\n",
                     err == ERROR_BROKEN_PIPE ? "" :
                     android::base::StringPrintf(": %s",
-                            SystemErrorCodeToString(err).c_str()).c_str());
+                            android::base::SystemErrorCodeToString(err).c_str()).c_str());
         }
     }
 
@@ -784,7 +785,7 @@ int launch_server(int server_port)
 
     if (wait_result != WAIT_OBJECT_0) {
         fprintf(stderr, "Unexpected result waiting for threads: %lu: %s\n",
-                wait_result, SystemErrorCodeToString(GetLastError()).c_str());
+                wait_result, android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
 
