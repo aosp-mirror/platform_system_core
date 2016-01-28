@@ -742,10 +742,6 @@ static int adb_shell(int argc, const char** argv,
             argc -= 2;
             argv += 2;
         } else if (!strcmp(argv[0], "-T") || !strcmp(argv[0], "-t")) {
-            if (!CanUseFeature(features, kFeatureShell2)) {
-                fprintf(stderr, "error: target doesn't support PTY args -Tt\n");
-                return 1;
-            }
             // Like ssh, -t arguments are cumulative so that multiple -t's
             // are needed to force a PTY.
             if (argv[0][1] == 't') {
@@ -767,6 +763,17 @@ static int adb_shell(int argc, const char** argv,
         } else {
             break;
         }
+    }
+
+    // Legacy shell protocol requires a remote PTY to close the subprocess properly which creates
+    // some weird interactions with -tT.
+    if (!use_shell_protocol && t_arg_count != 0) {
+        if (!CanUseFeature(features, kFeatureShell2)) {
+            fprintf(stderr, "error: target doesn't support PTY args -Tt\n");
+        } else {
+            fprintf(stderr, "error: PTY args -Tt cannot be used with -x\n");
+        }
+        return 1;
     }
 
     std::string shell_type_arg;
