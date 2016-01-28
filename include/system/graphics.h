@@ -41,7 +41,7 @@ extern "C" {
  * pixel format definitions
  */
 
-enum {
+typedef enum android_pixel_format {
     /*
      * "linear" color pixel formats:
      *
@@ -440,7 +440,7 @@ enum {
     HAL_PIXEL_FORMAT_YCbCr_422_SP       = 0x10, // NV16
     HAL_PIXEL_FORMAT_YCrCb_420_SP       = 0x11, // NV21
     HAL_PIXEL_FORMAT_YCbCr_422_I        = 0x14, // YUY2
-};
+} android_pixel_format_t;
 
 /*
  * Structure for describing YCbCr formats for consumption by applications.
@@ -526,7 +526,7 @@ struct android_depth_points {
  *
  */
 
-enum {
+typedef enum android_transform {
     /* flip source image horizontally (around the vertical axis) */
     HAL_TRANSFORM_FLIP_H    = 0x01,
     /* flip source image vertically (around the horizontal axis)*/
@@ -539,7 +539,7 @@ enum {
     HAL_TRANSFORM_ROT_270   = 0x07,
     /* don't use. see system/window.h */
     HAL_TRANSFORM_RESERVED  = 0x08,
-};
+} android_transform_t;
 
 /**
  * Dataspace Definitions
