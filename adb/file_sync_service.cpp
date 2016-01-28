@@ -21,6 +21,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <log/log.h>
 #include <selinux/android.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +35,7 @@
 #include "adb_io.h"
 #include "adb_utils.h"
 #include "private/android_filesystem_config.h"
+#include "security_log_tags.h"
 
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -145,6 +147,8 @@ static bool handle_send_file(int s, const char* path, uid_t uid,
                              gid_t gid, mode_t mode, std::vector<char>& buffer, bool do_unlink) {
     syncmsg msg;
     unsigned int timestamp = 0;
+
+    __android_log_security_bswrite(SEC_TAG_ADB_SEND_FILE, path);
 
     int fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
     if (fd < 0 && errno == ENOENT) {
@@ -314,6 +318,8 @@ static bool do_send(int s, const std::string& spec, std::vector<char>& buffer) {
 }
 
 static bool do_recv(int s, const char* path, std::vector<char>& buffer) {
+    __android_log_security_bswrite(SEC_TAG_ADB_RECV_FILE, path);
+
     int fd = adb_open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
         SendSyncFailErrno(s, "open failed");
