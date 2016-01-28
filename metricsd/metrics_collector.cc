@@ -32,8 +32,6 @@
 #include <base/strings/stringprintf.h>
 #include <brillo/binder_watcher.h>
 #include <brillo/osrelease_reader.h>
-#include <dbus/dbus.h>
-#include <dbus/message.h>
 
 #include "constants.h"
 #include "metrics_collector_service_impl.h"
@@ -142,7 +140,7 @@ int MetricsCollector::Run() {
   // Watch Binder events in the main loop
   brillo::BinderWatcher binder_watcher;
   CHECK(binder_watcher.Init()) << "Binder FD watcher init failed";
-  return brillo::DBusDaemon::Run();
+  return brillo::Daemon::Run();
 }
 
 uint32_t MetricsCollector::GetOsVersionHash() {
@@ -218,7 +216,7 @@ void MetricsCollector::Init(bool testing, MetricsLibraryInterface* metrics_lib,
 }
 
 int MetricsCollector::OnInit() {
-  int return_code = brillo::DBusDaemon::OnInit();
+  int return_code = brillo::Daemon::OnInit();
   if (return_code != EX_OK)
     return return_code;
 
@@ -232,9 +230,6 @@ int MetricsCollector::OnInit() {
   if (testing_)
     return EX_OK;
 
-  bus_->AssertOnDBusThread();
-  CHECK(bus_->SetUpAsyncOperations());
-
   weave_service_subscription_ = weaved::Service::Connect(
       brillo::MessageLoop::current(),
       base::Bind(&MetricsCollector::OnWeaveServiceConnected,
@@ -247,10 +242,6 @@ int MetricsCollector::OnInit() {
       base::TimeDelta::FromMilliseconds(kUpdateStatsIntervalMs));
 
   return EX_OK;
-}
-
-void MetricsCollector::OnShutdown(int* return_code) {
-  brillo::DBusDaemon::OnShutdown(return_code);
 }
 
 void MetricsCollector::OnWeaveServiceConnected(
@@ -311,7 +302,8 @@ void MetricsCollector::UpdateWeaveState() {
       metrics_lib_->AreMetricsEnabled() ? "enabled" : "disabled";
 
   if (!weave_service->SetStateProperty(kWeaveComponent, kWeaveTrait,
-                                       "analyticsReportingState", enabled,
+                                       "analyticsReportingState",
+                                       *brillo::ToValue(enabled),
                                        nullptr)) {
     LOG(ERROR) << "failed to update weave's state";
   }
