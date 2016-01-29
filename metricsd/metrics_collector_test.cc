@@ -64,37 +64,6 @@ class MetricsCollectorTest : public testing::Test {
         .RetiresOnSaturation();
   }
 
-  // Creates a new DBus signal message with zero or more string arguments.
-  // The message can be deallocated through DeleteDBusMessage.
-  //
-  // |path| is the object emitting the signal.
-  // |interface| is the interface the signal is emitted from.
-  // |name| is the name of the signal.
-  // |arg_values| contains the values of the string arguments.
-  DBusMessage* NewDBusSignalString(const string& path,
-                                   const string& interface,
-                                   const string& name,
-                                   const vector<string>& arg_values) {
-    DBusMessage* msg = dbus_message_new_signal(path.c_str(),
-                                               interface.c_str(),
-                                               name.c_str());
-    DBusMessageIter iter;
-    dbus_message_iter_init_append(msg, &iter);
-    for (vector<string>::const_iterator it = arg_values.begin();
-         it != arg_values.end(); ++it) {
-      const char* str_value = it->c_str();
-      dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &str_value);
-    }
-    return msg;
-  }
-
-  // Deallocates the DBus message |msg| previously allocated through
-  // dbus_message_new*.
-  void DeleteDBusMessage(DBusMessage* msg) {
-    dbus_message_unref(msg);
-  }
-
-
   // Creates or overwrites the file in |path| so that it contains the printable
   // representation of |value|.
   void CreateUint64ValueFile(const base::FilePath& path, uint64_t value) {

@@ -72,10 +72,7 @@ metrics_includes := external/gtest/include \
 libmetrics_shared_libraries := libchrome libbinder libbrillo libutils
 metrics_collector_shared_libraries := $(libmetrics_shared_libraries) \
   libbrillo-binder \
-  libbrillo-dbus \
   libbrillo-http \
-  libchrome-dbus \
-  libdbus \
   libmetrics \
   librootdev \
   libweaved

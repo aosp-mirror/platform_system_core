@@ -6,4 +6,4 @@ on post-fs-data
 service metricsd /system/bin/metricsd --foreground --logtosyslog
     class late_start
     user metricsd
-    group system dbus inet
+    group system inet
