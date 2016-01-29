@@ -175,8 +175,9 @@ TEST_F(ShellServiceTest, RawNoProtocolSubprocess) {
             "echo foo; echo bar >&2; [ -t 0 ]; echo $?",
             SubprocessType::kRaw, SubprocessProtocol::kNone));
 
-    // [ -t 0 ] == 1 means no terminal (raw).
-    ExpectLinesEqual(ReadRaw(subprocess_fd_), {"foo", "bar", "1"});
+    // [ -t 0 ] == 0 means we have a terminal (PTY). Even when requesting a raw subprocess, without
+    // the shell protocol we should always force a PTY to ensure proper cleanup.
+    ExpectLinesEqual(ReadRaw(subprocess_fd_), {"foo", "bar", "0"});
 }
 
 // Tests a PTY subprocess with no protocol.
