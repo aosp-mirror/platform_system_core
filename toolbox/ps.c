@@ -264,9 +264,6 @@ int ps_main(int argc, char **argv)
     int pidfilter = 0;
     int threads = 0;
 
-    d = opendir("/proc");
-    if(d == 0) return -1;
-
     while(argc > 1){
         if(!strcmp(argv[1],"-t")) {
             threads = 1;
@@ -287,7 +284,10 @@ int ps_main(int argc, char **argv)
         } else if(!strcmp(argv[1],"--ppid")) {
             ppid_filter = atoi(argv[2]);
             if (ppid_filter == 0) {
-                fprintf(stderr, "bad ppid '%s'\n", argv[2]);
+                /* Bug 26554285: Use printf because some apps require at least
+                 * one line of output to stdout even for errors.
+                 */
+                printf("bad ppid '%s'\n", argv[2]);
                 return 1;
             }
             argc--;
@@ -295,7 +295,10 @@ int ps_main(int argc, char **argv)
         } else {
             pidfilter = atoi(argv[1]);
             if (pidfilter == 0) {
-                fprintf(stderr, "bad pid '%s'\n", argv[1]);
+                /* Bug 26554285: Use printf because some apps require at least
+                 * one line of output to stdout even for errors.
+                 */
+                printf("bad pid '%s'\n", argv[1]);
                 return 1;
             }
         }
@@ -312,6 +315,9 @@ int ps_main(int argc, char **argv)
            (display_flags&SHOW_POLICY)?"PCY " : "",
            (int) PC_WIDTH, "PC",
            (display_flags&SHOW_ABI)?"ABI " : "");
+
+    d = opendir("/proc");
+    if(d == 0) return -1;
 
     while((de = readdir(d)) != 0){
         if(isdigit(de->d_name[0])){
