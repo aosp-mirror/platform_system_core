@@ -283,6 +283,10 @@ on post-fs
     # permissions if created by the recovery system.
     mkdir /cache/recovery 0770 system cache
 
+    # Backup/restore mechanism uses the cache partition
+    mkdir /cache/backup_stage 0700 system system
+    mkdir /cache/backup 0700 system system
+
     #change permissions on vmallocinfo so we can grab it from bugreports
     chown root log /proc/vmallocinfo
     chmod 0440 /proc/vmallocinfo
