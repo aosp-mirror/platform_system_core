@@ -212,6 +212,7 @@ class Subprocess {
 
     const std::string command_;
     const std::string terminal_type_;
+    bool make_pty_raw_ = false;
     SubprocessType type_;
     SubprocessProtocol protocol_;
     pid_t pid_ = -1;
@@ -231,6 +232,18 @@ Subprocess::Subprocess(const std::string& command, const char* terminal_type,
       terminal_type_(terminal_type ? terminal_type : ""),
       type_(type),
       protocol_(protocol) {
+    // If we aren't using the shell protocol we must allocate a PTY to properly close the
+    // subprocess. PTYs automatically send SIGHUP to the slave-side process when the master side
+    // of the PTY closes, which we rely on. If we use a raw pipe, processes that don't read/write,
+    // e.g. screenrecord, will never notice the broken pipe and terminate.
+    // The shell protocol doesn't require a PTY because it's always monitoring the local socket FD
+    // with select() and will send SIGHUP manually to the child process.
+    if (protocol_ == SubprocessProtocol::kNone && type_ == SubprocessType::kRaw) {
+        // Disable PTY input/output processing since the client is expecting raw data.
+        D("Can't create raw subprocess without shell protocol, using PTY in raw mode instead");
+        type_ = SubprocessType::kPty;
+        make_pty_raw_ = true;
+    }
 }
 
 Subprocess::~Subprocess() {
@@ -414,6 +427,24 @@ int Subprocess::OpenPtyChildFd(const char* pts_name, ScopedFd* error_sfd) {
             WriteFdExactly(error_sfd->fd(), message);
         }
         exit(-1);
+    }
+
+    if (make_pty_raw_) {
+        termios tattr;
+        if (tcgetattr(child_fd, &tattr) == -1) {
+            int saved_errno = errno;
+            WriteFdExactly(error_sfd->fd(), "tcgetattr failed: ");
+            WriteFdExactly(error_sfd->fd(), strerror(saved_errno));
+            exit(-1);
+        }
+
+        cfmakeraw(&tattr);
+        if (tcsetattr(child_fd, TCSADRAIN, &tattr) == -1) {
+            int saved_errno = errno;
+            WriteFdExactly(error_sfd->fd(), "tcsetattr failed: ");
+            WriteFdExactly(error_sfd->fd(), strerror(saved_errno));
+            exit(-1);
+        }
     }
 
     return child_fd;
