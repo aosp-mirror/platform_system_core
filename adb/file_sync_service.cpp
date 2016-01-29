@@ -130,6 +130,9 @@ done:
     return WriteFdExactly(s, &msg.dent, sizeof(msg.dent));
 }
 
+// Make sure that SendFail from adb_io.cpp isn't accidentally used in this file.
+#pragma GCC poison SendFail
+
 static bool SendSyncFail(int fd, const std::string& reason) {
     D("sync: failure: %s", reason.c_str());
 
@@ -265,7 +268,7 @@ static bool handle_send_link(int s, const std::string& path, std::vector<char>& 
         msg.status.msglen = 0;
         if (!WriteFdExactly(s, &msg.status, sizeof(msg.status))) return false;
     } else {
-        SendFail(s, "invalid data message: expected ID_DONE");
+        SendSyncFail(s, "invalid data message: expected ID_DONE");
         return false;
     }
 
@@ -277,7 +280,7 @@ static bool do_send(int s, const std::string& spec, std::vector<char>& buffer) {
     // 'spec' is of the form "/some/path,0755". Break it up.
     size_t comma = spec.find_last_of(',');
     if (comma == std::string::npos) {
-        SendFail(s, "missing , in ID_SEND");
+        SendSyncFail(s, "missing , in ID_SEND");
         return false;
     }
 
@@ -286,7 +289,7 @@ static bool do_send(int s, const std::string& spec, std::vector<char>& buffer) {
     errno = 0;
     mode_t mode = strtoul(spec.substr(comma + 1).c_str(), nullptr, 0);
     if (errno != 0) {
-        SendFail(s, "bad mode");
+        SendSyncFail(s, "bad mode");
         return false;
     }
 
