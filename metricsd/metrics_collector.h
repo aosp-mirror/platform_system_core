@@ -28,7 +28,7 @@
 #include <base/memory/weak_ptr.h>
 #include <base/time/time.h>
 #include <brillo/binder_watcher.h>
-#include <brillo/daemons/dbus_daemon.h>
+#include <brillo/daemons/daemon.h>
 #include <libweaved/command.h>
 #include <libweaved/service.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
@@ -42,7 +42,7 @@
 using chromeos_metrics::PersistentInteger;
 using std::unique_ptr;
 
-class MetricsCollector : public brillo::DBusDaemon {
+class MetricsCollector : public brillo::Daemon {
  public:
   MetricsCollector();
   ~MetricsCollector();
@@ -54,11 +54,8 @@ class MetricsCollector : public brillo::DBusDaemon {
             const base::FilePath& private_metrics_directory,
             const base::FilePath& shared_metrics_directory);
 
-  // Initializes DBus and MessageLoop variables before running the MessageLoop.
+  // Initializes the daemon.
   int OnInit() override;
-
-  // Clean up data set up in OnInit before shutting down message loop.
-  void OnShutdown(int* return_code) override;
 
   // Does all the work.
   int Run() override;
