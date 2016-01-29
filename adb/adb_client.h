@@ -24,8 +24,8 @@
 
 // Connect to adb, connect to the named service, and return a valid fd for
 // interacting with that service upon success or a negative number on failure.
-int adb_connect(const std::string& service, std::string* error);
-int _adb_connect(const std::string& service, std::string* error);
+int adb_connect(const std::string& service, std::string* _Nonnull error);
+int _adb_connect(const std::string& service, std::string* _Nonnull error);
 
 // Connect to adb, connect to the named service, returns true if the connection
 // succeeded AND the service returned OKAY. Outputs any returned error otherwise.
@@ -33,30 +33,33 @@ bool adb_command(const std::string& service);
 
 // Connects to the named adb service and fills 'result' with the response.
 // Returns true on success; returns false and fills 'error' on failure.
-bool adb_query(const std::string& service, std::string* result, std::string* error);
+bool adb_query(const std::string& service, std::string* _Nonnull result,
+               std::string* _Nonnull error);
 
 // Set the preferred transport to connect to.
-void adb_set_transport(TransportType type, const char* serial);
+void adb_set_transport(TransportType type, const char* _Nullable serial);
 
 // Set TCP specifics of the transport to use.
 void adb_set_tcp_specifics(int server_port);
 
 // Set TCP Hostname of the transport to use.
-void adb_set_tcp_name(const char* hostname);
+void adb_set_tcp_name(const char* _Nullable hostname);
 
 // Send commands to the current emulator instance. Will fail if there is not
 // exactly one emulator connected (or if you use -s <serial> with a <serial>
 // that does not designate an emulator).
-int adb_send_emulator_command(int argc, const char** argv, const char* serial);
+int adb_send_emulator_command(int argc, const char* _Nonnull* _Nonnull argv,
+                              const char* _Nullable serial);
 
 // Reads a standard adb status response (OKAY|FAIL) and returns true in the
 // event of OKAY, false in the event of FAIL or protocol error.
-bool adb_status(int fd, std::string* error);
+bool adb_status(int fd, std::string* _Nonnull error);
 
 // Create a host command corresponding to selected transport type/serial.
-std::string format_host_command(const char* command, TransportType type, const char* serial);
+std::string format_host_command(const char* _Nonnull command, TransportType type,
+                                const char* _Nullable serial);
 
 // Get the feature set of the current preferred transport.
-bool adb_get_feature_set(FeatureSet* feature_set, std::string* error);
+bool adb_get_feature_set(FeatureSet* _Nonnull feature_set, std::string* _Nonnull error);
 
 #endif

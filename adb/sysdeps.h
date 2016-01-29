@@ -61,6 +61,10 @@
 
 #ifdef _WIN32
 
+// Clang-only nullability specifiers
+#define _Nonnull
+#define _Nullable
+
 #include <ctype.h>
 #include <direct.h>
 #include <dirent.h>
