@@ -199,7 +199,7 @@ static int process_skip_chunk(struct sparse_file *s, unsigned int chunk_size,
 	return 0;
 }
 
-static int process_crc32_chunk(int fd, unsigned int chunk_size, uint32_t crc32)
+static int process_crc32_chunk(int fd, unsigned int chunk_size, uint32_t *crc32)
 {
 	uint32_t file_crc32;
 	int ret;
@@ -213,7 +213,7 @@ static int process_crc32_chunk(int fd, unsigned int chunk_size, uint32_t crc32)
 		return ret;
 	}
 
-	if (file_crc32 != crc32) {
+	if (crc32 != NULL && file_crc32 != *crc32) {
 		return -EINVAL;
 	}
 
@@ -257,7 +257,7 @@ static int process_chunk(struct sparse_file *s, int fd, off64_t offset,
 			}
 			return chunk_header->chunk_sz;
 		case CHUNK_TYPE_CRC32:
-			ret = process_crc32_chunk(fd, chunk_data_size, *crc_ptr);
+			ret = process_crc32_chunk(fd, chunk_data_size, crc_ptr);
 			if (ret < 0) {
 				verbose_error(s->verbose, -EINVAL, "crc block at %" PRId64,
 						offset);
@@ -374,6 +374,7 @@ static int sparse_file_read_normal(struct sparse_file *s, int fd)
 		ret = read_all(fd, buf, to_read);
 		if (ret < 0) {
 			error("failed to read sparse file");
+			free(buf);
 			return ret;
 		}
 
@@ -401,6 +402,7 @@ static int sparse_file_read_normal(struct sparse_file *s, int fd)
 		block++;
 	}
 
+	free(buf);
 	return 0;
 }
 
