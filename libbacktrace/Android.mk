@@ -60,6 +60,9 @@ libbacktrace_shared_libraries := \
 	liblog \
 	libunwind \
 
+libbacktrace_static_libraries := \
+	libcutils
+
 module := libbacktrace
 module_tag := optional
 build_type := target
