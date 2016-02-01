@@ -111,7 +111,7 @@ public:
             uid_t uid, pid_t pid, pid_t tid,
             const char *msg, unsigned short len);
     uint64_t flushTo(SocketClient *writer, const uint64_t start,
-                     bool privileged,
+                     bool privileged, bool security,
                      int (*filter)(const LogBufferElement *element, void *arg) = NULL,
                      void *arg = NULL);
 
