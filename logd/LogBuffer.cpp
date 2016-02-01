@@ -907,7 +907,8 @@ unsigned long LogBuffer::getSize(log_id_t id) {
 }
 
 uint64_t LogBuffer::flushTo(
-        SocketClient *reader, const uint64_t start, bool privileged,
+        SocketClient *reader, const uint64_t start,
+        bool privileged, bool security,
         int (*filter)(const LogBufferElement *element, void *arg), void *arg) {
     LogBufferElementCollection::iterator it;
     uint64_t max = start;
@@ -935,6 +936,10 @@ uint64_t LogBuffer::flushTo(
         LogBufferElement *element = *it;
 
         if (!privileged && (element->getUid() != uid)) {
+            continue;
+        }
+
+        if (!security && (element->getLogId() == LOG_ID_SECURITY)) {
             continue;
         }
 
