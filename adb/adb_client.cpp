@@ -295,3 +295,27 @@ bool adb_query(const std::string& service, std::string* result, std::string* err
     adb_close(fd);
     return true;
 }
+
+std::string format_host_command(const char* command, TransportType type, const char* serial) {
+    if (serial) {
+        return android::base::StringPrintf("host-serial:%s:%s", serial, command);
+    }
+
+    const char* prefix = "host";
+    if (type == kTransportUsb) {
+        prefix = "host-usb";
+    } else if (type == kTransportLocal) {
+        prefix = "host-local";
+    }
+    return android::base::StringPrintf("%s:%s", prefix, command);
+}
+
+bool adb_get_feature_set(FeatureSet* feature_set, std::string* error) {
+    std::string result;
+    if (adb_query(format_host_command("features", __adb_transport, __adb_serial), &result, error)) {
+        *feature_set = StringToFeatureSet(result);
+        return true;
+    }
+    feature_set->clear();
+    return false;
+}
