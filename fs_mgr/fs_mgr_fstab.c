@@ -210,9 +210,8 @@ static int parse_flags(char *flags, struct flag_list *fl,
     return f;
 }
 
-struct fstab *fs_mgr_read_fstab(const char *fstab_path)
+struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
 {
-    FILE *fstab_file;
     int cnt, entries;
     ssize_t len;
     size_t alloc_len = 0;
@@ -223,12 +222,6 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
     struct fs_mgr_flag_values flag_vals;
 #define FS_OPTIONS_LEN 1024
     char tmp_fs_options[FS_OPTIONS_LEN];
-
-    fstab_file = fopen(fstab_path, "r");
-    if (!fstab_file) {
-        ERROR("Cannot open file %s\n", fstab_path);
-        return 0;
-    }
 
     entries = 0;
     while ((len = getline(&line, &alloc_len, fstab_file)) != -1) {
@@ -255,7 +248,6 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
     /* Allocate and init the fstab structure */
     fstab = calloc(1, sizeof(struct fstab));
     fstab->num_entries = entries;
-    fstab->fstab_filename = strdup(fstab_path);
     fstab->recs = calloc(fstab->num_entries, sizeof(struct fstab_rec));
 
     fseek(fstab_file, 0, SEEK_SET);
@@ -338,16 +330,32 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
         ERROR("Error updating for slotselect\n");
         goto err;
     }
-    fclose(fstab_file);
     free(line);
     return fstab;
 
 err:
-    fclose(fstab_file);
     free(line);
     if (fstab)
         fs_mgr_free_fstab(fstab);
     return NULL;
+}
+
+struct fstab *fs_mgr_read_fstab(const char *fstab_path)
+{
+    FILE *fstab_file;
+    struct fstab *fstab;
+
+    fstab_file = fopen(fstab_path, "r");
+    if (!fstab_file) {
+        ERROR("Cannot open file %s\n", fstab_path);
+        return NULL;
+    }
+    fstab = fs_mgr_read_fstab_file(fstab_file);
+    if (fstab) {
+        fstab->fstab_filename = strdup(fstab_path);
+    }
+    fclose(fstab_file);
+    return fstab;
 }
 
 void fs_mgr_free_fstab(struct fstab *fstab)
