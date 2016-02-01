@@ -45,6 +45,7 @@ public:
     virtual void runSocketCommand(SocketClient *client);
 
     static bool hasReadLogs(SocketClient *client);
+    static bool hasSecurityLogs(SocketClient *client);
 };
 
 #endif

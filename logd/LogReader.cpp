@@ -163,6 +163,7 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
                        logbuf().isMonotonic() && android::isMonotonic(start));
 
         logbuf().flushTo(cli, sequence, FlushCommand::hasReadLogs(cli),
+                         FlushCommand::hasSecurityLogs(cli),
                          logFindStart.callback, &logFindStart);
 
         if (!logFindStart.found()) {
