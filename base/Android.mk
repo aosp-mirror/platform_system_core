@@ -24,10 +24,18 @@ libbase_src_files := \
     strings.cpp \
     test_utils.cpp \
 
+libbase_linux_src_files := \
+    errors_unix.cpp \
+
+libbase_darwin_src_files := \
+    errors_unix.cpp \
+
 libbase_windows_src_files := \
+    errors_windows.cpp \
     utf8.cpp \
 
 libbase_test_src_files := \
+    errors_test.cpp \
     file_test.cpp \
     logging_test.cpp \
     parseint_test.cpp \
@@ -55,10 +63,7 @@ libbase_darwin_cppflags := \
 include $(CLEAR_VARS)
 LOCAL_MODULE := libbase
 LOCAL_CLANG := true
-LOCAL_SRC_FILES := $(libbase_src_files)
-LOCAL_SRC_FILES_darwin := $(libbase_darwin_src_files)
-LOCAL_SRC_FILES_linux := $(libbase_linux_src_files)
-LOCAL_SRC_FILES_windows := $(libbase_windows_src_files)
+LOCAL_SRC_FILES := $(libbase_src_files) $(libbase_linux_src_files)
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_CPPFLAGS := $(libbase_cppflags) $(libbase_linux_cppflags)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include

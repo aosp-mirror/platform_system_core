@@ -27,6 +27,7 @@
 #include <sched.h>
 #endif
 
+#include <android-base/errors.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
@@ -54,7 +55,7 @@ static std::string GetLogFilePath() {
     if ((nchars >= arraysize(temp_path)) || (nchars == 0)) {
         // If string truncation or some other error.
         fatal("cannot retrieve temporary file path: %s\n",
-              SystemErrorCodeToString(GetLastError()).c_str());
+              android::base::SystemErrorCodeToString(GetLastError()).c_str());
     }
 
     std::string temp_path_utf8;
@@ -134,7 +135,7 @@ int adb_server_main(int is_daemon, int server_port, int ack_reply_fd) {
         DWORD written = 0;
         if (!WriteFile(ack_reply_handle, ack, bytes_to_write, &written, NULL)) {
             fatal("adb: cannot write ACK to handle 0x%p: %s", ack_reply_handle,
-                  SystemErrorCodeToString(GetLastError()).c_str());
+                  android::base::SystemErrorCodeToString(GetLastError()).c_str());
         }
         if (written != bytes_to_write) {
             fatal("adb: cannot write %lu bytes of ACK: only wrote %lu bytes",

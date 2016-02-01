@@ -43,6 +43,7 @@
 #include "mincrypt/rsa.h"
 #undef RSA_verify
 
+#include <android-base/errors.h>
 #include <android-base/strings.h>
 #include <cutils/list.h>
 
@@ -307,8 +308,7 @@ static int get_user_keyfilepath(char *filename, size_t len)
         WCHAR path[MAX_PATH];
         const HRESULT hr = SHGetFolderPathW(NULL, CSIDL_PROFILE, NULL, 0, path);
         if (FAILED(hr)) {
-            D("SHGetFolderPathW failed: %s",
-              SystemErrorCodeToString(hr).c_str());
+            D("SHGetFolderPathW failed: %s", android::base::SystemErrorCodeToString(hr).c_str());
             return -1;
         }
         if (!android::base::WideToUTF8(path, &home_str)) {

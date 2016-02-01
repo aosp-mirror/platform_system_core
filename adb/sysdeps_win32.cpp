@@ -32,6 +32,7 @@
 
 #include <cutils/sockets.h>
 
+#include <android-base/errors.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -93,36 +94,6 @@ static const FHClassRec _fh_socket_class = {
         if (!(cond)) fatal("assertion failed '%s' on %s:%d\n", #cond, __FILE__, __LINE__); \
     } while (0)
 
-std::string SystemErrorCodeToString(const DWORD error_code) {
-  const int kErrorMessageBufferSize = 256;
-  WCHAR msgbuf[kErrorMessageBufferSize];
-  DWORD flags = FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS;
-  DWORD len = FormatMessageW(flags, nullptr, error_code, 0, msgbuf,
-                             arraysize(msgbuf), nullptr);
-  if (len == 0) {
-    return android::base::StringPrintf(
-        "Error (%lu) while retrieving error. (%lu)", GetLastError(),
-        error_code);
-  }
-
-  // Convert UTF-16 to UTF-8.
-  std::string msg;
-  if (!android::base::WideToUTF8(msgbuf, &msg)) {
-      return android::base::StringPrintf(
-          "Error (%d) converting from UTF-16 to UTF-8 while retrieving error. (%lu)", errno,
-          error_code);
-  }
-
-  // Messages returned by the system end with line breaks.
-  msg = android::base::Trim(msg);
-  // There are many Windows error messages compared to POSIX, so include the
-  // numeric error code for easier, quicker, accurate identification. Use
-  // decimal instead of hex because there are decimal ranges like 10000-11999
-  // for Winsock.
-  android::base::StringAppendF(&msg, " (%lu)", error_code);
-  return msg;
-}
-
 void handle_deleter::operator()(HANDLE h) {
     // CreateFile() is documented to return INVALID_HANDLE_FILE on error,
     // implying that NULL is a valid handle, but this is probably impossible.
@@ -134,7 +105,7 @@ void handle_deleter::operator()(HANDLE h) {
     if (h != INVALID_HANDLE_VALUE) {
         if (!CloseHandle(h)) {
             D("CloseHandle(%p) failed: %s", h,
-              SystemErrorCodeToString(GetLastError()).c_str());
+              android::base::SystemErrorCodeToString(GetLastError()).c_str());
         }
     }
 }
@@ -470,8 +441,7 @@ int  adb_open(const char*  path, int  options)
                 return -1;
 
             default:
-                D( "unknown error: %s",
-                   SystemErrorCodeToString( err ).c_str() );
+                D("unknown error: %s", android::base::SystemErrorCodeToString(err).c_str());
                 errno = ENOENT;
                 return -1;
         }
@@ -517,8 +487,7 @@ int  adb_creat(const char*  path, int  mode)
                 return -1;
 
             default:
-                D( "unknown error: %s",
-                   SystemErrorCodeToString( err ).c_str() );
+                D("unknown error: %s", android::base::SystemErrorCodeToString(err).c_str());
                 errno = ENOENT;
                 return -1;
         }
@@ -708,7 +677,7 @@ static void _fh_socket_init( FH  f ) {
     f->event     = WSACreateEvent();
     if (f->event == WSA_INVALID_EVENT) {
         D("WSACreateEvent failed: %s",
-          SystemErrorCodeToString(WSAGetLastError()).c_str());
+          android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
 
         // _event_socket_start assumes that this field is INVALID_HANDLE_VALUE
         // on failure, instead of NULL which is what Windows really returns on
@@ -727,19 +696,19 @@ static int _fh_socket_close( FH  f ) {
             // minimize logging spam, so don't log these errors for now.
 #if 0
             D("socket shutdown failed: %s",
-              SystemErrorCodeToString(WSAGetLastError()).c_str());
+              android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
 #endif
         }
         if (closesocket(f->fh_socket) == SOCKET_ERROR) {
             D("closesocket failed: %s",
-              SystemErrorCodeToString(WSAGetLastError()).c_str());
+              android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
         }
         f->fh_socket = INVALID_SOCKET;
     }
     if (f->event != NULL) {
         if (!CloseHandle(f->event)) {
             D("CloseHandle failed: %s",
-              SystemErrorCodeToString(GetLastError()).c_str());
+              android::base::SystemErrorCodeToString(GetLastError()).c_str());
         }
         f->event = NULL;
     }
@@ -760,7 +729,7 @@ static int _fh_socket_read(FH f, void* buf, int len) {
         // that to reduce spam and confusion.
         if (err != WSAEWOULDBLOCK) {
             D("recv fd %d failed: %s", _fh_to_int(f),
-              SystemErrorCodeToString(err).c_str());
+              android::base::SystemErrorCodeToString(err).c_str());
         }
         _socket_set_errno(err);
         result = -1;
@@ -776,7 +745,7 @@ static int _fh_socket_write(FH f, const void* buf, int len) {
         // that to reduce spam and confusion.
         if (err != WSAEWOULDBLOCK) {
             D("send fd %d failed: %s", _fh_to_int(f),
-              SystemErrorCodeToString(err).c_str());
+              android::base::SystemErrorCodeToString(err).c_str());
         }
         _socket_set_errno(err);
         result = -1;
@@ -811,8 +780,8 @@ _init_winsock( void )
         WSADATA  wsaData;
         int      rc = WSAStartup( MAKEWORD(2,2), &wsaData);
         if (rc != 0) {
-            fatal( "adb: could not initialize Winsock: %s",
-                   SystemErrorCodeToString( rc ).c_str());
+            fatal("adb: could not initialize Winsock: %s",
+                  android::base::SystemErrorCodeToString(rc).c_str());
         }
         _winsock_init = 1;
 
@@ -870,7 +839,7 @@ int network_loopback_client(int port, int type, std::string* error) {
     s = socket(AF_INET, type, GetSocketProtocolFromSocketType(type));
     if(s == INVALID_SOCKET) {
         *error = android::base::StringPrintf("cannot create socket: %s",
-                SystemErrorCodeToString(WSAGetLastError()).c_str());
+                android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
         D("%s", error->c_str());
         return -1;
     }
@@ -881,7 +850,7 @@ int network_loopback_client(int port, int type, std::string* error) {
         const DWORD err = WSAGetLastError();
         *error = android::base::StringPrintf("cannot connect to %s:%u: %s",
                 inet_ntoa(addr.sin_addr), ntohs(addr.sin_port),
-                SystemErrorCodeToString(err).c_str());
+                android::base::SystemErrorCodeToString(err).c_str());
         D("could not connect to %s:%d: %s",
           type != SOCK_STREAM ? "udp" : "tcp", port, error->c_str());
         return -1;
@@ -924,7 +893,7 @@ static int _network_server(int port, int type, u_long interface_address,
     s = socket(AF_INET, type, GetSocketProtocolFromSocketType(type));
     if (s == INVALID_SOCKET) {
         *error = android::base::StringPrintf("cannot create socket: %s",
-                SystemErrorCodeToString(WSAGetLastError()).c_str());
+                android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
         D("%s", error->c_str());
         return -1;
     }
@@ -938,7 +907,7 @@ static int _network_server(int port, int type, u_long interface_address,
                    sizeof(n)) == SOCKET_ERROR) {
         *error = android::base::StringPrintf(
                 "cannot set socket option SO_EXCLUSIVEADDRUSE: %s",
-                SystemErrorCodeToString(WSAGetLastError()).c_str());
+                android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
         D("%s", error->c_str());
         return -1;
     }
@@ -948,7 +917,7 @@ static int _network_server(int port, int type, u_long interface_address,
         const DWORD err = WSAGetLastError();
         *error = android::base::StringPrintf("cannot bind to %s:%u: %s",
                 inet_ntoa(addr.sin_addr), ntohs(addr.sin_port),
-                SystemErrorCodeToString(err).c_str());
+                android::base::SystemErrorCodeToString(err).c_str());
         D("could not bind to %s:%d: %s",
           type != SOCK_STREAM ? "udp" : "tcp", port, error->c_str());
         return -1;
@@ -956,7 +925,7 @@ static int _network_server(int port, int type, u_long interface_address,
     if (type == SOCK_STREAM) {
         if (listen(s, LISTEN_BACKLOG) == SOCKET_ERROR) {
             *error = android::base::StringPrintf("cannot listen on socket: %s",
-                    SystemErrorCodeToString(WSAGetLastError()).c_str());
+                    android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
             D("could not listen on %s:%d: %s",
               type != SOCK_STREAM ? "udp" : "tcp", port, error->c_str());
             return -1;
@@ -1010,7 +979,7 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
     if (getaddrinfo(host.c_str(), port_str, &hints, &addrinfo_ptr) != 0) {
         *error = android::base::StringPrintf(
                 "cannot resolve host '%s' and port %s: %s", host.c_str(),
-                port_str, SystemErrorCodeToString(WSAGetLastError()).c_str());
+                port_str, android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
         D("%s", error->c_str());
         return -1;
     }
@@ -1025,7 +994,7 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
                       addrinfo->ai_protocol);
     if(s == INVALID_SOCKET) {
         *error = android::base::StringPrintf("cannot create socket: %s",
-                SystemErrorCodeToString(WSAGetLastError()).c_str());
+                android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
         D("%s", error->c_str());
         return -1;
     }
@@ -1037,7 +1006,7 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
         // TODO: Use WSAAddressToString or inet_ntop on address.
         *error = android::base::StringPrintf("cannot connect to %s:%s: %s",
                 host.c_str(), port_str,
-                SystemErrorCodeToString(WSAGetLastError()).c_str());
+                android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
         D("could not connect to %s:%s:%s: %s",
           type != SOCK_STREAM ? "udp" : "tcp", host.c_str(), port_str,
           error->c_str());
@@ -1075,7 +1044,7 @@ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrle
     if (fh->fh_socket == INVALID_SOCKET) {
         const DWORD err = WSAGetLastError();
         LOG(ERROR) << "adb_socket_accept: accept on fd " << serverfd <<
-                      " failed: " + SystemErrorCodeToString(err);
+                      " failed: " + android::base::SystemErrorCodeToString(err);
         _socket_set_errno( err );
         return -1;
     }
@@ -1106,9 +1075,8 @@ int  adb_setsockopt( int  fd, int  level, int  optname, const void*  optval, soc
                              reinterpret_cast<const char*>(optval), optlen );
     if ( result == SOCKET_ERROR ) {
         const DWORD err = WSAGetLastError();
-        D( "adb_setsockopt: setsockopt on fd %d level %d optname %d "
-           "failed: %s\n", fd, level, optname,
-           SystemErrorCodeToString(err).c_str() );
+        D("adb_setsockopt: setsockopt on fd %d level %d optname %d failed: %s\n",
+          fd, level, optname, android::base::SystemErrorCodeToString(err).c_str());
         _socket_set_errno( err );
         result = -1;
     }
@@ -1130,7 +1098,7 @@ int  adb_shutdown(int  fd)
     if (shutdown(f->fh_socket, SD_BOTH) == SOCKET_ERROR) {
         const DWORD err = WSAGetLastError();
         D("socket shutdown fd %d failed: %s", fd,
-          SystemErrorCodeToString(err).c_str());
+          android::base::SystemErrorCodeToString(err).c_str());
         _socket_set_errno(err);
         return -1;
     }
@@ -2575,7 +2543,7 @@ static bool _get_key_event_record(const HANDLE console, INPUT_RECORD* const inpu
         memset(input_record, 0, sizeof(*input_record));
         if (!ReadConsoleInputA(console, input_record, 1, &read_count)) {
             D("_get_key_event_record: ReadConsoleInputA() failed: %s\n",
-              SystemErrorCodeToString(GetLastError()).c_str());
+              android::base::SystemErrorCodeToString(GetLastError()).c_str());
             errno = EIO;
             return false;
         }
@@ -3344,7 +3312,7 @@ void stdin_raw_init() {
     if (!SetConsoleMode(in, new_console_mode)) {
         // This really should not fail.
         D("stdin_raw_init: SetConsoleMode() failed: %s",
-          SystemErrorCodeToString(GetLastError()).c_str());
+          android::base::SystemErrorCodeToString(GetLastError()).c_str());
     }
 
     // Once this is set, it means that stdin has been configured for
@@ -3364,7 +3332,7 @@ void stdin_raw_restore() {
         if (!SetConsoleMode(in, _old_console_mode)) {
             // This really should not fail.
             D("stdin_raw_restore: SetConsoleMode() failed: %s",
-              SystemErrorCodeToString(GetLastError()).c_str());
+              android::base::SystemErrorCodeToString(GetLastError()).c_str());
         }
     }
 }
