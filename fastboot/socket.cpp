@@ -89,7 +89,8 @@ class UdpSocket : public Socket {
 
     UdpSocket(Type type, cutils_socket_t sock);
 
-    ssize_t Send(const void* data, size_t length) override;
+    bool Send(const void* data, size_t length) override;
+    bool Send(std::vector<cutils_socket_buffer_t> buffers) override;
     ssize_t Receive(void* data, size_t length, int timeout_ms) override;
 
   private:
@@ -109,9 +110,20 @@ UdpSocket::UdpSocket(Type type, cutils_socket_t sock) : Socket(sock) {
     }
 }
 
-ssize_t UdpSocket::Send(const void* data, size_t length) {
+bool UdpSocket::Send(const void* data, size_t length) {
     return TEMP_FAILURE_RETRY(sendto(sock_, reinterpret_cast<const char*>(data), length, 0,
-                                     reinterpret_cast<sockaddr*>(addr_.get()), addr_size_));
+                                     reinterpret_cast<sockaddr*>(addr_.get()), addr_size_)) ==
+           static_cast<ssize_t>(length);
+}
+
+bool UdpSocket::Send(std::vector<cutils_socket_buffer_t> buffers) {
+    size_t total_length = 0;
+    for (const auto& buffer : buffers) {
+        total_length += buffer.length;
+    }
+
+    return TEMP_FAILURE_RETRY(socket_send_buffers_function_(
+                   sock_, buffers.data(), buffers.size())) == static_cast<ssize_t>(total_length);
 }
 
 ssize_t UdpSocket::Receive(void* data, size_t length, int timeout_ms) {
@@ -135,7 +147,8 @@ class TcpSocket : public Socket {
   public:
     TcpSocket(cutils_socket_t sock) : Socket(sock) {}
 
-    ssize_t Send(const void* data, size_t length) override;
+    bool Send(const void* data, size_t length) override;
+    bool Send(std::vector<cutils_socket_buffer_t> buffers) override;
     ssize_t Receive(void* data, size_t length, int timeout_ms) override;
 
     std::unique_ptr<Socket> Accept() override;
@@ -144,23 +157,52 @@ class TcpSocket : public Socket {
     DISALLOW_COPY_AND_ASSIGN(TcpSocket);
 };
 
-ssize_t TcpSocket::Send(const void* data, size_t length) {
-    size_t total = 0;
+bool TcpSocket::Send(const void* data, size_t length) {
+    while (length > 0) {
+        ssize_t sent =
+                TEMP_FAILURE_RETRY(send(sock_, reinterpret_cast<const char*>(data), length, 0));
 
-    while (total < length) {
-        ssize_t bytes = TEMP_FAILURE_RETRY(
-                send(sock_, reinterpret_cast<const char*>(data) + total, length - total, 0));
-
-        if (bytes == -1) {
-            if (total == 0) {
-                return -1;
-            }
-            break;
+        if (sent == -1) {
+            return false;
         }
-        total += bytes;
+        length -= sent;
     }
 
-    return total;
+    return true;
+}
+
+bool TcpSocket::Send(std::vector<cutils_socket_buffer_t> buffers) {
+    while (!buffers.empty()) {
+        ssize_t sent = TEMP_FAILURE_RETRY(
+                socket_send_buffers_function_(sock_, buffers.data(), buffers.size()));
+
+        if (sent == -1) {
+            return false;
+        }
+
+        // Adjust the buffers to skip past the bytes we've just sent.
+        auto iter = buffers.begin();
+        while (sent > 0) {
+            if (iter->length > static_cast<size_t>(sent)) {
+                // Incomplete buffer write; adjust the buffer to point to the next byte to send.
+                iter->length -= sent;
+                iter->data = reinterpret_cast<const char*>(iter->data) + sent;
+                break;
+            }
+
+            // Complete buffer write; move on to the next buffer.
+            sent -= iter->length;
+            ++iter;
+        }
+
+        // Shortcut the common case: we've written everything remaining.
+        if (iter == buffers.end()) {
+            break;
+        }
+        buffers.erase(buffers.begin(), iter);
+    }
+
+    return true;
 }
 
 ssize_t TcpSocket::Receive(void* data, size_t length, int timeout_ms) {
