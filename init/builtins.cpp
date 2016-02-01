@@ -884,6 +884,13 @@ static int do_installkey(const std::vector<std::string>& args) {
                                      do_installkeys_ensure_dir_exists);
 }
 
+static int do_init_user0(const std::vector<std::string>& args) {
+    if (!is_file_crypto()) {
+        return 0;
+    }
+    return e4crypt_do_init_user0();
+}
+
 BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     static const Map builtin_functions = {
@@ -900,6 +907,7 @@ BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"export",                  {2,     2,    do_export}},
         {"hostname",                {1,     1,    do_hostname}},
         {"ifup",                    {1,     1,    do_ifup}},
+        {"init_user0",              {0,     0,    do_init_user0}},
         {"insmod",                  {1,     kMax, do_insmod}},
         {"installkey",              {1,     1,    do_installkey}},
         {"load_persist_props",      {0,     0,    do_load_persist_props}},

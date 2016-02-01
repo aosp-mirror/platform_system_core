@@ -420,6 +420,8 @@ on post-fs-data
 
     symlink /data/data /data/user/0
 
+    init_user0
+
     # Reload policy from /data/security if present.
     setprop selinux.reload_policy 1
 
