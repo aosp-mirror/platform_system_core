@@ -137,3 +137,60 @@ TEST(sysdeps_win32, unix_isatty) {
     // Make sure an invalid FD is handled correctly.
     EXPECT_EQ(0, unix_isatty(-1));
 }
+
+void TestParseCompleteUTF8(const char* buf, const size_t buf_size,
+                           const size_t expected_complete_bytes,
+                           const std::vector<char>& expected_remaining_bytes) {
+    std::vector<char> remaining_bytes;
+    const size_t complete_bytes = internal::ParseCompleteUTF8(buf, buf + buf_size,
+                                                              &remaining_bytes);
+    EXPECT_EQ(expected_complete_bytes, complete_bytes);
+    EXPECT_EQ(expected_remaining_bytes, remaining_bytes);
+}
+
+TEST(sysdeps_win32, ParseCompleteUTF8) {
+    const std::vector<std::vector<char>> multi_byte_sequences = {
+        { '\xc2', '\xa9' },                 // 2 byte UTF-8 sequence
+        { '\xe1', '\xb4', '\xa8' },         // 3 byte UTF-8 sequence
+        { '\xf0', '\x9f', '\x98', '\x80' }, // 4 byte UTF-8 sequence
+    };
+    std::vector<std::vector<char>> all_sequences = {
+        {},                                 // 0 bytes
+        { '\0' },                           // NULL byte
+        { 'a' },                            // 1 byte UTF-8 sequence
+    };
+    all_sequences.insert(all_sequences.end(), multi_byte_sequences.begin(),
+                         multi_byte_sequences.end());
+
+    // Vary a prefix of bytes in front of the sequence that we're actually interested in parsing.
+    for (const auto& prefix : all_sequences) {
+        // Parse (prefix + one byte of the sequence at a time)
+        for (const auto& seq : multi_byte_sequences) {
+            std::vector<char> buffer(prefix);
+
+            // For every byte of the sequence except the last
+            for (size_t i = 0; i < seq.size() - 1; ++i) {
+                buffer.push_back(seq[i]);
+
+                // When parsing an incomplete UTF-8 sequence, the amount of the buffer preceding
+                // the start of the incomplete UTF-8 sequence is valid. The remaining bytes are the
+                // bytes of the incomplete UTF-8 sequence.
+                TestParseCompleteUTF8(buffer.data(), buffer.size(), prefix.size(),
+                                      std::vector<char>(seq.begin(), seq.begin() + i + 1));
+            }
+
+            // For the last byte of the sequence
+            buffer.push_back(seq.back());
+            TestParseCompleteUTF8(buffer.data(), buffer.size(), buffer.size(), std::vector<char>());
+        }
+
+        // Parse (prefix (aka sequence) + invalid trailing bytes) to verify that the invalid
+        // trailing bytes are immediately "returned" to prevent them from being stuck in some
+        // buffer.
+        std::vector<char> buffer(prefix);
+        for (size_t i = 0; i < 8; ++i) {
+            buffer.push_back(0x80); // trailing byte
+            TestParseCompleteUTF8(buffer.data(), buffer.size(), buffer.size(), std::vector<char>());
+        }
+    }
+}
