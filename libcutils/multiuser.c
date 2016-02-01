@@ -27,3 +27,9 @@ appid_t multiuser_get_app_id(uid_t uid) {
 uid_t multiuser_get_uid(userid_t userId, appid_t appId) {
     return userId * MULTIUSER_APP_PER_USER_RANGE + (appId % MULTIUSER_APP_PER_USER_RANGE);
 }
+
+appid_t multiuser_get_shared_app_gid(uid_t id) {
+  return MULTIUSER_FIRST_SHARED_APPLICATION_GID + (id % MULTIUSER_APP_PER_USER_RANGE)
+          - MULTIUSER_FIRST_APPLICATION_UID;
+
+}
