@@ -27,6 +27,8 @@
 #include <windows.h>
 #include <winerror.h>
 
+#include <android-base/errors.h>
+
 #include "adb.h"
 #include "transport.h"
 
@@ -221,7 +223,7 @@ static void* _power_notification_thread(void* unused) {
   if (!instance) {
     // This is such a common API call that this should never fail.
     fatal("GetModuleHandleW failed: %s",
-          SystemErrorCodeToString(GetLastError()).c_str());
+          android::base::SystemErrorCodeToString(GetLastError()).c_str());
   }
 
   WNDCLASSEXW wndclass;
@@ -232,14 +234,14 @@ static void* _power_notification_thread(void* unused) {
   wndclass.lpszClassName = kPowerNotificationWindowClassName;
   if (!RegisterClassExW(&wndclass)) {
     fatal("RegisterClassExW failed: %s",
-          SystemErrorCodeToString(GetLastError()).c_str());
+          android::base::SystemErrorCodeToString(GetLastError()).c_str());
   }
 
   if (!CreateWindowExW(WS_EX_NOACTIVATE, kPowerNotificationWindowClassName,
                        L"ADB Power Notification Window", WS_POPUP, 0, 0, 0, 0,
                        NULL, NULL, instance, NULL)) {
     fatal("CreateWindowExW failed: %s",
-          SystemErrorCodeToString(GetLastError()).c_str());
+          android::base::SystemErrorCodeToString(GetLastError()).c_str());
   }
 
   MSG msg;
@@ -285,7 +287,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
   ret->adb_interface = AdbCreateInterfaceByName(interface_name);
   if (NULL == ret->adb_interface) {
     D("AdbCreateInterfaceByName failed: %s",
-      SystemErrorCodeToString(GetLastError()).c_str());
+      android::base::SystemErrorCodeToString(GetLastError()).c_str());
     goto fail;
   }
 
@@ -296,7 +298,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
                                    AdbOpenSharingModeReadWrite);
   if (NULL == ret->adb_read_pipe) {
     D("AdbOpenDefaultBulkReadEndpoint failed: %s",
-      SystemErrorCodeToString(GetLastError()).c_str());
+      android::base::SystemErrorCodeToString(GetLastError()).c_str());
     goto fail;
   }
 
@@ -307,7 +309,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
                                     AdbOpenSharingModeReadWrite);
   if (NULL == ret->adb_write_pipe) {
     D("AdbOpenDefaultBulkWriteEndpoint failed: %s",
-      SystemErrorCodeToString(GetLastError()).c_str());
+      android::base::SystemErrorCodeToString(GetLastError()).c_str());
     goto fail;
   }
 
@@ -319,7 +321,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
                       false);
   if (0 == name_len) {
     D("AdbGetInterfaceName returned name length of zero: %s",
-      SystemErrorCodeToString(GetLastError()).c_str());
+      android::base::SystemErrorCodeToString(GetLastError()).c_str());
     goto fail;
   }
 
@@ -335,7 +337,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
                            &name_len,
                            false)) {
     D("AdbGetInterfaceName failed: %s",
-      SystemErrorCodeToString(GetLastError()).c_str());
+      android::base::SystemErrorCodeToString(GetLastError()).c_str());
     goto fail;
   }
 
@@ -370,7 +372,7 @@ int usb_write(usb_handle* handle, const void* data, int len) {
                             &written,
                             time_out)) {
     D("AdbWriteEndpointSync failed: %s",
-      SystemErrorCodeToString(GetLastError()).c_str());
+      android::base::SystemErrorCodeToString(GetLastError()).c_str());
     err = EIO;
     goto fail;
   }
@@ -394,7 +396,7 @@ int usb_write(usb_handle* handle, const void* data, int len) {
                               &written,
                               time_out)) {
       D("AdbWriteEndpointSync of zero length packet failed: %s",
-        SystemErrorCodeToString(GetLastError()).c_str());
+        android::base::SystemErrorCodeToString(GetLastError()).c_str());
       err = EIO;
       goto fail;
     }
@@ -431,7 +433,7 @@ int usb_read(usb_handle *handle, void* data, int len) {
     if (!AdbReadEndpointSync(handle->adb_read_pipe, data, len, &read,
                              time_out)) {
       D("AdbReadEndpointSync failed: %s",
-        SystemErrorCodeToString(GetLastError()).c_str());
+        android::base::SystemErrorCodeToString(GetLastError()).c_str());
       err = EIO;
       goto fail;
     }
@@ -460,7 +462,7 @@ fail:
 static void _adb_close_handle(ADBAPIHANDLE adb_handle) {
   if (!AdbCloseHandle(adb_handle)) {
     D("AdbCloseHandle(%p) failed: %s", adb_handle,
-      SystemErrorCodeToString(GetLastError()).c_str());
+      android::base::SystemErrorCodeToString(GetLastError()).c_str());
   }
 }
 
@@ -539,7 +541,7 @@ int recognized_device(usb_handle* handle) {
   if (!AdbGetUsbDeviceDescriptor(handle->adb_interface,
                                  &device_desc)) {
     D("AdbGetUsbDeviceDescriptor failed: %s",
-      SystemErrorCodeToString(GetLastError()).c_str());
+      android::base::SystemErrorCodeToString(GetLastError()).c_str());
     return 0;
   }
 
@@ -549,7 +551,7 @@ int recognized_device(usb_handle* handle) {
   if (!AdbGetUsbInterfaceDescriptor(handle->adb_interface,
                                     &interf_desc)) {
     D("AdbGetUsbInterfaceDescriptor failed: %s",
-      SystemErrorCodeToString(GetLastError()).c_str());
+      android::base::SystemErrorCodeToString(GetLastError()).c_str());
     return 0;
   }
 
@@ -569,7 +571,7 @@ int recognized_device(usb_handle* handle) {
         D("device zero_mask: 0x%x", handle->zero_mask);
       } else {
         D("AdbGetEndpointInformation failed: %s",
-          SystemErrorCodeToString(GetLastError()).c_str());
+          android::base::SystemErrorCodeToString(GetLastError()).c_str());
       }
     }
 
@@ -591,7 +593,7 @@ void find_devices() {
 
   if (NULL == enum_handle) {
     D("AdbEnumInterfaces failed: %s",
-      SystemErrorCodeToString(GetLastError()).c_str());
+      android::base::SystemErrorCodeToString(GetLastError()).c_str());
     return;
   }
 
@@ -627,7 +629,7 @@ void find_devices() {
             }
           } else {
             D("cannot get serial number: %s",
-              SystemErrorCodeToString(GetLastError()).c_str());
+              android::base::SystemErrorCodeToString(GetLastError()).c_str());
             usb_cleanup_handle(handle);
             free(handle);
           }
@@ -644,7 +646,7 @@ void find_devices() {
   if (GetLastError() != ERROR_NO_MORE_ITEMS) {
     // Only ERROR_NO_MORE_ITEMS is expected at the end of enumeration.
     D("AdbNextInterface failed: %s",
-      SystemErrorCodeToString(GetLastError()).c_str());
+      android::base::SystemErrorCodeToString(GetLastError()).c_str());
   }
 
   _adb_close_handle(enum_handle);

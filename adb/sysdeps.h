@@ -257,9 +257,6 @@ static __inline__ int adb_is_absolute_host_path(const char* path) {
     return isalpha(path[0]) && path[1] == ':' && path[2] == '\\';
 }
 
-// Like strerror(), but for Win32 error codes.
-std::string SystemErrorCodeToString(DWORD error_code);
-
 // We later define a macro mapping 'stat' to 'adb_stat'. This causes:
 //   struct stat s;
 //   stat(filename, &s);
