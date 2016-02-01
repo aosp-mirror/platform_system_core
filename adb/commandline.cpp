@@ -428,49 +428,6 @@ static void copy_to_file(int inFd, int outFd) {
     free(buf);
 }
 
-static std::string format_host_command(const char* command,
-                                       TransportType type, const char* serial) {
-    if (serial) {
-        return android::base::StringPrintf("host-serial:%s:%s", serial, command);
-    }
-
-    const char* prefix = "host";
-    if (type == kTransportUsb) {
-        prefix = "host-usb";
-    } else if (type == kTransportLocal) {
-        prefix = "host-local";
-    }
-    return android::base::StringPrintf("%s:%s", prefix, command);
-}
-
-namespace {
-
-enum class ErrorAction {
-    kPrintToStderr,
-    kDoNotPrint
-};
-
-}  // namespace
-
-// Fills |feature_set| using the target indicated by |transport_type| and |serial|. Returns false
-// and clears |feature_set| on failure. |error_action| selects whether to also print error messages
-// on failure.
-static bool GetFeatureSet(TransportType transport_type, const char* serial, FeatureSet* feature_set,
-                          ErrorAction error_action) {
-    std::string result, error;
-
-    if (adb_query(format_host_command("features", transport_type, serial), &result, &error)) {
-        *feature_set = StringToFeatureSet(result);
-        return true;
-    }
-
-    if (error_action == ErrorAction::kPrintToStderr) {
-        fprintf(stderr, "error: %s\n", error.c_str());
-    }
-    feature_set->clear();
-    return false;
-}
-
 static void send_window_size_change(int fd, std::unique_ptr<ShellProtocol>& shell) {
 #if !defined(_WIN32)
     // Old devices can't handle window size changes.
@@ -712,10 +669,12 @@ static int RemoteShell(bool use_shell_protocol, const std::string& type_arg,
     return exit_code;
 }
 
-static int adb_shell(int argc, const char** argv,
-                     TransportType transport_type, const char* serial) {
+static int adb_shell(int argc, const char** argv) {
     FeatureSet features;
-    if (!GetFeatureSet(transport_type, serial, &features, ErrorAction::kPrintToStderr)) {
+    std::string error;
+
+    if (!adb_get_feature_set(&features, &error)) {
+        fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
     }
 
@@ -1096,7 +1055,8 @@ static int send_shell_command(TransportType transport_type, const char* serial,
         // Use shell protocol if it's supported and the caller doesn't explicitly disable it.
         if (!disable_shell_protocol) {
             FeatureSet features;
-            if (GetFeatureSet(transport_type, serial, &features, ErrorAction::kDoNotPrint)) {
+            std::string error;
+            if (adb_get_feature_set(&features, &error)) {
                 use_shell_protocol = CanUseFeature(features, kFeatureShell2);
             } else {
                 // Device was unreachable.
@@ -1575,7 +1535,7 @@ int adb_commandline(int argc, const char **argv) {
         return adb_send_emulator_command(argc, argv, serial);
     }
     else if (!strcmp(argv[0], "shell")) {
-        return adb_shell(argc, argv, transport_type, serial);
+        return adb_shell(argc, argv);
     }
     else if (!strcmp(argv[0], "exec-in") || !strcmp(argv[0], "exec-out")) {
         int exec_in = !strcmp(argv[0], "exec-in");
@@ -1731,7 +1691,9 @@ int adb_commandline(int argc, const char **argv) {
     else if (!strcmp(argv[0], "install")) {
         if (argc < 2) return usage();
         FeatureSet features;
-        if (!GetFeatureSet(transport_type, serial, &features, ErrorAction::kPrintToStderr)) {
+        std::string error;
+        if (!adb_get_feature_set(&features, &error)) {
+            fprintf(stderr, "error: %s\n", error.c_str());
             return 1;
         }
 
@@ -1747,7 +1709,9 @@ int adb_commandline(int argc, const char **argv) {
     else if (!strcmp(argv[0], "uninstall")) {
         if (argc < 2) return usage();
         FeatureSet features;
-        if (!GetFeatureSet(transport_type, serial, &features, ErrorAction::kPrintToStderr)) {
+        std::string error;
+        if (!adb_get_feature_set(&features, &error)) {
+            fprintf(stderr, "error: %s\n", error.c_str());
             return 1;
         }
 
@@ -1850,7 +1814,9 @@ int adb_commandline(int argc, const char **argv) {
     else if (!strcmp(argv[0], "features")) {
         // Only list the features common to both the adb client and the device.
         FeatureSet features;
-        if (!GetFeatureSet(transport_type, serial, &features, ErrorAction::kPrintToStderr)) {
+        std::string error;
+        if (!adb_get_feature_set(&features, &error)) {
+            fprintf(stderr, "error: %s\n", error.c_str());
             return 1;
         }
 

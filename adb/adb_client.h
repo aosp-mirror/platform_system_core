@@ -18,6 +18,7 @@
 #define _ADB_CLIENT_H_
 
 #include "adb.h"
+#include "transport.h"
 
 #include <string>
 
@@ -51,5 +52,11 @@ int adb_send_emulator_command(int argc, const char** argv, const char* serial);
 // Reads a standard adb status response (OKAY|FAIL) and returns true in the
 // event of OKAY, false in the event of FAIL or protocol error.
 bool adb_status(int fd, std::string* error);
+
+// Create a host command corresponding to selected transport type/serial.
+std::string format_host_command(const char* command, TransportType type, const char* serial);
+
+// Get the feature set of the current preferred transport.
+bool adb_get_feature_set(FeatureSet* feature_set, std::string* error);
 
 #endif
