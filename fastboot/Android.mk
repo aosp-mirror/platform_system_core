@@ -106,7 +106,11 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := fastboot_test
 LOCAL_MODULE_HOST_OS := darwin linux windows
 
-LOCAL_SRC_FILES := socket.cpp socket_test.cpp
+LOCAL_SRC_FILES := \
+    socket.cpp \
+    socket_mock.cpp \
+    socket_test.cpp \
+
 LOCAL_STATIC_LIBRARIES := libbase libcutils
 
 LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
