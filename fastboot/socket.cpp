@@ -28,6 +28,7 @@
 
 #include "socket.h"
 
+#include <android-base/errors.h>
 #include <android-base/stringprintf.h>
 
 Socket::Socket(cutils_socket_t sock) : sock_(sock) {}
@@ -75,6 +76,10 @@ ssize_t Socket::ReceiveAll(void* data, size_t length, int timeout_ms) {
     }
 
     return total;
+}
+
+int Socket::GetLocalPort() {
+    return socket_get_local_port(sock_);
 }
 
 // Implements the Socket interface for UDP.
@@ -209,4 +214,13 @@ std::unique_ptr<Socket> Socket::NewServer(Protocol protocol, int port) {
     }
 
     return nullptr;
+}
+
+std::string Socket::GetErrorMessage() {
+#if defined(_WIN32)
+    DWORD error_code = WSAGetLastError();
+#else
+    int error_code = errno;
+#endif
+    return android::base::SystemErrorCodeToString(error_code);
 }

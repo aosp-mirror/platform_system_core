@@ -44,6 +44,10 @@ class Socket {
   public:
     enum class Protocol { kTcp, kUdp };
 
+    // Returns the socket error message. This must be called immediately after a socket failure
+    // before any other system calls are made.
+    static std::string GetErrorMessage();
+
     // Creates a new client connection. Clients are connected to a specific hostname/port and can
     // only send to that destination.
     // On failure, |error| is filled (if non-null) and nullptr is returned.
@@ -77,6 +81,9 @@ class Socket {
     // Accepts an incoming TCP connection. No effect for UDP sockets. Returns a new Socket
     // connected to the client on success, nullptr on failure.
     virtual std::unique_ptr<Socket> Accept() { return nullptr; }
+
+    // Returns the local port the Socket is bound to or -1 on error.
+    int GetLocalPort();
 
   protected:
     // Protected constructor to force factory function use.
