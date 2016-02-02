@@ -74,8 +74,7 @@ typedef void (*fs_mgr_verity_state_callback)(struct fstab_rec *fstab,
 struct fstab *fs_mgr_read_fstab(const char *fstab_path);
 void fs_mgr_free_fstab(struct fstab *fstab);
 
-#define FS_MGR_MNTALL_DEV_NON_DEFAULT_FILE_ENCRYPTED 5
-#define FS_MGR_MNTALL_DEV_DEFAULT_FILE_ENCRYPTED 4
+#define FS_MGR_MNTALL_DEV_FILE_ENCRYPTED 4
 #define FS_MGR_MNTALL_DEV_NEEDS_RECOVERY 3
 #define FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION 2
 #define FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED 1
