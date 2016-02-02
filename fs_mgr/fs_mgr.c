@@ -441,7 +441,7 @@ out:
 }
 
 // Check to see if a mountable volume has encryption requirements
-static int handle_encryptable(struct fstab *fstab, const struct fstab_rec* rec)
+static int handle_encryptable(const struct fstab_rec* rec)
 {
     /* Check for existence of convert_fbe breadcrumb file */
     char convert_fbe_name[PATH_MAX];
@@ -472,41 +472,8 @@ static int handle_encryptable(struct fstab *fstab, const struct fstab_rec* rec)
     // Deal with file level encryption
     if (   (rec->fs_mgr_flags & MF_FILEENCRYPTION)
         || ((rec->fs_mgr_flags & MF_FORCEFDEORFBE) && convert_fbe)) {
-        // Default or not yet initialized encryption requires no more work here
-        if (!e4crypt_non_default_key(rec->mount_point)) {
-            INFO("%s is default file encrypted\n", rec->mount_point);
-            return FS_MGR_MNTALL_DEV_DEFAULT_FILE_ENCRYPTED;
-        }
-
-        INFO("%s is non-default file encrypted\n", rec->mount_point);
-
-        // Uses non-default key, so must unmount and set up temp file system
-        if (umount(rec->mount_point)) {
-            ERROR("Failed to umount %s - rebooting\n", rec->mount_point);
-            return FS_MGR_MNTALL_FAIL;
-        }
-
-        if (fs_mgr_do_tmpfs_mount(rec->mount_point) != 0) {
-            ERROR("Failed to mount a tmpfs at %s\n", rec->mount_point);
-            return FS_MGR_MNTALL_FAIL;
-        }
-
-        // Mount data temporarily so we can access unencrypted dir
-        char tmp_mnt[PATH_MAX];
-        strlcpy(tmp_mnt, rec->mount_point, sizeof(tmp_mnt));
-        strlcat(tmp_mnt, "/tmp_mnt", sizeof(tmp_mnt));
-        if (mkdir(tmp_mnt, 0700)) {
-            ERROR("Failed to create temp mount point\n");
-            return FS_MGR_MNTALL_FAIL;
-        }
-
-        if (fs_mgr_do_mount(fstab, rec->mount_point,
-                            rec->blk_device, tmp_mnt)) {
-            ERROR("Error temp mounting encrypted file system\n");
-            return FS_MGR_MNTALL_FAIL;
-        }
-
-        return FS_MGR_MNTALL_DEV_NON_DEFAULT_FILE_ENCRYPTED;
+        INFO("%s is file encrypted\n", rec->mount_point);
+        return FS_MGR_MNTALL_DEV_FILE_ENCRYPTED;
     }
 
     return FS_MGR_MNTALL_DEV_NOT_ENCRYPTED;
@@ -584,7 +551,7 @@ int fs_mgr_mount_all(struct fstab *fstab)
 
         /* Deal with encryptability. */
         if (!mret) {
-            int status = handle_encryptable(fstab, &fstab->recs[attempted_idx]);
+            int status = handle_encryptable(&fstab->recs[attempted_idx]);
 
             if (status == FS_MGR_MNTALL_FAIL) {
                 /* Fatal error - no point continuing */
