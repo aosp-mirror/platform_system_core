@@ -132,6 +132,11 @@ int socket_close(cutils_socket_t sock);
 int socket_set_receive_timeout(cutils_socket_t sock, int timeout_ms);
 
 /*
+ * Returns the local port the socket is bound to or -1 on error.
+ */
+int socket_get_local_port(cutils_socket_t sock);
+
+/*
  * socket_peer_is_trusted - Takes a socket which is presumed to be a
  * connected local socket (e.g. AF_LOCAL) and returns whether the peer
  * (the userid that owns the process on the other end of that socket)

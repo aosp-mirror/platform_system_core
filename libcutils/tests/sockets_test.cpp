@@ -15,20 +15,14 @@
  */
 
 // Tests socket functionality using loopback connections. Requires IPv4 and
-// IPv6 capabilities, and that kTestPort is available for loopback
-// communication. These tests also assume that no UDP packets are lost,
-// which should be the case for loopback communication, but is not guaranteed.
+// IPv6 capabilities. These tests assume that no UDP packets are lost, which
+// should be the case for loopback communication, but is not guaranteed.
 
 #include <cutils/sockets.h>
 
 #include <time.h>
 
 #include <gtest/gtest.h>
-
-enum {
-    // This port must be available for loopback communication.
-    kTestPort = 54321
-};
 
 // Makes sure the passed sockets are valid, sends data between them, and closes
 // them. Any failures are logged with gtest.
@@ -47,19 +41,19 @@ static void TestConnectedSockets(cutils_socket_t server, cutils_socket_t client,
     // Send client -> server first to get the UDP client's address.
     ASSERT_EQ(3, send(client, "foo", 3, 0));
     if (type == SOCK_DGRAM) {
-      EXPECT_EQ(3, recvfrom(server, buffer, 3, 0,
-                            reinterpret_cast<sockaddr*>(&addr), &addr_size));
+        EXPECT_EQ(3, recvfrom(server, buffer, 3, 0,
+                              reinterpret_cast<sockaddr*>(&addr), &addr_size));
     } else {
-      EXPECT_EQ(3, recv(server, buffer, 3, 0));
+        EXPECT_EQ(3, recv(server, buffer, 3, 0));
     }
     EXPECT_EQ(0, memcmp(buffer, "foo", 3));
 
     // Now send server -> client.
     if (type == SOCK_DGRAM) {
-      ASSERT_EQ(3, sendto(server, "bar", 3, 0,
-                          reinterpret_cast<sockaddr*>(&addr), addr_size));
+        ASSERT_EQ(3, sendto(server, "bar", 3, 0,
+                            reinterpret_cast<sockaddr*>(&addr), addr_size));
     } else {
-      ASSERT_EQ(3, send(server, "bar", 3, 0));
+        ASSERT_EQ(3, send(server, "bar", 3, 0));
     }
     EXPECT_EQ(3, recv(client, buffer, 3, 0));
     EXPECT_EQ(0, memcmp(buffer, "bar", 3));
@@ -87,22 +81,43 @@ void TestReceiveTimeout(cutils_socket_t sock) {
     EXPECT_LE(1.0, difftime(time(nullptr), start_time));
 }
 
+// Tests socket_get_local_port().
+TEST(SocketsTest, TestGetLocalPort) {
+    cutils_socket_t server;
+
+    // Check a bunch of ports so that we can ignore any conflicts in case
+    // of ports already being taken, but if a server is able to start up we
+    // should always be able to read its port.
+    for (int port : {10000, 12345, 15999, 20202, 25000}) {
+        for (int type : {SOCK_DGRAM, SOCK_STREAM}) {
+            server = socket_inaddr_any_server(port, SOCK_DGRAM);
+            if (server != INVALID_SOCKET) {
+                EXPECT_EQ(port, socket_get_local_port(server));
+            }
+            socket_close(server);
+        }
+    }
+
+    // Check expected failure for an invalid socket.
+    EXPECT_EQ(-1, socket_get_local_port(INVALID_SOCKET));
+}
+
 // Tests socket_inaddr_any_server() and socket_network_client() for IPv4 UDP.
 TEST(SocketsTest, TestIpv4UdpLoopback) {
-    cutils_socket_t server = socket_inaddr_any_server(kTestPort, SOCK_DGRAM);
-    cutils_socket_t client = socket_network_client("127.0.0.1", kTestPort,
-                                                   SOCK_DGRAM);
+    cutils_socket_t server = socket_inaddr_any_server(0, SOCK_DGRAM);
+    cutils_socket_t client = socket_network_client(
+            "127.0.0.1", socket_get_local_port(server), SOCK_DGRAM);
 
     TestConnectedSockets(server, client, SOCK_DGRAM);
 }
 
 // Tests socket_inaddr_any_server() and socket_network_client() for IPv4 TCP.
 TEST(SocketsTest, TestIpv4TcpLoopback) {
-    cutils_socket_t server = socket_inaddr_any_server(kTestPort, SOCK_STREAM);
+    cutils_socket_t server = socket_inaddr_any_server(0, SOCK_STREAM);
     ASSERT_NE(INVALID_SOCKET, server);
 
-    cutils_socket_t client = socket_network_client("127.0.0.1", kTestPort,
-                                                   SOCK_STREAM);
+    cutils_socket_t client = socket_network_client(
+            "127.0.0.1", socket_get_local_port(server), SOCK_STREAM);
     cutils_socket_t handler = accept(server, nullptr, nullptr);
     EXPECT_EQ(0, socket_close(server));
 
@@ -111,20 +126,20 @@ TEST(SocketsTest, TestIpv4TcpLoopback) {
 
 // Tests socket_inaddr_any_server() and socket_network_client() for IPv6 UDP.
 TEST(SocketsTest, TestIpv6UdpLoopback) {
-    cutils_socket_t server = socket_inaddr_any_server(kTestPort, SOCK_DGRAM);
-    cutils_socket_t client = socket_network_client("::1", kTestPort,
-                                                   SOCK_DGRAM);
+    cutils_socket_t server = socket_inaddr_any_server(0, SOCK_DGRAM);
+    cutils_socket_t client = socket_network_client(
+            "::1", socket_get_local_port(server), SOCK_DGRAM);
 
     TestConnectedSockets(server, client, SOCK_DGRAM);
 }
 
 // Tests socket_inaddr_any_server() and socket_network_client() for IPv6 TCP.
 TEST(SocketsTest, TestIpv6TcpLoopback) {
-    cutils_socket_t server = socket_inaddr_any_server(kTestPort, SOCK_STREAM);
+    cutils_socket_t server = socket_inaddr_any_server(0, SOCK_STREAM);
     ASSERT_NE(INVALID_SOCKET, server);
 
-    cutils_socket_t client = socket_network_client("::1", kTestPort,
-                                                   SOCK_STREAM);
+    cutils_socket_t client = socket_network_client(
+            "::1", socket_get_local_port(server), SOCK_STREAM);
     cutils_socket_t handler = accept(server, nullptr, nullptr);
     EXPECT_EQ(0, socket_close(server));
 
@@ -133,7 +148,7 @@ TEST(SocketsTest, TestIpv6TcpLoopback) {
 
 // Tests setting a receive timeout for UDP sockets.
 TEST(SocketsTest, TestUdpReceiveTimeout) {
-    cutils_socket_t sock = socket_inaddr_any_server(kTestPort, SOCK_DGRAM);
+    cutils_socket_t sock = socket_inaddr_any_server(0, SOCK_DGRAM);
     ASSERT_NE(INVALID_SOCKET, sock);
 
     TestReceiveTimeout(sock);
@@ -143,11 +158,11 @@ TEST(SocketsTest, TestUdpReceiveTimeout) {
 
 // Tests setting a receive timeout for TCP sockets.
 TEST(SocketsTest, TestTcpReceiveTimeout) {
-    cutils_socket_t server = socket_inaddr_any_server(kTestPort, SOCK_STREAM);
+    cutils_socket_t server = socket_inaddr_any_server(0, SOCK_STREAM);
     ASSERT_NE(INVALID_SOCKET, server);
 
-    cutils_socket_t client = socket_network_client("localhost", kTestPort,
-                                                   SOCK_STREAM);
+    cutils_socket_t client = socket_network_client(
+            "localhost", socket_get_local_port(server), SOCK_STREAM);
     cutils_socket_t handler = accept(server, nullptr, nullptr);
     EXPECT_EQ(0, socket_close(server));
 
