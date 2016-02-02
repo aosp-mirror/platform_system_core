@@ -1,4 +1,3 @@
 service debuggerd /system/bin/debuggerd
-    class main
     group root readproc
     writepid /dev/cpuset/system-background/tasks
