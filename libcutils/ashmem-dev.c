@@ -22,6 +22,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -34,6 +35,89 @@
 
 #define ASHMEM_DEVICE "/dev/ashmem"
 
+/* ashmem identity */
+static dev_t __ashmem_rdev;
+/*
+ * If we trigger a signal handler in the middle of locked activity and the
+ * signal handler calls ashmem, we could get into a deadlock state.
+ */
+static pthread_mutex_t __ashmem_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* logistics of getting file descriptor for ashmem */
+static int __ashmem_open_locked()
+{
+    int ret;
+    struct stat st;
+
+    int fd = TEMP_FAILURE_RETRY(open(ASHMEM_DEVICE, O_RDWR));
+    if (fd < 0) {
+        return fd;
+    }
+
+    ret = TEMP_FAILURE_RETRY(fstat(fd, &st));
+    if (ret < 0) {
+        int save_errno = errno;
+        close(fd);
+        errno = save_errno;
+        return ret;
+    }
+    if (!S_ISCHR(st.st_mode) || !st.st_rdev) {
+        close(fd);
+        errno = ENOTTY;
+        return -1;
+    }
+
+    __ashmem_rdev = st.st_rdev;
+    return fd;
+}
+
+static int __ashmem_open()
+{
+    int fd;
+
+    pthread_mutex_lock(&__ashmem_lock);
+    fd = __ashmem_open_locked();
+    pthread_mutex_unlock(&__ashmem_lock);
+
+    return fd;
+}
+
+/* Make sure file descriptor references ashmem, negative number means false */
+static int __ashmem_is_ashmem(int fd)
+{
+    dev_t rdev;
+    struct stat st;
+
+    if (TEMP_FAILURE_RETRY(fstat(fd, &st)) < 0) {
+        return -1;
+    }
+
+    if (S_ISCHR(st.st_mode) && st.st_rdev) {
+        pthread_mutex_lock(&__ashmem_lock);
+        rdev = __ashmem_rdev;
+        if (rdev) {
+            pthread_mutex_unlock(&__ashmem_lock);
+        } else {
+            int fd = __ashmem_open_locked();
+            if (fd < 0) {
+                pthread_mutex_unlock(&__ashmem_lock);
+                return -1;
+            }
+            rdev = __ashmem_rdev;
+            pthread_mutex_unlock(&__ashmem_lock);
+
+            close(fd);
+        }
+
+        if (st.st_rdev == rdev) {
+            return 0;
+        }
+    }
+
+    errno = ENOTTY;
+    return -1;
+}
+
 /*
  * ashmem_create_region - creates a new ashmem region and returns the file
  * descriptor, or <0 on error
@@ -45,7 +129,7 @@ int ashmem_create_region(const char *name, size_t size)
 {
     int ret, save_errno;
 
-    int fd = TEMP_FAILURE_RETRY(open(ASHMEM_DEVICE, O_RDWR));
+    int fd = __ashmem_open();
     if (fd < 0) {
         return fd;
     }
@@ -76,22 +160,44 @@ error:
 
 int ashmem_set_prot_region(int fd, int prot)
 {
+    int ret = __ashmem_is_ashmem(fd);
+    if (ret < 0) {
+        return ret;
+    }
+
     return TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_SET_PROT_MASK, prot));
 }
 
 int ashmem_pin_region(int fd, size_t offset, size_t len)
 {
     struct ashmem_pin pin = { offset, len };
+
+    int ret = __ashmem_is_ashmem(fd);
+    if (ret < 0) {
+        return ret;
+    }
+
     return TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_PIN, &pin));
 }
 
 int ashmem_unpin_region(int fd, size_t offset, size_t len)
 {
     struct ashmem_pin pin = { offset, len };
+
+    int ret = __ashmem_is_ashmem(fd);
+    if (ret < 0) {
+        return ret;
+    }
+
     return TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_UNPIN, &pin));
 }
 
 int ashmem_get_size_region(int fd)
 {
+    int ret = __ashmem_is_ashmem(fd);
+    if (ret < 0) {
+        return ret;
+    }
+
     return TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_GET_SIZE, NULL));
 }
