@@ -78,8 +78,11 @@ int ashmem_get_size_region(int fd)
         return -1;
     }
 
-    // Check if this is an "ashmem" region.
-    // TODO: This is very hacky, and can easily break. We need some reliable indicator.
+    /*
+     * Check if this is an "ashmem" region.
+     * TODO: This is very hacky, and can easily break.
+     * We need some reliable indicator.
+     */
     if (!(buf.st_nlink == 0 && S_ISREG(buf.st_mode))) {
         errno = ENOTTY;
         return -1;

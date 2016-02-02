@@ -20,17 +20,19 @@
  * used by the simulator.
  */
 
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/ioctl.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <linux/ashmem.h>
+
 #include <cutils/ashmem.h>
 
-#define ASHMEM_DEVICE	"/dev/ashmem"
+#define ASHMEM_DEVICE "/dev/ashmem"
 
 /*
  * ashmem_create_region - creates a new ashmem region and returns the file
@@ -41,50 +43,55 @@
  */
 int ashmem_create_region(const char *name, size_t size)
 {
-	int fd, ret;
+    int ret, save_errno;
 
-	fd = open(ASHMEM_DEVICE, O_RDWR);
-	if (fd < 0)
-		return fd;
+    int fd = TEMP_FAILURE_RETRY(open(ASHMEM_DEVICE, O_RDWR));
+    if (fd < 0) {
+        return fd;
+    }
 
-	if (name) {
-		char buf[ASHMEM_NAME_LEN] = {0};
+    if (name) {
+        char buf[ASHMEM_NAME_LEN] = {0};
 
-		strlcpy(buf, name, sizeof(buf));
-		ret = ioctl(fd, ASHMEM_SET_NAME, buf);
-		if (ret < 0)
-			goto error;
-	}
+        strlcpy(buf, name, sizeof(buf));
+        ret = TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_SET_NAME, buf));
+        if (ret < 0) {
+            goto error;
+        }
+    }
 
-	ret = ioctl(fd, ASHMEM_SET_SIZE, size);
-	if (ret < 0)
-		goto error;
+    ret = TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_SET_SIZE, size));
+    if (ret < 0) {
+        goto error;
+    }
 
-	return fd;
+    return fd;
 
 error:
-	close(fd);
-	return ret;
+    save_errno = errno;
+    close(fd);
+    errno = save_errno;
+    return ret;
 }
 
 int ashmem_set_prot_region(int fd, int prot)
 {
-	return ioctl(fd, ASHMEM_SET_PROT_MASK, prot);
+    return TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_SET_PROT_MASK, prot));
 }
 
 int ashmem_pin_region(int fd, size_t offset, size_t len)
 {
-	struct ashmem_pin pin = { offset, len };
-	return ioctl(fd, ASHMEM_PIN, &pin);
+    struct ashmem_pin pin = { offset, len };
+    return TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_PIN, &pin));
 }
 
 int ashmem_unpin_region(int fd, size_t offset, size_t len)
 {
-	struct ashmem_pin pin = { offset, len };
-	return ioctl(fd, ASHMEM_UNPIN, &pin);
+    struct ashmem_pin pin = { offset, len };
+    return TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_UNPIN, &pin));
 }
 
 int ashmem_get_size_region(int fd)
 {
-  return ioctl(fd, ASHMEM_GET_SIZE, NULL);
+    return TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_GET_SIZE, NULL));
 }
