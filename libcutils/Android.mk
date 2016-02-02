@@ -17,21 +17,22 @@ LOCAL_PATH := $(my-dir)
 include $(CLEAR_VARS)
 
 libcutils_common_sources := \
-        hashmap.c \
         atomic.c.arm \
-        native_handle.c \
         config_utils.c \
+        fs_config.c \
+        hashmap.c \
+        iosched_policy.c \
         load_file.c \
-        strlcpy.c \
+        native_handle.c \
         open_memstream.c \
+        process_name.c \
+        record_stream.c \
+        sched_policy.c \
+        sockets.cpp \
         strdup16to8.c \
         strdup8to16.c \
-        record_stream.c \
-        process_name.c \
+        strlcpy.c \
         threads.c \
-        sched_policy.c \
-        iosched_policy.c \
-        fs_config.c
 
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
