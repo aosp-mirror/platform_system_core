@@ -14,33 +14,31 @@
  * limitations under the License.
  */
 
-// Tests UDP functionality using loopback connections. Requires that kTestPort is available
-// for loopback communication on the host. These tests also assume that no UDP packets are lost,
-// which should be the case for loopback communication, but is not guaranteed.
+// Tests socket functionality using loopback connections. The UDP tests assume that no packets are
+// lost, which should be the case for loopback communication, but is not guaranteed.
+//
+// Also tests our SocketMock class to make sure it works as expected and reports errors properly
+// if the mock expectations aren't met during a test.
 
 #include "socket.h"
+#include "socket_mock.h"
 
 #include <gtest/gtest.h>
+#include <gtest/gtest-spi.h>
 
-enum {
-    // This port must be available for loopback communication.
-    kTestPort = 54321,
-
-    // Don't wait forever in a unit test.
-    kTestTimeoutMs = 3000,
-};
+enum { kTestTimeoutMs = 3000 };
 
 // Creates connected sockets |server| and |client|. Returns true on success.
 bool MakeConnectedSockets(Socket::Protocol protocol, std::unique_ptr<Socket>* server,
-                          std::unique_ptr<Socket>* client, const std::string hostname = "localhost",
-                          int port = kTestPort) {
-    *server = Socket::NewServer(protocol, port);
+                          std::unique_ptr<Socket>* client,
+                          const std::string hostname = "localhost") {
+    *server = Socket::NewServer(protocol, 0);
     if (*server == nullptr) {
         ADD_FAILURE() << "Failed to create server.";
         return false;
     }
 
-    *client = Socket::NewClient(protocol, hostname, port, nullptr);
+    *client = Socket::NewClient(protocol, hostname, (*server)->GetLocalPort(), nullptr);
     if (*client == nullptr) {
         ADD_FAILURE() << "Failed to create client.";
         return false;
@@ -123,4 +121,87 @@ TEST(SocketTest, TestUdpReceiveOverflow) {
     } else {
         EXPECT_EQ(-1, bytes);
     }
+}
+
+TEST(SocketMockTest, TestSendSuccess) {
+    SocketMock mock;
+
+    mock.ExpectSend("foo");
+    EXPECT_TRUE(SendString(&mock, "foo"));
+
+    mock.ExpectSend("abc");
+    mock.ExpectSend("123");
+    EXPECT_TRUE(SendString(&mock, "abc"));
+    EXPECT_TRUE(SendString(&mock, "123"));
+}
+
+TEST(SocketMockTest, TestSendFailure) {
+    SocketMock* mock = new SocketMock;
+
+    EXPECT_NONFATAL_FAILURE(SendString(mock, "foo"), "no message was expected");
+
+    mock->ExpectSend("foo");
+    EXPECT_NONFATAL_FAILURE(SendString(mock, "bar"), "expected foo, but got bar");
+    EXPECT_TRUE(SendString(mock, "foo"));
+
+    mock->AddReceive("foo");
+    EXPECT_NONFATAL_FAILURE(SendString(mock, "foo"), "called out-of-order");
+    EXPECT_TRUE(ReceiveString(mock, "foo"));
+
+    mock->ExpectSend("foo");
+    EXPECT_NONFATAL_FAILURE(delete mock, "1 event(s) were not handled");
+}
+
+TEST(SocketMockTest, TestReceiveSuccess) {
+    SocketMock mock;
+
+    mock.AddReceive("foo");
+    EXPECT_TRUE(ReceiveString(&mock, "foo"));
+
+    mock.AddReceive("abc");
+    mock.AddReceive("123");
+    EXPECT_TRUE(ReceiveString(&mock, "abc"));
+    EXPECT_TRUE(ReceiveString(&mock, "123"));
+}
+
+TEST(SocketMockTest, TestReceiveFailure) {
+    SocketMock* mock = new SocketMock;
+
+    EXPECT_NONFATAL_FAILURE(ReceiveString(mock, "foo"), "no message was ready");
+
+    mock->ExpectSend("foo");
+    EXPECT_NONFATAL_FAILURE(ReceiveString(mock, "foo"), "called out-of-order");
+    EXPECT_TRUE(SendString(mock, "foo"));
+
+    char c;
+    mock->AddReceive("foo");
+    EXPECT_NONFATAL_FAILURE(mock->Receive(&c, 1, 0), "not enough bytes (1) for foo");
+    EXPECT_TRUE(ReceiveString(mock, "foo"));
+
+    mock->AddReceive("foo");
+    EXPECT_NONFATAL_FAILURE(delete mock, "1 event(s) were not handled");
+}
+
+TEST(SocketMockTest, TestAcceptSuccess) {
+    SocketMock mock;
+
+    SocketMock* mock_handler = new SocketMock;
+    mock.AddAccept(std::unique_ptr<SocketMock>(mock_handler));
+    EXPECT_EQ(mock_handler, mock.Accept().get());
+
+    mock.AddAccept(nullptr);
+    EXPECT_EQ(nullptr, mock.Accept().get());
+}
+
+TEST(SocketMockTest, TestAcceptFailure) {
+    SocketMock* mock = new SocketMock;
+
+    EXPECT_NONFATAL_FAILURE(mock->Accept(), "no socket was ready");
+
+    mock->ExpectSend("foo");
+    EXPECT_NONFATAL_FAILURE(mock->Accept(), "called out-of-order");
+    EXPECT_TRUE(SendString(mock, "foo"));
+
+    mock->AddAccept(nullptr);
+    EXPECT_NONFATAL_FAILURE(delete mock, "1 event(s) were not handled");
 }
