@@ -34,17 +34,17 @@ static void TestConnectedSockets(cutils_socket_t server, cutils_socket_t client,
     ASSERT_NE(INVALID_SOCKET, server);
     ASSERT_NE(INVALID_SOCKET, client);
 
-    char buffer[3];
+    char buffer[128];
     sockaddr_storage addr;
     socklen_t addr_size = sizeof(addr);
 
     // Send client -> server first to get the UDP client's address.
     ASSERT_EQ(3, send(client, "foo", 3, 0));
     if (type == SOCK_DGRAM) {
-        EXPECT_EQ(3, recvfrom(server, buffer, 3, 0,
+        EXPECT_EQ(3, recvfrom(server, buffer, sizeof(buffer), 0,
                               reinterpret_cast<sockaddr*>(&addr), &addr_size));
     } else {
-        EXPECT_EQ(3, recv(server, buffer, 3, 0));
+        EXPECT_EQ(3, recv(server, buffer, sizeof(buffer), 0));
     }
     EXPECT_EQ(0, memcmp(buffer, "foo", 3));
 
@@ -55,8 +55,19 @@ static void TestConnectedSockets(cutils_socket_t server, cutils_socket_t client,
     } else {
         ASSERT_EQ(3, send(server, "bar", 3, 0));
     }
-    EXPECT_EQ(3, recv(client, buffer, 3, 0));
+    EXPECT_EQ(3, recv(client, buffer, sizeof(buffer), 0));
     EXPECT_EQ(0, memcmp(buffer, "bar", 3));
+
+    // Send multiple buffers using socket_send_buffers().
+    std::string data[] = {"foo", "bar", "12345"};
+    cutils_socket_buffer_t socket_buffers[3];
+    for (int i = 0; i < 3; ++i) {
+        socket_buffers[i] = make_cutils_socket_buffer(&data[i][0],
+                                                      data[i].length());
+    }
+    EXPECT_EQ(11, socket_send_buffers(client, socket_buffers, 3));
+    EXPECT_EQ(11, recv(server, buffer, sizeof(buffer), 0));
+    EXPECT_EQ(0, memcmp(buffer, "foobar12345", 11));
 
     EXPECT_EQ(0, socket_close(server));
     EXPECT_EQ(0, socket_close(client));
@@ -170,4 +181,9 @@ TEST(SocketsTest, TestTcpReceiveTimeout) {
 
     EXPECT_EQ(0, socket_close(client));
     EXPECT_EQ(0, socket_close(handler));
+}
+
+// Tests socket_send_buffers() failure.
+TEST(SocketsTest, TestSocketSendBuffersFailure) {
+    EXPECT_EQ(-1, socket_send_buffers(INVALID_SOCKET, nullptr, 0));
 }
