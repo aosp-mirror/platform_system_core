@@ -47,12 +47,25 @@ bool socket_peer_is_trusted(int fd __android_unused)
 }
 
 int socket_close(int sock) {
-  return close(sock);
+    return close(sock);
 }
 
 int socket_set_receive_timeout(cutils_socket_t sock, int timeout_ms) {
-  struct timeval tv;
-  tv.tv_sec = timeout_ms / 1000;
-  tv.tv_usec = (timeout_ms % 1000) * 1000;
-  return setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    struct timeval tv;
+    tv.tv_sec = timeout_ms / 1000;
+    tv.tv_usec = (timeout_ms % 1000) * 1000;
+    return setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+}
+
+cutils_socket_buffer_t make_cutils_socket_buffer(void* data, size_t length) {
+    cutils_socket_buffer_t buffer;
+    buffer.iov_base = data;
+    buffer.iov_len = length;
+    return buffer;
+}
+
+ssize_t socket_send_buffers(cutils_socket_t sock,
+                            cutils_socket_buffer_t* buffers,
+                            size_t num_buffers) {
+    return writev(sock, buffers, num_buffers);
 }

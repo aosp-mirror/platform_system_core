@@ -58,3 +58,22 @@ int socket_set_receive_timeout(cutils_socket_t sock, int timeout_ms) {
     return setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout_ms,
                       sizeof(timeout_ms));
 }
+
+cutils_socket_buffer_t make_cutils_socket_buffer(void* data, size_t length) {
+    cutils_socket_buffer_t buffer;
+    buffer.buf = data;
+    buffer.len = length;
+    return buffer;
+}
+
+ssize_t socket_send_buffers(cutils_socket_t sock,
+                            cutils_socket_buffer_t* buffers,
+                            size_t num_buffers) {
+    DWORD bytes_sent = 0;
+
+    if (WSASend(sock, buffers, num_buffers, &bytes_sent, 0, NULL, NULL) !=
+            SOCKET_ERROR) {
+        return bytes_sent;
+    }
+    return -1;
+}
