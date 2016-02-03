@@ -59,7 +59,8 @@ const int kSecondsPerWeek = kSecondsPerDay * kDaysPerWeek;
 // Interval between calls to UpdateStats().
 const uint32_t kUpdateStatsIntervalMs = 300000;
 
-const char kKernelCrashDetectedFile[] = "/var/run/kernel-crash-detected";
+const char kKernelCrashDetectedFile[] =
+    "/data/misc/crash_reporter/run/kernel-crash-detected";
 const char kUncleanShutdownDetectedFile[] =
     "/var/run/unclean-shutdown-detected";
 
