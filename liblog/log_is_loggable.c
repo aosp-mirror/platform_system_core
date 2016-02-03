@@ -110,7 +110,7 @@ static int __android_log_level(const char *tag, int default_prio)
      * Where the missing tag matches all tags and becomes the
      * system global default. We do not support ro.log.tag* .
      */
-    static char *last_tag;
+    static char last_tag[PROP_NAME_MAX];
     static uint32_t global_serial;
     /* some compilers erroneously see uninitialized use. !not_locked */
     uint32_t current_global_serial = 0;
@@ -149,20 +149,19 @@ static int __android_log_level(const char *tag, int default_prio)
     if (taglen) {
         int local_change_detected = change_detected;
         if (!not_locked) {
-            if (!last_tag
+            if (!last_tag[0]
                     || (last_tag[0] != tag[0])
-                    || strcmp(last_tag + 1, tag + 1)) {
+                    || strncmp(last_tag + 1, tag + 1, sizeof(last_tag) - 1)) {
                 /* invalidate log.tag.<tag> cache */
                 for (i = 0; i < (sizeof(tag_cache) / sizeof(tag_cache[0])); ++i) {
                     tag_cache[i].pinfo = NULL;
                     tag_cache[i].c = '\0';
                 }
-                free(last_tag);
-                last_tag = NULL;
+                last_tag[0] = '\0';
                 local_change_detected = 1;
             }
-            if (!last_tag) {
-                last_tag = strdup(tag);
+            if (!last_tag[0]) {
+                strncpy(last_tag, tag, sizeof(last_tag));
             }
         }
         strcpy(key + sizeof(log_namespace) - 1, tag);
