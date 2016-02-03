@@ -250,6 +250,9 @@ TEST(SocketMockTest, TestSendSuccess) {
 TEST(SocketMockTest, TestSendFailure) {
     SocketMock* mock = new SocketMock;
 
+    mock->ExpectSendFailure("foo");
+    EXPECT_FALSE(SendString(mock, "foo"));
+
     EXPECT_NONFATAL_FAILURE(SendString(mock, "foo"), "no message was expected");
 
     mock->ExpectSend("foo");
@@ -274,10 +277,23 @@ TEST(SocketMockTest, TestReceiveSuccess) {
     mock.AddReceive("123");
     EXPECT_TRUE(ReceiveString(&mock, "abc"));
     EXPECT_TRUE(ReceiveString(&mock, "123"));
+
+    // Make sure ReceiveAll() can piece together multiple receives.
+    mock.AddReceive("foo");
+    mock.AddReceive("bar");
+    mock.AddReceive("123");
+    EXPECT_TRUE(ReceiveString(&mock, "foobar123"));
 }
 
 TEST(SocketMockTest, TestReceiveFailure) {
     SocketMock* mock = new SocketMock;
+
+    mock->AddReceiveFailure();
+    EXPECT_FALSE(ReceiveString(mock, "foo"));
+
+    mock->AddReceive("foo");
+    mock->AddReceiveFailure();
+    EXPECT_FALSE(ReceiveString(mock, "foobar"));
 
     EXPECT_NONFATAL_FAILURE(ReceiveString(mock, "foo"), "no message was ready");
 
