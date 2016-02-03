@@ -46,7 +46,7 @@ libcutils_nonwindows_sources := \
         socket_loopback_client_unix.c \
         socket_loopback_server_unix.c \
         socket_network_client_unix.c \
-        sockets_unix.c \
+        sockets_unix.cpp \
         str_parms.c \
 
 libcutils_nonwindows_host_sources := \
@@ -56,7 +56,7 @@ libcutils_nonwindows_host_sources := \
 libcutils_windows_host_sources := \
         socket_inaddr_any_server_windows.c \
         socket_network_client_windows.c \
-        sockets_windows.c \
+        sockets_windows.cpp \
 
 # Shared and static library for host
 # Note: when linking this library on Windows, you must also link to Winsock2

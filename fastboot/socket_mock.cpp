@@ -38,26 +38,35 @@ SocketMock::~SocketMock() {
     }
 }
 
-ssize_t SocketMock::Send(const void* data, size_t length) {
+bool SocketMock::Send(const void* data, size_t length) {
     if (events_.empty()) {
         ADD_FAILURE() << "Send() was called when no message was expected";
-        return -1;
+        return false;
     }
 
     if (events_.front().type != EventType::kSend) {
         ADD_FAILURE() << "Send() was called out-of-order";
-        return -1;
+        return false;
     }
 
     std::string message(reinterpret_cast<const char*>(data), length);
     if (events_.front().message != message) {
         ADD_FAILURE() << "Send() expected " << events_.front().message << ", but got " << message;
-        return -1;
+        return false;
     }
 
-    ssize_t return_value = events_.front().return_value;
     events_.pop();
-    return return_value;
+    return true;
+}
+
+// Mock out multi-buffer send to be one large send, since that's what it should looks like from
+// the user's perspective.
+bool SocketMock::Send(std::vector<cutils_socket_buffer_t> buffers) {
+    std::string data;
+    for (const auto& buffer : buffers) {
+        data.append(reinterpret_cast<const char*>(buffer.data), buffer.length);
+    }
+    return Send(data.data(), data.size());
 }
 
 ssize_t SocketMock::Receive(void* data, size_t length, int /*timeout_ms*/) {
@@ -106,13 +115,13 @@ std::unique_ptr<Socket> SocketMock::Accept() {
 }
 
 void SocketMock::ExpectSend(std::string message) {
-    ssize_t return_value = message.length();
-    events_.push(Event(EventType::kSend, std::move(message), return_value, nullptr));
+    events_.push(Event(EventType::kSend, std::move(message), 0, nullptr));
 }
 
-void SocketMock::ExpectSendFailure(std::string message) {
-    events_.push(Event(EventType::kSend, std::move(message), -1, nullptr));
-}
+// TODO: make this properly return false to the caller.
+//void SocketMock::ExpectSendFailure(std::string message) {
+//    events_.push(Event(EventType::kSend, std::move(message), 0, nullptr));
+//}
 
 void SocketMock::AddReceive(std::string message) {
     ssize_t return_value = message.length();

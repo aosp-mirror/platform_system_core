@@ -33,11 +33,15 @@
 #ifndef SOCKET_H_
 #define SOCKET_H_
 
+#include <functional>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <android-base/macros.h>
 #include <cutils/sockets.h>
+#include <gtest/gtest_prod.h>
 
 // Socket interface to be implemented for each platform.
 class Socket {
@@ -64,8 +68,17 @@ class Socket {
     virtual ~Socket();
 
     // Sends |length| bytes of |data|. For TCP sockets this will continue trying to send until all
-    // bytes are transmitted. Returns the number of bytes actually sent or -1 on error.
-    virtual ssize_t Send(const void* data, size_t length) = 0;
+    // bytes are transmitted. Returns true on success.
+    virtual bool Send(const void* data, size_t length) = 0;
+
+    // Sends |buffers| using multi-buffer write, which can be significantly faster than making
+    // multiple calls. For UDP sockets |buffers| are all combined into a single datagram; for
+    // TCP sockets this will continue sending until all buffers are fully transmitted. Returns true
+    // on success.
+    //
+    // Note: This is non-functional for UDP server Sockets because it's not currently needed and
+    // would require an additional sendto() variation of multi-buffer write.
+    virtual bool Send(std::vector<cutils_socket_buffer_t> buffers) = 0;
 
     // Waits up to |timeout_ms| to receive up to |length| bytes of data. |timout_ms| of 0 will
     // block forever. Returns the number of bytes received or -1 on error/timeout. On timeout
@@ -94,8 +107,16 @@ class Socket {
 
     cutils_socket_t sock_ = INVALID_SOCKET;
 
+    // Non-class functions we want to override during tests to verify functionality. Implementation
+    // should call this rather than using socket_send_buffers() directly.
+    std::function<ssize_t(cutils_socket_t, cutils_socket_buffer_t*, size_t)>
+            socket_send_buffers_function_ = &socket_send_buffers;
+
   private:
     int receive_timeout_ms_ = 0;
+
+    FRIEND_TEST(SocketTest, TestTcpSendBuffers);
+    FRIEND_TEST(SocketTest, TestUdpSendBuffers);
 
     DISALLOW_COPY_AND_ASSIGN(Socket);
 };
