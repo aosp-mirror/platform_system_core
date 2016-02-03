@@ -31,6 +31,7 @@ LOCAL_SRC_FILES := \
     fs.cpp\
     protocol.cpp \
     socket.cpp \
+    tcp.cpp \
     util.cpp \
 
 LOCAL_MODULE := fastboot
@@ -111,6 +112,8 @@ LOCAL_SRC_FILES := \
     socket.cpp \
     socket_mock.cpp \
     socket_test.cpp \
+    tcp.cpp \
+    tcp_test.cpp \
 
 LOCAL_STATIC_LIBRARIES := libbase libcutils
 
