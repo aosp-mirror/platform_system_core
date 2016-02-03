@@ -42,22 +42,22 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+
 #include <functional>
 #include <utility>
 #include <vector>
 
 #include <android-base/parseint.h>
+#include <android-base/parsenetaddress.h>
 #include <android-base/strings.h>
 #include <sparse/sparse.h>
 #include <ziparchive/zip_archive.h>
-
-#include <android-base/strings.h>
-#include <android-base/parseint.h>
 
 #include "bootimg_utils.h"
 #include "diagnose_usb.h"
 #include "fastboot.h"
 #include "fs.h"
+#include "tcp.h"
 #include "transport.h"
 #include "usb.h"
 
@@ -69,9 +69,9 @@
 
 char cur_product[FB_RESPONSE_SZ + 1];
 
-static const char *serial = 0;
-static const char *product = 0;
-static const char *cmdline = 0;
+static const char* serial = nullptr;
+static const char* product = nullptr;
+static const char* cmdline = nullptr;
 static unsigned short vendor_id = 0;
 static int long_listing = 0;
 static int64_t sparse_limit = -1;
@@ -227,17 +227,51 @@ static int list_devices_callback(usb_ifc_info* info) {
     return -1;
 }
 
+// Opens a new Transport connected to a device. If |serial| is non-null it will be used to identify
+// a specific device, otherwise the first USB device found will be used.
+//
+// If |serial| is non-null but invalid, this prints an error message to stderr and returns nullptr.
+// Otherwise it blocks until the target is available.
+//
+// The returned Transport is a singleton, so multiple calls to this function will return the same
+// object, and the caller should not attempt to delete the returned Transport.
 static Transport* open_device() {
     static Transport* transport = nullptr;
-    int announce = 1;
+    bool announce = true;
 
-    if (transport) return transport;
+    if (transport != nullptr) {
+        return transport;
+    }
 
-    for (;;) {
-        transport = usb_open(match_fastboot);
-        if (transport) return transport;
+    std::string host;
+    int port = tcp::kDefaultPort;
+    if (serial != nullptr && android::base::StartsWith(serial, "tcp:")) {
+        std::string error;
+        const char* address = serial + strlen("tcp:");
+
+        if (!android::base::ParseNetAddress(address, &host, &port, nullptr, &error)) {
+            fprintf(stderr, "error: Invalid network address '%s': %s\n", address, error.c_str());
+            return nullptr;
+        }
+    }
+
+    while (true) {
+        if (!host.empty()) {
+            std::string error;
+            transport = tcp::Connect(host, port, &error).release();
+            if (transport == nullptr && announce) {
+                fprintf(stderr, "error: %s\n", error.c_str());
+            }
+        } else {
+            transport = usb_open(match_fastboot);
+        }
+
+        if (transport != nullptr) {
+            return transport;
+        }
+
         if (announce) {
-            announce = 0;
+            announce = false;
             fprintf(stderr, "< waiting for %s >\n", serial ? serial : "any device");
         }
         usleep(1000);
@@ -299,8 +333,10 @@ static void usage() {
             "                                           if supported by partition type).\n"
             "  -u                                       Do not erase partition before\n"
             "                                           formatting.\n"
-            "  -s <specific device>                     Specify device serial number\n"
-            "                                           or path to device port.\n"
+            "  -s <specific device>                     Specify a device. For USB, provide either\n"
+            "                                           a serial number or path to device port.\n"
+            "                                           For TCP, provide an address in the form\n"
+            "                                           tcp:<hostname>[:port].\n"
             "  -p <product>                             Specify product name.\n"
             "  -c <cmdline>                             Override kernel commandline.\n"
             "  -i <vendor id>                           Specify a custom USB vendor id.\n"
@@ -1263,6 +1299,10 @@ int main(int argc, char **argv)
     }
 
     Transport* transport = open_device();
+    if (transport == nullptr) {
+        return 1;
+    }
+
     if (slot_override != "")
         slot_override = verify_slot(transport, slot_override.c_str());
     if (next_active != "")
