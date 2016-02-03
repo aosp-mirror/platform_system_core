@@ -297,8 +297,7 @@ on post-fs-data
     # We restorecon /data in case the userdata partition has been reset.
     restorecon /data
 
-    # Start logd, then start debuggerd to make debugging early-boot crashes easier.
-    start logd
+    # start debuggerd to make debugging early-boot crashes easier.
     start debuggerd
     start debuggerd64
 
