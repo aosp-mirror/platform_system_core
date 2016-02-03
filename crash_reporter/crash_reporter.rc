@@ -13,6 +13,10 @@ on post-fs-data
     # Remove any previous orphaned locks.
     rmdir /data/misc/crash_reporter/lock/crash_sender
 
+    # Remove any previous run files.
+    rm /data/misc/crash_reporter/run/kernel-crash-detected
+    rmdir /data/misc/crash_reporter/run
+
     # Create crash directories.
     # These directories are group-writable by root so that crash_reporter can
     # still access them when it switches users.

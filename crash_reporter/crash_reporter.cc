@@ -43,7 +43,8 @@
 #endif
 
 static const char kCrashCounterHistogram[] = "Logging.CrashCounter";
-static const char kKernelCrashDetected[] = "/var/run/kernel-crash-detected";
+static const char kKernelCrashDetected[] =
+    "/data/misc/crash_reporter/run/kernel-crash-detected";
 static const char kUncleanShutdownDetected[] =
     "/var/run/unclean-shutdown-detected";
 static const char kGUIDFileName[] = "/data/misc/crash_reporter/guid";

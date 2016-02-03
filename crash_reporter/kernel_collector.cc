@@ -30,8 +30,8 @@ using base::StringPrintf;
 namespace {
 
 const char kDefaultKernelStackSignature[] = "kernel-UnspecifiedStackSignature";
-const char kDumpParentPath[] = "/dev";
-const char kDumpPath[] = "/dev/pstore";
+const char kDumpParentPath[] = "/sys/fs";
+const char kDumpPath[] = "/sys/fs/pstore";
 const char kDumpFormat[] = "dmesg-ramoops-%zu";
 const char kKernelExecName[] = "kernel";
 // Maximum number of records to examine in the kDumpPath.
