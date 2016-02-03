@@ -55,8 +55,9 @@ bool SocketMock::Send(const void* data, size_t length) {
         return false;
     }
 
+    bool return_value = events_.front().return_value;
     events_.pop();
-    return true;
+    return return_value;
 }
 
 // Mock out multi-buffer send to be one large send, since that's what it should looks like from
@@ -115,13 +116,12 @@ std::unique_ptr<Socket> SocketMock::Accept() {
 }
 
 void SocketMock::ExpectSend(std::string message) {
-    events_.push(Event(EventType::kSend, std::move(message), 0, nullptr));
+    events_.push(Event(EventType::kSend, std::move(message), true, nullptr));
 }
 
-// TODO: make this properly return false to the caller.
-//void SocketMock::ExpectSendFailure(std::string message) {
-//    events_.push(Event(EventType::kSend, std::move(message), 0, nullptr));
-//}
+void SocketMock::ExpectSendFailure(std::string message) {
+    events_.push(Event(EventType::kSend, std::move(message), false, nullptr));
+}
 
 void SocketMock::AddReceive(std::string message) {
     ssize_t return_value = message.length();
