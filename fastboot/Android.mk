@@ -65,6 +65,7 @@ LOCAL_STATIC_LIBRARIES := \
     libdiagnose_usb \
     libbase \
     libcutils \
+    libgtest_host \
 
 # libf2fs_dlutils_host will dlopen("libf2fs_fmt_host_dyn")
 LOCAL_CFLAGS_linux := -DUSE_F2FS

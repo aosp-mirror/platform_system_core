@@ -23,8 +23,10 @@
 #include "socket.h"
 #include "socket_mock.h"
 
-#include <gtest/gtest.h>
+#include <list>
+
 #include <gtest/gtest-spi.h>
+#include <gtest/gtest.h>
 
 enum { kTestTimeoutMs = 3000 };
 
@@ -59,7 +61,7 @@ bool MakeConnectedSockets(Socket::Protocol protocol, std::unique_ptr<Socket>* se
 // Sends a string over a Socket. Returns true if the full string (without terminating char)
 // was sent.
 static bool SendString(Socket* sock, const std::string& message) {
-    return sock->Send(message.c_str(), message.length()) == static_cast<ssize_t>(message.length());
+    return sock->Send(message.c_str(), message.length());
 }
 
 // Receives a string from a Socket. Returns true if the full string (without terminating char)
@@ -120,6 +122,116 @@ TEST(SocketTest, TestUdpReceiveOverflow) {
         EXPECT_EQ(0, memcmp(buffer, "12345", 5));
     } else {
         EXPECT_EQ(-1, bytes);
+    }
+}
+
+// Tests UDP multi-buffer send.
+TEST(SocketTest, TestUdpSendBuffers) {
+    std::unique_ptr<Socket> sock = Socket::NewServer(Socket::Protocol::kUdp, 0);
+    std::vector<std::string> data{"foo", "bar", "12345"};
+    std::vector<cutils_socket_buffer_t> buffers{{data[0].data(), data[0].length()},
+                                                {data[1].data(), data[1].length()},
+                                                {data[2].data(), data[2].length()}};
+    ssize_t mock_return_value = 0;
+
+    // Mock out socket_send_buffers() to verify we're sending in the correct buffers and
+    // return |mock_return_value|.
+    sock->socket_send_buffers_function_ = [&buffers, &mock_return_value](
+            cutils_socket_t /*cutils_sock*/, cutils_socket_buffer_t* sent_buffers,
+            size_t num_sent_buffers) -> ssize_t {
+        EXPECT_EQ(buffers.size(), num_sent_buffers);
+        for (size_t i = 0; i < num_sent_buffers; ++i) {
+            EXPECT_EQ(buffers[i].data, sent_buffers[i].data);
+            EXPECT_EQ(buffers[i].length, sent_buffers[i].length);
+        }
+        return mock_return_value;
+    };
+
+    mock_return_value = strlen("foobar12345");
+    EXPECT_TRUE(sock->Send(buffers));
+
+    mock_return_value -= 1;
+    EXPECT_FALSE(sock->Send(buffers));
+
+    mock_return_value = 0;
+    EXPECT_FALSE(sock->Send(buffers));
+
+    mock_return_value = -1;
+    EXPECT_FALSE(sock->Send(buffers));
+}
+
+// Tests TCP re-sending until socket_send_buffers() sends all data. This is a little complicated,
+// but the general idea is that we intercept calls to socket_send_buffers() using a lambda mock
+// function that simulates partial writes.
+TEST(SocketTest, TestTcpSendBuffers) {
+    std::unique_ptr<Socket> sock = Socket::NewServer(Socket::Protocol::kTcp, 0);
+    std::vector<std::string> data{"foo", "bar", "12345"};
+    std::vector<cutils_socket_buffer_t> buffers{{data[0].data(), data[0].length()},
+                                                {data[1].data(), data[1].length()},
+                                                {data[2].data(), data[2].length()}};
+
+    // Test breaking up the buffered send at various points.
+    std::list<std::string> test_sends[] = {
+            // Successes.
+            {"foobar12345"},
+            {"f", "oob", "ar12345"},
+            {"fo", "obar12", "345"},
+            {"foo", "bar12345"},
+            {"foob", "ar123", "45"},
+            {"f", "o", "o", "b", "a", "r", "1", "2", "3", "4", "5"},
+
+            // Failures.
+            {},
+            {"f"},
+            {"foo", "bar"},
+            {"fo", "obar12"},
+            {"foobar1234"}
+    };
+
+    for (auto& test : test_sends) {
+        ssize_t bytes_sent = 0;
+        bool expect_success = true;
+
+        // Create a mock function for custom socket_send_buffers() behavior. This function will
+        // check to make sure the input buffers start at the next unsent byte, then return the
+        // number of bytes indicated by the next entry in |test|.
+        sock->socket_send_buffers_function_ = [&bytes_sent, &data, &expect_success, &test](
+                cutils_socket_t /*cutils_sock*/, cutils_socket_buffer_t* buffers,
+                size_t num_buffers) -> ssize_t {
+            EXPECT_TRUE(num_buffers > 0);
+
+            // Failure case - pretend we errored out before sending all the buffers.
+            if (test.empty()) {
+                expect_success = false;
+                return -1;
+            }
+
+            // Count the bytes we've sent to find where the next buffer should start and how many
+            // bytes should be left in it.
+            size_t byte_count = bytes_sent, data_index = 0;
+            while (data_index < data.size()) {
+                if (byte_count >= data[data_index].length()) {
+                    byte_count -= data[data_index].length();
+                    ++data_index;
+                } else {
+                    break;
+                }
+            }
+            void* expected_next_byte = &data[data_index][byte_count];
+            size_t expected_next_size = data[data_index].length() - byte_count;
+
+            EXPECT_EQ(data.size() - data_index, num_buffers);
+            EXPECT_EQ(expected_next_byte, buffers[0].data);
+            EXPECT_EQ(expected_next_size, buffers[0].length);
+
+            std::string to_send = std::move(test.front());
+            test.pop_front();
+            bytes_sent += to_send.length();
+            return to_send.length();
+        };
+
+        EXPECT_EQ(expect_success, sock->Send(buffers));
+        EXPECT_TRUE(test.empty());
     }
 }
 
