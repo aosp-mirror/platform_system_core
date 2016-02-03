@@ -65,6 +65,9 @@ class SocketMock : public Socket {
     // Adds an expectation for Send().
     void ExpectSend(std::string message);
 
+    // Adds an expectation for Send() that returns false.
+    void ExpectSendFailure(std::string message);
+
     // Adds data to provide for Receive().
     void AddReceive(std::string message);
 
