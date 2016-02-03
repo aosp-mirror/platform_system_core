@@ -60,11 +60,9 @@ static void TestConnectedSockets(cutils_socket_t server, cutils_socket_t client,
 
     // Send multiple buffers using socket_send_buffers().
     std::string data[] = {"foo", "bar", "12345"};
-    cutils_socket_buffer_t socket_buffers[3];
-    for (int i = 0; i < 3; ++i) {
-        socket_buffers[i] = make_cutils_socket_buffer(&data[i][0],
-                                                      data[i].length());
-    }
+    cutils_socket_buffer_t socket_buffers[] = { {data[0].data(), data[0].length()},
+                                                {data[1].data(), data[1].length()},
+                                                {data[2].data(), data[2].length()} };
     EXPECT_EQ(11, socket_send_buffers(client, socket_buffers, 3));
     EXPECT_EQ(11, recv(server, buffer, sizeof(buffer), 0));
     EXPECT_EQ(0, memcmp(buffer, "foobar12345", 11));
