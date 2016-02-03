@@ -192,7 +192,7 @@ class Subprocess {
 
     // Sets up FDs, forks a subprocess, starts the subprocess manager thread,
     // and exec's the child. Returns false on failure.
-    bool ForkAndExec();
+    bool ForkAndExec(std::string* _Nonnull error);
 
   private:
     // Opens the file at |pts_name|.
@@ -250,7 +250,7 @@ Subprocess::~Subprocess() {
     WaitForExit();
 }
 
-bool Subprocess::ForkAndExec() {
+bool Subprocess::ForkAndExec(std::string* error) {
     ScopedFd child_stdinout_sfd, child_stderr_sfd;
     ScopedFd parent_error_sfd, child_error_sfd;
     char pts_name[PATH_MAX];
@@ -265,7 +265,9 @@ bool Subprocess::ForkAndExec() {
     // use threads, logging directly from the child might deadlock due to locks held in another
     // thread during the fork.
     if (!CreateSocketpair(&parent_error_sfd, &child_error_sfd)) {
-        LOG(ERROR) << "failed to create pipe for subprocess error reporting";
+        *error = android::base::StringPrintf(
+            "failed to create pipe for subprocess error reporting: %s", strerror(errno));
+        return false;
     }
 
     // Construct the environment for the child before we fork.
@@ -316,18 +318,22 @@ bool Subprocess::ForkAndExec() {
         stdinout_sfd_.Reset(fd);
     } else {
         if (!CreateSocketpair(&stdinout_sfd_, &child_stdinout_sfd)) {
+            *error = android::base::StringPrintf("failed to create socketpair for stdin/out: %s",
+                                                 strerror(errno));
             return false;
         }
         // Raw subprocess + shell protocol allows for splitting stderr.
         if (protocol_ == SubprocessProtocol::kShell &&
                 !CreateSocketpair(&stderr_sfd_, &child_stderr_sfd)) {
+            *error = android::base::StringPrintf("failed to create socketpair for stderr: %s",
+                                                 strerror(errno));
             return false;
         }
         pid_ = fork();
     }
 
     if (pid_ == -1) {
-        PLOG(ERROR) << "fork failed";
+        *error = android::base::StringPrintf("fork failed: %s", strerror(errno));
         return false;
     }
 
@@ -357,7 +363,8 @@ bool Subprocess::ForkAndExec() {
         } else {
             execle(_PATH_BSHELL, _PATH_BSHELL, "-c", command_.c_str(), nullptr, cenv.data());
         }
-        WriteFdExactly(child_error_sfd.fd(), "exec '" _PATH_BSHELL "' failed");
+        WriteFdExactly(child_error_sfd.fd(), "exec '" _PATH_BSHELL "' failed: ");
+        WriteFdExactly(child_error_sfd.fd(), strerror(errno));
         child_error_sfd.Reset();
         _Exit(1);
     }
@@ -370,7 +377,7 @@ bool Subprocess::ForkAndExec() {
     child_error_sfd.Reset();
     std::string error_message = ReadAll(parent_error_sfd.fd());
     if (!error_message.empty()) {
-        LOG(ERROR) << error_message;
+        *error = error_message;
         return false;
     }
 
@@ -382,6 +389,9 @@ bool Subprocess::ForkAndExec() {
     } else {
         // Shell protocol: create another socketpair to intercept data.
         if (!CreateSocketpair(&protocol_sfd_, &local_socket_sfd_)) {
+            *error = android::base::StringPrintf(
+                "failed to create socketpair to intercept data: %s", strerror(errno));
+            kill(pid_, SIGKILL);
             return false;
         }
         D("protocol FD = %d", protocol_sfd_.fd());
@@ -389,7 +399,8 @@ bool Subprocess::ForkAndExec() {
         input_.reset(new ShellProtocol(protocol_sfd_.fd()));
         output_.reset(new ShellProtocol(protocol_sfd_.fd()));
         if (!input_ || !output_) {
-            LOG(ERROR) << "failed to allocate shell protocol objects";
+            *error = "failed to allocate shell protocol objects";
+            kill(pid_, SIGKILL);
             return false;
         }
 
@@ -400,7 +411,9 @@ bool Subprocess::ForkAndExec() {
         for (int fd : {stdinout_sfd_.fd(), stderr_sfd_.fd()}) {
             if (fd >= 0) {
                 if (!set_file_block_mode(fd, false)) {
-                    LOG(ERROR) << "failed to set non-blocking mode for fd " << fd;
+                    *error = android::base::StringPrintf(
+                        "failed to set non-blocking mode for fd %d", fd);
+                    kill(pid_, SIGKILL);
                     return false;
                 }
             }
@@ -408,7 +421,9 @@ bool Subprocess::ForkAndExec() {
     }
 
     if (!adb_thread_create(ThreadHandler, this)) {
-        PLOG(ERROR) << "failed to create subprocess thread";
+        *error =
+            android::base::StringPrintf("failed to create subprocess thread: %s", strerror(errno));
+        kill(pid_, SIGKILL);
         return false;
     }
 
@@ -710,6 +725,37 @@ void Subprocess::WaitForExit() {
 
 }  // namespace
 
+// Create a pipe containing the error.
+static int ReportError(SubprocessProtocol protocol, const std::string& message) {
+    int pipefd[2];
+    if (pipe(pipefd) != 0) {
+        LOG(ERROR) << "failed to create pipe to report error";
+        return -1;
+    }
+
+    std::string buf = android::base::StringPrintf("error: %s\n", message.c_str());
+    if (protocol == SubprocessProtocol::kShell) {
+        ShellProtocol::Id id = ShellProtocol::kIdStderr;
+        uint32_t length = buf.length();
+        WriteFdExactly(pipefd[1], &id, sizeof(id));
+        WriteFdExactly(pipefd[1], &length, sizeof(length));
+    }
+
+    WriteFdExactly(pipefd[1], buf.data(), buf.length());
+
+    if (protocol == SubprocessProtocol::kShell) {
+        ShellProtocol::Id id = ShellProtocol::kIdExit;
+        uint32_t length = 1;
+        char exit_code = 126;
+        WriteFdExactly(pipefd[1], &id, sizeof(id));
+        WriteFdExactly(pipefd[1], &length, sizeof(length));
+        WriteFdExactly(pipefd[1], &exit_code, sizeof(exit_code));
+    }
+
+    adb_close(pipefd[1]);
+    return pipefd[0];
+}
+
 int StartSubprocess(const char* name, const char* terminal_type,
                     SubprocessType type, SubprocessProtocol protocol) {
     D("starting %s subprocess (protocol=%s, TERM=%s): '%s'",
@@ -720,13 +766,14 @@ int StartSubprocess(const char* name, const char* terminal_type,
     Subprocess* subprocess = new Subprocess(name, terminal_type, type, protocol);
     if (!subprocess) {
         LOG(ERROR) << "failed to allocate new subprocess";
-        return -1;
+        return ReportError(protocol, "failed to allocate new subprocess");
     }
 
-    if (!subprocess->ForkAndExec()) {
-        LOG(ERROR) << "failed to start subprocess";
+    std::string error;
+    if (!subprocess->ForkAndExec(&error)) {
+        LOG(ERROR) << "failed to start subprocess: " << error;
         delete subprocess;
-        return -1;
+        return ReportError(protocol, error);
     }
 
     D("subprocess creation successful: local_socket_fd=%d, pid=%d",
