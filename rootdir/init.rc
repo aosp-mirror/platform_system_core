@@ -412,18 +412,19 @@ on post-fs-data
 
     mkdir /data/system 0775 system system
     mkdir /data/system/heapdump 0700 system system
+
+    mkdir /data/system_de 0770 system system
     mkdir /data/system_ce 0770 system system
-    mkdir /data/system_ce/0 0770 system system
+
+    mkdir /data/misc_de 01771 system misc
+    mkdir /data/misc_ce 01771 system misc
 
     mkdir /data/user 0711 system system
     mkdir /data/user_de 0711 system system
-    mkdir /data/user_de/0 0771 system system
+    symlink /data/data /data/user/0
 
     mkdir /data/media 0770 media_rw media_rw
-    mkdir /data/media/0 0770 media_rw media_rw
     mkdir /data/media/obb 0770 media_rw media_rw
-
-    symlink /data/data /data/user/0
 
     init_user0
 
