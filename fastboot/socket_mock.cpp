@@ -55,7 +55,7 @@ bool SocketMock::Send(const void* data, size_t length) {
         return false;
     }
 
-    bool return_value = events_.front().return_value;
+    bool return_value = events_.front().status;
     events_.pop();
     return return_value;
 }
@@ -76,21 +76,28 @@ ssize_t SocketMock::Receive(void* data, size_t length, int /*timeout_ms*/) {
         return -1;
     }
 
-    if (events_.front().type != EventType::kReceive) {
+    const Event& event = events_.front();
+    if (event.type != EventType::kReceive) {
         ADD_FAILURE() << "Receive() was called out-of-order";
         return -1;
     }
 
-    if (events_.front().return_value > static_cast<ssize_t>(length)) {
-        ADD_FAILURE() << "Receive(): not enough bytes (" << length << ") for "
-                      << events_.front().message;
+    const std::string& message = event.message;
+    if (message.length() > length) {
+        ADD_FAILURE() << "Receive(): not enough bytes (" << length << ") for " << message;
         return -1;
     }
 
-    ssize_t return_value = events_.front().return_value;
-    if (return_value > 0) {
-        memcpy(data, events_.front().message.data(), return_value);
+    receive_timed_out_ = event.status;
+    ssize_t return_value = message.length();
+
+    // Empty message indicates failure.
+    if (message.empty()) {
+        return_value = -1;
+    } else {
+        memcpy(data, message.data(), message.length());
     }
+
     events_.pop();
     return return_value;
 }
@@ -124,18 +131,21 @@ void SocketMock::ExpectSendFailure(std::string message) {
 }
 
 void SocketMock::AddReceive(std::string message) {
-    ssize_t return_value = message.length();
-    events_.push(Event(EventType::kReceive, std::move(message), return_value, nullptr));
+    events_.push(Event(EventType::kReceive, std::move(message), false, nullptr));
+}
+
+void SocketMock::AddReceiveTimeout() {
+    events_.push(Event(EventType::kReceive, "", true, nullptr));
 }
 
 void SocketMock::AddReceiveFailure() {
-    events_.push(Event(EventType::kReceive, "", -1, nullptr));
+    events_.push(Event(EventType::kReceive, "", false, nullptr));
 }
 
 void SocketMock::AddAccept(std::unique_ptr<Socket> sock) {
-    events_.push(Event(EventType::kAccept, "", 0, std::move(sock)));
+    events_.push(Event(EventType::kAccept, "", false, std::move(sock)));
 }
 
-SocketMock::Event::Event(EventType _type, std::string _message, ssize_t _return_value,
+SocketMock::Event::Event(EventType _type, std::string _message, ssize_t _status,
                          std::unique_ptr<Socket> _sock)
-        : type(_type), message(_message), return_value(_return_value), sock(std::move(_sock)) {}
+        : type(_type), message(_message), status(_status), sock(std::move(_sock)) {}
