@@ -11,15 +11,14 @@ LOCAL_MODULE := logcat
 
 LOCAL_CFLAGS := -Werror
 
-LOCAL_INIT_RC := logcatd.rc
-
 include $(BUILD_EXECUTABLE)
 
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := logpersist.start
-LOCAL_MODULE_TAGS := debug
+LOCAL_MODULE_TAGS := debug eng
 LOCAL_MODULE_CLASS := EXECUTABLES
+LOCAL_INIT_RC := logcatd.rc
 LOCAL_MODULE_PATH := $(bin_dir)
 LOCAL_SRC_FILES := logpersist
 ALL_TOOLS := logpersist.start logpersist.stop logpersist.cat
