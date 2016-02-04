@@ -22,7 +22,6 @@ commonSources:= \
 	Log.cpp \
 	NativeHandle.cpp \
 	Printer.cpp \
-	ProcessCallStack.cpp \
 	PropertyMap.cpp \
 	RefBase.cpp \
 	SharedBuffer.cpp \
@@ -44,7 +43,7 @@ host_commonCflags := -DLIBUTILS_NATIVE=1 $(TOOL_CFLAGS) -Werror
 # =====================================================
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= $(commonSources)
-LOCAL_SRC_FILES_linux := Looper.cpp
+LOCAL_SRC_FILES_linux := Looper.cpp ProcessCallStack.cpp
 LOCAL_CFLAGS_darwin := -Wno-unused-parameter
 LOCAL_MODULE:= libutils
 LOCAL_STATIC_LIBRARIES := liblog
@@ -67,6 +66,7 @@ LOCAL_SRC_FILES:= \
 	$(commonSources) \
 	BlobCache.cpp \
 	Looper.cpp \
+	ProcessCallStack.cpp \
 	Trace.cpp
 
 ifeq ($(TARGET_ARCH),mips)

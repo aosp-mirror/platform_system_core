@@ -68,7 +68,13 @@
 #include <windows.h>
 #endif
 
-static pid_t GetThreadId() {
+#if defined(_WIN32)
+typedef uint32_t thread_id;
+#else
+typedef pid_t thread_id;
+#endif
+
+static thread_id GetThreadId() {
 #if defined(__BIONIC__)
   return gettid();
 #elif defined(__APPLE__)
