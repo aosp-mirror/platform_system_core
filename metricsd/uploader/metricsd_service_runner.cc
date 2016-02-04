@@ -20,6 +20,7 @@
 
 #include <binder/IServiceManager.h>
 #include <brillo/binder_watcher.h>
+#include <brillo/message_loops/base_message_loop.h>
 #include <utils/Errors.h>
 
 #include "uploader/bn_metricsd_impl.h"
@@ -40,15 +41,17 @@ void MetricsdServiceRunner::Run() {
   CHECK(status == android::OK) << "Metricsd service registration failed";
 
   message_loop_for_io_.reset(new base::MessageLoopForIO);
+  message_loop_.reset(new brillo::BaseMessageLoop(message_loop_for_io_.get()));
 
-  brillo::BinderWatcher watcher;
+  brillo::BinderWatcher watcher(message_loop_.get());
   CHECK(watcher.Init()) << "failed to initialize the binder file descriptor "
                         << "watcher";
 
-  message_loop_for_io_->Run();
+  message_loop_->Run();
 
   // Delete the message loop here as it needs to be deconstructed in the thread
   // it is attached to.
+  message_loop_.reset();
   message_loop_for_io_.reset();
 }
 
