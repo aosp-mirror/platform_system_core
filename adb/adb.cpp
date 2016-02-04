@@ -509,14 +509,60 @@ static bool _create_anonymous_pipe(unique_handle* pipe_read_out,
     return true;
 }
 
-// Read from a pipe (that we take ownership of) and write what is returned to
-// GetStdHandle(nStdHandle). Return on error or when the pipe is closed.
+// Read from a pipe (that we take ownership of) and write the result to stdout/stderr. Return on
+// error or when the pipe is closed. Internally makes inheritable handles, so this should not be
+// called if subprocesses may be started concurrently.
 static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
     // Take ownership of the HANDLE and close when we're done.
     unique_handle   read_pipe(h);
-    const HANDLE    write_handle = GetStdHandle(nStdHandle);
-    const char*     output_name = nStdHandle == STD_OUTPUT_HANDLE ?
-                                      "stdout" : "stderr";
+    const char*     output_name = nStdHandle == STD_OUTPUT_HANDLE ? "stdout" : "stderr";
+    const int       original_fd = fileno(nStdHandle == STD_OUTPUT_HANDLE ? stdout : stderr);
+    std::unique_ptr<FILE, decltype(&fclose)> stream(nullptr, fclose);
+
+    if (original_fd == -1) {
+        fprintf(stderr, "Failed to get file descriptor for %s: %s\n", output_name, strerror(errno));
+        return EXIT_FAILURE;
+    }
+
+    // If fileno() is -2, stdout/stderr is not associated with an output stream, so we should read,
+    // but don't write. Otherwise, make a FILE* identical to stdout/stderr except that it is in
+    // binary mode with no CR/LR translation since we're reading raw.
+    if (original_fd >= 0) {
+        // This internally makes a duplicate file handle that is inheritable, so callers should not
+        // call this function if subprocesses may be started concurrently.
+        const int fd = dup(original_fd);
+        if (fd == -1) {
+            fprintf(stderr, "Failed to duplicate file descriptor for %s: %s\n", output_name,
+                    strerror(errno));
+            return EXIT_FAILURE;
+        }
+
+        // Note that although we call fdopen() below with a binary flag, it may not adhere to that
+        // flag, so we have to set the mode manually.
+        if (_setmode(fd, _O_BINARY) == -1) {
+            fprintf(stderr, "Failed to set binary mode for duplicate of %s: %s\n", output_name,
+                    strerror(errno));
+            unix_close(fd);
+            return EXIT_FAILURE;
+        }
+
+        stream.reset(fdopen(fd, "wb"));
+        if (stream.get() == nullptr) {
+            fprintf(stderr, "Failed to open duplicate stream for %s: %s\n", output_name,
+                    strerror(errno));
+            unix_close(fd);
+            return EXIT_FAILURE;
+        }
+
+        // Unbuffer the stream because it will be buffered by default and we want subprocess output
+        // to be shown immediately.
+        if (setvbuf(stream.get(), NULL, _IONBF, 0) == -1) {
+            fprintf(stderr, "Failed to unbuffer %s: %s\n", output_name, strerror(errno));
+            return EXIT_FAILURE;
+        }
+
+        // fd will be closed when stream is closed.
+    }
 
     while (true) {
         char    buf[64 * 1024];
@@ -534,20 +580,13 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
             }
         }
 
-        // Don't try to write if our stdout/stderr was not setup by the
-        // parent process.
-        if (write_handle != NULL && write_handle != INVALID_HANDLE_VALUE) {
-            DWORD   bytes_written = 0;
-            if (!WriteFile(write_handle, buf, bytes_read, &bytes_written,
-                           NULL)) {
-                fprintf(stderr, "Failed to write to %s: %s\n", output_name,
-                        android::base::SystemErrorCodeToString(GetLastError()).c_str());
-                return EXIT_FAILURE;
-            }
-
+        // Don't try to write if our stdout/stderr was not setup by the parent process.
+        if (stream) {
+            // fwrite() actually calls adb_fwrite() which can write UTF-8 to the console.
+            const size_t bytes_written = fwrite(buf, 1, bytes_read, stream.get());
             if (bytes_written != bytes_read) {
-                fprintf(stderr, "Only wrote %lu of %lu bytes to %s\n",
-                        bytes_written, bytes_read, output_name);
+                fprintf(stderr, "Only wrote %zu of %lu bytes to %s\n", bytes_written, bytes_read,
+                        output_name);
                 return EXIT_FAILURE;
             }
         }
@@ -596,7 +635,10 @@ int launch_server(int server_port)
         return -1;
     }
 
-    // create pipes with non-inheritable read handle, inheritable write handle
+    // Create pipes with non-inheritable read handle, inheritable write handle. We need to connect
+    // the subprocess to pipes instead of just letting the subprocess inherit our existing
+    // stdout/stderr handles because a DETACHED_PROCESS cannot write to a console that it is not
+    // attached to.
     unique_handle   ack_read, ack_write;
     if (!_create_anonymous_pipe(&ack_read, &ack_write, &sa)) {
         return -1;
@@ -704,8 +746,9 @@ int launch_server(int server_port)
     stdout_write.reset();
     stderr_write.reset();
 
-    // Start threads to read from subprocess stdout/stderr and write to ours
-    // to make subprocess errors easier to diagnose.
+    // Start threads to read from subprocess stdout/stderr and write to ours to make subprocess
+    // errors easier to diagnose. Note that the threads internally create inheritable handles, but
+    // that is ok because we've already spawned the subprocess.
 
     // In the past, reading from a pipe before the child process's C Runtime
     // started up and called GetFileType() caused a hang: http://blogs.msdn.com/b/oldnewthing/archive/2011/12/02/10243553.aspx#10244216
