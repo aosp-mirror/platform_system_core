@@ -21,6 +21,7 @@
 #include <thread>
 
 #include <base/message_loop/message_loop.h>
+#include <brillo/message_loops/message_loop.h>
 
 #include "uploader/crash_counters.h"
 
@@ -39,6 +40,7 @@ class MetricsdServiceRunner {
   void Run();
 
   std::unique_ptr<base::MessageLoopForIO> message_loop_for_io_;
+  std::unique_ptr<brillo::MessageLoop> message_loop_;
 
   std::unique_ptr<std::thread> thread_;
   std::shared_ptr<CrashCounters> counters_;
