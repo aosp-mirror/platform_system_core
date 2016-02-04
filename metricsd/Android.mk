@@ -200,7 +200,7 @@ LOCAL_SHARED_LIBRARIES := $(metricsd_shared_libraries)
 LOCAL_SRC_FILES := $(metricsd_tests_sources) $(metricsd_common)
 LOCAL_STATIC_LIBRARIES := libBionicGtestMain libgmock metricsd_protos metricsd_binder_proxy
 ifdef BRILLO
-LOCAL_MODULE_TAGS := debug
+LOCAL_MODULE_TAGS := eng
 endif
 include $(BUILD_NATIVE_TEST)
 
@@ -218,7 +218,7 @@ LOCAL_SRC_FILES := $(metrics_collector_tests_sources) \
 LOCAL_STATIC_LIBRARIES := libBionicGtestMain libgmock metricsd_binder_proxy \
   $(metrics_collector_static_libraries)
 ifdef BRILLO
-LOCAL_MODULE_TAGS := debug
+LOCAL_MODULE_TAGS := eng
 endif
 include $(BUILD_NATIVE_TEST)
 
