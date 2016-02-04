@@ -753,8 +753,11 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
         if (dst_isdir) {
             // If we're copying a local file to a remote directory,
             // we really want to copy to remote_dir + "/" + local_filename.
-            path_holder = android::base::StringPrintf(
-                "%s/%s", dst_path, adb_basename(src_path).c_str());
+            path_holder = dst_path;
+            if (path_holder.back() != '/') {
+                path_holder.push_back('/');
+            }
+            path_holder += adb_basename(src_path);
             dst_path = path_holder.c_str();
         }
         sc.SetExpectedTotalBytes(st.st_size);
