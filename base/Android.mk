@@ -67,7 +67,7 @@ LOCAL_SRC_FILES := $(libbase_src_files) $(libbase_linux_src_files)
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_CPPFLAGS := $(libbase_cppflags) $(libbase_linux_cppflags)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
-LOCAL_STATIC_LIBRARIES := libcutils
+LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_MULTILIB := both
 include $(BUILD_STATIC_LIBRARY)
 
@@ -77,7 +77,6 @@ LOCAL_CLANG := true
 LOCAL_WHOLE_STATIC_LIBRARIES := libbase
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
-LOCAL_SHARED_LIBRARIES := libcutils
 LOCAL_MULTILIB := both
 include $(BUILD_SHARED_LIBRARY)
 
@@ -94,7 +93,7 @@ LOCAL_CPPFLAGS := $(libbase_cppflags)
 LOCAL_CPPFLAGS_darwin := $(libbase_darwin_cppflags)
 LOCAL_CPPFLAGS_linux := $(libbase_linux_cppflags)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
-LOCAL_STATIC_LIBRARIES := libcutils
+LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_MULTILIB := both
 LOCAL_MODULE_HOST_OS := darwin linux windows
 include $(BUILD_HOST_STATIC_LIBRARY)
@@ -104,7 +103,6 @@ LOCAL_MODULE := libbase
 LOCAL_WHOLE_STATIC_LIBRARIES := libbase
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
-LOCAL_STATIC_LIBRARIES := libcutils
 LOCAL_MULTILIB := both
 LOCAL_MODULE_HOST_OS := darwin linux windows
 include $(BUILD_HOST_SHARED_LIBRARY)
