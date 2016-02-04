@@ -21,6 +21,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 // We only build the affinity WAR code for Linux.
 #if defined(__linux__)
@@ -124,6 +125,13 @@ int adb_server_main(int is_daemon, int server_port, int ack_reply_fd) {
     if (is_daemon) {
         close_stdin();
         setup_daemon_logging();
+
+#if !defined(_WIN32)
+        // Set the process group so that ctrl-c in the spawning process doesn't kill us.
+        // Do this here instead of after the fork so that a ctrl-c between the "starting server" and
+        // "done starting server" messages gets a chance to terminate the server.
+        setpgrp();
+#endif
 
         // Any error output written to stderr now goes to adb.log. We could
         // keep around a copy of the stderr fd and use that to write any errors
