@@ -878,9 +878,6 @@ static int do_installkey(const std::vector<std::string>& args) {
 }
 
 static int do_init_user0(const std::vector<std::string>& args) {
-    if (!is_file_crypto()) {
-        return 0;
-    }
     return e4crypt_do_init_user0();
 }
 
