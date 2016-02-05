@@ -1,0 +1,8 @@
+on property:persist.mmc.max_read_speed=*
+    write /sys/block/mmcblk0/max_read_speed ${persist.mmc.max_read_speed}
+
+on property:persist.mmc.max_write_speed=*
+    write /sys/block/mmcblk0/max_write_speed ${persist.mmc.max_write_speed}
+
+on property:persist.mmc.cache_size=*
+    write /sys/block/mmcblk0/cache_size ${persist.mmc.cache_size}
