@@ -134,8 +134,15 @@ static const char* get_sigcode(int signo, int code) {
       switch (code) {
         case SEGV_MAPERR: return "SEGV_MAPERR";
         case SEGV_ACCERR: return "SEGV_ACCERR";
+#if defined(SEGV_BNDERR)
+        case SEGV_BNDERR: return "SEGV_BNDERR";
+#endif
       }
+#if defined(SEGV_BNDERR)
+      static_assert(NSIGSEGV == SEGV_BNDERR, "missing SEGV_* si_code");
+#else
       static_assert(NSIGSEGV == SEGV_ACCERR, "missing SEGV_* si_code");
+#endif
       break;
     case SIGTRAP:
       switch (code) {
