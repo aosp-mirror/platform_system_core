@@ -12,6 +12,18 @@ LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 include $(BUILD_PREBUILT)
 
 #######################################
+# init-debug.rc
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := init-debug.rc
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_TAGS := debug
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/init
+
+include $(BUILD_PREBUILT)
+
+#######################################
 # asan.options
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
 include $(CLEAR_VARS)
