@@ -416,7 +416,7 @@ bool Service::Start(const std::vector<std::string>& dynamic_args) {
             }
         }
 
-        std::string pid_str = StringPrintf("%d", pid);
+        std::string pid_str = StringPrintf("%d", getpid());
         for (const auto& file : writepid_files_) {
             if (!WriteStringToFile(pid_str, file)) {
                 ERROR("couldn't write %s to %s: %s\n",
