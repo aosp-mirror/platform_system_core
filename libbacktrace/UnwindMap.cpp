@@ -33,14 +33,18 @@
 // of maps using the same map cursor.
 //-------------------------------------------------------------------------
 UnwindMap::UnwindMap(pid_t pid) : BacktraceMap(pid) {
+  unw_map_cursor_clear(&map_cursor_);
 }
 
-UnwindMap::~UnwindMap() {
+UnwindMapRemote::UnwindMapRemote(pid_t pid) : UnwindMap(pid) {
+}
+
+UnwindMapRemote::~UnwindMapRemote() {
   unw_map_cursor_destroy(&map_cursor_);
   unw_map_cursor_clear(&map_cursor_);
 }
 
-bool UnwindMap::GenerateMap() {
+bool UnwindMapRemote::GenerateMap() {
   // Use the map_cursor information to construct the BacktraceMap data
   // rather than reparsing /proc/self/maps.
   unw_map_cursor_reset(&map_cursor_);
@@ -63,7 +67,7 @@ bool UnwindMap::GenerateMap() {
   return true;
 }
 
-bool UnwindMap::Build() {
+bool UnwindMapRemote::Build() {
   return (unw_map_cursor_create(&map_cursor_, pid_) == 0) && GenerateMap();
 }
 
@@ -84,6 +88,7 @@ bool UnwindMapLocal::GenerateMap() {
   for (int i = 0; i < 3; i++) {
     maps_.clear();
 
+    // Save the map data retrieved so we can tell if it changes.
     unw_map_local_cursor_get(&map_cursor_);
 
     unw_map_t unw_map;
@@ -142,7 +147,7 @@ BacktraceMap* BacktraceMap::Create(pid_t pid, bool uncached) {
   } else if (pid == getpid()) {
     map = new UnwindMapLocal();
   } else {
-    map = new UnwindMap(pid);
+    map = new UnwindMapRemote(pid);
   }
   if (!map->Build()) {
     delete map;
