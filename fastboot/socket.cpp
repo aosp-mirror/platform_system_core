@@ -48,18 +48,6 @@ int Socket::Close() {
     return ret;
 }
 
-bool Socket::SetReceiveTimeout(int timeout_ms) {
-    if (timeout_ms != receive_timeout_ms_) {
-        if (socket_set_receive_timeout(sock_, timeout_ms) == 0) {
-            receive_timeout_ms_ = timeout_ms;
-            return true;
-        }
-        return false;
-    }
-
-    return true;
-}
-
 ssize_t Socket::ReceiveAll(void* data, size_t length, int timeout_ms) {
     size_t total = 0;
 
@@ -80,6 +68,40 @@ ssize_t Socket::ReceiveAll(void* data, size_t length, int timeout_ms) {
 
 int Socket::GetLocalPort() {
     return socket_get_local_port(sock_);
+}
+
+// According to Windows setsockopt() documentation, if a Windows socket times out during send() or
+// recv() the state is indeterminate and should not be used. Our UDP protocol relies on being able
+// to re-send after a timeout, so we must use select() rather than SO_RCVTIMEO.
+// See https://msdn.microsoft.com/en-us/library/windows/desktop/ms740476(v=vs.85).aspx.
+bool Socket::WaitForRecv(int timeout_ms) {
+    receive_timed_out_ = false;
+
+    // In our usage |timeout_ms| <= 0 means block forever, so just return true immediately and let
+    // the subsequent recv() do the blocking.
+    if (timeout_ms <= 0) {
+        return true;
+    }
+
+    // select() doesn't always check this case and will block for |timeout_ms| if we let it.
+    if (sock_ == INVALID_SOCKET) {
+        return false;
+    }
+
+    fd_set read_set;
+    FD_ZERO(&read_set);
+    FD_SET(sock_, &read_set);
+
+    timeval timeout;
+    timeout.tv_sec = timeout_ms / 1000;
+    timeout.tv_usec = (timeout_ms % 1000) * 1000;
+
+    int result = TEMP_FAILURE_RETRY(select(sock_ + 1, &read_set, nullptr, nullptr, &timeout));
+
+    if (result == 0) {
+        receive_timed_out_ = true;
+    }
+    return result == 1;
 }
 
 // Implements the Socket interface for UDP.
@@ -127,7 +149,7 @@ bool UdpSocket::Send(std::vector<cutils_socket_buffer_t> buffers) {
 }
 
 ssize_t UdpSocket::Receive(void* data, size_t length, int timeout_ms) {
-    if (!SetReceiveTimeout(timeout_ms)) {
+    if (!WaitForRecv(timeout_ms)) {
         return -1;
     }
 
@@ -206,7 +228,7 @@ bool TcpSocket::Send(std::vector<cutils_socket_buffer_t> buffers) {
 }
 
 ssize_t TcpSocket::Receive(void* data, size_t length, int timeout_ms) {
-    if (!SetReceiveTimeout(timeout_ms)) {
+    if (!WaitForRecv(timeout_ms)) {
         return -1;
     }
 
