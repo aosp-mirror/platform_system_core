@@ -112,7 +112,7 @@ TEST(adb_utils, adb_dirname) {
 }
 
 void test_mkdirs(const std::string basepath) {
-  EXPECT_TRUE(mkdirs(basepath));
+  EXPECT_TRUE(mkdirs(adb_dirname(basepath)));
   EXPECT_NE(-1, adb_creat(basepath.c_str(), 0600));
   EXPECT_FALSE(mkdirs(basepath + "/subdir/"));
 }
