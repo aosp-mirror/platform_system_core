@@ -38,6 +38,7 @@
 #include <processgroup/processgroup.h>
 
 #define MEM_CGROUP_PATH "/dev/memcg/apps"
+#define MEM_CGROUP_TASKS "/dev/memcg/apps/tasks"
 #define ACCT_CGROUP_PATH "/acct"
 
 #define PROCESSGROUP_UID_PREFIX "uid_"
@@ -68,7 +69,10 @@ struct ctx {
 static const char* getCgroupRootPath() {
     static const char* cgroup_root_path = NULL;
     std::call_once(init_path_flag, [&]() {
-            cgroup_root_path = access(MEM_CGROUP_PATH, W_OK) ? ACCT_CGROUP_PATH : MEM_CGROUP_PATH;
+            // Check if mem cgroup is mounted, only then check for write-access to avoid
+            // SELinux denials
+            cgroup_root_path = access(MEM_CGROUP_TASKS, F_OK) || access(MEM_CGROUP_PATH, W_OK) ?
+                    ACCT_CGROUP_PATH : MEM_CGROUP_PATH;
             });
     return cgroup_root_path;
 }

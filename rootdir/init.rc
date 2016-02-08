@@ -85,7 +85,7 @@ on init
     # root memory control cgroup, used by lmkd
     mkdir /dev/memcg 0700 root system
     mount cgroup none /dev/memcg memory
-    # app mem cgroups, used by activity manager and lmkd
+    # app mem cgroups, used by activity manager, lmkd and zygote
     mkdir /dev/memcg/apps/ 0755 system system
 
     write /proc/sys/kernel/panic_on_oops 1
