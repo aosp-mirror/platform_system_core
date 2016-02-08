@@ -367,7 +367,11 @@ static void showLog(LogState *state,
     char prefixBuf[128], suffixBuf[128];
     char priChar;
     time_t when;
+#if !defined(_WIN32)
     pid_t pid, tid;
+#else
+    uint32_t pid, tid;
+#endif
 
     TRACE("LOG %d: %s %s", logPrio, tag, msg);
 
