@@ -211,10 +211,32 @@ bool property_get_bool(const char *key, int flag) {
     return (flag & BOOL_DEFAULT_FLAG_TRUE_FALSE) != BOOL_DEFAULT_FALSE;
 }
 
-// Remove the static, and use this variable
-// globally for debugging if necessary. eg:
-//   write(fdDmesg, "I am here\n", 10);
 static int fdDmesg = -1;
+void inline android::prdebug(const char *fmt, ...) {
+    if (fdDmesg < 0) {
+        return;
+    }
+
+    static const char message[] = {
+        KMSG_PRIORITY(LOG_DEBUG), 'l', 'o', 'g', 'd', ':', ' '
+    };
+    char buffer[256];
+    memcpy(buffer, message, sizeof(message));
+
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buffer + sizeof(message),
+                      sizeof(buffer) - sizeof(message), fmt, ap);
+    va_end(ap);
+    if (n > 0) {
+        buffer[sizeof(buffer) - 1] = '\0';
+        if (!strchr(buffer, '\n')) {
+            buffer[sizeof(buffer) - 2] = '\0';
+            strlcat(buffer, "\n", sizeof(buffer));
+        }
+        write(fdDmesg, buffer, strlen(buffer));
+    }
+}
 
 static sem_t uidName;
 static uid_t uid;

@@ -17,6 +17,7 @@
 #ifndef _LOGD_LOG_UTILS_H__
 #define _LOGD_LOG_UTILS_H__
 
+#include <sys/cdefs.h>
 #include <sys/types.h>
 
 #include <log/log.h>
@@ -29,6 +30,7 @@ namespace android {
 
 // Furnished in main.cpp. Caller must own and free returned value
 char *uidToName(uid_t uid);
+void prdebug(const char *fmt, ...) __printflike(1, 2);
 
 // Furnished in LogStatistics.cpp. Caller must own and free returned value
 char *pidToName(pid_t pid);
