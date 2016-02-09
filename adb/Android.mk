@@ -58,6 +58,7 @@ LIBADB_SRC_FILES := \
 LIBADB_TEST_SRCS := \
     adb_io_test.cpp \
     adb_utils_test.cpp \
+    sysdeps_test.cpp \
     transport_test.cpp \
 
 LIBADB_CFLAGS := \
