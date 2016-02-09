@@ -39,7 +39,7 @@
 #endif
 
 #define MEMCG_SYSFS_PATH "/dev/memcg/"
-#define MEMPRESSURE_WATCH_LEVEL "medium"
+#define MEMPRESSURE_WATCH_LEVEL "low"
 #define ZONEINFO_PATH "/proc/zoneinfo"
 #define LINE_MAX 128
 
