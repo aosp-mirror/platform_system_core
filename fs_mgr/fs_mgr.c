@@ -440,26 +440,32 @@ out:
     return ret;
 }
 
+static bool needs_block_encryption(const struct fstab_rec* rec)
+{
+    if (device_is_force_encrypted() && fs_mgr_is_encryptable(rec)) return true;
+    if (rec->fs_mgr_flags & MF_FORCECRYPT) return true;
+    if (rec->fs_mgr_flags & MF_CRYPT) {
+        /* Check for existence of convert_fde breadcrumb file */
+        char convert_fde_name[PATH_MAX];
+        snprintf(convert_fde_name, sizeof(convert_fde_name),
+                 "%s/misc/vold/convert_fde", rec->mount_point);
+        if (access(convert_fde_name, F_OK) == 0) return true;
+    }
+    if (rec->fs_mgr_flags & MF_FORCEFDEORFBE) {
+        /* Check for absence of convert_fbe breadcrumb file */
+        char convert_fbe_name[PATH_MAX];
+        snprintf(convert_fbe_name, sizeof(convert_fbe_name),
+                 "%s/convert_fbe", rec->mount_point);
+        if (access(convert_fbe_name, F_OK) != 0) return true;
+    }
+    return false;
+}
+
 // Check to see if a mountable volume has encryption requirements
 static int handle_encryptable(const struct fstab_rec* rec)
 {
-    /* Check for existence of convert_fbe breadcrumb file */
-    char convert_fbe_name[PATH_MAX];
-    snprintf(convert_fbe_name, sizeof(convert_fbe_name),
-             "%s/convert_fbe", rec->mount_point);
-    bool convert_fbe = (access(convert_fbe_name, F_OK) == 0);
-
-    /* Check for existence of convert_fbe breadcrumb file */
-    char convert_fde_name[PATH_MAX];
-    snprintf(convert_fde_name, sizeof(convert_fbe_name),
-             "%s/misc/vold/convert_fde", rec->mount_point);
-    bool convert_fde = (access(convert_fde_name, F_OK) == 0);
-
     /* If this is block encryptable, need to trigger encryption */
-    if (   (rec->fs_mgr_flags & MF_FORCECRYPT)
-        || ((rec->fs_mgr_flags & MF_CRYPT) && convert_fde)
-        || ((rec->fs_mgr_flags & MF_FORCEFDEORFBE) && !convert_fbe)
-        || (device_is_force_encrypted() && fs_mgr_is_encryptable(rec))) {
+    if (needs_block_encryption(rec)) {
         if (umount(rec->mount_point) == 0) {
             return FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION;
         } else {
@@ -467,16 +473,13 @@ static int handle_encryptable(const struct fstab_rec* rec)
                     rec->mount_point, strerror(errno));
             return FS_MGR_MNTALL_DEV_NOT_ENCRYPTED;
         }
-    }
-
+    } else if (rec->fs_mgr_flags & (MF_FILEENCRYPTION | MF_FORCEFDEORFBE)) {
     // Deal with file level encryption
-    if (   (rec->fs_mgr_flags & MF_FILEENCRYPTION)
-        || ((rec->fs_mgr_flags & MF_FORCEFDEORFBE) && convert_fbe)) {
         INFO("%s is file encrypted\n", rec->mount_point);
         return FS_MGR_MNTALL_DEV_FILE_ENCRYPTED;
+    } else {
+        return FS_MGR_MNTALL_DEV_NOT_ENCRYPTED;
     }
-
-    return FS_MGR_MNTALL_DEV_NOT_ENCRYPTED;
 }
 
 /* When multiple fstab records share the same mount_point, it will
