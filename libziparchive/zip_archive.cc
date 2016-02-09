@@ -224,9 +224,7 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
           strerror(errno));
     return kIoError;
   }
-  ssize_t actual = TEMP_FAILURE_RETRY(
-      read(fd, scan_buffer, static_cast<size_t>(read_amount)));
-  if (actual != static_cast<ssize_t>(read_amount)) {
+  if (!android::base::ReadFully(fd, scan_buffer, static_cast<size_t>(read_amount))) {
     ALOGW("Zip: read %" PRId64 " failed: %s", static_cast<int64_t>(read_amount),
           strerror(errno));
     return kIoError;
@@ -481,8 +479,7 @@ void CloseArchive(ZipArchiveHandle handle) {
 static int32_t UpdateEntryFromDataDescriptor(int fd,
                                              ZipEntry *entry) {
   uint8_t ddBuf[sizeof(DataDescriptor) + sizeof(DataDescriptor::kOptSignature)];
-  ssize_t actual = TEMP_FAILURE_RETRY(read(fd, ddBuf, sizeof(ddBuf)));
-  if (actual != sizeof(ddBuf)) {
+  if (!android::base::ReadFully(fd, ddBuf, sizeof(ddBuf))) {
     return kIoError;
   }
 
@@ -498,26 +495,14 @@ static int32_t UpdateEntryFromDataDescriptor(int fd,
 }
 
 // Attempts to read |len| bytes into |buf| at offset |off|.
-//
-// This method uses pread64 on platforms that support it and
-// lseek64 + read on platforms that don't. This implies that
-// callers should not rely on the |fd| offset being incremented
+// Callers should not rely on the |fd| offset being incremented
 // as a side effect of this call.
-static inline ssize_t ReadAtOffset(int fd, uint8_t* buf, size_t len,
-                                   off64_t off) {
-#if !defined(_WIN32)
-  return TEMP_FAILURE_RETRY(pread64(fd, buf, len, off));
-#else
-  // The only supported platform that doesn't support pread at the moment
-  // is Windows. Only recent versions of windows support unix like forks,
-  // and even there the semantics are quite different.
+static inline bool ReadAtOffset(int fd, uint8_t* buf, size_t len, off64_t off) {
   if (lseek64(fd, off, SEEK_SET) != off) {
     ALOGW("Zip: failed seek to offset %" PRId64, off);
-    return kIoError;
+    return false;
   }
-
-  return TEMP_FAILURE_RETRY(read(fd, buf, len));
-#endif
+  return android::base::ReadFully(fd, buf, len);
 }
 
 static int32_t FindEntry(const ZipArchive* archive, const int ent,
@@ -567,9 +552,7 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   }
 
   uint8_t lfh_buf[sizeof(LocalFileHeader)];
-  ssize_t actual = ReadAtOffset(archive->fd, lfh_buf, sizeof(lfh_buf),
-                                 local_header_offset);
-  if (actual != sizeof(lfh_buf)) {
+  if (!ReadAtOffset(archive->fd, lfh_buf, sizeof(lfh_buf), local_header_offset)) {
     ALOGW("Zip: failed reading lfh name from offset %" PRId64,
         static_cast<int64_t>(local_header_offset));
     return kIoError;
@@ -610,10 +593,7 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
     }
 
     uint8_t* name_buf = reinterpret_cast<uint8_t*>(malloc(nameLen));
-    ssize_t actual = ReadAtOffset(archive->fd, name_buf, nameLen,
-                                  name_offset);
-
-    if (actual != nameLen) {
+    if (!ReadAtOffset(archive->fd, name_buf, nameLen, name_offset)) {
       ALOGW("Zip: failed reading lfh name from offset %" PRId64, static_cast<int64_t>(name_offset));
       free(name_buf);
       return kIoError;
@@ -942,10 +922,9 @@ static int32_t InflateEntryToWriter(int fd, const ZipEntry* entry,
   do {
     /* read as much as we can */
     if (zstream.avail_in == 0) {
-      const ZD_TYPE getSize = (compressed_length > kBufSize) ? kBufSize : compressed_length;
-      const ZD_TYPE actual = TEMP_FAILURE_RETRY(read(fd, &read_buf[0], getSize));
-      if (actual != getSize) {
-        ALOGW("Zip: inflate read failed (" ZD " vs " ZD ")", actual, getSize);
+      const size_t getSize = (compressed_length > kBufSize) ? kBufSize : compressed_length;
+      if (!android::base::ReadFully(fd, read_buf.data(), getSize)) {
+        ALOGW("Zip: inflate read failed, getSize = %zu: %s", getSize, strerror(errno));
         return kIoError;
       }
 
@@ -1005,11 +984,9 @@ static int32_t CopyEntryToWriter(int fd, const ZipEntry* entry, Writer* writer,
 
     // Safe conversion because kBufSize is narrow enough for a 32 bit signed
     // value.
-    const ssize_t block_size = (remaining > kBufSize) ? kBufSize : remaining;
-    const ssize_t actual = TEMP_FAILURE_RETRY(read(fd, &buf[0], block_size));
-
-    if (actual != block_size) {
-      ALOGW("CopyFileToFile: copy read failed (" ZD " vs " ZD ")", actual, block_size);
+    const size_t block_size = (remaining > kBufSize) ? kBufSize : remaining;
+    if (!android::base::ReadFully(fd, buf.data(), block_size)) {
+      ALOGW("CopyFileToFile: copy read failed, block_size = %zu: %s", block_size, strerror(errno));
       return kIoError;
     }
 

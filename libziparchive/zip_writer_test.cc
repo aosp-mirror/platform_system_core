@@ -154,12 +154,22 @@ void ConvertZipTimeToTm(uint32_t& zip_time, struct tm* tm) {
   tm->tm_mday = (zip_time >> 16) & 0x1f;
 }
 
+static struct tm MakeTm() {
+  struct tm tm;
+  memset(&tm, 0, sizeof(struct tm));
+  tm.tm_year = 2001 - 1900;
+  tm.tm_mon = 1;
+  tm.tm_mday = 12;
+  tm.tm_hour = 18;
+  tm.tm_min = 30;
+  tm.tm_sec = 20;
+  return tm;
+}
+
 TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedFlagAndTime) {
   ZipWriter writer(file_);
 
-  struct tm tm;
-  memset(&tm, 0, sizeof(struct tm));
-  ASSERT_TRUE(strptime("18:30:20 1/12/2001", "%H:%M:%S %d/%m/%Y", &tm) != nullptr);
+  struct tm tm = MakeTm();
   time_t time = mktime(&tm);
   ASSERT_EQ(0, writer.StartEntryWithTime("align.txt", ZipWriter::kAlign32, time));
   ASSERT_EQ(0, writer.WriteBytes("he", 2));
@@ -210,9 +220,7 @@ TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedValue) {
 TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedValueAndTime) {
   ZipWriter writer(file_);
 
-  struct tm tm;
-  memset(&tm, 0, sizeof(struct tm));
-  ASSERT_TRUE(strptime("18:30:20 1/12/2001", "%H:%M:%S %d/%m/%Y", &tm) != nullptr);
+  struct tm tm = MakeTm();
   time_t time = mktime(&tm);
   ASSERT_EQ(0, writer.StartAlignedEntryWithTime("align.txt", 0, time, 4096));
   ASSERT_EQ(0, writer.WriteBytes("he", 2));

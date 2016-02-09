@@ -95,13 +95,12 @@ LOCAL_CPP_EXTENSION := .cc
 LOCAL_CFLAGS := $(libziparchive_common_c_flags)
 LOCAL_CPPFLAGS := -Wno-unnamed-type-template-args $(libziparchive_common_cpp_flags)
 LOCAL_SRC_FILES := $(libziparchive_test_files)
-LOCAL_SHARED_LIBRARIES := \
-    libziparchive-host \
-    liblog \
-    libbase \
-
 LOCAL_STATIC_LIBRARIES := \
-    libutils \
+    libziparchive-host \
     libz \
+    libbase \
+    libutils \
+    liblog \
 
+LOCAL_MODULE_HOST_OS := darwin linux windows
 include $(BUILD_HOST_NATIVE_TEST)
