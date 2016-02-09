@@ -8,7 +8,7 @@ persist.logd.security      bool   false  Enable security buffer.
 ro.device_owner            bool   false  Override persist.logd.security to false
 ro.logd.kernel             bool+ svelte+ Enable klogd daemon
 ro.logd.statistics         bool+ svelte+ Enable logcat -S statistics.
-ro.build.type              string        if user, logd.statistics &
+ro.debuggable              number        if not "1", logd.statistics &
                                          ro.logd.kernel default false.
 persist.logd.logpersistd   string        Enable logpersist daemon, "logcatd"
                                          turns on logcat -f in logd context
@@ -46,10 +46,10 @@ persist.log.tag.<tag>      string build  default for log.tag.<tag>
 
 NB:
 - bool+ - "true", "false" and comma separated list of "eng" (forced false if
-  ro.build.type is "user") or "svelte" (forced false if ro.config.low_ram is
+  ro.debuggable is not "1") or "svelte" (forced false if ro.config.low_ram is
   true).
 - svelte - see ro.config.low_ram for details.
-- svelte+ - see ro.config.low_ram and ro.build.type for details.
+- svelte+ - see ro.config.low_ram and ro.debuggable for details.
 - ro - <base property> temporary override, ro.<base property> platform default.
 - persist - <base property> override, persist.<base property> platform default.
 - build - VERBOSE for native, DEBUG for jvm isLoggable, or developer option.
