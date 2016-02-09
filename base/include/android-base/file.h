@@ -20,6 +20,10 @@
 #include <sys/stat.h>
 #include <string>
 
+#if !defined(_WIN32) && !defined(O_BINARY)
+#define O_BINARY 0
+#endif
+
 namespace android {
 namespace base {
 
