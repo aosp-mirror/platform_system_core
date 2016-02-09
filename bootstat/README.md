@@ -7,10 +7,11 @@ analysis.
 
     Usage: bootstat [options]
     options include:
-      -d              Dump the boot event records to the console.
-      -h              Show this help.
-      -l              Log all metrics to logstorage.
-      -r              Record the relative time of a named boot event.
+      -h, --help            Show this help
+      -l, --log             Log all metrics to logstorage
+      -p, --print           Dump the boot event records to the console
+      -r, --record          Record the timestamp of a named boot event
+      --record_boot_reason  Record the reason why the device booted
 
 ## Relative time ##
 
