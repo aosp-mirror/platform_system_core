@@ -29,10 +29,6 @@
 #include "cutils/log.h"
 #include "utils/Compat.h"
 
-#if !defined(_WIN32)
-#define O_BINARY 0
-#endif
-
 namespace android {
 namespace base {
 

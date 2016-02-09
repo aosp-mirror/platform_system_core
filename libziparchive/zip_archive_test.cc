@@ -21,9 +21,11 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <memory>
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/test_utils.h>
 #include <gtest/gtest.h>
 #include <ziparchive/zip_archive.h>
 #include <ziparchive/zip_archive_stream_entry.h>
@@ -91,7 +93,7 @@ TEST(ziparchive, OpenMissing) {
 }
 
 TEST(ziparchive, OpenAssumeFdOwnership) {
-  int fd = open((test_data_dir + "/" + kValidZip).c_str(), O_RDONLY);
+  int fd = open((test_data_dir + "/" + kValidZip).c_str(), O_RDONLY | O_BINARY);
   ASSERT_NE(-1, fd);
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveFd(fd, "OpenWithAssumeFdOwnership", &handle));
@@ -101,7 +103,7 @@ TEST(ziparchive, OpenAssumeFdOwnership) {
 }
 
 TEST(ziparchive, OpenDoNotAssumeFdOwnership) {
-  int fd = open((test_data_dir + "/" + kValidZip).c_str(), O_RDONLY);
+  int fd = open((test_data_dir + "/" + kValidZip).c_str(), O_RDONLY | O_BINARY);
   ASSERT_NE(-1, fd);
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveFd(fd, "OpenWithAssumeFdOwnership", &handle, false));
@@ -373,30 +375,13 @@ static const uint16_t kAbZip[] = {
 static const std::string kAbTxtName("ab.txt");
 static const size_t kAbUncompressedSize = 270216;
 
-static int make_temporary_file(const char* file_name_pattern) {
-  char full_path[1024];
-  // Account for differences between the host and the target.
-  //
-  // TODO: Maybe reuse bionic/tests/TemporaryFile.h.
-  snprintf(full_path, sizeof(full_path), "/data/local/tmp/%s", file_name_pattern);
-  int fd = mkstemp(full_path);
-  if (fd == -1) {
-    snprintf(full_path, sizeof(full_path), "/tmp/%s", file_name_pattern);
-    fd = mkstemp(full_path);
-  }
-
-  return fd;
-}
-
 TEST(ziparchive, EmptyEntries) {
-  char temp_file_pattern[] = "empty_entries_test_XXXXXX";
-  int fd = make_temporary_file(temp_file_pattern);
-  ASSERT_NE(-1, fd);
-  const ssize_t file_size = sizeof(kEmptyEntriesZip);
-  ASSERT_EQ(file_size, TEMP_FAILURE_RETRY(write(fd, kEmptyEntriesZip, file_size)));
+  TemporaryFile tmp_file;
+  ASSERT_NE(-1, tmp_file.fd);
+  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, kEmptyEntriesZip, sizeof(kEmptyEntriesZip)));
 
   ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveFd(fd, "EmptyEntriesTest", &handle));
+  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EmptyEntriesTest", &handle));
 
   ZipEntry entry;
   ZipString empty_name;
@@ -406,27 +391,23 @@ TEST(ziparchive, EmptyEntries) {
   uint8_t buffer[1];
   ASSERT_EQ(0, ExtractToMemory(handle, &entry, buffer, 1));
 
-  char output_file_pattern[] = "empty_entries_output_XXXXXX";
-  int output_fd = make_temporary_file(output_file_pattern);
-  ASSERT_NE(-1, output_fd);
-  ASSERT_EQ(0, ExtractEntryToFile(handle, &entry, output_fd));
+
+  TemporaryFile tmp_output_file;
+  ASSERT_NE(-1, tmp_output_file.fd);
+  ASSERT_EQ(0, ExtractEntryToFile(handle, &entry, tmp_output_file.fd));
 
   struct stat stat_buf;
-  ASSERT_EQ(0, fstat(output_fd, &stat_buf));
+  ASSERT_EQ(0, fstat(tmp_output_file.fd, &stat_buf));
   ASSERT_EQ(0, stat_buf.st_size);
-
-  close(fd);
-  close(output_fd);
 }
 
 TEST(ziparchive, EntryLargerThan32K) {
-  char temp_file_pattern[] = "entry_larger_than_32k_test_XXXXXX";
-  int fd = make_temporary_file(temp_file_pattern);
-  ASSERT_NE(-1, fd);
-  ASSERT_TRUE(android::base::WriteFully(fd, reinterpret_cast<const uint8_t*>(kAbZip),
+  TemporaryFile tmp_file;
+  ASSERT_NE(-1, tmp_file.fd);
+  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, reinterpret_cast<const uint8_t*>(kAbZip),
                          sizeof(kAbZip) - 1));
   ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveFd(fd, "EntryLargerThan32KTest", &handle));
+  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EntryLargerThan32KTest", &handle));
 
   ZipEntry entry;
   ZipString ab_name;
@@ -439,21 +420,21 @@ TEST(ziparchive, EntryLargerThan32K) {
   ASSERT_EQ(0, ExtractToMemory(handle, &entry, &buffer[0], buffer.size()));
 
   // Extract the entry to a file.
-  char output_file_pattern[] = "entry_larger_than_32k_test_output_XXXXXX";
-  int output_fd = make_temporary_file(output_file_pattern);
-  ASSERT_NE(-1, output_fd);
-  ASSERT_EQ(0, ExtractEntryToFile(handle, &entry, output_fd));
+  TemporaryFile tmp_output_file;
+  ASSERT_NE(-1, tmp_output_file.fd);
+  ASSERT_EQ(0, ExtractEntryToFile(handle, &entry, tmp_output_file.fd));
 
   // Make sure the extracted file size is as expected.
   struct stat stat_buf;
-  ASSERT_EQ(0, fstat(output_fd, &stat_buf));
+  ASSERT_EQ(0, fstat(tmp_output_file.fd, &stat_buf));
   ASSERT_EQ(kAbUncompressedSize, static_cast<size_t>(stat_buf.st_size));
 
   // Read the file back to a buffer and make sure the contents are
   // the same as the memory buffer we extracted directly to.
   std::vector<uint8_t> file_contents(kAbUncompressedSize);
-  ASSERT_EQ(0, lseek64(output_fd, 0, SEEK_SET));
-  ASSERT_TRUE(android::base::ReadFully(output_fd, &file_contents[0], file_contents.size()));
+  ASSERT_EQ(0, lseek64(tmp_output_file.fd, 0, SEEK_SET));
+  ASSERT_TRUE(android::base::ReadFully(tmp_output_file.fd, &file_contents[0],
+                                       file_contents.size()));
   ASSERT_EQ(file_contents, buffer);
 
   for (int i = 0; i < 90072; ++i) {
@@ -462,35 +443,28 @@ TEST(ziparchive, EntryLargerThan32K) {
     ASSERT_EQ('b', line[1]);
     ASSERT_EQ('\n', line[2]);
   }
-
-  close(fd);
-  close(output_fd);
 }
 
 TEST(ziparchive, TrailerAfterEOCD) {
-  char temp_file_pattern[] = "trailer_after_eocd_test_XXXXXX";
-  int fd = make_temporary_file(temp_file_pattern);
-  ASSERT_NE(-1, fd);
+  TemporaryFile tmp_file;
+  ASSERT_NE(-1, tmp_file.fd);
 
   // Create a file with 8 bytes of random garbage.
   static const uint8_t trailer[] = { 'A' ,'n', 'd', 'r', 'o', 'i', 'd', 'z' };
-  const ssize_t file_size = sizeof(kEmptyEntriesZip);
-  const ssize_t trailer_size = sizeof(trailer);
-  ASSERT_EQ(file_size, TEMP_FAILURE_RETRY(write(fd, kEmptyEntriesZip, file_size)));
-  ASSERT_EQ(trailer_size, TEMP_FAILURE_RETRY(write(fd, trailer, trailer_size)));
+  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, kEmptyEntriesZip, sizeof(kEmptyEntriesZip)));
+  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, trailer, sizeof(trailer)));
 
   ZipArchiveHandle handle;
-  ASSERT_GT(0, OpenArchiveFd(fd, "EmptyEntriesTest", &handle));
+  ASSERT_GT(0, OpenArchiveFd(tmp_file.fd, "EmptyEntriesTest", &handle));
 }
 
 TEST(ziparchive, ExtractToFile) {
-  char kTempFilePattern[] = "zip_archive_input_XXXXXX";
-  int fd = make_temporary_file(kTempFilePattern);
-  ASSERT_NE(-1, fd);
+  TemporaryFile tmp_file;
+  ASSERT_NE(-1, tmp_file.fd);
   const uint8_t data[8] = { '1', '2', '3', '4', '5', '6', '7', '8' };
-  const ssize_t data_size = sizeof(data);
+  const size_t data_size = sizeof(data);
 
-  ASSERT_EQ(data_size, TEMP_FAILURE_RETRY(write(fd, data, data_size)));
+  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, data, data_size));
 
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
@@ -499,28 +473,25 @@ TEST(ziparchive, ExtractToFile) {
   ZipString name;
   SetZipString(&name, kATxtName);
   ASSERT_EQ(0, FindEntry(handle, name, &entry));
-  ASSERT_EQ(0, ExtractEntryToFile(handle, &entry, fd));
+  ASSERT_EQ(0, ExtractEntryToFile(handle, &entry, tmp_file.fd));
 
 
   // Assert that the first 8 bytes of the file haven't been clobbered.
   uint8_t read_buffer[data_size];
-  ASSERT_EQ(0, lseek64(fd, 0, SEEK_SET));
-  ASSERT_EQ(data_size, TEMP_FAILURE_RETRY(read(fd, read_buffer, data_size)));
+  ASSERT_EQ(0, lseek64(tmp_file.fd, 0, SEEK_SET));
+  ASSERT_TRUE(android::base::ReadFully(tmp_file.fd, read_buffer, data_size));
   ASSERT_EQ(0, memcmp(read_buffer, data, data_size));
 
   // Assert that the remainder of the file contains the incompressed data.
   std::vector<uint8_t> uncompressed_data(entry.uncompressed_length);
-  ASSERT_EQ(static_cast<ssize_t>(entry.uncompressed_length),
-            TEMP_FAILURE_RETRY(
-                read(fd, &uncompressed_data[0], entry.uncompressed_length)));
+  ASSERT_TRUE(android::base::ReadFully(tmp_file.fd, uncompressed_data.data(),
+                                       entry.uncompressed_length));
   ASSERT_EQ(0, memcmp(&uncompressed_data[0], kATxtContents.data(),
                       kATxtContents.size()));
 
   // Assert that the total length of the file is sane
-  ASSERT_EQ(data_size + static_cast<ssize_t>(kATxtContents.size()),
-            lseek64(fd, 0, SEEK_END));
-
-  close(fd);
+  ASSERT_EQ(static_cast<ssize_t>(data_size + kATxtContents.size()),
+            lseek64(tmp_file.fd, 0, SEEK_END));
 }
 
 static void ZipArchiveStreamTest(
