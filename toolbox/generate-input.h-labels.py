@@ -18,6 +18,7 @@
 
 import os
 import re
+import sys
 
 input_prop_list = []
 ev_list = []
@@ -36,7 +37,7 @@ ff_list = []
 
 r = re.compile(r'#define\s+(\S+)\s+((?:0x)?\d+)')
 
-with open('bionic/libc/kernel/uapi/linux/input.h', 'r') as f:
+with open(sys.argv[1], 'r') as f:
   for line in f:
     m = r.match(line)
     if m:
