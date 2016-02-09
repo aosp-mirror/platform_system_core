@@ -10,5 +10,8 @@ on property:init.svc.bootanim=stopped
     # Record boot_complete timing event.
     exec - root root -- /system/bin/bootstat -r boot_complete
 
+    # Record the boot reason.
+    exec - root root -- /system/bin/bootstat --record_boot_reason
+
     # Log all boot events.
     exec - root root -- /system/bin/bootstat -l
