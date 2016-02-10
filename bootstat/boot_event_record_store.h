@@ -37,6 +37,10 @@ class BootEventRecordStore {
   // Persists the boot event named |name| in the record store.
   void AddBootEvent(const std::string& name);
 
+  // Persists the boot event named |name| with the associated |value| in the
+  // record store.
+  void AddBootEventWithValue(const std::string& name, int32_t value);
+
   // Returns a list of all of the boot events persisted in the record store.
   std::vector<BootEventRecord> GetAllBootEvents() const;
 
@@ -45,6 +49,7 @@ class BootEventRecordStore {
   // more test-friendly path.
   FRIEND_TEST(BootEventRecordStoreTest, AddSingleBootEvent);
   FRIEND_TEST(BootEventRecordStoreTest, AddMultipleBootEvents);
+  FRIEND_TEST(BootEventRecordStoreTest, AddBootEventWithValue);
 
   // Sets the filesystem path of the record store.
   void SetStorePath(const std::string& path);
