@@ -1,8 +1,8 @@
 #! /system/bin/sh
 # logpersist cat start and stop handlers
 progname="${0##*/}"
-case `getprop ro.build.type` in
-userdebug|eng) ;;
+case `getprop ro.debuggable` in
+1) ;;
 *) echo "${progname} - Permission denied"
    exit 1
    ;;
