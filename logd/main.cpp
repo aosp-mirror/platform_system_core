@@ -202,8 +202,8 @@ bool property_get_bool(const char *key, int flag) {
         return false;
     }
     if (flag & BOOL_DEFAULT_FLAG_ENG) {
-        property_get("ro.build.type", property, "");
-        if (!strcmp(property, "user")) {
+        property_get("ro.debuggable", property, "");
+        if (strcmp(property, "1")) {
             return false;
         }
     }
