@@ -883,8 +883,6 @@ int launch_server(int server_port)
             fprintf(stderr, "ADB server didn't ACK\n" );
             return -1;
         }
-
-        setsid();
     }
 #endif /* !defined(_WIN32) */
     return 0;

@@ -127,10 +127,12 @@ int adb_server_main(int is_daemon, int server_port, int ack_reply_fd) {
         setup_daemon_logging();
 
 #if !defined(_WIN32)
-        // Set the process group so that ctrl-c in the spawning process doesn't kill us.
-        // Do this here instead of after the fork so that a ctrl-c between the "starting server" and
-        // "done starting server" messages gets a chance to terminate the server.
-        setpgrp();
+        // Start a new session for the daemon. Do this here instead of after the fork so
+        // that a ctrl-c between the "starting server" and "done starting server" messages
+        // gets a chance to terminate the server.
+        if (setsid() == -1) {
+            fatal("setsid() failed: %s", strerror(errno));
+        }
 #endif
 
         // Any error output written to stderr now goes to adb.log. We could
