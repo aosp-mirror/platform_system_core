@@ -87,8 +87,12 @@ TEST(sysdeps_win32, adb_strerror) {
     TestAdbStrError(-1, "Unknown error");
     // Test very big, positive unknown error.
     TestAdbStrError(1000000, "Unknown error");
+
     // Test success case.
-    TestAdbStrError(0, "No error");
+    // Wine returns "Success" for strerror(0), Windows returns "No error", so accept both.
+    std::string success = adb_strerror(0);
+    EXPECT_TRUE(success == "Success" || success == "No error") << "strerror(0) = " << success;
+
     // Test error that regular strerror() should have a string for.
     TestAdbStrError(EPERM, "Operation not permitted");
     // Test error that regular strerror() doesn't have a string for, but that
