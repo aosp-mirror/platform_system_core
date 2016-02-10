@@ -18,14 +18,15 @@
 // timestamp, dump the persisted events, and log all events to EventLog to be
 // uploaded to Android log storage via Tron.
 
-//#define LOG_TAG "bootstat"
-
+#include <getopt.h>
 #include <unistd.h>
 #include <cstddef>
 #include <cstdio>
+#include <map>
 #include <memory>
 #include <string>
 #include <android-base/logging.h>
+#include <cutils/properties.h>
 #include <log/log.h>
 #include "boot_event_record_store.h"
 #include "event_log_list_builder.h"
@@ -35,7 +36,7 @@ namespace {
 // Builds an EventLog buffer named |event| containing |data| and writes
 // the log into the Tron histogram logs.
 void LogBootEvent(const std::string& event, int32_t data) {
-  LOG(INFO) << "Logging boot time: " << event << " " << data;
+  LOG(INFO) << "Logging boot metric: " << event << " " << data;
 
   EventLogListBuilder log_builder;
   log_builder.Append(event);
@@ -74,10 +75,11 @@ void ShowHelp(const char *cmd) {
   fprintf(stderr, "Usage: %s [options]\n", cmd);
   fprintf(stderr,
           "options include:\n"
-          "  -d              Dump the boot event records to the console.\n"
-          "  -h              Show this help.\n"
-          "  -l              Log all metrics to logstorage.\n"
-          "  -r              Record the timestamp of a named boot event.\n");
+          "  -h, --help            Show this help\n"
+          "  -l, --log             Log all metrics to logstorage\n"
+          "  -p, --print           Dump the boot event records to the console\n"
+          "  -r, --record          Record the timestamp of a named boot event\n"
+          "  --record_boot_reason  Record the reason why the device booted\n");
 }
 
 // Constructs a readable, printable string from the givencommand line
@@ -92,6 +94,61 @@ std::string GetCommandLine(int argc, char **argv) {
   return cmd;
 }
 
+// Convenience wrapper over the property API that returns an
+// std::string.
+std::string GetProperty(const char* key) {
+  std::vector<char> temp(PROPERTY_VALUE_MAX);
+  const int len = property_get(key, &temp[0], nullptr);
+  if (len < 0) {
+    return "";
+  }
+  return std::string(&temp[0], len);
+}
+
+// A mapping from boot reason string, as read from the ro.boot.bootreason
+// system property, to a unique integer ID. Viewers of log data dashboards for
+// the boot_reason metric may refer to this mapping to discern the histogram
+// values.
+const std::map<std::string, int> kBootReasonMap = {
+  {"normal", 0},
+  {"recovery", 1},
+  {"reboot", 2},
+  {"PowerKey", 3},
+  {"hard_reset", 4},
+  {"kernel_panic", 5},
+  {"rpm_err", 6},
+  {"hw_reset", 7},
+  {"tz_err", 8},
+  {"adsp_err", 9},
+  {"modem_err", 10},
+  {"mba_err", 11},
+  {"Watchdog", 12},
+  {"Panic", 13},
+};
+
+// Converts a string value representing the reason the system booted to an
+// integer representation. This is necessary for logging the boot_reason metric
+// via Tron, which does not accept non-integer buckets in histograms.
+int32_t BootReasonStrToEnum(const std::string& boot_reason) {
+  static const int32_t kUnknownBootReason = -1;
+
+  auto mapping = kBootReasonMap.find(boot_reason);
+  if (mapping != kBootReasonMap.end()) {
+    return mapping->second;
+  }
+
+  LOG(INFO) << "Unknown boot reason: " << boot_reason;
+  return kUnknownBootReason;
+}
+
+// Records the boot_reason metric by querying the ro.boot.bootreason system
+// property.
+void RecordBootReason() {
+  int32_t boot_reason = BootReasonStrToEnum(GetProperty("ro.boot.bootreason"));
+  BootEventRecordStore boot_event_store;
+  boot_event_store.AddBootEventWithValue("boot_reason", boot_reason);
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -100,9 +157,31 @@ int main(int argc, char **argv) {
   const std::string cmd_line = GetCommandLine(argc, argv);
   LOG(INFO) << "Service started: " << cmd_line;
 
+  int option_index = 0;
+  static const char boot_reason_str[] = "record_boot_reason";
+  static const struct option long_options[] = {
+    { "help",            no_argument,       NULL,   'h' },
+    { "log",             no_argument,       NULL,   'l' },
+    { "print",           no_argument,       NULL,   'p' },
+    { "record",          required_argument, NULL,   'r' },
+    { boot_reason_str,   no_argument,       NULL,   0 },
+    { NULL,              0,                 NULL,   0 }
+  };
+
   int opt = 0;
-  while ((opt = getopt(argc, argv, "hlpr:")) != -1) {
+  while ((opt = getopt_long(argc, argv, "hlpr:", long_options, &option_index)) != -1) {
     switch (opt) {
+      // This case handles long options which have no single-character mapping.
+      case 0: {
+        const std::string option_name = long_options[option_index].name;
+        if (option_name == boot_reason_str) {
+          RecordBootReason();
+        } else {
+          LOG(ERROR) << "Invalid option: " << option_name;
+        }
+        break;
+      }
+
       case 'h': {
         ShowHelp(argv[0]);
         break;

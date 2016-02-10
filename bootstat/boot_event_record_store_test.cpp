@@ -154,3 +154,15 @@ TEST_F(BootEventRecordStoreTest, AddMultipleBootEvents) {
     EXPECT_TRUE(FuzzUptimeEquals(uptime, *i));
   }
 }
+
+TEST_F(BootEventRecordStoreTest, AddBootEventWithValue) {
+  BootEventRecordStore store;
+  store.SetStorePath(GetStorePathForTesting());
+
+  store.AddBootEventWithValue("permian", 42);
+
+  auto events = store.GetAllBootEvents();
+  ASSERT_EQ(1U, events.size());
+  EXPECT_EQ("permian", events[0].first);
+  EXPECT_EQ(42, events[0].second);
+}

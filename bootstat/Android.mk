@@ -32,6 +32,7 @@ bootstat_test_src_files := \
 
 bootstat_shared_libs := \
         libbase \
+        libcutils \
         liblog
 
 bootstat_cflags := \

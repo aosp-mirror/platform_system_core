@@ -56,19 +56,31 @@ void BootEventRecordStore::AddBootEvent(const std::string& name) {
     LOG(ERROR) << "Failed to read /proc/uptime";
   }
 
+  // Cast intentionally rounds down.
+  int32_t uptime = static_cast<int32_t>(strtod(uptime_str.c_str(), NULL));
+  AddBootEventWithValue(name, uptime);
+}
+
+// The implementation of AddBootEventValue makes use of the mtime file
+// attribute to store the value associated with a boot event in order to
+// optimize on-disk size requirements and small-file thrashing.
+void BootEventRecordStore::AddBootEventWithValue(
+    const std::string& name, int32_t value) {
   std::string record_path = GetBootEventPath(name);
   if (creat(record_path.c_str(), S_IRUSR | S_IWUSR) == -1) {
     PLOG(ERROR) << "Failed to create " << record_path;
   }
 
+  // Fill out the stat structure for |record_path| in order to get the atime to
+  // set in the utime() call.
   struct stat file_stat;
   if (stat(record_path.c_str(), &file_stat) == -1) {
     PLOG(ERROR) << "Failed to read " << record_path;
   }
 
-  // Cast intentionally rounds down.
-  time_t uptime = static_cast<time_t>(strtod(uptime_str.c_str(), NULL));
-  struct utimbuf times = {file_stat.st_atime, uptime};
+  // Set the |modtime| of the file to store the value of the boot event while
+  // preserving the |actime| (as read by stat).
+  struct utimbuf times = {/* actime */ file_stat.st_atime, /* modtime */ value};
   if (utime(record_path.c_str(), &times) == -1) {
     PLOG(ERROR) << "Failed to set mtime for " << record_path;
   }
