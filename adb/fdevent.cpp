@@ -25,6 +25,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <list>
 #include <unordered_map>
 #include <vector>
@@ -70,6 +71,7 @@ struct PollNode {
 // That's why we don't need a lock for fdevent.
 static auto& g_poll_node_map = *new std::unordered_map<int, PollNode>();
 static auto& g_pending_list = *new std::list<fdevent*>();
+static std::atomic<bool> terminate_loop(false);
 static bool main_thread_valid;
 static unsigned long main_thread_id;
 
@@ -364,6 +366,10 @@ void fdevent_loop()
 #endif // !ADB_HOST
 
     while (true) {
+        if (terminate_loop) {
+            return;
+        }
+
         D("--- --- waiting for events");
 
         fdevent_process();
@@ -376,6 +382,10 @@ void fdevent_loop()
     }
 }
 
+void fdevent_terminate_loop() {
+    terminate_loop = true;
+}
+
 size_t fdevent_installed_count() {
     return g_poll_node_map.size();
 }
@@ -384,4 +394,5 @@ void fdevent_reset() {
     g_poll_node_map.clear();
     g_pending_list.clear();
     main_thread_valid = false;
+    terminate_loop = false;
 }
