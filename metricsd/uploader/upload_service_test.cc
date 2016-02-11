@@ -304,6 +304,8 @@ TEST_F(UploadServiceTest, CurrentLogSavedAndResumed) {
   upload_service_->PersistToDisk();
   EXPECT_EQ(
       1, upload_service_->current_log_->uma_proto()->histogram_event().size());
+  // Destroy the old service before creating a new one.
+  upload_service_.reset();
   upload_service_.reset(new UploadService(
       "", base::TimeDelta(), base::TimeDelta(), private_dir_, shared_dir_));
   upload_service_->InitForTest(nullptr);
@@ -325,6 +327,8 @@ TEST_F(UploadServiceTest, CorruptedSavedLog) {
   // Write a bogus saved log.
   EXPECT_EQ(5, base::WriteFile(upload_service_->saved_log_path_, "hello", 5));
 
+  // Destroy the old service before creating a new one.
+  upload_service_.reset();
   upload_service_.reset(new UploadService(
       "", base::TimeDelta(), base::TimeDelta(), private_dir_, shared_dir_));
 
