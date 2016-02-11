@@ -57,7 +57,9 @@ static const char* kPublicNativeLibraries = "libandroid.so:"
 
 class LibraryNamespaces {
  public:
-  LibraryNamespaces() : initialized_(false) { }
+  LibraryNamespaces() : initialized_(false) {
+    PreloadPublicLibraries();
+  }
 
   android_namespace_t* GetOrCreate(JNIEnv* env, jobject class_loader,
                                    bool is_shared,
@@ -103,15 +105,16 @@ class LibraryNamespaces {
   }
 
  private:
-  bool InitPublicNamespace(const char* library_path) {
-    // Make sure all the public libraries are loaded
+  void PreloadPublicLibraries() {
+    // android_init_namespaces() expects all the public libraries
+    // to be loaded so that they can be found by soname alone.
     std::vector<std::string> sonames = android::base::Split(kPublicNativeLibraries, ":");
     for (const auto& soname : sonames) {
-      if (dlopen(soname.c_str(), RTLD_NOW | RTLD_NODELETE) == nullptr) {
-        return false;
-      }
+      dlopen(soname.c_str(), RTLD_NOW | RTLD_NODELETE);
     }
+  }
 
+  bool InitPublicNamespace(const char* library_path) {
     // Some apps call dlopen from generated code unknown to linker in which
     // case linker uses anonymous namespace. See b/25844435 for details.
     initialized_ = android_init_namespaces(kPublicNativeLibraries, library_path);
