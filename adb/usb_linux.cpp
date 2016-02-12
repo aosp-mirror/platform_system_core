@@ -571,7 +571,7 @@ static void register_device(const char* dev_name, const char* dev_path,
     register_usb_transport(done_usb, serial.c_str(), dev_path, done_usb->writeable);
 }
 
-static void* device_poll_thread(void* unused) {
+static void device_poll_thread(void*) {
     adb_thread_setname("device poll");
     D("Created device thread");
     while (true) {
@@ -580,7 +580,6 @@ static void* device_poll_thread(void* unused) {
         kick_disconnected_devices();
         sleep(1);
     }
-    return nullptr;
 }
 
 void usb_init() {

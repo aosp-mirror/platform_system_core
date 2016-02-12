@@ -57,13 +57,11 @@ struct stinfo {
     void *cookie;
 };
 
-void *service_bootstrap_func(void *x)
-{
+static void service_bootstrap_func(void* x) {
     stinfo* sti = reinterpret_cast<stinfo*>(x);
     adb_thread_setname(android::base::StringPrintf("service %d", sti->fd));
     sti->func(sti->fd, sti->cookie);
     free(sti);
-    return 0;
 }
 
 #if !ADB_HOST
