@@ -112,20 +112,26 @@ TEST(adb_utils, adb_dirname) {
 }
 
 void test_mkdirs(const std::string basepath) {
-  EXPECT_TRUE(mkdirs(adb_dirname(basepath)));
-  EXPECT_NE(-1, adb_creat(basepath.c_str(), 0600));
-  EXPECT_FALSE(mkdirs(basepath + "/subdir/"));
+  // Test creating a directory hierarchy.
+  EXPECT_TRUE(mkdirs(basepath));
+  // Test finding an existing directory hierarchy.
+  EXPECT_TRUE(mkdirs(basepath));
+  const std::string filepath = basepath + "/file";
+  // Verify that the hierarchy was created by trying to create a file in it.
+  EXPECT_NE(-1, adb_creat(filepath.c_str(), 0600));
+  // If a file exists where we want a directory, the operation should fail.
+  EXPECT_FALSE(mkdirs(filepath));
 }
 
 TEST(adb_utils, mkdirs) {
   TemporaryDir td;
 
   // Absolute paths.
-  test_mkdirs(std::string(td.path) + "/dir/subdir/file");
+  test_mkdirs(std::string(td.path) + "/dir/subdir");
 
   // Relative paths.
   ASSERT_EQ(0, chdir(td.path)) << strerror(errno);
-  test_mkdirs(std::string("relative/subrel/file"));
+  test_mkdirs(std::string("relative/subrel"));
 }
 
 #if !defined(_WIN32)
