@@ -20,10 +20,9 @@
 
 #include "sysdeps.h"
 
-static void* increment_atomic_int(void* c) {
+static void increment_atomic_int(void* c) {
     sleep(1);
     reinterpret_cast<std::atomic<int>*>(c)->fetch_add(1);
-    return nullptr;
 }
 
 TEST(sysdeps_thread, smoke) {
@@ -56,4 +55,15 @@ TEST(sysdeps_thread, join) {
     }
 
     ASSERT_EQ(500, counter.load());
+}
+
+TEST(sysdeps_thread, exit) {
+    adb_thread_t thread;
+    ASSERT_TRUE(adb_thread_create(
+        [](void*) {
+            adb_thread_exit();
+            for (;;) continue;
+        },
+        nullptr, &thread));
+    ASSERT_TRUE(adb_thread_join(thread));
 }

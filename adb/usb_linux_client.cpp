@@ -232,10 +232,7 @@ static const struct {
     },
 };
 
-
-
-static void *usb_adb_open_thread(void *x)
-{
+static void usb_adb_open_thread(void* x) {
     struct usb_handle *usb = (struct usb_handle *)x;
     int fd;
 
@@ -270,7 +267,7 @@ static void *usb_adb_open_thread(void *x)
     }
 
     // never gets here
-    return 0;
+    abort();
 }
 
 static int usb_adb_write(usb_handle *h, const void *data, int len)
@@ -434,8 +431,7 @@ err:
     return;
 }
 
-static void *usb_ffs_open_thread(void *x)
-{
+static void usb_ffs_open_thread(void* x) {
     struct usb_handle *usb = (struct usb_handle *)x;
 
     adb_thread_setname("usb ffs open");
@@ -462,7 +458,7 @@ static void *usb_ffs_open_thread(void *x)
     }
 
     // never gets here
-    return 0;
+    abort();
 }
 
 static int usb_ffs_write(usb_handle* h, const void* data, int len) {
