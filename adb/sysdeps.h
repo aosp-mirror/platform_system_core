@@ -115,25 +115,26 @@ static __inline__ void  adb_mutex_unlock( adb_mutex_t*  lock )
     LeaveCriticalSection( lock );
 }
 
-typedef void* (*adb_thread_func_t)(void* arg);
+typedef void (*adb_thread_func_t)(void* arg);
 typedef HANDLE adb_thread_t;
 
-struct win_thread_args {
+struct adb_winthread_args {
     adb_thread_func_t func;
     void* arg;
 };
 
-static unsigned __stdcall win_thread_wrapper(void* args) {
-    win_thread_args thread_args = *static_cast<win_thread_args*>(args);
-    delete static_cast<win_thread_args*>(args);
-    void* result = thread_args.func(thread_args.arg);
-    return reinterpret_cast<unsigned>(result);
+static unsigned __stdcall adb_winthread_wrapper(void* heap_args) {
+    // Move the arguments from the heap onto the thread's stack.
+    adb_winthread_args thread_args = *static_cast<adb_winthread_args*>(heap_args);
+    delete static_cast<adb_winthread_args*>(heap_args);
+    thread_args.func(thread_args.arg);
+    return 0;
 }
 
 static __inline__ bool adb_thread_create(adb_thread_func_t func, void* arg,
                                          adb_thread_t* thread = nullptr) {
-    win_thread_args* args = new win_thread_args{.func = func, .arg = arg};
-    uintptr_t handle = _beginthreadex(nullptr, 0, win_thread_wrapper, args, 0, nullptr);
+    adb_winthread_args* args = new adb_winthread_args{.func = func, .arg = arg};
+    uintptr_t handle = _beginthreadex(nullptr, 0, adb_winthread_wrapper, args, 0, nullptr);
     if (handle != static_cast<uintptr_t>(0)) {
         if (thread) {
             *thread = reinterpret_cast<HANDLE>(handle);
@@ -166,6 +167,10 @@ static __inline__ bool adb_thread_join(adb_thread_t thread) {
 static __inline__ bool adb_thread_detach(adb_thread_t thread) {
     CloseHandle(thread);
     return true;
+}
+
+static __inline__ void __attribute__((noreturn)) adb_thread_exit() {
+    ExitThread(0);
 }
 
 static __inline__ int adb_thread_setname(const std::string& name) {
@@ -701,9 +706,23 @@ static __inline__ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, 
 #define  unix_write  adb_write
 #define  unix_close  adb_close
 
-typedef void*  (*adb_thread_func_t)( void*  arg );
-
+// Win32 is limited to DWORDs for thread return values; limit the POSIX systems to this as well to
+// ensure compatibility.
+typedef void (*adb_thread_func_t)(void* arg);
 typedef pthread_t adb_thread_t;
+
+struct adb_pthread_args {
+    adb_thread_func_t func;
+    void* arg;
+};
+
+static void* adb_pthread_wrapper(void* heap_args) {
+    // Move the arguments from the heap onto the thread's stack.
+    adb_pthread_args thread_args = *reinterpret_cast<adb_pthread_args*>(heap_args);
+    delete static_cast<adb_pthread_args*>(heap_args);
+    thread_args.func(thread_args.arg);
+    return nullptr;
+}
 
 static __inline__ bool adb_thread_create(adb_thread_func_t start, void* arg,
                                          adb_thread_t* thread = nullptr) {
@@ -711,7 +730,8 @@ static __inline__ bool adb_thread_create(adb_thread_func_t start, void* arg,
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, thread ? PTHREAD_CREATE_JOINABLE : PTHREAD_CREATE_DETACHED);
-    errno = pthread_create(&temp, &attr, start, arg);
+    auto* pthread_args = new adb_pthread_args{.func = start, .arg = arg};
+    errno = pthread_create(&temp, &attr, adb_pthread_wrapper, pthread_args);
     if (errno == 0) {
         if (thread) {
             *thread = temp;
@@ -729,6 +749,10 @@ static __inline__ bool adb_thread_join(adb_thread_t thread) {
 static __inline__ bool adb_thread_detach(adb_thread_t thread) {
     errno = pthread_detach(thread);
     return errno == 0;
+}
+
+static __inline__ void __attribute__((noreturn)) adb_thread_exit() {
+    pthread_exit(nullptr);
 }
 
 static __inline__ int adb_thread_setname(const std::string& name) {
