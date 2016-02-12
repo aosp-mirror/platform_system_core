@@ -170,7 +170,7 @@ static __inline__ bool adb_thread_detach(adb_thread_t thread) {
 }
 
 static __inline__ void __attribute__((noreturn)) adb_thread_exit() {
-    ExitThread(0);
+    _endthreadex(0);
 }
 
 static __inline__ int adb_thread_setname(const std::string& name) {
