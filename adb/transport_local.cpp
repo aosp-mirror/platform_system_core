@@ -121,8 +121,7 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
 }
 
 #if ADB_HOST
-static void *client_socket_thread(void *x)
-{
+static void client_socket_thread(void* x) {
     adb_thread_setname("client_socket_thread");
     D("transport: client_socket_thread() starting");
     while (true) {
@@ -135,13 +134,11 @@ static void *client_socket_thread(void *x)
         }
         sleep(1);
     }
-    return 0;
 }
 
 #else // ADB_HOST
 
-static void *server_socket_thread(void * arg)
-{
+static void server_socket_thread(void* arg) {
     int serverfd, fd;
     sockaddr_storage ss;
     sockaddr *addrp = reinterpret_cast<sockaddr*>(&ss);
@@ -174,7 +171,6 @@ static void *server_socket_thread(void * arg)
         }
     }
     D("transport: server_socket_thread() exiting");
-    return 0;
 }
 
 /* This is relevant only for ADB daemon running inside the emulator. */
@@ -220,14 +216,13 @@ static void *server_socket_thread(void * arg)
  *   the transport registration is completed. That's why we need to send the
  *   'start' request after the transport is registered.
  */
-static void *qemu_socket_thread(void * arg)
-{
-/* 'accept' request to the adb QEMUD service. */
-static const char _accept_req[] = "accept";
-/* 'start' request to the adb QEMUD service. */
-static const char _start_req[]  = "start";
-/* 'ok' reply from the adb QEMUD service. */
-static const char _ok_resp[]    = "ok";
+static void qemu_socket_thread(void* arg) {
+    /* 'accept' request to the adb QEMUD service. */
+    static const char _accept_req[] = "accept";
+    /* 'start' request to the adb QEMUD service. */
+    static const char _start_req[] = "start";
+    /* 'ok' reply from the adb QEMUD service. */
+    static const char _ok_resp[] = "ok";
 
     const int port = (int) (uintptr_t) arg;
     int res, fd;
@@ -247,7 +242,7 @@ static const char _ok_resp[]    = "ok";
          * implement adb QEMUD service. Fall back to the old TCP way. */
         D("adb service is not available. Falling back to TCP socket.");
         adb_thread_create(server_socket_thread, arg);
-        return 0;
+        return;
     }
 
     for(;;) {
@@ -275,21 +270,21 @@ static const char _ok_resp[]    = "ok";
             fd = qemu_pipe_open(con_name);
             if (fd < 0) {
                 D("adb service become unavailable.");
-                return 0;
+                return;
             }
         } else {
             D("Unable to send the '%s' request to ADB service.", _accept_req);
-            return 0;
+            return;
         }
     }
     D("transport: qemu_socket_thread() exiting");
-    return 0;
+    return;
 }
 #endif  // !ADB_HOST
 
 void local_init(int port)
 {
-    void* (*func)(void *);
+    adb_thread_func_t func;
     const char* debug_name = "";
 
 #if ADB_HOST
