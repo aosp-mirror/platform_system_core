@@ -55,6 +55,7 @@ LOCAL_CFLAGS += $(common_cflags)
 LOCAL_CONLYFLAGS += -std=gnu99
 
 LOCAL_SHARED_LIBRARIES := \
+    liblog \
     libcutils \
     libselinux \
 
