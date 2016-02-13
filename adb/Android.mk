@@ -158,7 +158,7 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
 LOCAL_STATIC_LIBRARIES := libadbd
-LOCAL_SHARED_LIBRARIES := libbase libcutils
+LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
 include $(BUILD_NATIVE_TEST)
 
 # libdiagnose_usb
