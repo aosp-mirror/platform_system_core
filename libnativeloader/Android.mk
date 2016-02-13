@@ -17,7 +17,8 @@ LOCAL_CFLAGS += -Werror -Wall
 LOCAL_CPPFLAGS := -std=gnu++14 -fvisibility=hidden
 LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
-
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 include $(BUILD_SHARED_LIBRARY)
 
 # Shared library for host
@@ -34,7 +35,8 @@ LOCAL_CFLAGS += -Werror -Wall
 LOCAL_CPPFLAGS := -std=gnu++14 -fvisibility=hidden
 LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
-
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 include $(BUILD_HOST_SHARED_LIBRARY)
 
 # Static library for host
@@ -50,5 +52,6 @@ LOCAL_CFLAGS += -Werror -Wall
 LOCAL_CPPFLAGS := -std=gnu++14 -fvisibility=hidden
 LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
-
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 include $(BUILD_HOST_STATIC_LIBRARY)
