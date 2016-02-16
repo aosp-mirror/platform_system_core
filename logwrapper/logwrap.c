@@ -408,7 +408,7 @@ static int parent(const char *tag, int parent_read, pid_t pid,
         if (poll_fds[0].revents & POLLHUP) {
             int ret;
 
-            ret = waitpid(pid, &status, WNOHANG);
+            ret = TEMP_FAILURE_RETRY(waitpid(pid, &status, 0));
             if (ret < 0) {
                 rc = errno;
                 ALOG(LOG_ERROR, "logwrap", "waitpid failed with %s\n", strerror(errno));
