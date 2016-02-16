@@ -810,14 +810,6 @@ static int activity_manager_connect() {
 char* engrave_tombstone(pid_t pid, pid_t tid, int signal, uintptr_t abort_msg_address,
         bool dump_sibling_threads, bool quiet, bool* detach_failed,
         int* total_sleep_time_usec) {
-    mkdir(TOMBSTONE_DIR, 0755);
-    chown(TOMBSTONE_DIR, AID_SYSTEM, AID_SYSTEM);
-
-    if (selinux_android_restorecon(TOMBSTONE_DIR) == -1) {
-        *detach_failed = false;
-        return NULL;
-    }
-
     int fd;
     char* path = find_and_open_tombstone(&fd);
     if (!path) {
