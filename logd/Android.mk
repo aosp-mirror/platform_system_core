@@ -42,6 +42,10 @@ event_flag := -DAUDITD_LOG_TAG=1003 -DLOGD_LOG_TAG=1004
 
 LOCAL_CFLAGS := -Werror $(event_flag)
 
+ifeq ($(TARGET_BUILD_VARIANT),user)
+LOCAL_CFLAGS += -DAUDITD_ENFORCE_INTEGRITY=true
+endif
+
 include $(BUILD_EXECUTABLE)
 
 include $(call first-makefiles-under,$(LOCAL_PATH))
