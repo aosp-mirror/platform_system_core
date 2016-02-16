@@ -16,6 +16,9 @@ LOCAL_MODULE := libnetutils
 
 LOCAL_CFLAGS := -Werror
 
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
+
 include $(BUILD_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
