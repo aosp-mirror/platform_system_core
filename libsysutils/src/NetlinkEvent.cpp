@@ -159,7 +159,7 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
     struct ifaddrmsg *ifaddr = (struct ifaddrmsg *) NLMSG_DATA(nh);
     struct ifa_cacheinfo *cacheinfo = NULL;
     char addrstr[INET6_ADDRSTRLEN] = "";
-    char ifname[IFNAMSIZ];
+    char ifname[IFNAMSIZ] = "";
 
     if (!checkRtNetlinkLength(nh, sizeof(*ifaddr)))
         return false;
@@ -207,8 +207,7 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
 
             // Find the interface name.
             if (!if_indextoname(ifaddr->ifa_index, ifname)) {
-                SLOGE("Unknown ifindex %d in %s", ifaddr->ifa_index, msgtype);
-                return false;
+                SLOGD("Unknown ifindex %d in %s", ifaddr->ifa_index, msgtype);
             }
 
         } else if (rta->rta_type == IFA_CACHEINFO) {
@@ -235,8 +234,7 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
     mAction = (type == RTM_NEWADDR) ? Action::kAddressUpdated :
                                       Action::kAddressRemoved;
     mSubsystem = strdup("net");
-    asprintf(&mParams[0], "ADDRESS=%s/%d", addrstr,
-             ifaddr->ifa_prefixlen);
+    asprintf(&mParams[0], "ADDRESS=%s/%d", addrstr, ifaddr->ifa_prefixlen);
     asprintf(&mParams[1], "INTERFACE=%s", ifname);
     asprintf(&mParams[2], "FLAGS=%u", ifaddr->ifa_flags);
     asprintf(&mParams[3], "SCOPE=%u", ifaddr->ifa_scope);
