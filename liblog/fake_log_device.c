@@ -691,6 +691,17 @@ int fakeLogOpen(const char *pathName, int flags)
     return redirectOpen(pathName, flags);
 }
 
+/*
+ * The logger API has no means or need to 'stop' or 'close' using the logs,
+ * and as such, there is no way for that 'stop' or 'close' to translate into
+ * a close operation to the fake log handler. fakeLogClose is provided for
+ * completeness only.
+ *
+ * We have no intention of adding a log close operation as it would complicate
+ * every user of the logging API with no gain since the only valid place to
+ * call is in the exit handler. Logging can continue in the exit handler to
+ * help debug HOST tools ...
+ */
 int fakeLogClose(int fd)
 {
     /* Assume that open() was called first. */
