@@ -50,7 +50,7 @@ BootEventRecordStore::BootEventRecordStore() {
   SetStorePath(BOOTSTAT_DATA_DIR);
 }
 
-void BootEventRecordStore::AddBootEvent(const std::string& name) {
+void BootEventRecordStore::AddBootEvent(const std::string& event) {
   std::string uptime_str;
   if (!android::base::ReadFileToString("/proc/uptime", &uptime_str)) {
     LOG(ERROR) << "Failed to read /proc/uptime";
@@ -58,15 +58,15 @@ void BootEventRecordStore::AddBootEvent(const std::string& name) {
 
   // Cast intentionally rounds down.
   int32_t uptime = static_cast<int32_t>(strtod(uptime_str.c_str(), NULL));
-  AddBootEventWithValue(name, uptime);
+  AddBootEventWithValue(event, uptime);
 }
 
 // The implementation of AddBootEventValue makes use of the mtime file
 // attribute to store the value associated with a boot event in order to
 // optimize on-disk size requirements and small-file thrashing.
 void BootEventRecordStore::AddBootEventWithValue(
-    const std::string& name, int32_t value) {
-  std::string record_path = GetBootEventPath(name);
+    const std::string& event, int32_t value) {
+  std::string record_path = GetBootEventPath(event);
   if (creat(record_path.c_str(), S_IRUSR | S_IWUSR) == -1) {
     PLOG(ERROR) << "Failed to create " << record_path;
   }
@@ -84,6 +84,22 @@ void BootEventRecordStore::AddBootEventWithValue(
   if (utime(record_path.c_str(), &times) == -1) {
     PLOG(ERROR) << "Failed to set mtime for " << record_path;
   }
+}
+
+bool BootEventRecordStore::GetBootEvent(
+    const std::string& event, BootEventRecord* record) const {
+  CHECK_NE(static_cast<BootEventRecord*>(nullptr), record);
+  CHECK(!event.empty());
+
+  const std::string record_path = GetBootEventPath(event);
+  int32_t uptime;
+  if (!ParseRecordEventTime(record_path, &uptime)) {
+    LOG(ERROR) << "Failed to parse boot time record: " << record_path;
+    return false;
+  }
+
+  *record = std::make_pair(event, uptime);
+  return true;
 }
 
 std::vector<BootEventRecordStore::BootEventRecord> BootEventRecordStore::
@@ -104,14 +120,13 @@ std::vector<BootEventRecordStore::BootEventRecord> BootEventRecordStore::
     }
 
     const std::string event = entry->d_name;
-    const std::string record_path = GetBootEventPath(event);
-    int32_t uptime;
-    if (!ParseRecordEventTime(record_path, &uptime)) {
-      LOG(ERROR) << "Failed to parse boot time record: " << record_path;
+    BootEventRecord record;
+    if (!GetBootEvent(event, &record)) {
+      LOG(ERROR) << "Failed to parse boot time event: " << event;
       continue;
     }
 
-    events.push_back(std::make_pair(event, uptime));
+    events.push_back(record);
   }
 
   return events;

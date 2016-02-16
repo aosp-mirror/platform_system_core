@@ -166,3 +166,26 @@ TEST_F(BootEventRecordStoreTest, AddBootEventWithValue) {
   EXPECT_EQ("permian", events[0].first);
   EXPECT_EQ(42, events[0].second);
 }
+
+TEST_F(BootEventRecordStoreTest, GetBootEvent) {
+  BootEventRecordStore store;
+  store.SetStorePath(GetStorePathForTesting());
+
+  // Event does not exist.
+  BootEventRecordStore::BootEventRecord record;
+  bool result = store.GetBootEvent("nonexistent", &record);
+  EXPECT_EQ(false, result);
+
+  // Empty path.
+  EXPECT_DEATH(store.GetBootEvent(std::string(), &record), std::string());
+
+  // Success case.
+  store.AddBootEventWithValue("carboniferous", 314);
+  result = store.GetBootEvent("carboniferous", &record);
+  EXPECT_EQ(true, result);
+  EXPECT_EQ("carboniferous", record.first);
+  EXPECT_EQ(314, record.second);
+
+  // Null |record|.
+  EXPECT_DEATH(store.GetBootEvent("carboniferous", nullptr), std::string());
+}
