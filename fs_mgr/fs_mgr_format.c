@@ -33,7 +33,7 @@ extern void reset_ext4fs_info();
 
 static int format_ext4(char *fs_blkdev, char *fs_mnt_point)
 {
-    unsigned int nr_sec;
+    uint64_t dev_sz;
     int fd, rc = 0;
 
     if ((fd = open(fs_blkdev, O_WRONLY, 0644)) < 0) {
@@ -41,7 +41,7 @@ static int format_ext4(char *fs_blkdev, char *fs_mnt_point)
         return -1;
     }
 
-    if ((ioctl(fd, BLKGETSIZE, &nr_sec)) == -1) {
+    if ((ioctl(fd, BLKGETSIZE64, &dev_sz)) == -1) {
         ERROR("Cannot get block device size.  %s\n", strerror(errno));
         close(fd);
         return -1;
@@ -49,7 +49,7 @@ static int format_ext4(char *fs_blkdev, char *fs_mnt_point)
 
     /* Format the partition using the calculated length */
     reset_ext4fs_info();
-    info.len = ((off64_t)nr_sec * 512);
+    info.len = (off64_t)dev_sz;
 
     /* Use make_ext4fs_internal to avoid wiping an already-wiped partition. */
     rc = make_ext4fs_internal(fd, NULL, NULL, fs_mnt_point, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL);
