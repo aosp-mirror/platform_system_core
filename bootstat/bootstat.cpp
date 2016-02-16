@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <cstddef>
 #include <cstdio>
+#include <ctime>
 #include <map>
 #include <memory>
 #include <string>
@@ -155,6 +156,32 @@ void RecordBootReason() {
   boot_event_store.AddBootEventWithValue("boot_reason", boot_reason);
 }
 
+// Records two metrics related to the user resetting a device: the time at
+// which the device is reset, and the time since the user last reset the
+// device.  The former is only set once per-factory reset.
+void RecordFactoryReset() {
+  BootEventRecordStore boot_event_store;
+  BootEventRecordStore::BootEventRecord record;
+
+  time_t current_time_utc = time(nullptr);
+
+  // The factory_reset boot event does not exist after the device is reset, so
+  // use this signal to mark the time of the factory reset.
+  if (!boot_event_store.GetBootEvent("factory_reset", &record)) {
+    boot_event_store.AddBootEventWithValue("factory_reset", current_time_utc);
+    boot_event_store.AddBootEventWithValue("time_since_factory_reset", 0);
+    return;
+  }
+
+  // Calculate and record the difference in time between now and the
+  // factory_reset time.
+  time_t factory_reset_utc = record.second;
+  time_t time_since_factory_reset = difftime(current_time_utc,
+                                             factory_reset_utc);
+  boot_event_store.AddBootEventWithValue("time_since_factory_reset",
+                                         time_since_factory_reset);
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -165,12 +192,14 @@ int main(int argc, char **argv) {
 
   int option_index = 0;
   static const char boot_reason_str[] = "record_boot_reason";
+  static const char factory_reset_str[] = "record_factory_reset";
   static const struct option long_options[] = {
     { "help",            no_argument,       NULL,   'h' },
     { "log",             no_argument,       NULL,   'l' },
     { "print",           no_argument,       NULL,   'p' },
     { "record",          required_argument, NULL,   'r' },
     { boot_reason_str,   no_argument,       NULL,   0 },
+    { factory_reset_str, no_argument,       NULL,   0 },
     { NULL,              0,                 NULL,   0 }
   };
 
@@ -182,6 +211,8 @@ int main(int argc, char **argv) {
         const std::string option_name = long_options[option_index].name;
         if (option_name == boot_reason_str) {
           RecordBootReason();
+        } else if (option_name == factory_reset_str) {
+          RecordFactoryReset();
         } else {
           LOG(ERROR) << "Invalid option: " << option_name;
         }
