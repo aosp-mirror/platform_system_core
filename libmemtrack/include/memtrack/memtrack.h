@@ -19,7 +19,6 @@
 
 #include <sys/types.h>
 #include <stddef.h>
-#include <cutils/compiler.h>
 
 #ifdef __cplusplus
 extern "C" {
