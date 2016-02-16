@@ -759,7 +759,7 @@ static char* find_and_open_tombstone(int* fd)
         if (errno != ENOENT)
             continue;
 
-        *fd = open(path, O_CREAT | O_EXCL | O_WRONLY, 0600);
+        *fd = open(path, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW | O_CLOEXEC, 0600);
         if (*fd < 0)
             continue;   /* raced ? */
 
@@ -769,7 +769,7 @@ static char* find_and_open_tombstone(int* fd)
 
     /* we didn't find an available file, so we clobber the oldest one */
     snprintf(path, sizeof(path), TOMBSTONE_DIR"/tombstone_%02d", oldest);
-    *fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0600);
+    *fd = open(path, O_CREAT | O_TRUNC | O_WRONLY | O_NOFOLLOW | O_CLOEXEC, 0600);
     if (*fd < 0) {
         LOG("failed to open tombstone file '%s': %s\n", path, strerror(errno));
         return NULL;
