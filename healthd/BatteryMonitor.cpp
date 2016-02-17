@@ -56,6 +56,28 @@ static int mapSysfsString(const char* str,
     return -1;
 }
 
+static void initBatteryProperties(BatteryProperties* props) {
+    props->chargerAcOnline = false;
+    props->chargerUsbOnline = false;
+    props->chargerWirelessOnline = false;
+    props->maxChargingCurrent = 0;
+    props->batteryStatus = BATTERY_STATUS_UNKNOWN;
+    props->batteryHealth = BATTERY_HEALTH_UNKNOWN;
+    props->batteryPresent = false;
+    props->batteryLevel = 0;
+    props->batteryVoltage = 0;
+    props->batteryTemperature = 0;
+    props->batteryCurrent = 0;
+    props->batteryCycleCount = 0;
+    props->batteryFullCharge = 0;
+    props->batteryTechnology.clear();
+}
+
+BatteryMonitor::BatteryMonitor() : mHealthdConfig(nullptr), mBatteryDevicePresent(false),
+    mAlwaysPluggedDevice(false), mBatteryFixedCapacity(0), mBatteryFixedTemperature(0) {
+    initBatteryProperties(&props);
+}
+
 int BatteryMonitor::getBatteryStatus(const char* status) {
     int ret;
     struct sysfsStringEnumMap batteryStatusMap[] = {
@@ -184,12 +206,7 @@ int BatteryMonitor::getIntField(const String8& path) {
 bool BatteryMonitor::update(void) {
     bool logthis;
 
-    props.chargerAcOnline = false;
-    props.chargerUsbOnline = false;
-    props.chargerWirelessOnline = false;
-    props.batteryStatus = BATTERY_STATUS_UNKNOWN;
-    props.batteryHealth = BATTERY_HEALTH_UNKNOWN;
-    props.maxChargingCurrent = 0;
+    initBatteryProperties(&props);
 
     if (!mHealthdConfig->batteryPresentPath.isEmpty())
         props.batteryPresent = getBooleanField(mHealthdConfig->batteryPresentPath);
