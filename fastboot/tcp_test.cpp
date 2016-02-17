@@ -42,6 +42,16 @@ TEST(TcpConnectTest, TestSuccess) {
     EXPECT_EQ("", error);
 }
 
+TEST(TcpConnectTest, TestNewerVersionSuccess) {
+    std::unique_ptr<SocketMock> mock(new SocketMock);
+    mock->ExpectSend("FB01");
+    mock->AddReceive("FB99");
+
+    std::string error;
+    EXPECT_NE(nullptr, tcp::internal::Connect(std::move(mock), &error));
+    EXPECT_EQ("", error);
+}
+
 TEST(TcpConnectTest, TestSendFailure) {
     std::unique_ptr<SocketMock> mock(new SocketMock);
     mock->ExpectSendFailure("FB01");
@@ -74,11 +84,11 @@ TEST(TcpConnectTest, TestBadResponseFailure) {
 TEST(TcpConnectTest, TestUnknownVersionFailure) {
     std::unique_ptr<SocketMock> mock(new SocketMock);
     mock->ExpectSend("FB01");
-    mock->AddReceive("FB02");
+    mock->AddReceive("FB00");
 
     std::string error;
     EXPECT_EQ(nullptr, tcp::internal::Connect(std::move(mock), &error));
-    EXPECT_EQ("Unknown TCP protocol version 02 (host version 01)", error);
+    EXPECT_EQ("Unknown TCP protocol version 00 (host version 01)", error);
 }
 
 // Fixture to configure a SocketMock for a successful TCP connection.
