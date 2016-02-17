@@ -15,7 +15,7 @@
  */
 
 #define LOG_TAG "Properties_test"
-#include <utils/Log.h>
+#include <cutils/log.h>
 #include <gtest/gtest.h>
 
 #include <cutils/properties.h>
