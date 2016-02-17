@@ -46,7 +46,7 @@
 
 #include "minui/minui.h"
 
-#include "healthd.h"
+#include <healthd/healthd.h>
 
 char *locale;
 
