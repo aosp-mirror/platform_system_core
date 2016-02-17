@@ -37,6 +37,7 @@ class BatteryMonitor {
         ANDROID_POWER_SUPPLY_TYPE_BATTERY
     };
 
+    BatteryMonitor();
     void init(struct healthd_config *hc);
     bool update(void);
     status_t getProperty(int id, struct BatteryProperty *val);
