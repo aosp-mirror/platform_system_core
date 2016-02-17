@@ -27,7 +27,7 @@
 #include <sys/limits.h>
 
 #define LOG_TAG "packagelistparser"
-#include <utils/Log.h>
+#include <cutils/log.h>
 
 #include <packagelistparser/packagelistparser.h>
 
