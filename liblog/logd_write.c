@@ -125,7 +125,7 @@ static int __write_to_log_initialize()
 
 #if FAKE_LOG_DEVICE
     for (i = 0; i < LOG_ID_MAX; i++) {
-        char buf[sizeof("/dev/log_system")];
+        char buf[sizeof("/dev/log_security")];
         snprintf(buf, sizeof(buf), "/dev/log_%s", android_log_id_to_name(i));
         log_fds[i] = fakeLogOpen(buf, O_WRONLY);
     }
