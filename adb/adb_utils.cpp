@@ -213,6 +213,7 @@ std::string perror_str(const char* msg) {
 }
 
 #if !defined(_WIN32)
+// Windows version provided in sysdeps_win32.cpp
 bool set_file_block_mode(int fd, bool block) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1) {

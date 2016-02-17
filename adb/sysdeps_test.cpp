@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <atomic>
 
+#include "adb_io.h"
 #include "sysdeps.h"
 
 static void increment_atomic_int(void* c) {
@@ -66,4 +67,106 @@ TEST(sysdeps_thread, exit) {
         },
         nullptr, &thread));
     ASSERT_TRUE(adb_thread_join(thread));
+}
+
+TEST(sysdeps_socketpair, smoke) {
+    int fds[2];
+    ASSERT_EQ(0, adb_socketpair(fds)) << strerror(errno);
+    ASSERT_TRUE(WriteFdExactly(fds[0], "foo", 4));
+    ASSERT_TRUE(WriteFdExactly(fds[1], "bar", 4));
+
+    char buf[4];
+    ASSERT_TRUE(ReadFdExactly(fds[1], buf, 4));
+    ASSERT_STREQ(buf, "foo");
+    ASSERT_TRUE(ReadFdExactly(fds[0], buf, 4));
+    ASSERT_STREQ(buf, "bar");
+    ASSERT_EQ(0, adb_close(fds[0]));
+    ASSERT_EQ(0, adb_close(fds[1]));
+}
+
+class sysdeps_poll : public ::testing::Test {
+  protected:
+    int fds[2];
+    void SetUp() override {
+        ASSERT_EQ(0, adb_socketpair(fds)) << strerror(errno);
+    }
+
+    void TearDown() override {
+        ASSERT_EQ(0, adb_close(fds[0]));
+        ASSERT_EQ(0, adb_close(fds[1]));
+    }
+};
+
+TEST_F(sysdeps_poll, smoke) {
+    adb_pollfd pfd[2];
+    pfd[0].fd = fds[0];
+    pfd[0].events = POLLRDNORM;
+    pfd[1].fd = fds[1];
+    pfd[1].events = POLLWRNORM;
+
+    EXPECT_EQ(1, adb_poll(pfd, 2, 0));
+    EXPECT_EQ(0, pfd[0].revents);
+    EXPECT_EQ(POLLWRNORM, pfd[1].revents);
+
+    ASSERT_TRUE(WriteFdExactly(fds[1], "foo", 4));
+
+    // Wait for the socketpair to be flushed.
+    EXPECT_EQ(1, adb_poll(pfd, 1, 100));
+    EXPECT_EQ(POLLRDNORM, pfd[0].revents);
+
+    EXPECT_EQ(2, adb_poll(pfd, 2, 0));
+    EXPECT_EQ(POLLRDNORM, pfd[0].revents);
+    EXPECT_EQ(POLLWRNORM, pfd[1].revents);
+}
+
+TEST_F(sysdeps_poll, timeout) {
+    adb_pollfd pfd;
+    pfd.fd = fds[0];
+    pfd.events = POLLRDNORM;
+
+    EXPECT_EQ(0, adb_poll(&pfd, 1, 100));
+    EXPECT_EQ(0, pfd.revents);
+
+    ASSERT_TRUE(WriteFdExactly(fds[1], "foo", 4));
+
+    EXPECT_EQ(1, adb_poll(&pfd, 1, 100));
+    EXPECT_EQ(POLLRDNORM, pfd.revents);
+}
+
+TEST_F(sysdeps_poll, invalid_fd) {
+    adb_pollfd pfd[3];
+    pfd[0].fd = fds[0];
+    pfd[0].events = POLLRDNORM;
+    pfd[1].fd = INT_MAX;
+    pfd[1].events = POLLRDNORM;
+    pfd[2].fd = fds[1];
+    pfd[2].events = POLLWRNORM;
+
+    ASSERT_TRUE(WriteFdExactly(fds[1], "foo", 4));
+
+    // Wait for the socketpair to be flushed.
+    EXPECT_EQ(1, adb_poll(pfd, 1, 100));
+    EXPECT_EQ(POLLRDNORM, pfd[0].revents);
+
+    EXPECT_EQ(3, adb_poll(pfd, 3, 0));
+    EXPECT_EQ(POLLRDNORM, pfd[0].revents);
+    EXPECT_EQ(POLLNVAL, pfd[1].revents);
+    EXPECT_EQ(POLLWRNORM, pfd[2].revents);
+}
+
+TEST_F(sysdeps_poll, duplicate_fd) {
+    adb_pollfd pfd[2];
+    pfd[0].fd = fds[0];
+    pfd[0].events = POLLRDNORM;
+    pfd[1] = pfd[0];
+
+    EXPECT_EQ(0, adb_poll(pfd, 2, 0));
+    EXPECT_EQ(0, pfd[0].revents);
+    EXPECT_EQ(0, pfd[1].revents);
+
+    ASSERT_TRUE(WriteFdExactly(fds[1], "foo", 4));
+
+    EXPECT_EQ(2, adb_poll(pfd, 2, 100));
+    EXPECT_EQ(POLLRDNORM, pfd[0].revents);
+    EXPECT_EQ(POLLRDNORM, pfd[1].revents);
 }

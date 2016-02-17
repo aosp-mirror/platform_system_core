@@ -50,6 +50,7 @@ LIBADB_SRC_FILES := \
     adb_listeners.cpp \
     adb_trace.cpp \
     adb_utils.cpp \
+    fdevent.cpp \
     sockets.cpp \
     transport.cpp \
     transport_local.cpp \
@@ -75,12 +76,10 @@ LIBADB_windows_CFLAGS := \
     $(ADB_COMMON_windows_CFLAGS) \
 
 LIBADB_darwin_SRC_FILES := \
-    fdevent.cpp \
     get_my_path_darwin.cpp \
     usb_osx.cpp \
 
 LIBADB_linux_SRC_FILES := \
-    fdevent.cpp \
     get_my_path_linux.cpp \
     usb_linux.cpp \
 
