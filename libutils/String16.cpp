@@ -77,7 +77,7 @@ static char16_t* allocFromUTF8(const char* u8str, size_t u8len)
         //printf("Created UTF-16 string from UTF-8 \"%s\":", in);
         //printHexData(1, str, buf->size(), 16, 1);
         //printf("\n");
-        
+
         return u16str;
     }
 
@@ -127,7 +127,7 @@ String16::String16(const char16_t* o)
         mString = str;
         return;
     }
-    
+
     mString = getEmptyString();
 }
 
@@ -142,7 +142,7 @@ String16::String16(const char16_t* o, size_t len)
         mString = str;
         return;
     }
-    
+
     mString = getEmptyString();
 }
 
@@ -228,7 +228,7 @@ status_t String16::append(const String16& other)
     } else if (otherLen == 0) {
         return NO_ERROR;
     }
-    
+
     SharedBuffer* buf = SharedBuffer::bufferFromData(mString)
         ->editResize((myLen+otherLen+1)*sizeof(char16_t));
     if (buf) {
@@ -249,7 +249,7 @@ status_t String16::append(const char16_t* chrs, size_t otherLen)
     } else if (otherLen == 0) {
         return NO_ERROR;
     }
-    
+
     SharedBuffer* buf = SharedBuffer::bufferFromData(mString)
         ->editResize((myLen+otherLen+1)*sizeof(char16_t));
     if (buf) {

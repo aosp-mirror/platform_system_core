@@ -62,9 +62,9 @@ public:
     explicit                    String16(const char* o, size_t len);
 
                                 ~String16();
-    
+
     inline  const char16_t*     string() const;
-    
+
             size_t              size() const;
             void                setTo(const String16& other);
             status_t            setTo(const char16_t* other);
@@ -72,12 +72,12 @@ public:
             status_t            setTo(const String16& other,
                                       size_t len,
                                       size_t begin=0);
-    
+
             status_t            append(const String16& other);
             status_t            append(const char16_t* other, size_t len);
-            
+
     inline  String16&           operator=(const String16& other);
-    
+
     inline  String16&           operator+=(const String16& other);
     inline  String16            operator+(const String16& other) const;
 
@@ -90,7 +90,7 @@ public:
 
             bool                startsWith(const String16& prefix) const;
             bool                startsWith(const char16_t* prefix) const;
-            
+
             status_t            makeLower();
 
             status_t            replaceAll(char16_t replaceThis,
@@ -106,16 +106,16 @@ public:
     inline  bool                operator!=(const String16& other) const;
     inline  bool                operator>=(const String16& other) const;
     inline  bool                operator>(const String16& other) const;
-    
+
     inline  bool                operator<(const char16_t* other) const;
     inline  bool                operator<=(const char16_t* other) const;
     inline  bool                operator==(const char16_t* other) const;
     inline  bool                operator!=(const char16_t* other) const;
     inline  bool                operator>=(const char16_t* other) const;
     inline  bool                operator>(const char16_t* other) const;
-    
+
     inline                      operator const char16_t*() const;
-    
+
 private:
             const char16_t*     mString;
 };
