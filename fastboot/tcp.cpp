@@ -28,6 +28,7 @@
 
 #include "tcp.h"
 
+#include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 
 namespace tcp {
@@ -98,7 +99,8 @@ bool TcpTransport::InitializeProtocol(std::string* error) {
         return false;
     }
 
-    char buffer[kHandshakeLength];
+    char buffer[kHandshakeLength + 1];
+    buffer[kHandshakeLength] = '\0';
     if (socket_->ReceiveAll(buffer, kHandshakeLength, kHandshakeTimeoutMs) != kHandshakeLength) {
         *error = android::base::StringPrintf(
                 "No initialization message received (%s). Target may not support TCP fastboot",
@@ -111,9 +113,10 @@ bool TcpTransport::InitializeProtocol(std::string* error) {
         return false;
     }
 
-    if (memcmp(buffer + 2, "01", 2) != 0) {
+    int version = 0;
+    if (!android::base::ParseInt(buffer + 2, &version) || version < kProtocolVersion) {
         *error = android::base::StringPrintf("Unknown TCP protocol version %s (host version %02d)",
-                                             std::string(buffer + 2, 2).c_str(), kProtocolVersion);
+                                             buffer + 2, kProtocolVersion);
         return false;
     }
 
