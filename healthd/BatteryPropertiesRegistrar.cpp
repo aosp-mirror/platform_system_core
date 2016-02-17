@@ -26,7 +26,7 @@
 #include <utils/Mutex.h>
 #include <utils/String16.h>
 
-#include "healthd.h"
+#include <healthd/healthd.h>
 
 namespace android {
 
