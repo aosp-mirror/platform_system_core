@@ -71,7 +71,10 @@ class SocketMock : public Socket {
     // Adds data to provide for Receive().
     void AddReceive(std::string message);
 
-    // Adds a Receive() failure.
+    // Adds a Receive() timeout after which ReceiveTimedOut() will return true.
+    void AddReceiveTimeout();
+
+    // Adds a Receive() failure after which ReceiveTimedOut() will return false.
     void AddReceiveFailure();
 
     // Adds a Socket to return from Accept().
@@ -81,12 +84,12 @@ class SocketMock : public Socket {
     enum class EventType { kSend, kReceive, kAccept };
 
     struct Event {
-        Event(EventType _type, std::string _message, ssize_t _return_value,
+        Event(EventType _type, std::string _message, ssize_t _status,
               std::unique_ptr<Socket> _sock);
 
         EventType type;
         std::string message;
-        ssize_t return_value;
+        bool status;  // Return value for Send() or timeout status for Receive().
         std::unique_ptr<Socket> sock;
     };
 

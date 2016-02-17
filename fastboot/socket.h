@@ -81,12 +81,16 @@ class Socket {
     virtual bool Send(std::vector<cutils_socket_buffer_t> buffers) = 0;
 
     // Waits up to |timeout_ms| to receive up to |length| bytes of data. |timout_ms| of 0 will
-    // block forever. Returns the number of bytes received or -1 on error/timeout. On timeout
-    // errno will be set to EAGAIN or EWOULDBLOCK.
+    // block forever. Returns the number of bytes received or -1 on error/timeout; see
+    // ReceiveTimedOut() to distinguish between the two.
     virtual ssize_t Receive(void* data, size_t length, int timeout_ms) = 0;
 
     // Calls Receive() until exactly |length| bytes have been received or an error occurs.
     virtual ssize_t ReceiveAll(void* data, size_t length, int timeout_ms);
+
+    // Returns true if the last Receive() call timed out normally and can be retried; fatal errors
+    // or successful reads will return false.
+    bool ReceiveTimedOut() { return receive_timed_out_; }
 
     // Closes the socket. Returns 0 on success, -1 on error.
     virtual int Close();
@@ -102,10 +106,13 @@ class Socket {
     // Protected constructor to force factory function use.
     Socket(cutils_socket_t sock);
 
-    // Update the socket receive timeout if necessary.
-    bool SetReceiveTimeout(int timeout_ms);
+    // Blocks up to |timeout_ms| until a read is possible on |sock_|, and sets |receive_timed_out_|
+    // as appropriate to help distinguish between normal timeouts and fatal errors. Returns true if
+    // a subsequent recv() on |sock_| will complete without blocking or if |timeout_ms| <= 0.
+    bool WaitForRecv(int timeout_ms);
 
     cutils_socket_t sock_ = INVALID_SOCKET;
+    bool receive_timed_out_ = false;
 
     // Non-class functions we want to override during tests to verify functionality. Implementation
     // should call this rather than using socket_send_buffers() directly.
@@ -113,8 +120,6 @@ class Socket {
             socket_send_buffers_function_ = &socket_send_buffers;
 
   private:
-    int receive_timeout_ms_ = 0;
-
     FRIEND_TEST(SocketTest, TestTcpSendBuffers);
     FRIEND_TEST(SocketTest, TestUdpSendBuffers);
 

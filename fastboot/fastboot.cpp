@@ -59,6 +59,7 @@
 #include "fs.h"
 #include "tcp.h"
 #include "transport.h"
+#include "udp.h"
 #include "usb.h"
 
 #ifndef O_BINARY
@@ -245,22 +246,41 @@ static Transport* open_device() {
         return transport;
     }
 
+    Socket::Protocol protocol = Socket::Protocol::kTcp;
     std::string host;
-    int port = tcp::kDefaultPort;
-    if (serial != nullptr && android::base::StartsWith(serial, "tcp:")) {
-        std::string error;
-        const char* address = serial + strlen("tcp:");
+    int port = 0;
+    if (serial != nullptr) {
+        const char* net_address = nullptr;
 
-        if (!android::base::ParseNetAddress(address, &host, &port, nullptr, &error)) {
-            fprintf(stderr, "error: Invalid network address '%s': %s\n", address, error.c_str());
-            return nullptr;
+        if (android::base::StartsWith(serial, "tcp:")) {
+            protocol = Socket::Protocol::kTcp;
+            port = tcp::kDefaultPort;
+            net_address = serial + strlen("tcp:");
+        } else if (android::base::StartsWith(serial, "udp:")) {
+            protocol = Socket::Protocol::kUdp;
+            port = udp::kDefaultPort;
+            net_address = serial + strlen("udp:");
+        }
+
+        if (net_address != nullptr) {
+            std::string error;
+            if (!android::base::ParseNetAddress(net_address, &host, &port, nullptr, &error)) {
+                fprintf(stderr, "error: Invalid network address '%s': %s\n", net_address,
+                        error.c_str());
+                return nullptr;
+            }
         }
     }
 
     while (true) {
         if (!host.empty()) {
             std::string error;
-            transport = tcp::Connect(host, port, &error).release();
+            if (protocol == Socket::Protocol::kTcp) {
+                transport = tcp::Connect(host, port, &error).release();
+            } else if (protocol == Socket::Protocol::kUdp) {
+                transport = udp::Connect(host, port, &error).release();
+            }
+
             if (transport == nullptr && announce) {
                 fprintf(stderr, "error: %s\n", error.c_str());
             }
@@ -337,8 +357,9 @@ static void usage() {
             "                                           formatting.\n"
             "  -s <specific device>                     Specify a device. For USB, provide either\n"
             "                                           a serial number or path to device port.\n"
-            "                                           For TCP, provide an address in the form\n"
-            "                                           tcp:<hostname>[:port].\n"
+            "                                           For ethernet, provide an address in the"
+            "                                           form <protocol>:<hostname>[:port] where"
+            "                                           <protocol> is either tcp or udp.\n"
             "  -p <product>                             Specify product name.\n"
             "  -c <cmdline>                             Override kernel commandline.\n"
             "  -i <vendor id>                           Specify a custom USB vendor id.\n"

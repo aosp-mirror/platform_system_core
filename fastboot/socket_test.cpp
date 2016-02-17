@@ -28,7 +28,8 @@
 #include <gtest/gtest-spi.h>
 #include <gtest/gtest.h>
 
-enum { kTestTimeoutMs = 3000 };
+static constexpr int kShortTimeoutMs = 10;
+static constexpr int kTestTimeoutMs = 3000;
 
 // Creates connected sockets |server| and |client|. Returns true on success.
 bool MakeConnectedSockets(Socket::Protocol protocol, std::unique_ptr<Socket>* server,
@@ -85,6 +86,50 @@ TEST(SocketTest, TestSendAndReceive) {
         EXPECT_TRUE(SendString(server.get(), "bar baz"));
         EXPECT_TRUE(ReceiveString(client.get(), "bar baz"));
     }
+}
+
+TEST(SocketTest, TestReceiveTimeout) {
+    std::unique_ptr<Socket> server, client;
+    char buffer[16];
+
+    for (Socket::Protocol protocol : {Socket::Protocol::kUdp, Socket::Protocol::kTcp}) {
+        ASSERT_TRUE(MakeConnectedSockets(protocol, &server, &client));
+
+        EXPECT_EQ(-1, server->Receive(buffer, sizeof(buffer), kShortTimeoutMs));
+        EXPECT_TRUE(server->ReceiveTimedOut());
+
+        EXPECT_EQ(-1, client->Receive(buffer, sizeof(buffer), kShortTimeoutMs));
+        EXPECT_TRUE(client->ReceiveTimedOut());
+    }
+
+    // UDP will wait for timeout if the other side closes.
+    ASSERT_TRUE(MakeConnectedSockets(Socket::Protocol::kUdp, &server, &client));
+    EXPECT_EQ(0, server->Close());
+    EXPECT_EQ(-1, client->Receive(buffer, sizeof(buffer), kShortTimeoutMs));
+    EXPECT_TRUE(client->ReceiveTimedOut());
+}
+
+TEST(SocketTest, TestReceiveFailure) {
+    std::unique_ptr<Socket> server, client;
+    char buffer[16];
+
+    for (Socket::Protocol protocol : {Socket::Protocol::kUdp, Socket::Protocol::kTcp}) {
+        ASSERT_TRUE(MakeConnectedSockets(protocol, &server, &client));
+
+        EXPECT_EQ(0, server->Close());
+        EXPECT_EQ(-1, server->Receive(buffer, sizeof(buffer), kTestTimeoutMs));
+        EXPECT_FALSE(server->ReceiveTimedOut());
+
+        EXPECT_EQ(0, client->Close());
+        EXPECT_EQ(-1, client->Receive(buffer, sizeof(buffer), kTestTimeoutMs));
+        EXPECT_FALSE(client->ReceiveTimedOut());
+    }
+
+    // TCP knows right away when the other side closes and returns 0 to indicate EOF.
+    ASSERT_TRUE(MakeConnectedSockets(Socket::Protocol::kTcp, &server, &client));
+    EXPECT_EQ(0, server->Close());
+    EXPECT_EQ(0, client->Receive(buffer, sizeof(buffer), kTestTimeoutMs));
+    EXPECT_FALSE(client->ReceiveTimedOut());
 }
 
 // Tests sending and receiving large packets.
@@ -290,6 +335,11 @@ TEST(SocketMockTest, TestReceiveFailure) {
 
     mock->AddReceiveFailure();
     EXPECT_FALSE(ReceiveString(mock, "foo"));
+    EXPECT_FALSE(mock->ReceiveTimedOut());
+
+    mock->AddReceiveTimeout();
+    EXPECT_FALSE(ReceiveString(mock, "foo"));
+    EXPECT_TRUE(mock->ReceiveTimedOut());
 
     mock->AddReceive("foo");
     mock->AddReceiveFailure();
