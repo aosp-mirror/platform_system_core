@@ -35,7 +35,7 @@
 #include <log/logd.h>
 #include <log/logger.h>
 #include <log/logprint.h>
-#include <utils/threads.h>
+#include <system/thread_defs.h>
 
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
