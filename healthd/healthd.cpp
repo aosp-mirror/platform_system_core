@@ -109,10 +109,17 @@ static struct healthd_mode_ops android_ops = {
 };
 
 static struct healthd_mode_ops charger_ops = {
+#ifdef CHARGER_NO_UI
+    .init = healthd_mode_nop_init,
+    .preparetowait = healthd_mode_nop_preparetowait,
+    .heartbeat = healthd_mode_nop_heartbeat,
+    .battery_update = healthd_mode_nop_battery_update,
+#else
     .init = healthd_mode_charger_init,
     .preparetowait = healthd_mode_charger_preparetowait,
     .heartbeat = healthd_mode_charger_heartbeat,
     .battery_update = healthd_mode_charger_battery_update,
+#endif
 };
 
 static struct healthd_mode_ops recovery_ops = {
