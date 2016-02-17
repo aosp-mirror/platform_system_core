@@ -105,33 +105,39 @@ std::string GetProperty(const char* key) {
   return std::string(&temp[0], len);
 }
 
+constexpr int32_t kUnknownBootReason = 1;
+
 // A mapping from boot reason string, as read from the ro.boot.bootreason
 // system property, to a unique integer ID. Viewers of log data dashboards for
 // the boot_reason metric may refer to this mapping to discern the histogram
 // values.
-const std::map<std::string, int> kBootReasonMap = {
-  {"normal", 0},
-  {"recovery", 1},
-  {"reboot", 2},
-  {"PowerKey", 3},
-  {"hard_reset", 4},
-  {"kernel_panic", 5},
-  {"rpm_err", 6},
-  {"hw_reset", 7},
-  {"tz_err", 8},
-  {"adsp_err", 9},
-  {"modem_err", 10},
-  {"mba_err", 11},
-  {"Watchdog", 12},
-  {"Panic", 13},
+const std::map<std::string, int32_t> kBootReasonMap = {
+  {"unknown", kUnknownBootReason},
+  {"normal", 2},
+  {"recovery", 3},
+  {"reboot", 4},
+  {"PowerKey", 5},
+  {"hard_reset", 6},
+  {"kernel_panic", 7},
+  {"rpm_err", 8},
+  {"hw_reset", 9},
+  {"tz_err", 10},
+  {"adsp_err", 11},
+  {"modem_err", 12},
+  {"mba_err", 13},
+  {"Watchdog", 14},
+  {"Panic", 15},
+  {"power_key", 16},
+  {"power_on", 17},
+  {"Reboot", 18},
+  {"rtc", 19},
+  {"edl", 20},
 };
 
 // Converts a string value representing the reason the system booted to an
 // integer representation. This is necessary for logging the boot_reason metric
 // via Tron, which does not accept non-integer buckets in histograms.
 int32_t BootReasonStrToEnum(const std::string& boot_reason) {
-  static const int32_t kUnknownBootReason = -1;
-
   auto mapping = kBootReasonMap.find(boot_reason);
   if (mapping != kBootReasonMap.end()) {
     return mapping->second;
