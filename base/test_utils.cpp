@@ -16,7 +16,6 @@
 
 #include "android-base/logging.h"
 #include "android-base/test_utils.h"
-#include "utils/Compat.h" // For OS_PATH_SEPARATOR.
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -27,6 +26,9 @@
 #if defined(_WIN32)
 #include <windows.h>
 #include <direct.h>
+#define OS_PATH_SEPARATOR '\\'
+#else
+#define OS_PATH_SEPARATOR '/'
 #endif
 
 #include <string>
