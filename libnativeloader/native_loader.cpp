@@ -36,10 +36,6 @@ namespace android {
 #ifdef __ANDROID__
 // TODO(dimitry): move this to system properties.
 static const char* kPublicNativeLibraries = "libandroid.so:"
-                                            // TODO (dimitry): This is a workaround for http://b/26436837
-                                            // will be removed before the release.
-                                            "libart.so:"
-                                            // END OF WORKAROUND
                                             "libc.so:"
                                             "libcamera2ndk.so:"
                                             "libdl.so:"
@@ -69,7 +65,8 @@ class LibraryNamespaces {
   android_namespace_t* GetOrCreate(JNIEnv* env, jobject class_loader,
                                    bool is_shared,
                                    jstring java_library_path,
-                                   jstring java_permitted_path) {
+                                   jstring java_permitted_path,
+                                   int32_t target_sdk_version) {
     ScopedUtfChars library_path(env, java_library_path);
 
     std::string permitted_path;
@@ -78,7 +75,7 @@ class LibraryNamespaces {
       permitted_path = path.c_str();
     }
 
-    if (!initialized_ && !InitPublicNamespace(library_path.c_str())) {
+    if (!initialized_ && !InitPublicNamespace(library_path.c_str(), target_sdk_version)) {
       return nullptr;
     }
 
@@ -119,10 +116,19 @@ class LibraryNamespaces {
     }
   }
 
-  bool InitPublicNamespace(const char* library_path) {
+  bool InitPublicNamespace(const char* library_path, int32_t target_sdk_version) {
     // Some apps call dlopen from generated code unknown to linker in which
     // case linker uses anonymous namespace. See b/25844435 for details.
-    initialized_ = android_init_namespaces(kPublicNativeLibraries, library_path);
+    std::string publicNativeLibraries = kPublicNativeLibraries;
+
+    // TODO (dimitry): This is a workaround for http://b/26436837
+    // will be removed before the release.
+    if (target_sdk_version <= 23) {
+      publicNativeLibraries += ":libart.so";
+    }
+    // END OF WORKAROUND
+
+    initialized_ = android_init_namespaces(publicNativeLibraries.c_str(), library_path);
 
     return initialized_;
   }
@@ -156,7 +162,7 @@ void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* pat
 
   android_namespace_t* ns =
       g_namespaces->GetOrCreate(env, class_loader, is_shared,
-                                java_library_path, java_permitted_path);
+                                java_library_path, java_permitted_path, target_sdk_version);
 
   if (ns == nullptr) {
     return nullptr;
