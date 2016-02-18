@@ -404,17 +404,16 @@ void GetThreads(pid_t pid, std::vector<pid_t>* threads) {
   char task_path[128];
   snprintf(task_path, sizeof(task_path), "/proc/%d/task", pid);
 
-  DIR* tasks_dir = opendir(task_path);
+  std::unique_ptr<DIR, decltype(&closedir)> tasks_dir(opendir(task_path), closedir);
   ASSERT_TRUE(tasks_dir != nullptr);
   struct dirent* entry;
-  while ((entry = readdir(tasks_dir)) != nullptr) {
+  while ((entry = readdir(tasks_dir.get())) != nullptr) {
     char* end;
     pid_t tid = strtoul(entry->d_name, &end, 10);
     if (*end == '\0') {
       threads->push_back(tid);
     }
   }
-  closedir(tasks_dir);
 }
 
 TEST(libbacktrace, ptrace_threads) {

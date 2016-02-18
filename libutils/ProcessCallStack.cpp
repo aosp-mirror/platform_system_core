@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <memory>
 
 #include <utils/Log.h>
 #include <utils/Errors.h>
@@ -130,11 +131,10 @@ void ProcessCallStack::clear() {
 }
 
 void ProcessCallStack::update() {
-    DIR *dp;
     struct dirent *ep;
     struct dirent entry;
 
-    dp = opendir(PATH_SELF_TASK);
+    std::unique_ptr<DIR, decltype(&closedir)> dp(opendir(PATH_SELF_TASK), closedir);
     if (dp == NULL) {
         ALOGE("%s: Failed to update the process's call stacks: %s",
               __FUNCTION__, strerror(errno));
@@ -159,7 +159,7 @@ void ProcessCallStack::update() {
      * - Read every file in directory => get every tid
      */
     int code;
-    while ((code = readdir_r(dp, &entry, &ep)) == 0 && ep != NULL) {
+    while ((code = readdir_r(dp.get(), &entry, &ep)) == 0 && ep != NULL) {
         pid_t tid = -1;
         sscanf(ep->d_name, "%d", &tid);
 
@@ -198,8 +198,6 @@ void ProcessCallStack::update() {
         ALOGE("%s: Failed to readdir from %s: %s",
               __FUNCTION__, PATH_SELF_TASK, strerror(code));
     }
-
-    closedir(dp);
 }
 
 void ProcessCallStack::log(const char* logtag, android_LogPriority priority,
