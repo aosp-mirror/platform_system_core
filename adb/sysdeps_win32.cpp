@@ -190,8 +190,7 @@ typedef struct FHRec_
 #define  fh_handle  u.handle
 #define  fh_socket  u.socket
 
-#define  WIN32_FH_BASE    100
-
+#define  WIN32_FH_BASE    2048
 #define  WIN32_MAX_FHS    128
 
 static adb_mutex_t   _win32_lock;
@@ -241,17 +240,10 @@ _fh_alloc( FHClass  clazz )
 
     adb_mutex_lock( &_win32_lock );
 
-    // Search entire array, starting from _win32_fh_next.
-    for (int nn = 0; nn < WIN32_MAX_FHS; nn++) {
-        // Keep incrementing _win32_fh_next to avoid giving out an index that
-        // was recently closed, to try to avoid use-after-free.
-        const int index = _win32_fh_next++;
-        // Handle wrap-around of _win32_fh_next.
-        if (_win32_fh_next == WIN32_MAX_FHS) {
-            _win32_fh_next = 0;
-        }
-        if (_win32_fhs[index].clazz == NULL) {
-            f = &_win32_fhs[index];
+    for (int i = _win32_fh_next; i < WIN32_MAX_FHS; ++i) {
+        if (_win32_fhs[i].clazz == NULL) {
+            f = &_win32_fhs[i];
+            _win32_fh_next = i + 1;
             goto Exit;
         }
     }
@@ -276,6 +268,12 @@ _fh_close( FH   f )
     // Use lock so that closing only happens once and so that _fh_alloc can't
     // allocate a FH that we're in the middle of closing.
     adb_mutex_lock(&_win32_lock);
+
+    int offset = f - _win32_fhs;
+    if (_win32_fh_next > offset) {
+        _win32_fh_next = offset;
+    }
+
     if (f->used) {
         f->clazz->_fh_close( f );
         f->name[0] = '\0';
