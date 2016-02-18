@@ -28,6 +28,7 @@ liblog_host_sources := logd_write.c log_event_write.c fake_log_device.c event.lo
 liblog_target_sources := logd_write.c log_event_write.c event_tag_map.c log_time.cpp log_is_loggable.c
 liblog_target_sources += logprint.c
 liblog_target_sources += log_read.c
+liblog_target_sources += log_event_list.c
 
 # Shared and static library for host
 # ========================================================
