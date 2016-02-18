@@ -726,8 +726,9 @@ static int _fh_socket_close( FH  f ) {
 #endif
         }
         if (closesocket(f->fh_socket) == SOCKET_ERROR) {
-            D("closesocket failed: %s",
-              android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
+            // Don't set errno here, since adb_close will ignore it.
+            const DWORD err = WSAGetLastError();
+            D("closesocket failed: %s", android::base::SystemErrorCodeToString(err).c_str());
         }
         f->fh_socket = INVALID_SOCKET;
     }
@@ -839,16 +840,15 @@ static int GetSocketProtocolFromSocketType(int type) {
 
 int network_loopback_client(int port, int type, std::string* error) {
     struct sockaddr_in addr;
-    SOCKET  s;
+    SOCKET s;
 
-    unique_fh  f(_fh_alloc(&_fh_socket_class));
+    unique_fh f(_fh_alloc(&_fh_socket_class));
     if (!f) {
         *error = strerror(errno);
         return -1;
     }
 
-    if (!_winsock_init)
-        _init_winsock();
+    if (!_winsock_init) _init_winsock();
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -856,30 +856,32 @@ int network_loopback_client(int port, int type, std::string* error) {
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
     s = socket(AF_INET, type, GetSocketProtocolFromSocketType(type));
-    if(s == INVALID_SOCKET) {
+    if (s == INVALID_SOCKET) {
+        const DWORD err = WSAGetLastError();
         *error = android::base::StringPrintf("cannot create socket: %s",
-                android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
+                                             android::base::SystemErrorCodeToString(err).c_str());
         D("%s", error->c_str());
+        _socket_set_errno(err);
         return -1;
     }
     f->fh_socket = s;
 
-    if(connect(s, (struct sockaddr *) &addr, sizeof(addr)) == SOCKET_ERROR) {
+    if (connect(s, (struct sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
         // Save err just in case inet_ntoa() or ntohs() changes the last error.
         const DWORD err = WSAGetLastError();
         *error = android::base::StringPrintf("cannot connect to %s:%u: %s",
-                inet_ntoa(addr.sin_addr), ntohs(addr.sin_port),
-                android::base::SystemErrorCodeToString(err).c_str());
-        D("could not connect to %s:%d: %s",
-          type != SOCK_STREAM ? "udp" : "tcp", port, error->c_str());
+                                             inet_ntoa(addr.sin_addr), ntohs(addr.sin_port),
+                                             android::base::SystemErrorCodeToString(err).c_str());
+        D("could not connect to %s:%d: %s", type != SOCK_STREAM ? "udp" : "tcp", port,
+          error->c_str());
+        _socket_set_errno(err);
         return -1;
     }
 
     const int fd = _fh_to_int(f.get());
-    snprintf( f->name, sizeof(f->name), "%d(lo-client:%s%d)", fd,
-              type != SOCK_STREAM ? "udp:" : "", port );
-    D( "port %d type %s => fd %d", port, type != SOCK_STREAM ? "udp" : "tcp",
-       fd );
+    snprintf(f->name, sizeof(f->name), "%d(lo-client:%s%d)", fd, type != SOCK_STREAM ? "udp:" : "",
+             port);
+    D("port %d type %s => fd %d", port, type != SOCK_STREAM ? "udp" : "tcp", fd);
     f.release();
     return fd;
 }
@@ -887,20 +889,18 @@ int network_loopback_client(int port, int type, std::string* error) {
 #define LISTEN_BACKLOG 4
 
 // interface_address is INADDR_LOOPBACK or INADDR_ANY.
-static int _network_server(int port, int type, u_long interface_address,
-                           std::string* error) {
+static int _network_server(int port, int type, u_long interface_address, std::string* error) {
     struct sockaddr_in addr;
-    SOCKET  s;
-    int  n;
+    SOCKET s;
+    int n;
 
-    unique_fh   f(_fh_alloc(&_fh_socket_class));
+    unique_fh f(_fh_alloc(&_fh_socket_class));
     if (!f) {
         *error = strerror(errno);
         return -1;
     }
 
-    if (!_winsock_init)
-        _init_winsock();
+    if (!_winsock_init) _init_winsock();
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -911,9 +911,11 @@ static int _network_server(int port, int type, u_long interface_address,
     // IPv4 and IPv6.
     s = socket(AF_INET, type, GetSocketProtocolFromSocketType(type));
     if (s == INVALID_SOCKET) {
+        const DWORD err = WSAGetLastError();
         *error = android::base::StringPrintf("cannot create socket: %s",
-                android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
+                                             android::base::SystemErrorCodeToString(err).c_str());
         D("%s", error->c_str());
+        _socket_set_errno(err);
         return -1;
     }
 
@@ -922,40 +924,41 @@ static int _network_server(int port, int type, u_long interface_address,
     // Note: SO_REUSEADDR on Windows allows multiple processes to bind to the
     // same port, so instead use SO_EXCLUSIVEADDRUSE.
     n = 1;
-    if (setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (const char*)&n,
-                   sizeof(n)) == SOCKET_ERROR) {
-        *error = android::base::StringPrintf(
-                "cannot set socket option SO_EXCLUSIVEADDRUSE: %s",
-                android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
+    if (setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (const char*)&n, sizeof(n)) == SOCKET_ERROR) {
+        const DWORD err = WSAGetLastError();
+        *error = android::base::StringPrintf("cannot set socket option SO_EXCLUSIVEADDRUSE: %s",
+                                             android::base::SystemErrorCodeToString(err).c_str());
         D("%s", error->c_str());
+        _socket_set_errno(err);
         return -1;
     }
 
-    if (bind(s, (struct sockaddr *) &addr, sizeof(addr)) == SOCKET_ERROR) {
+    if (bind(s, (struct sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
         // Save err just in case inet_ntoa() or ntohs() changes the last error.
         const DWORD err = WSAGetLastError();
-        *error = android::base::StringPrintf("cannot bind to %s:%u: %s",
-                inet_ntoa(addr.sin_addr), ntohs(addr.sin_port),
-                android::base::SystemErrorCodeToString(err).c_str());
-        D("could not bind to %s:%d: %s",
-          type != SOCK_STREAM ? "udp" : "tcp", port, error->c_str());
+        *error = android::base::StringPrintf("cannot bind to %s:%u: %s", inet_ntoa(addr.sin_addr),
+                                             ntohs(addr.sin_port),
+                                             android::base::SystemErrorCodeToString(err).c_str());
+        D("could not bind to %s:%d: %s", type != SOCK_STREAM ? "udp" : "tcp", port, error->c_str());
+        _socket_set_errno(err);
         return -1;
     }
     if (type == SOCK_STREAM) {
         if (listen(s, LISTEN_BACKLOG) == SOCKET_ERROR) {
-            *error = android::base::StringPrintf("cannot listen on socket: %s",
-                    android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
-            D("could not listen on %s:%d: %s",
-              type != SOCK_STREAM ? "udp" : "tcp", port, error->c_str());
+            const DWORD err = WSAGetLastError();
+            *error = android::base::StringPrintf(
+                "cannot listen on socket: %s", android::base::SystemErrorCodeToString(err).c_str());
+            D("could not listen on %s:%d: %s", type != SOCK_STREAM ? "udp" : "tcp", port,
+              error->c_str());
+            _socket_set_errno(err);
             return -1;
         }
     }
     const int fd = _fh_to_int(f.get());
-    snprintf( f->name, sizeof(f->name), "%d(%s-server:%s%d)", fd,
-              interface_address == INADDR_LOOPBACK ? "lo" : "any",
-              type != SOCK_STREAM ? "udp:" : "", port );
-    D( "port %d type %s => fd %d", port, type != SOCK_STREAM ? "udp" : "tcp",
-       fd );
+    snprintf(f->name, sizeof(f->name), "%d(%s-server:%s%d)", fd,
+             interface_address == INADDR_LOOPBACK ? "lo" : "any", type != SOCK_STREAM ? "udp:" : "",
+             port);
+    D("port %d type %s => fd %d", port, type != SOCK_STREAM ? "udp" : "tcp", fd);
     f.release();
     return fd;
 }
@@ -989,54 +992,57 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
     struct addrinfo* addrinfo_ptr = nullptr;
 
 #if (NTDDI_VERSION >= NTDDI_WINXPSP2) || (_WIN32_WINNT >= _WIN32_WINNT_WS03)
-    // TODO: When the Android SDK tools increases the Windows system
-    // requirements >= WinXP SP2, switch to android::base::UTF8ToWide() + GetAddrInfoW().
+// TODO: When the Android SDK tools increases the Windows system
+// requirements >= WinXP SP2, switch to android::base::UTF8ToWide() + GetAddrInfoW().
 #else
-    // Otherwise, keep using getaddrinfo(), or do runtime API detection
-    // with GetProcAddress("GetAddrInfoW").
+// Otherwise, keep using getaddrinfo(), or do runtime API detection
+// with GetProcAddress("GetAddrInfoW").
 #endif
     if (getaddrinfo(host.c_str(), port_str, &hints, &addrinfo_ptr) != 0) {
-        *error = android::base::StringPrintf(
-                "cannot resolve host '%s' and port %s: %s", host.c_str(),
-                port_str, android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
+        const DWORD err = WSAGetLastError();
+        *error = android::base::StringPrintf("cannot resolve host '%s' and port %s: %s",
+                                             host.c_str(), port_str,
+                                             android::base::SystemErrorCodeToString(err).c_str());
+
         D("%s", error->c_str());
+        _socket_set_errno(err);
         return -1;
     }
-    std::unique_ptr<struct addrinfo, decltype(freeaddrinfo)*>
-        addrinfo(addrinfo_ptr, freeaddrinfo);
+    std::unique_ptr<struct addrinfo, decltype(freeaddrinfo)*> addrinfo(addrinfo_ptr, freeaddrinfo);
     addrinfo_ptr = nullptr;
 
     // TODO: Try all the addresses if there's more than one? This just uses
     // the first. Or, could call WSAConnectByName() (Windows Vista and newer)
     // which tries all addresses, takes a timeout and more.
-    SOCKET s = socket(addrinfo->ai_family, addrinfo->ai_socktype,
-                      addrinfo->ai_protocol);
-    if(s == INVALID_SOCKET) {
+    SOCKET s = socket(addrinfo->ai_family, addrinfo->ai_socktype, addrinfo->ai_protocol);
+    if (s == INVALID_SOCKET) {
+        const DWORD err = WSAGetLastError();
         *error = android::base::StringPrintf("cannot create socket: %s",
-                android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
+                                             android::base::SystemErrorCodeToString(err).c_str());
         D("%s", error->c_str());
+        _socket_set_errno(err);
         return -1;
     }
     f->fh_socket = s;
 
     // TODO: Implement timeouts for Windows. Seems like the default in theory
     // (according to http://serverfault.com/a/671453) and in practice is 21 sec.
-    if(connect(s, addrinfo->ai_addr, addrinfo->ai_addrlen) == SOCKET_ERROR) {
+    if (connect(s, addrinfo->ai_addr, addrinfo->ai_addrlen) == SOCKET_ERROR) {
         // TODO: Use WSAAddressToString or inet_ntop on address.
-        *error = android::base::StringPrintf("cannot connect to %s:%s: %s",
-                host.c_str(), port_str,
-                android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
-        D("could not connect to %s:%s:%s: %s",
-          type != SOCK_STREAM ? "udp" : "tcp", host.c_str(), port_str,
-          error->c_str());
+        const DWORD err = WSAGetLastError();
+        *error = android::base::StringPrintf("cannot connect to %s:%s: %s", host.c_str(), port_str,
+                                             android::base::SystemErrorCodeToString(err).c_str());
+        D("could not connect to %s:%s:%s: %s", type != SOCK_STREAM ? "udp" : "tcp", host.c_str(),
+          port_str, error->c_str());
+        _socket_set_errno(err);
         return -1;
     }
 
     const int fd = _fh_to_int(f.get());
-    snprintf( f->name, sizeof(f->name), "%d(net-client:%s%d)", fd,
-              type != SOCK_STREAM ? "udp:" : "", port );
-    D( "host '%s' port %d type %s => fd %d", host.c_str(), port,
-       type != SOCK_STREAM ? "udp" : "tcp", fd );
+    snprintf(f->name, sizeof(f->name), "%d(net-client:%s%d)", fd, type != SOCK_STREAM ? "udp:" : "",
+             port);
+    D("host '%s' port %d type %s => fd %d", host.c_str(), port, type != SOCK_STREAM ? "udp" : "tcp",
+      fd);
     f.release();
     return fd;
 }
@@ -1180,10 +1186,7 @@ int adb_socketpair(int sv[2]) {
 
     accepted = adb_socket_accept(server, nullptr, nullptr);
     if (accepted < 0) {
-        const DWORD err = WSAGetLastError();
-        D("adb_socketpair: failed to accept: %s",
-          android::base::SystemErrorCodeToString(err).c_str());
-        _socket_set_errno(err);
+        D("adb_socketpair: failed to accept: %s", strerror(errno));
         goto fail;
     }
     adb_close(server);
