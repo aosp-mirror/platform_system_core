@@ -28,6 +28,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <memory>
 
 #include <log/log.h>
 #include <private/android_filesystem_config.h>
@@ -162,11 +163,11 @@ static int removeProcessGroup(uid_t uid, int pid)
 
 static void removeUidProcessGroups(const char *uid_path)
 {
-    DIR *uid = opendir(uid_path);
+    std::unique_ptr<DIR, decltype(&closedir)> uid(opendir(uid_path), closedir);
     if (uid != NULL) {
         struct dirent cur;
         struct dirent *dir;
-        while ((readdir_r(uid, &cur, &dir) == 0) && dir) {
+        while ((readdir_r(uid.get(), &cur, &dir) == 0) && dir) {
             char path[PROCESSGROUP_MAX_PATH_LEN];
 
             if (dir->d_type != DT_DIR) {
@@ -181,20 +182,19 @@ static void removeUidProcessGroups(const char *uid_path)
             SLOGV("removing %s\n", path);
             rmdir(path);
         }
-        closedir(uid);
     }
 }
 
 void removeAllProcessGroups()
 {
     SLOGV("removeAllProcessGroups()");
-    DIR *root = opendir(PROCESSGROUP_CGROUP_PATH);
+    std::unique_ptr<DIR, decltype(&closedir)> root(opendir(PROCESSGROUP_CGROUP_PATH), closedir);
     if (root == NULL) {
         SLOGE("failed to open %s: %s", PROCESSGROUP_CGROUP_PATH, strerror(errno));
     } else {
         struct dirent cur;
         struct dirent *dir;
-        while ((readdir_r(root, &cur, &dir) == 0) && dir) {
+        while ((readdir_r(root.get(), &cur, &dir) == 0) && dir) {
             char path[PROCESSGROUP_MAX_PATH_LEN];
 
             if (dir->d_type != DT_DIR) {
@@ -209,7 +209,6 @@ void removeAllProcessGroups()
             SLOGV("removing %s\n", path);
             rmdir(path);
         }
-        closedir(root);
     }
 }
 

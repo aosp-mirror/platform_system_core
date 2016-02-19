@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <memory>
 
 #include <gtest/gtest.h>
 #include <log/log.h>
@@ -734,8 +735,8 @@ TEST(logcat, logrotate_continue) {
         EXPECT_FALSE(system(command));
         return;
     }
-    DIR *dir;
-    EXPECT_TRUE(NULL != (dir = opendir(tmp_out_dir)));
+    std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(tmp_out_dir), closedir);
+    EXPECT_NE(nullptr, dir);
     if (!dir) {
         snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
         EXPECT_FALSE(system(command));
@@ -743,7 +744,7 @@ TEST(logcat, logrotate_continue) {
     }
     struct dirent *entry;
     unsigned count = 0;
-    while ((entry = readdir(dir))) {
+    while ((entry = readdir(dir.get()))) {
         if (strncmp(entry->d_name, log_filename, sizeof(log_filename) - 1)) {
             continue;
         }
@@ -766,7 +767,6 @@ TEST(logcat, logrotate_continue) {
         free(line);
         unlink(command);
     }
-    closedir(dir);
     if (count > 1) {
         char *brk = strpbrk(second_last_line, "\r\n");
         if (!brk) {

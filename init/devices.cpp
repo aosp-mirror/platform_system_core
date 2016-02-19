@@ -31,6 +31,8 @@
 #include <sys/un.h>
 #include <linux/netlink.h>
 
+#include <memory>
+
 #include <selinux/selinux.h>
 #include <selinux/label.h>
 #include <selinux/android.h>
@@ -957,10 +959,9 @@ static void do_coldboot(DIR *d)
 
 static void coldboot(const char *path)
 {
-    DIR *d = opendir(path);
+    std::unique_ptr<DIR, decltype(&closedir)> d(opendir(path), closedir);
     if(d) {
-        do_coldboot(d);
-        closedir(d);
+        do_coldboot(d.get());
     }
 }
 
