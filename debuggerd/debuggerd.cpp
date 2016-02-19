@@ -678,13 +678,6 @@ static int do_server() {
   // Ignore failed writes to closed sockets
   signal(SIGPIPE, SIG_IGN);
 
-  int logsocket = socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_DGRAM);
-  if (logsocket < 0) {
-    logsocket = -1;
-  } else {
-    fcntl(logsocket, F_SETFD, FD_CLOEXEC);
-  }
-
   struct sigaction act;
   act.sa_handler = SIG_DFL;
   sigemptyset(&act.sa_mask);
