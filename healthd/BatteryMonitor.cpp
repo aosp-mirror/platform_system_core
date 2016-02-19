@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <memory>
 
 #include <batteryservice/BatteryService.h>
 #include <cutils/klog.h>
@@ -456,13 +457,13 @@ void BatteryMonitor::init(struct healthd_config *hc) {
     char pval[PROPERTY_VALUE_MAX];
 
     mHealthdConfig = hc;
-    DIR* dir = opendir(POWER_SUPPLY_SYSFS_PATH);
+    std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(POWER_SUPPLY_SYSFS_PATH), closedir);
     if (dir == NULL) {
         KLOG_ERROR(LOG_TAG, "Could not open %s\n", POWER_SUPPLY_SYSFS_PATH);
     } else {
         struct dirent* entry;
 
-        while ((entry = readdir(dir))) {
+        while ((entry = readdir(dir.get()))) {
             const char* name = entry->d_name;
 
             if (!strcmp(name, ".") || !strcmp(name, ".."))
@@ -600,7 +601,6 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                 break;
             }
         }
-        closedir(dir);
     }
 
     // This indicates that there is no charger driver registered.

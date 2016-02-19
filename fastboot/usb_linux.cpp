@@ -145,7 +145,7 @@ static int filter_usb_device(char* sysfs_name,
     int in, out;
     unsigned i;
     unsigned e;
-    
+
     if (check(ptr, len, USB_DT_DEVICE, USB_DT_DEVICE_SIZE))
         return -1;
     dev = (struct usb_device_descriptor *)ptr;
@@ -333,15 +333,14 @@ static std::unique_ptr<usb_handle> find_usb_device(const char* base, ifc_match_f
     char desc[1024];
     int n, in, out, ifc;
 
-    DIR *busdir;
     struct dirent *de;
     int fd;
     int writable;
 
-    busdir = opendir(base);
+    std::unique_ptr<DIR, decltype(&closedir)> busdir(opendir(base), closedir);
     if (busdir == 0) return 0;
 
-    while ((de = readdir(busdir)) && (usb == nullptr)) {
+    while ((de = readdir(busdir.get())) && (usb == nullptr)) {
         if (badname(de->d_name)) continue;
 
         if (!convert_to_devfs_name(de->d_name, devname, sizeof(devname))) {
@@ -377,7 +376,6 @@ static std::unique_ptr<usb_handle> find_usb_device(const char* base, ifc_match_f
             }
         }
     }
-    closedir(busdir);
 
     return usb;
 }
