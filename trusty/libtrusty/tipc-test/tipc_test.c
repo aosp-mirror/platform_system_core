@@ -96,7 +96,7 @@ static void print_usage_and_exit(const char *prog, int code, bool verbose)
 {
 	fprintf (stderr, usage, prog);
 	if (verbose)
-		fprintf (stderr, usage_long);
+		fprintf (stderr, "%s", usage_long);
 	exit(code);
 }
 
