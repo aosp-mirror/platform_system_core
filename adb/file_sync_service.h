@@ -41,25 +41,25 @@ struct SyncRequest {
 
 union syncmsg {
     struct __attribute__((packed)) {
-        unsigned id;
-        unsigned mode;
-        unsigned size;
-        unsigned time;
+        uint32_t id;
+        uint32_t mode;
+        uint32_t size;
+        uint32_t time;
     } stat;
     struct __attribute__((packed)) {
-        unsigned id;
-        unsigned mode;
-        unsigned size;
-        unsigned time;
-        unsigned namelen;
+        uint32_t id;
+        uint32_t mode;
+        uint32_t size;
+        uint32_t time;
+        uint32_t namelen;
     } dent;
     struct __attribute__((packed)) {
-        unsigned id;
-        unsigned size;
+        uint32_t id;
+        uint32_t size;
     } data;
     struct __attribute__((packed)) {
-        unsigned id;
-        unsigned msglen;
+        uint32_t id;
+        uint32_t msglen;
     } status;
 };
 
