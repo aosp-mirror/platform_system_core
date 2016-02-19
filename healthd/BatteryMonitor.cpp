@@ -16,8 +16,8 @@
 
 #define LOG_TAG "healthd"
 
-#include "healthd.h"
-#include "BatteryMonitor.h"
+#include <healthd/healthd.h>
+#include <healthd/BatteryMonitor.h>
 
 #include <dirent.h>
 #include <errno.h>

@@ -17,8 +17,8 @@
 #define LOG_TAG "healthd"
 #define KLOG_LEVEL 6
 
-#include "healthd.h"
-#include "BatteryMonitor.h"
+#include <healthd/healthd.h>
+#include <healthd/BatteryMonitor.h>
 
 #include <errno.h>
 #include <libgen.h>
