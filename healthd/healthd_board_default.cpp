@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <healthd.h>
+#include <healthd/healthd.h>
 
 void healthd_board_init(struct healthd_config*)
 {

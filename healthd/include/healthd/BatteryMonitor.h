@@ -22,7 +22,7 @@
 #include <utils/String8.h>
 #include <utils/Vector.h>
 
-#include "healthd.h"
+#include <healthd/healthd.h>
 
 namespace android {
 
