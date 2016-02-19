@@ -26,6 +26,7 @@
 #include <sys/poll.h>
 #include <linux/input.h>
 #include <errno.h>
+#include <memory>
 #include <cutils/log.h>
 
 static struct pollfd* ufds;
@@ -143,22 +144,20 @@ static int read_notify(const char* dirname, int nfd) {
 static int scan_dir(const char* dirname) {
   char devname[PATH_MAX];
   char* filename;
-  DIR* dir;
   struct dirent* de;
-  dir = opendir(dirname);
+  std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(dirname), closedir);
   if (dir == NULL)
     return -1;
   strcpy(devname, dirname);
   filename = devname + strlen(devname);
   *filename++ = '/';
-  while ((de = readdir(dir))) {
+  while ((de = readdir(dir.get()))) {
     if ((de->d_name[0] == '.' && de->d_name[1] == '\0') ||
         (de->d_name[1] == '.' && de->d_name[2] == '\0'))
       continue;
     strcpy(filename, de->d_name);
     open_device(devname);
   }
-  closedir(dir);
   return 0;
 }
 
