@@ -49,6 +49,7 @@
 #include "remount_service.h"
 #include "services.h"
 #include "shell_service.h"
+#include "sysdeps.h"
 #include "transport.h"
 
 struct stinfo {
@@ -369,12 +370,21 @@ static void wait_for_state(int fd, void* data) {
         std::string error = "unknown error";
         const char* serial = sinfo->serial.length() ? sinfo->serial.c_str() : NULL;
         atransport* t = acquire_one_transport(sinfo->transport_type, serial, &is_ambiguous, &error);
-
         if (t != nullptr && t->connection_state == sinfo->state) {
             SendOkay(fd);
             break;
         } else if (!is_ambiguous) {
-            adb_sleep_ms(1000);
+            adb_pollfd pfd = {.fd = fd, .events = POLLIN };
+            int rc = adb_poll(&pfd, 1, 1000);
+            if (rc < 0) {
+                SendFail(fd, error);
+                break;
+            } else if (rc > 0 && (pfd.revents & POLLHUP) != 0) {
+                // The other end of the socket is closed, probably because the other side was
+                // terminated, bail out.
+                break;
+            }
+
             // Try again...
         } else {
             SendFail(fd, error);
