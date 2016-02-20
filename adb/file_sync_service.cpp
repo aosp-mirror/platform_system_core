@@ -183,8 +183,6 @@ static bool handle_send_file(int s, const char* path, uid_t uid,
     }
 
     while (true) {
-        unsigned int len;
-
         if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) goto fail;
 
         if (msg.data.id != ID_DATA) {
@@ -193,17 +191,17 @@ static bool handle_send_file(int s, const char* path, uid_t uid,
                 break;
             }
             SendSyncFail(s, "invalid data message");
-            goto fail;
+            goto abort;
         }
-        len = msg.data.size;
-        if (len > buffer.size()) { // TODO: resize buffer?
+
+        if (msg.data.size > buffer.size()) {  // TODO: resize buffer?
             SendSyncFail(s, "oversize data message");
-            goto fail;
+            goto abort;
         }
 
-        if (!ReadFdExactly(s, &buffer[0], len)) goto fail;
+        if (!ReadFdExactly(s, &buffer[0], msg.data.size)) goto abort;
 
-        if (!WriteFdExactly(fd, &buffer[0], len)) {
+        if (!WriteFdExactly(fd, &buffer[0], msg.data.size)) {
             SendSyncFailErrno(s, "write failed");
             goto fail;
         }
@@ -221,6 +219,35 @@ static bool handle_send_file(int s, const char* path, uid_t uid,
     return WriteFdExactly(s, &msg.status, sizeof(msg.status));
 
 fail:
+    // If there's a problem on the device, we'll send an ID_FAIL message and
+    // close the socket. Unfortunately the kernel will sometimes throw that
+    // data away if the other end keeps writing without reading (which is
+    // the case with old versions of adb). To maintain compatibility, keep
+    // reading and throwing away ID_DATA packets until the other side notices
+    // that we've reported an error.
+    while (true) {
+        if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) goto fail;
+
+        if (msg.data.id == ID_DONE) {
+            goto abort;
+        } else if (msg.data.id != ID_DATA) {
+            char id[5];
+            memcpy(id, &msg.data.id, sizeof(msg.data.id));
+            id[4] = '\0';
+            D("handle_send_fail received unexpected id '%s' during failure", id);
+            goto abort;
+        }
+
+        if (msg.data.size > buffer.size()) {
+            D("handle_send_fail received oversized packet of length '%u' during failure",
+              msg.data.size);
+            goto abort;
+        }
+
+        if (!ReadFdExactly(s, &buffer[0], msg.data.size)) goto abort;
+    }
+
+abort:
     if (fd >= 0) adb_close(fd);
     if (do_unlink) adb_unlink(path);
     return false;
@@ -402,18 +429,6 @@ static bool handle_sync_command(int fd, std::vector<char>& buffer) {
 
 void file_sync_service(int fd, void* cookie) {
     std::vector<char> buffer(SYNC_DATA_MAX);
-
-    // If there's a problem on the device, we'll send an ID_FAIL message and
-    // close the socket. Unfortunately the kernel will sometimes throw that
-    // data away if the other end keeps writing without reading (which is
-    // the normal case with our protocol --- they won't read until the end).
-    // So set SO_LINGER to give the client 20s to get around to reading our
-    // failure response. Without this, the other side's ability to report
-    // useful errors is reduced.
-    struct linger l;
-    l.l_onoff = 1;
-    l.l_linger = 20;
-    adb_setsockopt(fd, SOL_SOCKET, SO_LINGER, &l, sizeof(l));
 
     while (handle_sync_command(fd, buffer)) {
     }
