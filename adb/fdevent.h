@@ -76,9 +76,9 @@ void fdevent_set_timeout(fdevent *fde, int64_t  timeout_ms);
 */
 void fdevent_loop();
 
-// For debugging only.
+// The following functions are used only for tests.
+void fdevent_terminate_loop();
 size_t fdevent_installed_count();
-// For debugging only.
 void fdevent_reset();
 
 #endif
