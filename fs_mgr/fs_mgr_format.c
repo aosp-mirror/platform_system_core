@@ -52,7 +52,7 @@ static int format_ext4(char *fs_blkdev, char *fs_mnt_point)
     info.len = ((off64_t)nr_sec * 512);
 
     /* Use make_ext4fs_internal to avoid wiping an already-wiped partition. */
-    rc = make_ext4fs_internal(fd, NULL, NULL, fs_mnt_point, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL);
+    rc = make_ext4fs_internal(fd, NULL, NULL, fs_mnt_point, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, NULL, NULL);
     if (rc) {
         ERROR("make_ext4fs returned %d.\n", rc);
     }
