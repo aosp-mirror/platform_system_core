@@ -180,6 +180,14 @@ static __inline__ int adb_thread_setname(const std::string& name) {
     return 0;
 }
 
+static __inline__ adb_thread_t adb_thread_self() {
+    return GetCurrentThread();
+}
+
+static __inline__ bool adb_thread_equal(adb_thread_t lhs, adb_thread_t rhs) {
+    return GetThreadId(lhs) == GetThreadId(rhs);
+}
+
 static __inline__  unsigned long adb_thread_id()
 {
     return GetCurrentThreadId();
@@ -263,24 +271,6 @@ int unix_isatty(int fd);
 /* normally provided by <cutils/misc.h> */
 extern void*  load_file(const char*  pathname, unsigned*  psize);
 
-/* normally provided by "fdevent.h" */
-
-#define FDE_READ              0x0001
-#define FDE_WRITE             0x0002
-#define FDE_ERROR             0x0004
-#define FDE_DONT_CLOSE        0x0080
-
-typedef void (*fd_func)(int fd, unsigned events, void *userdata);
-
-fdevent *fdevent_create(int fd, fd_func func, void *arg);
-void     fdevent_destroy(fdevent *fde);
-void     fdevent_install(fdevent *fde, int fd, fd_func func, void *arg);
-void     fdevent_remove(fdevent *item);
-void     fdevent_set(fdevent *fde, unsigned events);
-void     fdevent_add(fdevent *fde, unsigned events);
-void     fdevent_del(fdevent *fde, unsigned events);
-void     fdevent_loop();
-
 static __inline__ void  adb_sleep_ms( int  mseconds )
 {
     Sleep( mseconds );
@@ -303,6 +293,14 @@ extern int  adb_setsockopt(int  fd, int  level, int  optname, const void*  optva
 #define  setsockopt  ___xxx_setsockopt
 
 extern int  adb_socketpair( int  sv[2] );
+
+struct adb_pollfd {
+    int fd;
+    short events;
+    short revents;
+};
+extern int adb_poll(adb_pollfd* fds, size_t nfds, int timeout);
+#define poll ___xxx_poll
 
 static __inline__ int adb_is_absolute_host_path(const char* path) {
     return isalpha(path[0]) && path[1] == ':' && path[2] == '\\';
@@ -456,14 +454,14 @@ size_t ParseCompleteUTF8(const char* first, const char* last, std::vector<char>*
 
 #else /* !_WIN32 a.k.a. Unix */
 
-#include "fdevent.h"
 #include <cutils/misc.h>
 #include <cutils/sockets.h>
 #include <cutils/threads.h>
-#include <signal.h>
-#include <sys/wait.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 
 #include <pthread.h>
 #include <unistd.h>
@@ -802,6 +800,13 @@ static __inline__ int  adb_socketpair( int  sv[2] )
 
 #undef   socketpair
 #define  socketpair   ___xxx_socketpair
+
+typedef struct pollfd adb_pollfd;
+static __inline__ int adb_poll(adb_pollfd* fds, size_t nfds, int timeout) {
+    return TEMP_FAILURE_RETRY(poll(fds, nfds, timeout));
+}
+
+#define poll ___xxx_poll
 
 static __inline__ void  adb_sleep_ms( int  mseconds )
 {
