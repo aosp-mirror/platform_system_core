@@ -122,12 +122,14 @@ class sysdeps_poll : public ::testing::Test {
 };
 
 TEST_F(sysdeps_poll, smoke) {
-    adb_pollfd pfd[2];
+    adb_pollfd pfd[2] = {};
     pfd[0].fd = fds[0];
     pfd[0].events = POLLRDNORM;
     pfd[1].fd = fds[1];
     pfd[1].events = POLLWRNORM;
 
+    pfd[0].revents = -1;
+    pfd[1].revents = -1;
     EXPECT_EQ(1, adb_poll(pfd, 2, 0));
     EXPECT_EQ(0, pfd[0].revents);
     EXPECT_EQ(POLLWRNORM, pfd[1].revents);
@@ -135,16 +137,18 @@ TEST_F(sysdeps_poll, smoke) {
     ASSERT_TRUE(WriteFdExactly(fds[1], "foo", 4));
 
     // Wait for the socketpair to be flushed.
+    pfd[0].revents = -1;
     EXPECT_EQ(1, adb_poll(pfd, 1, 100));
     EXPECT_EQ(POLLRDNORM, pfd[0].revents);
-
+    pfd[0].revents = -1;
+    pfd[1].revents = -1;
     EXPECT_EQ(2, adb_poll(pfd, 2, 0));
     EXPECT_EQ(POLLRDNORM, pfd[0].revents);
     EXPECT_EQ(POLLWRNORM, pfd[1].revents);
 }
 
 TEST_F(sysdeps_poll, timeout) {
-    adb_pollfd pfd;
+    adb_pollfd pfd = {};
     pfd.fd = fds[0];
     pfd.events = POLLRDNORM;
 
@@ -158,7 +162,7 @@ TEST_F(sysdeps_poll, timeout) {
 }
 
 TEST_F(sysdeps_poll, invalid_fd) {
-    adb_pollfd pfd[3];
+    adb_pollfd pfd[3] = {};
     pfd[0].fd = fds[0];
     pfd[0].events = POLLRDNORM;
     pfd[1].fd = INT_MAX;
@@ -179,7 +183,7 @@ TEST_F(sysdeps_poll, invalid_fd) {
 }
 
 TEST_F(sysdeps_poll, duplicate_fd) {
-    adb_pollfd pfd[2];
+    adb_pollfd pfd[2] = {};
     pfd[0].fd = fds[0];
     pfd[0].events = POLLRDNORM;
     pfd[1] = pfd[0];
@@ -196,7 +200,7 @@ TEST_F(sysdeps_poll, duplicate_fd) {
 }
 
 TEST_F(sysdeps_poll, disconnect) {
-    adb_pollfd pfd;
+    adb_pollfd pfd = {};
     pfd.fd = fds[0];
     pfd.events = POLLIN;
 
