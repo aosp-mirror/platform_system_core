@@ -18,15 +18,13 @@
 
 #include <gtest/gtest.h>
 
-#include <pthread.h>
-#include <signal.h>
-
 #include <limits>
 #include <queue>
 #include <string>
 #include <vector>
 
 #include "adb_io.h"
+#include "fdevent_test.h"
 
 class FdHandler {
   public:
@@ -48,7 +46,7 @@ class FdHandler {
         if (events & FDE_READ) {
             ASSERT_EQ(fd, handler->read_fd_);
             char c;
-            ASSERT_EQ(1, read(fd, &c, 1));
+            ASSERT_EQ(1, adb_read(fd, &c, 1));
             handler->queue_.push(c);
             fdevent_add(&handler->write_fde_, FDE_WRITE);
         }
@@ -57,7 +55,7 @@ class FdHandler {
             ASSERT_FALSE(handler->queue_.empty());
             char c = handler->queue_.front();
             handler->queue_.pop();
-            ASSERT_EQ(1, write(fd, &c, 1));
+            ASSERT_EQ(1, adb_write(fd, &c, 1));
             if (handler->queue_.empty()) {
               fdevent_del(&handler->write_fde_, FDE_WRITE);
             }
@@ -72,28 +70,18 @@ class FdHandler {
     std::queue<char> queue_;
 };
 
-static void signal_handler(int) {
-    pthread_exit(nullptr);
-}
-
-class FdeventTest : public ::testing::Test {
-  protected:
-    static void SetUpTestCase() {
-        ASSERT_NE(SIG_ERR, signal(SIGUSR1, signal_handler));
-        ASSERT_NE(SIG_ERR, signal(SIGPIPE, SIG_IGN));
-    }
-
-    virtual void SetUp() {
-        fdevent_reset();
-        ASSERT_EQ(0u, fdevent_installed_count());
-    }
-};
-
 struct ThreadArg {
     int first_read_fd;
     int last_write_fd;
     size_t middle_pipe_count;
 };
+
+TEST_F(FdeventTest, fdevent_terminate) {
+    adb_thread_t thread;
+    PrepareThread();
+    ASSERT_TRUE(adb_thread_create([](void*) { fdevent_loop(); }, nullptr, &thread));
+    TerminateThread(thread);
+}
 
 static void FdEventThreadFunc(ThreadArg* arg) {
     std::vector<int> read_fds;
@@ -102,7 +90,7 @@ static void FdEventThreadFunc(ThreadArg* arg) {
     read_fds.push_back(arg->first_read_fd);
     for (size_t i = 0; i < arg->middle_pipe_count; ++i) {
         int fds[2];
-        ASSERT_EQ(0, pipe(fds));
+        ASSERT_EQ(0, adb_socketpair(fds));
         read_fds.push_back(fds[0]);
         write_fds.push_back(fds[1]);
     }
@@ -122,9 +110,9 @@ TEST_F(FdeventTest, smoke) {
     const std::string MESSAGE = "fdevent_test";
     int fd_pair1[2];
     int fd_pair2[2];
-    ASSERT_EQ(0, pipe(fd_pair1));
-    ASSERT_EQ(0, pipe(fd_pair2));
-    pthread_t thread;
+    ASSERT_EQ(0, adb_socketpair(fd_pair1));
+    ASSERT_EQ(0, adb_socketpair(fd_pair2));
+    adb_thread_t thread;
     ThreadArg thread_arg;
     thread_arg.first_read_fd = fd_pair1[0];
     thread_arg.last_write_fd = fd_pair2[1];
@@ -132,9 +120,9 @@ TEST_F(FdeventTest, smoke) {
     int writer = fd_pair1[1];
     int reader = fd_pair2[0];
 
-    ASSERT_EQ(0, pthread_create(&thread, nullptr,
-                                reinterpret_cast<void* (*)(void*)>(FdEventThreadFunc),
-                                &thread_arg));
+    PrepareThread();
+    ASSERT_TRUE(adb_thread_create(reinterpret_cast<void (*)(void*)>(FdEventThreadFunc), &thread_arg,
+                                  &thread));
 
     for (size_t i = 0; i < MESSAGE_LOOP_COUNT; ++i) {
         std::string read_buffer = MESSAGE;
@@ -144,10 +132,9 @@ TEST_F(FdeventTest, smoke) {
         ASSERT_EQ(read_buffer, write_buffer);
     }
 
-    ASSERT_EQ(0, pthread_kill(thread, SIGUSR1));
-    ASSERT_EQ(0, pthread_join(thread, nullptr));
-    ASSERT_EQ(0, close(writer));
-    ASSERT_EQ(0, close(reader));
+    TerminateThread(thread);
+    ASSERT_EQ(0, adb_close(writer));
+    ASSERT_EQ(0, adb_close(reader));
 }
 
 struct InvalidFdArg {
@@ -161,7 +148,7 @@ static void InvalidFdEventCallback(int fd, unsigned events, void* userdata) {
     ASSERT_EQ(arg->expected_events, events);
     fdevent_remove(&arg->fde);
     if (++*(arg->happened_event_count) == 2) {
-        pthread_exit(nullptr);
+        fdevent_terminate_loop();
     }
 }
 
@@ -184,9 +171,7 @@ static void InvalidFdThreadFunc(void*) {
 }
 
 TEST_F(FdeventTest, invalid_fd) {
-    pthread_t thread;
-    ASSERT_EQ(0, pthread_create(&thread, nullptr,
-                                reinterpret_cast<void* (*)(void*)>(InvalidFdThreadFunc),
-                                nullptr));
-    ASSERT_EQ(0, pthread_join(thread, nullptr));
+    adb_thread_t thread;
+    ASSERT_TRUE(adb_thread_create(InvalidFdThreadFunc, nullptr, &thread));
+    ASSERT_TRUE(adb_thread_join(thread));
 }

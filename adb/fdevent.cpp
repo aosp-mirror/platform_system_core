@@ -21,12 +21,11 @@
 #include "fdevent.h"
 
 #include <fcntl.h>
-#include <poll.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ioctl.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <list>
 #include <unordered_map>
 #include <vector>
@@ -54,7 +53,7 @@ int SHELL_EXIT_NOTIFY_FD = -1;
 
 struct PollNode {
   fdevent* fde;
-  ::pollfd pollfd;
+  adb_pollfd pollfd;
 
   PollNode(fdevent* fde) : fde(fde) {
       memset(&pollfd, 0, sizeof(pollfd));
@@ -72,18 +71,19 @@ struct PollNode {
 // That's why we don't need a lock for fdevent.
 static auto& g_poll_node_map = *new std::unordered_map<int, PollNode>();
 static auto& g_pending_list = *new std::list<fdevent*>();
+static std::atomic<bool> terminate_loop(false);
 static bool main_thread_valid;
-static pthread_t main_thread;
+static unsigned long main_thread_id;
 
 static void check_main_thread() {
     if (main_thread_valid) {
-        CHECK_NE(0, pthread_equal(main_thread, pthread_self()));
+        CHECK_EQ(main_thread_id, adb_thread_id());
     }
 }
 
 static void set_main_thread() {
     main_thread_valid = true;
-    main_thread = pthread_self();
+    main_thread_id = adb_thread_id();
 }
 
 static std::string dump_fde(const fdevent* fde) {
@@ -217,7 +217,7 @@ void fdevent_del(fdevent* fde, unsigned events) {
     fdevent_set(fde, (fde->state & FDE_EVENTMASK) & ~events);
 }
 
-static std::string dump_pollfds(const std::vector<pollfd>& pollfds) {
+static std::string dump_pollfds(const std::vector<adb_pollfd>& pollfds) {
     std::string result;
     for (const auto& pollfd : pollfds) {
         std::string op;
@@ -233,13 +233,13 @@ static std::string dump_pollfds(const std::vector<pollfd>& pollfds) {
 }
 
 static void fdevent_process() {
-    std::vector<pollfd> pollfds;
+    std::vector<adb_pollfd> pollfds;
     for (const auto& pair : g_poll_node_map) {
         pollfds.push_back(pair.second.pollfd);
     }
     CHECK_GT(pollfds.size(), 0u);
     D("poll(), pollfds = %s", dump_pollfds(pollfds).c_str());
-    int ret = TEMP_FAILURE_RETRY(poll(&pollfds[0], pollfds.size(), -1));
+    int ret = adb_poll(&pollfds[0], pollfds.size(), -1);
     if (ret == -1) {
         PLOG(ERROR) << "poll(), ret = " << ret;
         return;
@@ -289,6 +289,9 @@ static void fdevent_call_fdfunc(fdevent* fde)
 }
 
 #if !ADB_HOST
+
+#include <sys/ioctl.h>
+
 static void fdevent_subproc_event_func(int fd, unsigned ev,
                                        void* /* userdata */)
 {
@@ -363,6 +366,10 @@ void fdevent_loop()
 #endif // !ADB_HOST
 
     while (true) {
+        if (terminate_loop) {
+            return;
+        }
+
         D("--- --- waiting for events");
 
         fdevent_process();
@@ -375,6 +382,10 @@ void fdevent_loop()
     }
 }
 
+void fdevent_terminate_loop() {
+    terminate_loop = true;
+}
+
 size_t fdevent_installed_count() {
     return g_poll_node_map.size();
 }
@@ -383,4 +394,5 @@ void fdevent_reset() {
     g_poll_node_map.clear();
     g_pending_list.clear();
     main_thread_valid = false;
+    terminate_loop = false;
 }
