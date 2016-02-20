@@ -112,8 +112,12 @@ class sysdeps_poll : public ::testing::Test {
     }
 
     void TearDown() override {
-        ASSERT_EQ(0, adb_close(fds[0]));
-        ASSERT_EQ(0, adb_close(fds[1]));
+        if (fds[0] >= 0) {
+            ASSERT_EQ(0, adb_close(fds[0]));
+        }
+        if (fds[1] >= 0) {
+            ASSERT_EQ(0, adb_close(fds[1]));
+        }
     }
 };
 
@@ -189,4 +193,21 @@ TEST_F(sysdeps_poll, duplicate_fd) {
     EXPECT_EQ(2, adb_poll(pfd, 2, 100));
     EXPECT_EQ(POLLRDNORM, pfd[0].revents);
     EXPECT_EQ(POLLRDNORM, pfd[1].revents);
+}
+
+TEST_F(sysdeps_poll, disconnect) {
+    adb_pollfd pfd;
+    pfd.fd = fds[0];
+    pfd.events = POLLIN;
+
+    EXPECT_EQ(0, adb_poll(&pfd, 1, 0));
+    EXPECT_EQ(0, pfd.revents);
+
+    EXPECT_EQ(0, adb_close(fds[1]));
+    fds[1] = -1;
+
+    EXPECT_EQ(1, adb_poll(&pfd, 1, 100));
+
+    // Linux returns POLLIN | POLLHUP, Windows returns just POLLHUP.
+    EXPECT_EQ(POLLHUP, pfd.revents & POLLHUP);
 }
