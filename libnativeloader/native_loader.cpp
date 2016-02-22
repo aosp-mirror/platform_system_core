@@ -103,6 +103,14 @@ class LibraryNamespaces {
     return ns;
   }
 
+  android_namespace_t* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
+    auto it = std::find_if(namespaces_.begin(), namespaces_.end(),
+                [&](const std::pair<jweak, android_namespace_t*>& value) {
+                  return env->IsSameObject(value.first, class_loader);
+                });
+    return it != namespaces_.end() ? it->second : nullptr;
+  }
+
  private:
   void PreloadPublicLibraries() {
     // android_init_namespaces() expects all the public libraries
@@ -119,14 +127,6 @@ class LibraryNamespaces {
     initialized_ = android_init_namespaces(kPublicNativeLibraries, library_path);
 
     return initialized_;
-  }
-
-  android_namespace_t* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
-    auto it = std::find_if(namespaces_.begin(), namespaces_.end(),
-                [&](const std::pair<jweak, android_namespace_t*>& value) {
-                  return env->IsSameObject(value.first, class_loader);
-                });
-    return it != namespaces_.end() ? it->second : nullptr;
   }
 
   bool initialized_;
@@ -167,5 +167,11 @@ void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* pat
   return dlopen(path, RTLD_NOW);
 #endif
 }
+
+#if defined(__ANDROID__)
+android_namespace_t* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
+  return g_namespaces->FindNamespaceByClassLoader(env, class_loader);
+}
+#endif
 
 }; //  android namespace
