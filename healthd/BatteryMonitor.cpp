@@ -341,6 +341,17 @@ bool BatteryMonitor::update(void) {
             props.chargerWirelessOnline;
 }
 
+int BatteryMonitor::getChargeStatus() {
+    int result = BATTERY_STATUS_UNKNOWN;
+    if (!mHealthdConfig->batteryStatusPath.isEmpty()) {
+        char buf[128];
+        if (readFromFile(mHealthdConfig->batteryStatusPath, buf, sizeof(buf)) > 0) {
+            result = getBatteryStatus(buf);
+        }
+    }
+    return result;
+}
+
 status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
     status_t ret = BAD_VALUE;
 
