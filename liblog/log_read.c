@@ -503,10 +503,7 @@ ssize_t android_logger_get_statistics(struct logger_list *logger_list,
     }
 
     if (logger_list->pid) {
-        n = snprintf(cp, remaining, " pid=%u", logger_list->pid);
-        n = min(n, remaining);
-        remaining -= n;
-        cp += n;
+        snprintf(cp, remaining, " pid=%u", logger_list->pid);
     }
 
     return send_log_msg(NULL, NULL, buf, len);
@@ -657,7 +654,6 @@ static int android_logger_list_read_pstore(struct logger_list *logger_list,
         preread_count = 0;
     }
 
-    ret = 0;
     while(1) {
         if (preread_count < sizeof(buf)) {
             ret = TEMP_FAILURE_RETRY(read(logger_list->sock,
@@ -834,7 +830,6 @@ int android_logger_list_read(struct logger_list *logger_list,
         if (logger_list->pid) {
             ret = snprintf(cp, remaining, " pid=%u", logger_list->pid);
             ret = min(ret, remaining);
-            remaining -= ret;
             cp += ret;
         }
 
@@ -867,7 +862,6 @@ int android_logger_list_read(struct logger_list *logger_list,
         logger_list->sock = sock;
     }
 
-    ret = 0;
     while(1) {
         memset(log_msg, 0, sizeof(*log_msg));
 
