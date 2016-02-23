@@ -6,6 +6,16 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := healthd_board_default.cpp
 LOCAL_MODULE := libhealthd.default
 LOCAL_CFLAGS := -Werror
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES := BatteryMonitor.cpp
+LOCAL_MODULE := libbatterymonitor
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
+LOCAL_STATIC_LIBRARIES := libutils
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -14,7 +24,6 @@ LOCAL_SRC_FILES := \
 	healthd.cpp \
 	healthd_mode_android.cpp \
 	healthd_mode_charger.cpp \
-	BatteryMonitor.cpp \
 	BatteryPropertiesRegistrar.cpp
 
 LOCAL_MODULE := healthd
@@ -35,7 +44,7 @@ endif
 
 LOCAL_C_INCLUDES := bootable/recovery
 
-LOCAL_STATIC_LIBRARIES := libbatteryservice libbinder libminui libpng libz libutils libcutils liblog libm libc
+LOCAL_STATIC_LIBRARIES := libbatterymonitor libbatteryservice libbinder libminui libpng libz libutils libcutils liblog libm libc
 
 ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
 LOCAL_STATIC_LIBRARIES += libsuspend
