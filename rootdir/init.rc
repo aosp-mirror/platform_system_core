@@ -44,15 +44,15 @@ on init
     mkdir /acct/uid
 
     # Create energy-aware scheduler tuning nodes
-    mkdir /sys/fs/cgroup/stune
-    mount cgroup none /sys/fs/cgroup/stune schedtune
-    mkdir /sys/fs/cgroup/stune/foreground
-    chown system system /sys/fs/cgroup/stune
-    chown system system /sys/fs/cgroup/stune/foreground
-    chown system system /sys/fs/cgroup/stune/tasks
-    chown system system /sys/fs/cgroup/stune/foreground/tasks
-    chmod 0664 /sys/fs/cgroup/stune/tasks
-    chmod 0664 /sys/fs/cgroup/stune/foreground/tasks
+    mkdir /dev/stune
+    mount cgroup none /dev/stune schedtune
+    mkdir /dev/stune/foreground
+    chown system system /dev/stune
+    chown system system /dev/stune/foreground
+    chown system system /dev/stune/tasks
+    chown system system /dev/stune/foreground/tasks
+    chmod 0664 /dev/stune/tasks
+    chmod 0664 /dev/stune/foreground/tasks
 
     # Mount staging areas for devices managed by vold
     # See storage config details at http://source.android.com/tech/storage/
