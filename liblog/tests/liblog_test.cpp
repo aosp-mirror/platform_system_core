@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2014 The Android Open Source Project
+ * Copyright (C) 2013-2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1740,4 +1740,530 @@ TEST(liblog, android_errorWriteLog__android_logger_list_read__null_subtag) {
     EXPECT_EQ(0, count);
 
     android_logger_list_close(logger_list);
+}
+
+static int is_real_element(int type) {
+    return ((type == EVENT_TYPE_INT) ||
+            (type == EVENT_TYPE_LONG) ||
+            (type == EVENT_TYPE_STRING) ||
+            (type == EVENT_TYPE_FLOAT));
+}
+
+int android_log_buffer_to_string(const char *msg, size_t len,
+                                 char *strOut, size_t strOutLen) {
+    android_log_context context = create_android_log_parser(msg, len);
+    android_log_list_element elem;
+    bool overflow = false;
+    /* Reserve 1 byte for null terminator. */
+    size_t origStrOutLen = strOutLen--;
+
+    if (!context) {
+        return -EBADF;
+    }
+
+    memset(&elem, 0, sizeof(elem));
+
+    size_t outCount;
+
+    do {
+        elem = android_log_read_next(context);
+        switch ((int)elem.type) {
+        case EVENT_TYPE_LIST:
+            if (strOutLen == 0) {
+                overflow = true;
+            } else {
+                *strOut++ = '[';
+                strOutLen--;
+            }
+            break;
+
+        case EVENT_TYPE_LIST_STOP:
+            if (strOutLen == 0) {
+                overflow = true;
+            } else {
+                *strOut++ = ']';
+                strOutLen--;
+            }
+            break;
+
+        case EVENT_TYPE_INT:
+            /*
+             * snprintf also requires room for the null terminator, which
+             * we don't care about  but we have allocated enough room for
+             * that
+             */
+            outCount = snprintf(strOut, strOutLen + 1,
+                                "%" PRId32, elem.data.int32);
+            if (outCount <= strOutLen) {
+                strOut += outCount;
+                strOutLen -= outCount;
+            } else {
+                overflow = true;
+            }
+            break;
+
+        case EVENT_TYPE_LONG:
+            /*
+             * snprintf also requires room for the null terminator, which
+             * we don't care about but we have allocated enough room for
+             * that
+             */
+            outCount = snprintf(strOut, strOutLen + 1,
+                                "%" PRId64, elem.data.int64);
+            if (outCount <= strOutLen) {
+                strOut += outCount;
+                strOutLen -= outCount;
+            } else {
+                overflow = true;
+            }
+            break;
+
+        case EVENT_TYPE_FLOAT:
+            /*
+             * snprintf also requires room for the null terminator, which
+             * we don't care about but we have allocated enough room for
+             * that
+             */
+            outCount = snprintf(strOut, strOutLen + 1, "%f", elem.data.float32);
+            if (outCount <= strOutLen) {
+                strOut += outCount;
+                strOutLen -= outCount;
+            } else {
+                overflow = true;
+            }
+            break;
+
+        default:
+            elem.complete = true;
+            break;
+
+        case EVENT_TYPE_UNKNOWN:
+#if 0 // Ideal purity in the test, we want to complain about UNKNOWN showing up
+            if (elem.complete) {
+                break;
+            }
+#endif
+            elem.data.string = const_cast<char *>("<unknown>");
+            elem.len = strlen(elem.data.string);
+            /* FALLTHRU */
+        case EVENT_TYPE_STRING:
+            if (elem.len <= strOutLen) {
+                memcpy(strOut, elem.data.string, elem.len);
+                strOut += elem.len;
+                strOutLen -= elem.len;
+            } else if (strOutLen > 0) {
+                /* copy what we can */
+                memcpy(strOut, elem.data.string, strOutLen);
+                strOut += strOutLen;
+                strOutLen = 0;
+                overflow = true;
+            }
+            break;
+        }
+
+        if (elem.complete) {
+            break;
+        }
+        /* Determine whether to put a comma or not. */
+        if (!overflow && (is_real_element(elem.type) ||
+                (elem.type == EVENT_TYPE_LIST_STOP))) {
+            android_log_list_element next = android_log_peek_next(context);
+            if (!next.complete && (is_real_element(next.type) ||
+                    (next.type == EVENT_TYPE_LIST))) {
+                if (strOutLen == 0) {
+                    overflow = true;
+                } else {
+                    *strOut++ = ',';
+                    strOutLen--;
+                }
+            }
+        }
+    } while ((elem.type != EVENT_TYPE_UNKNOWN) && !overflow && !elem.complete);
+
+    android_log_destroy(&context);
+
+    if (overflow) {
+        if (strOutLen < origStrOutLen) {
+            /* leave an indicator */
+            *(strOut-1) = '!';
+        } else {
+            /* nothing was written at all */
+            *strOut++ = '!';
+        }
+    }
+    *strOut++ = '\0';
+
+    if ((elem.type == EVENT_TYPE_UNKNOWN) && !elem.complete) {
+        fprintf(stderr, "Binary log entry conversion failed\n");
+        return -EINVAL;
+    }
+
+    return 0;
+}
+
+static const char *event_test_int32(uint32_t tag, size_t &expected_len) {
+    android_log_context ctx;
+
+    EXPECT_TRUE(NULL != (ctx = create_android_logger(tag)));
+    if (!ctx) {
+        return NULL;
+    }
+    EXPECT_LE(0, android_log_write_int32(ctx, 0x40302010));
+    EXPECT_LE(0, android_log_write_list(ctx, LOG_ID_EVENTS));
+    EXPECT_LE(0, android_log_destroy(&ctx));
+    EXPECT_TRUE(NULL == ctx);
+
+    expected_len = sizeof(uint32_t) +
+                   sizeof(uint8_t) + sizeof(uint32_t);
+
+    return "1076895760";
+}
+
+static const char *event_test_int64(uint32_t tag, size_t &expected_len) {
+    android_log_context ctx;
+
+    EXPECT_TRUE(NULL != (ctx = create_android_logger(tag)));
+    if (!ctx) {
+        return NULL;
+    }
+    EXPECT_LE(0, android_log_write_int64(ctx, 0x8070605040302010));
+    EXPECT_LE(0, android_log_write_list(ctx, LOG_ID_EVENTS));
+    EXPECT_LE(0, android_log_destroy(&ctx));
+    EXPECT_TRUE(NULL == ctx);
+
+    expected_len = sizeof(uint32_t) +
+                   sizeof(uint8_t) + sizeof(uint64_t);
+
+    return "-9191740941672636400";
+}
+
+static const char *event_test_list_int64(uint32_t tag, size_t &expected_len) {
+    android_log_context ctx;
+
+    EXPECT_TRUE(NULL != (ctx = create_android_logger(tag)));
+    if (!ctx) {
+        return NULL;
+    }
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_int64(ctx, 0x8070605040302010));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_list(ctx, LOG_ID_EVENTS));
+    EXPECT_LE(0, android_log_destroy(&ctx));
+    EXPECT_TRUE(NULL == ctx);
+
+    expected_len = sizeof(uint32_t) +
+                   sizeof(uint8_t) + sizeof(uint8_t) +
+                       sizeof(uint8_t) + sizeof(uint64_t);
+
+    return "[-9191740941672636400]";
+}
+
+static const char *event_test_simple_automagic_list(uint32_t tag, size_t &expected_len) {
+    android_log_context ctx;
+
+    EXPECT_TRUE(NULL != (ctx = create_android_logger(tag)));
+    if (!ctx) {
+        return NULL;
+    }
+    // The convenience API where we allow a simple list to be
+    // created without explicit begin or end calls.
+    EXPECT_LE(0, android_log_write_int32(ctx, 0x40302010));
+    EXPECT_LE(0, android_log_write_int64(ctx, 0x8070605040302010));
+    EXPECT_LE(0, android_log_write_list(ctx, LOG_ID_EVENTS));
+    EXPECT_LE(0, android_log_destroy(&ctx));
+    EXPECT_TRUE(NULL == ctx);
+
+    expected_len = sizeof(uint32_t) +
+                   sizeof(uint8_t) + sizeof(uint8_t) +
+                       sizeof(uint8_t) + sizeof(uint32_t) +
+                       sizeof(uint8_t) + sizeof(uint64_t);
+
+    return "[1076895760,-9191740941672636400]";
+}
+
+static const char *event_test_list_empty(uint32_t tag, size_t &expected_len) {
+    android_log_context ctx;
+
+    EXPECT_TRUE(NULL != (ctx = create_android_logger(tag)));
+    if (!ctx) {
+        return NULL;
+    }
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_list(ctx, LOG_ID_EVENTS));
+    EXPECT_LE(0, android_log_destroy(&ctx));
+    EXPECT_TRUE(NULL == ctx);
+
+    expected_len = sizeof(uint32_t) +
+                   sizeof(uint8_t) + sizeof(uint8_t);
+
+    return "[]";
+}
+
+static const char *event_test_complex_nested_list(uint32_t tag, size_t &expected_len) {
+    android_log_context ctx;
+
+    EXPECT_TRUE(NULL != (ctx = create_android_logger(tag)));
+    if (!ctx) {
+        return NULL;
+    }
+
+    EXPECT_LE(0, android_log_write_list_begin(ctx)); // [
+    EXPECT_LE(0, android_log_write_int32(ctx, 0x01020304));
+    EXPECT_LE(0, android_log_write_int64(ctx, 0x0102030405060708));
+    EXPECT_LE(0, android_log_write_string8(ctx, "Hello World"));
+    EXPECT_LE(0, android_log_write_list_begin(ctx)); // [
+    EXPECT_LE(0, android_log_write_int32(ctx, 1));
+    EXPECT_LE(0, android_log_write_int32(ctx, 2));
+    EXPECT_LE(0, android_log_write_int32(ctx, 3));
+    EXPECT_LE(0, android_log_write_int32(ctx, 4));
+    EXPECT_LE(0, android_log_write_list_end(ctx));   // ]
+    EXPECT_LE(0, android_log_write_float32(ctx, 1.0102030405060708));
+    EXPECT_LE(0, android_log_write_list_end(ctx));   // ]
+
+    //
+    // This one checks for the automagic list creation because a list
+    // begin and end was missing for it! This is actually an <oops> corner
+    // case, and not the behavior we morally support. The automagic API is to
+    // allow for a simple case of a series of objects in a single list. e.g.
+    //   int32,int32,int32,string -> [int32,int32,int32,string]
+    //
+    EXPECT_LE(0, android_log_write_string8(ctx, "dlroW olleH"));
+
+    EXPECT_LE(0, android_log_write_list(ctx, LOG_ID_EVENTS));
+    EXPECT_LE(0, android_log_destroy(&ctx));
+    EXPECT_TRUE(NULL == ctx);
+
+    expected_len = sizeof(uint32_t) +
+                   sizeof(uint8_t) + sizeof(uint8_t) +
+                       sizeof(uint8_t) + sizeof(uint8_t) +
+                           sizeof(uint8_t) + sizeof(uint32_t) +
+                           sizeof(uint8_t) + sizeof(uint64_t) +
+                           sizeof(uint8_t) + sizeof(uint32_t) +
+                                             sizeof("Hello World") - 1 +
+                           sizeof(uint8_t) + sizeof(uint8_t) +
+                               4 * (sizeof(uint8_t) + sizeof(uint32_t)) +
+                           sizeof(uint8_t) + sizeof(uint32_t) +
+                       sizeof(uint8_t) + sizeof(uint32_t) +
+                                         sizeof("dlroW olleH") - 1;
+
+    return "[[16909060,72623859790382856,Hello World,[1,2,3,4],1.010203],dlroW olleH]";
+}
+
+static const char *event_test_7_level_prefix(uint32_t tag, size_t &expected_len) {
+    android_log_context ctx;
+
+    EXPECT_TRUE(NULL != (ctx = create_android_logger(tag)));
+    if (!ctx) {
+        return NULL;
+    }
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_int32(ctx, 1));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_int32(ctx, 2));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_int32(ctx, 3));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_int32(ctx, 4));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_int32(ctx, 5));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_int32(ctx, 6));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_int32(ctx, 7));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_list(ctx, LOG_ID_EVENTS));
+    EXPECT_LE(0, android_log_destroy(&ctx));
+    EXPECT_TRUE(NULL == ctx);
+
+    expected_len = sizeof(uint32_t) + 7 *
+      (sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t));
+
+    return "[[[[[[[1],2],3],4],5],6],7]";
+}
+
+static const char *event_test_7_level_suffix(uint32_t tag, size_t &expected_len) {
+    android_log_context ctx;
+
+    EXPECT_TRUE(NULL != (ctx = create_android_logger(tag)));
+    if (!ctx) {
+        return NULL;
+    }
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_int32(ctx, 1));
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_int32(ctx, 2));
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_int32(ctx, 3));
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_int32(ctx, 4));
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_int32(ctx, 5));
+    EXPECT_LE(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_write_int32(ctx, 6));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_list_end(ctx));
+    EXPECT_LE(0, android_log_write_list(ctx, LOG_ID_EVENTS));
+    EXPECT_LE(0, android_log_destroy(&ctx));
+    EXPECT_TRUE(NULL == ctx);
+
+    expected_len = sizeof(uint32_t) + 6 *
+      (sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t));
+
+    return "[1,[2,[3,[4,[5,[6]]]]]]";
+}
+
+// make sure all user buffers are flushed
+static void print_barrier() {
+    std::cout.flush();
+    fflush(stdout);
+    std::cerr.flush();
+    fflush(stderr); // everything else is paranoia ...
+}
+
+static void create_android_logger(const char *(*fn)(uint32_t tag, size_t &expected_len)) {
+    struct logger_list *logger_list;
+
+    pid_t pid = getpid();
+
+    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
+        LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
+
+    log_time ts(android_log_clockid());
+
+    size_t expected_len;
+    const char *expected_string = (*fn)(1005, expected_len);
+
+    if (!expected_string) {
+        android_logger_list_close(logger_list);
+        return;
+    }
+
+    usleep(1000000);
+
+    int count = 0;
+
+    for (;;) {
+        log_msg log_msg;
+        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
+            break;
+        }
+
+        ASSERT_EQ(log_msg.entry.pid, pid);
+
+        if ((log_msg.entry.sec < (ts.tv_sec - 1))
+         || ((ts.tv_sec + 1) < log_msg.entry.sec)
+         || ((size_t)log_msg.entry.len != expected_len)
+         || (log_msg.id() != LOG_ID_EVENTS)) {
+            continue;
+        }
+
+        char *eventData = log_msg.msg();
+
+        ++count;
+
+        AndroidLogFormat *logformat = android_log_format_new();
+        EXPECT_TRUE(NULL != logformat);
+        AndroidLogEntry entry;
+        char msgBuf[1024];
+        int processBinaryLogBuffer = android_log_processBinaryLogBuffer(
+            &log_msg.entry_v1, &entry, NULL, msgBuf, sizeof(msgBuf));
+        EXPECT_EQ(0, processBinaryLogBuffer);
+        if (processBinaryLogBuffer == 0) {
+            print_barrier();
+            int printLogLine = android_log_printLogLine(
+                logformat, fileno(stderr), &entry);
+            print_barrier();
+            EXPECT_EQ(20 + (int)strlen(expected_string), printLogLine);
+        }
+        android_log_format_free(logformat);
+
+        // test buffer reading API
+        snprintf(msgBuf, sizeof(msgBuf), "I/[%d]", get4LE(eventData));
+        print_barrier();
+        fprintf(stderr, "%-10s(%5u): ", msgBuf, pid);
+        memset(msgBuf, 0, sizeof(msgBuf));
+        int buffer_to_string = android_log_buffer_to_string(
+            eventData + sizeof(uint32_t),
+            log_msg.entry.len - sizeof(uint32_t),
+            msgBuf, sizeof(msgBuf));
+        fprintf(stderr, "%s\n", msgBuf);
+        print_barrier();
+        EXPECT_EQ(0, buffer_to_string);
+        EXPECT_EQ(strlen(expected_string), strlen(msgBuf));
+        EXPECT_EQ(0, strcmp(expected_string, msgBuf));
+    }
+
+    EXPECT_EQ(1, count);
+
+    android_logger_list_close(logger_list);
+}
+
+TEST(liblog, create_android_logger_int32) {
+    create_android_logger(event_test_int32);
+}
+
+TEST(liblog, create_android_logger_int64) {
+    create_android_logger(event_test_int64);
+}
+
+TEST(liblog, create_android_logger_list_int64) {
+    create_android_logger(event_test_list_int64);
+}
+
+TEST(liblog, create_android_logger_simple_automagic_list) {
+    create_android_logger(event_test_simple_automagic_list);
+}
+
+TEST(liblog, create_android_logger_list_empty) {
+    create_android_logger(event_test_list_empty);
+}
+
+TEST(liblog, create_android_logger_complex_nested_list) {
+    create_android_logger(event_test_complex_nested_list);
+}
+
+TEST(liblog, create_android_logger_7_level_prefix) {
+    create_android_logger(event_test_7_level_prefix);
+}
+
+TEST(liblog, create_android_logger_7_level_suffix) {
+    create_android_logger(event_test_7_level_suffix);
+}
+
+TEST(liblog, create_android_logger_overflow) {
+    android_log_context ctx;
+
+    EXPECT_TRUE(NULL != (ctx = create_android_logger(1005)));
+    if (ctx) {
+        for (size_t i = 0; i < ANDROID_MAX_LIST_NEST_DEPTH; ++i) {
+            EXPECT_LE(0, android_log_write_list_begin(ctx));
+        }
+        EXPECT_GT(0, android_log_write_list_begin(ctx));
+        /* One more for good measure, must be permanently unhappy */
+        EXPECT_GT(0, android_log_write_list_begin(ctx));
+        EXPECT_LE(0, android_log_destroy(&ctx));
+        EXPECT_TRUE(NULL == ctx);
+    }
+
+    ASSERT_TRUE(NULL != (ctx = create_android_logger(1005)));
+    for (size_t i = 0; i < ANDROID_MAX_LIST_NEST_DEPTH; ++i) {
+        EXPECT_LE(0, android_log_write_list_begin(ctx));
+        EXPECT_LE(0, android_log_write_int32(ctx, i));
+    }
+    EXPECT_GT(0, android_log_write_list_begin(ctx));
+    /* One more for good measure, must be permanently unhappy */
+    EXPECT_GT(0, android_log_write_list_begin(ctx));
+    EXPECT_LE(0, android_log_destroy(&ctx));
+    ASSERT_TRUE(NULL == ctx);
 }
