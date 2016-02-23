@@ -21,8 +21,11 @@
 
 #include <cutils/sockets.h>
 
-#include "LogReader.h"
 #include "FlushCommand.h"
+#include "LogBuffer.h"
+#include "LogBufferElement.h"
+#include "LogReader.h"
+#include "LogUtils.h"
 
 LogReader::LogReader(LogBuffer *logbuf) :
         SocketListener(getLogSocket(), true),

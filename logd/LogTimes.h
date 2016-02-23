@@ -27,6 +27,7 @@
 #include <log/log.h>
 
 class LogReader;
+class LogBufferElement;
 
 class LogTimeEntry {
     static pthread_mutex_t timesLock;

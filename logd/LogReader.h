@@ -18,8 +18,8 @@
 #define _LOGD_LOG_WRITER_H__
 
 #include <sysutils/SocketListener.h>
-#include "LogBuffer.h"
-#include "LogTimes.h"
+
+class LogBuffer;
 
 class LogReader : public SocketListener {
     LogBuffer &mLogbuf;
