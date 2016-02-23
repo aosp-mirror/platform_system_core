@@ -19,6 +19,9 @@
 
 #include "jni.h"
 #include <stdint.h>
+#if defined(__ANDROID__)
+#include <android/dlext.h>
+#endif
 
 namespace android {
 
@@ -26,6 +29,13 @@ __attribute__((visibility("default")))
 void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* path,
                         jobject class_loader, bool is_shared, jstring library_path,
                         jstring permitted_path);
+
+#if defined(__ANDROID__)
+// Look up linker namespace by class_loader. Returns nullptr if
+// there is no namespace associated with the class_loader.
+__attribute__((visibility("default")))
+android_namespace_t* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader);
+#endif
 
 };  // namespace android
 
