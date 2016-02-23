@@ -323,11 +323,10 @@ bool BatteryMonitor::update(void) {
                                 " cc=%d", props.batteryCycleCount);
             }
         } else {
-            snprintf(dmesgline, sizeof(dmesgline),
+            len = snprintf(dmesgline, sizeof(dmesgline),
                  "battery none");
         }
 
-        len = strlen(dmesgline);
         snprintf(dmesgline + len, sizeof(dmesgline) - len, " chg=%s%s%s",
                  props.chargerAcOnline ? "a" : "",
                  props.chargerUsbOnline ? "u" : "",
