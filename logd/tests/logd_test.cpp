@@ -30,6 +30,8 @@
 #include <log/log.h>
 #include <log/logger.h>
 
+#include "../LogReader.h" // pickup LOGD_SNDTIMEO
+
 /*
  * returns statistics
  */
@@ -253,6 +255,9 @@ static void dump_log_msg(const char *prefix,
         fprintf(stderr, "lid=crash ");
         break;
     case 5:
+        fprintf(stderr, "lid=security ");
+        break;
+    case 6:
         fprintf(stderr, "lid=kernel ");
         break;
     default:
@@ -709,4 +714,57 @@ TEST(logd, timeout) {
     EXPECT_EQ(0U, alarm_wrap);
     EXPECT_TRUE(content_timeout);
     EXPECT_NE(0U, alarm_timeout);
+}
+
+// b/27242723 confirmed fixed
+TEST(logd, SNDTIMEO) {
+    static const unsigned sndtimeo = LOGD_SNDTIMEO; // <sigh> it has to be done!
+    static const unsigned sleep_time = sndtimeo + 3;
+    static const unsigned alarm_time = sleep_time + 5;
+
+    int fd;
+
+    ASSERT_TRUE((fd = socket_local_client("logdr",
+                                 ANDROID_SOCKET_NAMESPACE_RESERVED,
+                                 SOCK_SEQPACKET)) > 0);
+
+    struct sigaction ignore, old_sigaction;
+    memset(&ignore, 0, sizeof(ignore));
+    ignore.sa_handler = caught_signal;
+    sigemptyset(&ignore.sa_mask);
+    sigaction(SIGALRM, &ignore, &old_sigaction);
+    unsigned int old_alarm = alarm(alarm_time);
+
+    static const char ask[] = "stream lids=0,1,2,3,4,5,6"; // all sources
+    bool reader_requested = write(fd, ask, sizeof(ask)) == sizeof(ask);
+    EXPECT_TRUE(reader_requested);
+
+    log_msg msg;
+    bool read_one = recv(fd, msg.buf, sizeof(msg), 0) > 0;
+
+    EXPECT_TRUE(read_one);
+    if (read_one) {
+        dump_log_msg("user", &msg, 3, -1);
+    }
+
+    fprintf (stderr, "Sleep for >%d seconds logd SO_SNDTIMEO ...\n", sndtimeo);
+    sleep(sleep_time);
+
+    // flush will block if we did not trigger. if it did, last entry returns 0
+    int recv_ret;
+    do {
+        recv_ret = recv(fd, msg.buf, sizeof(msg), 0);
+    } while (recv_ret > 0);
+    int save_errno = (recv_ret < 0) ? errno : 0;
+
+    EXPECT_NE(0U, alarm(old_alarm));
+    sigaction(SIGALRM, &old_sigaction, NULL);
+
+    EXPECT_EQ(0, recv_ret);
+    if (recv_ret > 0) {
+        dump_log_msg("user", &msg, 3, -1);
+    }
+    EXPECT_EQ(0, save_errno);
+
+    close(fd);
 }

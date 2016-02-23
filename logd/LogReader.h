@@ -19,6 +19,8 @@
 
 #include <sysutils/SocketListener.h>
 
+#define LOGD_SNDTIMEO 32
+
 class LogBuffer;
 
 class LogReader : public SocketListener {
