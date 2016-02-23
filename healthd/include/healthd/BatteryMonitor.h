@@ -40,6 +40,7 @@ class BatteryMonitor {
     BatteryMonitor();
     void init(struct healthd_config *hc);
     bool update(void);
+    int getChargeStatus();
     status_t getProperty(int id, struct BatteryProperty *val);
     void dumpState(int fd);
 
