@@ -81,10 +81,10 @@ class LibraryNamespaces {
 
     std::lock_guard<std::mutex> guard(mutex_);
 
-    auto it = FindNamespaceByClassLoader(env, class_loader);
+    android_namespace_t* ns = FindNamespaceByClassLoader(env, class_loader);
 
-    if (it != namespaces_.end()) {
-      return it->second;
+    if (ns != nullptr) {
+      return ns;
     }
 
     uint64_t namespace_type = ANDROID_NAMESPACE_TYPE_ISOLATED;
@@ -92,18 +92,25 @@ class LibraryNamespaces {
       namespace_type |= ANDROID_NAMESPACE_TYPE_SHARED;
     }
 
-    android_namespace_t* ns =
-            android_create_namespace("classloader-namespace",
-                                     nullptr,
-                                     library_path.c_str(),
-                                     namespace_type,
-                                     java_permitted_path != nullptr ?
-                                        permitted_path.c_str() :
-                                        nullptr);
+    ns = android_create_namespace("classloader-namespace",
+                                  nullptr,
+                                  library_path.c_str(),
+                                  namespace_type,
+                                  java_permitted_path != nullptr ?
+                                      permitted_path.c_str() :
+                                      nullptr);
 
     namespaces_.push_back(std::make_pair(env->NewWeakGlobalRef(class_loader), ns));
 
     return ns;
+  }
+
+  android_namespace_t* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
+    auto it = std::find_if(namespaces_.begin(), namespaces_.end(),
+                [&](const std::pair<jweak, android_namespace_t*>& value) {
+                  return env->IsSameObject(value.first, class_loader);
+                });
+    return it != namespaces_.end() ? it->second : nullptr;
   }
 
  private:
@@ -131,14 +138,6 @@ class LibraryNamespaces {
     initialized_ = android_init_namespaces(publicNativeLibraries.c_str(), library_path);
 
     return initialized_;
-  }
-
-  std::vector<std::pair<jweak, android_namespace_t*>>::const_iterator
-  FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
-    return std::find_if(namespaces_.begin(), namespaces_.end(),
-            [&](const std::pair<jweak, android_namespace_t*>& value) {
-              return env->IsSameObject(value.first, class_loader);
-            });
   }
 
   bool initialized_;
@@ -179,5 +178,11 @@ void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* pat
   return dlopen(path, RTLD_NOW);
 #endif
 }
+
+#if defined(__ANDROID__)
+android_namespace_t* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
+  return g_namespaces->FindNamespaceByClassLoader(env, class_loader);
+}
+#endif
 
 }; //  android namespace
