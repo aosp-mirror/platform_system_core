@@ -685,10 +685,9 @@ static int do_server() {
   act.sa_flags = SA_NOCLDWAIT;
   sigaction(SIGCHLD, &act, 0);
 
-  int s = socket_local_server(SOCKET_NAME, ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
-  if (s < 0)
-    return 1;
-  fcntl(s, F_SETFD, FD_CLOEXEC);
+  int s = socket_local_server(SOCKET_NAME, ANDROID_SOCKET_NAMESPACE_ABSTRACT,
+                              SOCK_STREAM | SOCK_CLOEXEC);
+  if (s == -1) return 1;
 
   ALOGI("debuggerd: starting\n");
 
@@ -698,13 +697,11 @@ static int do_server() {
     socklen_t alen = sizeof(ss);
 
     ALOGV("waiting for connection\n");
-    int fd = accept(s, addrp, &alen);
-    if (fd < 0) {
-      ALOGV("accept failed: %s\n", strerror(errno));
+    int fd = accept4(s, addrp, &alen, SOCK_CLOEXEC);
+    if (fd == -1) {
+      ALOGE("accept failed: %s\n", strerror(errno));
       continue;
     }
-
-    fcntl(fd, F_SETFD, FD_CLOEXEC);
 
     handle_request(fd);
   }
