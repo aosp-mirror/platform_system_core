@@ -99,7 +99,6 @@ LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
 LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
     adb_auth_client.cpp \
-    fdevent.cpp \
     jdwp_service.cpp \
     usb_linux_client.cpp \
 
