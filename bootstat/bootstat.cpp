@@ -80,7 +80,8 @@ void ShowHelp(const char *cmd) {
           "  -l, --log             Log all metrics to logstorage\n"
           "  -p, --print           Dump the boot event records to the console\n"
           "  -r, --record          Record the timestamp of a named boot event\n"
-          "  --record_boot_reason  Record the reason why the device booted\n");
+          "  --record_boot_reason  Record the reason why the device booted\n"
+          "  --record_time_since_factory_reset Record the time since the device was reset\n");
 }
 
 // Constructs a readable, printable string from the givencommand line
@@ -192,7 +193,7 @@ int main(int argc, char **argv) {
 
   int option_index = 0;
   static const char boot_reason_str[] = "record_boot_reason";
-  static const char factory_reset_str[] = "record_factory_reset";
+  static const char factory_reset_str[] = "record_time_since_factory_reset";
   static const struct option long_options[] = {
     { "help",            no_argument,       NULL,   'h' },
     { "log",             no_argument,       NULL,   'l' },
