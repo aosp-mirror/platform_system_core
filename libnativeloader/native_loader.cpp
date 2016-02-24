@@ -53,6 +53,7 @@ static const char* kPublicNativeLibraries = "libandroid.so:"
                                             "libOpenSLES.so:"
                                             "libRS.so:"
                                             "libstdc++.so:"
+                                            "libvulkan.so:"
                                             "libwebviewchromium_plat_support.so:"
                                             "libz.so";
 
