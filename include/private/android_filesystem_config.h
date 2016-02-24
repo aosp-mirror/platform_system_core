@@ -88,6 +88,7 @@
 #define AID_WEBSERV       1044  /* webservd process */
 #define AID_DEBUGGERD     1045  /* debuggerd unprivileged user */
 #define AID_MEDIA_CODEC   1046  /* mediacodec process */
+#define AID_CAMERASERVER  1047  /* cameraserver process */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -194,6 +195,7 @@ static const struct android_id_info android_ids[] = {
     { "webserv",       AID_WEBSERV },
     { "debuggerd",     AID_DEBUGGERD, },
     { "mediacodec",    AID_MEDIA_CODEC, },
+    { "cameraserver",  AID_CAMERASERVER, },
 
     { "shell",         AID_SHELL, },
     { "cache",         AID_CACHE, },
