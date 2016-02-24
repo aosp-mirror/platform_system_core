@@ -194,49 +194,47 @@ void atrace_setup()
 void atrace_begin_body(const char* name)
 {
     char buf[ATRACE_MESSAGE_LENGTH];
-    size_t len;
 
-    len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "B|%d|%s", getpid(), name);
+    int len = snprintf(buf, sizeof(buf), "B|%d|%s", getpid(), name);
+    if (len >= (int) sizeof(buf)) {
+        ALOGW("Truncated name in %s: %s\n", __FUNCTION__, name);
+        len = sizeof(buf) - 1;
+    }
     write(atrace_marker_fd, buf, len);
 }
 
+#define WRITE_MSG(format_begin, format_end, pid, name, value) { \
+    char buf[ATRACE_MESSAGE_LENGTH]; \
+    int len = snprintf(buf, sizeof(buf), format_begin "%s" format_end, pid, \
+        name, value); \
+    if (len >= (int) sizeof(buf)) { \
+        /* Given the sizeof(buf), and all of the current format buffers, \
+         * it is impossible for name_len to be < 0 if len >= sizeof(buf). */ \
+        int name_len = strlen(name) - (len - sizeof(buf)) - 1; \
+        /* Truncate the name to make the message fit. */ \
+        ALOGW("Truncated name in %s: %s\n", __FUNCTION__, name); \
+        len = snprintf(buf, sizeof(buf), format_begin "%.*s" format_end, pid, \
+            name_len, name, value); \
+    } \
+    write(atrace_marker_fd, buf, len); \
+}
 
 void atrace_async_begin_body(const char* name, int32_t cookie)
 {
-    char buf[ATRACE_MESSAGE_LENGTH];
-    size_t len;
-
-    len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "S|%d|%s|%" PRId32,
-            getpid(), name, cookie);
-    write(atrace_marker_fd, buf, len);
+    WRITE_MSG("S|%d|", "|%" PRId32, getpid(), name, cookie);
 }
 
 void atrace_async_end_body(const char* name, int32_t cookie)
 {
-    char buf[ATRACE_MESSAGE_LENGTH];
-    size_t len;
-
-    len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "F|%d|%s|%" PRId32,
-            getpid(), name, cookie);
-    write(atrace_marker_fd, buf, len);
+    WRITE_MSG("F|%d|", "|%" PRId32, getpid(), name, cookie);
 }
 
 void atrace_int_body(const char* name, int32_t value)
 {
-    char buf[ATRACE_MESSAGE_LENGTH];
-    size_t len;
-
-    len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "C|%d|%s|%" PRId32,
-            getpid(), name, value);
-    write(atrace_marker_fd, buf, len);
+    WRITE_MSG("C|%d|", "|%" PRId32, getpid(), name, value);
 }
 
 void atrace_int64_body(const char* name, int64_t value)
 {
-    char buf[ATRACE_MESSAGE_LENGTH];
-    size_t len;
-
-    len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "C|%d|%s|%" PRId64,
-            getpid(), name, value);
-    write(atrace_marker_fd, buf, len);
+    WRITE_MSG("C|%d|", "|%" PRId64, getpid(), name, value);
 }
