@@ -927,9 +927,9 @@ typedef enum android_dataspace {
      * The values are encoded using the full range ([0,255] for 8-bit) for all
      * components.
      */
-    HAL_DATASPACE_SRGB_LINEAR_LEGACY = 0x200,
+    HAL_DATASPACE_SRGB_LINEAR = 0x200, // deprecated, use HAL_DATASPACE_V0_SRGB_LINEAR
 
-    HAL_DATASPACE_SRGB_LINEAR = HAL_DATASPACE_STANDARD_BT709 |
+    HAL_DATASPACE_V0_SRGB_LINEAR = HAL_DATASPACE_STANDARD_BT709 |
             HAL_DATASPACE_TRANSFER_LINEAR | HAL_DATASPACE_RANGE_FULL,
 
 
@@ -946,9 +946,9 @@ typedef enum android_dataspace {
      *
      * Use full range and BT.709 standard.
      */
-    HAL_DATASPACE_SRGB_LEGACY = 0x201,
+    HAL_DATASPACE_SRGB = 0x201, // deprecated, use HAL_DATASPACE_V0_SRGB
 
-    HAL_DATASPACE_SRGB = HAL_DATASPACE_STANDARD_BT709 |
+    HAL_DATASPACE_V0_SRGB = HAL_DATASPACE_STANDARD_BT709 |
             HAL_DATASPACE_TRANSFER_SRGB | HAL_DATASPACE_RANGE_FULL,
 
 
@@ -970,9 +970,9 @@ typedef enum android_dataspace {
      *
      * Use full range, BT.601 transfer and BT.601_625 standard.
      */
-    HAL_DATASPACE_JFIF_LEGACY = 0x101,
+    HAL_DATASPACE_JFIF = 0x101, // deprecated, use HAL_DATASPACE_V0_JFIF
 
-    HAL_DATASPACE_JFIF = HAL_DATASPACE_STANDARD_BT601_625 |
+    HAL_DATASPACE_V0_JFIF = HAL_DATASPACE_STANDARD_BT601_625 |
             HAL_DATASPACE_TRANSFER_SMPTE_170M | HAL_DATASPACE_RANGE_FULL,
 
     /*
@@ -982,9 +982,9 @@ typedef enum android_dataspace {
      *
      * Use limited range, BT.601 transfer and BT.601_625 standard.
      */
-    HAL_DATASPACE_BT601_625_LEGACY = 0x102,
+    HAL_DATASPACE_BT601_625 = 0x102, // deprecated, use HAL_DATASPACE_V0_BT601_625
 
-    HAL_DATASPACE_BT601_625 = HAL_DATASPACE_STANDARD_BT601_625 |
+    HAL_DATASPACE_V0_BT601_625 = HAL_DATASPACE_STANDARD_BT601_625 |
             HAL_DATASPACE_TRANSFER_SMPTE_170M | HAL_DATASPACE_RANGE_LIMITED,
 
 
@@ -995,9 +995,9 @@ typedef enum android_dataspace {
      *
      * Use limited range, BT.601 transfer and BT.601_525 standard.
      */
-    HAL_DATASPACE_BT601_525_LEGACY = 0x103,
+    HAL_DATASPACE_BT601_525 = 0x103, // deprecated, use HAL_DATASPACE_V0_BT601_525
 
-    HAL_DATASPACE_BT601_525 = HAL_DATASPACE_STANDARD_BT601_525 |
+    HAL_DATASPACE_V0_BT601_525 = HAL_DATASPACE_STANDARD_BT601_525 |
             HAL_DATASPACE_TRANSFER_SMPTE_170M | HAL_DATASPACE_RANGE_LIMITED,
 
     /*
@@ -1007,9 +1007,9 @@ typedef enum android_dataspace {
      *
      * Use limited range, BT.709 transfer and BT.709 standard.
      */
-    HAL_DATASPACE_BT709_LEGACY = 0x104,
+    HAL_DATASPACE_BT709 = 0x104, // deprecated, use HAL_DATASPACE_V0_BT709
 
-    HAL_DATASPACE_BT709 = HAL_DATASPACE_STANDARD_BT709 |
+    HAL_DATASPACE_V0_BT709 = HAL_DATASPACE_STANDARD_BT709 |
             HAL_DATASPACE_TRANSFER_SMPTE_170M | HAL_DATASPACE_RANGE_LIMITED,
 
     /*
