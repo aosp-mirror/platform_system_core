@@ -50,6 +50,7 @@ LIBADB_SRC_FILES := \
     adb_listeners.cpp \
     adb_trace.cpp \
     adb_utils.cpp \
+    fdevent.cpp \
     sockets.cpp \
     transport.cpp \
     transport_local.cpp \
@@ -58,6 +59,9 @@ LIBADB_SRC_FILES := \
 LIBADB_TEST_SRCS := \
     adb_io_test.cpp \
     adb_utils_test.cpp \
+    fdevent_test.cpp \
+    socket_test.cpp \
+    sysdeps_test.cpp \
     transport_test.cpp \
 
 LIBADB_CFLAGS := \
@@ -74,26 +78,16 @@ LIBADB_windows_CFLAGS := \
     $(ADB_COMMON_windows_CFLAGS) \
 
 LIBADB_darwin_SRC_FILES := \
-    fdevent.cpp \
     get_my_path_darwin.cpp \
     usb_osx.cpp \
 
 LIBADB_linux_SRC_FILES := \
-    fdevent.cpp \
     get_my_path_linux.cpp \
     usb_linux.cpp \
 
 LIBADB_windows_SRC_FILES := \
     sysdeps_win32.cpp \
     usb_windows.cpp \
-
-LIBADB_TEST_linux_SRCS := \
-    fdevent_test.cpp \
-    socket_test.cpp \
-
-LIBADB_TEST_darwin_SRCS := \
-    fdevent_test.cpp \
-    socket_test.cpp \
 
 LIBADB_TEST_windows_SRCS := \
     sysdeps_win32_test.cpp \
@@ -157,7 +151,7 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
 LOCAL_STATIC_LIBRARIES := libadbd
-LOCAL_SHARED_LIBRARIES := libbase libcutils
+LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
 include $(BUILD_NATIVE_TEST)
 
 # libdiagnose_usb

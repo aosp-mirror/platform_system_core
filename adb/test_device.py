@@ -766,6 +766,22 @@ class FileOperationsTest(DeviceTest):
             if host_dir is not None:
                 shutil.rmtree(host_dir)
 
+    @requires_non_root
+    def test_push_error_reporting(self):
+        """Make sure that errors that occur while pushing a file get reported
+
+        Bug: http://b/26816782
+        """
+        with tempfile.NamedTemporaryFile() as tmp_file:
+            tmp_file.write('\0' * 1024 * 1024)
+            tmp_file.flush()
+            try:
+                self.device.push(local=tmp_file.name, remote='/system/')
+                self.fail("push should not have succeeded")
+            except subprocess.CalledProcessError as e:
+                output = e.output
+
+            self.assertIn("Permission denied", output)
 
     def _test_pull(self, remote_file, checksum):
         tmp_write = tempfile.NamedTemporaryFile(mode='wb', delete=False)

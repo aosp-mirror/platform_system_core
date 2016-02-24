@@ -97,7 +97,7 @@ static void kick_devices();
 
 /// Entry point for thread that polls (every second) for new usb interfaces.
 /// This routine calls find_devices in infinite loop.
-void* device_poll_thread(void* unused);
+static void device_poll_thread(void*);
 
 /// Initializes this module
 void usb_init();
@@ -172,7 +172,7 @@ int register_new_device(usb_handle* handle) {
   return 1;
 }
 
-void* device_poll_thread(void* unused) {
+void device_poll_thread(void*) {
   adb_thread_setname("Device Poll");
   D("Created device thread");
 
@@ -180,8 +180,6 @@ void* device_poll_thread(void* unused) {
     find_devices();
     adb_sleep_ms(1000);
   }
-
-  return NULL;
 }
 
 static LRESULT CALLBACK _power_window_proc(HWND hwnd, UINT uMsg, WPARAM wParam,
@@ -203,7 +201,7 @@ static LRESULT CALLBACK _power_window_proc(HWND hwnd, UINT uMsg, WPARAM wParam,
   return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
-static void* _power_notification_thread(void* unused) {
+static void _power_notification_thread(void*) {
   // This uses a thread with its own window message pump to get power
   // notifications. If adb runs from a non-interactive service account, this
   // might not work (not sure). If that happens to not work, we could use
@@ -255,8 +253,6 @@ static void* _power_notification_thread(void* unused) {
   // shutting down. Not a big deal since the whole process will be going away
   // soon anyway.
   D("Power notification thread exiting");
-
-  return NULL;
 }
 
 void usb_init() {

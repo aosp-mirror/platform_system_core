@@ -134,7 +134,7 @@ std::string adb_dirname(const std::string& path) {
   return result;
 }
 
-// Given a relative or absolute filepath, create the parent directory hierarchy
+// Given a relative or absolute filepath, create the directory hierarchy
 // as needed. Returns true if the hierarchy is/was setup.
 bool mkdirs(const std::string& path) {
   // TODO: all the callers do unlink && mkdirs && adb_creat ---
@@ -157,12 +157,12 @@ bool mkdirs(const std::string& path) {
     return true;
   }
 
+  const std::string parent(adb_dirname(path));
+
   // If dirname returned the same path as what we passed in, don't go recursive.
   // This can happen on Windows when walking up the directory hierarchy and not
   // finding anything that already exists (unlike POSIX that will eventually
   // find . or /).
-  const std::string parent(adb_dirname(path));
-
   if (parent == path) {
     errno = ENOENT;
     return false;
@@ -174,14 +174,14 @@ bool mkdirs(const std::string& path) {
   }
 
   // Now that the parent directory hierarchy of 'path' has been ensured,
-  // create parent itself.
+  // create path itself.
   if (adb_mkdir(path, 0775) == -1) {
-    // Can't just check for errno == EEXIST because it might be a file that
-    // exists.
     const int saved_errno = errno;
-    if (directory_exists(parent)) {
+    // If someone else created the directory, that is ok.
+    if (directory_exists(path)) {
       return true;
     }
+    // There might be a pre-existing file at 'path', or there might have been some other error.
     errno = saved_errno;
     return false;
   }
@@ -213,6 +213,7 @@ std::string perror_str(const char* msg) {
 }
 
 #if !defined(_WIN32)
+// Windows version provided in sysdeps_win32.cpp
 bool set_file_block_mode(int fd, bool block) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1) {

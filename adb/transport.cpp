@@ -190,8 +190,7 @@ void send_packet(apacket *p, atransport *t)
 //
 // read_transport thread reads data from a transport (representing a usb/tcp connection),
 // and makes the main thread call handle_packet().
-static void *read_transport_thread(void *_t)
-{
+static void read_transport_thread(void* _t) {
     atransport *t = reinterpret_cast<atransport*>(_t);
     apacket *p;
 
@@ -244,13 +243,11 @@ oops:
     D("%s: read_transport thread is exiting", t->serial);
     kick_transport(t);
     transport_unref(t);
-    return 0;
 }
 
 // write_transport thread gets packets sent by the main thread (through send_packet()),
 // and writes to a transport (representing a usb/tcp connection).
-static void *write_transport_thread(void *_t)
-{
+static void write_transport_thread(void* _t) {
     atransport *t = reinterpret_cast<atransport*>(_t);
     apacket *p;
     int active = 0;
@@ -295,7 +292,6 @@ static void *write_transport_thread(void *_t)
     D("%s: write_transport thread is exiting, fd %d", t->serial, t->fd);
     kick_transport(t);
     transport_unref(t);
-    return 0;
 }
 
 static void kick_transport_locked(atransport* t) {

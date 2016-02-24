@@ -30,6 +30,7 @@
 #include <vector>
 
 // Include this before open/unlink are defined as macros below.
+#include <android-base/errors.h>
 #include <android-base/utf8.h>
 
 /*
@@ -114,13 +115,62 @@ static __inline__ void  adb_mutex_unlock( adb_mutex_t*  lock )
     LeaveCriticalSection( lock );
 }
 
-typedef  void*  (*adb_thread_func_t)(void*  arg);
+typedef void (*adb_thread_func_t)(void* arg);
+typedef HANDLE adb_thread_t;
 
-typedef  void (*win_thread_func_t)(void*  arg);
+struct adb_winthread_args {
+    adb_thread_func_t func;
+    void* arg;
+};
 
-static __inline__ bool adb_thread_create(adb_thread_func_t func, void* arg) {
-    uintptr_t tid = _beginthread((win_thread_func_t)func, 0, arg);
-    return (tid != static_cast<uintptr_t>(-1L));
+static unsigned __stdcall adb_winthread_wrapper(void* heap_args) {
+    // Move the arguments from the heap onto the thread's stack.
+    adb_winthread_args thread_args = *static_cast<adb_winthread_args*>(heap_args);
+    delete static_cast<adb_winthread_args*>(heap_args);
+    thread_args.func(thread_args.arg);
+    return 0;
+}
+
+static __inline__ bool adb_thread_create(adb_thread_func_t func, void* arg,
+                                         adb_thread_t* thread = nullptr) {
+    adb_winthread_args* args = new adb_winthread_args{.func = func, .arg = arg};
+    uintptr_t handle = _beginthreadex(nullptr, 0, adb_winthread_wrapper, args, 0, nullptr);
+    if (handle != static_cast<uintptr_t>(0)) {
+        if (thread) {
+            *thread = reinterpret_cast<HANDLE>(handle);
+        } else {
+            CloseHandle(thread);
+        }
+        return true;
+    }
+    return false;
+}
+
+static __inline__ bool adb_thread_join(adb_thread_t thread) {
+    switch (WaitForSingleObject(thread, INFINITE)) {
+        case WAIT_OBJECT_0:
+            CloseHandle(thread);
+            return true;
+
+        case WAIT_FAILED:
+            fprintf(stderr, "adb_thread_join failed: %s\n",
+                    android::base::SystemErrorCodeToString(GetLastError()).c_str());
+            break;
+
+        default:
+            abort();
+    }
+
+    return false;
+}
+
+static __inline__ bool adb_thread_detach(adb_thread_t thread) {
+    CloseHandle(thread);
+    return true;
+}
+
+static __inline__ void __attribute__((noreturn)) adb_thread_exit() {
+    _endthreadex(0);
 }
 
 static __inline__ int adb_thread_setname(const std::string& name) {
@@ -128,6 +178,14 @@ static __inline__ int adb_thread_setname(const std::string& name) {
     // the thread name in Windows. Unfortunately, it only works during debugging, but
     // our build process doesn't generate PDB files needed for debugging.
     return 0;
+}
+
+static __inline__ adb_thread_t adb_thread_self() {
+    return GetCurrentThread();
+}
+
+static __inline__ bool adb_thread_equal(adb_thread_t lhs, adb_thread_t rhs) {
+    return GetThreadId(lhs) == GetThreadId(rhs);
 }
 
 static __inline__  unsigned long adb_thread_id()
@@ -213,24 +271,6 @@ int unix_isatty(int fd);
 /* normally provided by <cutils/misc.h> */
 extern void*  load_file(const char*  pathname, unsigned*  psize);
 
-/* normally provided by "fdevent.h" */
-
-#define FDE_READ              0x0001
-#define FDE_WRITE             0x0002
-#define FDE_ERROR             0x0004
-#define FDE_DONT_CLOSE        0x0080
-
-typedef void (*fd_func)(int fd, unsigned events, void *userdata);
-
-fdevent *fdevent_create(int fd, fd_func func, void *arg);
-void     fdevent_destroy(fdevent *fde);
-void     fdevent_install(fdevent *fde, int fd, fd_func func, void *arg);
-void     fdevent_remove(fdevent *item);
-void     fdevent_set(fdevent *fde, unsigned events);
-void     fdevent_add(fdevent *fde, unsigned events);
-void     fdevent_del(fdevent *fde, unsigned events);
-void     fdevent_loop();
-
 static __inline__ void  adb_sleep_ms( int  mseconds )
 {
     Sleep( mseconds );
@@ -253,6 +293,14 @@ extern int  adb_setsockopt(int  fd, int  level, int  optname, const void*  optva
 #define  setsockopt  ___xxx_setsockopt
 
 extern int  adb_socketpair( int  sv[2] );
+
+struct adb_pollfd {
+    int fd;
+    short events;
+    short revents;
+};
+extern int adb_poll(adb_pollfd* fds, size_t nfds, int timeout);
+#define poll ___xxx_poll
 
 static __inline__ int adb_is_absolute_host_path(const char* path) {
     return isalpha(path[0]) && path[1] == ':' && path[2] == '\\';
@@ -406,14 +454,14 @@ size_t ParseCompleteUTF8(const char* first, const char* last, std::vector<char>*
 
 #else /* !_WIN32 a.k.a. Unix */
 
-#include "fdevent.h"
 #include <cutils/misc.h>
 #include <cutils/sockets.h>
 #include <cutils/threads.h>
-#include <signal.h>
-#include <sys/wait.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 
 #include <pthread.h>
 #include <unistd.h>
@@ -656,16 +704,53 @@ static __inline__ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, 
 #define  unix_write  adb_write
 #define  unix_close  adb_close
 
-typedef void*  (*adb_thread_func_t)( void*  arg );
+// Win32 is limited to DWORDs for thread return values; limit the POSIX systems to this as well to
+// ensure compatibility.
+typedef void (*adb_thread_func_t)(void* arg);
+typedef pthread_t adb_thread_t;
 
-static __inline__ bool adb_thread_create(adb_thread_func_t start, void* arg) {
+struct adb_pthread_args {
+    adb_thread_func_t func;
+    void* arg;
+};
+
+static void* adb_pthread_wrapper(void* heap_args) {
+    // Move the arguments from the heap onto the thread's stack.
+    adb_pthread_args thread_args = *reinterpret_cast<adb_pthread_args*>(heap_args);
+    delete static_cast<adb_pthread_args*>(heap_args);
+    thread_args.func(thread_args.arg);
+    return nullptr;
+}
+
+static __inline__ bool adb_thread_create(adb_thread_func_t start, void* arg,
+                                         adb_thread_t* thread = nullptr) {
+    pthread_t temp;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    pthread_attr_setdetachstate(&attr, thread ? PTHREAD_CREATE_JOINABLE : PTHREAD_CREATE_DETACHED);
+    auto* pthread_args = new adb_pthread_args{.func = start, .arg = arg};
+    errno = pthread_create(&temp, &attr, adb_pthread_wrapper, pthread_args);
+    if (errno == 0) {
+        if (thread) {
+            *thread = temp;
+        }
+        return true;
+    }
+    return false;
+}
 
-    pthread_t thread;
-    errno = pthread_create(&thread, &attr, start, arg);
-    return (errno == 0);
+static __inline__ bool adb_thread_join(adb_thread_t thread) {
+    errno = pthread_join(thread, nullptr);
+    return errno == 0;
+}
+
+static __inline__ bool adb_thread_detach(adb_thread_t thread) {
+    errno = pthread_detach(thread);
+    return errno == 0;
+}
+
+static __inline__ void __attribute__((noreturn)) adb_thread_exit() {
+    pthread_exit(nullptr);
 }
 
 static __inline__ int adb_thread_setname(const std::string& name) {
@@ -715,6 +800,13 @@ static __inline__ int  adb_socketpair( int  sv[2] )
 
 #undef   socketpair
 #define  socketpair   ___xxx_socketpair
+
+typedef struct pollfd adb_pollfd;
+static __inline__ int adb_poll(adb_pollfd* fds, size_t nfds, int timeout) {
+    return TEMP_FAILURE_RETRY(poll(fds, nfds, timeout));
+}
+
+#define poll ___xxx_poll
 
 static __inline__ void  adb_sleep_ms( int  mseconds )
 {

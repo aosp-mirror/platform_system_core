@@ -88,7 +88,8 @@ class SyncConnection {
             : total_bytes_(0),
               start_time_ms_(CurrentTimeMs()),
               expected_total_bytes_(0),
-              expect_multiple_files_(false) {
+              expect_multiple_files_(false),
+              expect_done_(false) {
         max = SYNC_DATA_MAX; // TODO: decide at runtime.
 
         std::string error;
@@ -116,6 +117,16 @@ class SyncConnection {
     }
 
     bool IsValid() { return fd >= 0; }
+
+    bool ReceivedError(const char* from, const char* to) {
+        adb_pollfd pfd = {.fd = fd, .events = POLLIN};
+        int rc = adb_poll(&pfd, 1, 0);
+        if (rc < 0) {
+            Error("failed to poll: %s", strerror(errno));
+            return true;
+        }
+        return rc != 0;
+    }
 
     bool SendRequest(int id, const char* path_and_mode) {
         size_t path_length = strlen(path_and_mode);
@@ -175,6 +186,7 @@ class SyncConnection {
         p += sizeof(SyncRequest);
 
         WriteOrDie(lpath, rpath, &buf[0], (p - &buf[0]));
+        expect_done_ = true;
         total_bytes_ += data_length;
         return true;
     }
@@ -220,6 +232,11 @@ class SyncConnection {
             total_bytes_ += bytes_read;
             bytes_copied += bytes_read;
 
+            // Check to see if we've received an error from the other side.
+            if (ReceivedError(lpath, rpath)) {
+                break;
+            }
+
             ReportProgress(rpath, bytes_copied, total_size);
         }
 
@@ -228,17 +245,24 @@ class SyncConnection {
         syncmsg msg;
         msg.data.id = ID_DONE;
         msg.data.size = mtime;
+        expect_done_ = true;
         return WriteOrDie(lpath, rpath, &msg.data, sizeof(msg.data));
     }
 
     bool CopyDone(const char* from, const char* to) {
         syncmsg msg;
         if (!ReadFdExactly(fd, &msg.status, sizeof(msg.status))) {
-            Error("failed to copy '%s' to '%s': no ID_DONE: %s", from, to, strerror(errno));
+            Error("failed to copy '%s' to '%s': couldn't read from device", from, to);
             return false;
         }
         if (msg.status.id == ID_OKAY) {
-            return true;
+            if (expect_done_) {
+                expect_done_ = false;
+                return true;
+            } else {
+                Error("failed to copy '%s' to '%s': received premature success", from, to);
+                return true;
+            }
         }
         if (msg.status.id != ID_FAIL) {
             Error("failed to copy '%s' to '%s': unknown reason %d", from, to, msg.status.id);
@@ -357,6 +381,7 @@ class SyncConnection {
 
     uint64_t expected_total_bytes_;
     bool expect_multiple_files_;
+    bool expect_done_;
 
     LinePrinter line_printer_;
 
