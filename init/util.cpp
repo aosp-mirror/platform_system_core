@@ -102,7 +102,7 @@ int create_socket(const char *name, int type, mode_t perm, uid_t uid,
                   gid_t gid, const char *socketcon)
 {
     struct sockaddr_un addr;
-    int fd, ret;
+    int fd, ret, savederrno;
     char *filecon;
 
     if (socketcon) {
@@ -140,16 +140,26 @@ int create_socket(const char *name, int type, mode_t perm, uid_t uid,
     }
 
     ret = bind(fd, (struct sockaddr *) &addr, sizeof (addr));
-    if (ret) {
-        ERROR("Failed to bind socket '%s': %s\n", name, strerror(errno));
-        goto out_unlink;
-    }
+    savederrno = errno;
 
     setfscreatecon(NULL);
     freecon(filecon);
 
-    chown(addr.sun_path, uid, gid);
-    chmod(addr.sun_path, perm);
+    if (ret) {
+        ERROR("Failed to bind socket '%s': %s\n", name, strerror(savederrno));
+        goto out_unlink;
+    }
+
+    ret = lchown(addr.sun_path, uid, gid);
+    if (ret) {
+        ERROR("Failed to lchown socket '%s': %s\n", addr.sun_path, strerror(errno));
+        goto out_unlink;
+    }
+    ret = fchmodat(AT_FDCWD, addr.sun_path, perm, AT_SYMLINK_NOFOLLOW);
+    if (ret) {
+        ERROR("Failed to fchmodat socket '%s': %s\n", addr.sun_path, strerror(errno));
+        goto out_unlink;
+    }
 
     INFO("Created socket '%s' with mode '%o', user '%d', group '%d'\n",
          addr.sun_path, perm, uid, gid);
