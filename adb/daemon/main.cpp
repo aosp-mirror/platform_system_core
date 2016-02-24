@@ -43,24 +43,15 @@
 
 static const char* root_seclabel = nullptr;
 
-static void drop_capabilities_bounding_set_if_needed() {
-#ifdef ALLOW_ADBD_ROOT
+static void drop_capabilities_bounding_set_if_needed(struct minijail *j) {
+#if defined(ALLOW_ADBD_ROOT)
     char value[PROPERTY_VALUE_MAX];
     property_get("ro.debuggable", value, "");
     if (strcmp(value, "1") == 0) {
         return;
     }
 #endif
-    for (int i = 0; prctl(PR_CAPBSET_READ, i, 0, 0, 0) >= 0; i++) {
-        if (i == CAP_SETUID || i == CAP_SETGID) {
-            // CAP_SETUID CAP_SETGID needed by /system/bin/run-as
-            continue;
-        }
-
-        if (prctl(PR_CAPBSET_DROP, i, 0, 0, 0) == -1) {
-            PLOG(FATAL) << "Could not drop capabilities";
-        }
-    }
+    minijail_capbset_drop(j, CAP_TO_MASK(CAP_SETUID) | CAP_TO_MASK(CAP_SETGID));
 }
 
 static bool should_drop_privileges() {
@@ -131,7 +122,7 @@ static void drop_privileges(int server_port) {
     // Don't listen on a port (default 5037) if running in secure mode.
     // Don't run as root if running in secure mode.
     if (should_drop_privileges()) {
-        drop_capabilities_bounding_set_if_needed();
+        drop_capabilities_bounding_set_if_needed(jail.get());
 
         minijail_change_gid(jail.get(), AID_SHELL);
         minijail_change_uid(jail.get(), AID_SHELL);
