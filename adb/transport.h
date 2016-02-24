@@ -50,7 +50,6 @@ public:
     // it's better to do this piece by piece.
 
     atransport() {
-        auth_fde = {};
         transport_fde = {};
         protocol_version = A_VERSION;
         max_payload = MAX_PAYLOAD;
@@ -87,7 +86,6 @@ public:
 
     void* key = nullptr;
     unsigned char token[TOKEN_SIZE] = {};
-    fdevent auth_fde;
     size_t failed_auth_attempts = 0;
 
     const std::string connection_state_name() const;
