@@ -739,16 +739,8 @@ static int activity_manager_connect() {
 char* engrave_tombstone(
     pid_t pid, pid_t tid, int signal, uintptr_t abort_msg_address, bool dump_sibling_threads,
     bool quiet, bool* detach_failed, int* total_sleep_time_usec) {
-  mkdir(TOMBSTONE_DIR, 0755);
-  chown(TOMBSTONE_DIR, AID_SYSTEM, AID_SYSTEM);
-
   int fd = -1;
-  char* path = NULL;
-  if (selinux_android_restorecon(TOMBSTONE_DIR) == 0) {
-    path = find_and_open_tombstone(&fd);
-  } else {
-    LOG("Failed to restore security context, not writing tombstone.\n");
-  }
+  char* path = find_and_open_tombstone(&fd);
 
   if (fd < 0 && quiet) {
     LOG("Skipping tombstone write, nothing to do.\n");
