@@ -44,6 +44,7 @@ static const char *key_paths[] = {
 };
 
 static fdevent listener_fde;
+static fdevent framework_fde;
 static int framework_fd = -1;
 
 static void usb_disconnected(void* unused, atransport* t);
@@ -161,29 +162,30 @@ int adb_auth_verify(uint8_t* token, uint8_t* sig, int siglen)
     return ret;
 }
 
-static void usb_disconnected(void* unused, atransport* t)
-{
+static void usb_disconnected(void* unused, atransport* t) {
     D("USB disconnect");
     usb_transport = NULL;
     needs_retry = false;
 }
 
-static void adb_auth_event(int fd, unsigned events, void *data)
-{
+static void framework_disconnected() {
+    D("Framework disconnect");
+    fdevent_remove(&framework_fde);
+    framework_fd = -1;
+}
+
+static void adb_auth_event(int fd, unsigned events, void*) {
     char response[2];
     int ret;
 
     if (events & FDE_READ) {
         ret = unix_read(fd, response, sizeof(response));
         if (ret <= 0) {
-            D("Framework disconnect");
-            if (usb_transport)
-                fdevent_remove(&usb_transport->auth_fde);
-            framework_fd = -1;
-        }
-        else if (ret == 2 && response[0] == 'O' && response[1] == 'K') {
-            if (usb_transport)
+            framework_disconnected();
+        } else if (ret == 2 && response[0] == 'O' && response[1] == 'K') {
+            if (usb_transport) {
                 adb_auth_verified(usb_transport);
+            }
         }
     }
 }
@@ -221,13 +223,9 @@ void adb_auth_confirm_key(unsigned char *key, size_t len, atransport *t)
         D("Failed to write PK, errno=%d", errno);
         return;
     }
-
-    fdevent_install(&t->auth_fde, framework_fd, adb_auth_event, t);
-    fdevent_add(&t->auth_fde, FDE_READ);
 }
 
-static void adb_auth_listener(int fd, unsigned events, void *data)
-{
+static void adb_auth_listener(int fd, unsigned events, void* data) {
     sockaddr_storage addr;
     socklen_t alen;
     int s;
@@ -240,7 +238,14 @@ static void adb_auth_listener(int fd, unsigned events, void *data)
         return;
     }
 
+    if (framework_fd >= 0) {
+        PLOG(WARNING) << "adb received framework auth socket connection again";
+        framework_disconnected();
+    }
+
     framework_fd = s;
+    fdevent_install(&framework_fde, framework_fd, adb_auth_event, nullptr);
+    fdevent_add(&framework_fde, FDE_READ);
 
     if (needs_retry) {
         needs_retry = false;
