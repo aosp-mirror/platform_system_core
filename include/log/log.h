@@ -589,6 +589,8 @@ int android_log_write_list_end(android_log_context ctx);
 int android_log_write_int32(android_log_context ctx, int32_t value);
 int android_log_write_int64(android_log_context ctx, int64_t value);
 int android_log_write_string8(android_log_context ctx, const char *value);
+int android_log_write_string8_len(android_log_context ctx,
+                                  const char *value, size_t maxlen);
 int android_log_write_float32(android_log_context ctx, float value);
 
 /* Submit the composed list context to the specified logger id */

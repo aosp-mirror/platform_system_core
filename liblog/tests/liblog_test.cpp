@@ -1429,7 +1429,7 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__data_too_l
     const int TAG = 123456782;
     const char SUBTAG[] = "test-subtag";
     const int UID = -1;
-    const int DATA_LEN = SIZEOF_MAX_PAYLOAD_BUF;
+    const int DATA_LEN = sizeof(max_payload_buf);
     struct logger_list *logger_list;
 
     pid_t pid = getpid();
@@ -1500,9 +1500,9 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__data_too_l
         }
         eventData += dataLen;
 
-        // 4 bytes for the tag, and 512 bytes for the log since the
-        // max_payload_buf should be truncated.
-        ASSERT_EQ(4 + 512, eventData - original);
+        // 4 bytes for the tag, and max_payload_buf should be truncated.
+        ASSERT_LE(4 + 512, eventData - original);      // worst expectations
+        ASSERT_GT(4 + DATA_LEN, eventData - original); // must be truncated
 
         ++count;
     }
@@ -2123,6 +2123,30 @@ static const char *event_test_7_level_suffix(uint32_t tag, size_t &expected_len)
     return "[1,[2,[3,[4,[5,[6]]]]]]";
 }
 
+static const char *event_test_android_log_error_write(uint32_t tag, size_t &expected_len) {
+    EXPECT_LE(0, __android_log_error_write(tag, "Hello World", 42, "dlroW olleH", 11));
+
+    expected_len = sizeof(uint32_t) +
+      sizeof(uint8_t) + sizeof(uint8_t) +
+          sizeof(uint8_t) + sizeof(uint32_t) + sizeof("Hello World") - 1 +
+          sizeof(uint8_t) + sizeof(uint32_t) +
+          sizeof(uint8_t) + sizeof(uint32_t) + sizeof("dlroW olleH") - 1;
+
+    return "[Hello World,42,dlroW olleH]";
+}
+
+static const char *event_test_android_log_error_write_null(uint32_t tag, size_t &expected_len) {
+    EXPECT_LE(0, __android_log_error_write(tag, "Hello World", 42, NULL, 0));
+
+    expected_len = sizeof(uint32_t) +
+      sizeof(uint8_t) + sizeof(uint8_t) +
+          sizeof(uint8_t) + sizeof(uint32_t) + sizeof("Hello World") - 1 +
+          sizeof(uint8_t) + sizeof(uint32_t) +
+          sizeof(uint8_t) + sizeof(uint32_t) + sizeof("") - 1;
+
+    return "[Hello World,42,]";
+}
+
 // make sure all user buffers are flushed
 static void print_barrier() {
     std::cout.flush();
@@ -2239,6 +2263,14 @@ TEST(liblog, create_android_logger_7_level_prefix) {
 
 TEST(liblog, create_android_logger_7_level_suffix) {
     create_android_logger(event_test_7_level_suffix);
+}
+
+TEST(liblog, create_android_logger_android_log_error_write) {
+    create_android_logger(event_test_android_log_error_write);
+}
+
+TEST(liblog, create_android_logger_android_log_error_write_null) {
+    create_android_logger(event_test_android_log_error_write_null);
 }
 
 TEST(liblog, create_android_logger_overflow) {
