@@ -27,6 +27,7 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
+#include "LogBuffer.h"
 #include "LogListener.h"
 #include "LogUtils.h"
 
