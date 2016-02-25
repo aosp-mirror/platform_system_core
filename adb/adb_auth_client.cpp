@@ -239,7 +239,7 @@ static void adb_auth_listener(int fd, unsigned events, void* data) {
     }
 
     if (framework_fd >= 0) {
-        PLOG(WARNING) << "adb received framework auth socket connection again";
+        LOG(WARNING) << "adb received framework auth socket connection again";
         framework_disconnected();
     }
 
