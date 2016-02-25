@@ -84,6 +84,12 @@ class CrashCollector {
     forced_crash_directory_ = forced_directory;
   }
 
+  // For testing, set the root directory to read etc/os-release.d properties
+  // from.
+  void ForceOsReleaseDDirectory(const base::FilePath &forced_directory) {
+    forced_osreleased_directory_ = forced_directory;
+  }
+
   base::FilePath GetCrashDirectoryInfo(mode_t *mode,
                                        uid_t *directory_owner,
                                        gid_t *directory_group);
@@ -158,6 +164,7 @@ class CrashCollector {
   IsFeedbackAllowedFunction is_feedback_allowed_function_;
   std::string extra_metadata_;
   base::FilePath forced_crash_directory_;
+  base::FilePath forced_osreleased_directory_;
   base::FilePath log_config_path_;
 
  private:

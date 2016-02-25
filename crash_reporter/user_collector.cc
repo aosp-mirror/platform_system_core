@@ -37,7 +37,6 @@
 #include <base/strings/string_split.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
-#include <brillo/osrelease_reader.h>
 #include <brillo/process.h>
 #include <brillo/syslog_logging.h>
 #include <cutils/properties.h>
@@ -58,11 +57,6 @@ static const gid_t kUnknownGid = -1;
 
 const char *UserCollector::kUserId = "Uid:\t";
 const char *UserCollector::kGroupId = "Gid:\t";
-
-// Product information keys in the /etc/os-release.d folder.
-static const char kBdkVersionKey[] = "bdk_version";
-static const char kProductIDKey[] = "product_id";
-static const char kProductVersionKey[] = "product_version";
 
 
 using base::FilePath;
@@ -504,29 +498,6 @@ UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
 
   if (GetLogContents(FilePath(log_config_path_), exec, log_path))
     AddCrashMetaData("log", log_path.value());
-
-  brillo::OsReleaseReader reader;
-  reader.Load();
-  std::string value = "undefined";
-  if (!reader.GetString(kBdkVersionKey, &value)) {
-    LOG(ERROR) << "Could not read " << kBdkVersionKey
-               << " from /etc/os-release.d/";
-  }
-  AddCrashMetaData(kBdkVersionKey, value);
-
-  value = "undefined";
-  if (!reader.GetString(kProductIDKey, &value)) {
-    LOG(ERROR) << "Could not read " << kProductIDKey
-               << " from /etc/os-release.d/";
-  }
-  AddCrashMetaData(kProductIDKey, value);
-
-  value = "undefined";
-  if (!reader.GetString(kProductVersionKey, &value)) {
-    LOG(ERROR) << "Could not read " << kProductVersionKey
-               << " from /etc/os-release.d/";
-  }
-  AddCrashMetaData(kProductVersionKey, value);
 
   ErrorType error_type =
       ConvertCoreToMinidump(pid, container_dir, core_path, minidump_path);
