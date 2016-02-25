@@ -72,7 +72,7 @@ LOCAL_SRC_FILES:= \
 ifeq ($(TARGET_ARCH),mips)
 LOCAL_CFLAGS += -DALIGN_DOUBLE
 endif
-LOCAL_CFLAGS += -Werror
+LOCAL_CFLAGS += -Werror -fvisibility=protected
 
 LOCAL_STATIC_LIBRARIES := \
 	libcutils \
