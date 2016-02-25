@@ -53,7 +53,6 @@ public:
 
         EXPECT_EQ(key, rhs.key);
         EXPECT_EQ(0, memcmp(token, rhs.token, TOKEN_SIZE));
-        EXPECT_EQ(0, memcmp(&auth_fde, &rhs.auth_fde, sizeof(fdevent)));
         EXPECT_EQ(failed_auth_attempts, rhs.failed_auth_attempts);
 
         EXPECT_EQ(features(), rhs.features());
