@@ -12,6 +12,7 @@ analysis.
       -p, --print           Dump the boot event records to the console
       -r, --record          Record the timestamp of a named boot event
       --record_boot_reason  Record the reason why the device booted
+      --record_time_since_factory_reset Record the time since the device was reset
 
 ## Relative time ##
 
