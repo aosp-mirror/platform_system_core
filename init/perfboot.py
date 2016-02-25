@@ -191,9 +191,9 @@ def restore_dropbox(device, original_dropbox_max_files):
 
 def init_perf(device, output, record_list, tags):
     device.wait()
-    build_type = device.get_prop('ro.build.type')
+    debuggable = device.get_prop('ro.debuggable')
     original_dropbox_max_files = None
-    if build_type != 'user':
+    if debuggable == '1':
         # Workaround for Dropbox issue (http://b/20890386).
         original_dropbox_max_files = disable_dropbox(device)
 
