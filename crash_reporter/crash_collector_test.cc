@@ -182,9 +182,26 @@ TEST_F(CrashCollectorTest, MetaData) {
   const char kMetaFileBasename[] = "generated.meta";
   FilePath meta_file = test_dir_.path().Append(kMetaFileBasename);
   FilePath payload_file = test_dir_.path().Append("payload-file");
+  FilePath osreleased_directory =
+      test_dir_.path().Append("etc").Append("os-release.d");
+  ASSERT_TRUE(base::CreateDirectory(osreleased_directory));
+  collector_.ForceOsReleaseDDirectory(test_dir_.path());
+
   std::string contents;
   const char kPayload[] = "foo";
   ASSERT_TRUE(base::WriteFile(payload_file, kPayload, strlen(kPayload)));
+  const char kBdkVersion[] = "1";
+  ASSERT_TRUE(base::WriteFile(osreleased_directory.Append("bdk_version"),
+                              kBdkVersion,
+                              strlen(kBdkVersion)));
+  const char kProductId[] = "baz";
+  ASSERT_TRUE(base::WriteFile(osreleased_directory.Append("product_id"),
+                              kProductId,
+                              strlen(kProductId)));
+  const char kProductVersion[] = "1.2.3.4";
+  ASSERT_TRUE(base::WriteFile(osreleased_directory.Append("product_version"),
+                              kProductVersion,
+                              strlen(kProductVersion)));
   collector_.AddCrashMetaData("foo", "bar");
   collector_.WriteCrashMetaData(meta_file, "kernel", payload_file.value());
   EXPECT_TRUE(base::ReadFileToString(meta_file, &contents));
@@ -193,6 +210,9 @@ TEST_F(CrashCollectorTest, MetaData) {
           "exec_name=kernel\n"
           "payload=%s\n"
           "payload_size=3\n"
+          "bdk_version=1\n"
+          "product_id=baz\n"
+          "product_version=1.2.3.4\n"
           "done=1\n",
           test_dir_.path().Append("payload-file").value().c_str());
   EXPECT_EQ(kExpectedMeta, contents);

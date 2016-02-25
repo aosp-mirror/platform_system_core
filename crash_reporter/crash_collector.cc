@@ -36,6 +36,7 @@
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
 #include <brillo/key_value_store.h>
+#include <brillo/osrelease_reader.h>
 #include <brillo/process.h>
 
 namespace {
@@ -51,6 +52,11 @@ const char kShellPath[] = "/system/bin/sh";
 const char kSystemCrashPath[] = "/data/misc/crash_reporter/crash";
 const char kUploadVarPrefix[] = "upload_var_";
 const char kUploadFilePrefix[] = "upload_file_";
+
+// Product information keys in the /etc/os-release.d folder.
+static const char kBdkVersionKey[] = "bdk_version";
+static const char kProductIDKey[] = "product_id";
+static const char kProductVersionKey[] = "product_version";
 
 // Normally this path is not used.  Unfortunately, there are a few edge cases
 // where we need this.  Any process that runs as kDefaultUserName that crashes
@@ -384,14 +390,49 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
                                         const std::string &payload_path) {
   int64_t payload_size = -1;
   base::GetFileSize(FilePath(payload_path), &payload_size);
+
+  brillo::OsReleaseReader reader;
+  if (!forced_osreleased_directory_.empty()) {
+    reader.LoadTestingOnly(forced_osreleased_directory_);
+  } else {
+    reader.Load();
+  }
+  std::string bdk_version = "undefined";
+  std::string product_id = "undefined";
+  std::string product_version = "undefined";
+
+  if (!reader.GetString(kBdkVersionKey, &bdk_version)) {
+    LOG(ERROR) << "Could not read " << kBdkVersionKey
+               << " from /etc/os-release.d/";
+  }
+
+  if (!reader.GetString(kProductIDKey, &product_id)) {
+    LOG(ERROR) << "Could not read " << kProductIDKey
+               << " from /etc/os-release.d/";
+  }
+
+  if (!reader.GetString(kProductVersionKey, &product_version)) {
+    LOG(ERROR) << "Could not read " << kProductVersionKey
+               << " from /etc/os-release.d/";
+  }
+
   std::string meta_data = StringPrintf("%sexec_name=%s\n"
                                        "payload=%s\n"
                                        "payload_size=%" PRId64 "\n"
+                                       "%s=%s\n"
+                                       "%s=%s\n"
+                                       "%s=%s\n"
                                        "done=1\n",
                                        extra_metadata_.c_str(),
                                        exec_name.c_str(),
                                        payload_path.c_str(),
-                                       payload_size);
+                                       payload_size,
+                                       kBdkVersionKey,
+                                       bdk_version.c_str(),
+                                       kProductIDKey,
+                                       product_id.c_str(),
+                                       kProductVersionKey,
+                                       product_version.c_str());
   // We must use WriteNewFile instead of base::WriteFile as we
   // do not want to write with root access to a symlink that an attacker
   // might have created.
