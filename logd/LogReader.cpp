@@ -18,11 +18,15 @@
 #include <poll.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 
 #include <cutils/sockets.h>
 
-#include "LogReader.h"
 #include "FlushCommand.h"
+#include "LogBuffer.h"
+#include "LogBufferElement.h"
+#include "LogReader.h"
+#include "LogUtils.h"
 
 LogReader::LogReader(LogBuffer *logbuf) :
         SocketListener(getLogSocket(), true),
@@ -176,6 +180,11 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
     }
 
     FlushCommand command(*this, nonBlock, tail, logMask, pid, sequence, timeout);
+
+    // Set acceptable upper limit to wait for slow reader processing b/27242723
+    struct timeval t = { LOGD_SNDTIMEO, 0 };
+    setsockopt(cli->getSocket(), SOL_SOCKET, SO_SNDTIMEO, (const char *)&t, sizeof(t));
+
     command.runSocketCommand(cli);
     return true;
 }

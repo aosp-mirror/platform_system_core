@@ -19,9 +19,11 @@
 
 #include <sysutils/SocketListener.h>
 #include <log/log_read.h>
-#include "LogReader.h"
 
 char *log_strntok_r(char *s, size_t *len, char **saveptr, size_t *sublen);
+
+class LogBuffer;
+class LogReader;
 
 class LogKlog : public SocketListener {
     LogBuffer *logbuf;
