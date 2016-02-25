@@ -195,9 +195,10 @@ int android_log_write_int64(android_log_context ctx, int64_t value) {
     return 0;
 }
 
-int android_log_write_string8(android_log_context ctx, const char *value) {
+int android_log_write_string8_len(android_log_context ctx,
+                                  const char *value, size_t maxlen) {
     size_t needed;
-    int32_t len;
+    ssize_t len;
     android_log_context_internal *context;
 
     context = (android_log_context_internal *)ctx;
@@ -208,13 +209,13 @@ int android_log_write_string8(android_log_context ctx, const char *value) {
         return -EIO;
     }
     if (!value) {
-        return -EINVAL;
+        value = "";
     }
-    len = strlen(value);
-    needed = sizeof(uint8_t) + sizeof(len) + len;
+    len = strnlen(value, maxlen);
+    needed = sizeof(uint8_t) + sizeof(int32_t) + len;
     if ((context->pos + needed) > MAX_EVENT_PAYLOAD) {
         /* Truncate string for delivery */
-        len = MAX_EVENT_PAYLOAD - context->pos - 1 - sizeof(len);
+        len = MAX_EVENT_PAYLOAD - context->pos - 1 - sizeof(int32_t);
         if (len <= 0) {
             context->overflow = true;
             return -EIO;
@@ -223,9 +224,15 @@ int android_log_write_string8(android_log_context ctx, const char *value) {
     context->count[context->list_nest_depth]++;
     context->storage[context->pos + 0] = EVENT_TYPE_STRING;
     copy4LE(&context->storage[context->pos + 1], len);
-    memcpy(&context->storage[context->pos + 5], value, len);
+    if (len) {
+        memcpy(&context->storage[context->pos + 5], value, len);
+    }
     context->pos += needed;
-    return 0;
+    return len;
+}
+
+int android_log_write_string8(android_log_context ctx, const char *value) {
+    return android_log_write_string8_len(ctx, value, MAX_EVENT_PAYLOAD);
 }
 
 int android_log_write_float32(android_log_context ctx, float value) {
