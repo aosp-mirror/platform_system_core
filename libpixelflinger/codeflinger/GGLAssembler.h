@@ -288,6 +288,14 @@ public:
 
 
 private:
+    // GGLAssembler hides RegisterAllocator's and ARMAssemblerProxy's reset
+    // methods by providing a reset method with a different parameter set. The
+    // intent of GGLAssembler's reset method is to wrap the inherited reset
+    // methods, so make these methods private in order to prevent direct calls
+    // to these methods from clients.
+    using RegisterAllocator::reset;
+    using ARMAssemblerProxy::reset;
+
     struct tex_coord_t {
         reg_t       s;
         reg_t       t;
