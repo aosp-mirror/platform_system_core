@@ -18,7 +18,10 @@
 #define _LOGD_LOG_AUDIT_H__
 
 #include <sysutils/SocketListener.h>
-#include "LogReader.h"
+
+#include "LogBuffer.h"
+
+class LogReader;
 
 class LogAudit : public SocketListener {
     LogBuffer *logbuf;

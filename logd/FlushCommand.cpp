@@ -16,7 +16,10 @@
 
 #include <stdlib.h>
 
+#include <private/android_filesystem_config.h>
+
 #include "FlushCommand.h"
+#include "LogBuffer.h"
 #include "LogBufferElement.h"
 #include "LogCommand.h"
 #include "LogReader.h"

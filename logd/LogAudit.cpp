@@ -20,9 +20,12 @@
 #include <limits.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/prctl.h>
 #include <sys/uio.h>
 #include <syslog.h>
+
+#include <string>
 
 #include <cutils/properties.h>
 #include <log/logger.h>
@@ -31,7 +34,9 @@
 
 #include "libaudit.h"
 #include "LogAudit.h"
+#include "LogBuffer.h"
 #include "LogKlog.h"
+#include "LogReader.h"
 
 #ifndef AUDITD_ENFORCE_INTEGRITY
 #define AUDITD_ENFORCE_INTEGRITY false
