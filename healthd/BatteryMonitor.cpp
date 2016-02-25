@@ -39,6 +39,8 @@
 #define FAKE_BATTERY_CAPACITY 42
 #define FAKE_BATTERY_TEMPERATURE 424
 #define ALWAYS_PLUGGED_CAPACITY 100
+#define MILLION 10000000.0
+#define DEFAULT_VBUS_VOLTAGE 5000000
 
 namespace android {
 
@@ -61,6 +63,7 @@ static void initBatteryProperties(BatteryProperties* props) {
     props->chargerUsbOnline = false;
     props->chargerWirelessOnline = false;
     props->maxChargingCurrent = 0;
+    props->maxChargingVoltage = 0;
     props->batteryStatus = BATTERY_STATUS_UNKNOWN;
     props->batteryHealth = BATTERY_HEALTH_UNKNOWN;
     props->batteryPresent = false;
@@ -254,6 +257,7 @@ bool BatteryMonitor::update(void) {
         props.batteryTechnology = String8(buf);
 
     unsigned int i;
+    double MaxPower = 0;
 
     for (i = 0; i < mChargerNames.size(); i++) {
         String8 path;
@@ -282,11 +286,23 @@ bool BatteryMonitor::update(void) {
                 path.clear();
                 path.appendFormat("%s/%s/current_max", POWER_SUPPLY_SYSFS_PATH,
                                   mChargerNames[i].string());
-                if (access(path.string(), R_OK) == 0) {
-                    int maxChargingCurrent = getIntField(path);
-                    if (props.maxChargingCurrent < maxChargingCurrent) {
-                        props.maxChargingCurrent = maxChargingCurrent;
-                    }
+                int ChargingCurrent =
+                    (access(path.string(), R_OK) == 0) ? getIntField(path) : 0;
+
+                path.clear();
+                path.appendFormat("%s/%s/voltage_max", POWER_SUPPLY_SYSFS_PATH,
+                                  mChargerNames[i].string());
+
+                int ChargingVoltage =
+                    (access(path.string(), R_OK) == 0) ? getIntField(path) :
+                    DEFAULT_VBUS_VOLTAGE;
+
+                double power = ((double)ChargingCurrent / MILLION) *
+                        ((double)ChargingVoltage / MILLION);
+                if (MaxPower < power) {
+                    props.maxChargingCurrent = ChargingCurrent;
+                    props.maxChargingVoltage = ChargingVoltage;
+                    MaxPower = power;
                 }
             }
         }
@@ -416,9 +432,10 @@ void BatteryMonitor::dumpState(int fd) {
     int v;
     char vs[128];
 
-    snprintf(vs, sizeof(vs), "ac: %d usb: %d wireless: %d current_max: %d\n",
+    snprintf(vs, sizeof(vs), "ac: %d usb: %d wireless: %d current_max: %d voltage_max: %d\n",
              props.chargerAcOnline, props.chargerUsbOnline,
-             props.chargerWirelessOnline, props.maxChargingCurrent);
+             props.chargerWirelessOnline, props.maxChargingCurrent,
+             props.maxChargingVoltage);
     write(fd, vs, strlen(vs));
     snprintf(vs, sizeof(vs), "status: %d health: %d present: %d\n",
              props.batteryStatus, props.batteryHealth, props.batteryPresent);
