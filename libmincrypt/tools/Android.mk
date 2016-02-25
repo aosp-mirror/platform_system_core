@@ -14,9 +14,19 @@
 
 LOCAL_PATH := $(call my-dir)
 
+# Determine whether to build dumpkey from system/core/libmincrypt or from
+# bootable/recovery/tools. The dumpkey source is temporarily present in both
+# locations during the process of moving the tool to the recovery repository.
+# TODO(mnissler): Remove the guard after the transition is complete.
+ifndef BUILD_DUMPKEY_FROM_RECOVERY
+BUILD_DUMPKEY_FROM_RECOVERY := false
+endif
+
+ifeq ($(BUILD_DUMPKEY_FROM_RECOVERY),false)
 include $(CLEAR_VARS)
 LOCAL_MODULE := dumpkey
 LOCAL_SRC_FILES := DumpPublicKey.java
 LOCAL_JAR_MANIFEST := DumpPublicKey.mf
 LOCAL_STATIC_JAVA_LIBRARIES := bouncycastle-host
 include $(BUILD_HOST_JAVA_LIBRARY)
+endif
