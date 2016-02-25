@@ -26,6 +26,9 @@
 namespace android {
 
 __attribute__((visibility("default")))
+void PreloadPublicNativeLibraries();
+
+__attribute__((visibility("default")))
 void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* path,
                         jobject class_loader, bool is_shared, jstring library_path,
                         jstring permitted_path);
