@@ -49,7 +49,9 @@ class KernelCollectorTest : public ::testing::Test {
  protected:
   void WriteStringToFile(const FilePath &file_path,
                          const char *data) {
-    ASSERT_EQ(strlen(data), base::WriteFile(file_path, data, strlen(data)));
+    unsigned int numBytesWritten =
+        base::WriteFile(file_path, data, strlen(data));
+    ASSERT_EQ(strlen(data), numBytesWritten);
   }
 
   void SetUpSuccessfulCollect();
@@ -284,7 +286,7 @@ TEST_F(KernelCollectorTest, CollectOK) {
   size_t end_pos = filename.find_first_of("\n");
   ASSERT_NE(std::string::npos, end_pos);
   filename = filename.substr(0, end_pos);
-  ASSERT_EQ(0, filename.find(test_crash_directory().value()));
+  ASSERT_EQ(0U, filename.find(test_crash_directory().value()));
   ASSERT_TRUE(base::PathExists(FilePath(filename)));
   std::string contents;
   ASSERT_TRUE(base::ReadFileToString(FilePath(filename), &contents));
