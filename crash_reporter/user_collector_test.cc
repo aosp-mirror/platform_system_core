@@ -186,10 +186,10 @@ TEST_F(UserCollectorTest, GetSymlinkTarget) {
         test_dir_.path().Append("test/this_link").value().c_str();
     this_link.assign(long_link.c_str(), len);
     ASSERT_EQ(len, this_link.size());
-    unlink(kLink);
     ASSERT_EQ(0, symlink(this_link.c_str(), kLink));
     ASSERT_TRUE(collector_.GetSymlinkTarget(FilePath(kLink), &result));
     ASSERT_EQ(this_link, result.value());
+    unlink(kLink);
   }
 }
 
