@@ -138,9 +138,9 @@ static void __initialize(void) {
         ta_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
 
 #ifdef USE_SCHEDBOOST
-        filename = "/sys/fs/cgroup/stune/foreground/tasks";
+        filename = "/dev/stune/foreground/tasks";
         fg_schedboost_fd = open(filename, O_WRONLY | O_CLOEXEC);
-        filename = "/sys/fs/cgroup/stune/tasks";
+        filename = "/dev/stune/tasks";
         bg_schedboost_fd = open(filename, O_WRONLY | O_CLOEXEC);
 #endif
     }
