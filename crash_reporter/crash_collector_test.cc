@@ -95,7 +95,7 @@ TEST_F(CrashCollectorTest, Sanitize) {
 }
 
 TEST_F(CrashCollectorTest, FormatDumpBasename) {
-  struct tm tm = {0};
+  struct tm tm = {};
   tm.tm_sec = 15;
   tm.tm_min = 50;
   tm.tm_hour = 13;
