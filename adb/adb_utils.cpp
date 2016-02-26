@@ -153,7 +153,9 @@ bool mkdirs(const std::string& path) {
   // - Recursive, so it uses stack space relative to number of directory
   //   components.
 
-  if (directory_exists(path)) {
+  // If path points to a symlink to a directory, that's fine.
+  struct stat sb;
+  if (stat(path.c_str(), &sb) != -1 && S_ISDIR(sb.st_mode)) {
     return true;
   }
 
