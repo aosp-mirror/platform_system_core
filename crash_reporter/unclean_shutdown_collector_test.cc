@@ -73,7 +73,9 @@ class UncleanShutdownCollectorTest : public ::testing::Test {
  protected:
   void WriteStringToFile(const FilePath &file_path,
                          const char *data) {
-    ASSERT_EQ(strlen(data), base::WriteFile(file_path, data, strlen(data)));
+    unsigned int numBytesWritten =
+        base::WriteFile(file_path, data, strlen(data));
+    ASSERT_EQ(strlen(data), numBytesWritten);
   }
 
   UncleanShutdownCollectorMock collector_;

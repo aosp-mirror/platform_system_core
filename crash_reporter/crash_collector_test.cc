@@ -74,10 +74,11 @@ TEST_F(CrashCollectorTest, Initialize) {
 TEST_F(CrashCollectorTest, WriteNewFile) {
   FilePath test_file = test_dir_.path().Append("test_new");
   const char kBuffer[] = "buffer";
-  EXPECT_EQ(strlen(kBuffer),
-            collector_.WriteNewFile(test_file,
-                                    kBuffer,
-                                    strlen(kBuffer)));
+  unsigned int numBytesWritten = collector_.WriteNewFile(
+      test_file,
+      kBuffer,
+      strlen(kBuffer));
+  EXPECT_EQ(strlen(kBuffer), numBytesWritten);
   EXPECT_LT(collector_.WriteNewFile(test_file,
                                     kBuffer,
                                     strlen(kBuffer)), 0);
