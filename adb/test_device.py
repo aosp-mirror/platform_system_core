@@ -845,6 +845,72 @@ class FileOperationsTest(DeviceTest):
             if host_dir is not None:
                 shutil.rmtree(host_dir)
 
+    def test_pull_dir_symlink(self):
+        """Pull a directory into a symlink to a directory.
+
+        Bug: http://b/27362811
+        """
+        if os.name != "posix":
+            raise unittest.SkipTest('requires POSIX')
+
+        try:
+            host_dir = tempfile.mkdtemp()
+            real_dir = os.path.join(host_dir, "dir")
+            symlink = os.path.join(host_dir, "symlink")
+            os.mkdir(real_dir)
+            os.symlink(real_dir, symlink)
+
+            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+            self.device.shell(['mkdir', '-p', self.DEVICE_TEMP_DIR])
+
+            # Populate device directory with random files.
+            temp_files = make_random_device_files(
+                self.device, in_dir=self.DEVICE_TEMP_DIR, num_files=32)
+
+            self.device.pull(remote=self.DEVICE_TEMP_DIR, local=symlink)
+
+            for temp_file in temp_files:
+                host_path = os.path.join(
+                    real_dir, posixpath.basename(self.DEVICE_TEMP_DIR),
+                    temp_file.base_name)
+                self._verify_local(temp_file.checksum, host_path)
+
+            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+        finally:
+            if host_dir is not None:
+                shutil.rmtree(host_dir)
+
+    def test_pull_dir_symlink_collision(self):
+        """Pull a directory into a colliding symlink to directory."""
+        if os.name != "posix":
+            raise unittest.SkipTest('requires POSIX')
+
+        try:
+            host_dir = tempfile.mkdtemp()
+            real_dir = os.path.join(host_dir, "real")
+            tmp_dirname = os.path.basename(self.DEVICE_TEMP_DIR)
+            symlink = os.path.join(host_dir, tmp_dirname)
+            os.mkdir(real_dir)
+            os.symlink(real_dir, symlink)
+
+            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+            self.device.shell(['mkdir', '-p', self.DEVICE_TEMP_DIR])
+
+            # Populate device directory with random files.
+            temp_files = make_random_device_files(
+                self.device, in_dir=self.DEVICE_TEMP_DIR, num_files=32)
+
+            self.device.pull(remote=self.DEVICE_TEMP_DIR, local=host_dir)
+
+            for temp_file in temp_files:
+                host_path = os.path.join(real_dir, temp_file.base_name)
+                self._verify_local(temp_file.checksum, host_path)
+
+            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+        finally:
+            if host_dir is not None:
+                shutil.rmtree(host_dir)
+
     def test_pull_symlink_dir(self):
         """Pull a symlink to a directory of symlinks to files."""
         try:
