@@ -101,15 +101,15 @@ TEST_F(UserCollectorTest, ParseCrashAttributes) {
       &pid, &signal, &uid, &gid, &exec_name));
   EXPECT_EQ(123456, pid);
   EXPECT_EQ(11, signal);
-  EXPECT_EQ(1000, uid);
-  EXPECT_EQ(2000, gid);
+  EXPECT_EQ(1000U, uid);
+  EXPECT_EQ(2000U, gid);
   EXPECT_EQ("foobar", exec_name);
   EXPECT_TRUE(collector_.ParseCrashAttributes("4321:6:barfoo",
       &pid, &signal, &uid, &gid, &exec_name));
   EXPECT_EQ(4321, pid);
   EXPECT_EQ(6, signal);
-  EXPECT_EQ(-1, uid);
-  EXPECT_EQ(-1, gid);
+  EXPECT_EQ(-1U, uid);
+  EXPECT_EQ(-1U, gid);
   EXPECT_EQ("barfoo", exec_name);
 
   EXPECT_FALSE(collector_.ParseCrashAttributes("123456:11",
@@ -333,8 +333,8 @@ TEST_F(UserCollectorTest, GetUserInfoFromName) {
   gid_t gid = 100;
   uid_t uid = 100;
   EXPECT_TRUE(collector_.GetUserInfoFromName("root", &uid, &gid));
-  EXPECT_EQ(0, uid);
-  EXPECT_EQ(0, gid);
+  EXPECT_EQ(0U, uid);
+  EXPECT_EQ(0U, gid);
 }
 
 TEST_F(UserCollectorTest, CopyOffProcFilesBadPath) {
@@ -387,7 +387,9 @@ TEST_F(UserCollectorTest, ValidateProcFiles) {
 
   // maps file is not empty
   const char data[] = "test data";
-  ASSERT_EQ(sizeof(data), base::WriteFile(maps_file, data, sizeof(data)));
+  unsigned int numBytesWritten =
+      base::WriteFile(maps_file, data, sizeof(data));
+  ASSERT_EQ(sizeof(data), numBytesWritten);
   ASSERT_TRUE(base::PathExists(maps_file));
   EXPECT_TRUE(collector_.ValidateProcFiles(container_dir));
 }
