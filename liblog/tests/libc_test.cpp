@@ -31,66 +31,6 @@ typedef unsigned char log_id_t; // log_id_t missing as a result
 #include <log/logger.h>
 #include <log/log_read.h>
 
-TEST(libc, __libc_android_log_event_int) {
-    struct logger_list *logger_list;
-
-    pid_t pid = getpid();
-
-    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-        LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
-
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    int value = ts.tv_nsec;
-
-    __libc_android_log_event_int(0, value);
-    usleep(1000000);
-
-    int count = 0;
-
-    for (;;) {
-        log_msg log_msg;
-        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
-            break;
-        }
-
-        ASSERT_EQ(log_msg.entry.pid, pid);
-
-        if ((log_msg.entry.len != (4 + 1 + 4))
-         || ((int)log_msg.id() != LOG_ID_EVENTS)) {
-            continue;
-        }
-
-        char *eventData = log_msg.msg();
-
-        int incoming = (eventData[0] & 0xFF) |
-                      ((eventData[1] & 0xFF) << 8) |
-                      ((eventData[2] & 0xFF) << 16) |
-                      ((eventData[3] & 0xFF) << 24);
-
-        if (incoming != 0) {
-            continue;
-        }
-
-        if (eventData[4] != EVENT_TYPE_INT) {
-            continue;
-        }
-
-        incoming = (eventData[4 + 1 + 0] & 0xFF) |
-                  ((eventData[4 + 1 + 1] & 0xFF) << 8) |
-                  ((eventData[4 + 1 + 2] & 0xFF) << 16) |
-                  ((eventData[4 + 1 + 3] & 0xFF) << 24);
-
-        if (incoming == value) {
-            ++count;
-        }
-    }
-
-    EXPECT_EQ(1, count);
-
-    android_logger_list_close(logger_list);
-}
-
 TEST(libc, __libc_fatal_no_abort) {
     struct logger_list *logger_list;
 
