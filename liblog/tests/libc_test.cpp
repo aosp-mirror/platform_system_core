@@ -14,66 +14,9 @@
  * limitations under the License.
  */
 
-#include <fcntl.h>
-#include <sys/cdefs.h>
-
 #include <gtest/gtest.h>
 
-// Should be in bionic test suite, *but* we are using liblog to confirm
-// end-to-end logging, so let the overly cute oedipus complex begin ...
-#include "../../../../bionic/libc/bionic/libc_logging.cpp" // not Standalone
-#define _ANDROID_LOG_H // Priorities redefined
-#define _LIBS_LOG_LOG_H // log ids redefined
-typedef unsigned char log_id_t; // log_id_t missing as a result
-#define _LIBS_LOG_LOG_READ_H // log_time redefined
-
-#include <log/log.h>
-#include <log/logger.h>
-#include <log/log_read.h>
-
-TEST(libc, __libc_fatal_no_abort) {
-    struct logger_list *logger_list;
-
-    pid_t pid = getpid();
-
-    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-        (log_id_t)LOG_ID_CRASH, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
-
-    char b[80];
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-
-    __libc_fatal_no_abort("%u.%09u", (unsigned)ts.tv_sec, (unsigned)ts.tv_nsec);
-    snprintf(b, sizeof(b),"%u.%09u", (unsigned)ts.tv_sec, (unsigned)ts.tv_nsec);
-    usleep(1000000);
-
-    int count = 0;
-
-    for (;;) {
-        log_msg log_msg;
-        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
-            break;
-        }
-
-        ASSERT_EQ(log_msg.entry.pid, pid);
-
-        if ((int)log_msg.id() != LOG_ID_CRASH) {
-            continue;
-        }
-
-        char *data = log_msg.msg();
-
-        if ((*data == ANDROID_LOG_FATAL)
-                && !strcmp(data + 1, "libc")
-                && !strcmp(data + 1 + strlen(data + 1) + 1, b)) {
-            ++count;
-        }
-    }
-
-    EXPECT_EQ(1, count);
-
-    android_logger_list_close(logger_list);
-}
+#include <stdio.h>
 
 TEST(libc, __pstore_append) {
     FILE *fp;
