@@ -155,15 +155,15 @@ int LogAudit::logPrint(const char *fmt, ...) {
         }
     }
 
-    bool notEnforcing = strstr(str, " enforcing=0");
-    bool permissive = strstr(str, " permissive=1");
+    bool permissive = strstr(str, " enforcing=0") ||
+                      strstr(str, " permissive=1");
 
-    if (notEnforcing) {
+    if (permissive) {
         // SELinux in permissive mode is not allowed
         enforceIntegrity();
     }
 
-    bool info = loaded || permissive || notEnforcing;
+    bool info = loaded || permissive;
     if ((fdDmesg >= 0) && initialized) {
         struct iovec iov[3];
         static const char log_info[] = { KMSG_PRIORITY(LOG_INFO) };
