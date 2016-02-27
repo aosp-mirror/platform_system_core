@@ -517,12 +517,6 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath) 
     if (!sc.SendRequest(ID_RECV, rpath)) return false;
 
     adb_unlink(lpath);
-    const std::string dirpath = adb_dirname(lpath);
-    if (!mkdirs(dirpath.c_str())) {
-        sc.Error("failed to create parent directory '%s': %s", dirpath.c_str(), strerror(errno));
-        return false;
-    }
-
     int lfd = adb_creat(lpath, 0644);
     if (lfd < 0) {
         sc.Error("cannot create '%s': %s", lpath, strerror(errno));
@@ -803,22 +797,20 @@ static bool remote_symlink_isdir(SyncConnection& sc, const std::string& rpath) {
     return S_ISDIR(mode);
 }
 
-static bool remote_build_list(SyncConnection& sc,
-                              std::vector<copyinfo>* file_list,
-                              const std::string& rpath,
-                              const std::string& lpath) {
+static bool remote_build_list(SyncConnection& sc, std::vector<copyinfo>* file_list,
+                              const std::string& rpath, const std::string& lpath) {
     std::vector<copyinfo> dirlist;
     std::vector<copyinfo> linklist;
-    bool empty_dir = true;
+
+    // Add an entry for the current directory to ensure it gets created before pulling its contents.
+    copyinfo ci(adb_dirname(lpath), adb_dirname(rpath), adb_basename(rpath), S_IFDIR);
+    file_list->push_back(ci);
 
     // Put the files/dirs in rpath on the lists.
     auto callback = [&](unsigned mode, unsigned size, unsigned time, const char* name) {
         if (IsDotOrDotDot(name)) {
             return;
         }
-
-        // We found a child that isn't '.' or '..'.
-        empty_dir = false;
 
         copyinfo ci(lpath, rpath, name, mode);
         if (S_ISDIR(mode)) {
@@ -834,13 +826,6 @@ static bool remote_build_list(SyncConnection& sc,
 
     if (!sync_ls(sc, rpath.c_str(), callback)) {
         return false;
-    }
-
-    // Add the current directory to the list if it was empty, to ensure that it gets created.
-    if (empty_dir) {
-        copyinfo ci(adb_dirname(lpath), adb_dirname(rpath), adb_basename(rpath), S_IFDIR);
-        file_list->push_back(ci);
-        return true;
     }
 
     // Check each symlink we found to see whether it's a file or directory.
