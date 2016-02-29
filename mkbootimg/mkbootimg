@@ -19,6 +19,7 @@ from argparse import ArgumentParser, FileType, Action
 from os import fstat
 from struct import pack
 from hashlib import sha1
+import sys
 
 def filesize(f):
     if f is None:
@@ -133,8 +134,10 @@ def main():
     img_id = write_header(args)
     write_data(args)
     if args.id:
-        print('0x' + ''.join('{:02x}'.format(ord(c)) for c in img_id))
-
+        if isinstance(img_id, str):
+            # Python 2's struct.pack returns a string, but py3 returns bytes.
+            img_id = [ord(x) for x in img_id]
+        print('0x' + ''.join('{:02x}'.format(c) for c in img_id))
 
 if __name__ == '__main__':
     main()
