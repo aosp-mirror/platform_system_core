@@ -16,6 +16,7 @@
 #
 # pylint: disable=bad-indentation,bad-continuation
 
+from __future__ import print_function
 import os
 import re
 import sys
@@ -72,11 +73,11 @@ with open(sys.argv[1], 'r') as f:
         ff_list.append(name)
 
 def Dump(struct_name, values):
-  print 'static struct label %s[] = {' % (struct_name)
+  print('static struct label %s[] = {' % (struct_name))
   for value in values:
-    print '    LABEL(%s),' % (value)
-  print '    LABEL_END,'
-  print '};'
+    print('    LABEL(%s),' % (value))
+  print('    LABEL_END,')
+  print('};')
 
 Dump("input_prop_labels", input_prop_list)
 Dump("ev_labels", ev_list)
