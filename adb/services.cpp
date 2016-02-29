@@ -421,6 +421,11 @@ static void connect_device(const std::string& address, std::string* response) {
     close_on_exec(fd);
     disable_tcp_nagle(fd);
 
+    // Send a TCP keepalive ping to the device every second so we can detect disconnects.
+    if (!set_tcp_keepalive(fd, 1)) {
+        D("warning: failed to configure TCP keepalives (%s)", strerror(errno));
+    }
+
     int ret = register_socket_transport(fd, serial.c_str(), port, 0);
     if (ret < 0) {
         adb_close(fd);

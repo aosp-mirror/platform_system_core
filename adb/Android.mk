@@ -79,10 +79,12 @@ LIBADB_windows_CFLAGS := \
 
 LIBADB_darwin_SRC_FILES := \
     get_my_path_darwin.cpp \
+    sysdeps_unix.cpp \
     usb_osx.cpp \
 
 LIBADB_linux_SRC_FILES := \
     get_my_path_linux.cpp \
+    sysdeps_unix.cpp \
     usb_linux.cpp \
 
 LIBADB_windows_SRC_FILES := \
