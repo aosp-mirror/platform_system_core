@@ -99,11 +99,20 @@ std::string LogAudit::getProperty(const std::string& name)
 }
 
 void LogAudit::enforceIntegrity() {
+    static bool loggedOnce;
+    bool once = loggedOnce;
+
+    loggedOnce = true;
+
     if (!AUDITD_ENFORCE_INTEGRITY) {
-        logToDmesg("integrity enforcement suppressed; not rebooting");
+        if (!once) {
+            logToDmesg("integrity enforcement suppressed; not rebooting");
+        }
     } else if (rebootToSafeMode) {
         if (getProperty("persist.sys.safemode") == "1") {
-            logToDmesg("integrity enforcement suppressed; in safe mode");
+            if (!once) {
+                logToDmesg("integrity enforcement suppressed; in safe mode");
+            }
             return;
         }
 
