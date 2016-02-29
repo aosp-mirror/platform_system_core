@@ -841,4 +841,9 @@ static inline void disable_tcp_nagle(int fd) {
     adb_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &off, sizeof(off));
 }
 
+// Sets TCP socket |fd| to send a keepalive TCP message every |interval_sec| seconds. Set
+// |interval_sec| to 0 to disable keepalives. If keepalives are enabled, the connection will be
+// configured to drop after 10 missed keepalives. Returns true on success.
+bool set_tcp_keepalive(int fd, int interval_sec);
+
 #endif /* _ADB_SYSDEPS_H */
