@@ -1228,6 +1228,33 @@ bool set_file_block_mode(int fd, bool block) {
     }
 }
 
+bool set_tcp_keepalive(int fd, int interval_sec) {
+    FH fh = _fh_from_int(fd, __func__);
+
+    if (!fh || fh->clazz != &_fh_socket_class) {
+        D("set_tcp_keepalive(%d) failed: invalid fd", fd);
+        errno = EBADF;
+        return false;
+    }
+
+    tcp_keepalive keepalive;
+    keepalive.onoff = (interval_sec > 0);
+    keepalive.keepalivetime = interval_sec * 1000;
+    keepalive.keepaliveinterval = interval_sec * 1000;
+
+    DWORD bytes_returned = 0;
+    if (WSAIoctl(fh->fh_socket, SIO_KEEPALIVE_VALS, &keepalive, sizeof(keepalive), nullptr, 0,
+                 &bytes_returned, nullptr, nullptr) != 0) {
+        const DWORD err = WSAGetLastError();
+        D("set_tcp_keepalive(%d) failed: %s", fd,
+          android::base::SystemErrorCodeToString(err).c_str());
+        _socket_set_errno(err);
+        return false;
+    }
+
+    return true;
+}
+
 static adb_mutex_t g_console_output_buffer_lock;
 
 void
