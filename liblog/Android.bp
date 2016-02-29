@@ -14,15 +14,16 @@
 // limitations under the License.
 //
 
-liblog_host_sources = [
+liblog_sources = [
     "logd_write.c",
+    "log_event_list.c",
     "log_event_write.c",
+]
+liblog_host_sources = [
     "fake_log_device.c",
     //"event.logtags",
 ]
 liblog_target_sources = [
-    "logd_write.c",
-    "log_event_write.c",
     "event_tag_map.c",
     "log_time.cpp",
     "log_is_loggable.c",
@@ -35,6 +36,8 @@ liblog_target_sources = [
 cc_library {
     name: "liblog",
     host_supported: true,
+
+    srcs: liblog_sources,
 
     target: {
         host: {
@@ -71,7 +74,6 @@ cc_library {
         //       $(LOCAL_PATH)/event.logtags)
         // so make sure we do not regret hard-coding it as follows:
         "-DLIBLOG_LOG_TAG=1005",
-        "-DSNET_EVENT_LOG_TAG=1397638484",
     ],
     compile_multilib: "both",
     stl: "none",
