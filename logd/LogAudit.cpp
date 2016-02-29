@@ -164,6 +164,10 @@ int LogAudit::logPrint(const char *fmt, ...) {
         }
     }
 
+    // Note: The audit log can include untrusted strings, but those containing
+    // "a control character, unprintable character, double quote mark, or a
+    // space" are hex encoded. The space character before the search term is
+    // therefore needed to prevent denial of service. Do not remove the space.
     bool permissive = strstr(str, " enforcing=0") ||
                       strstr(str, " permissive=1");
 
