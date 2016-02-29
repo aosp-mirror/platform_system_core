@@ -189,7 +189,7 @@ bool CrashCollector::GetUserInfoFromName(const std::string &name,
   return true;
 }
 
-bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
+bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid __unused,
                                                     FilePath *crash_directory,
                                                     bool *out_of_capacity) {
   if (out_of_capacity) *out_of_capacity = false;
