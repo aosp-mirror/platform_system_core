@@ -90,7 +90,11 @@ my_dist_files := $(LOCAL_BUILT_MODULE)
 ifeq ($(HOST_OS),linux)
 my_dist_files += $(HOST_LIBRARY_PATH)/libf2fs_fmt_host_dyn$(HOST_SHLIB_SUFFIX)
 endif
-$(call dist-for-goals,dist_files sdk,$(my_dist_files))
+$(call dist-for-goals,dist_files sdk win_sdk,$(my_dist_files))
+ifdef HOST_CROSS_OS
+# Archive fastboot.exe for win_sdk build.
+$(call dist-for-goals,win_sdk,$(ALL_MODULES.host_cross_fastboot.BUILT))
+endif
 my_dist_files :=
 
 ifeq ($(HOST_OS),linux)
