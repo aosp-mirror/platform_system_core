@@ -89,9 +89,9 @@ TEST_F(VectorTest, SetCapacity_ShrinkBelowSize) {
   vector.add(4);
 
   vector.setCapacity(8);
-  ASSERT_EQ(8, vector.capacity());
+  ASSERT_EQ(8U, vector.capacity());
   vector.setCapacity(2);
-  ASSERT_EQ(8, vector.capacity());
+  ASSERT_EQ(8U, vector.capacity());
 }
 
 // NOTE: All of the tests below are useless because of the "TODO" above.
