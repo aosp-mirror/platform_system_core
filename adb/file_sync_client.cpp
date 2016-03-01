@@ -188,6 +188,7 @@ class SyncConnection {
         WriteOrDie(lpath, rpath, &buf[0], (p - &buf[0]));
         expect_done_ = true;
         total_bytes_ += data_length;
+        ReportProgress(rpath, data_length, data_length);
         return true;
     }
 
