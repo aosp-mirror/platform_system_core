@@ -70,6 +70,11 @@ ifdef BOARD_ROOT_EXTRA_SYMLINKS
     ; mkdir -p $(dir $(TARGET_ROOT_OUT)/$(word 2,$(p))) \
     ; ln -sf $(word 1,$(p)) $(TARGET_ROOT_OUT)/$(word 2,$(p)))
 endif
+# The A/B updater uses a top-level /postinstall directory to mount the new
+# system before reboot.
+ifeq ($(AB_OTA_UPDATER),true)
+  LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/postinstall
+endif
 
 include $(BUILD_SYSTEM)/base_rules.mk
 
