@@ -15,20 +15,29 @@
 //
 
 liblog_sources = [
-    "logd_write.c",
     "log_event_list.c",
     "log_event_write.c",
+    "logger_write.c",
+    "config_write.c",
+    "logger_name.c",
+    "logger_lock.c",
 ]
 liblog_host_sources = [
     "fake_log_device.c",
     //"event.logtags",
+    "fake_writer.c",
 ]
 liblog_target_sources = [
     "event_tag_map.c",
+    "config_read.c",
     "log_time.cpp",
     "log_is_loggable.c",
     "logprint.c",
-    "log_read.c",
+    "pmsg_reader.c",
+    "pmsg_writer.c",
+    "logd_reader.c",
+    "logd_writer.c",
+    "logger_read.c",
 ]
 
 // Shared and static library for host and device
