@@ -21,7 +21,7 @@
 
 #include <log/log_read.h>
 
-#include "log_cdefs.h"
+#include "log_portability.h"
 
 LIBLOG_ABI_PRIVATE const char log_time::default_format[] = "%m-%d %H:%M:%S.%q";
 LIBLOG_ABI_PRIVATE const timespec log_time::EPOCH = { 0, 0 };

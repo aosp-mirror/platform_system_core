@@ -24,10 +24,14 @@ include $(CLEAR_VARS)
 # so make sure we do not regret hard-coding it as follows:
 liblog_cflags := -DLIBLOG_LOG_TAG=1005
 
-liblog_sources := logd_write.c log_event_list.c log_event_write.c
+liblog_sources := log_event_list.c log_event_write.c logger_write.c
+liblog_sources += config_write.c logger_name.c logger_lock.c
 liblog_host_sources := $(liblog_sources) fake_log_device.c event.logtags
+liblog_host_sources += fake_writer.c
 liblog_target_sources := $(liblog_sources) event_tag_map.c
-liblog_target_sources += log_time.cpp log_is_loggable.c logprint.c log_read.c
+liblog_target_sources += config_read.c log_time.cpp log_is_loggable.c logprint.c
+liblog_target_sources += pmsg_reader.c pmsg_writer.c
+liblog_target_sources += logd_reader.c logd_writer.c logger_read.c
 
 # Shared and static library for host
 # ========================================================
