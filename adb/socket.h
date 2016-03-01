@@ -114,4 +114,13 @@ asocket *create_remote_socket(unsigned id, atransport *t);
 void connect_to_remote(asocket *s, const char *destination);
 void connect_to_smartsocket(asocket *s);
 
+// Internal functions that are only made available here for testing purposes.
+namespace internal {
+
+#if ADB_HOST
+char* skip_host_serial(const char* service);
+#endif
+
+}  // namespace internal
+
 #endif  // __ADB_SOCKET_H
