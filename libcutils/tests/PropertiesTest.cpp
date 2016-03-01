@@ -106,14 +106,14 @@ TEST_F(PropertiesTest, SetString) {
         ResetValue();
 
         // Since the value is null, default value will be returned
-        int len = property_get(PROPERTY_TEST_KEY, mValue, PROPERTY_TEST_VALUE_DEFAULT);
+        size_t len = property_get(PROPERTY_TEST_KEY, mValue, PROPERTY_TEST_VALUE_DEFAULT);
         EXPECT_EQ(strlen(PROPERTY_TEST_VALUE_DEFAULT), len);
         EXPECT_STREQ(PROPERTY_TEST_VALUE_DEFAULT, mValue);
     }
 
     // Trivial case => get returns what was set
     {
-        int len = SetAndGetProperty("hello_world");
+        size_t len = SetAndGetProperty("hello_world");
         EXPECT_EQ(strlen("hello_world"), len) << "hello_world key";
         EXPECT_STREQ("hello_world", mValue);
         ResetValue();
@@ -122,7 +122,7 @@ TEST_F(PropertiesTest, SetString) {
     // Set to empty string => get returns default always
     {
         const char* EMPTY_STRING_DEFAULT = "EMPTY_STRING";
-        int len = SetAndGetProperty("", EMPTY_STRING_DEFAULT);
+        size_t len = SetAndGetProperty("", EMPTY_STRING_DEFAULT);
         EXPECT_EQ(strlen(EMPTY_STRING_DEFAULT), len) << "empty key";
         EXPECT_STREQ(EMPTY_STRING_DEFAULT, mValue);
         ResetValue();
@@ -147,7 +147,7 @@ TEST_F(PropertiesTest, SetString) {
 
         // Expect that the value set fails since it's too long
         EXPECT_GT(0, property_set(PROPERTY_TEST_KEY, oneLongerString.c_str()));
-        int len = property_get(PROPERTY_TEST_KEY, mValue, PROPERTY_TEST_VALUE_DEFAULT);
+        size_t len = property_get(PROPERTY_TEST_KEY, mValue, PROPERTY_TEST_VALUE_DEFAULT);
 
         EXPECT_EQ(strlen(VALID_TEST_VALUE), len) << "set should've failed";
         EXPECT_STREQ(VALID_TEST_VALUE, mValue);
