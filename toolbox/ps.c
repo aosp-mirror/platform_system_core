@@ -57,16 +57,16 @@ static int ps_line(int pid, int tid)
     int prio, nice, rtprio, sched, psr;
     struct passwd *pw;
 
-    sprintf(statline, "/proc/%d", tid ? tid : pid);
+    snprintf(statline, sizeof(statline), "/proc/%d", tid ? tid : pid);
     stat(statline, &stats);
 
     if(tid) {
-        sprintf(statline, "/proc/%d/task/%d/stat", pid, tid);
+        snprintf(statline, sizeof(statline), "/proc/%d/task/%d/stat", pid, tid);
         cmdline[0] = 0;
         snprintf(macline, sizeof(macline), "/proc/%d/task/%d/attr/current", pid, tid);
     } else {
-        sprintf(statline, "/proc/%d/stat", pid);
-        sprintf(cmdline, "/proc/%d/cmdline", pid);
+        snprintf(statline, sizeof(statline), "/proc/%d/stat", pid);
+        snprintf(cmdline, sizeof(cmdline), "/proc/%d/cmdline", pid);
         snprintf(macline, sizeof(macline), "/proc/%d/attr/current", pid);
         int fd = open(cmdline, O_RDONLY);
         if(fd == 0) {
@@ -149,7 +149,7 @@ static int ps_line(int pid, int tid)
 
     pw = getpwuid(stats.st_uid);
     if(pw == 0 || (display_flags & SHOW_NUMERIC_UID)) {
-        sprintf(user,"%d",(int)stats.st_uid);
+        snprintf(user,sizeof(user),"%d",(int)stats.st_uid);
     } else {
         strcpy(user,pw->pw_name);
     }
@@ -208,7 +208,7 @@ static void print_exe_abi(int pid)
     int fd, r;
     char exeline[1024];
 
-    sprintf(exeline, "/proc/%d/exe", pid);
+    snprintf(exeline, sizeof(exeline), "/proc/%d/exe", pid);
     fd = open(exeline, O_RDONLY);
     if(fd == 0) {
         printf("    ");
@@ -243,7 +243,7 @@ void ps_threads(int pid)
     DIR *d;
     struct dirent *de;
 
-    sprintf(tmp,"/proc/%d/task",pid);
+    snprintf(tmp,sizeof(tmp),"/proc/%d/task",pid);
     d = opendir(tmp);
     if(d == 0) return;
 

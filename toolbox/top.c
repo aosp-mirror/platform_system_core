@@ -258,29 +258,29 @@ static void read_procs(void) {
 
             proc->pid = proc->tid = pid;
 
-            sprintf(filename, "/proc/%d/stat", pid);
+            snprintf(filename, sizeof(filename), "/proc/%d/stat", pid);
             read_stat(filename, proc);
 
-            sprintf(filename, "/proc/%d/cmdline", pid);
+            snprintf(filename, sizeof(filename), "/proc/%d/cmdline", pid);
             read_cmdline(filename, proc);
 
-            sprintf(filename, "/proc/%d/status", pid);
+            snprintf(filename, sizeof(filename), "/proc/%d/status", pid);
             read_status(filename, proc);
 
             read_policy(pid, proc);
 
             proc->num_threads = 0;
         } else {
-            sprintf(filename, "/proc/%d/cmdline", pid);
+            snprintf(filename, sizeof(filename), "/proc/%d/cmdline", pid);
             read_cmdline(filename, &cur_proc);
 
-            sprintf(filename, "/proc/%d/status", pid);
+            snprintf(filename, sizeof(filename), "/proc/%d/status", pid);
             read_status(filename, &cur_proc);
 
             proc = NULL;
         }
 
-        sprintf(filename, "/proc/%d/task", pid);
+        snprintf(filename, sizeof(filename), "/proc/%d/task", pid);
         task_dir = opendir(filename);
         if (!task_dir) continue;
 
@@ -295,7 +295,7 @@ static void read_procs(void) {
 
                 proc->pid = pid; proc->tid = tid;
 
-                sprintf(filename, "/proc/%d/task/%d/stat", pid, tid);
+                snprintf(filename, sizeof(filename), "/proc/%d/task/%d/stat", pid, tid);
                 read_stat(filename, proc);
 
                 read_policy(tid, proc);
@@ -484,7 +484,7 @@ static void print_procs(void) {
         if (user && user->pw_name) {
             user_str = user->pw_name;
         } else {
-            snprintf(user_buf, 20, "%d", proc->uid);
+            snprintf(user_buf, sizeof(user_buf), "%d", proc->uid);
             user_str = user_buf;
         }
         if (!threads) {

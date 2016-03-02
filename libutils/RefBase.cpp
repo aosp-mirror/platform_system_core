@@ -190,17 +190,22 @@ public:
         {
             Mutex::Autolock _l(mMutex);
             char buf[128];
-            sprintf(buf, "Strong references on RefBase %p (weakref_type %p):\n", mBase, this);
+            snprintf(buf, sizeof(buf),
+                     "Strong references on RefBase %p (weakref_type %p):\n",
+                     mBase, this);
             text.append(buf);
             printRefsLocked(&text, mStrongRefs);
-            sprintf(buf, "Weak references on RefBase %p (weakref_type %p):\n", mBase, this);
+            snprintf(buf, sizeof(buf),
+                     "Weak references on RefBase %p (weakref_type %p):\n",
+                     mBase, this);
             text.append(buf);
             printRefsLocked(&text, mWeakRefs);
         }
 
         {
             char name[100];
-            snprintf(name, 100, DEBUG_REFS_CALLSTACK_PATH "/%p.stack", this);
+            snprintf(name, sizeof(name), DEBUG_REFS_CALLSTACK_PATH "/%p.stack",
+                     this);
             int rc = open(name, O_RDWR | O_CREAT | O_APPEND, 644);
             if (rc >= 0) {
                 write(rc, text.string(), text.length());
@@ -293,8 +298,8 @@ private:
         char buf[128];
         while (refs) {
             char inc = refs->ref >= 0 ? '+' : '-';
-            sprintf(buf, "\t%c ID %p (ref %d):\n", 
-                    inc, refs->id, refs->ref);
+            snprintf(buf, sizeof(buf), "\t%c ID %p (ref %d):\n",
+                     inc, refs->id, refs->ref);
             out->append(buf);
 #if DEBUG_REFS_CALLSTACK_ENABLED
             out->append(refs->stack.toString("\t\t"));
