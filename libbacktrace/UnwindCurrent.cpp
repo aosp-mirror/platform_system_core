@@ -23,6 +23,7 @@
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
 
+#include <android-base/strings.h>
 #include <backtrace/Backtrace.h>
 
 #include "BacktraceLog.h"
@@ -123,6 +124,16 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucon
       } else {
         num_ignore_frames--;
       }
+    }
+
+    // For now, do not attempt to do local unwinds through .dex, or .oat
+    // maps. We can only unwind through these if there is a compressed
+    // section available, almost all local unwinds are done by ART
+    // which will dump the Java frames separately.
+    // TODO: Come up with a flag to control this.
+    if (android::base::EndsWith(frame->map.name, ".dex")
+        || android::base::EndsWith(frame->map.name, ".oat")) {
+      break;
     }
     ret = unw_step (cursor.get());
   } while (ret > 0 && num_frames < MAX_BACKTRACE_FRAMES);
