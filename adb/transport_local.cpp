@@ -225,7 +225,7 @@ static void qemu_socket_thread(void* arg) {
     static const char _ok_resp[] = "ok";
 
     const int port = (int) (uintptr_t) arg;
-    int res, fd;
+    int fd;
     char tmp[256];
     char con_name[32];
 
@@ -251,19 +251,19 @@ static void qemu_socket_thread(void* arg) {
          */
 
         /* Send the 'accept' request. */
-        res = adb_write(fd, _accept_req, strlen(_accept_req));
-        if ((size_t)res == strlen(_accept_req)) {
+        if (WriteFdExactly(fd, _accept_req, strlen(_accept_req))) {
             /* Wait for the response. In the response we expect 'ok' on success,
              * or 'ko' on failure. */
-            res = adb_read(fd, tmp, sizeof(tmp));
-            if (res != 2 || memcmp(tmp, _ok_resp, 2)) {
+            if (!ReadFdExactly(fd, tmp, 2) || memcmp(tmp, _ok_resp, 2)) {
                 D("Accepting ADB host connection has failed.");
                 adb_close(fd);
             } else {
                 /* Host is connected. Register the transport, and start the
                  * exchange. */
                 register_socket_transport(fd, "host", port, 1);
-                adb_write(fd, _start_req, strlen(_start_req));
+                if (!WriteFdExactly(fd, _start_req, strlen(_start_req))) {
+                    adb_close(fd);
+                }
             }
 
             /* Prepare for accepting of the next ADB host connection. */
