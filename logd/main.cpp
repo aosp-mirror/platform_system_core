@@ -165,7 +165,7 @@ bool property_get_bool(const char *key, int flag) {
         char newkey[PROPERTY_KEY_MAX];
         snprintf(newkey, sizeof(newkey), "ro.%s", key);
         property_get(newkey, property, "");
-        // persist properties set by /data require innoculation with
+        // persist properties set by /data require inoculation with
         // logd-reinit. They may be set in init.rc early and function, but
         // otherwise are defunct unless reset. Do not rely on persist
         // properties for startup-only keys unless you are willing to restart
@@ -265,8 +265,11 @@ static void *reinit_thread_start(void * /*obj*/) {
     set_sched_policy(0, SP_BACKGROUND);
     setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND);
 
-    setgid(AID_SYSTEM);
-    setuid(AID_SYSTEM);
+    // If we are AID_ROOT, we should drop to AID_SYSTEM, if we are anything
+    // else, we have even lesser privileges and accept our fate. Not worth
+    // checking for error returns setting this thread's privileges.
+    (void)setgid(AID_SYSTEM);
+    (void)setuid(AID_SYSTEM);
 
     while (reinit_running && !sem_wait(&reinit) && reinit_running) {
 

@@ -90,7 +90,7 @@ void LogTimeEntry::threadStop(void *obj) {
         while(it != times.end()) {
             if (*it == me) {
                 times.erase(it);
-                me->release_Locked();
+                me->release_nodelete_Locked();
                 break;
             }
             it++;
