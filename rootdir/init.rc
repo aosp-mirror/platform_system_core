@@ -360,6 +360,7 @@ on post-fs-data
     mkdir /data/local 0751 root root
     mkdir /data/misc/media 0700 media media
     mkdir /data/misc/audioserver 0700 audioserver audioserver
+    mkdir /data/misc/cameraserver 0700 cameraserver cameraserver
     mkdir /data/misc/vold 0700 root root
     mkdir /data/misc/boottrace 0771 system shell
     mkdir /data/misc/update_engine 0700 root root
