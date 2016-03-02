@@ -75,7 +75,13 @@ public:
     void triggerSkip_Locked(log_id_t id, unsigned int skip) { skipAhead[id] = skip; }
     void cleanSkip_Locked(void);
 
-    // Called after LogTimeEntry removed from list, lock implicitly held
+    // These called after LogTimeEntry removed from list, lock implicitly held
+    void release_nodelete_Locked(void) {
+        mRelease = true;
+        pthread_cond_signal(&threadTriggeredCondition);
+        // assumes caller code path will call decRef_Locked()
+    }
+
     void release_Locked(void) {
         mRelease = true;
         pthread_cond_signal(&threadTriggeredCondition);
