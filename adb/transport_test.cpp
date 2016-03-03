@@ -218,3 +218,60 @@ TEST(transport, parse_banner_features) {
     ASSERT_EQ(std::string("bar"), t.model);
     ASSERT_EQ(std::string("baz"), t.device);
 }
+
+TEST(transport, test_matches_target) {
+    std::string serial = "foo";
+    std::string devpath = "/path/to/bar";
+    std::string product = "test_product";
+    std::string model = "test_model";
+    std::string device = "test_device";
+
+    atransport t;
+    t.serial = &serial[0];
+    t.devpath = &devpath[0];
+    t.product = &product[0];
+    t.model = &model[0];
+    t.device = &device[0];
+
+    // These tests should not be affected by the transport type.
+    for (TransportType type : {kTransportAny, kTransportLocal}) {
+        t.type = type;
+
+        EXPECT_TRUE(t.MatchesTarget(serial));
+        EXPECT_TRUE(t.MatchesTarget(devpath));
+        EXPECT_TRUE(t.MatchesTarget("product:" + product));
+        EXPECT_TRUE(t.MatchesTarget("model:" + model));
+        EXPECT_TRUE(t.MatchesTarget("device:" + device));
+
+        // Product, model, and device don't match without the prefix.
+        EXPECT_FALSE(t.MatchesTarget(product));
+        EXPECT_FALSE(t.MatchesTarget(model));
+        EXPECT_FALSE(t.MatchesTarget(device));
+    }
+}
+
+TEST(transport, test_matches_target_local) {
+    std::string serial = "100.100.100.100:5555";
+
+    atransport t;
+    t.serial = &serial[0];
+
+    // Network address matching should only be used for local transports.
+    for (TransportType type : {kTransportAny, kTransportLocal}) {
+        t.type = type;
+        bool should_match = (type == kTransportLocal);
+
+        EXPECT_EQ(should_match, t.MatchesTarget("100.100.100.100"));
+        EXPECT_EQ(should_match, t.MatchesTarget("tcp:100.100.100.100"));
+        EXPECT_EQ(should_match, t.MatchesTarget("tcp:100.100.100.100:5555"));
+        EXPECT_EQ(should_match, t.MatchesTarget("udp:100.100.100.100"));
+        EXPECT_EQ(should_match, t.MatchesTarget("udp:100.100.100.100:5555"));
+
+        // Wrong protocol, hostname, or port should never match.
+        EXPECT_FALSE(t.MatchesTarget("100.100.100"));
+        EXPECT_FALSE(t.MatchesTarget("100.100.100.100:"));
+        EXPECT_FALSE(t.MatchesTarget("100.100.100.100:-1"));
+        EXPECT_FALSE(t.MatchesTarget("100.100.100.100:5554"));
+        EXPECT_FALSE(t.MatchesTarget("abc:100.100.100.100"));
+    }
+}
