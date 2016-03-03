@@ -17,8 +17,9 @@
 LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
+LOCAL_CLANG := true
 LOCAL_MODULE := ion-unit-tests
-LOCAL_CFLAGS += -g -Wall -Werror -std=gnu++11 -Wno-missing-field-initializers
+LOCAL_CFLAGS += -g -Wall -Werror -Wno-missing-field-initializers
 LOCAL_SHARED_LIBRARIES += libion
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/../kernel-headers
 LOCAL_SRC_FILES := \
