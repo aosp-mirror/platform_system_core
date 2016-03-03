@@ -60,6 +60,18 @@ static void ensure_trailing_separators(std::string& local_path, std::string& rem
     }
 }
 
+static bool should_pull_file(mode_t mode) {
+    return mode & (S_IFREG | S_IFBLK | S_IFCHR);
+}
+
+static bool should_push_file(mode_t mode) {
+    mode_t mask = S_IFREG;
+#if !defined(_WIN32)
+    mask |= S_IFLNK;
+#endif
+    return mode & mask;
+}
+
 struct copyinfo {
     std::string lpath;
     std::string rpath;
@@ -483,11 +495,6 @@ static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath,
 #endif
     }
 
-    if (!S_ISREG(mode)) {
-        sc.Error("local file '%s' has unsupported mode: 0o%o", lpath, mode);
-        return false;
-    }
-
     struct stat st;
     if (stat(lpath, &st) == -1) {
         sc.Error("failed to stat local file '%s': %s", lpath, strerror(errno));
@@ -619,13 +626,12 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* file_lis
         if (S_ISDIR(st.st_mode)) {
             dirlist.push_back(ci);
         } else {
-            if (!S_ISREG(st.st_mode) && !S_ISLNK(st.st_mode)) {
-                sc.Error("skipping special file '%s'", lpath.c_str());
+            if (!should_push_file(st.st_mode)) {
+                sc.Warning("skipping special file '%s' (mode = 0o%o)", lpath.c_str(), st.st_mode);
                 ci.skip = true;
-            } else {
-                ci.time = st.st_mtime;
-                ci.size = st.st_size;
             }
+            ci.time = st.st_mtime;
+            ci.size = st.st_size;
             file_list->push_back(ci);
         }
     }
@@ -767,6 +773,9 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
             success &= copy_local_dir_remote(sc, src_path, dst_dir.c_str(),
                                              false, false);
             continue;
+        } else if (!should_push_file(st.st_mode)) {
+            sc.Warning("skipping special file '%s' (mode = 0o%o)", src_path, st.st_mode);
+            continue;
         }
 
         std::string path_holder;
@@ -819,6 +828,10 @@ static bool remote_build_list(SyncConnection& sc, std::vector<copyinfo>* file_li
         } else if (S_ISLNK(mode)) {
             linklist.push_back(ci);
         } else {
+            if (!should_pull_file(ci.mode)) {
+                sc.Warning("skipping special file '%s' (mode = 0o%o)", ci.rpath.c_str(), ci.mode);
+                ci.skip = true;
+            }
             ci.time = time;
             ci.size = size;
             file_list->push_back(ci);
@@ -975,11 +988,6 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
             src_isdir = remote_symlink_isdir(sc, src_path);
         }
 
-        if ((src_mode & (S_IFREG | S_IFDIR | S_IFBLK | S_IFCHR)) == 0) {
-            sc.Error("skipping remote object '%s' (mode = 0o%o)", src_path, src_mode);
-            continue;
-        }
-
         if (src_isdir) {
             std::string dst_dir = dst;
 
@@ -998,27 +1006,30 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
 
             success &= copy_remote_dir_local(sc, src_path, dst_dir.c_str(), copy_attrs);
             continue;
-        } else {
-            std::string path_holder;
-            if (dst_isdir) {
-                // If we're copying a remote file to a local directory, we
-                // really want to copy to local_dir + OS_PATH_SEPARATOR +
-                // basename(remote).
-                path_holder = android::base::StringPrintf("%s%c%s", dst_path, OS_PATH_SEPARATOR,
-                                                          adb_basename(src_path).c_str());
-                dst_path = path_holder.c_str();
-            }
+        } else if (!should_pull_file(src_mode)) {
+            sc.Warning("skipping special file '%s' (mode = 0o%o)", src_path, src_mode);
+            continue;
+        }
 
-            sc.SetExpectedTotalBytes(src_size);
-            if (!sync_recv(sc, src_path, dst_path)) {
-                success = false;
-                continue;
-            }
+        std::string path_holder;
+        if (dst_isdir) {
+            // If we're copying a remote file to a local directory, we
+            // really want to copy to local_dir + OS_PATH_SEPARATOR +
+            // basename(remote).
+            path_holder = android::base::StringPrintf("%s%c%s", dst_path, OS_PATH_SEPARATOR,
+                                                      adb_basename(src_path).c_str());
+            dst_path = path_holder.c_str();
+        }
 
-            if (copy_attrs && set_time_and_mode(dst_path, src_time, src_mode) != 0) {
-                success = false;
-                continue;
-            }
+        sc.SetExpectedTotalBytes(src_size);
+        if (!sync_recv(sc, src_path, dst_path)) {
+            success = false;
+            continue;
+        }
+
+        if (copy_attrs && set_time_and_mode(dst_path, src_time, src_mode) != 0) {
+            success = false;
+            continue;
         }
     }
 
