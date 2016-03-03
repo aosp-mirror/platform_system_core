@@ -216,8 +216,8 @@ class ForwardReverseTest(DeviceTest):
         """Send data through adb forward and read it back via adb reverse"""
         forward_port = 12345
         reverse_port = forward_port + 1
-        forward_spec = "tcp:" + str(forward_port)
-        reverse_spec = "tcp:" + str(reverse_port)
+        forward_spec = 'tcp:' + str(forward_port)
+        reverse_spec = 'tcp:' + str(reverse_port)
         forward_setup = False
         reverse_setup = False
 
@@ -739,7 +739,7 @@ class FileOperationsTest(DeviceTest):
             # Create some random files and a subdirectory containing more files.
             temp_files = make_random_host_files(in_dir=host_dir, num_files=4)
 
-            subdir = os.path.join(host_dir, "subdir")
+            subdir = os.path.join(host_dir, 'subdir')
             os.mkdir(subdir)
             subdir_temp_files = make_random_host_files(in_dir=subdir,
                                                        num_files=4)
@@ -756,7 +756,7 @@ class FileOperationsTest(DeviceTest):
             for subdir_temp_file in subdir_temp_files:
                 remote_path = posixpath.join(self.DEVICE_TEMP_DIR,
                                              # BROKEN: http://b/25394682
-                                             # "subdir",
+                                             # 'subdir';
                                              temp_file.base_name)
                 self._verify_remote(temp_file.checksum, remote_path)
 
@@ -777,11 +777,11 @@ class FileOperationsTest(DeviceTest):
             tmp_file.flush()
             try:
                 self.device.push(local=tmp_file.name, remote='/system/')
-                self.fail("push should not have succeeded")
+                self.fail('push should not have succeeded')
             except subprocess.CalledProcessError as e:
                 output = e.output
 
-            self.assertIn("Permission denied", output)
+            self.assertIn('Permission denied', output)
 
     def _test_pull(self, remote_file, checksum):
         tmp_write = tempfile.NamedTemporaryFile(mode='wb', delete=False)
@@ -850,13 +850,13 @@ class FileOperationsTest(DeviceTest):
 
         Bug: http://b/27362811
         """
-        if os.name != "posix":
+        if os.name != 'posix':
             raise unittest.SkipTest('requires POSIX')
 
         try:
             host_dir = tempfile.mkdtemp()
-            real_dir = os.path.join(host_dir, "dir")
-            symlink = os.path.join(host_dir, "symlink")
+            real_dir = os.path.join(host_dir, 'dir')
+            symlink = os.path.join(host_dir, 'symlink')
             os.mkdir(real_dir)
             os.symlink(real_dir, symlink)
 
@@ -882,12 +882,12 @@ class FileOperationsTest(DeviceTest):
 
     def test_pull_dir_symlink_collision(self):
         """Pull a directory into a colliding symlink to directory."""
-        if os.name != "posix":
+        if os.name != 'posix':
             raise unittest.SkipTest('requires POSIX')
 
         try:
             host_dir = tempfile.mkdtemp()
-            real_dir = os.path.join(host_dir, "real")
+            real_dir = os.path.join(host_dir, 'real')
             tmp_dirname = os.path.basename(self.DEVICE_TEMP_DIR)
             symlink = os.path.join(host_dir, tmp_dirname)
             os.mkdir(real_dir)
@@ -990,7 +990,7 @@ class FileOperationsTest(DeviceTest):
         try:
             host_dir = tempfile.mkdtemp()
 
-            subdir = posixpath.join(self.DEVICE_TEMP_DIR, "subdir")
+            subdir = posixpath.join(self.DEVICE_TEMP_DIR, 'subdir')
             self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
             self.device.shell(['mkdir', '-p', subdir])
 
@@ -1011,7 +1011,7 @@ class FileOperationsTest(DeviceTest):
 
             for subdir_temp_file in subdir_temp_files:
                 local_path = os.path.join(host_dir,
-                                          "subdir",
+                                          'subdir',
                                           subdir_temp_file.base_name)
                 self._verify_local(subdir_temp_file.checksum, local_path)
 
