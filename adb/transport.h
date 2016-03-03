@@ -107,6 +107,21 @@ public:
     void RemoveDisconnect(adisconnect* disconnect);
     void RunDisconnects();
 
+    // Returns true if |target| matches this transport. A matching |target| can be any of:
+    //   * <serial>
+    //   * <devpath>
+    //   * product:<product>
+    //   * model:<model>
+    //   * device:<device>
+    //
+    // If this is a local transport, serial will also match [tcp:|udp:]<hostname>[:port] targets.
+    // For example, serial "100.100.100.100:5555" would match any of:
+    //   * 100.100.100.100
+    //   * tcp:100.100.100.100
+    //   * udp:100.100.100.100:5555
+    // This is to make it easier to use the same network target for both fastboot and adb.
+    bool MatchesTarget(const std::string& target) const;
+
 private:
     // A set of features transmitted in the banner with the initial connection.
     // This is stored in the banner as 'features=feature0,feature1,etc'.

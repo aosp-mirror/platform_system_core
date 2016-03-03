@@ -30,6 +30,7 @@
 #include <list>
 
 #include <android-base/logging.h>
+#include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 
@@ -679,11 +680,7 @@ atransport* acquire_one_transport(TransportType type, const char* serial,
 
         // Check for matching serial number.
         if (serial) {
-            if ((t->serial && !strcmp(serial, t->serial)) ||
-                (t->devpath && !strcmp(serial, t->devpath)) ||
-                qual_match(serial, "product:", t->product, false) ||
-                qual_match(serial, "model:", t->model, true) ||
-                qual_match(serial, "device:", t->device, false)) {
+            if (t->MatchesTarget(serial)) {
                 if (result) {
                     *error_out = "more than one device";
                     if (is_ambiguous) *is_ambiguous = true;
@@ -833,6 +830,43 @@ void atransport::RunDisconnects() {
         disconnect->func(disconnect->opaque, this);
     }
     disconnects_.clear();
+}
+
+bool atransport::MatchesTarget(const std::string& target) const {
+    if (serial) {
+        if (target == serial) {
+            return true;
+        } else if (type == kTransportLocal) {
+            // Local transports can match [tcp:|udp:]<hostname>[:port].
+            const char* local_target_ptr = target.c_str();
+
+            // For fastboot compatibility, ignore protocol prefixes.
+            if (android::base::StartsWith(target, "tcp:") ||
+                    android::base::StartsWith(target, "udp:")) {
+                local_target_ptr += 4;
+            }
+
+            // Parse our |serial| and the given |target| to check if the hostnames and ports match.
+            std::string serial_host, error;
+            int serial_port = -1;
+            if (android::base::ParseNetAddress(serial, &serial_host, &serial_port, nullptr,
+                                               &error)) {
+                // |target| may omit the port to default to ours.
+                std::string target_host;
+                int target_port = serial_port;
+                if (android::base::ParseNetAddress(local_target_ptr, &target_host, &target_port,
+                                                   nullptr, &error) &&
+                        serial_host == target_host && serial_port == target_port) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return (devpath && target == devpath) ||
+           qual_match(target.c_str(), "product:", product, false) ||
+           qual_match(target.c_str(), "model:", model, true) ||
+           qual_match(target.c_str(), "device:", device, false);
 }
 
 #if ADB_HOST
