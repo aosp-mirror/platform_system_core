@@ -370,11 +370,11 @@ void* HeapImpl::Alloc(size_t size) {
 }
 
 void* HeapImpl::AllocLocked(size_t size) {
-  if (__predict_false(size > kMaxBucketAllocationSize)) {
+  if (size > kMaxBucketAllocationSize) {
     return MapAlloc(size);
   }
   int bucket = size_to_bucket(size);
-  if (__predict_false(free_chunks_[bucket].empty())) {
+  if (free_chunks_[bucket].empty()) {
     Chunk *chunk = new Chunk(this, bucket);
     free_chunks_[bucket].insert(chunk->node_);
   }
