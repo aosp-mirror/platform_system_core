@@ -813,7 +813,7 @@ static bool remote_build_list(SyncConnection& sc, std::vector<copyinfo>* file_li
     std::vector<copyinfo> linklist;
 
     // Add an entry for the current directory to ensure it gets created before pulling its contents.
-    copyinfo ci(adb_dirname(lpath), adb_dirname(rpath), adb_basename(rpath), S_IFDIR);
+    copyinfo ci(adb_dirname(lpath), adb_dirname(rpath), adb_basename(lpath), S_IFDIR);
     file_list->push_back(ci);
 
     // Put the files/dirs in rpath on the lists.

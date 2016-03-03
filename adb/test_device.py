@@ -911,6 +911,30 @@ class FileOperationsTest(DeviceTest):
             if host_dir is not None:
                 shutil.rmtree(host_dir)
 
+    def test_pull_dir_nonexistent(self):
+        """Pull a directory of files from the device to a nonexistent path."""
+        try:
+            host_dir = tempfile.mkdtemp()
+            dest_dir = os.path.join(host_dir, 'dest')
+
+            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+            self.device.shell(['mkdir', '-p', self.DEVICE_TEMP_DIR])
+
+            # Populate device directory with random files.
+            temp_files = make_random_device_files(
+                self.device, in_dir=self.DEVICE_TEMP_DIR, num_files=32)
+
+            self.device.pull(remote=self.DEVICE_TEMP_DIR, local=dest_dir)
+
+            for temp_file in temp_files:
+                host_path = os.path.join(dest_dir, temp_file.base_name)
+                self._verify_local(temp_file.checksum, host_path)
+
+            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+        finally:
+            if host_dir is not None:
+                shutil.rmtree(host_dir)
+
     def test_pull_symlink_dir(self):
         """Pull a symlink to a directory of symlinks to files."""
         try:
