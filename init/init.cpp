@@ -561,6 +561,7 @@ int main(int argc, char** argv) {
         #define MAKE_STR(x) __STRING(x)
         mount("proc", "/proc", "proc", 0, "hidepid=2,gid=" MAKE_STR(AID_READPROC));
         mount("sysfs", "/sys", "sysfs", 0, NULL);
+        mount("selinuxfs", "/sys/fs/selinux", "selinuxfs", 0, NULL);
     }
 
     // We must have some place other than / to create the device nodes for
