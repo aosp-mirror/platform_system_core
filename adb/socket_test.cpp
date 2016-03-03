@@ -270,3 +270,49 @@ TEST_F(LocalSocketTest, close_socket_in_CLOSE_WAIT_state) {
 }
 
 #endif  // defined(__linux__)
+
+#if ADB_HOST
+
+// Checks that skip_host_serial(serial) returns a pointer to the part of |serial| which matches
+// |expected|, otherwise logs the failure to gtest.
+void VerifySkipHostSerial(const std::string& serial, const char* expected) {
+    const char* result = internal::skip_host_serial(serial.c_str());
+    if (expected == nullptr) {
+        EXPECT_EQ(nullptr, result);
+    } else {
+        EXPECT_STREQ(expected, result);
+    }
+}
+
+// Check [tcp:|udp:]<serial>[:<port>]:<command> format.
+TEST(socket_test, test_skip_host_serial) {
+    for (const std::string& protocol : {"", "tcp:", "udp:"}) {
+        VerifySkipHostSerial(protocol, nullptr);
+        VerifySkipHostSerial(protocol + "foo", nullptr);
+
+        VerifySkipHostSerial(protocol + "foo:bar", ":bar");
+        VerifySkipHostSerial(protocol + "foo:bar:baz", ":bar:baz");
+
+        VerifySkipHostSerial(protocol + "foo:123:bar", ":bar");
+        VerifySkipHostSerial(protocol + "foo:123:456", ":456");
+        VerifySkipHostSerial(protocol + "foo:123:bar:baz", ":bar:baz");
+
+        // Don't register a port unless it's all numbers and ends with ':'.
+        VerifySkipHostSerial(protocol + "foo:123", ":123");
+        VerifySkipHostSerial(protocol + "foo:123bar:baz", ":123bar:baz");
+    }
+}
+
+// Check <prefix>:<serial>:<command> format.
+TEST(socket_test, test_skip_host_serial_prefix) {
+    for (const std::string& prefix : {"usb:", "product:", "model:", "device:"}) {
+        VerifySkipHostSerial(prefix, nullptr);
+        VerifySkipHostSerial(prefix + "foo", nullptr);
+
+        VerifySkipHostSerial(prefix + "foo:bar", ":bar");
+        VerifySkipHostSerial(prefix + "foo:bar:baz", ":bar:baz");
+        VerifySkipHostSerial(prefix + "foo:123:bar", ":123:bar");
+    }
+}
+
+#endif  // ADB_HOST
