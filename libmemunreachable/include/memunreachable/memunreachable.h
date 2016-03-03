@@ -27,9 +27,15 @@
 struct Leak {
   uintptr_t begin;
   size_t size;
+
+  size_t referenced_count;
+  size_t referenced_size;
+
   size_t num_backtrace_frames;
+
   static const size_t contents_length = 32;
   char contents[contents_length];
+
   static const size_t backtrace_length = 16;
   uintptr_t backtrace_frames[backtrace_length];
 
