@@ -26,6 +26,8 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <string>
+#include <vector>
 
 #if !ADB_HOST
 #include "cutils/properties.h"
@@ -623,49 +625,51 @@ static unsigned unhex(unsigned char *s, int len)
 
 #if ADB_HOST
 
-#define PREFIX(str) { str, sizeof(str) - 1 }
-static const struct prefix_struct {
-    const char *str;
-    const size_t len;
-} prefixes[] = {
-    PREFIX("usb:"),
-    PREFIX("product:"),
-    PREFIX("model:"),
-    PREFIX("device:"),
-};
-static const int num_prefixes = (sizeof(prefixes) / sizeof(prefixes[0]));
+namespace internal {
 
-/* skip_host_serial return the position in a string
-   skipping over the 'serial' parameter in the ADB protocol,
-   where parameter string may be a host:port string containing
-   the protocol delimiter (colon). */
-static char *skip_host_serial(char *service) {
-    char *first_colon, *serial_end;
-    int i;
+// Returns the position in |service| following the target serial parameter. Serial format can be
+// any of:
+//   * [tcp:|udp:]<serial>[:<port>]:<command>
+//   * <prefix>:<serial>:<command>
+// Where <port> must be a base-10 number and <prefix> may be any of {usb,product,model,device}.
+//
+// The returned pointer will point to the ':' just before <command>, or nullptr if not found.
+char* skip_host_serial(const char* service) {
+    static const std::vector<std::string>& prefixes =
+        *(new std::vector<std::string>{"usb:", "product:", "model:", "device:"});
 
-    for (i = 0; i < num_prefixes; i++) {
-        if (!strncmp(service, prefixes[i].str, prefixes[i].len))
-            return strchr(service + prefixes[i].len, ':');
+    for (const std::string& prefix : prefixes) {
+        if (!strncmp(service, prefix.c_str(), prefix.length())) {
+            return strchr(service + prefix.length(), ':');
+        }
     }
 
-    first_colon = strchr(service, ':');
+    // For fastboot compatibility, ignore protocol prefixes.
+    if (!strncmp(service, "tcp:", 4) || !strncmp(service, "udp:", 4)) {
+        service += 4;
+    }
+
+    char* first_colon = strchr(service, ':');
     if (!first_colon) {
-        /* No colon in service string. */
-        return NULL;
+        // No colon in service string.
+        return nullptr;
     }
-    serial_end = first_colon;
+
+    char* serial_end = first_colon;
     if (isdigit(serial_end[1])) {
         serial_end++;
-        while ((*serial_end) && isdigit(*serial_end)) {
+        while (*serial_end && isdigit(*serial_end)) {
             serial_end++;
         }
-        if ((*serial_end) != ':') {
+        if (*serial_end != ':') {
             // Something other than numbers was found, reset the end.
             serial_end = first_colon;
         }
     }
     return serial_end;
 }
+
+}  // namespace internal
 
 #endif // ADB_HOST
 
@@ -725,7 +729,7 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
         service += strlen("host-serial:");
 
         // serial number should follow "host:" and could be a host:port string.
-        serial_end = skip_host_serial(service);
+        serial_end = internal::skip_host_serial(service);
         if (serial_end) {
             *serial_end = 0; // terminate string
             serial = service;
