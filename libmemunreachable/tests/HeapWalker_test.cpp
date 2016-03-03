@@ -107,8 +107,8 @@ TEST_F(HeapWalkerTest, live) {
       heap_walker.Root(buffer_begin(buffer1), buffer_end(buffer1));
 
       allocator::vector<Range> leaked(heap_);
-      size_t num_leaks = SIZE_T_MAX;
-      size_t leaked_bytes = SIZE_T_MAX;
+      size_t num_leaks = SIZE_MAX;
+      size_t leaked_bytes = SIZE_MAX;
       ASSERT_EQ(true, heap_walker.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
 
       EXPECT_EQ(0U, num_leaks);
@@ -133,8 +133,8 @@ TEST_F(HeapWalkerTest, unaligned) {
       heap_walker.Root(buffer_begin(buffer1) + i, buffer_end(buffer1) - j);
 
       allocator::vector<Range> leaked(heap_);
-      size_t num_leaks = SIZE_T_MAX;
-      size_t leaked_bytes = SIZE_T_MAX;
+      size_t num_leaks = SIZE_MAX;
+      size_t leaked_bytes = SIZE_MAX;
       ASSERT_EQ(true, heap_walker.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
 
       EXPECT_EQ(0U, num_leaks);

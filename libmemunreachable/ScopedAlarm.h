@@ -18,6 +18,7 @@
 #define LIBMEMUNREACHABLE_SCOPED_ALARM_H_
 
 #include <signal.h>
+#include <sys/time.h>
 
 #include <chrono>
 #include <functional>
