@@ -27,6 +27,7 @@
 
 #include "Allocator.h"
 #include "HeapWalker.h"
+#include "LeakFolding.h"
 #include "LeakPipe.h"
 #include "ProcessMappings.h"
 #include "PtracerThread.h"
@@ -122,18 +123,30 @@ bool MemUnreachable::GetUnreachableMemory(allocator::vector<Leak>& leaks, size_t
   ALOGI("sweeping process %d for unreachable memory", pid_);
   leaks.clear();
 
-  allocator::vector<Range> leaked{allocator_};
-  if (!heap_walker_.Leaked(leaked, limit, num_leaks, leak_bytes)) {
+  if (!heap_walker_.DetectLeaks()) {
+    return false;
+  }
+
+  LeakFolding folding(allocator_, heap_walker_);
+  if (!folding.FoldLeaks()) {
+    return false;
+  }
+
+  allocator::vector<LeakFolding::Leak> leaked{allocator_};
+
+  if (!folding.Leaked(leaked, limit, num_leaks, leak_bytes)) {
     return false;
   }
 
   for (auto it = leaked.begin(); it != leaked.end(); it++) {
     Leak leak{};
-    leak.begin = it->begin;
-    leak.size = it->end - it->begin;;
-    memcpy(leak.contents, reinterpret_cast<void*>(it->begin),
+    leak.begin = it->range.begin;
+    leak.size = it->range.size();
+    leak.referenced_count = it->referenced_count;
+    leak.referenced_size = it->referenced_size;
+    memcpy(leak.contents, reinterpret_cast<void*>(it->range.begin),
         std::min(leak.size, Leak::contents_length));
-    ssize_t num_backtrace_frames = malloc_backtrace(reinterpret_cast<void*>(it->begin),
+    ssize_t num_backtrace_frames = malloc_backtrace(reinterpret_cast<void*>(it->range.begin),
         leak.backtrace_frames, leak.backtrace_length);
     if (num_backtrace_frames > 0) {
       leak.num_backtrace_frames = num_backtrace_frames;
@@ -352,6 +365,11 @@ std::string Leak::ToString(bool log_contents) const {
   oss << "  " << std::dec << size;
   oss << " bytes unreachable at ";
   oss << std::hex << begin;
+  if (referenced_count > 0) {
+    oss << " referencing " << std::dec << referenced_size << " unreachable bytes";
+    oss << " in " << referenced_count;
+    oss << " allocation" << ((referenced_count == 1) ? "" : "s");
+  }
   oss << std::endl;
 
   if (log_contents) {
