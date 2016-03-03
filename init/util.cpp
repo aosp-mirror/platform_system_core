@@ -401,20 +401,18 @@ int wait_for_file(const char *filename, int timeout)
 
 void open_devnull_stdio(void)
 {
-    // Try to avoid the mknod() call if we can. Since SELinux makes
-    // a /dev/null replacement available for free, let's use it.
     int fd = open("/sys/fs/selinux/null", O_RDWR);
     if (fd == -1) {
-        // OOPS, /sys/fs/selinux/null isn't available, likely because
-        // /sys/fs/selinux isn't mounted. Fall back to mknod.
-        static const char *name = "/dev/__null__";
-        if (mknod(name, S_IFCHR | 0600, (1 << 8) | 3) == 0) {
-            fd = open(name, O_RDWR);
-            unlink(name);
-        }
-        if (fd == -1) {
-            exit(1);
-        }
+        /* Fail silently.
+         * stdout/stderr isn't available, and because
+         * klog_init() is called after open_devnull_stdio(), we can't
+         * log to dmesg. Reordering klog_init() to be called before
+         * open_devnull_stdio() isn't an option either, as then klog_fd
+         * will be assigned 0 or 1, which will end up getting clobbered
+         * by the code below. There's nowhere good to log.
+         */
+
+        exit(1);
     }
 
     dup2(fd, 0);
