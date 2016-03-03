@@ -77,8 +77,6 @@ class LibraryNamespaces {
       return nullptr;
     }
 
-    std::lock_guard<std::mutex> guard(mutex_);
-
     android_namespace_t* ns = FindNamespaceByClassLoader(env, class_loader);
 
     LOG_FATAL_IF(ns != nullptr, "There is already a namespace associated with this classloader");
@@ -130,12 +128,12 @@ class LibraryNamespaces {
   }
 
   bool initialized_;
-  std::mutex mutex_;
   std::vector<std::pair<jweak, android_namespace_t*>> namespaces_;
 
   DISALLOW_COPY_AND_ASSIGN(LibraryNamespaces);
 };
 
+static std::mutex g_namespaces_mutex;
 static LibraryNamespaces* g_namespaces = new LibraryNamespaces;
 
 static bool namespaces_enabled(uint32_t target_sdk_version) {
@@ -145,6 +143,7 @@ static bool namespaces_enabled(uint32_t target_sdk_version) {
 
 void PreloadPublicNativeLibraries() {
 #if defined(__ANDROID__)
+  std::lock_guard<std::mutex> guard(g_namespaces_mutex);
   g_namespaces->PreloadPublicLibraries();
 #endif
 }
@@ -161,6 +160,7 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
     return nullptr;
   }
 
+  std::lock_guard<std::mutex> guard(g_namespaces_mutex);
   android_namespace_t* ns = g_namespaces->Create(env,
                                                  class_loader,
                                                  is_shared,
@@ -186,6 +186,7 @@ void* OpenNativeLibrary(JNIEnv* env,
     return dlopen(path, RTLD_NOW);
   }
 
+  std::lock_guard<std::mutex> guard(g_namespaces_mutex);
   android_namespace_t* ns = g_namespaces->FindNamespaceByClassLoader(env, class_loader);
 
   if (ns == nullptr) {
@@ -210,6 +211,7 @@ void* OpenNativeLibrary(JNIEnv* env,
 
 #if defined(__ANDROID__)
 android_namespace_t* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
+  std::lock_guard<std::mutex> guard(g_namespaces_mutex);
   return g_namespaces->FindNamespaceByClassLoader(env, class_loader);
 }
 #endif
