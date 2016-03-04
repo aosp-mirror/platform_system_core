@@ -477,8 +477,10 @@ static int handle_encryptable(const struct fstab_rec* rec)
     // Deal with file level encryption
         INFO("%s is file encrypted\n", rec->mount_point);
         return FS_MGR_MNTALL_DEV_FILE_ENCRYPTED;
-    } else {
+    } else if (fs_mgr_is_encryptable(rec)) {
         return FS_MGR_MNTALL_DEV_NOT_ENCRYPTED;
+    } else {
+        return FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE;
     }
 }
 
@@ -490,7 +492,7 @@ static int handle_encryptable(const struct fstab_rec* rec)
 int fs_mgr_mount_all(struct fstab *fstab)
 {
     int i = 0;
-    int encryptable = FS_MGR_MNTALL_DEV_NOT_ENCRYPTED;
+    int encryptable = FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE;
     int error_count = 0;
     int mret = -1;
     int mount_errno = 0;
@@ -561,8 +563,8 @@ int fs_mgr_mount_all(struct fstab *fstab)
                 return status;
             }
 
-            if (status != FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
-                if (encryptable != FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
+            if (status != FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE) {
+                if (encryptable != FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE) {
                     // Log and continue
                     ERROR("Only one encryptable/encrypted partition supported\n");
                 }
