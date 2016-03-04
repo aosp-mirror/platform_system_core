@@ -576,8 +576,7 @@ static __inline__ int  adb_shutdown(int fd, int direction)
 // Closes a file descriptor that came from adb_open() or adb_open_mode(), but
 // not designed to take a file descriptor from unix_open(). See the comments
 // for adb_open() for more info.
-static __inline__ int  adb_close(int fd)
-{
+__inline__ int adb_close(int fd) {
     return close(fd);
 }
 #undef   close
