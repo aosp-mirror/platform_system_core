@@ -130,7 +130,12 @@ class LibraryNamespaces {
     // TODO (dimitry): This is a workaround for http://b/26436837
     // will be removed before the release.
     if (target_sdk_version <= 23) {
-      publicNativeLibraries += ":libart.so";
+      // check if libart.so is loaded.
+      void* handle = dlopen("libart.so", RTLD_NOW | RTLD_NOLOAD);
+      if (handle != nullptr) {
+        publicNativeLibraries += ":libart.so";
+        dlclose(handle);
+      }
     }
     // END OF WORKAROUND
 
