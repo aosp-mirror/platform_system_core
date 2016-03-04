@@ -3,10 +3,13 @@
 on post-fs-data
     mkdir /data/misc/bootstat 0700 root root
 
-# This marker, boot animation stopped, is considered the point at which the
+# The first marker, boot animation stopped, is considered the point at which
 # the user may interact with the device, so it is a good proxy for the boot
 # complete signal.
-on property:init.svc.bootanim=stopped
+#
+# The second marker ensures an encrypted device is decrypted before logging
+# boot time data.
+on property:init.svc.bootanim=stopped && property:vold.decrypt=trigger_restart_framework
     # Record boot_complete timing event.
     exec - root root -- /system/bin/bootstat -r boot_complete
 
