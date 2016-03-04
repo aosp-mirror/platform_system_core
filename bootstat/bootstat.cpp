@@ -170,7 +170,9 @@ void RecordFactoryReset() {
   // use this signal to mark the time of the factory reset.
   if (!boot_event_store.GetBootEvent("factory_reset", &record)) {
     boot_event_store.AddBootEventWithValue("factory_reset", current_time_utc);
-    boot_event_store.AddBootEventWithValue("time_since_factory_reset", 0);
+
+    // Don't log the time_since_factory_reset until some time has elapsed.
+    // The data is not meaningful yet and skews the histogram buckets.
     return;
   }
 
