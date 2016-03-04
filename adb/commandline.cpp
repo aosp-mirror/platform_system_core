@@ -1265,6 +1265,9 @@ static int restore(int argc, const char** argv) {
     printf("Now unlock your device and confirm the restore operation.\n");
     copy_to_file(tarFd, fd);
 
+    // Wait until the other side finishes, or it'll get sent SIGHUP.
+    copy_to_file(fd, STDOUT_FILENO);
+
     adb_close(fd);
     adb_close(tarFd);
     return 0;
