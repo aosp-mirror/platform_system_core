@@ -39,6 +39,9 @@ bool adb_query(const std::string& service, std::string* _Nonnull result,
 // Set the preferred transport to connect to.
 void adb_set_transport(TransportType type, const char* _Nullable serial);
 
+// Get the preferred transport to connect to.
+void adb_get_transport(TransportType* _Nullable type, const char* _Nullable* _Nullable serial);
+
 // Set TCP specifics of the transport to use.
 void adb_set_tcp_specifics(int server_port);
 
