@@ -50,6 +50,15 @@ void adb_set_transport(TransportType type, const char* serial)
     __adb_serial = serial;
 }
 
+void adb_get_transport(TransportType* type, const char** serial) {
+    if (type) {
+        *type = __adb_transport;
+    }
+    if (serial) {
+        *serial = __adb_serial;
+    }
+}
+
 void adb_set_tcp_specifics(int server_port)
 {
     __adb_server_port = server_port;
