@@ -81,7 +81,7 @@ class LeakFolding {
   void ComputeDAG();
   void AccumulateLeaks(SCCInfo* dominator);
 
-  allocator::map<LeakInfo, Range, compare_range> leak_map_;
+  allocator::map<Range, LeakInfo, compare_range> leak_map_;
   Graph<LeakInfo> leak_graph_;
   allocator::vector<Allocator<SCCInfo>::unique_ptr> leak_scc_;
 };
