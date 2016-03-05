@@ -209,7 +209,7 @@ using vector = std::vector<T, Allocator<T>>;
 template<class T>
 using list = std::list<T, Allocator<T>>;
 
-template<class T, class Key, class Compare = std::less<Key>>
+template<class Key, class T, class Compare = std::less<Key>>
 using map = std::map<Key, T, Compare, Allocator<std::pair<const Key, T>>>;
 
 template<class Key, class Hash = std::hash<Key>, class KeyEqual = std::equal_to<Key>>

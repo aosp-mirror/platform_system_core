@@ -74,7 +74,7 @@ class HeapWalker {
 
   DISALLOW_COPY_AND_ASSIGN(HeapWalker);
   Allocator<HeapWalker> allocator_;
-  using AllocationMap = allocator::map<AllocationInfo, Range, compare_range>;
+  using AllocationMap = allocator::map<Range, AllocationInfo, compare_range>;
   AllocationMap allocations_;
   size_t allocation_bytes_;
   Range valid_allocations_range_;
