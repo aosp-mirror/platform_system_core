@@ -1072,6 +1072,51 @@ static bool wait_for_device(const char* service, TransportType t, const char* se
     return adb_command(cmd);
 }
 
+static bool adb_root(const char* command) {
+    std::string error;
+    ScopedFd fd;
+
+    fd.Reset(adb_connect(android::base::StringPrintf("%s:", command), &error));
+    if (!fd.valid()) {
+        fprintf(stderr, "adb: unable to connect for %s: %s\n", command, error.c_str());
+        return false;
+    }
+
+    // Figure out whether we actually did anything.
+    char buf[256];
+    char* cur = buf;
+    ssize_t bytes_left = sizeof(buf);
+    while (bytes_left > 0) {
+        ssize_t bytes_read = adb_read(fd.fd(), cur, bytes_left);
+        if (bytes_read == 0) {
+            break;
+        } else if (bytes_read < 0) {
+            fprintf(stderr, "adb: error while reading for %s: %s\n", command, strerror(errno));
+            return false;
+        }
+        cur += bytes_read;
+        bytes_left -= bytes_read;
+    }
+
+    if (bytes_left == 0) {
+        fprintf(stderr, "adb: unexpected output length for %s\n", command);
+        return false;
+    }
+
+    fflush(stdout);
+    WriteFdExactly(STDOUT_FILENO, buf, sizeof(buf) - bytes_left);
+    if (cur != buf && strstr(buf, "restarting") == nullptr) {
+        return true;
+    }
+
+    // Give adbd 500ms to kill itself, then wait-for-device for it to come back up.
+    adb_sleep_ms(500);
+    TransportType type;
+    const char* serial;
+    adb_get_transport(&type, &serial);
+    return wait_for_device("wait-for-device", type, serial);
+}
+
 // Connects to the device "shell" service with |command| and prints the
 // resulting output.
 static int send_shell_command(TransportType transport_type, const char* serial,
@@ -1219,6 +1264,9 @@ static int restore(int argc, const char** argv) {
 
     printf("Now unlock your device and confirm the restore operation.\n");
     copy_to_file(tarFd, fd);
+
+    // Wait until the other side finishes, or it'll get sent SIGHUP.
+    copy_to_file(fd, STDOUT_FILENO);
 
     adb_close(fd);
     adb_close(tarFd);
@@ -1632,8 +1680,6 @@ int adb_commandline(int argc, const char **argv) {
              !strcmp(argv[0], "reboot") ||
              !strcmp(argv[0], "reboot-bootloader") ||
              !strcmp(argv[0], "usb") ||
-             !strcmp(argv[0], "root") ||
-             !strcmp(argv[0], "unroot") ||
              !strcmp(argv[0], "disable-verity") ||
              !strcmp(argv[0], "enable-verity")) {
         std::string command;
@@ -1645,8 +1691,9 @@ int adb_commandline(int argc, const char **argv) {
             command = android::base::StringPrintf("%s:", argv[0]);
         }
         return adb_connect_command(command);
-    }
-    else if (!strcmp(argv[0], "bugreport")) {
+    } else if (!strcmp(argv[0], "root") || !strcmp(argv[0], "unroot")) {
+        return adb_root(argv[0]) ? 0 : 1;
+    } else if (!strcmp(argv[0], "bugreport")) {
         if (argc != 1) return usage();
         // No need for shell protocol with bugreport, always disable for
         // simplicity.
