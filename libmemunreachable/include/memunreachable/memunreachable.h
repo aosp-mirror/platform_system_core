@@ -31,13 +31,22 @@ struct Leak {
   size_t referenced_count;
   size_t referenced_size;
 
-  size_t num_backtrace_frames;
+  size_t similar_count;
+  size_t similar_size;
+  size_t similar_referenced_count;
+  size_t similar_referenced_size;
+
+  size_t total_size;
 
   static const size_t contents_length = 32;
   char contents[contents_length];
 
-  static const size_t backtrace_length = 16;
-  uintptr_t backtrace_frames[backtrace_length];
+  struct Backtrace {
+    size_t num_frames;
+
+    static const size_t max_frames = 16;
+    uintptr_t frames[max_frames];
+  } backtrace;
 
   std::string ToString(bool log_contents) const;
 };

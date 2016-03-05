@@ -56,7 +56,7 @@ TEST_F(LeakFoldingTest, one) {
   allocator::vector<LeakFolding::Leak> leaked(heap_);
   size_t num_leaks = 0;
   size_t leaked_bytes = 0;
-  ASSERT_EQ(true, folding.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
+  ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(1U, num_leaks);
   EXPECT_EQ(sizeof(uintptr_t), leaked_bytes);
@@ -81,7 +81,7 @@ TEST_F(LeakFoldingTest, two) {
   allocator::vector<LeakFolding::Leak> leaked(heap_);
   size_t num_leaks = 0;
   size_t leaked_bytes = 0;
-  ASSERT_EQ(true, folding.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
+  ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(2U, num_leaks);
   EXPECT_EQ(2*sizeof(uintptr_t), leaked_bytes);
@@ -110,7 +110,7 @@ TEST_F(LeakFoldingTest, dominator) {
   allocator::vector<LeakFolding::Leak> leaked(heap_);
   size_t num_leaks = 0;
   size_t leaked_bytes = 0;
-  ASSERT_EQ(true, folding.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
+  ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(2U, num_leaks);
   EXPECT_EQ(2*sizeof(uintptr_t), leaked_bytes);
@@ -141,7 +141,7 @@ TEST_F(LeakFoldingTest, cycle) {
   allocator::vector<LeakFolding::Leak> leaked(heap_);
   size_t num_leaks = 0;
   size_t leaked_bytes = 0;
-  ASSERT_EQ(true, folding.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
+  ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(3U, num_leaks);
   EXPECT_EQ(3*sizeof(uintptr_t), leaked_bytes);
@@ -172,7 +172,7 @@ TEST_F(LeakFoldingTest, dominator_cycle) {
   allocator::vector<LeakFolding::Leak> leaked(heap_);
   size_t num_leaks = 0;
   size_t leaked_bytes = 0;
-  ASSERT_EQ(true, folding.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
+  ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(3U, num_leaks);
   EXPECT_EQ(5*sizeof(uintptr_t), leaked_bytes);
@@ -215,7 +215,7 @@ TEST_F(LeakFoldingTest, two_cycles) {
   allocator::vector<LeakFolding::Leak> leaked(heap_);
   size_t num_leaks = 0;
   size_t leaked_bytes = 0;
-  ASSERT_EQ(true, folding.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
+  ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(6U, num_leaks);
   EXPECT_EQ(6*sizeof(uintptr_t), leaked_bytes);
@@ -251,7 +251,7 @@ TEST_F(LeakFoldingTest, two_dominator_cycles) {
   allocator::vector<LeakFolding::Leak> leaked(heap_);
   size_t num_leaks = 0;
   size_t leaked_bytes = 0;
-  ASSERT_EQ(true, folding.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
+  ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(4U, num_leaks);
   EXPECT_EQ(4*sizeof(uintptr_t), leaked_bytes);
@@ -289,11 +289,11 @@ TEST_F(LeakFoldingTest, giant_dominator_cycle) {
   allocator::vector<LeakFolding::Leak> leaked(heap_);
   size_t num_leaks = 0;
   size_t leaked_bytes = 0;
-  ASSERT_EQ(true, folding.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
+  ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(n, num_leaks);
   EXPECT_EQ(n * sizeof(uintptr_t), leaked_bytes);
-  ASSERT_EQ(100U, leaked.size());
+  ASSERT_EQ(1000U, leaked.size());
   EXPECT_EQ(n - 1, leaked[0].referenced_count);
   EXPECT_EQ((n - 1) * sizeof(uintptr_t), leaked[0].referenced_size);
 }
@@ -326,7 +326,7 @@ TEST_F(LeakFoldingTest, giant_cycle) {
   allocator::vector<LeakFolding::Leak> leaked(heap_);
   size_t num_leaks = 0;
   size_t leaked_bytes = 0;
-  ASSERT_EQ(true, folding.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
+  ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(n + 1, num_leaks);
   EXPECT_EQ((n + 1) * sizeof(uintptr_t), leaked_bytes);
@@ -368,7 +368,7 @@ TEST_F(LeakFoldingTest, multipath) {
   allocator::vector<LeakFolding::Leak> leaked(heap_);
   size_t num_leaks = 0;
   size_t leaked_bytes = 0;
-  ASSERT_EQ(true, folding.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
+  ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(4U, num_leaks);
   EXPECT_EQ(5 * sizeof(uintptr_t), leaked_bytes);
@@ -411,7 +411,7 @@ TEST_F(LeakFoldingTest, multicycle) {
   allocator::vector<LeakFolding::Leak> leaked(heap_);
   size_t num_leaks = 0;
   size_t leaked_bytes = 0;
-  ASSERT_EQ(true, folding.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
+  ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(4U, num_leaks);
   EXPECT_EQ(8 * sizeof(uintptr_t), leaked_bytes);

@@ -24,6 +24,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 extern std::atomic<int> heap_count;
@@ -211,6 +212,9 @@ using list = std::list<T, Allocator<T>>;
 
 template<class Key, class T, class Compare = std::less<Key>>
 using map = std::map<Key, T, Compare, Allocator<std::pair<const Key, T>>>;
+
+template<class Key, class T, class Hash = std::hash<Key>, class KeyEqual = std::equal_to<Key>>
+using unordered_map = std::unordered_map<Key, T, Hash, KeyEqual, Allocator<std::pair<const Key, T>>>;
 
 template<class Key, class Hash = std::hash<Key>, class KeyEqual = std::equal_to<Key>>
 using unordered_set = std::unordered_set<Key, Hash, KeyEqual, Allocator<Key>>;

@@ -33,7 +33,7 @@ class LeakFolding {
     size_t referenced_size;
   };
 
-  bool Leaked(allocator::vector<Leak>& leaked, size_t limit,
+  bool Leaked(allocator::vector<Leak>& leaked,
       size_t* num_leaks_out, size_t* leak_bytes_out);
 
  private:
