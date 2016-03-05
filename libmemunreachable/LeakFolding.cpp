@@ -111,7 +111,7 @@ bool LeakFolding::FoldLeaks() {
 }
 
 bool LeakFolding::Leaked(allocator::vector<LeakFolding::Leak>& leaked,
-    size_t limit, size_t* num_leaks_out, size_t* leak_bytes_out) {
+    size_t* num_leaks_out, size_t* leak_bytes_out) {
   size_t num_leaks = 0;
   size_t leak_bytes = 0;
   for (auto& it : leak_map_) {
@@ -120,15 +120,12 @@ bool LeakFolding::Leaked(allocator::vector<LeakFolding::Leak>& leaked,
     leak_bytes += leak.range.size();
   }
 
-  size_t n = 0;
   for (auto& it : leak_map_) {
     const LeakInfo& leak = it.second;
     if (leak.scc->dominator) {
-      if (n++ < limit) {
-        leaked.emplace_back(Leak{leak.range,
-          leak.scc->cuumulative_count - 1,
-          leak.scc->cuumulative_size - leak.range.size()});
-      }
+      leaked.emplace_back(Leak{leak.range,
+        leak.scc->cuumulative_count - 1,
+        leak.scc->cuumulative_size - leak.range.size()});
     }
   }
 
