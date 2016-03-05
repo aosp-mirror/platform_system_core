@@ -284,7 +284,9 @@ bool Subprocess::ForkAndExec(std::string* error) {
     if (type_ == SubprocessType::kPty) {
         int fd;
         pid_ = forkpty(&fd, pts_name, nullptr, nullptr);
-        stdinout_sfd_.Reset(fd);
+        if (pid_ > 0) {
+          stdinout_sfd_.Reset(fd);
+        }
     } else {
         if (!CreateSocketpair(&stdinout_sfd_, &child_stdinout_sfd)) {
             *error = android::base::StringPrintf("failed to create socketpair for stdin/out: %s",
