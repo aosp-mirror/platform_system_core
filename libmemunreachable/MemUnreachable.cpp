@@ -468,10 +468,29 @@ std::string Leak::ToString(bool log_contents) const {
   return oss.str();
 }
 
+// Figure out the abi based on defined macros.
+#if defined(__arm__)
+#define ABI_STRING "arm"
+#elif defined(__aarch64__)
+#define ABI_STRING "arm64"
+#elif defined(__mips__) && !defined(__LP64__)
+#define ABI_STRING "mips"
+#elif defined(__mips__) && defined(__LP64__)
+#define ABI_STRING "mips64"
+#elif defined(__i386__)
+#define ABI_STRING "x86"
+#elif defined(__x86_64__)
+#define ABI_STRING "x86_64"
+#else
+#error "Unsupported ABI"
+#endif
+
 std::string UnreachableMemoryInfo::ToString(bool log_contents) const {
   std::ostringstream oss;
   oss << "  " << leak_bytes << " bytes in ";
   oss << num_leaks << " unreachable allocation" << plural(num_leaks);
+  oss << std::endl;
+  oss << "  ABI: '" ABI_STRING "'" << std::endl;
   oss << std::endl;
 
   for (auto it = leaks.begin(); it != leaks.end(); it++) {
