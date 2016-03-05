@@ -19,6 +19,8 @@
 
 #include <string>
 
+#include <android-base/macros.h>
+
 void close_stdin();
 
 bool getcwd(std::string* cwd);
@@ -38,5 +40,46 @@ std::string dump_hex(const void* ptr, size_t byte_count);
 std::string perror_str(const char* msg);
 
 bool set_file_block_mode(int fd, bool block);
+
+extern int adb_close(int fd);
+
+// Helper to automatically close an FD when it goes out of scope.
+class ScopedFd {
+  public:
+    ScopedFd() {
+    }
+
+    ~ScopedFd() {
+        Reset();
+    }
+
+    void Reset(int fd = -1) {
+        if (fd != fd_) {
+            if (valid()) {
+                adb_close(fd_);
+            }
+            fd_ = fd;
+        }
+    }
+
+    int Release() {
+        int temp = fd_;
+        fd_ = -1;
+        return temp;
+    }
+
+    bool valid() const {
+        return fd_ >= 0;
+    }
+
+    int fd() const {
+        return fd_;
+    }
+
+  private:
+    int fd_ = -1;
+
+    DISALLOW_COPY_AND_ASSIGN(ScopedFd);
+};
 
 #endif
