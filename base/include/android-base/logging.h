@@ -150,6 +150,14 @@ class ErrnoRestorer {
 #define UNIMPLEMENTED(level) \
   LOG(level) << __PRETTY_FUNCTION__ << " unimplemented "
 
+#ifdef __clang_analyzer__
+// ClangL static analyzer does not see the conditional statement inside
+// LogMessage's destructor that will abort on FATAL severity.
+#define ABORT_AFTER_LOG_FATAL for (;;abort())
+#else
+#define ABORT_AFTER_LOG_FATAL
+#endif
+
 // Check whether condition x holds and LOG(FATAL) if not. The value of the
 // expression x is only evaluated once. Extra logging can be appended using <<
 // after. For example:
@@ -160,6 +168,7 @@ class ErrnoRestorer {
   if (LIKELY((x)))                                                            \
     ;                                                                         \
   else                                                                        \
+    ABORT_AFTER_LOG_FATAL                                                     \
     ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::DEFAULT, \
                                 ::android::base::FATAL, -1).stream()          \
         << "Check failed: " #x << " "
@@ -169,6 +178,7 @@ class ErrnoRestorer {
   for (auto _values = ::android::base::MakeEagerEvaluator(LHS, RHS);        \
        UNLIKELY(!(_values.lhs OP _values.rhs));                             \
        /* empty */)                                                         \
+  ABORT_AFTER_LOG_FATAL                                                     \
   ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::DEFAULT, \
                               ::android::base::FATAL, -1).stream()          \
       << "Check failed: " << #LHS << " " << #OP << " " << #RHS              \
@@ -192,6 +202,7 @@ class ErrnoRestorer {
   if (LIKELY((strcmp(s1, s2) == 0) == sense))                              \
     ;                                                                      \
   else                                                                     \
+    ABORT_AFTER_LOG_FATAL                                                  \
     LOG(FATAL) << "Check failed: "                                         \
                << "\"" << s1 << "\""                                       \
                << (sense ? " == " : " != ") << "\"" << s2 << "\""
@@ -206,6 +217,7 @@ class ErrnoRestorer {
     int rc = call args;                                                \
     if (rc != 0) {                                                     \
       errno = rc;                                                      \
+      ABORT_AFTER_LOG_FATAL                                            \
       PLOG(FATAL) << #call << " failed for " << what; \
     }                                                                  \
   } while (false)
