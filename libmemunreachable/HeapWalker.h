@@ -20,11 +20,14 @@
 #include "android-base/macros.h"
 
 #include "Allocator.h"
+#include "Tarjan.h"
 
 // A range [begin, end)
 struct Range {
   uintptr_t begin;
   uintptr_t end;
+
+  size_t size() const { return end - begin; };
 };
 
 // Comparator for Ranges that returns equivalence for overlapping ranges
@@ -33,7 +36,6 @@ struct compare_range {
     return a.end <= b.begin;
   }
 };
-
 
 class HeapWalker {
  public:
@@ -55,21 +57,54 @@ class HeapWalker {
   size_t Allocations();
   size_t AllocationBytes();
 
- private:
-  struct RangeInfo {
+  template<class F>
+  void ForEachPtrInRange(const Range& range, F&& f);
+
+  template<class F>
+  void ForEachAllocation(F&& f);
+
+  struct AllocationInfo {
     bool referenced_from_root;
-    bool referenced_from_leak;
   };
-  void Walk(const Range& range, bool RangeInfo::* flag);
+
+ private:
+
+  void RecurseRoot(const Range& root);
+  bool IsAllocationPtr(uintptr_t ptr, Range* range, AllocationInfo** info);
+
   DISALLOW_COPY_AND_ASSIGN(HeapWalker);
   Allocator<HeapWalker> allocator_;
-  using RangeMap = allocator::map<RangeInfo, Range, compare_range>;
-  RangeMap allocations_;
+  using AllocationMap = allocator::map<Range, AllocationInfo, compare_range>;
+  AllocationMap allocations_;
   size_t allocation_bytes_;
   Range valid_allocations_range_;
 
   allocator::vector<Range> roots_;
   allocator::vector<uintptr_t> root_vals_;
 };
+
+template<class F>
+inline void HeapWalker::ForEachPtrInRange(const Range& range, F&& f) {
+  uintptr_t begin = (range.begin + (sizeof(uintptr_t) - 1)) & ~(sizeof(uintptr_t) - 1);
+  // TODO(ccross): we might need to consider a pointer to the end of a buffer
+  // to be inside the buffer, which means the common case of a pointer to the
+  // beginning of a buffer may keep two ranges live.
+  for (uintptr_t i = begin; i < range.end; i += sizeof(uintptr_t)) {
+    Range ref_range;
+    AllocationInfo* ref_info;
+    if (IsAllocationPtr(*reinterpret_cast<uintptr_t*>(i), &ref_range, &ref_info)) {
+      f(ref_range, ref_info);
+    }
+  }
+}
+
+template<class F>
+inline void HeapWalker::ForEachAllocation(F&& f) {
+  for (auto& it : allocations_) {
+    const Range& range = it.first;
+    HeapWalker::AllocationInfo& allocation = it.second;
+    f(range, allocation);
+  }
+}
 
 #endif

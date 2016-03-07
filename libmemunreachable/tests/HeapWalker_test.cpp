@@ -80,6 +80,8 @@ TEST_F(HeapWalkerTest, leak) {
   HeapWalker heap_walker(heap_);
   heap_walker.Allocation(buffer_begin(buffer2), buffer_end(buffer2));
 
+  ASSERT_EQ(true, heap_walker.DetectLeaks());
+
   allocator::vector<Range> leaked(heap_);
   size_t num_leaks = 0;
   size_t leaked_bytes = 0;
@@ -106,9 +108,11 @@ TEST_F(HeapWalkerTest, live) {
       heap_walker.Allocation(buffer_begin(buffer2), buffer_end(buffer2));
       heap_walker.Root(buffer_begin(buffer1), buffer_end(buffer1));
 
+      ASSERT_EQ(true, heap_walker.DetectLeaks());
+
       allocator::vector<Range> leaked(heap_);
-      size_t num_leaks = SIZE_T_MAX;
-      size_t leaked_bytes = SIZE_T_MAX;
+      size_t num_leaks = SIZE_MAX;
+      size_t leaked_bytes = SIZE_MAX;
       ASSERT_EQ(true, heap_walker.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
 
       EXPECT_EQ(0U, num_leaks);
@@ -132,9 +136,11 @@ TEST_F(HeapWalkerTest, unaligned) {
       heap_walker.Allocation(buffer_begin(buffer2), buffer_end(buffer2));
       heap_walker.Root(buffer_begin(buffer1) + i, buffer_end(buffer1) - j);
 
+      ASSERT_EQ(true, heap_walker.DetectLeaks());
+
       allocator::vector<Range> leaked(heap_);
-      size_t num_leaks = SIZE_T_MAX;
-      size_t leaked_bytes = SIZE_T_MAX;
+      size_t num_leaks = SIZE_MAX;
+      size_t leaked_bytes = SIZE_MAX;
       ASSERT_EQ(true, heap_walker.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
 
       EXPECT_EQ(0U, num_leaks);
@@ -142,4 +148,27 @@ TEST_F(HeapWalkerTest, unaligned) {
       EXPECT_EQ(0U, leaked.size());
     }
   }
+}
+
+TEST_F(HeapWalkerTest, cycle) {
+  void* buffer1;
+  void* buffer2;
+
+  buffer1 = &buffer2;
+  buffer2 = &buffer1;
+
+  HeapWalker heap_walker(heap_);
+  heap_walker.Allocation(buffer_begin(buffer1), buffer_end(buffer1));
+  heap_walker.Allocation(buffer_begin(buffer2), buffer_end(buffer2));
+
+  ASSERT_EQ(true, heap_walker.DetectLeaks());
+
+  allocator::vector<Range> leaked(heap_);
+  size_t num_leaks = 0;
+  size_t leaked_bytes = 0;
+  ASSERT_EQ(true, heap_walker.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
+
+  EXPECT_EQ(2U, num_leaks);
+  EXPECT_EQ(2*sizeof(uintptr_t), leaked_bytes);
+  ASSERT_EQ(2U, leaked.size());
 }
