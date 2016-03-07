@@ -86,7 +86,7 @@ class ThreadCaptureImpl {
   void PtraceDetach(pid_t tid, unsigned int signal);
   bool PtraceThreadInfo(pid_t tid, ThreadInfo& thread_info);
 
-  allocator::map<unsigned int, pid_t> captured_threads_;
+  allocator::map<pid_t, unsigned int> captured_threads_;
   Allocator<ThreadCaptureImpl> allocator_;
   pid_t pid_;
   std::function<void(pid_t)> inject_test_func_;

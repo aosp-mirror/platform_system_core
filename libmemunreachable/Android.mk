@@ -3,6 +3,7 @@ LOCAL_PATH := $(call my-dir)
 memunreachable_srcs := \
    Allocator.cpp \
    HeapWalker.cpp \
+   LeakFolding.cpp \
    LeakPipe.cpp \
    LineBuffer.cpp \
    MemUnreachable.cpp \
@@ -12,7 +13,9 @@ memunreachable_srcs := \
 
 memunreachable_test_srcs := \
    tests/Allocator_test.cpp \
+   tests/DisableMalloc_test.cpp \
    tests/HeapWalker_test.cpp \
+   tests/LeakFolding_test.cpp \
    tests/MemUnreachable_test.cpp \
    tests/ThreadCapture_test.cpp \
 
@@ -41,3 +44,21 @@ LOCAL_CLANG := true
 LOCAL_SHARED_LIBRARIES := libmemunreachable libbase liblog
 
 include $(BUILD_NATIVE_TEST)
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := memunreachable_test
+LOCAL_SRC_FILES := \
+   Allocator.cpp \
+   HeapWalker.cpp  \
+   LeakFolding.cpp \
+   tests/Allocator_test.cpp \
+   tests/HeapWalker_test.cpp \
+   tests/HostMallocStub.cpp \
+   tests/LeakFolding_test.cpp \
+
+LOCAL_CFLAGS := -std=c++14 -Wall -Wextra -Werror
+LOCAL_CLANG := true
+LOCAL_SHARED_LIBRARIES := libbase liblog
+
+include $(BUILD_HOST_NATIVE_TEST)

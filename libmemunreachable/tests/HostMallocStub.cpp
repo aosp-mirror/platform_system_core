@@ -14,22 +14,10 @@
  * limitations under the License.
  */
 
-#ifndef LIBMEMUNREACHABLE_BIONIC_H_
-#define LIBMEMUNREACHABLE_BIONIC_H_
+#include "bionic.h"
 
-#include <sys/cdefs.h>
-#include <stdint.h>
-#include <stdlib.h>
+void malloc_disable() {
+}
 
-__BEGIN_DECLS
-
-/* Exported from bionic */
-extern void malloc_disable();
-extern void malloc_enable();
-extern int malloc_iterate(uintptr_t base, size_t size,
-    void (*callback)(uintptr_t base, size_t size, void* arg), void* arg);
-extern ssize_t malloc_backtrace(void* pointer, uintptr_t* frames, size_t frame_count);
-
-__END_DECLS
-
-#endif // LIBMEMUNREACHABLE_BIONIC_H_
+void malloc_enable() {
+}
