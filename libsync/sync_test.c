@@ -92,7 +92,7 @@ int main(int argc __attribute__((unused)), char *argv[] __attribute__((unused)))
 
         for (j = 0; j < 2; j++) {
             unsigned val = i + j * 3 + 1;
-            sprintf(str, "test_fence%d-%d", i, j);
+            snprintf(str, sizeof(str), "test_fence%d-%d", i, j);
             int fd = sw_sync_fence_create(sync_timeline_fd, str, val);
             if (fd < 0) {
                 printf("can't create sync pt %d: %s", val, strerror(errno));
@@ -106,7 +106,7 @@ int main(int argc __attribute__((unused)), char *argv[] __attribute__((unused)))
 
     sync_data[3].thread_no = 3;
     for (j = 0; j < 2; j++) {
-        sprintf(str, "merged_fence%d", j);
+        snprintf(str, sizeof(str), "merged_fence%d", j);
         sync_data[3].fd[j] = sync_merge(str, sync_data[0].fd[j], sync_data[1].fd[j]);
         if (sync_data[3].fd[j] < 0) {
             printf("can't merge sync pts %d and %d: %s\n",
