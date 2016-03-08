@@ -12,7 +12,7 @@ void parse_error(struct parse_state *state, const char *fmt, ...)
     char buf[128];
     int off;
 
-    snprintf(buf, 128, "%s: %d: ", state->filename, state->line);
+    snprintf(buf, sizeof(buf), "%s: %d: ", state->filename, state->line);
     buf[127] = 0;
     off = strlen(buf);
 
