@@ -60,5 +60,6 @@ LOCAL_SRC_FILES := \
 LOCAL_CFLAGS := -std=c++14 -Wall -Wextra -Werror
 LOCAL_CLANG := true
 LOCAL_SHARED_LIBRARIES := libbase liblog
+LOCAL_MODULE_HOST_OS := linux
 
 include $(BUILD_HOST_NATIVE_TEST)
