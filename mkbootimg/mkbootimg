@@ -20,6 +20,7 @@ from os import fstat
 from struct import pack
 from hashlib import sha1
 import sys
+import re
 
 def filesize(f):
     if f is None:
@@ -47,7 +48,7 @@ def pad_file(f, padding):
 def write_header(args):
     BOOT_MAGIC = 'ANDROID!'.encode()
     args.output.write(pack('8s', BOOT_MAGIC))
-    args.output.write(pack('8I',
+    args.output.write(pack('10I',
         filesize(args.kernel),                          # size in bytes
         args.base + args.kernel_offset,                 # physical load addr
         filesize(args.ramdisk),                         # size in bytes
@@ -55,8 +56,9 @@ def write_header(args):
         filesize(args.second),                          # size in bytes
         args.base + args.second_offset,                 # physical load addr
         args.base + args.tags_offset,                   # physical addr for kernel tags
-        args.pagesize))                                 # flash page size we assume
-    args.output.write(pack('8x'))                       # future expansion: should be 0
+        args.pagesize,                                  # flash page size we assume
+        args.os_version,                                # operating system version
+        args.os_patch_level))                           # security patch level
     args.output.write(pack('16s', args.board.encode())) # asciiz product name
     args.output.write(pack('512s', args.cmdline[:512].encode()))
 
@@ -97,6 +99,18 @@ def write_padded_file(f_out, f_in, padding):
 def parse_int(x):
     return int(x, 0)
 
+def match_to_int(x):
+    if (x and x.lastindex == 3):
+        return (parse_int(x.group(3)) +
+                parse_int(x.group(2)) * 100 +
+                parse_int(x.group(1)) * 10000)
+    return 0
+
+def parse_os_version(x):
+    return match_to_int(re.search(r'^(\d+)\.(\d{1,2})\.(\d{1,2})', x))
+
+def parse_os_patch_level(x):
+    return match_to_int(re.search(r'^(\d{4,})-(\d{2})-(\d{2})', x))
 
 def parse_cmdline():
     parser = ArgumentParser()
@@ -111,6 +125,10 @@ def parse_cmdline():
     parser.add_argument('--ramdisk_offset', help='ramdisk offset', type=parse_int, default=0x01000000)
     parser.add_argument('--second_offset', help='2nd bootloader offset', type=parse_int,
                         default=0x00f00000)
+    parser.add_argument('--os_version', help='operating system version', type=parse_os_version,
+                        default=0)
+    parser.add_argument('--os_patch_level', help='operating system patch level',
+                        type=parse_os_patch_level, default=0)
     parser.add_argument('--tags_offset', help='tags offset', type=parse_int, default=0x00000100)
     parser.add_argument('--board', help='board name', default='', action=ValidateStrLenAction,
                         maxlen=16)
