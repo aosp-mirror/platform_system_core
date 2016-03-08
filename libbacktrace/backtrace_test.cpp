@@ -1412,9 +1412,9 @@ void CheckForLeak(pid_t pid, pid_t tid) {
   }
   size_t new_pss = GetPssBytes();
   ASSERT_TRUE(new_pss != 0);
-  size_t abs_diff = (new_pss > stable_pss) ? new_pss - stable_pss : stable_pss - new_pss;
-  // As long as the new pss is within a certain amount, consider everything okay.
-  ASSERT_LE(abs_diff, MAX_LEAK_BYTES);
+  if (new_pss > stable_pss) {
+    ASSERT_LE(new_pss - stable_pss, MAX_LEAK_BYTES);
+  }
 }
 
 TEST(libbacktrace, check_for_leak_local) {
