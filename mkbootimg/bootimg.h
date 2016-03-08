@@ -43,7 +43,11 @@ struct boot_img_hdr
 
     uint32_t tags_addr;    /* physical addr for kernel tags */
     uint32_t page_size;    /* flash page size we assume */
-    uint32_t unused[2];    /* future expansion: should be 0 */
+
+    /* operating system version; "1.2.34" -> 010234 */
+    uint32_t os_version;
+    /* operating system patch level; "2016-01-01" -> 20160101 */
+    uint32_t os_patch_level;
 
     uint8_t name[BOOT_NAME_SIZE]; /* asciiz product name */
 
