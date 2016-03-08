@@ -588,7 +588,7 @@ int fs_mgr_mount_all(struct fstab *fstab)
                   fstab->recs[top_idx].fs_type);
             if (fs_mgr_is_encryptable(&fstab->recs[top_idx]) &&
                 strcmp(fstab->recs[top_idx].key_loc, KEY_IN_FOOTER)) {
-                int fd = open(fstab->recs[top_idx].key_loc, O_WRONLY, 0644);
+                int fd = open(fstab->recs[top_idx].key_loc, O_WRONLY);
                 if (fd >= 0) {
                     INFO("%s(): also wipe %s\n", __func__, fstab->recs[top_idx].key_loc);
                     wipe_block_device(fd, get_file_size(fd));

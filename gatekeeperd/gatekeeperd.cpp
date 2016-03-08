@@ -76,7 +76,7 @@ public:
 
     void store_sid(uint32_t uid, uint64_t sid) {
         char filename[21];
-        sprintf(filename, "%u", uid);
+        snprintf(filename, sizeof(filename), "%u", uid);
         int fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR);
         if (fd < 0) {
             ALOGE("could not open file: %s: %s", filename, strerror(errno));
@@ -102,7 +102,7 @@ public:
 
     void maybe_store_sid(uint32_t uid, uint64_t sid) {
         char filename[21];
-        sprintf(filename, "%u", uid);
+        snprintf(filename, sizeof(filename), "%u", uid);
         if (access(filename, F_OK) == -1) {
             store_sid(uid, sid);
         }
@@ -111,7 +111,7 @@ public:
     uint64_t read_sid(uint32_t uid) {
         char filename[21];
         uint64_t sid;
-        sprintf(filename, "%u", uid);
+        snprintf(filename, sizeof(filename), "%u", uid);
         int fd = open(filename, O_RDONLY);
         if (fd < 0) return 0;
         read(fd, &sid, sizeof(sid));
@@ -121,7 +121,7 @@ public:
 
     void clear_sid(uint32_t uid) {
         char filename[21];
-        sprintf(filename, "%u", uid);
+        snprintf(filename, sizeof(filename), "%u", uid);
         if (remove(filename) < 0) {
             ALOGE("%s: could not remove file [%s], attempting 0 write", __func__, strerror(errno));
             store_sid(uid, 0);
