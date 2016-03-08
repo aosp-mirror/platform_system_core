@@ -21,12 +21,15 @@
 #include <mutex>
 #include <string>
 #include <sstream>
+#include <unordered_map>
 
 #include <backtrace.h>
 #include <android-base/macros.h>
 
 #include "Allocator.h"
 #include "HeapWalker.h"
+#include "Leak.h"
+#include "LeakFolding.h"
 #include "LeakPipe.h"
 #include "ProcessMappings.h"
 #include "PtracerThread.h"
@@ -117,31 +120,83 @@ bool MemUnreachable::CollectAllocations(const allocator::vector<ThreadInfo>& thr
   return true;
 }
 
-bool MemUnreachable::GetUnreachableMemory(allocator::vector<Leak>& leaks, size_t limit,
-    size_t* num_leaks, size_t* leak_bytes) {
+bool MemUnreachable::GetUnreachableMemory(allocator::vector<Leak>& leaks,
+    size_t limit, size_t* num_leaks, size_t* leak_bytes) {
   ALOGI("sweeping process %d for unreachable memory", pid_);
   leaks.clear();
 
-  allocator::vector<Range> leaked{allocator_};
-  if (!heap_walker_.Leaked(leaked, limit, num_leaks, leak_bytes)) {
+  if (!heap_walker_.DetectLeaks()) {
     return false;
   }
 
-  for (auto it = leaked.begin(); it != leaked.end(); it++) {
-    Leak leak{};
-    leak.begin = it->begin;
-    leak.size = it->end - it->begin;;
-    memcpy(leak.contents, reinterpret_cast<void*>(it->begin),
-        std::min(leak.size, Leak::contents_length));
-    ssize_t num_backtrace_frames = malloc_backtrace(reinterpret_cast<void*>(it->begin),
-        leak.backtrace_frames, leak.backtrace_length);
-    if (num_backtrace_frames > 0) {
-      leak.num_backtrace_frames = num_backtrace_frames;
-    }
-    leaks.emplace_back(leak);
-  }
+
+  allocator::vector<Range> leaked1{allocator_};
+  heap_walker_.Leaked(leaked1, 0, num_leaks, leak_bytes);
 
   ALOGI("sweeping done");
+
+  ALOGI("folding related leaks");
+
+  LeakFolding folding(allocator_, heap_walker_);
+  if (!folding.FoldLeaks()) {
+    return false;
+  }
+
+  allocator::vector<LeakFolding::Leak> leaked{allocator_};
+
+  if (!folding.Leaked(leaked, num_leaks, leak_bytes)) {
+    return false;
+  }
+
+  allocator::unordered_map<Leak::Backtrace, Leak*> backtrace_map{allocator_};
+
+  // Prevent reallocations of backing memory so we can store pointers into it
+  // in backtrace_map.
+  leaks.reserve(leaked.size());
+
+  for (auto& it: leaked) {
+    leaks.emplace_back();
+    Leak* leak = &leaks.back();
+
+    ssize_t num_backtrace_frames = malloc_backtrace(reinterpret_cast<void*>(it.range.begin),
+        leak->backtrace.frames, leak->backtrace.max_frames);
+    if (num_backtrace_frames > 0) {
+      leak->backtrace.num_frames = num_backtrace_frames;
+
+      auto inserted = backtrace_map.emplace(leak->backtrace, leak);
+      if (!inserted.second) {
+        // Leak with same backtrace already exists, drop this one and
+        // increment similar counts on the existing one.
+        leaks.pop_back();
+        Leak* similar_leak = inserted.first->second;
+        similar_leak->similar_count++;
+        similar_leak->similar_size += it.range.size();
+        similar_leak->similar_referenced_count += it.referenced_count;
+        similar_leak->similar_referenced_size += it.referenced_size;
+        similar_leak->total_size += it.range.size();
+        similar_leak->total_size += it.referenced_size;
+        continue;
+      }
+    }
+
+    leak->begin = it.range.begin;
+    leak->size = it.range.size();
+    leak->referenced_count = it.referenced_count;
+    leak->referenced_size = it.referenced_size;
+    leak->total_size = leak->size + leak->referenced_size;
+    memcpy(leak->contents, reinterpret_cast<void*>(it.range.begin),
+        std::min(leak->size, Leak::contents_length));
+  }
+
+  ALOGI("folding done");
+
+  std::sort(leaks.begin(), leaks.end(), [](const Leak& a, const Leak& b) {
+    return a.total_size > b.total_size;
+  });
+
+  if (leaks.size() > limit) {
+    leaks.resize(limit);
+  }
 
   return true;
 }
@@ -201,6 +256,11 @@ bool MemUnreachable::ClassifyMappings(const allocator::vector<Mapping>& mappings
   }
 
   return true;
+}
+
+template<typename T>
+static inline const char* plural(T val) {
+  return (val == 1) ? "" : "s";
 }
 
 bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
@@ -339,9 +399,8 @@ bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
 
   ALOGI("unreachable memory detection done");
   ALOGE("%zu bytes in %zu allocation%s unreachable out of %zu bytes in %zu allocation%s",
-      info.leak_bytes, info.num_leaks, info.num_leaks == 1 ? "" : "s",
-      info.allocation_bytes, info.num_allocations, info.num_allocations == 1 ? "" : "s");
-
+      info.leak_bytes, info.num_leaks, plural(info.num_leaks),
+      info.allocation_bytes, info.num_allocations, plural(info.num_allocations));
   return true;
 }
 
@@ -353,6 +412,23 @@ std::string Leak::ToString(bool log_contents) const {
   oss << " bytes unreachable at ";
   oss << std::hex << begin;
   oss << std::endl;
+  if (referenced_count > 0) {
+    oss << std::dec;
+    oss << "   referencing " << referenced_size << " unreachable bytes";
+    oss << " in " << referenced_count << " allocation" << plural(referenced_count);
+    oss << std::endl;
+  }
+  if (similar_count > 0) {
+    oss << std::dec;
+    oss << "   and " << similar_size << " similar unreachable bytes";
+    oss << " in " << similar_count << " allocation" << plural(similar_count);
+    oss << std::endl;
+    if (similar_referenced_count > 0) {
+      oss << "   referencing " << similar_referenced_size << " unreachable bytes";
+      oss << " in " << similar_referenced_count << " allocation" << plural(similar_referenced_count);
+      oss << std::endl;
+    }
+  }
 
   if (log_contents) {
     const int bytes_per_line = 16;
@@ -361,7 +437,7 @@ std::string Leak::ToString(bool log_contents) const {
     if (bytes == size) {
       oss << "   contents:" << std::endl;
     } else {
-      oss << "  first " << bytes << " bytes of contents:" << std::endl;
+      oss << "   first " << bytes << " bytes of contents:" << std::endl;
     }
 
     for (size_t i = 0; i < bytes; i += bytes_per_line) {
@@ -385,21 +461,41 @@ std::string Leak::ToString(bool log_contents) const {
       oss << std::endl;
     }
   }
-  if (num_backtrace_frames > 0) {
-    oss << backtrace_string(backtrace_frames, num_backtrace_frames);
+  if (backtrace.num_frames > 0) {
+    oss << backtrace_string(backtrace.frames, backtrace.num_frames);
   }
 
   return oss.str();
 }
 
+// Figure out the abi based on defined macros.
+#if defined(__arm__)
+#define ABI_STRING "arm"
+#elif defined(__aarch64__)
+#define ABI_STRING "arm64"
+#elif defined(__mips__) && !defined(__LP64__)
+#define ABI_STRING "mips"
+#elif defined(__mips__) && defined(__LP64__)
+#define ABI_STRING "mips64"
+#elif defined(__i386__)
+#define ABI_STRING "x86"
+#elif defined(__x86_64__)
+#define ABI_STRING "x86_64"
+#else
+#error "Unsupported ABI"
+#endif
+
 std::string UnreachableMemoryInfo::ToString(bool log_contents) const {
   std::ostringstream oss;
   oss << "  " << leak_bytes << " bytes in ";
-  oss << num_leaks << " unreachable allocation" << (num_leaks == 1 ? "" : "s");
+  oss << num_leaks << " unreachable allocation" << plural(num_leaks);
+  oss << std::endl;
+  oss << "  ABI: '" ABI_STRING "'" << std::endl;
   oss << std::endl;
 
   for (auto it = leaks.begin(); it != leaks.end(); it++) {
       oss << it->ToString(log_contents);
+      oss << std::endl;
   }
 
   return oss.str();

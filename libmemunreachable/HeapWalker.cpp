@@ -21,17 +21,19 @@
 
 #include "Allocator.h"
 #include "HeapWalker.h"
+#include "LeakFolding.h"
 #include "log.h"
 
 bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
   if (end == begin) {
     end = begin + 1;
   }
-  auto inserted = allocations_.insert(std::pair<Range, RangeInfo>(Range{begin, end}, RangeInfo{false, false}));
+  Range range{begin, end};
+  auto inserted = allocations_.insert(std::pair<Range, AllocationInfo>(range, AllocationInfo{}));
   if (inserted.second) {
     valid_allocations_range_.begin = std::min(valid_allocations_range_.begin, begin);
     valid_allocations_range_.end = std::max(valid_allocations_range_.end, end);
-    allocation_bytes_ += end - begin;
+    allocation_bytes_ += range.size();
     return true;
   } else {
     Range overlap = inserted.first->first;
@@ -44,27 +46,30 @@ bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
   }
 }
 
-void HeapWalker::Walk(const Range& range, bool RangeInfo::*flag) {
-  allocator::vector<Range> to_do(1, range, allocator_);
+bool HeapWalker::IsAllocationPtr(uintptr_t ptr, Range* range, AllocationInfo** info) {
+  if (ptr >= valid_allocations_range_.begin && ptr < valid_allocations_range_.end) {
+    AllocationMap::iterator it = allocations_.find(Range{ptr, ptr + 1});
+    if (it != allocations_.end()) {
+      *range = it->first;
+      *info = &it->second;
+      return true;
+    }
+  }
+  return false;
+}
+
+void HeapWalker::RecurseRoot(const Range& root) {
+  allocator::vector<Range> to_do(1, root, allocator_);
   while (!to_do.empty()) {
     Range range = to_do.back();
     to_do.pop_back();
-    uintptr_t begin = (range.begin + (sizeof(uintptr_t) - 1)) & ~(sizeof(uintptr_t) - 1);
-    // TODO(ccross): we might need to consider a pointer to the end of a buffer
-    // to be inside the buffer, which means the common case of a pointer to the
-    // beginning of a buffer may keep two ranges live.
-    for (uintptr_t i = begin; i < range.end; i += sizeof(uintptr_t)) {
-      uintptr_t val = *reinterpret_cast<uintptr_t*>(i);
-      if (val >= valid_allocations_range_.begin && val < valid_allocations_range_.end) {
-        RangeMap::iterator it = allocations_.find(Range{val, val + 1});
-        if (it != allocations_.end()) {
-          if (!(it->second.*flag)) {
-            to_do.push_back(it->first);
-            it->second.*flag = true;
-          }
-        }
+
+    ForEachPtrInRange(range, [&](Range& ref_range, AllocationInfo* ref_info) {
+      if (!ref_info->referenced_from_root) {
+        ref_info->referenced_from_root = true;
+        to_do.push_back(ref_range);
       }
-    }
+    });
   }
 }
 
@@ -85,27 +90,22 @@ size_t HeapWalker::AllocationBytes() {
 }
 
 bool HeapWalker::DetectLeaks() {
+  // Recursively walk pointers from roots to mark referenced allocations
   for (auto it = roots_.begin(); it != roots_.end(); it++) {
-    Walk(*it, &RangeInfo::referenced_from_root);
+    RecurseRoot(*it);
   }
 
   Range vals;
   vals.begin = reinterpret_cast<uintptr_t>(root_vals_.data());
   vals.end = vals.begin + root_vals_.size() * sizeof(uintptr_t);
-  Walk(vals, &RangeInfo::referenced_from_root);
 
-  for (auto it = allocations_.begin(); it != allocations_.end(); it++) {
-    if (!it->second.referenced_from_root) {
-      Walk(it->first, &RangeInfo::referenced_from_leak);
-    }
-  }
+  RecurseRoot(vals);
 
   return true;
 }
 
 bool HeapWalker::Leaked(allocator::vector<Range>& leaked, size_t limit,
     size_t* num_leaks_out, size_t* leak_bytes_out) {
-  DetectLeaks();
   leaked.clear();
 
   size_t num_leaks = 0;
@@ -120,7 +120,7 @@ bool HeapWalker::Leaked(allocator::vector<Range>& leaked, size_t limit,
   size_t n = 0;
   for (auto it = allocations_.begin(); it != allocations_.end(); it++) {
     if (!it->second.referenced_from_root) {
-      if (n++ <= limit) {
+      if (n++ < limit) {
         leaked.push_back(it->first);
       }
     }
