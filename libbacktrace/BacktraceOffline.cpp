@@ -561,7 +561,7 @@ DebugFrameInfo* ReadDebugFrameFromELFFile(const llvm::object::ELFFile<ELFT>* elf
   uint64_t eh_frame_vaddr = 0;
   std::vector<uint8_t> eh_frame_data;
 
-  for (auto it = elf->begin_sections(); it != elf->end_sections(); ++it) {
+  for (auto it = elf->section_begin(); it != elf->section_end(); ++it) {
     llvm::ErrorOr<llvm::StringRef> name = elf->getSectionName(&*it);
     if (name) {
       if (name.get() == ".debug_frame") {
@@ -600,7 +600,7 @@ DebugFrameInfo* ReadDebugFrameFromELFFile(const llvm::object::ELFFile<ELFT>* elf
   }
 
   std::vector<ProgramHeader> program_headers;
-  for (auto it = elf->begin_program_headers(); it != elf->end_program_headers(); ++it) {
+  for (auto it = elf->program_header_begin(); it != elf->program_header_end(); ++it) {
     ProgramHeader header;
     header.vaddr = it->p_vaddr;
     header.file_offset = it->p_offset;
