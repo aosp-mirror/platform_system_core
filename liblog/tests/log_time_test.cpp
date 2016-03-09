@@ -21,8 +21,6 @@
 #include <log/log_time.h>
 
 TEST(liblog, log_time) {
-#ifdef __ANDROID__
-
 #ifdef _SYSTEM_CORE_INCLUDE_PRIVATE_ANDROID_LOGGER_H_
     log_time(CLOCK_MONOTONIC);
 
@@ -36,8 +34,4 @@ TEST(liblog, log_time) {
     EXPECT_EQ(tl, ts);
     EXPECT_GE(tl, ts);
     EXPECT_LE(tl, ts);
-
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
 }

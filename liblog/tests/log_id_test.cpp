@@ -31,7 +31,6 @@
 #endif
 
 TEST(liblog, log_id) {
-#ifdef __ANDROID__
     int count = 0;
 
     for(int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
@@ -44,13 +43,9 @@ TEST(liblog, log_id) {
         fprintf(stderr, "log buffer %s\r", name);
     }
     ASSERT_EQ(LOG_ID_MAX, count);
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
 }
 
 TEST(liblog, __android_log_buf_print) {
-#ifdef __ANDROID__
     EXPECT_LT(0, __android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_INFO,
                                          "TEST__android_log_buf_print",
                                          "radio"));
@@ -63,13 +58,9 @@ TEST(liblog, __android_log_buf_print) {
                                          "TEST__android_log_buf_print",
                                          "main"));
     usleep(1000);
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
 }
 
 TEST(liblog, __android_log_buf_write) {
-#ifdef __ANDROID__
     EXPECT_LT(0, __android_log_buf_write(LOG_ID_RADIO, ANDROID_LOG_INFO,
                                          "TEST__android_log_buf_write",
                                          "radio"));
@@ -82,26 +73,20 @@ TEST(liblog, __android_log_buf_write) {
                                          "TEST__android_log_buf_write",
                                          "main"));
     usleep(1000);
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
 }
 
-#ifdef __ANDROID__
 static void* ConcurrentPrintFn(void *arg) {
     int ret = __android_log_buf_print(LOG_ID_MAIN, ANDROID_LOG_INFO,
                                   "TEST__android_log_print", "Concurrent %" PRIuPTR,
                                   reinterpret_cast<uintptr_t>(arg));
     return reinterpret_cast<void*>(ret);
 }
-#endif
 
 #define NUM_CONCURRENT 64
 #define _concurrent_name(a,n) a##__concurrent##n
 #define concurrent_name(a,n) _concurrent_name(a,n)
 
 TEST(liblog, concurrent_name(__android_log_buf_print, NUM_CONCURRENT)) {
-#ifdef __ANDROID__
     pthread_t t[NUM_CONCURRENT];
     int i;
     for (i=0; i < NUM_CONCURRENT; i++) {
@@ -119,7 +104,4 @@ TEST(liblog, concurrent_name(__android_log_buf_print, NUM_CONCURRENT)) {
         }
     }
     ASSERT_LT(0, ret);
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
 }
