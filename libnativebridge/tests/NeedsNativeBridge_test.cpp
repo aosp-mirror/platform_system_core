@@ -18,15 +18,17 @@
 
 namespace android {
 
-static const char* kISAs[] = { "arm", "arm64", "mips", "x86", "x86_64", "random", "64arm", "64_x86",
-                               "64_x86_64", "", "reallylongstringabcd", nullptr };
+static const char* kISAs[] = { "arm", "arm64", "mips", "mips64", "x86", "x86_64", "random", "64arm",
+                               "64_x86", "64_x86_64", "", "reallylongstringabcd", nullptr };
 
 #if defined(__arm__)
 static const char* kRuntimeISA = "arm";
 #elif defined(__aarch64__)
 static const char* kRuntimeISA = "arm64";
-#elif defined(__mips__)
+#elif defined(__mips__) && !defined(__LP64__)
 static const char* kRuntimeISA = "mips";
+#elif defined(__mips__) && defined(__LP64__)
+static const char* kRuntimeISA = "mips64";
 #elif defined(__i386__)
 static const char* kRuntimeISA = "x86";
 #elif defined(__x86_64__)
