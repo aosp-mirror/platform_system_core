@@ -20,6 +20,7 @@
 
 #include <getopt.h>
 #include <unistd.h>
+#include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <ctime>
@@ -166,6 +167,15 @@ void RecordFactoryReset() {
 
   time_t current_time_utc = time(nullptr);
 
+  static const char* factory_reset_current_time = "factory_reset_current_time";
+  if (current_time_utc < 0) {
+    // UMA does not display negative values in buckets, so convert to positive.
+    LogBootEvent(factory_reset_current_time, std::abs(current_time_utc));
+    return;
+  } else {
+    LogBootEvent(factory_reset_current_time, current_time_utc);
+  }
+
   // The factory_reset boot event does not exist after the device is reset, so
   // use this signal to mark the time of the factory reset.
   if (!boot_event_store.GetBootEvent("factory_reset", &record)) {
@@ -179,6 +189,7 @@ void RecordFactoryReset() {
   // Calculate and record the difference in time between now and the
   // factory_reset time.
   time_t factory_reset_utc = record.second;
+  LogBootEvent("factory_reset_record_value", factory_reset_utc);
   time_t time_since_factory_reset = difftime(current_time_utc,
                                              factory_reset_utc);
   boot_event_store.AddBootEventWithValue("time_since_factory_reset",
