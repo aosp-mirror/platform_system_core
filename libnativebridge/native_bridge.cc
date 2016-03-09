@@ -231,8 +231,10 @@ bool LoadNativeBridge(const char* nb_library_filename,
 static const char* kRuntimeISA = "arm";
 #elif defined(__aarch64__)
 static const char* kRuntimeISA = "arm64";
-#elif defined(__mips__)
+#elif defined(__mips__) && !defined(__LP64__)
 static const char* kRuntimeISA = "mips";
+#elif defined(__mips__) && defined(__LP64__)
+static const char* kRuntimeISA = "mips64";
 #elif defined(__i386__)
 static const char* kRuntimeISA = "x86";
 #elif defined(__x86_64__)
