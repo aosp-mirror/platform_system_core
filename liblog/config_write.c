@@ -64,3 +64,17 @@ LIBLOG_HIDDEN void __android_log_config_write() {
     __android_log_add_transport(&__android_log_transport_write, &fakeLoggerWrite);
 #endif
 }
+
+LIBLOG_HIDDEN void __android_log_config_write_close() {
+    struct android_log_transport_write *transport;
+    struct listnode *n;
+
+    write_transport_for_each_safe(transport, n, &__android_log_transport_write) {
+        transport->logMask = 0;
+        list_remove(&transport->node);
+    }
+    write_transport_for_each_safe(transport, n, &__android_log_persist_write) {
+        transport->logMask = 0;
+        list_remove(&transport->node);
+    }
+}

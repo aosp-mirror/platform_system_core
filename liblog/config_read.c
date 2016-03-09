@@ -60,3 +60,15 @@ LIBLOG_HIDDEN void __android_log_config_read() {
     __android_log_add_transport(&__android_log_persist_read, &pmsgLoggerRead);
 #endif
 }
+
+LIBLOG_HIDDEN void __android_log_config_read_close() {
+    struct android_log_transport_read *transport;
+    struct listnode *n;
+
+    read_transport_for_each_safe(transport, n, &__android_log_transport_read) {
+        list_remove(&transport->node);
+    }
+    read_transport_for_each_safe(transport, n, &__android_log_persist_read) {
+        list_remove(&transport->node);
+    }
+}
