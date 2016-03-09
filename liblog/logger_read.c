@@ -228,6 +228,13 @@ LIBLOG_ABI_PUBLIC int android_logger_set_prune_list(
     LOGGER_LIST_FUNCTION(logger_list, -ENODEV, setPrune, buf, len);
 }
 
+LIBLOG_HIDDEN struct listnode __android_log_readers =
+    { &__android_log_readers, &__android_log_readers };
+#if !defined(_WIN32)
+LIBLOG_HIDDEN pthread_rwlock_t __android_log_readers_lock =
+    PTHREAD_RWLOCK_INITIALIZER;
+#endif
+
 LIBLOG_ABI_PUBLIC struct logger_list *android_logger_list_alloc(
         int mode,
         unsigned int tail,
@@ -245,6 +252,10 @@ LIBLOG_ABI_PUBLIC struct logger_list *android_logger_list_alloc(
     logger_list->mode = mode;
     logger_list->tail = tail;
     logger_list->pid = pid;
+
+    logger_list_wrlock();
+    list_add_tail(&__android_log_readers, &logger_list->node);
+    logger_list_unlock();
 
     return (struct logger_list *)logger_list;
 }
@@ -266,6 +277,10 @@ LIBLOG_ABI_PUBLIC struct logger_list *android_logger_list_alloc_time(
     logger_list->mode = mode;
     logger_list->start = start;
     logger_list->pid = pid;
+
+    logger_list_wrlock();
+    list_add_tail(&__android_log_readers, &logger_list->node);
+    logger_list_unlock();
 
     return (struct logger_list *)logger_list;
 }
@@ -501,6 +516,10 @@ LIBLOG_ABI_PUBLIC void android_logger_list_free(struct logger_list *logger_list)
     if (logger_list_internal == NULL) {
         return;
     }
+
+    logger_list_wrlock();
+    list_remove(&logger_list_internal->node);
+    logger_list_unlock();
 
     while (!list_empty(&logger_list_internal->transport)) {
         struct listnode *node = list_head(&logger_list_internal->transport);
