@@ -34,6 +34,24 @@ typedef uint64_t word_t;
 typedef uint32_t word_t;
 #endif
 
+enum BacktraceUnwindError : uint32_t {
+  BACKTRACE_UNWIND_NO_ERROR,
+  // Something failed while trying to perform the setup to begin the unwind.
+  BACKTRACE_UNWIND_ERROR_SETUP_FAILED,
+  // There is no map information to use with the unwind.
+  BACKTRACE_UNWIND_ERROR_MAP_MISSING,
+  // An error occurred that indicates a programming error.
+  BACKTRACE_UNWIND_ERROR_INTERNAL,
+  // The thread to unwind has disappeared before the unwind can begin.
+  BACKTRACE_UNWIND_ERROR_THREAD_DOESNT_EXIST,
+  // The thread to unwind has not responded to a signal in a timely manner.
+  BACKTRACE_UNWIND_ERROR_THREAD_TIMEOUT,
+  // Attempt to do an unsupported operation.
+  BACKTRACE_UNWIND_ERROR_UNSUPPORTED_OPERATION,
+  // Attempt to do an offline unwind without a context.
+  BACKTRACE_UNWIND_ERROR_NO_CONTEXT,
+};
+
 struct backtrace_frame_data_t {
   size_t num;             // The current fame number.
   uintptr_t pc;           // The absolute pc.
@@ -127,6 +145,10 @@ public:
 
   BacktraceMap* GetMap() { return map_; }
 
+  BacktraceUnwindError GetError() { return error_; }
+
+  std::string GetErrorString(BacktraceUnwindError error);
+
 protected:
   Backtrace(pid_t pid, pid_t tid, BacktraceMap* map);
 
@@ -145,6 +167,8 @@ protected:
   bool map_shared_;
 
   std::vector<backtrace_frame_data_t> frames_;
+
+  BacktraceUnwindError error_;
 };
 
 #endif // _BACKTRACE_BACKTRACE_H
