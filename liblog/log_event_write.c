@@ -18,10 +18,15 @@
 
 #include <log/log.h>
 
+#include "log_cdefs.h"
+
 #define MAX_SUBTAG_LEN 32
 
-int __android_log_error_write(int tag, const char *subTag, int32_t uid,
-                              const char *data, uint32_t dataLen)
+LIBLOG_ABI_PUBLIC int __android_log_error_write(
+        int tag,
+        const char *subTag,
+        int32_t uid,
+        const char *data, uint32_t dataLen)
 {
     int ret = -EINVAL;
 

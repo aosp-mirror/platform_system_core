@@ -18,16 +18,17 @@
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/cdefs.h>
 
 #include <log/log_read.h>
 
-const char log_time::default_format[] = "%m-%d %H:%M:%S.%q";
-const timespec log_time::EPOCH = { 0, 0 };
+#include "log_cdefs.h"
+
+LIBLOG_ABI_PRIVATE const char log_time::default_format[] = "%m-%d %H:%M:%S.%q";
+LIBLOG_ABI_PRIVATE const timespec log_time::EPOCH = { 0, 0 };
 
 // Add %#q for fractional seconds to standard strptime function
 
-char *log_time::strptime(const char *s, const char *format) {
+LIBLOG_ABI_PRIVATE char *log_time::strptime(const char *s, const char *format) {
     time_t now;
 #ifdef __linux__
     *this = log_time(CLOCK_REALTIME);
@@ -133,7 +134,7 @@ char *log_time::strptime(const char *s, const char *format) {
     return ret;
 }
 
-log_time log_time::operator-= (const timespec &T) {
+LIBLOG_ABI_PRIVATE log_time log_time::operator-= (const timespec &T) {
     // No concept of negative time, clamp to EPOCH
     if (*this <= T) {
         return *this = EPOCH;
@@ -150,7 +151,7 @@ log_time log_time::operator-= (const timespec &T) {
     return *this;
 }
 
-log_time log_time::operator+= (const timespec &T) {
+LIBLOG_ABI_PRIVATE log_time log_time::operator+= (const timespec &T) {
     this->tv_nsec += (unsigned long int)T.tv_nsec;
     if (this->tv_nsec >= NS_PER_SEC) {
         this->tv_nsec -= NS_PER_SEC;
@@ -161,7 +162,7 @@ log_time log_time::operator+= (const timespec &T) {
     return *this;
 }
 
-log_time log_time::operator-= (const log_time &T) {
+LIBLOG_ABI_PRIVATE log_time log_time::operator-= (const log_time &T) {
     // No concept of negative time, clamp to EPOCH
     if (*this <= T) {
         return *this = EPOCH;
@@ -178,7 +179,7 @@ log_time log_time::operator-= (const log_time &T) {
     return *this;
 }
 
-log_time log_time::operator+= (const log_time &T) {
+LIBLOG_ABI_PRIVATE log_time log_time::operator+= (const log_time &T) {
     this->tv_nsec += T.tv_nsec;
     if (this->tv_nsec >= NS_PER_SEC) {
         this->tv_nsec -= NS_PER_SEC;
