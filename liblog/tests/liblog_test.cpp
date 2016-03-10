@@ -896,7 +896,10 @@ Good Signior Leonato, you are come to meet your\n\
 trouble: the fashion of the world is to avoid\n\
 cost, and you encounter it\n\
 LEONATO\n\
-Never came trouble to my house in the likeness of your grace";
+Never came trouble to my house in the likeness of your grace,\n\
+for trouble being gone, comfort should remain, but\n\
+when you depart from me, sorrow abides and happiness\n\
+takes his leave.";
 
 TEST(liblog, max_payload) {
     pid_t pid = getpid();
@@ -2450,4 +2453,14 @@ TEST(liblog, create_android_logger_overflow) {
     EXPECT_GT(0, android_log_write_list_begin(ctx));
     EXPECT_LE(0, android_log_destroy(&ctx));
     ASSERT_TRUE(NULL == ctx);
+}
+
+static const char __pmsg_file[] =
+        "/data/william-shakespeare/MuchAdoAboutNothing.txt";
+
+TEST(liblog, __android_log_pmsg_file_write) {
+    EXPECT_LT(0, __android_log_pmsg_file_write(
+            LOG_ID_CRASH, ANDROID_LOG_VERBOSE,
+            __pmsg_file, max_payload_buf, sizeof(max_payload_buf)));
+    fprintf(stderr, "Reboot, ensure file %s matches\n", __pmsg_file);
 }
