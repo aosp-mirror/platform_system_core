@@ -148,3 +148,24 @@ Backtrace* Backtrace::Create(pid_t pid, pid_t tid, BacktraceMap* map) {
     return new UnwindPtrace(pid, tid, map);
   }
 }
+
+std::string Backtrace::GetErrorString(BacktraceUnwindError error) {
+  switch (error) {
+  case BACKTRACE_UNWIND_NO_ERROR:
+    return "No error";
+  case BACKTRACE_UNWIND_ERROR_SETUP_FAILED:
+    return "Setup failed";
+  case BACKTRACE_UNWIND_ERROR_MAP_MISSING:
+    return "No map found";
+  case BACKTRACE_UNWIND_ERROR_INTERNAL:
+    return "Internal libbacktrace error, please submit a bugreport";
+  case BACKTRACE_UNWIND_ERROR_THREAD_DOESNT_EXIST:
+    return "Thread doesn't exist";
+  case BACKTRACE_UNWIND_ERROR_THREAD_TIMEOUT:
+    return "Thread has not repsonded to signal in time";
+  case BACKTRACE_UNWIND_ERROR_UNSUPPORTED_OPERATION:
+    return "Attempt to use an unsupported feature";
+  case BACKTRACE_UNWIND_ERROR_NO_CONTEXT:
+    return "Attempt to do an offline unwind without a context";
+  }
+}

@@ -129,9 +129,11 @@ static unw_accessors_t accessors = {
 bool BacktraceOffline::Unwind(size_t num_ignore_frames, ucontext_t* context) {
   if (context == nullptr) {
     BACK_LOGW("The context is needed for offline backtracing.");
+    error_ = BACKTRACE_UNWIND_ERROR_NO_CONTEXT;
     return false;
   }
   context_ = context;
+  error_ = BACKTRACE_UNWIND_NO_ERROR;
 
   unw_addr_space_t addr_space = unw_create_addr_space(&accessors, 0);
   unw_cursor_t cursor;
@@ -139,6 +141,7 @@ bool BacktraceOffline::Unwind(size_t num_ignore_frames, ucontext_t* context) {
   if (ret != 0) {
     BACK_LOGW("unw_init_remote failed %d", ret);
     unw_destroy_addr_space(addr_space);
+    error_ = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
     return false;
   }
   size_t num_frames = 0;
