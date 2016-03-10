@@ -495,14 +495,20 @@ static int32_t UpdateEntryFromDataDescriptor(int fd,
 }
 
 // Attempts to read |len| bytes into |buf| at offset |off|.
-// Callers should not rely on the |fd| offset being incremented
-// as a side effect of this call.
+// On non-Windows platforms, callers are guaranteed that the |fd|
+// offset is unchanged and there is no side effect to this call.
+//
+// On Windows platforms this is not thread-safe.
 static inline bool ReadAtOffset(int fd, uint8_t* buf, size_t len, off64_t off) {
+#if !defined(_WIN32)
+  return TEMP_FAILURE_RETRY(pread64(fd, buf, len, off));
+#else
   if (lseek64(fd, off, SEEK_SET) != off) {
     ALOGW("Zip: failed seek to offset %" PRId64, off);
     return false;
   }
   return android::base::ReadFully(fd, buf, len);
+#endif
 }
 
 static int32_t FindEntry(const ZipArchive* archive, const int ent,
