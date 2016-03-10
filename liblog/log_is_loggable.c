@@ -23,6 +23,8 @@
 
 #include <android/log.h>
 
+#include "log_cdefs.h"
+
 static pthread_mutex_t lock_loggable = PTHREAD_MUTEX_INITIALIZER;
 
 static int lock()
@@ -250,7 +252,8 @@ static int __android_log_level(const char *tag, int default_prio)
     return default_prio;
 }
 
-int __android_log_is_loggable(int prio, const char *tag, int default_prio)
+LIBLOG_ABI_PUBLIC int __android_log_is_loggable(int prio, const char *tag,
+                                                int default_prio)
 {
     int logLevel = __android_log_level(tag, default_prio);
     return logLevel >= 0 && prio >= logLevel;
@@ -315,7 +318,7 @@ static unsigned char evaluate_persist_ro(const struct cache2 *self)
  * Timestamp state generally remains constant, but can change at any time
  * to handle developer requirements.
  */
-clockid_t android_log_clockid()
+LIBLOG_ABI_PUBLIC clockid_t android_log_clockid()
 {
     static struct cache2 clockid = {
         PTHREAD_MUTEX_INITIALIZER,
@@ -343,7 +346,7 @@ static unsigned char evaluate_security(const struct cache2 *self)
     return (c != BOOLEAN_FALSE) && c && (self->cache_persist.c == BOOLEAN_TRUE);
 }
 
-int __android_log_security()
+LIBLOG_ABI_PUBLIC int __android_log_security()
 {
     static struct cache2 security = {
         PTHREAD_MUTEX_INITIALIZER,
