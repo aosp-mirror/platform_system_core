@@ -16,17 +16,20 @@
 
 #if defined(_WIN32)
 
-#include <log/uio.h>
 #include <unistd.h>
 
-int  readv( int  fd, struct iovec*  vecs, int  count )
+#include <log/uio.h>
+
+#include "log_cdefs.h"
+
+LIBLOG_ABI_PUBLIC int readv(int fd, struct iovec *vecs, int count)
 {
     int   total = 0;
 
     for ( ; count > 0; count--, vecs++ ) {
         char*  buf = vecs->iov_base;
         int    len = vecs->iov_len;
-        
+
         while (len > 0) {
             int  ret = read( fd, buf, len );
             if (ret < 0) {
@@ -46,14 +49,14 @@ Exit:
     return total;
 }
 
-int  writev( int  fd, const struct iovec*  vecs, int  count )
+LIBLOG_ABI_PUBLIC int writev(int fd, const struct iovec *vecs, int count)
 {
     int   total = 0;
 
     for ( ; count > 0; count--, vecs++ ) {
         const char*  buf = vecs->iov_base;
         int          len = vecs->iov_len;
-        
+
         while (len > 0) {
             int  ret = write( fd, buf, len );
             if (ret < 0) {
@@ -69,7 +72,7 @@ int  writev( int  fd, const struct iovec*  vecs, int  count )
             len   -= ret;
         }
     }
-Exit:    
+Exit:
     return total;
 }
 
