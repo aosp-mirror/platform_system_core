@@ -91,7 +91,8 @@ static void dump_thread(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid) {
   if (backtrace->Unwind(0)) {
     dump_backtrace_to_log(backtrace.get(), log, "  ");
   } else {
-    ALOGE("Unwind failed: tid = %d", tid);
+    ALOGE("Unwind failed: tid = %d: %s", tid,
+          backtrace->GetErrorString(backtrace->GetError()).c_str());
   }
 }
 
