@@ -1129,11 +1129,20 @@ TEST(liblog, android_logger_get_) {
         struct logger * logger;
         EXPECT_TRUE(NULL != (logger = android_logger_open(logger_list, id)));
         EXPECT_EQ(id, android_logger_get_id(logger));
-        EXPECT_LT(0, android_logger_get_log_size(logger));
-        /* crash buffer is allowed to be empty, that is actually healthy! */
-        if (android_logger_get_log_readable_size(logger) ||
-                (strcmp("crash", name) && strcmp("security", name))) {
-            EXPECT_LT(0, android_logger_get_log_readable_size(logger));
+        ssize_t get_log_size = android_logger_get_log_size(logger);
+        /* security buffer is allowed to be denied */
+        if (strcmp("security", name)) {
+            EXPECT_LT(0, get_log_size);
+            /* crash buffer is allowed to be empty, that is actually healthy! */
+            EXPECT_LE((strcmp("crash", name)) != 0,
+                      android_logger_get_log_readable_size(logger));
+        } else {
+            EXPECT_NE(0, get_log_size);
+            if (get_log_size < 0) {
+                EXPECT_GT(0, android_logger_get_log_readable_size(logger));
+            } else {
+                EXPECT_LE(0, android_logger_get_log_readable_size(logger));
+            }
         }
         EXPECT_LT(0, android_logger_get_log_version(logger));
     }
