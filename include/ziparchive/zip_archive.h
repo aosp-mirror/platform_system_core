@@ -152,6 +152,9 @@ void CloseArchive(ZipArchiveHandle handle);
  * if this file entry contains a data descriptor footer. To verify crc32s
  * and length, a call to VerifyCrcAndLengths must be made after entry data
  * has been processed.
+ *
+ * On non-Windows platforms this method does not modify internal state and
+ * can be called concurrently.
  */
 int32_t FindEntry(const ZipArchiveHandle handle, const ZipString& entryName,
                   ZipEntry* data);
