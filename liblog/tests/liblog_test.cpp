@@ -16,6 +16,7 @@
 
 #include <fcntl.h>
 #include <inttypes.h>
+#include <semaphore.h>
 #include <signal.h>
 #include <string.h>
 #include <sys/types.h>
@@ -470,9 +471,15 @@ TEST(liblog, __security_buffer) {
 }
 
 static unsigned signaled;
-log_time signal_time;
+static log_time signal_time;
 
-static void caught_blocking(int /*signum*/)
+/*
+ *  Strictly, we are not allowed to log messages in a signal context, but we
+ * do make an effort to keep the failure surface minimized, and this in-effect
+ * should catch any regressions in that effort. The odds of a logged message
+ * in a signal handler causing a lockup problem should be _very_ small.
+ */
+static void caught_blocking_signal(int /*signum*/)
 {
     unsigned long long v = 0xDEADBEEFA55A0000ULL;
 
@@ -522,7 +529,7 @@ static void get_ticks(unsigned long long *uticks, unsigned long long *sticks)
     }
 }
 
-TEST(liblog, android_logger_list_read__cpu) {
+TEST(liblog, android_logger_list_read__cpu_signal) {
     struct logger_list *logger_list;
     unsigned long long v = 0xDEADBEEFA55A0000ULL;
 
@@ -545,7 +552,7 @@ TEST(liblog, android_logger_list_read__cpu) {
 
     memset(&signal_time, 0, sizeof(signal_time));
 
-    signal(SIGALRM, caught_blocking);
+    signal(SIGALRM, caught_blocking_signal);
     alarm(alarm_time);
 
     signaled = 0;
@@ -590,7 +597,158 @@ TEST(liblog, android_logger_list_read__cpu) {
     alarm(0);
     signal(SIGALRM, SIG_DFL);
 
-    EXPECT_LT(1, count);
+    EXPECT_LE(1, count);
+
+    EXPECT_EQ(1, signals);
+
+    android_logger_list_close(logger_list);
+
+    unsigned long long uticks_end;
+    unsigned long long sticks_end;
+    get_ticks(&uticks_end, &sticks_end);
+
+    // Less than 1% in either user or system time, or both
+    const unsigned long long one_percent_ticks = alarm_time;
+    unsigned long long user_ticks = uticks_end - uticks_start;
+    unsigned long long system_ticks = sticks_end - sticks_start;
+    EXPECT_GT(one_percent_ticks, user_ticks);
+    EXPECT_GT(one_percent_ticks, system_ticks);
+    EXPECT_GT(one_percent_ticks, user_ticks + system_ticks);
+}
+
+/*
+ *  Strictly, we are not allowed to log messages in a signal context, the
+ * correct way to handle this is to ensure the messages are constructed in
+ * a thread; the signal handler should only unblock the thread.
+ */
+static sem_t thread_trigger;
+
+static void caught_blocking_thread(int /*signum*/)
+{
+    sem_post(&thread_trigger);
+}
+
+static void *running_thread(void *) {
+    unsigned long long v = 0xDEADBEAFA55A0000ULL;
+
+    v += getpid() & 0xFFFF;
+
+    struct timespec timeout;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    timeout.tv_sec += 55;
+    sem_timedwait(&thread_trigger, &timeout);
+
+    ++signaled;
+    if ((signal_time.tv_sec == 0) && (signal_time.tv_nsec == 0)) {
+        signal_time = log_time(CLOCK_MONOTONIC);
+        signal_time.tv_sec += 2;
+    }
+
+    LOG_FAILURE_RETRY(__android_log_btwrite(0, EVENT_TYPE_LONG, &v, sizeof(v)));
+
+    return NULL;
+}
+
+int start_thread()
+{
+    sem_init(&thread_trigger, 0, 0);
+
+    pthread_attr_t attr;
+    if (pthread_attr_init(&attr)) {
+        return -1;
+    }
+
+    struct sched_param param;
+
+    memset(&param, 0, sizeof(param));
+    pthread_attr_setschedparam(&attr, &param);
+    pthread_attr_setschedpolicy(&attr, SCHED_BATCH);
+
+    if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) {
+        pthread_attr_destroy(&attr);
+        return -1;
+    }
+
+    pthread_t thread;
+    if (pthread_create(&thread, &attr, running_thread, NULL)) {
+        pthread_attr_destroy(&attr);
+        return -1;
+    }
+
+    pthread_attr_destroy(&attr);
+    return 0;
+}
+
+TEST(liblog, android_logger_list_read__cpu_thread) {
+    struct logger_list *logger_list;
+    unsigned long long v = 0xDEADBEAFA55A0000ULL;
+
+    pid_t pid = getpid();
+
+    v += pid & 0xFFFF;
+
+    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
+        LOG_ID_EVENTS, ANDROID_LOG_RDONLY, 1000, pid)));
+
+    int count = 0;
+
+    int signals = 0;
+
+    unsigned long long uticks_start;
+    unsigned long long sticks_start;
+    get_ticks(&uticks_start, &sticks_start);
+
+    const unsigned alarm_time = 10;
+
+    memset(&signal_time, 0, sizeof(signal_time));
+
+    signaled = 0;
+    EXPECT_EQ(0, start_thread());
+
+    signal(SIGALRM, caught_blocking_thread);
+    alarm(alarm_time);
+
+    do {
+        log_msg log_msg;
+        if (LOG_FAILURE_RETRY(android_logger_list_read(logger_list, &log_msg)) <= 0) {
+            break;
+        }
+
+        alarm(alarm_time);
+
+        ++count;
+
+        ASSERT_EQ(log_msg.entry.pid, pid);
+
+        if ((log_msg.entry.len != (4 + 1 + 8))
+         || (log_msg.id() != LOG_ID_EVENTS)) {
+            continue;
+        }
+
+        char *eventData = log_msg.msg();
+
+        if (eventData[4] != EVENT_TYPE_LONG) {
+            continue;
+        }
+
+        unsigned long long l = eventData[4 + 1 + 0] & 0xFF;
+        l |= (unsigned long long) (eventData[4 + 1 + 1] & 0xFF) << 8;
+        l |= (unsigned long long) (eventData[4 + 1 + 2] & 0xFF) << 16;
+        l |= (unsigned long long) (eventData[4 + 1 + 3] & 0xFF) << 24;
+        l |= (unsigned long long) (eventData[4 + 1 + 4] & 0xFF) << 32;
+        l |= (unsigned long long) (eventData[4 + 1 + 5] & 0xFF) << 40;
+        l |= (unsigned long long) (eventData[4 + 1 + 6] & 0xFF) << 48;
+        l |= (unsigned long long) (eventData[4 + 1 + 7] & 0xFF) << 56;
+
+        if (l == v) {
+            ++signals;
+            break;
+        }
+    } while (!signaled || (log_time(CLOCK_MONOTONIC) < signal_time));
+    alarm(0);
+    signal(SIGALRM, SIG_DFL);
+
+    EXPECT_LE(1, count);
 
     EXPECT_EQ(1, signals);
 
