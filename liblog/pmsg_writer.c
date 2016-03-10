@@ -157,3 +157,114 @@ static int pmsgWrite(log_id_t logId, struct timespec *ts,
 
     return ret;
 }
+
+/*
+ * Virtual pmsg filesystem
+ *
+ * Payload will comprise the string "<basedir>:<basefile>\0<content>" to a
+ * maximum of LOGGER_ENTRY_MAX_PAYLOAD, but scaled to the last newline in the
+ * file.
+ *
+ * Will hijack the header.realtime.tv_nsec field for a sequence number in usec.
+ */
+
+static inline const char *strnrchr(const char *buf, size_t len, char c) {
+    const char *cp = buf + len;
+    while ((--cp > buf) && (*cp != c));
+    if (cp <= buf) {
+        return buf + len;
+    }
+    return cp;
+}
+
+/* Write a buffer as filename references (tag = <basedir>:<basename>) */
+LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_write(
+        log_id_t logId,
+        char prio,
+        const char *filename,
+        const char *buf, size_t len) {
+    int fd;
+    size_t length, packet_len;
+    const char *tag;
+    char *cp, *slash;
+    struct timespec ts;
+    struct iovec vec[3];
+
+    /* Make sure the logId value is not a bad idea */
+    if ((logId == LOG_ID_KERNEL) ||       /* Verbotten */
+            (logId == LOG_ID_EVENTS) ||   /* Do not support binary content */
+            (logId == LOG_ID_SECURITY) || /* Bad idea to allow */
+            ((unsigned)logId >= 32)) {    /* fit within logMask on arch32 */
+        return -EINVAL;
+    }
+
+    clock_gettime(android_log_clockid(), &ts);
+
+    cp = strdup(filename);
+    if (!cp) {
+        return -ENOMEM;
+    }
+
+    fd = pmsgLoggerWrite.context.fd;
+    if (fd < 0) {
+        __android_log_lock();
+        fd = pmsgOpen();
+        __android_log_unlock();
+        if (fd < 0) {
+            return -EBADF;
+        }
+    }
+
+    tag = cp;
+    slash = strrchr(cp, '/');
+    if (slash) {
+        *slash = ':';
+        slash = strrchr(cp, '/');
+        if (slash) {
+            tag = slash + 1;
+        }
+    }
+
+    length = strlen(tag) + 1;
+    packet_len = LOGGER_ENTRY_MAX_PAYLOAD - sizeof(char) - length;
+
+    vec[0].iov_base = &prio;
+    vec[0].iov_len  = sizeof(char);
+    vec[1].iov_base = (unsigned char *)tag;
+    vec[1].iov_len  = length;
+
+    for (ts.tv_nsec = 0, length = len;
+            length;
+            ts.tv_nsec += ANDROID_LOG_PMSG_FILE_SEQUENCE) {
+        ssize_t ret;
+        size_t transfer;
+
+        if ((ts.tv_nsec / ANDROID_LOG_PMSG_FILE_SEQUENCE) >=
+                ANDROID_LOG_PMSG_FILE_MAX_SEQUENCE) {
+            len -= length;
+            break;
+        }
+
+        transfer = length;
+        if (transfer > packet_len) {
+            transfer = strnrchr(buf, packet_len - 1, '\n') - buf;
+            if ((transfer < length) && (buf[transfer] == '\n')) {
+                ++transfer;
+            }
+        }
+
+        vec[2].iov_base = (unsigned char *)buf;
+        vec[2].iov_len  = transfer;
+
+        ret = pmsgWrite(logId, &ts, vec, sizeof(vec) / sizeof(vec[0]));
+
+        if (ret <= 0) {
+            free(cp);
+            return ret;
+        }
+        length -= transfer;
+        buf += transfer;
+    }
+    free(cp);
+    return len;
+}
