@@ -260,7 +260,8 @@ static void qemu_socket_thread(void* arg) {
             } else {
                 /* Host is connected. Register the transport, and start the
                  * exchange. */
-                register_socket_transport(fd, "host", port, 1);
+                std::string serial = android::base::StringPrintf("host-%d", fd);
+                register_socket_transport(fd, serial.c_str(), port, 1);
                 if (!WriteFdExactly(fd, _start_req, strlen(_start_req))) {
                     adb_close(fd);
                 }
