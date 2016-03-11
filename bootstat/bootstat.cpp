@@ -32,6 +32,7 @@
 #include <log/log.h>
 #include "boot_event_record_store.h"
 #include "event_log_list_builder.h"
+#include "uptime_parser.h"
 
 namespace {
 
@@ -150,6 +151,37 @@ int32_t BootReasonStrToEnum(const std::string& boot_reason) {
   return kUnknownBootReason;
 }
 
+// Records several metrics related to the time it takes to boot the device,
+// including disambiguating boot time on encrypted or non-encrypted devices.
+void RecordBootComplete() {
+  BootEventRecordStore boot_event_store;
+  time_t uptime = bootstat::ParseUptime();
+
+  BootEventRecordStore::BootEventRecord record;
+
+  // post_decrypt_time_elapsed is only logged on encrypted devices.
+  if (boot_event_store.GetBootEvent("post_decrypt_time_elapsed", &record)) {
+    // Log the amount of time elapsed until the device is decrypted, which
+    // includes the variable amount of time the user takes to enter the
+    // decryption password.
+    boot_event_store.AddBootEventWithValue("boot_decryption_complete", uptime);
+
+    // Subtract the decryption time to normalize the boot cycle timing.
+    time_t boot_complete = uptime - record.second;
+    boot_event_store.AddBootEventWithValue("boot_complete_post_decrypt",
+                                           boot_complete);
+
+
+  } else {
+    boot_event_store.AddBootEventWithValue("boot_complete_no_encryption",
+                                           uptime);
+  }
+
+  // Record the total time from device startup to boot complete, regardless of
+  // encryption state.
+  boot_event_store.AddBootEventWithValue("boot_complete", uptime);
+}
+
 // Records the boot_reason metric by querying the ro.boot.bootreason system
 // property.
 void RecordBootReason() {
@@ -205,6 +237,7 @@ int main(int argc, char **argv) {
   LOG(INFO) << "Service started: " << cmd_line;
 
   int option_index = 0;
+  static const char boot_complete_str[] = "record_boot_complete";
   static const char boot_reason_str[] = "record_boot_reason";
   static const char factory_reset_str[] = "record_time_since_factory_reset";
   static const struct option long_options[] = {
@@ -212,6 +245,7 @@ int main(int argc, char **argv) {
     { "log",             no_argument,       NULL,   'l' },
     { "print",           no_argument,       NULL,   'p' },
     { "record",          required_argument, NULL,   'r' },
+    { boot_complete_str, no_argument,       NULL,   0 },
     { boot_reason_str,   no_argument,       NULL,   0 },
     { factory_reset_str, no_argument,       NULL,   0 },
     { NULL,              0,                 NULL,   0 }
@@ -223,7 +257,9 @@ int main(int argc, char **argv) {
       // This case handles long options which have no single-character mapping.
       case 0: {
         const std::string option_name = long_options[option_index].name;
-        if (option_name == boot_reason_str) {
+        if (option_name == boot_complete_str) {
+          RecordBootComplete();
+        } else if (option_name == boot_reason_str) {
           RecordBootReason();
         } else if (option_name == factory_reset_str) {
           RecordFactoryReset();
