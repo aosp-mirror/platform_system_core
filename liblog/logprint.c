@@ -1429,8 +1429,16 @@ LIBLOG_ABI_PUBLIC char *android_log_formatLogLine (
      * possibly causing heap corruption.  To avoid this we double check and
      * set the length at the maximum (size minus null byte)
      */
-    prefixLen += MIN(len, sizeof(prefixBuf) - prefixLen);
-    suffixLen = MIN(suffixLen, sizeof(suffixBuf));
+    prefixLen += len;
+    if (prefixLen >= sizeof(prefixBuf)) {
+        prefixLen = sizeof(prefixBuf) - 1;
+        prefixBuf[sizeof(prefixBuf) - 1] = '\0';
+    }
+    if (suffixLen >= sizeof(suffixBuf)) {
+        suffixLen = sizeof(suffixBuf) - 1;
+        suffixBuf[sizeof(suffixBuf) - 2] = '\n';
+        suffixBuf[sizeof(suffixBuf) - 1] = '\0';
+    }
 
     /* the following code is tragically unreadable */
 

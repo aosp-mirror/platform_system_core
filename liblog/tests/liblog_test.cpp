@@ -800,6 +800,60 @@ TEST(liblog, max_payload) {
     EXPECT_LE(SIZEOF_MAX_PAYLOAD_BUF, static_cast<size_t>(max_len));
 }
 
+TEST(liblog, __android_log_buf_print__maxtag) {
+    struct logger_list *logger_list;
+
+    pid_t pid = getpid();
+
+    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
+        LOG_ID_MAIN, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
+
+    log_time ts(android_log_clockid());
+
+    EXPECT_LT(0, __android_log_buf_print(LOG_ID_MAIN, ANDROID_LOG_INFO,
+                                         max_payload_buf, max_payload_buf));
+    usleep(1000000);
+
+    int count = 0;
+
+    for (;;) {
+        log_msg log_msg;
+        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
+            break;
+        }
+
+        ASSERT_EQ(log_msg.entry.pid, pid);
+
+        if ((log_msg.entry.sec < (ts.tv_sec - 1))
+         || ((ts.tv_sec + 1) < log_msg.entry.sec)
+         || ((size_t)log_msg.entry.len < LOGGER_ENTRY_MAX_PAYLOAD)
+         || (log_msg.id() != LOG_ID_MAIN)) {
+            continue;
+        }
+
+        ++count;
+
+        AndroidLogFormat *logformat = android_log_format_new();
+        EXPECT_TRUE(NULL != logformat);
+        AndroidLogEntry entry;
+        int processLogBuffer = android_log_processLogBuffer(&log_msg.entry_v1,
+                                                            &entry);
+        EXPECT_EQ(0, processLogBuffer);
+        if (processLogBuffer == 0) {
+            fflush(stderr);
+            int printLogLine =
+                    android_log_printLogLine(logformat, fileno(stderr), &entry);
+            EXPECT_LE(128, printLogLine);
+            EXPECT_GT(LOGGER_ENTRY_MAX_PAYLOAD, printLogLine);
+        }
+        android_log_format_free(logformat);
+    }
+
+    EXPECT_EQ(1, count);
+
+    android_logger_list_close(logger_list);
+}
+
 TEST(liblog, too_big_payload) {
     pid_t pid = getpid();
     static const char big_payload_tag[] = "TEST_big_payload_XXXX";
