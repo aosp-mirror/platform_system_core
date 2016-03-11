@@ -1029,8 +1029,8 @@ static bool check_wait_for_device_syntax(const char* service) {
     // TODO: when we have libc++ for Windows, use a regular expression instead.
     // wait-for-((any|local|usb)-)?(bootloader|device|recovery|sideload)
 
-    char type[20];
-    char state[20];
+    char type[20 + 1]; // sscanf's %20[...] doesn't include the NUL.
+    char state[20 + 1];
     int length = 0;
     if (sscanf(service, "wait-for-%20[a-z]-%20[a-z]%n", type, state, &length) < 2 ||
         length != static_cast<int>(strlen(service))) {
