@@ -460,24 +460,6 @@ static bool selinux_is_enforcing(void)
     return true;
 }
 
-int selinux_reload_policy(void)
-{
-    INFO("SELinux: Attempting to reload policy files\n");
-
-    if (selinux_android_reload_policy() == -1) {
-        return -1;
-    }
-
-    if (sehandle)
-        selabel_close(sehandle);
-
-    if (sehandle_prop)
-        selabel_close(sehandle_prop);
-
-    selinux_init_all_handles();
-    return 0;
-}
-
 static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_t len) {
 
     property_audit_data *d = reinterpret_cast<property_audit_data*>(data);
