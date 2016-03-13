@@ -413,9 +413,6 @@ on post-fs-data
     rm /data/bugreports
     symlink /data/user_de/0/com.android.shell/files/bugreports /data/bugreports
 
-    # Separate location for storing security policy files on data
-    mkdir /data/security 0711 system system
-
     # Create all remaining /data root dirs so that they are made through init
     # and get proper encryption policy installed
     mkdir /data/backup 0700 system system
@@ -438,9 +435,6 @@ on post-fs-data
     mkdir /data/media/obb 0770 media_rw media_rw
 
     init_user0
-
-    # Reload policy from /data/security if present.
-    setprop selinux.reload_policy 1
 
     # Set SELinux security contexts on upgrade or policy update.
     restorecon_recursive /data
