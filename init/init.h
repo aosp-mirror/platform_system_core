@@ -35,8 +35,6 @@ void handle_control_message(const std::string& msg, const std::string& arg);
 
 void property_changed(const char *name, const char *value);
 
-int selinux_reload_policy(void);
-
 void register_epoll_handler(int fd, void (*fn)());
 
 int add_environment(const char* key, const char* val);
