@@ -24,6 +24,7 @@
 #include <utility>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include "uptime_parser.h"
 
 namespace {
 
@@ -51,14 +52,7 @@ BootEventRecordStore::BootEventRecordStore() {
 }
 
 void BootEventRecordStore::AddBootEvent(const std::string& event) {
-  std::string uptime_str;
-  if (!android::base::ReadFileToString("/proc/uptime", &uptime_str)) {
-    LOG(ERROR) << "Failed to read /proc/uptime";
-  }
-
-  // Cast intentionally rounds down.
-  int32_t uptime = static_cast<int32_t>(strtod(uptime_str.c_str(), NULL));
-  AddBootEventWithValue(event, uptime);
+  AddBootEventWithValue(event, bootstat::ParseUptime());
 }
 
 // The implementation of AddBootEventValue makes use of the mtime file
