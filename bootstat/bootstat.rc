@@ -3,6 +3,14 @@
 on post-fs-data
     mkdir /data/misc/bootstat 0700 root root
 
+# Record the time at which the user has successfully entered the pin to decrypt
+# the device, /data is decrypted, and the system is entering the main boot phase.
+#
+# post-fs-data: /data is writable
+# property:init.svc.bootanim=running: The boot animation is running
+on post-fs-data && property:init.svc.bootanim=running
+    exec - root root -- /system/bin/bootstat -r post_decrypt_time_elapsed
+
 # The first marker, boot animation stopped, is considered the point at which
 # the user may interact with the device, so it is a good proxy for the boot
 # complete signal.
@@ -10,8 +18,8 @@ on post-fs-data
 # The second marker ensures an encrypted device is decrypted before logging
 # boot time data.
 on property:init.svc.bootanim=stopped && property:vold.decrypt=trigger_restart_framework
-    # Record boot_complete timing event.
-    exec - root root -- /system/bin/bootstat -r boot_complete
+    # Record boot_complete and related stats (decryption, etc).
+    exec - root root -- /system/bin/bootstat --record_boot_complete
 
     # Record the boot reason.
     exec - root root -- /system/bin/bootstat --record_boot_reason
