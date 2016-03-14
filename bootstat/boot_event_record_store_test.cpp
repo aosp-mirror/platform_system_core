@@ -25,6 +25,7 @@
 #include <android-base/test_utils.h>
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include "uptime_parser.h"
 
 using testing::UnorderedElementsAreArray;
 
@@ -36,17 +37,6 @@ namespace {
 bool FuzzUptimeEquals(int32_t a, int32_t b) {
   const int32_t FUZZ_SECONDS = 10;
   return (abs(a - b) <= FUZZ_SECONDS);
-}
-
-// Returns the uptime as read from /proc/uptime, rounded down to an integer.
-int32_t ReadUptime() {
-  std::string uptime_str;
-  if (!android::base::ReadFileToString("/proc/uptime", &uptime_str)) {
-    return -1;
-  }
-
-  // Cast to int to round down.
-  return static_cast<int32_t>(strtod(uptime_str.c_str(), NULL));
 }
 
 // Recursively deletes the directory at |path|.
@@ -110,7 +100,7 @@ TEST_F(BootEventRecordStoreTest, AddSingleBootEvent) {
   BootEventRecordStore store;
   store.SetStorePath(GetStorePathForTesting());
 
-  int32_t uptime = ReadUptime();
+  time_t uptime = bootstat::ParseUptime();
   ASSERT_NE(-1, uptime);
 
   store.AddBootEvent("cenozoic");
@@ -125,7 +115,7 @@ TEST_F(BootEventRecordStoreTest, AddMultipleBootEvents) {
   BootEventRecordStore store;
   store.SetStorePath(GetStorePathForTesting());
 
-  int32_t uptime = ReadUptime();
+  time_t uptime = bootstat::ParseUptime();
   ASSERT_NE(-1, uptime);
 
   store.AddBootEvent("cretaceous");

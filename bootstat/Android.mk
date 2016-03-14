@@ -20,32 +20,33 @@ bootstat_c_includes := external/gtest/include
 
 bootstat_lib_src_files := \
         boot_event_record_store.cpp \
-        event_log_list_builder.cpp
+        event_log_list_builder.cpp \
+        uptime_parser.cpp \
 
 bootstat_src_files := \
-        bootstat.cpp
+        bootstat.cpp \
 
 bootstat_test_src_files := \
         boot_event_record_store_test.cpp \
         event_log_list_builder_test.cpp \
-        testrunner.cpp
+        testrunner.cpp \
 
 bootstat_shared_libs := \
         libbase \
         libcutils \
-        liblog
+        liblog \
 
 bootstat_cflags := \
         -Wall \
         -Wextra \
-        -Werror
+        -Werror \
 
 bootstat_cppflags := \
-        -Wno-non-virtual-dtor
+        -Wno-non-virtual-dtor \
 
 bootstat_debug_cflags := \
         $(bootstat_cflags) \
-        -UNDEBUG
+        -UNDEBUG \
 
 # 524291 corresponds to sysui_histogram, from
 # frameworks/base/core/java/com/android/internal/logging/EventLogTags.logtags
