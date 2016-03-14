@@ -45,7 +45,7 @@ public:
     virtual             ~Thread();
 
     // Start the thread in threadLoop() which needs to be implemented.
-    virtual status_t    run(    const char* name = 0,
+    virtual status_t    run(    const char* name,
                                 int32_t priority = PRIORITY_DEFAULT,
                                 size_t stack = 0);
     
