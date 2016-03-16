@@ -55,7 +55,9 @@ static const char* kPublicNativeLibraries = "libandroid.so:"
                                             "libRS.so:"
                                             "libstdc++.so:"
                                             "libvulkan.so:"
+#if !defined(IGNORE_WEBVIEW_CHROMIUM)
                                             "libwebviewchromium_plat_support.so:"
+#endif
                                             "libz.so";
 
 class LibraryNamespaces {
