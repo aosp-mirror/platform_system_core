@@ -374,7 +374,8 @@ static void ptrace_siblings(pid_t pid, pid_t main_tid, std::set<pid_t>& tids) {
 }
 
 static bool perform_dump(const debugger_request_t& request, int fd, int tombstone_fd,
-                         BacktraceMap* backtrace_map, const std::set<pid_t>& siblings) {
+                         BacktraceMap* backtrace_map, const std::set<pid_t>& siblings,
+                         int* crash_signal) {
   if (TEMP_FAILURE_RETRY(write(fd, "\0", 1)) != 1) {
     ALOGE("debuggerd: failed to respond to client: %s\n", strerror(errno));
     return false;
@@ -420,6 +421,7 @@ static bool perform_dump(const debugger_request_t& request, int fd, int tombston
         // the non-signaled threads stop moving.  Without
         // this we get a lot of "ptrace detach failed:
         // No such process".
+        *crash_signal = signal;
         kill(request.pid, SIGSTOP);
         engrave_tombstone(tombstone_fd, backtrace_map, request.pid, request.tid, siblings, signal,
                           request.original_si_code, request.abort_msg_address);
@@ -632,7 +634,8 @@ static void handle_request(int fd) {
     _exit(1);
   }
 
-  succeeded = perform_dump(request, fd, tombstone_fd, backtrace_map.get(), siblings);
+  int crash_signal = SIGKILL;
+  succeeded = perform_dump(request, fd, tombstone_fd, backtrace_map.get(), siblings, &crash_signal);
   if (succeeded) {
     if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
       if (!tombstone_path.empty()) {
@@ -659,9 +662,7 @@ static void handle_request(int fd) {
 
   // Send the signal back to the process if it crashed and we're not waiting for gdb.
   if (!attach_gdb && request.action == DEBUGGER_ACTION_CRASH) {
-    // TODO: Send the same signal that triggered the dump, so that shell says "Segmentation fault"
-    //       instead of "Killed"?
-    if (!send_signal(SIGKILL)) {
+    if (!send_signal(crash_signal)) {
       ALOGE("debuggerd: failed to kill process %d: %s", request.pid, strerror(errno));
     }
   }
