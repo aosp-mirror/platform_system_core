@@ -14,6 +14,9 @@ LOCAL_SHARED_LIBRARIES := libnativehelper liblog libcutils
 LOCAL_STATIC_LIBRARIES := libbase
 LOCAL_CLANG := true
 LOCAL_CFLAGS += -Werror -Wall
+ifeq ($(TARGET_IGNORE_WEBVIEW_CHROMIUM), true)
+LOCAL_CFLAGS += -DIGNORE_WEBVIEW_CHROMIUM
+endif
 LOCAL_CPPFLAGS := -std=gnu++14 -fvisibility=hidden
 LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
@@ -32,6 +35,9 @@ LOCAL_SHARED_LIBRARIES := libnativehelper liblog libcutils
 LOCAL_STATIC_LIBRARIES := libbase
 LOCAL_CLANG := true
 LOCAL_CFLAGS += -Werror -Wall
+ifeq ($(TARGET_IGNORE_WEBVIEW_CHROMIUM), true)
+LOCAL_CFLAGS += -DIGNORE_WEBVIEW_CHROMIUM
+endif
 LOCAL_CPPFLAGS := -std=gnu++14 -fvisibility=hidden
 LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
@@ -49,6 +55,9 @@ LOCAL_SRC_FILES:= $(NATIVE_LOADER_COMMON_SRC_FILES)
 LOCAL_STATIC_LIBRARIES := libnativehelper libcutils liblog libbase
 LOCAL_CLANG := true
 LOCAL_CFLAGS += -Werror -Wall
+ifeq ($(TARGET_IGNORE_WEBVIEW_CHROMIUM), true)
+LOCAL_CFLAGS += -DIGNORE_WEBVIEW_CHROMIUM
+endif
 LOCAL_CPPFLAGS := -std=gnu++14 -fvisibility=hidden
 LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
