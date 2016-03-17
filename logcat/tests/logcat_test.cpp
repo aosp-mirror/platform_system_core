@@ -986,3 +986,34 @@ TEST(logcat, regex) {
 
     ASSERT_EQ(2, count);
 }
+
+TEST(logcat, maxcount) {
+    FILE *fp;
+    int count = 0;
+
+    char buffer[5120];
+
+    snprintf(buffer, sizeof(buffer), "logcat --pid %d -d --max-count 3", getpid());
+
+    LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_WARN, "logcat_test", "logcat_test"));
+    LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_WARN, "logcat_test", "logcat_test"));
+    LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_WARN, "logcat_test", "logcat_test"));
+    LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_WARN, "logcat_test", "logcat_test"));
+
+    // Let the logs settle
+    sleep(1);
+
+    ASSERT_TRUE(NULL != (fp = popen(buffer, "r")));
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        if (!strncmp(begin, buffer, sizeof(begin) - 1)) {
+            continue;
+        }
+
+        count++;
+    }
+
+    pclose(fp);
+
+    ASSERT_EQ(3, count);
+}
