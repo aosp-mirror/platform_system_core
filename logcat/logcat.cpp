@@ -37,6 +37,8 @@
 #include <log/logprint.h>
 #include <system/thread_defs.h>
 
+#include <pcrecpp.h>
+
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
 static AndroidLogFormat * g_logformat;
@@ -76,6 +78,7 @@ static int g_outFD = -1;
 static size_t g_outByteCount = 0;
 static int g_printBinary = 0;
 static int g_devCount = 0;                              // >1 means multiple
+static pcrecpp::RE* g_regex;
 
 __noreturn static void logcat_panic(bool showHelp, const char *fmt, ...) __printflike(2,3);
 
@@ -143,6 +146,21 @@ void printBinary(struct log_msg *buf)
     TEMP_FAILURE_RETRY(write(g_outFD, buf, size));
 }
 
+static bool regexOk(const AndroidLogEntry& entry, log_id_t id)
+{
+    if (! g_regex) {
+        return true;
+    }
+
+    if (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) {
+        return false;
+    }
+
+    std::string messageString(entry.message, entry.messageLen);
+
+    return g_regex->PartialMatch(messageString);
+}
+
 static void processBuffer(log_device_t* dev, struct log_msg *buf)
 {
     int bytesWritten = 0;
@@ -171,7 +189,8 @@ static void processBuffer(log_device_t* dev, struct log_msg *buf)
         goto error;
     }
 
-    if (android_log_shouldPrintLine(g_logformat, entry.tag, entry.priority)) {
+    if (android_log_shouldPrintLine(g_logformat, entry.tag, entry.priority) &&
+        regexOk(entry, buf->id())) {
         bytesWritten = android_log_printLogLine(g_logformat, g_outFD, &entry);
 
         if (bytesWritten < 0) {
@@ -271,6 +290,8 @@ static void show_help(const char *cmd)
                     "  -c              clear (flush) the entire log and exit\n"
                     "  --clear\n"
                     "  -d              dump the log and then exit (don't block)\n"
+                    "  -e <expr>       only print lines where the log message matches <expr>\n"
+                    "  --regex <expr>  where <expr> is a regular expression\n"
                     "  -t <count>      print only the most recent <count> lines (implies -d)\n"
                     "  -t '<time>'     print most recent lines since specified time (implies -d)\n"
                     "  -T <count>      print only the most recent <count> lines (does not imply -d)\n"
@@ -548,6 +569,7 @@ int main(int argc, char **argv)
           { "last",          no_argument,       NULL,   'L' },
           { pid_str,         required_argument, NULL,   0 },
           { "prune",         optional_argument, NULL,   'p' },
+          { "regex",         required_argument, NULL,   'e' },
           { "rotate_count",  required_argument, NULL,   'n' },
           { "rotate_kbytes", required_argument, NULL,   'r' },
           { "statistics",    no_argument,       NULL,   'S' },
@@ -556,7 +578,7 @@ int main(int argc, char **argv)
           { NULL,            0,                 NULL,   0 }
         };
 
-        ret = getopt_long(argc, argv, ":cdDLt:T:gG:sQf:r:n:v:b:BSpP:",
+        ret = getopt_long(argc, argv, ":cdDLt:T:gG:sQf:r:n:v:b:BSpP:e:",
                           long_options, &option_index);
 
         if (ret < 0) {
@@ -642,6 +664,10 @@ int main(int argc, char **argv)
 
             case 'D':
                 printDividers = true;
+            break;
+
+            case 'e':
+                g_regex = new pcrecpp::RE(optarg);
             break;
 
             case 'g':
