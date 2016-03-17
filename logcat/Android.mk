@@ -5,7 +5,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:= logcat.cpp event.logtags
 
-LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
+LOCAL_SHARED_LIBRARIES := liblog libbase libcutils libpcrecpp
 
 LOCAL_MODULE := logcat
 
