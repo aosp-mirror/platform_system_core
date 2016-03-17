@@ -417,12 +417,7 @@ static bool perform_dump(const debugger_request_t& request, int fd, int tombston
 #endif
       case SIGTRAP:
         ALOGV("stopped -- fatal signal\n");
-        // Send a SIGSTOP to the process to make all of
-        // the non-signaled threads stop moving.  Without
-        // this we get a lot of "ptrace detach failed:
-        // No such process".
         *crash_signal = signal;
-        send_signal(request.pid, 0, SIGSTOP);
         engrave_tombstone(tombstone_fd, backtrace_map, request.pid, request.tid, siblings, signal,
                           request.original_si_code, request.abort_msg_address);
         break;
