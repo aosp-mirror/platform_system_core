@@ -451,45 +451,7 @@ static bool drop_privileges() {
   return true;
 }
 
-static void handle_request(int fd) {
-  ALOGV("handle_request(%d)\n", fd);
-
-  ScopedFd closer(fd);
-  debugger_request_t request;
-  memset(&request, 0, sizeof(request));
-  int status = read_request(fd, &request);
-  if (status != 0) {
-    return;
-  }
-
-  ALOGV("BOOM: pid=%d uid=%d gid=%d tid=%d\n", request.pid, request.uid, request.gid, request.tid);
-
-#if defined(__LP64__)
-  // On 64 bit systems, requests to dump 32 bit and 64 bit tids come
-  // to the 64 bit debuggerd. If the process is a 32 bit executable,
-  // redirect the request to the 32 bit debuggerd.
-  if (is32bit(request.tid)) {
-    // Only dump backtrace and dump tombstone requests can be redirected.
-    if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE ||
-        request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
-      redirect_to_32(fd, &request);
-    } else {
-      ALOGE("debuggerd: Not allowed to redirect action %d to 32 bit debuggerd\n", request.action);
-    }
-    return;
-  }
-#endif
-
-  // Fork a child to handle the rest of the request.
-  pid_t fork_pid = fork();
-  if (fork_pid == -1) {
-    ALOGE("debuggerd: failed to fork: %s\n", strerror(errno));
-    return;
-  } else if (fork_pid != 0) {
-    waitpid(fork_pid, nullptr, 0);
-    return;
-  }
-
+static void worker_process(int fd, debugger_request_t& request) {
   // Open the tombstone file if we need it.
   std::string tombstone_path;
   int tombstone_fd = -1;
@@ -604,6 +566,111 @@ static void handle_request(int fd) {
   exit(!succeeded);
 }
 
+static void monitor_worker_process(int child_pid, const debugger_request_t& request) {
+  struct timespec timeout = {.tv_sec = 10, .tv_nsec = 0 };
+
+  sigset_t signal_set;
+  sigemptyset(&signal_set);
+  sigaddset(&signal_set, SIGCHLD);
+
+  bool kill_worker = false;
+  bool kill_target = false;
+  bool kill_self = false;
+
+  int status;
+  siginfo_t siginfo;
+  int signal = TEMP_FAILURE_RETRY(sigtimedwait(&signal_set, &siginfo, &timeout));
+  if (signal == SIGCHLD) {
+    pid_t rc = waitpid(0, &status, WNOHANG | WUNTRACED);
+    if (rc != child_pid) {
+      ALOGE("debuggerd: waitpid returned unexpected pid (%d), committing murder-suicide", rc);
+      kill_worker = true;
+      kill_target = true;
+      kill_self = true;
+    }
+
+    if (WIFSIGNALED(status)) {
+      ALOGE("debuggerd: worker process %d terminated due to signal %d", child_pid, WTERMSIG(status));
+      kill_worker = false;
+      kill_target = true;
+    } else if (WIFSTOPPED(status)) {
+      ALOGE("debuggerd: worker process %d stopped due to signal %d", child_pid, WSTOPSIG(status));
+      kill_worker = true;
+      kill_target = true;
+    }
+  } else {
+    ALOGE("debuggerd: worker process %d timed out", child_pid);
+    kill_worker = true;
+    kill_target = true;
+  }
+
+  if (kill_worker) {
+    // Something bad happened, kill the worker.
+    if (kill(child_pid, SIGKILL) != 0) {
+      ALOGE("debuggerd: failed to kill worker process %d: %s", child_pid, strerror(errno));
+    } else {
+      waitpid(child_pid, &status, 0);
+    }
+  }
+
+  if (kill_target) {
+    // Resume or kill the target, depending on what the initial request was.
+    if (request.action == DEBUGGER_ACTION_CRASH) {
+      ALOGE("debuggerd: killing target %d", request.pid);
+      kill(request.pid, SIGKILL);
+    } else {
+      ALOGE("debuggerd: resuming target %d", request.pid);
+      kill(request.pid, SIGCONT);
+    }
+  }
+
+  if (kill_self) {
+    stop_signal_sender();
+    _exit(1);
+  }
+}
+
+static void handle_request(int fd) {
+  ALOGV("handle_request(%d)\n", fd);
+
+  ScopedFd closer(fd);
+  debugger_request_t request;
+  memset(&request, 0, sizeof(request));
+  int status = read_request(fd, &request);
+  if (status != 0) {
+    return;
+  }
+
+  ALOGW("debuggerd: handling request: pid=%d uid=%d gid=%d tid=%d\n", request.pid, request.uid,
+        request.gid, request.tid);
+
+#if defined(__LP64__)
+  // On 64 bit systems, requests to dump 32 bit and 64 bit tids come
+  // to the 64 bit debuggerd. If the process is a 32 bit executable,
+  // redirect the request to the 32 bit debuggerd.
+  if (is32bit(request.tid)) {
+    // Only dump backtrace and dump tombstone requests can be redirected.
+    if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE ||
+        request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
+      redirect_to_32(fd, &request);
+    } else {
+      ALOGE("debuggerd: Not allowed to redirect action %d to 32 bit debuggerd\n", request.action);
+    }
+    return;
+  }
+#endif
+
+  // Fork a child to handle the rest of the request.
+  pid_t fork_pid = fork();
+  if (fork_pid == -1) {
+    ALOGE("debuggerd: failed to fork: %s\n", strerror(errno));
+  } else if (fork_pid == 0) {
+    worker_process(fd, request);
+  } else {
+    monitor_worker_process(fork_pid, request);
+  }
+}
+
 static int do_server() {
   // debuggerd crashes can't be reported to debuggerd.
   // Reset all of the crash handlers.
@@ -620,12 +687,11 @@ static int do_server() {
   // Ignore failed writes to closed sockets
   signal(SIGPIPE, SIG_IGN);
 
-  struct sigaction act;
-  act.sa_handler = SIG_DFL;
-  sigemptyset(&act.sa_mask);
-  sigaddset(&act.sa_mask,SIGCHLD);
-  act.sa_flags = SA_NOCLDWAIT;
-  sigaction(SIGCHLD, &act, 0);
+  // Block SIGCHLD so we can sigtimedwait for it.
+  sigset_t sigchld;
+  sigemptyset(&sigchld);
+  sigaddset(&sigchld, SIGCHLD);
+  sigprocmask(SIG_SETMASK, &sigchld, nullptr);
 
   int s = socket_local_server(SOCKET_NAME, ANDROID_SOCKET_NAMESPACE_ABSTRACT,
                               SOCK_STREAM | SOCK_CLOEXEC);
