@@ -37,7 +37,7 @@ struct signal_message {
 
 // Fork a process to send signals for the worker processes to use after they've dropped privileges.
 bool start_signal_sender() {
-  if (signal_pid == 0) {
+  if (signal_pid != 0) {
     ALOGE("debuggerd: attempted to start signal sender multiple times");
     return false;
   }
