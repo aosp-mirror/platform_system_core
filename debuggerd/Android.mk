@@ -15,6 +15,7 @@ LOCAL_SRC_FILES:= \
     debuggerd.cpp \
     elf_utils.cpp \
     getevent.cpp \
+    signal_sender.cpp \
     tombstone.cpp \
     utility.cpp \
 
