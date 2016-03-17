@@ -26,7 +26,7 @@
 namespace android {
 
 __attribute__((visibility("default")))
-void PreloadPublicNativeLibraries();
+void InitializeNativeLoader();
 
 __attribute__((visibility("default")))
 jstring CreateClassLoaderNamespace(JNIEnv* env,
