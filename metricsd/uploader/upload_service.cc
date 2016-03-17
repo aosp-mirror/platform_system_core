@@ -183,6 +183,7 @@ void UploadService::GatherHistograms() {
   base::StatisticsRecorder::GetHistograms(&histograms);
 
   histogram_snapshot_manager_.PrepareDeltas(
+      histograms.begin(), histograms.end(),
       base::Histogram::kNoFlags, base::Histogram::kUmaTargetedHistogramFlag);
 
   // Gather and reset the crash counters, shared with the binder threads.
