@@ -15,4 +15,5 @@ libOpenMAXAL.so
 libOpenSLES.so
 libRS.so
 libstdc++.so
+libvulkan.so
 libz.so
