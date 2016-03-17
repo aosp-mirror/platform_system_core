@@ -15,21 +15,20 @@
  */
 
 #include <dirent.h>
+#include <elf.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <sys/types.h>
-#include <time.h>
-
-#include <elf.h>
 #include <sys/poll.h>
 #include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 
 #include <set>
 
@@ -48,6 +47,7 @@
 
 #include "backtrace.h"
 #include "getevent.h"
+#include "signal_sender.h"
 #include "tombstone.h"
 #include "utility.h"
 
@@ -422,7 +422,7 @@ static bool perform_dump(const debugger_request_t& request, int fd, int tombston
         // this we get a lot of "ptrace detach failed:
         // No such process".
         *crash_signal = signal;
-        kill(request.pid, SIGSTOP);
+        send_signal(request.pid, 0, SIGSTOP);
         engrave_tombstone(tombstone_fd, backtrace_map, request.pid, request.tid, siblings, signal,
                           request.original_si_code, request.abort_msg_address);
         break;
@@ -451,99 +451,7 @@ static bool drop_privileges() {
   return true;
 }
 
-// Fork a process that listens for signals to send, or 0, to exit.
-static bool fork_signal_sender(int* out_fd, pid_t* sender_pid, pid_t target_pid) {
-  int sfd[2];
-  if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sfd) != 0) {
-    ALOGE("debuggerd: failed to create socketpair for signal sender: %s", strerror(errno));
-    return false;
-  }
-
-  pid_t fork_pid = fork();
-  if (fork_pid == -1) {
-    ALOGE("debuggerd: failed to initialize signal sender: fork failed: %s", strerror(errno));
-    return false;
-  } else if (fork_pid == 0) {
-    close(sfd[1]);
-
-    while (true) {
-      int signal;
-      int rc = TEMP_FAILURE_RETRY(read(sfd[0], &signal, sizeof(signal)));
-      if (rc < 0) {
-        ALOGE("debuggerd: signal sender failed to read from socket");
-        kill(target_pid, SIGKILL);
-        exit(1);
-      } else if (rc != sizeof(signal)) {
-        ALOGE("debuggerd: signal sender read unexpected number of bytes: %d", rc);
-        kill(target_pid, SIGKILL);
-        exit(1);
-      }
-
-      // Report success after sending a signal, or before exiting.
-      int err = 0;
-      if (signal != 0) {
-        if (kill(target_pid, signal) != 0) {
-          err = errno;
-        }
-      }
-
-      if (TEMP_FAILURE_RETRY(write(sfd[0], &err, sizeof(err))) < 0) {
-        ALOGE("debuggerd: signal sender failed to write: %s", strerror(errno));
-        kill(target_pid, SIGKILL);
-        exit(1);
-      }
-
-      if (signal == 0) {
-        exit(0);
-      }
-    }
-  } else {
-    close(sfd[0]);
-    *out_fd = sfd[1];
-    *sender_pid = fork_pid;
-    return true;
-  }
-}
-
-static void handle_request(int fd) {
-  ALOGV("handle_request(%d)\n", fd);
-
-  ScopedFd closer(fd);
-  debugger_request_t request;
-  memset(&request, 0, sizeof(request));
-  int status = read_request(fd, &request);
-  if (status != 0) {
-    return;
-  }
-
-  ALOGV("BOOM: pid=%d uid=%d gid=%d tid=%d\n", request.pid, request.uid, request.gid, request.tid);
-
-#if defined(__LP64__)
-  // On 64 bit systems, requests to dump 32 bit and 64 bit tids come
-  // to the 64 bit debuggerd. If the process is a 32 bit executable,
-  // redirect the request to the 32 bit debuggerd.
-  if (is32bit(request.tid)) {
-    // Only dump backtrace and dump tombstone requests can be redirected.
-    if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE ||
-        request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
-      redirect_to_32(fd, &request);
-    } else {
-      ALOGE("debuggerd: Not allowed to redirect action %d to 32 bit debuggerd\n", request.action);
-    }
-    return;
-  }
-#endif
-
-  // Fork a child to handle the rest of the request.
-  pid_t fork_pid = fork();
-  if (fork_pid == -1) {
-    ALOGE("debuggerd: failed to fork: %s\n", strerror(errno));
-    return;
-  } else if (fork_pid != 0) {
-    waitpid(fork_pid, nullptr, 0);
-    return;
-  }
-
+static void worker_process(int fd, debugger_request_t& request) {
   // Open the tombstone file if we need it.
   std::string tombstone_path;
   int tombstone_fd = -1;
@@ -585,15 +493,6 @@ static void handle_request(int fd) {
   // Don't attach to the sibling threads if we want to attach gdb.
   // Supposedly, it makes the process less reliable.
   bool attach_gdb = should_attach_gdb(&request);
-  int signal_fd = -1;
-  pid_t signal_pid = 0;
-
-  // Fork a process that stays root, and listens on a pipe to pause and resume the target.
-  if (!fork_signal_sender(&signal_fd, &signal_pid, request.pid)) {
-    ALOGE("debuggerd: failed to fork signal sender");
-    exit(1);
-  }
-
   if (attach_gdb) {
     // Open all of the input devices we need to listen for VOLUMEDOWN before dropping privileges.
     if (init_getevent() != 0) {
@@ -602,21 +501,6 @@ static void handle_request(int fd) {
     }
 
   }
-
-  auto send_signal = [=](int signal) {
-    int error;
-    if (TEMP_FAILURE_RETRY(write(signal_fd, &signal, sizeof(signal))) < 0) {
-      ALOGE("debuggerd: failed to notify signal process: %s", strerror(errno));
-      return false;
-    } else if (TEMP_FAILURE_RETRY(read(signal_fd, &error, sizeof(error))) < 0) {
-      ALOGE("debuggerd: failed to read response from signal process: %s", strerror(errno));
-      return false;
-    } else if (error != 0) {
-      errno = error;
-      return false;
-    }
-    return true;
-  };
 
   std::set<pid_t> siblings;
   if (!attach_gdb) {
@@ -646,7 +530,7 @@ static void handle_request(int fd) {
 
   if (attach_gdb) {
     // Tell the signal process to send SIGSTOP to the target.
-    if (!send_signal(SIGSTOP)) {
+    if (!send_signal(request.pid, 0, SIGSTOP)) {
       ALOGE("debuggerd: failed to stop process for gdb attach: %s", strerror(errno));
       attach_gdb = false;
     }
@@ -662,7 +546,7 @@ static void handle_request(int fd) {
 
   // Send the signal back to the process if it crashed and we're not waiting for gdb.
   if (!attach_gdb && request.action == DEBUGGER_ACTION_CRASH) {
-    if (!send_signal(crash_signal)) {
+    if (!send_signal(request.pid, request.tid, crash_signal)) {
       ALOGE("debuggerd: failed to kill process %d: %s", request.pid, strerror(errno));
     }
   }
@@ -672,19 +556,119 @@ static void handle_request(int fd) {
     wait_for_user_action(request);
 
     // Tell the signal process to send SIGCONT to the target.
-    if (!send_signal(SIGCONT)) {
+    if (!send_signal(request.pid, 0, SIGCONT)) {
       ALOGE("debuggerd: failed to resume process %d: %s", request.pid, strerror(errno));
     }
 
     uninit_getevent();
   }
 
-  if (!send_signal(0)) {
-    ALOGE("debuggerd: failed to notify signal sender to finish");
-    kill(signal_pid, SIGKILL);
-  }
-  waitpid(signal_pid, nullptr, 0);
   exit(!succeeded);
+}
+
+static void monitor_worker_process(int child_pid, const debugger_request_t& request) {
+  struct timespec timeout = {.tv_sec = 10, .tv_nsec = 0 };
+
+  sigset_t signal_set;
+  sigemptyset(&signal_set);
+  sigaddset(&signal_set, SIGCHLD);
+
+  bool kill_worker = false;
+  bool kill_target = false;
+  bool kill_self = false;
+
+  int status;
+  siginfo_t siginfo;
+  int signal = TEMP_FAILURE_RETRY(sigtimedwait(&signal_set, &siginfo, &timeout));
+  if (signal == SIGCHLD) {
+    pid_t rc = waitpid(0, &status, WNOHANG | WUNTRACED);
+    if (rc != child_pid) {
+      ALOGE("debuggerd: waitpid returned unexpected pid (%d), committing murder-suicide", rc);
+      kill_worker = true;
+      kill_target = true;
+      kill_self = true;
+    }
+
+    if (WIFSIGNALED(status)) {
+      ALOGE("debuggerd: worker process %d terminated due to signal %d", child_pid, WTERMSIG(status));
+      kill_worker = false;
+      kill_target = true;
+    } else if (WIFSTOPPED(status)) {
+      ALOGE("debuggerd: worker process %d stopped due to signal %d", child_pid, WSTOPSIG(status));
+      kill_worker = true;
+      kill_target = true;
+    }
+  } else {
+    ALOGE("debuggerd: worker process %d timed out", child_pid);
+    kill_worker = true;
+    kill_target = true;
+  }
+
+  if (kill_worker) {
+    // Something bad happened, kill the worker.
+    if (kill(child_pid, SIGKILL) != 0) {
+      ALOGE("debuggerd: failed to kill worker process %d: %s", child_pid, strerror(errno));
+    } else {
+      waitpid(child_pid, &status, 0);
+    }
+  }
+
+  if (kill_target) {
+    // Resume or kill the target, depending on what the initial request was.
+    if (request.action == DEBUGGER_ACTION_CRASH) {
+      ALOGE("debuggerd: killing target %d", request.pid);
+      kill(request.pid, SIGKILL);
+    } else {
+      ALOGE("debuggerd: resuming target %d", request.pid);
+      kill(request.pid, SIGCONT);
+    }
+  }
+
+  if (kill_self) {
+    stop_signal_sender();
+    _exit(1);
+  }
+}
+
+static void handle_request(int fd) {
+  ALOGV("handle_request(%d)\n", fd);
+
+  ScopedFd closer(fd);
+  debugger_request_t request;
+  memset(&request, 0, sizeof(request));
+  int status = read_request(fd, &request);
+  if (status != 0) {
+    return;
+  }
+
+  ALOGW("debuggerd: handling request: pid=%d uid=%d gid=%d tid=%d\n", request.pid, request.uid,
+        request.gid, request.tid);
+
+#if defined(__LP64__)
+  // On 64 bit systems, requests to dump 32 bit and 64 bit tids come
+  // to the 64 bit debuggerd. If the process is a 32 bit executable,
+  // redirect the request to the 32 bit debuggerd.
+  if (is32bit(request.tid)) {
+    // Only dump backtrace and dump tombstone requests can be redirected.
+    if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE ||
+        request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
+      redirect_to_32(fd, &request);
+    } else {
+      ALOGE("debuggerd: Not allowed to redirect action %d to 32 bit debuggerd\n", request.action);
+    }
+    return;
+  }
+#endif
+
+  // Fork a child to handle the rest of the request.
+  pid_t fork_pid = fork();
+  if (fork_pid == -1) {
+    ALOGE("debuggerd: failed to fork: %s\n", strerror(errno));
+  } else if (fork_pid == 0) {
+    worker_process(fd, request);
+  } else {
+    monitor_worker_process(fork_pid, request);
+  }
 }
 
 static int do_server() {
@@ -703,16 +687,21 @@ static int do_server() {
   // Ignore failed writes to closed sockets
   signal(SIGPIPE, SIG_IGN);
 
-  struct sigaction act;
-  act.sa_handler = SIG_DFL;
-  sigemptyset(&act.sa_mask);
-  sigaddset(&act.sa_mask,SIGCHLD);
-  act.sa_flags = SA_NOCLDWAIT;
-  sigaction(SIGCHLD, &act, 0);
+  // Block SIGCHLD so we can sigtimedwait for it.
+  sigset_t sigchld;
+  sigemptyset(&sigchld);
+  sigaddset(&sigchld, SIGCHLD);
+  sigprocmask(SIG_SETMASK, &sigchld, nullptr);
 
   int s = socket_local_server(SOCKET_NAME, ANDROID_SOCKET_NAMESPACE_ABSTRACT,
                               SOCK_STREAM | SOCK_CLOEXEC);
   if (s == -1) return 1;
+
+  // Fork a process that stays root, and listens on a pipe to pause and resume the target.
+  if (!start_signal_sender()) {
+    ALOGE("debuggerd: failed to fork signal sender");
+    return 1;
+  }
 
   ALOGI("debuggerd: starting\n");
 
