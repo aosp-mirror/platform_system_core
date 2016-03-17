@@ -29,32 +29,14 @@
 #include <string>
 #include <mutex>
 
+#include "android-base/file.h"
 #include "android-base/macros.h"
 #include "android-base/strings.h"
 
 namespace android {
 
-#ifdef __ANDROID__
-// TODO(dimitry): move this to system properties.
-static const char* kPublicNativeLibraries = "libandroid.so:"
-                                            "libc.so:"
-                                            "libdl.so:"
-                                            "libEGL.so:"
-                                            "libGLESv1_CM.so:"
-                                            "libGLESv2.so:"
-                                            "libGLESv3.so:"
-                                            "libicui18n.so:"
-                                            "libicuuc.so:"
-                                            "libjnigraphics.so:"
-                                            "liblog.so:"
-                                            "libmediandk.so:"
-                                            "libm.so:"
-                                            "libOpenMAXAL.so:"
-                                            "libOpenSLES.so:"
-                                            "libRS.so:"
-                                            "libstdc++.so:"
-                                            "libwebviewchromium_plat_support.so:"
-                                            "libz.so";
+#if defined(__ANDROID__)
+static constexpr const char* kPublicNativeLibrariesConfig = "/system/etc/public.libraries.txt";
 
 class LibraryNamespaces {
  public:
@@ -79,7 +61,8 @@ class LibraryNamespaces {
 
     android_namespace_t* ns = FindNamespaceByClassLoader(env, class_loader);
 
-    LOG_FATAL_IF(ns != nullptr, "There is already a namespace associated with this classloader");
+    LOG_ALWAYS_FATAL_IF(ns != nullptr,
+                        "There is already a namespace associated with this classloader");
 
     uint64_t namespace_type = ANDROID_NAMESPACE_TYPE_ISOLATED;
     if (is_shared) {
@@ -109,10 +92,30 @@ class LibraryNamespaces {
     return it != namespaces_.end() ? it->second : nullptr;
   }
 
-  void PreloadPublicLibraries() {
+  void Initialize() {
+    // Read list of public native libraries from the config file.
+    std::string file_content;
+    LOG_ALWAYS_FATAL_IF(!base::ReadFileToString(kPublicNativeLibrariesConfig, &file_content),
+                        "Error reading public native library list from \"%s\": %s",
+                        kPublicNativeLibrariesConfig, strerror(errno));
+
+    std::vector<std::string> lines = base::Split(file_content, "\n");
+
+    std::vector<std::string> sonames;
+
+    for (const auto& line : lines) {
+      auto trimmed_line = base::Trim(line);
+      if (trimmed_line[0] == '#' || trimmed_line.empty()) {
+        continue;
+      }
+
+      sonames.push_back(trimmed_line);
+    }
+
+    public_libraries_ = base::Join(sonames, ':');
+
     // android_init_namespaces() expects all the public libraries
     // to be loaded so that they can be found by soname alone.
-    std::vector<std::string> sonames = android::base::Split(kPublicNativeLibraries, ":");
     for (const auto& soname : sonames) {
       dlopen(soname.c_str(), RTLD_NOW | RTLD_NODELETE);
     }
@@ -120,15 +123,19 @@ class LibraryNamespaces {
 
  private:
   bool InitPublicNamespace(const char* library_path) {
-    // Some apps call dlopen from generated code unknown to linker in which
-    // case linker uses anonymous namespace. See b/25844435 for details.
-    initialized_ = android_init_namespaces(kPublicNativeLibraries, library_path);
+    // (http://b/25844435) - Some apps call dlopen from generated code (mono jited
+    // code is one example) unknown to linker in which  case linker uses anonymous
+    // namespace. The second argument specifies the search path for the anonymous
+    // namespace which is the library_path of the classloader.
+    initialized_ = android_init_namespaces(public_libraries_.c_str(), library_path);
 
     return initialized_;
   }
 
   bool initialized_;
   std::vector<std::pair<jweak, android_namespace_t*>> namespaces_;
+  std::string public_libraries_;
+
 
   DISALLOW_COPY_AND_ASSIGN(LibraryNamespaces);
 };
@@ -141,10 +148,10 @@ static bool namespaces_enabled(uint32_t target_sdk_version) {
 }
 #endif
 
-void PreloadPublicNativeLibraries() {
+void InitializeNativeLoader() {
 #if defined(__ANDROID__)
   std::lock_guard<std::mutex> guard(g_namespaces_mutex);
-  g_namespaces->PreloadPublicLibraries();
+  g_namespaces->Initialize();
 #endif
 }
 
