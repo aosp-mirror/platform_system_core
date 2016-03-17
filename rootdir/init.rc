@@ -62,6 +62,10 @@ on init
     mount tmpfs tmpfs /mnt mode=0755,uid=0,gid=1000
     restorecon_recursive /mnt
 
+    mount configfs none /config
+    chmod 0775 /config/sdcardfs
+    chown system package_info /config/sdcardfs
+
     mkdir /mnt/secure 0700 root root
     mkdir /mnt/secure/asec 0700 root root
     mkdir /mnt/asec 0755 root system
