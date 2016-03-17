@@ -312,7 +312,7 @@ enum {
     NATIVE_WINDOW_SET_SIDEBAND_STREAM       = 18,
     NATIVE_WINDOW_SET_BUFFERS_DATASPACE     = 19,
     NATIVE_WINDOW_SET_SURFACE_DAMAGE        = 20,   /* private */
-    NATIVE_WINDOW_SET_SINGLE_BUFFER_MODE    = 21,
+    NATIVE_WINDOW_SET_SHARED_BUFFER_MODE    = 21,
     NATIVE_WINDOW_SET_AUTO_REFRESH          = 22,
 };
 
@@ -954,20 +954,20 @@ static inline int native_window_set_surface_damage(
 }
 
 /*
- * native_window_set_single_buffer_mode(..., bool singleBufferMode)
- * Enable/disable single buffer mode
+ * native_window_set_shared_buffer_mode(..., bool sharedBufferMode)
+ * Enable/disable shared buffer mode
  */
-static inline int native_window_set_single_buffer_mode(
+static inline int native_window_set_shared_buffer_mode(
         struct ANativeWindow* window,
-        bool singleBufferMode)
+        bool sharedBufferMode)
 {
-    return window->perform(window, NATIVE_WINDOW_SET_SINGLE_BUFFER_MODE,
-            singleBufferMode);
+    return window->perform(window, NATIVE_WINDOW_SET_SHARED_BUFFER_MODE,
+            sharedBufferMode);
 }
 
 /*
  * native_window_set_auto_refresh(..., autoRefresh)
- * Enable/disable auto refresh when in single buffer mode
+ * Enable/disable auto refresh when in shared buffer mode
  */
 static inline int native_window_set_auto_refresh(
         struct ANativeWindow* window,
