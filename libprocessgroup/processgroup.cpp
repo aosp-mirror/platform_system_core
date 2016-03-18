@@ -38,6 +38,9 @@
 
 #include <processgroup/processgroup.h>
 
+// Uncomment line below use memory cgroups for keeping track of (forked) PIDs
+// #define USE_MEMCG 1
+
 #define MEM_CGROUP_PATH "/dev/memcg/apps"
 #define MEM_CGROUP_TASKS "/dev/memcg/apps/tasks"
 #define ACCT_CGROUP_PATH "/acct"
@@ -68,6 +71,7 @@ struct ctx {
 };
 
 static const char* getCgroupRootPath() {
+#ifdef USE_MEMCG
     static const char* cgroup_root_path = NULL;
     std::call_once(init_path_flag, [&]() {
             // Check if mem cgroup is mounted, only then check for write-access to avoid
@@ -76,6 +80,9 @@ static const char* getCgroupRootPath() {
                     ACCT_CGROUP_PATH : MEM_CGROUP_PATH;
             });
     return cgroup_root_path;
+#else
+    return ACCT_CGROUP_PATH;
+#endif
 }
 
 static int convertUidToPath(char *path, size_t size, uid_t uid)
