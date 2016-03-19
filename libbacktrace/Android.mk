@@ -86,18 +86,34 @@ libbacktrace_static_libraries :=
 libbacktrace_offline_src_files := \
 	BacktraceOffline.cpp \
 
+# Use shared llvm library on device to save space.
 libbacktrace_offline_shared_libraries := \
 	libbacktrace \
+	libbase \
 	liblog \
 	libunwind \
-
-# Use shared llvm library on device to save space.
-libbacktrace_offline_shared_libraries_target := \
+	libutils \
 	libLLVM \
+
+libbacktrace_offline_static_libraries := \
+	libziparchive \
+	libz \
+
+module := libbacktrace_offline
+build_type := target
+build_target := SHARED_LIBRARY
+include $(LOCAL_PATH)/Android.build.mk
+
+libbacktrace_offline_shared_libraries := \
+	libbacktrace \
+	libbase \
+	liblog \
+	libunwind \
+	libziparchive-host \
 
 # Use static llvm libraries on host to remove dependency on 32-bit llvm shared library
 # which is not included in the prebuilt.
-libbacktrace_offline_static_libraries_host := \
+libbacktrace_offline_static_libraries := \
 	libLLVMObject \
 	libLLVMBitReader \
 	libLLVMMC \
@@ -106,10 +122,6 @@ libbacktrace_offline_static_libraries_host := \
 	libLLVMSupport \
 
 module := libbacktrace_offline
-module_tag := optional
-build_type := target
-build_target := SHARED_LIBRARY
-include $(LOCAL_PATH)/Android.build.mk
 build_type := host
 libbacktrace_multilib := both
 include $(LOCAL_PATH)/Android.build.mk
