@@ -182,6 +182,10 @@ check_directory_ownership(const char* path, uid_t uid)
     if (ret < 0)
         return -1;
 
+    /* /data/user/0 is a known safe symlink */
+    if (strcmp("/data/user/0", path) == 0)
+        return 0;
+
     /* must be a real directory, not a symlink */
     if (!S_ISDIR(st.st_mode))
         goto BAD;
