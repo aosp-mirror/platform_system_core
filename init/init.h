@@ -26,8 +26,7 @@ class Service;
 
 extern const char *ENV[32];
 extern bool waiting_for_exec;
-extern int have_console;
-extern std::string console_name;
+extern std::string default_console;
 extern struct selabel_handle *sehandle;
 extern struct selabel_handle *sehandle_prop;
 
