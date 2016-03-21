@@ -18,17 +18,16 @@
 #define _INIT_INIT_H
 
 #include <string>
-#include <vector>
 
 class Action;
 class Service;
 
 #define COMMAND_RETRY_TIMEOUT 5
-#define DEFAULT_CONSOLE "console"
 
 extern const char *ENV[32];
 extern bool waiting_for_exec;
-extern std::vector<std::string> console_names;
+extern int have_console;
+extern std::string console_name;
 extern struct selabel_handle *sehandle;
 extern struct selabel_handle *sehandle_prop;
 

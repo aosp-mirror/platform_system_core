@@ -172,7 +172,6 @@ bool Service::HandleClass(const std::vector<std::string>& args, std::string* err
 
 bool Service::HandleConsole(const std::vector<std::string>& args, std::string* err) {
     flags_ |= SVC_CONSOLE;
-    console_ = args.size() > 1 ? args[1] : DEFAULT_CONSOLE;
     return true;
 }
 
@@ -283,7 +282,7 @@ Service::OptionHandlerMap::Map& Service::OptionHandlerMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     static const Map option_handlers = {
         {"class",       {1,     1,    &Service::HandleClass}},
-        {"console",     {0,     1,    &Service::HandleConsole}},
+        {"console",     {0,     0,    &Service::HandleConsole}},
         {"critical",    {0,     0,    &Service::HandleCritical}},
         {"disabled",    {0,     0,    &Service::HandleDisabled}},
         {"group",       {1,     NR_SVC_SUPP_GIDS + 1, &Service::HandleGroup}},
@@ -330,7 +329,7 @@ bool Service::Start(const std::vector<std::string>& dynamic_args) {
     }
 
     bool needs_console = (flags_ & SVC_CONSOLE);
-    if (needs_console && console_names.empty()) {
+    if (needs_console && !have_console) {
         ERROR("service '%s' requires console\n", name_.c_str());
         flags_ |= SVC_DISABLED;
         return false;
@@ -607,12 +606,10 @@ void Service::ZapStdio() const {
 }
 
 void Service::OpenConsole() const {
-    int fd = -1;
-    if (std::find(console_names.begin(), console_names.end(), console_) != console_names.end()) {
-        std::string c_path = "/dev/" + console_;
-        fd = open(c_path.c_str(), O_RDWR);
+    int fd;
+    if ((fd = open(console_name.c_str(), O_RDWR)) < 0) {
+        fd = open("/dev/null", O_RDWR);
     }
-    if (fd == -1) fd = open("/dev/null", O_RDWR);
     ioctl(fd, TIOCSCTTY, 0);
     dup2(fd, 0);
     dup2(fd, 1);
