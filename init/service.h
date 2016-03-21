@@ -129,7 +129,6 @@ private:
 
     std::string name_;
     std::string classname_;
-    std::string console_;
 
     unsigned flags_;
     pid_t pid_;

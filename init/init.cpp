@@ -74,7 +74,8 @@ static int property_triggers_enabled = 0;
 
 static char qemu[32];
 
-std::vector<std::string> console_names;
+int have_console;
+std::string console_name = "/dev/console";
 static time_t process_needs_restart;
 
 const char *ENV[32];
@@ -297,23 +298,38 @@ static int keychord_init_action(const std::vector<std::string>& args)
 
 static int console_init_action(const std::vector<std::string>& args)
 {
-    std::vector<std::string> consoles;
-    std::string c_prop = property_get("ro.boot.console");
-    if (c_prop.empty()) {
-        // Property is missing, so check the system console by default.
-        consoles.emplace_back(DEFAULT_CONSOLE);
-    } else {
-        consoles = android::base::Split(c_prop, ":");
+    std::string console = property_get("ro.boot.console");
+    if (!console.empty()) {
+        console_name = "/dev/" + console;
     }
 
-    for (const auto& c : consoles) {
-        std::string console = "/dev/" + c;
-        int fd = open(console.c_str(), O_RDWR | O_CLOEXEC);
-        if (fd != -1) {
-            console_names.emplace_back(c);
-            close(fd);
-        }
+    int fd = open(console_name.c_str(), O_RDWR | O_CLOEXEC);
+    if (fd >= 0)
+        have_console = 1;
+    close(fd);
+
+    fd = open("/dev/tty0", O_WRONLY | O_CLOEXEC);
+    if (fd >= 0) {
+        const char *msg;
+            msg = "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"  // console is 40 cols x 30 lines
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "             A N D R O I D ";
+        write(fd, msg, strlen(msg));
+        close(fd);
     }
+
     return 0;
 }
 
