@@ -115,6 +115,13 @@ Options
 Options are modifiers to services.  They affect how and when init
 runs the service.
 
+console [<console>]
+  This service needs a console. The optional second parameter chooses a
+  specific console instead of the default. The default "/dev/console" can
+  be changed by setting the "androidboot.console" kernel parameter. In
+  all cases the leading "/dev/" should be omitted, so "/dev/tty0" would be
+  specified as just "console tty0".
+
 critical
   This is a device-critical service. If it exits more than four times in
   four minutes, the device will reboot into recovery mode.
