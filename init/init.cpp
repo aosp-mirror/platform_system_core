@@ -353,7 +353,7 @@ static int set_mmap_rnd_bits_action(const std::vector<std::string>& args)
             && set_mmap_rnd_bits_min(16, 16, true)) {
         ret = 0;
     }
-#elif defined(__x86__64__)
+#elif defined(__x86_64__)
     /* x86_64 supports 28 - 32 bits */
     if (set_mmap_rnd_bits_min(32, 32, false)
             && set_mmap_rnd_bits_min(16, 16, true)) {
