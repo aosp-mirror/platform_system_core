@@ -32,7 +32,6 @@
 #include <log/logger.h>
 #include <cutils/properties.h>
 
-#include <corkscrew/demangle.h>
 #include <corkscrew/backtrace.h>
 
 #include <sys/socket.h>
@@ -260,8 +259,7 @@ static void dump_stack_segment(const ptrace_context_t* context, log_t* log, pid_
         find_symbol_ptrace(context, stack_content, &mi, &symbol);
 
         if (symbol) {
-            char* demangled_name = demangle_symbol_name(symbol->name);
-            const char* symbol_name = demangled_name ? demangled_name : symbol->name;
+            const char* symbol_name = symbol->name;
             uint32_t offset = stack_content - (mi->start + symbol->start);
             if (!i && label >= 0) {
                 if (offset) {
@@ -280,7 +278,6 @@ static void dump_stack_segment(const ptrace_context_t* context, log_t* log, pid_
                             *sp, stack_content, mi ? mi->name : "", symbol_name);
                 }
             }
-            free(demangled_name);
         } else {
             if (!i && label >= 0) {
                 _LOG(log, scopeFlags, "    #%02d  %08x  %08x  %s\n",
