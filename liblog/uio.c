@@ -20,7 +20,7 @@
 
 #include <log/uio.h>
 
-#include "log_cdefs.h"
+#include "log_portability.h"
 
 LIBLOG_ABI_PUBLIC int readv(int fd, struct iovec *vecs, int count)
 {

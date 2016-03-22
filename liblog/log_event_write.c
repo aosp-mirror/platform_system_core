@@ -18,7 +18,7 @@
 
 #include <log/log.h>
 
-#include "log_cdefs.h"
+#include "log_portability.h"
 
 #define MAX_SUBTAG_LEN 32
 
