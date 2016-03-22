@@ -19,7 +19,7 @@
 
 #include <sys/types.h>
 
-#include "log_cdefs.h"
+#include "log_portability.h"
 
 struct iovec;
 

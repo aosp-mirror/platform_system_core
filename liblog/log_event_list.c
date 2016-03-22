@@ -25,7 +25,7 @@
 #include <log/log.h>
 #include <log/logger.h>
 
-#include "log_cdefs.h"
+#include "log_portability.h"
 
 #define MAX_EVENT_PAYLOAD (LOGGER_ENTRY_MAX_PAYLOAD - sizeof(int32_t))
 

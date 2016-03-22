@@ -957,7 +957,10 @@ Good Signior Leonato, you are come to meet your\n\
 trouble: the fashion of the world is to avoid\n\
 cost, and you encounter it\n\
 LEONATO\n\
-Never came trouble to my house in the likeness of your grace";
+Never came trouble to my house in the likeness of your grace,\n\
+for trouble being gone, comfort should remain, but\n\
+when you depart from me, sorrow abides and happiness\n\
+takes his leave.";
 
 TEST(liblog, max_payload) {
     pid_t pid = getpid();
@@ -2519,4 +2522,57 @@ TEST(liblog, create_android_logger_overflow) {
     EXPECT_GT(0, android_log_write_list_begin(ctx));
     EXPECT_LE(0, android_log_destroy(&ctx));
     ASSERT_TRUE(NULL == ctx);
+}
+
+static const char __pmsg_file[] =
+        "/data/william-shakespeare/MuchAdoAboutNothing.txt";
+
+TEST(liblog, __android_log_pmsg_file_write) {
+    EXPECT_LT(0, __android_log_pmsg_file_write(
+            LOG_ID_CRASH, ANDROID_LOG_VERBOSE,
+            __pmsg_file, max_payload_buf, sizeof(max_payload_buf)));
+    fprintf(stderr, "Reboot, ensure file %s matches\n"
+                    "with liblog.__android_log_msg_file_read test\n",
+                    __pmsg_file);
+}
+
+ssize_t __pmsg_fn(log_id_t logId, char prio, const char *filename,
+                  const char *buf, size_t len, void *arg) {
+    EXPECT_TRUE(NULL == arg);
+    EXPECT_EQ(LOG_ID_CRASH, logId);
+    EXPECT_EQ(ANDROID_LOG_VERBOSE, prio);
+    EXPECT_FALSE(NULL == strstr(__pmsg_file, filename));
+    EXPECT_EQ(len, sizeof(max_payload_buf));
+    EXPECT_EQ(0, strcmp(max_payload_buf, buf));
+
+    ++signaled;
+    if ((len != sizeof(max_payload_buf)) ||
+            strcmp(max_payload_buf, buf)) {
+        fprintf(stderr, "comparison fails on content \"%s\"\n", buf);
+    }
+    return !arg ||
+           (LOG_ID_CRASH != logId) ||
+           (ANDROID_LOG_VERBOSE != prio) ||
+           !strstr(__pmsg_file, filename) ||
+           (len != sizeof(max_payload_buf)) ||
+           !!strcmp(max_payload_buf, buf) ? -ENOEXEC : 1;
+}
+
+TEST(liblog, __android_log_pmsg_file_read) {
+    signaled = 0;
+
+    ssize_t ret = __android_log_pmsg_file_read(
+            LOG_ID_CRASH, ANDROID_LOG_VERBOSE,
+            __pmsg_file, __pmsg_fn, NULL);
+
+    if (ret == -ENOENT) {
+        fprintf(stderr,
+            "No pre-boot results of liblog.__android_log_mesg_file_write to "
+            "compare with,\n"
+            "false positive test result.\n");
+        return;
+    }
+
+    EXPECT_LT(0, ret);
+    EXPECT_EQ(1U, signaled);
 }

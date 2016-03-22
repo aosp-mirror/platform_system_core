@@ -24,7 +24,7 @@
 #include <log/event_tag_map.h>
 #include <log/log.h>
 
-#include "log_cdefs.h"
+#include "log_portability.h"
 
 #define OUT_TAG "EventTagMap"
 

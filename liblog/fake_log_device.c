@@ -31,7 +31,7 @@
 #include <log/logd.h>
 
 #include "fake_log_device.h"
-#include "log_cdefs.h"
+#include "log_portability.h"
 
 #define kMaxTagLen  16      /* from the long-dead utils/Log.cpp */
 

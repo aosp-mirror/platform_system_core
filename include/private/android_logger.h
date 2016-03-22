@@ -19,7 +19,10 @@
 #ifndef _SYSTEM_CORE_INCLUDE_PRIVATE_ANDROID_LOGGER_H_
 #define _SYSTEM_CORE_INCLUDE_PRIVATE_ANDROID_LOGGER_H_
 
+/* Android private interfaces */
+
 #include <stdint.h>
+#include <sys/types.h>
 
 #include <log/log.h>
 #include <log/log_read.h>
@@ -95,4 +98,35 @@ typedef struct __attribute__((__packed__)) {
     char data[];
 } android_log_event_string_t;
 
+#if defined(__cplusplus)
+extern "C" {
 #endif
+
+#define ANDROID_LOG_PMSG_FILE_MAX_SEQUENCE 256 /* 1MB file */
+#define ANDROID_LOG_PMSG_FILE_SEQUENCE     1000
+
+ssize_t __android_log_pmsg_file_write(
+        log_id_t logId,
+        char prio,
+        const char *filename,
+        const char *buf, size_t len);
+
+#define LOG_ID_ANY      ((log_id_t)-1)
+#define ANDROID_LOG_ANY ANDROID_LOG_UNKNOWN
+
+/* first 5 arguments match __android_log_msg_file_write, a cast is safe */
+typedef ssize_t (*__android_log_pmsg_file_read_fn)(
+        log_id_t logId,
+        char prio,
+        const char *filename,
+        const char *buf, size_t len, void *arg);
+
+ssize_t __android_log_pmsg_file_read(
+        log_id_t logId, char prio, const char *prefix,
+        __android_log_pmsg_file_read_fn fn, void *arg);
+
+#if defined(__cplusplus)
+}
+#endif
+
+#endif /* _SYSTEM_CORE_INCLUDE_PRIVATE_ANDROID_LOGGER_H_ */
