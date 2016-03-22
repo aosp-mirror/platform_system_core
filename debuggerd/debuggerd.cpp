@@ -586,9 +586,7 @@ static void monitor_worker_process(int child_pid, const debugger_request_t& requ
       kill_worker = true;
       kill_target = true;
       kill_self = true;
-    }
-
-    if (WIFSIGNALED(status)) {
+    } else if (WIFSIGNALED(status)) {
       ALOGE("debuggerd: worker process %d terminated due to signal %d", child_pid, WTERMSIG(status));
       kill_worker = false;
       kill_target = true;
@@ -612,15 +610,16 @@ static void monitor_worker_process(int child_pid, const debugger_request_t& requ
     }
   }
 
-  if (kill_target) {
-    // Resume or kill the target, depending on what the initial request was.
-    if (request.action == DEBUGGER_ACTION_CRASH) {
-      ALOGE("debuggerd: killing target %d", request.pid);
-      kill(request.pid, SIGKILL);
-    } else {
-      ALOGE("debuggerd: resuming target %d", request.pid);
-      kill(request.pid, SIGCONT);
-    }
+  int exit_signal = SIGCONT;
+  if (kill_target && request.action == DEBUGGER_ACTION_CRASH) {
+    ALOGE("debuggerd: killing target %d", request.pid);
+    exit_signal = SIGKILL;
+  } else {
+    ALOGW("debuggerd: resuming target %d", request.pid);
+  }
+
+  if (kill(request.pid, exit_signal) != 0) {
+    ALOGE("debuggerd: failed to send signal %d to target: %s", exit_signal, strerror(errno));
   }
 
   if (kill_self) {
