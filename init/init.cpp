@@ -373,6 +373,11 @@ static int set_mmap_rnd_bits_action(const std::vector<std::string>& args)
 #else
     ERROR("Unknown architecture\n");
 #endif
+
+#ifdef __BRILLO__
+    // TODO: b/27794137
+    ret = 0;
+#endif
     if (ret == -1) {
         ERROR("Unable to set adequate mmap entropy value!\n");
         security_failure();
