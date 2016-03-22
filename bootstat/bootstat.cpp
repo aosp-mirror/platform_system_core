@@ -32,25 +32,10 @@
 #include <log/log.h>
 #include "boot_event_record_store.h"
 #include "event_log_list_builder.h"
+#include "histogram_logger.h"
 #include "uptime_parser.h"
 
 namespace {
-
-// Builds an EventLog buffer named |event| containing |data| and writes
-// the log into the Tron histogram logs.
-void LogBootEvent(const std::string& event, int32_t data) {
-  LOG(INFO) << "Logging boot metric: " << event << " " << data;
-
-  EventLogListBuilder log_builder;
-  log_builder.Append(event);
-  log_builder.Append(data);
-
-  std::unique_ptr<uint8_t[]> log;
-  size_t size;
-  log_builder.Release(&log, &size);
-
-  android_bWriteLog(HISTOGRAM_LOG_TAG, log.get(), size);
-}
 
 // Scans the boot event record store for record files and logs each boot event
 // via EventLog.
@@ -59,7 +44,7 @@ void LogBootEvents() {
 
   auto events = boot_event_store.GetAllBootEvents();
   for (auto i = events.cbegin(); i != events.cend(); ++i) {
-    LogBootEvent(i->first, i->second);
+    bootstat::LogHistogram(i->first, i->second);
   }
 }
 
@@ -202,10 +187,10 @@ void RecordFactoryReset() {
   static const char* factory_reset_current_time = "factory_reset_current_time";
   if (current_time_utc < 0) {
     // UMA does not display negative values in buckets, so convert to positive.
-    LogBootEvent(factory_reset_current_time, std::abs(current_time_utc));
+    bootstat::LogHistogram(factory_reset_current_time, std::abs(current_time_utc));
     return;
   } else {
-    LogBootEvent(factory_reset_current_time, current_time_utc);
+    bootstat::LogHistogram(factory_reset_current_time, current_time_utc);
   }
 
   // The factory_reset boot event does not exist after the device is reset, so
@@ -221,7 +206,7 @@ void RecordFactoryReset() {
   // Calculate and record the difference in time between now and the
   // factory_reset time.
   time_t factory_reset_utc = record.second;
-  LogBootEvent("factory_reset_record_value", factory_reset_utc);
+  bootstat::LogHistogram("factory_reset_record_value", factory_reset_utc);
   time_t time_since_factory_reset = difftime(current_time_utc,
                                              factory_reset_utc);
   boot_event_store.AddBootEventWithValue("time_since_factory_reset",

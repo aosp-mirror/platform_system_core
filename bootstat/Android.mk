@@ -21,6 +21,7 @@ bootstat_c_includes := external/gtest/include
 bootstat_lib_src_files := \
         boot_event_record_store.cpp \
         event_log_list_builder.cpp \
+        histogram_logger.cpp \
         uptime_parser.cpp \
 
 bootstat_src_files := \
@@ -41,17 +42,13 @@ bootstat_cflags := \
         -Wextra \
         -Werror \
 
-bootstat_cppflags := \
-        -Wno-non-virtual-dtor \
-
-bootstat_debug_cflags := \
-        $(bootstat_cflags) \
-        -UNDEBUG \
-
 # 524291 corresponds to sysui_histogram, from
 # frameworks/base/core/java/com/android/internal/logging/EventLogTags.logtags
 bootstat_cflags += -DHISTOGRAM_LOG_TAG=524291
 
+bootstat_debug_cflags := \
+        $(bootstat_cflags) \
+        -UNDEBUG \
 
 # bootstat static library
 # -----------------------------------------------------------------------------
@@ -60,7 +57,6 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := libbootstat
 LOCAL_CFLAGS := $(bootstat_cflags)
-LOCAL_CPPFLAGS := $(bootstat_cppflags)
 LOCAL_C_INCLUDES := $(bootstat_c_includes)
 LOCAL_SHARED_LIBRARIES := $(bootstat_shared_libs)
 LOCAL_SRC_FILES := $(bootstat_lib_src_files)
@@ -76,7 +72,6 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := libbootstat_debug
 LOCAL_CFLAGS := $(bootstat_cflags)
-LOCAL_CPPFLAGS := $(bootstat_debug_cppflags)
 LOCAL_C_INCLUDES := $(bootstat_c_includes)
 LOCAL_SHARED_LIBRARIES := $(bootstat_shared_libs)
 LOCAL_SRC_FILES := $(bootstat_lib_src_files)
@@ -92,7 +87,6 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := libbootstat_host_debug
 LOCAL_CFLAGS := $(bootstat_debug_cflags)
-LOCAL_CPPFLAGS := $(bootstat_cppflags)
 LOCAL_C_INCLUDES := $(bootstat_c_includes)
 LOCAL_SHARED_LIBRARIES := $(bootstat_shared_libs)
 LOCAL_SRC_FILES := $(bootstat_lib_src_files)
@@ -108,7 +102,6 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := bootstat
 LOCAL_CFLAGS := $(bootstat_cflags)
-LOCAL_CPPFLAGS := $(bootstat_cppflags)
 LOCAL_C_INCLUDES := $(bootstat_c_includes)
 LOCAL_SHARED_LIBRARIES := $(bootstat_shared_libs)
 LOCAL_STATIC_LIBRARIES := libbootstat
@@ -126,7 +119,6 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := bootstat_tests
 LOCAL_CFLAGS := $(bootstat_tests_cflags)
-LOCAL_CPPFLAGS := $(bootstat_cppflags)
 LOCAL_SHARED_LIBRARIES := $(bootstat_shared_libs)
 LOCAL_STATIC_LIBRARIES := libbootstat_debug libgmock
 LOCAL_SRC_FILES := $(bootstat_test_src_files)
@@ -142,7 +134,6 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := bootstat_tests
 LOCAL_CFLAGS := $(bootstat_tests_cflags)
-LOCAL_CPPFLAGS := $(bootstat_cppflags)
 LOCAL_SHARED_LIBRARIES := $(bootstat_shared_libs)
 LOCAL_STATIC_LIBRARIES := libbootstat_host_debug libgmock_host
 LOCAL_SRC_FILES := $(bootstat_test_src_files)
