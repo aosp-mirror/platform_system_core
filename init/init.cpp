@@ -310,6 +310,7 @@ static bool __attribute__((unused)) set_mmap_rnd_bits_min(int start, int min, bo
     }
     std::ifstream inf(path, std::fstream::in);
     if (!inf) {
+        ERROR("Cannot open for reading: %s!\n", path.c_str());
         return false;
     }
     while (start >= min) {
@@ -317,6 +318,7 @@ static bool __attribute__((unused)) set_mmap_rnd_bits_min(int start, int min, bo
         std::string str_val = std::to_string(start);
         std::ofstream of(path, std::fstream::out);
         if (!of) {
+            ERROR("Cannot open for writing: %s!\n", path.c_str());
             return false;
         }
         of << str_val << std::endl;
@@ -332,15 +334,27 @@ static bool __attribute__((unused)) set_mmap_rnd_bits_min(int start, int min, bo
         start--;
     }
     inf.close();
-    return (start >= min);
+    if (start < min) {
+        ERROR("Unable to set minimum required entropy %d in %s!\n",
+              min, path.c_str());
+        return false;
+    }
+    return true;
 }
 
 /*
  * Set /proc/sys/vm/mmap_rnd_bits and potentially
  * /proc/sys/vm/mmap_rnd_compat_bits to the maximum supported values.
- * Returns -1 if unable to set these to an acceptable value.  Apply
- * upstream patch-sets https://lkml.org/lkml/2015/12/21/337 and
- * https://lkml.org/lkml/2016/2/4/831 to enable this.
+ * Returns -1 if unable to set these to an acceptable value.
+ *
+ * To support this sysctl, the following upstream commits are needed:
+ *
+ * d07e22597d1d mm: mmap: add new /proc tunable for mmap_base ASLR
+ * e0c25d958f78 arm: mm: support ARCH_MMAP_RND_BITS
+ * 8f0d3aa9de57 arm64: mm: support ARCH_MMAP_RND_BITS
+ * 9e08f57d684a x86: mm: support ARCH_MMAP_RND_BITS
+ * ec9ee4acd97c drivers: char: random: add get_random_long()
+ * 5ef11c35ce86 mm: ASLR: use get_random_long()
  */
 static int set_mmap_rnd_bits_action(const std::vector<std::string>& args)
 {
