@@ -21,9 +21,11 @@
 #include <sys/stat.h>
 #include <utime.h>
 #include <cstdlib>
+#include <string>
 #include <utility>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include "histogram_logger.h"
 #include "uptime_parser.h"
 
 namespace {
@@ -42,6 +44,20 @@ bool ParseRecordEventTime(const std::string& path, int32_t* uptime) {
   }
 
   *uptime = file_stat.st_mtime;
+
+  // The following code (till function exit) is a debug test to ensure the
+  // validity of the file mtime value, i.e., to check that the record file
+  // mtime values are not changed once set.
+  // TODO(jhawkins): Remove this code.
+  std::string content;
+  if (!android::base::ReadFileToString(path, &content)) {
+    PLOG(ERROR) << "Failed to read " << path;
+    return false;
+  }
+
+  int32_t value = std::stoi(content);
+  bootstat::LogHistogram("bootstat_mtime_matches_content", value == *uptime);
+
   return true;
 }
 
@@ -61,8 +77,20 @@ void BootEventRecordStore::AddBootEvent(const std::string& event) {
 void BootEventRecordStore::AddBootEventWithValue(
     const std::string& event, int32_t value) {
   std::string record_path = GetBootEventPath(event);
-  if (creat(record_path.c_str(), S_IRUSR | S_IWUSR) == -1) {
+  int record_fd = creat(record_path.c_str(), S_IRUSR | S_IWUSR);
+  if (record_fd == -1) {
     PLOG(ERROR) << "Failed to create " << record_path;
+    return;
+  }
+
+  // Writing the value as content in the record file is a debug measure to
+  // ensure the validity of the file mtime value, i.e., to check that the record
+  // file mtime values are not changed once set.
+  // TODO(jhawkins): Remove this block.
+  if (!android::base::WriteStringToFd(std::to_string(value), record_fd)) {
+    PLOG(ERROR) << "Failed to write value to " << record_path;
+    close(record_fd);
+    return;
   }
 
   // Fill out the stat structure for |record_path| in order to get the atime to
@@ -70,6 +98,8 @@ void BootEventRecordStore::AddBootEventWithValue(
   struct stat file_stat;
   if (stat(record_path.c_str(), &file_stat) == -1) {
     PLOG(ERROR) << "Failed to read " << record_path;
+    close(record_fd);
+    return;
   }
 
   // Set the |modtime| of the file to store the value of the boot event while
@@ -77,7 +107,11 @@ void BootEventRecordStore::AddBootEventWithValue(
   struct utimbuf times = {/* actime */ file_stat.st_atime, /* modtime */ value};
   if (utime(record_path.c_str(), &times) == -1) {
     PLOG(ERROR) << "Failed to set mtime for " << record_path;
+    close(record_fd);
+    return;
   }
+
+  close(record_fd);
 }
 
 bool BootEventRecordStore::GetBootEvent(
