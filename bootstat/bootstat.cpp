@@ -63,6 +63,21 @@ void LogBootEvents() {
   }
 }
 
+// Records the named boot |event| to the record store. If |value| is non-empty
+// and is a proper string representation of an integer value, the converted
+// integer value is associated with the boot event.
+void RecordBootEventFromCommandLine(
+    const std::string& event, const std::string& value_str) {
+  BootEventRecordStore boot_event_store;
+  if (!value_str.empty()) {
+    int32_t value = 0;
+    value = std::stoi(value_str);
+    boot_event_store.AddBootEventWithValue(event, value);
+  } else {
+    boot_event_store.AddBootEvent(event);
+  }
+}
+
 void PrintBootEvents() {
   printf("Boot events:\n");
   printf("------------\n");
@@ -82,6 +97,7 @@ void ShowHelp(const char *cmd) {
           "  -l, --log             Log all metrics to logstorage\n"
           "  -p, --print           Dump the boot event records to the console\n"
           "  -r, --record          Record the timestamp of a named boot event\n"
+          "  --value               Optional value to associate with the boot event\n"
           "  --record_boot_reason  Record the reason why the device booted\n"
           "  --record_time_since_factory_reset Record the time since the device was reset\n");
 }
@@ -261,6 +277,7 @@ int main(int argc, char **argv) {
   LOG(INFO) << "Service started: " << cmd_line;
 
   int option_index = 0;
+  static const char value_str[] = "value";
   static const char boot_complete_str[] = "record_boot_complete";
   static const char boot_reason_str[] = "record_boot_reason";
   static const char factory_reset_str[] = "record_time_since_factory_reset";
@@ -269,19 +286,26 @@ int main(int argc, char **argv) {
     { "log",             no_argument,       NULL,   'l' },
     { "print",           no_argument,       NULL,   'p' },
     { "record",          required_argument, NULL,   'r' },
+    { value_str,         required_argument, NULL,   0 },
     { boot_complete_str, no_argument,       NULL,   0 },
     { boot_reason_str,   no_argument,       NULL,   0 },
     { factory_reset_str, no_argument,       NULL,   0 },
     { NULL,              0,                 NULL,   0 }
   };
 
+  std::string boot_event;
+  std::string value;
   int opt = 0;
   while ((opt = getopt_long(argc, argv, "hlpr:", long_options, &option_index)) != -1) {
     switch (opt) {
       // This case handles long options which have no single-character mapping.
       case 0: {
         const std::string option_name = long_options[option_index].name;
-        if (option_name == boot_complete_str) {
+        if (option_name == value_str) {
+          // |optarg| is an external variable set by getopt representing
+          // the option argument.
+          value = optarg;
+        } else if (option_name == boot_complete_str) {
           RecordBootComplete();
         } else if (option_name == boot_reason_str) {
           RecordBootReason();
@@ -311,10 +335,7 @@ int main(int argc, char **argv) {
       case 'r': {
         // |optarg| is an external variable set by getopt representing
         // the option argument.
-        const char* event = optarg;
-
-        BootEventRecordStore boot_event_store;
-        boot_event_store.AddBootEvent(event);
+        boot_event = optarg;
         break;
       }
 
@@ -328,6 +349,10 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
       }
     }
+  }
+
+  if (!boot_event.empty()) {
+    RecordBootEventFromCommandLine(boot_event, value);
   }
 
   return 0;
