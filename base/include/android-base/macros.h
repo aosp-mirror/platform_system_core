@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef UTILS_MACROS_H
-#define UTILS_MACROS_H
+#ifndef ANDROID_BASE_MACROS_H
+#define ANDROID_BASE_MACROS_H
 
 #include <stddef.h>  // for size_t
 #include <unistd.h>  // for TEMP_FAILURE_RETRY
@@ -185,4 +185,4 @@ void UNUSED(const T&...) {
   } while (0)
 #endif
 
-#endif  // UTILS_MACROS_H
+#endif  // ANDROID_BASE_MACROS_H

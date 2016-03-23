@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef BASE_LOGGING_H
-#define BASE_LOGGING_H
+
+#ifndef ANDROID_BASE_LOGGING_H
+#define ANDROID_BASE_LOGGING_H
 
 // NOTE: For Windows, you must include logging.h after windows.h to allow the
 // following code to suppress the evil ERROR macro:
@@ -346,4 +347,4 @@ class ScopedLogSeverity {
 }  // namespace base
 }  // namespace android
 
-#endif  // BASE_LOGGING_H
+#endif  // ANDROID_BASE_LOGGING_H
