@@ -580,9 +580,20 @@ static void monitor_worker_process(int child_pid, const debugger_request_t& requ
   siginfo_t siginfo;
   int signal = TEMP_FAILURE_RETRY(sigtimedwait(&signal_set, &siginfo, &timeout));
   if (signal == SIGCHLD) {
-    pid_t rc = waitpid(0, &status, WNOHANG | WUNTRACED);
+    pid_t rc = waitpid(-1, &status, WNOHANG | WUNTRACED);
     if (rc != child_pid) {
       ALOGE("debuggerd: waitpid returned unexpected pid (%d), committing murder-suicide", rc);
+
+      if (WIFEXITED(status)) {
+        ALOGW("debuggerd: pid %d exited with status %d", rc, WEXITSTATUS(status));
+      } else if (WIFSIGNALED(status)) {
+        ALOGW("debuggerd: pid %d received signal %d", rc, WTERMSIG(status));
+      } else if (WIFSTOPPED(status)) {
+        ALOGW("debuggerd: pid %d stopped by signal %d", rc, WSTOPSIG(status));
+      } else if (WIFCONTINUED(status)) {
+        ALOGW("debuggerd: pid %d continued", rc);
+      }
+
       kill_worker = true;
       kill_target = true;
       kill_self = true;
