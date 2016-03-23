@@ -36,10 +36,10 @@
 
 #include <log/logger.h>
 
+#include <android-base/unique_fd.h>
 #include <cutils/debugger.h>
 #include <cutils/properties.h>
 #include <cutils/sockets.h>
-#include <nativehelper/ScopedFd.h>
 
 #include <linux/input.h>
 
@@ -632,7 +632,7 @@ static void monitor_worker_process(int child_pid, const debugger_request_t& requ
 static void handle_request(int fd) {
   ALOGV("handle_request(%d)\n", fd);
 
-  ScopedFd closer(fd);
+  android::base::unique_fd closer(fd);
   debugger_request_t request;
   memset(&request, 0, sizeof(request));
   int status = read_request(fd, &request);
