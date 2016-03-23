@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef TEST_UTILS_H
-#define TEST_UTILS_H
+#ifndef ANDROID_BASE_TEST_UTILS_H
+#define ANDROID_BASE_TEST_UTILS_H
 
 #include <string>
 
@@ -48,4 +48,4 @@ class TemporaryDir {
   DISALLOW_COPY_AND_ASSIGN(TemporaryDir);
 };
 
-#endif // TEST_UTILS_H
+#endif  // ANDROID_BASE_TEST_UTILS_H

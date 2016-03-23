@@ -20,6 +20,7 @@
 #include <string>
 
 #include <android-base/macros.h>
+#include <android-base/unique_fd.h>
 
 void close_stdin();
 
@@ -50,6 +51,14 @@ bool set_file_block_mode(int fd, bool block);
 extern int adb_close(int fd);
 
 // Helper to automatically close an FD when it goes out of scope.
+struct AdbCloser {
+    static void Close(int fd) {
+        adb_close(fd);
+    }
+};
+
+using unique_fd = android::base::unique_fd_impl<AdbCloser>;
+
 class ScopedFd {
   public:
     ScopedFd() {

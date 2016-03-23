@@ -160,8 +160,13 @@ class Subprocess {
     pid_t pid() const { return pid_; }
 
     // Sets up FDs, forks a subprocess, starts the subprocess manager thread,
-    // and exec's the child. Returns false on failure.
+    // and exec's the child. Returns false and sets error on failure.
     bool ForkAndExec(std::string* _Nonnull error);
+
+    // Start the subprocess manager thread. Consumes the subprocess, regardless of success.
+    // Returns false and sets error on failure.
+    static bool StartThread(std::unique_ptr<Subprocess> subprocess,
+                            std::string* _Nonnull error);
 
   private:
     // Opens the file at |pts_name|.
@@ -391,14 +396,19 @@ bool Subprocess::ForkAndExec(std::string* error) {
         }
     }
 
-    if (!adb_thread_create(ThreadHandler, this)) {
+    D("subprocess parent: completed");
+    return true;
+}
+
+bool Subprocess::StartThread(std::unique_ptr<Subprocess> subprocess, std::string* error) {
+    Subprocess* raw = subprocess.release();
+    if (!adb_thread_create(ThreadHandler, raw)) {
         *error =
             android::base::StringPrintf("failed to create subprocess thread: %s", strerror(errno));
-        kill(pid_, SIGKILL);
+        kill(raw->pid_, SIGKILL);
         return false;
     }
 
-    D("subprocess parent: completed");
     return true;
 }
 
@@ -442,6 +452,7 @@ void Subprocess::ThreadHandler(void* userdata) {
     adb_thread_setname(android::base::StringPrintf(
             "shell srvc %d", subprocess->local_socket_fd()));
 
+    D("passing data streams for PID %d", subprocess->pid());
     subprocess->PassDataStreams();
 
     D("deleting Subprocess for PID %d", subprocess->pid());
@@ -738,7 +749,7 @@ int StartSubprocess(const char* name, const char* terminal_type,
       protocol == SubprocessProtocol::kNone ? "none" : "shell",
       terminal_type, name);
 
-    Subprocess* subprocess = new Subprocess(name, terminal_type, type, protocol);
+    auto subprocess = std::make_unique<Subprocess>(name, terminal_type, type, protocol);
     if (!subprocess) {
         LOG(ERROR) << "failed to allocate new subprocess";
         return ReportError(protocol, "failed to allocate new subprocess");
@@ -747,11 +758,17 @@ int StartSubprocess(const char* name, const char* terminal_type,
     std::string error;
     if (!subprocess->ForkAndExec(&error)) {
         LOG(ERROR) << "failed to start subprocess: " << error;
-        delete subprocess;
         return ReportError(protocol, error);
     }
 
-    D("subprocess creation successful: local_socket_fd=%d, pid=%d",
-      subprocess->local_socket_fd(), subprocess->pid());
-    return subprocess->local_socket_fd();
+    unique_fd local_socket(dup(subprocess->local_socket_fd()));
+    D("subprocess creation successful: local_socket_fd=%d, pid=%d", local_socket.get(),
+      subprocess->pid());
+
+    if (!Subprocess::StartThread(std::move(subprocess), &error)) {
+        LOG(ERROR) << "failed to start subprocess management thread: " << error;
+        return ReportError(protocol, error);
+    }
+
+    return local_socket.release();
 }

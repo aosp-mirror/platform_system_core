@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef BASE_FILE_H
-#define BASE_FILE_H
+#ifndef ANDROID_BASE_FILE_H
+#define ANDROID_BASE_FILE_H
 
 #include <sys/stat.h>
 #include <string>
@@ -46,4 +46,4 @@ bool RemoveFileIfExists(const std::string& path, std::string* err = nullptr);
 }  // namespace base
 }  // namespace android
 
-#endif  // BASE_FILE_H
+#endif // ANDROID_BASE_FILE_H
