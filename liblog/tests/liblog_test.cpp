@@ -1065,8 +1065,10 @@ TEST(liblog, __android_log_buf_print__maxtag) {
             fflush(stderr);
             int printLogLine =
                     android_log_printLogLine(logformat, fileno(stderr), &entry);
+            // Legacy tag truncation
             EXPECT_LE(128, printLogLine);
-            EXPECT_GT(LOGGER_ENTRY_MAX_PAYLOAD, printLogLine);
+            // Measured maximum if we try to print part of the tag as message
+            EXPECT_GT(LOGGER_ENTRY_MAX_PAYLOAD * 13 / 8, printLogLine);
         }
         android_log_format_free(logformat);
     }
