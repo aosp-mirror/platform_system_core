@@ -1038,6 +1038,34 @@ typedef enum android_dataspace {
 
 } android_dataspace_t;
 
+/*
+ * Color transforms that may be applied by hardware composer to the whole
+ * display.
+ */
+typedef enum android_color_transform {
+    /* Applies no transform to the output color */
+    HAL_COLOR_TRANSFORM_IDENTITY = 0,
+
+    /* Applies an arbitrary transform defined by a 4x4 affine matrix */
+    HAL_COLOR_TRANSFORM_ARBITRARY_MATRIX = 1,
+
+    /* Applies a transform that inverts the value or luminance of the color, but
+     * does not modify hue or saturation */
+    HAL_COLOR_TRANSFORM_VALUE_INVERSE = 2,
+
+    /* Applies a transform that maps all colors to shades of gray */
+    HAL_COLOR_TRANSFORM_GRAYSCALE = 3,
+
+    /* Applies a transform which corrects for protanopic color blindness */
+    HAL_COLOR_TRANSFORM_CORRECT_PROTANOPIA = 4,
+
+    /* Applies a transform which corrects for deuteranopic color blindness */
+    HAL_COLOR_TRANSFORM_CORRECT_DEUTERANOPIA = 5,
+
+    /* Applies a transform which corrects for tritanopic color blindness */
+    HAL_COLOR_TRANSFORM_CORRECT_TRITANOPIA = 6
+} android_color_transform_t;
+
 #ifdef __cplusplus
 }
 #endif
