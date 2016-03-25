@@ -55,6 +55,7 @@ class BootEventRecordStore {
   FRIEND_TEST(BootEventRecordStoreTest, AddMultipleBootEvents);
   FRIEND_TEST(BootEventRecordStoreTest, AddBootEventWithValue);
   FRIEND_TEST(BootEventRecordStoreTest, GetBootEvent);
+  FRIEND_TEST(BootEventRecordStoreTest, GetBootEventNoFileContent);
 
   // Sets the filesystem path of the record store.
   void SetStorePath(const std::string& path);
