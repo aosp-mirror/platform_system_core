@@ -18,7 +18,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <fstream>
 #include <libgen.h>
 #include <paths.h>
 #include <signal.h>
@@ -290,114 +289,6 @@ ret:
     return result;
 }
 
-static void security_failure() {
-    ERROR("Security failure; rebooting into recovery mode...\n");
-    android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
-    while (true) { pause(); }  // never reached
-}
-
-#define MMAP_RND_PATH "/proc/sys/vm/mmap_rnd_bits"
-#define MMAP_RND_COMPAT_PATH "/proc/sys/vm/mmap_rnd_compat_bits"
-
-/* __attribute__((unused)) due to lack of mips support: see mips block
- * in set_mmap_rnd_bits_action */
-static bool __attribute__((unused)) set_mmap_rnd_bits_min(int start, int min, bool compat) {
-    std::string path;
-    if (compat) {
-        path = MMAP_RND_COMPAT_PATH;
-    } else {
-        path = MMAP_RND_PATH;
-    }
-    std::ifstream inf(path, std::fstream::in);
-    if (!inf) {
-        ERROR("Cannot open for reading: %s!\n", path.c_str());
-        return false;
-    }
-    while (start >= min) {
-        // try to write out new value
-        std::string str_val = std::to_string(start);
-        std::ofstream of(path, std::fstream::out);
-        if (!of) {
-            ERROR("Cannot open for writing: %s!\n", path.c_str());
-            return false;
-        }
-        of << str_val << std::endl;
-        of.close();
-
-        // check to make sure it was recorded
-        inf.seekg(0);
-        std::string str_rec;
-        inf >> str_rec;
-        if (str_val.compare(str_rec) == 0) {
-            break;
-        }
-        start--;
-    }
-    inf.close();
-    if (start < min) {
-        ERROR("Unable to set minimum required entropy %d in %s!\n",
-              min, path.c_str());
-        return false;
-    }
-    return true;
-}
-
-/*
- * Set /proc/sys/vm/mmap_rnd_bits and potentially
- * /proc/sys/vm/mmap_rnd_compat_bits to the maximum supported values.
- * Returns -1 if unable to set these to an acceptable value.
- *
- * To support this sysctl, the following upstream commits are needed:
- *
- * d07e22597d1d mm: mmap: add new /proc tunable for mmap_base ASLR
- * e0c25d958f78 arm: mm: support ARCH_MMAP_RND_BITS
- * 8f0d3aa9de57 arm64: mm: support ARCH_MMAP_RND_BITS
- * 9e08f57d684a x86: mm: support ARCH_MMAP_RND_BITS
- * ec9ee4acd97c drivers: char: random: add get_random_long()
- * 5ef11c35ce86 mm: ASLR: use get_random_long()
- */
-static int set_mmap_rnd_bits_action(const std::vector<std::string>& args)
-{
-    int ret = -1;
-
-    /* values are arch-dependent */
-#if defined(__aarch64__)
-    /* arm64 supports 18 - 33 bits depending on pagesize and VA_SIZE */
-    if (set_mmap_rnd_bits_min(33, 24, false)
-            && set_mmap_rnd_bits_min(16, 16, true)) {
-        ret = 0;
-    }
-#elif defined(__x86_64__)
-    /* x86_64 supports 28 - 32 bits */
-    if (set_mmap_rnd_bits_min(32, 32, false)
-            && set_mmap_rnd_bits_min(16, 16, true)) {
-        ret = 0;
-    }
-#elif defined(__arm__) || defined(__i386__)
-    /* check to see if we're running on 64-bit kernel */
-    bool h64 = !access(MMAP_RND_COMPAT_PATH, F_OK);
-    /* supported 32-bit architecture must have 16 bits set */
-    if (set_mmap_rnd_bits_min(16, 16, h64)) {
-        ret = 0;
-    }
-#elif defined(__mips__) || defined(__mips64__)
-    // TODO: add mips support b/27788820
-    ret = 0;
-#else
-    ERROR("Unknown architecture\n");
-#endif
-
-#ifdef __BRILLO__
-    // TODO: b/27794137
-    ret = 0;
-#endif
-    if (ret == -1) {
-        ERROR("Unable to set adequate mmap entropy value!\n");
-        security_failure();
-    }
-    return ret;
-}
-
 static int keychord_init_action(const std::vector<std::string>& args)
 {
     keychord_init();
@@ -554,6 +445,12 @@ static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_
     return 0;
 }
 
+static void security_failure() {
+    ERROR("Security failure; rebooting into recovery mode...\n");
+    android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
+    while (true) { pause(); }  // never reached
+}
+
 static void selinux_initialize(bool in_kernel_domain) {
     Timer t;
 
@@ -703,7 +600,6 @@ int main(int argc, char** argv) {
     am.QueueBuiltinAction(wait_for_coldboot_done_action, "wait_for_coldboot_done");
     // ... so that we can start queuing up actions that require stuff from /dev.
     am.QueueBuiltinAction(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
-    am.QueueBuiltinAction(set_mmap_rnd_bits_action, "set_mmap_rnd_bits");
     am.QueueBuiltinAction(keychord_init_action, "keychord_init");
     am.QueueBuiltinAction(console_init_action, "console_init");
 
