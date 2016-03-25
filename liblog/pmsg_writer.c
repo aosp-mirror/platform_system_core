@@ -73,6 +73,11 @@ static int pmsgAvailable(log_id_t logId)
     if (logId > LOG_ID_SECURITY) {
         return -EINVAL;
     }
+    if ((logId != LOG_ID_SECURITY) &&
+            (logId != LOG_ID_EVENTS) &&
+            !__android_log_is_debuggable()) {
+        return -EINVAL;
+    }
     if (pmsgLoggerWrite.context.fd < 0) {
         if (access("/dev/pmsg0", W_OK) == 0) {
             return 0;
@@ -80,6 +85,14 @@ static int pmsgAvailable(log_id_t logId)
         return -EBADF;
     }
     return 1;
+}
+
+/*
+ * Extract a 4-byte value from a byte stream.
+ */
+static inline uint32_t get4LE(const uint8_t* src)
+{
+    return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
 }
 
 static int pmsgWrite(log_id_t logId, struct timespec *ts,
@@ -91,6 +104,16 @@ static int pmsgWrite(log_id_t logId, struct timespec *ts,
     android_pmsg_log_header_t pmsgHeader;
     size_t i, payloadSize;
     ssize_t ret;
+
+    if ((logId == LOG_ID_EVENTS) && !__android_log_is_debuggable()) {
+        if (vec[0].iov_len < 4) {
+            return -EINVAL;
+        }
+
+        if (SNET_EVENT_LOG_TAG != get4LE(vec[0].iov_base)) {
+            return -EPERM;
+        }
+    }
 
     if (pmsgLoggerWrite.context.fd < 0) {
         return -EBADF;
