@@ -613,7 +613,6 @@ static void transport_unref(atransport* t) {
     t->ref_count--;
     if (t->ref_count == 0) {
         D("transport: %s unref (kicking and closing)", t->serial);
-        t->Kick();
         t->close(t);
         remove_transport(t);
     } else {
