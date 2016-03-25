@@ -415,6 +415,7 @@ static bool perform_dump(const debugger_request_t& request, int fd, int tombston
 #ifdef SIGSTKFLT
       case SIGSTKFLT:
 #endif
+      case SIGSYS:
       case SIGTRAP:
         ALOGV("stopped -- fatal signal\n");
         *crash_signal = signal;
