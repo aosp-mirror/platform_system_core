@@ -155,7 +155,6 @@ static inline uid_t __android_log_uid() { return getuid(); }
 LIBLOG_HIDDEN void __android_log_lock();
 LIBLOG_HIDDEN int __android_log_trylock();
 LIBLOG_HIDDEN void __android_log_unlock();
-LIBLOG_HIDDEN int __android_log_is_debuggable();
 
 __END_DECLS
 
