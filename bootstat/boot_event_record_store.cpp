@@ -55,8 +55,11 @@ bool ParseRecordEventTime(const std::string& path, int32_t* uptime) {
     return false;
   }
 
-  int32_t value = std::stoi(content);
-  bootstat::LogHistogram("bootstat_mtime_matches_content", value == *uptime);
+  // Ignore existing bootstat records (which do not contain file content).
+  if (!content.empty()) {
+    int32_t value = std::stoi(content);
+    bootstat::LogHistogram("bootstat_mtime_matches_content", value == *uptime);
+  }
 
   return true;
 }
