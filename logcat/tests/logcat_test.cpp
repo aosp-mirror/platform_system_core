@@ -953,3 +953,67 @@ TEST(logcat, white_black_adjust) {
     free(list);
     list = NULL;
 }
+
+TEST(logcat, regex) {
+    FILE *fp;
+    int count = 0;
+
+    char buffer[5120];
+
+    snprintf(buffer, sizeof(buffer), "logcat --pid %d -d -e logcat_test_a+b", getpid());
+
+    LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_WARN, "logcat_test", "logcat_test_ab"));
+    LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_WARN, "logcat_test", "logcat_test_b"));
+    LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_WARN, "logcat_test", "logcat_test_aaaab"));
+    LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_WARN, "logcat_test", "logcat_test_aaaa"));
+
+    // Let the logs settle
+    sleep(1);
+
+    ASSERT_TRUE(NULL != (fp = popen(buffer, "r")));
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        if (!strncmp(begin, buffer, sizeof(begin) - 1)) {
+            continue;
+        }
+
+        EXPECT_TRUE(strstr(buffer, "logcat_test_") != NULL);
+
+        count++;
+    }
+
+    pclose(fp);
+
+    ASSERT_EQ(2, count);
+}
+
+TEST(logcat, maxcount) {
+    FILE *fp;
+    int count = 0;
+
+    char buffer[5120];
+
+    snprintf(buffer, sizeof(buffer), "logcat --pid %d -d --max-count 3", getpid());
+
+    LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_WARN, "logcat_test", "logcat_test"));
+    LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_WARN, "logcat_test", "logcat_test"));
+    LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_WARN, "logcat_test", "logcat_test"));
+    LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_WARN, "logcat_test", "logcat_test"));
+
+    // Let the logs settle
+    sleep(1);
+
+    ASSERT_TRUE(NULL != (fp = popen(buffer, "r")));
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        if (!strncmp(begin, buffer, sizeof(begin) - 1)) {
+            continue;
+        }
+
+        count++;
+    }
+
+    pclose(fp);
+
+    ASSERT_EQ(3, count);
+}

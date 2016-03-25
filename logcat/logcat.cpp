@@ -37,6 +37,8 @@
 #include <log/logprint.h>
 #include <system/thread_defs.h>
 
+#include <pcrecpp.h>
+
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
 static AndroidLogFormat * g_logformat;
@@ -76,6 +78,10 @@ static int g_outFD = -1;
 static size_t g_outByteCount = 0;
 static int g_printBinary = 0;
 static int g_devCount = 0;                              // >1 means multiple
+static pcrecpp::RE* g_regex;
+// 0 means "infinite"
+static size_t g_maxCount = 0;
+static size_t g_printCount = 0;
 
 __noreturn static void logcat_panic(bool showHelp, const char *fmt, ...) __printflike(2,3);
 
@@ -143,6 +149,21 @@ void printBinary(struct log_msg *buf)
     TEMP_FAILURE_RETRY(write(g_outFD, buf, size));
 }
 
+static bool regexOk(const AndroidLogEntry& entry, log_id_t id)
+{
+    if (! g_regex) {
+        return true;
+    }
+
+    if (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) {
+        return false;
+    }
+
+    std::string messageString(entry.message, entry.messageLen);
+
+    return g_regex->PartialMatch(messageString);
+}
+
 static void processBuffer(log_device_t* dev, struct log_msg *buf)
 {
     int bytesWritten = 0;
@@ -171,8 +192,11 @@ static void processBuffer(log_device_t* dev, struct log_msg *buf)
         goto error;
     }
 
-    if (android_log_shouldPrintLine(g_logformat, entry.tag, entry.priority)) {
+    if (android_log_shouldPrintLine(g_logformat, entry.tag, entry.priority) &&
+        regexOk(entry, buf->id())) {
         bytesWritten = android_log_printLogLine(g_logformat, g_outFD, &entry);
+
+        g_printCount++;
 
         if (bytesWritten < 0) {
             logcat_panic(false, "output error");
@@ -271,6 +295,10 @@ static void show_help(const char *cmd)
                     "  -c              clear (flush) the entire log and exit\n"
                     "  --clear\n"
                     "  -d              dump the log and then exit (don't block)\n"
+                    "  -e <expr>       only print lines where the log message matches <expr>\n"
+                    "  --regex <expr>  where <expr> is a regular expression\n"
+                    "  -m <count>      quit after printing <count> lines. This is meant to be\n"
+                    "  --max-count=<count> paired with --regex, but will work on its own.\n"
                     "  -t <count>      print only the most recent <count> lines (implies -d)\n"
                     "  -t '<time>'     print most recent lines since specified time (implies -d)\n"
                     "  -T <count>      print only the most recent <count> lines (does not imply -d)\n"
@@ -521,6 +549,7 @@ int main(int argc, char **argv)
     size_t tail_lines = 0;
     log_time tail_time(log_time::EPOCH);
     size_t pid = 0;
+    bool got_t = false;
 
     signal(SIGPIPE, exit);
 
@@ -547,7 +576,9 @@ int main(int argc, char **argv)
           { "format",        required_argument, NULL,   'v' },
           { "last",          no_argument,       NULL,   'L' },
           { pid_str,         required_argument, NULL,   0 },
+          { "max-count",     required_argument, NULL,   'm' },
           { "prune",         optional_argument, NULL,   'p' },
+          { "regex",         required_argument, NULL,   'e' },
           { "rotate_count",  required_argument, NULL,   'n' },
           { "rotate_kbytes", required_argument, NULL,   'r' },
           { "statistics",    no_argument,       NULL,   'S' },
@@ -556,7 +587,7 @@ int main(int argc, char **argv)
           { NULL,            0,                 NULL,   0 }
         };
 
-        ret = getopt_long(argc, argv, ":cdDLt:T:gG:sQf:r:n:v:b:BSpP:",
+        ret = getopt_long(argc, argv, ":cdDLt:T:gG:sQf:r:n:v:b:BSpP:m:e:",
                           long_options, &option_index);
 
         if (ret < 0) {
@@ -613,6 +644,7 @@ int main(int argc, char **argv)
             break;
 
             case 't':
+                got_t = true;
                 mode |= ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK;
                 /* FALLTHRU */
             case 'T':
@@ -642,6 +674,19 @@ int main(int argc, char **argv)
 
             case 'D':
                 printDividers = true;
+            break;
+
+            case 'e':
+                g_regex = new pcrecpp::RE(optarg);
+            break;
+
+            case 'm': {
+                char *end = NULL;
+                if (!getSizeTArg(optarg, &g_maxCount)) {
+                    logcat_panic(false, "-%c \"%s\" isn't an "
+                                 "integer greater than zero\n", ret, optarg);
+                }
+            }
             break;
 
             case 'g':
@@ -920,6 +965,10 @@ int main(int argc, char **argv)
         }
     }
 
+    if (g_maxCount && got_t) {
+        logcat_panic(true, "Cannot use -m (--max-count) and -t together");
+    }
+
     if (!devices) {
         dev = devices = new log_device_t("main", false);
         g_devCount = 1;
@@ -1135,7 +1184,8 @@ int main(int argc, char **argv)
 
     dev = NULL;
     log_device_t unexpected("unexpected", false);
-    while (1) {
+
+    while (!g_maxCount || g_printCount < g_maxCount) {
         struct log_msg log_msg;
         log_device_t* d;
         int ret = android_logger_list_read(logger_list, &log_msg);
