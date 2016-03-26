@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef BASE_PARSEINT_H
-#define BASE_PARSEINT_H
+#ifndef ANDROID_BASE_PARSEINT_H
+#define ANDROID_BASE_PARSEINT_H
 
 #include <errno.h>
 #include <stdlib.h>
@@ -70,4 +70,4 @@ bool ParseInt(const char* s, T* out,
 }  // namespace base
 }  // namespace android
 
-#endif  // BASE_PARSEINT_H
+#endif  // ANDROID_BASE_PARSEINT_H
