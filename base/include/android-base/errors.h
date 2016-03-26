@@ -27,8 +27,8 @@
 // special handling to get the error string. Refer to Microsoft documentation
 // to determine which error code to check for each function.
 
-#ifndef BASE_ERRORS_H
-#define BASE_ERRORS_H
+#ifndef ANDROID_BASE_ERRORS_H
+#define ANDROID_BASE_ERRORS_H
 
 #include <string>
 
@@ -43,4 +43,4 @@ std::string SystemErrorCodeToString(int error_code);
 }  // namespace base
 }  // namespace android
 
-#endif  // BASE_ERRORS_H
+#endif  // ANDROID_BASE_ERRORS_H

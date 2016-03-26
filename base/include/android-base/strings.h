@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef BASE_STRINGS_H
-#define BASE_STRINGS_H
+#ifndef ANDROID_BASE_STRINGS_H
+#define ANDROID_BASE_STRINGS_H
 
 #include <sstream>
 #include <string>
@@ -65,4 +65,4 @@ bool EndsWith(const std::string& s, const char* suffix);
 }  // namespace base
 }  // namespace android
 
-#endif  // BASE_STRINGS_H
+#endif  // ANDROID_BASE_STRINGS_H
