@@ -118,7 +118,7 @@ void connect_to_smartsocket(asocket *s);
 namespace internal {
 
 #if ADB_HOST
-char* skip_host_serial(const char* service);
+char* skip_host_serial(char* service);
 #endif
 
 }  // namespace internal
