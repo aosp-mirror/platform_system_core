@@ -120,6 +120,7 @@ debuggerd_shared_libraries := \
     libbacktrace \
     libbase \
     libcutils \
+    liblog
 
 debuggerd_c_includes := \
     $(LOCAL_PATH)/test \
