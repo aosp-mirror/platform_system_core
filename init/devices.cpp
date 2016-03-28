@@ -413,7 +413,7 @@ static void parse_event(const char *msg, struct uevent *uevent)
 static char **get_character_device_symlinks(struct uevent *uevent)
 {
     const char *parent;
-    char *slash;
+    const char *slash;
     char **links;
     int link_num = 0;
     int width;
@@ -467,7 +467,7 @@ static char **get_block_device_symlinks(struct uevent *uevent)
 {
     const char *device;
     struct platform_node *pdev;
-    char *slash;
+    const char *slash;
     const char *type;
     char buf[256];
     char link_path[256];
