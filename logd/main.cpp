@@ -44,6 +44,7 @@
 #include <log/event_tag_map.h>
 #include <packagelistparser/packagelistparser.h>
 #include <private/android_filesystem_config.h>
+#include <private/android_logger.h>
 #include <scoped_minijail.h>
 #include <utils/threads.h>
 
@@ -174,11 +175,8 @@ bool property_get_bool(const char *key, int flag) {
                                  BOOL_DEFAULT_FALSE)) {
         return false;
     }
-    if (flag & BOOL_DEFAULT_FLAG_ENG) {
-        property_get("ro.debuggable", property, "");
-        if (strcmp(property, "1")) {
-            return false;
-        }
+    if ((flag & BOOL_DEFAULT_FLAG_ENG) && !__android_log_is_debuggable()) {
+        return false;
     }
 
     return (flag & BOOL_DEFAULT_FLAG_TRUE_FALSE) != BOOL_DEFAULT_FALSE;
