@@ -355,7 +355,7 @@ void make_link_init(const char *oldpath, const char *newpath)
 {
     int ret;
     char buf[256];
-    char *slash;
+    const char *slash;
     int width;
 
     slash = strrchr(newpath, '/');
