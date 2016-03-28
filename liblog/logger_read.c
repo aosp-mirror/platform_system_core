@@ -26,6 +26,7 @@
 #include <cutils/list.h>
 #include <log/log.h>
 #include <log/logger.h>
+#include <private/android_filesystem_config.h>
 
 #include "config_read.h"
 #include "log_portability.h"
@@ -91,6 +92,10 @@ static int init_transport_context(struct android_log_logger_list *logger_list)
         logger_for_each(logger, logger_list) {
             log_id_t logId = logger->logId;
 
+            if ((logId == LOG_ID_SECURITY) &&
+                    (__android_log_uid() != AID_SYSTEM)) {
+                continue;
+            }
             if (transport->read &&
                     (!transport->available ||
                         (transport->available(logId) >= 0))) {
