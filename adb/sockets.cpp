@@ -32,6 +32,7 @@
 
 #if !ADB_HOST
 #include <android-base/properties.h>
+#include <private/android_logger.h>
 #endif
 
 #include "adb.h"
@@ -416,12 +417,7 @@ asocket* create_local_service_socket(const char* name, const atransport* transpo
     D("LS(%d): bound to '%s' via %d", s->id, name, fd);
 
 #if !ADB_HOST
-    bool debuggable = false;
-    if (!strncmp(name, "root:", 5)) {
-        debuggable = android::base::GetBoolProperty("ro.debuggable", false);
-    }
-
-    if ((!strncmp(name, "root:", 5) && getuid() != 0 && debuggable) ||
+    if ((!strncmp(name, "root:", 5) && getuid() != 0 && __android_log_is_debuggable()) ||
         (!strncmp(name, "unroot:", 7) && getuid() == 0) ||
         !strncmp(name, "usb:", 4) ||
         !strncmp(name, "tcpip:", 6)) {

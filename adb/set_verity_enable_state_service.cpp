@@ -26,6 +26,7 @@
 
 #include "android-base/properties.h"
 #include "android-base/stringprintf.h"
+#include <private/android_logger.h>
 
 #include "adb.h"
 #include "adb_io.h"
@@ -102,8 +103,7 @@ void set_verity_enabled_state_service(int fd, void* cookie) {
         WriteFdFmt(fd, "verity not enabled - ENG build\n");
         return;
     }
-
-    if (!android::base::GetBoolProperty("ro.debuggable", false)) {
+    if (!__android_log_is_debuggable()) {
         WriteFdFmt(fd, "verity cannot be disabled/enabled - USER build\n");
         return;
     }
