@@ -49,20 +49,85 @@ static enum {
     kLogUninitialized, kLogNotAvailable, kLogAvailable
 } g_log_status = kLogUninitialized;
 
+static int check_log_uid_permissions()
+{
+#if defined(__BIONIC__)
+    uid_t uid = __android_log_uid();
+
+    /* Matches clientHasLogCredentials() in logd */
+    if ((uid != AID_SYSTEM) && (uid != AID_ROOT) && (uid != AID_LOG)) {
+        uid = geteuid();
+        if ((uid != AID_SYSTEM) && (uid != AID_ROOT) && (uid != AID_LOG)) {
+            gid_t gid = getgid();
+            if ((gid != AID_SYSTEM) &&
+                    (gid != AID_ROOT) &&
+                    (gid != AID_LOG)) {
+                gid = getegid();
+                if ((gid != AID_SYSTEM) &&
+                        (gid != AID_ROOT) &&
+                        (gid != AID_LOG)) {
+                    int num_groups;
+                    gid_t *groups;
+
+                    num_groups = getgroups(0, NULL);
+                    if (num_groups <= 0) {
+                        return -EPERM;
+                    }
+                    groups = calloc(num_groups, sizeof(gid_t));
+                    if (!groups) {
+                        return -ENOMEM;
+                    }
+                    num_groups = getgroups(num_groups, groups);
+                    while (num_groups > 0) {
+                        if (groups[num_groups - 1] == AID_LOG) {
+                            break;
+                        }
+                        --num_groups;
+                    }
+                    free(groups);
+                    if (num_groups <= 0) {
+                        return -EPERM;
+                    }
+                }
+            }
+        }
+    }
+#endif
+    return 0;
+}
+
+static void __android_log_cache_available(
+        struct android_log_transport_write *node)
+{
+    size_t i;
+
+    if (node->logMask) {
+        return;
+    }
+
+    for (i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
+        if (node->write &&
+                (i != LOG_ID_KERNEL) &&
+                ((i != LOG_ID_SECURITY) ||
+                    (check_log_uid_permissions() == 0)) &&
+                (!node->available || ((*node->available)(i) >= 0))) {
+            node->logMask |= 1 << i;
+        }
+    }
+}
+
 LIBLOG_ABI_PUBLIC int __android_log_dev_available()
 {
     struct android_log_transport_write *node;
-    size_t i;
 
     if (list_empty(&__android_log_transport_write)) {
         return kLogUninitialized;
     }
-    for (i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
-        write_transport_for_each(node, &__android_log_transport_write) {
-            if (node->write &&
-                    (!node->available || ((*node->available)(i) >= 0))) {
-                return kLogAvailable;
-            }
+
+    write_transport_for_each(node, &__android_log_transport_write) {
+        __android_log_cache_available(node);
+        if (node->logMask) {
+            return kLogAvailable;
         }
     }
     return kLogNotAvailable;
@@ -77,6 +142,11 @@ static int __write_to_log_initialize()
 
     __android_log_config_write();
     write_transport_for_each_safe(transport, n, &__android_log_transport_write) {
+        __android_log_cache_available(transport);
+        if (!transport->logMask) {
+            list_remove(&transport->node);
+            continue;
+        }
         if (!transport->open || ((*transport->open)() < 0)) {
             if (transport->close) {
                 (*transport->close)();
@@ -87,6 +157,11 @@ static int __write_to_log_initialize()
         ++ret;
     }
     write_transport_for_each_safe(transport, n, &__android_log_persist_write) {
+        __android_log_cache_available(transport);
+        if (!transport->logMask) {
+            list_remove(&transport->node);
+            continue;
+        }
         if (!transport->open || ((*transport->open)() < 0)) {
             if (transport->close) {
                 (*transport->close)();
@@ -127,50 +202,13 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
 
 #if defined(__BIONIC__)
     if (log_id == LOG_ID_SECURITY) {
-        uid_t uid;
-
         if (vec[0].iov_len < 4) {
             return -EINVAL;
         }
 
-        uid = __android_log_uid();
-        /* Matches clientHasLogCredentials() in logd */
-        if ((uid != AID_SYSTEM) && (uid != AID_ROOT) && (uid != AID_LOG)) {
-            uid = geteuid();
-            if ((uid != AID_SYSTEM) && (uid != AID_ROOT) && (uid != AID_LOG)) {
-                gid_t gid = getgid();
-                if ((gid != AID_SYSTEM) &&
-                        (gid != AID_ROOT) &&
-                        (gid != AID_LOG)) {
-                    gid = getegid();
-                    if ((gid != AID_SYSTEM) &&
-                            (gid != AID_ROOT) &&
-                            (gid != AID_LOG)) {
-                        int num_groups;
-                        gid_t *groups;
-
-                        num_groups = getgroups(0, NULL);
-                        if (num_groups <= 0) {
-                            return -EPERM;
-                        }
-                        groups = calloc(num_groups, sizeof(gid_t));
-                        if (!groups) {
-                            return -ENOMEM;
-                        }
-                        num_groups = getgroups(num_groups, groups);
-                        while (num_groups > 0) {
-                            if (groups[num_groups - 1] == AID_LOG) {
-                                break;
-                            }
-                            --num_groups;
-                        }
-                        free(groups);
-                        if (num_groups <= 0) {
-                            return -EPERM;
-                        }
-                    }
-                }
-            }
+        ret = check_log_uid_permissions();
+        if (ret < 0) {
+            return ret;
         }
         if (!__android_log_security()) {
             /* If only we could reset downstream logd counter */
@@ -262,8 +300,9 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
 #endif
 
     ret = 0;
+    i = 1 << log_id;
     write_transport_for_each(node, &__android_log_transport_write) {
-        if (node->write) {
+        if (node->logMask & i) {
             ssize_t retval;
             retval = (*node->write)(log_id, &ts, vec, nr);
             if (ret >= 0) {
@@ -273,7 +312,7 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
     }
 
     write_transport_for_each(node, &__android_log_persist_write) {
-        if (node->write) {
+        if (node->logMask & i) {
             (void)(*node->write)(log_id, &ts, vec, nr);
         }
     }
@@ -343,12 +382,12 @@ LIBLOG_ABI_PUBLIC int __android_log_buf_write(int bufID, int prio,
     }
 #endif
 
-    vec[0].iov_base   = (unsigned char *) &prio;
-    vec[0].iov_len    = 1;
-    vec[1].iov_base   = (void *) tag;
-    vec[1].iov_len    = strlen(tag) + 1;
-    vec[2].iov_base   = (void *) msg;
-    vec[2].iov_len    = strlen(msg) + 1;
+    vec[0].iov_base = (unsigned char *)&prio;
+    vec[0].iov_len  = 1;
+    vec[1].iov_base = (void *)tag;
+    vec[1].iov_len  = strlen(tag) + 1;
+    vec[2].iov_base = (void *)msg;
+    vec[2].iov_len  = strlen(msg) + 1;
 
     return write_to_log(bufID, vec, 3);
 }
