@@ -30,11 +30,10 @@
 bool ProcessMappings(pid_t pid, allocator::vector<Mapping>& mappings) {
   char map_buffer[1024];
   snprintf(map_buffer, sizeof(map_buffer), "/proc/%d/maps", pid);
-  int fd = open(map_buffer, O_RDONLY);
-  if (fd < 0) {
+  android::base::unique_fd fd(open(map_buffer, O_RDONLY));
+  if (fd == -1) {
     return false;
   }
-  android::base::unique_fd fd_guard{fd};
 
   LineBuffer line_buf(fd, map_buffer, sizeof(map_buffer));
   char* line;

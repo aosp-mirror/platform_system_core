@@ -28,8 +28,6 @@
 
 #include <gtest/gtest.h>
 
-#include <android-base/unique_fd.h>
-
 #include "Allocator.h"
 #include "ScopedDisableMalloc.h"
 #include "ScopedPipe.h"
