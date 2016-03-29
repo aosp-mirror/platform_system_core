@@ -40,6 +40,7 @@ union android_log_context {
 struct android_log_transport_write {
   struct listnode node;
   const char *name;
+  unsigned logMask; /* cache of available success */
   union android_log_context context; /* Initialized by static allocation */
 
   int (*available)(log_id_t logId);

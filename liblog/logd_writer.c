@@ -105,12 +105,6 @@ static int logdAvailable(log_id_t logId)
     if (logId > LOG_ID_SECURITY) {
         return -EINVAL;
     }
-    if (logId == LOG_ID_SECURITY) {
-        uid_t uid = __android_log_uid();
-        if ((uid != AID_LOG) && (uid != AID_ROOT) && (uid != AID_SYSTEM)) {
-            return -EPERM;
-        }
-    }
     if (logdLoggerWrite.context.sock < 0) {
         if (access("/dev/socket/logdw", W_OK) == 0) {
             return 0;
