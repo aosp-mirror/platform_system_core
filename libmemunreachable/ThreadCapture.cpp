@@ -108,12 +108,11 @@ bool ThreadCaptureImpl::ListThreads(TidList& tids) {
   strlcat(path, pid_str, sizeof(path));
   strlcat(path, "/task", sizeof(path));
 
-  int fd = open(path, O_CLOEXEC | O_DIRECTORY | O_RDONLY);
-  if (fd < 0) {
+  android::base::unique_fd fd(open(path, O_CLOEXEC | O_DIRECTORY | O_RDONLY));
+  if (fd == -1) {
     ALOGE("failed to open %s: %s", path, strerror(errno));
     return false;
   }
-  android::base::unique_fd fd_guard{fd};
 
   struct linux_dirent64 {
     uint64_t  d_ino;
@@ -125,7 +124,7 @@ bool ThreadCaptureImpl::ListThreads(TidList& tids) {
   char dirent_buf[4096];
   ssize_t nread;
   do {
-    nread = syscall(SYS_getdents64, fd, dirent_buf, sizeof(dirent_buf));
+    nread = syscall(SYS_getdents64, fd.get(), dirent_buf, sizeof(dirent_buf));
     if (nread < 0) {
       ALOGE("failed to get directory entries from %s: %s", path, strerror(errno));
       return false;

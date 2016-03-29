@@ -41,7 +41,7 @@ namespace {
 // the value of the record.
 bool CreateEmptyBootEventRecord(const std::string& record_path, int32_t value) {
   android::base::unique_fd record_fd(creat(record_path.c_str(), S_IRUSR | S_IWUSR));
-  if (record_fd.get() == -1) {
+  if (record_fd == -1) {
     return false;
   }
 
@@ -49,7 +49,7 @@ bool CreateEmptyBootEventRecord(const std::string& record_path, int32_t value) {
   // ensure the validity of the file mtime value, i.e., to check that the record
   // file mtime values are not changed once set.
   // TODO(jhawkins): Remove this block.
-  if (!android::base::WriteStringToFd(std::to_string(value), record_fd.get())) {
+  if (!android::base::WriteStringToFd(std::to_string(value), record_fd)) {
     return false;
   }
 

@@ -64,6 +64,7 @@ class unique_fd final {
   }
 
   int get() const { return value_; }
+  operator int() const { return get(); }
 
   int release() __attribute__((warn_unused_result)) {
     int ret = value_;
