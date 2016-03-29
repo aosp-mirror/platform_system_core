@@ -21,6 +21,7 @@
 #ifdef __ANDROID__
 #include <android/dlext.h>
 #include "cutils/properties.h"
+#define LOG_TAG "libnativeloader"
 #include "log/log.h"
 #endif
 
@@ -38,6 +39,11 @@ namespace android {
 #if defined(__ANDROID__)
 static constexpr const char* kPublicNativeLibrariesConfig = "/system/etc/public.libraries.txt";
 
+static bool namespace_workaround_enabled(int32_t target_sdk_version) {
+  // target_sdk_version = 0 is another way of saying "target current sdk level"
+  return target_sdk_version != 0 && target_sdk_version <= 23;
+}
+
 class LibraryNamespaces {
  public:
   LibraryNamespaces() : initialized_(false) { }
@@ -54,6 +60,14 @@ class LibraryNamespaces {
     if (java_permitted_path != nullptr) {
       ScopedUtfChars path(env, java_permitted_path);
       permitted_path = path.c_str();
+    } else {
+      // (http://b/27588281) This is a workaround for apps using custom
+      // classloaders and calling System.load() with an absolute path which
+      // is outside of the classloader library search path.
+      //
+      // This part effectively allows such a classloader to access anything
+      // under /data
+      permitted_path = "/data";
     }
 
     if (!initialized_ && !InitPublicNamespace(library_path.c_str(), target_sdk_version)) {
@@ -74,7 +88,7 @@ class LibraryNamespaces {
                                   nullptr,
                                   library_path.c_str(),
                                   namespace_type,
-                                  java_permitted_path != nullptr ?
+                                  !permitted_path.empty() ?
                                       permitted_path.c_str() :
                                       nullptr);
 
@@ -128,7 +142,7 @@ class LibraryNamespaces {
 
     // TODO (dimitry): This is a workaround for http://b/26436837
     // will be removed before the release.
-    if (target_sdk_version <= 23) {
+    if (namespace_workaround_enabled(target_sdk_version)) {
       // check if libart.so is loaded.
       void* handle = dlopen("libart.so", RTLD_NOW | RTLD_NOLOAD);
       if (handle != nullptr) {
