@@ -100,9 +100,9 @@ class ErrnoRestorer {
     errno = saved_errno_;
   }
 
-  // Allow this object to evaluate to false which is useful in macros.
+  // Allow this object to be used as part of && operation.
   operator bool() const {
-    return false;
+    return true;
   }
 
  private:
@@ -123,13 +123,11 @@ class ErrnoRestorer {
 // else statement after LOG() macro, it won't bind to the if statement in the macro.
 // do-while(0) statement doesn't work here. Because we need to support << operator
 // following the macro, like "LOG(DEBUG) << xxx;".
-#define LOG_TO(dest, severity)                                                      \
-  if (LIKELY(::android::base::severity < ::android::base::GetMinimumLogSeverity())) \
-    ;                                                                               \
-  else                                                                              \
-    ::android::base::ErrnoRestorer() ? *(std::ostream*)nullptr :                    \
-      ::android::base::LogMessage(__FILE__, __LINE__,                               \
-          ::android::base::dest,                                                    \
+#define LOG_TO(dest, severity)                                                        \
+  UNLIKELY(::android::base::severity >= ::android::base::GetMinimumLogSeverity()) &&  \
+    ::android::base::ErrnoRestorer() &&                                               \
+      ::android::base::LogMessage(__FILE__, __LINE__,                                 \
+          ::android::base::dest,                                                      \
           ::android::base::severity, -1).stream()
 
 // A variant of LOG that also logs the current errno value. To be used when
@@ -137,13 +135,11 @@ class ErrnoRestorer {
 #define PLOG(severity) PLOG_TO(DEFAULT, severity)
 
 // Behaves like PLOG, but logs to the specified log ID.
-#define PLOG_TO(dest, severity)                                                     \
-  if (LIKELY(::android::base::severity < ::android::base::GetMinimumLogSeverity())) \
-    ;                                                                               \
-  else                                                                              \
-    ::android::base::ErrnoRestorer() ? *(std::ostream*)nullptr :                    \
-      ::android::base::LogMessage(__FILE__, __LINE__,                               \
-          ::android::base::dest,                                                    \
+#define PLOG_TO(dest, severity)                                                      \
+  UNLIKELY(::android::base::severity >= ::android::base::GetMinimumLogSeverity()) && \
+    ::android::base::ErrnoRestorer() &&                                              \
+      ::android::base::LogMessage(__FILE__, __LINE__,                                \
+          ::android::base::dest,                                                     \
           ::android::base::severity, errno).stream()
 
 // Marker that code is yet to be implemented.
@@ -157,9 +153,7 @@ class ErrnoRestorer {
 //     CHECK(false == true) results in a log message of
 //       "Check failed: false == true".
 #define CHECK(x)                                                              \
-  if (LIKELY((x)))                                                            \
-    ;                                                                         \
-  else                                                                        \
+  LIKELY((x)) ||                                                              \
     ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::DEFAULT, \
                                 ::android::base::FATAL, -1).stream()          \
         << "Check failed: " #x << " "
