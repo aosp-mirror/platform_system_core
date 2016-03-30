@@ -69,19 +69,19 @@ namespace android {
 
 /* Global Variables */
 
-static const char * g_outputFileName = NULL;
+static const char * g_outputFileName;
 // 0 means "no log rotation"
-static size_t g_logRotateSizeKBytes = 0;
+static size_t g_logRotateSizeKBytes;
 // 0 means "unbounded"
 static size_t g_maxRotatedLogs = DEFAULT_MAX_ROTATED_LOGS;
 static int g_outFD = -1;
-static size_t g_outByteCount = 0;
-static int g_printBinary = 0;
-static int g_devCount = 0;                              // >1 means multiple
+static size_t g_outByteCount;
+static int g_printBinary;
+static int g_devCount;                              // >1 means multiple
 static pcrecpp::RE* g_regex;
 // 0 means "infinite"
-static size_t g_maxCount = 0;
-static size_t g_printCount = 0;
+static size_t g_maxCount;
+static size_t g_printCount;
 
 __noreturn static void logcat_panic(bool showHelp, const char *fmt, ...) __printflike(2,3);
 
