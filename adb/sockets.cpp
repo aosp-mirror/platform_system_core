@@ -634,7 +634,7 @@ namespace internal {
 // Where <port> must be a base-10 number and <prefix> may be any of {usb,product,model,device}.
 //
 // The returned pointer will point to the ':' just before <command>, or nullptr if not found.
-char* skip_host_serial(const char* service) {
+char* skip_host_serial(char* service) {
     static const std::vector<std::string>& prefixes =
         *(new std::vector<std::string>{"usb:", "product:", "model:", "device:"});
 
