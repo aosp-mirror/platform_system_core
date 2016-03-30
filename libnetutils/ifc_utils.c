@@ -259,10 +259,12 @@ int ifc_act_on_address(int action, const char *name, const char *address,
     struct {
         struct nlmsghdr n;
         struct ifaddrmsg r;
-        // Allow for IPv6 address, headers, and padding.
+        // Allow for IPv6 address, headers, IPv4 broadcast addr and padding.
         char attrbuf[NLMSG_ALIGN(sizeof(struct nlmsghdr)) +
                      NLMSG_ALIGN(sizeof(struct rtattr)) +
-                     NLMSG_ALIGN(INET6_ADDRLEN)];
+                     NLMSG_ALIGN(INET6_ADDRLEN) +
+                     NLMSG_ALIGN(sizeof(struct rtattr)) +
+                     NLMSG_ALIGN(INET_ADDRLEN)];
     } req;
     struct rtattr *rta;
     struct nlmsghdr *nh;
@@ -316,6 +318,16 @@ int ifc_act_on_address(int action, const char *name, const char *address,
     rta->rta_len = RTA_LENGTH(addrlen);
     req.n.nlmsg_len = NLMSG_ALIGN(req.n.nlmsg_len) + RTA_LENGTH(addrlen);
     memcpy(RTA_DATA(rta), addr, addrlen);
+
+    // Add an explicit IFA_BROADCAST for IPv4 RTM_NEWADDRs.
+    if (ss.ss_family == AF_INET && action == RTM_NEWADDR) {
+        rta = (struct rtattr *) (((char *) &req) + NLMSG_ALIGN(req.n.nlmsg_len));
+        rta->rta_type = IFA_BROADCAST;
+        rta->rta_len = RTA_LENGTH(addrlen);
+        req.n.nlmsg_len = NLMSG_ALIGN(req.n.nlmsg_len) + RTA_LENGTH(addrlen);
+        ((struct in_addr *)addr)->s_addr |= htonl((1<<(32-prefixlen))-1);
+        memcpy(RTA_DATA(rta), addr, addrlen);
+    }
 
     s = socket(PF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
     if (s < 0) {
