@@ -29,11 +29,14 @@ extern "C" {
 #include <ucontext.h>
 #include <unistd.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
+#include <android-base/file.h>
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
+#include <ziparchive/zip_archive.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
@@ -641,15 +644,103 @@ static bool IsValidElfPath(const std::string& filename) {
   return memcmp(buf, elf_magic, 4) == 0;
 }
 
+static bool IsValidApkPath(const std::string& apk_path) {
+  static const char zip_preamble[] = {0x50, 0x4b, 0x03, 0x04};
+  struct stat st;
+  if (stat(apk_path.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) {
+    return false;
+  }
+  FILE* fp = fopen(apk_path.c_str(), "reb");
+  if (fp == nullptr) {
+    return false;
+  }
+  char buf[4];
+  if (fread(buf, 4, 1, fp) != 1) {
+    fclose(fp);
+    return false;
+  }
+  fclose(fp);
+  return memcmp(buf, zip_preamble, 4) == 0;
+}
+
+class ScopedZiparchiveHandle {
+ public:
+  ScopedZiparchiveHandle(ZipArchiveHandle handle) : handle_(handle) {
+  }
+
+  ~ScopedZiparchiveHandle() {
+    CloseArchive(handle_);
+  }
+
+ private:
+  ZipArchiveHandle handle_;
+};
+
+llvm::object::OwningBinary<llvm::object::Binary> OpenEmbeddedElfFile(const std::string& filename) {
+  llvm::object::OwningBinary<llvm::object::Binary> nothing;
+  size_t pos = filename.find("!/");
+  if (pos == std::string::npos) {
+    return nothing;
+  }
+  std::string apk_file = filename.substr(0, pos);
+  std::string elf_file = filename.substr(pos + 2);
+  if (!IsValidApkPath(apk_file)) {
+    BACK_LOGW("%s is not a valid apk file", apk_file.c_str());
+    return nothing;
+  }
+  ZipArchiveHandle handle;
+  int32_t ret_code = OpenArchive(apk_file.c_str(), &handle);
+  if (ret_code != 0) {
+    CloseArchive(handle);
+    BACK_LOGW("failed to open archive %s: %s", apk_file.c_str(), ErrorCodeString(ret_code));
+    return nothing;
+  }
+  ScopedZiparchiveHandle scoped_handle(handle);
+  ZipEntry zentry;
+  ret_code = FindEntry(handle, ZipString(elf_file.c_str()), &zentry);
+  if (ret_code != 0) {
+    BACK_LOGW("failed to find %s in %s: %s", elf_file.c_str(), apk_file.c_str(),
+              ErrorCodeString(ret_code));
+    return nothing;
+  }
+  if (zentry.method != kCompressStored || zentry.compressed_length != zentry.uncompressed_length) {
+    BACK_LOGW("%s is compressed in %s, which doesn't support running directly", elf_file.c_str(),
+              apk_file.c_str());
+    return nothing;
+  }
+  auto buffer_or_err = llvm::MemoryBuffer::getOpenFileSlice(GetFileDescriptor(handle), apk_file,
+                                                            zentry.uncompressed_length,
+                                                            zentry.offset);
+  if (!buffer_or_err) {
+    BACK_LOGW("failed to read %s in %s: %s", elf_file.c_str(), apk_file.c_str(),
+              buffer_or_err.getError().message().c_str());
+    return nothing;
+  }
+  auto binary_or_err = llvm::object::createBinary(buffer_or_err.get()->getMemBufferRef());
+  if (!binary_or_err) {
+    BACK_LOGW("failed to create binary for %s in %s: %s", elf_file.c_str(), apk_file.c_str(),
+              binary_or_err.getError().message().c_str());
+    return nothing;
+  }
+  return llvm::object::OwningBinary<llvm::object::Binary>(std::move(binary_or_err.get()),
+                                                          std::move(buffer_or_err.get()));
+}
+
 static DebugFrameInfo* ReadDebugFrameFromFile(const std::string& filename) {
-  if (!IsValidElfPath(filename)) {
-    return nullptr;
+  llvm::object::OwningBinary<llvm::object::Binary> owning_binary;
+  if (filename.find("!/") != std::string::npos) {
+    owning_binary = OpenEmbeddedElfFile(filename);
+  } else {
+    if (!IsValidElfPath(filename)) {
+      return nullptr;
+    }
+    auto binary_or_err = llvm::object::createBinary(llvm::StringRef(filename));
+    if (!binary_or_err) {
+      return nullptr;
+    }
+    owning_binary = std::move(binary_or_err.get());
   }
-  auto owning_binary = llvm::object::createBinary(llvm::StringRef(filename));
-  if (owning_binary.getError()) {
-    return nullptr;
-  }
-  llvm::object::Binary* binary = owning_binary.get().getBinary();
+  llvm::object::Binary* binary = owning_binary.getBinary();
   auto obj = llvm::dyn_cast<llvm::object::ObjectFile>(binary);
   if (obj == nullptr) {
     return nullptr;
