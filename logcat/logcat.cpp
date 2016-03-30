@@ -83,6 +83,7 @@ static pcrecpp::RE* g_regex;
 static size_t g_maxCount;
 static size_t g_printCount;
 
+// if showHelp is set, newline required in fmt statement to transition to usage
 __noreturn static void logcat_panic(bool showHelp, const char *fmt, ...) __printflike(2,3);
 
 static int openLogFile (const char *pathname)
@@ -149,14 +150,10 @@ void printBinary(struct log_msg *buf)
     TEMP_FAILURE_RETRY(write(g_outFD, buf, size));
 }
 
-static bool regexOk(const AndroidLogEntry& entry, log_id_t id)
+static bool regexOk(const AndroidLogEntry& entry)
 {
-    if (! g_regex) {
+    if (!g_regex) {
         return true;
-    }
-
-    if (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) {
-        return false;
     }
 
     std::string messageString(entry.message, entry.messageLen);
@@ -193,7 +190,7 @@ static void processBuffer(log_device_t* dev, struct log_msg *buf)
     }
 
     if (android_log_shouldPrintLine(g_logformat, entry.tag, entry.priority) &&
-        regexOk(entry, buf->id())) {
+            regexOk(entry)) {
         bytesWritten = android_log_printLogLine(g_logformat, g_outFD, &entry);
 
         g_printCount++;
@@ -966,7 +963,7 @@ int main(int argc, char **argv)
     }
 
     if (g_maxCount && got_t) {
-        logcat_panic(true, "Cannot use -m (--max-count) and -t together");
+        logcat_panic(true, "Cannot use -m (--max-count) and -t together\n");
     }
 
     if (!devices) {
@@ -1185,7 +1182,7 @@ int main(int argc, char **argv)
     dev = NULL;
     log_device_t unexpected("unexpected", false);
 
-    while (!g_maxCount || g_printCount < g_maxCount) {
+    while (!g_maxCount || (g_printCount < g_maxCount)) {
         struct log_msg log_msg;
         log_device_t* d;
         int ret = android_logger_list_read(logger_list, &log_msg);
