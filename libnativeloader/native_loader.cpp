@@ -40,8 +40,7 @@ namespace android {
 static constexpr const char* kPublicNativeLibrariesConfig = "/system/etc/public.libraries.txt";
 
 static bool namespace_workaround_enabled(int32_t target_sdk_version) {
-  // target_sdk_version = 0 is another way of saying "target current sdk level"
-  return target_sdk_version != 0 && target_sdk_version <= 23;
+  return target_sdk_version <= 23;
 }
 
 class LibraryNamespaces {
