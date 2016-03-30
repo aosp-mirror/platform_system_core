@@ -246,7 +246,7 @@ bool Subprocess::ForkAndExec(std::string* error) {
         char** current = environ;
         while (char* env_cstr = *current++) {
             std::string env_string = env_cstr;
-            char* delimiter = strchr(env_string.c_str(), '=');
+            char* delimiter = strchr(&env_string[0], '=');
 
             // Drop any values that don't contain '='.
             if (delimiter) {
