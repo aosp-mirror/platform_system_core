@@ -82,6 +82,7 @@ static pcrecpp::RE* g_regex;
 // 0 means "infinite"
 static size_t g_maxCount;
 static size_t g_printCount;
+static bool g_printItAnyways;
 
 // if showHelp is set, newline required in fmt statement to transition to usage
 __noreturn static void logcat_panic(bool showHelp, const char *fmt, ...) __printflike(2,3);
@@ -189,14 +190,16 @@ static void processBuffer(log_device_t* dev, struct log_msg *buf)
         goto error;
     }
 
-    if (android_log_shouldPrintLine(g_logformat, entry.tag, entry.priority) &&
-            regexOk(entry)) {
-        bytesWritten = android_log_printLogLine(g_logformat, g_outFD, &entry);
+    if (android_log_shouldPrintLine(g_logformat, entry.tag, entry.priority)) {
+        bool match = regexOk(entry);
 
-        g_printCount++;
+        g_printCount += match;
+        if (match || g_printItAnyways) {
+            bytesWritten = android_log_printLogLine(g_logformat, g_outFD, &entry);
 
-        if (bytesWritten < 0) {
-            logcat_panic(false, "output error");
+            if (bytesWritten < 0) {
+                logcat_panic(false, "output error");
+            }
         }
     }
 
@@ -296,6 +299,8 @@ static void show_help(const char *cmd)
                     "  --regex <expr>  where <expr> is a regular expression\n"
                     "  -m <count>      quit after printing <count> lines. This is meant to be\n"
                     "  --max-count=<count> paired with --regex, but will work on its own.\n"
+                    "  --print         paired with --regex and --max-count to let content bypass\n"
+                    "                  regex filter but still stop at number of matches.\n"
                     "  -t <count>      print only the most recent <count> lines (implies -d)\n"
                     "  -t '<time>'     print most recent lines since specified time (implies -d)\n"
                     "  -T <count>      print only the most recent <count> lines (does not imply -d)\n"
@@ -561,8 +566,10 @@ int main(int argc, char **argv)
         int ret;
 
         int option_index = 0;
+        // list of long-argument only strings for later comparison
         static const char pid_str[] = "pid";
         static const char wrap_str[] = "wrap";
+        static const char print_str[] = "print";
         static const struct option long_options[] = {
           { "binary",        no_argument,       NULL,   'B' },
           { "buffer",        required_argument, NULL,   'b' },
@@ -576,6 +583,7 @@ int main(int argc, char **argv)
           { "last",          no_argument,       NULL,   'L' },
           { pid_str,         required_argument, NULL,   0 },
           { "max-count",     required_argument, NULL,   'm' },
+          { print_str,       no_argument,       NULL,   0 },
           { "prune",         optional_argument, NULL,   'p' },
           { "regex",         required_argument, NULL,   'e' },
           { "rotate-count",  required_argument, NULL,   'n' },
@@ -622,6 +630,10 @@ int main(int argc, char **argv)
                                 long_options[option_index].name,
                                 ANDROID_LOG_WRAP_DEFAULT_TIMEOUT, dummy);
                     }
+                    break;
+                }
+                if (long_options[option_index].name == print_str) {
+                    g_printItAnyways = true;
                     break;
                 }
             break;
@@ -968,6 +980,15 @@ int main(int argc, char **argv)
 
     if (g_maxCount && got_t) {
         logcat_panic(true, "Cannot use -m (--max-count) and -t together\n");
+    }
+    if (g_printItAnyways && (!g_regex || !g_maxCount)) {
+        // One day it would be nice if --print -v color and --regex <expr>
+        // could play with each other and show regex highlighted content.
+        fprintf(stderr, "WARNING: "
+                            "--print ignored, to be used in combination with\n"
+                        "         "
+                            "--regex <expr> and --max-count <N>\n");
+        g_printItAnyways = false;
     }
 
     if (!devices) {
