@@ -280,9 +280,9 @@ static void show_help(const char *cmd)
                     "  -f <filename>   Log to file. Default is stdout\n"
                     "  --file=<filename>\n"
                     "  -r <kbytes>     Rotate log every kbytes. Requires -f\n"
-                    "  --rotate_kbytes=<kbytes>\n"
+                    "  --rotate-kbytes=<kbytes>\n"
                     "  -n <count>      Sets max number of rotated logs to <count>, default 4\n"
-                    "  --rotate_count=<count>\n"
+                    "  --rotate-count=<count>\n"
                     "  -v <format>     Sets the log print format, where <format> is:\n"
                     "  --format=<format>\n"
                     "                      brief color epoch long monotonic printable process raw\n"
@@ -303,9 +303,9 @@ static void show_help(const char *cmd)
                     "                  count is pure numerical, time is 'MM-DD hh:mm:ss.mmm...'\n"
                     "                  'YYYY-MM-DD hh:mm:ss.mmm...' or 'sssss.mmm...' format\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
-                    "  --buffer_size\n"
+                    "  --buffer-size\n"
                     "  -G <size>       set size of log ring buffer, may suffix with K or M.\n"
-                    "  --buffer_size=<size>\n"
+                    "  --buffer-size=<size>\n"
                     "  -L              dump logs from prior to last reboot\n"
                     "  --last\n"
                     // Leave security (Device Owner only installations) and
@@ -566,19 +566,23 @@ int main(int argc, char **argv)
         static const struct option long_options[] = {
           { "binary",        no_argument,       NULL,   'B' },
           { "buffer",        required_argument, NULL,   'b' },
-          { "buffer_size",   optional_argument, NULL,   'g' },
+          { "buffer-size",   optional_argument, NULL,   'g' },
           { "clear",         no_argument,       NULL,   'c' },
           { "dividers",      no_argument,       NULL,   'D' },
           { "file",          required_argument, NULL,   'f' },
           { "format",        required_argument, NULL,   'v' },
+          // hidden and undocumented reserved alias for --max-count
+          { "head",          required_argument, NULL,   'm' },
           { "last",          no_argument,       NULL,   'L' },
           { pid_str,         required_argument, NULL,   0 },
           { "max-count",     required_argument, NULL,   'm' },
           { "prune",         optional_argument, NULL,   'p' },
           { "regex",         required_argument, NULL,   'e' },
-          { "rotate_count",  required_argument, NULL,   'n' },
-          { "rotate_kbytes", required_argument, NULL,   'r' },
+          { "rotate-count",  required_argument, NULL,   'n' },
+          { "rotate-kbytes", required_argument, NULL,   'r' },
           { "statistics",    no_argument,       NULL,   'S' },
+          // hidden and undocumented reserved alias for -t
+          { "tail",          required_argument, NULL,   't' },
           // support, but ignore and do not document, the optional argument
           { wrap_str,        optional_argument, NULL,   0 },
           { NULL,            0,                 NULL,   0 }
