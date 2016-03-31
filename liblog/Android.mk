@@ -23,6 +23,7 @@ include $(CLEAR_VARS)
 #       $(LOCAL_PATH)/event.logtags)
 # so make sure we do not regret hard-coding it as follows:
 liblog_cflags := -DLIBLOG_LOG_TAG=1005
+liblog_cflags += -DSNET_EVENT_LOG_TAG=1397638484
 
 liblog_sources := log_event_list.c log_event_write.c logger_write.c
 liblog_sources += config_write.c logger_name.c logger_lock.c
