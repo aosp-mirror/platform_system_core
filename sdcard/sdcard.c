@@ -1894,105 +1894,6 @@ static void run(const char* source_path, const char* label, uid_t uid,
     exit(1);
 }
 
-static int sdcardfs_setup(const char *source_path, const char *dest_path, uid_t fsuid,
-                        gid_t fsgid, bool multi_user, userid_t userid, gid_t gid, mode_t mask) {
-    char opts[256];
-
-    snprintf(opts, sizeof(opts),
-            "fsuid=%d,fsgid=%d,%smask=%d,userid=%d,gid=%d",
-            fsuid, fsgid, multi_user?"multiuser,":"", mask, userid, gid);
-
-    if (mount(source_path, dest_path, "sdcardfs",
-                        MS_NOSUID | MS_NODEV | MS_NOEXEC | MS_NOATIME, opts) != 0) {
-        ERROR("failed to mount sdcardfs filesystem: %s\n", strerror(errno));
-        return -1;
-    }
-
-    return 0;
-}
-
-static void run_sdcardfs(const char* source_path, const char* label, uid_t uid,
-        gid_t gid, userid_t userid, bool multi_user, bool full_write) {
-    char dest_path_default[PATH_MAX];
-    char dest_path_read[PATH_MAX];
-    char dest_path_write[PATH_MAX];
-    char obb_path[PATH_MAX];
-    snprintf(dest_path_default, PATH_MAX, "/mnt/runtime/default/%s", label);
-    snprintf(dest_path_read, PATH_MAX, "/mnt/runtime/read/%s", label);
-    snprintf(dest_path_write, PATH_MAX, "/mnt/runtime/write/%s", label);
-
-    umask(0);
-    if (multi_user) {
-        /* Multi-user storage is fully isolated per user, so "other"
-         * permissions are completely masked off. */
-        if (sdcardfs_setup(source_path, dest_path_default, uid, gid, multi_user, userid,
-                                                      AID_SDCARD_RW, 0006)
-                || sdcardfs_setup(source_path, dest_path_read, uid, gid, multi_user, userid,
-                                                      AID_EVERYBODY, 0027)
-                || sdcardfs_setup(source_path, dest_path_write, uid, gid, multi_user, userid,
-                                                      AID_EVERYBODY, full_write ? 0007 : 0027)) {
-            ERROR("failed to fuse_setup\n");
-            exit(1);
-        }
-    } else {
-        /* Physical storage is readable by all users on device, but
-         * the Android directories are masked off to a single user
-         * deep inside attr_from_stat(). */
-        if (sdcardfs_setup(source_path, dest_path_default, uid, gid, multi_user, userid,
-                                                      AID_SDCARD_RW, 0006)
-                || sdcardfs_setup(source_path, dest_path_read, uid, gid, multi_user, userid,
-                                                      AID_EVERYBODY, full_write ? 0027 : 0022)
-                || sdcardfs_setup(source_path, dest_path_write, uid, gid, multi_user, userid,
-                                                      AID_EVERYBODY, full_write ? 0007 : 0022)) {
-            ERROR("failed to fuse_setup\n");
-            exit(1);
-        }
-    }
-
-    /* Drop privs */
-    if (setgroups(sizeof(kGroups) / sizeof(kGroups[0]), kGroups) < 0) {
-        ERROR("cannot setgroups: %s\n", strerror(errno));
-        exit(1);
-    }
-    if (setgid(gid) < 0) {
-        ERROR("cannot setgid: %s\n", strerror(errno));
-        exit(1);
-    }
-    if (setuid(uid) < 0) {
-        ERROR("cannot setuid: %s\n", strerror(errno));
-        exit(1);
-    }
-
-    if (multi_user) {
-        snprintf(obb_path, sizeof(obb_path), "%s/obb", source_path);
-        fs_prepare_dir(&obb_path[0], 0775, uid, gid);
-    }
-
-    exit(0);
-}
-
-static bool supports_sdcardfs(void) {
-    FILE *fp;
-    char *buf = NULL;
-    size_t buflen = 0;
-
-    fp = fopen("/proc/filesystems", "r");
-    if (!fp) {
-        ERROR("Could not read /proc/filesystems, error: %s\n", strerror(errno));
-        return false;
-    }
-    while ((getline(&buf, &buflen, fp)) > 0) {
-        if (strstr(buf, "sdcardfs\n")) {
-            free(buf);
-            fclose(fp);
-            return true;
-        }
-    }
-    free(buf);
-    fclose(fp);
-    return false;
-}
-
 int main(int argc, char **argv) {
     const char *source_path = NULL;
     const char *label = NULL;
@@ -2065,10 +1966,6 @@ int main(int argc, char **argv) {
         sleep(1);
     }
 
-    if (supports_sdcardfs()) {
-        run_sdcardfs(source_path, label, uid, gid, userid, multi_user, full_write);
-    } else {
-        run(source_path, label, uid, gid, userid, multi_user, full_write);
-    }
+    run(source_path, label, uid, gid, userid, multi_user, full_write);
     return 1;
 }
