@@ -451,10 +451,6 @@ static log_time lastLogTime(char *outputFileName) {
         return retval;
     }
 
-    clockid_t clock_type = android_log_clockid();
-    log_time now(clock_type);
-    bool monotonic = clock_type == CLOCK_MONOTONIC;
-
     std::string directory;
     char *file = strrchr(outputFileName, '/');
     if (!file) {
@@ -466,10 +462,21 @@ static log_time lastLogTime(char *outputFileName) {
         *file = '/';
         ++file;
     }
+
+    std::unique_ptr<DIR, int(*)(DIR*)>
+            dir(opendir(directory.c_str()), closedir);
+    if (!dir.get()) {
+        return retval;
+    }
+
+    clockid_t clock_type = android_log_clockid();
+    log_time now(clock_type);
+    bool monotonic = clock_type == CLOCK_MONOTONIC;
+
     size_t len = strlen(file);
     log_time modulo(0, NS_PER_SEC);
-    std::unique_ptr<DIR, int(*)(DIR*)>dir(opendir(directory.c_str()), closedir);
     struct dirent *dp;
+
     while ((dp = readdir(dir.get())) != NULL) {
         if ((dp->d_type != DT_REG)
                 // If we are using realtime, check all files that match the
@@ -578,11 +585,13 @@ int main(int argc, char **argv)
           { "dividers",      no_argument,       NULL,   'D' },
           { "file",          required_argument, NULL,   'f' },
           { "format",        required_argument, NULL,   'v' },
+          // hidden and undocumented reserved alias for --regex
+          { "grep",          required_argument, NULL,   'e' },
           // hidden and undocumented reserved alias for --max-count
           { "head",          required_argument, NULL,   'm' },
           { "last",          no_argument,       NULL,   'L' },
-          { pid_str,         required_argument, NULL,   0 },
           { "max-count",     required_argument, NULL,   'm' },
+          { pid_str,         required_argument, NULL,   0 },
           { print_str,       no_argument,       NULL,   0 },
           { "prune",         optional_argument, NULL,   'p' },
           { "regex",         required_argument, NULL,   'e' },
