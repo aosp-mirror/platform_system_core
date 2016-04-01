@@ -21,6 +21,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+
 #include <memory>
 
 #include <gtest/gtest.h>
@@ -781,8 +783,15 @@ TEST(logcat, logrotate_continue) {
     EXPECT_FALSE(system(command));
 }
 
-static void caught_blocking_clear(int /*signum*/)
-{
+TEST(logcat, logrotate_nodir) {
+    // expect logcat to error out on writing content and exit(1) for nodir
+    EXPECT_EQ(W_EXITCODE(1, 0),
+              system("logcat -b all -d"
+                     " -f /das/nein/gerfingerpoken/logcat/log.txt"
+                     " -n 256 -r 1024"));
+}
+
+static void caught_blocking_clear(int /*signum*/) {
     unsigned long long v = 0xDEADBEEFA55C0000ULL;
 
     v += getpid() & 0xFFFF;
