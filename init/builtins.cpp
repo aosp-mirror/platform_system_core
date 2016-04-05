@@ -21,6 +21,7 @@
 #include <mntent.h>
 #include <net/if.h>
 #include <signal.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -129,6 +130,16 @@ static void unmount_and_fsck(const struct mntent *entry) {
     ServiceManager::GetInstance().ForEachService([] (Service* s) { s->Stop(); });
     TEMP_FAILURE_RETRY(kill(-1, SIGKILL));
 
+    // Restart Watchdogd to allow us to complete umounting and fsck
+    Service *svc = ServiceManager::GetInstance().FindServiceByName("watchdogd");
+    if (svc) {
+        do {
+            sched_yield(); // do not be so eager, let cleanup have priority
+            ServiceManager::GetInstance().ReapAnyOutstandingChildren();
+        } while (svc->flags() & SVC_RUNNING); // Paranoid Cargo
+        svc->Start();
+    }
+
     int count = 0;
     while (count++ < UNMOUNT_CHECK_TIMES) {
         int fd = TEMP_FAILURE_RETRY(open(entry->mnt_fsname, O_RDONLY | O_EXCL));
@@ -148,6 +159,11 @@ static void unmount_and_fsck(const struct mntent *entry) {
             return;
         }
     }
+
+    // NB: With watchdog still running, there is no cap on the time it takes
+    // to complete the fsck, from the users perspective the device graphics
+    // and responses are locked-up and they may choose to hold the power
+    // button in frustration if it drags out.
 
     int st;
     if (!strcmp(entry->mnt_type, "f2fs")) {
