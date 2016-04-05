@@ -149,7 +149,8 @@ int _adb_connect(const std::string& service, std::string* error) {
         }
     }
 
-    if (memcmp(&service[0],"host",4) != 0 && switch_socket_transport(fd, error)) {
+    if ((memcmp(&service[0],"host",4) != 0 || service == "host:reconnect") &&
+        switch_socket_transport(fd, error)) {
         return -1;
     }
 
@@ -159,9 +160,11 @@ int _adb_connect(const std::string& service, std::string* error) {
         return -1;
     }
 
-    if (!adb_status(fd, error)) {
-        adb_close(fd);
-        return -1;
+    if (service != "reconnect") {
+        if (!adb_status(fd, error)) {
+            adb_close(fd);
+            return -1;
+        }
     }
 
     D("_adb_connect: return fd %d", fd);
