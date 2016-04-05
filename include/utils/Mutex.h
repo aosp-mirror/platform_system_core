@@ -35,6 +35,10 @@ namespace android {
 class Condition;
 
 /*
+ * NOTE: This class is for code that builds on Win32.  Its usage is
+ * deprecated for code which doesn't build for Win32.  New code which
+ * doesn't build for Win32 should use std::mutex and std::lock_guard instead.
+ *
  * Simple mutex class.  The implementation is system-dependent.
  *
  * The mutex must be unlocked by the thread that locked it.  They are not
