@@ -1134,6 +1134,13 @@ int handle_host_request(const char* service, TransportType type,
         /* we don't even need to send a reply */
         return 0;
     }
+
+    if (!strcmp(service, "reconnect")) {
+        if (s->transport != nullptr) {
+            kick_transport(s->transport);
+        }
+        return SendOkay(reply_fd, "done");
+    }
 #endif // ADB_HOST
 
     int ret = handle_forward_request(service, type, serial, reply_fd);

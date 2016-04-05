@@ -184,6 +184,13 @@ void reboot_service(int fd, void* arg)
     adb_close(fd);
 }
 
+static void reconnect_service(int fd, void* arg) {
+    WriteFdExactly(fd, "done");
+    adb_close(fd);
+    atransport* t = static_cast<atransport*>(arg);
+    kick_transport(t);
+}
+
 int reverse_service(const char* command) {
     int s[2];
     if (adb_socketpair(s)) {
@@ -345,6 +352,8 @@ int service_to_fd(const char* name, const atransport* transport) {
         ret = create_service_thread(set_verity_enabled_state_service, (void*)0);
     } else if(!strncmp(name, "enable-verity:", 15)) {
         ret = create_service_thread(set_verity_enabled_state_service, (void*)1);
+    } else if (!strcmp(name, "reconnect")) {
+        ret = create_service_thread(reconnect_service, const_cast<atransport*>(transport));
 #endif
     }
     if (ret >= 0) {
