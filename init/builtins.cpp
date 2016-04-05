@@ -16,6 +16,7 @@
 
 #include "builtins.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <mntent.h>
@@ -41,6 +42,7 @@
 #include <selinux/label.h>
 
 #include <fs_mgr.h>
+#include <android-base/file.h>
 #include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <cutils/partition_utils.h>
@@ -106,6 +108,32 @@ done:
     return ret;
 }
 
+// Turn off backlight while we are performing power down cleanup activities.
+static void turnOffBacklight() {
+    static const char off[] = "0";
+
+    android::base::WriteStringToFile(off, "/sys/class/leds/lcd-backlight/brightness");
+
+    static const char backlightDir[] = "/sys/class/backlight";
+    std::unique_ptr<DIR, int(*)(DIR*)> dir(opendir(backlightDir), closedir);
+    if (!dir) {
+        return;
+    }
+
+    struct dirent *dp;
+    while ((dp = readdir(dir.get())) != NULL) {
+        if (((dp->d_type != DT_DIR) && (dp->d_type != DT_LNK)) ||
+                (dp->d_name[0] == '.')) {
+            continue;
+        }
+
+        std::string fileName = android::base::StringPrintf("%s/%s/brightness",
+                                                           backlightDir,
+                                                           dp->d_name);
+        android::base::WriteStringToFile(off, fileName);
+    }
+}
+
 static void unmount_and_fsck(const struct mntent *entry) {
     if (strcmp(entry->mnt_type, "f2fs") && strcmp(entry->mnt_type, "ext4"))
         return;
@@ -139,6 +167,8 @@ static void unmount_and_fsck(const struct mntent *entry) {
         } while (svc->flags() & SVC_RUNNING); // Paranoid Cargo
         svc->Start();
     }
+
+    turnOffBacklight();
 
     int count = 0;
     while (count++ < UNMOUNT_CHECK_TIMES) {
