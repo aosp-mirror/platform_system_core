@@ -43,6 +43,7 @@
 #include <cutils/hashmap.h>
 #include <cutils/log.h>
 #include <cutils/multiuser.h>
+#include <cutils/properties.h>
 #include <packagelistparser/packagelistparser.h>
 
 #include <private/android_filesystem_config.h>
@@ -88,6 +89,9 @@
 #endif
 
 #define ERROR(x...) ALOGE(x)
+
+#define PROP_SDCARDFS_DEVICE "ro.sys.sdcardfs"
+#define PROP_SDCARDFS_USER "persist.sys.sdcardfs"
 
 #define FUSE_UNKNOWN_INO 0xffffffff
 
@@ -1993,6 +1997,29 @@ static bool supports_sdcardfs(void) {
     return false;
 }
 
+static bool should_use_sdcardfs(void) {
+    char property[PROPERTY_VALUE_MAX];
+
+    // Allow user to have a strong opinion about state
+    property_get(PROP_SDCARDFS_USER, property, "");
+    if (!strcmp(property, "force_on")) {
+        ALOGW("User explicitly enabled sdcardfs");
+        return supports_sdcardfs();
+    } else if (!strcmp(property, "force_off")) {
+        ALOGW("User explicitly disabled sdcardfs");
+        return false;
+    }
+
+    // Fall back to device opinion about state
+    if (property_get_bool(PROP_SDCARDFS_DEVICE, false)) {
+        ALOGW("Device explicitly enabled sdcardfs");
+        return supports_sdcardfs();
+    } else {
+        ALOGW("Device explicitly disabled sdcardfs");
+        return false;
+    }
+}
+
 int main(int argc, char **argv) {
     const char *source_path = NULL;
     const char *label = NULL;
@@ -2065,7 +2092,7 @@ int main(int argc, char **argv) {
         sleep(1);
     }
 
-    if (supports_sdcardfs()) {
+    if (should_use_sdcardfs()) {
         run_sdcardfs(source_path, label, uid, gid, userid, multi_user, full_write);
     } else {
         run(source_path, label, uid, gid, userid, multi_user, full_write);
