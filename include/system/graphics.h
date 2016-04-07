@@ -1066,6 +1066,20 @@ typedef enum android_color_transform {
     HAL_COLOR_TRANSFORM_CORRECT_TRITANOPIA = 6
 } android_color_transform_t;
 
+/*
+ * Supported HDR formats. Must be kept in sync with equivalents in Display.java.
+ */
+typedef enum android_hdr {
+    /* Device supports Dolby Vision HDR */
+    HAL_HDR_DOLBY_VISION = 1,
+
+    /* Device supports HDR10 */
+    HAL_HDR_HDR10 = 2,
+
+    /* Device supports hybrid log-gamma HDR */
+    HAL_HDR_HLG = 3
+} android_hdr_t;
+
 #ifdef __cplusplus
 }
 #endif
