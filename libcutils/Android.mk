@@ -19,6 +19,7 @@ include $(CLEAR_VARS)
 libcutils_common_sources := \
         config_utils.c \
         fs_config.c \
+        canned_fs_config.c \
         hashmap.c \
         iosched_policy.c \
         load_file.c \
