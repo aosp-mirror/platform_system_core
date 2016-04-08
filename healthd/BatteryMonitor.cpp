@@ -74,6 +74,7 @@ static void initBatteryProperties(BatteryProperties* props) {
     props->batteryCurrent = 0;
     props->batteryCycleCount = 0;
     props->batteryFullCharge = 0;
+    props->batteryChargeCounter = 0;
     props->batteryTechnology.clear();
 }
 
@@ -230,6 +231,9 @@ bool BatteryMonitor::update(void) {
 
     if (!mHealthdConfig->batteryCycleCountPath.isEmpty())
         props.batteryCycleCount = getIntField(mHealthdConfig->batteryCycleCountPath);
+
+    if (!mHealthdConfig->batteryChargeCounterPath.isEmpty())
+        props.batteryChargeCounter = getIntField(mHealthdConfig->batteryChargeCounterPath);
 
     props.batteryTemperature = mBatteryFixedTemperature ?
         mBatteryFixedTemperature :
