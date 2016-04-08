@@ -638,11 +638,18 @@ int fs_mgr_mount_all(struct fstab *fstab)
             }
             encryptable = FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED;
         } else {
-            ERROR("Failed to mount an un-encryptable or wiped partition on"
-                   "%s at %s options: %s error: %s\n",
-                   fstab->recs[attempted_idx].blk_device, fstab->recs[attempted_idx].mount_point,
-                   fstab->recs[attempted_idx].fs_options, strerror(mount_errno));
-            ++error_count;
+            if (fs_mgr_is_nofail(&fstab->recs[attempted_idx])) {
+                ERROR("Ignoring failure to mount an un-encryptable or wiped partition on"
+                       "%s at %s options: %s error: %s\n",
+                       fstab->recs[attempted_idx].blk_device, fstab->recs[attempted_idx].mount_point,
+                       fstab->recs[attempted_idx].fs_options, strerror(mount_errno));
+            } else {
+                ERROR("Failed to mount an un-encryptable or wiped partition on"
+                       "%s at %s options: %s error: %s\n",
+                       fstab->recs[attempted_idx].blk_device, fstab->recs[attempted_idx].mount_point,
+                       fstab->recs[attempted_idx].fs_options, strerror(mount_errno));
+                ++error_count;
+            }
             continue;
         }
     }
