@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <time.h>
 #include <ftw.h>
+#include <pwd.h>
 
 #include <selinux/label.h>
 #include <selinux/android.h>
@@ -39,29 +40,10 @@
 #include <cutils/sockets.h>
 #include <android-base/stringprintf.h>
 
-#include <private/android_filesystem_config.h>
-
 #include "init.h"
 #include "log.h"
 #include "property_service.h"
 #include "util.h"
-
-/*
- * android_name_to_id - returns the integer uid/gid associated with the given
- * name, or UINT_MAX on error.
- */
-static unsigned int android_name_to_id(const char *name)
-{
-    const struct android_id_info *info = android_ids;
-    unsigned int n;
-
-    for (n = 0; n < android_id_count; n++) {
-        if (!strcmp(info[n].name, name))
-            return info[n].aid;
-    }
-
-    return UINT_MAX;
-}
 
 static unsigned int do_decode_uid(const char *s)
 {
@@ -69,8 +51,13 @@ static unsigned int do_decode_uid(const char *s)
 
     if (!s || *s == '\0')
         return UINT_MAX;
-    if (isalpha(s[0]))
-        return android_name_to_id(s);
+
+    if (isalpha(s[0])) {
+        struct passwd* pwd = getpwnam(s);
+        if (!pwd)
+            return UINT_MAX;
+        return pwd->pw_uid;
+    }
 
     errno = 0;
     v = (unsigned int) strtoul(s, 0, 0);
