@@ -16,14 +16,17 @@
 
 #include <ctype.h>
 #include <fcntl.h>
+#include <grp.h>
 #include <poll.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include <sys/types.h>
+
 #include <android-base/stringprintf.h>
-#include <private/android_filesystem_config.h>
 #include <selinux/selinux.h>
 
 #include "ueventd.h"
@@ -84,15 +87,6 @@ int ueventd_main(int argc, char **argv)
     return 0;
 }
 
-static int get_android_id(const char *id)
-{
-    unsigned int i;
-    for (i = 0; i < ARRAY_SIZE(android_ids); i++)
-        if (!strcmp(id, android_ids[i].name))
-            return android_ids[i].aid;
-    return -1;
-}
-
 void set_device_permission(int nargs, char **args)
 {
     char *name;
@@ -103,7 +97,6 @@ void set_device_permission(int nargs, char **args)
     int prefix = 0;
     int wildcard = 0;
     char *endptr;
-    int ret;
     char *tmp = 0;
 
     if (nargs == 0)
@@ -151,21 +144,21 @@ void set_device_permission(int nargs, char **args)
         return;
     }
 
-    ret = get_android_id(args[2]);
-    if (ret < 0) {
+    struct passwd* pwd = getpwnam(args[2]);
+    if (!pwd) {
         ERROR("invalid uid '%s'\n", args[2]);
         free(tmp);
         return;
     }
-    uid = ret;
+    uid = pwd->pw_uid;
 
-    ret = get_android_id(args[3]);
-    if (ret < 0) {
+    struct group* grp = getgrnam(args[3]);
+    if (!grp) {
         ERROR("invalid gid '%s'\n", args[3]);
         free(tmp);
         return;
     }
-    gid = ret;
+    gid = grp->gr_gid;
 
     add_dev_perms(name, attr, perm, uid, gid, prefix, wildcard);
     free(tmp);
