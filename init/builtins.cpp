@@ -48,7 +48,6 @@
 #include <cutils/partition_utils.h>
 #include <cutils/android_reboot.h>
 #include <logwrap/logwrap.h>
-#include <private/android_filesystem_config.h>
 
 #include "action.h"
 #include "bootchart.h"
