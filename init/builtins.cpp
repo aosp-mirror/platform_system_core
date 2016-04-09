@@ -45,6 +45,7 @@
 #include <android-base/file.h>
 #include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
+#include <bootloader_message_writer.h>
 #include <cutils/partition_utils.h>
 #include <cutils/android_reboot.h>
 #include <logwrap/logwrap.h>
@@ -451,14 +452,10 @@ exit_success:
 }
 
 static int wipe_data_via_recovery() {
-    mkdir("/cache/recovery", 0700);
-    int fd = open("/cache/recovery/command", O_RDWR|O_CREAT|O_TRUNC|O_CLOEXEC, 0600);
-    if (fd >= 0) {
-        write(fd, "--wipe_data\n", strlen("--wipe_data\n") + 1);
-        write(fd, "--reason=wipe_data_via_recovery\n", strlen("--reason=wipe_data_via_recovery\n") + 1);
-        close(fd);
-    } else {
-        ERROR("could not open /cache/recovery/command\n");
+    const std::vector<std::string> options = {"--wipe_data", "--reason=wipe_data_via_recovery"};
+    std::string err;
+    if (!write_bootloader_message(options, &err)) {
+        ERROR("failed to set bootloader message: %s", err.c_str());
         return -1;
     }
     android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
