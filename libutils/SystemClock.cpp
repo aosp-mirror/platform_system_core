@@ -56,66 +56,12 @@ int64_t elapsedRealtime()
 	return nanoseconds_to_milliseconds(elapsedRealtimeNano());
 }
 
-#define METHOD_CLOCK_GETTIME    0
-#define METHOD_IOCTL            1
-#define METHOD_SYSTEMTIME       2
-
-/*
- * To debug/verify the timestamps returned by the kernel, change
- * DEBUG_TIMESTAMP to 1 and call the timestamp routine from a single thread
- * in the test program. b/10899829
- */
-#define DEBUG_TIMESTAMP         0
-
-#if DEBUG_TIMESTAMP && defined(__arm__)
-static inline void checkTimeStamps(int64_t timestamp,
-                                   int64_t volatile *prevTimestampPtr,
-                                   int volatile *prevMethodPtr,
-                                   int curMethod)
-{
-    /*
-     * Disable the check for SDK since the prebuilt toolchain doesn't contain
-     * gettid, and int64_t is different on the ARM platform
-     * (ie long vs long long).
-     */
-    int64_t prevTimestamp = *prevTimestampPtr;
-    int prevMethod = *prevMethodPtr;
-
-    if (timestamp < prevTimestamp) {
-        static const char *gettime_method_names[] = {
-            "clock_gettime",
-            "ioctl",
-            "systemTime",
-        };
-
-        ALOGW("time going backwards: prev %lld(%s) vs now %lld(%s), tid=%d",
-              prevTimestamp, gettime_method_names[prevMethod],
-              timestamp, gettime_method_names[curMethod],
-              gettid());
-    }
-    // NOTE - not atomic and may generate spurious warnings if the 64-bit
-    // write is interrupted or not observed as a whole.
-    *prevTimestampPtr = timestamp;
-    *prevMethodPtr = curMethod;
-}
-#else
-#define checkTimeStamps(timestamp, prevTimestampPtr, prevMethodPtr, curMethod)
-#endif
-
 /*
  * native public static long elapsedRealtimeNano();
  */
 int64_t elapsedRealtimeNano()
 {
 #if defined(__ANDROID__)
-    struct timespec ts;
-    int result;
-    int64_t timestamp;
-#if DEBUG_TIMESTAMP
-    static volatile int64_t prevTimestamp;
-    static volatile int prevMethod;
-#endif
-
     static int s_fd = -1;
 
     if (s_fd == -1) {
@@ -125,31 +71,20 @@ int64_t elapsedRealtimeNano()
         }
     }
 
-    result = ioctl(s_fd,
-            ANDROID_ALARM_GET_TIME(ANDROID_ALARM_ELAPSED_REALTIME), &ts);
-
-    if (result == 0) {
-        timestamp = seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
-        checkTimeStamps(timestamp, &prevTimestamp, &prevMethod, METHOD_IOCTL);
-        return timestamp;
+    struct timespec ts;
+    if (ioctl(s_fd, ANDROID_ALARM_GET_TIME(ANDROID_ALARM_ELAPSED_REALTIME), &ts) == 0) {
+        return seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
     }
 
     // /dev/alarm doesn't exist, fallback to CLOCK_BOOTTIME
-    result = clock_gettime(CLOCK_BOOTTIME, &ts);
-    if (result == 0) {
-        timestamp = seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
-        checkTimeStamps(timestamp, &prevTimestamp, &prevMethod,
-                        METHOD_CLOCK_GETTIME);
-        return timestamp;
+    if (clock_gettime(CLOCK_BOOTTIME, &ts) == 0) {
+        return seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
     }
 
     // XXX: there was an error, probably because the driver didn't
     // exist ... this should return
     // a real error, like an exception!
-    timestamp = systemTime(SYSTEM_TIME_MONOTONIC);
-    checkTimeStamps(timestamp, &prevTimestamp, &prevMethod,
-                    METHOD_SYSTEMTIME);
-    return timestamp;
+    return systemTime(SYSTEM_TIME_MONOTONIC);
 #else
     return systemTime(SYSTEM_TIME_MONOTONIC);
 #endif
