@@ -315,8 +315,8 @@ static void show_help(const char *cmd)
                     // kernel (userdebug and eng) buffers undocumented.
                     "  -b <buffer>, --buffer=<buffer>         Request alternate ring buffer, 'main',\n"
                     "                  'system', 'radio', 'events', 'crash', 'default' or 'all'.\n"
-                    "                  Multiple -b parameters are allowed. Buffers interleaved.\n"
-                    "                  Default -b main -b system -b crash.\n"
+                    "                  Multiple -b parameters or comma separated list of buffers are\n"
+                    "                  allowed. Buffers interleaved. Default -b main,system,crash.\n"
                     "  -B, --binary    Output the log in binary.\n"
                     "  -S, --statistics                       Output statistics.\n"
                     "  -p, --prune     Print prune white and ~black list. Service is specified as\n"
@@ -762,111 +762,63 @@ int main(int argc, char **argv)
             break;
 
             case 'b': {
-                if (strcmp(optarg, "default") == 0) {
-                    for (int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
-                        switch (i) {
-                        case LOG_ID_SECURITY:
-                        case LOG_ID_EVENTS:
-                            continue;
-                        case LOG_ID_MAIN:
-                        case LOG_ID_SYSTEM:
-                        case LOG_ID_CRASH:
-                            break;
-                        default:
-                            continue;
-                        }
+                unsigned idMask = 0;
+                while ((optarg = strtok(optarg, ",:; \t\n\r\f")) != NULL) {
+                    if (strcmp(optarg, "default") == 0) {
+                        idMask |= (1 << LOG_ID_MAIN) |
+                                  (1 << LOG_ID_SYSTEM) |
+                                  (1 << LOG_ID_CRASH);
+                    } else if (strcmp(optarg, "all") == 0) {
+                        idMask = (unsigned)-1;
+                    } else {
+                        log_id_t log_id = android_name_to_log_id(optarg);
+                        const char *name = android_log_id_to_name(log_id);
 
-                        const char *name = android_log_id_to_name((log_id_t)i);
-                        log_id_t log_id = android_name_to_log_id(name);
-
-                        if (log_id != (log_id_t)i) {
-                            continue;
+                        if (strcmp(name, optarg) != 0) {
+                            logcat_panic(true, "unknown buffer %s\n", optarg);
                         }
-
-                        bool found = false;
-                        for (dev = devices; dev; dev = dev->next) {
-                            if (!strcmp(optarg, dev->device)) {
-                                found = true;
-                                break;
-                            }
-                            if (!dev->next) {
-                                break;
-                            }
-                        }
-                        if (found) {
-                            break;
-                        }
-
-                        log_device_t* d = new log_device_t(name, false);
-
-                        if (dev) {
-                            dev->next = d;
-                            dev = d;
-                        } else {
-                            devices = dev = d;
-                        }
-                        g_devCount++;
+                        idMask |= (1 << log_id);
                     }
-                    break;
+                    optarg = NULL;
                 }
 
-                if (strcmp(optarg, "all") == 0) {
-                    for (int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
-                        const char *name = android_log_id_to_name((log_id_t)i);
-                        log_id_t log_id = android_name_to_log_id(name);
+                for (int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
+                    const char *name = android_log_id_to_name((log_id_t)i);
+                    log_id_t log_id = android_name_to_log_id(name);
 
-                        if (log_id != (log_id_t)i) {
-                            continue;
-                        }
+                    if (log_id != (log_id_t)i) {
+                        continue;
+                    }
+                    if ((idMask & (1 << i)) == 0) {
+                        continue;
+                    }
 
-                        bool found = false;
-                        for (dev = devices; dev; dev = dev->next) {
-                            if (!strcmp(optarg, dev->device)) {
-                                found = true;
-                                break;
-                            }
-                            if (!dev->next) {
-                                break;
-                            }
-                        }
-                        if (found) {
+                    bool found = false;
+                    for (dev = devices; dev; dev = dev->next) {
+                        if (!strcmp(name, dev->device)) {
+                            found = true;
                             break;
                         }
-
-                        bool binary = !strcmp(name, "events") ||
-                                      !strcmp(name, "security");
-                        log_device_t* d = new log_device_t(name, binary);
-
-                        if (dev) {
-                            dev->next = d;
-                            dev = d;
-                        } else {
-                            devices = dev = d;
-                        }
-                        g_devCount++;
-                    }
-                    break;
-                }
-
-                bool binary = !(strcmp(optarg, "events") &&
-                                strcmp(optarg, "security"));
-
-                if (devices) {
-                    dev = devices;
-                    while (dev->next) {
-                        if (!strcmp(optarg, dev->device)) {
-                            dev = NULL;
+                        if (!dev->next) {
                             break;
                         }
-                        dev = dev->next;
                     }
+                    if (found) {
+                        continue;
+                    }
+
+                    bool binary = !strcmp(name, "events") ||
+                                  !strcmp(name, "security");
+                    log_device_t* d = new log_device_t(name, binary);
+
                     if (dev) {
-                        dev->next = new log_device_t(optarg, binary);
+                        dev->next = d;
+                        dev = d;
+                    } else {
+                        devices = dev = d;
                     }
-                } else {
-                    devices = new log_device_t(optarg, binary);
+                    g_devCount++;
                 }
-                g_devCount++;
             }
             break;
 
