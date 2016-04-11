@@ -176,13 +176,41 @@ int32_t BootReasonStrToEnum(const std::string& boot_reason) {
   return kUnknownBootReason;
 }
 
+// Returns the appropriate metric key prefix for the boot_complete metric such
+// that boot metrics after a system update are labeled as ota_boot_complete;
+// otherwise, they are labeled as boot_complete.  This method encapsulates the
+// bookkeeping required to track when a system update has occurred by storing
+// the UTC timestamp of the system build date and comparing against the current
+// system build date.
+std::string CalculateBootCompletePrefix() {
+  static const std::string kBuildDateKey = "build_date";
+  std::string boot_complete_prefix = "boot_complete";
+
+  std::string build_date_str = GetProperty("ro.build.date.utc");
+  int32_t build_date = std::stoi(build_date_str);
+
+  BootEventRecordStore boot_event_store;
+  BootEventRecordStore::BootEventRecord record;
+  if (!boot_event_store.GetBootEvent(kBuildDateKey, &record) ||
+      build_date != record.second) {
+    boot_complete_prefix = "ota_" + boot_complete_prefix;
+    boot_event_store.AddBootEventWithValue(kBuildDateKey, build_date);
+  }
+
+  return boot_complete_prefix;
+}
+
 // Records several metrics related to the time it takes to boot the device,
 // including disambiguating boot time on encrypted or non-encrypted devices.
 void RecordBootComplete() {
   BootEventRecordStore boot_event_store;
+  BootEventRecordStore::BootEventRecord record;
   time_t uptime = bootstat::ParseUptime();
 
-  BootEventRecordStore::BootEventRecord record;
+  // The boot_complete metric has two variants: boot_complete and
+  // ota_boot_complete.  The latter signifies that the device is booting after
+  // a system update.
+  std::string boot_complete_prefix = CalculateBootCompletePrefix();
 
   // post_decrypt_time_elapsed is only logged on encrypted devices.
   if (boot_event_store.GetBootEvent("post_decrypt_time_elapsed", &record)) {
@@ -193,18 +221,18 @@ void RecordBootComplete() {
 
     // Subtract the decryption time to normalize the boot cycle timing.
     time_t boot_complete = uptime - record.second;
-    boot_event_store.AddBootEventWithValue("boot_complete_post_decrypt",
+    boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_post_decrypt",
                                            boot_complete);
 
 
   } else {
-    boot_event_store.AddBootEventWithValue("boot_complete_no_encryption",
+    boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_no_encryption",
                                            uptime);
   }
 
   // Record the total time from device startup to boot complete, regardless of
   // encryption state.
-  boot_event_store.AddBootEventWithValue("boot_complete", uptime);
+  boot_event_store.AddBootEventWithValue(boot_complete_prefix, uptime);
 }
 
 // Records the boot_reason metric by querying the ro.boot.bootreason system
