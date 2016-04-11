@@ -36,7 +36,8 @@
 namespace android {
 
 #if defined(__ANDROID__)
-static constexpr const char* kPublicNativeLibrariesConfig = "/system/etc/public.libraries.txt";
+static constexpr const char* kPublicNativeLibrariesSystemConfig = "/system/etc/public.libraries.txt";
+static constexpr const char* kPublicNativeLibrariesVendorConfig = "/vendor/etc/public.libraries.txt";
 
 class LibraryNamespaces {
  public:
@@ -93,15 +94,38 @@ class LibraryNamespaces {
   }
 
   void Initialize() {
+    std::vector<std::string> sonames;
+
+    LOG_ALWAYS_FATAL_IF(!ReadConfig(kPublicNativeLibrariesSystemConfig, &sonames),
+                        "Error reading public native library list from \"%s\": %s",
+                        kPublicNativeLibrariesSystemConfig, strerror(errno));
+    // This file is optional, quietly ignore if the file does not exist.
+    ReadConfig(kPublicNativeLibrariesVendorConfig, &sonames);
+
+    // android_init_namespaces() expects all the public libraries
+    // to be loaded so that they can be found by soname alone.
+    //
+    // TODO(dimitry): this is a bit misleading since we do not know
+    // if the vendor public library is going to be opened from /vendor/lib
+    // we might as well end up loading them from /system/lib
+    // For now we rely on CTS test to catch things like this but
+    // it should probably be addressed in the future.
+    for (const auto& soname : sonames) {
+      dlopen(soname.c_str(), RTLD_NOW | RTLD_NODELETE);
+    }
+
+    public_libraries_ = base::Join(sonames, ':');
+  }
+
+ private:
+  bool ReadConfig(const std::string& configFile, std::vector<std::string>* sonames) {
     // Read list of public native libraries from the config file.
     std::string file_content;
-    LOG_ALWAYS_FATAL_IF(!base::ReadFileToString(kPublicNativeLibrariesConfig, &file_content),
-                        "Error reading public native library list from \"%s\": %s",
-                        kPublicNativeLibrariesConfig, strerror(errno));
+    if(!base::ReadFileToString(configFile, &file_content)) {
+      return false;
+    }
 
     std::vector<std::string> lines = base::Split(file_content, "\n");
-
-    std::vector<std::string> sonames;
 
     for (const auto& line : lines) {
       auto trimmed_line = base::Trim(line);
@@ -109,19 +133,12 @@ class LibraryNamespaces {
         continue;
       }
 
-      sonames.push_back(trimmed_line);
+      sonames->push_back(trimmed_line);
     }
 
-    public_libraries_ = base::Join(sonames, ':');
-
-    // android_init_namespaces() expects all the public libraries
-    // to be loaded so that they can be found by soname alone.
-    for (const auto& soname : sonames) {
-      dlopen(soname.c_str(), RTLD_NOW | RTLD_NODELETE);
-    }
+    return true;
   }
 
- private:
   bool InitPublicNamespace(const char* library_path) {
     // (http://b/25844435) - Some apps call dlopen from generated code (mono jited
     // code is one example) unknown to linker in which  case linker uses anonymous
