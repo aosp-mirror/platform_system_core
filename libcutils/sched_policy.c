@@ -148,7 +148,7 @@ static void __initialize(void) {
 }
 
 /*
- * Try to get the scheduler group.
+ * Returns the path under the requested cgroup subsystem (if it exists)
  *
  * The data from /proc/<pid>/cgroup looks (something) like:
  *  2:cpu:/bg_non_interactive
@@ -158,7 +158,7 @@ static void __initialize(void) {
  * the default cgroup.  If the string is longer than "bufLen", the string
  * will be truncated.
  */
-static int getSchedulerGroup(int tid, char* buf, size_t bufLen)
+static int getCGroupSubsys(int tid, const char* subsys, char* buf, size_t bufLen)
 {
 #if defined(__ANDROID__)
     char pathBuf[32];
@@ -172,7 +172,7 @@ static int getSchedulerGroup(int tid, char* buf, size_t bufLen)
 
     while(fgets(lineBuf, sizeof(lineBuf) -1, fp)) {
         char *next = lineBuf;
-        char *subsys;
+        char *found_subsys;
         char *grp;
         size_t len;
 
@@ -181,11 +181,11 @@ static int getSchedulerGroup(int tid, char* buf, size_t bufLen)
             goto out_bad_data;
         }
 
-        if (!(subsys = strsep(&next, ":"))) {
+        if (!(found_subsys = strsep(&next, ":"))) {
             goto out_bad_data;
         }
 
-        if (strcmp(subsys, "cpu")) {
+        if (strcmp(found_subsys, subsys)) {
             /* Not the subsys we're looking for */
             continue;
         }
@@ -206,7 +206,7 @@ static int getSchedulerGroup(int tid, char* buf, size_t bufLen)
         return 0;
     }
 
-    SLOGE("Failed to find cpu subsys");
+    SLOGE("Failed to find subsys %s", subsys);
     fclose(fp);
     return -1;
  out_bad_data:
@@ -228,7 +228,23 @@ int get_sched_policy(int tid, SchedPolicy *policy)
 
     if (__sys_supports_schedgroups) {
         char grpBuf[32];
-        if (getSchedulerGroup(tid, grpBuf, sizeof(grpBuf)) < 0)
+#ifdef USE_CPUSETS
+        if (getCGroupSubsys(tid, "cpuset", grpBuf, sizeof(grpBuf)) < 0)
+            return -1;
+        if (grpBuf[0] == '\0') {
+            *policy = SP_FOREGROUND;
+        } else if (!strcmp(grpBuf, "foreground")) {
+            *policy = SP_FOREGROUND;
+        } else if (!strcmp(grpBuf, "background")) {
+            *policy = SP_BACKGROUND;
+        } else if (!strcmp(grpBuf, "top-app")) {
+            *policy = SP_TOP_APP;
+        } else {
+            errno = ERANGE;
+            return -1;
+        }
+#else
+        if (getCGroupSubsys(tid, "cpu", grpBuf, sizeof(grpBuf)) < 0)
             return -1;
         if (grpBuf[0] == '\0') {
             *policy = SP_FOREGROUND;
@@ -238,6 +254,7 @@ int get_sched_policy(int tid, SchedPolicy *policy)
             errno = ERANGE;
             return -1;
         }
+#endif
     } else {
         int rc = sched_getscheduler(tid);
         if (rc < 0)
