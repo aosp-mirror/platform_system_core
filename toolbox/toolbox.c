@@ -4,29 +4,14 @@
 #include <string.h>
 #include <unistd.h>
 
-int main(int, char **);
-
-static int toolbox_main(int argc, char **argv)
-{
-    // "toolbox foo ..." is equivalent to "foo ..."
-    if (argc > 1) {
-        return main(argc - 1, argv + 1);
-    } else {
-        printf("Toolbox!\n");
-        return 0;
-    }
-}
-
 #define TOOL(name) int name##_main(int, char**);
 #include "tools.h"
 #undef TOOL
 
-static struct 
-{
-    const char *name;
+static struct {
+    const char* name;
     int (*func)(int, char**);
 } tools[] = {
-    { "toolbox", toolbox_main },
 #define TOOL(name) { #name, name##_main },
 #include "tools.h"
 #undef TOOL
@@ -40,33 +25,35 @@ static void SIGPIPE_handler(int signal) {
     _exit(0);
 }
 
-int main(int argc, char **argv)
-{
-    int i;
-    char *name = argv[0];
-
+int main(int argc, char** argv) {
     // Let's assume that none of this code handles broken pipes. At least ls,
     // ps, and top were broken (though I'd previously added this fix locally
     // to top). We exit rather than use SIG_IGN because tools like top will
     // just keep on writing to nowhere forever if we don't stop them.
     signal(SIGPIPE, SIGPIPE_handler);
 
-    if((argc > 1) && (argv[1][0] == '@')) {
-        name = argv[1] + 1;
-        argc--;
-        argv++;
-    } else {
-        char *cmd = strrchr(argv[0], '/');
-        if (cmd)
-            name = cmd + 1;
-    }
+    char* cmd = strrchr(argv[0], '/');
+    char* name = cmd ? (cmd + 1) : argv[0];
 
-    for(i = 0; tools[i].name; i++){
-        if(!strcmp(tools[i].name, name)){
+    for (size_t i = 0; tools[i].name; i++) {
+        if (!strcmp(tools[i].name, name)) {
             return tools[i].func(argc, argv);
         }
     }
 
     printf("%s: no such tool\n", argv[0]);
     return -1;
+}
+
+int toolbox_main(int argc, char** argv) {
+    // "toolbox foo ..." is equivalent to "foo ..."
+    if (argc > 1) {
+        return main(argc - 1, argv + 1);
+    }
+
+    // Plain "toolbox" lists the tools.
+    for (size_t i = 1; tools[i].name; i++) {
+        printf("%s%c", tools[i].name, tools[i+1].name ? ' ' : '\n');
+    }
+    return 0;
 }
