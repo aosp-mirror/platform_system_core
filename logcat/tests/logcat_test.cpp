@@ -153,23 +153,29 @@ TEST(logcat, tz) {
         return;
     }
 
-    FILE *fp;
+    int tries = 3; // in case run too soon after system start or buffer clear
+    int count;
 
-    ASSERT_TRUE(NULL != (fp = popen(
-      "logcat -v long -v America/Los_Angeles -b all -t 3 2>/dev/null",
-      "r")));
+    do {
+        FILE *fp;
 
-    char buffer[5120];
+        ASSERT_TRUE(NULL != (fp = popen(
+          "logcat -v long -v America/Los_Angeles -b all -t 3 2>/dev/null",
+          "r")));
 
-    int count = 0;
+        char buffer[5120];
 
-    while (fgetLongTime(buffer, sizeof(buffer), fp)) {
-        if (strstr(buffer, " -0700") || strstr(buffer, " -0800")) {
-            ++count;
+        count = 0;
+
+        while (fgetLongTime(buffer, sizeof(buffer), fp)) {
+            if (strstr(buffer, " -0700") || strstr(buffer, " -0800")) {
+                ++count;
+            }
         }
-    }
 
-    pclose(fp);
+        pclose(fp);
+
+    } while ((count < 3) && --tries && (sleep(1), true));
 
     ASSERT_EQ(3, count);
 }
@@ -196,84 +202,47 @@ TEST(logcat, ntz) {
     ASSERT_EQ(0, count);
 }
 
+void do_tail(int num) {
+    int tries = 3; // in case run too soon after system start or buffer clear
+    int count;
+
+    do {
+        char buffer[5120];
+
+        snprintf(buffer, sizeof(buffer),
+          "logcat -v long -b radio -b events -b system -b main -t %d 2>/dev/null",
+          num);
+
+        FILE *fp;
+        ASSERT_TRUE(NULL != (fp = popen(buffer, "r")));
+
+        count = 0;
+
+        while (fgetLongTime(buffer, sizeof(buffer), fp)) {
+            ++count;
+        }
+
+        pclose(fp);
+
+    } while ((count < num) && --tries && (sleep(1), true));
+
+    ASSERT_EQ(num, count);
+}
+
 TEST(logcat, tail_3) {
-    FILE *fp;
-
-    ASSERT_TRUE(NULL != (fp = popen(
-      "logcat -v long -b radio -b events -b system -b main -t 3 2>/dev/null",
-      "r")));
-
-    char buffer[5120];
-
-    int count = 0;
-
-    while (fgetLongTime(buffer, sizeof(buffer), fp)) {
-        ++count;
-    }
-
-    pclose(fp);
-
-    ASSERT_EQ(3, count);
+    do_tail(3);
 }
 
 TEST(logcat, tail_10) {
-    FILE *fp;
-
-    ASSERT_TRUE(NULL != (fp = popen(
-      "logcat -v long -b radio -b events -b system -b main -t 10 2>/dev/null",
-      "r")));
-
-    char buffer[5120];
-
-    int count = 0;
-
-    while (fgetLongTime(buffer, sizeof(buffer), fp)) {
-        ++count;
-    }
-
-    pclose(fp);
-
-    ASSERT_EQ(10, count);
+    do_tail(10);
 }
 
 TEST(logcat, tail_100) {
-    FILE *fp;
-
-    ASSERT_TRUE(NULL != (fp = popen(
-      "logcat -v long -b radio -b events -b system -b main -t 100 2>/dev/null",
-      "r")));
-
-    char buffer[5120];
-
-    int count = 0;
-
-    while (fgetLongTime(buffer, sizeof(buffer), fp)) {
-        ++count;
-    }
-
-    pclose(fp);
-
-    ASSERT_EQ(100, count);
+    do_tail(100);
 }
 
 TEST(logcat, tail_1000) {
-    FILE *fp;
-
-    ASSERT_TRUE(NULL != (fp = popen(
-      "logcat -v long -b radio -b events -b system -b main -t 1000 2>/dev/null",
-      "r")));
-
-    char buffer[5120];
-
-    int count = 0;
-
-    while (fgetLongTime(buffer, sizeof(buffer), fp)) {
-        ++count;
-    }
-
-    pclose(fp);
-
-    ASSERT_EQ(1000, count);
+    do_tail(1000);
 }
 
 TEST(logcat, tail_time) {
