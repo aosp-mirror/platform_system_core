@@ -337,7 +337,7 @@ static ssize_t get_node_path_locked(struct node* node, char* buf, size_t bufsize
 
     ssize_t pathlen = 0;
     if (node->parent && node->graft_path == NULL) {
-        pathlen = get_node_path_locked(node->parent, buf, bufsize - namelen - 2);
+        pathlen = get_node_path_locked(node->parent, buf, bufsize - namelen - 1);
         if (pathlen < 0) {
             return -1;
         }
