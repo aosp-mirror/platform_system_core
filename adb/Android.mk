@@ -108,7 +108,7 @@ LOCAL_SANITIZE := $(adb_target_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
-LOCAL_STATIC_LIBRARIES := libbase
+LOCAL_STATIC_LIBRARIES := libcrypto_utils_static libcrypto_static libbase
 
 include $(BUILD_STATIC_LIBRARY)
 
@@ -131,7 +131,7 @@ LOCAL_SANITIZE := $(adb_host_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
-LOCAL_STATIC_LIBRARIES := libcrypto_static libbase
+LOCAL_STATIC_LIBRARIES := libcrypto_utils_static libcrypto_static libbase
 
 LOCAL_C_INCLUDES_windows := development/host/windows/usb/api/
 LOCAL_MULTILIB := first
@@ -151,7 +151,7 @@ LOCAL_SRC_FILES := \
     shell_service_test.cpp \
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
-LOCAL_STATIC_LIBRARIES := libadbd
+LOCAL_STATIC_LIBRARIES := libadbd libcrypto_utils_static libcrypto_static
 LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
 include $(BUILD_NATIVE_TEST)
 
@@ -191,6 +191,7 @@ LOCAL_SANITIZE := $(adb_host_sanitize)
 LOCAL_SHARED_LIBRARIES := libbase
 LOCAL_STATIC_LIBRARIES := \
     libadb \
+    libcrypto_utils_static \
     libcrypto_static \
     libcutils \
     libdiagnose_usb \
@@ -219,7 +220,7 @@ LOCAL_CFLAGS_darwin := $(LIBADB_darwin_CFLAGS)
 LOCAL_SRC_FILES := test_track_devices.cpp
 LOCAL_SANITIZE := $(adb_host_sanitize)
 LOCAL_SHARED_LIBRARIES := libbase
-LOCAL_STATIC_LIBRARIES := libadb libcrypto_static libcutils
+LOCAL_STATIC_LIBRARIES := libadb libcrypto_utils_static libcrypto_static libcutils
 LOCAL_LDLIBS += -lrt -ldl -lpthread
 include $(BUILD_HOST_EXECUTABLE)
 endif
@@ -271,6 +272,7 @@ LOCAL_SANITIZE := $(adb_host_sanitize)
 LOCAL_STATIC_LIBRARIES := \
     libadb \
     libbase \
+    libcrypto_utils_static \
     libcrypto_static \
     libdiagnose_usb \
     liblog \
@@ -342,11 +344,11 @@ LOCAL_STATIC_LIBRARIES := \
     libfec_rs \
     libselinux \
     liblog \
-    libmincrypt \
     libext4_utils_static \
     libsquashfs_utils \
     libcutils \
     libbase \
+    libcrypto_utils_static \
     libcrypto_static \
     libminijail
 

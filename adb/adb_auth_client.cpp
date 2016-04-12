@@ -23,10 +23,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <openssl/obj_mac.h>
+#include <openssl/rsa.h>
+#include <openssl/sha.h>
+
+#include <crypto_utils/android_pubkey.h>
+
 #include "cutils/list.h"
 #include "cutils/sockets.h"
-#include "mincrypt/rsa.h"
-#include "mincrypt/sha.h"
 
 #include "adb.h"
 #include "fdevent.h"
@@ -34,7 +38,7 @@
 
 struct adb_public_key {
     struct listnode node;
-    RSAPublicKey key;
+    RSA* key;
 };
 
 static const char *key_paths[] = {
@@ -66,9 +70,8 @@ static void read_keys(const char *file, struct listnode *list)
     }
 
     while (fgets(buf, sizeof(buf), f)) {
-        /* Allocate 4 extra bytes to decode the base64 data in-place */
         auto key = reinterpret_cast<adb_public_key*>(
-            calloc(1, sizeof(adb_public_key) + 4));
+            calloc(1, sizeof(adb_public_key)));
         if (key == nullptr) {
             D("Can't malloc key");
             break;
@@ -78,15 +81,18 @@ static void read_keys(const char *file, struct listnode *list)
         if (sep)
             *sep = '\0';
 
-        ret = __b64_pton(buf, (u_char *)&key->key, sizeof(key->key) + 4);
-        if (ret != sizeof(key->key)) {
+        // b64_pton requires one additional byte in the target buffer for
+        // decoding to succeed. See http://b/28035006 for details.
+        uint8_t keybuf[ANDROID_PUBKEY_ENCODED_SIZE + 1];
+        ret = __b64_pton(buf, keybuf, sizeof(keybuf));
+        if (ret != ANDROID_PUBKEY_ENCODED_SIZE) {
             D("%s: Invalid base64 data ret=%d", file, ret);
             free(key);
             continue;
         }
 
-        if (key->key.len != RSANUMWORDS) {
-            D("%s: Invalid key len %d", file, key->key.len);
+        if (!android_pubkey_decode(keybuf, ret, &key->key)) {
+            D("%s: Failed to parse key", file);
             free(key);
             continue;
         }
@@ -104,7 +110,9 @@ static void free_keys(struct listnode *list)
     while (!list_empty(list)) {
         item = list_head(list);
         list_remove(item);
-        free(node_to_item(item, struct adb_public_key, node));
+        adb_public_key* key = node_to_item(item, struct adb_public_key, node);
+        RSA_free(key->key);
+        free(key);
     }
 }
 
@@ -139,20 +147,17 @@ int adb_auth_generate_token(void *token, size_t token_size)
     return ret * token_size;
 }
 
-int adb_auth_verify(uint8_t* token, uint8_t* sig, int siglen)
+int adb_auth_verify(uint8_t* token, size_t token_size, uint8_t* sig, int siglen)
 {
     struct listnode *item;
     struct listnode key_list;
     int ret = 0;
 
-    if (siglen != RSANUMBYTES)
-        return 0;
-
     load_keys(&key_list);
 
     list_for_each(item, &key_list) {
         adb_public_key* key = node_to_item(item, struct adb_public_key, node);
-        ret = RSA_verify(&key->key, sig, siglen, token, SHA_DIGEST_SIZE);
+        ret = RSA_verify(NID_sha1, token, token_size, sig, siglen, key->key);
         if (ret)
             break;
     }
