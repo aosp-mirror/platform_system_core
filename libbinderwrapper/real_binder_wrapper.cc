@@ -29,7 +29,7 @@ namespace android {
 // be awkward.
 class RealBinderWrapper::DeathRecipient : public IBinder::DeathRecipient {
  public:
-  explicit DeathRecipient(const base::Closure& callback)
+  explicit DeathRecipient(const ::base::Closure& callback)
       : callback_(callback) {}
   ~DeathRecipient() = default;
 
@@ -40,7 +40,7 @@ class RealBinderWrapper::DeathRecipient : public IBinder::DeathRecipient {
 
  private:
   // Callback to run in response to binder death.
-  base::Closure callback_;
+  ::base::Closure callback_;
 
   DISALLOW_COPY_AND_ASSIGN(DeathRecipient);
 };
@@ -85,7 +85,7 @@ sp<BBinder> RealBinderWrapper::CreateLocalBinder() {
 
 bool RealBinderWrapper::RegisterForDeathNotifications(
     const sp<IBinder>& binder,
-    const base::Closure& callback) {
+    const ::base::Closure& callback) {
   sp<DeathRecipient> recipient(new DeathRecipient(callback));
   if (binder->linkToDeath(recipient) != OK) {
     LOG(ERROR) << "Failed to register for death notifications on "

@@ -64,7 +64,7 @@ sp<BBinder> StubBinderWrapper::CreateLocalBinder() {
 
 bool StubBinderWrapper::RegisterForDeathNotifications(
     const sp<IBinder>& binder,
-    const base::Closure& callback) {
+    const ::base::Closure& callback) {
   death_callbacks_[binder] = callback;
   return true;
 }
