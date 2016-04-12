@@ -72,7 +72,7 @@ include $(BUILD_EXECUTABLE)
 $(LOCAL_PATH)/toolbox.c: $(intermediates)/tools.h
 
 TOOLS_H := $(intermediates)/tools.h
-$(TOOLS_H): PRIVATE_TOOLS := $(ALL_TOOLS)
+$(TOOLS_H): PRIVATE_TOOLS := toolbox $(ALL_TOOLS)
 $(TOOLS_H): PRIVATE_CUSTOM_TOOL = echo "/* file generated automatically */" > $@ ; for t in $(PRIVATE_TOOLS) ; do echo "TOOL($$t)" >> $@ ; done
 $(TOOLS_H): $(LOCAL_PATH)/Android.mk
 $(TOOLS_H):
