@@ -70,7 +70,7 @@ class BinderWrapper {
   // is currently registered for |binder|, it will be replaced.
   virtual bool RegisterForDeathNotifications(
       const sp<IBinder>& binder,
-      const base::Closure& callback) = 0;
+      const ::base::Closure& callback) = 0;
 
   // Unregisters the callback, if any, for |binder|.
   virtual bool UnregisterForDeathNotifications(const sp<IBinder>& binder) = 0;
