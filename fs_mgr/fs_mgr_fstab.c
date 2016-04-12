@@ -74,6 +74,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "noemulatedsd", MF_NOEMULATEDSD },
     { "notrim",       MF_NOTRIM },
     { "formattable", MF_FORMATTABLE },
+    { "nofail",      MF_NOFAIL },
     { "defaults",    0 },
     { 0,             0 },
 };
@@ -479,4 +480,9 @@ int fs_mgr_is_notrim(struct fstab_rec *fstab)
 int fs_mgr_is_formattable(struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & (MF_FORMATTABLE);
+}
+
+int fs_mgr_is_nofail(struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_NOFAIL;
 }
