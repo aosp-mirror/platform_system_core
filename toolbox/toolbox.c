@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
     }
 
     printf("%s: no such tool\n", argv[0]);
-    return -1;
+    return 127;
 }
 
 int toolbox_main(int argc, char** argv) {
