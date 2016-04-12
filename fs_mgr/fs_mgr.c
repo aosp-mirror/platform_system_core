@@ -14,35 +14,32 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <ctype.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
-#include <errno.h>
+#include <sys/swap.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <libgen.h>
 #include <time.h>
-#include <sys/swap.h>
-#include <dirent.h>
-#include <ext4.h>
-#include <ext4_sb.h>
-#include <ext4_crypt_init_extensions.h>
+#include <unistd.h>
 
-#include <linux/loop.h>
-#include <private/android_filesystem_config.h>
+#include <ext4.h>
+#include <ext4_crypt_init_extensions.h>
+#include <ext4_sb.h>
+
 #include <cutils/android_reboot.h>
 #include <cutils/partition_utils.h>
 #include <cutils/properties.h>
+#include <linux/loop.h>
 #include <logwrap/logwrap.h>
-
-#include "mincrypt/rsa.h"
-#include "mincrypt/sha.h"
-#include "mincrypt/sha256.h"
+#include <private/android_filesystem_config.h>
 
 #include "ext4_utils.h"
 #include "wipe.h"
