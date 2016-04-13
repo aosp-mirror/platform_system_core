@@ -518,7 +518,8 @@ static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath,
     return sc.CopyDone(lpath, rpath);
 }
 
-static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath) {
+static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath,
+                      const char* name=nullptr) {
     unsigned size = 0;
     if (!sync_stat(sc, rpath, nullptr, nullptr, &size)) return false;
 
@@ -574,7 +575,7 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath) 
 
         bytes_copied += msg.data.size;
 
-        sc.ReportProgress(rpath, bytes_copied, size);
+        sc.ReportProgress(name != nullptr ? name : rpath, bytes_copied, size);
     }
 
     adb_close(lfd);
@@ -927,7 +928,7 @@ static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
 }
 
 bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
-                  bool copy_attrs) {
+                  bool copy_attrs, const char* name) {
     SyncConnection sc;
     if (!sc.IsValid()) return false;
 
@@ -1022,7 +1023,7 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
         }
 
         sc.SetExpectedTotalBytes(src_size);
-        if (!sync_recv(sc, src_path, dst_path)) {
+        if (!sync_recv(sc, src_path, dst_path, name)) {
             success = false;
             continue;
         }
