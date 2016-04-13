@@ -65,6 +65,9 @@ static int uninstall_app_legacy(TransportType t, const char* serial, int argc, c
 static auto& gProductOutPath = *new std::string();
 extern int gListenAll;
 
+static constexpr char BUGZ_OK_PREFIX[] = "OK:";
+static constexpr char BUGZ_FAIL_PREFIX[] = "FAIL:";
+
 static std::string product_file(const char *extra) {
     if (gProductOutPath.empty()) {
         fprintf(stderr, "adb: Product directory not specified; "
@@ -170,7 +173,7 @@ static void help() {
         "                                 (-g: grant all runtime permissions)\n"
         "  adb uninstall [-k] <package> - remove this app package from the device\n"
         "                                 ('-k' means keep the data and cache directories)\n"
-        "  adb bugreport                - return all information from the device\n"
+        "  adb bugreport [<zip_file>]   - return all information from the device\n"
         "                                 that should be included in a bug report.\n"
         "\n"
         "  adb backup [-f <file>] [-apk|-noapk] [-obb|-noobb] [-shared|-noshared] [-all] [-system|-nosystem] [<packages...>]\n"
@@ -285,7 +288,8 @@ static void stdin_raw_restore() {
 // this expects that incoming data will use the shell protocol, in which case
 // stdout/stderr are routed independently and the remote exit code will be
 // returned.
-static int read_and_dump(int fd, bool use_shell_protocol=false) {
+// if |output| is non-null, stdout will be appended to it instead.
+static int read_and_dump(int fd, bool use_shell_protocol=false, std::string* output=nullptr) {
     int exit_code = 0;
     std::unique_ptr<ShellProtocol> protocol;
     int length = 0;
@@ -330,8 +334,12 @@ static int read_and_dump(int fd, bool use_shell_protocol=false) {
             }
         }
 
-        fwrite(buffer_ptr, 1, length, outfile);
-        fflush(outfile);
+        if (output == nullptr) {
+            fwrite(buffer_ptr, 1, length, outfile);
+            fflush(outfile);
+        } else {
+            output->append(buffer_ptr, length);
+        }
     }
 
     return exit_code;
@@ -1121,7 +1129,8 @@ static bool adb_root(const char* command) {
 // resulting output.
 static int send_shell_command(TransportType transport_type, const char* serial,
                               const std::string& command,
-                              bool disable_shell_protocol) {
+                              bool disable_shell_protocol,
+                              std::string* output=nullptr) {
     int fd;
     bool use_shell_protocol = false;
 
@@ -1156,13 +1165,47 @@ static int send_shell_command(TransportType transport_type, const char* serial,
         }
     }
 
-    int exit_code = read_and_dump(fd, use_shell_protocol);
+    int exit_code = read_and_dump(fd, use_shell_protocol, output);
 
     if (adb_close(fd) < 0) {
         PLOG(ERROR) << "failure closing FD " << fd;
     }
 
     return exit_code;
+}
+
+static int bugreport(TransportType transport_type, const char* serial, int argc,
+                     const char** argv) {
+    // No need for shell protocol with bugreport, always disable for simplicity.
+    if (argc == 1) return send_shell_command(transport_type, serial, "bugreport", true);
+    if (argc != 2) return usage();
+
+    // Zipped bugreport option - will call 'bugreportz', which prints the location of the generated
+    // file, then pull it to the destination file provided by the user.
+    const char* dest_file = argv[1];
+    std::string output;
+
+    int status = send_shell_command(transport_type, serial, "bugreportz", true, &output);
+    if (status != 0 || output.empty()) return status;
+    output = android::base::Trim(output);
+
+    if (android::base::StartsWith(output, BUGZ_OK_PREFIX)) {
+        const char* zip_file = &output[strlen(BUGZ_OK_PREFIX)];
+        std::vector<const char*> srcs{zip_file};
+        status = do_sync_pull(srcs, dest_file, true, dest_file) ? 0 : 1;
+        if (status != 0) {
+            fprintf(stderr, "Could not copy file '%s' to '%s'\n", zip_file, dest_file);
+        }
+        return status;
+    }
+    if (android::base::StartsWith(output, BUGZ_FAIL_PREFIX)) {
+        const char* error_message = &output[strlen(BUGZ_FAIL_PREFIX)];
+        fprintf(stderr, "device failed to take a zipped bugreport: %s\n", error_message);
+        return -1;
+    }
+    fprintf(stderr, "unexpected string (%s) returned by bugreportz, "
+            "device probably does not support -z option\n", output.c_str());
+    return -1;
 }
 
 static int logcat(TransportType transport, const char* serial, int argc, const char** argv) {
@@ -1694,12 +1737,8 @@ int adb_commandline(int argc, const char **argv) {
     } else if (!strcmp(argv[0], "root") || !strcmp(argv[0], "unroot")) {
         return adb_root(argv[0]) ? 0 : 1;
     } else if (!strcmp(argv[0], "bugreport")) {
-        if (argc != 1) return usage();
-        // No need for shell protocol with bugreport, always disable for
-        // simplicity.
-        return send_shell_command(transport_type, serial, "bugreport", true);
-    }
-    else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
+        return bugreport(transport_type, serial, argc, argv);
+    } else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
         bool reverse = !strcmp(argv[0], "reverse");
         ++argv;
         --argc;
