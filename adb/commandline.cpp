@@ -1112,7 +1112,7 @@ static bool adb_root(const char* command) {
     TransportType type;
     const char* serial;
     adb_get_transport(&type, &serial);
-    return wait_for_device("wait-for-device", type, serial);
+    return wait_for_device("wait-for-any", type, serial);
 }
 
 // Connects to the device "shell" service with |command| and prints the
