@@ -27,6 +27,7 @@
 
 #include <android-base/file.h>
 #include <android-base/strings.h>
+#include <cutils/properties.h>
 #include <cutils/sched_policy.h>
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
@@ -278,66 +279,68 @@ static void show_help(const char *cmd)
     fprintf(stderr,"Usage: %s [options] [filterspecs]\n", cmd);
 
     fprintf(stderr, "options include:\n"
-                    "  -s              Set default filter to silent.\n"
-                    "                  Like specifying filterspec '*:S'\n"
-                    "  -f <filename>   Log to file. Default is stdout\n"
-                    "  --file=<filename>\n"
-                    "  -r <kbytes>     Rotate log every kbytes. Requires -f\n"
-                    "  --rotate-kbytes=<kbytes>\n"
-                    "  -n <count>      Sets max number of rotated logs to <count>, default 4\n"
-                    "  --rotate-count=<count>\n"
-                    "  -v <format>     Sets the log print format, where <format> is:\n"
-                    "  --format=<format>\n"
-                    "                      brief color epoch long monotonic printable process raw\n"
-                    "                      tag thread threadtime time uid usec UTC year zone\n\n"
-                    "  -D              print dividers between each log buffer\n"
-                    "  --dividers\n"
-                    "  -c              clear (flush) the entire log and exit\n"
-                    "  --clear\n"
-                    "  -d              dump the log and then exit (don't block)\n"
-                    "  -e <expr>       only print lines where the log message matches <expr>\n"
-                    "  --regex <expr>  where <expr> is a regular expression\n"
-                    "  -m <count>      quit after printing <count> lines. This is meant to be\n"
-                    "  --max-count=<count> paired with --regex, but will work on its own.\n"
-                    "  --print         paired with --regex and --max-count to let content bypass\n"
+                    "  -s              Set default filter to silent. Equivalent to filterspec '*:S'\n"
+                    "  -f <file>, --file=<file>               Log to file. Default is stdout\n"
+                    "  -r <kbytes>, --rotate-kbytes=<kbytes>  Rotate log every kbytes. Requires -f\n"
+                    "                  option. Permits property expansion.\n"
+                    "  -n <count>, --rotate-count=<count>     Sets max number of rotated logs to\n"
+                    "                  <count>, default 4. Permits property expansion.\n"
+                    "  -v <format>, --format=<format>\n"
+                    "                  Sets the log print format, where <format> is:\n"
+                    "                    brief color epoch long monotonic printable process raw\n"
+                    "                    tag thread threadtime time uid usec UTC year zone\n"
+                    "  -D, --dividers  Print dividers between each log buffer\n"
+                    "  -c, --clear     Clear (flush) the entire log and exit\n"
+                    "  -d              Dump the log and then exit (don't block)\n"
+                    "  -e <expr>, --regex=<expr>\n"
+                    "                  Only print lines where the log message matches <expr>\n"
+                    "                  where <expr> is a regular expression\n"
+                    // Leave --head undocumented as alias for -m
+                    "  -m <count>, --max-count=<count>\n"
+                    "                  Quit after printing <count> lines. This is meant to be\n"
+                    "                  paired with --regex, but will work on its own.\n"
+                    "  --print         Paired with --regex and --max-count to let content bypass\n"
                     "                  regex filter but still stop at number of matches.\n"
-                    "  -t <count>      print only the most recent <count> lines (implies -d)\n"
-                    "  -t '<time>'     print most recent lines since specified time (implies -d)\n"
-                    "  -T <count>      print only the most recent <count> lines (does not imply -d)\n"
-                    "  -T '<time>'     print most recent lines since specified time (not imply -d)\n"
+                    // Leave --tail undocumented as alias for -t
+                    "  -t <count>      Print only the most recent <count> lines (implies -d)\n"
+                    "  -t '<time>'     Print most recent lines since specified time (implies -d)\n"
+                    "  -T <count>      Print only the most recent <count> lines (does not imply -d)\n"
+                    "  -T '<time>'     Print most recent lines since specified time (not imply -d)\n"
                     "                  count is pure numerical, time is 'MM-DD hh:mm:ss.mmm...'\n"
                     "                  'YYYY-MM-DD hh:mm:ss.mmm...' or 'sssss.mmm...' format\n"
-                    "  -g              get the size of the log's ring buffer and exit\n"
-                    "  --buffer-size\n"
-                    "  -G <size>       set size of log ring buffer, may suffix with K or M.\n"
-                    "  --buffer-size=<size>\n"
-                    "  -L              dump logs from prior to last reboot\n"
-                    "  --last\n"
+                    "  -g, --buffer-size                      Get the size of the ring buffer.\n"
+                    "  -G <size>, --buffer-size=<size>\n"
+                    "                  Set size of log ring buffer, may suffix with K or M.\n"
+                    "  -L, -last       Dump logs from prior to last reboot\n"
                     // Leave security (Device Owner only installations) and
                     // kernel (userdebug and eng) buffers undocumented.
-                    "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio',\n"
-                    "  --buffer=<buffer> 'events', 'crash', 'default' or 'all'. Multiple -b\n"
-                    "                  parameters are allowed and results are interleaved. The\n"
-                    "                  default is -b main -b system -b crash.\n"
-                    "  -B              output the log in binary.\n"
-                    "  --binary\n"
-                    "  -S              output statistics.\n"
-                    "  --statistics\n"
-                    "  -p              print prune white and ~black list. Service is specified as\n"
-                    "  --prune         UID, UID/PID or /PID. Weighed for quicker pruning if prefix\n"
+                    "  -b <buffer>, --buffer=<buffer>         Request alternate ring buffer, 'main',\n"
+                    "                  'system', 'radio', 'events', 'crash', 'default' or 'all'.\n"
+                    "                  Multiple -b parameters or comma separated list of buffers are\n"
+                    "                  allowed. Buffers interleaved. Default -b main,system,crash.\n"
+                    "                  Permits property expansion.\n"
+                    "  -B, --binary    Output the log in binary.\n"
+                    "  -S, --statistics                       Output statistics.\n"
+                    "  -p, --prune     Print prune white and ~black list. Service is specified as\n"
+                    "                  UID, UID/PID or /PID. Weighed for quicker pruning if prefix\n"
                     "                  with ~, otherwise weighed for longevity if unadorned. All\n"
                     "                  other pruning activity is oldest first. Special case ~!\n"
                     "                  represents an automatic quicker pruning for the noisiest\n"
                     "                  UID as determined by the current statistics.\n"
-                    "  -P '<list> ...' set prune white and ~black list, using same format as\n"
-                    "  --prune='<list> ...'  printed above. Must be quoted.\n"
+                    "  -P '<list> ...', --prune='<list> ...'\n"
+                    "                  Set prune white and ~black list, using same format as\n"
+                    "                  listed above. Must be quoted.\n"
                     "  --pid=<pid>     Only prints logs from the given pid.\n"
-                    // Check ANDROID_LOG_WRAP_DEFAULT_TIMEOUT value
+                    // Check ANDROID_LOG_WRAP_DEFAULT_TIMEOUT value for match to 2 hours
                     "  --wrap          Sleep for 2 hours or when buffer about to wrap whichever\n"
                     "                  comes first. Improves efficiency of polling by providing\n"
                     "                  an about-to-wrap wakeup.\n");
 
-    fprintf(stderr,"\nfilterspecs are a series of \n"
+    fprintf(stderr,"\nProperty expansion where available, may need to be single quoted to prevent\n"
+                   "shell expansion:\n"
+                   "  ${key}          - Expand string with property value associated with key\n"
+                   "  ${key:-default} - Expand, if property key value clear, use default\n"
+                   "\nfilterspecs are a series of \n"
                    "  <tag>[:priority]\n\n"
                    "where <tag> is a log component tag (or * for all) and priority is:\n"
                    "  V    Verbose (default for <tag>)\n"
@@ -394,7 +397,7 @@ static const char *multiplier_of_size(unsigned long value)
 }
 
 /*String to unsigned int, returns -1 if it fails*/
-static bool getSizeTArg(char *ptr, size_t *val, size_t min = 0,
+static bool getSizeTArg(const char *ptr, size_t *val, size_t min = 0,
                         size_t max = SIZE_MAX)
 {
     if (!ptr) {
@@ -533,6 +536,49 @@ static log_time lastLogTime(char *outputFileName) {
     // a replay of the last entry we have just checked.
     retval += modulo;
     return retval;
+}
+
+// Expand multiple flat property references ${<tag>:-default} or ${tag}.
+//
+// ToDo: Do we permit nesting?
+//   ${persist.logcat.something:-${ro.logcat.something:-maybesomething}}
+// For now this will result in a syntax error for caller and is acceptable.
+//
+std::string expand(const char *str)
+{
+  std::string retval(str);
+
+  // Caller has no use for ${, } or :- as literals so no use for escape
+  // character. Result expectations are a number or a string, with validity
+  // checking for both in caller. Recursive expansion or other syntax errors
+  // will result in content caller can not obviously tolerate, error must
+  // report substring if applicable, expanded and original content (if
+  // different) so that it will be clear to user what they did wrong.
+  for (size_t pos; (pos = retval.find("${")) != std::string::npos; ) {
+    size_t epos = retval.find("}", pos + 2);
+    if (epos == std::string::npos) {
+      break; // Caller will error out, showing this unexpanded.
+    }
+    size_t def = retval.find(":-", pos + 2);
+    if (def >= epos) {
+      def = std::string::npos;
+    }
+    std::string default_value("");
+    std::string key;
+    if (def == std::string::npos) {
+      key = retval.substr(pos + 2, epos - (pos + 2));
+    } else {
+      key = retval.substr(pos + 2, def - (pos + 2));
+      default_value = retval.substr(def + 2, epos - (def + 2));
+    }
+    char value[PROPERTY_VALUE_MAX];
+    property_get(key.c_str(), value, default_value.c_str());
+    // Caller will error out, syntactically empty content at this point
+    // will not be tolerated as expected.
+    retval.replace(pos, epos - pos + 1, value);
+  }
+
+  return retval;
 }
 
 } /* namespace android */
@@ -765,111 +811,75 @@ int main(int argc, char **argv)
             break;
 
             case 'b': {
-                if (strcmp(optarg, "default") == 0) {
-                    for (int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
-                        switch (i) {
-                        case LOG_ID_SECURITY:
-                        case LOG_ID_EVENTS:
-                            continue;
-                        case LOG_ID_MAIN:
-                        case LOG_ID_SYSTEM:
-                        case LOG_ID_CRASH:
-                            break;
-                        default:
-                            continue;
-                        }
+                unsigned idMask = 0;
+                std::string expanded = expand(optarg);
+                std::istringstream copy(expanded);
+                std::string token;
+                // wish for strtok and ",:; \t\n\r\f" for hidden flexibility
+                while (std::getline(copy, token, ',')) { // settle for ","
+                    if (token.compare("default") == 0) {
+                        idMask |= (1 << LOG_ID_MAIN) |
+                                  (1 << LOG_ID_SYSTEM) |
+                                  (1 << LOG_ID_CRASH);
+                    } else if (token.compare("all") == 0) {
+                        idMask = (unsigned)-1;
+                    } else {
+                        log_id_t log_id = android_name_to_log_id(token.c_str());
+                        const char *name = android_log_id_to_name(log_id);
 
-                        const char *name = android_log_id_to_name((log_id_t)i);
-                        log_id_t log_id = android_name_to_log_id(name);
-
-                        if (log_id != (log_id_t)i) {
-                            continue;
-                        }
-
-                        bool found = false;
-                        for (dev = devices; dev; dev = dev->next) {
-                            if (!strcmp(optarg, dev->device)) {
-                                found = true;
-                                break;
+                        if (token.compare(name) != 0) {
+                            bool strDifferent = expanded.compare(token);
+                            if (expanded.compare(optarg)) {
+                                expanded += " expanded from ";
+                                expanded += optarg;
                             }
-                            if (!dev->next) {
-                                break;
+                            if (strDifferent) {
+                                expanded = token + " within " + expanded;
                             }
+                            logcat_panic(true, "unknown buffer -b %s\n",
+                                         expanded.c_str());
                         }
-                        if (found) {
-                            break;
-                        }
-
-                        log_device_t* d = new log_device_t(name, false);
-
-                        if (dev) {
-                            dev->next = d;
-                            dev = d;
-                        } else {
-                            devices = dev = d;
-                        }
-                        g_devCount++;
+                        idMask |= (1 << log_id);
                     }
-                    break;
                 }
 
-                if (strcmp(optarg, "all") == 0) {
-                    for (int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
-                        const char *name = android_log_id_to_name((log_id_t)i);
-                        log_id_t log_id = android_name_to_log_id(name);
+                for (int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
+                    const char *name = android_log_id_to_name((log_id_t)i);
+                    log_id_t log_id = android_name_to_log_id(name);
 
-                        if (log_id != (log_id_t)i) {
-                            continue;
-                        }
+                    if (log_id != (log_id_t)i) {
+                        continue;
+                    }
+                    if ((idMask & (1 << i)) == 0) {
+                        continue;
+                    }
 
-                        bool found = false;
-                        for (dev = devices; dev; dev = dev->next) {
-                            if (!strcmp(optarg, dev->device)) {
-                                found = true;
-                                break;
-                            }
-                            if (!dev->next) {
-                                break;
-                            }
-                        }
-                        if (found) {
+                    bool found = false;
+                    for (dev = devices; dev; dev = dev->next) {
+                        if (!strcmp(name, dev->device)) {
+                            found = true;
                             break;
                         }
-
-                        bool binary = !strcmp(name, "events") ||
-                                      !strcmp(name, "security");
-                        log_device_t* d = new log_device_t(name, binary);
-
-                        if (dev) {
-                            dev->next = d;
-                            dev = d;
-                        } else {
-                            devices = dev = d;
-                        }
-                        g_devCount++;
-                    }
-                    break;
-                }
-
-                bool binary = !(strcmp(optarg, "events") &&
-                                strcmp(optarg, "security"));
-
-                if (devices) {
-                    dev = devices;
-                    while (dev->next) {
-                        if (!strcmp(optarg, dev->device)) {
-                            dev = NULL;
+                        if (!dev->next) {
                             break;
                         }
-                        dev = dev->next;
                     }
+                    if (found) {
+                        continue;
+                    }
+
+                    bool binary = !strcmp(name, "events") ||
+                                  !strcmp(name, "security");
+                    log_device_t* d = new log_device_t(name, binary);
+
                     if (dev) {
-                        dev->next = new log_device_t(optarg, binary);
+                        dev->next = d;
+                        dev = d;
+                    } else {
+                        devices = dev = d;
                     }
-                } else {
-                    devices = new log_device_t(optarg, binary);
+                    g_devCount++;
                 }
-                g_devCount++;
             }
             break;
 
@@ -885,22 +895,36 @@ int main(int argc, char **argv)
                 g_outputFileName = optarg;
             break;
 
-            case 'r':
-                if (!getSizeTArg(optarg, &g_logRotateSizeKBytes, 1)) {
-                    logcat_panic(true, "Invalid parameter %s to -r\n", optarg);
+            case 'r': {
+                std::string expanded = expand(optarg);
+                if (!getSizeTArg(expanded.c_str(), &g_logRotateSizeKBytes, 1)) {
+                    if (expanded.compare(optarg)) {
+                        expanded += " expanded from ";
+                        expanded += optarg;
+                    }
+                    logcat_panic(true, "Invalid parameter -r %s\n",
+                                 expanded.c_str());
                 }
+            }
             break;
 
-            case 'n':
-                if (!getSizeTArg(optarg, &g_maxRotatedLogs, 1)) {
-                    logcat_panic(true, "Invalid parameter %s to -n\n", optarg);
+            case 'n': {
+                std::string expanded = expand(optarg);
+                if (!getSizeTArg(expanded.c_str(), &g_maxRotatedLogs, 1)) {
+                    if (expanded.compare(optarg)) {
+                        expanded += " expanded from ";
+                        expanded += optarg;
+                    }
+                    logcat_panic(true, "Invalid parameter -n %s\n",
+                                 expanded.c_str());
                 }
+            }
             break;
 
             case 'v':
                 err = setLogFormat (optarg);
                 if (err < 0) {
-                    logcat_panic(true, "Invalid parameter %s to -v\n", optarg);
+                    logcat_panic(true, "Invalid parameter -v %s\n", optarg);
                 }
                 hasSetLogFormat |= err;
             break;
