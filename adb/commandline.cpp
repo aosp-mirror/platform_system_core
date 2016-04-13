@@ -1057,11 +1057,11 @@ static bool wait_for_device(const char* service, TransportType t, const char* se
         return false;
     }
 
-    if (components[3] != "bootloader" && components[3] != "device" && components[3] != "recovery" &&
-        components[3] != "sideload") {
+    if (components[3] != "any" && components[3] != "bootloader" && components[3] != "device" &&
+        components[3] != "recovery" && components[3] != "sideload") {
         fprintf(stderr,
                 "adb: unknown state %s; "
-                "expected 'bootloader', 'device', 'recovery', or 'sideload'\n",
+                "expected 'any', 'bootloader', 'device', 'recovery', or 'sideload'\n",
                 components[3].c_str());
         return false;
     }
