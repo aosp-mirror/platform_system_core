@@ -353,7 +353,8 @@ void handle_packet(apacket *p, atransport *t)
                 send_auth_publickey(t);
             }
         } else if (p->msg.arg0 == ADB_AUTH_SIGNATURE) {
-            if (adb_auth_verify(t->token, p->data, p->msg.data_length)) {
+            if (adb_auth_verify(t->token, sizeof(t->token),
+                                p->data, p->msg.data_length)) {
                 adb_auth_verified(t);
                 t->failed_auth_attempts = 0;
             } else {

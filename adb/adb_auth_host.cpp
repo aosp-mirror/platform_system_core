@@ -37,14 +37,9 @@
 
 #include "adb.h"
 
-/* HACK: we need the RSAPublicKey struct
- * but RSA_verify conflits with openssl */
-#define RSA_verify RSA_verify_mincrypt
-#include "mincrypt/rsa.h"
-#undef RSA_verify
-
 #include <android-base/errors.h>
 #include <android-base/strings.h>
+#include <crypto_utils/android_pubkey.h>
 #include <cutils/list.h>
 
 #include <openssl/evp.h>
@@ -67,54 +62,6 @@ struct adb_private_key {
 
 static struct listnode key_list;
 
-
-/* Convert OpenSSL RSA private key to android pre-computed RSAPublicKey format */
-static int RSA_to_RSAPublicKey(RSA *rsa, RSAPublicKey *pkey)
-{
-    int ret = 1;
-    unsigned int i;
-
-    BN_CTX* ctx = BN_CTX_new();
-    BIGNUM* r32 = BN_new();
-    BIGNUM* rr = BN_new();
-    BIGNUM* r = BN_new();
-    BIGNUM* rem = BN_new();
-    BIGNUM* n = BN_new();
-    BIGNUM* n0inv = BN_new();
-
-    if (RSA_size(rsa) != RSANUMBYTES) {
-        ret = 0;
-        goto out;
-    }
-
-    BN_set_bit(r32, 32);
-    BN_copy(n, rsa->n);
-    BN_set_bit(r, RSANUMWORDS * 32);
-    BN_mod_sqr(rr, r, n, ctx);
-    BN_div(NULL, rem, n, r32, ctx);
-    BN_mod_inverse(n0inv, rem, r32, ctx);
-
-    pkey->len = RSANUMWORDS;
-    pkey->n0inv = 0 - BN_get_word(n0inv);
-    for (i = 0; i < RSANUMWORDS; i++) {
-        BN_div(rr, rem, rr, r32, ctx);
-        pkey->rr[i] = BN_get_word(rem);
-        BN_div(n, rem, n, r32, ctx);
-        pkey->n[i] = BN_get_word(rem);
-    }
-    pkey->exponent = BN_get_word(rsa->e);
-
-out:
-    BN_free(n0inv);
-    BN_free(n);
-    BN_free(rem);
-    BN_free(r);
-    BN_free(rr);
-    BN_free(r32);
-    BN_CTX_free(ctx);
-
-    return ret;
-}
 
 static void get_user_info(char *buf, size_t len)
 {
@@ -156,53 +103,55 @@ static void get_user_info(char *buf, size_t len)
 
 static int write_public_keyfile(RSA *private_key, const char *private_key_path)
 {
-    RSAPublicKey pkey;
+    uint8_t binary_key_data[ANDROID_PUBKEY_ENCODED_SIZE];
+    uint8_t* base64_key_data = nullptr;
+    size_t base64_key_length = 0;
     FILE *outfile = NULL;
     char path[PATH_MAX], info[MAX_PAYLOAD_V1];
-    uint8_t* encoded = nullptr;
-    size_t encoded_length;
     int ret = 0;
 
-    if (snprintf(path, sizeof(path), "%s.pub", private_key_path) >=
-        (int)sizeof(path)) {
-        D("Path too long while writing public key");
-        return 0;
-    }
-
-    if (!RSA_to_RSAPublicKey(private_key, &pkey)) {
+    if (!android_pubkey_encode(private_key, binary_key_data,
+                               sizeof(binary_key_data))) {
         D("Failed to convert to publickey");
-        return 0;
-    }
-
-    outfile = fopen(path, "w");
-    if (!outfile) {
-        D("Failed to open '%s'", path);
-        return 0;
+        goto out;
     }
 
     D("Writing public key to '%s'", path);
 
 #if defined(OPENSSL_IS_BORINGSSL)
-    if (!EVP_EncodedLength(&encoded_length, sizeof(pkey))) {
+    if (!EVP_EncodedLength(&base64_key_length, sizeof(binary_key_data))) {
         D("Public key too large to base64 encode");
         goto out;
     }
 #else
     /* While we switch from OpenSSL to BoringSSL we have to implement
      * |EVP_EncodedLength| here. */
-    encoded_length = 1 + ((sizeof(pkey) + 2) / 3 * 4);
+    base64_key_length = 1 + ((sizeof(binary_key_data) + 2) / 3 * 4);
 #endif
 
-    encoded = new uint8_t[encoded_length];
-    if (encoded == nullptr) {
+    base64_key_data = new uint8_t[base64_key_length];
+    if (base64_key_data == nullptr) {
         D("Allocation failure");
         goto out;
     }
 
-    encoded_length = EVP_EncodeBlock(encoded, (uint8_t*) &pkey, sizeof(pkey));
+    base64_key_length = EVP_EncodeBlock(base64_key_data, binary_key_data,
+                                        sizeof(binary_key_data));
     get_user_info(info, sizeof(info));
 
-    if (fwrite(encoded, encoded_length, 1, outfile) != 1 ||
+    if (snprintf(path, sizeof(path), "%s.pub", private_key_path) >=
+        (int)sizeof(path)) {
+        D("Path too long while writing public key");
+        goto out;
+    }
+
+    outfile = fopen(path, "w");
+    if (!outfile) {
+        D("Failed to open '%s'", path);
+        goto out;
+    }
+
+    if (fwrite(base64_key_data, base64_key_length, 1, outfile) != 1 ||
         fwrite(info, strlen(info), 1, outfile) != 1) {
         D("Write error while writing public key");
         goto out;
@@ -214,7 +163,7 @@ static int write_public_keyfile(RSA *private_key, const char *private_key_path)
     if (outfile != NULL) {
         fclose(outfile);
     }
-    delete[] encoded;
+    delete[] base64_key_data;
     return ret;
 }
 
