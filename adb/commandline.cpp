@@ -1033,50 +1033,40 @@ static int ppp(int argc, const char** argv) {
 #endif /* !defined(_WIN32) */
 }
 
-static bool check_wait_for_device_syntax(const char* service) {
-    // TODO: when we have libc++ for Windows, use a regular expression instead.
-    // wait-for-((any|local|usb)-)?(bootloader|device|recovery|sideload)
-
-    char type[20 + 1]; // sscanf's %20[...] doesn't include the NUL.
-    char state[20 + 1];
-    int length = 0;
-    if (sscanf(service, "wait-for-%20[a-z]-%20[a-z]%n", type, state, &length) < 2 ||
-        length != static_cast<int>(strlen(service))) {
+static bool wait_for_device(const char* service, TransportType t, const char* serial) {
+    std::vector<std::string> components = android::base::Split(service, "-");
+    if (components.size() < 3 || components.size() > 4) {
         fprintf(stderr, "adb: couldn't parse 'wait-for' command: %s\n", service);
         return false;
     }
 
-    if (strcmp(type, "any") != 0 && strcmp(type, "local") != 0 && strcmp(type, "usb") != 0) {
-        fprintf(stderr, "adb: unknown type %s; expected 'any', 'local', or 'usb'\n", type);
-        return false;
-    }
-    if (strcmp(state, "bootloader") != 0 && strcmp(state, "device") != 0 &&
-        strcmp(state, "recovery") != 0 && strcmp(state, "sideload") != 0) {
-        fprintf(stderr, "adb: unknown state %s; "
-                        "expected 'bootloader', 'device', 'recovery', or 'sideload'\n", state);
-        return false;
-    }
-    return true;
-}
-
-static bool wait_for_device(const char* service, TransportType t, const char* serial) {
     // Was the caller vague about what they'd like us to wait for?
     // If so, check they weren't more specific in their choice of transport type.
-    if (strcmp(service, "wait-for-device") == 0) {
+    if (components.size() == 3) {
+        auto it = components.begin() + 2;
         if (t == kTransportUsb) {
-            service = "wait-for-usb-device";
+            components.insert(it, "usb");
         } else if (t == kTransportLocal) {
-            service = "wait-for-local-device";
+            components.insert(it, "local");
         } else {
-            service = "wait-for-any-device";
+            components.insert(it, "any");
         }
-    }
-
-    if (!check_wait_for_device_syntax(service)) {
+    } else if (components[2] != "any" && components[2] != "local" && components[2] != "usb") {
+        fprintf(stderr, "adb: unknown type %s; expected 'any', 'local', or 'usb'\n",
+                components[2].c_str());
         return false;
     }
 
-    std::string cmd = format_host_command(service, t, serial);
+    if (components[3] != "any" && components[3] != "bootloader" && components[3] != "device" &&
+        components[3] != "recovery" && components[3] != "sideload") {
+        fprintf(stderr,
+                "adb: unknown state %s; "
+                "expected 'any', 'bootloader', 'device', 'recovery', or 'sideload'\n",
+                components[3].c_str());
+        return false;
+    }
+
+    std::string cmd = format_host_command(android::base::Join(components, "-").c_str(), t, serial);
     return adb_command(cmd);
 }
 
@@ -1122,7 +1112,7 @@ static bool adb_root(const char* command) {
     TransportType type;
     const char* serial;
     adb_get_transport(&type, &serial);
-    return wait_for_device("wait-for-device", type, serial);
+    return wait_for_device("wait-for-any", type, serial);
 }
 
 // Connects to the device "shell" service with |command| and prints the

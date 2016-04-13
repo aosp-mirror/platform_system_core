@@ -370,7 +370,7 @@ static void wait_for_state(int fd, void* data) {
         std::string error = "unknown error";
         const char* serial = sinfo->serial.length() ? sinfo->serial.c_str() : NULL;
         atransport* t = acquire_one_transport(sinfo->transport_type, serial, &is_ambiguous, &error);
-        if (t != nullptr && t->connection_state == sinfo->state) {
+        if (t != nullptr && (sinfo->state == kCsAny || sinfo->state == t->connection_state)) {
             SendOkay(fd);
             break;
         } else if (!is_ambiguous) {
@@ -534,6 +534,8 @@ asocket* host_service_to_socket(const char* name, const char* serial) {
             sinfo->state = kCsSideload;
         } else if (!strcmp(name, "-bootloader")) {
             sinfo->state = kCsBootloader;
+        } else if (!strcmp(name, "-any")) {
+            sinfo->state = kCsAny;
         } else {
             return nullptr;
         }
