@@ -87,6 +87,7 @@ on init
 
     # Symlink to keep legacy apps working in multi-user world
     symlink /storage/self/primary /sdcard
+    symlink /storage/self/primary /mnt/sdcard
     symlink /mnt/user/0/primary /mnt/runtime/default/self/primary
 
     # root memory control cgroup, used by lmkd
