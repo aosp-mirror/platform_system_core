@@ -76,7 +76,6 @@ public:
             const std::string& seclabel,  const std::vector<std::string>& args);
 
     bool HandleLine(const std::vector<std::string>& args, std::string* err);
-    bool Start(const std::vector<std::string>& dynamic_args);
     bool Start();
     bool StartIfNotDisabled();
     bool Enable();
