@@ -15,8 +15,10 @@
  */
 
 #include <fcntl.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <log/logger.h>
@@ -159,14 +161,13 @@ const char *LogStatistics::uidToName(uid_t uid) const {
         return strdup("auditd");
     }
 
-    // Android hard coded
-    const struct android_id_info *info = android_ids;
-
-    for (size_t i = 0; i < android_id_count; ++i) {
-        if (info->aid == uid) {
-            return strdup(info->name);
+    // Android system
+    if (uid < AID_APP) {
+        // in bionic, thread safe as long as we copy the results
+        struct passwd *pwd = getpwuid(uid);
+        if (pwd) {
+            return strdup(pwd->pw_name);
         }
-        ++info;
     }
 
     // Parse /data/system/packages.list
@@ -177,6 +178,14 @@ const char *LogStatistics::uidToName(uid_t uid) const {
     }
     if (name) {
         return name;
+    }
+
+    // Android application
+    if (uid >= AID_APP) {
+        struct passwd *pwd = getpwuid(uid);
+        if (pwd) {
+            return strdup(pwd->pw_name);
+        }
     }
 
     // report uid -> pid(s) -> pidToName if unique
