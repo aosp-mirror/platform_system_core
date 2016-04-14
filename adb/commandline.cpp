@@ -1620,6 +1620,11 @@ int adb_commandline(int argc, const char **argv) {
     else if (!strcmp(argv[0], "exec-in") || !strcmp(argv[0], "exec-out")) {
         int exec_in = !strcmp(argv[0], "exec-in");
 
+        if (argc < 2) {
+            fprintf(stderr, "Usage: adb %s command\n", argv[0]);
+            return 1;
+        }
+
         std::string cmd = "exec:";
         cmd += argv[1];
         argc -= 2;
