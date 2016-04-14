@@ -95,7 +95,7 @@ libbacktrace_offline_src_files := \
 	BacktraceOffline.cpp \
 
 # Use shared llvm library on device to save space.
-libbacktrace_offline_shared_libraries := \
+libbacktrace_offline_shared_libraries_target := \
 	libbacktrace \
 	libbase \
 	liblog \
@@ -103,47 +103,20 @@ libbacktrace_offline_shared_libraries := \
 	libutils \
 	libLLVM \
 
-libbacktrace_offline_static_libraries := \
+libbacktrace_offline_static_libraries_target := \
 	libziparchive \
 	libz \
-
-module := libbacktrace_offline
-build_type := target
-build_target := SHARED_LIBRARY
-include $(LOCAL_PATH)/Android.build.mk
-
-libbacktrace_offline_shared_libraries := \
-	libbacktrace \
-	libbase \
-	liblog \
-	libunwind \
-	libziparchive-host \
 
 # Use static llvm libraries on host to remove dependency on 32-bit llvm shared library
 # which is not included in the prebuilt.
-libbacktrace_offline_static_libraries := \
-	libLLVMObject \
-	libLLVMBitReader \
-	libLLVMMC \
-	libLLVMMCParser \
-	libLLVMCore \
-	libLLVMSupport \
-
-module := libbacktrace_offline
-build_type := host
-libbacktrace_multilib := both
-include $(LOCAL_PATH)/Android.build.mk
-
-libbacktrace_offline_shared_libraries :=
-libbacktrace_offline_static_libraries := \
+libbacktrace_offline_static_libraries_host := \
 	libbacktrace \
-	libbase \
-	libcutils \
-	liblog \
 	libunwind \
-	liblzma \
-	libziparchive \
+	libziparchive-host \
 	libz \
+	libbase \
+	liblog \
+	libutils \
 	libLLVMObject \
 	libLLVMBitReader \
 	libLLVMMC \
@@ -154,6 +127,9 @@ libbacktrace_offline_static_libraries := \
 module := libbacktrace_offline
 build_type := target
 build_target := STATIC_LIBRARY
+libbacktrace_offline_multilib := both
+include $(LOCAL_PATH)/Android.build.mk
+build_type := host
 include $(LOCAL_PATH)/Android.build.mk
 
 #-------------------------------------------------------------------------
@@ -200,13 +176,33 @@ backtrace_test_ldlibs_host := \
 backtrace_test_shared_libraries := \
 	libbacktrace_test \
 	libbacktrace \
-	libbacktrace_offline \
 	libbase \
 	libcutils \
+	liblog \
 	libunwind \
 
 backtrace_test_shared_libraries_target += \
 	libdl \
+	libutils \
+	libLLVM \
+
+backtrace_test_static_libraries := \
+	libbacktrace_offline \
+
+backtrace_test_static_libraries_target := \
+	libziparchive \
+	libz \
+
+backtrace_test_static_libraries_host := \
+	libziparchive-host \
+	libz \
+	libutils \
+	libLLVMObject \
+	libLLVMBitReader \
+	libLLVMMC \
+	libLLVMMCParser \
+	libLLVMCore \
+	libLLVMSupport \
 
 backtrace_test_ldlibs_host += \
 	-ldl \
