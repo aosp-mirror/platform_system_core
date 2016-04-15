@@ -40,10 +40,6 @@ namespace android {
 static constexpr const char* kPublicNativeLibrariesSystemConfig = "/system/etc/public.libraries.txt";
 static constexpr const char* kPublicNativeLibrariesVendorConfig = "/vendor/etc/public.libraries.txt";
 
-static bool namespace_workaround_enabled(int32_t target_sdk_version) {
-  return target_sdk_version <= 23;
-}
-
 class LibraryNamespaces {
  public:
   LibraryNamespaces() : initialized_(false) { }
@@ -156,18 +152,7 @@ class LibraryNamespaces {
   bool InitPublicNamespace(const char* library_path, int32_t target_sdk_version) {
     std::string publicNativeLibraries = public_libraries_;
 
-    // TODO (dimitry): This is a workaround for http://b/26436837
-    // will be removed before the release.
-    if (namespace_workaround_enabled(target_sdk_version)) {
-      // check if libart.so is loaded.
-      void* handle = dlopen("libart.so", RTLD_NOW | RTLD_NOLOAD);
-      if (handle != nullptr) {
-        publicNativeLibraries += ":libart.so";
-        dlclose(handle);
-      }
-    }
-    // END OF WORKAROUND
-
+    UNUSED(target_sdk_version);
     // (http://b/25844435) - Some apps call dlopen from generated code (mono jited
     // code is one example) unknown to linker in which  case linker uses anonymous
     // namespace. The second argument specifies the search path for the anonymous
