@@ -205,7 +205,19 @@ std::string CalculateBootCompletePrefix() {
 void RecordBootComplete() {
   BootEventRecordStore boot_event_store;
   BootEventRecordStore::BootEventRecord record;
+
   time_t uptime = bootstat::ParseUptime();
+  time_t current_time_utc = time(nullptr);
+
+  if (boot_event_store.GetBootEvent("last_boot_time_utc", &record)) {
+    time_t last_boot_time_utc = record.second;
+    time_t time_since_last_boot = difftime(current_time_utc,
+                                           last_boot_time_utc);
+    boot_event_store.AddBootEventWithValue("time_since_last_boot",
+                                           time_since_last_boot);
+  }
+
+  boot_event_store.AddBootEventWithValue("last_boot_time_utc", current_time_utc);
 
   // The boot_complete metric has two variants: boot_complete and
   // ota_boot_complete.  The latter signifies that the device is booting after
