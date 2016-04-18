@@ -37,7 +37,13 @@
 // fds far from the range that open() returns. But all of that might defeat the
 // purpose of the tests.
 
-TEST(io, ReadFdExactly_whole) {
+#if defined(_WIN32)
+#define POSIX_TEST(x,y) TEST(DISABLED_ ## x,y)
+#else
+#define POSIX_TEST TEST
+#endif
+
+POSIX_TEST(io, ReadFdExactly_whole) {
   const char expected[] = "Foobar";
   TemporaryFile tf;
   ASSERT_NE(-1, tf.fd);
@@ -51,7 +57,7 @@ TEST(io, ReadFdExactly_whole) {
   EXPECT_STREQ(expected, buf);
 }
 
-TEST(io, ReadFdExactly_eof) {
+POSIX_TEST(io, ReadFdExactly_eof) {
   const char expected[] = "Foobar";
   TemporaryFile tf;
   ASSERT_NE(-1, tf.fd);
@@ -65,7 +71,7 @@ TEST(io, ReadFdExactly_eof) {
   EXPECT_EQ(0, errno) << strerror(errno);
 }
 
-TEST(io, ReadFdExactly_partial) {
+POSIX_TEST(io, ReadFdExactly_partial) {
   const char input[] = "Foobar";
   TemporaryFile tf;
   ASSERT_NE(-1, tf.fd);
@@ -82,7 +88,7 @@ TEST(io, ReadFdExactly_partial) {
   EXPECT_STREQ(expected.c_str(), buf);
 }
 
-TEST(io, WriteFdExactly_whole) {
+POSIX_TEST(io, WriteFdExactly_whole) {
   const char expected[] = "Foobar";
   TemporaryFile tf;
   ASSERT_NE(-1, tf.fd);
@@ -97,7 +103,7 @@ TEST(io, WriteFdExactly_whole) {
   EXPECT_STREQ(expected, s.c_str());
 }
 
-TEST(io, WriteFdExactly_partial) {
+POSIX_TEST(io, WriteFdExactly_partial) {
   const char buf[] = "Foobar";
   TemporaryFile tf;
   ASSERT_NE(-1, tf.fd);
@@ -114,7 +120,7 @@ TEST(io, WriteFdExactly_partial) {
   EXPECT_EQ(expected, s);
 }
 
-TEST(io, WriteFdExactly_ENOSPC) {
+POSIX_TEST(io, WriteFdExactly_ENOSPC) {
     int fd = open("/dev/full", O_WRONLY);
     ASSERT_NE(-1, fd);
 
@@ -123,7 +129,7 @@ TEST(io, WriteFdExactly_ENOSPC) {
     ASSERT_EQ(ENOSPC, errno);
 }
 
-TEST(io, WriteFdExactly_string) {
+POSIX_TEST(io, WriteFdExactly_string) {
   const char str[] = "Foobar";
   TemporaryFile tf;
   ASSERT_NE(-1, tf.fd);
@@ -137,7 +143,7 @@ TEST(io, WriteFdExactly_string) {
   EXPECT_STREQ(str, s.c_str());
 }
 
-TEST(io, WriteFdFmt) {
+POSIX_TEST(io, WriteFdFmt) {
     TemporaryFile tf;
     ASSERT_NE(-1, tf.fd);
 
