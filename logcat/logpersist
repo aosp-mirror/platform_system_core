@@ -1,5 +1,5 @@
 #! /system/bin/sh
-# logpersist cat start and stop handlers
+# logpersist cat, start and stop handlers
 progname="${0##*/}"
 case `getprop ro.debuggable` in
 1) ;;
@@ -7,36 +7,134 @@ case `getprop ro.debuggable` in
    exit 1
    ;;
 esac
+
 data=/data/misc/logd
 property=persist.logd.logpersistd
 service=logcatd
-if [ X"${1}" = X"-h" -o X"${1}" = X"--help" ]; then
-  echo "${progname%.*}.cat            - dump current ${service%d} logs"
-  echo "${progname%.*}.start          - start ${service} service"
-  echo "${progname%.*}.stop [--clear] - stop ${service} service"
-  exit 0
+size_default=256
+buffer_default=all
+args="${@}"
+
+size=${size_default}
+buffer=${buffer_default}
+clear=false
+while [ ${#} -gt 0 ]; do
+  case ${1} in
+    -c|--clear) clear=true ;;
+    --size=*) size="${1#--size=}" ;;
+    --rotate-count=*) size="${1#--rotate-count=}" ;;
+    -n|--size|--rotate-count) size="${2}" ; shift ;;
+    --buffer=*) buffer="${1#--buffer=}" ;;
+    -b|--buffer) buffer="${2}" ; shift ;;
+    -h|--help|*)
+      LEAD_SPACE_="`echo ${progname%.*} | tr '[ -~]' ' '`"
+      echo "${progname%.*}.cat             - dump current ${service%d} logs"
+      echo "${progname%.*}.start [--size=<size_in_kb>] [--buffer=<buffers>] [--clear]"
+      echo "${LEAD_SPACE_}                 - start ${service} service"
+      echo "${progname%.*}.stop [--clear]  - stop ${service} service"
+      case ${1} in
+        -h|--help) exit 0 ;;
+        *) echo ERROR: bad argument ${@} >&2 ; exit 1 ;;
+      esac
+      ;;
+  esac
+  shift
+done
+
+if [ -z "${size}" -o "${size_default}" = "${size}" ]; then
+  unset size
 fi
+if [ -n "${size}" ] &&
+  ! ( [ 0 -lt "${size}" ] && [ 2048 -ge "${size}" ] ) >/dev/null 2>&1; then
+  echo ERROR: Invalid --size ${size} >&2
+  exit 1
+fi
+if [ -z "${buffer}" -o "${buffer_default}" = "${buffer}" ]; then
+  unset buffer
+fi
+if [ -n "${buffer}" ] && ! logcat -b ${buffer} -g >/dev/null 2>&1; then
+  echo ERROR: Invalid --buffer ${buffer} >&2
+  exit 1
+fi
+
 case ${progname} in
 *.cat)
-  su 1036 ls "${data}" |
+  if [ -n "${size}${buffer}" -o "true" = "${clear}" ]; then
+    echo WARNING: Can not use --clear, --size or --buffer with ${progname%.*}.cat >&2
+  fi
+  su logd ls "${data}" |
   tr -d '\r' |
   sort -ru |
   sed "s#^#${data}/#" |
-  su 1036 xargs cat
+  su logd xargs cat
   ;;
 *.start)
-  su 0 setprop ${property} ${service}
+  current_buffer="`getprop ${property}.buffer`"
+  current_size="`getprop ${property}.size`"
+  if [ "${service}" = "`getprop ${property}`" ]; then
+    if [ "true" = "${clear}" ]; then
+      su root stop ${service}
+      su root setprop ${property} ""
+      # 20ms done, guarantees content stop before rm
+      sleep 1
+    elif [ "${buffer}|${size}" != "${current_buffer}|${current_size}" ]; then
+      echo   "ERROR: Changing existing collection parameters from" >&2
+      if [ "${buffer}" != "${current_buffer}" ]; then
+        a=${current_buffer}
+        b=${buffer}
+        if [ -z "${a}" ]; then a="${default_buffer}"; fi
+        if [ -z "${b}" ]; then b="${default_buffer}"; fi
+        echo "           --buffer ${a} to ${b}" >&2
+      fi
+      if [ "${size}" != "${current_size}" ]; then
+        a=${current_size}
+        b=${size}
+        if [ -z "${a}" ]; then a="${default_size}"; fi
+        if [ -z "${b}" ]; then b="${default_size}"; fi
+        echo "           --size ${a} to ${b}" >&2
+      fi
+      echo   "       Are you sure you want to do this?" >&2
+      echo   "       Suggest add --clear to erase data and restart with new settings." >&2
+      echo   "       To blindly override and retain data, ${progname%.*}.stop first." >&2
+      exit 1
+    fi
+  fi
+  if [ "true" = "${clear}" ]; then
+    su logd,misc rm -rf "${data}"
+  fi
+  if [ -n "${buffer}${current_buffer}" ]; then
+    su root setprop ${property}.buffer "${buffer}"
+  fi
+  if [ -n "${size}${current_size}" ]; then
+    su root setprop ${property}.size "${size}"
+  fi
+  # ${service}.rc does the heavy lifting with the following trigger
+  su root setprop ${property} ${service}
   getprop ${property}
+  # 20ms done, to permit process feedback check
   sleep 1
+  # also generate an error return code if not found running, bonus
   ps -t | grep "${data##*/}.*${service%d}"
   ;;
 *.stop)
-  su 0 stop ${service}
-  su 0 setprop ${property} ""
-  [ X"${1}" != X"-c" -a X"${1}" != X"--clear" ] ||
-  ( sleep 1 ; su 1036,9998 rm -rf "${data}" )
+  if [ -n "${size}${buffer}" ]; then
+    echo "WARNING: Can not use --size or --buffer with ${progname%.*}.stop" >&2
+  fi
+  su root stop ${service}
+  su root setprop ${property} ""
+  if [ -n "`getprop ${property}.buffer`" ]; then
+    su root setprop ${property}.buffer ""
+  fi
+  if [ -n "`getprop ${property}.size`" ]; then
+    su root setprop ${property}.size ""
+  fi
+  if [ "true" = "${clear}" ]; then
+    # 20ms done, guarantees content stop before rm
+    sleep 1
+    su logd,misc rm -rf "${data}"
+  fi
   ;;
 *)
-  echo "Unexpected command ${0##*/} ${@}" >&2
+  echo "ERROR: Unexpected command ${0##*/} ${args}" >&2
   exit 1
 esac
