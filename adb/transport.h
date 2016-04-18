@@ -60,7 +60,13 @@ public:
     int (*read_from_remote)(apacket* p, atransport* t) = nullptr;
     int (*write_to_remote)(apacket* p, atransport* t) = nullptr;
     void (*close)(atransport* t) = nullptr;
-    void (*kick)(atransport* t) = nullptr;
+    void SetKickFunction(void (*kick_func)(atransport*)) {
+        kick_func_ = kick_func;
+    }
+    bool IsKicked() {
+        return kicked_;
+    }
+    void Kick();
 
     int fd = -1;
     int transport_socket = -1;
@@ -82,7 +88,6 @@ public:
     char* device = nullptr;
     char* devpath = nullptr;
     int adb_port = -1;  // Use for emulators (local transport)
-    bool kicked = false;
 
     void* key = nullptr;
     unsigned char token[TOKEN_SIZE] = {};
@@ -123,6 +128,9 @@ public:
     bool MatchesTarget(const std::string& target) const;
 
 private:
+    bool kicked_ = false;
+    void (*kick_func_)(atransport*) = nullptr;
+
     // A set of features transmitted in the banner with the initial connection.
     // This is stored in the banner as 'features=feature0,feature1,etc'.
     FeatureSet features_;
