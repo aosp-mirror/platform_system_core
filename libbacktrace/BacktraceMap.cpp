@@ -15,6 +15,7 @@
  */
 
 #include <ctype.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -46,8 +47,8 @@ void BacktraceMap::FillIn(uintptr_t addr, backtrace_map_t* map) {
 }
 
 bool BacktraceMap::ParseLine(const char* line, backtrace_map_t* map) {
-  unsigned long int start;
-  unsigned long int end;
+  uint64_t start;
+  uint64_t end;
   char permissions[5];
   int name_pos;
 
@@ -56,14 +57,14 @@ bool BacktraceMap::ParseLine(const char* line, backtrace_map_t* map) {
 // __TEXT                 0009f000-000a1000 [    8K     8K] r-x/rwx SM=COW  /Volumes/android/dalvik-dev/out/host/darwin-x86/bin/libcorkscrew_test\n
 // 012345678901234567890123456789012345678901234567890123456789
 // 0         1         2         3         4         5
-  if (sscanf(line, "%*21c %lx-%lx [%*13c] %3c/%*3c SM=%*3c  %n",
+  if (sscanf(line, "%*21c %" SCNx64 "-%" SCNx64 " [%*13c] %3c/%*3c SM=%*3c  %n",
              &start, &end, permissions, &name_pos) != 3) {
 #else
 // Linux /proc/<pid>/maps lines:
 // 6f000000-6f01e000 rwxp 00000000 00:0c 16389419   /system/lib/libcomposer.so\n
 // 012345678901234567890123456789012345678901234567890123456789
 // 0         1         2         3         4         5
-  if (sscanf(line, "%lx-%lx %4s %*x %*x:%*x %*d %n",
+  if (sscanf(line, "%" SCNx64 "-%" SCNx64 " %4s %*x %*x:%*x %*d %n",
              &start, &end, permissions, &name_pos) != 3) {
 #endif
     return false;
