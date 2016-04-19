@@ -63,7 +63,6 @@ static int check_cache(struct cache *cache)
 
 static void refresh_cache(struct cache *cache, const char *key)
 {
-    uint32_t serial;
     char buf[PROP_VALUE_MAX];
 
     if (!cache->pinfo) {
@@ -71,13 +70,8 @@ static void refresh_cache(struct cache *cache, const char *key)
         if (!cache->pinfo) {
             return;
         }
-        cache->serial = -1;
     }
-    serial = __system_property_serial(cache->pinfo);
-    if (serial == cache->serial) {
-        return;
-    }
-    cache->serial = serial;
+    cache->serial = __system_property_serial(cache->pinfo);
     __system_property_read(cache->pinfo, 0, buf);
     switch(buf[0]) {
     case 't': case 'T':
