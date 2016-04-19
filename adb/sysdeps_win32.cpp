@@ -191,7 +191,7 @@ typedef struct FHRec_
 #define  fh_socket  u.socket
 
 #define  WIN32_FH_BASE    2048
-#define  WIN32_MAX_FHS    128
+#define  WIN32_MAX_FHS    2048
 
 static adb_mutex_t   _win32_lock;
 static  FHRec        _win32_fhs[ WIN32_MAX_FHS ];
