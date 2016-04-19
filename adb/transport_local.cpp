@@ -388,7 +388,7 @@ int init_socket_transport(atransport *t, int s, int adb_port, int local)
 {
     int  fail = 0;
 
-    t->kick = remote_kick;
+    t->SetKickFunction(remote_kick);
     t->close = remote_close;
     t->read_from_remote = remote_read;
     t->write_to_remote = remote_write;

@@ -295,20 +295,12 @@ static void write_transport_thread(void* _t) {
     transport_unref(t);
 }
 
-static void kick_transport_locked(atransport* t) {
-    CHECK(t != nullptr);
-    if (!t->kicked) {
-        t->kicked = true;
-        t->kick(t);
-    }
-}
-
 void kick_transport(atransport* t) {
     adb_mutex_lock(&transport_lock);
     // As kick_transport() can be called from threads without guarantee that t is valid,
     // check if the transport is in transport_list first.
     if (std::find(transport_list.begin(), transport_list.end(), t) != transport_list.end()) {
-        kick_transport_locked(t);
+        t->Kick();
     }
     adb_mutex_unlock(&transport_lock);
 }
@@ -621,7 +613,7 @@ static void transport_unref(atransport* t) {
     t->ref_count--;
     if (t->ref_count == 0) {
         D("transport: %s unref (kicking and closing)", t->serial);
-        kick_transport_locked(t);
+        t->Kick();
         t->close(t);
         remove_transport(t);
     } else {
@@ -746,6 +738,14 @@ atransport* acquire_one_transport(TransportType type, const char* serial,
     }
 
     return result;
+}
+
+void atransport::Kick() {
+    if (!kicked_) {
+        kicked_ = true;
+        CHECK(kick_func_ != nullptr);
+        kick_func_(this);
+    }
 }
 
 const std::string atransport::connection_state_name() const {
@@ -926,10 +926,7 @@ std::string list_transports(bool long_listing) {
 void close_usb_devices() {
     adb_mutex_lock(&transport_lock);
     for (const auto& t : transport_list) {
-        if (!t->kicked) {
-            t->kicked = 1;
-            t->kick(t);
-        }
+        t->Kick();
     }
     adb_mutex_unlock(&transport_lock);
 }
@@ -1000,7 +997,7 @@ void kick_all_tcp_devices() {
             // the read_transport thread will notify the main thread to make this transport
             // offline. Then the main thread will notify the write_transport thread to exit.
             // Finally, this transport will be closed and freed in the main thread.
-            kick_transport_locked(t);
+            t->Kick();
         }
     }
     adb_mutex_unlock(&transport_lock);
