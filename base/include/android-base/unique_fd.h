@@ -19,7 +19,10 @@
 
 #include <unistd.h>
 
-#include <android-base/macros.h>
+// DO NOT INCLUDE OTHER LIBBASE HEADERS!
+// This file gets used in libbinder, and libbinder is used everywhere.
+// Including other headers from libbase frequently results in inclusion of
+// android-base/macros.h, which causes macro collisions.
 
 // Container for a file descriptor that automatically closes the descriptor as
 // it goes out of scope.
@@ -75,7 +78,8 @@ class unique_fd final {
  private:
   int value_;
 
-  DISALLOW_COPY_AND_ASSIGN(unique_fd);
+  unique_fd(const unique_fd&);
+  void operator=(const unique_fd&);
 };
 
 }  // namespace base
