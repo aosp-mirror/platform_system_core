@@ -557,13 +557,6 @@ on nonencrypted
     class_start main
     class_start late_start
 
-on property:vold.decrypt=trigger_default_encryption
-    start defaultcrypto
-
-on property:vold.decrypt=trigger_encryption
-    start surfaceflinger
-    start encrypt
-
 on property:sys.init_log_level=*
     loglevel ${sys.init_log_level}
 
