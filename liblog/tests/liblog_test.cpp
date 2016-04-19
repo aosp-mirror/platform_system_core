@@ -1338,7 +1338,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_FALSE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_FALSE(__android_log_is_loggable(
                         levels[i].level, tag, levels[j].level));
                 }
@@ -1347,7 +1347,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_TRUE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_TRUE(__android_log_is_loggable(
                         levels[i].level, tag, levels[j].level));
                 }
@@ -1379,7 +1379,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_FALSE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_FALSE(__android_log_is_loggable(
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
@@ -1388,7 +1388,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_TRUE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_TRUE(__android_log_is_loggable(
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
@@ -1408,7 +1408,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_FALSE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_FALSE(__android_log_is_loggable(
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
@@ -1417,7 +1417,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_TRUE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_TRUE(__android_log_is_loggable(
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
@@ -1439,7 +1439,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_FALSE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_FALSE(__android_log_is_loggable(
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
@@ -1448,7 +1448,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_TRUE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_TRUE(__android_log_is_loggable(
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
@@ -1468,7 +1468,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_FALSE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_FALSE(__android_log_is_loggable(
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
@@ -1477,7 +1477,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_TRUE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_TRUE(__android_log_is_loggable(
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
@@ -1513,7 +1513,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_FALSE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_FALSE(__android_log_is_loggable(
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
@@ -1522,7 +1522,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_TRUE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_TRUE(__android_log_is_loggable(
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
@@ -1542,7 +1542,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_FALSE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_FALSE(__android_log_is_loggable(
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
@@ -1551,7 +1551,7 @@ TEST(liblog, is_loggable) {
                     fprintf(stderr, "\n");
                 }
                 EXPECT_TRUE(android_log_is_loggable);
-                for(size_t k = 1000; k; --k) {
+                for(size_t k = 10; k; --k) {
                     EXPECT_TRUE(__android_log_is_loggable(
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
