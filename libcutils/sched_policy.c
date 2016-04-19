@@ -337,7 +337,7 @@ int set_sched_policy(int tid, SchedPolicy policy)
     char thread_name[255];
     int fd;
 
-    sprintf(statfile, "/proc/%d/stat", tid);
+    snprintf(statfile, sizeof(statfile), "/proc/%d/stat", tid);
     memset(thread_name, 0, sizeof(thread_name));
 
     fd = open(statfile, O_RDONLY);
