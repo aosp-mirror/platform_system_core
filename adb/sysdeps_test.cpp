@@ -215,3 +215,32 @@ TEST_F(sysdeps_poll, disconnect) {
     // Linux returns POLLIN | POLLHUP, Windows returns just POLLHUP.
     EXPECT_EQ(POLLHUP, pfd.revents & POLLHUP);
 }
+
+TEST_F(sysdeps_poll, fd_count) {
+    // https://code.google.com/p/android/issues/detail?id=12141
+    static constexpr int num_sockets = 512;
+    std::vector<int> sockets;
+    std::vector<adb_pollfd> pfds;
+    sockets.resize(num_sockets * 2);
+    for (int32_t i = 0; i < num_sockets; ++i) {
+        ASSERT_EQ(0, adb_socketpair(&sockets[i * 2])) << strerror(errno);
+        ASSERT_TRUE(WriteFdExactly(sockets[i * 2], &i, sizeof(i)));
+        adb_pollfd pfd;
+        pfd.events = POLLIN;
+        pfd.fd = sockets[i * 2 + 1];
+        pfds.push_back(pfd);
+    }
+
+    ASSERT_EQ(num_sockets, adb_poll(pfds.data(), pfds.size(), 0));
+    for (int i = 0; i < num_sockets; ++i) {
+        ASSERT_NE(0, pfds[i].revents & POLLIN);
+
+        int32_t buf[2] = { -1, -1 };
+        ASSERT_EQ(adb_read(pfds[i].fd, buf, sizeof(buf)), static_cast<ssize_t>(sizeof(int32_t)));
+        ASSERT_EQ(i, buf[0]);
+    }
+
+    for (int fd : sockets) {
+        adb_close(fd);
+    }
+}
