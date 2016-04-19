@@ -29,86 +29,96 @@
 #include <inttypes.h>
 #include <stdio.h>
 
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <vector>
+
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 
 #include "adb.h"
 #include "transport.h"
 
-#define  DBG   D
-
-// There's no strerror equivalent for the errors returned by IOKit.
-// https://developer.apple.com/library/mac/documentation/DeviceDrivers/Conceptual/AccessingHardware/AH_Handling_Errors/AH_Handling_Errors.html
-// Search the web for "IOReturn.h" to find a complete up to date list.
-
-static IONotificationPortRef    notificationPort = 0;
-static io_iterator_t            notificationIterator;
-
 struct usb_handle
 {
     UInt8 bulkIn;
     UInt8 bulkOut;
     IOUSBInterfaceInterface190** interface;
-    io_object_t usbNotification;
     unsigned int zero_mask;
+
+    // For garbage collecting disconnected devices.
+    bool mark;
+    std::string devpath;
+    std::atomic<bool> dead;
+
+    usb_handle() : bulkIn(0), bulkOut(0), interface(nullptr),
+        zero_mask(0), mark(false), dead(false) {
+    }
 };
 
-static CFRunLoopRef currentRunLoop = 0;
-static pthread_mutex_t start_lock;
-static pthread_cond_t start_cond;
+static std::atomic<bool> usb_inited_flag;
 
+static auto& g_usb_handles_mutex = *new std::mutex();
+static auto& g_usb_handles = *new std::vector<std::unique_ptr<usb_handle>>();
 
-static void AndroidInterfaceAdded(void *refCon, io_iterator_t iterator);
-static void AndroidInterfaceNotify(void *refCon, io_iterator_t iterator,
-                                   natural_t messageType,
-                                   void *messageArgument);
-static usb_handle* CheckInterface(IOUSBInterfaceInterface190 **iface,
-                                  UInt16 vendor, UInt16 product);
-
-static int
-InitUSB()
-{
-    CFMutableDictionaryRef  matchingDict;
-    CFRunLoopSourceRef      runLoopSource;
-
-    //* To set up asynchronous notifications, create a notification port and
-    //* add its run loop event source to the program's run loop
-    notificationPort = IONotificationPortCreate(kIOMasterPortDefault);
-    runLoopSource = IONotificationPortGetRunLoopSource(notificationPort);
-    CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, kCFRunLoopDefaultMode);
-
-    //* Create our matching dictionary to find the Android device's
-    //* adb interface
-    //* IOServiceAddMatchingNotification consumes the reference, so we do
-    //* not need to release this
-    matchingDict = IOServiceMatching(kIOUSBInterfaceClassName);
-
-    if (!matchingDict) {
-        LOG(ERROR) << "Couldn't create USB matching dictionary.";
-        return -1;
+static bool IsKnownDevice(const std::string& devpath) {
+    std::lock_guard<std::mutex> lock_guard(g_usb_handles_mutex);
+    for (auto& usb : g_usb_handles) {
+        if (usb->devpath == devpath) {
+            // Set mark flag to indicate this device is still alive.
+            usb->mark = true;
+            return true;
+        }
     }
+    return false;
+}
 
-    //* We have to get notifications for all potential candidates and test them
-    //* at connection time because the matching rules don't allow for a
-    //* USB interface class of 0xff for class+subclass+protocol matches
-    //* See https://developer.apple.com/library/mac/qa/qa1076/_index.html
-    IOServiceAddMatchingNotification(
-            notificationPort,
-            kIOFirstMatchNotification,
-            matchingDict,
-            AndroidInterfaceAdded,
-            NULL,
-            &notificationIterator);
+static void usb_kick_locked(usb_handle* handle);
 
-    //* Iterate over set of matching interfaces to access already-present
-    //* devices and to arm the notification
-    AndroidInterfaceAdded(NULL, notificationIterator);
+static void KickDisconnectedDevices() {
+    std::lock_guard<std::mutex> lock_guard(g_usb_handles_mutex);
+    for (auto& usb : g_usb_handles) {
+        if (!usb->mark) {
+            usb_kick_locked(usb.get());
+        } else {
+            usb->mark = false;
+        }
+    }
+}
 
-    return 0;
+static void AddDevice(std::unique_ptr<usb_handle> handle) {
+    handle->mark = true;
+    std::lock_guard<std::mutex> lock(g_usb_handles_mutex);
+    g_usb_handles.push_back(std::move(handle));
+}
+
+static void AndroidInterfaceAdded(io_iterator_t iterator);
+static std::unique_ptr<usb_handle> CheckInterface(IOUSBInterfaceInterface190 **iface,
+                                                  UInt16 vendor, UInt16 product);
+
+static bool FindUSBDevices() {
+    // Create the matching dictionary to find the Android device's adb interface.
+    CFMutableDictionaryRef matchingDict = IOServiceMatching(kIOUSBInterfaceClassName);
+    if (!matchingDict) {
+        LOG(ERROR) << "couldn't create USB matching dictionary";
+        return false;
+    }
+    // Create an iterator for all I/O Registry objects that match the dictionary.
+    io_iterator_t iter = 0;
+    kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault, matchingDict, &iter);
+    if (kr != KERN_SUCCESS) {
+        LOG(ERROR) << "failed to get matching services";
+        return false;
+    }
+    // Iterate over all matching objects.
+    AndroidInterfaceAdded(iter);
+    IOObjectRelease(iter);
+    return true;
 }
 
 static void
-AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
+AndroidInterfaceAdded(io_iterator_t iterator)
 {
     kern_return_t            kr;
     io_service_t             usbDevice;
@@ -124,8 +134,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
     UInt16                   product;
     UInt8                    serialIndex;
     char                     serial[256];
-    char                     devpathBuf[64];
-    char                     *devpath = NULL;
+    std::string devpath;
 
     while ((usbInterface = IOIteratorNext(iterator))) {
         //* Create an intermediate interface plugin
@@ -199,9 +208,11 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         kr = (*dev)->GetDeviceVendor(dev, &vendor);
         kr = (*dev)->GetDeviceProduct(dev, &product);
         kr = (*dev)->GetLocationID(dev, &locationId);
-        if (kr == 0) {
-            snprintf(devpathBuf, sizeof(devpathBuf), "usb:%" PRIu32 "X", locationId);
-            devpath = devpathBuf;
+        if (kr == KERN_SUCCESS) {
+            devpath = android::base::StringPrintf("usb:%" PRIu32 "X", locationId);
+            if (IsKnownDevice(devpath)) {
+                continue;
+            }
         }
         kr = (*dev)->USBGetSerialNumberStringIndex(dev, &serialIndex);
 
@@ -256,49 +267,29 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
 
         (*dev)->Release(dev);
 
-        LOG(INFO) << android::base::StringPrintf("Found vid=%04x pid=%04x serial=%s\n",
+        VLOG(USB) << android::base::StringPrintf("Found vid=%04x pid=%04x serial=%s\n",
                         vendor, product, serial);
-
-        usb_handle* handle = CheckInterface((IOUSBInterfaceInterface190**)iface,
-                                            vendor, product);
-        if (handle == NULL) {
-            LOG(ERROR) << "Could not find device interface";
+        if (devpath.empty()) {
+            devpath = serial;
+        }
+        if (IsKnownDevice(devpath)) {
+            (*iface)->USBInterfaceClose(iface);
             (*iface)->Release(iface);
             continue;
         }
 
-        LOG(DEBUG) << "AndroidDeviceAdded calling register_usb_transport";
-        register_usb_transport(handle, (serial[0] ? serial : NULL), devpath, 1);
-
-        // Register for an interest notification of this device being removed.
-        // Pass the reference to our private data as the refCon for the
-        // notification.
-        kr = IOServiceAddInterestNotification(notificationPort,
-                usbInterface,
-                kIOGeneralInterest,
-                AndroidInterfaceNotify,
-                handle,
-                &handle->usbNotification);
-
-        if (kIOReturnSuccess != kr) {
-            LOG(ERROR) << "Unable to create interest notification (" << std::hex << kr << ")";
+        std::unique_ptr<usb_handle> handle = CheckInterface((IOUSBInterfaceInterface190**)iface,
+                                                            vendor, product);
+        if (handle == nullptr) {
+            LOG(ERROR) << "Could not find device interface";
+            (*iface)->Release(iface);
+            continue;
         }
-    }
-}
-
-static void
-AndroidInterfaceNotify(void *refCon, io_service_t service, natural_t messageType, void *messageArgument)
-{
-    usb_handle *handle = (usb_handle *)refCon;
-
-    if (messageType == kIOMessageServiceIsTerminated) {
-        if (!handle) {
-            LOG(ERROR) << "NULL handle";
-            return;
-        }
-        LOG(DEBUG) << "AndroidInterfaceNotify";
-        IOObjectRelease(handle->usbNotification);
-        usb_kick(handle);
+        handle->devpath = devpath;
+        usb_handle* handle_p = handle.get();
+        VLOG(USB) << "Add usb device " << serial;
+        AddDevice(std::move(handle));
+        register_usb_transport(handle_p, serial, devpath.c_str(), 1);
     }
 }
 
@@ -316,10 +307,10 @@ static bool ClearPipeStallBothEnds(IOUSBInterfaceInterface190** interface, UInt8
 
 //* TODO: simplify this further since we only register to get ADB interface
 //* subclass+protocol events
-static usb_handle*
+static std::unique_ptr<usb_handle>
 CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 product)
 {
-    usb_handle* handle;
+    std::unique_ptr<usb_handle> handle;
     IOReturn kr;
     UInt8 interfaceNumEndpoints, interfaceClass, interfaceSubClass, interfaceProtocol;
     UInt8 endpoint;
@@ -353,8 +344,10 @@ CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 pro
         goto err_bad_adb_interface;
     }
 
-    handle = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
-    if (handle == nullptr) goto err_bad_adb_interface;
+    handle.reset(new usb_handle);
+    if (handle == nullptr) {
+        goto err_bad_adb_interface;
+    }
 
     //* Iterate over the endpoints for this interface and find the first
     //* bulk in/out pipes available.  These will be our read/write pipes.
@@ -392,39 +385,37 @@ CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 pro
     return handle;
 
 err_get_pipe_props:
-    free(handle);
 err_bad_adb_interface:
 err_get_interface_class:
 err_get_num_ep:
     (*interface)->USBInterfaceClose(interface);
-    return NULL;
+    return nullptr;
 }
+
+std::mutex& operate_device_lock = *new std::mutex();
 
 static void RunLoopThread(void* unused) {
     adb_thread_setname("RunLoop");
-    InitUSB();
 
-    currentRunLoop = CFRunLoopGetCurrent();
-
-    // Signal the parent that we are running
-    adb_mutex_lock(&start_lock);
-    adb_cond_signal(&start_cond);
-    adb_mutex_unlock(&start_lock);
-
-    CFRunLoopRun();
-    currentRunLoop = 0;
-
-    IOObjectRelease(notificationIterator);
-    IONotificationPortDestroy(notificationPort);
-
-    LOG(DEBUG) << "RunLoopThread done";
+    VLOG(USB) << "RunLoopThread started";
+    while (true) {
+        {
+            std::lock_guard<std::mutex> lock_guard(operate_device_lock);
+            FindUSBDevices();
+            KickDisconnectedDevices();
+        }
+        // Signal the parent that we are running
+        usb_inited_flag = true;
+        adb_sleep_ms(1000);
+    }
+    VLOG(USB) << "RunLoopThread done";
 }
 
 static void usb_cleanup() {
-    LOG(DEBUG) << "usb_cleanup";
+    VLOG(USB) << "usb_cleanup";
+    // Wait until usb operations in RunLoopThread finish, and prevent further operations.
+    operate_device_lock.lock();
     close_usb_devices();
-    if (currentRunLoop)
-        CFRunLoopStop(currentRunLoop);
 }
 
 void usb_init() {
@@ -432,20 +423,16 @@ void usb_init() {
     if (!initialized) {
         atexit(usb_cleanup);
 
-        adb_mutex_init(&start_lock, NULL);
-        adb_cond_init(&start_cond, NULL);
+        usb_inited_flag = false;
 
         if (!adb_thread_create(RunLoopThread, nullptr)) {
             fatal_errno("cannot create RunLoop thread");
         }
 
         // Wait for initialization to finish
-        adb_mutex_lock(&start_lock);
-        adb_cond_wait(&start_cond, &start_lock);
-        adb_mutex_unlock(&start_lock);
-
-        adb_mutex_destroy(&start_lock);
-        adb_cond_destroy(&start_cond);
+        while (!usb_inited_flag) {
+            adb_sleep_ms(100);
+        }
 
         initialized = true;
     }
@@ -458,7 +445,7 @@ int usb_write(usb_handle *handle, const void *buf, int len)
     if (!len)
         return 0;
 
-    if (!handle)
+    if (!handle || handle->dead)
         return -1;
 
     if (NULL == handle->interface) {
@@ -499,7 +486,7 @@ int usb_read(usb_handle *handle, void *buf, int len)
         return 0;
     }
 
-    if (!handle) {
+    if (!handle || handle->dead) {
         return -1;
     }
 
@@ -532,20 +519,33 @@ int usb_read(usb_handle *handle, void *buf, int len)
 
 int usb_close(usb_handle *handle)
 {
+    std::lock_guard<std::mutex> lock(g_usb_handles_mutex);
+    for (auto it = g_usb_handles.begin(); it != g_usb_handles.end(); ++it) {
+        if ((*it).get() == handle) {
+            g_usb_handles.erase(it);
+            break;
+        }
+    }
     return 0;
 }
 
-void usb_kick(usb_handle *handle)
+static void usb_kick_locked(usb_handle *handle)
 {
     LOG(INFO) << "Kicking handle";
     /* release the interface */
     if (!handle)
         return;
 
-    if (handle->interface)
+    if (!handle->dead)
     {
+        handle->dead = true;
         (*handle->interface)->USBInterfaceClose(handle->interface);
         (*handle->interface)->Release(handle->interface);
-        handle->interface = 0;
     }
+}
+
+void usb_kick(usb_handle *handle) {
+    // Use the lock to avoid multiple thread kicking the device at the same time.
+    std::lock_guard<std::mutex> lock_guard(g_usb_handles_mutex);
+    usb_kick_locked(handle);
 }
