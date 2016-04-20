@@ -34,6 +34,6 @@ int open_tombstone(std::string* path);
 /* Creates a tombstone file and writes the crash dump to it. */
 void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid,
                        const std::set<pid_t>& siblings, int signal, int original_si_code,
-                       uintptr_t abort_msg_address);
+                       uintptr_t abort_msg_address, int amfd);
 
 #endif // _DEBUGGERD_TOMBSTONE_H
