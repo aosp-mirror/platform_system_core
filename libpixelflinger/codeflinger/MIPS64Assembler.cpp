@@ -33,10 +33,6 @@
 #include <cutils/log.h>
 #include <cutils/properties.h>
 
-#if defined(WITH_LIB_HARDWARE)
-#include <hardware_legacy/qemu_tracing.h>
-#endif
-
 #include <private/pixelflinger/ggl_context.h>
 
 #include "MIPS64Assembler.h"
