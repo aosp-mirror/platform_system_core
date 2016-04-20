@@ -25,9 +25,11 @@
 #include <sys/poll.h>
 #include <sys/prctl.h>
 #include <sys/ptrace.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/un.h>
 #include <time.h>
 
 #include <set>
@@ -248,6 +250,43 @@ static int read_request(int fd, debugger_request_t* out_request) {
   return 0;
 }
 
+static int activity_manager_connect() {
+  android::base::unique_fd amfd(socket(PF_UNIX, SOCK_STREAM, 0));
+  if (amfd.get() < -1) {
+    ALOGE("debuggerd: Unable to connect to activity manager (socket failed: %s)", strerror(errno));
+    return -1;
+  }
+
+  struct sockaddr_un address;
+  memset(&address, 0, sizeof(address));
+  address.sun_family = AF_UNIX;
+  // The path used here must match the value defined in NativeCrashListener.java.
+  strncpy(address.sun_path, "/data/system/ndebugsocket", sizeof(address.sun_path));
+  if (TEMP_FAILURE_RETRY(connect(amfd.get(), reinterpret_cast<struct sockaddr*>(&address),
+                                 sizeof(address))) == -1) {
+    ALOGE("debuggerd: Unable to connect to activity manager (connect failed: %s)", strerror(errno));
+    return -1;
+  }
+
+  struct timeval tv;
+  memset(&tv, 0, sizeof(tv));
+  tv.tv_sec = 1;  // tight leash
+  if (setsockopt(amfd.get(), SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) == -1) {
+    ALOGE("debuggerd: Unable to connect to activity manager (setsockopt SO_SNDTIMEO failed: %s)",
+          strerror(errno));
+    return -1;
+  }
+
+  tv.tv_sec = 3;  // 3 seconds on handshake read
+  if (setsockopt(amfd.get(), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1) {
+    ALOGE("debuggerd: Unable to connect to activity manager (setsockopt SO_RCVTIMEO failed: %s)",
+          strerror(errno));
+    return -1;
+  }
+
+  return amfd.release();
+}
+
 static bool should_attach_gdb(const debugger_request_t& request) {
   if (request.action == DEBUGGER_ACTION_CRASH) {
     return property_get_bool("debug.debuggerd.wait_for_gdb", false);
@@ -375,7 +414,7 @@ static void ptrace_siblings(pid_t pid, pid_t main_tid, std::set<pid_t>& tids) {
 
 static bool perform_dump(const debugger_request_t& request, int fd, int tombstone_fd,
                          BacktraceMap* backtrace_map, const std::set<pid_t>& siblings,
-                         int* crash_signal) {
+                         int* crash_signal, int amfd) {
   if (TEMP_FAILURE_RETRY(write(fd, "\0", 1)) != 1) {
     ALOGE("debuggerd: failed to respond to client: %s\n", strerror(errno));
     return false;
@@ -393,7 +432,7 @@ static bool perform_dump(const debugger_request_t& request, int fd, int tombston
         if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
           ALOGV("debuggerd: stopped -- dumping to tombstone");
           engrave_tombstone(tombstone_fd, backtrace_map, request.pid, request.tid, siblings, signal,
-                            request.original_si_code, request.abort_msg_address);
+                            request.original_si_code, request.abort_msg_address, amfd);
         } else if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE) {
           ALOGV("debuggerd: stopped -- dumping to fd");
           dump_backtrace(fd, -1, backtrace_map, request.pid, request.tid, siblings);
@@ -420,7 +459,7 @@ static bool perform_dump(const debugger_request_t& request, int fd, int tombston
         ALOGV("stopped -- fatal signal\n");
         *crash_signal = signal;
         engrave_tombstone(tombstone_fd, backtrace_map, request.pid, request.tid, siblings, signal,
-                          request.original_si_code, request.abort_msg_address);
+                          request.original_si_code, request.abort_msg_address, amfd);
         break;
 
       default:
@@ -506,6 +545,12 @@ static void worker_process(int fd, debugger_request_t& request) {
   // Generate the backtrace map before dropping privileges.
   std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::Create(request.pid));
 
+  int amfd = -1;
+  if (request.action == DEBUGGER_ACTION_CRASH) {
+    // Connect to the activity manager before dropping privileges.
+    amfd = activity_manager_connect();
+  }
+
   bool succeeded = false;
 
   // Now that we've done everything that requires privileges, we can drop them.
@@ -515,7 +560,8 @@ static void worker_process(int fd, debugger_request_t& request) {
   }
 
   int crash_signal = SIGKILL;
-  succeeded = perform_dump(request, fd, tombstone_fd, backtrace_map.get(), siblings, &crash_signal);
+  succeeded = perform_dump(request, fd, tombstone_fd, backtrace_map.get(), siblings,
+                           &crash_signal, amfd);
   if (succeeded) {
     if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
       if (!tombstone_path.empty()) {
@@ -558,6 +604,8 @@ static void worker_process(int fd, debugger_request_t& request) {
 
     uninit_getevent();
   }
+
+  close(amfd);
 
   exit(!succeeded);
 }
