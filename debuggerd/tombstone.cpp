@@ -28,9 +28,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/ptrace.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/un.h>
 
 #include <memory>
 #include <string>
@@ -58,9 +56,6 @@
 #define MAX_TOMBSTONES  10
 #define TOMBSTONE_DIR   "/data/tombstones"
 #define TOMBSTONE_TEMPLATE (TOMBSTONE_DIR"/tombstone_%02d")
-
-// Must match the path defined in NativeCrashListener.java
-#define NCRASH_SOCKET_PATH "/data/system/ndebugsocket"
 
 static bool signal_has_si_addr(int sig) {
   switch (sig) {
@@ -711,39 +706,9 @@ int open_tombstone(std::string* out_path) {
   return fd;
 }
 
-static int activity_manager_connect() {
-  int amfd = socket(PF_UNIX, SOCK_STREAM, 0);
-  if (amfd >= 0) {
-    struct sockaddr_un address;
-    int err;
-
-    memset(&address, 0, sizeof(address));
-    address.sun_family = AF_UNIX;
-    strncpy(address.sun_path, NCRASH_SOCKET_PATH, sizeof(address.sun_path));
-    err = TEMP_FAILURE_RETRY(connect(
-        amfd, reinterpret_cast<struct sockaddr*>(&address), sizeof(address)));
-    if (!err) {
-      struct timeval tv;
-      memset(&tv, 0, sizeof(tv));
-      tv.tv_sec = 1;  // tight leash
-      err = setsockopt(amfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-      if (!err) {
-        tv.tv_sec = 3;  // 3 seconds on handshake read
-        err = setsockopt(amfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-      }
-    }
-    if (err) {
-      close(amfd);
-      amfd = -1;
-    }
-  }
-
-  return amfd;
-}
-
 void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid,
                        const std::set<pid_t>& siblings, int signal, int original_si_code,
-                       uintptr_t abort_msg_address) {
+                       uintptr_t abort_msg_address, int amfd) {
   log_t log;
   log.current_tid = tid;
   log.crashed_tid = tid;
@@ -756,10 +721,6 @@ void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid
   log.tfd = tombstone_fd;
   // Preserve amfd since it can be modified through the calls below without
   // being closed.
-  int amfd = activity_manager_connect();
   log.amfd = amfd;
   dump_crash(&log, map, pid, tid, siblings, signal, original_si_code, abort_msg_address);
-
-  // This file descriptor can be -1, any error is ignored.
-  close(amfd);
 }
