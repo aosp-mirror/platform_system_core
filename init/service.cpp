@@ -17,6 +17,9 @@
 #include "service.h"
 
 #include <fcntl.h>
+#include <sched.h>
+#include <sys/mount.h>
+#include <sys/prctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -49,6 +52,46 @@ using android::base::WriteStringToFile;
 #define CRITICAL_CRASH_THRESHOLD    4       // if we crash >4 times ...
 #define CRITICAL_CRASH_WINDOW       (4*60)  // ... in 4 minutes, goto recovery
 
+static void SetUpPidNamespace(const std::string& service_name) {
+    constexpr unsigned int kSafeFlags = MS_NODEV | MS_NOEXEC | MS_NOSUID;
+
+    // It's OK to LOG(FATAL) in this function since it's running in the first
+    // child process.
+    if (mount("", "/proc", "proc", kSafeFlags | MS_REMOUNT, "") == -1) {
+        PLOG(FATAL) << "couldn't remount(/proc)";
+    }
+
+    if (prctl(PR_SET_NAME, service_name.c_str()) == -1) {
+        PLOG(FATAL) << "couldn't set name";
+    }
+
+    pid_t child_pid = fork();
+    if (child_pid == -1) {
+        PLOG(FATAL) << "couldn't fork init inside the PID namespace";
+    }
+
+    if (child_pid > 0) {
+        // So that we exit with the right status.
+        static int init_exitstatus = 0;
+        signal(SIGTERM, [](int) { _exit(init_exitstatus); });
+
+        pid_t waited_pid;
+        int status;
+        while ((waited_pid = wait(&status)) > 0) {
+             // This loop will end when there are no processes left inside the
+             // PID namespace or when the init process inside the PID namespace
+             // gets a signal.
+            if (waited_pid == child_pid) {
+                init_exitstatus = status;
+            }
+        }
+        if (!WIFEXITED(init_exitstatus)) {
+            _exit(EXIT_FAILURE);
+        }
+        _exit(WEXITSTATUS(init_exitstatus));
+    }
+}
+
 SocketInfo::SocketInfo() : uid(0), gid(0), perm(0) {
 }
 
@@ -68,18 +111,22 @@ ServiceEnvironmentInfo::ServiceEnvironmentInfo(const std::string& name,
 Service::Service(const std::string& name, const std::string& classname,
                  const std::vector<std::string>& args)
     : name_(name), classname_(classname), flags_(0), pid_(0), time_started_(0),
-      time_crashed_(0), nr_crashed_(0), uid_(0), gid_(0), seclabel_(""),
-      ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0), priority_(0), args_(args) {
+      time_crashed_(0), nr_crashed_(0), uid_(0), gid_(0), namespace_flags_(0),
+      seclabel_(""), ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0),
+      priority_(0), args_(args) {
     onrestart_.InitSingleTrigger("onrestart");
 }
 
 Service::Service(const std::string& name, const std::string& classname,
-                 unsigned flags, uid_t uid, gid_t gid, const std::vector<gid_t>& supp_gids,
-                 const std::string& seclabel,  const std::vector<std::string>& args)
-    : name_(name), classname_(classname), flags_(flags), pid_(0), time_started_(0),
-      time_crashed_(0), nr_crashed_(0), uid_(uid), gid_(gid), supp_gids_(supp_gids),
-      seclabel_(seclabel), ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0), priority_(0),
-      args_(args) {
+                 unsigned flags, uid_t uid, gid_t gid,
+                 const std::vector<gid_t>& supp_gids, unsigned namespace_flags,
+                 const std::string& seclabel,
+                 const std::vector<std::string>& args)
+    : name_(name), classname_(classname), flags_(flags), pid_(0),
+      time_started_(0), time_crashed_(0), nr_crashed_(0), uid_(uid), gid_(gid),
+      supp_gids_(supp_gids), namespace_flags_(namespace_flags),
+      seclabel_(seclabel), ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0),
+      priority_(0), args_(args) {
     onrestart_.InitSingleTrigger("onrestart");
 }
 
@@ -257,6 +304,22 @@ bool Service::HandleOnrestart(const std::vector<std::string>& args, std::string*
     return true;
 }
 
+bool Service::HandleNamespace(const std::vector<std::string>& args, std::string* err) {
+    for (size_t i = 1; i < args.size(); i++) {
+        if (args[i] == "pid") {
+            namespace_flags_ |= CLONE_NEWPID;
+            // PID namespaces require mount namespaces.
+            namespace_flags_ |= CLONE_NEWNS;
+        } else if (args[i] == "mnt") {
+            namespace_flags_ |= CLONE_NEWNS;
+        } else {
+            *err = "namespace must be 'pid' or 'mnt'";
+            return false;
+        }
+    }
+    return true;
+}
+
 bool Service::HandleSeclabel(const std::vector<std::string>& args, std::string* err) {
     seclabel_ = args[1];
     return true;
@@ -314,6 +377,7 @@ Service::OptionHandlerMap::Map& Service::OptionHandlerMap::map() const {
         {"keycodes",    {1,     kMax, &Service::HandleKeycodes}},
         {"oneshot",     {0,     0,    &Service::HandleOneshot}},
         {"onrestart",   {1,     kMax, &Service::HandleOnrestart}},
+        {"namespace",   {1,     2,    &Service::HandleNamespace}},
         {"seclabel",    {1,     1,    &Service::HandleSeclabel}},
         {"setenv",      {2,     2,    &Service::HandleSetenv}},
         {"socket",      {3,     6,    &Service::HandleSocket}},
@@ -389,7 +453,7 @@ bool Service::Start() {
 
         rc = getfilecon(args_[0].c_str(), &fcon);
         if (rc < 0) {
-            LOG(ERROR) << "could not get context while starting '" << name_ << "'";
+            LOG(ERROR) << "could not get file context while starting '" << name_ << "'";
             free(mycon);
             return false;
         }
@@ -417,9 +481,22 @@ bool Service::Start() {
 
     LOG(VERBOSE) << "Starting service '" << name_ << "'...";
 
-    pid_t pid = fork();
+    pid_t pid = -1;
+    if (namespace_flags_) {
+        pid = clone(nullptr, nullptr, namespace_flags_ | SIGCHLD,
+                    nullptr);
+    } else {
+        pid = fork();
+    }
+
     if (pid == 0) {
         umask(077);
+
+        if (namespace_flags_ & CLONE_NEWPID) {
+            // This will fork again to run an init process inside the PID
+            // namespace.
+            SetUpPidNamespace(name_);
+        }
 
         for (const auto& ei : envvars_) {
             add_environment(ei.name.c_str(), ei.value.c_str());
@@ -695,6 +772,7 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
     exec_count_++;
     std::string name = StringPrintf("exec %d (%s)", exec_count_, str_args[0].c_str());
     unsigned flags = SVC_EXEC | SVC_ONESHOT;
+    unsigned namespace_flags = 0;
 
     std::string seclabel = "";
     if (command_arg > 2 && args[1] != "-") {
@@ -715,7 +793,8 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
     }
 
     std::unique_ptr<Service> svc_p(new Service(name, "default", flags, uid, gid,
-                                               supp_gids, seclabel, str_args));
+                                               supp_gids, namespace_flags,
+                                               seclabel, str_args));
     if (!svc_p) {
         LOG(ERROR) << "Couldn't allocate service for exec of '" << str_args[0] << "'";
         return nullptr;
