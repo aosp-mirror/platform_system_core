@@ -31,6 +31,9 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
+
+#include <android-base/logging.h>
 
 #include "adb.h"
 #include "transport.h"
@@ -49,14 +52,19 @@
 #define cpu_to_le16(x)  htole16(x)
 #define cpu_to_le32(x)  htole32(x)
 
+static int dummy_fd = -1;
+
 struct usb_handle
 {
     adb_cond_t notify;
     adb_mutex_t lock;
+    bool open_new_connection;
+    std::atomic<bool> kicked;
 
     int (*write)(usb_handle *h, const void *data, int len);
     int (*read)(usb_handle *h, void *data, int len);
     void (*kick)(usb_handle *h);
+    void (*close)(usb_handle *h);
 
     // Legacy f_adb
     int fd;
@@ -241,8 +249,10 @@ static void usb_adb_open_thread(void* x) {
     while (true) {
         // wait until the USB device needs opening
         adb_mutex_lock(&usb->lock);
-        while (usb->fd != -1)
+        while (!usb->open_new_connection) {
             adb_cond_wait(&usb->notify, &usb->lock);
+        }
+        usb->open_new_connection = false;
         adb_mutex_unlock(&usb->lock);
 
         D("[ usb_thread - opening device ]");
@@ -281,6 +291,10 @@ static int usb_adb_write(usb_handle *h, const void *data, int len)
             h->fd, n, errno, strerror(errno));
         return -1;
     }
+    if (h->kicked) {
+        D("usb_adb_write finished due to kicked");
+        return -1;
+    }
     D("[ done fd=%d ]", h->fd);
     return 0;
 }
@@ -299,6 +313,10 @@ static int usb_adb_read(usb_handle *h, void *data, int len)
                 h->fd, n, errno, strerror(errno));
             return -1;
         }
+        if (h->kicked) {
+            D("usb_adb_read finished due to kicked");
+            return -1;
+        }
         len -= n;
         data = ((char*)data) + n;
     }
@@ -306,14 +324,23 @@ static int usb_adb_read(usb_handle *h, void *data, int len)
     return 0;
 }
 
-static void usb_adb_kick(usb_handle *h)
-{
+static void usb_adb_kick(usb_handle *h) {
     D("usb_kick");
-    adb_mutex_lock(&h->lock);
-    unix_close(h->fd);
-    h->fd = -1;
+    // Other threads may be calling usb_adb_read/usb_adb_write at the same time.
+    // If we close h->fd, the file descriptor will be reused to open other files,
+    // and the read/write thread may operate on the wrong file. So instead
+    // we set the kicked flag and reopen h->fd to a dummy file here. After read/write
+    // threads finish, we close h->fd in usb_adb_close().
+    h->kicked = true;
+    TEMP_FAILURE_RETRY(dup2(dummy_fd, h->fd));
+}
 
-    // notify usb_adb_open_thread that we are disconnected
+static void usb_adb_close(usb_handle *h) {
+    h->kicked = false;
+    adb_close(h->fd);
+    // Notify usb_adb_open_thread to open a new connection.
+    adb_mutex_lock(&h->lock);
+    h->open_new_connection = true;
     adb_cond_signal(&h->notify);
     adb_mutex_unlock(&h->lock);
 }
@@ -326,8 +353,11 @@ static void usb_adb_init()
     h->write = usb_adb_write;
     h->read = usb_adb_read;
     h->kick = usb_adb_kick;
+    h->close = usb_adb_close;
+    h->kicked = false;
     h->fd = -1;
 
+    h->open_new_connection = true;
     adb_cond_init(&h->notify, 0);
     adb_mutex_init(&h->lock, 0);
 
@@ -350,7 +380,7 @@ static void usb_adb_init()
 }
 
 
-static void init_functionfs(struct usb_handle *h)
+static bool init_functionfs(struct usb_handle *h)
 {
     ssize_t ret;
     struct desc_v1 v1_descriptor;
@@ -413,7 +443,7 @@ static void init_functionfs(struct usb_handle *h)
         goto err;
     }
 
-    return;
+    return true;
 
 err:
     if (h->bulk_in > 0) {
@@ -428,7 +458,7 @@ err:
         adb_close(h->control);
         h->control = -1;
     }
-    return;
+    return false;
 }
 
 static void usb_ffs_open_thread(void* x) {
@@ -439,16 +469,16 @@ static void usb_ffs_open_thread(void* x) {
     while (true) {
         // wait until the USB device needs opening
         adb_mutex_lock(&usb->lock);
-        while (usb->control != -1 && usb->bulk_in != -1 && usb->bulk_out != -1)
+        while (!usb->open_new_connection) {
             adb_cond_wait(&usb->notify, &usb->lock);
+        }
+        usb->open_new_connection = false;
         adb_mutex_unlock(&usb->lock);
 
         while (true) {
-            init_functionfs(usb);
-
-            if (usb->control >= 0 && usb->bulk_in >= 0 && usb->bulk_out >= 0)
+            if (init_functionfs(usb)) {
                 break;
-
+            }
             adb_sleep_ms(1000);
         }
         property_set("sys.usb.ffs.ready", "1");
@@ -513,16 +543,22 @@ static void usb_ffs_kick(usb_handle *h)
         D("[ kick: sink (fd=%d) clear halt failed (%d) ]", h->bulk_out, errno);
     }
 
-    adb_mutex_lock(&h->lock);
-
     // don't close ep0 here, since we may not need to reinitialize it with
     // the same descriptors again. if however ep1/ep2 fail to re-open in
     // init_functionfs, only then would we close and open ep0 again.
+    // Ditto the comment in usb_adb_kick.
+    h->kicked = true;
+    TEMP_FAILURE_RETRY(dup2(dummy_fd, h->bulk_out));
+    TEMP_FAILURE_RETRY(dup2(dummy_fd, h->bulk_in));
+}
+
+static void usb_ffs_close(usb_handle *h) {
+    h->kicked = false;
     adb_close(h->bulk_out);
     adb_close(h->bulk_in);
-    h->bulk_out = h->bulk_in = -1;
-
-    // notify usb_ffs_open_thread that we are disconnected
+    // Notify usb_adb_open_thread to open a new connection.
+    adb_mutex_lock(&h->lock);
+    h->open_new_connection = true;
     adb_cond_signal(&h->notify);
     adb_mutex_unlock(&h->lock);
 }
@@ -537,10 +573,13 @@ static void usb_ffs_init()
     h->write = usb_ffs_write;
     h->read = usb_ffs_read;
     h->kick = usb_ffs_kick;
+    h->close = usb_ffs_close;
+    h->kicked = false;
     h->control = -1;
     h->bulk_out = -1;
     h->bulk_out = -1;
 
+    h->open_new_connection = true;
     adb_cond_init(&h->notify, 0);
     adb_mutex_init(&h->lock, 0);
 
@@ -552,6 +591,8 @@ static void usb_ffs_init()
 
 void usb_init()
 {
+    dummy_fd = adb_open("/dev/null", O_WRONLY);
+    CHECK_NE(dummy_fd, -1);
     if (access(USB_FFS_ADB_EP0, F_OK) == 0)
         usb_ffs_init();
     else
@@ -569,6 +610,7 @@ int usb_read(usb_handle *h, void *data, int len)
 }
 int usb_close(usb_handle *h)
 {
+    h->close(h);
     return 0;
 }
 
