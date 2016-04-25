@@ -380,7 +380,7 @@ public:
             tid(tid),
             padding(0) {
     }
-    LogBufferElementKey(uint64_t key):value(key) { }
+    explicit LogBufferElementKey(uint64_t key):value(key) { }
 
     uint64_t getKey() { return value; }
 };
