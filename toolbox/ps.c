@@ -282,6 +282,13 @@ int ps_main(int argc, char **argv)
         } else if(!strcmp(argv[1],"--abi")) {
             display_flags |= SHOW_ABI;
         } else if(!strcmp(argv[1],"--ppid")) {
+            if (argc < 3) {
+                /* Bug 26554285: Use printf because some apps require at least
+                 * one line of output to stdout even for errors.
+                 */
+                printf("no ppid\n");
+                return 1;
+            }
             ppid_filter = atoi(argv[2]);
             if (ppid_filter == 0) {
                 /* Bug 26554285: Use printf because some apps require at least
