@@ -48,6 +48,9 @@
 
 #include <private/android_filesystem_config.h>
 
+/* FUSE_CANONICAL_PATH is not currently upstreamed */
+#define FUSE_CANONICAL_PATH 2016
+
 /* README
  *
  * What is this?
@@ -1471,6 +1474,35 @@ static int handle_init(struct fuse* fuse, struct fuse_handler* handler,
     return NO_STATUS;
 }
 
+static int handle_canonical_path(struct fuse* fuse, struct fuse_handler* handler,
+        const struct fuse_in_header *hdr)
+{
+    struct node* node;
+    char path[PATH_MAX];
+    int len;
+
+    pthread_mutex_lock(&fuse->global->lock);
+    node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
+            path, sizeof(path));
+    TRACE("[%d] CANONICAL_PATH @ %" PRIx64 " (%s)\n", handler->token, hdr->nodeid,
+        node ? node->name : "?");
+    pthread_mutex_unlock(&fuse->global->lock);
+
+    if (!node) {
+        return -ENOENT;
+    }
+    if (!check_caller_access_to_node(fuse, hdr, node, R_OK)) {
+        return -EACCES;
+    }
+    len = strlen(path);
+    if (len + 1 > PATH_MAX)
+        len = PATH_MAX - 1;
+    path[PATH_MAX - 1] = 0;
+    fuse_reply(fuse, hdr->unique, path, len + 1);
+    return NO_STATUS;
+}
+
+
 static int handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
         const struct fuse_in_header *hdr, const void *data, size_t data_len)
 {
@@ -1584,6 +1616,10 @@ static int handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
     case FUSE_INIT: { /* init_in -> init_out */
         const struct fuse_init_in *req = data;
         return handle_init(fuse, handler, hdr, req);
+    }
+
+    case FUSE_CANONICAL_PATH: { /* nodeid -> bytez[] */
+        return handle_canonical_path(fuse, handler, hdr);
     }
 
     default: {
