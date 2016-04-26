@@ -16,8 +16,6 @@
 
 LOCAL_PATH := $(call my-dir)
 
-bootstat_c_includes := external/gtest/include
-
 bootstat_lib_src_files := \
         boot_event_record_store.cpp \
         event_log_list_builder.cpp \
@@ -57,7 +55,7 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := libbootstat
 LOCAL_CFLAGS := $(bootstat_cflags)
-LOCAL_C_INCLUDES := $(bootstat_c_includes)
+LOCAL_WHOLE_STATIC_LIBRARIES := libgtest_prod
 LOCAL_SHARED_LIBRARIES := $(bootstat_shared_libs)
 LOCAL_SRC_FILES := $(bootstat_lib_src_files)
 # Clang is required because of C++14
@@ -72,7 +70,7 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := libbootstat_debug
 LOCAL_CFLAGS := $(bootstat_cflags)
-LOCAL_C_INCLUDES := $(bootstat_c_includes)
+LOCAL_WHOLE_STATIC_LIBRARIES := libgtest_prod
 LOCAL_SHARED_LIBRARIES := $(bootstat_shared_libs)
 LOCAL_SRC_FILES := $(bootstat_lib_src_files)
 # Clang is required because of C++14
@@ -87,7 +85,7 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := libbootstat_host_debug
 LOCAL_CFLAGS := $(bootstat_debug_cflags)
-LOCAL_C_INCLUDES := $(bootstat_c_includes)
+LOCAL_WHOLE_STATIC_LIBRARIES := libgtest_prod
 LOCAL_SHARED_LIBRARIES := $(bootstat_shared_libs)
 LOCAL_SRC_FILES := $(bootstat_lib_src_files)
 # Clang is required because of C++14
@@ -102,7 +100,7 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := bootstat
 LOCAL_CFLAGS := $(bootstat_cflags)
-LOCAL_C_INCLUDES := $(bootstat_c_includes)
+LOCAL_WHOLE_STATIC_LIBRARIES := libgtest_prod
 LOCAL_SHARED_LIBRARIES := $(bootstat_shared_libs)
 LOCAL_STATIC_LIBRARIES := libbootstat
 LOCAL_INIT_RC := bootstat.rc
