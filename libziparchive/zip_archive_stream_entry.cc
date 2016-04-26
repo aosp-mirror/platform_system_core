@@ -48,7 +48,8 @@ bool ZipArchiveStreamEntry::Init(const ZipEntry& entry) {
 
 class ZipArchiveStreamEntryUncompressed : public ZipArchiveStreamEntry {
  public:
-  ZipArchiveStreamEntryUncompressed(ZipArchiveHandle handle) : ZipArchiveStreamEntry(handle) {}
+  explicit ZipArchiveStreamEntryUncompressed(ZipArchiveHandle handle)
+      : ZipArchiveStreamEntry(handle) {}
   virtual ~ZipArchiveStreamEntryUncompressed() {}
 
   const std::vector<uint8_t>* Read() override;
@@ -110,7 +111,8 @@ bool ZipArchiveStreamEntryUncompressed::Verify() {
 
 class ZipArchiveStreamEntryCompressed : public ZipArchiveStreamEntry {
  public:
-  ZipArchiveStreamEntryCompressed(ZipArchiveHandle handle) : ZipArchiveStreamEntry(handle) {}
+  explicit ZipArchiveStreamEntryCompressed(ZipArchiveHandle handle)
+      : ZipArchiveStreamEntry(handle) {}
   virtual ~ZipArchiveStreamEntryCompressed();
 
   const std::vector<uint8_t>* Read() override;
@@ -249,7 +251,7 @@ const std::vector<uint8_t>* ZipArchiveStreamEntryCompressed::Read() {
 
 class ZipArchiveStreamEntryRawCompressed : public ZipArchiveStreamEntryUncompressed {
  public:
-  ZipArchiveStreamEntryRawCompressed(ZipArchiveHandle handle)
+  explicit ZipArchiveStreamEntryRawCompressed(ZipArchiveHandle handle)
       : ZipArchiveStreamEntryUncompressed(handle) {}
   virtual ~ZipArchiveStreamEntryRawCompressed() {}
 
