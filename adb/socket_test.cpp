@@ -44,6 +44,8 @@ static void FdEventThreadFunc(void*) {
     fdevent_loop();
 }
 
+const size_t SLEEP_FOR_FDEVENT_IN_MS = 100;
+
 TEST_F(LocalSocketTest, smoke) {
     // Join two socketpairs with a chain of intermediate socketpairs.
     int first[2];
@@ -99,7 +101,8 @@ TEST_F(LocalSocketTest, smoke) {
     ASSERT_EQ(0, adb_close(last[1]));
 
     // Wait until the local sockets are closed.
-    adb_sleep_ms(100);
+    adb_sleep_ms(SLEEP_FOR_FDEVENT_IN_MS);
+    ASSERT_EQ(GetAdditionalLocalSocketCount(), fdevent_installed_count());
     TerminateThread(thread);
 }
 
@@ -151,12 +154,13 @@ TEST_F(LocalSocketTest, close_socket_with_packet) {
     ASSERT_TRUE(adb_thread_create(reinterpret_cast<void (*)(void*)>(CloseWithPacketThreadFunc),
                                   &arg, &thread));
     // Wait until the fdevent_loop() starts.
-    adb_sleep_ms(100);
+    adb_sleep_ms(SLEEP_FOR_FDEVENT_IN_MS);
     ASSERT_EQ(0, adb_close(cause_close_fd[0]));
-    adb_sleep_ms(100);
-    EXPECT_EQ(2u, fdevent_installed_count());
+    adb_sleep_ms(SLEEP_FOR_FDEVENT_IN_MS);
+    EXPECT_EQ(1u + GetAdditionalLocalSocketCount(), fdevent_installed_count());
     ASSERT_EQ(0, adb_close(socket_fd[0]));
-
+    adb_sleep_ms(SLEEP_FOR_FDEVENT_IN_MS);
+    ASSERT_EQ(GetAdditionalLocalSocketCount(), fdevent_installed_count());
     TerminateThread(thread);
 }
 
@@ -175,10 +179,10 @@ TEST_F(LocalSocketTest, read_from_closing_socket) {
     ASSERT_TRUE(adb_thread_create(reinterpret_cast<void (*)(void*)>(CloseWithPacketThreadFunc),
                                   &arg, &thread));
     // Wait until the fdevent_loop() starts.
-    adb_sleep_ms(100);
+    adb_sleep_ms(SLEEP_FOR_FDEVENT_IN_MS);
     ASSERT_EQ(0, adb_close(cause_close_fd[0]));
-    adb_sleep_ms(100);
-    EXPECT_EQ(2u, fdevent_installed_count());
+    adb_sleep_ms(SLEEP_FOR_FDEVENT_IN_MS);
+    EXPECT_EQ(1u + GetAdditionalLocalSocketCount(), fdevent_installed_count());
 
     // Verify if we can read successfully.
     std::vector<char> buf(arg.bytes_written);
@@ -186,6 +190,8 @@ TEST_F(LocalSocketTest, read_from_closing_socket) {
     ASSERT_EQ(true, ReadFdExactly(socket_fd[0], buf.data(), buf.size()));
     ASSERT_EQ(0, adb_close(socket_fd[0]));
 
+    adb_sleep_ms(SLEEP_FOR_FDEVENT_IN_MS);
+    ASSERT_EQ(GetAdditionalLocalSocketCount(), fdevent_installed_count());
     TerminateThread(thread);
 }
 
@@ -208,10 +214,12 @@ TEST_F(LocalSocketTest, write_error_when_having_packets) {
                                   &arg, &thread));
 
     // Wait until the fdevent_loop() starts.
-    adb_sleep_ms(100);
-    EXPECT_EQ(3u, fdevent_installed_count());
+    adb_sleep_ms(SLEEP_FOR_FDEVENT_IN_MS);
+    EXPECT_EQ(2u + GetAdditionalLocalSocketCount(), fdevent_installed_count());
     ASSERT_EQ(0, adb_close(socket_fd[0]));
 
+    adb_sleep_ms(SLEEP_FOR_FDEVENT_IN_MS);
+    ASSERT_EQ(GetAdditionalLocalSocketCount(), fdevent_installed_count());
     TerminateThread(thread);
 }
 
@@ -260,12 +268,14 @@ TEST_F(LocalSocketTest, close_socket_in_CLOSE_WAIT_state) {
                                   &arg, &thread));
 
     // Wait until the fdevent_loop() starts.
-    adb_sleep_ms(100);
-    EXPECT_EQ(2u, fdevent_installed_count());
+    adb_sleep_ms(SLEEP_FOR_FDEVENT_IN_MS);
+    EXPECT_EQ(1u + GetAdditionalLocalSocketCount(), fdevent_installed_count());
 
     // Wait until the client closes its socket.
     ASSERT_TRUE(adb_thread_join(client_thread));
 
+    adb_sleep_ms(SLEEP_FOR_FDEVENT_IN_MS);
+    ASSERT_EQ(GetAdditionalLocalSocketCount(), fdevent_installed_count());
     TerminateThread(thread);
 }
 
