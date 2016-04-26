@@ -279,7 +279,7 @@ class ShellTest(DeviceTest):
         Raises:
           unittest.SkipTest: The device doesn't support exit codes.
         """
-        if self.device.SHELL_PROTOCOL_FEATURE not in self.device.features:
+        if not self.device.has_shell_protocol():
             raise unittest.SkipTest('exit codes are unavailable on this device')
 
         proc = subprocess.Popen(
@@ -342,7 +342,7 @@ class ShellTest(DeviceTest):
         a terminal stdin to test so this test will be skipped if stdin
         is not a terminal.
         """
-        if self.device.SHELL_PROTOCOL_FEATURE not in self.device.features:
+        if not self.device.has_shell_protocol():
             raise unittest.SkipTest('PTY arguments unsupported on this device')
         if not os.isatty(sys.stdin.fileno()):
             raise unittest.SkipTest('PTY tests require stdin terminal')
@@ -394,7 +394,7 @@ class ShellTest(DeviceTest):
 
         Bug: http://b/19734861
         """
-        if self.device.SHELL_PROTOCOL_FEATURE not in self.device.features:
+        if not self.device.has_shell_protocol():
             raise unittest.SkipTest('shell protocol unsupported on this device')
 
         # Shell protocol should be used by default.
@@ -424,7 +424,7 @@ class ShellTest(DeviceTest):
 
         Bug: http://b/23825725
         """
-        if self.device.SHELL_PROTOCOL_FEATURE not in self.device.features:
+        if not self.device.has_shell_protocol():
             raise unittest.SkipTest('shell protocol unsupported on this device')
 
         # Start a long-running process.
@@ -445,7 +445,7 @@ class ShellTest(DeviceTest):
 
     def test_non_interactive_stdin(self):
         """Tests that non-interactive shells send stdin."""
-        if self.device.SHELL_PROTOCOL_FEATURE not in self.device.features:
+        if not self.device.has_shell_protocol():
             raise unittest.SkipTest('non-interactive stdin unsupported '
                                     'on this device')
 
