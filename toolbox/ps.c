@@ -60,7 +60,7 @@ static int ps_line(int pid, int tid)
     snprintf(statline, sizeof(statline), "/proc/%d", tid ? tid : pid);
     stat(statline, &stats);
 
-    if(tid) {
+    if (tid) {
         snprintf(statline, sizeof(statline), "/proc/%d/task/%d/stat", pid, tid);
         cmdline[0] = 0;
         snprintf(macline, sizeof(macline), "/proc/%d/task/%d/attr/current", pid, tid);
@@ -69,21 +69,21 @@ static int ps_line(int pid, int tid)
         snprintf(cmdline, sizeof(cmdline), "/proc/%d/cmdline", pid);
         snprintf(macline, sizeof(macline), "/proc/%d/attr/current", pid);
         int fd = open(cmdline, O_RDONLY);
-        if(fd == 0) {
+        if (fd == 0) {
             r = 0;
         } else {
             r = read(fd, cmdline, 1023);
             close(fd);
-            if(r < 0) r = 0;
+            if (r < 0) r = 0;
         }
         cmdline[r] = 0;
     }
 
     int fd = open(statline, O_RDONLY);
-    if(fd == 0) return -1;
+    if (fd == 0) return -1;
     r = read(fd, statline, 1023);
     close(fd);
-    if(r < 0) return -1;
+    if (r < 0) return -1;
     statline[r] = 0;
 
     ptr = statline;
@@ -142,19 +142,19 @@ static int ps_line(int pid, int tid)
 
     nexttok(&ptr); // tty
 
-    if(tid != 0) {
+    if (tid != 0) {
         ppid = pid;
         pid = tid;
     }
 
     pw = getpwuid(stats.st_uid);
-    if(pw == 0 || (display_flags & SHOW_NUMERIC_UID)) {
-        snprintf(user,sizeof(user),"%d",(int)stats.st_uid);
+    if (pw == 0 || (display_flags & SHOW_NUMERIC_UID)) {
+        snprintf(user, sizeof(user), "%d", (int)stats.st_uid);
     } else {
-        strcpy(user,pw->pw_name);
+        strcpy(user, pw->pw_name);
     }
 
-    if(ppid_filter != 0 && ppid != ppid_filter) {
+    if (ppid_filter != 0 && ppid != ppid_filter) {
         return 0;
     }
 
@@ -196,7 +196,7 @@ static int ps_line(int pid, int tid)
         print_exe_abi(pid);
     }
     printf("%s", cmdline[0] ? cmdline : name);
-    if(display_flags&SHOW_TIME)
+    if (display_flags & SHOW_TIME)
         printf(" (u:%d, s:%d)", utime, stime);
 
     printf("\n");
@@ -210,13 +210,13 @@ static void print_exe_abi(int pid)
 
     snprintf(exeline, sizeof(exeline), "/proc/%d/exe", pid);
     fd = open(exeline, O_RDONLY);
-    if(fd == 0) {
+    if (fd == 0) {
         printf("    ");
         return;
     }
     r = read(fd, exeline, 5 /* 4 byte ELFMAG + 1 byte EI_CLASS */);
     close(fd);
-    if(r < 0) {
+    if (r < 0) {
         printf("    ");
         return;
     }
@@ -245,12 +245,12 @@ void ps_threads(int pid)
 
     snprintf(tmp,sizeof(tmp),"/proc/%d/task",pid);
     d = opendir(tmp);
-    if(d == 0) return;
+    if (d == 0) return;
 
-    while((de = readdir(d)) != 0){
-        if(isdigit(de->d_name[0])){
+    while ((de = readdir(d)) != 0) {
+        if (isdigit(de->d_name[0])) {
             int tid = atoi(de->d_name);
-            if(tid == pid) continue;
+            if (tid == pid) continue;
             ps_line(pid, tid);
         }
     }
@@ -264,24 +264,24 @@ int ps_main(int argc, char **argv)
     int pidfilter = 0;
     int threads = 0;
 
-    while(argc > 1){
-        if(!strcmp(argv[1],"-t")) {
+    while (argc > 1) {
+        if (!strcmp(argv[1], "-t")) {
             threads = 1;
-        } else if(!strcmp(argv[1],"-n")) {
+        } else if (!strcmp(argv[1], "-n")) {
             display_flags |= SHOW_NUMERIC_UID;
-        } else if(!strcmp(argv[1],"-x")) {
+        } else if (!strcmp(argv[1], "-x")) {
             display_flags |= SHOW_TIME;
-        } else if(!strcmp(argv[1], "-Z")) {
+        } else if (!strcmp(argv[1], "-Z")) {
             display_flags |= SHOW_MACLABEL;
-        } else if(!strcmp(argv[1],"-P")) {
+        } else if (!strcmp(argv[1], "-P")) {
             display_flags |= SHOW_POLICY;
-        } else if(!strcmp(argv[1],"-p")) {
+        } else if (!strcmp(argv[1], "-p")) {
             display_flags |= SHOW_PRIO;
-        } else if(!strcmp(argv[1],"-c")) {
+        } else if (!strcmp(argv[1], "-c")) {
             display_flags |= SHOW_CPU;
-        } else if(!strcmp(argv[1],"--abi")) {
+        } else if (!strcmp(argv[1], "--abi")) {
             display_flags |= SHOW_ABI;
-        } else if(!strcmp(argv[1],"--ppid")) {
+        } else if (!strcmp(argv[1], "--ppid")) {
             if (argc < 3) {
                 /* Bug 26554285: Use printf because some apps require at least
                  * one line of output to stdout even for errors.
@@ -324,18 +324,17 @@ int ps_main(int argc, char **argv)
            (display_flags&SHOW_ABI)?"ABI " : "");
 
     d = opendir("/proc");
-    if(d == 0) return -1;
+    if (d == 0) return -1;
 
-    while((de = readdir(d)) != 0){
-        if(isdigit(de->d_name[0])){
+    while ((de = readdir(d)) != 0) {
+        if (isdigit(de->d_name[0])) {
             int pid = atoi(de->d_name);
-            if(!pidfilter || (pidfilter == pid)) {
+            if (!pidfilter || (pidfilter == pid)) {
                 ps_line(pid, 0);
-                if(threads) ps_threads(pid);
+                if (threads) ps_threads(pid);
             }
         }
     }
     closedir(d);
     return 0;
 }
-
