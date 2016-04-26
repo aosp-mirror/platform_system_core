@@ -822,7 +822,8 @@ static int handle_forget(struct fuse* fuse, struct fuse_handler* handler,
             hdr->nodeid, node ? node->name : "?");
     if (node) {
         __u64 n = req->nlookup;
-        while (n--) {
+        while (n) {
+            n--;
             release_node_locked(node);
         }
     }
