@@ -49,6 +49,16 @@ class FdeventTest : public ::testing::Test {
         dummy = dummy_fds[0];
     }
 
+    size_t GetAdditionalLocalSocketCount() {
+#if ADB_HOST
+        // dummy socket installed in PrepareThread()
+        return 1;
+#else
+        // dummy socket and one more socket installed in fdevent_subproc_setup()
+        return 2;
+#endif
+    }
+
     void TerminateThread(adb_thread_t thread) {
         fdevent_terminate_loop();
         ASSERT_TRUE(WriteFdExactly(dummy, "", 1));
