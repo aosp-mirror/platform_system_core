@@ -36,7 +36,7 @@
 namespace android {
 
 #if defined(__ANDROID__)
-static constexpr const char* kPublicNativeLibrariesSystemConfig = "/system/etc/public.libraries.txt";
+static constexpr const char* kPublicNativeLibrariesSystemConfigPathFromRoot = "/etc/public.libraries.txt";
 static constexpr const char* kPublicNativeLibrariesVendorConfig = "/vendor/etc/public.libraries.txt";
 
 class LibraryNamespaces {
@@ -95,10 +95,14 @@ class LibraryNamespaces {
 
   void Initialize() {
     std::vector<std::string> sonames;
+    const char* android_root_env = getenv("ANDROID_ROOT");
+    std::string root_dir = android_root_env != nullptr ? android_root_env : "/system";
+    std::string public_native_libraries_system_config =
+            root_dir + kPublicNativeLibrariesSystemConfigPathFromRoot;
 
-    LOG_ALWAYS_FATAL_IF(!ReadConfig(kPublicNativeLibrariesSystemConfig, &sonames),
+    LOG_ALWAYS_FATAL_IF(!ReadConfig(public_native_libraries_system_config, &sonames),
                         "Error reading public native library list from \"%s\": %s",
-                        kPublicNativeLibrariesSystemConfig, strerror(errno));
+                        public_native_libraries_system_config.c_str(), strerror(errno));
     // This file is optional, quietly ignore if the file does not exist.
     ReadConfig(kPublicNativeLibrariesVendorConfig, &sonames);
 
