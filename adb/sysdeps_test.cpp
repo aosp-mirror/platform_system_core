@@ -218,7 +218,7 @@ TEST_F(sysdeps_poll, disconnect) {
 
 TEST_F(sysdeps_poll, fd_count) {
     // https://code.google.com/p/android/issues/detail?id=12141
-    static constexpr int num_sockets = 512;
+    static constexpr int num_sockets = 256;
     std::vector<int> sockets;
     std::vector<adb_pollfd> pfds;
     sockets.resize(num_sockets * 2);
