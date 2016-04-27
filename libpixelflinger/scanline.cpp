@@ -965,7 +965,7 @@ discard:
  * Use only for one-to-one texture mapping.
  */
 struct horz_iterator32 {
-    horz_iterator32(context_t* c) {
+    explicit horz_iterator32(context_t* c) {
         const int x = c->iterators.xl;
         const int y = c->iterators.y;
         texture_t& tx = c->state.texture[0];
@@ -982,7 +982,7 @@ protected:
 
 /* A variant for 16-bit source textures. */
 struct horz_iterator16 {
-    horz_iterator16(context_t* c) {
+    explicit horz_iterator16(context_t* c) {
         const int x = c->iterators.xl;
         const int y = c->iterators.y;
         texture_t& tx = c->state.texture[0];
@@ -1002,7 +1002,7 @@ protected:
  * texture pixel value.
  */
 struct clamp_iterator {
-    clamp_iterator(context_t* c) {
+    explicit clamp_iterator(context_t* c) {
         const int xs = c->iterators.xl;
         texture_t& tx = c->state.texture[0];
         texture_iterators_t& ti = tx.iterators;
@@ -1112,13 +1112,13 @@ void horz_clamp_iterator::init(const context_t* c, int shift)
 }
 
 struct horz_clamp_iterator16 : horz_clamp_iterator {
-    horz_clamp_iterator16(const context_t* c) {
+    explicit horz_clamp_iterator16(const context_t* c) {
         init(c,1);
     };
 };
 
 struct horz_clamp_iterator32 : horz_clamp_iterator {
-    horz_clamp_iterator32(context_t* c) {
+    explicit horz_clamp_iterator32(context_t* c) {
         init(c,2);
     };
 };
@@ -1126,7 +1126,7 @@ struct horz_clamp_iterator32 : horz_clamp_iterator {
 /* This is used to perform dithering operations.
  */
 struct ditherer {
-    ditherer(const context_t* c) {
+    explicit ditherer(const context_t* c) {
         const int x = c->iterators.xl;
         const int y = c->iterators.y;
         m_line = &c->ditherMatrix[ ((y & GGL_DITHER_MASK)<<GGL_DITHER_ORDER_SHIFT) ];
@@ -1172,7 +1172,7 @@ protected:
  *   blender.blend(<32-bit-src-pixel-value>,<ptr-to-16-bit-dest-pixel>)
  */
 struct blender_32to16 {
-    blender_32to16(context_t* /*c*/) { }
+    explicit blender_32to16(context_t* /*c*/) { }
     void write(uint32_t s, uint16_t* dst) {
         if (s == 0)
             return;
@@ -1229,7 +1229,7 @@ struct blender_32to16 {
  * where dstFactor=srcA*(1-srcA) srcFactor=srcA
  */
 struct blender_32to16_srcA {
-    blender_32to16_srcA(const context_t* /*c*/) { }
+    explicit blender_32to16_srcA(const context_t* /*c*/) { }
     void write(uint32_t s, uint16_t* dst) {
         if (!s) {
             return;
@@ -1271,7 +1271,7 @@ protected:
 /* This blender does a normal blend after modulation.
  */
 struct blender_32to16_modulate : blender_modulate {
-    blender_32to16_modulate(const context_t* c) {
+    explicit blender_32to16_modulate(const context_t* c) {
         init(c);
     }
     void write(uint32_t s, uint16_t* dst) {
@@ -1343,7 +1343,7 @@ struct blender_32to16_modulate : blender_modulate {
 
 /* same as 32to16_modulate, except that the input is xRGB, instead of ARGB */
 struct blender_x32to16_modulate : blender_modulate {
-    blender_x32to16_modulate(const context_t* c) {
+    explicit blender_x32to16_modulate(const context_t* c) {
         init(c);
     }
     void write(uint32_t s, uint16_t* dst) {
@@ -1398,7 +1398,7 @@ struct blender_x32to16_modulate : blender_modulate {
 
 /* Same as above, but source is 16bit rgb565 */
 struct blender_16to16_modulate : blender_modulate {
-    blender_16to16_modulate(const context_t* c) {
+    explicit blender_16to16_modulate(const context_t* c) {
         init(c);
     }
     void write(uint16_t s16, uint16_t* dst) {
@@ -1434,7 +1434,7 @@ struct blender_16to16_modulate : blender_modulate {
  *   }
  */
 struct dst_iterator16 {
-    dst_iterator16(const context_t* c) {
+    explicit dst_iterator16(const context_t* c) {
         const int x = c->iterators.xl;
         const int width = c->iterators.xr - x;
         const int32_t y = c->iterators.y;
