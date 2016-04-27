@@ -41,11 +41,13 @@ bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
     return true;
   } else {
     Range overlap = inserted.first->first;
-    ALOGE("range %p-%p overlaps with existing range %p-%p",
-        reinterpret_cast<void*>(begin),
-        reinterpret_cast<void*>(end),
-        reinterpret_cast<void*>(overlap.begin),
-        reinterpret_cast<void*>(overlap.end));
+    if (overlap != range) {
+      ALOGE("range %p-%p overlaps with existing range %p-%p",
+          reinterpret_cast<void*>(begin),
+          reinterpret_cast<void*>(end),
+          reinterpret_cast<void*>(overlap.begin),
+          reinterpret_cast<void*>(overlap.end));
+    }
     return false;
   }
 }
