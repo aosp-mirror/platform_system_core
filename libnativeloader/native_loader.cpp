@@ -159,10 +159,6 @@ class LibraryNamespaces {
 
 static std::mutex g_namespaces_mutex;
 static LibraryNamespaces* g_namespaces = new LibraryNamespaces;
-
-static bool namespaces_enabled(uint32_t target_sdk_version) {
-  return target_sdk_version > 0;
-}
 #endif
 
 void InitializeNativeLoader() {
@@ -180,10 +176,7 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
                                    jstring library_path,
                                    jstring permitted_path) {
 #if defined(__ANDROID__)
-  if (!namespaces_enabled(target_sdk_version)) {
-    return nullptr;
-  }
-
+  UNUSED(target_sdk_version);
   std::lock_guard<std::mutex> guard(g_namespaces_mutex);
   android_namespace_t* ns = g_namespaces->Create(env,
                                                  class_loader,
@@ -206,7 +199,8 @@ void* OpenNativeLibrary(JNIEnv* env,
                         jobject class_loader,
                         jstring library_path) {
 #if defined(__ANDROID__)
-  if (!namespaces_enabled(target_sdk_version) || class_loader == nullptr) {
+  UNUSED(target_sdk_version);
+  if (class_loader == nullptr) {
     return dlopen(path, RTLD_NOW);
   }
 
