@@ -31,6 +31,12 @@ struct Range {
   uintptr_t end;
 
   size_t size() const { return end - begin; };
+  bool operator==(const Range& other) const {
+    return this->begin == other.begin && this->end == other.end;
+  }
+  bool operator!=(const Range& other) const {
+    return !(*this == other);
+  }
 };
 
 // Comparator for Ranges that returns equivalence for overlapping ranges
