@@ -17,9 +17,12 @@
 #ifndef LIBMEMUNREACHABLE_HEAP_WALKER_H_
 #define LIBMEMUNREACHABLE_HEAP_WALKER_H_
 
+#include <signal.h>
+
 #include "android-base/macros.h"
 
 #include "Allocator.h"
+#include "ScopedSignalHandler.h"
 #include "Tarjan.h"
 
 // A range [begin, end)
@@ -28,6 +31,12 @@ struct Range {
   uintptr_t end;
 
   size_t size() const { return end - begin; };
+  bool operator==(const Range& other) const {
+    return this->begin == other.begin && this->end == other.end;
+  }
+  bool operator!=(const Range& other) const {
+    return !(*this == other);
+  }
 };
 
 // Comparator for Ranges that returns equivalence for overlapping ranges
@@ -41,10 +50,17 @@ class HeapWalker {
  public:
   HeapWalker(Allocator<HeapWalker> allocator) : allocator_(allocator),
     allocations_(allocator), allocation_bytes_(0),
-	roots_(allocator), root_vals_(allocator) {
+	roots_(allocator), root_vals_(allocator),
+	segv_handler_(allocator), walking_ptr_(0) {
     valid_allocations_range_.end = 0;
     valid_allocations_range_.begin = ~valid_allocations_range_.end;
+
+    segv_handler_.install(SIGSEGV,
+        [=](ScopedSignalHandler& handler, int signal, siginfo_t* siginfo, void* uctx) {
+          this->HandleSegFault(handler, signal, siginfo, uctx);
+      });
   }
+
   ~HeapWalker() {}
   bool Allocation(uintptr_t begin, uintptr_t end);
   void Root(uintptr_t begin, uintptr_t end);
@@ -70,7 +86,8 @@ class HeapWalker {
  private:
 
   void RecurseRoot(const Range& root);
-  bool IsAllocationPtr(uintptr_t ptr, Range* range, AllocationInfo** info);
+  bool WordContainsAllocationPtr(uintptr_t ptr, Range* range, AllocationInfo** info);
+  void HandleSegFault(ScopedSignalHandler&, int, siginfo_t*, void*);
 
   DISALLOW_COPY_AND_ASSIGN(HeapWalker);
   Allocator<HeapWalker> allocator_;
@@ -81,6 +98,9 @@ class HeapWalker {
 
   allocator::vector<Range> roots_;
   allocator::vector<uintptr_t> root_vals_;
+
+  ScopedSignalHandler segv_handler_;
+  uintptr_t walking_ptr_;
 };
 
 template<class F>
@@ -92,7 +112,7 @@ inline void HeapWalker::ForEachPtrInRange(const Range& range, F&& f) {
   for (uintptr_t i = begin; i < range.end; i += sizeof(uintptr_t)) {
     Range ref_range;
     AllocationInfo* ref_info;
-    if (IsAllocationPtr(*reinterpret_cast<uintptr_t*>(i), &ref_range, &ref_info)) {
+    if (WordContainsAllocationPtr(i, &ref_range, &ref_info)) {
       f(ref_range, ref_info);
     }
   }
