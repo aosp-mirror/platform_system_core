@@ -810,12 +810,14 @@ TEST(logcat, blocking_clear) {
     ASSERT_TRUE(NULL != (fp = popen(
       "( trap exit HUP QUIT INT PIPE KILL ; sleep 6; echo DONE )&"
       " logcat -b events -c 2>&1 ;"
+      " logcat -b events -g 2>&1 ;"
       " logcat -v brief -b events 2>&1",
       "r")));
 
     char buffer[BIG_BUFFER];
 
     int count = 0;
+    int minus_g = 0;
 
     int signals = 0;
 
@@ -831,6 +833,50 @@ TEST(logcat, blocking_clear) {
 
         if (!strncmp(buffer, "DONE", 4)) {
             break;
+        }
+
+        int size, consumed, max, payload;
+        char size_mult[3], consumed_mult[3];
+        size = consumed = max = payload = 0;
+        if (6 == sscanf(buffer, "events: ring buffer is %d%2s (%d%2s consumed),"
+                                " max entry is %db, max payload is %db",
+                                &size, size_mult, &consumed, consumed_mult,
+                                &max, &payload)) {
+            long full_size = size, full_consumed = consumed;
+
+            switch(size_mult[0]) {
+            case 'G':
+                full_size *= 1024;
+                /* FALLTHRU */
+            case 'M':
+                full_size *= 1024;
+                /* FALLTHRU */
+            case 'K':
+                full_size *= 1024;
+                /* FALLTHRU */
+            case 'b':
+                break;
+            }
+            switch(consumed_mult[0]) {
+            case 'G':
+                full_consumed *= 1024;
+                /* FALLTHRU */
+            case 'M':
+                full_consumed *= 1024;
+                /* FALLTHRU */
+            case 'K':
+                full_consumed *= 1024;
+                /* FALLTHRU */
+            case 'b':
+                break;
+            }
+            EXPECT_GT(full_size, full_consumed);
+            EXPECT_GT(full_size, max);
+            EXPECT_GT(max, payload);
+            EXPECT_GT(max, full_consumed);
+
+            ++minus_g;
+            continue;
         }
 
         ++count;
@@ -861,6 +907,7 @@ TEST(logcat, blocking_clear) {
     pclose(fp);
 
     EXPECT_LE(1, count);
+    EXPECT_EQ(1, minus_g);
 
     EXPECT_EQ(1, signals);
 }
