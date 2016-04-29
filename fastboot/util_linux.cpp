@@ -28,27 +28,16 @@
 
 #include "fastboot.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <unistd.h>
 #include <limits.h>
 
-void get_my_path(char *path)
-{
-    char proc[64];
-    char *x;
+#include <android-base/stringprintf.h>
 
-    sprintf(proc, "/proc/%d/exe", getpid());
-    int err = readlink(proc, path, PATH_MAX - 1);
-
-    if(err <= 0) {
-        path[0] = 0;
-    } else {
-        path[err] = 0;
-        x = strrchr(path,'/');
-        if(x) x[1] = 0;
-    }
+std::string get_my_path() {
+    std::string proc = android::base::StringPrintf("/proc/%d/exe", getpid());
+    char path[PATH_MAX + 1];
+    int rc = readlink(proc.c_str(), path, sizeof(path) - 1);
+    if (rc == -1) return "";
+    path[rc] = '\0';
+    return path;
 }

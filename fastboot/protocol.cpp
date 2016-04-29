@@ -36,16 +36,16 @@
 
 #include <algorithm>
 
+#include <android-base/stringprintf.h>
 #include <sparse/sparse.h>
 
 #include "fastboot.h"
 #include "transport.h"
 
-static char ERROR[128];
+static std::string g_error;
 
-char *fb_get_error(void)
-{
-    return ERROR;
+const std::string fb_get_error() {
+    return g_error;
 }
 
 static int check_response(Transport* transport, uint32_t size, char* response) {
@@ -54,14 +54,14 @@ static int check_response(Transport* transport, uint32_t size, char* response) {
     while (true) {
         int r = transport->Read(status, 64);
         if (r < 0) {
-            snprintf(ERROR, sizeof(ERROR), "status read failed (%s)", strerror(errno));
+            g_error = android::base::StringPrintf("status read failed (%s)", strerror(errno));
             transport->Close();
             return -1;
         }
         status[r] = 0;
 
         if (r < 4) {
-            snprintf(ERROR, sizeof(ERROR), "status malformed (%d bytes)", r);
+            g_error = android::base::StringPrintf("status malformed (%d bytes)", r);
             transport->Close();
             return -1;
         }
@@ -80,9 +80,9 @@ static int check_response(Transport* transport, uint32_t size, char* response) {
 
         if (!memcmp(status, "FAIL", 4)) {
             if (r > 4) {
-                snprintf(ERROR, sizeof(ERROR), "remote: %s", status + 4);
+                g_error = android::base::StringPrintf("remote: %s", status + 4);
             } else {
-                strcpy(ERROR, "remote failure");
+                g_error = "remote failure";
             }
             return -1;
         }
@@ -90,14 +90,14 @@ static int check_response(Transport* transport, uint32_t size, char* response) {
         if (!memcmp(status, "DATA", 4) && size > 0){
             uint32_t dsize = strtol(status + 4, 0, 16);
             if (dsize > size) {
-                strcpy(ERROR, "data size too large");
+                g_error = android::base::StringPrintf("data size too large (%d)", dsize);
                 transport->Close();
                 return -1;
             }
             return dsize;
         }
 
-        strcpy(ERROR,"unknown status code");
+        g_error = "unknown status code";
         transport->Close();
         break;
     }
@@ -108,7 +108,7 @@ static int check_response(Transport* transport, uint32_t size, char* response) {
 static int _command_start(Transport* transport, const char* cmd, uint32_t size, char* response) {
     size_t cmdsize = strlen(cmd);
     if (cmdsize > 64) {
-        snprintf(ERROR, sizeof(ERROR), "command too large");
+        g_error = android::base::StringPrintf("command too large (%zu)", cmdsize);
         return -1;
     }
 
@@ -117,7 +117,7 @@ static int _command_start(Transport* transport, const char* cmd, uint32_t size, 
     }
 
     if (transport->Write(cmd, cmdsize) != static_cast<int>(cmdsize)) {
-        snprintf(ERROR, sizeof(ERROR), "command write failed (%s)", strerror(errno));
+        g_error = android::base::StringPrintf("command write failed (%s)", strerror(errno));
         transport->Close();
         return -1;
     }
@@ -128,12 +128,12 @@ static int _command_start(Transport* transport, const char* cmd, uint32_t size, 
 static int _command_data(Transport* transport, const void* data, uint32_t size) {
     int r = transport->Write(data, size);
     if (r < 0) {
-        snprintf(ERROR, sizeof(ERROR), "data transfer failure (%s)", strerror(errno));
+        g_error = android::base::StringPrintf("data transfer failure (%s)", strerror(errno));
         transport->Close();
         return -1;
     }
     if (r != ((int) size)) {
-        snprintf(ERROR, sizeof(ERROR), "data transfer failure (short transfer)");
+        g_error = "data transfer failure (short transfer)";
         transport->Close();
         return -1;
     }
@@ -216,7 +216,7 @@ static int fb_download_data_sparse_write(void *priv, const void *data, int len)
 
     if (len > TRANSPORT_BUF_SIZE) {
         if (transport_buf_len > 0) {
-            snprintf(ERROR, sizeof(ERROR), "internal error: transport_buf not empty\n");
+            g_error = "internal error: transport_buf not empty";
             return -1;
         }
         to_write = round_down(len, TRANSPORT_BUF_SIZE);
@@ -230,7 +230,7 @@ static int fb_download_data_sparse_write(void *priv, const void *data, int len)
 
     if (len > 0) {
         if (len > TRANSPORT_BUF_SIZE) {
-            snprintf(ERROR, sizeof(ERROR), "internal error: too much left for transport_buf\n");
+            g_error = "internal error: too much left for transport_buf";
             return -1;
         }
         memcpy(transport_buf, ptr, len);
