@@ -54,7 +54,7 @@ LIBLOG_HIDDEN struct android_log_transport_write pmsgLoggerWrite = {
 static int pmsgOpen()
 {
     if (pmsgLoggerWrite.context.fd < 0) {
-        pmsgLoggerWrite.context.fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
+        pmsgLoggerWrite.context.fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
     }
 
     return pmsgLoggerWrite.context.fd;
