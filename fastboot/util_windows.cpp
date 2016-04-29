@@ -38,14 +38,12 @@
 
 #include <windows.h>
 
-void get_my_path(char exe[PATH_MAX])
-{
-	char*  r;
+std::string get_my_path() {
+    char path[PATH_MAX + 1];
 
-	GetModuleFileName( NULL, exe, PATH_MAX-1 );
-	exe[PATH_MAX-1] = 0;
-	r = strrchr( exe, '\\' );
-	if (r)
-		*r = 0;
+    DWORD result = GetModuleFileName(NULL, path, sizeof(path) - 1);
+    if (result == 0 || result == sizeof(path) - 1) return "";
+    path[PATH_MAX - 1] = 0;
+
+    return path;
 }
-

@@ -49,6 +49,7 @@
 
 #include <android-base/parseint.h>
 #include <android-base/parsenetaddress.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <sparse/sparse.h>
 #include <ziparchive/zip_archive.h>
@@ -108,12 +109,9 @@ static struct {
     {"vendor.img", "vendor.sig", "vendor", true},
 };
 
-static char* find_item(const char* item, const char* product) {
-    char *dir;
+static std::string find_item(const char* item, const char* product) {
     const char *fn;
-    char path[PATH_MAX + 128];
-
-    if(!strcmp(item,"boot")) {
+    if (!strcmp(item,"boot")) {
         fn = "boot.img";
     } else if(!strcmp(item,"recovery")) {
         fn = "recovery.img";
@@ -129,24 +127,22 @@ static char* find_item(const char* item, const char* product) {
         fn = "android-info.txt";
     } else {
         fprintf(stderr,"unknown partition '%s'\n", item);
-        return 0;
+        return "";
     }
 
-    if(product) {
-        get_my_path(path);
-        sprintf(path + strlen(path),
-                "../../../target/product/%s/%s", product, fn);
-        return strdup(path);
+    if (product) {
+        std::string path = get_my_path();
+        path.erase(path.find_last_of('/'));
+        return android::base::StringPrintf("%s/../../../target/product/%s/%s",
+                                           path.c_str(), product, fn);
     }
 
-    dir = getenv("ANDROID_PRODUCT_OUT");
-    if((dir == 0) || (dir[0] == 0)) {
+    char* dir = getenv("ANDROID_PRODUCT_OUT");
+    if (dir == nullptr || dir[0] == '\0') {
         die("neither -p product specified nor ANDROID_PRODUCT_OUT set");
-        return 0;
     }
 
-    sprintf(path, "%s/%s", dir, fn);
-    return strdup(path);
+    return android::base::StringPrintf("%s/%s", dir, fn);
 }
 
 static int64_t get_file_size(int fd) {
@@ -179,8 +175,8 @@ oops:
     return 0;
 }
 
-static void* load_file(const char* fn, int64_t* sz) {
-    int fd = open(fn, O_RDONLY | O_BINARY);
+static void* load_file(const std::string& path, int64_t* sz) {
+    int fd = open(path.c_str(), O_RDONLY | O_BINARY);
     if (fd == -1) return nullptr;
     return load_fd(fd, sz);
 }
@@ -964,18 +960,19 @@ static void do_update(Transport* transport, const char* filename, const char* sl
     CloseArchive(zip);
 }
 
-static void do_send_signature(char* fn) {
-    char* xtn = strrchr(fn, '.');
-    if (!xtn) return;
+static void do_send_signature(const char* filename) {
+    if (android::base::EndsWith(filename, ".img") == false) {
+        return;
+    }
 
-    if (strcmp(xtn, ".img")) return;
-
-    strcpy(xtn, ".sig");
+    std::string sig_path = filename;
+    sig_path.erase(sig_path.size() - 4);
+    sig_path += ".sig";
 
     int64_t sz;
-    void* data = load_file(fn, &sz);
-    strcpy(xtn, ".img");
+    void* data = load_file(sig_path, &sz);
     if (data == nullptr) return;
+
     fb_queue_download("signature", data, sz);
     fb_queue_command("signature", "installing signature");
 }
@@ -985,8 +982,8 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
-    char* fname = find_item("info", product);
-    if (fname == nullptr) die("cannot find android-info.txt");
+    std::string fname = find_item("info", product);
+    if (fname.empty()) die("cannot find android-info.txt");
 
     int64_t sz;
     void* data = load_file(fname, &sz);
@@ -997,14 +994,14 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
     for (size_t i = 0; i < ARRAY_SIZE(images); i++) {
         fname = find_item(images[i].part_name, product);
         fastboot_buffer buf;
-        if (load_buf(transport, fname, &buf)) {
+        if (load_buf(transport, fname.c_str(), &buf)) {
             if (images[i].is_optional)
                 continue;
             die("could not load %s\n", images[i].img_name);
         }
 
         auto flashall = [&](const std::string &partition) {
-            do_send_signature(fname);
+            do_send_signature(fname.c_str());
             if (erase_first && needs_erase(transport, partition.c_str())) {
                 fb_queue_erase(partition.c_str());
             }
@@ -1180,7 +1177,7 @@ failed:
         fprintf(stderr, "Erase successful, but not automatically formatting.\n");
         if (errMsg) fprintf(stderr, "%s", errMsg);
     }
-    fprintf(stderr,"FAILED (%s)\n", fb_get_error());
+    fprintf(stderr, "FAILED (%s)\n", fb_get_error().c_str());
 }
 
 int main(int argc, char **argv)
@@ -1441,8 +1438,8 @@ int main(int argc, char **argv)
             fb_queue_download("boot.img", data, sz);
             fb_queue_command("boot", "booting");
         } else if(!strcmp(*argv, "flash")) {
-            char *pname = argv[1];
-            char *fname = 0;
+            char* pname = argv[1];
+            std::string fname;
             require(2);
             if (argc > 2) {
                 fname = argv[2];
@@ -1451,13 +1448,13 @@ int main(int argc, char **argv)
                 fname = find_item(pname, product);
                 skip(2);
             }
-            if (fname == 0) die("cannot determine image filename for '%s'", pname);
+            if (fname.empty()) die("cannot determine image filename for '%s'", pname);
 
             auto flash = [&](const std::string &partition) {
                 if (erase_first && needs_erase(transport, partition.c_str())) {
                     fb_queue_erase(partition.c_str());
                 }
-                do_flash(transport, partition.c_str(), fname);
+                do_flash(transport, partition.c_str(), fname.c_str());
             };
             do_for_partitions(transport, pname, slot_override.c_str(), flash, true);
         } else if(!strcmp(*argv, "flash:raw")) {

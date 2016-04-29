@@ -43,7 +43,7 @@ int fb_command(Transport* transport, const char* cmd);
 int fb_command_response(Transport* transport, const char* cmd, char* response);
 int fb_download_data(Transport* transport, const void* data, uint32_t size);
 int fb_download_data_sparse(Transport* transport, struct sparse_file* s);
-char *fb_get_error(void);
+const std::string fb_get_error();
 
 #define FB_COMMAND_SZ 64
 #define FB_RESPONSE_SZ 64
@@ -72,7 +72,7 @@ double now();
 char *mkmsg(const char *fmt, ...);
 __attribute__((__noreturn__)) void die(const char *fmt, ...);
 
-void get_my_path(char *path);
+std::string get_my_path();
 
 /* Current product */
 extern char cur_product[FB_RESPONSE_SZ + 1];
