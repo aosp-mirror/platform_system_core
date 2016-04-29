@@ -31,19 +31,15 @@
 #import <Carbon/Carbon.h>
 #include <unistd.h>
 
-void get_my_path(char s[PATH_MAX])
-{
+std::string get_my_path() {
     CFBundleRef mainBundle = CFBundleGetMainBundle();
     CFURLRef executableURL = CFBundleCopyExecutableURL(mainBundle);
     CFStringRef executablePathString = CFURLCopyFileSystemPath(executableURL, kCFURLPOSIXPathStyle);
     CFRelease(executableURL);
 
-    CFStringGetFileSystemRepresentation(executablePathString, s, PATH_MAX-1);
+    char path[PATH_MAX + 1];
+    CFStringGetFileSystemRepresentation(executablePathString, path, sizeof(PATH_MAX)-1);
     CFRelease(executablePathString);
 
-	char *x;
-    x = strrchr(s, '/');
-    if(x) x[1] = 0;
+    return path;
 }
-
-
