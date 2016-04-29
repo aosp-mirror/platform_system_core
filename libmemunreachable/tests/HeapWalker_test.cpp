@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#include <sys/mman.h>
+#include <unistd.h>
+
 #include "HeapWalker.h"
 
 #include <gtest/gtest.h>
@@ -171,4 +174,28 @@ TEST_F(HeapWalkerTest, cycle) {
   EXPECT_EQ(2U, num_leaks);
   EXPECT_EQ(2*sizeof(uintptr_t), leaked_bytes);
   ASSERT_EQ(2U, leaked.size());
+}
+
+TEST_F(HeapWalkerTest, segv) {
+  const size_t page_size = sysconf(_SC_PAGE_SIZE);
+  void* buffer1 = mmap(NULL, page_size, PROT_NONE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+  ASSERT_NE(buffer1, nullptr);
+  void* buffer2;
+
+  buffer2 = &buffer1;
+
+  HeapWalker heap_walker(heap_);
+  heap_walker.Allocation(buffer_begin(buffer1), buffer_begin(buffer1)+page_size);
+  heap_walker.Root(buffer_begin(buffer2), buffer_end(buffer2));
+
+  ASSERT_EQ(true, heap_walker.DetectLeaks());
+
+  allocator::vector<Range> leaked(heap_);
+  size_t num_leaks = 0;
+  size_t leaked_bytes = 0;
+  ASSERT_EQ(true, heap_walker.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
+
+  EXPECT_EQ(0U, num_leaks);
+  EXPECT_EQ(0U, leaked_bytes);
+  ASSERT_EQ(0U, leaked.size());
 }
