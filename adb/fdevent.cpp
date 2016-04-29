@@ -55,7 +55,7 @@ struct PollNode {
   fdevent* fde;
   adb_pollfd pollfd;
 
-  PollNode(fdevent* fde) : fde(fde) {
+  explicit PollNode(fdevent* fde) : fde(fde) {
       memset(&pollfd, 0, sizeof(pollfd));
       pollfd.fd = fde->fd;
 

@@ -167,7 +167,7 @@ ssize_t UdpSocket::Receive(void* data, size_t length, int timeout_ms) {
 // Implements the Socket interface for TCP.
 class TcpSocket : public Socket {
   public:
-    TcpSocket(cutils_socket_t sock) : Socket(sock) {}
+    explicit TcpSocket(cutils_socket_t sock) : Socket(sock) {}
 
     bool Send(const void* data, size_t length) override;
     bool Send(std::vector<cutils_socket_buffer_t> buffers) override;
