@@ -20,6 +20,8 @@
 
 #include "adb_io.h"
 #include "sysdeps.h"
+#include "sysdeps/condition_variable.h"
+#include "sysdeps/mutex.h"
 
 static void increment_atomic_int(void* c) {
     sleep(1);
@@ -245,7 +247,6 @@ TEST_F(sysdeps_poll, fd_count) {
     }
 }
 
-#include "sysdeps/mutex.h"
 TEST(sysdeps_mutex, mutex_smoke) {
     static std::atomic<bool> finished(false);
     static std::mutex &m = *new std::mutex();
@@ -300,4 +301,22 @@ TEST(sysdeps_mutex, recursive_mutex_smoke) {
     ASSERT_FALSE(m.try_lock());
     m.lock();
     m.unlock();
+}
+
+TEST(sysdeps_condition_variable, smoke) {
+    static std::mutex &m = *new std::mutex;
+    static std::condition_variable &cond = *new std::condition_variable;
+    static volatile bool flag = false;
+
+    std::unique_lock<std::mutex> lock(m);
+    adb_thread_create([](void*) {
+        m.lock();
+        flag = true;
+        cond.notify_one();
+        m.unlock();
+    }, nullptr);
+
+    while (!flag) {
+        cond.wait(lock);
+    }
 }
