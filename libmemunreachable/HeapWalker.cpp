@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
+#include <errno.h>
 #include <inttypes.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include <map>
 #include <utility>
@@ -22,6 +25,7 @@
 #include "Allocator.h"
 #include "HeapWalker.h"
 #include "LeakFolding.h"
+#include "ScopedSignalHandler.h"
 #include "log.h"
 
 bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
@@ -46,9 +50,15 @@ bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
   }
 }
 
-bool HeapWalker::IsAllocationPtr(uintptr_t ptr, Range* range, AllocationInfo** info) {
-  if (ptr >= valid_allocations_range_.begin && ptr < valid_allocations_range_.end) {
-    AllocationMap::iterator it = allocations_.find(Range{ptr, ptr + 1});
+bool HeapWalker::WordContainsAllocationPtr(uintptr_t word_ptr, Range* range, AllocationInfo** info) {
+  walking_ptr_ = word_ptr;
+  // This access may segfault if the process under test has done something strange,
+  // for example mprotect(PROT_NONE) on a native heap page.  If so, it will be
+  // caught and handled by mmaping a zero page over the faulting page.
+  uintptr_t value = *reinterpret_cast<uintptr_t*>(word_ptr);
+  walking_ptr_ = 0;
+  if (value >= valid_allocations_range_.begin && value < valid_allocations_range_.end) {
+    AllocationMap::iterator it = allocations_.find(Range{value, value + 1});
     if (it != allocations_.end()) {
       *range = it->first;
       *info = &it->second;
@@ -135,3 +145,30 @@ bool HeapWalker::Leaked(allocator::vector<Range>& leaked, size_t limit,
 
   return true;
 }
+
+static bool MapOverPage(void* addr) {
+  const size_t page_size = sysconf(_SC_PAGE_SIZE);
+  void *page = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(addr) & ~(page_size-1));
+
+  void* ret = mmap(page, page_size, PROT_READ, MAP_ANONYMOUS|MAP_PRIVATE|MAP_FIXED, -1, 0);
+  if (ret == MAP_FAILED) {
+    ALOGE("failed to map page at %p: %s", page, strerror(errno));
+    return false;
+  }
+
+  return true;
+}
+
+void HeapWalker::HandleSegFault(ScopedSignalHandler& handler, int signal, siginfo_t* si, void* /*uctx*/) {
+  uintptr_t addr = reinterpret_cast<uintptr_t>(si->si_addr);
+  if (addr != walking_ptr_) {
+    handler.reset();
+    return;
+  }
+  ALOGW("failed to read page at %p, signal %d", si->si_addr, signal);
+  if (!MapOverPage(si->si_addr)) {
+    handler.reset();
+  }
+}
+
+ScopedSignalHandler::SignalFn ScopedSignalHandler::handler_;
