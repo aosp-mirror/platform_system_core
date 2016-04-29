@@ -1043,7 +1043,7 @@ static void convertMonotonic(struct timespec *result,
          * Anything in the Android Logger before the dmesg logging span will
          * be highly suspect regarding the monotonic time calculations.
          */
-        FILE *p = popen("/system/bin/dmesg", "r");
+        FILE *p = popen("/system/bin/dmesg", "re");
         if (p) {
             char *line = NULL;
             size_t len = 0;
