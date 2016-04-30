@@ -71,7 +71,7 @@ public:
 
 #if !DEBUG_REFS
 
-    weakref_impl(RefBase* base)
+    explicit weakref_impl(RefBase* base)
         : mStrong(INITIAL_STRONG_VALUE)
         , mWeak(0)
         , mBase(base)

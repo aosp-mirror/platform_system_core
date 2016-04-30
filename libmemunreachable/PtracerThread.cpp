@@ -37,7 +37,7 @@
 
 class Stack {
  public:
-  Stack(size_t size) : size_(size) {
+  explicit Stack(size_t size) : size_(size) {
     int prot = PROT_READ | PROT_WRITE;
     int flags = MAP_PRIVATE | MAP_ANONYMOUS;
     page_size_ = sysconf(_SC_PAGE_SIZE);

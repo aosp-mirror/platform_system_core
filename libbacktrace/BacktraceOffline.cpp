@@ -665,7 +665,7 @@ static bool IsValidApkPath(const std::string& apk_path) {
 
 class ScopedZiparchiveHandle {
  public:
-  ScopedZiparchiveHandle(ZipArchiveHandle handle) : handle_(handle) {
+  explicit ScopedZiparchiveHandle(ZipArchiveHandle handle) : handle_(handle) {
   }
 
   ~ScopedZiparchiveHandle() {
