@@ -264,7 +264,7 @@ void Action::DumpState() const {
 
 class EventTrigger : public Trigger {
 public:
-    EventTrigger(const std::string& trigger) : trigger_(trigger) {
+    explicit EventTrigger(const std::string& trigger) : trigger_(trigger) {
     }
     bool CheckTriggers(const Action& action) const override {
         return action.CheckEventTrigger(trigger_);
@@ -288,7 +288,7 @@ private:
 
 class BuiltinTrigger : public Trigger {
 public:
-    BuiltinTrigger(Action* action) : action_(action) {
+    explicit BuiltinTrigger(Action* action) : action_(action) {
     }
     bool CheckTriggers(const Action& action) const override {
         return action_ == &action;
