@@ -66,24 +66,17 @@ void atrace_set_tracing_enabled(bool enabled)
 // values listed in the app_cmdlines property.
 static bool atrace_is_cmdline_match(const char* cmdline)
 {
+    int count = property_get_int32("debug.atrace.app_number", 0);
+
+    char buf[PROPERTY_KEY_MAX];
     char value[PROPERTY_VALUE_MAX];
-    char* start = value;
 
-    property_get("debug.atrace.app_cmdlines", value, "");
-
-    while (start != NULL) {
-        char* end = strchr(start, ',');
-
-        if (end != NULL) {
-            *end = '\0';
-            end++;
-        }
-
-        if (strcmp(cmdline, start) == 0) {
+    for (int i = 0; i < count; i++) {
+        snprintf(buf, sizeof(buf), "debug.atrace.app_%d", i);
+        property_get(buf, value, "");
+        if (strcmp(value, cmdline) == 0) {
             return true;
         }
-
-        start = end;
     }
 
     return false;
