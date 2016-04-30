@@ -111,7 +111,7 @@ class UdpTransport : public Transport {
     int Close() override;
 
   private:
-    UdpTransport(std::unique_ptr<Socket> socket) : socket_(std::move(socket)) {}
+    explicit UdpTransport(std::unique_ptr<Socket> socket) : socket_(std::move(socket)) {}
 
     // Performs the UDP initialization procedure. Returns true on success.
     bool InitializeProtocol(std::string* error);
