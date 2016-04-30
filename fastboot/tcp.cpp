@@ -66,7 +66,7 @@ class TcpTransport : public Transport {
     int Close() override;
 
   private:
-    TcpTransport(std::unique_ptr<Socket> sock) : socket_(std::move(sock)) {}
+    explicit TcpTransport(std::unique_ptr<Socket> sock) : socket_(std::move(sock)) {}
 
     // Connects to the device and performs the initial handshake. Returns false and fills |error|
     // on failure.

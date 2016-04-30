@@ -89,7 +89,7 @@ struct usb_handle
 
 class LinuxUsbTransport : public Transport {
   public:
-    LinuxUsbTransport(std::unique_ptr<usb_handle> handle) : handle_(std::move(handle)) {}
+    explicit LinuxUsbTransport(std::unique_ptr<usb_handle> handle) : handle_(std::move(handle)) {}
     ~LinuxUsbTransport() override = default;
 
     ssize_t Read(void* data, size_t len) override;
