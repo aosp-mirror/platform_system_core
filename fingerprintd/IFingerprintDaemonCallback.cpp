@@ -27,7 +27,7 @@ namespace android {
 class BpFingerprintDaemonCallback : public BpInterface<IFingerprintDaemonCallback>
 {
 public:
-    BpFingerprintDaemonCallback(const sp<IBinder>& impl) :
+    explicit BpFingerprintDaemonCallback(const sp<IBinder>& impl) :
             BpInterface<IFingerprintDaemonCallback>(impl) {
     }
     virtual status_t onEnrollResult(int64_t devId, int32_t fpId, int32_t gpId, int32_t rem) {

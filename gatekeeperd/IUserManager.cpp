@@ -27,7 +27,7 @@ namespace android {
 class BpUserManager : public BpInterface<IUserManager>
 {
 public:
-    BpUserManager(const sp<IBinder>& impl) :
+    explicit BpUserManager(const sp<IBinder>& impl) :
             BpInterface<IUserManager>(impl) {
     }
     virtual int32_t getCredentialOwnerProfile(int32_t user_id) {
