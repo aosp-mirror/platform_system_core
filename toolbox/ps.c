@@ -151,7 +151,7 @@ static int ps_line(int pid, int tid)
     if (pw == 0 || (display_flags & SHOW_NUMERIC_UID)) {
         snprintf(user, sizeof(user), "%d", (int)stats.st_uid);
     } else {
-        strcpy(user, pw->pw_name);
+        snprintf(user, sizeof(user), "%s", pw->pw_name);
     }
 
     if (ppid_filter != 0 && ppid != ppid_filter) {
