@@ -15,7 +15,6 @@
  */
 #include <string.h>
 #include <unistd.h>
-#include <sys/syslimits.h>
 
 #include "processgroup_priv.h"
 
