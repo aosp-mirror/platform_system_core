@@ -131,6 +131,10 @@ class LibraryNamespaces {
     public_libraries_ = base::Join(sonames, ':');
   }
 
+  void Reset() {
+    namespaces_.clear();
+  }
+
  private:
   bool ReadConfig(const std::string& configFile, std::vector<std::string>* sonames) {
     // Read list of public native libraries from the config file.
@@ -185,6 +189,12 @@ void InitializeNativeLoader() {
 #endif
 }
 
+void ResetNativeLoader() {
+#if defined(__ANDROID__)
+  std::lock_guard<std::mutex> guard(g_namespaces_mutex);
+  g_namespaces->Reset();
+#endif
+}
 
 jstring CreateClassLoaderNamespace(JNIEnv* env,
                                    int32_t target_sdk_version,
