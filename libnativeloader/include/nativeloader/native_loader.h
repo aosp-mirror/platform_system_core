@@ -50,6 +50,9 @@ __attribute__((visibility("default")))
 android_namespace_t* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader);
 #endif
 
+__attribute__((visibility("default")))
+void ResetNativeLoader();
+
 };  // namespace android
 
 #endif  // NATIVE_BRIDGE_H_
