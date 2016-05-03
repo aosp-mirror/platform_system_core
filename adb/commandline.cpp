@@ -1175,7 +1175,11 @@ static int bugreport(TransportType transport_type, const char* serial, int argc,
 
     // Zipped bugreport option - will call 'bugreportz', which prints the location of the generated
     // file, then pull it to the destination file provided by the user.
-    const char* dest_file = argv[1];
+    std::string dest_file = argv[1];
+    if (!android::base::EndsWith(argv[1], ".zip")) {
+        // TODO: use a case-insensitive comparison (like EndsWithIgnoreCase
+        dest_file += ".zip";
+    }
     std::string output;
 
     int status = send_shell_command(transport_type, serial, "bugreportz", true, &output);
@@ -1185,9 +1189,9 @@ static int bugreport(TransportType transport_type, const char* serial, int argc,
     if (android::base::StartsWith(output, BUGZ_OK_PREFIX)) {
         const char* zip_file = &output[strlen(BUGZ_OK_PREFIX)];
         std::vector<const char*> srcs{zip_file};
-        status = do_sync_pull(srcs, dest_file, true, dest_file) ? 0 : 1;
+        status = do_sync_pull(srcs, dest_file.c_str(), true, dest_file.c_str()) ? 0 : 1;
         if (status != 0) {
-            fprintf(stderr, "Could not copy file '%s' to '%s'\n", zip_file, dest_file);
+            fprintf(stderr, "Could not copy file '%s' to '%s'\n", zip_file, dest_file.c_str());
         }
         return status;
     }
