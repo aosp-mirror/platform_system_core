@@ -599,6 +599,10 @@ int fs_mgr_mount_all(struct fstab *fstab)
                 /* Let's replay the mount actions. */
                 i = top_idx - 1;
                 continue;
+            } else {
+                ERROR("%s(): Format failed. Suggest recovery...\n", __func__);
+                encryptable = FS_MGR_MNTALL_DEV_NEEDS_RECOVERY;
+                continue;
             }
         }
         if (mret && mount_errno != EBUSY && mount_errno != EACCES &&
