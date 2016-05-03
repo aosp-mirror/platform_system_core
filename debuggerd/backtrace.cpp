@@ -29,6 +29,7 @@
 #include <sys/ptrace.h>
 
 #include <memory>
+#include <string>
 
 #include <backtrace/Backtrace.h>
 
@@ -96,11 +97,11 @@ static void dump_thread(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid) {
   }
 }
 
-void dump_backtrace(int fd, int amfd, BacktraceMap* map, pid_t pid, pid_t tid,
-                    const std::set<pid_t>& siblings) {
+void dump_backtrace(int fd, BacktraceMap* map, pid_t pid, pid_t tid,
+                    const std::set<pid_t>& siblings, std::string* amfd_data) {
   log_t log;
   log.tfd = fd;
-  log.amfd = amfd;
+  log.amfd_data = amfd_data;
 
   dump_process_header(&log, pid);
   dump_thread(&log, map, pid, tid);

@@ -68,7 +68,8 @@ class TombstoneTest : public ::testing::Test {
     }
 
     log_.tfd = tombstone_fd;
-    log_.amfd = -1;
+    amfd_data_.clear();
+    log_.amfd_data = &amfd_data_;
     log_.crashed_tid = 12;
     log_.current_tid = 12;
     log_.should_retrieve_logcat = false;
@@ -90,6 +91,7 @@ class TombstoneTest : public ::testing::Test {
   std::unique_ptr<BacktraceMock> backtrace_mock_;
 
   log_t log_;
+  std::string amfd_data_;
 };
 
 TEST_F(TombstoneTest, single_map) {
@@ -116,6 +118,8 @@ TEST_F(TombstoneTest, single_map) {
 "    01234000-01234fff ---         0      1000\n";
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
+
+  ASSERT_STREQ("", amfd_data_.c_str());
 
   // Verify that the log buf is empty, and no error messages.
   ASSERT_STREQ("", getFakeLogBuf().c_str());
@@ -149,6 +153,8 @@ TEST_F(TombstoneTest, single_map_elf_build_id) {
 "    01234000-01234fff r--         0      1000  /system/lib/libfake.so (BuildId: abcdef1234567890abcdef1234567890)\n";
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
+
+  ASSERT_STREQ("", amfd_data_.c_str());
 
   // Verify that the log buf is empty, and no error messages.
   ASSERT_STREQ("", getFakeLogBuf().c_str());
@@ -188,6 +194,8 @@ TEST_F(TombstoneTest, single_map_no_build_id) {
 "    01234000-01234fff -w-         0      1000  /system/lib/libfake.so\n";
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
+
+  ASSERT_STREQ("", amfd_data_.c_str());
 
   // Verify that the log buf is empty, and no error messages.
   ASSERT_STREQ("", getFakeLogBuf().c_str());
@@ -251,6 +259,8 @@ TEST_F(TombstoneTest, multiple_maps) {
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
 
+  ASSERT_STREQ("", amfd_data_.c_str());
+
   // Verify that the log buf is empty, and no error messages.
   ASSERT_STREQ("", getFakeLogBuf().c_str());
   ASSERT_STREQ("", getFakeLogPrint().c_str());
@@ -304,6 +314,8 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_before) {
 "    0a634000-0a634fff rwx         0      1000  /system/lib/fake.so\n";
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
+
+  ASSERT_STREQ("", amfd_data_.c_str());
 
   // Verify that the log buf is empty, and no error messages.
   ASSERT_STREQ("", getFakeLogBuf().c_str());
@@ -359,6 +371,8 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_between) {
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
 
+  ASSERT_STREQ("", amfd_data_.c_str());
+
   // Verify that the log buf is empty, and no error messages.
   ASSERT_STREQ("", getFakeLogBuf().c_str());
   ASSERT_STREQ("", getFakeLogPrint().c_str());
@@ -410,6 +424,8 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_in_map) {
 "    0a634000-0a634fff rwx         0      1000  /system/lib/fake.so\n";
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
+
+  ASSERT_STREQ("", amfd_data_.c_str());
 
   // Verify that the log buf is empty, and no error messages.
   ASSERT_STREQ("", getFakeLogBuf().c_str());
@@ -469,6 +485,8 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_after) {
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
 
+  ASSERT_STREQ("", amfd_data_.c_str());
+
   // Verify that the log buf is empty, and no error messages.
   ASSERT_STREQ("", getFakeLogBuf().c_str());
   ASSERT_STREQ("", getFakeLogPrint().c_str());
@@ -500,6 +518,8 @@ TEST_F(TombstoneTest, multiple_maps_getsiginfo_fail) {
 "    0a434000-0a434fff -w-      1000      1000  (load base 0xd000)\n";
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
+
+  ASSERT_STREQ("", amfd_data_.c_str());
 
   // Verify that the log buf is empty, and no error messages.
   ASSERT_STREQ("", getFakeLogBuf().c_str());
@@ -562,6 +582,8 @@ TEST_F(TombstoneTest, multiple_maps_check_signal_has_si_addr) {
         << "Signal " << si.si_signo << " is not expected to include an address.";
     }
 
+    ASSERT_STREQ("", amfd_data_.c_str());
+
     // Verify that the log buf is empty, and no error messages.
     ASSERT_STREQ("", getFakeLogBuf().c_str());
     ASSERT_STREQ("", getFakeLogPrint().c_str());
@@ -582,6 +604,8 @@ TEST_F(TombstoneTest, dump_signal_info_error) {
 
   ASSERT_STREQ("", getFakeLogBuf().c_str());
   ASSERT_STREQ("6 DEBUG cannot get siginfo: Bad address\n\n", getFakeLogPrint().c_str());
+
+  ASSERT_STREQ("", amfd_data_.c_str());
 }
 
 TEST_F(TombstoneTest, dump_log_file_error) {
@@ -596,4 +620,14 @@ TEST_F(TombstoneTest, dump_log_file_error) {
   ASSERT_STREQ("", getFakeLogBuf().c_str());
   ASSERT_STREQ("6 DEBUG Unable to open /fake/filename: Permission denied\n\n",
                getFakeLogPrint().c_str());
+
+  ASSERT_STREQ("", amfd_data_.c_str());
+}
+
+TEST_F(TombstoneTest, dump_header_info) {
+  dump_header_info(&log_);
+
+  std::string expected = "Build fingerprint: 'unknown'\nRevision: 'unknown'\n";
+  expected += android::base::StringPrintf("ABI: '%s'\n", ABI_STRING);
+  ASSERT_STREQ(expected.c_str(), amfd_data_.c_str());
 }
