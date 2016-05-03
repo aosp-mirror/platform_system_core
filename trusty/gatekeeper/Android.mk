@@ -43,8 +43,4 @@ LOCAL_SHARED_LIBRARIES := \
 
 LOCAL_MODULE_TAGS := optional
 
-# Symlink gatekeeper.trusty.so -> gatekeeper.<device>.so so libhardware can find it.
-LOCAL_POST_INSTALL_CMD = \
-    $(hide) ln -sf $(notdir $(LOCAL_INSTALLED_MODULE)) $(dir $(LOCAL_INSTALLED_MODULE))gatekeeper.$(TARGET_DEVICE).so
-
 include $(BUILD_SHARED_LIBRARY)
