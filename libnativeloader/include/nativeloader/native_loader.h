@@ -43,6 +43,9 @@ void* OpenNativeLibrary(JNIEnv* env,
                         jobject class_loader,
                         jstring library_path);
 
+__attribute__((visibility("default")))
+bool CloseNativeLibrary(void* handle);
+
 #if defined(__ANDROID__)
 // Look up linker namespace by class_loader. Returns nullptr if
 // there is no namespace associated with the class_loader.
