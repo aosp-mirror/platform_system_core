@@ -241,6 +241,10 @@ void* OpenNativeLibrary(JNIEnv* env,
 #endif
 }
 
+bool CloseNativeLibrary(void* handle) {
+  return dlclose(handle) == 0;
+}
+
 #if defined(__ANDROID__)
 android_namespace_t* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
   std::lock_guard<std::mutex> guard(g_namespaces_mutex);
