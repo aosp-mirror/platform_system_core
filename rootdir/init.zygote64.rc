@@ -7,4 +7,4 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
     onrestart restart cameraserver
     onrestart restart media
     onrestart restart netd
-    writepid /dev/cpuset/foreground/tasks /dev/stune/foreground/tasks
+    writepid /dev/cpuset/foreground/tasks
