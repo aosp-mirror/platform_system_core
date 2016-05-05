@@ -16,7 +16,6 @@
 
 #define LOG_TAG "DEBUG"
 
-#include <arpa/inet.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -613,16 +612,6 @@ static void dump_crash(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid,
   property_get("ro.debuggable", value, "0");
   bool want_logs = (value[0] == '1');
 
-  if (log->amfd >= 0) {
-    // Activity Manager protocol: binary 32-bit network-byte-order ints for the
-    // pid and signal number, followed by the raw text of the dump, culminating
-    // in a zero byte that marks end-of-data.
-    uint32_t datum = htonl(pid);
-    TEMP_FAILURE_RETRY( write(log->amfd, &datum, 4) );
-    datum = htonl(signal);
-    TEMP_FAILURE_RETRY( write(log->amfd, &datum, 4) );
-  }
-
   _LOG(log, logtype::HEADER,
        "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
   dump_header_info(log);
@@ -640,17 +629,6 @@ static void dump_crash(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid,
   if (want_logs) {
     dump_logs(log, pid, 0);
   }
-
-  // send EOD to the Activity Manager, then wait for its ack to avoid racing ahead
-  // and killing the target out from under it
-  if (log->amfd >= 0) {
-    uint8_t eodMarker = 0;
-    TEMP_FAILURE_RETRY( write(log->amfd, &eodMarker, 1) );
-    // 3 sec timeout reading the ack; we're fine if that happens
-    TEMP_FAILURE_RETRY( read(log->amfd, &eodMarker, 1) );
-  }
-
-  return;
 }
 
 // open_tombstone - find an available tombstone slot, if any, of the
@@ -708,7 +686,7 @@ int open_tombstone(std::string* out_path) {
 
 void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid,
                        const std::set<pid_t>& siblings, int signal, int original_si_code,
-                       uintptr_t abort_msg_address, int amfd) {
+                       uintptr_t abort_msg_address, std::string* amfd_data) {
   log_t log;
   log.current_tid = tid;
   log.crashed_tid = tid;
@@ -719,8 +697,6 @@ void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid
   }
 
   log.tfd = tombstone_fd;
-  // Preserve amfd since it can be modified through the calls below without
-  // being closed.
-  log.amfd = amfd;
+  log.amfd_data = amfd_data;
   dump_crash(&log, map, pid, tid, siblings, signal, original_si_code, abort_msg_address);
 }
