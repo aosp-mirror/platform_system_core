@@ -25,7 +25,8 @@
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 
-#include <android-base/file.h>
+#include <string>
+
 #include <android-base/stringprintf.h>
 #include <backtrace/Backtrace.h>
 #include <log/log.h>
@@ -49,7 +50,6 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
                       && log->crashed_tid != -1
                       && log->current_tid != -1
                       && (log->crashed_tid == log->current_tid);
-  bool write_to_activitymanager = (log->amfd != -1);
 
   char buf[512];
   va_list ap;
@@ -68,12 +68,8 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
 
   if (write_to_logcat) {
     __android_log_buf_write(LOG_ID_CRASH, ANDROID_LOG_FATAL, LOG_TAG, buf);
-    if (write_to_activitymanager) {
-      if (!android::base::WriteFully(log->amfd, buf, len)) {
-        // timeout or other failure on write; stop informing the activity manager
-        ALOGE("AM write failed: %s", strerror(errno));
-        log->amfd = -1;
-      }
+    if (log->amfd_data != nullptr) {
+      *log->amfd_data += buf;
     }
   }
 }
