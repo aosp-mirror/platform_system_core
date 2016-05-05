@@ -1182,6 +1182,8 @@ static int bugreport(TransportType transport_type, const char* serial, int argc,
     }
     std::string output;
 
+    fprintf(stderr, "Bugreport is in progress and it could take minutes to complete.\n"
+            "Please be patient and do not cancel or disconnect your device until it completes.\n");
     int status = send_shell_command(transport_type, serial, "bugreportz", true, &output);
     if (status != 0 || output.empty()) return status;
     output = android::base::Trim(output);
