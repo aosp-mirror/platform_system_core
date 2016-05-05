@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <arpa/inet.h>
 #include <dirent.h>
 #include <elf.h>
 #include <errno.h>
@@ -32,12 +33,15 @@
 #include <sys/un.h>
 #include <time.h>
 
+#include <memory>
 #include <set>
+#include <string>
 
 #include <selinux/android.h>
 
 #include <log/logger.h>
 
+#include <android-base/file.h>
 #include <android-base/unique_fd.h>
 #include <cutils/debugger.h>
 #include <cutils/properties.h>
@@ -288,6 +292,41 @@ static int activity_manager_connect() {
   return amfd.release();
 }
 
+static void activity_manager_write(int pid, int signal, int amfd, const std::string& amfd_data) {
+  if (amfd == -1) {
+    return;
+  }
+
+  // Activity Manager protocol: binary 32-bit network-byte-order ints for the
+  // pid and signal number, followed by the raw text of the dump, culminating
+  // in a zero byte that marks end-of-data.
+  uint32_t datum = htonl(pid);
+  if (!android::base::WriteFully(amfd, &datum, 4)) {
+    ALOGE("AM pid write failed: %s\n", strerror(errno));
+    return;
+  }
+  datum = htonl(signal);
+  if (!android::base::WriteFully(amfd, &datum, 4)) {
+    ALOGE("AM signal write failed: %s\n", strerror(errno));
+    return;
+  }
+
+  if (!android::base::WriteFully(amfd, amfd_data.c_str(), amfd_data.size())) {
+    ALOGE("AM data write failed: %s\n", strerror(errno));
+    return;
+  }
+
+  // Send EOD to the Activity Manager, then wait for its ack to avoid racing
+  // ahead and killing the target out from under it.
+  uint8_t eodMarker = 0;
+  if (!android::base::WriteFully(amfd, &eodMarker, 1)) {
+    ALOGE("AM eod write failed: %s\n", strerror(errno));
+    return;
+  }
+  // 3 sec timeout reading the ack; we're fine if the read fails.
+  android::base::ReadFully(amfd, &eodMarker, 1);
+}
+
 static bool should_attach_gdb(const debugger_request_t& request) {
   if (request.action == DEBUGGER_ACTION_CRASH) {
     return property_get_bool("debug.debuggerd.wait_for_gdb", false);
@@ -415,7 +454,7 @@ static void ptrace_siblings(pid_t pid, pid_t main_tid, std::set<pid_t>& tids) {
 
 static bool perform_dump(const debugger_request_t& request, int fd, int tombstone_fd,
                          BacktraceMap* backtrace_map, const std::set<pid_t>& siblings,
-                         int* crash_signal, int amfd) {
+                         int* crash_signal, std::string* amfd_data) {
   if (TEMP_FAILURE_RETRY(write(fd, "\0", 1)) != 1) {
     ALOGE("debuggerd: failed to respond to client: %s\n", strerror(errno));
     return false;
@@ -433,10 +472,10 @@ static bool perform_dump(const debugger_request_t& request, int fd, int tombston
         if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
           ALOGV("debuggerd: stopped -- dumping to tombstone");
           engrave_tombstone(tombstone_fd, backtrace_map, request.pid, request.tid, siblings, signal,
-                            request.original_si_code, request.abort_msg_address, amfd);
+                            request.original_si_code, request.abort_msg_address, amfd_data);
         } else if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE) {
           ALOGV("debuggerd: stopped -- dumping to fd");
-          dump_backtrace(fd, -1, backtrace_map, request.pid, request.tid, siblings);
+          dump_backtrace(fd, backtrace_map, request.pid, request.tid, siblings, nullptr);
         } else {
           ALOGV("debuggerd: stopped -- continuing");
           if (ptrace(PTRACE_CONT, request.tid, 0, 0) != 0) {
@@ -460,7 +499,7 @@ static bool perform_dump(const debugger_request_t& request, int fd, int tombston
         ALOGV("stopped -- fatal signal\n");
         *crash_signal = signal;
         engrave_tombstone(tombstone_fd, backtrace_map, request.pid, request.tid, siblings, signal,
-                          request.original_si_code, request.abort_msg_address, amfd);
+                          request.original_si_code, request.abort_msg_address, amfd_data);
         break;
 
       default:
@@ -547,9 +586,11 @@ static void worker_process(int fd, debugger_request_t& request) {
   std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::Create(request.pid));
 
   int amfd = -1;
+  std::unique_ptr<std::string> amfd_data;
   if (request.action == DEBUGGER_ACTION_CRASH) {
     // Connect to the activity manager before dropping privileges.
     amfd = activity_manager_connect();
+    amfd_data.reset(new std::string);
   }
 
   bool succeeded = false;
@@ -562,11 +603,11 @@ static void worker_process(int fd, debugger_request_t& request) {
 
   int crash_signal = SIGKILL;
   succeeded = perform_dump(request, fd, tombstone_fd, backtrace_map.get(), siblings,
-                           &crash_signal, amfd);
+                           &crash_signal, amfd_data.get());
   if (succeeded) {
     if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
       if (!tombstone_path.empty()) {
-        write(fd, tombstone_path.c_str(), tombstone_path.length());
+        android::base::WriteFully(fd, tombstone_path.c_str(), tombstone_path.length());
       }
     }
   }
@@ -577,6 +618,13 @@ static void worker_process(int fd, debugger_request_t& request) {
       ALOGE("debuggerd: failed to stop process for gdb attach: %s", strerror(errno));
       attach_gdb = false;
     }
+  }
+
+  if (!attach_gdb) {
+    // Tell the Activity Manager about the crashing process. If we are
+    // waiting for gdb to attach, do not send this or Activity Manager
+    // might kill the process before anyone can attach.
+    activity_manager_write(request.pid, crash_signal, amfd, *amfd_data.get());
   }
 
   if (ptrace(PTRACE_DETACH, request.tid, 0, 0) != 0) {
@@ -595,8 +643,11 @@ static void worker_process(int fd, debugger_request_t& request) {
   }
 
   // Wait for gdb, if requested.
-  if (attach_gdb && succeeded) {
+  if (attach_gdb) {
     wait_for_user_action(request);
+
+    // Now tell the activity manager about this process.
+    activity_manager_write(request.pid, crash_signal, amfd, *amfd_data.get());
 
     // Tell the signal process to send SIGCONT to the target.
     if (!send_signal(request.pid, 0, SIGCONT)) {
