@@ -36,7 +36,6 @@ OUR_TOOLS := \
     log \
     nandread \
     newfs_msdos \
-    ps \
     sendevent \
     start \
     stop \
