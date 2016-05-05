@@ -32,6 +32,7 @@ struct fs_mgr_flag_values {
     int partnum;
     int swap_prio;
     unsigned int zram_size;
+    int file_encryption_type;
 };
 
 struct flag_list {
@@ -63,7 +64,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "check",       MF_CHECK },
     { "encryptable=",MF_CRYPT },
     { "forceencrypt=",MF_FORCECRYPT },
-    { "fileencryption",MF_FILEENCRYPTION },
+    { "fileencryption=",MF_FILEENCRYPTION },
     { "forcefdeorfbe=",MF_FORCEFDEORFBE },
     { "nonremovable",MF_NONREMOVABLE },
     { "voldmanaged=",MF_VOLDMANAGED},
@@ -79,6 +80,12 @@ static struct flag_list fs_mgr_flags[] = {
     { "nofail",      MF_NOFAIL },
     { "defaults",    0 },
     { 0,             0 },
+};
+
+static struct flag_list encryption_types[] = {
+    {"software", ET_SOFTWARE},
+    {"ice", ET_ICE},
+    {0, 0}
 };
 
 static uint64_t calculate_zram_size(unsigned int percentage)
@@ -147,6 +154,21 @@ static int parse_flags(char *flags, struct flag_list *fl,
                      * location of the keys.  Get it and return it.
                      */
                     flag_vals->key_loc = strdup(strchr(p, '=') + 1);
+                    flag_vals->file_encryption_type = ET_SOFTWARE;
+                } else if ((fl[i].flag == MF_FILEENCRYPTION) && flag_vals) {
+                    /* The fileencryption flag is followed by an = and the
+                     * type of the encryption.  Get it and return it.
+                     */
+                    const struct flag_list *j;
+                    const char *type = strchr(p, '=') + 1;
+                    for (j = encryption_types; j->name; ++j) {
+                        if (!strcmp(type, j->name)) {
+                            flag_vals->file_encryption_type = j->flag;
+                        }
+                    }
+                    if (flag_vals->file_encryption_type == 0) {
+                        ERROR("Unknown file encryption type: %s\n", type);
+                    }
                 } else if ((fl[i].flag == MF_LENGTH) && flag_vals) {
                     /* The length flag is followed by an = and the
                      * size of the partition.  Get it and return it.
@@ -337,6 +359,7 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
         fstab->recs[cnt].partnum = flag_vals.partnum;
         fstab->recs[cnt].swap_prio = flag_vals.swap_prio;
         fstab->recs[cnt].zram_size = flag_vals.zram_size;
+        fstab->recs[cnt].file_encryption_type = flag_vals.file_encryption_type;
         cnt++;
     }
     /* If an A/B partition, modify block device to be the real block device */
