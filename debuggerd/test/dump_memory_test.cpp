@@ -125,7 +125,7 @@ class DumpMemoryTest : public ::testing::Test {
     }
 
     log_.tfd = tombstone_fd;
-    log_.amfd = -1;
+    log_.amfd_data = nullptr;
     log_.crashed_tid = 12;
     log_.current_tid = 12;
     log_.should_retrieve_logcat = false;
