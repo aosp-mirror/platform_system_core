@@ -227,7 +227,7 @@ static int pmsgRead(struct android_log_logger_list *logger_list,
                     log_msg->entry_v4.uid = buf.p.uid;
                 }
 
-                return ret;
+                return ret + log_msg->entry_v4.hdr_size;
             }
         }
 
