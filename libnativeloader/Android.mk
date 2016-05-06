@@ -1,7 +1,9 @@
 LOCAL_PATH:= $(call my-dir)
 
-NATIVE_LOADER_COMMON_SRC_FILES := \
+native_loader_common_src_files := \
   native_loader.cpp
+
+native_loader_common_cflags := -Werror -Wall
 
 # Shared library for target
 # ========================================================
@@ -9,11 +11,11 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE:= libnativeloader
 
-LOCAL_SRC_FILES:= $(NATIVE_LOADER_COMMON_SRC_FILES)
+LOCAL_SRC_FILES:= $(native_loader_common_src_files)
 LOCAL_SHARED_LIBRARIES := libnativehelper liblog libcutils
 LOCAL_STATIC_LIBRARIES := libbase
 LOCAL_CLANG := true
-LOCAL_CFLAGS += -Werror -Wall
+LOCAL_CFLAGS := $(native_loader_common_cflags)
 LOCAL_CPPFLAGS := -std=gnu++14 -fvisibility=hidden
 LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
@@ -27,11 +29,11 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE:= libnativeloader
 
-LOCAL_SRC_FILES:= $(NATIVE_LOADER_COMMON_SRC_FILES)
+LOCAL_SRC_FILES:= $(native_loader_common_src_files)
 LOCAL_SHARED_LIBRARIES := libnativehelper liblog libcutils
 LOCAL_STATIC_LIBRARIES := libbase
 LOCAL_CLANG := true
-LOCAL_CFLAGS += -Werror -Wall
+LOCAL_CFLAGS := $(native_loader_common_cflags)
 LOCAL_CPPFLAGS := -std=gnu++14 -fvisibility=hidden
 LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
@@ -45,10 +47,10 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE:= libnativeloader
 
-LOCAL_SRC_FILES:= $(NATIVE_LOADER_COMMON_SRC_FILES)
+LOCAL_SRC_FILES:= $(native_loader_common_src_files)
 LOCAL_STATIC_LIBRARIES := libnativehelper libcutils liblog libbase
 LOCAL_CLANG := true
-LOCAL_CFLAGS += -Werror -Wall
+LOCAL_CFLAGS := $(native_loader_common_cflags)
 LOCAL_CPPFLAGS := -std=gnu++14 -fvisibility=hidden
 LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
