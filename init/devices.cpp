@@ -130,49 +130,6 @@ int add_dev_perms(const char *name, const char *attr,
     return 0;
 }
 
-void fixup_sys_perms(const char *upath)
-{
-    char buf[512];
-    struct listnode *node;
-    struct perms_ *dp;
-
-    /* upaths omit the "/sys" that paths in this list
-     * contain, so we add 4 when comparing...
-     */
-    list_for_each(node, &sys_perms) {
-        dp = &(node_to_item(node, struct perm_node, plist))->dp;
-        if (dp->prefix) {
-            if (strncmp(upath, dp->name + 4, strlen(dp->name + 4)))
-                continue;
-        } else if (dp->wildcard) {
-            if (fnmatch(dp->name + 4, upath, FNM_PATHNAME) != 0)
-                continue;
-        } else {
-            if (strcmp(upath, dp->name + 4))
-                continue;
-        }
-
-        if ((strlen(upath) + strlen(dp->attr) + 6) > sizeof(buf))
-            break;
-
-        snprintf(buf, sizeof(buf), "/sys%s/%s", upath, dp->attr);
-        INFO("fixup %s %d %d 0%o\n", buf, dp->uid, dp->gid, dp->perm);
-        chown(buf, dp->uid, dp->gid);
-        chmod(buf, dp->perm);
-    }
-
-    // Now fixup SELinux file labels
-    int len = snprintf(buf, sizeof(buf), "/sys%s", upath);
-    if ((len < 0) || ((size_t) len >= sizeof(buf))) {
-        // Overflow
-        return;
-    }
-    if (access(buf, F_OK) == 0) {
-        INFO("restorecon_recursive: %s\n", buf);
-        restorecon_recursive(buf);
-    }
-}
-
 static bool perm_path_matches(const char *path, struct perms_ *dp)
 {
     if (dp->prefix) {
@@ -187,6 +144,36 @@ static bool perm_path_matches(const char *path, struct perms_ *dp)
     }
 
     return false;
+}
+
+void fixup_sys_perms(const char *upath)
+{
+    struct listnode *node;
+
+    /* upaths omit the "/sys" that paths in this list
+     * contain, so we prepend it...
+     */
+    std::string path = SYSFS_PREFIX;
+    path += upath;
+
+    list_for_each(node, &sys_perms) {
+        perms_ *dp;
+
+        dp = &(node_to_item(node, struct perm_node, plist))->dp;
+        if (!perm_path_matches(path.c_str(), dp)) {
+                continue;
+        }
+
+        std::string attr_file = path + "/" + dp->attr;
+        INFO("fixup %s %d %d 0%o\n", attr_file.c_str(), dp->uid, dp->gid, dp->perm);
+        chown(attr_file.c_str(), dp->uid, dp->gid);
+        chmod(attr_file.c_str(), dp->perm);
+    }
+
+    if (access(path.c_str(), F_OK) == 0) {
+        INFO("restorecon_recursive: %s\n", path.c_str());
+        restorecon_recursive(path.c_str());
+    }
 }
 
 static mode_t get_device_perm(const char *path, const char **links,
