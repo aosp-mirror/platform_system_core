@@ -37,14 +37,19 @@
 #include "adb_utils.h"
 
 #if ADB_HOST
+
+// Android Wear has been using port 5601 in all of its documentation/tooling,
+// but we search for emulators on ports [5554, 5555 + ADB_LOCAL_TRANSPORT_MAX].
+// Avoid stomping on their port by limiting the number of emulators that can be
+// connected.
+#define ADB_LOCAL_TRANSPORT_MAX 16
+
+ADB_MUTEX_DEFINE(local_transports_lock);
+
 /* we keep a list of opened transports. The atransport struct knows to which
  * local transport it is connected. The list is used to detect when we're
  * trying to connect twice to a given local transport.
  */
-#define  ADB_LOCAL_TRANSPORT_MAX  64
-
-ADB_MUTEX_DEFINE( local_transports_lock );
-
 static atransport*  local_transports[ ADB_LOCAL_TRANSPORT_MAX ];
 #endif /* ADB_HOST */
 
