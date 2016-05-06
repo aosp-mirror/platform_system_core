@@ -325,6 +325,7 @@ LOCAL_CLANG := true
 
 LOCAL_SRC_FILES := \
     daemon/main.cpp \
+    daemon/mdns.cpp \
     services.cpp \
     file_sync_service.cpp \
     framebuffer_service.cpp \
@@ -372,6 +373,7 @@ LOCAL_STATIC_LIBRARIES := \
     libcrypto_utils \
     libcrypto \
     libminijail \
+    libmdnssd \
     libdebuggerd_handler \
 
 include $(BUILD_EXECUTABLE)

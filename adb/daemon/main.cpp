@@ -45,6 +45,8 @@
 #include "adb_utils.h"
 #include "transport.h"
 
+#include "mdns.h"
+
 static const char* root_seclabel = nullptr;
 
 static void drop_capabilities_bounding_set_if_needed(struct minijail *j) {
@@ -140,6 +142,11 @@ static void drop_privileges(int server_port) {
     }
 }
 
+static void setup_port(int port) {
+    local_init(port);
+    setup_mdns(port);
+}
+
 int adbd_main(int server_port) {
     umask(0);
 
@@ -188,10 +195,10 @@ int adbd_main(int server_port) {
     if (sscanf(prop_port.c_str(), "%d", &port) == 1 && port > 0) {
         D("using port=%d", port);
         // Listen on TCP port specified by service.adb.tcp.port property.
-        local_init(port);
+        setup_port(port);
     } else if (!is_usb) {
         // Listen on default port.
-        local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
+        setup_port(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
     }
 
     D("adbd_main(): pre init_jdwp()");
