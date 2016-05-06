@@ -40,6 +40,12 @@ namespace android {
 static constexpr const char* kPublicNativeLibrariesSystemConfigPathFromRoot = "/etc/public.libraries.txt";
 static constexpr const char* kPublicNativeLibrariesVendorConfig = "/vendor/etc/public.libraries.txt";
 
+static bool is_debuggable() {
+  char debuggable[PROP_VALUE_MAX];
+  property_get("ro.debuggable", debuggable, "0");
+  return std::string(debuggable) == "1";
+}
+
 class LibraryNamespaces {
  public:
   LibraryNamespaces() : initialized_(false) { }
@@ -113,6 +119,19 @@ class LibraryNamespaces {
     LOG_ALWAYS_FATAL_IF(!ReadConfig(public_native_libraries_system_config, &sonames),
                         "Error reading public native library list from \"%s\": %s",
                         public_native_libraries_system_config.c_str(), strerror(errno));
+
+    // For debuggable platform builds use ANDROID_ADDITIONAL_PUBLIC_LIBRARIES environment
+    // variable to add libraries to the list. This is intended for platform tests only.
+    if (is_debuggable()) {
+      const char* additional_libs = getenv("ANDROID_ADDITIONAL_PUBLIC_LIBRARIES");
+      if (additional_libs != nullptr && additional_libs[0] != '\0') {
+        std::vector<std::string> additional_libs_vector = base::Split(additional_libs, ":");
+        std::copy(additional_libs_vector.begin(),
+                  additional_libs_vector.end(),
+                  std::back_inserter(sonames));
+      }
+    }
+
     // This file is optional, quietly ignore if the file does not exist.
     ReadConfig(kPublicNativeLibrariesVendorConfig, &sonames);
 
