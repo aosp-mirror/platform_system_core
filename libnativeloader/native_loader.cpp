@@ -56,7 +56,12 @@ class LibraryNamespaces {
                               jstring java_library_path,
                               jstring java_permitted_path,
                               int32_t target_sdk_version) {
-    ScopedUtfChars library_path(env, java_library_path);
+    std::string library_path; // empty string by default.
+
+    if (java_library_path != nullptr) {
+      ScopedUtfChars library_path_utf_chars(env, java_library_path);
+      library_path = library_path_utf_chars.c_str();
+    }
 
     std::string permitted_path;
     if (java_permitted_path != nullptr) {
