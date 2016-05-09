@@ -345,6 +345,11 @@ bool String16::startsWith(const char16_t* prefix) const
     return strncmp16(mString, prefix, ps) == 0;
 }
 
+bool String16::contains(const char16_t* chrs) const
+{
+    return strstr16(mString, chrs) != nullptr;
+}
+
 status_t String16::makeLower()
 {
     const size_t N = size();
