@@ -76,7 +76,9 @@ class LibraryNamespaces {
 
     if (java_permitted_path != nullptr) {
       ScopedUtfChars path(env, java_permitted_path);
-      permitted_path = permitted_path + ":" + path.c_str();
+      if (path.c_str() != nullptr && path.size() > 0) {
+        permitted_path = permitted_path + ":" + path.c_str();
+      }
     }
 
     if (!initialized_ && !InitPublicNamespace(library_path.c_str())) {
