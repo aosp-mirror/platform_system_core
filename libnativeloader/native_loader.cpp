@@ -19,7 +19,7 @@
 
 #include <dlfcn.h>
 #ifdef __ANDROID__
-#include <android/dlext.h>
+#include "dlext_namespaces.h"
 #include "cutils/properties.h"
 #include "log/log.h"
 #endif
