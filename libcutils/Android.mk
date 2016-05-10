@@ -17,7 +17,6 @@ LOCAL_PATH := $(my-dir)
 include $(CLEAR_VARS)
 
 libcutils_common_sources := \
-        atomic.c.arm \
         config_utils.c \
         fs_config.c \
         hashmap.c \
