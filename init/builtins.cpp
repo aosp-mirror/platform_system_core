@@ -36,6 +36,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <linux/loop.h>
+#include <ext4_crypt.h>
 #include <ext4_crypt_init_extensions.h>
 
 #include <selinux/selinux.h>
@@ -132,6 +133,17 @@ static void turnOffBacklight() {
                                                            dp->d_name);
         android::base::WriteStringToFile(off, fileName);
     }
+}
+
+static int wipe_data_via_recovery(const std::string& reason) {
+    const std::vector<std::string> options = {"--wipe_data", std::string() + "--reason=" + reason};
+    std::string err;
+    if (!write_bootloader_message(options, &err)) {
+        ERROR("failed to set bootloader message: %s", err.c_str());
+        return -1;
+    }
+    android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
+    while (1) { pause(); }  // never reached
 }
 
 static void unmount_and_fsck(const struct mntent *entry) {
@@ -323,7 +335,13 @@ static int do_mkdir(const std::vector<std::string>& args) {
         }
     }
 
-    return e4crypt_set_directory_policy(args[1].c_str());
+    if (e4crypt_is_native()) {
+        if (e4crypt_set_directory_policy(args[1].c_str())) {
+            wipe_data_via_recovery(std::string() + "set_policy_failed:" + args[1]);
+            return -1;
+        }
+    }
+    return 0;
 }
 
 static struct {
@@ -451,17 +469,6 @@ exit_success:
 
 }
 
-static int wipe_data_via_recovery() {
-    const std::vector<std::string> options = {"--wipe_data", "--reason=wipe_data_via_recovery"};
-    std::string err;
-    if (!write_bootloader_message(options, &err)) {
-        ERROR("failed to set bootloader message: %s", err.c_str());
-        return -1;
-    }
-    android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
-    while (1) { pause(); }  // never reached
-}
-
 /* Imports .rc files from the specified paths. Default ones are applied if none is given.
  *
  * start_index: index of the first path in the args list
@@ -552,7 +559,7 @@ static int do_mount_all(const std::vector<std::string>& args) {
     } else if (ret == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
         /* Setup a wipe via recovery, and reboot into recovery */
         ERROR("fs_mgr_mount_all suggested recovery, so wiping data via recovery.\n");
-        ret = wipe_data_via_recovery();
+        ret = wipe_data_via_recovery("wipe_data_via_recovery");
         /* If reboot worked, there is no return. */
     } else if (ret == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
         if (e4crypt_install_keyring()) {
