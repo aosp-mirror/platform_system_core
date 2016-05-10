@@ -40,6 +40,11 @@ namespace android {
 static constexpr const char* kPublicNativeLibrariesSystemConfigPathFromRoot = "/etc/public.libraries.txt";
 static constexpr const char* kPublicNativeLibrariesVendorConfig = "/vendor/etc/public.libraries.txt";
 
+// (http://b/27588281) This is a workaround for apps using custom classloaders and calling
+// System.load() with an absolute path which is outside of the classloader library search path.
+// This list includes all directories app is allowed to access this way.
+static constexpr const char* kWhitelistedDirectories = "/data:/mnt/expand";
+
 static bool is_debuggable() {
   char debuggable[PROP_VALUE_MAX];
   property_get("ro.debuggable", debuggable, "0");
@@ -63,18 +68,17 @@ class LibraryNamespaces {
       library_path = library_path_utf_chars.c_str();
     }
 
-    std::string permitted_path;
+    // (http://b/27588281) This is a workaround for apps using custom
+    // classloaders and calling System.load() with an absolute path which
+    // is outside of the classloader library search path.
+    //
+    // This part effectively allows such a classloader to access anything
+    // under /data and /mnt/expand
+    std::string permitted_path = kWhitelistedDirectories;
+
     if (java_permitted_path != nullptr) {
       ScopedUtfChars path(env, java_permitted_path);
-      permitted_path = path.c_str();
-    } else {
-      // (http://b/27588281) This is a workaround for apps using custom
-      // classloaders and calling System.load() with an absolute path which
-      // is outside of the classloader library search path.
-      //
-      // This part effectively allows such a classloader to access anything
-      // under /data
-      permitted_path = "/data";
+      permitted_path = permitted_path + ":" + path.c_str();
     }
 
     if (!initialized_ && !InitPublicNamespace(library_path.c_str(), target_sdk_version)) {
