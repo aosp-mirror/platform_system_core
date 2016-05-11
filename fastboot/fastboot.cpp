@@ -777,10 +777,10 @@ static bool needs_erase(Transport* transport, const char* partition) {
     return partition_type == "ext4";
 }
 
-static int load_buf_fd(Transport* transport, int fd, struct fastboot_buffer* buf) {
+static bool load_buf_fd(Transport* transport, int fd, struct fastboot_buffer* buf) {
     int64_t sz = get_file_size(fd);
     if (sz == -1) {
-        return -1;
+        return false;
     }
 
     lseek64(fd, 0, SEEK_SET);
@@ -788,7 +788,7 @@ static int load_buf_fd(Transport* transport, int fd, struct fastboot_buffer* buf
     if (limit) {
         sparse_file** s = load_sparse_files(fd, limit);
         if (s == nullptr) {
-            return -1;
+            return false;
         }
         buf->type = FB_BUFFER_SPARSE;
         buf->data = s;
@@ -800,18 +800,14 @@ static int load_buf_fd(Transport* transport, int fd, struct fastboot_buffer* buf
         buf->sz = sz;
     }
 
-    return 0;
+    return true;
 }
 
-static int load_buf(Transport* transport, const char *fname, struct fastboot_buffer *buf)
-{
-    int fd;
-
-    fd = open(fname, O_RDONLY | O_BINARY);
-    if (fd < 0) {
-        return -1;
+static bool load_buf(Transport* transport, const char* fname, struct fastboot_buffer* buf) {
+    int fd = open(fname, O_RDONLY | O_BINARY);
+    if (fd == -1) {
+        return false;
     }
-
     return load_buf_fd(transport, fd, buf);
 }
 
@@ -955,8 +951,8 @@ static void do_for_partitions(Transport* transport, const char *part, const char
 static void do_flash(Transport* transport, const char* pname, const char* fname) {
     struct fastboot_buffer buf;
 
-    if (load_buf(transport, fname, &buf)) {
-        die("cannot load '%s'", fname);
+    if (!load_buf(transport, fname, &buf)) {
+        die("cannot load '%s': %s", fname, strerror(errno));
     }
     flash_buf(pname, &buf);
 }
@@ -1000,8 +996,9 @@ static void do_update(Transport* transport, const char* filename, const char* sl
             exit(1); // unzip_to_file already explained why.
         }
         fastboot_buffer buf;
-        int rc = load_buf_fd(transport, fd, &buf);
-        if (rc) die("cannot load %s from flash", images[i].img_name);
+        if (!load_buf_fd(transport, fd, &buf)) {
+            die("cannot load %s from flash: %s", images[i].img_name, strerror(errno));
+        }
 
         auto update = [&](const std::string &partition) {
             do_update_signature(zip, images[i].sig_name);
@@ -1054,10 +1051,9 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
     for (size_t i = 0; i < ARRAY_SIZE(images); i++) {
         fname = find_item(images[i].part_name, product);
         fastboot_buffer buf;
-        if (load_buf(transport, fname.c_str(), &buf)) {
-            if (images[i].is_optional)
-                continue;
-            die("could not load %s\n", images[i].img_name);
+        if (!load_buf(transport, fname.c_str(), &buf)) {
+            if (images[i].is_optional) continue;
+            die("could not load '%s': %s", images[i].img_name, strerror(errno));
         }
 
         auto flashall = [&](const std::string &partition) {
@@ -1225,7 +1221,7 @@ static void fb_perform_format(Transport* transport,
         return;
     }
 
-    if (load_buf_fd(transport, fd, &buf)) {
+    if (!load_buf_fd(transport, fd, &buf)) {
         fprintf(stderr, "Cannot read image: %s\n", strerror(errno));
         close(fd);
         return;
