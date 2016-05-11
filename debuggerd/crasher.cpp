@@ -22,8 +22,9 @@
 
 extern const char* __progname;
 
-void crash1(void);
-void crashnostack(void);
+extern "C" void crash1(void);
+extern "C" void crashnostack(void);
+
 static int do_action(const char* arg);
 
 static void maybe_abort() {
@@ -159,6 +160,10 @@ static int do_action(const char* arg)
         __assert("some_file.c", 123, "false");
     } else if (!strcmp(arg, "assert2")) {
         __assert2("some_file.c", 123, "some_function", "false");
+    } else if (!strcmp(arg, "fortify")) {
+        char buf[10];
+        __read_chk(-1, buf, 32, 10);
+        while (true) pause();
     } else if (!strcmp(arg, "LOG_ALWAYS_FATAL")) {
         LOG_ALWAYS_FATAL("hello %s", "world");
     } else if (!strcmp(arg, "LOG_ALWAYS_FATAL_IF")) {
@@ -172,7 +177,7 @@ static int do_action(const char* arg)
     } else if (!strcmp(arg, "heap-usage")) {
         abuse_heap();
     } else if (!strcmp(arg, "SIGSEGV-unmapped")) {
-        char* map = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+        char* map = reinterpret_cast<char*>(mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0));
         munmap(map, sizeof(int));
         map[0] = '8';
     }
@@ -189,6 +194,7 @@ static int do_action(const char* arg)
     fprintf(stderr, "  abort                 call abort()\n");
     fprintf(stderr, "  assert                call assert() without a function\n");
     fprintf(stderr, "  assert2               call assert() with a function\n");
+    fprintf(stderr, "  fortify               fail a _FORTIFY_SOURCE check\n");
     fprintf(stderr, "  LOG_ALWAYS_FATAL      call LOG_ALWAYS_FATAL\n");
     fprintf(stderr, "  LOG_ALWAYS_FATAL_IF   call LOG_ALWAYS_FATAL\n");
     fprintf(stderr, "  SIGFPE                cause a SIGFPE\n");
