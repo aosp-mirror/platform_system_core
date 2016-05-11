@@ -54,7 +54,7 @@ include $(BUILD_EXECUTABLE)
 
 
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := crasher.c
+LOCAL_SRC_FILES := crasher.cpp
 LOCAL_SRC_FILES_arm    := arm/crashglue.S
 LOCAL_SRC_FILES_arm64  := arm64/crashglue.S
 LOCAL_SRC_FILES_mips   := mips/crashglue.S
@@ -63,9 +63,9 @@ LOCAL_SRC_FILES_x86    := x86/crashglue.S
 LOCAL_SRC_FILES_x86_64 := x86_64/crashglue.S
 LOCAL_MODULE_PATH := $(TARGET_OUT_OPTIONAL_EXECUTABLES)
 LOCAL_MODULE_TAGS := optional
-LOCAL_CFLAGS += -fstack-protector-all -Werror -Wno-free-nonheap-object -Wno-date-time
+LOCAL_CPPFLAGS := $(common_cppflags) -fstack-protector-all -Wno-free-nonheap-object -Wno-date-time
 #LOCAL_FORCE_STATIC_EXECUTABLE := true
-LOCAL_SHARED_LIBRARIES := libcutils liblog libc
+LOCAL_SHARED_LIBRARIES := libcutils liblog
 
 # The arm emulator has VFP but not VFPv3-D32.
 ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
