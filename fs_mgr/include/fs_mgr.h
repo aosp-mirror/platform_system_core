@@ -65,6 +65,7 @@ struct fstab_rec {
     int partnum;
     int swap_prio;
     unsigned int zram_size;
+    int file_encryption_type;
 };
 
 // Callback function for verity status
@@ -85,6 +86,10 @@ int fs_mgr_mount_all(struct fstab *fstab);
 
 #define FS_MGR_DOMNT_FAILED -1
 #define FS_MGR_DOMNT_BUSY -2
+
+#define ET_SOFTWARE 1
+#define ET_ICE      2
+
 int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
                     char *tmp_mount_point);
 int fs_mgr_do_tmpfs_mount(char *n_name);
