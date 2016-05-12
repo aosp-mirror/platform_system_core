@@ -17,7 +17,7 @@
 #ifndef ANDROID_REF_BASE_H
 #define ANDROID_REF_BASE_H
 
-#include <cutils/atomic.h>
+#include <atomic>
 
 #include <stdint.h>
 #include <sys/types.h>
@@ -176,16 +176,17 @@ class LightRefBase
 public:
     inline LightRefBase() : mCount(0) { }
     inline void incStrong(__attribute__((unused)) const void* id) const {
-        android_atomic_inc(&mCount);
+        mCount.fetch_add(1, std::memory_order_relaxed);
     }
     inline void decStrong(__attribute__((unused)) const void* id) const {
-        if (android_atomic_dec(&mCount) == 1) {
+        if (mCount.fetch_sub(1, std::memory_order_release) == 1) {
+            std::atomic_thread_fence(std::memory_order_acquire);
             delete static_cast<const T*>(this);
         }
     }
     //! DEBUGGING ONLY: Get current strong ref count.
     inline int32_t getStrongCount() const {
-        return mCount;
+        return mCount.load(std::memory_order_relaxed);
     }
 
     typedef LightRefBase<T> basetype;
@@ -200,7 +201,7 @@ private:
             const void* old_id, const void* new_id) { }
 
 private:
-    mutable volatile int32_t mCount;
+    mutable std::atomic<int32_t> mCount;
 };
 
 // This is a wrapper around LightRefBase that simply enforces a virtual
