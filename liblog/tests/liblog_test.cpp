@@ -1368,6 +1368,7 @@ TEST(liblog, is_loggable) {
             snprintf(key, sizeof(key), "%s%s", log_namespace, tag);
             fprintf(stderr, "i=%zu j=%zu property_set(\"%s\",\"%s\")\r",
                     i, j, key, buf);
+            usleep(20000);
             property_set(key, buf);
             bool android_log_is_loggable = __android_log_is_loggable(
                 levels[i].level, tag, ANDROID_LOG_DEBUG);
@@ -1393,6 +1394,7 @@ TEST(liblog, is_loggable) {
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
             }
+            usleep(20000);
             property_set(key, "");
 
             fprintf(stderr, "i=%zu j=%zu property_set(\"%s\",\"%s\")\r",
@@ -1422,6 +1424,7 @@ TEST(liblog, is_loggable) {
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
             }
+            usleep(20000);
             property_set(key + base_offset, "");
 
             strcpy(key, log_namespace);
@@ -1453,6 +1456,7 @@ TEST(liblog, is_loggable) {
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
             }
+            usleep(20000);
             property_set(key, "");
 
             fprintf(stderr, "i=%zu j=%zu property_set(\"%s\",\"%s\")\r",
@@ -1482,6 +1486,7 @@ TEST(liblog, is_loggable) {
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
             }
+            usleep(20000);
             property_set(key + base_offset, "");
         }
     }
@@ -1489,6 +1494,7 @@ TEST(liblog, is_loggable) {
     // All combinations of level and tag properties, but with global set to INFO
     strcpy(key, log_namespace);
     key[sizeof(log_namespace) - 2] = '\0';
+    usleep(20000);
     property_set(key, "I");
     snprintf(key, sizeof(key), "%s%s", log_namespace, tag);
     for(size_t i = 0; i < (sizeof(levels) / sizeof(levels[0])); ++i) {
@@ -1502,6 +1508,7 @@ TEST(liblog, is_loggable) {
 
             fprintf(stderr, "i=%zu j=%zu property_set(\"%s\",\"%s\")\r",
                     i, j, key, buf);
+            usleep(20000);
             property_set(key, buf);
             bool android_log_is_loggable = __android_log_is_loggable(
                 levels[i].level, tag, ANDROID_LOG_DEBUG);
@@ -1527,6 +1534,7 @@ TEST(liblog, is_loggable) {
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
             }
+            usleep(20000);
             property_set(key, "");
 
             fprintf(stderr, "i=%zu j=%zu property_set(\"%s\",\"%s\")\r",
@@ -1556,12 +1564,14 @@ TEST(liblog, is_loggable) {
                         levels[i].level, tag, ANDROID_LOG_DEBUG));
                 }
             }
+            usleep(20000);
             property_set(key + base_offset, "");
         }
     }
 
     // reset parms
     snprintf(key, sizeof(key), "%s%s", log_namespace, tag);
+    usleep(20000);
     property_set(key, hold[0]);
     property_set(key + base_offset, hold[1]);
     strcpy(key, log_namespace);
