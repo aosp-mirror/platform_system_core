@@ -23,6 +23,11 @@
 #include <errno.h>
 #include <cutils/partition_utils.h>
 #include <sys/mount.h>
+
+#include <selinux/selinux.h>
+#include <selinux/label.h>
+#include <selinux/android.h>
+
 #include "ext4_utils.h"
 #include "ext4.h"
 #include "make_ext4fs.h"
@@ -47,16 +52,28 @@ static int format_ext4(char *fs_blkdev, char *fs_mnt_point)
         return -1;
     }
 
+    struct selabel_handle *sehandle = selinux_android_file_context_handle();
+    if (!sehandle) {
+        /* libselinux logs specific error */
+        ERROR("Cannot initialize android file_contexts");
+        close(fd);
+        return -1;
+    }
+
     /* Format the partition using the calculated length */
     reset_ext4fs_info();
     info.len = (off64_t)dev_sz;
 
     /* Use make_ext4fs_internal to avoid wiping an already-wiped partition. */
-    rc = make_ext4fs_internal(fd, NULL, NULL, fs_mnt_point, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL);
+    rc = make_ext4fs_internal(fd, NULL, NULL, fs_mnt_point, 0, 0, 0, 0, 0, 0, sehandle, 0, 0, NULL);
     if (rc) {
         ERROR("make_ext4fs returned %d.\n", rc);
     }
     close(fd);
+
+    if (sehandle) {
+        selabel_close(sehandle);
+    }
 
     return rc;
 }
