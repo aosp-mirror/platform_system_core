@@ -43,6 +43,7 @@
 #include <sys/wait.h>
 
 #include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <cutils/list.h>
 #include <cutils/uevent.h>
 
@@ -146,22 +147,30 @@ static bool perm_path_matches(const char *path, struct perms_ *dp)
     return false;
 }
 
-void fixup_sys_perms(const char *upath)
-{
-    struct listnode *node;
+static bool match_subsystem(perms_* dp, const char* pattern,
+                            const char* path, const char* subsystem) {
+    if (!pattern || !subsystem || strstr(dp->name, subsystem) == NULL) {
+        return false;
+    }
 
-    /* upaths omit the "/sys" that paths in this list
-     * contain, so we prepend it...
-     */
-    std::string path = SYSFS_PREFIX;
-    path += upath;
+    std::string subsys_path = android::base::StringPrintf(pattern, subsystem, basename(path));
+    return perm_path_matches(subsys_path.c_str(), dp);
+}
 
+static void fixup_sys_perms(const char* upath, const char* subsystem) {
+    // upaths omit the "/sys" that paths in this list
+    // contain, so we prepend it...
+    std::string path = std::string(SYSFS_PREFIX) + upath;
+
+    listnode* node;
     list_for_each(node, &sys_perms) {
-        perms_ *dp;
-
-        dp = &(node_to_item(node, struct perm_node, plist))->dp;
-        if (!perm_path_matches(path.c_str(), dp)) {
-                continue;
+        perms_* dp = &(node_to_item(node, perm_node, plist))->dp;
+        if (match_subsystem(dp, SYSFS_PREFIX "/class/%s/%s", path.c_str(), subsystem)) {
+            ; // matched
+        } else if (match_subsystem(dp, SYSFS_PREFIX "/bus/%s/devices/%s", path.c_str(), subsystem)) {
+            ; // matched
+        } else if (!perm_path_matches(path.c_str(), dp)) {
+            continue;
         }
 
         std::string attr_file = path + "/" + dp->attr;
@@ -734,7 +743,7 @@ static void handle_generic_device_event(struct uevent *uevent)
 static void handle_device_event(struct uevent *uevent)
 {
     if (!strcmp(uevent->action,"add") || !strcmp(uevent->action, "change") || !strcmp(uevent->action, "online"))
-        fixup_sys_perms(uevent->path);
+        fixup_sys_perms(uevent->path, uevent->subsystem);
 
     if (!strncmp(uevent->subsystem, "block", 5)) {
         handle_block_device_event(uevent);
