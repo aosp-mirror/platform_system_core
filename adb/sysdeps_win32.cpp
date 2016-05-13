@@ -1128,6 +1128,24 @@ int adb_getsockname(int fd, struct sockaddr* sockaddr, socklen_t* optlen) {
     return result;
 }
 
+int adb_socket_get_local_port(int fd) {
+    sockaddr_storage addr_storage;
+    socklen_t addr_len = sizeof(addr_storage);
+
+    if (adb_getsockname(fd, reinterpret_cast<sockaddr*>(&addr_storage), &addr_len) < 0) {
+        D("adb_socket_get_local_port: adb_getsockname failed: %s", strerror(errno));
+        return -1;
+    }
+
+    if (!(addr_storage.ss_family == AF_INET || addr_storage.ss_family == AF_INET6)) {
+        D("adb_socket_get_local_port: unknown address family received: %d", addr_storage.ss_family);
+        errno = ECONNABORTED;
+        return -1;
+    }
+
+    return ntohs(reinterpret_cast<sockaddr_in*>(&addr_storage)->sin_port);
+}
+
 int  adb_shutdown(int  fd)
 {
     FH   f = _fh_from_int(fd, __func__);
@@ -1154,9 +1172,7 @@ int adb_socketpair(int sv[2]) {
     int server = -1;
     int client = -1;
     int accepted = -1;
-    sockaddr_storage addr_storage;
-    socklen_t addr_len = sizeof(addr_storage);
-    sockaddr_in* addr = nullptr;
+    int local_port = -1;
     std::string error;
 
     server = network_loopback_server(0, SOCK_STREAM, &error);
@@ -1165,20 +1181,14 @@ int adb_socketpair(int sv[2]) {
         goto fail;
     }
 
-    if (adb_getsockname(server, reinterpret_cast<sockaddr*>(&addr_storage), &addr_len) < 0) {
-        D("adb_socketpair: adb_getsockname failed: %s", strerror(errno));
+    local_port = adb_socket_get_local_port(server);
+    if (local_port < 0) {
+        D("adb_socketpair: failed to get server port number: %s", error.c_str());
         goto fail;
     }
+    D("adb_socketpair: bound on port %d", local_port);
 
-    if (addr_storage.ss_family != AF_INET) {
-        D("adb_socketpair: unknown address family received: %d", addr_storage.ss_family);
-        errno = ECONNABORTED;
-        goto fail;
-    }
-
-    addr = reinterpret_cast<sockaddr_in*>(&addr_storage);
-    D("adb_socketpair: bound on port %d", ntohs(addr->sin_port));
-    client = network_loopback_client(ntohs(addr->sin_port), SOCK_STREAM, &error);
+    client = network_loopback_client(local_port, SOCK_STREAM, &error);
     if (client < 0) {
         D("adb_socketpair: failed to connect client: %s", error.c_str());
         goto fail;

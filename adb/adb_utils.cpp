@@ -27,6 +27,7 @@
 #include <algorithm>
 
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 
@@ -230,3 +231,26 @@ bool set_file_block_mode(int fd, bool block) {
     return true;
 }
 #endif
+
+bool forward_targets_are_valid(const std::string& source, const std::string& dest,
+                               std::string* error) {
+    if (android::base::StartsWith(source, "tcp:")) {
+        // The source port may be 0 to allow the system to select an open port.
+        int port;
+        if (!android::base::ParseInt(&source[4], &port) || port < 0) {
+            *error = android::base::StringPrintf("Invalid source port: '%s'", &source[4]);
+            return false;
+        }
+    }
+
+    if (android::base::StartsWith(dest, "tcp:")) {
+        // The destination port must be > 0.
+        int port;
+        if (!android::base::ParseInt(&dest[4], &port) || port <= 0) {
+            *error = android::base::StringPrintf("Invalid destination port: '%s'", &dest[4]);
+            return false;
+        }
+    }
+
+    return true;
+}
