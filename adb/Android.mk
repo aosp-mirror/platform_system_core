@@ -58,6 +58,7 @@ LIBADB_SRC_FILES := \
 
 LIBADB_TEST_SRCS := \
     adb_io_test.cpp \
+    adb_listeners_test.cpp \
     adb_utils_test.cpp \
     fdevent_test.cpp \
     socket_test.cpp \

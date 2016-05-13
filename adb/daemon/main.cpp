@@ -142,10 +142,8 @@ static void drop_privileges(int server_port) {
         std::string error;
         std::string local_name =
             android::base::StringPrintf("tcp:%d", server_port);
-        if (install_listener(local_name, "*smartsocket*", nullptr, 0,
-                             &error)) {
-            LOG(FATAL) << "Could not install *smartsocket* listener: "
-                       << error;
+        if (install_listener(local_name, "*smartsocket*", nullptr, 0, nullptr, &error)) {
+            LOG(FATAL) << "Could not install *smartsocket* listener: " << error;
         }
     }
 }
