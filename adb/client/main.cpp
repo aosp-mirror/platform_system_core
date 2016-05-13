@@ -117,7 +117,7 @@ int adb_server_main(int is_daemon, int server_port, int ack_reply_fd) {
 
     std::string error;
     std::string local_name = android::base::StringPrintf("tcp:%d", server_port);
-    if (install_listener(local_name, "*smartsocket*", nullptr, 0, &error)) {
+    if (install_listener(local_name, "*smartsocket*", nullptr, 0, nullptr, &error)) {
         fatal("could not install *smartsocket* listener: %s", error.c_str());
     }
 

@@ -126,7 +126,7 @@ static void help() {
         "                                    <serial> \" \" <local> \" \" <remote> \"\\n\"\n"
         "  adb forward <local> <remote> - forward socket connections\n"
         "                                 forward specs are one of: \n"
-        "                                   tcp:<port>\n"
+        "                                   tcp:<port> (<local> may be \"tcp:0\" to pick any open port)\n"
         "                                   localabstract:<unix domain socket name>\n"
         "                                   localreserved:<unix domain socket name>\n"
         "                                   localfilesystem:<unix domain socket name>\n"
@@ -140,7 +140,7 @@ static void help() {
         "  adb reverse --list           - list all reverse socket connections from device\n"
         "  adb reverse <remote> <local> - reverse socket connections\n"
         "                                 reverse specs are one of:\n"
-        "                                   tcp:<port>\n"
+        "                                   tcp:<port> (<remote> may be \"tcp:0\" to pick any open port)\n"
         "                                   localabstract:<unix domain socket name>\n"
         "                                   localreserved:<unix domain socket name>\n"
         "                                   localfilesystem:<unix domain socket name>\n"
@@ -1719,7 +1719,7 @@ int adb_commandline(int argc, const char **argv) {
             }
         }
 
-        std::string cmd;
+        std::string cmd, error;
         if (strcmp(argv[0], "--list") == 0) {
             if (argc != 1) return usage();
             return adb_query_command(host_prefix + ":list-forward");
@@ -1733,14 +1733,37 @@ int adb_commandline(int argc, const char **argv) {
         } else if (strcmp(argv[0], "--no-rebind") == 0) {
             // forward --no-rebind <local> <remote>
             if (argc != 3) return usage();
-            cmd = host_prefix + ":forward:norebind:" + argv[1] + ";" + argv[2];
+            if (forward_targets_are_valid(argv[1], argv[2], &error)) {
+                cmd = host_prefix + ":forward:norebind:" + argv[1] + ";" + argv[2];
+            }
         } else {
             // forward <local> <remote>
             if (argc != 2) return usage();
-            cmd = host_prefix + ":forward:" + argv[0] + ";" + argv[1];
+            if (forward_targets_are_valid(argv[0], argv[1], &error)) {
+                cmd = host_prefix + ":forward:" + argv[0] + ";" + argv[1];
+            }
         }
 
-        return adb_command(cmd) ? 0 : 1;
+        if (!error.empty()) {
+            fprintf(stderr, "error: %s\n", error.c_str());
+            return 1;
+        }
+
+        int fd = adb_connect(cmd, &error);
+        if (fd < 0 || !adb_status(fd, &error)) {
+            adb_close(fd);
+            fprintf(stderr, "error: %s\n", error.c_str());
+            return 1;
+        }
+
+        // Server or device may optionally return a resolved TCP port number.
+        std::string resolved_port;
+        if (ReadProtocolString(fd, &resolved_port, &error) && !resolved_port.empty()) {
+            printf("%s\n", resolved_port.c_str());
+        }
+
+        ReadOrderlyShutdown(fd);
+        return 0;
     }
     /* do_sync_*() commands */
     else if (!strcmp(argv[0], "ls")) {

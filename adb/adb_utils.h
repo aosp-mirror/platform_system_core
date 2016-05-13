@@ -43,6 +43,13 @@ bool set_file_block_mode(int fd, bool block);
 
 extern int adb_close(int fd);
 
+// Given forward/reverse targets, returns true if they look sane. If an error is found, fills
+// |error| and returns false.
+// Currently this only checks "tcp:" targets. Additional checking could be added for other targets
+// if needed.
+bool forward_targets_are_valid(const std::string& source, const std::string& dest,
+                               std::string* error);
+
 // Helper to automatically close an FD when it goes out of scope.
 class ScopedFd {
   public:

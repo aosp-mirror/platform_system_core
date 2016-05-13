@@ -50,7 +50,7 @@ constexpr size_t MAX_PAYLOAD = MAX_PAYLOAD_V2;
 std::string adb_version();
 
 // Increment this when we want to force users to start a new adb server.
-#define ADB_SERVER_VERSION 36
+#define ADB_SERVER_VERSION 37
 
 class atransport;
 struct usb_handle;
@@ -114,29 +114,6 @@ enum ConnectionState {
     kCsNoPerm,  // Insufficient permissions to communicate with the device.
     kCsSideload,
     kCsUnauthorized,
-};
-
-/* A listener is an entity which binds to a local port
-** and, upon receiving a connection on that port, creates
-** an asocket to connect the new local connection to a
-** specific remote service.
-**
-** TODO: some listeners read from the new connection to
-** determine what exact service to connect to on the far
-** side.
-*/
-struct alistener
-{
-    alistener *next;
-    alistener *prev;
-
-    fdevent fde;
-    int fd;
-
-    char *local_name;
-    char *connect_to;
-    atransport *transport;
-    adisconnect  disconnect;
 };
 
 
