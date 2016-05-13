@@ -191,6 +191,22 @@ class ForwardReverseTest(DeviceTest):
         msg = self.device.forward_list()
         self.assertEqual('', msg.strip())
 
+    def test_forward_tcp_port_0(self):
+        self.assertEqual('', self.device.forward_list().strip(),
+                         'Forwarding list must be empty to run this test.')
+
+        try:
+            # If resolving TCP port 0 is supported, `adb forward` will print
+            # the actual port number.
+            port = self.device.forward('tcp:0', 'tcp:8888').strip()
+            if not port:
+                raise unittest.SkipTest('Forwarding tcp:0 is not available.')
+
+            self.assertTrue(re.search(r'tcp:{}.+tcp:8888'.format(port),
+                                      self.device.forward_list()))
+        finally:
+            self.device.forward_remove_all()
+
     def test_reverse(self):
         msg = self.device.reverse_list()
         self.assertEqual('', msg.strip(),
@@ -209,6 +225,22 @@ class ForwardReverseTest(DeviceTest):
         self.device.reverse_remove_all()
         msg = self.device.reverse_list()
         self.assertEqual('', msg.strip())
+
+    def test_reverse_tcp_port_0(self):
+        self.assertEqual('', self.device.reverse_list().strip(),
+                         'Reverse list must be empty to run this test.')
+
+        try:
+            # If resolving TCP port 0 is supported, `adb reverse` will print
+            # the actual port number.
+            port = self.device.reverse('tcp:0', 'tcp:8888').strip()
+            if not port:
+                raise unittest.SkipTest('Reversing tcp:0 is not available.')
+
+            self.assertTrue(re.search(r'tcp:{}.+tcp:8888'.format(port),
+                                      self.device.reverse_list()))
+        finally:
+            self.device.reverse_remove_all()
 
     # Note: If you run this test when adb connect'd to a physical device over
     # TCP, it will fail in adb reverse due to https://code.google.com/p/android/issues/detail?id=189821

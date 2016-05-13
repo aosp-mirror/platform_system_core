@@ -21,6 +21,8 @@
 
 #include <string>
 
+#include <android-base/macros.h>
+
 // error/status codes for install_listener.
 enum InstallStatus {
   INSTALL_STATUS_OK = 0,
@@ -30,10 +32,8 @@ enum InstallStatus {
   INSTALL_STATUS_LISTENER_NOT_FOUND = -4,
 };
 
-InstallStatus install_listener(const std::string& local_name,
-                               const char* connect_to,
-                               atransport* transport,
-                               int no_rebind,
+InstallStatus install_listener(const std::string& local_name, const char* connect_to,
+                               atransport* transport, int no_rebind, int* resolved_tcp_port,
                                std::string* error);
 
 std::string format_listeners();
