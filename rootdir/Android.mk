@@ -54,7 +54,7 @@ endif
 #
 # create some directories (some are mount points) and symlinks
 LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
-    sbin dev proc sys system data oem acct cache config storage mnt root $(BOARD_ROOT_EXTRA_FOLDERS)); \
+    sbin dev proc sys system data oem acct config storage mnt root $(BOARD_ROOT_EXTRA_FOLDERS)); \
     ln -sf /system/etc $(TARGET_ROOT_OUT)/etc; \
     ln -sf /sys/kernel/debug $(TARGET_ROOT_OUT)/d; \
     ln -sf /storage/self/primary $(TARGET_ROOT_OUT)/sdcard
@@ -62,6 +62,11 @@ ifdef BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/vendor
 else
   LOCAL_POST_INSTALL_CMD += ; ln -sf /system/vendor $(TARGET_ROOT_OUT)/vendor
+endif
+ifdef BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE
+  LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/cache
+else
+  LOCAL_POST_INSTALL_CMD += ; ln -sf /data/cache $(TARGET_ROOT_OUT)/cache
 endif
 ifdef BOARD_ROOT_EXTRA_SYMLINKS
 # BOARD_ROOT_EXTRA_SYMLINKS is a list of <target>:<link_name>.
