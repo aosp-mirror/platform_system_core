@@ -94,6 +94,8 @@ public:
             bool                startsWith(const String16& prefix) const;
             bool                startsWith(const char16_t* prefix) const;
 
+            bool                contains(const char16_t* chrs) const;
+
             status_t            makeLower();
 
             status_t            replaceAll(char16_t replaceThis,
