@@ -29,6 +29,8 @@ protected:
 
     virtual void TearDown() {
     }
+
+    char16_t const * const kSearchString = u"I am a leaf on the wind.";
 };
 
 TEST_F(UnicodeTest, UTF8toUTF16ZeroLength) {
@@ -110,6 +112,39 @@ TEST_F(UnicodeTest, UTF8toUTF16Normal) {
             << "should be second half of surrogate U+10000";
     EXPECT_EQ(NULL, output[5])
             << "should be NULL terminated";
+}
+
+TEST_F(UnicodeTest, strstr16EmptyTarget) {
+    EXPECT_EQ(strstr16(kSearchString, u""), kSearchString)
+            << "should return the original pointer";
+}
+
+TEST_F(UnicodeTest, strstr16SameString) {
+    const char16_t* result = strstr16(kSearchString, kSearchString);
+    EXPECT_EQ(kSearchString, result)
+            << "should return the original pointer";
+}
+
+TEST_F(UnicodeTest, strstr16TargetStartOfString) {
+    const char16_t* result = strstr16(kSearchString, u"I am");
+    EXPECT_EQ(kSearchString, result)
+            << "should return the original pointer";
+}
+
+
+TEST_F(UnicodeTest, strstr16TargetEndOfString) {
+    const char16_t* result = strstr16(kSearchString, u"wind.");
+    EXPECT_EQ(kSearchString+19, result);
+}
+
+TEST_F(UnicodeTest, strstr16TargetWithinString) {
+    const char16_t* result = strstr16(kSearchString, u"leaf");
+    EXPECT_EQ(kSearchString+7, result);
+}
+
+TEST_F(UnicodeTest, strstr16TargetNotPresent) {
+    const char16_t* result = strstr16(kSearchString, u"soar");
+    EXPECT_EQ(nullptr, result);
 }
 
 }
