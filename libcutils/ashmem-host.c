@@ -62,12 +62,12 @@ int ashmem_set_prot_region(int fd __unused, int prot __unused)
 
 int ashmem_pin_region(int fd __unused, size_t offset __unused, size_t len __unused)
 {
-    return ASHMEM_NOT_PURGED;
+    return 0 /*ASHMEM_NOT_PURGED*/;
 }
 
 int ashmem_unpin_region(int fd __unused, size_t offset __unused, size_t len __unused)
 {
-    return ASHMEM_IS_UNPINNED;
+    return 0 /*ASHMEM_IS_UNPINNED*/;
 }
 
 int ashmem_get_size_region(int fd)
