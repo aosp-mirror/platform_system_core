@@ -19,18 +19,13 @@
  * System clock functions.
  */
 
-#if defined(__ANDROID__)
-#include <linux/ioctl.h>
-#include <linux/rtc.h>
-#include <utils/Atomic.h>
-#include <linux/android_alarm.h>
-#endif
-
 #include <sys/time.h>
 #include <limits.h>
 #include <fcntl.h>
 #include <string.h>
+#include <errno.h>
 
+#include <cutils/compiler.h>
 #include <utils/SystemClock.h>
 #include <utils/Timers.h>
 
@@ -61,30 +56,16 @@ int64_t elapsedRealtime()
  */
 int64_t elapsedRealtimeNano()
 {
-#if defined(__ANDROID__)
-    static int s_fd = -1;
-
-    if (s_fd == -1) {
-        int fd = open("/dev/alarm", O_RDONLY);
-        if (android_atomic_cmpxchg(-1, fd, &s_fd)) {
-            close(fd);
-        }
-    }
-
+#if defined(__linux__)
     struct timespec ts;
-    if (ioctl(s_fd, ANDROID_ALARM_GET_TIME(ANDROID_ALARM_ELAPSED_REALTIME), &ts) == 0) {
-        return seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
+    int err = clock_gettime(CLOCK_BOOTTIME, &ts);
+    if (CC_UNLIKELY(err)) {
+        // This should never happen, but just in case ...
+        ALOGE("clock_gettime(CLOCK_BOOTTIME) failed: %s", strerror(errno));
+        return 0;
     }
 
-    // /dev/alarm doesn't exist, fallback to CLOCK_BOOTTIME
-    if (clock_gettime(CLOCK_BOOTTIME, &ts) == 0) {
-        return seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
-    }
-
-    // XXX: there was an error, probably because the driver didn't
-    // exist ... this should return
-    // a real error, like an exception!
-    return systemTime(SYSTEM_TIME_MONOTONIC);
+    return seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
 #else
     return systemTime(SYSTEM_TIME_MONOTONIC);
 #endif
