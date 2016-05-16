@@ -39,25 +39,33 @@
 namespace android {
 namespace base {
 
-class unique_fd final {
+struct DefaultCloser {
+  static void Close(int fd) {
+    // Even if close(2) fails with EINTR, the fd will have been closed.
+    // Using TEMP_FAILURE_RETRY will either lead to EBADF or closing someone
+    // else's fd.
+    // http://lkml.indiana.edu/hypermail/linux/kernel/0509.1/0877.html
+    ::close(fd);
+  }
+};
+
+template <typename Closer>
+class unique_fd_impl final {
  public:
-  unique_fd() : value_(-1) {}
+  unique_fd_impl() : value_(-1) {}
 
-  explicit unique_fd(int value) : value_(value) {}
-  ~unique_fd() { clear(); }
+  explicit unique_fd_impl(int value) : value_(value) {}
+  ~unique_fd_impl() { clear(); }
 
-  unique_fd(unique_fd&& other) : value_(other.release()) {}
-  unique_fd& operator=(unique_fd&& s) {
+  unique_fd_impl(unique_fd_impl&& other) : value_(other.release()) {}
+  unique_fd_impl& operator=(unique_fd_impl&& s) {
     reset(s.release());
     return *this;
   }
 
   void reset(int new_value) {
     if (value_ != -1) {
-      // Even if close(2) fails with EINTR, the fd will have been closed.
-      // Using TEMP_FAILURE_RETRY will either lead to EBADF or closing someone else's fd.
-      // http://lkml.indiana.edu/hypermail/linux/kernel/0509.1/0877.html
-      close(value_);
+      Closer::Close(value_);
     }
     value_ = new_value;
   }
@@ -78,9 +86,11 @@ class unique_fd final {
  private:
   int value_;
 
-  unique_fd(const unique_fd&);
-  void operator=(const unique_fd&);
+  unique_fd_impl(const unique_fd_impl&);
+  void operator=(const unique_fd_impl&);
 };
+
+using unique_fd = unique_fd_impl<DefaultCloser>;
 
 }  // namespace base
 }  // namespace android
