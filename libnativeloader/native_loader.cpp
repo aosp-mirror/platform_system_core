@@ -101,9 +101,7 @@ class LibraryNamespaces {
                                   nullptr,
                                   library_path.c_str(),
                                   namespace_type,
-                                  !permitted_path.empty() ?
-                                      permitted_path.c_str() :
-                                      nullptr);
+                                  permitted_path.c_str());
 
     if (ns != nullptr) {
       namespaces_.push_back(std::make_pair(env->NewWeakGlobalRef(class_loader), ns));
