@@ -208,24 +208,6 @@ LOCAL_MULTILIB := first
 
 include $(BUILD_HOST_NATIVE_TEST)
 
-# adb device tracker (used by ddms) test tool
-# =========================================================
-
-ifeq ($(HOST_OS),linux)
-include $(CLEAR_VARS)
-LOCAL_MODULE := adb_device_tracker_test
-LOCAL_CFLAGS := -DADB_HOST=1 $(LIBADB_CFLAGS)
-LOCAL_CFLAGS_windows := $(LIBADB_windows_CFLAGS)
-LOCAL_CFLAGS_linux := $(LIBADB_linux_CFLAGS)
-LOCAL_CFLAGS_darwin := $(LIBADB_darwin_CFLAGS)
-LOCAL_SRC_FILES := test_track_devices.cpp
-LOCAL_SANITIZE := $(adb_host_sanitize)
-LOCAL_SHARED_LIBRARIES := libbase
-LOCAL_STATIC_LIBRARIES := libadb libcrypto_utils_static libcrypto_static libcutils
-LOCAL_LDLIBS += -lrt -ldl -lpthread
-include $(BUILD_HOST_EXECUTABLE)
-endif
-
 # adb host tool
 # =========================================================
 include $(CLEAR_VARS)

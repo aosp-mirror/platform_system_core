@@ -1902,6 +1902,14 @@ int adb_commandline(int argc, const char **argv) {
     else if (!strcmp(argv[0], "jdwp")) {
         return adb_connect_command("jdwp");
     }
+    else if (!strcmp(argv[0], "track-jdwp")) {
+        return adb_connect_command("track-jdwp");
+    }
+    else if (!strcmp(argv[0], "track-devices")) {
+        return adb_connect_command("host:track-devices");
+    }
+
+
     /* "adb /?" is a common idiom under Windows */
     else if (!strcmp(argv[0], "help") || !strcmp(argv[0], "/?")) {
         help();
