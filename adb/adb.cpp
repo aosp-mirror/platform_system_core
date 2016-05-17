@@ -65,21 +65,34 @@ std::string adb_version() {
 void fatal(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    fprintf(stderr, "error: ");
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
+    char buf[1024];
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+
+#if ADB_HOST
+    fprintf(stderr, "error: %s\n", buf);
+#else
+    LOG(ERROR) << "error: " << buf;
+#endif
+
     va_end(ap);
-    exit(-1);
+    abort();
 }
 
 void fatal_errno(const char* fmt, ...) {
+    int err = errno;
     va_list ap;
     va_start(ap, fmt);
-    fprintf(stderr, "error: %s: ", strerror(errno));
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
+    char buf[1024];
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+
+#if ADB_HOST
+    fprintf(stderr, "error: %s: %s\n", buf, strerror(err));
+#else
+    LOG(ERROR) << "error: " << buf << ": " << strerror(err);
+#endif
+
     va_end(ap);
-    exit(-1);
+    abort();
 }
 
 apacket* get_apacket(void)

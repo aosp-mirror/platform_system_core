@@ -412,7 +412,7 @@ int Subprocess::OpenPtyChildFd(const char* pts_name, ScopedFd* error_sfd) {
         for (const char* message : messages) {
             WriteFdExactly(error_sfd->fd(), message);
         }
-        exit(-1);
+        abort();
     }
 
     if (make_pty_raw_) {
@@ -421,7 +421,7 @@ int Subprocess::OpenPtyChildFd(const char* pts_name, ScopedFd* error_sfd) {
             int saved_errno = errno;
             WriteFdExactly(error_sfd->fd(), "tcgetattr failed: ");
             WriteFdExactly(error_sfd->fd(), strerror(saved_errno));
-            exit(-1);
+            abort();
         }
 
         cfmakeraw(&tattr);
@@ -429,7 +429,7 @@ int Subprocess::OpenPtyChildFd(const char* pts_name, ScopedFd* error_sfd) {
             int saved_errno = errno;
             WriteFdExactly(error_sfd->fd(), "tcsetattr failed: ");
             WriteFdExactly(error_sfd->fd(), strerror(saved_errno));
-            exit(-1);
+            abort();
         }
     }
 
