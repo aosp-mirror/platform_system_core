@@ -26,10 +26,6 @@
 #include <cutils/memory.h>
 #include <cutils/log.h>
 
-#ifdef __arm__
-#include <machine/cpu-features.h>
-#endif
-
 #include "buffer.h"
 #include "scanline.h"
 
