@@ -83,7 +83,8 @@ extern struct android_namespace_t* android_create_namespace(const char* name,
                                                             const char* ld_library_path,
                                                             const char* default_library_path,
                                                             uint64_t type,
-                                                            const char* permitted_when_isolated_path);
+                                                            const char* permitted_when_isolated_path,
+                                                            android_namespace_t* parent);
 
 __END_DECLS
 
