@@ -341,6 +341,43 @@ LIBLOG_ABI_PUBLIC struct logger_list *android_logger_list_open(
     return logger_list;
 }
 
+/* Validate log_msg packet, read function has already been null checked */
+static int android_transport_read(struct android_log_logger_list *logger_list,
+                                  struct android_log_transport_context *transp,
+                                  struct log_msg *log_msg)
+{
+    int ret = (*transp->transport->read)(logger_list, transp, log_msg);
+
+    if (ret > (int)sizeof(*log_msg)) {
+        ret = sizeof(*log_msg);
+    }
+
+    transp->ret = ret;
+
+    /* propagate errors, or make sure len & hdr_size members visible */
+    if (ret < (int)(sizeof(log_msg->entry.len) +
+                    sizeof(log_msg->entry.hdr_size))) {
+        if (ret >= (int)sizeof(log_msg->entry.len)) {
+            log_msg->entry.len = 0;
+        }
+        return ret;
+    }
+
+    /* hdr_size correction (logger_entry -> logger_entry_v2+ conversion) */
+    if (log_msg->entry_v2.hdr_size == 0) {
+        log_msg->entry_v2.hdr_size = sizeof(struct logger_entry);
+    }
+
+    /* len validation */
+    if (ret <= log_msg->entry_v2.hdr_size) {
+        log_msg->entry.len = 0;
+    } else {
+        log_msg->entry.len = ret - log_msg->entry_v2.hdr_size;
+    }
+
+    return ret;
+}
+
 /* Read from the selected logs */
 LIBLOG_ABI_PUBLIC int android_logger_list_read(struct logger_list *logger_list,
                                                struct log_msg *log_msg)
@@ -378,7 +415,7 @@ LIBLOG_ABI_PUBLIC int android_logger_list_read(struct logger_list *logger_list,
                     } else if ((logger_list_internal->mode &
                                 ANDROID_LOG_NONBLOCK) ||
                             !transp->transport->poll) {
-                        retval = transp->ret = (*transp->transport->read)(
+                        retval = android_transport_read(
                                 logger_list_internal,
                                 transp,
                                 &transp->logMsg);
@@ -397,7 +434,7 @@ LIBLOG_ABI_PUBLIC int android_logger_list_read(struct logger_list *logger_list,
                             }
                             retval = transp->ret = pollval;
                         } else if (pollval > 0) {
-                            retval = transp->ret = (*transp->transport->read)(
+                            retval = android_transport_read(
                                     logger_list_internal,
                                     transp,
                                     &transp->logMsg);
@@ -434,16 +471,22 @@ LIBLOG_ABI_PUBLIC int android_logger_list_read(struct logger_list *logger_list,
         if (!oldest) {
             return ret;
         }
-        memcpy(log_msg, &oldest->logMsg, oldest->logMsg.entry.len +
-                    (oldest->logMsg.entry.hdr_size ?
-                        oldest->logMsg.entry.hdr_size :
-                        sizeof(struct logger_entry)));
+        // ret is a positive value less than sizeof(struct log_msg)
+        ret = oldest->ret;
+        if (ret < oldest->logMsg.entry.hdr_size) {
+            // zero truncated header fields.
+            memset(log_msg, 0,
+                   (oldest->logMsg.entry.hdr_size > sizeof(oldest->logMsg) ?
+                       sizeof(oldest->logMsg) :
+                       oldest->logMsg.entry.hdr_size));
+        }
+        memcpy(log_msg, &oldest->logMsg, ret);
         oldest->logMsg.entry.len = 0; /* Mark it as copied */
-        return oldest->ret;
+        return ret;
     }
 
     /* if only one, no need to copy into transport_context and merge-sort */
-    return (transp->transport->read)(logger_list_internal, transp, log_msg);
+    return android_transport_read(logger_list_internal, transp, log_msg);
 }
 
 /* Close all the logs */
