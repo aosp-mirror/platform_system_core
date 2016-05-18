@@ -243,12 +243,8 @@ int dhcp_start(const char *interface)
     property_set(result_prop_name, "");
 
     /* Start the daemon and wait until it's ready */
-    if (property_get(HOSTNAME_PROP_NAME, prop_value, NULL) && (prop_value[0] != '\0'))
-        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:-f %s -h %s %s", DAEMON_NAME,
-                 p2p_interface, DHCP_CONFIG_PATH, prop_value, interface);
-    else
-        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:-f %s %s", DAEMON_NAME,
-                 p2p_interface, DHCP_CONFIG_PATH, interface);
+    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s", DAEMON_NAME,
+            p2p_interface);
     memset(prop_value, '\0', PROPERTY_VALUE_MAX);
     property_set(ctrl_prop, daemon_cmd);
     if (wait_for_property(daemon_prop_name, desired_status, 10) < 0) {
@@ -288,7 +284,8 @@ int dhcp_stop(const char *interface)
             DAEMON_PROP_NAME,
             p2p_interface);
 
-    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s", DAEMON_NAME, p2p_interface);
+    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s", DAEMON_NAME,
+            p2p_interface);
 
     /* Stop the daemon and wait until it's reported to be stopped */
     property_set(ctrl_prop, daemon_cmd);
@@ -317,7 +314,8 @@ int dhcp_release_lease(const char *interface)
             DAEMON_PROP_NAME,
             p2p_interface);
 
-    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s", DAEMON_NAME, p2p_interface);
+    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s", DAEMON_NAME,
+            p2p_interface);
 
     /* Stop the daemon and wait until it's reported to be stopped */
     property_set(ctrl_prop, daemon_cmd);
@@ -357,8 +355,8 @@ int dhcp_start_renew(const char *interface)
     property_set(result_prop_name, "");
 
     /* Start the renew daemon and wait until it's ready */
-    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:%s", DAEMON_NAME_RENEW,
-            p2p_interface, interface);
+    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s", DAEMON_NAME_RENEW,
+            p2p_interface);
     memset(prop_value, '\0', PROPERTY_VALUE_MAX);
     property_set(ctrl_prop, daemon_cmd);
 
