@@ -43,8 +43,6 @@
 using std::recursive_mutex;
 #endif
 
-static void local_socket_close(asocket* s);
-
 static recursive_mutex& local_socket_list_lock = *new recursive_mutex();
 static unsigned local_socket_next_id = 1;
 
@@ -128,7 +126,7 @@ void close_all_sockets(atransport *t)
 restart:
     for (s = local_socket_list.next; s != &local_socket_list; s = s->next) {
         if (s->transport == t || (s->peer && s->peer->transport == t)) {
-            local_socket_close(s);
+            s->close(s);
             goto restart;
         }
     }
