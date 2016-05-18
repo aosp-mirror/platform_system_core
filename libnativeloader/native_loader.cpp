@@ -97,11 +97,14 @@ class LibraryNamespaces {
       namespace_type |= ANDROID_NAMESPACE_TYPE_SHARED;
     }
 
+    android_namespace_t* parent_ns = FindParentNamespaceByClassLoader(env, class_loader);
+
     ns = android_create_namespace("classloader-namespace",
                                   nullptr,
                                   library_path.c_str(),
                                   namespace_type,
-                                  permitted_path.c_str());
+                                  permitted_path.c_str(),
+                                  parent_ns);
 
     if (ns != nullptr) {
       namespaces_.push_back(std::make_pair(env->NewWeakGlobalRef(class_loader), ns));
@@ -196,6 +199,29 @@ class LibraryNamespaces {
     initialized_ = android_init_namespaces(publicNativeLibraries.c_str(), library_path);
 
     return initialized_;
+  }
+
+  jobject GetParentClassLoader(JNIEnv* env, jobject class_loader) {
+    jclass class_loader_class = env->FindClass("java/lang/ClassLoader");
+    jmethodID get_parent = env->GetMethodID(class_loader_class,
+                                            "getParent",
+                                            "()Ljava/lang/ClassLoader;");
+
+    return env->CallObjectMethod(class_loader, get_parent);
+  }
+
+  android_namespace_t* FindParentNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
+    jobject parent_class_loader = GetParentClassLoader(env, class_loader);
+
+    while (parent_class_loader != nullptr) {
+      android_namespace_t* ns = FindNamespaceByClassLoader(env, parent_class_loader);
+      if (ns != nullptr) {
+        return ns;
+      }
+
+      parent_class_loader = GetParentClassLoader(env, parent_class_loader);
+    }
+    return nullptr;
   }
 
   bool initialized_;
