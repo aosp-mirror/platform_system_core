@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -35,12 +36,12 @@
 
 #include "adb.h"
 #include "adb_io.h"
+#include "sysdeps/mutex.h"
 #include "transport.h"
 
-ADB_MUTEX_DEFINE(socket_list_lock);
+static void local_socket_close(asocket* s);
 
-static void local_socket_close_locked(asocket* s);
-
+static std::recursive_mutex& local_socket_list_lock = *new std::recursive_mutex();
 static unsigned local_socket_next_id = 1;
 
 static asocket local_socket_list = {
@@ -62,7 +63,7 @@ asocket* find_local_socket(unsigned local_id, unsigned peer_id) {
     asocket* s;
     asocket* result = NULL;
 
-    adb_mutex_lock(&socket_list_lock);
+    std::lock_guard<std::recursive_mutex> lock(local_socket_list_lock);
     for (s = local_socket_list.next; s != &local_socket_list; s = s->next) {
         if (s->id != local_id) {
             continue;
@@ -72,7 +73,6 @@ asocket* find_local_socket(unsigned local_id, unsigned peer_id) {
         }
         break;
     }
-    adb_mutex_unlock(&socket_list_lock);
 
     return result;
 }
@@ -85,18 +85,16 @@ static void insert_local_socket(asocket* s, asocket* list) {
 }
 
 void install_local_socket(asocket* s) {
-    adb_mutex_lock(&socket_list_lock);
+    std::lock_guard<std::recursive_mutex> lock(local_socket_list_lock);
 
     s->id = local_socket_next_id++;
 
     // Socket ids should never be 0.
     if (local_socket_next_id == 0) {
-        local_socket_next_id = 1;
+        fatal("local socket id overflow");
     }
 
     insert_local_socket(s, &local_socket_list);
-
-    adb_mutex_unlock(&socket_list_lock);
 }
 
 void remove_socket(asocket* s) {
@@ -116,15 +114,14 @@ void close_all_sockets(atransport* t) {
     /* this is a little gross, but since s->close() *will* modify
     ** the list out from under you, your options are limited.
     */
-    adb_mutex_lock(&socket_list_lock);
+    std::lock_guard<std::recursive_mutex> lock(local_socket_list_lock);
 restart:
     for (s = local_socket_list.next; s != &local_socket_list; s = s->next) {
         if (s->transport == t || (s->peer && s->peer->transport == t)) {
-            local_socket_close_locked(s);
+            local_socket_close(s);
             goto restart;
         }
     }
-    adb_mutex_unlock(&socket_list_lock);
 }
 
 static int local_socket_enqueue(asocket* s, apacket* p) {
@@ -187,12 +184,6 @@ static void local_socket_ready(asocket* s) {
     fdevent_add(&s->fde, FDE_READ);
 }
 
-static void local_socket_close(asocket* s) {
-    adb_mutex_lock(&socket_list_lock);
-    local_socket_close_locked(s);
-    adb_mutex_unlock(&socket_list_lock);
-}
-
 // be sure to hold the socket list lock when calling this
 static void local_socket_destroy(asocket* s) {
     apacket *p, *n;
@@ -220,8 +211,9 @@ static void local_socket_destroy(asocket* s) {
     }
 }
 
-static void local_socket_close_locked(asocket* s) {
-    D("entered local_socket_close_locked. LS(%d) fd=%d", s->id, s->fd);
+static void local_socket_close(asocket* s) {
+    D("entered local_socket_close. LS(%d) fd=%d", s->id, s->fd);
+    std::lock_guard<std::recursive_mutex> lock(local_socket_list_lock);
     if (s->peer) {
         D("LS(%d): closing peer. peer->id=%d peer->fd=%d", s->id, s->peer->id, s->peer->fd);
         /* Note: it's important to call shutdown before disconnecting from
@@ -231,14 +223,9 @@ static void local_socket_close_locked(asocket* s) {
         if (s->peer->shutdown) {
             s->peer->shutdown(s->peer);
         }
-        s->peer->peer = 0;
-        // tweak to avoid deadlock
-        if (s->peer->close == local_socket_close) {
-            local_socket_close_locked(s->peer);
-        } else {
-            s->peer->close(s->peer);
-        }
-        s->peer = 0;
+        s->peer->peer = nullptr;
+        s->peer->close(s->peer);
+        s->peer = nullptr;
     }
 
     /* If we are already closing, or if there are no
