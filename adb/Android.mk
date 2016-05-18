@@ -200,7 +200,10 @@ endif
 # will violate ODR
 LOCAL_SHARED_LIBRARIES :=
 
+# Don't build the host adb on Windows (this branch should only be used for security updates.)
+ifneq ($(HOST_OS),windows)
 include $(BUILD_HOST_EXECUTABLE)
+endif
 
 $(call dist-for-goals,dist_files sdk,$(LOCAL_BUILT_MODULE))
 
