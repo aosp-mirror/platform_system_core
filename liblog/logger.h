@@ -124,23 +124,23 @@ struct android_log_transport_context {
 
 /* assumes caller has structures read-locked, single threaded, or fenced */
 #define transport_context_for_each(transp, logger_list)              \
-  for (transp = node_to_item((logger_list)->transport.next,          \
+  for ((transp) = node_to_item((logger_list)->transport.next,        \
                              struct android_log_transport_context,   \
                              node);                                  \
-       (transp != node_to_item(&(logger_list)->transport,            \
+       ((transp) != node_to_item(&(logger_list)->transport,          \
                                struct android_log_transport_context, \
                                node)) &&                             \
-           (transp->parent == (logger_list));                        \
-       transp = node_to_item(transp->node.next,                      \
+           ((transp)->parent == (logger_list));                      \
+       (transp) = node_to_item((transp)->node.next,                  \
                              struct android_log_transport_context, node))
 
 #define logger_for_each(logp, logger_list)                          \
-    for (logp = node_to_item((logger_list)->logger.next,            \
+    for ((logp) = node_to_item((logger_list)->logger.next,          \
                              struct android_log_logger, node);      \
-         (logp != node_to_item(&(logger_list)->logger,              \
+         ((logp) != node_to_item(&(logger_list)->logger,            \
                                struct android_log_logger, node)) && \
-             (logp->parent == (logger_list));                       \
-         logp = node_to_item((logp)->node.next,                     \
+             ((logp)->parent == (logger_list));                     \
+         (logp) = node_to_item((logp)->node.next,                   \
                              struct android_log_logger, node))
 
 /* OS specific dribs and drabs */

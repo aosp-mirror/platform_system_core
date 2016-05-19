@@ -33,7 +33,7 @@
 #include "LogUtils.h"
 
 #define log_id_for_each(i) \
-    for (log_id_t i = LOG_ID_MIN; i < LOG_ID_MAX; i = (log_id_t) (i + 1))
+    for (log_id_t i = LOG_ID_MIN; (i) < LOG_ID_MAX; (i) = (log_id_t) ((i) + 1))
 
 class LogStatistics;
 
