@@ -57,7 +57,7 @@
 #endif
 
 #if !defined(SI_DETHREAD)
-#define SI_DETHREAD -7
+#define SI_DETHREAD (-7)
 #endif
 
 #endif

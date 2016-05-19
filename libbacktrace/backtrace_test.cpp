@@ -1420,7 +1420,7 @@ TEST(libbacktrace, unwind_thread_doesnt_exist) {
 #if defined(ENABLE_PSS_TESTS)
 #include "GetPss.h"
 
-#define MAX_LEAK_BYTES 32*1024UL
+#define MAX_LEAK_BYTES (32*1024UL)
 
 void CheckForLeak(pid_t pid, pid_t tid) {
   // Do a few runs to get the PSS stable.
