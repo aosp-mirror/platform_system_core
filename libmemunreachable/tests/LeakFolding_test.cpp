@@ -37,10 +37,10 @@ class LeakFoldingTest : public ::testing::Test {
   Heap heap_;
 };
 
-#define buffer_begin(buffer) reinterpret_cast<uintptr_t>(&buffer[0])
-#define buffer_end(buffer) (reinterpret_cast<uintptr_t>(&buffer[0]) + sizeof(buffer))
+#define buffer_begin(buffer) reinterpret_cast<uintptr_t>(&(buffer)[0])
+#define buffer_end(buffer) (reinterpret_cast<uintptr_t>(&(buffer)[0]) + sizeof(buffer))
 #define ALLOCATION(heap_walker, buffer) \
-  ASSERT_EQ(true, heap_walker.Allocation(buffer_begin(buffer), buffer_end(buffer)))
+  ASSERT_EQ(true, (heap_walker).Allocation(buffer_begin(buffer), buffer_end(buffer)))
 
 TEST_F(LeakFoldingTest, one) {
   void* buffer1[1] = {nullptr};
