@@ -114,7 +114,7 @@ struct proc {
 static struct proc *pidhash[PIDHASH_SZ];
 #define pid_hashfn(x) ((((x) >> 8) ^ (x)) & (PIDHASH_SZ - 1))
 
-#define ADJTOSLOT(adj) (adj + -OOM_ADJUST_MIN)
+#define ADJTOSLOT(adj) ((adj) + -OOM_ADJUST_MIN)
 static struct adjslot_list procadjslot_list[ADJTOSLOT(OOM_ADJUST_MAX) + 1];
 
 /*
