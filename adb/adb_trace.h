@@ -41,7 +41,7 @@ enum AdbTrace {
 };
 
 #define VLOG_IS_ON(TAG) \
-    ((adb_trace_mask & (1 << TAG)) != 0)
+    ((adb_trace_mask & (1 << (TAG))) != 0)
 
 #define VLOG(TAG)         \
     if (LIKELY(!VLOG_IS_ON(TAG))) \
