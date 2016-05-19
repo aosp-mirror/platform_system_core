@@ -24,7 +24,7 @@
 
 // This is an extremely simplified version of libpagemap.
 
-#define _BITS(x, offset, bits) (((x) >> offset) & ((1LL << (bits)) - 1))
+#define _BITS(x, offset, bits) (((x) >> (offset)) & ((1LL << (bits)) - 1))
 
 #define PAGEMAP_PRESENT(x)     (_BITS(x, 63, 1))
 #define PAGEMAP_SWAPPED(x)     (_BITS(x, 62, 1))
