@@ -26,7 +26,7 @@
 
 #include <hardware/memtrack.h>
 
-#define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
+#define ARRAY_SIZE(x) (sizeof(x)/sizeof((x)[0]))
 
 static const memtrack_module_t *module;
 

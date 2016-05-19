@@ -57,7 +57,7 @@
 #define CHUNK_HEADER_LEN (sizeof(chunk_header_t))
 
 #define container_of(inner, outer_t, elem) \
-	((outer_t *)((char *)inner - offsetof(outer_t, elem)))
+	((outer_t *)((char *)(inner) - offsetof(outer_t, elem)))
 
 struct output_file_ops {
 	int (*open)(struct output_file *, int fd);
