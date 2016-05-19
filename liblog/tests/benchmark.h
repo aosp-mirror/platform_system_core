@@ -141,7 +141,7 @@ void StartBenchmarkTiming(uint64_t);
 void StopBenchmarkTiming(uint64_t);
 
 #define BENCHMARK(f) \
-    static ::testing::Benchmark* _benchmark_##f __attribute__((unused)) = \
-        (::testing::Benchmark*)::testing::BenchmarkFactory(#f, f)
+    static ::testing::Benchmark* _benchmark_##f __attribute__((unused)) = /* NOLINT */ \
+        (::testing::Benchmark*)::testing::BenchmarkFactory(#f, f) /* NOLINT */
 
 #endif // BIONIC_BENCHMARK_H_
