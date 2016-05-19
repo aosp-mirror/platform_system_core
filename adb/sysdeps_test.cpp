@@ -244,3 +244,60 @@ TEST_F(sysdeps_poll, fd_count) {
         adb_close(fd);
     }
 }
+
+#include "sysdeps/mutex.h"
+TEST(sysdeps_mutex, mutex_smoke) {
+    static std::atomic<bool> finished(false);
+    static std::mutex &m = *new std::mutex();
+    m.lock();
+    ASSERT_FALSE(m.try_lock());
+    adb_thread_create([](void*) {
+        ASSERT_FALSE(m.try_lock());
+        m.lock();
+        finished.store(true);
+        adb_sleep_ms(200);
+        m.unlock();
+    }, nullptr);
+
+    ASSERT_FALSE(finished.load());
+    adb_sleep_ms(100);
+    ASSERT_FALSE(finished.load());
+    m.unlock();
+    adb_sleep_ms(100);
+    m.lock();
+    ASSERT_TRUE(finished.load());
+    m.unlock();
+}
+
+// Our implementation on Windows aborts on double lock.
+#if defined(_WIN32)
+TEST(sysdeps_mutex, mutex_reentrant_lock) {
+    std::mutex &m = *new std::mutex();
+
+    m.lock();
+    ASSERT_FALSE(m.try_lock());
+    EXPECT_DEATH(m.lock(), "non-recursive mutex locked reentrantly");
+}
+#endif
+
+TEST(sysdeps_mutex, recursive_mutex_smoke) {
+    static std::recursive_mutex &m = *new std::recursive_mutex();
+
+    m.lock();
+    ASSERT_TRUE(m.try_lock());
+    m.unlock();
+
+    adb_thread_create([](void*) {
+        ASSERT_FALSE(m.try_lock());
+        m.lock();
+        adb_sleep_ms(500);
+        m.unlock();
+    }, nullptr);
+
+    adb_sleep_ms(100);
+    m.unlock();
+    adb_sleep_ms(100);
+    ASSERT_FALSE(m.try_lock());
+    m.lock();
+    m.unlock();
+}
