@@ -125,7 +125,7 @@ static int init_transport_context(struct android_log_logger_list *logger_list)
     ssize_t ret = -EINVAL;                                                    \
     struct android_log_transport_context *transp;                             \
     struct android_log_logger *logger_internal =                              \
-            (struct android_log_logger *)logger;                              \
+            (struct android_log_logger *)(logger);                            \
                                                                               \
     if (!logger_internal) {                                                   \
         return ret;                                                           \
@@ -186,7 +186,7 @@ LIBLOG_ABI_PUBLIC int android_logger_get_log_version(struct logger *logger)
 #define LOGGER_LIST_FUNCTION(logger_list, def, func, args...)                 \
     struct android_log_transport_context *transp;                             \
     struct android_log_logger_list *logger_list_internal =                    \
-            (struct android_log_logger_list *)logger_list;                    \
+            (struct android_log_logger_list *)(logger_list);                  \
                                                                               \
     ssize_t ret = init_transport_context(logger_list_internal);               \
     if (ret < 0) {                                                            \
