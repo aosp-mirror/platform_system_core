@@ -20,8 +20,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <netutils/dhcp.h>
 #include <netutils/ifc.h>
+
+extern int do_dhcp(char*);
 
 int main(int argc, char* argv[]) {
   if (argc != 2) {
