@@ -61,9 +61,13 @@ static void setup_mdns_thread(void* /* unused */) {
     start_mdns();
     std::lock_guard<std::mutex> lock(mdns_lock);
 
-    auto error = DNSServiceRegister(&mdns_ref, 0, 0, nullptr, "_adb._tcp",
-                                    nullptr, nullptr, htobe16((uint16_t)port),
-                                    0, nullptr, mdns_callback, nullptr);
+    std::string hostname = "adb-";
+    hostname += android::base::GetProperty("ro.serialno", "unidentified");
+
+    auto error = DNSServiceRegister(&mdns_ref, 0, 0, hostname.c_str(),
+                                    kADBServiceType, nullptr, nullptr,
+                                    htobe16((uint16_t)port), 0, nullptr,
+                                    mdns_callback, nullptr);
 
     if (error != kDNSServiceErr_NoError) {
         LOG(ERROR) << "Could not register mDNS service (" << error << ").";
