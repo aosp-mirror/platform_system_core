@@ -59,8 +59,7 @@ class LibraryNamespaces {
                               jobject class_loader,
                               bool is_shared,
                               jstring java_library_path,
-                              jstring java_permitted_path,
-                              int32_t target_sdk_version) {
+                              jstring java_permitted_path) {
     std::string library_path; // empty string by default.
 
     if (java_library_path != nullptr) {
@@ -83,7 +82,7 @@ class LibraryNamespaces {
       }
     }
 
-    if (!initialized_ && !InitPublicNamespace(library_path.c_str(), target_sdk_version)) {
+    if (!initialized_ && !InitPublicNamespace(library_path.c_str())) {
       return nullptr;
     }
 
@@ -188,15 +187,12 @@ class LibraryNamespaces {
     return true;
   }
 
-  bool InitPublicNamespace(const char* library_path, int32_t target_sdk_version) {
-    std::string publicNativeLibraries = public_libraries_;
-
-    UNUSED(target_sdk_version);
+  bool InitPublicNamespace(const char* library_path) {
     // (http://b/25844435) - Some apps call dlopen from generated code (mono jited
     // code is one example) unknown to linker in which  case linker uses anonymous
     // namespace. The second argument specifies the search path for the anonymous
     // namespace which is the library_path of the classloader.
-    initialized_ = android_init_namespaces(publicNativeLibraries.c_str(), library_path);
+    initialized_ = android_init_namespaces(public_libraries_.c_str(), library_path);
 
     return initialized_;
   }
@@ -263,8 +259,7 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
                                                  class_loader,
                                                  is_shared,
                                                  library_path,
-                                                 permitted_path,
-                                                 target_sdk_version);
+                                                 permitted_path);
   if (ns == nullptr) {
     return env->NewStringUTF(dlerror());
   }
@@ -292,7 +287,7 @@ void* OpenNativeLibrary(JNIEnv* env,
   if (ns == nullptr) {
     // This is the case where the classloader was not created by ApplicationLoaders
     // In this case we create an isolated not-shared namespace for it.
-    ns = g_namespaces->Create(env, class_loader, false, library_path, nullptr, target_sdk_version);
+    ns = g_namespaces->Create(env, class_loader, false, library_path, nullptr);
     if (ns == nullptr) {
       return nullptr;
     }
