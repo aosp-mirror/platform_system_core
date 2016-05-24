@@ -400,35 +400,33 @@ static bool init_functionfs(struct usb_handle *h)
     v2_descriptor.os_header = os_desc_header;
     v2_descriptor.os_desc = os_desc_compat;
 
-    if (h->control < 0) { // might have already done this before
-        D("OPENING %s", USB_FFS_ADB_EP0);
-        h->control = adb_open(USB_FFS_ADB_EP0, O_RDWR);
-        if (h->control < 0) {
-            D("[ %s: cannot open control endpoint: errno=%d]", USB_FFS_ADB_EP0, errno);
+    D("OPENING %s", USB_FFS_ADB_EP0);
+    h->control = adb_open(USB_FFS_ADB_EP0, O_RDWR);
+    if (h->control < 0) {
+        D("[ %s: cannot open control endpoint: errno=%d]", USB_FFS_ADB_EP0, errno);
+        goto err;
+    }
+
+    ret = adb_write(h->control, &v2_descriptor, sizeof(v2_descriptor));
+    if (ret < 0) {
+        v1_descriptor.header.magic = cpu_to_le32(FUNCTIONFS_DESCRIPTORS_MAGIC);
+        v1_descriptor.header.length = cpu_to_le32(sizeof(v1_descriptor));
+        v1_descriptor.header.fs_count = 3;
+        v1_descriptor.header.hs_count = 3;
+        v1_descriptor.fs_descs = fs_descriptors;
+        v1_descriptor.hs_descs = hs_descriptors;
+        D("[ %s: Switching to V1_descriptor format errno=%d ]", USB_FFS_ADB_EP0, errno);
+        ret = adb_write(h->control, &v1_descriptor, sizeof(v1_descriptor));
+        if (ret < 0) {
+            D("[ %s: write descriptors failed: errno=%d ]", USB_FFS_ADB_EP0, errno);
             goto err;
         }
+    }
 
-        ret = adb_write(h->control, &v2_descriptor, sizeof(v2_descriptor));
-        if (ret < 0) {
-            v1_descriptor.header.magic = cpu_to_le32(FUNCTIONFS_DESCRIPTORS_MAGIC);
-            v1_descriptor.header.length = cpu_to_le32(sizeof(v1_descriptor));
-            v1_descriptor.header.fs_count = 3;
-            v1_descriptor.header.hs_count = 3;
-            v1_descriptor.fs_descs = fs_descriptors;
-            v1_descriptor.hs_descs = hs_descriptors;
-            D("[ %s: Switching to V1_descriptor format errno=%d ]", USB_FFS_ADB_EP0, errno);
-            ret = adb_write(h->control, &v1_descriptor, sizeof(v1_descriptor));
-            if (ret < 0) {
-                D("[ %s: write descriptors failed: errno=%d ]", USB_FFS_ADB_EP0, errno);
-                goto err;
-            }
-        }
-
-        ret = adb_write(h->control, &strings, sizeof(strings));
-        if (ret < 0) {
-            D("[ %s: writing strings failed: errno=%d]", USB_FFS_ADB_EP0, errno);
-            goto err;
-        }
+    ret = adb_write(h->control, &strings, sizeof(strings));
+    if (ret < 0) {
+        D("[ %s: writing strings failed: errno=%d]", USB_FFS_ADB_EP0, errno);
+        goto err;
     }
 
     h->bulk_out = adb_open(USB_FFS_ADB_OUT, O_RDWR);
@@ -556,6 +554,7 @@ static void usb_ffs_close(usb_handle *h) {
     h->kicked = false;
     adb_close(h->bulk_out);
     adb_close(h->bulk_in);
+    adb_close(h->control);
     // Notify usb_adb_open_thread to open a new connection.
     adb_mutex_lock(&h->lock);
     h->open_new_connection = true;
