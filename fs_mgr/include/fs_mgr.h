@@ -65,7 +65,7 @@ struct fstab_rec {
     int partnum;
     int swap_prio;
     unsigned int zram_size;
-    int file_encryption_type;
+    unsigned int file_encryption_mode;
 };
 
 // Callback function for verity status
@@ -87,9 +87,6 @@ int fs_mgr_mount_all(struct fstab *fstab);
 #define FS_MGR_DOMNT_FAILED -1
 #define FS_MGR_DOMNT_BUSY -2
 
-#define ET_SOFTWARE 1
-#define ET_ICE      2
-
 int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
                     char *tmp_mount_point);
 int fs_mgr_do_tmpfs_mount(char *n_name);
@@ -107,6 +104,7 @@ int fs_mgr_is_nonremovable(const struct fstab_rec *fstab);
 int fs_mgr_is_verified(const struct fstab_rec *fstab);
 int fs_mgr_is_encryptable(const struct fstab_rec *fstab);
 int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab);
+const char* fs_mgr_get_file_encryption_mode(const struct fstab_rec *fstab);
 int fs_mgr_is_convertible_to_fbe(const struct fstab_rec *fstab);
 int fs_mgr_is_noemulatedsd(const struct fstab_rec *fstab);
 int fs_mgr_is_notrim(struct fstab_rec *fstab);

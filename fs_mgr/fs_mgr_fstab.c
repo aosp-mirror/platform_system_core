@@ -32,12 +32,12 @@ struct fs_mgr_flag_values {
     int partnum;
     int swap_prio;
     unsigned int zram_size;
-    int file_encryption_type;
+    unsigned int file_encryption_mode;
 };
 
 struct flag_list {
     const char *name;
-    unsigned flag;
+    unsigned int flag;
 };
 
 static struct flag_list mount_flags[] = {
@@ -82,9 +82,12 @@ static struct flag_list fs_mgr_flags[] = {
     { 0,             0 },
 };
 
-static struct flag_list encryption_types[] = {
-    {"software", ET_SOFTWARE},
-    {"ice", ET_ICE},
+#define EM_SOFTWARE 1
+#define EM_ICE      2
+
+static struct flag_list encryption_modes[] = {
+    {"software", EM_SOFTWARE},
+    {"ice", EM_ICE},
     {0, 0}
 };
 
@@ -154,20 +157,20 @@ static int parse_flags(char *flags, struct flag_list *fl,
                      * location of the keys.  Get it and return it.
                      */
                     flag_vals->key_loc = strdup(strchr(p, '=') + 1);
-                    flag_vals->file_encryption_type = ET_SOFTWARE;
+                    flag_vals->file_encryption_mode = EM_SOFTWARE;
                 } else if ((fl[i].flag == MF_FILEENCRYPTION) && flag_vals) {
                     /* The fileencryption flag is followed by an = and the
                      * type of the encryption.  Get it and return it.
                      */
                     const struct flag_list *j;
-                    const char *type = strchr(p, '=') + 1;
-                    for (j = encryption_types; j->name; ++j) {
-                        if (!strcmp(type, j->name)) {
-                            flag_vals->file_encryption_type = j->flag;
+                    const char *mode = strchr(p, '=') + 1;
+                    for (j = encryption_modes; j->name; ++j) {
+                        if (!strcmp(mode, j->name)) {
+                            flag_vals->file_encryption_mode = j->flag;
                         }
                     }
-                    if (flag_vals->file_encryption_type == 0) {
-                        ERROR("Unknown file encryption type: %s\n", type);
+                    if (flag_vals->file_encryption_mode == 0) {
+                        ERROR("Unknown file encryption mode: %s\n", mode);
                     }
                 } else if ((fl[i].flag == MF_LENGTH) && flag_vals) {
                     /* The length flag is followed by an = and the
@@ -359,7 +362,7 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
         fstab->recs[cnt].partnum = flag_vals.partnum;
         fstab->recs[cnt].swap_prio = flag_vals.swap_prio;
         fstab->recs[cnt].zram_size = flag_vals.zram_size;
-        fstab->recs[cnt].file_encryption_type = flag_vals.file_encryption_type;
+        fstab->recs[cnt].file_encryption_mode = flag_vals.file_encryption_mode;
         cnt++;
     }
     /* If an A/B partition, modify block device to be the real block device */
@@ -500,6 +503,17 @@ int fs_mgr_is_encryptable(const struct fstab_rec *fstab)
 int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_FILEENCRYPTION;
+}
+
+const char* fs_mgr_get_file_encryption_mode(const struct fstab_rec *fstab)
+{
+    const struct flag_list *j;
+    for (j = encryption_modes; j->name; ++j) {
+        if (fstab->file_encryption_mode == j->flag) {
+            return j->name;
+        }
+    }
+    return NULL;
 }
 
 int fs_mgr_is_convertible_to_fbe(const struct fstab_rec *fstab)
