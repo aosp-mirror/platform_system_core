@@ -12,12 +12,11 @@ include $(CLEAR_VARS)
 LOCAL_MODULE:= libnativeloader
 
 LOCAL_SRC_FILES:= $(native_loader_common_src_files)
-LOCAL_SHARED_LIBRARIES := libnativehelper liblog libcutils
+LOCAL_SHARED_LIBRARIES := libnativehelper liblog libcutils libdl
 LOCAL_STATIC_LIBRARIES := libbase
 LOCAL_CLANG := true
 LOCAL_CFLAGS := $(native_loader_common_cflags)
 LOCAL_CPPFLAGS := -std=gnu++14 -fvisibility=hidden
-LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
