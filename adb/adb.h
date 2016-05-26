@@ -188,7 +188,7 @@ void put_apacket(apacket *p);
 
 
 void local_init(int port);
-void local_connect(int port);
+bool local_connect(int port);
 int  local_connect_arbitrary_ports(int console_port, int adb_port, std::string* error);
 
 // USB host/client interface.

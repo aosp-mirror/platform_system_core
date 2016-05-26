@@ -950,6 +950,8 @@ int register_socket_transport(int s, const char *serial, int port, int local) {
     for (const auto& transport : pending_list) {
         if (transport->serial && strcmp(serial, transport->serial) == 0) {
             adb_mutex_unlock(&transport_lock);
+            VLOG(TRANSPORT) << "socket transport " << transport->serial
+                << " is already in pending_list and fails to register";
             delete t;
             return -1;
         }
@@ -958,6 +960,8 @@ int register_socket_transport(int s, const char *serial, int port, int local) {
     for (const auto& transport : transport_list) {
         if (transport->serial && strcmp(serial, transport->serial) == 0) {
             adb_mutex_unlock(&transport_lock);
+            VLOG(TRANSPORT) << "socket transport " << transport->serial
+                << " is already in transport_list and fails to register";
             delete t;
             return -1;
         }
@@ -990,8 +994,7 @@ atransport *find_transport(const char *serial) {
 void kick_all_tcp_devices() {
     adb_mutex_lock(&transport_lock);
     for (auto& t : transport_list) {
-        // TCP/IP devices have adb_port == 0.
-        if (t->type == kTransportLocal && t->adb_port == 0) {
+        if (t->IsTcpDevice()) {
             // Kicking breaks the read_transport thread of this transport out of any read, then
             // the read_transport thread will notify the main thread to make this transport
             // offline. Then the main thread will notify the write_transport thread to exit.
