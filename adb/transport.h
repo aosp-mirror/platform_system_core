@@ -87,7 +87,22 @@ public:
     char* model = nullptr;
     char* device = nullptr;
     char* devpath = nullptr;
-    int adb_port = -1;  // Use for emulators (local transport)
+    void SetLocalPortForEmulator(int port) {
+        CHECK_EQ(local_port_for_emulator_, -1);
+        local_port_for_emulator_ = port;
+    }
+
+    bool GetLocalPortForEmulator(int* port) const {
+        if (type == kTransportLocal && local_port_for_emulator_ != -1) {
+            *port = local_port_for_emulator_;
+            return true;
+        }
+        return false;
+    }
+
+    bool IsTcpDevice() const {
+        return type == kTransportLocal && local_port_for_emulator_ == -1;
+    }
 
     void* key = nullptr;
     unsigned char token[TOKEN_SIZE] = {};
@@ -128,6 +143,7 @@ public:
     bool MatchesTarget(const std::string& target) const;
 
 private:
+    int local_port_for_emulator_ = -1;
     bool kicked_ = false;
     void (*kick_func_)(atransport*) = nullptr;
 
