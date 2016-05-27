@@ -27,6 +27,7 @@
 #include "adb.h"
 
 #include <android-base/errors.h>
+#include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <crypto_utils/android_pubkey.h>
@@ -334,39 +335,21 @@ void *adb_auth_nextkey(void *current)
     return NULL;
 }
 
-int adb_auth_get_userkey(unsigned char *data, size_t len)
-{
+std::string adb_auth_get_userkey() {
     char path[PATH_MAX];
     int ret = get_user_keyfilepath(path, sizeof(path) - 4);
     if (ret < 0 || ret >= (signed)(sizeof(path) - 4)) {
         D("Error getting user key filename");
-        return 0;
+        return "";
     }
     strcat(path, ".pub");
 
-    // TODO(danalbert): ReadFileToString
-    // Note that on Windows, load_file() does not do CR/LF translation, but
-    // ReadFileToString() uses the C Runtime which uses CR/LF translation by
-    // default (by is overridable with _setmode()).
-    unsigned size;
-    char* file_data = reinterpret_cast<char*>(load_file(path, &size));
-    if (file_data == nullptr) {
+    std::string content;
+    if (!android::base::ReadFileToString(path, &content)) {
         D("Can't load '%s'", path);
-        return 0;
+        return "";
     }
-
-    if (len < (size_t)(size + 1)) {
-        D("%s: Content too large ret=%d", path, size);
-        free(file_data);
-        return 0;
-    }
-
-    memcpy(data, file_data, size);
-    free(file_data);
-    file_data = nullptr;
-    data[size] = '\0';
-
-    return size + 1;
+    return content;
 }
 
 int adb_auth_keygen(const char* filename) {

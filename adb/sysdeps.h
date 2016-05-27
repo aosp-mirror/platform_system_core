@@ -269,9 +269,6 @@ extern int unix_open(const char* path, int options, ...);
 int unix_isatty(int fd);
 #define  isatty  ___xxx_isatty
 
-/* normally provided by <cutils/misc.h> */
-extern void*  load_file(const char*  pathname, unsigned*  psize);
-
 static __inline__ void  adb_sleep_ms( int  mseconds )
 {
     Sleep( mseconds );
@@ -458,7 +455,6 @@ size_t ParseCompleteUTF8(const char* first, const char* last, std::vector<char>*
 
 #else /* !_WIN32 a.k.a. Unix */
 
-#include <cutils/misc.h>
 #include <cutils/sockets.h>
 #include <cutils/threads.h>
 #include <fcntl.h>
