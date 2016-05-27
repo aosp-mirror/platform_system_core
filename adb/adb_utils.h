@@ -32,6 +32,12 @@ bool directory_exists(const std::string& path);
 std::string adb_basename(const std::string& path);
 std::string adb_dirname(const std::string& path);
 
+// Return the user's home directory.
+// |check_env_first| - if true, on Windows check the ANDROID_SDK_HOME
+// environment variable before trying the WinAPI call (useful when looking for
+// the .android directory)
+std::string adb_get_homedir_path(bool check_env_first);
+
 bool mkdirs(const std::string& path);
 
 std::string escape_arg(const std::string& s);

@@ -35,6 +35,14 @@
 #include "adb_trace.h"
 #include "sysdeps.h"
 
+#ifdef _WIN32
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  include "windows.h"
+#  include "shlobj.h"
+#endif
+
 ADB_MUTEX_DEFINE(basename_lock);
 ADB_MUTEX_DEFINE(dirname_lock);
 
@@ -253,4 +261,31 @@ bool forward_targets_are_valid(const std::string& source, const std::string& des
     }
 
     return true;
+}
+
+std::string adb_get_homedir_path(bool check_env_first) {
+#ifdef _WIN32
+    if (check_env_first) {
+        if (const char* const home = getenv("ANDROID_SDK_HOME")) {
+            return home;
+        }
+    }
+
+    WCHAR path[MAX_PATH];
+    const HRESULT hr = SHGetFolderPathW(NULL, CSIDL_PROFILE, NULL, 0, path);
+    if (FAILED(hr)) {
+        D("SHGetFolderPathW failed: %s", android::base::SystemErrorCodeToString(hr).c_str());
+        return {};
+    }
+    std::string home_str;
+    if (!android::base::WideToUTF8(path, &home_str)) {
+        return {};
+    }
+    return home_str;
+#else
+    if (const char* const home = getenv("HOME")) {
+        return home;
+    }
+    return {};
+#endif
 }
