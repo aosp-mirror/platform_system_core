@@ -120,7 +120,7 @@ inline GGLcolor gglFixedToIteratedColor(GGLfixed c) {
 template<bool> struct CTA;
 template<> struct CTA<true> { };
 
-#define GGL_CONTEXT(con, c)         context_t *con = static_cast<context_t *>(c)
+#define GGL_CONTEXT(con, c)         context_t *(con) = static_cast<context_t *>(c) /* NOLINT */
 #define GGL_OFFSETOF(field)         uintptr_t(&(((context_t*)0)->field))
 #define GGL_INIT_PROC(p, f)         p.f = ggl_ ## f;
 #define GGL_BETWEEN(x, L, H)        (uint32_t((x)-(L)) <= ((H)-(L)))
@@ -136,14 +136,14 @@ const int GGL_PIXEL_PIPELINE_STATE  = 0x00000004;
 // ----------------------------------------------------------------------------
 
 #define GGL_RESERVE_NEEDS(name, l, s)                               \
-    const uint32_t  GGL_NEEDS_##name##_MASK = (((1LU<<(s))-1)<<l);  \
+    const uint32_t  GGL_NEEDS_##name##_MASK = (((1LU<<(s))-1)<<(l));  \
     const uint32_t  GGL_NEEDS_##name##_SHIFT = (l);
 
 #define GGL_BUILD_NEEDS(val, name)                                  \
     (((val)<<(GGL_NEEDS_##name##_SHIFT)) & GGL_NEEDS_##name##_MASK)
 
 #define GGL_READ_NEEDS(name, n)                                     \
-    (uint32_t(n & GGL_NEEDS_##name##_MASK) >> GGL_NEEDS_##name##_SHIFT)
+    (uint32_t((n) & GGL_NEEDS_##name##_MASK) >> GGL_NEEDS_##name##_SHIFT)
 
 #define GGL_NEED_MASK(name)     (uint32_t(GGL_NEEDS_##name##_MASK))
 #define GGL_NEED(name, val)     GGL_BUILD_NEEDS(val, name)
