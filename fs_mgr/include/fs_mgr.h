@@ -80,11 +80,11 @@ void fs_mgr_free_fstab(struct fstab *fstab);
 #define FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION 2
 #define FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED 1
 #define FS_MGR_MNTALL_DEV_NOT_ENCRYPTED 0
-#define FS_MGR_MNTALL_FAIL -1
+#define FS_MGR_MNTALL_FAIL (-1)
 int fs_mgr_mount_all(struct fstab *fstab);
 
-#define FS_MGR_DOMNT_FAILED -1
-#define FS_MGR_DOMNT_BUSY -2
+#define FS_MGR_DOMNT_FAILED (-1)
+#define FS_MGR_DOMNT_BUSY (-2)
 int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
                     char *tmp_mount_point);
 int fs_mgr_do_tmpfs_mount(char *n_name);
