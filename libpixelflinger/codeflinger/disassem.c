@@ -279,14 +279,14 @@ static char const insn_fpaconstants[][8] = {
 	"4.0", "5.0", "0.5", "10.0"
 };
 
-#define insn_condition(x)	arm32_insn_conditions[(x >> 28) & 0x0f]
-#define insn_blktrans(x)	insn_block_transfers[(x >> 23) & 3]
-#define insn_stkblktrans(x)	insn_stack_block_transfers[(3*((x >> 20)&1))^((x >> 23)&3)]
-#define op2_shift(x)		op_shifts[(x >> 5) & 3]
-#define insn_fparnd(x)		insn_fpa_rounding[(x >> 5) & 0x03]
-#define insn_fpaprec(x)		insn_fpa_precision[(((x >> 18) & 2)|(x >> 7)) & 1]
-#define insn_fpaprect(x)	insn_fpa_precision[(((x >> 21) & 2)|(x >> 15)) & 1]
-#define insn_fpaimm(x)		insn_fpaconstants[x & 0x07]
+#define insn_condition(x)	arm32_insn_conditions[((x) >> 28) & 0x0f]
+#define insn_blktrans(x)	insn_block_transfers[((x) >> 23) & 3]
+#define insn_stkblktrans(x)	insn_stack_block_transfers[(3*(((x) >> 20)&1))^(((x) >> 23)&3)]
+#define op2_shift(x)		op_shifts[((x) >> 5) & 3]
+#define insn_fparnd(x)		insn_fpa_rounding[((x) >> 5) & 0x03]
+#define insn_fpaprec(x)		insn_fpa_precision[((((x) >> 18) & 2)|((x) >> 7)) & 1]
+#define insn_fpaprect(x)	insn_fpa_precision[((((x) >> 21) & 2)|((x) >> 15)) & 1]
+#define insn_fpaimm(x)		insn_fpaconstants[(x) & 0x07]
 
 /* Local prototypes */
 static void disasm_register_shift(const disasm_interface_t *di, u_int insn);
