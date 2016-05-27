@@ -24,12 +24,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef _WIN32
-#  include <sys/types.h>
-#  include <sys/stat.h>
-#  include <unistd.h>
-#endif
-
 #include "adb.h"
 
 /* HACK: we need the RSAPublicKey struct
@@ -39,6 +33,7 @@
 #undef RSA_verify
 
 #include <android-base/errors.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <cutils/list.h>
 
@@ -293,25 +288,23 @@ static int read_key(const char *file, struct listnode *list)
 
 static int get_user_keyfilepath(char *filename, size_t len)
 {
-    char android_dir[PATH_MAX];
-    struct stat buf;
-
-    std::string home = adb_get_homedir_path(true);
+    const std::string home = adb_get_homedir_path(true);
     D("home '%s'", home.c_str());
 
-    if (snprintf(android_dir, sizeof(android_dir), "%s%c%s", home.c_str(),
-                OS_PATH_SEPARATOR, ANDROID_PATH) >= (int)sizeof(android_dir))
-        return -1;
+    const std::string android_dir =
+            android::base::StringPrintf("%s%c%s", home.c_str(),
+                                        OS_PATH_SEPARATOR, ANDROID_PATH);
 
-    if (stat(android_dir, &buf)) {
-        if (adb_mkdir(android_dir, 0750) < 0) {
-            D("Cannot mkdir '%s'", android_dir);
+    struct stat buf;
+    if (stat(android_dir.c_str(), &buf)) {
+        if (adb_mkdir(android_dir.c_str(), 0750) < 0) {
+            D("Cannot mkdir '%s'", android_dir.c_str());
             return -1;
         }
     }
 
-    return snprintf(filename, len, "%s%c%s", android_dir, OS_PATH_SEPARATOR,
-                    ADB_KEY_FILE);
+    return snprintf(filename, len, "%s%c%s",
+                    android_dir.c_str(), OS_PATH_SEPARATOR, ADB_KEY_FILE);
 }
 
 static int get_user_key(struct listnode *list)
