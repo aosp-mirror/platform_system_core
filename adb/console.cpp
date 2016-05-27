@@ -26,6 +26,31 @@
 #include "adb.h"
 #include "adb_client.h"
 #include "adb_io.h"
+#include "adb_utils.h"
+
+// Return the console authentication command for the emulator, if needed
+static std::string adb_construct_auth_command() {
+    static const char auth_token_filename[] = ".emulator_console_auth_token";
+
+    std::string auth_token_path = adb_get_homedir_path(false);
+    auth_token_path += OS_PATH_SEPARATOR;
+    auth_token_path += auth_token_filename;
+
+    // read the token
+    std::string token;
+    if (!android::base::ReadFileToString(auth_token_path, &token)
+        || token.empty()) {
+        // we either can't read the file, or it doesn't exist, or it's empty -
+        // either way we won't add any authentication command.
+        return {};
+    }
+
+    // now construct and return the actual command: "auth <token>\n"
+    std::string command = "auth ";
+    command += token;
+    command += '\n';
+    return command;
+}
 
 // Return the console port of the currently connected emulator (if any) or -1 if
 // there is no emulator, and -2 if there is more than one.
@@ -88,11 +113,11 @@ int adb_send_emulator_command(int argc, const char** argv, const char* serial) {
         return 1;
     }
 
-    std::string commands;
+    std::string commands = adb_construct_auth_command();
 
     for (int i = 1; i < argc; i++) {
         commands.append(argv[i]);
-        commands.append(i == argc - 1 ? "\n" : " ");
+        commands.push_back(i == argc - 1 ? '\n' : ' ');
     }
 
     commands.append("quit\n");
