@@ -18,18 +18,13 @@
 
 #include "sysdeps.h"
 #include "adb_auth.h"
+#include "adb_utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef _WIN32
-#  ifndef WIN32_LEAN_AND_MEAN
-#    define WIN32_LEAN_AND_MEAN
-#  endif
-#  include "windows.h"
-#  include "shlobj.h"
-#else
+#ifndef _WIN32
 #  include <sys/types.h>
 #  include <sys/stat.h>
 #  include <unistd.h>
@@ -298,36 +293,14 @@ static int read_key(const char *file, struct listnode *list)
 
 static int get_user_keyfilepath(char *filename, size_t len)
 {
-    const char *format, *home;
     char android_dir[PATH_MAX];
     struct stat buf;
-#ifdef _WIN32
-    std::string home_str;
-    home = getenv("ANDROID_SDK_HOME");
-    if (!home) {
-        WCHAR path[MAX_PATH];
-        const HRESULT hr = SHGetFolderPathW(NULL, CSIDL_PROFILE, NULL, 0, path);
-        if (FAILED(hr)) {
-            D("SHGetFolderPathW failed: %s", android::base::SystemErrorCodeToString(hr).c_str());
-            return -1;
-        }
-        if (!android::base::WideToUTF8(path, &home_str)) {
-            return -1;
-        }
-        home = home_str.c_str();
-    }
-    format = "%s\\%s";
-#else
-    home = getenv("HOME");
-    if (!home)
-        return -1;
-    format = "%s/%s";
-#endif
 
-    D("home '%s'", home);
+    std::string home = adb_get_homedir_path(true);
+    D("home '%s'", home.c_str());
 
-    if (snprintf(android_dir, sizeof(android_dir), format, home,
-                        ANDROID_PATH) >= (int)sizeof(android_dir))
+    if (snprintf(android_dir, sizeof(android_dir), "%s%c%s", home.c_str(),
+                OS_PATH_SEPARATOR, ANDROID_PATH) >= (int)sizeof(android_dir))
         return -1;
 
     if (stat(android_dir, &buf)) {
@@ -337,7 +310,8 @@ static int get_user_keyfilepath(char *filename, size_t len)
         }
     }
 
-    return snprintf(filename, len, format, android_dir, ADB_KEY_FILE);
+    return snprintf(filename, len, "%s%c%s", android_dir, OS_PATH_SEPARATOR,
+                    ADB_KEY_FILE);
 }
 
 static int get_user_key(struct listnode *list)
