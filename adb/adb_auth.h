@@ -41,7 +41,7 @@ void adb_auth_init(void);
 int adb_auth_sign(void *key, const unsigned char* token, size_t token_size,
                   unsigned char* sig);
 void *adb_auth_nextkey(void *current);
-int adb_auth_get_userkey(unsigned char *data, size_t len);
+std::string adb_auth_get_userkey();
 
 static inline int adb_auth_generate_token(void *token, size_t token_size) {
     return 0;
@@ -60,9 +60,7 @@ static inline int adb_auth_sign(void* key, const unsigned char* token,
     return 0;
 }
 static inline void *adb_auth_nextkey(void *current) { return NULL; }
-static inline int adb_auth_get_userkey(unsigned char *data, size_t len) {
-    return 0;
-}
+static inline std::string adb_auth_get_userkey() { return ""; }
 
 void adbd_auth_init(void);
 void adbd_cloexec_auth_socket();
