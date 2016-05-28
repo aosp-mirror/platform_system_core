@@ -66,6 +66,7 @@ struct AdbCloser {
 
 using unique_fd = android::base::unique_fd_impl<AdbCloser>;
 
+// TODO: switch remaining users over to unique_fd...
 class ScopedFd {
   public:
     ScopedFd() {
