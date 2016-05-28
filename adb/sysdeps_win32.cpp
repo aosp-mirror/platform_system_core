@@ -110,62 +110,6 @@ void handle_deleter::operator()(HANDLE h) {
 /**************************************************************************/
 /**************************************************************************/
 /*****                                                                *****/
-/*****      replaces libs/cutils/load_file.c                          *****/
-/*****                                                                *****/
-/**************************************************************************/
-/**************************************************************************/
-
-void *load_file(const char *fn, unsigned *_sz)
-{
-    HANDLE    file;
-    char     *data;
-    DWORD     file_size;
-
-    std::wstring fn_wide;
-    if (!android::base::UTF8ToWide(fn, &fn_wide))
-        return NULL;
-
-    file = CreateFileW( fn_wide.c_str(),
-                        GENERIC_READ,
-                        FILE_SHARE_READ,
-                        NULL,
-                        OPEN_EXISTING,
-                        0,
-                        NULL );
-
-    if (file == INVALID_HANDLE_VALUE)
-        return NULL;
-
-    file_size = GetFileSize( file, NULL );
-    data      = NULL;
-
-    if (file_size > 0) {
-        data = (char*) malloc( file_size + 1 );
-        if (data == NULL) {
-            D("load_file: could not allocate %ld bytes", file_size );
-            file_size = 0;
-        } else {
-            DWORD  out_bytes;
-
-            if ( !ReadFile( file, data, file_size, &out_bytes, NULL ) ||
-                 out_bytes != file_size )
-            {
-                D("load_file: could not read %ld bytes from '%s'", file_size, fn);
-                free(data);
-                data      = NULL;
-                file_size = 0;
-            }
-        }
-    }
-    CloseHandle( file );
-
-    *_sz = (unsigned) file_size;
-    return  data;
-}
-
-/**************************************************************************/
-/**************************************************************************/
-/*****                                                                *****/
 /*****    common file descriptor handling                             *****/
 /*****                                                                *****/
 /**************************************************************************/

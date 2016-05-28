@@ -72,19 +72,23 @@ void send_auth_response(uint8_t *token, size_t token_size, atransport *t)
 void send_auth_publickey(atransport *t)
 {
     D("Calling send_auth_publickey");
-    apacket *p = get_apacket();
-    int ret;
-
-    ret = adb_auth_get_userkey(p->data, MAX_PAYLOAD_V1);
-    if (!ret) {
+    std::string key = adb_auth_get_userkey();
+    if (key.empty()) {
         D("Failed to get user public key");
-        put_apacket(p);
         return;
     }
 
+    if (key.size() >= MAX_PAYLOAD_V1) {
+        D("User public key too large (%zu B)", key.size());
+        return;
+    }
+
+    apacket* p = get_apacket();
+    memcpy(p->data, key.c_str(), key.size() + 1);
+
     p->msg.command = A_AUTH;
     p->msg.arg0 = ADB_AUTH_RSAPUBLICKEY;
-    p->msg.data_length = ret;
+    p->msg.data_length = key.size();
     send_packet(p, t);
 }
 

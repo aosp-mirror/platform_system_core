@@ -35,6 +35,7 @@
 #include <string>
 #include <vector>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -871,47 +872,47 @@ static int adb_download_buffer(const char *service, const char *fn, const void* 
  *   we hang up.
  */
 static int adb_sideload_host(const char* fn) {
-    unsigned sz;
-    size_t xfer = 0;
-    int status;
-    int last_percent = -1;
-    int opt = SIDELOAD_HOST_BLOCK_SIZE;
-
     printf("loading: '%s'", fn);
     fflush(stdout);
-    uint8_t* data = reinterpret_cast<uint8_t*>(load_file(fn, &sz));
-    if (data == 0) {
+
+    std::string content;
+    if (!android::base::ReadFileToString(fn, &content)) {
         printf("\n");
         fprintf(stderr, "* cannot read '%s' *\n", fn);
         return -1;
     }
 
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(content.data());
+    unsigned sz = content.size();
+
     std::string service =
             android::base::StringPrintf("sideload-host:%d:%d", sz, SIDELOAD_HOST_BLOCK_SIZE);
     std::string error;
-    int fd = adb_connect(service, &error);
-    if (fd < 0) {
+    unique_fd fd(adb_connect(service, &error));
+    if (fd >= 0) {
         // Try falling back to the older sideload method.  Maybe this
         // is an older device that doesn't support sideload-host.
         printf("\n");
-        status = adb_download_buffer("sideload", fn, data, sz, true);
-        goto done;
+        return adb_download_buffer("sideload", fn, data, sz, true);
     }
 
-    opt = adb_setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
+    int opt = SIDELOAD_HOST_BLOCK_SIZE;
+    adb_setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &opt, sizeof(opt));
 
+    size_t xfer = 0;
+    int last_percent = -1;
     while (true) {
         char buf[9];
         if (!ReadFdExactly(fd, buf, 8)) {
             fprintf(stderr, "* failed to read command: %s\n", strerror(errno));
-            status = -1;
-            goto done;
+            return -1;
         }
         buf[8] = '\0';
 
         if (strcmp("DONEDONE", buf) == 0) {
-            status = 0;
-            break;
+            printf("\rTotal xfer: %.2fx%*s\n",
+                   (double)xfer / (sz ? sz : 1), (int)strlen(fn)+10, "");
+            return 0;
         }
 
         int block = strtol(buf, NULL, 10);
@@ -919,21 +920,19 @@ static int adb_sideload_host(const char* fn) {
         size_t offset = block * SIDELOAD_HOST_BLOCK_SIZE;
         if (offset >= sz) {
             fprintf(stderr, "* attempt to read block %d past end\n", block);
-            status = -1;
-            goto done;
+            return -1;
         }
-        uint8_t* start = data + offset;
+        const uint8_t* start = data + offset;
         size_t offset_end = offset + SIDELOAD_HOST_BLOCK_SIZE;
         size_t to_write = SIDELOAD_HOST_BLOCK_SIZE;
         if (offset_end > sz) {
             to_write = sz - offset;
         }
 
-        if(!WriteFdExactly(fd, start, to_write)) {
+        if (!WriteFdExactly(fd, start, to_write)) {
             adb_status(fd, &error);
             fprintf(stderr,"* failed to write data '%s' *\n", error.c_str());
-            status = -1;
-            goto done;
+            return -1;
         }
         xfer += to_write;
 
@@ -950,13 +949,6 @@ static int adb_sideload_host(const char* fn) {
             last_percent = percent;
         }
     }
-
-    printf("\rTotal xfer: %.2fx%*s\n", (double)xfer / (sz ? sz : 1), (int)strlen(fn)+10, "");
-
-  done:
-    if (fd >= 0) adb_close(fd);
-    free(data);
-    return status;
 }
 
 /**
@@ -1067,10 +1059,9 @@ static bool wait_for_device(const char* service, TransportType t, const char* se
 
 static bool adb_root(const char* command) {
     std::string error;
-    ScopedFd fd;
 
-    fd.Reset(adb_connect(android::base::StringPrintf("%s:", command), &error));
-    if (!fd.valid()) {
+    unique_fd fd(adb_connect(android::base::StringPrintf("%s:", command), &error));
+    if (fd < 0) {
         fprintf(stderr, "adb: unable to connect for %s: %s\n", command, error.c_str());
         return false;
     }
@@ -1080,7 +1071,7 @@ static bool adb_root(const char* command) {
     char* cur = buf;
     ssize_t bytes_left = sizeof(buf);
     while (bytes_left > 0) {
-        ssize_t bytes_read = adb_read(fd.fd(), cur, bytes_left);
+        ssize_t bytes_read = adb_read(fd, cur, bytes_left);
         if (bytes_read == 0) {
             break;
         } else if (bytes_read < 0) {
