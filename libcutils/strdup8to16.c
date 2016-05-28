@@ -27,7 +27,7 @@
 #define UTF16_REPLACEMENT_CHAR 0xfffd
 
 /* Clever trick from Dianne that returns 1-4 depending on leading bit sequence*/
-#define UTF8_SEQ_LENGTH(ch) (((0xe5000000 >> ((ch >> 3) & 0x1e)) & 3) + 1)
+#define UTF8_SEQ_LENGTH(ch) (((0xe5000000 >> (((ch) >> 3) & 0x1e)) & 3) + 1)
 
 /* note: macro expands to multiple lines */
 #define UTF8_SHIFT_AND_MASK(unicode, byte)  \
