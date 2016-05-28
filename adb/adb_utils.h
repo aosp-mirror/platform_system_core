@@ -66,43 +66,4 @@ struct AdbCloser {
 
 using unique_fd = android::base::unique_fd_impl<AdbCloser>;
 
-// TODO: switch remaining users over to unique_fd...
-class ScopedFd {
-  public:
-    ScopedFd() {
-    }
-
-    ~ScopedFd() {
-        Reset();
-    }
-
-    void Reset(int fd = -1) {
-        if (fd != fd_) {
-            if (valid()) {
-                adb_close(fd_);
-            }
-            fd_ = fd;
-        }
-    }
-
-    int Release() {
-        int temp = fd_;
-        fd_ = -1;
-        return temp;
-    }
-
-    bool valid() const {
-        return fd_ >= 0;
-    }
-
-    int fd() const {
-        return fd_;
-    }
-
-  private:
-    int fd_ = -1;
-
-    DISALLOW_COPY_AND_ASSIGN(ScopedFd);
-};
-
 #endif
