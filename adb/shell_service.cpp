@@ -136,14 +136,14 @@ std::string ReadAll(int fd) {
 }
 
 // Creates a socketpair and saves the endpoints to |fd1| and |fd2|.
-bool CreateSocketpair(ScopedFd* fd1, ScopedFd* fd2) {
+bool CreateSocketpair(unique_fd* fd1, unique_fd* fd2) {
     int sockets[2];
     if (adb_socketpair(sockets) < 0) {
         PLOG(ERROR) << "cannot create socket pair";
         return false;
     }
-    fd1->Reset(sockets[0]);
-    fd2->Reset(sockets[1]);
+    fd1->reset(sockets[0]);
+    fd2->reset(sockets[1]);
     return true;
 }
 
@@ -155,7 +155,7 @@ class Subprocess {
 
     const std::string& command() const { return command_; }
 
-    int local_socket_fd() const { return local_socket_sfd_.fd(); }
+    int local_socket_fd() const { return local_socket_sfd_; }
 
     pid_t pid() const { return pid_; }
 
@@ -165,19 +165,19 @@ class Subprocess {
 
   private:
     // Opens the file at |pts_name|.
-    int OpenPtyChildFd(const char* pts_name, ScopedFd* error_sfd);
+    int OpenPtyChildFd(const char* pts_name, unique_fd* error_sfd);
 
     static void ThreadHandler(void* userdata);
     void PassDataStreams();
     void WaitForExit();
 
-    ScopedFd* SelectLoop(fd_set* master_read_set_ptr,
-                         fd_set* master_write_set_ptr);
+    unique_fd* SelectLoop(fd_set* master_read_set_ptr,
+                          fd_set* master_write_set_ptr);
 
     // Input/output stream handlers. Success returns nullptr, failure returns
     // a pointer to the failed FD.
-    ScopedFd* PassInput();
-    ScopedFd* PassOutput(ScopedFd* sfd, ShellProtocol::Id id);
+    unique_fd* PassInput();
+    unique_fd* PassOutput(unique_fd* sfd, ShellProtocol::Id id);
 
     const std::string command_;
     const std::string terminal_type_;
@@ -185,10 +185,10 @@ class Subprocess {
     SubprocessType type_;
     SubprocessProtocol protocol_;
     pid_t pid_ = -1;
-    ScopedFd local_socket_sfd_;
+    unique_fd local_socket_sfd_;
 
     // Shell protocol variables.
-    ScopedFd stdinout_sfd_, stderr_sfd_, protocol_sfd_;
+    unique_fd stdinout_sfd_, stderr_sfd_, protocol_sfd_;
     std::unique_ptr<ShellProtocol> input_, output_;
     size_t input_bytes_left_ = 0;
 
@@ -220,8 +220,8 @@ Subprocess::~Subprocess() {
 }
 
 bool Subprocess::ForkAndExec(std::string* error) {
-    ScopedFd child_stdinout_sfd, child_stderr_sfd;
-    ScopedFd parent_error_sfd, child_error_sfd;
+    unique_fd child_stdinout_sfd, child_stderr_sfd;
+    unique_fd parent_error_sfd, child_error_sfd;
     char pts_name[PATH_MAX];
 
     if (command_.empty()) {
@@ -285,7 +285,7 @@ bool Subprocess::ForkAndExec(std::string* error) {
         int fd;
         pid_ = forkpty(&fd, pts_name, nullptr, nullptr);
         if (pid_ > 0) {
-          stdinout_sfd_.Reset(fd);
+          stdinout_sfd_.reset(fd);
         }
     } else {
         if (!CreateSocketpair(&stdinout_sfd_, &child_stdinout_sfd)) {
@@ -313,40 +313,39 @@ bool Subprocess::ForkAndExec(std::string* error) {
         init_subproc_child();
 
         if (type_ == SubprocessType::kPty) {
-            child_stdinout_sfd.Reset(OpenPtyChildFd(pts_name, &child_error_sfd));
+            child_stdinout_sfd.reset(OpenPtyChildFd(pts_name, &child_error_sfd));
         }
 
-        dup2(child_stdinout_sfd.fd(), STDIN_FILENO);
-        dup2(child_stdinout_sfd.fd(), STDOUT_FILENO);
-        dup2(child_stderr_sfd.valid() ? child_stderr_sfd.fd() : child_stdinout_sfd.fd(),
-             STDERR_FILENO);
+        dup2(child_stdinout_sfd, STDIN_FILENO);
+        dup2(child_stdinout_sfd, STDOUT_FILENO);
+        dup2(child_stderr_sfd != -1 ? child_stderr_sfd : child_stdinout_sfd, STDERR_FILENO);
 
         // exec doesn't trigger destructors, close the FDs manually.
-        stdinout_sfd_.Reset();
-        stderr_sfd_.Reset();
-        child_stdinout_sfd.Reset();
-        child_stderr_sfd.Reset();
-        parent_error_sfd.Reset();
-        close_on_exec(child_error_sfd.fd());
+        stdinout_sfd_.reset(-1);
+        stderr_sfd_.reset(-1);
+        child_stdinout_sfd.reset(-1);
+        child_stderr_sfd.reset(-1);
+        parent_error_sfd.reset(-1);
+        close_on_exec(child_error_sfd);
 
         if (command_.empty()) {
             execle(_PATH_BSHELL, _PATH_BSHELL, "-", nullptr, cenv.data());
         } else {
             execle(_PATH_BSHELL, _PATH_BSHELL, "-c", command_.c_str(), nullptr, cenv.data());
         }
-        WriteFdExactly(child_error_sfd.fd(), "exec '" _PATH_BSHELL "' failed: ");
-        WriteFdExactly(child_error_sfd.fd(), strerror(errno));
-        child_error_sfd.Reset();
+        WriteFdExactly(child_error_sfd, "exec '" _PATH_BSHELL "' failed: ");
+        WriteFdExactly(child_error_sfd, strerror(errno));
+        child_error_sfd.reset(-1);
         _Exit(1);
     }
 
     // Subprocess parent.
     D("subprocess parent: stdin/stdout FD = %d, stderr FD = %d",
-      stdinout_sfd_.fd(), stderr_sfd_.fd());
+      stdinout_sfd_.get(), stderr_sfd_.get());
 
     // Wait to make sure the subprocess exec'd without error.
-    child_error_sfd.Reset();
-    std::string error_message = ReadAll(parent_error_sfd.fd());
+    child_error_sfd.reset(-1);
+    std::string error_message = ReadAll(parent_error_sfd);
     if (!error_message.empty()) {
         *error = error_message;
         return false;
@@ -356,7 +355,7 @@ bool Subprocess::ForkAndExec(std::string* error) {
     if (protocol_ == SubprocessProtocol::kNone) {
         // No protocol: all streams pass through the stdinout FD and hook
         // directly into the local socket for raw data transfer.
-        local_socket_sfd_.Reset(stdinout_sfd_.Release());
+        local_socket_sfd_.reset(stdinout_sfd_.release());
     } else {
         // Shell protocol: create another socketpair to intercept data.
         if (!CreateSocketpair(&protocol_sfd_, &local_socket_sfd_)) {
@@ -365,10 +364,10 @@ bool Subprocess::ForkAndExec(std::string* error) {
             kill(pid_, SIGKILL);
             return false;
         }
-        D("protocol FD = %d", protocol_sfd_.fd());
+        D("protocol FD = %d", protocol_sfd_.get());
 
-        input_.reset(new ShellProtocol(protocol_sfd_.fd()));
-        output_.reset(new ShellProtocol(protocol_sfd_.fd()));
+        input_.reset(new ShellProtocol(protocol_sfd_));
+        output_.reset(new ShellProtocol(protocol_sfd_));
         if (!input_ || !output_) {
             *error = "failed to allocate shell protocol objects";
             kill(pid_, SIGKILL);
@@ -379,7 +378,7 @@ bool Subprocess::ForkAndExec(std::string* error) {
         // likely but could happen under unusual circumstances, such as if we
         // write a ton of data to stdin but the subprocess never reads it and
         // the pipe fills up.
-        for (int fd : {stdinout_sfd_.fd(), stderr_sfd_.fd()}) {
+        for (int fd : {stdinout_sfd_.get(), stderr_sfd_.get()}) {
             if (fd >= 0) {
                 if (!set_file_block_mode(fd, false)) {
                     *error = android::base::StringPrintf(
@@ -402,7 +401,7 @@ bool Subprocess::ForkAndExec(std::string* error) {
     return true;
 }
 
-int Subprocess::OpenPtyChildFd(const char* pts_name, ScopedFd* error_sfd) {
+int Subprocess::OpenPtyChildFd(const char* pts_name, unique_fd* error_sfd) {
     int child_fd = adb_open(pts_name, O_RDWR | O_CLOEXEC);
     if (child_fd == -1) {
         // Don't use WriteFdFmt; since we're in the fork() child we don't want
@@ -410,7 +409,7 @@ int Subprocess::OpenPtyChildFd(const char* pts_name, ScopedFd* error_sfd) {
         const char* messages[] = {"child failed to open pseudo-term slave ",
                                   pts_name, ": ", strerror(errno)};
         for (const char* message : messages) {
-            WriteFdExactly(error_sfd->fd(), message);
+            WriteFdExactly(*error_sfd, message);
         }
         abort();
     }
@@ -419,16 +418,16 @@ int Subprocess::OpenPtyChildFd(const char* pts_name, ScopedFd* error_sfd) {
         termios tattr;
         if (tcgetattr(child_fd, &tattr) == -1) {
             int saved_errno = errno;
-            WriteFdExactly(error_sfd->fd(), "tcgetattr failed: ");
-            WriteFdExactly(error_sfd->fd(), strerror(saved_errno));
+            WriteFdExactly(*error_sfd, "tcgetattr failed: ");
+            WriteFdExactly(*error_sfd, strerror(saved_errno));
             abort();
         }
 
         cfmakeraw(&tattr);
         if (tcsetattr(child_fd, TCSADRAIN, &tattr) == -1) {
             int saved_errno = errno;
-            WriteFdExactly(error_sfd->fd(), "tcsetattr failed: ");
-            WriteFdExactly(error_sfd->fd(), strerror(saved_errno));
+            WriteFdExactly(*error_sfd, "tcsetattr failed: ");
+            WriteFdExactly(*error_sfd, strerror(saved_errno));
             abort();
         }
     }
@@ -449,7 +448,7 @@ void Subprocess::ThreadHandler(void* userdata) {
 }
 
 void Subprocess::PassDataStreams() {
-    if (!protocol_sfd_.valid()) {
+    if (protocol_sfd_ == -1) {
         return;
     }
 
@@ -457,21 +456,20 @@ void Subprocess::PassDataStreams() {
     fd_set master_read_set, master_write_set;
     FD_ZERO(&master_read_set);
     FD_ZERO(&master_write_set);
-    for (ScopedFd* sfd : {&protocol_sfd_, &stdinout_sfd_, &stderr_sfd_}) {
-        if (sfd->valid()) {
-            FD_SET(sfd->fd(), &master_read_set);
+    for (unique_fd* sfd : {&protocol_sfd_, &stdinout_sfd_, &stderr_sfd_}) {
+        if (*sfd != -1) {
+            FD_SET(*sfd, &master_read_set);
         }
     }
 
     // Pass data until the protocol FD or both the subprocess pipes die, at
     // which point we can't pass any more data.
-    while (protocol_sfd_.valid() &&
-            (stdinout_sfd_.valid() || stderr_sfd_.valid())) {
-        ScopedFd* dead_sfd = SelectLoop(&master_read_set, &master_write_set);
+    while (protocol_sfd_ != -1 && (stdinout_sfd_ != -1 || stderr_sfd_ != -1)) {
+        unique_fd* dead_sfd = SelectLoop(&master_read_set, &master_write_set);
         if (dead_sfd) {
-            D("closing FD %d", dead_sfd->fd());
-            FD_CLR(dead_sfd->fd(), &master_read_set);
-            FD_CLR(dead_sfd->fd(), &master_write_set);
+            D("closing FD %d", dead_sfd->get());
+            FD_CLR(*dead_sfd, &master_read_set);
+            FD_CLR(*dead_sfd, &master_write_set);
             if (dead_sfd == &protocol_sfd_) {
                 // Using SIGHUP is a decent general way to indicate that the
                 // controlling process is going away. If specific signals are
@@ -480,25 +478,24 @@ void Subprocess::PassDataStreams() {
                 D("protocol FD died, sending SIGHUP to pid %d", pid_);
                 kill(pid_, SIGHUP);
             }
-            dead_sfd->Reset();
+            dead_sfd->reset(-1);
         }
     }
 }
 
 namespace {
 
-inline bool ValidAndInSet(const ScopedFd& sfd, fd_set* set) {
-    return sfd.valid() && FD_ISSET(sfd.fd(), set);
+inline bool ValidAndInSet(const unique_fd& sfd, fd_set* set) {
+    return sfd != -1 && FD_ISSET(sfd, set);
 }
 
 }   // namespace
 
-ScopedFd* Subprocess::SelectLoop(fd_set* master_read_set_ptr,
-                                 fd_set* master_write_set_ptr) {
+unique_fd* Subprocess::SelectLoop(fd_set* master_read_set_ptr,
+                                  fd_set* master_write_set_ptr) {
     fd_set read_set, write_set;
-    int select_n = std::max(std::max(protocol_sfd_.fd(), stdinout_sfd_.fd()),
-                            stderr_sfd_.fd()) + 1;
-    ScopedFd* dead_sfd = nullptr;
+    int select_n = std::max(std::max(protocol_sfd_, stdinout_sfd_), stderr_sfd_) + 1;
+    unique_fd* dead_sfd = nullptr;
 
     // Keep calling select() and passing data until an FD closes/errors.
     while (!dead_sfd) {
@@ -509,8 +506,8 @@ ScopedFd* Subprocess::SelectLoop(fd_set* master_read_set_ptr,
                 continue;
             } else {
                 PLOG(ERROR) << "select failed, closing subprocess pipes";
-                stdinout_sfd_.Reset();
-                stderr_sfd_.Reset();
+                stdinout_sfd_.reset(-1);
+                stderr_sfd_.reset(-1);
                 return nullptr;
             }
         }
@@ -530,8 +527,8 @@ ScopedFd* Subprocess::SelectLoop(fd_set* master_read_set_ptr,
             dead_sfd = PassInput();
             // If we didn't finish writing, block on stdin write.
             if (input_bytes_left_) {
-                FD_CLR(protocol_sfd_.fd(), master_read_set_ptr);
-                FD_SET(stdinout_sfd_.fd(), master_write_set_ptr);
+                FD_CLR(protocol_sfd_, master_read_set_ptr);
+                FD_SET(stdinout_sfd_, master_write_set_ptr);
             }
         }
 
@@ -540,8 +537,8 @@ ScopedFd* Subprocess::SelectLoop(fd_set* master_read_set_ptr,
             dead_sfd = PassInput();
             // If we finished writing, go back to blocking on protocol read.
             if (!input_bytes_left_) {
-                FD_SET(protocol_sfd_.fd(), master_read_set_ptr);
-                FD_CLR(stdinout_sfd_.fd(), master_write_set_ptr);
+                FD_SET(protocol_sfd_, master_read_set_ptr);
+                FD_CLR(stdinout_sfd_, master_write_set_ptr);
             }
         }
     }  // while (!dead_sfd)
@@ -549,19 +546,18 @@ ScopedFd* Subprocess::SelectLoop(fd_set* master_read_set_ptr,
     return dead_sfd;
 }
 
-ScopedFd* Subprocess::PassInput() {
+unique_fd* Subprocess::PassInput() {
     // Only read a new packet if we've finished writing the last one.
     if (!input_bytes_left_) {
         if (!input_->Read()) {
             // Read() uses ReadFdExactly() which sets errno to 0 on EOF.
             if (errno != 0) {
-                PLOG(ERROR) << "error reading protocol FD "
-                            << protocol_sfd_.fd();
+                PLOG(ERROR) << "error reading protocol FD " << protocol_sfd_;
             }
             return &protocol_sfd_;
         }
 
-        if (stdinout_sfd_.valid()) {
+        if (stdinout_sfd_ != -1) {
             switch (input_->id()) {
                 case ShellProtocol::kIdWindowSizeChange:
                     int rows, cols, x_pixels, y_pixels;
@@ -572,7 +568,7 @@ ScopedFd* Subprocess::PassInput() {
                         ws.ws_col = cols;
                         ws.ws_xpixel = x_pixels;
                         ws.ws_ypixel = y_pixels;
-                        ioctl(stdinout_sfd_.fd(), TIOCSWINSZ, &ws);
+                        ioctl(stdinout_sfd_, TIOCSWINSZ, &ws);
                     }
                     break;
                 case ShellProtocol::kIdStdin:
@@ -580,11 +576,11 @@ ScopedFd* Subprocess::PassInput() {
                     break;
                 case ShellProtocol::kIdCloseStdin:
                     if (type_ == SubprocessType::kRaw) {
-                        if (adb_shutdown(stdinout_sfd_.fd(), SHUT_WR) == 0) {
+                        if (adb_shutdown(stdinout_sfd_, SHUT_WR) == 0) {
                             return nullptr;
                         }
                         PLOG(ERROR) << "failed to shutdown writes to FD "
-                                    << stdinout_sfd_.fd();
+                                    << stdinout_sfd_;
                         return &stdinout_sfd_;
                     } else {
                         // PTYs can't close just input, so rather than close the
@@ -593,7 +589,7 @@ ScopedFd* Subprocess::PassInput() {
                         // non-interactively which is rare and unsupported.
                         // If necessary, the client can manually close the shell
                         // with `exit` or by killing the adb client process.
-                        D("can't close input for PTY FD %d", stdinout_sfd_.fd());
+                        D("can't close input for PTY FD %d", stdinout_sfd_.get());
                     }
                     break;
             }
@@ -602,11 +598,10 @@ ScopedFd* Subprocess::PassInput() {
 
     if (input_bytes_left_ > 0) {
         int index = input_->data_length() - input_bytes_left_;
-        int bytes = adb_write(stdinout_sfd_.fd(), input_->data() + index,
-                              input_bytes_left_);
+        int bytes = adb_write(stdinout_sfd_, input_->data() + index, input_bytes_left_);
         if (bytes == 0 || (bytes < 0 && errno != EAGAIN)) {
             if (bytes < 0) {
-                PLOG(ERROR) << "error reading stdin FD " << stdinout_sfd_.fd();
+                PLOG(ERROR) << "error reading stdin FD " << stdinout_sfd_;
             }
             // stdin is done, mark this packet as finished and we'll just start
             // dumping any further data received from the protocol FD.
@@ -620,20 +615,20 @@ ScopedFd* Subprocess::PassInput() {
     return nullptr;
 }
 
-ScopedFd* Subprocess::PassOutput(ScopedFd* sfd, ShellProtocol::Id id) {
-    int bytes = adb_read(sfd->fd(), output_->data(), output_->data_capacity());
+unique_fd* Subprocess::PassOutput(unique_fd* sfd, ShellProtocol::Id id) {
+    int bytes = adb_read(*sfd, output_->data(), output_->data_capacity());
     if (bytes == 0 || (bytes < 0 && errno != EAGAIN)) {
         // read() returns EIO if a PTY closes; don't report this as an error,
         // it just means the subprocess completed.
         if (bytes < 0 && !(type_ == SubprocessType::kPty && errno == EIO)) {
-            PLOG(ERROR) << "error reading output FD " << sfd->fd();
+            PLOG(ERROR) << "error reading output FD " << *sfd;
         }
         return sfd;
     }
 
     if (bytes > 0 && !output_->Write(id, bytes)) {
         if (errno != 0) {
-            PLOG(ERROR) << "error reading protocol FD " << protocol_sfd_.fd();
+            PLOG(ERROR) << "error reading protocol FD " << protocol_sfd_;
         }
         return &protocol_sfd_;
     }
@@ -665,25 +660,25 @@ void Subprocess::WaitForExit() {
     }
 
     // If we have an open protocol FD send an exit packet.
-    if (protocol_sfd_.valid()) {
+    if (protocol_sfd_ != -1) {
         output_->data()[0] = exit_code;
         if (output_->Write(ShellProtocol::kIdExit, 1)) {
             D("wrote the exit code packet: %d", exit_code);
         } else {
             PLOG(ERROR) << "failed to write the exit code packet";
         }
-        protocol_sfd_.Reset();
+        protocol_sfd_.reset(-1);
     }
 
     // Pass the local socket FD to the shell cleanup fdevent.
     if (SHELL_EXIT_NOTIFY_FD >= 0) {
-        int fd = local_socket_sfd_.fd();
+        int fd = local_socket_sfd_;
         if (WriteFdExactly(SHELL_EXIT_NOTIFY_FD, &fd, sizeof(fd))) {
             D("passed fd %d to SHELL_EXIT_NOTIFY_FD (%d) for pid %d",
               fd, SHELL_EXIT_NOTIFY_FD, pid_);
             // The shell exit fdevent now owns the FD and will close it once
             // the last bit of data flushes through.
-            local_socket_sfd_.Release();
+            static_cast<void>(local_socket_sfd_.release());
         } else {
             PLOG(ERROR) << "failed to write fd " << fd
                         << " to SHELL_EXIT_NOTIFY_FD (" << SHELL_EXIT_NOTIFY_FD
