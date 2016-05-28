@@ -43,7 +43,7 @@
 #define __type_fit(t, a) (0 == 0)
 
 // TODO: should this be in our <sys/cdefs.h>?
-#define __arraycount(a) (sizeof(a) / sizeof(a[0]))
+#define __arraycount(a) (sizeof(a) / sizeof((a)[0]))
 
 // This at least matches GNU dd(1) behavior.
 #define SIGINFO SIGUSR1
