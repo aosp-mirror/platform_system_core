@@ -24,7 +24,6 @@ liblog_sources = [
 ]
 liblog_host_sources = [
     "fake_log_device.c",
-    //"event.logtags",
     "fake_writer.c",
 ]
 liblog_target_sources = [
@@ -87,6 +86,7 @@ cc_library {
         "-DLIBLOG_LOG_TAG=1005",
         "-DSNET_EVENT_LOG_TAG=1397638484",
     ],
+    logtags: ["event.logtags"],
     compile_multilib: "both",
     stl: "none",
 }
