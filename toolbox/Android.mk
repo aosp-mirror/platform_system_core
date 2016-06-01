@@ -3,7 +3,6 @@ LOCAL_PATH:= $(call my-dir)
 
 common_cflags := \
     -Werror -Wno-unused-parameter -Wno-unused-const-variable \
-    -I$(LOCAL_PATH)/upstream-netbsd/include/ \
     -include bsd-compatibility.h \
 
 
@@ -21,6 +20,7 @@ LOCAL_SRC_FILES := \
     upstream-netbsd/lib/libc/string/swab.c \
     upstream-netbsd/lib/libutil/raise_default_signal.c
 LOCAL_CFLAGS += $(common_cflags) -Dmain=dd_main -DNO_CONV
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/upstream-netbsd/include/
 LOCAL_MODULE := libtoolbox_dd
 include $(BUILD_STATIC_LIBRARY)
 
@@ -49,6 +49,7 @@ LOCAL_SRC_FILES := \
     $(patsubst %,%.c,$(OUR_TOOLS)) \
 
 LOCAL_CFLAGS += $(common_cflags)
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/upstream-netbsd/include/
 LOCAL_CONLYFLAGS += -std=gnu99
 
 LOCAL_SHARED_LIBRARIES := \
@@ -95,6 +96,7 @@ $(INPUT_H_LABELS_H):
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := r.c
 LOCAL_CFLAGS += $(common_cflags)
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/upstream-netbsd/include/
 LOCAL_MODULE := r
 LOCAL_MODULE_TAGS := debug
 include $(BUILD_EXECUTABLE)
@@ -109,6 +111,7 @@ LOCAL_SRC_FILES := \
     upstream-netbsd/usr.bin/grep/queue.c \
     upstream-netbsd/usr.bin/grep/util.c
 LOCAL_CFLAGS += $(common_cflags)
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/upstream-netbsd/include/
 LOCAL_MODULE := grep
 LOCAL_POST_INSTALL_CMD := $(hide) $(foreach t,egrep fgrep,ln -sf grep $(TARGET_OUT)/bin/$(t);)
 include $(BUILD_EXECUTABLE)
