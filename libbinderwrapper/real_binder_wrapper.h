@@ -17,6 +17,8 @@
 #ifndef SYSTEM_CORE_LIBBINDERWRAPPER_REAL_BINDER_WRAPPER_H_
 #define SYSTEM_CORE_LIBBINDERWRAPPER_REAL_BINDER_WRAPPER_H_
 
+#include <map>
+
 #include <base/macros.h>
 #include <binderwrapper/binder_wrapper.h>
 

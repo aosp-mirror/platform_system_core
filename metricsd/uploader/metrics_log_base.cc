@@ -16,6 +16,8 @@
 
 #include "uploader/metrics_log_base.h"
 
+#include <memory>
+
 #include "base/build_time.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_samples.h"
@@ -125,7 +127,7 @@ void MetricsLogBase::RecordHistogramDelta(const std::string& histogram_name,
   histogram_proto->set_name_hash(Hash(histogram_name));
   histogram_proto->set_sum(snapshot.sum());
 
-  for (scoped_ptr<SampleCountIterator> it = snapshot.Iterator(); !it->Done();
+  for (std::unique_ptr<SampleCountIterator> it = snapshot.Iterator(); !it->Done();
        it->Next()) {
     HistogramBase::Sample min;
     HistogramBase::Sample max;
