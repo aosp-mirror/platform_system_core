@@ -10,7 +10,8 @@ common_static_libraries := \
     libcrypto_utils_static \
     libcrypto_static \
     libext4_utils_static \
-    libsquashfs_utils
+    libsquashfs_utils \
+    libselinux
 
 include $(CLEAR_VARS)
 LOCAL_CLANG := true
