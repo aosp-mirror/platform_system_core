@@ -37,10 +37,11 @@
 #define ALL_PERMS (S_ISUID | S_ISGID | S_ISVTX | S_IRWXU | S_IRWXG | S_IRWXO)
 #define BUF_SIZE 64
 
-static int fs_prepare_dir_impl(const char* path, mode_t mode, uid_t uid, gid_t gid,
-        int allow_fixup) {
+static int fs_prepare_path_impl(const char* path, mode_t mode, uid_t uid, gid_t gid,
+        int allow_fixup, int prepare_as_dir) {
     // Check if path needs to be created
     struct stat sb;
+    int create_result = -1;
     if (TEMP_FAILURE_RETRY(lstat(path, &sb)) == -1) {
         if (errno == ENOENT) {
             goto create;
@@ -51,10 +52,12 @@ static int fs_prepare_dir_impl(const char* path, mode_t mode, uid_t uid, gid_t g
     }
 
     // Exists, verify status
-    if (!S_ISDIR(sb.st_mode)) {
-        ALOGE("Not a directory: %s", path);
+    int type_ok = prepare_as_dir ? S_ISDIR(sb.st_mode) : S_ISREG(sb.st_mode);
+    if (!type_ok) {
+        ALOGE("Not a %s: %s", (prepare_as_dir ? "directory" : "regular file"), path);
         return -1;
     }
+
     int owner_match = ((sb.st_uid == uid) && (sb.st_gid == gid));
     int mode_match = ((sb.st_mode & ALL_PERMS) == mode);
     if (owner_match && mode_match) {
@@ -74,13 +77,21 @@ static int fs_prepare_dir_impl(const char* path, mode_t mode, uid_t uid, gid_t g
     }
 
 create:
-    if (TEMP_FAILURE_RETRY(mkdir(path, mode)) == -1) {
+    create_result = prepare_as_dir
+        ? TEMP_FAILURE_RETRY(mkdir(path, mode))
+        : TEMP_FAILURE_RETRY(open(path, O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_RDONLY));
+    if (create_result == -1) {
         if (errno != EEXIST) {
-            ALOGE("Failed to mkdir(%s): %s", path, strerror(errno));
+            ALOGE("Failed to %s(%s): %s",
+                    (prepare_as_dir ? "mkdir" : "open"), path, strerror(errno));
             return -1;
         }
+    } else if (!prepare_as_dir) {
+        // For regular files we need to make sure we close the descriptor
+        if (close(create_result) == -1) {
+            ALOGW("Failed to close file after create %s: %s", path, strerror(errno));
+        }
     }
-
 fixup:
     if (TEMP_FAILURE_RETRY(chmod(path, mode)) == -1) {
         ALOGE("Failed to chmod(%s, %d): %s", path, mode, strerror(errno));
@@ -95,11 +106,15 @@ fixup:
 }
 
 int fs_prepare_dir(const char* path, mode_t mode, uid_t uid, gid_t gid) {
-    return fs_prepare_dir_impl(path, mode, uid, gid, 1);
+    return fs_prepare_path_impl(path, mode, uid, gid, /*allow_fixup*/ 1, /*prepare_as_dir*/ 1);
 }
 
 int fs_prepare_dir_strict(const char* path, mode_t mode, uid_t uid, gid_t gid) {
-    return fs_prepare_dir_impl(path, mode, uid, gid, 0);
+    return fs_prepare_path_impl(path, mode, uid, gid, /*allow_fixup*/ 0, /*prepare_as_dir*/ 1);
+}
+
+int fs_prepare_file_strict(const char* path, mode_t mode, uid_t uid, gid_t gid) {
+    return fs_prepare_path_impl(path, mode, uid, gid, /*allow_fixup*/ 0, /*prepare_as_dir*/ 0);
 }
 
 int fs_read_atomic_int(const char* path, int* out_value) {
