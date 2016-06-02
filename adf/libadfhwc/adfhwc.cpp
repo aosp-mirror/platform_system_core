@@ -166,6 +166,57 @@ int adf_getDisplayAttributes(struct adf_hwc_helper *dev, int disp,
     return 0;
 }
 
+static int32_t adf_display_attribute_hwc2(const adf_interface_data &data,
+        const drm_mode_modeinfo &mode, const uint32_t attribute)
+{
+    switch (attribute) {
+    case HWC2_ATTRIBUTE_VSYNC_PERIOD:
+        if (mode.vrefresh)
+            return 1000000000 / mode.vrefresh;
+        return 0;
+
+    case HWC2_ATTRIBUTE_WIDTH:
+        return mode.hdisplay;
+
+    case HWC2_ATTRIBUTE_HEIGHT:
+        return mode.vdisplay;
+
+    case HWC2_ATTRIBUTE_DPI_X:
+        return dpi(mode.hdisplay, data.width_mm);
+
+    case HWC2_ATTRIBUTE_DPI_Y:
+        return dpi(mode.vdisplay, data.height_mm);
+
+    default:
+        ALOGE("unknown display attribute %u", attribute);
+        return -EINVAL;
+    }
+}
+
+int adf_getDisplayAttributes_hwc2(struct adf_hwc_helper *dev, int disp,
+        uint32_t config, const uint32_t *attributes, int32_t *values)
+{
+    if ((size_t)disp >= dev->intf_fds.size())
+        return -EINVAL;
+
+    if (config >= dev->display_configs.size())
+        return -EINVAL;
+
+    adf_interface_data data;
+    int err = adf_get_interface_data(dev->intf_fds[disp], &data);
+    if (err < 0) {
+        ALOGE("failed to get ADF interface data: %s", strerror(err));
+        return err;
+    }
+
+    for (int i = 0; attributes[i] != HWC2_ATTRIBUTE_INVALID; i++)
+        values[i] = adf_display_attribute_hwc2(data,
+                dev->display_configs[config], attributes[i]);
+
+    adf_free_interface_data(&data);
+    return 0;
+}
+
 static void handle_adf_event(struct adf_hwc_helper *dev, int disp)
 {
     adf_event *event;
