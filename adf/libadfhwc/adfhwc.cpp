@@ -217,6 +217,20 @@ int adf_getDisplayAttributes_hwc2(struct adf_hwc_helper *dev, int disp,
     return 0;
 }
 
+int adf_set_active_config_hwc2(struct adf_hwc_helper *dev, int disp,
+        uint32_t config)
+{
+    if ((size_t)disp >= dev->intf_fds.size())
+        return -EINVAL;
+
+    if (config >= dev->display_configs.size())
+        return -EINVAL;
+
+    struct drm_mode_modeinfo mode = dev->display_configs[config];
+
+    return adf_interface_set_mode(dev->intf_fds[disp], &mode);
+}
+
 static void handle_adf_event(struct adf_hwc_helper *dev, int disp)
 {
     adf_event *event;

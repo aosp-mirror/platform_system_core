@@ -132,6 +132,8 @@ int adf_getDisplayAttributes(struct adf_hwc_helper *dev, int disp,
  */
 int adf_getDisplayAttributes_hwc2(struct adf_hwc_helper *dev, int disp,
         uint32_t config, const uint32_t *attributes, int32_t *values);
+int adf_set_active_config_hwc2(struct adf_hwc_helper *dev, int disp,
+        uint32_t config);
 
 __END_DECLS
 
