@@ -52,6 +52,13 @@ extern int fs_prepare_dir(const char* path, mode_t mode, uid_t uid, gid_t gid);
 extern int fs_prepare_dir_strict(const char* path, mode_t mode, uid_t uid, gid_t gid);
 
 /*
+ * Ensure that file exists with given mode and owners.  If it exists
+ * with different owners, they are not fixed and -1 is returned.
+ */
+extern int fs_prepare_file_strict(const char* path, mode_t mode, uid_t uid, gid_t gid);
+
+
+/*
  * Read single plaintext integer from given file, correctly handling files
  * partially written with fs_write_atomic_int().
  */
