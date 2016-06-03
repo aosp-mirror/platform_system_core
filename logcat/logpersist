@@ -28,7 +28,7 @@ while [ ${#} -gt 0 ]; do
     -b|--buffer) buffer="${2}" ; shift ;;
     -h|--help|*)
       LEAD_SPACE_="`echo ${progname%.*} | tr '[ -~]' ' '`"
-      echo "${progname%.*}.cat             - dump current ${service%d} logs"
+      echo "${progname%.*}.cat             - dump current ${service} logs"
       echo "${progname%.*}.start [--size=<size_in_kb>] [--buffer=<buffers>] [--clear]"
       echo "${LEAD_SPACE_}                 - start ${service} service"
       echo "${progname%.*}.stop [--clear]  - stop ${service} service"
@@ -113,8 +113,8 @@ case ${progname} in
   getprop ${property}
   # 20ms done, to permit process feedback check
   sleep 1
-  # also generate an error return code if not found running, bonus
-  ps -t | grep "${data##*/}.*${service%d}"
+  # also generate an error return code if not found running
+  pgrep -u ${data##*/} ${service%d}
   ;;
 *.stop)
   if [ -n "${size}${buffer}" ]; then
