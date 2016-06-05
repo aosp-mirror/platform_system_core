@@ -55,7 +55,7 @@ class BatteryMonitor {
 
     int getBatteryStatus(const char* status);
     int getBatteryHealth(const char* status);
-    int readFromFile(const String8& path, char* buf, size_t size);
+    int readFromFile(const String8& path, std::string* buf);
     PowerSupplyType readPowerSupplyType(const String8& path);
     bool getBooleanField(const String8& path);
     int getIntField(const String8& path);
