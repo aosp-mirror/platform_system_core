@@ -73,10 +73,7 @@ case ${progname} in
   current_size="`getprop ${property}.size`"
   if [ "${service}" = "`getprop ${property}`" ]; then
     if [ "true" = "${clear}" ]; then
-      su root stop ${service}
-      setprop ${property} ""
-      # 20ms done, guarantees content stop before rm
-      sleep 1
+      setprop ${property} "clear"
     elif [ "${buffer}|${size}" != "${current_buffer}|${current_size}" ]; then
       echo   "ERROR: Changing existing collection parameters from" >&2
       if [ "${buffer}" != "${current_buffer}" ]; then
@@ -98,9 +95,8 @@ case ${progname} in
       echo   "       To blindly override and retain data, ${progname%.*}.stop first." >&2
       exit 1
     fi
-  fi
-  if [ "true" = "${clear}" ]; then
-    su logd,misc rm -rf "${data}"
+  elif [ "true" = "${clear}" ]; then
+    setprop ${property} "clear"
   fi
   if [ -n "${buffer}${current_buffer}" ]; then
     setprop ${property}.buffer "${buffer}"
@@ -108,6 +104,9 @@ case ${progname} in
   if [ -n "${size}${current_size}" ]; then
     setprop ${property}.size "${size}"
   fi
+  while [ "clear" = "`getprop ${property}`" ]; do
+    continue
+  done
   # ${service}.rc does the heavy lifting with the following trigger
   setprop ${property} ${service}
   getprop ${property}
@@ -120,19 +119,20 @@ case ${progname} in
   if [ -n "${size}${buffer}" ]; then
     echo "WARNING: Can not use --size or --buffer with ${progname%.*}.stop" >&2
   fi
-  su root stop ${service}
-  setprop ${property} ""
+  if [ "true" = "${clear}" ]; then
+    setprop ${property} "clear"
+  else
+    setprop ${property} "stop"
+  fi
   if [ -n "`getprop ${property}.buffer`" ]; then
     setprop ${property}.buffer ""
   fi
   if [ -n "`getprop ${property}.size`" ]; then
     setprop ${property}.size ""
   fi
-  if [ "true" = "${clear}" ]; then
-    # 20ms done, guarantees content stop before rm
-    sleep 1
-    su logd,misc rm -rf "${data}"
-  fi
+  while [ "clear" = "`getprop ${property}`" ]; do
+    continue
+  done
   ;;
 *)
   echo "ERROR: Unexpected command ${0##*/} ${args}" >&2
