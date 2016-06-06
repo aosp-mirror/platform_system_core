@@ -479,6 +479,12 @@ void Subprocess::PassDataStreams() {
                 // and only fall back on this for unexpected closures.
                 D("protocol FD died, sending SIGHUP to pid %d", pid_);
                 kill(pid_, SIGHUP);
+
+                // We also need to close the pipes connected to the child process
+                // so that if it ignores SIGHUP and continues to write data it
+                // won't fill up the pipe and block.
+                stdinout_sfd_.Reset();
+                stderr_sfd_.Reset();
             }
             dead_sfd->Reset();
         }
