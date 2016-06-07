@@ -574,6 +574,7 @@ int fs_mgr_mount_all(struct fstab *fstab)
 
         /* mount(2) returned an error, handle the encryptable/formattable case */
         bool wiped = partition_wiped(fstab->recs[top_idx].blk_device);
+        bool crypt_footer = false;
         if (mret && mount_errno != EBUSY && mount_errno != EACCES &&
             fs_mgr_is_formattable(&fstab->recs[top_idx]) && wiped) {
             /* top_idx and attempted_idx point at the same partition, but sometimes
@@ -594,8 +595,11 @@ int fs_mgr_mount_all(struct fstab *fstab)
                     ERROR("%s(): %s wouldn't open (%s)\n", __func__,
                           fstab->recs[top_idx].key_loc, strerror(errno));
                 }
+            } else if (fs_mgr_is_encryptable(&fstab->recs[top_idx]) &&
+                !strcmp(fstab->recs[top_idx].key_loc, KEY_IN_FOOTER)) {
+                crypt_footer = true;
             }
-            if (fs_mgr_do_format(&fstab->recs[top_idx]) == 0) {
+            if (fs_mgr_do_format(&fstab->recs[top_idx], crypt_footer) == 0) {
                 /* Let's replay the mount actions. */
                 i = top_idx - 1;
                 continue;
