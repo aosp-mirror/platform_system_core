@@ -471,13 +471,21 @@ bool Service::Start() {
             }
         }
 
+        std::vector<std::string> expanded_args;
         std::vector<char*> strs;
-        for (const auto& s : args_) {
-            strs.push_back(const_cast<char*>(s.c_str()));
+        expanded_args.resize(args_.size());
+        strs.push_back(const_cast<char*>(args_[0].c_str()));
+        for (std::size_t i = 1; i < args_.size(); ++i) {
+            if (!expand_props(args_[i], &expanded_args[i])) {
+                ERROR("%s: cannot expand '%s'\n", args_[0].c_str(), args_[i].c_str());
+                _exit(127);
+            }
+            strs.push_back(const_cast<char*>(expanded_args[i].c_str()));
         }
         strs.push_back(nullptr);
-        if (execve(args_[0].c_str(), (char**) &strs[0], (char**) ENV) < 0) {
-            ERROR("cannot execve('%s'): %s\n", args_[0].c_str(), strerror(errno));
+
+        if (execve(strs[0], (char**) &strs[0], (char**) ENV) < 0) {
+            ERROR("cannot execve('%s'): %s\n", strs[0], strerror(errno));
         }
 
         _exit(127);
