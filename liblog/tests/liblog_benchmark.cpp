@@ -205,7 +205,7 @@ static void BM_pmsg_short_aligned(int iters) {
         android_log_header_t header;
         android_log_event_int_t payload;
     };
-    char buf[sizeof(struct packet) + 8] __aligned(8);
+    alignas(8) char buf[sizeof(struct packet) + 8];
     memset(buf, 0, sizeof(buf));
     struct packet *buffer = (struct packet*)(((uintptr_t)buf + 7) & ~7);
     if (((uintptr_t)&buffer->pmsg_header) & 7) {
@@ -281,7 +281,7 @@ static void BM_pmsg_short_unaligned1(int iters) {
         android_log_header_t header;
         android_log_event_int_t payload;
     };
-    char buf[sizeof(struct packet) + 8] __aligned(8);
+    alignas(8) char buf[sizeof(struct packet) + 8];
     memset(buf, 0, sizeof(buf));
     struct packet *buffer = (struct packet*)((((uintptr_t)buf + 7) & ~7) + 1);
     if ((((uintptr_t)&buffer->pmsg_header) & 7) != 1) {
@@ -357,7 +357,7 @@ static void BM_pmsg_long_aligned(int iters) {
         android_log_header_t header;
         android_log_event_int_t payload;
     };
-    char buf[sizeof(struct packet) + 8 + LOGGER_ENTRY_MAX_PAYLOAD] __aligned(8);
+    alignas(8) char buf[sizeof(struct packet) + 8 + LOGGER_ENTRY_MAX_PAYLOAD];
     memset(buf, 0, sizeof(buf));
     struct packet *buffer = (struct packet*)(((uintptr_t)buf + 7) & ~7);
     if (((uintptr_t)&buffer->pmsg_header) & 7) {
@@ -430,7 +430,7 @@ static void BM_pmsg_long_unaligned1(int iters) {
         android_log_header_t header;
         android_log_event_int_t payload;
     };
-    char buf[sizeof(struct packet) + 8 + LOGGER_ENTRY_MAX_PAYLOAD] __aligned(8);
+    alignas(8) char buf[sizeof(struct packet) + 8 + LOGGER_ENTRY_MAX_PAYLOAD];
     memset(buf, 0, sizeof(buf));
     struct packet *buffer = (struct packet*)((((uintptr_t)buf + 7) & ~7) + 1);
     if ((((uintptr_t)&buffer->pmsg_header) & 7) != 1) {
