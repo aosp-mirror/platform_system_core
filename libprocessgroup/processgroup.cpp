@@ -22,18 +22,17 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include <chrono>
 #include <memory>
 
 #include <log/log.h>
 #include <private/android_filesystem_config.h>
-
-#include <utils/SystemClock.h>
 
 #include <processgroup/processgroup.h>
 #include "processgroup_priv.h"
@@ -250,25 +249,26 @@ static int killProcessGroupOnce(uid_t uid, int initialPid, int signal)
 
 int killProcessGroup(uid_t uid, int initialPid, int signal)
 {
-    int processes;
-    const int sleep_us = 5 * 1000;  // 5ms
-    int64_t startTime = android::uptimeMillis();
-    int retry = 40;
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
 
+    int retry = 40;
+    int processes;
     while ((processes = killProcessGroupOnce(uid, initialPid, signal)) > 0) {
         SLOGV("killed %d processes for processgroup %d\n", processes, initialPid);
         if (retry > 0) {
-            usleep(sleep_us);
+            usleep(5 * 1000); // 5ms
             --retry;
         } else {
-            SLOGE("failed to kill %d processes for processgroup %d\n",
-                    processes, initialPid);
+            SLOGE("failed to kill %d processes for processgroup %d\n", processes, initialPid);
             break;
         }
     }
 
-    SLOGV("Killed process group uid %d pid %d in %" PRId64 "ms, %d procs remain", uid, initialPid,
-            android::uptimeMillis()-startTime, processes);
+    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+
+    SLOGV("Killed process group uid %d pid %d in %dms, %d procs remain", uid, initialPid,
+          static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()),
+          processes);
 
     if (processes == 0) {
         return removeProcessGroup(uid, initialPid);

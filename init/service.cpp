@@ -30,6 +30,8 @@
 #include <cutils/android_reboot.h>
 #include <cutils/sockets.h>
 
+#include <processgroup/processgroup.h>
+
 #include "action.h"
 #include "init.h"
 #include "init_parser.h"
@@ -97,7 +99,7 @@ bool Service::Reap() {
     if (!(flags_ & SVC_ONESHOT) || (flags_ & SVC_RESTART)) {
         NOTICE("Service '%s' (pid %d) killing any children in process group\n",
                name_.c_str(), pid_);
-        kill(-pid_, SIGKILL);
+        killProcessGroup(uid_, pid_, SIGKILL);
     }
 
     // Remove any sockets we may have created.
@@ -490,6 +492,7 @@ bool Service::Start() {
     time_started_ = gettime();
     pid_ = pid;
     flags_ |= SVC_RUNNING;
+    createProcessGroup(uid_, pid_);
 
     if ((flags_ & SVC_EXEC) != 0) {
         INFO("SVC_EXEC pid %d (uid %d gid %d+%zu context %s) started; waiting...\n",
@@ -532,7 +535,7 @@ void Service::Terminate() {
     if (pid_) {
         NOTICE("Sending SIGTERM to service '%s' (pid %d)...\n", name_.c_str(),
                pid_);
-        kill(-pid_, SIGTERM);
+        killProcessGroup(uid_, pid_, SIGTERM);
         NotifyStateChange("stopping");
     }
 }
@@ -583,7 +586,7 @@ void Service::StopOrReset(int how) {
 
     if (pid_) {
         NOTICE("Service '%s' is being killed...\n", name_.c_str());
-        kill(-pid_, SIGKILL);
+        killProcessGroup(uid_, pid_, SIGKILL);
         NotifyStateChange("stopping");
     } else {
         NotifyStateChange("stopped");
