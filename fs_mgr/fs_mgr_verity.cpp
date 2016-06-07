@@ -150,6 +150,18 @@ out:
     return retval;
 }
 
+static int verify_verity_signature(const struct fec_verity_metadata& verity)
+{
+    if (verify_table(verity.signature, verity.table,
+            verity.table_length) == 0 ||
+        verify_table(verity.ecc_signature, verity.table,
+            verity.table_length) == 0) {
+        return 0;
+    }
+
+    return -1;
+}
+
 static int invalidate_table(char *table, size_t table_length)
 {
     size_t n = 0;
@@ -955,8 +967,7 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab)
     }
 
     // verify the signature on the table
-    if (verify_table(verity.signature, verity.table,
-            verity.table_length) < 0) {
+    if (verify_verity_signature(verity) < 0) {
         if (params.mode == VERITY_MODE_LOGGING) {
             // the user has been warned, allow mounting without dm-verity
             retval = FS_MGR_SETUP_VERITY_SUCCESS;
