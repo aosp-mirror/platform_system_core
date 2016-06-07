@@ -23,11 +23,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-// We only build the affinity WAR code for Linux.
-#if defined(__linux__)
-#include <sched.h>
-#endif
-
 #include <android-base/errors.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -39,21 +34,14 @@
 #include "adb_utils.h"
 #include "transport.h"
 
-#if defined(_WIN32)
-static BOOL WINAPI ctrlc_handler(DWORD type) {
-    // TODO: Consider trying to kill a starting up adb server (if we're in
-    // launch_server) by calling GenerateConsoleCtrlEvent().
-    exit(STATUS_CONTROL_C_EXIT);
-    return TRUE;
-}
-
 static std::string GetLogFilePath() {
+#if defined(_WIN32)
     const char log_name[] = "adb.log";
     WCHAR temp_path[MAX_PATH];
 
     // https://msdn.microsoft.com/en-us/library/windows/desktop/aa364992%28v=vs.85%29.aspx
     DWORD nchars = GetTempPathW(arraysize(temp_path), temp_path);
-    if ((nchars >= arraysize(temp_path)) || (nchars == 0)) {
+    if (nchars >= arraysize(temp_path) || nchars == 0) {
         // If string truncation or some other error.
         fatal("cannot retrieve temporary file path: %s\n",
               android::base::SystemErrorCodeToString(GetLastError()).c_str());
@@ -65,12 +53,12 @@ static std::string GetLogFilePath() {
     }
 
     return temp_path_utf8 + log_name;
-}
 #else
-static std::string GetLogFilePath() {
-    return std::string("/tmp/adb.log");
-}
+    const char* tmp_dir = getenv("TMPDIR");
+    if (tmp_dir == nullptr) tmp_dir = "/tmp";
+    return android::base::StringPrintf("%s/adb.%u.log", tmp_dir, getuid());
 #endif
+}
 
 static void setup_daemon_logging(void) {
     const std::string log_file_path(GetLogFilePath());
@@ -89,6 +77,15 @@ static void setup_daemon_logging(void) {
     fprintf(stderr, "--- adb starting (pid %d) ---\n", getpid());
     LOG(INFO) << adb_version();
 }
+
+#if defined(_WIN32)
+static BOOL WINAPI ctrlc_handler(DWORD type) {
+    // TODO: Consider trying to kill a starting up adb server (if we're in
+    // launch_server) by calling GenerateConsoleCtrlEvent().
+    exit(STATUS_CONTROL_C_EXIT);
+    return TRUE;
+}
+#endif
 
 int adb_server_main(int is_daemon, int server_port, int ack_reply_fd) {
 #if defined(_WIN32)
