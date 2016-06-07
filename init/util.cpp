@@ -504,6 +504,7 @@ bool expand_props(const std::string& src, std::string* dst) {
      * - will accept $$ as a literal $.
      * - no nested property expansion, i.e. ${foo.${bar}} is not supported,
      *   bad things will happen
+     * - ${x.y:-default} will return default value if property empty.
      */
     while (*src_ptr) {
         const char* c;
@@ -526,6 +527,7 @@ bool expand_props(const std::string& src, std::string* dst) {
         }
 
         std::string prop_name;
+        std::string def_val;
         if (*c == '{') {
             c++;
             const char* end = strchr(c, '}');
@@ -536,6 +538,11 @@ bool expand_props(const std::string& src, std::string* dst) {
             }
             prop_name = std::string(c, end);
             c = end + 1;
+            size_t def = prop_name.find(":-");
+            if (def < prop_name.size()) {
+                def_val = prop_name.substr(def + 2);
+                prop_name = prop_name.substr(0, def);
+            }
         } else {
             prop_name = c;
             ERROR("using deprecated syntax for specifying property '%s', use ${name} instead\n",
@@ -550,9 +557,12 @@ bool expand_props(const std::string& src, std::string* dst) {
 
         std::string prop_val = property_get(prop_name.c_str());
         if (prop_val.empty()) {
-            ERROR("property '%s' doesn't exist while expanding '%s'\n",
-                  prop_name.c_str(), src.c_str());
-            return false;
+            if (def_val.empty()) {
+                ERROR("property '%s' doesn't exist while expanding '%s'\n",
+                      prop_name.c_str(), src.c_str());
+                return false;
+            }
+            prop_val = def_val;
         }
 
         dst->append(prop_val);
