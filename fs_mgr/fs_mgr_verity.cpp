@@ -91,14 +91,12 @@ static RSA *load_key(const char *path)
     FILE* f = fopen(path, "r");
     if (!f) {
         ERROR("Can't open '%s'\n", path);
-        free(key_data);
         return NULL;
     }
 
     if (!fread(key_data, sizeof(key_data), 1, f)) {
         ERROR("Could not read key!\n");
         fclose(f);
-        free(key_data);
         return NULL;
     }
 
@@ -107,7 +105,6 @@ static RSA *load_key(const char *path)
     RSA* key = NULL;
     if (!android_pubkey_decode(key_data, sizeof(key_data), &key)) {
         ERROR("Could not parse key!\n");
-        free(key_data);
         return NULL;
     }
 
