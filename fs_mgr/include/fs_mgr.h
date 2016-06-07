@@ -18,6 +18,7 @@
 #define __CORE_FS_MGR_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <linux/dm-ioctl.h>
 
 // Magic number at start of verity metadata
@@ -109,7 +110,7 @@ int fs_mgr_is_formattable(struct fstab_rec *fstab);
 int fs_mgr_is_nofail(struct fstab_rec *fstab);
 int fs_mgr_swapon_all(struct fstab *fstab);
 
-int fs_mgr_do_format(struct fstab_rec *fstab);
+int fs_mgr_do_format(struct fstab_rec *fstab, bool reserve_footer);
 
 #ifdef __cplusplus
 }
