@@ -48,7 +48,7 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
         + LOGGER_ENTRY_MAX_PAYLOAD];
     struct iovec iov = { buffer, sizeof(buffer) };
 
-    char control[CMSG_SPACE(sizeof(struct ucred))] __aligned(4);
+    alignas(4) char control[CMSG_SPACE(sizeof(struct ucred))];
     struct msghdr hdr = {
         NULL,
         0,
