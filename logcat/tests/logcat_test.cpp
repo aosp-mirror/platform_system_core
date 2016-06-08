@@ -25,7 +25,6 @@
 
 #include <memory>
 
-#include <cutils/properties.h>
 #include <gtest/gtest.h>
 #include <log/log.h>
 #include <log/logger.h>
@@ -424,14 +423,6 @@ TEST(logcat, get_size) {
 TEST(logcat, multiple_buffer) {
     ASSERT_EQ(4, get_groups(
       "logcat -v brief -b radio,events,system,main -g 2>/dev/null"));
-}
-
-// duplicate test for get_size, but use test.logcat.buffer property
-TEST(logcat, property_expand) {
-    property_set("test.logcat.buffer", "radio,events");
-    EXPECT_EQ(4, get_groups(
-      "logcat -v brief -b 'system,${test.logcat.buffer:-bogo},main' -g 2>/dev/null"));
-    property_set("test.logcat.buffer", "");
 }
 
 TEST(logcat, bad_buffer) {
