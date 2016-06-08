@@ -93,6 +93,7 @@ public:
     pid_t pid() const { return pid_; }
     uid_t uid() const { return uid_; }
     gid_t gid() const { return gid_; }
+    int priority() const { return priority_; }
     const std::vector<gid_t>& supp_gids() const { return supp_gids_; }
     const std::string& seclabel() const { return seclabel_; }
     const std::vector<int>& keycodes() const { return keycodes_; }
@@ -116,6 +117,7 @@ private:
     bool HandleCritical(const std::vector<std::string>& args, std::string* err);
     bool HandleDisabled(const std::vector<std::string>& args, std::string* err);
     bool HandleGroup(const std::vector<std::string>& args, std::string* err);
+    bool HandlePriority(const std::vector<std::string>& args, std::string* err);
     bool HandleIoprio(const std::vector<std::string>& args, std::string* err);
     bool HandleKeycodes(const std::vector<std::string>& args, std::string* err);
     bool HandleOneshot(const std::vector<std::string>& args, std::string* err);
@@ -155,6 +157,7 @@ private:
 
     IoSchedClass ioprio_class_;
     int ioprio_pri_;
+    int priority_;
 
     std::vector<std::string> args_;
 };
