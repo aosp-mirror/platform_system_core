@@ -17,7 +17,9 @@
 #include "service.h"
 
 #include <fcntl.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <termios.h>
@@ -29,6 +31,7 @@
 #include <android-base/stringprintf.h>
 #include <cutils/android_reboot.h>
 #include <cutils/sockets.h>
+#include <system/thread_defs.h>
 
 #include <processgroup/processgroup.h>
 
@@ -65,7 +68,7 @@ Service::Service(const std::string& name, const std::string& classname,
                  const std::vector<std::string>& args)
     : name_(name), classname_(classname), flags_(0), pid_(0), time_started_(0),
       time_crashed_(0), nr_crashed_(0), uid_(0), gid_(0), seclabel_(""),
-      ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0), args_(args) {
+      ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0), priority_(0), args_(args) {
     onrestart_.InitSingleTrigger("onrestart");
 }
 
@@ -74,7 +77,8 @@ Service::Service(const std::string& name, const std::string& classname,
                  const std::string& seclabel,  const std::vector<std::string>& args)
     : name_(name), classname_(classname), flags_(flags), pid_(0), time_started_(0),
       time_crashed_(0), nr_crashed_(0), uid_(uid), gid_(gid), supp_gids_(supp_gids),
-      seclabel_(seclabel), ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0), args_(args) {
+      seclabel_(seclabel), ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0), priority_(0),
+      args_(args) {
     onrestart_.InitSingleTrigger("onrestart");
 }
 
@@ -197,6 +201,19 @@ bool Service::HandleGroup(const std::vector<std::string>& args, std::string* err
     return true;
 }
 
+bool Service::HandlePriority(const std::vector<std::string>& args, std::string* err) {
+    priority_ = std::stoi(args[1]);
+
+    if (priority_ < ANDROID_PRIORITY_HIGHEST || priority_ > ANDROID_PRIORITY_LOWEST) {
+        priority_ = 0;
+        *err = StringPrintf("process priority value must be range %d - %d",
+                ANDROID_PRIORITY_HIGHEST, ANDROID_PRIORITY_LOWEST);
+        return false;
+    }
+
+    return true;
+}
+
 bool Service::HandleIoprio(const std::vector<std::string>& args, std::string* err) {
     ioprio_pri_ = std::stoul(args[2], 0, 8);
 
@@ -290,6 +307,7 @@ Service::OptionHandlerMap::Map& Service::OptionHandlerMap::map() const {
         {"disabled",    {0,     0,    &Service::HandleDisabled}},
         {"group",       {1,     NR_SVC_SUPP_GIDS + 1, &Service::HandleGroup}},
         {"ioprio",      {2,     2,    &Service::HandleIoprio}},
+        {"priority",    {1,     1,    &Service::HandlePriority}},
         {"keycodes",    {1,     kMax, &Service::HandleKeycodes}},
         {"oneshot",     {0,     0,    &Service::HandleOneshot}},
         {"onrestart",   {1,     kMax, &Service::HandleOnrestart}},
@@ -467,6 +485,12 @@ bool Service::Start() {
             if (setexeccon(seclabel_.c_str()) < 0) {
                 ERROR("cannot setexeccon('%s'): %s\n",
                       seclabel_.c_str(), strerror(errno));
+                _exit(127);
+            }
+        }
+        if (priority_ != 0) {
+            if (setpriority(PRIO_PROCESS, 0, priority_) != 0) {
+                ERROR("setpriority failed: %s\n", strerror(errno));
                 _exit(127);
             }
         }
