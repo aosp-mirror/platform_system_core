@@ -184,6 +184,9 @@ writepid <file...>
   Write the child's pid to the given files when it forks. Meant for
   cgroup/cpuset usage.
 
+priority <priority>
+  Scheduling priority of the service process. This value has to be in range
+  -20 to 19. Default priority is 0. Priority is set via setpriority().
 
 Triggers
 --------
