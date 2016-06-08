@@ -292,11 +292,16 @@ static void stdin_raw_restore() {
 // stdout/stderr are routed independently and the remote exit code will be
 // returned.
 // if |output| is non-null, stdout will be appended to it instead.
-static int read_and_dump(int fd, bool use_shell_protocol=false, std::string* output=nullptr) {
+// if |err| is non-null, stderr will be appended to it instead.
+static int read_and_dump(int fd, bool use_shell_protocol=false, std::string* output=nullptr,
+                         std::string* err=nullptr) {
     int exit_code = 0;
+    if (fd < 0) return exit_code;
+
     std::unique_ptr<ShellProtocol> protocol;
     int length = 0;
     FILE* outfile = stdout;
+    std::string* outstring = output;
 
     char raw_buffer[BUFSIZ];
     char* buffer_ptr = raw_buffer;
@@ -309,7 +314,7 @@ static int read_and_dump(int fd, bool use_shell_protocol=false, std::string* out
         buffer_ptr = protocol->data();
     }
 
-    while (fd >= 0) {
+    while (true) {
         if (use_shell_protocol) {
             if (!protocol->Read()) {
                 break;
@@ -317,9 +322,11 @@ static int read_and_dump(int fd, bool use_shell_protocol=false, std::string* out
             switch (protocol->id()) {
                 case ShellProtocol::kIdStdout:
                     outfile = stdout;
+                    outstring = output;
                     break;
                 case ShellProtocol::kIdStderr:
                     outfile = stderr;
+                    outstring = err;
                     break;
                 case ShellProtocol::kIdExit:
                     exit_code = protocol->data()[0];
@@ -337,11 +344,11 @@ static int read_and_dump(int fd, bool use_shell_protocol=false, std::string* out
             }
         }
 
-        if (output == nullptr) {
+        if (outstring == nullptr) {
             fwrite(buffer_ptr, 1, length, outfile);
             fflush(outfile);
         } else {
-            output->append(buffer_ptr, length);
+            outstring->append(buffer_ptr, length);
         }
     }
 
@@ -1123,7 +1130,8 @@ static bool adb_root(const char* command) {
 static int send_shell_command(TransportType transport_type, const char* serial,
                               const std::string& command,
                               bool disable_shell_protocol,
-                              std::string* output=nullptr) {
+                              std::string* output=nullptr,
+                              std::string* err=nullptr) {
     int fd;
     bool use_shell_protocol = false;
 
@@ -1158,7 +1166,7 @@ static int send_shell_command(TransportType transport_type, const char* serial,
         }
     }
 
-    int exit_code = read_and_dump(fd, use_shell_protocol, output);
+    int exit_code = read_and_dump(fd, use_shell_protocol, output, err);
 
     if (adb_close(fd) < 0) {
         PLOG(ERROR) << "failure closing FD " << fd;
@@ -1169,8 +1177,7 @@ static int send_shell_command(TransportType transport_type, const char* serial,
 
 static int bugreport(TransportType transport_type, const char* serial, int argc,
                      const char** argv) {
-    // No need for shell protocol with bugreport, always disable for simplicity.
-    if (argc == 1) return send_shell_command(transport_type, serial, "bugreport", true);
+    if (argc == 1) return send_shell_command(transport_type, serial, "bugreport", false);
     if (argc != 2) return usage();
 
     // Zipped bugreport option - will call 'bugreportz', which prints the location of the generated
@@ -1184,7 +1191,7 @@ static int bugreport(TransportType transport_type, const char* serial, int argc,
 
     fprintf(stderr, "Bugreport is in progress and it could take minutes to complete.\n"
             "Please be patient and do not cancel or disconnect your device until it completes.\n");
-    int status = send_shell_command(transport_type, serial, "bugreportz", true, &output);
+    int status = send_shell_command(transport_type, serial, "bugreportz", false, &output, nullptr);
     if (status != 0 || output.empty()) return status;
     output = android::base::Trim(output);
 
@@ -1199,10 +1206,10 @@ static int bugreport(TransportType transport_type, const char* serial, int argc,
     }
     if (android::base::StartsWith(output, BUGZ_FAIL_PREFIX)) {
         const char* error_message = &output[strlen(BUGZ_FAIL_PREFIX)];
-        fprintf(stderr, "device failed to take a zipped bugreport: %s\n", error_message);
+        fprintf(stderr, "Device failed to take a zipped bugreport: %s\n", error_message);
         return -1;
     }
-    fprintf(stderr, "unexpected string (%s) returned by bugreportz, "
+    fprintf(stderr, "Unexpected string (%s) returned by bugreportz, "
             "device probably does not support -z option\n", output.c_str());
     return -1;
 }
