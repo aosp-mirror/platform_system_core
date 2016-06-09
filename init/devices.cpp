@@ -257,11 +257,25 @@ static void make_device(const char *path,
     /* If the node already exists update its SELinux label to handle cases when
      * it was created with the wrong context during coldboot procedure. */
     if (mknod(path, mode, dev) && (errno == EEXIST)) {
-        if (lsetfilecon(path, secontext)) {
+
+        char* fcon = nullptr;
+        int rc = lgetfilecon(path, &fcon);
+        if (rc < 0) {
+            ERROR("Cannot get SELinux label on '%s' device (%s)\n",
+                    path, strerror(errno));
+            goto out;
+        }
+
+        bool different = strcmp(fcon, secontext) != 0;
+        freecon(fcon);
+
+        if (different && lsetfilecon(path, secontext)) {
             ERROR("Cannot set '%s' SELinux label on '%s' device (%s)\n",
                     secontext, path, strerror(errno));
         }
     }
+
+out:
     chown(path, uid, -1);
     setegid(AID_ROOT);
 
