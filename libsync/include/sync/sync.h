@@ -90,6 +90,66 @@ struct sync_pt_info {
 #define SYNC_IOC_LEGACY_FENCE_INFO	_IOWR(SYNC_IOC_MAGIC, 2,\
 	struct sync_fence_info_data)
 
+struct sync_merge_data {
+ char name[32];
+ int32_t fd2;
+ int32_t fence;
+ uint32_t flags;
+ uint32_t pad;
+};
+
+struct sync_file_info {
+ char name[32];
+ int32_t status;
+ uint32_t flags;
+ uint32_t num_fences;
+ uint32_t pad;
+
+ uint64_t sync_fence_info;
+};
+
+struct sync_fence_info {
+ char obj_name[32];
+ char driver_name[32];
+ int32_t status;
+ uint32_t flags;
+ uint64_t timestamp_ns;
+};
+
+/**
+ * Mainline API:
+ *
+ * Opcodes  0, 1 and 2 were burned during a API change to avoid users of the
+ * old API to get weird errors when trying to handling sync_files. The API
+ * change happened during the de-stage of the Sync Framework when there was
+ * no upstream users available.
+ */
+
+/**
+ * DOC: SYNC_IOC_MERGE - merge two fences
+ *
+ * Takes a struct sync_merge_data.  Creates a new fence containing copies of
+ * the sync_pts in both the calling fd and sync_merge_data.fd2.  Returns the
+ * new fence's fd in sync_merge_data.fence
+ *
+ * This is the new version of the Sync API after the de-stage that happened
+ * on Linux kernel 4.7.
+ */
+#define SYNC_IOC_MERGE		_IOWR(SYNC_IOC_MAGIC, 3, struct sync_merge_data)
+
+/**
+ * DOC: SYNC_IOC_FILE_INFO - get detailed information on a sync_file
+ *
+ * Takes a struct sync_file_info. If num_fences is 0, the field is updated
+ * with the actual number of fences. If num_fences is > 0, the system will
+ * use the pointer provided on sync_fence_info to return up to num_fences of
+ * struct sync_fence_info, with detailed fence information.
+ *
+ * This is the new version of the Sync API after the de-stage that happened
+ * on Linux kernel 4.7.
+ */
+#define SYNC_IOC_FILE_INFO	_IOWR(SYNC_IOC_MAGIC, 4, struct sync_file_info)
+
 /* timeout in msecs */
 int sync_wait(int fd, int timeout);
 int sync_merge(const char *name, int fd1, int fd2);
