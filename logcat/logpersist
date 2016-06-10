@@ -74,7 +74,7 @@ case ${progname} in
   if [ "${service}" = "`getprop ${property}`" ]; then
     if [ "true" = "${clear}" ]; then
       su root stop ${service}
-      su root setprop ${property} ""
+      setprop ${property} ""
       # 20ms done, guarantees content stop before rm
       sleep 1
     elif [ "${buffer}|${size}" != "${current_buffer}|${current_size}" ]; then
@@ -103,13 +103,13 @@ case ${progname} in
     su logd,misc rm -rf "${data}"
   fi
   if [ -n "${buffer}${current_buffer}" ]; then
-    su root setprop ${property}.buffer "${buffer}"
+    setprop ${property}.buffer "${buffer}"
   fi
   if [ -n "${size}${current_size}" ]; then
-    su root setprop ${property}.size "${size}"
+    setprop ${property}.size "${size}"
   fi
   # ${service}.rc does the heavy lifting with the following trigger
-  su root setprop ${property} ${service}
+  setprop ${property} ${service}
   getprop ${property}
   # 20ms done, to permit process feedback check
   sleep 1
@@ -121,12 +121,12 @@ case ${progname} in
     echo "WARNING: Can not use --size or --buffer with ${progname%.*}.stop" >&2
   fi
   su root stop ${service}
-  su root setprop ${property} ""
+  setprop ${property} ""
   if [ -n "`getprop ${property}.buffer`" ]; then
-    su root setprop ${property}.buffer ""
+    setprop ${property}.buffer ""
   fi
   if [ -n "`getprop ${property}.size`" ]; then
-    su root setprop ${property}.size ""
+    setprop ${property}.size ""
   fi
   if [ "true" = "${clear}" ]; then
     # 20ms done, guarantees content stop before rm
