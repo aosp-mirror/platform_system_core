@@ -290,6 +290,7 @@ static void show_help(const char *cmd)
                     "                    tag thread threadtime time uid usec UTC year zone\n"
                     "  -D, --dividers  Print dividers between each log buffer\n"
                     "  -c, --clear     Clear (flush) the entire log and exit\n"
+                    "                  if Log to File specified, clear fileset instead\n"
                     "  -d              Dump the log and then exit (don't block)\n"
                     "  -e <expr>, --regex=<expr>\n"
                     "                  Only print lines where the log message matches <expr>\n"
@@ -1033,7 +1034,35 @@ int main(int argc, char **argv)
         }
 
         if (clearLog) {
-            if (android_logger_clear(dev->logger)) {
+            if (g_outputFileName) {
+                int maxRotationCountDigits =
+                    (g_maxRotatedLogs > 0) ? (int) (floor(log10(g_maxRotatedLogs) + 1)) : 0;
+
+                for (int i = g_maxRotatedLogs ; i >= 0 ; --i) {
+                    char *file;
+
+                    if (i == 0) {
+                        asprintf(&file, "%s", g_outputFileName);
+                    } else {
+                        asprintf(&file, "%s.%.*d", g_outputFileName, maxRotationCountDigits, i);
+                    }
+
+                    if (!file) {
+                        perror("while clearing log files");
+                        clearFail = clearFail ?: dev->device;
+                        break;
+                    }
+
+                    err = unlink(file);
+
+                    if (err < 0 && errno != ENOENT && clearFail == NULL) {
+                        perror("while clearing log files");
+                        clearFail = dev->device;
+                    }
+
+                    free(file);
+                }
+            } else if (android_logger_clear(dev->logger)) {
                 clearFail = clearFail ?: dev->device;
             }
         }
