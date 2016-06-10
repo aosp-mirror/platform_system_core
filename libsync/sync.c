@@ -27,18 +27,6 @@
 
 #include <sync/sync.h>
 
-// The sync code is undergoing a major change. Add enough in to get
-// everything to compile wih the latest uapi headers.
-struct sync_merge_data {
-  int32_t fd2;
-  char name[32];
-  int32_t fence;
-};
-
-#define SYNC_IOC_MAGIC '>'
-#define SYNC_IOC_WAIT _IOW(SYNC_IOC_MAGIC, 0, __s32)
-#define SYNC_IOC_MERGE _IOWR(SYNC_IOC_MAGIC, 1, struct sync_merge_data)
-#define SYNC_IOC_FENCE_INFO _IOWR(SYNC_IOC_MAGIC, 2, struct sync_fence_info_data)
 
 struct sw_sync_create_fence_data {
   __u32 value;
@@ -54,18 +42,18 @@ int sync_wait(int fd, int timeout)
 {
     __s32 to = timeout;
 
-    return ioctl(fd, SYNC_IOC_WAIT, &to);
+    return ioctl(fd, SYNC_IOC_LEGACY_WAIT, &to);
 }
 
 int sync_merge(const char *name, int fd1, int fd2)
 {
-    struct sync_merge_data data;
+    struct sync_legacy_merge_data data;
     int err;
 
     data.fd2 = fd2;
     strlcpy(data.name, name, sizeof(data.name));
 
-    err = ioctl(fd1, SYNC_IOC_MERGE, &data);
+    err = ioctl(fd1, SYNC_IOC_LEGACY_MERGE, &data);
     if (err < 0)
         return err;
 
@@ -82,7 +70,7 @@ struct sync_fence_info_data *sync_fence_info(int fd)
         return NULL;
 
     info->len = 4096;
-    err = ioctl(fd, SYNC_IOC_FENCE_INFO, info);
+    err = ioctl(fd, SYNC_IOC_LEGACY_FENCE_INFO, info);
     if (err < 0) {
         free(info);
         return NULL;
