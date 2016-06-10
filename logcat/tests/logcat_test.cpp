@@ -772,6 +772,82 @@ TEST(logcat, logrotate_continue) {
     EXPECT_FALSE(system(command));
 }
 
+TEST(logcat, logrotate_clear) {
+    static const char tmp_out_dir_form[] = "/data/local/tmp/logcat.logrotate.XXXXXX";
+    char tmp_out_dir[sizeof(tmp_out_dir_form)];
+    ASSERT_TRUE(NULL != mkdtemp(strcpy(tmp_out_dir, tmp_out_dir_form)));
+
+    static const char log_filename[] = "log.txt";
+    static const unsigned num_val = 32;
+    static const char logcat_cmd[] = "logcat -b all -d -f %s/%s -n %d -r 1";
+    static const char clear_cmd[] = " -c";
+    static const char cleanup_cmd[] = "rm -rf %s";
+    char command[sizeof(tmp_out_dir) + sizeof(logcat_cmd) + sizeof(log_filename) + sizeof(clear_cmd) + 32];
+
+    // Run command with all data
+    {
+        snprintf(command, sizeof(command) - sizeof(clear_cmd),
+                 logcat_cmd, tmp_out_dir, log_filename, num_val);
+
+        int ret;
+        EXPECT_FALSE((ret = system(command)));
+        if (ret) {
+            snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
+            EXPECT_FALSE(system(command));
+            return;
+        }
+        std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(tmp_out_dir), closedir);
+        EXPECT_NE(nullptr, dir);
+        if (!dir) {
+            snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
+            EXPECT_FALSE(system(command));
+            return;
+        }
+        struct dirent *entry;
+        unsigned count = 0;
+        while ((entry = readdir(dir.get()))) {
+            if (strncmp(entry->d_name, log_filename, sizeof(log_filename) - 1)) {
+                continue;
+            }
+            ++count;
+        }
+        EXPECT_EQ(count, num_val + 1);
+    }
+
+    {
+        // Now with -c option tacked onto the end
+        strcat(command, clear_cmd);
+
+        int ret;
+        EXPECT_FALSE((ret = system(command)));
+        if (ret) {
+            snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
+            EXPECT_FALSE(system(command));
+            return;
+        }
+        std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(tmp_out_dir), closedir);
+        EXPECT_NE(nullptr, dir);
+        if (!dir) {
+            snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
+            EXPECT_FALSE(system(command));
+            return;
+        }
+        struct dirent *entry;
+        unsigned count = 0;
+        while ((entry = readdir(dir.get()))) {
+            if (strncmp(entry->d_name, log_filename, sizeof(log_filename) - 1)) {
+                continue;
+            }
+            fprintf(stderr, "Found %s/%s!!!\n", tmp_out_dir, entry->d_name);
+            ++count;
+        }
+        EXPECT_EQ(count, 0U);
+    }
+
+    snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
+    EXPECT_FALSE(system(command));
+}
+
 TEST(logcat, logrotate_nodir) {
     // expect logcat to error out on writing content and exit(1) for nodir
     EXPECT_EQ(W_EXITCODE(1, 0),
