@@ -23,7 +23,7 @@
 
 #define TRUSTY_DEVICE_NAME "/dev/trusty-ipc-dev0"
 
-#define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
+#define ARRAY_SIZE(x) (sizeof(x)/sizeof((x)[0]))
 
 static inline bool is_32bit_aligned(size_t sz)
 {

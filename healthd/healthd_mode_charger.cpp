@@ -58,7 +58,7 @@ char *locale;
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
-#define ARRAY_SIZE(x)           (sizeof(x)/sizeof(x[0]))
+#define ARRAY_SIZE(x)           (sizeof(x)/sizeof((x)[0]))
 
 #define MSEC_PER_SEC            (1000LL)
 #define NSEC_PER_MSEC           (1000000LL)
