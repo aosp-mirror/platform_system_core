@@ -889,7 +889,7 @@ static int adb_sideload_host(const char* fn) {
             android::base::StringPrintf("sideload-host:%d:%d", sz, SIDELOAD_HOST_BLOCK_SIZE);
     std::string error;
     unique_fd fd(adb_connect(service, &error));
-    if (fd >= 0) {
+    if (fd < 0) {
         // Try falling back to the older sideload method.  Maybe this
         // is an older device that doesn't support sideload-host.
         printf("\n");
