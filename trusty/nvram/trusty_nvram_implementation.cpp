@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "trusty_nvram_implementation.h"
+
 #include <errno.h>
 #include <string.h>
 
@@ -23,10 +25,9 @@
 #define LOG_TAG "TrustyNVRAM"
 #include <log/log.h>
 
-#include <nvram/hal/nvram_device_adapter.h>
 #include <nvram/messages/blob.h>
-#include <nvram/messages/nvram_messages.h>
 
+namespace nvram {
 namespace {
 
 // Character device to open for Trusty IPC connections.
@@ -35,35 +36,7 @@ const char kTrustyDeviceName[] = "/dev/trusty-ipc-dev0";
 // App identifier of the NVRAM app.
 const char kTrustyNvramAppId[] = "com.android.trusty.nvram";
 
-// |TrustyNvramImplementation| proxies requests to the Trusty NVRAM app. It
-// serializes the request objects, sends it to the Trusty app and finally reads
-// back the result and decodes it.
-class TrustyNvramImplementation : public nvram::NvramImplementation {
- public:
-  ~TrustyNvramImplementation() override;
-
-  void Execute(const nvram::Request& request,
-               nvram::Response* response) override;
-
- private:
-  // Connects the IPC channel to the Trusty app if it is not already open.
-  // Returns true if the channel is open, false on errors.
-  bool Connect();
-
-  // Dispatches a command to the trust app. Returns true if successful (note
-  // that the response may still indicate an error on the Trusty side), false if
-  // there are any I/O or encoding/decoding errors.
-  bool SendRequest(const nvram::Request& request,
-                   nvram::Response* response);
-
-  // The file descriptor for the IPC connection to the Trusty app.
-  int tipc_nvram_fd_ = -1;
-
-  // Response buffer. This puts a hard size limit on the responses from the
-  // Trusty app. 4096 matches the maximum IPC message size currently supported
-  // by Trusty.
-  uint8_t response_buffer_[4096];
-};
+}  // namespace
 
 TrustyNvramImplementation::~TrustyNvramImplementation() {
   if (tipc_nvram_fd_ != -1) {
@@ -136,17 +109,4 @@ bool TrustyNvramImplementation::SendRequest(const nvram::Request& request,
   return true;
 }
 
-}  // namespace
-
-extern "C" int trusty_nvram_open(const hw_module_t* module,
-                                 const char* device_id,
-                                 hw_device_t** device_ptr) {
-  if (strcmp(NVRAM_HARDWARE_DEVICE_ID, device_id) != 0) {
-    return -EINVAL;
-  }
-
-  nvram::NvramDeviceAdapter* adapter =
-      new nvram::NvramDeviceAdapter(module, new TrustyNvramImplementation);
-  *device_ptr = adapter->as_device();
-  return 0;
-}
+}  // namespace nvram
