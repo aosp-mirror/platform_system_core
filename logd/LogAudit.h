@@ -27,15 +27,12 @@ class LogAudit : public SocketListener {
     LogBuffer *logbuf;
     LogReader *reader;
     int fdDmesg;
-    bool policyLoaded;
-    bool rebootToSafeMode;
     bool initialized;
 
 public:
     LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg);
     int log(char *buf, size_t len);
     bool isMonotonic() { return logbuf->isMonotonic(); }
-    void allowSafeMode(bool allow = true) { rebootToSafeMode = allow; }
 
 protected:
     virtual bool onDataAvailable(SocketClient *cli);
@@ -44,9 +41,6 @@ private:
     static int getLogSocket();
     int logPrint(const char *fmt, ...)
         __attribute__ ((__format__ (__printf__, 2, 3)));
-    void logToDmesg(const std::string& str);
-    std::string getProperty(const std::string& name);
-    void enforceIntegrity();
 };
 
 #endif
