@@ -41,7 +41,7 @@ static int get_active_slot_suffix_from_misc(struct fstab *fstab,
     int n;
     int misc_fd;
     ssize_t num_read;
-    struct bootloader_message msg;
+    struct bootloader_message_ab msg;
 
     misc_fd = -1;
     for (n = 0; n < fstab->num_entries; n++) {
