@@ -1,6 +1,7 @@
 The properties that logd responds to are:
 
 name                       type default  description
+ro.logd.auditd             bool   true   Enable selinux audit daemon
 ro.logd.auditd.dmesg       bool   true   selinux audit messages duplicated and
                                          sent on to dmesg log
 persist.logd.security      bool   false  Enable security buffer.
