@@ -477,6 +477,102 @@ struct android_ycbcr {
     uint32_t reserved[8];
 };
 
+/*
+ * Structures for describing flexible YUVA/RGBA formats for consumption by
+ * applications. Such flexible formats contain a plane for each component (e.g.
+ * red, green, blue), where each plane is laid out in a grid-like pattern
+ * occupying unique byte addresses and with consistent byte offsets between
+ * neighboring pixels.
+ *
+ * The android_flex_layout structure is used with any pixel format that can be
+ * represented by it, such as:
+ *  - HAL_PIXEL_FORMAT_YCbCr_*_888
+ *  - HAL_PIXEL_FORMAT_FLEX_RGB*_888
+ *  - HAL_PIXEL_FORMAT_RGB[AX]_888[8],BGRA_8888,RGB_888
+ *  - HAL_PIXEL_FORMAT_YV12,Y8,Y16,YCbCr_422_SP/I,YCrCb_420_SP
+ *  - even implementation defined formats that can be represented by
+ *    the structures
+ *
+ * Vertical increment (aka. row increment or stride) describes the distance in
+ * bytes from the first pixel of one row to the first pixel of the next row
+ * (below) for the component plane. This can be negative.
+ *
+ * Horizontal increment (aka. column or pixel increment) describes the distance
+ * in bytes from one pixel to the next pixel (to the right) on the same row for
+ * the component plane. This can be negative.
+ *
+ * Each plane can be subsampled either vertically or horizontally by
+ * a power-of-two factor.
+ *
+ * The bit-depth of each component can be arbitrary, as long as the pixels are
+ * laid out on whole bytes, in native byte-order, using the most significant
+ * bits of each unit.
+ */
+
+typedef enum android_flex_component {
+    /* luma */
+    FLEX_COMPONENT_Y = 1 << 0,
+    /* chroma blue */
+    FLEX_COMPONENT_Cb = 1 << 1,
+    /* chroma red */
+    FLEX_COMPONENT_Cr = 1 << 2,
+
+    /* red */
+    FLEX_COMPONENT_R = 1 << 10,
+    /* green */
+    FLEX_COMPONENT_G = 1 << 11,
+    /* blue */
+    FLEX_COMPONENT_B = 1 << 12,
+
+    /* alpha */
+    FLEX_COMPONENT_A = 1 << 30,
+} android_flex_component_t;
+
+typedef struct android_flex_plane {
+    /* pointer to the first byte of the top-left pixel of the plane. */
+    uint8_t *top_left;
+
+    android_flex_component_t component;
+
+    /* bits allocated for the component in each pixel. Must be a positive
+       multiple of 8. */
+    int32_t bits_per_component;
+    /* number of the most significant bits used in the format for this
+       component. Must be between 1 and bits_per_component, inclusive. */
+    int32_t bits_used;
+
+    /* horizontal increment */
+    int32_t h_increment;
+    /* vertical increment */
+    int32_t v_increment;
+    /* horizontal subsampling. Must be a positive power of 2. */
+    int32_t h_subsampling;
+    /* vertical subsampling. Must be a positive power of 2. */
+    int32_t v_subsampling;
+} android_flex_plane_t;
+
+typedef enum android_flex_format {
+    /* not a flexible format */
+    FLEX_FORMAT_INVALID = 0x0,
+    FLEX_FORMAT_Y = FLEX_COMPONENT_Y,
+    FLEX_FORMAT_YCbCr = FLEX_COMPONENT_Y | FLEX_COMPONENT_Cb | FLEX_COMPONENT_Cr,
+    FLEX_FORMAT_YCbCrA = FLEX_FORMAT_YCbCr | FLEX_COMPONENT_A,
+    FLEX_FORMAT_RGB = FLEX_COMPONENT_R | FLEX_COMPONENT_G | FLEX_COMPONENT_B,
+    FLEX_FORMAT_RGBA = FLEX_FORMAT_RGB | FLEX_COMPONENT_A,
+} android_flex_format_t;
+
+typedef struct android_flex_layout {
+    /* the kind of flexible format */
+    android_flex_format_t format;
+
+    /* number of planes; 0 for FLEX_FORMAT_INVALID */
+    uint32_t num_planes;
+    /* a plane for each component; ordered in increasing component value order.
+       E.g. FLEX_FORMAT_RGBA maps 0 -> R, 1 -> G, etc.
+       Can be NULL for FLEX_FORMAT_INVALID */
+    android_flex_plane_t *planes;
+} android_flex_layout_t;
+
 /**
  * Structure used to define depth point clouds for format HAL_PIXEL_FORMAT_BLOB
  * with dataSpace value of HAL_DATASPACE_DEPTH.
