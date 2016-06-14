@@ -245,7 +245,6 @@ static char *name;
 static sem_t reinit;
 static bool reinit_running = false;
 static LogBuffer *logBuf = NULL;
-static LogAudit *logAudit = NULL;
 
 static bool package_list_parser_cb(pkg_info *info, void * /* userdata */) {
 
@@ -295,10 +294,6 @@ static void *reinit_thread_start(void * /*obj*/) {
         if (logBuf) {
             logBuf->init();
             logBuf->initPrune(NULL);
-        }
-
-        if (logAudit) {
-            logAudit->allowSafeMode();
         }
     }
 
@@ -520,19 +515,25 @@ int main(int argc, char *argv[]) {
     // initiated log messages. New log entries are added to LogBuffer
     // and LogReader is notified to send updates to connected clients.
 
-    logAudit = new LogAudit(logBuf, reader,
-                            property_get_bool("logd.auditd.dmesg",
-                                              BOOL_DEFAULT_TRUE |
-                                              BOOL_DEFAULT_FLAG_PERSIST)
-                                ? fdDmesg
-                                : -1);
+    bool auditd = property_get_bool("logd.auditd",
+                                    BOOL_DEFAULT_TRUE |
+                                    BOOL_DEFAULT_FLAG_PERSIST);
+    LogAudit *al = NULL;
+    if (auditd) {
+        al = new LogAudit(logBuf, reader,
+                          property_get_bool("logd.auditd.dmesg",
+                                            BOOL_DEFAULT_TRUE |
+                                            BOOL_DEFAULT_FLAG_PERSIST)
+                              ? fdDmesg
+                              : -1);
+    }
 
     LogKlog *kl = NULL;
     if (klogd) {
-        kl = new LogKlog(logBuf, reader, fdDmesg, fdPmesg, logAudit != NULL);
+        kl = new LogKlog(logBuf, reader, fdDmesg, fdPmesg, al != NULL);
     }
 
-    readDmesg(logAudit, kl);
+    readDmesg(al, kl);
 
     // failure is an option ... messages are in dmesg (required by standard)
 
@@ -540,9 +541,8 @@ int main(int argc, char *argv[]) {
         delete kl;
     }
 
-    if (logAudit && logAudit->startListener()) {
-        delete logAudit;
-        logAudit = NULL;
+    if (al && al->startListener()) {
+        delete al;
     }
 
     TEMP_FAILURE_RETRY(pause());

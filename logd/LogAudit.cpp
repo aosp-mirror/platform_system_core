@@ -25,9 +25,6 @@
 #include <sys/uio.h>
 #include <syslog.h>
 
-#include <string>
-
-#include <cutils/properties.h>
 #include <log/logger.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
@@ -37,10 +34,6 @@
 #include "LogBuffer.h"
 #include "LogKlog.h"
 #include "LogReader.h"
-
-#ifndef AUDITD_ENFORCE_INTEGRITY
-#define AUDITD_ENFORCE_INTEGRITY false
-#endif
 
 #define KMSG_PRIORITY(PRI)                          \
     '<',                                            \
@@ -53,10 +46,11 @@ LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg) :
         logbuf(buf),
         reader(reader),
         fdDmesg(fdDmesg),
-        policyLoaded(false),
-        rebootToSafeMode(false),
         initialized(false) {
-    logToDmesg("start");
+    static const char auditd_message[] = { KMSG_PRIORITY(LOG_INFO),
+        'l', 'o', 'g', 'd', '.', 'a', 'u', 'd', 'i', 't', 'd', ':',
+        ' ', 's', 't', 'a', 'r', 't', '\n' };
+    write(fdDmesg, auditd_message, sizeof(auditd_message));
 }
 
 bool LogAudit::onDataAvailable(SocketClient *cli) {
@@ -82,55 +76,6 @@ bool LogAudit::onDataAvailable(SocketClient *cli) {
     return true;
 }
 
-void LogAudit::logToDmesg(const std::string& str)
-{
-    static const char prefix[] = { KMSG_PRIORITY(LOG_INFO),
-        'l', 'o', 'g', 'd', '.', 'a', 'u', 'd', 'i', 't', 'd', ':',
-        ' ', '\0' };
-    std::string message = prefix + str + "\n";
-    write(fdDmesg, message.c_str(), message.length());
-}
-
-std::string LogAudit::getProperty(const std::string& name)
-{
-    char value[PROP_VALUE_MAX] = {0};
-    property_get(name.c_str(), value, "");
-    return value;
-}
-
-void LogAudit::enforceIntegrity() {
-    static bool loggedOnce;
-    bool once = loggedOnce;
-
-    loggedOnce = true;
-
-    if (!AUDITD_ENFORCE_INTEGRITY) {
-        if (!once) {
-            logToDmesg("integrity enforcement suppressed; not rebooting");
-        }
-    } else if (rebootToSafeMode) {
-        if (getProperty("persist.sys.safemode") == "1") {
-            if (!once) {
-                logToDmesg("integrity enforcement suppressed; in safe mode");
-            }
-            return;
-        }
-
-        logToDmesg("enforcing integrity; rebooting to safe mode");
-        property_set("persist.sys.safemode", "1");
-
-        std::string buildDate = getProperty("ro.build.date.utc");
-        if (!buildDate.empty()) {
-            property_set("persist.sys.audit_safemode", buildDate.c_str());
-        }
-
-        property_set("sys.powerctl", "reboot");
-    } else {
-        logToDmesg("enforcing integrity: rebooting to recovery");
-        property_set("sys.powerctl", "reboot,recovery");
-    }
-}
-
 int LogAudit::logPrint(const char *fmt, ...) {
     if (fmt == NULL) {
         return -EINVAL;
@@ -152,31 +97,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
         memmove(cp, cp + 1, strlen(cp + 1) + 1);
     }
 
-    bool loaded = strstr(str, " policy loaded ");
-
-    if (loaded) {
-        if (policyLoaded) {
-            // SELinux policy changes are not allowed
-            enforceIntegrity();
-        } else {
-            logToDmesg("policy loaded");
-            policyLoaded = true;
-        }
-    }
-
-    // Note: The audit log can include untrusted strings, but those containing
-    // "a control character, unprintable character, double quote mark, or a
-    // space" are hex encoded. The space character before the search term is
-    // therefore needed to prevent denial of service. Do not remove the space.
-    bool permissive = strstr(str, " enforcing=0") ||
-                      strstr(str, " permissive=1");
-
-    if (permissive) {
-        // SELinux in permissive mode is not allowed
-        enforceIntegrity();
-    }
-
-    bool info = loaded || permissive;
+    bool info = strstr(str, " permissive=1") || strstr(str, " policy loaded ");
     if ((fdDmesg >= 0) && initialized) {
         struct iovec iov[3];
         static const char log_info[] = { KMSG_PRIORITY(LOG_INFO) };
