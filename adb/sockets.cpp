@@ -410,7 +410,7 @@ asocket* create_local_service_socket(const char* name, const atransport* transpo
 #endif
     int fd = service_to_fd(name, transport);
     if (fd < 0) {
-        return 0;
+        return nullptr;
     }
 
     asocket* s = create_local_socket(fd);

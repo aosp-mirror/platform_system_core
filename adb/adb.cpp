@@ -329,8 +329,6 @@ static void handle_new_connection(atransport* t, apacket* p) {
 
 void handle_packet(apacket *p, atransport *t)
 {
-    asocket *s;
-
     D("handle_packet() %c%c%c%c", ((char*) (&(p->msg.command)))[0],
             ((char*) (&(p->msg.command)))[1],
             ((char*) (&(p->msg.command)))[2],
@@ -339,7 +337,7 @@ void handle_packet(apacket *p, atransport *t)
 
     switch(p->msg.command){
     case A_SYNC:
-        if(p->msg.arg0){
+        if (p->msg.arg0){
             send_packet(p, t);
 #if ADB_HOST
             send_connect(t);
@@ -384,8 +382,8 @@ void handle_packet(apacket *p, atransport *t)
         if (t->online && p->msg.arg0 != 0 && p->msg.arg1 == 0) {
             char *name = (char*) p->data;
             name[p->msg.data_length > 0 ? p->msg.data_length - 1 : 0] = 0;
-            s = create_local_service_socket(name, t);
-            if(s == 0) {
+            asocket* s = create_local_service_socket(name, t);
+            if (s == nullptr) {
                 send_close(0, p->msg.arg0, t);
             } else {
                 s->peer = create_remote_socket(p->msg.arg0, t);
@@ -398,7 +396,8 @@ void handle_packet(apacket *p, atransport *t)
 
     case A_OKAY: /* READY(local-id, remote-id, "") */
         if (t->online && p->msg.arg0 != 0 && p->msg.arg1 != 0) {
-            if((s = find_local_socket(p->msg.arg1, 0))) {
+            asocket* s = find_local_socket(p->msg.arg1, 0);
+            if (s) {
                 if(s->peer == 0) {
                     /* On first READY message, create the connection. */
                     s->peer = create_remote_socket(p->msg.arg0, t);
@@ -422,7 +421,8 @@ void handle_packet(apacket *p, atransport *t)
 
     case A_CLSE: /* CLOSE(local-id, remote-id, "") or CLOSE(0, remote-id, "") */
         if (t->online && p->msg.arg1 != 0) {
-            if((s = find_local_socket(p->msg.arg1, p->msg.arg0))) {
+            asocket* s = find_local_socket(p->msg.arg1, p->msg.arg0);
+            if (s) {
                 /* According to protocol.txt, p->msg.arg0 might be 0 to indicate
                  * a failed OPEN only. However, due to a bug in previous ADB
                  * versions, CLOSE(0, remote-id, "") was also used for normal
@@ -445,11 +445,12 @@ void handle_packet(apacket *p, atransport *t)
 
     case A_WRTE: /* WRITE(local-id, remote-id, <data>) */
         if (t->online && p->msg.arg0 != 0 && p->msg.arg1 != 0) {
-            if((s = find_local_socket(p->msg.arg1, p->msg.arg0))) {
+            asocket* s = find_local_socket(p->msg.arg1, p->msg.arg0);
+            if (s) {
                 unsigned rid = p->msg.arg0;
                 p->len = p->msg.data_length;
 
-                if(s->enqueue(s, p) == 0) {
+                if (s->enqueue(s, p) == 0) {
                     D("Enqueue the socket");
                     send_ready(s->id, rid, t);
                 }
