@@ -872,19 +872,18 @@ static int adb_download_buffer(const char *service, const char *fn, const void* 
  *   we hang up.
  */
 static int adb_sideload_host(const char* fn) {
-    printf("loading: '%s'", fn);
-    fflush(stdout);
+    fprintf(stderr, "loading: '%s'...\n", fn);
 
     std::string content;
     if (!android::base::ReadFileToString(fn, &content)) {
-        printf("\n");
-        fprintf(stderr, "* cannot read '%s' *\n", fn);
+        fprintf(stderr, "failed: %s\n", strerror(errno));
         return -1;
     }
 
     const uint8_t* data = reinterpret_cast<const uint8_t*>(content.data());
     unsigned sz = content.size();
 
+    fprintf(stderr, "connecting...\n");
     std::string service =
             android::base::StringPrintf("sideload-host:%d:%d", sz, SIDELOAD_HOST_BLOCK_SIZE);
     std::string error;
@@ -892,7 +891,7 @@ static int adb_sideload_host(const char* fn) {
     if (fd < 0) {
         // Try falling back to the older sideload method.  Maybe this
         // is an older device that doesn't support sideload-host.
-        printf("\n");
+        fprintf(stderr, "falling back to older sideload method...\n");
         return adb_download_buffer("sideload", fn, data, sz, true);
     }
 
