@@ -35,8 +35,8 @@ BacktraceMap::~BacktraceMap() {
 }
 
 void BacktraceMap::FillIn(uintptr_t addr, backtrace_map_t* map) {
-  for (BacktraceMap::const_iterator it = begin();
-       it != end(); ++it) {
+  ScopedBacktraceMapIteratorLock lock(this);
+  for (BacktraceMap::const_iterator it = begin(); it != end(); ++it) {
     if (addr >= it->start && addr < it->end) {
       *map = *it;
       return;
