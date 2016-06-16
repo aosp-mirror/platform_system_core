@@ -562,7 +562,7 @@ static void worker_process(int fd, debugger_request_t& request) {
   // won't necessarily have stopped by the time ptrace() returns.  (We
   // currently assume it does.)  We write to the file descriptor to
   // ensure that it can run as soon as we call PTRACE_CONT below.
-  // See details in bionic/libc/linker/debugger.c, in function
+  // See details in client/debuggerd_client.cpp, in function
   // debugger_signal_handler().
 
   // Attach to the target process.
