@@ -1092,12 +1092,10 @@ static bool adb_root(const char* command) {
         return true;
     }
 
-    // Give adbd 500ms to kill itself, then wait-for-device for it to come back up.
-    adb_sleep_ms(500);
-    TransportType type;
-    const char* serial;
-    adb_get_transport(&type, &serial);
-    return wait_for_device("wait-for-any", type, serial);
+    // Give adbd some time to kill itself and come back up.
+    // We can't use wait-for-device because devices (e.g. adb over network) might not come back.
+    adb_sleep_ms(3000);
+    return true;
 }
 
 // Connects to the device "shell" service with |command| and prints the
