@@ -319,6 +319,7 @@ LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
 LOCAL_C_INCLUDES += system/extras/ext4_utils
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
+LOCAL_STRIP_MODULE := keep_symbols
 LOCAL_STATIC_LIBRARIES := \
     libadbd \
     libbase \
@@ -333,6 +334,7 @@ LOCAL_STATIC_LIBRARIES := \
     libbase \
     libcrypto_utils_static \
     libcrypto_static \
-    libminijail
+    libminijail \
+    libdebuggerd_client \
 
 include $(BUILD_EXECUTABLE)
