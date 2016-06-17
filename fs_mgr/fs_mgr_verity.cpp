@@ -189,7 +189,7 @@ static int invalidate_table(char *table, size_t table_length)
     return -1;
 }
 
-static void verity_ioctl_init(struct dm_ioctl *io, char *name, unsigned flags)
+static void verity_ioctl_init(struct dm_ioctl *io, const char *name, unsigned flags)
 {
     memset(io, 0, DM_BUF_SIZE);
     io->data_size = DM_BUF_SIZE;
@@ -792,8 +792,9 @@ out:
 int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
 {
     alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
+    bool system_root = false;
     char fstab_filename[PROPERTY_VALUE_MAX + sizeof(FSTAB_PREFIX)];
-    char *mount_point;
+    const char *mount_point;
     char propbuf[PROPERTY_VALUE_MAX];
     char *status;
     int fd = -1;
@@ -821,6 +822,9 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
     property_get("ro.hardware", propbuf, "");
     snprintf(fstab_filename, sizeof(fstab_filename), FSTAB_PREFIX"%s", propbuf);
 
+    property_get("ro.build.system_root_image", propbuf, "");
+    system_root = !strcmp(propbuf, "true");
+
     fstab = fs_mgr_read_fstab(fstab_filename);
 
     if (!fstab) {
@@ -833,7 +837,12 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
             continue;
         }
 
-        mount_point = basename(fstab->recs[i].mount_point);
+        if (system_root && !strcmp(fstab->recs[i].mount_point, "/")) {
+            mount_point = "system";
+        } else {
+            mount_point = basename(fstab->recs[i].mount_point);
+        }
+
         verity_ioctl_init(io, mount_point, 0);
 
         if (ioctl(fd, DM_TABLE_STATUS, io)) {
@@ -844,7 +853,9 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
 
         status = &buffer[io->data_start + sizeof(struct dm_target_spec)];
 
-        callback(&fstab->recs[i], mount_point, mode, *status);
+        if (*status == 'C' || *status == 'V') {
+            callback(&fstab->recs[i], mount_point, mode, *status);
+        }
     }
 
     rc = 0;
