@@ -20,7 +20,6 @@
 #include <time.h>
 #include <unistd.h>
 
-
 #include <android-base/logging.h>
 
 #include <storaged.h>
@@ -42,12 +41,12 @@ void disk_stats_publisher::update(void) {
     if (parse_disk_stats(DISK_STATS_PATH, &curr)) {
         struct disk_stats inc = get_inc_disk_stats(&mPrevious, &curr);
         add_disk_stats(&inc, &mAccumulate);
-        #ifdef DEBUG
+#ifdef DEBUG
 //            log_kernel_disk_stats(&mPrevious, "prev stats");
 //            log_kernel_disk_stats(&curr, "curr stats");
 //            log_kernel_disk_stats(&inc, "inc stats");
 //            log_kernel_disk_stats(&mAccumulate, "accumulated stats");
-        #endif
+#endif
         mPrevious = curr;
     }
 }
@@ -103,10 +102,10 @@ void disk_stats_monitor::update(struct disk_stats* stats) {
         if (UNLIKELY(detect(&perf))) {
             mStall = true;
             add_disk_stats(&inc, &mAccumulate);
-            #ifdef DEBUG
+#ifdef DEBUG
             log_kernel_disk_perf(&mMean, "stalled_mean");
             log_kernel_disk_perf(&mStd, "stalled_std");
-            #endif
+#endif
         } else {
             if (mStall) {
                 log_kernel_disk_stats(&mAccumulate, "stalled");

@@ -290,7 +290,6 @@ int main(int argc, char** argv) {
         sort_running_tasks_info(res);
         log_console_running_tasks_info(res);
 
-
         return 0;
     }
 
