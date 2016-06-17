@@ -111,6 +111,7 @@ private:
     void ZapStdio() const;
     void OpenConsole() const;
     void PublishSocket(const std::string& name, int fd) const;
+    void KillProcessGroup(int signal);
 
     bool HandleClass(const std::vector<std::string>& args, std::string* err);
     bool HandleConsole(const std::vector<std::string>& args, std::string* err);
