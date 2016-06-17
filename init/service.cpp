@@ -99,11 +99,16 @@ void Service::NotifyStateChange(const std::string& new_state) const {
     property_set(prop_name.c_str(), new_state.c_str());
 }
 
+void Service::KillProcessGroup(int signal) {
+    NOTICE("Sending signal %d to service '%s' (pid %d) process group...\n",
+           signal, name_.c_str(), pid_);
+    kill(pid_, signal);
+    killProcessGroup(uid_, pid_, signal);
+}
+
 bool Service::Reap() {
     if (!(flags_ & SVC_ONESHOT) || (flags_ & SVC_RESTART)) {
-        NOTICE("Service '%s' (pid %d) killing any children in process group\n",
-               name_.c_str(), pid_);
-        killProcessGroup(uid_, pid_, SIGKILL);
+        KillProcessGroup(SIGKILL);
     }
 
     // Remove any sockets we may have created.
@@ -524,7 +529,12 @@ bool Service::Start() {
     time_started_ = gettime();
     pid_ = pid;
     flags_ |= SVC_RUNNING;
-    createProcessGroup(uid_, pid_);
+
+    errno = -createProcessGroup(uid_, pid_);
+    if (errno != 0) {
+        ERROR("createProcessGroup(%d, %d) failed for service '%s': %s\n",
+              uid_, pid_, name_.c_str(), strerror(errno));
+    }
 
     if ((flags_ & SVC_EXEC) != 0) {
         INFO("SVC_EXEC pid %d (uid %d gid %d+%zu context %s) started; waiting...\n",
@@ -565,9 +575,7 @@ void Service::Terminate() {
     flags_ &= ~(SVC_RESTARTING | SVC_DISABLED_START);
     flags_ |= SVC_DISABLED;
     if (pid_) {
-        NOTICE("Sending SIGTERM to service '%s' (pid %d)...\n", name_.c_str(),
-               pid_);
-        killProcessGroup(uid_, pid_, SIGTERM);
+        KillProcessGroup(SIGTERM);
         NotifyStateChange("stopping");
     }
 }
@@ -597,19 +605,18 @@ void Service::RestartIfNeeded(time_t& process_needs_restart) {
     }
 }
 
-/* The how field should be either SVC_DISABLED, SVC_RESET, or SVC_RESTART */
+// The how field should be either SVC_DISABLED, SVC_RESET, or SVC_RESTART.
 void Service::StopOrReset(int how) {
-    /* The service is still SVC_RUNNING until its process exits, but if it has
-     * already exited it shoudn't attempt a restart yet. */
+    // The service is still SVC_RUNNING until its process exits, but if it has
+    // already exited it shoudn't attempt a restart yet.
     flags_ &= ~(SVC_RESTARTING | SVC_DISABLED_START);
 
     if ((how != SVC_DISABLED) && (how != SVC_RESET) && (how != SVC_RESTART)) {
-        /* Hrm, an illegal flag.  Default to SVC_DISABLED */
+        // An illegal flag: default to SVC_DISABLED.
         how = SVC_DISABLED;
     }
-        /* if the service has not yet started, prevent
-         * it from auto-starting with its class
-         */
+
+    // If the service has not yet started, prevent it from auto-starting with its class.
     if (how == SVC_RESET) {
         flags_ |= (flags_ & SVC_RC_DISABLED) ? SVC_DISABLED : SVC_RESET;
     } else {
@@ -617,8 +624,7 @@ void Service::StopOrReset(int how) {
     }
 
     if (pid_) {
-        NOTICE("Service '%s' is being killed...\n", name_.c_str());
-        killProcessGroup(uid_, pid_, SIGKILL);
+        KillProcessGroup(SIGKILL);
         NotifyStateChange("stopping");
     } else {
         NotifyStateChange("stopped");
