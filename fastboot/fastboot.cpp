@@ -852,6 +852,11 @@ static void flash_buf(const char *pname, struct fastboot_buffer *buf)
     }
 }
 
+static bool has_slots(Transport* transport) {
+  std::string suffix_list_unused;
+  return fb_getvar(transport, "slot-suffixes", &suffix_list_unused);
+}
+
 static std::vector<std::string> get_suffixes(Transport* transport) {
     std::vector<std::string> suffixes;
     std::string suffix_list;
@@ -1061,7 +1066,9 @@ static void do_send_signature(const char* filename) {
 
 static void do_flashall(Transport* transport, const char* slot_override, int erase_first) {
     queue_info_dump();
+    const bool device_has_slots = has_slots(transport);
     const bool has_slot_override = slot_override != nullptr && strcmp(slot_override, "") != 0;
+    const bool should_ignore_slots = !device_has_slots || has_slot_override;
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
@@ -1075,7 +1082,7 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
     setup_requirements(reinterpret_cast<char*>(data), sz);
 
     for (size_t i = 0; i < ARRAY_SIZE(images); i++) {
-        if (has_slot_override && !images[i].active_slot) {
+        if (should_ignore_slots && !images[i].active_slot) {
             // We will not do anything with _other files if we are given an explicit slot to use.
             continue;
         }
@@ -1089,7 +1096,7 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
         // sometimes write the 'active + 1'th slot for first boot optimization reasons. This is
         // defined by the images array unless one is explicitly provided.
         std::string real_slot_override;
-        if (has_slot_override) {
+        if (should_ignore_slots) {
             real_slot_override = slot_override;
         } else {
             real_slot_override = get_slot_name(transport, images[i].active_slot ? 0 : 1);
