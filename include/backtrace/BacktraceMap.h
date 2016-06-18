@@ -71,6 +71,12 @@ public:
   bool IsWritable(uintptr_t pc) { return GetFlags(pc) & PROT_WRITE; }
   bool IsExecutable(uintptr_t pc) { return GetFlags(pc) & PROT_EXEC; }
 
+  // In order to use the iterators on this object, a caller must
+  // call the LockIterator and UnlockIterator function to guarantee
+  // that the data does not change while it's being used.
+  virtual void LockIterator() {}
+  virtual void UnlockIterator() {}
+
   typedef std::deque<backtrace_map_t>::iterator iterator;
   iterator begin() { return maps_.begin(); }
   iterator end() { return maps_.end(); }
@@ -100,6 +106,20 @@ protected:
 
   std::deque<backtrace_map_t> maps_;
   pid_t pid_;
+};
+
+class ScopedBacktraceMapIteratorLock {
+public:
+  explicit ScopedBacktraceMapIteratorLock(BacktraceMap* map) : map_(map) {
+    map->LockIterator();
+  }
+
+  ~ScopedBacktraceMapIteratorLock() {
+    map_->UnlockIterator();
+  }
+
+private:
+  BacktraceMap* map_;
 };
 
 #endif // _BACKTRACE_BACKTRACE_MAP_H
