@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef UTILS_THREAD_ANNOTATIONS_H
-#define UTILS_THREAD_ANNOTATIONS_H
+#ifndef ANDROID_BASE_THREAD_ANNOTATIONS_H
+#define ANDROID_BASE_THREAD_ANNOTATIONS_H
 
 #if defined(__SUPPORT_TS_ANNOTATION__) || defined(__clang__)
 #define THREAD_ANNOTATION_ATTRIBUTE__(x)   __attribute__((x))
@@ -80,4 +80,4 @@
 #define NO_THREAD_SAFETY_ANALYSIS \
       THREAD_ANNOTATION_ATTRIBUTE__(no_thread_safety_analysis)
 
-#endif  // UTILS_THREAD_ANNOTATIONS_H
+#endif  // ANDROID_BASE_THREAD_ANNOTATIONS_H

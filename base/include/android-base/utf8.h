@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef BASE_UTF8_H
-#define BASE_UTF8_H
+#ifndef ANDROID_BASE_UTF8_H
+#define ANDROID_BASE_UTF8_H
 
 #ifdef _WIN32
 #include <string>
@@ -84,4 +84,4 @@ using ::unlink;
 }  // namespace base
 }  // namespace android
 
-#endif  // BASE_UTF8_H
+#endif  // ANDROID_BASE_UTF8_H
