@@ -17,7 +17,7 @@ LOCAL_SRC_FILES := BatteryMonitor.cpp
 LOCAL_MODULE := libbatterymonitor
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
-LOCAL_STATIC_LIBRARIES := libutils libbinder
+LOCAL_STATIC_LIBRARIES := libutils libbase libbinder
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -60,7 +60,7 @@ endif
 
 LOCAL_C_INCLUDES := bootable/recovery $(LOCAL_PATH)/include
 
-LOCAL_STATIC_LIBRARIES := libbatterymonitor libbatteryservice libbinder
+LOCAL_STATIC_LIBRARIES := libbatterymonitor libbatteryservice libbinder libbase
 
 ifneq ($(strip $(LOCAL_CHARGER_NO_UI)),true)
 LOCAL_STATIC_LIBRARIES += libminui libpng libz
