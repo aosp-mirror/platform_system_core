@@ -1,0 +1,19 @@
+cc_library_static {
+  name: "libdebuggerd_client",
+  srcs: ["client/debuggerd_client.cpp"],
+
+  cflags: [
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-Os",
+  ],
+
+  local_include_dirs: ["include"],
+  export_include_dirs: ["include"],
+
+  // libdebuggerd_client gets async signal safe logging via libc_logging,
+  // which defines its interface in bionic private headers.
+  include_dirs: ["bionic/libc"],
+  static_libs: ["libc_logging"],
+}

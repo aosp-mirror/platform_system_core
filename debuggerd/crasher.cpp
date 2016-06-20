@@ -16,6 +16,10 @@
 #include <cutils/sockets.h>
 #include <log/log.h>
 
+#if defined(STATIC_CRASHER)
+#include "debuggerd/client.h"
+#endif
+
 #ifndef __unused
 #define __unused __attribute__((__unused__))
 #endif
@@ -43,7 +47,7 @@ __attribute__ ((noinline)) static void smash_stack_dummy_function(volatile int* 
 // Assign local array address to global variable to force stack guards.
 // Use another noinline function to corrupt the stack.
 __attribute__ ((noinline)) static int smash_stack(volatile int* plen) {
-    printf("crasher: deliberately corrupting stack...\n");
+    printf("%s: deliberately corrupting stack...\n", __progname);
 
     char buf[128];
     smash_stack_dummy_buf = buf;
@@ -135,7 +139,7 @@ static void sigsegv_non_null() {
 
 static int do_action(const char* arg)
 {
-    fprintf(stderr,"crasher: init pid=%d tid=%d\n", getpid(), gettid());
+    fprintf(stderr, "%s: init pid=%d tid=%d\n", __progname, getpid(), gettid());
 
     if (!strncmp(arg, "thread-", strlen("thread-"))) {
         return do_action_on_thread(arg + strlen("thread-"));
@@ -209,9 +213,26 @@ static int do_action(const char* arg)
 
 int main(int argc, char **argv)
 {
-    fprintf(stderr,"crasher: built at " __TIME__ "!@\n");
+    fprintf(stderr, "%s: built at " __TIME__ "!@\n", __progname);
 
-    if(argc > 1) {
+#if defined(STATIC_CRASHER)
+    debuggerd_callbacks_t callbacks = {
+      .get_abort_message = []() {
+        static struct {
+          size_t size;
+          char msg[32];
+        } msg;
+
+        msg.size = strlen("dummy abort message");
+        memcpy(msg.msg, "dummy abort message", strlen("dummy abort message"));
+        return reinterpret_cast<abort_msg_t*>(&msg);
+      },
+      .post_dump = nullptr
+    };
+    debuggerd_init(&callbacks);
+#endif
+
+    if (argc > 1) {
         return do_action(argv[1]);
     } else {
         crash1();
