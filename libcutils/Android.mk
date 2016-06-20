@@ -117,7 +117,8 @@ LOCAL_SRC_FILES_x86_64 += \
         arch-x86_64/android_memset32.S \
 
 LOCAL_C_INCLUDES := $(libcutils_c_includes)
-LOCAL_STATIC_LIBRARIES := liblog
+LOCAL_EXPORT_STATIC_LIBRARY_HEADERS := libdebuggerd_client
+LOCAL_STATIC_LIBRARIES := liblog libdebuggerd_client
 ifneq ($(ENABLE_CPUSETS),)
 LOCAL_CFLAGS += -DUSE_CPUSETS
 endif
@@ -134,6 +135,8 @@ LOCAL_MODULE := libcutils
 # TODO: remove liblog as whole static library, once we don't have prebuilt that requires
 # liblog symbols present in libcutils.
 LOCAL_WHOLE_STATIC_LIBRARIES := libcutils liblog
+LOCAL_EXPORT_STATIC_LIBRARY_HEADERS := libdebuggerd_client
+LOCAL_STATIC_LIBRARIES := libdebuggerd_client
 LOCAL_SHARED_LIBRARIES := liblog
 ifneq ($(ENABLE_CPUSETS),)
 LOCAL_CFLAGS += -DUSE_CPUSETS

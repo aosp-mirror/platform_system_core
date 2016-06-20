@@ -32,6 +32,7 @@
 #include <libminijail.h>
 
 #include "cutils/properties.h"
+#include "debuggerd/client.h"
 #include "private/android_filesystem_config.h"
 #include "selinux/android.h"
 
@@ -247,6 +248,7 @@ int main(int argc, char** argv) {
 
     close_stdin();
 
+    debuggerd_init(nullptr);
     adb_trace_init(argv);
 
     D("Handling main()");
