@@ -124,7 +124,7 @@ int __android_log_vprint(int prio, const char *tag,
 void __android_log_assert(const char *cond, const char *tag,
                           const char *fmt, ...)
 #if defined(__GNUC__)
-    __attribute__ ((noreturn))
+    __attribute__ ((__noreturn__))
 #ifdef __USE_MINGW_ANSI_STDIO
 #if __USE_MINGW_ANSI_STDIO
     __attribute__ ((format(gnu_printf, 3, 4)))
