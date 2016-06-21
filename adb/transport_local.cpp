@@ -240,16 +240,20 @@ static void server_socket_thread(void* arg) {
 /* This is relevant only for ADB daemon running inside the emulator. */
 /*
  * Redefine open and write for qemu_pipe.h that contains inlined references
- * to those routines. We will redifine them back after qemu_pipe.h inclusion.
+ * to those routines. We will redefine them back after qemu_pipe.h inclusion.
  */
 #undef open
+#undef read
 #undef write
 #define open    adb_open
+#define read    adb_read
 #define write   adb_write
-#include <hardware/qemu_pipe.h>
+#include <system/qemu_pipe.h>
 #undef open
+#undef read
 #undef write
 #define open    ___xxx_open
+#define read    ___xxx_read
 #define write   ___xxx_write
 
 /* A worker thread that monitors host connections, and registers a transport for
@@ -297,7 +301,7 @@ static void qemu_socket_thread(void* arg) {
     D("transport: qemu_socket_thread() starting");
 
     /* adb QEMUD service connection request. */
-    snprintf(con_name, sizeof(con_name), "qemud:adb:%d", port);
+    snprintf(con_name, sizeof(con_name), "pipe:qemud:adb:%d", port);
 
     /* Connect to the adb QEMUD service. */
     fd = qemu_pipe_open(con_name);
