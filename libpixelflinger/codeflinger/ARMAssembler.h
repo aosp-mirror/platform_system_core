@@ -167,9 +167,6 @@ private:
     uint32_t*       mPC;
     uint32_t*       mPrologPC;
     int64_t         mDuration;
-#if defined(WITH_LIB_HARDWARE)
-    bool            mQemuTracing;
-#endif
     
     struct branch_target_t {
         inline branch_target_t() : label(0), pc(0) { }
