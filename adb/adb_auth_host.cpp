@@ -33,15 +33,12 @@
 #include <crypto_utils/android_pubkey.h>
 #include <cutils/list.h>
 
+#include <openssl/base64.h>
 #include <openssl/evp.h>
 #include <openssl/objects.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
-
-#if defined(OPENSSL_IS_BORINGSSL)
-#include <openssl/base64.h>
-#endif
 
 #define ANDROID_PATH   ".android"
 #define ADB_KEY_FILE   "adbkey"
@@ -54,108 +51,52 @@ struct adb_private_key {
 static struct listnode key_list;
 
 
-static void get_user_info(char *buf, size_t len)
-{
-    char hostname[1024], username[1024];
-    int ret = -1;
-
-    if (getenv("HOSTNAME") != NULL) {
-        strncpy(hostname, getenv("HOSTNAME"), sizeof(hostname));
-        hostname[sizeof(hostname)-1] = '\0';
-        ret = 0;
-    }
-
-#ifndef _WIN32
-    if (ret < 0)
-        ret = gethostname(hostname, sizeof(hostname));
+static std::string get_user_info() {
+    std::string hostname;
+    if (getenv("HOSTNAME")) hostname = getenv("HOSTNAME");
+#if !defined(_WIN32)
+    char buf[64];
+    if (hostname.empty() && gethostname(buf, sizeof(buf)) != -1) hostname = buf;
 #endif
-    if (ret < 0)
-        strcpy(hostname, "unknown");
+    if (hostname.empty()) hostname = "unknown";
 
-    ret = -1;
-
-    if (getenv("LOGNAME") != NULL) {
-        strncpy(username, getenv("LOGNAME"), sizeof(username));
-        username[sizeof(username)-1] = '\0';
-        ret = 0;
-    }
-
+    std::string username;
+    if (getenv("LOGNAME")) username = getenv("LOGNAME");
 #if !defined _WIN32 && !defined ADB_HOST_ON_TARGET
-    if (ret < 0)
-        ret = getlogin_r(username, sizeof(username));
+    if (username.empty() && getlogin()) username = getlogin();
 #endif
-    if (ret < 0)
-        strcpy(username, "unknown");
+    if (username.empty()) hostname = "unknown";
 
-    ret = snprintf(buf, len, " %s@%s", username, hostname);
-    if (ret >= (signed)len)
-        buf[len - 1] = '\0';
+    return " " + username + "@" + hostname;
 }
 
-static int write_public_keyfile(RSA *private_key, const char *private_key_path)
-{
+static bool write_public_keyfile(RSA* private_key, const std::string& private_key_path) {
     uint8_t binary_key_data[ANDROID_PUBKEY_ENCODED_SIZE];
-    uint8_t* base64_key_data = nullptr;
-    size_t base64_key_length = 0;
-    FILE *outfile = NULL;
-    char path[PATH_MAX], info[MAX_PAYLOAD_V1];
-    int ret = 0;
-
-    if (!android_pubkey_encode(private_key, binary_key_data,
-                               sizeof(binary_key_data))) {
-        D("Failed to convert to publickey");
-        goto out;
+    if (!android_pubkey_encode(private_key, binary_key_data, sizeof(binary_key_data))) {
+        LOG(ERROR) << "Failed to convert to public key";
+        return false;
     }
 
-    D("Writing public key to '%s'", path);
-
-#if defined(OPENSSL_IS_BORINGSSL)
+    size_t base64_key_length;
     if (!EVP_EncodedLength(&base64_key_length, sizeof(binary_key_data))) {
-        D("Public key too large to base64 encode");
-        goto out;
-    }
-#else
-    /* While we switch from OpenSSL to BoringSSL we have to implement
-     * |EVP_EncodedLength| here. */
-    base64_key_length = 1 + ((sizeof(binary_key_data) + 2) / 3 * 4);
-#endif
-
-    base64_key_data = new uint8_t[base64_key_length];
-    if (base64_key_data == nullptr) {
-        D("Allocation failure");
-        goto out;
+        LOG(ERROR) << "Public key too large to base64 encode";
+        return false;
     }
 
-    base64_key_length = EVP_EncodeBlock(base64_key_data, binary_key_data,
+    std::string content;
+    content.resize(base64_key_length);
+    base64_key_length = EVP_EncodeBlock(reinterpret_cast<uint8_t*>(&content[0]), binary_key_data,
                                         sizeof(binary_key_data));
-    get_user_info(info, sizeof(info));
 
-    if (snprintf(path, sizeof(path), "%s.pub", private_key_path) >=
-        (int)sizeof(path)) {
-        D("Path too long while writing public key");
-        goto out;
+    content += get_user_info();
+
+    std::string path(private_key_path + ".pub");
+    if (!android::base::WriteStringToFile(content, path)) {
+        PLOG(ERROR) << "Failed to write public key to '" << path << "'";
+        return false;
     }
 
-    outfile = fopen(path, "w");
-    if (!outfile) {
-        D("Failed to open '%s'", path);
-        goto out;
-    }
-
-    if (fwrite(base64_key_data, base64_key_length, 1, outfile) != 1 ||
-        fwrite(info, strlen(info), 1, outfile) != 1) {
-        D("Write error while writing public key");
-        goto out;
-    }
-
-    ret = 1;
-
- out:
-    if (outfile != NULL) {
-        fclose(outfile);
-    }
-    delete[] base64_key_data;
-    return ret;
+    return true;
 }
 
 static int generate_key(const char *file)
