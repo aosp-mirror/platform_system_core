@@ -22,10 +22,6 @@
 #include <cutils/log.h>
 #include <cutils/properties.h>
 
-#if defined(WITH_LIB_HARDWARE)
-#include <hardware_legacy/qemu_tracing.h>
-#endif
-
 #include <private/pixelflinger/ggl_context.h>
 
 #include "ARMAssembler.h"
@@ -48,9 +44,6 @@ ARMAssembler::ARMAssembler(const sp<Assembly>& assembly)
 {
     mBase = mPC = (uint32_t *)assembly->base();
     mDuration = ggl_system_time();
-#if defined(WITH_LIB_HARDWARE)
-    mQemuTracing = true;
-#endif
 }
 
 ARMAssembler::~ARMAssembler()
@@ -183,13 +176,6 @@ int ARMAssembler::generate(const char* name)
     const int64_t duration = ggl_system_time() - mDuration;
     const char * const format = "generated %s (%d ins) at [%p:%p] in %lld ns\n";
     ALOGI(format, name, int(pc()-base()), base(), pc(), duration);
-
-#if defined(WITH_LIB_HARDWARE)
-    if (__builtin_expect(mQemuTracing, 0)) {
-        int err = qemu_add_mapping(uintptr_t(base()), name);
-        mQemuTracing = (err >= 0);
-    }
-#endif
 
     char value[PROPERTY_VALUE_MAX];
     property_get("debug.pf.disasm", value, "0");
