@@ -32,7 +32,6 @@ BSD_TOOLS := \
 
 OUR_TOOLS := \
     getevent \
-    log \
     nandread \
     newfs_msdos \
     sendevent \
@@ -51,9 +50,7 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/upstream-netbsd/include/
 LOCAL_CONLYFLAGS += -std=gnu99
 
 LOCAL_SHARED_LIBRARIES := \
-    liblog \
     libcutils \
-    libselinux \
 
 LOCAL_WHOLE_STATIC_LIBRARIES := $(patsubst %,libtoolbox_%,$(BSD_TOOLS))
 
