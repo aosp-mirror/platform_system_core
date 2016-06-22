@@ -84,7 +84,9 @@ ifeq ($(USE_SYSDEPS_WIN32),)
 	LOCAL_STATIC_LIBRARIES += libcutils
 endif
 
-include $(BUILD_HOST_EXECUTABLE)
+ifneq ($(HOST_OS),windows)
+  include $(BUILD_HOST_EXECUTABLE)
+endif
 
 $(call dist-for-goals,dist_files sdk,$(LOCAL_BUILT_MODULE))
 
