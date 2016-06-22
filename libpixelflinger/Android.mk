@@ -74,10 +74,6 @@ LOCAL_C_INCLUDES += $(LOCAL_EXPORT_C_INCLUDE_DIRS) \
 		    external/safe-iop/include
 LOCAL_SHARED_LIBRARIES := libcutils liblog libutils
 
-# Really this should go away entirely or at least not depend on
-# libhardware, but this at least gets us built.
-LOCAL_SHARED_LIBRARIES += libhardware_legacy
-LOCAL_CFLAGS += -DWITH_LIB_HARDWARE
 include $(BUILD_SHARED_LIBRARY)
 
 include $(call all-makefiles-under,$(LOCAL_PATH))
