@@ -1135,6 +1135,236 @@ typedef enum android_dataspace {
 } android_dataspace_t;
 
 /*
+ * Color modes that may be supported by a display.
+ *
+ * Definitions:
+ * Rendering intent generally defines the goal in mapping a source (input)
+ * color to a destination device color for a given color mode.
+ *
+ *  It is important to keep in mind three cases where mapping may be applied:
+ *  1. The source gamut is much smaller than the destination (display) gamut
+ *  2. The source gamut is much larger than the destination gamut (this will
+ *  ordinarily be handled using colorimetric rendering, below)
+ *  3. The source and destination gamuts are roughly equal, although not
+ *  completely overlapping
+ *  Also, a common requirement for mappings is that skin tones should be
+ *  preserved, or at least remain natural in appearance.
+ *
+ *  Colorimetric Rendering Intent (All cases):
+ *  Colorimetric indicates that colors should be preserved. In the case
+ *  that the source gamut lies wholly within the destination gamut or is
+ *  about the same (#1, #3), this will simply mean that no manipulations
+ *  (no saturation boost, for example) are applied. In the case where some
+ *  source colors lie outside the destination gamut (#2, #3), those will
+ *  need to be mapped to colors that are within the destination gamut,
+ *  while the already in-gamut colors remain unchanged.
+ *
+ *  Non-colorimetric transforms can take many forms. There are no hard
+ *  rules and it's left to the implementation to define.
+ *  Two common intents are described below.
+ *
+ *  Stretched-Gamut Enhancement Intent (Source < Destination):
+ *  When the destination gamut is much larger than the source gamut (#1), the
+ *  source primaries may be redefined to reflect the full extent of the
+ *  destination space, or to reflect an intermediate gamut.
+ *  Skin-tone preservation would likely be applied. An example might be sRGB
+ *  input displayed on a DCI-P3 capable device, with skin-tone preservation.
+ *
+ *  Within-Gamut Enhancement Intent (Source >= Destination):
+ *  When the device (destination) gamut is not larger than the source gamut
+ *  (#2 or #3), but the appearance of a larger gamut is desired, techniques
+ *  such as saturation boost may be applied to the source colors. Skin-tone
+ *  preservation may be applied. There is no unique method for within-gamut
+ *  enhancement; it would be defined within a flexible color mode.
+ *
+ */
+typedef enum android_color_mode {
+
+  /*
+   * HAL_COLOR_MODE_DEFAULT is the "native" gamut of the display.
+   * White Point: Vendor/OEM defined
+   * Panel Gamma: Vendor/OEM defined (typically 2.2)
+   * Rendering Intent: Vendor/OEM defined (typically 'enhanced')
+   */
+  HAL_COLOR_MODE_NATIVE = 0,
+
+  /*
+   * HAL_COLOR_MODE_STANDARD_BT601_625 corresponds with display
+   * settings that implement the ITU-R Recommendation BT.601
+   * or Rec 601. Using 625 line version
+   * Rendering Intent: Colorimetric
+   * Primaries:
+   *                  x       y
+   *  green           0.290   0.600
+   *  blue            0.150   0.060
+   *  red             0.640   0.330
+   *  white (D65)     0.3127  0.3290
+   *
+   *  KR = 0.299, KB = 0.114. This adjusts the luminance interpretation
+   *  for RGB conversion from the one purely determined by the primaries
+   *  to minimize the color shift into RGB space that uses BT.709
+   *  primaries.
+   *
+   * Gamma Correction (GC):
+   *
+   *  if Vlinear < 0.018
+   *    Vnonlinear = 4.500 * Vlinear
+   *  else
+   *    Vnonlinear = 1.099 * (Vlinear)^(0.45) – 0.099
+   */
+  HAL_COLOR_MODE_STANDARD_BT601_625 = 1,
+
+  /*
+   * Primaries:
+   *                  x       y
+   *  green           0.290   0.600
+   *  blue            0.150   0.060
+   *  red             0.640   0.330
+   *  white (D65)     0.3127  0.3290
+   *
+   *  Use the unadjusted KR = 0.222, KB = 0.071 luminance interpretation
+   *  for RGB conversion.
+   *
+   * Gamma Correction (GC):
+   *
+   *  if Vlinear < 0.018
+   *    Vnonlinear = 4.500 * Vlinear
+   *  else
+   *    Vnonlinear = 1.099 * (Vlinear)^(0.45) – 0.099
+   */
+  HAL_COLOR_MODE_STANDARD_BT601_625_UNADJUSTED = 2,
+
+  /*
+   * Primaries:
+   *                  x       y
+   *  green           0.310   0.595
+   *  blue            0.155   0.070
+   *  red             0.630   0.340
+   *  white (D65)     0.3127  0.3290
+   *
+   *  KR = 0.299, KB = 0.114. This adjusts the luminance interpretation
+   *  for RGB conversion from the one purely determined by the primaries
+   *  to minimize the color shift into RGB space that uses BT.709
+   *  primaries.
+   *
+   * Gamma Correction (GC):
+   *
+   *  if Vlinear < 0.018
+   *    Vnonlinear = 4.500 * Vlinear
+   *  else
+   *    Vnonlinear = 1.099 * (Vlinear)^(0.45) – 0.099
+   */
+  HAL_COLOR_MODE_STANDARD_BT601_525 = 3,
+
+  /*
+   * Primaries:
+   *                  x       y
+   *  green           0.310   0.595
+   *  blue            0.155   0.070
+   *  red             0.630   0.340
+   *  white (D65)     0.3127  0.3290
+   *
+   *  Use the unadjusted KR = 0.212, KB = 0.087 luminance interpretation
+   *  for RGB conversion (as in SMPTE 240M).
+   *
+   * Gamma Correction (GC):
+   *
+   *  if Vlinear < 0.018
+   *    Vnonlinear = 4.500 * Vlinear
+   *  else
+   *    Vnonlinear = 1.099 * (Vlinear)^(0.45) – 0.099
+   */
+  HAL_COLOR_MODE_STANDARD_BT601_525_UNADJUSTED = 4,
+
+  /*
+   * HAL_COLOR_MODE_REC709 corresponds with display settings that implement
+   * the ITU-R Recommendation BT.709 / Rec. 709 for high-definition television.
+   * Rendering Intent: Colorimetric
+   * Primaries:
+   *                  x       y
+   *  green           0.300   0.600
+   *  blue            0.150   0.060
+   *  red             0.640   0.330
+   *  white (D65)     0.3127  0.3290
+   *
+   * HDTV REC709 Inverse Gamma Correction (IGC): V represents normalized
+   * (with [0 to 1] range) value of R, G, or B.
+   *
+   *  if Vnonlinear < 0.081
+   *    Vlinear = Vnonlinear / 4.5
+   *  else
+   *    Vlinear = ((Vnonlinear + 0.099) / 1.099) ^ (1/0.45)
+   *
+   * HDTV REC709 Gamma Correction (GC):
+   *
+   *  if Vlinear < 0.018
+   *    Vnonlinear = 4.5 * Vlinear
+   *  else
+   *    Vnonlinear = 1.099 * (Vlinear) ^ 0.45 – 0.099
+   */
+  HAL_COLOR_MODE_STANDARD_BT709 = 5,
+
+  /*
+   * HAL_COLOR_MODE_DCI_P3 corresponds with display settings that implement
+   * SMPTE EG 432-1 and SMPTE RP 431-2
+   * Rendering Intent: Colorimetric
+   * Primaries:
+   *                  x       y
+   *  green           0.265   0.690
+   *  blue            0.150   0.060
+   *  red             0.680   0.320
+   *  white (D65)     0.3127  0.3290
+   *
+   * Gamma: 2.2
+   */
+  HAL_COLOR_MODE_DCI_P3 = 6,
+
+  /*
+   * HAL_COLOR_MODE_SRGB corresponds with display settings that implement
+   * the sRGB color space. Uses the same primaries as ITU-R Recommendation
+   * BT.709
+   * Rendering Intent: Colorimetric
+   * Primaries:
+   *                  x       y
+   *  green           0.300   0.600
+   *  blue            0.150   0.060
+   *  red             0.640   0.330
+   *  white (D65)     0.3127  0.3290
+   *
+   * PC/Internet (sRGB) Inverse Gamma Correction (IGC):
+   *
+   *  if Vnonlinear ≤ 0.03928
+   *    Vlinear = Vnonlinear / 12.92
+   *  else
+   *    Vlinear = ((Vnonlinear + 0.055)/1.055) ^ 2.4
+   *
+   * PC/Internet (sRGB) Gamma Correction (GC):
+   *
+   *  if Vlinear ≤ 0.0031308
+   *    Vnonlinear = 12.92 * Vlinear
+   *  else
+   *    Vnonlinear = 1.055 * (Vlinear)^(1/2.4) – 0.055
+   */
+  HAL_COLOR_MODE_SRGB = 7,
+
+  /*
+   * HAL_COLOR_MODE_ADOBE_RGB corresponds with the RGB color space developed
+   * by Adobe Systems, Inc. in 1998.
+   * Rendering Intent: Colorimetric
+   * Primaries:
+   *                  x       y
+   *  green           0.210   0.710
+   *  blue            0.150   0.060
+   *  red             0.640   0.330
+   *  white (D65)     0.3127  0.3290
+   *
+   * Gamma: 2.2
+   */
+  HAL_COLOR_MODE_ADOBE_RGB = 8
+
+} android_color_mode_t;
+
+/*
  * Color transforms that may be applied by hardware composer to the whole
  * display.
  */
