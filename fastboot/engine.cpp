@@ -38,7 +38,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define ARRAY_SIZE(x)           (sizeof(x)/sizeof(x[0]))
+#define ARRAY_SIZE(x)           (sizeof(x)/sizeof((x)[0]))
 
 #define OP_DOWNLOAD   1
 #define OP_COMMAND    2
