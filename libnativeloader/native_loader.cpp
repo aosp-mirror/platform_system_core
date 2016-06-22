@@ -133,9 +133,10 @@ class LibraryNamespaces {
     std::string public_native_libraries_system_config =
             root_dir + kPublicNativeLibrariesSystemConfigPathFromRoot;
 
-    LOG_ALWAYS_FATAL_IF(!ReadConfig(public_native_libraries_system_config, &sonames),
+    std::string error_msg;
+    LOG_ALWAYS_FATAL_IF(!ReadConfig(public_native_libraries_system_config, &sonames, &error_msg),
                         "Error reading public native library list from \"%s\": %s",
-                        public_native_libraries_system_config.c_str(), strerror(errno));
+                        public_native_libraries_system_config.c_str(), error_msg.c_str());
 
     // For debuggable platform builds use ANDROID_ADDITIONAL_PUBLIC_LIBRARIES environment
     // variable to add libraries to the list. This is intended for platform tests only.
@@ -172,19 +173,41 @@ class LibraryNamespaces {
   }
 
  private:
-  bool ReadConfig(const std::string& configFile, std::vector<std::string>* sonames) {
+  bool ReadConfig(const std::string& configFile, std::vector<std::string>* sonames,
+                  std::string* error_msg = nullptr) {
     // Read list of public native libraries from the config file.
     std::string file_content;
     if(!base::ReadFileToString(configFile, &file_content)) {
+      if (error_msg) *error_msg = strerror(errno);
       return false;
     }
 
     std::vector<std::string> lines = base::Split(file_content, "\n");
 
-    for (const auto& line : lines) {
+    for (auto& line : lines) {
       auto trimmed_line = base::Trim(line);
       if (trimmed_line[0] == '#' || trimmed_line.empty()) {
         continue;
+      }
+      size_t space_pos = trimmed_line.rfind(' ');
+      if (space_pos != std::string::npos) {
+        std::string type = trimmed_line.substr(space_pos + 1);
+        if (type != "32" && type != "64") {
+          if (error_msg) *error_msg = "Malformed line: " + line;
+          return false;
+        }
+#if defined(__LP64__)
+        // Skip 32 bit public library.
+        if (type == "32") {
+          continue;
+        }
+#else
+        // Skip 64 bit public library.
+        if (type == "64") {
+          continue;
+        }
+#endif
+        trimmed_line.resize(space_pos);
       }
 
       sonames->push_back(trimmed_line);
