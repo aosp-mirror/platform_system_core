@@ -21,6 +21,7 @@
 #include "android-base/logging.h"
 
 #include <libgen.h>
+#include <time.h>
 
 // For getprogname(3) or program_invocation_short_name.
 #if defined(__ANDROID__) || defined(__APPLE__)
@@ -186,12 +187,24 @@ static const char* ProgramInvocationName() {
 
 void StderrLogger(LogId, LogSeverity severity, const char*, const char* file,
                   unsigned int line, const char* message) {
+  struct tm now;
+  time_t t = time(nullptr);
+
+#if defined(_WIN32)
+  localtime_s(&now, &t);
+#else
+  localtime_r(&t, &now);
+#endif
+
+  char timestamp[32];
+  strftime(timestamp, sizeof(timestamp), "%m-%d %H:%M:%S", &now);
+
   static const char log_characters[] = "VDIWEF";
   static_assert(arraysize(log_characters) - 1 == FATAL + 1,
                 "Mismatch in size of log_characters and values in LogSeverity");
   char severity_char = log_characters[severity];
-  fprintf(stderr, "%s %c %5d %5d %s:%u] %s\n", ProgramInvocationName(),
-          severity_char, getpid(), GetThreadId(), file, line, message);
+  fprintf(stderr, "%s %c %s %5d %5d %s:%u] %s\n", ProgramInvocationName(),
+          severity_char, timestamp, getpid(), GetThreadId(), file, line, message);
 }
 
 
