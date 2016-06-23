@@ -145,6 +145,7 @@ LOCAL_CFLAGS_darwin := $(LIBADB_darwin_CFLAGS)
 LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
     adb_auth_host.cpp \
+    transport_mdns.cpp
 
 LOCAL_SRC_FILES_darwin := $(LIBADB_darwin_SRC_FILES)
 LOCAL_SRC_FILES_linux := $(LIBADB_linux_SRC_FILES)
@@ -154,7 +155,7 @@ LOCAL_SANITIZE := $(adb_host_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
-LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase
+LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase libmdnssd
 LOCAL_STATIC_LIBRARIES_linux := libusb
 LOCAL_STATIC_LIBRARIES_darwin := libusb
 
@@ -225,6 +226,7 @@ LOCAL_STATIC_LIBRARIES := \
     libcutils \
     libdiagnose_usb \
     libgmock_host \
+    libmdnssd \
 
 LOCAL_STATIC_LIBRARIES_linux := libusb
 LOCAL_STATIC_LIBRARIES_darwin := libusb
@@ -292,6 +294,7 @@ LOCAL_STATIC_LIBRARIES := \
     libcrypto \
     libdiagnose_usb \
     liblog \
+    libmdnssd \
 
 # Don't use libcutils on Windows.
 LOCAL_STATIC_LIBRARIES_darwin := libcutils

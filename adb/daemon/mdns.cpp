@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "adb_mdns.h"
 #include "sysdeps.h"
 
 #include <chrono>
