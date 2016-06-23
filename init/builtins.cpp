@@ -345,6 +345,11 @@ static int do_mkdir(const std::vector<std::string>& args) {
     return 0;
 }
 
+/* umount <path> */
+static int do_umount(const std::vector<std::string>& args) {
+  return umount(args[1].c_str());
+}
+
 static struct {
     const char *name;
     unsigned flag;
@@ -958,6 +963,7 @@ BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"mkdir",                   {1,     4,    do_mkdir}},
         {"mount_all",               {1,     kMax, do_mount_all}},
         {"mount",                   {3,     kMax, do_mount}},
+        {"umount",                  {1,     1,    do_umount}},
         {"powerctl",                {1,     1,    do_powerctl}},
         {"restart",                 {1,     1,    do_restart}},
         {"restorecon",              {1,     kMax, do_restorecon}},

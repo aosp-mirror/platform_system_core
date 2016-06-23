@@ -355,6 +355,9 @@ trigger <event>
    Trigger an event.  Used to queue an action from another
    action.
 
+umount <path>
+   Unmount the filesystem mounted at that path.
+
 verity_load_state
    Internal implementation detail used to load dm-verity state.
 
