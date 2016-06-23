@@ -155,7 +155,7 @@ class Subprocess {
 
     const std::string& command() const { return command_; }
 
-    int local_socket_fd() const { return local_socket_sfd_.fd(); }
+    int ReleaseLocalSocket() { return local_socket_sfd_.Release(); }
 
     pid_t pid() const { return pid_; }
 
@@ -450,7 +450,7 @@ void Subprocess::ThreadHandler(void* userdata) {
     Subprocess* subprocess = reinterpret_cast<Subprocess*>(userdata);
 
     adb_thread_setname(android::base::StringPrintf(
-            "shell srvc %d", subprocess->local_socket_fd()));
+            "shell srvc %d", subprocess->pid()));
 
     D("passing data streams for PID %d", subprocess->pid());
     subprocess->PassDataStreams();
@@ -761,14 +761,13 @@ int StartSubprocess(const char* name, const char* terminal_type,
         return ReportError(protocol, error);
     }
 
-    unique_fd local_socket(dup(subprocess->local_socket_fd()));
-    D("subprocess creation successful: local_socket_fd=%d, pid=%d", local_socket.get(),
-      subprocess->pid());
+    int local_socket = subprocess->ReleaseLocalSocket();
+    D("subprocess creation successful: local_socket_fd=%d, pid=%d", local_socket, subprocess->pid());
 
     if (!Subprocess::StartThread(std::move(subprocess), &error)) {
         LOG(ERROR) << "failed to start subprocess management thread: " << error;
         return ReportError(protocol, error);
     }
 
-    return local_socket.release();
+    return local_socket;
 }
