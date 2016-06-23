@@ -756,13 +756,14 @@ int StartSubprocess(const char* name, const char* terminal_type,
         return ReportError(protocol, error);
     }
 
-    int local_socket = subprocess->ReleaseLocalSocket();
-    D("subprocess creation successful: local_socket_fd=%d, pid=%d", local_socket, subprocess->pid());
+    unique_fd local_socket(subprocess->ReleaseLocalSocket());
+    D("subprocess creation successful: local_socket_fd=%d, pid=%d", local_socket.get(),
+      subprocess->pid());
 
     if (!Subprocess::StartThread(std::move(subprocess), &error)) {
         LOG(ERROR) << "failed to start subprocess management thread: " << error;
         return ReportError(protocol, error);
     }
 
-    return local_socket;
+    return local_socket.release();
 }
