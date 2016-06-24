@@ -382,22 +382,7 @@ static int do_mount(const std::vector<std::string>& args) {
     source = args[2].c_str();
     target = args[3].c_str();
 
-    if (!strncmp(source, "mtd@", 4)) {
-        n = mtd_name_to_number(source + 4);
-        if (n < 0) {
-            return -1;
-        }
-
-        snprintf(tmp, sizeof(tmp), "/dev/block/mtdblock%d", n);
-
-        if (wait)
-            wait_for_file(tmp, COMMAND_RETRY_TIMEOUT);
-        if (mount(tmp, target, system, flags, options) < 0) {
-            return -1;
-        }
-
-        goto exit_success;
-    } else if (!strncmp(source, "loop@", 5)) {
+    if (!strncmp(source, "loop@", 5)) {
         int mode, loop, fd;
         struct loop_info info;
 

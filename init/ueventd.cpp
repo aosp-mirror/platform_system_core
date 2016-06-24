@@ -119,22 +119,13 @@ void set_device_permission(int nargs, char **args)
         return;
     }
 
-    /* If path starts with mtd@ lookup the mount number. */
-    if (!strncmp(name, "mtd@", 4)) {
-        int n = mtd_name_to_number(name + 4);
-        if (n >= 0)
-            asprintf(&tmp, "/dev/mtd/mtd%d", n);
-        name = tmp;
-    } else {
-        int len = strlen(name);
-        char *wildcard_chr = strchr(name, '*');
-        if ((name[len - 1] == '*') &&
-            (wildcard_chr == (name + len - 1))) {
-            prefix = 1;
-            name[len - 1] = '\0';
-        } else if (wildcard_chr) {
-            wildcard = 1;
-        }
+    int len = strlen(name);
+    char *wildcard_chr = strchr(name, '*');
+    if ((name[len - 1] == '*') && (wildcard_chr == (name + len - 1))) {
+        prefix = 1;
+        name[len - 1] = '\0';
+    } else if (wildcard_chr) {
+        wildcard = 1;
     }
 
     perm = strtol(args[1], &endptr, 8);
