@@ -34,6 +34,7 @@
 #include <sys/un.h>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/strings.h>
 
 /* for ANDROID_SOCKET_* */
@@ -74,7 +75,7 @@ static unsigned int do_decode_uid(const char *s)
 unsigned int decode_uid(const char *s) {
     unsigned int v = do_decode_uid(s);
     if (v == UINT_MAX) {
-        ERROR("decode_uid: Unable to find UID for '%s'. Returning UINT_MAX\n", s);
+        LOG(ERROR) << "decode_uid: Unable to find UID for '" << s << "'; returning UINT_MAX";
     }
     return v;
 }
@@ -94,14 +95,14 @@ int create_socket(const char *name, int type, mode_t perm, uid_t uid,
 
     if (socketcon) {
         if (setsockcreatecon(socketcon) == -1) {
-            ERROR("setsockcreatecon(\"%s\") failed: %s\n", socketcon, strerror(errno));
+            PLOG(ERROR) << "setsockcreatecon(\"" << socketcon << "\") failed";
             return -1;
         }
     }
 
     fd = socket(PF_UNIX, type, 0);
     if (fd < 0) {
-        ERROR("Failed to open socket '%s': %s\n", name, strerror(errno));
+        PLOG(ERROR) << "Failed to open socket '" << name << "'";
         return -1;
     }
 
@@ -115,7 +116,7 @@ int create_socket(const char *name, int type, mode_t perm, uid_t uid,
 
     ret = unlink(addr.sun_path);
     if (ret != 0 && errno != ENOENT) {
-        ERROR("Failed to unlink old socket '%s': %s\n", name, strerror(errno));
+        PLOG(ERROR) << "Failed to unlink old socket '" << name << "'";
         goto out_close;
     }
 
@@ -133,23 +134,26 @@ int create_socket(const char *name, int type, mode_t perm, uid_t uid,
     freecon(filecon);
 
     if (ret) {
-        ERROR("Failed to bind socket '%s': %s\n", name, strerror(savederrno));
+      errno = savederrno;
+        PLOG(ERROR) << "Failed to bind socket '" << name << "'";
         goto out_unlink;
     }
 
     ret = lchown(addr.sun_path, uid, gid);
     if (ret) {
-        ERROR("Failed to lchown socket '%s': %s\n", addr.sun_path, strerror(errno));
+        PLOG(ERROR) << "Failed to lchown socket '" << addr.sun_path << "'";
         goto out_unlink;
     }
     ret = fchmodat(AT_FDCWD, addr.sun_path, perm, AT_SYMLINK_NOFOLLOW);
     if (ret) {
-        ERROR("Failed to fchmodat socket '%s': %s\n", addr.sun_path, strerror(errno));
+        PLOG(ERROR) << "Failed to fchmodat socket '" << addr.sun_path << "'";
         goto out_unlink;
     }
 
-    INFO("Created socket '%s' with mode '%o', user '%d', group '%d'\n",
-         addr.sun_path, perm, uid, gid);
+    LOG(INFO) << "Created socket '" << addr.sun_path << "'"
+              << ", mode " << std::oct << perm << std::dec
+              << ", user " << uid
+              << ", group " << gid;
 
     return fd;
 
@@ -172,11 +176,11 @@ bool read_file(const char* path, std::string* content) {
     // or group-writable files.
     struct stat sb;
     if (fstat(fd, &sb) == -1) {
-        ERROR("fstat failed for '%s': %s\n", path, strerror(errno));
+        PLOG(ERROR) << "fstat failed for '" << path << "'";
         return false;
     }
     if ((sb.st_mode & (S_IWGRP | S_IWOTH)) != 0) {
-        ERROR("skipping insecure file '%s'\n", path);
+        PLOG(ERROR) << "skipping insecure file '" << path << "'";
         return false;
     }
 
@@ -188,12 +192,12 @@ bool read_file(const char* path, std::string* content) {
 int write_file(const char* path, const char* content) {
     int fd = TEMP_FAILURE_RETRY(open(path, O_WRONLY|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600));
     if (fd == -1) {
-        NOTICE("write_file: Unable to open '%s': %s\n", path, strerror(errno));
+        PLOG(ERROR) << "write_file: Unable to open '" << path << "'";
         return -1;
     }
     int result = android::base::WriteStringToFd(content, fd) ? 0 : -1;
     if (result == -1) {
-        NOTICE("write_file: Unable to write to '%s': %s\n", path, strerror(errno));
+        PLOG(ERROR) << "write_file: Unable to write to '" << path << "'";
     }
     close(fd);
     return result;
@@ -228,7 +232,7 @@ int mkdir_recursive(const char *pathname, mode_t mode)
         if (width == 0)
             continue;
         if ((unsigned int)width > sizeof(buf) - 1) {
-            ERROR("path too long for mkdir_recursive\n");
+            LOG(ERROR) << "path too long for mkdir_recursive";
             return -1;
         }
         memcpy(buf, pathname, width);
@@ -282,12 +286,10 @@ void make_link_init(const char *oldpath, const char *newpath)
     memcpy(buf, newpath, width);
     buf[width] = 0;
     ret = mkdir_recursive(buf, 0755);
-    if (ret)
-        ERROR("Failed to create directory %s: %s (%d)\n", buf, strerror(errno), errno);
+    if (ret) PLOG(ERROR) << "Failed to create directory " << buf;
 
     ret = symlink(oldpath, newpath);
-    if (ret && errno != EEXIST)
-        ERROR("Failed to symlink %s to %s: %s (%d)\n", oldpath, newpath, strerror(errno), errno);
+    if (ret && errno != EEXIST) PLOG(ERROR) << "Failed to symlink " << oldpath << " to " << newpath;
 }
 
 void remove_link(const char *oldpath, const char *newpath)
@@ -446,7 +448,7 @@ bool expand_props(const std::string& src, std::string* dst) {
             const char* end = strchr(c, '}');
             if (!end) {
                 // failed to find closing brace, abort.
-                ERROR("unexpected end of string in '%s', looking for }\n", src.c_str());
+                LOG(ERROR) << "unexpected end of string in '" << src << "', looking for }";
                 return false;
             }
             prop_name = std::string(c, end);
@@ -458,21 +460,19 @@ bool expand_props(const std::string& src, std::string* dst) {
             }
         } else {
             prop_name = c;
-            ERROR("using deprecated syntax for specifying property '%s', use ${name} instead\n",
-                  c);
+            LOG(ERROR) << "using deprecated syntax for specifying property '" << c << "', use ${name} instead";
             c += prop_name.size();
         }
 
         if (prop_name.empty()) {
-            ERROR("invalid zero-length prop name in '%s'\n", src.c_str());
+            LOG(ERROR) << "invalid zero-length property name in '" << src << "'";
             return false;
         }
 
         std::string prop_val = property_get(prop_name.c_str());
         if (prop_val.empty()) {
             if (def_val.empty()) {
-                ERROR("property '%s' doesn't exist while expanding '%s'\n",
-                      prop_name.c_str(), src.c_str());
+                LOG(ERROR) << "property '" << prop_name << "' doesn't exist while expanding '" << src << "'";
                 return false;
             }
             prop_val = def_val;
