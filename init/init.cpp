@@ -35,8 +35,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <mtd/mtd-user.h>
-
 #include <selinux/selinux.h>
 #include <selinux/label.h>
 #include <selinux/android.h>
