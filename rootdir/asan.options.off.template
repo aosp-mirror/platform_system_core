@@ -1,0 +1,7 @@
+quarantine_size_mb=0
+max_redzone=16
+poison_heap=false
+poison_partial=false
+poison_array_cookie=false
+alloc_dealloc_mismatch=false
+new_delete_type_mismatch=false

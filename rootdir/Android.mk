@@ -26,6 +26,7 @@ include $(BUILD_PREBUILT)
 #######################################
 # asan.options
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
+
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := asan.options
@@ -34,6 +35,72 @@ LOCAL_SRC_FILES := $(LOCAL_MODULE)
 LOCAL_MODULE_PATH := $(TARGET_OUT)
 
 include $(BUILD_PREBUILT)
+
+# Modules for asan.options.X files.
+
+ASAN_OPTIONS_FILES :=
+
+define create-asan-options-module
+include $$(CLEAR_VARS)
+LOCAL_MODULE := asan.options.$(1)
+ASAN_OPTIONS_FILES += asan.options.$(1)
+LOCAL_MODULE_CLASS := ETC
+# The asan.options.off.template tries to turn off as much of ASAN as is possible.
+LOCAL_SRC_FILES := asan.options.off.template
+LOCAL_MODULE_PATH := $(TARGET_OUT)
+include $$(BUILD_PREBUILT)
+endef
+
+# Pretty comprehensive set of native services. This list is helpful if all that's to be checked is an
+# app.
+ifeq ($(SANITIZE_LITE),true)
+SANITIZE_ASAN_OPTIONS_FOR := \
+  adbd \
+  ATFWD-daemon \
+  audioserver \
+  bridgemgrd \
+  cameraserver \
+  cnd \
+  debuggerd \
+  debuggerd64 \
+  dex2oat \
+  drmserver \
+  fingerprintd \
+  gatekeeperd \
+  installd \
+  keystore \
+  lmkd \
+  logcat \
+  logd \
+  lowi-server \
+  media.codec \
+  mediadrmserver \
+  media.extractor \
+  mediaserver \
+  mm-qcamera-daemon \
+  mpdecision \
+  netmgrd \
+  perfd \
+  perfprofd \
+  qmuxd \
+  qseecomd \
+  rild \
+  sdcard \
+  servicemanager \
+  slim_daemon \
+  surfaceflinger \
+  thermal-engine \
+  time_daemon \
+  update_engine \
+  vold \
+  wpa_supplicant \
+  zip
+endif
+
+ifneq ($(SANITIZE_ASAN_OPTIONS_FOR),)
+  $(foreach binary, $(SANITIZE_ASAN_OPTIONS_FOR), $(eval $(call create-asan-options-module,$(binary))))
+endif
+
 endif
 
 #######################################
@@ -47,7 +114,7 @@ LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 EXPORT_GLOBAL_ASAN_OPTIONS :=
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
   EXPORT_GLOBAL_ASAN_OPTIONS := export ASAN_OPTIONS include=/system/asan.options
-  LOCAL_REQUIRED_MODULES := asan.options
+  LOCAL_REQUIRED_MODULES := asan.options $(ASAN_OPTIONS_FILES)
 endif
 # Put it here instead of in init.rc module definition,
 # because init.rc is conditionally included.
