@@ -32,7 +32,6 @@ BSD_TOOLS := \
 
 OUR_TOOLS := \
     getevent \
-    nandread \
     newfs_msdos \
     sendevent \
     start \
