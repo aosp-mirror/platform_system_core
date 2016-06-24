@@ -281,8 +281,11 @@ hostname <name>
 ifup <interface>
    Bring the network interface <interface> online.
 
-insmod <path>
-   Install the module at <path>
+insmod [-f] <path> [<options>]
+   Install the module at <path> with the specified options.
+   -f
+   Force installation of the module even if the version of the running kernel
+   and the version of the kernel for which the module was compiled do not match.
 
 load_all_props
    Loads properties from /system, /vendor, et cetera.
