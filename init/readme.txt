@@ -311,8 +311,6 @@ mount_all <fstab> [ <path> ]*
 
 mount <type> <device> <dir> [ <flag> ]* [<options>]
    Attempt to mount the named device at the directory <dir>
-   <device> may be of the form mtd@name to specify a mtd block
-   device by name.
    <flag>s include "ro", "rw", "remount", "noatime", ...
    <options> include "barrier=1", "noauto_da_alloc", "discard", ... as
    a comma separated string, eg: barrier=1,noauto_da_alloc
