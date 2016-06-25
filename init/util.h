@@ -27,7 +27,6 @@
 
 #define COLDBOOT_DONE "/dev/.coldboot_done"
 
-int mtd_name_to_number(const char *name);
 int create_socket(const char *name, int type, mode_t perm,
                   uid_t uid, gid_t gid, const char *socketcon);
 
