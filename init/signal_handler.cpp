@@ -47,7 +47,7 @@ static void handle_signal() {
 
 static void SIGCHLD_handler(int) {
     if (TEMP_FAILURE_RETRY(write(signal_write_fd, "1", 1)) == -1) {
-        ERROR("write(signal_write_fd) failed: %s\n", strerror(errno));
+        PLOG(ERROR) << "write(signal_write_fd) failed";
     }
 }
 
@@ -55,7 +55,7 @@ void signal_handler_init() {
     // Create a signalling mechanism for SIGCHLD.
     int s[2];
     if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, s) == -1) {
-        ERROR("socketpair failed: %s\n", strerror(errno));
+        PLOG(ERROR) << "socketpair failed";
         exit(1);
     }
 
