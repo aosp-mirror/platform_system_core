@@ -42,7 +42,7 @@ int Command::InvokeFunc() const {
     expanded_args[0] = args_[0];
     for (std::size_t i = 1; i < args_.size(); ++i) {
         if (!expand_props(args_[i], &expanded_args[i])) {
-            ERROR("%s: cannot expand '%s'\n", args_[0].c_str(), args_[i].c_str());
+            LOG(ERROR) << args_[0] << ": cannot expand '" << args_[i] << "'";
             return -EINVAL;
         }
     }
@@ -123,9 +123,8 @@ void Action::ExecuteCommand(const Command& command) const {
         std::string cmd_str = command.BuildCommandString();
         std::string source = command.BuildSourceString();
 
-        INFO("Command '%s' action=%s%s returned %d took %.2fs\n",
-             cmd_str.c_str(), trigger_name.c_str(), source.c_str(),
-             result, t.duration());
+        LOG(INFO) << "Command '" << cmd_str << "' action=" << trigger_name << source
+                  << " returned " << result << " took " << t.duration() << "s";
     }
 }
 
@@ -253,13 +252,12 @@ std::string Action::BuildTriggersString() const {
 
 void Action::DumpState() const {
     std::string trigger_name = BuildTriggersString();
-    INFO("on %s\n", trigger_name.c_str());
+    LOG(INFO) << "on " << trigger_name;
 
     for (const auto& c : commands_) {
         std::string cmd_str = c.BuildCommandString();
-        INFO(" %s\n", cmd_str.c_str());
+        LOG(INFO) << "  %s" << cmd_str;
     }
-    INFO("\n");
 }
 
 class EventTrigger : public Trigger {
@@ -366,7 +364,7 @@ void ActionManager::ExecuteOneCommand() {
 
     if (current_command_ == 0) {
         std::string trigger_name = action->BuildTriggersString();
-        INFO("processing action (%s)\n", trigger_name.c_str());
+        LOG(INFO) << "processing action (" << trigger_name << ")";
     }
 
     action->ExecuteOneCommand(current_command_);
@@ -395,7 +393,6 @@ void ActionManager::DumpState() const {
     for (const auto& a : actions_) {
         a->DumpState();
     }
-    INFO("\n");
 }
 
 bool ActionParser::ParseSection(const std::vector<std::string>& args,

@@ -29,6 +29,7 @@
 
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <cutils/android_reboot.h>
 #include <cutils/sockets.h>
 #include <system/thread_defs.h>
@@ -91,8 +92,7 @@ void Service::NotifyStateChange(const std::string& new_state) const {
     std::string prop_name = StringPrintf("init.svc.%s", name_.c_str());
     if (prop_name.length() >= PROP_NAME_MAX) {
         // If the property name would be too long, we can't set it.
-        ERROR("Property name \"init.svc.%s\" too long; not setting to %s\n",
-              name_.c_str(), new_state.c_str());
+        LOG(ERROR) << "Property name \"init.svc." << name_ << "\" too long; not setting to " << new_state;
         return;
     }
 
@@ -100,8 +100,9 @@ void Service::NotifyStateChange(const std::string& new_state) const {
 }
 
 void Service::KillProcessGroup(int signal) {
-    NOTICE("Sending signal %d to service '%s' (pid %d) process group...\n",
-           signal, name_.c_str(), pid_);
+    LOG(VERBOSE) << "Sending signal " << signal
+                 << " to service '" << name_
+                 << "' (pid " << pid_ << ") process group...\n",
     kill(pid_, signal);
     killProcessGroup(uid_, pid_, signal);
 }
@@ -118,7 +119,7 @@ bool Service::Reap() {
     }
 
     if (flags_ & SVC_EXEC) {
-        INFO("SVC_EXEC pid %d finished...\n", pid_);
+        LOG(INFO) << "SVC_EXEC pid " << pid_ << " finished...";
         return true;
     }
 
@@ -141,9 +142,10 @@ bool Service::Reap() {
     if ((flags_ & SVC_CRITICAL) && !(flags_ & SVC_RESTART)) {
         if (time_crashed_ + CRITICAL_CRASH_WINDOW >= now) {
             if (++nr_crashed_ > CRITICAL_CRASH_THRESHOLD) {
-                ERROR("critical process '%s' exited %d times in %d minutes; "
-                      "rebooting into recovery mode\n", name_.c_str(),
-                      CRITICAL_CRASH_THRESHOLD, CRITICAL_CRASH_WINDOW / 60);
+                LOG(ERROR) << "critical process '" << name_ << "' exited "
+                           << CRITICAL_CRASH_THRESHOLD << " times in "
+                           << (CRITICAL_CRASH_WINDOW / 60) << " minutes; "
+                           << "rebooting into recovery mode";
                 android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
                 return false;
             }
@@ -164,15 +166,11 @@ bool Service::Reap() {
 }
 
 void Service::DumpState() const {
-    INFO("service %s\n", name_.c_str());
-    INFO("  class '%s'\n", classname_.c_str());
-    INFO("  exec");
-    for (const auto& s : args_) {
-        INFO(" '%s'", s.c_str());
-    }
-    INFO("\n");
+    LOG(INFO) << "service " << name_;
+    LOG(INFO) << "  class '" << classname_ << "'";
+    LOG(INFO) << "  exec "<< android::base::Join(args_, " ");
     for (const auto& si : sockets_) {
-        INFO("  socket %s %s 0%o\n", si.name.c_str(), si.type.c_str(), si.perm);
+        LOG(INFO) << "  socket " << si.name << " " << si.type << " " << std::oct << si.perm;
     }
 }
 
@@ -362,8 +360,7 @@ bool Service::Start() {
 
         bool have_console = (open(console_.c_str(), O_RDWR | O_CLOEXEC) != -1);
         if (!have_console) {
-            ERROR("service '%s' couldn't open console '%s': %s\n",
-                  name_.c_str(), console_.c_str(), strerror(errno));
+            PLOG(ERROR) << "service '" << name_ << "' couldn't open console '" << console_ << "'";
             flags_ |= SVC_DISABLED;
             return false;
         }
@@ -371,8 +368,7 @@ bool Service::Start() {
 
     struct stat sb;
     if (stat(args_[0].c_str(), &sb) == -1) {
-        ERROR("cannot find '%s' (%s), disabling '%s'\n",
-              args_[0].c_str(), strerror(errno), name_.c_str());
+        PLOG(ERROR) << "cannot find '" << args_[0] << "', disabling '" << name_ << "'";
         flags_ |= SVC_DISABLED;
         return false;
     }
@@ -384,16 +380,16 @@ bool Service::Start() {
         char* mycon = nullptr;
         char* fcon = nullptr;
 
-        INFO("computing context for service '%s'\n", args_[0].c_str());
+        LOG(INFO) << "computing context for service '" << args_[0] << "'";
         int rc = getcon(&mycon);
         if (rc < 0) {
-            ERROR("could not get context while starting '%s'\n", name_.c_str());
+            LOG(ERROR) << "could not get context while starting '" << name_ << "'";
             return false;
         }
 
         rc = getfilecon(args_[0].c_str(), &fcon);
         if (rc < 0) {
-            ERROR("could not get context while starting '%s'\n", name_.c_str());
+            LOG(ERROR) << "could not get context while starting '" << name_ << "'";
             free(mycon);
             return false;
         }
@@ -406,7 +402,7 @@ bool Service::Start() {
             free(ret_scon);
         }
         if (rc == 0 && scon == mycon) {
-            ERROR("Service %s does not have a SELinux domain defined.\n", name_.c_str());
+            LOG(ERROR) << "Service " << name_ << " does not have a SELinux domain defined.";
             free(mycon);
             free(fcon);
             return false;
@@ -414,12 +410,12 @@ bool Service::Start() {
         free(mycon);
         free(fcon);
         if (rc < 0) {
-            ERROR("could not get context while starting '%s'\n", name_.c_str());
+            LOG(ERROR) << "could not get context while starting '" << name_ << "'";
             return false;
         }
     }
 
-    NOTICE("Starting service '%s'...\n", name_.c_str());
+    LOG(VERBOSE) << "Starting service '" << name_ << "'...";
 
     pid_t pid = fork();
     if (pid == 0) {
@@ -446,15 +442,14 @@ bool Service::Start() {
         std::string pid_str = StringPrintf("%d", getpid());
         for (const auto& file : writepid_files_) {
             if (!WriteStringToFile(pid_str, file)) {
-                ERROR("couldn't write %s to %s: %s\n",
-                      pid_str.c_str(), file.c_str(), strerror(errno));
+                PLOG(ERROR) << "couldn't write " << pid_str << " to " << file;
             }
         }
 
         if (ioprio_class_ != IoSchedClass_NONE) {
             if (android_set_ioprio(getpid(), ioprio_class_, ioprio_pri_)) {
-                ERROR("Failed to set pid %d ioprio = %d,%d: %s\n",
-                      getpid(), ioprio_class_, ioprio_pri_, strerror(errno));
+                PLOG(ERROR) << "Failed to set pid " << getpid()
+                            << " ioprio=" << ioprio_class_ << "," << ioprio_pri_;
             }
         }
 
@@ -470,32 +465,31 @@ bool Service::Start() {
         // As requested, set our gid, supplemental gids, and uid.
         if (gid_) {
             if (setgid(gid_) != 0) {
-                ERROR("setgid failed: %s\n", strerror(errno));
+                PLOG(ERROR) << "setgid failed";
                 _exit(127);
             }
         }
         if (!supp_gids_.empty()) {
             if (setgroups(supp_gids_.size(), &supp_gids_[0]) != 0) {
-                ERROR("setgroups failed: %s\n", strerror(errno));
+                PLOG(ERROR) << "setgroups failed";
                 _exit(127);
             }
         }
         if (uid_) {
             if (setuid(uid_) != 0) {
-                ERROR("setuid failed: %s\n", strerror(errno));
+                PLOG(ERROR) << "setuid failed";
                 _exit(127);
             }
         }
         if (!seclabel_.empty()) {
             if (setexeccon(seclabel_.c_str()) < 0) {
-                ERROR("cannot setexeccon('%s'): %s\n",
-                      seclabel_.c_str(), strerror(errno));
+                PLOG(ERROR) << "cannot setexeccon('" << seclabel_ << "')";
                 _exit(127);
             }
         }
         if (priority_ != 0) {
             if (setpriority(PRIO_PROCESS, 0, priority_) != 0) {
-                ERROR("setpriority failed: %s\n", strerror(errno));
+                PLOG(ERROR) << "setpriority failed";
                 _exit(127);
             }
         }
@@ -506,7 +500,7 @@ bool Service::Start() {
         strs.push_back(const_cast<char*>(args_[0].c_str()));
         for (std::size_t i = 1; i < args_.size(); ++i) {
             if (!expand_props(args_[i], &expanded_args[i])) {
-                ERROR("%s: cannot expand '%s'\n", args_[0].c_str(), args_[i].c_str());
+                LOG(ERROR) << args_[0] << ": cannot expand '" << args_[i] << "'";
                 _exit(127);
             }
             strs.push_back(const_cast<char*>(expanded_args[i].c_str()));
@@ -514,14 +508,14 @@ bool Service::Start() {
         strs.push_back(nullptr);
 
         if (execve(strs[0], (char**) &strs[0], (char**) ENV) < 0) {
-            ERROR("cannot execve('%s'): %s\n", strs[0], strerror(errno));
+            PLOG(ERROR) << "cannot execve('" << strs[0] << "')";
         }
 
         _exit(127);
     }
 
     if (pid < 0) {
-        ERROR("failed to start '%s'\n", name_.c_str());
+        PLOG(ERROR) << "failed to fork for '" << name_ << "'";
         pid_ = 0;
         return false;
     }
@@ -532,14 +526,13 @@ bool Service::Start() {
 
     errno = -createProcessGroup(uid_, pid_);
     if (errno != 0) {
-        ERROR("createProcessGroup(%d, %d) failed for service '%s': %s\n",
-              uid_, pid_, name_.c_str(), strerror(errno));
+        PLOG(ERROR) << "createProcessGroup(" << uid_ << ", " << pid_ << ") failed for service '" << name_ << "'";
     }
 
     if ((flags_ & SVC_EXEC) != 0) {
-        INFO("SVC_EXEC pid %d (uid %d gid %d+%zu context %s) started; waiting...\n",
-             pid_, uid_, gid_, supp_gids_.size(),
-             !seclabel_.empty() ? seclabel_.c_str() : "default");
+        LOG(INFO) << android::base::StringPrintf("SVC_EXEC pid %d (uid %d gid %d+%zu context %s) started; waiting...",
+                                                 pid_, uid_, gid_, supp_gids_.size(),
+                                                 !seclabel_.empty() ? seclabel_.c_str() : "default");
     }
 
     NotifyStateChange("running");
@@ -672,8 +665,7 @@ ServiceManager& ServiceManager::GetInstance() {
 void ServiceManager::AddService(std::unique_ptr<Service> service) {
     Service* old_service = FindServiceByName(service->name());
     if (old_service) {
-        ERROR("ignored duplicate definition of service '%s'",
-              service->name().c_str());
+        LOG(ERROR) << "ignored duplicate definition of service '" << service->name() << "'";
         return;
     }
     services_.emplace_back(std::move(service));
@@ -690,12 +682,12 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
         }
     }
     if (command_arg > 4 + NR_SVC_SUPP_GIDS) {
-        ERROR("exec called with too many supplementary group ids\n");
+        LOG(ERROR) << "exec called with too many supplementary group ids";
         return nullptr;
     }
 
     if (command_arg >= args.size()) {
-        ERROR("exec called without command\n");
+        LOG(ERROR) << "exec called without command";
         return nullptr;
     }
     std::vector<std::string> str_args(args.begin() + command_arg, args.end());
@@ -725,8 +717,7 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
     std::unique_ptr<Service> svc_p(new Service(name, "default", flags, uid, gid,
                                                supp_gids, seclabel, str_args));
     if (!svc_p) {
-        ERROR("Couldn't allocate service for exec of '%s'",
-              str_args[0].c_str());
+        LOG(ERROR) << "Couldn't allocate service for exec of '" << str_args[0] << "'";
         return nullptr;
     }
     Service* svc = svc_p.get();
@@ -809,7 +800,6 @@ void ServiceManager::DumpState() const {
     for (const auto& s : services_) {
         s->DumpState();
     }
-    INFO("\n");
 }
 
 bool ServiceManager::ReapOneProcess() {
@@ -818,7 +808,7 @@ bool ServiceManager::ReapOneProcess() {
     if (pid == 0) {
         return false;
     } else if (pid == -1) {
-        ERROR("waitpid failed: %s\n", strerror(errno));
+        PLOG(ERROR) << "waitpid failed";
         return false;
     }
 
@@ -833,13 +823,13 @@ bool ServiceManager::ReapOneProcess() {
     }
 
     if (WIFEXITED(status)) {
-        NOTICE("%s exited with status %d\n", name.c_str(), WEXITSTATUS(status));
+        LOG(VERBOSE) << name << " exited with status " << WEXITSTATUS(status);
     } else if (WIFSIGNALED(status)) {
-        NOTICE("%s killed by signal %d\n", name.c_str(), WTERMSIG(status));
+        LOG(VERBOSE) << name << " killed by signal " << WTERMSIG(status);
     } else if (WIFSTOPPED(status)) {
-        NOTICE("%s stopped by signal %d\n", name.c_str(), WSTOPSIG(status));
+        LOG(VERBOSE) << name << " stopped by signal " << WSTOPSIG(status);
     } else {
-        NOTICE("%s state changed", name.c_str());
+        LOG(VERBOSE) << name << " state changed";
     }
 
     if (!svc) {
