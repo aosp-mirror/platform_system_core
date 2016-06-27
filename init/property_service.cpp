@@ -64,7 +64,7 @@ static int property_set_fd = -1;
 
 void property_init() {
     if (__system_property_area_init()) {
-        ERROR("Failed to initialize property area\n");
+        LOG(ERROR) << "Failed to initialize property area";
         exit(1);
     }
 }
@@ -127,7 +127,7 @@ static void write_persistent_property(const char *name, const char *value)
     snprintf(tempPath, sizeof(tempPath), "%s/.temp.XXXXXX", PERSISTENT_PROPERTY_DIR);
     fd = mkstemp(tempPath);
     if (fd < 0) {
-        ERROR("Unable to write persistent property to temp file %s: %s\n", tempPath, strerror(errno));
+        PLOG(ERROR) << "Unable to write persistent property to temp file " << tempPath;
         return;
     }
     write(fd, value, strlen(value));
@@ -136,8 +136,8 @@ static void write_persistent_property(const char *name, const char *value)
 
     snprintf(path, sizeof(path), "%s/%s", PERSISTENT_PROPERTY_DIR, name);
     if (rename(tempPath, path)) {
+        PLOG(ERROR) << "Unable to rename persistent property file " << tempPath << " to " << path;
         unlink(tempPath);
-        ERROR("Unable to rename persistent property file %s to %s\n", tempPath, path);
     }
 }
 
@@ -176,7 +176,7 @@ static int property_set_impl(const char* name, const char* value) {
 
     if (strcmp("selinux.restorecon_recursive", name) == 0 && valuelen > 0) {
         if (restorecon_recursive(value) != 0) {
-            ERROR("Failed to restorecon_recursive %s\n", value);
+            LOG(ERROR) << "Failed to restorecon_recursive " << value;
         }
     }
 
@@ -219,7 +219,7 @@ static int property_set_impl(const char* name, const char* value) {
 int property_set(const char* name, const char* value) {
     int rc = property_set_impl(name, value);
     if (rc == -1) {
-        ERROR("property_set(\"%s\", \"%s\") failed\n", name, value);
+        LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed";
     }
     return rc;
 }
@@ -245,7 +245,7 @@ static void handle_property_set_fd()
     /* Check socket options here */
     if (getsockopt(s, SOL_SOCKET, SO_PEERCRED, &cr, &cr_size) < 0) {
         close(s);
-        ERROR("Unable to receive socket options\n");
+        PLOG(ERROR) << "Unable to receive socket options";
         return;
     }
 
@@ -254,19 +254,18 @@ static void handle_property_set_fd()
     ufds[0].revents = 0;
     nr = TEMP_FAILURE_RETRY(poll(ufds, 1, timeout_ms));
     if (nr == 0) {
-        ERROR("sys_prop: timeout waiting for uid=%d to send property message.\n", cr.uid);
+        LOG(ERROR) << "sys_prop: timeout waiting for uid " << cr.uid << " to send property message.";
         close(s);
         return;
     } else if (nr < 0) {
-        ERROR("sys_prop: error waiting for uid=%d to send property message: %s\n", cr.uid, strerror(errno));
+        PLOG(ERROR) << "sys_prop: error waiting for uid " << cr.uid << " to send property message";
         close(s);
         return;
     }
 
     r = TEMP_FAILURE_RETRY(recv(s, &msg, sizeof(msg), MSG_DONTWAIT));
     if(r != sizeof(prop_msg)) {
-        ERROR("sys_prop: mis-match msg size received: %d expected: %zu: %s\n",
-              r, sizeof(prop_msg), strerror(errno));
+        PLOG(ERROR) << "sys_prop: mis-match msg size received: " << r << " expected: " << sizeof(prop_msg);
         close(s);
         return;
     }
@@ -277,7 +276,7 @@ static void handle_property_set_fd()
         msg.value[PROP_VALUE_MAX-1] = 0;
 
         if (!is_legal_property_name(msg.name, strlen(msg.name))) {
-            ERROR("sys_prop: illegal property name. Got: \"%s\"\n", msg.name);
+            LOG(ERROR) << "sys_prop: illegal property name \"" << msg.name << "\"";
             close(s);
             return;
         }
@@ -291,15 +290,17 @@ static void handle_property_set_fd()
             if (check_control_mac_perms(msg.value, source_ctx, &cr)) {
                 handle_control_message((char*) msg.name + 4, (char*) msg.value);
             } else {
-                ERROR("sys_prop: Unable to %s service ctl [%s] uid:%d gid:%d pid:%d\n",
-                        msg.name + 4, msg.value, cr.uid, cr.gid, cr.pid);
+                LOG(ERROR) << "sys_prop: Unable to " << (msg.name + 4)
+                           << " service ctl [" << msg.value << "]"
+                           << " uid:" << cr.uid
+                           << " gid:" << cr.gid
+                           << " pid:" << cr.pid;
             }
         } else {
             if (check_mac_perms(msg.name, source_ctx, &cr)) {
                 property_set((char*) msg.name, (char*) msg.value);
             } else {
-                ERROR("sys_prop: permission denied uid:%d  name:%s\n",
-                      cr.uid, msg.name);
+                LOG(ERROR) << "sys_prop: permission denied uid:" << cr.uid << " name:" << msg.name;
             }
 
             // Note: bionic's property client code assumes that the
@@ -389,7 +390,7 @@ static void load_properties_from_file(const char* filename, const char* filter) 
         data.push_back('\n');
         load_properties(&data[0], filter);
     }
-    NOTICE("(Loading properties from %s took %.2fs.)\n", filename, t.duration());
+    LOG(VERBOSE) << "(Loading properties from " << filename << " took " << t.duration() << "s.)";
 }
 
 static void load_persistent_properties() {
@@ -397,8 +398,8 @@ static void load_persistent_properties() {
 
     std::unique_ptr<DIR, int(*)(DIR*)> dir(opendir(PERSISTENT_PROPERTY_DIR), closedir);
     if (!dir) {
-        ERROR("Unable to open persistent property directory \"%s\": %s\n",
-              PERSISTENT_PROPERTY_DIR, strerror(errno));
+        PLOG(ERROR) << "Unable to open persistent property directory \""
+                    << PERSISTENT_PROPERTY_DIR << "\"";
         return;
     }
 
@@ -414,25 +415,23 @@ static void load_persistent_properties() {
         // Open the file and read the property value.
         int fd = openat(dirfd(dir.get()), entry->d_name, O_RDONLY | O_NOFOLLOW);
         if (fd == -1) {
-            ERROR("Unable to open persistent property file \"%s\": %s\n",
-                  entry->d_name, strerror(errno));
+            PLOG(ERROR) << "Unable to open persistent property file \"" << entry->d_name << "\"";
             continue;
         }
 
         struct stat sb;
         if (fstat(fd, &sb) == -1) {
-            ERROR("fstat on property file \"%s\" failed: %s\n", entry->d_name, strerror(errno));
+            PLOG(ERROR) << "fstat on property file \"" << entry->d_name << "\" failed";
             close(fd);
             continue;
         }
 
         // File must not be accessible to others, be owned by root/root, and
         // not be a hard link to any other file.
-        if (((sb.st_mode & (S_IRWXG | S_IRWXO)) != 0) || (sb.st_uid != 0) || (sb.st_gid != 0) ||
-                (sb.st_nlink != 1)) {
-            ERROR("skipping insecure property file %s (uid=%u gid=%u nlink=%u mode=%o)\n",
-                  entry->d_name, (unsigned int)sb.st_uid, (unsigned int)sb.st_gid,
-                  (unsigned int)sb.st_nlink, sb.st_mode);
+        if (((sb.st_mode & (S_IRWXG | S_IRWXO)) != 0) || sb.st_uid != 0 || sb.st_gid != 0 || sb.st_nlink != 1) {
+            PLOG(ERROR) << "skipping insecure property file " << entry->d_name
+                        << " (uid=" << sb.st_uid << " gid=" << sb.st_gid
+                        << " nlink=" << sb.st_nlink << " mode=" << std::oct << sb.st_mode << ")";
             close(fd);
             continue;
         }
@@ -443,8 +442,7 @@ static void load_persistent_properties() {
             value[length] = 0;
             property_set(entry->d_name, value);
         } else {
-            ERROR("Unable to read persistent property file %s: %s\n",
-                  entry->d_name, strerror(errno));
+            PLOG(ERROR) << "Unable to read persistent property file " << entry->d_name;
         }
         close(fd);
     }
@@ -477,27 +475,27 @@ void load_persist_props(void) {
 void load_recovery_id_prop() {
     std::string ro_hardware = property_get("ro.hardware");
     if (ro_hardware.empty()) {
-        ERROR("ro.hardware not set - unable to load recovery id\n");
+        LOG(ERROR) << "ro.hardware not set - unable to load recovery id";
         return;
     }
     std::string fstab_filename = FSTAB_PREFIX + ro_hardware;
 
     std::unique_ptr<fstab, void(*)(fstab*)> tab(fs_mgr_read_fstab(fstab_filename.c_str()),
-            fs_mgr_free_fstab);
+                                                fs_mgr_free_fstab);
     if (!tab) {
-        ERROR("unable to read fstab %s: %s\n", fstab_filename.c_str(), strerror(errno));
+        PLOG(ERROR) << "unable to read fstab " << fstab_filename;
         return;
     }
 
     fstab_rec* rec = fs_mgr_get_entry_for_mount_point(tab.get(), RECOVERY_MOUNT_POINT);
     if (rec == NULL) {
-        ERROR("/recovery not specified in fstab\n");
+        LOG(ERROR) << "/recovery not specified in fstab";
         return;
     }
 
     int fd = open(rec->blk_device, O_RDONLY);
     if (fd == -1) {
-        ERROR("error opening block device %s: %s\n", rec->blk_device, strerror(errno));
+        PLOG(ERROR) << "error opening block device " << rec->blk_device;
         return;
     }
 
@@ -506,7 +504,7 @@ void load_recovery_id_prop() {
         std::string hex = bytes_to_hex(reinterpret_cast<uint8_t*>(hdr.id), sizeof(hdr.id));
         property_set("ro.recovery_id", hex.c_str());
     } else {
-        ERROR("error reading /recovery: %s\n", strerror(errno));
+        PLOG(ERROR) << "error reading /recovery";
     }
 
     close(fd);
@@ -523,7 +521,7 @@ void start_property_service() {
     property_set_fd = create_socket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
                                     0666, 0, 0, NULL);
     if (property_set_fd == -1) {
-        ERROR("start_property_service socket creation failed: %s\n", strerror(errno));
+        PLOG(ERROR) << "start_property_service socket creation failed";
         exit(1);
     }
 
