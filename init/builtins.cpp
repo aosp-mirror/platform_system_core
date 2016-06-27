@@ -73,12 +73,12 @@ static const int kTerminateServiceDelayMicroSeconds = 50000;
 static int insmod(const char *filename, const char *options, int flags) {
     int fd = open(filename, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
     if (fd == -1) {
-        ERROR("insmod: open(\"%s\") failed: %s", filename, strerror(errno));
+        PLOG(ERROR) << "insmod: open(\"" << filename << "\") failed";
         return -1;
     }
     int rc = syscall(__NR_finit_module, fd, options, flags);
     if (rc == -1) {
-        ERROR("finit_module for \"%s\" failed: %s", filename, strerror(errno));
+        PLOG(ERROR) << "finit_module for \"" << filename << "\" failed";
     }
     close(fd);
     return rc;
@@ -141,7 +141,7 @@ static int wipe_data_via_recovery(const std::string& reason) {
     const std::vector<std::string> options = {"--wipe_data", std::string() + "--reason=" + reason};
     std::string err;
     if (!write_bootloader_message(options, &err)) {
-        ERROR("failed to set bootloader message: %s", err.c_str());
+        LOG(ERROR) << "failed to set bootloader message: " << err;
         return -1;
     }
     android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
@@ -214,13 +214,13 @@ static void unmount_and_fsck(const struct mntent *entry) {
         const char *f2fs_argv[] = {
             "/system/bin/fsck.f2fs", "-f", entry->mnt_fsname,
         };
-        android_fork_execvp_ext(ARRAY_SIZE(f2fs_argv), (char **)f2fs_argv,
+        android_fork_execvp_ext(arraysize(f2fs_argv), (char **)f2fs_argv,
                                 &st, true, LOG_KLOG, true, NULL, NULL, 0);
     } else if (!strcmp(entry->mnt_type, "ext4")) {
         const char *ext4_argv[] = {
             "/system/bin/e2fsck", "-f", "-y", entry->mnt_fsname,
         };
-        android_fork_execvp_ext(ARRAY_SIZE(ext4_argv), (char **)ext4_argv,
+        android_fork_execvp_ext(arraysize(ext4_argv), (char **)ext4_argv,
                                 &st, true, LOG_KLOG, true, NULL, NULL, 0);
     }
 }
@@ -440,7 +440,7 @@ static int do_mount(const std::vector<std::string>& args) {
         }
 
         close(fd);
-        ERROR("out of loopback devices");
+        LOG(ERROR) << "out of loopback devices";
         return -1;
     } else {
         if (wait)
@@ -503,9 +503,9 @@ static int do_mount_all(const std::vector<std::string>& args) {
     if (pid > 0) {
         /* Parent.  Wait for the child to return */
         int wp_ret = TEMP_FAILURE_RETRY(waitpid(pid, &status, 0));
-        if (wp_ret < 0) {
-            /* Unexpected error code. We will continue anyway. */
-            NOTICE("waitpid failed rc=%d: %s\n", wp_ret, strerror(errno));
+        if (wp_ret == -1) {
+            // Unexpected error code. We will continue anyway.
+            PLOG(WARNING) << "waitpid failed";
         }
 
         if (WIFEXITED(status)) {
@@ -520,7 +520,7 @@ static int do_mount_all(const std::vector<std::string>& args) {
         child_ret = fs_mgr_mount_all(fstab);
         fs_mgr_free_fstab(fstab);
         if (child_ret == -1) {
-            ERROR("fs_mgr_mount_all returned an error\n");
+            PLOG(ERROR) << "fs_mgr_mount_all returned an error";
         }
         _exit(child_ret);
     } else {
@@ -545,7 +545,7 @@ static int do_mount_all(const std::vector<std::string>& args) {
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
     } else if (ret == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
         /* Setup a wipe via recovery, and reboot into recovery */
-        ERROR("fs_mgr_mount_all suggested recovery, so wiping data via recovery.\n");
+        PLOG(ERROR) << "fs_mgr_mount_all suggested recovery, so wiping data via recovery.";
         ret = wipe_data_via_recovery("wipe_data_via_recovery");
         /* If reboot worked, there is no return. */
     } else if (ret == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
@@ -559,7 +559,7 @@ static int do_mount_all(const std::vector<std::string>& args) {
         // do anything different from the nonencrypted case.
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
     } else if (ret > 0) {
-        ERROR("fs_mgr_mount_all returned unexpected error %d\n", ret);
+        PLOG(ERROR) << "fs_mgr_mount_all returned unexpected error " << ret;
     }
     /* else ... < 0: error */
 
@@ -596,7 +596,7 @@ static int do_setrlimit(const std::vector<std::string>& args) {
 static int do_start(const std::vector<std::string>& args) {
     Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
     if (!svc) {
-        ERROR("do_start: Service %s not found\n", args[1].c_str());
+        LOG(ERROR) << "do_start: Service " << args[1] << " not found";
         return -1;
     }
     if (!svc->Start())
@@ -607,7 +607,7 @@ static int do_start(const std::vector<std::string>& args) {
 static int do_stop(const std::vector<std::string>& args) {
     Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
     if (!svc) {
-        ERROR("do_stop: Service %s not found\n", args[1].c_str());
+        LOG(ERROR) << "do_stop: Service " << args[1] << " not found";
         return -1;
     }
     svc->Stop();
@@ -617,7 +617,7 @@ static int do_stop(const std::vector<std::string>& args) {
 static int do_restart(const std::vector<std::string>& args) {
     Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
     if (!svc) {
-        ERROR("do_restart: Service %s not found\n", args[1].c_str());
+        LOG(ERROR) << "do_restart: Service " << args[1] << " not found";
         return -1;
     }
     svc->Restart();
@@ -638,7 +638,7 @@ static int do_powerctl(const std::vector<std::string>& args) {
         cmd = ANDROID_RB_RESTART2;
         len = 6;
     } else {
-        ERROR("powerctl: unrecognized command '%s'\n", command);
+        LOG(ERROR) << "powerctl: unrecognized command '" << command << "'";
         return -EINVAL;
     }
 
@@ -652,7 +652,7 @@ static int do_powerctl(const std::vector<std::string>& args) {
             reboot_target = &command[len + 1];
         }
     } else if (command[len] != '\0') {
-        ERROR("powerctl: unrecognized reboot target '%s'\n", &command[len]);
+        LOG(ERROR) << "powerctl: unrecognized reboot target '" << &command[len] << "'";
         return -EINVAL;
     }
 
@@ -689,7 +689,7 @@ static int do_powerctl(const std::vector<std::string>& args) {
             // Wait a bit before recounting the number or running services.
             usleep(kTerminateServiceDelayMicroSeconds);
         }
-        NOTICE("Terminating running services took %.02f seconds", t.duration());
+        LOG(VERBOSE) << "Terminating running services took " << t.duration() << " seconds";
     }
 
     return android_reboot_with_callback(cmd, 0, reboot_target,
@@ -865,7 +865,7 @@ static int do_restorecon_recursive(const std::vector<std::string>& args) {
 static int do_loglevel(const std::vector<std::string>& args) {
     int log_level = std::stoi(args[1]);
     if (log_level < KLOG_ERROR_LEVEL || log_level > KLOG_DEBUG_LEVEL) {
-        ERROR("loglevel: invalid log level'%d'\n", log_level);
+        LOG(ERROR) << "loglevel: invalid log level " << log_level;
         return -EINVAL;
     }
     klog_set_level(log_level);

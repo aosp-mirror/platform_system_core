@@ -38,7 +38,7 @@ bool ImportParser::ParseSection(const std::vector<std::string>& args,
         return false;
     }
 
-    INFO("Added '%s' to import list\n", conf_file.c_str());
+    LOG(INFO) << "Added '" << conf_file << "' to import list";
     imports_.emplace_back(std::move(conf_file));
     return true;
 }
@@ -48,8 +48,7 @@ void ImportParser::EndFile(const std::string& filename) {
     imports_.clear();
     for (const auto& s : current_imports) {
         if (!Parser::GetInstance().ParseConfig(s)) {
-            ERROR("could not import file '%s' from '%s': %s\n",
-                  s.c_str(), filename.c_str(), strerror(errno));
+            PLOG(ERROR) << "could not import file '" << s << "' from '" << filename << "'";
         }
     }
 }
