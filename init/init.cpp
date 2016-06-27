@@ -87,7 +87,7 @@ void register_epoll_handler(int fd, void (*fn)()) {
     ev.events = EPOLLIN;
     ev.data.ptr = reinterpret_cast<void*>(fn);
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev) == -1) {
-        ERROR("epoll_ctl failed: %s\n", strerror(errno));
+        PLOG(ERROR) << "epoll_ctl failed";
     }
 }
 
@@ -98,7 +98,7 @@ int add_environment(const char *key, const char *val)
     size_t key_len = strlen(key);
 
     /* The last environment entry is reserved to terminate the list */
-    for (n = 0; n < (ARRAY_SIZE(ENV) - 1); n++) {
+    for (n = 0; n < (arraysize(ENV) - 1); n++) {
 
         /* Delete any existing entry for this key */
         if (ENV[n] != NULL) {
@@ -118,7 +118,7 @@ int add_environment(const char *key, const char *val)
         }
     }
 
-    ERROR("No env. room to store: '%s':'%s'\n", key, val);
+    LOG(ERROR) << "No env. room to store: '" << key << "':'" << val << "'";
 
     return -1;
 }
@@ -141,7 +141,7 @@ static void restart_processes()
 void handle_control_message(const std::string& msg, const std::string& name) {
     Service* svc = ServiceManager::GetInstance().FindServiceByName(name);
     if (svc == nullptr) {
-        ERROR("no such service '%s'\n", name.c_str());
+        LOG(ERROR) << "no such service '" << name << "'";
         return;
     }
 
@@ -152,22 +152,22 @@ void handle_control_message(const std::string& msg, const std::string& name) {
     } else if (msg == "restart") {
         svc->Restart();
     } else {
-        ERROR("unknown control msg '%s'\n", msg.c_str());
+        LOG(ERROR) << "unknown control msg '" << msg << "'";
     }
 }
 
 static int wait_for_coldboot_done_action(const std::vector<std::string>& args) {
     Timer t;
 
-    NOTICE("Waiting for %s...\n", COLDBOOT_DONE);
+    LOG(VERBOSE) << "Waiting for " COLDBOOT_DONE "...";
     // Any longer than 1s is an unreasonable length of time to delay booting.
     // If you're hitting this timeout, check that you didn't make your
     // sepolicy regular expressions too expensive (http://b/19899875).
     if (wait_for_file(COLDBOOT_DONE, 1)) {
-        ERROR("Timed out waiting for %s\n", COLDBOOT_DONE);
+        LOG(ERROR) << "Timed out waiting for " COLDBOOT_DONE;
     }
 
-    NOTICE("Waiting for %s took %.2fs.\n", COLDBOOT_DONE, t.duration());
+    LOG(VERBOSE) << "Waiting for " COLDBOOT_DONE " took " << t.duration() << "s.";
     return 0;
 }
 
@@ -199,11 +199,11 @@ static int mix_hwrng_into_linux_rng_action(const std::vector<std::string>& args)
             open("/dev/hw_random", O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
     if (hwrandom_fd == -1) {
         if (errno == ENOENT) {
-          ERROR("/dev/hw_random not found\n");
-          /* It's not an error to not have a Hardware RNG. */
-          result = 0;
+            LOG(ERROR) << "/dev/hw_random not found";
+            // It's not an error to not have a Hardware RNG.
+            result = 0;
         } else {
-          ERROR("Failed to open /dev/hw_random: %s\n", strerror(errno));
+            PLOG(ERROR) << "Failed to open /dev/hw_random";
         }
         goto ret;
     }
@@ -211,7 +211,7 @@ static int mix_hwrng_into_linux_rng_action(const std::vector<std::string>& args)
     urandom_fd = TEMP_FAILURE_RETRY(
             open("/dev/urandom", O_WRONLY | O_NOFOLLOW | O_CLOEXEC));
     if (urandom_fd == -1) {
-        ERROR("Failed to open /dev/urandom: %s\n", strerror(errno));
+        PLOG(ERROR) << "Failed to open /dev/urandom";
         goto ret;
     }
 
@@ -219,23 +219,22 @@ static int mix_hwrng_into_linux_rng_action(const std::vector<std::string>& args)
         chunk_size = TEMP_FAILURE_RETRY(
                 read(hwrandom_fd, buf, sizeof(buf) - total_bytes_written));
         if (chunk_size == -1) {
-            ERROR("Failed to read from /dev/hw_random: %s\n", strerror(errno));
+            PLOG(ERROR) << "Failed to read from /dev/hw_random";
             goto ret;
         } else if (chunk_size == 0) {
-            ERROR("Failed to read from /dev/hw_random: EOF\n");
+            LOG(ERROR) << "Failed to read from /dev/hw_random: EOF";
             goto ret;
         }
 
         chunk_size = TEMP_FAILURE_RETRY(write(urandom_fd, buf, chunk_size));
         if (chunk_size == -1) {
-            ERROR("Failed to write to /dev/urandom: %s\n", strerror(errno));
+            PLOG(ERROR) << "Failed to write to /dev/urandom";
             goto ret;
         }
         total_bytes_written += chunk_size;
     }
 
-    INFO("Mixed %zu bytes from /dev/hw_random into /dev/urandom",
-                total_bytes_written);
+    LOG(INFO) << "Mixed " << total_bytes_written << " bytes from /dev/hw_random into /dev/urandom";
     result = 0;
 
 ret:
@@ -249,7 +248,7 @@ ret:
 }
 
 static void security_failure() {
-    ERROR("Security failure; rebooting into recovery mode...\n");
+    LOG(ERROR) << "Security failure; rebooting into recovery mode...";
     android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
     while (true) { pause(); }  // never reached
 }
@@ -268,7 +267,7 @@ static bool __attribute__((unused)) set_mmap_rnd_bits_min(int start, int min, bo
     }
     std::ifstream inf(path, std::fstream::in);
     if (!inf) {
-        ERROR("Cannot open for reading: %s!\n", path.c_str());
+        LOG(ERROR) << "Cannot open for reading: " << path;
         return false;
     }
     while (start >= min) {
@@ -276,7 +275,7 @@ static bool __attribute__((unused)) set_mmap_rnd_bits_min(int start, int min, bo
         std::string str_val = std::to_string(start);
         std::ofstream of(path, std::fstream::out);
         if (!of) {
-            ERROR("Cannot open for writing: %s!\n", path.c_str());
+            LOG(ERROR) << "Cannot open for writing: " << path;
             return false;
         }
         of << str_val << std::endl;
@@ -293,8 +292,7 @@ static bool __attribute__((unused)) set_mmap_rnd_bits_min(int start, int min, bo
     }
     inf.close();
     if (start < min) {
-        ERROR("Unable to set minimum required entropy %d in %s!\n",
-              min, path.c_str());
+        LOG(ERROR) << "Unable to set minimum required entropy " << min << " in " << path;
         return false;
     }
     return true;
@@ -350,7 +348,7 @@ static int set_mmap_rnd_bits_action(const std::vector<std::string>& args)
     ret = 0;
 #endif
     if (ret == -1) {
-        ERROR("Unable to set adequate mmap entropy value!\n");
+        LOG(ERROR) << "Unable to set adequate mmap entropy value!";
         security_failure();
     }
     return ret;
@@ -413,7 +411,7 @@ static void export_kernel_boot_props() {
         { "ro.boot.hardware",   "ro.hardware",   "unknown", },
         { "ro.boot.revision",   "ro.revision",   "0", },
     };
-    for (size_t i = 0; i < ARRAY_SIZE(prop_map); i++) {
+    for (size_t i = 0; i < arraysize(prop_map); i++) {
         std::string value = property_get(prop_map[i].src_prop);
         property_set(prop_map[i].dst_prop, (!value.empty()) ? value.c_str() : prop_map[i].default_value);
     }
@@ -427,7 +425,7 @@ static void process_kernel_dt() {
     std::string dt_file;
     android::base::ReadFileToString(file_name, &dt_file);
     if (!dt_file.compare("android,firmware")) {
-        ERROR("firmware/android is not compatible with 'android,firmware'\n");
+        LOG(ERROR) << "firmware/android is not compatible with 'android,firmware'";
         return;
     }
 
@@ -503,7 +501,7 @@ static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_
     property_audit_data *d = reinterpret_cast<property_audit_data*>(data);
 
     if (!d || !d->name || !d->cr) {
-        ERROR("audit_callback invoked with null data arguments!");
+        LOG(ERROR) << "audit_callback invoked with null data arguments!";
         return 0;
     }
 
@@ -522,9 +520,9 @@ static void selinux_initialize(bool in_kernel_domain) {
     selinux_set_callback(SELINUX_CB_AUDIT, cb);
 
     if (in_kernel_domain) {
-        INFO("Loading SELinux policy...\n");
+        LOG(INFO) << "Loading SELinux policy...";
         if (selinux_android_load_policy() < 0) {
-            ERROR("failed to load policy: %s\n", strerror(errno));
+            PLOG(ERROR) << "failed to load policy";
             security_failure();
         }
 
@@ -532,8 +530,7 @@ static void selinux_initialize(bool in_kernel_domain) {
         bool is_enforcing = selinux_is_enforcing();
         if (kernel_enforcing != is_enforcing) {
             if (security_setenforce(is_enforcing)) {
-                ERROR("security_setenforce(%s) failed: %s\n",
-                      is_enforcing ? "true" : "false", strerror(errno));
+                PLOG(ERROR) << "security_setenforce(%s) failed" << (is_enforcing ? "true" : "false");
                 security_failure();
             }
         }
@@ -542,8 +539,8 @@ static void selinux_initialize(bool in_kernel_domain) {
             security_failure();
         }
 
-        NOTICE("(Initializing SELinux %s took %.2fs.)\n",
-               is_enforcing ? "enforcing" : "non-enforcing", t.duration());
+        LOG(INFO) << "(Initializing SELinux " << (is_enforcing ? "enforcing" : "non-enforcing")
+                  << " took " << t.duration() << "s.)";
     } else {
         selinux_init_all_handles();
     }
@@ -583,10 +580,9 @@ int main(int argc, char** argv) {
     // later on. Now that tmpfs is mounted on /dev, we can actually talk
     // to the outside world.
     open_devnull_stdio();
-    klog_init();
-    klog_set_level(KLOG_NOTICE_LEVEL);
+    InitKernelLogging(argv);
 
-    NOTICE("init %s started!\n", is_first_stage ? "first stage" : "second stage");
+    LOG(INFO) << "init " << (is_first_stage ? "first stage" : "second stage") << " started!";
 
     if (!is_first_stage) {
         // Indicate that booting is in progress to background fw loaders, etc.
@@ -611,13 +607,13 @@ int main(int argc, char** argv) {
     // that the SELinux policy has been loaded.
     if (is_first_stage) {
         if (restorecon("/init") == -1) {
-            ERROR("restorecon failed: %s\n", strerror(errno));
+            PLOG(ERROR) << "restorecon failed";
             security_failure();
         }
         char* path = argv[0];
         char* args[] = { path, const_cast<char*>("--second-stage"), nullptr };
         if (execv(path, args) == -1) {
-            ERROR("execv(\"%s\") failed: %s\n", path, strerror(errno));
+            PLOG(ERROR) << "execv(\"" << path << "\") failed";
             security_failure();
         }
     }
@@ -625,7 +621,7 @@ int main(int argc, char** argv) {
     // These directories were necessarily created before initial policy load
     // and therefore need their security context restored to the proper value.
     // This must happen before /dev is populated by ueventd.
-    NOTICE("Running restorecon...\n");
+    LOG(INFO) << "Running restorecon...";
     restorecon("/dev");
     restorecon("/dev/socket");
     restorecon("/dev/__properties__");
@@ -634,7 +630,7 @@ int main(int argc, char** argv) {
 
     epoll_fd = epoll_create1(EPOLL_CLOEXEC);
     if (epoll_fd == -1) {
-        ERROR("epoll_create1 failed: %s\n", strerror(errno));
+        PLOG(ERROR) << "epoll_create1 failed";
         exit(1);
     }
 
@@ -705,7 +701,7 @@ int main(int argc, char** argv) {
         epoll_event ev;
         int nr = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd, &ev, 1, timeout));
         if (nr == -1) {
-            ERROR("epoll_wait failed: %s\n", strerror(errno));
+            PLOG(ERROR) << "epoll_wait failed";
         } else if (nr == 1) {
             ((void (*)()) ev.data.ptr)();
         }
