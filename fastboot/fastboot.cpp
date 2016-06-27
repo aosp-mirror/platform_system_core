@@ -99,20 +99,15 @@ struct fastboot_buffer {
 };
 
 static struct {
-    char img_name[17];
-    char sig_name[17];
-    char item_name[17];
+    char img_name[13];
+    char sig_name[13];
     char part_name[9];
-    bool active_slot;
     bool is_optional;
 } images[] = {
-    {"boot.img",         "boot.sig",         "boot",         "boot",     true,  false},
-    {"boot_other.img",   "boot_other.sig",   "boot_other",   "boot",     false, true},
-    {"recovery.img",     "recovery.sig",     "recovery",     "recovery", true,  true},
-    {"system.img",       "system.sig",       "system",       "system",   true,  false},
-    {"system_other.img", "system_other.sig", "system_other", "system",   false, true},
-    {"vendor.img",       "vendor.sig",       "vendor",       "vendor",   true,  true},
-    {"vendor_other.img", "vendor_other.sig", "vendor_other", "vendor",   false, true},
+    {"boot.img", "boot.sig", "boot", false},
+    {"recovery.img", "recovery.sig", "recovery", true},
+    {"system.img", "system.sig", "system", false},
+    {"vendor.img", "vendor.sig", "vendor", true},
 };
 
 static char* find_item(const char* item, const char* product) {
@@ -134,12 +129,6 @@ static char* find_item(const char* item, const char* product) {
         fn = "cache.img";
     } else if(!strcmp(item,"info")) {
         fn = "android-info.txt";
-    } else if(!strcmp(item,"system_other")) {
-        fn = "system_other.img";
-    } else if(!strcmp(item,"boot_other")) {
-        fn = "boot_other.img";
-    } else if(!strcmp(item,"vendor_other")) {
-        fn = "vendor_other.img";
     } else {
         fprintf(stderr,"unknown partition '%s'\n", item);
         return 0;
@@ -391,10 +380,9 @@ static void usage() {
             "                                           added to all partition names that use\n"
             "                                           slots. 'all' can be given to refer\n"
             "                                           to all slots. 'other' can be given to\n"
-            "                                           refer to a non-current slot. 'active' can\n"
-            "                                           be given to refer to a current slot only.\n"
-            "                                           If this flag is not given slots will be\n"
-            "                                           written to based on the filename.\n"
+            "                                           refer to a non-current slot. If this\n"
+            "                                           flag is not used, slotted partitions\n"
+            "                                           will default to the current active slot.\n"
             "  -a, --set-active[=<suffix>]              Sets the active slot. If no suffix is\n"
             "                                           provided, this will default to the value\n"
             "                                           given by --slot. If slots are not\n"
@@ -869,28 +857,6 @@ static std::vector<std::string> get_suffixes(Transport* transport) {
     return android::base::Split(suffix_list, ",");
 }
 
-// Returns a std::string of the slot name 'active_offset' after the active slot
-static std::string get_slot_name(Transport* transport, size_t active_offset) {
-    std::vector<std::string> suffixes = get_suffixes(transport);
-    std::string current_slot;
-    if (!fb_getvar(transport, "current-slot", &current_slot)) {
-        die("Failed to identify current slot.");
-    }
-    if (active_offset >= suffixes.size()) {
-        die("active slot offset larger than total number of slots!");
-    }
-    if (!suffixes.empty()) {
-        for (size_t i = 0; i < suffixes.size(); i++) {
-            if (current_slot == suffixes[i])
-                return suffixes[(i + active_offset) % suffixes.size()];
-        }
-    } else {
-        die("No known slots.");
-    }
-    die("Unable to find current slot");
-    return "";
-}
-
 static std::string verify_slot(Transport* transport, const char *slot, bool allow_all) {
     if (strcmp(slot, "all") == 0) {
         if (allow_all) {
@@ -908,9 +874,18 @@ static std::string verify_slot(Transport* transport, const char *slot, bool allo
     std::vector<std::string> suffixes = get_suffixes(transport);
 
     if (strcmp(slot, "other") == 0) {
-        return get_slot_name(transport, 1);
-    } else if (strcmp(slot, "active") == 0) {
-        return get_slot_name(transport, 0);
+        std::string current_slot;
+        if (!fb_getvar(transport, "current-slot", &current_slot)) {
+            die("Failed to identify current slot.");
+        }
+        if (!suffixes.empty()) {
+            for (size_t i = 0; i < suffixes.size(); i++) {
+                if (current_slot == suffixes[i])
+                    return suffixes[(i+1)%suffixes.size()];
+            }
+        } else {
+            die("No known slots.");
+        }
     }
 
     for (const std::string &suffix : suffixes) {
@@ -1067,7 +1042,6 @@ static void do_send_signature(char* fn) {
 
 static void do_flashall(Transport* transport, const char* slot_override, int erase_first) {
     queue_info_dump();
-    const bool has_slot_override = slot_override != nullptr && strcmp(slot_override, "") != 0;
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
@@ -1081,25 +1055,12 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
     setup_requirements(reinterpret_cast<char*>(data), sz);
 
     for (size_t i = 0; i < ARRAY_SIZE(images); i++) {
-        if (has_slot_override && !images[i].active_slot) {
-            // We will not do anything with _other files if we are given an explicit slot to use.
-            continue;
-        }
-        fname = find_item(images[i].item_name, product);
+        fname = find_item(images[i].part_name, product);
         fastboot_buffer buf;
         if (load_buf(transport, fname, &buf)) {
             if (images[i].is_optional)
                 continue;
             die("could not load %s\n", images[i].img_name);
-        }
-        // Get the actual slot we are writing to based on the filename. This is because we need to
-        // sometimes write the 'active + 1'th slot for first boot optimization reasons. This is
-        // defined by the images array unless one is explicitly provided.
-        std::string real_slot_override;
-        if (has_slot_override) {
-            real_slot_override = slot_override;
-        } else {
-            real_slot_override = get_slot_name(transport, images[i].active_slot ? 0 : 1);
         }
 
         auto flashall = [&](const std::string &partition) {
@@ -1109,11 +1070,7 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
             }
             flash_buf(partition.c_str(), &buf);
         };
-        do_for_partitions(transport,
-                          images[i].part_name,
-                          real_slot_override.c_str(),
-                          flashall,
-                          false);
+        do_for_partitions(transport, images[i].part_name, slot_override, flashall, false);
     }
 }
 
