@@ -855,9 +855,30 @@ static std::vector<std::string> get_suffixes(Transport* transport) {
     std::vector<std::string> suffixes;
     std::string suffix_list;
     if (!fb_getvar(transport, "slot-suffixes", &suffix_list)) {
-        die("Could not get suffixes.\n");
+        return suffixes;
     }
-    return android::base::Split(suffix_list, ",");
+    suffixes = android::base::Split(suffix_list, ",");
+    // Unfortunately some devices will return an error message in the
+    // guise of a valid value. If we only see only one suffix, it's probably
+    // not real.
+    if (suffixes.size() == 1) {
+        suffixes.clear();
+    }
+    return suffixes;
+}
+
+// Given a current slot, this returns what the 'other' slot is.
+static std::string get_other_slot(Transport* transport, std::string& current_slot) {
+    std::vector<std::string> suffixes = get_suffixes(transport);
+
+    if (!suffixes.empty()) {
+        for (size_t i = 0; i < suffixes.size(); i++) {
+            if (current_slot == suffixes[i]) {
+                return suffixes[(i+1)%suffixes.size()];
+            }
+        }
+    }
+    return "";
 }
 
 static std::string verify_slot(Transport* transport, const char *slot, bool allow_all) {
@@ -881,23 +902,24 @@ static std::string verify_slot(Transport* transport, const char *slot, bool allo
         if (!fb_getvar(transport, "current-slot", &current_slot)) {
             die("Failed to identify current slot.");
         }
-        if (!suffixes.empty()) {
-            for (size_t i = 0; i < suffixes.size(); i++) {
-                if (current_slot == suffixes[i])
-                    return suffixes[(i+1)%suffixes.size()];
-            }
-        } else {
-            die("No known slots.");
+        std::string other = get_other_slot(transport, current_slot);
+        if (other == "") {
+           die("No known slots.");
         }
+        return other;
     }
 
     for (const std::string &suffix : suffixes) {
         if (suffix == slot)
             return slot;
     }
-    fprintf(stderr, "Slot %s does not exist. supported slots are:\n", slot);
-    for (const std::string &suffix : suffixes) {
-        fprintf(stderr, "%s\n", suffix.c_str());
+    if (suffixes.empty()) {
+        fprintf(stderr, "Device does not support slots.\n");
+    } else {
+        fprintf(stderr, "Slot %s does not exist. supported slots are:\n", slot);
+        for (const std::string &suffix : suffixes) {
+            fprintf(stderr, "%s\n", suffix.c_str());
+        }
     }
     exit(1);
 }
@@ -948,6 +970,9 @@ static void do_for_partitions(Transport* transport, const char *part, const char
         }
         if (has_slot == "yes") {
             std::vector<std::string> suffixes = get_suffixes(transport);
+            if (suffixes.empty()) {
+                die("Error reading suffixes.\n");
+            }
             for (std::string &suffix : suffixes) {
                 do_for_partition(transport, part, suffix.c_str(), func, force_slot);
             }
