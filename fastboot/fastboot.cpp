@@ -307,8 +307,11 @@ static void usage() {
             "\n"
             "commands:\n"
             "  update <filename>                        Reflash device from update.zip.\n"
+            "                                           Sets the flashed slot as active.\n"
             "  flashall                                 Flash boot, system, vendor, and --\n"
-            "                                           if found -- recovery.\n"
+            "                                           if found -- recovery. If the device\n"
+            "                                           supports slots, the slot that has\n"
+            "                                           been flashed to is set as active.\n"
             "  flash <partition> [ <filename> ]         Write a file to a flash partition.\n"
             "  flashing lock                            Locks the device. Prevents flashing.\n"
             "  flashing unlock                          Unlocks the device. Allows flashing\n"
@@ -907,6 +910,20 @@ static void do_update_signature(ZipArchiveHandle zip, char* fn) {
     fb_queue_command("signature", "installing signature");
 }
 
+// Sets slot_override as the active slot. If slot_override is blank,
+// set current slot as active instead. This clears slot-unbootable.
+static void set_active(Transport* transport, const char* slot_override) {
+    if (slot_override && slot_override[0]) {
+        fb_set_active(slot_override);
+    } else {
+        std::string current_slot;
+        if (fb_getvar(transport, "current-slot", &current_slot)) {
+            current_slot = verify_slot(transport, current_slot.c_str(), false);
+            fb_set_active(current_slot.c_str());
+        }
+    }
+}
+
 static void do_update(Transport* transport, const char* filename, const char* slot_override, bool erase_first) {
     queue_info_dump();
 
@@ -957,6 +974,7 @@ static void do_update(Transport* transport, const char* filename, const char* sl
     }
 
     CloseArchive(zip);
+    set_active(transport, slot_override);
 }
 
 static void do_send_signature(const char* filename) {
@@ -1007,6 +1025,8 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
         };
         do_for_partitions(transport, images[i].part_name, slot_override, flashall, false);
     }
+
+    set_active(transport, slot_override);
 }
 
 #define skip(n) do { argc -= (n); argv += (n); } while (0)
@@ -1327,7 +1347,12 @@ int main(int argc, char **argv)
     if (wants_set_active) {
         if (next_active == "") {
             if (slot_override == "") {
-                wants_set_active = false;
+                std::string current_slot;
+                if (fb_getvar(transport, "current-slot", &current_slot)) {
+                    next_active = verify_slot(transport, current_slot.c_str(), false);
+                } else {
+                    wants_set_active = false;
+                }
             } else {
                 next_active = verify_slot(transport, slot_override.c_str(), false);
             }
