@@ -34,13 +34,10 @@ OUR_TOOLS := \
     getevent \
     newfs_msdos \
     sendevent \
-    start \
-    stop \
 
 ALL_TOOLS = $(BSD_TOOLS) $(OUR_TOOLS)
 
 LOCAL_SRC_FILES := \
-    start_stop.cpp \
     toolbox.c \
     $(patsubst %,%.c,$(OUR_TOOLS)) \
 
