@@ -47,6 +47,7 @@
 #include <utility>
 #include <vector>
 
+#include <android-base/macros.h>
 #include <android-base/parseint.h>
 #include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
@@ -66,8 +67,6 @@
 #ifndef O_BINARY
 #define O_BINARY 0
 #endif
-
-#define ARRAY_SIZE(a) (sizeof(a)/sizeof(*(a)))
 
 char cur_product[FB_RESPONSE_SZ + 1];
 
@@ -986,7 +985,7 @@ static void do_update(Transport* transport, const char* filename, const char* sl
 
     setup_requirements(reinterpret_cast<char*>(data), sz);
 
-    for (size_t i = 0; i < ARRAY_SIZE(images); ++i) {
+    for (size_t i = 0; i < arraysize(images); ++i) {
         int fd = unzip_to_file(zip, images[i].img_name);
         if (fd == -1) {
             if (images[i].is_optional) {
@@ -1048,7 +1047,7 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
 
     setup_requirements(reinterpret_cast<char*>(data), sz);
 
-    for (size_t i = 0; i < ARRAY_SIZE(images); i++) {
+    for (size_t i = 0; i < arraysize(images); i++) {
         fname = find_item(images[i].part_name, product);
         fastboot_buffer buf;
         if (!load_buf(transport, fname.c_str(), &buf)) {

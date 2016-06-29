@@ -24,11 +24,12 @@
 #include <sstream>
 #include <iostream>
 
+#include <android-base/macros.h>
+
 namespace android {
 
 #define STRINGIFY_INNER(x) #x
 #define STRINGIFY(x) STRINGIFY_INNER(x)
-#define ARRAY_SIZE(x) (sizeof(x)/sizeof((x)[0]))
 #define ASSERT_OK(x) ASSERT_EQ(0, (x))
 #define EXPECT_OK(x) EXPECT_EQ(0, (x))
 
@@ -85,7 +86,7 @@ protected:
     }
 
     void ResetValue(unsigned char c = 0xFF) {
-        for (size_t i = 0; i < ARRAY_SIZE(mValue); ++i) {
+        for (size_t i = 0; i < arraysize(mValue); ++i) {
             mValue[i] = (char) c;
         }
     }
@@ -177,7 +178,7 @@ TEST_F(PropertiesTest, GetBool) {
      * TRUE
      */
     const char *valuesTrue[] = { "1", "true", "y", "yes", "on", };
-    for (size_t i = 0; i < ARRAY_SIZE(valuesTrue); ++i) {
+    for (size_t i = 0; i < arraysize(valuesTrue); ++i) {
         ASSERT_OK(property_set(PROPERTY_TEST_KEY, valuesTrue[i]));
         bool val = property_get_bool(PROPERTY_TEST_KEY, /*default_value*/false);
         EXPECT_TRUE(val) << "Property should've been TRUE for value: '" << valuesTrue[i] << "'";
@@ -187,7 +188,7 @@ TEST_F(PropertiesTest, GetBool) {
      * FALSE
      */
     const char *valuesFalse[] = { "0", "false", "n", "no", "off", };
-    for (size_t i = 0; i < ARRAY_SIZE(valuesFalse); ++i) {
+    for (size_t i = 0; i < arraysize(valuesFalse); ++i) {
         ASSERT_OK(property_set(PROPERTY_TEST_KEY, valuesFalse[i]));
         bool val = property_get_bool(PROPERTY_TEST_KEY, /*default_value*/true);
         EXPECT_FALSE(val) << "Property shoud've been FALSE For string value: '" << valuesFalse[i] << "'";
@@ -200,7 +201,7 @@ TEST_F(PropertiesTest, GetBool) {
             "+1", "  1  ", "  true", "  true  ", "  y  ", "  yes", "yes  ",
             "+0", "-0", "00", "  00  ", "  false", "false  ",
     };
-    for (size_t i = 0; i < ARRAY_SIZE(valuesNeither); ++i) {
+    for (size_t i = 0; i < arraysize(valuesNeither); ++i) {
         ASSERT_OK(property_set(PROPERTY_TEST_KEY, valuesNeither[i]));
 
         // The default value should always be used
@@ -249,9 +250,9 @@ TEST_F(PropertiesTest, GetInt64) {
         DEFAULT_VALUE, DEFAULT_VALUE,
     };
 
-    ASSERT_EQ(ARRAY_SIZE(setValues), ARRAY_SIZE(getValues));
+    ASSERT_EQ(arraysize(setValues), arraysize(getValues));
 
-    for (size_t i = 0; i < ARRAY_SIZE(setValues); ++i) {
+    for (size_t i = 0; i < arraysize(setValues); ++i) {
         ASSERT_OK(property_set(PROPERTY_TEST_KEY, setValues[i]));
 
         int64_t val = property_get_int64(PROPERTY_TEST_KEY, DEFAULT_VALUE);
@@ -296,9 +297,9 @@ TEST_F(PropertiesTest, GetInt32) {
         DEFAULT_VALUE, DEFAULT_VALUE,
     };
 
-    ASSERT_EQ(ARRAY_SIZE(setValues), ARRAY_SIZE(getValues));
+    ASSERT_EQ(arraysize(setValues), arraysize(getValues));
 
-    for (size_t i = 0; i < ARRAY_SIZE(setValues); ++i) {
+    for (size_t i = 0; i < arraysize(setValues); ++i) {
         ASSERT_OK(property_set(PROPERTY_TEST_KEY, setValues[i]));
 
         int32_t val = property_get_int32(PROPERTY_TEST_KEY, DEFAULT_VALUE);
