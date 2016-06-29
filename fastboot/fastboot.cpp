@@ -1168,7 +1168,7 @@ static void do_flashall(Transport* transport, const std::string& slot_override, 
         if (!slot) continue;
         fname = find_item_given_name(images[i].img_name, product);
         fastboot_buffer buf;
-        if (load_buf(transport, fname.c_str(), &buf)) {
+        if (!load_buf(transport, fname.c_str(), &buf)) {
             if (images[i].is_optional) continue;
             die("could not load %s\n", images[i].img_name);
         }
