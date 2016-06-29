@@ -72,8 +72,9 @@ public:
             const std::vector<std::string>& args);
 
     Service(const std::string& name, const std::string& classname,
-            unsigned flags, uid_t uid, gid_t gid, const std::vector<gid_t>& supp_gids,
-            const std::string& seclabel,  const std::vector<std::string>& args);
+            unsigned flags, uid_t uid, gid_t gid,
+            const std::vector<gid_t>& supp_gids, unsigned namespace_flags,
+            const std::string& seclabel, const std::vector<std::string>& args);
 
     bool HandleLine(const std::vector<std::string>& args, std::string* err);
     bool Start();
@@ -123,6 +124,7 @@ private:
     bool HandleKeycodes(const std::vector<std::string>& args, std::string* err);
     bool HandleOneshot(const std::vector<std::string>& args, std::string* err);
     bool HandleOnrestart(const std::vector<std::string>& args, std::string* err);
+    bool HandleNamespace(const std::vector<std::string>& args, std::string* err);
     bool HandleSeclabel(const std::vector<std::string>& args, std::string* err);
     bool HandleSetenv(const std::vector<std::string>& args, std::string* err);
     bool HandleSocket(const std::vector<std::string>& args, std::string* err);
@@ -142,6 +144,7 @@ private:
     uid_t uid_;
     gid_t gid_;
     std::vector<gid_t> supp_gids_;
+    unsigned namespace_flags_;
 
     std::string seclabel_;
 
