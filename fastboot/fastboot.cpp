@@ -99,20 +99,15 @@ struct fastboot_buffer {
 };
 
 static struct {
-    char img_name[17];
-    char sig_name[17];
-    char item_name[17];
+    char img_name[13];
+    char sig_name[13];
     char part_name[9];
-    bool active_slot;
     bool is_optional;
 } images[] = {
-    {"boot.img",         "boot.sig",         "boot",         "boot",     true,  false},
-    {"boot_other.img",   "boot_other.sig",   "boot_other",   "boot",     false, true},
-    {"recovery.img",     "recovery.sig",     "recovery",     "recovery", true,  true},
-    {"system.img",       "system.sig",       "system",       "system",   true,  false},
-    {"system_other.img", "system_other.sig", "system_other", "system",   false, true},
-    {"vendor.img",       "vendor.sig",       "vendor",       "vendor",   true,  true},
-    {"vendor_other.img", "vendor_other.sig", "vendor_other", "vendor",   false, true},
+    {"boot.img", "boot.sig", "boot", false},
+    {"recovery.img", "recovery.sig", "recovery", true},
+    {"system.img", "system.sig", "system", false},
+    {"vendor.img", "vendor.sig", "vendor", true},
 };
 
 static std::string find_item(const char* item, const char* product) {
@@ -131,12 +126,6 @@ static std::string find_item(const char* item, const char* product) {
         fn = "cache.img";
     } else if(!strcmp(item,"info")) {
         fn = "android-info.txt";
-    } else if(!strcmp(item,"system_other")) {
-        fn = "system_other.img";
-    } else if(!strcmp(item,"boot_other")) {
-        fn = "boot_other.img";
-    } else if(!strcmp(item,"vendor_other")) {
-        fn = "vendor_other.img";
     } else {
         fprintf(stderr,"unknown partition '%s'\n", item);
         return "";
@@ -320,8 +309,11 @@ static void usage() {
             "\n"
             "commands:\n"
             "  update <filename>                        Reflash device from update.zip.\n"
+            "                                           Sets the flashed slot as active.\n"
             "  flashall                                 Flash boot, system, vendor, and --\n"
-            "                                           if found -- recovery.\n"
+            "                                           if found -- recovery. If the device\n"
+            "                                           supports slots, the slot that has\n"
+            "                                           been flashed to is set as active.\n"
             "  flash <partition> [ <filename> ]         Write a file to a flash partition.\n"
             "  flashing lock                            Locks the device. Prevents flashing.\n"
             "  flashing unlock                          Unlocks the device. Allows flashing\n"
@@ -386,10 +378,9 @@ static void usage() {
             "                                           added to all partition names that use\n"
             "                                           slots. 'all' can be given to refer\n"
             "                                           to all slots. 'other' can be given to\n"
-            "                                           refer to a non-current slot. 'active' can\n"
-            "                                           be given to refer to a current slot only.\n"
-            "                                           If this flag is not given slots will be\n"
-            "                                           written to based on the filename.\n"
+            "                                           refer to a non-current slot. If this\n"
+            "                                           flag is not used, slotted partitions\n"
+            "                                           will default to the current active slot.\n"
             "  -a, --set-active[=<suffix>]              Sets the active slot. If no suffix is\n"
             "                                           provided, this will default to the value\n"
             "                                           given by --slot. If slots are not\n"
@@ -851,39 +842,33 @@ static void flash_buf(const char *pname, struct fastboot_buffer *buf)
     }
 }
 
-static bool has_slots(Transport* transport) {
-  std::string suffix_list_unused;
-  return fb_getvar(transport, "slot-suffixes", &suffix_list_unused);
-}
-
 static std::vector<std::string> get_suffixes(Transport* transport) {
     std::vector<std::string> suffixes;
     std::string suffix_list;
     if (!fb_getvar(transport, "slot-suffixes", &suffix_list)) {
-        die("Could not get suffixes.\n");
+        return suffixes;
     }
-    return android::base::Split(suffix_list, ",");
+    suffixes = android::base::Split(suffix_list, ",");
+    // Unfortunately some devices will return an error message in the
+    // guise of a valid value. If we only see only one suffix, it's probably
+    // not real.
+    if (suffixes.size() == 1) {
+        suffixes.clear();
+    }
+    return suffixes;
 }
 
-// Returns a std::string of the slot name 'active_offset' after the active slot
-static std::string get_slot_name(Transport* transport, size_t active_offset) {
+// Given a current slot, this returns what the 'other' slot is.
+static std::string get_other_slot(Transport* transport, std::string& current_slot) {
     std::vector<std::string> suffixes = get_suffixes(transport);
-    std::string current_slot;
-    if (!fb_getvar(transport, "current-slot", &current_slot)) {
-        die("Failed to identify current slot.");
-    }
-    if (active_offset >= suffixes.size()) {
-        die("active slot offset larger than total number of slots!");
-    }
+
     if (!suffixes.empty()) {
         for (size_t i = 0; i < suffixes.size(); i++) {
-            if (current_slot == suffixes[i])
-                return suffixes[(i + active_offset) % suffixes.size()];
+            if (current_slot == suffixes[i]) {
+                return suffixes[(i+1)%suffixes.size()];
+            }
         }
-    } else {
-        die("No known slots.");
     }
-    die("Unable to find current slot");
     return "";
 }
 
@@ -904,18 +889,28 @@ static std::string verify_slot(Transport* transport, const char *slot, bool allo
     std::vector<std::string> suffixes = get_suffixes(transport);
 
     if (strcmp(slot, "other") == 0) {
-        return get_slot_name(transport, 1);
-    } else if (strcmp(slot, "active") == 0) {
-        return get_slot_name(transport, 0);
+        std::string current_slot;
+        if (!fb_getvar(transport, "current-slot", &current_slot)) {
+            die("Failed to identify current slot.");
+        }
+        std::string other = get_other_slot(transport, current_slot);
+        if (other == "") {
+           die("No known slots.");
+        }
+        return other;
     }
 
     for (const std::string &suffix : suffixes) {
         if (suffix == slot)
             return slot;
     }
-    fprintf(stderr, "Slot %s does not exist. supported slots are:\n", slot);
-    for (const std::string &suffix : suffixes) {
-        fprintf(stderr, "%s\n", suffix.c_str());
+    if (suffixes.empty()) {
+        fprintf(stderr, "Device does not support slots.\n");
+    } else {
+        fprintf(stderr, "Slot %s does not exist. supported slots are:\n", slot);
+        for (const std::string &suffix : suffixes) {
+            fprintf(stderr, "%s\n", suffix.c_str());
+        }
     }
     exit(1);
 }
@@ -966,6 +961,9 @@ static void do_for_partitions(Transport* transport, const char *part, const char
         }
         if (has_slot == "yes") {
             std::vector<std::string> suffixes = get_suffixes(transport);
+            if (suffixes.empty()) {
+                die("Error reading suffixes.\n");
+            }
             for (std::string &suffix : suffixes) {
                 do_for_partition(transport, part, suffix.c_str(), func, force_slot);
             }
@@ -992,6 +990,20 @@ static void do_update_signature(ZipArchiveHandle zip, char* fn) {
     if (data == nullptr) return;
     fb_queue_download("signature", data, sz);
     fb_queue_command("signature", "installing signature");
+}
+
+// Sets slot_override as the active slot. If slot_override is blank,
+// set current slot as active instead. This clears slot-unbootable.
+static void set_active(Transport* transport, const char* slot_override) {
+    if (slot_override && slot_override[0]) {
+        fb_set_active(slot_override);
+    } else {
+        std::string current_slot;
+        if (fb_getvar(transport, "current-slot", &current_slot)) {
+            current_slot = verify_slot(transport, current_slot.c_str(), false);
+            fb_set_active(current_slot.c_str());
+        }
+    }
 }
 
 static void do_update(Transport* transport, const char* filename, const char* slot_override, bool erase_first) {
@@ -1044,6 +1056,7 @@ static void do_update(Transport* transport, const char* filename, const char* sl
     }
 
     CloseArchive(zip);
+    set_active(transport, slot_override);
 }
 
 static void do_send_signature(const char* filename) {
@@ -1065,9 +1078,6 @@ static void do_send_signature(const char* filename) {
 
 static void do_flashall(Transport* transport, const char* slot_override, int erase_first) {
     queue_info_dump();
-    const bool device_has_slots = has_slots(transport);
-    const bool has_slot_override = slot_override != nullptr && strcmp(slot_override, "") != 0;
-    const bool should_ignore_slots = !device_has_slots || has_slot_override;
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
@@ -1080,25 +1090,12 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
 
     setup_requirements(reinterpret_cast<char*>(data), sz);
 
-    for (size_t i = 0; i < arraysize(images); i++) {
-        if (should_ignore_slots && !images[i].active_slot) {
-            // We will not do anything with _other files if we are given an explicit slot to use.
-            continue;
-        }
-        fname = find_item(images[i].item_name, product);
+    for (size_t i = 0; i < ARRAY_SIZE(images); i++) {
+        fname = find_item(images[i].part_name, product);
         fastboot_buffer buf;
         if (!load_buf(transport, fname.c_str(), &buf)) {
             if (images[i].is_optional) continue;
             die("could not load '%s': %s", images[i].img_name, strerror(errno));
-        }
-        // Get the actual slot we are writing to based on the filename. This is because we need to
-        // sometimes write the 'active + 1'th slot for first boot optimization reasons. This is
-        // defined by the images array unless one is explicitly provided.
-        std::string real_slot_override;
-        if (should_ignore_slots) {
-            real_slot_override = slot_override;
-        } else {
-            real_slot_override = get_slot_name(transport, images[i].active_slot ? 0 : 1);
         }
 
         auto flashall = [&](const std::string &partition) {
@@ -1108,12 +1105,10 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
             }
             flash_buf(partition.c_str(), &buf);
         };
-        do_for_partitions(transport,
-                          images[i].part_name,
-                          real_slot_override.c_str(),
-                          flashall,
-                          false);
+        do_for_partitions(transport, images[i].part_name, slot_override, flashall, false);
     }
+
+    set_active(transport, slot_override);
 }
 
 #define skip(n) do { argc -= (n); argv += (n); } while (0)
@@ -1448,7 +1443,12 @@ int main(int argc, char **argv)
     if (wants_set_active) {
         if (next_active == "") {
             if (slot_override == "") {
-                wants_set_active = false;
+                std::string current_slot;
+                if (fb_getvar(transport, "current-slot", &current_slot)) {
+                    next_active = verify_slot(transport, current_slot.c_str(), false);
+                } else {
+                    wants_set_active = false;
+                }
             } else {
                 next_active = verify_slot(transport, slot_override.c_str(), false);
             }
