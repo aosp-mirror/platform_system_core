@@ -221,29 +221,29 @@ void Service::DumpState() const {
     }
 }
 
-bool Service::HandleClass(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseClass(const std::vector<std::string>& args, std::string* err) {
     classname_ = args[1];
     return true;
 }
 
-bool Service::HandleConsole(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseConsole(const std::vector<std::string>& args, std::string* err) {
     flags_ |= SVC_CONSOLE;
     console_ = args.size() > 1 ? "/dev/" + args[1] : "";
     return true;
 }
 
-bool Service::HandleCritical(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseCritical(const std::vector<std::string>& args, std::string* err) {
     flags_ |= SVC_CRITICAL;
     return true;
 }
 
-bool Service::HandleDisabled(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseDisabled(const std::vector<std::string>& args, std::string* err) {
     flags_ |= SVC_DISABLED;
     flags_ |= SVC_RC_DISABLED;
     return true;
 }
 
-bool Service::HandleGroup(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseGroup(const std::vector<std::string>& args, std::string* err) {
     gid_ = decode_uid(args[1].c_str());
     for (std::size_t n = 2; n < args.size(); n++) {
         supp_gids_.emplace_back(decode_uid(args[n].c_str()));
@@ -251,7 +251,7 @@ bool Service::HandleGroup(const std::vector<std::string>& args, std::string* err
     return true;
 }
 
-bool Service::HandlePriority(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParsePriority(const std::vector<std::string>& args, std::string* err) {
     priority_ = std::stoi(args[1]);
 
     if (priority_ < ANDROID_PRIORITY_HIGHEST || priority_ > ANDROID_PRIORITY_LOWEST) {
@@ -264,7 +264,7 @@ bool Service::HandlePriority(const std::vector<std::string>& args, std::string* 
     return true;
 }
 
-bool Service::HandleIoprio(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseIoprio(const std::vector<std::string>& args, std::string* err) {
     ioprio_pri_ = std::stoul(args[2], 0, 8);
 
     if (ioprio_pri_ < 0 || ioprio_pri_ > 7) {
@@ -286,25 +286,25 @@ bool Service::HandleIoprio(const std::vector<std::string>& args, std::string* er
     return true;
 }
 
-bool Service::HandleKeycodes(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseKeycodes(const std::vector<std::string>& args, std::string* err) {
     for (std::size_t i = 1; i < args.size(); i++) {
         keycodes_.emplace_back(std::stoi(args[i]));
     }
     return true;
 }
 
-bool Service::HandleOneshot(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseOneshot(const std::vector<std::string>& args, std::string* err) {
     flags_ |= SVC_ONESHOT;
     return true;
 }
 
-bool Service::HandleOnrestart(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseOnrestart(const std::vector<std::string>& args, std::string* err) {
     std::vector<std::string> str_args(args.begin() + 1, args.end());
     onrestart_.AddCommand(str_args, "", 0, err);
     return true;
 }
 
-bool Service::HandleNamespace(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseNamespace(const std::vector<std::string>& args, std::string* err) {
     for (size_t i = 1; i < args.size(); i++) {
         if (args[i] == "pid") {
             namespace_flags_ |= CLONE_NEWPID;
@@ -320,18 +320,18 @@ bool Service::HandleNamespace(const std::vector<std::string>& args, std::string*
     return true;
 }
 
-bool Service::HandleSeclabel(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseSeclabel(const std::vector<std::string>& args, std::string* err) {
     seclabel_ = args[1];
     return true;
 }
 
-bool Service::HandleSetenv(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseSetenv(const std::vector<std::string>& args, std::string* err) {
     envvars_.emplace_back(args[1], args[2]);
     return true;
 }
 
 /* name type perm [ uid gid context ] */
-bool Service::HandleSocket(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseSocket(const std::vector<std::string>& args, std::string* err) {
     if (args[2] != "dgram" && args[2] != "stream" && args[2] != "seqpacket") {
         *err = "socket type must be 'dgram', 'stream' or 'seqpacket'";
         return false;
@@ -346,61 +346,61 @@ bool Service::HandleSocket(const std::vector<std::string>& args, std::string* er
     return true;
 }
 
-bool Service::HandleUser(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseUser(const std::vector<std::string>& args, std::string* err) {
     uid_ = decode_uid(args[1].c_str());
     return true;
 }
 
-bool Service::HandleWritepid(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseWritepid(const std::vector<std::string>& args, std::string* err) {
     writepid_files_.assign(args.begin() + 1, args.end());
     return true;
 }
 
-class Service::OptionHandlerMap : public KeywordMap<OptionHandler> {
+class Service::OptionParserMap : public KeywordMap<OptionParser> {
 public:
-    OptionHandlerMap() {
+    OptionParserMap() {
     }
 private:
     Map& map() const override;
 };
 
-Service::OptionHandlerMap::Map& Service::OptionHandlerMap::map() const {
+Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
-    static const Map option_handlers = {
-        {"class",       {1,     1,    &Service::HandleClass}},
-        {"console",     {0,     1,    &Service::HandleConsole}},
-        {"critical",    {0,     0,    &Service::HandleCritical}},
-        {"disabled",    {0,     0,    &Service::HandleDisabled}},
-        {"group",       {1,     NR_SVC_SUPP_GIDS + 1, &Service::HandleGroup}},
-        {"ioprio",      {2,     2,    &Service::HandleIoprio}},
-        {"priority",    {1,     1,    &Service::HandlePriority}},
-        {"keycodes",    {1,     kMax, &Service::HandleKeycodes}},
-        {"oneshot",     {0,     0,    &Service::HandleOneshot}},
-        {"onrestart",   {1,     kMax, &Service::HandleOnrestart}},
-        {"namespace",   {1,     2,    &Service::HandleNamespace}},
-        {"seclabel",    {1,     1,    &Service::HandleSeclabel}},
-        {"setenv",      {2,     2,    &Service::HandleSetenv}},
-        {"socket",      {3,     6,    &Service::HandleSocket}},
-        {"user",        {1,     1,    &Service::HandleUser}},
-        {"writepid",    {1,     kMax, &Service::HandleWritepid}},
+    static const Map option_parsers = {
+        {"class",       {1,     1,    &Service::ParseClass}},
+        {"console",     {0,     1,    &Service::ParseConsole}},
+        {"critical",    {0,     0,    &Service::ParseCritical}},
+        {"disabled",    {0,     0,    &Service::ParseDisabled}},
+        {"group",       {1,     NR_SVC_SUPP_GIDS + 1, &Service::ParseGroup}},
+        {"ioprio",      {2,     2,    &Service::ParseIoprio}},
+        {"priority",    {1,     1,    &Service::ParsePriority}},
+        {"keycodes",    {1,     kMax, &Service::ParseKeycodes}},
+        {"oneshot",     {0,     0,    &Service::ParseOneshot}},
+        {"onrestart",   {1,     kMax, &Service::ParseOnrestart}},
+        {"namespace",   {1,     2,    &Service::ParseNamespace}},
+        {"seclabel",    {1,     1,    &Service::ParseSeclabel}},
+        {"setenv",      {2,     2,    &Service::ParseSetenv}},
+        {"socket",      {3,     6,    &Service::ParseSocket}},
+        {"user",        {1,     1,    &Service::ParseUser}},
+        {"writepid",    {1,     kMax, &Service::ParseWritepid}},
     };
-    return option_handlers;
+    return option_parsers;
 }
 
-bool Service::HandleLine(const std::vector<std::string>& args, std::string* err) {
+bool Service::ParseLine(const std::vector<std::string>& args, std::string* err) {
     if (args.empty()) {
         *err = "option needed, but not provided";
         return false;
     }
 
-    static const OptionHandlerMap handler_map;
-    auto handler = handler_map.FindFunction(args[0], args.size() - 1, err);
+    static const OptionParserMap parser_map;
+    auto parser = parser_map.FindFunction(args[0], args.size() - 1, err);
 
-    if (!handler) {
+    if (!parser) {
         return false;
     }
 
-    return (this->*handler)(args, err);
+    return (this->*parser)(args, err);
 }
 
 bool Service::Start() {
@@ -949,7 +949,7 @@ bool ServiceParser::ParseSection(const std::vector<std::string>& args,
 bool ServiceParser::ParseLineSection(const std::vector<std::string>& args,
                                      const std::string& filename, int line,
                                      std::string* err) const {
-    return service_ ? service_->HandleLine(args, err) : false;
+    return service_ ? service_->ParseLine(args, err) : false;
 }
 
 void ServiceParser::EndSection() {
