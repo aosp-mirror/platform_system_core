@@ -52,8 +52,6 @@ constexpr unsigned int div_round_up(unsigned int x, unsigned int y) {
   return (x + y - 1) / y;
 }
 
-#define ARRAY_SIZE(x) (sizeof(x)/sizeof((x)[0]))
-
 static constexpr size_t kPageSize = 4096;
 static constexpr size_t kChunkSize = 256 * 1024;
 static constexpr size_t kUsableChunkSize = kChunkSize - kPageSize;
@@ -258,7 +256,7 @@ void* Chunk::Alloc() {
   unsigned int i = first_free_bitmap_;
   while (free_bitmap_[i] == 0)
     i++;
-  assert(i < ARRAY_SIZE(free_bitmap_));
+  assert(i < arraysize(free_bitmap_));
   unsigned int bit = __builtin_ffs(free_bitmap_[i]) - 1;
   assert(free_bitmap_[i] & (1U << bit));
   free_bitmap_[i] &= ~(1U << bit);
@@ -266,7 +264,7 @@ void* Chunk::Alloc() {
   assert(n < max_allocations_);
 
   unsigned int page = n * allocation_size_ / kPageSize;
-  assert(page / 32 < ARRAY_SIZE(dirty_pages_));
+  assert(page / 32 < arraysize(dirty_pages_));
   dirty_pages_[page / 32] |= 1U << (page % 32);
 
   free_count_--;
@@ -285,7 +283,7 @@ void Chunk::Free(void* ptr) {
   unsigned int i = n / 32;
   unsigned int bit = n % 32;
 
-  assert(i < ARRAY_SIZE(free_bitmap_));
+  assert(i < arraysize(free_bitmap_));
   assert(!(free_bitmap_[i] & (1U << bit)));
   free_bitmap_[i] |= 1U << bit;
   free_count_++;
