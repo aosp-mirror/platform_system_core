@@ -46,8 +46,6 @@
 #include "adb_utils.h"
 #include "transport.h"
 
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
-
 #if !ADB_HOST
 #include <cutils/properties.h>
 #include <sys/capability.h>
