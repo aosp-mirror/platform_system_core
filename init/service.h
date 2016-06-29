@@ -76,7 +76,7 @@ public:
             const std::vector<gid_t>& supp_gids, unsigned namespace_flags,
             const std::string& seclabel, const std::vector<std::string>& args);
 
-    bool HandleLine(const std::vector<std::string>& args, std::string* err);
+    bool ParseLine(const std::vector<std::string>& args, std::string* err);
     bool Start();
     bool StartIfNotDisabled();
     bool Enable();
@@ -103,9 +103,9 @@ public:
     const std::vector<std::string>& args() const { return args_; }
 
 private:
-    using OptionHandler = bool (Service::*) (const std::vector<std::string>& args,
-                                             std::string* err);
-    class OptionHandlerMap;
+    using OptionParser = bool (Service::*) (const std::vector<std::string>& args,
+                                            std::string* err);
+    class OptionParserMap;
 
     void NotifyStateChange(const std::string& new_state) const;
     void StopOrReset(int how);
@@ -114,22 +114,22 @@ private:
     void PublishSocket(const std::string& name, int fd) const;
     void KillProcessGroup(int signal);
 
-    bool HandleClass(const std::vector<std::string>& args, std::string* err);
-    bool HandleConsole(const std::vector<std::string>& args, std::string* err);
-    bool HandleCritical(const std::vector<std::string>& args, std::string* err);
-    bool HandleDisabled(const std::vector<std::string>& args, std::string* err);
-    bool HandleGroup(const std::vector<std::string>& args, std::string* err);
-    bool HandlePriority(const std::vector<std::string>& args, std::string* err);
-    bool HandleIoprio(const std::vector<std::string>& args, std::string* err);
-    bool HandleKeycodes(const std::vector<std::string>& args, std::string* err);
-    bool HandleOneshot(const std::vector<std::string>& args, std::string* err);
-    bool HandleOnrestart(const std::vector<std::string>& args, std::string* err);
-    bool HandleNamespace(const std::vector<std::string>& args, std::string* err);
-    bool HandleSeclabel(const std::vector<std::string>& args, std::string* err);
-    bool HandleSetenv(const std::vector<std::string>& args, std::string* err);
-    bool HandleSocket(const std::vector<std::string>& args, std::string* err);
-    bool HandleUser(const std::vector<std::string>& args, std::string* err);
-    bool HandleWritepid(const std::vector<std::string>& args, std::string* err);
+    bool ParseClass(const std::vector<std::string>& args, std::string* err);
+    bool ParseConsole(const std::vector<std::string>& args, std::string* err);
+    bool ParseCritical(const std::vector<std::string>& args, std::string* err);
+    bool ParseDisabled(const std::vector<std::string>& args, std::string* err);
+    bool ParseGroup(const std::vector<std::string>& args, std::string* err);
+    bool ParsePriority(const std::vector<std::string>& args, std::string* err);
+    bool ParseIoprio(const std::vector<std::string>& args, std::string* err);
+    bool ParseKeycodes(const std::vector<std::string>& args, std::string* err);
+    bool ParseOneshot(const std::vector<std::string>& args, std::string* err);
+    bool ParseOnrestart(const std::vector<std::string>& args, std::string* err);
+    bool ParseNamespace(const std::vector<std::string>& args, std::string* err);
+    bool ParseSeclabel(const std::vector<std::string>& args, std::string* err);
+    bool ParseSetenv(const std::vector<std::string>& args, std::string* err);
+    bool ParseSocket(const std::vector<std::string>& args, std::string* err);
+    bool ParseUser(const std::vector<std::string>& args, std::string* err);
+    bool ParseWritepid(const std::vector<std::string>& args, std::string* err);
 
     std::string name_;
     std::string classname_;
