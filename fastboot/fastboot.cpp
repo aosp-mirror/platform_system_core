@@ -1090,7 +1090,7 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
 
     setup_requirements(reinterpret_cast<char*>(data), sz);
 
-    for (size_t i = 0; i < ARRAY_SIZE(images); i++) {
+    for (size_t i = 0; i < arraysize(images); i++) {
         fname = find_item(images[i].part_name, product);
         fastboot_buffer buf;
         if (!load_buf(transport, fname.c_str(), &buf)) {
