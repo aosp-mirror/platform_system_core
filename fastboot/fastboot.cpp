@@ -49,7 +49,6 @@
 
 #include <android-base/parseint.h>
 #include <android-base/parsenetaddress.h>
-#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <sparse/sparse.h>
 #include <ziparchive/zip_archive.h>
@@ -100,40 +99,21 @@ struct fastboot_buffer {
 };
 
 static struct {
-    char img_name[17];
-    char sig_name[17];
+    char img_name[13];
+    char sig_name[13];
     char part_name[9];
     bool is_optional;
-    bool is_secondary;
 } images[] = {
-    {"boot.img", "boot.sig", "boot", false, false},
-    {"boot_other.img", "boot.sig", "boot", true, true},
-    {"recovery.img", "recovery.sig", "recovery", true, false},
-    {"system.img", "system.sig", "system", false, false},
-    {"system_other.img", "system.sig", "system", true, true},
-    {"vendor.img", "vendor.sig", "vendor", true, false},
-    {"vendor_other.img", "vendor.sig", "vendor", true, true},
+    {"boot.img", "boot.sig", "boot", false},
+    {"recovery.img", "recovery.sig", "recovery", true},
+    {"system.img", "system.sig", "system", false},
+    {"vendor.img", "vendor.sig", "vendor", true},
 };
 
-static std::string find_item_given_name(const char* img_name, const char* product) {
+static char* find_item(const char* item, const char* product) {
     char *dir;
-    char path[PATH_MAX + 128];
-
-    if(product) {
-        get_my_path(path);
-        return android::base::StringPrintf("../../../target/product/%s/%s", product, img_name);
-    }
-
-    dir = getenv("ANDROID_PRODUCT_OUT");
-    if((dir == 0) || (dir[0] == 0)) {
-        die("neither -p product specified nor ANDROID_PRODUCT_OUT set");
-    }
-
-    return android::base::StringPrintf("%s/%s", dir, img_name);
-}
-
-std::string find_item(const char* item, const char* product) {
     const char *fn;
+    char path[PATH_MAX + 128];
 
     if(!strcmp(item,"boot")) {
         fn = "boot.img";
@@ -151,10 +131,24 @@ std::string find_item(const char* item, const char* product) {
         fn = "android-info.txt";
     } else {
         fprintf(stderr,"unknown partition '%s'\n", item);
-        return "";
+        return 0;
     }
 
-    return find_item_given_name(fn, product);
+    if(product) {
+        get_my_path(path);
+        sprintf(path + strlen(path),
+                "../../../target/product/%s/%s", product, fn);
+        return strdup(path);
+    }
+
+    dir = getenv("ANDROID_PRODUCT_OUT");
+    if((dir == 0) || (dir[0] == 0)) {
+        die("neither -p product specified nor ANDROID_PRODUCT_OUT set");
+        return 0;
+    }
+
+    sprintf(path, "%s/%s", dir, fn);
+    return strdup(path);
 }
 
 static int64_t get_file_size(int fd) {
@@ -325,11 +319,6 @@ static void usage() {
             "                                           if found -- recovery. If the device\n"
             "                                           supports slots, the slot that has\n"
             "                                           been flashed to is set as active.\n"
-            "                                           Secondary images may be flashed to\n"
-            "                                           an inactive slot.\n"
-            "  flash-primary                            Same as flashall, but do not flash\n"
-            "                                           secondary images.\n"
-            "  flash-secondary                          Only flashes the secondary images.\n"
             "  flash <partition> [ <filename> ]         Write a file to a flash partition.\n"
             "  flashing lock                            Locks the device. Prevents flashing.\n"
             "  flashing unlock                          Unlocks the device. Allows flashing\n"
@@ -878,12 +867,8 @@ static std::vector<std::string> get_suffixes(Transport* transport) {
     return suffixes;
 }
 
-static bool supports_AB(Transport* transport) {
-  return !get_suffixes(transport).empty();
-}
-
 // Given a current slot, this returns what the 'other' slot is.
-static std::string get_other_slot(Transport* transport, const std::string& current_slot) {
+static std::string get_other_slot(Transport* transport, std::string& current_slot) {
     std::vector<std::string> suffixes = get_suffixes(transport);
 
     if (!suffixes.empty()) {
@@ -894,12 +879,6 @@ static std::string get_other_slot(Transport* transport, const std::string& curre
         }
     }
     return "";
-}
-
-static std::string get_other_slot(Transport* transport) {
-    std::string current_slot;
-    fb_getvar(transport, "current-slot", &current_slot);
-    return get_other_slot(transport, current_slot);
 }
 
 static std::string verify_slot(Transport* transport, const char *slot, bool allow_all) {
@@ -1024,9 +1003,9 @@ static void do_update_signature(ZipArchiveHandle zip, char* fn) {
 
 // Sets slot_override as the active slot. If slot_override is blank,
 // set current slot as active instead. This clears slot-unbootable.
-static void set_active(Transport* transport, const std::string& slot_override) {
-    if (slot_override != "") {
-        fb_set_active(slot_override.c_str());
+static void set_active(Transport* transport, const char* slot_override) {
+    if (slot_override && slot_override[0]) {
+        fb_set_active(slot_override);
     } else {
         std::string current_slot;
         if (fb_getvar(transport, "current-slot", &current_slot)) {
@@ -1036,7 +1015,7 @@ static void set_active(Transport* transport, const std::string& slot_override) {
     }
 }
 
-static void do_update(Transport* transport, const char* filename, const std::string& slot_override, bool erase_first) {
+static void do_update(Transport* transport, const char* filename, const char* slot_override, bool erase_first) {
     queue_info_dump();
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
@@ -1057,31 +1036,7 @@ static void do_update(Transport* transport, const char* filename, const std::str
 
     setup_requirements(reinterpret_cast<char*>(data), sz);
 
-    std::string secondary;
-    bool update_secondary = slot_override != "all";
-    if (update_secondary) {
-        if (slot_override != "") {
-            secondary = get_other_slot(transport, slot_override);
-        } else {
-            secondary = get_other_slot(transport);
-        }
-        if (secondary == "") {
-            if (supports_AB(transport)) {
-                fprintf(stderr, "Warning: Could not determine slot for secondary images. Ignoring.\n");
-            }
-            update_secondary = false;
-        }
-    }
     for (size_t i = 0; i < ARRAY_SIZE(images); ++i) {
-        const char* slot = slot_override.c_str();
-        if (images[i].is_secondary) {
-            if (update_secondary) {
-                slot = secondary.c_str();
-            } else {
-                continue;
-            }
-        }
-
         int fd = unzip_to_file(zip, images[i].img_name);
         if (fd == -1) {
             if (images[i].is_optional) {
@@ -1105,69 +1060,49 @@ static void do_update(Transport* transport, const char* filename, const std::str
              * program exits.
              */
         };
-        do_for_partitions(transport, images[i].part_name, slot, update, false);
+        do_for_partitions(transport, images[i].part_name, slot_override, update, false);
     }
 
     CloseArchive(zip);
     set_active(transport, slot_override);
 }
 
-static void do_send_signature(const std::string& fn) {
-    std::size_t extension_loc = fn.find(".img");
-    if (extension_loc == std::string::npos) return;
+static void do_send_signature(char* fn) {
+    char* xtn = strrchr(fn, '.');
+    if (!xtn) return;
 
-    std::string fs_sig = fn.substr(0, extension_loc) + ".sig";
+    if (strcmp(xtn, ".img")) return;
+
+    strcpy(xtn, ".sig");
 
     int64_t sz;
-    void* data = load_file(fs_sig.c_str(), &sz);
+    void* data = load_file(fn, &sz);
+    strcpy(xtn, ".img");
     if (data == nullptr) return;
     fb_queue_download("signature", data, sz);
     fb_queue_command("signature", "installing signature");
 }
 
-static void do_flashall(Transport* transport, const std::string& slot_override, int erase_first, bool flash_primary, bool flash_secondary) {
-    std::string fname;
-    if (flash_primary) {
-        queue_info_dump();
+static void do_flashall(Transport* transport, const char* slot_override, int erase_first) {
+    queue_info_dump();
 
-        fb_queue_query_save("product", cur_product, sizeof(cur_product));
+    fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
-        fname = find_item("info", product);
-        if (fname == "") die("cannot find android-info.txt");
+    char* fname = find_item("info", product);
+    if (fname == nullptr) die("cannot find android-info.txt");
 
-        int64_t sz;
-        void* data = load_file(fname.c_str(), &sz);
-        if (data == nullptr) die("could not load android-info.txt: %s", strerror(errno));
+    int64_t sz;
+    void* data = load_file(fname, &sz);
+    if (data == nullptr) die("could not load android-info.txt: %s", strerror(errno));
 
-        setup_requirements(reinterpret_cast<char*>(data), sz);
-    }
-    std::string secondary;
-    if (flash_secondary) {
-        if (slot_override != "") {
-            secondary = get_other_slot(transport, slot_override);
-        } else {
-            secondary = get_other_slot(transport);
-        }
-        if (secondary == "") {
-            if (supports_AB(transport)) {
-                fprintf(stderr, "Warning: Could not determine slot for secondary images. Ignoring.\n");
-            }
-            flash_secondary = false;
-        }
-    }
+    setup_requirements(reinterpret_cast<char*>(data), sz);
 
     for (size_t i = 0; i < ARRAY_SIZE(images); i++) {
-        const char* slot = NULL;
-        if (images[i].is_secondary) {
-            if (flash_secondary) slot = secondary.c_str();
-        } else {
-            if (flash_primary) slot = slot_override.c_str();
-        }
-        if (!slot) continue;
-        fname = find_item_given_name(images[i].img_name, product);
+        fname = find_item(images[i].part_name, product);
         fastboot_buffer buf;
-        if (load_buf(transport, fname.c_str(), &buf)) {
-            if (images[i].is_optional) continue;
+        if (load_buf(transport, fname, &buf)) {
+            if (images[i].is_optional)
+                continue;
             die("could not load %s\n", images[i].img_name);
         }
 
@@ -1178,10 +1113,10 @@ static void do_flashall(Transport* transport, const std::string& slot_override, 
             }
             flash_buf(partition.c_str(), &buf);
         };
-        do_for_partitions(transport, images[i].part_name, slot, flashall, false);
+        do_for_partitions(transport, images[i].part_name, slot_override, flashall, false);
     }
 
-    if (flash_primary) set_active(transport, slot_override);
+    set_active(transport, slot_override);
 }
 
 #define skip(n) do { argc -= (n); argv += (n); } while (0)
@@ -1508,8 +1443,10 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (slot_override != "") slot_override = verify_slot(transport, slot_override.c_str());
-    if (next_active != "") next_active = verify_slot(transport, next_active.c_str(), false);
+    if (slot_override != "")
+        slot_override = verify_slot(transport, slot_override.c_str());
+    if (next_active != "")
+        next_active = verify_slot(transport, next_active.c_str(), false);
 
     if (wants_set_active) {
         if (next_active == "") {
@@ -1630,7 +1567,7 @@ int main(int argc, char **argv)
             fb_queue_command("boot", "booting");
         } else if(!strcmp(*argv, "flash")) {
             char *pname = argv[1];
-            std::string fname;
+            char *fname = 0;
             require(2);
             if (argc > 2) {
                 fname = argv[2];
@@ -1639,13 +1576,13 @@ int main(int argc, char **argv)
                 fname = find_item(pname, product);
                 skip(2);
             }
-            if (fname == "") die("cannot determine image filename for '%s'", pname);
+            if (fname == 0) die("cannot determine image filename for '%s'", pname);
 
             auto flash = [&](const std::string &partition) {
                 if (erase_first && needs_erase(transport, partition.c_str())) {
                     fb_queue_erase(partition.c_str());
                 }
-                do_flash(transport, partition.c_str(), fname.c_str());
+                do_flash(transport, partition.c_str(), fname);
             };
             do_for_partitions(transport, pname, slot_override.c_str(), flash, true);
         } else if(!strcmp(*argv, "flash:raw")) {
@@ -1670,27 +1607,14 @@ int main(int argc, char **argv)
             do_for_partitions(transport, argv[1], slot_override.c_str(), flashraw, true);
         } else if(!strcmp(*argv, "flashall")) {
             skip(1);
-            if (slot_override == "all") {
-                 fprintf(stderr, "Warning: slot set to 'all'. Secondary slots will not be flashed.");
-                 do_flashall(transport, slot_override, erase_first, true, false);
-            } else {
-                do_flashall(transport, slot_override, erase_first, true, true);
-            }
-            wants_reboot = true;
-        } else if(!strcmp(*argv, "flash-primary")) {
-            skip(1);
-            do_flashall(transport, slot_override, erase_first, true, false);
-            wants_reboot = true;
-        } else if(!strcmp(*argv, "flash-secondary")) {
-            skip(1);
-            do_flashall(transport, slot_override, erase_first, false, true);
+            do_flashall(transport, slot_override.c_str(), erase_first);
             wants_reboot = true;
         } else if(!strcmp(*argv, "update")) {
             if (argc > 1) {
-                do_update(transport, argv[1], slot_override, erase_first);
+                do_update(transport, argv[1], slot_override.c_str(), erase_first);
                 skip(2);
             } else {
-                do_update(transport, "update.zip", slot_override, erase_first);
+                do_update(transport, "update.zip", slot_override.c_str(), erase_first);
                 skip(1);
             }
             wants_reboot = 1;
