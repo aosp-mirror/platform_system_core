@@ -70,7 +70,7 @@ $(TOOLS_H):
 
 $(LOCAL_PATH)/getevent.c: $(intermediates)/input.h-labels.h
 
-UAPI_INPUT_EVENT_CODES_H := bionic/libc/kernel/uapi/linux/input-event-codes.h
+UAPI_INPUT_EVENT_CODES_H := bionic/libc/kernel/uapi/linux/input.h bionic/libc/kernel/uapi/linux/input-event-codes.h
 INPUT_H_LABELS_H := $(intermediates)/input.h-labels.h
 $(INPUT_H_LABELS_H): PRIVATE_LOCAL_PATH := $(LOCAL_PATH)
 # The PRIVATE_CUSTOM_TOOL line uses = to evaluate the output path late.
