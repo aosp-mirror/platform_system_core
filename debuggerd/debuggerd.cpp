@@ -183,6 +183,16 @@ out:
    return allowed;
 }
 
+static bool pid_contains_tid(pid_t pid, pid_t tid) {
+  char task_path[PATH_MAX];
+  if (snprintf(task_path, PATH_MAX, "/proc/%d/task/%d", pid, tid) >= PATH_MAX) {
+    ALOGE("debuggerd: task path overflow (pid = %d, tid = %d)\n", pid, tid);
+    exit(1);
+  }
+
+  return access(task_path, F_OK) == 0;
+}
+
 static int read_request(int fd, debugger_request_t* out_request) {
   ucred cr;
   socklen_t len = sizeof(cr);
@@ -227,16 +237,13 @@ static int read_request(int fd, debugger_request_t* out_request) {
 
   if (msg.action == DEBUGGER_ACTION_CRASH) {
     // Ensure that the tid reported by the crashing process is valid.
-    char buf[64];
-    struct stat s;
-    snprintf(buf, sizeof buf, "/proc/%d/task/%d", out_request->pid, out_request->tid);
-    if (stat(buf, &s)) {
-      ALOGE("tid %d does not exist in pid %d. ignoring debug request\n",
-          out_request->tid, out_request->pid);
+    // This check needs to happen again after ptracing the requested thread to prevent a race.
+    if (!pid_contains_tid(out_request->pid, out_request->tid)) {
+      ALOGE("tid %d does not exist in pid %d. ignoring debug request\n", out_request->tid,
+            out_request->pid);
       return -1;
     }
-  } else if (cr.uid == 0
-            || (cr.uid == AID_SYSTEM && msg.action == DEBUGGER_ACTION_DUMP_BACKTRACE)) {
+  } else if (cr.uid == 0 || (cr.uid == AID_SYSTEM && msg.action == DEBUGGER_ACTION_DUMP_BACKTRACE)) {
     // Only root or system can ask us to attach to any process and dump it explicitly.
     // However, system is only allowed to collect backtraces but cannot dump tombstones.
     status = get_process_info(out_request->tid, &out_request->pid,
@@ -413,10 +420,31 @@ static void redirect_to_32(int fd, debugger_request_t* request) {
 }
 #endif
 
-static void ptrace_siblings(pid_t pid, pid_t main_tid, std::set<pid_t>& tids) {
-  char task_path[64];
+// Attach to a thread, and verify that it's still a member of the given process
+static bool ptrace_attach_thread(pid_t pid, pid_t tid) {
+  if (ptrace(PTRACE_ATTACH, tid, 0, 0) != 0) {
+    return false;
+  }
 
-  snprintf(task_path, sizeof(task_path), "/proc/%d/task", pid);
+  // Make sure that the task we attached to is actually part of the pid we're dumping.
+  if (!pid_contains_tid(pid, tid)) {
+    if (ptrace(PTRACE_DETACH, tid, 0, 0) != 0) {
+      ALOGE("debuggerd: failed to detach from thread '%d'", tid);
+      exit(1);
+    }
+    return false;
+  }
+
+  return true;
+}
+
+static void ptrace_siblings(pid_t pid, pid_t main_tid, std::set<pid_t>& tids) {
+  char task_path[PATH_MAX];
+
+  if (snprintf(task_path, PATH_MAX, "/proc/%d/task", pid) >= PATH_MAX) {
+    ALOGE("debuggerd: task path overflow (pid = %d)\n", pid);
+    abort();
+  }
 
   std::unique_ptr<DIR, int (*)(DIR*)> d(opendir(task_path), closedir);
 
@@ -443,7 +471,7 @@ static void ptrace_siblings(pid_t pid, pid_t main_tid, std::set<pid_t>& tids) {
       continue;
     }
 
-    if (ptrace(PTRACE_ATTACH, tid, 0, 0) < 0) {
+    if (!ptrace_attach_thread(pid, tid)) {
       ALOGE("debuggerd: ptrace attach to %d failed: %s", tid, strerror(errno));
       continue;
     }
@@ -568,9 +596,31 @@ static void worker_process(int fd, debugger_request_t& request) {
   // debugger_signal_handler().
 
   // Attach to the target process.
-  if (ptrace(PTRACE_ATTACH, request.tid, 0, 0) != 0) {
+  if (!ptrace_attach_thread(request.pid, request.tid)) {
     ALOGE("debuggerd: ptrace attach failed: %s", strerror(errno));
     exit(1);
+  }
+
+  // DEBUGGER_ACTION_CRASH requests can come from arbitrary processes and the tid field in the
+  // request is sent from the other side. If an attacker can cause a process to be spawned with the
+  // pid of their process, they could trick debuggerd into dumping that process by exiting after
+  // sending the request. Validate the trusted request.uid/gid to defend against this.
+  if (request.action == DEBUGGER_ACTION_CRASH) {
+    pid_t pid;
+    uid_t uid;
+    gid_t gid;
+    if (get_process_info(request.tid, &pid, &uid, &gid) != 0) {
+      ALOGE("debuggerd: failed to get process info for tid '%d'", request.tid);
+      exit(1);
+    }
+
+    if (pid != request.pid || uid != request.uid || gid != request.gid) {
+      ALOGE(
+        "debuggerd: attached task %d does not match request: "
+        "expected pid=%d,uid=%d,gid=%d, actual pid=%d,uid=%d,gid=%d",
+        request.tid, request.pid, request.uid, request.gid, pid, uid, gid);
+      exit(1);
+    }
   }
 
   // Don't attach to the sibling threads if we want to attach gdb.
