@@ -46,7 +46,7 @@
 #include <android-base/file.h>
 #include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
-#include <bootloader_message_writer.h>
+#include <bootloader_message/bootloader_message.h>
 #include <cutils/partition_utils.h>
 #include <cutils/android_reboot.h>
 #include <logwrap/logwrap.h>
