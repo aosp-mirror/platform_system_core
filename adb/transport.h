@@ -19,11 +19,14 @@
 
 #include <sys/types.h>
 
+#include <deque>
 #include <list>
 #include <string>
 #include <unordered_set>
 
 #include "adb.h"
+
+#include <openssl/rsa.h>
 
 typedef std::unordered_set<std::string> FeatureSet;
 
@@ -104,7 +107,8 @@ public:
         return type == kTransportLocal && local_port_for_emulator_ == -1;
     }
 
-    void* key = nullptr;
+    RSA* NextKey();
+
     unsigned char token[TOKEN_SIZE] = {};
     size_t failed_auth_attempts = 0;
 
@@ -155,6 +159,8 @@ private:
 
     // A list of adisconnect callbacks called when the transport is kicked.
     std::list<adisconnect*> disconnects_;
+
+    std::deque<RSA*> keys_;
 
     DISALLOW_COPY_AND_ASSIGN(atransport);
 };

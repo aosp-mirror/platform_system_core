@@ -35,6 +35,7 @@
 #include <android-base/strings.h>
 
 #include "adb.h"
+#include "adb_auth.h"
 #include "adb_utils.h"
 #include "diagnose_usb.h"
 
@@ -1073,4 +1074,12 @@ int check_data(apacket *p)
     } else {
         return 0;
     }
+}
+
+RSA* atransport::NextKey() {
+    if (keys_.empty()) keys_ = adb_auth_get_private_keys();
+
+    RSA* result = keys_[0];
+    keys_.pop_front();
+    return result;
 }
