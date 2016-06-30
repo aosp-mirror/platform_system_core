@@ -302,7 +302,6 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
         break;
     case SP_SYSTEM:
         fd = system_bg_cpuset_fd;
-        boost_fd = bg_schedboost_fd;
         break;
     default:
         boost_fd = fd = -1;
