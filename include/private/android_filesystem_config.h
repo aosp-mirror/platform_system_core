@@ -89,6 +89,12 @@
 #define AID_DEBUGGERD     1045  /* debuggerd unprivileged user */
 #define AID_MEDIA_CODEC   1046  /* mediacodec process */
 #define AID_CAMERASERVER  1047  /* cameraserver process */
+#define AID_FIREWALL      1048  /* firewalld process */
+#define AID_TRUNKS        1049  /* trunksd process (TPM daemon) */
+#define AID_NVRAM         1050  /* Access-controlled NVRAM */
+#define AID_DNS           1051  /* DNS resolution daemon (system: netd) */
+#define AID_DNS_TETHER    1052  /* DNS resolution daemon (tether: dnsmasq) */
+/* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -196,6 +202,11 @@ static const struct android_id_info android_ids[] = {
     { "debuggerd",     AID_DEBUGGERD, },
     { "mediacodec",    AID_MEDIA_CODEC, },
     { "cameraserver",  AID_CAMERASERVER, },
+    { "firewall",      AID_FIREWALL, },
+    { "trunks",        AID_TRUNKS, },
+    { "nvram",         AID_NVRAM, },
+    { "dns",           AID_DNS, },
+    { "dns_tether",    AID_DNS_TETHER, },
 
     { "shell",         AID_SHELL, },
     { "cache",         AID_CACHE, },
