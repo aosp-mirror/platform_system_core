@@ -370,19 +370,7 @@ static void read_status_line(int fd, char* buf, size_t count)
     *buf = '\0';
 }
 
-static void copy_to_file(int inFd, int outFd) {
-    const size_t BUFSIZE = 32 * 1024;
-    char* buf = (char*) malloc(BUFSIZE);
-    if (buf == nullptr) fatal("couldn't allocate buffer for copy_to_file");
-    int len;
-    long total = 0;
-#ifdef _WIN32
-    int old_stdin_mode = -1;
-    int old_stdout_mode = -1;
-#endif
-
-    D("copy_to_file(%d -> %d)", inFd, outFd);
-
+static void stdinout_raw_prologue(int inFd, int outFd, int& old_stdin_mode, int& old_stdout_mode) {
     if (inFd == STDIN_FILENO) {
         stdin_raw_init();
 #ifdef _WIN32
@@ -401,6 +389,39 @@ static void copy_to_file(int inFd, int outFd) {
         }
     }
 #endif
+}
+
+static void stdinout_raw_epilogue(int inFd, int outFd, int old_stdin_mode, int old_stdout_mode) {
+    if (inFd == STDIN_FILENO) {
+        stdin_raw_restore();
+#ifdef _WIN32
+        if (_setmode(STDIN_FILENO, old_stdin_mode) == -1) {
+            fatal_errno("could not restore stdin mode");
+        }
+#endif
+    }
+
+#ifdef _WIN32
+    if (outFd == STDOUT_FILENO) {
+        if (_setmode(STDOUT_FILENO, old_stdout_mode) == -1) {
+            fatal_errno("could not restore stdout mode");
+        }
+    }
+#endif
+}
+
+static void copy_to_file(int inFd, int outFd) {
+    const size_t BUFSIZE = 32 * 1024;
+    char* buf = (char*) malloc(BUFSIZE);
+    if (buf == nullptr) fatal("couldn't allocate buffer for copy_to_file");
+    int len;
+    long total = 0;
+    int old_stdin_mode = -1;
+    int old_stdout_mode = -1;
+
+    D("copy_to_file(%d -> %d)", inFd, outFd);
+
+    stdinout_raw_prologue(inFd, outFd, old_stdin_mode, old_stdout_mode);
 
     while (true) {
         if (inFd == STDIN_FILENO) {
@@ -425,22 +446,7 @@ static void copy_to_file(int inFd, int outFd) {
         total += len;
     }
 
-    if (inFd == STDIN_FILENO) {
-        stdin_raw_restore();
-#ifdef _WIN32
-        if (_setmode(STDIN_FILENO, old_stdin_mode) == -1) {
-            fatal_errno("could not restore stdin mode");
-        }
-#endif
-    }
-
-#ifdef _WIN32
-    if (outFd == STDOUT_FILENO) {
-        if (_setmode(STDOUT_FILENO, old_stdout_mode) == -1) {
-            fatal_errno("could not restore stdout mode");
-        }
-    }
-#endif
+    stdinout_raw_epilogue(inFd, outFd, old_stdin_mode, old_stdout_mode);
 
     D("copy_to_file() finished after %lu bytes", total);
     free(buf);
@@ -1234,6 +1240,29 @@ static int logcat(TransportType transport, const char* serial, int argc, const c
     return send_shell_command(transport, serial, cmd, true);
 }
 
+static void write_zeros(int bytes, int fd) {
+    int old_stdin_mode = -1;
+    int old_stdout_mode = -1;
+    char* buf = (char*) calloc(1, bytes);
+    if (buf == nullptr) fatal("couldn't allocate buffer for write_zeros");
+
+    D("write_zeros(%d) -> %d", bytes, fd);
+
+    stdinout_raw_prologue(-1, fd, old_stdin_mode, old_stdout_mode);
+
+    if (fd == STDOUT_FILENO) {
+        fwrite(buf, 1, bytes, stdout);
+        fflush(stdout);
+    } else {
+        adb_write(fd, buf, bytes);
+    }
+
+    stdinout_raw_prologue(-1, fd, old_stdin_mode, old_stdout_mode);
+
+    D("write_zeros() finished");
+    free(buf);
+}
+
 static int backup(int argc, const char** argv) {
     const char* filename = "backup.ab";
 
@@ -1313,6 +1342,9 @@ static int restore(int argc, const char** argv) {
 
     printf("Now unlock your device and confirm the restore operation.\n");
     copy_to_file(tarFd, fd);
+
+    // Provide an in-band EOD marker in case the archive file is malformed
+    write_zeros(512*2, fd);
 
     // Wait until the other side finishes, or it'll get sent SIGHUP.
     copy_to_file(fd, STDOUT_FILENO);
