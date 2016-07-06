@@ -278,6 +278,16 @@ enum {
      * age will be 0.
      */
     NATIVE_WINDOW_BUFFER_AGE = 13,
+
+    /*
+     * Returns the duration of the last dequeueBuffer call in microseconds
+     */
+    NATIVE_WINDOW_LAST_DEQUEUE_DURATION = 14,
+
+    /*
+     * Returns the duration of the last queueBuffer call in microseconds
+     */
+    NATIVE_WINDOW_LAST_QUEUE_DURATION = 15,
 };
 
 /* Valid operations for the (*perform)() hook.
