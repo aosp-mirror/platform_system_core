@@ -8,8 +8,16 @@ case `getprop ro.debuggable` in
    ;;
 esac
 
-data=/data/misc/logd
 property=persist.logd.logpersistd
+
+case `getprop ${property#persist.}.enable` in
+true) ;;
+*) echo "${progname} - Disabled"
+   exit 1
+   ;;
+esac
+
+data=/data/misc/logd
 service=logcatd
 size_default=256
 buffer_default=all
@@ -69,11 +77,11 @@ case ${progname} in
   su logd xargs cat
   ;;
 *.start)
-  current_buffer="`getprop ${property}.buffer`"
-  current_size="`getprop ${property}.size`"
-  if [ "${service}" = "`getprop ${property}`" ]; then
+  current_buffer="`getprop ${property#persist.}.buffer`"
+  current_size="`getprop ${property#persist.}.size`"
+  if [ "${service}" = "`getprop ${property#persist.}`" ]; then
     if [ "true" = "${clear}" ]; then
-      setprop ${property} "clear"
+      setprop ${property#persist.} "clear"
     elif [ "${buffer}|${size}" != "${current_buffer}|${current_size}" ]; then
       echo   "ERROR: Changing existing collection parameters from" >&2
       if [ "${buffer}" != "${current_buffer}" ]; then
@@ -96,22 +104,30 @@ case ${progname} in
       exit 1
     fi
   elif [ "true" = "${clear}" ]; then
-    setprop ${property} "clear"
+    setprop ${property#persist.} "clear"
   fi
   if [ -n "${buffer}${current_buffer}" ]; then
     setprop ${property}.buffer "${buffer}"
+    if [ -z "${buffer}" ]; then
+      # deal with trampoline for empty properties
+      setprop ${property#persist.}.buffer ""
+    fi
   fi
   if [ -n "${size}${current_size}" ]; then
     setprop ${property}.size "${size}"
+    if [ -z "${size}" ]; then
+      # deal with trampoline for empty properties
+      setprop ${property#persist.}.size ""
+    fi
   fi
-  while [ "clear" = "`getprop ${property}`" ]; do
+  while [ "clear" = "`getprop ${property#persist.}`" ]; do
     continue
   done
   # ${service}.rc does the heavy lifting with the following trigger
   setprop ${property} ${service}
-  getprop ${property}
   # 20ms done, to permit process feedback check
   sleep 1
+  getprop ${property#persist.}
   # also generate an error return code if not found running
   pgrep -u ${data##*/} ${service%d}
   ;;
@@ -124,13 +140,17 @@ case ${progname} in
   else
     setprop ${property} "stop"
   fi
-  if [ -n "`getprop ${property}.buffer`" ]; then
+  if [ -n "`getprop ${property#persist.}.buffer`" ]; then
     setprop ${property}.buffer ""
+    # deal with trampoline for empty properties
+    setprop ${property#persist.}.buffer ""
   fi
-  if [ -n "`getprop ${property}.size`" ]; then
+  if [ -n "`getprop ${property#persist.}.size`" ]; then
     setprop ${property}.size ""
+    # deal with trampoline for empty properties
+    setprop ${property#persist.}.size ""
   fi
-  while [ "clear" = "`getprop ${property}`" ]; do
+  while [ "clear" = "`getprop ${property#persist.}`" ]; do
     continue
   done
   ;;
