@@ -352,7 +352,7 @@ static void usage() {
             "                                           override the fs type and/or size\n"
             "                                           the bootloader reports.\n"
             "  getvar <variable>                        Display a bootloader variable.\n"
-            "  set_active <suffix>                      Sets the active slot. If slots are\n"
+            "  set_active <slot>                        Sets the active slot. If slots are\n"
             "                                           not supported, this does nothing.\n"
             "  boot <kernel> [ <ramdisk> [ <second> ] ] Download and boot kernel.\n"
             "  flash:raw boot <kernel> [ <ramdisk> [ <second> ] ]\n"
@@ -389,19 +389,21 @@ static void usage() {
             "                                           (default: 2048).\n"
             "  -S <size>[K|M|G]                         Automatically sparse files greater\n"
             "                                           than 'size'. 0 to disable.\n"
-            "  --slot <suffix>                          Specify slot suffix to be used if the\n"
-            "                                           device supports slots. This will be\n"
-            "                                           added to all partition names that use\n"
-            "                                           slots. 'all' can be given to refer\n"
-            "                                           to all slots. 'other' can be given to\n"
-            "                                           refer to a non-current slot. If this\n"
-            "                                           flag is not used, slotted partitions\n"
-            "                                           will default to the current active slot.\n"
-            "  -a, --set-active[=<suffix>]              Sets the active slot. If no suffix is\n"
+            "  --slot <slot>                            Specify slot name to be used if the\n"
+            "                                           device supports slots. All operations\n"
+            "                                           on partitions that support slots will\n"
+            "                                           be done on the slot specified.\n"
+            "                                           'all' can be given to refer to all slots.\n"
+            "                                           'other' can be given to refer to a\n"
+            "                                           non-current slot. If this flag is not\n"
+            "                                           used, slotted partitions will default\n"
+            "                                           to the current active slot.\n"
+            "  -a, --set-active[=<slot>]                Sets the active slot. If no slot is\n"
             "                                           provided, this will default to the value\n"
             "                                           given by --slot. If slots are not\n"
-            "                                           supported, this does nothing. This will\n"
-            "                                           run after all non-reboot commands.\n"
+            "                                           supported, this sets the current slot\n"
+            "                                           to be active. This will run after all\n"
+            "                                           non-reboot commands.\n"
 #if !defined(_WIN32)
             "  --wipe-and-use-fbe                       On devices which support it,\n"
             "                                           erase userdata and cache, and\n"
@@ -862,7 +864,19 @@ static void flash_buf(const char *pname, struct fastboot_buffer *buf)
     }
 }
 
-static std::vector<std::string> get_suffixes(Transport* transport) {
+static std::string get_current_slot(Transport* transport)
+{
+    std::string current_slot;
+    if (fb_getvar(transport, "current-slot", &current_slot)) {
+        if (current_slot == "_a") return "a"; // Legacy support
+        if (current_slot == "_b") return "b"; // Legacy support
+        return current_slot;
+    }
+    return "";
+}
+
+// Legacy support
+static std::vector<std::string> get_suffixes_obsolete(Transport* transport) {
     std::vector<std::string> suffixes;
     std::string suffix_list;
     if (!fb_getvar(transport, "slot-suffixes", &suffix_list)) {
@@ -878,99 +892,110 @@ static std::vector<std::string> get_suffixes(Transport* transport) {
     return suffixes;
 }
 
+// Legacy support
+static bool supports_AB_obsolete(Transport* transport) {
+  return !get_suffixes_obsolete(transport).empty();
+}
+
+static int get_slot_count(Transport* transport) {
+    std::string var;
+    int count;
+    if (!fb_getvar(transport, "slot-count", &var)) {
+        if (supports_AB_obsolete(transport)) return 2; // Legacy support
+    }
+    if (!android::base::ParseInt(var.c_str(), &count)) return 0;
+    return count;
+}
+
 static bool supports_AB(Transport* transport) {
-  return !get_suffixes(transport).empty();
+  return get_slot_count(transport) >= 2;
 }
 
 // Given a current slot, this returns what the 'other' slot is.
-static std::string get_other_slot(Transport* transport, const std::string& current_slot) {
-    std::vector<std::string> suffixes = get_suffixes(transport);
+static std::string get_other_slot(const std::string& current_slot, int count) {
+    if (count == 0) return "";
 
-    if (!suffixes.empty()) {
-        for (size_t i = 0; i < suffixes.size(); i++) {
-            if (current_slot == suffixes[i]) {
-                return suffixes[(i+1)%suffixes.size()];
-            }
-        }
-    }
-    return "";
+    char next = (current_slot[0] - 'a' + 1)%count + 'a';
+    return std::string(1, next);
+}
+
+static std::string get_other_slot(Transport* transport, const std::string& current_slot) {
+    return get_other_slot(current_slot, get_slot_count(transport));
+}
+
+static std::string get_other_slot(Transport* transport, int count) {
+    return get_other_slot(get_current_slot(transport), count);
 }
 
 static std::string get_other_slot(Transport* transport) {
-    std::string current_slot;
-    fb_getvar(transport, "current-slot", &current_slot);
-    return get_other_slot(transport, current_slot);
+    return get_other_slot(get_current_slot(transport), get_slot_count(transport));
 }
 
-static std::string verify_slot(Transport* transport, const char *slot, bool allow_all) {
-    if (strcmp(slot, "all") == 0) {
+static std::string verify_slot(Transport* transport, const std::string& slot_name, bool allow_all) {
+    std::string slot = slot_name;
+    if (slot == "_a") slot = "a"; // Legacy support
+    if (slot == "_b") slot = "b"; // Legacy support
+    if (slot == "all") {
         if (allow_all) {
             return "all";
         } else {
-            std::vector<std::string> suffixes = get_suffixes(transport);
-            if (!suffixes.empty()) {
-                return suffixes[0];
+            int count = get_slot_count(transport);
+            if (count > 0) {
+                return "a";
             } else {
                 die("No known slots.");
             }
         }
     }
 
-    std::vector<std::string> suffixes = get_suffixes(transport);
+    int count = get_slot_count(transport);
+    if (count == 0) die("Device does not support slots.\n");
 
-    if (strcmp(slot, "other") == 0) {
-        std::string current_slot;
-        if (!fb_getvar(transport, "current-slot", &current_slot)) {
-            die("Failed to identify current slot.");
-        }
-        std::string other = get_other_slot(transport, current_slot);
+    if (slot == "other") {
+        std::string other = get_other_slot(transport, count);
         if (other == "") {
            die("No known slots.");
         }
         return other;
     }
 
-    for (const std::string &suffix : suffixes) {
-        if (suffix == slot)
-            return slot;
+    if (slot.size() == 1 && (slot[0]-'a' >= 0 && slot[0]-'a' < count)) return slot;
+
+    fprintf(stderr, "Slot %s does not exist. supported slots are:\n", slot.c_str());
+    for (int i=0; i<count; i++) {
+        fprintf(stderr, "%c\n", (char)(i + 'a'));
     }
-    if (suffixes.empty()) {
-        fprintf(stderr, "Device does not support slots.\n");
-    } else {
-        fprintf(stderr, "Slot %s does not exist. supported slots are:\n", slot);
-        for (const std::string &suffix : suffixes) {
-            fprintf(stderr, "%s\n", suffix.c_str());
-        }
-    }
+
     exit(1);
 }
 
-static std::string verify_slot(Transport* transport, const char *slot) {
+static std::string verify_slot(Transport* transport, const std::string& slot) {
    return verify_slot(transport, slot, true);
 }
 
-static void do_for_partition(Transport* transport, const char *part, const char *slot,
+static void do_for_partition(Transport* transport, const std::string& part, const std::string& slot,
                              std::function<void(const std::string&)> func, bool force_slot) {
     std::string has_slot;
     std::string current_slot;
 
-    if (!fb_getvar(transport, std::string("has-slot:")+part, &has_slot)) {
+    if (!fb_getvar(transport, "has-slot:" + part, &has_slot)) {
         /* If has-slot is not supported, the answer is no. */
         has_slot = "no";
     }
     if (has_slot == "yes") {
-        if (!slot || slot[0] == 0) {
-            if (!fb_getvar(transport, "current-slot", &current_slot)) {
+        if (slot == "") {
+            current_slot = get_current_slot(transport);
+            if (current_slot == "") {
                 die("Failed to identify current slot.\n");
             }
-            func(std::string(part) + current_slot);
+            func(part + "_" + current_slot);
         } else {
-            func(std::string(part) + slot);
+            func(part + '_' + slot);
         }
     } else {
-        if (force_slot && slot && slot[0]) {
+        if (force_slot && slot != "") {
              fprintf(stderr, "Warning: %s does not support slots, and slot %s was requested.\n",
-                     part, slot);
+                     part.c_str(), slot.c_str());
         }
         func(part);
     }
@@ -981,21 +1006,17 @@ static void do_for_partition(Transport* transport, const char *part, const char 
  * partition names. If force_slot is true, it will fail if a slot is specified, and the given
  * partition does not support slots.
  */
-static void do_for_partitions(Transport* transport, const char *part, const char *slot,
+static void do_for_partitions(Transport* transport, const std::string& part, const std::string& slot,
                               std::function<void(const std::string&)> func, bool force_slot) {
     std::string has_slot;
 
-    if (slot && strcmp(slot, "all") == 0) {
-        if (!fb_getvar(transport, std::string("has-slot:") + part, &has_slot)) {
-            die("Could not check if partition %s has slot.", part);
+    if (slot == "all") {
+        if (!fb_getvar(transport, "has-slot:" + part, &has_slot)) {
+            die("Could not check if partition %s has slot.", part.c_str());
         }
         if (has_slot == "yes") {
-            std::vector<std::string> suffixes = get_suffixes(transport);
-            if (suffixes.empty()) {
-                die("Error reading suffixes.\n");
-            }
-            for (std::string &suffix : suffixes) {
-                do_for_partition(transport, part, suffix.c_str(), func, force_slot);
+            for (int i=0; i < get_slot_count(transport); i++) {
+                do_for_partition(transport, part, std::string(1, (char)(i + 'a')), func, force_slot);
             }
         } else {
             do_for_partition(transport, part, "", func, force_slot);
@@ -1025,15 +1046,20 @@ static void do_update_signature(ZipArchiveHandle zip, char* fn) {
 // Sets slot_override as the active slot. If slot_override is blank,
 // set current slot as active instead. This clears slot-unbootable.
 static void set_active(Transport* transport, const std::string& slot_override) {
+    std::string separator = "";
     if (!supports_AB(transport)) {
-      return;
-    } else if (slot_override != "") {
-        fb_set_active(slot_override.c_str());
+        if (supports_AB_obsolete(transport)) {
+            separator = "_"; // Legacy support
+        } else {
+            return;
+        }
+    }
+    if (slot_override != "") {
+        fb_set_active((separator + slot_override).c_str());
     } else {
-        std::string current_slot;
-        if (fb_getvar(transport, "current-slot", &current_slot)) {
-            current_slot = verify_slot(transport, current_slot.c_str(), false);
-            fb_set_active(current_slot.c_str());
+        std::string current_slot = get_current_slot(transport);
+        if (current_slot != "") {
+            fb_set_active((separator + current_slot).c_str());
         }
     }
 }
@@ -1510,20 +1536,23 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (slot_override != "") slot_override = verify_slot(transport, slot_override.c_str());
-    if (next_active != "") next_active = verify_slot(transport, next_active.c_str(), false);
+    if (!supports_AB(transport) && supports_AB_obsolete(transport)) {
+        fprintf(stderr, "Warning: Device A/B support is outdated. Bootloader update required.\n");
+    }
+    if (slot_override != "") slot_override = verify_slot(transport, slot_override);
+    if (next_active != "") next_active = verify_slot(transport, next_active, false);
 
     if (wants_set_active) {
         if (next_active == "") {
             if (slot_override == "") {
                 std::string current_slot;
                 if (fb_getvar(transport, "current-slot", &current_slot)) {
-                    next_active = verify_slot(transport, current_slot.c_str(), false);
+                    next_active = verify_slot(transport, current_slot, false);
                 } else {
                     wants_set_active = false;
                 }
             } else {
-                next_active = verify_slot(transport, slot_override.c_str(), false);
+                next_active = verify_slot(transport, slot_override, false);
             }
         }
     }
@@ -1546,7 +1575,7 @@ int main(int argc, char **argv)
 
                 fb_queue_erase(partition.c_str());
             };
-            do_for_partitions(transport, argv[1], slot_override.c_str(), erase, true);
+            do_for_partitions(transport, argv[1], slot_override, erase, true);
             skip(2);
         } else if(!strncmp(*argv, "format", strlen("format"))) {
             char *overrides;
@@ -1582,7 +1611,7 @@ int main(int argc, char **argv)
                 fb_perform_format(transport, partition.c_str(), 0,
                     type_override, size_override, "");
             };
-            do_for_partitions(transport, argv[1], slot_override.c_str(), format, true);
+            do_for_partitions(transport, argv[1], slot_override, format, true);
             skip(2);
         } else if(!strcmp(*argv, "signature")) {
             require(2);
@@ -1649,7 +1678,7 @@ int main(int argc, char **argv)
                 }
                 do_flash(transport, partition.c_str(), fname.c_str());
             };
-            do_for_partitions(transport, pname, slot_override.c_str(), flash, true);
+            do_for_partitions(transport, pname, slot_override, flash, true);
         } else if(!strcmp(*argv, "flash:raw")) {
             char *kname = argv[2];
             char *rname = 0;
@@ -1669,7 +1698,7 @@ int main(int argc, char **argv)
             auto flashraw = [&](const std::string &partition) {
                 fb_queue_flash(partition.c_str(), data, sz);
             };
-            do_for_partitions(transport, argv[1], slot_override.c_str(), flashraw, true);
+            do_for_partitions(transport, argv[1], slot_override, flashraw, true);
         } else if(!strcmp(*argv, "flashall")) {
             skip(1);
             if (slot_override == "all") {
@@ -1698,7 +1727,7 @@ int main(int argc, char **argv)
             wants_reboot = 1;
         } else if(!strcmp(*argv, "set_active")) {
             require(2);
-            std::string slot = verify_slot(transport, argv[1], false);
+            std::string slot = verify_slot(transport, std::string(argv[1]), false);
             fb_set_active(slot.c_str());
             skip(2);
         } else if(!strcmp(*argv, "oem")) {
