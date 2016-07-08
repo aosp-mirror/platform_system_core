@@ -316,30 +316,6 @@ int wait_for_file(const char *filename, int timeout)
     return ret;
 }
 
-void open_devnull_stdio(void)
-{
-    int fd = open("/sys/fs/selinux/null", O_RDWR);
-    if (fd == -1) {
-        /* Fail silently.
-         * stdout/stderr isn't available, and because
-         * klog_init() is called after open_devnull_stdio(), we can't
-         * log to dmesg. Reordering klog_init() to be called before
-         * open_devnull_stdio() isn't an option either, as then klog_fd
-         * will be assigned 0 or 1, which will end up getting clobbered
-         * by the code below. There's nowhere good to log.
-         */
-
-        exit(1);
-    }
-
-    dup2(fd, 0);
-    dup2(fd, 1);
-    dup2(fd, 2);
-    if (fd > 2) {
-        close(fd);
-    }
-}
-
 void import_kernel_cmdline(bool in_qemu,
                            std::function<void(const std::string&, const std::string&, bool)> fn) {
     std::string cmdline;

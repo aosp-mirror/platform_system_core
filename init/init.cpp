@@ -579,7 +579,6 @@ int main(int argc, char** argv) {
     // kmsg and null, otherwise we won't be able to remount / read-only
     // later on. Now that tmpfs is mounted on /dev, we can actually talk
     // to the outside world.
-    open_devnull_stdio();
     InitKernelLogging(argv);
 
     LOG(INFO) << "init " << (is_first_stage ? "first stage" : "second stage") << " started!";

@@ -28,7 +28,6 @@
 #define DEV_NAME "/dev/watchdog"
 
 int watchdogd_main(int argc, char **argv) {
-    open_devnull_stdio();
     InitKernelLogging(argv);
 
     int interval = 10;
