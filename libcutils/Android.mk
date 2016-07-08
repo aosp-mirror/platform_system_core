@@ -95,7 +95,7 @@ LOCAL_SRC_FILES := $(libcutils_common_sources) \
         android_reboot.c \
         ashmem-dev.c \
         debugger.c \
-        klog.c \
+        klog.cpp \
         partition_utils.c \
         properties.c \
         qtaguid.c \
