@@ -518,5 +518,5 @@ Alternatively, use the emulator:
 
   emulator -partition-size 1024 -verbose -show-kernel -no-window
 
-You might want to call klog_set_level(6) after the klog_init() call
-so you see the kernel logging in dmesg (or the emulator output).
+You might want to change the klog_set_level call so you see all the kernel
+logging in dmesg (or the emulator output).
