@@ -16,8 +16,11 @@
 
 #include "log.h"
 
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/uio.h>
 
 #include <selinux/selinux.h>
@@ -51,9 +54,20 @@ static void KernelLogger(android::base::LogId, android::base::LogSeverity severi
 }
 
 void InitKernelLogging(char* argv[]) {
-    android::base::InitLogging(argv, &KernelLogger);
+    // Make stdin/stdout/stderr all point to /dev/null.
+    int fd = open("/sys/fs/selinux/null", O_RDWR);
+    if (fd == -1) {
+        int saved_errno = errno;
+        android::base::InitLogging(argv, &KernelLogger);
+        errno = saved_errno;
+        PLOG(FATAL) << "Couldn't open /sys/fs/selinux/null";
+    }
+    dup2(fd, 0);
+    dup2(fd, 1);
+    dup2(fd, 2);
+    if (fd > 2) close(fd);
 
-    klog_init();
+    android::base::InitLogging(argv, &KernelLogger);
     klog_set_level(KLOG_NOTICE_LEVEL);
 }
 

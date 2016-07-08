@@ -85,7 +85,6 @@ int main(int argc, char *argv[])
     char *fstab_file=NULL;
     struct fstab *fstab=NULL;
 
-    klog_init();
     klog_set_level(6);
 
     parse_options(argc, argv, &a_flag, &u_flag, &n_flag, &n_name, &n_blk_dev);
@@ -111,4 +110,3 @@ int main(int argc, char *argv[])
     /* Should not get here */
     exit(1);
 }
-

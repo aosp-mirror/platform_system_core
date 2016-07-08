@@ -54,7 +54,6 @@ void sanitize(char *p);
 void make_link_init(const char *oldpath, const char *newpath);
 void remove_link(const char *oldpath, const char *newpath);
 int wait_for_file(const char *filename, int timeout);
-void open_devnull_stdio(void);
 void import_kernel_cmdline(bool in_qemu,
                            std::function<void(const std::string&, const std::string&, bool)>);
 int make_dir(const char *path, mode_t mode);

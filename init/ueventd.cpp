@@ -52,7 +52,6 @@ int ueventd_main(int argc, char **argv)
      */
     signal(SIGCHLD, SIG_IGN);
 
-    open_devnull_stdio();
     InitKernelLogging(argv);
 
     LOG(INFO) << "ueventd started!";
