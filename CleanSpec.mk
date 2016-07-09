@@ -58,3 +58,4 @@ $(call add-clean-step, rm -rf $(PRODUCT_OUT)/obj/SHARED_LIBRARIES/libsysutils_in
 $(call add-clean-step, rm -rf $(PRODUCT_OUT)/system/bin/grep $(PRODUCT_OUT)/system/bin/toolbox)
 $(call add-clean-step, rm -rf $(PRODUCT_OUT)/system/lib/hw/gatekeeper.$(TARGET_DEVICE).so)
 $(call add-clean-step, rm -rf $(PRODUCT_OUT)/system/lib64/hw/gatekeeper.$(TARGET_DEVICE).so)
+$(call add-clean-step, rm -rf $(PRODUCT_OUT)/root/vendor)
