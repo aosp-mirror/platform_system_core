@@ -484,7 +484,9 @@ ssize_t utf16_to_utf8_length(const char16_t *src, size_t src_len)
     if (ret_difference >= 5) {
         // Log the difference between new and old calculation. A high number, or equal numbers
         // appearing frequently, would be indicative of an attack.
-        std::string logged_string = (std::ostringstream() << ret_difference).str();
+        std::ostringstream logged_string_stream;
+        logged_string_stream << ret_difference;
+        std::string logged_string = logged_string_stream.str();
         android_errorWriteWithInfoLog(0x534e4554, "29250543", -1 /* int_uid */,
             logged_string.c_str(), logged_string.length() + 1);
     }
