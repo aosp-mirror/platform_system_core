@@ -113,6 +113,8 @@ private:
     void OpenConsole() const;
     void PublishSocket(const std::string& name, int fd) const;
     void KillProcessGroup(int signal);
+    void CreateSockets(const std::string& scon);
+    void SetProcessAttributes();
 
     bool ParseClass(const std::vector<std::string>& args, std::string* err);
     bool ParseConsole(const std::vector<std::string>& args, std::string* err);
