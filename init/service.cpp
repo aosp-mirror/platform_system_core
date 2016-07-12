@@ -52,6 +52,43 @@ using android::base::WriteStringToFile;
 #define CRITICAL_CRASH_THRESHOLD    4       // if we crash >4 times ...
 #define CRITICAL_CRASH_WINDOW       (4*60)  // ... in 4 minutes, goto recovery
 
+static std::string ComputeContextFromExecutable(std::string& service_name,
+                                                const std::string& service_path) {
+    std::string computed_context;
+
+    char* raw_con = nullptr;
+    char* raw_filecon = nullptr;
+
+    if (getcon(&raw_con) == -1) {
+        LOG(ERROR) << "could not get context while starting '" << service_name << "'";
+        return "";
+    }
+    std::unique_ptr<char> mycon(raw_con);
+
+    if (getfilecon(service_path.c_str(), &raw_filecon) == -1) {
+        LOG(ERROR) << "could not get file context while starting '" << service_name << "'";
+        return "";
+    }
+    std::unique_ptr<char> filecon(raw_filecon);
+
+    char* new_con = nullptr;
+    int rc = security_compute_create(mycon.get(), filecon.get(),
+                                     string_to_security_class("process"), &new_con);
+    if (rc == 0) {
+        computed_context = new_con;
+        free(new_con);
+    }
+    if (rc == 0 && computed_context == mycon.get()) {
+        LOG(ERROR) << "service " << service_name << " does not have a SELinux domain defined";
+        return "";
+    }
+    if (rc < 0) {
+        LOG(ERROR) << "could not get context while starting '" << service_name << "'";
+        return "";
+    }
+    return computed_context;
+}
+
 static void SetUpPidNamespace(const std::string& service_name) {
     constexpr unsigned int kSafeFlags = MS_NODEV | MS_NOEXEC | MS_NOSUID;
 
@@ -90,6 +127,19 @@ static void SetUpPidNamespace(const std::string& service_name) {
         }
         _exit(WEXITSTATUS(init_exitstatus));
     }
+}
+
+static void ExpandArgs(const std::vector<std::string>& args, std::vector<char*>* strs) {
+    std::vector<std::string> expanded_args;
+    expanded_args.resize(args.size());
+    strs->push_back(const_cast<char*>(args[0].c_str()));
+    for (std::size_t i = 1; i < args.size(); ++i) {
+        if (!expand_props(args[i], &expanded_args[i])) {
+            LOG(FATAL) << args[0] << ": cannot expand '" << args[i] << "'";
+        }
+        strs->push_back(const_cast<char*>(expanded_args[i].c_str()));
+    }
+    strs->push_back(nullptr);
 }
 
 SocketInfo::SocketInfo() : uid(0), gid(0), perm(0) {
@@ -152,6 +202,50 @@ void Service::KillProcessGroup(int signal) {
                  << "' (pid " << pid_ << ") process group...\n",
     kill(pid_, signal);
     killProcessGroup(uid_, pid_, signal);
+}
+
+void Service::CreateSockets(const std::string& context) {
+    for (const auto& si : sockets_) {
+        int socket_type = ((si.type == "stream" ? SOCK_STREAM :
+                            (si.type == "dgram" ? SOCK_DGRAM :
+                             SOCK_SEQPACKET)));
+        const char* socketcon = !si.socketcon.empty() ? si.socketcon.c_str() : context.c_str();
+
+        int s = create_socket(si.name.c_str(), socket_type, si.perm, si.uid, si.gid, socketcon);
+        if (s >= 0) {
+            PublishSocket(si.name, s);
+        }
+    }
+}
+
+void Service::SetProcessAttributes() {
+    setpgid(0, getpid());
+
+    if (gid_) {
+        if (setgid(gid_) != 0) {
+            PLOG(FATAL) << "setgid failed";
+        }
+    }
+    if (!supp_gids_.empty()) {
+        if (setgroups(supp_gids_.size(), &supp_gids_[0]) != 0) {
+            PLOG(FATAL) << "setgroups failed";
+        }
+    }
+    if (uid_) {
+        if (setuid(uid_) != 0) {
+            PLOG(FATAL) << "setuid failed";
+        }
+    }
+    if (!seclabel_.empty()) {
+        if (setexeccon(seclabel_.c_str()) < 0) {
+            PLOG(FATAL) << "cannot setexeccon('" << seclabel_ << "')";
+        }
+    }
+    if (priority_ != 0) {
+        if (setpriority(PRIO_PROCESS, 0, priority_) != 0) {
+            PLOG(FATAL) << "setpriority failed";
+        }
+    }
 }
 
 bool Service::Reap() {
@@ -441,50 +535,18 @@ bool Service::Start() {
     if (!seclabel_.empty()) {
         scon = seclabel_;
     } else {
-        char* mycon = nullptr;
-        char* fcon = nullptr;
-
-        LOG(INFO) << "computing context for service '" << args_[0] << "'";
-        int rc = getcon(&mycon);
-        if (rc < 0) {
-            LOG(ERROR) << "could not get context while starting '" << name_ << "'";
-            return false;
-        }
-
-        rc = getfilecon(args_[0].c_str(), &fcon);
-        if (rc < 0) {
-            LOG(ERROR) << "could not get file context while starting '" << name_ << "'";
-            free(mycon);
-            return false;
-        }
-
-        char* ret_scon = nullptr;
-        rc = security_compute_create(mycon, fcon, string_to_security_class("process"),
-                                     &ret_scon);
-        if (rc == 0) {
-            scon = ret_scon;
-            free(ret_scon);
-        }
-        if (rc == 0 && scon == mycon) {
-            LOG(ERROR) << "Service " << name_ << " does not have a SELinux domain defined.";
-            free(mycon);
-            free(fcon);
-            return false;
-        }
-        free(mycon);
-        free(fcon);
-        if (rc < 0) {
-            LOG(ERROR) << "could not get context while starting '" << name_ << "'";
+        LOG(INFO) << "computing context for service '" << name_ << "'";
+        scon = ComputeContextFromExecutable(name_, args_[0]);
+        if (scon == "") {
             return false;
         }
     }
 
-    LOG(VERBOSE) << "Starting service '" << name_ << "'...";
+    LOG(VERBOSE) << "starting service '" << name_ << "'...";
 
     pid_t pid = -1;
     if (namespace_flags_) {
-        pid = clone(nullptr, nullptr, namespace_flags_ | SIGCHLD,
-                    nullptr);
+        pid = clone(nullptr, nullptr, namespace_flags_ | SIGCHLD, nullptr);
     } else {
         pid = fork();
     }
@@ -502,19 +564,7 @@ bool Service::Start() {
             add_environment(ei.name.c_str(), ei.value.c_str());
         }
 
-        for (const auto& si : sockets_) {
-            int socket_type = ((si.type == "stream" ? SOCK_STREAM :
-                                (si.type == "dgram" ? SOCK_DGRAM :
-                                 SOCK_SEQPACKET)));
-            const char* socketcon =
-                !si.socketcon.empty() ? si.socketcon.c_str() : scon.c_str();
-
-            int s = create_socket(si.name.c_str(), socket_type, si.perm,
-                                  si.uid, si.gid, socketcon);
-            if (s >= 0) {
-                PublishSocket(si.name, s);
-            }
-        }
+        CreateSockets(scon);
 
         std::string pid_str = StringPrintf("%d", getpid());
         for (const auto& file : writepid_files_) {
@@ -525,7 +575,7 @@ bool Service::Start() {
 
         if (ioprio_class_ != IoSchedClass_NONE) {
             if (android_set_ioprio(getpid(), ioprio_class_, ioprio_pri_)) {
-                PLOG(ERROR) << "Failed to set pid " << getpid()
+                PLOG(ERROR) << "failed to set pid " << getpid()
                             << " ioprio=" << ioprio_class_ << "," << ioprio_pri_;
             }
         }
@@ -537,53 +587,12 @@ bool Service::Start() {
             ZapStdio();
         }
 
-        setpgid(0, getpid());
+        // As requested, set our gid, supplemental gids, uid, context, and
+        // priority. Aborts on failure.
+        SetProcessAttributes();
 
-        // As requested, set our gid, supplemental gids, and uid.
-        if (gid_) {
-            if (setgid(gid_) != 0) {
-                PLOG(ERROR) << "setgid failed";
-                _exit(127);
-            }
-        }
-        if (!supp_gids_.empty()) {
-            if (setgroups(supp_gids_.size(), &supp_gids_[0]) != 0) {
-                PLOG(ERROR) << "setgroups failed";
-                _exit(127);
-            }
-        }
-        if (uid_) {
-            if (setuid(uid_) != 0) {
-                PLOG(ERROR) << "setuid failed";
-                _exit(127);
-            }
-        }
-        if (!seclabel_.empty()) {
-            if (setexeccon(seclabel_.c_str()) < 0) {
-                PLOG(ERROR) << "cannot setexeccon('" << seclabel_ << "')";
-                _exit(127);
-            }
-        }
-        if (priority_ != 0) {
-            if (setpriority(PRIO_PROCESS, 0, priority_) != 0) {
-                PLOG(ERROR) << "setpriority failed";
-                _exit(127);
-            }
-        }
-
-        std::vector<std::string> expanded_args;
         std::vector<char*> strs;
-        expanded_args.resize(args_.size());
-        strs.push_back(const_cast<char*>(args_[0].c_str()));
-        for (std::size_t i = 1; i < args_.size(); ++i) {
-            if (!expand_props(args_[i], &expanded_args[i])) {
-                LOG(ERROR) << args_[0] << ": cannot expand '" << args_[i] << "'";
-                _exit(127);
-            }
-            strs.push_back(const_cast<char*>(expanded_args[i].c_str()));
-        }
-        strs.push_back(nullptr);
-
+        ExpandArgs(args_, &strs);
         if (execve(strs[0], (char**) &strs[0], (char**) ENV) < 0) {
             PLOG(ERROR) << "cannot execve('" << strs[0] << "')";
         }
@@ -603,13 +612,14 @@ bool Service::Start() {
 
     errno = -createProcessGroup(uid_, pid_);
     if (errno != 0) {
-        PLOG(ERROR) << "createProcessGroup(" << uid_ << ", " << pid_ << ") failed for service '" << name_ << "'";
+        PLOG(ERROR) << "createProcessGroup(" << uid_ << ", " << pid_ << ") failed for service '"
+                    << name_ << "'";
     }
 
     if ((flags_ & SVC_EXEC) != 0) {
-        LOG(INFO) << android::base::StringPrintf("SVC_EXEC pid %d (uid %d gid %d+%zu context %s) started; waiting...",
-                                                 pid_, uid_, gid_, supp_gids_.size(),
-                                                 !seclabel_.empty() ? seclabel_.c_str() : "default");
+        LOG(INFO) << android::base::StringPrintf(
+            "SVC_EXEC pid %d (uid %d gid %d+%zu context %s) started; waiting...", pid_, uid_, gid_,
+            supp_gids_.size(), !seclabel_.empty() ? seclabel_.c_str() : "default");
     }
 
     NotifyStateChange("running");
