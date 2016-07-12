@@ -23,7 +23,7 @@
 
 class CpuUsageCollector {
  public:
-  CpuUsageCollector(MetricsLibraryInterface* metrics_library);
+  explicit CpuUsageCollector(MetricsLibraryInterface* metrics_library);
 
   // Initialize this collector's state.
   void Init();

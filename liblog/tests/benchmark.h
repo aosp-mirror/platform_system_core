@@ -38,7 +38,7 @@ class Benchmark {
   Benchmark(const char* name, void (*fn)(int)) : name_(strdup(name)), fn_(fn) {
     BenchmarkRegister(this);
   }
-  Benchmark(const char* name) : name_(strdup(name)), fn_(NULL) {}
+  explicit Benchmark(const char* name) : name_(strdup(name)), fn_(NULL) {}
 
   virtual ~Benchmark() {
     free(name_);

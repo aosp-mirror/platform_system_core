@@ -76,7 +76,7 @@ public:
     int fd;
     int events;
 
-    StubCallbackHandler(int nextResult) : nextResult(nextResult),
+    explicit StubCallbackHandler(int nextResult) : nextResult(nextResult),
             callbackCount(0), fd(-1), events(-1) {
     }
 
