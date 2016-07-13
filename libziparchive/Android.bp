@@ -1,0 +1,111 @@
+//
+// Copyright (C) 2013 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+cc_defaults {
+    name: "libziparchive_flags",
+    cflags: [
+        // ZLIB_CONST turns on const for input buffers, which is pretty standard.
+        "-DZLIB_CONST",
+        "-Werror",
+        "-Wall",
+    ],
+    cppflags: [
+        "-Wold-style-cast",
+        // Incorrectly warns when C++11 empty brace {} initializer is used.
+        // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61489
+        "-Wno-missing-field-initializers",
+    ],
+}
+
+cc_defaults {
+    name: "libziparchive_defaults",
+    srcs: [
+        "zip_archive.cc",
+        "zip_archive_stream_entry.cc",
+        "zip_writer.cc",
+    ],
+
+    target: {
+        windows: {
+            cflags: ["-mno-ms-bitfields"],
+
+            enabled: true,
+        },
+    },
+
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+}
+
+
+cc_library {
+    name: "libziparchive",
+    host_supported: true,
+    defaults: ["libziparchive_defaults", "libziparchive_flags"],
+    static_libs: ["libutils"],
+    shared_libs: ["liblog", "libbase"],
+    target: {
+        android: {
+            static_libs: ["libz"],
+        },
+        host: {
+            shared_libs: ["libz-host"],
+        },
+    },
+}
+
+// Also provide libziparchive-host until everything is switched over to using libziparchive
+cc_library {
+    name: "libziparchive-host",
+    host_supported: true,
+    device_supported: false,
+    defaults: ["libziparchive_defaults", "libziparchive_flags"],
+    shared_libs: ["libz-host"],
+    static_libs: ["libutils"],
+}
+
+// Tests.
+cc_test {
+    name: "ziparchive-tests",
+    host_supported: true,
+    defaults: ["libziparchive_flags"],
+
+    srcs: [
+        "entry_name_utils_test.cc",
+        "zip_archive_test.cc",
+        "zip_writer_test.cc",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+
+    static_libs: [
+        "libziparchive",
+        "libz",
+        "libutils",
+    ],
+
+    target: {
+        host: {
+            cppflags: ["-Wno-unnamed-type-template-args"],
+        },
+        windows: {
+            enabled: true,
+        },
+    },
+}

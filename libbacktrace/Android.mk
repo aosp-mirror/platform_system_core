@@ -44,53 +44,6 @@ LLVM_ROOT_PATH := external/llvm
 include $(LLVM_ROOT_PATH)/llvm.mk
 
 #-------------------------------------------------------------------------
-# The libbacktrace library.
-#-------------------------------------------------------------------------
-libbacktrace_src_files := \
-	Backtrace.cpp \
-	BacktraceCurrent.cpp \
-	BacktraceMap.cpp \
-	BacktracePtrace.cpp \
-	thread_utils.c \
-	ThreadEntry.cpp \
-	UnwindCurrent.cpp \
-	UnwindMap.cpp \
-	UnwindPtrace.cpp \
-
-libbacktrace_shared_libraries := \
-	libbase \
-	liblog \
-	libunwind \
-
-libbacktrace_static_libraries := \
-	libcutils
-
-module := libbacktrace
-module_tag := optional
-build_type := target
-build_target := SHARED_LIBRARY
-include $(LOCAL_PATH)/Android.build.mk
-build_type := host
-libbacktrace_multilib := both
-include $(LOCAL_PATH)/Android.build.mk
-
-libbacktrace_shared_libraries :=
-
-libbacktrace_static_libraries := \
-	libbase \
-	liblog \
-	libunwind \
-	liblzma \
-
-module := libbacktrace
-build_type := target
-build_target := STATIC_LIBRARY
-include $(LOCAL_PATH)/Android.build.mk
-build_type := host
-libbacktrace_multilib := both
-include $(LOCAL_PATH)/Android.build.mk
-
-#-------------------------------------------------------------------------
 # The libbacktrace_offline shared library.
 #-------------------------------------------------------------------------
 libbacktrace_offline_src_files := \
@@ -130,26 +83,6 @@ module := libbacktrace_offline
 build_type := target
 build_target := STATIC_LIBRARY
 libbacktrace_offline_multilib := both
-include $(LOCAL_PATH)/Android.build.mk
-build_type := host
-include $(LOCAL_PATH)/Android.build.mk
-
-#-------------------------------------------------------------------------
-# The libbacktrace_test library needed by backtrace_test.
-#-------------------------------------------------------------------------
-libbacktrace_test_cflags := \
-	-O0 \
-
-libbacktrace_test_src_files := \
-	backtrace_testlib.c \
-
-libbacktrace_test_strip_module := false
-
-module := libbacktrace_test
-module_tag := debug
-build_type := target
-build_target := SHARED_LIBRARY
-libbacktrace_test_multilib := both
 include $(LOCAL_PATH)/Android.build.mk
 build_type := host
 include $(LOCAL_PATH)/Android.build.mk
@@ -219,22 +152,3 @@ backtrace_test_multilib := both
 include $(LOCAL_PATH)/Android.build.mk
 build_type := host
 include $(LOCAL_PATH)/Android.build.mk
-
-#----------------------------------------------------------------------------
-# Special truncated libbacktrace library for mac.
-#----------------------------------------------------------------------------
-ifeq ($(HOST_OS),darwin)
-
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := libbacktrace
-LOCAL_MODULE_TAGS := optional
-
-LOCAL_SRC_FILES := \
-	BacktraceMap.cpp \
-
-LOCAL_MULTILIB := both
-
-include $(BUILD_HOST_SHARED_LIBRARY)
-
-endif # HOST_OS-darwin
