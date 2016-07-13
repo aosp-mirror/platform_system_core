@@ -26,7 +26,7 @@
  * SUCH DAMAGE.
  */
     .text
-    .align 0
+    .balign 0
 
     .global scanline_t32cb16blend_arm64
 

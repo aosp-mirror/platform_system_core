@@ -75,7 +75,7 @@
     .endm
 
     .text
-    .align
+    .balign 4
 
     .global scanline_t32cb16blend_mips64
     .ent    scanline_t32cb16blend_mips64

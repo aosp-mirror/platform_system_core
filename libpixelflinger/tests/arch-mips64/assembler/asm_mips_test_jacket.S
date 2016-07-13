@@ -27,7 +27,7 @@
 #  */
 
     .text
-    .align 8
+    .balign 8
 
     .global asm_mips_test_jacket
 
