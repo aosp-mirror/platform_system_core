@@ -66,6 +66,10 @@ cc_library {
                 "libdl",
                 "liblog",
             ],
+
+            sanitize: {
+                misc_undefined: ["integer"],
+            },
         },
 
         host: {
@@ -96,9 +100,6 @@ cc_library {
     },
 
     clang: true,
-    sanitize: {
-        misc_undefined: ["integer"],
-    },
 }
 
 // Include subdirectory makefiles
