@@ -1,0 +1,36 @@
+
+
+// ========================================================
+// Static and shared library
+// ========================================================
+cc_library {
+    name: "liblogwrap",
+    srcs: ["logwrap.c"],
+    shared_libs: [
+        "libcutils",
+        "liblog",
+    ],
+    export_include_dirs: ["include"],
+    local_include_dirs: ["include"],
+    cflags: [
+        "-Werror",
+        "-std=gnu99",
+    ],
+}
+
+// ========================================================
+// Executable
+// ========================================================
+cc_binary {
+    name: "logwrapper",
+    srcs: ["logwrapper.c"],
+    static_libs: [
+        "liblog",
+        "liblogwrap",
+        "libcutils",
+    ],
+    cflags: [
+        "-Werror",
+        "-std=gnu99",
+    ],
+}
