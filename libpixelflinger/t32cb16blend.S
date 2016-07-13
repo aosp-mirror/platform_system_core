@@ -18,7 +18,7 @@
 
 	.text
 	.syntax unified
-	.align
+	.align 4
 	
 	.global scanline_t32cb16blend_arm
 
