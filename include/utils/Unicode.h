@@ -87,7 +87,7 @@ ssize_t utf32_to_utf8_length(const char32_t *src, size_t src_len);
  * "dst" becomes \xE3\x81\x82\xE3\x81\x84
  * (note that "dst" is NOT null-terminated, like strncpy)
  */
-void utf32_to_utf8(const char32_t* src, size_t src_len, char* dst);
+void utf32_to_utf8(const char32_t* src, size_t src_len, char* dst, size_t dst_len);
 
 /**
  * Returns the unicode value at "index".
@@ -109,7 +109,7 @@ ssize_t utf16_to_utf8_length(const char16_t *src, size_t src_len);
  * enough to fit the UTF-16 as measured by utf16_to_utf8_length with an added
  * NULL terminator.
  */
-void utf16_to_utf8(const char16_t* src, size_t src_len, char* dst);
+void utf16_to_utf8(const char16_t* src, size_t src_len, char* dst, size_t dst_len);
 
 /**
  * Returns the length of "src" when "src" is valid UTF-8 string.
