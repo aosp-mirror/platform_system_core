@@ -565,7 +565,7 @@ on boot
 
 on nonencrypted
     # A/B update verifier that marks a successful boot.
-    exec - root -- /system/bin/update_verifier nonencrypted
+    exec - root cache -- /system/bin/update_verifier nonencrypted
     class_start main
     class_start late_start
 
@@ -588,12 +588,12 @@ on property:vold.decrypt=trigger_post_fs_data
 
 on property:vold.decrypt=trigger_restart_min_framework
     # A/B update verifier that marks a successful boot.
-    exec - root -- /system/bin/update_verifier trigger_restart_min_framework
+    exec - root cache -- /system/bin/update_verifier trigger_restart_min_framework
     class_start main
 
 on property:vold.decrypt=trigger_restart_framework
     # A/B update verifier that marks a successful boot.
-    exec - root -- /system/bin/update_verifier trigger_restart_framework
+    exec - root cache -- /system/bin/update_verifier trigger_restart_framework
     class_start main
     class_start late_start
 
