@@ -38,10 +38,6 @@
 
 #include <private/android_filesystem_config.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define FUSE_TRACE 0
 
 #if FUSE_TRACE
@@ -195,9 +191,5 @@ struct fuse_handler {
 
 void handle_fuse_requests(struct fuse_handler* handler);
 void derive_permissions_recursive_locked(struct fuse* fuse, struct node *parent);
-
-#ifdef __cplusplus
-}; /* extern "C" */
-#endif
 
 #endif  /* FUSE_H_ */
