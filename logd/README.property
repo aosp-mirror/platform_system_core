@@ -1,4 +1,4 @@
-The properties that logd responds to are:
+The properties that logd and friends react to are:
 
 name                       type default  description
 ro.logd.auditd.dmesg       bool   true   selinux audit messages duplicated and
@@ -9,8 +9,16 @@ ro.logd.kernel             bool+ svelte+ Enable klogd daemon
 ro.logd.statistics         bool+ svelte+ Enable logcat -S statistics.
 ro.debuggable              number        if not "1", logd.statistics &
                                          ro.logd.kernel default false.
+logd.logpersistd.enable    bool   auto   Safe to start logpersist daemon service
+logd.logpersistd          string persist Enable logpersist daemon, "logcatd"
+                                         turns on logcat -f in logd context.
+					 Responds to logcatd, clear and stop.
+logd.logpersistd.buffer          persist logpersistd buffers to collect
+logd.logpersistd.size            persist logpersistd size in MB
 persist.logd.logpersistd   string        Enable logpersist daemon, "logcatd"
-                                         turns on logcat -f in logd context
+                                         turns on logcat -f in logd context.
+persist.logd.logpersistd.buffer    all   logpersistd buffers to collect
+persist.logd.logpersistd.size      256   logpersistd size in MB
 persist.logd.size          number  ro    Global default size of the buffer for
                                          all log ids at initial startup, at
                                          runtime use: logcat -b all -G <value>
@@ -44,6 +52,7 @@ log.tag.<tag>             string persist The <tag> specific logging level.
 persist.log.tag.<tag>      string build  default for log.tag.<tag>
 
 NB:
+- auto - managed by /init
 - bool+ - "true", "false" and comma separated list of "eng" (forced false if
   ro.debuggable is not "1") or "svelte" (forced false if ro.config.low_ram is
   true).
