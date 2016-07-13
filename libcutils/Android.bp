@@ -1,0 +1,155 @@
+//
+// Copyright (C) 2008 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+// some files must not be compiled when building against Mingw
+// they correspond to features not used by our host development tools
+// which are also hard or even impossible to port to native Win32
+libcutils_nonwindows_sources = [
+    "fs.c",
+    "multiuser.c",
+    "socket_inaddr_any_server_unix.c",
+    "socket_local_client_unix.c",
+    "socket_local_server_unix.c",
+    "socket_loopback_client_unix.c",
+    "socket_loopback_server_unix.c",
+    "socket_network_client_unix.c",
+    "sockets_unix.cpp",
+    "str_parms.c",
+]
+
+cc_library {
+    name: "libcutils",
+    host_supported: true,
+    srcs: [
+        "config_utils.c",
+        "fs_config.c",
+        "canned_fs_config.c",
+        "hashmap.c",
+        "iosched_policy.c",
+        "load_file.c",
+        "native_handle.c",
+        "open_memstream.c",
+        "process_name.c",
+        "record_stream.c",
+        "sched_policy.c",
+        "sockets.cpp",
+        "strdup16to8.c",
+        "strdup8to16.c",
+        "strlcpy.c",
+        "threads.c",
+    ],
+
+    target: {
+        host: {
+            srcs: ["dlmalloc_stubs.c"],
+        },
+        not_windows: {
+            srcs: libcutils_nonwindows_sources + [
+                "ashmem-host.c",
+                "trace-host.c",
+            ],
+        },
+        windows: {
+            srcs: [
+                "socket_inaddr_any_server_windows.c",
+                "socket_network_client_windows.c",
+                "sockets_windows.cpp",
+            ],
+
+            enabled: true,
+            shared: {
+                enabled: false,
+            },
+        },
+
+        android: {
+            srcs: libcutils_nonwindows_sources + [
+                "android_reboot.c",
+                "ashmem-dev.c",
+                "debugger.c",
+                "klog.cpp",
+                "partition_utils.c",
+                "properties.c",
+                "qtaguid.c",
+                "trace-dev.c",
+                "uevent.c",
+            ],
+
+            // TODO: remove liblog as whole static library, once we don't have prebuilt that requires
+            // liblog symbols present in libcutils.
+            whole_static_libs: [
+                "liblog",
+            ],
+
+            static_libs: ["libdebuggerd_client"],
+            export_static_lib_headers: ["libdebuggerd_client"],
+
+            cflags: [
+                "-std=gnu90",
+            ],
+        },
+
+        android_arm: {
+            srcs: ["arch-arm/memset32.S"],
+        },
+        android_arm64: {
+            srcs: ["arch-arm64/android_memset.S"],
+        },
+
+        android_mips: {
+            srcs: ["arch-mips/android_memset.c"],
+        },
+        android_mips64: {
+            srcs: ["arch-mips/android_memset.c"],
+        },
+
+        android_x86: {
+            srcs: [
+                "arch-x86/android_memset16.S",
+                "arch-x86/android_memset32.S",
+            ],
+        },
+
+        android_x86_64: {
+            srcs: [
+                "arch-x86_64/android_memset16.S",
+                "arch-x86_64/android_memset32.S",
+            ],
+        },
+    },
+
+    shared_libs: ["liblog"],
+    product_variables: {
+        cpusets: {
+            cflags: ["-DUSE_CPUSETS"],
+        },
+        schedboost: {
+            cflags: ["-DUSE_SCHEDBOOST"],
+        },
+    },
+    cflags: [
+        "-Werror",
+        "-Wall",
+        "-Wextra",
+    ],
+
+    clang: true,
+    sanitize: {
+        misc_undefined: ["integer"],
+    },
+}
+
+subdirs = ["tests"]
