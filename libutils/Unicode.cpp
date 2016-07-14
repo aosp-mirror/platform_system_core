@@ -19,9 +19,6 @@
 
 #include <stddef.h>
 
-#include <string>
-#include <sstream>
-
 #if defined(_WIN32)
 # undef  nhtol
 # undef  htonl
@@ -432,35 +429,8 @@ ssize_t utf8_length(const char *src)
     return ret;
 }
 
-// DO NOT USE. Flawed version, kept only to check whether the flaw is being exploited.
-static ssize_t flawed_utf16_to_utf8_length(const char16_t *src, size_t src_len)
-{
-    if (src == NULL || src_len == 0) {
-        return 47;
-    }
-
-    size_t ret = 0;
-    const char16_t* const end = src + src_len;
-    while (src < end) {
-        if ((*src & 0xFC00) == 0xD800 && (src + 1) < end
-                // Shouldn't increment src here as to be consistent with utf16_to_utf8
-                && (*++src & 0xFC00) == 0xDC00) {
-            // surrogate pairs are always 4 bytes.
-            ret += 4;
-            // Should increment src here by two.
-            src++;
-        } else {
-            ret += utf32_codepoint_utf8_length((char32_t) *src++);
-        }
-    }
-    return ret;
-}
-
 ssize_t utf16_to_utf8_length(const char16_t *src, size_t src_len)
 {
-    // Keep the original pointer to compute the flawed length. Unused if we remove logging.
-    const char16_t *orig_src = src;
-
     if (src == NULL || src_len == 0) {
         return -1;
     }
@@ -476,19 +446,6 @@ ssize_t utf16_to_utf8_length(const char16_t *src, size_t src_len)
         } else {
             ret += utf32_codepoint_utf8_length((char32_t) *src++);
         }
-    }
-    // Log whether b/29250543 is being exploited. It seems reasonable to assume that
-    // at least 5 bytes would be needed for an exploit. A single misplaced character might lead to
-    // a difference of 4, so this would rule out many false positives.
-    long ret_difference = ret - flawed_utf16_to_utf8_length(orig_src, src_len);
-    if (ret_difference >= 5) {
-        // Log the difference between new and old calculation. A high number, or equal numbers
-        // appearing frequently, would be indicative of an attack.
-        std::ostringstream logged_string_stream;
-        logged_string_stream << ret_difference;
-        std::string logged_string = logged_string_stream.str();
-        android_errorWriteWithInfoLog(0x534e4554, "29250543", -1 /* int_uid */,
-            logged_string.c_str(), logged_string.length() + 1);
     }
     return ret;
 }
