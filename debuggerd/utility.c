@@ -18,6 +18,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -127,4 +128,32 @@ void wait_for_stop(pid_t tid, int* total_sleep_time_usec) {
         usleep(sleep_time_usec);
         *total_sleep_time_usec += sleep_time_usec;
     }
+}
+
+bool pid_contains_tid(pid_t pid, pid_t tid) {
+  char task_path[PATH_MAX];
+  if (snprintf(task_path, PATH_MAX, "/proc/%d/task/%d", pid, tid) >= PATH_MAX) {
+    XLOG("debuggerd: task path overflow (pid = %d, tid = %d)\n", pid, tid);
+    exit(1);
+  }
+
+  return access(task_path, F_OK) == 0;
+}
+
+// Attach to a thread, and verify that it's still a member of the given process
+bool ptrace_attach_thread(pid_t pid, pid_t tid) {
+  if (ptrace(PTRACE_ATTACH, tid, 0, 0) != 0) {
+    return false;
+  }
+
+  // Make sure that the task we attached to is actually part of the pid we're dumping.
+  if (!pid_contains_tid(pid, tid)) {
+    if (ptrace(PTRACE_DETACH, tid, 0, 0) != 0) {
+      XLOG("debuggerd: failed to detach from thread '%d'", tid);
+      exit(1);
+    }
+    return false;
+  }
+
+  return true;
 }
