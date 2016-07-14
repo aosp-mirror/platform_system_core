@@ -142,7 +142,7 @@ static int pmsgWrite(log_id_t logId, struct timespec *ts,
     pmsgHeader.magic = LOGGER_MAGIC;
     pmsgHeader.len = sizeof(pmsgHeader) + sizeof(header);
     pmsgHeader.uid = __android_log_uid();
-    pmsgHeader.pid = __android_log_pid();
+    pmsgHeader.pid = getpid();
 
     header.id = logId;
     header.tid = gettid();
