@@ -146,11 +146,13 @@ struct android_log_transport_context {
 /* OS specific dribs and drabs */
 
 #if defined(_WIN32)
+#include <private/android_filesystem_config.h>
 typedef uint32_t uid_t;
+static inline uid_t __android_log_uid() { return AID_SYSTEM; }
+#else
+static inline uid_t __android_log_uid() { return getuid(); }
 #endif
 
-LIBLOG_HIDDEN uid_t __android_log_uid();
-LIBLOG_HIDDEN pid_t __android_log_pid();
 LIBLOG_HIDDEN void __android_log_lock();
 LIBLOG_HIDDEN int __android_log_trylock();
 LIBLOG_HIDDEN void __android_log_unlock();
