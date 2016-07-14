@@ -148,7 +148,6 @@ std::string find_item(const char* item, const char* product) {
     } else {
         fprintf(stderr,"unknown partition '%s'\n", item);
         return "";
-
     }
 
     return find_item_given_name(fn, product);
@@ -324,9 +323,6 @@ static void usage() {
             "                                           been flashed to is set as active.\n"
             "                                           Secondary images may be flashed to\n"
             "                                           an inactive slot.\n"
-            "  flash-primary                            Same as flashall, but do not flash\n"
-            "                                           secondary images.\n"
-            "  flash-secondary                          Only flashes the secondary images.\n"
             "  flash <partition> [ <filename> ]         Write a file to a flash partition.\n"
             "  flashing lock                            Locks the device. Prevents flashing.\n"
             "  flashing unlock                          Unlocks the device. Allows flashing\n"
@@ -401,6 +397,9 @@ static void usage() {
             "                                           supported, this sets the current slot\n"
             "                                           to be active. This will run after all\n"
             "                                           non-reboot commands.\n"
+            "  --skip-secondary                         Will not flash secondary slots when\n"
+            "                                           performing a flashall or update. This\n"
+            "                                           will preserve data on other slots.\n"
             "  --unbuffered                             Do not buffer input or output.\n"
             "  --version                                Display version.\n"
             "  -h, --help                               show this message.\n"
@@ -1002,7 +1001,7 @@ static void set_active(Transport* transport, const std::string& slot_override) {
     }
 }
 
-static void do_update(Transport* transport, const char* filename, const std::string& slot_override, bool erase_first) {
+static void do_update(Transport* transport, const char* filename, const std::string& slot_override, bool erase_first, bool skip_secondary) {
     queue_info_dump();
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
@@ -1024,8 +1023,7 @@ static void do_update(Transport* transport, const char* filename, const std::str
     setup_requirements(reinterpret_cast<char*>(data), sz);
 
     std::string secondary;
-    bool update_secondary = slot_override != "all";
-    if (update_secondary) {
+    if (!skip_secondary) {
         if (slot_override != "") {
             secondary = get_other_slot(transport, slot_override);
         } else {
@@ -1035,13 +1033,13 @@ static void do_update(Transport* transport, const char* filename, const std::str
             if (supports_AB(transport)) {
                 fprintf(stderr, "Warning: Could not determine slot for secondary images. Ignoring.\n");
             }
-            update_secondary = false;
+            skip_secondary = true;
         }
     }
     for (size_t i = 0; i < arraysize(images); ++i) {
         const char* slot = slot_override.c_str();
         if (images[i].is_secondary) {
-            if (update_secondary) {
+            if (!skip_secondary) {
                 slot = secondary.c_str();
             } else {
                 continue;
@@ -1076,7 +1074,11 @@ static void do_update(Transport* transport, const char* filename, const std::str
     }
 
     CloseArchive(zip);
-    set_active(transport, slot_override);
+    if (slot_override == "all") {
+        set_active(transport, "a");
+    } else {
+        set_active(transport, slot_override);
+    }
 }
 
 static void do_send_signature(const std::string& fn) {
@@ -1093,24 +1095,23 @@ static void do_send_signature(const std::string& fn) {
     fb_queue_command("signature", "installing signature");
 }
 
-static void do_flashall(Transport* transport, const std::string& slot_override, int erase_first, bool flash_primary, bool flash_secondary) {
+static void do_flashall(Transport* transport, const std::string& slot_override, int erase_first, bool skip_secondary) {
     std::string fname;
-    if (flash_primary) {
-        queue_info_dump();
+    queue_info_dump();
 
-        fb_queue_query_save("product", cur_product, sizeof(cur_product));
+    fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
-        fname = find_item("info", product);
-        if (fname.empty()) die("cannot find android-info.txt");
+    fname = find_item("info", product);
+    if (fname.empty()) die("cannot find android-info.txt");
 
-        int64_t sz;
-        void* data = load_file(fname.c_str(), &sz);
-        if (data == nullptr) die("could not load android-info.txt: %s", strerror(errno));
+    int64_t sz;
+    void* data = load_file(fname.c_str(), &sz);
+    if (data == nullptr) die("could not load android-info.txt: %s", strerror(errno));
 
-        setup_requirements(reinterpret_cast<char*>(data), sz);
-    }
+    setup_requirements(reinterpret_cast<char*>(data), sz);
+
     std::string secondary;
-    if (flash_secondary) {
+    if (!skip_secondary) {
         if (slot_override != "") {
             secondary = get_other_slot(transport, slot_override);
         } else {
@@ -1120,16 +1121,16 @@ static void do_flashall(Transport* transport, const std::string& slot_override, 
             if (supports_AB(transport)) {
                 fprintf(stderr, "Warning: Could not determine slot for secondary images. Ignoring.\n");
             }
-            flash_secondary = false;
+            skip_secondary = true;
         }
     }
 
     for (size_t i = 0; i < arraysize(images); i++) {
         const char* slot = NULL;
         if (images[i].is_secondary) {
-            if (flash_secondary) slot = secondary.c_str();
+            if (!skip_secondary) slot = secondary.c_str();
         } else {
-            if (flash_primary) slot = slot_override.c_str();
+            slot = slot_override.c_str();
         }
         if (!slot) continue;
         fname = find_item_given_name(images[i].img_name, product);
@@ -1149,7 +1150,11 @@ static void do_flashall(Transport* transport, const std::string& slot_override, 
         do_for_partitions(transport, images[i].part_name, slot, flashall, false);
     }
 
-    if (flash_primary) set_active(transport, slot_override);
+    if (slot_override == "all") {
+        set_active(transport, "a");
+    } else {
+        set_active(transport, slot_override);
+    }
 }
 
 #define skip(n) do { argc -= (n); argv += (n); } while (0)
@@ -1327,6 +1332,7 @@ int main(int argc, char **argv)
     bool wants_reboot = false;
     bool wants_reboot_bootloader = false;
     bool wants_set_active = false;
+    bool skip_secondary = false;
     bool erase_first = true;
     void *data;
     int64_t sz;
@@ -1350,6 +1356,7 @@ int main(int argc, char **argv)
         {"slot", required_argument, 0, 0},
         {"set_active", optional_argument, 0, 'a'},
         {"set-active", optional_argument, 0, 'a'},
+        {"skip-secondary", no_argument, 0, 0},
         {0, 0, 0, 0}
     };
 
@@ -1431,6 +1438,12 @@ int main(int argc, char **argv)
                 return 0;
             } else if (strcmp("slot", longopts[longindex].name) == 0) {
                 slot_override = std::string(optarg);
+            } else if (strcmp("skip-secondary", longopts[longindex].name) == 0 ) {
+                skip_secondary = true;
+            } else {
+                fprintf(stderr, "Internal error in options processing for %s\n",
+                    longopts[longindex].name);
+                return 1;
             }
             break;
         default:
@@ -1627,26 +1640,22 @@ int main(int argc, char **argv)
         } else if(!strcmp(*argv, "flashall")) {
             skip(1);
             if (slot_override == "all") {
-                 fprintf(stderr, "Warning: slot set to 'all'. Secondary slots will not be flashed.");
-                 do_flashall(transport, slot_override, erase_first, true, false);
+                fprintf(stderr, "Warning: slot set to 'all'. Secondary slots will not be flashed.\n");
+                do_flashall(transport, slot_override, erase_first, true);
             } else {
-                do_flashall(transport, slot_override, erase_first, true, true);
+                do_flashall(transport, slot_override, erase_first, skip_secondary);
             }
             wants_reboot = true;
-        } else if(!strcmp(*argv, "flash-primary")) {
-            skip(1);
-            do_flashall(transport, slot_override, erase_first, true, false);
-            wants_reboot = true;
-        } else if(!strcmp(*argv, "flash-secondary")) {
-            skip(1);
-            do_flashall(transport, slot_override, erase_first, false, true);
-            wants_reboot = true;
         } else if(!strcmp(*argv, "update")) {
+            bool slot_all = (slot_override == "all");
+            if (slot_all) {
+                fprintf(stderr, "Warning: slot set to 'all'. Secondary slots will not be flashed.\n");
+            }
             if (argc > 1) {
-                do_update(transport, argv[1], slot_override, erase_first);
+                do_update(transport, argv[1], slot_override, erase_first, skip_secondary || slot_all);
                 skip(2);
             } else {
-                do_update(transport, "update.zip", slot_override, erase_first);
+                do_update(transport, "update.zip", slot_override, erase_first, skip_secondary || slot_all);
                 skip(1);
             }
             wants_reboot = 1;
