@@ -225,12 +225,10 @@ static int read_request(int fd, debugger_request_t* out_request) {
 
   if (msg.action == DEBUGGER_ACTION_CRASH) {
     // Ensure that the tid reported by the crashing process is valid.
-    char buf[64];
-    struct stat s;
-    snprintf(buf, sizeof buf, "/proc/%d/task/%d", out_request->pid, out_request->tid);
-    if (stat(buf, &s)) {
+    // This check needs to happen again after ptracing the requested thread to prevent a race.
+    if (!pid_contains_tid(out_request->pid, out_request->tid)) {
       ALOGE("tid %d does not exist in pid %d. ignoring debug request\n",
-          out_request->tid, out_request->pid);
+            out_request->tid, out_request->pid);
       return -1;
     }
   } else if (cr.uid == 0
@@ -380,9 +378,32 @@ static void handle_request(int fd) {
     // ensure that it can run as soon as we call PTRACE_CONT below.
     // See details in bionic/libc/linker/debugger.c, in function
     // debugger_signal_handler().
-    if (ptrace(PTRACE_ATTACH, request.tid, 0, 0)) {
+    if (!ptrace_attach_thread(request.pid, request.tid)) {
       ALOGE("ptrace attach failed: %s\n", strerror(errno));
     } else {
+      // DEBUGGER_ACTION_CRASH requests can come from arbitrary processes and the tid field in
+      // the request is sent from the other side. If an attacker can cause a process to be
+      // spawned with the pid of their process, they could trick debuggerd into dumping that
+      // process by exiting after sending the request. Validate the trusted request.uid/gid
+      // to defend against this.
+      if (request.action == DEBUGGER_ACTION_CRASH) {
+        pid_t pid;
+        uid_t uid;
+        gid_t gid;
+        if (get_process_info(request.tid, &pid, &uid, &gid) != 0) {
+          ALOGE("debuggerd: failed to get process info for tid '%d'", request.tid);
+          exit(1);
+        }
+
+        if (pid != request.pid || uid != request.uid || gid != request.gid) {
+          ALOGE(
+            "debuggerd: attached task %d does not match request: "
+            "expected pid=%d,uid=%d,gid=%d, actual pid=%d,uid=%d,gid=%d",
+            request.tid, request.pid, request.uid, request.gid, pid, uid, gid);
+          exit(1);
+        }
+      }
+
       bool detach_failed = false;
       bool tid_unresponsive = false;
       bool attach_gdb = should_attach_gdb(&request);
