@@ -17,7 +17,7 @@
 
 
     .text
-    .align 4
+    .balign 4
     
     .global rotate90CW_4x4_16v6
 
