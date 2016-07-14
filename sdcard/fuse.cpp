@@ -57,7 +57,7 @@ static void release_node_locked(struct node* node)
             TRACE("DESTROY %p (%s)\n", node, node->name);
             remove_node_from_parent_locked(node);
 
-                /* TODO: remove debugging - poison memory */
+            /* TODO: remove debugging - poison memory */
             memset(node->name, 0xef, node->namelen);
             free(node->name);
             free(node->actual_name);
@@ -342,18 +342,18 @@ struct node *create_node_locked(struct fuse* fuse,
         return NULL;
     }
 
-    node = calloc(1, sizeof(struct node));
+    node = static_cast<struct node*>(calloc(1, sizeof(struct node)));
     if (!node) {
         return NULL;
     }
-    node->name = malloc(namelen + 1);
+    node->name = static_cast<char*>(malloc(namelen + 1));
     if (!node->name) {
         free(node);
         return NULL;
     }
     memcpy(node->name, name, namelen + 1);
     if (strcmp(name, actual_name)) {
-        node->actual_name = malloc(namelen + 1);
+        node->actual_name = static_cast<char*>(malloc(namelen + 1));
         if (!node->actual_name) {
             free(node->name);
             free(node);
@@ -383,13 +383,13 @@ static int rename_node_locked(struct node *node, const char *name,
     /* make the storage bigger without actually changing the name
      * in case an error occurs part way */
     if (namelen > node->namelen) {
-        char* new_name = realloc(node->name, namelen + 1);
+        char* new_name = static_cast<char*>(realloc(node->name, namelen + 1));
         if (!new_name) {
             return -ENOMEM;
         }
         node->name = new_name;
         if (need_actual_name && node->actual_name) {
-            char* new_actual_name = realloc(node->actual_name, namelen + 1);
+            char* new_actual_name = static_cast<char*>(realloc(node->actual_name, namelen + 1));
             if (!new_actual_name) {
                 return -ENOMEM;
             }
@@ -400,7 +400,7 @@ static int rename_node_locked(struct node *node, const char *name,
     /* update the name, taking care to allocate storage before overwriting the old name */
     if (need_actual_name) {
         if (!node->actual_name) {
-            node->actual_name = malloc(namelen + 1);
+            node->actual_name = static_cast<char*>(malloc(namelen + 1));
             if (!node->actual_name) {
                 return -ENOMEM;
             }
@@ -420,7 +420,7 @@ static struct node *lookup_node_by_id_locked(struct fuse *fuse, __u64 nid)
     if (nid == FUSE_ROOT_ID) {
         return &fuse->global->root;
     } else {
-        return id_to_ptr(nid);
+        return static_cast<struct node*>(id_to_ptr(nid));
     }
 }
 
@@ -578,7 +578,7 @@ static int handle_lookup(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->global->lock);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] LOOKUP %s @ %"PRIx64" (%s)\n", handler->token, name, hdr->nodeid,
+    TRACE("[%d] LOOKUP %s @ %" PRIx64 " (%s)\n", handler->token, name, hdr->nodeid,
         parent_node ? parent_node->name : "?");
     pthread_mutex_unlock(&fuse->global->lock);
 
@@ -600,7 +600,7 @@ static int handle_forget(struct fuse* fuse, struct fuse_handler* handler,
 
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_by_id_locked(fuse, hdr->nodeid);
-    TRACE("[%d] FORGET #%"PRIu64" @ %"PRIx64" (%s)\n", handler->token, req->nlookup,
+    TRACE("[%d] FORGET #%" PRIu64 " @ %" PRIx64 " (%s)\n", handler->token, req->nlookup,
             hdr->nodeid, node ? node->name : "?");
     if (node) {
         __u64 n = req->nlookup;
@@ -621,7 +621,7 @@ static int handle_getattr(struct fuse* fuse, struct fuse_handler* handler,
 
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
-    TRACE("[%d] GETATTR flags=%x fh=%"PRIx64" @ %"PRIx64" (%s)\n", handler->token,
+    TRACE("[%d] GETATTR flags=%x fh=%" PRIx64 " @ %" PRIx64 " (%s)\n", handler->token,
             req->getattr_flags, req->fh, hdr->nodeid, node ? node->name : "?");
     pthread_mutex_unlock(&fuse->global->lock);
 
@@ -644,7 +644,7 @@ static int handle_setattr(struct fuse* fuse, struct fuse_handler* handler,
 
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
-    TRACE("[%d] SETATTR fh=%"PRIx64" valid=%x @ %"PRIx64" (%s)\n", handler->token,
+    TRACE("[%d] SETATTR fh=%" PRIx64 " valid=%x @ %" PRIx64 " (%s)\n", handler->token,
             req->fh, req->valid, hdr->nodeid, node ? node->name : "?");
     pthread_mutex_unlock(&fuse->global->lock);
 
@@ -709,7 +709,7 @@ static int handle_mknod(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->global->lock);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] MKNOD %s 0%o @ %"PRIx64" (%s)\n", handler->token,
+    TRACE("[%d] MKNOD %s 0%o @ %" PRIx64 " (%s)\n", handler->token,
             name, req->mode, hdr->nodeid, parent_node ? parent_node->name : "?");
     pthread_mutex_unlock(&fuse->global->lock);
 
@@ -738,7 +738,7 @@ static int handle_mkdir(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->global->lock);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] MKDIR %s 0%o @ %"PRIx64" (%s)\n", handler->token,
+    TRACE("[%d] MKDIR %s 0%o @ %" PRIx64 " (%s)\n", handler->token,
             name, req->mode, hdr->nodeid, parent_node ? parent_node->name : "?");
     pthread_mutex_unlock(&fuse->global->lock);
 
@@ -786,7 +786,7 @@ static int handle_unlink(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->global->lock);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] UNLINK %s @ %"PRIx64" (%s)\n", handler->token,
+    TRACE("[%d] UNLINK %s @ %" PRIx64 " (%s)\n", handler->token,
             name, hdr->nodeid, parent_node ? parent_node->name : "?");
     pthread_mutex_unlock(&fuse->global->lock);
 
@@ -808,7 +808,7 @@ static int handle_unlink(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_unlock(&fuse->global->lock);
     if (parent_node && child_node) {
         /* Tell all other views that node is gone */
-        TRACE("[%d] fuse_notify_delete parent=%"PRIx64", child=%"PRIx64", name=%s\n",
+        TRACE("[%d] fuse_notify_delete parent=%" PRIx64 ", child=%" PRIx64 ", name=%s\n",
                 handler->token, (uint64_t) parent_node->nid, (uint64_t) child_node->nid, name);
         if (fuse != fuse->global->fuse_default) {
             fuse_notify_delete(fuse->global->fuse_default, parent_node->nid, child_node->nid, name);
@@ -834,7 +834,7 @@ static int handle_rmdir(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->global->lock);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] RMDIR %s @ %"PRIx64" (%s)\n", handler->token,
+    TRACE("[%d] RMDIR %s @ %" PRIx64 " (%s)\n", handler->token,
             name, hdr->nodeid, parent_node ? parent_node->name : "?");
     pthread_mutex_unlock(&fuse->global->lock);
 
@@ -856,7 +856,7 @@ static int handle_rmdir(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_unlock(&fuse->global->lock);
     if (parent_node && child_node) {
         /* Tell all other views that node is gone */
-        TRACE("[%d] fuse_notify_delete parent=%"PRIx64", child=%"PRIx64", name=%s\n",
+        TRACE("[%d] fuse_notify_delete parent=%" PRIx64 ", child=%" PRIx64 ", name=%s\n",
                 handler->token, (uint64_t) parent_node->nid, (uint64_t) child_node->nid, name);
         if (fuse != fuse->global->fuse_default) {
             fuse_notify_delete(fuse->global->fuse_default, parent_node->nid, child_node->nid, name);
@@ -883,6 +883,7 @@ static int handle_rename(struct fuse* fuse, struct fuse_handler* handler,
     char old_child_path[PATH_MAX];
     char new_child_path[PATH_MAX];
     const char* new_actual_name;
+    int search;
     int res;
 
     pthread_mutex_lock(&fuse->global->lock);
@@ -890,7 +891,7 @@ static int handle_rename(struct fuse* fuse, struct fuse_handler* handler,
             old_parent_path, sizeof(old_parent_path));
     new_parent_node = lookup_node_and_path_by_id_locked(fuse, req->newdir,
             new_parent_path, sizeof(new_parent_path));
-    TRACE("[%d] RENAME %s->%s @ %"PRIx64" (%s) -> %"PRIx64" (%s)\n", handler->token,
+    TRACE("[%d] RENAME %s->%s @ %" PRIx64 " (%s) -> %" PRIx64 " (%s)\n", handler->token,
             old_name, new_name,
             hdr->nodeid, old_parent_node ? old_parent_node->name : "?",
             req->newdir, new_parent_node ? new_parent_node->name : "?");
@@ -919,7 +920,7 @@ static int handle_rename(struct fuse* fuse, struct fuse_handler* handler,
      * differing only by case.  In this case we don't want to look for a case
      * insensitive match.  This allows commands like "mv foo FOO" to work as expected.
      */
-    int search = old_parent_node != new_parent_node
+    search = old_parent_node != new_parent_node
             || strcasecmp(old_name, new_name);
     if (!(new_actual_name = find_file_within(new_parent_path, new_name,
             new_child_path, sizeof(new_child_path), search))) {
@@ -974,7 +975,7 @@ static int handle_open(struct fuse* fuse, struct fuse_handler* handler,
 
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
-    TRACE("[%d] OPEN 0%o @ %"PRIx64" (%s)\n", handler->token,
+    TRACE("[%d] OPEN 0%o @ %" PRIx64 " (%s)\n", handler->token,
             req->flags, hdr->nodeid, node ? node->name : "?");
     pthread_mutex_unlock(&fuse->global->lock);
 
@@ -985,7 +986,7 @@ static int handle_open(struct fuse* fuse, struct fuse_handler* handler,
             open_flags_to_access_mode(req->flags))) {
         return -EACCES;
     }
-    h = malloc(sizeof(*h));
+    h = static_cast<struct handle*>(malloc(sizeof(*h)));
     if (!h) {
         return -ENOMEM;
     }
@@ -1005,7 +1006,7 @@ static int handle_open(struct fuse* fuse, struct fuse_handler* handler,
 static int handle_read(struct fuse* fuse, struct fuse_handler* handler,
         const struct fuse_in_header* hdr, const struct fuse_read_in* req)
 {
-    struct handle *h = id_to_ptr(req->fh);
+    struct handle *h = static_cast<struct handle*>(id_to_ptr(req->fh));
     __u64 unique = hdr->unique;
     __u32 size = req->size;
     __u64 offset = req->offset;
@@ -1016,7 +1017,7 @@ static int handle_read(struct fuse* fuse, struct fuse_handler* handler,
      * overlaps the request buffer and will clobber data in the request.  This
      * saves us 128KB per request handler thread at the cost of this scary comment. */
 
-    TRACE("[%d] READ %p(%d) %u@%"PRIu64"\n", handler->token,
+    TRACE("[%d] READ %p(%d) %u@%" PRIu64 "\n", handler->token,
             h, h->fd, size, (uint64_t) offset);
     if (size > MAX_READ) {
         return -EINVAL;
@@ -1034,7 +1035,7 @@ static int handle_write(struct fuse* fuse, struct fuse_handler* handler,
         const void* buffer)
 {
     struct fuse_write_out out;
-    struct handle *h = id_to_ptr(req->fh);
+    struct handle *h = static_cast<struct handle*>(id_to_ptr(req->fh));
     int res;
     __u8 aligned_buffer[req->size] __attribute__((__aligned__(PAGE_SIZE)));
 
@@ -1043,7 +1044,7 @@ static int handle_write(struct fuse* fuse, struct fuse_handler* handler,
         buffer = (const __u8*) aligned_buffer;
     }
 
-    TRACE("[%d] WRITE %p(%d) %u@%"PRIu64"\n", handler->token,
+    TRACE("[%d] WRITE %p(%d) %u@%" PRIu64 "\n", handler->token,
             h, h->fd, req->size, req->offset);
     res = pwrite64(h->fd, buffer, req->size, req->offset);
     if (res < 0) {
@@ -1089,7 +1090,7 @@ static int handle_statfs(struct fuse* fuse, struct fuse_handler* handler,
 static int handle_release(struct fuse* fuse, struct fuse_handler* handler,
         const struct fuse_in_header* hdr, const struct fuse_release_in* req)
 {
-    struct handle *h = id_to_ptr(req->fh);
+    struct handle *h = static_cast<struct handle*>(id_to_ptr(req->fh));
 
     TRACE("[%d] RELEASE %p(%d)\n", handler->token, h, h->fd);
     close(h->fd);
@@ -1105,16 +1106,16 @@ static int handle_fsync(struct fuse* fuse, struct fuse_handler* handler,
 
     int fd = -1;
     if (is_dir) {
-      struct dirhandle *dh = id_to_ptr(req->fh);
+      struct dirhandle *dh = static_cast<struct dirhandle*>(id_to_ptr(req->fh));
       fd = dirfd(dh->d);
     } else {
-      struct handle *h = id_to_ptr(req->fh);
+      struct handle *h = static_cast<struct handle*>(id_to_ptr(req->fh));
       fd = h->fd;
     }
 
     TRACE("[%d] %s %p(%d) is_data_sync=%d\n", handler->token,
             is_dir ? "FSYNCDIR" : "FSYNC",
-            id_to_ptr(req->fh), fd, is_data_sync);
+            static_cast<struct node*>(id_to_ptr(req->fh)), fd, is_data_sync);
     int res = is_data_sync ? fdatasync(fd) : fsync(fd);
     if (res == -1) {
         return -errno;
@@ -1139,7 +1140,7 @@ static int handle_opendir(struct fuse* fuse, struct fuse_handler* handler,
 
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
-    TRACE("[%d] OPENDIR @ %"PRIx64" (%s)\n", handler->token,
+    TRACE("[%d] OPENDIR @ %" PRIx64 " (%s)\n", handler->token,
             hdr->nodeid, node ? node->name : "?");
     pthread_mutex_unlock(&fuse->global->lock);
 
@@ -1149,7 +1150,7 @@ static int handle_opendir(struct fuse* fuse, struct fuse_handler* handler,
     if (!check_caller_access_to_node(fuse, hdr, node, R_OK)) {
         return -EACCES;
     }
-    h = malloc(sizeof(*h));
+    h = static_cast<struct dirhandle*>(malloc(sizeof(*h)));
     if (!h) {
         return -ENOMEM;
     }
@@ -1172,7 +1173,7 @@ static int handle_readdir(struct fuse* fuse, struct fuse_handler* handler,
     char buffer[8192];
     struct fuse_dirent *fde = (struct fuse_dirent*) buffer;
     struct dirent *de;
-    struct dirhandle *h = id_to_ptr(req->fh);
+    struct dirhandle *h = static_cast<struct dirhandle*>(id_to_ptr(req->fh));
 
     TRACE("[%d] READDIR %p\n", handler->token, h);
     if (req->offset == 0) {
@@ -1198,7 +1199,7 @@ static int handle_readdir(struct fuse* fuse, struct fuse_handler* handler,
 static int handle_releasedir(struct fuse* fuse, struct fuse_handler* handler,
         const struct fuse_in_header* hdr, const struct fuse_release_in* req)
 {
-    struct dirhandle *h = id_to_ptr(req->fh);
+    struct dirhandle *h = static_cast<struct dirhandle*>(id_to_ptr(req->fh));
 
     TRACE("[%d] RELEASEDIR %p\n", handler->token, h);
     closedir(h->d);
@@ -1284,51 +1285,51 @@ static int handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
 {
     switch (hdr->opcode) {
     case FUSE_LOOKUP: { /* bytez[] -> entry_out */
-        const char* name = data;
+        const char *name = static_cast<const char*>(data);
         return handle_lookup(fuse, handler, hdr, name);
     }
 
     case FUSE_FORGET: {
-        const struct fuse_forget_in *req = data;
+        const struct fuse_forget_in *req = static_cast<const struct fuse_forget_in*>(data);
         return handle_forget(fuse, handler, hdr, req);
     }
 
     case FUSE_GETATTR: { /* getattr_in -> attr_out */
-        const struct fuse_getattr_in *req = data;
+        const struct fuse_getattr_in *req = static_cast<const struct fuse_getattr_in*>(data);
         return handle_getattr(fuse, handler, hdr, req);
     }
 
     case FUSE_SETATTR: { /* setattr_in -> attr_out */
-        const struct fuse_setattr_in *req = data;
+        const struct fuse_setattr_in *req = static_cast<const struct fuse_setattr_in*>(data);
         return handle_setattr(fuse, handler, hdr, req);
     }
 
 //    case FUSE_READLINK:
 //    case FUSE_SYMLINK:
     case FUSE_MKNOD: { /* mknod_in, bytez[] -> entry_out */
-        const struct fuse_mknod_in *req = data;
+        const struct fuse_mknod_in *req = static_cast<const struct fuse_mknod_in*>(data);
         const char *name = ((const char*) data) + sizeof(*req);
         return handle_mknod(fuse, handler, hdr, req, name);
     }
 
     case FUSE_MKDIR: { /* mkdir_in, bytez[] -> entry_out */
-        const struct fuse_mkdir_in *req = data;
+        const struct fuse_mkdir_in *req = static_cast<const struct fuse_mkdir_in*>(data);
         const char *name = ((const char*) data) + sizeof(*req);
         return handle_mkdir(fuse, handler, hdr, req, name);
     }
 
     case FUSE_UNLINK: { /* bytez[] -> */
-        const char* name = data;
+        const char *name = static_cast<const char*>(data);
         return handle_unlink(fuse, handler, hdr, name);
     }
 
     case FUSE_RMDIR: { /* bytez[] -> */
-        const char* name = data;
+        const char *name = static_cast<const char*>(data);
         return handle_rmdir(fuse, handler, hdr, name);
     }
 
     case FUSE_RENAME: { /* rename_in, oldname, newname ->  */
-        const struct fuse_rename_in *req = data;
+        const struct fuse_rename_in *req = static_cast<const struct fuse_rename_in*>(data);
         const char *old_name = ((const char*) data) + sizeof(*req);
         const char *new_name = old_name + strlen(old_name) + 1;
         return handle_rename(fuse, handler, hdr, req, old_name, new_name);
@@ -1336,17 +1337,17 @@ static int handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
 
 //    case FUSE_LINK:
     case FUSE_OPEN: { /* open_in -> open_out */
-        const struct fuse_open_in *req = data;
+        const struct fuse_open_in *req = static_cast<const struct fuse_open_in*>(data);
         return handle_open(fuse, handler, hdr, req);
     }
 
     case FUSE_READ: { /* read_in -> byte[] */
-        const struct fuse_read_in *req = data;
+        const struct fuse_read_in *req = static_cast<const struct fuse_read_in*>(data);
         return handle_read(fuse, handler, hdr, req);
     }
 
     case FUSE_WRITE: { /* write_in, byte[write_in.size] -> write_out */
-        const struct fuse_write_in *req = data;
+        const struct fuse_write_in *req = static_cast<const struct fuse_write_in*>(data);
         const void* buffer = (const __u8*)data + sizeof(*req);
         return handle_write(fuse, handler, hdr, req, buffer);
     }
@@ -1356,13 +1357,13 @@ static int handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
     }
 
     case FUSE_RELEASE: { /* release_in -> */
-        const struct fuse_release_in *req = data;
+        const struct fuse_release_in *req = static_cast<const struct fuse_release_in*>(data);
         return handle_release(fuse, handler, hdr, req);
     }
 
     case FUSE_FSYNC:
     case FUSE_FSYNCDIR: {
-        const struct fuse_fsync_in *req = data;
+        const struct fuse_fsync_in *req = static_cast<const struct fuse_fsync_in*>(data);
         return handle_fsync(fuse, handler, hdr, req);
     }
 
@@ -1375,22 +1376,22 @@ static int handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
     }
 
     case FUSE_OPENDIR: { /* open_in -> open_out */
-        const struct fuse_open_in *req = data;
+        const struct fuse_open_in *req = static_cast<const struct fuse_open_in*>(data);
         return handle_opendir(fuse, handler, hdr, req);
     }
 
     case FUSE_READDIR: {
-        const struct fuse_read_in *req = data;
+        const struct fuse_read_in *req = static_cast<const struct fuse_read_in*>(data);
         return handle_readdir(fuse, handler, hdr, req);
     }
 
     case FUSE_RELEASEDIR: { /* release_in -> */
-        const struct fuse_release_in *req = data;
+        const struct fuse_release_in *req = static_cast<const struct fuse_release_in*>(data);
         return handle_releasedir(fuse, handler, hdr, req);
     }
 
     case FUSE_INIT: { /* init_in -> init_out */
-        const struct fuse_init_in *req = data;
+        const struct fuse_init_in *req = static_cast<const struct fuse_init_in*>(data);
         return handle_init(fuse, handler, hdr, req);
     }
 
@@ -1399,7 +1400,7 @@ static int handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
     }
 
     default: {
-        TRACE("[%d] NOTIMPL op=%d uniq=%"PRIx64" nid=%"PRIx64"\n",
+        TRACE("[%d] NOTIMPL op=%d uniq=%" PRIx64 " nid=%" PRIx64 "\n",
                 handler->token, hdr->opcode, hdr->unique, hdr->nodeid);
         return -ENOSYS;
     }
@@ -1426,7 +1427,8 @@ void handle_fuse_requests(struct fuse_handler* handler)
             continue;
         }
 
-        const struct fuse_in_header *hdr = (void*)handler->request_buffer;
+        const struct fuse_in_header* hdr =
+            reinterpret_cast<const struct fuse_in_header*>(handler->request_buffer);
         if (hdr->len != (size_t)len) {
             ERROR("[%d] malformed header: len=%zu, hdr->len=%u\n",
                     handler->token, (size_t)len, hdr->len);
