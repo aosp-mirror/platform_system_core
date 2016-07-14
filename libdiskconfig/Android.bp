@@ -1,0 +1,32 @@
+cc_library {
+    name: "libdiskconfig",
+    srcs: [
+        "diskconfig.c",
+        "diskutils.c",
+        "write_lst.c",
+        "config_mbr.c",
+    ],
+
+    shared_libs: [
+        "libcutils",
+        "liblog",
+    ],
+    cflags: ["-Werror"],
+    export_include_dirs: ["include"],
+    local_include_dirs: ["include"],
+
+    target: {
+        darwin: {
+            enabled: false,
+        },
+        linux: {
+            cflags: [
+                "-O2",
+                "-g",
+                "-W",
+                "-Wall",
+                "-D_LARGEFILE64_SOURCE",
+            ],
+        },
+    },
+}
