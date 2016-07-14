@@ -17,6 +17,7 @@
 #define LOG_TAG "String8_test"
 #include <utils/Log.h>
 #include <utils/String8.h>
+#include <utils/String16.h>
 
 #include <gtest/gtest.h>
 
@@ -70,6 +71,25 @@ TEST_F(String8Test, OperatorPlusEquals) {
     EXPECT_STREQ(src1.string(), "My voice is my passport. Verify me.");
     EXPECT_STREQ(src2.string(), " is my passport.");
     EXPECT_STREQ(src3, " Verify me.");
+}
+
+// http://b/29250543
+TEST_F(String8Test, CorrectInvalidSurrogate) {
+    // d841d8 is an invalid start for a surrogate pair. Make sure this is handled by ignoring the
+    // first character in the pair and handling the rest correctly.
+    char16_t char16_arr[] = { 0xd841, 0xd841, 0xdc41, 0x0000 };
+    String16 string16(char16_arr);
+    String8 string8(string16);
+
+    EXPECT_EQ(4U, string8.length());
+}
+
+TEST_F(String8Test, CheckUtf32Conversion) {
+    // Since bound checks were added, check the conversion can be done without fatal errors.
+    // The utf8 lengths of these are chars are 1 + 2 + 3 + 4 = 10.
+    const char32_t string32[] = { 0x0000007f, 0x000007ff, 0x0000911, 0x0010fffe, 0 };
+    String8 string8(string32);
+    EXPECT_EQ(10U, string8.length());
 }
 
 }
