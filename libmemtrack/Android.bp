@@ -1,0 +1,30 @@
+// Copyright 2013 The Android Open Source Project
+
+cc_library_shared {
+    name: "libmemtrack",
+    srcs: ["memtrack.c"],
+    export_include_dirs: ["include"],
+    local_include_dirs: ["include"],
+    include_dirs: ["hardware/libhardware/include"],
+    shared_libs: [
+        "libhardware",
+        "liblog",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}
+
+cc_binary {
+    name: "memtrack_test",
+    srcs: ["memtrack_test.c"],
+    shared_libs: [
+        "libmemtrack",
+        "libpagemap",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}

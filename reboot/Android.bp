@@ -1,0 +1,8 @@
+// Copyright 2013 The Android Open Source Project
+
+cc_binary {
+    name: "reboot",
+    srcs: ["reboot.c"],
+    shared_libs: ["libcutils"],
+    cflags: ["-Werror"],
+}

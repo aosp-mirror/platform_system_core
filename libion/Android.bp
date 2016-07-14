@@ -1,0 +1,25 @@
+
+cc_library {
+    name: "libion",
+    srcs: ["ion.c"],
+    shared_libs: ["liblog"],
+    local_include_dirs: [
+        "include",
+        "kernel-headers",
+    ],
+    export_include_dirs: [
+        "include",
+        "kernel-headers",
+    ],
+    cflags: ["-Werror"],
+}
+
+cc_binary {
+    name: "iontest",
+    srcs: ["ion_test.c"],
+    static_libs: ["libion"],
+    shared_libs: ["liblog"],
+    cflags: ["-Werror"],
+}
+
+subdirs = ["tests"]
