@@ -20,6 +20,7 @@
 
 #include <errno.h>
 #include <signal.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/ptrace.h>
@@ -203,4 +204,32 @@ void dump_memory(log_t* log, pid_t tid, uintptr_t addr) {
         *asc_out = '\0';
         _LOG(log, logtype::MEMORY, "    %s %s\n", code_buffer, ascii_buffer);
     }
+}
+
+bool pid_contains_tid(pid_t pid, pid_t tid) {
+  char task_path[PATH_MAX];
+  if (snprintf(task_path, PATH_MAX, "/proc/%d/task/%d", pid, tid) >= PATH_MAX) {
+    ALOGE("debuggerd: task path overflow (pid = %d, tid = %d)\n", pid, tid);
+    exit(1);
+  }
+
+  return access(task_path, F_OK) == 0;
+}
+
+// Attach to a thread, and verify that it's still a member of the given process
+bool ptrace_attach_thread(pid_t pid, pid_t tid) {
+  if (ptrace(PTRACE_ATTACH, tid, 0, 0) != 0) {
+    return false;
+  }
+
+  // Make sure that the task we attached to is actually part of the pid we're dumping.
+  if (!pid_contains_tid(pid, tid)) {
+    if (ptrace(PTRACE_DETACH, tid, 0, 0) != 0) {
+      ALOGE("debuggerd: failed to detach from thread '%d'", tid);
+      exit(1);
+    }
+    return false;
+  }
+
+  return true;
 }

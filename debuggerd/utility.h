@@ -75,4 +75,9 @@ int wait_for_sigstop(pid_t, int*, bool*);
 
 void dump_memory(log_t* log, pid_t tid, uintptr_t addr);
 
+bool pid_contains_tid(pid_t pid, pid_t tid);
+
+// Attach to a thread, and verify that it's still a member of the given process
+bool ptrace_attach_thread(pid_t pid, pid_t tid);
+
 #endif // _DEBUGGERD_UTILITY_H
