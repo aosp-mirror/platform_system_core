@@ -53,7 +53,7 @@
     .endm
 
     .text
-    .align
+    .balign 4
 
     .global scanline_col32cb16blend_mips64
     .ent    scanline_col32cb16blend_mips64
