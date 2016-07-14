@@ -28,6 +28,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <android-base/logging.h>
+
 #include <cutils/fs.h>
 #include <cutils/hashmap.h>
 #include <cutils/log.h>
@@ -36,37 +38,36 @@
 
 #include <private/android_filesystem_config.h>
 
-/* README
- *
- * What is this?
- *
- * sdcard is a program that uses FUSE to emulate FAT-on-sdcard style
- * directory permissions (all files are given fixed owner, group, and
- * permissions at creation, owner, group, and permissions are not
- * changeable, symlinks and hardlinks are not createable, etc.
- *
- * See usage() for command line options.
- *
- * It must be run as root, but will drop to requested UID/GID as soon as it
- * mounts a filesystem.  It will refuse to run if requested UID/GID are zero.
- *
- * Things I believe to be true:
- *
- * - ops that return a fuse_entry (LOOKUP, MKNOD, MKDIR, LINK, SYMLINK,
- * CREAT) must bump that node's refcount
- * - don't forget that FORGET can forget multiple references (req->nlookup)
- * - if an op that returns a fuse_entry fails writing the reply to the
- * kernel, you must rollback the refcount to reflect the reference the
- * kernel did not actually acquire
- *
- * This daemon can also derive custom filesystem permissions based on directory
- * structure when requested. These custom permissions support several features:
- *
- * - Apps can access their own files in /Android/data/com.example/ without
- * requiring any additional GIDs.
- * - Separate permissions for protecting directories like Pictures and Music.
- * - Multi-user separation on the same physical device.
- */
+// README
+//
+// What is this?
+//
+// sdcard is a program that uses FUSE to emulate FAT-on-sdcard style
+// directory permissions (all files are given fixed owner, group, and
+// permissions at creation, owner, group, and permissions are not
+// changeable, symlinks and hardlinks are not createable, etc.
+//
+// See usage() for command line options.
+//
+// It must be run as root, but will drop to requested UID/GID as soon as it
+// mounts a filesystem.  It will refuse to run if requested UID/GID are zero.
+//
+// Things I believe to be true:
+//
+// - ops that return a fuse_entry (LOOKUP, MKNOD, MKDIR, LINK, SYMLINK,
+// CREAT) must bump that node's refcount
+// - don't forget that FORGET can forget multiple references (req->nlookup)
+// - if an op that returns a fuse_entry fails writing the reply to the
+// kernel, you must rollback the refcount to reflect the reference the
+// kernel did not actually acquire
+//
+// This daemon can also derive custom filesystem permissions based on directory
+// structure when requested. These custom permissions support several features:
+//
+// - Apps can access their own files in /Android/data/com.example/ without
+// requiring any additional GIDs.
+// - Separate permissions for protecting directories like Pictures and Music.
+// - Multi-user separation on the same physical device.
 
 #include "fuse.h"
 
@@ -121,7 +122,7 @@ static void watch_package_list(struct fuse_global* global) {
 
     int nfd = inotify_init();
     if (nfd < 0) {
-        ERROR("inotify_init failed: %s\n", strerror(errno));
+        PLOG(ERROR) << "inotify_init failed";
         return;
     }
 
@@ -131,12 +132,12 @@ static void watch_package_list(struct fuse_global* global) {
             int res = inotify_add_watch(nfd, PACKAGES_LIST_FILE, IN_DELETE_SELF);
             if (res == -1) {
                 if (errno == ENOENT || errno == EACCES) {
-                    /* Framework may not have created yet, sleep and retry */
-                    ERROR("missing \"%s\"; retrying\n", PACKAGES_LIST_FILE);
+                    /* Framework may not have created the file yet, sleep and retry. */
+                    LOG(ERROR) << "missing \"" << PACKAGES_LIST_FILE << "\"; retrying...";
                     sleep(3);
                     continue;
                 } else {
-                    ERROR("inotify_add_watch failed: %s\n", strerror(errno));
+                    PLOG(ERROR) << "inotify_add_watch failed";
                     return;
                 }
             }
@@ -144,7 +145,7 @@ static void watch_package_list(struct fuse_global* global) {
             /* Watch above will tell us about any future changes, so
              * read the current state. */
             if (read_package_list(global) == false) {
-                ERROR("read_package_list failed\n");
+                LOG(ERROR) << "read_package_list failed";
                 return;
             }
             active = true;
@@ -155,7 +156,7 @@ static void watch_package_list(struct fuse_global* global) {
         if (res < (int) sizeof(*event)) {
             if (errno == EINTR)
                 continue;
-            ERROR("failed to read inotify event: %s\n", strerror(errno));
+            PLOG(ERROR) << "failed to read inotify event";
             return;
         }
 
@@ -182,7 +183,7 @@ static int fuse_setup(struct fuse* fuse, gid_t gid, mode_t mask) {
 
     fuse->fd = open("/dev/fuse", O_RDWR);
     if (fuse->fd == -1) {
-        ERROR("failed to open fuse device: %s\n", strerror(errno));
+        PLOG(ERROR) << "failed to open fuse device";
         return -1;
     }
 
@@ -193,7 +194,7 @@ static int fuse_setup(struct fuse* fuse, gid_t gid, mode_t mask) {
             fuse->fd, fuse->global->uid, fuse->global->gid);
     if (mount("/dev/fuse", fuse->dest_path, "fuse", MS_NOSUID | MS_NODEV | MS_NOEXEC |
             MS_NOATIME, opts) != 0) {
-        ERROR("failed to mount fuse filesystem: %s\n", strerror(errno));
+        PLOG(ERROR) << "failed to mount fuse filesystem";
         return -1;
     }
 
@@ -285,8 +286,7 @@ static void run(const char* source_path, const char* label, uid_t uid,
         if (fuse_setup(&fuse_default, AID_SDCARD_RW, 0006)
                 || fuse_setup(&fuse_read, AID_EVERYBODY, 0027)
                 || fuse_setup(&fuse_write, AID_EVERYBODY, full_write ? 0007 : 0027)) {
-            ERROR("failed to fuse_setup\n");
-            exit(1);
+            PLOG(FATAL) << "failed to fuse_setup";
         }
     } else {
         /* Physical storage is readable by all users on device, but
@@ -295,23 +295,19 @@ static void run(const char* source_path, const char* label, uid_t uid,
         if (fuse_setup(&fuse_default, AID_SDCARD_RW, 0006)
                 || fuse_setup(&fuse_read, AID_EVERYBODY, full_write ? 0027 : 0022)
                 || fuse_setup(&fuse_write, AID_EVERYBODY, full_write ? 0007 : 0022)) {
-            ERROR("failed to fuse_setup\n");
-            exit(1);
+            PLOG(FATAL) << "failed to fuse_setup";
         }
     }
 
-    /* Drop privs */
+    /* Drop privs. */
     if (setgroups(sizeof(kGroups) / sizeof(kGroups[0]), kGroups) < 0) {
-        ERROR("cannot setgroups: %s\n", strerror(errno));
-        exit(1);
+        PLOG(FATAL) << "cannot setgroups";
     }
     if (setgid(gid) < 0) {
-        ERROR("cannot setgid: %s\n", strerror(errno));
-        exit(1);
+        PLOG(FATAL) << "cannot setgid";
     }
     if (setuid(uid) < 0) {
-        ERROR("cannot setuid: %s\n", strerror(errno));
-        exit(1);
+        PLOG(FATAL) << "cannot setuid";
     }
 
     if (multi_user) {
@@ -321,23 +317,20 @@ static void run(const char* source_path, const char* label, uid_t uid,
     if (pthread_create(&thread_default, NULL, start_handler, &handler_default)
             || pthread_create(&thread_read, NULL, start_handler, &handler_read)
             || pthread_create(&thread_write, NULL, start_handler, &handler_write)) {
-        ERROR("failed to pthread_create\n");
-        exit(1);
+        LOG(FATAL) << "failed to pthread_create";
     }
 
     watch_package_list(&global);
-    ERROR("terminated prematurely\n");
-    exit(1);
+    LOG(FATAL) << "terminated prematurely";
 }
 
 static int usage() {
-    ERROR("usage: sdcard [OPTIONS] <source_path> <label>\n"
-            "    -u: specify UID to run as\n"
-            "    -g: specify GID to run as\n"
-            "    -U: specify user ID that owns device\n"
-            "    -m: source_path is multi-user\n"
-            "    -w: runtime write mount has full write access\n"
-            "\n");
+    LOG(ERROR) << "usage: sdcard [OPTIONS] <source_path> <label>"
+               << "    -u: specify UID to run as"
+               << "    -g: specify GID to run as"
+               << "    -U: specify user ID that owns device"
+               << "    -m: source_path is multi-user"
+               << "    -w: runtime write mount has full write access";
     return 1;
 }
 
@@ -384,32 +377,32 @@ int main(int argc, char **argv) {
         } else if (!label) {
             label = arg;
         } else {
-            ERROR("too many arguments\n");
+            LOG(ERROR) << "too many arguments";
             return usage();
         }
     }
 
     if (!source_path) {
-        ERROR("no source path specified\n");
+        LOG(ERROR) << "no source path specified";
         return usage();
     }
     if (!label) {
-        ERROR("no label specified\n");
+        LOG(ERROR) << "no label specified";
         return usage();
     }
     if (!uid || !gid) {
-        ERROR("uid and gid must be nonzero\n");
+        LOG(ERROR) << "uid and gid must be nonzero";
         return usage();
     }
 
     rlim.rlim_cur = 8192;
     rlim.rlim_max = 8192;
     if (setrlimit(RLIMIT_NOFILE, &rlim)) {
-        ERROR("Error setting RLIMIT_NOFILE, errno = %d\n", errno);
+        PLOG(ERROR) << "setting RLIMIT_NOFILE failed";
     }
 
     while ((fs_read_atomic_int("/data/.layout_version", &fs_version) == -1) || (fs_version < 3)) {
-        ERROR("installd fs upgrade not yet complete. Waiting...\n");
+        LOG(ERROR) << "installd fs upgrade not yet complete; waiting...";
         sleep(1);
     }
 
