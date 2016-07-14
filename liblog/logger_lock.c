@@ -22,33 +22,7 @@
 #include <pthread.h>
 #endif
 
-#include <private/android_filesystem_config.h>
-
 #include "logger.h"
-
-LIBLOG_HIDDEN uid_t __android_log_uid()
-{
-#if defined(_WIN32)
-    return AID_SYSTEM;
-#else
-    static uid_t last_uid = AID_ROOT; /* logd *always* starts up as AID_ROOT */
-
-    if (last_uid == AID_ROOT) { /* have we called to get the UID yet? */
-        last_uid = getuid();
-    }
-    return last_uid;
-#endif
-}
-
-LIBLOG_HIDDEN pid_t __android_log_pid()
-{
-    static pid_t last_pid = (pid_t) -1;
-
-    if (last_pid == (pid_t) -1) {
-        last_pid = getpid();
-    }
-    return last_pid;
-}
 
 #if !defined(_WIN32)
 static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
