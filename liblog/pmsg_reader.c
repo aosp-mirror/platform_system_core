@@ -144,6 +144,7 @@ static int pmsgRead(struct android_log_logger_list *logger_list,
     struct __attribute__((__packed__)) {
         android_pmsg_log_header_t p;
         android_log_header_t l;
+        uint8_t prio;
     } buf;
     static uint8_t preread_count;
     bool is_system;
@@ -180,11 +181,16 @@ static int pmsgRead(struct android_log_logger_list *logger_list,
         if (preread_count != sizeof(buf)) {
             return preread_count ? -EIO : -EAGAIN;
         }
-        if ((buf.p.magic != LOGGER_MAGIC)
-         || (buf.p.len <= sizeof(buf))
-         || (buf.p.len > (sizeof(buf) + LOGGER_ENTRY_MAX_PAYLOAD))
-         || (buf.l.id >= LOG_ID_MAX)
-         || (buf.l.realtime.tv_nsec >= NS_PER_SEC)) {
+        if ((buf.p.magic != LOGGER_MAGIC) ||
+                (buf.p.len <= sizeof(buf)) ||
+                (buf.p.len > (sizeof(buf) + LOGGER_ENTRY_MAX_PAYLOAD)) ||
+                (buf.l.id >= LOG_ID_MAX) ||
+                (buf.l.realtime.tv_nsec >= NS_PER_SEC) ||
+                ((buf.l.id != LOG_ID_EVENTS) &&
+                    (buf.l.id != LOG_ID_SECURITY) &&
+                    ((buf.prio == ANDROID_LOG_UNKNOWN) ||
+                        (buf.prio == ANDROID_LOG_DEFAULT) ||
+                        (buf.prio >= ANDROID_LOG_SILENT)))) {
             do {
                 memmove(&buf.p.magic, &buf.p.magic + 1, --preread_count);
             } while (preread_count && (buf.p.magic != LOGGER_MAGIC));
@@ -202,10 +208,12 @@ static int pmsgRead(struct android_log_logger_list *logger_list,
             uid = get_best_effective_uid();
             is_system = uid_has_log_permission(uid);
             if (is_system || (uid == buf.p.uid)) {
+                char *msg = is_system ?
+                    log_msg->entry_v4.msg :
+                    log_msg->entry_v3.msg;
+                *msg = buf.prio;
                 ret = TEMP_FAILURE_RETRY(read(transp->context.fd,
-                                          is_system ?
-                                              log_msg->entry_v4.msg :
-                                              log_msg->entry_v3.msg,
+                                          msg + sizeof(buf.prio),
                                           buf.p.len - sizeof(buf)));
                 if (ret < 0) {
                     return -errno;
@@ -214,7 +222,7 @@ static int pmsgRead(struct android_log_logger_list *logger_list,
                     return -EIO;
                 }
 
-                log_msg->entry_v4.len = buf.p.len - sizeof(buf);
+                log_msg->entry_v4.len = buf.p.len - sizeof(buf) + sizeof(buf.prio);
                 log_msg->entry_v4.hdr_size = is_system ?
                     sizeof(log_msg->entry_v4) :
                     sizeof(log_msg->entry_v3);
@@ -227,7 +235,7 @@ static int pmsgRead(struct android_log_logger_list *logger_list,
                     log_msg->entry_v4.uid = buf.p.uid;
                 }
 
-                return ret + log_msg->entry_v4.hdr_size;
+                return ret + sizeof(buf.prio) + log_msg->entry_v4.hdr_size;
             }
         }
 
