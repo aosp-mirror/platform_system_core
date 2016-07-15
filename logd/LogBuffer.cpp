@@ -573,8 +573,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
             if ((worst == AID_SYSTEM) && mPrune.worstPidOfSystemEnabled()) {
                 // begin scope of PID sorted list
-                std::unique_ptr<const PidEntry *[]> sorted = stats.sort(
-                    worst, (pid_t)0, 2, id, worst);
+                std::unique_ptr<const PidEntry *[]> sorted = stats.sortPids(
+                    worst, (pid_t)0, 2, id);
                 if (sorted.get() && sorted[0] && sorted[1]) {
                     worstPid = sorted[0]->getKey();
                     second_worst_sizes = worst_sizes
