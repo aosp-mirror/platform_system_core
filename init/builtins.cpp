@@ -915,8 +915,12 @@ static int do_restorecon_recursive(const std::vector<std::string>& args) {
     int ret = 0;
 
     for (auto it = std::next(args.begin()); it != args.end(); ++it) {
-        if (restorecon_recursive(it->c_str()) < 0)
+        /* The contents of CE paths are encrypted on FBE devices until user
+         * credentials are presented (filenames inside are mangled), so we need
+         * to delay restorecon of those until vold explicitly requests it. */
+        if (restorecon_recursive_skipce(it->c_str()) < 0) {
             ret = -errno;
+        }
     }
     return ret;
 }
