@@ -94,6 +94,7 @@
 #define AID_NVRAM         1050  /* Access-controlled NVRAM */
 #define AID_DNS           1051  /* DNS resolution daemon (system: netd) */
 #define AID_DNS_TETHER    1052  /* DNS resolution daemon (tether: dnsmasq) */
+#define AID_WEBVIEW_ZYGOTE 1053 /* WebView zygote process */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
@@ -207,6 +208,7 @@ static const struct android_id_info android_ids[] = {
     { "nvram",         AID_NVRAM, },
     { "dns",           AID_DNS, },
     { "dns_tether",    AID_DNS_TETHER, },
+    { "webview_zygote", AID_WEBVIEW_ZYGOTE, },
 
     { "shell",         AID_SHELL, },
     { "cache",         AID_CACHE, },
