@@ -33,7 +33,6 @@ BSD_TOOLS := \
 OUR_TOOLS := \
     getevent \
     newfs_msdos \
-    sendevent \
 
 ALL_TOOLS = $(BSD_TOOLS) $(OUR_TOOLS)
 
