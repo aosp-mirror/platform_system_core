@@ -455,8 +455,8 @@ public:
                                              size_t len, log_id id) {
         return uidTable[id].sort(uid, pid, len);
     }
-    std::unique_ptr<const PidEntry *[]> sort(uid_t uid, pid_t pid,
-                                             size_t len, log_id id, uid_t) {
+    std::unique_ptr<const PidEntry *[]> sortPids(uid_t uid, pid_t pid,
+                                             size_t len, log_id id) {
         return pidSystemTable[id].sort(uid, pid, len);
     }
 

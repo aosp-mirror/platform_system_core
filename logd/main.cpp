@@ -212,7 +212,7 @@ bool property_get_bool(const char *key, int flag) {
 }
 
 static int fdDmesg = -1;
-void inline android::prdebug(const char *fmt, ...) {
+void android::prdebug(const char *fmt, ...) {
     if (fdDmesg < 0) {
         return;
     }
