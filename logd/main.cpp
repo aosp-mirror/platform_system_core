@@ -36,12 +36,15 @@
 #include <cstdbool>
 #include <memory>
 
+#include <android-base/macros.h>
 #include <cutils/properties.h>
 #include <cutils/sched_policy.h>
 #include <cutils/sockets.h>
+#include <libminijail.h>
 #include <log/event_tag_map.h>
 #include <packagelistparser/packagelistparser.h>
 #include <private/android_filesystem_config.h>
+#include <scoped_minijail.h>
 #include <utils/threads.h>
 
 #include "CommandListener.h"
@@ -58,14 +61,14 @@
     '>'
 
 //
-//  The service is designed to be run by init, it does not respond well
+// The service is designed to be run by init, it does not respond well
 // to starting up manually. When starting up manually the sockets will
 // fail to open typically for one of the following reasons:
 //     EADDRINUSE if logger is running.
 //     EACCESS if started without precautions (below)
 //
 // Here is a cookbook procedure for starting up logd manually assuming
-// init is out of the way, pedantically all permissions and selinux
+// init is out of the way, pedantically all permissions and SELinux
 // security is put back in place:
 //
 //    setenforce 0
@@ -102,43 +105,13 @@ static int drop_privs() {
         return -1;
     }
 
-    if (prctl(PR_SET_KEEPCAPS, 1) < 0) {
-        return -1;
-    }
-
     gid_t groups[] = { AID_READPROC };
-
-    if (setgroups(sizeof(groups) / sizeof(groups[0]), groups) == -1) {
-        return -1;
-    }
-
-    if (setgid(AID_LOGD) != 0) {
-        return -1;
-    }
-
-    if (setuid(AID_LOGD) != 0) {
-        return -1;
-    }
-
-    struct __user_cap_header_struct capheader;
-    struct __user_cap_data_struct capdata[2];
-    memset(&capheader, 0, sizeof(capheader));
-    memset(&capdata, 0, sizeof(capdata));
-    capheader.version = _LINUX_CAPABILITY_VERSION_3;
-    capheader.pid = 0;
-
-    capdata[CAP_TO_INDEX(CAP_SYSLOG)].permitted = CAP_TO_MASK(CAP_SYSLOG);
-    capdata[CAP_TO_INDEX(CAP_AUDIT_CONTROL)].permitted |= CAP_TO_MASK(CAP_AUDIT_CONTROL);
-
-    capdata[0].effective = capdata[0].permitted;
-    capdata[1].effective = capdata[1].permitted;
-    capdata[0].inheritable = 0;
-    capdata[1].inheritable = 0;
-
-    if (capset(&capheader, &capdata[0]) < 0) {
-        return -1;
-    }
-
+    ScopedMinijail j(minijail_new());
+    minijail_set_supplementary_gids(j.get(), arraysize(groups), groups);
+    minijail_change_uid(j.get(), AID_LOGD);
+    minijail_change_gid(j.get(), AID_LOGD);
+    minijail_use_caps(j.get(), CAP_TO_MASK(CAP_SYSLOG) | CAP_TO_MASK(CAP_AUDIT_CONTROL));
+    minijail_enter(j.get());
     return 0;
 }
 
