@@ -56,7 +56,8 @@ bool clientHasLogCredentials(SocketClient *cli);
 bool property_get_bool(const char *key, int def);
 
 static inline bool worstUidEnabledForLogid(log_id_t id) {
-    return (id == LOG_ID_MAIN) || (id == LOG_ID_SYSTEM) || (id == LOG_ID_RADIO);
+    return (id == LOG_ID_MAIN) || (id == LOG_ID_SYSTEM) ||
+            (id == LOG_ID_RADIO) || (id == LOG_ID_EVENTS);
 }
 
 template <int (*cmp)(const char *l, const char *r, const size_t s)>

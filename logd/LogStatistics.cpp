@@ -152,6 +152,15 @@ void LogStatistics::drop(LogBufferElement *element) {
 
     pidTable.drop(element->getPid(), element);
     tidTable.drop(element->getTid(), element);
+
+    uint32_t tag = element->getTag();
+    if (tag) {
+        if (log_id == LOG_ID_SECURITY) {
+            securityTagTable.drop(tag, element);
+        } else {
+            tagTable.drop(tag, element);
+        }
+    }
 }
 
 // caller must own and free character string
@@ -438,6 +447,10 @@ std::string TagEntry::format(const LogStatistics & /* stat */, log_id_t /* id */
                                                    getSizes());
 
     std::string pruned = "";
+    size_t dropped = getDropped();
+    if (dropped) {
+        pruned = android::base::StringPrintf("%zu", dropped);
+    }
 
     return formatLine(name, size, pruned);
 }
