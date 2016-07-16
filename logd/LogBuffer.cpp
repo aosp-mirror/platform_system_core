@@ -313,16 +313,16 @@ LogBufferElementCollection::iterator LogBuffer::erase(
     LogBufferElement *element = *it;
     log_id_t id = element->getLogId();
 
-    {   // start of scope for uid found iterator
-        LogBufferIteratorMap::iterator found =
-            mLastWorstUid[id].find(element->getUid());
-        if ((found != mLastWorstUid[id].end())
-                && (it == found->second)) {
-            mLastWorstUid[id].erase(found);
+    {   // start of scope for found iterator
+        int key = ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY)) ?
+                element->getTag() : element->getUid();
+        LogBufferIteratorMap::iterator found = mLastWorst[id].find(key);
+        if ((found != mLastWorst[id].end()) && (it == found->second)) {
+            mLastWorst[id].erase(found);
         }
     }
 
-    if (element->getUid() == AID_SYSTEM) {
+    if ((id != LOG_ID_EVENTS) && (id != LOG_ID_SECURITY) && (element->getUid() == AID_SYSTEM)) {
         // start of scope for pid found iterator
         LogBufferPidIteratorMap::iterator found =
             mLastWorstPidOfSystem[id].find(element->getPid());
@@ -544,48 +544,31 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     bool hasBlacklist = (id != LOG_ID_SECURITY) && mPrune.naughty();
     while (!clearAll && (pruneRows > 0)) {
         // recalculate the worst offender on every batched pass
-        uid_t worst = (uid_t) -1;
+        int worst = -1; // not valid for getUid() or getKey()
         size_t worst_sizes = 0;
         size_t second_worst_sizes = 0;
         pid_t worstPid = 0; // POSIX guarantees PID != 0
 
         if (worstUidEnabledForLogid(id) && mPrune.worstUidEnabled()) {
-            {   // begin scope for UID sorted list
-                std::unique_ptr<const UidEntry *[]> sorted = stats.sort(
-                    AID_ROOT, (pid_t)0, 2, id);
+            // Calculate threshold as 12.5% of available storage
+            size_t threshold = log_buffer_size(id) / 8;
 
-                if (sorted.get() && sorted[0] && sorted[1]) {
-                    worst_sizes = sorted[0]->getSizes();
-                    // Calculate threshold as 12.5% of available storage
-                    size_t threshold = log_buffer_size(id) / 8;
-                    if ((worst_sizes > threshold)
-                        // Allow time horizon to extend roughly tenfold, assume
-                        // average entry length is 100 characters.
-                            && (worst_sizes > (10 * sorted[0]->getDropped()))) {
-                        worst = sorted[0]->getKey();
-                        second_worst_sizes = sorted[1]->getSizes();
-                        if (second_worst_sizes < threshold) {
-                            second_worst_sizes = threshold;
-                        }
-                    }
-                }
-            }
+            if ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY)) {
+                stats.sortTags(AID_ROOT, (pid_t)0, 2, id).findWorst(
+                    worst, worst_sizes, second_worst_sizes, threshold);
+            } else {
+                stats.sort(AID_ROOT, (pid_t)0, 2, id).findWorst(
+                    worst, worst_sizes, second_worst_sizes, threshold);
 
-            if ((worst == AID_SYSTEM) && mPrune.worstPidOfSystemEnabled()) {
-                // begin scope of PID sorted list
-                std::unique_ptr<const PidEntry *[]> sorted = stats.sortPids(
-                    worst, (pid_t)0, 2, id);
-                if (sorted.get() && sorted[0] && sorted[1]) {
-                    worstPid = sorted[0]->getKey();
-                    second_worst_sizes = worst_sizes
-                                       - sorted[0]->getSizes()
-                                       + sorted[1]->getSizes();
+                if ((worst == AID_SYSTEM) && mPrune.worstPidOfSystemEnabled()) {
+                    stats.sortPids(worst, (pid_t)0, 2, id).findWorst(
+                        worstPid, worst_sizes, second_worst_sizes);
                 }
             }
         }
 
         // skip if we have neither worst nor naughty filters
-        if ((worst == (uid_t) -1) && !hasBlacklist) {
+        if ((worst == -1) && !hasBlacklist) {
             break;
         }
 
@@ -597,10 +580,10 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         // - coalesce chatty tags
         // - check age-out of preserved logs
         bool gc = pruneRows <= 1;
-        if (!gc && (worst != (uid_t) -1)) {
-            {   // begin scope for uid worst found iterator
-                LogBufferIteratorMap::iterator found = mLastWorstUid[id].find(worst);
-                if ((found != mLastWorstUid[id].end())
+        if (!gc && (worst != -1)) {
+            {   // begin scope for worst found iterator
+                LogBufferIteratorMap::iterator found = mLastWorst[id].find(worst);
+                if ((found != mLastWorst[id].end())
                         && (found->second != mLogElements.end())) {
                     leading = false;
                     it = found->second;
@@ -658,6 +641,10 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
+            int key = ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY)) ?
+                    element->getTag() :
+                    element->getUid();
+
             if (hasBlacklist && mPrune.naughty(element)) {
                 last.clear(element);
                 it = erase(it);
@@ -670,7 +657,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                     break;
                 }
 
-                if (element->getUid() == worst) {
+                if (key == worst) {
                     kick = true;
                     if (worst_sizes < second_worst_sizes) {
                         break;
@@ -689,20 +676,19 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 last.add(element);
                 if (worstPid
                         && ((!gc && (element->getPid() == worstPid))
-                            || (mLastWorstPidOfSystem[id].find(element->getPid())
+                           || (mLastWorstPidOfSystem[id].find(element->getPid())
                                 == mLastWorstPidOfSystem[id].end()))) {
-                    mLastWorstPidOfSystem[id][element->getUid()] = it;
+                    mLastWorstPidOfSystem[id][key] = it;
                 }
-                if ((!gc && !worstPid && (element->getUid() == worst))
-                        || (mLastWorstUid[id].find(element->getUid())
-                            == mLastWorstUid[id].end())) {
-                    mLastWorstUid[id][element->getUid()] = it;
+                if ((!gc && !worstPid && (key == worst))
+                        || (mLastWorst[id].find(key) == mLastWorst[id].end())) {
+                    mLastWorst[id][key] = it;
                 }
                 ++it;
                 continue;
             }
 
-            if ((element->getUid() != worst)
+            if ((key != worst)
                     || (worstPid && (element->getPid() != worstPid))) {
                 leading = false;
                 last.clear(element);
@@ -734,9 +720,9 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                                     == mLastWorstPidOfSystem[id].end()))) {
                         mLastWorstPidOfSystem[id][worstPid] = it;
                     }
-                    if ((!gc && !worstPid) || (mLastWorstUid[id].find(worst)
-                                == mLastWorstUid[id].end())) {
-                        mLastWorstUid[id][worst] = it;
+                    if ((!gc && !worstPid) ||
+                         (mLastWorst[id].find(worst) == mLastWorst[id].end())) {
+                        mLastWorst[id][worst] = it;
                     }
                     ++it;
                 }

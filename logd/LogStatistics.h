@@ -203,7 +203,7 @@ struct EntryBaseDropped : public EntryBase {
     EntryBaseDropped():dropped(0) { }
     EntryBaseDropped(LogBufferElement *element):
             EntryBase(element),
-            dropped(element->getDropped()){
+            dropped(element->getDropped()) {
     }
 
     size_t getDropped() const { return dropped; }
@@ -370,13 +370,13 @@ struct TidEntry : public EntryBaseDropped {
     std::string format(const LogStatistics &stat, log_id_t id) const;
 };
 
-struct TagEntry : public EntryBase {
+struct TagEntry : public EntryBaseDropped {
     const uint32_t tag;
     pid_t pid;
     uid_t uid;
 
     TagEntry(LogBufferElement *element):
-            EntryBase(element),
+            EntryBaseDropped(element),
             tag(element->getTag()),
             pid(element->getPid()),
             uid(element->getUid()) {
@@ -399,6 +399,43 @@ struct TagEntry : public EntryBase {
 
     std::string formatHeader(const std::string &name, log_id_t id) const;
     std::string format(const LogStatistics &stat, log_id_t id) const;
+};
+
+template <typename TEntry>
+class LogFindWorst {
+    std::unique_ptr<const TEntry *[]> sorted;
+
+public:
+
+    LogFindWorst(std::unique_ptr<const TEntry *[]> &&sorted) : sorted(std::move(sorted)) { }
+
+    void findWorst(int &worst,
+                    size_t &worst_sizes, size_t &second_worst_sizes,
+                    size_t threshold) {
+        if (sorted.get() && sorted[0] && sorted[1]) {
+            worst_sizes = sorted[0]->getSizes();
+            if ((worst_sizes > threshold)
+                // Allow time horizon to extend roughly tenfold, assume
+                // average entry length is 100 characters.
+                    && (worst_sizes > (10 * sorted[0]->getDropped()))) {
+                worst = sorted[0]->getKey();
+                second_worst_sizes = sorted[1]->getSizes();
+                if (second_worst_sizes < threshold) {
+                    second_worst_sizes = threshold;
+                }
+            }
+        }
+    }
+
+    void findWorst(int &worst,
+                    size_t worst_sizes, size_t &second_worst_sizes) {
+        if (sorted.get() && sorted[0] && sorted[1]) {
+            worst = sorted[0]->getKey();
+            second_worst_sizes = worst_sizes
+                               - sorted[0]->getSizes()
+                               + sorted[1]->getSizes();
+        }
+    }
 };
 
 // Log Statistics
@@ -451,13 +488,14 @@ public:
         --mDroppedElements[log_id];
     }
 
-    std::unique_ptr<const UidEntry *[]> sort(uid_t uid, pid_t pid,
-                                             size_t len, log_id id) {
-        return uidTable[id].sort(uid, pid, len);
+    LogFindWorst<UidEntry> sort(uid_t uid, pid_t pid, size_t len, log_id id) {
+        return LogFindWorst<UidEntry>(uidTable[id].sort(uid, pid, len));
     }
-    std::unique_ptr<const PidEntry *[]> sortPids(uid_t uid, pid_t pid,
-                                             size_t len, log_id id) {
-        return pidSystemTable[id].sort(uid, pid, len);
+    LogFindWorst<PidEntry> sortPids(uid_t uid, pid_t pid, size_t len, log_id id) {
+        return LogFindWorst<PidEntry>(pidSystemTable[id].sort(uid, pid, len));
+    }
+    LogFindWorst<TagEntry> sortTags(uid_t uid, pid_t pid, size_t len, log_id) {
+        return LogFindWorst<TagEntry>(tagTable.sort(uid, pid, len));
     }
 
     // fast track current value by id only
