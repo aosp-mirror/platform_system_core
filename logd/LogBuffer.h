@@ -89,7 +89,7 @@ class LogBuffer {
     typedef std::unordered_map<uid_t,
                                LogBufferElementCollection::iterator>
                 LogBufferIteratorMap;
-    LogBufferIteratorMap mLastWorstUid[LOG_ID_MAX];
+    LogBufferIteratorMap mLastWorst[LOG_ID_MAX];
     // watermark of any worst/chatty pid of system processing
     typedef std::unordered_map<pid_t,
                                LogBufferElementCollection::iterator>
