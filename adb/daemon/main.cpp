@@ -28,8 +28,10 @@
 #include <memory>
 
 #include <android-base/logging.h>
+#include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <libminijail.h>
+#include <scoped_minijail.h>
 
 #include "cutils/properties.h"
 #include "debuggerd/client.h"
@@ -99,8 +101,7 @@ static bool should_drop_privileges() {
 }
 
 static void drop_privileges(int server_port) {
-    std::unique_ptr<minijail, void (*)(minijail*)> jail(minijail_new(),
-                                                        &minijail_destroy);
+    ScopedMinijail jail(minijail_new());
 
     // Add extra groups:
     // AID_ADB to access the USB driver
@@ -116,9 +117,7 @@ static void drop_privileges(int server_port) {
                       AID_INET,     AID_NET_BT,    AID_NET_BT_ADMIN,
                       AID_SDCARD_R, AID_SDCARD_RW, AID_NET_BW_STATS,
                       AID_READPROC};
-    minijail_set_supplementary_gids(jail.get(),
-                                    sizeof(groups) / sizeof(groups[0]),
-                                    groups);
+    minijail_set_supplementary_gids(jail.get(), arraysize(groups), groups);
 
     // Don't listen on a port (default 5037) if running in secure mode.
     // Don't run as root if running in secure mode.
