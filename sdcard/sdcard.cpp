@@ -36,6 +36,9 @@
 #include <cutils/multiuser.h>
 #include <packagelistparser/packagelistparser.h>
 
+#include <libminijail.h>
+#include <scoped_minijail.h>
+
 #include <private/android_filesystem_config.h>
 
 // README
@@ -204,6 +207,15 @@ static int fuse_setup(struct fuse* fuse, gid_t gid, mode_t mask) {
     return 0;
 }
 
+static void drop_privs(uid_t uid, gid_t gid) {
+    ScopedMinijail j(minijail_new());
+    minijail_set_supplementary_gids(j.get(), sizeof(kGroups) / sizeof(kGroups[0]), kGroups);
+    minijail_change_gid(j.get(), gid);
+    minijail_change_uid(j.get(), uid);
+    /* minijail_enter() will abort if priv-dropping fails. */
+    minijail_enter(j.get());
+}
+
 static void* start_handler(void* data) {
     struct fuse_handler* handler = static_cast<fuse_handler*>(data);
     handle_fuse_requests(handler);
@@ -299,16 +311,8 @@ static void run(const char* source_path, const char* label, uid_t uid,
         }
     }
 
-    /* Drop privs. */
-    if (setgroups(sizeof(kGroups) / sizeof(kGroups[0]), kGroups) < 0) {
-        PLOG(FATAL) << "cannot setgroups";
-    }
-    if (setgid(gid) < 0) {
-        PLOG(FATAL) << "cannot setgid";
-    }
-    if (setuid(uid) < 0) {
-        PLOG(FATAL) << "cannot setuid";
-    }
+    // Will abort if priv-dropping fails.
+    drop_privs(uid, gid);
 
     if (multi_user) {
         fs_prepare_dir(global.obb_path, 0775, uid, gid);
