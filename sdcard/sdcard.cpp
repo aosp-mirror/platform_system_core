@@ -29,6 +29,7 @@
 #include <unistd.h>
 
 #include <android-base/logging.h>
+#include <android-base/macros.h>
 
 #include <cutils/fs.h>
 #include <cutils/hashmap.h>
@@ -209,7 +210,7 @@ static int fuse_setup(struct fuse* fuse, gid_t gid, mode_t mask) {
 
 static void drop_privs(uid_t uid, gid_t gid) {
     ScopedMinijail j(minijail_new());
-    minijail_set_supplementary_gids(j.get(), sizeof(kGroups) / sizeof(kGroups[0]), kGroups);
+    minijail_set_supplementary_gids(j.get(), arraysize(kGroups), kGroups);
     minijail_change_gid(j.get(), gid);
     minijail_change_uid(j.get(), uid);
     /* minijail_enter() will abort if priv-dropping fails. */
