@@ -6,7 +6,6 @@
 #ifndef ADB_MUTEX
 #error ADB_MUTEX not defined when including this file
 #endif
-ADB_MUTEX(socket_list_lock)
 ADB_MUTEX(transport_lock)
 #if ADB_HOST
 ADB_MUTEX(local_transports_lock)
