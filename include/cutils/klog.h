@@ -23,7 +23,6 @@
 
 __BEGIN_DECLS
 
-void klog_init(void);
 int  klog_get_level(void);
 void klog_set_level(int level);
 
