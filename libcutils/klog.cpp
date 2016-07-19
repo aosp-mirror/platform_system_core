@@ -36,9 +36,6 @@ void klog_set_level(int level) {
     klog_level = level;
 }
 
-void klog_init(void) {
-}
-
 static int __open_klog(void) {
     int fd = open("/dev/kmsg", O_WRONLY | O_CLOEXEC);
     if (fd == -1) {
