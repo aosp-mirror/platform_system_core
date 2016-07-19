@@ -144,19 +144,22 @@ LOCAL_CFLAGS_linux := $(LIBADB_linux_CFLAGS)
 LOCAL_CFLAGS_darwin := $(LIBADB_darwin_CFLAGS)
 LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
-    adb_auth_host.cpp \
-    transport_mdns.cpp
+    adb_auth_host.cpp
 
 LOCAL_SRC_FILES_darwin := $(LIBADB_darwin_SRC_FILES)
 LOCAL_SRC_FILES_linux := $(LIBADB_linux_SRC_FILES)
 LOCAL_SRC_FILES_windows := $(LIBADB_windows_SRC_FILES)
 
+LOCAL_SRC_FILES_linux += transport_mdns.cpp
+LOCAL_SRC_FILES_darwin += transport_mdns_unsupported.cpp
+LOCAL_SRC_FILES_windows += transport_mdns_unsupported.cpp
+
 LOCAL_SANITIZE := $(adb_host_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
-LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase libmdnssd
-LOCAL_STATIC_LIBRARIES_linux := libusb
+LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase
+LOCAL_STATIC_LIBRARIES_linux := libusb libmdnssd
 LOCAL_STATIC_LIBRARIES_darwin := libusb
 
 LOCAL_C_INCLUDES_windows := development/host/windows/usb/api/
@@ -225,10 +228,9 @@ LOCAL_STATIC_LIBRARIES := \
     libcrypto \
     libcutils \
     libdiagnose_usb \
-    libgmock_host \
-    libmdnssd \
+    libgmock_host
 
-LOCAL_STATIC_LIBRARIES_linux := libusb
+LOCAL_STATIC_LIBRARIES_linux := libusb libmdnssd
 LOCAL_STATIC_LIBRARIES_darwin := libusb
 
 # Set entrypoint to wmain from sysdeps_win32.cpp instead of main
@@ -293,12 +295,11 @@ LOCAL_STATIC_LIBRARIES := \
     libcrypto_utils \
     libcrypto \
     libdiagnose_usb \
-    liblog \
-    libmdnssd \
+    liblog
 
 # Don't use libcutils on Windows.
 LOCAL_STATIC_LIBRARIES_darwin := libcutils
-LOCAL_STATIC_LIBRARIES_linux := libcutils
+LOCAL_STATIC_LIBRARIES_linux := libcutils libmdnssd
 
 LOCAL_STATIC_LIBRARIES_darwin += libusb
 LOCAL_STATIC_LIBRARIES_linux += libusb
