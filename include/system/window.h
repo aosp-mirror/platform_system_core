@@ -353,7 +353,8 @@ enum {
     NATIVE_WINDOW_SET_SURFACE_DAMAGE        = 20,   /* private */
     NATIVE_WINDOW_SET_SHARED_BUFFER_MODE    = 21,
     NATIVE_WINDOW_SET_AUTO_REFRESH          = 22,
-    NATIVE_WINDOW_GET_FRAME_TIMESTAMPS      = 23,
+    NATIVE_WINDOW_ENABLE_FRAME_TIMESTAMPS   = 23,
+    NATIVE_WINDOW_GET_FRAME_TIMESTAMPS      = 24,
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -1014,6 +1015,13 @@ static inline int native_window_set_auto_refresh(
         bool autoRefresh)
 {
     return window->perform(window, NATIVE_WINDOW_SET_AUTO_REFRESH, autoRefresh);
+}
+
+static inline int native_window_enable_frame_timestamps(
+        struct ANativeWindow* window, bool enable)
+{
+    return window->perform(window, NATIVE_WINDOW_ENABLE_FRAME_TIMESTAMPS,
+            enable);
 }
 
 static inline int native_window_get_frame_timestamps(
