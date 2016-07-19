@@ -130,6 +130,9 @@ debuggerd_cpp_flags := \
     -Wno-missing-field-initializers \
     -fno-rtti \
 
+# Bug: http://b/29823425 Disable -Wvarargs for Clang update to r271374
+debuggerd_cpp_flags += -Wno-varargs
+
 # Only build the host tests on linux.
 ifeq ($(HOST_OS),linux)
 
