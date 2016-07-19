@@ -67,8 +67,8 @@ static void dump_process_footer(log_t* log, pid_t pid) {
   _LOG(log, logtype::BACKTRACE, "\n----- end %d -----\n", pid);
 }
 
-static void dump_thread(
-    log_t* log, pid_t tid, bool attached, bool* detach_failed, int* total_sleep_time_usec) {
+static void dump_thread(log_t* log, pid_t pid, pid_t tid, bool attached,
+                        bool* detach_failed, int* total_sleep_time_usec) {
   char path[PATH_MAX];
   char threadnamebuf[1024];
   char* threadname = NULL;
@@ -88,7 +88,7 @@ static void dump_thread(
 
   _LOG(log, logtype::BACKTRACE, "\n\"%s\" sysTid=%d\n", threadname ? threadname : "<unknown>", tid);
 
-  if (!attached && ptrace(PTRACE_ATTACH, tid, 0, 0) < 0) {
+  if (!attached && !ptrace_attach_thread(pid, tid)) {
     _LOG(log, logtype::BACKTRACE, "Could not attach to thread: %s\n", strerror(errno));
     return;
   }
@@ -117,7 +117,7 @@ void dump_backtrace(int fd, int amfd, pid_t pid, pid_t tid, bool* detach_failed,
   log.amfd = amfd;
 
   dump_process_header(&log, pid);
-  dump_thread(&log, tid, true, detach_failed, total_sleep_time_usec);
+  dump_thread(&log, pid, tid, true, detach_failed, total_sleep_time_usec);
 
   char task_path[64];
   snprintf(task_path, sizeof(task_path), "/proc/%d/task", pid);
@@ -135,7 +135,7 @@ void dump_backtrace(int fd, int amfd, pid_t pid, pid_t tid, bool* detach_failed,
         continue;
       }
 
-      dump_thread(&log, new_tid, false, detach_failed, total_sleep_time_usec);
+      dump_thread(&log, pid, new_tid, false, detach_failed, total_sleep_time_usec);
     }
     closedir(d);
   }
