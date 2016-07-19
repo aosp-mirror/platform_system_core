@@ -25,6 +25,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <libminijail.h>
+#include <scoped_minijail.h>
+
 #include <packagelistparser/packagelistparser.h>
 #include <private/android_filesystem_config.h>
 #include <selinux/android.h>
@@ -136,19 +139,6 @@ int main(int argc, char* argv[]) {
     error(1, 0, "only 'shell' or 'root' users can run this program");
   }
 
-  __user_cap_header_struct capheader;
-  __user_cap_data_struct capdata[2];
-  memset(&capheader, 0, sizeof(capheader));
-  memset(&capdata, 0, sizeof(capdata));
-  capheader.version = _LINUX_CAPABILITY_VERSION_3;
-  capdata[CAP_TO_INDEX(CAP_SETUID)].effective |= CAP_TO_MASK(CAP_SETUID);
-  capdata[CAP_TO_INDEX(CAP_SETGID)].effective |= CAP_TO_MASK(CAP_SETGID);
-  capdata[CAP_TO_INDEX(CAP_SETUID)].permitted |= CAP_TO_MASK(CAP_SETUID);
-  capdata[CAP_TO_INDEX(CAP_SETGID)].permitted |= CAP_TO_MASK(CAP_SETGID);
-  if (capset(&capheader, &capdata[0]) == -1) {
-    error(1, errno, "couldn't set capabilities");
-  }
-
   char* pkgname = argv[1];
   int cmd_argv_offset = 2;
 
@@ -201,18 +191,10 @@ int main(int argc, char* argv[]) {
   // same time to avoid nasty surprises.
   uid_t uid = userAppId;
   uid_t gid = userAppId;
-  if (setresgid(gid, gid, gid) == -1) {
-    error(1, errno, "setresgid failed");
-  }
-  if (setresuid(uid, uid, uid) == -1) {
-    error(1, errno, "setresuid failed");
-  }
-
-  // Required if caller has uid and gid all non-zero.
-  memset(&capdata, 0, sizeof(capdata));
-  if (capset(&capheader, &capdata[0]) == -1) {
-    error(1, errno, "couldn't clear all capabilities");
-  }
+  ScopedMinijail j(minijail_new());
+  minijail_change_uid(j.get(), uid);
+  minijail_change_gid(j.get(), gid);
+  minijail_enter(j.get());
 
   if (selinux_android_setcontext(uid, 0, info.seinfo, pkgname) < 0) {
     error(1, errno, "couldn't set SELinux security context");
