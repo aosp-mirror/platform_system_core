@@ -31,7 +31,7 @@ char16_t *strcpy16(char16_t *, const char16_t *);
 char16_t *strncpy16(char16_t *, const char16_t *, size_t);
 char16_t *strstr16(const char16_t*, const char16_t*);
 
-// Version of comparison that supports embedded nulls.
+// Version of comparison that supports embedded NULs.
 // This is different than strncmp() because we don't stop
 // at a nul character and consider the strings to be different
 // if the lengths are different (thus we need to supply the
@@ -58,7 +58,7 @@ ssize_t utf32_to_utf8_length(const char32_t *src, size_t src_len);
  * large enough to store the string, the part of the "src" string is stored
  * into "dst" as much as possible. See the examples for more detail.
  * Returns the size actually used for storing the string.
- * dst" is not null-terminated when dst_len is fully used (like strncpy).
+ * dst" is not nul-terminated when dst_len is fully used (like strncpy).
  *
  * Example 1
  * "src" == \u3042\u3044 (\xE3\x81\x82\xE3\x81\x84)
@@ -67,7 +67,7 @@ ssize_t utf32_to_utf8_length(const char32_t *src, size_t src_len);
  * ->
  * Returned value == 6
  * "dst" becomes \xE3\x81\x82\xE3\x81\x84\0
- * (note that "dst" is null-terminated)
+ * (note that "dst" is nul-terminated)
  *
  * Example 2
  * "src" == \u3042\u3044 (\xE3\x81\x82\xE3\x81\x84)
@@ -76,7 +76,7 @@ ssize_t utf32_to_utf8_length(const char32_t *src, size_t src_len);
  * ->
  * Returned value == 3
  * "dst" becomes \xE3\x81\x82\0
- * (note that "dst" is null-terminated, but \u3044 is not stored in "dst"
+ * (note that "dst" is nul-terminated, but \u3044 is not stored in "dst"
  * since "dst" does not have enough size to store the character)
  *
  * Example 3
@@ -86,7 +86,7 @@ ssize_t utf32_to_utf8_length(const char32_t *src, size_t src_len);
  * ->
  * Returned value == 6
  * "dst" becomes \xE3\x81\x82\xE3\x81\x84
- * (note that "dst" is NOT null-terminated, like strncpy)
+ * (note that "dst" is NOT nul-terminated, like strncpy)
  */
 void utf32_to_utf8(const char32_t* src, size_t src_len, char* dst);
 
@@ -108,7 +108,7 @@ ssize_t utf16_to_utf8_length(const char16_t *src, size_t src_len);
 /**
  * Converts a UTF-16 string to UTF-8. The destination buffer must be large
  * enough to fit the UTF-16 as measured by utf16_to_utf8_length with an added
- * NULL terminator.
+ * NUL terminator.
  */
 void utf16_to_utf8(const char16_t* src, size_t src_len, char* dst);
 
@@ -118,7 +118,7 @@ void utf16_to_utf8(const char16_t* src, size_t src_len, char* dst);
  * is an invalid string.
  *
  * This function should be used to determine whether "src" is valid UTF-8
- * characters with valid unicode codepoints. "src" must be null-terminated.
+ * characters with valid unicode codepoints. "src" must be nul-terminated.
  *
  * If you are going to use other utf8_to_... functions defined in this header
  * with string which may not be valid UTF-8 with valid codepoint (form 0 to
@@ -138,35 +138,38 @@ size_t utf8_to_utf32_length(const char *src, size_t src_len);
 /**
  * Stores a UTF-32 string converted from "src" in "dst". "dst" must be large
  * enough to store the entire converted string as measured by
- * utf8_to_utf32_length plus space for a NULL terminator.
+ * utf8_to_utf32_length plus space for a NUL terminator.
  */
 void utf8_to_utf32(const char* src, size_t src_len, char32_t* dst);
 
 /**
- * Returns the UTF-16 length of UTF-8 string "src".
+ * Returns the UTF-16 length of UTF-8 string "src". Returns -1 in case
+ * it's invalid utf8. No buffer over-read occurs because of bound checks. Using overreadIsFatal you
+ * can ask to log a message and fail in case the invalid utf8 could have caused an override if no
+ * bound checks were used (otherwise -1 is returned).
  */
-ssize_t utf8_to_utf16_length(const uint8_t* src, size_t srcLen);
+ssize_t utf8_to_utf16_length(const uint8_t* src, size_t srcLen, bool overreadIsFatal = false);
 
 /**
  * Convert UTF-8 to UTF-16 including surrogate pairs.
- * Returns a pointer to the end of the string (where a null terminator might go
- * if you wanted to add one).
+ * Returns a pointer to the end of the string (where a NUL terminator might go
+ * if you wanted to add one). At most dstLen characters are written; it won't emit half a surrogate
+ * pair. If dstLen == 0 nothing is written and dst is returned. If dstLen > SSIZE_MAX it aborts
+ * (this being probably a negative number returned as an error and casted to unsigned).
  */
-char16_t* utf8_to_utf16_no_null_terminator(const uint8_t* src, size_t srcLen, char16_t* dst);
+char16_t* utf8_to_utf16_no_null_terminator(
+        const uint8_t* src, size_t srcLen, char16_t* dst, size_t dstLen);
 
 /**
- * Convert UTF-8 to UTF-16 including surrogate pairs. The destination buffer
- * must be large enough to hold the result as measured by utf8_to_utf16_length
- * plus an added NULL terminator.
+ * Convert UTF-8 to UTF-16 including surrogate pairs. At most dstLen - 1
+ * characters are written; it won't emit half a surrogate pair; and a NUL terminator is appended
+ * after. dstLen - 1 can be measured beforehand using utf8_to_utf16_length. Aborts if dstLen == 0
+ * (at least one character is needed for the NUL terminator) or dstLen > SSIZE_MAX (the latter
+ * case being likely a negative number returned as an error and casted to unsigned) . Returns a
+ * pointer to the NUL terminator.
  */
-void utf8_to_utf16(const uint8_t* src, size_t srcLen, char16_t* dst);
-
-/**
- * Like utf8_to_utf16_no_null_terminator, but you can supply a maximum length of the
- * decoded string.  The decoded string will fill up to that length; if it is longer
- * the returned pointer will be to the character after dstLen.
- */
-char16_t* utf8_to_utf16_n(const uint8_t* src, size_t srcLen, char16_t* dst, size_t dstLen);
+char16_t *utf8_to_utf16(
+        const uint8_t* src, size_t srcLen, char16_t* dst, size_t dstLen);
 
 }
 

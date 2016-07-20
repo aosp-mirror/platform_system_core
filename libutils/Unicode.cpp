@@ -16,6 +16,7 @@
 
 #include <utils/Unicode.h>
 
+#include <limits.h>
 #include <stddef.h>
 
 #if defined(_WIN32)
@@ -535,7 +536,7 @@ static inline uint32_t utf8_to_utf32_codepoint(const uint8_t *src, size_t length
     //printf("Char at %p: len=%d, utf-16=%p\n", src, length, (void*)result);
 }
 
-ssize_t utf8_to_utf16_length(const uint8_t* u8str, size_t u8len)
+ssize_t utf8_to_utf16_length(const uint8_t* u8str, size_t u8len, bool overreadIsFatal)
 {
     const uint8_t* const u8end = u8str + u8len;
     const uint8_t* u8cur = u8str;
@@ -545,6 +546,20 @@ ssize_t utf8_to_utf16_length(const uint8_t* u8str, size_t u8len)
     while (u8cur < u8end) {
         u16measuredLen++;
         int u8charLen = utf8_codepoint_len(*u8cur);
+        // Malformed utf8, some characters are beyond the end.
+        // Cases:
+        // If u8charLen == 1, this becomes u8cur >= u8end, which cannot happen as u8cur < u8end,
+        // then this condition fail and we continue, as expected.
+        // If u8charLen == 2, this becomes u8cur + 1 >= u8end, which fails only if
+        // u8cur == u8end - 1, that is, there was only one remaining character to read but we need
+        // 2 of them. This condition holds and we return -1, as expected.
+        if (u8cur + u8charLen - 1 >= u8end) {
+            if (overreadIsFatal) {
+                LOG_ALWAYS_FATAL("Attempt to overread computing length of utf8 string");
+            } else {
+                return -1;
+            }
+        }
         uint32_t codepoint = utf8_to_utf32_codepoint(u8cur, u8charLen);
         if (codepoint > 0xFFFF) u16measuredLen++; // this will be a surrogate pair in utf16
         u8cur += u8charLen;
@@ -561,38 +576,21 @@ ssize_t utf8_to_utf16_length(const uint8_t* u8str, size_t u8len)
     return u16measuredLen;
 }
 
-char16_t* utf8_to_utf16_no_null_terminator(const uint8_t* u8str, size_t u8len, char16_t* u16str)
-{
-    const uint8_t* const u8end = u8str + u8len;
-    const uint8_t* u8cur = u8str;
-    char16_t* u16cur = u16str;
-
-    while (u8cur < u8end) {
-        size_t u8len = utf8_codepoint_len(*u8cur);
-        uint32_t codepoint = utf8_to_utf32_codepoint(u8cur, u8len);
-
-        // Convert the UTF32 codepoint to one or more UTF16 codepoints
-        if (codepoint <= 0xFFFF) {
-            // Single UTF16 character
-            *u16cur++ = (char16_t) codepoint;
-        } else {
-            // Multiple UTF16 characters with surrogates
-            codepoint = codepoint - 0x10000;
-            *u16cur++ = (char16_t) ((codepoint >> 10) + 0xD800);
-            *u16cur++ = (char16_t) ((codepoint & 0x3FF) + 0xDC00);
-        }
-
-        u8cur += u8len;
-    }
-    return u16cur;
-}
-
-void utf8_to_utf16(const uint8_t* u8str, size_t u8len, char16_t* u16str) {
-    char16_t* end = utf8_to_utf16_no_null_terminator(u8str, u8len, u16str);
+char16_t* utf8_to_utf16(const uint8_t* u8str, size_t u8len, char16_t* u16str, size_t u16len) {
+    // A value > SSIZE_MAX is probably a negative value returned as an error and casted.
+    LOG_ALWAYS_FATAL_IF(u16len == 0 || u16len > SSIZE_MAX, "u16len is %zu", u16len);
+    char16_t* end = utf8_to_utf16_no_null_terminator(u8str, u8len, u16str, u16len - 1);
     *end = 0;
+    return end;
 }
 
-char16_t* utf8_to_utf16_n(const uint8_t* src, size_t srcLen, char16_t* dst, size_t dstLen) {
+char16_t* utf8_to_utf16_no_null_terminator(
+        const uint8_t* src, size_t srcLen, char16_t* dst, size_t dstLen) {
+    if (dstLen == 0) {
+        return dst;
+    }
+    // A value > SSIZE_MAX is probably a negative value returned as an error and casted.
+    LOG_ALWAYS_FATAL_IF(dstLen > SSIZE_MAX, "dstLen is %zu", dstLen);
     const uint8_t* const u8end = src + srcLen;
     const uint8_t* u8cur = src;
     const char16_t* const u16end = dst + dstLen;
