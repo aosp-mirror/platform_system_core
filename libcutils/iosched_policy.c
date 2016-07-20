@@ -24,7 +24,8 @@
 #include <cutils/iosched_policy.h>
 
 #if defined(__ANDROID__)
-#include <linux/ioprio.h>
+#define IOPRIO_WHO_PROCESS (1)
+#define IOPRIO_CLASS_SHIFT (13)
 #include <sys/syscall.h>
 #define __android_unused
 #else
