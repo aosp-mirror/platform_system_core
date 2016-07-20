@@ -275,8 +275,9 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
     case PERM_ANDROID_DATA:
     case PERM_ANDROID_OBB:
     case PERM_ANDROID_MEDIA:
-        appid = (appid_t) (uintptr_t) hashmapGet(fuse->global->package_to_appid, node->name);
-        if (appid != 0) {
+        const auto& iter = fuse->global->package_to_appid->find(node->name);
+        if (iter != fuse->global->package_to_appid->end()) {
+            appid = iter->second;
             node->uid = multiuser_get_uid(parent->userid, appid);
         }
         break;
