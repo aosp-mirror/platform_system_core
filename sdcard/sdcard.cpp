@@ -32,7 +32,6 @@
 #include <android-base/macros.h>
 
 #include <cutils/fs.h>
-#include <cutils/hashmap.h>
 #include <cutils/log.h>
 #include <cutils/multiuser.h>
 #include <packagelistparser/packagelistparser.h>
@@ -78,41 +77,22 @@
 /* Supplementary groups to execute with. */
 static const gid_t kGroups[1] = { AID_PACKAGE_INFO };
 
-static int str_hash(void *key) {
-    return hashmapHash(key, strlen(static_cast<const char*>(key)));
-}
-
-/* Tests if two string keys are equal ignoring case. */
-static bool str_icase_equals(void *keyA, void *keyB) {
-    return strcasecmp(static_cast<const char*>(keyA), static_cast<const char*>(keyB)) == 0;
-}
-
-static bool remove_str_to_int(void *key, void *value, void *context) {
-    Hashmap* map = static_cast<Hashmap*>(context);
-    hashmapRemove(map, key);
-    free(key);
-    return true;
-}
-
 static bool package_parse_callback(pkg_info *info, void *userdata) {
     struct fuse_global *global = (struct fuse_global *)userdata;
-
-    char* name = strdup(info->name);
-    hashmapPut(global->package_to_appid, name, (void*) (uintptr_t) info->uid);
+    bool res = global->package_to_appid->emplace(info->name, info->uid).second;
     packagelist_free(info);
-    return true;
+    return res;
 }
 
 static bool read_package_list(struct fuse_global* global) {
     pthread_mutex_lock(&global->lock);
 
-    hashmapForEach(global->package_to_appid, remove_str_to_int, global->package_to_appid);
-
+    global->package_to_appid->clear();
     bool rc = packagelist_parse(package_parse_callback, global);
     TRACE("read_package_list: found %zu packages\n",
-            hashmapSize(global->package_to_appid));
+            global->package_to_appid->size());
 
-    /* Regenerate ownership details using newly loaded mapping */
+    // Regenerate ownership details using newly loaded mapping.
     derive_permissions_recursive_locked(global->fuse_default, &global->root);
 
     pthread_mutex_unlock(&global->lock);
@@ -245,7 +225,7 @@ static void run(const char* source_path, const char* label, uid_t uid,
     memset(&handler_write, 0, sizeof(handler_write));
 
     pthread_mutex_init(&global.lock, NULL);
-    global.package_to_appid = hashmapCreate(256, str_hash, str_icase_equals);
+    global.package_to_appid = new AppIdMap;
     global.uid = uid;
     global.gid = gid;
     global.multi_user = multi_user;
