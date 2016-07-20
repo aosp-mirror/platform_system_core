@@ -1436,6 +1436,16 @@ static bool _is_valid_ack_reply_fd(const int ack_reply_fd) {
 #endif
 }
 
+static bool _use_legacy_install() {
+    FeatureSet features;
+    std::string error;
+    if (!adb_get_feature_set(&features, &error)) {
+        fprintf(stderr, "error: %s\n", error.c_str());
+        return true;
+    }
+    return !CanUseFeature(features, kFeatureCmd);
+}
+
 int adb_commandline(int argc, const char **argv) {
     int no_daemon = 0;
     int is_daemon = 0;
@@ -1830,17 +1840,10 @@ int adb_commandline(int argc, const char **argv) {
     }
     else if (!strcmp(argv[0], "install")) {
         if (argc < 2) return usage();
-        FeatureSet features;
-        std::string error;
-        if (!adb_get_feature_set(&features, &error)) {
-            fprintf(stderr, "error: %s\n", error.c_str());
-            return 1;
+        if (_use_legacy_install()) {
+            return install_app_legacy(transport_type, serial, argc, argv);
         }
-
-        if (CanUseFeature(features, kFeatureCmd)) {
-            return install_app(transport_type, serial, argc, argv);
-        }
-        return install_app_legacy(transport_type, serial, argc, argv);
+        return install_app(transport_type, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "install-multiple")) {
         if (argc < 2) return usage();
@@ -1848,17 +1851,10 @@ int adb_commandline(int argc, const char **argv) {
     }
     else if (!strcmp(argv[0], "uninstall")) {
         if (argc < 2) return usage();
-        FeatureSet features;
-        std::string error;
-        if (!adb_get_feature_set(&features, &error)) {
-            fprintf(stderr, "error: %s\n", error.c_str());
-            return 1;
+        if (_use_legacy_install()) {
+            return uninstall_app_legacy(transport_type, serial, argc, argv);
         }
-
-        if (CanUseFeature(features, kFeatureCmd)) {
-            return uninstall_app(transport_type, serial, argc, argv);
-        }
-        return uninstall_app_legacy(transport_type, serial, argc, argv);
+        return uninstall_app(transport_type, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "sync")) {
         std::string src;
@@ -2072,7 +2068,6 @@ static int install_multiple_app(TransportType transport, const char* serial, int
     int i;
     struct stat sb;
     uint64_t total_size = 0;
-
     // Find all APK arguments starting at end.
     // All other arguments passed through verbatim.
     int first_apk = -1;
@@ -2097,7 +2092,14 @@ static int install_multiple_app(TransportType transport, const char* serial, int
         return 1;
     }
 
-    std::string cmd = android::base::StringPrintf("exec:pm install-create -S %" PRIu64, total_size);
+    std::string install_cmd;
+    if (_use_legacy_install()) {
+        install_cmd = "exec:pm";
+    } else {
+        install_cmd = "exec:cmd package";
+    }
+
+    std::string cmd = android::base::StringPrintf("%s install-create -S %" PRIu64, install_cmd.c_str(), total_size);
     for (i = 1; i < first_apk; i++) {
         cmd += " " + escape_arg(argv[i]);
     }
@@ -2139,8 +2141,8 @@ static int install_multiple_app(TransportType transport, const char* serial, int
         }
 
         std::string cmd = android::base::StringPrintf(
-                "exec:pm install-write -S %" PRIu64 " %d %d_%s -",
-                static_cast<uint64_t>(sb.st_size), session_id, i, adb_basename(file).c_str());
+                "%s install-write -S %" PRIu64 " %d %d_%s -",
+                install_cmd.c_str(), static_cast<uint64_t>(sb.st_size), session_id, i, adb_basename(file).c_str());
 
         int localFd = adb_open(file, O_RDONLY);
         if (localFd < 0) {
@@ -2175,8 +2177,8 @@ static int install_multiple_app(TransportType transport, const char* serial, int
 finalize_session:
     // Commit session if we streamed everything okay; otherwise abandon
     std::string service =
-            android::base::StringPrintf("exec:pm install-%s %d",
-                                        success ? "commit" : "abandon", session_id);
+            android::base::StringPrintf("%s install-%s %d",
+                                        install_cmd.c_str(), success ? "commit" : "abandon", session_id);
     fd = adb_connect(service, &error);
     if (fd < 0) {
         fprintf(stderr, "Connect error for finalize: %s\n", error.c_str());
