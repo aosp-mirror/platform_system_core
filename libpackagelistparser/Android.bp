@@ -1,0 +1,13 @@
+cc_library {
+
+    name: "libpackagelistparser",
+    srcs: ["packagelistparser.c"],
+    shared_libs: ["liblog"],
+    local_include_dirs: ["include"],
+    export_include_dirs: ["include"],
+
+    clang: true,
+    sanitize: {
+        misc_undefined: ["integer"],
+    },
+}
