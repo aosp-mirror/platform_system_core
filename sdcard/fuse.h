@@ -30,14 +30,17 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include <map>
+#include <string>
+
 #include <cutils/fs.h>
-#include <cutils/hashmap.h>
 #include <cutils/log.h>
 #include <cutils/multiuser.h>
 #include <packagelistparser/packagelistparser.h>
 
 #include <private/android_filesystem_config.h>
 
+// TODO(b/30222003): Fix compilation with FUSE_TRACE == 1.
 #define FUSE_TRACE 0
 
 #if FUSE_TRACE
@@ -58,6 +61,16 @@
  * The request size is bounded by the maximum size of a FUSE_WRITE request because it has
  * the largest possible data payload. */
 #define MAX_REQUEST_SIZE (sizeof(struct fuse_in_header) + sizeof(struct fuse_write_in) + MAX_WRITE)
+
+namespace {
+struct CaseInsensitiveCompare {
+    bool operator()(const std::string& lhs, const std::string& rhs) const {
+        return strcasecmp(lhs.c_str(), rhs.c_str()) < 0;
+    }
+};
+}
+
+using AppIdMap = std::map<std::string, appid_t, CaseInsensitiveCompare>;
 
 /* Permission mode for a specific node. Controls how file permissions
  * are derived for children nodes. */
@@ -135,7 +148,7 @@ struct fuse_global {
     char source_path[PATH_MAX];
     char obb_path[PATH_MAX];
 
-    Hashmap* package_to_appid;
+    AppIdMap* package_to_appid;
 
     __u64 next_generation;
     struct node root;
