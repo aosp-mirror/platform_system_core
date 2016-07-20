@@ -181,16 +181,72 @@ int LogAudit::logPrint(const char *fmt, ...) {
         struct iovec iov[3];
         static const char log_info[] = { KMSG_PRIORITY(LOG_INFO) };
         static const char log_warning[] = { KMSG_PRIORITY(LOG_WARNING) };
+        static const char newline[] = "\n";
 
-        iov[0].iov_base = info ? const_cast<char *>(log_info)
-                               : const_cast<char *>(log_warning);
-        iov[0].iov_len = info ? sizeof(log_info) : sizeof(log_warning);
-        iov[1].iov_base = str;
-        iov[1].iov_len = strlen(str);
-        iov[2].iov_base = const_cast<char *>("\n");
-        iov[2].iov_len = 1;
+        // Dedupe messages, checking for identical messages starting with avc:
+        static unsigned count;
+        static char *last_str;
+        static bool last_info;
 
-        writev(fdDmesg, iov, sizeof(iov) / sizeof(iov[0]));
+        if (last_str != NULL) {
+            static const char avc[] = "): avc: ";
+            char *avcl = strstr(last_str, avc);
+            bool skip = false;
+
+            if (avcl) {
+                char *avcr = strstr(str, avc);
+
+                skip = avcr && !strcmp(avcl + strlen(avc), avcr + strlen(avc));
+                if (skip) {
+                    ++count;
+                    free(last_str);
+                    last_str = strdup(str);
+                    last_info = info;
+                }
+            }
+            if (!skip) {
+                static const char resume[] = " duplicate messages suppressed\n";
+
+                iov[0].iov_base = last_info ?
+                    const_cast<char *>(log_info) :
+                    const_cast<char *>(log_warning);
+                iov[0].iov_len = last_info ?
+                    sizeof(log_info) :
+                    sizeof(log_warning);
+                iov[1].iov_base = last_str;
+                iov[1].iov_len = strlen(last_str);
+                if (count > 1) {
+                    iov[2].iov_base = const_cast<char *>(resume);
+                    iov[2].iov_len = strlen(resume);
+                } else {
+                    iov[2].iov_base = const_cast<char *>(newline);
+                    iov[2].iov_len = strlen(newline);
+                }
+
+                writev(fdDmesg, iov, sizeof(iov) / sizeof(iov[0]));
+                free(last_str);
+                last_str = NULL;
+            }
+        }
+        if (last_str == NULL) {
+            count = 0;
+            last_str = strdup(str);
+            last_info = info;
+        }
+        if (count == 0) {
+            iov[0].iov_base = info ?
+                const_cast<char *>(log_info) :
+                const_cast<char *>(log_warning);
+            iov[0].iov_len = info ?
+                sizeof(log_info) :
+                sizeof(log_warning);
+            iov[1].iov_base = str;
+            iov[1].iov_len = strlen(str);
+            iov[2].iov_base = const_cast<char *>(newline);
+            iov[2].iov_len = strlen(newline);
+
+            writev(fdDmesg, iov, sizeof(iov) / sizeof(iov[0]));
+        }
     }
 
     pid_t pid = getpid();
