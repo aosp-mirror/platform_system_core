@@ -18,6 +18,7 @@
 #define _ADB_CLIENT_H_
 
 #include "adb.h"
+#include "sysdeps.h"
 #include "transport.h"
 
 #include <string>
