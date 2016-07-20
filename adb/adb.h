@@ -226,8 +226,6 @@ void usb_kick(usb_handle *h);
 int is_adb_interface(int vid, int pid, int usb_class, int usb_subclass, int usb_protocol);
 #endif
 
-int adb_commandline(int argc, const char **argv);
-
 ConnectionState connection_state(atransport *t);
 
 extern const char* adb_device_banner;

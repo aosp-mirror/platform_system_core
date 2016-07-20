@@ -51,10 +51,11 @@
 #include "adb_client.h"
 #include "adb_io.h"
 #include "adb_utils.h"
+#include "bugreport.h"
+#include "commandline.h"
 #include "file_sync_service.h"
 #include "services.h"
 #include "shell_service.h"
-#include "transport.h"
 
 static int install_app(TransportType t, const char* serial, int argc, const char** argv);
 static int install_multiple_app(TransportType t, const char* serial, int argc, const char** argv);
@@ -64,9 +65,6 @@ static int uninstall_app_legacy(TransportType t, const char* serial, int argc, c
 
 static auto& gProductOutPath = *new std::string();
 extern int gListenAll;
-
-static constexpr char BUGZ_OK_PREFIX[] = "OK:";
-static constexpr char BUGZ_FAIL_PREFIX[] = "FAIL:";
 
 static std::string product_file(const char *extra) {
     if (gProductOutPath.empty()) {
@@ -253,7 +251,7 @@ static void help() {
         );
 }
 
-static int usage() {
+int usage() {
     help();
     return 1;
 }
@@ -1131,13 +1129,8 @@ static bool adb_root(const char* command) {
     return wait_for_device("wait-for-any", type, serial);
 }
 
-// Connects to the device "shell" service with |command| and prints the
-// resulting output.
-static int send_shell_command(TransportType transport_type, const char* serial,
-                              const std::string& command,
-                              bool disable_shell_protocol,
-                              std::string* output=nullptr,
-                              std::string* err=nullptr) {
+int send_shell_command(TransportType transport_type, const char* serial, const std::string& command,
+                       bool disable_shell_protocol, std::string* output, std::string* err) {
     int fd;
     bool use_shell_protocol = false;
 
@@ -1179,45 +1172,6 @@ static int send_shell_command(TransportType transport_type, const char* serial,
     }
 
     return exit_code;
-}
-
-static int bugreport(TransportType transport_type, const char* serial, int argc,
-                     const char** argv) {
-    if (argc == 1) return send_shell_command(transport_type, serial, "bugreport", false);
-    if (argc != 2) return usage();
-
-    // Zipped bugreport option - will call 'bugreportz', which prints the location of the generated
-    // file, then pull it to the destination file provided by the user.
-    std::string dest_file = argv[1];
-    if (!android::base::EndsWith(argv[1], ".zip")) {
-        // TODO: use a case-insensitive comparison (like EndsWithIgnoreCase
-        dest_file += ".zip";
-    }
-    std::string output;
-
-    fprintf(stderr, "Bugreport is in progress and it could take minutes to complete.\n"
-            "Please be patient and do not cancel or disconnect your device until it completes.\n");
-    int status = send_shell_command(transport_type, serial, "bugreportz", false, &output, nullptr);
-    if (status != 0 || output.empty()) return status;
-    output = android::base::Trim(output);
-
-    if (android::base::StartsWith(output, BUGZ_OK_PREFIX)) {
-        const char* zip_file = &output[strlen(BUGZ_OK_PREFIX)];
-        std::vector<const char*> srcs{zip_file};
-        status = do_sync_pull(srcs, dest_file.c_str(), true, dest_file.c_str()) ? 0 : 1;
-        if (status != 0) {
-            fprintf(stderr, "Could not copy file '%s' to '%s'\n", zip_file, dest_file.c_str());
-        }
-        return status;
-    }
-    if (android::base::StartsWith(output, BUGZ_FAIL_PREFIX)) {
-        const char* error_message = &output[strlen(BUGZ_FAIL_PREFIX)];
-        fprintf(stderr, "Device failed to take a zipped bugreport: %s\n", error_message);
-        return -1;
-    }
-    fprintf(stderr, "Unexpected string (%s) returned by bugreportz, "
-            "device probably does not support -z option\n", output.c_str());
-    return -1;
 }
 
 static int logcat(TransportType transport, const char* serial, int argc, const char** argv) {
@@ -1775,7 +1729,8 @@ int adb_commandline(int argc, const char **argv) {
     } else if (!strcmp(argv[0], "root") || !strcmp(argv[0], "unroot")) {
         return adb_root(argv[0]) ? 0 : 1;
     } else if (!strcmp(argv[0], "bugreport")) {
-        return bugreport(transport_type, serial, argc, argv);
+        Bugreport bugreport;
+        return bugreport.DoIt(transport_type, serial, argc, argv);
     } else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
         bool reverse = !strcmp(argv[0], "reverse");
         ++argv;
