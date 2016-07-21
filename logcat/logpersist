@@ -17,6 +17,7 @@ true) ;;
    ;;
 esac
 
+log_tag_property=persist.log.tag
 data=/data/misc/logd
 service=logcatd
 size_default=256
@@ -64,6 +65,9 @@ if [ -n "${buffer}" ] && ! logcat -b ${buffer} -g >/dev/null 2>&1; then
   echo ERROR: Invalid --buffer ${buffer} >&2
   exit 1
 fi
+
+log_tag="`getprop ${log_tag_property}`"
+logd_logpersistd="`getprop ${property}`"
 
 case ${progname} in
 *.cat)
@@ -123,6 +127,12 @@ case ${progname} in
   while [ "clear" = "`getprop ${property#persist.}`" ]; do
     continue
   done
+  # Tell Settings that we are back on again if we turned logging off
+  tag="${log_tag#Settings}"
+  if [ X"${log_tag}" != X"${tag}" ]; then
+    echo "WARNING: enabling logd service" >&2
+    setprop ${log_tag_property} "${tag#,}"
+  fi
   # ${service}.rc does the heavy lifting with the following trigger
   setprop ${property} ${service}
   # 20ms done, to permit process feedback check
@@ -158,3 +168,9 @@ case ${progname} in
   echo "ERROR: Unexpected command ${0##*/} ${args}" >&2
   exit 1
 esac
+
+if [ X"${log_tag}" != X"`getprop ${log_tag_property}`" ] ||
+   [ X"${logd_logpersistd}" != X"`getprop ${property}`" ]; then
+  echo "WARNING: killing Settings" >&2
+  am force-stop com.android.settings
+fi
