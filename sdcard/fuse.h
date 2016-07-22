@@ -33,6 +33,7 @@
 #include <map>
 #include <string>
 
+#include <android-base/logging.h>
 #include <cutils/fs.h>
 #include <cutils/log.h>
 #include <cutils/multiuser.h>
@@ -40,14 +41,19 @@
 
 #include <private/android_filesystem_config.h>
 
-// TODO(b/30222003): Fix compilation with FUSE_TRACE == 1.
 #define FUSE_TRACE 0
 
 #if FUSE_TRACE
 #define TRACE(x...) ALOGD(x)
-#else
+static constexpr bool kEnableDLog = true;
+#else  // FUSE_TRACE == 0
 #define TRACE(x...) do {} while (0)
+static constexpr bool kEnableDLog = false;
 #endif
+
+// Use same strategy as DCHECK().
+#define DLOG(x) \
+    if (kEnableDLog) LOG(x)
 
 #define ERROR(x...) ALOGE(x)
 
