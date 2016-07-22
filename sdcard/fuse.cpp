@@ -18,6 +18,8 @@
 
 #include "fuse.h"
 
+#include <android-base/logging.h>
+
 /* FUSE_CANONICAL_PATH is not currently upstreamed */
 #define FUSE_CANONICAL_PATH 2016
 
@@ -579,8 +581,8 @@ static int handle_lookup(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->global->lock);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] LOOKUP %s @ %" PRIx64 " (%s)\n", handler->token, name, hdr->nodeid,
-        parent_node ? parent_node->name : "?");
+    DLOG(INFO) << "[" << handler->token << "] LOOKUP " << name << " @ " << hdr->nodeid
+               << " (" << (parent_node ? parent_node->name : "?") << ")";
     pthread_mutex_unlock(&fuse->global->lock);
 
     if (!parent_node || !(actual_name = find_file_within(parent_path, name,
@@ -601,8 +603,9 @@ static int handle_forget(struct fuse* fuse, struct fuse_handler* handler,
 
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_by_id_locked(fuse, hdr->nodeid);
-    TRACE("[%d] FORGET #%" PRIu64 " @ %" PRIx64 " (%s)\n", handler->token, req->nlookup,
-            hdr->nodeid, node ? node->name : "?");
+    DLOG(INFO) << "[" << handler->token << "] FORGET #" << req->nlookup
+               << " @ " << std::hex << hdr->nodeid
+               << " (" << (node ? node->name : "?") << ")";
     if (node) {
         __u64 n = req->nlookup;
         while (n) {
@@ -622,8 +625,9 @@ static int handle_getattr(struct fuse* fuse, struct fuse_handler* handler,
 
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
-    TRACE("[%d] GETATTR flags=%x fh=%" PRIx64 " @ %" PRIx64 " (%s)\n", handler->token,
-            req->getattr_flags, req->fh, hdr->nodeid, node ? node->name : "?");
+    DLOG(INFO) << "[" << handler->token << "] GETATTR flags=" << req->getattr_flags
+               << " fh=" << std::hex << req->fh << " @ " << std::hex << hdr->nodeid
+               << " (" << (node ? node->name : "?") << ")";
     pthread_mutex_unlock(&fuse->global->lock);
 
     if (!node) {
@@ -645,8 +649,9 @@ static int handle_setattr(struct fuse* fuse, struct fuse_handler* handler,
 
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
-    TRACE("[%d] SETATTR fh=%" PRIx64 " valid=%x @ %" PRIx64 " (%s)\n", handler->token,
-            req->fh, req->valid, hdr->nodeid, node ? node->name : "?");
+    DLOG(INFO) << "[" << handler->token << "] SETATTR fh=" << std::hex << req->fh
+               << " valid=" << std::hex << req->valid << " @ " << std::hex << hdr->nodeid
+               << " (" << (node ? node->name : "?") << ")";
     pthread_mutex_unlock(&fuse->global->lock);
 
     if (!node) {
@@ -710,8 +715,9 @@ static int handle_mknod(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->global->lock);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] MKNOD %s 0%o @ %" PRIx64 " (%s)\n", handler->token,
-            name, req->mode, hdr->nodeid, parent_node ? parent_node->name : "?");
+    DLOG(INFO) << "[" << handler->token << "] MKNOD " << name << " 0" << std::oct << req->mode
+               << " @ " << std::hex << hdr->nodeid
+               << " (" << (parent_node ? parent_node->name : "?") << ")";
     pthread_mutex_unlock(&fuse->global->lock);
 
     if (!parent_node || !(actual_name = find_file_within(parent_path, name,
@@ -739,8 +745,9 @@ static int handle_mkdir(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->global->lock);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] MKDIR %s 0%o @ %" PRIx64 " (%s)\n", handler->token,
-            name, req->mode, hdr->nodeid, parent_node ? parent_node->name : "?");
+    DLOG(INFO) << "[" << handler->token << "] MKDIR " << name << " 0" << std::oct << req->mode
+               << " @ " << std::hex << hdr->nodeid
+               << " (" << (parent_node ? parent_node->name : "?") << ")";
     pthread_mutex_unlock(&fuse->global->lock);
 
     if (!parent_node || !(actual_name = find_file_within(parent_path, name,
@@ -787,8 +794,8 @@ static int handle_unlink(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->global->lock);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] UNLINK %s @ %" PRIx64 " (%s)\n", handler->token,
-            name, hdr->nodeid, parent_node ? parent_node->name : "?");
+    DLOG(INFO) << "[" << handler->token << "] UNLINK " << name << " @ " << std::hex << hdr->nodeid
+               << " (" << (parent_node ? parent_node->name : "?") << ")";
     pthread_mutex_unlock(&fuse->global->lock);
 
     if (!parent_node || !find_file_within(parent_path, name,
@@ -809,8 +816,9 @@ static int handle_unlink(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_unlock(&fuse->global->lock);
     if (parent_node && child_node) {
         /* Tell all other views that node is gone */
-        TRACE("[%d] fuse_notify_delete parent=%" PRIx64 ", child=%" PRIx64 ", name=%s\n",
-                handler->token, (uint64_t) parent_node->nid, (uint64_t) child_node->nid, name);
+        DLOG(INFO) << "[" << handler->token << "] fuse_notify_delete"
+                   << " parent=" << std::hex << parent_node->nid
+                   << ", child=" << std::hex << child_node->nid << ", name=" << name;
         if (fuse != fuse->global->fuse_default) {
             fuse_notify_delete(fuse->global->fuse_default, parent_node->nid, child_node->nid, name);
         }
@@ -835,8 +843,8 @@ static int handle_rmdir(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->global->lock);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] RMDIR %s @ %" PRIx64 " (%s)\n", handler->token,
-            name, hdr->nodeid, parent_node ? parent_node->name : "?");
+    DLOG(INFO) << "[" << handler->token << "] UNLINK " << name << " @ " << std::hex << hdr->nodeid
+               << " (" << (parent_node ? parent_node->name : "?") << ")";
     pthread_mutex_unlock(&fuse->global->lock);
 
     if (!parent_node || !find_file_within(parent_path, name,
@@ -857,8 +865,9 @@ static int handle_rmdir(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_unlock(&fuse->global->lock);
     if (parent_node && child_node) {
         /* Tell all other views that node is gone */
-        TRACE("[%d] fuse_notify_delete parent=%" PRIx64 ", child=%" PRIx64 ", name=%s\n",
-                handler->token, (uint64_t) parent_node->nid, (uint64_t) child_node->nid, name);
+        DLOG(INFO) << "[" << handler->token << "] fuse_notify_delete"
+                   << " parent=" << std::hex << parent_node->nid
+                   << ", child=" << std::hex << child_node->nid << ", name=" << name;
         if (fuse != fuse->global->fuse_default) {
             fuse_notify_delete(fuse->global->fuse_default, parent_node->nid, child_node->nid, name);
         }
@@ -892,10 +901,11 @@ static int handle_rename(struct fuse* fuse, struct fuse_handler* handler,
             old_parent_path, sizeof(old_parent_path));
     new_parent_node = lookup_node_and_path_by_id_locked(fuse, req->newdir,
             new_parent_path, sizeof(new_parent_path));
-    TRACE("[%d] RENAME %s->%s @ %" PRIx64 " (%s) -> %" PRIx64 " (%s)\n", handler->token,
-            old_name, new_name,
-            hdr->nodeid, old_parent_node ? old_parent_node->name : "?",
-            req->newdir, new_parent_node ? new_parent_node->name : "?");
+    DLOG(INFO) << "[" << handler->token << "] RENAME " << old_name << "->" << new_name
+               << " @ " << std::hex << hdr->nodeid
+               << " (" << (old_parent_node ? old_parent_node->name : "?") << ") -> "
+               << std::hex << req->newdir
+               << " (" << (new_parent_node ? new_parent_node->name : "?") << ")";
     if (!old_parent_node || !new_parent_node) {
         res = -ENOENT;
         goto lookup_error;
@@ -976,8 +986,8 @@ static int handle_open(struct fuse* fuse, struct fuse_handler* handler,
 
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
-    TRACE("[%d] OPEN 0%o @ %" PRIx64 " (%s)\n", handler->token,
-            req->flags, hdr->nodeid, node ? node->name : "?");
+    DLOG(INFO) << "[" << handler->token << "] OPEN 0" << std::oct << req->flags
+               << " @ " << std::hex << hdr->nodeid << " (" << (node ? node->name : "?") << ")";
     pthread_mutex_unlock(&fuse->global->lock);
 
     if (!node) {
@@ -1018,8 +1028,8 @@ static int handle_read(struct fuse* fuse, struct fuse_handler* handler,
      * overlaps the request buffer and will clobber data in the request.  This
      * saves us 128KB per request handler thread at the cost of this scary comment. */
 
-    TRACE("[%d] READ %p(%d) %u@%" PRIu64 "\n", handler->token,
-            h, h->fd, size, (uint64_t) offset);
+    DLOG(INFO) << "[" << handler->token << "] READ " << std::hex << h << "(" << h->fd << ") "
+               << size << "@" << offset;
     if (size > MAX_READ) {
         return -EINVAL;
     }
@@ -1045,8 +1055,8 @@ static int handle_write(struct fuse* fuse, struct fuse_handler* handler,
         buffer = (const __u8*) aligned_buffer;
     }
 
-    TRACE("[%d] WRITE %p(%d) %u@%" PRIu64 "\n", handler->token,
-            h, h->fd, req->size, req->offset);
+    DLOG(INFO) << "[" << handler->token << "] WRITE " << std::hex << h << "(" << h->fd << ") "
+               << req->size << "@" << req->offset;
     res = pwrite64(h->fd, buffer, req->size, req->offset);
     if (res < 0) {
         return -errno;
@@ -1141,8 +1151,8 @@ static int handle_opendir(struct fuse* fuse, struct fuse_handler* handler,
 
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
-    TRACE("[%d] OPENDIR @ %" PRIx64 " (%s)\n", handler->token,
-            hdr->nodeid, node ? node->name : "?");
+    DLOG(INFO) << "[" << handler->token << "] OPENDIR @ " << std::hex << hdr->nodeid
+               << " (" << (node ? node->name : "?") << ")";
     pthread_mutex_unlock(&fuse->global->lock);
 
     if (!node) {
@@ -1401,8 +1411,8 @@ static int handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
     }
 
     default: {
-        TRACE("[%d] NOTIMPL op=%d uniq=%" PRIx64 " nid=%" PRIx64 "\n",
-                handler->token, hdr->opcode, hdr->unique, hdr->nodeid);
+        DLOG(INFO) << "[" << handler->token << "] NOTIMPL op=" << hdr->opcode
+                   << "uniq=" << std::hex << hdr->unique << "nid=" << std::hex << hdr->nodeid;
         return -ENOSYS;
     }
     }
