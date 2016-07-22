@@ -191,6 +191,10 @@ priority <priority>
 namespace <pid|mnt>
   Enter a new PID or mount namespace when forking the service.
 
+oom_score_adjust <value>
+   Sets the child's /proc/self/oom_score_adj to the specified value,
+   which must range from -1000 to 1000.
+
 
 Triggers
 --------
