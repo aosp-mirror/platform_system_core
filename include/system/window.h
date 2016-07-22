@@ -1006,13 +1006,14 @@ static inline int native_window_set_auto_refresh(
 
 static inline int native_window_get_frame_timestamps(
         struct ANativeWindow* window, uint32_t framesAgo,
-        int64_t* outPostedTime, int64_t* outAcquireTime,
+        int64_t* outRequestedPresentTime, int64_t* outAcquireTime,
         int64_t* outRefreshStartTime, int64_t* outGlCompositionDoneTime,
         int64_t* outDisplayRetireTime, int64_t* outReleaseTime)
 {
     return window->perform(window, NATIVE_WINDOW_GET_FRAME_TIMESTAMPS,
-            framesAgo, outPostedTime, outAcquireTime, outRefreshStartTime,
-            outGlCompositionDoneTime, outDisplayRetireTime, outReleaseTime);
+            framesAgo, outRequestedPresentTime, outAcquireTime,
+            outRefreshStartTime, outGlCompositionDoneTime, outDisplayRetireTime,
+            outReleaseTime);
 }
 
 
