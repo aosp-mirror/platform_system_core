@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/swap.h>
@@ -38,6 +39,7 @@
 #include <ext4_utils/ext4_sb.h>
 #include <ext4_utils/ext4_utils.h>
 #include <ext4_utils/wipe.h>
+#include <linux/fs.h>
 #include <linux/loop.h>
 #include <logwrap/logwrap.h>
 #include <private/android_filesystem_config.h>
@@ -50,8 +52,9 @@
 #define KEY_IN_FOOTER  "footer"
 
 #define E2FSCK_BIN      "/system/bin/e2fsck"
-#define F2FS_FSCK_BIN  "/system/bin/fsck.f2fs"
+#define F2FS_FSCK_BIN   "/system/bin/fsck.f2fs"
 #define MKSWAP_BIN      "/system/bin/mkswap"
+#define TUNE2FS_BIN     "/system/bin/tune2fs"
 
 #define FSCK_LOG_FILE   "/dev/fscklogs/log"
 
@@ -178,6 +181,99 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
     }
 
     return;
+}
+
+/* Function to read the primary superblock */
+static int read_super_block(int fd, struct ext4_super_block *sb)
+{
+    off64_t ret;
+
+    ret = lseek64(fd, 1024, SEEK_SET);
+    if (ret < 0)
+        return ret;
+
+    ret = read(fd, sb, sizeof(*sb));
+    if (ret < 0)
+        return ret;
+    if (ret != sizeof(*sb))
+        return ret;
+
+    return 0;
+}
+
+static ext4_fsblk_t ext4_blocks_count(struct ext4_super_block *es)
+{
+    return ((ext4_fsblk_t)le32_to_cpu(es->s_blocks_count_hi) << 32) |
+            le32_to_cpu(es->s_blocks_count_lo);
+}
+
+static ext4_fsblk_t ext4_r_blocks_count(struct ext4_super_block *es)
+{
+    return ((ext4_fsblk_t)le32_to_cpu(es->s_r_blocks_count_hi) << 32) |
+            le32_to_cpu(es->s_r_blocks_count_lo);
+}
+
+static void do_reserved_size(char *blk_device, char *fs_type, struct fstab_rec *rec)
+{
+    /* Check for the types of filesystems we know how to check */
+    if (!strcmp(fs_type, "ext2") || !strcmp(fs_type, "ext3") || !strcmp(fs_type, "ext4")) {
+        /*
+         * Some system images do not have tune2fs for licensing reasons
+         * Detect these and skip reserve blocks.
+         */
+        if (access(TUNE2FS_BIN, X_OK)) {
+            ERROR("Not running %s on %s (executable not in system image)\n",
+                  TUNE2FS_BIN, blk_device);
+        } else {
+            INFO("Running %s on %s\n", TUNE2FS_BIN, blk_device);
+
+            int status = 0;
+            int ret = 0;
+            unsigned long reserved_blocks = 0;
+            int fd = TEMP_FAILURE_RETRY(open(blk_device, O_RDONLY | O_CLOEXEC));
+            if (fd >= 0) {
+                struct ext4_super_block sb;
+                ret = read_super_block(fd, &sb);
+                if (ret < 0) {
+                    ERROR("Can't read '%s' super block: %s\n", blk_device, strerror(errno));
+                    goto out;
+                }
+                reserved_blocks = rec->reserved_size / EXT4_BLOCK_SIZE(&sb);
+                unsigned long reserved_threshold = ext4_blocks_count(&sb) * 0.02;
+                if (reserved_threshold < reserved_blocks) {
+                    WARNING("Reserved blocks %lu is too large\n", reserved_blocks);
+                    reserved_blocks = reserved_threshold;
+                }
+
+                if (ext4_r_blocks_count(&sb) == reserved_blocks) {
+                    INFO("Have reserved same blocks\n");
+                    goto out;
+                }
+            } else {
+                ERROR("Failed to open '%s': %s\n", blk_device, strerror(errno));
+                return;
+            }
+
+            char buf[16] = {0};
+            snprintf(buf, sizeof (buf), "-r %lu", reserved_blocks);
+            char *tune2fs_argv[] = {
+                TUNE2FS_BIN,
+                buf,
+                blk_device,
+            };
+
+            ret = android_fork_execvp_ext(ARRAY_SIZE(tune2fs_argv), tune2fs_argv,
+                                          &status, true, LOG_KLOG | LOG_FILE,
+                                          true, NULL, NULL, 0);
+
+            if (ret < 0) {
+                /* No need to check for error in fork, we can't really handle it now */
+                ERROR("Failed trying to run %s\n", TUNE2FS_BIN);
+            }
+      out:
+            close(fd);
+        }
+    }
 }
 
 static void remove_trailing_slashes(char *n)
@@ -325,6 +421,12 @@ static int mount_with_alternatives(struct fstab *fstab, int start_idx, int *end_
                 check_fs(fstab->recs[i].blk_device, fstab->recs[i].fs_type,
                          fstab->recs[i].mount_point);
             }
+
+            if (fstab->recs[i].fs_mgr_flags & MF_RESERVEDSIZE) {
+                do_reserved_size(fstab->recs[i].blk_device, fstab->recs[i].fs_type,
+                                 &fstab->recs[i]);
+            }
+
             if (!__mount(fstab->recs[i].blk_device, fstab->recs[i].mount_point, &fstab->recs[i])) {
                 *attempted_idx = i;
                 mounted = 1;
@@ -688,6 +790,10 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
         if (fstab->recs[i].fs_mgr_flags & MF_CHECK) {
             check_fs(n_blk_device, fstab->recs[i].fs_type,
                      fstab->recs[i].mount_point);
+        }
+
+        if (fstab->recs[i].fs_mgr_flags & MF_RESERVEDSIZE) {
+            do_reserved_size(n_blk_device, fstab->recs[i].fs_type, &fstab->recs[i]);
         }
 
         if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
