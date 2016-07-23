@@ -31,7 +31,7 @@ LOCAL_SRC_FILES := android_pubkey.c
 LOCAL_CFLAGS := -Wall -Werror -Wextra -std=c99
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
-LOCAL_SHARED_LIBRARIES := libcrypto-host
+LOCAL_SHARED_LIBRARIES := libcrypto
 include $(BUILD_HOST_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -40,7 +40,7 @@ LOCAL_SRC_FILES := android_pubkey.c
 LOCAL_CFLAGS := -Wall -Werror -Wextra -std=c99
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
-LOCAL_STATIC_LIBRARIES := libcrypto_static
+LOCAL_STATIC_LIBRARIES := libcrypto
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)

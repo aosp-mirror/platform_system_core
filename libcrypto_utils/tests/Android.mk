@@ -20,5 +20,5 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libcrypto_utils_test
 LOCAL_SRC_FILES := android_pubkey_test.cpp
 LOCAL_CFLAGS := -Wall -Werror -Wextra -std=c++11
-LOCAL_SHARED_LIBRARIES := libcrypto_utils libcrypto-host
+LOCAL_SHARED_LIBRARIES := libcrypto_utils libcrypto
 include $(BUILD_HOST_NATIVE_TEST)
