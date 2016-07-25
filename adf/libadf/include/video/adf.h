@@ -49,69 +49,94 @@ enum adf_event_type {
   ADF_EVENT_DEVICE_CUSTOM = 128,
   ADF_EVENT_TYPE_MAX = 255,
 };
-struct adf_set_event {
+enum adf_complete_fence_type {
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+  ADF_COMPLETE_FENCE_NONE = 0,
+  ADF_COMPLETE_FENCE_PRESENT = 1,
+  ADF_COMPLETE_FENCE_RELEASE = 2,
+};
+/* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+struct adf_set_event {
   __u8 type;
   __u8 enabled;
 };
-struct adf_event {
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+struct adf_event {
   __u8 type;
   __u32 length;
 };
-struct adf_vsync_event {
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+struct adf_vsync_event {
   struct adf_event base;
   __aligned_u64 timestamp;
 };
-struct adf_hotplug_event {
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+struct adf_hotplug_event {
   struct adf_event base;
   __u8 connected;
 };
-#define ADF_MAX_PLANES 4
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+#define ADF_MAX_PLANES 4
 struct adf_buffer_config {
   __u32 overlay_engine;
   __u32 w;
-  __u32 h;
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+  __u32 h;
   __u32 format;
   __s32 fd[ADF_MAX_PLANES];
   __u32 offset[ADF_MAX_PLANES];
-  __u32 pitch[ADF_MAX_PLANES];
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+  __u32 pitch[ADF_MAX_PLANES];
   __u8 n_planes;
   __s32 acquire_fence;
 };
-#define ADF_MAX_BUFFERS (4096 / sizeof(struct adf_buffer_config))
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+#define ADF_MAX_BUFFERS (4096 / sizeof(struct adf_buffer_config))
 struct adf_post_config {
   size_t n_interfaces;
   __u32 __user * interfaces;
-  size_t n_bufs;
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+  size_t n_bufs;
   struct adf_buffer_config __user * bufs;
   size_t custom_data_size;
   void __user * custom_data;
-  __s32 complete_fence;
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+  __s32 complete_fence;
 };
+struct adf_post_config_v2 {
+  __u32 n_interfaces;
+/* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+  __u64 interfaces;
+  __u32 n_bufs;
+  __u64 bufs;
+  __u64 custom_data_size;
+/* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+  __u64 custom_data;
+  __s32 complete_fence;
+  __u8 complete_fence_type;
+};
+/* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
 #define ADF_MAX_INTERFACES (4096 / sizeof(__u32))
 struct adf_simple_buffer_alloc {
   __u16 w;
-/* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
   __u16 h;
+/* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
   __u32 format;
   __s32 fd;
   __u32 offset;
-/* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
   __u32 pitch;
+/* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
 };
 struct adf_simple_post_config {
   struct adf_buffer_config buf;
-/* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
   __s32 complete_fence;
+/* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+};
+struct adf_simple_post_config_v2 {
+  struct adf_buffer_config buf;
+  __s32 complete_fence;
+/* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+  __u8 complete_fence_type;
 };
 struct adf_attachment_config {
   __u32 overlay_engine;
@@ -177,4 +202,8 @@ struct adf_overlay_engine_data {
 #define ADF_ATTACH _IOW(ADF_IOCTL_TYPE, 9, struct adf_attachment_config)
 /* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
 #define ADF_DETACH _IOW(ADF_IOCTL_TYPE, 10, struct adf_attachment_config)
+#define ADF_POST_CONFIG_V2 _IOW(ADF_IOCTL_TYPE, 11, struct adf_post_config_v2)
+#define ADF_SIMPLE_POST_CONFIG_V2 _IOW(ADF_IOCTL_TYPE, 12, struct adf_simple_post_config_v2)
 #endif
+/* WARNING: DO NOT EDIT, AUTO-GENERATED CODE - SEE TOP FOR INSTRUCTIONS */
+
