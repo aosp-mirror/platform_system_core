@@ -95,16 +95,16 @@ static void SetUpPidNamespace(const std::string& service_name) {
     // It's OK to LOG(FATAL) in this function since it's running in the first
     // child process.
     if (mount("", "/proc", "proc", kSafeFlags | MS_REMOUNT, "") == -1) {
-        PLOG(FATAL) << "couldn't remount(/proc)";
+        PLOG(FATAL) << "couldn't remount(/proc) for " << service_name;
     }
 
     if (prctl(PR_SET_NAME, service_name.c_str()) == -1) {
-        PLOG(FATAL) << "couldn't set name";
+        PLOG(FATAL) << "couldn't set name for " << service_name;
     }
 
     pid_t child_pid = fork();
     if (child_pid == -1) {
-        PLOG(FATAL) << "couldn't fork init inside the PID namespace";
+        PLOG(FATAL) << "couldn't fork init inside the PID namespace for " << service_name;
     }
 
     if (child_pid > 0) {
@@ -219,31 +219,32 @@ void Service::CreateSockets(const std::string& context) {
 }
 
 void Service::SetProcessAttributes() {
-    setpgid(0, getpid());
+    // TODO: work out why this fails for `console` then upgrade to FATAL.
+    if (setpgid(0, getpid()) == -1) PLOG(ERROR) << "setpgid failed for " << name_;
 
     if (gid_) {
         if (setgid(gid_) != 0) {
-            PLOG(FATAL) << "setgid failed";
+            PLOG(FATAL) << "setgid failed for " << name_;
         }
     }
     if (!supp_gids_.empty()) {
         if (setgroups(supp_gids_.size(), &supp_gids_[0]) != 0) {
-            PLOG(FATAL) << "setgroups failed";
+            PLOG(FATAL) << "setgroups failed for " << name_;
         }
     }
     if (uid_) {
         if (setuid(uid_) != 0) {
-            PLOG(FATAL) << "setuid failed";
+            PLOG(FATAL) << "setuid failed for " << name_;
         }
     }
     if (!seclabel_.empty()) {
         if (setexeccon(seclabel_.c_str()) < 0) {
-            PLOG(FATAL) << "cannot setexeccon('" << seclabel_ << "')";
+            PLOG(FATAL) << "cannot setexeccon('" << seclabel_ << "') for " << name_;
         }
     }
     if (priority_ != 0) {
         if (setpriority(PRIO_PROCESS, 0, priority_) != 0) {
-            PLOG(FATAL) << "setpriority failed";
+            PLOG(FATAL) << "setpriority failed for " << name_;
         }
     }
 }
