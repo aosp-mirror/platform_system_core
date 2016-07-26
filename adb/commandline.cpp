@@ -66,6 +66,8 @@ static int uninstall_app_legacy(TransportType t, const char* serial, int argc, c
 static auto& gProductOutPath = *new std::string();
 extern int gListenAll;
 
+DefaultStandardStreamsCallback DEFAULT_STANDARD_STREAMS_CALLBACK(nullptr, nullptr);
+
 static std::string product_file(const char *extra) {
     if (gProductOutPath.empty()) {
         fprintf(stderr, "adb: Product directory not specified; "
@@ -289,17 +291,14 @@ static void stdin_raw_restore() {
 // this expects that incoming data will use the shell protocol, in which case
 // stdout/stderr are routed independently and the remote exit code will be
 // returned.
-// if |output| is non-null, stdout will be appended to it instead.
-// if |err| is non-null, stderr will be appended to it instead.
-static int read_and_dump(int fd, bool use_shell_protocol=false, std::string* output=nullptr,
-                         std::string* err=nullptr) {
+// if |callback| is non-null, stdout/stderr output will be handled by it.
+int read_and_dump(int fd, bool use_shell_protocol = false,
+                  StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK) {
     int exit_code = 0;
     if (fd < 0) return exit_code;
 
     std::unique_ptr<ShellProtocol> protocol;
     int length = 0;
-    FILE* outfile = stdout;
-    std::string* outstring = output;
 
     char raw_buffer[BUFSIZ];
     char* buffer_ptr = raw_buffer;
@@ -317,14 +316,13 @@ static int read_and_dump(int fd, bool use_shell_protocol=false, std::string* out
             if (!protocol->Read()) {
                 break;
             }
+            length = protocol->data_length();
             switch (protocol->id()) {
                 case ShellProtocol::kIdStdout:
-                    outfile = stdout;
-                    outstring = output;
+                    callback->OnStdout(buffer_ptr, length);
                     break;
                 case ShellProtocol::kIdStderr:
-                    outfile = stderr;
-                    outstring = err;
+                    callback->OnStderr(buffer_ptr, length);
                     break;
                 case ShellProtocol::kIdExit:
                     exit_code = protocol->data()[0];
@@ -340,17 +338,11 @@ static int read_and_dump(int fd, bool use_shell_protocol=false, std::string* out
             if (length <= 0) {
                 break;
             }
-        }
-
-        if (outstring == nullptr) {
-            fwrite(buffer_ptr, 1, length, outfile);
-            fflush(outfile);
-        } else {
-            outstring->append(buffer_ptr, length);
+            callback->OnStdout(buffer_ptr, length);
         }
     }
 
-    return exit_code;
+    return callback->Done(exit_code);
 }
 
 static void read_status_line(int fd, char* buf, size_t count)
@@ -1130,14 +1122,15 @@ static bool adb_root(const char* command) {
 }
 
 int send_shell_command(TransportType transport_type, const char* serial, const std::string& command,
-                       bool disable_shell_protocol, std::string* output, std::string* err) {
+                       bool disable_shell_protocol, StandardStreamsCallbackInterface* callback) {
     int fd;
     bool use_shell_protocol = false;
 
     while (true) {
         bool attempt_connection = true;
 
-        // Use shell protocol if it's supported and the caller doesn't explicitly disable it.
+        // Use shell protocol if it's supported and the caller doesn't explicitly
+        // disable it.
         if (!disable_shell_protocol) {
             FeatureSet features;
             std::string error;
@@ -1159,13 +1152,13 @@ int send_shell_command(TransportType transport_type, const char* serial, const s
             }
         }
 
-        fprintf(stderr,"- waiting for device -\n");
+        fprintf(stderr, "- waiting for device -\n");
         if (!wait_for_device("wait-for-device", transport_type, serial)) {
             return 1;
         }
     }
 
-    int exit_code = read_and_dump(fd, use_shell_protocol, output, err);
+    int exit_code = read_and_dump(fd, use_shell_protocol, callback);
 
     if (adb_close(fd) < 0) {
         PLOG(ERROR) << "failure closing FD " << fd;
