@@ -19,11 +19,58 @@
 #include <android-base/strings.h>
 
 #include "bugreport.h"
-#include "commandline.h"
 #include "file_sync_service.h"
 
 static constexpr char BUGZ_OK_PREFIX[] = "OK:";
 static constexpr char BUGZ_FAIL_PREFIX[] = "FAIL:";
+
+// Custom callback used to handle the output of zipped bugreports.
+class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface {
+  public:
+    BugreportStandardStreamsCallback(const std::string& dest_file, Bugreport* br)
+        : br_(br), dest_file_(dest_file), stdout_str_() {
+    }
+
+    void OnStdout(const char* buffer, int length) {
+        std::string output;
+        OnStream(&output, stdout, buffer, length);
+        stdout_str_.append(output);
+    }
+
+    void OnStderr(const char* buffer, int length) {
+        OnStream(nullptr, stderr, buffer, length);
+    }
+
+    int Done(int unused_) {
+        int status = -1;
+        std::string output = android::base::Trim(stdout_str_);
+        if (android::base::StartsWith(output, BUGZ_OK_PREFIX)) {
+            const char* zip_file = &output[strlen(BUGZ_OK_PREFIX)];
+            std::vector<const char*> srcs{zip_file};
+            status = br_->DoSyncPull(srcs, dest_file_.c_str(), true, dest_file_.c_str()) ? 0 : 1;
+            if (status != 0) {
+                fprintf(stderr, "Could not copy file '%s' to '%s'\n", zip_file, dest_file_.c_str());
+            }
+        } else if (android::base::StartsWith(output, BUGZ_FAIL_PREFIX)) {
+            const char* error_message = &output[strlen(BUGZ_FAIL_PREFIX)];
+            fprintf(stderr, "Device failed to take a zipped bugreport: %s\n", error_message);
+        } else {
+            fprintf(stderr,
+                    "Unexpected string (%s) returned by bugreportz, "
+                    "device probably does not support it\n",
+                    output.c_str());
+        }
+
+        return status;
+    }
+
+  private:
+    Bugreport* br_;
+    const std::string dest_file_;
+    std::string stdout_str_;
+
+    DISALLOW_COPY_AND_ASSIGN(BugreportStandardStreamsCallback);
+};
 
 int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, const char** argv) {
     if (argc == 1) return SendShellCommand(transport_type, serial, "bugreport", false);
@@ -37,41 +84,18 @@ int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, 
         // TODO: use a case-insensitive comparison (like EndsWithIgnoreCase
         dest_file += ".zip";
     }
-    std::string output;
-
     fprintf(stderr,
             "Bugreport is in progress and it could take minutes to complete.\n"
             "Please be patient and do not cancel or disconnect your device until "
             "it completes.\n");
-    int status = SendShellCommand(transport_type, serial, "bugreportz", false, &output, nullptr);
-    if (status != 0 || output.empty()) return status;
-    output = android::base::Trim(output);
-
-    if (android::base::StartsWith(output, BUGZ_OK_PREFIX)) {
-        const char* zip_file = &output[strlen(BUGZ_OK_PREFIX)];
-        std::vector<const char*> srcs{zip_file};
-        status = DoSyncPull(srcs, dest_file.c_str(), true, dest_file.c_str()) ? 0 : 1;
-        if (status != 0) {
-            fprintf(stderr, "Could not copy file '%s' to '%s'\n", zip_file, dest_file.c_str());
-        }
-        return status;
-    }
-    if (android::base::StartsWith(output, BUGZ_FAIL_PREFIX)) {
-        const char* error_message = &output[strlen(BUGZ_FAIL_PREFIX)];
-        fprintf(stderr, "Device failed to take a zipped bugreport: %s\n", error_message);
-        return -1;
-    }
-    fprintf(stderr,
-            "Unexpected string (%s) returned by bugreportz, "
-            "device probably does not support it\n",
-            output.c_str());
-    return -1;
+    BugreportStandardStreamsCallback bugz_callback(dest_file, this);
+    return SendShellCommand(transport_type, serial, "bugreportz", false, &bugz_callback);
 }
 
 int Bugreport::SendShellCommand(TransportType transport_type, const char* serial,
                                 const std::string& command, bool disable_shell_protocol,
-                                std::string* output, std::string* err) {
-    return send_shell_command(transport_type, serial, command, disable_shell_protocol, output, err);
+                                StandardStreamsCallbackInterface* callback) {
+    return send_shell_command(transport_type, serial, command, disable_shell_protocol, callback);
 }
 
 bool Bugreport::DoSyncPull(const std::vector<const char*>& srcs, const char* dst, bool copy_attrs,
