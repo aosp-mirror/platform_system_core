@@ -26,8 +26,12 @@
 #include <selinux/selinux.h>
 
 static const int kLogSeverityToKLogLevel[] = {
-    KLOG_NOTICE_LEVEL, KLOG_DEBUG_LEVEL, KLOG_INFO_LEVEL,
-    KLOG_WARNING_LEVEL, KLOG_ERROR_LEVEL, KLOG_ERROR_LEVEL,
+    [android::base::VERBOSE] = KLOG_DEBUG_LEVEL,
+    [android::base::DEBUG] = KLOG_DEBUG_LEVEL,
+    [android::base::INFO] = KLOG_INFO_LEVEL,
+    [android::base::WARNING] = KLOG_WARNING_LEVEL,
+    [android::base::ERROR] = KLOG_ERROR_LEVEL,
+    [android::base::FATAL] = KLOG_ERROR_LEVEL,
 };
 static_assert(arraysize(kLogSeverityToKLogLevel) == android::base::FATAL + 1,
               "Mismatch in size of kLogSeverityToKLogLevel and values in LogSeverity");
@@ -68,7 +72,7 @@ void InitKernelLogging(char* argv[]) {
     if (fd > 2) close(fd);
 
     android::base::InitLogging(argv, &KernelLogger);
-    klog_set_level(KLOG_NOTICE_LEVEL);
+    klog_set_level(KLOG_INFO_LEVEL);
 }
 
 int selinux_klog_callback(int type, const char *fmt, ...) {
