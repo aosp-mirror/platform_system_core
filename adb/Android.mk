@@ -184,6 +184,7 @@ LOCAL_SRC_FILES := \
     adb_client.cpp \
     bugreport.cpp \
     bugreport_test.cpp \
+    line_printer.cpp \
     services.cpp \
     shell_service_protocol.cpp \
     shell_service_protocol_test.cpp \

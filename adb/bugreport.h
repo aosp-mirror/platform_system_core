@@ -21,12 +21,13 @@
 
 #include "adb.h"
 #include "commandline.h"
+#include "line_printer.h"
 
 class Bugreport {
     friend class BugreportStandardStreamsCallback;
 
   public:
-    Bugreport() {
+    Bugreport() : line_printer_() {
     }
     int DoIt(TransportType transport_type, const char* serial, int argc, const char** argv);
 
@@ -42,6 +43,9 @@ class Bugreport {
                             const char* name);
 
   private:
+    virtual void UpdateProgress(const std::string& file_name, int progress, int total,
+                                bool keep_info_line = false);
+    LinePrinter line_printer_;
     DISALLOW_COPY_AND_ASSIGN(Bugreport);
 };
 
