@@ -30,6 +30,7 @@
 #include <sys/mount.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
@@ -589,12 +590,11 @@ int main(int argc, char** argv) {
         mount("proc", "/proc", "proc", 0, "hidepid=2,gid=" MAKE_STR(AID_READPROC));
         mount("sysfs", "/sys", "sysfs", 0, NULL);
         mount("selinuxfs", "/sys/fs/selinux", "selinuxfs", 0, NULL);
+        mknod("/dev/kmsg", S_IFCHR | 0600, makedev(1, 11));
     }
 
-    // We must have some place other than / to create the device nodes for
-    // kmsg and null, otherwise we won't be able to remount / read-only
-    // later on. Now that tmpfs is mounted on /dev, we can actually talk
-    // to the outside world.
+    // Now that tmpfs is mounted on /dev and we have /dev/kmsg, we can actually
+    // talk to the outside world...
     InitKernelLogging(argv);
 
     LOG(INFO) << "init " << (is_first_stage ? "first stage" : "second stage") << " started!";
@@ -638,6 +638,7 @@ int main(int argc, char** argv) {
     // This must happen before /dev is populated by ueventd.
     LOG(INFO) << "Running restorecon...";
     restorecon("/dev");
+    restorecon("/dev/kmsg");
     restorecon("/dev/socket");
     restorecon("/dev/__properties__");
     restorecon("/property_contexts");
