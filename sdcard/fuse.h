@@ -35,7 +35,6 @@
 
 #include <android-base/logging.h>
 #include <cutils/fs.h>
-#include <cutils/log.h>
 #include <cutils/multiuser.h>
 #include <packagelistparser/packagelistparser.h>
 
@@ -44,18 +43,14 @@
 #define FUSE_TRACE 0
 
 #if FUSE_TRACE
-#define TRACE(x...) ALOGD(x)
 static constexpr bool kEnableDLog = true;
 #else  // FUSE_TRACE == 0
-#define TRACE(x...) do {} while (0)
 static constexpr bool kEnableDLog = false;
 #endif
 
 // Use same strategy as DCHECK().
 #define DLOG(x) \
     if (kEnableDLog) LOG(x)
-
-#define ERROR(x...) ALOGE(x)
 
 /* Maximum number of bytes to write in one request. */
 #define MAX_WRITE (256 * 1024)

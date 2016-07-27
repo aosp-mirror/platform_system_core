@@ -32,7 +32,6 @@
 #include <android-base/macros.h>
 
 #include <cutils/fs.h>
-#include <cutils/log.h>
 #include <cutils/multiuser.h>
 #include <packagelistparser/packagelistparser.h>
 
@@ -89,8 +88,7 @@ static bool read_package_list(struct fuse_global* global) {
 
     global->package_to_appid->clear();
     bool rc = packagelist_parse(package_parse_callback, global);
-    TRACE("read_package_list: found %zu packages\n",
-            global->package_to_appid->size());
+    DLOG(INFO) << "read_package_list: found " << global->package_to_appid->size() << " packages";
 
     // Regenerate ownership details using newly loaded mapping.
     derive_permissions_recursive_locked(global->fuse_default, &global->root);
@@ -148,7 +146,7 @@ static void watch_package_list(struct fuse_global* global) {
             int event_size;
             event = (struct inotify_event *) (event_buf + event_pos);
 
-            TRACE("inotify event: %08x\n", event->mask);
+            DLOG(INFO) << "inotify event: " << std::hex << event->mask << std::dec;
             if ((event->mask & IN_IGNORED) == IN_IGNORED) {
                 /* Previously watched file was deleted, probably due to move
                  * that swapped in new data; re-arm the watch and read. */
