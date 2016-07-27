@@ -26,7 +26,7 @@
 // Sender implemented using http_utils from libbrillo
 class HttpSender : public Sender {
  public:
-  explicit HttpSender(std::string server_url);
+  explicit HttpSender(const std::string& server_url);
   ~HttpSender() override = default;
   // Sends |content| whose SHA1 hash is |hash| to server_url with a synchronous
   // POST request to server_url.
