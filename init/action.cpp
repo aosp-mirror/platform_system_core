@@ -118,7 +118,7 @@ void Action::ExecuteCommand(const Command& command) const {
     Timer t;
     int result = command.InvokeFunc();
 
-    if (klog_get_level() >= KLOG_INFO_LEVEL) {
+    if (klog_get_level() >= KLOG_DEBUG_LEVEL) {
         std::string trigger_name = BuildTriggersString();
         std::string cmd_str = command.BuildCommandString();
         std::string source = command.BuildSourceString();
