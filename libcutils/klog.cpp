@@ -37,15 +37,7 @@ void klog_set_level(int level) {
 }
 
 static int __open_klog(void) {
-    int fd = open("/dev/kmsg", O_WRONLY | O_CLOEXEC);
-    if (fd == -1) {
-        static const char* name = "/dev/__kmsg__";
-        if (mknod(name, S_IFCHR | 0600, (1 << 8) | 11) == 0) {
-            fd = open(name, O_WRONLY | O_CLOEXEC);
-            unlink(name);
-        }
-    }
-    return fd;
+    return TEMP_FAILURE_RETRY(open("/dev/kmsg", O_WRONLY | O_CLOEXEC));
 }
 
 #define LOG_BUF_MAX 512
