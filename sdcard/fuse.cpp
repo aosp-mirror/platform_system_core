@@ -1272,8 +1272,8 @@ static int handle_canonical_path(struct fuse* fuse, struct fuse_handler* handler
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             path, sizeof(path));
-    TRACE("[%d] CANONICAL_PATH @ %" PRIx64 " (%s)\n", handler->token, hdr->nodeid,
-        node ? node->name : "?");
+    DLOG(INFO) << "[" << handler->token << "] CANONICAL_PATH @ " << std::hex << hdr->nodeid
+               << std::dec << " (" << (node ? node->name : "?") << ")";
     pthread_mutex_unlock(&fuse->global->lock);
 
     if (!node) {
