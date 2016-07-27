@@ -32,6 +32,7 @@
 #include "adb_auth.h"
 #include "adb_listeners.h"
 #include "adb_utils.h"
+#include "commandline.h"
 #include "transport.h"
 
 static std::string GetLogFilePath() {
