@@ -45,18 +45,20 @@ static inline __u64 ptr_to_id(void *ptr)
 static void acquire_node_locked(struct node* node)
 {
     node->refcount++;
-    TRACE("ACQUIRE %p (%s) rc=%d\n", node, node->name, node->refcount);
+    DLOG(INFO) << "ACQUIRE " << std::hex << node << std::dec
+               << " (" << node->name << ") rc=" << node->refcount;
 }
 
 static void remove_node_from_parent_locked(struct node* node);
 
 static void release_node_locked(struct node* node)
 {
-    TRACE("RELEASE %p (%s) rc=%d\n", node, node->name, node->refcount);
+    DLOG(INFO) << "RELEASE " << std::hex << node << std::dec
+               << " (" << node->name << ") rc=" << node->refcount;
     if (node->refcount > 0) {
         node->refcount--;
         if (!node->refcount) {
-            TRACE("DESTROY %p (%s)\n", node, node->name);
+            DLOG(INFO) << "DESTROY " << std::hex << node << std::dec << " (" << node->name << ")";
             remove_node_from_parent_locked(node);
 
             /* TODO: remove debugging - poison memory */
@@ -67,7 +69,7 @@ static void release_node_locked(struct node* node)
             free(node);
         }
     } else {
-        ERROR("Zero refcnt %p\n", node);
+        LOG(ERROR) << std::hex << node << std::dec << " refcount=0";
     }
 }
 
@@ -161,7 +163,7 @@ static char* find_file_within(const char* path, const char* name,
         struct dirent* entry;
         DIR* dir = opendir(path);
         if (!dir) {
-            ERROR("opendir %s failed: %s\n", path, strerror(errno));
+            PLOG(ERROR) << "opendir(" << path << ") failed";
             return actual;
         }
         while ((entry = readdir(dir))) {
@@ -229,7 +231,7 @@ static int touch(char* path, mode_t mode) {
         if (errno == EEXIST) {
             return 0;
         } else {
-            ERROR("Failed to open(%s): %s\n", path, strerror(errno));
+            PLOG(ERROR) << "open(" << path << ") failed";
             return -1;
         }
     }
@@ -341,7 +343,7 @@ struct node *create_node_locked(struct fuse* fuse,
     // Detect overflows in the inode counter. "4 billion nodes should be enough
     // for everybody".
     if (fuse->global->inode_ctr == 0) {
-        ERROR("No more inode numbers available");
+        LOG(ERROR) << "No more inode numbers available";
         return NULL;
     }
 
@@ -490,7 +492,7 @@ static void fuse_reply(struct fuse *fuse, __u64 unique, void *data, int len)
 
     res = writev(fuse->fd, vec, 2);
     if (res < 0) {
-        ERROR("*** REPLY FAILED *** %d\n", errno);
+        PLOG(ERROR) << "*** REPLY FAILED ***";
     }
 }
 
@@ -566,7 +568,7 @@ static void fuse_notify_delete(struct fuse* fuse, const __u64 parent,
     res = writev(fuse->fd, vec, 3);
     /* Ignore ENOENT, since other views may not have seen the entry */
     if (res < 0 && errno != ENOENT) {
-        ERROR("*** NOTIFY FAILED *** %d\n", errno);
+        PLOG(ERROR) << "*** NOTIFY FAILED ***";
     }
 }
 
@@ -626,7 +628,7 @@ static int handle_getattr(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
     DLOG(INFO) << "[" << handler->token << "] GETATTR flags=" << req->getattr_flags
-               << " fh=" << std::hex << req->fh << " @ " << std::hex << hdr->nodeid
+               << " fh=" << std::hex << req->fh << " @ " << hdr->nodeid << std::dec
                << " (" << (node ? node->name : "?") << ")";
     pthread_mutex_unlock(&fuse->global->lock);
 
@@ -650,7 +652,7 @@ static int handle_setattr(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
     DLOG(INFO) << "[" << handler->token << "] SETATTR fh=" << std::hex << req->fh
-               << " valid=" << std::hex << req->valid << " @ " << std::hex << hdr->nodeid
+               << " valid=" << std::hex << req->valid << " @ " << hdr->nodeid << std::dec
                << " (" << (node ? node->name : "?") << ")";
     pthread_mutex_unlock(&fuse->global->lock);
 
@@ -695,8 +697,8 @@ static int handle_setattr(struct fuse* fuse, struct fuse_handler* handler,
               times[1].tv_nsec = req->mtimensec;
             }
         }
-        TRACE("[%d] Calling utimensat on %s with atime %ld, mtime=%ld\n",
-                handler->token, path, times[0].tv_sec, times[1].tv_sec);
+        DLOG(INFO) << "[" << handler->token << "] Calling utimensat on " << path
+                   << " with atime " << times[0].tv_sec << ", mtime=" << times[1].tv_sec;
         if (utimensat(-1, path, times, 0) < 0) {
             return -errno;
         }
@@ -767,7 +769,7 @@ static int handle_mkdir(struct fuse* fuse, struct fuse_handler* handler,
         char nomedia[PATH_MAX];
         snprintf(nomedia, PATH_MAX, "%s/.nomedia", child_path);
         if (touch(nomedia, 0664) != 0) {
-            ERROR("Failed to touch(%s): %s\n", nomedia, strerror(errno));
+            PLOG(ERROR) << "touch(" << nomedia << ") failed";
             return -ENOENT;
         }
     }
@@ -775,7 +777,7 @@ static int handle_mkdir(struct fuse* fuse, struct fuse_handler* handler,
         char nomedia[PATH_MAX];
         snprintf(nomedia, PATH_MAX, "%s/.nomedia", fuse->global->obb_path);
         if (touch(nomedia, 0664) != 0) {
-            ERROR("Failed to touch(%s): %s\n", nomedia, strerror(errno));
+            PLOG(ERROR) << "touch(" << nomedia << ") failed";
             return -ENOENT;
         }
     }
@@ -818,7 +820,8 @@ static int handle_unlink(struct fuse* fuse, struct fuse_handler* handler,
         /* Tell all other views that node is gone */
         DLOG(INFO) << "[" << handler->token << "] fuse_notify_delete"
                    << " parent=" << std::hex << parent_node->nid
-                   << ", child=" << std::hex << child_node->nid << ", name=" << name;
+                   << ", child=" << std::hex << child_node->nid << std::dec
+                   << ", name=" << name;
         if (fuse != fuse->global->fuse_default) {
             fuse_notify_delete(fuse->global->fuse_default, parent_node->nid, child_node->nid, name);
         }
@@ -867,7 +870,8 @@ static int handle_rmdir(struct fuse* fuse, struct fuse_handler* handler,
         /* Tell all other views that node is gone */
         DLOG(INFO) << "[" << handler->token << "] fuse_notify_delete"
                    << " parent=" << std::hex << parent_node->nid
-                   << ", child=" << std::hex << child_node->nid << ", name=" << name;
+                   << ", child=" << std::hex << child_node->nid << std::dec
+                   << ", name=" << name;
         if (fuse != fuse->global->fuse_default) {
             fuse_notify_delete(fuse->global->fuse_default, parent_node->nid, child_node->nid, name);
         }
@@ -939,7 +943,7 @@ static int handle_rename(struct fuse* fuse, struct fuse_handler* handler,
         goto io_error;
     }
 
-    TRACE("[%d] RENAME %s->%s\n", handler->token, old_child_path, new_child_path);
+    DLOG(INFO) << "[" << handler->token << "] RENAME " << old_child_path << "->" << new_child_path;
     res = rename(old_child_path, new_child_path);
     if (res < 0) {
         res = -errno;
@@ -987,7 +991,8 @@ static int handle_open(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->global->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
     DLOG(INFO) << "[" << handler->token << "] OPEN 0" << std::oct << req->flags
-               << " @ " << std::hex << hdr->nodeid << " (" << (node ? node->name : "?") << ")";
+               << " @ " << std::hex << hdr->nodeid << std::dec
+               << " (" << (node ? node->name : "?") << ")";
     pthread_mutex_unlock(&fuse->global->lock);
 
     if (!node) {
@@ -1001,7 +1006,7 @@ static int handle_open(struct fuse* fuse, struct fuse_handler* handler,
     if (!h) {
         return -ENOMEM;
     }
-    TRACE("[%d] OPEN %s\n", handler->token, path);
+    DLOG(INFO) << "[" << handler->token << "] OPEN " << path;
     h->fd = open(path, req->flags);
     if (h->fd < 0) {
         free(h);
@@ -1028,8 +1033,8 @@ static int handle_read(struct fuse* fuse, struct fuse_handler* handler,
      * overlaps the request buffer and will clobber data in the request.  This
      * saves us 128KB per request handler thread at the cost of this scary comment. */
 
-    DLOG(INFO) << "[" << handler->token << "] READ " << std::hex << h << "(" << h->fd << ") "
-               << size << "@" << offset;
+    DLOG(INFO) << "[" << handler->token << "] READ " << std::hex << h << std::dec
+               << "(" << h->fd << ") " << size << "@" << offset;
     if (size > MAX_READ) {
         return -EINVAL;
     }
@@ -1055,8 +1060,8 @@ static int handle_write(struct fuse* fuse, struct fuse_handler* handler,
         buffer = (const __u8*) aligned_buffer;
     }
 
-    DLOG(INFO) << "[" << handler->token << "] WRITE " << std::hex << h << "(" << h->fd << ") "
-               << req->size << "@" << req->offset;
+    DLOG(INFO) << "[" << handler->token << "] WRITE " << std::hex << h << std::dec
+               << "(" << h->fd << ") " << req->size << "@" << req->offset;
     res = pwrite64(h->fd, buffer, req->size, req->offset);
     if (res < 0) {
         return -errno;
@@ -1076,7 +1081,7 @@ static int handle_statfs(struct fuse* fuse, struct fuse_handler* handler,
     int res;
 
     pthread_mutex_lock(&fuse->global->lock);
-    TRACE("[%d] STATFS\n", handler->token);
+    DLOG(INFO) << "[" << handler->token << "] STATFS";
     res = get_node_path_locked(&fuse->global->root, path, sizeof(path));
     pthread_mutex_unlock(&fuse->global->lock);
     if (res < 0) {
@@ -1103,7 +1108,8 @@ static int handle_release(struct fuse* fuse, struct fuse_handler* handler,
 {
     struct handle *h = static_cast<struct handle*>(id_to_ptr(req->fh));
 
-    TRACE("[%d] RELEASE %p(%d)\n", handler->token, h, h->fd);
+    DLOG(INFO) << "[" << handler->token << "] RELEASE " << std::hex << h << std::dec
+               << "(" << h->fd << ")";
     close(h->fd);
     free(h);
     return 0;
@@ -1124,9 +1130,8 @@ static int handle_fsync(struct fuse* fuse, struct fuse_handler* handler,
       fd = h->fd;
     }
 
-    TRACE("[%d] %s %p(%d) is_data_sync=%d\n", handler->token,
-            is_dir ? "FSYNCDIR" : "FSYNC",
-            static_cast<struct node*>(id_to_ptr(req->fh)), fd, is_data_sync);
+    DLOG(INFO) << "[" << handler->token << "] " << (is_dir ? "FSYNCDIR" : "FSYNC") << " "
+               << std::hex << req->fh << std::dec << "(" << fd << ") is_data_sync=" << is_data_sync;
     int res = is_data_sync ? fdatasync(fd) : fsync(fd);
     if (res == -1) {
         return -errno;
@@ -1137,7 +1142,7 @@ static int handle_fsync(struct fuse* fuse, struct fuse_handler* handler,
 static int handle_flush(struct fuse* fuse, struct fuse_handler* handler,
         const struct fuse_in_header* hdr)
 {
-    TRACE("[%d] FLUSH\n", handler->token);
+    DLOG(INFO) << "[" << handler->token << "] FLUSH";
     return 0;
 }
 
@@ -1165,7 +1170,7 @@ static int handle_opendir(struct fuse* fuse, struct fuse_handler* handler,
     if (!h) {
         return -ENOMEM;
     }
-    TRACE("[%d] OPENDIR %s\n", handler->token, path);
+    DLOG(INFO) << "[" << handler->token << "] OPENDIR " << path;
     h->d = opendir(path);
     if (!h->d) {
         free(h);
@@ -1186,10 +1191,10 @@ static int handle_readdir(struct fuse* fuse, struct fuse_handler* handler,
     struct dirent *de;
     struct dirhandle *h = static_cast<struct dirhandle*>(id_to_ptr(req->fh));
 
-    TRACE("[%d] READDIR %p\n", handler->token, h);
+    DLOG(INFO) << "[" << handler->token << "] READDIR " << h;
     if (req->offset == 0) {
         /* rewinddir() might have been called above us, so rewind here too */
-        TRACE("[%d] calling rewinddir()\n", handler->token);
+        DLOG(INFO) << "[" << handler->token << "] calling rewinddir()";
         rewinddir(h->d);
     }
     de = readdir(h->d);
@@ -1212,7 +1217,7 @@ static int handle_releasedir(struct fuse* fuse, struct fuse_handler* handler,
 {
     struct dirhandle *h = static_cast<struct dirhandle*>(id_to_ptr(req->fh));
 
-    TRACE("[%d] RELEASEDIR %p\n", handler->token, h);
+    DLOG(INFO) << "[" << handler->token << "] RELEASEDIR " << h;
     closedir(h->d);
     free(h);
     return 0;
@@ -1224,8 +1229,8 @@ static int handle_init(struct fuse* fuse, struct fuse_handler* handler,
     struct fuse_init_out out;
     size_t fuse_struct_size;
 
-    TRACE("[%d] INIT ver=%d.%d maxread=%d flags=%x\n",
-            handler->token, req->major, req->minor, req->max_readahead, req->flags);
+    DLOG(INFO) << "[" << handler->token << "] INIT ver=" << req->major << "." << req->minor
+               << " maxread=" << req->max_readahead << " flags=" << std::hex << req->flags;
 
     /* Kernel 2.6.16 is the first stable kernel with struct fuse_init_out
      * defined (fuse version 7.6). The structure is the same from 7.6 through
@@ -1233,8 +1238,9 @@ static int handle_init(struct fuse* fuse, struct fuse_handler* handler,
      * new parameters.
      */
     if (req->major != FUSE_KERNEL_VERSION || req->minor < 6) {
-        ERROR("Fuse kernel version mismatch: Kernel version %d.%d, Expected at least %d.6",
-              req->major, req->minor, FUSE_KERNEL_VERSION);
+        LOG(ERROR) << "Fuse kernel version mismatch: Kernel version "
+                   << req->major << "." << req->minor
+                   << ", Expected at least " << FUSE_KERNEL_VERSION << ".6";
         return -1;
     }
 
@@ -1412,7 +1418,7 @@ static int handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
 
     default: {
         DLOG(INFO) << "[" << handler->token << "] NOTIMPL op=" << hdr->opcode
-                   << "uniq=" << std::hex << hdr->unique << "nid=" << std::hex << hdr->nodeid;
+                   << "uniq=" << std::hex << hdr->unique << "nid=" << hdr->nodeid << std::dec;
         return -ENOSYS;
     }
     }
@@ -1426,23 +1432,23 @@ void handle_fuse_requests(struct fuse_handler* handler)
                 handler->request_buffer, sizeof(handler->request_buffer)));
         if (len < 0) {
             if (errno == ENODEV) {
-                ERROR("[%d] someone stole our marbles!\n", handler->token);
+                LOG(ERROR) << "[" << handler->token << "] someone stole our marbles!";
                 exit(2);
             }
-            ERROR("[%d] handle_fuse_requests: errno=%d\n", handler->token, errno);
+            PLOG(ERROR) << "[" << handler->token << "] handle_fuse_requests";
             continue;
         }
 
         if ((size_t)len < sizeof(struct fuse_in_header)) {
-            ERROR("[%d] request too short: len=%zu\n", handler->token, (size_t)len);
+            LOG(ERROR) << "[" << handler->token << "] request too short: len=" << len;
             continue;
         }
 
         const struct fuse_in_header* hdr =
             reinterpret_cast<const struct fuse_in_header*>(handler->request_buffer);
         if (hdr->len != (size_t)len) {
-            ERROR("[%d] malformed header: len=%zu, hdr->len=%u\n",
-                    handler->token, (size_t)len, hdr->len);
+            LOG(ERROR) << "[" << handler->token << "] malformed header: len=" << len
+                       << ", hdr->len=" << hdr->len;
             continue;
         }
 
@@ -1456,7 +1462,7 @@ void handle_fuse_requests(struct fuse_handler* handler)
 
         if (res != NO_STATUS) {
             if (res) {
-                TRACE("[%d] ERROR %d\n", handler->token, res);
+                DLOG(INFO) << "[" << handler->token << "] ERROR " << res;
             }
             fuse_status(fuse, unique, res);
         }
