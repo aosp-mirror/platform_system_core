@@ -283,7 +283,7 @@ TEST_F(KernelCollectorTest, CollectOK) {
   pos += strlen(kNamePrefix);
   std::string filename = log.substr(pos, std::string::npos);
   // Take the name up until \n
-  size_t end_pos = filename.find_first_of("\n");
+  size_t end_pos = filename.find_first_of('\n');
   ASSERT_NE(std::string::npos, end_pos);
   filename = filename.substr(0, end_pos);
   ASSERT_EQ(0U, filename.find(test_crash_directory().value()));
