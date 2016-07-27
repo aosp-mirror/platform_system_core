@@ -20,8 +20,11 @@
 #include <vector>
 
 #include "adb.h"
+#include "commandline.h"
 
 class Bugreport {
+    friend class BugreportStandardStreamsCallback;
+
   public:
     Bugreport() {
     }
@@ -30,9 +33,10 @@ class Bugreport {
   protected:
     // Functions below are abstractions of external functions so they can be
     // mocked on tests.
-    virtual int SendShellCommand(TransportType transport_type, const char* serial,
-                                 const std::string& command, bool disable_shell_protocol,
-                                 std::string* output = nullptr, std::string* err = nullptr);
+    virtual int SendShellCommand(
+        TransportType transport_type, const char* serial, const std::string& command,
+        bool disable_shell_protocol,
+        StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK);
 
     virtual bool DoSyncPull(const std::vector<const char*>& srcs, const char* dst, bool copy_attrs,
                             const char* name);
