@@ -23,7 +23,7 @@
 #include <brillo/http/http_utils.h>
 #include <brillo/mime_utils.h>
 
-HttpSender::HttpSender(const std::string server_url)
+HttpSender::HttpSender(const std::string& server_url)
     : server_url_(server_url) {}
 
 bool HttpSender::Send(const std::string& content,
