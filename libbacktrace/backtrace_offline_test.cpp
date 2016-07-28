@@ -73,7 +73,7 @@ static ucontext_t GetUContextFromUnwContext(const unw_context_t& unw_context) {
   return ucontext;
 }
 
-static void OfflineBacktraceFunctionCall(std::function<int(void (*)(void*), void*)> function,
+static void OfflineBacktraceFunctionCall(const std::function<int(void (*)(void*), void*)>& function,
                                          std::vector<uintptr_t>* pc_values) {
   // Create a thread to generate the needed stack and registers information.
   g_exit_flag = false;
