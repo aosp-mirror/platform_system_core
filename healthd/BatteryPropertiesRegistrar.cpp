@@ -35,7 +35,7 @@ void BatteryPropertiesRegistrar::publish(
     defaultServiceManager()->addService(String16("batteryproperties"), service);
 }
 
-void BatteryPropertiesRegistrar::notifyListeners(struct BatteryProperties props) {
+void BatteryPropertiesRegistrar::notifyListeners(const struct BatteryProperties& props) {
     Mutex::Autolock _l(mRegistrationLock);
     for (size_t i = 0; i < mListeners.size(); i++) {
         mListeners[i]->batteryPropertiesChanged(props);
