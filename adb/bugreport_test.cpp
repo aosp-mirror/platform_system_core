@@ -117,7 +117,7 @@ class BugreportMock : public Bugreport {
                      bool disable_shell_protocol, StandardStreamsCallbackInterface* callback));
     MOCK_METHOD4(DoSyncPull, bool(const std::vector<const char*>& srcs, const char* dst,
                                   bool copy_attrs, const char* name));
-    MOCK_METHOD4(UpdateProgress, void(const std::string&, int, int, bool));
+    MOCK_METHOD3(UpdateProgress, void(const std::string&, int, int));
 };
 
 class BugreportTest : public ::testing::Test {
@@ -129,8 +129,8 @@ class BugreportTest : public ::testing::Test {
                             WithArg<4>(ReturnCallbackDone(0))));
     }
 
-    void ExpectProgress(int progress, int total, bool keep_info_line = false) {
-        EXPECT_CALL(br_, UpdateProgress(StrEq("file.zip"), progress, total, keep_info_line));
+    void ExpectProgress(int progress, int total) {
+        EXPECT_CALL(br_, UpdateProgress(HasSubstr("file.zip"), progress, total));
     }
 
     BugreportMock br_;
@@ -159,7 +159,7 @@ TEST_F(BugreportTest, OkLegacy) {
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("OK:/device/bugreport.zip")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
-                                true, StrEq("file.zip")))
+                                true, HasSubstr("file.zip")))
         .WillOnce(Return(true));
 
     const char* args[1024] = {"bugreport", "file.zip"};
@@ -175,7 +175,7 @@ TEST_F(BugreportTest, OkLegacySplitBuffer) {
                         WithArg<4>(WriteOnStdout("/bugreport.zip")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
-                                true, StrEq("file.zip")))
+                                true, HasSubstr("file.zip")))
         .WillOnce(Return(true));
 
     const char* args[1024] = {"bugreport", "file.zip"};
@@ -189,7 +189,7 @@ TEST_F(BugreportTest, Ok) {
     ExpectProgress(10, 100);
     ExpectProgress(50, 100);
     ExpectProgress(99, 100);
-    ExpectProgress(100, 100, true);
+    ExpectProgress(100, 100);
     // clang-format off
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         .WillOnce(DoAll(
@@ -208,7 +208,7 @@ TEST_F(BugreportTest, Ok) {
             WithArg<4>(WriteOnStdout(".zip")),
             WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
-                                true, StrEq("file.zip")))
+                                true, HasSubstr("file.zip")))
         .WillOnce(Return(true));
 
     const char* args[1024] = {"bugreport", "file.zip"};
@@ -218,12 +218,12 @@ TEST_F(BugreportTest, Ok) {
 // Tests 'adb bugreport file' when it succeeds
 TEST_F(BugreportTest, OkNoExtension) {
     SetBugreportzVersion("1.1");
-    ExpectProgress(100, 100, true);
+    ExpectProgress(100, 100);
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("OK:/device/bugreport.zip\n")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
-                                true, StrEq("file.zip")))
+                                true, HasSubstr("file.zip")))
         .WillOnce(Return(true));
 
     const char* args[1024] = {"bugreport", "file"};
@@ -294,12 +294,12 @@ TEST_F(BugreportTest, BugreportzFailed) {
 // Tests 'adb bugreport file.zip' when the bugreport could not be pulled
 TEST_F(BugreportTest, PullFails) {
     SetBugreportzVersion("1.1");
-    ExpectProgress(100, 100, true);
+    ExpectProgress(100, 100);
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("OK:/device/bugreport.zip")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
-                                true, StrEq("file.zip")))
+                                true, HasSubstr("file.zip")))
         .WillOnce(Return(false));
 
     const char* args[1024] = {"bugreport", "file.zip"};
