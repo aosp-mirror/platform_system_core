@@ -1,0 +1,32 @@
+// Shared library for target
+// ========================================================
+cc_library {
+    name: "libnativeloader",
+    host_supported: true,
+    srcs: ["native_loader.cpp"],
+    shared_libs: [
+        "libnativehelper",
+        "liblog",
+        "libcutils",
+    ],
+    static_libs: ["libbase"],
+    target: {
+        android: {
+            shared_libs: ["libdl"],
+        },
+        host: {
+            host_ldlibs: ["-ldl"],
+        },
+    },
+    clang: true,
+    cflags: [
+        "-Werror",
+        "-Wall",
+    ],
+    cppflags: [
+        "-std=gnu++14",
+        "-fvisibility=hidden",
+    ],
+    export_include_dirs: ["include"],
+    local_include_dirs: ["include"],
+}
