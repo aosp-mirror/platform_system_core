@@ -160,7 +160,7 @@ TEST_F(AllocatorTest, shared) {
 
   Allocator<int>::shared_ptr ptr = allocator.make_shared(0);
   {
-    auto ptr2 = ptr;
+    auto ptr2 = ptr;  // NOLINT, test copy of ptr
   }
   ASSERT_NE(ptr, nullptr);
 }
