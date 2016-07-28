@@ -31,7 +31,7 @@ class BatteryPropertiesRegistrar : public BnBatteryPropertiesRegistrar,
                                    public IBinder::DeathRecipient {
 public:
     void publish(const sp<BatteryPropertiesRegistrar>& service);
-    void notifyListeners(struct BatteryProperties props);
+    void notifyListeners(const struct BatteryProperties& props);
 
 private:
     Mutex mRegistrationLock;
