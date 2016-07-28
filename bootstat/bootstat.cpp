@@ -28,6 +28,7 @@
 #include <memory>
 #include <string>
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
 #include <cutils/properties.h>
 #include <log/log.h>
 #include "boot_event_record_store.h"
@@ -56,8 +57,9 @@ void RecordBootEventFromCommandLine(
   BootEventRecordStore boot_event_store;
   if (!value_str.empty()) {
     int32_t value = 0;
-    value = std::stoi(value_str);
-    boot_event_store.AddBootEventWithValue(event, value);
+    if (android::base::ParseInt(value_str.c_str(), &value)) {
+      boot_event_store.AddBootEventWithValue(event, value);
+    }
   } else {
     boot_event_store.AddBootEvent(event);
   }
@@ -187,7 +189,10 @@ std::string CalculateBootCompletePrefix() {
   std::string boot_complete_prefix = "boot_complete";
 
   std::string build_date_str = GetProperty("ro.build.date.utc");
-  int32_t build_date = std::stoi(build_date_str);
+  int32_t build_date;
+  if (!android::base::ParseInt(build_date_str.c_str(), &build_date)) {
+    return std::string();
+  }
 
   BootEventRecordStore boot_event_store;
   BootEventRecordStore::BootEventRecord record;
@@ -223,6 +228,10 @@ void RecordBootComplete() {
   // ota_boot_complete.  The latter signifies that the device is booting after
   // a system update.
   std::string boot_complete_prefix = CalculateBootCompletePrefix();
+  if (boot_complete_prefix.empty()) {
+    // The system is hosed because the build date property could not be read.
+    return;
+  }
 
   // post_decrypt_time_elapsed is only logged on encrypted devices.
   if (boot_event_store.GetBootEvent("post_decrypt_time_elapsed", &record)) {
