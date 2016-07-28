@@ -858,7 +858,7 @@ static void update_verity_table_blk_device(char *blk_device, char **table)
     std::string result, word;
     auto tokens = android::base::Split(*table, " ");
 
-    for (const auto token : tokens) {
+    for (const auto& token : tokens) {
         if (android::base::StartsWith(token, "/dev/block/") &&
             android::base::StartsWith(blk_device, token.c_str())) {
             word = blk_device;
