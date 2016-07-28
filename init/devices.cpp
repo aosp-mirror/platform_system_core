@@ -181,7 +181,7 @@ static void fixup_sys_perms(const char* upath, const char* subsystem) {
     }
 
     if (access(path.c_str(), F_OK) == 0) {
-        LOG(INFO) << "restorecon_recursive: " << path;
+        LOG(VERBOSE) << "restorecon_recursive: " << path;
         restorecon_recursive(path.c_str());
     }
 }
