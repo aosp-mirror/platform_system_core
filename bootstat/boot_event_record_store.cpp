@@ -25,6 +25,7 @@
 #include <utility>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
 #include "histogram_logger.h"
 #include "uptime_parser.h"
 
@@ -57,8 +58,10 @@ bool ParseRecordEventTime(const std::string& path, int32_t* uptime) {
 
   // Ignore existing bootstat records (which do not contain file content).
   if (!content.empty()) {
-    int32_t value = std::stoi(content);
-    bootstat::LogHistogram("bootstat_mtime_matches_content", value == *uptime);
+    int32_t value;
+    if (android::base::ParseInt(content.c_str(), &value)) {
+      bootstat::LogHistogram("bootstat_mtime_matches_content", value == *uptime);
+    }
   }
 
   return true;
