@@ -30,7 +30,12 @@ static constexpr char BUGZ_PROGRESS_SEPARATOR[] = "/";
 class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface {
   public:
     BugreportStandardStreamsCallback(const std::string& dest_file, bool show_progress, Bugreport* br)
-        : br_(br), dest_file_(dest_file), show_progress_(show_progress), status_(-1), line_() {
+        : br_(br),
+          dest_file_(dest_file),
+          line_message_(android::base::StringPrintf("generating %s", dest_file_.c_str())),
+          show_progress_(show_progress),
+          status_(-1),
+          line_() {
     }
 
     void OnStdout(const char* buffer, int length) {
@@ -62,12 +67,12 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
         if (android::base::StartsWith(line, BUGZ_OK_PREFIX)) {
             if (show_progress_) {
                 // Make sure pull message doesn't conflict with generation message.
-                br_->UpdateProgress(dest_file_, 100, 100, true);
+                br_->UpdateProgress(line_message_, 100, 100);
             }
 
             const char* zip_file = &line[strlen(BUGZ_OK_PREFIX)];
             std::vector<const char*> srcs{zip_file};
-            status_ = br_->DoSyncPull(srcs, dest_file_.c_str(), true, dest_file_.c_str()) ? 0 : 1;
+            status_ = br_->DoSyncPull(srcs, dest_file_.c_str(), true, line_message_.c_str()) ? 0 : 1;
             if (status_ != 0) {
                 fprintf(stderr, "Could not copy file '%s' to '%s'\n", zip_file, dest_file_.c_str());
             }
@@ -96,6 +101,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
 
     Bugreport* br_;
     const std::string dest_file_;
+    const std::string line_message_;
     bool show_progress_;
     int status_;
 
@@ -156,15 +162,11 @@ int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, 
     return SendShellCommand(transport_type, serial, bugz_command, false, &bugz_callback);
 }
 
-void Bugreport::UpdateProgress(const std::string& file_name, int progress, int total,
-                               bool keep_info_line) {
+void Bugreport::UpdateProgress(const std::string& message, int progress, int total) {
     int progress_percentage = (progress * 100 / total);
-    line_printer_.Print(android::base::StringPrintf("[%3d%%] generating %s", progress_percentage,
-                                                    file_name.c_str()),
-                        LinePrinter::INFO);
-    if (keep_info_line) {
-        line_printer_.KeepInfoLine();
-    }
+    line_printer_.Print(
+        android::base::StringPrintf("[%3d%%] %s", progress_percentage, message.c_str()),
+        LinePrinter::INFO);
 }
 
 int Bugreport::SendShellCommand(TransportType transport_type, const char* serial,
