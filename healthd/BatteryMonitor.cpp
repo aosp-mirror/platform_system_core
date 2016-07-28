@@ -196,6 +196,7 @@ BatteryMonitor::PowerSupplyType BatteryMonitor::readPowerSupplyType(const String
             {"USB_PD", ANDROID_POWER_SUPPLY_TYPE_AC},
             {"USB_PD_DRP", ANDROID_POWER_SUPPLY_TYPE_USB},
             {"Wireless", ANDROID_POWER_SUPPLY_TYPE_WIRELESS},
+            {"DASH", ANDROID_POWER_SUPPLY_TYPE_AC},
             {NULL, 0},
     };
     std::string buf;
