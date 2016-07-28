@@ -317,7 +317,7 @@ bool CrashCollector::CheckHasCapacity(const FilePath &crash_directory) {
       continue;
 
     std::string filename(ent->d_name);
-    size_t last_dot = filename.rfind(".");
+    size_t last_dot = filename.rfind('.');
     std::string basename;
     // If there is a valid looking extension, use the base part of the
     // name.  If the only dot is the first byte (aka a dot file), treat
