@@ -39,7 +39,7 @@ class TrustyKeymasterDevice {
      * These are the only symbols that will be exported by libtrustykeymaster.  All functionality
      * can be reached via the function pointers in device_.
      */
-    __attribute__((visibility("default"))) TrustyKeymasterDevice(const hw_module_t* module);
+    __attribute__((visibility("default"))) explicit TrustyKeymasterDevice(const hw_module_t* module);
     __attribute__((visibility("default"))) hw_device_t* hw_device();
 
     ~TrustyKeymasterDevice();

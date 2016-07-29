@@ -23,7 +23,7 @@ using namespace android;
 
 class Foo : public LightRefBase<Foo> {
 public:
-    Foo(bool* deleted_check) : mDeleted(deleted_check) {
+    explicit Foo(bool* deleted_check) : mDeleted(deleted_check) {
         *mDeleted = false;
     }
 

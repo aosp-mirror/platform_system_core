@@ -60,7 +60,7 @@ class DelayedTask : public Thread {
     int mDelayMillis;
 
 public:
-    DelayedTask(int delayMillis) : mDelayMillis(delayMillis) { }
+    explicit DelayedTask(int delayMillis) : mDelayMillis(delayMillis) { }
 
 protected:
     virtual ~DelayedTask() { }

@@ -27,7 +27,7 @@
 
 class MetricsdServiceRunner {
  public:
-  MetricsdServiceRunner(std::shared_ptr<CrashCounters> counters);
+  explicit MetricsdServiceRunner(std::shared_ptr<CrashCounters> counters);
 
   // Start the Metricsd Binder service in a new thread.
   void Start();
