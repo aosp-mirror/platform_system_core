@@ -104,7 +104,7 @@ class Socket {
 
   protected:
     // Protected constructor to force factory function use.
-    Socket(cutils_socket_t sock);
+    explicit Socket(cutils_socket_t sock);
 
     // Blocks up to |timeout_ms| until a read is possible on |sock_|, and sets |receive_timed_out_|
     // as appropriate to help distinguish between normal timeouts and fatal errors. Returns true if

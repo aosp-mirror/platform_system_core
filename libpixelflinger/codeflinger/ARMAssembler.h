@@ -35,7 +35,7 @@ namespace android {
 class ARMAssembler : public ARMAssemblerInterface
 {
 public:
-                ARMAssembler(const sp<Assembly>& assembly);
+    explicit    ARMAssembler(const sp<Assembly>& assembly);
     virtual     ~ARMAssembler();
 
     uint32_t*   base() const;

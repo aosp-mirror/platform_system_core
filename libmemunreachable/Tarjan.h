@@ -62,7 +62,7 @@ using SCCList = allocator::vector<SCC<T>>;
 template<class T>
 class TarjanAlgorithm {
  public:
-  TarjanAlgorithm(Allocator<void> allocator) : index_(0),
+  explicit TarjanAlgorithm(Allocator<void> allocator) : index_(0),
     stack_(allocator), components_(allocator) {}
 
   void Execute(Graph<T>& graph, SCCList<T>& out);

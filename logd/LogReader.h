@@ -27,7 +27,7 @@ class LogReader : public SocketListener {
     LogBuffer &mLogbuf;
 
 public:
-    LogReader(LogBuffer *logbuf);
+    explicit LogReader(LogBuffer *logbuf);
     void notifyNewLog();
 
     LogBuffer &logbuf(void) const { return mLogbuf; }

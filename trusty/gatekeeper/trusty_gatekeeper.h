@@ -27,7 +27,7 @@ namespace gatekeeper {
 class TrustyGateKeeperDevice {
     public:
 
-    TrustyGateKeeperDevice(const hw_module_t* module);
+    explicit TrustyGateKeeperDevice(const hw_module_t* module);
     ~TrustyGateKeeperDevice();
 
     hw_device_t* hw_device();
