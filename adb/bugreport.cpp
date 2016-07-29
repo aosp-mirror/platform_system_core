@@ -15,6 +15,7 @@
  */
 
 #include <string>
+#include <vector>
 
 #include <android-base/strings.h>
 
@@ -31,10 +32,12 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
   public:
     BugreportStandardStreamsCallback(const std::string& dest_file, bool show_progress, Bugreport* br)
         : br_(br),
+          src_file_(),
           dest_file_(dest_file),
           line_message_(android::base::StringPrintf("generating %s", dest_file_.c_str())),
+          invalid_lines_(),
           show_progress_(show_progress),
-          status_(-1),
+          status_(0),
           line_() {
     }
 
@@ -54,9 +57,39 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
         OnStream(nullptr, stderr, buffer, length);
     }
     int Done(int unused_) {
-        // Process remaining line, if any...
+        // Process remaining line, if any.
         ProcessLine(line_);
-        // ..then return.
+
+        // Warn about invalid lines, if any.
+        if (!invalid_lines_.empty()) {
+            fprintf(stderr,
+                    "WARNING: bugreportz generated %zu line(s) with unknown commands, "
+                    "device might not support zipped bugreports:\n",
+                    invalid_lines_.size());
+            for (const auto& line : invalid_lines_) {
+                fprintf(stderr, "\t%s\n", line.c_str());
+            }
+            fprintf(stderr,
+                    "If the zipped bugreport was not generated, try 'adb bugreport' instead.\n");
+        }
+
+        // Pull the generated bug report.
+        if (status_ == 0) {
+            if (src_file_.empty()) {
+                fprintf(stderr, "bugreportz did not return a '%s' or '%s' line\n", BUGZ_OK_PREFIX,
+                        BUGZ_FAIL_PREFIX);
+                return -1;
+            }
+            std::vector<const char*> srcs{src_file_.c_str()};
+            status_ = br_->DoSyncPull(srcs, dest_file_.c_str(), true, line_message_.c_str()) ? 0 : 1;
+            if (status_ != 0) {
+                fprintf(stderr,
+                        "Bug report finished but could not be copied to '%s'.\n"
+                        "Try to run 'adb pull %s <directory>'\n"
+                        "to copy it to a directory that can be written.\n",
+                        dest_file_.c_str(), src_file_.c_str());
+            }
+        }
         return status_;
     }
 
@@ -65,17 +98,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
         if (line.empty()) return;
 
         if (android::base::StartsWith(line, BUGZ_OK_PREFIX)) {
-            if (show_progress_) {
-                // Make sure pull message doesn't conflict with generation message.
-                br_->UpdateProgress(line_message_, 100, 100);
-            }
-
-            const char* zip_file = &line[strlen(BUGZ_OK_PREFIX)];
-            std::vector<const char*> srcs{zip_file};
-            status_ = br_->DoSyncPull(srcs, dest_file_.c_str(), true, line_message_.c_str()) ? 0 : 1;
-            if (status_ != 0) {
-                fprintf(stderr, "Could not copy file '%s' to '%s'\n", zip_file, dest_file_.c_str());
-            }
+            src_file_ = &line[strlen(BUGZ_OK_PREFIX)];
         } else if (android::base::StartsWith(line, BUGZ_FAIL_PREFIX)) {
             const char* error_message = &line[strlen(BUGZ_FAIL_PREFIX)];
             fprintf(stderr, "Device failed to take a zipped bugreport: %s\n", error_message);
@@ -91,17 +114,15 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
             int total = std::stoi(line.substr(idx2 + 1));
             br_->UpdateProgress(dest_file_, progress, total);
         } else {
-            fprintf(stderr,
-                    "WARNING: unexpected line (%s) returned by bugreportz, "
-                    "device probably does not support zipped bugreports.\n"
-                    "Try 'adb bugreport' instead.",
-                    line.c_str());
+            invalid_lines_.push_back(line);
         }
     }
 
     Bugreport* br_;
+    std::string src_file_;
     const std::string dest_file_;
     const std::string line_message_;
+    std::vector<std::string> invalid_lines_;
     bool show_progress_;
     int status_;
 
@@ -132,18 +153,15 @@ int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, 
     std::string bugz_stderr;
     DefaultStandardStreamsCallback version_callback(nullptr, &bugz_stderr);
     int status = SendShellCommand(transport_type, serial, "bugreportz -v", false, &version_callback);
-
-    if (status != 0) {
-        fprintf(stderr,
-                "Failed to get bugreportz version: 'bugreport -v' returned '%s' "
-                "(code %d)."
-                "\nIf the device does not support it, try running 'adb bugreport' "
-                "to get a "
-                "flat-file bugreport.",
-                bugz_stderr.c_str(), status);
-        return status;
-    }
     std::string bugz_version = android::base::Trim(bugz_stderr);
+
+    if (status != 0 || bugz_version.empty()) {
+        fprintf(stderr,
+                "Failed to get bugreportz version: 'bugreportz -v' returned '%s' (code %d).\n"
+                "If the device runs Android M or below, try 'adb bugreport' instead.\n",
+                bugz_stderr.c_str(), status);
+        return status != 0 ? status : -1;
+    }
 
     bool show_progress = true;
     std::string bugz_command = "bugreportz -p";
@@ -153,8 +171,7 @@ int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, 
         fprintf(stderr,
                 "Bugreport is in progress and it could take minutes to complete.\n"
                 "Please be patient and do not cancel or disconnect your device "
-                "until it completes."
-                "\n");
+                "until it completes.\n");
         show_progress = false;
         bugz_command = "bugreportz";
     }
