@@ -48,7 +48,7 @@ struct compare_range {
 
 class HeapWalker {
  public:
-  HeapWalker(Allocator<HeapWalker> allocator) : allocator_(allocator),
+  explicit HeapWalker(Allocator<HeapWalker> allocator) : allocator_(allocator),
     allocations_(allocator), allocation_bytes_(0),
 	roots_(allocator), root_vals_(allocator),
 	segv_handler_(allocator), walking_ptr_(0) {

@@ -41,7 +41,7 @@ class BacktraceMapMock : public BacktraceMap {
 
 class BacktraceMock : public Backtrace {
  public:
-  BacktraceMock(BacktraceMapMock* map) : Backtrace(0, 0, map) {
+  explicit BacktraceMock(BacktraceMapMock* map) : Backtrace(0, 0, map) {
     if (map_ == nullptr) {
       abort();
     }

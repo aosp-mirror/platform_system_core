@@ -74,7 +74,7 @@ class ScopedDisableMalloc {
 
 class ScopedDisableMallocTimeout {
  public:
-  ScopedDisableMallocTimeout(std::chrono::milliseconds timeout = std::chrono::milliseconds(2000)) :
+  explicit ScopedDisableMallocTimeout(std::chrono::milliseconds timeout = std::chrono::milliseconds(2000)) :
     timeout_(timeout), timed_out_(false), disable_malloc_() {
     Disable();
   }

@@ -35,7 +35,7 @@ class FlushCommand : public SocketClientCommand {
     uint64_t mTimeout;
 
 public:
-    FlushCommand(LogReader &mReader,
+    explicit FlushCommand(LogReader &mReader,
                  bool nonBlock = false,
                  unsigned long tail = -1,
                  unsigned int logMask = -1,

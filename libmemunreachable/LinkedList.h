@@ -21,7 +21,7 @@ template<class T>
 class LinkedList {
 public:
     LinkedList() : next_(this), prev_(this), data_() {}
-    LinkedList(T data) : LinkedList() {
+    explicit LinkedList(T data) : LinkedList() {
         data_ = data;
     }
     ~LinkedList() {}
