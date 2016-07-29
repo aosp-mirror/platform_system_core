@@ -109,13 +109,13 @@ public:
   }
 
   // Construct an STLAllocator on top of a Heap
-  STLAllocator(const Heap& heap) :
+  STLAllocator(const Heap& heap) :  // NOLINT, implicit
       heap_(heap) {
   }
 
   // Rebind an STLAllocator from an another STLAllocator
   template<typename U>
-  STLAllocator(const STLAllocator<U>& other) :
+  STLAllocator(const STLAllocator<U>& other) :  // NOLINT, implicit
       heap_(other.heap_) {
   }
 
@@ -155,12 +155,12 @@ class Allocator : public STLAllocator<T> {
  public:
   ~Allocator() {}
 
-  Allocator(const Heap& other) :
+  Allocator(const Heap& other) : // NOLINT, implicit
       STLAllocator<T>(other) {
   }
 
   template<typename U>
-  Allocator(const STLAllocator<U>& other) :
+  Allocator(const STLAllocator<U>& other) :  // NOLINT, implicit
       STLAllocator<T>(other) {
   }
 

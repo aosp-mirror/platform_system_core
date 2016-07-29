@@ -23,7 +23,7 @@
 
 class DiskUsageCollector {
  public:
-  DiskUsageCollector(MetricsLibraryInterface* metrics_library);
+  explicit DiskUsageCollector(MetricsLibraryInterface* metrics_library);
 
   // Schedule the next collection.
   void Schedule();

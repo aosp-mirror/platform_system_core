@@ -27,7 +27,7 @@ void* ptr;
 
 class HiddenPointer {
  public:
-  HiddenPointer(size_t size = 256) {
+  explicit HiddenPointer(size_t size = 256) {
     Set(malloc(size));
   }
   ~HiddenPointer() {

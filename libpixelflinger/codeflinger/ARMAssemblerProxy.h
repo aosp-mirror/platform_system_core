@@ -34,7 +34,7 @@ public:
     // ARMAssemblerProxy take ownership of the target
 
                 ARMAssemblerProxy();
-                ARMAssemblerProxy(ARMAssemblerInterface* target);
+    explicit    ARMAssemblerProxy(ARMAssemblerInterface* target);
     virtual     ~ARMAssemblerProxy();
 
     void setTarget(ARMAssemblerInterface* target);

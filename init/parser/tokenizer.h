@@ -36,7 +36,7 @@ namespace init {
 // a TOK_NEWLINE will not be generated for that line.
 class Tokenizer {
  public:
-  Tokenizer(const std::string& data);
+  explicit Tokenizer(const std::string& data);
   ~Tokenizer();
 
   enum TokenType { TOK_START, TOK_END, TOK_NEWLINE, TOK_TEXT };

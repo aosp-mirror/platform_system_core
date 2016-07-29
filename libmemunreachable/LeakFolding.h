@@ -54,7 +54,7 @@ class LeakFolding {
     bool dominator;
     SCCInfo* accumulator;
 
-    SCCInfo(Allocator<SCCInfo> allocator) : node(this, allocator),
+    explicit SCCInfo(Allocator<SCCInfo> allocator) : node(this, allocator),
         count(0), size(0), cuumulative_count(0), cuumulative_size(0),
         dominator(false), accumulator(nullptr) {}
    private:
