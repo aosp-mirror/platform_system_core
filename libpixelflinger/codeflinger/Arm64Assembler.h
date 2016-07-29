@@ -47,8 +47,8 @@ namespace android {
 class ArmToArm64Assembler : public ARMAssemblerInterface
 {
 public:
-                ArmToArm64Assembler(const sp<Assembly>& assembly);
-                ArmToArm64Assembler(void *base);
+    explicit    ArmToArm64Assembler(const sp<Assembly>& assembly);
+    explicit    ArmToArm64Assembler(void *base);
     virtual     ~ArmToArm64Assembler();
 
     uint32_t*   base() const;

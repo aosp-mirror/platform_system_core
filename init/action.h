@@ -44,7 +44,7 @@ private:
 
 class Action {
 public:
-    Action(bool oneshot = false);
+    explicit Action(bool oneshot = false);
 
     bool AddCommand(const std::vector<std::string>& args,
                     const std::string& filename, int line, std::string* err);

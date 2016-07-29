@@ -103,7 +103,7 @@ class LogBuffer {
 public:
     LastLogTimes &mTimes;
 
-    LogBuffer(LastLogTimes *times);
+    explicit LogBuffer(LastLogTimes *times);
     void init();
     bool isMonotonic() { return monotonic; }
 

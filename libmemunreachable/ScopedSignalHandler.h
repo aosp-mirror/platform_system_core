@@ -30,7 +30,7 @@ class ScopedSignalHandler {
  public:
   using Fn = std::function<void(ScopedSignalHandler&, int, siginfo_t*, void*)>;
 
-  ScopedSignalHandler(Allocator<Fn> allocator) : allocator_(allocator), signal_(-1) {}
+  explicit ScopedSignalHandler(Allocator<Fn> allocator) : allocator_(allocator), signal_(-1) {}
   ~ScopedSignalHandler() {
     reset();
   }

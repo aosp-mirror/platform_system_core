@@ -32,7 +32,7 @@ class Stack;
 // the parent.
 class PtracerThread {
  public:
-  PtracerThread(const std::function<int()>& func);
+  explicit PtracerThread(const std::function<int()>& func);
   ~PtracerThread();
   bool Start();
   int Join();

@@ -29,7 +29,7 @@
 
 class UnwindMap : public BacktraceMap {
 public:
-  UnwindMap(pid_t pid);
+  explicit UnwindMap(pid_t pid);
 
   unw_map_cursor_t* GetMapCursor() { return &map_cursor_; }
 
@@ -39,7 +39,7 @@ protected:
 
 class UnwindMapRemote : public UnwindMap {
 public:
-  UnwindMapRemote(pid_t pid);
+  explicit UnwindMapRemote(pid_t pid);
   virtual ~UnwindMapRemote();
 
   bool Build() override;

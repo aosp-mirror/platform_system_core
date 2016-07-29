@@ -22,7 +22,7 @@
 
 class LogCommand : public FrameworkCommand {
 public:
-    LogCommand(const char *cmd);
+    explicit LogCommand(const char *cmd);
     virtual ~LogCommand() {}
 };
 

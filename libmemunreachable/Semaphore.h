@@ -24,7 +24,7 @@
 
 class Semaphore {
  public:
-  Semaphore(int count = 0) : count_(count) {}
+  explicit Semaphore(int count = 0) : count_(count) {}
   ~Semaphore() = default;
 
   void Wait(std::chrono::milliseconds ms) {
