@@ -2298,30 +2298,6 @@ int unix_open(const char* path, int options, ...) {
     }
 }
 
-// Version of stat() that takes a UTF-8 path.
-int adb_stat(const char* path, struct adb_stat* s) {
-#pragma push_macro("wstat")
-// This definition of wstat seems to be missing from <sys/stat.h>.
-#if defined(_FILE_OFFSET_BITS) && (_FILE_OFFSET_BITS == 64)
-#ifdef _USE_32BIT_TIME_T
-#define wstat _wstat32i64
-#else
-#define wstat _wstat64
-#endif
-#else
-// <sys/stat.h> has a function prototype for wstat() that should be available.
-#endif
-
-    std::wstring path_wide;
-    if (!android::base::UTF8ToWide(path, &path_wide)) {
-        return -1;
-    }
-
-    return wstat(path_wide.c_str(), s);
-
-#pragma pop_macro("wstat")
-}
-
 // Version of opendir() that takes a UTF-8 path.
 DIR* adb_opendir(const char* path) {
     std::wstring path_wide;
