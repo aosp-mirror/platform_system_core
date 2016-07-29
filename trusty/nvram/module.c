@@ -16,7 +16,7 @@
 
 #include <hardware/nvram.h>
 
-// This function is defined in trusty_nvram_implementation.cpp.
+// This function is defined in trusty_nvram_device.cpp.
 int trusty_nvram_open(const hw_module_t* module,
                       const char* device_id,
                       hw_device_t** device_ptr);
