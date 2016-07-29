@@ -78,11 +78,13 @@ static void handle_keychord() {
     if (adb_enabled == "running") {
         Service* svc = ServiceManager::GetInstance().FindServiceByKeychord(id);
         if (svc) {
-            INFO("Starting service %s from keychord\n", svc->name().c_str());
+            NOTICE("Starting service '%s' from keychord %d\n", svc->name().c_str(), id);
             svc->Start();
         } else {
-            ERROR("service for keychord %d not found\n", id);
+            ERROR("Service for keychord %d not found\n", id);
         }
+    } else {
+        WARNING("Not starting service for keychord %d because ADB is disabled\n", id);
     }
 }
 
