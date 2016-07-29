@@ -22,9 +22,22 @@ LOCAL_MODULE := nvram.trusty
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_SRC_FILES := \
 	module.c \
+	trusty_nvram_device.cpp \
 	trusty_nvram_implementation.cpp
 LOCAL_MODULE_TAGS := optional
 LOCAL_CFLAGS := -Wall -Werror -Wextra -fvisibility=hidden
 LOCAL_STATIC_LIBRARIES := libnvram-hal
 LOCAL_SHARED_LIBRARIES := libtrusty libnvram-messages liblog
 include $(BUILD_SHARED_LIBRARY)
+
+# nvram-wipe is a helper tool for clearing NVRAM state.
+include $(CLEAR_VARS)
+LOCAL_MODULE := nvram-wipe
+LOCAL_SRC_FILES := \
+	nvram_wipe.cpp \
+	trusty_nvram_implementation.cpp
+LOCAL_MODULE_TAGS := optional
+LOCAL_CFLAGS := -Wall -Werror -Wextra -fvisibility=hidden
+LOCAL_STATIC_LIBRARIES := libnvram-hal
+LOCAL_SHARED_LIBRARIES := libtrusty libnvram-messages liblog
+include $(BUILD_EXECUTABLE)
