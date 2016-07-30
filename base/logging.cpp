@@ -43,12 +43,11 @@
 
 #include "android-base/macros.h"
 #include "android-base/strings.h"
-#include "cutils/threads.h"
 
 // Headers for LogMessage::LogLine.
 #ifdef __ANDROID__
 #include <android/set_abort_message.h>
-#include "cutils/log.h"
+#include "log/log.h"
 #else
 #include <sys/types.h>
 #include <unistd.h>
