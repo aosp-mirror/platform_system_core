@@ -82,6 +82,7 @@ static std::string product_file(const char *extra) {
 
 static void help() {
     fprintf(stderr, "%s\n", adb_version().c_str());
+    // clang-format off
     fprintf(stderr,
         " -a                            - directs adb to listen on all interfaces for a connection\n"
         " -d                            - directs command to the only connected USB device\n"
@@ -174,9 +175,11 @@ static void help() {
         "                                 (-g: grant all runtime permissions)\n"
         "  adb uninstall [-k] <package> - remove this app package from the device\n"
         "                                 ('-k' means keep the data and cache directories)\n"
-        "  adb bugreport [<zip_file>]   - return all information from the device\n"
-        "                                 that should be included in a bug report.\n"
-        "\n"
+        "  adb bugreport [<path>]       - return all information from the device that should be included in a zipped bug report.\n"
+        "                                 If <path> is a file, the bug report will be saved as that file.\n"
+        "                                 If <path> is a directory, the bug report will be saved in that directory with the name provided by the device.\n"
+        "                                 If <path> is omitted, the bug report will be saved in the current directory with the name provided by the device.\n"
+        "                                 NOTE: if the device does not support zipped bug reports, the bug report will be output on stdout.\n"
         "  adb backup [-f <file>] [-apk|-noapk] [-obb|-noobb] [-shared|-noshared] [-all] [-system|-nosystem] [<packages...>]\n"
         "                               - write an archive of the device's data to <file>.\n"
         "                                 If no -f option is supplied then the data is written\n"
@@ -250,8 +253,8 @@ static void help() {
         "  ADB_TRACE                    - Print debug information. A comma separated list of the following values\n"
         "                                 1 or all, adb, sockets, packets, rwx, usb, sync, sysdeps, transport, jdwp\n"
         "  ANDROID_SERIAL               - The serial number to connect to. -s takes priority over this if given.\n"
-        "  ANDROID_LOG_TAGS             - When used with the logcat option, only these debug tags are printed.\n"
-        );
+        "  ANDROID_LOG_TAGS             - When used with the logcat option, only these debug tags are printed.\n");
+    // clang-format on
 }
 
 int usage() {
@@ -1284,7 +1287,7 @@ static std::string find_product_out_path(const std::string& hint) {
     if (hint.find_first_of(OS_PATH_SEPARATORS) != std::string::npos) {  // NOLINT
         std::string cwd;
         if (!getcwd(&cwd)) {
-            fprintf(stderr, "adb: getcwd failed: %s\n", strerror(errno));
+            perror("adb: getcwd failed");
             return "";
         }
         return android::base::StringPrintf("%s%c%s", cwd.c_str(), OS_PATH_SEPARATOR, hint.c_str());
