@@ -24,9 +24,8 @@
 #include <string>
 
 #include "android-base/macros.h"  // For TEMP_FAILURE_RETRY on Darwin.
+#include "android-base/logging.h"
 #include "android-base/utf8.h"
-#define LOG_TAG "base.file"
-#include "cutils/log.h"
 #include "utils/Compat.h"
 
 namespace android {
@@ -86,22 +85,22 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
   int flags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_BINARY;
   int fd = TEMP_FAILURE_RETRY(open(path.c_str(), flags, mode));
   if (fd == -1) {
-    ALOGE("android::WriteStringToFile open failed: %s", strerror(errno));
+    PLOG(ERROR) << "android::WriteStringToFile open failed";
     return false;
   }
 
   // We do an explicit fchmod here because we assume that the caller really
   // meant what they said and doesn't want the umask-influenced mode.
   if (fchmod(fd, mode) == -1) {
-    ALOGE("android::WriteStringToFile fchmod failed: %s", strerror(errno));
+    PLOG(ERROR) << "android::WriteStringToFile fchmod failed";
     return CleanUpAfterFailedWrite(path);
   }
   if (fchown(fd, owner, group) == -1) {
-    ALOGE("android::WriteStringToFile fchown failed: %s", strerror(errno));
+    PLOG(ERROR) << "android::WriteStringToFile fchown failed";
     return CleanUpAfterFailedWrite(path);
   }
   if (!WriteStringToFd(content, fd)) {
-    ALOGE("android::WriteStringToFile write failed: %s", strerror(errno));
+    PLOG(ERROR) << "android::WriteStringToFile write failed";
     return CleanUpAfterFailedWrite(path);
   }
   close(fd);
