@@ -171,7 +171,7 @@ static int getCGroupSubsys(int tid, const char* subsys, char* buf, size_t bufLen
     FILE *fp;
 
     snprintf(pathBuf, sizeof(pathBuf), "/proc/%d/cgroup", tid);
-    if (!(fp = fopen(pathBuf, "r"))) {
+    if (!(fp = fopen(pathBuf, "re"))) {
         return -1;
     }
 
@@ -329,6 +329,27 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
 #endif
 }
 
+static void set_timerslack_ns(int tid, unsigned long long slack) {
+    char buf[64];
+
+    /* v4.6+ kernels support the /proc/<tid>/timerslack_ns interface. */
+    snprintf(buf, sizeof(buf), "/proc/%d/timerslack_ns", tid);
+    int fd = open(buf, O_WRONLY | O_CLOEXEC);
+    if (fd != -1) {
+        int len = snprintf(buf, sizeof(buf), "%llu", slack);
+        if (write(fd, buf, len) != len) {
+            SLOGE("set_timerslack_ns write failed: %s\n", strerror(errno));
+        }
+        close(fd);
+        return;
+    }
+
+    /* If the above fails, try the old common.git PR_SET_TIMERSLACK_PID. */
+    if (prctl(PR_SET_TIMERSLACK_PID, slack, tid) == -1) {
+        SLOGE("set_timerslack_ns prctl failed: %s\n", strerror(errno));
+    }
+}
+
 int set_sched_policy(int tid, SchedPolicy policy)
 {
     if (tid == 0) {
@@ -341,12 +362,11 @@ int set_sched_policy(int tid, SchedPolicy policy)
     char statfile[64];
     char statline[1024];
     char thread_name[255];
-    int fd;
 
     snprintf(statfile, sizeof(statfile), "/proc/%d/stat", tid);
     memset(thread_name, 0, sizeof(thread_name));
 
-    fd = open(statfile, O_RDONLY);
+    int fd = open(statfile, O_RDONLY | O_CLOEXEC);
     if (fd >= 0) {
         int rc = read(fd, statline, 1023);
         close(fd);
@@ -425,8 +445,8 @@ int set_sched_policy(int tid, SchedPolicy policy)
                            &param);
     }
 
-    prctl(PR_SET_TIMERSLACK_PID,
-          policy == SP_BACKGROUND ? TIMER_SLACK_BG : TIMER_SLACK_FG, tid);
+    set_timerslack_ns(tid, policy == SP_BACKGROUND ?
+                               TIMER_SLACK_BG : TIMER_SLACK_FG);
 
     return 0;
 }
