@@ -34,6 +34,8 @@
 #include <android-base/unique_fd.h>
 #include <android-base/utf8.h>
 
+#include "sysdeps/stat.h"
+
 /*
  * TEMP_FAILURE_RETRY is defined by some, but not all, versions of
  * <unistd.h>. (Alas, it is not as standard as we'd hoped!) So, if it's
@@ -199,8 +201,6 @@ static __inline__ void  close_on_exec(int  fd)
     /* nothing really */
 }
 
-#define  lstat    stat   /* no symlinks on Win32 */
-
 #define  S_ISLNK(m)   0   /* no symlinks on Win32 */
 
 extern int  adb_unlink(const char*  path);
@@ -306,27 +306,6 @@ extern int adb_poll(adb_pollfd* fds, size_t nfds, int timeout);
 static __inline__ int adb_is_absolute_host_path(const char* path) {
     return isalpha(path[0]) && path[1] == ':' && path[2] == '\\';
 }
-
-// We later define a macro mapping 'stat' to 'adb_stat'. This causes:
-//   struct stat s;
-//   stat(filename, &s);
-// To turn into the following:
-//   struct adb_stat s;
-//   adb_stat(filename, &s);
-// To get this to work, we need to make 'struct adb_stat' the same as
-// 'struct stat'. Note that this definition of 'struct adb_stat' uses the
-// *current* macro definition of stat, so it may actually be inheriting from
-// struct _stat32i64 (or some other remapping).
-struct adb_stat : public stat {};
-
-static_assert(sizeof(struct adb_stat) == sizeof(struct stat),
-    "structures should be the same");
-
-extern int adb_stat(const char* f, struct adb_stat* s);
-
-// stat is already a macro, undefine it so we can redefine it.
-#undef stat
-#define stat adb_stat
 
 // UTF-8 versions of POSIX APIs.
 extern DIR* adb_opendir(const char* dirname);
