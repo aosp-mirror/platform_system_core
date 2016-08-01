@@ -63,6 +63,7 @@ LIBADB_TEST_SRCS := \
     fdevent_test.cpp \
     socket_test.cpp \
     sysdeps_test.cpp \
+    sysdeps/stat_test.cpp \
     transport_test.cpp \
 
 LIBADB_CFLAGS := \
@@ -90,6 +91,7 @@ LIBADB_linux_SRC_FILES := \
 
 LIBADB_windows_SRC_FILES := \
     sysdeps_win32.cpp \
+    sysdeps/win32/stat.cpp \
     usb_windows.cpp \
 
 LIBADB_TEST_windows_SRCS := \
