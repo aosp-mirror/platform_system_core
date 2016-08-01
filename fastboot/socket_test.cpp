@@ -34,7 +34,7 @@ static constexpr int kTestTimeoutMs = 3000;
 // Creates connected sockets |server| and |client|. Returns true on success.
 bool MakeConnectedSockets(Socket::Protocol protocol, std::unique_ptr<Socket>* server,
                           std::unique_ptr<Socket>* client,
-                          const std::string hostname = "localhost") {
+                          const std::string& hostname = "localhost") {
     *server = Socket::NewServer(protocol, 0);
     if (*server == nullptr) {
         ADD_FAILURE() << "Failed to create server.";

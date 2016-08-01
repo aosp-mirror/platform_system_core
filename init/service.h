@@ -177,7 +177,7 @@ public:
     Service* FindServiceByName(const std::string& name) const;
     Service* FindServiceByPid(pid_t pid) const;
     Service* FindServiceByKeychord(int keychord_id) const;
-    void ForEachService(std::function<void(Service*)> callback) const;
+    void ForEachService(const std::function<void(Service*)>& callback) const;
     void ForEachServiceInClass(const std::string& classname,
                                void (*func)(Service* svc)) const;
     void ForEachServiceWithFlags(unsigned matchflags,

@@ -969,7 +969,7 @@ static std::string verify_slot(Transport* transport, const std::string& slot) {
 }
 
 static void do_for_partition(Transport* transport, const std::string& part, const std::string& slot,
-                             std::function<void(const std::string&)> func, bool force_slot) {
+                             const std::function<void(const std::string&)>& func, bool force_slot) {
     std::string has_slot;
     std::string current_slot;
 
@@ -1002,7 +1002,7 @@ static void do_for_partition(Transport* transport, const std::string& part, cons
  * partition does not support slots.
  */
 static void do_for_partitions(Transport* transport, const std::string& part, const std::string& slot,
-                              std::function<void(const std::string&)> func, bool force_slot) {
+                              const std::function<void(const std::string&)>& func, bool force_slot) {
     std::string has_slot;
 
     if (slot == "all") {
