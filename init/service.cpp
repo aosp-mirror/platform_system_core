@@ -850,7 +850,7 @@ Service* ServiceManager::FindServiceByKeychord(int keychord_id) const {
     return nullptr;
 }
 
-void ServiceManager::ForEachService(std::function<void(Service*)> callback) const {
+void ServiceManager::ForEachService(const std::function<void(Service*)>& callback) const {
     for (const auto& s : services_) {
         callback(s.get());
     }

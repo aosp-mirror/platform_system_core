@@ -317,7 +317,7 @@ int wait_for_file(const char *filename, int timeout)
 }
 
 void import_kernel_cmdline(bool in_qemu,
-                           std::function<void(const std::string&, const std::string&, bool)> fn) {
+                           const std::function<void(const std::string&, const std::string&, bool)>& fn) {
     std::string cmdline;
     android::base::ReadFileToString("/proc/cmdline", &cmdline);
 
