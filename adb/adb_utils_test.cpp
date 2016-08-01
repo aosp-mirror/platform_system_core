@@ -111,7 +111,7 @@ TEST(adb_utils, adb_dirname) {
   EXPECT_EQ("/system/bin", adb_dirname("/system/bin/sh/"));
 }
 
-void test_mkdirs(const std::string basepath) {
+void test_mkdirs(const std::string& basepath) {
   // Test creating a directory hierarchy.
   EXPECT_TRUE(mkdirs(basepath));
   // Test finding an existing directory hierarchy.

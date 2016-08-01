@@ -1275,9 +1275,10 @@ static std::string find_product_out_path(const std::string& hint) {
         return hint;
     }
 
-    // If there are any slashes in it, assume it's a relative path;
+    // If any of the OS_PATH_SEPARATORS is found, assume it's a relative path;
     // make it absolute.
-    if (hint.find_first_of(OS_PATH_SEPARATORS) != std::string::npos) {
+    // NOLINT: Do not complain if OS_PATH_SEPARATORS has only one character.
+    if (hint.find_first_of(OS_PATH_SEPARATORS) != std::string::npos) {  // NOLINT
         std::string cwd;
         if (!getcwd(&cwd)) {
             fprintf(stderr, "adb: getcwd failed: %s\n", strerror(errno));
