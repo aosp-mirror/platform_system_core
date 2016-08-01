@@ -433,7 +433,7 @@ class SyncConnection {
 typedef void (sync_ls_cb)(unsigned mode, unsigned size, unsigned time, const char* name);
 
 static bool sync_ls(SyncConnection& sc, const char* path,
-                    std::function<sync_ls_cb> func) {
+                    const std::function<sync_ls_cb>& func) {
     if (!sc.SendRequest(ID_LIST, path)) return false;
 
     while (true) {
