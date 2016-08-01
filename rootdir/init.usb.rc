@@ -103,7 +103,7 @@ on property:sys.usb.config=accessory,audio_source,adb && property:sys.usb.config
 
 # Used to set USB configuration at boot and to switch the configuration
 # when changing the default configuration
-on property:persist.sys.usb.config=*
+on boot && property:persist.sys.usb.config=*
     setprop sys.usb.config ${persist.sys.usb.config}
 
 #
