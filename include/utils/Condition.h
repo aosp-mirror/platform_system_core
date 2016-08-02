@@ -54,7 +54,7 @@ public:
     };
 
     Condition();
-    Condition(int type);
+    explicit Condition(int type);
     ~Condition();
     // Wait on the condition variable.  Lock the mutex before calling.
     status_t wait(Mutex& mutex);
