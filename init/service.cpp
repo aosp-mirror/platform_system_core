@@ -197,11 +197,15 @@ void Service::NotifyStateChange(const std::string& new_state) const {
 }
 
 void Service::KillProcessGroup(int signal) {
-    LOG(VERBOSE) << "Sending signal " << signal
-                 << " to service '" << name_
-                 << "' (pid " << pid_ << ") process group...\n",
-    kill(pid_, signal);
-    killProcessGroup(uid_, pid_, signal);
+    LOG(INFO) << "Sending signal " << signal
+              << " to service '" << name_
+              << "' (pid " << pid_ << ") process group...";
+    if (killProcessGroup(uid_, pid_, signal) == -1) {
+        PLOG(ERROR) << "killProcessGroup(" << uid_ << ", " << pid_ << ", " << signal << ") failed";
+    }
+    if (kill(-pid_, signal) == -1) {
+        PLOG(ERROR) << "kill(" << pid_ << ", " << signal << ") failed";
+    }
 }
 
 void Service::CreateSockets(const std::string& context) {
