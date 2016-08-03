@@ -26,6 +26,7 @@
 #include <string>
 
 #include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <cutils/sched_policy.h>
 #include <cutils/sockets.h>
@@ -109,29 +110,27 @@ static void rotateLogs()
             (g_maxRotatedLogs > 0) ? (int) (floor(log10(g_maxRotatedLogs) + 1)) : 0;
 
     for (int i = g_maxRotatedLogs ; i > 0 ; i--) {
-        char *file0, *file1;
+        std::string file1 = android::base::StringPrintf(
+            "%s.%.*d", g_outputFileName, maxRotationCountDigits, i);
 
-        asprintf(&file1, "%s.%.*d", g_outputFileName, maxRotationCountDigits, i);
-
+        std::string file0;
         if (i - 1 == 0) {
-            asprintf(&file0, "%s", g_outputFileName);
+            file0 = android::base::StringPrintf("%s", g_outputFileName);
         } else {
-            asprintf(&file0, "%s.%.*d", g_outputFileName, maxRotationCountDigits, i - 1);
+            file0 = android::base::StringPrintf(
+                "%s.%.*d", g_outputFileName, maxRotationCountDigits, i - 1);
         }
 
-        if (!file0 || !file1) {
+        if ((file0.length() == 0) || (file1.length() == 0)) {
             perror("while rotating log files");
             break;
         }
 
-        err = rename(file0, file1);
+        err = rename(file0.c_str(), file1.c_str());
 
         if (err < 0 && errno != ENOENT) {
             perror("while rotating log files");
         }
-
-        free(file1);
-        free(file0);
     }
 
     g_outFD = openLogFile(g_outputFileName);
@@ -1040,28 +1039,27 @@ int main(int argc, char **argv)
                     (g_maxRotatedLogs > 0) ? (int) (floor(log10(g_maxRotatedLogs) + 1)) : 0;
 
                 for (int i = g_maxRotatedLogs ; i >= 0 ; --i) {
-                    char *file;
+                    std::string file;
 
                     if (i == 0) {
-                        asprintf(&file, "%s", g_outputFileName);
+                        file = android::base::StringPrintf("%s", g_outputFileName);
                     } else {
-                        asprintf(&file, "%s.%.*d", g_outputFileName, maxRotationCountDigits, i);
+                        file = android::base::StringPrintf("%s.%.*d",
+                            g_outputFileName, maxRotationCountDigits, i);
                     }
 
-                    if (!file) {
+                    if (file.length() == 0) {
                         perror("while clearing log files");
                         clearFail = clearFail ?: dev->device;
                         break;
                     }
 
-                    err = unlink(file);
+                    err = unlink(file.c_str());
 
                     if (err < 0 && errno != ENOENT && clearFail == NULL) {
                         perror("while clearing log files");
                         clearFail = dev->device;
                     }
-
-                    free(file);
                 }
             } else if (android_logger_clear(dev->logger)) {
                 clearFail = clearFail ?: dev->device;
