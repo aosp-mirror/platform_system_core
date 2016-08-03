@@ -283,6 +283,8 @@ static void show_help(const char *cmd)
                     "                  Rotate log every kbytes. Requires -f option\n"
                     "  -n <count>, --rotate-count=<count>\n"
                     "                  Sets max number of rotated logs to <count>, default 4\n"
+                    "  --id=<id>       If the signature id for logging to file changes, then clear\n"
+                    "                  the fileset and continue\n"
                     "  -v <format>, --format=<format>\n"
                     "                  Sets log print format verb and adverbs, where <format> is:\n"
                     "                    brief long process raw tag thread threadtime time\n"
@@ -546,6 +548,7 @@ int main(int argc, char **argv)
     unsigned long setLogSize = 0;
     int getPruneList = 0;
     char *setPruneList = NULL;
+    char *setId = NULL;
     int printStatistics = 0;
     int mode = ANDROID_LOG_RDONLY;
     const char *forceFilters = NULL;
@@ -573,6 +576,7 @@ int main(int argc, char **argv)
         int option_index = 0;
         // list of long-argument only strings for later comparison
         static const char pid_str[] = "pid";
+        static const char id_str[] = "id";
         static const char wrap_str[] = "wrap";
         static const char print_str[] = "print";
         static const struct option long_options[] = {
@@ -587,6 +591,7 @@ int main(int argc, char **argv)
           { "grep",          required_argument, NULL,   'e' },
           // hidden and undocumented reserved alias for --max-count
           { "head",          required_argument, NULL,   'm' },
+          { id_str,          required_argument, NULL,   0 },
           { "last",          no_argument,       NULL,   'L' },
           { "max-count",     required_argument, NULL,   'm' },
           { pid_str,         required_argument, NULL,   0 },
@@ -612,7 +617,7 @@ int main(int argc, char **argv)
 
         switch (ret) {
             case 0:
-                // One of the long options
+                // only long options
                 if (long_options[option_index].name == pid_str) {
                     // ToDo: determine runtime PID_MAX?
                     if (!getSizeTArg(optarg, &pid, 1)) {
@@ -641,6 +646,10 @@ int main(int argc, char **argv)
                 }
                 if (long_options[option_index].name == print_str) {
                     g_printItAnyways = true;
+                    break;
+                }
+                if (long_options[option_index].name == id_str) {
+                    setId = optarg && optarg[0] ? optarg : NULL;
                     break;
                 }
             break;
@@ -967,7 +976,20 @@ int main(int argc, char **argv)
         logcat_panic(true, "-r requires -f as well\n");
     }
 
-    setupOutput();
+    if (setId != NULL) {
+        if (g_outputFileName == NULL) {
+            logcat_panic(true, "--id='%s' requires -f as well\n", setId);
+        }
+
+        std::string file_name = android::base::StringPrintf("%s.id", g_outputFileName);
+        std::string file;
+        bool file_ok = android::base::ReadFileToString(file_name, &file);
+        android::base::WriteStringToFile(setId, file_name,
+                                         S_IRUSR | S_IWUSR, getuid(), getgid());
+        if (!file_ok || (file.compare(setId) == 0)) {
+            setId = NULL;
+        }
+    }
 
     if (hasSetLogFormat == 0) {
         const char* logFormat = getenv("ANDROID_PRINTF_LOG");
@@ -1033,7 +1055,7 @@ int main(int argc, char **argv)
             continue;
         }
 
-        if (clearLog) {
+        if (clearLog || setId) {
             if (g_outputFileName) {
                 int maxRotationCountDigits =
                     (g_maxRotatedLogs > 0) ? (int) (floor(log10(g_maxRotatedLogs) + 1)) : 0;
@@ -1175,7 +1197,6 @@ int main(int argc, char **argv)
         return EXIT_SUCCESS;
     }
 
-
     if (getLogSize) {
         return EXIT_SUCCESS;
     }
@@ -1185,6 +1206,8 @@ int main(int argc, char **argv)
     if (clearLog) {
         return EXIT_SUCCESS;
     }
+
+    setupOutput(mode);
 
     //LOG_EVENT_INT(10, 12345);
     //LOG_EVENT_LONG(11, 0x1122334455667788LL);
