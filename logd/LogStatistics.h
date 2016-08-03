@@ -166,7 +166,7 @@ struct EntryBase {
     size_t size;
 
     EntryBase():size(0) { }
-    EntryBase(LogBufferElement *element):size(element->getMsgLen()) { }
+    explicit EntryBase(LogBufferElement *element):size(element->getMsgLen()) { }
 
     size_t getSizes() const { return size; }
 
@@ -201,7 +201,7 @@ struct EntryBaseDropped : public EntryBase {
     size_t dropped;
 
     EntryBaseDropped():dropped(0) { }
-    EntryBaseDropped(LogBufferElement *element):
+    explicit EntryBaseDropped(LogBufferElement *element):
             EntryBase(element),
             dropped(element->getDropped()) {
     }
@@ -226,7 +226,7 @@ struct UidEntry : public EntryBaseDropped {
     const uid_t uid;
     pid_t pid;
 
-    UidEntry(LogBufferElement *element):
+    explicit UidEntry(LogBufferElement *element):
             EntryBaseDropped(element),
             uid(element->getUid()),
             pid(element->getPid()) {
@@ -256,13 +256,13 @@ struct PidEntry : public EntryBaseDropped {
     uid_t uid;
     char *name;
 
-    PidEntry(pid_t pid):
+    explicit PidEntry(pid_t pid):
             EntryBaseDropped(),
             pid(pid),
             uid(android::pidToUid(pid)),
             name(android::pidToName(pid)) {
     }
-    PidEntry(LogBufferElement *element):
+    explicit PidEntry(LogBufferElement *element):
             EntryBaseDropped(element),
             pid(element->getPid()),
             uid(element->getUid()),
@@ -320,7 +320,7 @@ struct TidEntry : public EntryBaseDropped {
             uid(android::pidToUid(tid)),
             name(android::tidToName(tid)) {
     }
-    TidEntry(LogBufferElement *element):
+    explicit TidEntry(LogBufferElement *element):
             EntryBaseDropped(element),
             tid(element->getTid()),
             pid(element->getPid()),
@@ -375,7 +375,7 @@ struct TagEntry : public EntryBaseDropped {
     pid_t pid;
     uid_t uid;
 
-    TagEntry(LogBufferElement *element):
+    explicit TagEntry(LogBufferElement *element):
             EntryBaseDropped(element),
             tag(element->getTag()),
             pid(element->getPid()),
@@ -407,7 +407,7 @@ class LogFindWorst {
 
 public:
 
-    LogFindWorst(std::unique_ptr<const TEntry *[]> &&sorted) : sorted(std::move(sorted)) { }
+    explicit LogFindWorst(std::unique_ptr<const TEntry *[]> &&sorted) : sorted(std::move(sorted)) { }
 
     void findWorst(int &worst,
                     size_t &worst_sizes, size_t &second_worst_sizes,
