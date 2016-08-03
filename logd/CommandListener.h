@@ -49,7 +49,7 @@ private:
     class name##Cmd : public LogCommand {                        \
         LogBuffer &mBuf;                                         \
     public:                                                      \
-        name##Cmd(LogBuffer *buf);                               \
+        explicit name##Cmd(LogBuffer *buf);                      \
         virtual ~name##Cmd() {}                                  \
         int runCommand(SocketClient *c, int argc, char ** argv); \
     };
