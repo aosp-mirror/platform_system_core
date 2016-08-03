@@ -21,6 +21,7 @@ cc_defaults {
             srcs: [
                 "MemsetTest.cpp",
                 "PropertiesTest.cpp",
+                "sched_policy_test.cpp",
                 "trace-dev_test.cpp",
             ],
         },
