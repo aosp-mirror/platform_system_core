@@ -14,31 +14,38 @@
  * limitations under the License.
  */
 
+#include "bugreport.h"
+
 #include <string>
 #include <vector>
 
 #include <android-base/strings.h>
 
-#include "bugreport.h"
+#include "sysdeps.h"
+#include "adb_utils.h"
 #include "file_sync_service.h"
 
-static constexpr char BUGZ_OK_PREFIX[] = "OK:";
-static constexpr char BUGZ_FAIL_PREFIX[] = "FAIL:";
+static constexpr char BUGZ_BEGIN_PREFIX[] = "BEGIN:";
 static constexpr char BUGZ_PROGRESS_PREFIX[] = "PROGRESS:";
 static constexpr char BUGZ_PROGRESS_SEPARATOR[] = "/";
+static constexpr char BUGZ_OK_PREFIX[] = "OK:";
+static constexpr char BUGZ_FAIL_PREFIX[] = "FAIL:";
 
 // Custom callback used to handle the output of zipped bugreports.
 class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface {
   public:
-    BugreportStandardStreamsCallback(const std::string& dest_file, bool show_progress, Bugreport* br)
+    BugreportStandardStreamsCallback(const std::string& dest_dir, const std::string& dest_file,
+                                     bool show_progress, Bugreport* br)
         : br_(br),
           src_file_(),
+          dest_dir_(dest_dir),
           dest_file_(dest_file),
-          line_message_(android::base::StringPrintf("generating %s", dest_file_.c_str())),
+          line_message_(),
           invalid_lines_(),
           show_progress_(show_progress),
           status_(0),
           line_() {
+        SetLineMessage();
     }
 
     void OnStdout(const char* buffer, int length) {
@@ -80,25 +87,49 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
                         BUGZ_FAIL_PREFIX);
                 return -1;
             }
+            std::string destination;
+            if (dest_dir_.empty()) {
+                destination = dest_file_;
+            } else {
+                destination = android::base::StringPrintf("%s%c%s", dest_dir_.c_str(),
+                                                          OS_PATH_SEPARATOR, dest_file_.c_str());
+            }
             std::vector<const char*> srcs{src_file_.c_str()};
-            status_ = br_->DoSyncPull(srcs, dest_file_.c_str(), true, line_message_.c_str()) ? 0 : 1;
+            status_ =
+                br_->DoSyncPull(srcs, destination.c_str(), true, line_message_.c_str()) ? 0 : 1;
             if (status_ != 0) {
                 fprintf(stderr,
                         "Bug report finished but could not be copied to '%s'.\n"
                         "Try to run 'adb pull %s <directory>'\n"
                         "to copy it to a directory that can be written.\n",
-                        dest_file_.c_str(), src_file_.c_str());
+                        destination.c_str(), src_file_.c_str());
             }
         }
         return status_;
     }
 
   private:
+    void SetLineMessage() {
+        line_message_ =
+            android::base::StringPrintf("generating %s", adb_basename(dest_file_).c_str());
+    }
+
+    void SetSrcFile(const std::string path) {
+        src_file_ = path;
+        if (!dest_dir_.empty()) {
+            // Only uses device-provided name when user passed a directory.
+            dest_file_ = adb_basename(path);
+            SetLineMessage();
+        }
+    }
+
     void ProcessLine(const std::string& line) {
         if (line.empty()) return;
 
-        if (android::base::StartsWith(line, BUGZ_OK_PREFIX)) {
-            src_file_ = &line[strlen(BUGZ_OK_PREFIX)];
+        if (android::base::StartsWith(line, BUGZ_BEGIN_PREFIX)) {
+            SetSrcFile(&line[strlen(BUGZ_BEGIN_PREFIX)]);
+        } else if (android::base::StartsWith(line, BUGZ_OK_PREFIX)) {
+            SetSrcFile(&line[strlen(BUGZ_OK_PREFIX)]);
         } else if (android::base::StartsWith(line, BUGZ_FAIL_PREFIX)) {
             const char* error_message = &line[strlen(BUGZ_FAIL_PREFIX)];
             fprintf(stderr, "Device failed to take a zipped bugreport: %s\n", error_message);
@@ -112,22 +143,38 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
             size_t idx2 = line.rfind(BUGZ_PROGRESS_SEPARATOR);
             int progress = std::stoi(line.substr(idx1, (idx2 - idx1)));
             int total = std::stoi(line.substr(idx2 + 1));
-            br_->UpdateProgress(dest_file_, progress, total);
+            br_->UpdateProgress(line_message_, progress, total);
         } else {
             invalid_lines_.push_back(line);
         }
     }
 
     Bugreport* br_;
+
+    // Path of bugreport on device.
     std::string src_file_;
-    const std::string dest_file_;
-    const std::string line_message_;
+
+    // Bugreport destination on host, depending on argument passed on constructor:
+    // - if argument is a directory, dest_dir_ is set with it and dest_file_ will be the name
+    //   of the bugreport reported by the device.
+    // - if argument is empty, dest_dir is set as the current directory and dest_file_ will be the
+    //   name of the bugreport reported by the device.
+    // - otherwise, dest_dir_ is not set and dest_file_ is set with the value passed on constructor.
+    std::string dest_dir_, dest_file_;
+
+    // Message displayed on LinePrinter, it's updated every time the destination above change.
+    std::string line_message_;
+
+    // Lines sent by bugreportz that contain invalid commands; will be displayed at the end.
     std::vector<std::string> invalid_lines_;
+
+    // Whether PROGRESS_LINES should be interpreted as progress.
     bool show_progress_;
+
+    // Overall process of the operation, as returned by Done().
     int status_;
 
-    // Temporary buffer containing the characters read since the last newline
-    // (\n).
+    // Temporary buffer containing the characters read since the last newline (\n).
     std::string line_;
 
     DISALLOW_COPY_AND_ASSIGN(BugreportStandardStreamsCallback);
@@ -137,17 +184,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
 int usage();
 
 int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, const char** argv) {
-    if (argc == 1) return SendShellCommand(transport_type, serial, "bugreport", false);
-    if (argc != 2) return usage();
-
-    // Zipped bugreport option - will call 'bugreportz', which prints the location
-    // of the generated
-    // file, then pull it to the destination file provided by the user.
-    std::string dest_file = argv[1];
-    if (!android::base::EndsWith(argv[1], ".zip")) {
-        // TODO: use a case-insensitive comparison (like EndsWithIgnoreCase
-        dest_file += ".zip";
-    }
+    if (argc > 2) return usage();
 
     // Gets bugreportz version.
     std::string bugz_stderr;
@@ -156,11 +193,44 @@ int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, 
     std::string bugz_version = android::base::Trim(bugz_stderr);
 
     if (status != 0 || bugz_version.empty()) {
+        // Device does not support bugreportz: if called as 'adb bugreport', just falls out to the
+        // flat-file version
+        if (argc == 1) return SendShellCommand(transport_type, serial, "bugreport", false);
+
+        // But if user explicitly asked for a zipped bug report, fails instead (otherwise calling
+        // 'bugreport' would generate a lot of output the user might not be prepared to handle)
         fprintf(stderr,
                 "Failed to get bugreportz version: 'bugreportz -v' returned '%s' (code %d).\n"
                 "If the device runs Android M or below, try 'adb bugreport' instead.\n",
                 bugz_stderr.c_str(), status);
         return status != 0 ? status : -1;
+    }
+
+    std::string dest_file, dest_dir;
+
+    if (argc == 1) {
+        // No args - use current directory
+        if (!getcwd(&dest_dir)) {
+            perror("adb: getcwd failed");
+            return 1;
+        }
+    } else {
+        // Check whether argument is a directory or file
+        if (directory_exists(argv[1])) {
+            dest_dir = argv[1];
+        } else {
+            dest_file = argv[1];
+        }
+    }
+
+    if (dest_file.empty()) {
+        // Uses a default value until device provides the proper name
+        dest_file = "bugreport.zip";
+    } else {
+        if (!android::base::EndsWith(dest_file, ".zip")) {
+            // TODO: use a case-insensitive comparison (like EndsWithIgnoreCase
+            dest_file += ".zip";
+        }
     }
 
     bool show_progress = true;
@@ -175,7 +245,7 @@ int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, 
         show_progress = false;
         bugz_command = "bugreportz";
     }
-    BugreportStandardStreamsCallback bugz_callback(dest_file, show_progress, this);
+    BugreportStandardStreamsCallback bugz_callback(dest_dir, dest_file, show_progress, this);
     return SendShellCommand(transport_type, serial, bugz_command, false, &bugz_callback);
 }
 

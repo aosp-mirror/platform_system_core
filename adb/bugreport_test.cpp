@@ -19,6 +19,12 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <android-base/strings.h>
+#include <android-base/test_utils.h>
+
+#include "sysdeps.h"
+#include "adb_utils.h"
+
 using ::testing::_;
 using ::testing::Action;
 using ::testing::ActionInterface;
@@ -122,28 +128,38 @@ class BugreportMock : public Bugreport {
 
 class BugreportTest : public ::testing::Test {
   public:
-    void SetBugreportzVersion(const std::string& version) {
+    void SetUp() {
+        if (!getcwd(&cwd_)) {
+            ADD_FAILURE() << "getcwd failed: " << strerror(errno);
+            return;
+        }
+    }
+
+    void ExpectBugreportzVersion(const std::string& version) {
         EXPECT_CALL(br_,
                     SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -v", false, _))
             .WillOnce(DoAll(WithArg<4>(WriteOnStderr(version.c_str())),
                             WithArg<4>(ReturnCallbackDone(0))));
     }
 
-    void ExpectProgress(int progress, int total) {
-        EXPECT_CALL(br_, UpdateProgress(HasSubstr("file.zip"), progress, total));
+    void ExpectProgress(int progress, int total, const std::string& file = "file.zip") {
+        EXPECT_CALL(br_, UpdateProgress(StrEq("generating " + file), progress, total));
     }
 
     BugreportMock br_;
+    std::string cwd_;  // TODO: make it static
 };
 
-// Tests when called with invalid number of argumnts
+// Tests when called with invalid number of arguments
 TEST_F(BugreportTest, InvalidNumberArgs) {
     const char* args[1024] = {"bugreport", "to", "principal"};
     ASSERT_EQ(-42, br_.DoIt(kTransportLocal, "HannibalLecter", 3, args));
 }
 
-// Tests the legacy 'adb bugreport' option
-TEST_F(BugreportTest, FlatFileFormat) {
+// Tests the 'adb bugreport' option when the device does not support 'bugreportz' - it falls back
+// to the flat-file format ('bugreport' binary on device)
+TEST_F(BugreportTest, NoArgumentsPreNDevice) {
+    ExpectBugreportzVersion("");
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreport", false, _))
         .WillOnce(Return(0));
 
@@ -151,15 +167,52 @@ TEST_F(BugreportTest, FlatFileFormat) {
     ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 1, args));
 }
 
-// Tests 'adb bugreport file.zip' when it succeeds and device does not support
-// progress.
-TEST_F(BugreportTest, OkLegacy) {
-    SetBugreportzVersion("1.0");
+// Tests the 'adb bugreport' option when the device supports 'bugreportz' version 1.0 - it will
+// save the bugreport in the current directory with the name provided by the device.
+TEST_F(BugreportTest, NoArgumentsNDevice) {
+    ExpectBugreportzVersion("1.0");
+
+    std::string dest_file =
+        android::base::StringPrintf("%s%cda_bugreport.zip", cwd_.c_str(), OS_PATH_SEPARATOR);
+    EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz", false, _))
+        .WillOnce(DoAll(WithArg<4>(WriteOnStdout("OK:/device/da_bugreport.zip")),
+                        WithArg<4>(ReturnCallbackDone())));
+    EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/da_bugreport.zip")), StrEq(dest_file),
+                                true, StrEq("generating da_bugreport.zip")))
+        .WillOnce(Return(true));
+
+    const char* args[1024] = {"bugreport"};
+    ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 1, args));
+}
+
+// Tests the 'adb bugreport' option when the device supports 'bugreportz' version 1.1 - it will
+// save the bugreport in the current directory with the name provided by the device.
+TEST_F(BugreportTest, NoArgumentsPostNDevice) {
+    ExpectBugreportzVersion("1.1");
+    std::string dest_file =
+        android::base::StringPrintf("%s%cda_bugreport.zip", cwd_.c_str(), OS_PATH_SEPARATOR);
+    ExpectProgress(50, 100, "da_bugreport.zip");
+    EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
+        .WillOnce(DoAll(WithArg<4>(WriteOnStdout("BEGIN:/device/da_bugreport.zip\n")),
+                        WithArg<4>(WriteOnStdout("PROGRESS:50/100\n")),
+                        WithArg<4>(WriteOnStdout("OK:/device/da_bugreport.zip\n")),
+                        WithArg<4>(ReturnCallbackDone())));
+    EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/da_bugreport.zip")), StrEq(dest_file),
+                                true, StrEq("generating da_bugreport.zip")))
+        .WillOnce(Return(true));
+
+    const char* args[1024] = {"bugreport"};
+    ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 1, args));
+}
+
+// Tests 'adb bugreport file.zip' when it succeeds and device does not support progress.
+TEST_F(BugreportTest, OkNDevice) {
+    ExpectBugreportzVersion("1.0");
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz", false, _))
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("OK:/device/bugreport.zip")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
-                                true, HasSubstr("file.zip")))
+                                true, StrEq("generating file.zip")))
         .WillOnce(Return(true));
 
     const char* args[1024] = {"bugreport", "file.zip"};
@@ -168,14 +221,14 @@ TEST_F(BugreportTest, OkLegacy) {
 
 // Tests 'adb bugreport file.zip' when it succeeds but response was sent in
 // multiple buffer writers and without progress updates.
-TEST_F(BugreportTest, OkLegacySplitBuffer) {
-    SetBugreportzVersion("1.0");
+TEST_F(BugreportTest, OkNDeviceSplitBuffer) {
+    ExpectBugreportzVersion("1.0");
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz", false, _))
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("OK:/device")),
                         WithArg<4>(WriteOnStdout("/bugreport.zip")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
-                                true, HasSubstr("file.zip")))
+                                true, StrEq("generating file.zip")))
         .WillOnce(Return(true));
 
     const char* args[1024] = {"bugreport", "file.zip"};
@@ -183,16 +236,18 @@ TEST_F(BugreportTest, OkLegacySplitBuffer) {
 }
 
 // Tests 'adb bugreport file.zip' when it succeeds and displays progress.
-TEST_F(BugreportTest, Ok) {
-    SetBugreportzVersion("1.1");
+TEST_F(BugreportTest, OkProgress) {
+    ExpectBugreportzVersion("1.1");
     ExpectProgress(1, 100);
     ExpectProgress(10, 100);
     ExpectProgress(50, 100);
     ExpectProgress(99, 100);
     // clang-format off
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
-        // NOTE: DoAll accepts at most 10 arguments, and we have reached that limit...
+        // NOTE: DoAll accepts at most 10 arguments, and we're almost reached that limit...
         .WillOnce(DoAll(
+            // Name might change on OK, so make sure the right one is picked.
+            WithArg<4>(WriteOnStdout("BEGIN:/device/bugreport___NOT.zip\n")),
             // Progress line in one write
             WithArg<4>(WriteOnStdout("PROGRESS:1/100\n")),
             // Add some bogus lines
@@ -209,30 +264,68 @@ TEST_F(BugreportTest, Ok) {
             WithArg<4>(ReturnCallbackDone())));
     // clang-format on
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
-                                true, HasSubstr("file.zip")))
+                                true, StrEq("generating file.zip")))
         .WillOnce(Return(true));
 
     const char* args[1024] = {"bugreport", "file.zip"};
     ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }
 
+// Tests 'adb bugreport dir' when it succeeds and destination is a directory.
+TEST_F(BugreportTest, OkDirectory) {
+    ExpectBugreportzVersion("1.1");
+    TemporaryDir td;
+    std::string dest_file =
+        android::base::StringPrintf("%s%cda_bugreport.zip", td.path, OS_PATH_SEPARATOR);
+
+    EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
+        .WillOnce(DoAll(WithArg<4>(WriteOnStdout("BEGIN:/device/da_bugreport.zip\n")),
+                        WithArg<4>(WriteOnStdout("OK:/device/da_bugreport.zip")),
+                        WithArg<4>(ReturnCallbackDone())));
+    EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/da_bugreport.zip")), StrEq(dest_file),
+                                true, StrEq("generating da_bugreport.zip")))
+        .WillOnce(Return(true));
+
+    const char* args[1024] = {"bugreport", td.path};
+    ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
+}
+
 // Tests 'adb bugreport file' when it succeeds
 TEST_F(BugreportTest, OkNoExtension) {
-    SetBugreportzVersion("1.1");
+    ExpectBugreportzVersion("1.1");
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("OK:/device/bugreport.zip\n")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
-                                true, HasSubstr("file.zip")))
+                                true, StrEq("generating file.zip")))
         .WillOnce(Return(true));
 
     const char* args[1024] = {"bugreport", "file"};
     ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }
 
+// Tests 'adb bugreport dir' when it succeeds and destination is a directory and device runs N.
+TEST_F(BugreportTest, OkNDeviceDirectory) {
+    ExpectBugreportzVersion("1.0");
+    TemporaryDir td;
+    std::string dest_file =
+        android::base::StringPrintf("%s%cda_bugreport.zip", td.path, OS_PATH_SEPARATOR);
+
+    EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz", false, _))
+        .WillOnce(DoAll(WithArg<4>(WriteOnStdout("BEGIN:/device/da_bugreport.zip\n")),
+                        WithArg<4>(WriteOnStdout("OK:/device/da_bugreport.zip")),
+                        WithArg<4>(ReturnCallbackDone())));
+    EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/da_bugreport.zip")), StrEq(dest_file),
+                                true, StrEq("generating da_bugreport.zip")))
+        .WillOnce(Return(true));
+
+    const char* args[1024] = {"bugreport", td.path};
+    ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
+}
+
 // Tests 'adb bugreport file.zip' when the bugreport itself failed
 TEST_F(BugreportTest, BugreportzReturnedFail) {
-    SetBugreportzVersion("1.1");
+    ExpectBugreportzVersion("1.1");
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         .WillOnce(
             DoAll(WithArg<4>(WriteOnStdout("FAIL:D'OH!\n")), WithArg<4>(ReturnCallbackDone())));
@@ -247,7 +340,7 @@ TEST_F(BugreportTest, BugreportzReturnedFail) {
 // was sent in
 // multiple buffer writes
 TEST_F(BugreportTest, BugreportzReturnedFailSplitBuffer) {
-    SetBugreportzVersion("1.1");
+    ExpectBugreportzVersion("1.1");
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("FAIL")), WithArg<4>(WriteOnStdout(":D'OH!\n")),
                         WithArg<4>(ReturnCallbackDone())));
@@ -261,7 +354,7 @@ TEST_F(BugreportTest, BugreportzReturnedFailSplitBuffer) {
 // Tests 'adb bugreport file.zip' when the bugreportz returned an unsupported
 // response.
 TEST_F(BugreportTest, BugreportzReturnedUnsupported) {
-    SetBugreportzVersion("1.1");
+    ExpectBugreportzVersion("1.1");
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("bugreportz? What am I, a zombie?")),
                         WithArg<4>(ReturnCallbackDone())));
@@ -283,7 +376,7 @@ TEST_F(BugreportTest, BugreportzVersionFailed) {
 
 // Tests 'adb bugreport file.zip' when the bugreportz -v returns status 0 but with no output.
 TEST_F(BugreportTest, BugreportzVersionEmpty) {
-    SetBugreportzVersion("");
+    ExpectBugreportzVersion("");
 
     const char* args[1024] = {"bugreport", "file.zip"};
     ASSERT_EQ(-1, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
@@ -291,7 +384,7 @@ TEST_F(BugreportTest, BugreportzVersionEmpty) {
 
 // Tests 'adb bugreport file.zip' when the main bugreportz command failed
 TEST_F(BugreportTest, BugreportzFailed) {
-    SetBugreportzVersion("1.1");
+    ExpectBugreportzVersion("1.1");
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         .WillOnce(Return(666));
 
@@ -301,7 +394,7 @@ TEST_F(BugreportTest, BugreportzFailed) {
 
 // Tests 'adb bugreport file.zip' when the bugreport could not be pulled
 TEST_F(BugreportTest, PullFails) {
-    SetBugreportzVersion("1.1");
+    ExpectBugreportzVersion("1.1");
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("OK:/device/bugreport.zip")),
                         WithArg<4>(ReturnCallbackDone())));
