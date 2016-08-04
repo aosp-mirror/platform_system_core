@@ -189,14 +189,14 @@ TEST_F(BugreportTest, Ok) {
     ExpectProgress(10, 100);
     ExpectProgress(50, 100);
     ExpectProgress(99, 100);
-    ExpectProgress(100, 100);
     // clang-format off
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
+        // NOTE: DoAll accepts at most 10 arguments, and we have reached that limit...
         .WillOnce(DoAll(
             // Progress line in one write
             WithArg<4>(WriteOnStdout("PROGRESS:1/100\n")),
             // Add some bogus lines
-            WithArg<4>(WriteOnStdout("\nDUDE:SWEET\n\n")),
+            WithArg<4>(WriteOnStdout("\nDUDE:SWEET\n\nBLA\n\nBLA\nBLA\n\n")),
             // Multiple progress lines in one write
             WithArg<4>(WriteOnStdout("PROGRESS:10/100\nPROGRESS:50/100\n")),
             // Progress line in multiple writes
@@ -207,6 +207,7 @@ TEST_F(BugreportTest, Ok) {
             WithArg<4>(WriteOnStdout("OK:/device/bugreport")),
             WithArg<4>(WriteOnStdout(".zip")),
             WithArg<4>(ReturnCallbackDone())));
+    // clang-format on
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
                                 true, HasSubstr("file.zip")))
         .WillOnce(Return(true));
@@ -218,7 +219,6 @@ TEST_F(BugreportTest, Ok) {
 // Tests 'adb bugreport file' when it succeeds
 TEST_F(BugreportTest, OkNoExtension) {
     SetBugreportzVersion("1.1");
-    ExpectProgress(100, 100);
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("OK:/device/bugreport.zip\n")),
                         WithArg<4>(ReturnCallbackDone())));
@@ -281,6 +281,14 @@ TEST_F(BugreportTest, BugreportzVersionFailed) {
     ASSERT_EQ(666, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }
 
+// Tests 'adb bugreport file.zip' when the bugreportz -v returns status 0 but with no output.
+TEST_F(BugreportTest, BugreportzVersionEmpty) {
+    SetBugreportzVersion("");
+
+    const char* args[1024] = {"bugreport", "file.zip"};
+    ASSERT_EQ(-1, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
+}
+
 // Tests 'adb bugreport file.zip' when the main bugreportz command failed
 TEST_F(BugreportTest, BugreportzFailed) {
     SetBugreportzVersion("1.1");
@@ -294,7 +302,6 @@ TEST_F(BugreportTest, BugreportzFailed) {
 // Tests 'adb bugreport file.zip' when the bugreport could not be pulled
 TEST_F(BugreportTest, PullFails) {
     SetBugreportzVersion("1.1");
-    ExpectProgress(100, 100);
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("OK:/device/bugreport.zip")),
                         WithArg<4>(ReturnCallbackDone())));
