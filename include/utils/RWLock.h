@@ -47,8 +47,8 @@ public:
     };
 
                 RWLock();
-                RWLock(const char* name);
-                RWLock(int type, const char* name = NULL);
+    explicit    RWLock(const char* name);
+    explicit    RWLock(int type, const char* name = NULL);
                 ~RWLock();
 
     status_t    readLock();
@@ -59,7 +59,7 @@ public:
 
     class AutoRLock {
     public:
-        inline AutoRLock(RWLock& rwlock) : mLock(rwlock)  { mLock.readLock(); }
+        inline explicit AutoRLock(RWLock& rwlock) : mLock(rwlock)  { mLock.readLock(); }
         inline ~AutoRLock() { mLock.unlock(); }
     private:
         RWLock& mLock;
@@ -67,7 +67,7 @@ public:
 
     class AutoWLock {
     public:
-        inline AutoWLock(RWLock& rwlock) : mLock(rwlock)  { mLock.writeLock(); }
+        inline explicit AutoWLock(RWLock& rwlock) : mLock(rwlock)  { mLock.writeLock(); }
         inline ~AutoWLock() { mLock.unlock(); }
     private:
         RWLock& mLock;
