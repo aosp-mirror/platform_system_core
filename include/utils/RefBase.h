@@ -222,12 +222,12 @@ public:
     
     inline wp() : m_ptr(0) { }
 
-    wp(T* other);
+    wp(T* other);  // NOLINT(implicit)
     wp(const wp<T>& other);
-    wp(const sp<T>& other);
-    template<typename U> wp(U* other);
-    template<typename U> wp(const sp<U>& other);
-    template<typename U> wp(const wp<U>& other);
+    explicit wp(const sp<T>& other);
+    template<typename U> wp(U* other);  // NOLINT(implicit)
+    template<typename U> wp(const sp<U>& other);  // NOLINT(implicit)
+    template<typename U> wp(const wp<U>& other);  // NOLINT(implicit)
 
     ~wp();
     

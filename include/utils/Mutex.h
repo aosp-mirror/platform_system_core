@@ -52,8 +52,8 @@ public:
     };
 
                 Mutex();
-                Mutex(const char* name);
-                Mutex(int type, const char* name = NULL);
+    explicit    Mutex(const char* name);
+    explicit    Mutex(int type, const char* name = NULL);
                 ~Mutex();
 
     // lock or unlock the mutex
@@ -77,8 +77,8 @@ public:
     // constructed and released when Autolock goes out of scope.
     class Autolock {
     public:
-        inline Autolock(Mutex& mutex) : mLock(mutex)  { mLock.lock(); }
-        inline Autolock(Mutex* mutex) : mLock(*mutex) { mLock.lock(); }
+        inline explicit Autolock(Mutex& mutex) : mLock(mutex)  { mLock.lock(); }
+        inline explicit Autolock(Mutex* mutex) : mLock(*mutex) { mLock.lock(); }
         inline ~Autolock() { mLock.unlock(); }
     private:
         Mutex& mLock;
