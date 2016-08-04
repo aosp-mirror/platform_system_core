@@ -699,7 +699,7 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
     for (const copyinfo& ci : file_list) {
         if (!ci.skip) {
             if (list_only) {
-                sc.Error("would push: %s -> %s", ci.lpath.c_str(), ci.rpath.c_str());
+                sc.Println("would push: %s -> %s", ci.lpath.c_str(), ci.rpath.c_str());
             } else {
                 if (!sync_send(sc, ci.lpath.c_str(), ci.rpath.c_str(), ci.time, ci.mode)) {
                     return false;
