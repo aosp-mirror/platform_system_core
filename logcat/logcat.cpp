@@ -230,13 +230,15 @@ static void maybePrintStart(log_device_t* dev, bool printDividers) {
     }
 }
 
-static void setupOutput()
-{
-
+static void setupOutputAndSchedulingPolicy(bool blocking) {
     if (g_outputFileName == NULL) {
         g_outFD = STDOUT_FILENO;
+        return;
+    }
 
-    } else {
+    if (blocking) {
+        // Lower priority and set to batch scheduling if we are saving
+        // the logs into files and taking continuous content.
         if (set_sched_policy(0, SP_BACKGROUND) < 0) {
             fprintf(stderr, "failed to set background scheduling policy\n");
         }
@@ -250,26 +252,26 @@ static void setupOutput()
         if (setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND) < 0) {
             fprintf(stderr, "failed set to priority\n");
         }
-
-        g_outFD = openLogFile (g_outputFileName);
-
-        if (g_outFD < 0) {
-            logcat_panic(false, "couldn't open output file");
-        }
-
-        struct stat statbuf;
-        if (fstat(g_outFD, &statbuf) == -1) {
-            close(g_outFD);
-            logcat_panic(false, "couldn't get output file stat\n");
-        }
-
-        if ((size_t) statbuf.st_size > SIZE_MAX || statbuf.st_size < 0) {
-            close(g_outFD);
-            logcat_panic(false, "invalid output file stat\n");
-        }
-
-        g_outByteCount = statbuf.st_size;
     }
+
+    g_outFD = openLogFile (g_outputFileName);
+
+    if (g_outFD < 0) {
+        logcat_panic(false, "couldn't open output file");
+    }
+
+    struct stat statbuf;
+    if (fstat(g_outFD, &statbuf) == -1) {
+        close(g_outFD);
+        logcat_panic(false, "couldn't get output file stat\n");
+    }
+
+    if ((size_t) statbuf.st_size > SIZE_MAX || statbuf.st_size < 0) {
+        close(g_outFD);
+        logcat_panic(false, "invalid output file stat\n");
+    }
+
+    g_outByteCount = statbuf.st_size;
 }
 
 static void show_help(const char *cmd)
@@ -659,7 +661,7 @@ int main(int argc, char **argv)
             break;
 
             case 'L':
-                mode |= ANDROID_LOG_PSTORE;
+                mode |= ANDROID_LOG_RDONLY | ANDROID_LOG_PSTORE | ANDROID_LOG_NONBLOCK;
             break;
 
             case 'd':
@@ -1201,7 +1203,7 @@ int main(int argc, char **argv)
         return EXIT_SUCCESS;
     }
 
-    setupOutput(mode);
+    setupOutputAndSchedulingPolicy((mode & ANDROID_LOG_NONBLOCK) == 0);
 
     //LOG_EVENT_INT(10, 12345);
     //LOG_EVENT_LONG(11, 0x1122334455667788LL);
