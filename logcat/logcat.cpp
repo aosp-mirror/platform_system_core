@@ -444,7 +444,7 @@ static char *parseTime(log_time &t, const char *cp) {
     return t.strptime(cp, "%s.%q");
 }
 
-// Find last logged line in gestalt of all matching existing output files
+// Find last logged line in <outputFileName>, or <outputFileName>.1
 static log_time lastLogTime(char *outputFileName) {
     log_time retval(log_time::EPOCH);
     if (!outputFileName) {
@@ -469,24 +469,18 @@ static log_time lastLogTime(char *outputFileName) {
         return retval;
     }
 
-    clockid_t clock_type = android_log_clockid();
-    log_time now(clock_type);
-    bool monotonic = clock_type == CLOCK_MONOTONIC;
+    log_time now(android_log_clockid());
 
     size_t len = strlen(file);
     log_time modulo(0, NS_PER_SEC);
     struct dirent *dp;
 
     while ((dp = readdir(dir.get())) != NULL) {
-        if ((dp->d_type != DT_REG)
-                // If we are using realtime, check all files that match the
-                // basename for latest time. If we are using monotonic time
-                // then only check the main file because time cycles on
-                // every reboot.
-                || strncmp(dp->d_name, file, len + monotonic)
-                || (dp->d_name[len]
-                    && ((dp->d_name[len] != '.')
-                        || !isdigit(dp->d_name[len+1])))) {
+        if ((dp->d_type != DT_REG) ||
+                (strncmp(dp->d_name, file, len) != 0) ||
+                (dp->d_name[len] &&
+                     ((dp->d_name[len] != '.') ||
+                         (strtoll(dp->d_name + 1, NULL, 10) != 1)))) {
             continue;
         }
 
