@@ -346,6 +346,18 @@ class SyncConnection {
         line_printer_.Print(s, LinePrinter::INFO);
     }
 
+    void Println(const char* fmt, ...) __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3))) {
+        std::string s;
+
+        va_list ap;
+        va_start(ap, fmt);
+        android::base::StringAppendV(&s, fmt, ap);
+        va_end(ap);
+
+        line_printer_.Print(s, LinePrinter::INFO);
+        line_printer_.KeepInfoLine();
+    }
+
     void Error(const char* fmt, ...) __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3))) {
         std::string s = "adb: error: ";
 
@@ -711,9 +723,9 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
         }
     }
 
-    sc.Printf("%s: %d file%s pushed. %d file%s skipped.%s", rpath.c_str(),
-              pushed, (pushed == 1) ? "" : "s", skipped,
-              (skipped == 1) ? "" : "s", sc.TransferRate().c_str());
+    sc.Println("%s: %d file%s pushed. %d file%s skipped.%s", rpath.c_str(), pushed,
+               (pushed == 1) ? "" : "s", skipped, (skipped == 1) ? "" : "s",
+               sc.TransferRate().c_str());
     return true;
 }
 
@@ -920,9 +932,9 @@ static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
         }
     }
 
-    sc.Printf("%s: %d file%s pulled. %d file%s skipped.%s", rpath.c_str(),
-              pulled, (pulled == 1) ? "" : "s", skipped,
-              (skipped == 1) ? "" : "s", sc.TransferRate().c_str());
+    sc.Println("%s: %d file%s pulled. %d file%s skipped.%s", rpath.c_str(), pulled,
+               (pulled == 1) ? "" : "s", skipped, (skipped == 1) ? "" : "s",
+               sc.TransferRate().c_str());
     return true;
 }
 
