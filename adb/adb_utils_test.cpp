@@ -123,14 +123,20 @@ TEST(adb_utils, adb_dirname) {
 
 void test_mkdirs(const std::string basepath) {
   // Test creating a directory hierarchy.
-  EXPECT_TRUE(mkdirs(basepath));
+  ASSERT_TRUE(mkdirs(basepath));
   // Test finding an existing directory hierarchy.
-  EXPECT_TRUE(mkdirs(basepath));
+  ASSERT_TRUE(mkdirs(basepath));
+  // Test mkdirs on an existing hierarchy with a trailing slash.
+  ASSERT_TRUE(mkdirs(basepath + '/'));
+#if defined(_WIN32)
+  ASSERT_TRUE(mkdirs(basepath + '\\'));
+#endif
+
   const std::string filepath = basepath + "/file";
   // Verify that the hierarchy was created by trying to create a file in it.
-  EXPECT_NE(-1, adb_creat(filepath.c_str(), 0600));
+  ASSERT_NE(-1, adb_creat(filepath.c_str(), 0600));
   // If a file exists where we want a directory, the operation should fail.
-  EXPECT_FALSE(mkdirs(filepath));
+  ASSERT_FALSE(mkdirs(filepath));
 }
 
 TEST(adb_utils, mkdirs) {
