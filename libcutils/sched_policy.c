@@ -45,9 +45,6 @@ static inline SchedPolicy _policy(SchedPolicy p)
 
 #define POLICY_DEBUG 0
 
-// This prctl is only available in Android kernels.
-#define PR_SET_TIMERSLACK_PID 41
-
 // timer slack value in nS enforced when the thread moves to background
 #define TIMER_SLACK_BG 40000000
 #define TIMER_SLACK_FG 50000
@@ -293,9 +290,9 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
 }
 
 static void set_timerslack_ns(int tid, unsigned long long slack) {
+    // v4.6+ kernels support the /proc/<tid>/timerslack_ns interface.
+    // TODO: once we've backported this, log if the open(2) fails.
     char buf[64];
-
-    /* v4.6+ kernels support the /proc/<tid>/timerslack_ns interface. */
     snprintf(buf, sizeof(buf), "/proc/%d/timerslack_ns", tid);
     int fd = open(buf, O_WRONLY | O_CLOEXEC);
     if (fd != -1) {
@@ -305,11 +302,6 @@ static void set_timerslack_ns(int tid, unsigned long long slack) {
         }
         close(fd);
         return;
-    }
-
-    /* If the above fails, try the old common.git PR_SET_TIMERSLACK_PID. */
-    if (prctl(PR_SET_TIMERSLACK_PID, slack, tid) == -1) {
-        SLOGE("set_timerslack_ns prctl failed: %s\n", strerror(errno));
     }
 }
 
