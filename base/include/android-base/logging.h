@@ -53,8 +53,8 @@ enum LogId {
 typedef std::function<void(LogId, LogSeverity, const char*, const char*,
                            unsigned int, const char*)> LogFunction;
 
-extern void StderrLogger(LogId, LogSeverity, const char*, const char*,
-                         unsigned int, const char*);
+void KernelLogger(LogId, LogSeverity, const char*, const char*, unsigned int, const char*);
+void StderrLogger(LogId, LogSeverity, const char*, const char*, unsigned int, const char*);
 
 #ifdef __ANDROID__
 // We expose this even though it is the default because a user that wants to
@@ -79,17 +79,14 @@ class LogdLogger {
 // The tag (or '*' for the global level) comes first, followed by a colon and a
 // letter indicating the minimum priority level we're expected to log.  This can
 // be used to reveal or conceal logs with specific tags.
-extern void InitLogging(char* argv[], LogFunction&& logger);
+void InitLogging(char* argv[], LogFunction&& logger);
 
 // Configures logging using the default logger (logd for the device, stderr for
 // the host).
-extern void InitLogging(char* argv[]);
+void InitLogging(char* argv[]);
 
 // Replace the current logger.
-extern void SetLogger(LogFunction&& logger);
-
-// Get the minimum severity level for logging.
-extern LogSeverity GetMinimumLogSeverity();
+void SetLogger(LogFunction&& logger);
 
 class ErrnoRestorer {
  public:
@@ -333,6 +330,12 @@ class LogMessage {
 
   DISALLOW_COPY_AND_ASSIGN(LogMessage);
 };
+
+// Get the minimum severity level for logging.
+LogSeverity GetMinimumLogSeverity();
+
+// Set the minimum severity level for logging, returning the old severity.
+LogSeverity SetMinimumLogSeverity(LogSeverity new_severity);
 
 // Allows to temporarily change the minimum severity level for logging.
 class ScopedLogSeverity {

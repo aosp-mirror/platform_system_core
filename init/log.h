@@ -19,8 +19,6 @@
 
 #include <android-base/logging.h>
 
-#include <cutils/klog.h>
-
 void InitKernelLogging(char* argv[]);
 
 int selinux_klog_callback(int level, const char* fmt, ...) __printflike(2, 3);
