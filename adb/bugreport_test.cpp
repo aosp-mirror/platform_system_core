@@ -36,7 +36,9 @@ using ::testing::Return;
 using ::testing::StrEq;
 using ::testing::WithArg;
 using ::testing::internal::CaptureStderr;
+using ::testing::internal::CaptureStdout;
 using ::testing::internal::GetCapturedStderr;
+using ::testing::internal::GetCapturedStdout;
 
 // Empty function so tests don't need to be linked against file_sync_service.cpp, which requires
 // SELinux and its transitive dependencies...
@@ -152,19 +154,28 @@ class BugreportTest : public ::testing::Test {
 
 // Tests when called with invalid number of arguments
 TEST_F(BugreportTest, InvalidNumberArgs) {
-    const char* args[1024] = {"bugreport", "to", "principal"};
+    const char* args[] = {"bugreport", "to", "principal"};
     ASSERT_EQ(-42, br_.DoIt(kTransportLocal, "HannibalLecter", 3, args));
 }
 
 // Tests the 'adb bugreport' option when the device does not support 'bugreportz' - it falls back
 // to the flat-file format ('bugreport' binary on device)
 TEST_F(BugreportTest, NoArgumentsPreNDevice) {
-    ExpectBugreportzVersion("");
+    // clang-format off
+    EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -v", false, _))
+        .WillOnce(DoAll(WithArg<4>(WriteOnStderr("")),
+                        // Write some bogus output on stdout to make sure it's ignored
+                        WithArg<4>(WriteOnStdout("Dude, where is my bugreportz?")),
+                        WithArg<4>(ReturnCallbackDone(0))));
+    // clang-format on
+    std::string bugreport = "Reported the bug was.";
+    CaptureStdout();
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreport", false, _))
-        .WillOnce(Return(0));
+        .WillOnce(DoAll(WithArg<4>(WriteOnStdout(bugreport)), Return(0)));
 
-    const char* args[1024] = {"bugreport"};
+    const char* args[] = {"bugreport"};
     ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 1, args));
+    ASSERT_THAT(GetCapturedStdout(), StrEq(bugreport));
 }
 
 // Tests the 'adb bugreport' option when the device supports 'bugreportz' version 1.0 - it will
@@ -181,7 +192,7 @@ TEST_F(BugreportTest, NoArgumentsNDevice) {
                                 true, StrEq("generating da_bugreport.zip")))
         .WillOnce(Return(true));
 
-    const char* args[1024] = {"bugreport"};
+    const char* args[] = {"bugreport"};
     ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 1, args));
 }
 
@@ -201,7 +212,7 @@ TEST_F(BugreportTest, NoArgumentsPostNDevice) {
                                 true, StrEq("generating da_bugreport.zip")))
         .WillOnce(Return(true));
 
-    const char* args[1024] = {"bugreport"};
+    const char* args[] = {"bugreport"};
     ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 1, args));
 }
 
@@ -215,7 +226,7 @@ TEST_F(BugreportTest, OkNDevice) {
                                 true, StrEq("generating file.zip")))
         .WillOnce(Return(true));
 
-    const char* args[1024] = {"bugreport", "file.zip"};
+    const char* args[] = {"bugreport", "file.zip"};
     ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }
 
@@ -231,7 +242,7 @@ TEST_F(BugreportTest, OkNDeviceSplitBuffer) {
                                 true, StrEq("generating file.zip")))
         .WillOnce(Return(true));
 
-    const char* args[1024] = {"bugreport", "file.zip"};
+    const char* args[] = {"bugreport", "file.zip"};
     ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }
 
@@ -267,7 +278,7 @@ TEST_F(BugreportTest, OkProgress) {
                                 true, StrEq("generating file.zip")))
         .WillOnce(Return(true));
 
-    const char* args[1024] = {"bugreport", "file.zip"};
+    const char* args[] = {"bugreport", "file.zip"};
     ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }
 
@@ -286,7 +297,7 @@ TEST_F(BugreportTest, OkDirectory) {
                                 true, StrEq("generating da_bugreport.zip")))
         .WillOnce(Return(true));
 
-    const char* args[1024] = {"bugreport", td.path};
+    const char* args[] = {"bugreport", td.path};
     ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }
 
@@ -300,7 +311,7 @@ TEST_F(BugreportTest, OkNoExtension) {
                                 true, StrEq("generating file.zip")))
         .WillOnce(Return(true));
 
-    const char* args[1024] = {"bugreport", "file"};
+    const char* args[] = {"bugreport", "file"};
     ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }
 
@@ -319,7 +330,7 @@ TEST_F(BugreportTest, OkNDeviceDirectory) {
                                 true, StrEq("generating da_bugreport.zip")))
         .WillOnce(Return(true));
 
-    const char* args[1024] = {"bugreport", td.path};
+    const char* args[] = {"bugreport", td.path};
     ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }
 
@@ -331,7 +342,7 @@ TEST_F(BugreportTest, BugreportzReturnedFail) {
             DoAll(WithArg<4>(WriteOnStdout("FAIL:D'OH!\n")), WithArg<4>(ReturnCallbackDone())));
 
     CaptureStderr();
-    const char* args[1024] = {"bugreport", "file.zip"};
+    const char* args[] = {"bugreport", "file.zip"};
     ASSERT_EQ(-1, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
     ASSERT_THAT(GetCapturedStderr(), HasSubstr("D'OH!"));
 }
@@ -346,7 +357,7 @@ TEST_F(BugreportTest, BugreportzReturnedFailSplitBuffer) {
                         WithArg<4>(ReturnCallbackDone())));
 
     CaptureStderr();
-    const char* args[1024] = {"bugreport", "file.zip"};
+    const char* args[] = {"bugreport", "file.zip"};
     ASSERT_EQ(-1, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
     ASSERT_THAT(GetCapturedStderr(), HasSubstr("D'OH!"));
 }
@@ -360,7 +371,7 @@ TEST_F(BugreportTest, BugreportzReturnedUnsupported) {
                         WithArg<4>(ReturnCallbackDone())));
 
     CaptureStderr();
-    const char* args[1024] = {"bugreport", "file.zip"};
+    const char* args[] = {"bugreport", "file.zip"};
     ASSERT_EQ(-1, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
     ASSERT_THAT(GetCapturedStderr(), HasSubstr("bugreportz? What am I, a zombie?"));
 }
@@ -370,7 +381,7 @@ TEST_F(BugreportTest, BugreportzVersionFailed) {
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -v", false, _))
         .WillOnce(Return(666));
 
-    const char* args[1024] = {"bugreport", "file.zip"};
+    const char* args[] = {"bugreport", "file.zip"};
     ASSERT_EQ(666, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }
 
@@ -378,7 +389,7 @@ TEST_F(BugreportTest, BugreportzVersionFailed) {
 TEST_F(BugreportTest, BugreportzVersionEmpty) {
     ExpectBugreportzVersion("");
 
-    const char* args[1024] = {"bugreport", "file.zip"};
+    const char* args[] = {"bugreport", "file.zip"};
     ASSERT_EQ(-1, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }
 
@@ -388,7 +399,7 @@ TEST_F(BugreportTest, BugreportzFailed) {
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         .WillOnce(Return(666));
 
-    const char* args[1024] = {"bugreport", "file.zip"};
+    const char* args[] = {"bugreport", "file.zip"};
     ASSERT_EQ(666, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }
 
@@ -402,6 +413,6 @@ TEST_F(BugreportTest, PullFails) {
                                 true, HasSubstr("file.zip")))
         .WillOnce(Return(false));
 
-    const char* args[1024] = {"bugreport", "file.zip"};
+    const char* args[] = {"bugreport", "file.zip"};
     ASSERT_EQ(1, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }

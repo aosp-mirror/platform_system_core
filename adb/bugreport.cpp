@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG ADB
+
 #include "bugreport.h"
 
 #include <string>
@@ -187,22 +189,30 @@ int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, 
     if (argc > 2) return usage();
 
     // Gets bugreportz version.
-    std::string bugz_stderr;
-    DefaultStandardStreamsCallback version_callback(nullptr, &bugz_stderr);
+    std::string bugz_stdout, bugz_stderr;
+    DefaultStandardStreamsCallback version_callback(&bugz_stdout, &bugz_stderr);
     int status = SendShellCommand(transport_type, serial, "bugreportz -v", false, &version_callback);
     std::string bugz_version = android::base::Trim(bugz_stderr);
+    std::string bugz_output = android::base::Trim(bugz_stdout);
 
     if (status != 0 || bugz_version.empty()) {
-        // Device does not support bugreportz: if called as 'adb bugreport', just falls out to the
-        // flat-file version
-        if (argc == 1) return SendShellCommand(transport_type, serial, "bugreport", false);
+        D("'bugreportz' -v results: status=%d, stdout='%s', stderr='%s'", status,
+          bugz_output.c_str(), bugz_version.c_str());
+        if (argc == 1) {
+            // Device does not support bugreportz: if called as 'adb bugreport', just falls out to
+            // the flat-file version.
+            fprintf(stderr,
+                    "Failed to get bugreportz version, which is only available on devices "
+                    "running Android 7.0 or later.\nTrying a plain-text bug report instead.\n");
+            return SendShellCommand(transport_type, serial, "bugreport", false);
+        }
 
         // But if user explicitly asked for a zipped bug report, fails instead (otherwise calling
-        // 'bugreport' would generate a lot of output the user might not be prepared to handle)
+        // 'bugreport' would generate a lot of output the user might not be prepared to handle).
         fprintf(stderr,
                 "Failed to get bugreportz version: 'bugreportz -v' returned '%s' (code %d).\n"
-                "If the device runs Android M or below, try 'adb bugreport' instead.\n",
-                bugz_stderr.c_str(), status);
+                "If the device does not run Android 7.0 or above, try 'adb bugreport' instead.\n",
+                bugz_output.c_str(), status);
         return status != 0 ? status : -1;
     }
 
