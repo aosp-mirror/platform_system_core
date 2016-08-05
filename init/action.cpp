@@ -118,7 +118,8 @@ void Action::ExecuteCommand(const Command& command) const {
     Timer t;
     int result = command.InvokeFunc();
 
-    if (klog_get_level() >= KLOG_DEBUG_LEVEL) {
+    // TODO: this should probably be changed to "if (failed || took a long time)"...
+    if (android::base::GetMinimumLogSeverity() <= android::base::DEBUG) {
         std::string trigger_name = BuildTriggersString();
         std::string cmd_str = command.BuildCommandString();
         std::string source = command.BuildSourceString();

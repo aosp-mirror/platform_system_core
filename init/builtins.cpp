@@ -491,11 +491,7 @@ static void import_late(const std::vector<std::string>& args, size_t start_index
  * not return.
  */
 static int do_mount_all(const std::vector<std::string>& args) {
-    pid_t pid;
     int ret = -1;
-    int child_ret = -1;
-    int status;
-    struct fstab *fstab;
 
     const char* fstabfile = args[1].c_str();
     /*
@@ -504,9 +500,10 @@ static int do_mount_all(const std::vector<std::string>& args) {
      * process if anything goes wrong (crash or memory leak), and wait for
      * the child to finish in the parent.
      */
-    pid = fork();
+    pid_t pid = fork();
     if (pid > 0) {
         /* Parent.  Wait for the child to return */
+        int status;
         int wp_ret = TEMP_FAILURE_RETRY(waitpid(pid, &status, 0));
         if (wp_ret == -1) {
             // Unexpected error code. We will continue anyway.
@@ -520,9 +517,13 @@ static int do_mount_all(const std::vector<std::string>& args) {
         }
     } else if (pid == 0) {
         /* child, call fs_mgr_mount_all() */
-        klog_set_level(6);  /* So we can see what fs_mgr_mount_all() does */
-        fstab = fs_mgr_read_fstab(fstabfile);
-        child_ret = fs_mgr_mount_all(fstab);
+
+        // So we can always see what fs_mgr_mount_all() does.
+        // Only needed if someone explicitly changes the default log level in their init.rc.
+        android::base::ScopedLogSeverity info(android::base::INFO);
+
+        struct fstab* fstab = fs_mgr_read_fstab(fstabfile);
+        int child_ret = fs_mgr_mount_all(fstab);
         fs_mgr_free_fstab(fstab);
         if (child_ret == -1) {
             PLOG(ERROR) << "fs_mgr_mount_all returned an error";
@@ -872,12 +873,23 @@ static int do_restorecon_recursive(const std::vector<std::string>& args) {
 }
 
 static int do_loglevel(const std::vector<std::string>& args) {
+    // TODO: support names instead/as well?
     int log_level = std::stoi(args[1]);
-    if (log_level < KLOG_ERROR_LEVEL || log_level > KLOG_DEBUG_LEVEL) {
-        LOG(ERROR) << "loglevel: invalid log level " << log_level;
-        return -EINVAL;
+    android::base::LogSeverity severity;
+    switch (log_level) {
+        case 7: severity = android::base::DEBUG; break;
+        case 6: severity = android::base::INFO; break;
+        case 5:
+        case 4: severity = android::base::WARNING; break;
+        case 3: severity = android::base::ERROR; break;
+        case 2:
+        case 1:
+        case 0: severity = android::base::FATAL; break;
+        default:
+            LOG(ERROR) << "loglevel: invalid log level " << log_level;
+            return -EINVAL;
     }
-    klog_set_level(log_level);
+    android::base::SetMinimumLogSeverity(severity);
     return 0;
 }
 
