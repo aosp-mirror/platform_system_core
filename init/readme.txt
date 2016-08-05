@@ -514,6 +514,3 @@ For quicker turnaround when working on init itself, use:
 Alternatively, use the emulator:
 
   emulator -partition-size 1024 -verbose -show-kernel -no-window
-
-You might want to change the klog_set_level call so you see all the kernel
-logging in dmesg (or the emulator output).
