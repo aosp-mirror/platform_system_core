@@ -7,8 +7,8 @@ common_static_libraries := \
     libfec \
     libfec_rs \
     libbase \
-    libcrypto_utils_static \
-    libcrypto_static \
+    libcrypto_utils \
+    libcrypto \
     libext4_utils_static \
     libsquashfs_utils \
     libselinux
