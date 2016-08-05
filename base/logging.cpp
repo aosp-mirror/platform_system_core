@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #include <windows.h>
 #endif
 
 #include "android-base/logging.h"
 
+#include <fcntl.h>
 #include <libgen.h>
 #include <time.h>
 
@@ -28,6 +29,10 @@
 #include <stdlib.h>
 #elif defined(__GLIBC__)
 #include <errno.h>
+#endif
+
+#if defined(__linux__)
+#include <sys/uio.h>
 #endif
 
 #include <iostream>
@@ -172,10 +177,6 @@ static bool gInitialized = false;
 static LogSeverity gMinimumLogSeverity = INFO;
 static auto& gProgramInvocationName = *new std::unique_ptr<std::string>();
 
-LogSeverity GetMinimumLogSeverity() {
-  return gMinimumLogSeverity;
-}
-
 static const char* ProgramInvocationName() {
   if (gProgramInvocationName == nullptr) {
     gProgramInvocationName.reset(new std::string(getprogname()));
@@ -183,6 +184,42 @@ static const char* ProgramInvocationName() {
 
   return gProgramInvocationName->c_str();
 }
+
+#if defined(__linux__)
+void KernelLogger(android::base::LogId, android::base::LogSeverity severity,
+                  const char* tag, const char*, unsigned int, const char* msg) {
+  static constexpr int kLogSeverityToKernelLogLevel[] = {
+    [android::base::VERBOSE] = 7, // KERN_DEBUG (there is no verbose kernel log level)
+    [android::base::DEBUG]   = 7, // KERN_DEBUG
+    [android::base::INFO]    = 6, // KERN_INFO
+    [android::base::WARNING] = 4, // KERN_WARNING
+    [android::base::ERROR]   = 3, // KERN_ERROR
+    [android::base::FATAL]   = 2, // KERN_CRIT
+  };
+  static_assert(arraysize(kLogSeverityToKernelLogLevel) == android::base::FATAL + 1,
+                "Mismatch in size of kLogSeverityToKernelLogLevel and values in LogSeverity");
+
+  static int klog_fd = TEMP_FAILURE_RETRY(open("/dev/kmsg", O_WRONLY | O_CLOEXEC));
+  if (klog_fd == -1) return;
+
+  int level = kLogSeverityToKernelLogLevel[severity];
+
+  // The kernel's printk buffer is only 1024 bytes.
+  // TODO: should we automatically break up long lines into multiple lines?
+  // Or we could log but with something like "..." at the end?
+  char buf[1024];
+  size_t size = snprintf(buf, sizeof(buf), "<%d>%s: %s\n", level, tag, msg);
+  if (size > sizeof(buf)) {
+    size = snprintf(buf, sizeof(buf), "<%d>%s: %zu-byte message too long for printk\n",
+                    level, tag, size);
+  }
+
+  iovec iov[1];
+  iov[0].iov_base = buf;
+  iov[0].iov_len = size;
+  TEMP_FAILURE_RETRY(writev(klog_fd, iov, 1));
+}
+#endif
 
 void StderrLogger(LogId, LogSeverity severity, const char*, const char* file,
                   unsigned int line, const char* message) {
@@ -211,28 +248,26 @@ void StderrLogger(LogId, LogSeverity severity, const char*, const char* file,
 LogdLogger::LogdLogger(LogId default_log_id) : default_log_id_(default_log_id) {
 }
 
-static const android_LogPriority kLogSeverityToAndroidLogPriority[] = {
-    ANDROID_LOG_VERBOSE, ANDROID_LOG_DEBUG, ANDROID_LOG_INFO,
-    ANDROID_LOG_WARN,    ANDROID_LOG_ERROR, ANDROID_LOG_FATAL,
-};
-static_assert(arraysize(kLogSeverityToAndroidLogPriority) == FATAL + 1,
-              "Mismatch in size of kLogSeverityToAndroidLogPriority and values "
-              "in LogSeverity");
-
-static const log_id kLogIdToAndroidLogId[] = {
-    LOG_ID_MAX, LOG_ID_MAIN, LOG_ID_SYSTEM,
-};
-static_assert(arraysize(kLogIdToAndroidLogId) == SYSTEM + 1,
-              "Mismatch in size of kLogIdToAndroidLogId and values in LogId");
-
 void LogdLogger::operator()(LogId id, LogSeverity severity, const char* tag,
                             const char* file, unsigned int line,
                             const char* message) {
+  static constexpr android_LogPriority kLogSeverityToAndroidLogPriority[] = {
+    ANDROID_LOG_VERBOSE, ANDROID_LOG_DEBUG, ANDROID_LOG_INFO,
+    ANDROID_LOG_WARN,    ANDROID_LOG_ERROR, ANDROID_LOG_FATAL,
+  };
+  static_assert(arraysize(kLogSeverityToAndroidLogPriority) == FATAL + 1,
+                "Mismatch in size of kLogSeverityToAndroidLogPriority and values in LogSeverity");
+
   int priority = kLogSeverityToAndroidLogPriority[severity];
   if (id == DEFAULT) {
     id = default_log_id_;
   }
 
+  static constexpr log_id kLogIdToAndroidLogId[] = {
+    LOG_ID_MAX, LOG_ID_MAIN, LOG_ID_SYSTEM,
+  };
+  static_assert(arraysize(kLogIdToAndroidLogId) == SYSTEM + 1,
+                "Mismatch in size of kLogIdToAndroidLogId and values in LogId");
   log_id lg_id = kLogIdToAndroidLogId[id];
 
   if (priority == ANDROID_LOG_FATAL) {
@@ -427,13 +462,22 @@ void LogMessage::LogLine(const char* file, unsigned int line, LogId id,
   gLogger(id, severity, tag, file, line, message);
 }
 
-ScopedLogSeverity::ScopedLogSeverity(LogSeverity level) {
-  old_ = gMinimumLogSeverity;
-  gMinimumLogSeverity = level;
+LogSeverity GetMinimumLogSeverity() {
+    return gMinimumLogSeverity;
+}
+
+LogSeverity SetMinimumLogSeverity(LogSeverity new_severity) {
+  LogSeverity old_severity = gMinimumLogSeverity;
+  gMinimumLogSeverity = new_severity;
+  return old_severity;
+}
+
+ScopedLogSeverity::ScopedLogSeverity(LogSeverity new_severity) {
+  old_ = SetMinimumLogSeverity(new_severity);
 }
 
 ScopedLogSeverity::~ScopedLogSeverity() {
-  gMinimumLogSeverity = old_;
+  SetMinimumLogSeverity(old_);
 }
 
 }  // namespace base
