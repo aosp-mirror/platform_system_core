@@ -28,8 +28,11 @@
 #include <unistd.h>
 #include <utime.h>
 
+#include <chrono>
 #include <functional>
 #include <memory>
+#include <sstream>
+#include <string>
 #include <vector>
 
 #include "sysdeps.h"
@@ -94,14 +97,112 @@ struct copyinfo {
     }
 };
 
+enum class TransferDirection {
+    push,
+    pull,
+};
+
+struct TransferLedger {
+    std::chrono::steady_clock::time_point start_time;
+    uint64_t files_transferred;
+    uint64_t files_skipped;
+    uint64_t bytes_transferred;
+    uint64_t bytes_expected;
+    bool expect_multiple_files;
+
+    TransferLedger() {
+        Reset();
+    }
+
+    bool operator==(const TransferLedger& other) const {
+        return files_transferred == other.files_transferred &&
+               files_skipped == other.files_skipped && bytes_transferred == other.bytes_transferred;
+    }
+
+    bool operator!=(const TransferLedger& other) const {
+        return !(*this == other);
+    }
+
+    void Reset() {
+        start_time = std::chrono::steady_clock::now();
+        files_transferred = 0;
+        files_skipped = 0;
+        bytes_transferred = 0;
+        bytes_expected = 0;
+    }
+
+    std::string TransferRate() {
+        if (bytes_transferred == 0) return "";
+
+        std::chrono::duration<double> duration;
+        duration = std::chrono::steady_clock::now() - start_time;
+
+        double s = duration.count();
+        if (s == 0) {
+            return "";
+        }
+        double rate = (static_cast<double>(bytes_transferred) / s) / (1024 * 1024);
+        return android::base::StringPrintf(" %.1f MB/s (%" PRIu64 " bytes in %.3fs)", rate,
+                                           bytes_transferred, s);
+    }
+
+    void ReportProgress(LinePrinter& lp, const std::string& file, uint64_t file_copied_bytes,
+                        uint64_t file_total_bytes) {
+        char overall_percentage_str[5] = "?";
+        if (bytes_expected != 0) {
+            int overall_percentage = static_cast<int>(bytes_transferred * 100 / bytes_expected);
+            // If we're pulling symbolic links, we'll pull the target of the link rather than
+            // just create a local link, and that will cause us to go over 100%.
+            if (overall_percentage <= 100) {
+                snprintf(overall_percentage_str, sizeof(overall_percentage_str), "%d%%",
+                         overall_percentage);
+            }
+        }
+
+        std::string output;
+        if (file_copied_bytes > file_total_bytes || file_total_bytes == 0) {
+            // This case can happen if we're racing against something that wrote to the file
+            // between our stat and our read, or if we're reading a magic file that lies about
+            // its size. Just show how much we've copied.
+            output = android::base::StringPrintf("[%4s] %s: %" PRId64 "/?", overall_percentage_str,
+                                                 file.c_str(), file_copied_bytes);
+        } else {
+            // If we're transferring multiple files, we want to know how far through the current
+            // file we are, as well as the overall percentage.
+            if (expect_multiple_files) {
+                int file_percentage = static_cast<int>(file_copied_bytes * 100 / file_total_bytes);
+                output = android::base::StringPrintf("[%4s] %s: %d%%", overall_percentage_str,
+                                                     file.c_str(), file_percentage);
+            } else {
+                output =
+                    android::base::StringPrintf("[%4s] %s", overall_percentage_str, file.c_str());
+            }
+        }
+        lp.Print(output, LinePrinter::LineType::INFO);
+    }
+
+    void ReportTransferRate(LinePrinter& lp, const std::string& name, TransferDirection direction) {
+        const char* direction_str = (direction == TransferDirection::push) ? "pushed" : "pulled";
+        std::stringstream ss;
+        if (!name.empty()) {
+            ss << name << ": ";
+        }
+        ss << files_transferred << " file" << ((files_transferred == 1) ? "" : "s") << " "
+           << direction_str << ".";
+        if (files_skipped > 0) {
+            ss << " " << files_skipped << " file" << ((files_skipped == 1) ? "" : "s")
+               << " skipped.";
+        }
+        ss << TransferRate();
+
+        lp.Print(ss.str(), LinePrinter::LineType::INFO);
+        lp.KeepInfoLine();
+    }
+};
+
 class SyncConnection {
   public:
-    SyncConnection()
-            : total_bytes_(0),
-              start_time_ms_(CurrentTimeMs()),
-              expected_total_bytes_(0),
-              expect_multiple_files_(false),
-              expect_done_(false) {
+    SyncConnection() : expect_done_(false) {
         max = SYNC_DATA_MAX; // TODO: decide at runtime.
 
         std::string error;
@@ -138,6 +239,40 @@ class SyncConnection {
             return true;
         }
         return rc != 0;
+    }
+
+    void NewTransfer() {
+        current_ledger_.Reset();
+    }
+
+    void RecordBytesTransferred(size_t bytes) {
+        current_ledger_.bytes_transferred += bytes;
+        global_ledger_.bytes_transferred += bytes;
+    }
+
+    void RecordFilesTransferred(size_t files) {
+        current_ledger_.files_transferred += files;
+        global_ledger_.files_transferred += files;
+    }
+
+    void RecordFilesSkipped(size_t files) {
+        current_ledger_.files_skipped += files;
+        global_ledger_.files_skipped += files;
+    }
+
+    void ReportProgress(const std::string& file, uint64_t file_copied_bytes,
+                        uint64_t file_total_bytes) {
+        current_ledger_.ReportProgress(line_printer_, file, file_copied_bytes, file_total_bytes);
+    }
+
+    void ReportTransferRate(const std::string& file, TransferDirection direction) {
+        current_ledger_.ReportTransferRate(line_printer_, file, direction);
+    }
+
+    void ReportOverallTransferRate(TransferDirection direction) {
+        if (current_ledger_ != global_ledger_) {
+            global_ledger_.ReportTransferRate(line_printer_, "", direction);
+        }
     }
 
     bool SendRequest(int id, const char* path_and_mode) {
@@ -199,7 +334,9 @@ class SyncConnection {
 
         WriteOrDie(lpath, rpath, &buf[0], (p - &buf[0]));
         expect_done_ = true;
-        total_bytes_ += data_length;
+
+        // RecordFilesTransferred gets called in CopyDone.
+        RecordBytesTransferred(data_length);
         ReportProgress(rpath, data_length, data_length);
         return true;
     }
@@ -242,7 +379,7 @@ class SyncConnection {
             sbuf.size = bytes_read;
             WriteOrDie(lpath, rpath, &sbuf, sizeof(SyncRequest) + bytes_read);
 
-            total_bytes_ += bytes_read;
+            RecordBytesTransferred(bytes_read);
             bytes_copied += bytes_read;
 
             // Check to see if we've received an error from the other side.
@@ -259,6 +396,8 @@ class SyncConnection {
         msg.data.id = ID_DONE;
         msg.data.size = mtime;
         expect_done_ = true;
+
+        // RecordFilesTransferred gets called in CopyDone.
         return WriteOrDie(lpath, rpath, &msg.data, sizeof(msg.data));
     }
 
@@ -271,6 +410,7 @@ class SyncConnection {
         if (msg.status.id == ID_OKAY) {
             if (expect_done_) {
                 expect_done_ = false;
+                RecordFilesTransferred(1);
                 return true;
             } else {
                 Error("failed to copy '%s' to '%s': received premature success", from, to);
@@ -296,44 +436,6 @@ class SyncConnection {
         return false;
     }
 
-    std::string TransferRate() {
-        uint64_t ms = CurrentTimeMs() - start_time_ms_;
-        if (total_bytes_ == 0 || ms == 0) return "";
-
-        double s = static_cast<double>(ms) / 1000LL;
-        double rate = (static_cast<double>(total_bytes_) / s) / (1024*1024);
-        return android::base::StringPrintf(" %.1f MB/s (%" PRId64 " bytes in %.3fs)",
-                                           rate, total_bytes_, s);
-    }
-
-    void ReportProgress(const char* file, uint64_t file_copied_bytes, uint64_t file_total_bytes) {
-        char overall_percentage_str[5] = "?";
-        if (expected_total_bytes_ != 0) {
-            int overall_percentage = static_cast<int>(total_bytes_ * 100 / expected_total_bytes_);
-            // If we're pulling symbolic links, we'll pull the target of the link rather than
-            // just create a local link, and that will cause us to go over 100%.
-            if (overall_percentage <= 100) {
-                snprintf(overall_percentage_str, sizeof(overall_percentage_str), "%d%%",
-                         overall_percentage);
-            }
-        }
-
-        if (file_copied_bytes > file_total_bytes || file_total_bytes == 0) {
-            // This case can happen if we're racing against something that wrote to the file
-            // between our stat and our read, or if we're reading a magic file that lies about
-            // its size. Just show how much we've copied.
-            Printf("[%4s] %s: %" PRId64 "/?", overall_percentage_str, file, file_copied_bytes);
-        } else {
-            // If we're transferring multiple files, we want to know how far through the current
-            // file we are, as well as the overall percentage.
-            if (expect_multiple_files_) {
-                int file_percentage = static_cast<int>(file_copied_bytes * 100 / file_total_bytes);
-                Printf("[%4s] %s: %d%%", overall_percentage_str, file, file_percentage);
-            } else {
-                Printf("[%4s] %s", overall_percentage_str, file);
-            }
-        }
-    }
 
     void Printf(const char* fmt, ...) __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3))) {
         std::string s;
@@ -344,6 +446,18 @@ class SyncConnection {
         va_end(ap);
 
         line_printer_.Print(s, LinePrinter::INFO);
+    }
+
+    void Println(const char* fmt, ...) __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3))) {
+        std::string s;
+
+        va_list ap;
+        va_start(ap, fmt);
+        android::base::StringAppendV(&s, fmt, ap);
+        va_end(ap);
+
+        line_printer_.Print(s, LinePrinter::INFO);
+        line_printer_.KeepInfoLine();
     }
 
     void Error(const char* fmt, ...) __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3))) {
@@ -369,33 +483,29 @@ class SyncConnection {
     }
 
     void ComputeExpectedTotalBytes(const std::vector<copyinfo>& file_list) {
-        expected_total_bytes_ = 0;
+        current_ledger_.bytes_expected = 0;
         for (const copyinfo& ci : file_list) {
             // Unfortunately, this doesn't work for symbolic links, because we'll copy the
             // target of the link rather than just creating a link. (But ci.size is the link size.)
-            if (!ci.skip) expected_total_bytes_ += ci.size;
+            if (!ci.skip) current_ledger_.bytes_expected += ci.size;
         }
-        expect_multiple_files_ = true;
+        current_ledger_.expect_multiple_files = true;
     }
 
     void SetExpectedTotalBytes(uint64_t expected_total_bytes) {
-        expected_total_bytes_ = expected_total_bytes;
-        expect_multiple_files_ = false;
+        current_ledger_.bytes_expected = expected_total_bytes;
+        current_ledger_.expect_multiple_files = false;
     }
-
-    uint64_t total_bytes_;
 
     // TODO: add a char[max] buffer here, to replace syncsendbuf...
     int fd;
     size_t max;
 
   private:
-    uint64_t start_time_ms_;
-
-    uint64_t expected_total_bytes_;
-    bool expect_multiple_files_;
     bool expect_done_;
 
+    TransferLedger global_ledger_;
+    TransferLedger current_ledger_;
     LinePrinter line_printer_;
 
     bool SendQuit() {
@@ -421,12 +531,6 @@ class SyncConnection {
             _exit(1);
         }
         return true;
-    }
-
-    static uint64_t CurrentTimeMs() {
-        struct timeval tv;
-        gettimeofday(&tv, 0); // (Not clock_gettime because of Mac/Windows.)
-        return static_cast<uint64_t>(tv.tv_sec) * 1000 + tv.tv_usec / 1000;
     }
 };
 
@@ -570,13 +674,12 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath) 
             return false;
         }
 
-        sc.total_bytes_ += msg.data.size;
-
         bytes_copied += msg.data.size;
-
+        sc.RecordBytesTransferred(msg.data.size);
         sc.ReportProgress(rpath, bytes_copied, size);
     }
 
+    sc.RecordFilesTransferred(1);
     adb_close(lfd);
     return true;
 }
@@ -661,13 +764,14 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* file_lis
 static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
                                   std::string rpath, bool check_timestamps,
                                   bool list_only) {
+    sc.NewTransfer();
+
     // Make sure that both directory paths end in a slash.
     // Both paths are known to be nonempty, so we don't need to check.
     ensure_trailing_separators(lpath, rpath);
 
     // Recursively build the list of files to copy.
     std::vector<copyinfo> file_list;
-    int pushed = 0;
     int skipped = 0;
     if (!local_build_list(sc, &file_list, lpath, rpath)) {
         return false;
@@ -699,21 +803,19 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
     for (const copyinfo& ci : file_list) {
         if (!ci.skip) {
             if (list_only) {
-                sc.Error("would push: %s -> %s", ci.lpath.c_str(), ci.rpath.c_str());
+                sc.Println("would push: %s -> %s", ci.lpath.c_str(), ci.rpath.c_str());
             } else {
                 if (!sync_send(sc, ci.lpath.c_str(), ci.rpath.c_str(), ci.time, ci.mode)) {
                     return false;
                 }
             }
-            pushed++;
         } else {
             skipped++;
         }
     }
 
-    sc.Printf("%s: %d file%s pushed. %d file%s skipped.%s", rpath.c_str(),
-              pushed, (pushed == 1) ? "" : "s", skipped,
-              (skipped == 1) ? "" : "s", sc.TransferRate().c_str());
+    sc.RecordFilesSkipped(skipped);
+    sc.ReportTransferRate(lpath, TransferDirection::push);
     return true;
 }
 
@@ -789,10 +891,14 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
             path_holder += adb_basename(src_path);
             dst_path = path_holder.c_str();
         }
+
+        sc.NewTransfer();
         sc.SetExpectedTotalBytes(st.st_size);
         success &= sync_send(sc, src_path, dst_path, st.st_mtime, st.st_mode);
+        sc.ReportTransferRate(src_path, TransferDirection::push);
     }
 
+    sc.ReportOverallTransferRate(TransferDirection::push);
     return success;
 }
 
@@ -878,6 +984,8 @@ static int set_time_and_mode(const std::string& lpath, time_t time,
 
 static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
                                   std::string lpath, bool copy_attrs) {
+    sc.NewTransfer();
+
     // Make sure that both directory paths end in a slash.
     // Both paths are known to be nonempty, so we don't need to check.
     ensure_trailing_separators(lpath, rpath);
@@ -891,7 +999,6 @@ static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
 
     sc.ComputeExpectedTotalBytes(file_list);
 
-    int pulled = 0;
     int skipped = 0;
     for (const copyinfo &ci : file_list) {
         if (!ci.skip) {
@@ -903,7 +1010,6 @@ static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
                              ci.lpath.c_str(), strerror(errno));
                     return false;
                 }
-                pulled++;
                 continue;
             }
 
@@ -914,15 +1020,13 @@ static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
             if (copy_attrs && set_time_and_mode(ci.lpath, ci.time, ci.mode)) {
                 return false;
             }
-            pulled++;
         } else {
             skipped++;
         }
     }
 
-    sc.Printf("%s: %d file%s pulled. %d file%s skipped.%s", rpath.c_str(),
-              pulled, (pulled == 1) ? "" : "s", skipped,
-              (skipped == 1) ? "" : "s", sc.TransferRate().c_str());
+    sc.RecordFilesSkipped(skipped);
+    sc.ReportTransferRate(rpath, TransferDirection::pull);
     return true;
 }
 
@@ -1021,6 +1125,7 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
             dst_path = path_holder.c_str();
         }
 
+        sc.NewTransfer();
         sc.SetExpectedTotalBytes(src_size);
         if (!sync_recv(sc, src_path, dst_path)) {
             success = false;
@@ -1031,8 +1136,10 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
             success = false;
             continue;
         }
+        sc.ReportTransferRate(src_path, TransferDirection::pull);
     }
 
+    sc.ReportOverallTransferRate(TransferDirection::pull);
     return success;
 }
 
@@ -1040,5 +1147,9 @@ bool do_sync_sync(const std::string& lpath, const std::string& rpath, bool list_
     SyncConnection sc;
     if (!sc.IsValid()) return false;
 
-    return copy_local_dir_remote(sc, lpath, rpath, true, list_only);
+    bool success = copy_local_dir_remote(sc, lpath, rpath, true, list_only);
+    if (!list_only) {
+        sc.ReportOverallTransferRate(TransferDirection::push);
+    }
+    return success;
 }
