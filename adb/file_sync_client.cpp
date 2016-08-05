@@ -677,9 +677,8 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath,
 
         bytes_copied += msg.data.size;
 
-        sc.ReportProgress(name != nullptr ? name : rpath, bytes_copied, size);
         sc.RecordBytesTransferred(msg.data.size);
-        sc.ReportProgress(rpath, bytes_copied, size);
+        sc.ReportProgress(name != nullptr ? name : rpath, bytes_copied, size);
     }
 
     sc.RecordFilesTransferred(1);
