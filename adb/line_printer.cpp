@@ -124,4 +124,5 @@ void LinePrinter::Print(string to_print, LineType type) {
 
 void LinePrinter::KeepInfoLine() {
   if (!have_blank_line_) Out("\n");
+  have_blank_line_ = true;
 }
