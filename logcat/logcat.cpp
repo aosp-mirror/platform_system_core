@@ -26,6 +26,7 @@
 #include <string>
 
 #include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <cutils/sched_policy.h>
 #include <cutils/sockets.h>
@@ -109,29 +110,27 @@ static void rotateLogs()
             (g_maxRotatedLogs > 0) ? (int) (floor(log10(g_maxRotatedLogs) + 1)) : 0;
 
     for (int i = g_maxRotatedLogs ; i > 0 ; i--) {
-        char *file0, *file1;
+        std::string file1 = android::base::StringPrintf(
+            "%s.%.*d", g_outputFileName, maxRotationCountDigits, i);
 
-        asprintf(&file1, "%s.%.*d", g_outputFileName, maxRotationCountDigits, i);
-
+        std::string file0;
         if (i - 1 == 0) {
-            asprintf(&file0, "%s", g_outputFileName);
+            file0 = android::base::StringPrintf("%s", g_outputFileName);
         } else {
-            asprintf(&file0, "%s.%.*d", g_outputFileName, maxRotationCountDigits, i - 1);
+            file0 = android::base::StringPrintf(
+                "%s.%.*d", g_outputFileName, maxRotationCountDigits, i - 1);
         }
 
-        if (!file0 || !file1) {
+        if ((file0.length() == 0) || (file1.length() == 0)) {
             perror("while rotating log files");
             break;
         }
 
-        err = rename(file0, file1);
+        err = rename(file0.c_str(), file1.c_str());
 
         if (err < 0 && errno != ENOENT) {
             perror("while rotating log files");
         }
-
-        free(file1);
-        free(file0);
     }
 
     g_outFD = openLogFile(g_outputFileName);
@@ -231,13 +230,15 @@ static void maybePrintStart(log_device_t* dev, bool printDividers) {
     }
 }
 
-static void setupOutput()
-{
-
+static void setupOutputAndSchedulingPolicy(bool blocking) {
     if (g_outputFileName == NULL) {
         g_outFD = STDOUT_FILENO;
+        return;
+    }
 
-    } else {
+    if (blocking) {
+        // Lower priority and set to batch scheduling if we are saving
+        // the logs into files and taking continuous content.
         if (set_sched_policy(0, SP_BACKGROUND) < 0) {
             fprintf(stderr, "failed to set background scheduling policy\n");
         }
@@ -251,26 +252,26 @@ static void setupOutput()
         if (setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND) < 0) {
             fprintf(stderr, "failed set to priority\n");
         }
-
-        g_outFD = openLogFile (g_outputFileName);
-
-        if (g_outFD < 0) {
-            logcat_panic(false, "couldn't open output file");
-        }
-
-        struct stat statbuf;
-        if (fstat(g_outFD, &statbuf) == -1) {
-            close(g_outFD);
-            logcat_panic(false, "couldn't get output file stat\n");
-        }
-
-        if ((size_t) statbuf.st_size > SIZE_MAX || statbuf.st_size < 0) {
-            close(g_outFD);
-            logcat_panic(false, "invalid output file stat\n");
-        }
-
-        g_outByteCount = statbuf.st_size;
     }
+
+    g_outFD = openLogFile (g_outputFileName);
+
+    if (g_outFD < 0) {
+        logcat_panic(false, "couldn't open output file");
+    }
+
+    struct stat statbuf;
+    if (fstat(g_outFD, &statbuf) == -1) {
+        close(g_outFD);
+        logcat_panic(false, "couldn't get output file stat\n");
+    }
+
+    if ((size_t) statbuf.st_size > SIZE_MAX || statbuf.st_size < 0) {
+        close(g_outFD);
+        logcat_panic(false, "invalid output file stat\n");
+    }
+
+    g_outByteCount = statbuf.st_size;
 }
 
 static void show_help(const char *cmd)
@@ -284,6 +285,8 @@ static void show_help(const char *cmd)
                     "                  Rotate log every kbytes. Requires -f option\n"
                     "  -n <count>, --rotate-count=<count>\n"
                     "                  Sets max number of rotated logs to <count>, default 4\n"
+                    "  --id=<id>       If the signature id for logging to file changes, then clear\n"
+                    "                  the fileset and continue\n"
                     "  -v <format>, --format=<format>\n"
                     "                  Sets log print format verb and adverbs, where <format> is:\n"
                     "                    brief long process raw tag thread threadtime time\n"
@@ -443,7 +446,7 @@ static char *parseTime(log_time &t, const char *cp) {
     return t.strptime(cp, "%s.%q");
 }
 
-// Find last logged line in gestalt of all matching existing output files
+// Find last logged line in <outputFileName>, or <outputFileName>.1
 static log_time lastLogTime(char *outputFileName) {
     log_time retval(log_time::EPOCH);
     if (!outputFileName) {
@@ -468,24 +471,18 @@ static log_time lastLogTime(char *outputFileName) {
         return retval;
     }
 
-    clockid_t clock_type = android_log_clockid();
-    log_time now(clock_type);
-    bool monotonic = clock_type == CLOCK_MONOTONIC;
+    log_time now(android_log_clockid());
 
     size_t len = strlen(file);
     log_time modulo(0, NS_PER_SEC);
     struct dirent *dp;
 
     while ((dp = readdir(dir.get())) != NULL) {
-        if ((dp->d_type != DT_REG)
-                // If we are using realtime, check all files that match the
-                // basename for latest time. If we are using monotonic time
-                // then only check the main file because time cycles on
-                // every reboot.
-                || strncmp(dp->d_name, file, len + monotonic)
-                || (dp->d_name[len]
-                    && ((dp->d_name[len] != '.')
-                        || !isdigit(dp->d_name[len+1])))) {
+        if ((dp->d_type != DT_REG) ||
+                (strncmp(dp->d_name, file, len) != 0) ||
+                (dp->d_name[len] &&
+                     ((dp->d_name[len] != '.') ||
+                         (strtoll(dp->d_name + 1, NULL, 10) != 1)))) {
             continue;
         }
 
@@ -547,6 +544,7 @@ int main(int argc, char **argv)
     unsigned long setLogSize = 0;
     int getPruneList = 0;
     char *setPruneList = NULL;
+    char *setId = NULL;
     int printStatistics = 0;
     int mode = ANDROID_LOG_RDONLY;
     const char *forceFilters = NULL;
@@ -574,6 +572,7 @@ int main(int argc, char **argv)
         int option_index = 0;
         // list of long-argument only strings for later comparison
         static const char pid_str[] = "pid";
+        static const char id_str[] = "id";
         static const char wrap_str[] = "wrap";
         static const char print_str[] = "print";
         static const struct option long_options[] = {
@@ -588,6 +587,7 @@ int main(int argc, char **argv)
           { "grep",          required_argument, NULL,   'e' },
           // hidden and undocumented reserved alias for --max-count
           { "head",          required_argument, NULL,   'm' },
+          { id_str,          required_argument, NULL,   0 },
           { "last",          no_argument,       NULL,   'L' },
           { "max-count",     required_argument, NULL,   'm' },
           { pid_str,         required_argument, NULL,   0 },
@@ -613,7 +613,7 @@ int main(int argc, char **argv)
 
         switch (ret) {
             case 0:
-                // One of the long options
+                // only long options
                 if (long_options[option_index].name == pid_str) {
                     // ToDo: determine runtime PID_MAX?
                     if (!getSizeTArg(optarg, &pid, 1)) {
@@ -644,6 +644,10 @@ int main(int argc, char **argv)
                     g_printItAnyways = true;
                     break;
                 }
+                if (long_options[option_index].name == id_str) {
+                    setId = optarg && optarg[0] ? optarg : NULL;
+                    break;
+                }
             break;
 
             case 's':
@@ -657,7 +661,7 @@ int main(int argc, char **argv)
             break;
 
             case 'L':
-                mode |= ANDROID_LOG_PSTORE;
+                mode |= ANDROID_LOG_RDONLY | ANDROID_LOG_PSTORE | ANDROID_LOG_NONBLOCK;
             break;
 
             case 'd':
@@ -968,7 +972,20 @@ int main(int argc, char **argv)
         logcat_panic(true, "-r requires -f as well\n");
     }
 
-    setupOutput();
+    if (setId != NULL) {
+        if (g_outputFileName == NULL) {
+            logcat_panic(true, "--id='%s' requires -f as well\n", setId);
+        }
+
+        std::string file_name = android::base::StringPrintf("%s.id", g_outputFileName);
+        std::string file;
+        bool file_ok = android::base::ReadFileToString(file_name, &file);
+        android::base::WriteStringToFile(setId, file_name,
+                                         S_IRUSR | S_IWUSR, getuid(), getgid());
+        if (!file_ok || (file.compare(setId) == 0)) {
+            setId = NULL;
+        }
+    }
 
     if (hasSetLogFormat == 0) {
         const char* logFormat = getenv("ANDROID_PRINTF_LOG");
@@ -1034,34 +1051,33 @@ int main(int argc, char **argv)
             continue;
         }
 
-        if (clearLog) {
+        if (clearLog || setId) {
             if (g_outputFileName) {
                 int maxRotationCountDigits =
                     (g_maxRotatedLogs > 0) ? (int) (floor(log10(g_maxRotatedLogs) + 1)) : 0;
 
                 for (int i = g_maxRotatedLogs ; i >= 0 ; --i) {
-                    char *file;
+                    std::string file;
 
                     if (i == 0) {
-                        asprintf(&file, "%s", g_outputFileName);
+                        file = android::base::StringPrintf("%s", g_outputFileName);
                     } else {
-                        asprintf(&file, "%s.%.*d", g_outputFileName, maxRotationCountDigits, i);
+                        file = android::base::StringPrintf("%s.%.*d",
+                            g_outputFileName, maxRotationCountDigits, i);
                     }
 
-                    if (!file) {
+                    if (file.length() == 0) {
                         perror("while clearing log files");
                         clearFail = clearFail ?: dev->device;
                         break;
                     }
 
-                    err = unlink(file);
+                    err = unlink(file.c_str());
 
                     if (err < 0 && errno != ENOENT && clearFail == NULL) {
                         perror("while clearing log files");
                         clearFail = dev->device;
                     }
-
-                    free(file);
                 }
             } else if (android_logger_clear(dev->logger)) {
                 clearFail = clearFail ?: dev->device;
@@ -1177,7 +1193,6 @@ int main(int argc, char **argv)
         return EXIT_SUCCESS;
     }
 
-
     if (getLogSize) {
         return EXIT_SUCCESS;
     }
@@ -1187,6 +1202,8 @@ int main(int argc, char **argv)
     if (clearLog) {
         return EXIT_SUCCESS;
     }
+
+    setupOutputAndSchedulingPolicy((mode & ANDROID_LOG_NONBLOCK) == 0);
 
     //LOG_EVENT_INT(10, 12345);
     //LOG_EVENT_LONG(11, 0x1122334455667788LL);
