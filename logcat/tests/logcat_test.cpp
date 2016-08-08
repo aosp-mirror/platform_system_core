@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -844,6 +845,75 @@ TEST(logcat, logrotate_clear) {
         EXPECT_EQ(count, 0U);
     }
 
+    snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
+    EXPECT_FALSE(system(command));
+}
+
+static int logrotate_count_id(const char *logcat_cmd, const char *tmp_out_dir) {
+
+    static const char log_filename[] = "log.txt";
+    char command[strlen(tmp_out_dir) + strlen(logcat_cmd) + strlen(log_filename) + 32];
+
+    snprintf(command, sizeof(command), logcat_cmd, tmp_out_dir, log_filename);
+
+    int ret;
+    EXPECT_FALSE((ret = system(command)));
+    if (ret) {
+        return -1;
+    }
+    std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(tmp_out_dir), closedir);
+    EXPECT_NE(nullptr, dir);
+    if (!dir) {
+        return -1;
+    }
+    struct dirent *entry;
+    int count = 0;
+    while ((entry = readdir(dir.get()))) {
+        if (strncmp(entry->d_name, log_filename, sizeof(log_filename) - 1)) {
+            continue;
+        }
+        ++count;
+    }
+    return count;
+}
+
+TEST(logcat, logrotate_id) {
+    static const char logcat_cmd[] = "logcat -b all -d -f %s/%s -n 32 -r 1 --id=test";
+    static const char logcat_short_cmd[] = "logcat -b all -t 10 -f %s/%s -n 32 -r 1 --id=test";
+    static const char tmp_out_dir_form[] = "/data/local/tmp/logcat.logrotate.XXXXXX";
+    static const char log_filename[] = "log.txt";
+    char tmp_out_dir[strlen(tmp_out_dir_form) + 1];
+    ASSERT_TRUE(NULL != mkdtemp(strcpy(tmp_out_dir, tmp_out_dir_form)));
+
+    EXPECT_EQ(34, logrotate_count_id(logcat_cmd, tmp_out_dir));
+    EXPECT_EQ(34, logrotate_count_id(logcat_short_cmd, tmp_out_dir));
+
+    char id_file[strlen(tmp_out_dir_form) + strlen(log_filename) + 5];
+    snprintf(id_file, sizeof(id_file), "%s/%s.id", tmp_out_dir, log_filename);
+    if (getuid() != 0) {
+        chmod(id_file, 0);
+        EXPECT_EQ(34, logrotate_count_id(logcat_short_cmd, tmp_out_dir));
+    }
+    unlink(id_file);
+    EXPECT_EQ(34, logrotate_count_id(logcat_short_cmd, tmp_out_dir));
+
+    FILE *fp = fopen(id_file, "w");
+    if (fp) {
+        fprintf(fp, "not_a_test");
+        fclose(fp);
+    }
+    if (getuid() != 0) {
+        chmod(id_file, 0); // API to preserve content even with signature change
+        ASSERT_EQ(34, logrotate_count_id(logcat_short_cmd, tmp_out_dir));
+        chmod(id_file, 0600);
+    }
+
+    int new_signature;
+    EXPECT_LE(2, (new_signature = logrotate_count_id(logcat_short_cmd, tmp_out_dir)));
+    EXPECT_GT(34, new_signature);
+
+    static const char cleanup_cmd[] = "rm -rf %s";
+    char command[strlen(cleanup_cmd) + strlen(tmp_out_dir_form)];
     snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
     EXPECT_FALSE(system(command));
 }
