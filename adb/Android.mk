@@ -111,7 +111,7 @@ LOCAL_SANITIZE := $(adb_target_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
-LOCAL_STATIC_LIBRARIES := libcrypto_utils_static libcrypto_static libbase
+LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase
 
 include $(BUILD_STATIC_LIBRARY)
 
@@ -134,7 +134,7 @@ LOCAL_SANITIZE := $(adb_host_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
-LOCAL_STATIC_LIBRARIES := libcrypto_utils_static libcrypto_static libbase
+LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase
 
 LOCAL_C_INCLUDES_windows := development/host/windows/usb/api/
 LOCAL_MULTILIB := first
@@ -154,7 +154,7 @@ LOCAL_SRC_FILES := \
     shell_service_test.cpp \
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
-LOCAL_STATIC_LIBRARIES := libadbd libcrypto_utils_static libcrypto_static
+LOCAL_STATIC_LIBRARIES := libadbd libcrypto_utils libcrypto
 LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
 include $(BUILD_NATIVE_TEST)
 
@@ -194,8 +194,8 @@ LOCAL_SANITIZE := $(adb_host_sanitize)
 LOCAL_SHARED_LIBRARIES := libbase
 LOCAL_STATIC_LIBRARIES := \
     libadb \
-    libcrypto_utils_static \
-    libcrypto_static \
+    libcrypto_utils \
+    libcrypto \
     libcutils \
     libdiagnose_usb \
 
@@ -257,8 +257,8 @@ LOCAL_SANITIZE := $(adb_host_sanitize)
 LOCAL_STATIC_LIBRARIES := \
     libadb \
     libbase \
-    libcrypto_utils_static \
-    libcrypto_static \
+    libcrypto_utils \
+    libcrypto \
     libdiagnose_usb \
     liblog \
 
@@ -334,8 +334,8 @@ LOCAL_STATIC_LIBRARIES := \
     libsquashfs_utils \
     libcutils \
     libbase \
-    libcrypto_utils_static \
-    libcrypto_static \
+    libcrypto_utils \
+    libcrypto \
     libminijail \
     libdebuggerd_client \
 
