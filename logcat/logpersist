@@ -17,8 +17,9 @@ true) ;;
    ;;
 esac
 
+log_uid=logd
 log_tag_property=persist.log.tag
-data=/data/misc/logd
+data=/data/misc/logd/logcat
 service=logcatd
 size_default=256
 buffer_default=all
@@ -74,11 +75,12 @@ case ${progname} in
   if [ -n "${size}${buffer}" -o "true" = "${clear}" ]; then
     echo WARNING: Can not use --clear, --size or --buffer with ${progname%.*}.cat >&2
   fi
-  su logd ls "${data}" |
+  su ${log_uid} ls "${data%/*}" |
   tr -d '\r' |
   sort -ru |
-  sed "s#^#${data}/#" |
-  su logd xargs cat
+  sed "s#^#${data%/*}/#" |
+  grep "${data}[.]*[0-9]*\$" |
+  su ${log_uid} xargs cat
   ;;
 *.start)
   current_buffer="`getprop ${property#persist.}.buffer`"
@@ -139,7 +141,7 @@ case ${progname} in
   sleep 1
   getprop ${property#persist.}
   # also generate an error return code if not found running
-  pgrep -u ${data##*/} ${service%d}
+  pgrep -u ${log_uid} ${service%d}
   ;;
 *.stop)
   if [ -n "${size}${buffer}" ]; then
