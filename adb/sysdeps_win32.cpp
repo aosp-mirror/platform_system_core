@@ -952,7 +952,7 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
         _socket_set_errno(err);
         return -1;
     }
-    std::unique_ptr<struct addrinfo, decltype(freeaddrinfo)*> addrinfo(addrinfo_ptr, freeaddrinfo);
+    std::unique_ptr<struct addrinfo, decltype(&freeaddrinfo)> addrinfo(addrinfo_ptr, freeaddrinfo);
     addrinfo_ptr = nullptr;
 
     // TODO: Try all the addresses if there's more than one? This just uses
