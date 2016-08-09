@@ -447,7 +447,7 @@ static bool dump_sibling_thread_report(
     }
 
     // Skip this thread if cannot ptrace it
-    if (ptrace(PTRACE_ATTACH, new_tid, 0, 0) < 0) {
+    if (!ptrace_attach_thread(pid, new_tid)) {
       _LOG(log, logtype::ERROR, "ptrace attach to %d failed: %s\n", new_tid, strerror(errno));
       continue;
     }
