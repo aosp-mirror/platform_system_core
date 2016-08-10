@@ -9,6 +9,12 @@ cc_library_static {
     "-Os",
   ],
 
+  target: {
+    android64: {
+      cflags: ["-DTARGET_IS_64_BIT"],
+    },
+  },
+
   local_include_dirs: ["include"],
   export_include_dirs: ["include"],
 
