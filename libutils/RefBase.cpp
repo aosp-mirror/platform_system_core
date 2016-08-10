@@ -56,25 +56,31 @@
 
 namespace android {
 
-// Usage, invariants, etc:
+// Observations, invariants, etc:
 
-// It is normally OK just to keep weak pointers to an object.  The object will
-// be deallocated by decWeak when the last weak reference disappears.
-// Once a a strong reference has been created, the object will disappear once
-// the last strong reference does (decStrong).
-// AttemptIncStrong will succeed if the object has a strong reference, or if it
-// has a weak reference and has never had a strong reference.
-// AttemptIncWeak really does succeed only if there is already a WEAK
-// reference, and thus may fail when attemptIncStrong would succeed.
+// By default, obects are destroyed when the last strong reference disappears
+// or, if the object never had a strong reference, when the last weak reference
+// disappears.
+//
 // OBJECT_LIFETIME_WEAK changes this behavior to retain the object
 // unconditionally until the last reference of either kind disappears.  The
 // client ensures that the extendObjectLifetime call happens before the dec
 // call that would otherwise have deallocated the object, or before an
 // attemptIncStrong call that might rely on it.  We do not worry about
 // concurrent changes to the object lifetime.
+//
+// AttemptIncStrong will succeed if the object has a strong reference, or if it
+// has a weak reference and has never had a strong reference.
+// AttemptIncWeak really does succeed only if there is already a WEAK
+// reference, and thus may fail when attemptIncStrong would succeed.
+//
 // mStrong is the strong reference count.  mWeak is the weak reference count.
 // Between calls, and ignoring memory ordering effects, mWeak includes strong
 // references, and is thus >= mStrong.
+//
+// A weakref_impl holds all the information, including both reference counts,
+// required to perform wp<> operations.  Thus these can continue to be performed
+// after the RefBase object has been destroyed.
 //
 // A weakref_impl is allocated as the value of mRefs in a RefBase object on
 // construction.
@@ -671,7 +677,8 @@ RefBase::~RefBase()
 {
     if (mRefs->mStrong.load(std::memory_order_relaxed)
             == INITIAL_STRONG_VALUE) {
-        // we never acquired a strong (and/or weak) reference on this object.
+        // We never acquired a strong reference on this object.
+        // We assume there are no outstanding weak references.
         delete mRefs;
     } else {
         // life-time of this object is extended to WEAK, in
