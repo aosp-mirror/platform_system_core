@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005 The Android Open Source Project
+ * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,146 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+
+// SOME COMMENTS ABOUT USAGE:
+
+// This provides primarily wp<> weak pointer types and RefBase, which work
+// together with sp<> from <StrongPointer.h>.
+
+// sp<> (and wp<>) are a type of smart pointer that use a well defined protocol
+// to operate. As long as the object they are templated with implements that
+// protocol, these smart pointers work. In several places the platform
+// instantiates sp<> with non-RefBase objects; the two are not tied to each
+// other.
+
+// RefBase is such an implementation and it supports strong pointers, weak
+// pointers and some magic features for the binder.
+
+// So, when using RefBase objects, you have the ability to use strong and weak
+// pointers through sp<> and wp<>.
+
+// Normally, when the last strong pointer goes away, the object is destroyed,
+// i.e. it's destructor is called. HOWEVER, parts of its associated memory is not
+// freed until the last weak pointer is released.
+
+// Weak pointers are essentially "safe" pointers. They are always safe to
+// access through promote(). They may return nullptr if the object was
+// destroyed because it ran out of strong pointers. This makes them good candidates
+// for keys in a cache for instance.
+
+// Weak pointers remain valid for comparison purposes even after the underlying
+// object has been destroyed. Even if object A is destroyed and its memory reused
+// for B, A remaining weak pointer to A will not compare equal to one to B.
+// This again makes them attractive for use as keys.
+
+// How is this supposed / intended to be used?
+
+// Our recommendation is to use strong references (sp<>) when there is an
+// ownership relation. e.g. when an object "owns" another one, use a strong
+// ref. And of course use strong refs as arguments of functions (it's extremely
+// rare that a function will take a wp<>).
+
+// Typically a newly allocated object will immediately be used to initialize
+// a strong pointer, which may then be used to construct or assign to other
+// strong and weak pointers.
+
+// Use weak references when there are no ownership relation. e.g. the keys in a
+// cache (you cannot use plain pointers because there is no safe way to acquire
+// a strong reference from a vanilla pointer).
+
+// This implies that two objects should never (or very rarely) have sp<> on
+// each other, because they can't both own each other.
+
+
+// Caveats with reference counting
+
+// Obviously, circular strong references are a big problem; this creates leaks
+// and it's hard to debug -- except it's in fact really easy because RefBase has
+// tons of debugging code for that. It can basically tell you exactly where the
+// leak is.
+
+// Another problem has to do with destructors with side effects. You must
+// assume that the destructor of reference counted objects can be called AT ANY
+// TIME. For instance code as simple as this:
+
+// void setStuff(const sp<Stuff>& stuff) {
+//   std::lock_guard<std::mutex> lock(mMutex);
+//   mStuff = stuff;
+// }
+
+// is very dangerous. This code WILL deadlock one day or another.
+
+// What isn't obvious is that ~Stuff() can be called as a result of the
+// assignment. And it gets called with the lock held. First of all, the lock is
+// protecting mStuff, not ~Stuff(). Secondly, if ~Stuff() uses its own internal
+// mutex, now you have mutex ordering issues.  Even worse, if ~Stuff() is
+// virtual, now you're calling into "user" code (potentially), by that, I mean,
+// code you didn't even write.
+
+// A correct way to write this code is something like:
+
+// void setStuff(const sp<Stuff>& stuff) {
+//   std::unique_lock<std::mutex> lock(mMutex);
+//   sp<Stuff> hold = mStuff;
+//   mStuff = stuff;
+//   lock.unlock();
+// }
+
+// More importantly, reference counted objects should do as little work as
+// possible in their destructor, or at least be mindful that their destructor
+// could be called from very weird and unintended places.
+
+// Other more specific restrictions for wp<> and sp<>:
+
+// Constructing a strong or weak pointer to "this" in its constructors is almost
+// always wrong.  In the case of strong pointers. it is always wrong with RefBase
+// because the onFirstRef() callback will be mode on an incompletely constructed
+// object. In either case, it is wrong if such a pointer does not outlive the
+// constructor, since destruction of the smart pointer will attempt to destroy the
+// object before construction is finished, normally resulting in a pointer to a
+// destroyed object being returned from a new expression.
+
+// In the case of weak pointers, this occurs because an object that has never been
+// referenced by a strong pointer is destroyed when the last weak pointer disappears.
+
+// Such strong or weak pointers can be safely created in the RefBase onFirstRef()
+// callback.
+
+// Use of wp::unsafe_get() for any purpose other than debugging is almost
+// always wrong.  Unless you somehow know that there is a longer-lived sp<> to
+// the same object, it may well return a pointer to a deallocated object that
+// has since been reallocated for a different purpose. (And if you know there
+// is a longer-lived sp<>, why not use an sp<> directly?) A wp<> should only be
+// dereferenced by using promote().
+
+// Explicitly deleting or otherwise destroying a RefBase object with outstanding
+// wp<> or sp<> pointers to it will result in heap corruption.
+
+// Extra Features:
+
+// RefBase::extendObjectLifetime() can be used to prevent destruction of the
+// object while there are still weak references. This is really special purpose
+// functionality to support Binder.
+
+// Wp::promote(), implemented via the attemptIncStrong() member function, is
+// used to try to convert a weak pointer back to a strong pointer.  It's the
+// normal way to try to access the fields of an object referenced only through
+// a wp<>.  Binder code also sometimes uses attemptIncStrong() directly.
+
+// RefBase provides a number of additional callbacks for certain reference count
+// events, as well as some debugging facilities.
+
+// Debugging support can be enabled by turning on DEBUG_REFS in RefBase.cpp.
+// Otherwise essentially no checking is provided.
+
+// Thread safety:
+
+// Like std::shared_ptr, sp<> and wp<> allow concurrent accesses to DIFFERENT
+// sp<> and wp<> instances that happen to refer to the same underlying object.
+// They do NOT support concurrent access (where at least one access is a write)
+// to THE SAME sp<> or wp<>.  In effect, their thread-safety properties are
+// exactly like those of T*, NOT atomic<T*>.
 
 #ifndef ANDROID_REF_BASE_H
 #define ANDROID_REF_BASE_H
@@ -142,9 +282,19 @@ protected:
         FIRST_INC_STRONG = 0x0001
     };
     
+    // Invoked after creation of initial strong pointer/reference.
     virtual void            onFirstRef();
+    // Invoked when either the last strong reference goes away, or we need to undo
+    // the effect of an unnecessary onIncStrongAttempted.
     virtual void            onLastStrongRef(const void* id);
+    // Only called in OBJECT_LIFETIME_WEAK case.  Returns true if OK to promote to
+    // strong reference. May have side effects if it returns true.
+    // The first flags argument is always FIRST_INC_STRONG.
+    // TODO: Remove initial flag argument.
     virtual bool            onIncStrongAttempted(uint32_t flags, const void* id);
+    // Invoked in the OBJECT_LIFETIME_WEAK case when the last reference of either
+    // kind goes away.  Unused.
+    // TODO: Remove.
     virtual void            onLastWeakRef(const void* id);
 
 private:
