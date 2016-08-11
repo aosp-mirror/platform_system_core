@@ -19,12 +19,39 @@ LOCAL_STATIC_LIBRARIES := libutils
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+LOCAL_SRC_FILES := \
+    healthd_mode_android.cpp \
+    healthd_mode_charger.cpp \
+    AnimationParser.cpp \
+    BatteryPropertiesRegistrar.cpp \
+
+LOCAL_MODULE := libhealthd_internal
+LOCAL_C_INCLUDES := bootable/recovery
+LOCAL_EXPORT_C_INCLUDE_DIRS := \
+    $(LOCAL_PATH) \
+    $(LOCAL_PATH)/include \
+
+LOCAL_STATIC_LIBRARIES := \
+    libbatterymonitor \
+    libbatteryservice \
+    libbinder \
+    libminui \
+    libpng \
+    libz \
+    libutils \
+    libbase \
+    libcutils \
+    liblog \
+    libm \
+    libc \
+
+include $(BUILD_STATIC_LIBRARY)
+
+
+include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
-	healthd.cpp \
-	healthd_mode_android.cpp \
-	healthd_mode_charger.cpp \
-	BatteryPropertiesRegistrar.cpp
+    healthd.cpp \
 
 LOCAL_MODULE := healthd
 LOCAL_MODULE_TAGS := optional
@@ -44,7 +71,20 @@ endif
 
 LOCAL_C_INCLUDES := bootable/recovery
 
-LOCAL_STATIC_LIBRARIES := libbatterymonitor libbatteryservice libbinder libminui libpng libz libutils libcutils liblog libm libc
+LOCAL_STATIC_LIBRARIES := \
+    libhealthd_internal \
+    libbatterymonitor \
+    libbatteryservice \
+    libbinder \
+    libminui \
+    libpng \
+    libz \
+    libutils \
+    libbase \
+    libcutils \
+    liblog \
+    libm \
+    libc
 
 ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
 LOCAL_STATIC_LIBRARIES += libsuspend
@@ -61,7 +101,7 @@ include $(BUILD_EXECUTABLE)
 
 define _add-charger-image
 include $$(CLEAR_VARS)
-LOCAL_MODULE := system_core_charger_$(notdir $(1))
+LOCAL_MODULE := system_core_charger_res_images_$(notdir $(1))
 LOCAL_MODULE_STEM := $(notdir $(1))
 _img_modules += $$(LOCAL_MODULE)
 LOCAL_SRC_FILES := $1
