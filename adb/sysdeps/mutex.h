@@ -20,7 +20,7 @@
 
 #include <windows.h>
 
-#include <android-base/macros.h>
+#include <base/macros.h>
 
 #include "adb.h"
 
