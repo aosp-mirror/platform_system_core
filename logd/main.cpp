@@ -221,7 +221,7 @@ static char* name;
 
 static sem_t reinit;
 static bool reinit_running = false;
-static LogBuffer* logBuf = NULL;
+static LogBuffer* logBuf = nullptr;
 
 static bool package_list_parser_cb(pkg_info* info, void* /* userdata */) {
     bool rc = true;
@@ -254,9 +254,9 @@ static void* reinit_thread_start(void* /*obj*/) {
     while (reinit_running && !sem_wait(&reinit) && reinit_running) {
         // uidToName Privileged Worker
         if (uid) {
-            name = NULL;
+            name = nullptr;
 
-            packagelist_parse(package_list_parser_cb, NULL);
+            packagelist_parse(package_list_parser_cb, nullptr);
 
             uid = 0;
             sem_post(&uidName);
@@ -291,19 +291,19 @@ static void* reinit_thread_start(void* /*obj*/) {
         // Anything that reads persist.<property>
         if (logBuf) {
             logBuf->init();
-            logBuf->initPrune(NULL);
+            logBuf->initPrune(nullptr);
         }
         android::ReReadEventLogTags();
     }
 
-    return NULL;
+    return nullptr;
 }
 
 static sem_t sem_name;
 
 char* android::uidToName(uid_t u) {
     if (!u || !reinit_running) {
-        return NULL;
+        return nullptr;
     }
 
     sem_wait(&sem_name);
@@ -311,7 +311,7 @@ char* android::uidToName(uid_t u) {
     // Not multi-thread safe, we use sem_name to protect
     uid = u;
 
-    name = NULL;
+    name = nullptr;
     sem_post(&reinit);
     sem_wait(&uidName);
     char* ret = name;
@@ -332,12 +332,13 @@ static void readDmesg(LogAudit* al, LogKlog* kl) {
         return;
     }
 
-    int rc = klogctl(KLOG_SIZE_BUFFER, NULL, 0);
+    int rc = klogctl(KLOG_SIZE_BUFFER, nullptr, 0);
     if (rc <= 0) {
         return;
     }
 
-    size_t len = rc + 1024;  // Margin for additional input race or trailing nul
+    // Margin for additional input race or trailing nul
+    ssize_t len = rc + 1024;
     std::unique_ptr<char[]> buf(new char[len]);
 
     rc = klogctl(KLOG_READ_ALL, buf.get(), len);
@@ -345,7 +346,7 @@ static void readDmesg(LogAudit* al, LogKlog* kl) {
         return;
     }
 
-    if ((size_t)rc < len) {
+    if (rc < len) {
         len = rc + 1;
     }
     buf[--len] = '\0';
@@ -354,10 +355,11 @@ static void readDmesg(LogAudit* al, LogKlog* kl) {
         kl->synchronize(buf.get(), len);
     }
 
-    size_t sublen;
-    for (char *ptr = NULL, *tok = buf.get();
-         (rc >= 0) && ((tok = log_strntok_r(tok, &len, &ptr, &sublen)));
-         tok = NULL) {
+    ssize_t sublen;
+    for (char *ptr = nullptr, *tok = buf.get();
+         (rc >= 0) && !!(tok = android::log_strntok_r(tok, len, ptr, sublen));
+         tok = nullptr) {
+        if ((sublen <= 0) || !*tok) continue;
         if (al) {
             rc = al->log(tok, sublen);
         }
@@ -444,7 +446,7 @@ int main(int argc, char* argv[]) {
         if (!pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) {
             pthread_t thread;
             reinit_running = true;
-            if (pthread_create(&thread, &attr, reinit_thread_start, NULL)) {
+            if (pthread_create(&thread, &attr, reinit_thread_start, nullptr)) {
                 reinit_running = false;
             }
         }
@@ -507,7 +509,7 @@ int main(int argc, char* argv[]) {
     // initiated log messages. New log entries are added to LogBuffer
     // and LogReader is notified to send updates to connected clients.
 
-    LogAudit* al = NULL;
+    LogAudit* al = nullptr;
     if (auditd) {
         al = new LogAudit(logBuf, reader,
                           __android_logger_property_get_bool(
@@ -516,9 +518,9 @@ int main(int argc, char* argv[]) {
                               : -1);
     }
 
-    LogKlog* kl = NULL;
+    LogKlog* kl = nullptr;
     if (klogd) {
-        kl = new LogKlog(logBuf, reader, fdDmesg, fdPmesg, al != NULL);
+        kl = new LogKlog(logBuf, reader, fdDmesg, fdPmesg, al != nullptr);
     }
 
     readDmesg(al, kl);
