@@ -31,9 +31,6 @@
 #include <backtrace/Backtrace.h>
 #include <log/log.h>
 
-constexpr int SLEEP_TIME_USEC = 50000;          // 0.05 seconds
-constexpr int MAX_TOTAL_SLEEP_USEC = 10000000;  // 10 seconds
-
 // Whitelist output desired in the logcat output.
 bool is_allowed_in_logcat(enum logtype ltype) {
   if ((ltype == HEADER)
@@ -74,10 +71,10 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
   }
 }
 
-int wait_for_signal(pid_t tid, int* total_sleep_time_usec) {
+int wait_for_signal(pid_t tid) {
   while (true) {
     int status;
-    pid_t n = TEMP_FAILURE_RETRY(waitpid(tid, &status, __WALL | WNOHANG));
+    pid_t n = TEMP_FAILURE_RETRY(waitpid(tid, &status, __WALL));
     if (n == -1) {
       ALOGE("waitpid failed: tid %d, %s", tid, strerror(errno));
       return -1;
@@ -91,14 +88,6 @@ int wait_for_signal(pid_t tid, int* total_sleep_time_usec) {
         return -1;
       }
     }
-
-    if (*total_sleep_time_usec > MAX_TOTAL_SLEEP_USEC) {
-      ALOGE("timed out waiting for stop signal: tid=%d", tid);
-      return -1;
-    }
-
-    usleep(SLEEP_TIME_USEC);
-    *total_sleep_time_usec += SLEEP_TIME_USEC;
   }
 }
 

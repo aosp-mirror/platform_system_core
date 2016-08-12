@@ -77,7 +77,7 @@ enum logtype {
 void _LOG(log_t* log, logtype ltype, const char *fmt, ...)
         __attribute__ ((format(printf, 3, 4)));
 
-int wait_for_signal(pid_t tid, int* total_sleep_time_usec);
+int wait_for_signal(pid_t tid);
 
 void dump_memory(log_t* log, Backtrace* backtrace, uintptr_t addr, const char* fmt, ...);
 
