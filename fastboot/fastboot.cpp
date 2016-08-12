@@ -599,6 +599,7 @@ static int unzip_to_file(ZipArchiveHandle zip, char* entry_name) {
     ZipEntry zip_entry;
     if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
         fprintf(stderr, "archive does not contain '%s'\n", entry_name);
+        fclose(fp);
         return -1;
     }
 
@@ -606,10 +607,12 @@ static int unzip_to_file(ZipArchiveHandle zip, char* entry_name) {
     int error = ExtractEntryToFile(zip, &zip_entry, fd);
     if (error != 0) {
         fprintf(stderr, "failed to extract '%s': %s\n", entry_name, ErrorCodeString(error));
+        fclose(fp);
         return -1;
     }
 
     lseek(fd, 0, SEEK_SET);
+    // TODO: We're leaking 'fp' here.
     return fd;
 }
 
