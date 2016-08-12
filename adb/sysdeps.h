@@ -828,4 +828,9 @@ static inline void disable_tcp_nagle(int fd) {
 // configured to drop after 10 missed keepalives. Returns true on success.
 bool set_tcp_keepalive(int fd, int interval_sec);
 
+#if defined(_WIN32)
+// Win32 defines ERROR, which we don't need, but which conflicts with google3 logging.
+#undef ERROR
+#endif
+
 #endif /* _ADB_SYSDEPS_H */

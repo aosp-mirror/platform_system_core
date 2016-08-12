@@ -16,8 +16,9 @@
 
 #define TRACE_TAG ADB
 
-#include "sysdeps.h"
+#include "adb.h"
 #include "adb_auth.h"
+#include "transport.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -25,53 +26,28 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "adb.h"
-#include "transport.h"
-
 bool auth_required = true;
 
 void send_auth_request(atransport *t)
 {
-    D("Calling send_auth_request");
-    apacket *p;
-    int ret;
+    LOG(INFO) << "Calling send_auth_request...";
 
-    ret = adb_auth_generate_token(t->token, sizeof(t->token));
-    if (ret != sizeof(t->token)) {
-        D("Error generating token ret=%d", ret);
+    if (!adb_auth_generate_token(t->token, sizeof(t->token))) {
+        PLOG(ERROR) << "Error generating token";
         return;
     }
 
-    p = get_apacket();
-    memcpy(p->data, t->token, ret);
+    apacket* p = get_apacket();
+    memcpy(p->data, t->token, sizeof(t->token));
     p->msg.command = A_AUTH;
     p->msg.arg0 = ADB_AUTH_TOKEN;
-    p->msg.data_length = ret;
+    p->msg.data_length = sizeof(t->token);
     send_packet(p, t);
 }
 
-void send_auth_response(uint8_t *token, size_t token_size, atransport *t)
-{
-    D("Calling send_auth_response");
-    apacket *p = get_apacket();
-    int ret;
+static void send_auth_publickey(atransport* t) {
+    LOG(INFO) << "Calling send_auth_publickey";
 
-    ret = adb_auth_sign(t->key, token, token_size, p->data);
-    if (!ret) {
-        D("Error signing the token");
-        put_apacket(p);
-        return;
-    }
-
-    p->msg.command = A_AUTH;
-    p->msg.arg0 = ADB_AUTH_SIGNATURE;
-    p->msg.data_length = ret;
-    send_packet(p, t);
-}
-
-void send_auth_publickey(atransport *t)
-{
-    D("Calling send_auth_publickey");
     std::string key = adb_auth_get_userkey();
     if (key.empty()) {
         D("Failed to get user public key");
@@ -89,6 +65,35 @@ void send_auth_publickey(atransport *t)
     p->msg.command = A_AUTH;
     p->msg.arg0 = ADB_AUTH_RSAPUBLICKEY;
     p->msg.data_length = key.size();
+    send_packet(p, t);
+}
+
+void send_auth_response(uint8_t* token, size_t token_size, atransport* t) {
+    RSA* key = t->NextKey();
+    if (key == nullptr) {
+        // No more private keys to try, send the public key.
+        send_auth_publickey(t);
+        return;
+    }
+
+    LOG(INFO) << "Calling send_auth_response";
+    apacket* p = get_apacket();
+
+    int ret = adb_auth_sign(key, token, token_size, p->data);
+
+    // Stop sharing this key.
+    RSA_free(key);
+    key = nullptr;
+
+    if (!ret) {
+        D("Error signing the token");
+        put_apacket(p);
+        return;
+    }
+
+    p->msg.command = A_AUTH;
+    p->msg.arg0 = ADB_AUTH_SIGNATURE;
+    p->msg.data_length = ret;
     send_packet(p, t);
 }
 
