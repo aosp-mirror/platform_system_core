@@ -26,6 +26,7 @@
 #include <syslog.h>
 
 #include <log/logger.h>
+#include <private/android_filesystem_config.h>
 
 #include "LogBuffer.h"
 #include "LogKlog.h"
@@ -614,7 +615,12 @@ int LogKlog::log(const char *buf, size_t len) {
     // Parse pid, tid and uid
     const pid_t pid = sniffPid(&p, len - (p - buf));
     const pid_t tid = pid;
-    const uid_t uid = pid ? logbuf->pidToUid(pid) : 0;
+    uid_t uid = AID_ROOT;
+    if (pid) {
+        logbuf->lock();
+        uid = logbuf->pidToUid(pid);
+        logbuf->unlock();
+    }
 
     // Parse (rules at top) to pull out a tag from the incoming kernel message.
     // Some may view the following as an ugly heuristic, the desire is to
