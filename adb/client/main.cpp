@@ -111,7 +111,6 @@ int adb_server_main(int is_daemon, int server_port, int ack_reply_fd) {
 
     usb_init();
     local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
-    adb_auth_init();
 
     std::string error;
     std::string local_name = android::base::StringPrintf("tcp:%d", server_port);
@@ -119,11 +118,14 @@ int adb_server_main(int is_daemon, int server_port, int ack_reply_fd) {
         fatal("could not install *smartsocket* listener: %s", error.c_str());
     }
 
-    // Inform our parent that we are up and running.
     if (is_daemon) {
         close_stdin();
         setup_daemon_logging();
+    }
 
+    adb_auth_init();
+
+    if (is_daemon) {
 #if !defined(_WIN32)
         // Start a new session for the daemon. Do this here instead of after the fork so
         // that a ctrl-c between the "starting server" and "done starting server" messages
@@ -132,6 +134,8 @@ int adb_server_main(int is_daemon, int server_port, int ack_reply_fd) {
             fatal("setsid() failed: %s", strerror(errno));
         }
 #endif
+
+        // Inform our parent that we are up and running.
 
         // Any error output written to stderr now goes to adb.log. We could
         // keep around a copy of the stderr fd and use that to write any errors

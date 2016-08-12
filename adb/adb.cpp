@@ -354,21 +354,13 @@ void handle_packet(apacket *p, atransport *t)
     case A_AUTH:
         if (p->msg.arg0 == ADB_AUTH_TOKEN) {
             t->connection_state = kCsUnauthorized;
-            t->key = adb_auth_nextkey(t->key);
-            if (t->key) {
-                send_auth_response(p->data, p->msg.data_length, t);
-            } else {
-                /* No more private keys to try, send the public key */
-                send_auth_publickey(t);
-            }
+            send_auth_response(p->data, p->msg.data_length, t);
         } else if (p->msg.arg0 == ADB_AUTH_SIGNATURE) {
-            if (adb_auth_verify(t->token, sizeof(t->token),
-                                p->data, p->msg.data_length)) {
+            if (adb_auth_verify(t->token, sizeof(t->token), p->data, p->msg.data_length)) {
                 adb_auth_verified(t);
                 t->failed_auth_attempts = 0;
             } else {
-                if (t->failed_auth_attempts++ > 10)
-                    adb_sleep_ms(1000);
+                if (t->failed_auth_attempts++ > 10) adb_sleep_ms(1000);
                 send_auth_request(t);
             }
         } else if (p->msg.arg0 == ADB_AUTH_RSAPUBLICKEY) {
