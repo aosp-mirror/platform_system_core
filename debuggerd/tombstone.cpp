@@ -176,7 +176,7 @@ static void dump_header_info(log_t* log) {
   _LOG(log, logtype::HEADER, "ABI: '%s'\n", ABI_STRING);
 }
 
-static void dump_signal_info(log_t* log, pid_t tid, int signal, int si_code) {
+static void dump_signal_info(log_t* log, pid_t tid) {
   siginfo_t si;
   memset(&si, 0, sizeof(si));
   if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si) == -1) {
@@ -184,18 +184,15 @@ static void dump_signal_info(log_t* log, pid_t tid, int signal, int si_code) {
     return;
   }
 
-  // bionic has to re-raise some signals, which overwrites the si_code with SI_TKILL.
-  si.si_code = si_code;
-
   char addr_desc[32]; // ", fault addr 0x1234"
-  if (signal_has_si_addr(signal)) {
+  if (signal_has_si_addr(si.si_signo)) {
     snprintf(addr_desc, sizeof(addr_desc), "%p", si.si_addr);
   } else {
     snprintf(addr_desc, sizeof(addr_desc), "--------");
   }
 
-  _LOG(log, logtype::HEADER, "signal %d (%s), code %d (%s), fault addr %s\n",
-       signal, get_signame(signal), si.si_code, get_sigcode(signal, si.si_code), addr_desc);
+  _LOG(log, logtype::HEADER, "signal %d (%s), code %d (%s), fault addr %s\n", si.si_signo,
+       get_signame(si.si_signo), si.si_code, get_sigcode(si.si_signo, si.si_code), addr_desc);
 }
 
 static void dump_thread_info(log_t* log, pid_t pid, pid_t tid) {
@@ -445,17 +442,14 @@ static void dump_backtrace_and_stack(Backtrace* backtrace, log_t* log) {
   }
 }
 
-static void dump_thread(log_t* log, pid_t pid, pid_t tid, BacktraceMap* map, int signal,
-                        int si_code, uintptr_t abort_msg_address, bool primary_thread) {
+static void dump_thread(log_t* log, pid_t pid, pid_t tid, BacktraceMap* map,
+                        uintptr_t abort_msg_address, bool primary_thread) {
   log->current_tid = tid;
   if (!primary_thread) {
     _LOG(log, logtype::THREAD, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
   }
   dump_thread_info(log, pid, tid);
-
-  if (signal) {
-    dump_signal_info(log, tid, signal, si_code);
-  }
+  dump_signal_info(log, tid);
 
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map));
   if (primary_thread) {
@@ -606,8 +600,7 @@ static void dump_logs(log_t* log, pid_t pid, unsigned int tail) {
 
 // Dumps all information about the specified pid to the tombstone.
 static void dump_crash(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid,
-                       const std::set<pid_t>& siblings, int signal, int si_code,
-                       uintptr_t abort_msg_address) {
+                       const std::set<pid_t>& siblings, uintptr_t abort_msg_address) {
   // don't copy log messages to tombstone unless this is a dev device
   char value[PROPERTY_VALUE_MAX];
   property_get("ro.debuggable", value, "0");
@@ -616,14 +609,14 @@ static void dump_crash(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid,
   _LOG(log, logtype::HEADER,
        "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
   dump_header_info(log);
-  dump_thread(log, pid, tid, map, signal, si_code, abort_msg_address, true);
+  dump_thread(log, pid, tid, map, abort_msg_address, true);
   if (want_logs) {
     dump_logs(log, pid, 5);
   }
 
   if (!siblings.empty()) {
     for (pid_t sibling : siblings) {
-      dump_thread(log, pid, sibling, map, 0, 0, 0, false);
+      dump_thread(log, pid, sibling, map, 0, false);
     }
   }
 
@@ -686,8 +679,8 @@ int open_tombstone(std::string* out_path) {
 }
 
 void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid,
-                       const std::set<pid_t>& siblings, int signal, int original_si_code,
-                       uintptr_t abort_msg_address, std::string* amfd_data) {
+                       const std::set<pid_t>& siblings, uintptr_t abort_msg_address,
+                       std::string* amfd_data) {
   log_t log;
   log.current_tid = tid;
   log.crashed_tid = tid;
@@ -699,5 +692,5 @@ void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid
 
   log.tfd = tombstone_fd;
   log.amfd_data = amfd_data;
-  dump_crash(&log, map, pid, tid, siblings, signal, original_si_code, abort_msg_address);
+  dump_crash(&log, map, pid, tid, siblings, abort_msg_address);
 }
