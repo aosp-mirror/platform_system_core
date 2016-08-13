@@ -185,7 +185,7 @@ static bool have_siginfo(int signum) {
   return result;
 }
 
-static void send_debuggerd_packet(siginfo_t* info) {
+static void send_debuggerd_packet() {
   // Mutex to prevent multiple crashing threads from trying to talk
   // to debuggerd at the same time.
   static pthread_mutex_t crash_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -222,7 +222,6 @@ static void send_debuggerd_packet(siginfo_t* info) {
     msg.abort_msg_address = reinterpret_cast<uintptr_t>(g_callbacks.get_abort_message());
   }
 
-  msg.original_si_code = (info != nullptr) ? info->si_code : 0;
   ret = TEMP_FAILURE_RETRY(write(s, &msg, sizeof(msg)));
   if (ret == sizeof(msg)) {
     char debuggerd_ack;
@@ -254,7 +253,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void*) 
 
   log_signal_summary(signal_number, info);
 
-  send_debuggerd_packet(info);
+  send_debuggerd_packet();
 
   // We need to return from the signal handler so that debuggerd can dump the
   // thread that crashed, but returning here does not guarantee that the signal

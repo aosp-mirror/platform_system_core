@@ -51,6 +51,8 @@
 
 #include <private/android_filesystem_config.h>
 
+#include <debuggerd/client.h>
+
 #include "backtrace.h"
 #include "getevent.h"
 #include "signal_sender.h"
@@ -70,7 +72,6 @@ struct debugger_request_t {
   pid_t pid, tid;
   uid_t uid, gid;
   uintptr_t abort_msg_address;
-  int32_t original_si_code;
 };
 
 static void wait_for_user_action(const debugger_request_t& request) {
@@ -222,7 +223,6 @@ static int read_request(int fd, debugger_request_t* out_request) {
   out_request->uid = cr.uid;
   out_request->gid = cr.gid;
   out_request->abort_msg_address = msg.abort_msg_address;
-  out_request->original_si_code = msg.original_si_code;
 
   if (msg.action == DEBUGGER_ACTION_CRASH) {
     // Ensure that the tid reported by the crashing process is valid.
@@ -471,8 +471,8 @@ static bool perform_dump(const debugger_request_t& request, int fd, int tombston
       case SIGSTOP:
         if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
           ALOGV("debuggerd: stopped -- dumping to tombstone");
-          engrave_tombstone(tombstone_fd, backtrace_map, request.pid, request.tid, siblings, signal,
-                            request.original_si_code, request.abort_msg_address, amfd_data);
+          engrave_tombstone(tombstone_fd, backtrace_map, request.pid, request.tid, siblings,
+                            request.abort_msg_address, amfd_data);
         } else if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE) {
           ALOGV("debuggerd: stopped -- dumping to fd");
           dump_backtrace(fd, backtrace_map, request.pid, request.tid, siblings, nullptr);
@@ -498,8 +498,8 @@ static bool perform_dump(const debugger_request_t& request, int fd, int tombston
       case SIGTRAP:
         ALOGV("stopped -- fatal signal\n");
         *crash_signal = signal;
-        engrave_tombstone(tombstone_fd, backtrace_map, request.pid, request.tid, siblings, signal,
-                          request.original_si_code, request.abort_msg_address, amfd_data);
+        engrave_tombstone(tombstone_fd, backtrace_map, request.pid, request.tid, siblings,
+                          request.abort_msg_address, amfd_data);
         break;
 
       default:
