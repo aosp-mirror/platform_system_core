@@ -44,7 +44,6 @@ typedef struct __attribute__((packed)) {
   int32_t action;
   pid_t tid;
   uint64_t abort_msg_address;
-  int32_t original_si_code;
 } debugger_msg_t;
 
 // These callbacks are called in a signal handler, and thus must be async signal safe.

@@ -595,7 +595,7 @@ TEST_F(TombstoneTest, dump_signal_info_error) {
   si.si_signo = 0;
   ptrace_set_fake_getsiginfo(si);
 
-  dump_signal_info(&log_, 123, SIGSEGV, 10);
+  dump_signal_info(&log_, 123);
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
