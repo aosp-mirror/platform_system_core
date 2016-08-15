@@ -459,7 +459,7 @@ static bool dump_sibling_thread_report(const ptrace_context_t* context,
         }
 
         /* Skip this thread if cannot ptrace it */
-        if (ptrace(PTRACE_ATTACH, new_tid, 0, 0) < 0) {
+        if (!ptrace_attach_thread(pid, new_tid)) {
             continue;
         }
 
