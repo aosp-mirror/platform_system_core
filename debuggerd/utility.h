@@ -63,4 +63,9 @@ void _LOG(log_t* log, int scopeFlags, const char *fmt, ...)
 int wait_for_signal(pid_t tid, int* total_sleep_time_usec);
 void wait_for_stop(pid_t tid, int* total_sleep_time_usec);
 
+bool pid_contains_tid(pid_t pid, pid_t tid);
+
+// Attach to a thread, and verify that it's still a member of the given process
+bool ptrace_attach_thread(pid_t pid, pid_t tid);
+
 #endif // _DEBUGGERD_UTILITY_H
