@@ -47,7 +47,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
           show_progress_(show_progress),
           status_(0),
           line_() {
-        SetLineMessage();
+        SetLineMessage("generating");
     }
 
     void OnStdout(const char* buffer, int length) {
@@ -97,6 +97,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
                                                           OS_PATH_SEPARATOR, dest_file_.c_str());
             }
             std::vector<const char*> srcs{src_file_.c_str()};
+            SetLineMessage("pulling");
             status_ =
                 br_->DoSyncPull(srcs, destination.c_str(), true, line_message_.c_str()) ? 0 : 1;
             if (status_ != 0) {
@@ -111,9 +112,8 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
     }
 
   private:
-    void SetLineMessage() {
-        line_message_ =
-            android::base::StringPrintf("generating %s", adb_basename(dest_file_).c_str());
+    void SetLineMessage(const std::string& action) {
+        line_message_ = action + " " + adb_basename(dest_file_);
     }
 
     void SetSrcFile(const std::string path) {
@@ -121,7 +121,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
         if (!dest_dir_.empty()) {
             // Only uses device-provided name when user passed a directory.
             dest_file_ = adb_basename(path);
-            SetLineMessage();
+            SetLineMessage("generating");
         }
     }
 
