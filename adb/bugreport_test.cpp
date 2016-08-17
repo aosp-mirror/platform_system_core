@@ -189,7 +189,7 @@ TEST_F(BugreportTest, NoArgumentsNDevice) {
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("OK:/device/da_bugreport.zip")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/da_bugreport.zip")), StrEq(dest_file),
-                                true, StrEq("generating da_bugreport.zip")))
+                                true, StrEq("pulling da_bugreport.zip")))
         .WillOnce(Return(true));
 
     const char* args[] = {"bugreport"};
@@ -209,7 +209,7 @@ TEST_F(BugreportTest, NoArgumentsPostNDevice) {
                         WithArg<4>(WriteOnStdout("OK:/device/da_bugreport.zip\n")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/da_bugreport.zip")), StrEq(dest_file),
-                                true, StrEq("generating da_bugreport.zip")))
+                                true, StrEq("pulling da_bugreport.zip")))
         .WillOnce(Return(true));
 
     const char* args[] = {"bugreport"};
@@ -223,7 +223,7 @@ TEST_F(BugreportTest, OkNDevice) {
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("OK:/device/bugreport.zip")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
-                                true, StrEq("generating file.zip")))
+                                true, StrEq("pulling file.zip")))
         .WillOnce(Return(true));
 
     const char* args[] = {"bugreport", "file.zip"};
@@ -239,7 +239,7 @@ TEST_F(BugreportTest, OkNDeviceSplitBuffer) {
                         WithArg<4>(WriteOnStdout("/bugreport.zip")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
-                                true, StrEq("generating file.zip")))
+                                true, StrEq("pulling file.zip")))
         .WillOnce(Return(true));
 
     const char* args[] = {"bugreport", "file.zip"};
@@ -275,7 +275,7 @@ TEST_F(BugreportTest, OkProgress) {
             WithArg<4>(ReturnCallbackDone())));
     // clang-format on
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
-                                true, StrEq("generating file.zip")))
+                                true, StrEq("pulling file.zip")))
         .WillOnce(Return(true));
 
     const char* args[] = {"bugreport", "file.zip"};
@@ -294,7 +294,7 @@ TEST_F(BugreportTest, OkDirectory) {
                         WithArg<4>(WriteOnStdout("OK:/device/da_bugreport.zip")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/da_bugreport.zip")), StrEq(dest_file),
-                                true, StrEq("generating da_bugreport.zip")))
+                                true, StrEq("pulling da_bugreport.zip")))
         .WillOnce(Return(true));
 
     const char* args[] = {"bugreport", td.path};
@@ -308,7 +308,7 @@ TEST_F(BugreportTest, OkNoExtension) {
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("OK:/device/bugreport.zip\n")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
-                                true, StrEq("generating file.zip")))
+                                true, StrEq("pulling file.zip")))
         .WillOnce(Return(true));
 
     const char* args[] = {"bugreport", "file"};
@@ -327,7 +327,7 @@ TEST_F(BugreportTest, OkNDeviceDirectory) {
                         WithArg<4>(WriteOnStdout("OK:/device/da_bugreport.zip")),
                         WithArg<4>(ReturnCallbackDone())));
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/da_bugreport.zip")), StrEq(dest_file),
-                                true, StrEq("generating da_bugreport.zip")))
+                                true, StrEq("pulling da_bugreport.zip")))
         .WillOnce(Return(true));
 
     const char* args[] = {"bugreport", td.path};
