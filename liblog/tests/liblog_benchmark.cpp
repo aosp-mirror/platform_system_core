@@ -542,7 +542,7 @@ static void BM_log_latency(int iters) {
 
             char* eventData = log_msg.msg();
 
-            if (eventData[4] != EVENT_TYPE_LONG) {
+            if (!eventData || (eventData[4] != EVENT_TYPE_LONG)) {
                 continue;
             }
             log_time tx(eventData + 4 + 1);
@@ -622,7 +622,7 @@ static void BM_log_delay(int iters) {
 
             char* eventData = log_msg.msg();
 
-            if (eventData[4] != EVENT_TYPE_LONG) {
+            if (!eventData || (eventData[4] != EVENT_TYPE_LONG)) {
                 continue;
             }
             log_time tx(eventData + 4 + 1);
