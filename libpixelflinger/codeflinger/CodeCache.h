@@ -19,6 +19,7 @@
 #ifndef ANDROID_CODECACHE_H
 #define ANDROID_CODECACHE_H
 
+#include <atomic>
 #include <stdint.h>
 #include <pthread.h>
 #include <sys/types.h>
@@ -69,7 +70,7 @@ public:
     typedef void    weakref_type;
 
 private:
-    mutable int32_t     mCount;
+    mutable std::atomic<int32_t>     mCount;
             uint32_t*   mBase;
             size_t      mSize;
 };
