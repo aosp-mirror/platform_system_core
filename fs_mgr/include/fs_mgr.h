@@ -17,6 +17,7 @@
 #ifndef __CORE_FS_MGR_H
 #define __CORE_FS_MGR_H
 
+#include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <linux/dm-ioctl.h>
@@ -73,6 +74,7 @@ struct fstab_rec {
 typedef void (*fs_mgr_verity_state_callback)(struct fstab_rec *fstab,
         const char *mount_point, int mode, int status);
 
+struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file);
 struct fstab *fs_mgr_read_fstab(const char *fstab_path);
 void fs_mgr_free_fstab(struct fstab *fstab);
 
@@ -114,6 +116,11 @@ int fs_mgr_is_nofail(struct fstab_rec *fstab);
 int fs_mgr_swapon_all(struct fstab *fstab);
 
 int fs_mgr_do_format(struct fstab_rec *fstab, bool reserve_footer);
+
+#define FS_MGR_EARLY_SETUP_VERITY_NO_VERITY -2
+#define FS_MGR_EARLY_SETUP_VERITY_FAIL -1
+#define FS_MGR_EARLY_SETUP_VERITY_SUCCESS 0
+int fs_mgr_early_setup_verity(struct fstab_rec *fstab);
 
 #ifdef __cplusplus
 }

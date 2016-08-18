@@ -21,6 +21,13 @@
 
 extern void handle_device_fd();
 extern void device_init(void);
+
+enum early_device_type { EARLY_BLOCK_DEV, EARLY_CHAR_DEV };
+
+extern int early_device_socket_open();
+extern void early_device_socket_close();
+extern void early_create_dev(const std::string& syspath, early_device_type dev_type);
+
 extern int add_dev_perms(const char *name, const char *attr,
                          mode_t perm, unsigned int uid,
                          unsigned int gid, unsigned short prefix,
