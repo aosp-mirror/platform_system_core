@@ -69,7 +69,7 @@ static void send_auth_publickey(atransport* t) {
 }
 
 void send_auth_response(uint8_t* token, size_t token_size, atransport* t) {
-    RSA* key = t->NextKey();
+    std::shared_ptr<RSA> key = t->NextKey();
     if (key == nullptr) {
         // No more private keys to try, send the public key.
         send_auth_publickey(t);
@@ -79,12 +79,7 @@ void send_auth_response(uint8_t* token, size_t token_size, atransport* t) {
     LOG(INFO) << "Calling send_auth_response";
     apacket* p = get_apacket();
 
-    int ret = adb_auth_sign(key, token, token_size, p->data);
-
-    // Stop sharing this key.
-    RSA_free(key);
-    key = nullptr;
-
+    int ret = adb_auth_sign(key.get(), token, token_size, p->data);
     if (!ret) {
         D("Error signing the token");
         put_apacket(p);
