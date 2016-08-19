@@ -42,7 +42,6 @@ cc_library {
         "load_file.c",
         "native_handle.c",
         "open_memstream.c",
-        "process_name.c",
         "record_stream.c",
         "sched_policy.c",
         "sockets.cpp",
