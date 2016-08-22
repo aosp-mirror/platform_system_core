@@ -360,7 +360,7 @@ void handle_packet(apacket *p, atransport *t)
                 adb_auth_verified(t);
                 t->failed_auth_attempts = 0;
             } else {
-                if (t->failed_auth_attempts++ > 10) adb_sleep_ms(1000);
+                if (t->failed_auth_attempts++ > 256) adb_sleep_ms(1000);
                 send_auth_request(t);
             }
         } else if (p->msg.arg0 == ADB_AUTH_RSAPUBLICKEY) {
