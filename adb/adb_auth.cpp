@@ -64,7 +64,9 @@ static void send_auth_publickey(atransport* t) {
 
     p->msg.command = A_AUTH;
     p->msg.arg0 = ADB_AUTH_RSAPUBLICKEY;
-    p->msg.data_length = key.size();
+
+    // adbd expects a null-terminated string.
+    p->msg.data_length = key.size() + 1;
     send_packet(p, t);
 }
 
