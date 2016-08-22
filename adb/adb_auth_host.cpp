@@ -16,16 +16,18 @@
 
 #define TRACE_TAG AUTH
 
-#include "adb_auth.h"
-#include "adb.h"
-#include "adb_utils.h"
-#include "sysdeps.h"
-
+#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(__linux__)
+#include <sys/inotify.h>
+#endif
 
+#include <map>
 #include <mutex>
+#include <set>
+#include <string>
 
 #include <android-base/errors.h>
 #include <android-base/file.h>
@@ -39,10 +41,16 @@
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 
+#include "adb.h"
+#include "adb_auth.h"
+#include "adb_utils.h"
+#include "sysdeps.h"
 #include "sysdeps/mutex.h"
 
-static std::mutex& g_key_list_mutex = *new std::mutex;
-static std::deque<RSA*>& g_key_list = *new std::deque<RSA*>;
+static std::mutex& g_keys_mutex = *new std::mutex;
+static std::map<std::string, std::shared_ptr<RSA>>& g_keys =
+    *new std::map<std::string, std::shared_ptr<RSA>>;
+static std::map<int, std::string>& g_monitored_paths = *new std::map<int, std::string>;
 
 static std::string get_user_info() {
     LOG(INFO) << "get_user_info...";
@@ -146,8 +154,23 @@ out:
     return ret;
 }
 
-static bool read_key(const std::string& file) {
-    LOG(INFO) << "read_key '" << file << "'...";
+static std::string hash_key(RSA* key) {
+    unsigned char* pubkey = nullptr;
+    int len = i2d_RSA_PUBKEY(key, &pubkey);
+    if (len < 0) {
+        LOG(ERROR) << "failed to encode RSA public key";
+        return std::string();
+    }
+
+    std::string result;
+    result.resize(SHA256_DIGEST_LENGTH);
+    SHA256(pubkey, len, reinterpret_cast<unsigned char*>(&result[0]));
+    OPENSSL_free(pubkey);
+    return result;
+}
+
+static bool read_key_file(const std::string& file) {
+    LOG(INFO) << "read_key_file '" << file << "'...";
 
     std::unique_ptr<FILE, decltype(&fclose)> fp(fopen(file.c_str(), "r"), fclose);
     if (!fp) {
@@ -162,8 +185,64 @@ static bool read_key(const std::string& file) {
         return false;
     }
 
-    g_key_list.push_back(key);
+    std::lock_guard<std::mutex> lock(g_keys_mutex);
+    std::string fingerprint = hash_key(key);
+    if (g_keys.find(fingerprint) != g_keys.end()) {
+        LOG(INFO) << "ignoring already-loaded key: " << file;
+        RSA_free(key);
+    } else {
+        g_keys[fingerprint] = std::shared_ptr<RSA>(key, RSA_free);
+    }
+
     return true;
+}
+
+static bool read_keys(const std::string& path, bool allow_dir = true) {
+    LOG(INFO) << "read_keys '" << path << "'...";
+
+    struct stat st;
+    if (stat(path.c_str(), &st) != 0) {
+        PLOG(ERROR) << "failed to stat '" << path << "'";
+        return false;
+    }
+
+    if (S_ISREG(st.st_mode)) {
+        if (!android::base::EndsWith(path, ".adb_key")) {
+            LOG(INFO) << "skipping non-adb_key '" << path << "'";
+            return false;
+        }
+
+        return read_key_file(path);
+    } else if (S_ISDIR(st.st_mode)) {
+        if (!allow_dir) {
+            // inotify isn't recursive. It would break expectations to load keys in nested
+            // directories but not monitor them for new keys.
+            LOG(WARNING) << "refusing to recurse into directory '" << path << "'";
+            return false;
+        }
+
+        std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(path.c_str()), closedir);
+        if (!dir) {
+            PLOG(ERROR) << "failed to open directory '" << path << "'";
+            return false;
+        }
+
+        bool result = false;
+        while (struct dirent* dent = readdir(dir.get())) {
+            std::string name = dent->d_name;
+
+            // We can't use dent->d_type here because it's not available on Windows.
+            if (name == "." || name == "..") {
+                continue;
+            }
+
+            result |= read_keys((path + OS_PATH_SEPARATOR + name).c_str(), false);
+        }
+        return result;
+    }
+
+    LOG(ERROR) << "unexpected type for '" << path << "': 0x" << std::hex << st.st_mode;
+    return false;
 }
 
 static std::string get_user_key_path() {
@@ -200,31 +279,29 @@ static bool get_user_key() {
         }
     }
 
-    return read_key(path);
+    return read_key_file(path);
 }
 
-static void get_vendor_keys() {
+static std::set<std::string> get_vendor_keys() {
     const char* adb_keys_path = getenv("ADB_VENDOR_KEYS");
     if (adb_keys_path == nullptr) {
-        return;
+        return std::set<std::string>();
     }
 
+    std::set<std::string> result;
     for (const auto& path : android::base::Split(adb_keys_path, ENV_PATH_SEPARATOR_STR)) {
-        if (!read_key(path.c_str())) {
-            PLOG(ERROR) << "Failed to read '" << path << "'";
-        }
+        result.emplace(path);
     }
+    return result;
 }
 
-std::deque<RSA*> adb_auth_get_private_keys() {
-    std::deque<RSA*> result;
+std::deque<std::shared_ptr<RSA>> adb_auth_get_private_keys() {
+    std::deque<std::shared_ptr<RSA>> result;
 
-    // Copy all the currently known keys, increasing their reference count so they're
-    // usable until both we and the caller have freed our pointers.
-    std::lock_guard<std::mutex> lock(g_key_list_mutex);
-    for (const auto& key : g_key_list) {
-        RSA_up_ref(key); // Since we're handing out another pointer to this key...
-        result.push_back(key);
+    // Copy all the currently known keys.
+    std::lock_guard<std::mutex> lock(g_keys_mutex);
+    for (const auto& it : g_keys) {
+        result.push_back(it.second);
     }
 
     // Add a sentinel to the list. Our caller uses this to mean "out of private keys,
@@ -270,6 +347,77 @@ int adb_auth_keygen(const char* filename) {
     return (generate_key(filename) == 0);
 }
 
+#if defined(__linux__)
+static void adb_auth_inotify_update(int fd, unsigned fd_event, void*) {
+    LOG(INFO) << "adb_auth_inotify_update called";
+    if (!(fd_event & FDE_READ)) {
+        return;
+    }
+
+    char buf[sizeof(struct inotify_event) + NAME_MAX + 1];
+    while (true) {
+        ssize_t rc = TEMP_FAILURE_RETRY(unix_read(fd, buf, sizeof(buf)));
+        if (rc == -1) {
+            if (errno == EAGAIN) {
+                LOG(INFO) << "done reading inotify fd";
+                break;
+            }
+            PLOG(FATAL) << "read of inotify event failed";
+        }
+
+        // The read potentially returned multiple events.
+        char* start = buf;
+        char* end = buf + rc;
+
+        while (start < end) {
+            inotify_event* event = reinterpret_cast<inotify_event*>(start);
+            auto root_it = g_monitored_paths.find(event->wd);
+            if (root_it == g_monitored_paths.end()) {
+                LOG(FATAL) << "observed inotify event for unmonitored path, wd = " << event->wd;
+            }
+
+            std::string path = root_it->second;
+            if (event->len > 0) {
+                path += '/';
+                path += event->name;
+            }
+
+            if (event->mask & (IN_CREATE | IN_MOVED_TO)) {
+                if (event->mask & IN_ISDIR) {
+                    LOG(INFO) << "ignoring new directory at '" << path << "'";
+                } else {
+                    LOG(INFO) << "observed new file at '" << path << "'";
+                    read_keys(path, false);
+                }
+            } else {
+                LOG(WARNING) << "unmonitored event for " << path << ": 0x" << std::hex
+                             << event->mask;
+            }
+
+            start += sizeof(struct inotify_event) + event->len;
+        }
+    }
+}
+
+static void adb_auth_inotify_init(const std::set<std::string>& paths) {
+    LOG(INFO) << "adb_auth_inotify_init...";
+    int infd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
+    for (const std::string& path : paths) {
+        int wd = inotify_add_watch(infd, path.c_str(), IN_CREATE | IN_MOVED_TO);
+        if (wd < 0) {
+            PLOG(ERROR) << "failed to inotify_add_watch on path '" << path;
+            continue;
+        }
+
+        g_monitored_paths[wd] = path;
+        LOG(INFO) << "watch descriptor " << wd << " registered for " << path;
+    }
+
+    fdevent* event = fdevent_create(infd, adb_auth_inotify_update, nullptr);
+    fdevent_add(event, FDE_READ);
+}
+#endif
+
 void adb_auth_init() {
     LOG(INFO) << "adb_auth_init...";
 
@@ -278,6 +426,13 @@ void adb_auth_init() {
         return;
     }
 
-    std::lock_guard<std::mutex> lock(g_key_list_mutex);
-    get_vendor_keys();
+    const auto& key_paths = get_vendor_keys();
+
+#if defined(__linux__)
+    adb_auth_inotify_init(key_paths);
+#endif
+
+    for (const std::string& path : key_paths) {
+        read_keys(path.c_str());
+    }
 }

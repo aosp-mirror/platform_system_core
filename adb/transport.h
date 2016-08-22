@@ -21,6 +21,7 @@
 
 #include <deque>
 #include <list>
+#include <memory>
 #include <string>
 #include <unordered_set>
 
@@ -107,7 +108,7 @@ public:
         return type == kTransportLocal && local_port_for_emulator_ == -1;
     }
 
-    RSA* NextKey();
+    std::shared_ptr<RSA> NextKey();
 
     unsigned char token[TOKEN_SIZE] = {};
     size_t failed_auth_attempts = 0;
@@ -160,7 +161,7 @@ private:
     // A list of adisconnect callbacks called when the transport is kicked.
     std::list<adisconnect*> disconnects_;
 
-    std::deque<RSA*> keys_;
+    std::deque<std::shared_ptr<RSA>> keys_;
 
     DISALLOW_COPY_AND_ASSIGN(atransport);
 };
