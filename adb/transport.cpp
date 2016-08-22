@@ -1076,10 +1076,10 @@ int check_data(apacket *p)
     }
 }
 
-RSA* atransport::NextKey() {
+std::shared_ptr<RSA> atransport::NextKey() {
     if (keys_.empty()) keys_ = adb_auth_get_private_keys();
 
-    RSA* result = keys_[0];
+    std::shared_ptr<RSA> result = keys_[0];
     keys_.pop_front();
     return result;
 }
