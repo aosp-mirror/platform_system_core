@@ -20,6 +20,7 @@
 #include "adb.h"
 
 #include <deque>
+#include <memory>
 
 #include <openssl/rsa.h>
 
@@ -43,7 +44,7 @@ void send_auth_response(uint8_t *token, size_t token_size, atransport *t);
 void adb_auth_init();
 int adb_auth_sign(RSA* key, const unsigned char* token, size_t token_size, unsigned char* sig);
 std::string adb_auth_get_userkey();
-std::deque<RSA*> adb_auth_get_private_keys();
+std::deque<std::shared_ptr<RSA>> adb_auth_get_private_keys();
 
 static inline bool adb_auth_generate_token(void*, size_t) { abort(); }
 static inline bool adb_auth_verify(void*, size_t, void*, int) { abort(); }
@@ -53,7 +54,7 @@ static inline void adb_auth_confirm_key(unsigned char*, size_t, atransport*) { a
 
 static inline int adb_auth_sign(void*, const unsigned char*, size_t, unsigned char*) { abort(); }
 static inline std::string adb_auth_get_userkey() { abort(); }
-static inline std::deque<RSA*> adb_auth_get_private_keys() { abort(); }
+static inline std::deque<std::shared_ptr<RSA>> adb_auth_get_private_keys() { abort(); }
 
 void adbd_auth_init(void);
 void adbd_cloexec_auth_socket();
