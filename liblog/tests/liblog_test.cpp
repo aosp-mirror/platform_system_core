@@ -132,12 +132,17 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
         LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
 
+    // Check that we can close and reopen the logger
     log_time ts(CLOCK_MONOTONIC);
-
     ASSERT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
+    __android_log_close();
+
+    log_time ts1(CLOCK_MONOTONIC);
+    ASSERT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts1, sizeof(ts1)));
     usleep(1000000);
 
     int count = 0;
+    int second_count = 0;
 
     for (;;) {
         log_msg log_msg;
@@ -161,10 +166,13 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
         log_time tx(eventData + 4 + 1);
         if (ts == tx) {
             ++count;
+        } else if (ts1 == tx) {
+            ++second_count;
         }
     }
 
     EXPECT_EQ(1, count);
+    EXPECT_EQ(1, second_count);
 
     android_logger_list_close(logger_list);
 }
