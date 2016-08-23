@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
     fstab = fs_mgr_read_fstab(fstab_file);
 
     if (a_flag) {
-        return fs_mgr_mount_all(fstab);
+        return fs_mgr_mount_all(fstab, MOUNT_MODE_DEFAULT);
     } else if (n_flag) {
         return fs_mgr_do_mount(fstab, n_name, n_blk_dev, 0);
     } else if (u_flag) {
