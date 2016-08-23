@@ -67,12 +67,9 @@ static int logdOpen()
     int i, ret = 0;
 
     if (logdLoggerWrite.context.sock < 0) {
-        i = TEMP_FAILURE_RETRY(socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0));
+        i = TEMP_FAILURE_RETRY(socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
         if (i < 0) {
             ret = -errno;
-        } else if (TEMP_FAILURE_RETRY(fcntl(i, F_SETFL, O_NONBLOCK)) < 0) {
-            ret = -errno;
-            close(i);
         } else {
             struct sockaddr_un un;
             memset(&un, 0, sizeof(struct sockaddr_un));
