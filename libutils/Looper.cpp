@@ -84,6 +84,7 @@ Looper::Looper(bool allowNonCallbacks) :
 
 Looper::~Looper() {
     close(mWakeEventFd);
+    mWakeEventFd = -1;
     if (mEpollFd >= 0) {
         close(mEpollFd);
     }
@@ -413,7 +414,8 @@ void Looper::wake() {
     ssize_t nWrite = TEMP_FAILURE_RETRY(write(mWakeEventFd, &inc, sizeof(uint64_t)));
     if (nWrite != sizeof(uint64_t)) {
         if (errno != EAGAIN) {
-            ALOGW("Could not write wake signal: %s", strerror(errno));
+            LOG_ALWAYS_FATAL("Could not write wake signal to fd %d: %s",
+                    mWakeEventFd, strerror(errno));
         }
     }
 }
