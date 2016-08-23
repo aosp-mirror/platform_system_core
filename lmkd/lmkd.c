@@ -397,9 +397,6 @@ static void ctrl_data_handler(uint32_t events) {
 }
 
 static void ctrl_connect_handler(uint32_t events __unused) {
-    struct sockaddr_storage ss;
-    struct sockaddr *addrp = (struct sockaddr *)&ss;
-    socklen_t alen;
     struct epoll_event epev;
 
     if (ctrl_dfd >= 0) {
@@ -407,8 +404,7 @@ static void ctrl_connect_handler(uint32_t events __unused) {
         ctrl_dfd_reopened = 1;
     }
 
-    alen = sizeof(ss);
-    ctrl_dfd = accept(ctrl_lfd, addrp, &alen);
+    ctrl_dfd = accept(ctrl_lfd, NULL, NULL);
 
     if (ctrl_dfd < 0) {
         ALOGE("lmkd control socket accept failed; errno=%d", errno);

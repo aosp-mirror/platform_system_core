@@ -254,10 +254,7 @@ TEST_F(LocalSocketTest, close_socket_in_CLOSE_WAIT_state) {
     ASSERT_TRUE(adb_thread_create(reinterpret_cast<void (*)(void*)>(ClientThreadFunc), nullptr,
                                   &client_thread));
 
-    struct sockaddr addr;
-    socklen_t alen;
-    alen = sizeof(addr);
-    int accept_fd = adb_socket_accept(listen_fd, &addr, &alen);
+    int accept_fd = adb_socket_accept(listen_fd, nullptr, nullptr);
     ASSERT_GE(accept_fd, 0);
     CloseRdHupSocketArg arg;
     arg.socket_fd = accept_fd;
