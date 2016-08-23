@@ -116,16 +116,18 @@ static struct {
 };
 
 static std::string find_item_given_name(const char* img_name, const char* product) {
-    char *dir;
-    char path[PATH_MAX + 128];
+    char path_c_str[PATH_MAX + 128];
 
     if(product) {
-        get_my_path(path);
-        return android::base::StringPrintf("../../../target/product/%s/%s", product, img_name);
+        get_my_path(path_c_str);
+        std::string path = path_c_str;
+        path.erase(path.find_last_of('/'));
+        return android::base::StringPrintf("%s/../../../target/product/%s/%s",
+                                           path.c_str(), product, img_name);
     }
 
-    dir = getenv("ANDROID_PRODUCT_OUT");
-    if((dir == 0) || (dir[0] == 0)) {
+    char *dir = getenv("ANDROID_PRODUCT_OUT");
+    if (dir == nullptr || dir[0] == '\0') {
         die("neither -p product specified nor ANDROID_PRODUCT_OUT set");
     }
 
