@@ -355,6 +355,9 @@ void __android_log_close()
 #else
     close(logd_fd);
     logd_fd = -1;
+
+    close(pstore_fd);
+    pstore_fd = -1;
 #endif
 
 #ifdef HAVE_PTHREADS
