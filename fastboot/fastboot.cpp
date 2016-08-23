@@ -115,16 +115,15 @@ static struct {
 };
 
 static std::string find_item_given_name(const char* img_name, const char* product) {
-    char *dir;
-
     if(product) {
         std::string path = get_my_path();
+        path.erase(path.find_last_of('/'));
         return android::base::StringPrintf("%s/../../../target/product/%s/%s",
                                            path.c_str(), product, img_name);
     }
 
-    dir = getenv("ANDROID_PRODUCT_OUT");
-    if((dir == 0) || (dir[0] == 0)) {
+    char *dir = getenv("ANDROID_PRODUCT_OUT");
+    if (dir == nullptr || dir[0] == '\0') {
         die("neither -p product specified nor ANDROID_PRODUCT_OUT set");
     }
 
@@ -134,7 +133,7 @@ static std::string find_item_given_name(const char* img_name, const char* produc
 std::string find_item(const char* item, const char* product) {
     const char *fn;
 
-    if(!strcmp(item,"boot")) {
+    if (!strcmp(item,"boot")) {
         fn = "boot.img";
     } else if(!strcmp(item,"recovery")) {
         fn = "recovery.img";
@@ -397,9 +396,8 @@ static void usage() {
             "  -a, --set-active[=<slot>]                Sets the active slot. If no slot is\n"
             "                                           provided, this will default to the value\n"
             "                                           given by --slot. If slots are not\n"
-            "                                           supported, this sets the current slot\n"
-            "                                           to be active. This will run after all\n"
-            "                                           non-reboot commands.\n"
+            "                                           supported, this does nothing. This will\n"
+            "                                           run after all non-reboot commands.\n"
             "  --skip-secondary                         Will not flash secondary slots when\n"
             "                                           performing a flashall or update. This\n"
             "                                           will preserve data on other slots.\n"
@@ -1142,17 +1140,14 @@ static void do_update(Transport* transport, const char* filename, const std::str
     }
 }
 
-static void do_send_signature(const char* filename) {
-    if (android::base::EndsWith(filename, ".img") == false) {
-        return;
-    }
+static void do_send_signature(const std::string& fn) {
+    std::size_t extension_loc = fn.find(".img");
+    if (extension_loc == std::string::npos) return;
 
-    std::string sig_path = filename;
-    sig_path.erase(sig_path.size() - 4);
-    sig_path += ".sig";
+    std::string fs_sig = fn.substr(0, extension_loc) + ".sig";
 
     int64_t sz;
-    void* data = load_file(sig_path, &sz);
+    void* data = load_file(fs_sig.c_str(), &sz);
     if (data == nullptr) return;
 
     fb_queue_download("signature", data, sz);
@@ -1201,7 +1196,7 @@ static void do_flashall(Transport* transport, const std::string& slot_override, 
         fastboot_buffer buf;
         if (!load_buf(transport, fname.c_str(), &buf)) {
             if (images[i].is_optional) continue;
-            die("could not load %s\n", images[i].img_name);
+            die("could not load '%s': %s\n", images[i].img_name, strerror(errno));
         }
 
         auto flashall = [&](const std::string &partition) {
