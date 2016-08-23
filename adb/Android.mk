@@ -151,7 +151,7 @@ LOCAL_SRC_FILES_linux := $(LIBADB_linux_SRC_FILES)
 LOCAL_SRC_FILES_windows := $(LIBADB_windows_SRC_FILES)
 
 LOCAL_SRC_FILES_linux += transport_mdns.cpp
-LOCAL_SRC_FILES_darwin += transport_mdns_unsupported.cpp
+LOCAL_SRC_FILES_darwin += transport_mdns.cpp
 LOCAL_SRC_FILES_windows += transport_mdns_unsupported.cpp
 
 LOCAL_SANITIZE := $(adb_host_sanitize)

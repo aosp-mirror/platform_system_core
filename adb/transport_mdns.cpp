@@ -85,10 +85,17 @@ class ResolvedService : public AsyncServiceRef {
                     const char* hosttarget, uint16_t port) :
             name_(name),
             port_(port) {
+
+        /* TODO: We should be able to get IPv6 support by adding
+         * kDNSServiceProtocol_IPv6 to the flags below. However, when we do
+         * this, we get served link-local addresses that are usually useless to
+         * connect to. What's more, we seem to /only/ get those and nothing else.
+         * If we want IPv6 in the future we'll have to figure out why.
+         */
         DNSServiceErrorType ret =
             DNSServiceGetAddrInfo(
                 &sdRef_, 0, interfaceIndex,
-                kDNSServiceProtocol_IPv6|kDNSServiceProtocol_IPv4, hosttarget,
+                kDNSServiceProtocol_IPv4, hosttarget,
                 register_service_ip, reinterpret_cast<void*>(this));
 
         if (ret != kDNSServiceErr_NoError) {
