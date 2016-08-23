@@ -465,9 +465,9 @@ exit_success:
  *
  * start_index: index of the first path in the args list
  */
-static void import_late(const std::vector<std::string>& args, size_t start_index) {
+static void import_late(const std::vector<std::string>& args, size_t start_index, size_t end_index) {
     Parser& parser = Parser::GetInstance();
-    if (args.size() <= start_index) {
+    if (end_index <= start_index) {
         // Use the default set if no path is given
         static const std::vector<std::string> init_directories = {
             "/system/etc/init",
@@ -479,21 +479,19 @@ static void import_late(const std::vector<std::string>& args, size_t start_index
             parser.ParseConfig(dir);
         }
     } else {
-        for (size_t i = start_index; i < args.size(); ++i) {
+        for (size_t i = start_index; i < end_index; ++i) {
             parser.ParseConfig(args[i]);
         }
     }
 }
 
-/* mount_all <fstab> [ <path> ]*
+/* mount_fstab
  *
- * This function might request a reboot, in which case it will
- * not return.
+ *  Call fs_mgr_mount_all() to mount the given fstab
  */
-static int do_mount_all(const std::vector<std::string>& args) {
+static int mount_fstab(const char* fstabfile, int mount_mode) {
     int ret = -1;
 
-    const char* fstabfile = args[1].c_str();
     /*
      * Call fs_mgr_mount_all() to mount all filesystems.  We fork(2) and
      * do the call in the child to provide protection to the main init
@@ -523,7 +521,7 @@ static int do_mount_all(const std::vector<std::string>& args) {
         android::base::ScopedLogSeverity info(android::base::INFO);
 
         struct fstab* fstab = fs_mgr_read_fstab(fstabfile);
-        int child_ret = fs_mgr_mount_all(fstab);
+        int child_ret = fs_mgr_mount_all(fstab, mount_mode);
         fs_mgr_free_fstab(fstab);
         if (child_ret == -1) {
             PLOG(ERROR) << "fs_mgr_mount_all returned an error";
@@ -533,28 +531,38 @@ static int do_mount_all(const std::vector<std::string>& args) {
         /* fork failed, return an error */
         return -1;
     }
+    return ret;
+}
 
-    /* Paths of .rc files are specified at the 2nd argument and beyond */
-    import_late(args, 2);
-
-    if (ret == FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION) {
+/* Queue event based on fs_mgr return code.
+ *
+ * code: return code of fs_mgr_mount_all
+ *
+ * This function might request a reboot, in which case it will
+ * not return.
+ *
+ * return code is processed based on input code
+ */
+static int queue_fs_event(int code) {
+    int ret = code;
+    if (code == FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION) {
         ActionManager::GetInstance().QueueEventTrigger("encrypt");
-    } else if (ret == FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED) {
+    } else if (code == FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED) {
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "block");
         ActionManager::GetInstance().QueueEventTrigger("defaultcrypto");
-    } else if (ret == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
+    } else if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
         property_set("ro.crypto.state", "unencrypted");
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
-    } else if (ret == FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE) {
+    } else if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE) {
         property_set("ro.crypto.state", "unsupported");
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
-    } else if (ret == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
+    } else if (code == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
         /* Setup a wipe via recovery, and reboot into recovery */
         PLOG(ERROR) << "fs_mgr_mount_all suggested recovery, so wiping data via recovery.";
         ret = wipe_data_via_recovery("wipe_data_via_recovery");
         /* If reboot worked, there is no return. */
-    } else if (ret == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
+    } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
         if (e4crypt_install_keyring()) {
             return -1;
         }
@@ -564,10 +572,51 @@ static int do_mount_all(const std::vector<std::string>& args) {
         // Although encrypted, we have device key, so we do not need to
         // do anything different from the nonencrypted case.
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
-    } else if (ret > 0) {
-        PLOG(ERROR) << "fs_mgr_mount_all returned unexpected error " << ret;
+    } else if (code > 0) {
+        PLOG(ERROR) << "fs_mgr_mount_all returned unexpected error " << code;
     }
     /* else ... < 0: error */
+
+    return ret;
+}
+
+/* mount_all <fstab> [ <path> ]* [--<options>]*
+ *
+ * This function might request a reboot, in which case it will
+ * not return.
+ */
+static int do_mount_all(const std::vector<std::string>& args) {
+    std::size_t na = 0;
+    bool import_rc = true;
+    bool queue_event = true;
+    int mount_mode = MOUNT_MODE_DEFAULT;
+    const char* fstabfile = args[1].c_str();
+    std::size_t path_arg_end = args.size();
+
+    for (na = args.size() - 1; na > 1; --na) {
+        if (args[na] == "--early") {
+             path_arg_end = na;
+             queue_event = false;
+             mount_mode = MOUNT_MODE_EARLY;
+        } else if (args[na] == "--late") {
+            path_arg_end = na;
+            import_rc = false;
+            mount_mode = MOUNT_MODE_LATE;
+        }
+    }
+
+    int ret =  mount_fstab(fstabfile, mount_mode);
+
+    if (import_rc) {
+        /* Paths of .rc files are specified at the 2nd argument and beyond */
+        import_late(args, 2, path_arg_end);
+    }
+
+    if (queue_event) {
+        /* queue_fs_event will queue event based on mount_fstab return code
+         * and return processed return code*/
+        ret = queue_fs_event(ret);
+    }
 
     return ret;
 }
