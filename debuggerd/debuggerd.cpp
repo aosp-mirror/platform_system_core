@@ -193,8 +193,6 @@ static int read_request(int fd, debugger_request_t* out_request) {
   }
 
   ALOGV("reading tid");
-  fcntl(fd, F_SETFL, O_NONBLOCK);
-
   pollfd pollfds[1];
   pollfds[0].fd = fd;
   pollfds[0].events = POLLIN;
@@ -828,7 +826,7 @@ static int do_server() {
     socklen_t alen = sizeof(ss);
 
     ALOGV("waiting for connection\n");
-    int fd = accept4(s, addrp, &alen, SOCK_CLOEXEC);
+    int fd = accept4(s, addrp, &alen, SOCK_CLOEXEC | SOCK_NONBLOCK);
     if (fd == -1) {
       ALOGE("accept failed: %s\n", strerror(errno));
       continue;
