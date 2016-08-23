@@ -227,32 +227,29 @@ int property_set(const char* name, const char* value) {
 static void handle_property_set_fd()
 {
     prop_msg msg;
-    int s;
     int r;
-    struct ucred cr;
-    struct sockaddr_un addr;
-    socklen_t addr_size = sizeof(addr);
-    socklen_t cr_size = sizeof(cr);
     char * source_ctx = NULL;
-    struct pollfd ufds[1];
-    const int timeout_ms = 2 * 1000;  /* Default 2 sec timeout for caller to send property. */
-    int nr;
 
-    if ((s = accept(property_set_fd, (struct sockaddr *) &addr, &addr_size)) < 0) {
+    int s = accept(property_set_fd, nullptr, nullptr);
+    if (s == -1) {
         return;
     }
 
     /* Check socket options here */
+    struct ucred cr;
+    socklen_t cr_size = sizeof(cr);
     if (getsockopt(s, SOL_SOCKET, SO_PEERCRED, &cr, &cr_size) < 0) {
         close(s);
         PLOG(ERROR) << "Unable to receive socket options";
         return;
     }
 
+    static constexpr int timeout_ms = 2 * 1000;  /* Default 2 sec timeout for caller to send property. */
+    struct pollfd ufds[1];
     ufds[0].fd = s;
     ufds[0].events = POLLIN;
     ufds[0].revents = 0;
-    nr = TEMP_FAILURE_RETRY(poll(ufds, 1, timeout_ms));
+    int nr = TEMP_FAILURE_RETRY(poll(ufds, 1, timeout_ms));
     if (nr == 0) {
         LOG(ERROR) << "sys_prop: timeout waiting for uid " << cr.uid << " to send property message.";
         close(s);

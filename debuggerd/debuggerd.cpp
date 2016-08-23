@@ -872,12 +872,8 @@ static int do_server() {
   ALOGI("debuggerd: starting\n");
 
   for (;;) {
-    sockaddr_storage ss;
-    sockaddr* addrp = reinterpret_cast<sockaddr*>(&ss);
-    socklen_t alen = sizeof(ss);
-
     ALOGV("waiting for connection\n");
-    int fd = accept4(s, addrp, &alen, SOCK_CLOEXEC | SOCK_NONBLOCK);
+    int fd = accept4(s, nullptr, nullptr, SOCK_CLOEXEC | SOCK_NONBLOCK);
     if (fd == -1) {
       ALOGE("accept failed: %s\n", strerror(errno));
       continue;
