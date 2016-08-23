@@ -43,6 +43,10 @@ bool WriteFully(int fd, const void* data, size_t byte_count);
 
 bool RemoveFileIfExists(const std::string& path, std::string* err = nullptr);
 
+#if !defined(_WIN32)
+bool Readlink(const std::string& path, std::string* result);
+#endif
+
 }  // namespace base
 }  // namespace android
 
