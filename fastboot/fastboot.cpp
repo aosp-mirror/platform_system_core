@@ -99,19 +99,40 @@ struct fastboot_buffer {
 };
 
 static struct {
-    char img_name[13];
-    char sig_name[13];
+    char img_name[17];
+    char sig_name[17];
     char part_name[9];
     bool is_optional;
+    bool is_secondary;
 } images[] = {
-    {"boot.img", "boot.sig", "boot", false},
-    {"recovery.img", "recovery.sig", "recovery", true},
-    {"system.img", "system.sig", "system", false},
-    {"vendor.img", "vendor.sig", "vendor", true},
+    {"boot.img", "boot.sig", "boot", false, false},
+    {"boot_other.img", "boot.sig", "boot", true, true},
+    {"recovery.img", "recovery.sig", "recovery", true, false},
+    {"system.img", "system.sig", "system", false, false},
+    {"system_other.img", "system.sig", "system", true, true},
+    {"vendor.img", "vendor.sig", "vendor", true, false},
+    {"vendor_other.img", "vendor.sig", "vendor", true, true},
 };
 
-static std::string find_item(const char* item, const char* product) {
+static std::string find_item_given_name(const char* img_name, const char* product) {
+    if(product) {
+        std::string path = get_my_path();
+        path.erase(path.find_last_of('/'));
+        return android::base::StringPrintf("%s/../../../target/product/%s/%s",
+                                           path.c_str(), product, img_name);
+    }
+
+    char *dir = getenv("ANDROID_PRODUCT_OUT");
+    if (dir == nullptr || dir[0] == '\0') {
+        die("neither -p product specified nor ANDROID_PRODUCT_OUT set");
+    }
+
+    return android::base::StringPrintf("%s/%s", dir, img_name);
+}
+
+std::string find_item(const char* item, const char* product) {
     const char *fn;
+
     if (!strcmp(item,"boot")) {
         fn = "boot.img";
     } else if(!strcmp(item,"recovery")) {
@@ -131,19 +152,7 @@ static std::string find_item(const char* item, const char* product) {
         return "";
     }
 
-    if (product) {
-        std::string path = get_my_path();
-        path.erase(path.find_last_of('/'));
-        return android::base::StringPrintf("%s/../../../target/product/%s/%s",
-                                           path.c_str(), product, fn);
-    }
-
-    char* dir = getenv("ANDROID_PRODUCT_OUT");
-    if (dir == nullptr || dir[0] == '\0') {
-        die("neither -p product specified nor ANDROID_PRODUCT_OUT set");
-    }
-
-    return android::base::StringPrintf("%s/%s", dir, fn);
+    return find_item_given_name(fn, product);
 }
 
 static int64_t get_file_size(int fd) {
@@ -309,8 +318,13 @@ static void usage() {
             "\n"
             "commands:\n"
             "  update <filename>                        Reflash device from update.zip.\n"
+            "                                           Sets the flashed slot as active.\n"
             "  flashall                                 Flash boot, system, vendor, and --\n"
-            "                                           if found -- recovery.\n"
+            "                                           if found -- recovery. If the device\n"
+            "                                           supports slots, the slot that has\n"
+            "                                           been flashed to is set as active.\n"
+            "                                           Secondary images may be flashed to\n"
+            "                                           an inactive slot.\n"
             "  flash <partition> [ <filename> ]         Write a file to a flash partition.\n"
             "  flashing lock                            Locks the device. Prevents flashing.\n"
             "  flashing unlock                          Unlocks the device. Allows flashing\n"
@@ -333,7 +347,7 @@ static void usage() {
             "                                           override the fs type and/or size\n"
             "                                           the bootloader reports.\n"
             "  getvar <variable>                        Display a bootloader variable.\n"
-            "  set_active <suffix>                      Sets the active slot. If slots are\n"
+            "  set_active <slot>                        Sets the active slot. If slots are\n"
             "                                           not supported, this does nothing.\n"
             "  boot <kernel> [ <ramdisk> [ <second> ] ] Download and boot kernel.\n"
             "  flash:raw boot <kernel> [ <ramdisk> [ <second> ] ]\n"
@@ -370,19 +384,23 @@ static void usage() {
             "                                           (default: 2048).\n"
             "  -S <size>[K|M|G]                         Automatically sparse files greater\n"
             "                                           than 'size'. 0 to disable.\n"
-            "  --slot <suffix>                          Specify slot suffix to be used if the\n"
-            "                                           device supports slots. This will be\n"
-            "                                           added to all partition names that use\n"
-            "                                           slots. 'all' can be given to refer\n"
-            "                                           to all slots. 'other' can be given to\n"
-            "                                           refer to a non-current slot. If this\n"
-            "                                           flag is not used, slotted partitions\n"
-            "                                           will default to the current active slot.\n"
-            "  -a, --set-active[=<suffix>]              Sets the active slot. If no suffix is\n"
+            "  --slot <slot>                            Specify slot name to be used if the\n"
+            "                                           device supports slots. All operations\n"
+            "                                           on partitions that support slots will\n"
+            "                                           be done on the slot specified.\n"
+            "                                           'all' can be given to refer to all slots.\n"
+            "                                           'other' can be given to refer to a\n"
+            "                                           non-current slot. If this flag is not\n"
+            "                                           used, slotted partitions will default\n"
+            "                                           to the current active slot.\n"
+            "  -a, --set-active[=<slot>]                Sets the active slot. If no slot is\n"
             "                                           provided, this will default to the value\n"
             "                                           given by --slot. If slots are not\n"
             "                                           supported, this does nothing. This will\n"
             "                                           run after all non-reboot commands.\n"
+            "  --skip-secondary                         Will not flash secondary slots when\n"
+            "                                           performing a flashall or update. This\n"
+            "                                           will preserve data on other slots.\n"
 #if !defined(_WIN32)
             "  --wipe-and-use-fbe                       On devices which support it,\n"
             "                                           erase userdata and cache, and\n"
@@ -842,83 +860,138 @@ static void flash_buf(const char *pname, struct fastboot_buffer *buf)
     }
 }
 
-static std::vector<std::string> get_suffixes(Transport* transport) {
+static std::string get_current_slot(Transport* transport)
+{
+    std::string current_slot;
+    if (fb_getvar(transport, "current-slot", &current_slot)) {
+        if (current_slot == "_a") return "a"; // Legacy support
+        if (current_slot == "_b") return "b"; // Legacy support
+        return current_slot;
+    }
+    return "";
+}
+
+// Legacy support
+static std::vector<std::string> get_suffixes_obsolete(Transport* transport) {
     std::vector<std::string> suffixes;
     std::string suffix_list;
     if (!fb_getvar(transport, "slot-suffixes", &suffix_list)) {
-        die("Could not get suffixes.\n");
+        return suffixes;
     }
-    return android::base::Split(suffix_list, ",");
+    suffixes = android::base::Split(suffix_list, ",");
+    // Unfortunately some devices will return an error message in the
+    // guise of a valid value. If we only see only one suffix, it's probably
+    // not real.
+    if (suffixes.size() == 1) {
+        suffixes.clear();
+    }
+    return suffixes;
 }
 
-static std::string verify_slot(Transport* transport, const char *slot, bool allow_all) {
-    if (strcmp(slot, "all") == 0) {
+// Legacy support
+static bool supports_AB_obsolete(Transport* transport) {
+  return !get_suffixes_obsolete(transport).empty();
+}
+
+static int get_slot_count(Transport* transport) {
+    std::string var;
+    int count;
+    if (!fb_getvar(transport, "slot-count", &var)) {
+        if (supports_AB_obsolete(transport)) return 2; // Legacy support
+    }
+    if (!android::base::ParseInt(var.c_str(), &count)) return 0;
+    return count;
+}
+
+static bool supports_AB(Transport* transport) {
+  return get_slot_count(transport) >= 2;
+}
+
+// Given a current slot, this returns what the 'other' slot is.
+static std::string get_other_slot(const std::string& current_slot, int count) {
+    if (count == 0) return "";
+
+    char next = (current_slot[0] - 'a' + 1)%count + 'a';
+    return std::string(1, next);
+}
+
+static std::string get_other_slot(Transport* transport, const std::string& current_slot) {
+    return get_other_slot(current_slot, get_slot_count(transport));
+}
+
+static std::string get_other_slot(Transport* transport, int count) {
+    return get_other_slot(get_current_slot(transport), count);
+}
+
+static std::string get_other_slot(Transport* transport) {
+    return get_other_slot(get_current_slot(transport), get_slot_count(transport));
+}
+
+static std::string verify_slot(Transport* transport, const std::string& slot_name, bool allow_all) {
+    std::string slot = slot_name;
+    if (slot == "_a") slot = "a"; // Legacy support
+    if (slot == "_b") slot = "b"; // Legacy support
+    if (slot == "all") {
         if (allow_all) {
             return "all";
         } else {
-            std::vector<std::string> suffixes = get_suffixes(transport);
-            if (!suffixes.empty()) {
-                return suffixes[0];
+            int count = get_slot_count(transport);
+            if (count > 0) {
+                return "a";
             } else {
                 die("No known slots.");
             }
         }
     }
 
-    std::vector<std::string> suffixes = get_suffixes(transport);
+    int count = get_slot_count(transport);
+    if (count == 0) die("Device does not support slots.\n");
 
-    if (strcmp(slot, "other") == 0) {
-        std::string current_slot;
-        if (!fb_getvar(transport, "current-slot", &current_slot)) {
-            die("Failed to identify current slot.");
+    if (slot == "other") {
+        std::string other = get_other_slot(transport, count);
+        if (other == "") {
+           die("No known slots.");
         }
-        if (!suffixes.empty()) {
-            for (size_t i = 0; i < suffixes.size(); i++) {
-                if (current_slot == suffixes[i])
-                    return suffixes[(i+1)%suffixes.size()];
-            }
-        } else {
-            die("No known slots.");
-        }
+        return other;
     }
 
-    for (const std::string &suffix : suffixes) {
-        if (suffix == slot)
-            return slot;
+    if (slot.size() == 1 && (slot[0]-'a' >= 0 && slot[0]-'a' < count)) return slot;
+
+    fprintf(stderr, "Slot %s does not exist. supported slots are:\n", slot.c_str());
+    for (int i=0; i<count; i++) {
+        fprintf(stderr, "%c\n", (char)(i + 'a'));
     }
-    fprintf(stderr, "Slot %s does not exist. supported slots are:\n", slot);
-    for (const std::string &suffix : suffixes) {
-        fprintf(stderr, "%s\n", suffix.c_str());
-    }
+
     exit(1);
 }
 
-static std::string verify_slot(Transport* transport, const char *slot) {
+static std::string verify_slot(Transport* transport, const std::string& slot) {
    return verify_slot(transport, slot, true);
 }
 
-static void do_for_partition(Transport* transport, const char *part, const char *slot,
+static void do_for_partition(Transport* transport, const std::string& part, const std::string& slot,
                              const std::function<void(const std::string&)>& func, bool force_slot) {
     std::string has_slot;
     std::string current_slot;
 
-    if (!fb_getvar(transport, std::string("has-slot:")+part, &has_slot)) {
+    if (!fb_getvar(transport, "has-slot:" + part, &has_slot)) {
         /* If has-slot is not supported, the answer is no. */
         has_slot = "no";
     }
     if (has_slot == "yes") {
-        if (!slot || slot[0] == 0) {
-            if (!fb_getvar(transport, "current-slot", &current_slot)) {
+        if (slot == "") {
+            current_slot = get_current_slot(transport);
+            if (current_slot == "") {
                 die("Failed to identify current slot.\n");
             }
-            func(std::string(part) + current_slot);
+            func(part + "_" + current_slot);
         } else {
-            func(std::string(part) + slot);
+            func(part + '_' + slot);
         }
     } else {
-        if (force_slot && slot && slot[0]) {
+        if (force_slot && slot != "") {
              fprintf(stderr, "Warning: %s does not support slots, and slot %s was requested.\n",
-                     part, slot);
+                     part.c_str(), slot.c_str());
         }
         func(part);
     }
@@ -929,18 +1002,17 @@ static void do_for_partition(Transport* transport, const char *part, const char 
  * partition names. If force_slot is true, it will fail if a slot is specified, and the given
  * partition does not support slots.
  */
-static void do_for_partitions(Transport* transport, const char *part, const char *slot,
+static void do_for_partitions(Transport* transport, const std::string& part, const std::string& slot,
                               const std::function<void(const std::string&)>& func, bool force_slot) {
     std::string has_slot;
 
-    if (slot && strcmp(slot, "all") == 0) {
-        if (!fb_getvar(transport, std::string("has-slot:") + part, &has_slot)) {
-            die("Could not check if partition %s has slot.", part);
+    if (slot == "all") {
+        if (!fb_getvar(transport, "has-slot:" + part, &has_slot)) {
+            die("Could not check if partition %s has slot.", part.c_str());
         }
         if (has_slot == "yes") {
-            std::vector<std::string> suffixes = get_suffixes(transport);
-            for (std::string &suffix : suffixes) {
-                do_for_partition(transport, part, suffix.c_str(), func, force_slot);
+            for (int i=0; i < get_slot_count(transport); i++) {
+                do_for_partition(transport, part, std::string(1, (char)(i + 'a')), func, force_slot);
             }
         } else {
             do_for_partition(transport, part, "", func, force_slot);
@@ -967,7 +1039,28 @@ static void do_update_signature(ZipArchiveHandle zip, char* fn) {
     fb_queue_command("signature", "installing signature");
 }
 
-static void do_update(Transport* transport, const char* filename, const char* slot_override, bool erase_first) {
+// Sets slot_override as the active slot. If slot_override is blank,
+// set current slot as active instead. This clears slot-unbootable.
+static void set_active(Transport* transport, const std::string& slot_override) {
+    std::string separator = "";
+    if (!supports_AB(transport)) {
+        if (supports_AB_obsolete(transport)) {
+            separator = "_"; // Legacy support
+        } else {
+            return;
+        }
+    }
+    if (slot_override != "") {
+        fb_set_active((separator + slot_override).c_str());
+    } else {
+        std::string current_slot = get_current_slot(transport);
+        if (current_slot != "") {
+            fb_set_active((separator + current_slot).c_str());
+        }
+    }
+}
+
+static void do_update(Transport* transport, const char* filename, const std::string& slot_override, bool erase_first, bool skip_secondary) {
     queue_info_dump();
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
@@ -988,7 +1081,30 @@ static void do_update(Transport* transport, const char* filename, const char* sl
 
     setup_requirements(reinterpret_cast<char*>(data), sz);
 
+    std::string secondary;
+    if (!skip_secondary) {
+        if (slot_override != "") {
+            secondary = get_other_slot(transport, slot_override);
+        } else {
+            secondary = get_other_slot(transport);
+        }
+        if (secondary == "") {
+            if (supports_AB(transport)) {
+                fprintf(stderr, "Warning: Could not determine slot for secondary images. Ignoring.\n");
+            }
+            skip_secondary = true;
+        }
+    }
     for (size_t i = 0; i < arraysize(images); ++i) {
+        const char* slot = slot_override.c_str();
+        if (images[i].is_secondary) {
+            if (!skip_secondary) {
+                slot = secondary.c_str();
+            } else {
+                continue;
+            }
+        }
+
         int fd = unzip_to_file(zip, images[i].img_name);
         if (fd == -1) {
             if (images[i].is_optional) {
@@ -1013,49 +1129,74 @@ static void do_update(Transport* transport, const char* filename, const char* sl
              * program exits.
              */
         };
-        do_for_partitions(transport, images[i].part_name, slot_override, update, false);
+        do_for_partitions(transport, images[i].part_name, slot, update, false);
     }
 
     CloseArchive(zip);
+    if (slot_override == "all") {
+        set_active(transport, "a");
+    } else {
+        set_active(transport, slot_override);
+    }
 }
 
-static void do_send_signature(const char* filename) {
-    if (android::base::EndsWith(filename, ".img") == false) {
-        return;
-    }
+static void do_send_signature(const std::string& fn) {
+    std::size_t extension_loc = fn.find(".img");
+    if (extension_loc == std::string::npos) return;
 
-    std::string sig_path = filename;
-    sig_path.erase(sig_path.size() - 4);
-    sig_path += ".sig";
+    std::string fs_sig = fn.substr(0, extension_loc) + ".sig";
 
     int64_t sz;
-    void* data = load_file(sig_path, &sz);
+    void* data = load_file(fs_sig.c_str(), &sz);
     if (data == nullptr) return;
 
     fb_queue_download("signature", data, sz);
     fb_queue_command("signature", "installing signature");
 }
 
-static void do_flashall(Transport* transport, const char* slot_override, int erase_first) {
+static void do_flashall(Transport* transport, const std::string& slot_override, int erase_first, bool skip_secondary) {
+    std::string fname;
     queue_info_dump();
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
-    std::string fname = find_item("info", product);
+    fname = find_item("info", product);
     if (fname.empty()) die("cannot find android-info.txt");
 
     int64_t sz;
-    void* data = load_file(fname, &sz);
+    void* data = load_file(fname.c_str(), &sz);
     if (data == nullptr) die("could not load android-info.txt: %s", strerror(errno));
 
     setup_requirements(reinterpret_cast<char*>(data), sz);
 
+    std::string secondary;
+    if (!skip_secondary) {
+        if (slot_override != "") {
+            secondary = get_other_slot(transport, slot_override);
+        } else {
+            secondary = get_other_slot(transport);
+        }
+        if (secondary == "") {
+            if (supports_AB(transport)) {
+                fprintf(stderr, "Warning: Could not determine slot for secondary images. Ignoring.\n");
+            }
+            skip_secondary = true;
+        }
+    }
+
     for (size_t i = 0; i < arraysize(images); i++) {
-        fname = find_item(images[i].part_name, product);
+        const char* slot = NULL;
+        if (images[i].is_secondary) {
+            if (!skip_secondary) slot = secondary.c_str();
+        } else {
+            slot = slot_override.c_str();
+        }
+        if (!slot) continue;
+        fname = find_item_given_name(images[i].img_name, product);
         fastboot_buffer buf;
         if (!load_buf(transport, fname.c_str(), &buf)) {
             if (images[i].is_optional) continue;
-            die("could not load '%s': %s", images[i].img_name, strerror(errno));
+            die("could not load '%s': %s\n", images[i].img_name, strerror(errno));
         }
 
         auto flashall = [&](const std::string &partition) {
@@ -1065,7 +1206,13 @@ static void do_flashall(Transport* transport, const char* slot_override, int era
             }
             flash_buf(partition.c_str(), &buf);
         };
-        do_for_partitions(transport, images[i].part_name, slot_override, flashall, false);
+        do_for_partitions(transport, images[i].part_name, slot, flashall, false);
+    }
+
+    if (slot_override == "all") {
+        set_active(transport, "a");
+    } else {
+        set_active(transport, slot_override);
     }
 }
 
@@ -1245,6 +1392,7 @@ int main(int argc, char **argv)
     bool wants_reboot = false;
     bool wants_reboot_bootloader = false;
     bool wants_set_active = false;
+    bool skip_secondary = false;
     bool erase_first = true;
     bool set_fbe_marker = false;
     void *data;
@@ -1269,6 +1417,7 @@ int main(int argc, char **argv)
         {"slot", required_argument, 0, 0},
         {"set_active", optional_argument, 0, 'a'},
         {"set-active", optional_argument, 0, 'a'},
+        {"skip-secondary", no_argument, 0, 0},
 #if !defined(_WIN32)
         {"wipe-and-use-fbe", no_argument, 0, 0},
 #endif
@@ -1353,6 +1502,8 @@ int main(int argc, char **argv)
                 return 0;
             } else if (strcmp("slot", longopts[longindex].name) == 0) {
                 slot_override = std::string(optarg);
+            } else if (strcmp("skip-secondary", longopts[longindex].name) == 0 ) {
+                skip_secondary = true;
 #if !defined(_WIN32)
             } else if (strcmp("wipe-and-use-fbe", longopts[longindex].name) == 0) {
                 wants_wipe = true;
@@ -1393,17 +1544,23 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (slot_override != "")
-        slot_override = verify_slot(transport, slot_override.c_str());
-    if (next_active != "")
-        next_active = verify_slot(transport, next_active.c_str(), false);
+    if (!supports_AB(transport) && supports_AB_obsolete(transport)) {
+        fprintf(stderr, "Warning: Device A/B support is outdated. Bootloader update required.\n");
+    }
+    if (slot_override != "") slot_override = verify_slot(transport, slot_override);
+    if (next_active != "") next_active = verify_slot(transport, next_active, false);
 
     if (wants_set_active) {
         if (next_active == "") {
             if (slot_override == "") {
-                wants_set_active = false;
+                std::string current_slot;
+                if (fb_getvar(transport, "current-slot", &current_slot)) {
+                    next_active = verify_slot(transport, current_slot, false);
+                } else {
+                    wants_set_active = false;
+                }
             } else {
-                next_active = verify_slot(transport, slot_override.c_str(), false);
+                next_active = verify_slot(transport, slot_override, false);
             }
         }
     }
@@ -1426,7 +1583,7 @@ int main(int argc, char **argv)
 
                 fb_queue_erase(partition.c_str());
             };
-            do_for_partitions(transport, argv[1], slot_override.c_str(), erase, true);
+            do_for_partitions(transport, argv[1], slot_override, erase, true);
             skip(2);
         } else if(!strncmp(*argv, "format", strlen("format"))) {
             char *overrides;
@@ -1462,7 +1619,7 @@ int main(int argc, char **argv)
                 fb_perform_format(transport, partition.c_str(), 0,
                     type_override, size_override, "");
             };
-            do_for_partitions(transport, argv[1], slot_override.c_str(), format, true);
+            do_for_partitions(transport, argv[1], slot_override, format, true);
             skip(2);
         } else if(!strcmp(*argv, "signature")) {
             require(2);
@@ -1529,7 +1686,7 @@ int main(int argc, char **argv)
                 }
                 do_flash(transport, partition.c_str(), fname.c_str());
             };
-            do_for_partitions(transport, pname, slot_override.c_str(), flash, true);
+            do_for_partitions(transport, pname, slot_override, flash, true);
         } else if(!strcmp(*argv, "flash:raw")) {
             char *kname = argv[2];
             char *rname = 0;
@@ -1549,23 +1706,32 @@ int main(int argc, char **argv)
             auto flashraw = [&](const std::string &partition) {
                 fb_queue_flash(partition.c_str(), data, sz);
             };
-            do_for_partitions(transport, argv[1], slot_override.c_str(), flashraw, true);
+            do_for_partitions(transport, argv[1], slot_override, flashraw, true);
         } else if(!strcmp(*argv, "flashall")) {
             skip(1);
-            do_flashall(transport, slot_override.c_str(), erase_first);
+            if (slot_override == "all") {
+                fprintf(stderr, "Warning: slot set to 'all'. Secondary slots will not be flashed.\n");
+                do_flashall(transport, slot_override, erase_first, true);
+            } else {
+                do_flashall(transport, slot_override, erase_first, skip_secondary);
+            }
             wants_reboot = true;
         } else if(!strcmp(*argv, "update")) {
+            bool slot_all = (slot_override == "all");
+            if (slot_all) {
+                fprintf(stderr, "Warning: slot set to 'all'. Secondary slots will not be flashed.\n");
+            }
             if (argc > 1) {
-                do_update(transport, argv[1], slot_override.c_str(), erase_first);
+                do_update(transport, argv[1], slot_override, erase_first, skip_secondary || slot_all);
                 skip(2);
             } else {
-                do_update(transport, "update.zip", slot_override.c_str(), erase_first);
+                do_update(transport, "update.zip", slot_override, erase_first, skip_secondary || slot_all);
                 skip(1);
             }
             wants_reboot = 1;
         } else if(!strcmp(*argv, "set_active")) {
             require(2);
-            std::string slot = verify_slot(transport, argv[1], false);
+            std::string slot = verify_slot(transport, std::string(argv[1]), false);
             fb_set_active(slot.c_str());
             skip(2);
         } else if(!strcmp(*argv, "oem")) {
