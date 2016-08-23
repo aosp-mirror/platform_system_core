@@ -199,16 +199,7 @@ void SocketListener::runListener() {
             continue;
         }
         if (mListen && FD_ISSET(mSock, &read_fds)) {
-            sockaddr_storage ss;
-            sockaddr* addrp = reinterpret_cast<sockaddr*>(&ss);
-            socklen_t alen;
-            int c;
-
-            do {
-                alen = sizeof(ss);
-                c = accept4(mSock, addrp, &alen, SOCK_CLOEXEC);
-                SLOGV("%s got %d from accept", mSocketName, c);
-            } while (c < 0 && errno == EINTR);
+            int c = TEMP_FAILURE_RETRY(accept4(mSock, nullptr, nullptr, SOCK_CLOEXEC));
             if (c < 0) {
                 SLOGE("accept failed (%s)", strerror(errno));
                 sleep(1);
