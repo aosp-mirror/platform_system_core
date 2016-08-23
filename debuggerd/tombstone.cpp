@@ -56,8 +56,13 @@
 #define TOMBSTONE_DIR   "/data/tombstones"
 #define TOMBSTONE_TEMPLATE (TOMBSTONE_DIR"/tombstone_%02d")
 
-static bool signal_has_si_addr(int sig) {
-  switch (sig) {
+static bool signal_has_si_addr(int si_signo, int si_code) {
+  // Manually sent signals won't have si_addr.
+  if (si_code == SI_USER || si_code == SI_QUEUE || si_code == SI_TKILL) {
+    return false;
+  }
+
+  switch (si_signo) {
     case SIGBUS:
     case SIGFPE:
     case SIGILL:
@@ -185,7 +190,7 @@ static void dump_signal_info(log_t* log, pid_t tid) {
   }
 
   char addr_desc[32]; // ", fault addr 0x1234"
-  if (signal_has_si_addr(si.si_signo)) {
+  if (signal_has_si_addr(si.si_signo, si.si_code)) {
     snprintf(addr_desc, sizeof(addr_desc), "%p", si.si_addr);
   } else {
     snprintf(addr_desc, sizeof(addr_desc), "--------");
@@ -359,7 +364,7 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
   siginfo_t si;
   memset(&si, 0, sizeof(si));
   if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si) != -1) {
-    print_fault_address_marker = signal_has_si_addr(si.si_signo);
+    print_fault_address_marker = signal_has_si_addr(si.si_signo, si.si_code);
     addr = reinterpret_cast<uintptr_t>(si.si_addr);
   } else {
     ALOGE("Cannot get siginfo for %d: %s\n", tid, strerror(errno));
