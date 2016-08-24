@@ -367,6 +367,10 @@ static int android_transport_read(struct android_log_logger_list *logger_list,
     if (log_msg->entry_v2.hdr_size == 0) {
         log_msg->entry_v2.hdr_size = sizeof(struct logger_entry);
     }
+    if ((log_msg->entry_v2.hdr_size < sizeof(log_msg->entry_v1)) ||
+            (log_msg->entry_v2.hdr_size > sizeof(log_msg->entry))) {
+        return -EINVAL;
+    }
 
     /* len validation */
     if (ret <= log_msg->entry_v2.hdr_size) {
