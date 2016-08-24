@@ -154,7 +154,7 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
 
         char *eventData = log_msg.msg();
 
-        if (eventData[4] != EVENT_TYPE_LONG) {
+        if (!eventData || (eventData[4] != EVENT_TYPE_LONG)) {
             continue;
         }
 
@@ -227,7 +227,7 @@ static void bswrite_test(const char *message) {
 
         char *eventData = log_msg.msg();
 
-        if (eventData[4] != EVENT_TYPE_STRING) {
+        if (!eventData || (eventData[4] != EVENT_TYPE_STRING)) {
             continue;
         }
 
@@ -506,7 +506,7 @@ TEST(liblog, __security_buffer) {
 
         char *eventData = log_msg.msg();
 
-        if (eventData[4] != EVENT_TYPE_LONG) {
+        if (!eventData || (eventData[4] != EVENT_TYPE_LONG)) {
             continue;
         }
 
@@ -637,7 +637,7 @@ TEST(liblog, android_logger_list_read__cpu_signal) {
 
         char *eventData = log_msg.msg();
 
-        if (eventData[4] != EVENT_TYPE_LONG) {
+        if (!eventData || (eventData[4] != EVENT_TYPE_LONG)) {
             continue;
         }
 
@@ -788,7 +788,7 @@ TEST(liblog, android_logger_list_read__cpu_thread) {
 
         char *eventData = log_msg.msg();
 
-        if (eventData[4] != EVENT_TYPE_LONG) {
+        if (!eventData || (eventData[4] != EVENT_TYPE_LONG)) {
             continue;
         }
 
@@ -990,9 +990,9 @@ TEST(liblog, max_payload) {
             continue;
         }
 
-        char *data = log_msg.msg() + 1;
+        char *data = log_msg.msg();
 
-        if (strcmp(data, tag)) {
+        if (!data || strcmp(++data, tag)) {
             continue;
         }
 
@@ -1107,9 +1107,9 @@ TEST(liblog, too_big_payload) {
             continue;
         }
 
-        char *data = log_msg.msg() + 1;
+        char *data = log_msg.msg();
 
-        if (strcmp(data, tag)) {
+        if (!data || strcmp(++data, tag)) {
             continue;
         }
 
@@ -1606,6 +1606,9 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__typical) {
         }
 
         char *eventData = log_msg.msg();
+        if (!eventData) {
+            continue;
+        }
 
         // Tag
         int tag = get4LE(eventData);
@@ -1687,6 +1690,10 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__data_too_l
         }
 
         char *eventData = log_msg.msg();
+        if (!eventData) {
+            continue;
+        }
+
         char *original = eventData;
 
         // Tag
@@ -1774,6 +1781,9 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__null_data)
         }
 
         char *eventData = log_msg.msg();
+        if (!eventData) {
+            continue;
+        }
 
         // Tag
         int tag = get4LE(eventData);
@@ -1817,6 +1827,9 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__subtag_too
         }
 
         char *eventData = log_msg.msg();
+        if (!eventData) {
+            continue;
+        }
 
         // Tag
         int tag = get4LE(eventData);
@@ -1904,6 +1917,9 @@ TEST(liblog, android_errorWriteLog__android_logger_list_read__success) {
         }
 
         char *eventData = log_msg.msg();
+        if (!eventData) {
+            continue;
+        }
 
         // Tag
         int tag = get4LE(eventData);
@@ -1961,6 +1977,9 @@ TEST(liblog, android_errorWriteLog__android_logger_list_read__null_subtag) {
         }
 
         char *eventData = log_msg.msg();
+        if (!eventData) {
+            continue;
+        }
 
         // Tag
         int tag = get4LE(eventData);
@@ -2449,16 +2468,19 @@ static void create_android_logger(const char *(*fn)(uint32_t tag, size_t &expect
         android_log_format_free(logformat);
 
         // test buffer reading API
-        snprintf(msgBuf, sizeof(msgBuf), "I/[%d]", get4LE(eventData));
-        print_barrier();
-        fprintf(stderr, "%-10s(%5u): ", msgBuf, pid);
-        memset(msgBuf, 0, sizeof(msgBuf));
-        int buffer_to_string = android_log_buffer_to_string(
-            eventData + sizeof(uint32_t),
-            log_msg.entry.len - sizeof(uint32_t),
-            msgBuf, sizeof(msgBuf));
-        fprintf(stderr, "%s\n", msgBuf);
-        print_barrier();
+        int buffer_to_string = -1;
+        if (eventData) {
+            snprintf(msgBuf, sizeof(msgBuf), "I/[%d]", get4LE(eventData));
+            print_barrier();
+            fprintf(stderr, "%-10s(%5u): ", msgBuf, pid);
+            memset(msgBuf, 0, sizeof(msgBuf));
+            buffer_to_string = android_log_buffer_to_string(
+                eventData + sizeof(uint32_t),
+                log_msg.entry.len - sizeof(uint32_t),
+                msgBuf, sizeof(msgBuf));
+            fprintf(stderr, "%s\n", msgBuf);
+            print_barrier();
+        }
         EXPECT_EQ(0, buffer_to_string);
         EXPECT_EQ(strlen(expected_string), strlen(msgBuf));
         EXPECT_EQ(0, strcmp(expected_string, msgBuf));

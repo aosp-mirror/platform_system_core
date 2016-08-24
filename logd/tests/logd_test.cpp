@@ -213,9 +213,15 @@ static void dump_log_msg(const char *prefix,
         version = 1;
         break;
 
-    case sizeof(msg->entry_v2):
+    case sizeof(msg->entry_v2): /* PLUS case sizeof(msg->entry_v3): */
         if (version == 0) {
-            version = 2;
+            version = (msg->entry_v3.lid < LOG_ID_MAX) ? 3 : 2;
+        }
+        break;
+
+    case sizeof(msg->entry_v4):
+        if (version == 0) {
+            version = 4;
         }
         break;
     }
@@ -269,6 +275,11 @@ static void dump_log_msg(const char *prefix,
     unsigned int len = msg->entry.len;
     fprintf(stderr, "msg[%u]={", len);
     unsigned char *cp = reinterpret_cast<unsigned char *>(msg->msg());
+    if (!cp) {
+        static const unsigned char garbage[] = "<INVALID>";
+        cp = const_cast<unsigned char *>(garbage);
+        len = strlen(reinterpret_cast<const char *>(garbage));
+    }
     while(len) {
         unsigned char *p = cp;
         while (*p && (((' ' <= *p) && (*p < 0x7F)) || (*p == '\n'))) {
