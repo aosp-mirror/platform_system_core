@@ -257,13 +257,13 @@ static int request_suspend(bool /*enable*/)
 
 static int draw_text(const char *str, int x, int y)
 {
-    int str_len_px = gr_measure(str);
+    int str_len_px = gr_measure(gr_sys_font(), str);
 
     if (x < 0)
         x = (gr_fb_width() - str_len_px) / 2;
     if (y < 0)
         y = (gr_fb_height() - char_height) / 2;
-    gr_text(x, y, str, 0);
+    gr_text(gr_sys_font(), x, y, str, 0);
 
     return y + char_height;
 }
@@ -364,7 +364,7 @@ static void update_screen_state(struct charger *charger, int64_t now)
         }
 
         gr_init();
-        gr_font_size(&char_width, &char_height);
+        gr_font_size(gr_sys_font(), &char_width, &char_height);
 
 #ifndef CHARGER_DISABLE_INIT_BLANK
         gr_fb_blank(true);
