@@ -105,16 +105,14 @@
 
 // Other more specific restrictions for wp<> and sp<>:
 
-// Constructing a strong or weak pointer to "this" in its constructors is almost
-// always wrong.  In the case of strong pointers. it is always wrong with RefBase
-// because the onFirstRef() callback will be mode on an incompletely constructed
-// object. In either case, it is wrong if such a pointer does not outlive the
-// constructor, since destruction of the smart pointer will attempt to destroy the
-// object before construction is finished, normally resulting in a pointer to a
-// destroyed object being returned from a new expression.
-
-// In the case of weak pointers, this occurs because an object that has never been
-// referenced by a strong pointer is destroyed when the last weak pointer disappears.
+// Do not construct a strong pointer to "this" in an object's constructor.
+// The onFirstRef() callback would be made on an incompletely constructed
+// object.
+// Construction of a weak pointer to "this" in an object's constructor is also
+// discouraged. But the implementation was recently changed so that, in the
+// absence of extendObjectLifetime() calls, weak pointers no longer impact
+// object lifetime, and hence this no longer risks premature deallocation,
+// and hence usually works correctly.
 
 // Such strong or weak pointers can be safely created in the RefBase onFirstRef()
 // callback.
@@ -126,8 +124,23 @@
 // is a longer-lived sp<>, why not use an sp<> directly?) A wp<> should only be
 // dereferenced by using promote().
 
+// Any object inheriting from RefBase should always be destroyed as the result
+// of a reference count decrement, not via any other means.  Such objects
+// should never be stack allocated, or appear directly as data members in other
+// objects. Objects inheriting from RefBase should have their strong reference
+// count incremented as soon as possible after construction. Usually this
+// will be done via construction of an sp<> to the object, but may instead
+// involve other means of calling RefBase::incStrong().
 // Explicitly deleting or otherwise destroying a RefBase object with outstanding
-// wp<> or sp<> pointers to it will result in heap corruption.
+// wp<> or sp<> pointers to it will result in an abort or heap corruption.
+
+// It is particularly important not to mix sp<> and direct storage management
+// since the sp from raw pointer constructor is implicit. Thus if a RefBase-
+// -derived object of type T is managed without ever incrementing its strong
+// count, and accidentally passed to f(sp<T>), a strong pointer to the object
+// will be temporarily constructed and destroyed, prematurely deallocating the
+// object, and resulting in heap corruption. None of this would be easily
+// visible in the source.
 
 // Extra Features:
 
@@ -144,7 +157,7 @@
 // events, as well as some debugging facilities.
 
 // Debugging support can be enabled by turning on DEBUG_REFS in RefBase.cpp.
-// Otherwise essentially no checking is provided.
+// Otherwise little checking is provided.
 
 // Thread safety:
 
