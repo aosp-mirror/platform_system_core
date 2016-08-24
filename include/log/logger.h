@@ -143,7 +143,14 @@ struct log_msg {
     }
     char *msg()
     {
-        return entry.hdr_size ? (char *) buf + entry.hdr_size : entry_v1.msg;
+        unsigned short hdr_size = entry.hdr_size;
+        if (!hdr_size) {
+            hdr_size = sizeof(entry_v1);
+        }
+        if ((hdr_size < sizeof(entry_v1)) || (hdr_size > sizeof(entry))) {
+            return NULL;
+        }
+        return (char *) buf + hdr_size;
     }
     unsigned int len()
     {

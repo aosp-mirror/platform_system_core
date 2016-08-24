@@ -496,6 +496,11 @@ LIBLOG_ABI_PUBLIC int android_log_processLogBuffer(
     char *msg = buf->msg;
     struct logger_entry_v2 *buf2 = (struct logger_entry_v2 *)buf;
     if (buf2->hdr_size) {
+        if ((buf2->hdr_size < sizeof(((struct log_msg *)NULL)->entry_v1)) ||
+                (buf2->hdr_size > sizeof(((struct log_msg *)NULL)->entry))) {
+            fprintf(stderr, "+++ LOG: entry illegal hdr_size\n");
+            return -1;
+        }
         msg = ((char *)buf2) + buf2->hdr_size;
         if (buf2->hdr_size >= sizeof(struct logger_entry_v4)) {
             entry->uid = ((struct logger_entry_v4 *)buf)->uid;
@@ -775,6 +780,11 @@ LIBLOG_ABI_PUBLIC int android_log_processBinaryLogBuffer(
     eventData = (const unsigned char*) buf->msg;
     struct logger_entry_v2 *buf2 = (struct logger_entry_v2 *)buf;
     if (buf2->hdr_size) {
+        if ((buf2->hdr_size < sizeof(((struct log_msg *)NULL)->entry_v1)) ||
+                (buf2->hdr_size > sizeof(((struct log_msg *)NULL)->entry))) {
+            fprintf(stderr, "+++ LOG: entry illegal hdr_size\n");
+            return -1;
+        }
         eventData = ((unsigned char *)buf2) + buf2->hdr_size;
         if ((buf2->hdr_size >= sizeof(struct logger_entry_v3)) &&
                 (((struct logger_entry_v3 *)buf)->lid == LOG_ID_SECURITY)) {

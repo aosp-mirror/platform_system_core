@@ -544,6 +544,10 @@ static void dump_log_file(
     if (!hdr_size) {
       hdr_size = sizeof(log_entry.entry_v1);
     }
+    if ((hdr_size < sizeof(log_entry.entry_v1)) ||
+        (hdr_size > sizeof(log_entry.entry))) {
+      continue;
+    }
     char* msg = reinterpret_cast<char*>(log_entry.buf) + hdr_size;
 
     char timeBuf[32];

@@ -343,6 +343,10 @@ LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_read(
         char *msg = (char *)&transp.logMsg + hdr_size;
         char *split = NULL;
 
+        if ((hdr_size < sizeof(transp.logMsg.entry_v1)) ||
+                (hdr_size > sizeof(transp.logMsg.entry))) {
+            continue;
+        }
         /* Check for invalid sequence number */
         if ((transp.logMsg.entry.nsec % ANDROID_LOG_PMSG_FILE_SEQUENCE) ||
                 ((transp.logMsg.entry.nsec / ANDROID_LOG_PMSG_FILE_SEQUENCE) >=
