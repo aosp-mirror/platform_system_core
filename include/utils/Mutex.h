@@ -64,13 +64,18 @@ public:
     status_t    tryLock();
 
 #if defined(__ANDROID__)
-    // lock the mutex, but don't wait longer than timeoutMilliseconds.
+    // Lock the mutex, but don't wait longer than timeoutNs (relative time).
     // Returns 0 on success, TIMED_OUT for failure due to timeout expiration.
     //
     // OSX doesn't have pthread_mutex_timedlock() or equivalent. To keep
     // capabilities consistent across host OSes, this method is only available
     // when building Android binaries.
-    status_t    timedLock(nsecs_t timeoutMilliseconds);
+    //
+    // FIXME?: pthread_mutex_timedlock is based on CLOCK_REALTIME,
+    // which is subject to NTP adjustments, and includes time during suspend,
+    // so a timeout may occur even though no processes could run.
+    // Not holding a partial wakelock may lead to a system suspend.
+    status_t    timedLock(nsecs_t timeoutNs);
 #endif
 
     // Manages the mutex automatically. It'll be locked when Autolock is
@@ -134,6 +139,7 @@ inline status_t Mutex::tryLock() {
 }
 #if defined(__ANDROID__)
 inline status_t Mutex::timedLock(nsecs_t timeoutNs) {
+    timeoutNs += systemTime(SYSTEM_TIME_REALTIME);
     const struct timespec ts = {
         /* .tv_sec = */ static_cast<time_t>(timeoutNs / 1000000000),
         /* .tv_nsec = */ static_cast<long>(timeoutNs % 1000000000),
