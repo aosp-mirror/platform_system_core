@@ -71,10 +71,7 @@ static ListenerList& listener_list = *new ListenerList();
 
 static void ss_listener_event_func(int _fd, unsigned ev, void *_l) {
     if (ev & FDE_READ) {
-        sockaddr_storage ss;
-        sockaddr* addrp = reinterpret_cast<sockaddr*>(&ss);
-        socklen_t alen = sizeof(ss);
-        int fd = adb_socket_accept(_fd, addrp, &alen);
+        int fd = adb_socket_accept(_fd, nullptr, nullptr);
         if (fd < 0) return;
 
         int rcv_buf_size = CHUNK_SIZE;
@@ -96,13 +93,7 @@ static void listener_event_func(int _fd, unsigned ev, void* _l)
     asocket *s;
 
     if (ev & FDE_READ) {
-        sockaddr_storage ss;
-        sockaddr* addrp = reinterpret_cast<sockaddr*>(&ss);
-        socklen_t alen;
-        int fd;
-
-        alen = sizeof(ss);
-        fd = adb_socket_accept(_fd, addrp, &alen);
+        int fd = adb_socket_accept(_fd, nullptr, nullptr);
         if (fd < 0) {
             return;
         }
