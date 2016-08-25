@@ -444,10 +444,7 @@ static void jdwp_control_event(int s, unsigned events, void* _control) {
     JdwpControl* control = (JdwpControl*)_control;
 
     if (events & FDE_READ) {
-        sockaddr_storage ss;
-        sockaddr* addrp = reinterpret_cast<sockaddr*>(&ss);
-        socklen_t addrlen = sizeof(ss);
-        int s = adb_socket_accept(control->listen_socket, addrp, &addrlen);
+        int s = adb_socket_accept(control->listen_socket, nullptr, nullptr);
         if (s < 0) {
             if (errno == ECONNABORTED) {
                 /* oops, the JDWP process died really quick */
