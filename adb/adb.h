@@ -126,8 +126,8 @@ void fatal_errno(const char* fmt, ...) __attribute__((noreturn, format(__printf_
 
 void handle_packet(apacket *p, atransport *t);
 
-int launch_server(int server_port);
-int adb_server_main(int is_daemon, int server_port, int ack_reply_fd);
+int launch_server(const std::string& socket_spec);
+int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply_fd);
 
 /* initialize a transport object's func pointers and state */
 #if ADB_HOST
