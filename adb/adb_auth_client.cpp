@@ -151,9 +151,7 @@ void adb_auth_confirm_key(unsigned char* key, size_t len, atransport* t) {
 }
 
 static void adb_auth_listener(int fd, unsigned events, void* data) {
-    sockaddr_storage addr;
-    socklen_t alen = sizeof(addr);
-    int s = adb_socket_accept(fd, reinterpret_cast<sockaddr*>(&addr), &alen);
+    int s = adb_socket_accept(fd, nullptr, nullptr);
     if (s < 0) {
         PLOG(ERROR) << "Failed to accept";
         return;
