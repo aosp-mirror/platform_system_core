@@ -87,7 +87,7 @@ TEST(RefBase, WeakCopies) {
     EXPECT_EQ(1, foo->getWeakRefs()->getWeakCount());
     ASSERT_FALSE(isDeleted) << "deleted too early! still has a reference!";
     wp1 = nullptr;
-    ASSERT_TRUE(isDeleted) << "foo2 was leaked!";
+    ASSERT_FALSE(isDeleted) << "Deletion on wp destruction should no longer occur";
 }
 
 
@@ -121,8 +121,33 @@ static inline void waitFor(bool val) {
 
 cpu_set_t otherCpus;
 
+// Divide the cpus we're allowed to run on into myCpus and otherCpus.
+// Set origCpus to the processors we were originally allowed to run on.
+// Return false if origCpus doesn't include at least processors 0 and 1.
+static bool setExclusiveCpus(cpu_set_t* origCpus /* out */,
+        cpu_set_t* myCpus /* out */, cpu_set_t* otherCpus) {
+    if (sched_getaffinity(0, sizeof(cpu_set_t), origCpus) != 0) {
+        return false;
+    }
+    if (!CPU_ISSET(0,  origCpus) || !CPU_ISSET(1, origCpus)) {
+        return false;
+    }
+    CPU_ZERO(myCpus);
+    CPU_ZERO(otherCpus);
+    CPU_OR(myCpus, myCpus, origCpus);
+    CPU_OR(otherCpus, otherCpus, origCpus);
+    for (unsigned i = 0; i < CPU_SETSIZE; ++i) {
+        // I get the even cores, the other thread gets the odd ones.
+        if (i & 1) {
+            CPU_CLR(i, myCpus);
+        } else {
+            CPU_CLR(i, otherCpus);
+        }
+    }
+    return true;
+}
+
 static void visit2AndRemove() {
-    EXPECT_TRUE(CPU_ISSET(1,  &otherCpus));
     if (sched_setaffinity(0, sizeof(cpu_set_t), &otherCpus) != 0) {
         FAIL() << "setaffinity returned:" << errno;
     }
@@ -139,27 +164,10 @@ TEST(RefBase, RacingDestructors) {
     cpu_set_t myCpus;
     // Restrict us and the helper thread to disjoint cpu sets.
     // This prevents us from getting scheduled against each other,
-    // which would be atrociously slow.  We fail if that's impossible.
-    if (sched_getaffinity(0, sizeof(cpu_set_t), &origCpus) != 0) {
-        FAIL();
-    }
-    EXPECT_TRUE(CPU_ISSET(0,  &origCpus));
-    if (CPU_ISSET(1, &origCpus)) {
-        CPU_ZERO(&myCpus);
-        CPU_ZERO(&otherCpus);
-        CPU_OR(&myCpus, &myCpus, &origCpus);
-        CPU_OR(&otherCpus, &otherCpus, &origCpus);
-        for (unsigned i = 0; i < CPU_SETSIZE; ++i) {
-            // I get the even cores, the other thread gets the odd ones.
-            if (i & 1) {
-                CPU_CLR(i, &myCpus);
-            } else {
-                CPU_CLR(i, &otherCpus);
-            }
-        }
+    // which would be atrociously slow.
+    if (setExclusiveCpus(&origCpus, &myCpus, &otherCpus)) {
         std::thread t(visit2AndRemove);
         std::atomic<int> deleteCount(0);
-        EXPECT_TRUE(CPU_ISSET(0,  &myCpus));
         if (sched_setaffinity(0, sizeof(cpu_set_t), &myCpus) != 0) {
             FAIL() << "setaffinity returned:" << errno;
         }
@@ -174,6 +182,72 @@ TEST(RefBase, RacingDestructors) {
             ASSERT_TRUE(bar->getWeakRefs()->getWeakCount() >= 1);
             sp3->mVisited1 = true;
             sp3 = nullptr;
+        }
+        t.join();
+        if (sched_setaffinity(0, sizeof(cpu_set_t), &origCpus) != 0) {
+            FAIL();
+        }
+        ASSERT_EQ(NITERS, deleteCount) << "Deletions missed!";
+    }  // Otherwise this is slow and probably pointless on a uniprocessor.
+}
+
+static wp<Bar> wpBuffer;
+static std::atomic<bool> wpBufferFull(false);
+
+// Wait until wpBufferFull has value val.
+static inline void wpWaitFor(bool val) {
+    while (wpBufferFull != val) {}
+}
+
+static void visit3AndRemove() {
+    if (sched_setaffinity(0, sizeof(cpu_set_t), &otherCpus) != 0) {
+        FAIL() << "setaffinity returned:" << errno;
+    }
+    for (int i = 0; i < NITERS; ++i) {
+        wpWaitFor(true);
+        {
+            sp<Bar> sp1 = wpBuffer.promote();
+            // We implicitly check that sp1 != NULL
+            sp1->mVisited2 = true;
+        }
+        wpBuffer = nullptr;
+        wpBufferFull = false;
+    }
+}
+
+TEST(RefBase, RacingPromotions) {
+    cpu_set_t origCpus;
+    cpu_set_t myCpus;
+    // Restrict us and the helper thread to disjoint cpu sets.
+    // This prevents us from getting scheduled against each other,
+    // which would be atrociously slow.
+    if (setExclusiveCpus(&origCpus, &myCpus, &otherCpus)) {
+        std::thread t(visit3AndRemove);
+        std::atomic<int> deleteCount(0);
+        if (sched_setaffinity(0, sizeof(cpu_set_t), &myCpus) != 0) {
+            FAIL() << "setaffinity returned:" << errno;
+        }
+        for (int i = 0; i < NITERS; ++i) {
+            Bar* bar = new Bar(&deleteCount);
+            wp<Bar> wp1(bar);
+            bar->mVisited1 = true;
+            if (i % (NITERS / 10) == 0) {
+                // Do this rarely, since it generates a log message.
+                wp1 = nullptr;  // No longer destroys the object.
+                wp1 = bar;
+            }
+            wpBuffer = wp1;
+            ASSERT_EQ(bar->getWeakRefs()->getWeakCount(), 2);
+            wpBufferFull = true;
+            // Promotion races with that in visit3AndRemove.
+            // This may or may not succeed, but it shouldn't interfere with
+            // the concurrent one.
+            sp<Bar> sp1 = wp1.promote();
+            wpWaitFor(false);  // Waits for other thread to drop strong pointer.
+            sp1 = nullptr;
+            // No strong pointers here.
+            sp1 = wp1.promote();
+            ASSERT_EQ(sp1.get(), nullptr) << "Dead wp promotion succeeded!";
         }
         t.join();
         if (sched_setaffinity(0, sizeof(cpu_set_t), &origCpus) != 0) {
