@@ -71,7 +71,7 @@ static char16_t* allocFromUTF8(const char* u8str, size_t u8len)
         u8cur = (const uint8_t*) u8str;
         char16_t* u16str = (char16_t*)buf->data();
 
-        utf8_to_utf16(u8cur, u8len, u16str);
+        utf8_to_utf16(u8cur, u8len, u16str, ((size_t) u16len) + 1);
 
         //printf("Created UTF-16 string from UTF-8 \"%s\":", in);
         //printHexData(1, str, buf->size(), 16, 1);
