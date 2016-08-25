@@ -98,7 +98,7 @@ TEST_F(UnicodeTest, UTF8toUTF16Normal) {
 
     char16_t output[1 + 1 + 1 + 2 + 1]; // Room for NULL
 
-    utf8_to_utf16(str, sizeof(str), output);
+    utf8_to_utf16(str, sizeof(str), output, sizeof(output) / sizeof(output[0]));
 
     EXPECT_EQ(0x0030, output[0])
             << "should be U+0030";
@@ -145,6 +145,17 @@ TEST_F(UnicodeTest, strstr16TargetWithinString) {
 TEST_F(UnicodeTest, strstr16TargetNotPresent) {
     const char16_t* result = strstr16(kSearchString, u"soar");
     EXPECT_EQ(nullptr, result);
+}
+
+// http://b/29267949
+// Test that overreading in utf8_to_utf16_length is detected
+TEST_F(UnicodeTest, InvalidUtf8OverreadDetected) {
+    // An utf8 char starting with \xc4 is two bytes long.
+    // Add extra zeros so no extra memory is read in case the code doesn't
+    // work as expected.
+    static char utf8[] = "\xc4\x00\x00\x00";
+    ASSERT_DEATH(utf8_to_utf16_length((uint8_t *) utf8, strlen(utf8),
+            true /* overreadIsFatal */), "" /* regex for ASSERT_DEATH */);
 }
 
 }
