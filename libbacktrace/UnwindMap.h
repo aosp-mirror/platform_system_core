@@ -17,6 +17,7 @@
 #ifndef _LIBBACKTRACE_UNWIND_MAP_H
 #define _LIBBACKTRACE_UNWIND_MAP_H
 
+#include <pthread.h>
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -56,10 +57,15 @@ public:
 
   void FillIn(uintptr_t addr, backtrace_map_t* map) override;
 
+  void LockIterator() override { pthread_rwlock_rdlock(&map_lock_); }
+  void UnlockIterator() override { pthread_rwlock_unlock(&map_lock_); }
+
 private:
   bool GenerateMap();
 
   bool map_created_;
+
+  pthread_rwlock_t map_lock_;
 };
 
 #endif // _LIBBACKTRACE_UNWIND_MAP_H

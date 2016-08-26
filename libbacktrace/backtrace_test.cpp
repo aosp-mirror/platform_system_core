@@ -896,6 +896,7 @@ void VerifyMap(pid_t pid) {
   std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(pid));
 
   // Basic test that verifies that the map is in the expected order.
+  ScopedBacktraceMapIteratorLock lock(map.get());
   std::vector<map_test_t>::const_iterator test_it = test_maps.begin();
   for (BacktraceMap::const_iterator it = map->begin(); it != map->end(); ++it) {
     ASSERT_TRUE(test_it != test_maps.end());

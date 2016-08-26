@@ -368,6 +368,7 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
     ALOGE("Cannot get siginfo for %d: %s\n", tid, strerror(errno));
   }
 
+  ScopedBacktraceMapIteratorLock lock(map);
   _LOG(log, logtype::MAPS, "\n");
   if (!print_fault_address_marker) {
     _LOG(log, logtype::MAPS, "memory map:\n");
