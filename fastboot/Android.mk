@@ -58,7 +58,7 @@ LOCAL_LDLIBS_windows := -lws2_32
 LOCAL_C_INCLUDES_windows := development/host/windows/usb/api
 
 LOCAL_STATIC_LIBRARIES := \
-    libziparchive-host \
+    libziparchive \
     libext4_utils_host \
     libsparse_host \
     libutils \
