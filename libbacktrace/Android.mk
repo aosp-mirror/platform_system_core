@@ -67,7 +67,7 @@ libbacktrace_offline_static_libraries_target := \
 libbacktrace_offline_static_libraries_host := \
 	libbacktrace \
 	libunwind \
-	libziparchive-host \
+	libziparchive \
 	libz \
 	libbase \
 	liblog \
@@ -129,7 +129,7 @@ backtrace_test_static_libraries_target := \
 	libz \
 
 backtrace_test_static_libraries_host := \
-	libziparchive-host \
+	libziparchive \
 	libz \
 	libutils \
 	libLLVMObject \
