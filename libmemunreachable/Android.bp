@@ -1,0 +1,80 @@
+cc_defaults {
+    name: "libmemunreachable_defaults",
+
+    cflags: [
+        "-std=c++14",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+    ],
+    clang: true,
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+}
+
+cc_library_shared {
+    name: "libmemunreachable",
+    defaults: ["libmemunreachable_defaults"],
+    srcs: [
+        "Allocator.cpp",
+        "HeapWalker.cpp",
+        "LeakFolding.cpp",
+        "LeakPipe.cpp",
+        "LineBuffer.cpp",
+        "MemUnreachable.cpp",
+        "ProcessMappings.cpp",
+        "PtracerThread.cpp",
+        "ThreadCapture.cpp",
+    ],
+
+    static_libs: [
+        "libc_malloc_debug_backtrace",
+        "libc_logging",
+    ],
+    // Only need this for arm since libc++ uses its own unwind code that
+    // doesn't mix with the other default unwind code.
+    arch: {
+        arm: {
+            static_libs: ["libunwind_llvm"],
+        },
+    },
+    export_include_dirs: ["include"],
+    local_include_dirs: ["include"],
+}
+
+cc_test {
+    name: "memunreachable_test",
+    defaults: ["libmemunreachable_defaults"],
+    host_supported: true,
+    srcs: [
+        "tests/Allocator_test.cpp",
+        "tests/HeapWalker_test.cpp",
+        "tests/LeakFolding_test.cpp",
+    ],
+
+    target: {
+        android: {
+            srcs: [
+                "tests/DisableMalloc_test.cpp",
+                "tests/MemUnreachable_test.cpp",
+                "tests/ThreadCapture_test.cpp",
+            ],
+            shared_libs: [
+                "libmemunreachable",
+            ],
+        },
+        host: {
+            srcs: [
+                "Allocator.cpp",
+                "HeapWalker.cpp",
+                "LeakFolding.cpp",
+                "tests/HostMallocStub.cpp",
+            ],
+        },
+        darwin: {
+            enabled: false,
+        },
+    },
+}
