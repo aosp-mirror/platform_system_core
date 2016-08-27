@@ -52,6 +52,7 @@ LIBADB_SRC_FILES := \
     adb_utils.cpp \
     fdevent.cpp \
     sockets.cpp \
+    socket_spec.cpp \
     transport.cpp \
     transport_local.cpp \
     transport_usb.cpp \

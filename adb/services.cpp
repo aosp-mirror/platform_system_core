@@ -49,6 +49,7 @@
 #include "remount_service.h"
 #include "services.h"
 #include "shell_service.h"
+#include "socket_spec.h"
 #include "sysdeps.h"
 #include "transport.h"
 
@@ -278,36 +279,12 @@ static int create_service_thread(void (*func)(int, void *), void *cookie)
 int service_to_fd(const char* name, const atransport* transport) {
     int ret = -1;
 
-    if(!strncmp(name, "tcp:", 4)) {
-        int port = atoi(name + 4);
-        name = strchr(name + 4, ':');
-        if(name == 0) {
-            std::string error;
-            ret = network_loopback_client(port, SOCK_STREAM, &error);
-            if (ret >= 0)
-                disable_tcp_nagle(ret);
-        } else {
-#if ADB_HOST
-            std::string error;
-            ret = network_connect(name + 1, port, SOCK_STREAM, 0, &error);
-#else
-            return -1;
-#endif
+    if (is_socket_spec(name)) {
+        std::string error;
+        ret = socket_spec_connect(name, &error);
+        if (ret < 0) {
+            LOG(ERROR) << "failed to connect to socket '" << name << "': " << error;
         }
-#if !defined(_WIN32)   /* winsock doesn't implement unix domain sockets */
-    } else if(!strncmp(name, "local:", 6)) {
-        ret = socket_local_client(name + 6,
-                ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM);
-    } else if(!strncmp(name, "localreserved:", 14)) {
-        ret = socket_local_client(name + 14,
-                ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM);
-    } else if(!strncmp(name, "localabstract:", 14)) {
-        ret = socket_local_client(name + 14,
-                ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
-    } else if(!strncmp(name, "localfilesystem:", 16)) {
-        ret = socket_local_client(name + 16,
-                ANDROID_SOCKET_NAMESPACE_FILESYSTEM, SOCK_STREAM);
-#endif
 #if !ADB_HOST
     } else if(!strncmp("dev:", name, 4)) {
         ret = unix_open(name + 4, O_RDWR | O_CLOEXEC);

@@ -23,11 +23,9 @@
 #include <android-base/strings.h>
 #include <cutils/sockets.h>
 
+#include "socket_spec.h"
 #include "sysdeps.h"
 #include "transport.h"
-
-// Not static because it is used in commandline.c.
-int gListenAll = 0;
 
 // A listener is an entity which binds to a local port and, upon receiving a connection on that
 // port, creates an asocket to connect the new local connection to a specific remote service.
@@ -120,48 +118,6 @@ static void listener_disconnect(void* arg, atransport*) {
     }
 }
 
-int local_name_to_fd(alistener* listener, int* resolved_tcp_port, std::string* error) {
-    if (android::base::StartsWith(listener->local_name, "tcp:")) {
-        int requested_port = atoi(&listener->local_name[4]);
-        int sock = -1;
-        if (gListenAll > 0) {
-            sock = network_inaddr_any_server(requested_port, SOCK_STREAM, error);
-        } else {
-            sock = network_loopback_server(requested_port, SOCK_STREAM, error);
-        }
-
-        // If the caller requested port 0, update the listener name with the resolved port.
-        if (sock >= 0 && requested_port == 0) {
-            int local_port = adb_socket_get_local_port(sock);
-            if (local_port > 0) {
-                listener->local_name = android::base::StringPrintf("tcp:%d", local_port);
-                if (resolved_tcp_port != nullptr) {
-                    *resolved_tcp_port = local_port;
-                }
-            }
-        }
-
-        return sock;
-    }
-#if !defined(_WIN32)  // No Unix-domain sockets on Windows.
-    // It's nonsensical to support the "reserved" space on the adb host side.
-    if (android::base::StartsWith(listener->local_name, "local:")) {
-        return network_local_server(&listener->local_name[6], ANDROID_SOCKET_NAMESPACE_ABSTRACT,
-                                    SOCK_STREAM, error);
-    } else if (android::base::StartsWith(listener->local_name, "localabstract:")) {
-        return network_local_server(&listener->local_name[14], ANDROID_SOCKET_NAMESPACE_ABSTRACT,
-                                    SOCK_STREAM, error);
-    } else if (android::base::StartsWith(listener->local_name, "localfilesystem:")) {
-        return network_local_server(&listener->local_name[16], ANDROID_SOCKET_NAMESPACE_FILESYSTEM,
-                                    SOCK_STREAM, error);
-    }
-
-#endif
-    *error = android::base::StringPrintf("unknown local portname '%s'",
-                                         listener->local_name.c_str());
-    return -1;
-}
-
 // Write the list of current listeners (network redirections) into a string.
 std::string format_listeners() {
     std::string result;
@@ -230,9 +186,18 @@ InstallStatus install_listener(const std::string& local_name, const char* connec
 
     std::unique_ptr<alistener> listener(new alistener(local_name, connect_to));
 
-    listener->fd = local_name_to_fd(listener.get(), resolved_tcp_port, error);
+    int resolved = 0;
+    listener->fd = socket_spec_listen(listener->local_name, error, &resolved);
     if (listener->fd < 0) {
         return INSTALL_STATUS_CANNOT_BIND;
+    }
+
+    // If the caller requested port 0, update the listener name with the resolved port.
+    if (resolved != 0) {
+        listener->local_name = android::base::StringPrintf("tcp:%d", resolved);
+        if (resolved_tcp_port) {
+            *resolved_tcp_port = resolved;
+        }
     }
 
     close_on_exec(listener->fd);
