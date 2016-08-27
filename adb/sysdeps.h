@@ -277,6 +277,15 @@ static __inline__ void  adb_sleep_ms( int  mseconds )
 int network_loopback_client(int port, int type, std::string* error);
 int network_loopback_server(int port, int type, std::string* error);
 int network_inaddr_any_server(int port, int type, std::string* error);
+
+inline int network_local_client(const char* name, int namespace_id, int type, std::string* error) {
+    abort();
+}
+
+inline int network_local_server(const char* name, int namespace_id, int type, std::string* error) {
+    abort();
+}
+
 int network_connect(const std::string& host, int port, int type, int timeout,
                     std::string* error);
 
@@ -638,10 +647,12 @@ inline int network_inaddr_any_server(int port, int type, std::string* error) {
   return _fd_set_error_str(socket_inaddr_any_server(port, type), error);
 }
 
-inline int network_local_server(const char *name, int namespace_id, int type,
-                                std::string* error) {
-  return _fd_set_error_str(socket_local_server(name, namespace_id, type),
-                           error);
+inline int network_local_client(const char* name, int namespace_id, int type, std::string* error) {
+    return _fd_set_error_str(socket_local_client(name, namespace_id, type), error);
+}
+
+inline int network_local_server(const char* name, int namespace_id, int type, std::string* error) {
+    return _fd_set_error_str(socket_local_server(name, namespace_id, type), error);
 }
 
 inline int network_connect(const std::string& host, int port, int type,
