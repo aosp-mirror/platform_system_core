@@ -60,9 +60,18 @@
 // This should be used in the private: declarations for a class
 // that wants to prevent anyone from instantiating it. This is
 // especially useful for classes containing only static methods.
+//
+// When building with C++11 toolchains, just use the language support
+// for explicitly deleted methods.
+#if __cplusplus >= 201103L
+#define DISALLOW_IMPLICIT_CONSTRUCTORS(TypeName) \
+  TypeName() = delete;                           \
+  DISALLOW_COPY_AND_ASSIGN(TypeName)
+#else
 #define DISALLOW_IMPLICIT_CONSTRUCTORS(TypeName) \
   TypeName();                                    \
   DISALLOW_COPY_AND_ASSIGN(TypeName)
+#endif
 
 // The arraysize(arr) macro returns the # of elements in an array arr.
 // The expression is a compile-time constant, and therefore can be
