@@ -52,6 +52,7 @@ static inline SchedPolicy _policy(SchedPolicy p)
 static pthread_once_t the_once = PTHREAD_ONCE_INIT;
 
 static int __sys_supports_schedgroups = -1;
+static int __sys_supports_timerslack = -1;
 
 // File descriptors open to /dev/cpuctl/../tasks, setup by initialize, or -1 on error.
 static int bg_cgroup_fd = -1;
@@ -104,7 +105,7 @@ static int add_tid_to_cgroup(int tid, int fd)
 
 static void __initialize(void) {
     char* filename;
-    if (!access("/dev/cpuctl/tasks", F_OK)) {
+    if (!access("/dev/cpuctl/tasks", W_OK)) {
         __sys_supports_schedgroups = 1;
 
         filename = "/dev/cpuctl/tasks";
@@ -123,7 +124,7 @@ static void __initialize(void) {
     }
 
 #ifdef USE_CPUSETS
-    if (!access("/dev/cpuset/tasks", F_OK)) {
+    if (!access("/dev/cpuset/tasks", W_OK)) {
 
         filename = "/dev/cpuset/foreground/tasks";
         fg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
@@ -142,6 +143,10 @@ static void __initialize(void) {
 #endif
     }
 #endif
+
+    char buf[64];
+    snprintf(buf, sizeof(buf), "/proc/%d/timerslack_ns", getpid());
+    __sys_supports_timerslack = !access(buf, W_OK);
 }
 
 /*
@@ -417,8 +422,10 @@ int set_sched_policy(int tid, SchedPolicy policy)
                            &param);
     }
 
-    set_timerslack_ns(tid, policy == SP_BACKGROUND ?
+    if (__sys_supports_timerslack) {
+        set_timerslack_ns(tid, policy == SP_BACKGROUND ?
                                TIMER_SLACK_BG : TIMER_SLACK_FG);
+    }
 
     return 0;
 }
