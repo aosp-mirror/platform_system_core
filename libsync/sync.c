@@ -21,12 +21,26 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <linux/sync.h>
 #include <linux/sw_sync.h>
 
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include <sync/sync.h>
+
+// The sync code is undergoing a major change. Add enough in to get
+// everything to compile wih the latest uapi headers.
+struct sync_merge_data {
+  int32_t fd2;
+  char name[32];
+  int32_t fence;
+};
+
+#define SYNC_IOC_MAGIC '>'
+#define SYNC_IOC_WAIT _IOW(SYNC_IOC_MAGIC, 0, __s32)
+#define SYNC_IOC_MERGE _IOWR(SYNC_IOC_MAGIC, 1, struct sync_merge_data)
+#define SYNC_IOC_FENCE_INFO _IOWR(SYNC_IOC_MAGIC, 2, struct sync_fence_info_data)
 
 int sync_wait(int fd, int timeout)
 {
