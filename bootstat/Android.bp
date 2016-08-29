@@ -1,0 +1,94 @@
+//
+// Copyright (C) 2016 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+bootstat_lib_src_files = [
+    "boot_event_record_store.cpp",
+    "event_log_list_builder.cpp",
+    "histogram_logger.cpp",
+    "uptime_parser.cpp",
+]
+
+cc_defaults {
+    name: "bootstat_defaults",
+
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+
+        // 524291 corresponds to sysui_histogram, from
+        // frameworks/base/core/java/com/android/internal/logging/EventLogTags.logtags
+        "-DHISTOGRAM_LOG_TAG=524291",
+    ],
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "liblog",
+    ],
+    whole_static_libs: ["libgtest_prod"],
+    // Clang is required because of C++14
+    clang: true,
+}
+
+// bootstat static library
+// -----------------------------------------------------------------------------
+cc_library_static {
+    name: "libbootstat",
+    defaults: ["bootstat_defaults"],
+    srcs: bootstat_lib_src_files,
+}
+
+// bootstat static library, debug
+// -----------------------------------------------------------------------------
+cc_library_static {
+    name: "libbootstat_debug",
+    defaults: ["bootstat_defaults"],
+    host_supported: true,
+    srcs: bootstat_lib_src_files,
+
+    target: {
+        host: {
+            cflags: ["-UNDEBUG"],
+        },
+    },
+}
+
+// bootstat binary
+// -----------------------------------------------------------------------------
+cc_binary {
+    name: "bootstat",
+    defaults: ["bootstat_defaults"],
+    static_libs: ["libbootstat"],
+    init_rc: ["bootstat.rc"],
+    srcs: ["bootstat.cpp"],
+}
+
+// Native tests
+// -----------------------------------------------------------------------------
+cc_test {
+    name: "bootstat_tests",
+    defaults: ["bootstat_defaults"],
+    host_supported: true,
+    static_libs: [
+        "libbootstat_debug",
+        "libgmock",
+    ],
+    srcs: [
+        "boot_event_record_store_test.cpp",
+        "event_log_list_builder_test.cpp",
+        "testrunner.cpp",
+    ],
+}
