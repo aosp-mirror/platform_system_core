@@ -575,15 +575,14 @@ bool RefBase::weakref_type::attemptIncStrong(const void* id)
             // grab a strong-reference, which is always safe due to the
             // extended life-time.
             curCount = impl->mStrong.fetch_add(1, std::memory_order_relaxed);
-        }
-
-        // If the strong reference count has already been incremented by
-        // someone else, the implementor of onIncStrongAttempted() is holding
-        // an unneeded reference.  So call onLastStrongRef() here to remove it.
-        // (No, this is not pretty.)  Note that we MUST NOT do this if we
-        // are in fact acquiring the first reference.
-        if (curCount > 0 && curCount < INITIAL_STRONG_VALUE) {
-            impl->mBase->onLastStrongRef(id);
+            // If the strong reference count has already been incremented by
+            // someone else, the implementor of onIncStrongAttempted() is holding
+            // an unneeded reference.  So call onLastStrongRef() here to remove it.
+            // (No, this is not pretty.)  Note that we MUST NOT do this if we
+            // are in fact acquiring the first reference.
+            if (curCount != 0 && curCount != INITIAL_STRONG_VALUE) {
+                impl->mBase->onLastStrongRef(id);
+            }
         }
     }
     
@@ -593,7 +592,7 @@ bool RefBase::weakref_type::attemptIncStrong(const void* id)
     ALOGD("attemptIncStrong of %p from %p: cnt=%d\n", this, id, curCount);
 #endif
 
-    // curCount is the value of mStrong before we increment ed it.
+    // curCount is the value of mStrong before we incremented it.
     // Now we need to fix-up the count if it was INITIAL_STRONG_VALUE.
     // This must be done safely, i.e.: handle the case where several threads
     // were here in attemptIncStrong().
