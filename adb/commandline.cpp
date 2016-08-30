@@ -52,10 +52,11 @@
 #include "adb_client.h"
 #include "adb_io.h"
 #include "adb_utils.h"
+#include "bugreport.h"
+#include "commandline.h"
 #include "file_sync_service.h"
 #include "services.h"
 #include "shell_service.h"
-#include "transport.h"
 
 static int install_app(TransportType t, const char* serial, int argc, const char** argv);
 static int install_multiple_app(TransportType t, const char* serial, int argc, const char** argv);
@@ -66,8 +67,7 @@ static int uninstall_app_legacy(TransportType t, const char* serial, int argc, c
 static auto& gProductOutPath = *new std::string();
 extern int gListenAll;
 
-static constexpr char BUGZ_OK_PREFIX[] = "OK:";
-static constexpr char BUGZ_FAIL_PREFIX[] = "FAIL:";
+DefaultStandardStreamsCallback DEFAULT_STANDARD_STREAMS_CALLBACK(nullptr, nullptr);
 
 static std::string product_file(const char *extra) {
     if (gProductOutPath.empty()) {
@@ -82,6 +82,7 @@ static std::string product_file(const char *extra) {
 
 static void help() {
     fprintf(stderr, "%s\n", adb_version().c_str());
+    // clang-format off
     fprintf(stderr,
         " -a                            - directs adb to listen on all interfaces for a connection\n"
         " -d                            - directs command to the only connected USB device\n"
@@ -174,9 +175,11 @@ static void help() {
         "                                 (-g: grant all runtime permissions)\n"
         "  adb uninstall [-k] <package> - remove this app package from the device\n"
         "                                 ('-k' means keep the data and cache directories)\n"
-        "  adb bugreport [<zip_file>]   - return all information from the device\n"
-        "                                 that should be included in a bug report.\n"
-        "\n"
+        "  adb bugreport [<path>]       - return all information from the device that should be included in a zipped bug report.\n"
+        "                                 If <path> is a file, the bug report will be saved as that file.\n"
+        "                                 If <path> is a directory, the bug report will be saved in that directory with the name provided by the device.\n"
+        "                                 If <path> is omitted, the bug report will be saved in the current directory with the name provided by the device.\n"
+        "                                 NOTE: if the device does not support zipped bug reports, the bug report will be output on stdout.\n"
         "  adb backup [-f <file>] [-apk|-noapk] [-obb|-noobb] [-shared|-noshared] [-all] [-system|-nosystem] [<packages...>]\n"
         "                               - write an archive of the device's data to <file>.\n"
         "                                 If no -f option is supplied then the data is written\n"
@@ -250,11 +253,11 @@ static void help() {
         "  ADB_TRACE                    - Print debug information. A comma separated list of the following values\n"
         "                                 1 or all, adb, sockets, packets, rwx, usb, sync, sysdeps, transport, jdwp\n"
         "  ANDROID_SERIAL               - The serial number to connect to. -s takes priority over this if given.\n"
-        "  ANDROID_LOG_TAGS             - When used with the logcat option, only these debug tags are printed.\n"
-        );
+        "  ANDROID_LOG_TAGS             - When used with the logcat option, only these debug tags are printed.\n");
+    // clang-format on
 }
 
-static int usage() {
+int usage() {
     help();
     return 1;
 }
@@ -292,17 +295,14 @@ static void stdin_raw_restore() {
 // this expects that incoming data will use the shell protocol, in which case
 // stdout/stderr are routed independently and the remote exit code will be
 // returned.
-// if |output| is non-null, stdout will be appended to it instead.
-// if |err| is non-null, stderr will be appended to it instead.
-static int read_and_dump(int fd, bool use_shell_protocol=false, std::string* output=nullptr,
-                         std::string* err=nullptr) {
+// if |callback| is non-null, stdout/stderr output will be handled by it.
+int read_and_dump(int fd, bool use_shell_protocol = false,
+                  StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK) {
     int exit_code = 0;
     if (fd < 0) return exit_code;
 
     std::unique_ptr<ShellProtocol> protocol;
     int length = 0;
-    FILE* outfile = stdout;
-    std::string* outstring = output;
 
     char raw_buffer[BUFSIZ];
     char* buffer_ptr = raw_buffer;
@@ -320,14 +320,13 @@ static int read_and_dump(int fd, bool use_shell_protocol=false, std::string* out
             if (!protocol->Read()) {
                 break;
             }
+            length = protocol->data_length();
             switch (protocol->id()) {
                 case ShellProtocol::kIdStdout:
-                    outfile = stdout;
-                    outstring = output;
+                    callback->OnStdout(buffer_ptr, length);
                     break;
                 case ShellProtocol::kIdStderr:
-                    outfile = stderr;
-                    outstring = err;
+                    callback->OnStderr(buffer_ptr, length);
                     break;
                 case ShellProtocol::kIdExit:
                     exit_code = protocol->data()[0];
@@ -343,17 +342,11 @@ static int read_and_dump(int fd, bool use_shell_protocol=false, std::string* out
             if (length <= 0) {
                 break;
             }
-        }
-
-        if (outstring == nullptr) {
-            fwrite(buffer_ptr, 1, length, outfile);
-            fflush(outfile);
-        } else {
-            outstring->append(buffer_ptr, length);
+            callback->OnStdout(buffer_ptr, length);
         }
     }
 
-    return exit_code;
+    return callback->Done(exit_code);
 }
 
 static void read_status_line(int fd, char* buf, size_t count)
@@ -371,19 +364,7 @@ static void read_status_line(int fd, char* buf, size_t count)
     *buf = '\0';
 }
 
-static void copy_to_file(int inFd, int outFd) {
-    const size_t BUFSIZE = 32 * 1024;
-    char* buf = (char*) malloc(BUFSIZE);
-    if (buf == nullptr) fatal("couldn't allocate buffer for copy_to_file");
-    int len;
-    long total = 0;
-#ifdef _WIN32
-    int old_stdin_mode = -1;
-    int old_stdout_mode = -1;
-#endif
-
-    D("copy_to_file(%d -> %d)", inFd, outFd);
-
+static void stdinout_raw_prologue(int inFd, int outFd, int& old_stdin_mode, int& old_stdout_mode) {
     if (inFd == STDIN_FILENO) {
         stdin_raw_init();
 #ifdef _WIN32
@@ -402,6 +383,39 @@ static void copy_to_file(int inFd, int outFd) {
         }
     }
 #endif
+}
+
+static void stdinout_raw_epilogue(int inFd, int outFd, int old_stdin_mode, int old_stdout_mode) {
+    if (inFd == STDIN_FILENO) {
+        stdin_raw_restore();
+#ifdef _WIN32
+        if (_setmode(STDIN_FILENO, old_stdin_mode) == -1) {
+            fatal_errno("could not restore stdin mode");
+        }
+#endif
+    }
+
+#ifdef _WIN32
+    if (outFd == STDOUT_FILENO) {
+        if (_setmode(STDOUT_FILENO, old_stdout_mode) == -1) {
+            fatal_errno("could not restore stdout mode");
+        }
+    }
+#endif
+}
+
+static void copy_to_file(int inFd, int outFd) {
+    const size_t BUFSIZE = 32 * 1024;
+    char* buf = (char*) malloc(BUFSIZE);
+    if (buf == nullptr) fatal("couldn't allocate buffer for copy_to_file");
+    int len;
+    long total = 0;
+    int old_stdin_mode = -1;
+    int old_stdout_mode = -1;
+
+    D("copy_to_file(%d -> %d)", inFd, outFd);
+
+    stdinout_raw_prologue(inFd, outFd, old_stdin_mode, old_stdout_mode);
 
     while (true) {
         if (inFd == STDIN_FILENO) {
@@ -426,22 +440,7 @@ static void copy_to_file(int inFd, int outFd) {
         total += len;
     }
 
-    if (inFd == STDIN_FILENO) {
-        stdin_raw_restore();
-#ifdef _WIN32
-        if (_setmode(STDIN_FILENO, old_stdin_mode) == -1) {
-            fatal_errno("could not restore stdin mode");
-        }
-#endif
-    }
-
-#ifdef _WIN32
-    if (outFd == STDOUT_FILENO) {
-        if (_setmode(STDOUT_FILENO, old_stdout_mode) == -1) {
-            fatal_errno("could not restore stdout mode");
-        }
-    }
-#endif
+    stdinout_raw_epilogue(inFd, outFd, old_stdin_mode, old_stdout_mode);
 
     D("copy_to_file() finished after %lu bytes", total);
     free(buf);
@@ -1113,20 +1112,16 @@ static bool adb_root(const char* command) {
     return true;
 }
 
-// Connects to the device "shell" service with |command| and prints the
-// resulting output.
-static int send_shell_command(TransportType transport_type, const char* serial,
-                              const std::string& command,
-                              bool disable_shell_protocol,
-                              std::string* output=nullptr,
-                              std::string* err=nullptr) {
+int send_shell_command(TransportType transport_type, const char* serial, const std::string& command,
+                       bool disable_shell_protocol, StandardStreamsCallbackInterface* callback) {
     int fd;
     bool use_shell_protocol = false;
 
     while (true) {
         bool attempt_connection = true;
 
-        // Use shell protocol if it's supported and the caller doesn't explicitly disable it.
+        // Use shell protocol if it's supported and the caller doesn't explicitly
+        // disable it.
         if (!disable_shell_protocol) {
             FeatureSet features;
             std::string error;
@@ -1148,58 +1143,19 @@ static int send_shell_command(TransportType transport_type, const char* serial,
             }
         }
 
-        fprintf(stderr,"- waiting for device -\n");
+        fprintf(stderr, "- waiting for device -\n");
         if (!wait_for_device("wait-for-device", transport_type, serial)) {
             return 1;
         }
     }
 
-    int exit_code = read_and_dump(fd, use_shell_protocol, output, err);
+    int exit_code = read_and_dump(fd, use_shell_protocol, callback);
 
     if (adb_close(fd) < 0) {
         PLOG(ERROR) << "failure closing FD " << fd;
     }
 
     return exit_code;
-}
-
-static int bugreport(TransportType transport_type, const char* serial, int argc,
-                     const char** argv) {
-    if (argc == 1) return send_shell_command(transport_type, serial, "bugreport", false);
-    if (argc != 2) return usage();
-
-    // Zipped bugreport option - will call 'bugreportz', which prints the location of the generated
-    // file, then pull it to the destination file provided by the user.
-    std::string dest_file = argv[1];
-    if (!android::base::EndsWith(argv[1], ".zip")) {
-        // TODO: use a case-insensitive comparison (like EndsWithIgnoreCase
-        dest_file += ".zip";
-    }
-    std::string output;
-
-    fprintf(stderr, "Bugreport is in progress and it could take minutes to complete.\n"
-            "Please be patient and do not cancel or disconnect your device until it completes.\n");
-    int status = send_shell_command(transport_type, serial, "bugreportz", false, &output, nullptr);
-    if (status != 0 || output.empty()) return status;
-    output = android::base::Trim(output);
-
-    if (android::base::StartsWith(output, BUGZ_OK_PREFIX)) {
-        const char* zip_file = &output[strlen(BUGZ_OK_PREFIX)];
-        std::vector<const char*> srcs{zip_file};
-        status = do_sync_pull(srcs, dest_file.c_str(), true, dest_file.c_str()) ? 0 : 1;
-        if (status != 0) {
-            fprintf(stderr, "Could not copy file '%s' to '%s'\n", zip_file, dest_file.c_str());
-        }
-        return status;
-    }
-    if (android::base::StartsWith(output, BUGZ_FAIL_PREFIX)) {
-        const char* error_message = &output[strlen(BUGZ_FAIL_PREFIX)];
-        fprintf(stderr, "Device failed to take a zipped bugreport: %s\n", error_message);
-        return -1;
-    }
-    fprintf(stderr, "Unexpected string (%s) returned by bugreportz, "
-            "device probably does not support -z option\n", output.c_str());
-    return -1;
 }
 
 static int logcat(TransportType transport, const char* serial, int argc, const char** argv) {
@@ -1220,6 +1176,29 @@ static int logcat(TransportType transport, const char* serial, int argc, const c
 
     // No need for shell protocol with logcat, always disable for simplicity.
     return send_shell_command(transport, serial, cmd, true);
+}
+
+static void write_zeros(int bytes, int fd) {
+    int old_stdin_mode = -1;
+    int old_stdout_mode = -1;
+    char* buf = (char*) calloc(1, bytes);
+    if (buf == nullptr) fatal("couldn't allocate buffer for write_zeros");
+
+    D("write_zeros(%d) -> %d", bytes, fd);
+
+    stdinout_raw_prologue(-1, fd, old_stdin_mode, old_stdout_mode);
+
+    if (fd == STDOUT_FILENO) {
+        fwrite(buf, 1, bytes, stdout);
+        fflush(stdout);
+    } else {
+        adb_write(fd, buf, bytes);
+    }
+
+    stdinout_raw_prologue(-1, fd, old_stdin_mode, old_stdout_mode);
+
+    D("write_zeros() finished");
+    free(buf);
 }
 
 static int backup(int argc, const char** argv) {
@@ -1302,6 +1281,9 @@ static int restore(int argc, const char** argv) {
     printf("Now unlock your device and confirm the restore operation.\n");
     copy_to_file(tarFd, fd);
 
+    // Provide an in-band EOD marker in case the archive file is malformed
+    write_zeros(512*2, fd);
+
     // Wait until the other side finishes, or it'll get sent SIGHUP.
     copy_to_file(fd, STDOUT_FILENO);
 
@@ -1337,7 +1319,7 @@ static std::string find_product_out_path(const std::string& hint) {
     if (hint.find_first_of(OS_PATH_SEPARATORS) != std::string::npos) {  // NOLINT
         std::string cwd;
         if (!getcwd(&cwd)) {
-            fprintf(stderr, "adb: getcwd failed: %s\n", strerror(errno));
+            perror("adb: getcwd failed");
             return "";
         }
         return android::base::StringPrintf("%s%c%s", cwd.c_str(), OS_PATH_SEPARATOR, hint.c_str());
@@ -1435,6 +1417,16 @@ static bool _is_valid_ack_reply_fd(const int ack_reply_fd) {
 #else
     return ack_reply_fd > 2;
 #endif
+}
+
+static bool _use_legacy_install() {
+    FeatureSet features;
+    std::string error;
+    if (!adb_get_feature_set(&features, &error)) {
+        fprintf(stderr, "error: %s\n", error.c_str());
+        return true;
+    }
+    return !CanUseFeature(features, kFeatureCmd);
 }
 
 int adb_commandline(int argc, const char **argv) {
@@ -1737,7 +1729,8 @@ int adb_commandline(int argc, const char **argv) {
     } else if (!strcmp(argv[0], "root") || !strcmp(argv[0], "unroot")) {
         return adb_root(argv[0]) ? 0 : 1;
     } else if (!strcmp(argv[0], "bugreport")) {
-        return bugreport(transport_type, serial, argc, argv);
+        Bugreport bugreport;
+        return bugreport.DoIt(transport_type, serial, argc, argv);
     } else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
         bool reverse = !strcmp(argv[0], "reverse");
         ++argv;
@@ -1831,17 +1824,10 @@ int adb_commandline(int argc, const char **argv) {
     }
     else if (!strcmp(argv[0], "install")) {
         if (argc < 2) return usage();
-        FeatureSet features;
-        std::string error;
-        if (!adb_get_feature_set(&features, &error)) {
-            fprintf(stderr, "error: %s\n", error.c_str());
-            return 1;
+        if (_use_legacy_install()) {
+            return install_app_legacy(transport_type, serial, argc, argv);
         }
-
-        if (CanUseFeature(features, kFeatureCmd)) {
-            return install_app(transport_type, serial, argc, argv);
-        }
-        return install_app_legacy(transport_type, serial, argc, argv);
+        return install_app(transport_type, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "install-multiple")) {
         if (argc < 2) return usage();
@@ -1849,17 +1835,10 @@ int adb_commandline(int argc, const char **argv) {
     }
     else if (!strcmp(argv[0], "uninstall")) {
         if (argc < 2) return usage();
-        FeatureSet features;
-        std::string error;
-        if (!adb_get_feature_set(&features, &error)) {
-            fprintf(stderr, "error: %s\n", error.c_str());
-            return 1;
+        if (_use_legacy_install()) {
+            return uninstall_app_legacy(transport_type, serial, argc, argv);
         }
-
-        if (CanUseFeature(features, kFeatureCmd)) {
-            return uninstall_app(transport_type, serial, argc, argv);
-        }
-        return uninstall_app_legacy(transport_type, serial, argc, argv);
+        return uninstall_app(transport_type, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "sync")) {
         std::string src;
@@ -2073,7 +2052,6 @@ static int install_multiple_app(TransportType transport, const char* serial, int
     int i;
     struct stat sb;
     uint64_t total_size = 0;
-
     // Find all APK arguments starting at end.
     // All other arguments passed through verbatim.
     int first_apk = -1;
@@ -2098,7 +2076,14 @@ static int install_multiple_app(TransportType transport, const char* serial, int
         return 1;
     }
 
-    std::string cmd = android::base::StringPrintf("exec:pm install-create -S %" PRIu64, total_size);
+    std::string install_cmd;
+    if (_use_legacy_install()) {
+        install_cmd = "exec:pm";
+    } else {
+        install_cmd = "exec:cmd package";
+    }
+
+    std::string cmd = android::base::StringPrintf("%s install-create -S %" PRIu64, install_cmd.c_str(), total_size);
     for (i = 1; i < first_apk; i++) {
         cmd += " " + escape_arg(argv[i]);
     }
@@ -2140,8 +2125,8 @@ static int install_multiple_app(TransportType transport, const char* serial, int
         }
 
         std::string cmd = android::base::StringPrintf(
-                "exec:pm install-write -S %" PRIu64 " %d %d_%s -",
-                static_cast<uint64_t>(sb.st_size), session_id, i, adb_basename(file).c_str());
+                "%s install-write -S %" PRIu64 " %d %d_%s -",
+                install_cmd.c_str(), static_cast<uint64_t>(sb.st_size), session_id, i, adb_basename(file).c_str());
 
         int localFd = adb_open(file, O_RDONLY);
         if (localFd < 0) {
@@ -2176,8 +2161,8 @@ static int install_multiple_app(TransportType transport, const char* serial, int
 finalize_session:
     // Commit session if we streamed everything okay; otherwise abandon
     std::string service =
-            android::base::StringPrintf("exec:pm install-%s %d",
-                                        success ? "commit" : "abandon", session_id);
+            android::base::StringPrintf("%s install-%s %d",
+                                        install_cmd.c_str(), success ? "commit" : "abandon", session_id);
     fd = adb_connect(service, &error);
     if (fd < 0) {
         fprintf(stderr, "Connect error for finalize: %s\n", error.c_str());
