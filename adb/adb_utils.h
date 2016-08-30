@@ -20,7 +20,6 @@
 #include <string>
 
 #include <android-base/macros.h>
-#include <android-base/unique_fd.h>
 
 void close_stdin();
 
@@ -56,14 +55,5 @@ extern int adb_close(int fd);
 // if needed.
 bool forward_targets_are_valid(const std::string& source, const std::string& dest,
                                std::string* error);
-
-// Helper to automatically close an FD when it goes out of scope.
-struct AdbCloser {
-    static void Close(int fd) {
-        adb_close(fd);
-    }
-};
-
-using unique_fd = android::base::unique_fd_impl<AdbCloser>;
 
 #endif

@@ -100,6 +100,7 @@
 #include "adb.h"
 #include "adb_io.h"
 #include "adb_trace.h"
+#include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "security_log_tags.h"
 
