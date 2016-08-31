@@ -188,6 +188,10 @@ priority <priority>
   Scheduling priority of the service process. This value has to be in range
   -20 to 19. Default priority is 0. Priority is set via setpriority().
 
+namespace <pid|mnt>
+  Enter a new PID or mount namespace when forking the service.
+
+
 Triggers
 --------
 Triggers are strings which can be used to match certain kinds of
