@@ -95,4 +95,14 @@ using unique_fd = unique_fd_impl<DefaultCloser>;
 }  // namespace base
 }  // namespace android
 
+template <typename T>
+int close(const android::base::unique_fd_impl<T>&)
+#if defined(__clang__)
+  __attribute__((__unavailable__(
+#else
+  __attribute__((__error__(
+#endif
+    "close called on unique_fd"
+  )));
+
 #endif  // ANDROID_BASE_UNIQUE_FD_H
