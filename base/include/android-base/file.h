@@ -47,6 +47,8 @@ bool RemoveFileIfExists(const std::string& path, std::string* err = nullptr);
 bool Readlink(const std::string& path, std::string* result);
 #endif
 
+std::string GetExecutablePath();
+
 }  // namespace base
 }  // namespace android
 

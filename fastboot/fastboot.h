@@ -72,8 +72,6 @@ double now();
 char *mkmsg(const char *fmt, ...);
 __attribute__((__noreturn__)) void die(const char *fmt, ...);
 
-std::string get_my_path();
-
 /* Current product */
 extern char cur_product[FB_RESPONSE_SZ + 1];
 
