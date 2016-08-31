@@ -23,9 +23,6 @@
 /* FUSE_CANONICAL_PATH is not currently upstreamed */
 #define FUSE_CANONICAL_PATH 2016
 
-#define PROP_SDCARDFS_DEVICE "ro.sys.sdcardfs"
-#define PROP_SDCARDFS_USER "persist.sys.sdcardfs"
-
 #define FUSE_UNKNOWN_INO 0xffffffff
 
 /* Pseudo-error constant used to indicate that no fuse status is needed
