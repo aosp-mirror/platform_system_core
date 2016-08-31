@@ -28,11 +28,16 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 
 #include <cutils/fs.h>
 #include <cutils/multiuser.h>
+#include <cutils/properties.h>
+
 #include <packagelistparser/packagelistparser.h>
 
 #include <libminijail.h>
@@ -72,6 +77,9 @@
 // - Multi-user separation on the same physical device.
 
 #include "fuse.h"
+
+#define PROP_SDCARDFS_DEVICE "ro.sys.sdcardfs"
+#define PROP_SDCARDFS_USER "persist.sys.sdcardfs"
 
 /* Supplementary groups to execute with. */
 static const gid_t kGroups[1] = { AID_PACKAGE_INFO };
@@ -307,6 +315,98 @@ static void run(const char* source_path, const char* label, uid_t uid,
     LOG(FATAL) << "terminated prematurely";
 }
 
+static bool sdcardfs_setup(const std::string& source_path, const std::string& dest_path, uid_t fsuid,
+                        gid_t fsgid, bool multi_user, userid_t userid, gid_t gid, mode_t mask) {
+    std::string opts = android::base::StringPrintf("fsuid=%d,fsgid=%d,%smask=%d,userid=%d,gid=%d",
+            fsuid, fsgid, multi_user?"multiuser,":"", mask, userid, gid);
+
+    if (mount(source_path.c_str(), dest_path.c_str(), "sdcardfs",
+                        MS_NOSUID | MS_NODEV | MS_NOEXEC | MS_NOATIME, opts.c_str()) != 0) {
+        PLOG(ERROR) << "failed to mount sdcardfs filesystem";
+        return false;
+    }
+
+    return true;
+}
+
+static void run_sdcardfs(const std::string& source_path, const std::string& label, uid_t uid,
+        gid_t gid, userid_t userid, bool multi_user, bool full_write) {
+    std::string dest_path_default = "/mnt/runtime/default/" + label;
+    std::string dest_path_read = "/mnt/runtime/read/" + label;
+    std::string dest_path_write = "/mnt/runtime/write/" + label;
+
+    umask(0);
+    if (multi_user) {
+        // Multi-user storage is fully isolated per user, so "other"
+        // permissions are completely masked off.
+        if (!sdcardfs_setup(source_path, dest_path_default, uid, gid, multi_user, userid,
+                                                      AID_SDCARD_RW, 0006)
+                || !sdcardfs_setup(source_path, dest_path_read, uid, gid, multi_user, userid,
+                                                      AID_EVERYBODY, 0027)
+                || !sdcardfs_setup(source_path, dest_path_write, uid, gid, multi_user, userid,
+                                                      AID_EVERYBODY, full_write ? 0007 : 0027)) {
+            LOG(FATAL) << "failed to sdcardfs_setup";
+        }
+    } else {
+        // Physical storage is readable by all users on device, but
+        // the Android directories are masked off to a single user
+        // deep inside attr_from_stat().
+        if (!sdcardfs_setup(source_path, dest_path_default, uid, gid, multi_user, userid,
+                                                      AID_SDCARD_RW, 0006)
+                || !sdcardfs_setup(source_path, dest_path_read, uid, gid, multi_user, userid,
+                                                      AID_EVERYBODY, full_write ? 0027 : 0022)
+                || !sdcardfs_setup(source_path, dest_path_write, uid, gid, multi_user, userid,
+                                                      AID_EVERYBODY, full_write ? 0007 : 0022)) {
+            LOG(FATAL) << "failed to sdcardfs_setup";
+        }
+    }
+
+    // Will abort if priv-dropping fails.
+    drop_privs(uid, gid);
+
+    if (multi_user) {
+        std::string obb_path = source_path + "/obb";
+        fs_prepare_dir(obb_path.c_str(), 0775, uid, gid);
+    }
+
+    exit(0);
+}
+
+static bool supports_sdcardfs(void) {
+    std::string filesystems;
+    if (!android::base::ReadFileToString("/proc/filesystems", &filesystems)) {
+        PLOG(ERROR) << "Could not read /proc/filesystems";
+        return false;
+    }
+    for (const auto& fs : android::base::Split(filesystems, "\n")) {
+        if (fs.find("sdcardfs") != std::string::npos) return true;
+    }
+    return false;
+}
+
+static bool should_use_sdcardfs(void) {
+    char property[PROPERTY_VALUE_MAX];
+
+    // Allow user to have a strong opinion about state
+    property_get(PROP_SDCARDFS_USER, property, "");
+    if (!strcmp(property, "force_on")) {
+        LOG(WARNING) << "User explicitly enabled sdcardfs";
+        return supports_sdcardfs();
+    } else if (!strcmp(property, "force_off")) {
+        LOG(WARNING) << "User explicitly disabled sdcardfs";
+        return false;
+    }
+
+    // Fall back to device opinion about state
+    if (property_get_bool(PROP_SDCARDFS_DEVICE, false)) {
+        LOG(WARNING) << "Device explicitly enabled sdcardfs";
+        return supports_sdcardfs();
+    } else {
+        LOG(WARNING) << "Device explicitly disabled sdcardfs";
+        return false;
+    }
+}
+
 static int usage() {
     LOG(ERROR) << "usage: sdcard [OPTIONS] <source_path> <label>"
                << "    -u: specify UID to run as"
@@ -389,6 +489,10 @@ int main(int argc, char **argv) {
         sleep(1);
     }
 
-    run(source_path, label, uid, gid, userid, multi_user, full_write);
+    if (should_use_sdcardfs()) {
+        run_sdcardfs(source_path, label, uid, gid, userid, multi_user, full_write);
+    } else {
+        run(source_path, label, uid, gid, userid, multi_user, full_write);
+    }
     return 1;
 }
