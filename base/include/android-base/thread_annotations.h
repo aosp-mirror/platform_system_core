@@ -29,6 +29,9 @@
 #define SCOPED_CAPABILITY \
       THREAD_ANNOTATION_ATTRIBUTE__(scoped_lockable)
 
+#define SHARED_CAPABILITY(...) \
+      THREAD_ANNOTATION_ATTRIBUTE__(shared_capability(__VA_ARGS__))
+
 #define GUARDED_BY(x) \
       THREAD_ANNOTATION_ATTRIBUTE__(guarded_by(x))
 
@@ -75,6 +78,27 @@
       THREAD_ANNOTATION_ATTRIBUTE__(assert_shared_capability(x))
 
 #define RETURN_CAPABILITY(x) \
+      THREAD_ANNOTATION_ATTRIBUTE__(lock_returned(x))
+
+#define EXCLUSIVE_LOCK_FUNCTION(...) \
+      THREAD_ANNOTATION_ATTRIBUTE__(exclusive_lock_function(__VA_ARGS__))
+
+#define EXCLUSIVE_TRYLOCK_FUNCTION(...) \
+      THREAD_ANNOTATION_ATTRIBUTE__(exclusive_trylock_function(__VA_ARGS__))
+
+#define SHARED_LOCK_FUNCTION(...) \
+      THREAD_ANNOTATION_ATTRIBUTE__(shared_lock_function(__VA_ARGS__))
+
+#define SHARED_TRYLOCK_FUNCTION(...) \
+      THREAD_ANNOTATION_ATTRIBUTE__(shared_trylock_function(__VA_ARGS__))
+
+#define UNLOCK_FUNCTION(...) \
+      THREAD_ANNOTATION_ATTRIBUTE__(unlock_function(__VA_ARGS__))
+
+#define SCOPED_LOCKABLE \
+      THREAD_ANNOTATION_ATTRIBUTE__(scoped_lockable)
+
+#define LOCK_RETURNED(x) \
       THREAD_ANNOTATION_ATTRIBUTE__(lock_returned(x))
 
 #define NO_THREAD_SAFETY_ANALYSIS \
