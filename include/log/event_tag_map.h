@@ -41,7 +41,7 @@ void android_closeEventTagMap(EventTagMap* map);
 /*
  * Look up a tag by index.  Returns the tag string, or NULL if not found.
  */
-const char* android_lookupEventTag(const EventTagMap* map, int tag);
+const char* android_lookupEventTag(const EventTagMap* map, unsigned int tag);
 
 #ifdef __cplusplus
 }
