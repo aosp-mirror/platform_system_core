@@ -265,7 +265,7 @@ static constexpr bool kEnableDChecks = true;
 // MakeEagerEvaluator to infer the types of LHS and RHS.
 template <typename LHS, typename RHS>
 struct EagerEvaluator {
-  EagerEvaluator(LHS l, RHS r) : lhs(l), rhs(r) {
+  constexpr EagerEvaluator(LHS l, RHS r) : lhs(l), rhs(r) {
   }
   LHS lhs;
   RHS rhs;
@@ -273,7 +273,7 @@ struct EagerEvaluator {
 
 // Helper function for CHECK_xx.
 template <typename LHS, typename RHS>
-static inline EagerEvaluator<LHS, RHS> MakeEagerEvaluator(LHS lhs, RHS rhs) {
+constexpr EagerEvaluator<LHS, RHS> MakeEagerEvaluator(LHS lhs, RHS rhs) {
   return EagerEvaluator<LHS, RHS>(lhs, rhs);
 }
 
