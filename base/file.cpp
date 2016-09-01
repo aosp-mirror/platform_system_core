@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -31,7 +32,7 @@
 #include "utils/Compat.h"
 
 #if defined(__APPLE__)
-#import <Carbon/Carbon.h>
+#include <mach-o/dyld.h>
 #endif
 #if defined(_WIN32)
 #include <windows.h>
@@ -210,15 +211,14 @@ std::string GetExecutablePath() {
   android::base::Readlink("/proc/self/exe", &path);
   return path;
 #elif defined(__APPLE__)
-  // TODO: use _NSGetExecutablePath instead (http://b/31240820)?
-  CFBundleRef mainBundle = CFBundleGetMainBundle();
-  CFURLRef executableURL = CFBundleCopyExecutableURL(mainBundle);
-  CFStringRef executablePathString = CFURLCopyFileSystemPath(executableURL, kCFURLPOSIXPathStyle);
-  CFRelease(executableURL);
-
   char path[PATH_MAX + 1];
-  CFStringGetFileSystemRepresentation(executablePathString, path, sizeof(PATH_MAX)-1);
-  CFRelease(executablePathString);
+  uint32_t path_len = sizeof(path);
+  int rc = _NSGetExecutablePath(path, &path_len);
+  if (rc < 0) {
+    std::unique_ptr<char> path_buf(new char[path_len]);
+    _NSGetExecutablePath(path_buf.get(), &path_len);
+    return path_buf.get();
+  }
   return path;
 #elif defined(_WIN32)
   char path[PATH_MAX + 1];
