@@ -47,6 +47,7 @@
 #include <utility>
 #include <vector>
 
+#include <android-base/file.h>
 #include <android-base/macros.h>
 #include <android-base/parseint.h>
 #include <android-base/parsenetaddress.h>
@@ -116,7 +117,7 @@ static struct {
 
 static std::string find_item_given_name(const char* img_name, const char* product) {
     if(product) {
-        std::string path = get_my_path();
+        std::string path = android::base::GetExecutablePath();
         path.erase(path.find_last_of('/'));
         return android::base::StringPrintf("%s/../../../target/product/%s/%s",
                                            path.c_str(), product, img_name);
