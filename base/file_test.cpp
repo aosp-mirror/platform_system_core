@@ -136,3 +136,7 @@ TEST(file, Readlink) {
   ASSERT_EQ(max, result);
 #endif
 }
+
+TEST(file, GetExecutablePath) {
+  ASSERT_NE("", android::base::GetExecutablePath());
+}
