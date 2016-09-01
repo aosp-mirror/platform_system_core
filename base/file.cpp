@@ -30,6 +30,13 @@
 #include "android-base/utf8.h"
 #include "utils/Compat.h"
 
+#if defined(__APPLE__)
+#import <Carbon/Carbon.h>
+#endif
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 namespace android {
 namespace base {
 
@@ -196,6 +203,33 @@ bool Readlink(const std::string& path, std::string* result) {
   }
 }
 #endif
+
+std::string GetExecutablePath() {
+#if defined(__linux__)
+  std::string path;
+  android::base::Readlink("/proc/self/exe", &path);
+  return path;
+#elif defined(__APPLE__)
+  // TODO: use _NSGetExecutablePath instead (http://b/31240820)?
+  CFBundleRef mainBundle = CFBundleGetMainBundle();
+  CFURLRef executableURL = CFBundleCopyExecutableURL(mainBundle);
+  CFStringRef executablePathString = CFURLCopyFileSystemPath(executableURL, kCFURLPOSIXPathStyle);
+  CFRelease(executableURL);
+
+  char path[PATH_MAX + 1];
+  CFStringGetFileSystemRepresentation(executablePathString, path, sizeof(PATH_MAX)-1);
+  CFRelease(executablePathString);
+  return path;
+#elif defined(_WIN32)
+  char path[PATH_MAX + 1];
+  DWORD result = GetModuleFileName(NULL, path, sizeof(path) - 1);
+  if (result == 0 || result == sizeof(path) - 1) return "";
+  path[PATH_MAX - 1] = 0;
+  return path;
+#else
+#error unknown OS
+#endif
+}
 
 }  // namespace base
 }  // namespace android
