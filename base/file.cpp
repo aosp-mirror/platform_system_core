@@ -20,8 +20,10 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <string>
+#include <vector>
 
 #include "android-base/macros.h"  // For TEMP_FAILURE_RETRY on Darwin.
 #include "android-base/logging.h"
@@ -170,6 +172,30 @@ bool RemoveFileIfExists(const std::string& path, std::string* err) {
   }
   return true;
 }
+
+#if !defined(_WIN32)
+bool Readlink(const std::string& path, std::string* result) {
+  result->clear();
+
+  // Most Linux file systems (ext2 and ext4, say) limit symbolic links to
+  // 4095 bytes. Since we'll copy out into the string anyway, it doesn't
+  // waste memory to just start there. We add 1 so that we can recognize
+  // whether it actually fit (rather than being truncated to 4095).
+  std::vector<char> buf(4095 + 1);
+  while (true) {
+    ssize_t size = readlink(path.c_str(), &buf[0], buf.size());
+    // Unrecoverable error?
+    if (size == -1) return false;
+    // It fit! (If size == buf.size(), it may have been truncated.)
+    if (static_cast<size_t>(size) < buf.size()) {
+      result->assign(&buf[0], size);
+      return true;
+    }
+    // Double our buffer and try again.
+    buf.resize(buf.size() * 2);
+  }
+}
+#endif
 
 }  // namespace base
 }  // namespace android

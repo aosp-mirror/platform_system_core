@@ -110,3 +110,29 @@ TEST(file, RemoveFileIfExist) {
   ASSERT_FALSE(android::base::RemoveFileIfExists(td.path, &err));
   ASSERT_EQ("is not a regular or symbol link file", err);
 }
+
+TEST(file, Readlink) {
+#if !defined(_WIN32)
+  // Linux doesn't allow empty symbolic links.
+  std::string min("x");
+  // ext2 and ext4 both have PAGE_SIZE limits.
+  std::string max(static_cast<size_t>(4096 - 1), 'x');
+
+  TemporaryDir td;
+  std::string min_path{std::string(td.path) + "/" + "min"};
+  std::string max_path{std::string(td.path) + "/" + "max"};
+
+  ASSERT_EQ(0, symlink(min.c_str(), min_path.c_str()));
+  ASSERT_EQ(0, symlink(max.c_str(), max_path.c_str()));
+
+  std::string result;
+
+  result = "wrong";
+  ASSERT_TRUE(android::base::Readlink(min_path, &result));
+  ASSERT_EQ(min, result);
+
+  result = "wrong";
+  ASSERT_TRUE(android::base::Readlink(max_path, &result));
+  ASSERT_EQ(max, result);
+#endif
+}
