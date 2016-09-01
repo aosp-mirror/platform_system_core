@@ -691,7 +691,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                         && ((!gc && (element->getPid() == worstPid))
                             || (mLastWorstPidOfSystem[id].find(element->getPid())
                                 == mLastWorstPidOfSystem[id].end()))) {
-                    mLastWorstPidOfSystem[id][element->getUid()] = it;
+                    mLastWorstPidOfSystem[id][element->getPid()] = it;
                 }
                 if ((!gc && !worstPid && (element->getUid() == worst))
                         || (mLastWorstUid[id].find(element->getUid())
