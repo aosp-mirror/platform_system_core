@@ -32,7 +32,7 @@
 static std::string adb_construct_auth_command() {
     static const char auth_token_filename[] = ".emulator_console_auth_token";
 
-    std::string auth_token_path = adb_get_homedir_path(false);
+    std::string auth_token_path = adb_get_homedir_path();
     auth_token_path += OS_PATH_SEPARATOR;
     auth_token_path += auth_token_filename;
 

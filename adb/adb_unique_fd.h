@@ -16,12 +16,11 @@
 
 #pragma once
 
-#include <string>
+#include <android-base/unique_fd.h>
 
-// Returns true if the argument starts with a plausible socket prefix.
-bool is_socket_spec(const std::string& spec);
-bool is_local_socket_spec(const std::string& spec);
+// Helper to automatically close an FD when it goes out of scope.
+struct AdbCloser {
+    static void Close(int fd);
+};
 
-int socket_spec_connect(const std::string& spec, std::string* error);
-int socket_spec_listen(const std::string& spec, std::string* error,
-                       int* resolved_tcp_port = nullptr);
+using unique_fd = android::base::unique_fd_impl<AdbCloser>;
