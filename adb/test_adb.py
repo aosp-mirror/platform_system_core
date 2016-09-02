@@ -207,6 +207,28 @@ class NonApiTest(unittest.TestCase):
             # reading the response from the adb emu kill command (on Windows).
             self.assertEqual(0, p.returncode)
 
+    def test_connect_ipv4_ipv6(self):
+        """Ensure that `adb connect localhost:1234` will try both IPv4 and IPv6.
+
+        Bug: http://b/30313466
+        """
+        ipv4 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        ipv4.bind(('127.0.0.1', 0))
+        ipv4.listen(1)
+
+        ipv6 = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+        ipv6.bind(('::1', ipv4.getsockname()[1] + 1))
+        ipv6.listen(1)
+
+        for s in (ipv4, ipv6):
+            port = s.getsockname()[1]
+            output = subprocess.check_output(
+                ['adb', 'connect', 'localhost:{}'.format(port)])
+
+            self.assertEqual(
+                output.strip(), 'connected to localhost:{}'.format(port))
+            s.close()
+
 
 def main():
     random.seed(0)
