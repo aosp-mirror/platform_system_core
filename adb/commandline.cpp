@@ -51,6 +51,7 @@
 #include "adb_auth.h"
 #include "adb_client.h"
 #include "adb_io.h"
+#include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "file_sync_service.h"
 #include "services.h"
