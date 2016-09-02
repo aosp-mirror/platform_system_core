@@ -14,21 +14,23 @@
  * limitations under the License.
  */
 
+#include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <fnmatch.h>
+#include <libgen.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-
-#include <fcntl.h>
-#include <dirent.h>
-#include <unistd.h>
 #include <string.h>
-
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
 #include <sys/un.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <linux/netlink.h>
 
 #include <memory>
@@ -39,8 +41,6 @@
 #include <selinux/avc.h>
 
 #include <private/android_filesystem_config.h>
-#include <sys/time.h>
-#include <sys/wait.h>
 
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
@@ -541,30 +541,49 @@ static char **get_block_device_symlinks(struct uevent *uevent)
     return links;
 }
 
+static void make_link_init(const char* oldpath, const char* newpath) {
+  const char* slash = strrchr(newpath, '/');
+  if (!slash) return;
+
+  if (mkdir_recursive(dirname(newpath), 0755)) {
+    PLOG(ERROR) << "Failed to create directory " << dirname(newpath);
+  }
+
+  if (symlink(oldpath, newpath) && errno != EEXIST) {
+    PLOG(ERROR) << "Failed to symlink " << oldpath << " to " << newpath;
+  }
+}
+
+static void remove_link(const char* oldpath, const char* newpath) {
+  std::string path;
+  if (android::base::Readlink(newpath, &path) && path == oldpath) unlink(newpath);
+}
+
 static void handle_device(const char *action, const char *devpath,
         const char *path, int block, int major, int minor, char **links)
 {
-    int i;
-
     if(!strcmp(action, "add")) {
         make_device(devpath, path, block, major, minor, (const char **)links);
         if (links) {
-            for (i = 0; links[i]; i++)
+            for (int i = 0; links[i]; i++) {
                 make_link_init(devpath, links[i]);
+            }
         }
     }
 
     if(!strcmp(action, "remove")) {
         if (links) {
-            for (i = 0; links[i]; i++)
+            for (int i = 0; links[i]; i++) {
                 remove_link(devpath, links[i]);
+            }
         }
         unlink(devpath);
     }
 
     if (links) {
-        for (i = 0; links[i]; i++)
+        for (int i = 0; links[i]; i++) {
             free(links[i]);
+        }
         free(links);
     }
 }
