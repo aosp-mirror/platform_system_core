@@ -88,7 +88,7 @@ static BOOL WINAPI ctrlc_handler(DWORD type) {
 }
 #endif
 
-int adb_server_main(int is_daemon, int server_port, int ack_reply_fd) {
+int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply_fd) {
 #if defined(_WIN32)
     // adb start-server starts us up with stdout and stderr hooked up to
     // anonymous pipes. When the C Runtime sees this, it makes stderr and
@@ -113,8 +113,7 @@ int adb_server_main(int is_daemon, int server_port, int ack_reply_fd) {
     local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
 
     std::string error;
-    std::string local_name = android::base::StringPrintf("tcp:%d", server_port);
-    if (install_listener(local_name, "*smartsocket*", nullptr, 0, nullptr, &error)) {
+    if (install_listener(socket_spec, "*smartsocket*", nullptr, 0, nullptr, &error)) {
         fatal("could not install *smartsocket* listener: %s", error.c_str());
     }
 
