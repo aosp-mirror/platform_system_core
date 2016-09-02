@@ -126,6 +126,7 @@ private:
     bool ParseKeycodes(const std::vector<std::string>& args, std::string* err);
     bool ParseOneshot(const std::vector<std::string>& args, std::string* err);
     bool ParseOnrestart(const std::vector<std::string>& args, std::string* err);
+    bool ParseOomScoreAdjust(const std::vector<std::string>& args, std::string* err);
     bool ParseNamespace(const std::vector<std::string>& args, std::string* err);
     bool ParseSeclabel(const std::vector<std::string>& args, std::string* err);
     bool ParseSetenv(const std::vector<std::string>& args, std::string* err);
@@ -164,6 +165,8 @@ private:
     IoSchedClass ioprio_class_;
     int ioprio_pri_;
     int priority_;
+
+    int oom_score_adjust_;
 
     std::vector<std::string> args_;
 };
