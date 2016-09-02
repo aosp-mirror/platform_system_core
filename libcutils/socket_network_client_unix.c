@@ -59,64 +59,63 @@ int socket_network_client_timeout(const char* host, int port, int type, int time
         return -1;
     }
 
-    // TODO: try all the addresses if there's more than one?
-    int family = addrs[0].ai_family;
-    int protocol = addrs[0].ai_protocol;
-    socklen_t addr_len = addrs[0].ai_addrlen;
-    struct sockaddr_storage addr;
-    memcpy(&addr, addrs[0].ai_addr, addr_len);
+    int result = -1;
+    for (struct addrinfo* addr = addrs; addr != NULL; addr = addr->ai_next) {
+        // The Mac doesn't have SOCK_NONBLOCK.
+        int s = socket(addr->ai_family, type, addr->ai_protocol);
+        if (s == -1 || toggle_O_NONBLOCK(s) == -1) return -1;
+
+        int rc = connect(s, addr->ai_addr, addr->ai_addrlen);
+        if (rc == 0) {
+            result = toggle_O_NONBLOCK(s);
+            break;
+        } else if (rc == -1 && errno != EINPROGRESS) {
+            close(s);
+            continue;
+        }
+
+        fd_set r_set;
+        FD_ZERO(&r_set);
+        FD_SET(s, &r_set);
+        fd_set w_set = r_set;
+
+        struct timeval ts;
+        ts.tv_sec = timeout;
+        ts.tv_usec = 0;
+        if ((rc = select(s + 1, &r_set, &w_set, NULL, (timeout != 0) ? &ts : NULL)) == -1) {
+            close(s);
+            break;
+        }
+        if (rc == 0) {  // we had a timeout
+            errno = ETIMEDOUT;
+            close(s);
+            break;
+        }
+
+        int error = 0;
+        socklen_t len = sizeof(error);
+        if (FD_ISSET(s, &r_set) || FD_ISSET(s, &w_set)) {
+            if (getsockopt(s, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
+                close(s);
+                break;
+            }
+        } else {
+            close(s);
+            break;
+        }
+
+        if (error) {  // check if we had a socket error
+            // TODO: Update the timeout.
+            errno = error;
+            close(s);
+            continue;
+        }
+
+        result = toggle_O_NONBLOCK(s);
+    }
 
     freeaddrinfo(addrs);
-
-    // The Mac doesn't have SOCK_NONBLOCK.
-    int s = socket(family, type, protocol);
-    if (s == -1 || toggle_O_NONBLOCK(s) == -1) return -1;
-
-    int rc = connect(s, (const struct sockaddr*) &addr, addr_len);
-    if (rc == 0) {
-        return toggle_O_NONBLOCK(s);
-    } else if (rc == -1 && errno != EINPROGRESS) {
-        close(s);
-        return -1;
-    }
-
-    fd_set r_set;
-    FD_ZERO(&r_set);
-    FD_SET(s, &r_set);
-    fd_set w_set = r_set;
-
-    struct timeval ts;
-    ts.tv_sec = timeout;
-    ts.tv_usec = 0;
-    if ((rc = select(s + 1, &r_set, &w_set, NULL, (timeout != 0) ? &ts : NULL)) == -1) {
-        close(s);
-        return -1;
-    }
-    if (rc == 0) {   // we had a timeout
-        errno = ETIMEDOUT;
-        close(s);
-        return -1;
-    }
-
-    int error = 0;
-    socklen_t len = sizeof(error);
-    if (FD_ISSET(s, &r_set) || FD_ISSET(s, &w_set)) {
-        if (getsockopt(s, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
-            close(s);
-            return -1;
-        }
-    } else {
-        close(s);
-        return -1;
-    }
-
-    if (error) {  // check if we had a socket error
-        errno = error;
-        close(s);
-        return -1;
-    }
-
-    return toggle_O_NONBLOCK(s);
+    return result;
 }
 
 int socket_network_client(const char* host, int port, int type) {
