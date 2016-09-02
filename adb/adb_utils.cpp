@@ -17,6 +17,7 @@
 #define TRACE_TAG ADB
 
 #include "adb_utils.h"
+#include "adb_unique_fd.h"
 
 #include <libgen.h>
 #include <stdlib.h>
@@ -308,4 +309,8 @@ std::string adb_get_android_dir_path() {
         }
     }
     return android_dir;
+}
+
+void AdbCloser::Close(int fd) {
+    adb_close(fd);
 }
