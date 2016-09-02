@@ -100,6 +100,8 @@ static void help() {
         "                                 be an absolute path.\n"
         " -H                            - Name of adb server host (default: localhost)\n"
         " -P                            - Port of adb server (default: 5037)\n"
+        " -L <socket>                   - listen on socket specifier for the adb server\n"
+        "                                 (default: tcp:localhost:5037)\n"
         " devices [-l]                  - list all connected devices\n"
         "                                 ('-l' will also list device qualifiers)\n"
         " connect <host>[:<port>]       - connect to a device via TCP/IP\n"
@@ -1462,18 +1464,9 @@ int adb_commandline(int argc, const char **argv) {
     }
     // TODO: also try TARGET_PRODUCT/TARGET_DEVICE as a hint
 
-    /* Validate and assign the server port */
-    const char* server_port_str = getenv("ANDROID_ADB_SERVER_PORT");
-    int server_port = DEFAULT_ADB_PORT;
-    if (server_port_str && strlen(server_port_str) > 0) {
-        server_port = strtol(server_port_str, nullptr, 0);
-        if (server_port <= 0 || server_port > 65535) {
-            fprintf(stderr,
-                    "adb: Env var ANDROID_ADB_SERVER_PORT must be a positive number less than 65536. Got \"%s\"\n",
-                    server_port_str);
-            return usage();
-        }
-    }
+    const char* server_host_str = nullptr;
+    const char* server_port_str = nullptr;
+    const char* server_socket_str = nullptr;
 
     // We need to check for -d and -e before we look at $ANDROID_SERIAL.
     const char* serial = nullptr;
@@ -1527,17 +1520,14 @@ int adb_commandline(int argc, const char **argv) {
         } else if (!strcmp(argv[0],"-a")) {
             gListenAll = 1;
         } else if (!strncmp(argv[0], "-H", 2)) {
-            const char *hostname = NULL;
             if (argv[0][2] == '\0') {
                 if (argc < 2) return usage();
-                hostname = argv[1];
+                server_host_str = argv[1];
                 argc--;
                 argv++;
             } else {
-                hostname = argv[0] + 2;
+                server_host_str = argv[0] + 2;
             }
-            adb_set_tcp_name(hostname);
-
         } else if (!strncmp(argv[0], "-P", 2)) {
             if (argv[0][2] == '\0') {
                 if (argc < 2) return usage();
@@ -1547,26 +1537,51 @@ int adb_commandline(int argc, const char **argv) {
             } else {
                 server_port_str = argv[0] + 2;
             }
-            if (strlen(server_port_str) > 0) {
-                server_port = (int) strtol(server_port_str, NULL, 0);
-                if (server_port <= 0 || server_port > 65535) {
-                    fprintf(stderr,
-                            "adb: port number must be a positive number less than 65536. Got \"%s\"\n",
-                            server_port_str);
-                    return usage();
-                }
-            } else {
-                fprintf(stderr,
-                "adb: port number must be a positive number less than 65536. Got empty string.\n");
-                return usage();
-            }
+        } else if (!strcmp(argv[0], "-L")) {
+            if (argc < 2) return usage();
+            server_socket_str = argv[1];
+            argc--;
+            argv++;
         } else {
-                /* out of recognized modifiers and flags */
+            /* out of recognized modifiers and flags */
             break;
         }
         argc--;
         argv++;
     }
+
+    if ((server_host_str || server_port_str) && server_socket_str) {
+        fprintf(stderr, "adb: -L is incompatible with -H or -P\n");
+        exit(1);
+    }
+
+    // If -L, -H, or -P are specified, ignore environment variables.
+    // Otherwise, prefer ADB_SERVER_SOCKET over ANDROID_ADB_SERVER_ADDRESS/PORT.
+    if (!(server_host_str || server_port_str || server_socket_str)) {
+        server_socket_str = server_socket_str ? server_socket_str : getenv("ADB_SERVER_SOCKET");
+    }
+
+    if (!server_socket_str) {
+        // tcp:1234 and tcp:localhost:1234 are different with -a, so don't default to localhost
+        server_host_str = server_host_str ? server_host_str : getenv("ANDROID_ADB_SERVER_ADDRESS");
+
+        long server_port = DEFAULT_ADB_PORT;
+        server_port_str = server_port_str ? server_port_str : getenv("ANDROID_ADB_SERVER_PORT");
+
+        int rc;
+        char* temp;
+        if (server_host_str) {
+            rc = asprintf(&temp, "tcp:%s:%ld", server_host_str, server_port);
+        } else {
+            rc = asprintf(&temp, "tcp:%ld", server_port);
+        }
+        if (rc < 0) {
+            fatal("failed to allocate server socket specification");
+        }
+        server_socket_str = temp;
+    }
+
+    adb_set_socket_spec(server_socket_str);
 
     // If none of -d, -e, or -s were specified, try $ANDROID_SERIAL.
     if (transport_type == kTransportAny && serial == nullptr) {
@@ -1574,7 +1589,6 @@ int adb_commandline(int argc, const char **argv) {
     }
 
     adb_set_transport(transport_type, serial);
-    adb_set_tcp_specifics(server_port);
 
     if (is_server) {
         if (no_daemon || is_daemon) {
@@ -1582,9 +1596,9 @@ int adb_commandline(int argc, const char **argv) {
                 fprintf(stderr, "reply fd for adb server to client communication not specified.\n");
                 return usage();
             }
-            r = adb_server_main(is_daemon, server_port, ack_reply_fd);
+            r = adb_server_main(is_daemon, server_socket_str, ack_reply_fd);
         } else {
-            r = launch_server(server_port);
+            r = launch_server(server_socket_str);
         }
         if (r) {
             fprintf(stderr,"* could not start server *\n");

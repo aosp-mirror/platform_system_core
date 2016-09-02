@@ -131,6 +131,22 @@ bool is_socket_spec(const std::string& spec) {
     return StartsWith(spec, "tcp:");
 }
 
+bool is_local_socket_spec(const std::string& spec) {
+    for (const auto& it : kLocalSocketTypes) {
+        std::string prefix = it.first + ":";
+        if (StartsWith(spec, prefix.c_str())) {
+            return true;
+        }
+    }
+
+    std::string error;
+    std::string hostname;
+    if (!parse_tcp_spec(spec, &hostname, nullptr, &error)) {
+        return false;
+    }
+    return tcp_host_is_local(hostname);
+}
+
 int socket_spec_connect(const std::string& spec, std::string* error) {
     if (StartsWith(spec, "tcp:")) {
         std::string hostname;

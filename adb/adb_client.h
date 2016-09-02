@@ -42,11 +42,9 @@ void adb_set_transport(TransportType type, const char* _Nullable serial);
 // Get the preferred transport to connect to.
 void adb_get_transport(TransportType* _Nullable type, const char* _Nullable* _Nullable serial);
 
-// Set TCP specifics of the transport to use.
-void adb_set_tcp_specifics(int server_port);
-
-// Set TCP Hostname of the transport to use.
-void adb_set_tcp_name(const char* _Nullable hostname);
+// Set the socket specification for the adb server.
+// This function can only be called once, and the argument must live to the end of the process.
+void adb_set_socket_spec(const char* _Nonnull socket_spec);
 
 // Send commands to the current emulator instance. Will fail if there is not
 // exactly one emulator connected (or if you use -s <serial> with a <serial>
