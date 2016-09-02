@@ -34,6 +34,7 @@
 
 #include "adb.h"
 #include "adb_io.h"
+#include "adb_unique_fd.h"
 #include "adb_utils.h"
 
 /* here's how these things work.
