@@ -508,7 +508,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     LogBufferElementCollection::iterator it;
 
     if (caller_uid != AID_ROOT) {
-        // Only here if clearAll condition (pruneRows == ULONG_MAX)
+        // Only here if clear all request from non system source, so chatty
+        // filter logistics is not required.
         it = mLastSet[id] ? mLast[id] : mLogElements.begin();
         while (it != mLogElements.end()) {
             LogBufferElement *element = *it;
@@ -534,7 +535,9 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             }
 
             it = erase(it);
-            pruneRows--;
+            if (--pruneRows == 0) {
+                break;
+            }
         }
         LogTimeEntry::unlock();
         return busy;
@@ -678,7 +681,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                         && ((!gc && (element->getPid() == worstPid))
                            || (mLastWorstPidOfSystem[id].find(element->getPid())
                                 == mLastWorstPidOfSystem[id].end()))) {
-                    mLastWorstPidOfSystem[id][key] = it;
+                    mLastWorstPidOfSystem[id][element->getPid()] = it;
                 }
                 if ((!gc && !worstPid && (key == worst))
                         || (mLastWorst[id].find(key) == mLastWorst[id].end())) {
