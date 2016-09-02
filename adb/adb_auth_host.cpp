@@ -246,21 +246,7 @@ static bool read_keys(const std::string& path, bool allow_dir = true) {
 }
 
 static std::string get_user_key_path() {
-    const std::string home = adb_get_homedir_path(true);
-    LOG(DEBUG) << "adb_get_homedir_path returned '" << home << "'";
-
-    const std::string android_dir = android::base::StringPrintf("%s%c.android", home.c_str(),
-                                                                OS_PATH_SEPARATOR);
-
-    struct stat buf;
-    if (stat(android_dir.c_str(), &buf) == -1) {
-        if (adb_mkdir(android_dir.c_str(), 0750) == -1) {
-            PLOG(ERROR) << "Cannot mkdir '" << android_dir << "'";
-            return "";
-        }
-    }
-
-    return android_dir + OS_PATH_SEPARATOR + "adbkey";
+    return adb_get_android_dir_path() + OS_PATH_SEPARATOR + "adbkey";
 }
 
 static bool get_user_key() {

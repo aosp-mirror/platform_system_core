@@ -25,6 +25,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <vector>
 
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
@@ -41,6 +42,8 @@
 #  endif
 #  include "windows.h"
 #  include "shlobj.h"
+#else
+#include <pwd.h>
 #endif
 
 ADB_MUTEX_DEFINE(basename_lock);
@@ -263,14 +266,8 @@ bool forward_targets_are_valid(const std::string& source, const std::string& des
     return true;
 }
 
-std::string adb_get_homedir_path(bool check_env_first) {
+std::string adb_get_homedir_path() {
 #ifdef _WIN32
-    if (check_env_first) {
-        if (const char* const home = getenv("ANDROID_SDK_HOME")) {
-            return home;
-        }
-    }
-
     WCHAR path[MAX_PATH];
     const HRESULT hr = SHGetFolderPathW(NULL, CSIDL_PROFILE, NULL, 0, path);
     if (FAILED(hr)) {
@@ -286,6 +283,29 @@ std::string adb_get_homedir_path(bool check_env_first) {
     if (const char* const home = getenv("HOME")) {
         return home;
     }
+
+    struct passwd pwent;
+    struct passwd* result;
+    int pwent_max = sysconf(_SC_GETPW_R_SIZE_MAX);
+    std::vector<char> buf(pwent_max);
+    int rc = getpwuid_r(getuid(), &pwent, buf.data(), buf.size(), &result);
+    if (rc == 0 && result) {
+        return result->pw_dir;
+    }
+
+    LOG(FATAL) << "failed to get user home directory";
     return {};
 #endif
+}
+
+std::string adb_get_android_dir_path() {
+    std::string user_dir = adb_get_homedir_path();
+    std::string android_dir = user_dir + OS_PATH_SEPARATOR + ".android";
+    struct stat buf;
+    if (stat(android_dir.c_str(), &buf) == -1) {
+        if (adb_mkdir(android_dir.c_str(), 0750) == -1) {
+            PLOG(FATAL) << "Cannot mkdir '" << android_dir << "'";
+        }
+    }
+    return android_dir;
 }
