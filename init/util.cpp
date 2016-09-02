@@ -270,40 +270,6 @@ void sanitize(char *s)
     }
 }
 
-void make_link_init(const char *oldpath, const char *newpath)
-{
-    int ret;
-    char buf[256];
-    const char *slash;
-    int width;
-
-    slash = strrchr(newpath, '/');
-    if (!slash)
-        return;
-    width = slash - newpath;
-    if (width <= 0 || width > (int)sizeof(buf) - 1)
-        return;
-    memcpy(buf, newpath, width);
-    buf[width] = 0;
-    ret = mkdir_recursive(buf, 0755);
-    if (ret) PLOG(ERROR) << "Failed to create directory " << buf;
-
-    ret = symlink(oldpath, newpath);
-    if (ret && errno != EEXIST) PLOG(ERROR) << "Failed to symlink " << oldpath << " to " << newpath;
-}
-
-void remove_link(const char *oldpath, const char *newpath)
-{
-    char path[256];
-    ssize_t ret;
-    ret = readlink(newpath, path, sizeof(path) - 1);
-    if (ret <= 0)
-        return;
-    path[ret] = 0;
-    if (!strcmp(path, oldpath))
-        unlink(newpath);
-}
-
 int wait_for_file(const char *filename, int timeout)
 {
     struct stat info;
