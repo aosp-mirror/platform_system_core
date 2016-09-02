@@ -163,7 +163,7 @@ Service::Service(const std::string& name, const std::string& classname,
     : name_(name), classname_(classname), flags_(0), pid_(0), time_started_(0),
       time_crashed_(0), nr_crashed_(0), uid_(0), gid_(0), namespace_flags_(0),
       seclabel_(""), ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0),
-      priority_(0), args_(args) {
+      priority_(0), oom_score_adjust_(-1000), args_(args) {
     onrestart_.InitSingleTrigger("onrestart");
 }
 
@@ -176,7 +176,7 @@ Service::Service(const std::string& name, const std::string& classname,
       time_started_(0), time_crashed_(0), nr_crashed_(0), uid_(uid), gid_(gid),
       supp_gids_(supp_gids), namespace_flags_(namespace_flags),
       seclabel_(seclabel), ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0),
-      priority_(0), args_(args) {
+      priority_(0), oom_score_adjust_(-1000), args_(args) {
     onrestart_.InitSingleTrigger("onrestart");
 }
 
@@ -419,6 +419,18 @@ bool Service::ParseNamespace(const std::vector<std::string>& args, std::string* 
     return true;
 }
 
+bool Service::ParseOomScoreAdjust(const std::vector<std::string>& args, std::string* err) {
+    oom_score_adjust_ = std::stol(args[1], 0, 10);
+
+    if (oom_score_adjust_ < -1000 || oom_score_adjust_ > 1000) {
+        *err = "oom_score_adjust value must be in range -1000 - +1000";
+        return false;
+    }
+
+    return true;
+}
+
+
 bool Service::ParseSeclabel(const std::vector<std::string>& args, std::string* err) {
     seclabel_ = args[1];
     return true;
@@ -476,6 +488,8 @@ Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
         {"keycodes",    {1,     kMax, &Service::ParseKeycodes}},
         {"oneshot",     {0,     0,    &Service::ParseOneshot}},
         {"onrestart",   {1,     kMax, &Service::ParseOnrestart}},
+        {"oom_score_adjust",
+                        {1,     1,    &Service::ParseOomScoreAdjust}},
         {"namespace",   {1,     2,    &Service::ParseNamespace}},
         {"seclabel",    {1,     1,    &Service::ParseSeclabel}},
         {"setenv",      {2,     2,    &Service::ParseSetenv}},
@@ -609,6 +623,14 @@ bool Service::Start() {
         PLOG(ERROR) << "failed to fork for '" << name_ << "'";
         pid_ = 0;
         return false;
+    }
+
+    if (oom_score_adjust_ != -1000) {
+        std::string oom_str = StringPrintf("%d", oom_score_adjust_);
+        std::string oom_file = StringPrintf("/proc/%d/oom_score_adj", pid);
+        if (!WriteStringToFile(oom_str, oom_file)) {
+            PLOG(ERROR) << "couldn't write oom_score_adj: " << strerror(errno);
+        }
     }
 
     time_started_ = gettime();
