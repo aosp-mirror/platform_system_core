@@ -20,6 +20,7 @@
 
 // Returns true if the argument starts with a plausible socket prefix.
 bool is_socket_spec(const std::string& spec);
+bool is_local_socket_spec(const std::string& spec);
 
 int socket_spec_connect(const std::string& spec, std::string* error);
 int socket_spec_listen(const std::string& spec, std::string* error,
