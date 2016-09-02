@@ -60,8 +60,8 @@ void adb_get_transport(TransportType* type, const char** serial) {
 }
 
 void adb_set_socket_spec(const char* socket_spec) {
-    if (!__adb_server_socket_spec) {
-        LOG(FATAL) << "attempted to reinitialize adb_server_socket_spec";
+    if (__adb_server_socket_spec) {
+        LOG(FATAL) << "attempted to reinitialize adb_server_socket_spec " << socket_spec << " (was " << __adb_server_socket_spec << ")";
     }
     __adb_server_socket_spec = socket_spec;
 }
