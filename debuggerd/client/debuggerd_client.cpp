@@ -129,6 +129,9 @@ static void log_signal_summary(int signum, const siginfo_t* info) {
       signal_name = "SIGSTKFLT";
       break;
 #endif
+    case SIGSYS:
+      signal_name = "SIGSYS";
+      break;
     case SIGTRAP:
       signal_name = "SIGTRAP";
       break;
