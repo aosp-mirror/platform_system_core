@@ -99,6 +99,9 @@ LIBLOG_ABI_PUBLIC EventTagMap* android_openEventTagMap(const char* fileName)
     if (processFile(newTagMap) != 0)
         goto fail;
 
+    if (fd >= 0)
+      close(fd);
+
     return newTagMap;
 
 fail:
