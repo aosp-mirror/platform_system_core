@@ -45,7 +45,6 @@
 #include "adb_auth.h"
 #include "adb_utils.h"
 #include "sysdeps.h"
-#include "sysdeps/mutex.h"
 
 static std::mutex& g_keys_mutex = *new std::mutex;
 static std::map<std::string, std::shared_ptr<RSA>>& g_keys =
