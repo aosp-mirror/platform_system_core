@@ -236,6 +236,9 @@ on init
 
     export DOWNLOAD_CACHE /data/cache
 
+    # set RLIMIT_NICE to allow priorities from 19 to -20
+    setrlimit 13 40 40
+
 # Healthd can trigger a full boot from charger mode by signaling this
 # property when the power button is held.
 on property:sys.boot_from_charger_mode=1
@@ -258,6 +261,11 @@ on firmware_mounts_complete
 # Mount filesystems and start core system services.
 on late-init
     trigger early-fs
+
+    # Mount fstab in init.{$device}.rc by mount_all command. Optional parameter
+    # '--early' can be specified to skip entries with 'latemount'.
+    # /system and /vendor must be mounted by the end of the fs stage,
+    # while /data is optional.
     trigger fs
     trigger post-fs
 
@@ -266,9 +274,18 @@ on late-init
     # issued fs triggers have completed.
     trigger load_system_props_action
 
+    # Mount fstab in init.{$device}.rc by mount_all with '--late' parameter
+    # to only mount entries with 'latemount'. This is needed if '--early' is
+    # specified in the previous mount_all command on the fs stage.
+    # With /system mounted and properties form /system + /factory available,
+    # some services can be started.
+    trigger late-fs
+
     # Now we can mount /data. File encryption requires keymaster to decrypt
-    # /data, which in turn can only be loaded when system properties are present
+    # /data, which in turn can only be loaded when system properties are present.
     trigger post-fs-data
+
+    # Load persist properties and override properties (if enabled) from /data.
     trigger load_persist_props_action
 
     # Remove a file to wake up anything waiting for firmware.
@@ -478,9 +495,6 @@ on boot
     ifup lo
     hostname localhost
     domainname localdomain
-
-    # set RLIMIT_NICE to allow priorities from 19 to -20
-    setrlimit 13 40 40
 
     # Memory management.  Basic kernel parameters, and allow the high
     # level system server to be able to adjust the kernel OOM driver
