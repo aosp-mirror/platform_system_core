@@ -29,12 +29,12 @@ header followed (optionally) by a payload.  The header consists of 6
 32 bit words which are sent across the wire in little endian format.
 
 struct message {
-    unsigned command;       /* command identifier constant      */
-    unsigned arg0;          /* first argument                   */
-    unsigned arg1;          /* second argument                  */
-    unsigned data_length;   /* length of payload (0 is allowed) */
-    unsigned data_crc32;    /* crc32 of data payload            */
-    unsigned magic;         /* command ^ 0xffffffff             */
+    unsigned command;       /* command identifier constant (A_CNXN, ...) */
+    unsigned arg0;          /* first argument                            */
+    unsigned arg1;          /* second argument                           */
+    unsigned data_length;   /* length of payload (0 is allowed)          */
+    unsigned data_crc32;    /* crc32 of data payload                     */
+    unsigned magic;         /* command ^ 0xffffffff                      */
 };
 
 Receipt of an invalid message header, corrupt message payload, or an
@@ -54,6 +54,8 @@ reversed.
 
 
 --- CONNECT(version, maxdata, "system-identity-string") ----------------
+
+Command constant: A_CNXN
 
 The CONNECT message establishes the presence of a remote system.
 The version is used to ensure protocol compatibility and maxdata
@@ -80,6 +82,8 @@ or identifier string.  The banner is used to transmit useful properties.
 
 --- AUTH(type, 0, "data") ----------------------------------------------
 
+Command constant: A_AUTH
+
 The AUTH message informs the recipient that authentication is required to
 connect to the sender. If type is TOKEN(1), data is a random token that
 the recipient can sign with a private key. The recipient replies with an
@@ -97,6 +101,8 @@ confirm they want to install the public key on the device.
 
 
 --- OPEN(local-id, 0, "destination") -----------------------------------
+
+Command constant: A_OPEN
 
 The OPEN message informs the recipient that the sender has a stream
 identified by local-id that it wishes to connect to the named
@@ -120,11 +126,13 @@ Common destination naming conventions include:
 
 --- READY(local-id, remote-id, "") -------------------------------------
 
+Command constant: A_OKAY
+
 The READY message informs the recipient that the sender's stream
 identified by local-id is ready for write messages and that it is
 connected to the recipient's stream identified by remote-id.
 
-Neither the local-id nor the remote-id may be zero. 
+Neither the local-id nor the remote-id may be zero.
 
 A READY message containing a remote-id which does not map to an open
 stream on the recipient's side is ignored.  The stream may have been
@@ -135,8 +143,9 @@ is used to establish the connection).  Nonetheless, the local-id MUST
 not change on later READY messages sent to the same stream.
 
 
-
 --- WRITE(local-id, remote-id, "data") ---------------------------------
+
+Command constant: A_WRTE
 
 The WRITE message sends data to the recipient's stream identified by
 remote-id.  The payload MUST be <= maxdata in length.
@@ -154,6 +163,8 @@ the connection.
 
 --- CLOSE(local-id, remote-id, "") -------------------------------------
 
+Command constant: A_CLSE
+
 The CLOSE message informs recipient that the connection between the
 sender's stream (local-id) and the recipient's stream (remote-id) is
 broken.  The remote-id MUST not be zero, but the local-id MAY be zero
@@ -170,12 +181,14 @@ requirement, since they will be ignored.
 
 --- SYNC(online, sequence, "") -----------------------------------------
 
+Command constant: A_SYNC
+
 The SYNC message is used by the io pump to make sure that stale
 outbound messages are discarded when the connection to the remote side
 is broken.  It is only used internally to the bridge and never valid
-to send across the wire.  
+to send across the wire.
 
-* when the connection to the remote side goes offline, the io pump 
+* when the connection to the remote side goes offline, the io pump
   sends a SYNC(0, 0) and starts discarding all messages
 * when the connection to the remote side is established, the io pump
   sends a SYNC(1, token) and continues to discard messages
