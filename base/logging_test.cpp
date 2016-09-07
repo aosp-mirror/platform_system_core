@@ -126,7 +126,12 @@ std::string make_log_pattern(android::base::LogSeverity severity,
   char log_char = log_characters[severity];
   std::string holder(__FILE__);
   return android::base::StringPrintf(
-      "%c[[:space:]]+[[:digit:]]+[[:space:]]+[[:digit:]]+ %s:[[:digit:]]+] %s",
+      "%c[[:space:]]+"
+      "[[:digit:]]+-[[:digit:]]+[[:space:]]+"
+      "[[:digit:]]+:[[:digit:]]+:[[:digit:]]+[[:space:]]+"
+      "[[:digit:]]+[[:space:]]+"
+      "[[:digit:]]+[[:space:]]+"
+      "%s:[[:digit:]]+] %s",
       log_char, basename(&holder[0]), message);
 }
 
