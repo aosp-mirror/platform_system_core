@@ -322,6 +322,45 @@ const char *android_log_id_to_name(log_id_t log_id)
 }
 #endif
 
+/*
+ * Release any logger resources. A new log write will immediately re-acquire.
+ */
+void __android_log_close()
+{
+#if FAKE_LOG_DEVICE
+    int i;
+#endif
+
+#ifdef HAVE_PTHREADS
+    pthread_mutex_lock(&log_init_lock);
+#endif
+
+    write_to_log = __write_to_log_init;
+
+    /*
+     * Threads that are actively writing at this point are not held back
+     * by a lock and are at risk of dropping the messages with a return code
+     * -EBADF. Prefer to return error code than add the overhead of a lock to
+     * each log writing call to guarantee delivery. In addition, anyone
+     * calling this is doing so to release the logging resources and shut down,
+     * for them to do so with outstanding log requests in other threads is a
+     * disengenuous use of this function.
+     */
+#if FAKE_LOG_DEVICE
+    for (i = 0; i < LOG_ID_MAX; i++) {
+        fakeLogClose(log_fds[i]);
+        log_fds[i] = -1;
+    }
+#else
+    close(logd_fd);
+    logd_fd = -1;
+#endif
+
+#ifdef HAVE_PTHREADS
+    pthread_mutex_unlock(&log_init_lock);
+#endif
+}
+
 static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
 {
 #if !defined(_WIN32)
