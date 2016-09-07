@@ -122,7 +122,9 @@ TEST(logging, CHECK) {
 
 static std::string make_log_pattern(android::base::LogSeverity severity,
                                     const char* message) {
-  static const char* log_characters = "VDIWEF";
+  static const char log_characters[] = "VDIWEFF";
+  static_assert(arraysize(log_characters) - 1 == android::base::FATAL + 1,
+                "Mismatch in size of log_characters and values in LogSeverity");
   char log_char = log_characters[severity];
   std::string holder(__FILE__);
   return android::base::StringPrintf(
@@ -162,6 +164,14 @@ static void CheckMessage(const CapturedStderr& cap,
 
 TEST(logging, LOG_FATAL) {
   ASSERT_DEATH({SuppressAbortUI(); LOG(FATAL) << "foobar";}, "foobar");
+}
+
+TEST(logging, LOG_FATAL_WITHOUT_ABORT_disabled) {
+  CHECK_LOG_DISABLED(FATAL_WITHOUT_ABORT);
+}
+
+TEST(logging, LOG_FATAL_WITHOUT_ABORT_enabled) {
+  CHECK_LOG_ENABLED(FATAL_WITHOUT_ABORT);
 }
 
 TEST(logging, LOG_ERROR_disabled) {
@@ -259,6 +269,18 @@ TEST(logging, LOG_does_not_have_dangling_if) {
   errno = ENOENT; \
   PLOG(severity) << "foobar"; \
   CheckMessage(cap2, android::base::severity, "foobar: No such file or directory"); \
+
+TEST(logging, PLOG_FATAL) {
+  ASSERT_DEATH({SuppressAbortUI(); PLOG(FATAL) << "foobar";}, "foobar");
+}
+
+TEST(logging, PLOG_FATAL_WITHOUT_ABORT_disabled) {
+  CHECK_PLOG_DISABLED(FATAL_WITHOUT_ABORT);
+}
+
+TEST(logging, PLOG_FATAL_WITHOUT_ABORT_enabled) {
+  CHECK_PLOG_ENABLED(FATAL_WITHOUT_ABORT);
+}
 
 TEST(logging, PLOG_ERROR_disabled) {
   CHECK_PLOG_DISABLED(ERROR);
