@@ -117,6 +117,41 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
     return ret;
 }
 
+/*
+ * Release any logger resources. A new log write will immediately re-acquire.
+ */
+void __android_log_close()
+{
+#ifdef HAVE_PTHREADS
+    pthread_mutex_lock(&log_init_lock);
+#endif
+
+    write_to_log = __write_to_log_init;
+
+    /*
+     * Threads that are actively writing at this point are not held back
+     * by a lock and are at risk of dropping the messages with a return code
+     * -EBADF. Prefer to return error code than add the overhead of a lock to
+     * each log writing call to guarantee delivery. In addition, anyone
+     * calling this is doing so to release the logging resources and shut down,
+     * for them to do so with outstanding log requests in other threads is a
+     * disengenuous use of this function.
+     */
+
+    log_close(log_fds[LOG_ID_MAIN]);
+    log_fds[LOG_ID_MAIN] = -1;
+    log_close(log_fds[LOG_ID_RADIO]);
+    log_fds[LOG_ID_RADIO] = -1;
+    log_close(log_fds[LOG_ID_EVENTS]);
+    log_fds[LOG_ID_EVENTS] = -1;
+    log_close(log_fds[LOG_ID_SYSTEM]);
+    log_fds[LOG_ID_SYSTEM] = -1;
+
+#ifdef HAVE_PTHREADS
+    pthread_mutex_unlock(&log_init_lock);
+#endif
+}
+
 static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
 {
 #ifdef HAVE_PTHREADS
