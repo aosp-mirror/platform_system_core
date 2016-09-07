@@ -85,6 +85,7 @@ static const char* get_signame(int sig) {
     case SIGSTKFLT: return "SIGSTKFLT";
 #endif
     case SIGSTOP: return "SIGSTOP";
+    case SIGSYS: return "SIGSYS";
     case SIGTRAP: return "SIGTRAP";
     default: return "?";
   }
@@ -148,6 +149,14 @@ static const char* get_sigcode(int signo, int code) {
       static_assert(NSIGSEGV == SEGV_ACCERR, "missing SEGV_* si_code");
 #endif
       break;
+#if defined(SYS_SECCOMP) // Our glibc is too old, and we build this for the host too.
+    case SIGSYS:
+      switch (code) {
+        case SYS_SECCOMP: return "SYS_SECCOMP";
+      }
+      static_assert(NSIGSYS == SYS_SECCOMP, "missing SYS_* si_code");
+      break;
+#endif
     case SIGTRAP:
       switch (code) {
         case TRAP_BRKPT: return "TRAP_BRKPT";
