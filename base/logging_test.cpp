@@ -120,167 +120,191 @@ TEST(logging, CHECK) {
   EXPECT_FALSE(flag) << "CHECK_STREQ probably has a dangling if with no else";
 }
 
-std::string make_log_pattern(android::base::LogSeverity severity,
-                             const char* message) {
+static std::string make_log_pattern(android::base::LogSeverity severity,
+                                    const char* message) {
   static const char* log_characters = "VDIWEF";
   char log_char = log_characters[severity];
   std::string holder(__FILE__);
   return android::base::StringPrintf(
-      "%c[[:space:]]+"
-      "[[:digit:]]+-[[:digit:]]+[[:space:]]+"
-      "[[:digit:]]+:[[:digit:]]+:[[:digit:]]+[[:space:]]+"
-      "[[:digit:]]+[[:space:]]+"
-      "[[:digit:]]+[[:space:]]+"
-      "%s:[[:digit:]]+] %s",
+      "%c \\d+-\\d+ \\d+:\\d+:\\d+ \\s*\\d+ \\s*\\d+ %s:\\d+] %s",
       log_char, basename(&holder[0]), message);
 }
 
-TEST(logging, LOG) {
-  ASSERT_DEATH({SuppressAbortUI(); LOG(FATAL) << "foobar";}, "foobar");
+#define CHECK_LOG_DISABLED(severity) \
+  android::base::ScopedLogSeverity sls1(android::base::FATAL); \
+  CapturedStderr cap1; \
+  LOG(severity) << "foo bar"; \
+  ASSERT_EQ(0, lseek(cap1.fd(), 0, SEEK_CUR)); \
+
+#define CHECK_LOG_ENABLED(severity) \
+  android::base::ScopedLogSeverity sls2(android::base::severity); \
+  CapturedStderr cap2; \
+  LOG(severity) << "foobar"; \
+  CheckMessage(cap2, android::base::severity, "foobar"); \
+
+static void CheckMessage(const CapturedStderr& cap,
+                         android::base::LogSeverity severity, const char* expected) {
+  std::string output;
+  ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
+  android::base::ReadFdToString(cap.fd(), &output);
 
   // We can't usefully check the output of any of these on Windows because we
   // don't have std::regex, but we can at least make sure we printed at least as
   // many characters are in the log message.
-  {
-    CapturedStderr cap;
-    LOG(WARNING) << "foobar";
-    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
-
-    std::string output;
-    android::base::ReadFdToString(cap.fd(), &output);
-    ASSERT_GT(output.length(), strlen("foobar"));
+  ASSERT_GT(output.length(), strlen(expected));
+  ASSERT_NE(nullptr, strstr(output.c_str(), expected)) << output;
 
 #if !defined(_WIN32)
-    std::regex message_regex(
-        make_log_pattern(android::base::WARNING, "foobar"));
-    ASSERT_TRUE(std::regex_search(output, message_regex)) << output;
+  std::regex message_regex(make_log_pattern(severity, expected));
+  ASSERT_TRUE(std::regex_search(output, message_regex)) << output;
 #endif
-  }
-
-  {
-    CapturedStderr cap;
-    LOG(INFO) << "foobar";
-    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
-
-    std::string output;
-    android::base::ReadFdToString(cap.fd(), &output);
-    ASSERT_GT(output.length(), strlen("foobar"));
-
-#if !defined(_WIN32)
-    std::regex message_regex(
-        make_log_pattern(android::base::INFO, "foobar"));
-    ASSERT_TRUE(std::regex_search(output, message_regex)) << output;
-#endif
-  }
-
-  {
-    CapturedStderr cap;
-    LOG(DEBUG) << "foobar";
-    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
-
-    std::string output;
-    android::base::ReadFdToString(cap.fd(), &output);
-    ASSERT_TRUE(output.empty());
-  }
-
-  {
-    android::base::ScopedLogSeverity severity(android::base::DEBUG);
-    CapturedStderr cap;
-    LOG(DEBUG) << "foobar";
-    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
-
-    std::string output;
-    android::base::ReadFdToString(cap.fd(), &output);
-    ASSERT_GT(output.length(), strlen("foobar"));
-
-#if !defined(_WIN32)
-    std::regex message_regex(
-        make_log_pattern(android::base::DEBUG, "foobar"));
-    ASSERT_TRUE(std::regex_search(output, message_regex)) << output;
-#endif
-  }
-
-  // Test whether LOG() saves and restores errno.
-  {
-    CapturedStderr cap;
-    errno = 12345;
-    LOG(INFO) << (errno = 67890);
-    EXPECT_EQ(12345, errno) << "errno was not restored";
-
-    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
-
-    std::string output;
-    android::base::ReadFdToString(cap.fd(), &output);
-    EXPECT_NE(nullptr, strstr(output.c_str(), "67890")) << output;
-
-#if !defined(_WIN32)
-    std::regex message_regex(
-        make_log_pattern(android::base::INFO, "67890"));
-    ASSERT_TRUE(std::regex_search(output, message_regex)) << output;
-#endif
-  }
-
-  // Test whether LOG() has a dangling if with no else.
-  {
-    CapturedStderr cap;
-
-    // Do the test two ways: once where we hypothesize that LOG()'s if
-    // will evaluate to true (when severity is high enough) and once when we
-    // expect it to evaluate to false (when severity is not high enough).
-    bool flag = false;
-    if (true)
-      LOG(INFO) << "foobar";
-    else
-      flag = true;
-
-    EXPECT_FALSE(flag) << "LOG macro probably has a dangling if with no else";
-
-    flag = false;
-    if (true)
-      LOG(VERBOSE) << "foobar";
-    else
-      flag = true;
-
-    EXPECT_FALSE(flag) << "LOG macro probably has a dangling if with no else";
-  }
 }
 
-TEST(logging, PLOG) {
-  {
-    CapturedStderr cap;
-    errno = ENOENT;
-    PLOG(INFO) << "foobar";
-    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
+TEST(logging, LOG_FATAL) {
+  ASSERT_DEATH({SuppressAbortUI(); LOG(FATAL) << "foobar";}, "foobar");
+}
 
-    std::string output;
-    android::base::ReadFdToString(cap.fd(), &output);
-    ASSERT_GT(output.length(), strlen("foobar"));
+TEST(logging, LOG_ERROR_disabled) {
+  CHECK_LOG_DISABLED(ERROR);
+}
 
-#if !defined(_WIN32)
-    std::regex message_regex(make_log_pattern(
-        android::base::INFO, "foobar: No such file or directory"));
-    ASSERT_TRUE(std::regex_search(output, message_regex)) << output;
-#endif
-  }
+TEST(logging, LOG_ERROR_enabled) {
+  CHECK_LOG_ENABLED(ERROR);
+}
+
+TEST(logging, LOG_WARNING_disabled) {
+  CHECK_LOG_DISABLED(WARNING);
+}
+
+TEST(logging, LOG_WARNING_enabled) {
+  CHECK_LOG_ENABLED(WARNING);
+}
+
+TEST(logging, LOG_INFO_disabled) {
+  CHECK_LOG_DISABLED(INFO);
+}
+
+TEST(logging, LOG_INFO_enabled) {
+  CHECK_LOG_ENABLED(INFO);
+}
+
+TEST(logging, LOG_DEBUG_disabled) {
+  CHECK_LOG_DISABLED(DEBUG);
+}
+
+TEST(logging, LOG_DEBUG_enabled) {
+  CHECK_LOG_ENABLED(DEBUG);
+}
+
+TEST(logging, LOG_VERBOSE_disabled) {
+  CHECK_LOG_DISABLED(VERBOSE);
+}
+
+TEST(logging, LOG_VERBOSE_enabled) {
+  CHECK_LOG_ENABLED(VERBOSE);
+}
+
+TEST(logging, LOG_does_not_clobber_errno) {
+  CapturedStderr cap;
+  errno = 12345;
+  LOG(INFO) << (errno = 67890);
+  EXPECT_EQ(12345, errno) << "errno was not restored";
+
+  CheckMessage(cap, android::base::INFO, "67890");
+}
+
+TEST(logging, PLOG_does_not_clobber_errno) {
+  CapturedStderr cap;
+  errno = 12345;
+  PLOG(INFO) << (errno = 67890);
+  EXPECT_EQ(12345, errno) << "errno was not restored";
+
+  CheckMessage(cap, android::base::INFO, "67890");
+}
+
+TEST(logging, LOG_does_not_have_dangling_if) {
+  CapturedStderr cap; // So the logging below has no side-effects.
+
+  // Do the test two ways: once where we hypothesize that LOG()'s if
+  // will evaluate to true (when severity is high enough) and once when we
+  // expect it to evaluate to false (when severity is not high enough).
+  bool flag = false;
+  if (true)
+    LOG(INFO) << "foobar";
+  else
+    flag = true;
+
+  EXPECT_FALSE(flag) << "LOG macro probably has a dangling if with no else";
+
+  flag = false;
+  if (true)
+    LOG(VERBOSE) << "foobar";
+  else
+    flag = true;
+
+  EXPECT_FALSE(flag) << "LOG macro probably has a dangling if with no else";
+}
+
+#define CHECK_PLOG(severity) \
+
+#define CHECK_PLOG_DISABLED(severity) \
+  android::base::ScopedLogSeverity sls1(android::base::FATAL); \
+  CapturedStderr cap1; \
+  PLOG(severity) << "foo bar"; \
+  ASSERT_EQ(0, lseek(cap1.fd(), 0, SEEK_CUR)); \
+
+#define CHECK_PLOG_ENABLED(severity) \
+  android::base::ScopedLogSeverity sls2(android::base::severity); \
+  CapturedStderr cap2; \
+  errno = ENOENT; \
+  PLOG(severity) << "foobar"; \
+  CheckMessage(cap2, android::base::severity, "foobar: No such file or directory"); \
+
+TEST(logging, PLOG_ERROR_disabled) {
+  CHECK_PLOG_DISABLED(ERROR);
+}
+
+TEST(logging, PLOG_ERROR_enabled) {
+  CHECK_PLOG_ENABLED(ERROR);
+}
+
+TEST(logging, PLOG_WARNING_disabled) {
+  CHECK_PLOG_DISABLED(WARNING);
+}
+
+TEST(logging, PLOG_WARNING_enabled) {
+  CHECK_PLOG_ENABLED(WARNING);
+}
+
+TEST(logging, PLOG_INFO_disabled) {
+  CHECK_PLOG_DISABLED(INFO);
+}
+
+TEST(logging, PLOG_INFO_enabled) {
+  CHECK_PLOG_ENABLED(INFO);
+}
+
+TEST(logging, PLOG_DEBUG_disabled) {
+  CHECK_PLOG_DISABLED(DEBUG);
+}
+
+TEST(logging, PLOG_DEBUG_enabled) {
+  CHECK_PLOG_ENABLED(DEBUG);
+}
+
+TEST(logging, PLOG_VERBOSE_disabled) {
+  CHECK_PLOG_DISABLED(VERBOSE);
+}
+
+TEST(logging, PLOG_VERBOSE_enabled) {
+  CHECK_PLOG_ENABLED(VERBOSE);
 }
 
 TEST(logging, UNIMPLEMENTED) {
-  {
-    CapturedStderr cap;
-    errno = ENOENT;
-    UNIMPLEMENTED(ERROR);
-    ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
+  std::string expected = android::base::StringPrintf("%s unimplemented ", __PRETTY_FUNCTION__);
 
-    std::string output;
-    android::base::ReadFdToString(cap.fd(), &output);
-    ASSERT_GT(output.length(), strlen("unimplemented"));
-
-#if !defined(_WIN32)
-    std::string expected_message =
-        android::base::StringPrintf("%s unimplemented ", __PRETTY_FUNCTION__);
-    std::regex message_regex(
-        make_log_pattern(android::base::ERROR, expected_message.c_str()));
-    ASSERT_TRUE(std::regex_search(output, message_regex)) << output;
-#endif
-  }
+  CapturedStderr cap;
+  errno = ENOENT;
+  UNIMPLEMENTED(ERROR);
+  CheckMessage(cap, android::base::ERROR, expected.c_str());
 }
