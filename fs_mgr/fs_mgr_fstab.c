@@ -78,6 +78,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "formattable", MF_FORMATTABLE },
     { "slotselect",  MF_SLOTSELECT },
     { "nofail",      MF_NOFAIL },
+    { "latemount",   MF_LATEMOUNT },
     { "defaults",    0 },
     { 0,             0 },
 };
@@ -544,4 +545,9 @@ int fs_mgr_is_slotselect(struct fstab_rec *fstab)
 int fs_mgr_is_nofail(struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_NOFAIL;
+}
+
+int fs_mgr_is_latemount(struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_LATEMOUNT;
 }

@@ -1,4 +1,3 @@
-
 Android Init Language
 ---------------------
 
@@ -77,6 +76,14 @@ fact present on the file system, which was not the case with the
 monolithic init .rc files.  This additionally will aid in merge
 conflict resolution when multiple services are added to the system, as
 each one will go into a separate file.
+
+There are two options "early" and "late" in mount_all command
+which can be set after optional paths. With "--early" set, the
+init executable will skip mounting entries with "latemount" flag
+and triggering fs encryption state event. With "--late" set,
+init executable will only mount entries with "latemount" flag but skip
+importing rc files. By default, no option is set, and mount_all will
+mount_all will process all entries in the given fstab.
 
 Actions
 -------
@@ -291,10 +298,11 @@ mkdir <path> [mode] [owner] [group]
    owned by the root user and root group. If provided, the mode, owner and group
    will be updated if the directory exists already.
 
-mount_all <fstab> [ <path> ]*
+mount_all <fstab> [ <path> ]* [--<option>]
    Calls fs_mgr_mount_all on the given fs_mgr-format fstab and imports .rc files
-   at the specified paths (e.g., on the partitions just mounted). Refer to the
-   section of "Init .rc Files" for detail.
+   at the specified paths (e.g., on the partitions just mounted) with optional
+   options "early" and "late".
+   Refer to the section of "Init .rc Files" for detail.
 
 mount <type> <device> <dir> [ <flag> ]* [<options>]
    Attempt to mount the named device at the directory <dir>
