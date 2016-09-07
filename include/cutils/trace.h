@@ -70,7 +70,8 @@ __BEGIN_DECLS
 #define ATRACE_TAG_PACKAGE_MANAGER  (1<<18)
 #define ATRACE_TAG_SYSTEM_SERVER    (1<<19)
 #define ATRACE_TAG_DATABASE         (1<<20)
-#define ATRACE_TAG_LAST             ATRACE_TAG_DATABASE
+#define ATRACE_TAG_NETWORK          (1<<21)
+#define ATRACE_TAG_LAST             ATRACE_TAG_NETWORK
 
 // Reserved for initialization.
 #define ATRACE_TAG_NOT_READY        (1ULL<<63)
