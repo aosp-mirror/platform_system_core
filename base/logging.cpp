@@ -188,14 +188,18 @@ static const char* ProgramInvocationName() {
 #if defined(__linux__)
 void KernelLogger(android::base::LogId, android::base::LogSeverity severity,
                   const char* tag, const char*, unsigned int, const char* msg) {
+  // clang-format off
   static constexpr int kLogSeverityToKernelLogLevel[] = {
-    [android::base::VERBOSE] = 7, // KERN_DEBUG (there is no verbose kernel log level)
-    [android::base::DEBUG]   = 7, // KERN_DEBUG
-    [android::base::INFO]    = 6, // KERN_INFO
-    [android::base::WARNING] = 4, // KERN_WARNING
-    [android::base::ERROR]   = 3, // KERN_ERROR
-    [android::base::FATAL]   = 2, // KERN_CRIT
+      [android::base::VERBOSE] = 7,              // KERN_DEBUG (there is no verbose kernel log
+                                                 //             level)
+      [android::base::DEBUG] = 7,                // KERN_DEBUG
+      [android::base::INFO] = 6,                 // KERN_INFO
+      [android::base::WARNING] = 4,              // KERN_WARNING
+      [android::base::ERROR] = 3,                // KERN_ERROR
+      [android::base::FATAL_WITHOUT_ABORT] = 2,  // KERN_CRIT
+      [android::base::FATAL] = 2,                // KERN_CRIT
   };
+  // clang-format on
   static_assert(arraysize(kLogSeverityToKernelLogLevel) == android::base::FATAL + 1,
                 "Mismatch in size of kLogSeverityToKernelLogLevel and values in LogSeverity");
 
@@ -235,7 +239,7 @@ void StderrLogger(LogId, LogSeverity severity, const char*, const char* file,
   char timestamp[32];
   strftime(timestamp, sizeof(timestamp), "%m-%d %H:%M:%S", &now);
 
-  static const char log_characters[] = "VDIWEF";
+  static const char log_characters[] = "VDIWEFF";
   static_assert(arraysize(log_characters) - 1 == FATAL + 1,
                 "Mismatch in size of log_characters and values in LogSeverity");
   char severity_char = log_characters[severity];
@@ -252,8 +256,9 @@ void LogdLogger::operator()(LogId id, LogSeverity severity, const char* tag,
                             const char* file, unsigned int line,
                             const char* message) {
   static constexpr android_LogPriority kLogSeverityToAndroidLogPriority[] = {
-    ANDROID_LOG_VERBOSE, ANDROID_LOG_DEBUG, ANDROID_LOG_INFO,
-    ANDROID_LOG_WARN,    ANDROID_LOG_ERROR, ANDROID_LOG_FATAL,
+      ANDROID_LOG_VERBOSE, ANDROID_LOG_DEBUG, ANDROID_LOG_INFO,
+      ANDROID_LOG_WARN,    ANDROID_LOG_ERROR, ANDROID_LOG_FATAL,
+      ANDROID_LOG_FATAL,
   };
   static_assert(arraysize(kLogSeverityToAndroidLogPriority) == FATAL + 1,
                 "Mismatch in size of kLogSeverityToAndroidLogPriority and values in LogSeverity");
@@ -325,12 +330,12 @@ void InitLogging(char* argv[]) {
           gMinimumLogSeverity = ERROR;
           continue;
         case 'f':
-          gMinimumLogSeverity = FATAL;
+          gMinimumLogSeverity = FATAL_WITHOUT_ABORT;
           continue;
         // liblog will even suppress FATAL if you say 's' for silent, but that's
         // crazy!
         case 's':
-          gMinimumLogSeverity = FATAL;
+          gMinimumLogSeverity = FATAL_WITHOUT_ABORT;
           continue;
       }
     }
