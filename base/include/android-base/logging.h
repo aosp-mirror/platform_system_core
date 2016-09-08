@@ -41,6 +41,7 @@ enum LogSeverity {
   INFO,
   WARNING,
   ERROR,
+  FATAL_WITHOUT_ABORT,
   FATAL,
 };
 
