@@ -51,11 +51,14 @@ enum LogId {
   SYSTEM,
 };
 
-typedef std::function<void(LogId, LogSeverity, const char*, const char*,
-                           unsigned int, const char*)> LogFunction;
+using LogFunction = std::function<void(LogId, LogSeverity, const char*, const char*,
+                                       unsigned int, const char*)>;
+using AbortFunction = std::function<void(const char*)>;
 
 void KernelLogger(LogId, LogSeverity, const char*, const char*, unsigned int, const char*);
 void StderrLogger(LogId, LogSeverity, const char*, const char*, unsigned int, const char*);
+
+void DefaultAborter(const char* abort_message);
 
 #ifdef __ANDROID__
 // We expose this even though it is the default because a user that wants to
@@ -80,14 +83,21 @@ class LogdLogger {
 // The tag (or '*' for the global level) comes first, followed by a colon and a
 // letter indicating the minimum priority level we're expected to log.  This can
 // be used to reveal or conceal logs with specific tags.
-void InitLogging(char* argv[], LogFunction&& logger);
-
-// Configures logging using the default logger (logd for the device, stderr for
-// the host).
-void InitLogging(char* argv[]);
+#ifdef __ANDROID__
+#define INIT_LOGGING_DEFAULT_LOGGER LogdLogger()
+#else
+#define INIT_LOGGING_DEFAULT_LOGGER StderrLogger
+#endif
+void InitLogging(char* argv[],
+                 LogFunction&& logger = INIT_LOGGING_DEFAULT_LOGGER,
+                 AbortFunction&& aborter = DefaultAborter);
+#undef INIT_LOGGING_DEFAULT_LOGGER
 
 // Replace the current logger.
 void SetLogger(LogFunction&& logger);
+
+// Replace the current aborter.
+void SetAborter(AbortFunction&& aborter);
 
 class ErrnoRestorer {
  public:
