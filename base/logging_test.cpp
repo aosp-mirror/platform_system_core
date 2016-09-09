@@ -330,3 +330,23 @@ TEST(logging, UNIMPLEMENTED) {
   UNIMPLEMENTED(ERROR);
   CheckMessage(cap, android::base::ERROR, expected.c_str());
 }
+
+static void NoopAborter(const char* msg ATTRIBUTE_UNUSED) {
+  LOG(ERROR) << "called noop";
+}
+
+TEST(logging, LOG_FATAL_NOOP_ABORTER) {
+  {
+    android::base::SetAborter(NoopAborter);
+
+    android::base::ScopedLogSeverity sls(android::base::ERROR);
+    CapturedStderr cap;
+    LOG(FATAL) << "foobar";
+    CheckMessage(cap, android::base::FATAL, "foobar");
+    CheckMessage(cap, android::base::ERROR, "called noop");
+
+    android::base::SetAborter(android::base::DefaultAborter);
+  }
+
+  ASSERT_DEATH({SuppressAbortUI(); LOG(FATAL) << "foobar";}, "foobar");
+}
