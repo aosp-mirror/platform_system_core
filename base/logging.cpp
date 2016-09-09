@@ -173,6 +173,8 @@ static auto& gLogger = *new LogFunction(LogdLogger());
 static auto& gLogger = *new LogFunction(StderrLogger);
 #endif
 
+static auto& gAborter = *new AbortFunction(DefaultAborter);
+
 static bool gInitialized = false;
 static LogSeverity gMinimumLogSeverity = INFO;
 static auto& gProgramInvocationName = *new std::unique_ptr<std::string>();
@@ -247,6 +249,15 @@ void StderrLogger(LogId, LogSeverity severity, const char*, const char* file,
           severity_char, timestamp, getpid(), GetThreadId(), file, line, message);
 }
 
+void DefaultAborter(const char* abort_message) {
+#ifdef __ANDROID__
+  android_set_abort_message(abort_message);
+#else
+  UNUSED(abort_message);
+#endif
+  abort();
+}
+
 
 #ifdef __ANDROID__
 LogdLogger::LogdLogger(LogId default_log_id) : default_log_id_(default_log_id) {
@@ -284,12 +295,10 @@ void LogdLogger::operator()(LogId id, LogSeverity severity, const char* tag,
 }
 #endif
 
-void InitLogging(char* argv[], LogFunction&& logger) {
+void InitLogging(char* argv[], LogFunction&& logger, AbortFunction&& aborter) {
   SetLogger(std::forward<LogFunction>(logger));
-  InitLogging(argv);
-}
+  SetAborter(std::forward<AbortFunction>(aborter));
 
-void InitLogging(char* argv[]) {
   if (gInitialized) {
     return;
   }
@@ -347,6 +356,11 @@ void InitLogging(char* argv[]) {
 void SetLogger(LogFunction&& logger) {
   lock_guard<mutex> lock(logging_lock);
   gLogger = std::move(logger);
+}
+
+void SetAborter(AbortFunction&& aborter) {
+  lock_guard<mutex> lock(logging_lock);
+  gAborter = std::move(aborter);
 }
 
 static const char* GetFileBasename(const char* file) {
@@ -450,10 +464,7 @@ LogMessage::~LogMessage() {
 
   // Abort if necessary.
   if (data_->GetSeverity() == FATAL) {
-#ifdef __ANDROID__
-    android_set_abort_message(msg.c_str());
-#endif
-    abort();
+    gAborter(msg.c_str());
   }
 }
 
