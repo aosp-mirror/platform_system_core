@@ -39,12 +39,8 @@
 #include "../libaudit.h" // pickup AUDIT_RATE_LIMIT_*
 #include "../LogReader.h" // pickup LOGD_SNDTIMEO
 
-/*
- * returns statistics
- */
-static void my_android_logger_get_statistics(char *buf, size_t len)
+static void send_to_control(char* buf, size_t len)
 {
-    snprintf(buf, len, "getStatistics 0 1 2 3 4");
     int sock = socket_local_client("logd",
                                    ANDROID_SOCKET_NAMESPACE_RESERVED,
                                    SOCK_STREAM);
@@ -72,6 +68,15 @@ static void my_android_logger_get_statistics(char *buf, size_t len)
         }
         close(sock);
     }
+}
+
+/*
+ * returns statistics
+ */
+static void my_android_logger_get_statistics(char *buf, size_t len)
+{
+    snprintf(buf, len, "getStatistics 0 1 2 3 4");
+    send_to_control(buf, len);
 }
 
 static void alloc_statistics(char **buffer, size_t *length)
@@ -814,6 +819,44 @@ TEST(logd, SNDTIMEO) {
     EXPECT_EQ(0, save_errno);
 
     close(fd);
+}
+
+TEST(logd, getEventTag_list) {
+#ifdef __ANDROID__
+    char buffer[256];
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "getEventTag name=*");
+    send_to_control(buffer, sizeof(buffer));
+    buffer[sizeof(buffer) - 1] = '\0';
+    char *cp;
+    long ret = strtol(buffer, &cp, 10);
+    EXPECT_GT(ret, 4096);
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
+}
+
+TEST(logd, getEventTag_newentry) {
+#ifdef __ANDROID__
+    char buffer[256];
+    memset(buffer, 0, sizeof(buffer));
+    log_time now(CLOCK_MONOTONIC);
+    char name[64];
+    snprintf(name, sizeof(name), "a%" PRIu64, now.nsec());
+    snprintf(buffer, sizeof(buffer),
+             "getEventTag name=%s format=\"(new|1)\"", name);
+    send_to_control(buffer, sizeof(buffer));
+    buffer[sizeof(buffer) - 1] = '\0';
+    char *cp;
+    long ret = strtol(buffer, &cp, 10);
+    EXPECT_GT(ret, 16);
+    EXPECT_TRUE(strstr(buffer, "\t(new|1)") != NULL);
+    EXPECT_TRUE(strstr(buffer, name) != NULL);
+    // ToDo: also look for this in /data/misc/logd/event-log-tags and
+    // /dev/event-log-tags.
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
 
 static inline int32_t get4LE(const char* src)

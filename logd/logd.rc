@@ -14,3 +14,10 @@ service logd-reinit /system/bin/logd --reinit
     user logd
     group logd
     writepid /dev/cpuset/system-background/tasks
+
+on fs
+    write /dev/event-log-tags "# content owned by logd
+"
+    chown logd logd /dev/event-log-tags
+    chmod 0644 /dev/event-log-tags
+    restorecon /dev/event-log-tags
