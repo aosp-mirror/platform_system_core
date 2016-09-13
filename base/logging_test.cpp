@@ -120,6 +120,28 @@ TEST(logging, CHECK) {
   EXPECT_FALSE(flag) << "CHECK_STREQ probably has a dangling if with no else";
 }
 
+TEST(logging, DCHECK) {
+  if (android::base::kEnableDChecks) {
+    ASSERT_DEATH({SuppressAbortUI(); DCHECK(false);}, "DCheck failed: false ");
+  }
+  DCHECK(true);
+
+  if (android::base::kEnableDChecks) {
+    ASSERT_DEATH({SuppressAbortUI(); DCHECK_EQ(0, 1);}, "DCheck failed: 0 == 1 ");
+  }
+  DCHECK_EQ(0, 0);
+
+  if (android::base::kEnableDChecks) {
+    ASSERT_DEATH({SuppressAbortUI(); DCHECK_STREQ("foo", "bar");},
+                 R"(DCheck failed: "foo" == "bar")");
+  }
+  DCHECK_STREQ("foo", "foo");
+
+  // No testing whether we have a dangling else, possibly. That's inherent to the if (constexpr)
+  // setup we intentionally chose to force type-checks of debug code even in release builds (so
+  // we don't get more bit-rot).
+}
+
 static std::string make_log_pattern(android::base::LogSeverity severity,
                                     const char* message) {
   static const char log_characters[] = "VDIWEFF";
