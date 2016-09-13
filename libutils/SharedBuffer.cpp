@@ -111,16 +111,26 @@ void SharedBuffer::acquire() const {
 
 int32_t SharedBuffer::release(uint32_t flags) const
 {
-    int32_t prev = 1;
-    if (onlyOwner()
-            || (((prev = mRefs.fetch_sub(1, std::memory_order_release)) == 1)
-                && (atomic_thread_fence(std::memory_order_acquire), true))) {
+    const bool useDealloc = ((flags & eKeepStorage) == 0);
+    if (onlyOwner()) {
+        // Since we're the only owner, our reference count goes to zero.
         mRefs.store(0, std::memory_order_relaxed);
-        if ((flags & eKeepStorage) == 0) {
-            free(const_cast<SharedBuffer*>(this));
+        if (useDealloc) {
+            dealloc(this);
+        }
+        // As the only owner, our previous reference count was 1.
+        return 1;
+    }
+    // There's multiple owners, we need to use an atomic decrement.
+    int32_t prevRefCount = mRefs.fetch_sub(1, std::memory_order_release);
+    if (prevRefCount == 1) {
+        // We're the last reference, we need the acquire fence.
+        atomic_thread_fence(std::memory_order_acquire);
+        if (useDealloc) {
+            dealloc(this);
         }
     }
-    return prev;
+    return prevRefCount;
 }
 
 
