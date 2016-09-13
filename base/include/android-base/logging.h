@@ -201,14 +201,13 @@ class ErrnoRestorer {
 #define CHECK_GT(x, y) CHECK_OP(x, y, > )
 
 // Helper for CHECK_STRxx(s1,s2) macros.
-#define CHECK_STROP(s1, s2, sense)                                         \
-  if (LIKELY((strcmp(s1, s2) == 0) == (sense)))                            \
-    ;                                                                      \
-  else                                                                     \
-    ABORT_AFTER_LOG_FATAL                                                  \
-    LOG(FATAL) << "Check failed: "                                         \
-               << "\"" << (s1) << "\""                                     \
-               << ((sense) ? " == " : " != ") << "\"" << (s2) << "\""
+#define CHECK_STROP(s1, s2, sense)                                             \
+  while (UNLIKELY((strcmp(s1, s2) == 0) != (sense)))                           \
+    ABORT_AFTER_LOG_FATAL                                                      \
+    ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::DEFAULT,  \
+                                ::android::base::FATAL, -1).stream()           \
+        << "Check failed: " << "\"" << (s1) << "\""                            \
+        << ((sense) ? " == " : " != ") << "\"" << (s2) << "\""
 
 // Check for string (const char*) equality between s1 and s2, LOG(FATAL) if not.
 #define CHECK_STREQ(s1, s2) CHECK_STROP(s1, s2, true)
