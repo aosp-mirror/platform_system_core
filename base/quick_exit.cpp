@@ -26,8 +26,8 @@
 namespace android {
 namespace base {
 
-static std::mutex quick_exit_mutex;
-static std::vector<void(*)()> quick_exit_handlers;
+static auto& quick_exit_mutex = *new std::mutex();
+static auto& quick_exit_handlers = *new std::vector<void (*)()>();
 
 void quick_exit(int exit_code) {
   std::lock_guard<std::mutex> lock(quick_exit_mutex);
