@@ -55,10 +55,11 @@ bool ReadFdToString(int fd, std::string* content) {
   return (n == 0) ? true : false;
 }
 
-bool ReadFileToString(const std::string& path, std::string* content) {
+bool ReadFileToString(const std::string& path, std::string* content, bool follow_symlinks) {
   content->clear();
 
-  int fd = TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_BINARY));
+  int flags = O_RDONLY | O_CLOEXEC | O_BINARY | (follow_symlinks ? 0 : O_NOFOLLOW);
+  int fd = TEMP_FAILURE_RETRY(open(path.c_str(), flags));
   if (fd == -1) {
     return false;
   }
@@ -91,8 +92,10 @@ static bool CleanUpAfterFailedWrite(const std::string& path) {
 
 #if !defined(_WIN32)
 bool WriteStringToFile(const std::string& content, const std::string& path,
-                       mode_t mode, uid_t owner, gid_t group) {
-  int flags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_BINARY;
+                       mode_t mode, uid_t owner, gid_t group,
+                       bool follow_symlinks) {
+  int flags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_BINARY |
+              (follow_symlinks ? 0 : O_NOFOLLOW);
   int fd = TEMP_FAILURE_RETRY(open(path.c_str(), flags, mode));
   if (fd == -1) {
     PLOG(ERROR) << "android::WriteStringToFile open failed";
@@ -118,8 +121,10 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
 }
 #endif
 
-bool WriteStringToFile(const std::string& content, const std::string& path) {
-  int flags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_BINARY;
+bool WriteStringToFile(const std::string& content, const std::string& path,
+                       bool follow_symlinks) {
+  int flags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_BINARY |
+              (follow_symlinks ? 0 : O_NOFOLLOW);
   int fd = TEMP_FAILURE_RETRY(open(path.c_str(), flags, DEFFILEMODE));
   if (fd == -1) {
     return false;
