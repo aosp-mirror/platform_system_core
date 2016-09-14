@@ -37,16 +37,14 @@
 
 #include <iostream>
 #include <limits>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
-#ifndef _WIN32
-#include <mutex>
-#endif
-
 #include "android-base/macros.h"
+#include "android-base/mutex.h"
 #include "android-base/strings.h"
 
 // Headers for LogMessage::LogLine.
@@ -92,17 +90,11 @@ static thread_id GetThreadId() {
 }
 
 namespace {
-#ifndef _WIN32
-using std::mutex;
-using std::lock_guard;
-
 #if defined(__GLIBC__)
 const char* getprogname() {
   return program_invocation_short_name;
 }
-#endif
-
-#else
+#elif defined(_WIN32)
 const char* getprogname() {
   static bool first = true;
   static char progname[MAX_PATH] = {};
@@ -121,51 +113,13 @@ const char* getprogname() {
 
   return progname;
 }
-
-class mutex {
- public:
-  mutex() {
-    InitializeCriticalSection(&critical_section_);
-  }
-  ~mutex() {
-    DeleteCriticalSection(&critical_section_);
-  }
-
-  void lock() {
-    EnterCriticalSection(&critical_section_);
-  }
-
-  void unlock() {
-    LeaveCriticalSection(&critical_section_);
-  }
-
- private:
-  CRITICAL_SECTION critical_section_;
-};
-
-template <typename LockT>
-class lock_guard {
- public:
-  explicit lock_guard(LockT& lock) : lock_(lock) {
-    lock_.lock();
-  }
-
-  ~lock_guard() {
-    lock_.unlock();
-  }
-
- private:
-  LockT& lock_;
-
-  DISALLOW_COPY_AND_ASSIGN(lock_guard);
-};
 #endif
 } // namespace
 
 namespace android {
 namespace base {
 
-static auto& logging_lock = *new mutex();
+static auto& logging_lock = *new std::mutex();
 
 #ifdef __ANDROID__
 static auto& gLogger = *new LogFunction(LogdLogger());
@@ -354,12 +308,12 @@ void InitLogging(char* argv[], LogFunction&& logger, AbortFunction&& aborter) {
 }
 
 void SetLogger(LogFunction&& logger) {
-  lock_guard<mutex> lock(logging_lock);
+  std::lock_guard<std::mutex> lock(logging_lock);
   gLogger = std::move(logger);
 }
 
 void SetAborter(AbortFunction&& aborter) {
-  lock_guard<mutex> lock(logging_lock);
+  std::lock_guard<std::mutex> lock(logging_lock);
   gAborter = std::move(aborter);
 }
 
@@ -445,7 +399,7 @@ LogMessage::~LogMessage() {
 
   {
     // Do the actual logging with the lock held.
-    lock_guard<mutex> lock(logging_lock);
+    std::lock_guard<std::mutex> lock(logging_lock);
     if (msg.find('\n') == std::string::npos) {
       LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetId(),
               data_->GetSeverity(), msg.c_str());
