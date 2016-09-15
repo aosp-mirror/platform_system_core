@@ -787,6 +787,36 @@ class FileOperationsTest(DeviceTest):
             if host_dir is not None:
                 shutil.rmtree(host_dir)
 
+    @unittest.skipIf(sys.platform == "win32", "symlinks require elevated privileges on windows")
+    def test_push_symlink(self):
+        """Push a symlink.
+
+        Bug: http://b/31491920
+        """
+        try:
+            host_dir = tempfile.mkdtemp()
+
+            # Make sure the temp directory isn't setuid, or else adb will
+            # complain.
+            os.chmod(host_dir, 0o700)
+
+            with open(os.path.join(host_dir, 'foo'), 'w') as f:
+                f.write('foo')
+
+            symlink_path = os.path.join(host_dir, 'symlink')
+            os.symlink('foo', symlink_path)
+
+            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+            self.device.shell(['mkdir', self.DEVICE_TEMP_DIR])
+            self.device.push(symlink_path, self.DEVICE_TEMP_DIR)
+            rc, out, _ = self.device.shell_nocheck(
+                ['cat', posixpath.join(self.DEVICE_TEMP_DIR, 'symlink')])
+            self.assertEqual(0, rc)
+            self.assertEqual(out.strip(), 'foo')
+        finally:
+            if host_dir is not None:
+                shutil.rmtree(host_dir)
+
     def test_multiple_push(self):
         """Push multiple files to the device in one adb push command.
 
