@@ -45,6 +45,24 @@ TEST(file, ReadFileToString_WriteStringToFile) {
   EXPECT_EQ("abc", s);
 }
 
+// symlinks require elevated privileges on Windows.
+#if !defined(_WIN32)
+TEST(file, ReadFileToString_WriteStringToFile_symlink) {
+  TemporaryFile target, link;
+  ASSERT_EQ(0, unlink(link.path));
+  ASSERT_EQ(0, symlink(target.path, link.path));
+  ASSERT_FALSE(android::base::WriteStringToFile("foo", link.path, false));
+  ASSERT_EQ(ELOOP, errno);
+  ASSERT_TRUE(android::base::WriteStringToFile("foo", link.path, true));
+
+  std::string s;
+  ASSERT_FALSE(android::base::ReadFileToString(link.path, &s));
+  ASSERT_EQ(ELOOP, errno);
+  ASSERT_TRUE(android::base::ReadFileToString(link.path, &s, true));
+  ASSERT_EQ("foo", s);
+}
+#endif
+
 // WriteStringToFile2 is explicitly for setting Unix permissions, which make no
 // sense on Windows.
 #if !defined(_WIN32)
