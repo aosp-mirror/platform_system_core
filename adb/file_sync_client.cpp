@@ -606,7 +606,7 @@ static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath,
     }
     if (st.st_size < SYNC_DATA_MAX) {
         std::string data;
-        if (!android::base::ReadFileToString(lpath, &data)) {
+        if (!android::base::ReadFileToString(lpath, &data, true)) {
             sc.Error("failed to read all of '%s': %s", lpath, strerror(errno));
             return false;
         }
