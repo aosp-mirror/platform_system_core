@@ -17,8 +17,6 @@
 #define TRACE_TAG TRANSPORT
 
 #include "sysdeps.h"
-#include "sysdeps/condition_variable.h"
-#include "sysdeps/mutex.h"
 #include "transport.h"
 
 #include <errno.h>
@@ -27,6 +25,7 @@
 #include <string.h>
 #include <sys/types.h>
 
+#include <condition_variable>
 #include <vector>
 
 #include <android-base/stringprintf.h>

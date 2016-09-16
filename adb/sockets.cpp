@@ -36,7 +36,6 @@
 
 #include "adb.h"
 #include "adb_io.h"
-#include "sysdeps/mutex.h"
 #include "transport.h"
 
 static std::recursive_mutex& local_socket_list_lock = *new std::recursive_mutex();
