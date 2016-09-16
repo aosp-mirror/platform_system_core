@@ -38,8 +38,17 @@ __BEGIN_DECLS
 
 /*****************************************************************************/
 
+#ifdef __cplusplus
+#define ANDROID_NATIVE_UNSIGNED_CAST(x) static_cast<unsigned int>(x)
+#else
+#define ANDROID_NATIVE_UNSIGNED_CAST(x) ((unsigned int)(x))
+#endif
+
 #define ANDROID_NATIVE_MAKE_CONSTANT(a,b,c,d) \
-    (((unsigned)(a)<<24)|((unsigned)(b)<<16)|((unsigned)(c)<<8)|(unsigned)(d))
+    ((ANDROID_NATIVE_UNSIGNED_CAST(a) << 24) | \
+     (ANDROID_NATIVE_UNSIGNED_CAST(b) << 16) | \
+     (ANDROID_NATIVE_UNSIGNED_CAST(c) << 8) | \
+     (ANDROID_NATIVE_UNSIGNED_CAST(d)))
 
 #define ANDROID_NATIVE_WINDOW_MAGIC \
     ANDROID_NATIVE_MAKE_CONSTANT('_','w','n','d')

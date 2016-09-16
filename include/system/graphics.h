@@ -452,15 +452,15 @@ typedef enum android_pixel_format {
  *
  * Buffers must have a 8 bit depth.
  *
- * @y, @cb, and @cr point to the first byte of their respective planes.
+ * y, cb, and cr point to the first byte of their respective planes.
  *
  * Stride describes the distance in bytes from the first value of one row of
  * the image to the first value of the next row.  It includes the width of the
  * image plus padding.
- * @ystride is the stride of the luma plane.
- * @cstride is the stride of the chroma planes.
+ * ystride is the stride of the luma plane.
+ * cstride is the stride of the chroma planes.
  *
- * @chroma_step is the distance in bytes from one chroma pixel value to the
+ * chroma_step is the distance in bytes from one chroma pixel value to the
  * next.  This is 2 bytes for semiplanar (because chroma values are interleaved
  * and each chroma value is one byte) and 1 for planar.
  */
@@ -585,9 +585,9 @@ typedef struct android_flex_layout {
  * measurement is correct. It is between 0.f and 1.f, inclusive, with 1.f ==
  * 100% confidence.
  *
- * @num_points is the number of points in the list
+ * num_points is the number of points in the list
  *
- * @xyz_points is the flexible array of floating-point values.
+ * xyz_points is the flexible array of floating-point values.
  *   It contains (num_points) * 4 floats.
  *
  *   For example:
@@ -612,7 +612,14 @@ struct android_depth_points {
     /** reserved for future use, set to 0 by gralloc's (*lock)() */
     uint32_t reserved[8];
 
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wc99-extensions"
+#endif
     float xyzc_points[];
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 };
 
 /**
