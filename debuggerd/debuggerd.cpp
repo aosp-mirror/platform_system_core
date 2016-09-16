@@ -835,18 +835,19 @@ static int do_server() {
 }
 
 static int do_explicit_dump(pid_t tid, bool dump_backtrace) {
-  fprintf(stdout, "Sending request to dump task %d.\n", tid);
+  fprintf(stdout, "Sending request to dump task %d...\n", tid);
+  fflush(stdout);
 
+  // TODO: we could have better error reporting if debuggerd sent an error string back.
   if (dump_backtrace) {
-    fflush(stdout);
     if (dump_backtrace_to_file(tid, fileno(stdout)) < 0) {
-      fputs("Error dumping backtrace.\n", stderr);
+      fputs("Error dumping backtrace (check logcat).\n", stderr);
       return 1;
     }
   } else {
     char tombstone_path[PATH_MAX];
     if (dump_tombstone(tid, tombstone_path, sizeof(tombstone_path)) < 0) {
-      fputs("Error dumping tombstone.\n", stderr);
+      fputs("Error dumping tombstone (check logcat).\n", stderr);
       return 1;
     }
     fprintf(stderr, "Tombstone written to: %s\n", tombstone_path);
@@ -854,12 +855,14 @@ static int do_explicit_dump(pid_t tid, bool dump_backtrace) {
   return 0;
 }
 
-static void usage() {
-  fputs("Usage: -b [<tid>]\n"
-        "  -b dump backtrace to console, otherwise dump full tombstone file\n"
+static int usage() {
+  fputs("usage: debuggerd [-b] [<tid>]\n"
         "\n"
-        "If tid specified, sends a request to debuggerd to dump that task.\n"
-        "Otherwise, starts the debuggerd server.\n", stderr);
+        "Given a thread id, sends a request to debuggerd to dump that thread.\n"
+        "Otherwise, starts the debuggerd server.\n"
+        "\n"
+        "-b\tdump backtrace to console, otherwise generate tombstone\n", stderr);
+  return EXIT_FAILURE;
 }
 
 int main(int argc, char** argv) {
@@ -873,22 +876,15 @@ int main(int argc, char** argv) {
   }
 
   bool dump_backtrace = false;
-  bool have_tid = false;
   pid_t tid = 0;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-b")) {
       dump_backtrace = true;
-    } else if (!have_tid) {
-      tid = atoi(argv[i]);
-      have_tid = true;
-    } else {
-      usage();
-      return 1;
+    } else if (tid != 0 || (tid = atoi(argv[i])) == 0) {
+      // Only one tid is allowed. (And 0 isn't a valid tid.)
+      // atoi(3) returns 0 on failure to parse, so this catches anything else too.
+      return usage();
     }
   }
-  if (!have_tid) {
-    usage();
-    return 1;
-  }
-  return do_explicit_dump(tid, dump_backtrace);
+  return (tid != 0) ? do_explicit_dump(tid, dump_backtrace) : usage();
 }
