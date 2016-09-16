@@ -18,8 +18,8 @@ LOCAL_PATH := $(call my-dir)
 
 binderwrapperCommonCFlags := -Wall -Werror -Wno-unused-parameter
 binderwrapperCommonCFlags += -Wno-sign-promo  # for libchrome
-binderwrapperCommonExportCIncludeDirs := $(LOCAL_PATH)/../include
-binderwrapperCommonCIncludes := $(LOCAL_PATH)/../include
+binderwrapperCommonExportCIncludeDirs := $(LOCAL_PATH)/include
+binderwrapperCommonCIncludes := $(LOCAL_PATH)/include
 binderwrapperCommonSharedLibraries := \
   libbinder \
   libchrome \
