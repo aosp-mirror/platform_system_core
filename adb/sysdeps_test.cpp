@@ -17,11 +17,10 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 #include <atomic>
+#include <condition_variable>
 
 #include "adb_io.h"
 #include "sysdeps.h"
-#include "sysdeps/condition_variable.h"
-#include "sysdeps/mutex.h"
 
 static void increment_atomic_int(void* c) {
     sleep(1);
