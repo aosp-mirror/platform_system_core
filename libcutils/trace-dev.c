@@ -196,6 +196,12 @@ void atrace_begin_body(const char* name)
     write(atrace_marker_fd, buf, len);
 }
 
+void atrace_end_body()
+{
+    char c = 'E';
+    write(atrace_marker_fd, &c, 1);
+}
+
 #define WRITE_MSG(format_begin, format_end, pid, name, value) { \
     char buf[ATRACE_MESSAGE_LENGTH]; \
     int len = snprintf(buf, sizeof(buf), format_begin "%s" format_end, pid, \
