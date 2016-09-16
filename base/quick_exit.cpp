@@ -21,8 +21,6 @@
 #include <mutex>
 #include <vector>
 
-#include "android-base/mutex.h"
-
 namespace android {
 namespace base {
 
