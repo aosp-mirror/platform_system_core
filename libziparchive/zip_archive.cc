@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "android-base/file.h"
+#include "android-base/logging.h"
 #include "android-base/macros.h"  // TEMP_FAILURE_RETRY may or may not be in unistd
 #include "android-base/memory.h"
 #include "log/log.h"
@@ -1072,4 +1073,11 @@ const char* ErrorCodeString(int32_t error_code) {
 
 int GetFileDescriptor(const ZipArchiveHandle handle) {
   return reinterpret_cast<ZipArchive*>(handle)->fd;
+}
+
+ZipString::ZipString(const char* entry_name)
+    : name(reinterpret_cast<const uint8_t*>(entry_name)) {
+  size_t len = strlen(entry_name);
+  CHECK_LE(len, static_cast<size_t>(UINT16_MAX));
+  name_length = static_cast<uint16_t>(len);
 }
