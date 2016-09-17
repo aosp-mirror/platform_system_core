@@ -44,7 +44,6 @@
 #include <vector>
 
 #include "android-base/macros.h"
-#include "android-base/mutex.h"
 #include "android-base/strings.h"
 
 // Headers for LogMessage::LogLine.
