@@ -22,11 +22,11 @@ LOCAL_PATH := $(call my-dir)
 ifeq ($(HOST_OS),linux)
 
 include $(CLEAR_VARS)
-
 LOCAL_MODULE := libusbhost
 LOCAL_SRC_FILES := usbhost.c
 LOCAL_CFLAGS := -Werror
-
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 endif
@@ -35,24 +35,22 @@ endif
 # ========================================================
 
 include $(CLEAR_VARS)
-
 LOCAL_MODULE := libusbhost
 LOCAL_SRC_FILES := usbhost.c
-
 LOCAL_CFLAGS := -g -DUSE_LIBLOG -Werror
-
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 # needed for logcat
 LOCAL_SHARED_LIBRARIES := libcutils
-
 include $(BUILD_SHARED_LIBRARY)
 
 # Static library for target
 # ========================================================
 
 include $(CLEAR_VARS)
-
 LOCAL_MODULE := libusbhost
 LOCAL_SRC_FILES := usbhost.c
 LOCAL_CFLAGS := -Werror
-
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 include $(BUILD_STATIC_LIBRARY)
