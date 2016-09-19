@@ -31,24 +31,18 @@
 
 #include <cutils/sockets.h>
 
-/* open listen() port on loopback interface */
-int socket_loopback_server(int port, int type)
+static int _socket_loopback_server(int family, int type, struct sockaddr * addr, size_t size)
 {
-    struct sockaddr_in addr;
     int s, n;
 
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-
-    s = socket(AF_INET, type, 0);
-    if(s < 0) return -1;
+    s = socket(family, type, 0);
+    if(s < 0)
+        return -1;
 
     n = 1;
     setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *) &n, sizeof(n));
 
-    if(bind(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+    if(bind(s, addr, size) < 0) {
         close(s);
         return -1;
     }
@@ -60,10 +54,35 @@ int socket_loopback_server(int port, int type)
 
         if (ret < 0) {
             close(s);
-            return -1; 
+            return -1;
         }
     }
 
     return s;
 }
 
+/* open listen() port on loopback IPv6 interface */
+int socket_loopback_server6(int port, int type)
+{
+    struct sockaddr_in6 addr;
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin6_family = AF_INET6;
+    addr.sin6_port = htons(port);
+    addr.sin6_addr = in6addr_loopback;
+
+    return _socket_loopback_server(AF_INET6, type, (struct sockaddr *) &addr, sizeof(addr));
+}
+
+/* open listen() port on loopback interface */
+int socket_loopback_server(int port, int type)
+{
+    struct sockaddr_in addr;
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+    return _socket_loopback_server(AF_INET, type, (struct sockaddr *) &addr, sizeof(addr));
+}
