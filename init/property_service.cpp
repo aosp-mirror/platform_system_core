@@ -141,23 +141,24 @@ static void write_persistent_property(const char *name, const char *value)
     }
 }
 
-static bool is_legal_property_name(const char* name, size_t namelen)
+bool is_legal_property_name(const std::string &name)
 {
-    size_t i;
+    size_t namelen = name.size();
+
     if (namelen >= PROP_NAME_MAX) return false;
     if (namelen < 1) return false;
     if (name[0] == '.') return false;
     if (name[namelen - 1] == '.') return false;
 
-    /* Only allow alphanumeric, plus '.', '-', or '_' */
+    /* Only allow alphanumeric, plus '.', '-', '@', or '_' */
     /* Don't allow ".." to appear in a property name */
-    for (i = 0; i < namelen; i++) {
+    for (size_t i = 0; i < namelen; i++) {
         if (name[i] == '.') {
             // i=0 is guaranteed to never have a dot. See above.
             if (name[i-1] == '.') return false;
             continue;
         }
-        if (name[i] == '_' || name[i] == '-') continue;
+        if (name[i] == '_' || name[i] == '-' || name[i] == '@') continue;
         if (name[i] >= 'a' && name[i] <= 'z') continue;
         if (name[i] >= 'A' && name[i] <= 'Z') continue;
         if (name[i] >= '0' && name[i] <= '9') continue;
@@ -168,10 +169,9 @@ static bool is_legal_property_name(const char* name, size_t namelen)
 }
 
 static int property_set_impl(const char* name, const char* value) {
-    size_t namelen = strlen(name);
     size_t valuelen = strlen(value);
 
-    if (!is_legal_property_name(name, namelen)) return -1;
+    if (!is_legal_property_name(name)) return -1;
     if (valuelen >= PROP_VALUE_MAX) return -1;
 
     if (strcmp("selinux.restorecon_recursive", name) == 0 && valuelen > 0) {
@@ -188,7 +188,7 @@ static int property_set_impl(const char* name, const char* value) {
 
         __system_property_update(pi, value, valuelen);
     } else {
-        int rc = __system_property_add(name, namelen, value, valuelen);
+        int rc = __system_property_add(name, strlen(name), value, valuelen);
         if (rc < 0) {
             return rc;
         }
@@ -272,7 +272,7 @@ static void handle_property_set_fd()
         msg.name[PROP_NAME_MAX-1] = 0;
         msg.value[PROP_VALUE_MAX-1] = 0;
 
-        if (!is_legal_property_name(msg.name, strlen(msg.name))) {
+        if (!is_legal_property_name(msg.name)) {
             LOG(ERROR) << "sys_prop: illegal property name \"" << msg.name << "\"";
             close(s);
             return;
