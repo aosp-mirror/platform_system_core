@@ -243,8 +243,12 @@ int32_t ZipWriter::PrepareDeflate() {
   // Initialize the z_stream for compression.
   z_stream_ = std::unique_ptr<z_stream, void(*)(z_stream*)>(new z_stream(), DeleteZStream);
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
   int zerr = deflateInit2(z_stream_.get(), Z_BEST_COMPRESSION, Z_DEFLATED, -MAX_WBITS,
                           DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY);
+#pragma GCC diagnostic pop
+
   if (zerr != Z_OK) {
     if (zerr == Z_VERSION_ERROR) {
       ALOGE("Installed zlib is not compatible with linked version (%s)", ZLIB_VERSION);
