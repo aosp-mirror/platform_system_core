@@ -31,8 +31,6 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
-#include <sys/system_properties.h>
-
 #include "config_write.h"
 #include "log_portability.h"
 #include "logger.h"
@@ -53,25 +51,8 @@ LIBLOG_HIDDEN struct android_log_transport_write pmsgLoggerWrite = {
     .write = pmsgWrite,
 };
 
-static bool pmsgShouldUse = false;
-
-// Only use pmsg on eng builds
-static bool pmsgIsEng() {
-    char buf[PROP_VALUE_MAX];
-
-    if (__system_property_get("ro.build.type", buf) == 0) {
-        return false;
-    }
-
-    if (!strncmp(buf, "eng", sizeof("eng"))) {
-        return true;
-    }
-    return false;
-}
-
 static int pmsgOpen()
 {
-    pmsgShouldUse = pmsgIsEng();
     if (pmsgLoggerWrite.context.fd < 0) {
         pmsgLoggerWrite.context.fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
     }
@@ -94,7 +75,7 @@ static int pmsgAvailable(log_id_t logId)
     }
     if ((logId != LOG_ID_SECURITY) &&
             (logId != LOG_ID_EVENTS) &&
-            (!pmsgShouldUse || !__android_log_is_debuggable())) {
+            !__android_log_is_debuggable()) {
         return -EINVAL;
     }
     if (pmsgLoggerWrite.context.fd < 0) {
@@ -124,7 +105,7 @@ static int pmsgWrite(log_id_t logId, struct timespec *ts,
     size_t i, payloadSize;
     ssize_t ret;
 
-    if ((logId == LOG_ID_EVENTS) && (!pmsgShouldUse || !__android_log_is_debuggable())) {
+    if ((logId == LOG_ID_EVENTS) && !__android_log_is_debuggable()) {
         if (vec[0].iov_len < 4) {
             return -EINVAL;
         }
