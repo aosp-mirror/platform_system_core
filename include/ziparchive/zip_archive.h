@@ -43,8 +43,7 @@ struct ZipString {
   /*
    * entry_name has to be an c-style string with only ASCII characters.
    */
-  explicit ZipString(const char* entry_name)
-      : name(reinterpret_cast<const uint8_t*>(entry_name)), name_length(strlen(entry_name)) {}
+  explicit ZipString(const char* entry_name);
 
   bool operator==(const ZipString& rhs) const {
     return name && (name_length == rhs.name_length) &&
