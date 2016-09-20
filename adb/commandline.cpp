@@ -37,6 +37,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 
@@ -1549,23 +1550,32 @@ int adb_commandline(int argc, const char **argv) {
 
     // If -L, -H, or -P are specified, ignore environment variables.
     // Otherwise, prefer ADB_SERVER_SOCKET over ANDROID_ADB_SERVER_ADDRESS/PORT.
-    if (!(server_host_str || server_port_str || server_socket_str)) {
-        server_socket_str = server_socket_str ? server_socket_str : getenv("ADB_SERVER_SOCKET");
+    if (!server_host_str && !server_port_str && !server_socket_str) {
+        server_socket_str = getenv("ADB_SERVER_SOCKET");
     }
 
     if (!server_socket_str) {
         // tcp:1234 and tcp:localhost:1234 are different with -a, so don't default to localhost
         server_host_str = server_host_str ? server_host_str : getenv("ANDROID_ADB_SERVER_ADDRESS");
 
-        long server_port = DEFAULT_ADB_PORT;
+        int server_port = DEFAULT_ADB_PORT;
         server_port_str = server_port_str ? server_port_str : getenv("ANDROID_ADB_SERVER_PORT");
+        if (server_port_str && strlen(server_port_str) > 0) {
+            if (!android::base::ParseInt(server_port_str, &server_port, 1, 65535)) {
+                fprintf(stderr,
+                        "adb: Env var ANDROID_ADB_SERVER_PORT must be a positive"
+                        " number less than 65535. Got \"%s\"\n",
+                        server_port_str);
+                exit(1);
+            }
+        }
 
         int rc;
         char* temp;
         if (server_host_str) {
-            rc = asprintf(&temp, "tcp:%s:%ld", server_host_str, server_port);
+            rc = asprintf(&temp, "tcp:%s:%d", server_host_str, server_port);
         } else {
-            rc = asprintf(&temp, "tcp:%ld", server_port);
+            rc = asprintf(&temp, "tcp:%d", server_port);
         }
         if (rc < 0) {
             fatal("failed to allocate server socket specification");
