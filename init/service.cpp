@@ -996,7 +996,7 @@ void ServiceParser::EndSection() {
 }
 
 bool ServiceParser::IsValidName(const std::string& name) const {
-    if (name.size() > 16) {
+    if (name.size() > PROP_NAME_MAX - sizeof("init.svc.")) {
         return false;
     }
     for (const auto& c : name) {
