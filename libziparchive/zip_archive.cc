@@ -463,9 +463,14 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
    * Grab the CD offset and size, and the number of entries in the
    * archive and verify that they look reasonable.
    */
-  if (eocd->cd_start_offset + eocd->cd_size > eocd_offset) {
+  if (static_cast<off64_t>(eocd->cd_start_offset) + eocd->cd_size > eocd_offset) {
     ALOGW("Zip: bad offsets (dir %" PRIu32 ", size %" PRIu32 ", eocd %" PRId64 ")",
         eocd->cd_start_offset, eocd->cd_size, static_cast<int64_t>(eocd_offset));
+#if defined(__ANDROID__)
+    if (eocd->cd_start_offset + eocd->cd_size <= eocd_offset) {
+      android_errorWriteLog(0x534e4554, "31251826");
+    }
+#endif
     return kInvalidOffset;
   }
   if (eocd->num_records == 0) {
