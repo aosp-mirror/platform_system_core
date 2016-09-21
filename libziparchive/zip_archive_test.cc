@@ -40,6 +40,7 @@ static const std::string kMissingZip = "missing.zip";
 static const std::string kValidZip = "valid.zip";
 static const std::string kLargeZip = "large.zip";
 static const std::string kBadCrcZip = "bad_crc.zip";
+static const std::string kCrashApk = "crash.apk";
 static const std::string kUpdateZip = "dummy-update.zip";
 
 static const std::vector<uint8_t> kATxtContents {
@@ -86,6 +87,12 @@ TEST(ziparchive, Open) {
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, OutOfBound) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(-8, OpenArchiveWrapper(kCrashApk, &handle));
   CloseArchive(handle);
 }
 
