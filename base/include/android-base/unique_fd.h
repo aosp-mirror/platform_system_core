@@ -55,7 +55,7 @@ class unique_fd_impl final {
   unique_fd_impl() : value_(-1) {}
 
   explicit unique_fd_impl(int value) : value_(value) {}
-  ~unique_fd_impl() { clear(); }
+  ~unique_fd_impl() { reset(); }
 
   unique_fd_impl(unique_fd_impl&& other) : value_(other.release()) {}
   unique_fd_impl& operator=(unique_fd_impl&& s) {
@@ -63,15 +63,11 @@ class unique_fd_impl final {
     return *this;
   }
 
-  void reset(int new_value) {
+  void reset(int new_value = -1) {
     if (value_ != -1) {
       Closer::Close(value_);
     }
     value_ = new_value;
-  }
-
-  void clear() {
-    reset(-1);
   }
 
   int get() const { return value_; }
