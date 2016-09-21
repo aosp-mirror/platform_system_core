@@ -493,10 +493,10 @@ void Subprocess::PassDataStreams() {
                 // We also need to close the pipes connected to the child process
                 // so that if it ignores SIGHUP and continues to write data it
                 // won't fill up the pipe and block.
-                stdinout_sfd_.clear();
-                stderr_sfd_.clear();
+                stdinout_sfd_.reset();
+                stderr_sfd_.reset();
             }
-            dead_sfd->clear();
+            dead_sfd->reset();
         }
     }
 }
