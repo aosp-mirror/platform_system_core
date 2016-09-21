@@ -197,6 +197,7 @@ extern int  adb_write(int  fd, const void*  buf, int  len);
 extern int  adb_lseek(int  fd, int  pos, int  where);
 extern int  adb_shutdown(int  fd);
 extern int  adb_close(int  fd);
+extern int  adb_register_socket(SOCKET s);
 
 // See the comments for the !defined(_WIN32) version of unix_close().
 static __inline__ int  unix_close(int fd)
@@ -523,6 +524,12 @@ __inline__ int adb_close(int fd) {
 #undef   close
 #define  close   ____xxx_close
 
+// On Windows, ADB has an indirection layer for file descriptors. If we get a
+// Win32 SOCKET object from an external library, we have to map it in to that
+// indirection layer, which this does.
+__inline__ int  adb_register_socket(int s) {
+    return s;
+}
 
 static __inline__  int  adb_read(int  fd, void*  buf, size_t  len)
 {
