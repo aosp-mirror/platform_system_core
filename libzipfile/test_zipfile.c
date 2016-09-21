@@ -75,7 +75,6 @@ main(int argc, char** argv)
             unsize = get_zipentry_size(entry);
             size = unsize * 1.001;
             scratch = malloc(size);
-            printf("scratch=%p\n", scratch);
             err = decompress_zipentry(entry, scratch, size);
             if (err != 0) {
                 fprintf(stderr, "error decompressing file\n");
