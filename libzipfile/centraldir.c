@@ -62,11 +62,16 @@ read_central_dir_values(Zipfile* file, const unsigned char* buf, int len)
     return 0;
 }
 
+static const int kCompressionStored = 0x0;
+static const int kCompressionDeflate = 0x8;
+
 static int
 read_central_directory_entry(Zipfile* file, Zipentry* entry,
                 const unsigned char** buf, ssize_t* len)
 {
     const unsigned char* p;
+    size_t remaining;
+    const unsigned char* bufLimit;
 
     unsigned short  extraFieldLength;
     unsigned short  fileCommentLength;
@@ -74,6 +79,8 @@ read_central_directory_entry(Zipfile* file, Zipentry* entry,
     unsigned int dataOffset;
 
     p = *buf;
+    remaining = *len;
+    bufLimit = file->buf + file->bufsize;
 
     if (*len < ENTRY_LEN) {
         fprintf(stderr, "cde entry not large enough\n");
@@ -94,31 +101,77 @@ read_central_directory_entry(Zipfile* file, Zipentry* entry,
     localHeaderRelOffset = read_le_int(&p[0x2a]);
 
     p += ENTRY_LEN;
+    remaining -= ENTRY_LEN;
 
     // filename
     if (entry->fileNameLength != 0) {
+        if (entry->fileNameLength > remaining) {
+            fprintf(stderr, "cde entry not large enough for file name.\n");
+            return 1;
+        }
+
         entry->fileName = p;
     } else {
-        entry->fileName = NULL;
+        fprintf(stderr, "cde entry does not contain a file name.\n");
+        return 1;
     }
     p += entry->fileNameLength;
+    remaining -= entry->fileNameLength;
 
     // extra field
+    if (extraFieldLength > remaining) {
+        fprintf(stderr, "cde entry not large enough for extra field.\n");
+        return 1;
+    }
     p += extraFieldLength;
+    remaining -= extraFieldLength;
 
     // comment, if any
+    if (fileCommentLength > remaining) {
+        fprintf(stderr, "cde entry not large enough for file comment.\n");
+        return 1;
+    }
+
     p += fileCommentLength;
+    remaining -= fileCommentLength;
 
     *buf = p;
+    *len = remaining;
 
     // the size of the extraField in the central dir is how much data there is,
     // but the one in the local file header also contains some padding.
     p = file->buf + localHeaderRelOffset;
+    if (p >= bufLimit) {
+      fprintf(stderr, "Invalid local header offset for entry.\n");
+      return 1;
+    }
+
     extraFieldLength = read_le_short(&p[0x1c]);
 
     dataOffset = localHeaderRelOffset + LFH_SIZE
         + entry->fileNameLength + extraFieldLength;
     entry->data = file->buf + dataOffset;
+
+    // Sanity check: make sure that the start of the entry data is within
+    // our allocated buffer.
+    if ((entry->data < file->buf) || (entry->data >= bufLimit)) {
+      fprintf(stderr, "Invalid data offset for entry.\n");
+      return 1;
+    }
+
+    // Sanity check: make sure that the end of the entry data is within
+    // our allocated buffer. We need to look at the uncompressedSize for
+    // stored entries and the compressed size for deflated entries.
+    if ((entry->compressionMethod == kCompressionStored) &&
+        (entry->uncompressedSize > (unsigned int) (bufLimit - entry->data))) {
+      fprintf(stderr, "Invalid uncompressed size for stored entry.\n");
+      return 1;
+    }
+    if ((entry->compressionMethod == kCompressionDeflate) &&
+        (entry->compressedSize > (unsigned int) (bufLimit - entry->data))) {
+      fprintf(stderr, "Invalid uncompressed size for deflated entry.\n");
+      return 1;
+    }
 #if 0
     printf("file->buf=%p entry->data=%p dataOffset=%x localHeaderRelOffset=%d "
            "entry->fileNameLength=%d extraFieldLength=%d\n",
