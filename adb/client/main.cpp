@@ -129,7 +129,9 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
         // Start a new session for the daemon. Do this here instead of after the fork so
         // that a ctrl-c between the "starting server" and "done starting server" messages
         // gets a chance to terminate the server.
-        if (setsid() == -1) {
+        // setsid will fail with EPERM if it's already been a lead process of new session.
+        // Ignore such error.
+        if (setsid() == -1 && errno != EPERM) {
             fatal("setsid() failed: %s", strerror(errno));
         }
 #endif
