@@ -27,6 +27,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -137,7 +138,7 @@ typedef struct FHRec_
 #define  WIN32_FH_BASE    2048
 #define  WIN32_MAX_FHS    2048
 
-static adb_mutex_t   _win32_lock;
+static  std::mutex&  _win32_lock = *new std::mutex();
 static  FHRec        _win32_fhs[ WIN32_MAX_FHS ];
 static  int          _win32_fh_next;  // where to start search for free FHRec
 
@@ -182,27 +183,24 @@ _fh_alloc( FHClass  clazz )
 {
     FH   f = NULL;
 
-    adb_mutex_lock( &_win32_lock );
+    std::lock_guard<std::mutex> lock(_win32_lock);
 
     for (int i = _win32_fh_next; i < WIN32_MAX_FHS; ++i) {
         if (_win32_fhs[i].clazz == NULL) {
             f = &_win32_fhs[i];
             _win32_fh_next = i + 1;
-            goto Exit;
+            f->clazz = clazz;
+            f->used = 1;
+            f->eof = 0;
+            f->name[0] = '\0';
+            clazz->_fh_init(f);
+            return f;
         }
     }
-    D( "_fh_alloc: no more free file descriptors" );
-    errno = EMFILE;   // Too many open files
-Exit:
-    if (f) {
-        f->clazz   = clazz;
-        f->used    = 1;
-        f->eof     = 0;
-        f->name[0] = '\0';
-        clazz->_fh_init(f);
-    }
-    adb_mutex_unlock( &_win32_lock );
-    return f;
+
+    D("_fh_alloc: no more free file descriptors");
+    errno = EMFILE;  // Too many open files
+    return nullptr;
 }
 
 
@@ -211,7 +209,7 @@ _fh_close( FH   f )
 {
     // Use lock so that closing only happens once and so that _fh_alloc can't
     // allocate a FH that we're in the middle of closing.
-    adb_mutex_lock(&_win32_lock);
+    std::lock_guard<std::mutex> lock(_win32_lock);
 
     int offset = f - _win32_fhs;
     if (_win32_fh_next > offset) {
@@ -225,7 +223,6 @@ _fh_close( FH   f )
         f->used    = 0;
         f->clazz   = NULL;
     }
-    adb_mutex_unlock(&_win32_lock);
     return 0;
 }
 
@@ -1232,17 +1229,6 @@ bool set_tcp_keepalive(int fd, int interval_sec) {
     }
 
     return true;
-}
-
-static adb_mutex_t g_console_output_buffer_lock;
-
-void
-adb_sysdeps_init( void )
-{
-#define  ADB_MUTEX(x)  InitializeCriticalSection( & x );
-#include "mutex_list.h"
-    InitializeCriticalSection( &_win32_lock );
-    InitializeCriticalSection( &g_console_output_buffer_lock );
 }
 
 /**************************************************************************/
@@ -2437,12 +2423,13 @@ size_t ParseCompleteUTF8(const char* const first, const char* const last,
 // Bytes that have not yet been output to the console because they are incomplete UTF-8 sequences.
 // Note that we use only one buffer even though stderr and stdout are logically separate streams.
 // This matches the behavior of Linux.
-// Protected by g_console_output_buffer_lock.
-static auto& g_console_output_buffer = *new std::vector<char>();
 
 // Internal helper function to write UTF-8 bytes to a console. Returns -1 on error.
 static int _console_write_utf8(const char* const buf, const size_t buf_size, FILE* stream,
                                HANDLE console) {
+    static std::mutex& console_output_buffer_lock = *new std::mutex();
+    static auto& console_output_buffer = *new std::vector<char>();
+
     const int saved_errno = errno;
     std::vector<char> combined_buffer;
 
@@ -2450,24 +2437,25 @@ static int _console_write_utf8(const char* const buf, const size_t buf_size, FIL
     const char* utf8;
     size_t utf8_size;
 
-    adb_mutex_lock(&g_console_output_buffer_lock);
-    if (g_console_output_buffer.empty()) {
-        // If g_console_output_buffer doesn't have a buffered up incomplete UTF-8 sequence (the
-        // common case with plain ASCII), parse buf directly.
-        utf8 = buf;
-        utf8_size = internal::ParseCompleteUTF8(buf, buf + buf_size, &g_console_output_buffer);
-    } else {
-        // If g_console_output_buffer has a buffered up incomplete UTF-8 sequence, move it to
-        // combined_buffer (and effectively clear g_console_output_buffer) and append buf to
-        // combined_buffer, then parse it all together.
-        combined_buffer.swap(g_console_output_buffer);
-        combined_buffer.insert(combined_buffer.end(), buf, buf + buf_size);
+    {
+        std::lock_guard<std::mutex> lock(console_output_buffer_lock);
+        if (console_output_buffer.empty()) {
+            // If console_output_buffer doesn't have a buffered up incomplete UTF-8 sequence (the
+            // common case with plain ASCII), parse buf directly.
+            utf8 = buf;
+            utf8_size = internal::ParseCompleteUTF8(buf, buf + buf_size, &console_output_buffer);
+        } else {
+            // If console_output_buffer has a buffered up incomplete UTF-8 sequence, move it to
+            // combined_buffer (and effectively clear console_output_buffer) and append buf to
+            // combined_buffer, then parse it all together.
+            combined_buffer.swap(console_output_buffer);
+            combined_buffer.insert(combined_buffer.end(), buf, buf + buf_size);
 
-        utf8 = combined_buffer.data();
-        utf8_size = internal::ParseCompleteUTF8(utf8, utf8 + combined_buffer.size(),
-                                                &g_console_output_buffer);
+            utf8 = combined_buffer.data();
+            utf8_size = internal::ParseCompleteUTF8(utf8, utf8 + combined_buffer.size(),
+                                                    &console_output_buffer);
+        }
     }
-    adb_mutex_unlock(&g_console_output_buffer_lock);
 
     std::wstring utf16;
 

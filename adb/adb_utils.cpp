@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <mutex>
 #include <vector>
 
 #include <android-base/logging.h>
@@ -47,8 +48,6 @@
 #include <pwd.h>
 #endif
 
-ADB_MUTEX_DEFINE(basename_lock);
-ADB_MUTEX_DEFINE(dirname_lock);
 
 #if defined(_WIN32)
 constexpr char kNullFileName[] = "NUL";
@@ -102,13 +101,15 @@ std::string escape_arg(const std::string& s) {
 }
 
 std::string adb_basename(const std::string& path) {
+  static std::mutex& basename_lock = *new std::mutex();
+
   // Copy path because basename may modify the string passed in.
   std::string result(path);
 
   // Use lock because basename() may write to a process global and return a
   // pointer to that. Note that this locking strategy only works if all other
-  // callers to dirname in the process also grab this same lock.
-  adb_mutex_lock(&basename_lock);
+  // callers to basename in the process also grab this same lock.
+  std::lock_guard<std::mutex> lock(basename_lock);
 
   // Note that if std::string uses copy-on-write strings, &str[0] will cause
   // the copy to be made, so there is no chance of us accidentally writing to
@@ -119,19 +120,19 @@ std::string adb_basename(const std::string& path) {
   // before leaving the lock.
   result.assign(name);
 
-  adb_mutex_unlock(&basename_lock);
-
   return result;
 }
 
 std::string adb_dirname(const std::string& path) {
+  static std::mutex& dirname_lock = *new std::mutex();
+
   // Copy path because dirname may modify the string passed in.
   std::string result(path);
 
   // Use lock because dirname() may write to a process global and return a
   // pointer to that. Note that this locking strategy only works if all other
   // callers to dirname in the process also grab this same lock.
-  adb_mutex_lock(&dirname_lock);
+  std::lock_guard<std::mutex> lock(dirname_lock);
 
   // Note that if std::string uses copy-on-write strings, &str[0] will cause
   // the copy to be made, so there is no chance of us accidentally writing to
@@ -141,8 +142,6 @@ std::string adb_dirname(const std::string& path) {
   // In case dirname returned a pointer to a process global, copy that string
   // before leaving the lock.
   result.assign(parent);
-
-  adb_mutex_unlock(&dirname_lock);
 
   return result;
 }
