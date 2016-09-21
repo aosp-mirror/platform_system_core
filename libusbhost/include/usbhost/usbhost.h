@@ -216,7 +216,7 @@ int usb_device_control_transfer(struct usb_device *device,
 int usb_device_bulk_transfer(struct usb_device *device,
                             int endpoint,
                             void* buffer,
-                            int length,
+                            unsigned int length,
                             unsigned int timeout);
 
 /** Reset USB bus for the device */
