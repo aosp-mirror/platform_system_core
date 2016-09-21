@@ -25,3 +25,7 @@ bool is_local_socket_spec(const std::string& spec);
 int socket_spec_connect(const std::string& spec, std::string* error);
 int socket_spec_listen(const std::string& spec, std::string* error,
                        int* resolved_tcp_port = nullptr);
+
+// Exposed for testing.
+bool parse_tcp_socket_spec(const std::string& spec, std::string* hostname, int* port,
+                           std::string* error);
