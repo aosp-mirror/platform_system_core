@@ -622,21 +622,32 @@ char* skip_host_serial(char* service) {
         service += 4;
     }
 
-    char* first_colon = strchr(service, ':');
-    if (!first_colon) {
+    // Check for an IPv6 address. `adb connect` creates the serial number from the canonical
+    // network address so it will always have the [] delimiters.
+    if (service[0] == '[') {
+        char* ipv6_end = strchr(service, ']');
+        if (ipv6_end != nullptr) {
+            service = ipv6_end;
+        }
+    }
+
+    // The next colon we find must either begin the port field or the command field.
+    char* colon_ptr = strchr(service, ':');
+    if (!colon_ptr) {
         // No colon in service string.
         return nullptr;
     }
 
-    char* serial_end = first_colon;
+    // If the next field is only decimal digits and ends with another colon, it's a port.
+    char* serial_end = colon_ptr;
     if (isdigit(serial_end[1])) {
         serial_end++;
         while (*serial_end && isdigit(*serial_end)) {
             serial_end++;
         }
         if (*serial_end != ':') {
-            // Something other than numbers was found, reset the end.
-            serial_end = first_colon;
+            // Something other than "<port>:" was found, this must be the command field instead.
+            serial_end = colon_ptr;
         }
     }
     return serial_end;
