@@ -20,6 +20,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <android-base/parseint.h>
+#include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <cutils/sockets.h>
@@ -62,55 +64,47 @@ static auto& kLocalSocketTypes = *new std::unordered_map<std::string, LocalSocke
     { "localfilesystem", { ANDROID_SOCKET_NAMESPACE_FILESYSTEM, !ADB_WINDOWS } },
 });
 
-static bool parse_tcp_spec(const std::string& spec, std::string* hostname, int* port,
+bool parse_tcp_socket_spec(const std::string& spec, std::string* hostname, int* port,
                            std::string* error) {
-    std::vector<std::string> fragments = android::base::Split(spec, ":");
-    if (fragments.size() == 1 || fragments.size() > 3) {
-        *error = StringPrintf("invalid tcp specification: '%s'", spec.c_str());
-        return false;
-    }
-
-    if (fragments[0] != "tcp") {
+    if (!StartsWith(spec, "tcp:")) {
         *error = StringPrintf("specification is not tcp: '%s'", spec.c_str());
         return false;
     }
 
-    // strtol accepts leading whitespace.
-    const std::string& port_str = fragments.back();
-    if (port_str.empty() || port_str[0] < '0' || port_str[0] > '9') {
-        *error = StringPrintf("invalid port '%s'", port_str.c_str());
-        return false;
-    }
+    std::string hostname_value;
+    int port_value;
 
-    char* parsed_end;
-    long parsed_port = strtol(port_str.c_str(), &parsed_end, 10);
-    if (*parsed_end != '\0') {
-        *error = StringPrintf("trailing chars in port: '%s'", port_str.c_str());
-        return false;
-    }
-    if (parsed_port > 65535) {
-        *error = StringPrintf("invalid port %ld", parsed_port);
-        return false;
-    }
-
-    // tcp:123 is valid, tcp::123 isn't.
-    if (fragments.size() == 2) {
-        // Empty hostname.
-        if (hostname) {
-            *hostname = "";
-        }
-    } else {
-        if (fragments[1].empty()) {
-            *error = StringPrintf("empty host in '%s'", spec.c_str());
+    // If the spec is tcp:<port>, parse it ourselves.
+    // Otherwise, delegate to android::base::ParseNetAddress.
+    if (android::base::ParseInt(&spec[4], &port_value)) {
+        // Do the range checking ourselves, because ParseInt rejects 'tcp:65536' and 'tcp:foo:1234'
+        // identically.
+        if (port_value < 0 || port_value > 65535) {
+            *error = StringPrintf("bad port number '%d'", port_value);
             return false;
         }
-        if (hostname) {
-            *hostname = fragments[1];
+    } else {
+        std::string addr = spec.substr(4);
+        port_value = -1;
+
+        // FIXME: ParseNetAddress rejects port 0. This currently doesn't hurt, because listening
+        //        on an address that isn't 'localhost' is unsupported.
+        if (!android::base::ParseNetAddress(addr, &hostname_value, &port_value, nullptr, error)) {
+            return false;
         }
+
+        if (port_value == -1) {
+            *error = StringPrintf("missing port in specification: '%s'", spec.c_str());
+            return false;
+        }
+    }
+
+    if (hostname) {
+        *hostname = std::move(hostname_value);
     }
 
     if (port) {
-        *port = parsed_port;
+        *port = port_value;
     }
 
     return true;
@@ -141,7 +135,7 @@ bool is_local_socket_spec(const std::string& spec) {
 
     std::string error;
     std::string hostname;
-    if (!parse_tcp_spec(spec, &hostname, nullptr, &error)) {
+    if (!parse_tcp_socket_spec(spec, &hostname, nullptr, &error)) {
         return false;
     }
     return tcp_host_is_local(hostname);
@@ -151,7 +145,7 @@ int socket_spec_connect(const std::string& spec, std::string* error) {
     if (StartsWith(spec, "tcp:")) {
         std::string hostname;
         int port;
-        if (!parse_tcp_spec(spec, &hostname, &port, error)) {
+        if (!parse_tcp_socket_spec(spec, &hostname, &port, error)) {
             return -1;
         }
 
@@ -196,7 +190,7 @@ int socket_spec_listen(const std::string& spec, std::string* error, int* resolve
     if (StartsWith(spec, "tcp:")) {
         std::string hostname;
         int port;
-        if (!parse_tcp_spec(spec, &hostname, &port, error)) {
+        if (!parse_tcp_socket_spec(spec, &hostname, &port, error)) {
             return -1;
         }
 
