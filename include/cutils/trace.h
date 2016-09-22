@@ -189,8 +189,8 @@ static inline void atrace_begin(uint64_t tag, const char* name)
 static inline void atrace_end(uint64_t tag)
 {
     if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
-        char c = 'E';
-        write(atrace_marker_fd, &c, 1);
+        void atrace_end_body();
+        atrace_end_body();
     }
 }
 
