@@ -112,6 +112,7 @@ int socket_network_client_timeout(const char* host, int port, int type, int time
         }
 
         result = toggle_O_NONBLOCK(s);
+        break;
     }
 
     freeaddrinfo(addrs);
