@@ -97,13 +97,6 @@ private:
             SortedVector< key_value_pair_t<KEY, VALUE> >    mVector;
 };
 
-// KeyedVector<KEY, VALUE> can be trivially moved using memcpy() because its
-// underlying SortedVector can be trivially moved.
-template<typename KEY, typename VALUE> struct trait_trivial_move<KeyedVector<KEY, VALUE> > {
-    enum { value = trait_trivial_move<SortedVector< key_value_pair_t<KEY, VALUE> > >::value };
-};
-
-
 // ---------------------------------------------------------------------------
 
 /**
