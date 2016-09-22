@@ -17,6 +17,7 @@
 #ifndef _LIBS_UTILS_CONDITION_H
 #define _LIBS_UTILS_CONDITION_H
 
+#include <limits.h>
 #include <stdint.h>
 #include <sys/types.h>
 #include <time.h>
@@ -120,7 +121,7 @@ inline status_t Condition::waitRelative(Mutex& mutex, nsecs_t reltime) {
     // On 32-bit devices, tv_sec is 32-bit, but `reltime` is 64-bit.
     int64_t reltime_sec = reltime/1000000000;
 
-    ts.tv_nsec += reltime%1000000000;
+    ts.tv_nsec += static_cast<long>(reltime%1000000000);
     if (reltime_sec < INT64_MAX && ts.tv_nsec >= 1000000000) {
         ts.tv_nsec -= 1000000000;
         ++reltime_sec;
@@ -133,11 +134,7 @@ inline status_t Condition::waitRelative(Mutex& mutex, nsecs_t reltime) {
         time_sec += reltime_sec;
     }
 
-#if defined(__LP64__)
-    ts.tv_sec = time_sec;
-#else
-    ts.tv_sec = (time_sec > INT32_MAX) ? INT32_MAX : time_sec;
-#endif
+    ts.tv_sec = (time_sec > LONG_MAX) ? LONG_MAX : static_cast<long>(time_sec);
 
     return -pthread_cond_timedwait(&mCond, &mutex.mMutex, &ts);
 }
