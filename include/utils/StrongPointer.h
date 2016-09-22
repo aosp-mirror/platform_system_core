@@ -137,7 +137,7 @@ template<typename T> template<typename U>
 sp<T>::sp(U* other)
         : m_ptr(other) {
     if (other)
-        ((T*) other)->incStrong(this);
+        (static_cast<T*>(other))->incStrong(this);
 }
 
 template<typename T> template<typename U>
@@ -212,7 +212,7 @@ sp<T>& sp<T>::operator =(sp<U>&& other) {
 template<typename T> template<typename U>
 sp<T>& sp<T>::operator =(U* other) {
     if (other)
-        ((T*) other)->incStrong(this);
+        (static_cast<T*>(other))->incStrong(this);
     if (m_ptr)
         m_ptr->decStrong(this);
     m_ptr = other;
