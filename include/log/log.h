@@ -41,6 +41,15 @@
 extern "C" {
 #endif
 
+// This file uses ", ## __VA_ARGS__" zero-argument token pasting to
+// work around issues with debug-only syntax errors in assertions
+// that are missing format strings.  See commit
+// 19299904343daf191267564fe32e6cd5c165cd42
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+#endif
+
 // ---------------------------------------------------------------------
 
 /*
@@ -691,6 +700,10 @@ int __android_log_buf_print(int bufID, int prio, const char *tag, const char *fm
     __attribute__((__format__(printf, 4, 5)))
 #endif
     ;
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
 #ifdef __cplusplus
 }
