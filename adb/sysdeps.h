@@ -97,27 +97,6 @@ static __inline__ bool adb_is_separator(char c) {
     return c == '\\' || c == '/';
 }
 
-typedef CRITICAL_SECTION          adb_mutex_t;
-
-#define  ADB_MUTEX_DEFINE(x)     adb_mutex_t   x
-
-/* declare all mutexes */
-/* For win32, adb_sysdeps_init() will do the mutex runtime initialization. */
-#define  ADB_MUTEX(x)   extern adb_mutex_t  x;
-#include "mutex_list.h"
-
-extern void  adb_sysdeps_init(void);
-
-static __inline__ void adb_mutex_lock( adb_mutex_t*  lock )
-{
-    EnterCriticalSection( lock );
-}
-
-static __inline__ void  adb_mutex_unlock( adb_mutex_t*  lock )
-{
-    LeaveCriticalSection( lock );
-}
-
 typedef void (*adb_thread_func_t)(void* arg);
 typedef HANDLE adb_thread_t;
 
@@ -476,27 +455,6 @@ static __inline__ bool adb_is_separator(char c) {
     return c == '/';
 }
 
-typedef  pthread_mutex_t          adb_mutex_t;
-
-#define  ADB_MUTEX_INITIALIZER    PTHREAD_MUTEX_INITIALIZER
-#define  adb_mutex_init           pthread_mutex_init
-#define  adb_mutex_lock           pthread_mutex_lock
-#define  adb_mutex_unlock         pthread_mutex_unlock
-#define  adb_mutex_destroy        pthread_mutex_destroy
-
-#define  ADB_MUTEX_DEFINE(m)      adb_mutex_t   m = PTHREAD_MUTEX_INITIALIZER
-
-#define  adb_cond_t               pthread_cond_t
-#define  adb_cond_init            pthread_cond_init
-#define  adb_cond_wait            pthread_cond_wait
-#define  adb_cond_broadcast       pthread_cond_broadcast
-#define  adb_cond_signal          pthread_cond_signal
-#define  adb_cond_destroy         pthread_cond_destroy
-
-/* declare all mutexes */
-#define  ADB_MUTEX(x)   extern adb_mutex_t  x;
-#include "mutex_list.h"
-
 static __inline__ void  close_on_exec(int  fd)
 {
     fcntl( fd, F_SETFD, FD_CLOEXEC );
@@ -817,10 +775,6 @@ static __inline__ int  adb_mkdir(const std::string& path, int mode)
 
 #undef   mkdir
 #define  mkdir  ___xxx_mkdir
-
-static __inline__ void  adb_sysdeps_init(void)
-{
-}
 
 static __inline__ int adb_is_absolute_host_path(const char* path) {
     return path[0] == '/';
