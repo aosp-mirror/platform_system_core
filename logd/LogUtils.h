@@ -37,7 +37,7 @@ char *pidToName(pid_t pid);
 char *tidToName(pid_t tid);
 
 // Furnished in main.cpp. Thread safe.
-const char *tagToName(uint32_t tag);
+const char *tagToName(size_t *len, uint32_t tag);
 
 }
 

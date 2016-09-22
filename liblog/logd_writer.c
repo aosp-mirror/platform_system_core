@@ -181,9 +181,9 @@ static int logdWrite(log_id_t logId, struct timespec *ts,
             }
         }
         snapshot = atomic_exchange_explicit(&dropped, 0, memory_order_relaxed);
-        if (snapshot && __android_log_is_loggable(ANDROID_LOG_INFO,
-                                                  "liblog",
-                                                  ANDROID_LOG_VERBOSE)) {
+        if (snapshot && __android_log_is_loggable_len(ANDROID_LOG_INFO,
+                                                      "liblog", strlen("liblog"),
+                                                      ANDROID_LOG_VERBOSE)) {
             android_log_event_int_t buffer;
 
             header.id = LOG_ID_EVENTS;
