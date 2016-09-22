@@ -19,6 +19,7 @@
 #ifndef LIBMEMUNREACHABLE_TARJAN_H_
 #define LIBMEMUNREACHABLE_TARJAN_H_
 
+#include <assert.h>
 #include <algorithm>
 
 #include "Allocator.h"
