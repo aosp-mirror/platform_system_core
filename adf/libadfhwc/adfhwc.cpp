@@ -273,28 +273,39 @@ static void *adf_event_thread(void *data)
 
     setpriority(PRIO_PROCESS, 0, HAL_PRIORITY_URGENT_DISPLAY);
 
-    pollfd *fds = new pollfd[dev->intf_fds.size()];
+    struct sigaction action = { };
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    action.sa_handler = [](int) { pthread_exit(0); };
+
+    if (sigaction(SIGUSR2, &action, NULL) < 0) {
+        ALOGE("failed to set thread exit action %s", strerror(errno));
+        return NULL;
+    }
+
+    sigset_t signal_set;
+    sigemptyset(&signal_set);
+    sigaddset(&signal_set, SIGUSR2);
+
+    pthread_sigmask(SIG_UNBLOCK, &signal_set, NULL);
+
+    pollfd fds[dev->intf_fds.size()];
     for (size_t i = 0; i < dev->intf_fds.size(); i++) {
         fds[i].fd = dev->intf_fds[i];
         fds[i].events = POLLIN | POLLPRI;
     }
 
     while (true) {
-        int err = poll(fds, dev->intf_fds.size(), -1);
-
-        if (err > 0) {
-            for (size_t i = 0; i < dev->intf_fds.size(); i++)
-                if (fds[i].revents & (POLLIN | POLLPRI))
-                    handle_adf_event(dev, i);
-        }
-        else if (err == -1) {
-            if (errno == EINTR)
-                break;
+        if (TEMP_FAILURE_RETRY(poll(fds, dev->intf_fds.size(), -1)) < 0) {
             ALOGE("error in event thread: %s", strerror(errno));
+            break;
         }
+
+        for (size_t i = 0; i < dev->intf_fds.size(); i++)
+            if (fds[i].revents & (POLLIN | POLLPRI))
+                handle_adf_event(dev, i);
     }
 
-    delete [] fds;
     return NULL;
 }
 
@@ -329,6 +340,12 @@ int adf_hwc_open(int *intf_fds, size_t n_intfs,
         }
     }
 
+    sigset_t signal_set;
+    sigemptyset(&signal_set);
+    sigaddset(&signal_set, SIGUSR2);
+
+    pthread_sigmask(SIG_BLOCK, &signal_set, NULL);
+
     ret = pthread_create(&dev_ret->event_thread, NULL, adf_event_thread,
             dev_ret);
     if (ret) {
@@ -349,7 +366,7 @@ err:
 
 void adf_hwc_close(struct adf_hwc_helper *dev)
 {
-    pthread_kill(dev->event_thread, SIGTERM);
+    pthread_kill(dev->event_thread, SIGUSR2);
     pthread_join(dev->event_thread, NULL);
 
     for (size_t i = 0; i < dev->intf_fds.size(); i++)
