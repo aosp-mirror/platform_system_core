@@ -120,11 +120,35 @@ class ErrnoRestorer {
   DISALLOW_COPY_AND_ASSIGN(ErrnoRestorer);
 };
 
+// Defines whether the given severity will be logged or silently swallowed.
+#define WOULD_LOG(severity) WOULD_LOG_SEVERITY(::android::base::severity)
+#define WOULD_LOG_SEVERITY(severity) \
+  UNLIKELY((severity) >= ::android::base::GetMinimumLogSeverity())
+
+// Get an ostream that can be used for logging at the given severity and to the default
+// destination.
+//
+// Notes:
+// 1) This will not check whether the severity is high enough. One should use WOULD_LOG to filter
+//    usage manually.
+// 2) This does not save and restore errno.
+#define LOG_STREAM(severity) LOG_STREAM_S(::android::base::severity)
+#define LOG_STREAM_S(severity) LOG_STREAM_TO_S(DEFAULT, severity)
+
+// Get an ostream that can be used for logging at the given severity and to the
+// given destination. The same notes as for LOG_STREAM apply.
+#define LOG_STREAM_TO(dest, severity) LOG_STREAM_TO_S(dest, ::android::base::severity)
+#define LOG_STREAM_TO_S(dest, severity)                                 \
+  ::android::base::LogMessage(__FILE__, __LINE__,                       \
+                              ::android::base::dest,                    \
+                              severity, -1).stream()
+
 // Logs a message to logcat on Android otherwise to stderr. If the severity is
 // FATAL it also causes an abort. For example:
 //
 //     LOG(FATAL) << "We didn't expect to reach here";
-#define LOG(severity) LOG_TO(DEFAULT, severity)
+#define LOG(severity) LOG_S(::android::base::severity)
+#define LOG_S(severity) LOG_TO_S(DEFAULT, severity)
 
 // Logs a message to logcat with the specified log ID on Android otherwise to
 // stderr. If the severity is FATAL it also causes an abort.
@@ -132,24 +156,25 @@ class ErrnoRestorer {
 // else statement after LOG() macro, it won't bind to the if statement in the macro.
 // do-while(0) statement doesn't work here. Because we need to support << operator
 // following the macro, like "LOG(DEBUG) << xxx;".
-#define LOG_TO(dest, severity)                                                        \
-  UNLIKELY(::android::base::severity >= ::android::base::GetMinimumLogSeverity()) &&  \
-    ::android::base::ErrnoRestorer() &&                                               \
-      ::android::base::LogMessage(__FILE__, __LINE__,                                 \
-          ::android::base::dest,                                                      \
-          ::android::base::severity, -1).stream()
+#define LOG_TO(dest, severity) LOG_TO_S(dest, ::android::base::severity)
+#define LOG_TO_S(dest, severity)           \
+  WOULD_LOG_SEVERITY(severity) &&          \
+    ::android::base::ErrnoRestorer() &&    \
+      LOG_STREAM_TO_S(dest, severity)      \
 
 // A variant of LOG that also logs the current errno value. To be used when
 // library calls fail.
-#define PLOG(severity) PLOG_TO(DEFAULT, severity)
+#define PLOG(severity) PLOG_S(::android::base::severity)
+#define PLOG_S(severity) PLOG_TO_S(DEFAULT, severity)
 
 // Behaves like PLOG, but logs to the specified log ID.
-#define PLOG_TO(dest, severity)                                                      \
-  UNLIKELY(::android::base::severity >= ::android::base::GetMinimumLogSeverity()) && \
-    ::android::base::ErrnoRestorer() &&                                              \
-      ::android::base::LogMessage(__FILE__, __LINE__,                                \
-          ::android::base::dest,                                                     \
-          ::android::base::severity, errno).stream()
+#define PLOG_TO(dest, severity) PLOG_TO_S(dest, ::android::base::severity)
+#define PLOG_TO_S(dest, severity)                       \
+  WOULD_LOG_SEVERITY(severity) &&                       \
+    ::android::base::ErrnoRestorer() &&                 \
+      ::android::base::LogMessage(__FILE__, __LINE__,   \
+          ::android::base::dest,                        \
+          severity, errno).stream()
 
 // Marker that code is yet to be implemented.
 #define UNIMPLEMENTED(level) \
