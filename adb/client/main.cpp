@@ -169,7 +169,6 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
 }
 
 int main(int argc, char** argv) {
-    adb_sysdeps_init();
     adb_trace_init(argv);
     return adb_commandline(argc - 1, const_cast<const char**>(argv + 1));
 }

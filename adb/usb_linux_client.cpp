@@ -32,6 +32,8 @@
 
 #include <algorithm>
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 
 #include <android-base/logging.h>
 
@@ -54,12 +56,14 @@
 
 static int dummy_fd = -1;
 
-struct usb_handle
-{
-    adb_cond_t notify;
-    adb_mutex_t lock;
-    bool open_new_connection;
+struct usb_handle {
+    usb_handle() : kicked(false) {
+    }
+
+    std::condition_variable notify;
+    std::mutex lock;
     std::atomic<bool> kicked;
+    bool open_new_connection = true;
 
     int (*write)(usb_handle *h, const void *data, int len);
     int (*read)(usb_handle *h, void *data, int len);
@@ -67,12 +71,12 @@ struct usb_handle
     void (*close)(usb_handle *h);
 
     // Legacy f_adb
-    int fd;
+    int fd = -1;
 
     // FunctionFS
-    int control;
-    int bulk_out; /* "out" from the host's perspective => source for adbd */
-    int bulk_in;  /* "in" from the host's perspective => sink for adbd */
+    int control = -1;
+    int bulk_out = -1; /* "out" from the host's perspective => source for adbd */
+    int bulk_in = -1;  /* "in" from the host's perspective => sink for adbd */
 };
 
 struct func_desc {
@@ -248,12 +252,12 @@ static void usb_adb_open_thread(void* x) {
 
     while (true) {
         // wait until the USB device needs opening
-        adb_mutex_lock(&usb->lock);
+        std::unique_lock<std::mutex> lock(usb->lock);
         while (!usb->open_new_connection) {
-            adb_cond_wait(&usb->notify, &usb->lock);
+            usb->notify.wait(lock);
         }
         usb->open_new_connection = false;
-        adb_mutex_unlock(&usb->lock);
+        lock.unlock();
 
         D("[ usb_thread - opening device ]");
         do {
@@ -339,27 +343,20 @@ static void usb_adb_close(usb_handle *h) {
     h->kicked = false;
     adb_close(h->fd);
     // Notify usb_adb_open_thread to open a new connection.
-    adb_mutex_lock(&h->lock);
+    h->lock.lock();
     h->open_new_connection = true;
-    adb_cond_signal(&h->notify);
-    adb_mutex_unlock(&h->lock);
+    h->lock.unlock();
+    h->notify.notify_one();
 }
 
 static void usb_adb_init()
 {
-    usb_handle* h = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
-    if (h == nullptr) fatal("couldn't allocate usb_handle");
+    usb_handle* h = new usb_handle();
 
     h->write = usb_adb_write;
     h->read = usb_adb_read;
     h->kick = usb_adb_kick;
     h->close = usb_adb_close;
-    h->kicked = false;
-    h->fd = -1;
-
-    h->open_new_connection = true;
-    adb_cond_init(&h->notify, 0);
-    adb_mutex_init(&h->lock, 0);
 
     // Open the file /dev/android_adb_enable to trigger
     // the enabling of the adb USB function in the kernel.
@@ -468,12 +465,12 @@ static void usb_ffs_open_thread(void* x) {
 
     while (true) {
         // wait until the USB device needs opening
-        adb_mutex_lock(&usb->lock);
+        std::unique_lock<std::mutex> lock(usb->lock);
         while (!usb->open_new_connection) {
-            adb_cond_wait(&usb->notify, &usb->lock);
+            usb->notify.wait(lock);
         }
         usb->open_new_connection = false;
-        adb_mutex_unlock(&usb->lock);
+        lock.unlock();
 
         while (true) {
             if (init_functionfs(usb)) {
@@ -557,31 +554,22 @@ static void usb_ffs_close(usb_handle *h) {
     adb_close(h->bulk_out);
     adb_close(h->bulk_in);
     // Notify usb_adb_open_thread to open a new connection.
-    adb_mutex_lock(&h->lock);
+    h->lock.lock();
     h->open_new_connection = true;
-    adb_cond_signal(&h->notify);
-    adb_mutex_unlock(&h->lock);
+    h->lock.unlock();
+    h->notify.notify_one();
 }
 
 static void usb_ffs_init()
 {
     D("[ usb_init - using FunctionFS ]");
 
-    usb_handle* h = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
-    if (h == nullptr) fatal("couldn't allocate usb_handle");
+    usb_handle* h = new usb_handle();
 
     h->write = usb_ffs_write;
     h->read = usb_ffs_read;
     h->kick = usb_ffs_kick;
     h->close = usb_ffs_close;
-    h->kicked = false;
-    h->control = -1;
-    h->bulk_out = -1;
-    h->bulk_out = -1;
-
-    h->open_new_connection = true;
-    adb_cond_init(&h->notify, 0);
-    adb_mutex_init(&h->lock, 0);
 
     D("[ usb_init - starting thread ]");
     if (!adb_thread_create(usb_ffs_open_thread, h)) {
@@ -608,6 +596,7 @@ int usb_read(usb_handle *h, void *data, int len)
 {
     return h->read(h, data, len);
 }
+
 int usb_close(usb_handle *h)
 {
     h->close(h);

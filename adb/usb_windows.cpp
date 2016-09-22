@@ -19,13 +19,17 @@
 #include "sysdeps.h"
 
 #include <winsock2.h>  // winsock.h *must* be included before windows.h.
-#include <adb_api.h>
+#include <windows.h>
+#include <usb100.h>
+#include <winerror.h>
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <usb100.h>
-#include <windows.h>
-#include <winerror.h>
+
+#include <mutex>
+
+#include <adb_api.h>
 
 #include <android-base/errors.h>
 
@@ -73,7 +77,7 @@ static usb_handle handle_list = {
 };
 
 /// Locker for the list of opened usb handles
-ADB_MUTEX_DEFINE( usb_lock );
+static std::mutex& usb_lock = *new std::mutex();
 
 /// Checks if there is opened usb handle in handle_list for this device.
 int known_device(const wchar_t* dev_name);
@@ -141,9 +145,8 @@ int known_device(const wchar_t* dev_name) {
   int ret = 0;
 
   if (NULL != dev_name) {
-    adb_mutex_lock(&usb_lock);
+    std::lock_guard<std::mutex> lock(usb_lock);
     ret = known_device_locked(dev_name);
-    adb_mutex_unlock(&usb_lock);
   }
 
   return ret;
@@ -153,11 +156,10 @@ int register_new_device(usb_handle* handle) {
   if (NULL == handle)
     return 0;
 
-  adb_mutex_lock(&usb_lock);
+  std::lock_guard<std::mutex> lock(usb_lock);
 
   // Check if device is already in the list
   if (known_device_locked(handle->interface_name)) {
-    adb_mutex_unlock(&usb_lock);
     return 0;
   }
 
@@ -166,8 +168,6 @@ int register_new_device(usb_handle* handle) {
   handle->prev = handle_list.prev;
   handle->prev->next = handle;
   handle->next->prev = handle;
-
-  adb_mutex_unlock(&usb_lock);
 
   return 1;
 }
@@ -493,11 +493,8 @@ static void usb_kick_locked(usb_handle* handle) {
 void usb_kick(usb_handle* handle) {
   D("usb_kick");
   if (NULL != handle) {
-    adb_mutex_lock(&usb_lock);
-
+    std::lock_guard<std::mutex> lock(usb_lock);
     usb_kick_locked(handle);
-
-    adb_mutex_unlock(&usb_lock);
   } else {
     errno = EINVAL;
   }
@@ -508,16 +505,16 @@ int usb_close(usb_handle* handle) {
 
   if (NULL != handle) {
     // Remove handle from the list
-    adb_mutex_lock(&usb_lock);
+    {
+      std::lock_guard<std::mutex> lock(usb_lock);
 
-    if ((handle->next != handle) && (handle->prev != handle)) {
-      handle->next->prev = handle->prev;
-      handle->prev->next = handle->next;
-      handle->prev = handle;
-      handle->next = handle;
+      if ((handle->next != handle) && (handle->prev != handle)) {
+        handle->next->prev = handle->prev;
+        handle->prev->next = handle->next;
+        handle->prev = handle;
+        handle->next = handle;
+      }
     }
-
-    adb_mutex_unlock(&usb_lock);
 
     // Cleanup handle
     usb_cleanup_handle(handle);
@@ -651,9 +648,8 @@ void find_devices() {
 static void kick_devices() {
   // Need to acquire lock to safely walk the list which might be modified
   // by another thread.
-  adb_mutex_lock(&usb_lock);
+  std::lock_guard<std::mutex> lock(usb_lock);
   for (usb_handle* usb = handle_list.next; usb != &handle_list; usb = usb->next) {
     usb_kick_locked(usb);
   }
-  adb_mutex_unlock(&usb_lock);
 }
