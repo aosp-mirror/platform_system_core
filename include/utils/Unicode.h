@@ -60,6 +60,7 @@ ssize_t utf32_to_utf8_length(const char32_t *src, size_t src_len);
  * Returns the size actually used for storing the string.
  * dst" is not nul-terminated when dst_len is fully used (like strncpy).
  *
+ * \code
  * Example 1
  * "src" == \u3042\u3044 (\xE3\x81\x82\xE3\x81\x84)
  * "src_len" == 2
@@ -87,6 +88,7 @@ ssize_t utf32_to_utf8_length(const char32_t *src, size_t src_len);
  * Returned value == 6
  * "dst" becomes \xE3\x81\x82\xE3\x81\x84
  * (note that "dst" is NOT nul-terminated, like strncpy)
+ * \endcode
  */
 void utf32_to_utf8(const char32_t* src, size_t src_len, char* dst, size_t dst_len);
 

@@ -677,4 +677,8 @@ void Looper::Request::initEventItem(struct epoll_event* eventItem) const {
     eventItem->data.fd = fd;
 }
 
+MessageHandler::~MessageHandler() { }
+
+LooperCallback::~LooperCallback() { }
+
 } // namespace android
