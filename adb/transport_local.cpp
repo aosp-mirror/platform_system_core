@@ -26,6 +26,7 @@
 #include <sys/types.h>
 
 #include <condition_variable>
+#include <mutex>
 #include <vector>
 
 #include <android-base/stringprintf.h>
@@ -47,7 +48,7 @@
 // connected.
 #define ADB_LOCAL_TRANSPORT_MAX 16
 
-ADB_MUTEX_DEFINE(local_transports_lock);
+static std::mutex& local_transports_lock = *new std::mutex();
 
 /* we keep a list of opened transports. The atransport struct knows to which
  * local transport it is connected. The list is used to detect when we're
@@ -384,14 +385,13 @@ static void remote_kick(atransport *t)
 
 #if ADB_HOST
     int  nn;
-    adb_mutex_lock( &local_transports_lock );
+    std::lock_guard<std::mutex> lock(local_transports_lock);
     for (nn = 0; nn < ADB_LOCAL_TRANSPORT_MAX; nn++) {
         if (local_transports[nn] == t) {
             local_transports[nn] = NULL;
             break;
         }
     }
-    adb_mutex_unlock( &local_transports_lock );
 #endif
 }
 
@@ -435,9 +435,8 @@ static atransport* find_emulator_transport_by_adb_port_locked(int adb_port)
 
 atransport* find_emulator_transport_by_adb_port(int adb_port)
 {
-    adb_mutex_lock( &local_transports_lock );
+    std::lock_guard<std::mutex> lock(local_transports_lock);
     atransport* result = find_emulator_transport_by_adb_port_locked(adb_port);
-    adb_mutex_unlock( &local_transports_lock );
     return result;
 }
 
@@ -455,9 +454,8 @@ int get_available_local_transport_index_locked()
 
 int get_available_local_transport_index()
 {
-    adb_mutex_lock( &local_transports_lock );
+    std::lock_guard<std::mutex> lock(local_transports_lock);
     int result = get_available_local_transport_index_locked();
-    adb_mutex_unlock( &local_transports_lock );
     return result;
 }
 #endif
@@ -477,26 +475,20 @@ int init_socket_transport(atransport *t, int s, int adb_port, int local)
 
 #if ADB_HOST
     if (local) {
-        adb_mutex_lock( &local_transports_lock );
-        {
-            t->SetLocalPortForEmulator(adb_port);
-            atransport* existing_transport =
-                    find_emulator_transport_by_adb_port_locked(adb_port);
-            int index = get_available_local_transport_index_locked();
-            if (existing_transport != NULL) {
-                D("local transport for port %d already registered (%p)?",
-                adb_port, existing_transport);
-                fail = -1;
-            } else if (index < 0) {
-                // Too many emulators.
-                D("cannot register more emulators. Maximum is %d",
-                        ADB_LOCAL_TRANSPORT_MAX);
-                fail = -1;
-            } else {
-                local_transports[index] = t;
-            }
-       }
-       adb_mutex_unlock( &local_transports_lock );
+        std::lock_guard<std::mutex> lock(local_transports_lock);
+        t->SetLocalPortForEmulator(adb_port);
+        atransport* existing_transport = find_emulator_transport_by_adb_port_locked(adb_port);
+        int index = get_available_local_transport_index_locked();
+        if (existing_transport != NULL) {
+            D("local transport for port %d already registered (%p)?", adb_port, existing_transport);
+            fail = -1;
+        } else if (index < 0) {
+            // Too many emulators.
+            D("cannot register more emulators. Maximum is %d", ADB_LOCAL_TRANSPORT_MAX);
+            fail = -1;
+        } else {
+            local_transports[index] = t;
+        }
     }
 #endif
     return fail;

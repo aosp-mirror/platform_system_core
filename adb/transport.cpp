@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <list>
+#include <mutex>
 
 #include <android-base/logging.h>
 #include <android-base/parsenetaddress.h>
@@ -44,7 +45,7 @@ static void transport_unref(atransport *t);
 static auto& transport_list = *new std::list<atransport*>();
 static auto& pending_list = *new std::list<atransport*>();
 
-ADB_MUTEX_DEFINE( transport_lock );
+static std::mutex& transport_lock = *new std::mutex();
 
 const char* const kFeatureShell2 = "shell_v2";
 const char* const kFeatureCmd = "cmd";
@@ -297,13 +298,12 @@ static void write_transport_thread(void* _t) {
 }
 
 void kick_transport(atransport* t) {
-    adb_mutex_lock(&transport_lock);
+    std::lock_guard<std::mutex> lock(transport_lock);
     // As kick_transport() can be called from threads without guarantee that t is valid,
     // check if the transport is in transport_list first.
     if (std::find(transport_list.begin(), transport_list.end(), t) != transport_list.end()) {
         t->Kick();
     }
-    adb_mutex_unlock(&transport_lock);
 }
 
 static int transport_registration_send = -1;
@@ -333,7 +333,7 @@ device_tracker_remove( device_tracker*  tracker )
     device_tracker**  pnode = &device_tracker_list;
     device_tracker*   node  = *pnode;
 
-    adb_mutex_lock( &transport_lock );
+    std::lock_guard<std::mutex> lock(transport_lock);
     while (node) {
         if (node == tracker) {
             *pnode = node->next;
@@ -342,7 +342,6 @@ device_tracker_remove( device_tracker*  tracker )
         pnode = &node->next;
         node  = *pnode;
     }
-    adb_mutex_unlock( &transport_lock );
 }
 
 static void
@@ -504,9 +503,10 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
         fdevent_remove(&(t->transport_fde));
         adb_close(t->fd);
 
-        adb_mutex_lock(&transport_lock);
-        transport_list.remove(t);
-        adb_mutex_unlock(&transport_lock);
+        {
+            std::lock_guard<std::mutex> lock(transport_lock);
+            transport_list.remove(t);
+        }
 
         if (t->product)
             free(t->product);
@@ -555,10 +555,11 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
         }
     }
 
-    adb_mutex_lock(&transport_lock);
-    pending_list.remove(t);
-    transport_list.push_front(t);
-    adb_mutex_unlock(&transport_lock);
+    {
+        std::lock_guard<std::mutex> lock(transport_lock);
+        pending_list.remove(t);
+        transport_list.push_front(t);
+    }
 
     update_transports();
 }
@@ -609,7 +610,8 @@ static void remove_transport(atransport *transport)
 
 static void transport_unref(atransport* t) {
     CHECK(t != nullptr);
-    adb_mutex_lock(&transport_lock);
+
+    std::lock_guard<std::mutex> lock(transport_lock);
     CHECK_GT(t->ref_count, 0u);
     t->ref_count--;
     if (t->ref_count == 0) {
@@ -619,7 +621,6 @@ static void transport_unref(atransport* t) {
     } else {
         D("transport: %s unref (count=%zu)", t->serial, t->ref_count);
     }
-    adb_mutex_unlock(&transport_lock);
 }
 
 static int qual_match(const char *to_test,
@@ -665,7 +666,7 @@ atransport* acquire_one_transport(TransportType type, const char* serial,
         *error_out = "no devices found";
     }
 
-    adb_mutex_lock(&transport_lock);
+    std::unique_lock<std::mutex> lock(transport_lock);
     for (const auto& t : transport_list) {
         if (t->connection_state == kCsNoPerm) {
 #if ADB_HOST
@@ -713,7 +714,7 @@ atransport* acquire_one_transport(TransportType type, const char* serial,
             }
         }
     }
-    adb_mutex_unlock(&transport_lock);
+    lock.unlock();
 
     // Don't return unauthorized devices; the caller can't do anything with them.
     if (result && result->connection_state == kCsUnauthorized) {
@@ -914,21 +915,20 @@ static void append_transport(const atransport* t, std::string* result,
 
 std::string list_transports(bool long_listing) {
     std::string result;
-    adb_mutex_lock(&transport_lock);
+
+    std::lock_guard<std::mutex> lock(transport_lock);
     for (const auto& t : transport_list) {
         append_transport(t, &result, long_listing);
     }
-    adb_mutex_unlock(&transport_lock);
     return result;
 }
 
 /* hack for osx */
 void close_usb_devices() {
-    adb_mutex_lock(&transport_lock);
+    std::lock_guard<std::mutex> lock(transport_lock);
     for (const auto& t : transport_list) {
         t->Kick();
     }
-    adb_mutex_unlock(&transport_lock);
 }
 #endif // ADB_HOST
 
@@ -947,10 +947,9 @@ int register_socket_transport(int s, const char *serial, int port, int local) {
         return -1;
     }
 
-    adb_mutex_lock(&transport_lock);
+    std::unique_lock<std::mutex> lock(transport_lock);
     for (const auto& transport : pending_list) {
         if (transport->serial && strcmp(serial, transport->serial) == 0) {
-            adb_mutex_unlock(&transport_lock);
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                 << " is already in pending_list and fails to register";
             delete t;
@@ -960,7 +959,6 @@ int register_socket_transport(int s, const char *serial, int port, int local) {
 
     for (const auto& transport : transport_list) {
         if (transport->serial && strcmp(serial, transport->serial) == 0) {
-            adb_mutex_unlock(&transport_lock);
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                 << " is already in transport_list and fails to register";
             delete t;
@@ -970,7 +968,8 @@ int register_socket_transport(int s, const char *serial, int port, int local) {
 
     pending_list.push_front(t);
     t->serial = strdup(serial);
-    adb_mutex_unlock(&transport_lock);
+
+    lock.unlock();
 
     register_transport(t);
     return 0;
@@ -980,20 +979,19 @@ int register_socket_transport(int s, const char *serial, int port, int local) {
 atransport *find_transport(const char *serial) {
     atransport* result = nullptr;
 
-    adb_mutex_lock(&transport_lock);
+    std::lock_guard<std::mutex> lock(transport_lock);
     for (auto& t : transport_list) {
         if (t->serial && strcmp(serial, t->serial) == 0) {
             result = t;
             break;
         }
     }
-    adb_mutex_unlock(&transport_lock);
 
     return result;
 }
 
 void kick_all_tcp_devices() {
-    adb_mutex_lock(&transport_lock);
+    std::lock_guard<std::mutex> lock(transport_lock);
     for (auto& t : transport_list) {
         if (t->IsTcpDevice()) {
             // Kicking breaks the read_transport thread of this transport out of any read, then
@@ -1003,7 +1001,6 @@ void kick_all_tcp_devices() {
             t->Kick();
         }
     }
-    adb_mutex_unlock(&transport_lock);
 }
 
 #endif
@@ -1023,20 +1020,20 @@ void register_usb_transport(usb_handle* usb, const char* serial,
         t->devpath = strdup(devpath);
     }
 
-    adb_mutex_lock(&transport_lock);
-    pending_list.push_front(t);
-    adb_mutex_unlock(&transport_lock);
+    {
+        std::lock_guard<std::mutex> lock(transport_lock);
+        pending_list.push_front(t);
+    }
 
     register_transport(t);
 }
 
 // This should only be used for transports with connection_state == kCsNoPerm.
 void unregister_usb_transport(usb_handle *usb) {
-    adb_mutex_lock(&transport_lock);
+    std::lock_guard<std::mutex> lock(transport_lock);
     transport_list.remove_if([usb](atransport* t) {
         return t->usb == usb && t->connection_state == kCsNoPerm;
     });
-    adb_mutex_unlock(&transport_lock);
 }
 
 int check_header(apacket *p, atransport *t)

@@ -269,17 +269,6 @@ TEST(sysdeps_mutex, mutex_smoke) {
     m.unlock();
 }
 
-// Our implementation on Windows aborts on double lock.
-#if defined(_WIN32)
-TEST(sysdeps_mutex, mutex_reentrant_lock) {
-    std::mutex &m = *new std::mutex();
-
-    m.lock();
-    ASSERT_FALSE(m.try_lock());
-    EXPECT_DEATH(m.lock(), "non-recursive mutex locked reentrantly");
-}
-#endif
-
 TEST(sysdeps_mutex, recursive_mutex_smoke) {
     static std::recursive_mutex &m = *new std::recursive_mutex();
 
