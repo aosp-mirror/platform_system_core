@@ -85,7 +85,7 @@ static int __inline__ qemu_pipe_frame_send(int fd,
                                            const void* buff,
                                            size_t len) {
     char header[5];
-    snprintf(header, sizeof(header), "%04x", len);
+    snprintf(header, sizeof(header), "%04zu", len);
     ssize_t ret = TEMP_FAILURE_RETRY(write(fd, header, 4));
     if (ret != 4) {
         QEMU_PIPE_DEBUG("Can't write qemud frame header: %s", strerror(errno));
@@ -123,7 +123,7 @@ static int __inline__ qemu_pipe_frame_recv(int fd, void* buff, size_t len) {
         return -1;
     }
     ret = TEMP_FAILURE_RETRY(read(fd, buff, size));
-    if (ret != size) {
+    if (ret != (ssize_t)size) {
         QEMU_PIPE_DEBUG("Could not read qemud frame payload: %s",
                         strerror(errno));
         return -1;

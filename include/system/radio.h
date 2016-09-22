@@ -218,7 +218,8 @@ typedef struct radio_event {
 } radio_event_t;
 
 
-static radio_rds_t radio_rds_for_region(bool rds, radio_region_t region) {
+static inline
+radio_rds_t radio_rds_for_region(bool rds, radio_region_t region) {
     if (!rds)
         return RADIO_RDS_NONE;
     switch(region) {
@@ -234,7 +235,8 @@ static radio_rds_t radio_rds_for_region(bool rds, radio_region_t region) {
     }
 }
 
-static radio_deemphasis_t radio_demephasis_for_region(radio_region_t region) {
+static inline
+radio_deemphasis_t radio_demephasis_for_region(radio_region_t region) {
     switch(region) {
         case RADIO_REGION_KOREA:
         case RADIO_REGION_ITU_2:
