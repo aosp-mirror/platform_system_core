@@ -98,7 +98,7 @@ FileMap::~FileMap(void)
     }
 #if defined(__MINGW32__)
     if (mBasePtr && UnmapViewOfFile(mBasePtr) == 0) {
-        ALOGD("UnmapViewOfFile(%p) failed, error = %" PRId32 "\n", mBasePtr,
+        ALOGD("UnmapViewOfFile(%p) failed, error = %lu\n", mBasePtr,
               GetLastError() );
     }
     if (mFileMapping != INVALID_HANDLE_VALUE) {
@@ -138,7 +138,7 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
     mFileHandle  = (HANDLE) _get_osfhandle(fd);
     mFileMapping = CreateFileMapping( mFileHandle, NULL, protect, 0, 0, NULL);
     if (mFileMapping == NULL) {
-        ALOGE("CreateFileMapping(%p, %" PRIx32 ") failed with error %" PRId32 "\n",
+        ALOGE("CreateFileMapping(%p, %lx) failed with error %lu\n",
               mFileHandle, protect, GetLastError() );
         return false;
     }
@@ -153,7 +153,7 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
                               (DWORD)(adjOffset),
                               adjLength );
     if (mBasePtr == NULL) {
-        ALOGE("MapViewOfFile(%" PRId64 ", %zu) failed with error %" PRId32 "\n",
+        ALOGE("MapViewOfFile(%" PRId64 ", %zu) failed with error %lu\n",
               adjOffset, adjLength, GetLastError() );
         CloseHandle(mFileMapping);
         mFileMapping = INVALID_HANDLE_VALUE;

@@ -166,7 +166,7 @@ LruCache<TKey, TValue>::LruCache(uint32_t maxCapacity)
     , mOldest(NULL)
     , mYoungest(NULL)
     , mMaxCapacity(maxCapacity)
-    , mNullValue(NULL) {
+    , mNullValue(0) {
     mSet->max_load_factor(1.0);
 };
 
