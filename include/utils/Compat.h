@@ -45,13 +45,8 @@ static inline ssize_t pwrite64(int fd, const void* buf, size_t nbytes, off64_t o
 #define DEFFILEMODE 0666
 #endif /* _WIN32 */
 
-#if defined(_WIN32)
-#define ZD "%ld"
-#define ZD_TYPE long
-#else
 #define ZD "%zd"
 #define ZD_TYPE ssize_t
-#endif
 
 /*
  * Needed for cases where something should be constexpr if possible, but not
