@@ -146,6 +146,9 @@ static const struct fs_path_config android_files[] = {
     { 00755, AID_WIFI,      AID_WIFI,     CAP_MASK_LONG(CAP_NET_ADMIN) |
                                           CAP_MASK_LONG(CAP_NET_RAW),    "system/bin/hostapd" },
 
+    /* Support wifi_hal_legacy administering a network interface. */
+    { 00755, AID_WIFI,      AID_WIFI,     CAP_MASK_LONG(CAP_NET_ADMIN) | CAP_MASK_LONG(CAP_NET_RAW),    "system/bin/hw/wifi_hal_legacy" },
+
     { 00750, AID_ROOT,      AID_ROOT,      0, "system/bin/uncrypt" },
     { 00750, AID_ROOT,      AID_ROOT,      0, "system/bin/install-recovery.sh" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/*" },
