@@ -45,3 +45,24 @@ int socket_get_local_port(cutils_socket_t sock) {
     }
     return -1;
 }
+
+int android_get_control_socket(const char* name) {
+    char key[64];
+    snprintf(key, sizeof(key), ANDROID_SOCKET_ENV_PREFIX "%s", name);
+
+    const char* val = getenv(key);
+    if (!val) {
+        return -1;
+    }
+
+    errno = 0;
+    long ret = strtol(val, NULL, 10);
+    if (errno) {
+        return -1;
+    }
+    if (ret < 0 || ret > INT_MAX) {
+        return -1;
+    }
+
+    return static_cast<int>(ret);
+}
