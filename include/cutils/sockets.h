@@ -18,6 +18,7 @@
 #define __CUTILS_SOCKETS_H
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,28 +52,8 @@ extern "C" {
  * android_get_control_socket - simple helper function to get the file
  * descriptor of our init-managed Unix domain socket. `name' is the name of the
  * socket, as given in init.rc. Returns -1 on error.
- *
- * This is inline and not in libcutils proper because we want to use this in
- * third-party daemons with minimal modification.
  */
-static inline int android_get_control_socket(const char* name)
-{
-	char key[64];
-	snprintf(key, sizeof(key), ANDROID_SOCKET_ENV_PREFIX "%s", name);
-
-	const char* val = getenv(key);
-	if (!val) {
-		return -1;
-	}
-
-	errno = 0;
-	int fd = strtol(val, NULL, 10);
-	if (errno) {
-		return -1;
-	}
-
-	return fd;
-}
+int android_get_control_socket(const char* name);
 
 /*
  * See also android.os.LocalSocketAddress.Namespace
