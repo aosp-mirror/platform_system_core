@@ -41,8 +41,8 @@ subsystem adf
 /dev/android_adb          0660   adb        adb
 /dev/android_adb_enable   0660   adb        adb
 /dev/ttyMSM0              0600   bluetooth  bluetooth
-/dev/uhid                 0660   system     net_bt_stack
-/dev/uinput               0660   system     net_bt_stack
+/dev/uhid                 0660   system     bluetooth
+/dev/uinput               0660   system     bluetooth
 /dev/alarm                0664   system     radio
 /dev/rtc0                 0640   system     system
 /dev/tty0                 0660   root       system
