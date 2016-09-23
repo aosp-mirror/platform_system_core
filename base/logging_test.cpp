@@ -317,69 +317,131 @@ static void CheckMessage(const CapturedStderr& cap,
 #endif
 }
 
-#define CHECK_LOG_STREAM(severity) \
+#define CHECK_LOG_STREAM_DISABLED(severity) \
+  android::base::ScopedLogSeverity sls1(android::base::FATAL); \
+  CapturedStderr cap1; \
+  LOG_STREAM(severity) << "foo bar"; \
+  ASSERT_EQ(0, lseek(cap1.fd(), 0, SEEK_CUR));
+
+#define CHECK_LOG_STREAM_ENABLED(severity) \
   android::base::ScopedLogSeverity sls2(android::base::severity); \
   CapturedStderr cap2; \
   LOG_STREAM(severity) << "foobar"; \
   CheckMessage(cap2, android::base::severity, "foobar"); \
 
-TEST(logging, LOG_STREAM_FATAL_WITHOUT_ABORT) {
-  CHECK_LOG_STREAM(FATAL_WITHOUT_ABORT);
+TEST(logging, LOG_STREAM_FATAL_WITHOUT_ABORT_disabled) {
+  CHECK_LOG_STREAM_DISABLED(FATAL_WITHOUT_ABORT);
 }
 
-TEST(logging, LOG_STREAM_ERROR) {
-  CHECK_LOG_STREAM(ERROR);
+TEST(logging, LOG_STREAM_FATAL_WITHOUT_ABORT_enabled) {
+  CHECK_LOG_STREAM_ENABLED(FATAL_WITHOUT_ABORT);
 }
 
-TEST(logging, LOG_STREAM_WARNING) {
-  CHECK_LOG_STREAM(WARNING);
+TEST(logging, LOG_STREAM_ERROR_disabled) {
+  CHECK_LOG_STREAM_DISABLED(ERROR);
 }
 
-TEST(logging, LOG_STREAM_INFO) {
-  CHECK_LOG_STREAM(INFO);
+TEST(logging, LOG_STREAM_ERROR_enabled) {
+  CHECK_LOG_STREAM_ENABLED(ERROR);
 }
 
-TEST(logging, LOG_STREAM_DEBUG) {
-  CHECK_LOG_STREAM(DEBUG);
+TEST(logging, LOG_STREAM_WARNING_disabled) {
+  CHECK_LOG_STREAM_DISABLED(WARNING);
 }
 
-TEST(logging, LOG_STREAM_VERBOSE) {
-  CHECK_LOG_STREAM(VERBOSE);
+TEST(logging, LOG_STREAM_WARNING_enabled) {
+  CHECK_LOG_STREAM_ENABLED(WARNING);
 }
 
-#undef CHECK_LOG_STREAM
+TEST(logging, LOG_STREAM_INFO_disabled) {
+  CHECK_LOG_STREAM_DISABLED(INFO);
+}
 
-#define CHECK_LOG_STREAM_S(severity) \
+TEST(logging, LOG_STREAM_INFO_enabled) {
+  CHECK_LOG_STREAM_ENABLED(INFO);
+}
+
+TEST(logging, LOG_STREAM_DEBUG_disabled) {
+  CHECK_LOG_STREAM_DISABLED(DEBUG);
+}
+
+TEST(logging, LOG_STREAM_DEBUG_enabled) {
+  CHECK_LOG_STREAM_ENABLED(DEBUG);
+}
+
+TEST(logging, LOG_STREAM_VERBOSE_disabled) {
+  CHECK_LOG_STREAM_DISABLED(VERBOSE);
+}
+
+TEST(logging, LOG_STREAM_VERBOSE_enabled) {
+  CHECK_LOG_STREAM_ENABLED(VERBOSE);
+}
+
+#undef CHECK_LOG_STREAM_DISABLED
+#undef CHECK_LOG_STREAM_ENABLED
+
+#define CHECK_LOG_STREAM_S_DISABLED(severity) \
+  android::base::ScopedLogSeverity sls1(android::base::FATAL); \
+  CapturedStderr cap1; \
+  LOG_STREAM_S(android::base::severity) << "foobar"; \
+  ASSERT_EQ(0, lseek(cap1.fd(), 0, SEEK_CUR));
+
+#define CHECK_LOG_STREAM_S_ENABLED(severity) \
   android::base::ScopedLogSeverity sls2(android::base::severity); \
   CapturedStderr cap2; \
   LOG_STREAM_S(android::base::severity) << "foobar"; \
   CheckMessage(cap2, android::base::severity, "foobar"); \
 
-TEST(logging, LOG_STREAM_S_FATAL_WITHOUT_ABORT) {
-  CHECK_LOG_STREAM_S(FATAL_WITHOUT_ABORT);
+TEST(logging, LOG_STREAM_S_FATAL_WITHOUT_ABORT_disabled) {
+  CHECK_LOG_STREAM_S_DISABLED(FATAL_WITHOUT_ABORT);
 }
 
-TEST(logging, LOG_STREAM_S_ERROR) {
-  CHECK_LOG_STREAM_S(ERROR);
+TEST(logging, LOG_STREAM_S_FATAL_WITHOUT_ABORT_enabled) {
+  CHECK_LOG_STREAM_S_ENABLED(FATAL_WITHOUT_ABORT);
 }
 
-TEST(logging, LOG_STREAM_S_WARNING) {
-  CHECK_LOG_STREAM_S(WARNING);
+TEST(logging, LOG_STREAM_S_ERROR_disabled) {
+  CHECK_LOG_STREAM_S_DISABLED(ERROR);
 }
 
-TEST(logging, LOG_STREAM_S_INFO) {
-  CHECK_LOG_STREAM_S(INFO);
+TEST(logging, LOG_STREAM_S_ERROR_enabled) {
+  CHECK_LOG_STREAM_S_ENABLED(ERROR);
 }
 
-TEST(logging, LOG_STREAM_S_DEBUG) {
-  CHECK_LOG_STREAM_S(DEBUG);
+TEST(logging, LOG_STREAM_S_WARNING_disabled) {
+  CHECK_LOG_STREAM_S_DISABLED(WARNING);
 }
 
-TEST(logging, LOG_STREAM_S_VERBOSE) {
-  CHECK_LOG_STREAM_S(VERBOSE);
+TEST(logging, LOG_STREAM_S_WARNING_enabled) {
+  CHECK_LOG_STREAM_S_ENABLED(WARNING);
 }
 
-#undef CHECK_LOG_STREAM_S
+TEST(logging, LOG_STREAM_S_INFO_disabled) {
+  CHECK_LOG_STREAM_S_DISABLED(INFO);
+}
+
+TEST(logging, LOG_STREAM_S_INFO_enabled) {
+  CHECK_LOG_STREAM_S_ENABLED(INFO);
+}
+
+TEST(logging, LOG_STREAM_S_DEBUG_disabled) {
+  CHECK_LOG_STREAM_S_DISABLED(DEBUG);
+}
+
+TEST(logging, LOG_STREAM_S_DEBUG_enabled) {
+  CHECK_LOG_STREAM_S_ENABLED(DEBUG);
+}
+
+TEST(logging, LOG_STREAM_S_VERBOSE_disabled) {
+  CHECK_LOG_STREAM_S_DISABLED(VERBOSE);
+}
+
+TEST(logging, LOG_STREAM_S_VERBOSE_enabled) {
+  CHECK_LOG_STREAM_S_ENABLED(VERBOSE);
+}
+
+#undef CHECK_LOG_STREAM_S_DISABLED
+#undef CHECK_LOG_STREAM_S_ENABLED
 
 
 #define CHECK_LOG_DISABLED(severity) \
