@@ -150,10 +150,6 @@ protected:
     virtual int     do_compare(const void* lhs, const void* rhs) const;
 };
 
-// SortedVector<T> can be trivially moved using memcpy() because moving does not
-// require any change to the underlying SharedBuffer contents or reference count.
-template<typename T> struct trait_trivial_move<SortedVector<T> > { enum { value = true }; };
-
 // ---------------------------------------------------------------------------
 // No user serviceable parts from here...
 // ---------------------------------------------------------------------------
