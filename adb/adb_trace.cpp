@@ -27,7 +27,7 @@
 #include "adb.h"
 
 #if !ADB_HOST
-#include <cutils/properties.h>
+#include <android-base/properties.h>
 #endif
 
 #if !ADB_HOST
@@ -88,19 +88,11 @@ std::string get_trace_setting_from_env() {
     return std::string(setting);
 }
 
-#if !ADB_HOST
-std::string get_trace_setting_from_prop() {
-    char buf[PROPERTY_VALUE_MAX];
-    property_get("persist.adb.trace_mask", buf, "");
-    return std::string(buf);
-}
-#endif
-
 std::string get_trace_setting() {
 #if ADB_HOST
     return get_trace_setting_from_env();
 #else
-    return get_trace_setting_from_prop();
+    return android::base::GetProperty("persist.adb.trace_mask", "");
 #endif
 }
 
