@@ -39,7 +39,10 @@ cc_library {
     shared_libs: ["liblog"],
     target: {
         android: {
-            srcs: ["errors_unix.cpp"],
+            srcs: [
+                "errors_unix.cpp",
+                "properties.cpp",
+            ],
             cppflags: ["-Wexit-time-destructors"],
         },
         darwin: {
@@ -78,6 +81,9 @@ cc_test {
         "test_main.cpp",
     ],
     target: {
+        android: {
+            srcs: ["properties_test.cpp"],
+        },
         windows: {
             srcs: ["utf8_test.cpp"],
             enabled: true,
