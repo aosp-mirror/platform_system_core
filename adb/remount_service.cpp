@@ -29,10 +29,11 @@
 
 #include <string>
 
+#include <android-base/properties.h>
+
 #include "adb.h"
 #include "adb_io.h"
 #include "adb_utils.h"
-#include "cutils/properties.h"
 #include "fs_mgr.h"
 
 // Returns the device used to mount a directory in /proc/mounts.
@@ -53,10 +54,7 @@ static std::string find_proc_mount(const char* dir) {
 
 // Returns the device used to mount a directory in the fstab.
 static std::string find_fstab_mount(const char* dir) {
-    char propbuf[PROPERTY_VALUE_MAX];
-
-    property_get("ro.hardware", propbuf, "");
-    std::string fstab_filename = std::string("/fstab.") + propbuf;
+    std::string fstab_filename = "/fstab." + android::base::GetProperty("ro.hardware", "");
     struct fstab* fstab = fs_mgr_read_fstab(fstab_filename.c_str());
     struct fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab, dir);
     std::string dev = rec ? std::string(rec->blk_device) : "";
@@ -113,12 +111,8 @@ void remount_service(int fd, void* cookie) {
         return;
     }
 
-    char prop_buf[PROPERTY_VALUE_MAX];
-    property_get("partition.system.verified", prop_buf, "");
-    bool system_verified = (strlen(prop_buf) > 0);
-
-    property_get("partition.vendor.verified", prop_buf, "");
-    bool vendor_verified = (strlen(prop_buf) > 0);
+    bool system_verified = !(android::base::GetProperty("partition.system.verified", "").empty());
+    bool vendor_verified = !(android::base::GetProperty("partition.vendor.verified", "").empty());
 
     if (system_verified || vendor_verified) {
         // Allow remount but warn of likely bad effects
@@ -136,9 +130,7 @@ void remount_service(int fd, void* cookie) {
     }
 
     bool success = true;
-    property_get("ro.build.system_root_image", prop_buf, "");
-    bool system_root = !strcmp(prop_buf, "true");
-    if (system_root) {
+    if (android::base::GetBoolProperty("ro.build.system_root_image", false)) {
         success &= remount_partition(fd, "/");
     } else {
         success &= remount_partition(fd, "/system");

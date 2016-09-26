@@ -24,16 +24,17 @@
 #include <stdio.h>
 #include <sys/stat.h>
 
-#include "cutils/properties.h"
+#include "android-base/properties.h"
+#include "android-base/stringprintf.h"
 
 #include "adb.h"
 #include "adb_io.h"
+#include "adb_unique_fd.h"
 #include "fs_mgr.h"
 #include "remount_service.h"
 
 #include "fec/io.h"
 
-#define FSTAB_PREFIX "/fstab."
 struct fstab *fstab;
 
 #ifdef ALLOW_ADBD_DISABLE_VERITY
@@ -88,56 +89,46 @@ static int set_verity_enabled_state(int fd, const char *block_device,
     return 0;
 }
 
-void set_verity_enabled_state_service(int fd, void* cookie)
-{
+void set_verity_enabled_state_service(int fd, void* cookie) {
+    unique_fd closer(fd);
+
     bool enable = (cookie != NULL);
-    if (kAllowDisableVerity) {
-        char fstab_filename[PROPERTY_VALUE_MAX + sizeof(FSTAB_PREFIX)];
-        char propbuf[PROPERTY_VALUE_MAX];
-        int i;
-        bool any_changed = false;
-
-        property_get("ro.secure", propbuf, "0");
-        if (strcmp(propbuf, "1")) {
-            WriteFdFmt(fd, "verity not enabled - ENG build\n");
-            goto errout;
-        }
-
-        property_get("ro.debuggable", propbuf, "0");
-        if (strcmp(propbuf, "1")) {
-            WriteFdFmt(fd, "verity cannot be disabled/enabled - USER build\n");
-            goto errout;
-        }
-
-        property_get("ro.hardware", propbuf, "");
-        snprintf(fstab_filename, sizeof(fstab_filename), FSTAB_PREFIX"%s",
-                 propbuf);
-
-        fstab = fs_mgr_read_fstab(fstab_filename);
-        if (!fstab) {
-            WriteFdFmt(fd, "Failed to open %s\nMaybe run adb root?\n", fstab_filename);
-            goto errout;
-        }
-
-        /* Loop through entries looking for ones that vold manages */
-        for (i = 0; i < fstab->num_entries; i++) {
-            if(fs_mgr_is_verified(&fstab->recs[i])) {
-                if (!set_verity_enabled_state(fd, fstab->recs[i].blk_device,
-                                              fstab->recs[i].mount_point,
-                                              enable)) {
-                    any_changed = true;
-                }
-           }
-        }
-
-        if (any_changed) {
-            WriteFdFmt(fd, "Now reboot your device for settings to take effect\n");
-        }
-    } else {
+    if (!kAllowDisableVerity) {
         WriteFdFmt(fd, "%s-verity only works for userdebug builds\n",
                    enable ? "enable" : "disable");
     }
 
-errout:
-    adb_close(fd);
+    if (!android::base::GetBoolProperty("ro.secure", false)) {
+        WriteFdFmt(fd, "verity not enabled - ENG build\n");
+        return;
+    }
+
+    if (!android::base::GetBoolProperty("ro.debuggable", false)) {
+        WriteFdFmt(fd, "verity cannot be disabled/enabled - USER build\n");
+        return;
+    }
+
+    std::string fstab_filename = "/fstab." + android::base::GetProperty("ro.hardware", "");
+
+    fstab = fs_mgr_read_fstab(fstab_filename.c_str());
+    if (!fstab) {
+        WriteFdFmt(fd, "Failed to open %s\nMaybe run adb root?\n", fstab_filename.c_str());
+        return;
+    }
+
+    // Loop through entries looking for ones that vold manages.
+    bool any_changed = false;
+    for (int i = 0; i < fstab->num_entries; i++) {
+        if (fs_mgr_is_verified(&fstab->recs[i])) {
+            if (!set_verity_enabled_state(fd, fstab->recs[i].blk_device,
+                                          fstab->recs[i].mount_point,
+                                          enable)) {
+                any_changed = true;
+            }
+        }
+    }
+
+    if (any_changed) {
+        WriteFdFmt(fd, "Now reboot your device for settings to take effect\n");
+    }
 }
