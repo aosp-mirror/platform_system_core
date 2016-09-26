@@ -402,6 +402,9 @@ static void usage() {
             "  --skip-secondary                         Will not flash secondary slots when\n"
             "                                           performing a flashall or update. This\n"
             "                                           will preserve data on other slots.\n"
+            "  --skip-reboot                            Will not reboot the device when\n"
+            "                                           performing commands that normally\n"
+            "                                           trigger a reboot.\n"
 #if !defined(_WIN32)
             "  --wipe-and-use-fbe                       On devices which support it,\n"
             "                                           erase userdata and cache, and\n"
@@ -1392,6 +1395,7 @@ int main(int argc, char **argv)
     bool wants_wipe = false;
     bool wants_reboot = false;
     bool wants_reboot_bootloader = false;
+    bool skip_reboot = false;
     bool wants_set_active = false;
     bool skip_secondary = false;
     bool erase_first = true;
@@ -1419,6 +1423,7 @@ int main(int argc, char **argv)
         {"set_active", optional_argument, 0, 'a'},
         {"set-active", optional_argument, 0, 'a'},
         {"skip-secondary", no_argument, 0, 0},
+        {"skip-reboot", no_argument, 0, 0},
 #if !defined(_WIN32)
         {"wipe-and-use-fbe", no_argument, 0, 0},
 #endif
@@ -1505,6 +1510,8 @@ int main(int argc, char **argv)
                 slot_override = std::string(optarg);
             } else if (strcmp("skip-secondary", longopts[longindex].name) == 0 ) {
                 skip_secondary = true;
+            } else if (strcmp("skip-reboot", longopts[longindex].name) == 0 ) {
+                skip_reboot = true;
 #if !defined(_WIN32)
             } else if (strcmp("wipe-and-use-fbe", longopts[longindex].name) == 0) {
                 wants_wipe = true;
@@ -1729,7 +1736,7 @@ int main(int argc, char **argv)
                 do_update(transport, "update.zip", slot_override, erase_first, skip_secondary || slot_all);
                 skip(1);
             }
-            wants_reboot = 1;
+            wants_reboot = true;
         } else if(!strcmp(*argv, "set_active")) {
             require(2);
             std::string slot = verify_slot(transport, std::string(argv[1]), false);
@@ -1784,7 +1791,7 @@ int main(int argc, char **argv)
     if (wants_set_active) {
         fb_set_active(next_active.c_str());
     }
-    if (wants_reboot) {
+    if (wants_reboot && !skip_reboot) {
         fb_queue_reboot();
         fb_queue_wait_for_disconnect();
     } else if (wants_reboot_bootloader) {
