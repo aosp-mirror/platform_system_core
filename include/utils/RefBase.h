@@ -206,16 +206,28 @@ inline bool operator _op_ (const U* o) const {                  \
 
 // ---------------------------------------------------------------------------
 
+// RefererenceRenamer is pure abstract, there is no virtual method
+// implementation to put in a translation unit in order to silence the
+// weak vtables warning.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wweak-vtables"
+#endif
+
 class ReferenceRenamer {
 protected:
     // destructor is purposedly not virtual so we avoid code overhead from
     // subclasses; we have to make it protected to guarantee that it
     // cannot be called from this base class (and to make strict compilers
     // happy).
-    ~ReferenceRenamer();
+    ~ReferenceRenamer() { }
 public:
     virtual void operator()(size_t i) const = 0;
 };
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
 // ---------------------------------------------------------------------------
 
