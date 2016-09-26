@@ -48,9 +48,9 @@
 #include "transport.h"
 
 #if !ADB_HOST
-#include <cutils/properties.h>
 #include <sys/capability.h>
 #include <sys/mount.h>
+#include <android-base/properties.h>
 #endif
 
 std::string adb_version() {
@@ -200,11 +200,9 @@ std::string get_connection_string() {
         "ro.product.device",
     };
 
-    for (const auto& prop_name : cnxn_props) {
-        char value[PROPERTY_VALUE_MAX];
-        property_get(prop_name, value, "");
-        connection_properties.push_back(
-            android::base::StringPrintf("%s=%s", prop_name, value));
+    for (const auto& prop : cnxn_props) {
+        std::string value = std::string(prop) + "=" + android::base::GetProperty(prop, "");
+        connection_properties.push_back(value);
     }
 #endif
 
