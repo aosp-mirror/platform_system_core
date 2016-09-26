@@ -33,7 +33,7 @@
 #include <cutils/sockets.h>
 
 #if !ADB_HOST
-#include "cutils/properties.h"
+#include <android-base/properties.h>
 #endif
 
 #include "adb.h"
@@ -356,15 +356,13 @@ void local_init(int port)
     func = client_socket_thread;
     debug_name = "client";
 #else
-    /* For the adbd daemon in the system image we need to distinguish
-     * between the device, and the emulator. */
-    char is_qemu[PROPERTY_VALUE_MAX];
-    property_get("ro.kernel.qemu", is_qemu, "");
-    if (!strcmp(is_qemu, "1")) {
-        /* Running inside the emulator: use QEMUD pipe as the transport. */
+    // For the adbd daemon in the system image we need to distinguish
+    // between the device, and the emulator.
+    if (android::base::GetBoolProperty("ro.kernel.qemu", false)) {
+        // Running inside the emulator: use QEMUD pipe as the transport.
         func = qemu_socket_thread;
     } else {
-        /* Running inside the device: use TCP socket as the transport. */
+        // Running inside the device: use TCP socket as the transport.
         func = server_socket_thread;
     }
     debug_name = "server";

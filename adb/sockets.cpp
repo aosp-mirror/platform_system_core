@@ -31,7 +31,7 @@
 #include <vector>
 
 #if !ADB_HOST
-#include "cutils/properties.h"
+#include <android-base/properties.h>
 #endif
 
 #include "adb.h"
@@ -416,12 +416,12 @@ asocket* create_local_service_socket(const char* name, const atransport* transpo
     D("LS(%d): bound to '%s' via %d", s->id, name, fd);
 
 #if !ADB_HOST
-    char debug[PROPERTY_VALUE_MAX];
+    bool debuggable = false;
     if (!strncmp(name, "root:", 5)) {
-        property_get("ro.debuggable", debug, "");
+        debuggable = android::base::GetBoolProperty("ro.debuggable", false);
     }
 
-    if ((!strncmp(name, "root:", 5) && getuid() != 0 && strcmp(debug, "1") == 0) ||
+    if ((!strncmp(name, "root:", 5) && getuid() != 0 && debuggable) ||
         (!strncmp(name, "unroot:", 7) && getuid() == 0) ||
         !strncmp(name, "usb:", 4) ||
         !strncmp(name, "tcpip:", 6)) {
