@@ -391,7 +391,7 @@ LogMessage::LogMessage(const char* file, unsigned int line, LogId id,
 
 LogMessage::~LogMessage() {
   // Check severity again. This is duplicate work wrt/ LOG macros, but not LOG_STREAM.
-  if (!WOULD_LOG_SEVERITY(data_->GetSeverity())) {
+  if (!WOULD_LOG(data_->GetSeverity())) {
     return;
   }
 
