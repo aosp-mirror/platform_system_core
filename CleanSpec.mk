@@ -59,3 +59,4 @@ $(call add-clean-step, rm -rf $(PRODUCT_OUT)/system/bin/grep $(PRODUCT_OUT)/syst
 $(call add-clean-step, rm -rf $(PRODUCT_OUT)/system/lib/hw/gatekeeper.$(TARGET_DEVICE).so)
 $(call add-clean-step, rm -rf $(PRODUCT_OUT)/system/lib64/hw/gatekeeper.$(TARGET_DEVICE).so)
 $(call add-clean-step, rm -rf $(PRODUCT_OUT)/root/vendor)
+$(call add-clean-step, rm -rf $(PRODUCT_OUT)/root/init.rc)
