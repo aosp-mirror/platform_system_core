@@ -982,7 +982,7 @@ static int handle_open(struct fuse* fuse, struct fuse_handler* handler,
 {
     struct node* node;
     char path[PATH_MAX];
-    struct fuse_open_out out;
+    struct fuse_open_out out = {};
     struct handle *h;
 
     pthread_mutex_lock(&fuse->global->lock);
@@ -1011,7 +1011,6 @@ static int handle_open(struct fuse* fuse, struct fuse_handler* handler,
     }
     out.fh = ptr_to_id(h);
     out.open_flags = 0;
-    out.padding = 0;
     fuse_reply(fuse, hdr->unique, &out, sizeof(out));
     return NO_STATUS;
 }
@@ -1148,7 +1147,7 @@ static int handle_opendir(struct fuse* fuse, struct fuse_handler* handler,
 {
     struct node* node;
     char path[PATH_MAX];
-    struct fuse_open_out out;
+    struct fuse_open_out out = {};
     struct dirhandle *h;
 
     pthread_mutex_lock(&fuse->global->lock);
@@ -1175,7 +1174,6 @@ static int handle_opendir(struct fuse* fuse, struct fuse_handler* handler,
     }
     out.fh = ptr_to_id(h);
     out.open_flags = 0;
-    out.padding = 0;
     fuse_reply(fuse, hdr->unique, &out, sizeof(out));
     return NO_STATUS;
 }
