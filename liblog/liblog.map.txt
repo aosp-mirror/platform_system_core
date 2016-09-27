@@ -1,0 +1,14 @@
+LIBLOG {
+  global:
+    __android_log_assert;
+    __android_log_btwrite;
+    __android_log_buf_print; # introduced-arm=21 introduced-arm64=21 introduced-mips=9 introduced-mips64=21 introduced-x86=9 introduced-x86_64=21
+    __android_log_buf_write; # introduced-arm=21 introduced-arm64=21 introduced-mips=9 introduced-mips64=21 introduced-x86=9 introduced-x86_64=21
+    __android_log_bwrite;
+    __android_log_dev_available;
+    __android_log_print;
+    __android_log_vprint;
+    __android_log_write;
+  local:
+    *;
+};
