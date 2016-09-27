@@ -345,7 +345,7 @@ CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 pro
 
     //* check to make sure interface class, subclass and protocol match ADB
     //* avoid opening mass storage endpoints
-    if (!is_adb_interface(vendor, product, interfaceClass, interfaceSubClass, interfaceProtocol)) {
+    if (!is_adb_interface(interfaceClass, interfaceSubClass, interfaceProtocol)) {
         goto err_bad_adb_interface;
     }
 

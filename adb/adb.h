@@ -199,7 +199,7 @@ void usb_kick(usb_handle *h);
 
 // USB device detection.
 #if ADB_HOST
-int is_adb_interface(int vid, int pid, int usb_class, int usb_subclass, int usb_protocol);
+int is_adb_interface(int usb_class, int usb_subclass, int usb_protocol);
 #endif
 
 ConnectionState connection_state(atransport *t);
