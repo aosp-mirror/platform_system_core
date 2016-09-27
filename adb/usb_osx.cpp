@@ -177,6 +177,7 @@ AndroidInterfaceAdded(io_iterator_t iterator)
         kr = (*iface)->GetDevice(iface, &usbDevice);
         if (kIOReturnSuccess != kr || !usbDevice) {
             LOG(ERROR) << "Couldn't grab device from interface (" << std::hex << kr << ")";
+            (*iface)->Release(iface);
             continue;
         }
 
@@ -191,6 +192,7 @@ AndroidInterfaceAdded(io_iterator_t iterator)
         (void)IOObjectRelease(usbDevice);
         if ((kIOReturnSuccess != kr) || (!plugInInterface)) {
             LOG(ERROR) << "Unable to create a device plug-in (" << std::hex << kr << ")";
+            (*iface)->Release(iface);
             continue;
         }
 
@@ -200,6 +202,7 @@ AndroidInterfaceAdded(io_iterator_t iterator)
         (*plugInInterface)->Release(plugInInterface);
         if (result || !dev) {
             LOG(ERROR) << "Couldn't create a device interface (" << std::hex << result << ")";
+            (*iface)->Release(iface);
             continue;
         }
 
@@ -211,6 +214,8 @@ AndroidInterfaceAdded(io_iterator_t iterator)
         if (kr == KERN_SUCCESS) {
             devpath = android::base::StringPrintf("usb:%" PRIu32 "X", locationId);
             if (IsKnownDevice(devpath)) {
+                (*dev)->Release(dev);
+                (*iface)->Release(iface);
                 continue;
             }
         }
