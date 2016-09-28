@@ -18,12 +18,13 @@
  *
  */
 
+#define LOG_TAG "libaudit"
+
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
 
-#define LOG_TAG "libaudit"
-#include <log/log.h>
+#include <android/log.h>
 
 #include "libaudit.h"
 

@@ -22,10 +22,9 @@
 #include <list>
 #include <string>
 
-#include <log/log.h>
-#include <sysutils/SocketClient.h>
-
+#include <android/log.h>
 #include <private/android_filesystem_config.h>
+#include <sysutils/SocketClient.h>
 
 #include "LogBufferElement.h"
 #include "LogTimes.h"
