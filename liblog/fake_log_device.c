@@ -28,7 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <log/logd.h>
+#include <log/log.h>
 
 #include "fake_log_device.h"
 #include "log_portability.h"

@@ -25,7 +25,7 @@
 #endif
 
 #include <log/event_tag_map.h>
-#include <log/logd.h>
+#include <log/log.h>
 #include <log/logger.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
