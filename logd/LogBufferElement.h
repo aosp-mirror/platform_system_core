@@ -23,7 +23,7 @@
 
 #include <sysutils/SocketClient.h>
 #include <log/log.h>
-#include <log/log_read.h>
+#include <log/logger.h>
 
 class LogBuffer;
 

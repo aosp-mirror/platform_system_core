@@ -23,7 +23,6 @@
 #include <cutils/sockets.h>
 #include <log/log.h>
 #include <log/logger.h>
-#include <log/log_read.h>
 #include <private/android_logger.h>
 
 #include "benchmark.h"
