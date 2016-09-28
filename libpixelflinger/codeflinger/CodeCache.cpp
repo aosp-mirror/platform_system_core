@@ -15,17 +15,16 @@
 ** limitations under the License.
 */
 
+#define LOG_TAG "CodeCache"
 
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <sys/mman.h>
+#include <unistd.h>
 
+#include <android/log.h>
 #include <cutils/ashmem.h>
-#define LOG_TAG "CodeCache"
-#include <cutils/log.h>
-
 
 #include "CodeCache.h"
 

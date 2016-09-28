@@ -32,14 +32,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <cutils/log.h>
+#include <android/log.h>
 #include <cutils/properties.h>
 #include <private/pixelflinger/ggl_context.h>
 
 #include "codeflinger/Arm64Assembler.h"
-#include "codeflinger/CodeCache.h"
 #include "codeflinger/Arm64Disassembler.h"
-
+#include "codeflinger/CodeCache.h"
 
 /*
 ** --------------------------------------------

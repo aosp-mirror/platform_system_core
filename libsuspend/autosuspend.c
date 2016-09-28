@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "libsuspend"
+
 #include <stdbool.h>
 
-#define LOG_TAG "libsuspend"
-#include <cutils/log.h>
+#include <android/log.h>
 
 #include <suspend/autosuspend.h>
 
