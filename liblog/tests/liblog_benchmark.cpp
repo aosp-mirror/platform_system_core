@@ -20,8 +20,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <android/log.h>
 #include <cutils/sockets.h>
-#include <log/log.h>
 #include <log/logger.h>
 #include <private/android_logger.h>
 

@@ -24,7 +24,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <log/log.h>
+#include <android/log.h>
 #include <log/logger.h>
 
 #define LOGGER_MAGIC 'l'

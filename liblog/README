@@ -6,7 +6,7 @@ NAME
        liblog - Android NDK logger interfaces
 
 SYNOPSIS
-       #include <log/log.h>
+       #include <android/log.h>
 
        ALOG(android_priority, tag, format, ...)
        IF_ALOG(android_priority, tag)
