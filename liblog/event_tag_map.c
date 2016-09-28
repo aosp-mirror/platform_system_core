@@ -120,6 +120,7 @@ LIBLOG_ABI_PUBLIC void android_closeEventTagMap(EventTagMap* map)
         return;
 
     munmap(map->mapAddr, map->mapLen);
+    free(map->tagArray);
     free(map);
 }
 
