@@ -307,6 +307,17 @@ TEST(socket_test, test_skip_host_serial) {
         // Don't register a port unless it's all numbers and ends with ':'.
         VerifySkipHostSerial(protocol + "foo:123", ":123");
         VerifySkipHostSerial(protocol + "foo:123bar:baz", ":123bar:baz");
+
+        VerifySkipHostSerial(protocol + "100.100.100.100:5555:foo", ":foo");
+        VerifySkipHostSerial(protocol + "[0123:4567:89ab:CDEF:0:9:a:f]:5555:foo", ":foo");
+        VerifySkipHostSerial(protocol + "[::1]:5555:foo", ":foo");
+
+        // If we can't find both [] then treat it as a normal serial with [ in it.
+        VerifySkipHostSerial(protocol + "[0123:foo", ":foo");
+
+        // Don't be fooled by random IPv6 addresses in the command string.
+        VerifySkipHostSerial(protocol + "foo:ping [0123:4567:89ab:CDEF:0:9:a:f]:5555",
+                             ":ping [0123:4567:89ab:CDEF:0:9:a:f]:5555");
     }
 }
 
