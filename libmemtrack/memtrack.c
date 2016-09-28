@@ -14,16 +14,15 @@
  * limitations under the License.
  */
 
-#include <memtrack/memtrack.h>
-
 #define LOG_TAG "memtrack"
 
-#include <log/log.h>
+#include <memtrack/memtrack.h>
 
 #include <errno.h>
 #include <malloc.h>
 #include <string.h>
 
+#include <android/log.h>
 #include <hardware/memtrack.h>
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof((x)[0]))

@@ -20,6 +20,7 @@
 
 #include <getopt.h>
 #include <unistd.h>
+
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
@@ -27,12 +28,14 @@
 #include <map>
 #include <memory>
 #include <string>
+
+#include <android/log.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <cutils/properties.h>
-#include <log/log.h>
+
 #include "boot_event_record_store.h"
-#include "event_log_list_builder.h"
+#include "event_log_list_builder.h" /* ToDo: switch to liblog implementation */
 #include "histogram_logger.h"
 #include "uptime_parser.h"
 
