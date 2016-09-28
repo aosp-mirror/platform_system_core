@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "log/log.h"
+#include "android/log.h"
 
 #define UNUSED __attribute__((__unused__))
 
