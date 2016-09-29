@@ -203,9 +203,8 @@ static void removeUidProcessGroups(const char *uid_path)
 {
     std::unique_ptr<DIR, decltype(&closedir)> uid(opendir(uid_path), closedir);
     if (uid != NULL) {
-        struct dirent cur;
-        struct dirent *dir;
-        while ((readdir_r(uid.get(), &cur, &dir) == 0) && dir) {
+        dirent* dir;
+        while ((dir = readdir(uid.get())) != nullptr) {
             char path[PROCESSGROUP_MAX_PATH_LEN];
 
             if (dir->d_type != DT_DIR) {
@@ -231,9 +230,8 @@ void removeAllProcessGroups()
     if (root == NULL) {
         PLOG(ERROR) << "failed to open " << cgroup_root_path;
     } else {
-        struct dirent cur;
-        struct dirent *dir;
-        while ((readdir_r(root.get(), &cur, &dir) == 0) && dir) {
+        dirent* dir;
+        while ((dir = readdir(root.get())) != nullptr) {
             char path[PROCESSGROUP_MAX_PATH_LEN];
 
             if (dir->d_type != DT_DIR) {
