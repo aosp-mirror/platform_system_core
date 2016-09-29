@@ -130,6 +130,8 @@ int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle);
 int32_t OpenArchiveFd(const int fd, const char* debugFileName,
                       ZipArchiveHandle *handle, bool assume_ownership = true);
 
+int32_t OpenArchiveFromMemory(void* address, size_t length, const char* debugFileName,
+                              ZipArchiveHandle *handle);
 /*
  * Close archive, releasing resources associated with it. This will
  * unmap the central directory of the zipfile and free all internal
@@ -213,6 +215,17 @@ int32_t ExtractToMemory(ZipArchiveHandle handle, ZipEntry* entry,
 int GetFileDescriptor(const ZipArchiveHandle handle);
 
 const char* ErrorCodeString(int32_t error_code);
+
+#if !defined(_WIN32)
+typedef bool (*ProcessZipEntryFunction)(const uint8_t* buf, size_t buf_size, void* cookie);
+
+/*
+ * Stream the uncompressed data through the supplied function,
+ * passing cookie to it each time it gets called.
+*/
+int32_t ProcessZipEntryContents(ZipArchiveHandle handle, ZipEntry* entry,
+        ProcessZipEntryFunction func, void* cookie);
+#endif
 
 __END_DECLS
 

@@ -39,7 +39,7 @@ static constexpr size_t kBufSize = 65535;
 bool ZipArchiveStreamEntry::Init(const ZipEntry& entry) {
   ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle_);
   off64_t data_offset = entry.offset;
-  if (lseek64(archive->fd, data_offset, SEEK_SET) != data_offset) {
+  if (!archive->mapped_zip.SeekToOffset(data_offset)) {
     ALOGW("lseek to data at %" PRId64 " failed: %s", data_offset, strerror(errno));
     return false;
   }
@@ -88,7 +88,7 @@ const std::vector<uint8_t>* ZipArchiveStreamEntryUncompressed::Read() {
   size_t bytes = (length_ > data_.size()) ? data_.size() : length_;
   ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle_);
   errno = 0;
-  if (!android::base::ReadFully(archive->fd, data_.data(), bytes)) {
+  if (!archive->mapped_zip.ReadData(data_.data(), bytes)) {
     if (errno != 0) {
       ALOGE("Error reading from archive fd: %s", strerror(errno));
     } else {
@@ -209,7 +209,7 @@ const std::vector<uint8_t>* ZipArchiveStreamEntryCompressed::Read() {
       size_t bytes = (compressed_length_ > in_.size()) ? in_.size() : compressed_length_;
       ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle_);
       errno = 0;
-      if (!android::base::ReadFully(archive->fd, in_.data(), bytes)) {
+      if (!archive->mapped_zip.ReadData(in_.data(), bytes)) {
         if (errno != 0) {
           ALOGE("Error reading from archive fd: %s", strerror(errno));
         } else {
