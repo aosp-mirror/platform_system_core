@@ -194,7 +194,7 @@ public:
      inline void push_back(const TYPE& item)  { insertAt(item, size(), 1); }
      inline void push_front(const TYPE& item) { insertAt(item, 0, 1); }
      inline iterator erase(iterator pos) {
-         ssize_t index = removeItemsAt(pos-array());
+         ssize_t index = removeItemsAt(static_cast<size_t>(pos-array()));
          return begin() + index;
      }
 
