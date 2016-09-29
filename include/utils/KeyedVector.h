@@ -157,7 +157,7 @@ template<typename KEY, typename VALUE> inline
 VALUE& KeyedVector<KEY,VALUE>::editValueFor(const KEY& key) {
     ssize_t i = this->indexOfKey(key);
     LOG_ALWAYS_FATAL_IF(i<0, "%s: key not found", __PRETTY_FUNCTION__);
-    return mVector.editItemAt(i).value;
+    return mVector.editItemAt(static_cast<size_t>(i)).value;
 }
 
 template<typename KEY, typename VALUE> inline
