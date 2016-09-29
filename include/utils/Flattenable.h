@@ -31,32 +31,32 @@ namespace android {
 
 class FlattenableUtils {
 public:
-    template<int N>
+    template<size_t N>
     static size_t align(size_t size) {
         COMPILE_TIME_ASSERT_FUNCTION_SCOPE( !(N & (N-1)) );
         return (size + (N-1)) & ~(N-1);
     }
 
-    template<int N>
+    template<size_t N>
     static size_t align(void const*& buffer) {
         COMPILE_TIME_ASSERT_FUNCTION_SCOPE( !(N & (N-1)) );
-        intptr_t b = intptr_t(buffer);
-        buffer = (void*)((intptr_t(buffer) + (N-1)) & ~(N-1));
-        return size_t(intptr_t(buffer) - b);
+        uintptr_t b = uintptr_t(buffer);
+        buffer = reinterpret_cast<void*>((uintptr_t(buffer) + (N-1)) & ~(N-1));
+        return size_t(uintptr_t(buffer) - b);
     }
 
-    template<int N>
+    template<size_t N>
     static size_t align(void*& buffer) {
         return align<N>( const_cast<void const*&>(buffer) );
     }
 
     static void advance(void*& buffer, size_t& size, size_t offset) {
-        buffer = reinterpret_cast<void*>( intptr_t(buffer) + offset );
+        buffer = reinterpret_cast<void*>( uintptr_t(buffer) + offset );
         size -= offset;
     }
 
     static void advance(void const*& buffer, size_t& size, size_t offset) {
-        buffer = reinterpret_cast<void const*>( intptr_t(buffer) + offset );
+        buffer = reinterpret_cast<void const*>( uintptr_t(buffer) + offset );
         size -= offset;
     }
 
