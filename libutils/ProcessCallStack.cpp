@@ -131,9 +131,6 @@ void ProcessCallStack::clear() {
 }
 
 void ProcessCallStack::update() {
-    struct dirent *ep;
-    struct dirent entry;
-
     std::unique_ptr<DIR, decltype(&closedir)> dp(opendir(PATH_SELF_TASK), closedir);
     if (dp == NULL) {
         ALOGE("%s: Failed to update the process's call stacks: %s",
@@ -158,8 +155,8 @@ void ProcessCallStack::update() {
      * Each tid is a directory inside of /proc/self/task
      * - Read every file in directory => get every tid
      */
-    int code;
-    while ((code = readdir_r(dp.get(), &entry, &ep)) == 0 && ep != NULL) {
+    dirent* ep;
+    while ((ep = readdir(dp.get())) != NULL) {
         pid_t tid = -1;
         sscanf(ep->d_name, "%d", &tid);
 
@@ -193,10 +190,6 @@ void ProcessCallStack::update() {
 
         ALOGV("%s: Got call stack for tid %d (size %zu)",
               __FUNCTION__, tid, threadInfo.callStack.size());
-    }
-    if (code != 0) { // returns positive error value on error
-        ALOGE("%s: Failed to readdir from %s: %s",
-              __FUNCTION__, PATH_SELF_TASK, strerror(code));
     }
 }
 
