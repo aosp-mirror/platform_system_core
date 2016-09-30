@@ -21,7 +21,7 @@ cc_library_static {
         "libutils",
     ],
     cflags: [
-        "-DLOG_TAG=\\\"adfhwc\\\"",
+        "-DLOG_TAG=\"adfhwc\"",
         "-Werror",
     ],
     local_include_dirs: ["include"],
