@@ -17,18 +17,18 @@
 #define LOG_TAG "properties"
 // #define LOG_NDEBUG 0
 
+#include <assert.h>
+#include <ctype.h>
+#include <errno.h>
+#include <inttypes.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <unistd.h>
-#include <cutils/sockets.h>
-#include <errno.h>
-#include <assert.h>
 
+#include <android/log.h>
 #include <cutils/properties.h>
-#include <stdbool.h>
-#include <inttypes.h>
-#include <log/log.h>
+#include <cutils/sockets.h>
 
 int8_t property_get_bool(const char *key, int8_t default_value) {
     if (!key) {

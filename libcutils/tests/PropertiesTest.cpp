@@ -15,16 +15,17 @@
  */
 
 #define LOG_TAG "Properties_test"
-#include <cutils/log.h>
-#include <gtest/gtest.h>
 
-#include <cutils/properties.h>
 #include <limits.h>
-#include <string>
-#include <sstream>
-#include <iostream>
 
+#include <iostream>
+#include <sstream>
+#include <string>
+
+#include <android/log.h>
 #include <android-base/macros.h>
+#include <cutils/properties.h>
+#include <gtest/gtest.h>
 
 namespace android {
 

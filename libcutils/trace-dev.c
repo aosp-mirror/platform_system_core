@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "cutils-trace"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -27,8 +29,7 @@
 #include <cutils/properties.h>
 #include <cutils/trace.h>
 
-#define LOG_TAG "cutils-trace"
-#include <log/log.h>
+#include <android/log.h>
 
 /**
  * Maximum size of a message that can be logged to the trace buffer.
