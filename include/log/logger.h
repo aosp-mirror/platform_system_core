@@ -11,16 +11,13 @@
 #define _LIBS_LOG_LOGGER_H
 
 #include <stdint.h>
-#ifdef __linux__
-#include <time.h> /* clockid_t definition */
-#endif
+#include <time.h>
 
 #ifdef __cplusplus
 #include <string>
 #endif
 
 #include <log/log.h>
-#include <log/log_read.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -80,6 +77,155 @@ struct logger_entry_v4 {
     char        msg[0];    /* the entry's payload */
 } __attribute__((__packed__));
 
+/* struct log_time is a wire-format variant of struct timespec */
+#define NS_PER_SEC 1000000000ULL
+
+#ifdef __cplusplus
+
+// NB: do NOT define a copy constructor. This will result in structure
+// no longer being compatible with pass-by-value which is desired
+// efficient behavior. Also, pass-by-reference breaks C/C++ ABI.
+struct log_time {
+public:
+    uint32_t tv_sec; // good to Feb 5 2106
+    uint32_t tv_nsec;
+
+    static const uint32_t tv_sec_max = 0xFFFFFFFFUL;
+    static const uint32_t tv_nsec_max = 999999999UL;
+
+    log_time(const timespec &T)
+    {
+        tv_sec = T.tv_sec;
+        tv_nsec = T.tv_nsec;
+    }
+    log_time(uint32_t sec, uint32_t nsec)
+    {
+        tv_sec = sec;
+        tv_nsec = nsec;
+    }
+    static const timespec EPOCH;
+    log_time()
+    {
+    }
+#ifdef __linux__
+    log_time(clockid_t id)
+    {
+        timespec T;
+        clock_gettime(id, &T);
+        tv_sec = T.tv_sec;
+        tv_nsec = T.tv_nsec;
+    }
+#endif
+    log_time(const char *T)
+    {
+        const uint8_t *c = (const uint8_t *) T;
+        tv_sec = c[0] | (c[1] << 8) | (c[2] << 16) | (c[3] << 24);
+        tv_nsec = c[4] | (c[5] << 8) | (c[6] << 16) | (c[7] << 24);
+    }
+
+    // timespec
+    bool operator== (const timespec &T) const
+    {
+        return (tv_sec == static_cast<uint32_t>(T.tv_sec))
+            && (tv_nsec == static_cast<uint32_t>(T.tv_nsec));
+    }
+    bool operator!= (const timespec &T) const
+    {
+        return !(*this == T);
+    }
+    bool operator< (const timespec &T) const
+    {
+        return (tv_sec < static_cast<uint32_t>(T.tv_sec))
+            || ((tv_sec == static_cast<uint32_t>(T.tv_sec))
+                && (tv_nsec < static_cast<uint32_t>(T.tv_nsec)));
+    }
+    bool operator>= (const timespec &T) const
+    {
+        return !(*this < T);
+    }
+    bool operator> (const timespec &T) const
+    {
+        return (tv_sec > static_cast<uint32_t>(T.tv_sec))
+            || ((tv_sec == static_cast<uint32_t>(T.tv_sec))
+                && (tv_nsec > static_cast<uint32_t>(T.tv_nsec)));
+    }
+    bool operator<= (const timespec &T) const
+    {
+        return !(*this > T);
+    }
+    log_time operator-= (const timespec &T);
+    log_time operator- (const timespec &T) const
+    {
+        log_time local(*this);
+        return local -= T;
+    }
+    log_time operator+= (const timespec &T);
+    log_time operator+ (const timespec &T) const
+    {
+        log_time local(*this);
+        return local += T;
+    }
+
+    // log_time
+    bool operator== (const log_time &T) const
+    {
+        return (tv_sec == T.tv_sec) && (tv_nsec == T.tv_nsec);
+    }
+    bool operator!= (const log_time &T) const
+    {
+        return !(*this == T);
+    }
+    bool operator< (const log_time &T) const
+    {
+        return (tv_sec < T.tv_sec)
+            || ((tv_sec == T.tv_sec) && (tv_nsec < T.tv_nsec));
+    }
+    bool operator>= (const log_time &T) const
+    {
+        return !(*this < T);
+    }
+    bool operator> (const log_time &T) const
+    {
+        return (tv_sec > T.tv_sec)
+            || ((tv_sec == T.tv_sec) && (tv_nsec > T.tv_nsec));
+    }
+    bool operator<= (const log_time &T) const
+    {
+        return !(*this > T);
+    }
+    log_time operator-= (const log_time &T);
+    log_time operator- (const log_time &T) const
+    {
+        log_time local(*this);
+        return local -= T;
+    }
+    log_time operator+= (const log_time &T);
+    log_time operator+ (const log_time &T) const
+    {
+        log_time local(*this);
+        return local += T;
+    }
+
+    uint64_t nsec() const
+    {
+        return static_cast<uint64_t>(tv_sec) * NS_PER_SEC + tv_nsec;
+    }
+
+    static const char default_format[];
+
+    // Add %#q for the fraction of a second to the standard library functions
+    char *strptime(const char *s, const char *format = default_format);
+} __attribute__((__packed__));
+
+#else
+
+typedef struct log_time {
+    uint32_t tv_sec;
+    uint32_t tv_nsec;
+} __attribute__((__packed__)) log_time;
+
+#endif
+
 /*
  * The maximum size of the log entry payload that can be
  * written to the logger. An attempt to write more than
@@ -93,8 +239,6 @@ struct logger_entry_v4 {
  * may result in read() returning EINVAL.
  */
 #define LOGGER_ENTRY_MAX_LEN    (5*1024)
-
-#define NS_PER_SEC 1000000000ULL
 
 struct log_msg {
     union {

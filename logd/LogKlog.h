@@ -17,8 +17,8 @@
 #ifndef _LOGD_LOG_KLOG_H__
 #define _LOGD_LOG_KLOG_H__
 
+#include <log/logger.h>
 #include <sysutils/SocketListener.h>
-#include <log/log_read.h>
 
 char *log_strntok_r(char *s, size_t *len, char **saveptr, size_t *sublen);
 
