@@ -16,8 +16,6 @@
 
 #include "nativebridge/native_bridge.h"
 
-#include <cstring>
-#include <cutils/log.h>
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -25,6 +23,9 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 
+#include <cstring>
+
+#include <android/log.h>
 
 namespace android {
 

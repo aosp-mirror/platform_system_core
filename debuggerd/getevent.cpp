@@ -14,20 +14,22 @@
  * limitations under the License.
  */
 
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <linux/input.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include <sys/ioctl.h>
 #include <sys/inotify.h>
+#include <sys/ioctl.h>
 #include <sys/limits.h>
 #include <sys/poll.h>
-#include <linux/input.h>
-#include <errno.h>
+
 #include <memory>
-#include <cutils/log.h>
+
+#include <android/log.h>
 
 static struct pollfd* ufds;
 static char** device_names;

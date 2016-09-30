@@ -16,15 +16,15 @@
 
 #define LOG_TAG "Vector"
 
-#include <string.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include <cutils/log.h>
-#include <safe_iop.h>
-
+#include <android/log.h>
 #include <utils/Errors.h>
 #include <utils/VectorImpl.h>
+
+#include <safe_iop.h>
 
 #include "SharedBuffer.h"
 

@@ -28,8 +28,9 @@
 #ifndef _LIBS_UTILS_LOG_H
 #define _LIBS_UTILS_LOG_H
 
-#include <cutils/log.h>
 #include <sys/types.h>
+
+#include <android/log.h>
 
 #ifdef __cplusplus
 

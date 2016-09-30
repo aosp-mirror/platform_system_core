@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "libsuspend"
+//#define LOG_NDEBUG 0
+
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -25,9 +28,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define LOG_TAG "libsuspend"
-//#define LOG_NDEBUG 0
-#include <cutils/log.h>
+#include <android/log.h>
 
 #include "autosuspend_ops.h"
 

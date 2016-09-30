@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "trusty_storage_client"
+
 #include <errno.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -21,11 +23,9 @@
 #include <string.h>
 #include <sys/uio.h>
 
+#include <android/log.h>
 #include <trusty/tipc.h>
 #include <trusty/lib/storage.h>
-
-#define LOG_TAG "trusty_storage_client"
-#include <cutils/log.h>
 
 #define MAX_CHUNK_SIZE 4040
 

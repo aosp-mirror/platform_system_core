@@ -23,7 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <cutils/log.h>
+#include <android/log.h>
 
 #include "tipc_ioctl.h"
 
