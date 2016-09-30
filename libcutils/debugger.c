@@ -14,20 +14,20 @@
  * limitations under the License.
  */
 
-#include <stdbool.h>
+#define LOG_TAG "DEBUG"
+
 #include <fcntl.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 
+#include <android/log.h>
 #include <cutils/debugger.h>
 #include <cutils/sockets.h>
-
-#define LOG_TAG "DEBUG"
-#include <log/log.h>
 
 static int send_request(int sock_fd, void* msg_ptr, size_t msg_len) {
   int result = 0;
