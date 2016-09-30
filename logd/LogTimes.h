@@ -23,8 +23,8 @@
 
 #include <list>
 
+#include <android/log.h>
 #include <sysutils/SocketClient.h>
-#include <log/log.h>
 
 class LogReader;
 class LogBufferElement;
