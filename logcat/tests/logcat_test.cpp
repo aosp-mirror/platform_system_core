@@ -26,8 +26,8 @@
 
 #include <memory>
 
+#include <android/log.h>
 #include <gtest/gtest.h>
-#include <log/log.h>
 #include <log/logger.h>
 
 #define BIG_BUFFER (5 * 1024)
