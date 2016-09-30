@@ -26,7 +26,6 @@
 #include <gtest/gtest.h>
 #include <log/log.h>
 #include <log/logger.h>
-#include <log/log_read.h>
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
