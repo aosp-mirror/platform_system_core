@@ -23,6 +23,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/ashmem.h>
 #include <pthread.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -30,10 +31,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <linux/ashmem.h>
-
+#include <android/log.h>
 #include <cutils/ashmem.h>
-#include <log/log.h>
 
 #define ASHMEM_DEVICE "/dev/ashmem"
 

@@ -26,8 +26,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <android/log.h>
 #include <cutils/qtaguid.h>
-#include <log/log.h>
 
 static const char* CTRL_PROCPATH = "/proc/net/xt_qtaguid/ctrl";
 static const int CTRL_MAX_INPUT_LEN = 128;

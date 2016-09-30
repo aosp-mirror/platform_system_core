@@ -21,18 +21,18 @@
 #define _ATFILE_SOURCE 1
 #define _GNU_SOURCE 1
 
-#include <cutils/fs.h>
-#include <cutils/log.h>
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
+#include <dirent.h>
 #include <errno.h>
-#include <string.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdlib.h>
-#include <dirent.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <android/log.h>
+#include <cutils/fs.h>
 
 #define ALL_PERMS (S_ISUID | S_ISGID | S_ISVTX | S_IRWXU | S_IRWXG | S_IRWXO)
 #define BUF_SIZE 64
