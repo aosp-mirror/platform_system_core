@@ -119,7 +119,7 @@ public:
     unsigned long getSize(log_id_t id);
     int setSize(log_id_t id, unsigned long size);
     unsigned long getSizeUsed(log_id_t id);
-    // *strp uses malloc, use free to release.
+
     std::string formatStatistics(uid_t uid, pid_t pid, unsigned int logMask);
 
     void enableStatistics() {
