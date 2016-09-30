@@ -18,7 +18,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <log/log.h>
+#include <android/log.h>
 
 #include "config_write.h"
 #include "fake_log_device.h"

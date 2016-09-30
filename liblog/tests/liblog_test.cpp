@@ -22,9 +22,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <android/log.h>
 #include <cutils/properties.h>
 #include <gtest/gtest.h>
-#include <log/log.h>
 #include <log/logger.h>
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
