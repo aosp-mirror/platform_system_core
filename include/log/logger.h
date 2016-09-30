@@ -15,6 +15,10 @@
 #include <time.h> /* clockid_t definition */
 #endif
 
+#ifdef __cplusplus
+#include <string>
+#endif
+
 #include <log/log.h>
 #include <log/log_read.h>
 
@@ -81,14 +85,14 @@ struct logger_entry_v4 {
  * written to the logger. An attempt to write more than
  * this amount will result in a truncated log entry.
  */
-#define LOGGER_ENTRY_MAX_PAYLOAD	4068
+#define LOGGER_ENTRY_MAX_PAYLOAD 4068
 
 /*
  * The maximum size of a log entry which can be read from the
  * kernel logger driver. An attempt to read less than this amount
  * may result in read() returning EINVAL.
  */
-#define LOGGER_ENTRY_MAX_LEN		(5*1024)
+#define LOGGER_ENTRY_MAX_LEN    (5*1024)
 
 #define NS_PER_SEC 1000000000ULL
 
@@ -218,6 +222,94 @@ clockid_t android_log_clockid();
  */
 log_id_t android_name_to_log_id(const char *logName);
 const char *android_log_id_to_name(log_id_t log_id);
+
+#ifdef __cplusplus
+// android_log_context C++ helpers
+class android_log_event_context {
+    android_log_context ctx;
+    int ret;
+
+public:
+    explicit android_log_event_context(int tag) : ret(0) {
+        ctx = create_android_logger(tag);
+    }
+    explicit android_log_event_context(log_msg& log_msg) : ret(0) {
+        ctx = create_android_log_parser(log_msg.msg() + sizeof(uint32_t),
+                                        log_msg.entry.len - sizeof(uint32_t));
+    }
+    ~android_log_event_context() { android_log_destroy(&ctx); }
+
+    int close() {
+        int retval = android_log_destroy(&ctx);
+        if (retval < 0) ret = retval;
+        return retval;
+    }
+
+    // To allow above C calls to use this class as parameter
+    operator android_log_context() const { return ctx; };
+
+    int error() const { return ret; }
+
+    int begin() {
+        int retval = android_log_write_list_begin(ctx);
+        if (retval < 0) ret = retval;
+        return ret;
+    }
+    int end() {
+        int retval = android_log_write_list_end(ctx);
+        if (retval < 0) ret = retval;
+        return ret;
+    }
+
+    android_log_event_context& operator <<(int32_t value) {
+        int retval = android_log_write_int32(ctx, value);
+        if (retval < 0) ret = retval;
+        return *this;
+    }
+    android_log_event_context& operator <<(uint32_t value) {
+        int retval = android_log_write_int32(ctx, value);
+        if (retval < 0) ret = retval;
+        return *this;
+    }
+    android_log_event_context& operator <<(int64_t value) {
+        int retval = android_log_write_int64(ctx, value);
+        if (retval < 0) ret = retval;
+        return *this;
+    }
+    android_log_event_context& operator <<(uint64_t value) {
+        int retval = android_log_write_int64(ctx, value);
+        if (retval < 0) ret = retval;
+        return *this;
+    }
+    android_log_event_context& operator <<(const char* value) {
+        int retval = android_log_write_string8(ctx, value);
+        if (retval < 0) ret = retval;
+        return *this;
+    }
+    android_log_event_context& operator <<(std::string& value) {
+        int retval = android_log_write_string8_len(ctx,
+                                                   value.data(),
+                                                   value.length());
+        if (retval < 0) ret = retval;
+        return *this;
+    }
+    android_log_event_context& operator <<(float value) {
+        int retval = android_log_write_float32(ctx, value);
+        if (retval < 0) ret = retval;
+        return *this;
+    }
+
+    int write(log_id_t id) {
+        int retval = android_log_write_list(ctx, id);
+        if (retval < 0) ret = retval;
+        return ret;
+    }
+
+    android_log_list_element read() { return android_log_read_next(ctx); }
+    android_log_list_element peak() { return android_log_peek_next(ctx); }
+
+};
+#endif
 
 #ifdef __cplusplus
 }
