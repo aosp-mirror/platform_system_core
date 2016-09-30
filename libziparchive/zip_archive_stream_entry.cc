@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "ZIPARCHIVE"
+
 // Read-only stream access to Zip Archive entries.
 #include <errno.h>
 #include <inttypes.h>
@@ -24,9 +26,8 @@
 #include <memory>
 #include <vector>
 
-#define LOG_TAG "ZIPARCHIVE"
+#include <android/log.h>
 #include <android-base/file.h>
-#include <log/log.h>
 #include <ziparchive/zip_archive.h>
 #include <ziparchive/zip_archive_stream_entry.h>
 #include <zlib.h>

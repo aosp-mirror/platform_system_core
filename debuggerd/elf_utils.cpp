@@ -23,9 +23,9 @@
 
 #include <string>
 
-#include <backtrace/Backtrace.h>
+#include <android/log.h>
 #include <android-base/stringprintf.h>
-#include <log/log.h>
+#include <backtrace/Backtrace.h>
 
 #include "elf_utils.h"
 

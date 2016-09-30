@@ -30,13 +30,13 @@
 #include <memory>
 #include <vector>
 
-#include "android-base/file.h"
-#include "android-base/logging.h"
-#include "android-base/macros.h"  // TEMP_FAILURE_RETRY may or may not be in unistd
-#include "android-base/memory.h"
-#include "log/log.h"
-#include "utils/Compat.h"
-#include "utils/FileMap.h"
+#include <android/log.h>
+#include <android-base/file.h>
+#include <android-base/logging.h>
+#include <android-base/macros.h>  // TEMP_FAILURE_RETRY may or may not be in unistd
+#include <android-base/memory.h>
+#include <utils/Compat.h>
+#include <utils/FileMap.h>
 #include "ziparchive/zip_archive.h"
 #include "zlib.h"
 

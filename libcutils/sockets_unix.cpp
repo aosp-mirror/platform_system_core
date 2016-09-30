@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-#include <cutils/sockets.h>
-
 #include <sys/uio.h>
 
 #include <android/log.h>
+#include <cutils/sockets.h>
 
 #if defined(__ANDROID__)
 /* For the socket trust (credentials) check */

@@ -21,15 +21,15 @@
 #include <errno.h>
 #include <signal.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #include <string>
 
+#include <android/log.h>
 #include <android-base/stringprintf.h>
 #include <backtrace/Backtrace.h>
-#include <log/log.h>
 
 // Whitelist output desired in the logcat output.
 bool is_allowed_in_logcat(enum logtype ltype) {

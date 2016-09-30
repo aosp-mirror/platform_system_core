@@ -16,24 +16,23 @@
 
 #define LOG_TAG "DEBUG"
 
+#include <errno.h>
+#include <dirent.h>
+#include <limits.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <time.h>
-#include <errno.h>
-#include <limits.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <sys/types.h>
 #include <sys/ptrace.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
 #include <memory>
 #include <string>
 
+#include <android/log.h>
 #include <backtrace/Backtrace.h>
-
-#include <log/log.h>
 
 #include "backtrace.h"
 

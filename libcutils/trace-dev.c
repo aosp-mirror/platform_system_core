@@ -25,11 +25,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+
+#include <android/log.h>
 #include <cutils/compiler.h>
 #include <cutils/properties.h>
 #include <cutils/trace.h>
-
-#include <android/log.h>
 
 /**
  * Maximum size of a message that can be logged to the trace buffer.
