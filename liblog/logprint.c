@@ -31,8 +31,8 @@
 #include <sys/param.h>
 #include <sys/types.h>
 
+#include <android/log.h>
 #include <cutils/list.h>
-#include <log/logd.h>
 #include <log/logprint.h>
 
 #include "log_portability.h"

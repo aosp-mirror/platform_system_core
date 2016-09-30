@@ -20,9 +20,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <android/log.h>
 #include <backtrace/backtrace_constants.h>
 #include <backtrace/BacktraceMap.h>
-#include <log/log.h>
 
 #include "thread_utils.h"
 

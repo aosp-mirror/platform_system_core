@@ -19,8 +19,9 @@
 #include <cinttypes>
 #include <memory>
 #include <string>
+
+#include <android/log.h>
 #include <android-base/logging.h>
-#include <log/log.h>
 
 namespace {
 

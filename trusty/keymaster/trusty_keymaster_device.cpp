@@ -14,26 +14,24 @@
  * limitations under the License.
  */
 
-#include "trusty_keymaster_device.h"
+#define LOG_TAG "TrustyKeymaster"
 
 #include <assert.h>
+#include <openssl/evp.h>
+#include <openssl/x509.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <stddef.h>
 
 #include <type_traits>
 
-#include <openssl/evp.h>
-#include <openssl/x509.h>
-
-#define LOG_TAG "TrustyKeymaster"
-#include <cutils/log.h>
+#include <android/log.h>
 #include <hardware/keymaster0.h>
-
 #include <keymaster/authorization_set.h>
 
+#include "trusty_keymaster_device.h"
 #include "trusty_keymaster_ipc.h"
 #include "keymaster_ipc.h"
 

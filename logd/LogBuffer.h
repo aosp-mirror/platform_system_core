@@ -22,10 +22,9 @@
 #include <list>
 #include <string>
 
-#include <log/log.h>
-#include <sysutils/SocketClient.h>
-
+#include <android/log.h>
 #include <private/android_filesystem_config.h>
+#include <sysutils/SocketClient.h>
 
 #include "LogBufferElement.h"
 #include "LogTimes.h"
@@ -119,7 +118,7 @@ public:
     unsigned long getSize(log_id_t id);
     int setSize(log_id_t id, unsigned long size);
     unsigned long getSizeUsed(log_id_t id);
-    // *strp uses malloc, use free to release.
+
     std::string formatStatistics(uid_t uid, pid_t pid, unsigned int logMask);
 
     void enableStatistics() {

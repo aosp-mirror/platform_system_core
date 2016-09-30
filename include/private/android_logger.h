@@ -24,10 +24,14 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <log/log.h>
-#include <log/log_read.h>
+#include <android/log.h>
+#include <log/logger.h>
 
 #define LOGGER_MAGIC 'l'
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
 
 /* Header Structure to pstore */
 typedef struct __attribute__((__packed__)) {
@@ -84,6 +88,7 @@ typedef struct __attribute__((__packed__)) {
  * in C++.
  * http://stackoverflow.com/questions/4412749/are-flexible-array-members-valid-in-c
  */
+
 typedef struct __attribute__((__packed__)) {
     int8_t type;    // EVENT_TYPE_STRING;
     int32_t length; // Little Endian Order
@@ -97,10 +102,6 @@ typedef struct __attribute__((__packed__)) {
     int32_t length; // Little Endian Order
     char data[];
 } android_log_event_string_t;
-
-#if defined(__cplusplus)
-extern "C" {
-#endif
 
 #define ANDROID_LOG_PMSG_FILE_MAX_SEQUENCE 256 /* 1MB file */
 #define ANDROID_LOG_PMSG_FILE_SEQUENCE     1000

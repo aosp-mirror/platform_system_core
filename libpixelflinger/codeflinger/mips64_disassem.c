@@ -34,20 +34,19 @@
  *  from: @(#)kadb.c    8.1 (Berkeley) 6/10/93
  */
 
-#include <stdio.h>
-#include <stdint.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <sys/cdefs.h>
-
 #include <sys/types.h>
-#include "mips_opcode.h"
 
-#include <cutils/log.h>
+#include <android/log.h>
+
+#include "mips_opcode.h"
 
 static char *sprintf_buffer;
 static int sprintf_buf_len;
-
 
 typedef uint64_t db_addr_t;
 static void db_printf(const char* fmt, ...);

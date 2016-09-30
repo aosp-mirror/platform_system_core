@@ -17,10 +17,11 @@
 #ifndef _LOGPRINT_H
 #define _LOGPRINT_H
 
-#include <log/log.h>
-#include <log/logger.h>
-#include <log/event_tag_map.h>
 #include <pthread.h>
+
+#include <android/log.h>
+#include <log/event_tag_map.h>
+#include <log/logger.h>
 
 #ifdef __cplusplus
 extern "C" {
