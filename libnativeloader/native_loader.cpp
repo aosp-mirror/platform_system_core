@@ -20,9 +20,9 @@
 #include <dlfcn.h>
 #ifdef __ANDROID__
 #include "dlext_namespaces.h"
-#include "cutils/properties.h"
 #define LOG_TAG "libnativeloader"
-#include "log/log.h"
+#include "android/log.h"
+#include "cutils/properties.h"
 #endif
 
 #include <algorithm>
@@ -30,9 +30,9 @@
 #include <string>
 #include <mutex>
 
-#include "android-base/file.h"
-#include "android-base/macros.h"
-#include "android-base/strings.h"
+#include <android-base/file.h>
+#include <android-base/macros.h>
+#include <android-base/strings.h>
 
 namespace android {
 

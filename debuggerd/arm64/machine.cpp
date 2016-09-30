@@ -24,8 +24,8 @@
 #include <sys/ptrace.h>
 #include <sys/uio.h>
 
+#include <android/log.h>
 #include <backtrace/Backtrace.h>
-#include <log/log.h>
 
 #include "machine.h"
 #include "utility.h"

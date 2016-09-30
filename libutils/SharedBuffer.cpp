@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <log/log.h>
+#include <android/log.h>
 
 #include "SharedBuffer.h"
 

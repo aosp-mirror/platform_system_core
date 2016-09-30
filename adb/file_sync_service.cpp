@@ -31,16 +31,16 @@
 #include <unistd.h>
 #include <utime.h>
 
+#include <android/log.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
+#include <private/android_filesystem_config.h>
+#include <selinux/android.h>
+
 #include "adb.h"
 #include "adb_io.h"
 #include "adb_utils.h"
-#include "private/android_filesystem_config.h"
 #include "security_log_tags.h"
-
-#include <android-base/stringprintf.h>
-#include <android-base/strings.h>
-#include <log/log.h>
-#include <selinux/android.h>
 
 static bool should_use_fs_config(const std::string& path) {
     // TODO: use fs_config to configure permissions on /data.

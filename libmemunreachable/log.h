@@ -19,6 +19,6 @@
 
 #define LOG_TAG "libmemunreachable"
 
-#include <log/log.h>
+#include <android/log.h>
 
 #endif // LIBMEMUNREACHABLE_LOG_H_

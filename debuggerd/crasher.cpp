@@ -13,8 +13,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <android/log.h>
 #include <cutils/sockets.h>
-#include <log/log.h>
 
 #if defined(STATIC_CRASHER)
 #include "debuggerd/client.h"

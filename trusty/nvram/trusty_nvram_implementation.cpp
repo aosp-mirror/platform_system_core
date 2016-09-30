@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "TrustyNVRAM"
+
 #include "trusty_nvram_implementation.h"
 
 #include <errno.h>
 #include <string.h>
 
+#include <android/log.h>
 #include <hardware/nvram.h>
 #include <trusty/tipc.h>
-
-#define LOG_TAG "TrustyNVRAM"
-#include <log/log.h>
 
 #include <nvram/messages/blob.h>
 

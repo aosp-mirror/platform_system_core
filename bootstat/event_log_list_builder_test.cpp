@@ -17,9 +17,10 @@
 #include "event_log_list_builder.h"
 
 #include <inttypes.h>
-#include <gtest/gtest.h>
+
+#include <android/log.h>
 #include <gmock/gmock.h>
-#include <log/log.h>
+#include <gtest/gtest.h>
 
 using testing::ElementsAreArray;
 

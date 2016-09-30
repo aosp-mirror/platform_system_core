@@ -92,10 +92,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include <android/log.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <paths.h>
-#include <log/log.h>
 
 #include "adb.h"
 #include "adb_io.h"
