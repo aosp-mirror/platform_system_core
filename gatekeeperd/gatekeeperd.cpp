@@ -19,25 +19,22 @@
 #include "IGateKeeperService.h"
 
 #include <errno.h>
-#include <stdint.h>
-#include <inttypes.h>
 #include <fcntl.h>
+#include <inttypes.h>
+#include <stdint.h>
 #include <unistd.h>
 
-#include <cutils/log.h>
-#include <utils/Log.h>
-
+#include <android/log.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/PermissionCache.h>
-#include <utils/String16.h>
-#include <utils/Log.h>
-
-#include <keystore/IKeystoreService.h>
-#include <keystore/keystore.h> // For error code
 #include <gatekeeper/password_handle.h> // for password_handle_t
 #include <hardware/gatekeeper.h>
 #include <hardware/hw_auth_token.h>
+#include <keystore/IKeystoreService.h>
+#include <keystore/keystore.h> // For error code
+#include <utils/Log.h>
+#include <utils/String16.h>
 
 #include "SoftGateKeeperDevice.h"
 #include "IUserManager.h"

@@ -15,5 +15,6 @@
  */
 
 #define LOG_TAG "storageproxyd"
-#include <cutils/log.h>
+
+#include <android/log.h>
 

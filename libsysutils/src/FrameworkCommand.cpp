@@ -13,12 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <errno.h>
 
 #define LOG_TAG "FrameworkCommand"
 
-#include <cutils/log.h>
+#include <errno.h>
 
+#include <android/log.h>
 #include <sysutils/FrameworkCommand.h>
 
 #define UNUSED __attribute__((unused))

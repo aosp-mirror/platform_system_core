@@ -17,14 +17,14 @@
 #ifndef ANDROID_VECTOR_H
 #define ANDROID_VECTOR_H
 
-#include <new>
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <cutils/log.h>
+#include <new>
 
-#include <utils/VectorImpl.h>
+#include <android/log.h>
 #include <utils/TypeHelpers.h>
+#include <utils/VectorImpl.h>
 
 // ---------------------------------------------------------------------------
 

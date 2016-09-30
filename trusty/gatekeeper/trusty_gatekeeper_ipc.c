@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "TrustyGateKeeper"
+
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define LOG_TAG "TrustyGateKeeper"
-#include <cutils/log.h>
+#include <android/log.h>
 #include <trusty/tipc.h>
 
 #include "trusty_gatekeeper_ipc.h"
