@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-#include <log/log.h>
-#include <utils/Unicode.h>
-
 #include <limits.h>
 #include <stddef.h>
+
+#include <android/log.h>
+#include <utils/Unicode.h>
 
 #if defined(_WIN32)
 # undef  nhtol
