@@ -29,12 +29,13 @@
 #define _LIBS_LOG_LOG_H
 
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
-#include <log/logd.h>
+#include <android/log.h>
 #include <log/uio.h>
 
 #ifdef __cplusplus
@@ -49,6 +50,14 @@ extern "C" {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
 #endif
+
+int __android_log_bwrite(int32_t tag, const void *payload, size_t len);
+int __android_log_btwrite(int32_t tag, char type, const void *payload,
+    size_t len);
+int __android_log_bswrite(int32_t tag, const char *payload);
+
+int __android_log_security_bwrite(int32_t tag, const void *payload, size_t len);
+int __android_log_security_bswrite(int32_t tag, const char *payload);
 
 // ---------------------------------------------------------------------
 

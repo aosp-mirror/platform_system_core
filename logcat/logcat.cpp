@@ -32,7 +32,6 @@
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
 #include <log/log.h>
-#include <log/logd.h>
 #include <log/logger.h>
 #include <log/logprint.h>
 #include <system/thread_defs.h>
