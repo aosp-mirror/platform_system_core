@@ -26,21 +26,21 @@
  * SUCH DAMAGE.
  */
 
+#include <errno.h>
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <errno.h>
-
 #include <sys/mman.h>
-#include <cutils/ashmem.h>
-#include <cutils/log.h>
+#include <unistd.h>
 
-#define __STDC_FORMAT_MACROS
-#include <inttypes.h>
+#include <android/log.h>
+#include <cutils/ashmem.h>
 
 #include "codeflinger/ARMAssemblerInterface.h"
 #include "codeflinger/MIPS64Assembler.h"
+
 using namespace android;
 
 #define TESTS_DATAOP_ENABLE             1

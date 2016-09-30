@@ -13,19 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <stdio.h>
+
+#define LOG_TAG "SocketListener"
+
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
-#include <sys/socket.h>
 #include <sys/select.h>
+#include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/un.h>
 
-#define LOG_TAG "SocketListener"
-#include <cutils/log.h>
+#include <android/log.h>
 #include <cutils/sockets.h>
-
 #include <sysutils/SocketListener.h>
 #include <sysutils/SocketClient.h>
 

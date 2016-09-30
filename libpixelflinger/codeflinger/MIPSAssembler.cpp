@@ -52,13 +52,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <cutils/log.h>
-#include <cutils/properties.h>
 
+#include <android/log.h>
+#include <cutils/properties.h>
 #include <private/pixelflinger/ggl_context.h>
 
-#include "MIPSAssembler.h"
 #include "CodeCache.h"
+#include "MIPSAssembler.h"
 #include "mips_disassem.h"
 
 // Choose MIPS arch variant following gcc flags

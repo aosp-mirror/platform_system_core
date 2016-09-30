@@ -20,11 +20,11 @@
 #include <pthread.h>
 #include <sys/resource.h>
 
+#include <android/log.h>
+#include <utils/Vector.h>
+
 #include <adf/adf.h>
 #include <adfhwc/adfhwc.h>
-
-#include <cutils/log.h>
-#include <utils/Vector.h>
 
 struct adf_hwc_helper {
     adf_hwc_event_callbacks const *event_cb;
