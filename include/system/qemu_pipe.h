@@ -85,7 +85,7 @@ static int __inline__ qemu_pipe_frame_send(int fd,
                                            const void* buff,
                                            size_t len) {
     char header[5];
-    snprintf(header, sizeof(header), "%04zu", len);
+    snprintf(header, sizeof(header), "%04zx", len);
     ssize_t ret = TEMP_FAILURE_RETRY(write(fd, header, 4));
     if (ret != 4) {
         QEMU_PIPE_DEBUG("Can't write qemud frame header: %s", strerror(errno));
