@@ -23,8 +23,8 @@
 #include <string.h>
 #include <sys/mman.h>
 
+#include <android/log.h>
 #include <log/event_tag_map.h>
-#include <log/log.h>
 
 #include "log_portability.h"
 
