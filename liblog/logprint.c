@@ -32,7 +32,7 @@
 #include <sys/types.h>
 
 #include <cutils/list.h>
-#include <log/logd.h>
+#include <log/log.h>
 #include <log/logprint.h>
 
 #include "log_portability.h"
