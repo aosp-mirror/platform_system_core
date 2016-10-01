@@ -84,7 +84,7 @@ cc_library {
         //       's/^\([0-9]*\)[ \t]*liblog[ \t].*/-DLIBLOG_LOG_TAG=\1/p' \
         //       $(LOCAL_PATH)/event.logtags)
         // so make sure we do not regret hard-coding it as follows:
-        "-DLIBLOG_LOG_TAG=1005",
+        "-DLIBLOG_LOG_TAG=1006",
         "-DSNET_EVENT_LOG_TAG=1397638484",
     ],
     logtags: ["event.logtags"],
