@@ -21,11 +21,10 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <cutils/log.h>
-
+#include <android/log.h>
+#include <utils/TypeHelpers.h>
 #include <utils/Vector.h>
 #include <utils/VectorImpl.h>
-#include <utils/TypeHelpers.h>
 
 // ---------------------------------------------------------------------------
 

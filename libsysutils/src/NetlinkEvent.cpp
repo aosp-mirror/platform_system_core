@@ -13,39 +13,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <stdlib.h>
-#include <string.h>
 
 #define LOG_TAG "NetlinkEvent"
-#include <cutils/log.h>
 
-#include <sysutils/NetlinkEvent.h>
-
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/icmp6.h>
 #include <arpa/inet.h>
-#include <net/if.h>
-
 #include <linux/if.h>
 #include <linux/if_addr.h>
 #include <linux/if_link.h>
 #include <linux/netfilter/nfnetlink.h>
 #include <linux/netfilter/nfnetlink_log.h>
 #include <linux/netfilter_ipv4/ipt_ULOG.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <netinet/icmp6.h>
+#include <netlink/attr.h>
+#include <netlink/genl/genl.h>
+#include <netlink/handlers.h>
+#include <netlink/msg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 /* From kernel's net/netfilter/xt_quota2.c */
 const int LOCAL_QLOG_NL_EVENT = 112;
 const int LOCAL_NFLOG_PACKET = NFNL_SUBSYS_ULOG << 8 | NFULNL_MSG_PACKET;
 
-#include <linux/netlink.h>
-#include <linux/rtnetlink.h>
-
-#include <netlink/attr.h>
-#include <netlink/genl/genl.h>
-#include <netlink/handlers.h>
-#include <netlink/msg.h>
+#include <android/log.h>
+#include <sysutils/NetlinkEvent.h>
 
 NetlinkEvent::NetlinkEvent() {
     mAction = Action::kUnknown;

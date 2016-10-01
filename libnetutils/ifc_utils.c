@@ -1,34 +1,21 @@
 /*
  * Copyright 2008, The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <errno.h>
-#include <pthread.h>
-
-#include <sys/socket.h>
-#include <sys/select.h>
-#include <sys/types.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <net/if.h>
-#include <netdb.h>
-
+#include <errno.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/if_arp.h>
@@ -37,19 +24,28 @@
 #include <linux/ipv6_route.h>
 #include <linux/rtnetlink.h>
 #include <linux/sockios.h>
-
-#include "netutils/ifc.h"
+#include <net/if.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #ifdef ANDROID
 #define LOG_TAG "NetUtils"
-#include <cutils/log.h>
+#include <android/log.h>
 #include <cutils/properties.h>
 #else
-#include <stdio.h>
-#include <string.h>
 #define ALOGD printf
 #define ALOGW printf
 #endif
+
+#include "netutils/ifc.h"
 
 #if defined(__ANDROID__)
 /* SIOCKILLADDR is an Android extension. */

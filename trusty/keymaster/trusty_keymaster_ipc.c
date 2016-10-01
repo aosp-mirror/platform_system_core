@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "TrustyKeymaster"
+
 // TODO: make this generic in libtrusty
 
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define LOG_TAG "TrustyKeymaster"
-#include <cutils/log.h>
-
+#include <android/log.h>
 #include <trusty/tipc.h>
 
 #include "trusty_keymaster_ipc.h"

@@ -16,10 +16,11 @@
 
 #define LOG_TAG "BitSet_test"
 
-#include <utils/BitSet.h>
-#include <cutils/log.h>
-#include <gtest/gtest.h>
 #include <unistd.h>
+
+#include <android/log.h>
+#include <gtest/gtest.h>
+#include <utils/BitSet.h>
 
 namespace android {
 

@@ -16,14 +16,14 @@
  */
 
 #define LOG_TAG "write_lst"
-#include <sys/types.h>
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include <unistd.h>
 
-#include <cutils/log.h>
-
+#include <android/log.h>
 #include <diskconfig/diskconfig.h>
 
 struct write_list *

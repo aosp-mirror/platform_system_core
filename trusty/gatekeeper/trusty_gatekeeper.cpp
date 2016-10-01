@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "TrustyGateKeeper"
+
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
-#include <assert.h>
 #include <type_traits>
+
+#include <android/log.h>
 
 #include "trusty_gatekeeper.h"
 #include "trusty_gatekeeper_ipc.h"
 #include "gatekeeper_ipc.h"
-
-#define LOG_TAG "TrustyGateKeeper"
-#include <cutils/log.h>
 
 namespace gatekeeper {
 
