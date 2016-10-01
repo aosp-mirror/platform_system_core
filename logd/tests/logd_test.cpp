@@ -23,11 +23,10 @@
 
 #include <string>
 
-#include <gtest/gtest.h>
-
+#include <android/log.h>
 #include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
-#include <log/log.h>
+#include <gtest/gtest.h>
 #include <log/logger.h>
 
 #include "../LogReader.h" // pickup LOGD_SNDTIMEO
