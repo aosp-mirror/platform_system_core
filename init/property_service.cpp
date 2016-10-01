@@ -376,17 +376,17 @@ static void load_properties(char *data, const char *filter)
     }
 }
 
-/*
- * Filter is used to decide which properties to load: NULL loads all keys,
- * "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
- */
+// Filter is used to decide which properties to load: NULL loads all keys,
+// "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
 static void load_properties_from_file(const char* filename, const char* filter) {
     Timer t;
     std::string data;
-    if (read_file(filename, &data)) {
-        data.push_back('\n');
-        load_properties(&data[0], filter);
+    if (!read_file(filename, &data)) {
+        PLOG(WARNING) << "Couldn't load properties from " << filename;
+        return;
     }
+    data.push_back('\n');
+    load_properties(&data[0], filter);
     LOG(VERBOSE) << "(Loading properties from " << filename << " took " << t.duration() << "s.)";
 }
 
