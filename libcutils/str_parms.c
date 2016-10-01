@@ -24,10 +24,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <android/log.h>
 #include <cutils/hashmap.h>
 #include <cutils/memory.h>
 #include <cutils/str_parms.h>
-#include <log/log.h>
 
 #define UNUSED __attribute__((unused))
 

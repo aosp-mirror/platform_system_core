@@ -18,7 +18,7 @@
 
 #include <sys/uio.h>
 
-#include <log/log.h>
+#include <android/log.h>
 
 #if defined(__ANDROID__)
 /* For the socket trust (credentials) check */
