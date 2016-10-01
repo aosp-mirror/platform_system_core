@@ -18,8 +18,10 @@
 
 #include <cstdlib>
 #include <memory>
+
+#include <android/log.h>
 #include <android-base/logging.h>
-#include <log/log.h>
+
 #include "event_log_list_builder.h"
 
 namespace bootstat {

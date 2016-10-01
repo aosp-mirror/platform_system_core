@@ -25,23 +25,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <sys/ptrace.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #include <memory>
 #include <string>
 
-#include <private/android_filesystem_config.h>
-
+#include <android/log.h>
 #include <android-base/stringprintf.h>
-#include <cutils/properties.h>
-#include <log/log.h>
-#include <log/logger.h>
-#include <log/logprint.h>
-
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
+#include <cutils/properties.h>
+#include <log/logger.h>
+#include <log/logprint.h>
+#include <private/android_filesystem_config.h>
 
 #include <selinux/android.h>
 
