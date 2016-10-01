@@ -22,7 +22,6 @@
 
 #include <cutils/list.h>
 #include <log/log.h>
-#include <log/log_read.h>
 #include <log/logger.h>
 
 #include "log_portability.h"

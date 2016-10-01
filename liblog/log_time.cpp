@@ -19,7 +19,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <log/log_read.h>
+#include <log/logger.h>
 
 #include "log_portability.h"
 
