@@ -302,7 +302,7 @@ void reinit_signal_handler(int /*signal*/) {
 }
 
 // tagToName converts an events tag into a name
-const char *android::tagToName(uint32_t tag) {
+const char *android::tagToName(size_t *len, uint32_t tag) {
     static const EventTagMap *map;
 
     if (!map) {
@@ -312,10 +312,11 @@ const char *android::tagToName(uint32_t tag) {
         }
         sem_post(&sem_name);
         if (!map) {
+            if (len) len = 0;
             return NULL;
         }
     }
-    return android_lookupEventTag(map, tag);
+    return android_lookupEventTag_len(map, len, tag);
 }
 
 static void readDmesg(LogAudit *al, LogKlog *kl) {

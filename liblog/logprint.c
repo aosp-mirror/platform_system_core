@@ -539,6 +539,7 @@ LIBLOG_ABI_PUBLIC int android_log_processLogBuffer(
 
     entry->priority = msg[0];
     entry->tag = msg + 1;
+    entry->tagLen = msgStart - 1;
     entry->message = msg + msgStart;
     entry->messageLen = (msgEnd < msgStart) ? 0 : (msgEnd - msgStart);
 
@@ -801,8 +802,9 @@ LIBLOG_ABI_PUBLIC int android_log_processBinaryLogBuffer(
     eventData += 4;
     inCount -= 4;
 
+    entry->tagLen = 0;
     if (map != NULL) {
-        entry->tag = android_lookupEventTag(map, tagIndex);
+        entry->tag = android_lookupEventTag_len(map, &entry->tagLen, tagIndex);
     } else {
         entry->tag = NULL;
     }
@@ -813,12 +815,16 @@ LIBLOG_ABI_PUBLIC int android_log_processBinaryLogBuffer(
      * shift the buffer pointers down.
      */
     if (entry->tag == NULL) {
-        int tagLen;
+        size_t tagLen;
 
         tagLen = snprintf(messageBuf, messageBufLen, "[%d]", tagIndex);
+        if (tagLen >= (size_t)messageBufLen) {
+            tagLen = messageBufLen - 1;
+        }
         entry->tag = messageBuf;
-        messageBuf += tagLen+1;
-        messageBufLen -= tagLen+1;
+        entry->tagLen = tagLen;
+        messageBuf += tagLen + 1;
+        messageBufLen -= tagLen + 1;
     }
 
     /*
@@ -1386,13 +1392,13 @@ LIBLOG_ABI_PUBLIC char *android_log_formatLogLine (
     switch (p_format->format) {
         case FORMAT_TAG:
             len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
-                "%c/%-8s: ", priChar, entry->tag);
+                "%c/%-8.*s: ", priChar, (int)entry->tagLen, entry->tag);
             strcpy(suffixBuf + suffixLen, "\n");
             ++suffixLen;
             break;
         case FORMAT_PROCESS:
             len = snprintf(suffixBuf + suffixLen, sizeof(suffixBuf) - suffixLen,
-                "  (%s)\n", entry->tag);
+                "  (%.*s)\n", (int)entry->tagLen, entry->tag);
             suffixLen += MIN(len, sizeof(suffixBuf) - suffixLen);
             len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
                 "%c(%s%5d) ", priChar, uid, entry->pid);
@@ -1411,8 +1417,8 @@ LIBLOG_ABI_PUBLIC char *android_log_formatLogLine (
             break;
         case FORMAT_TIME:
             len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
-                "%s %c/%-8s(%s%5d): ", timeBuf, priChar, entry->tag,
-                uid, entry->pid);
+                "%s %c/%-8.*s(%s%5d): ", timeBuf, priChar,
+                (int)entry->tagLen, entry->tag, uid, entry->pid);
             strcpy(suffixBuf + suffixLen, "\n");
             ++suffixLen;
             break;
@@ -1422,15 +1428,16 @@ LIBLOG_ABI_PUBLIC char *android_log_formatLogLine (
                 *ret = ' ';
             }
             len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
-                "%s %s%5d %5d %c %-8s: ", timeBuf,
-                uid, entry->pid, entry->tid, priChar, entry->tag);
+                "%s %s%5d %5d %c %-8.*s: ", timeBuf, uid, entry->pid,
+                entry->tid, priChar, (int)entry->tagLen, entry->tag);
             strcpy(suffixBuf + suffixLen, "\n");
             ++suffixLen;
             break;
         case FORMAT_LONG:
             len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
-                "[ %s %s%5d:%5d %c/%-8s ]\n",
-                timeBuf, uid, entry->pid, entry->tid, priChar, entry->tag);
+                "[ %s %s%5d:%5d %c/%-8.*s ]\n",
+                timeBuf, uid, entry->pid, entry->tid, priChar,
+                (int)entry->tagLen, entry->tag);
             strcpy(suffixBuf + suffixLen, "\n\n");
             suffixLen += 2;
             prefixSuffixIsHeaderFooter = 1;
@@ -1438,7 +1445,8 @@ LIBLOG_ABI_PUBLIC char *android_log_formatLogLine (
         case FORMAT_BRIEF:
         default:
             len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
-                "%c/%-8s(%s%5d): ", priChar, entry->tag, uid, entry->pid);
+                "%c/%-8.*s(%s%5d): ", priChar, (int)entry->tagLen, entry->tag,
+                uid, entry->pid);
             strcpy(suffixBuf + suffixLen, "\n");
             ++suffixLen;
             break;

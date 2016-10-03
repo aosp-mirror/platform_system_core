@@ -34,8 +34,9 @@
  * Single entry.
  */
 typedef struct EventTag {
-    uint32_t    tagIndex;
-    const char* tagStr;
+    uint32_t tagIndex;
+    char*    tagStr;
+    size_t   tagLen;
 } EventTag;
 
 /*
@@ -139,8 +140,9 @@ LIBLOG_ABI_PUBLIC void android_closeEventTagMap(EventTagMap* map)
  *
  * The entries are sorted by tag number, so we can do a binary search.
  */
-LIBLOG_ABI_PUBLIC const char* android_lookupEventTag(const EventTagMap* map,
-                                                     unsigned int tag)
+LIBLOG_ABI_PUBLIC const char* android_lookupEventTag_len(const EventTagMap* map,
+                                                         size_t *len,
+                                                         unsigned int tag)
 {
     int lo = 0;
     int hi = map->numTags - 1;
@@ -157,12 +159,34 @@ LIBLOG_ABI_PUBLIC const char* android_lookupEventTag(const EventTagMap* map,
             hi = mid - 1;
         } else {
             /* found */
+            if (len) *len = map->tagArray[mid].tagLen;
+            /*
+             * b/31456426 to check if gTest can detect copy-on-write issue
+             * add the following line to break us:
+             *     map->tagArray[mid].tagStr[map->tagArray[mid].tagLen] = '\0';
+             * or explicitly use deprecated android_lookupEventTag().
+             */
             return map->tagArray[mid].tagStr;
         }
     }
 
     errno = ENOENT;
+    if (len) *len = 0;
     return NULL;
+}
+
+LIBLOG_ABI_PUBLIC const char* android_lookupEventTag(const EventTagMap* map,
+                                                     unsigned int tag)
+{
+    size_t len;
+    const char* tagStr = android_lookupEventTag_len(map, &len, tag);
+    char* cp;
+
+    if (!tagStr) return tagStr;
+    cp = (char*)tagStr;
+    cp += len;
+    if (*cp) *cp = '\0'; /* Trigger copy on write :-( */
+    return tagStr;
 }
 
 /*
@@ -337,19 +361,13 @@ static int scanTagLine(char** pData, EventTag* tag, int lineNum)
     /* Determine whether "c" is a valid tag char. */
     while (isalnum(*++cp) || (*cp == '_')) {
     }
+    tag->tagLen = cp - tag->tagStr;
 
-    if (*cp == '\n') {
-        /* null terminate and return */
-        *cp = '\0';
-    } else if (isspace(*cp)) {
-        /* CRLF or trailin spaces; zap this char, then scan for the '\n' */
-        *cp = '\0';
-
+    if (isspace(*cp)) {
         /* just ignore the rest of the line till \n
         TODO: read the tag description that follows the tag name
         */
-        while (*++cp != '\n') {
-        }
+        while (*cp != '\n') ++cp;
     } else {
         fprintf(stderr, "%s: invalid tag chars on line %d\n", OUT_TAG, lineNum);
         errno = EINVAL;
@@ -387,10 +405,12 @@ static int sortTags(EventTagMap* map)
     for (i = 1; i < map->numTags; i++) {
         if (map->tagArray[i].tagIndex == map->tagArray[i - 1].tagIndex) {
             fprintf(stderr,
-                "%s: duplicate tag entries (%" PRIu32 ":%s and %" PRIu32 ":%s)\n",
+                "%s: duplicate tag entries (%" PRIu32 ":%.*s and %" PRIu32 ":%.*s)\n",
                 OUT_TAG,
-                map->tagArray[i].tagIndex, map->tagArray[i].tagStr,
-                map->tagArray[i - 1].tagIndex, map->tagArray[i - 1].tagStr);
+                map->tagArray[i].tagIndex, (int)map->tagArray[i].tagLen,
+                map->tagArray[i].tagStr,
+                map->tagArray[i - 1].tagIndex, (int)map->tagArray[i - 1].tagLen,
+                map->tagArray[i - 1].tagStr);
             errno = EMLINK;
             return -1;
         }
