@@ -718,3 +718,12 @@ LIBLOG_ABI_PUBLIC int __android_log_is_loggable(int prio,
     int logLevel = def;
     return logLevel >= 0 && prio >= logLevel;
 }
+
+LIBLOG_ABI_PUBLIC int __android_log_is_loggable_len(int prio,
+                                                    const char *tag __unused,
+                                                    size_t len __unused,
+                                                    int def)
+{
+    int logLevel = def;
+    return logLevel >= 0 && prio >= logLevel;
+}

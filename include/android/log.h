@@ -803,10 +803,12 @@ int android_log_destroy(android_log_context *ctx);
  */
 #if LOG_NDEBUG /* Production */
 #define android_testLog(prio, tag) \
-    (__android_log_is_loggable(prio, tag, ANDROID_LOG_DEBUG) != 0)
+    (__android_log_is_loggable_len(prio, tag, (tag && *tag) ? strlen(tag) : 0, \
+                                   ANDROID_LOG_DEBUG) != 0)
 #else
 #define android_testLog(prio, tag) \
-    (__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE) != 0)
+    (__android_log_is_loggable_len(prio, tag, (tag && *tag) ? strlen(tag) : 0, \
+                                   ANDROID_LOG_VERBOSE) != 0)
 #endif
 
 /*
@@ -816,6 +818,7 @@ int android_log_destroy(android_log_context *ctx);
  * any other value.
  */
 int __android_log_is_loggable(int prio, const char *tag, int default_prio);
+int __android_log_is_loggable_len(int prio, const char *tag, size_t len, int default_prio);
 
 int __android_log_security(); /* Device Owner is present */
 

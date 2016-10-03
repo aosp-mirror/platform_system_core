@@ -650,10 +650,14 @@ BENCHMARK(BM_log_delay);
  *	Measure the time it takes for __android_log_is_loggable.
  */
 static void BM_is_loggable(int iters) {
+    static const char logd[] = "logd";
+
     StartBenchmarkTiming();
 
     for (int i = 0; i < iters; ++i) {
-        __android_log_is_loggable(ANDROID_LOG_WARN, "logd", ANDROID_LOG_VERBOSE);
+        __android_log_is_loggable_len(ANDROID_LOG_WARN,
+                                      logd, strlen(logd),
+                                      ANDROID_LOG_VERBOSE);
     }
 
     StopBenchmarkTiming();

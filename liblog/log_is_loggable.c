@@ -85,13 +85,13 @@ static void refresh_cache(struct cache *cache, const char *key)
     }
 }
 
-static int __android_log_level(const char *tag, int default_prio)
+static int __android_log_level(const char *tag, size_t len, int default_prio)
 {
     /* sizeof() is used on this array below */
     static const char log_namespace[] = "persist.log.tag.";
     static const size_t base_offset = 8; /* skip "persist." */
     /* calculate the size of our key temporary buffer */
-    const size_t taglen = (tag && *tag) ? strlen(tag) : 0;
+    const size_t taglen = tag ? len : 0;
     /* sizeof(log_namespace) = strlen(log_namespace) + 1 */
     char key[sizeof(log_namespace) + taglen]; /* may be > PROPERTY_KEY_MAX */
     char *kp;
@@ -147,7 +147,11 @@ static int __android_log_level(const char *tag, int default_prio)
         if (!not_locked) {
             if (!last_tag[0]
                     || (last_tag[0] != tag[0])
-                    || strncmp(last_tag + 1, tag + 1, sizeof(last_tag) - 1)) {
+                    || strncmp(last_tag + 1, tag + 1,
+                               (len < sizeof(last_tag)) ?
+                                    (len - 1) :
+                                    (sizeof(last_tag) - 1))
+                    || ((len < sizeof(last_tag)) && last_tag[len])) {
                 /* invalidate log.tag.<tag> cache */
                 for (i = 0; i < (sizeof(tag_cache) / sizeof(tag_cache[0])); ++i) {
                     tag_cache[i].pinfo = NULL;
@@ -157,10 +161,16 @@ static int __android_log_level(const char *tag, int default_prio)
                 local_change_detected = 1;
             }
             if (!last_tag[0]) {
-                strncpy(last_tag, tag, sizeof(last_tag));
+                if (len < sizeof(last_tag)) {
+                    strncpy(last_tag, tag, len);
+                    last_tag[len] = '\0';
+                } else {
+                    strncpy(last_tag, tag, sizeof(last_tag));
+                }
             }
         }
-        strcpy(key + sizeof(log_namespace) - 1, tag);
+        strncpy(key + sizeof(log_namespace) - 1, tag, len);
+        key[sizeof(log_namespace) - 1 + len] = '\0';
 
         kp = key;
         for (i = 0; i < (sizeof(tag_cache) / sizeof(tag_cache[0])); ++i) {
@@ -246,10 +256,21 @@ static int __android_log_level(const char *tag, int default_prio)
     return default_prio;
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_is_loggable(int prio, const char *tag,
+LIBLOG_ABI_PUBLIC int __android_log_is_loggable_len(int prio,
+                                                    const char *tag, size_t len,
+                                                    int default_prio)
+{
+    int logLevel = __android_log_level(tag, len, default_prio);
+    return logLevel >= 0 && prio >= logLevel;
+}
+
+LIBLOG_ABI_PUBLIC int __android_log_is_loggable(int prio,
+                                                const char *tag,
                                                 int default_prio)
 {
-    int logLevel = __android_log_level(tag, default_prio);
+    int logLevel = __android_log_level(tag,
+                                       (tag && *tag) ? strlen(tag) : 0,
+                                       default_prio);
     return logLevel >= 0 && prio >= logLevel;
 }
 
