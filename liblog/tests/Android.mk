@@ -40,7 +40,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := $(test_module_prefix)benchmarks
 LOCAL_MODULE_TAGS := $(test_tags)
 LOCAL_CFLAGS += $(benchmark_c_flags)
-LOCAL_SHARED_LIBRARIES += liblog libm
+LOCAL_SHARED_LIBRARIES += liblog libm libbase
 LOCAL_SRC_FILES := $(benchmark_src_files)
 include $(BUILD_NATIVE_TEST)
 
@@ -73,6 +73,6 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := $(test_module_prefix)unit-tests
 LOCAL_MODULE_TAGS := $(test_tags)
 LOCAL_CFLAGS += $(test_c_flags)
-LOCAL_SHARED_LIBRARIES := liblog libcutils
+LOCAL_SHARED_LIBRARIES := liblog libcutils libbase
 LOCAL_SRC_FILES := $(test_src_files)
 include $(BUILD_NATIVE_TEST)

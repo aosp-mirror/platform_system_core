@@ -279,6 +279,7 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
         }
     } else if (log_id == LOG_ID_EVENTS) {
         const char *tag;
+        size_t len;
         EventTagMap *m, *f;
 
         if (vec[0].iov_len < 4) {
@@ -286,6 +287,7 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
         }
 
         tag = NULL;
+        len = 0;
         f = NULL;
         m = (EventTagMap *)atomic_load(&tagMap);
 
@@ -308,11 +310,11 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
             }
         }
         if (m && (m != (EventTagMap *)(uintptr_t)-1LL)) {
-            tag = android_lookupEventTag(m, get4LE(vec[0].iov_base));
+            tag = android_lookupEventTag_len(m, &len, get4LE(vec[0].iov_base));
         }
-        ret = __android_log_is_loggable(ANDROID_LOG_INFO,
-                                        tag,
-                                        ANDROID_LOG_VERBOSE);
+        ret = __android_log_is_loggable_len(ANDROID_LOG_INFO,
+                                            tag, len,
+                                            ANDROID_LOG_VERBOSE);
         if (f) { /* local copy marked for close */
             android_closeEventTagMap(f);
         }
@@ -345,7 +347,9 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
             tag = NULL;
         }
 
-        if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
+        if (!__android_log_is_loggable_len(prio,
+                                           tag, len - 1,
+                                           ANDROID_LOG_VERBOSE)) {
             return -EPERM;
         }
     }

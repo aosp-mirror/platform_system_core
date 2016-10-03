@@ -59,6 +59,7 @@ typedef struct AndroidLogEntry_t {
     int32_t pid;
     int32_t tid;
     const char * tag;
+    size_t tagLen;
     size_t messageLen;
     const char * message;
 } AndroidLogEntry;
