@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <semaphore.h>
@@ -22,7 +24,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <string>
+
 #include <android/log.h>
+#include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <cutils/properties.h>
 #include <gtest/gtest.h>
 #include <log/logger.h>
@@ -1337,8 +1343,8 @@ TEST(liblog, is_loggable) {
                 continue;
             }
             fprintf(stderr, "i=%zu j=%zu\r", i, j);
-            bool android_log_is_loggable = __android_log_is_loggable(
-                levels[i].level, tag, levels[j].level);
+            bool android_log_is_loggable = __android_log_is_loggable_len(
+                levels[i].level, tag, strlen(tag), levels[j].level);
             if ((levels[i].level < levels[j].level)
                     || (levels[j].level == -1)) {
                 if (android_log_is_loggable) {
@@ -1346,8 +1352,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_FALSE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_FALSE(__android_log_is_loggable(
-                        levels[i].level, tag, levels[j].level));
+                    EXPECT_FALSE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), levels[j].level));
                 }
             } else {
                 if (!android_log_is_loggable) {
@@ -1355,8 +1361,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_TRUE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_TRUE(__android_log_is_loggable(
-                        levels[i].level, tag, levels[j].level));
+                    EXPECT_TRUE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), levels[j].level));
                 }
             }
         }
@@ -1377,8 +1383,8 @@ TEST(liblog, is_loggable) {
                     i, j, key, buf);
             usleep(20000);
             property_set(key, buf);
-            bool android_log_is_loggable = __android_log_is_loggable(
-                levels[i].level, tag, ANDROID_LOG_DEBUG);
+            bool android_log_is_loggable = __android_log_is_loggable_len(
+                levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG);
             if ((levels[i].level < levels[j].level)
                     || (levels[j].level == -1)
                     || ((levels[i].level < ANDROID_LOG_DEBUG)
@@ -1388,8 +1394,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_FALSE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_FALSE(__android_log_is_loggable(
-                        levels[i].level, tag, ANDROID_LOG_DEBUG));
+                    EXPECT_FALSE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG));
                 }
             } else {
                 if (!android_log_is_loggable) {
@@ -1397,8 +1403,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_TRUE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_TRUE(__android_log_is_loggable(
-                        levels[i].level, tag, ANDROID_LOG_DEBUG));
+                    EXPECT_TRUE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG));
                 }
             }
             usleep(20000);
@@ -1407,8 +1413,8 @@ TEST(liblog, is_loggable) {
             fprintf(stderr, "i=%zu j=%zu property_set(\"%s\",\"%s\")\r",
                     i, j, key + base_offset, buf);
             property_set(key + base_offset, buf);
-            android_log_is_loggable = __android_log_is_loggable(
-                levels[i].level, tag, ANDROID_LOG_DEBUG);
+            android_log_is_loggable = __android_log_is_loggable_len(
+                levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG);
             if ((levels[i].level < levels[j].level)
                     || (levels[j].level == -1)
                     || ((levels[i].level < ANDROID_LOG_DEBUG)
@@ -1418,8 +1424,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_FALSE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_FALSE(__android_log_is_loggable(
-                        levels[i].level, tag, ANDROID_LOG_DEBUG));
+                    EXPECT_FALSE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG));
                 }
             } else {
                 if (!android_log_is_loggable) {
@@ -1427,8 +1433,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_TRUE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_TRUE(__android_log_is_loggable(
-                        levels[i].level, tag, ANDROID_LOG_DEBUG));
+                    EXPECT_TRUE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG));
                 }
             }
             usleep(20000);
@@ -1439,8 +1445,8 @@ TEST(liblog, is_loggable) {
             fprintf(stderr, "i=%zu j=%zu property_set(\"%s\",\"%s\")\r",
                     i, j, key, buf);
             property_set(key, buf);
-            android_log_is_loggable = __android_log_is_loggable(
-                levels[i].level, tag, ANDROID_LOG_DEBUG);
+            android_log_is_loggable = __android_log_is_loggable_len(
+                levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG);
             if ((levels[i].level < levels[j].level)
                     || (levels[j].level == -1)
                     || ((levels[i].level < ANDROID_LOG_DEBUG)
@@ -1450,8 +1456,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_FALSE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_FALSE(__android_log_is_loggable(
-                        levels[i].level, tag, ANDROID_LOG_DEBUG));
+                    EXPECT_FALSE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG));
                 }
             } else {
                 if (!android_log_is_loggable) {
@@ -1459,8 +1465,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_TRUE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_TRUE(__android_log_is_loggable(
-                        levels[i].level, tag, ANDROID_LOG_DEBUG));
+                    EXPECT_TRUE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG));
                 }
             }
             usleep(20000);
@@ -1469,8 +1475,8 @@ TEST(liblog, is_loggable) {
             fprintf(stderr, "i=%zu j=%zu property_set(\"%s\",\"%s\")\r",
                     i, j, key + base_offset, buf);
             property_set(key + base_offset, buf);
-            android_log_is_loggable = __android_log_is_loggable(
-                levels[i].level, tag, ANDROID_LOG_DEBUG);
+            android_log_is_loggable = __android_log_is_loggable_len(
+                levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG);
             if ((levels[i].level < levels[j].level)
                     || (levels[j].level == -1)
                     || ((levels[i].level < ANDROID_LOG_DEBUG)
@@ -1480,8 +1486,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_FALSE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_FALSE(__android_log_is_loggable(
-                        levels[i].level, tag, ANDROID_LOG_DEBUG));
+                    EXPECT_FALSE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG));
                 }
             } else {
                 if (!android_log_is_loggable) {
@@ -1489,8 +1495,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_TRUE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_TRUE(__android_log_is_loggable(
-                        levels[i].level, tag, ANDROID_LOG_DEBUG));
+                    EXPECT_TRUE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG));
                 }
             }
             usleep(20000);
@@ -1517,8 +1523,8 @@ TEST(liblog, is_loggable) {
                     i, j, key, buf);
             usleep(20000);
             property_set(key, buf);
-            bool android_log_is_loggable = __android_log_is_loggable(
-                levels[i].level, tag, ANDROID_LOG_DEBUG);
+            bool android_log_is_loggable = __android_log_is_loggable_len(
+                levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG);
             if ((levels[i].level < levels[j].level)
                     || (levels[j].level == -1)
                     || ((levels[i].level < ANDROID_LOG_INFO) // Yes INFO
@@ -1528,8 +1534,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_FALSE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_FALSE(__android_log_is_loggable(
-                        levels[i].level, tag, ANDROID_LOG_DEBUG));
+                    EXPECT_FALSE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG));
                 }
             } else {
                 if (!android_log_is_loggable) {
@@ -1537,8 +1543,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_TRUE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_TRUE(__android_log_is_loggable(
-                        levels[i].level, tag, ANDROID_LOG_DEBUG));
+                    EXPECT_TRUE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG));
                 }
             }
             usleep(20000);
@@ -1547,8 +1553,8 @@ TEST(liblog, is_loggable) {
             fprintf(stderr, "i=%zu j=%zu property_set(\"%s\",\"%s\")\r",
                     i, j, key + base_offset, buf);
             property_set(key + base_offset, buf);
-            android_log_is_loggable = __android_log_is_loggable(
-                levels[i].level, tag, ANDROID_LOG_DEBUG);
+            android_log_is_loggable = __android_log_is_loggable_len(
+                levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG);
             if ((levels[i].level < levels[j].level)
                     || (levels[j].level == -1)
                     || ((levels[i].level < ANDROID_LOG_INFO) // Yes INFO
@@ -1558,8 +1564,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_FALSE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_FALSE(__android_log_is_loggable(
-                        levels[i].level, tag, ANDROID_LOG_DEBUG));
+                    EXPECT_FALSE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG));
                 }
             } else {
                 if (!android_log_is_loggable) {
@@ -1567,8 +1573,8 @@ TEST(liblog, is_loggable) {
                 }
                 EXPECT_TRUE(android_log_is_loggable);
                 for(size_t k = 10; k; --k) {
-                    EXPECT_TRUE(__android_log_is_loggable(
-                        levels[i].level, tag, ANDROID_LOG_DEBUG));
+                    EXPECT_TRUE(__android_log_is_loggable_len(
+                        levels[i].level, tag, strlen(tag), ANDROID_LOG_DEBUG));
                 }
             }
             usleep(20000);
@@ -2616,4 +2622,84 @@ TEST(liblog, __android_log_pmsg_file_read) {
 
     EXPECT_LT(0, ret);
     EXPECT_EQ(1U, signaled);
+}
+
+// meant to be handed to ASSERT_TRUE / EXPECT_TRUE only to expand the message
+static testing::AssertionResult IsOk(bool ok, std::string &message) {
+    return ok ?
+        testing::AssertionSuccess() :
+        (testing::AssertionFailure() << message);
+}
+
+static void event_log_tags_test_smap(pid_t pid) {
+    std::string filename = android::base::StringPrintf("/proc/%d/smaps", pid);
+
+    std::string content;
+    if (!android::base::ReadFileToString(filename, &content)) return;
+
+    bool shared_ok = false;
+    bool anonymous_ok = false;
+    bool pass_ok = false;
+
+    static const char event_log_tags[] = "event-log-tags";
+    std::string::size_type pos = 0;
+    while ((pos = content.find(event_log_tags, pos)) != std::string::npos) {
+        pos += strlen(event_log_tags);
+
+        // must not be: 'Shared_Clean: 0 kB'
+        static const char shared_clean[] = "Shared_Clean:";
+        std::string::size_type clean = content.find(shared_clean, pos);
+        bool ok = (clean != std::string::npos) &&
+                  ((clean = content.find_first_not_of(" \t", clean +
+                                strlen(shared_clean))) != std::string::npos) &&
+                  (content.find_first_not_of("123456789", clean) != clean);
+        if (ok && !pass_ok) {
+            shared_ok = true;
+        } else if (!ok) {
+            shared_ok = false;
+        }
+
+        // must be: 'Anonymous: 0 kB'
+        static const char anonymous[] = "Anonymous:";
+        std::string::size_type anon = content.find(anonymous, pos);
+        ok = (anon != std::string::npos) &&
+             ((anon = content.find_first_not_of(" \t", anon +
+                          strlen(anonymous))) != std::string::npos) &&
+             (content.find_first_not_of("0", anon) != anon);
+        if (ok && !pass_ok) {
+            anonymous_ok = true;
+        } else if (!ok) {
+            anonymous_ok = false;
+        }
+
+        pass_ok = true;
+    }
+    content = "";
+
+    if (!pass_ok) return;
+    if (shared_ok && anonymous_ok) return;
+
+    filename = android::base::StringPrintf("/proc/%d/comm", pid);
+    android::base::ReadFileToString(filename, &content);
+    content = android::base::StringPrintf("%d:%s",
+                  pid, content.substr(0, content.find("\n")).c_str());
+
+    EXPECT_TRUE(IsOk(shared_ok, content));
+    EXPECT_TRUE(IsOk(anonymous_ok, content));
+}
+
+TEST(liblog, event_log_tags) {
+    std::unique_ptr<DIR, int(*)(DIR*)> proc_dir(opendir("/proc"), closedir);
+    ASSERT_FALSE(!proc_dir);
+
+    dirent* e;
+    while ((e = readdir(proc_dir.get()))) {
+        if (e->d_type != DT_DIR) continue;
+        if (!isdigit(e->d_name[0])) continue;
+        long long id = atoll(e->d_name);
+        if (id <= 0) continue;
+        pid_t pid = id;
+        if (id != pid) continue;
+        event_log_tags_test_smap(pid);
+    }
 }
