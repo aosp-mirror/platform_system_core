@@ -82,12 +82,6 @@ int main(int argc, char *argv[])
     (void)argc;
     (void)argv;
 
-    ret = memtrack_init();
-    if (ret < 0) {
-        fprintf(stderr, "failed to initialize HAL: %s (%d)\n", strerror(-ret), ret);
-        exit(EXIT_FAILURE);
-    }
-
     ret = pm_kernel_create(&ker);
     if (ret) {
         fprintf(stderr, "Error creating kernel interface -- "
