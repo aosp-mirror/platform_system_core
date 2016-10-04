@@ -21,7 +21,6 @@
 
 #include <android/log.h>
 #include <android-base/stringprintf.h>
-#include <log/logger.h>
 
 // Forward declarations.
 class Backtrace;
