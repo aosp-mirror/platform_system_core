@@ -37,7 +37,6 @@
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 #include <cutils/properties.h>
-#include <log/logger.h>
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
 

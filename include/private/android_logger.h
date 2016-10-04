@@ -25,7 +25,7 @@
 #include <sys/types.h>
 
 #include <android/log.h>
-#include <log/logger.h>
+#include <log/logger.h> /* log_time */
 
 #define LOGGER_MAGIC 'l'
 
