@@ -21,7 +21,7 @@
 
 #include <android/log.h>
 #include <log/event_tag_map.h>
-#include <log/logger.h>
+#include <log/logger.h> /* struct logger_entry */
 
 #ifdef __cplusplus
 extern "C" {
