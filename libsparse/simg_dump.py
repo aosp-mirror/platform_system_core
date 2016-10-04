@@ -15,43 +15,64 @@
 # limitations under the License.
 
 from __future__ import print_function
-import getopt, posixpath, signal, struct, sys
+import csv
+import getopt
+import hashlib
+import posixpath
+import signal
+import struct
+import sys
+
 
 def usage(argv0):
   print("""
-Usage: %s [-v] sparse_image_file ...
+Usage: %s [-v] [-s] [-c <filename>] sparse_image_file ...
  -v             verbose output
-""" % ( argv0 ))
+ -s             show sha1sum of data blocks
+ -c <filename>  save .csv file of blocks
+""" % (argv0))
   sys.exit(2)
 
-def main():
 
+def main():
   signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
   me = posixpath.basename(sys.argv[0])
 
   # Parse the command line
-  verbose = 0			# -v
+  verbose = 0                   # -v
+  showhash = 0                  # -s
+  csvfilename = None            # -c
   try:
     opts, args = getopt.getopt(sys.argv[1:],
-                               "v",
-                               ["verbose"])
+                               "vsc:",
+                               ["verbose", "showhash", "csvfile"])
   except getopt.GetoptError, e:
     print(e)
     usage(me)
   for o, a in opts:
     if o in ("-v", "--verbose"):
       verbose += 1
+    elif o in ("-s", "--showhash"):
+      showhash = True
+    elif o in ("-c", "--csvfile"):
+      csvfilename = a
     else:
       print("Unrecognized option \"%s\"" % (o))
       usage(me)
 
-  if len(args) == 0:
+  if not args:
     print("No sparse_image_file specified")
     usage(me)
 
+  if csvfilename:
+    csvfile = open(csvfilename, "wb")
+    csvwriter = csv.writer(csvfile)
+
+  output = verbose or csvfilename or showhash
+
   for path in args:
-    FH = open(path, 'rb')
+    FH = open(path, "rb")
     header_bin = FH.read(28)
     header = struct.unpack("<I4H4I", header_bin)
 
@@ -88,71 +109,99 @@ def main():
     if image_checksum != 0:
       print("checksum=0x%08X" % (image_checksum))
 
-    if not verbose:
+    if not output:
       continue
-    print("            input_bytes      output_blocks")
-    print("chunk    offset     number  offset  number")
+
+    if verbose > 0:
+      print("            input_bytes      output_blocks")
+      print("chunk    offset     number  offset  number")
+
+    if csvfilename:
+      csvwriter.writerow(["chunk", "input offset", "input bytes",
+                          "output offset", "output blocks", "type", "hash"])
+
     offset = 0
-    for i in xrange(1,total_chunks+1):
+    for i in xrange(1, total_chunks + 1):
       header_bin = FH.read(12)
       header = struct.unpack("<2H2I", header_bin)
       chunk_type = header[0]
-      reserved1 = header[1]
       chunk_sz = header[2]
       total_sz = header[3]
       data_sz = total_sz - 12
+      curhash = ""
+      curtype = ""
+      curpos = FH.tell()
 
-      print("%4u %10u %10u %7u %7u" % (i, FH.tell(), data_sz, offset, chunk_sz),
-            end=" ")
+      if verbose > 0:
+        print("%4u %10u %10u %7u %7u" % (i, curpos, data_sz, offset, chunk_sz),
+              end=" ")
 
       if chunk_type == 0xCAC1:
         if data_sz != (chunk_sz * blk_sz):
           print("Raw chunk input size (%u) does not match output size (%u)"
                 % (data_sz, chunk_sz * blk_sz))
-          break;
+          break
         else:
-          print("Raw data", end="")
-          FH.read(data_sz)
+          curtype = "Raw data"
+          data = FH.read(data_sz)
+          if showhash:
+            h = hashlib.sha1()
+            h.update(data)
+            curhash = h.hexdigest()
       elif chunk_type == 0xCAC2:
         if data_sz != 4:
           print("Fill chunk should have 4 bytes of fill, but this has %u"
-                % (data_sz), end="")
-          break;
+                % (data_sz))
+          break
         else:
           fill_bin = FH.read(4)
           fill = struct.unpack("<I", fill_bin)
-          print("Fill with 0x%08X" % (fill))
+          curtype = format("Fill with 0x%08X" % (fill))
+          if showhash:
+            h = hashlib.sha1()
+            data = fill_bin * (blk_sz / 4);
+            for block in xrange(chunk_sz):
+              h.update(data)
+            curhash = h.hexdigest()
       elif chunk_type == 0xCAC3:
         if data_sz != 0:
           print("Don't care chunk input size is non-zero (%u)" % (data_sz))
-          break;
+          break
         else:
-          print("Don't care", end="")
+          curtype = "Don't care"
       elif chunk_type == 0xCAC4:
         if data_sz != 4:
           print("CRC32 chunk should have 4 bytes of CRC, but this has %u"
-                % (data_sz), end="")
-          break;
+                % (data_sz))
+          break
         else:
           crc_bin = FH.read(4)
           crc = struct.unpack("<I", crc_bin)
-          print("Unverified CRC32 0x%08X" % (crc))
+          curtype = format("Unverified CRC32 0x%08X" % (crc))
       else:
-          print("Unknown chunk type 0x%04X" % (chunk_type), end="")
-          break;
+        print("Unknown chunk type 0x%04X" % (chunk_type))
+        break
 
-      if verbose > 1:
-        header = struct.unpack("<12B", header_bin)
-        print(" (%02X%02X %02X%02X %02X%02X%02X%02X %02X%02X%02X%02X)"
-              % (header[0], header[1], header[2], header[3],
-                 header[4], header[5], header[6], header[7],
-                 header[8], header[9], header[10], header[11]))
-      else:
-        print()
+      if verbose > 0:
+        print("%-18s" % (curtype), end=" ")
+
+        if verbose > 1:
+          header = struct.unpack("<12B", header_bin)
+          print(" (%02X%02X %02X%02X %02X%02X%02X%02X %02X%02X%02X%02X)"
+                % (header[0], header[1], header[2], header[3],
+                   header[4], header[5], header[6], header[7],
+                   header[8], header[9], header[10], header[11]), end=" ")
+
+        print(curhash)
+
+      if csvfilename:
+        csvwriter.writerow([i, curpos, data_sz, offset, chunk_sz, curtype,
+                            curhash])
 
       offset += chunk_sz
 
-    print("     %10u            %7u         End" % (FH.tell(), offset))
+    if verbose > 0:
+      print("     %10u            %7u         End" % (FH.tell(), offset))
 
     if total_blks != offset:
       print("The header said we should have %u output blocks, but we saw %u"
@@ -162,6 +211,9 @@ def main():
     if junk_len:
       print("There were %u bytes of extra data at the end of the file."
             % (junk_len))
+
+  if csvfilename:
+    csvfile.close()
 
   sys.exit(0)
 
