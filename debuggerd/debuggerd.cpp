@@ -19,6 +19,7 @@
 #include <elf.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/input.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -39,15 +40,12 @@
 
 #include <selinux/android.h>
 
-#include <log/logger.h>
-
+#include <android/log.h>
 #include <android-base/file.h>
 #include <android-base/unique_fd.h>
 #include <cutils/debugger.h>
 #include <cutils/properties.h>
 #include <cutils/sockets.h>
-
-#include <linux/input.h>
 
 #include <private/android_filesystem_config.h>
 
