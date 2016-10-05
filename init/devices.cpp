@@ -294,7 +294,7 @@ static void add_platform_device(const char *path)
             name += 9;
     }
 
-    LOG(INFO) << "adding platform device " << name << " (" << path << ")";
+    LOG(VERBOSE) << "adding platform device " << name << " (" << path << ")";
 
     bus = (platform_node*) calloc(1, sizeof(struct platform_node));
     bus->path = strdup(path);
