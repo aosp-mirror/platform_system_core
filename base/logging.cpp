@@ -415,6 +415,8 @@ LogMessage::~LogMessage() {
         msg[nl] = '\0';
         LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetId(),
                 data_->GetSeverity(), &msg[i]);
+        // Undo the zero-termination so we can give the complete message to the aborter.
+        msg[nl] = '\n';
         i = nl + 1;
       }
     }
