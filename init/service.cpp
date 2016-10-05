@@ -561,7 +561,7 @@ bool Service::Start() {
         }
     }
 
-    LOG(VERBOSE) << "starting service '" << name_ << "'...";
+    LOG(INFO) << "starting service '" << name_ << "'...";
 
     pid_t pid = -1;
     if (namespace_flags_) {
@@ -939,13 +939,13 @@ bool ServiceManager::ReapOneProcess() {
     }
 
     if (WIFEXITED(status)) {
-        LOG(VERBOSE) << name << " exited with status " << WEXITSTATUS(status);
+        LOG(INFO) << name << " exited with status " << WEXITSTATUS(status);
     } else if (WIFSIGNALED(status)) {
-        LOG(VERBOSE) << name << " killed by signal " << WTERMSIG(status);
+        LOG(INFO) << name << " killed by signal " << WTERMSIG(status);
     } else if (WIFSTOPPED(status)) {
-        LOG(VERBOSE) << name << " stopped by signal " << WSTOPSIG(status);
+        LOG(INFO) << name << " stopped by signal " << WSTOPSIG(status);
     } else {
-        LOG(VERBOSE) << name << " state changed";
+        LOG(INFO) << name << " state changed";
     }
 
     if (!svc) {
