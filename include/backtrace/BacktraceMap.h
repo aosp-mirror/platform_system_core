@@ -19,7 +19,7 @@
 
 #include <stdint.h>
 #include <sys/types.h>
-#ifdef USE_MINGW
+#ifdef _WIN32
 // MINGW does not define these constants.
 #define PROT_NONE 0
 #define PROT_READ 0x1
