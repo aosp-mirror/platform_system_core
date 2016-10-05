@@ -606,3 +606,27 @@ TEST(logging, LOG_FATAL_NOOP_ABORTER) {
 
   ASSERT_DEATH({SuppressAbortUI(); LOG(FATAL) << "foobar";}, "foobar");
 }
+
+struct CountLineAborter {
+  static void CountLineAborterFunction(const char* msg) {
+    while (*msg != 0) {
+      if (*msg == '\n') {
+        newline_count++;
+      }
+      msg++;
+    }
+  }
+  static size_t newline_count;
+};
+size_t CountLineAborter::newline_count = 0;
+
+TEST(logging, LOG_FATAL_ABORTER_MESSAGE) {
+  CountLineAborter::newline_count = 0;
+  android::base::SetAborter(CountLineAborter::CountLineAborterFunction);
+
+  android::base::ScopedLogSeverity sls(android::base::ERROR);
+  CapturedStderr cap;
+  LOG(FATAL) << "foo\nbar";
+
+  EXPECT_EQ(CountLineAborter::newline_count, 1U + 1U);  // +1 for final '\n'.
+}
