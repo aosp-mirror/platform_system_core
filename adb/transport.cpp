@@ -150,32 +150,17 @@ static void transport_socket_events(int fd, unsigned events, void *_t)
     }
 }
 
-void send_packet(apacket *p, atransport *t)
-{
-    unsigned char *x;
-    unsigned sum;
-    unsigned count;
-
+void send_packet(apacket* p, atransport* t) {
     p->msg.magic = p->msg.command ^ 0xffffffff;
-
-    count = p->msg.data_length;
-    x = (unsigned char *) p->data;
-    sum = 0;
-    while(count-- > 0){
-        sum += *x++;
-    }
-    p->msg.data_check = sum;
+    p->msg.data_check = calculate_apacket_checksum(p);
 
     print_packet("send", p);
 
     if (t == NULL) {
-        D("Transport is null");
-        // Zap errno because print_packet() and other stuff have errno effect.
-        errno = 0;
-        fatal_errno("Transport is null");
+        fatal("Transport is null");
     }
 
-    if(write_packet(t->transport_socket, t->serial, &p)){
+    if (write_packet(t->transport_socket, t->serial, &p)) {
         fatal_errno("cannot enqueue packet on transport socket");
     }
 }
@@ -1052,23 +1037,11 @@ int check_header(apacket *p, atransport *t)
     return 0;
 }
 
-int check_data(apacket *p)
-{
-    unsigned count, sum;
-    unsigned char *x;
-
-    count = p->msg.data_length;
-    x = p->data;
-    sum = 0;
-    while(count-- > 0) {
-        sum += *x++;
-    }
-
-    if(sum != p->msg.data_check) {
+int check_data(apacket* p) {
+    if (calculate_apacket_checksum(p) != p->msg.data_check) {
         return -1;
-    } else {
-        return 0;
     }
+    return 0;
 }
 
 #if ADB_HOST
