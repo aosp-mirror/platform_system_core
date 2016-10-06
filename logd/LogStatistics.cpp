@@ -21,6 +21,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <list>
+
 #include <log/logger.h>
 
 #include "LogStatistics.h"
@@ -467,55 +469,86 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
     short spaces = 1;
 
     log_id_for_each(id) {
-        if (!(logMask & (1 << id))) {
-            continue;
-        }
+        if (!(logMask & (1 << id))) continue;
         oldLength = output.length();
-        if (spaces < 0) {
-            spaces = 0;
-        }
+        if (spaces < 0) spaces = 0;
         output += android::base::StringPrintf("%*s%s", spaces, "",
                                               android_log_id_to_name(id));
         spaces += spaces_total + oldLength - output.length();
     }
+    if (spaces < 0) spaces = 0;
+    output += android::base::StringPrintf("%*sTotal", spaces, "");
 
-    spaces = 4;
-    output += "\nTotal";
+    static const char TotalStr[] = "\nTotal";
+    spaces = 10 - strlen(TotalStr);
+    output += TotalStr;
 
+    size_t totalSize = 0;
+    size_t totalEls = 0;
     log_id_for_each(id) {
-        if (!(logMask & (1 << id))) {
-            continue;
-        }
+        if (!(logMask & (1 << id))) continue;
         oldLength = output.length();
-        if (spaces < 0) {
-            spaces = 0;
-        }
-        output += android::base::StringPrintf("%*s%zu/%zu", spaces, "",
-                                              sizesTotal(id),
-                                              elementsTotal(id));
+        if (spaces < 0) spaces = 0;
+        size_t szs = sizesTotal(id);
+        totalSize += szs;
+        size_t els = elementsTotal(id);
+        totalEls += els;
+        output += android::base::StringPrintf("%*s%zu/%zu", spaces, "", szs, els);
         spaces += spaces_total + oldLength - output.length();
     }
+    if (spaces < 0) spaces = 0;
+    output += android::base::StringPrintf("%*s%zu/%zu", spaces, "", totalSize, totalEls);
 
-    spaces = 6;
-    output += "\nNow";
+    static const char NowStr[] = "\nNow";
+    spaces = 10 - strlen(NowStr);
+    output += NowStr;
 
+    totalSize = 0;
+    totalEls = 0;
     log_id_for_each(id) {
-        if (!(logMask & (1 << id))) {
-            continue;
-        }
+        if (!(logMask & (1 << id))) continue;
 
         size_t els = elements(id);
         if (els) {
             oldLength = output.length();
-            if (spaces < 0) {
-                spaces = 0;
-            }
-            output += android::base::StringPrintf("%*s%zu/%zu", spaces, "",
-                                                  sizes(id), els);
+            if (spaces < 0) spaces = 0;
+            size_t szs = sizes(id);
+            totalSize += szs;
+            totalEls += els;
+            output += android::base::StringPrintf("%*s%zu/%zu", spaces, "", szs, els);
             spaces -= output.length() - oldLength;
         }
         spaces += spaces_total;
     }
+    if (spaces < 0) spaces = 0;
+    output += android::base::StringPrintf("%*s%zu/%zu", spaces, "", totalSize, totalEls);
+
+    static const char OverheadStr[] = "\nOverhead";
+    spaces = 10 - strlen(OverheadStr);
+    output += OverheadStr;
+
+    totalSize = 0;
+    log_id_for_each(id) {
+        if (!(logMask & (1 << id))) continue;
+
+        size_t els = elements(id);
+        if (els) {
+            oldLength = output.length();
+            if (spaces < 0) spaces = 0;
+            // estimate the std::list overhead.
+            static const size_t overhead =
+                ((sizeof(LogBufferElement) + sizeof(uint64_t) - 1) &
+                    -sizeof(uint64_t)) +
+                sizeof(std::list<LogBufferElement*>);
+            size_t szs = sizes(id) + els * overhead;
+            totalSize += szs;
+            output += android::base::StringPrintf("%*s%zu", spaces, "", szs);
+            spaces -= output.length() - oldLength;
+        }
+        spaces += spaces_total;
+    }
+    if (spaces < 0) spaces = 0;
+    output += android::base::StringPrintf("%*s%zu", spaces, "", totalSize);
 
     // Report on Chattiest
 
@@ -523,9 +556,7 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
 
     // Chattiest by application (UID)
     log_id_for_each(id) {
-        if (!(logMask & (1 << id))) {
-            continue;
-        }
+        if (!(logMask & (1 << id))) continue;
 
         name = (uid == AID_ROOT)
             ? "Chattiest UIDs in %s log buffer:"
@@ -539,27 +570,21 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
             : "Logging for this PID:";
         output += pidTable.format(*this, uid, pid, name);
         name = "Chattiest TIDs";
-        if (pid) {
-            name += android::base::StringPrintf(" for PID %d", pid);
-        }
+        if (pid) name += android::base::StringPrintf(" for PID %d", pid);
         name += ":";
         output += tidTable.format(*this, uid, pid, name);
     }
 
     if (enable && (logMask & (1 << LOG_ID_EVENTS))) {
         name = "Chattiest events log buffer TAGs";
-        if (pid) {
-            name += android::base::StringPrintf(" for PID %d", pid);
-        }
+        if (pid) name += android::base::StringPrintf(" for PID %d", pid);
         name += ":";
         output += tagTable.format(*this, uid, pid, name, LOG_ID_EVENTS);
     }
 
     if (enable && (logMask & (1 << LOG_ID_SECURITY))) {
         name = "Chattiest security log buffer TAGs";
-        if (pid) {
-            name += android::base::StringPrintf(" for PID %d", pid);
-        }
+        if (pid) name += android::base::StringPrintf(" for PID %d", pid);
         name += ":";
         output += securityTagTable.format(*this, uid, pid, name, LOG_ID_SECURITY);
     }
