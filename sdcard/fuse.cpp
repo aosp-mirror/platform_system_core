@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#include <errno.h>
+#include <string.h>
+#include <unistd.h>
+
 #define LOG_TAG "sdcard"
 
 #include "fuse.h"
@@ -223,7 +227,8 @@ static void attr_from_stat(struct fuse* fuse, struct fuse_attr *attr,
 }
 
 static int touch(char* path, mode_t mode) {
-    int fd = open(path, O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW, mode);
+    int fd = TEMP_FAILURE_RETRY(open(path, O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+                                     mode));
     if (fd == -1) {
         if (errno == EEXIST) {
             return 0;
@@ -469,27 +474,34 @@ static void fuse_status(struct fuse *fuse, __u64 unique, int err)
     hdr.len = sizeof(hdr);
     hdr.error = err;
     hdr.unique = unique;
-    write(fuse->fd, &hdr, sizeof(hdr));
+    ssize_t ret = TEMP_FAILURE_RETRY(write(fuse->fd, &hdr, sizeof(hdr)));
+    if (ret == -1) {
+        PLOG(ERROR) << "*** STATUS FAILED ***";
+    } else if (static_cast<size_t>(ret) != sizeof(hdr)) {
+        LOG(ERROR) << "*** STATUS FAILED: written " << ret << " expected "
+                   << sizeof(hdr) << " ***";
+    }
 }
 
 static void fuse_reply(struct fuse *fuse, __u64 unique, void *data, int len)
 {
     struct fuse_out_header hdr;
-    struct iovec vec[2];
-    int res;
-
     hdr.len = len + sizeof(hdr);
     hdr.error = 0;
     hdr.unique = unique;
 
+    struct iovec vec[2];
     vec[0].iov_base = &hdr;
     vec[0].iov_len = sizeof(hdr);
     vec[1].iov_base = data;
     vec[1].iov_len = len;
 
-    res = writev(fuse->fd, vec, 2);
-    if (res < 0) {
+    ssize_t ret = TEMP_FAILURE_RETRY(writev(fuse->fd, vec, 2));
+    if (ret == -1) {
         PLOG(ERROR) << "*** REPLY FAILED ***";
+    } else if (static_cast<size_t>(ret) != sizeof(hdr) + len) {
+        LOG(ERROR) << "*** REPLY FAILED: written " << ret << " expected "
+                   << sizeof(hdr) + len << " ***";
     }
 }
 
@@ -501,7 +513,7 @@ static int fuse_reply_entry(struct fuse* fuse, __u64 unique,
     struct fuse_entry_out out;
     struct stat s;
 
-    if (lstat(path, &s) < 0) {
+    if (lstat(path, &s) == -1) {
         return -errno;
     }
 
@@ -528,7 +540,7 @@ static int fuse_reply_attr(struct fuse* fuse, __u64 unique, const struct node* n
     struct fuse_attr_out out;
     struct stat s;
 
-    if (lstat(path, &s) < 0) {
+    if (lstat(path, &s) == -1) {
         return -errno;
     }
     memset(&out, 0, sizeof(out));
@@ -542,10 +554,7 @@ static void fuse_notify_delete(struct fuse* fuse, const __u64 parent,
         const __u64 child, const char* name) {
     struct fuse_out_header hdr;
     struct fuse_notify_delete_out data;
-    struct iovec vec[3];
     size_t namelen = strlen(name);
-    int res;
-
     hdr.len = sizeof(hdr) + sizeof(data) + namelen + 1;
     hdr.error = FUSE_NOTIFY_DELETE;
     hdr.unique = 0;
@@ -555,6 +564,7 @@ static void fuse_notify_delete(struct fuse* fuse, const __u64 parent,
     data.namelen = namelen;
     data.padding = 0;
 
+    struct iovec vec[3];
     vec[0].iov_base = &hdr;
     vec[0].iov_len = sizeof(hdr);
     vec[1].iov_base = &data;
@@ -562,10 +572,15 @@ static void fuse_notify_delete(struct fuse* fuse, const __u64 parent,
     vec[2].iov_base = (void*) name;
     vec[2].iov_len = namelen + 1;
 
-    res = writev(fuse->fd, vec, 3);
+    ssize_t ret = TEMP_FAILURE_RETRY(writev(fuse->fd, vec, 3));
     /* Ignore ENOENT, since other views may not have seen the entry */
-    if (res < 0 && errno != ENOENT) {
-        PLOG(ERROR) << "*** NOTIFY FAILED ***";
+    if (ret == -1) {
+        if (errno != ENOENT) {
+            PLOG(ERROR) << "*** NOTIFY FAILED ***";
+        }
+    } else if (static_cast<size_t>(ret) != sizeof(hdr) + sizeof(data) + namelen + 1) {
+        LOG(ERROR) << "*** NOTIFY FAILED: written " << ret << " expected "
+                   << sizeof(hdr) + sizeof(data) + namelen + 1 << " ***";
     }
 }
 
@@ -665,7 +680,7 @@ static int handle_setattr(struct fuse* fuse, struct fuse_handler* handler,
     /* XXX: incomplete implementation on purpose.
      * chmod/chown should NEVER be implemented.*/
 
-    if ((req->valid & FATTR_SIZE) && truncate64(path, req->size) < 0) {
+    if ((req->valid & FATTR_SIZE) && TEMP_FAILURE_RETRY(truncate64(path, req->size)) == -1) {
         return -errno;
     }
 
@@ -727,7 +742,7 @@ static int handle_mknod(struct fuse* fuse, struct fuse_handler* handler,
         return -EACCES;
     }
     __u32 mode = (req->mode & (~0777)) | 0664;
-    if (mknod(child_path, mode, req->rdev) < 0) {
+    if (mknod(child_path, mode, req->rdev) == -1) {
         return -errno;
     }
     return fuse_reply_entry(fuse, hdr->unique, parent_node, name, actual_name, child_path);
@@ -757,7 +772,7 @@ static int handle_mkdir(struct fuse* fuse, struct fuse_handler* handler,
         return -EACCES;
     }
     __u32 mode = (req->mode & (~0777)) | 0775;
-    if (mkdir(child_path, mode) < 0) {
+    if (mkdir(child_path, mode) == -1) {
         return -errno;
     }
 
@@ -804,7 +819,7 @@ static int handle_unlink(struct fuse* fuse, struct fuse_handler* handler,
     if (!check_caller_access_to_name(fuse, hdr, parent_node, name, W_OK)) {
         return -EACCES;
     }
-    if (unlink(child_path) < 0) {
+    if (unlink(child_path) == -1) {
         return -errno;
     }
     pthread_mutex_lock(&fuse->global->lock);
@@ -854,7 +869,7 @@ static int handle_rmdir(struct fuse* fuse, struct fuse_handler* handler,
     if (!check_caller_access_to_name(fuse, hdr, parent_node, name, W_OK)) {
         return -EACCES;
     }
-    if (rmdir(child_path) < 0) {
+    if (rmdir(child_path) == -1) {
         return -errno;
     }
     pthread_mutex_lock(&fuse->global->lock);
@@ -942,7 +957,7 @@ static int handle_rename(struct fuse* fuse, struct fuse_handler* handler,
 
     DLOG(INFO) << "[" << handler->token << "] RENAME " << old_child_path << "->" << new_child_path;
     res = rename(old_child_path, new_child_path);
-    if (res < 0) {
+    if (res == -1) {
         res = -errno;
         goto io_error;
     }
@@ -1004,8 +1019,8 @@ static int handle_open(struct fuse* fuse, struct fuse_handler* handler,
         return -ENOMEM;
     }
     DLOG(INFO) << "[" << handler->token << "] OPEN " << path;
-    h->fd = open(path, req->flags);
-    if (h->fd < 0) {
+    h->fd = TEMP_FAILURE_RETRY(open(path, req->flags));
+    if (h->fd == -1) {
         free(h);
         return -errno;
     }
@@ -1035,8 +1050,8 @@ static int handle_read(struct fuse* fuse, struct fuse_handler* handler,
     if (size > MAX_READ) {
         return -EINVAL;
     }
-    res = pread64(h->fd, read_buffer, size, offset);
-    if (res < 0) {
+    res = TEMP_FAILURE_RETRY(pread64(h->fd, read_buffer, size, offset));
+    if (res == -1) {
         return -errno;
     }
     fuse_reply(fuse, unique, read_buffer, res);
@@ -1059,8 +1074,8 @@ static int handle_write(struct fuse* fuse, struct fuse_handler* handler,
 
     DLOG(INFO) << "[" << handler->token << "] WRITE " << std::hex << h << std::dec
                << "(" << h->fd << ") " << req->size << "@" << req->offset;
-    res = pwrite64(h->fd, buffer, req->size, req->offset);
-    if (res < 0) {
+    res = TEMP_FAILURE_RETRY(pwrite64(h->fd, buffer, req->size, req->offset));
+    if (res == -1) {
         return -errno;
     }
     out.size = res;
@@ -1084,7 +1099,7 @@ static int handle_statfs(struct fuse* fuse, struct fuse_handler* handler,
     if (res < 0) {
         return -ENOENT;
     }
-    if (statfs(fuse->global->root.name, &stat) < 0) {
+    if (TEMP_FAILURE_RETRY(statfs(fuse->global->root.name, &stat)) == -1) {
         return -errno;
     }
     memset(&out, 0, sizeof(out));
@@ -1293,7 +1308,6 @@ static int handle_canonical_path(struct fuse* fuse, struct fuse_handler* handler
     return NO_STATUS;
 }
 
-
 static int handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
         const struct fuse_in_header *hdr, const void *data, size_t data_len)
 {
@@ -1427,7 +1441,7 @@ void handle_fuse_requests(struct fuse_handler* handler)
     for (;;) {
         ssize_t len = TEMP_FAILURE_RETRY(read(fuse->fd,
                 handler->request_buffer, sizeof(handler->request_buffer)));
-        if (len < 0) {
+        if (len == -1) {
             if (errno == ENODEV) {
                 LOG(ERROR) << "[" << handler->token << "] someone stole our marbles!";
                 exit(2);
@@ -1436,14 +1450,14 @@ void handle_fuse_requests(struct fuse_handler* handler)
             continue;
         }
 
-        if ((size_t)len < sizeof(struct fuse_in_header)) {
+        if (static_cast<size_t>(len) < sizeof(struct fuse_in_header)) {
             LOG(ERROR) << "[" << handler->token << "] request too short: len=" << len;
             continue;
         }
 
         const struct fuse_in_header* hdr =
             reinterpret_cast<const struct fuse_in_header*>(handler->request_buffer);
-        if (hdr->len != (size_t)len) {
+        if (hdr->len != static_cast<size_t>(len)) {
             LOG(ERROR) << "[" << handler->token << "] malformed header: len=" << len
                        << ", hdr->len=" << hdr->len;
             continue;
