@@ -37,8 +37,6 @@
 #include <unistd.h>
 #include <linux/loop.h>
 #include <linux/module.h>
-#include <ext4_crypt.h>
-#include <ext4_crypt_init_extensions.h>
 
 #include <selinux/selinux.h>
 #include <selinux/label.h>
@@ -51,6 +49,8 @@
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/partition_utils.h>
 #include <cutils/android_reboot.h>
+#include <ext4_utils/ext4_crypt.h>
+#include <ext4_utils/ext4_crypt_init_extensions.h>
 #include <logwrap/logwrap.h>
 
 #include "action.h"
