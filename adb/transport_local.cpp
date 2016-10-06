@@ -99,7 +99,8 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
     int fd = -1;
 
 #if ADB_HOST
-    if (find_emulator_transport_by_adb_port(adb_port) != nullptr) {
+    if (find_emulator_transport_by_adb_port(adb_port) != nullptr ||
+        find_emulator_transport_by_console_port(console_port) != nullptr) {
         return -1;
     }
 
@@ -116,7 +117,7 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
         D("client: connected on remote on fd %d", fd);
         close_on_exec(fd);
         disable_tcp_nagle(fd);
-        std::string serial = android::base::StringPrintf("emulator-%d", console_port);
+        std::string serial = getEmulatorSerialString(console_port);
         if (register_socket_transport(fd, serial.c_str(), adb_port, 1) == 0) {
             return 0;
         }
@@ -360,6 +361,11 @@ atransport* find_emulator_transport_by_adb_port_locked(int adb_port)
     return NULL;
 }
 
+std::string getEmulatorSerialString(int console_port)
+{
+    return android::base::StringPrintf("emulator-%d", console_port);
+}
+
 atransport* find_emulator_transport_by_adb_port(int adb_port)
 {
     adb_mutex_lock( &local_transports_lock );
@@ -367,6 +373,12 @@ atransport* find_emulator_transport_by_adb_port(int adb_port)
     adb_mutex_unlock( &local_transports_lock );
     return result;
 }
+
+atransport* find_emulator_transport_by_console_port(int console_port)
+{
+    return find_transport(getEmulatorSerialString(console_port).c_str());
+}
+
 
 /* Only call this function if you already hold local_transports_lock. */
 int get_available_local_transport_index_locked()
