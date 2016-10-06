@@ -45,6 +45,7 @@
 #include "adb_auth.h"
 #include "adb_utils.h"
 #include "sysdeps.h"
+#include "transport.h"
 
 static std::mutex& g_keys_mutex = *new std::mutex;
 static std::map<std::string, std::shared_ptr<RSA>>& g_keys =
@@ -420,4 +421,53 @@ void adb_auth_init() {
     for (const std::string& path : key_paths) {
         read_keys(path.c_str());
     }
+}
+
+static void send_auth_publickey(atransport* t) {
+    LOG(INFO) << "Calling send_auth_publickey";
+
+    std::string key = adb_auth_get_userkey();
+    if (key.empty()) {
+        D("Failed to get user public key");
+        return;
+    }
+
+    if (key.size() >= MAX_PAYLOAD_V1) {
+        D("User public key too large (%zu B)", key.size());
+        return;
+    }
+
+    apacket* p = get_apacket();
+    memcpy(p->data, key.c_str(), key.size() + 1);
+
+    p->msg.command = A_AUTH;
+    p->msg.arg0 = ADB_AUTH_RSAPUBLICKEY;
+
+    // adbd expects a null-terminated string.
+    p->msg.data_length = key.size() + 1;
+    send_packet(p, t);
+}
+
+void send_auth_response(uint8_t* token, size_t token_size, atransport* t) {
+    std::shared_ptr<RSA> key = t->NextKey();
+    if (key == nullptr) {
+        // No more private keys to try, send the public key.
+        send_auth_publickey(t);
+        return;
+    }
+
+    LOG(INFO) << "Calling send_auth_response";
+    apacket* p = get_apacket();
+
+    int ret = adb_auth_sign(key.get(), token, token_size, p->data);
+    if (!ret) {
+        D("Error signing the token");
+        put_apacket(p);
+        return;
+    }
+
+    p->msg.command = A_AUTH;
+    p->msg.arg0 = ADB_AUTH_SIGNATURE;
+    p->msg.data_length = ret;
+    send_packet(p, t);
 }
