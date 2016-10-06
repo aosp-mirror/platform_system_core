@@ -1071,6 +1071,7 @@ int check_data(apacket *p)
     }
 }
 
+#if ADB_HOST
 std::shared_ptr<RSA> atransport::NextKey() {
     if (keys_.empty()) keys_ = adb_auth_get_private_keys();
 
@@ -1078,3 +1079,4 @@ std::shared_ptr<RSA> atransport::NextKey() {
     keys_.pop_front();
     return result;
 }
+#endif

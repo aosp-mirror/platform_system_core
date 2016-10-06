@@ -351,19 +351,31 @@ void handle_packet(apacket *p, atransport *t)
         break;
 
     case A_AUTH:
-        if (p->msg.arg0 == ADB_AUTH_TOKEN) {
-            t->connection_state = kCsUnauthorized;
-            send_auth_response(p->data, p->msg.data_length, t);
-        } else if (p->msg.arg0 == ADB_AUTH_SIGNATURE) {
-            if (adb_auth_verify(t->token, sizeof(t->token), p->data, p->msg.data_length)) {
-                adb_auth_verified(t);
-                t->failed_auth_attempts = 0;
-            } else {
-                if (t->failed_auth_attempts++ > 256) adb_sleep_ms(1000);
-                send_auth_request(t);
-            }
-        } else if (p->msg.arg0 == ADB_AUTH_RSAPUBLICKEY) {
-            adb_auth_confirm_key(p->data, p->msg.data_length, t);
+        switch (p->msg.arg0) {
+#if ADB_HOST
+            case ADB_AUTH_TOKEN:
+                t->connection_state = kCsUnauthorized;
+                send_auth_response(p->data, p->msg.data_length, t);
+                break;
+#else
+            case ADB_AUTH_SIGNATURE:
+                if (adbd_auth_verify(t->token, sizeof(t->token), p->data, p->msg.data_length)) {
+                    adbd_auth_verified(t);
+                    t->failed_auth_attempts = 0;
+                } else {
+                    if (t->failed_auth_attempts++ > 256) adb_sleep_ms(1000);
+                    send_auth_request(t);
+                }
+                break;
+
+            case ADB_AUTH_RSAPUBLICKEY:
+                adbd_auth_confirm_key(p->data, p->msg.data_length, t);
+                break;
+#endif
+            default:
+                t->connection_state = kCsOffline;
+                handle_offline(t);
+                break;
         }
         break;
 

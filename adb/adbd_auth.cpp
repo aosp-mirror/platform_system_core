@@ -44,7 +44,9 @@ static struct adisconnect usb_disconnect = { usb_disconnected, nullptr};
 static atransport* usb_transport;
 static bool needs_retry = false;
 
-bool adb_auth_verify(uint8_t* token, size_t token_size, uint8_t* sig, int sig_len) {
+bool auth_required = true;
+
+bool adbd_auth_verify(uint8_t* token, size_t token_size, uint8_t* sig, int sig_len) {
     static constexpr const char* key_paths[] = { "/adb_keys", "/data/misc/adb/adb_keys", nullptr };
 
     for (const auto& path : key_paths) {
@@ -85,7 +87,7 @@ bool adb_auth_verify(uint8_t* token, size_t token_size, uint8_t* sig, int sig_le
     return false;
 }
 
-bool adb_auth_generate_token(void* token, size_t token_size) {
+static bool adbd_auth_generate_token(void* token, size_t token_size) {
     FILE* fp = fopen("/dev/urandom", "re");
     if (!fp) return false;
     bool okay = (fread(token, token_size, 1, fp) == 1);
@@ -105,7 +107,7 @@ static void framework_disconnected() {
     framework_fd = -1;
 }
 
-static void adb_auth_event(int fd, unsigned events, void*) {
+static void adbd_auth_event(int fd, unsigned events, void*) {
     if (events & FDE_READ) {
         char response[2];
         int ret = unix_read(fd, response, sizeof(response));
@@ -113,13 +115,13 @@ static void adb_auth_event(int fd, unsigned events, void*) {
             framework_disconnected();
         } else if (ret == 2 && response[0] == 'O' && response[1] == 'K') {
             if (usb_transport) {
-                adb_auth_verified(usb_transport);
+                adbd_auth_verified(usb_transport);
             }
         }
     }
 }
 
-void adb_auth_confirm_key(unsigned char* key, size_t len, atransport* t) {
+void adbd_auth_confirm_key(unsigned char* key, size_t len, atransport* t) {
     if (!usb_transport) {
         usb_transport = t;
         t->AddDisconnect(&usb_disconnect);
@@ -150,7 +152,7 @@ void adb_auth_confirm_key(unsigned char* key, size_t len, atransport* t) {
     }
 }
 
-static void adb_auth_listener(int fd, unsigned events, void* data) {
+static void adbd_auth_listener(int fd, unsigned events, void* data) {
     int s = adb_socket_accept(fd, nullptr, nullptr);
     if (s < 0) {
         PLOG(ERROR) << "Failed to accept";
@@ -163,7 +165,7 @@ static void adb_auth_listener(int fd, unsigned events, void* data) {
     }
 
     framework_fd = s;
-    fdevent_install(&framework_fde, framework_fd, adb_auth_event, nullptr);
+    fdevent_install(&framework_fde, framework_fd, adbd_auth_event, nullptr);
     fdevent_add(&framework_fde, FDE_READ);
 
     if (needs_retry) {
@@ -193,6 +195,28 @@ void adbd_auth_init(void) {
         return;
     }
 
-    fdevent_install(&listener_fde, fd, adb_auth_listener, NULL);
+    fdevent_install(&listener_fde, fd, adbd_auth_listener, NULL);
     fdevent_add(&listener_fde, FDE_READ);
+}
+
+void send_auth_request(atransport* t) {
+    LOG(INFO) << "Calling send_auth_request...";
+
+    if (!adbd_auth_generate_token(t->token, sizeof(t->token))) {
+        PLOG(ERROR) << "Error generating token";
+        return;
+    }
+
+    apacket* p = get_apacket();
+    memcpy(p->data, t->token, sizeof(t->token));
+    p->msg.command = A_AUTH;
+    p->msg.arg0 = ADB_AUTH_TOKEN;
+    p->msg.data_length = sizeof(t->token);
+    send_packet(p, t);
+}
+
+void adbd_auth_verified(atransport *t)
+{
+    handle_online(t);
+    send_connect(t);
 }
