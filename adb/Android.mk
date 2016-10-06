@@ -45,7 +45,6 @@ ADB_COMMON_windows_CFLAGS := \
 # get enough of adb in here that we no longer need minadb. https://b/17626262
 LIBADB_SRC_FILES := \
     adb.cpp \
-    adb_auth.cpp \
     adb_io.cpp \
     adb_listeners.cpp \
     adb_trace.cpp \
@@ -103,7 +102,7 @@ LOCAL_MODULE := libadbd
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
 LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
-    adb_auth_client.cpp \
+    adbd_auth.cpp \
     jdwp_service.cpp \
     usb_linux_client.cpp \
 
