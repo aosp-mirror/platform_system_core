@@ -122,7 +122,7 @@ restart:
 }
 
 static int local_socket_enqueue(asocket* s, apacket* p) {
-    D("LS(%d): enqueue %d", s->id, p->len);
+    D("LS(%d): enqueue %zu", s->id, p->len);
 
     p->ptr = p->data;
 
@@ -195,7 +195,7 @@ static void local_socket_destroy(asocket* s) {
 
     /* dispose of any unwritten data */
     for (p = s->pkt_first; p; p = n) {
-        D("LS(%d): discarding %d bytes", s->id, p->len);
+        D("LS(%d): discarding %zu bytes", s->id, p->len);
         n = p->next;
         put_apacket(p);
     }
@@ -305,7 +305,7 @@ static void local_socket_event_func(int fd, unsigned ev, void* _s) {
 
     if (ev & FDE_READ) {
         apacket* p = get_apacket();
-        unsigned char* x = p->data;
+        char* x = p->data;
         const size_t max_payload = s->get_max_payload();
         size_t avail = max_payload;
         int r = 0;
@@ -553,7 +553,7 @@ static void local_socket_close_notify(asocket* s) {
     s->close(s);
 }
 
-static unsigned unhex(unsigned char* s, int len) {
+static unsigned unhex(char* s, int len) {
     unsigned n = 0, c;
 
     while (len-- > 0) {
@@ -665,7 +665,7 @@ static int smart_socket_enqueue(asocket* s, apacket* p) {
     TransportType type = kTransportAny;
 #endif
 
-    D("SS(%d): enqueue %d", s->id, p->len);
+    D("SS(%d): enqueue %zu", s->id, p->len);
 
     if (s->pkt_first == 0) {
         s->pkt_first = p;
@@ -698,7 +698,7 @@ static int smart_socket_enqueue(asocket* s, apacket* p) {
     D("SS(%d): len is %d", s->id, len);
     /* can't do anything until we have the full header */
     if ((len + 4) > p->len) {
-        D("SS(%d): waiting for %d more bytes", s->id, len + 4 - p->len);
+        D("SS(%d): waiting for %zu more bytes", s->id, len + 4 - p->len);
         return 0;
     }
 

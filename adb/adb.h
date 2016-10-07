@@ -18,6 +18,7 @@
 #define __ADB_H
 
 #include <limits.h>
+#include <stdint.h>
 #include <sys/types.h>
 
 #include <string>
@@ -56,24 +57,26 @@ class atransport;
 struct usb_handle;
 
 struct amessage {
-    unsigned command;       /* command identifier constant      */
-    unsigned arg0;          /* first argument                   */
-    unsigned arg1;          /* second argument                  */
-    unsigned data_length;   /* length of payload (0 is allowed) */
-    unsigned data_check;    /* checksum of data payload         */
-    unsigned magic;         /* command ^ 0xffffffff             */
+    uint32_t command;     /* command identifier constant      */
+    uint32_t arg0;        /* first argument                   */
+    uint32_t arg1;        /* second argument                  */
+    uint32_t data_length; /* length of payload (0 is allowed) */
+    uint32_t data_check;  /* checksum of data payload         */
+    uint32_t magic;       /* command ^ 0xffffffff             */
 };
 
 struct apacket
 {
     apacket *next;
 
-    unsigned len;
-    unsigned char *ptr;
+    size_t len;
+    char* ptr;
 
     amessage msg;
-    unsigned char data[MAX_PAYLOAD];
+    char data[MAX_PAYLOAD];
 };
+
+uint32_t calculate_apacket_checksum(const apacket* packet);
 
 /* the adisconnect structure is used to record a callback that
 ** will be called whenever a transport is disconnected (e.g. by the user)
