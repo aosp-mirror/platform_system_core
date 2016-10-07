@@ -43,6 +43,7 @@ typedef enum {
 typedef struct __attribute__((packed)) {
   int32_t action;
   pid_t tid;
+  pid_t ignore_tid;
   uint64_t abort_msg_address;
 } debugger_msg_t;
 
