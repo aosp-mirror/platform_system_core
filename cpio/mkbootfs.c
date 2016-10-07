@@ -51,6 +51,8 @@ static char *target_out_path = NULL;
 #define CANNED_LINE_LENGTH  (1024)
 #endif
 
+#define TRAILER "TRAILER!!!"
+
 static int verbose = 0;
 static int total_size = 0;
 
@@ -80,8 +82,8 @@ static void fix_stat(const char *path, struct stat *s)
     } else {
         // Use the compiled-in fs_config() function.
         unsigned st_mode = s->st_mode;
-        fs_config(path, S_ISDIR(s->st_mode), target_out_path,
-                       &s->st_uid, &s->st_gid, &st_mode, &capabilities);
+        int is_dir = S_ISDIR(s->st_mode) || strcmp(path, TRAILER) == 0;
+        fs_config(path, is_dir, target_out_path, &s->st_uid, &s->st_gid, &st_mode, &capabilities);
         s->st_mode = (typeof(s->st_mode)) st_mode;
     }
 }
@@ -140,7 +142,7 @@ static void _eject_trailer()
 {
     struct stat s;
     memset(&s, 0, sizeof(s));
-    _eject(&s, "TRAILER!!!", 10, 0, 0);
+    _eject(&s, TRAILER, 10, 0, 0);
 
     while(total_size & 0xff) {
         total_size++;
