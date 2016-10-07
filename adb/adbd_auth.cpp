@@ -46,7 +46,7 @@ static bool needs_retry = false;
 
 bool auth_required = true;
 
-bool adbd_auth_verify(uint8_t* token, size_t token_size, uint8_t* sig, int sig_len) {
+bool adbd_auth_verify(const char* token, size_t token_size, const char* sig, int sig_len) {
     static constexpr const char* key_paths[] = { "/adb_keys", "/data/misc/adb/adb_keys", nullptr };
 
     for (const auto& path : key_paths) {
@@ -78,7 +78,9 @@ bool adbd_auth_verify(uint8_t* token, size_t token_size, uint8_t* sig, int sig_l
                     continue;
                 }
 
-                bool verified = (RSA_verify(NID_sha1, token, token_size, sig, sig_len, key) == 1);
+                bool verified =
+                    (RSA_verify(NID_sha1, reinterpret_cast<const uint8_t*>(token), token_size,
+                                reinterpret_cast<const uint8_t*>(sig), sig_len, key) == 1);
                 RSA_free(key);
                 if (verified) return true;
             }
@@ -121,7 +123,7 @@ static void adbd_auth_event(int fd, unsigned events, void*) {
     }
 }
 
-void adbd_auth_confirm_key(unsigned char* key, size_t len, atransport* t) {
+void adbd_auth_confirm_key(const char* key, size_t len, atransport* t) {
     if (!usb_transport) {
         usb_transport = t;
         t->AddDisconnect(&usb_disconnect);

@@ -112,7 +112,7 @@ public:
     std::shared_ptr<RSA> NextKey();
 #endif
 
-    unsigned char token[TOKEN_SIZE] = {};
+    char token[TOKEN_SIZE] = {};
     size_t failed_auth_attempts = 0;
 
     const std::string connection_state_name() const;
