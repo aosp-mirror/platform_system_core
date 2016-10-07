@@ -87,6 +87,12 @@ cc_library {
                 "uevent.c",
             ],
 
+            // TODO: remove liblog as whole static library, once we don't have prebuilt that requires
+            // liblog symbols present in libcutils.
+            whole_static_libs: [
+                "liblog",
+            ],
+
             static_libs: ["libdebuggerd_client"],
             export_static_lib_headers: ["libdebuggerd_client"],
 
