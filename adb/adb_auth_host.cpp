@@ -298,14 +298,15 @@ std::deque<std::shared_ptr<RSA>> adb_auth_get_private_keys() {
     return result;
 }
 
-int adb_auth_sign(RSA* key, const unsigned char* token, size_t token_size, unsigned char* sig) {
+static int adb_auth_sign(RSA* key, const char* token, size_t token_size, char* sig) {
     if (token_size != TOKEN_SIZE) {
         D("Unexpected token size %zd", token_size);
         return 0;
     }
 
     unsigned int len;
-    if (!RSA_sign(NID_sha1, token, token_size, sig, &len, key)) {
+    if (!RSA_sign(NID_sha1, reinterpret_cast<const uint8_t*>(token), token_size,
+                  reinterpret_cast<uint8_t*>(sig), &len, key)) {
         return 0;
     }
 
@@ -448,7 +449,7 @@ static void send_auth_publickey(atransport* t) {
     send_packet(p, t);
 }
 
-void send_auth_response(uint8_t* token, size_t token_size, atransport* t) {
+void send_auth_response(const char* token, size_t token_size, atransport* t) {
     std::shared_ptr<RSA> key = t->NextKey();
     if (key == nullptr) {
         // No more private keys to try, send the public key.

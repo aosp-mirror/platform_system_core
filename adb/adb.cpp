@@ -94,6 +94,18 @@ void fatal_errno(const char* fmt, ...) {
     abort();
 }
 
+uint32_t calculate_apacket_checksum(const apacket* p) {
+    const unsigned char* x = reinterpret_cast<const unsigned char*>(p->data);
+    uint32_t sum = 0;
+    size_t count = p->msg.data_length;
+
+    while (count-- > 0) {
+        sum += *x++;
+    }
+
+    return sum;
+}
+
 apacket* get_apacket(void)
 {
     apacket* p = reinterpret_cast<apacket*>(malloc(sizeof(apacket)));

@@ -36,11 +36,10 @@
 void adb_auth_init();
 
 int adb_auth_keygen(const char* filename);
-int adb_auth_sign(RSA* key, const unsigned char* token, size_t token_size, unsigned char* sig);
 std::string adb_auth_get_userkey();
 std::deque<std::shared_ptr<RSA>> adb_auth_get_private_keys();
 
-void send_auth_response(uint8_t *token, size_t token_size, atransport *t);
+void send_auth_response(const char* token, size_t token_size, atransport* t);
 
 #else // !ADB_HOST
 
@@ -50,8 +49,8 @@ void adbd_auth_init(void);
 void adbd_auth_verified(atransport *t);
 
 void adbd_cloexec_auth_socket();
-bool adbd_auth_verify(uint8_t* token, size_t token_size, uint8_t* sig, int sig_len);
-void adbd_auth_confirm_key(unsigned char *data, size_t len, atransport *t);
+bool adbd_auth_verify(const char* token, size_t token_size, const char* sig, int sig_len);
+void adbd_auth_confirm_key(const char* data, size_t len, atransport* t);
 
 void send_auth_request(atransport *t);
 
