@@ -57,6 +57,15 @@ int native_handle_close(const native_handle_t* h);
 native_handle_t* native_handle_create(int numFds, int numInts);
 
 /*
+ * native_handle_clone
+ *
+ * creates a native_handle_t and initializes it from another native_handle_t.
+ * Must be destroyed with native_handle_delete().
+ *
+ */
+native_handle_t* native_handle_clone(const native_handle_t* handle);
+
+/*
  * native_handle_delete
  * 
  * frees a native_handle_t allocated with native_handle_create().
