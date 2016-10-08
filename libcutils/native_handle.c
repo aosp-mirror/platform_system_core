@@ -44,6 +44,27 @@ native_handle_t* native_handle_create(int numFds, int numInts)
     return h;
 }
 
+native_handle_t* native_handle_clone(const native_handle_t* handle)
+{
+    native_handle_t* clone = native_handle_create(handle->numFds, handle->numInts);
+    int i;
+
+    for (i = 0; i < handle->numFds; i++) {
+        clone->data[i] = dup(handle->data[i]);
+        if (clone->data[i] < 0) {
+            clone->numFds = i;
+            native_handle_close(clone);
+            native_handle_delete(clone);
+            return NULL;
+        }
+    }
+
+    memcpy(&clone->data[handle->numFds], &handle->data[handle->numFds],
+            sizeof(int) * handle->numInts);
+
+    return clone;
+}
+
 int native_handle_delete(native_handle_t* h)
 {
     if (h) {
