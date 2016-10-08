@@ -31,7 +31,7 @@ namespace base {
 template <typename T>
 bool ParseUint(const char* s, T* out,
                T max = std::numeric_limits<T>::max()) {
-  int base = (s[0] == '0' && s[1] == 'x') ? 16 : 10;
+  int base = (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) ? 16 : 10;
   errno = 0;
   char* end;
   unsigned long long int result = strtoull(s, &end, base);
@@ -53,7 +53,7 @@ template <typename T>
 bool ParseInt(const char* s, T* out,
               T min = std::numeric_limits<T>::min(),
               T max = std::numeric_limits<T>::max()) {
-  int base = (s[0] == '0' && s[1] == 'x') ? 16 : 10;
+  int base = (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) ? 16 : 10;
   errno = 0;
   char* end;
   long long int result = strtoll(s, &end, base);
