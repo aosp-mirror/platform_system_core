@@ -24,13 +24,13 @@
 #include <cutils/partition_utils.h>
 #include <sys/mount.h>
 
+#include <ext4_utils/ext4_utils.h>
+#include <ext4_utils/ext4.h>
+#include <ext4_utils/make_ext4fs.h>
 #include <selinux/selinux.h>
 #include <selinux/label.h>
 #include <selinux/android.h>
 
-#include "ext4_utils.h"
-#include "ext4.h"
-#include "make_ext4fs.h"
 #include "fs_mgr_priv.h"
 #include "cryptfs.h"
 

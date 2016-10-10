@@ -1,7 +1,6 @@
 #include "fs.h"
 
 #include "fastboot.h"
-#include "make_ext4fs.h"
 #include "make_f2fs.h"
 
 #include <errno.h>
@@ -12,6 +11,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <ext4_utils/make_ext4fs.h>
 #include <sparse/sparse.h>
 
 static int generate_ext4_image(int fd, long long partSize, const std::string& initial_dir)
