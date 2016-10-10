@@ -69,6 +69,7 @@ struct debugger_request_t {
   debugger_action_t action;
   pid_t pid, tid;
   uid_t uid, gid;
+  pid_t ignore_tid;
   uintptr_t abort_msg_address;
 };
 
@@ -225,6 +226,7 @@ static int read_request(int fd, debugger_request_t* out_request) {
 
   out_request->action = static_cast<debugger_action_t>(msg.action);
   out_request->tid = msg.tid;
+  out_request->ignore_tid = msg.ignore_tid;
   out_request->pid = cr.pid;
   out_request->uid = cr.uid;
   out_request->gid = cr.gid;
@@ -433,7 +435,7 @@ static bool ptrace_attach_thread(pid_t pid, pid_t tid) {
   return true;
 }
 
-static void ptrace_siblings(pid_t pid, pid_t main_tid, std::set<pid_t>& tids) {
+static void ptrace_siblings(pid_t pid, pid_t main_tid, pid_t ignore_tid, std::set<pid_t>& tids) {
   char task_path[PATH_MAX];
 
   if (snprintf(task_path, PATH_MAX, "/proc/%d/task", pid) >= PATH_MAX) {
@@ -462,7 +464,7 @@ static void ptrace_siblings(pid_t pid, pid_t main_tid, std::set<pid_t>& tids) {
       continue;
     }
 
-    if (tid == main_tid) {
+    if (tid == main_tid || tid == ignore_tid) {
       continue;
     }
 
@@ -633,7 +635,7 @@ static void worker_process(int fd, debugger_request_t& request) {
 
   std::set<pid_t> siblings;
   if (!attach_gdb) {
-    ptrace_siblings(request.pid, request.tid, siblings);
+    ptrace_siblings(request.pid, request.tid, request.ignore_tid, siblings);
   }
 
   // Generate the backtrace map before dropping privileges.
