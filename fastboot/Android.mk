@@ -21,7 +21,6 @@ include $(CLEAR_VARS)
 LOCAL_C_INCLUDES := \
   $(LOCAL_PATH)/../adb \
   $(LOCAL_PATH)/../mkbootimg \
-  $(LOCAL_PATH)/../../extras/ext4_utils \
   $(LOCAL_PATH)/../../extras/f2fs_utils \
 
 LOCAL_SRC_FILES := \
