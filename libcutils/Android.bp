@@ -95,10 +95,6 @@ cc_library {
 
             static_libs: ["libdebuggerd_client"],
             export_static_lib_headers: ["libdebuggerd_client"],
-
-            cflags: [
-                "-std=gnu90",
-            ],
         },
 
         android_arm: {

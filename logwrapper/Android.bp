@@ -14,7 +14,6 @@ cc_library {
     local_include_dirs: ["include"],
     cflags: [
         "-Werror",
-        "-std=gnu99",
     ],
 }
 
@@ -31,6 +30,5 @@ cc_binary {
     ],
     cflags: [
         "-Werror",
-        "-std=gnu99",
     ],
 }

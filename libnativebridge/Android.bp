@@ -12,7 +12,6 @@ cc_library {
         "-Wall",
     ],
     cppflags: [
-        "-std=gnu++11",
         "-fvisibility=protected",
     ],
 
