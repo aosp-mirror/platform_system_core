@@ -205,9 +205,8 @@ static void find_usb_device(const std::string& base,
                          interface->bInterfaceProtocol, interface->bNumEndpoints);
 
                     if (interface->bNumEndpoints == 2 &&
-                            is_adb_interface(vid, pid, interface->bInterfaceClass,
-                            interface->bInterfaceSubClass, interface->bInterfaceProtocol))  {
-
+                        is_adb_interface(interface->bInterfaceClass, interface->bInterfaceSubClass,
+                                         interface->bInterfaceProtocol)) {
                         struct stat st;
                         char pathbuf[128];
                         char link[256];
