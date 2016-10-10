@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <sched.h>
 #include <signal.h>
@@ -141,7 +142,13 @@ static int do_action(const char* arg)
 {
     fprintf(stderr, "%s: init pid=%d tid=%d\n", __progname, getpid(), gettid());
 
-    if (!strncmp(arg, "thread-", strlen("thread-"))) {
+    if (!strncmp(arg, "exhaustfd-", strlen("exhaustfd-"))) {
+      errno = 0;
+      while (errno != EMFILE) {
+        open("/dev/null", O_RDONLY);
+      }
+      return do_action(arg + strlen("exhaustfd-"));
+    } else if (!strncmp(arg, "thread-", strlen("thread-"))) {
         return do_action_on_thread(arg + strlen("thread-"));
     } else if (!strcmp(arg, "SIGSEGV-non-null")) {
         sigsegv_non_null();
@@ -208,6 +215,8 @@ static int do_action(const char* arg)
     fprintf(stderr, "  SIGTRAP               cause a SIGTRAP\n");
     fprintf(stderr, "prefix any of the above with 'thread-' to not run\n");
     fprintf(stderr, "on the process' main thread.\n");
+    fprintf(stderr, "prefix any of the above with 'exhaustfd-' to exhaust\n");
+    fprintf(stderr, "all available file descriptors before crashing.\n");
     return EXIT_SUCCESS;
 }
 
