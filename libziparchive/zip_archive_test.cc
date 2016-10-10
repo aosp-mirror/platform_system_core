@@ -41,6 +41,7 @@ static const std::string kValidZip = "valid.zip";
 static const std::string kLargeZip = "large.zip";
 static const std::string kBadCrcZip = "bad_crc.zip";
 static const std::string kCrashApk = "crash.apk";
+static const std::string kBadFilenameZip = "bad_filename.zip";
 static const std::string kUpdateZip = "dummy-update.zip";
 
 static const std::vector<uint8_t> kATxtContents {
@@ -86,7 +87,9 @@ static void SetZipString(ZipString* zip_str, const std::string& str) {
 TEST(ziparchive, Open) {
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
+  CloseArchive(handle);
 
+  ASSERT_EQ(-1, OpenArchiveWrapper(kBadFilenameZip, &handle));
   CloseArchive(handle);
 }
 
