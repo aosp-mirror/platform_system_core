@@ -178,9 +178,6 @@ int __android_log_btwrite(int32_t tag, char type, const void *payload,
                           size_t len);
 int __android_log_bswrite(int32_t tag, const char *payload);
 
-int __android_log_security_bwrite(int32_t tag, const void *payload, size_t len);
-int __android_log_security_bswrite(int32_t tag, const char *payload);
-
 // ---------------------------------------------------------------------
 
 /*
@@ -819,8 +816,6 @@ int android_log_destroy(android_log_context *ctx);
  */
 int __android_log_is_loggable(int prio, const char *tag, int default_prio);
 int __android_log_is_loggable_len(int prio, const char *tag, size_t len, int default_prio);
-
-int __android_log_security(); /* Device Owner is present */
 
 int __android_log_error_write(int tag, const char *subTag, int32_t uid, const char *data,
                               uint32_t dataLen);

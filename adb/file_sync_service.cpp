@@ -31,10 +31,10 @@
 #include <unistd.h>
 #include <utime.h>
 
-#include <android/log.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <private/android_filesystem_config.h>
+#include <private/android_logger.h>
 #include <selinux/android.h>
 
 #include "adb.h"

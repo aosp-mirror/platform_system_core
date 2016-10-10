@@ -82,6 +82,7 @@
 #include "shell_service.h"
 
 #include <errno.h>
+#include <paths.h>
 #include <pty.h>
 #include <pwd.h>
 #include <sys/select.h>
@@ -92,10 +93,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include <android/log.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
-#include <paths.h>
+#include <private/android_logger.h>
 
 #include "adb.h"
 #include "adb_io.h"
