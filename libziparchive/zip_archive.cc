@@ -379,6 +379,11 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
   archive->hash_table_size = RoundUpPower2(1 + (num_entries * 4) / 3);
   archive->hash_table = reinterpret_cast<ZipString*>(calloc(archive->hash_table_size,
       sizeof(ZipString)));
+  if (archive->hash_table == nullptr) {
+    ALOGW("Zip: unable to allocate the %u-entry hash_table, entry size: %zu",
+          archive->hash_table_size, sizeof(ZipString));
+    return -1;
+  }
 
   /*
    * Walk through the central directory, adding entries to the hash
@@ -411,6 +416,11 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
     const uint16_t comment_length = cdr->comment_length;
     const uint8_t* file_name = ptr + sizeof(CentralDirectoryRecord);
 
+    if (file_name + file_name_length > cd_end) {
+      ALOGW("Zip: file name boundary exceeds the central directory range, file_name_length: "
+            "%" PRIx16 ", cd_length: %zu", file_name_length, cd_length);
+      return -1;
+    }
     /* check that file name is valid UTF-8 and doesn't contain NUL (U+0000) characters */
     if (!IsValidEntryName(file_name, file_name_length)) {
       return -1;
