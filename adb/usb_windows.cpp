@@ -553,10 +553,9 @@ int recognized_device(usb_handle* handle) {
     return 0;
   }
 
-  if (is_adb_interface(device_desc.idVendor, device_desc.idProduct,
-      interf_desc.bInterfaceClass, interf_desc.bInterfaceSubClass, interf_desc.bInterfaceProtocol)) {
-
-    if(interf_desc.bInterfaceProtocol == 0x01) {
+  if (is_adb_interface(interf_desc.bInterfaceClass, interf_desc.bInterfaceSubClass,
+                       interf_desc.bInterfaceProtocol)) {
+    if (interf_desc.bInterfaceProtocol == 0x01) {
       AdbEndpointInformation endpoint_info;
       // assuming zero is a valid bulk endpoint ID
       if (AdbGetEndpointInformation(handle->adb_interface, 0, &endpoint_info)) {
