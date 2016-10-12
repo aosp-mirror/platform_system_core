@@ -570,6 +570,14 @@ TEST(logcat, blocking_tail) {
     EXPECT_EQ(1, signals);
 }
 
+// meant to be handed to ASSERT_FALSE / EXPECT_FALSE to expand the message
+static testing::AssertionResult IsFalse(int ret, const char* command) {
+    return ret ?
+        (testing::AssertionSuccess() <<
+            "ret=" << ret << " command=\"" << command << "\"") :
+        testing::AssertionFailure();
+}
+
 TEST(logcat, logrotate) {
     static const char form[] = "/data/local/tmp/logcat.logrotate.XXXXXX";
     char buf[sizeof(form)];
@@ -581,7 +589,7 @@ TEST(logcat, logrotate) {
     snprintf(command, sizeof(command), comm, buf);
 
     int ret;
-    EXPECT_FALSE((ret = system(command)));
+    EXPECT_FALSE(IsFalse(ret = system(command), command));
     if (!ret) {
         snprintf(command, sizeof(command), "ls -s %s 2>/dev/null", buf);
 
@@ -611,7 +619,7 @@ TEST(logcat, logrotate) {
         }
     }
     snprintf(command, sizeof(command), "rm -rf %s", buf);
-    EXPECT_FALSE(system(command));
+    EXPECT_FALSE(IsFalse(system(command), command));
 }
 
 TEST(logcat, logrotate_suffix) {
@@ -625,7 +633,7 @@ TEST(logcat, logrotate_suffix) {
     snprintf(command, sizeof(command), logcat_cmd, tmp_out_dir);
 
     int ret;
-    EXPECT_FALSE((ret = system(command)));
+    EXPECT_FALSE(IsFalse(ret = system(command), command));
     if (!ret) {
         snprintf(command, sizeof(command), "ls %s 2>/dev/null", tmp_out_dir);
 
@@ -664,7 +672,7 @@ TEST(logcat, logrotate_suffix) {
         EXPECT_EQ(11, log_file_count);
     }
     snprintf(command, sizeof(command), "rm -rf %s", tmp_out_dir);
-    EXPECT_FALSE(system(command));
+    EXPECT_FALSE(IsFalse(system(command), command));
 }
 
 TEST(logcat, logrotate_continue) {
@@ -679,10 +687,10 @@ TEST(logcat, logrotate_continue) {
     snprintf(command, sizeof(command), logcat_cmd, tmp_out_dir, log_filename);
 
     int ret;
-    EXPECT_FALSE((ret = system(command)));
+    EXPECT_FALSE(IsFalse(ret = system(command), command));
     if (ret) {
         snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
-        EXPECT_FALSE(system(command));
+        EXPECT_FALSE(IsFalse(system(command), command));
         return;
     }
     FILE *fp;
@@ -690,7 +698,7 @@ TEST(logcat, logrotate_continue) {
     EXPECT_TRUE(NULL != ((fp = fopen(command, "r"))));
     if (!fp) {
         snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
-        EXPECT_FALSE(system(command));
+        EXPECT_FALSE(IsFalse(system(command), command));
         return;
     }
     char *line = NULL;
@@ -714,23 +722,23 @@ TEST(logcat, logrotate_continue) {
     EXPECT_TRUE(NULL != second_last_line);
     if (!second_last_line) {
         snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
-        EXPECT_FALSE(system(command));
+        EXPECT_FALSE(IsFalse(system(command), command));
         return;
     }
     // re-run the command, it should only add a few lines more content if it
     // continues where it left off.
     snprintf(command, sizeof(command), logcat_cmd, tmp_out_dir, log_filename);
-    EXPECT_FALSE((ret = system(command)));
+    EXPECT_FALSE(IsFalse(ret = system(command), command));
     if (ret) {
         snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
-        EXPECT_FALSE(system(command));
+        EXPECT_FALSE(IsFalse(system(command), command));
         return;
     }
     std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(tmp_out_dir), closedir);
     EXPECT_NE(nullptr, dir);
     if (!dir) {
         snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
-        EXPECT_FALSE(system(command));
+        EXPECT_FALSE(IsFalse(system(command), command));
         return;
     }
     struct dirent *entry;
@@ -769,7 +777,7 @@ TEST(logcat, logrotate_continue) {
     free(second_last_line);
 
     snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
-    EXPECT_FALSE(system(command));
+    EXPECT_FALSE(IsFalse(system(command), command));
 }
 
 TEST(logcat, logrotate_clear) {
@@ -790,17 +798,17 @@ TEST(logcat, logrotate_clear) {
                  logcat_cmd, tmp_out_dir, log_filename, num_val);
 
         int ret;
-        EXPECT_FALSE((ret = system(command)));
+        EXPECT_FALSE(IsFalse(ret = system(command), command));
         if (ret) {
             snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
-            EXPECT_FALSE(system(command));
+            EXPECT_FALSE(IsFalse(system(command), command));
             return;
         }
         std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(tmp_out_dir), closedir);
         EXPECT_NE(nullptr, dir);
         if (!dir) {
             snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
-            EXPECT_FALSE(system(command));
+            EXPECT_FALSE(IsFalse(system(command), command));
             return;
         }
         struct dirent *entry;
@@ -819,17 +827,18 @@ TEST(logcat, logrotate_clear) {
         strcat(command, clear_cmd);
 
         int ret;
-        EXPECT_FALSE((ret = system(command)));
+        EXPECT_FALSE(IsFalse(ret = system(command), command));
         if (ret) {
             snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
             EXPECT_FALSE(system(command));
+            EXPECT_FALSE(IsFalse(system(command), command));
             return;
         }
         std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(tmp_out_dir), closedir);
         EXPECT_NE(nullptr, dir);
         if (!dir) {
             snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
-            EXPECT_FALSE(system(command));
+            EXPECT_FALSE(IsFalse(system(command), command));
             return;
         }
         struct dirent *entry;
@@ -845,7 +854,7 @@ TEST(logcat, logrotate_clear) {
     }
 
     snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
-    EXPECT_FALSE(system(command));
+    EXPECT_FALSE(IsFalse(system(command), command));
 }
 
 static int logrotate_count_id(const char *logcat_cmd, const char *tmp_out_dir) {
@@ -856,7 +865,7 @@ static int logrotate_count_id(const char *logcat_cmd, const char *tmp_out_dir) {
     snprintf(command, sizeof(command), logcat_cmd, tmp_out_dir, log_filename);
 
     int ret;
-    EXPECT_FALSE((ret = system(command)));
+    EXPECT_FALSE(IsFalse(ret = system(command), command));
     if (ret) {
         return -1;
     }
@@ -914,7 +923,7 @@ TEST(logcat, logrotate_id) {
     static const char cleanup_cmd[] = "rm -rf %s";
     char command[strlen(cleanup_cmd) + strlen(tmp_out_dir_form)];
     snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
-    EXPECT_FALSE(system(command));
+    EXPECT_FALSE(IsFalse(system(command), command));
 }
 
 TEST(logcat, logrotate_nodir) {
