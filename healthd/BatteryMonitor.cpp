@@ -29,6 +29,7 @@
 #include <memory>
 
 #include <android-base/file.h>
+#include <android-base/parseint.h>
 #include <android-base/strings.h>
 #include <batteryservice/BatteryService.h>
 #include <cutils/klog.h>
@@ -182,7 +183,7 @@ int BatteryMonitor::getIntField(const String8& path) {
     int value = 0;
 
     if (readFromFile(path, &buf) > 0)
-        value = std::stoi(buf.c_str(), NULL, 0);
+        android::base::ParseInt(buf, &value);
 
     return value;
 }
