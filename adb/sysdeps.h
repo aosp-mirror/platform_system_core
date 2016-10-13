@@ -594,7 +594,7 @@ inline int _fd_set_error_str(int fd, std::string* error) {
 }
 
 inline int network_loopback_client(int port, int type, std::string* error) {
-  return _fd_set_error_str(socket_loopback_client(port, type), error);
+  return _fd_set_error_str(socket_network_client("localhost", port, type), error);
 }
 
 inline int network_loopback_server(int port, int type, std::string* error) {
