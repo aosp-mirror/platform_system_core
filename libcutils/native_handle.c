@@ -28,6 +28,20 @@
 static const int kMaxNativeFds = 1024;
 static const int kMaxNativeInts = 1024;
 
+native_handle_t* native_handle_init(char* storage, int numFds, int numInts)
+{
+    if ((uintptr_t) storage % alignof(native_handle_t)) {
+        return NULL;
+    }
+
+    native_handle_t* handle = (native_handle_t*) storage;
+    handle->version = sizeof(native_handle_t);
+    handle->numFds = numFds;
+    handle->numInts = numInts;
+
+    return handle;
+}
+
 native_handle_t* native_handle_create(int numFds, int numInts)
 {
     if (numFds < 0 || numInts < 0 || numFds > kMaxNativeFds || numInts > kMaxNativeInts) {
