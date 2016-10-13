@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/uio.h>
 #include <sys/param.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
@@ -72,42 +73,20 @@ size_t BacktracePtrace::Read(uintptr_t addr, uint8_t* buffer, size_t bytes) {
   if (!BacktraceMap::IsValid(map) || !(map.flags & PROT_READ)) {
     return 0;
   }
-
   bytes = MIN(map.end - addr, bytes);
-  size_t bytes_read = 0;
-  word_t data_word;
-  size_t align_bytes = addr & (sizeof(word_t) - 1);
-  if (align_bytes != 0) {
-    if (!PtraceRead(Tid(), addr & ~(sizeof(word_t) - 1), &data_word)) {
-      return 0;
-    }
-    size_t copy_bytes = MIN(sizeof(word_t) - align_bytes, bytes);
-    memcpy(buffer, reinterpret_cast<uint8_t*>(&data_word) + align_bytes, copy_bytes);
-    addr += copy_bytes;
-    buffer += copy_bytes;
-    bytes -= copy_bytes;
-    bytes_read += copy_bytes;
-  }
 
-  size_t num_words = bytes / sizeof(word_t);
-  for (size_t i = 0; i < num_words; i++) {
-    if (!PtraceRead(Tid(), addr, &data_word)) {
-      return bytes_read;
-    }
-    memcpy(buffer, &data_word, sizeof(word_t));
-    buffer += sizeof(word_t);
-    addr += sizeof(word_t);
-    bytes_read += sizeof(word_t);
-  }
+  struct iovec local_io;
+  local_io.iov_base = buffer;
+  local_io.iov_len = bytes;
 
-  size_t left_over = bytes & (sizeof(word_t) - 1);
-  if (left_over) {
-    if (!PtraceRead(Tid(), addr, &data_word)) {
-      return bytes_read;
-    }
-    memcpy(buffer, &data_word, left_over);
-    bytes_read += left_over;
+  struct iovec remote_io;
+  remote_io.iov_base = reinterpret_cast<void*>(addr);
+  remote_io.iov_len = bytes;
+
+  ssize_t bytes_read = process_vm_readv(Tid(), &local_io, 1, &remote_io, 1, 0);
+  if (bytes_read == -1) {
+    return 0;
   }
-  return bytes_read;
+  return static_cast<size_t>(bytes_read);
 #endif
 }
