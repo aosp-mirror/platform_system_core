@@ -84,7 +84,6 @@ int android_get_control_socket(const char* name);
  *
  * These functions return INVALID_SOCKET (-1) on failure for all platforms.
  */
-int socket_loopback_client(int port, int type);
 cutils_socket_t socket_network_client(const char* host, int port, int type);
 int socket_network_client_timeout(const char* host, int port, int type,
                                   int timeout, int* getaddrinfo_error);
