@@ -17,9 +17,16 @@
 #ifndef NATIVE_HANDLE_H_
 #define NATIVE_HANDLE_H_
 
+#include <stdalign.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Declare a char array for use with native_handle_init */
+#define NATIVE_HANDLE_DECLARE_STORAGE(name, maxFds, maxInts) \
+    alignas(native_handle_t) char name[                            \
+      sizeof(native_handle_t) + sizeof(int) * (maxFds + maxInts)]
 
 typedef struct native_handle
 {
@@ -46,6 +53,14 @@ typedef struct native_handle
  */
 int native_handle_close(const native_handle_t* h);
 
+/*
+ * native_handle_init
+ *
+ * Initializes a native_handle_t from storage.  storage must be declared with
+ * NATIVE_HANDLE_DECLARE_STORAGE.  numFds and numInts must not respectively
+ * exceed maxFds and maxInts used to declare the storage.
+ */
+native_handle_t* native_handle_init(char* storage, int numFds, int numInts);
 
 /*
  * native_handle_create
