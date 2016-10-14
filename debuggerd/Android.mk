@@ -1,7 +1,6 @@
 LOCAL_PATH := $(call my-dir)
 
 common_cppflags := \
-    -std=gnu++11 \
     -W \
     -Wall \
     -Wextra \
