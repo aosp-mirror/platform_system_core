@@ -755,7 +755,7 @@ static int64_t get_target_sparse_limit(Transport* transport) {
     max_download_size = android::base::Trim(max_download_size);
 
     uint64_t limit;
-    if (!android::base::ParseUint(max_download_size.c_str(), &limit)) {
+    if (!android::base::ParseUint(max_download_size, &limit)) {
         fprintf(stderr, "couldn't parse max-download-size '%s'\n", max_download_size.c_str());
         return 0;
     }
@@ -903,7 +903,7 @@ static int get_slot_count(Transport* transport) {
     if (!fb_getvar(transport, "slot-count", &var)) {
         if (supports_AB_obsolete(transport)) return 2; // Legacy support
     }
-    if (!android::base::ParseInt(var.c_str(), &count)) return 0;
+    if (!android::base::ParseInt(var, &count)) return 0;
     return count;
 }
 
@@ -1362,7 +1362,7 @@ static void fb_perform_format(Transport* transport,
     }
 
     int64_t size;
-    if (!android::base::ParseInt(partition_size.c_str(), &size)) {
+    if (!android::base::ParseInt(partition_size, &size)) {
         fprintf(stderr, "Couldn't parse partition size '%s'.\n", partition_size.c_str());
         return;
     }

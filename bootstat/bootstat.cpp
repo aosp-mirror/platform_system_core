@@ -60,7 +60,7 @@ void RecordBootEventFromCommandLine(
   BootEventRecordStore boot_event_store;
   if (!value_str.empty()) {
     int32_t value = 0;
-    if (android::base::ParseInt(value_str.c_str(), &value)) {
+    if (android::base::ParseInt(value_str, &value)) {
       boot_event_store.AddBootEventWithValue(event, value);
     }
   } else {
@@ -193,7 +193,7 @@ std::string CalculateBootCompletePrefix() {
 
   std::string build_date_str = GetProperty("ro.build.date.utc");
   int32_t build_date;
-  if (!android::base::ParseInt(build_date_str.c_str(), &build_date)) {
+  if (!android::base::ParseInt(build_date_str, &build_date)) {
     return std::string();
   }
 

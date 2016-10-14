@@ -19,7 +19,7 @@
 #include <gtest/gtest.h>
 
 TEST(parseint, signed_smoke) {
-  int i;
+  int i = 0;
   ASSERT_FALSE(android::base::ParseInt("x", &i));
   ASSERT_FALSE(android::base::ParseInt("123x", &i));
 
@@ -28,7 +28,7 @@ TEST(parseint, signed_smoke) {
   ASSERT_TRUE(android::base::ParseInt("-123", &i));
   ASSERT_EQ(-123, i);
 
-  short s;
+  short s = 0;
   ASSERT_TRUE(android::base::ParseInt("1234", &s));
   ASSERT_EQ(1234, s);
 
@@ -39,7 +39,7 @@ TEST(parseint, signed_smoke) {
 }
 
 TEST(parseint, unsigned_smoke) {
-  unsigned int i;
+  unsigned int i = 0u;
   ASSERT_FALSE(android::base::ParseUint("x", &i));
   ASSERT_FALSE(android::base::ParseUint("123x", &i));
 
@@ -47,7 +47,7 @@ TEST(parseint, unsigned_smoke) {
   ASSERT_EQ(123u, i);
   ASSERT_FALSE(android::base::ParseUint("-123", &i));
 
-  unsigned short s;
+  unsigned short s = 0u;
   ASSERT_TRUE(android::base::ParseUint("1234", &s));
   ASSERT_EQ(1234u, s);
 
@@ -58,21 +58,41 @@ TEST(parseint, unsigned_smoke) {
 }
 
 TEST(parseint, no_implicit_octal) {
-  int i;
+  int i = 0;
   ASSERT_TRUE(android::base::ParseInt("0123", &i));
   ASSERT_EQ(123, i);
 
-  unsigned int u;
+  unsigned int u = 0u;
   ASSERT_TRUE(android::base::ParseUint("0123", &u));
   ASSERT_EQ(123u, u);
 }
 
 TEST(parseint, explicit_hex) {
-  int i;
+  int i = 0;
   ASSERT_TRUE(android::base::ParseInt("0x123", &i));
   ASSERT_EQ(0x123, i);
 
-  unsigned int u;
+  unsigned int u = 0u;
   ASSERT_TRUE(android::base::ParseUint("0x123", &u));
   ASSERT_EQ(0x123u, u);
+}
+
+TEST(parseint, string) {
+  int i = 0;
+  ASSERT_TRUE(android::base::ParseInt(std::string("123"), &i));
+  ASSERT_EQ(123, i);
+
+  unsigned int u = 0u;
+  ASSERT_TRUE(android::base::ParseUint(std::string("123"), &u));
+  ASSERT_EQ(123u, u);
+}
+
+TEST(parseint, untouched_on_failure) {
+  int i = 123;
+  ASSERT_FALSE(android::base::ParseInt("456x", &i));
+  ASSERT_EQ(123, i);
+
+  unsigned int u = 123u;
+  ASSERT_FALSE(android::base::ParseInt("456x", &u));
+  ASSERT_EQ(123u, u);
 }
