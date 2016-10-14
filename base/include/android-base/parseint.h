@@ -21,13 +21,15 @@
 #include <stdlib.h>
 
 #include <limits>
+#include <string>
 
 namespace android {
 namespace base {
 
 // Parses the unsigned decimal integer in the string 's' and sets 'out' to
 // that value. Optionally allows the caller to define a 'max' beyond which
-// otherwise valid values will be rejected. Returns boolean success.
+// otherwise valid values will be rejected. Returns boolean success; 'out'
+// is untouched if parsing fails.
 template <typename T>
 bool ParseUint(const char* s, T* out,
                T max = std::numeric_limits<T>::max()) {
@@ -45,10 +47,17 @@ bool ParseUint(const char* s, T* out,
   return true;
 }
 
+// TODO: string_view
+template <typename T>
+bool ParseUint(const std::string& s, T* out,
+               T max = std::numeric_limits<T>::max()) {
+  return ParseUint(s.c_str(), out, max);
+}
+
 // Parses the signed decimal integer in the string 's' and sets 'out' to
 // that value. Optionally allows the caller to define a 'min' and 'max
 // beyond which otherwise valid values will be rejected. Returns boolean
-// success.
+// success; 'out' is untouched if parsing fails.
 template <typename T>
 bool ParseInt(const char* s, T* out,
               T min = std::numeric_limits<T>::min(),
@@ -65,6 +74,14 @@ bool ParseInt(const char* s, T* out,
   }
   *out = static_cast<T>(result);
   return true;
+}
+
+// TODO: string_view
+template <typename T>
+bool ParseInt(const std::string& s, T* out,
+              T min = std::numeric_limits<T>::min(),
+              T max = std::numeric_limits<T>::max()) {
+  return ParseInt(s.c_str(), out, min, max);
 }
 
 }  // namespace base
