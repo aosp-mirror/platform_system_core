@@ -2,7 +2,6 @@ cc_defaults {
     name: "libmemunreachable_defaults",
 
     cflags: [
-        "-std=c++14",
         "-Wall",
         "-Wextra",
         "-Werror",
