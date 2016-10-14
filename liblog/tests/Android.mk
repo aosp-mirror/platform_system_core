@@ -28,7 +28,6 @@ benchmark_c_flags := \
     -Wall -Wextra \
     -Werror \
     -fno-builtin \
-    -std=gnu++11
 
 benchmark_src_files := \
     benchmark_main.cpp \
@@ -54,7 +53,6 @@ test_c_flags := \
     -Wall -Wextra \
     -Werror \
     -fno-builtin \
-    -std=gnu++11
 
 test_src_files := \
     liblog_test.cpp

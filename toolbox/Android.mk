@@ -42,7 +42,6 @@ LOCAL_SRC_FILES := \
 
 LOCAL_CFLAGS += $(common_cflags)
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/upstream-netbsd/include/
-LOCAL_CONLYFLAGS += -std=gnu99
 
 LOCAL_SHARED_LIBRARIES := \
     libcutils \

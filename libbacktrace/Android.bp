@@ -21,8 +21,6 @@ cc_defaults {
         "-Wall",
         "-Werror",
     ],
-    conlyflags: ["-std=gnu99"],
-    cppflags: ["-std=gnu++11"],
 
     clang_cflags: ["-Wno-inline-asm"],
 
