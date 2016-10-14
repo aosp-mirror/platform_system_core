@@ -59,7 +59,7 @@ bool ParseRecordEventTime(const std::string& path, int32_t* uptime) {
   // Ignore existing bootstat records (which do not contain file content).
   if (!content.empty()) {
     int32_t value;
-    if (android::base::ParseInt(content.c_str(), &value)) {
+    if (android::base::ParseInt(content, &value)) {
       bootstat::LogHistogram("bootstat_mtime_matches_content", value == *uptime);
     }
   }

@@ -31,6 +31,7 @@
 #include <selinux/selinux.h>
 
 #include <android-base/file.h>
+#include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <cutils/android_reboot.h>
@@ -46,6 +47,7 @@
 #include "property_service.h"
 #include "util.h"
 
+using android::base::ParseInt;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
 
@@ -351,22 +353,19 @@ bool Service::ParseGroup(const std::vector<std::string>& args, std::string* err)
 }
 
 bool Service::ParsePriority(const std::vector<std::string>& args, std::string* err) {
-    priority_ = std::stoi(args[1]);
-
-    if (priority_ < ANDROID_PRIORITY_HIGHEST || priority_ > ANDROID_PRIORITY_LOWEST) {
-        priority_ = 0;
+    priority_ = 0;
+    if (!ParseInt(args[1], &priority_,
+                  static_cast<int>(ANDROID_PRIORITY_LOWEST),
+                  static_cast<int>(ANDROID_PRIORITY_HIGHEST))) {
         *err = StringPrintf("process priority value must be range %d - %d",
                 ANDROID_PRIORITY_HIGHEST, ANDROID_PRIORITY_LOWEST);
         return false;
     }
-
     return true;
 }
 
 bool Service::ParseIoprio(const std::vector<std::string>& args, std::string* err) {
-    ioprio_pri_ = std::stoul(args[2], 0, 8);
-
-    if (ioprio_pri_ < 0 || ioprio_pri_ > 7) {
+    if (!ParseInt(args[2], &ioprio_pri_, 0, 7)) {
         *err = "priority value must be range 0 - 7";
         return false;
     }
@@ -387,7 +386,12 @@ bool Service::ParseIoprio(const std::vector<std::string>& args, std::string* err
 
 bool Service::ParseKeycodes(const std::vector<std::string>& args, std::string* err) {
     for (std::size_t i = 1; i < args.size(); i++) {
-        keycodes_.emplace_back(std::stoi(args[i]));
+        int code;
+        if (ParseInt(args[i], &code)) {
+            keycodes_.emplace_back(code);
+        } else {
+            LOG(WARNING) << "ignoring invalid keycode: " << args[i];
+        }
     }
     return true;
 }
@@ -420,16 +424,12 @@ bool Service::ParseNamespace(const std::vector<std::string>& args, std::string* 
 }
 
 bool Service::ParseOomScoreAdjust(const std::vector<std::string>& args, std::string* err) {
-    oom_score_adjust_ = std::stol(args[1], 0, 10);
-
-    if (oom_score_adjust_ < -1000 || oom_score_adjust_ > 1000) {
+    if (!ParseInt(args[1], &oom_score_adjust_, -1000, 1000)) {
         *err = "oom_score_adjust value must be in range -1000 - +1000";
         return false;
     }
-
     return true;
 }
-
 
 bool Service::ParseSeclabel(const std::vector<std::string>& args, std::string* err) {
     seclabel_ = args[1];
@@ -448,7 +448,7 @@ bool Service::ParseSocket(const std::vector<std::string>& args, std::string* err
         return false;
     }
 
-    int perm = std::stoul(args[3], 0, 8);
+    int perm = std::strtoul(args[3].c_str(), 0, 8);
     uid_t uid = args.size() > 4 ? decode_uid(args[4].c_str()) : 0;
     gid_t gid = args.size() > 5 ? decode_uid(args[5].c_str()) : 0;
     std::string socketcon = args.size() > 6 ? args[6] : "";
