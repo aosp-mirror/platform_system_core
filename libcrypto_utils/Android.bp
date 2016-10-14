@@ -24,7 +24,6 @@ cc_library {
         "-Wall",
         "-Wextra",
         "-Werror",
-        "-std=c99",
     ],
     local_include_dirs: ["include"],
     export_include_dirs: ["include"],

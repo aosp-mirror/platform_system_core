@@ -12,7 +12,7 @@ LOCAL_MODULE:= libnativebridge-dummy
 LOCAL_SRC_FILES:= $(NATIVE_BRIDGE_COMMON_SRC_FILES)
 LOCAL_CLANG := true
 LOCAL_CFLAGS += -Werror -Wall
-LOCAL_CPPFLAGS := -std=gnu++11 -fvisibility=protected
+LOCAL_CPPFLAGS := -fvisibility=protected
 LOCAL_SHARED_LIBRARIES := libdl
 LOCAL_MULTILIB := both
 
@@ -27,7 +27,7 @@ LOCAL_MODULE:= libnativebridge-dummy
 LOCAL_SRC_FILES:= $(NATIVE_BRIDGE_COMMON_SRC_FILES)
 LOCAL_CLANG := true
 LOCAL_CFLAGS += -Werror -Wall
-LOCAL_CPPFLAGS := -std=gnu++11 -fvisibility=protected
+LOCAL_CPPFLAGS := -fvisibility=protected
 LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
 
@@ -48,7 +48,7 @@ LOCAL_MODULE:= libnativebridge2-dummy
 LOCAL_SRC_FILES:= $(NATIVE_BRIDGE2_COMMON_SRC_FILES)
 LOCAL_CLANG := true
 LOCAL_CFLAGS += -Werror -Wall
-LOCAL_CPPFLAGS := -std=gnu++11 -fvisibility=protected
+LOCAL_CPPFLAGS := -fvisibility=protected
 LOCAL_SHARED_LIBRARIES := libdl
 LOCAL_MULTILIB := both
 
@@ -63,7 +63,7 @@ LOCAL_MODULE:= libnativebridge2-dummy
 LOCAL_SRC_FILES:= $(NATIVE_BRIDGE2_COMMON_SRC_FILES)
 LOCAL_CLANG := true
 LOCAL_CFLAGS += -Werror -Wall
-LOCAL_CPPFLAGS := -std=gnu++11 -fvisibility=protected
+LOCAL_CPPFLAGS := -fvisibility=protected
 LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
 

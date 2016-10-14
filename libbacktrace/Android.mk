@@ -20,12 +20,6 @@ libbacktrace_common_cflags := \
 	-Wall \
 	-Werror \
 
-libbacktrace_common_conlyflags := \
-	-std=gnu99 \
-
-libbacktrace_common_cppflags := \
-	-std=gnu++11 \
-
 libbacktrace_common_c_includes := \
 	external/libunwind/include/tdep \
 
