@@ -52,7 +52,7 @@ template <typename T>
 T GetIntProperty(const std::string& key, T default_value, T min, T max) {
   T result;
   std::string value = GetProperty(key, "");
-  if (!value.empty() && android::base::ParseInt(value.c_str(), &result, min, max)) return result;
+  if (!value.empty() && android::base::ParseInt(value, &result, min, max)) return result;
   return default_value;
 }
 
@@ -60,7 +60,7 @@ template <typename T>
 T GetUintProperty(const std::string& key, T default_value, T max) {
   T result;
   std::string value = GetProperty(key, "");
-  if (!value.empty() && android::base::ParseUint(value.c_str(), &result, max)) return result;
+  if (!value.empty() && android::base::ParseUint(value, &result, max)) return result;
   return default_value;
 }
 
