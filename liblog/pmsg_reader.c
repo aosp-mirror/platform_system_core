@@ -151,8 +151,8 @@ static int pmsgRead(struct android_log_logger_list *logger_list,
 
     memset(log_msg, 0, sizeof(*log_msg));
 
-    if (transp->context.fd <= 0) {
-        int fd = open("/sys/fs/pstore/pmsg-ramoops-0", O_RDONLY | O_CLOEXEC);
+    if (atomic_load(&transp->context.fd) <= 0) {
+        int i, fd = open("/sys/fs/pstore/pmsg-ramoops-0", O_RDONLY | O_CLOEXEC);
 
         if (fd < 0) {
             return -errno;
@@ -164,13 +164,22 @@ static int pmsgRead(struct android_log_logger_list *logger_list,
                 return -errno;
             }
         }
-        transp->context.fd = fd;
+        i = atomic_exchange(&transp->context.fd, fd);
+        if ((i > 0) && (i != fd)) {
+            close(i);
+        }
         preread_count = 0;
     }
 
     while(1) {
+        int fd;
+
         if (preread_count < sizeof(buf)) {
-            ret = TEMP_FAILURE_RETRY(read(transp->context.fd,
+            fd = atomic_load(&transp->context.fd);
+            if (fd <= 0) {
+                return -EBADF;
+            }
+            ret = TEMP_FAILURE_RETRY(read(fd,
                                           &buf.p.magic + preread_count,
                                           sizeof(buf) - preread_count));
             if (ret < 0) {
@@ -212,9 +221,13 @@ static int pmsgRead(struct android_log_logger_list *logger_list,
                     log_msg->entry_v4.msg :
                     log_msg->entry_v3.msg;
                 *msg = buf.prio;
-                ret = TEMP_FAILURE_RETRY(read(transp->context.fd,
-                                          msg + sizeof(buf.prio),
-                                          buf.p.len - sizeof(buf)));
+                fd = atomic_load(&transp->context.fd);
+                if (fd <= 0) {
+                    return -EBADF;
+                }
+                ret = TEMP_FAILURE_RETRY(read(fd,
+                                              msg + sizeof(buf.prio),
+                                              buf.p.len - sizeof(buf)));
                 if (ret < 0) {
                     return -errno;
                 }
@@ -239,12 +252,19 @@ static int pmsgRead(struct android_log_logger_list *logger_list,
             }
         }
 
-        current = TEMP_FAILURE_RETRY(lseek(transp->context.fd,
-                                           (off_t)0, SEEK_CUR));
+        fd = atomic_load(&transp->context.fd);
+        if (fd <= 0) {
+            return -EBADF;
+        }
+        current = TEMP_FAILURE_RETRY(lseek(fd, (off_t)0, SEEK_CUR));
         if (current < 0) {
             return -errno;
         }
-        next = TEMP_FAILURE_RETRY(lseek(transp->context.fd,
+        fd = atomic_load(&transp->context.fd);
+        if (fd <= 0) {
+            return -EBADF;
+        }
+        next = TEMP_FAILURE_RETRY(lseek(fd,
                                         (off_t)(buf.p.len - sizeof(buf)),
                                         SEEK_CUR));
         if (next < 0) {
@@ -258,10 +278,10 @@ static int pmsgRead(struct android_log_logger_list *logger_list,
 
 static void pmsgClose(struct android_log_logger_list *logger_list __unused,
                       struct android_log_transport_context *transp) {
-    if (transp->context.fd > 0) {
-        close (transp->context.fd);
+    int fd = atomic_exchange(&transp->context.fd, 0);
+    if (fd > 0) {
+        close (fd);
     }
-    transp->context.fd = 0;
 }
 
 LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_read(
