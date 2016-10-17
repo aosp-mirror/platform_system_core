@@ -17,10 +17,12 @@
 #define LOG_TAG "Service"
 
 #include <errno.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/properties.h>
+#include <log/log.h>
 #include <sysutils/ServiceManager.h>
 
 ServiceManager::ServiceManager() {

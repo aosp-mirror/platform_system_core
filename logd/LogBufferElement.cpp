@@ -22,7 +22,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <log/logger.h>
 #include <private/android_logger.h>
 
 #include "LogBuffer.h"

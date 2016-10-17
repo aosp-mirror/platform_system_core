@@ -14,7 +14,11 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "socket-unix"
+
 #include <sys/uio.h>
+#include <time.h>
+#include <unistd.h>
 
 #include <android/log.h>
 #include <cutils/sockets.h>
