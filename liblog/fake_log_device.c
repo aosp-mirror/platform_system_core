@@ -727,3 +727,8 @@ LIBLOG_ABI_PUBLIC int __android_log_is_loggable_len(int prio,
     int logLevel = def;
     return logLevel >= 0 && prio >= logLevel;
 }
+
+LIBLOG_ABI_PRIVATE int __android_log_is_debuggable()
+{
+    return 1;
+}

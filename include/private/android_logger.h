@@ -130,6 +130,8 @@ int __android_log_security_bwrite(int32_t tag, const void *payload, size_t len);
 int __android_log_security_bswrite(int32_t tag, const char *payload);
 int __android_log_security(); /* Device Owner is present */
 
+int __android_log_is_debuggable();
+
 #if defined(__cplusplus)
 }
 #endif
