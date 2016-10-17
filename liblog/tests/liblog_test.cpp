@@ -20,6 +20,7 @@
 #include <inttypes.h>
 #include <semaphore.h>
 #include <signal.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -129,6 +130,70 @@ TEST(liblog, concurrent_name(__android_log_buf_print, NUM_CONCURRENT)) {
     ASSERT_LT(0, ret);
 }
 
+std::string popenToString(std::string command) {
+    std::string ret;
+
+    FILE* fp = popen(command.c_str(), "r");
+    if (fp) {
+        if (!android::base::ReadFdToString(fileno(fp), &ret)) ret = "";
+        pclose(fp);
+    }
+    return ret;
+}
+
+static bool isPmsgActive() {
+    pid_t pid = getpid();
+
+    std::string myPidFds = popenToString(android::base::StringPrintf(
+                                             "ls -l /proc/%d/fd", pid));
+    if (myPidFds.length() == 0) return true; // guess it is?
+
+    return std::string::npos != myPidFds.find(" -> /dev/pmsg0");
+}
+
+static bool isLogdwActive() {
+    std::string logdwSignature = popenToString(
+        "grep /dev/socket/logdw /proc/net/unix");
+    size_t beginning = logdwSignature.find(" ");
+    if (beginning == std::string::npos) return true;
+    beginning = logdwSignature.find(" ", beginning + 1);
+    if (beginning == std::string::npos) return true;
+    size_t end = logdwSignature.find(" ", beginning + 1);
+    if (end == std::string::npos) return true;
+    end = logdwSignature.find(" ", end + 1);
+    if (end == std::string::npos) return true;
+    end = logdwSignature.find(" ", end + 1);
+    if (end == std::string::npos) return true;
+    end = logdwSignature.find(" ", end + 1);
+    if (end == std::string::npos) return true;
+    std::string allLogdwEndpoints = popenToString(
+        "grep ' 00000002" +
+        logdwSignature.substr(beginning, end - beginning) +
+        " ' /proc/net/unix | " +
+        "sed -n 's/.* \\([0-9][0-9]*\\)$/ -> socket:[\\1]/p'");
+    if (allLogdwEndpoints.length() == 0) return true;
+
+    // NB: allLogdwEndpoints has some false positives in it, but those
+    // strangers do not overlap with the simplistic activities inside this
+    // test suite.
+
+    pid_t pid = getpid();
+
+    std::string myPidFds = popenToString(android::base::StringPrintf(
+        "ls -l /proc/%d/fd", pid));
+    if (myPidFds.length() == 0) return true;
+
+    // NB: fgrep with multiple strings is broken in Android
+    for (beginning = 0;
+         (end = allLogdwEndpoints.find("\n", beginning)) != std::string::npos;
+         beginning = end + 1) {
+        if (myPidFds.find(allLogdwEndpoints.substr(beginning,
+                                                   end - beginning)) !=
+            std::string::npos) return true;
+    }
+    return false;
+}
+
 TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     struct logger_list *logger_list;
 
@@ -140,10 +205,22 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     // Check that we can close and reopen the logger
     log_time ts(CLOCK_MONOTONIC);
     ASSERT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
+    bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
+    bool logdwActiveAfter__android_log_btwrite = isLogdwActive();
+    EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
+    EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
     __android_log_close();
+    bool pmsgActiveAfter__android_log_close = isPmsgActive();
+    bool logdwActiveAfter__android_log_close = isLogdwActive();
+    EXPECT_FALSE(pmsgActiveAfter__android_log_close);
+    EXPECT_FALSE(logdwActiveAfter__android_log_close);
 
     log_time ts1(CLOCK_MONOTONIC);
     ASSERT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts1, sizeof(ts1)));
+    pmsgActiveAfter__android_log_btwrite = isPmsgActive();
+    logdwActiveAfter__android_log_btwrite = isLogdwActive();
+    EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
+    EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
     usleep(1000000);
 
     int count = 0;
@@ -2575,12 +2652,35 @@ static const char __pmsg_file[] =
         "/data/william-shakespeare/MuchAdoAboutNothing.txt";
 
 TEST(liblog, __android_log_pmsg_file_write) {
+    __android_log_close();
+    bool pmsgActiveAfter__android_log_close = isPmsgActive();
+    bool logdwActiveAfter__android_log_close = isLogdwActive();
+    EXPECT_FALSE(pmsgActiveAfter__android_log_close);
+    EXPECT_FALSE(logdwActiveAfter__android_log_close);
     EXPECT_LT(0, __android_log_pmsg_file_write(
             LOG_ID_CRASH, ANDROID_LOG_VERBOSE,
             __pmsg_file, max_payload_buf, sizeof(max_payload_buf)));
     fprintf(stderr, "Reboot, ensure file %s matches\n"
                     "with liblog.__android_log_msg_file_read test\n",
                     __pmsg_file);
+    bool pmsgActiveAfter__android_pmsg_file_write = isPmsgActive();
+    bool logdwActiveAfter__android_pmsg_file_write = isLogdwActive();
+    EXPECT_FALSE(pmsgActiveAfter__android_pmsg_file_write);
+    EXPECT_FALSE(logdwActiveAfter__android_pmsg_file_write);
+    EXPECT_LT(0, __android_log_buf_print(LOG_ID_MAIN, ANDROID_LOG_INFO,
+                                         "TEST__android_log_pmsg_file_write",
+                                         "main"));
+    bool pmsgActiveAfter__android_log_buf_print = isPmsgActive();
+    bool logdwActiveAfter__android_log_buf_print = isLogdwActive();
+    EXPECT_TRUE(pmsgActiveAfter__android_log_buf_print);
+    EXPECT_TRUE(logdwActiveAfter__android_log_buf_print);
+    EXPECT_LT(0, __android_log_pmsg_file_write(
+            LOG_ID_CRASH, ANDROID_LOG_VERBOSE,
+            __pmsg_file, max_payload_buf, sizeof(max_payload_buf)));
+    pmsgActiveAfter__android_pmsg_file_write = isPmsgActive();
+    logdwActiveAfter__android_pmsg_file_write = isLogdwActive();
+    EXPECT_TRUE(pmsgActiveAfter__android_pmsg_file_write);
+    EXPECT_TRUE(logdwActiveAfter__android_pmsg_file_write);
 }
 
 ssize_t __pmsg_fn(log_id_t logId, char prio, const char *filename,
@@ -2597,7 +2697,7 @@ ssize_t __pmsg_fn(log_id_t logId, char prio, const char *filename,
             strcmp(max_payload_buf, buf)) {
         fprintf(stderr, "comparison fails on content \"%s\"\n", buf);
     }
-    return !arg ||
+    return arg ||
            (LOG_ID_CRASH != logId) ||
            (ANDROID_LOG_VERBOSE != prio) ||
            !strstr(__pmsg_file, filename) ||
@@ -2608,9 +2708,20 @@ ssize_t __pmsg_fn(log_id_t logId, char prio, const char *filename,
 TEST(liblog, __android_log_pmsg_file_read) {
     signaled = 0;
 
+    __android_log_close();
+    bool pmsgActiveAfter__android_log_close = isPmsgActive();
+    bool logdwActiveAfter__android_log_close = isLogdwActive();
+    EXPECT_FALSE(pmsgActiveAfter__android_log_close);
+    EXPECT_FALSE(logdwActiveAfter__android_log_close);
+
     ssize_t ret = __android_log_pmsg_file_read(
             LOG_ID_CRASH, ANDROID_LOG_VERBOSE,
             __pmsg_file, __pmsg_fn, NULL);
+
+    bool pmsgActiveAfter__android_log_pmsg_file_read = isPmsgActive();
+    bool logdwActiveAfter__android_log_pmsg_file_read = isLogdwActive();
+    EXPECT_FALSE(pmsgActiveAfter__android_log_pmsg_file_read);
+    EXPECT_FALSE(logdwActiveAfter__android_log_pmsg_file_read);
 
     if (ret == -ENOENT) {
         fprintf(stderr,

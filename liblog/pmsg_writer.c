@@ -20,6 +20,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -53,18 +54,25 @@ LIBLOG_HIDDEN struct android_log_transport_write pmsgLoggerWrite = {
 
 static int pmsgOpen()
 {
-    if (pmsgLoggerWrite.context.fd < 0) {
-        pmsgLoggerWrite.context.fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
+    int fd = atomic_load(&pmsgLoggerWrite.context.fd);
+    if (fd < 0) {
+        int i;
+
+        fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
+        i = atomic_exchange(&pmsgLoggerWrite.context.fd, fd);
+        if ((i >= 0) && (i != fd)) {
+            close(i);
+        }
     }
 
-    return pmsgLoggerWrite.context.fd;
+    return fd;
 }
 
 static void pmsgClose()
 {
-    if (pmsgLoggerWrite.context.fd >= 0) {
-        close(pmsgLoggerWrite.context.fd);
-        pmsgLoggerWrite.context.fd = -1;
+    int fd = atomic_exchange(&pmsgLoggerWrite.context.fd, -1);
+    if (fd >= 0) {
+        close(fd);
     }
 }
 
@@ -78,7 +86,7 @@ static int pmsgAvailable(log_id_t logId)
             !__android_log_is_debuggable()) {
         return -EINVAL;
     }
-    if (pmsgLoggerWrite.context.fd < 0) {
+    if (atomic_load(&pmsgLoggerWrite.context.fd) < 0) {
         if (access("/dev/pmsg0", W_OK) == 0) {
             return 0;
         }
@@ -115,7 +123,7 @@ static int pmsgWrite(log_id_t logId, struct timespec *ts,
         }
     }
 
-    if (pmsgLoggerWrite.context.fd < 0) {
+    if (atomic_load(&pmsgLoggerWrite.context.fd) < 0) {
         return -EBADF;
     }
 
@@ -169,7 +177,8 @@ static int pmsgWrite(log_id_t logId, struct timespec *ts,
     }
     pmsgHeader.len += payloadSize;
 
-    ret = TEMP_FAILURE_RETRY(writev(pmsgLoggerWrite.context.fd, newVec, i));
+    ret = TEMP_FAILURE_RETRY(writev(atomic_load(&pmsgLoggerWrite.context.fd),
+                                    newVec, i));
     if (ret < 0) {
         ret = errno ? -errno : -ENOTCONN;
     }
@@ -206,7 +215,7 @@ LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_write(
         char prio,
         const char *filename,
         const char *buf, size_t len) {
-    int fd;
+    bool weOpened;
     size_t length, packet_len;
     const char *tag;
     char *cp, *slash;
@@ -228,16 +237,6 @@ LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_write(
         return -ENOMEM;
     }
 
-    fd = pmsgLoggerWrite.context.fd;
-    if (fd < 0) {
-        __android_log_lock();
-        fd = pmsgOpen();
-        __android_log_unlock();
-        if (fd < 0) {
-            return -EBADF;
-        }
-    }
-
     tag = cp;
     slash = strrchr(cp, '/');
     if (slash) {
@@ -256,6 +255,7 @@ LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_write(
     vec[1].iov_base = (unsigned char *)tag;
     vec[1].iov_len  = length;
 
+    weOpened = false;
     for (ts.tv_nsec = 0, length = len;
             length;
             ts.tv_nsec += ANDROID_LOG_PMSG_FILE_SEQUENCE) {
@@ -279,14 +279,35 @@ LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_write(
         vec[2].iov_base = (unsigned char *)buf;
         vec[2].iov_len  = transfer;
 
+        if (atomic_load(&pmsgLoggerWrite.context.fd) < 0) {
+            if (!weOpened) { /* Impossible for weOpened = true here */
+                __android_log_lock();
+            }
+            weOpened = atomic_load(&pmsgLoggerWrite.context.fd) < 0;
+            if (!weOpened) {
+                __android_log_unlock();
+            } else if (pmsgOpen() < 0) {
+                __android_log_unlock();
+                return -EBADF;
+            }
+        }
+
         ret = pmsgWrite(logId, &ts, vec, sizeof(vec) / sizeof(vec[0]));
 
         if (ret <= 0) {
+            if (weOpened) {
+                pmsgClose();
+                __android_log_unlock();
+            }
             free(cp);
-            return ret;
+            return ret ? ret : (len - length);
         }
         length -= transfer;
         buf += transfer;
+    }
+    if (weOpened) {
+        pmsgClose();
+        __android_log_unlock();
     }
     free(cp);
     return len;
