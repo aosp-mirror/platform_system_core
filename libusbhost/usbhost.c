@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 // #define DEBUG 1
 #if DEBUG
 
@@ -43,6 +47,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <ctype.h>
+#include <poll.h>
 #include <pthread.h>
 
 #include <linux/usbdevice_fs.h>
@@ -681,29 +686,38 @@ int usb_request_queue(struct usb_request *req)
     return res;
 }
 
-struct usb_request *usb_request_wait(struct usb_device *dev)
+struct usb_request *usb_request_wait(struct usb_device *dev, int timeoutMillis)
 {
-    struct usbdevfs_urb *urb = NULL;
-    struct usb_request *req = NULL;
+    // Poll until a request becomes available if there is a timeout
+    if (timeoutMillis > 0) {
+        struct pollfd p = {.fd = dev->fd, .events = POLLOUT, .revents = 0};
 
-    while (1) {
-        int res = ioctl(dev->fd, USBDEVFS_REAPURB, &urb);
-        D("USBDEVFS_REAPURB returned %d\n", res);
-        if (res < 0) {
-            if(errno == EINTR) {
-                continue;
-            }
-            D("[ reap urb - error ]\n");
+        int res = poll(&p, 1, timeoutMillis);
+
+        if (res != 1 || p.revents != POLLOUT) {
+            D("[ poll - event %d, error %d]\n", p.revents, errno);
             return NULL;
-        } else {
-            D("[ urb @%p status = %d, actual = %d ]\n",
-                urb, urb->status, urb->actual_length);
-            req = (struct usb_request*)urb->usercontext;
-            req->actual_length = urb->actual_length;
         }
-        break;
     }
-    return req;
+
+    // Read the request. This should usually succeed as we polled before, but it can fail e.g. when
+    // two threads are reading usb requests at the same time and only a single request is available.
+    struct usbdevfs_urb *urb = NULL;
+    int res = TEMP_FAILURE_RETRY(ioctl(dev->fd, timeoutMillis == -1 ? USBDEVFS_REAPURB :
+                                       USBDEVFS_REAPURBNDELAY, &urb));
+    D("%s returned %d\n", timeoutMillis == -1 ? "USBDEVFS_REAPURB" : "USBDEVFS_REAPURBNDELAY", res);
+
+    if (res < 0) {
+        D("[ reap urb - error %d]\n", errno);
+        return NULL;
+    } else {
+        D("[ urb @%p status = %d, actual = %d ]\n", urb, urb->status, urb->actual_length);
+
+        struct usb_request *req = (struct usb_request*)urb->usercontext;
+        req->actual_length = urb->actual_length;
+
+        return req;
+    }
 }
 
 int usb_request_cancel(struct usb_request *req)
