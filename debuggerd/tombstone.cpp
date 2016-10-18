@@ -32,13 +32,13 @@
 #include <memory>
 #include <string>
 
-#include <android/log.h>
 #include <android-base/stringprintf.h>
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 #include <cutils/properties.h>
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
+#include <private/android_logger.h>
 
 #include <selinux/android.h>
 
@@ -622,9 +622,7 @@ static void dump_logs(log_t* log, pid_t pid, unsigned int tail) {
 static void dump_crash(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid,
                        const std::set<pid_t>& siblings, uintptr_t abort_msg_address) {
   // don't copy log messages to tombstone unless this is a dev device
-  char value[PROPERTY_VALUE_MAX];
-  property_get("ro.debuggable", value, "0");
-  bool want_logs = (value[0] == '1');
+  bool want_logs = __android_log_is_debuggable();
 
   _LOG(log, logtype::HEADER,
        "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
