@@ -82,8 +82,14 @@ static size_t g_maxCount;
 static size_t g_printCount;
 static bool g_printItAnyways;
 
+enum helpType {
+    HELP_FALSE,
+    HELP_TRUE,
+    HELP_FORMAT
+};
+
 // if showHelp is set, newline required in fmt statement to transition to usage
-__noreturn static void logcat_panic(bool showHelp, const char *fmt, ...) __printflike(2,3);
+__noreturn static void logcat_panic(enum helpType showHelp, const char *fmt, ...) __printflike(2,3);
 
 static int openLogFile (const char *pathname)
 {
@@ -133,7 +139,7 @@ static void rotateLogs()
     g_outFD = openLogFile(g_outputFileName);
 
     if (g_outFD < 0) {
-        logcat_panic(false, "couldn't open output file");
+        logcat_panic(HELP_FALSE, "couldn't open output file");
     }
 
     g_outByteCount = 0;
@@ -196,7 +202,7 @@ static void processBuffer(log_device_t* dev, struct log_msg *buf)
             bytesWritten = android_log_printLogLine(g_logformat, g_outFD, &entry);
 
             if (bytesWritten < 0) {
-                logcat_panic(false, "output error");
+                logcat_panic(HELP_FALSE, "output error");
             }
         }
     }
@@ -210,7 +216,6 @@ static void processBuffer(log_device_t* dev, struct log_msg *buf)
     }
 
 error:
-    //fprintf (stderr, "Error processing record\n");
     return;
 }
 
@@ -222,7 +227,7 @@ static void maybePrintStart(log_device_t* dev, bool printDividers) {
                      dev->printed ? "switch to" : "beginning of",
                      dev->device);
             if (write(g_outFD, buf, strlen(buf)) < 0) {
-                logcat_panic(false, "output error");
+                logcat_panic(HELP_FALSE, "output error");
             }
         }
         dev->printed = true;
@@ -256,18 +261,18 @@ static void setupOutputAndSchedulingPolicy(bool blocking) {
     g_outFD = openLogFile (g_outputFileName);
 
     if (g_outFD < 0) {
-        logcat_panic(false, "couldn't open output file");
+        logcat_panic(HELP_FALSE, "couldn't open output file");
     }
 
     struct stat statbuf;
     if (fstat(g_outFD, &statbuf) == -1) {
         close(g_outFD);
-        logcat_panic(false, "couldn't get output file stat\n");
+        logcat_panic(HELP_FALSE, "couldn't get output file stat\n");
     }
 
     if ((size_t) statbuf.st_size > SIZE_MAX || statbuf.st_size < 0) {
         close(g_outFD);
-        logcat_panic(false, "invalid output file stat\n");
+        logcat_panic(HELP_FALSE, "invalid output file stat\n");
     }
 
     g_outByteCount = statbuf.st_size;
@@ -288,9 +293,10 @@ static void show_help(const char *cmd)
                     "                  the fileset and continue\n"
                     "  -v <format>, --format=<format>\n"
                     "                  Sets log print format verb and adverbs, where <format> is:\n"
-                    "                    brief long process raw tag thread threadtime time\n"
+                    "                    brief help long process raw tag thread threadtime time\n"
                     "                  and individually flagged modifying adverbs can be added:\n"
-                    "                    color epoch monotonic printable uid usec UTC year zone\n"
+                    "                    color descriptive epoch monotonic printable uid\n"
+                    "                    usec UTC year zone\n"
                     "  -D, --dividers  Print dividers between each log buffer\n"
                     "  -c, --clear     Clear (flush) the entire log and exit\n"
                     "                  if Log to File specified, clear fileset instead\n"
@@ -356,6 +362,40 @@ static void show_help(const char *cmd)
                    "or defaults to \"threadtime\"\n\n");
 }
 
+static void show_format_help()
+{
+    fprintf(stderr,
+        "-v <format>, --format=<format> options:\n"
+        "  Sets log print format verb and adverbs, where <format> is:\n"
+        "    brief long process raw tag thread threadtime time\n"
+        "  and individually flagged modifying adverbs can be added:\n"
+        "    color descriptive epoch monotonic printable uid usec UTC year zone\n"
+        "\nSingle format verbs:\n"
+        "  brief      — Display priority/tag and PID of the process issuing the message.\n"
+        "  long       — Display all metadata fields, separate messages with blank lines.\n"
+        "  process    — Display PID only.\n"
+        "  raw        — Display the raw log message, with no other metadata fields.\n"
+        "  tag        — Display the priority/tag only.\n"
+        "  threadtime — Display the date, invocation time, priority, tag, and the PID\n"
+        "               and TID of the thread issuing the message. (the default format).\n"
+        "  time       — Display the date, invocation time, priority/tag, and PID of the\n"
+        "             process issuing the message.\n"
+        "\nAdverb modifiers can be used in combination:\n"
+        "  color       — Display in highlighted color to match priority. i.e. \x1B[38;5;231mVERBOSE\n"
+        "                \x1B[38;5;75mDEBUG \x1B[38;5;40mINFO \x1B[38;5;166mWARNING \x1B[38;5;196mERROR FATAL\x1B[0m\n"
+        "  descriptive — events logs only, descriptions from event-log-tags database.\n"
+        "  epoch       — Display time as seconds since Jan 1 1970.\n"
+        "  monotonic   — Display time as cpu seconds since last boot.\n"
+        "  printable   — Ensure that any binary logging content is escaped.\n"
+        "  uid         — If permitted, display the UID or Android ID of logged process.\n"
+        "  usec        — Display time down the microsecond precision.\n"
+        "  UTC         — Display time as UTC.\n"
+        "  year        — Add the year to the displayed time.\n"
+        "  zone        — Add the local timezone to the displayed time.\n"
+        "  \"<zone>\"    — Print using this public named timezone (experimental).\n\n"
+    );
+}
+
 static int setLogFormat(const char * formatString)
 {
     static AndroidLogPrintFormat format;
@@ -418,15 +458,23 @@ static bool getSizeTArg(const char *ptr, size_t *val, size_t min = 0,
     return true;
 }
 
-static void logcat_panic(bool showHelp, const char *fmt, ...)
+static void logcat_panic(enum helpType showHelp, const char *fmt, ...)
 {
     va_list  args;
     va_start(args, fmt);
     vfprintf(stderr, fmt,  args);
     va_end(args);
 
-    if (showHelp) {
+    switch (showHelp) {
+    case HELP_TRUE:
        show_help(getprogname());
+       break;
+    case HELP_FORMAT:
+       show_format_help();
+       break;
+    case HELP_FALSE:
+    default:
+      break;
     }
 
     exit(EXIT_FAILURE);
@@ -616,7 +664,7 @@ int main(int argc, char **argv)
                 if (long_options[option_index].name == pid_str) {
                     // ToDo: determine runtime PID_MAX?
                     if (!getSizeTArg(optarg, &pid, 1)) {
-                        logcat_panic(true, "%s %s out of range\n",
+                        logcat_panic(HELP_TRUE, "%s %s out of range\n",
                                      long_options[option_index].name, optarg);
                     }
                     break;
@@ -628,7 +676,7 @@ int main(int argc, char **argv)
                     // ToDo: implement API that supports setting a wrap timeout
                     size_t dummy = ANDROID_LOG_WRAP_DEFAULT_TIMEOUT;
                     if (optarg && !getSizeTArg(optarg, &dummy, 1)) {
-                        logcat_panic(true, "%s %s out of range\n",
+                        logcat_panic(HELP_TRUE, "%s %s out of range\n",
                                      long_options[option_index].name, optarg);
                     }
                     if (dummy != ANDROID_LOG_WRAP_DEFAULT_TIMEOUT) {
@@ -675,7 +723,8 @@ int main(int argc, char **argv)
                 if (strspn(optarg, "0123456789") != strlen(optarg)) {
                     char *cp = parseTime(tail_time, optarg);
                     if (!cp) {
-                        logcat_panic(false, "-%c \"%s\" not in time format\n",
+                        logcat_panic(HELP_FALSE,
+                                     "-%c \"%s\" not in time format\n",
                                      ret, optarg);
                     }
                     if (*cp) {
@@ -707,7 +756,7 @@ int main(int argc, char **argv)
             case 'm': {
                 char *end = NULL;
                 if (!getSizeTArg(optarg, &g_maxCount)) {
-                    logcat_panic(false, "-%c \"%s\" isn't an "
+                    logcat_panic(HELP_FALSE, "-%c \"%s\" isn't an "
                                  "integer greater than zero\n", ret, optarg);
                 }
             }
@@ -780,7 +829,8 @@ int main(int argc, char **argv)
                         const char *name = android_log_id_to_name(log_id);
 
                         if (strcmp(name, optarg) != 0) {
-                            logcat_panic(true, "unknown buffer %s\n", optarg);
+                            logcat_panic(HELP_TRUE,
+                                         "unknown buffer %s\n", optarg);
                         }
                         idMask |= (1 << log_id);
                     }
@@ -841,20 +891,27 @@ int main(int argc, char **argv)
 
             case 'r':
                 if (!getSizeTArg(optarg, &g_logRotateSizeKBytes, 1)) {
-                    logcat_panic(true, "Invalid parameter %s to -r\n", optarg);
+                    logcat_panic(HELP_TRUE,
+                                 "Invalid parameter \"%s\" to -r\n", optarg);
                 }
             break;
 
             case 'n':
                 if (!getSizeTArg(optarg, &g_maxRotatedLogs, 1)) {
-                    logcat_panic(true, "Invalid parameter %s to -n\n", optarg);
+                    logcat_panic(HELP_TRUE,
+                                 "Invalid parameter \"%s\" to -n\n", optarg);
                 }
             break;
 
             case 'v':
-                err = setLogFormat (optarg);
+                if (!strcmp(optarg, "help") || !strcmp(optarg, "--help")) {
+                    show_format_help();
+                    exit(0);
+                }
+                err = setLogFormat(optarg);
                 if (err < 0) {
-                    logcat_panic(true, "Invalid parameter %s to -v\n", optarg);
+                    logcat_panic(HELP_FORMAT,
+                                 "Invalid parameter \"%s\" to -v\n", optarg);
                 }
                 hasSetLogFormat |= err;
             break;
@@ -932,17 +989,20 @@ int main(int argc, char **argv)
                 break;
 
             case ':':
-                logcat_panic(true, "Option -%c needs an argument\n", optopt);
+                logcat_panic(HELP_TRUE,
+                             "Option -%c needs an argument\n", optopt);
                 break;
 
             default:
-                logcat_panic(true, "Unrecognized Option %c\n", optopt);
+                logcat_panic(HELP_TRUE,
+                             "Unrecognized Option %c\n", optopt);
                 break;
         }
     }
 
     if (g_maxCount && got_t) {
-        logcat_panic(true, "Cannot use -m (--max-count) and -t together\n");
+        logcat_panic(HELP_TRUE,
+                     "Cannot use -m (--max-count) and -t together\n");
     }
     if (g_printItAnyways && (!g_regex || !g_maxCount)) {
         // One day it would be nice if --print -v color and --regex <expr>
@@ -968,12 +1028,12 @@ int main(int argc, char **argv)
     }
 
     if (g_logRotateSizeKBytes != 0 && g_outputFileName == NULL) {
-        logcat_panic(true, "-r requires -f as well\n");
+        logcat_panic(HELP_TRUE, "-r requires -f as well\n");
     }
 
     if (setId != NULL) {
         if (g_outputFileName == NULL) {
-            logcat_panic(true, "--id='%s' requires -f as well\n", setId);
+            logcat_panic(HELP_TRUE, "--id='%s' requires -f as well\n", setId);
         }
 
         std::string file_name = android::base::StringPrintf("%s.id", g_outputFileName);
@@ -1003,7 +1063,8 @@ int main(int argc, char **argv)
     if (forceFilters) {
         err = android_log_addFilterString(g_logformat, forceFilters);
         if (err < 0) {
-            logcat_panic(false, "Invalid filter expression in logcat args\n");
+            logcat_panic(HELP_FALSE,
+                         "Invalid filter expression in logcat args\n");
         }
     } else if (argc == optind) {
         // Add from environment variable
@@ -1013,7 +1074,7 @@ int main(int argc, char **argv)
             err = android_log_addFilterString(g_logformat, env_tags_orig);
 
             if (err < 0) {
-                logcat_panic(true,
+                logcat_panic(HELP_TRUE,
                             "Invalid filter expression in ANDROID_LOG_TAGS\n");
             }
         }
@@ -1023,7 +1084,8 @@ int main(int argc, char **argv)
             err = android_log_addFilterString(g_logformat, argv[i]);
 
             if (err < 0) {
-                logcat_panic(true, "Invalid filter expression '%s'\n", argv[i]);
+                logcat_panic(HELP_TRUE,
+                             "Invalid filter expression '%s'\n", argv[i]);
             }
         }
     }
@@ -1109,17 +1171,20 @@ int main(int argc, char **argv)
     }
     // report any errors in the above loop and exit
     if (openDeviceFail) {
-        logcat_panic(false, "Unable to open log device '%s'\n", openDeviceFail);
+        logcat_panic(HELP_FALSE,
+                     "Unable to open log device '%s'\n", openDeviceFail);
     }
     if (clearFail) {
-        logcat_panic(false, "failed to clear the '%s' log\n", clearFail);
+        logcat_panic(HELP_FALSE,
+                     "failed to clear the '%s' log\n", clearFail);
     }
     if (setSizeFail) {
-        logcat_panic(false, "failed to set the '%s' log size\n", setSizeFail);
+        logcat_panic(HELP_FALSE,
+                     "failed to set the '%s' log size\n", setSizeFail);
     }
     if (getSizeFail) {
-        logcat_panic(false, "failed to get the readable '%s' log size",
-                     getSizeFail);
+        logcat_panic(HELP_FALSE,
+                     "failed to get the readable '%s' log size", getSizeFail);
     }
 
     if (setPruneList) {
@@ -1130,11 +1195,11 @@ int main(int argc, char **argv)
         if (asprintf(&buf, "%-*s", (int)(bLen - 1), setPruneList) > 0) {
             buf[len] = '\0';
             if (android_logger_set_prune_list(logger_list, buf, bLen)) {
-                logcat_panic(false, "failed to set the prune list");
+                logcat_panic(HELP_FALSE, "failed to set the prune list");
             }
             free(buf);
         } else {
-            logcat_panic(false, "failed to set the prune list (alloc)");
+            logcat_panic(HELP_FALSE, "failed to set the prune list (alloc)");
         }
     }
 
@@ -1165,7 +1230,7 @@ int main(int argc, char **argv)
         }
 
         if (!buf) {
-            logcat_panic(false, "failed to read data");
+            logcat_panic(HELP_FALSE, "failed to read data");
         }
 
         // remove trailing FF
@@ -1217,7 +1282,7 @@ int main(int argc, char **argv)
         int ret = android_logger_list_read(logger_list, &log_msg);
 
         if (ret == 0) {
-            logcat_panic(false, "read: unexpected EOF!\n");
+            logcat_panic(HELP_FALSE, "read: unexpected EOF!\n");
         }
 
         if (ret < 0) {
@@ -1226,12 +1291,12 @@ int main(int argc, char **argv)
             }
 
             if (ret == -EIO) {
-                logcat_panic(false, "read: unexpected EOF!\n");
+                logcat_panic(HELP_FALSE, "read: unexpected EOF!\n");
             }
             if (ret == -EINVAL) {
-                logcat_panic(false, "read: unexpected length.\n");
+                logcat_panic(HELP_FALSE, "read: unexpected length.\n");
             }
-            logcat_panic(false, "logcat read failure");
+            logcat_panic(HELP_FALSE, "logcat read failure");
         }
 
         for (d = devices; d; d = d->next) {
