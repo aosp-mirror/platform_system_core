@@ -38,8 +38,9 @@
 #include <cutils/sockets.h>
 
 #if !ADB_HOST
-#include "cutils/android_reboot.h"
 #include <android-base/properties.h>
+#include <cutils/android_reboot.h>
+#include <private/android_logger.h>
 #endif
 
 #include "adb.h"
@@ -73,7 +74,7 @@ void restart_root_service(int fd, void *cookie) {
         WriteFdExactly(fd, "adbd is already running as root\n");
         adb_close(fd);
     } else {
-        if (!android::base::GetBoolProperty("ro.debuggable", false)) {
+        if (!__android_log_is_debuggable()) {
             WriteFdExactly(fd, "adbd cannot run as root in production builds\n");
             adb_close(fd);
             return;
