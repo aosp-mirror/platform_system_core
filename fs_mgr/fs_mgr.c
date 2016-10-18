@@ -41,6 +41,7 @@
 #include <linux/loop.h>
 #include <logwrap/logwrap.h>
 #include <private/android_filesystem_config.h>
+#include <private/android_logger.h>
 
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_verity.h"
@@ -258,15 +259,6 @@ static int fs_match(char *in1, char *in2)
     free(n2);
 
     return ret;
-}
-
-static int device_is_debuggable() {
-    int ret = -1;
-    char value[PROP_VALUE_MAX];
-    ret = __system_property_get("ro.debuggable", value);
-    if (ret < 0)
-        return ret;
-    return strcmp(value, "1") ? 0 : 1;
 }
 
 static int device_is_secure() {
@@ -537,7 +529,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
 
         if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
             int rc = fs_mgr_setup_verity(&fstab->recs[i]);
-            if (device_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
+            if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
                 INFO("Verity disabled");
             } else if (rc != FS_MGR_SETUP_VERITY_SUCCESS) {
                 ERROR("Could not set up verified partition, skipping!\n");
@@ -699,7 +691,7 @@ int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
 
         if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
             int rc = fs_mgr_setup_verity(&fstab->recs[i]);
-            if (device_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
+            if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
                 INFO("Verity disabled");
             } else if (rc != FS_MGR_SETUP_VERITY_SUCCESS) {
                 ERROR("Could not set up verified partition, skipping!\n");
@@ -903,7 +895,7 @@ int fs_mgr_early_setup_verity(struct fstab_rec *fstab_rec)
 {
     if ((fstab_rec->fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
         int rc = fs_mgr_setup_verity(fstab_rec);
-        if (device_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
+        if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
             INFO("Verity disabled");
             return FS_MGR_EARLY_SETUP_VERITY_NO_VERITY;
         } else if (rc == FS_MGR_SETUP_VERITY_SUCCESS) {
