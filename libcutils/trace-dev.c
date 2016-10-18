@@ -26,10 +26,10 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include <android/log.h>
 #include <cutils/compiler.h>
 #include <cutils/properties.h>
 #include <cutils/trace.h>
+#include <private/android_logger.h>
 
 /**
  * Maximum size of a message that can be logged to the trace buffer.
@@ -86,15 +86,8 @@ static bool atrace_is_cmdline_match(const char* cmdline)
 // Determine whether application-level tracing is enabled for this process.
 static bool atrace_is_app_tracing_enabled()
 {
-    bool sys_debuggable = false;
-    char value[PROPERTY_VALUE_MAX];
+    bool sys_debuggable = __android_log_is_debuggable();
     bool result = false;
-
-    // Check whether the system is debuggable.
-    property_get("ro.debuggable", value, "0");
-    if (value[0] == '1') {
-        sys_debuggable = true;
-    }
 
     if (sys_debuggable || atrace_is_debuggable) {
         // Check whether tracing is enabled for this process.
