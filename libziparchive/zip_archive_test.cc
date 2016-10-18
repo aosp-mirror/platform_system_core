@@ -26,7 +26,9 @@
 
 #include <android-base/file.h>
 #include <android-base/test_utils.h>
+#include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
+#include <utils/FileMap.h>
 #include <ziparchive/zip_archive.h>
 #include <ziparchive/zip_archive_stream_entry.h>
 
@@ -36,6 +38,7 @@ static const std::string kMissingZip = "missing.zip";
 static const std::string kValidZip = "valid.zip";
 static const std::string kLargeZip = "large.zip";
 static const std::string kBadCrcZip = "bad_crc.zip";
+static const std::string kUpdateZip = "dummy-update.zip";
 
 static const std::vector<uint8_t> kATxtContents {
   'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
@@ -493,6 +496,32 @@ TEST(ziparchive, ExtractToFile) {
   ASSERT_EQ(static_cast<ssize_t>(data_size + kATxtContents.size()),
             lseek64(tmp_file.fd, 0, SEEK_END));
 }
+
+#if !defined(_WIN32)
+TEST(ziparchive, OpenFromMemory) {
+  const std::string zip_path = test_data_dir + "/" + kUpdateZip;
+  android::base::unique_fd fd(open(zip_path.c_str(), O_RDONLY | O_BINARY));
+  ASSERT_NE(-1, fd);
+  struct stat sb;
+  ASSERT_EQ(0, fstat(fd, &sb));
+
+  // Memory map the file first and open the archive from the memory region.
+  android::FileMap file_map;
+  file_map.create(zip_path.c_str(), fd, 0/*offset*/, sb.st_size, true);
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFromMemory(file_map.getDataPtr(), file_map.getDataLength(),
+                                     zip_path.c_str(), &handle));
+
+  // Assert one entry can be found and extracted correctly.
+  std::string BINARY_PATH("META-INF/com/google/android/update-binary");
+  ZipString binary_path(BINARY_PATH.c_str());
+  ZipEntry binary_entry;
+  ASSERT_EQ(0, FindEntry(handle, binary_path, &binary_entry));
+  TemporaryFile tmp_binary;
+  ASSERT_NE(-1, tmp_binary.fd);
+  ASSERT_EQ(0, ExtractEntryToFile(handle, &binary_entry, tmp_binary.fd));
+}
+#endif
 
 static void ZipArchiveStreamTest(
     ZipArchiveHandle& handle, const std::string& entry_name, bool raw,
