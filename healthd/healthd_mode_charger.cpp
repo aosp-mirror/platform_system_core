@@ -686,7 +686,7 @@ void healthd_mode_charger_init(struct healthd_config* config)
     ret = ev_init(input_callback, charger);
     if (!ret) {
         epollfd = ev_get_epollfd();
-        healthd_register_event(epollfd, charger_event_handler);
+        healthd_register_event(epollfd, charger_event_handler, EVENT_WAKEUP_FD);
     }
 
     ret = res_create_display_surface("charger/battery_fail", &charger->surf_unknown);
