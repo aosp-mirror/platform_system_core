@@ -25,114 +25,21 @@
 #include <unordered_map>
 
 #include <cutils/properties.h>
-#include <log/logger.h>
+#include <private/android_logger.h>
 
 #include "LogBuffer.h"
 #include "LogKlog.h"
 #include "LogReader.h"
 
 // Default
-#define LOG_BUFFER_SIZE (256 * 1024) // Tuned with ro.logd.size per-platform
 #define log_buffer_size(id) mMaxSize[id]
-#define LOG_BUFFER_MIN_SIZE (64 * 1024UL)
-#define LOG_BUFFER_MAX_SIZE (256 * 1024 * 1024UL)
-
-static bool valid_size(unsigned long value) {
-    if ((value < LOG_BUFFER_MIN_SIZE) || (LOG_BUFFER_MAX_SIZE < value)) {
-        return false;
-    }
-
-    long pages = sysconf(_SC_PHYS_PAGES);
-    if (pages < 1) {
-        return true;
-    }
-
-    long pagesize = sysconf(_SC_PAGESIZE);
-    if (pagesize <= 1) {
-        pagesize = PAGE_SIZE;
-    }
-
-    // maximum memory impact a somewhat arbitrary ~3%
-    pages = (pages + 31) / 32;
-    unsigned long maximum = pages * pagesize;
-
-    if ((maximum < LOG_BUFFER_MIN_SIZE) || (LOG_BUFFER_MAX_SIZE < maximum)) {
-        return true;
-    }
-
-    return value <= maximum;
-}
-
-static unsigned long property_get_size(const char *key) {
-    char property[PROPERTY_VALUE_MAX];
-    property_get(key, property, "");
-
-    char *cp;
-    unsigned long value = strtoul(property, &cp, 10);
-
-    switch(*cp) {
-    case 'm':
-    case 'M':
-        value *= 1024;
-    /* FALLTHRU */
-    case 'k':
-    case 'K':
-        value *= 1024;
-    /* FALLTHRU */
-    case '\0':
-        break;
-
-    default:
-        value = 0;
-    }
-
-    if (!valid_size(value)) {
-        value = 0;
-    }
-
-    return value;
-}
 
 void LogBuffer::init() {
-    static const char global_tuneable[] = "persist.logd.size"; // Settings App
-    static const char global_default[] = "ro.logd.size";       // BoardConfig.mk
-
-    unsigned long default_size = property_get_size(global_tuneable);
-    if (!default_size) {
-        default_size = property_get_size(global_default);
-        if (!default_size) {
-            default_size = property_get_bool("ro.config.low_ram",
-                                             BOOL_DEFAULT_FALSE)
-                ? LOG_BUFFER_MIN_SIZE // 64K
-                : LOG_BUFFER_SIZE;    // 256K
-        }
-    }
-
     log_id_for_each(i) {
         mLastSet[i] = false;
         mLast[i] = mLogElements.begin();
 
-        char key[PROP_NAME_MAX];
-
-        snprintf(key, sizeof(key), "%s.%s",
-                 global_tuneable, android_log_id_to_name(i));
-        unsigned long property_size = property_get_size(key);
-
-        if (!property_size) {
-            snprintf(key, sizeof(key), "%s.%s",
-                     global_default, android_log_id_to_name(i));
-            property_size = property_get_size(key);
-        }
-
-        if (!property_size) {
-            property_size = default_size;
-        }
-
-        if (!property_size) {
-            property_size = LOG_BUFFER_SIZE;
-        }
-
-        if (setSize(i, property_size)) {
+        if (setSize(i, __android_logger_get_buffer_size(i))) {
             setSize(i, LOG_BUFFER_MIN_SIZE);
         }
     }
@@ -880,7 +787,7 @@ unsigned long LogBuffer::getSizeUsed(log_id_t id) {
 // set the total space allocated to "id"
 int LogBuffer::setSize(log_id_t id, unsigned long size) {
     // Reasonable limits ...
-    if (!valid_size(size)) {
+    if (!__android_logger_valid_buffer_size(size)) {
         return -1;
     }
     pthread_mutex_lock(&mLogElementsLock);
