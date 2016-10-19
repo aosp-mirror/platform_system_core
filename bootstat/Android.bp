@@ -16,7 +16,6 @@
 
 bootstat_lib_src_files = [
     "boot_event_record_store.cpp",
-    "event_log_list_builder.cpp",
     "histogram_logger.cpp",
     "uptime_parser.cpp",
 ]
@@ -88,7 +87,6 @@ cc_test {
     ],
     srcs: [
         "boot_event_record_store_test.cpp",
-        "event_log_list_builder_test.cpp",
         "testrunner.cpp",
     ],
 }

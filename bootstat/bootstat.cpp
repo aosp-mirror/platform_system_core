@@ -35,7 +35,6 @@
 #include <cutils/properties.h>
 
 #include "boot_event_record_store.h"
-#include "event_log_list_builder.h" /* ToDo: switch to liblog implementation */
 #include "histogram_logger.h"
 #include "uptime_parser.h"
 
