@@ -1,25 +1,197 @@
+cc_defaults {
+    name: "debuggerd_defaults",
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Wno-error",
+        "-Wno-nullability-completeness",
+        "-Os",
+    ],
+
+    local_include_dirs: ["include"],
+}
+
 cc_library_static {
-  name: "libdebuggerd_client",
-  srcs: ["client/debuggerd_client.cpp"],
+    name: "libdebuggerd_handler",
+    defaults: ["debuggerd_defaults"],
+    srcs: ["handler/debuggerd_handler.cpp"],
 
-  cflags: [
-    "-Wall",
-    "-Wextra",
-    "-Werror",
-    "-Os",
-  ],
+    // libdebuggerd_handler gets async signal safe logging via libc_logging,
+    // which defines its interface in bionic private headers.
+    include_dirs: ["bionic/libc"],
+    static_libs: ["libc_logging"],
 
-  target: {
-    android64: {
-      cflags: ["-DTARGET_IS_64_BIT"],
+    export_include_dirs: ["include"],
+}
+
+cc_library {
+    name: "libdebuggerd_client",
+    defaults: ["debuggerd_defaults"],
+    srcs: [
+        "client/debuggerd_client.cpp",
+        "util.cpp",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+    ],
+    export_include_dirs: ["include"],
+}
+
+cc_library {
+    name: "libdebuggerd",
+    defaults: ["debuggerd_defaults"],
+
+    srcs: [
+        "libdebuggerd/backtrace.cpp",
+        "libdebuggerd/elf_utils.cpp",
+        "libdebuggerd/open_files_list.cpp",
+        "libdebuggerd/tombstone.cpp",
+        "libdebuggerd/utility.cpp",
+    ],
+
+    target: {
+        android_arm: {
+            srcs: ["libdebuggerd/arm/machine.cpp"],
+        },
+        android_arm64: {
+            srcs: ["libdebuggerd/arm64/machine.cpp"],
+        },
+        android_mips: {
+            srcs: ["libdebuggerd/mips/machine.cpp"],
+        },
+        android_mips64: {
+            srcs: ["libdebuggerd/mips64/machine.cpp"],
+        },
+        android_x86: {
+            srcs: ["libdebuggerd/x86/machine.cpp"],
+        },
+        android_x86_64: {
+            srcs: ["libdebuggerd/x86_64/machine.cpp"],
+        },
     },
-  },
 
-  local_include_dirs: ["include"],
-  export_include_dirs: ["include"],
+    local_include_dirs: ["libdebuggerd/include"],
+    export_include_dirs: ["libdebuggerd/include"],
 
-  // libdebuggerd_client gets async signal safe logging via libc_logging,
-  // which defines its interface in bionic private headers.
-  include_dirs: ["bionic/libc"],
-  static_libs: ["libc_logging"],
+    shared_libs: [
+        "libbacktrace",
+        "libbase",
+        "libcutils",
+        "liblog",
+    ],
+}
+
+cc_test {
+    name: "debuggerd_test",
+    defaults: ["debuggerd_defaults"],
+
+    cflags: ["-Wno-missing-field-initializers"],
+    srcs: [
+        "libdebuggerd/test/dump_memory_test.cpp",
+        "libdebuggerd/test/elf_fake.cpp",
+        "libdebuggerd/test/log_fake.cpp",
+        "libdebuggerd/test/open_files_list_test.cpp",
+        "libdebuggerd/test/property_fake.cpp",
+        "libdebuggerd/test/ptrace_fake.cpp",
+        "libdebuggerd/test/tombstone_test.cpp",
+    ],
+
+    target: {
+        android: {
+            srcs: [
+                "debuggerd_test.cpp",
+                "util.cpp"
+            ],
+        },
+    },
+
+    shared_libs: [
+        "libbacktrace",
+        "libbase",
+        "libcutils",
+    ],
+
+    static_libs: [
+        "libdebuggerd"
+    ],
+
+    local_include_dirs: [
+        "libdebuggerd",
+    ],
+
+    compile_multilib: "both",
+    multilib: {
+        lib32: {
+            stem: "debuggerd_test32",
+        },
+        lib64: {
+            stem: "debuggerd_test64",
+        },
+    },
+}
+
+cc_binary {
+    name: "crash_dump",
+    srcs: [
+        "crash_dump.cpp",
+        "util.cpp",
+    ],
+    defaults: ["debuggerd_defaults"],
+
+    compile_multilib: "both",
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
+
+    shared_libs: [
+        "libbacktrace",
+        "libbase",
+        "libdebuggerd",
+        "liblog",
+        "libprocinfo",
+        "libselinux",
+    ],
+}
+
+cc_binary {
+    name: "debuggerd",
+    srcs: [
+        "debuggerd.cpp",
+    ],
+    defaults: ["debuggerd_defaults"],
+
+    shared_libs: [
+        "libbase",
+        "libdebuggerd_client",
+        "liblog",
+        "libselinux",
+    ],
+
+    local_include_dirs: ["include"],
+}
+
+cc_binary {
+    name: "tombstoned",
+    srcs: [
+        "util.cpp",
+        "tombstoned/intercept_manager.cpp",
+        "tombstoned/tombstoned.cpp",
+    ],
+    defaults: ["debuggerd_defaults"],
+
+    static_libs: [
+        "libbase",
+        "libcutils",
+        "libevent",
+        "liblog",
+    ],
+
+    init_rc: ["tombstoned/tombstoned.rc"]
 }

@@ -343,6 +343,6 @@ LOCAL_STATIC_LIBRARIES := \
     libcrypto_utils \
     libcrypto \
     libminijail \
-    libdebuggerd_client \
+    libdebuggerd_handler \
 
 include $(BUILD_EXECUTABLE)

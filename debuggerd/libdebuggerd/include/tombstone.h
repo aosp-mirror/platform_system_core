@@ -23,6 +23,8 @@
 #include <set>
 #include <string>
 
+#include "open_files_list.h"
+
 class BacktraceMap;
 
 /* Create and open a tombstone file for writing.

@@ -34,9 +34,9 @@
 #include <libminijail.h>
 #include <scoped_minijail.h>
 
-#include "debuggerd/client.h"
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
+#include "debuggerd/handler.h"
 #include "selinux/android.h"
 
 #include "adb.h"

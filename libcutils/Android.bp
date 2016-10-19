@@ -78,7 +78,6 @@ cc_library {
             srcs: libcutils_nonwindows_sources + [
                 "android_reboot.c",
                 "ashmem-dev.c",
-                "debugger.c",
                 "klog.cpp",
                 "partition_utils.c",
                 "properties.c",
@@ -86,9 +85,6 @@ cc_library {
                 "trace-dev.c",
                 "uevent.c",
             ],
-
-            static_libs: ["libdebuggerd_client"],
-            export_static_lib_headers: ["libdebuggerd_client"],
         },
 
         android_arm: {
