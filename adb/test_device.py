@@ -371,15 +371,8 @@ class ShellTest(DeviceTest):
     def test_pty_logic(self):
         """Tests that a PTY is allocated when it should be.
 
-        PTY allocation behavior should match ssh; some behavior requires
-        a terminal stdin to test so this test will be skipped if stdin
-        is not a terminal.
+        PTY allocation behavior should match ssh.
         """
-        if not self.device.has_shell_protocol():
-            raise unittest.SkipTest('PTY arguments unsupported on this device')
-        if not os.isatty(sys.stdin.fileno()):
-            raise unittest.SkipTest('PTY tests require stdin terminal')
-
         def check_pty(args):
             """Checks adb shell PTY allocation.
 
@@ -409,15 +402,33 @@ class ShellTest(DeviceTest):
         # -T: never allocate PTY.
         self.assertEqual((False, False), check_pty(['-T']))
 
-        # No args: PTY only if stdin is a terminal and shell is interactive,
-        # which is difficult to reliably test from a script.
-        self.assertEqual((False, False), check_pty([]))
+        # These tests require a new device.
+        if self.device.has_shell_protocol() and os.isatty(sys.stdin.fileno()):
+            # No args: PTY only if stdin is a terminal and shell is interactive,
+            # which is difficult to reliably test from a script.
+            self.assertEqual((False, False), check_pty([]))
 
-        # -t: PTY if stdin is a terminal.
-        self.assertEqual((True, False), check_pty(['-t']))
+            # -t: PTY if stdin is a terminal.
+            self.assertEqual((True, False), check_pty(['-t']))
 
         # -t -t: always allocate PTY.
         self.assertEqual((True, True), check_pty(['-t', '-t']))
+
+        # -tt: always allocate PTY, POSIX style (http://b/32216152).
+        self.assertEqual((True, True), check_pty(['-tt']))
+
+        # -ttt: ssh has weird even/odd behavior with multiple -t flags, but
+        # we follow the man page instead.
+        self.assertEqual((True, True), check_pty(['-ttt']))
+
+        # -ttx: -x and -tt aren't incompatible (though -Tx would be an error).
+        self.assertEqual((True, True), check_pty(['-ttx']))
+
+        # -Ttt: -tt cancels out -T.
+        self.assertEqual((True, True), check_pty(['-Ttt']))
+
+        # -ttT: -T cancels out -tt.
+        self.assertEqual((False, False), check_pty(['-ttT']))
 
     def test_shell_protocol(self):
         """Tests the shell protocol on the device.
