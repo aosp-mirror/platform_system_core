@@ -86,9 +86,10 @@ sig_t ShellProtocolTest::saved_sigpipe_handler_ = nullptr;
 
 namespace {
 
-// Returns true if the packet contains the given values.
+// Returns true if the packet contains the given values. `data` can't be null.
 bool PacketEquals(const ShellProtocol* protocol, ShellProtocol::Id id,
                     const void* data, size_t data_length) {
+    // Note that passing memcmp null is bad, even if data_length is 0.
     return (protocol->id() == id &&
             protocol->data_length() == data_length &&
             !memcmp(data, protocol->data(), data_length));
@@ -130,7 +131,8 @@ TEST_F(ShellProtocolTest, ZeroLengthPacket) {
 
     ASSERT_TRUE(write_protocol_->Write(id, 0));
     ASSERT_TRUE(read_protocol_->Read());
-    ASSERT_TRUE(PacketEquals(read_protocol_, id, nullptr, 0));
+    char buf[1];
+    ASSERT_TRUE(PacketEquals(read_protocol_, id, buf, 0));
 }
 
 // Tests exit code packets.
