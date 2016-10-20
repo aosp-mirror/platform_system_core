@@ -25,10 +25,14 @@
 #if !defined(_WIN32)
 #include <pthread.h>
 #endif
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <android/log.h>
+#include <log/uio.h>
 
 #include "fake_log_device.h"
 #include "log_portability.h"

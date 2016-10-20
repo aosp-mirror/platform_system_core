@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 
 #include <linux/major.h>
 #include <linux/mmc/ioctl.h>

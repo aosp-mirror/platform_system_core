@@ -41,7 +41,7 @@
 const int LOCAL_QLOG_NL_EVENT = 112;
 const int LOCAL_NFLOG_PACKET = NFNL_SUBSYS_ULOG << 8 | NFULNL_MSG_PACKET;
 
-#include <android/log.h>
+#include <log/log.h>
 #include <sysutils/NetlinkEvent.h>
 
 NetlinkEvent::NetlinkEvent() {

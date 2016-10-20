@@ -1,12 +1,18 @@
-LIBLOG(3)               Android NDK Programming Manual               LIBLOG(3)
+LIBLOG(3)          Android Internal NDK Programming Manual           LIBLOG(3)
 
 
 
 NAME
-       liblog - Android NDK logger interfaces
+       liblog - Android Internal NDK logger interfaces
 
 SYNOPSIS
-       #include <android/log.h>
+       /*
+        * Please limit to 24 characters for runtime is loggable,
+        * 16 characters for persist is loggable, and logcat pretty
+        * alignment with limit of 7 characters.
+        */
+       #define LOG_TAG "yourtag"
+       #include <log/log.h>
 
        ALOG(android_priority, tag, format, ...)
        IF_ALOG(android_priority, tag)
@@ -66,20 +72,43 @@ SYNOPSIS
        int android_logger_get_log_readable_size(struct logger *logger)
        int android_logger_get_log_version(struct logger *logger)
 
-       struct  logger_list  *android_logger_list_alloc(int  mode, unsigned int
-       tail, pid_t pid)
-       struct  logger  *android_logger_open(struct  logger_list  *logger_list,
-       log_id_t id)
-       struct  logger_list  *android_logger_list_open(log_id_t  id,  int mode,
-       unsigned int tail, pid_t pid)
-
-       int android_logger_list_read(struct  logger_list  *logger_list,  struct
-       log_msg *log_msg
-
+       struct logger_list *android_logger_list_alloc(int mode,
+                                                     unsigned int tail,
+                                                     pid_t pid)
+       struct logger *android_logger_open(struct logger_list *logger_list,
+                                          log_id_t id)
+       struct logger_list *android_logger_list_open(log_id_t id, int mode,
+                                                    unsigned int tail,
+                                                    pid_t pid)
+       int android_logger_list_read(struct logger_list *logger_list,
+                                    struct log_msg *log_msg)
        void android_logger_list_free(struct logger_list *logger_list)
 
        log_id_t android_name_to_log_id(const char *logName)
        const char *android_log_id_to_name(log_id_t log_id)
+
+       android_log_context create_android_logger(uint32_t tag)
+
+       int android_log_write_list_begin(android_log_context ctx)
+       int android_log_write_list_end(android_log_context ctx)
+
+       int android_log_write_int32(android_log_context ctx, int32_t value)
+       int android_log_write_int64(android_log_context ctx, int64_t value)
+       int android_log_write_string8(android_log_context ctx,
+                                     const char *value)
+       int android_log_write_string8_len(android_log_context ctx,
+                                         const char *value, size_t maxlen)
+       int android_log_write_float32(android_log_context ctx, float value)
+
+       int android_log_write_list(android_log_context ctx,
+                                  log_id_t id = LOG_ID_EVENTS)
+
+       android_log_context create_android_log_parser(const char *msg,
+                                                     size_t len)
+       android_log_list_element android_log_read_next(android_log_context ctx)
+       android_log_list_element android_log_peek_next(android_log_context ctx)
+
+       int android_log_destroy(android_log_context *ctx)
 
        Link with -llog
 
@@ -163,8 +192,8 @@ ERRORS
        library retries on EINTR, -EINTR should never be returned.
 
 SEE ALSO
-       syslogd(8)
+       syslogd(8), klogd, auditd(8)
 
 
 
-                                  24 Jan 2014                        LIBLOG(3)
+                                  17 Oct 2016                        LIBLOG(3)

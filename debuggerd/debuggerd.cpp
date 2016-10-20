@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "debuggerd"
+
 #include <arpa/inet.h>
 #include <dirent.h>
 #include <elf.h>

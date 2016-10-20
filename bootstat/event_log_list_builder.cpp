@@ -20,7 +20,7 @@
 #include <memory>
 #include <string>
 
-#include <android/log.h>
+#include <log/log.h>
 #include <android-base/logging.h>
 
 namespace {

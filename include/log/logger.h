@@ -17,7 +17,7 @@
 #include <string>
 #endif
 
-#include <android/log.h>
+#include <log/log.h>
 
 #ifdef __cplusplus
 extern "C" {

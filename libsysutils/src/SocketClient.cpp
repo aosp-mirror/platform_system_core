@@ -25,8 +25,9 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <unistd.h>
 
-#include <android/log.h>
+#include <log/log.h>
 #include <sysutils/SocketClient.h>
 
 SocketClient::SocketClient(int socket, bool owned) {

@@ -30,7 +30,7 @@
 
 #include <sys/types.h>
 
-#include <android/log.h>
+#include <log/log.h>
 
 #ifdef __cplusplus
 

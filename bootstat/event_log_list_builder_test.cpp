@@ -18,9 +18,9 @@
 
 #include <inttypes.h>
 
-#include <android/log.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <log/log.h>
 
 using testing::ElementsAreArray;
 
