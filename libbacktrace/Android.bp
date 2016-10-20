@@ -92,6 +92,7 @@ cc_library {
             ],
 
             static_libs: ["libcutils"],
+            host_ldlibs: ["-lrt"],
         },
         android: {
             srcs: libbacktrace_sources,
