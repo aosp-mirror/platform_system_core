@@ -20,6 +20,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <android/log.h>
 #include <hardware/nvram.h>

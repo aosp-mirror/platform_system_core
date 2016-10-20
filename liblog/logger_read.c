@@ -25,7 +25,6 @@
 
 #include <android/log.h>
 #include <cutils/list.h>
-#include <log/logger.h>
 #include <private/android_filesystem_config.h>
 
 #include "config_read.h"

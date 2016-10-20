@@ -17,8 +17,10 @@
 #define LOG_TAG "TrustyGateKeeper"
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <android/log.h>
 #include <trusty/tipc.h>

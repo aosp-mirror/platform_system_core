@@ -24,9 +24,7 @@
 #include <android/set_abort_message.h>
 #endif
 
-#include <android/log.h>
 #include <log/event_tag_map.h>
-#include <log/logger.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "dlmalloc-stubs"
+
 #include "android/log.h"
 
 #define UNUSED __attribute__((__unused__))

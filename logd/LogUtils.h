@@ -20,8 +20,8 @@
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
-#include <android/log.h>
 #include <sysutils/SocketClient.h>
+#include <log/log.h>
 
 // Hijack this header as a common include file used by most all sources
 // to report some utilities defined here and there.

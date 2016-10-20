@@ -20,11 +20,12 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <linux/netlink.h> /* out of order because must follow sys/socket.h */
 
-#include <android/log.h>
 #include <cutils/uevent.h>
+#include <log/log.h>
 #include <sysutils/NetlinkEvent.h>
 
 #if 1

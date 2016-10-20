@@ -18,7 +18,7 @@
 
 #include <errno.h>
 
-#include <android/log.h>
+#include <log/log.h>
 #include <sysutils/FrameworkCommand.h>
 
 #define UNUSED __attribute__((unused))
