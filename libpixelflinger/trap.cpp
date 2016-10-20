@@ -15,6 +15,8 @@
 ** limitations under the License.
 */
 
+#define LOG_TAG "pixelflinger-trap"
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

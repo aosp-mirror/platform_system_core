@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "backtrace-map"
+
 #include <ctype.h>
 #include <inttypes.h>
 #include <stdint.h>

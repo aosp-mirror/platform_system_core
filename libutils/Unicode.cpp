@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "unicode"
+
 #include <limits.h>
 #include <stddef.h>
 

@@ -24,9 +24,10 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/sockets.h>
+#include <log/log.h>
 #include <sysutils/SocketListener.h>
 #include <sysutils/SocketClient.h>
 

@@ -23,7 +23,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <android/log.h>
+#include <log/log.h>
 #include <cutils/sched_policy.h>
 
 #define UNUSED __attribute__((__unused__))
