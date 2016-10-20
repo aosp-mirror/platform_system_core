@@ -27,12 +27,10 @@
 
 #include <string>
 
-#include <android/log.h>
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <cutils/properties.h>
 #include <gtest/gtest.h>
-#include <log/logger.h>
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>

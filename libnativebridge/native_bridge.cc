@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "nativebridge"
+
 #include "nativebridge/native_bridge.h"
 
 #include <dlfcn.h>
@@ -22,6 +24,7 @@
 #include <stdio.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <cstring>
 

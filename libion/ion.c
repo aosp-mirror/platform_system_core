@@ -27,6 +27,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <android/log.h>
 #include <ion/ion.h>

@@ -31,9 +31,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/sockets.h>
-#include <log/logger.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 

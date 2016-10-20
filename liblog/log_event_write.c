@@ -15,8 +15,9 @@
  */
 
 #include <errno.h>
+#include <stdint.h>
 
-#include <android/log.h>
+#include <log/log.h>
 
 #include "log_portability.h"
 

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "sharedbuffer"
+
 #include <stdlib.h>
 #include <string.h>
 

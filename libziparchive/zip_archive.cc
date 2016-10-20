@@ -18,6 +18,8 @@
  * Read-only access to Zip archives, with minimal heap allocation.
  */
 
+#define LOG_TAG "ziparchive"
+
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -30,11 +32,11 @@
 #include <memory>
 #include <vector>
 
-#include <android/log.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>  // TEMP_FAILURE_RETRY may or may not be in unistd
 #include <android-base/memory.h>
+#include <log/log.h>
 #include <utils/Compat.h>
 #include <utils/FileMap.h>
 #include "ziparchive/zip_archive.h"
