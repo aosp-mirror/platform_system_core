@@ -37,42 +37,6 @@
 #define HOST_TEST(suite, name) TEST(suite, name)
 #endif
 
-class CapturedStderr {
- public:
-  CapturedStderr() : old_stderr_(-1) {
-    init();
-  }
-
-  ~CapturedStderr() {
-    reset();
-  }
-
-  int fd() const {
-    return temp_file_.fd;
-  }
-
- private:
-  void init() {
-#if defined(_WIN32)
-    // On Windows, stderr is often buffered, so make sure it is unbuffered so
-    // that we can immediately read back what was written to stderr.
-    ASSERT_EQ(0, setvbuf(stderr, NULL, _IONBF, 0));
-#endif
-    old_stderr_ = dup(STDERR_FILENO);
-    ASSERT_NE(-1, old_stderr_);
-    ASSERT_NE(-1, dup2(fd(), STDERR_FILENO));
-  }
-
-  void reset() {
-    ASSERT_NE(-1, dup2(old_stderr_, STDERR_FILENO));
-    ASSERT_EQ(0, close(old_stderr_));
-    // Note: cannot restore prior setvbuf() setting.
-  }
-
-  TemporaryFile temp_file_;
-  int old_stderr_;
-};
-
 #if defined(_WIN32)
 static void ExitSignalAbortHandler(int) {
   _exit(3);
