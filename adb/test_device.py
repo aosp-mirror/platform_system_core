@@ -511,13 +511,14 @@ class ShellTest(DeviceTest):
             trap "echo SIGINT > {path}; exit 0" SIGINT
             trap "echo SIGHUP > {path}; exit 0" SIGHUP
             echo Waiting
-            while true; do sleep 100; done
+            read
         """.format(path=log_path)
 
         script = ";".join([x.strip() for x in script.strip().splitlines()])
 
-        process = self.device.shell_popen(
-            ["sh", "-c", "'{}'".format(script)], kill_atexit=False, stdout=subprocess.PIPE)
+        process = self.device.shell_popen([script], kill_atexit=False,
+                                          stdin=subprocess.PIPE,
+                                          stdout=subprocess.PIPE)
 
         self.assertEqual("Waiting\n", process.stdout.readline())
         process.send_signal(signal.SIGINT)
@@ -525,7 +526,7 @@ class ShellTest(DeviceTest):
 
         # Waiting for the local adb to finish is insufficient, since it hangs
         # up immediately.
-        time.sleep(0.25)
+        time.sleep(1)
 
         stdout, _ = self.device.shell(["cat", log_path])
         self.assertEqual(stdout.strip(), "SIGHUP")
