@@ -46,7 +46,7 @@ class Device : public IonAllHeapsTest {
 void Device::SetUp()
 {
     IonAllHeapsTest::SetUp();
-    m_deviceFd = open("/dev/ion-test", O_RDWR);
+    m_deviceFd = open("/dev/ion-test", O_RDONLY);
     ASSERT_GE(m_deviceFd, 0);
 }
 
