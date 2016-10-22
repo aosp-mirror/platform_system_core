@@ -686,100 +686,100 @@ static int RemoteShell(bool use_shell_protocol, const std::string& type_arg,
 static int adb_shell(int argc, const char** argv) {
     FeatureSet features;
     std::string error;
-
     if (!adb_get_feature_set(&features, &error)) {
         fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
     }
 
-    bool use_shell_protocol = CanUseFeature(features, kFeatureShell2);
-    if (!use_shell_protocol) {
-        D("shell protocol not supported, using raw data transfer");
-    } else {
-        D("using shell protocol");
-    }
+    enum PtyAllocationMode { kPtyAuto, kPtyNo, kPtyYes, kPtyDefinitely };
+
+    // Defaults.
+    char escape_char = '~'; // -e
+    bool use_shell_protocol = CanUseFeature(features, kFeatureShell2); // -x
+    PtyAllocationMode tty = use_shell_protocol ? kPtyAuto : kPtyDefinitely; // -t/-T
 
     // Parse shell-specific command-line options.
-    // argv[0] is always "shell".
-    --argc;
-    ++argv;
-    int t_arg_count = 0;
-    char escape_char = '~';
-    while (argc) {
-        if (!strcmp(argv[0], "-e")) {
-            if (argc < 2 || !(strlen(argv[1]) == 1 || strcmp(argv[1], "none") == 0)) {
-                fprintf(stderr, "error: -e requires a single-character argument or 'none'\n");
+    argv[0] = "adb shell"; // So getopt(3) error messages start "adb shell".
+    optind = 1; // argv[0] is always "shell", so set `optind` appropriately.
+    int opt;
+    while ((opt = getopt(argc, const_cast<char**>(argv), "+e:ntTx")) != -1) {
+        switch (opt) {
+            case 'e':
+                if (!(strlen(optarg) == 1 || strcmp(optarg, "none") == 0)) {
+                    fprintf(stderr, "error: -e requires a single-character argument or 'none'\n");
+                    return 1;
+                }
+                escape_char = (strcmp(optarg, "none") == 0) ? 0 : optarg[0];
+                break;
+            case 'n':
+                close_stdin();
+                break;
+            case 'x':
+                // This option basically asks for historical behavior, so set options that
+                // correspond to the historical defaults. This is slightly weird in that -Tx
+                // is fine (because we'll undo the -T) but -xT isn't, but that does seem to
+                // be our least worst choice...
+                use_shell_protocol = false;
+                tty = kPtyDefinitely;
+                escape_char = '~';
+                break;
+            case 't':
+                // Like ssh, -t arguments are cumulative so that multiple -t's
+                // are needed to force a PTY.
+                tty = (tty >= kPtyYes) ? kPtyDefinitely : kPtyYes;
+                break;
+            case 'T':
+                tty = kPtyNo;
+                break;
+            default:
+                // getopt(3) already printed an error message for us.
                 return 1;
-            }
-            escape_char = (strcmp(argv[1], "none") == 0) ? 0 : argv[1][0];
-            argc -= 2;
-            argv += 2;
-        } else if (!strcmp(argv[0], "-T") || !strcmp(argv[0], "-t")) {
-            // Like ssh, -t arguments are cumulative so that multiple -t's
-            // are needed to force a PTY.
-            if (argv[0][1] == 't') {
-                ++t_arg_count;
-            } else {
-                t_arg_count = -1;
-            }
-            --argc;
-            ++argv;
-        } else if (!strcmp(argv[0], "-x")) {
-            use_shell_protocol = false;
-            --argc;
-            ++argv;
-        } else if (!strcmp(argv[0], "-n")) {
-            close_stdin();
-
-            --argc;
-            ++argv;
-        } else {
-            break;
         }
     }
 
-    // Legacy shell protocol requires a remote PTY to close the subprocess properly which creates
-    // some weird interactions with -tT.
-    if (!use_shell_protocol && t_arg_count != 0) {
-        if (!CanUseFeature(features, kFeatureShell2)) {
-            fprintf(stderr, "error: target doesn't support PTY args -Tt\n");
-        } else {
-            fprintf(stderr, "error: PTY args -Tt cannot be used with -x\n");
-        }
-        return 1;
-    }
+    bool is_interactive = (optind == argc);
 
-    std::string shell_type_arg;
-    if (CanUseFeature(features, kFeatureShell2)) {
-        if (t_arg_count < 0) {
+    std::string shell_type_arg = kShellServiceArgPty;
+    if (tty == kPtyNo) {
+        shell_type_arg = kShellServiceArgRaw;
+    } else if (tty == kPtyAuto) {
+        // If stdin isn't a TTY, default to a raw shell; this lets
+        // things like `adb shell < my_script.sh` work as expected.
+        // Non-interactive shells should also not have a pty.
+        if (!unix_isatty(STDIN_FILENO) || !is_interactive) {
             shell_type_arg = kShellServiceArgRaw;
-        } else if (t_arg_count == 0) {
-            // If stdin isn't a TTY, default to a raw shell; this lets
-            // things like `adb shell < my_script.sh` work as expected.
-            // Otherwise leave |shell_type_arg| blank which uses PTY for
-            // interactive shells and raw for non-interactive.
-            if (!unix_isatty(STDIN_FILENO)) {
-                shell_type_arg = kShellServiceArgRaw;
-            }
-        } else if (t_arg_count == 1) {
-            // A single -t arg isn't enough to override implicit -T.
-            if (!unix_isatty(STDIN_FILENO)) {
-                fprintf(stderr,
-                        "Remote PTY will not be allocated because stdin is not a terminal.\n"
-                        "Use multiple -t options to force remote PTY allocation.\n");
-                shell_type_arg = kShellServiceArgRaw;
-            } else {
-                shell_type_arg = kShellServiceArgPty;
-            }
+        }
+    } else if (tty == kPtyYes) {
+        // A single -t arg isn't enough to override implicit -T.
+        if (!unix_isatty(STDIN_FILENO)) {
+            fprintf(stderr,
+                    "Remote PTY will not be allocated because stdin is not a terminal.\n"
+                    "Use multiple -t options to force remote PTY allocation.\n");
+            shell_type_arg = kShellServiceArgRaw;
+        }
+    }
+
+    D("shell -e 0x%x t=%d use_shell_protocol=%s shell_type_arg=%s\n",
+      escape_char, tty,
+      use_shell_protocol ? "true" : "false",
+      (shell_type_arg == kShellServiceArgPty) ? "pty" : "raw");
+
+    // Raw mode is only supported when talking to a new device *and* using the shell protocol.
+    if (!use_shell_protocol) {
+        if (shell_type_arg != kShellServiceArgPty) {
+            fprintf(stderr, "error: %s only supports allocating a pty\n",
+                    !CanUseFeature(features, kFeatureShell2) ? "device" : "-x");
+            return 1;
         } else {
-            shell_type_arg = kShellServiceArgPty;
+            // If we're not using the shell protocol, the type argument must be empty.
+            shell_type_arg = "";
         }
     }
 
     std::string command;
-    if (argc) {
+    if (optind < argc) {
         // We don't escape here, just like ssh(1). http://b/20564385.
-        command = android::base::Join(std::vector<const char*>(argv, argv + argc), ' ');
+        command = android::base::Join(std::vector<const char*>(argv + optind, argv + argc), ' ');
     }
 
     return RemoteShell(use_shell_protocol, shell_type_arg, escape_char, command);
@@ -1401,7 +1401,7 @@ static bool _use_legacy_install() {
     return !CanUseFeature(features, kFeatureCmd);
 }
 
-int adb_commandline(int argc, const char **argv) {
+int adb_commandline(int argc, const char** argv) {
     int no_daemon = 0;
     int is_daemon = 0;
     int is_server = 0;
