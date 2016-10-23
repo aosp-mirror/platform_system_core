@@ -102,3 +102,32 @@ bool TemporaryDir::init(const std::string& tmp_dir) {
            OS_PATH_SEPARATOR);
   return (mkdtemp(path) != nullptr);
 }
+
+CapturedStderr::CapturedStderr() : old_stderr_(-1) {
+  init();
+}
+
+CapturedStderr::~CapturedStderr() {
+  reset();
+}
+
+int CapturedStderr::fd() const {
+  return temp_file_.fd;
+}
+
+void CapturedStderr::init() {
+#if defined(_WIN32)
+  // On Windows, stderr is often buffered, so make sure it is unbuffered so
+  // that we can immediately read back what was written to stderr.
+  CHECK_EQ(0, setvbuf(stderr, NULL, _IONBF, 0));
+#endif
+  old_stderr_ = dup(STDERR_FILENO);
+  CHECK_NE(-1, old_stderr_);
+  CHECK_NE(-1, dup2(fd(), STDERR_FILENO));
+}
+
+void CapturedStderr::reset() {
+  CHECK_NE(-1, dup2(old_stderr_, STDERR_FILENO));
+  CHECK_EQ(0, close(old_stderr_));
+  // Note: cannot restore prior setvbuf() setting.
+}
