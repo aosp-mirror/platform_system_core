@@ -48,4 +48,21 @@ class TemporaryDir {
   DISALLOW_COPY_AND_ASSIGN(TemporaryDir);
 };
 
+class CapturedStderr {
+ public:
+  CapturedStderr();
+  ~CapturedStderr();
+
+  int fd() const;
+
+ private:
+  void init();
+  void reset();
+
+  TemporaryFile temp_file_;
+  int old_stderr_;
+
+  DISALLOW_COPY_AND_ASSIGN(CapturedStderr);
+};
+
 #endif  // ANDROID_BASE_TEST_UTILS_H
