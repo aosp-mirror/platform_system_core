@@ -25,7 +25,7 @@
 #include <sys/uio.h>
 #include <syslog.h>
 
-#include <log/logger.h>
+#include <private/android_logger.h>
 #include <private/android_filesystem_config.h>
 
 #include "LogBuffer.h"

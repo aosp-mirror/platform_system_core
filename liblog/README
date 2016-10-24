@@ -62,9 +62,7 @@ SYNOPSIS
        LOG_EVENT_INT(tag, value)
        LOG_EVENT_LONG(tag, value)
 
-       Link with -llog
-
-       #include <log/logger.h>
+       clockid_t android_log_clockid()
 
        log_id_t android_logger_get_id(struct logger *logger)
        int android_logger_clear(struct logger *logger)
