@@ -226,7 +226,8 @@ static void server_socket_thread(void* arg) {
             D("server: new connection on fd %d", fd);
             close_on_exec(fd);
             disable_tcp_nagle(fd);
-            if (register_socket_transport(fd, "host", port, 1) != 0) {
+            std::string serial = android::base::StringPrintf("host-%d", fd);
+            if (register_socket_transport(fd, serial.c_str(), port, 1) != 0) {
                 adb_close(fd);
             }
         }
