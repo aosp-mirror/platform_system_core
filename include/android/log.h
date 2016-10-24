@@ -67,25 +67,55 @@
  * NOTE: These functions MUST be implemented by /system/lib/liblog.so
  */
 
-#if !defined(_WIN32)
-#include <pthread.h>
-#endif
 #include <stdarg.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <time.h>
-#include <unistd.h>
-
-#include <log/uio.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /*
+ * This file uses ", ## __VA_ARGS__" zero-argument token pasting to
+ * work around issues with debug-only syntax errors in assertions
+ * that are missing format strings.  See commit
+ * 19299904343daf191267564fe32e6cd5c165cd42
+ */
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+#endif
+
+#ifndef __predict_false
+#define __predict_false(exp) __builtin_expect((exp) != 0, 0)
+#endif
+
+/*
+ * LOG_TAG is the local tag used for the following simplified
+ * logging macros.  You must set this preprocessor definition,
+ * or more tenuously supply a variable definition, before using
+ * the macros.
+ */
+
+/*
+ * Normally we strip the effects of ALOGV (VERBOSE messages),
+ * LOG_FATAL and LOG_FATAL_IF (FATAL assert messages) from the
+ * release builds be defining NDEBUG.  You can modify this (for
+ * example with "#define LOG_NDEBUG 0" at the top of your source
+ * file) to change that behavior.
+ */
+
+#ifndef LOG_NDEBUG
+#ifdef NDEBUG
+#define LOG_NDEBUG 1
+#else
+#define LOG_NDEBUG 0
+#endif
+#endif
+
+/*
  * Android log priority values, in ascending priority order.
  */
+#ifndef __android_LogPriority_defined
+#define __android_LogPriority_defined
 typedef enum android_LogPriority {
     ANDROID_LOG_UNKNOWN = 0,
     ANDROID_LOG_DEFAULT,    /* only for SetMinPriority() */
@@ -97,21 +127,20 @@ typedef enum android_LogPriority {
     ANDROID_LOG_FATAL,
     ANDROID_LOG_SILENT,     /* only for SetMinPriority(); must be last */
 } android_LogPriority;
-
-/*
- * Release any logger resources (a new log write will immediately re-acquire)
- */
-void __android_log_close();
+#endif
 
 /*
  * Send a simple string to the log.
  */
-int __android_log_write(int prio, const char *tag, const char *text);
+int __android_log_write(int prio, const char* tag, const char* text);
+
+#define android_writeLog(prio, tag, text) \
+    __android_log_write(prio, tag, text)
 
 /*
  * Send a formatted string to the log, used like printf(fmt,...)
  */
-int __android_log_print(int prio, const char *tag,  const char *fmt, ...)
+int __android_log_print(int prio, const char* tag,  const char* fmt, ...)
 #if defined(__GNUC__)
 #ifdef __USE_MINGW_ANSI_STDIO
 #if __USE_MINGW_ANSI_STDIO
@@ -125,19 +154,53 @@ int __android_log_print(int prio, const char *tag,  const char *fmt, ...)
 #endif
     ;
 
+#define android_printLog(prio, tag, ...) \
+    __android_log_print(prio, tag, __VA_ARGS__)
+
+/*
+ * Log macro that allows you to specify a number for the priority.
+ */
+#ifndef LOG_PRI
+#define LOG_PRI(priority, tag, ...) \
+    android_printLog(priority, tag, __VA_ARGS__)
+#endif
+
 /*
  * A variant of __android_log_print() that takes a va_list to list
  * additional parameters.
  */
-int __android_log_vprint(int prio, const char *tag,
-                         const char *fmt, va_list ap);
+int __android_log_vprint(int prio, const char* tag,
+                         const char* fmt, va_list ap)
+#if defined(__GNUC__)
+#ifdef __USE_MINGW_ANSI_STDIO
+#if __USE_MINGW_ANSI_STDIO
+    __attribute__ ((format(gnu_printf, 3, 0)))
+#else
+    __attribute__ ((format(printf, 3, 0)))
+#endif
+#else
+    __attribute__ ((format(printf, 3, 0)))
+#endif
+#endif
+    ;
+
+#define android_vprintLog(prio, cond, tag, ...) \
+    __android_log_vprint(prio, tag, __VA_ARGS__)
+
+/*
+ * Log macro that allows you to pass in a varargs ("args" is a va_list).
+ */
+#ifndef LOG_PRI_VA
+#define LOG_PRI_VA(priority, tag, fmt, args) \
+    android_vprintLog(priority, NULL, tag, fmt, args)
+#endif
 
 /*
  * Log an assertion failure and abort the process to have a chance
  * to inspect it if a debugger is attached. This uses the FATAL priority.
  */
-void __android_log_assert(const char *cond, const char *tag,
-                          const char *fmt, ...)
+void __android_log_assert(const char* cond, const char* tag,
+                          const char* fmt, ...)
 #if defined(__GNUC__)
     __attribute__ ((__noreturn__))
 #ifdef __USE_MINGW_ANSI_STDIO
@@ -152,74 +215,91 @@ void __android_log_assert(const char *cond, const char *tag,
 #endif
     ;
 
-//
-// C/C++ logging functions.  See the logging documentation for API details.
-//
-// We'd like these to be available from C code (in case we import some from
-// somewhere), so this has a C interface.
-//
-// The output will be correct when the log file is shared between multiple
-// threads and/or multiple processes so long as the operating system
-// supports O_APPEND.  These calls have mutex-protected data structures
-// and so are NOT reentrant.  Do not use LOG in a signal handler.
-//
+/* XXX Macros to work around syntax errors in places where format string
+ * arg is not passed to ALOG_ASSERT, LOG_ALWAYS_FATAL or LOG_ALWAYS_FATAL_IF
+ * (happens only in debug builds).
+ */
 
-// This file uses ", ## __VA_ARGS__" zero-argument token pasting to
-// work around issues with debug-only syntax errors in assertions
-// that are missing format strings.  See commit
-// 19299904343daf191267564fe32e6cd5c165cd42
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
-#endif
+/* Returns 2nd arg.  Used to substitute default value if caller's vararg list
+ * is empty.
+ */
+#define __android_second(dummy, second, ...)     second
 
-int __android_log_bwrite(int32_t tag, const void *payload, size_t len);
-int __android_log_btwrite(int32_t tag, char type, const void *payload,
-                          size_t len);
-int __android_log_bswrite(int32_t tag, const char *payload);
+/* If passed multiple args, returns ',' followed by all but 1st arg, otherwise
+ * returns nothing.
+ */
+#define __android_rest(first, ...)               , ## __VA_ARGS__
 
-// ---------------------------------------------------------------------
+#define android_printAssert(cond, tag, ...) \
+    __android_log_assert(cond, tag, \
+        __android_second(0, ## __VA_ARGS__, NULL) __android_rest(__VA_ARGS__))
 
 /*
- * Normally we strip ALOGV (VERBOSE messages) from release builds.
- * You can modify this (for example with "#define LOG_NDEBUG 0"
- * at the top of your source file) to change that behavior.
+ * Log a fatal error.  If the given condition fails, this stops program
+ * execution like a normal assertion, but also generating the given message.
+ * It is NOT stripped from release builds.  Note that the condition test
+ * is -inverted- from the normal assert() semantics.
  */
-#ifndef LOG_NDEBUG
-#ifdef NDEBUG
-#define LOG_NDEBUG 1
+#ifndef LOG_ALWAYS_FATAL_IF
+#define LOG_ALWAYS_FATAL_IF(cond, ...) \
+    ( (__predict_false(cond)) \
+    ? ((void)android_printAssert(#cond, LOG_TAG, ## __VA_ARGS__)) \
+    : (void)0 )
+#endif
+
+#ifndef LOG_ALWAYS_FATAL
+#define LOG_ALWAYS_FATAL(...) \
+    ( ((void)android_printAssert(NULL, LOG_TAG, ## __VA_ARGS__)) )
+#endif
+
+/*
+ * Versions of LOG_ALWAYS_FATAL_IF and LOG_ALWAYS_FATAL that
+ * are stripped out of release builds.
+ */
+
+#if LOG_NDEBUG
+
+#ifndef LOG_FATAL_IF
+#define LOG_FATAL_IF(cond, ...) ((void)0)
+#endif
+#ifndef LOG_FATAL
+#define LOG_FATAL(...) ((void)0)
+#endif
+
 #else
-#define LOG_NDEBUG 0
-#endif
-#endif
 
-/*
- * This is the local tag used for the following simplified
- * logging macros.  You can change this preprocessor definition
- * before using the other macros to change the tag.
- */
-#ifndef LOG_TAG
-#define LOG_TAG NULL
+#ifndef LOG_FATAL_IF
+#define LOG_FATAL_IF(cond, ...) LOG_ALWAYS_FATAL_IF(cond, ## __VA_ARGS__)
+#endif
+#ifndef LOG_FATAL
+#define LOG_FATAL(...) LOG_ALWAYS_FATAL(__VA_ARGS__)
 #endif
 
-// ---------------------------------------------------------------------
-
-#ifndef __predict_false
-#define __predict_false(exp) __builtin_expect((exp) != 0, 0)
 #endif
 
 /*
- *      -DLINT_RLOG in sources that you want to enforce that all logging
- * goes to the radio log buffer. If any logging goes to any of the other
- * log buffers, there will be a compile or link error to highlight the
- * problem. This is not a replacement for a full audit of the code since
- * this only catches compiled code, not ifdef'd debug code. Options to
- * defining this, either temporarily to do a spot check, or permanently
- * to enforce, in all the communications trees; We have hopes to ensure
- * that by supplying just the radio log buffer that the communications
- * teams will have their one-stop shop for triaging issues.
+ * Assertion that generates a log message when the assertion fails.
+ * Stripped out of release builds.  Uses the current LOG_TAG.
  */
-#ifndef LINT_RLOG
+#ifndef ALOG_ASSERT
+#define ALOG_ASSERT(cond, ...) LOG_FATAL_IF(!(cond), ## __VA_ARGS__)
+#endif
+
+/* --------------------------------------------------------------------- */
+
+/*
+ * C/C++ logging functions.  See the logging documentation for API details.
+ *
+ * We'd like these to be available from C code (in case we import some from
+ * somewhere), so this has a C interface.
+ *
+ * The output will be correct when the log file is shared between multiple
+ * threads and/or multiple processes so long as the operating system
+ * supports O_APPEND.  These calls have mutex-protected data structures
+ * and so are NOT reentrant.  Do not use LOG in a signal handler.
+ */
+
+/* --------------------------------------------------------------------- */
 
 /*
  * Simplified macro to send a verbose log message using the current LOG_TAG.
@@ -300,7 +380,7 @@ int __android_log_bswrite(int32_t tag, const char *payload);
     : (void)0 )
 #endif
 
-// ---------------------------------------------------------------------
+/* --------------------------------------------------------------------- */
 
 /*
  * Conditional based on whether the current LOG_TAG is enabled at
@@ -346,236 +426,7 @@ int __android_log_bswrite(int32_t tag, const char *payload);
 #define IF_ALOGE() IF_ALOG(LOG_ERROR, LOG_TAG)
 #endif
 
-
-// ---------------------------------------------------------------------
-
-/*
- * Simplified macro to send a verbose system log message using the current LOG_TAG.
- */
-#ifndef SLOGV
-#define __SLOGV(...) \
-    ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
-#if LOG_NDEBUG
-#define SLOGV(...) do { if (0) { __SLOGV(__VA_ARGS__); } } while (0)
-#else
-#define SLOGV(...) __SLOGV(__VA_ARGS__)
-#endif
-#endif
-
-#ifndef SLOGV_IF
-#if LOG_NDEBUG
-#define SLOGV_IF(cond, ...)   ((void)0)
-#else
-#define SLOGV_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-#endif
-
-/*
- * Simplified macro to send a debug system log message using the current LOG_TAG.
- */
-#ifndef SLOGD
-#define SLOGD(...) \
-    ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef SLOGD_IF
-#define SLOGD_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/*
- * Simplified macro to send an info system log message using the current LOG_TAG.
- */
-#ifndef SLOGI
-#define SLOGI(...) \
-    ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef SLOGI_IF
-#define SLOGI_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/*
- * Simplified macro to send a warning system log message using the current LOG_TAG.
- */
-#ifndef SLOGW
-#define SLOGW(...) \
-    ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef SLOGW_IF
-#define SLOGW_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/*
- * Simplified macro to send an error system log message using the current LOG_TAG.
- */
-#ifndef SLOGE
-#define SLOGE(...) \
-    ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef SLOGE_IF
-#define SLOGE_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-#endif /* !LINT_RLOG */
-
-// ---------------------------------------------------------------------
-
-/*
- * Simplified macro to send a verbose radio log message using the current LOG_TAG.
- */
-#ifndef RLOGV
-#define __RLOGV(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
-#if LOG_NDEBUG
-#define RLOGV(...) do { if (0) { __RLOGV(__VA_ARGS__); } } while (0)
-#else
-#define RLOGV(...) __RLOGV(__VA_ARGS__)
-#endif
-#endif
-
-#ifndef RLOGV_IF
-#if LOG_NDEBUG
-#define RLOGV_IF(cond, ...)   ((void)0)
-#else
-#define RLOGV_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-#endif
-
-/*
- * Simplified macro to send a debug radio log message using the current LOG_TAG.
- */
-#ifndef RLOGD
-#define RLOGD(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef RLOGD_IF
-#define RLOGD_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/*
- * Simplified macro to send an info radio log message using the current LOG_TAG.
- */
-#ifndef RLOGI
-#define RLOGI(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef RLOGI_IF
-#define RLOGI_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/*
- * Simplified macro to send a warning radio log message using the current LOG_TAG.
- */
-#ifndef RLOGW
-#define RLOGW(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef RLOGW_IF
-#define RLOGW_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/*
- * Simplified macro to send an error radio log message using the current LOG_TAG.
- */
-#ifndef RLOGE
-#define RLOGE(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef RLOGE_IF
-#define RLOGE_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-
-// ---------------------------------------------------------------------
-
-/*
- * Log a fatal error.  If the given condition fails, this stops program
- * execution like a normal assertion, but also generating the given message.
- * It is NOT stripped from release builds.  Note that the condition test
- * is -inverted- from the normal assert() semantics.
- */
-#ifndef LOG_ALWAYS_FATAL_IF
-#define LOG_ALWAYS_FATAL_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)android_printAssert(#cond, LOG_TAG, ## __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-#ifndef LOG_ALWAYS_FATAL
-#define LOG_ALWAYS_FATAL(...) \
-    ( ((void)android_printAssert(NULL, LOG_TAG, ## __VA_ARGS__)) )
-#endif
-
-/*
- * Versions of LOG_ALWAYS_FATAL_IF and LOG_ALWAYS_FATAL that
- * are stripped out of release builds.
- */
-#if LOG_NDEBUG
-
-#ifndef LOG_FATAL_IF
-#define LOG_FATAL_IF(cond, ...) ((void)0)
-#endif
-#ifndef LOG_FATAL
-#define LOG_FATAL(...) ((void)0)
-#endif
-
-#else
-
-#ifndef LOG_FATAL_IF
-#define LOG_FATAL_IF(cond, ...) LOG_ALWAYS_FATAL_IF(cond, ## __VA_ARGS__)
-#endif
-#ifndef LOG_FATAL
-#define LOG_FATAL(...) LOG_ALWAYS_FATAL(__VA_ARGS__)
-#endif
-
-#endif
-
-/*
- * Assertion that generates a log message when the assertion fails.
- * Stripped out of release builds.  Uses the current LOG_TAG.
- */
-#ifndef ALOG_ASSERT
-#define ALOG_ASSERT(cond, ...) LOG_FATAL_IF(!(cond), ## __VA_ARGS__)
-//#define ALOG_ASSERT(cond) LOG_FATAL_IF(!(cond), "Assertion failed: " #cond)
-#endif
-
-// ---------------------------------------------------------------------
+/* --------------------------------------------------------------------- */
 
 /*
  * Basic log message macro.
@@ -591,22 +442,6 @@ int __android_log_bswrite(int32_t tag, const char *payload);
 #endif
 
 /*
- * Log macro that allows you to specify a number for the priority.
- */
-#ifndef LOG_PRI
-#define LOG_PRI(priority, tag, ...) \
-    android_printLog(priority, tag, __VA_ARGS__)
-#endif
-
-/*
- * Log macro that allows you to pass in a varargs ("args" is a va_list).
- */
-#ifndef LOG_PRI_VA
-#define LOG_PRI_VA(priority, tag, fmt, args) \
-    android_vprintLog(priority, NULL, tag, fmt, args)
-#endif
-
-/*
  * Conditional given a desired logging priority and tag.
  */
 #ifndef IF_ALOG
@@ -614,181 +449,7 @@ int __android_log_bswrite(int32_t tag, const char *payload);
     if (android_testLog(ANDROID_##priority, tag))
 #endif
 
-// ---------------------------------------------------------------------
-
-/*
- * Event logging.
- */
-
-/*
- * Event log entry types.
- */
-typedef enum {
-    /* Special markers for android_log_list_element type */
-    EVENT_TYPE_LIST_STOP = '\n', /* declare end of list  */
-    EVENT_TYPE_UNKNOWN   = '?',  /* protocol error       */
-
-    /* must match with declaration in java/android/android/util/EventLog.java */
-    EVENT_TYPE_INT       = 0,    /* uint32_t */
-    EVENT_TYPE_LONG      = 1,    /* uint64_t */
-    EVENT_TYPE_STRING    = 2,
-    EVENT_TYPE_LIST      = 3,
-    EVENT_TYPE_FLOAT     = 4,
-} AndroidEventLogType;
-#define sizeof_AndroidEventLogType sizeof(typeof_AndroidEventLogType)
-#define typeof_AndroidEventLogType unsigned char
-
-#ifndef LOG_EVENT_INT
-#define LOG_EVENT_INT(_tag, _value) {                                       \
-        int intBuf = _value;                                                \
-        (void) android_btWriteLog(_tag, EVENT_TYPE_INT, &intBuf,            \
-            sizeof(intBuf));                                                \
-    }
-#endif
-#ifndef LOG_EVENT_LONG
-#define LOG_EVENT_LONG(_tag, _value) {                                      \
-        long long longBuf = _value;                                         \
-        (void) android_btWriteLog(_tag, EVENT_TYPE_LONG, &longBuf,          \
-            sizeof(longBuf));                                               \
-    }
-#endif
-#ifndef LOG_EVENT_FLOAT
-#define LOG_EVENT_FLOAT(_tag, _value) {                                     \
-        float floatBuf = _value;                                            \
-        (void) android_btWriteLog(_tag, EVENT_TYPE_FLOAT, &floatBuf,        \
-            sizeof(floatBuf));                                              \
-    }
-#endif
-#ifndef LOG_EVENT_STRING
-#define LOG_EVENT_STRING(_tag, _value)                                      \
-        (void) __android_log_bswrite(_tag, _value);
-#endif
-
-typedef enum log_id {
-    LOG_ID_MIN = 0,
-
-#ifndef LINT_RLOG
-    LOG_ID_MAIN = 0,
-#endif
-    LOG_ID_RADIO = 1,
-#ifndef LINT_RLOG
-    LOG_ID_EVENTS = 2,
-    LOG_ID_SYSTEM = 3,
-    LOG_ID_CRASH = 4,
-    LOG_ID_SECURITY = 5,
-    LOG_ID_KERNEL = 6, /* place last, third-parties can not use it */
-#endif
-
-    LOG_ID_MAX
-} log_id_t;
-#define sizeof_log_id_t sizeof(typeof_log_id_t)
-#define typeof_log_id_t unsigned char
-
-/* For manipulating lists of events. */
-
-#define ANDROID_MAX_LIST_NEST_DEPTH 8
-
-/*
- * The opaque context used to manipulate lists of events.
- */
-typedef struct android_log_context_internal *android_log_context;
-
-/*
- * Elements returned when reading a list of events.
- */
-typedef struct {
-    AndroidEventLogType type;
-    uint16_t complete;
-    uint16_t len;
-    union {
-        int32_t int32;
-        int64_t int64;
-        char *string;
-        float float32;
-    } data;
-} android_log_list_element;
-
-/*
- * Creates a context associated with an event tag to write elements to
- * the list of events.
- */
-android_log_context create_android_logger(uint32_t tag);
-
-/* All lists must be braced by a begin and end call */
-/*
- * NB: If the first level braces are missing when specifying multiple
- *     elements, we will manufacturer a list to embrace it for your API
- *     convenience. For a single element, it will remain solitary.
- */
-int android_log_write_list_begin(android_log_context ctx);
-int android_log_write_list_end(android_log_context ctx);
-
-int android_log_write_int32(android_log_context ctx, int32_t value);
-int android_log_write_int64(android_log_context ctx, int64_t value);
-int android_log_write_string8(android_log_context ctx, const char *value);
-int android_log_write_string8_len(android_log_context ctx,
-                                  const char *value, size_t maxlen);
-int android_log_write_float32(android_log_context ctx, float value);
-
-/* Submit the composed list context to the specified logger id */
-/* NB: LOG_ID_EVENTS and LOG_ID_SECURITY only valid binary buffers */
-int android_log_write_list(android_log_context ctx, log_id_t id);
-
-/*
- * Creates a context from a raw buffer representing a list of events to be read.
- */
-android_log_context create_android_log_parser(const char *msg, size_t len);
-
-android_log_list_element android_log_read_next(android_log_context ctx);
-android_log_list_element android_log_peek_next(android_log_context ctx);
-
-/* Finished with reader or writer context */
-int android_log_destroy(android_log_context *ctx);
-
-/*
- * ===========================================================================
- *
- * The stuff in the rest of this file should not be used directly.
- */
-
-#define android_printLog(prio, tag, ...) \
-    __android_log_print(prio, tag, __VA_ARGS__)
-
-#define android_vprintLog(prio, cond, tag, ...) \
-    __android_log_vprint(prio, tag, __VA_ARGS__)
-
-/* XXX Macros to work around syntax errors in places where format string
- * arg is not passed to ALOG_ASSERT, LOG_ALWAYS_FATAL or LOG_ALWAYS_FATAL_IF
- * (happens only in debug builds).
- */
-
-/* Returns 2nd arg.  Used to substitute default value if caller's vararg list
- * is empty.
- */
-#define __android_second(dummy, second, ...)     second
-
-/* If passed multiple args, returns ',' followed by all but 1st arg, otherwise
- * returns nothing.
- */
-#define __android_rest(first, ...)               , ## __VA_ARGS__
-
-#define android_printAssert(cond, tag, ...) \
-    __android_log_assert(cond, tag, \
-        __android_second(0, ## __VA_ARGS__, NULL) __android_rest(__VA_ARGS__))
-
-#define android_writeLog(prio, tag, text) \
-    __android_log_write(prio, tag, text)
-
-#define android_bWriteLog(tag, payload, len) \
-    __android_log_bwrite(tag, payload, len)
-#define android_btWriteLog(tag, type, payload, len) \
-    __android_log_btwrite(tag, type, payload, len)
-
-#define android_errorWriteLog(tag, subTag) \
-    __android_log_error_write(tag, subTag, -1, NULL, 0)
-
-#define android_errorWriteWithInfoLog(tag, subTag, uid, data, dataLen) \
-    __android_log_error_write(tag, subTag, uid, data, dataLen)
+/* --------------------------------------------------------------------- */
 
 /*
  *    IF_ALOG uses android_testLog, but IF_ALOG can be overridden.
@@ -798,6 +459,35 @@ int android_log_destroy(android_log_context *ctx);
  *        IF_ALOG as a convenient means to reimplement their policy
  *        over Android.
  */
+
+#ifndef __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE
+#ifndef __ANDROID_API__
+#define __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE 2
+#elif __ANDROID_API__ > 24 /* > Nougat */
+#define __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE 2
+#elif __ANDROID_API__ > 22 /* > Lollipop */
+#define __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE 1
+#else
+#define __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE 0
+#endif
+#endif
+
+#if __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE
+
+/*
+ * Use the per-tag properties "log.tag.<tagname>" to generate a runtime
+ * result of non-zero to expose a log. prio is ANDROID_LOG_VERBOSE to
+ * ANDROID_LOG_FATAL. default_prio if no property. Undefined behavior if
+ * any other value.
+ */
+int __android_log_is_loggable(int prio, const char* tag, int default_prio);
+
+#if __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE > 1
+#include <sys/types.h>
+
+int __android_log_is_loggable_len(int prio, const char* tag, size_t len,
+                                  int default_prio);
+
 #if LOG_NDEBUG /* Production */
 #define android_testLog(prio, tag) \
     (__android_log_is_loggable_len(prio, tag, (tag && *tag) ? strlen(tag) : 0, \
@@ -808,27 +498,23 @@ int android_log_destroy(android_log_context *ctx);
                                    ANDROID_LOG_VERBOSE) != 0)
 #endif
 
-/*
- * Use the per-tag properties "log.tag.<tagname>" to generate a runtime
- * result of non-zero to expose a log. prio is ANDROID_LOG_VERBOSE to
- * ANDROID_LOG_FATAL. default_prio if no property. Undefined behavior if
- * any other value.
- */
-int __android_log_is_loggable(int prio, const char *tag, int default_prio);
-int __android_log_is_loggable_len(int prio, const char *tag, size_t len, int default_prio);
+#else
 
-int __android_log_error_write(int tag, const char *subTag, int32_t uid, const char *data,
-                              uint32_t dataLen);
-
-/*
- * Send a simple string to the log.
- */
-int __android_log_buf_write(int bufID, int prio, const char *tag, const char *text);
-int __android_log_buf_print(int bufID, int prio, const char *tag, const char *fmt, ...)
-#if defined(__GNUC__)
-    __attribute__((__format__(printf, 4, 5)))
+#if LOG_NDEBUG /* Production */
+#define android_testLog(prio, tag) \
+    (__android_log_is_loggable(prio, tag, ANDROID_LOG_DEBUG) != 0)
+#else
+#define android_testLog(prio, tag) \
+    (__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE) != 0)
 #endif
-    ;
+
+#endif
+
+#else /* __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE */
+
+#define android_testLog(prio, tag) (1)
+
+#endif /* !__ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE */
 
 #if defined(__clang__)
 #pragma clang diagnostic pop
