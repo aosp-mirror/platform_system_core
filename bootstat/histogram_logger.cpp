@@ -17,27 +17,16 @@
 #include "histogram_logger.h"
 
 #include <cstdlib>
-#include <memory>
 
 #include <android-base/logging.h>
 #include <log/log.h>
-
-#include "event_log_list_builder.h"
 
 namespace bootstat {
 
 void LogHistogram(const std::string& event, int32_t data) {
   LOG(INFO) << "Logging histogram: " << event << " " << data;
-
-  EventLogListBuilder log_builder;
-  log_builder.Append(event);
-  log_builder.Append(data);
-
-  std::unique_ptr<uint8_t[]> log;
-  size_t size;
-  log_builder.Release(&log, &size);
-
-  android_bWriteLog(HISTOGRAM_LOG_TAG, log.get(), size);
+  android_log_event_context log(HISTOGRAM_LOG_TAG);
+  log << event << data << LOG_ID_EVENTS;
 }
 
 }  // namespace bootstat
