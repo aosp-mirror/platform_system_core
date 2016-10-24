@@ -484,8 +484,12 @@ class ShellTest(DeviceTest):
         self.device.shell(proc_query)
         os.kill(sleep_proc.pid, signal.SIGINT)
         sleep_proc.communicate()
-        self.assertEqual(1, self.device.shell_nocheck(proc_query)[0],
-                         'subprocess failed to terminate')
+
+        # It can take some time for the process to receive the signal and die.
+        end_time = time.time() + 3
+        while self.device.shell_nocheck(proc_query)[0] != 1:
+            self.assertFalse(time.time() > end_time,
+                             'subprocess failed to terminate in time')
 
     def test_non_interactive_stdin(self):
         """Tests that non-interactive shells send stdin."""
@@ -518,13 +522,14 @@ class ShellTest(DeviceTest):
             trap "echo SIGINT > {path}; exit 0" SIGINT
             trap "echo SIGHUP > {path}; exit 0" SIGHUP
             echo Waiting
-            while true; do sleep 100; done
+            read
         """.format(path=log_path)
 
         script = ";".join([x.strip() for x in script.strip().splitlines()])
 
-        process = self.device.shell_popen(
-            ["sh", "-c", "'{}'".format(script)], kill_atexit=False, stdout=subprocess.PIPE)
+        process = self.device.shell_popen([script], kill_atexit=False,
+                                          stdin=subprocess.PIPE,
+                                          stdout=subprocess.PIPE)
 
         self.assertEqual("Waiting\n", process.stdout.readline())
         process.send_signal(signal.SIGINT)
@@ -532,7 +537,7 @@ class ShellTest(DeviceTest):
 
         # Waiting for the local adb to finish is insufficient, since it hangs
         # up immediately.
-        time.sleep(0.25)
+        time.sleep(1)
 
         stdout, _ = self.device.shell(["cat", log_path])
         self.assertEqual(stdout.strip(), "SIGHUP")
