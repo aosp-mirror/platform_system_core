@@ -187,7 +187,9 @@ static void processBuffer(log_device_t* dev, struct log_msg *buf)
         goto error;
     }
 
-    if (android_log_shouldPrintLine(g_logformat, entry.tag, entry.priority)) {
+    if (android_log_shouldPrintLine(g_logformat,
+                                    std::string(entry.tag, entry.tagLen).c_str(),
+                                    entry.priority)) {
         bool match = regexOk(entry);
 
         g_printCount += match;

@@ -79,6 +79,26 @@ TEST(logcat, buckets) {
     EXPECT_EQ(4, count);
 }
 
+TEST(logcat, event_tag_filter) {
+    FILE *fp;
+
+    ASSERT_TRUE(NULL != (fp = popen(
+      "logcat -b events -d -s auditd am_proc_start am_pss am_proc_bound dvm_lock_sample am_wtf 2>/dev/null",
+      "r")));
+
+    char buffer[BIG_BUFFER];
+
+    int count = 0;
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        ++count;
+    }
+
+    pclose(fp);
+
+    EXPECT_LT(4, count);
+}
+
 TEST(logcat, year) {
 
     if (android_log_clockid() == CLOCK_MONOTONIC) {
