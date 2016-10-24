@@ -21,6 +21,7 @@
 #include <sys/types.h>
 
 #include <cutils/sockets.h>
+#include <private/android_logger.h>
 
 #include "FlushCommand.h"
 #include "LogBuffer.h"
