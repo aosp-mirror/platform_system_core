@@ -25,8 +25,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <android/log.h>
-#include <log/logger.h> /* log_time */
+#include <log/log.h>
 
 #define LOGGER_MAGIC 'l'
 
@@ -110,8 +109,8 @@ typedef struct __attribute__((__packed__)) {
 ssize_t __android_log_pmsg_file_write(
         log_id_t logId,
         char prio,
-        const char *filename,
-        const char *buf, size_t len);
+        const char* filename,
+        const char* buf, size_t len);
 
 #define LOG_ID_ANY      ((log_id_t)-1)
 #define ANDROID_LOG_ANY ANDROID_LOG_UNKNOWN
@@ -120,15 +119,15 @@ ssize_t __android_log_pmsg_file_write(
 typedef ssize_t (*__android_log_pmsg_file_read_fn)(
         log_id_t logId,
         char prio,
-        const char *filename,
-        const char *buf, size_t len, void *arg);
+        const char* filename,
+        const char* buf, size_t len, void* arg);
 
 ssize_t __android_log_pmsg_file_read(
-        log_id_t logId, char prio, const char *prefix,
-        __android_log_pmsg_file_read_fn fn, void *arg);
+        log_id_t logId, char prio, const char* prefix,
+        __android_log_pmsg_file_read_fn fn, void* arg);
 
-int __android_log_security_bwrite(int32_t tag, const void *payload, size_t len);
-int __android_log_security_bswrite(int32_t tag, const char *payload);
+int __android_log_security_bwrite(int32_t tag, const void* payload, size_t len);
+int __android_log_security_bswrite(int32_t tag, const char* payload);
 int __android_log_security(); /* Device Owner is present */
 
 int __android_log_is_debuggable();
@@ -139,7 +138,7 @@ int __android_log_is_debuggable();
 #define BOOL_DEFAULT_FLAG_PERSIST    0x2 /* <key>, persist.<key>, ro.<key>  */
 #define BOOL_DEFAULT_FLAG_ENG        0x4 /* off for user                    */
 #define BOOL_DEFAULT_FLAG_SVELTE     0x8 /* off for low_ram                 */
-bool __android_logger_property_get_bool(const char *key, int flag);
+bool __android_logger_property_get_bool(const char* key, int flag);
 
 #define LOG_BUFFER_SIZE (256 * 1024) /* Tuned with ro.logd.size per-platform */
 #define LOG_BUFFER_MIN_SIZE (64 * 1024UL)

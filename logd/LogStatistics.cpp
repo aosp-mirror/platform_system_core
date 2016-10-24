@@ -23,7 +23,7 @@
 
 #include <list>
 
-#include <log/logger.h>
+#include <android/log.h>
 
 #include "LogStatistics.h"
 
