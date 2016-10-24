@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/cdefs.h>
 #include <sys/user.h>
 #include <time.h>
 #include <unistd.h>
@@ -30,6 +31,10 @@
 #include "LogBuffer.h"
 #include "LogKlog.h"
 #include "LogReader.h"
+
+#ifndef __predict_false
+#define __predict_false(exp) __builtin_expect((exp) != 0, 0)
+#endif
 
 // Default
 #define log_buffer_size(id) mMaxSize[id]
@@ -234,9 +239,10 @@ LogBufferElementCollection::iterator LogBuffer::erase(
         }
     }
 
-    if ((id != LOG_ID_EVENTS) && (id != LOG_ID_SECURITY)) {
+    {   // start of scope for pid found iterator
         // element->getUid() may not be AID_SYSTEM for next-best-watermark.
-        // start of scope for pid found iterator
+        // will not assume id != LOG_ID_EVENTS or LOG_ID_SECURITY for KISS and
+        // long term code stability, find() check should be fast for those ids.
         LogBufferPidIteratorMap::iterator found =
             mLastWorstPidOfSystem[id].find(element->getPid());
         if ((found != mLastWorstPidOfSystem[id].end())
@@ -254,10 +260,11 @@ LogBufferElementCollection::iterator LogBuffer::erase(
     if (doSetLast) {
         log_id_for_each(i) {
             if (setLast[i]) {
-                if (it == mLogElements.end()) { // unlikely
+                if (__predict_false(it == mLogElements.end())) { // impossible
                     mLastSet[i] = false;
+                    mLast[i] = mLogElements.begin();
                 } else {
-                    mLast[i] = it;
+                    mLast[i] = it; // push down the road as next-best-watermark
                 }
             }
         }
@@ -420,7 +427,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
     LogBufferElementCollection::iterator it;
 
-    if (caller_uid != AID_ROOT) {
+    if (__predict_false(caller_uid != AID_ROOT)) { // unlikely
         // Only here if clear all request from non system source, so chatty
         // filter logistics is not required.
         it = mLastSet[id] ? mLast[id] : mLogElements.begin();
@@ -472,6 +479,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             if ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY)) {
                 stats.sortTags(AID_ROOT, (pid_t)0, 2, id).findWorst(
                     worst, worst_sizes, second_worst_sizes, threshold);
+                // per-pid filter for AID_SYSTEM sources is too complex
             } else {
                 stats.sort(AID_ROOT, (pid_t)0, 2, id).findWorst(
                     worst, worst_sizes, second_worst_sizes, threshold);
@@ -505,8 +513,9 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                     it = found->second;
                 }
             }
-            if (worstPid) { // Only set if !LOG_ID_EVENTS and !LOG_ID_SECURITY
-                // begin scope for pid worst found iterator
+            if (worstPid) { // begin scope for pid worst found iterator
+                // FYI: worstPid only set if !LOG_ID_EVENTS and
+                //      !LOG_ID_SECURITY, not going to make that assumption ...
                 LogBufferPidIteratorMap::iterator found
                     = mLastWorstPidOfSystem[id].find(worstPid);
                 if ((found != mLastWorstPidOfSystem[id].end())
@@ -596,7 +605,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                            || (mLastWorstPidOfSystem[id].find(element->getPid())
                                 == mLastWorstPidOfSystem[id].end()))) {
                     // element->getUid() may not be AID_SYSTEM, next best
-                    // watermark if current one empty.
+                    // watermark if current one empty. id is not LOG_ID_EVENTS
+                    // or LOG_ID_SECURITY because of worstPid check.
                     mLastWorstPidOfSystem[id][element->getPid()] = it;
                 }
                 if ((!gc && !worstPid && (key == worst))
@@ -640,7 +650,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                                 || (mLastWorstPidOfSystem[id].find(worstPid)
                                     == mLastWorstPidOfSystem[id].end()))) {
                         // element->getUid() may not be AID_SYSTEM, next best
-                        // watermark if current one empty.
+                        // watermark if current one empty. id is not
+                        // LOG_ID_EVENTS or LOG_ID_SECURITY because of worstPid.
                         mLastWorstPidOfSystem[id][worstPid] = it;
                     }
                     if ((!gc && !worstPid) ||
