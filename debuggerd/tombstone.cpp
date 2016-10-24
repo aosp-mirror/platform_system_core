@@ -576,9 +576,9 @@ static void dump_log_file(
       AndroidLogEntry e;
       char buf[512];
       android_log_processBinaryLogBuffer(entry, &e, g_eventTagMap, buf, sizeof(buf));
-      _LOG(log, logtype::LOGS, "%s.%03d %5d %5d %c %-8s: %s\n",
+      _LOG(log, logtype::LOGS, "%s.%03d %5d %5d %c %-8.*s: %s\n",
          timeBuf, entry->nsec / 1000000, entry->pid, entry->tid,
-         'I', e.tag, e.message);
+         'I', (int)e.tagLen, e.tag, e.message);
       continue;
     }
 
