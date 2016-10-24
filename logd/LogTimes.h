@@ -23,7 +23,7 @@
 
 #include <list>
 
-#include <android/log.h>
+#include <log/log.h>
 #include <sysutils/SocketClient.h>
 
 class LogReader;
