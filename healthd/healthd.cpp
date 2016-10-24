@@ -35,9 +35,19 @@
 
 using namespace android;
 
-// Periodic chores intervals in seconds
-#define DEFAULT_PERIODIC_CHORES_INTERVAL_FAST (60 * 1)
-#define DEFAULT_PERIODIC_CHORES_INTERVAL_SLOW (60 * 10)
+#ifndef BOARD_PERIODIC_CHORES_INTERVAL_FAST
+  // Periodic chores fast interval in seconds
+  #define DEFAULT_PERIODIC_CHORES_INTERVAL_FAST (60 * 1)
+#else
+  #define DEFAULT_PERIODIC_CHORES_INTERVAL_FAST (BOARD_PERIODIC_CHORES_INTERVAL_FAST)
+#endif
+
+#ifndef BOARD_PERIODIC_CHORES_INTERVAL_SLOW
+  // Periodic chores fast interval in seconds
+  #define DEFAULT_PERIODIC_CHORES_INTERVAL_SLOW (60 * 10)
+#else
+  #define DEFAULT_PERIODIC_CHORES_INTERVAL_SLOW (BOARD_PERIODIC_CHORES_INTERVAL_SLOW)
+#endif
 
 static struct healthd_config healthd_config = {
     .periodic_chores_interval_fast = DEFAULT_PERIODIC_CHORES_INTERVAL_FAST,
