@@ -1,1 +1,1 @@
-#include <android/log.h>
+#include <log/log.h>
