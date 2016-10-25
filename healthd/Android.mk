@@ -21,6 +21,10 @@ LOCAL_STATIC_LIBRARIES := libutils libbase libbinder
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
+LOCAL_CFLAGS += -DCHARGER_ENABLE_SUSPEND
+LOCAL_SHARED_LIBRARIES += libsuspend
+endif
 LOCAL_SRC_FILES := \
     healthd_mode_android.cpp \
     healthd_mode_charger.cpp \
