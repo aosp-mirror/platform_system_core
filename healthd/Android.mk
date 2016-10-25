@@ -19,6 +19,10 @@ LOCAL_STATIC_LIBRARIES := libutils
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
+LOCAL_CFLAGS += -DCHARGER_ENABLE_SUSPEND
+LOCAL_SHARED_LIBRARIES += libsuspend
+endif
 LOCAL_SRC_FILES := \
     healthd_mode_android.cpp \
     healthd_mode_charger.cpp \
@@ -76,7 +80,6 @@ endif
 ifneq ($(BOARD_PERIODIC_CHORES_INTERVAL_SLOW),)
 LOCAL_CFLAGS += -DBOARD_PERIODIC_CHORES_INTERVAL_SLOW=$(BOARD_PERIODIC_CHORES_INTERVAL_SLOW)
 endif
-
 LOCAL_C_INCLUDES := bootable/recovery
 
 LOCAL_STATIC_LIBRARIES := \
