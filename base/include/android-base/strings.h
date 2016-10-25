@@ -58,9 +58,11 @@ extern template std::string Join(const std::vector<const char*>&, const std::str
 
 // Tests whether 's' starts with 'prefix'.
 bool StartsWith(const std::string& s, const char* prefix);
+bool StartsWithIgnoreCase(const std::string& s, const char* prefix);
 
 // Tests whether 's' ends with 'suffix'.
 bool EndsWith(const std::string& s, const char* suffix);
+bool EndsWithIgnoreCase(const std::string& s, const char* suffix);
 
 }  // namespace base
 }  // namespace android
