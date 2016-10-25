@@ -87,17 +87,29 @@ template std::string Join(const std::vector<std::string>&, const std::string&);
 template std::string Join(const std::vector<const char*>&, const std::string&);
 
 bool StartsWith(const std::string& s, const char* prefix) {
-  return s.compare(0, strlen(prefix), prefix) == 0;
+  return strncmp(s.c_str(), prefix, strlen(prefix)) == 0;
 }
 
-bool EndsWith(const std::string& s, const char* suffix) {
+bool StartsWithIgnoreCase(const std::string& s, const char* prefix) {
+  return strncasecmp(s.c_str(), prefix, strlen(prefix)) == 0;
+}
+
+static bool EndsWith(const std::string& s, const char* suffix, bool case_sensitive) {
   size_t suffix_length = strlen(suffix);
   size_t string_length = s.size();
   if (suffix_length > string_length) {
     return false;
   }
   size_t offset = string_length - suffix_length;
-  return s.compare(offset, suffix_length, suffix) == 0;
+  return (case_sensitive ? strncmp : strncasecmp)(s.c_str() + offset, suffix, suffix_length) == 0;
+}
+
+bool EndsWith(const std::string& s, const char* suffix) {
+  return EndsWith(s, suffix, true);
+}
+
+bool EndsWithIgnoreCase(const std::string& s, const char* suffix) {
+  return EndsWith(s, suffix, false);
 }
 
 }  // namespace base
