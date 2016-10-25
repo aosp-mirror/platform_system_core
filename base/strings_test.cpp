@@ -134,44 +134,113 @@ TEST(strings, join_unordered_set) {
               "2,1" == android::base::Join(list, ','));
 }
 
-TEST(strings, startswith_empty) {
+TEST(strings, StartsWith_empty) {
   ASSERT_FALSE(android::base::StartsWith("", "foo"));
   ASSERT_TRUE(android::base::StartsWith("", ""));
 }
 
-TEST(strings, startswith_simple) {
+TEST(strings, StartsWithIgnoreCase_empty) {
+  ASSERT_FALSE(android::base::StartsWithIgnoreCase("", "foo"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("", ""));
+}
+
+TEST(strings, StartsWith_simple) {
   ASSERT_TRUE(android::base::StartsWith("foo", ""));
   ASSERT_TRUE(android::base::StartsWith("foo", "f"));
   ASSERT_TRUE(android::base::StartsWith("foo", "fo"));
   ASSERT_TRUE(android::base::StartsWith("foo", "foo"));
 }
 
-TEST(strings, startswith_prefix_too_long) {
+TEST(strings, StartsWithIgnoreCase_simple) {
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", ""));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "f"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "F"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "fo"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "fO"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "Fo"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "FO"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "foo"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "foO"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "fOo"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "fOO"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "Foo"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "FoO"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "FOo"));
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("foo", "FOO"));
+}
+
+TEST(strings, StartsWith_prefix_too_long) {
   ASSERT_FALSE(android::base::StartsWith("foo", "foobar"));
 }
 
-TEST(strings, startswith_contains_prefix) {
+TEST(strings, StartsWithIgnoreCase_prefix_too_long) {
+  ASSERT_FALSE(android::base::StartsWithIgnoreCase("foo", "foobar"));
+  ASSERT_FALSE(android::base::StartsWithIgnoreCase("foo", "FOOBAR"));
+}
+
+TEST(strings, StartsWith_contains_prefix) {
   ASSERT_FALSE(android::base::StartsWith("foobar", "oba"));
   ASSERT_FALSE(android::base::StartsWith("foobar", "bar"));
 }
 
-TEST(strings, endswith_empty) {
+TEST(strings, StartsWithIgnoreCase_contains_prefix) {
+  ASSERT_FALSE(android::base::StartsWithIgnoreCase("foobar", "oba"));
+  ASSERT_FALSE(android::base::StartsWithIgnoreCase("foobar", "OBA"));
+  ASSERT_FALSE(android::base::StartsWithIgnoreCase("foobar", "bar"));
+  ASSERT_FALSE(android::base::StartsWithIgnoreCase("foobar", "BAR"));
+}
+
+TEST(strings, EndsWith_empty) {
   ASSERT_FALSE(android::base::EndsWith("", "foo"));
   ASSERT_TRUE(android::base::EndsWith("", ""));
 }
 
-TEST(strings, endswith_simple) {
+TEST(strings, EndsWithIgnoreCase_empty) {
+  ASSERT_FALSE(android::base::EndsWithIgnoreCase("", "foo"));
+  ASSERT_FALSE(android::base::EndsWithIgnoreCase("", "FOO"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("", ""));
+}
+
+TEST(strings, EndsWith_simple) {
   ASSERT_TRUE(android::base::EndsWith("foo", ""));
   ASSERT_TRUE(android::base::EndsWith("foo", "o"));
   ASSERT_TRUE(android::base::EndsWith("foo", "oo"));
   ASSERT_TRUE(android::base::EndsWith("foo", "foo"));
 }
 
-TEST(strings, endswith_prefix_too_long) {
+TEST(strings, EndsWithIgnoreCase_simple) {
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", ""));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "o"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "O"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "oo"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "oO"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "Oo"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "OO"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "foo"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "foO"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "fOo"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "fOO"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "Foo"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "FoO"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "FOo"));
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("foo", "FOO"));
+}
+
+TEST(strings, EndsWith_prefix_too_long) {
   ASSERT_FALSE(android::base::EndsWith("foo", "foobar"));
 }
 
-TEST(strings, endswith_contains_prefix) {
+TEST(strings, EndsWithIgnoreCase_prefix_too_long) {
+  ASSERT_FALSE(android::base::EndsWithIgnoreCase("foo", "foobar"));
+  ASSERT_FALSE(android::base::EndsWithIgnoreCase("foo", "FOOBAR"));
+}
+
+TEST(strings, EndsWith_contains_prefix) {
   ASSERT_FALSE(android::base::EndsWith("foobar", "oba"));
   ASSERT_FALSE(android::base::EndsWith("foobar", "foo"));
+}
+
+TEST(strings, EndsWithIgnoreCase_contains_prefix) {
+  ASSERT_FALSE(android::base::EndsWithIgnoreCase("foobar", "OBA"));
+  ASSERT_FALSE(android::base::EndsWithIgnoreCase("foobar", "FOO"));
 }
