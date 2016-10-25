@@ -341,14 +341,19 @@ static void draw_clock(const animation& anim)
 
 static void draw_percent(const animation& anim)
 {
-    if (anim.cur_level <= 0 || anim.cur_status != BATTERY_STATUS_CHARGING) return;
+    int cur_level = anim.cur_level;
+    if (anim.cur_status == BATTERY_STATUS_FULL) {
+        cur_level = 100;
+    }
+
+    if (cur_level <= 0) return;
 
     const animation::text_field& field = anim.text_percent;
     if (field.font == nullptr || field.font->char_width == 0 || field.font->char_height == 0) {
         return;
     }
 
-    std::string str = base::StringPrintf("%d%%", anim.cur_level);
+    std::string str = base::StringPrintf("%d%%", cur_level);
 
     int x, y;
     determine_xy(field, str.size(), &x, &y);
