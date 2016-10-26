@@ -719,7 +719,7 @@ llvm::object::OwningBinary<llvm::object::Binary> OpenEmbeddedElfFile(const std::
   auto binary_or_err = llvm::object::createBinary(buffer_or_err.get()->getMemBufferRef());
   if (!binary_or_err) {
     BACK_LOGW("failed to create binary for %s in %s: %s", elf_file.c_str(), apk_file.c_str(),
-              binary_or_err.getError().message().c_str());
+              llvm::toString(binary_or_err.takeError()).c_str());
     return nothing;
   }
   return llvm::object::OwningBinary<llvm::object::Binary>(std::move(binary_or_err.get()),
