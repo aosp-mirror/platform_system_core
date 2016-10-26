@@ -449,7 +449,7 @@ const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_
     return (struct usb_device_descriptor*)device->desc;
 }
 
-char* usb_device_get_string(struct usb_device *device, int id)
+char* usb_device_get_string(struct usb_device *device, int id, int timeout)
 {
     char string[256];
     __u16 buffer[MAX_STRING_DESCRIPTOR_LENGTH / sizeof(__u16)];
@@ -465,7 +465,8 @@ char* usb_device_get_string(struct usb_device *device, int id)
     // read list of supported languages
     result = usb_device_control_transfer(device,
             USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE, USB_REQ_GET_DESCRIPTOR,
-            (USB_DT_STRING << 8) | 0, 0, languages, sizeof(languages), 0);
+            (USB_DT_STRING << 8) | 0, 0, languages, sizeof(languages),
+            timeout);
     if (result > 0)
         languageCount = (result - 2) / 2;
 
@@ -474,7 +475,8 @@ char* usb_device_get_string(struct usb_device *device, int id)
 
         result = usb_device_control_transfer(device,
                 USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE, USB_REQ_GET_DESCRIPTOR,
-                (USB_DT_STRING << 8) | id, languages[i], buffer, sizeof(buffer), 0);
+                (USB_DT_STRING << 8) | id, languages[i], buffer, sizeof(buffer),
+                timeout);
         if (result > 0) {
             int i;
             // skip first word, and copy the rest to the string, changing shorts to bytes.
@@ -489,16 +491,16 @@ char* usb_device_get_string(struct usb_device *device, int id)
     return NULL;
 }
 
-char* usb_device_get_manufacturer_name(struct usb_device *device)
+char* usb_device_get_manufacturer_name(struct usb_device *device, int timeout)
 {
     struct usb_device_descriptor *desc = (struct usb_device_descriptor *)device->desc;
-    return usb_device_get_string(device, desc->iManufacturer);
+    return usb_device_get_string(device, desc->iManufacturer, timeout);
 }
 
-char* usb_device_get_product_name(struct usb_device *device)
+char* usb_device_get_product_name(struct usb_device *device, int timeout)
 {
     struct usb_device_descriptor *desc = (struct usb_device_descriptor *)device->desc;
-    return usb_device_get_string(device, desc->iProduct);
+    return usb_device_get_string(device, desc->iProduct, timeout);
 }
 
 int usb_device_get_version(struct usb_device *device)
@@ -507,10 +509,10 @@ int usb_device_get_version(struct usb_device *device)
     return desc->bcdUSB;
 }
 
-char* usb_device_get_serial(struct usb_device *device)
+char* usb_device_get_serial(struct usb_device *device, int timeout)
 {
     struct usb_device_descriptor *desc = (struct usb_device_descriptor *)device->desc;
-    return usb_device_get_string(device, desc->iSerialNumber);
+    return usb_device_get_string(device, desc->iSerialNumber, timeout);
 }
 
 int usb_device_is_writeable(struct usb_device *device)
@@ -711,4 +713,3 @@ int usb_request_cancel(struct usb_request *req)
     struct usbdevfs_urb *urb = ((struct usbdevfs_urb*)req->private_data);
     return ioctl(req->dev->fd, USBDEVFS_DISCARDURB, urb);
 }
-

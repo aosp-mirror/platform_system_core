@@ -144,17 +144,17 @@ const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_
  * usb_device_get_product_name and usb_device_get_serial.
  * Call free() to free the result when you are done with it.
  */
-char* usb_device_get_string(struct usb_device *device, int id);
+char* usb_device_get_string(struct usb_device *device, int id, int timeout);
 
 /* Returns the manufacturer name for the USB device.
  * Call free() to free the result when you are done with it.
  */
-char* usb_device_get_manufacturer_name(struct usb_device *device);
+char* usb_device_get_manufacturer_name(struct usb_device *device, int timeout);
 
 /* Returns the product name for the USB device.
  * Call free() to free the result when you are done with it.
  */
-char* usb_device_get_product_name(struct usb_device *device);
+char* usb_device_get_product_name(struct usb_device *device, int timeout);
 
 /* Returns the version number for the USB device.
  */
@@ -163,7 +163,7 @@ int usb_device_get_version(struct usb_device *device);
 /* Returns the USB serial number for the USB device.
  * Call free() to free the result when you are done with it.
  */
-char* usb_device_get_serial(struct usb_device *device);
+char* usb_device_get_serial(struct usb_device *device, int timeout);
 
 /* Returns true if we have write access to the USB device,
  * and false if we only have access to the USB device configuration.
