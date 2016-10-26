@@ -8,6 +8,7 @@ cc_library {
         "libnativehelper",
         "liblog",
         "libcutils",
+        "libnativebridge",
     ],
     static_libs: ["libbase"],
     target: {
