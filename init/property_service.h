@@ -34,6 +34,7 @@ extern void load_system_props(void);
 extern void start_property_service(void);
 std::string property_get(const char* name);
 extern int property_set(const char *name, const char *value);
+extern bool is_legal_property_name(const std::string &name);
 
 
 #endif  /* _INIT_PROPERTY_H */
