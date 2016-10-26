@@ -36,27 +36,22 @@ atomic_int_fast64_t LogBufferElement::sequence(1);
 LogBufferElement::LogBufferElement(log_id_t log_id, log_time realtime,
                                    uid_t uid, pid_t pid, pid_t tid,
                                    const char *msg, unsigned short len) :
-        mLogId(log_id),
         mUid(uid),
         mPid(pid),
         mTid(tid),
-        mMsgLen(len),
         mSequence(sequence.fetch_add(1, memory_order_relaxed)),
-        mRealTime(realtime) {
+        mRealTime(realtime),
+        mMsgLen(len),
+        mLogId(log_id) {
     mMsg = new char[len];
     memcpy(mMsg, msg, len);
+    mTag = (isBinary() && (mMsgLen >= sizeof(uint32_t))) ?
+        le32toh(reinterpret_cast<android_event_header_t *>(mMsg)->tag) :
+        0;
 }
 
 LogBufferElement::~LogBufferElement() {
     delete [] mMsg;
-}
-
-uint32_t LogBufferElement::getTag() const {
-    if (((mLogId != LOG_ID_EVENTS) && (mLogId != LOG_ID_SECURITY)) ||
-            !mMsg || (mMsgLen < sizeof(uint32_t))) {
-        return 0;
-    }
-    return le32toh(reinterpret_cast<android_event_header_t *>(mMsg)->tag);
 }
 
 // caller must own and free character string
@@ -164,7 +159,7 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
     size_t hdrLen;
     // LOG_ID_SECURITY not strictly needed since spam filter not activated,
     // but required for accuracy.
-    if ((mLogId == LOG_ID_EVENTS) || (mLogId == LOG_ID_SECURITY)) {
+    if (isBinary()) {
         hdrLen = sizeof(android_log_event_string_t);
     } else {
         hdrLen = 1 + sizeof(tag);
@@ -178,7 +173,7 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
     }
 
     size_t retval = hdrLen + len;
-    if ((mLogId == LOG_ID_EVENTS) || (mLogId == LOG_ID_SECURITY)) {
+    if (isBinary()) {
         android_log_event_string_t *event =
             reinterpret_cast<android_log_event_string_t *>(buffer);
 
