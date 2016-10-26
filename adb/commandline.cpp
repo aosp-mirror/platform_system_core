@@ -1983,20 +1983,15 @@ static int uninstall_app(TransportType transport, const char* serial, int argc, 
 static int install_app(TransportType transport, const char* serial, int argc, const char** argv) {
     // The last argument must be the APK file
     const char* file = argv[argc - 1];
-    const char* dot = strrchr(file, '.');
-    bool found_apk = false;
-    struct stat sb;
-    if (dot && !strcasecmp(dot, ".apk")) {
-        if (stat(file, &sb) == -1 || !S_ISREG(sb.st_mode)) {
-            fprintf(stderr, "Invalid APK file: %s\n", file);
-            return EXIT_FAILURE;
-        }
-        found_apk = true;
+    if (!android::base::EndsWithIgnoreCase(file, ".apk")) {
+        fprintf(stderr, "Filename doesn't end .apk: %s\n", file);
+        return EXIT_FAILURE;
     }
 
-    if (!found_apk) {
-        fprintf(stderr, "Missing APK file\n");
-        return EXIT_FAILURE;
+    struct stat sb;
+    if (stat(file, &sb) == -1) {
+        fprintf(stderr, "Failed to stat %s: %s\n", file, strerror(errno));
+        return 1;
     }
 
     int localFd = adb_open(file, O_RDONLY);
@@ -2042,22 +2037,16 @@ static int install_app(TransportType transport, const char* serial, int argc, co
 static int install_multiple_app(TransportType transport, const char* serial, int argc,
                                 const char** argv)
 {
-    int i;
-    struct stat sb;
-    uint64_t total_size = 0;
     // Find all APK arguments starting at end.
     // All other arguments passed through verbatim.
     int first_apk = -1;
-    for (i = argc - 1; i >= 0; i--) {
+    uint64_t total_size = 0;
+    for (int i = argc - 1; i >= 0; i--) {
         const char* file = argv[i];
-        const char* dot = strrchr(file, '.');
-        if (dot && !strcasecmp(dot, ".apk")) {
-            if (stat(file, &sb) == -1 || !S_ISREG(sb.st_mode)) {
-                fprintf(stderr, "Invalid APK file: %s\n", file);
-                return EXIT_FAILURE;
-            }
 
-            total_size += sb.st_size;
+        if (android::base::EndsWithIgnoreCase(file, ".apk")) {
+            struct stat sb;
+            if (stat(file, &sb) != -1) total_size += sb.st_size;
             first_apk = i;
         } else {
             break;
@@ -2065,7 +2054,7 @@ static int install_multiple_app(TransportType transport, const char* serial, int
     }
 
     if (first_apk == -1) {
-        fprintf(stderr, "Missing APK file\n");
+        fprintf(stderr, "No APK file on command line\n");
         return 1;
     }
 
@@ -2077,7 +2066,7 @@ static int install_multiple_app(TransportType transport, const char* serial, int
     }
 
     std::string cmd = android::base::StringPrintf("%s install-create -S %" PRIu64, install_cmd.c_str(), total_size);
-    for (i = 1; i < first_apk; i++) {
+    for (int i = 1; i < first_apk; i++) {
         cmd += " " + escape_arg(argv[i]);
     }
 
@@ -2109,10 +2098,11 @@ static int install_multiple_app(TransportType transport, const char* serial, int
 
     // Valid session, now stream the APKs
     int success = 1;
-    for (i = first_apk; i < argc; i++) {
+    for (int i = first_apk; i < argc; i++) {
         const char* file = argv[i];
+        struct stat sb;
         if (stat(file, &sb) == -1) {
-            fprintf(stderr, "Failed to stat %s\n", file);
+            fprintf(stderr, "Failed to stat %s: %s\n", file, strerror(errno));
             success = 0;
             goto finalize_session;
         }
@@ -2212,10 +2202,8 @@ static int install_app_legacy(TransportType transport, const char* serial, int a
     static const char *const DATA_DEST = "/data/local/tmp/%s";
     static const char *const SD_DEST = "/sdcard/tmp/%s";
     const char* where = DATA_DEST;
-    int i;
-    struct stat sb;
 
-    for (i = 1; i < argc; i++) {
+    for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-s")) {
             where = SD_DEST;
         }
@@ -2224,22 +2212,15 @@ static int install_app_legacy(TransportType transport, const char* serial, int a
     // Find last APK argument.
     // All other arguments passed through verbatim.
     int last_apk = -1;
-    for (i = argc - 1; i >= 0; i--) {
-        const char* file = argv[i];
-        const char* dot = strrchr(file, '.');
-        if (dot && !strcasecmp(dot, ".apk")) {
-            if (stat(file, &sb) == -1 || !S_ISREG(sb.st_mode)) {
-                fprintf(stderr, "Invalid APK file: %s\n", file);
-                return EXIT_FAILURE;
-            }
-
+    for (int i = argc - 1; i >= 0; i--) {
+        if (android::base::EndsWithIgnoreCase(argv[i], ".apk")) {
             last_apk = i;
             break;
         }
     }
 
     if (last_apk == -1) {
-        fprintf(stderr, "Missing APK file\n");
+        fprintf(stderr, "No APK file on command line\n");
         return EXIT_FAILURE;
     }
 
