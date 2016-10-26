@@ -19,6 +19,7 @@
 
 #include "jni.h"
 #include <stdint.h>
+#include <string>
 #if defined(__ANDROID__)
 #include <android/dlext.h>
 #endif
@@ -41,10 +42,12 @@ void* OpenNativeLibrary(JNIEnv* env,
                         int32_t target_sdk_version,
                         const char* path,
                         jobject class_loader,
-                        jstring library_path);
+                        jstring library_path,
+                        bool* needs_native_bridge,
+                        std::string* error_msg);
 
 __attribute__((visibility("default")))
-bool CloseNativeLibrary(void* handle);
+bool CloseNativeLibrary(void* handle, const bool needs_native_bridge);
 
 #if defined(__ANDROID__)
 // Look up linker namespace by class_loader. Returns nullptr if
