@@ -23,8 +23,6 @@
 #include <sys/_system_properties.h>
 #include <unistd.h>
 
-#include <android/log.h>
-#include <log/logger.h>
 #include <private/android_logger.h>
 
 #include "log_portability.h"
