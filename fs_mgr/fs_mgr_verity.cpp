@@ -341,6 +341,17 @@ static int resume_verity_table(struct dm_ioctl *io, char *name, int fd)
     return 0;
 }
 
+static int test_access(char *device) {
+    int tries = 25;
+    while (tries--) {
+        if (!access(device, F_OK) || errno != ENOENT) {
+            return 0;
+        }
+        usleep(40 * 1000);
+    }
+    return -1;
+}
+
 static int check_verity_restart(const char *fname)
 {
     char buffer[VERITY_KMSG_BUFSIZE + 1];
@@ -1019,6 +1030,11 @@ loaded:
     free(fstab->blk_device);
     fstab->blk_device = verity_blk_name;
     verity_blk_name = 0;
+
+    // make sure we've set everything up properly
+    if (test_access(fstab->blk_device) < 0) {
+        goto out;
+    }
 
     retval = FS_MGR_SETUP_VERITY_SUCCESS;
 
