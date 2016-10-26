@@ -25,6 +25,8 @@
 constexpr const char* kNativeBridgeLibrary = "libnativebridge-dummy.so";
 constexpr const char* kCodeCache = "./code_cache";
 constexpr const char* kCodeCacheStatFail = "./code_cache/temp";
+constexpr const char* kNativeBridgeLibrary2 = "libnativebridge2-dummy.so";
+constexpr const char* kNativeBridgeLibrary3 = "libnativebridge3-dummy.so";
 
 namespace android {
 
