@@ -237,8 +237,7 @@ int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, 
         // Uses a default value until device provides the proper name
         dest_file = "bugreport.zip";
     } else {
-        if (!android::base::EndsWith(dest_file, ".zip")) {
-            // TODO: use a case-insensitive comparison (like EndsWithIgnoreCase
+        if (!android::base::EndsWithIgnoreCase(dest_file, ".zip")) {
             dest_file += ".zip";
         }
     }
