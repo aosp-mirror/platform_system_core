@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+// for manual checking of stale entries during LogBuffer::erase()
+//#define DEBUG_CHECK_FOR_STALE_ENTRIES
 
 #include <ctype.h>
 #include <errno.h>
@@ -256,6 +258,11 @@ LogBufferElementCollection::iterator LogBuffer::erase(
     log_id_for_each(i) {
         doSetLast |= setLast[i] = mLastSet[i] && (it == mLast[i]);
     }
+#ifdef DEBUG_CHECK_FOR_STALE_ENTRIES
+    LogBufferElementCollection::iterator bad = it;
+    int key = ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY)) ?
+            element->getTag() : element->getUid();
+#endif
     it = mLogElements.erase(it);
     if (doSetLast) {
         log_id_for_each(i) {
@@ -269,6 +276,27 @@ LogBufferElementCollection::iterator LogBuffer::erase(
             }
         }
     }
+#ifdef DEBUG_CHECK_FOR_STALE_ENTRIES
+    log_id_for_each(i) {
+        for(auto b : mLastWorst[i]) {
+            if (bad == b.second) {
+                android::prdebug("stale mLastWorst[%d] key=%d mykey=%d\n",
+                                 i, b.first, key);
+            }
+        }
+        for(auto b : mLastWorstPidOfSystem[i]) {
+            if (bad == b.second) {
+                android::prdebug("stale mLastWorstPidOfSystem[%d] pid=%d\n",
+                                 i, b.first);
+            }
+        }
+        if (mLastSet[i] && (bad == mLast[i])) {
+            android::prdebug("stale mLast[%d]\n", i);
+            mLastSet[i] = false;
+            mLast[i] = mLogElements.begin();
+        }
+    }
+#endif
     if (coalesce) {
         stats.erase(element);
     } else {
