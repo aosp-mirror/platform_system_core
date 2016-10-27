@@ -24,6 +24,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cutils/files.h>
 #include <cutils/klog.h>
 
 static int klog_level = KLOG_DEFAULT_LEVEL;
@@ -37,7 +38,11 @@ void klog_set_level(int level) {
 }
 
 static int __open_klog(void) {
-    return TEMP_FAILURE_RETRY(open("/dev/kmsg", O_WRONLY | O_CLOEXEC));
+    static const char kmsg_device[] = "/dev/kmsg";
+
+    int ret = android_get_control_file(kmsg_device);
+    if (ret >= 0) return ret;
+    return TEMP_FAILURE_RETRY(open(kmsg_device, O_WRONLY | O_CLOEXEC));
 }
 
 #define LOG_BUF_MAX 512
