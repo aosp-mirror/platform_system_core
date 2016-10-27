@@ -27,6 +27,8 @@
 
 int create_socket(const char *name, int type, mode_t perm,
                   uid_t uid, gid_t gid, const char *socketcon);
+int create_file(const char *path, int mode, mode_t perm,
+                uid_t uid, gid_t gid, const char *filecon);
 
 bool read_file(const char* path, std::string* content);
 int write_file(const char* path, const char* content);
