@@ -20,6 +20,7 @@
 #include <sys/types.h>
 
 #include <deque>
+#include <functional>
 #include <list>
 #include <memory>
 #include <string>
@@ -199,8 +200,8 @@ void unregister_usb_transport(usb_handle* usb);
 int check_header(apacket* p, atransport* t);
 int check_data(apacket* p);
 
-/* for MacOS X cleanup */
 void close_usb_devices();
+void close_usb_devices(std::function<bool(const atransport*)> predicate);
 
 void send_packet(apacket* p, atransport* t);
 

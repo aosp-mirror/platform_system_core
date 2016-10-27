@@ -1089,6 +1089,31 @@ int handle_host_request(const char* service, TransportType type,
         return 1;
     }
 
+    if (!strcmp(service, "reconnect-offline")) {
+        std::string response;
+        close_usb_devices([&response](const atransport* transport) {
+            switch (transport->connection_state) {
+                case kCsOffline:
+                case kCsUnauthorized:
+                    response += "reconnecting ";
+                    if (transport->serial) {
+                        response += transport->serial;
+                    } else {
+                        response += "<unknown>";
+                    }
+                    response += "\n";
+                    return true;
+                default:
+                    return false;
+            }
+        });
+        if (!response.empty()) {
+            response.resize(response.size() - 1);
+        }
+        SendOkay(reply_fd, response);
+        return 0;
+    }
+
     if (!strcmp(service, "features")) {
         std::string error;
         atransport* t = acquire_one_transport(type, serial, nullptr, &error);
