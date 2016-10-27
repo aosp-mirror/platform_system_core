@@ -290,11 +290,17 @@ static void wakealarm_init(void) {
 }
 
 static void healthd_mainloop(void) {
+    int nevents = 0;
     while (1) {
         struct epoll_event events[eventct];
-        int nevents;
         int timeout = awake_poll_interval;
         int mode_timeout;
+
+        /* Don't wait for first timer timeout to run periodic chores */
+        if (!nevents)
+            periodic_chores();
+
+        healthd_mode_ops->heartbeat();
 
         mode_timeout = healthd_mode_ops->preparetowait();
         if (timeout < 0 || (mode_timeout > 0 && mode_timeout < timeout))
@@ -311,11 +317,6 @@ static void healthd_mainloop(void) {
             if (events[n].data.ptr)
                 (*(void (*)(int))events[n].data.ptr)(events[n].events);
         }
-
-        if (!nevents)
-            periodic_chores();
-
-        healthd_mode_ops->heartbeat();
     }
 
     return;
