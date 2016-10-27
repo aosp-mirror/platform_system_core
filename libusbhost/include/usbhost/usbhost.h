@@ -232,10 +232,11 @@ void usb_request_free(struct usb_request *req);
 /* Submits a read or write request on the specified device */
 int usb_request_queue(struct usb_request *req);
 
- /* Waits for the results of a previous usb_request_queue operation.
+ /* Waits for the results of a previous usb_request_queue operation. timeoutMillis == -1 requests
+  * to wait forever.
   * Returns a usb_request, or NULL for error.
   */
-struct usb_request *usb_request_wait(struct usb_device *dev);
+struct usb_request *usb_request_wait(struct usb_device *dev, int timeoutMillis);
 
 /* Cancels a pending usb_request_queue() operation. */
 int usb_request_cancel(struct usb_request *req);
