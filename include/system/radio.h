@@ -81,7 +81,7 @@ typedef enum {
 } radio_direction_t;
 
 /* unique handle allocated to a radio module */
-typedef unsigned int radio_handle_t;
+typedef uint32_t radio_handle_t;
 
 /* Opaque meta data structure used by radio meta data API (see system/radio_metadata.h) */
 typedef struct radio_medtadata radio_metadata_t;
@@ -109,10 +109,10 @@ typedef struct radio_hal_am_band_config {
 typedef struct radio_hal_band_config {
     radio_band_t type;
     bool         antenna_connected;
-    unsigned int lower_limit;
-    unsigned int upper_limit;
-    unsigned int num_spacings;
-    unsigned int spacings[RADIO_NUM_SPACINGS_MAX];
+    uint32_t     lower_limit;
+    uint32_t     upper_limit;
+    uint32_t     num_spacings;
+    uint32_t     spacings[RADIO_NUM_SPACINGS_MAX];
     union {
         radio_hal_fm_band_config_t fm;
         radio_hal_am_band_config_t am;
@@ -137,10 +137,10 @@ typedef struct radio_hal_properties {
     char            product[RADIO_STRING_LEN_MAX];  /* product name */
     char            version[RADIO_STRING_LEN_MAX];  /* product version */
     char            serial[RADIO_STRING_LEN_MAX];  /* serial number (for subscription services) */
-    unsigned int    num_tuners;     /* number of tuners controllable independently */
-    unsigned int    num_audio_sources; /* number of audio sources driven simultaneously */
+    uint32_t        num_tuners;     /* number of tuners controllable independently */
+    uint32_t        num_audio_sources; /* number of audio sources driven simultaneously */
     bool            supports_capture; /* the hardware supports capture of audio source audio HAL */
-    unsigned int    num_bands;      /* number of band descriptors */
+    uint32_t        num_bands;      /* number of band descriptors */
     radio_hal_band_config_t bands[RADIO_NUM_BANDS_MAX]; /* band descriptors */
 } radio_hal_properties_t;
 
@@ -153,10 +153,10 @@ typedef struct radio_properties {
     char                product[RADIO_STRING_LEN_MAX];
     char                version[RADIO_STRING_LEN_MAX];
     char                serial[RADIO_STRING_LEN_MAX];
-    unsigned int        num_tuners;
-    unsigned int        num_audio_sources;
+    uint32_t            num_tuners;
+    uint32_t            num_audio_sources;
     bool                supports_capture;
-    unsigned int        num_bands;
+    uint32_t            num_bands;
     radio_band_config_t bands[RADIO_NUM_BANDS_MAX];
 } radio_properties_t;
 
@@ -164,13 +164,14 @@ typedef struct radio_properties {
  * Contains information on currently tuned channel.
  */
 typedef struct radio_program_info {
-    unsigned int     channel;   /* current channel. (e.g kHz for band type RADIO_BAND_FM) */
-    unsigned int     sub_channel; /* current sub channel. (used for RADIO_BAND_FM_HD) */
+    uint32_t         channel;   /* current channel. (e.g kHz for band type RADIO_BAND_FM) */
+    uint32_t         sub_channel; /* current sub channel. (used for RADIO_BAND_FM_HD) */
     bool             tuned;     /* tuned to a program or not */
     bool             stereo;    /* program is stereo or not */
     bool             digital;   /* digital program or not (e.g HD Radio program) */
-    unsigned int     signal_strength; /* signal strength from 0 to 100 */
-    radio_metadata_t *metadata; /* non null if meta data are present (e.g PTY, song title ...) */
+    uint32_t         signal_strength; /* signal strength from 0 to 100 */
+                                /* non null if meta data are present (e.g PTY, song title ...) */
+    __attribute__((aligned(8))) radio_metadata_t *metadata;
 } radio_program_info_t;
 
 
@@ -195,7 +196,7 @@ typedef unsigned int radio_event_type_t;
 /* Event passed to the framework by the HAL callback */
 typedef struct radio_hal_event {
     radio_event_type_t  type;       /* event type */
-    int                 status;     /* used by RADIO_EVENT_CONFIG, RADIO_EVENT_TUNED */
+    int32_t             status;     /* used by RADIO_EVENT_CONFIG, RADIO_EVENT_TUNED */
     union {
         /* RADIO_EVENT_ANTENNA, RADIO_EVENT_TA, RADIO_EVENT_EA */
         bool                    on;
@@ -208,12 +209,13 @@ typedef struct radio_hal_event {
 /* Used internally by the framework. Same information as in struct radio_hal_event */
 typedef struct radio_event {
     radio_event_type_t  type;
-    int                 status;
+    int32_t             status;
     union {
         bool                    on;
         radio_band_config_t     config;
         radio_program_info_t    info;
-        radio_metadata_t        *metadata; /* offset from start of struct when in shared memory */
+                                /* non null if meta data are present (e.g PTY, song title ...) */
+        __attribute__((aligned(8))) radio_metadata_t *metadata;
     };
 } radio_event_t;
 
