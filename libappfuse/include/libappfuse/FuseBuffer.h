@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_LIBAPPFUSE_APPFUSE_H_
-#define ANDROID_LIBAPPFUSE_APPFUSE_H_
+#ifndef ANDROID_LIBAPPFUSE_FUSEBUFFER_H_
+#define ANDROID_LIBAPPFUSE_FUSEBUFFER_H_
 
 #include <linux/fuse.h>
 
@@ -46,7 +46,7 @@ struct FuseRequest : public FuseMessage<FuseRequest, fuse_in_header> {
     fuse_open_in open_in;
     fuse_init_in init_in;
     fuse_read_in read_in;
-    char lookup_name[];
+    char lookup_name[0];
   };
 };
 
@@ -71,6 +71,19 @@ union FuseBuffer {
   void HandleNotImpl();
 };
 
+class FuseProxyLoop {
+  class IFuseProxyLoopCallback {
+   public:
+    virtual void OnMount() = 0;
+    virtual ~IFuseProxyLoopCallback() = default;
+  };
+
+  bool Start(int dev_fd, int proxy_fd, IFuseProxyLoopCallback* callback);
+
+ private:
+  FuseBuffer buffer_;
+};
+
 }  // namespace android
 
-#endif  // ANDROID_LIBAPPFUSE_APPFUSE_H_
+#endif  // ANDROID_LIBAPPFUSE_FUSEBUFFER_H_
