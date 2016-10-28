@@ -4,6 +4,7 @@ service logd /system/bin/logd
     socket logdw dgram 0222 logd logd
     file /proc/kmsg r
     file /dev/kmsg w
+    user logd
     group logd system readproc
     writepid /dev/cpuset/system-background/tasks
 
