@@ -46,6 +46,7 @@
 #include "backtrace.h"
 #include "elf_utils.h"
 #include "machine.h"
+#include "open_files_list.h"
 #include "tombstone.h"
 
 #define STACK_WORDS 16
@@ -620,7 +621,8 @@ static void dump_logs(log_t* log, pid_t pid, unsigned int tail) {
 }
 
 // Dumps all information about the specified pid to the tombstone.
-static void dump_crash(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid,
+static void dump_crash(log_t* log, BacktraceMap* map,
+                       const OpenFilesList& open_files, pid_t pid, pid_t tid,
                        const std::set<pid_t>& siblings, uintptr_t abort_msg_address) {
   // don't copy log messages to tombstone unless this is a dev device
   bool want_logs = __android_log_is_debuggable();
@@ -638,6 +640,9 @@ static void dump_crash(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid,
       dump_thread(log, pid, sibling, map, 0, false);
     }
   }
+
+  _LOG(log, logtype::OPEN_FILES, "\nopen files:\n");
+  dump_open_files_list_to_log(open_files, log, "    ");
 
   if (want_logs) {
     dump_logs(log, pid, 0);
@@ -697,7 +702,8 @@ int open_tombstone(std::string* out_path) {
   return fd;
 }
 
-void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid,
+void engrave_tombstone(int tombstone_fd, BacktraceMap* map,
+                       const OpenFilesList& open_files, pid_t pid, pid_t tid,
                        const std::set<pid_t>& siblings, uintptr_t abort_msg_address,
                        std::string* amfd_data) {
   log_t log;
@@ -711,5 +717,5 @@ void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid
 
   log.tfd = tombstone_fd;
   log.amfd_data = amfd_data;
-  dump_crash(&log, map, pid, tid, siblings, abort_msg_address);
+  dump_crash(&log, map, open_files, pid, tid, siblings, abort_msg_address);
 }
