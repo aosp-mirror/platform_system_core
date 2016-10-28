@@ -90,29 +90,36 @@
 //
 
 static int drop_privs(bool klogd, bool auditd) {
+    // Tricky, if ro.build.type is "eng" then this is true because of the
+    // side effect that ro.debuggable == 1 as well, else it is false.
+    bool eng = __android_logger_property_get_bool("ro.build.type", BOOL_DEFAULT_FALSE);
+
     struct sched_param param;
     memset(&param, 0, sizeof(param));
 
     if (set_sched_policy(0, SP_BACKGROUND) < 0) {
-        return -1;
+        android::prdebug("failed to set background scheduling policy");
+        if (!eng) return -1;
     }
 
     if (sched_setscheduler((pid_t) 0, SCHED_BATCH, &param) < 0) {
-        return -1;
+        android::prdebug("failed to set batch scheduler");
+        if (!eng) return -1;
     }
 
     if (setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND) < 0) {
-        return -1;
+        android::prdebug("failed to set background cgroup");
+        if (!eng) return -1;
     }
 
-    if (prctl(PR_SET_DUMPABLE, 0) < 0) {
+    if (!eng && (prctl(PR_SET_DUMPABLE, 0) < 0)) {
         android::prdebug("failed to clear PR_SET_DUMPABLE");
         return -1;
     }
 
     if (prctl(PR_SET_KEEPCAPS, 1) < 0) {
         android::prdebug("failed to set PR_SET_KEEPCAPS");
-        return -1;
+        if (!eng) return -1;
     }
 
     std::unique_ptr<struct _cap_struct, int(*)(void *)> caps(cap_init(), cap_free);
@@ -130,31 +137,31 @@ static int drop_privs(bool klogd, bool auditd) {
                      CAP_SET) < 0) return -1;
     if (cap_set_proc(caps.get()) < 0) {
         android::prdebug("failed to set CAP_SETGID, CAP_SYSLOG or CAP_AUDIT_CONTROL (%d)", errno);
-        return -1;
+        if (!eng) return -1;
     }
 
     gid_t groups[] = { AID_READPROC };
 
     if (setgroups(arraysize(groups), groups) == -1) {
         android::prdebug("failed to set AID_READPROC groups");
-        return -1;
+        if (!eng) return -1;
     }
 
     if (setgid(AID_LOGD) != 0) {
         android::prdebug("failed to set AID_LOGD gid");
-        return -1;
+        if (!eng) return -1;
     }
 
     if (setuid(AID_LOGD) != 0) {
         android::prdebug("failed to set AID_LOGD uid");
-        return -1;
+        if (!eng) return -1;
     }
 
     if (cap_set_flag(caps.get(), CAP_PERMITTED, 1, cap_value, CAP_CLEAR) < 0) return -1;
     if (cap_set_flag(caps.get(), CAP_EFFECTIVE, 1, cap_value, CAP_CLEAR) < 0) return -1;
     if (cap_set_proc(caps.get()) < 0) {
         android::prdebug("failed to clear CAP_SETGID (%d)", errno);
-        return -1;
+        if (!eng) return -1;
     }
 
     return 0;
