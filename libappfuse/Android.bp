@@ -1,0 +1,26 @@
+// Copyright 2016 The Android Open Source Project
+
+cc_defaults {
+    name: "libappfuse_defaults",
+    local_include_dirs: ["include"],
+    shared_libs: ["libbase"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    clang: true
+}
+
+cc_library_shared {
+    name: "libappfuse",
+    defaults: ["libappfuse_defaults"],
+    export_include_dirs: ["include"],
+    srcs: ["AppFuse.cc"]
+}
+
+cc_test {
+    name: "libappfuse_test",
+    defaults: ["libappfuse_defaults"],
+    shared_libs: ["libappfuse"],
+    srcs: ["tests/AppFuseTest.cc"]
+}
