@@ -241,6 +241,7 @@ static void bootchart_finish() {
     fclose(log_disks);
     fclose(log_procs);
     acct(NULL);
+    LOG(INFO) << "Bootcharting finished";
 }
 
 void bootchart_sample(int* timeout) {
@@ -253,12 +254,12 @@ void bootchart_sample(int* timeout) {
     int elapsed_time = current_time - g_last_bootchart_time;
 
     if (elapsed_time >= BOOTCHART_POLLING_MS) {
-        /* count missed samples */
+        // Count missed samples.
         while (elapsed_time >= BOOTCHART_POLLING_MS) {
             elapsed_time -= BOOTCHART_POLLING_MS;
             g_remaining_samples--;
         }
-        /* count may be negative, take a sample anyway */
+        // Count may be negative, take a sample anyway.
         g_last_bootchart_time = current_time;
         if (bootchart_step() < 0 || g_remaining_samples <= 0) {
             bootchart_finish();
