@@ -1950,10 +1950,17 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "reconnect")) {
         if (argc == 1) {
             return adb_query_command("host:reconnect");
-        } else if (argc == 2 && !strcmp(argv[1], "device")) {
-            std::string err;
-            adb_connect("reconnect", &err);
-            return 0;
+        } else if (argc == 2) {
+            if (!strcmp(argv[1], "device")) {
+                std::string err;
+                adb_connect("reconnect", &err);
+                return 0;
+            } else if (!strcmp(argv[1], "offline")) {
+                std::string err;
+                return adb_query_command("host:reconnect-offline");
+            } else {
+                return usage();
+            }
         }
     }
 
