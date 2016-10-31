@@ -791,11 +791,14 @@ static int smart_socket_enqueue(asocket* s, apacket* p) {
     }
 #endif
 
-    if (!(s->transport) || (s->transport->connection_state == kCsOffline)) {
+    if (!s->transport) {
+        SendFail(s->peer->fd, "device offline (no transport)");
+        goto fail;
+    } else if (s->transport->connection_state == kCsOffline) {
         /* if there's no remote we fail the connection
          ** right here and terminate it
          */
-        SendFail(s->peer->fd, "device offline (x)");
+        SendFail(s->peer->fd, "device offline (transport offline)");
         goto fail;
     }
 
