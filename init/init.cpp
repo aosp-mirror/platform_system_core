@@ -690,16 +690,38 @@ int main(int argc, char** argv) {
         mount("sysfs", "/sys", "sysfs", 0, NULL);
         mount("selinuxfs", "/sys/fs/selinux", "selinuxfs", 0, NULL);
         mknod("/dev/kmsg", S_IFCHR | 0600, makedev(1, 11));
-        early_mount();
     }
 
     // Now that tmpfs is mounted on /dev and we have /dev/kmsg, we can actually
     // talk to the outside world...
     InitKernelLogging(argv);
 
-    LOG(INFO) << "init " << (is_first_stage ? "first stage" : "second stage") << " started!";
+    if (is_first_stage) {
+        LOG(INFO) << "init first stage started!";
 
-    if (!is_first_stage) {
+        // Mount devices defined in android.early.* kernel commandline
+        early_mount();
+
+        // Set up SELinux, including loading the SELinux policy if we're in the kernel domain.
+        selinux_initialize(true);
+
+        // If we're in the kernel domain, re-exec init to transition to the init domain now
+        // that the SELinux policy has been loaded.
+
+        if (restorecon("/init") == -1) {
+            PLOG(ERROR) << "restorecon failed";
+            security_failure();
+        }
+        char* path = argv[0];
+        char* args[] = { path, const_cast<char*>("--second-stage"), nullptr };
+        if (execv(path, args) == -1) {
+            PLOG(ERROR) << "execv(\"" << path << "\") failed";
+            security_failure();
+        }
+
+    } else {
+        LOG(INFO) << "init second stage started!";
+
         // Indicate that booting is in progress to background fw loaders, etc.
         close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
 
@@ -713,24 +735,9 @@ int main(int argc, char** argv) {
         // Propagate the kernel variables to internal variables
         // used by init as well as the current required properties.
         export_kernel_boot_props();
-    }
 
-    // Set up SELinux, including loading the SELinux policy if we're in the kernel domain.
-    selinux_initialize(is_first_stage);
-
-    // If we're in the kernel domain, re-exec init to transition to the init domain now
-    // that the SELinux policy has been loaded.
-    if (is_first_stage) {
-        if (restorecon("/init") == -1) {
-            PLOG(ERROR) << "restorecon failed";
-            security_failure();
-        }
-        char* path = argv[0];
-        char* args[] = { path, const_cast<char*>("--second-stage"), nullptr };
-        if (execv(path, args) == -1) {
-            PLOG(ERROR) << "execv(\"" << path << "\") failed";
-            security_failure();
-        }
+        // Now set up SELinux for second stage
+        selinux_initialize(false);
     }
 
     // These directories were necessarily created before initial policy load
