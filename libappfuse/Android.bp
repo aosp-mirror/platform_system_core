@@ -15,12 +15,12 @@ cc_library_shared {
     name: "libappfuse",
     defaults: ["libappfuse_defaults"],
     export_include_dirs: ["include"],
-    srcs: ["AppFuse.cc"]
+    srcs: ["FuseBuffer.cc", "FuseBridgeLoop.cc"]
 }
 
 cc_test {
     name: "libappfuse_test",
     defaults: ["libappfuse_defaults"],
     shared_libs: ["libappfuse"],
-    srcs: ["tests/AppFuseTest.cc"]
+    srcs: ["tests/FuseBridgeLoopTest.cc", "tests/FuseBufferTest.cc"]
 }
