@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "libappfuse/AppFuse.h"
+#include "libappfuse/FuseBuffer.h"
 
 #include <inttypes.h>
 #include <string.h>
