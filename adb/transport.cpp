@@ -908,12 +908,18 @@ std::string list_transports(bool long_listing) {
     return result;
 }
 
+void close_usb_devices(std::function<bool(const atransport*)> predicate) {
+    std::lock_guard<std::mutex> lock(transport_lock);
+    for (auto& t : transport_list) {
+        if (predicate(t)) {
+            t->Kick();
+        }
+    }
+}
+
 /* hack for osx */
 void close_usb_devices() {
-    std::lock_guard<std::mutex> lock(transport_lock);
-    for (const auto& t : transport_list) {
-        t->Kick();
-    }
+    close_usb_devices([](const atransport*) { return true; });
 }
 #endif // ADB_HOST
 
