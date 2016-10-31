@@ -233,10 +233,8 @@ void Service::SetProcessAttributes() {
             PLOG(FATAL) << "setgid failed for " << name_;
         }
     }
-    if (!supp_gids_.empty()) {
-        if (setgroups(supp_gids_.size(), &supp_gids_[0]) != 0) {
-            PLOG(FATAL) << "setgroups failed for " << name_;
-        }
+    if (setgroups(supp_gids_.size(), &supp_gids_[0]) != 0) {
+        PLOG(FATAL) << "setgroups failed for " << name_;
     }
     if (uid_) {
         if (setuid(uid_) != 0) {
