@@ -88,7 +88,8 @@ LOCAL_CHARGER_NO_UI := true
 endif
 
 LOCAL_SRC_FILES := \
-	healthd.cpp
+    healthd_common.cpp \
+    charger.cpp \
 
 LOCAL_MODULE := charger
 LOCAL_MODULE_TAGS := optional
@@ -109,11 +110,8 @@ LOCAL_CFLAGS += -DBOARD_PERIODIC_CHORES_INTERVAL_SLOW=$(BOARD_PERIODIC_CHORES_IN
 endif
 
 LOCAL_STATIC_LIBRARIES := \
-    libhealthd_android \
     libhealthd_charger \
     libbatterymonitor \
-    libbatteryservice \
-    libbinder \
     libbase \
     libutils \
     libcutils \
@@ -173,7 +171,8 @@ endif # LOCAL_CHARGER_NO_UI
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
-	healthd.cpp
+    healthd_common.cpp \
+    healthd.cpp \
 
 LOCAL_MODULE := healthd
 LOCAL_MODULE_TAGS := optional
@@ -188,7 +187,6 @@ endif
 
 LOCAL_STATIC_LIBRARIES := \
     libhealthd_android \
-    libhealthd_charger \
     libbatterymonitor \
     libbatteryservice \
 
@@ -200,10 +198,6 @@ LOCAL_SHARED_LIBRARIES := \
     liblog \
     libm \
     libc \
-    libminui \
-    libpng \
-    libz \
-    libsuspend \
 
 LOCAL_HAL_STATIC_LIBRARIES := libhealthd
 include $(BUILD_EXECUTABLE)
