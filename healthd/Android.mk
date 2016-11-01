@@ -21,26 +21,47 @@ LOCAL_STATIC_LIBRARIES := libutils libbase libbinder
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
-LOCAL_CFLAGS += -DCHARGER_ENABLE_SUSPEND
-LOCAL_SHARED_LIBRARIES += libsuspend
-endif
 LOCAL_SRC_FILES := \
     healthd_mode_android.cpp \
-    healthd_mode_charger.cpp \
-    AnimationParser.cpp \
-    BatteryPropertiesRegistrar.cpp \
+    BatteryPropertiesRegistrar.cpp
 
-LOCAL_MODULE := libhealthd_internal
-LOCAL_C_INCLUDES := bootable/recovery
+LOCAL_MODULE := libhealthd_android
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
     $(LOCAL_PATH) \
-    $(LOCAL_PATH)/include \
+    $(LOCAL_PATH)/include
 
 LOCAL_STATIC_LIBRARIES := \
     libbatterymonitor \
     libbatteryservice \
-    libbinder \
+    libutils \
+    libbase \
+    libcutils \
+    liblog \
+    libc \
+
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+
+LOCAL_CFLAGS := -Werror
+ifeq ($(strip $(BOARD_CHARGER_DISABLE_INIT_BLANK)),true)
+LOCAL_CFLAGS += -DCHARGER_DISABLE_INIT_BLANK
+endif
+ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
+LOCAL_CFLAGS += -DCHARGER_ENABLE_SUSPEND
+endif
+
+LOCAL_SRC_FILES := \
+    healthd_mode_charger.cpp \
+    AnimationParser.cpp
+
+LOCAL_MODULE := libhealthd_charger
+LOCAL_C_INCLUDES := bootable/recovery $(LOCAL_PATH)/include
+LOCAL_EXPORT_C_INCLUDE_DIRS := \
+    $(LOCAL_PATH) \
+    $(LOCAL_PATH)/include
+
+LOCAL_STATIC_LIBRARIES := \
     libminui \
     libpng \
     libz \
@@ -51,11 +72,13 @@ LOCAL_STATIC_LIBRARIES := \
     libm \
     libc \
 
+ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
+LOCAL_STATIC_LIBRARIES += libsuspend
+endif
+
 include $(BUILD_STATIC_LIBRARY)
 
-
 include $(CLEAR_VARS)
-
 ifeq ($(strip $(BOARD_CHARGER_NO_UI)),true)
 LOCAL_CHARGER_NO_UI := true
 endif
@@ -64,66 +87,46 @@ LOCAL_CHARGER_NO_UI := true
 endif
 
 LOCAL_SRC_FILES := \
-	healthd.cpp \
-	healthd_mode_android.cpp \
-	BatteryPropertiesRegistrar.cpp \
-
-ifneq ($(strip $(LOCAL_CHARGER_NO_UI)),true)
-LOCAL_SRC_FILES += healthd_mode_charger.cpp
-endif
+	healthd.cpp
 
 LOCAL_MODULE := healthd
 LOCAL_MODULE_TAGS := optional
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT_SBIN)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 
-LOCAL_CFLAGS := -D__STDC_LIMIT_MACROS -Werror
-
-ifeq ($(strip $(BOARD_CHARGER_DISABLE_INIT_BLANK)),true)
-LOCAL_CFLAGS += -DCHARGER_DISABLE_INIT_BLANK
-endif
-
-ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
-LOCAL_CFLAGS += -DCHARGER_ENABLE_SUSPEND
-endif
-
+LOCAL_CFLAGS := -Werror
 ifeq ($(strip $(LOCAL_CHARGER_NO_UI)),true)
 LOCAL_CFLAGS += -DCHARGER_NO_UI
 endif
-
-LOCAL_C_INCLUDES := bootable/recovery $(LOCAL_PATH)/include
-
 ifneq ($(BOARD_PERIODIC_CHORES_INTERVAL_FAST),)
 LOCAL_CFLAGS += -DBOARD_PERIODIC_CHORES_INTERVAL_FAST=$(BOARD_PERIODIC_CHORES_INTERVAL_FAST)
 endif
-
 ifneq ($(BOARD_PERIODIC_CHORES_INTERVAL_SLOW),)
 LOCAL_CFLAGS += -DBOARD_PERIODIC_CHORES_INTERVAL_SLOW=$(BOARD_PERIODIC_CHORES_INTERVAL_SLOW)
 endif
 
 LOCAL_STATIC_LIBRARIES := \
-    libhealthd_internal \
+    libhealthd_android \
+    libhealthd_charger \
     libbatterymonitor \
     libbatteryservice \
     libbinder \
     libbase \
-
-ifneq ($(strip $(LOCAL_CHARGER_NO_UI)),true)
-LOCAL_STATIC_LIBRARIES += \
-   libminui \
-   libpng \
-   libz \
-
-endif
-
-
-LOCAL_STATIC_LIBRARIES += \
     libutils \
     libcutils \
     liblog \
     libm \
     libc \
+
+ifneq ($(strip $(LOCAL_CHARGER_NO_UI)),true)
+LOCAL_STATIC_LIBRARIES += \
+    libminui \
+    libpng \
+    libz \
+
+endif
 
 ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
 LOCAL_STATIC_LIBRARIES += libsuspend
