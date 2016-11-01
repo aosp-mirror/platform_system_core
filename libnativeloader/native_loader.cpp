@@ -473,14 +473,14 @@ bool CloseNativeLibrary(void* handle, const bool needs_native_bridge) {
 }
 
 #if defined(__ANDROID__)
+// native_bridge_namespaces are not supported for callers of this function.
+// This function will return nullptr in the case when application is running
+// on native bridge.
 android_namespace_t* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
   std::lock_guard<std::mutex> guard(g_namespaces_mutex);
-  // native_bridge_namespaces are not supported for callers of this function.
-  // At the moment this is libwebviewchromium_loader and vulkan.
   NativeLoaderNamespace ns;
   if (g_namespaces->FindNamespaceByClassLoader(env, class_loader, &ns)) {
-    CHECK(ns.is_android_namespace());
-    return ns.get_android_ns();
+    return ns.is_android_namespace() ? ns.get_android_ns() : nullptr;
   }
 
   return nullptr;
