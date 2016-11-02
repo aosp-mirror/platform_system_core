@@ -198,11 +198,6 @@ static bool handle_send_file(int s, const char* path, uid_t uid, gid_t gid, uint
         // Ignore the result of calling fchmod. It's not supported
         // by all filesystems, so we don't check for success. b/12441485
         fchmod(fd, mode);
-
-        if (!update_capabilities(path, capabilities)) {
-            SendSyncFailErrno(s, "update_capabilities failed");
-            goto fail;
-        }
     }
 
     while (true) {
@@ -231,6 +226,11 @@ static bool handle_send_file(int s, const char* path, uid_t uid, gid_t gid, uint
     }
 
     adb_close(fd);
+
+    if (!update_capabilities(path, capabilities)) {
+        SendSyncFailErrno(s, "update_capabilities failed");
+        goto fail;
+    }
 
     utimbuf u;
     u.actime = timestamp;
