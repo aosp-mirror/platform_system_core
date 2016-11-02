@@ -17,6 +17,7 @@
 #include "service.h"
 
 #include <fcntl.h>
+#include <linux/securebits.h>
 #include <sched.h>
 #include <sys/mount.h>
 #include <sys/prctl.h>
@@ -171,14 +172,16 @@ Service::Service(const std::string& name, const std::string& classname,
 
 Service::Service(const std::string& name, const std::string& classname,
                  unsigned flags, uid_t uid, gid_t gid,
-                 const std::vector<gid_t>& supp_gids, unsigned namespace_flags,
+                 const std::vector<gid_t>& supp_gids,
+                 const CapSet& capabilities, unsigned namespace_flags,
                  const std::string& seclabel,
                  const std::vector<std::string>& args)
     : name_(name), classname_(classname), flags_(flags), pid_(0),
       time_started_(0), time_crashed_(0), nr_crashed_(0), uid_(uid), gid_(gid),
-      supp_gids_(supp_gids), namespace_flags_(namespace_flags),
-      seclabel_(seclabel), ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0),
-      priority_(0), oom_score_adjust_(-1000), args_(args) {
+      supp_gids_(supp_gids), capabilities_(capabilities),
+      namespace_flags_(namespace_flags), seclabel_(seclabel),
+      ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0), priority_(0),
+      oom_score_adjust_(-1000), args_(args) {
     onrestart_.InitSingleTrigger("onrestart");
 }
 
@@ -225,6 +228,13 @@ void Service::CreateSockets(const std::string& context) {
 }
 
 void Service::SetProcessAttributes() {
+    // Keep capabilites on uid change.
+    if (capabilities_.any() && uid_) {
+        if (prctl(PR_SET_SECUREBITS, SECBIT_KEEP_CAPS | SECBIT_KEEP_CAPS_LOCKED) != 0) {
+            PLOG(FATAL) << "prtcl(PR_SET_KEEPCAPS) failed for " << name_;
+        }
+    }
+
     // TODO: work out why this fails for `console` then upgrade to FATAL.
     if (setpgid(0, getpid()) == -1) PLOG(ERROR) << "setpgid failed for " << name_;
 
@@ -249,6 +259,11 @@ void Service::SetProcessAttributes() {
     if (priority_ != 0) {
         if (setpriority(PRIO_PROCESS, 0, priority_) != 0) {
             PLOG(FATAL) << "setpriority failed for " << name_;
+        }
+    }
+    if (capabilities_.any()) {
+        if (!SetCapsForExec(capabilities_)) {
+            LOG(FATAL) << "cannot set capabilities for " << name_;
         }
     }
 }
@@ -318,6 +333,21 @@ void Service::DumpState() const {
     for (const auto& si : sockets_) {
         LOG(INFO) << "  socket " << si.name << " " << si.type << " " << std::oct << si.perm;
     }
+}
+
+bool Service::ParseCapabilities(const std::vector<std::string>& args, std::string* err) {
+    capabilities_ = 0;
+
+    for (size_t i = 1; i < args.size(); i++) {
+        const std::string& arg = args[i];
+        int cap = LookupCap(arg);
+        if (cap == -1) {
+            *err = StringPrintf("invalid capability '%s'", arg.c_str());
+            return false;
+        }
+        capabilities_[cap] = true;
+    }
+    return true;
 }
 
 bool Service::ParseClass(const std::vector<std::string>& args, std::string* err) {
@@ -476,6 +506,8 @@ private:
 Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     static const Map option_parsers = {
+        {"capabilities",
+                        {1,     kMax, &Service::ParseCapabilities}},
         {"class",       {1,     1,    &Service::ParseClass}},
         {"console",     {0,     1,    &Service::ParseConsole}},
         {"critical",    {0,     0,    &Service::ParseCritical}},
@@ -807,6 +839,7 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
     exec_count_++;
     std::string name = StringPrintf("exec %d (%s)", exec_count_, str_args[0].c_str());
     unsigned flags = SVC_EXEC | SVC_ONESHOT;
+    CapSet no_capabilities;
     unsigned namespace_flags = 0;
 
     std::string seclabel = "";
@@ -827,9 +860,9 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
         }
     }
 
-    std::unique_ptr<Service> svc_p(new Service(name, "default", flags, uid, gid,
-                                               supp_gids, namespace_flags,
-                                               seclabel, str_args));
+    std::unique_ptr<Service> svc_p(new Service(name, "default", flags, uid, gid, supp_gids,
+                                               no_capabilities, namespace_flags, seclabel,
+                                               str_args));
     if (!svc_p) {
         LOG(ERROR) << "Couldn't allocate service for exec of '" << str_args[0] << "'";
         return nullptr;

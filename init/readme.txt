@@ -149,24 +149,32 @@ socket <name> <type> <perm> [ <user> [ <group> [ <seclabel> ] ] ]
   computed based on the service executable file security context.
 
 user <username>
-  Change to username before exec'ing this service.
+  Change to 'username' before exec'ing this service.
   Currently defaults to root.  (??? probably should default to nobody)
   As of Android M, processes should use this option even if they
-  require linux capabilities.  Previously, to acquire linux
+  require Linux capabilities.  Previously, to acquire Linux
   capabilities, a process would need to run as root, request the
   capabilities, then drop to its desired uid.  There is a new
   mechanism through fs_config that allows device manufacturers to add
-  linux capabilities to specific binaries on a file system that should
+  Linux capabilities to specific binaries on a file system that should
   be used instead. This mechanism is described on
   http://source.android.com/devices/tech/config/filesystem.html.  When
   using this new mechanism, processes can use the user option to
   select their desired uid without ever running as root.
+  As of Android O, processes can also request capabilities directly in their .rc
+  files. See the "capabilities" option below.
 
 group <groupname> [ <groupname> ]*
-  Change to groupname before exec'ing this service.  Additional
+  Change to 'groupname' before exec'ing this service.  Additional
   groupnames beyond the (required) first one are used to set the
   supplemental groups of the process (via setgroups()).
   Currently defaults to root.  (??? probably should default to nobody)
+
+capabilities <capability> [ <capability> ]*
+  Set capabilities when exec'ing this service. 'capability' should be a Linux
+  capability without the "CAP_" prefix, like "NET_ADMIN" or "SETPCAP". See
+  http://man7.org/linux/man-pages/man7/capabilities.7.html for a list of Linux
+  capabilities.
 
 seclabel <seclabel>
   Change to 'seclabel' before exec'ing this service.
