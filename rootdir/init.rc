@@ -669,13 +669,3 @@ on property:ro.debuggable=1
 service flash_recovery /system/bin/install-recovery.sh
     class main
     oneshot
-
-service hwservicemanager /system/bin/hwservicemanager
-    user system
-    disabled
-    group system readproc
-    critical
-    writepid /dev/cpuset/system-background/tasks
-
-on property:hwservicemanager.ready=true
-    class_start hal
