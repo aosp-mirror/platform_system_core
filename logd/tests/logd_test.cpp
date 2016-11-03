@@ -23,6 +23,7 @@
 
 #include <string>
 
+#include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
 #include <gtest/gtest.h>
@@ -351,7 +352,7 @@ TEST(logd, both) {
         "/dev/log/system", "/dev/log_system",
     };
 
-    for (unsigned int i = 0; i < (sizeof(loggers) / sizeof(loggers[0])); ++i) {
+    for (unsigned int i = 0; i < arraysize(loggers); ++i) {
         fd = open(loggers[i], O_RDONLY);
         if (fd < 0) {
             continue;
@@ -434,12 +435,12 @@ TEST(logd, benchmark) {
     static const unsigned int log_latency = 4;
     static const unsigned int log_delay = 5;
 
-    unsigned long ns[sizeof(benchmarks) / sizeof(benchmarks[0])];
+    unsigned long ns[arraysize(benchmarks)];
 
     memset(ns, 0, sizeof(ns));
 
     while (fgets(buffer, sizeof(buffer), fp)) {
-        for (unsigned i = 0; i < sizeof(ns) / sizeof(ns[0]); ++i) {
+        for (unsigned i = 0; i < arraysize(ns); ++i) {
             char *cp = strstr(buffer, benchmarks[i]);
             if (!cp) {
                 continue;
@@ -470,7 +471,7 @@ TEST(logd, benchmark) {
 
     EXPECT_GE(20000000UL, ns[log_delay]); // 10500289 user
 
-    for (unsigned i = 0; i < sizeof(ns) / sizeof(ns[0]); ++i) {
+    for (unsigned i = 0; i < arraysize(ns); ++i) {
         EXPECT_NE(0UL, ns[i]);
     }
 

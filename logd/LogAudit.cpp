@@ -25,6 +25,7 @@
 #include <sys/uio.h>
 #include <syslog.h>
 
+#include <android-base/macros.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
@@ -143,7 +144,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
                     iov[2].iov_len = strlen(newline);
                 }
 
-                writev(fdDmesg, iov, sizeof(iov) / sizeof(iov[0]));
+                writev(fdDmesg, iov, arraysize(iov));
                 free(last_str);
                 last_str = NULL;
             }
@@ -165,7 +166,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
             iov[2].iov_base = const_cast<char *>(newline);
             iov[2].iov_len = strlen(newline);
 
-            writev(fdDmesg, iov, sizeof(iov) / sizeof(iov[0]));
+            writev(fdDmesg, iov, arraysize(iov));
         }
     }
 
