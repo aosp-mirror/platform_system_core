@@ -16,6 +16,7 @@
 
 #include <ctype.h>
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <semaphore.h>
@@ -2655,12 +2656,19 @@ TEST(liblog, __android_log_pmsg_file_write) {
     bool logdwActiveAfter__android_log_close = isLogdwActive();
     EXPECT_FALSE(pmsgActiveAfter__android_log_close);
     EXPECT_FALSE(logdwActiveAfter__android_log_close);
-    EXPECT_LT(0, __android_log_pmsg_file_write(
+    int return__android_log_pmsg_file_write = __android_log_pmsg_file_write(
             LOG_ID_CRASH, ANDROID_LOG_VERBOSE,
-            __pmsg_file, max_payload_buf, sizeof(max_payload_buf)));
-    fprintf(stderr, "Reboot, ensure file %s matches\n"
-                    "with liblog.__android_log_msg_file_read test\n",
-                    __pmsg_file);
+            __pmsg_file, max_payload_buf, sizeof(max_payload_buf));
+    EXPECT_LT(0, return__android_log_pmsg_file_write);
+    if (return__android_log_pmsg_file_write == -ENOMEM) {
+        fprintf(stderr,
+                "Kernel does not have space allocated to pmsg pstore driver configured\n"
+               );
+    } else if (!return__android_log_pmsg_file_write) {
+        fprintf(stderr, "Reboot, ensure file %s matches\n"
+                        "with liblog.__android_log_msg_file_read test\n",
+                        __pmsg_file);
+    }
     bool pmsgActiveAfter__android_pmsg_file_write = isPmsgActive();
     bool logdwActiveAfter__android_pmsg_file_write = isLogdwActive();
     EXPECT_FALSE(pmsgActiveAfter__android_pmsg_file_write);
