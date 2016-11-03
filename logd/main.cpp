@@ -106,6 +106,11 @@ static int drop_privs() {
         return -1;
     }
 
+    if (prctl(PR_SET_DUMPABLE, 0) < 0) {
+        android::prdebug("failed to clear PR_SET_DUMPABLE");
+        return -1;
+    }
+
     gid_t groups[] = { AID_READPROC };
     ScopedMinijail j(minijail_new());
     minijail_set_supplementary_gids(j.get(), arraysize(groups), groups);
