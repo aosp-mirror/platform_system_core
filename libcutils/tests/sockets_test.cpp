@@ -190,8 +190,16 @@ TEST(SocketsTest, TestSocketSendBuffersFailure) {
     EXPECT_EQ(-1, socket_send_buffers(INVALID_SOCKET, nullptr, 0));
 }
 
+#ifndef SOCK_NONBLOCK
+#define SOCK_NONBLOCK 0
+#endif
+
+#ifndef SOCK_CLOEXEC
+#define SOCK_CLOEXEC 0
+#endif
+
 TEST(SocketsTest, android_get_control_socket) {
-    static const char key[] = ANDROID_SOCKET_ENV_PREFIX "SocketsTest.android_get_control_socket";
+    static const char key[] = ANDROID_SOCKET_ENV_PREFIX "SocketsTest_android_get_control_socket";
     static const char* name = key + strlen(ANDROID_SOCKET_ENV_PREFIX);
 
     EXPECT_EQ(unsetenv(key), 0);
@@ -199,6 +207,11 @@ TEST(SocketsTest, android_get_control_socket) {
 
     int fd;
     ASSERT_GE(fd = socket(PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0), 0);
+#ifdef F_GETFL
+    int flags;
+    ASSERT_GE(flags = fcntl(fd, F_GETFL), 0);
+    ASSERT_GE(fcntl(fd, F_SETFL, flags | O_NONBLOCK), 0);
+#endif
     EXPECT_EQ(android_get_control_socket(name), -1);
 
     struct sockaddr_un addr;
