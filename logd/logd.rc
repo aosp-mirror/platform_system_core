@@ -4,10 +4,12 @@ service logd /system/bin/logd
     socket logdw dgram 0222 logd logd
     file /proc/kmsg r
     file /dev/kmsg w
-    group root system readproc
+    group logd system readproc
     writepid /dev/cpuset/system-background/tasks
 
 service logd-reinit /system/bin/logd --reinit
     oneshot
     disabled
+    user logd
+    group logd
     writepid /dev/cpuset/system-background/tasks
