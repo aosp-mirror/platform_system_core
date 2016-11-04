@@ -46,6 +46,7 @@ LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES:= \
     action.cpp \
     capabilities.cpp \
+    descriptors.cpp \
     import_parser.cpp \
     init_parser.cpp \
     log.cpp \
@@ -125,8 +126,10 @@ LOCAL_SRC_FILES := \
 LOCAL_SHARED_LIBRARIES += \
     libcutils \
     libbase \
+    libselinux \
 
 LOCAL_STATIC_LIBRARIES := libinit
 LOCAL_SANITIZE := integer
 LOCAL_CLANG := true
+LOCAL_CPPFLAGS := -Wall -Wextra -Werror
 include $(BUILD_NATIVE_TEST)
