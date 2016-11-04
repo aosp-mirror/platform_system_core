@@ -14,7 +14,7 @@
 
 cc_defaults {
     name: "libcutils_test_default",
-    srcs: ["sockets_test.cpp"],
+    srcs: ["sockets_test.cpp", "files_test.cpp"],
 
     target: {
         android: {
