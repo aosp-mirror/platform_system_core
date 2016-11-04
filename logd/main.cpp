@@ -39,6 +39,7 @@
 #include <android-base/macros.h>
 #include <cutils/properties.h>
 #include <cutils/sched_policy.h>
+#include <cutils/files.h>
 #include <cutils/sockets.h>
 #include <libminijail.h>
 #include <log/event_tag_map.h>
@@ -189,11 +190,11 @@ static void *reinit_thread_start(void * /*obj*/) {
     set_sched_policy(0, SP_BACKGROUND);
     setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND);
 
-    // If we are AID_ROOT, we should drop to AID_SYSTEM, if we are anything
-    // else, we have even lesser privileges and accept our fate. Not worth
-    // checking for error returns setting this thread's privileges.
-    (void)setgid(AID_SYSTEM);
-    (void)setuid(AID_SYSTEM);
+    // If we are AID_ROOT, we should drop to AID_LOGD+AID_SYSTEM, if we are
+    // anything else, we have even lesser privileges and accept our fate. Not
+    // worth checking for error returns setting this thread's privileges.
+    (void)setgid(AID_SYSTEM); // readonly access to /data/system/packages.list
+    (void)setuid(AID_LOGD);   // access to everything logd.
 
     while (reinit_running && !sem_wait(&reinit) && reinit_running) {
 
@@ -318,17 +319,6 @@ static void readDmesg(LogAudit *al, LogKlog *kl) {
 // logging plugins like auditd and restart control. Additional
 // transitory per-client threads are created for each reader.
 int main(int argc, char *argv[]) {
-    int fdPmesg = -1;
-    bool klogd = __android_logger_property_get_bool("logd.kernel",
-                                                    BOOL_DEFAULT_TRUE |
-                                                    BOOL_DEFAULT_FLAG_PERSIST |
-                                                    BOOL_DEFAULT_FLAG_ENG |
-                                                    BOOL_DEFAULT_FLAG_SVELTE);
-    if (klogd) {
-        fdPmesg = open("/proc/kmsg", O_RDONLY | O_NDELAY);
-    }
-    fdDmesg = open("/dev/kmsg", O_WRONLY);
-
     // issue reinit command. KISS argument parsing.
     if ((argc > 1) && argv[1] && !strcmp(argv[1], "--reinit")) {
         int sock = TEMP_FAILURE_RETRY(
@@ -362,6 +352,28 @@ int main(int argc, char *argv[]) {
             return -errno;
         }
         return strncmp(buffer, success, sizeof(success) - 1) != 0;
+    }
+
+    static const char dev_kmsg[] = "/dev/kmsg";
+    fdDmesg = android_get_control_file(dev_kmsg);
+    if (fdDmesg < 0) {
+        fdDmesg = TEMP_FAILURE_RETRY(open(dev_kmsg, O_WRONLY | O_CLOEXEC));
+    }
+
+    int fdPmesg = -1;
+    bool klogd = __android_logger_property_get_bool("logd.kernel",
+                                                    BOOL_DEFAULT_TRUE |
+                                                    BOOL_DEFAULT_FLAG_PERSIST |
+                                                    BOOL_DEFAULT_FLAG_ENG |
+                                                    BOOL_DEFAULT_FLAG_SVELTE);
+    if (klogd) {
+        static const char proc_kmsg[] = "/proc/kmsg";
+        fdPmesg = android_get_control_file(proc_kmsg);
+        if (fdPmesg < 0) {
+            fdPmesg = TEMP_FAILURE_RETRY(open(proc_kmsg,
+                                              O_RDONLY | O_NDELAY | O_CLOEXEC));
+        }
+        if (fdPmesg < 0) android::prdebug("Failed to open %s\n", proc_kmsg);
     }
 
     // Reinit Thread
