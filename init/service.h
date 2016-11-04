@@ -27,6 +27,7 @@
 
 #include "action.h"
 #include "capabilities.h"
+#include "descriptors.h"
 #include "init_parser.h"
 #include "keyword_map.h"
 
@@ -47,18 +48,6 @@
 
 class Action;
 class ServiceManager;
-
-struct SocketInfo {
-    SocketInfo();
-    SocketInfo(const std::string& name, const std::string& type, uid_t uid,
-                       gid_t gid, int perm, const std::string& socketcon);
-    std::string name;
-    std::string type;
-    uid_t uid;
-    gid_t gid;
-    int perm;
-    std::string socketcon;
-};
 
 struct ServiceEnvironmentInfo {
     ServiceEnvironmentInfo();
@@ -113,9 +102,7 @@ private:
     void StopOrReset(int how);
     void ZapStdio() const;
     void OpenConsole() const;
-    void PublishSocket(const std::string& name, int fd) const;
     void KillProcessGroup(int signal);
-    void CreateSockets(const std::string& scon);
     void SetProcessAttributes();
 
     bool ParseCapabilities(const std::vector<std::string>& args, std::string *err);
@@ -134,8 +121,12 @@ private:
     bool ParseSeclabel(const std::vector<std::string>& args, std::string* err);
     bool ParseSetenv(const std::vector<std::string>& args, std::string* err);
     bool ParseSocket(const std::vector<std::string>& args, std::string* err);
+    bool ParseFile(const std::vector<std::string>& args, std::string* err);
     bool ParseUser(const std::vector<std::string>& args, std::string* err);
     bool ParseWritepid(const std::vector<std::string>& args, std::string* err);
+
+    template <typename T>
+    bool AddDescriptor(const std::vector<std::string>& args, std::string* err);
 
     std::string name_;
     std::string classname_;
@@ -155,7 +146,7 @@ private:
 
     std::string seclabel_;
 
-    std::vector<SocketInfo> sockets_;
+    std::vector<std::unique_ptr<DescriptorInfo>> descriptors_;
     std::vector<ServiceEnvironmentInfo> envvars_;
 
     Action onrestart_;  // Commands to execute on restart.
