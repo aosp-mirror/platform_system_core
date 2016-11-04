@@ -547,6 +547,7 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
         }
         spaces += spaces_total;
     }
+    totalSize += sizeOf();
     if (spaces < 0) spaces = 0;
     output += android::base::StringPrintf("%*s%zu", spaces, "", totalSize);
 
