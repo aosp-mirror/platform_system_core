@@ -41,12 +41,10 @@
 #include <cutils/sched_policy.h>
 #include <cutils/files.h>
 #include <cutils/sockets.h>
-#include <libminijail.h>
 #include <log/event_tag_map.h>
 #include <packagelistparser/packagelistparser.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
-#include <scoped_minijail.h>
 #include <utils/threads.h>
 
 #include "CommandListener.h"
@@ -112,13 +110,53 @@ static int drop_privs() {
         return -1;
     }
 
+    if (prctl(PR_SET_KEEPCAPS, 1) < 0) {
+        android::prdebug("failed to set PR_SET_KEEPCAPS");
+        return -1;
+    }
+
+    std::unique_ptr<struct _cap_struct, int(*)(void *)> caps(cap_init(), cap_free);
+    if (cap_clear(caps.get()) < 0) return -1;
+    cap_value_t cap_value[] = {
+        CAP_SETGID, // must be first for below
+        CAP_SYSLOG,
+        CAP_AUDIT_CONTROL
+    };
+    if (cap_set_flag(caps.get(), CAP_PERMITTED,
+                     arraysize(cap_value), cap_value,
+                     CAP_SET) < 0) return -1;
+    if (cap_set_flag(caps.get(), CAP_EFFECTIVE,
+                     arraysize(cap_value), cap_value,
+                     CAP_SET) < 0) return -1;
+    if (cap_set_proc(caps.get()) < 0) {
+        android::prdebug("failed to set CAP_SETGID, CAP_SYSLOG or CAP_AUDIT_CONTROL (%d)", errno);
+        return -1;
+    }
+
     gid_t groups[] = { AID_READPROC };
-    ScopedMinijail j(minijail_new());
-    minijail_set_supplementary_gids(j.get(), arraysize(groups), groups);
-    minijail_change_uid(j.get(), AID_LOGD);
-    minijail_change_gid(j.get(), AID_LOGD);
-    minijail_use_caps(j.get(), CAP_TO_MASK(CAP_SYSLOG) | CAP_TO_MASK(CAP_AUDIT_CONTROL));
-    minijail_enter(j.get());
+
+    if (setgroups(arraysize(groups), groups) == -1) {
+        android::prdebug("failed to set AID_READPROC groups");
+        return -1;
+    }
+
+    if (setgid(AID_LOGD) != 0) {
+        android::prdebug("failed to set AID_LOGD gid");
+        return -1;
+    }
+
+    if (setuid(AID_LOGD) != 0) {
+        android::prdebug("failed to set AID_LOGD uid");
+        return -1;
+    }
+
+    if (cap_set_flag(caps.get(), CAP_PERMITTED, 1, cap_value, CAP_CLEAR) < 0) return -1;
+    if (cap_set_flag(caps.get(), CAP_EFFECTIVE, 1, cap_value, CAP_CLEAR) < 0) return -1;
+    if (cap_set_proc(caps.get()) < 0) {
+        android::prdebug("failed to clear CAP_SETGID (%d)", errno);
+        return -1;
+    }
+
     return 0;
 }
 
