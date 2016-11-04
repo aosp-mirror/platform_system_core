@@ -42,7 +42,29 @@ class LogHashtable {
 
     std::unordered_map<TKey, TEntry> map;
 
+    size_t bucket_size() const {
+        size_t count = 0;
+        for (size_t idx = 0; idx < map.bucket_count(); ++idx) {
+            size_t bucket_size = map.bucket_size(idx);
+            if (bucket_size == 0) bucket_size = 1;
+            count += bucket_size;
+        }
+        float load_factor = map.max_load_factor();
+        if (load_factor < 1.0) return count;
+        return count * load_factor;
+    }
+
+    static const size_t unordered_map_per_entry_overhead = sizeof(void*);
+    static const size_t unordered_map_bucket_overhead = sizeof(void*);
+
 public:
+
+    // Estimate unordered_map memory usage.
+    size_t sizeOf() const {
+        return sizeof(*this) +
+               (map.size() * (sizeof(TEntry) + unordered_map_per_entry_overhead)) +
+               (bucket_size() * sizeof(size_t) + unordered_map_bucket_overhead);
+    }
 
     typedef typename std::unordered_map<TKey, TEntry>::iterator iterator;
     typedef typename std::unordered_map<TKey, TEntry>::const_iterator const_iterator;
@@ -155,6 +177,7 @@ public:
         }
         return output;
     }
+
 };
 
 namespace EntryBaseConstants {
@@ -472,7 +495,26 @@ class LogStatistics {
     // security tag list
     tagTable_t securityTagTable;
 
+    size_t sizeOf() const {
+        size_t size = sizeof(*this) + pidTable.sizeOf() + tidTable.sizeOf() +
+                      tagTable.sizeOf() + securityTagTable.sizeOf();
+        for(auto it : pidTable) {
+            const char* name = it.second.getName();
+            if (name) size += strlen(name) + 1;
+        }
+        for(auto it : tidTable) {
+            const char* name = it.second.getName();
+            if (name) size += strlen(name) + 1;
+        }
+        log_id_for_each(id) {
+            size += uidTable[id].sizeOf();
+            size += pidSystemTable[id].sizeOf();
+        }
+        return size;
+    }
+
 public:
+
     LogStatistics();
 
     void enableStatistics() { enable = true; }
