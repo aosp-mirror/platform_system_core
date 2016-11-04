@@ -34,6 +34,7 @@ cc_library {
     host_supported: true,
     srcs: [
         "config_utils.c",
+        "files.cpp",
         "fs_config.c",
         "canned_fs_config.c",
         "hashmap.c",
