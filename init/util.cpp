@@ -14,32 +14,32 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <ftw.h>
+#include <pwd.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <fcntl.h>
-#include <ctype.h>
-#include <errno.h>
 #include <time.h>
-#include <ftw.h>
-#include <pwd.h>
+#include <unistd.h>
 
-#include <selinux/label.h>
 #include <selinux/android.h>
+#include <selinux/label.h>
 
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/un.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-
 /* for ANDROID_SOCKET_* */
 #include <cutils/sockets.h>
-#include <android-base/stringprintf.h>
 
 #include "init.h"
 #include "log.h"
@@ -161,6 +161,76 @@ out_unlink:
     unlink(addr.sun_path);
 out_close:
     close(fd);
+    return -1;
+}
+
+/*
+ * create_file - opens and creates a file as dictated in init.rc.
+ * This file is inherited by the daemon. We communicate the file
+ * descriptor's value via the environment variable ANDROID_FILE_<basename>
+ */
+int create_file(const char *path, int flags, mode_t perm, uid_t uid,
+                  gid_t gid, const char *filecon)
+{
+    char *secontext = NULL;
+    int ret;
+
+    if (filecon) {
+        if (setsockcreatecon(filecon) == -1) {
+            PLOG(ERROR) << "setsockcreatecon(\"" << filecon << "\") failed";
+            return -1;
+        }
+    } else if (sehandle) {
+        ret = selabel_lookup(sehandle, &secontext, path, perm);
+        if (ret != -1) {
+            ret = setfscreatecon(secontext);
+            if (ret == -1) {
+                freecon(secontext);
+                PLOG(ERROR) << "setfscreatecon(\"" << secontext << "\") failed";
+                return -1;
+            }
+        }
+    }
+
+    int fd = TEMP_FAILURE_RETRY(open(path, flags | O_NDELAY, perm));
+
+    if (filecon) {
+        setsockcreatecon(NULL);
+        lsetfilecon(path, filecon);
+    } else {
+        setfscreatecon(NULL);
+        freecon(secontext);
+    }
+
+    if (fd == -1) {
+        PLOG(ERROR) << "Failed to open/create file '" << path << "'";
+        goto out_close;
+    }
+
+    if (!(flags & O_NDELAY)) fcntl(fd, F_SETFD, flags);
+
+    ret = lchown(path, uid, gid);
+    if (ret) {
+        PLOG(ERROR) << "Failed to lchown file '" << path << "'";
+        goto out_close;
+    }
+    if (perm != static_cast<mode_t>(-1)) {
+        ret = fchmodat(AT_FDCWD, path, perm, AT_SYMLINK_NOFOLLOW);
+        if (ret) {
+            PLOG(ERROR) << "Failed to fchmodat file '" << path << "'";
+            goto out_close;
+        }
+    }
+
+    LOG(INFO) << "Created file '" << path << "'"
+              << ", mode " << std::oct << perm << std::dec
+              << ", user " << uid
+              << ", group " << gid;
+
+    return fd;
+
+out_close:
+    if (fd >= 0) close(fd);
     return -1;
 }
 
