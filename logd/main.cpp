@@ -228,6 +228,11 @@ static void *reinit_thread_start(void * /*obj*/) {
     set_sched_policy(0, SP_BACKGROUND);
     setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND);
 
+    cap_t caps = cap_init();
+    (void)cap_clear(caps);
+    (void)cap_set_proc(caps);
+    (void)cap_free(caps);
+
     // If we are AID_ROOT, we should drop to AID_LOGD+AID_SYSTEM, if we are
     // anything else, we have even lesser privileges and accept our fate. Not
     // worth checking for error returns setting this thread's privileges.
@@ -350,6 +355,39 @@ static void readDmesg(LogAudit *al, LogKlog *kl) {
     }
 }
 
+static int issueReinit() {
+    cap_t caps = cap_init();
+    (void)cap_clear(caps);
+    (void)cap_set_proc(caps);
+    (void)cap_free(caps);
+
+    int sock = TEMP_FAILURE_RETRY(
+        socket_local_client("logd",
+                            ANDROID_SOCKET_NAMESPACE_RESERVED,
+                            SOCK_STREAM));
+    if (sock < 0) return -errno;
+
+    static const char reinitStr[] = "reinit";
+    ssize_t ret = TEMP_FAILURE_RETRY(write(sock, reinitStr, sizeof(reinitStr)));
+    if (ret < 0) return -errno;
+
+    struct pollfd p;
+    memset(&p, 0, sizeof(p));
+    p.fd = sock;
+    p.events = POLLIN;
+    ret = TEMP_FAILURE_RETRY(poll(&p, 1, 1000));
+    if (ret < 0) return -errno;
+    if ((ret == 0) || !(p.revents & POLLIN)) return -ETIME;
+
+    static const char success[] = "success";
+    char buffer[sizeof(success) - 1];
+    memset(buffer, 0, sizeof(buffer));
+    ret = TEMP_FAILURE_RETRY(read(sock, buffer, sizeof(buffer)));
+    if (ret < 0) return -errno;
+
+    return strncmp(buffer, success, sizeof(success) - 1) != 0;
+}
+
 // Foreground waits for exit of the main persistent threads
 // that are started here. The threads are created to manage
 // UNIX domain client sockets for writing, reading and
@@ -359,37 +397,7 @@ static void readDmesg(LogAudit *al, LogKlog *kl) {
 int main(int argc, char *argv[]) {
     // issue reinit command. KISS argument parsing.
     if ((argc > 1) && argv[1] && !strcmp(argv[1], "--reinit")) {
-        int sock = TEMP_FAILURE_RETRY(
-            socket_local_client("logd",
-                                ANDROID_SOCKET_NAMESPACE_RESERVED,
-                                SOCK_STREAM));
-        if (sock < 0) {
-            return -errno;
-        }
-        static const char reinit[] = "reinit";
-        ssize_t ret = TEMP_FAILURE_RETRY(write(sock, reinit, sizeof(reinit)));
-        if (ret < 0) {
-            return -errno;
-        }
-        struct pollfd p;
-        memset(&p, 0, sizeof(p));
-        p.fd = sock;
-        p.events = POLLIN;
-        ret = TEMP_FAILURE_RETRY(poll(&p, 1, 1000));
-        if (ret < 0) {
-            return -errno;
-        }
-        if ((ret == 0) || !(p.revents & POLLIN)) {
-            return -ETIME;
-        }
-        static const char success[] = "success";
-        char buffer[sizeof(success) - 1];
-        memset(buffer, 0, sizeof(buffer));
-        ret = TEMP_FAILURE_RETRY(read(sock, buffer, sizeof(buffer)));
-        if (ret < 0) {
-            return -errno;
-        }
-        return strncmp(buffer, success, sizeof(success) - 1) != 0;
+        return issueReinit();
     }
 
     static const char dev_kmsg[] = "/dev/kmsg";
