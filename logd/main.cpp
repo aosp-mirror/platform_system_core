@@ -39,13 +39,12 @@
 #include <android-base/macros.h>
 #include <cutils/properties.h>
 #include <cutils/sched_policy.h>
+#include <cutils/files.h>
 #include <cutils/sockets.h>
-#include <libminijail.h>
 #include <log/event_tag_map.h>
 #include <packagelistparser/packagelistparser.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
-#include <scoped_minijail.h>
 #include <utils/threads.h>
 
 #include "CommandListener.h"
@@ -90,34 +89,81 @@
 //    logd
 //
 
-static int drop_privs() {
+static int drop_privs(bool klogd, bool auditd) {
+    // Tricky, if ro.build.type is "eng" then this is true because of the
+    // side effect that ro.debuggable == 1 as well, else it is false.
+    bool eng = __android_logger_property_get_bool("ro.build.type", BOOL_DEFAULT_FALSE);
+
     struct sched_param param;
     memset(&param, 0, sizeof(param));
 
     if (set_sched_policy(0, SP_BACKGROUND) < 0) {
-        return -1;
+        android::prdebug("failed to set background scheduling policy");
+        if (!eng) return -1;
     }
 
     if (sched_setscheduler((pid_t) 0, SCHED_BATCH, &param) < 0) {
-        return -1;
+        android::prdebug("failed to set batch scheduler");
+        if (!eng) return -1;
     }
 
     if (setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND) < 0) {
-        return -1;
+        android::prdebug("failed to set background cgroup");
+        if (!eng) return -1;
     }
 
-    if (prctl(PR_SET_DUMPABLE, 0) < 0) {
+    if (!eng && (prctl(PR_SET_DUMPABLE, 0) < 0)) {
         android::prdebug("failed to clear PR_SET_DUMPABLE");
         return -1;
     }
 
+    if (prctl(PR_SET_KEEPCAPS, 1) < 0) {
+        android::prdebug("failed to set PR_SET_KEEPCAPS");
+        if (!eng) return -1;
+    }
+
+    std::unique_ptr<struct _cap_struct, int(*)(void *)> caps(cap_init(), cap_free);
+    if (cap_clear(caps.get()) < 0) return -1;
+    cap_value_t cap_value[] = {
+        CAP_SETGID, // must be first for below
+        klogd ? CAP_SYSLOG : CAP_SETGID,
+        auditd ? CAP_AUDIT_CONTROL : CAP_SETGID
+    };
+    if (cap_set_flag(caps.get(), CAP_PERMITTED,
+                     arraysize(cap_value), cap_value,
+                     CAP_SET) < 0) return -1;
+    if (cap_set_flag(caps.get(), CAP_EFFECTIVE,
+                     arraysize(cap_value), cap_value,
+                     CAP_SET) < 0) return -1;
+    if (cap_set_proc(caps.get()) < 0) {
+        android::prdebug("failed to set CAP_SETGID, CAP_SYSLOG or CAP_AUDIT_CONTROL (%d)", errno);
+        if (!eng) return -1;
+    }
+
     gid_t groups[] = { AID_READPROC };
-    ScopedMinijail j(minijail_new());
-    minijail_set_supplementary_gids(j.get(), arraysize(groups), groups);
-    minijail_change_uid(j.get(), AID_LOGD);
-    minijail_change_gid(j.get(), AID_LOGD);
-    minijail_use_caps(j.get(), CAP_TO_MASK(CAP_SYSLOG) | CAP_TO_MASK(CAP_AUDIT_CONTROL));
-    minijail_enter(j.get());
+
+    if (setgroups(arraysize(groups), groups) == -1) {
+        android::prdebug("failed to set AID_READPROC groups");
+        if (!eng) return -1;
+    }
+
+    if (setgid(AID_LOGD) != 0) {
+        android::prdebug("failed to set AID_LOGD gid");
+        if (!eng) return -1;
+    }
+
+    if (setuid(AID_LOGD) != 0) {
+        android::prdebug("failed to set AID_LOGD uid");
+        if (!eng) return -1;
+    }
+
+    if (cap_set_flag(caps.get(), CAP_PERMITTED, 1, cap_value, CAP_CLEAR) < 0) return -1;
+    if (cap_set_flag(caps.get(), CAP_EFFECTIVE, 1, cap_value, CAP_CLEAR) < 0) return -1;
+    if (cap_set_proc(caps.get()) < 0) {
+        android::prdebug("failed to clear CAP_SETGID (%d)", errno);
+        if (!eng) return -1;
+    }
+
     return 0;
 }
 
@@ -189,11 +235,16 @@ static void *reinit_thread_start(void * /*obj*/) {
     set_sched_policy(0, SP_BACKGROUND);
     setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND);
 
-    // If we are AID_ROOT, we should drop to AID_SYSTEM, if we are anything
-    // else, we have even lesser privileges and accept our fate. Not worth
-    // checking for error returns setting this thread's privileges.
-    (void)setgid(AID_SYSTEM);
-    (void)setuid(AID_SYSTEM);
+    cap_t caps = cap_init();
+    (void)cap_clear(caps);
+    (void)cap_set_proc(caps);
+    (void)cap_free(caps);
+
+    // If we are AID_ROOT, we should drop to AID_LOGD+AID_SYSTEM, if we are
+    // anything else, we have even lesser privileges and accept our fate. Not
+    // worth checking for error returns setting this thread's privileges.
+    (void)setgid(AID_SYSTEM); // readonly access to /data/system/packages.list
+    (void)setuid(AID_LOGD);   // access to everything logd.
 
     while (reinit_running && !sem_wait(&reinit) && reinit_running) {
 
@@ -311,6 +362,39 @@ static void readDmesg(LogAudit *al, LogKlog *kl) {
     }
 }
 
+static int issueReinit() {
+    cap_t caps = cap_init();
+    (void)cap_clear(caps);
+    (void)cap_set_proc(caps);
+    (void)cap_free(caps);
+
+    int sock = TEMP_FAILURE_RETRY(
+        socket_local_client("logd",
+                            ANDROID_SOCKET_NAMESPACE_RESERVED,
+                            SOCK_STREAM));
+    if (sock < 0) return -errno;
+
+    static const char reinitStr[] = "reinit";
+    ssize_t ret = TEMP_FAILURE_RETRY(write(sock, reinitStr, sizeof(reinitStr)));
+    if (ret < 0) return -errno;
+
+    struct pollfd p;
+    memset(&p, 0, sizeof(p));
+    p.fd = sock;
+    p.events = POLLIN;
+    ret = TEMP_FAILURE_RETRY(poll(&p, 1, 1000));
+    if (ret < 0) return -errno;
+    if ((ret == 0) || !(p.revents & POLLIN)) return -ETIME;
+
+    static const char success[] = "success";
+    char buffer[sizeof(success) - 1];
+    memset(buffer, 0, sizeof(buffer));
+    ret = TEMP_FAILURE_RETRY(read(sock, buffer, sizeof(buffer)));
+    if (ret < 0) return -errno;
+
+    return strncmp(buffer, success, sizeof(success) - 1) != 0;
+}
+
 // Foreground waits for exit of the main persistent threads
 // that are started here. The threads are created to manage
 // UNIX domain client sockets for writing, reading and
@@ -318,6 +402,17 @@ static void readDmesg(LogAudit *al, LogKlog *kl) {
 // logging plugins like auditd and restart control. Additional
 // transitory per-client threads are created for each reader.
 int main(int argc, char *argv[]) {
+    // issue reinit command. KISS argument parsing.
+    if ((argc > 1) && argv[1] && !strcmp(argv[1], "--reinit")) {
+        return issueReinit();
+    }
+
+    static const char dev_kmsg[] = "/dev/kmsg";
+    fdDmesg = android_get_control_file(dev_kmsg);
+    if (fdDmesg < 0) {
+        fdDmesg = TEMP_FAILURE_RETRY(open(dev_kmsg, O_WRONLY | O_CLOEXEC));
+    }
+
     int fdPmesg = -1;
     bool klogd = __android_logger_property_get_bool("logd.kernel",
                                                     BOOL_DEFAULT_TRUE |
@@ -325,43 +420,13 @@ int main(int argc, char *argv[]) {
                                                     BOOL_DEFAULT_FLAG_ENG |
                                                     BOOL_DEFAULT_FLAG_SVELTE);
     if (klogd) {
-        fdPmesg = open("/proc/kmsg", O_RDONLY | O_NDELAY);
-    }
-    fdDmesg = open("/dev/kmsg", O_WRONLY);
-
-    // issue reinit command. KISS argument parsing.
-    if ((argc > 1) && argv[1] && !strcmp(argv[1], "--reinit")) {
-        int sock = TEMP_FAILURE_RETRY(
-            socket_local_client("logd",
-                                ANDROID_SOCKET_NAMESPACE_RESERVED,
-                                SOCK_STREAM));
-        if (sock < 0) {
-            return -errno;
+        static const char proc_kmsg[] = "/proc/kmsg";
+        fdPmesg = android_get_control_file(proc_kmsg);
+        if (fdPmesg < 0) {
+            fdPmesg = TEMP_FAILURE_RETRY(open(proc_kmsg,
+                                              O_RDONLY | O_NDELAY | O_CLOEXEC));
         }
-        static const char reinit[] = "reinit";
-        ssize_t ret = TEMP_FAILURE_RETRY(write(sock, reinit, sizeof(reinit)));
-        if (ret < 0) {
-            return -errno;
-        }
-        struct pollfd p;
-        memset(&p, 0, sizeof(p));
-        p.fd = sock;
-        p.events = POLLIN;
-        ret = TEMP_FAILURE_RETRY(poll(&p, 1, 1000));
-        if (ret < 0) {
-            return -errno;
-        }
-        if ((ret == 0) || !(p.revents & POLLIN)) {
-            return -ETIME;
-        }
-        static const char success[] = "success";
-        char buffer[sizeof(success) - 1];
-        memset(buffer, 0, sizeof(buffer));
-        ret = TEMP_FAILURE_RETRY(read(sock, buffer, sizeof(buffer)));
-        if (ret < 0) {
-            return -errno;
-        }
-        return strncmp(buffer, success, sizeof(success) - 1) != 0;
+        if (fdPmesg < 0) android::prdebug("Failed to open %s\n", proc_kmsg);
     }
 
     // Reinit Thread
@@ -386,7 +451,10 @@ int main(int argc, char *argv[]) {
         pthread_attr_destroy(&attr);
     }
 
-    if (drop_privs() != 0) {
+    bool auditd = __android_logger_property_get_bool("logd.auditd",
+                                                     BOOL_DEFAULT_TRUE |
+                                                     BOOL_DEFAULT_FLAG_PERSIST);
+    if (drop_privs(klogd, auditd) != 0) {
         return -1;
     }
 
@@ -441,9 +509,6 @@ int main(int argc, char *argv[]) {
     // initiated log messages. New log entries are added to LogBuffer
     // and LogReader is notified to send updates to connected clients.
 
-    bool auditd = __android_logger_property_get_bool("logd.auditd",
-                                                     BOOL_DEFAULT_TRUE |
-                                                     BOOL_DEFAULT_FLAG_PERSIST);
     LogAudit *al = NULL;
     if (auditd) {
         al = new LogAudit(logBuf, reader,
