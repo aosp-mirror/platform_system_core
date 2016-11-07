@@ -14,7 +14,7 @@
 
 cc_defaults {
     name: "libcutils_test_default",
-    srcs: ["sockets_test.cpp", "files_test.cpp"],
+    srcs: ["sockets_test.cpp"],
 
     target: {
         android: {
@@ -28,7 +28,11 @@ cc_defaults {
         },
 
         not_windows: {
-            srcs: ["test_str_parms.cpp"],
+            srcs: [
+                "test_str_parms.cpp",
+                "android_get_control_socket_test.cpp",
+                "android_get_control_file_test.cpp"
+            ],
         },
     },
 

@@ -24,7 +24,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cutils/files.h>
+#include <cutils/android_get_control_file.h>
 #include <cutils/klog.h>
 
 static int klog_level = KLOG_DEFAULT_LEVEL;
