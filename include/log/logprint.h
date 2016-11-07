@@ -46,6 +46,7 @@ typedef enum {
     FORMAT_MODIFIER_EPOCH,     /* Print time as seconds since Jan 1 1970 */
     FORMAT_MODIFIER_MONOTONIC, /* Print cpu time as seconds since start */
     FORMAT_MODIFIER_UID,       /* Adds uid */
+    FORMAT_MODIFIER_DESCRIPT,  /* Adds descriptive */
 } AndroidLogPrintFormat;
 
 typedef struct AndroidLogFormat_t AndroidLogFormat;

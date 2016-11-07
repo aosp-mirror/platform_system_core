@@ -25,6 +25,7 @@
 #include <sys/wait.h>
 
 #include <memory>
+#include <string>
 
 #include <gtest/gtest.h>
 #include <log/log.h>
@@ -1234,4 +1235,164 @@ TEST(logcat, maxcount) {
     pclose(fp);
 
     ASSERT_EQ(3, count);
+}
+
+static bool End_to_End(const char* tag, const char* fmt, ...)
+#if defined(__GNUC__)
+    __attribute__((__format__(printf, 2, 3)))
+#endif
+    ;
+
+static bool End_to_End(const char* tag, const char* fmt, ...) {
+    FILE *fp = popen("logcat -v brief -b events -v descriptive -t 100 2>/dev/null", "r");
+    if (!fp) return false;
+
+    char buffer[BIG_BUFFER];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(buffer, sizeof(buffer), fmt, ap);
+    va_end(ap);
+
+    char *str = NULL;
+    asprintf(&str, "I/%s ( %%d): %s%%c", tag, buffer);
+    std::string expect(str);
+    free(str);
+
+    int count = 0;
+    pid_t pid = getpid();
+    std::string lastMatch;
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        char newline;
+        int p;
+        int ret = sscanf(buffer, expect.c_str(), &p, &newline);
+        if ((2 == ret) && (p == pid) && (newline == '\n')) ++count;
+        else if ((1 == ret) && (p == pid) && (count == 0)) lastMatch = buffer;
+    }
+
+    pclose(fp);
+
+    if ((count == 0) && (lastMatch.length() > 0)) {
+        // Help us pinpoint where things went wrong ...
+        fprintf(stderr, "Closest match for\n    %s\n  is\n    %s",
+                expect.c_str(), lastMatch.c_str());
+    }
+
+    return count == 1;
+}
+
+TEST(logcat, descriptive) {
+    struct tag {
+        uint32_t tagNo;
+        const char* tagStr;
+    };
+
+    {
+        static const struct tag hhgtg = { 42, "answer" };
+        android_log_event_context ctx(hhgtg.tagNo);
+        static const char theAnswer[] = "what is five by seven";
+        ctx << theAnswer;
+        ctx.write();
+        EXPECT_TRUE(End_to_End(hhgtg.tagStr,
+                               "to life the universe etc=%s", theAnswer));
+    }
+
+    {
+        static const struct tag sync = { 2720, "sync" };
+        static const char id[] = "logcat.decriptive";
+        {
+            android_log_event_context ctx(sync.tagNo);
+            ctx << id << (int32_t)42 << (int32_t)-1 << (int32_t)0;
+            ctx.write();
+            EXPECT_TRUE(End_to_End(sync.tagStr,
+                                   "[id=%s,event=42,source=-1,account=0]",
+                                   id));
+        }
+
+        // Partial match to description
+        {
+            android_log_event_context ctx(sync.tagNo);
+            ctx << id << (int32_t)43 << (int64_t)-1 << (int32_t)0;
+            ctx.write();
+            EXPECT_TRUE(End_to_End(sync.tagStr,
+                                   "[id=%s,event=43,-1,0]",
+                                   id));
+        }
+
+        // Negative Test of End_to_End, ensure it is working
+        {
+            android_log_event_context ctx(sync.tagNo);
+            ctx << id << (int32_t)44 << (int32_t)-1 << (int64_t)0;
+            ctx.write();
+            fprintf(stderr, "Expect a \"Closest match\" message\n");
+            EXPECT_FALSE(End_to_End(sync.tagStr,
+                                    "[id=%s,event=44,source=-1,account=0]",
+                                    id));
+        }
+    }
+
+    {
+        static const struct tag sync = { 2747, "contacts_aggregation" };
+        {
+            android_log_event_context ctx(sync.tagNo);
+            ctx << (uint64_t)30 << (int32_t)2;
+            ctx.write();
+            EXPECT_TRUE(End_to_End(sync.tagStr,
+                                   "[aggregation time=30ms,count=2]"));
+        }
+
+        {
+            android_log_event_context ctx(sync.tagNo);
+            ctx << (uint64_t)31570 << (int32_t)911;
+            ctx.write();
+            EXPECT_TRUE(End_to_End(sync.tagStr,
+                                   "[aggregation time=31.57s,count=911]"));
+        }
+    }
+
+    {
+        static const struct tag sync = { 75000, "sqlite_mem_alarm_current" };
+        {
+            android_log_event_context ctx(sync.tagNo);
+            ctx << (uint32_t)512;
+            ctx.write();
+            EXPECT_TRUE(End_to_End(sync.tagStr, "current=512B"));
+        }
+
+        {
+            android_log_event_context ctx(sync.tagNo);
+            ctx << (uint32_t)3072;
+            ctx.write();
+            EXPECT_TRUE(End_to_End(sync.tagStr, "current=3KB"));
+        }
+
+        {
+            android_log_event_context ctx(sync.tagNo);
+            ctx << (uint32_t)2097152;
+            ctx.write();
+            EXPECT_TRUE(End_to_End(sync.tagStr, "current=2MB"));
+        }
+
+        {
+            android_log_event_context ctx(sync.tagNo);
+            ctx << (uint32_t)2097153;
+            ctx.write();
+            EXPECT_TRUE(End_to_End(sync.tagStr, "current=2097153B"));
+        }
+
+        {
+            android_log_event_context ctx(sync.tagNo);
+            ctx << (uint32_t)1073741824;
+            ctx.write();
+            EXPECT_TRUE(End_to_End(sync.tagStr, "current=1GB"));
+        }
+
+        {
+            android_log_event_context ctx(sync.tagNo);
+            ctx << (uint32_t)3221225472; // 3MB, but on purpose overflowed
+            ctx.write();
+            EXPECT_TRUE(End_to_End(sync.tagStr, "current=-1GB"));
+        }
+    }
+
 }

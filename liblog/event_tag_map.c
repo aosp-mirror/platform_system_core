@@ -38,6 +38,8 @@ typedef struct EventTag {
     uint32_t tagIndex;
     char*    tagStr;
     size_t   tagLen;
+    char*    fmtStr;
+    size_t   fmtLen;
 } EventTag;
 
 /*
@@ -168,6 +170,39 @@ LIBLOG_ABI_PUBLIC const char* android_lookupEventTag_len(const EventTagMap* map,
              * or explicitly use deprecated android_lookupEventTag().
              */
             return map->tagArray[mid].tagStr;
+        }
+    }
+
+    errno = ENOENT;
+    if (len) *len = 0;
+    return NULL;
+}
+
+/*
+ * Look up an entry in the map.
+ *
+ * The entries are sorted by tag number, so we can do a binary search.
+ */
+LIBLOG_ABI_PUBLIC const char* android_lookupEventFormat_len(
+    const EventTagMap* map, size_t *len, unsigned int tag)
+{
+    int lo = 0;
+    int hi = map->numTags - 1;
+
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        int cmp = map->tagArray[mid].tagIndex - tag;
+
+        if (cmp < 0) {
+            /* tag is bigger */
+            lo = mid + 1;
+        } else if (cmp > 0) {
+            /* tag is smaller */
+            hi = mid - 1;
+        } else {
+            /* found */
+            if (len) *len = map->tagArray[mid].fmtLen;
+            return map->tagArray[mid].fmtStr;
         }
     }
 
@@ -364,17 +399,21 @@ static int scanTagLine(char** pData, EventTag* tag, int lineNum)
     }
     tag->tagLen = cp - tag->tagStr;
 
-    if (isspace(*cp)) {
-        /* just ignore the rest of the line till \n
-        TODO: read the tag description that follows the tag name
-        */
-        while (*cp != '\n') ++cp;
-    } else {
+    if (!isspace(*cp)) {
         fprintf(stderr, "%s: invalid tag chars on line %d\n", OUT_TAG, lineNum);
         errno = EINVAL;
         return -1;
     }
 
+    while (isspace(*cp) && (*cp != '\n')) ++cp;
+    if (*cp != '#') {
+        tag->fmtStr = cp;
+        while ((*cp != '\n') && (*cp != '#')) ++cp;
+        while ((cp > tag->fmtStr) && isspace(*(cp - 1))) --cp;
+        tag->fmtLen = cp - tag->fmtStr;
+    }
+
+    while (*cp != '\n') ++cp;
     *pData = cp;
 
     return 0;
@@ -406,12 +445,14 @@ static int sortTags(EventTagMap* map)
     for (i = 1; i < map->numTags; i++) {
         if (map->tagArray[i].tagIndex == map->tagArray[i - 1].tagIndex) {
             fprintf(stderr,
-                "%s: duplicate tag entries (%" PRIu32 ":%.*s and %" PRIu32 ":%.*s)\n",
+                "%s: duplicate tag entries (%" PRIu32 ":%.*s:%.*s and %" PRIu32 ":%.*s:%.*s)\n",
                 OUT_TAG,
-                map->tagArray[i].tagIndex, (int)map->tagArray[i].tagLen,
-                map->tagArray[i].tagStr,
-                map->tagArray[i - 1].tagIndex, (int)map->tagArray[i - 1].tagLen,
-                map->tagArray[i - 1].tagStr);
+                map->tagArray[i].tagIndex,
+                (int)map->tagArray[i].tagLen, map->tagArray[i].tagStr,
+                (int)map->tagArray[i].fmtLen, map->tagArray[i].fmtStr,
+                map->tagArray[i - 1].tagIndex,
+                (int)map->tagArray[i - 1].tagLen, map->tagArray[i - 1].fmtStr,
+                (int)map->tagArray[i - 1].fmtLen, map->tagArray[i - 1].fmtStr);
             errno = EMLINK;
             return -1;
         }
