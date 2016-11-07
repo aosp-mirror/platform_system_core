@@ -38,6 +38,7 @@
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/unique_fd.h>
 /* for ANDROID_SOCKET_* */
 #include <cutils/sockets.h>
 
@@ -89,10 +90,6 @@ unsigned int decode_uid(const char *s) {
 int create_socket(const char *name, int type, mode_t perm, uid_t uid,
                   gid_t gid, const char *socketcon)
 {
-    struct sockaddr_un addr;
-    int fd, ret, savederrno;
-    char *filecon;
-
     if (socketcon) {
         if (setsockcreatecon(socketcon) == -1) {
             PLOG(ERROR) << "setsockcreatecon(\"" << socketcon << "\") failed";
@@ -100,52 +97,49 @@ int create_socket(const char *name, int type, mode_t perm, uid_t uid,
         }
     }
 
-    fd = socket(PF_UNIX, type, 0);
+    android::base::unique_fd fd(socket(PF_UNIX, type, 0));
     if (fd < 0) {
         PLOG(ERROR) << "Failed to open socket '" << name << "'";
         return -1;
     }
 
-    if (socketcon)
-        setsockcreatecon(NULL);
+    if (socketcon) setsockcreatecon(NULL);
 
+    struct sockaddr_un addr;
     memset(&addr, 0 , sizeof(addr));
     addr.sun_family = AF_UNIX;
     snprintf(addr.sun_path, sizeof(addr.sun_path), ANDROID_SOCKET_DIR"/%s",
              name);
 
-    ret = unlink(addr.sun_path);
-    if (ret != 0 && errno != ENOENT) {
+    if ((unlink(addr.sun_path) != 0) && (errno != ENOENT)) {
         PLOG(ERROR) << "Failed to unlink old socket '" << name << "'";
-        goto out_close;
+        return -1;
     }
 
-    filecon = NULL;
+    char *filecon = NULL;
     if (sehandle) {
-        ret = selabel_lookup(sehandle, &filecon, addr.sun_path, S_IFSOCK);
-        if (ret == 0)
+        if (selabel_lookup(sehandle, &filecon, addr.sun_path, S_IFSOCK) == 0) {
             setfscreatecon(filecon);
+        }
     }
 
-    ret = bind(fd, (struct sockaddr *) &addr, sizeof (addr));
-    savederrno = errno;
+    int ret = bind(fd, (struct sockaddr *) &addr, sizeof (addr));
+    int savederrno = errno;
 
     setfscreatecon(NULL);
     freecon(filecon);
 
     if (ret) {
-      errno = savederrno;
+        errno = savederrno;
         PLOG(ERROR) << "Failed to bind socket '" << name << "'";
         goto out_unlink;
     }
 
-    ret = lchown(addr.sun_path, uid, gid);
-    if (ret) {
+    if (lchown(addr.sun_path, uid, gid)) {
         PLOG(ERROR) << "Failed to lchown socket '" << addr.sun_path << "'";
         goto out_unlink;
     }
-    ret = fchmodat(AT_FDCWD, addr.sun_path, perm, AT_SYMLINK_NOFOLLOW);
-    if (ret) {
+    if (fchmodat(AT_FDCWD, addr.sun_path, perm, AT_SYMLINK_NOFOLLOW)) {
         PLOG(ERROR) << "Failed to fchmodat socket '" << addr.sun_path << "'";
         goto out_unlink;
     }
@@ -155,12 +149,10 @@ int create_socket(const char *name, int type, mode_t perm, uid_t uid,
               << ", user " << uid
               << ", group " << gid;
 
-    return fd;
+    return fd.release();
 
 out_unlink:
     unlink(addr.sun_path);
-out_close:
-    close(fd);
     return -1;
 }
 
@@ -173,7 +165,6 @@ int create_file(const char *path, int flags, mode_t perm, uid_t uid,
                   gid_t gid, const char *filecon)
 {
     char *secontext = NULL;
-    int ret;
 
     if (filecon) {
         if (setsockcreatecon(filecon) == -1) {
@@ -181,18 +172,17 @@ int create_file(const char *path, int flags, mode_t perm, uid_t uid,
             return -1;
         }
     } else if (sehandle) {
-        ret = selabel_lookup(sehandle, &secontext, path, perm);
-        if (ret != -1) {
-            ret = setfscreatecon(secontext);
-            if (ret == -1) {
-                freecon(secontext);
+        if (selabel_lookup(sehandle, &secontext, path, perm) != -1) {
+            if (setfscreatecon(secontext) == -1) {
+                freecon(secontext); // does not upset errno value
                 PLOG(ERROR) << "setfscreatecon(\"" << secontext << "\") failed";
                 return -1;
             }
         }
     }
 
-    int fd = TEMP_FAILURE_RETRY(open(path, flags | O_NDELAY, perm));
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path, flags | O_NDELAY, perm)));
+    int savederrno = errno;
 
     if (filecon) {
         setsockcreatecon(NULL);
@@ -202,23 +192,22 @@ int create_file(const char *path, int flags, mode_t perm, uid_t uid,
         freecon(secontext);
     }
 
-    if (fd == -1) {
+    if (fd < 0) {
+        errno = savederrno;
         PLOG(ERROR) << "Failed to open/create file '" << path << "'";
-        goto out_close;
+        return -1;
     }
 
     if (!(flags & O_NDELAY)) fcntl(fd, F_SETFD, flags);
 
-    ret = lchown(path, uid, gid);
-    if (ret) {
+    if (lchown(path, uid, gid)) {
         PLOG(ERROR) << "Failed to lchown file '" << path << "'";
-        goto out_close;
+        return -1;
     }
     if (perm != static_cast<mode_t>(-1)) {
-        ret = fchmodat(AT_FDCWD, path, perm, AT_SYMLINK_NOFOLLOW);
-        if (ret) {
+        if (fchmodat(AT_FDCWD, path, perm, AT_SYMLINK_NOFOLLOW)) {
             PLOG(ERROR) << "Failed to fchmodat file '" << path << "'";
-            goto out_close;
+            return -1;
         }
     }
 
@@ -227,11 +216,7 @@ int create_file(const char *path, int flags, mode_t perm, uid_t uid,
               << ", user " << uid
               << ", group " << gid;
 
-    return fd;
-
-out_close:
-    if (fd >= 0) close(fd);
-    return -1;
+    return fd.release();
 }
 
 bool read_file(const char* path, std::string* content) {
