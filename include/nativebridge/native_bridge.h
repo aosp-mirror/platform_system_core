@@ -104,7 +104,7 @@ int NativeBridgeUnloadLibrary(void* handle);
 
 // Get last error message of native bridge when fail to load library or search symbol.
 // This is reflection of dlerror() for native bridge.
-char* NativeBridgeGetError();
+const char* NativeBridgeGetError();
 
 struct native_bridge_namespace_t;
 
@@ -244,7 +244,7 @@ struct NativeBridgeCallbacks {
   // Returns:
   //   A string describing the most recent error that occurred when load library
   //   or lookup symbol via native bridge.
-  char* (*getError)();
+  const char* (*getError)();
 
   // Check whether library paths are supported by native bridge.
   //

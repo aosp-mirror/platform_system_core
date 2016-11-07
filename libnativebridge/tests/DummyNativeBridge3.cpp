@@ -68,7 +68,7 @@ extern "C" int native_bridge3_unloadLibrary(void* /* handle */) {
   return 0;
 }
 
-extern "C" char* native_bridge3_getError() {
+extern "C" const char* native_bridge3_getError() {
   return nullptr;
 }
 

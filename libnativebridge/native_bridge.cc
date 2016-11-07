@@ -551,15 +551,15 @@ int NativeBridgeUnloadLibrary(void* handle) {
   return -1;
 }
 
-char* NativeBridgeGetError() {
+const char* NativeBridgeGetError() {
   if (NativeBridgeInitialized()) {
     if (isCompatibleWith(NAMESPACE_VERSION)) {
       return callbacks->getError();
     } else {
-      ALOGE("not compatible with version %d, cannot get message", NAMESPACE_VERSION);
+      return "native bridge implementation is not compatible with version 3, cannot get message";
     }
   }
-  return nullptr;
+  return "native bridge is not initialized";
 }
 
 bool NativeBridgeIsPathSupported(const char* path) {
