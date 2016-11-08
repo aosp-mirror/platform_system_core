@@ -26,6 +26,7 @@
 #include <android-base/macros.h>
 
 namespace android {
+namespace fuse {
 
 template <typename T, typename Header>
 bool FuseMessage<T, Header>::CheckHeaderLength() const {
@@ -44,7 +45,7 @@ bool FuseMessage<T, Header>::CheckResult(
     return true;
   } else {
     PLOG(ERROR) << "Failed to " << operation_name
-        << " a packet from FD. result=" << result << " header.len="
+        << " a packet. result=" << result << " header.len="
         << header.len;
     return false;
   }
@@ -67,6 +68,14 @@ bool FuseMessage<T, Header>::Write(int fd) const {
 
 template struct FuseMessage<FuseRequest, fuse_in_header>;
 template struct FuseMessage<FuseResponse, fuse_out_header>;
+
+void FuseRequest::Reset(
+    uint32_t data_length, uint32_t opcode, uint64_t unique) {
+  memset(this, 0, sizeof(fuse_in_header) + data_length);
+  header.len = sizeof(fuse_in_header) + data_length;
+  header.opcode = opcode;
+  header.unique = unique;
+}
 
 void FuseResponse::ResetHeader(
     uint32_t data_length, int32_t error, uint64_t unique) {
@@ -133,4 +142,5 @@ void FuseBuffer::HandleNotImpl() {
   response.Reset(0, -ENOSYS, unique);
 }
 
+}  // namespace fuse
 }  // namespace android
