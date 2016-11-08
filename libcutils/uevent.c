@@ -17,6 +17,7 @@
 #include <cutils/uevent.h>
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdbool.h>
 #include <string.h>
 #include <strings.h>
@@ -104,7 +105,7 @@ int uevent_open_socket(int buf_sz, bool passcred)
     addr.nl_pid = getpid();
     addr.nl_groups = 0xffffffff;
 
-    s = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT);
+    s = socket(PF_NETLINK, SOCK_DGRAM | O_CLOEXEC, NETLINK_KOBJECT_UEVENT);
     if(s < 0)
         return -1;
 
