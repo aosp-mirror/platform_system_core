@@ -3,16 +3,6 @@
 LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := healthd_board_default.cpp
-LOCAL_MODULE := libhealthd.default
-LOCAL_CFLAGS := -Werror
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
-LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
-LOCAL_STATIC_LIBRARIES := libbinder
-LOCAL_EXPORT_STATIC_LIBRARY_HEADERS := libbinder
-include $(BUILD_STATIC_LIBRARY)
-
-include $(CLEAR_VARS)
 LOCAL_SRC_FILES := BatteryMonitor.cpp
 LOCAL_MODULE := libbatterymonitor
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
@@ -189,6 +179,7 @@ LOCAL_STATIC_LIBRARIES := \
     libhealthd_android \
     libbatterymonitor \
     libbatteryservice \
+    android.hardware.health@1.0-convert \
 
 LOCAL_SHARED_LIBRARIES := \
     libbinder \
@@ -198,6 +189,7 @@ LOCAL_SHARED_LIBRARIES := \
     liblog \
     libm \
     libc \
+    libhidl \
+    android.hardware.health@1.0 \
 
-LOCAL_HAL_STATIC_LIBRARIES := libhealthd
 include $(BUILD_EXECUTABLE)

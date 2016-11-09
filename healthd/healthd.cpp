@@ -24,13 +24,29 @@
 #include <unistd.h>
 #include <cutils/klog.h>
 
+#include <android/hardware/health/1.0/IHealth.h>
+#include <android/hardware/health/1.0/types.h>
+#include <hal_conversion.h>
+
 using namespace android;
+
+using IHealth = ::android::hardware::health::V1_0::IHealth;
+using Result = ::android::hardware::health::V1_0::Result;
+using HealthConfig = ::android::hardware::health::V1_0::HealthConfig;
+using HealthInfo = ::android::hardware::health::V1_0::HealthInfo;
+
+using ::android::hardware::health::V1_0::hal_conversion::convertToHealthConfig;
+using ::android::hardware::health::V1_0::hal_conversion::convertFromHealthConfig;
+using ::android::hardware::health::V1_0::hal_conversion::convertToHealthInfo;
+using ::android::hardware::health::V1_0::hal_conversion::convertFromHealthInfo;
+
+// device specific hal interface;
+static sp<IHealth> gHealth;
 
 // main healthd loop
 extern int healthd_main(void);
 
 // Android mode
-
 extern void healthd_mode_android_init(struct healthd_config *config);
 extern int healthd_mode_android_preparetowait(void);
 extern void healthd_mode_android_heartbeat(void);
@@ -43,6 +59,61 @@ static struct healthd_mode_ops android_ops = {
     .heartbeat = healthd_mode_android_heartbeat,
     .battery_update = healthd_mode_android_battery_update,
 };
+
+// default energy counter property redirect to talk to device
+// HAL
+static int healthd_board_get_energy_counter(int64_t *energy) {
+
+    if (gHealth == nullptr) {
+        return NAME_NOT_FOUND;
+    }
+
+    Result result = Result::NOT_SUPPORTED;
+    gHealth->energyCounter([=, &result] (Result ret, int64_t energyOut) {
+                result = ret;
+                *energy = energyOut;
+            });
+
+    return result == Result::SUCCESS ? OK : NAME_NOT_FOUND;
+}
+
+void healthd_board_init(struct healthd_config *config) {
+
+    // Initialize the board HAL - Equivalent of healthd_board_init(config)
+    // in charger/recovery mode.
+
+    gHealth = IHealth::getService("health");
+    if (gHealth == nullptr) {
+        KLOG_WARNING(LOG_TAG, "unable to get HAL interface, using defaults\n");
+        return;
+    }
+
+    HealthConfig halConfig;
+    convertToHealthConfig(config, halConfig);
+    gHealth->init(halConfig, [=] (const auto &halConfigOut) {
+            convertFromHealthConfig(halConfigOut, config);
+            // always redirect energy counter queries
+            config->energyCounter = healthd_board_get_energy_counter;
+            });
+}
+
+int healthd_board_battery_update(struct android::BatteryProperties *props) {
+    int logthis = 0;
+
+    if (gHealth == nullptr) {
+        return logthis;
+    }
+
+    HealthInfo info;
+    convertToHealthInfo(props, info);
+    gHealth->update(info,
+            [=, &logthis] (int32_t ret, const auto &infoOut) {
+                logthis = ret;
+                convertFromHealthInfo(infoOut, props);
+            });
+
+    return logthis;
+}
 
 int main(int /*argc*/, char ** /*argv*/) {
 
