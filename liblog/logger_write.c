@@ -189,7 +189,7 @@ LIBLOG_ABI_PUBLIC void __android_log_close()
     __android_log_unlock();
 
 #if defined(__BIONIC__)
-    android_closeEventTagMap(m);
+    if (m != (EventTagMap *)(uintptr_t)-1LL) android_closeEventTagMap(m);
 #endif
 
 }
