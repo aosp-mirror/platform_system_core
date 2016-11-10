@@ -101,23 +101,18 @@ void FuseBuffer::HandleInit() {
     return;
   }
 
-  // We limit ourselves to 15 because we don't handle BATCH_FORGET yet
-  size_t response_size = sizeof(fuse_init_out);
+  // We limit ourselves to minor=15 because we don't handle BATCH_FORGET yet.
+  // Thus we need to use FUSE_COMPAT_22_INIT_OUT_SIZE.
 #if defined(FUSE_COMPAT_22_INIT_OUT_SIZE)
   // FUSE_KERNEL_VERSION >= 23.
-
-  // If the kernel only works on minor revs older than or equal to 22,
-  // then use the older structure size since this code only uses the 7.22
-  // version of the structure.
-  if (minor <= 22) {
-    response_size = FUSE_COMPAT_22_INIT_OUT_SIZE;
-  }
+  const size_t response_size = FUSE_COMPAT_22_INIT_OUT_SIZE;
+#else
+  const size_t response_size = sizeof(fuse_init_out);
 #endif
 
   response.Reset(response_size, kFuseSuccess, unique);
   fuse_init_out* const out = &response.init_out;
   out->major = FUSE_KERNEL_VERSION;
-  // We limit ourselves to 15 because we don't handle BATCH_FORGET yet.
   out->minor = std::min(minor, 15u);
   out->max_readahead = max_readahead;
   out->flags = FUSE_ATOMIC_O_TRUNC | FUSE_BIG_WRITES;

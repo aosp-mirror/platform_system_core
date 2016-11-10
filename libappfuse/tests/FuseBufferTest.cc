@@ -163,7 +163,7 @@ TEST(FuseBufferTest, HandleInit) {
 
   buffer.HandleInit();
 
-  ASSERT_EQ(sizeof(fuse_out_header) + sizeof(fuse_init_out),
+  ASSERT_EQ(sizeof(fuse_out_header) + FUSE_COMPAT_22_INIT_OUT_SIZE,
             buffer.response.header.len);
   EXPECT_EQ(kFuseSuccess, buffer.response.header.error);
   EXPECT_EQ(static_cast<unsigned int>(FUSE_KERNEL_VERSION),
