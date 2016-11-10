@@ -28,9 +28,9 @@ constexpr size_t kFuseMaxWrite = 256 * 1024;
 constexpr size_t kFuseMaxRead = 128 * 1024;
 constexpr int32_t kFuseSuccess = 0;
 
-template<typename T, typename Header>
-struct FuseMessage {
-  Header header;
+template<typename T>
+class FuseMessage {
+ public:
   bool Read(int fd);
   bool Write(int fd) const;
  private:
@@ -40,7 +40,8 @@ struct FuseMessage {
 
 // FuseRequest represents file operation requests from /dev/fuse. It starts
 // from fuse_in_header. The body layout depends on the operation code.
-struct FuseRequest final : public FuseMessage<FuseRequest, fuse_in_header> {
+struct FuseRequest : public FuseMessage<FuseRequest> {
+  fuse_in_header header;
   union {
     // for FUSE_WRITE
     struct {
@@ -61,7 +62,8 @@ struct FuseRequest final : public FuseMessage<FuseRequest, fuse_in_header> {
 
 // FuseResponse represents file operation responses to /dev/fuse. It starts
 // from fuse_out_header. The body layout depends on the operation code.
-struct FuseResponse final : public FuseMessage<FuseResponse, fuse_out_header> {
+struct FuseResponse : public FuseMessage<FuseResponse> {
+  fuse_out_header header;
   union {
     // for FUSE_INIT
     fuse_init_out init_out;
