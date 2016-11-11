@@ -293,7 +293,7 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
             ret = __android_log_trylock();
             m = (EventTagMap *)atomic_load(&tagMap); /* trylock flush cache */
             if (!m) {
-                m = android_openEventTagMap(EVENT_TAG_MAP_FILE);
+                m = android_openEventTagMap(NULL);
                 if (ret) { /* trylock failed, use local copy, mark for close */
                     f = m;
                 } else {
