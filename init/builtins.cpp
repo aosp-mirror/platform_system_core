@@ -1023,7 +1023,7 @@ static int do_init_user0(const std::vector<std::string>& args) {
 BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     static const Map builtin_functions = {
-        {"bootchart_init",          {0,     0,    do_bootchart_init}},
+        {"bootchart",               {1,     1,    do_bootchart}},
         {"chmod",                   {2,     2,    do_chmod}},
         {"chown",                   {2,     3,    do_chown}},
         {"class_reset",             {1,     1,    do_class_reset}},
