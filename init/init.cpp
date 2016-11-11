@@ -18,7 +18,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <fstream>
 #include <inttypes.h>
 #include <libgen.h>
 #include <paths.h>
@@ -50,6 +49,7 @@
 #include <cutils/sockets.h>
 #include <private/android_filesystem_config.h>
 
+#include <fstream>
 #include <memory>
 
 #include "action.h"
