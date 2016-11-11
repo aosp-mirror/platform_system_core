@@ -440,8 +440,16 @@ Properties
 Init provides information about the services that it is responsible
 for via the below properties.
 
+init.start
+  Time after boot in ns (via the CLOCK_BOOTTIME clock) at which the first
+  stage of init started.
+
 init.svc.<name>
-   State of a named service ("stopped", "stopping", "running", "restarting")
+  State of a named service ("stopped", "stopping", "running", "restarting")
+
+init.svc.<name>.start
+  Time after boot in ns (via the CLOCK_BOOTTIME clock) that the service was
+  most recently started.
 
 
 Bootcharting
@@ -537,10 +545,10 @@ service akmd /system/bin/logwrapper /sbin/akmd
 
 For quicker turnaround when working on init itself, use:
 
-  mm -j
-  m ramdisk-nodeps
-  m bootimage-nodeps
-  adb reboot bootloader
+  mm -j &&
+  m ramdisk-nodeps &&
+  m bootimage-nodeps &&
+  adb reboot bootloader &&
   fastboot boot $ANDROID_PRODUCT_OUT/boot.img
 
 Alternatively, use the emulator:

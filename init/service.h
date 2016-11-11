@@ -30,6 +30,7 @@
 #include "descriptors.h"
 #include "init_parser.h"
 #include "keyword_map.h"
+#include "util.h"
 
 #define SVC_DISABLED       0x001  // do not autostart with class
 #define SVC_ONESHOT        0x002  // do not restart on exit
@@ -75,7 +76,7 @@ public:
     void Stop();
     void Terminate();
     void Restart();
-    void RestartIfNeeded(time_t& process_needs_restart);
+    void RestartIfNeeded(time_t* process_needs_restart_at);
     bool Reap();
     void DumpState() const;
 
@@ -134,9 +135,9 @@ private:
 
     unsigned flags_;
     pid_t pid_;
-    time_t time_started_;    // time of last start
-    time_t time_crashed_;    // first crash within inspection window
-    int nr_crashed_;         // number of times crashed within window
+    boot_clock::time_point time_started_; // time of last start
+    boot_clock::time_point time_crashed_; // first crash within inspection window
+    int crash_count_;                     // number of times crashed within window
 
     uid_t uid_;
     gid_t gid_;

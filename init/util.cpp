@@ -258,16 +258,11 @@ int write_file(const char* path, const char* content) {
     return result;
 }
 
-time_t gettime() {
-    timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    return now.tv_sec;
-}
-
-uint64_t gettime_ns() {
-    timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    return static_cast<uint64_t>(now.tv_sec) * UINT64_C(1000000000) + now.tv_nsec;
+boot_clock::time_point boot_clock::now() {
+  timespec ts;
+  clock_gettime(CLOCK_BOOTTIME, &ts);
+  return boot_clock::time_point(std::chrono::seconds(ts.tv_sec) +
+                                std::chrono::nanoseconds(ts.tv_nsec));
 }
 
 int mkdir_recursive(const char *pathname, mode_t mode)
@@ -325,16 +320,15 @@ void sanitize(char *s)
     }
 }
 
-int wait_for_file(const char *filename, int timeout)
-{
-    struct stat info;
-    uint64_t timeout_time_ns = gettime_ns() + timeout * UINT64_C(1000000000);
-    int ret = -1;
+int wait_for_file(const char* filename, std::chrono::nanoseconds timeout) {
+    boot_clock::time_point timeout_time = boot_clock::now() + timeout;
+    while (boot_clock::now() < timeout_time) {
+        struct stat sb;
+        if (stat(filename, &sb) != -1) return 0;
 
-    while (gettime_ns() < timeout_time_ns && ((ret = stat(filename, &info)) < 0))
         usleep(10000);
-
-    return ret;
+    }
+    return -1;
 }
 
 void import_kernel_cmdline(bool in_qemu,
