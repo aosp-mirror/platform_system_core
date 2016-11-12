@@ -160,7 +160,11 @@ static int do_action(const char* arg)
 {
     fprintf(stderr, "%s: init pid=%d tid=%d\n", __progname, getpid(), gettid());
 
-    if (!strncmp(arg, "exhaustfd-", strlen("exhaustfd-"))) {
+    if (!strncmp(arg, "wait-", strlen("wait-"))) {
+      char buf[1];
+      TEMP_FAILURE_RETRY(read(STDIN_FILENO, buf, sizeof(buf)));
+      return do_action(arg + strlen("wait-"));
+    } else if (!strncmp(arg, "exhaustfd-", strlen("exhaustfd-"))) {
       errno = 0;
       while (errno != EMFILE) {
         open("/dev/null", O_RDONLY);
@@ -235,6 +239,8 @@ static int do_action(const char* arg)
     fprintf(stderr, "on the process' main thread.\n");
     fprintf(stderr, "prefix any of the above with 'exhaustfd-' to exhaust\n");
     fprintf(stderr, "all available file descriptors before crashing.\n");
+    fprintf(stderr, "prefix any of the above with 'wait-' to wait until input is received on stdin\n");
+
     return EXIT_SUCCESS;
 }
 
