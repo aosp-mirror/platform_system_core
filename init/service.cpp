@@ -357,8 +357,8 @@ bool Service::ParseGroup(const std::vector<std::string>& args, std::string* err)
 bool Service::ParsePriority(const std::vector<std::string>& args, std::string* err) {
     priority_ = 0;
     if (!ParseInt(args[1], &priority_,
-                  static_cast<int>(ANDROID_PRIORITY_LOWEST),
-                  static_cast<int>(ANDROID_PRIORITY_HIGHEST))) {
+                  static_cast<int>(ANDROID_PRIORITY_HIGHEST), // highest is negative
+                  static_cast<int>(ANDROID_PRIORITY_LOWEST))) {
         *err = StringPrintf("process priority value must be range %d - %d",
                 ANDROID_PRIORITY_HIGHEST, ANDROID_PRIORITY_LOWEST);
         return false;
