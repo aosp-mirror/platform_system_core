@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/sendfile.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -784,139 +785,87 @@ static void handle_device_event(struct uevent *uevent)
     }
 }
 
-static int load_firmware(int fw_fd, int loading_fd, int data_fd)
-{
-    struct stat st;
-    long len_to_copy;
-    int ret = 0;
+static void load_firmware(uevent* uevent, const std::string& root,
+                          int fw_fd, size_t fw_size,
+                          int loading_fd, int data_fd) {
+    // Start transfer.
+    android::base::WriteFully(loading_fd, "1", 1);
 
-    if(fstat(fw_fd, &st) < 0)
-        return -1;
-    len_to_copy = st.st_size;
-
-    write(loading_fd, "1", 1);  /* start transfer */
-
-    while (len_to_copy > 0) {
-        char buf[PAGE_SIZE];
-        ssize_t nr;
-
-        nr = read(fw_fd, buf, sizeof(buf));
-        if(!nr)
-            break;
-        if(nr < 0) {
-            ret = -1;
-            break;
-        }
-        if (!android::base::WriteFully(data_fd, buf, nr)) {
-            ret = -1;
-            break;
-        }
-        len_to_copy -= nr;
+    // Copy the firmware.
+    int rc = sendfile(data_fd, fw_fd, nullptr, fw_size);
+    if (rc == -1) {
+        PLOG(ERROR) << "firmware: sendfile failed { '" << root << "', '" << uevent->firmware << "' }";
     }
 
-    if(!ret)
-        write(loading_fd, "0", 1);  /* successful end of transfer */
-    else
-        write(loading_fd, "-1", 2); /* abort transfer */
-
-    return ret;
+    // Tell the firmware whether to abort or commit.
+    const char* response = (rc != -1) ? "0" : "-1";
+    android::base::WriteFully(loading_fd, response, strlen(response));
 }
 
-static int is_booting(void)
-{
+static int is_booting() {
     return access("/dev/.booting", F_OK) == 0;
 }
 
-static void process_firmware_event(struct uevent *uevent)
-{
-    char *root, *loading, *data;
-    int l, loading_fd, data_fd, fw_fd;
-    size_t i;
+static void process_firmware_event(uevent* uevent) {
     int booting = is_booting();
 
     LOG(INFO) << "firmware: loading '" << uevent->firmware << "' for '" << uevent->path << "'";
 
-    l = asprintf(&root, SYSFS_PREFIX"%s/", uevent->path);
-    if (l == -1)
+    std::string root = android::base::StringPrintf("/sys%s", uevent->path);
+    std::string loading = root + "/loading";
+    std::string data = root + "/data";
+
+    android::base::unique_fd loading_fd(open(loading.c_str(), O_WRONLY|O_CLOEXEC));
+    if (loading_fd == -1) {
+        PLOG(ERROR) << "couldn't open firmware loading fd for " << uevent->firmware;
         return;
+    }
 
-    l = asprintf(&loading, "%sloading", root);
-    if (l == -1)
-        goto root_free_out;
-
-    l = asprintf(&data, "%sdata", root);
-    if (l == -1)
-        goto loading_free_out;
-
-    loading_fd = open(loading, O_WRONLY|O_CLOEXEC);
-    if(loading_fd < 0)
-        goto data_free_out;
-
-    data_fd = open(data, O_WRONLY|O_CLOEXEC);
-    if(data_fd < 0)
-        goto loading_close_out;
+    android::base::unique_fd data_fd(open(data.c_str(), O_WRONLY|O_CLOEXEC));
+    if (data_fd == -1) {
+        PLOG(ERROR) << "couldn't open firmware data fd for " << uevent->firmware;
+        return;
+    }
 
 try_loading_again:
-    for (i = 0; i < arraysize(firmware_dirs); i++) {
-        char *file = NULL;
-        l = asprintf(&file, "%s/%s", firmware_dirs[i], uevent->firmware);
-        if (l == -1)
-            goto data_free_out;
-        fw_fd = open(file, O_RDONLY|O_CLOEXEC);
-        free(file);
-        if (fw_fd >= 0) {
-            if (!load_firmware(fw_fd, loading_fd, data_fd)) {
-                LOG(INFO) << "firmware: copy success { '" << root << "', '" << uevent->firmware << "' }";
-            } else {
-                LOG(ERROR) << "firmware: copy failure { '" << root << "', '" << uevent->firmware << "' }";
-            }
-            break;
+    for (size_t i = 0; i < arraysize(firmware_dirs); i++) {
+        std::string file = android::base::StringPrintf("%s/%s", firmware_dirs[i], uevent->firmware);
+        android::base::unique_fd fw_fd(open(file.c_str(), O_RDONLY|O_CLOEXEC));
+        struct stat sb;
+        if (fw_fd != -1 && fstat(fw_fd, &sb) != -1) {
+            load_firmware(uevent, root, fw_fd, sb.st_size, loading_fd, data_fd);
+            return;
         }
-    }
-    if (fw_fd < 0) {
-        if (booting) {
-            /* If we're not fully booted, we may be missing
-             * filesystems needed for firmware, wait and retry.
-             */
-            usleep(100000);
-            booting = is_booting();
-            goto try_loading_again;
-        }
-        PLOG(ERROR) << "firmware: could not open '" << uevent->firmware << "'";
-        write(loading_fd, "-1", 2);
-        goto data_close_out;
     }
 
-    close(fw_fd);
-data_close_out:
-    close(data_fd);
-loading_close_out:
-    close(loading_fd);
-data_free_out:
-    free(data);
-loading_free_out:
-    free(loading);
-root_free_out:
-    free(root);
+    if (booting) {
+        // If we're not fully booted, we may be missing
+        // filesystems needed for firmware, wait and retry.
+        usleep(100000);
+        booting = is_booting();
+        goto try_loading_again;
+    }
+
+    LOG(ERROR) << "firmware: could not find firmware for " << uevent->firmware;
+
+    // Write "-1" as our response to the kernel's firmware request, since we have nothing for it.
+    write(loading_fd, "-1", 2);
 }
 
-static void handle_firmware_event(struct uevent *uevent)
-{
-    pid_t pid;
+static void handle_firmware_event(uevent* uevent) {
+    if (strcmp(uevent->subsystem, "firmware")) return;
+    if (strcmp(uevent->action, "add")) return;
 
-    if(strcmp(uevent->subsystem, "firmware"))
-        return;
-
-    if(strcmp(uevent->action, "add"))
-        return;
-
-    /* we fork, to avoid making large memory allocations in init proper */
-    pid = fork();
-    if (!pid) {
+    // Loading the firmware in a child means we can do that in parallel...
+    // (We ignore SIGCHLD rather than wait for our children.)
+    pid_t pid = fork();
+    if (pid == 0) {
+        Timer t;
         process_firmware_event(uevent);
+        LOG(INFO) << "loading " << uevent->path << " took " << t.duration() << "s";
         _exit(EXIT_SUCCESS);
-    } else if (pid < 0) {
-        PLOG(ERROR) << "could not fork to process firmware event";
+    } else if (pid == -1) {
+        PLOG(ERROR) << "could not fork to process firmware event for " << uevent->firmware;
     }
 }
 
@@ -1091,7 +1040,6 @@ void device_init() {
     LOG(INFO) << "Coldboot took " << t.duration() << "s.";
 }
 
-int get_device_fd()
-{
+int get_device_fd() {
     return device_fd;
 }
