@@ -22,8 +22,6 @@
 class Action;
 class Service;
 
-#define COMMAND_RETRY_TIMEOUT 5
-
 extern const char *ENV[32];
 extern bool waiting_for_exec;
 extern std::string default_console;
