@@ -30,11 +30,13 @@
 #define  TRACE_TAG  TRACE_SOCKETS
 #include "adb.h"
 
-#if defined(__BIONIC__)
-#define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP PTHREAD_RECURSIVE_MUTEX_INITIALIZER
-#endif
-
-static pthread_mutex_t socket_list_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+static pthread_mutex_t socket_list_lock;
+static void __attribute__((constructor)) socket_list_lock_init(void) {
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+  pthread_mutex_init(&socket_list_lock, &attr);
+}
 
 int sendfailmsg(int fd, const char *reason)
 {
