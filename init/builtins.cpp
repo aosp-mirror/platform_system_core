@@ -68,7 +68,7 @@
 #define UNMOUNT_CHECK_MS 5000
 #define UNMOUNT_CHECK_TIMES 10
 
-static const int kTerminateServiceDelayMicroSeconds = 50000;
+static constexpr std::chrono::nanoseconds kCommandRetryTimeout = 5s;
 
 static int insmod(const char *filename, const char *options, int flags) {
     int fd = open(filename, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
@@ -444,7 +444,7 @@ static int do_mount(const std::vector<std::string>& args) {
         return -1;
     } else {
         if (wait)
-            wait_for_file(source, COMMAND_RETRY_TIMEOUT);
+            wait_for_file(source, kCommandRetryTimeout);
         if (mount(source, target, system, flags, options) < 0) {
             return -1;
         }
@@ -749,7 +749,7 @@ static int do_powerctl(const std::vector<std::string>& args) {
             }
 
             // Wait a bit before recounting the number or running services.
-            usleep(kTerminateServiceDelayMicroSeconds);
+            usleep(50000 /*us*/);
         }
         LOG(VERBOSE) << "Terminating running services took " << t.duration() << " seconds";
     }
@@ -956,11 +956,11 @@ static int do_load_system_props(const std::vector<std::string>& args) {
 
 static int do_wait(const std::vector<std::string>& args) {
     if (args.size() == 2) {
-        return wait_for_file(args[1].c_str(), COMMAND_RETRY_TIMEOUT);
+        return wait_for_file(args[1].c_str(), kCommandRetryTimeout);
     } else if (args.size() == 3) {
         int timeout;
         if (android::base::ParseInt(args[2], &timeout)) {
-            return wait_for_file(args[1].c_str(), timeout);
+            return wait_for_file(args[1].c_str(), std::chrono::seconds(timeout));
         }
     }
     return -1;
