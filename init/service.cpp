@@ -17,6 +17,7 @@
 #include "service.h"
 
 #include <fcntl.h>
+#include <inttypes.h>
 #include <linux/securebits.h>
 #include <sched.h>
 #include <sys/mount.h>
@@ -50,9 +51,6 @@
 using android::base::ParseInt;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
-
-#define CRITICAL_CRASH_THRESHOLD    4       // if we crash >4 times ...
-#define CRITICAL_CRASH_WINDOW       (4*60)  // ... in 4 minutes, goto recovery
 
 static std::string ComputeContextFromExecutable(std::string& service_name,
                                                 const std::string& service_path) {
@@ -154,8 +152,8 @@ ServiceEnvironmentInfo::ServiceEnvironmentInfo(const std::string& name,
 
 Service::Service(const std::string& name, const std::string& classname,
                  const std::vector<std::string>& args)
-    : name_(name), classname_(classname), flags_(0), pid_(0), time_started_(0),
-      time_crashed_(0), nr_crashed_(0), uid_(0), gid_(0), namespace_flags_(0),
+    : name_(name), classname_(classname), flags_(0), pid_(0),
+      crash_count_(0), uid_(0), gid_(0), namespace_flags_(0),
       seclabel_(""), ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0),
       priority_(0), oom_score_adjust_(-1000), args_(args) {
     onrestart_.InitSingleTrigger("onrestart");
@@ -168,7 +166,7 @@ Service::Service(const std::string& name, const std::string& classname,
                  const std::string& seclabel,
                  const std::vector<std::string>& args)
     : name_(name), classname_(classname), flags_(flags), pid_(0),
-      time_started_(0), time_crashed_(0), nr_crashed_(0), uid_(uid), gid_(gid),
+      crash_count_(0), uid_(uid), gid_(gid),
       supp_gids_(supp_gids), capabilities_(capabilities),
       namespace_flags_(namespace_flags), seclabel_(seclabel),
       ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0), priority_(0),
@@ -190,6 +188,12 @@ void Service::NotifyStateChange(const std::string& new_state) const {
     }
 
     property_set(prop_name.c_str(), new_state.c_str());
+
+    if (new_state == "running") {
+        prop_name += ".start";
+        uint64_t start_ns = time_started_.time_since_epoch().count();
+        property_set(prop_name.c_str(), StringPrintf("%" PRIu64, start_ns).c_str());
+    }
 }
 
 void Service::KillProcessGroup(int signal) {
@@ -274,20 +278,19 @@ bool Service::Reap() {
         return false;
     }
 
-    time_t now = gettime();
+    // If we crash > 4 times in 4 minutes, reboot into recovery.
+    boot_clock::time_point now = boot_clock::now();
     if ((flags_ & SVC_CRITICAL) && !(flags_ & SVC_RESTART)) {
-        if (time_crashed_ + CRITICAL_CRASH_WINDOW >= now) {
-            if (++nr_crashed_ > CRITICAL_CRASH_THRESHOLD) {
-                LOG(ERROR) << "critical process '" << name_ << "' exited "
-                           << CRITICAL_CRASH_THRESHOLD << " times in "
-                           << (CRITICAL_CRASH_WINDOW / 60) << " minutes; "
+        if (now < time_crashed_ + 4min) {
+            if (++crash_count_ > 4) {
+                LOG(ERROR) << "critical process '" << name_ << "' exited 4 times in 4 minutes; "
                            << "rebooting into recovery mode";
                 android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
                 return false;
             }
         } else {
             time_crashed_ = now;
-            nr_crashed_ = 1;
+            crash_count_ = 1;
         }
     }
 
@@ -553,7 +556,6 @@ bool Service::Start() {
     // Starting a service removes it from the disabled or reset state and
     // immediately takes it out of the restarting state if it was in there.
     flags_ &= (~(SVC_DISABLED|SVC_RESTARTING|SVC_RESET|SVC_RESTART|SVC_DISABLED_START));
-    time_started_ = 0;
 
     // Running processes require no additional work --- if they're in the
     // process of exiting, we've ensured that they will immediately restart
@@ -667,7 +669,7 @@ bool Service::Start() {
         }
     }
 
-    time_started_ = gettime();
+    time_started_ = boot_clock::now();
     pid_ = pid;
     flags_ |= SVC_RUNNING;
 
@@ -731,18 +733,19 @@ void Service::Restart() {
     } /* else: Service is restarting anyways. */
 }
 
-void Service::RestartIfNeeded(time_t& process_needs_restart) {
-    time_t next_start_time = time_started_ + 5;
-
-    if (next_start_time <= gettime()) {
+void Service::RestartIfNeeded(time_t* process_needs_restart_at) {
+    boot_clock::time_point now = boot_clock::now();
+    boot_clock::time_point next_start = time_started_ + 5s;
+    if (now > next_start) {
         flags_ &= (~SVC_RESTARTING);
         Start();
         return;
     }
 
-    if ((next_start_time < process_needs_restart) ||
-        (process_needs_restart == 0)) {
-        process_needs_restart = next_start_time;
+    time_t next_start_time_t = time(nullptr) +
+        time_t(std::chrono::duration_cast<std::chrono::seconds>(next_start - now).count());
+    if (next_start_time_t < *process_needs_restart_at || *process_needs_restart_at == 0) {
+        *process_needs_restart_at = next_start_time_t;
     }
 }
 
