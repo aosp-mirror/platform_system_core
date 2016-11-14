@@ -18,6 +18,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <libgen.h>
 #include <paths.h>
 #include <signal.h>
@@ -68,6 +69,8 @@
 #include "util.h"
 #include "watchdogd.h"
 
+using android::base::StringPrintf;
+
 struct selabel_handle *sehandle;
 struct selabel_handle *sehandle_prop;
 
@@ -76,7 +79,7 @@ static int property_triggers_enabled = 0;
 static char qemu[32];
 
 std::string default_console = "/dev/console";
-static time_t process_needs_restart;
+static time_t process_needs_restart_at;
 
 const char *ENV[32];
 
@@ -133,11 +136,10 @@ void property_changed(const char *name, const char *value)
 
 static void restart_processes()
 {
-    process_needs_restart = 0;
-    ServiceManager::GetInstance().
-        ForEachServiceWithFlags(SVC_RESTARTING, [] (Service* s) {
-                s->RestartIfNeeded(process_needs_restart);
-            });
+    process_needs_restart_at = 0;
+    ServiceManager::GetInstance().ForEachServiceWithFlags(SVC_RESTARTING, [](Service* s) {
+        s->RestartIfNeeded(&process_needs_restart_at);
+    });
 }
 
 void handle_control_message(const std::string& msg, const std::string& name) {
@@ -165,7 +167,7 @@ static int wait_for_coldboot_done_action(const std::vector<std::string>& args) {
     // Any longer than 1s is an unreasonable length of time to delay booting.
     // If you're hitting this timeout, check that you didn't make your
     // sepolicy regular expressions too expensive (http://b/19899875).
-    if (wait_for_file(COLDBOOT_DONE, 1)) {
+    if (wait_for_file(COLDBOOT_DONE, 1s)) {
         LOG(ERROR) << "Timed out waiting for " COLDBOOT_DONE;
     }
 
@@ -376,15 +378,14 @@ static void import_kernel_nv(const std::string& key, const std::string& value, b
 
     if (for_emulator) {
         // In the emulator, export any kernel option with the "ro.kernel." prefix.
-        property_set(android::base::StringPrintf("ro.kernel.%s", key.c_str()).c_str(), value.c_str());
+        property_set(StringPrintf("ro.kernel.%s", key.c_str()).c_str(), value.c_str());
         return;
     }
 
     if (key == "qemu") {
         strlcpy(qemu, value.c_str(), sizeof(qemu));
     } else if (android::base::StartsWith(key, "androidboot.")) {
-        property_set(android::base::StringPrintf("ro.boot.%s", key.c_str() + 12).c_str(),
-                     value.c_str());
+        property_set(StringPrintf("ro.boot.%s", key.c_str() + 12).c_str(), value.c_str());
     }
 }
 
@@ -422,7 +423,7 @@ static void export_kernel_boot_props() {
 static void process_kernel_dt() {
     static const char android_dir[] = "/proc/device-tree/firmware/android";
 
-    std::string file_name = android::base::StringPrintf("%s/compatible", android_dir);
+    std::string file_name = StringPrintf("%s/compatible", android_dir);
 
     std::string dt_file;
     android::base::ReadFileToString(file_name, &dt_file);
@@ -440,12 +441,12 @@ static void process_kernel_dt() {
             continue;
         }
 
-        file_name = android::base::StringPrintf("%s/%s", android_dir, dp->d_name);
+        file_name = StringPrintf("%s/%s", android_dir, dp->d_name);
 
         android::base::ReadFileToString(file_name, &dt_file);
         std::replace(dt_file.begin(), dt_file.end(), ',', '.');
 
-        std::string property_name = android::base::StringPrintf("ro.boot.%s", dp->d_name);
+        std::string property_name = StringPrintf("ro.boot.%s", dp->d_name);
         property_set(property_name.c_str(), dt_file.c_str());
     }
 }
@@ -668,12 +669,14 @@ int main(int argc, char** argv) {
         return watchdogd_main(argc, argv);
     }
 
+    boot_clock::time_point start_time = boot_clock::now();
+
     // Clear the umask.
     umask(0);
 
     add_environment("PATH", _PATH_DEFPATH);
 
-    bool is_first_stage = (argc == 1) || (strcmp(argv[1], "--second-stage") != 0);
+    bool is_first_stage = (getenv("INIT_SECOND_STAGE") == nullptr);
 
     // Don't expose the raw commandline to unprivileged processes.
     chmod("/proc/cmdline", 0440);
@@ -698,32 +701,34 @@ int main(int argc, char** argv) {
     // talk to the outside world...
     InitKernelLogging(argv);
 
-    if (is_first_stage) {
-        LOG(INFO) << "init first stage started!";
+    LOG(INFO) << "init " << (is_first_stage ? "first" : "second") << " stage started!";
 
+    if (is_first_stage) {
         // Mount devices defined in android.early.* kernel commandline
         early_mount();
 
-        // Set up SELinux, including loading the SELinux policy if we're in the kernel domain.
+        // Set up SELinux, loading the SELinux policy.
         selinux_initialize(true);
 
-        // If we're in the kernel domain, re-exec init to transition to the init domain now
+        // We're in the kernel domain, so re-exec init to transition to the init domain now
         // that the SELinux policy has been loaded.
-
         if (restorecon("/init") == -1) {
             PLOG(ERROR) << "restorecon failed";
             security_failure();
         }
+
+        setenv("INIT_SECOND_STAGE", "true", 1);
+
+        uint64_t start_ns = start_time.time_since_epoch().count();
+        setenv("INIT_STARTED_AT", StringPrintf("%" PRIu64, start_ns).c_str(), 1);
+
         char* path = argv[0];
-        char* args[] = { path, const_cast<char*>("--second-stage"), nullptr };
+        char* args[] = { path, nullptr };
         if (execv(path, args) == -1) {
             PLOG(ERROR) << "execv(\"" << path << "\") failed";
             security_failure();
         }
-
     } else {
-        LOG(INFO) << "init second stage started!";
-
         // Indicate that booting is in progress to background fw loaders, etc.
         close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
 
@@ -738,7 +743,10 @@ int main(int argc, char** argv) {
         // used by init as well as the current required properties.
         export_kernel_boot_props();
 
-        // Now set up SELinux for second stage
+        // Make the time that init started available for bootstat to log.
+        property_set("init.start", getenv("INIT_STARTED_AT"));
+
+        // Now set up SELinux for second stage.
         selinux_initialize(false);
     }
 
@@ -813,21 +821,22 @@ int main(int argc, char** argv) {
             restart_processes();
         }
 
-        int timeout = -1;
-        if (process_needs_restart) {
-            timeout = (process_needs_restart - gettime()) * 1000;
-            if (timeout < 0)
-                timeout = 0;
+        // By default, sleep until something happens.
+        int epoll_timeout_ms = -1;
+
+        // If there's more work to do, wake up again immediately.
+        if (am.HasMoreCommands()) epoll_timeout_ms = 0;
+
+        // If there's a process that needs restarting, wake up in time for that.
+        if (process_needs_restart_at != 0) {
+            epoll_timeout_ms = (process_needs_restart_at - time(nullptr)) * 1000;
+            if (epoll_timeout_ms < 0) epoll_timeout_ms = 0;
         }
 
-        if (am.HasMoreCommands()) {
-            timeout = 0;
-        }
-
-        bootchart_sample(&timeout);
+        bootchart_sample(&epoll_timeout_ms);
 
         epoll_event ev;
-        int nr = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd, &ev, 1, timeout));
+        int nr = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd, &ev, 1, epoll_timeout_ms));
         if (nr == -1) {
             PLOG(ERROR) << "epoll_wait failed";
         } else if (nr == 1) {
