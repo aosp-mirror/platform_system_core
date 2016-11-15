@@ -43,7 +43,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <functional>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -301,7 +303,7 @@ static Transport* open_device() {
             announce = false;
             fprintf(stderr, "< waiting for %s >\n", serial ? serial : "any device");
         }
-        usleep(1000);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 

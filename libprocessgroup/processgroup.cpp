@@ -31,11 +31,14 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <thread>
 
 #include <android-base/logging.h>
 #include <private/android_filesystem_config.h>
 
 #include <processgroup/processgroup.h>
+
+using namespace std::chrono_literals;
 
 // Uncomment line below use memory cgroups for keeping track of (forked) PIDs
 // #define USE_MEMCG 1
@@ -288,7 +291,7 @@ int killProcessGroup(uid_t uid, int initialPid, int signal)
     while ((processes = killProcessGroupOnce(uid, initialPid, signal)) > 0) {
         LOG(VERBOSE) << "killed " << processes << " processes for processgroup " << initialPid;
         if (retry > 0) {
-            usleep(5 * 1000); // 5ms
+            std::this_thread::sleep_for(5ms);
             --retry;
         } else {
             LOG(ERROR) << "failed to kill " << processes << " processes for processgroup "
