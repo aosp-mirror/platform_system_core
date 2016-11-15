@@ -34,6 +34,8 @@
 #include <sys/types.h>
 #include <sys/un.h>
 
+#include <thread>
+
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
@@ -326,7 +328,7 @@ int wait_for_file(const char* filename, std::chrono::nanoseconds timeout) {
         struct stat sb;
         if (stat(filename, &sb) != -1) return 0;
 
-        usleep(10000);
+        std::this_thread::sleep_for(10ms);
     }
     return -1;
 }

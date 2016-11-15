@@ -43,10 +43,14 @@
 #include <linux/version.h>
 #include <linux/usb/ch9.h>
 
+#include <chrono>
 #include <memory>
+#include <thread>
 
 #include "fastboot.h"
 #include "usb.h"
+
+using namespace std::chrono_literals;
 
 #define MAX_RETRIES 5
 
@@ -426,7 +430,7 @@ ssize_t LinuxUsbTransport::Read(void* _data, size_t len)
         return -1;
     }
 
-    while(len > 0) {
+    while (len > 0) {
         int xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
 
         bulk.ep = handle_->ep_in;
@@ -435,18 +439,17 @@ ssize_t LinuxUsbTransport::Read(void* _data, size_t len)
         bulk.timeout = 0;
         retry = 0;
 
-        do{
-           DBG("[ usb read %d fd = %d], fname=%s\n", xfer, handle_->desc, handle_->fname);
-           n = ioctl(handle_->desc, USBDEVFS_BULK, &bulk);
-           DBG("[ usb read %d ] = %d, fname=%s, Retry %d \n", xfer, n, handle_->fname, retry);
+        do {
+            DBG("[ usb read %d fd = %d], fname=%s\n", xfer, handle_->desc, handle_->fname);
+            n = ioctl(handle_->desc, USBDEVFS_BULK, &bulk);
+            DBG("[ usb read %d ] = %d, fname=%s, Retry %d \n", xfer, n, handle_->fname, retry);
 
-           if( n < 0 ) {
-            DBG1("ERROR: n = %d, errno = %d (%s)\n",n, errno, strerror(errno));
-            if ( ++retry > MAX_RETRIES ) return -1;
-            sleep( 1 );
-           }
-        }
-        while( n < 0 );
+            if (n < 0) {
+                DBG1("ERROR: n = %d, errno = %d (%s)\n",n, errno, strerror(errno));
+                if (++retry > MAX_RETRIES) return -1;
+                std::this_thread::sleep_for(1s);
+            }
+        } while (n < 0);
 
         count += n;
         len -= n;
@@ -488,9 +491,8 @@ int LinuxUsbTransport::WaitForDisconnect()
 {
   double deadline = now() + WAIT_FOR_DISCONNECT_TIMEOUT;
   while (now() < deadline) {
-    if (access(handle_->fname, F_OK))
-      return 0;
-    usleep(50000);
+    if (access(handle_->fname, F_OK)) return 0;
+    std::this_thread::sleep_for(50ms);
   }
   return -1;
 }
