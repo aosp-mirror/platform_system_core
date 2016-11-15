@@ -38,6 +38,8 @@
 #include <linux/loop.h>
 #include <linux/module.h>
 
+#include <thread>
+
 #include <selinux/selinux.h>
 #include <selinux/label.h>
 
@@ -65,7 +67,6 @@
 #include "util.h"
 
 #define chmod DO_NOT_USE_CHMOD_USE_FCHMODAT_SYMLINK_NOFOLLOW
-#define UNMOUNT_CHECK_MS 5000
 #define UNMOUNT_CHECK_TIMES 10
 
 static constexpr std::chrono::nanoseconds kCommandRetryTimeout = 5s;
@@ -192,11 +193,9 @@ static void unmount_and_fsck(const struct mntent *entry) {
             close(fd);
             break;
         } else if (errno == EBUSY) {
-            /* Some processes using |entry->mnt_dir| are still alive. Wait for a
-             * while then retry.
-             */
-            TEMP_FAILURE_RETRY(
-                usleep(UNMOUNT_CHECK_MS * 1000 / UNMOUNT_CHECK_TIMES));
+            // Some processes using |entry->mnt_dir| are still alive. Wait for a
+            // while then retry.
+            std::this_thread::sleep_for(5000ms / UNMOUNT_CHECK_TIMES);
             continue;
         } else {
             /* Cannot open the device. Give up. */
@@ -754,7 +753,7 @@ static int do_powerctl(const std::vector<std::string>& args) {
             }
 
             // Wait a bit before recounting the number or running services.
-            usleep(50000 /*us*/);
+            std::this_thread::sleep_for(50ms);
         }
         LOG(VERBOSE) << "Terminating running services took " << t.duration() << " seconds";
     }
