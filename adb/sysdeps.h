@@ -248,11 +248,6 @@ extern int unix_open(const char* path, int options, ...);
 int unix_isatty(int fd);
 #define  isatty  ___xxx_isatty
 
-static __inline__ void  adb_sleep_ms( int  mseconds )
-{
-    Sleep( mseconds );
-}
-
 int network_loopback_client(int port, int type, std::string* error);
 int network_loopback_server(int port, int type, std::string* error);
 int network_inaddr_any_server(int port, int type, std::string* error);
@@ -765,11 +760,6 @@ static __inline__ int adb_poll(adb_pollfd* fds, size_t nfds, int timeout) {
 }
 
 #define poll ___xxx_poll
-
-static __inline__ void  adb_sleep_ms( int  mseconds )
-{
-    usleep( mseconds*1000 );
-}
 
 static __inline__ int  adb_mkdir(const std::string& path, int mode)
 {

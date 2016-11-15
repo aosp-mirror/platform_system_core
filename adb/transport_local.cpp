@@ -25,8 +25,10 @@
 #include <string.h>
 #include <sys/types.h>
 
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 #include <android-base/stringprintf.h>
@@ -144,7 +146,7 @@ static void PollAllLocalPortsForEmulator() {
 
 // Retry the disconnected local port for 60 times, and sleep 1 second between two retries.
 constexpr uint32_t LOCAL_PORT_RETRY_COUNT = 60;
-constexpr uint32_t LOCAL_PORT_RETRY_INTERVAL_IN_MS = 1000;
+constexpr auto LOCAL_PORT_RETRY_INTERVAL = std::chrono::seconds(1);
 
 struct RetryPort {
     int port;
@@ -173,7 +175,7 @@ static void client_socket_thread(void* x) {
         // Sleep here instead of the end of loop, because if we immediately try to reconnect
         // the emulator just kicked, the adbd on the emulator may not have time to remove the
         // just kicked transport.
-        adb_sleep_ms(LOCAL_PORT_RETRY_INTERVAL_IN_MS);
+        std::this_thread::sleep_for(LOCAL_PORT_RETRY_INTERVAL);
 
         // Try connecting retry ports.
         std::vector<RetryPort> next_ports;
@@ -214,7 +216,7 @@ static void server_socket_thread(void* arg) {
             serverfd = network_inaddr_any_server(port, SOCK_STREAM, &error);
             if(serverfd < 0) {
                 D("server: cannot bind socket yet: %s", error.c_str());
-                adb_sleep_ms(1000);
+                std::this_thread::sleep_for(std::chrono::seconds(1));
                 continue;
             }
             close_on_exec(serverfd);
