@@ -25,14 +25,15 @@ bool FuseBridgeLoop::Start(
     int raw_dev_fd, int raw_proxy_fd, FuseBridgeLoop::Callback* callback) {
   base::unique_fd dev_fd(raw_dev_fd);
   base::unique_fd proxy_fd(raw_proxy_fd);
+  fuse::FuseBuffer buffer;
 
   LOG(DEBUG) << "Start fuse loop.";
   while (true) {
-    if (!buffer_.request.Read(dev_fd)) {
+    if (!buffer.request.Read(dev_fd)) {
       return false;
     }
 
-    const uint32_t opcode = buffer_.request.header.opcode;
+    const uint32_t opcode = buffer.request.header.opcode;
     LOG(VERBOSE) << "Read a fuse packet, opcode=" << opcode;
     switch (opcode) {
       case FUSE_FORGET:
@@ -45,27 +46,27 @@ bool FuseBridgeLoop::Start(
       case FUSE_READ:
       case FUSE_WRITE:
       case FUSE_RELEASE:
-      case FUSE_FLUSH:
-        if (!buffer_.request.Write(proxy_fd)) {
+      case FUSE_FSYNC:
+        if (!buffer.request.Write(proxy_fd)) {
           LOG(ERROR) << "Failed to write a request to the proxy.";
           return false;
         }
-        if (!buffer_.response.Read(proxy_fd)) {
+        if (!buffer.response.Read(proxy_fd)) {
           LOG(ERROR) << "Failed to read a response from the proxy.";
           return false;
         }
         break;
 
       case FUSE_INIT:
-        buffer_.HandleInit();
+        buffer.HandleInit();
         break;
 
       default:
-        buffer_.HandleNotImpl();
+        buffer.HandleNotImpl();
         break;
     }
 
-    if (!buffer_.response.Write(dev_fd)) {
+    if (!buffer.response.Write(dev_fd)) {
       LOG(ERROR) << "Failed to write a response to the device.";
       return false;
     }
@@ -76,4 +77,12 @@ bool FuseBridgeLoop::Start(
   }
 }
 
+namespace fuse {
+
+bool StartFuseBridgeLoop(
+    int raw_dev_fd, int raw_proxy_fd, FuseBridgeLoopCallback* callback) {
+  return FuseBridgeLoop().Start(raw_dev_fd, raw_proxy_fd, callback);
+}
+
+}  // namespace fuse
 }  // namespace android
