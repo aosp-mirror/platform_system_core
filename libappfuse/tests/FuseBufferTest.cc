@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 namespace android {
+namespace fuse {
 
 constexpr char kTempFile[] = "/data/local/tmp/appfuse_test_dump";
 
@@ -183,5 +184,6 @@ TEST(FuseBufferTest, HandleNotImpl) {
   ASSERT_EQ(sizeof(fuse_out_header), buffer.response.header.len);
   EXPECT_EQ(-ENOSYS, buffer.response.header.error);
 }
-}
-  // namespace android
+
+} // namespace fuse
+} // namespace android

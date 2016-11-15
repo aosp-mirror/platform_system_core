@@ -21,11 +21,15 @@
 #include <sstream>
 #include <thread>
 
+#include <android-base/logging.h>
+#include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 
 namespace android {
+namespace fuse {
+namespace {
 
-class Callback : public FuseBridgeLoop::Callback {
+class Callback : public FuseBridgeLoopCallback {
  public:
   bool mounted;
   Callback() : mounted(false) {}
@@ -36,20 +40,28 @@ class Callback : public FuseBridgeLoop::Callback {
 
 class FuseBridgeLoopTest : public ::testing::Test {
  protected:
-  int dev_sockets_[2];
-  int proxy_sockets_[2];
+  base::unique_fd dev_sockets_[2];
+  base::unique_fd proxy_sockets_[2];
   Callback callback_;
   std::thread thread_;
 
   FuseRequest request_;
   FuseResponse response_;
 
-  void SetUp() {
-    ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_SEQPACKET, 0, dev_sockets_));
-    ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_SEQPACKET, 0, proxy_sockets_));
+  void SetUp() override {
+    base::SetMinimumLogSeverity(base::VERBOSE);
+    int dev_sockets[2];
+    int proxy_sockets[2];
+    ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_SEQPACKET, 0, dev_sockets));
+    ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_SEQPACKET, 0, proxy_sockets));
+    dev_sockets_[0].reset(dev_sockets[0]);
+    dev_sockets_[1].reset(dev_sockets[1]);
+    proxy_sockets_[0].reset(proxy_sockets[0]);
+    proxy_sockets_[1].reset(proxy_sockets[1]);
+
     thread_ = std::thread([this] {
-      FuseBridgeLoop loop;
-      loop.Start(dev_sockets_[1], proxy_sockets_[0], &callback_);
+      StartFuseBridgeLoop(
+          dev_sockets_[1].release(), proxy_sockets_[0].release(), &callback_);
     });
   }
 
@@ -103,19 +115,21 @@ class FuseBridgeLoopTest : public ::testing::Test {
   }
 
   void Close() {
-    close(dev_sockets_[0]);
-    close(dev_sockets_[1]);
-    close(proxy_sockets_[0]);
-    close(proxy_sockets_[1]);
+    dev_sockets_[0].reset();
+    dev_sockets_[1].reset();
+    proxy_sockets_[0].reset();
+    proxy_sockets_[1].reset();
     if (thread_.joinable()) {
       thread_.join();
     }
   }
 
-  void TearDown() {
+  void TearDown() override {
     Close();
   }
 };
+
+} //  namespace
 
 TEST_F(FuseBridgeLoopTest, FuseInit) {
   SendInitRequest(1u);
@@ -156,11 +170,11 @@ TEST_F(FuseBridgeLoopTest, FuseNotImpl) {
   CheckNotImpl(FUSE_RENAME);
   CheckNotImpl(FUSE_LINK);
   CheckNotImpl(FUSE_STATFS);
-  CheckNotImpl(FUSE_FSYNC);
   CheckNotImpl(FUSE_SETXATTR);
   CheckNotImpl(FUSE_GETXATTR);
   CheckNotImpl(FUSE_LISTXATTR);
   CheckNotImpl(FUSE_REMOVEXATTR);
+  CheckNotImpl(FUSE_FLUSH);
   CheckNotImpl(FUSE_OPENDIR);
   CheckNotImpl(FUSE_READDIR);
   CheckNotImpl(FUSE_RELEASEDIR);
@@ -190,7 +204,8 @@ TEST_F(FuseBridgeLoopTest, Proxy) {
   CheckProxy(FUSE_READ);
   CheckProxy(FUSE_WRITE);
   CheckProxy(FUSE_RELEASE);
-  CheckProxy(FUSE_FLUSH);
+  CheckProxy(FUSE_FSYNC);
 }
 
-}  // android
+}  // namespace fuse
+}  // namespace android
