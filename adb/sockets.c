@@ -20,13 +20,17 @@
 #include <errno.h>
 #include <string.h>
 #include <ctype.h>
-#include <pthread.h>
 
 #include "sysdeps.h"
 
 #define  TRACE_TAG  TRACE_SOCKETS
 #include "adb.h"
 
+#if defined(_WIN32)
+#define pthread_mutex_lock(...) abort()
+#define pthread_mutex_unlock(...) abort()
+#else
+#include <pthread.h>
 static pthread_mutex_t socket_list_lock;
 static void __attribute__((constructor)) socket_list_lock_init(void) {
   pthread_mutexattr_t attr;
@@ -34,6 +38,7 @@ static void __attribute__((constructor)) socket_list_lock_init(void) {
   pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
   pthread_mutex_init(&socket_list_lock, &attr);
 }
+#endif
 
 int sendfailmsg(int fd, const char *reason)
 {
