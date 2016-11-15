@@ -247,7 +247,9 @@ std::string Action::BuildTriggersString() const {
         result += event_trigger_;
         result += ' ';
     }
-    result.pop_back();
+    if (!result.empty()) {
+        result.pop_back();
+    }
     return result;
 }
 
