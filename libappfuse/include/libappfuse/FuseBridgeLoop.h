@@ -20,23 +20,14 @@
 #include "libappfuse/FuseBuffer.h"
 
 namespace android {
-
-// TODO: Remove the class after switching to StartFuseBridgeLoop in the
-// framework code.
-class FuseBridgeLoop final {
- public:
-  class Callback {
-   public:
-    virtual void OnMount() = 0;
-    virtual ~Callback() = default;
-  };
-
-  bool Start(int dev_fd, int proxy_fd, Callback* callback);
-};
-
 namespace fuse {
 
-class FuseBridgeLoopCallback : public FuseBridgeLoop::Callback {};
+class FuseBridgeLoopCallback {
+ public:
+  virtual void OnMount() = 0;
+  virtual ~FuseBridgeLoopCallback() = default;
+};
+
 bool StartFuseBridgeLoop(
     int dev_fd, int proxy_fd, FuseBridgeLoopCallback* callback);
 
