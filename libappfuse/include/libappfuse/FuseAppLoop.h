@@ -14,33 +14,31 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_LIBAPPFUSE_FUSEBRIDGELOOP_H_
-#define ANDROID_LIBAPPFUSE_FUSEBRIDGELOOP_H_
+#ifndef ANDROID_LIBAPPFUSE_FUSEAPPLOOP_H_
+#define ANDROID_LIBAPPFUSE_FUSEAPPLOOP_H_
 
 #include "libappfuse/FuseBuffer.h"
 
 namespace android {
-
-// TODO: Remove the class after switching to StartFuseBridgeLoop in the
-// framework code.
-class FuseBridgeLoop final {
- public:
-  class Callback {
-   public:
-    virtual void OnMount() = 0;
-    virtual ~Callback() = default;
-  };
-
-  bool Start(int dev_fd, int proxy_fd, Callback* callback);
-};
-
 namespace fuse {
 
-class FuseBridgeLoopCallback : public FuseBridgeLoop::Callback {};
-bool StartFuseBridgeLoop(
-    int dev_fd, int proxy_fd, FuseBridgeLoopCallback* callback);
+class FuseAppLoopCallback {
+ public:
+  virtual bool IsActive() = 0;
+  virtual int64_t OnGetSize(uint64_t inode) = 0;
+  virtual int32_t OnFsync(uint64_t inode) = 0;
+  virtual int32_t OnWrite(
+      uint64_t inode, uint64_t offset, uint32_t size, const void* data) = 0;
+  virtual int32_t OnRead(
+      uint64_t inode, uint64_t offset, uint32_t size, void* data) = 0;
+  virtual int32_t OnOpen(uint64_t inode) = 0;
+  virtual int32_t OnRelease(uint64_t inode) = 0;
+  virtual ~FuseAppLoopCallback() = default;
+};
+
+bool StartFuseAppLoop(int fd, FuseAppLoopCallback* callback);
 
 }  // namespace fuse
 }  // namespace android
 
-#endif  // ANDROID_LIBAPPFUSE_FUSEBRIDGELOOP_H_
+#endif  // ANDROID_LIBAPPFUSE_FUSEAPPLOOP_H_
