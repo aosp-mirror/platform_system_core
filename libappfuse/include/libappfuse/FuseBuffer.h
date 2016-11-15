@@ -20,6 +20,7 @@
 #include <linux/fuse.h>
 
 namespace android {
+namespace fuse {
 
 // The numbers came from sdcard.c.
 // Maximum number of bytes to write/read in one request/one reply.
@@ -37,33 +38,51 @@ struct FuseMessage {
   bool CheckResult(int result, const char* operation_name) const;
 };
 
-struct FuseRequest : public FuseMessage<FuseRequest, fuse_in_header> {
+// FuseRequest represents file operation requests from /dev/fuse. It starts
+// from fuse_in_header. The body layout depends on the operation code.
+struct FuseRequest final : public FuseMessage<FuseRequest, fuse_in_header> {
   union {
+    // for FUSE_WRITE
     struct {
       fuse_write_in write_in;
       char write_data[kFuseMaxWrite];
     };
+    // for FUSE_OPEN
     fuse_open_in open_in;
+    // for FUSE_INIT
     fuse_init_in init_in;
+    // for FUSE_READ
     fuse_read_in read_in;
+    // for FUSE_LOOKUP
     char lookup_name[0];
   };
+  void Reset(uint32_t data_length, uint32_t opcode, uint64_t unique);
 };
 
-struct FuseResponse : public FuseMessage<FuseResponse, fuse_out_header> {
+// FuseResponse represents file operation responses to /dev/fuse. It starts
+// from fuse_out_header. The body layout depends on the operation code.
+struct FuseResponse final : public FuseMessage<FuseResponse, fuse_out_header> {
   union {
+    // for FUSE_INIT
     fuse_init_out init_out;
+    // for FUSE_LOOKUP
     fuse_entry_out entry_out;
+    // for FUSE_GETATTR
     fuse_attr_out attr_out;
+    // for FUSE_OPEN
     fuse_open_out open_out;
+    // for FUSE_READ
     char read_data[kFuseMaxRead];
+    // for FUSE_WRITE
     fuse_write_out write_out;
   };
   void Reset(uint32_t data_length, int32_t error, uint64_t unique);
   void ResetHeader(uint32_t data_length, int32_t error, uint64_t unique);
 };
 
-union FuseBuffer {
+// To reduce memory usage, FuseBuffer shares the memory region for request and
+// response.
+union FuseBuffer final {
   FuseRequest request;
   FuseResponse response;
 
@@ -71,19 +90,7 @@ union FuseBuffer {
   void HandleNotImpl();
 };
 
-class FuseProxyLoop {
-  class IFuseProxyLoopCallback {
-   public:
-    virtual void OnMount() = 0;
-    virtual ~IFuseProxyLoopCallback() = default;
-  };
-
-  bool Start(int dev_fd, int proxy_fd, IFuseProxyLoopCallback* callback);
-
- private:
-  FuseBuffer buffer_;
-};
-
+}  // namespace fuse
 }  // namespace android
 
 #endif  // ANDROID_LIBAPPFUSE_FUSEBUFFER_H_
