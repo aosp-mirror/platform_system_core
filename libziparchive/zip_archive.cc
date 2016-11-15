@@ -781,7 +781,8 @@ class FileWriter : public Writer {
   // Creates a FileWriter for |fd| and prepare to write |entry| to it,
   // guaranteeing that the file descriptor is valid and that there's enough
   // space on the volume to write out the entry completely and that the file
-  // is truncated to the correct length.
+  // is truncated to the correct length (no truncation if |fd| references a
+  // block device).
   //
   // Returns a valid FileWriter on success, |nullptr| if an error occurred.
   static std::unique_ptr<FileWriter> Create(int fd, const ZipEntry* entry) {
@@ -814,11 +815,20 @@ class FileWriter : public Writer {
     }
 #endif  // __linux__
 
-    result = TEMP_FAILURE_RETRY(ftruncate(fd, declared_length + current_offset));
-    if (result == -1) {
-      ALOGW("Zip: unable to truncate file to %" PRId64 ": %s",
-            static_cast<int64_t>(declared_length + current_offset), strerror(errno));
+    struct stat sb;
+    if (fstat(fd, &sb) == -1) {
+      ALOGW("Zip: unable to fstat file: %s", strerror(errno));
       return std::unique_ptr<FileWriter>(nullptr);
+    }
+
+    // Block device doesn't support ftruncate(2).
+    if (!S_ISBLK(sb.st_mode)) {
+      result = TEMP_FAILURE_RETRY(ftruncate(fd, declared_length + current_offset));
+      if (result == -1) {
+        ALOGW("Zip: unable to truncate file to %" PRId64 ": %s",
+              static_cast<int64_t>(declared_length + current_offset), strerror(errno));
+        return std::unique_ptr<FileWriter>(nullptr);
+      }
     }
 
     return std::unique_ptr<FileWriter>(new FileWriter(fd, declared_length));
