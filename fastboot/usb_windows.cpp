@@ -362,9 +362,3 @@ Transport* usb_open(ifc_match_func callback)
     std::unique_ptr<usb_handle> handle = find_usb_device(callback);
     return handle ? new WindowsUsbTransport(std::move(handle)) : nullptr;
 }
-
-// called from fastboot.c
-void sleep(int seconds)
-{
-    Sleep(seconds * 1000);
-}
