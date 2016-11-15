@@ -121,8 +121,9 @@ typedef struct ANativeWindowBuffer
     int stride;
     int format;
     int usage;
+    uintptr_t layerCount;
 
-    void* reserved[2];
+    void* reserved[1];
 
     buffer_handle_t handle;
 
@@ -297,6 +298,13 @@ enum {
      * Returns the duration of the last queueBuffer call in microseconds
      */
     NATIVE_WINDOW_LAST_QUEUE_DURATION = 15,
+
+    /*
+     * Returns the number of image layers that the ANativeWindow buffer
+     * contains. By default this is 1, unless a buffer is explicitly allocated
+     * to contain multiple layers.
+     */
+    NATIVE_WINDOW_LAYER_COUNT = 16,
 };
 
 /* Valid operations for the (*perform)() hook.
