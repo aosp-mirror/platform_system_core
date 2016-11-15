@@ -195,7 +195,8 @@ void EndIteration(void* cookie);
  * Uncompress and write an entry to an open file identified by |fd|.
  * |entry->uncompressed_length| bytes will be written to the file at
  * its current offset, and the file will be truncated at the end of
- * the uncompressed data.
+ * the uncompressed data (no truncation if |fd| references a block
+ * device).
  *
  * Returns 0 on success and negative values on failure.
  */
