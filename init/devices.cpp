@@ -35,6 +35,7 @@
 #include <linux/netlink.h>
 
 #include <memory>
+#include <thread>
 
 #include <selinux/selinux.h>
 #include <selinux/label.h>
@@ -841,7 +842,7 @@ try_loading_again:
     if (booting) {
         // If we're not fully booted, we may be missing
         // filesystems needed for firmware, wait and retry.
-        usleep(100000);
+        std::this_thread::sleep_for(100ms);
         booting = is_booting();
         goto try_loading_again;
     }
