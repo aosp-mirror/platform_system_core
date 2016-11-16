@@ -1260,12 +1260,9 @@ static int handle_init(struct fuse* fuse, struct fuse_handler* handler,
 #if defined(FUSE_COMPAT_22_INIT_OUT_SIZE)
     /* FUSE_KERNEL_VERSION >= 23. */
 
-    /* If the kernel only works on minor revs older than or equal to 22,
-     * then use the older structure size since this code only uses the 7.22
-     * version of the structure. */
-    if (req->minor <= 22) {
-        fuse_struct_size = FUSE_COMPAT_22_INIT_OUT_SIZE;
-    }
+    /* Since we return minor version 15, the kernel does not accept the latest
+     * fuse_init_out size. We need to use FUSE_COMPAT_22_INIT_OUT_SIZE always.*/
+    fuse_struct_size = FUSE_COMPAT_22_INIT_OUT_SIZE;
 #endif
 
     out.major = FUSE_KERNEL_VERSION;
