@@ -632,8 +632,8 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
     size_t len;
     int64_t lval;
 
-    if (eventDataLen < 1)
-        return -1;
+    if (eventDataLen < 1) return -1;
+
     type = *eventData++;
     eventDataLen--;
 
@@ -729,8 +729,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
         {
             int32_t ival;
 
-            if (eventDataLen < 4)
-                return -1;
+            if (eventDataLen < 4) return -1;
             ival = get4LE(eventData);
             eventData += 4;
             eventDataLen -= 4;
@@ -740,8 +739,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
         goto pr_lval;
     case EVENT_TYPE_LONG:
         /* 64-bit signed long */
-        if (eventDataLen < 8)
-            return -1;
+        if (eventDataLen < 8) return -1;
         lval = get8LE(eventData);
         eventData += 8;
         eventDataLen -= 8;
@@ -761,8 +759,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
             uint32_t ival;
             float fval;
 
-            if (eventDataLen < 4)
-                return -1;
+            if (eventDataLen < 4) return -1;
             ival = get4LE(eventData);
             fval = *(float*)&ival;
             eventData += 4;
@@ -783,14 +780,12 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
         {
             unsigned int strLen;
 
-            if (eventDataLen < 4)
-                return -1;
+            if (eventDataLen < 4) return -1;
             strLen = get4LE(eventData);
             eventData += 4;
             eventDataLen -= 4;
 
-            if (eventDataLen < strLen)
-                return -1;
+            if (eventDataLen < strLen) return -1;
 
             if (cp && (strLen == 0)) {
                 /* reset the format if no content */
@@ -818,41 +813,32 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
             unsigned char count;
             int i;
 
-            if (eventDataLen < 1)
-                return -1;
+            if (eventDataLen < 1) return -1;
 
             count = *eventData++;
             eventDataLen--;
 
-            if (outBufLen > 0) {
-                *outBuf++ = '[';
-                outBufLen--;
-            } else {
-                goto no_room;
-            }
+            if (outBufLen <= 0) goto no_room;
+
+            *outBuf++ = '[';
+            outBufLen--;
 
             for (i = 0; i < count; i++) {
                 result = android_log_printBinaryEvent(&eventData, &eventDataLen,
                         &outBuf, &outBufLen, fmtStr, fmtLen);
-                if (result != 0)
-                    goto bail;
+                if (result != 0) goto bail;
 
-                if (i < count-1) {
-                    if (outBufLen > 0) {
-                        *outBuf++ = ',';
-                        outBufLen--;
-                    } else {
-                        goto no_room;
-                    }
+                if (i < (count - 1)) {
+                    if (outBufLen <= 0) goto no_room;
+                    *outBuf++ = ',';
+                    outBufLen--;
                 }
             }
 
-            if (outBufLen > 0) {
-                *outBuf++ = ']';
-                outBufLen--;
-            } else {
-                goto no_room;
-            }
+            if (outBufLen <= 0) goto no_room;
+
+            *outBuf++ = ']';
+            outBufLen--;
         }
         break;
     default:
@@ -997,8 +983,7 @@ LIBLOG_ABI_PUBLIC int android_log_processBinaryLogBuffer(
         }
     }
     inCount = buf->len;
-    if (inCount < 4)
-        return -1;
+    if (inCount < 4) return -1;
     tagIndex = get4LE(eventData);
     eventData += 4;
     inCount -= 4;
@@ -1031,16 +1016,20 @@ LIBLOG_ABI_PUBLIC int android_log_processBinaryLogBuffer(
     /*
      * Format the event log data into the buffer.
      */
-    char* outBuf = messageBuf;
-    size_t outRemaining = messageBufLen - 1; /* leave one for nul byte */
-    int result;
     const char* fmtStr = NULL;
     size_t fmtLen = 0;
     if (descriptive_output && map) {
         fmtStr = android_lookupEventFormat_len(map, &fmtLen, tagIndex);
     }
-    result = android_log_printBinaryEvent(&eventData, &inCount, &outBuf,
-                &outRemaining, &fmtStr, &fmtLen);
+
+    char* outBuf = messageBuf;
+    size_t outRemaining = messageBufLen - 1; /* leave one for nul byte */
+    int result = 0;
+
+    if ((inCount > 0) || fmtLen) {
+        result = android_log_printBinaryEvent(&eventData, &inCount, &outBuf,
+                                              &outRemaining, &fmtStr, &fmtLen);
+    }
     if ((result == 1) && fmtStr) {
         /* We overflowed :-(, let's repaint the line w/o format dressings */
         eventData = (const unsigned char*)buf->msg;
@@ -1055,17 +1044,16 @@ LIBLOG_ABI_PUBLIC int android_log_processBinaryLogBuffer(
     }
     if (result < 0) {
         fprintf(stderr, "Binary log entry conversion failed\n");
-        return -1;
-    } else if (result == 1) {
-        if (outBuf > messageBuf) {
-            /* leave an indicator */
-            *(outBuf-1) = '!';
-        } else {
-            /* no room to output anything at all */
-            *outBuf++ = '!';
-            outRemaining--;
+    }
+    if (result) {
+        if (!outRemaining) {
+            /* make space to leave an indicator */
+            --outBuf;
+            ++outRemaining;
         }
-        /* pretend we ate all the data */
+        *outBuf++ = (result < 0) ? '!' : '^'; /* Error or Truncation? */
+        outRemaining--;
+        /* pretend we ate all the data to prevent log stutter */
         inCount = 0;
     }
 
@@ -1802,8 +1790,7 @@ LIBLOG_ABI_PUBLIC int android_log_printLogLine(
     outBuffer = android_log_formatLogLine(p_format, defaultBuffer,
             sizeof(defaultBuffer), entry, &totalLen);
 
-    if (!outBuffer)
-        return -1;
+    if (!outBuffer) return -1;
 
     do {
         ret = write(fd, outBuffer, totalLen);
