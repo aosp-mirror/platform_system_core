@@ -741,6 +741,7 @@ int newfs_msdos_main(int argc, char *argv[])
                 exit(1);
             }
         }
+        free(img);
     }
     return 0;
 }
