@@ -20,7 +20,6 @@
 
 #include <unistd.h>
 
-#include <chrono>
 #include <thread>
 
 #include <android-base/stringprintf.h>

@@ -31,7 +31,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <chrono>
 #include <memory>
 #include <string>
 #include <thread>
@@ -61,6 +60,7 @@
 #include "file_sync_service.h"
 #include "services.h"
 #include "shell_service.h"
+#include "sysdeps/chrono.h"
 
 static int install_app(TransportType t, const char* serial, int argc, const char** argv);
 static int install_multiple_app(TransportType t, const char* serial, int argc, const char** argv);
@@ -1082,7 +1082,7 @@ static bool adb_root(const char* command) {
 
     // Give adbd some time to kill itself and come back up.
     // We can't use wait-for-device because devices (e.g. adb over network) might not come back.
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    std::this_thread::sleep_for(3s);
     return true;
 }
 
