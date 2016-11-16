@@ -589,9 +589,9 @@ static int do_mount_all(const std::vector<std::string>& args) {
 
     for (na = args.size() - 1; na > 1; --na) {
         if (args[na] == "--early") {
-             path_arg_end = na;
-             queue_event = false;
-             mount_mode = MOUNT_MODE_EARLY;
+            path_arg_end = na;
+            queue_event = false;
+            mount_mode = MOUNT_MODE_EARLY;
         } else if (args[na] == "--late") {
             path_arg_end = na;
             import_rc = false;
