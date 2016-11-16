@@ -30,7 +30,9 @@
 #include <sys/time.h>
 #include <time.h>
 
+#include <chrono>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <android-base/errors.h>
@@ -51,6 +53,7 @@
 #include <sys/capability.h>
 #include <sys/mount.h>
 #include <android-base/properties.h>
+using namespace std::chrono_literals;
 #endif
 
 std::string adb_version() {
@@ -375,7 +378,7 @@ void handle_packet(apacket *p, atransport *t)
                     adbd_auth_verified(t);
                     t->failed_auth_attempts = 0;
                 } else {
-                    if (t->failed_auth_attempts++ > 256) adb_sleep_ms(1000);
+                    if (t->failed_auth_attempts++ > 256) std::this_thread::sleep_for(1s);
                     send_auth_request(t);
                 }
                 break;

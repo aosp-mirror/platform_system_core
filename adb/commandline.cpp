@@ -31,8 +31,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <chrono>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <android-base/file.h>
@@ -1080,7 +1082,7 @@ static bool adb_root(const char* command) {
 
     // Give adbd some time to kill itself and come back up.
     // We can't use wait-for-device because devices (e.g. adb over network) might not come back.
-    adb_sleep_ms(3000);
+    std::this_thread::sleep_for(std::chrono::seconds(3));
     return true;
 }
 

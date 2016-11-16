@@ -28,7 +28,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <chrono>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <android-base/stringprintf.h>
@@ -188,8 +190,8 @@ int adb_connect(const std::string& service, std::string* error) {
         } else {
             fprintf(stdout,"* daemon started successfully *\n");
         }
-        /* give the server some time to start properly and detect devices */
-        adb_sleep_ms(3000);
+        // Give the server some time to start properly and detect devices.
+        std::this_thread::sleep_for(std::chrono::seconds(3));
         // fall through to _adb_connect
     } else {
         // If a server is already running, check its version matches.
@@ -234,7 +236,7 @@ int adb_connect(const std::string& service, std::string* error) {
             }
 
             /* XXX can we better detect its death? */
-            adb_sleep_ms(2000);
+            std::this_thread::sleep_for(std::chrono::seconds(2));
             goto start_server;
         }
     }
