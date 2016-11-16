@@ -1255,19 +1255,25 @@ static bool End_to_End(const char* tag, const char* fmt, ...) {
     va_end(ap);
 
     char *str = NULL;
-    asprintf(&str, "I/%s ( %%d): %s%%c", tag, buffer);
+    asprintf(&str, "I/%s ( %%d):%%c%s%%c", tag, buffer);
     std::string expect(str);
     free(str);
 
     int count = 0;
     pid_t pid = getpid();
     std::string lastMatch;
+    int maxMatch = 1;
     while (fgets(buffer, sizeof(buffer), fp)) {
+        char space;
         char newline;
         int p;
-        int ret = sscanf(buffer, expect.c_str(), &p, &newline);
-        if ((2 == ret) && (p == pid) && (newline == '\n')) ++count;
-        else if ((1 == ret) && (p == pid) && (count == 0)) lastMatch = buffer;
+        int ret = sscanf(buffer, expect.c_str(), &p, &space, &newline);
+        if ((ret == 3) && (p == pid) && (space == ' ') && (newline == '\n')) {
+            ++count;
+        } else if ((ret >= maxMatch) && (p == pid) && (count == 0)) {
+            lastMatch = buffer;
+            maxMatch = ret;
+        }
     }
 
     pclose(fp);
@@ -1395,4 +1401,10 @@ TEST(logcat, descriptive) {
         }
     }
 
+    {
+        static const struct tag sync = { 27501, "notification_panel_hidden" };
+        android_log_event_context ctx(sync.tagNo);
+        ctx.write();
+        EXPECT_TRUE(End_to_End(sync.tagStr, ""));
+    }
 }
