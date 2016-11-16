@@ -30,8 +30,10 @@
 #include <stdio.h>
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 #include <android-base/logging.h>
@@ -39,6 +41,8 @@
 
 #include "adb.h"
 #include "transport.h"
+
+using namespace std::chrono_literals;
 
 struct usb_handle
 {
@@ -411,7 +415,7 @@ static void RunLoopThread(void* unused) {
         }
         // Signal the parent that we are running
         usb_inited_flag = true;
-        adb_sleep_ms(1000);
+        std::this_thread::sleep_for(1s);
     }
     VLOG(USB) << "RunLoopThread done";
 }
@@ -436,7 +440,7 @@ void usb_init() {
 
         // Wait for initialization to finish
         while (!usb_inited_flag) {
-            adb_sleep_ms(100);
+            std::this_thread::sleep_for(100ms);
         }
 
         initialized = true;
