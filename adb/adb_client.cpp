@@ -28,7 +28,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <chrono>
 #include <string>
 #include <thread>
 #include <vector>
@@ -40,6 +39,7 @@
 #include "adb_io.h"
 #include "adb_utils.h"
 #include "socket_spec.h"
+#include "sysdeps/chrono.h"
 
 static TransportType __adb_transport = kTransportAny;
 static const char* __adb_serial = NULL;
@@ -191,7 +191,7 @@ int adb_connect(const std::string& service, std::string* error) {
             fprintf(stdout,"* daemon started successfully *\n");
         }
         // Give the server some time to start properly and detect devices.
-        std::this_thread::sleep_for(std::chrono::seconds(3));
+        std::this_thread::sleep_for(3s);
         // fall through to _adb_connect
     } else {
         // If a server is already running, check its version matches.
@@ -236,7 +236,7 @@ int adb_connect(const std::string& service, std::string* error) {
             }
 
             /* XXX can we better detect its death? */
-            std::this_thread::sleep_for(std::chrono::seconds(2));
+            std::this_thread::sleep_for(2s);
             goto start_server;
         }
     }
