@@ -38,6 +38,7 @@
 #include <list>
 #include <mutex>
 #include <string>
+#include <thread>
 
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
@@ -46,6 +47,7 @@
 #include "adb.h"
 #include "transport.h"
 
+using namespace std::chrono_literals;
 using namespace std::literals;
 
 /* usb scan debugging is waaaay too verbose */
@@ -577,7 +579,7 @@ static void device_poll_thread(void*) {
         // TODO: Use inotify.
         find_usb_device("/dev/bus/usb", register_device);
         kick_disconnected_devices();
-        sleep(1);
+        std::this_thread::sleep_for(1s);
     }
 }
 

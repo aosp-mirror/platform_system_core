@@ -16,14 +16,17 @@
 
 #include <gtest/gtest.h>
 #include <unistd.h>
+
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
+#include <thread>
 
 #include "adb_io.h"
 #include "sysdeps.h"
 
 static void increment_atomic_int(void* c) {
-    sleep(1);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
     reinterpret_cast<std::atomic<int>*>(c)->fetch_add(1);
 }
 
@@ -34,7 +37,7 @@ TEST(sysdeps_thread, smoke) {
         ASSERT_TRUE(adb_thread_create(increment_atomic_int, &counter));
     }
 
-    sleep(2);
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     ASSERT_EQ(100, counter.load());
 }
 
@@ -255,15 +258,15 @@ TEST(sysdeps_mutex, mutex_smoke) {
         ASSERT_FALSE(m.try_lock());
         m.lock();
         finished.store(true);
-        adb_sleep_ms(200);
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
         m.unlock();
     }, nullptr);
 
     ASSERT_FALSE(finished.load());
-    adb_sleep_ms(100);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     ASSERT_FALSE(finished.load());
     m.unlock();
-    adb_sleep_ms(100);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     m.lock();
     ASSERT_TRUE(finished.load());
     m.unlock();
@@ -279,13 +282,13 @@ TEST(sysdeps_mutex, recursive_mutex_smoke) {
     adb_thread_create([](void*) {
         ASSERT_FALSE(m.try_lock());
         m.lock();
-        adb_sleep_ms(500);
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         m.unlock();
     }, nullptr);
 
-    adb_sleep_ms(100);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     m.unlock();
-    adb_sleep_ms(100);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     ASSERT_FALSE(m.try_lock());
     m.lock();
     m.unlock();
