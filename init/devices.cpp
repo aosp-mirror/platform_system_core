@@ -111,13 +111,18 @@ int add_dev_perms(const char *name, const char *attr,
         return -ENOMEM;
 
     node->dp.name = strdup(name);
-    if (!node->dp.name)
+    if (!node->dp.name) {
+        free(node);
         return -ENOMEM;
+    }
 
     if (attr) {
         node->dp.attr = strdup(attr);
-        if (!node->dp.attr)
+        if (!node->dp.attr) {
+            free(node->dp.name);
+            free(node);
             return -ENOMEM;
+        }
     }
 
     node->dp.perm = perm;
