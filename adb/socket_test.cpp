@@ -19,7 +19,6 @@
 #include <gtest/gtest.h>
 
 #include <array>
-#include <chrono>
 #include <limits>
 #include <queue>
 #include <string>
@@ -33,6 +32,7 @@
 #include "fdevent_test.h"
 #include "socket.h"
 #include "sysdeps.h"
+#include "sysdeps/chrono.h"
 
 struct ThreadArg {
     int first_read_fd;
@@ -46,7 +46,7 @@ static void FdEventThreadFunc(void*) {
     fdevent_loop();
 }
 
-constexpr auto SLEEP_FOR_FDEVENT = std::chrono::milliseconds(100);
+constexpr auto SLEEP_FOR_FDEVENT = 100ms;
 
 TEST_F(LocalSocketTest, smoke) {
     // Join two socketpairs with a chain of intermediate socketpairs.
@@ -231,7 +231,7 @@ static void ClientThreadFunc() {
     std::string error;
     int fd = network_loopback_client(5038, SOCK_STREAM, &error);
     ASSERT_GE(fd, 0) << error;
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    std::this_thread::sleep_for(200ms);
     ASSERT_EQ(0, adb_close(fd));
 }
 
