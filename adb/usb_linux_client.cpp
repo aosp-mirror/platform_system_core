@@ -31,14 +31,18 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <thread>
 
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 
 #include "adb.h"
 #include "transport.h"
+
+using namespace std::chrono_literals;
 
 #define MAX_PACKET_SIZE_FS	64
 #define MAX_PACKET_SIZE_HS	512
@@ -268,7 +272,7 @@ static void usb_adb_open_thread(void* x) {
                 fd = unix_open("/dev/android", O_RDWR);
             }
             if (fd < 0) {
-                adb_sleep_ms(1000);
+                std::this_thread::sleep_for(1s);
             }
         } while (fd < 0);
         D("[ opening device succeeded ]");
@@ -476,7 +480,7 @@ static void usb_ffs_open_thread(void* x) {
             if (init_functionfs(usb)) {
                 break;
             }
-            adb_sleep_ms(1000);
+            std::this_thread::sleep_for(1s);
         }
         android::base::SetProperty("sys.usb.ffs.ready", "1");
 
