@@ -50,6 +50,48 @@ extern "C" {
 
 #include "BacktraceLog.h"
 
+struct EhFrame {
+  uint64_t hdr_vaddr;
+  uint64_t vaddr;
+  uint64_t fde_table_offset;
+  uintptr_t min_func_vaddr;
+  std::vector<uint8_t> hdr_data;
+  std::vector<uint8_t> data;
+};
+
+struct ArmIdxEntry {
+  uint32_t func_offset;
+  uint32_t value;
+};
+
+struct ArmExidx {
+  uint64_t exidx_vaddr;
+  uint64_t extab_vaddr;
+  std::vector<ArmIdxEntry> exidx_data;
+  std::vector<uint8_t> extab_data;
+  // There is a one-to-one map from exidx_data.func_offset to func_vaddr_array.
+  std::vector<uint32_t> func_vaddr_array;
+};
+
+struct DebugFrameInfo {
+  bool has_arm_exidx;
+  bool has_eh_frame;
+  bool has_debug_frame;
+  bool has_gnu_debugdata;
+
+  EhFrame eh_frame;
+  ArmExidx arm_exidx;
+
+  uint64_t min_vaddr;
+  uint64_t text_end_vaddr;
+
+  DebugFrameInfo() : has_arm_exidx(false), has_eh_frame(false),
+      has_debug_frame(false), has_gnu_debugdata(false) { }
+};
+
+static std::unordered_map<std::string, std::unique_ptr<DebugFrameInfo>>& g_debug_frames =
+    *new std::unordered_map<std::string, std::unique_ptr<DebugFrameInfo>>;
+
 void Space::Clear() {
   start = 0;
   end = 0;
@@ -207,21 +249,16 @@ size_t BacktraceOffline::Read(uintptr_t addr, uint8_t* buffer, size_t bytes) {
   if (read_size != 0) {
     return read_size;
   }
+  read_size = arm_exidx_space_.Read(addr, buffer, bytes);
+  if (read_size != 0) {
+    return read_size;
+  }
+  read_size = arm_extab_space_.Read(addr, buffer, bytes);
+  if (read_size != 0) {
+    return read_size;
+  }
   read_size = stack_space_.Read(addr, buffer, bytes);
   return read_size;
-}
-
-static bool FileOffsetToVaddr(
-    const std::vector<DebugFrameInfo::EhFrame::ProgramHeader>& program_headers,
-    uint64_t file_offset, uint64_t* vaddr) {
-  for (auto& header : program_headers) {
-    if (file_offset >= header.file_offset && file_offset < header.file_offset + header.file_size) {
-      // TODO: Consider load_bias?
-      *vaddr = file_offset - header.file_offset + header.vaddr;
-      return true;
-    }
-  }
-  return false;
 }
 
 bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
@@ -236,45 +273,90 @@ bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
   if (debug_frame == nullptr) {
     return false;
   }
-  if (debug_frame->is_eh_frame) {
-    uint64_t ip_offset = ip - map.start + map.offset;
-    uint64_t ip_vaddr;  // vaddr in the elf file.
-    bool result = FileOffsetToVaddr(debug_frame->eh_frame.program_headers, ip_offset, &ip_vaddr);
-    if (!result) {
-      return false;
-    }
-    // Calculate the addresses where .eh_frame_hdr and .eh_frame stay when the process was running.
-    eh_frame_hdr_space_.start = (ip - ip_vaddr) + debug_frame->eh_frame.eh_frame_hdr_vaddr;
-    eh_frame_hdr_space_.end =
-        eh_frame_hdr_space_.start + debug_frame->eh_frame.eh_frame_hdr_data.size();
-    eh_frame_hdr_space_.data = debug_frame->eh_frame.eh_frame_hdr_data.data();
-
-    eh_frame_space_.start = (ip - ip_vaddr) + debug_frame->eh_frame.eh_frame_vaddr;
-    eh_frame_space_.end = eh_frame_space_.start + debug_frame->eh_frame.eh_frame_data.size();
-    eh_frame_space_.data = debug_frame->eh_frame.eh_frame_data.data();
-
-    unw_dyn_info di;
-    memset(&di, '\0', sizeof(di));
-    di.start_ip = map.start;
-    di.end_ip = map.end;
-    di.format = UNW_INFO_FORMAT_REMOTE_TABLE;
-    di.u.rti.name_ptr = 0;
-    di.u.rti.segbase = eh_frame_hdr_space_.start;
-    di.u.rti.table_data =
-        eh_frame_hdr_space_.start + debug_frame->eh_frame.fde_table_offset_in_eh_frame_hdr;
-    di.u.rti.table_len = (eh_frame_hdr_space_.end - di.u.rti.table_data) / sizeof(unw_word_t);
-    int ret = dwarf_search_unwind_table(addr_space, ip, &di, proc_info, need_unwind_info, this);
-    return ret == 0;
-  }
 
   eh_frame_hdr_space_.Clear();
   eh_frame_space_.Clear();
-  unw_dyn_info_t di;
-  unw_word_t segbase = map.start - map.offset;
-  int found = dwarf_find_debug_frame(0, &di, ip, segbase, filename.c_str(), map.start, map.end);
-  if (found == 1) {
-    int ret = dwarf_search_unwind_table(addr_space, ip, &di, proc_info, need_unwind_info, this);
-    return ret == 0;
+  arm_exidx_space_.Clear();
+  arm_extab_space_.Clear();
+
+  // vaddr in the elf file.
+  uint64_t ip_vaddr = ip - map.start + debug_frame->min_vaddr;
+  if (debug_frame->has_arm_exidx) {
+    auto& func_vaddrs = debug_frame->arm_exidx.func_vaddr_array;
+    if (ip_vaddr >= func_vaddrs[0] && ip_vaddr < debug_frame->text_end_vaddr) {
+      // Use binary search to find the correct function.
+      auto it = std::upper_bound(func_vaddrs.begin(), func_vaddrs.end(),
+                                 static_cast<uint32_t>(ip_vaddr));
+      if (it != func_vaddrs.begin()) {
+        --it;
+        // Found the exidx entry.
+        size_t index = it - func_vaddrs.begin();
+
+        proc_info->format = UNW_INFO_FORMAT_ARM_EXIDX;
+        proc_info->unwind_info = reinterpret_cast<void*>(
+            static_cast<uintptr_t>(index * sizeof(ArmIdxEntry) +
+                                   debug_frame->arm_exidx.exidx_vaddr +
+                                   debug_frame->min_vaddr));
+
+        // Prepare arm_exidx space and arm_extab space.
+        arm_exidx_space_.start = debug_frame->min_vaddr + debug_frame->arm_exidx.exidx_vaddr;
+        arm_exidx_space_.end = arm_exidx_space_.start +
+            debug_frame->arm_exidx.exidx_data.size() * sizeof(ArmIdxEntry);
+        arm_exidx_space_.data = reinterpret_cast<const uint8_t*>(
+            debug_frame->arm_exidx.exidx_data.data());
+
+        arm_extab_space_.start = debug_frame->min_vaddr + debug_frame->arm_exidx.extab_vaddr;
+        arm_extab_space_.end = arm_extab_space_.start +
+            debug_frame->arm_exidx.extab_data.size();
+        arm_extab_space_.data = debug_frame->arm_exidx.extab_data.data();
+        return true;
+      }
+    }
+  }
+
+  if (debug_frame->has_eh_frame) {
+    if (ip_vaddr >= debug_frame->eh_frame.min_func_vaddr &&
+        ip_vaddr < debug_frame->text_end_vaddr) {
+      // Prepare eh_frame_hdr space and eh_frame space.
+      eh_frame_hdr_space_.start = ip - ip_vaddr + debug_frame->eh_frame.hdr_vaddr;
+      eh_frame_hdr_space_.end =
+          eh_frame_hdr_space_.start + debug_frame->eh_frame.hdr_data.size();
+      eh_frame_hdr_space_.data = debug_frame->eh_frame.hdr_data.data();
+
+      eh_frame_space_.start = ip - ip_vaddr + debug_frame->eh_frame.vaddr;
+      eh_frame_space_.end = eh_frame_space_.start + debug_frame->eh_frame.data.size();
+      eh_frame_space_.data = debug_frame->eh_frame.data.data();
+
+      unw_dyn_info di;
+      memset(&di, '\0', sizeof(di));
+      di.start_ip = map.start;
+      di.end_ip = map.end;
+      di.format = UNW_INFO_FORMAT_REMOTE_TABLE;
+      di.u.rti.name_ptr = 0;
+      di.u.rti.segbase = eh_frame_hdr_space_.start;
+      di.u.rti.table_data =
+          eh_frame_hdr_space_.start + debug_frame->eh_frame.fde_table_offset;
+      di.u.rti.table_len = (eh_frame_hdr_space_.end - di.u.rti.table_data) / sizeof(unw_word_t);
+      // TODO: Do it ourselves is more efficient than calling this function.
+      int ret = dwarf_search_unwind_table(addr_space, ip, &di, proc_info, need_unwind_info, this);
+      if (ret == 0) {
+        return true;
+      }
+    }
+  }
+
+  if (debug_frame->has_debug_frame || debug_frame->has_gnu_debugdata) {
+    unw_dyn_info_t di;
+    unw_word_t segbase = map.start - map.offset;
+    // TODO: http://b/32916571
+    // TODO: Do it ourselves is more efficient than calling libunwind functions.
+    int found = dwarf_find_debug_frame(0, &di, ip, segbase, filename.c_str(), map.start, map.end);
+    if (found == 1) {
+      int ret = dwarf_search_unwind_table(addr_space, ip, &di, proc_info, need_unwind_info, this);
+      if (ret == 0) {
+        return true;
+      }
+    }
   }
   return false;
 }
@@ -462,33 +544,18 @@ std::string BacktraceOffline::GetFunctionNameRaw(uintptr_t, uintptr_t* offset) {
   return "";
 }
 
-std::unordered_map<std::string, std::unique_ptr<DebugFrameInfo>> BacktraceOffline::debug_frames_;
-std::unordered_set<std::string> BacktraceOffline::debug_frame_missing_files_;
-
 static DebugFrameInfo* ReadDebugFrameFromFile(const std::string& filename);
 
 DebugFrameInfo* BacktraceOffline::GetDebugFrameInFile(const std::string& filename) {
   if (cache_file_) {
-    auto it = debug_frames_.find(filename);
-    if (it != debug_frames_.end()) {
+    auto it = g_debug_frames.find(filename);
+    if (it != g_debug_frames.end()) {
       return it->second.get();
-    }
-    if (debug_frame_missing_files_.find(filename) != debug_frame_missing_files_.end()) {
-      return nullptr;
     }
   }
   DebugFrameInfo* debug_frame = ReadDebugFrameFromFile(filename);
   if (cache_file_) {
-    if (debug_frame != nullptr) {
-      debug_frames_.emplace(filename, std::unique_ptr<DebugFrameInfo>(debug_frame));
-    } else {
-      debug_frame_missing_files_.insert(filename);
-    }
-  } else {
-    if (last_debug_frame_ != nullptr) {
-      delete last_debug_frame_;
-    }
-    last_debug_frame_ = debug_frame;
+      g_debug_frames.emplace(filename, std::unique_ptr<DebugFrameInfo>(debug_frame));
   }
   return debug_frame;
 }
@@ -556,72 +623,106 @@ static bool GetFdeTableOffsetInEhFrameHdr(const std::vector<uint8_t>& data,
   return true;
 }
 
-using ProgramHeader = DebugFrameInfo::EhFrame::ProgramHeader;
-
 template <class ELFT>
 DebugFrameInfo* ReadDebugFrameFromELFFile(const llvm::object::ELFFile<ELFT>* elf) {
+  DebugFrameInfo* result = new DebugFrameInfo;
+  result->text_end_vaddr = std::numeric_limits<uint64_t>::max();
+
   bool has_eh_frame_hdr = false;
-  uint64_t eh_frame_hdr_vaddr = 0;
-  std::vector<uint8_t> eh_frame_hdr_data;
   bool has_eh_frame = false;
-  uint64_t eh_frame_vaddr = 0;
-  std::vector<uint8_t> eh_frame_data;
 
   for (auto it = elf->section_begin(); it != elf->section_end(); ++it) {
     llvm::ErrorOr<llvm::StringRef> name = elf->getSectionName(&*it);
     if (name) {
-      if (name.get() == ".debug_frame") {
-        DebugFrameInfo* debug_frame = new DebugFrameInfo;
-        debug_frame->is_eh_frame = false;
-        return debug_frame;
-      }
-      if (name.get() == ".eh_frame_hdr") {
-        has_eh_frame_hdr = true;
-        eh_frame_hdr_vaddr = it->sh_addr;
+      std::string s = name.get();
+      if (s == ".debug_frame") {
+        result->has_debug_frame = true;
+      } else if (s == ".gnu_debugdata") {
+        result->has_gnu_debugdata = true;
+      } else if (s == ".eh_frame_hdr") {
+        result->eh_frame.hdr_vaddr = it->sh_addr;
         llvm::ErrorOr<llvm::ArrayRef<uint8_t>> data = elf->getSectionContents(&*it);
         if (data) {
-          eh_frame_hdr_data.insert(eh_frame_hdr_data.begin(), data->data(),
-                                   data->data() + data->size());
-        } else {
-          return nullptr;
+          result->eh_frame.hdr_data.insert(result->eh_frame.hdr_data.end(),
+              data->data(), data->data() + data->size());
+
+          uint64_t fde_table_offset;
+          if (GetFdeTableOffsetInEhFrameHdr(result->eh_frame.hdr_data,
+                                             &fde_table_offset)) {
+            result->eh_frame.fde_table_offset = fde_table_offset;
+            // Make sure we have at least one entry in fde_table.
+            if (fde_table_offset + 2 * sizeof(int32_t) <= data->size()) {
+              intptr_t eh_frame_hdr_vaddr = it->sh_addr;
+              int32_t sdata;
+              uint8_t* p = result->eh_frame.hdr_data.data() + fde_table_offset;
+              memcpy(&sdata, p, sizeof(sdata));
+              result->eh_frame.min_func_vaddr = eh_frame_hdr_vaddr + sdata;
+              has_eh_frame_hdr = true;
+            }
+          }
         }
-      } else if (name.get() == ".eh_frame") {
-        has_eh_frame = true;
-        eh_frame_vaddr = it->sh_addr;
+      } else if (s == ".eh_frame") {
+        result->eh_frame.vaddr = it->sh_addr;
         llvm::ErrorOr<llvm::ArrayRef<uint8_t>> data = elf->getSectionContents(&*it);
         if (data) {
-          eh_frame_data.insert(eh_frame_data.begin(), data->data(), data->data() + data->size());
-        } else {
-          return nullptr;
+          result->eh_frame.data.insert(result->eh_frame.data.end(),
+                                                data->data(), data->data() + data->size());
+          has_eh_frame = true;
         }
+      } else if (s == ".ARM.exidx") {
+        result->arm_exidx.exidx_vaddr = it->sh_addr;
+        llvm::ErrorOr<llvm::ArrayRef<uint8_t>> data = elf->getSectionContents(&*it);
+        if (data) {
+          size_t entry_count = data->size() / sizeof(ArmIdxEntry);
+          result->arm_exidx.exidx_data.resize(entry_count);
+          memcpy(result->arm_exidx.exidx_data.data(), data->data(),
+                 entry_count * sizeof(ArmIdxEntry));
+          if (entry_count > 0u) {
+            // Change IdxEntry.func_offset into vaddr.
+            result->arm_exidx.func_vaddr_array.reserve(entry_count);
+            uint32_t vaddr = it->sh_addr;
+            for (auto& entry : result->arm_exidx.exidx_data) {
+              uint32_t func_offset = entry.func_offset + vaddr;
+              // Clear bit 31 for the prel31 offset.
+              // Arm sets bit 0 to mark it as thumb code, remove the flag.
+              result->arm_exidx.func_vaddr_array.push_back(
+                  func_offset & 0x7ffffffe);
+              vaddr += 8;
+            }
+            result->has_arm_exidx = true;
+          }
+        }
+      } else if (s == ".ARM.extab") {
+        result->arm_exidx.extab_vaddr = it->sh_addr;
+        llvm::ErrorOr<llvm::ArrayRef<uint8_t>> data = elf->getSectionContents(&*it);
+        if (data) {
+          result->arm_exidx.extab_data.insert(result->arm_exidx.extab_data.end(),
+                                              data->data(), data->data() + data->size());
+        }
+      } else if (s == ".text") {
+        result->text_end_vaddr = it->sh_addr + it->sh_size;
       }
     }
   }
-  if (!(has_eh_frame_hdr && has_eh_frame)) {
-    return nullptr;
-  }
-  uint64_t fde_table_offset;
-  if (!GetFdeTableOffsetInEhFrameHdr(eh_frame_hdr_data, &fde_table_offset)) {
-    return nullptr;
+
+  if (has_eh_frame_hdr && has_eh_frame) {
+    result->has_eh_frame = true;
   }
 
-  std::vector<ProgramHeader> program_headers;
+  result->min_vaddr = std::numeric_limits<uint64_t>::max();
   for (auto it = elf->program_header_begin(); it != elf->program_header_end(); ++it) {
-    ProgramHeader header;
-    header.vaddr = it->p_vaddr;
-    header.file_offset = it->p_offset;
-    header.file_size = it->p_filesz;
-    program_headers.push_back(header);
+    if ((it->p_type == llvm::ELF::PT_LOAD) && (it->p_flags & llvm::ELF::PF_X)) {
+      if (it->p_vaddr < result->min_vaddr) {
+        result->min_vaddr = it->p_vaddr;
+      }
+    }
   }
-  DebugFrameInfo* debug_frame = new DebugFrameInfo;
-  debug_frame->is_eh_frame = true;
-  debug_frame->eh_frame.eh_frame_hdr_vaddr = eh_frame_hdr_vaddr;
-  debug_frame->eh_frame.eh_frame_vaddr = eh_frame_vaddr;
-  debug_frame->eh_frame.fde_table_offset_in_eh_frame_hdr = fde_table_offset;
-  debug_frame->eh_frame.eh_frame_hdr_data = std::move(eh_frame_hdr_data);
-  debug_frame->eh_frame.eh_frame_data = std::move(eh_frame_data);
-  debug_frame->eh_frame.program_headers = program_headers;
-  return debug_frame;
+  if (!result->has_eh_frame && !result->has_arm_exidx && !result->has_debug_frame &&
+      !result->has_gnu_debugdata) {
+    delete result;
+    return nullptr;
+  }
+  return result;
 }
 
 static bool IsValidElfPath(const std::string& filename) {
