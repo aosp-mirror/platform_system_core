@@ -95,7 +95,6 @@ void set_device_permission(int nargs, char **args)
     int prefix = 0;
     int wildcard = 0;
     char *endptr;
-    char *tmp = 0;
 
     if (nargs == 0)
         return;
@@ -129,14 +128,12 @@ void set_device_permission(int nargs, char **args)
     perm = strtol(args[1], &endptr, 8);
     if (!endptr || *endptr != '\0') {
         LOG(ERROR) << "invalid mode '" << args[1] << "'";
-        free(tmp);
         return;
     }
 
     struct passwd* pwd = getpwnam(args[2]);
     if (!pwd) {
         LOG(ERROR) << "invalid uid '" << args[2] << "'";
-        free(tmp);
         return;
     }
     uid = pwd->pw_uid;
@@ -144,11 +141,17 @@ void set_device_permission(int nargs, char **args)
     struct group* grp = getgrnam(args[3]);
     if (!grp) {
         LOG(ERROR) << "invalid gid '" << args[3] << "'";
-        free(tmp);
         return;
     }
     gid = grp->gr_gid;
 
-    add_dev_perms(name, attr, perm, uid, gid, prefix, wildcard);
-    free(tmp);
+    if (add_dev_perms(name, attr, perm, uid, gid, prefix, wildcard) != 0) {
+        PLOG(ERROR) << "add_dev_perms(name=" << name <<
+                       ", attr=" << attr <<
+                       ", perm=" << std::oct << perm << std::dec <<
+                       ", uid=" << uid << ", gid=" << gid <<
+                       ", prefix=" << prefix << ", wildcard=" << wildcard <<
+                       ")";
+        return;
+    }
 }
