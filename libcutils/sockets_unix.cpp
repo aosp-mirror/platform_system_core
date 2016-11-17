@@ -16,12 +16,20 @@
 
 #define LOG_TAG "socket-unix"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
 #include <sys/uio.h>
+#include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
 
 #include <android/log.h>
+#include <cutils/android_get_control_file.h>
 #include <cutils/sockets.h>
+
+#include "android_get_control_env.h"
 
 #if defined(__ANDROID__)
 /* For the socket trust (credentials) check */
@@ -79,4 +87,25 @@ ssize_t socket_send_buffers(cutils_socket_t sock,
     }
 
     return writev(sock, iovec_buffers, num_buffers);
+}
+
+int android_get_control_socket(const char* name) {
+    int fd = __android_get_control_from_env(ANDROID_SOCKET_ENV_PREFIX, name);
+
+    if (fd < 0) return fd;
+
+    // Compare to UNIX domain socket name, must match!
+    struct sockaddr_un addr;
+    socklen_t addrlen = sizeof(addr);
+    int ret = TEMP_FAILURE_RETRY(getsockname(fd, (struct sockaddr *)&addr, &addrlen));
+    if (ret < 0) return -1;
+    char *path = NULL;
+    if (asprintf(&path, ANDROID_SOCKET_DIR "/%s", name) < 0) return -1;
+    if (!path) return -1;
+    int cmp = strcmp(addr.sun_path, path);
+    free(path);
+    if (cmp != 0) return -1;
+
+    // It is what we think it is
+    return fd;
 }

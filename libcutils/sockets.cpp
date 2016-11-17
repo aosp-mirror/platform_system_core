@@ -28,32 +28,8 @@
 
 // This file contains socket implementation that can be shared between
 // platforms as long as the correct headers are included.
-#define _GNU_SOURCE 1 // For asprintf
-
-#include <ctype.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <limits.h>
-#if !defined(_WIN32)
-#include <netinet/in.h>
-#endif
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#if !defined(_WIN32)
-#include <sys/un.h>
-#endif
-#include <unistd.h>
-
-#include <string>
 
 #include <cutils/sockets.h>
-
-#ifndef TEMP_FAILURE_RETRY // _WIN32 does not define
-#define TEMP_FAILURE_RETRY(exp) (exp)
-#endif
 
 int socket_get_local_port(cutils_socket_t sock) {
     sockaddr_storage addr;
@@ -64,59 +40,4 @@ int socket_get_local_port(cutils_socket_t sock) {
         return ntohs(reinterpret_cast<sockaddr_in*>(&addr)->sin_port);
     }
     return -1;
-}
-
-int android_get_control_socket(const char* name) {
-    char *key = NULL;
-    if (asprintf(&key, ANDROID_SOCKET_ENV_PREFIX "%s", name) < 0) return -1;
-    if (!key) return -1;
-
-    char *cp = key;
-    while (*cp) {
-        if (!isalnum(*cp)) *cp = '_';
-        ++cp;
-    }
-
-    const char* val = getenv(key);
-    free(key);
-    if (!val) return -1;
-
-    errno = 0;
-    long fd = strtol(val, NULL, 10);
-    if (errno) return -1;
-
-    // validity checking
-    if ((fd < 0) || (fd > INT_MAX)) return -1;
-#if defined(_SC_OPEN_MAX)
-    if (fd >= sysconf(_SC_OPEN_MAX)) return -1;
-#elif defined(OPEN_MAX)
-    if (fd >= OPEN_MAX) return -1;
-#elif defined(_POSIX_OPEN_MAX)
-    if (fd >= _POSIX_OPEN_MAX) return -1;
-#endif
-
-#if defined(F_GETFD)
-    if (TEMP_FAILURE_RETRY(fcntl(fd, F_GETFD)) < 0) return -1;
-#elif defined(F_GETFL)
-    if (TEMP_FAILURE_RETRY(fcntl(fd, F_GETFL)) < 0) return -1;
-#else
-    struct stat s;
-    if (TEMP_FAILURE_RETRY(fstat(fd, &s)) < 0) return -1;
-#endif
-
-#if !defined(_WIN32)
-    struct sockaddr_un addr;
-    socklen_t addrlen = sizeof(addr);
-    int ret = TEMP_FAILURE_RETRY(getsockname(fd, (struct sockaddr *)&addr, &addrlen));
-    if (ret < 0) return -1;
-    char *path = NULL;
-    if (asprintf(&path, ANDROID_SOCKET_DIR"/%s", name) < 0) return -1;
-    if (!path) return -1;
-    int cmp = strcmp(addr.sun_path, path);
-    free(path);
-    if (cmp != 0) return -1;
-#endif
-
-    // It is what we think it is
-    return static_cast<int>(fd);
 }

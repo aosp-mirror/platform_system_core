@@ -16,6 +16,7 @@
 
 #include "util.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -23,7 +24,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cutils/files.h>
+#include <android-base/stringprintf.h>
+#include <android-base/test_utils.h>
+#include <cutils/android_get_control_file.h>
 #include <gtest/gtest.h>
 #include <selinux/android.h>
 
@@ -55,45 +58,48 @@ struct selabel_handle *sehandle;
 TEST(util, create_file) {
   if (!sehandle) sehandle = selinux_android_file_context_handle();
 
-  static const char path[] = "/data/local/tmp/util.create_file.test";
-  static const char key[] = ANDROID_FILE_ENV_PREFIX "_data_local_tmp_util_create_file_test";
-  EXPECT_EQ(unsetenv(key), 0);
-  unlink(path);
+  TemporaryFile tf;
+  close(tf.fd);
+  EXPECT_GE(unlink(tf.path), 0);
 
-  int fd;
+  std::string key(ANDROID_FILE_ENV_PREFIX);
+  key += tf.path;
+
+  std::for_each(key.begin(), key.end(), [] (char& c) { c = isalnum(c) ? c : '_'; });
+
+  EXPECT_EQ(unsetenv(key.c_str()), 0);
+
   uid_t uid = decode_uid("logd");
   gid_t gid = decode_uid("system");
   mode_t perms = S_IRWXU | S_IWGRP | S_IRGRP | S_IROTH;
   static const char context[] = "u:object_r:misc_logd_file:s0";
-  EXPECT_GE(fd = create_file(path, O_RDWR | O_CREAT, perms, uid, gid, context), 0);
-  if (fd < 0) return;
+  EXPECT_GE(tf.fd = create_file(tf.path, O_RDWR | O_CREAT, perms, uid, gid, context), 0);
+  if (tf.fd < 0) return;
   static const char hello[] = "hello world\n";
   static const ssize_t len = strlen(hello);
-  EXPECT_EQ(write(fd, hello, len), len);
-  char buffer[sizeof(hello)];
+  EXPECT_EQ(write(tf.fd, hello, len), len);
+  char buffer[sizeof(hello) + 1];
   memset(buffer, 0, sizeof(buffer));
-  EXPECT_GE(lseek(fd, 0, SEEK_SET), 0);
-  EXPECT_EQ(read(fd, buffer, sizeof(buffer)), len);
-  EXPECT_EQ(strcmp(hello, buffer), 0);
-  char val[32];
-  snprintf(val, sizeof(val), "%d", fd);
-  EXPECT_EQ(android_get_control_file(path), -1);
-  setenv(key, val, true);
-  EXPECT_EQ(android_get_control_file(path), fd);
-  close(fd);
-  EXPECT_EQ(android_get_control_file(path), -1);
-  EXPECT_EQ(unsetenv(key), 0);
+  EXPECT_GE(lseek(tf.fd, 0, SEEK_SET), 0);
+  EXPECT_EQ(read(tf.fd, buffer, sizeof(buffer)), len);
+  EXPECT_EQ(std::string(hello), buffer);
+  EXPECT_EQ(android_get_control_file(tf.path), -1);
+  EXPECT_EQ(setenv(key.c_str(), android::base::StringPrintf("%d", tf.fd).c_str(), true), 0);
+  EXPECT_EQ(android_get_control_file(tf.path), tf.fd);
+  close(tf.fd);
+  EXPECT_EQ(android_get_control_file(tf.path), -1);
+  EXPECT_EQ(unsetenv(key.c_str()), 0);
   struct stat st;
-  EXPECT_EQ(stat(path, &st), 0);
+  EXPECT_EQ(stat(tf.path, &st), 0);
   EXPECT_EQ(st.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO), perms);
   EXPECT_EQ(st.st_uid, uid);
   EXPECT_EQ(st.st_gid, gid);
   security_context_t con;
-  EXPECT_GE(getfilecon(path, &con), 0);
+  EXPECT_GE(getfilecon(tf.path, &con), 0);
   EXPECT_NE(con, static_cast<security_context_t>(NULL));
   if (con) {
     EXPECT_EQ(context, std::string(con));
   }
   freecon(con);
-  EXPECT_EQ(unlink(path), 0);
+  EXPECT_EQ(unlink(tf.path), 0);
 }
