@@ -31,6 +31,10 @@
 
 #include "android_get_control_env.h"
 
+#ifndef TEMP_FAILURE_RETRY
+#define TEMP_FAILURE_RETRY(exp) (exp) // KISS implementation
+#endif
+
 #if defined(__ANDROID__)
 /* For the socket trust (credentials) check */
 #include <private/android_filesystem_config.h>
