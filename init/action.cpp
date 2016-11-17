@@ -105,7 +105,10 @@ std::size_t Action::NumCommands() const {
 }
 
 void Action::ExecuteOneCommand(std::size_t command) const {
-    ExecuteCommand(commands_[command]);
+    // We need a copy here since some Command execution may result in
+    // changing commands_ vector by importing .rc files through parser
+    Command cmd = commands_[command];
+    ExecuteCommand(cmd);
 }
 
 void Action::ExecuteAllCommands() const {
