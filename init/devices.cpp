@@ -190,7 +190,7 @@ static void fixup_sys_perms(const char* upath, const char* subsystem) {
 
     if (access(path.c_str(), F_OK) == 0) {
         LOG(VERBOSE) << "restorecon_recursive: " << path;
-        restorecon_recursive(path.c_str());
+        restorecon(path.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE);
     }
 }
 
