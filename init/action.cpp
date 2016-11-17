@@ -157,6 +157,11 @@ bool Action::ParsePropertyTrigger(const std::string& trigger, std::string* err) 
 bool Action::InitTriggers(const std::vector<std::string>& args, std::string* err) {
     const static std::string prop_str("property:");
     for (std::size_t i = 0; i < args.size(); ++i) {
+        if (args[i].empty()) {
+            *err = "empty trigger is not valid";
+            return false;
+        }
+
         if (i % 2) {
             if (args[i] != "&&") {
                 *err = "&& is the only symbol allowed to concatenate actions";
@@ -186,7 +191,11 @@ bool Action::InitTriggers(const std::vector<std::string>& args, std::string* err
 bool Action::InitSingleTrigger(const std::string& trigger) {
     std::vector<std::string> name_vector{trigger};
     std::string err;
-    return InitTriggers(name_vector, &err);
+    bool ret = InitTriggers(name_vector, &err);
+    if (!ret) {
+        LOG(ERROR) << "InitSingleTrigger failed due to: " << err;
+    }
+    return ret;
 }
 
 // This function checks that all property triggers are satisfied, that is
@@ -252,9 +261,7 @@ std::string Action::BuildTriggersString() const {
         result += event_trigger_;
         result += ' ';
     }
-    if (!result.empty()) {
-        result.pop_back();
-    }
+    result.pop_back();
     return result;
 }
 
