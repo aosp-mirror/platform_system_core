@@ -18,6 +18,7 @@
 // they correspond to features not used by our host development tools
 // which are also hard or even impossible to port to native Win32
 libcutils_nonwindows_sources = [
+    "android_get_control_file.cpp",
     "fs.c",
     "multiuser.c",
     "socket_inaddr_any_server_unix.c",
@@ -34,7 +35,6 @@ cc_library {
     host_supported: true,
     srcs: [
         "config_utils.c",
-        "files.cpp",
         "fs_config.c",
         "canned_fs_config.c",
         "hashmap.c",
