@@ -106,20 +106,6 @@
 
 namespace {
 
-void init_subproc_child()
-{
-    setsid();
-
-    // Set OOM score adjustment to prevent killing
-    int fd = adb_open("/proc/self/oom_score_adj", O_WRONLY | O_CLOEXEC);
-    if (fd >= 0) {
-        adb_write(fd, "0", 1);
-        adb_close(fd);
-    } else {
-       D("adb: unable to update oom_score_adj");
-    }
-}
-
 // Reads from |fd| until close or failure.
 std::string ReadAll(int fd) {
     char buffer[512];
@@ -316,7 +302,7 @@ bool Subprocess::ForkAndExec(std::string* error) {
 
     if (pid_ == 0) {
         // Subprocess child.
-        init_subproc_child();
+        setsid();
 
         if (type_ == SubprocessType::kPty) {
             child_stdinout_sfd.reset(OpenPtyChildFd(pts_name, &child_error_sfd));
