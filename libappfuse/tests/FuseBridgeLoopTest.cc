@@ -200,11 +200,16 @@ TEST_F(FuseBridgeLoopTest, FuseNotImpl) {
 TEST_F(FuseBridgeLoopTest, Proxy) {
   CheckProxy(FUSE_LOOKUP);
   CheckProxy(FUSE_GETATTR);
-  CheckProxy(FUSE_OPEN);
   CheckProxy(FUSE_READ);
   CheckProxy(FUSE_WRITE);
-  CheckProxy(FUSE_RELEASE);
   CheckProxy(FUSE_FSYNC);
+
+  // Invoke FUSE_OPEN and FUSE_RELEASE at last as the loop will exit when all files are closed.
+  CheckProxy(FUSE_OPEN);
+  CheckProxy(FUSE_RELEASE);
+
+  // Ensure the loop exits.
+  Close();
 }
 
 }  // namespace fuse
