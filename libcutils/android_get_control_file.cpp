@@ -40,6 +40,10 @@
 
 #include "android_get_control_env.h"
 
+#ifndef TEMP_FAILURE_RETRY
+#define TEMP_FAILURE_RETRY(exp) (exp) // KISS implementation
+#endif
+
 LIBCUTILS_HIDDEN int __android_get_control_from_env(const char* prefix,
                                                     const char* name) {
     if (!prefix || !name) return -1;
@@ -68,13 +72,13 @@ LIBCUTILS_HIDDEN int __android_get_control_from_env(const char* prefix,
     // Since we are inheriting an fd, it could legitimately exceed _SC_OPEN_MAX
 
     // Still open?
-#if defined(F_GETFD) // Linux lowest overhead
+#if defined(F_GETFD) // Lowest overhead
     if (TEMP_FAILURE_RETRY(fcntl(fd, F_GETFD)) < 0) return -1;
-#elif defined(F_GETFL) // Mac host lowest overhead
-    if (fcntl(fd, F_GETFL) < 0) return -1;
+#elif defined(F_GETFL) // Alternate lowest overhead
+    if (TEMP_FAILURE_RETRY(fcntl(fd, F_GETFL)) < 0) return -1;
 #else // Hail Mary pass
     struct stat s;
-    if (fstat(fd, &s) < 0) return -1;
+    if (TEMP_FAILURE_RETRY(fstat(fd, &s)) < 0) return -1;
 #endif
 
     return static_cast<int>(fd);
