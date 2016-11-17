@@ -118,14 +118,16 @@ void Action::ExecuteCommand(const Command& command) const {
     Timer t;
     int result = command.InvokeFunc();
 
-    // TODO: this should probably be changed to "if (failed || took a long time)"...
-    if (android::base::GetMinimumLogSeverity() <= android::base::DEBUG) {
+    double duration_ms = t.duration() * 1000;
+    // Any action longer than 50ms will be warned to user as slow operation
+    if (duration_ms > 50.0 ||
+        android::base::GetMinimumLogSeverity() <= android::base::DEBUG) {
         std::string trigger_name = BuildTriggersString();
         std::string cmd_str = command.BuildCommandString();
         std::string source = command.BuildSourceString();
 
         LOG(INFO) << "Command '" << cmd_str << "' action=" << trigger_name << source
-                  << " returned " << result << " took " << t.duration() << "s";
+                  << " returned " << result << " took " << duration_ms << "ms.";
     }
 }
 
