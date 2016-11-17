@@ -81,6 +81,7 @@ static pcrecpp::RE* g_regex;
 static size_t g_maxCount;
 static size_t g_printCount;
 static bool g_printItAnyways;
+static bool g_debug;
 
 enum helpType {
     HELP_FALSE,
@@ -188,7 +189,7 @@ static void processBuffer(log_device_t* dev, struct log_msg *buf)
     } else {
         err = android_log_processLogBuffer(&buf->entry_v1, &entry);
     }
-    if (err < 0) {
+    if ((err < 0) && !g_debug) {
         goto error;
     }
 
@@ -619,6 +620,7 @@ int main(int argc, char **argv)
         int option_index = 0;
         // list of long-argument only strings for later comparison
         static const char pid_str[] = "pid";
+        static const char debug_str[] = "debug";
         static const char id_str[] = "id";
         static const char wrap_str[] = "wrap";
         static const char print_str[] = "print";
@@ -627,6 +629,7 @@ int main(int argc, char **argv)
           { "buffer",        required_argument, NULL,   'b' },
           { "buffer-size",   optional_argument, NULL,   'g' },
           { "clear",         no_argument,       NULL,   'c' },
+          { debug_str,       no_argument,       NULL,   0 },
           { "dividers",      no_argument,       NULL,   'D' },
           { "file",          required_argument, NULL,   'f' },
           { "format",        required_argument, NULL,   'v' },
@@ -689,6 +692,10 @@ int main(int argc, char **argv)
                 }
                 if (long_options[option_index].name == print_str) {
                     g_printItAnyways = true;
+                    break;
+                }
+                if (long_options[option_index].name == debug_str) {
+                    g_debug = true;
                     break;
                 }
                 if (long_options[option_index].name == id_str) {
