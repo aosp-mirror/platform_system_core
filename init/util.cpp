@@ -369,20 +369,9 @@ int make_dir(const char *path, mode_t mode)
     return rc;
 }
 
-int restorecon(const char* pathname)
+int restorecon(const char* pathname, int flags)
 {
-    return selinux_android_restorecon(pathname, 0);
-}
-
-int restorecon_recursive(const char* pathname)
-{
-    return selinux_android_restorecon(pathname, SELINUX_ANDROID_RESTORECON_RECURSE);
-}
-
-int restorecon_recursive_skipce(const char* pathname)
-{
-    return selinux_android_restorecon(pathname,
-            SELINUX_ANDROID_RESTORECON_RECURSE | SELINUX_ANDROID_RESTORECON_SKIPCE);
+    return selinux_android_restorecon(pathname, flags);
 }
 
 /*

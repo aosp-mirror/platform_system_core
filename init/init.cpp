@@ -759,8 +759,8 @@ int main(int argc, char** argv) {
     restorecon("/dev/socket");
     restorecon("/dev/__properties__");
     restorecon("/property_contexts");
-    restorecon_recursive("/sys");
-    restorecon_recursive("/dev/block");
+    restorecon("/sys", SELINUX_ANDROID_RESTORECON_RECURSE);
+    restorecon("/dev/block", SELINUX_ANDROID_RESTORECON_RECURSE);
     restorecon("/dev/device-mapper");
 
     epoll_fd = epoll_create1(EPOLL_CLOEXEC);
