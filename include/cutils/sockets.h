@@ -35,6 +35,7 @@ typedef SOCKET cutils_socket_t;
 #else
 
 #include <sys/socket.h>
+#include <netinet/in.h>
 
 typedef int cutils_socket_t;
 #define INVALID_SOCKET (-1)

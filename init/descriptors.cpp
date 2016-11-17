@@ -23,7 +23,7 @@
 #include <unistd.h>
 
 #include <android-base/stringprintf.h>
-#include <cutils/files.h>
+#include <cutils/android_get_control_file.h>
 #include <cutils/sockets.h>
 
 #include "init.h"

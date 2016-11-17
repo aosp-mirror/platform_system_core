@@ -14,33 +14,37 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <time.h>
 
-#include <cutils/files.h>
+#include <string>
+
+#include <android-base/stringprintf.h>
+#include <android-base/test_utils.h>
+#include <cutils/android_get_control_file.h>
 #include <gtest/gtest.h>
 
 TEST(FilesTest, android_get_control_file) {
-    static const char key[] = ANDROID_FILE_ENV_PREFIX "_dev_kmsg";
-    static const char name[] = "/dev/kmsg";
+    TemporaryFile tf;
+    ASSERT_GE(tf.fd, 0);
 
-    EXPECT_EQ(unsetenv(key), 0);
-    EXPECT_EQ(android_get_control_file(name), -1);
+    std::string key(ANDROID_FILE_ENV_PREFIX);
+    key += tf.path;
 
-    int fd;
-    ASSERT_GE(fd = open(name, O_RDONLY | O_CLOEXEC), 0);
-    EXPECT_EQ(android_get_control_file(name), -1);
+    std::for_each(key.begin(), key.end(), [] (char& c) { c = isalnum(c) ? c : '_'; });
 
-    char val[32];
-    snprintf(val, sizeof(val), "%d", fd);
-    EXPECT_EQ(setenv(key, val, true), 0);
+    EXPECT_EQ(unsetenv(key.c_str()), 0);
+    EXPECT_EQ(android_get_control_file(tf.path), -1);
 
-    EXPECT_EQ(android_get_control_file(name), fd);
-    close(fd);
-    EXPECT_EQ(android_get_control_file(name), -1);
-    EXPECT_EQ(unsetenv(key), 0);
-    EXPECT_EQ(android_get_control_file(name), -1);
+    EXPECT_EQ(setenv(key.c_str(), android::base::StringPrintf("%d", tf.fd).c_str(), true), 0);
+
+    EXPECT_EQ(android_get_control_file(tf.path), tf.fd);
+    close(tf.fd);
+    EXPECT_EQ(android_get_control_file(tf.path), -1);
+    EXPECT_EQ(unsetenv(key.c_str()), 0);
+    EXPECT_EQ(android_get_control_file(tf.path), -1);
 }

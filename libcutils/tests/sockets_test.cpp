@@ -18,11 +18,9 @@
 // IPv6 capabilities. These tests assume that no UDP packets are lost, which
 // should be the case for loopback communication, but is not guaranteed.
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <sys/un.h>
 #include <time.h>
 
 #include <cutils/sockets.h>
@@ -188,50 +186,4 @@ TEST(SocketsTest, TestTcpReceiveTimeout) {
 // Tests socket_send_buffers() failure.
 TEST(SocketsTest, TestSocketSendBuffersFailure) {
     EXPECT_EQ(-1, socket_send_buffers(INVALID_SOCKET, nullptr, 0));
-}
-
-#ifndef SOCK_NONBLOCK
-#define SOCK_NONBLOCK 0
-#endif
-
-#ifndef SOCK_CLOEXEC
-#define SOCK_CLOEXEC 0
-#endif
-
-TEST(SocketsTest, android_get_control_socket) {
-    static const char key[] = ANDROID_SOCKET_ENV_PREFIX "SocketsTest_android_get_control_socket";
-    static const char* name = key + strlen(ANDROID_SOCKET_ENV_PREFIX);
-
-    EXPECT_EQ(unsetenv(key), 0);
-    EXPECT_EQ(android_get_control_socket(name), -1);
-
-    int fd;
-    ASSERT_GE(fd = socket(PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0), 0);
-#ifdef F_GETFL
-    int flags;
-    ASSERT_GE(flags = fcntl(fd, F_GETFL), 0);
-    ASSERT_GE(fcntl(fd, F_SETFL, flags | O_NONBLOCK), 0);
-#endif
-    EXPECT_EQ(android_get_control_socket(name), -1);
-
-    struct sockaddr_un addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    snprintf(addr.sun_path, sizeof(addr.sun_path), ANDROID_SOCKET_DIR"/%s", name);
-    unlink(addr.sun_path);
-
-    EXPECT_EQ(bind(fd, (struct sockaddr*)&addr, sizeof(addr)), 0);
-    EXPECT_EQ(android_get_control_socket(name), -1);
-
-    char val[32];
-    snprintf(val, sizeof(val), "%d", fd);
-    EXPECT_EQ(setenv(key, val, true), 0);
-
-    EXPECT_EQ(android_get_control_socket(name), fd);
-    socket_close(fd);
-    EXPECT_EQ(android_get_control_socket(name), -1);
-    EXPECT_EQ(unlink(addr.sun_path), 0);
-    EXPECT_EQ(android_get_control_socket(name), -1);
-    EXPECT_EQ(unsetenv(key), 0);
-    EXPECT_EQ(android_get_control_socket(name), -1);
 }
