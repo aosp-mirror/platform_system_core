@@ -20,12 +20,13 @@
 #include <android-base/unique_fd.h>
 
 namespace android {
+namespace fuse {
 
-bool FuseBridgeLoop::Start(
-    int raw_dev_fd, int raw_proxy_fd, FuseBridgeLoop::Callback* callback) {
+bool StartFuseBridgeLoop(
+    int raw_dev_fd, int raw_proxy_fd, FuseBridgeLoopCallback* callback) {
   base::unique_fd dev_fd(raw_dev_fd);
   base::unique_fd proxy_fd(raw_proxy_fd);
-  fuse::FuseBuffer buffer;
+  FuseBuffer buffer;
   size_t open_count = 0;
 
   LOG(DEBUG) << "Start fuse loop.";
@@ -94,13 +95,6 @@ bool FuseBridgeLoop::Start(
         break;
     }
   }
-}
-
-namespace fuse {
-
-bool StartFuseBridgeLoop(
-    int raw_dev_fd, int raw_proxy_fd, FuseBridgeLoopCallback* callback) {
-  return FuseBridgeLoop().Start(raw_dev_fd, raw_proxy_fd, callback);
 }
 
 }  // namespace fuse
