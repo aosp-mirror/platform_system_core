@@ -25,11 +25,6 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
-// This file contains files implementation that can be shared between
-// platforms as long as the correct headers are included.
-#define _GNU_SOURCE 1 // for asprintf
-
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -41,17 +36,16 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cutils/files.h>
+#include <cutils/android_get_control_file.h>
 
-#ifndef TEMP_FAILURE_RETRY // _WIN32 does not define
-#define TEMP_FAILURE_RETRY(exp) (exp)
-#endif
+#include "android_get_control_env.h"
 
-int android_get_control_file(const char* path) {
-    if (!path) return -1;
+LIBCUTILS_HIDDEN int __android_get_control_from_env(const char* prefix,
+                                                    const char* name) {
+    if (!prefix || !name) return -1;
 
     char *key = NULL;
-    if (asprintf(&key, ANDROID_FILE_ENV_PREFIX "%s", path) < 0) return -1;
+    if (asprintf(&key, "%s%s", prefix, name) < 0) return -1;
     if (!key) return -1;
 
     char *cp = key;
@@ -70,29 +64,33 @@ int android_get_control_file(const char* path) {
 
     // validity checking
     if ((fd < 0) || (fd > INT_MAX)) return -1;
-#if defined(_SC_OPEN_MAX)
-    if (fd >= sysconf(_SC_OPEN_MAX)) return -1;
-#elif defined(OPEN_MAX)
-    if (fd >= OPEN_MAX) return -1;
-#elif defined(_POSIX_OPEN_MAX)
-    if (fd >= _POSIX_OPEN_MAX) return -1;
+
+    // Since we are inheriting an fd, it could legitimately exceed _SC_OPEN_MAX
+
+    // Still open?
+#if defined(F_GETFD) // Linux lowest overhead
+    if (TEMP_FAILURE_RETRY(fcntl(fd, F_GETFD)) < 0) return -1;
+#elif defined(F_GETFL) // Mac host lowest overhead
+    if (fcntl(fd, F_GETFL) < 0) return -1;
+#else // Hail Mary pass
+    struct stat s;
+    if (fstat(fd, &s) < 0) return -1;
 #endif
 
-#if defined(F_GETFD)
-    if (TEMP_FAILURE_RETRY(fcntl(fd, F_GETFD)) < 0) return -1;
-#elif defined(F_GETFL)
-    if (TEMP_FAILURE_RETRY(fcntl(fd, F_GETFL)) < 0) return -1;
-#else
-    struct stat s;
-    if (TEMP_FAILURE_RETRY(fstat(fd, &s)) < 0) return -1;
-#endif
+    return static_cast<int>(fd);
+}
+
+int android_get_control_file(const char* path) {
+    int fd = __android_get_control_from_env(ANDROID_FILE_ENV_PREFIX, path);
 
 #if defined(__linux__)
+    // Find file path from /proc and make sure it is correct
     char *proc = NULL;
-    if (asprintf(&proc, "/proc/self/fd/%ld", fd) < 0) return -1;
+    if (asprintf(&proc, "/proc/self/fd/%d", fd) < 0) return -1;
     if (!proc) return -1;
 
     size_t len = strlen(path);
+    // readlink() does not guarantee a nul byte, len+2 so we catch truncation.
     char *buf = static_cast<char *>(calloc(1, len + 2));
     if (!buf) {
         free(proc);
@@ -104,8 +102,8 @@ int android_get_control_file(const char* path) {
     free(buf);
     if (ret < 0) return -1;
     if (cmp != 0) return -1;
+    // It is what we think it is
 #endif
 
-    // It is what we think it is
-    return static_cast<int>(fd);
+    return fd;
 }
