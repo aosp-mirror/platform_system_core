@@ -1055,6 +1055,7 @@ LIBLOG_ABI_PUBLIC int android_log_processBinaryLogBuffer(
         outRemaining--;
         /* pretend we ate all the data to prevent log stutter */
         inCount = 0;
+        if (result > 0) result = 0;
     }
 
     /* eat the silly terminating '\n' */
@@ -1078,7 +1079,7 @@ LIBLOG_ABI_PUBLIC int android_log_processBinaryLogBuffer(
 
     entry->message = messageBuf;
 
-    return 0;
+    return result;
 }
 
 /*

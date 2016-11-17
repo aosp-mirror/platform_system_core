@@ -328,6 +328,9 @@ static void bswrite_test(const char *message) {
             EXPECT_TRUE(NULL != logformat);
             AndroidLogEntry entry;
             char msgBuf[1024];
+            if (length != total) {
+                fprintf(stderr, "Expect \"Binary log entry conversion failed\"\n");
+            }
             int processBinaryLogBuffer = android_log_processBinaryLogBuffer(
                 &log_msg.entry_v1, &entry, NULL, msgBuf, sizeof(msgBuf));
             EXPECT_EQ((length == total) ? 0 : -1, processBinaryLogBuffer);
