@@ -40,6 +40,7 @@
 
 #include <thread>
 
+#include <selinux/android.h>
 #include <selinux/selinux.h>
 #include <selinux/label.h>
 
@@ -909,25 +910,49 @@ static int do_chmod(const std::vector<std::string>& args) {
 static int do_restorecon(const std::vector<std::string>& args) {
     int ret = 0;
 
-    for (auto it = std::next(args.begin()); it != args.end(); ++it) {
-        if (restorecon(it->c_str()) < 0)
-            ret = -errno;
+    struct flag_type {const char* name; int value;};
+    static const flag_type flags[] = {
+        {"--recursive", SELINUX_ANDROID_RESTORECON_RECURSE},
+        {"--skip-ce", SELINUX_ANDROID_RESTORECON_SKIPCE},
+        {"--cross-filesystems", SELINUX_ANDROID_RESTORECON_CROSS_FILESYSTEMS},
+        {0, 0}
+    };
+
+    int flag = 0;
+
+    bool in_flags = true;
+    for (size_t i = 1; i < args.size(); ++i) {
+        if (android::base::StartsWith(args[i], "--")) {
+            if (!in_flags) {
+                LOG(ERROR) << "restorecon - flags must precede paths";
+                return -1;
+            }
+            bool found = false;
+            for (size_t j = 0; flags[j].name; ++j) {
+                if (args[i] == flags[j].name) {
+                    flag |= flags[j].value;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                LOG(ERROR) << "restorecon - bad flag " << args[i];
+                return -1;
+            }
+        } else {
+            in_flags = false;
+            if (restorecon(args[i].c_str(), flag) < 0) {
+                ret = -errno;
+            }
+        }
     }
     return ret;
 }
 
 static int do_restorecon_recursive(const std::vector<std::string>& args) {
-    int ret = 0;
-
-    for (auto it = std::next(args.begin()); it != args.end(); ++it) {
-        /* The contents of CE paths are encrypted on FBE devices until user
-         * credentials are presented (filenames inside are mangled), so we need
-         * to delay restorecon of those until vold explicitly requests it. */
-        if (restorecon_recursive_skipce(it->c_str()) < 0) {
-            ret = -errno;
-        }
-    }
-    return ret;
+    std::vector<std::string> non_const_args(args);
+    non_const_args.insert(std::next(non_const_args.begin()), "--recursive");
+    return do_restorecon(non_const_args);
 }
 
 static int do_loglevel(const std::vector<std::string>& args) {

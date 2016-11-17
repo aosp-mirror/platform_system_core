@@ -42,6 +42,7 @@
 #include <netinet/in.h>
 #include <sys/mman.h>
 
+#include <selinux/android.h>
 #include <selinux/selinux.h>
 #include <selinux/label.h>
 
@@ -175,7 +176,7 @@ static int property_set_impl(const char* name, const char* value) {
     if (valuelen >= PROP_VALUE_MAX) return -1;
 
     if (strcmp("selinux.restorecon_recursive", name) == 0 && valuelen > 0) {
-        if (restorecon_recursive(value) != 0) {
+        if (restorecon(value, SELINUX_ANDROID_RESTORECON_RECURSE) != 0) {
             LOG(ERROR) << "Failed to restorecon_recursive " << value;
         }
     }
