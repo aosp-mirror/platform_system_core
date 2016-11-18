@@ -149,7 +149,7 @@ struct TransferLedger {
     void ReportProgress(LinePrinter& lp, const std::string& file, uint64_t file_copied_bytes,
                         uint64_t file_total_bytes) {
         char overall_percentage_str[5] = "?";
-        if (bytes_expected != 0) {
+        if (bytes_expected != 0 && bytes_transferred <= bytes_expected) {
             int overall_percentage = static_cast<int>(bytes_transferred * 100 / bytes_expected);
             // If we're pulling symbolic links, we'll pull the target of the link rather than
             // just create a local link, and that will cause us to go over 100%.
