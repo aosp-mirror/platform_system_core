@@ -56,6 +56,7 @@
 #define FSCK_LOG_FILE   "/dev/fscklogs/log"
 
 #define ZRAM_CONF_DEV   "/sys/block/zram0/disksize"
+#define ZRAM_CONF_MCS   "/sys/block/zram0/max_comp_streams"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
@@ -802,6 +803,18 @@ int fs_mgr_swapon_all(struct fstab *fstab)
              * we can assume the device number is 0.
              */
             FILE *zram_fp;
+            FILE *zram_mcs_fp;
+
+            if (fstab->recs[i].max_comp_streams >= 0) {
+               zram_mcs_fp = fopen(ZRAM_CONF_MCS, "r+");
+              if (zram_mcs_fp == NULL) {
+                ERROR("Unable to open zram conf comp device %s\n", ZRAM_CONF_MCS);
+                ret = -1;
+                continue;
+              }
+              fprintf(zram_mcs_fp, "%d\n", fstab->recs[i].max_comp_streams);
+              fclose(zram_mcs_fp);
+            }
 
             zram_fp = fopen(ZRAM_CONF_DEV, "r+");
             if (zram_fp == NULL) {
