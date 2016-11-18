@@ -48,6 +48,7 @@ CommandListener::CommandListener(LogBuffer *buf, LogReader * /*reader*/,
     registerCmd(new SetPruneListCmd(buf));
     registerCmd(new GetPruneListCmd(buf));
     registerCmd(new ReinitCmd());
+    registerCmd(new ExitCmd(this));
 }
 
 CommandListener::ShutdownCmd::ShutdownCmd(LogReader *reader,
@@ -293,6 +294,21 @@ int CommandListener::ReinitCmd::runCommand(SocketClient *cli,
     reinit_signal_handler(SIGHUP);
 
     cli->sendMsg("success");
+
+    return 0;
+}
+
+CommandListener::ExitCmd::ExitCmd(CommandListener *parent) :
+        LogCommand("EXIT"),
+        mParent(*parent) {
+}
+
+int CommandListener::ExitCmd::runCommand(SocketClient * cli,
+                                         int /*argc*/, char ** /*argv*/) {
+    setname();
+
+    cli->sendMsg("success");
+    release(cli);
 
     return 0;
 }
