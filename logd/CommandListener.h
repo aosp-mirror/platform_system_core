@@ -52,22 +52,38 @@ private:
         explicit name##Cmd(LogBuffer *buf);                      \
         virtual ~name##Cmd() {}                                  \
         int runCommand(SocketClient *c, int argc, char ** argv); \
-    };
+    }
 
-    LogBufferCmd(Clear)
-    LogBufferCmd(GetBufSize)
-    LogBufferCmd(SetBufSize)
-    LogBufferCmd(GetBufSizeUsed)
-    LogBufferCmd(GetStatistics)
-    LogBufferCmd(GetPruneList)
-    LogBufferCmd(SetPruneList)
+    LogBufferCmd(Clear);
+    LogBufferCmd(GetBufSize);
+    LogBufferCmd(SetBufSize);
+    LogBufferCmd(GetBufSizeUsed);
+    LogBufferCmd(GetStatistics);
+    LogBufferCmd(GetPruneList);
+    LogBufferCmd(SetPruneList);
 
-    class ReinitCmd : public LogCommand {
-    public:
-        ReinitCmd();
-        virtual ~ReinitCmd() {}
-        int runCommand(SocketClient *c, int argc, char ** argv);
-    };
+#define LogCmd(name)                                             \
+    class name##Cmd : public LogCommand {                        \
+    public:                                                      \
+        name##Cmd();                                             \
+        virtual ~name##Cmd() {}                                  \
+        int runCommand(SocketClient *c, int argc, char ** argv); \
+    }
+
+    LogCmd(Reinit);
+
+#define LogParentCmd(name)                                       \
+    class name##Cmd : public LogCommand {                        \
+        CommandListener &mParent;                                \
+    public:                                                      \
+        name##Cmd();                                             \
+        explicit name##Cmd(CommandListener *parent);             \
+        virtual ~name##Cmd() {}                                  \
+        int runCommand(SocketClient *c, int argc, char ** argv); \
+        void release(SocketClient *c) { mParent.release(c); }    \
+    }
+
+    LogParentCmd(Exit);
 
 };
 
