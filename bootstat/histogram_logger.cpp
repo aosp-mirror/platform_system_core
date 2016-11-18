@@ -19,13 +19,13 @@
 #include <cstdlib>
 
 #include <android-base/logging.h>
-#include <log/log.h>
+#include <log/log_event_list.h>
 
 namespace bootstat {
 
 void LogHistogram(const std::string& event, int32_t data) {
   LOG(INFO) << "Logging histogram: " << event << " " << data;
-  android_log_event_context log(HISTOGRAM_LOG_TAG);
+  android_log_event_list log(HISTOGRAM_LOG_TAG);
   log << event << data << LOG_ID_EVENTS;
 }
 
