@@ -43,4 +43,21 @@ struct adb_stat : public stat {};
 // Windows doesn't have lstat.
 #define lstat adb_stat
 
+// mingw doesn't define S_IFLNK or S_ISLNK.
+#define S_IFLNK 0120000
+#define S_ISLNK(mode) (((mode) & S_IFMT) == S_IFLNK)
+
+// mingw defines S_IFBLK to a different value from bionic.
+#undef S_IFBLK
+#define S_IFBLK 0060000
+#undef S_ISBLK
+#define S_ISBLK(mode) (((mode) & S_IFMT) == S_IFBLK)
 #endif
+
+// Make sure that host file mode values match the ones on the device.
+static_assert(S_IFMT == 00170000, "");
+static_assert(S_IFLNK == 0120000, "");
+static_assert(S_IFREG == 0100000, "");
+static_assert(S_IFBLK == 0060000, "");
+static_assert(S_IFDIR == 0040000, "");
+static_assert(S_IFCHR == 0020000, "");

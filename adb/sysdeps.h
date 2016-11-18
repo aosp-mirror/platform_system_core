@@ -180,8 +180,6 @@ static __inline__ void  close_on_exec(int  fd)
     /* nothing really */
 }
 
-#define  S_ISLNK(m)   0   /* no symlinks on Win32 */
-
 extern int  adb_unlink(const char*  path);
 #undef  unlink
 #define unlink  ___xxx_unlink
