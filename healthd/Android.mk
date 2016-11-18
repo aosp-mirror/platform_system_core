@@ -189,7 +189,8 @@ LOCAL_SHARED_LIBRARIES := \
     liblog \
     libm \
     libc \
-    libhidl \
+    libhidlbase \
+    libhidltransport \
     android.hardware.health@1.0 \
 
 include $(BUILD_EXECUTABLE)
