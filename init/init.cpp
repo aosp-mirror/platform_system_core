@@ -695,6 +695,8 @@ int main(int argc, char** argv) {
         mount("sysfs", "/sys", "sysfs", 0, NULL);
         mount("selinuxfs", "/sys/fs/selinux", "selinuxfs", 0, NULL);
         mknod("/dev/kmsg", S_IFCHR | 0600, makedev(1, 11));
+        mknod("/dev/random", S_IFCHR | 0666, makedev(1, 8));
+        mknod("/dev/urandom", S_IFCHR | 0666, makedev(1, 9));
     }
 
     // Now that tmpfs is mounted on /dev and we have /dev/kmsg, we can actually
@@ -757,6 +759,8 @@ int main(int argc, char** argv) {
     restorecon("/dev");
     restorecon("/dev/kmsg");
     restorecon("/dev/socket");
+    restorecon("/dev/random");
+    restorecon("/dev/urandom");
     restorecon("/dev/__properties__");
     restorecon("/property_contexts");
     restorecon("/sys", SELINUX_ANDROID_RESTORECON_RECURSE);
