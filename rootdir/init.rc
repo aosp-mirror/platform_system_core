@@ -444,10 +444,6 @@ on post-fs-data
 
     mkdir /data/anr 0775 system system
 
-    # symlink to bugreport storage location
-    rm /data/bugreports
-    symlink /data/user_de/0/com.android.shell/files/bugreports /data/bugreports
-
     # Separate location for storing security policy files on data
     mkdir /data/security 0711 system system
 
