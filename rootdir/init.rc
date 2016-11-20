@@ -294,7 +294,6 @@ on late-init
     trigger early-boot
     trigger boot
 
-
 on post-fs
     start logd
     # once everything is setup, no need to modify /
