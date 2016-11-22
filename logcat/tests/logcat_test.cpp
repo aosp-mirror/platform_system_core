@@ -29,6 +29,7 @@
 
 #include <gtest/gtest.h>
 #include <log/log.h>
+#include <log/log_event_list.h>
 
 #define BIG_BUFFER (5 * 1024)
 
@@ -1091,7 +1092,7 @@ static bool get_white_black(char **list) {
     while (fgets(buffer, sizeof(buffer), fp)) {
         char *hold = *list;
         char *buf = buffer;
-	while (isspace(*buf)) {
+        while (isspace(*buf)) {
             ++buf;
         }
         char *end = buf + strlen(buf);
@@ -1126,7 +1127,7 @@ static bool set_white_black(const char *list) {
 
     while (fgets(buffer, sizeof(buffer), fp)) {
         char *buf = buffer;
-	while (isspace(*buf)) {
+        while (isspace(*buf)) {
             ++buf;
         }
         char *end = buf + strlen(buf);
@@ -1295,7 +1296,7 @@ TEST(logcat, descriptive) {
 
     {
         static const struct tag hhgtg = { 42, "answer" };
-        android_log_event_context ctx(hhgtg.tagNo);
+        android_log_event_list ctx(hhgtg.tagNo);
         static const char theAnswer[] = "what is five by seven";
         ctx << theAnswer;
         ctx.write();
@@ -1307,7 +1308,7 @@ TEST(logcat, descriptive) {
         static const struct tag sync = { 2720, "sync" };
         static const char id[] = "logcat.decriptive";
         {
-            android_log_event_context ctx(sync.tagNo);
+            android_log_event_list ctx(sync.tagNo);
             ctx << id << (int32_t)42 << (int32_t)-1 << (int32_t)0;
             ctx.write();
             EXPECT_TRUE(End_to_End(sync.tagStr,
@@ -1317,7 +1318,7 @@ TEST(logcat, descriptive) {
 
         // Partial match to description
         {
-            android_log_event_context ctx(sync.tagNo);
+            android_log_event_list ctx(sync.tagNo);
             ctx << id << (int32_t)43 << (int64_t)-1 << (int32_t)0;
             ctx.write();
             EXPECT_TRUE(End_to_End(sync.tagStr,
@@ -1327,7 +1328,7 @@ TEST(logcat, descriptive) {
 
         // Negative Test of End_to_End, ensure it is working
         {
-            android_log_event_context ctx(sync.tagNo);
+            android_log_event_list ctx(sync.tagNo);
             ctx << id << (int32_t)44 << (int32_t)-1 << (int64_t)0;
             ctx.write();
             fprintf(stderr, "Expect a \"Closest match\" message\n");
@@ -1340,7 +1341,7 @@ TEST(logcat, descriptive) {
     {
         static const struct tag sync = { 2747, "contacts_aggregation" };
         {
-            android_log_event_context ctx(sync.tagNo);
+            android_log_event_list ctx(sync.tagNo);
             ctx << (uint64_t)30 << (int32_t)2;
             ctx.write();
             EXPECT_TRUE(End_to_End(sync.tagStr,
@@ -1348,7 +1349,7 @@ TEST(logcat, descriptive) {
         }
 
         {
-            android_log_event_context ctx(sync.tagNo);
+            android_log_event_list ctx(sync.tagNo);
             ctx << (uint64_t)31570 << (int32_t)911;
             ctx.write();
             EXPECT_TRUE(End_to_End(sync.tagStr,
@@ -1359,42 +1360,42 @@ TEST(logcat, descriptive) {
     {
         static const struct tag sync = { 75000, "sqlite_mem_alarm_current" };
         {
-            android_log_event_context ctx(sync.tagNo);
+            android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)512;
             ctx.write();
             EXPECT_TRUE(End_to_End(sync.tagStr, "current=512B"));
         }
 
         {
-            android_log_event_context ctx(sync.tagNo);
+            android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)3072;
             ctx.write();
             EXPECT_TRUE(End_to_End(sync.tagStr, "current=3KB"));
         }
 
         {
-            android_log_event_context ctx(sync.tagNo);
+            android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)2097152;
             ctx.write();
             EXPECT_TRUE(End_to_End(sync.tagStr, "current=2MB"));
         }
 
         {
-            android_log_event_context ctx(sync.tagNo);
+            android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)2097153;
             ctx.write();
             EXPECT_TRUE(End_to_End(sync.tagStr, "current=2097153B"));
         }
 
         {
-            android_log_event_context ctx(sync.tagNo);
+            android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)1073741824;
             ctx.write();
             EXPECT_TRUE(End_to_End(sync.tagStr, "current=1GB"));
         }
 
         {
-            android_log_event_context ctx(sync.tagNo);
+            android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)3221225472; // 3MB, but on purpose overflowed
             ctx.write();
             EXPECT_TRUE(End_to_End(sync.tagStr, "current=-1GB"));
@@ -1403,7 +1404,7 @@ TEST(logcat, descriptive) {
 
     {
         static const struct tag sync = { 27501, "notification_panel_hidden" };
-        android_log_event_context ctx(sync.tagNo);
+        android_log_event_list ctx(sync.tagNo);
         ctx.write();
         EXPECT_TRUE(End_to_End(sync.tagStr, ""));
     }
