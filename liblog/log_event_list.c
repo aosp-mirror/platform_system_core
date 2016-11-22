@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <log/log_event_list.h>
 #include <private/android_logger.h>
 
 #include "log_portability.h"
