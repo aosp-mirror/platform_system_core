@@ -2651,6 +2651,19 @@ TEST(liblog, create_android_logger_overflow) {
     ASSERT_TRUE(NULL == ctx);
 }
 
+TEST(liblog, android_log_write_list_buffer) {
+    __android_log_event_list ctx(1005);
+    ctx << 1005 << "tag_def" << "(tag|1),(name|3),(format|3)";
+    std::string buffer(ctx);
+    ctx.close();
+
+    char msgBuf[1024];
+    memset(msgBuf, 0, sizeof(msgBuf));
+    EXPECT_EQ(android_log_buffer_to_string(buffer.data(), buffer.length(),
+                                           msgBuf, sizeof(msgBuf)), 0);
+    EXPECT_STREQ(msgBuf, "[1005,tag_def,(tag|1),(name|3),(format|3)]");
+}
+
 static const char __pmsg_file[] =
         "/data/william-shakespeare/MuchAdoAboutNothing.txt";
 

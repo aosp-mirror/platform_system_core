@@ -25,6 +25,13 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#if (defined(__cplusplus) && defined(_USING_LIBCXX))
+extern "C++" {
+#include <string>
+}
+#endif
+
+#include <log/log_event_list.h>
 #include <log/log.h>
 
 #define LOGGER_MAGIC 'l'
@@ -145,6 +152,40 @@ bool __android_logger_property_get_bool(const char* key, int flag);
 #define LOG_BUFFER_MAX_SIZE (256 * 1024 * 1024UL)
 unsigned long __android_logger_get_buffer_size(log_id_t logId);
 bool __android_logger_valid_buffer_size(unsigned long value);
+
+/* Retrieve the composed event buffer */
+int android_log_write_list_buffer(android_log_context ctx, const char** msg);
+
+#ifdef __cplusplus
+#ifdef __class_android_log_event_list_defined
+#ifndef __class_android_log_event_list_private_defined
+#define __class_android_log_event_list_private_defined
+/* android_log_context C++ helpers */
+extern "C++" {
+class __android_log_event_list : public android_log_event_list {
+    __android_log_event_list(const android_log_event_list&) = delete;
+    void operator =(const __android_log_event_list&) = delete;
+
+public:
+    explicit __android_log_event_list(int tag) : android_log_event_list(tag) { }
+    explicit __android_log_event_list(log_msg& log_msg) : android_log_event_list(log_msg) { }
+
+#if defined(_USING_LIBCXX)
+    operator std::string() {
+        if (ret) return std::string("");
+        const char* cp = NULL;
+        ssize_t len = android_log_write_list_buffer(ctx, &cp);
+        if (len < 0) ret = len;
+        if (!cp || (len <= 0)) return std::string("");
+        return std::string(cp, len);
+    }
+#endif
+
+};
+}
+#endif
+#endif
+#endif
 
 #if defined(__cplusplus)
 }
