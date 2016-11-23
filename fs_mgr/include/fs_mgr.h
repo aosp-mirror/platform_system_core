@@ -75,6 +75,7 @@ struct fstab_rec {
     int swap_prio;
     int max_comp_streams;
     unsigned int zram_size;
+    uint64_t reserved_size;
     unsigned int file_encryption_mode;
 };
 
