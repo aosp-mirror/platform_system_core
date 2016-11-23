@@ -9,6 +9,7 @@
 #include <sys/limits.h>
 #include <sys/poll.h>
 #include <linux/input.h>
+#include <err.h>
 #include <errno.h>
 #include <unistd.h>
 
@@ -110,10 +111,8 @@ static int print_possible_events(int fd, int print_flags)
                 break;
             bits_size = res + 16;
             bits = realloc(bits, bits_size * 2);
-            if(bits == NULL) {
-                fprintf(stderr, "failed to allocate buffer of size %d\n", (int)bits_size);
-                return 1;
-            }
+            if(bits == NULL)
+                err(1, "failed to allocate buffer of size %d\n", (int)bits_size);
         }
         res2 = 0;
         switch(i) {
