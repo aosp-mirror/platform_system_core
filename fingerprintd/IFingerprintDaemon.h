@@ -17,6 +17,8 @@
 #ifndef IFINGERPRINT_DAEMON_H_
 #define IFINGERPRINT_DAEMON_H_
 
+#include <android/hardware/biometrics/fingerprint/2.1/IBiometricsFingerprint.h>
+#include <android/hardware/biometrics/fingerprint/2.1/types.h>
 #include <binder/IInterface.h>
 #include <binder/Parcel.h>
 
@@ -69,7 +71,7 @@ class IFingerprintDaemon : public IInterface, public IBinder::DeathRecipient {
 
         // DECLARE_META_INTERFACE - C++ client interface not needed
         static const android::String16 descriptor;
-        static void hal_notify_callback(const fingerprint_msg_t *msg);
+        static void hal_notify_callback(const hardware::biometrics::fingerprint::V2_1::FingerprintMsg &msg);
 };
 
 // ----------------------------------------------------------------------------

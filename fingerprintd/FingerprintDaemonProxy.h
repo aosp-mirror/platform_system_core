@@ -22,6 +22,8 @@
 
 namespace android {
 
+using hardware::biometrics::fingerprint::V2_1::RequestStatus;
+
 class FingerprintDaemonProxy : public BnFingerprintDaemon {
     public:
         static FingerprintDaemonProxy* getInstance() {
@@ -45,17 +47,16 @@ class FingerprintDaemonProxy : public BnFingerprintDaemon {
         virtual int32_t setActiveGroup(int32_t groupId, const uint8_t* path, ssize_t pathLen);
         virtual int64_t openHal();
         virtual int32_t closeHal();
+        static void hal_notify_callback(const hardware::biometrics::fingerprint::V2_1::FingerprintMsg &msg);
 
     private:
         FingerprintDaemonProxy();
         virtual ~FingerprintDaemonProxy();
         void binderDied(const wp<IBinder>& who);
         void notifyKeystore(const uint8_t *auth_token, const size_t auth_token_length);
-        static void hal_notify_callback(const fingerprint_msg_t *msg);
+        int32_t HandleTransportError(const RequestStatus error);
 
         static FingerprintDaemonProxy* sInstance;
-        fingerprint_module_t const* mModule;
-        fingerprint_device_t* mDevice;
         sp<IFingerprintDaemonCallback> mCallback;
 };
 

@@ -26,8 +26,11 @@ LOCAL_SRC_FILES := \
 LOCAL_MODULE := fingerprintd
 LOCAL_SHARED_LIBRARIES := \
 	libbinder \
+	libhidlbase \
+	libhidltransport \
 	liblog \
 	libhardware \
 	libutils \
-	libkeystore_binder
+	libkeystore_binder \
+	android.hardware.biometrics.fingerprint@2.1
 include $(BUILD_EXECUTABLE)
