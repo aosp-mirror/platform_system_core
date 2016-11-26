@@ -478,11 +478,17 @@ static void process_kernel_cmdline() {
     if (qemu[0]) import_kernel_cmdline(true, import_kernel_nv);
 }
 
+static int property_enable_triggers_action(const std::vector<std::string>& args)
+{
+    /* Enable property triggers. */
+    property_triggers_enabled = 1;
+    return 0;
+}
+
 static int queue_property_triggers_action(const std::vector<std::string>& args)
 {
+    ActionManager::GetInstance().QueueBuiltinAction(property_enable_triggers_action, "enable_property_trigger");
     ActionManager::GetInstance().QueueAllPropertyTriggers();
-    /* enable property triggers */
-    property_triggers_enabled = 1;
     return 0;
 }
 
