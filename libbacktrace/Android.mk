@@ -38,40 +38,15 @@ LLVM_ROOT_PATH := external/llvm
 include $(LLVM_ROOT_PATH)/llvm.mk
 
 #-------------------------------------------------------------------------
-# The libbacktrace_offline shared library.
+# The libbacktrace_offline static library.
 #-------------------------------------------------------------------------
 libbacktrace_offline_src_files := \
 	BacktraceOffline.cpp \
 
-# Use shared llvm library on device to save space.
-libbacktrace_offline_shared_libraries_target := \
-	libbacktrace \
+# Use shared libraries so their headers get included during build.
+libbacktrace_offline_shared_libraries := \
 	libbase \
-	liblog \
 	libunwind \
-	libutils \
-	libLLVM \
-
-libbacktrace_offline_static_libraries_target := \
-	libziparchive \
-	libz \
-
-# Use static llvm libraries on host to remove dependency on 32-bit llvm shared library
-# which is not included in the prebuilt.
-libbacktrace_offline_static_libraries_host := \
-	libbacktrace \
-	libunwind \
-	libziparchive \
-	libz \
-	libbase \
-	liblog \
-	libutils \
-	libLLVMObject \
-	libLLVMBitReader \
-	libLLVMMC \
-	libLLVMMCParser \
-	libLLVMCore \
-	libLLVMSupport \
 
 module := libbacktrace_offline
 build_type := target
@@ -113,10 +88,16 @@ backtrace_test_shared_libraries := \
 backtrace_test_shared_libraries_target += \
 	libdl \
 	libutils \
-	libLLVM \
 
+# Statically link LLVMlibraries to remove dependency on llvm shared library.
 backtrace_test_static_libraries := \
 	libbacktrace_offline \
+	libLLVMObject \
+	libLLVMBitReader \
+	libLLVMMC \
+	libLLVMMCParser \
+	libLLVMCore \
+	libLLVMSupport \
 
 backtrace_test_static_libraries_target := \
 	libziparchive \
@@ -126,12 +107,6 @@ backtrace_test_static_libraries_host := \
 	libziparchive \
 	libz \
 	libutils \
-	libLLVMObject \
-	libLLVMBitReader \
-	libLLVMMC \
-	libLLVMMCParser \
-	libLLVMCore \
-	libLLVMSupport \
 
 backtrace_test_ldlibs_host += \
 	-ldl \
