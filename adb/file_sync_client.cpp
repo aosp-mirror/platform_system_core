@@ -43,6 +43,7 @@
 #include "adb_utils.h"
 #include "file_sync_service.h"
 #include "line_printer.h"
+#include "sysdeps/stat.h"
 
 #include <android-base/file.h>
 #include <android-base/strings.h>
@@ -64,15 +65,11 @@ static void ensure_trailing_separators(std::string& local_path, std::string& rem
 }
 
 static bool should_pull_file(mode_t mode) {
-    return mode & (S_IFREG | S_IFBLK | S_IFCHR);
+    return S_ISREG(mode) || S_ISBLK(mode) || S_ISCHR(mode);
 }
 
 static bool should_push_file(mode_t mode) {
-    mode_t mask = S_IFREG;
-#if !defined(_WIN32)
-    mask |= S_IFLNK;
-#endif
-    return mode & mask;
+    return S_ISREG(mode) || S_ISLNK(mode);
 }
 
 struct copyinfo {
