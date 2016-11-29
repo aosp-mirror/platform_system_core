@@ -311,7 +311,7 @@ const char *android::tagToName(size_t *len, uint32_t tag) {
     if (!map) {
         sem_wait(&sem_name);
         if (!map) {
-            map = android_openEventTagMap(EVENT_TAG_MAP_FILE);
+            map = android_openEventTagMap(NULL);
         }
         sem_post(&sem_name);
         if (!map) {

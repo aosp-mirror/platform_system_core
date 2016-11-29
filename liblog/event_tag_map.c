@@ -73,12 +73,13 @@ LIBLOG_ABI_PUBLIC EventTagMap* android_openEventTagMap(const char* fileName)
     EventTagMap* newTagMap;
     off_t end;
     int save_errno;
+    const char* tagfile = fileName ? fileName : EVENT_TAG_MAP_FILE;
 
-    int fd = open(fileName, O_RDONLY | O_CLOEXEC);
+    int fd = open(tagfile, O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
         save_errno = errno;
         fprintf(stderr, "%s: unable to open map '%s': %s\n",
-                OUT_TAG, fileName, strerror(save_errno));
+                OUT_TAG, tagfile, strerror(save_errno));
         goto fail_errno;
     }
 
@@ -87,7 +88,7 @@ LIBLOG_ABI_PUBLIC EventTagMap* android_openEventTagMap(const char* fileName)
     (void) lseek(fd, 0L, SEEK_SET);
     if (end < 0) {
         fprintf(stderr, "%s: unable to seek map '%s' %s\n",
-                OUT_TAG, fileName, strerror(save_errno));
+                OUT_TAG, tagfile, strerror(save_errno));
         goto fail_close;
     }
 
@@ -103,7 +104,7 @@ LIBLOG_ABI_PUBLIC EventTagMap* android_openEventTagMap(const char* fileName)
     fd = -1;
     if ((newTagMap->mapAddr == MAP_FAILED) || (newTagMap->mapAddr == NULL)) {
         fprintf(stderr, "%s: mmap(%s) failed: %s\n",
-                OUT_TAG, fileName, strerror(save_errno));
+                OUT_TAG, tagfile, strerror(save_errno));
         goto fail_free;
     }
 
