@@ -43,7 +43,6 @@
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <cutils/android_reboot.h>
 #include <cutils/fs.h>
 #include <cutils/iosched_policy.h>
 #include <cutils/list.h>
@@ -164,14 +163,21 @@ static int wait_for_coldboot_done_action(const std::vector<std::string>& args) {
     Timer t;
 
     LOG(VERBOSE) << "Waiting for " COLDBOOT_DONE "...";
-    // Any longer than 1s is an unreasonable length of time to delay booting.
-    // If you're hitting this timeout, check that you didn't make your
-    // sepolicy regular expressions too expensive (http://b/19899875).
-    if (wait_for_file(COLDBOOT_DONE, 1s)) {
+
+    // Historically we had a 1s timeout here because we weren't otherwise
+    // tracking boot time, and many OEMs made their sepolicy regular
+    // expressions too expensive (http://b/19899875).
+
+    // Now we're tracking boot time, just log the time taken to a system
+    // property. We still panic if it takes more than a minute though,
+    // because any build that slow isn't likely to boot at all, and we'd
+    // rather any test lab devices fail back to the bootloader.
+    if (wait_for_file(COLDBOOT_DONE, 60s) < 0) {
         LOG(ERROR) << "Timed out waiting for " COLDBOOT_DONE;
+        panic();
     }
 
-    LOG(VERBOSE) << "Waiting for " COLDBOOT_DONE " took " << t.duration() << "s.";
+    property_set("ro.boottime.init.cold_boot_wait", std::to_string(t.duration_ns()).c_str());
     return 0;
 }
 
@@ -252,9 +258,8 @@ ret:
 }
 
 static void security_failure() {
-    LOG(ERROR) << "Security failure; rebooting into recovery mode...";
-    android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
-    while (true) { pause(); }  // never reached
+    LOG(ERROR) << "Security failure...";
+    panic();
 }
 
 #define MMAP_RND_PATH "/proc/sys/vm/mmap_rnd_bits"
@@ -545,8 +550,8 @@ static void selinux_initialize(bool in_kernel_domain) {
             security_failure();
         }
 
-        LOG(INFO) << "(Initializing SELinux " << (is_enforcing ? "enforcing" : "non-enforcing")
-                  << " took " << t.duration() << "s.)";
+        // init's first stage can't set properties, so pass the time to the second stage.
+        setenv("INIT_SELINUX_TOOK", std::to_string(t.duration_ns()).c_str(), 1);
     } else {
         selinux_init_all_handles();
     }
@@ -752,7 +757,13 @@ int main(int argc, char** argv) {
         export_kernel_boot_props();
 
         // Make the time that init started available for bootstat to log.
-        property_set("init.start", getenv("INIT_STARTED_AT"));
+        property_set("ro.boottime.init", getenv("INIT_STARTED_AT"));
+        property_set("ro.boottime.init.selinux", getenv("INIT_SELINUX_TOOK"));
+
+        // Clean up our environment.
+        unsetenv("INIT_SECOND_STAGE");
+        unsetenv("INIT_STARTED_AT");
+        unsetenv("INIT_SELINUX_TOOK");
 
         // Now set up SELinux for second stage.
         selinux_initialize(false);
