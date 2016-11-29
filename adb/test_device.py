@@ -890,7 +890,8 @@ class FileOperationsTest(DeviceTest):
             except subprocess.CalledProcessError as e:
                 output = e.output
 
-            self.assertIn('Permission denied', output)
+            self.assertTrue('Permission denied' in output or
+                            'Read-only file system' in output)
 
     def _test_pull(self, remote_file, checksum):
         tmp_write = tempfile.NamedTemporaryFile(mode='wb', delete=False)
