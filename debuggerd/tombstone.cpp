@@ -571,7 +571,7 @@ static void dump_log_file(
 
     if (log_entry.id() == LOG_ID_EVENTS) {
       if (!g_eventTagMap) {
-        g_eventTagMap = android_openEventTagMap(EVENT_TAG_MAP_FILE);
+        g_eventTagMap = android_openEventTagMap(NULL);
       }
       AndroidLogEntry e;
       char buf[512];
