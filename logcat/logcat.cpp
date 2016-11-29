@@ -177,7 +177,7 @@ static void processBuffer(log_device_t* dev, struct log_msg *buf)
         static EventTagMap *eventTagMap = NULL;
 
         if (!eventTagMap && !hasOpenedEventTagMap) {
-            eventTagMap = android_openEventTagMap(EVENT_TAG_MAP_FILE);
+            eventTagMap = android_openEventTagMap(NULL);
             hasOpenedEventTagMap = true;
         }
         err = android_log_processBinaryLogBuffer(&buf->entry_v1, &entry,
