@@ -440,16 +440,27 @@ Properties
 Init provides information about the services that it is responsible
 for via the below properties.
 
-init.start
-  Time after boot in ns (via the CLOCK_BOOTTIME clock) at which the first
-  stage of init started.
-
 init.svc.<name>
   State of a named service ("stopped", "stopping", "running", "restarting")
 
-init.svc.<name>.start
+
+Boot timing
+-----------
+Init records some boot timing information in system properties.
+
+ro.boottime.init
+  Time after boot in ns (via the CLOCK_BOOTTIME clock) at which the first
+  stage of init started.
+
+ro.boottime.init.selinux
+  How long it took the first stage to initialize SELinux.
+
+ro.boottime.init.cold_boot_wait
+  How long init waited for ueventd's coldboot phase to end.
+
+ro.boottime.<service-name>
   Time after boot in ns (via the CLOCK_BOOTTIME clock) that the service was
-  most recently started.
+  first started.
 
 
 Bootcharting

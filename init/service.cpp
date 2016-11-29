@@ -36,7 +36,6 @@
 #include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <cutils/android_reboot.h>
 #include <system/thread_defs.h>
 
 #include <processgroup/processgroup.h>
@@ -190,9 +189,9 @@ void Service::NotifyStateChange(const std::string& new_state) const {
     property_set(prop_name.c_str(), new_state.c_str());
 
     if (new_state == "running") {
-        prop_name += ".start";
         uint64_t start_ns = time_started_.time_since_epoch().count();
-        property_set(prop_name.c_str(), StringPrintf("%" PRIu64, start_ns).c_str());
+        property_set(StringPrintf("ro.boottime.%s", name_.c_str()).c_str(),
+                     StringPrintf("%" PRIu64, start_ns).c_str());
     }
 }
 
@@ -283,10 +282,8 @@ bool Service::Reap() {
     if ((flags_ & SVC_CRITICAL) && !(flags_ & SVC_RESTART)) {
         if (now < time_crashed_ + 4min) {
             if (++crash_count_ > 4) {
-                LOG(ERROR) << "critical process '" << name_ << "' exited 4 times in 4 minutes; "
-                           << "rebooting into recovery mode";
-                android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
-                return false;
+                LOG(ERROR) << "critical process '" << name_ << "' exited 4 times in 4 minutes";
+                panic();
             }
         } else {
             time_crashed_ = now;
