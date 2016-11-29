@@ -48,7 +48,7 @@ static enum {
 
 static int check_log_uid_permissions()
 {
-#if defined(__BIONIC__)
+#if defined(__ANDROID__)
     uid_t uid = __android_log_uid();
 
     /* Matches clientHasLogCredentials() in logd */
@@ -130,7 +130,7 @@ LIBLOG_ABI_PUBLIC int __android_log_dev_available()
     return kLogNotAvailable;
 }
 
-#if defined(__BIONIC__)
+#if defined(__ANDROID__)
 static atomic_uintptr_t tagMap;
 #endif
 
@@ -140,7 +140,7 @@ static atomic_uintptr_t tagMap;
 LIBLOG_ABI_PUBLIC void __android_log_close()
 {
     struct android_log_transport_write *transport;
-#if defined(__BIONIC__)
+#if defined(__ANDROID__)
     EventTagMap *m;
 #endif
 
@@ -170,7 +170,7 @@ LIBLOG_ABI_PUBLIC void __android_log_close()
         }
     }
 
-#if defined(__BIONIC__)
+#if defined(__ANDROID__)
     /*
      * Additional risk here somewhat mitigated by immediately unlock flushing
      * the processor cache. The multi-threaded race that we choose to accept,
@@ -188,7 +188,7 @@ LIBLOG_ABI_PUBLIC void __android_log_close()
 
     __android_log_unlock();
 
-#if defined(__BIONIC__)
+#if defined(__ANDROID__)
     if (m != (EventTagMap *)(uintptr_t)-1LL) android_closeEventTagMap(m);
 #endif
 
@@ -261,7 +261,7 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
         return -EINVAL;
     }
 
-#if defined(__BIONIC__)
+#if defined(__ANDROID__)
     if (log_id == LOG_ID_SECURITY) {
         if (vec[0].iov_len < 4) {
             return -EINVAL;
