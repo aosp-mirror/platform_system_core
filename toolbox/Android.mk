@@ -81,15 +81,6 @@ $(INPUT_H_LABELS_H): $(LOCAL_PATH)/Android.mk $(LOCAL_PATH)/generate-input.h-lab
 $(INPUT_H_LABELS_H):
 	$(transform-generated-source)
 
-# We only want 'r' on userdebug and eng builds.
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES := r.c
-LOCAL_CFLAGS += $(common_cflags)
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/upstream-netbsd/include/
-LOCAL_MODULE := r
-LOCAL_MODULE_TAGS := debug
-include $(BUILD_EXECUTABLE)
-
 
 # We build BSD grep separately, so it can provide egrep and fgrep too.
 include $(CLEAR_VARS)
