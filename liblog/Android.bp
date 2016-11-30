@@ -73,6 +73,9 @@ cc_library {
         linux: {
             host_ldlibs: ["-lrt"],
         },
+        linux_bionic: {
+            enabled: true,
+        },
     },
 
     cflags: [
