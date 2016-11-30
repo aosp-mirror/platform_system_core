@@ -70,7 +70,8 @@ enum logtype {
   MAPS,
   MEMORY,
   STACK,
-  LOGS
+  LOGS,
+  OPEN_FILES
 };
 
 // Log information onto the tombstone.
