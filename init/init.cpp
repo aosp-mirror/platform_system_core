@@ -731,14 +731,14 @@ int main(int argc, char** argv) {
         // By default, sleep until something happens.
         int epoll_timeout_ms = -1;
 
-        // If there's more work to do, wake up again immediately.
-        if (am.HasMoreCommands()) epoll_timeout_ms = 0;
-
         // If there's a process that needs restarting, wake up in time for that.
         if (process_needs_restart_at != 0) {
             epoll_timeout_ms = (process_needs_restart_at - time(nullptr)) * 1000;
             if (epoll_timeout_ms < 0) epoll_timeout_ms = 0;
         }
+
+        // If there's more work to do, wake up again immediately.
+        if (am.HasMoreCommands()) epoll_timeout_ms = 0;
 
         bootchart_sample(&epoll_timeout_ms);
 
