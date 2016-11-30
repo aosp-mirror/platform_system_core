@@ -24,14 +24,15 @@ cc_defaults {
                 "PropertiesTest.cpp",
                 "sched_policy_test.cpp",
                 "trace-dev_test.cpp",
+                "test_str_parms.cpp",
+                "android_get_control_socket_test.cpp",
+                "android_get_control_file_test.cpp"
             ],
         },
 
         not_windows: {
             srcs: [
                 "test_str_parms.cpp",
-                "android_get_control_socket_test.cpp",
-                "android_get_control_file_test.cpp"
             ],
         },
     },
