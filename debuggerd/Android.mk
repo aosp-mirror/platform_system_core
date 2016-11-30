@@ -18,6 +18,7 @@ LOCAL_SRC_FILES:= \
     debuggerd.cpp \
     elf_utils.cpp \
     getevent.cpp \
+    open_files_list.cpp \
     signal_sender.cpp \
     tombstone.cpp \
     utility.cpp \
@@ -108,9 +109,11 @@ include $(BUILD_EXECUTABLE)
 
 debuggerd_test_src_files := \
     utility.cpp \
+    open_files_list.cpp \
     test/dump_memory_test.cpp \
     test/elf_fake.cpp \
     test/log_fake.cpp \
+    test/open_files_list_test.cpp \
     test/property_fake.cpp \
     test/ptrace_fake.cpp \
     test/tombstone_test.cpp \
