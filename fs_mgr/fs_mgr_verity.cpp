@@ -825,7 +825,7 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
     char fstab_filename[PROPERTY_VALUE_MAX + sizeof(FSTAB_PREFIX)];
     const char *mount_point;
     char propbuf[PROPERTY_VALUE_MAX];
-    char *status;
+    const char *status;
     int fd = -1;
     int i;
     int mode;
@@ -875,9 +875,13 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
         verity_ioctl_init(io, mount_point, 0);
 
         if (ioctl(fd, DM_TABLE_STATUS, io)) {
-            ERROR("Failed to query DM_TABLE_STATUS for %s (%s)\n", mount_point,
-                strerror(errno));
-            continue;
+            if (fstab->recs[i].fs_mgr_flags & MF_VERIFYATBOOT) {
+                status = "V";
+            } else {
+                ERROR("Failed to query DM_TABLE_STATUS for %s (%s)\n", mount_point,
+                      strerror(errno));
+                continue;
+            }
         }
 
         status = &buffer[io->data_start + sizeof(struct dm_target_spec)];
