@@ -20,6 +20,7 @@
 #include <stdio.h>
 
 TEST(libc, __pstore_append) {
+#ifdef __ANDROID__
     FILE *fp;
     ASSERT_TRUE(NULL != (fp = fopen("/dev/pmsg0", "a")));
     static const char message[] = "libc.__pstore_append\n";
@@ -42,4 +43,7 @@ TEST(libc, __pstore_append) {
                 "Reboot, ensure string libc.__pstore_append is in /sys/fs/pstore/pmsg-ramoops-0\n"
                );
     }
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
