@@ -55,6 +55,7 @@
 
 #include "backtrace.h"
 #include "getevent.h"
+#include "open_files_list.h"
 #include "signal_sender.h"
 #include "tombstone.h"
 #include "utility.h"
@@ -480,7 +481,8 @@ static void ptrace_siblings(pid_t pid, pid_t main_tid, pid_t ignore_tid, std::se
 }
 
 static bool perform_dump(const debugger_request_t& request, int fd, int tombstone_fd,
-                         BacktraceMap* backtrace_map, const std::set<pid_t>& siblings,
+                         BacktraceMap* backtrace_map, const OpenFilesList& open_files,
+                         const std::set<pid_t>& siblings,
                          int* crash_signal, std::string* amfd_data) {
   if (TEMP_FAILURE_RETRY(write(fd, "\0", 1)) != 1) {
     ALOGE("debuggerd: failed to respond to client: %s\n", strerror(errno));
@@ -499,7 +501,8 @@ static bool perform_dump(const debugger_request_t& request, int fd, int tombston
       case SIGSTOP:
         if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
           ALOGV("debuggerd: stopped -- dumping to tombstone");
-          engrave_tombstone(tombstone_fd, backtrace_map, request.pid, request.tid, siblings,
+          engrave_tombstone(tombstone_fd, backtrace_map, open_files,
+                            request.pid, request.tid, siblings,
                             request.abort_msg_address, amfd_data);
         } else if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE) {
           ALOGV("debuggerd: stopped -- dumping to fd");
@@ -526,7 +529,8 @@ static bool perform_dump(const debugger_request_t& request, int fd, int tombston
       case SIGTRAP:
         ALOGV("stopped -- fatal signal\n");
         *crash_signal = signal;
-        engrave_tombstone(tombstone_fd, backtrace_map, request.pid, request.tid, siblings,
+        engrave_tombstone(tombstone_fd, backtrace_map, open_files,
+                          request.pid, request.tid, siblings,
                           request.abort_msg_address, amfd_data);
         break;
 
@@ -643,6 +647,10 @@ static void worker_process(int fd, debugger_request_t& request) {
   // Generate the backtrace map before dropping privileges.
   std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::Create(request.pid));
 
+  // Collect the list of open files before dropping privileges.
+  OpenFilesList open_files;
+  populate_open_files_list(request.pid, &open_files);
+
   int amfd = -1;
   std::unique_ptr<std::string> amfd_data;
   if (request.action == DEBUGGER_ACTION_CRASH) {
@@ -660,8 +668,8 @@ static void worker_process(int fd, debugger_request_t& request) {
   }
 
   int crash_signal = SIGKILL;
-  succeeded = perform_dump(request, fd, tombstone_fd, backtrace_map.get(), siblings,
-                           &crash_signal, amfd_data.get());
+  succeeded = perform_dump(request, fd, tombstone_fd, backtrace_map.get(), open_files,
+                           siblings, &crash_signal, amfd_data.get());
   if (succeeded) {
     if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
       if (!tombstone_path.empty()) {
