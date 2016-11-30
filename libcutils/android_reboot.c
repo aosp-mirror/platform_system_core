@@ -42,24 +42,6 @@ typedef struct {
     struct mntent entry;
 } mntent_list;
 
-static bool has_mount_option(const char* opts, const char* opt_to_find)
-{
-  bool ret = false;
-  char* copy = NULL;
-  char* opt;
-  char* rem;
-
-  while ((opt = strtok_r(copy ? NULL : (copy = strdup(opts)), ",", &rem))) {
-      if (!strcmp(opt, opt_to_find)) {
-          ret = true;
-          break;
-      }
-  }
-
-  free(copy);
-  return ret;
-}
-
 static bool is_block_device(const char* fsname)
 {
     return !strncmp(fsname, "/dev/block", 10);
@@ -78,8 +60,7 @@ static void find_rw(struct listnode* rw_entries)
         return;
     }
     while ((mentry = getmntent(fp)) != NULL) {
-        if (is_block_device(mentry->mnt_fsname) &&
-            has_mount_option(mentry->mnt_opts, "rw")) {
+        if (is_block_device(mentry->mnt_fsname) && hasmntopt(mentry, "rw")) {
             mntent_list* item = (mntent_list*)calloc(1, sizeof(mntent_list));
             item->entry = *mentry;
             item->entry.mnt_fsname = strdup(mentry->mnt_fsname);
@@ -170,8 +151,7 @@ static void remount_ro(void (*cb_on_remount)(const struct mntent*))
             goto out;
         }
         while ((mentry = getmntent(fp)) != NULL) {
-            if (!is_block_device(mentry->mnt_fsname) ||
-                !has_mount_option(mentry->mnt_opts, "ro")) {
+            if (!is_block_device(mentry->mnt_fsname) || !hasmntopt(mentry, "ro")) {
                 continue;
             }
             mntent_list* item = find_item(&rw_entries, mentry->mnt_fsname);
