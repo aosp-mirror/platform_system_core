@@ -32,7 +32,8 @@ class BacktraceMap;
 int open_tombstone(std::string* path);
 
 /* Creates a tombstone file and writes the crash dump to it. */
-void engrave_tombstone(int tombstone_fd, BacktraceMap* map, pid_t pid, pid_t tid,
+void engrave_tombstone(int tombstone_fd, BacktraceMap* map,
+                       const OpenFilesList& open_files, pid_t pid, pid_t tid,
                        const std::set<pid_t>& siblings, uintptr_t abort_msg_address,
                        std::string* amfd_data);
 
