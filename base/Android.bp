@@ -49,6 +49,11 @@ cc_library {
             srcs: ["errors_unix.cpp"],
             cppflags: ["-Wexit-time-destructors"],
         },
+        linux_bionic: {
+            srcs: ["errors_unix.cpp"],
+            cppflags: ["-Wexit-time-destructors"],
+            enabled: true,
+        },
         linux: {
             srcs: ["errors_unix.cpp"],
             cppflags: ["-Wexit-time-destructors"],

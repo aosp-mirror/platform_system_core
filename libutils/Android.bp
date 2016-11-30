@@ -86,6 +86,13 @@ cc_library {
                 "ProcessCallStack.cpp",
             ],
         },
+        linux_bionic: {
+            enabled: true,
+            srcs: [
+                "Looper.cpp",
+                "ProcessCallStack.cpp",
+            ],
+        },
 
         darwin: {
             cflags: ["-Wno-unused-parameter"],
