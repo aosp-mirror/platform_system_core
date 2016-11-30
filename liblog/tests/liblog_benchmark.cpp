@@ -20,7 +20,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <unordered_set>
+
 #include <cutils/sockets.h>
+#include <log/event_tag_map.h>
 #include <private/android_logger.h>
 
 #include "benchmark.h"
@@ -689,3 +692,96 @@ static void BM_security(int iters) {
     StopBenchmarkTiming();
 }
 BENCHMARK(BM_security);
+
+// Keep maps around for multiple iterations
+static std::unordered_set<uint32_t> set;
+static const EventTagMap* map;
+
+static bool prechargeEventMap() {
+    if (map) return true;
+
+    fprintf(stderr, "Precharge: start\n");
+
+    map = android_openEventTagMap(NULL);
+    for (uint32_t tag = 1; tag < USHRT_MAX; ++tag) {
+        size_t len;
+        if (android_lookupEventTag_len(map, &len, tag) == NULL) continue;
+        set.insert(tag);
+    }
+
+    fprintf(stderr, "Precharge: stop %zu\n", set.size());
+
+    return true;
+}
+
+/*
+ *	Measure the time it takes for android_lookupEventTag_len
+ */
+static void BM_lookupEventTag(int iters) {
+
+    prechargeEventMap();
+
+    std::unordered_set<uint32_t>::const_iterator it = set.begin();
+
+    StartBenchmarkTiming();
+
+    for (int i = 0; i < iters; ++i) {
+        size_t len;
+        android_lookupEventTag_len(map, &len, (*it));
+        ++it;
+        if (it == set.end()) it = set.begin();
+    }
+
+    StopBenchmarkTiming();
+}
+BENCHMARK(BM_lookupEventTag);
+
+/*
+ *	Measure the time it takes for android_lookupEventTag_len
+ */
+static uint32_t notTag = 1;
+
+static void BM_lookupEventTag_NOT(int iters) {
+
+    prechargeEventMap();
+
+    while (set.find(notTag) != set.end()) {
+        ++notTag;
+        if (notTag >= USHRT_MAX) notTag = 1;
+    }
+
+    StartBenchmarkTiming();
+
+    for (int i = 0; i < iters; ++i) {
+        size_t len;
+        android_lookupEventTag_len(map, &len, notTag);
+    }
+
+    StopBenchmarkTiming();
+
+    ++notTag;
+    if (notTag >= USHRT_MAX) notTag = 1;
+}
+BENCHMARK(BM_lookupEventTag_NOT);
+
+/*
+ *	Measure the time it takes for android_lookupEventFormat_len
+ */
+static void BM_lookupEventFormat(int iters) {
+
+    prechargeEventMap();
+
+    std::unordered_set<uint32_t>::const_iterator it = set.begin();
+
+    StartBenchmarkTiming();
+
+    for (int i = 0; i < iters; ++i) {
+        size_t len;
+        android_lookupEventFormat_len(map, &len, (*it));
+        ++it;
+        if (it == set.end()) it = set.begin();
+    }
+
+    StopBenchmarkTiming();
+}
+BENCHMARK(BM_lookupEventFormat);
