@@ -62,7 +62,17 @@ cc_library {
         android: {
             static_libs: ["libz"],
         },
-        host: {
+        linux_bionic: {
+            static_libs: ["libz"],
+            enabled: true,
+        },
+        linux: {
+            shared_libs: ["libz-host"],
+        },
+        darwin: {
+            shared_libs: ["libz-host"],
+        },
+        windows: {
             shared_libs: ["libz-host"],
         },
     },
