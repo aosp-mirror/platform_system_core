@@ -2941,6 +2941,26 @@ static testing::AssertionResult IsOk(bool ok, std::string &message) {
         (testing::AssertionFailure() << message);
 }
 
+// must be: '<needle:> 0 kB'
+static bool isZero(const std::string &content, std::string::size_type pos,
+                   const char* needle) {
+    std::string::size_type offset = content.find(needle, pos);
+    return (offset != std::string::npos) &&
+           ((offset = content.find_first_not_of(" \t", offset +
+                      strlen(needle))) != std::string::npos) &&
+           (content.find_first_not_of("0", offset) != offset);
+}
+
+// must not be: '<needle:> 0 kB'
+static bool isNotZero(const std::string &content, std::string::size_type pos,
+                      const char* needle) {
+    std::string::size_type offset = content.find(needle, pos);
+    return (offset != std::string::npos) &&
+           ((offset = content.find_first_not_of(" \t", offset +
+                      strlen(needle))) != std::string::npos) &&
+           (content.find_first_not_of("123456789", offset) != offset);
+}
+
 static void event_log_tags_test_smap(pid_t pid) {
     std::string filename = android::base::StringPrintf("/proc/%d/smaps", pid);
 
@@ -2948,6 +2968,7 @@ static void event_log_tags_test_smap(pid_t pid) {
     if (!android::base::ReadFileToString(filename, &content)) return;
 
     bool shared_ok = false;
+    bool private_ok = false;
     bool anonymous_ok = false;
     bool pass_ok = false;
 
@@ -2957,25 +2978,28 @@ static void event_log_tags_test_smap(pid_t pid) {
         pos += strlen(event_log_tags);
 
         // must not be: 'Shared_Clean: 0 kB'
-        static const char shared_clean[] = "Shared_Clean:";
-        std::string::size_type clean = content.find(shared_clean, pos);
-        bool ok = (clean != std::string::npos) &&
-                  ((clean = content.find_first_not_of(" \t", clean +
-                                strlen(shared_clean))) != std::string::npos) &&
-                  (content.find_first_not_of("123456789", clean) != clean);
+        bool ok = isNotZero(content, pos, "Shared_Clean:") ||
+                  // If not /etc/event-log-tags, thus r/w, then half points
+                  // back for not 'Shared_Dirty: 0 kB'
+                  ((content.substr(pos - 5 - strlen(event_log_tags), 5) != "/etc/") &&
+                      isNotZero(content, pos, "Shared_Dirty:"));
         if (ok && !pass_ok) {
             shared_ok = true;
         } else if (!ok) {
             shared_ok = false;
         }
 
+        // must be: 'Private_Dirty: 0 kB' and 'Private_Clean: 0 kB'
+        ok = isZero(content, pos, "Private_Dirty:") ||
+             isZero(content, pos, "Private_Clean:");
+        if (ok && !pass_ok) {
+            private_ok = true;
+        } else if (!ok) {
+            private_ok = false;
+        }
+
         // must be: 'Anonymous: 0 kB'
-        static const char anonymous[] = "Anonymous:";
-        std::string::size_type anon = content.find(anonymous, pos);
-        ok = (anon != std::string::npos) &&
-             ((anon = content.find_first_not_of(" \t", anon +
-                          strlen(anonymous))) != std::string::npos) &&
-             (content.find_first_not_of("0", anon) != anon);
+        ok = isZero(content, pos, "Anonymous:");
         if (ok && !pass_ok) {
             anonymous_ok = true;
         } else if (!ok) {
@@ -2987,7 +3011,7 @@ static void event_log_tags_test_smap(pid_t pid) {
     content = "";
 
     if (!pass_ok) return;
-    if (shared_ok && anonymous_ok) return;
+    if (shared_ok && anonymous_ok && private_ok) return;
 
     filename = android::base::StringPrintf("/proc/%d/comm", pid);
     android::base::ReadFileToString(filename, &content);
@@ -2995,6 +3019,7 @@ static void event_log_tags_test_smap(pid_t pid) {
                   pid, content.substr(0, content.find("\n")).c_str());
 
     EXPECT_TRUE(IsOk(shared_ok, content));
+    EXPECT_TRUE(IsOk(private_ok, content));
     EXPECT_TRUE(IsOk(anonymous_ok, content));
 }
 #endif
