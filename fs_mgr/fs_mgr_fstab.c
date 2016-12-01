@@ -33,6 +33,7 @@ struct fs_mgr_flag_values {
     int swap_prio;
     int max_comp_streams;
     unsigned int zram_size;
+    uint64_t reserved_size;
 };
 
 struct flag_list {
@@ -80,6 +81,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "slotselect",  MF_SLOTSELECT },
     { "nofail",      MF_NOFAIL },
     { "latemount",   MF_LATEMOUNT },
+    { "reservedsize=", MF_RESERVEDSIZE },
     { "defaults",    0 },
     { 0,             0 },
 };
@@ -95,6 +97,20 @@ static uint64_t calculate_zram_size(unsigned int percentage)
     total *= sysconf(_SC_PAGESIZE);
 
     return total;
+}
+
+static uint64_t parse_size(const char *arg)
+{
+    char *endptr;
+    uint64_t size = strtoull(arg, &endptr, 10);
+    if (*endptr == 'k' || *endptr == 'K')
+        size *= 1024LL;
+    else if (*endptr == 'm' || *endptr == 'M')
+        size *= 1024LL * 1024LL;
+    else if (*endptr == 'g' || *endptr == 'G')
+        size *= 1024LL * 1024LL * 1024LL;
+
+    return size;
 }
 
 static int parse_flags(char *flags, struct flag_list *fl,
@@ -191,6 +207,11 @@ static int parse_flags(char *flags, struct flag_list *fl,
                         flag_vals->zram_size = calculate_zram_size(val);
                     else
                         flag_vals->zram_size = val;
+                } else if ((fl[i].flag == MF_RESERVEDSIZE) && flag_vals) {
+                    /* The reserved flag is followed by an = and the
+                     * reserved size of the partition.  Get it and return it.
+                     */
+                    flag_vals->reserved_size = parse_size(strchr(p, '=') + 1);
                 }
                 break;
             }
@@ -335,6 +356,7 @@ struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
         fstab->recs[cnt].swap_prio = flag_vals.swap_prio;
         fstab->recs[cnt].max_comp_streams = flag_vals.max_comp_streams;
         fstab->recs[cnt].zram_size = flag_vals.zram_size;
+        fstab->recs[cnt].reserved_size = flag_vals.reserved_size;
         cnt++;
     }
     /* If an A/B partition, modify block device to be the real block device */
