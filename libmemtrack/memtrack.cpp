@@ -23,6 +23,8 @@
 #include <string.h>
 #include <mutex>
 
+#include <android/log.h>
+
 using android::hardware::memtrack::V1_0::IMemtrack;
 using android::hardware::memtrack::V1_0::MemtrackType;
 using android::hardware::memtrack::V1_0::MemtrackRecord;
