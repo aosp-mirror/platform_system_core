@@ -23,6 +23,7 @@
 #include <unistd.h>
 
 #include <android-base/stringprintf.h>
+#include <android-base/unique_fd.h>
 #include <cutils/android_get_control_file.h>
 #include <cutils/sockets.h>
 
@@ -89,14 +90,34 @@ const std::string SocketInfo::key() const {
 
 FileInfo::FileInfo(const std::string& name, const std::string& type, uid_t uid,
                    gid_t gid, int perm, const std::string& context)
+        // defaults OK for uid,..., they are ignored for this class.
         : DescriptorInfo(name, type, uid, gid, perm, context) {
 }
 
-int FileInfo::Create(const std::string& context) const {
-  int flags = ((type() == "r" ? O_RDONLY :
-                (type() == "w" ? (O_WRONLY | O_CREAT) :
-                 (O_RDWR | O_CREAT))));
-  return create_file(name().c_str(), flags, perm(), uid(), gid(), context.c_str());
+int FileInfo::Create(const std::string&) const {
+  int flags = (type() == "r") ? O_RDONLY :
+              (type() == "w") ? O_WRONLY :
+                                O_RDWR;
+
+  // Make sure we do not block on open (eg: devices can chose to block on
+  // carrier detect).  Our intention is never to delay launch of a service
+  // for such a condition.  The service can perform its own blocking on
+  // carrier detect.
+  android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(name().c_str(),
+                                                      flags | O_NONBLOCK)));
+
+  if (fd < 0) {
+    PLOG(ERROR) << "Failed to open file '" << name().c_str() << "'";
+    return -1;
+  }
+
+  // Fixup as we set O_NONBLOCK for open, the intent for fd is to block reads.
+  fcntl(fd, F_SETFL, flags);
+
+  LOG(INFO) << "Opened file '" << name().c_str() << "'"
+            << ", flags " << std::oct << flags << std::dec;
+
+  return fd.release();
 }
 
 const std::string FileInfo::key() const {
