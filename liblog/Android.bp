@@ -27,7 +27,7 @@ liblog_host_sources = [
     "fake_writer.c",
 ]
 liblog_target_sources = [
-    "event_tag_map.c",
+    "event_tag_map.cpp",
     "config_read.c",
     "log_time.cpp",
     "log_is_loggable.c",
@@ -68,7 +68,7 @@ cc_library {
             enabled: true,
         },
         not_windows: {
-            srcs: ["event_tag_map.c"],
+            srcs: ["event_tag_map.cpp"],
         },
         linux: {
             host_ldlibs: ["-lrt"],
