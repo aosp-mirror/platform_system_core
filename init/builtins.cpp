@@ -146,8 +146,7 @@ static int wipe_data_via_recovery(const std::string& reason) {
         LOG(ERROR) << "failed to set bootloader message: " << err;
         return -1;
     }
-    android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
-    while (1) { pause(); }  // never reached
+    reboot("recovery");
 }
 
 static void unmount_and_fsck(const struct mntent *entry) {
@@ -732,7 +731,7 @@ static int do_powerctl(const std::vector<std::string>& args) {
         ServiceManager::GetInstance().ForEachService(
             [] (Service* s) { s->Terminate(); });
 
-        while (t.duration() < delay) {
+        while (t.duration_s() < delay) {
             ServiceManager::GetInstance().ReapAnyOutstandingChildren();
 
             int service_count = 0;
@@ -756,11 +755,10 @@ static int do_powerctl(const std::vector<std::string>& args) {
             // Wait a bit before recounting the number or running services.
             std::this_thread::sleep_for(50ms);
         }
-        LOG(VERBOSE) << "Terminating running services took " << t.duration() << " seconds";
+        LOG(VERBOSE) << "Terminating running services took " << t;
     }
 
-    return android_reboot_with_callback(cmd, 0, reboot_target,
-                                        callback_on_ro_remount);
+    return android_reboot_with_callback(cmd, 0, reboot_target, callback_on_ro_remount);
 }
 
 static int do_trigger(const std::vector<std::string>& args) {

@@ -110,7 +110,7 @@ bool Parser::ParseConfigFile(const std::string& path) {
     // Nexus 9 boot time, so it's disabled by default.
     if (false) DumpState();
 
-    LOG(VERBOSE) << "(Parsing " << path << " took " << t.duration() << "s.)";
+    LOG(VERBOSE) << "(Parsing " << path << " took " << t << ".)";
     return true;
 }
 
