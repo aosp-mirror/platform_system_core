@@ -46,19 +46,9 @@ static const char* __adb_serial = NULL;
 
 static const char* __adb_server_socket_spec;
 
-void adb_set_transport(TransportType type, const char* serial)
-{
+void adb_set_transport(TransportType type, const char* serial) {
     __adb_transport = type;
     __adb_serial = serial;
-}
-
-void adb_get_transport(TransportType* type, const char** serial) {
-    if (type) {
-        *type = __adb_transport;
-    }
-    if (serial) {
-        *serial = __adb_serial;
-    }
 }
 
 void adb_set_socket_spec(const char* socket_spec) {
