@@ -40,9 +40,6 @@ bool adb_query(const std::string& service, std::string* _Nonnull result,
 // Set the preferred transport to connect to.
 void adb_set_transport(TransportType type, const char* _Nullable serial);
 
-// Get the preferred transport to connect to.
-void adb_get_transport(TransportType* _Nullable type, const char* _Nullable* _Nullable serial);
-
 // Set the socket specification for the adb server.
 // This function can only be called once, and the argument must live to the end of the process.
 void adb_set_socket_spec(const char* _Nonnull socket_spec);
