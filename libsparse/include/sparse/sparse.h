@@ -176,6 +176,13 @@ int sparse_file_write(struct sparse_file *s, int fd, bool gz, bool sparse,
 int64_t sparse_file_len(struct sparse_file *s, bool sparse, bool crc);
 
 /**
+ * sparse_file_block_size
+ *
+ * @s - sparse file cookie
+ */
+unsigned int sparse_file_block_size(struct sparse_file *s);
+
+/**
  * sparse_file_callback - call a callback for blocks in sparse file
  *
  * @s - sparse file cookie
@@ -196,6 +203,24 @@ int64_t sparse_file_len(struct sparse_file *s, bool sparse, bool crc);
 int sparse_file_callback(struct sparse_file *s, bool sparse, bool crc,
 		int (*write)(void *priv, const void *data, int len), void *priv);
 
+/**
+ * sparse_file_foreach_chunk - call a callback for data blocks in sparse file
+ *
+ * @s - sparse file cookie
+ * @sparse - write in the Android sparse file format
+ * @crc - append a crc chunk
+ * @write - function to call for each block
+ * @priv - value that will be passed as the first argument to write
+ *
+ * The function has the same behavior as 'sparse_file_callback', except it only
+ * iterates on blocks that contain data.
+ *
+ * Returns 0 on success, negative errno on error.
+ */
+int sparse_file_foreach_chunk(struct sparse_file *s, bool sparse, bool crc,
+	int (*write)(void *priv, const void *data, int len, unsigned int block,
+		     unsigned int nr_blocks),
+	void *priv);
 /**
  * sparse_file_read - read a file into a sparse file cookie
  *
