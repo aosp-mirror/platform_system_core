@@ -96,6 +96,9 @@
 #define AID_DNS_TETHER    1052  /* DNS resolution daemon (tether: dnsmasq) */
 #define AID_WEBVIEW_ZYGOTE 1053 /* WebView zygote process */
 #define AID_VEHICLE_NETWORK 1054 /* Vehicle network service */
+#define AID_MEDIA_AUDIO   1055 /* GID for audio files on internal media storage */
+#define AID_MEDIA_VIDEO   1056 /* GID for video files on internal media storage */
+#define AID_MEDIA_IMAGE   1057 /* GID for image files on internal media storage */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
@@ -210,6 +213,9 @@ static const struct android_id_info android_ids[] = {
     { "dns_tether",    AID_DNS_TETHER, },
     { "webview_zygote", AID_WEBVIEW_ZYGOTE, },
     { "vehicle_network", AID_VEHICLE_NETWORK, },
+    { "media_audio",   AID_MEDIA_AUDIO, },
+    { "media_video",   AID_MEDIA_VIDEO, },
+    { "media_image",   AID_MEDIA_IMAGE, },
 
     { "shell",         AID_SHELL, },
     { "cache",         AID_CACHE, },
