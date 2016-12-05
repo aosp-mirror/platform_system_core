@@ -41,6 +41,8 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+
+#include <cutils/android_reboot.h>
 /* for ANDROID_SOCKET_* */
 #include <cutils/sockets.h>
 
@@ -471,4 +473,23 @@ bool expand_props(const std::string& src, std::string* dst) {
     }
 
     return true;
+}
+
+void reboot(const char* destination) {
+    android_reboot(ANDROID_RB_RESTART2, 0, destination);
+    // We're init, so android_reboot will actually have been a syscall so there's nothing
+    // to wait for. If android_reboot returns, just abort so that the kernel will reboot
+    // itself when init dies.
+    PLOG(FATAL) << "reboot failed";
+    abort();
+}
+
+void panic() {
+    LOG(ERROR) << "panic: rebooting to bootloader";
+    reboot("bootloader");
+}
+
+std::ostream& operator<<(std::ostream& os, const Timer& t) {
+    os << t.duration_s() << " seconds";
+    return os;
 }
