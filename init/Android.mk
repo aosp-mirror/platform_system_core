@@ -126,7 +126,6 @@ LOCAL_SRC_FILES := \
 LOCAL_SHARED_LIBRARIES += \
     libcutils \
     libbase \
-    libselinux \
 
 LOCAL_STATIC_LIBRARIES := libinit
 LOCAL_SANITIZE := integer
