@@ -50,6 +50,7 @@ LIBADB_SRC_FILES := \
     fdevent.cpp \
     sockets.cpp \
     socket_spec.cpp \
+    sysdeps/errno.cpp \
     transport.cpp \
     transport_local.cpp \
     transport_usb.cpp \
