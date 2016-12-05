@@ -868,7 +868,7 @@ static void handle_firmware_event(uevent* uevent) {
     if (pid == 0) {
         Timer t;
         process_firmware_event(uevent);
-        LOG(INFO) << "loading " << uevent->path << " took " << t.duration() << "s";
+        LOG(INFO) << "loading " << uevent->path << " took " << t;
         _exit(EXIT_SUCCESS);
     } else if (pid == -1) {
         PLOG(ERROR) << "could not fork to process firmware event for " << uevent->firmware;
@@ -1043,7 +1043,7 @@ void device_init() {
     coldboot("/sys/block");
     coldboot("/sys/devices");
     close(open(COLDBOOT_DONE, O_WRONLY|O_CREAT|O_CLOEXEC, 0000));
-    LOG(INFO) << "Coldboot took " << t.duration() << "s.";
+    LOG(INFO) << "Coldboot took " << t;
 }
 
 int get_device_fd() {
