@@ -16,4 +16,13 @@
 
 #pragma once
 
+#include <errno.h>
+#include <string.h>
+
+// Translate an errno value from linux to the host equivalent.
 int translate_linux_errno(int error);
+
+#if defined(_WIN32)
+char* adb_strerror(int err);
+#define strerror adb_strerror
+#endif
