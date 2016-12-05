@@ -49,7 +49,6 @@ static std::mutex& transport_lock = *new std::mutex();
 
 const char* const kFeatureShell2 = "shell_v2";
 const char* const kFeatureCmd = "cmd";
-const char* const kFeatureStat2 = "stat_v2";
 
 static std::string dump_packet(const char* name, const char* func, apacket* p) {
     unsigned  command = p->msg.command;
@@ -772,8 +771,7 @@ const FeatureSet& supported_features() {
     // Local static allocation to avoid global non-POD variables.
     static const FeatureSet* features = new FeatureSet{
         kFeatureShell2,
-        kFeatureCmd,
-        kFeatureStat2,
+        kFeatureCmd
         // Increment ADB_SERVER_VERSION whenever the feature list changes to
         // make sure that the adb client and server features stay in sync
         // (http://b/24370690).
