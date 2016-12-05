@@ -51,7 +51,7 @@ constexpr size_t MAX_PAYLOAD = MAX_PAYLOAD_V2;
 std::string adb_version();
 
 // Increment this when we want to force users to start a new adb server.
-#define ADB_SERVER_VERSION 37
+#define ADB_SERVER_VERSION 38
 
 class atransport;
 struct usb_handle;
