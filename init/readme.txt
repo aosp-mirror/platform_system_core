@@ -148,13 +148,10 @@ socket <name> <type> <perm> [ <user> [ <group> [ <seclabel> ] ] ]
   seclabel or computed based on the service executable file security context.
   For native executables see libcutils android_get_control_socket().
 
-file <path> <type> <perm> [ <user> [ <group> [ <seclabel> ] ] ]
-  Open/Create a file path and pass its fd to the launched process.  <type> must
-  be "r", "w" or "rw".  User and group default to 0.  'seclabel' is the SELinux
-  security context for the file if it must be created.  It defaults to the
-  service security context, as specified by seclabel or computed based on the
-  service executable file security context.  For native executables see
-  libcutils android_get_control_file().
+file <path> <type>
+  Open a file path and pass its fd to the launched process.  <type> must be
+  "r", "w" or "rw".  For native executables see libcutils
+  android_get_control_file().
 
 user <username>
   Change to 'username' before exec'ing this service.

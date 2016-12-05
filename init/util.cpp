@@ -160,69 +160,6 @@ out_unlink:
     return -1;
 }
 
-/*
- * create_file - opens and creates a file as dictated in init.rc.
- * This file is inherited by the daemon. We communicate the file
- * descriptor's value via the environment variable ANDROID_FILE_<basename>
- */
-int create_file(const char *path, int flags, mode_t perm, uid_t uid,
-                  gid_t gid, const char *filecon)
-{
-    char *secontext = NULL;
-
-    if (filecon) {
-        if (setsockcreatecon(filecon) == -1) {
-            PLOG(ERROR) << "setsockcreatecon(\"" << filecon << "\") failed";
-            return -1;
-        }
-    } else if (sehandle) {
-        if (selabel_lookup(sehandle, &secontext, path, perm) != -1) {
-            if (setfscreatecon(secontext) == -1) {
-                freecon(secontext); // does not upset errno value
-                PLOG(ERROR) << "setfscreatecon(\"" << secontext << "\") failed";
-                return -1;
-            }
-        }
-    }
-
-    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path, flags | O_NDELAY, perm)));
-    int savederrno = errno;
-
-    if (filecon) {
-        setsockcreatecon(NULL);
-        lsetfilecon(path, filecon);
-    } else {
-        setfscreatecon(NULL);
-        freecon(secontext);
-    }
-
-    if (fd < 0) {
-        errno = savederrno;
-        PLOG(ERROR) << "Failed to open/create file '" << path << "'";
-        return -1;
-    }
-
-    if (!(flags & O_NDELAY)) fcntl(fd, F_SETFD, flags);
-
-    if (lchown(path, uid, gid)) {
-        PLOG(ERROR) << "Failed to lchown file '" << path << "'";
-        return -1;
-    }
-    if (perm != static_cast<mode_t>(-1)) {
-        if (fchmodat(AT_FDCWD, path, perm, AT_SYMLINK_NOFOLLOW)) {
-            PLOG(ERROR) << "Failed to fchmodat file '" << path << "'";
-            return -1;
-        }
-    }
-
-    LOG(INFO) << "Created file '" << path << "'"
-              << ", mode " << std::oct << perm << std::dec
-              << ", user " << uid
-              << ", group " << gid;
-
-    return fd.release();
-}
-
 bool read_file(const char* path, std::string* content) {
     content->clear();
 
