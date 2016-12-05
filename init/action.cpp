@@ -121,7 +121,7 @@ void Action::ExecuteCommand(const Command& command) const {
     Timer t;
     int result = command.InvokeFunc();
 
-    double duration_ms = t.duration() * 1000;
+    double duration_ms = t.duration_s() * 1000;
     // Any action longer than 50ms will be warned to user as slow operation
     if (duration_ms > 50.0 ||
         android::base::GetMinimumLogSeverity() <= android::base::DEBUG) {

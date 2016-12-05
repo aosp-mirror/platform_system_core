@@ -169,11 +169,18 @@ bool is_legal_property_name(const std::string &name)
     return true;
 }
 
-static int property_set_impl(const char* name, const char* value) {
+int property_set(const char* name, const char* value) {
     size_t valuelen = strlen(value);
 
-    if (!is_legal_property_name(name)) return -1;
-    if (valuelen >= PROP_VALUE_MAX) return -1;
+    if (!is_legal_property_name(name)) {
+        LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: bad name";
+        return -1;
+    }
+    if (valuelen >= PROP_VALUE_MAX) {
+        LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: "
+                   << "value too long";
+        return -1;
+    }
 
     if (strcmp("selinux.restorecon_recursive", name) == 0 && valuelen > 0) {
         if (restorecon(value, SELINUX_ANDROID_RESTORECON_RECURSE) != 0) {
@@ -182,47 +189,40 @@ static int property_set_impl(const char* name, const char* value) {
     }
 
     prop_info* pi = (prop_info*) __system_property_find(name);
-
-    if(pi != 0) {
-        /* ro.* properties may NEVER be modified once set */
-        if(!strncmp(name, "ro.", 3)) return -1;
+    if (pi != nullptr) {
+        // ro.* properties are actually "write-once".
+        if (!strncmp(name, "ro.", 3)) {
+            LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: "
+                       << "property already set";
+            return -1;
+        }
 
         __system_property_update(pi, value, valuelen);
     } else {
         int rc = __system_property_add(name, strlen(name), value, valuelen);
         if (rc < 0) {
+            LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: "
+                       << "__system_property_add failed";
             return rc;
         }
     }
-    /* If name starts with "net." treat as a DNS property. */
+
+    // If name starts with "net." treat as a DNS property.
     if (strncmp("net.", name, strlen("net.")) == 0)  {
         if (strcmp("net.change", name) == 0) {
             return 0;
         }
-       /*
-        * The 'net.change' property is a special property used track when any
-        * 'net.*' property name is updated. It is _ONLY_ updated here. Its value
-        * contains the last updated 'net.*' property.
-        */
+        // The 'net.change' property is a special property used track when any
+        // 'net.*' property name is updated. It is _ONLY_ updated here. Its value
+        // contains the last updated 'net.*' property.
         property_set("net.change", name);
-    } else if (persistent_properties_loaded &&
-            strncmp("persist.", name, strlen("persist.")) == 0) {
-        /*
-         * Don't write properties to disk until after we have read all default properties
-         * to prevent them from being overwritten by default values.
-         */
+    } else if (persistent_properties_loaded && strncmp("persist.", name, strlen("persist.")) == 0) {
+        // Don't write properties to disk until after we have read all default properties
+        // to prevent them from being overwritten by default values.
         write_persistent_property(name, value);
     }
     property_changed(name, value);
     return 0;
-}
-
-int property_set(const char* name, const char* value) {
-    int rc = property_set_impl(name, value);
-    if (rc == -1) {
-        LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed";
-    }
-    return rc;
 }
 
 static void handle_property_set_fd()
@@ -388,7 +388,7 @@ static void load_properties_from_file(const char* filename, const char* filter) 
     }
     data.push_back('\n');
     load_properties(&data[0], filter);
-    LOG(VERBOSE) << "(Loading properties from " << filename << " took " << t.duration() << "s.)";
+    LOG(VERBOSE) << "(Loading properties from " << filename << " took " << t << ".)";
 }
 
 static void load_persistent_properties() {
