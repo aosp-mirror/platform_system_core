@@ -21,7 +21,6 @@
 #include <string>
 #include <vector>
 
-#include <android-base/parseint.h>
 #include <android-base/strings.h>
 
 #include "sysdeps.h"
@@ -144,11 +143,9 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
             //
             size_t idx1 = line.rfind(BUGZ_PROGRESS_PREFIX) + strlen(BUGZ_PROGRESS_PREFIX);
             size_t idx2 = line.rfind(BUGZ_PROGRESS_SEPARATOR);
-            int progress, total;
-            if (android::base::ParseInt(line.substr(idx1, (idx2 - idx1)), &progress) &&
-                android::base::ParseInt(line.substr(idx2 + 1), &total)) {
-                br_->UpdateProgress(line_message_, progress, total);
-            }
+            int progress = std::stoi(line.substr(idx1, (idx2 - idx1)));
+            int total = std::stoi(line.substr(idx2 + 1));
+            br_->UpdateProgress(line_message_, progress, total);
         } else {
             invalid_lines_.push_back(line);
         }

@@ -33,12 +33,12 @@ struct fs_mgr_flag_values {
     int swap_prio;
     int max_comp_streams;
     unsigned int zram_size;
-    uint64_t reserved_size;
+    unsigned int file_encryption_mode;
 };
 
 struct flag_list {
     const char *name;
-    unsigned flag;
+    unsigned int flag;
 };
 
 static struct flag_list mount_flags[] = {
@@ -65,7 +65,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "check",       MF_CHECK },
     { "encryptable=",MF_CRYPT },
     { "forceencrypt=",MF_FORCECRYPT },
-    { "fileencryption",MF_FILEENCRYPTION },
+    { "fileencryption=",MF_FILEENCRYPTION },
     { "forcefdeorfbe=",MF_FORCEFDEORFBE },
     { "nonremovable",MF_NONREMOVABLE },
     { "voldmanaged=",MF_VOLDMANAGED},
@@ -81,9 +81,17 @@ static struct flag_list fs_mgr_flags[] = {
     { "slotselect",  MF_SLOTSELECT },
     { "nofail",      MF_NOFAIL },
     { "latemount",   MF_LATEMOUNT },
-    { "reservedsize=", MF_RESERVEDSIZE },
     { "defaults",    0 },
     { 0,             0 },
+};
+
+#define EM_SOFTWARE 1
+#define EM_ICE      2
+
+static struct flag_list encryption_modes[] = {
+    {"software", EM_SOFTWARE},
+    {"ice", EM_ICE},
+    {0, 0}
 };
 
 static uint64_t calculate_zram_size(unsigned int percentage)
@@ -97,20 +105,6 @@ static uint64_t calculate_zram_size(unsigned int percentage)
     total *= sysconf(_SC_PAGESIZE);
 
     return total;
-}
-
-static uint64_t parse_size(const char *arg)
-{
-    char *endptr;
-    uint64_t size = strtoull(arg, &endptr, 10);
-    if (*endptr == 'k' || *endptr == 'K')
-        size *= 1024LL;
-    else if (*endptr == 'm' || *endptr == 'M')
-        size *= 1024LL * 1024LL;
-    else if (*endptr == 'g' || *endptr == 'G')
-        size *= 1024LL * 1024LL * 1024LL;
-
-    return size;
 }
 
 static int parse_flags(char *flags, struct flag_list *fl,
@@ -166,6 +160,21 @@ static int parse_flags(char *flags, struct flag_list *fl,
                      * location of the keys.  Get it and return it.
                      */
                     flag_vals->key_loc = strdup(strchr(p, '=') + 1);
+                    flag_vals->file_encryption_mode = EM_SOFTWARE;
+                } else if ((fl[i].flag == MF_FILEENCRYPTION) && flag_vals) {
+                    /* The fileencryption flag is followed by an = and the
+                     * type of the encryption.  Get it and return it.
+                     */
+                    const struct flag_list *j;
+                    const char *mode = strchr(p, '=') + 1;
+                    for (j = encryption_modes; j->name; ++j) {
+                        if (!strcmp(mode, j->name)) {
+                            flag_vals->file_encryption_mode = j->flag;
+                        }
+                    }
+                    if (flag_vals->file_encryption_mode == 0) {
+                        ERROR("Unknown file encryption mode: %s\n", mode);
+                    }
                 } else if ((fl[i].flag == MF_LENGTH) && flag_vals) {
                     /* The length flag is followed by an = and the
                      * size of the partition.  Get it and return it.
@@ -207,11 +216,6 @@ static int parse_flags(char *flags, struct flag_list *fl,
                         flag_vals->zram_size = calculate_zram_size(val);
                     else
                         flag_vals->zram_size = val;
-                } else if ((fl[i].flag == MF_RESERVEDSIZE) && flag_vals) {
-                    /* The reserved flag is followed by an = and the
-                     * reserved size of the partition.  Get it and return it.
-                     */
-                    flag_vals->reserved_size = parse_size(strchr(p, '=') + 1);
                 }
                 break;
             }
@@ -356,7 +360,7 @@ struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
         fstab->recs[cnt].swap_prio = flag_vals.swap_prio;
         fstab->recs[cnt].max_comp_streams = flag_vals.max_comp_streams;
         fstab->recs[cnt].zram_size = flag_vals.zram_size;
-        fstab->recs[cnt].reserved_size = flag_vals.reserved_size;
+        fstab->recs[cnt].file_encryption_mode = flag_vals.file_encryption_mode;
         cnt++;
     }
     /* If an A/B partition, modify block device to be the real block device */
@@ -513,6 +517,17 @@ int fs_mgr_is_encryptable(const struct fstab_rec *fstab)
 int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_FILEENCRYPTION;
+}
+
+const char* fs_mgr_get_file_encryption_mode(const struct fstab_rec *fstab)
+{
+    const struct flag_list *j;
+    for (j = encryption_modes; j->name; ++j) {
+        if (fstab->file_encryption_mode == j->flag) {
+            return j->name;
+        }
+    }
+    return NULL;
 }
 
 int fs_mgr_is_convertible_to_fbe(const struct fstab_rec *fstab)

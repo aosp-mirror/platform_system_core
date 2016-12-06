@@ -91,6 +91,7 @@ static const struct fs_path_config android_dirs[] = {
     { 00775, AID_MEDIA_RW, AID_MEDIA_RW, 0, "data/media/Music" },
     { 00750, AID_ROOT,   AID_SHELL,  0, "data/nativetest" },
     { 00750, AID_ROOT,   AID_SHELL,  0, "data/nativetest64" },
+    { 00775, AID_ROOT,   AID_ROOT,   0, "data/preloads" },
     { 00771, AID_SYSTEM, AID_SYSTEM, 0, "data" },
     { 00755, AID_ROOT,   AID_SYSTEM, 0, "mnt" },
     { 00755, AID_ROOT,   AID_ROOT,   0, "root" },
@@ -148,6 +149,9 @@ static const struct fs_path_config android_files[] = {
                                               "system/bin/run-as" },
     { 00700, AID_SYSTEM,    AID_SHELL,     CAP_MASK_LONG(CAP_BLOCK_SUSPEND),
                                               "system/bin/inputflinger" },
+
+    /* Support FIFO scheduling mode in SurfaceFlinger. */
+    { 00755, AID_SYSTEM,    AID_GRAPHICS,     CAP_MASK_LONG(CAP_SYS_NICE), "system/bin/surfaceflinger" },
 
     /* Support hostapd administering a network interface. */
     { 00755, AID_WIFI,      AID_WIFI,      CAP_MASK_LONG(CAP_NET_ADMIN) |

@@ -402,7 +402,32 @@ void LogKlog::sniffTime(log_time &now,
     }
 }
 
-pid_t LogKlog::sniffPid(const char *cp, size_t len) {
+pid_t LogKlog::sniffPid(const char **buf, size_t len) {
+    const char *cp = *buf;
+    // HTC kernels with modified printk "c0   1648 "
+    if ((len > 9) &&
+            (cp[0] == 'c') &&
+            isdigit(cp[1]) &&
+            (isdigit(cp[2]) || (cp[2] == ' ')) &&
+            (cp[3] == ' ')) {
+        bool gotDigit = false;
+        int i;
+        for (i = 4; i < 9; ++i) {
+            if (isdigit(cp[i])) {
+                gotDigit = true;
+            } else if (gotDigit || (cp[i] != ' ')) {
+                break;
+            }
+        }
+        if ((i == 9) && (cp[i] == ' ')) {
+            int pid = 0;
+            char dummy;
+            if (sscanf(cp + 4, "%d%c", &pid, &dummy) == 2) {
+                *buf = cp + 10; // skip-it-all
+                return pid;
+            }
+        }
+    }
     while (len) {
         // Mediatek kernels with modified printk
         if (*cp == '[') {
@@ -588,7 +613,7 @@ int LogKlog::log(const char *buf, size_t len) {
     }
 
     // Parse pid, tid and uid
-    const pid_t pid = sniffPid(p, len - (p - buf));
+    const pid_t pid = sniffPid(&p, len - (p - buf));
     const pid_t tid = pid;
     uid_t uid = AID_ROOT;
     if (pid) {

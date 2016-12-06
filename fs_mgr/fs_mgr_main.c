@@ -14,16 +14,11 @@
  * limitations under the License.
  */
 
-#define _GNU_SOURCE
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <libgen.h>
 #include "fs_mgr_priv.h"
-
-#ifdef _LIBGEN_H
-#warning "libgen.h must not be included"
-#endif
 
 char *me = "";
 
@@ -37,10 +32,10 @@ static void usage(void)
  * and exit the program, do not return to the caller.
  * Return the number of argv[] entries consumed.
  */
-static void parse_options(int argc, char * const argv[], int *a_flag, int *u_flag, int *n_flag,
-                     const char **n_name, const char **n_blk_dev)
+static void parse_options(int argc, char *argv[], int *a_flag, int *u_flag, int *n_flag,
+                     char **n_name, char **n_blk_dev)
 {
-    me = basename(argv[0]);
+    me = basename(strdup(argv[0]));
 
     if (argc <= 1) {
         usage();
@@ -80,14 +75,14 @@ static void parse_options(int argc, char * const argv[], int *a_flag, int *u_fla
     return;
 }
 
-int main(int argc, char * const argv[])
+int main(int argc, char *argv[])
 {
     int a_flag=0;
     int u_flag=0;
     int n_flag=0;
-    const char *n_name=NULL;
-    const char *n_blk_dev=NULL;
-    const char *fstab_file=NULL;
+    char *n_name=NULL;
+    char *n_blk_dev=NULL;
+    char *fstab_file=NULL;
     struct fstab *fstab=NULL;
 
     klog_set_level(6);
@@ -102,7 +97,7 @@ int main(int argc, char * const argv[])
     if (a_flag) {
         return fs_mgr_mount_all(fstab, MOUNT_MODE_DEFAULT);
     } else if (n_flag) {
-        return fs_mgr_do_mount(fstab, n_name, (char *)n_blk_dev, 0);
+        return fs_mgr_do_mount(fstab, n_name, n_blk_dev, 0);
     } else if (u_flag) {
         return fs_mgr_unmount_all(fstab);
     } else {

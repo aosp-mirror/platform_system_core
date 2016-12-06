@@ -64,9 +64,12 @@ static int system_bg_cpuset_fd = -1;
 static int bg_cpuset_fd = -1;
 static int fg_cpuset_fd = -1;
 static int ta_cpuset_fd = -1; // special cpuset for top app
+#endif
+
+// File descriptors open to /dev/stune/../tasks, setup by initialize, or -1 on error
 static int bg_schedboost_fd = -1;
 static int fg_schedboost_fd = -1;
-#endif
+static int ta_schedboost_fd = -1;
 
 /* Add tid to the scheduling group defined by the policy */
 static int add_tid_to_cgroup(int tid, int fd)
@@ -136,9 +139,11 @@ static void __initialize(void) {
         ta_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
 
 #ifdef USE_SCHEDBOOST
+        filename = "/dev/stune/top-app/tasks";
+        ta_schedboost_fd = open(filename, O_WRONLY | O_CLOEXEC);
         filename = "/dev/stune/foreground/tasks";
         fg_schedboost_fd = open(filename, O_WRONLY | O_CLOEXEC);
-        filename = "/dev/stune/tasks";
+        filename = "/dev/stune/background/tasks";
         bg_schedboost_fd = open(filename, O_WRONLY | O_CLOEXEC);
 #endif
     }
@@ -300,11 +305,10 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
         break;
     case SP_TOP_APP :
         fd = ta_cpuset_fd;
-        boost_fd = fg_schedboost_fd;
+        boost_fd = ta_schedboost_fd;
         break;
     case SP_SYSTEM:
         fd = system_bg_cpuset_fd;
-        boost_fd = bg_schedboost_fd;
         break;
     default:
         boost_fd = fd = -1;
@@ -316,10 +320,12 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
             return -errno;
     }
 
+#ifdef USE_SCHEDBOOST
     if (boost_fd > 0 && add_tid_to_cgroup(tid, boost_fd) != 0) {
         if (errno != ESRCH && errno != ENOENT)
             return -errno;
     }
+#endif
 
     return 0;
 #endif
@@ -391,19 +397,26 @@ int set_sched_policy(int tid, SchedPolicy policy)
 #endif
 
     if (__sys_supports_schedgroups) {
-        int fd;
+        int fd = -1;
+        int boost_fd = -1;
         switch (policy) {
         case SP_BACKGROUND:
             fd = bg_cgroup_fd;
+            boost_fd = bg_schedboost_fd;
             break;
         case SP_FOREGROUND:
         case SP_AUDIO_APP:
         case SP_AUDIO_SYS:
+            fd = fg_cgroup_fd;
+            boost_fd = fg_schedboost_fd;
+            break;
         case SP_TOP_APP:
             fd = fg_cgroup_fd;
+            boost_fd = ta_schedboost_fd;
             break;
         default:
             fd = -1;
+            boost_fd = -1;
             break;
         }
 
@@ -412,6 +425,13 @@ int set_sched_policy(int tid, SchedPolicy policy)
             if (errno != ESRCH && errno != ENOENT)
                 return -errno;
         }
+
+#ifdef USE_SCHEDBOOST
+        if (boost_fd > 0 && add_tid_to_cgroup(tid, boost_fd) != 0) {
+            if (errno != ESRCH && errno != ENOENT)
+                return -errno;
+        }
+#endif
     } else {
         struct sched_param param;
 
