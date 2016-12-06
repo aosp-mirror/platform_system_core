@@ -23,3 +23,8 @@
 char* adb_strerror(int err);
 #define strerror adb_strerror
 #endif
+
+// errno values differ between operating systems and between Linux architectures.
+// Arbitrarily select the Linux asm-generic values to use in the wire protocol.
+int errno_to_wire(int error);
+int errno_from_wire(int error);
