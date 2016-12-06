@@ -50,6 +50,7 @@ LIBADB_SRC_FILES := \
     fdevent.cpp \
     sockets.cpp \
     socket_spec.cpp \
+    sysdeps/errno.cpp \
     transport.cpp \
     transport_local.cpp \
     transport_usb.cpp \
@@ -88,10 +89,12 @@ LIBADB_linux_SRC_FILES := \
 
 LIBADB_windows_SRC_FILES := \
     sysdeps_win32.cpp \
+    sysdeps/win32/errno.cpp \
     sysdeps/win32/stat.cpp \
     usb_windows.cpp \
 
 LIBADB_TEST_windows_SRCS := \
+    sysdeps/win32/errno_test.cpp \
     sysdeps_win32_test.cpp \
 
 include $(CLEAR_VARS)
