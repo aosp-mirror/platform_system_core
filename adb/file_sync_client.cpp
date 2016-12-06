@@ -41,6 +41,7 @@
 #include "adb_utils.h"
 #include "file_sync_service.h"
 #include "line_printer.h"
+#include "sysdeps/errno.h"
 #include "sysdeps/stat.h"
 
 #include <android-base/file.h>
@@ -73,8 +74,8 @@ static bool should_push_file(mode_t mode) {
 struct copyinfo {
     std::string lpath;
     std::string rpath;
-    unsigned int time = 0;
-    unsigned int mode;
+    int64_t time = 0;
+    uint32_t mode;
     uint64_t size = 0;
     bool skip = false;
 
@@ -201,9 +202,16 @@ class SyncConnection {
         max = SYNC_DATA_MAX; // TODO: decide at runtime.
 
         std::string error;
-        fd = adb_connect("sync:", &error);
-        if (fd < 0) {
-            Error("connect failed: %s", error.c_str());
+        FeatureSet features;
+        if (!adb_get_feature_set(&features, &error)) {
+            fd = -1;
+            Error("failed to get feature set: %s", error.c_str());
+        } else {
+            have_stat_v2_ = CanUseFeature(features, kFeatureStat2);
+            fd = adb_connect("sync:", &error);
+            if (fd < 0) {
+                Error("connect failed: %s", error.c_str());
+            }
         }
     }
 
@@ -288,6 +296,77 @@ class SyncConnection {
         memcpy(data, path_and_mode, path_length);
 
         return WriteFdExactly(fd, &buf[0], buf.size());
+    }
+
+    bool SendStat(const char* path_and_mode) {
+        if (!have_stat_v2_) {
+            errno = ENOTSUP;
+            return false;
+        }
+        return SendRequest(ID_STAT_V2, path_and_mode);
+    }
+
+    bool SendLstat(const char* path_and_mode) {
+        if (have_stat_v2_) {
+            return SendRequest(ID_LSTAT_V2, path_and_mode);
+        } else {
+            return SendRequest(ID_LSTAT_V1, path_and_mode);
+        }
+    }
+
+    bool FinishStat(struct stat* st) {
+        syncmsg msg;
+
+        memset(st, 0, sizeof(*st));
+        if (have_stat_v2_) {
+            if (!ReadFdExactly(fd, &msg.stat_v2, sizeof(msg.stat_v2))) {
+                fatal_errno("protocol fault: failed to read stat response");
+            }
+
+            if (msg.stat_v2.id != ID_LSTAT_V2 && msg.stat_v2.id != ID_STAT_V2) {
+                fatal_errno("protocol fault: stat response has wrong message id: %" PRIx32,
+                            msg.stat_v2.id);
+            }
+
+            if (msg.stat_v2.error != 0) {
+                errno = errno_from_wire(msg.stat_v2.error);
+                return false;
+            }
+
+            st->st_dev = msg.stat_v2.dev;
+            st->st_ino = msg.stat_v2.ino;
+            st->st_mode = msg.stat_v2.mode;
+            st->st_nlink = msg.stat_v2.nlink;
+            st->st_uid = msg.stat_v2.uid;
+            st->st_gid = msg.stat_v2.gid;
+            st->st_size = msg.stat_v2.size;
+            st->st_atime = msg.stat_v2.atime;
+            st->st_mtime = msg.stat_v2.mtime;
+            st->st_ctime = msg.stat_v2.ctime;
+            return true;
+        } else {
+            if (!ReadFdExactly(fd, &msg.stat_v1, sizeof(msg.stat_v1))) {
+                fatal_errno("protocol fault: failed to read stat response");
+            }
+
+            if (msg.stat_v1.id != ID_LSTAT_V1) {
+                fatal_errno("protocol fault: stat response has wrong message id: %" PRIx32,
+                            msg.stat_v1.id);
+            }
+
+            if (msg.stat_v1.mode == 0 && msg.stat_v1.size == 0 && msg.stat_v1.time == 0) {
+                // There's no way for us to know what the error was.
+                errno = ENOPROTOOPT;
+                return false;
+            }
+
+            st->st_mode = msg.stat_v1.mode;
+            st->st_size = msg.stat_v1.size;
+            st->st_ctime = msg.stat_v1.time;
+            st->st_mtime = msg.stat_v1.time;
+        }
+
+        return true;
     }
 
     // Sending header, payload, and footer in a single write makes a huge
@@ -427,7 +506,7 @@ class SyncConnection {
             return false;
         }
         buf[msg.status.msglen] = 0;
-        Error("failed to copy '%s' to '%s': %s", from, to, &buf[0]);
+        Error("failed to copy '%s' to '%s': remote %s", from, to, &buf[0]);
         return false;
     }
 
@@ -498,6 +577,7 @@ class SyncConnection {
 
   private:
     bool expect_done_;
+    bool have_stat_v2_;
 
     TransferLedger global_ledger_;
     TransferLedger current_ledger_;
@@ -553,23 +633,45 @@ static bool sync_ls(SyncConnection& sc, const char* path,
     }
 }
 
-static bool sync_finish_stat(SyncConnection& sc, unsigned int* timestamp,
-                             unsigned int* mode, unsigned int* size) {
-    syncmsg msg;
-    if (!ReadFdExactly(sc.fd, &msg.stat, sizeof(msg.stat)) || msg.stat.id != ID_STAT) {
+static bool sync_stat(SyncConnection& sc, const char* path, struct stat* st) {
+    return sc.SendStat(path) && sc.FinishStat(st);
+}
+
+static bool sync_lstat(SyncConnection& sc, const char* path, struct stat* st) {
+    return sc.SendLstat(path) && sc.FinishStat(st);
+}
+
+static bool sync_stat_fallback(SyncConnection& sc, const char* path, struct stat* st) {
+    if (sync_stat(sc, path, st)) {
+        return true;
+    }
+
+    if (errno != ENOTSUP) {
         return false;
     }
 
-    if (timestamp) *timestamp = msg.stat.time;
-    if (mode) *mode = msg.stat.mode;
-    if (size) *size = msg.stat.size;
+    // Try to emulate the parts we can when talking to older adbds.
+    bool lstat_result = sync_lstat(sc, path, st);
+    if (!lstat_result) {
+        return false;
+    }
 
+    if (S_ISLNK(st->st_mode)) {
+        // If the target is a symlink, figure out whether it's a file or a directory.
+        // Also, zero out the st_size field, since no one actually cares what the path length is.
+        st->st_size = 0;
+        std::string dir_path = path;
+        dir_path.push_back('/');
+        struct stat tmp_st;
+
+        st->st_mode &= ~S_IFMT;
+        if (sync_lstat(sc, dir_path.c_str(), &tmp_st)) {
+            st->st_mode |= S_IFDIR;
+        } else {
+            st->st_mode |= S_IFREG;
+        }
+    }
     return true;
-}
-
-static bool sync_stat(SyncConnection& sc, const char* path,
-                      unsigned int* timestamp, unsigned int* mode, unsigned int* size) {
-    return sc.SendRequest(ID_STAT, path) && sync_finish_stat(sc, timestamp, mode, size);
 }
 
 static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath,
@@ -619,8 +721,11 @@ static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath,
 
 static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath,
                       const char* name=nullptr) {
-    unsigned size = 0;
-    if (!sync_stat(sc, rpath, nullptr, nullptr, &size)) return false;
+    struct stat st;
+    if (!sync_stat_fallback(sc, rpath, &st)) {
+        sc.Error("stat failed when trying to receive %s: %s", rpath, strerror(errno));
+        return false;
+    }
 
     if (!sc.SendRequest(ID_RECV, rpath)) return false;
 
@@ -673,7 +778,7 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath,
         bytes_copied += msg.data.size;
 
         sc.RecordBytesTransferred(msg.data.size);
-        sc.ReportProgress(name != nullptr ? name : rpath, bytes_copied, size);
+        sc.ReportProgress(name != nullptr ? name : rpath, bytes_copied, st.st_size);
     }
 
     sc.RecordFilesTransferred(1);
@@ -776,20 +881,20 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
 
     if (check_timestamps) {
         for (const copyinfo& ci : file_list) {
-            if (!sc.SendRequest(ID_STAT, ci.rpath.c_str())) {
+            if (!sc.SendLstat(ci.rpath.c_str())) {
+                sc.Error("failed to send lstat");
                 return false;
             }
         }
         for (copyinfo& ci : file_list) {
-            unsigned int timestamp, mode, size;
-            if (!sync_finish_stat(sc, &timestamp, &mode, &size)) {
-                return false;
-            }
-            if (size == ci.size) {
-                // For links, we cannot update the atime/mtime.
-                if ((S_ISREG(ci.mode & mode) && timestamp == ci.time) ||
-                        (S_ISLNK(ci.mode & mode) && timestamp >= ci.time)) {
-                    ci.skip = true;
+            struct stat st;
+            if (sc.FinishStat(&st)) {
+                if (st.st_size == static_cast<off_t>(ci.size)) {
+                    // For links, we cannot update the atime/mtime.
+                    if ((S_ISREG(ci.mode & st.st_mode) && st.st_mtime == ci.time) ||
+                        (S_ISLNK(ci.mode & st.st_mode) && st.st_mtime >= ci.time)) {
+                        ci.skip = true;
+                    }
                 }
             }
         }
@@ -821,10 +926,22 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
     if (!sc.IsValid()) return false;
 
     bool success = true;
-    unsigned dst_mode;
-    if (!sync_stat(sc, dst, nullptr, &dst_mode, nullptr)) return false;
-    bool dst_exists = (dst_mode != 0);
-    bool dst_isdir = S_ISDIR(dst_mode);
+    bool dst_exists;
+    bool dst_isdir;
+
+    struct stat st;
+    if (sync_stat_fallback(sc, dst, &st)) {
+        dst_exists = true;
+        dst_isdir = S_ISDIR(st.st_mode);
+    } else {
+        if (errno == ENOENT || errno == ENOPROTOOPT) {
+            dst_exists = false;
+            dst_isdir = false;
+        } else {
+            sc.Error("stat failed when trying to push to %s: %s", dst, strerror(errno));
+            return false;
+        }
+    }
 
     if (!dst_isdir) {
         if (srcs.size() > 1) {
@@ -869,8 +986,7 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
                 dst_dir.append(adb_basename(src_path));
             }
 
-            success &= copy_local_dir_remote(sc, src_path, dst_dir.c_str(),
-                                             false, false);
+            success &= copy_local_dir_remote(sc, src_path, dst_dir.c_str(), false, false);
             continue;
         } else if (!should_push_file(st.st_mode)) {
             sc.Warning("skipping special file '%s' (mode = 0o%o)", src_path, st.st_mode);
@@ -897,17 +1013,6 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
 
     sc.ReportOverallTransferRate(TransferDirection::push);
     return success;
-}
-
-static bool remote_symlink_isdir(SyncConnection& sc, const std::string& rpath) {
-    unsigned mode;
-    std::string dir_path = rpath;
-    dir_path.push_back('/');
-    if (!sync_stat(sc, dir_path.c_str(), nullptr, &mode, nullptr)) {
-        sc.Error("failed to stat remote symlink '%s'", dir_path.c_str());
-        return false;
-    }
-    return S_ISDIR(mode);
 }
 
 static bool remote_build_list(SyncConnection& sc, std::vector<copyinfo>* file_list,
@@ -947,7 +1052,13 @@ static bool remote_build_list(SyncConnection& sc, std::vector<copyinfo>* file_li
 
     // Check each symlink we found to see whether it's a file or directory.
     for (copyinfo& link_ci : linklist) {
-        if (remote_symlink_isdir(sc, link_ci.rpath)) {
+        struct stat st;
+        if (!sync_stat_fallback(sc, link_ci.rpath.c_str(), &st)) {
+            sc.Warning("stat failed for path %s: %s", link_ci.rpath.c_str(), strerror(errno));
+            continue;
+        }
+
+        if (S_ISDIR(st.st_mode)) {
             dirlist.emplace_back(std::move(link_ci));
         } else {
             file_list->emplace_back(std::move(link_ci));
@@ -1073,22 +1184,19 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
 
     for (const char* src_path : srcs) {
         const char* dst_path = dst;
-        unsigned src_mode, src_time, src_size;
-        if (!sync_stat(sc, src_path, &src_time, &src_mode, &src_size)) {
-            sc.Error("failed to stat remote object '%s'", src_path);
-            return false;
-        }
-        if (src_mode == 0) {
-            sc.Error("remote object '%s' does not exist", src_path);
+        struct stat src_st;
+        if (!sync_stat_fallback(sc, src_path, &src_st)) {
+            if (errno == ENOPROTOOPT) {
+                sc.Error("remote object '%s' does not exist", src_path);
+            } else {
+                sc.Error("failed to stat remote object '%s': %s", src_path, strerror(errno));
+            }
+
             success = false;
             continue;
         }
 
-        bool src_isdir = S_ISDIR(src_mode);
-        if (S_ISLNK(src_mode)) {
-            src_isdir = remote_symlink_isdir(sc, src_path);
-        }
-
+        bool src_isdir = S_ISDIR(src_st.st_mode);
         if (src_isdir) {
             std::string dst_dir = dst;
 
@@ -1107,8 +1215,8 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
 
             success &= copy_remote_dir_local(sc, src_path, dst_dir.c_str(), copy_attrs);
             continue;
-        } else if (!should_pull_file(src_mode)) {
-            sc.Warning("skipping special file '%s' (mode = 0o%o)", src_path, src_mode);
+        } else if (!should_pull_file(src_st.st_mode)) {
+            sc.Warning("skipping special file '%s' (mode = 0o%o)", src_path, src_st.st_mode);
             continue;
         }
 
@@ -1123,13 +1231,13 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
         }
 
         sc.NewTransfer();
-        sc.SetExpectedTotalBytes(src_size);
+        sc.SetExpectedTotalBytes(src_st.st_size);
         if (!sync_recv(sc, src_path, dst_path, name)) {
             success = false;
             continue;
         }
 
-        if (copy_attrs && set_time_and_mode(dst_path, src_time, src_mode) != 0) {
+        if (copy_attrs && set_time_and_mode(dst_path, src_st.st_mtime, src_st.st_mode) != 0) {
             success = false;
             continue;
         }
