@@ -720,13 +720,7 @@ static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath,
 }
 
 static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath,
-                      const char* name=nullptr) {
-    struct stat st;
-    if (!sync_stat_fallback(sc, rpath, &st)) {
-        sc.Error("stat failed when trying to receive %s: %s", rpath, strerror(errno));
-        return false;
-    }
-
+                      const char* name, uint64_t expected_size) {
     if (!sc.SendRequest(ID_RECV, rpath)) return false;
 
     adb_unlink(lpath);
@@ -778,7 +772,7 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath,
         bytes_copied += msg.data.size;
 
         sc.RecordBytesTransferred(msg.data.size);
-        sc.ReportProgress(name != nullptr ? name : rpath, bytes_copied, st.st_size);
+        sc.ReportProgress(name != nullptr ? name : rpath, bytes_copied, expected_size);
     }
 
     sc.RecordFilesTransferred(1);
@@ -1121,7 +1115,7 @@ static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
                 continue;
             }
 
-            if (!sync_recv(sc, ci.rpath.c_str(), ci.lpath.c_str())) {
+            if (!sync_recv(sc, ci.rpath.c_str(), ci.lpath.c_str(), nullptr, ci.size)) {
                 return false;
             }
 
@@ -1232,7 +1226,7 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
 
         sc.NewTransfer();
         sc.SetExpectedTotalBytes(src_st.st_size);
-        if (!sync_recv(sc, src_path, dst_path, name)) {
+        if (!sync_recv(sc, src_path, dst_path, name, src_st.st_size)) {
             success = false;
             continue;
         }
