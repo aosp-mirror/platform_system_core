@@ -207,18 +207,9 @@ int property_set(const char* name, const char* value) {
         }
     }
 
-    // If name starts with "net." treat as a DNS property.
-    if (strncmp("net.", name, strlen("net.")) == 0)  {
-        if (strcmp("net.change", name) == 0) {
-            return 0;
-        }
-        // The 'net.change' property is a special property used track when any
-        // 'net.*' property name is updated. It is _ONLY_ updated here. Its value
-        // contains the last updated 'net.*' property.
-        property_set("net.change", name);
-    } else if (persistent_properties_loaded && strncmp("persist.", name, strlen("persist.")) == 0) {
-        // Don't write properties to disk until after we have read all default properties
-        // to prevent them from being overwritten by default values.
+    // Don't write properties to disk until after we have read all default
+    // properties to prevent them from being overwritten by default values.
+    if (persistent_properties_loaded && strncmp("persist.", name, strlen("persist.")) == 0) {
         write_persistent_property(name, value);
     }
     property_changed(name, value);
