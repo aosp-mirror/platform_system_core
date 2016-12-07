@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <libunwind.h>
 #include <stdio.h>
 
 int test_level_four(int one, int two, int three, int four,
@@ -52,4 +53,24 @@ int test_recursive_call(int level, void (*callback_func)(void*), void* data) {
     }
   }
   return 0;
+}
+
+typedef struct {
+  unw_context_t* unw_context;
+  volatile int* exit_flag;
+} GetContextArg;
+
+static void GetContextAndExit(void* data) {
+  GetContextArg* arg = (GetContextArg*)data;
+  unw_getcontext(arg->unw_context);
+  // Don't touch the stack anymore.
+  while (*arg->exit_flag == 0) {
+  }
+}
+
+void test_get_context_and_wait(unw_context_t* unw_context, volatile int* exit_flag) {
+  GetContextArg arg;
+  arg.unw_context = unw_context;
+  arg.exit_flag = exit_flag;
+  test_level_one(1, 2, 3, 4, GetContextAndExit, &arg);
 }

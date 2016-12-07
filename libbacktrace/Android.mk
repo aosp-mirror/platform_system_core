@@ -111,8 +111,6 @@ backtrace_test_static_libraries_host := \
 backtrace_test_ldlibs_host += \
 	-ldl \
 
-backtrace_test_strip_module := false
-
 module := backtrace_test
 module_tag := debug
 build_type := target
