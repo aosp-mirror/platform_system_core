@@ -40,22 +40,7 @@ struct Space {
   size_t Read(uint64_t addr, uint8_t* buffer, size_t size);
 };
 
-struct DebugFrameInfo {
-  bool is_eh_frame;
-  struct EhFrame {
-    uint64_t eh_frame_hdr_vaddr;
-    uint64_t eh_frame_vaddr;
-    uint64_t fde_table_offset_in_eh_frame_hdr;
-    std::vector<uint8_t> eh_frame_hdr_data;
-    std::vector<uint8_t> eh_frame_data;
-    struct ProgramHeader {
-      uint64_t vaddr;
-      uint64_t file_offset;
-      uint64_t file_size;
-    };
-    std::vector<ProgramHeader> program_headers;
-  } eh_frame;
-};
+struct DebugFrameInfo;
 
 class BacktraceOffline : public Backtrace {
  public:
@@ -63,18 +48,13 @@ class BacktraceOffline : public Backtrace {
                    bool cache_file)
       : Backtrace(pid, tid, map),
         cache_file_(cache_file),
-        context_(nullptr),
-        last_debug_frame_(nullptr) {
+        context_(nullptr) {
     stack_space_.start = stack.start;
     stack_space_.end = stack.end;
     stack_space_.data = stack.data;
   }
 
-  virtual ~BacktraceOffline() {
-    if (last_debug_frame_ != nullptr) {
-      delete last_debug_frame_;
-    }
-  }
+  virtual ~BacktraceOffline() = default;
 
   bool Unwind(size_t num_ignore_frames, ucontext_t* context) override;
 
@@ -91,15 +71,13 @@ class BacktraceOffline : public Backtrace {
   std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) override;
   DebugFrameInfo* GetDebugFrameInFile(const std::string& filename);
 
-  static std::unordered_map<std::string, std::unique_ptr<DebugFrameInfo>> debug_frames_;
-  static std::unordered_set<std::string> debug_frame_missing_files_;
-
   bool cache_file_;
   ucontext_t* context_;
   Space eh_frame_hdr_space_;
   Space eh_frame_space_;
+  Space arm_extab_space_;
+  Space arm_exidx_space_;
   Space stack_space_;
-  DebugFrameInfo* last_debug_frame_;
 };
 
 #endif  // _LIBBACKTRACE_BACKTRACE_OFFLINE_H
