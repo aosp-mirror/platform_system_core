@@ -117,4 +117,17 @@ cc_library_shared {
     },
     cflags: ["-O0"],
     srcs: ["backtrace_testlib.c"],
+
+    target: {
+        linux: {
+            shared_libs: [
+                "libunwind",
+            ],
+        },
+        android: {
+            shared_libs: [
+                "libunwind",
+            ],
+        },
+    }
 }
