@@ -108,7 +108,7 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
     }
 
     bool nonBlock = false;
-    if (!fast<strncmp>(buffer, "dumpAndClose", 12)) {
+    if (!fastcmp<strncmp>(buffer, "dumpAndClose", 12)) {
         // Allow writer to get some cycles, and wait for pending notifications
         sched_yield();
         LogTimeEntry::lock();

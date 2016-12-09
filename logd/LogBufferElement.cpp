@@ -89,7 +89,7 @@ char *android::tidToName(pid_t tid) {
         size_t name_len = strlen(name);
         // KISS: ToDo: Only checks prefix truncated, not suffix, or both
         if ((retval_len < name_len)
-                && !fast<strcmp>(retval, name + name_len - retval_len)) {
+                && !fastcmp<strcmp>(retval, name + name_len - retval_len)) {
             free(retval);
             retval = name;
         } else {
