@@ -567,9 +567,9 @@ bool Service::Start() {
             console_ = default_console;
         }
 
-        bool have_console = (open(console_.c_str(), O_RDWR | O_CLOEXEC) != -1);
+        bool have_console = (access(console_.c_str(), R_OK | W_OK) != -1);
         if (!have_console) {
-            PLOG(ERROR) << "service '" << name_ << "' couldn't open console '" << console_ << "'";
+            PLOG(ERROR) << "service '" << name_ << "' cannot gain read/write access to console '" << console_ << "'";
             flags_ |= SVC_DISABLED;
             return false;
         }
