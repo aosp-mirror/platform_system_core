@@ -19,6 +19,33 @@
 ** by the device side of adb.
 */
 
+/*
+ * This file is consumed by build/tools/fs_config and is used
+ * for generating various files. Anything #define AID_<name>
+ * becomes the mapping for getpwnam/getpwuid, etc. The <name>
+ * field is lowercased.
+ * For example:
+ * #define AID_FOO_BAR 6666 becomes a friendly name of "foo_bar"
+ *
+ * The above holds true with the exception of:
+ *   mediacodec
+ *   mediaex
+ *   mediadrm
+ * Whose friendly names do not match the #define statements.
+ *
+ * Additionally, AID_OEM_RESERVED_START and AID_OEM_RESERVED_END
+ * can be used to define reserved OEM ranges used for sanity checks
+ * during the build process. The rules are, they must end with START/END
+ * The proper convention is incrementing a number like so:
+ * AID_OEM_RESERVED_START
+ * AID_OEM_RESERVED_1_START
+ * AID_OEM_RESERVED_2_START
+ * ...
+ * The same applies to the END.
+ * They are not required to be in order, but must not overlap each other and
+ * must define a START and END'ing range. START must be smaller than END.
+ */
+
 #ifndef _ANDROID_FILESYSTEM_CONFIG_H_
 #define _ANDROID_FILESYSTEM_CONFIG_H_
 
