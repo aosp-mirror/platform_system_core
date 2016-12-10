@@ -19,6 +19,33 @@
 ** by the device side of adb.
 */
 
+/*
+ * This file is consumed by build/tools/fs_config and is used
+ * for generating various files. Anything #define AID_<name>
+ * becomes the mapping for getpwnam/getpwuid, etc. The <name>
+ * field is lowercased.
+ * For example:
+ * #define AID_FOO_BAR 6666 becomes a friendly name of "foo_bar"
+ *
+ * The above holds true with the exception of:
+ *   mediacodec
+ *   mediaex
+ *   mediadrm
+ * Whose friendly names do not match the #define statements.
+ *
+ * Additionally, AID_OEM_RESERVED_START and AID_OEM_RESERVED_END
+ * can be used to define reserved OEM ranges used for sanity checks
+ * during the build process. The rules are, they must end with START/END
+ * The proper convention is incrementing a number like so:
+ * AID_OEM_RESERVED_START
+ * AID_OEM_RESERVED_1_START
+ * AID_OEM_RESERVED_2_START
+ * ...
+ * The same applies to the END.
+ * They are not required to be in order, but must not overlap each other and
+ * must define a START and END'ing range. START must be smaller than END.
+ */
+
 #ifndef _ANDROID_FILESYSTEM_CONFIG_H_
 #define _ANDROID_FILESYSTEM_CONFIG_H_
 
@@ -140,104 +167,15 @@
 #define AID_SHARED_GID_START 50000 /* start of gids for apps in each user to share */
 #define AID_SHARED_GID_END   59999 /* start of gids for apps in each user to share */
 
-#if !defined(EXCLUDE_FS_CONFIG_STRUCTURES)
 /*
- * Used in:
- *  bionic/libc/bionic/stubs.cpp
- *  external/libselinux/src/android.c
- *  system/core/logd/LogStatistics.cpp
- *  system/core/init/ueventd.cpp
- *  system/core/init/util.cpp
+ * android_ids has moved to pwd/grp functionality.
+ * If you need to add one, the structure is now
+ * auto-generated based on the AID_ constraints
+ * documented at the top of this header file.
+ * Also see build/tools/fs_config for more details.
  */
-struct android_id_info {
-    const char *name;
-    unsigned aid;
-};
 
-static const struct android_id_info android_ids[] = {
-    { "root",          AID_ROOT, },
-
-    { "system",        AID_SYSTEM, },
-
-    { "radio",         AID_RADIO, },
-    { "bluetooth",     AID_BLUETOOTH, },
-    { "graphics",      AID_GRAPHICS, },
-    { "input",         AID_INPUT, },
-    { "audio",         AID_AUDIO, },
-    { "camera",        AID_CAMERA, },
-    { "log",           AID_LOG, },
-    { "compass",       AID_COMPASS, },
-    { "mount",         AID_MOUNT, },
-    { "wifi",          AID_WIFI, },
-    { "adb",           AID_ADB, },
-    { "install",       AID_INSTALL, },
-    { "media",         AID_MEDIA, },
-    { "dhcp",          AID_DHCP, },
-    { "sdcard_rw",     AID_SDCARD_RW, },
-    { "vpn",           AID_VPN, },
-    { "keystore",      AID_KEYSTORE, },
-    { "usb",           AID_USB, },
-    { "drm",           AID_DRM, },
-    { "mdnsr",         AID_MDNSR, },
-    { "gps",           AID_GPS, },
-    // AID_UNUSED1
-    { "media_rw",      AID_MEDIA_RW, },
-    { "mtp",           AID_MTP, },
-    // AID_UNUSED2
-    { "drmrpc",        AID_DRMRPC, },
-    { "nfc",           AID_NFC, },
-    { "sdcard_r",      AID_SDCARD_R, },
-    { "clat",          AID_CLAT, },
-    { "loop_radio",    AID_LOOP_RADIO, },
-    { "mediadrm",      AID_MEDIA_DRM, },
-    { "package_info",  AID_PACKAGE_INFO, },
-    { "sdcard_pics",   AID_SDCARD_PICS, },
-    { "sdcard_av",     AID_SDCARD_AV, },
-    { "sdcard_all",    AID_SDCARD_ALL, },
-    { "logd",          AID_LOGD, },
-    { "shared_relro",  AID_SHARED_RELRO, },
-    { "dbus",          AID_DBUS, },
-    { "tlsdate",       AID_TLSDATE, },
-    { "mediaex",       AID_MEDIA_EX, },
-    { "audioserver",   AID_AUDIOSERVER, },
-    { "metrics_coll",  AID_METRICS_COLL },
-    { "metricsd",      AID_METRICSD },
-    { "webserv",       AID_WEBSERV },
-    { "debuggerd",     AID_DEBUGGERD, },
-    { "mediacodec",    AID_MEDIA_CODEC, },
-    { "cameraserver",  AID_CAMERASERVER, },
-    { "firewall",      AID_FIREWALL, },
-    { "trunks",        AID_TRUNKS, },
-    { "nvram",         AID_NVRAM, },
-    { "dns",           AID_DNS, },
-    { "dns_tether",    AID_DNS_TETHER, },
-    { "webview_zygote", AID_WEBVIEW_ZYGOTE, },
-    { "vehicle_network", AID_VEHICLE_NETWORK, },
-    { "media_audio",   AID_MEDIA_AUDIO, },
-    { "media_video",   AID_MEDIA_VIDEO, },
-    { "media_image",   AID_MEDIA_IMAGE, },
-
-    { "shell",         AID_SHELL, },
-    { "cache",         AID_CACHE, },
-    { "diag",          AID_DIAG, },
-
-    { "net_bt_admin",  AID_NET_BT_ADMIN, },
-    { "net_bt",        AID_NET_BT, },
-    { "inet",          AID_INET, },
-    { "net_raw",       AID_NET_RAW, },
-    { "net_admin",     AID_NET_ADMIN, },
-    { "net_bw_stats",  AID_NET_BW_STATS, },
-    { "net_bw_acct",   AID_NET_BW_ACCT, },
-    { "readproc",      AID_READPROC, },
-    { "wakelock",      AID_WAKELOCK, },
-
-    { "everybody",     AID_EVERYBODY, },
-    { "misc",          AID_MISC, },
-    { "nobody",        AID_NOBODY, },
-};
-
-#define android_id_count \
-    (sizeof(android_ids) / sizeof(android_ids[0]))
+#if !defined(EXCLUDE_FS_CONFIG_STRUCTURES)
 
 struct fs_path_config {
     unsigned mode;
