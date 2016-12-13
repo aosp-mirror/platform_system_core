@@ -165,12 +165,12 @@ int main(int argc, char* argv[]) {
   if (setegid(old_egid) == -1) error(1, errno, "couldn't restore egid");
 
   // Verify that user id is not too big.
-  if ((UID_MAX - info.uid) / AID_USER < (uid_t)userId) {
+  if ((UID_MAX - info.uid) / AID_USER_OFFSET < (uid_t)userId) {
     error(1, 0, "user id too big: %d", userId);
   }
 
   // Calculate user app ID.
-  uid_t userAppId = (AID_USER * userId) + info.uid;
+  uid_t userAppId = (AID_USER_OFFSET * userId) + info.uid;
 
   // Reject system packages.
   if (userAppId < AID_APP) {
