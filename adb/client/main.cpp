@@ -23,6 +23,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <thread>
+
 #include <android-base/errors.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -33,6 +35,7 @@
 #include "adb_listeners.h"
 #include "adb_utils.h"
 #include "commandline.h"
+#include "sysdeps/chrono.h"
 #include "transport.h"
 
 static std::string GetLogFilePath() {
@@ -113,8 +116,18 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
     local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
 
     std::string error;
-    if (install_listener(socket_spec, "*smartsocket*", nullptr, 0, nullptr, &error)) {
-        fatal("could not install *smartsocket* listener: %s", error.c_str());
+
+    auto start = std::chrono::steady_clock::now();
+
+    // If we told a previous adb server to quit because of version mismatch, we can get to this
+    // point before it's finished exiting. Retry for a while to give it some time.
+    while (install_listener(socket_spec, "*smartsocket*", nullptr, 0, nullptr, &error) !=
+           INSTALL_STATUS_OK) {
+        if (std::chrono::steady_clock::now() - start > 0.5s) {
+            fatal("could not install *smartsocket* listener: %s", error.c_str());
+        }
+
+        std::this_thread::sleep_for(100ms);
     }
 
     if (is_daemon) {
