@@ -21,8 +21,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <linux/sw_sync.h>
-
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -41,6 +39,16 @@ struct sync_merge_data {
 #define SYNC_IOC_WAIT _IOW(SYNC_IOC_MAGIC, 0, __s32)
 #define SYNC_IOC_MERGE _IOWR(SYNC_IOC_MAGIC, 1, struct sync_merge_data)
 #define SYNC_IOC_FENCE_INFO _IOWR(SYNC_IOC_MAGIC, 2, struct sync_fence_info_data)
+
+struct sw_sync_create_fence_data {
+  __u32 value;
+  char name[32];
+  __s32 fence;
+};
+
+#define SW_SYNC_IOC_MAGIC 'W'
+#define SW_SYNC_IOC_CREATE_FENCE _IOWR(SW_SYNC_IOC_MAGIC, 0, struct sw_sync_create_fence_data)
+#define SW_SYNC_IOC_INC _IOW(SW_SYNC_IOC_MAGIC, 1, __u32)
 
 int sync_wait(int fd, int timeout)
 {
