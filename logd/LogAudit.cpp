@@ -34,6 +34,7 @@
 #include "LogBuffer.h"
 #include "LogKlog.h"
 #include "LogReader.h"
+#include "LogUtils.h"
 
 #define KMSG_PRIORITY(PRI)                          \
     '<',                                            \
@@ -117,7 +118,8 @@ int LogAudit::logPrint(const char *fmt, ...) {
             if (avcl) {
                 char *avcr = strstr(str, avc);
 
-                skip = avcr && !strcmp(avcl + strlen(avc), avcr + strlen(avc));
+                skip = avcr && !fastcmp<strcmp>(avcl + strlen(avc),
+                                                avcr + strlen(avc));
                 if (skip) {
                     ++count;
                     free(last_str);
