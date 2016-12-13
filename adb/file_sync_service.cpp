@@ -39,9 +39,12 @@
 
 #include "adb.h"
 #include "adb_io.h"
+#include "adb_trace.h"
 #include "adb_utils.h"
 #include "security_log_tags.h"
 #include "sysdeps/errno.h"
+
+using android::base::StringPrintf;
 
 static bool should_use_fs_config(const std::string& path) {
     // TODO: use fs_config to configure permissions on /data.
@@ -152,7 +155,7 @@ static bool do_list(int s, const char* path) {
     if (!d) goto done;
 
     while ((de = readdir(d.get()))) {
-        std::string filename(android::base::StringPrintf("%s/%s", path, de->d_name));
+        std::string filename(StringPrintf("%s/%s", path, de->d_name));
 
         struct stat st;
         if (lstat(filename.c_str(), &st) == 0) {
@@ -191,7 +194,7 @@ static bool SendSyncFail(int fd, const std::string& reason) {
 }
 
 static bool SendSyncFailErrno(int fd, const std::string& reason) {
-    return SendSyncFail(fd, android::base::StringPrintf("%s: %s", reason.c_str(), strerror(errno)));
+    return SendSyncFail(fd, StringPrintf("%s: %s", reason.c_str(), strerror(errno)));
 }
 
 static bool handle_send_file(int s, const char* path, uid_t uid, gid_t gid, uint64_t capabilities,
@@ -433,9 +436,31 @@ static bool do_recv(int s, const char* path, std::vector<char>& buffer) {
     return WriteFdExactly(s, &msg.data, sizeof(msg.data));
 }
 
+static const char* sync_id_to_name(uint32_t id) {
+  switch (id) {
+    case ID_LSTAT_V1:
+      return "lstat_v1";
+    case ID_LSTAT_V2:
+      return "lstat_v2";
+    case ID_STAT_V2:
+      return "stat_v2";
+    case ID_LIST:
+      return "list";
+    case ID_SEND:
+      return "send";
+    case ID_RECV:
+      return "recv";
+    case ID_QUIT:
+        return "quit";
+    default:
+        return "???";
+  }
+}
+
 static bool handle_sync_command(int fd, std::vector<char>& buffer) {
     D("sync: waiting for request");
 
+    ATRACE_CALL();
     SyncRequest request;
     if (!ReadFdExactly(fd, &request, sizeof(request))) {
         SendSyncFail(fd, "command read failure");
@@ -453,9 +478,11 @@ static bool handle_sync_command(int fd, std::vector<char>& buffer) {
     }
     name[path_length] = 0;
 
-    const char* id = reinterpret_cast<const char*>(&request.id);
-    D("sync: '%.4s' '%s'", id, name);
+    std::string id_name = sync_id_to_name(request.id);
+    std::string trace_name = StringPrintf("%s(%s)", id_name.c_str(), name);
+    ATRACE_NAME(trace_name.c_str());
 
+    D("sync: %s('%s')", id_name.c_str(), name);
     switch (request.id) {
         case ID_LSTAT_V1:
             if (!do_lstat_v1(fd, name)) return false;
@@ -476,8 +503,7 @@ static bool handle_sync_command(int fd, std::vector<char>& buffer) {
         case ID_QUIT:
             return false;
         default:
-            SendSyncFail(
-                fd, android::base::StringPrintf("unknown command '%.4s' (%08x)", id, request.id));
+            SendSyncFail(fd, StringPrintf("unknown command %08x", request.id));
             return false;
     }
 
