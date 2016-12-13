@@ -58,4 +58,8 @@ extern int adb_trace_mask;
 void adb_trace_init(char**);
 void adb_trace_enable(AdbTrace trace_tag);
 
+#define ATRACE_TAG ATRACE_TAG_ADB
+#include <cutils/trace.h>
+#include <utils/Trace.h>
+
 #endif /* __ADB_TRACE_H */
