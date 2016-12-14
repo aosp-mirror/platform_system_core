@@ -539,6 +539,7 @@ TEST(liblog, __security_buffer) {
     bool set_persist = false;
     bool allow_security = false;
 
+    setuid(AID_SYSTEM); // only one that can read security buffer
     if (__android_log_security()) {
         allow_security = true;
     } else {
@@ -1762,12 +1763,10 @@ TEST(liblog, is_loggable) {
 #endif
 }
 
-TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__typical) {
 #ifdef __ANDROID__
-    const int TAG = 123456781;
-    const char SUBTAG[] = "test-subtag";
-    const int UID = -1;
-    const int DATA_LEN = 200;
+static void android_errorWriteWithInfoLog_helper(int TAG, const char* SUBTAG,
+                                                 int UID, const char* payload,
+                                                 int DATA_LEN, int& count) {
     struct logger_list *logger_list;
 
     pid_t pid = getpid();
@@ -1775,100 +1774,17 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__typical) {
     ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
         LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
 
-    ASSERT_LT(0, android_errorWriteWithInfoLog(
-            TAG, SUBTAG, UID, max_payload_buf, DATA_LEN));
-
-    sleep(2);
-
-    int count = 0;
-
-    for (;;) {
-        log_msg log_msg;
-        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
-            break;
-        }
-
-        char *eventData = log_msg.msg();
-        if (!eventData) {
-            continue;
-        }
-
-        // Tag
-        int tag = get4LE(eventData);
-        eventData += 4;
-
-        if (tag != TAG) {
-            continue;
-        }
-
-        // List type
-        ASSERT_EQ(EVENT_TYPE_LIST, eventData[0]);
-        eventData++;
-
-        // Number of elements in list
-        ASSERT_EQ(3, eventData[0]);
-        eventData++;
-
-        // Element #1: string type for subtag
-        ASSERT_EQ(EVENT_TYPE_STRING, eventData[0]);
-        eventData++;
-
-        ASSERT_EQ((int) strlen(SUBTAG), get4LE(eventData));
-        eventData +=4;
-
-        if (memcmp(SUBTAG, eventData, strlen(SUBTAG))) {
-            continue;
-        }
-        eventData += strlen(SUBTAG);
-
-        // Element #2: int type for uid
-        ASSERT_EQ(EVENT_TYPE_INT, eventData[0]);
-        eventData++;
-
-        ASSERT_EQ(UID, get4LE(eventData));
-        eventData += 4;
-
-        // Element #3: string type for data
-        ASSERT_EQ(EVENT_TYPE_STRING, eventData[0]);
-        eventData++;
-
-        ASSERT_EQ(DATA_LEN, get4LE(eventData));
-        eventData += 4;
-
-        if (memcmp(max_payload_buf, eventData, DATA_LEN)) {
-            continue;
-        }
-
-        ++count;
+    int retval_android_errorWriteWithinInfoLog = android_errorWriteWithInfoLog(
+            TAG, SUBTAG, UID, payload, DATA_LEN);
+    if (payload) {
+        ASSERT_LT(0, retval_android_errorWriteWithinInfoLog);
+    } else {
+        ASSERT_GT(0, retval_android_errorWriteWithinInfoLog);
     }
 
-    EXPECT_EQ(1, count);
-
-    android_logger_list_close(logger_list);
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}
-
-TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__data_too_large) {
-#ifdef __ANDROID__
-    const int TAG = 123456782;
-    const char SUBTAG[] = "test-subtag";
-    const int UID = -1;
-    const int DATA_LEN = sizeof(max_payload_buf);
-    struct logger_list *logger_list;
-
-    pid_t pid = getpid();
-
-    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-        LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
-
-    ASSERT_LT(0, android_errorWriteWithInfoLog(
-            TAG, SUBTAG, UID, max_payload_buf, DATA_LEN));
-
     sleep(2);
 
-    int count = 0;
+    count = 0;
 
     for (;;) {
         log_msg log_msg;
@@ -1891,6 +1807,12 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__data_too_l
             continue;
         }
 
+        if (!payload) {
+            // This tag should not have been written because the data was null
+            ++count;
+            break;
+        }
+
         // List type
         ASSERT_EQ(EVENT_TYPE_LIST, eventData[0]);
         eventData++;
@@ -1903,13 +1825,15 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__data_too_l
         ASSERT_EQ(EVENT_TYPE_STRING, eventData[0]);
         eventData++;
 
-        ASSERT_EQ((int) strlen(SUBTAG), get4LE(eventData));
+        int subtag_len = strlen(SUBTAG);
+        if (subtag_len > 32) subtag_len = 32;
+        ASSERT_EQ(subtag_len, get4LE(eventData));
         eventData +=4;
 
-        if (memcmp(SUBTAG, eventData, strlen(SUBTAG))) {
+        if (memcmp(SUBTAG, eventData, subtag_len)) {
             continue;
         }
-        eventData += strlen(SUBTAG);
+        eventData += subtag_len;
 
         // Element #2: int type for uid
         ASSERT_EQ(EVENT_TYPE_INT, eventData[0]);
@@ -1924,22 +1848,53 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__data_too_l
 
         size_t dataLen = get4LE(eventData);
         eventData += 4;
+        if (DATA_LEN < 512) ASSERT_EQ(DATA_LEN, (int)dataLen);
 
-        if (memcmp(max_payload_buf, eventData, dataLen)) {
+        if (memcmp(payload, eventData, dataLen)) {
             continue;
         }
-        eventData += dataLen;
 
-        // 4 bytes for the tag, and max_payload_buf should be truncated.
-        ASSERT_LE(4 + 512, eventData - original);      // worst expectations
-        ASSERT_GT(4 + DATA_LEN, eventData - original); // must be truncated
+        if (DATA_LEN >= 512) {
+            eventData += dataLen;
+            // 4 bytes for the tag, and max_payload_buf should be truncated.
+            ASSERT_LE(4 + 512, eventData - original);      // worst expectations
+            ASSERT_GT(4 + DATA_LEN, eventData - original); // must be truncated
+        }
 
         ++count;
     }
 
-    EXPECT_EQ(1, count);
-
     android_logger_list_close(logger_list);
+}
+#endif
+
+TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__typical) {
+#ifdef __ANDROID__
+    int count;
+    android_errorWriteWithInfoLog_helper(
+            123456781,
+            "test-subtag",
+            -1,
+            max_payload_buf,
+            200,
+            count);
+    EXPECT_EQ(1, count);
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
+}
+
+TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__data_too_large) {
+#ifdef __ANDROID__
+    int count;
+    android_errorWriteWithInfoLog_helper(
+            123456782,
+            "test-subtag",
+            -1,
+            max_payload_buf,
+            sizeof(max_payload_buf),
+            count);
+    EXPECT_EQ(1, count);
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
@@ -1947,49 +1902,15 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__data_too_l
 
 TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__null_data) {
 #ifdef __ANDROID__
-    const int TAG = 123456783;
-    const char SUBTAG[] = "test-subtag";
-    const int UID = -1;
-    const int DATA_LEN = 200;
-    struct logger_list *logger_list;
-
-    pid_t pid = getpid();
-
-    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-        LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
-
-    ASSERT_GT(0, android_errorWriteWithInfoLog(
-            TAG, SUBTAG, UID, NULL, DATA_LEN));
-
-    sleep(2);
-
-    int count = 0;
-
-    for (;;) {
-        log_msg log_msg;
-        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
-            break;
-        }
-
-        char *eventData = log_msg.msg();
-        if (!eventData) {
-            continue;
-        }
-
-        // Tag
-        int tag = get4LE(eventData);
-        eventData += 4;
-
-        if (tag == TAG) {
-            // This tag should not have been written because the data was null
-            count++;
-            break;
-        }
-    }
-
+    int count;
+    android_errorWriteWithInfoLog_helper(
+            123456783,
+            "test-subtag",
+            -1,
+            NULL,
+            200,
+            count);
     EXPECT_EQ(0, count);
-
-    android_logger_list_close(logger_list);
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
@@ -1997,88 +1918,15 @@ TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__null_data)
 
 TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__subtag_too_long) {
 #ifdef __ANDROID__
-    const int TAG = 123456784;
-    const char SUBTAG[] = "abcdefghijklmnopqrstuvwxyz now i know my abc";
-    const int UID = -1;
-    const int DATA_LEN = 200;
-    struct logger_list *logger_list;
-
-    pid_t pid = getpid();
-
-    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-        LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
-
-    ASSERT_LT(0, android_errorWriteWithInfoLog(
-            TAG, SUBTAG, UID, max_payload_buf, DATA_LEN));
-
-    sleep(2);
-
-    int count = 0;
-
-    for (;;) {
-        log_msg log_msg;
-        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
-            break;
-        }
-
-        char *eventData = log_msg.msg();
-        if (!eventData) {
-            continue;
-        }
-
-        // Tag
-        int tag = get4LE(eventData);
-        eventData += 4;
-
-        if (tag != TAG) {
-            continue;
-        }
-
-        // List type
-        ASSERT_EQ(EVENT_TYPE_LIST, eventData[0]);
-        eventData++;
-
-        // Number of elements in list
-        ASSERT_EQ(3, eventData[0]);
-        eventData++;
-
-        // Element #1: string type for subtag
-        ASSERT_EQ(EVENT_TYPE_STRING, eventData[0]);
-        eventData++;
-
-        // The subtag is longer than 32 and should be truncated to that.
-        ASSERT_EQ(32, get4LE(eventData));
-        eventData +=4;
-
-        if (memcmp(SUBTAG, eventData, 32)) {
-            continue;
-        }
-        eventData += 32;
-
-        // Element #2: int type for uid
-        ASSERT_EQ(EVENT_TYPE_INT, eventData[0]);
-        eventData++;
-
-        ASSERT_EQ(UID, get4LE(eventData));
-        eventData += 4;
-
-        // Element #3: string type for data
-        ASSERT_EQ(EVENT_TYPE_STRING, eventData[0]);
-        eventData++;
-
-        ASSERT_EQ(DATA_LEN, get4LE(eventData));
-        eventData += 4;
-
-        if (memcmp(max_payload_buf, eventData, DATA_LEN)) {
-            continue;
-        }
-
-        ++count;
-    }
-
+    int count;
+    android_errorWriteWithInfoLog_helper(
+            123456784,
+            "abcdefghijklmnopqrstuvwxyz now i know my abc",
+            -1,
+            max_payload_buf,
+            200,
+            count);
     EXPECT_EQ(1, count);
-
-    android_logger_list_close(logger_list);
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
@@ -2092,10 +1940,8 @@ TEST(liblog, __android_log_buf_write_and_print__max) {
     buf_write_test(max_payload_buf);
 }
 
-TEST(liblog, android_errorWriteLog__android_logger_list_read__success) {
 #ifdef __ANDROID__
-    const int TAG = 123456785;
-    const char SUBTAG[] = "test-subtag";
+static void android_errorWriteLog_helper(int TAG, const char *SUBTAG, int& count) {
     struct logger_list *logger_list;
 
     pid_t pid = getpid();
@@ -2103,11 +1949,16 @@ TEST(liblog, android_errorWriteLog__android_logger_list_read__success) {
     ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
         LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
 
-    ASSERT_LT(0, android_errorWriteLog(TAG, SUBTAG));
+    int retval_android_errorWriteLog = android_errorWriteLog(TAG, SUBTAG);
+    if (SUBTAG) {
+        ASSERT_LT(0, retval_android_errorWriteLog);
+    } else {
+        ASSERT_GT(0, retval_android_errorWriteLog);
+    }
 
     sleep(2);
 
-    int count = 0;
+    count = 0;
 
     for (;;) {
         log_msg log_msg;
@@ -2126,6 +1977,12 @@ TEST(liblog, android_errorWriteLog__android_logger_list_read__success) {
 
         if (tag != TAG) {
             continue;
+        }
+
+        if (!SUBTAG) {
+            // This tag should not have been written because the data was null
+            ++count;
+            break;
         }
 
         // List type
@@ -2149,9 +2006,15 @@ TEST(liblog, android_errorWriteLog__android_logger_list_read__success) {
         ++count;
     }
 
-    EXPECT_EQ(1, count);
-
     android_logger_list_close(logger_list);
+}
+#endif
+
+TEST(liblog, android_errorWriteLog__android_logger_list_read__success) {
+#ifdef __ANDROID__
+    int count;
+    android_errorWriteLog_helper(123456785, "test-subtag", count);
+    EXPECT_EQ(1, count);
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
@@ -2159,45 +2022,9 @@ TEST(liblog, android_errorWriteLog__android_logger_list_read__success) {
 
 TEST(liblog, android_errorWriteLog__android_logger_list_read__null_subtag) {
 #ifdef __ANDROID__
-    const int TAG = 123456786;
-    struct logger_list *logger_list;
-
-    pid_t pid = getpid();
-
-    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-        LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
-
-    ASSERT_GT(0, android_errorWriteLog(TAG, NULL));
-
-    sleep(2);
-
-    int count = 0;
-
-    for (;;) {
-        log_msg log_msg;
-        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
-            break;
-        }
-
-        char *eventData = log_msg.msg();
-        if (!eventData) {
-            continue;
-        }
-
-        // Tag
-        int tag = get4LE(eventData);
-        eventData += 4;
-
-        if (tag == TAG) {
-            // This tag should not have been written because the data was null
-            count++;
-            break;
-        }
-    }
-
+    int count;
+    android_errorWriteLog_helper(123456786, NULL, count);
     EXPECT_EQ(0, count);
-
-    android_logger_list_close(logger_list);
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
