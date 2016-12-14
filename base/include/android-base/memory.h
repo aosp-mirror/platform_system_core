@@ -20,25 +20,19 @@
 namespace android {
 namespace base {
 
-// Use packed structures for access to unaligned data on targets with alignment
+// Use memcpy for access to unaligned data on targets with alignment
 // restrictions.  The compiler will generate appropriate code to access these
 // structures without generating alignment exceptions.
 template <typename T>
-static inline T get_unaligned(const T* address) {
-  struct unaligned {
-    T v;
-  } __attribute__((packed));
-  const unaligned* p = reinterpret_cast<const unaligned*>(address);
-  return p->v;
+static inline T get_unaligned(const void* address) {
+  T result;
+  memcpy(&result, address, sizeof(T));
+  return result;
 }
 
 template <typename T>
-static inline void put_unaligned(T* address, T v) {
-  struct unaligned {
-    T v;
-  } __attribute__((packed));
-  unaligned* p = reinterpret_cast<unaligned*>(address);
-  p->v = v;
+static inline void put_unaligned(void* address, T v) {
+  memcpy(address, &v, sizeof(T));
 }
 
 } // namespace base
