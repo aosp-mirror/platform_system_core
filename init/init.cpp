@@ -18,7 +18,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <fstream>
 #include <inttypes.h>
 #include <libgen.h>
 #include <paths.h>
