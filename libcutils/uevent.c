@@ -116,7 +116,12 @@ int uevent_open_socket(int buf_sz, bool passcred)
     if(s < 0)
         return -1;
 
-    setsockopt(s, SOL_SOCKET, SO_RCVBUFFORCE, &buf_sz, sizeof(buf_sz));
+    /* buf_sz should be less than net.core.rmem_max for this to succeed */
+    if (setsockopt(s, SOL_SOCKET, SO_RCVBUF, &buf_sz, sizeof(buf_sz)) < 0) {
+        close(s);
+        return -1;
+    }
+
     setsockopt(s, SOL_SOCKET, SO_PASSCRED, &on, sizeof(on));
 
     if(bind(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
