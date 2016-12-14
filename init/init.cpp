@@ -18,7 +18,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <fstream>
 #include <inttypes.h>
 #include <libgen.h>
 #include <paths.h>
@@ -50,6 +49,7 @@
 #include <cutils/sockets.h>
 #include <private/android_filesystem_config.h>
 
+#include <fstream>
 #include <memory>
 
 #include "action.h"
@@ -349,7 +349,7 @@ static int set_mmap_rnd_bits_action(const std::vector<std::string>& args)
     // TODO: add mips support b/27788820
     ret = 0;
 #else
-    ERROR("Unknown architecture\n");
+    LOG(ERROR) << "Unknown architecture";
 #endif
 
 #ifdef __BRILLO__
