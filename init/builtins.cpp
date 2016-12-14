@@ -559,7 +559,7 @@ static int queue_fs_event(int code) {
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
         /* Setup a wipe via recovery, and reboot into recovery */
         PLOG(ERROR) << "fs_mgr_mount_all suggested recovery, so wiping data via recovery.";
-        ret = wipe_data_via_recovery("wipe_data_via_recovery");
+        ret = wipe_data_via_recovery("fs_mgr_mount_all");
         /* If reboot worked, there is no return. */
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
         if (e4crypt_install_keyring()) {
