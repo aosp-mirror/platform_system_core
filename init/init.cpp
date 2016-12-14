@@ -349,7 +349,7 @@ static int set_mmap_rnd_bits_action(const std::vector<std::string>& args)
     // TODO: add mips support b/27788820
     ret = 0;
 #else
-    ERROR("Unknown architecture\n");
+    LOG(ERROR) << "Unknown architecture";
 #endif
 
 #ifdef __BRILLO__
