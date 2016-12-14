@@ -152,7 +152,7 @@ public:
     }
 
     bool DoVerify(const password_handle_t *expected_handle, const SizedBuffer &password) {
-        uint64_t user_id = android::base::get_unaligned(&expected_handle->user_id);
+        uint64_t user_id = android::base::get_unaligned<secure_id_t>(&expected_handle->user_id);
         FastHashMap::const_iterator it = fast_hash_map_.find(user_id);
         if (it != fast_hash_map_.end() && VerifyFast(it->second, password)) {
             return true;
