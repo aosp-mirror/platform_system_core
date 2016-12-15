@@ -33,6 +33,7 @@ typedef enum {
     HAL_PIXEL_FORMAT_YCBCR_422_SP = 16, // 0x10
     HAL_PIXEL_FORMAT_YCRCB_420_SP = 17, // 0x11
     HAL_PIXEL_FORMAT_YCBCR_422_I = 20, // 0x14
+    HAL_PIXEL_FORMAT_JPEG = 256, // 0x100
 } android_pixel_format_t;
 
 typedef enum {
