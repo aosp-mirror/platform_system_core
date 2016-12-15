@@ -52,7 +52,7 @@ LOCAL_MULTILIB := both
 
 include $(BUILD_EXECUTABLE)
 
-crasher_cppflags := $(common_cppflags) -fstack-protector-all -Wno-free-nonheap-object -Wno-date-time
+crasher_cppflags := $(common_cppflags) -O0 -fstack-protector-all -Wno-free-nonheap-object
 
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := crasher.cpp
@@ -65,7 +65,7 @@ LOCAL_SRC_FILES_x86_64 := x86_64/crashglue.S
 LOCAL_MODULE_PATH := $(TARGET_OUT_OPTIONAL_EXECUTABLES)
 LOCAL_MODULE_TAGS := optional
 LOCAL_CPPFLAGS := $(crasher_cppflags)
-LOCAL_SHARED_LIBRARIES := libcutils liblog
+LOCAL_SHARED_LIBRARIES := libbase liblog
 
 # The arm emulator has VFP but not VFPv3-D32.
 ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
@@ -91,7 +91,6 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_OPTIONAL_EXECUTABLES)
 LOCAL_MODULE_TAGS := optional
 LOCAL_CPPFLAGS := $(crasher_cppflags) -DSTATIC_CRASHER
 LOCAL_FORCE_STATIC_EXECUTABLE := true
-LOCAL_SHARED_LIBRARIES := libcutils liblog
 
 # The arm emulator has VFP but not VFPv3-D32.
 ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
@@ -103,7 +102,7 @@ LOCAL_MODULE_STEM_32 := static_crasher
 LOCAL_MODULE_STEM_64 := static_crasher64
 LOCAL_MULTILIB := both
 
-LOCAL_STATIC_LIBRARIES := libdebuggerd_client libcutils liblog
+LOCAL_STATIC_LIBRARIES := libdebuggerd_client libbase liblog
 
 include $(BUILD_EXECUTABLE)
 
