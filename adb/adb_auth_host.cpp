@@ -207,11 +207,6 @@ static bool read_keys(const std::string& path, bool allow_dir = true) {
     }
 
     if (S_ISREG(st.st_mode)) {
-        if (!android::base::EndsWith(path, ".adb_key")) {
-            LOG(INFO) << "skipping non-adb_key '" << path << "'";
-            return false;
-        }
-
         return read_key_file(path);
     } else if (S_ISDIR(st.st_mode)) {
         if (!allow_dir) {
@@ -236,7 +231,12 @@ static bool read_keys(const std::string& path, bool allow_dir = true) {
                 continue;
             }
 
-            result |= read_keys((path + OS_PATH_SEPARATOR + name).c_str(), false);
+            if (!android::base::EndsWith(name, ".adb_key")) {
+                LOG(INFO) << "skipping non-adb_key '" << path << "/" << name << "'";
+                continue;
+            }
+
+            result |= read_key_file((path + OS_PATH_SEPARATOR + name));
         }
         return result;
     }
