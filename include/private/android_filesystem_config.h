@@ -157,15 +157,21 @@
 #define AID_MISC          9998  /* access to misc storage */
 #define AID_NOBODY        9999
 
-#define AID_APP          10000  /* first app user */
+#define AID_APP              10000 /* TODO: switch users over to AID_APP_START */
+#define AID_APP_START        10000 /* first app user */
+#define AID_APP_END          19999 /* last app user */
 
-#define AID_ISOLATED_START 99000 /* start of uids for fully isolated sandboxed processes */
-#define AID_ISOLATED_END   99999 /* end of uids for fully isolated sandboxed processes */
-
-#define AID_USER        100000  /* offset for uid ranges for each user */
+#define AID_CACHE_GID_START  20000 /* start of gids for apps to mark cached data */
+#define AID_CACHE_GID_END    29999 /* end of gids for apps to mark cached data */
 
 #define AID_SHARED_GID_START 50000 /* start of gids for apps in each user to share */
-#define AID_SHARED_GID_END   59999 /* start of gids for apps in each user to share */
+#define AID_SHARED_GID_END   59999 /* end of gids for apps in each user to share */
+
+#define AID_ISOLATED_START   99000 /* start of uids for fully isolated sandboxed processes */
+#define AID_ISOLATED_END     99999 /* end of uids for fully isolated sandboxed processes */
+
+#define AID_USER            100000 /* TODO: switch users over to AID_USER_OFFSET */
+#define AID_USER_OFFSET     100000 /* offset for uid ranges for each user */
 
 #if !defined(EXCLUDE_FS_CONFIG_STRUCTURES)
 /*
