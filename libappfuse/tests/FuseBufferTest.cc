@@ -20,6 +20,8 @@
 #include <string.h>
 #include <sys/socket.h>
 
+#include <thread>
+
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 
@@ -108,6 +110,30 @@ TEST(FuseMessageTest, Write_TooLong) {
 
 TEST(FuseMessageTest, Write_TooShort) {
   TestWriteInvalidLength(sizeof(fuse_in_header) - 1);
+}
+
+TEST(FuseMessageTest, ShortWriteAndRead) {
+  int raw_fds[2];
+  ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_STREAM, 0, raw_fds));
+
+  android::base::unique_fd fds[2];
+  fds[0].reset(raw_fds[0]);
+  fds[1].reset(raw_fds[1]);
+
+  const int send_buffer_size = 1024;
+  ASSERT_EQ(0, setsockopt(fds[0], SOL_SOCKET, SO_SNDBUF, &send_buffer_size,
+                          sizeof(int)));
+
+  bool succeed = false;
+  const int sender_fd = fds[0].get();
+  std::thread thread([sender_fd, &succeed] {
+    FuseRequest request;
+    request.header.len = 1024 * 4;
+    succeed = request.Write(sender_fd);
+  });
+  thread.detach();
+  FuseRequest request;
+  ASSERT_TRUE(request.Read(fds[1]));
 }
 
 TEST(FuseResponseTest, Reset) {
