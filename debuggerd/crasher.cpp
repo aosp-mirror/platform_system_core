@@ -17,47 +17,43 @@
 #define LOG_TAG "crasher"
 
 #include <assert.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
-#include <sched.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/cdefs.h>
 #include <sys/mman.h>
-#include <sys/ptrace.h>
-#include <sys/socket.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
+// We test both kinds of logging.
 #include <android/log.h>
-#include <cutils/sockets.h>
+#include <android-base/logging.h>
 
 #if defined(STATIC_CRASHER)
 #include "debuggerd/client.h"
 #endif
 
-#ifndef __unused
-#define __unused __attribute__((__unused__))
-#endif
+#define noinline __attribute__((__noinline__))
 
-extern const char* __progname;
+// Avoid name mangling so that stacks are more readable.
+extern "C" {
 
-extern "C" void crash1(void);
-extern "C" void crashnostack(void);
+void crash1(void);
+void crashnostack(void);
 
-static int do_action(const char* arg);
+int do_action(const char* arg);
 
-static void maybe_abort() {
+noinline void maybe_abort() {
     if (time(0) != 42) {
         abort();
     }
 }
 
-static char* smash_stack_dummy_buf;
-__attribute__ ((noinline)) static void smash_stack_dummy_function(volatile int* plen) {
+char* smash_stack_dummy_buf;
+noinline void smash_stack_dummy_function(volatile int* plen) {
   smash_stack_dummy_buf[*plen] = 0;
 }
 
@@ -65,8 +61,8 @@ __attribute__ ((noinline)) static void smash_stack_dummy_function(volatile int* 
 // compiler generates the proper stack guards around this function.
 // Assign local array address to global variable to force stack guards.
 // Use another noinline function to corrupt the stack.
-__attribute__ ((noinline)) static int smash_stack(volatile int* plen) {
-    printf("%s: deliberately corrupting stack...\n", __progname);
+noinline int smash_stack(volatile int* plen) {
+    printf("%s: deliberately corrupting stack...\n", getprogname());
 
     char buf[128];
     smash_stack_dummy_buf = buf;
@@ -75,91 +71,107 @@ __attribute__ ((noinline)) static int smash_stack(volatile int* plen) {
     return 0;
 }
 
-#if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Winfinite-recursion"
-#endif
 
-static void* global = 0; // So GCC doesn't optimize the tail recursion out of overflow_stack.
+void* global = 0; // So GCC doesn't optimize the tail recursion out of overflow_stack.
 
-__attribute__((noinline)) static void overflow_stack(void* p) {
+noinline void overflow_stack(void* p) {
     void* buf[1];
     buf[0] = p;
     global = buf;
     overflow_stack(&buf);
 }
 
-#if defined(__clang__)
 #pragma clang diagnostic pop
-#endif
 
-static void *noisy(void *x)
-{
-    char c = (uintptr_t) x;
-    for(;;) {
-        usleep(250*1000);
-        write(2, &c, 1);
-        if(c == 'C') *((volatile unsigned*) 0) = 42;
-    }
-    return NULL;
+noinline void* thread_callback(void* raw_arg) {
+    const char* arg = reinterpret_cast<const char*>(raw_arg);
+    return reinterpret_cast<void*>(static_cast<uintptr_t>(do_action(arg)));
 }
 
-static int ctest()
-{
-    pthread_t thr;
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    pthread_create(&thr, &attr, noisy, (void*) 'A');
-    pthread_create(&thr, &attr, noisy, (void*) 'B');
-    pthread_create(&thr, &attr, noisy, (void*) 'C');
-    for(;;) ;
-    return 0;
-}
-
-static void* thread_callback(void* raw_arg)
-{
-    return (void*) (uintptr_t) do_action((const char*) raw_arg);
-}
-
-static int do_action_on_thread(const char* arg)
-{
+noinline int do_action_on_thread(const char* arg) {
     pthread_t t;
-    pthread_create(&t, NULL, thread_callback, (void*) arg);
-    void* result = NULL;
+    pthread_create(&t, nullptr, thread_callback, const_cast<char*>(arg));
+    void* result = nullptr;
     pthread_join(t, &result);
-    return (int) (uintptr_t) result;
+    return reinterpret_cast<uintptr_t>(result);
 }
 
-__attribute__((noinline)) static int crash3(int a) {
-    *((int*) 0xdead) = a;
+noinline int crash3(int a) {
+    *reinterpret_cast<int*>(0xdead) = a;
     return a*4;
 }
 
-__attribute__((noinline)) static int crash2(int a) {
+noinline int crash2(int a) {
     a = crash3(a) + 2;
     return a*3;
 }
 
-__attribute__((noinline)) static int crash(int a) {
+noinline int crash(int a) {
     a = crash2(a) + 1;
     return a*2;
 }
 
-static void abuse_heap() {
+noinline void abuse_heap() {
     char buf[16];
-    free((void*) buf); // GCC is smart enough to warn about this, but we're doing it deliberately.
+    free(buf); // GCC is smart enough to warn about this, but we're doing it deliberately.
 }
 
-static void sigsegv_non_null() {
+noinline void sigsegv_non_null() {
     int* a = (int *)(&do_action);
     *a = 42;
 }
 
-static int do_action(const char* arg)
-{
-    fprintf(stderr, "%s: init pid=%d tid=%d\n", __progname, getpid(), gettid());
+noinline void fprintf_null() {
+    fprintf(nullptr, "oops");
+}
 
+noinline void readdir_null() {
+    readdir(nullptr);
+}
+
+noinline int strlen_null() {
+    char* sneaky_null = nullptr;
+    return strlen(sneaky_null);
+}
+
+static int usage() {
+    fprintf(stderr, "usage: %s KIND\n", getprogname());
+    fprintf(stderr, "\n");
+    fprintf(stderr, "where KIND is:\n");
+    fprintf(stderr, "  smash-stack           overwrite a -fstack-protector guard\n");
+    fprintf(stderr, "  stack-overflow        recurse until the stack overflows\n");
+    fprintf(stderr, "  heap-corruption       cause a libc abort by corrupting the heap\n");
+    fprintf(stderr, "  heap-usage            cause a libc abort by abusing a heap function\n");
+    fprintf(stderr, "  nostack               crash with a NULL stack pointer\n");
+    fprintf(stderr, "  abort                 call abort()\n");
+    fprintf(stderr, "  assert                call assert() without a function\n");
+    fprintf(stderr, "  assert2               call assert() with a function\n");
+    fprintf(stderr, "  exit                  call exit(1)\n");
+    fprintf(stderr, "  fortify               fail a _FORTIFY_SOURCE check\n");
+    fprintf(stderr, "  LOG_ALWAYS_FATAL      call liblog LOG_ALWAYS_FATAL\n");
+    fprintf(stderr, "  LOG_ALWAYS_FATAL_IF   call liblog LOG_ALWAYS_FATAL_IF\n");
+    fprintf(stderr, "  LOG-FATAL             call libbase LOG(FATAL)\n");
+    fprintf(stderr, "  SIGFPE                cause a SIGFPE\n");
+    fprintf(stderr, "  SIGSEGV               cause a SIGSEGV at address 0x0 (synonym: crash)\n");
+    fprintf(stderr, "  SIGSEGV-non-null      cause a SIGSEGV at a non-zero address\n");
+    fprintf(stderr, "  SIGSEGV-unmapped      mmap/munmap a region of memory and then attempt to access it\n");
+    fprintf(stderr, "  SIGTRAP               cause a SIGTRAP\n");
+    fprintf(stderr, "  fprintf-NULL          pass a null pointer to fprintf\n");
+    fprintf(stderr, "  readdir-NULL          pass a null pointer to readdir\n");
+    fprintf(stderr, "  strlen-NULL           pass a null pointer to strlen\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "prefix any of the above with 'thread-' to run on a new thread\n");
+    fprintf(stderr, "prefix any of the above with 'exhaustfd-' to exhaust\n");
+    fprintf(stderr, "all available file descriptors before crashing.\n");
+    fprintf(stderr, "prefix any of the above with 'wait-' to wait until input is received on stdin\n");
+
+    return EXIT_FAILURE;
+}
+
+noinline int do_action(const char* arg) {
+    // Prefixes.
     if (!strncmp(arg, "wait-", strlen("wait-"))) {
       char buf[1];
       TEMP_FAILURE_RETRY(read(STDIN_FILENO, buf, sizeof(buf)));
@@ -172,82 +184,66 @@ static int do_action(const char* arg)
       return do_action(arg + strlen("exhaustfd-"));
     } else if (!strncmp(arg, "thread-", strlen("thread-"))) {
         return do_action_on_thread(arg + strlen("thread-"));
-    } else if (!strcmp(arg, "SIGSEGV-non-null")) {
+    }
+
+    // Actions.
+    if (!strcasecmp(arg, "SIGSEGV-non-null")) {
         sigsegv_non_null();
-    } else if (!strcmp(arg, "smash-stack")) {
+    } else if (!strcasecmp(arg, "smash-stack")) {
         volatile int len = 128;
         return smash_stack(&len);
-    } else if (!strcmp(arg, "stack-overflow")) {
-        overflow_stack(NULL);
-    } else if (!strcmp(arg, "nostack")) {
+    } else if (!strcasecmp(arg, "stack-overflow")) {
+        overflow_stack(nullptr);
+    } else if (!strcasecmp(arg, "nostack")) {
         crashnostack();
-    } else if (!strcmp(arg, "ctest")) {
-        return ctest();
-    } else if (!strcmp(arg, "exit")) {
+    } else if (!strcasecmp(arg, "exit")) {
         exit(1);
-    } else if (!strcmp(arg, "crash") || !strcmp(arg, "SIGSEGV")) {
+    } else if (!strcasecmp(arg, "crash") || !strcmp(arg, "SIGSEGV")) {
         return crash(42);
-    } else if (!strcmp(arg, "abort")) {
+    } else if (!strcasecmp(arg, "abort")) {
         maybe_abort();
-    } else if (!strcmp(arg, "assert")) {
+    } else if (!strcasecmp(arg, "assert")) {
         __assert("some_file.c", 123, "false");
-    } else if (!strcmp(arg, "assert2")) {
+    } else if (!strcasecmp(arg, "assert2")) {
         __assert2("some_file.c", 123, "some_function", "false");
-    } else if (!strcmp(arg, "fortify")) {
+    } else if (!strcasecmp(arg, "fortify")) {
         char buf[10];
         __read_chk(-1, buf, 32, 10);
         while (true) pause();
-    } else if (!strcmp(arg, "LOG_ALWAYS_FATAL")) {
+    } else if (!strcasecmp(arg, "LOG(FATAL)")) {
+        LOG(FATAL) << "hello " << 123;
+    } else if (!strcasecmp(arg, "LOG_ALWAYS_FATAL")) {
         LOG_ALWAYS_FATAL("hello %s", "world");
-    } else if (!strcmp(arg, "LOG_ALWAYS_FATAL_IF")) {
+    } else if (!strcasecmp(arg, "LOG_ALWAYS_FATAL_IF")) {
         LOG_ALWAYS_FATAL_IF(true, "hello %s", "world");
-    } else if (!strcmp(arg, "SIGFPE")) {
+    } else if (!strcasecmp(arg, "SIGFPE")) {
         raise(SIGFPE);
         return EXIT_SUCCESS;
-    } else if (!strcmp(arg, "SIGTRAP")) {
+    } else if (!strcasecmp(arg, "SIGTRAP")) {
         raise(SIGTRAP);
         return EXIT_SUCCESS;
-    } else if (!strcmp(arg, "heap-usage")) {
+    } else if (!strcasecmp(arg, "fprintf-NULL")) {
+        fprintf_null();
+    } else if (!strcasecmp(arg, "readdir-NULL")) {
+        readdir_null();
+    } else if (!strcasecmp(arg, "strlen-NULL")) {
+        return strlen_null();
+    } else if (!strcasecmp(arg, "heap-usage")) {
         abuse_heap();
-    } else if (!strcmp(arg, "SIGSEGV-unmapped")) {
-        char* map = reinterpret_cast<char*>(mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0));
+    } else if (!strcasecmp(arg, "SIGSEGV-unmapped")) {
+        char* map = reinterpret_cast<char*>(mmap(nullptr, sizeof(int), PROT_READ | PROT_WRITE,
+                                                 MAP_SHARED | MAP_ANONYMOUS, -1, 0));
         munmap(map, sizeof(int));
         map[0] = '8';
+    } else {
+        return usage();
     }
 
-    fprintf(stderr, "%s OP\n", __progname);
-    fprintf(stderr, "where OP is:\n");
-    fprintf(stderr, "  smash-stack           overwrite a stack-guard canary\n");
-    fprintf(stderr, "  stack-overflow        recurse until the stack overflows\n");
-    fprintf(stderr, "  heap-corruption       cause a libc abort by corrupting the heap\n");
-    fprintf(stderr, "  heap-usage            cause a libc abort by abusing a heap function\n");
-    fprintf(stderr, "  nostack               crash with a NULL stack pointer\n");
-    fprintf(stderr, "  ctest                 (obsoleted by thread-crash?)\n");
-    fprintf(stderr, "  exit                  call exit(1)\n");
-    fprintf(stderr, "  abort                 call abort()\n");
-    fprintf(stderr, "  assert                call assert() without a function\n");
-    fprintf(stderr, "  assert2               call assert() with a function\n");
-    fprintf(stderr, "  fortify               fail a _FORTIFY_SOURCE check\n");
-    fprintf(stderr, "  LOG_ALWAYS_FATAL      call LOG_ALWAYS_FATAL\n");
-    fprintf(stderr, "  LOG_ALWAYS_FATAL_IF   call LOG_ALWAYS_FATAL\n");
-    fprintf(stderr, "  SIGFPE                cause a SIGFPE\n");
-    fprintf(stderr, "  SIGSEGV               cause a SIGSEGV at address 0x0 (synonym: crash)\n");
-    fprintf(stderr, "  SIGSEGV-non-null      cause a SIGSEGV at a non-zero address\n");
-    fprintf(stderr, "  SIGSEGV-unmapped      mmap/munmap a region of memory and then attempt to access it\n");
-    fprintf(stderr, "  SIGTRAP               cause a SIGTRAP\n");
-    fprintf(stderr, "prefix any of the above with 'thread-' to not run\n");
-    fprintf(stderr, "on the process' main thread.\n");
-    fprintf(stderr, "prefix any of the above with 'exhaustfd-' to exhaust\n");
-    fprintf(stderr, "all available file descriptors before crashing.\n");
-    fprintf(stderr, "prefix any of the above with 'wait-' to wait until input is received on stdin\n");
-
+    fprintf(stderr, "%s: exiting normally!\n", getprogname());
     return EXIT_SUCCESS;
 }
 
-int main(int argc, char **argv)
-{
-    fprintf(stderr, "%s: built at " __TIME__ "!@\n", __progname);
-
+int main(int argc, char** argv) {
 #if defined(STATIC_CRASHER)
     debuggerd_callbacks_t callbacks = {
       .get_abort_message = []() {
@@ -265,11 +261,10 @@ int main(int argc, char **argv)
     debuggerd_init(&callbacks);
 #endif
 
-    if (argc > 1) {
-        return do_action(argv[1]);
-    } else {
-        crash1();
-    }
+    if (argc == 1) crash1();
+    else if (argc == 2) return do_action(argv[1]);
 
-    return 0;
+    return usage();
 }
+
+};
