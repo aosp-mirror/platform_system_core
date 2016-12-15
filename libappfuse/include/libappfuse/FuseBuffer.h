@@ -34,9 +34,7 @@ class FuseMessage {
   bool Read(int fd);
   bool Write(int fd) const;
  private:
-  bool CheckPacketSize(size_t size, const char* name) const;
-  bool CheckResult(int result, const char* operation_name) const;
-  bool CheckHeaderLength(int result, const char* operation_name) const;
+  bool CheckHeaderLength(const char* name) const;
 };
 
 // FuseRequest represents file operation requests from /dev/fuse. It starts
