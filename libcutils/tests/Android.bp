@@ -26,7 +26,8 @@ cc_defaults {
                 "trace-dev_test.cpp",
                 "test_str_parms.cpp",
                 "android_get_control_socket_test.cpp",
-                "android_get_control_file_test.cpp"
+                "android_get_control_file_test.cpp",
+                "multiuser_test.cpp"
             ],
         },
 

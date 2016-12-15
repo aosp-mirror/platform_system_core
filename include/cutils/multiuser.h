@@ -23,19 +23,19 @@
 extern "C" {
 #endif
 
-// NOTE: keep in sync with android.os.UserId
-
-#define MULTIUSER_APP_PER_USER_RANGE 100000
-#define MULTIUSER_FIRST_SHARED_APPLICATION_GID 50000
-#define MULTIUSER_FIRST_APPLICATION_UID 10000
-
 typedef uid_t userid_t;
 typedef uid_t appid_t;
 
 extern userid_t multiuser_get_user_id(uid_t uid);
 extern appid_t multiuser_get_app_id(uid_t uid);
-extern uid_t multiuser_get_uid(userid_t userId, appid_t appId);
-extern appid_t multiuser_get_shared_app_gid(uid_t uid);
+
+extern uid_t multiuser_get_uid(userid_t user_id, appid_t app_id);
+
+extern gid_t multiuser_get_cache_gid(userid_t user_id, appid_t app_id);
+extern gid_t multiuser_get_shared_gid(userid_t user_id, appid_t app_id);
+
+/* TODO: switch callers over to multiuser_get_shared_gid() */
+extern gid_t multiuser_get_shared_app_gid(uid_t uid);
 
 #ifdef __cplusplus
 }
