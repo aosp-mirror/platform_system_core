@@ -61,4 +61,4 @@ bool SetProperty(const std::string& key, const std::string& value);
 } // namespace base
 } // namespace android
 
-#endif  // ANDROID_BASE_MEMORY_H
+#endif  // ANDROID_BASE_PROPERTIES_H
