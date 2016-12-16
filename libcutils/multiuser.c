@@ -15,21 +15,36 @@
  */
 
 #include <cutils/multiuser.h>
+#include <private/android_filesystem_config.h>
 
 userid_t multiuser_get_user_id(uid_t uid) {
-    return uid / MULTIUSER_APP_PER_USER_RANGE;
+    return uid / AID_USER_OFFSET;
 }
 
 appid_t multiuser_get_app_id(uid_t uid) {
-    return uid % MULTIUSER_APP_PER_USER_RANGE;
+    return uid % AID_USER_OFFSET;
 }
 
-uid_t multiuser_get_uid(userid_t userId, appid_t appId) {
-    return userId * MULTIUSER_APP_PER_USER_RANGE + (appId % MULTIUSER_APP_PER_USER_RANGE);
+uid_t multiuser_get_uid(userid_t user_id, appid_t app_id) {
+    return (user_id * AID_USER_OFFSET) + (app_id % AID_USER_OFFSET);
 }
 
-appid_t multiuser_get_shared_app_gid(uid_t id) {
-  return MULTIUSER_FIRST_SHARED_APPLICATION_GID + (id % MULTIUSER_APP_PER_USER_RANGE)
-          - MULTIUSER_FIRST_APPLICATION_UID;
+gid_t multiuser_get_cache_gid(userid_t user_id, appid_t app_id) {
+    if (app_id >= AID_APP_START && app_id <= AID_APP_END) {
+        return multiuser_get_uid(user_id, (app_id - AID_APP_START) + AID_CACHE_GID_START);
+    } else {
+        return -1;
+    }
+}
 
+gid_t multiuser_get_shared_gid(userid_t user_id, appid_t app_id) {
+    if (app_id >= AID_APP_START && app_id <= AID_APP_END) {
+        return multiuser_get_uid(user_id, (app_id - AID_APP_START) + AID_SHARED_GID_START);
+    } else {
+        return -1;
+    }
+}
+
+gid_t multiuser_get_shared_app_gid(uid_t uid) {
+    return multiuser_get_shared_gid(multiuser_get_user_id(uid), multiuser_get_app_id(uid));
 }

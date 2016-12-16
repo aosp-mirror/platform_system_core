@@ -182,7 +182,7 @@ const char *LogStatistics::uidToName(uid_t uid) const {
     }
 
     // Parse /data/system/packages.list
-    uid_t userId = uid % AID_USER;
+    uid_t userId = uid % AID_USER_OFFSET;
     const char *name = android::uidToName(userId);
     if (!name && (userId > (AID_SHARED_GID_START - AID_APP))) {
         name = android::uidToName(userId - (AID_SHARED_GID_START - AID_APP));
