@@ -30,7 +30,7 @@ liblog_target_sources = [
     "event_tag_map.cpp",
     "config_read.c",
     "log_time.cpp",
-    "log_is_loggable.c",
+    "properties.c",
     "logprint.c",
     "pmsg_reader.c",
     "pmsg_writer.c",
