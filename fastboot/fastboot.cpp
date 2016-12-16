@@ -1742,6 +1742,14 @@ int main(int argc, char **argv)
         } else if(!strcmp(*argv, "set_active")) {
             require(2);
             std::string slot = verify_slot(transport, std::string(argv[1]), false);
+            // Legacy support: verify_slot() removes leading underscores, we need to put them back
+            // in for old bootloaders. Legacy bootloaders do not have the slot-count variable but
+            // do have slot-suffixes.
+            std::string var;
+            if (!fb_getvar(transport, "slot-count", &var) &&
+                    fb_getvar(transport, "slot-suffixes", &var)) {
+                slot = "_" + slot;
+            }
             fb_set_active(slot.c_str());
             skip(2);
         } else if(!strcmp(*argv, "oem")) {
