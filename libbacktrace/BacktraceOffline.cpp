@@ -34,6 +34,7 @@ extern "C" {
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/macros.h>
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 #include <ziparchive/zip_archive.h>
@@ -534,6 +535,10 @@ bool BacktraceOffline::ReadReg(size_t reg, uint64_t* value) {
     default:
       result = false;
   }
+#else
+  UNUSED(reg);
+  UNUSED(value);
+  result = false;
 #endif
   return result;
 }
