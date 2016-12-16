@@ -59,6 +59,7 @@ public:
     LogBufferElement(log_id_t log_id, log_time realtime,
                      uid_t uid, pid_t pid, pid_t tid,
                      const char *msg, unsigned short len);
+    LogBufferElement(const LogBufferElement &elem);
     virtual ~LogBufferElement();
 
     bool isBinary(void) const {
@@ -79,6 +80,7 @@ public:
         return mDropped = value;
     }
     unsigned short getMsgLen() const { return mMsg ? mMsgLen : 0; }
+    const char* getMsg() const { return mMsg; }
     uint64_t getSequence(void) const { return mSequence; }
     static uint64_t getCurrentSequence(void) { return sequence.load(memory_order_relaxed); }
     log_time getRealTime(void) const { return mRealTime; }
