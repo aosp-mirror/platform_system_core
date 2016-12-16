@@ -892,7 +892,7 @@ static void update_verity_table_blk_device(char *blk_device, char **table)
     *table = strdup(result.c_str());
 }
 
-int fs_mgr_setup_verity(struct fstab_rec *fstab)
+int fs_mgr_setup_verity(struct fstab_rec *fstab, bool verify_dev)
 {
     int retval = FS_MGR_SETUP_VERITY_FAIL;
     int fd = -1;
@@ -1043,7 +1043,7 @@ loaded:
     verity_blk_name = 0;
 
     // make sure we've set everything up properly
-    if (test_access(fstab->blk_device) < 0) {
+    if (verify_dev && test_access(fstab->blk_device) < 0) {
         goto out;
     }
 
