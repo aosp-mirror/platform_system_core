@@ -11,7 +11,7 @@ mkdir -p $TMPDIR
 LOGROOT=/data/bootchart
 TARBALL=bootchart.tgz
 
-FILES="header proc_stat.log proc_ps.log proc_diskstats.log kernel_pacct"
+FILES="header proc_stat.log proc_ps.log proc_diskstats.log"
 
 for f in $FILES; do
     adb "${@}" pull $LOGROOT/$f $TMPDIR/$f 2>&1 > /dev/null
