@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-int do_bootchart_init(const std::vector<std::string>& args);
+int do_bootchart(const std::vector<std::string>& args);
 void bootchart_sample(int* timeout);
 
 #endif /* _BOOTCHART_H */

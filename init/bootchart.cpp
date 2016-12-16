@@ -34,29 +34,25 @@
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/stringprintf.h>
 
-#define LOG_ROOT        "/data/bootchart"
-#define LOG_STAT        LOG_ROOT"/proc_stat.log"
-#define LOG_PROCS       LOG_ROOT"/proc_ps.log"
-#define LOG_DISK        LOG_ROOT"/proc_diskstats.log"
-#define LOG_HEADER      LOG_ROOT"/header"
-#define LOG_ACCT        LOG_ROOT"/kernel_pacct"
+using android::base::StringPrintf;
 
-#define LOG_STARTFILE   LOG_ROOT"/start"
-#define LOG_STOPFILE    LOG_ROOT"/stop"
+static constexpr const char* LOG_STAT = "/data/bootchart/proc_stat.log";
+static constexpr const char* LOG_PROC = "/data/bootchart/proc_ps.log";
+static constexpr const char* LOG_DISK = "/data/bootchart/proc_diskstats.log";
+static constexpr const char* LOG_HEADER = "/data/bootchart/header";
 
 // Polling period in ms.
-static const int BOOTCHART_POLLING_MS = 200;
-
-// Max polling time in seconds.
-static const int BOOTCHART_MAX_TIME_SEC = 10*60;
+static constexpr int BOOTCHART_POLLING_MS = 200;
 
 static long long g_last_bootchart_time;
-static int g_remaining_samples;
 
-static FILE* log_stat;
-static FILE* log_procs;
-static FILE* log_disks;
+static bool g_bootcharting = false;
+
+static FILE* g_stat_log;
+static FILE* g_proc_log;
+static FILE* g_disk_log;
 
 static long long get_uptime_jiffies() {
     std::string uptime;
@@ -99,12 +95,12 @@ static void log_header() {
     fclose(out);
 }
 
-static void do_log_uptime(FILE* log) {
+static void log_uptime(FILE* log) {
     fprintf(log, "%lld\n", get_uptime_jiffies());
 }
 
-static void do_log_file(FILE* log, const char* procfile) {
-    do_log_uptime(log);
+static void log_file(FILE* log, const char* procfile) {
+    log_uptime(log);
 
     std::string content;
     if (android::base::ReadFileToString(procfile, &content)) {
@@ -112,161 +108,115 @@ static void do_log_file(FILE* log, const char* procfile) {
     }
 }
 
-static void do_log_procs(FILE* log) {
-    do_log_uptime(log);
+static void log_processes() {
+    log_uptime(g_proc_log);
 
     std::unique_ptr<DIR, int(*)(DIR*)> dir(opendir("/proc"), closedir);
     struct dirent* entry;
     while ((entry = readdir(dir.get())) != NULL) {
         // Only match numeric values.
-        char* end;
-        int pid = strtol(entry->d_name, &end, 10);
-        if (end != NULL && end > entry->d_name && *end == 0) {
-            char filename[32];
+        int pid = atoi(entry->d_name);
+        if (pid == 0) continue;
 
-            // /proc/<pid>/stat only has truncated task names, so get the full
-            // name from /proc/<pid>/cmdline.
-            snprintf(filename, sizeof(filename), "/proc/%d/cmdline", pid);
-            std::string cmdline;
-            android::base::ReadFileToString(filename, &cmdline);
-            const char* full_name = cmdline.c_str(); // So we stop at the first NUL.
-
-            // Read process stat line.
-            snprintf(filename, sizeof(filename), "/proc/%d/stat", pid);
-            std::string stat;
-            if (android::base::ReadFileToString(filename, &stat)) {
-                if (!cmdline.empty()) {
-                    // Substitute the process name with its real name.
-                    size_t open = stat.find('(');
-                    size_t close = stat.find_last_of(')');
-                    if (open != std::string::npos && close != std::string::npos) {
-                        stat.replace(open + 1, close - open - 1, full_name);
-                    }
-                }
-                fputs(stat.c_str(), log);
-            }
-        }
-    }
-
-    fputc('\n', log);
-}
-
-static int bootchart_init() {
-    int timeout = 0;
-
-    std::string start;
-    android::base::ReadFileToString(LOG_STARTFILE, &start);
-    if (!start.empty()) {
-        timeout = atoi(start.c_str());
-    } else {
-        // When running with emulator, androidboot.bootchart=<timeout>
-        // might be passed by as kernel parameters to specify the bootchart
-        // timeout. this is useful when using -wipe-data since the /data
-        // partition is fresh.
+        // /proc/<pid>/stat only has truncated task names, so get the full
+        // name from /proc/<pid>/cmdline.
         std::string cmdline;
-        const char* s;
-        android::base::ReadFileToString("/proc/cmdline", &cmdline);
-#define KERNEL_OPTION  "androidboot.bootchart="
-        if ((s = strstr(cmdline.c_str(), KERNEL_OPTION)) != NULL) {
-            timeout = atoi(s + sizeof(KERNEL_OPTION) - 1);
+        android::base::ReadFileToString(StringPrintf("/proc/%d/cmdline", pid), &cmdline);
+        const char* full_name = cmdline.c_str(); // So we stop at the first NUL.
+
+        // Read process stat line.
+        std::string stat;
+        if (android::base::ReadFileToString(StringPrintf("/proc/%d/stat", pid), &stat)) {
+            if (!cmdline.empty()) {
+                // Substitute the process name with its real name.
+                size_t open = stat.find('(');
+                size_t close = stat.find_last_of(')');
+                if (open != std::string::npos && close != std::string::npos) {
+                    stat.replace(open + 1, close - open - 1, full_name);
+                }
+            }
+            fputs(stat.c_str(), g_proc_log);
         }
     }
-    if (timeout == 0)
+
+    fputc('\n', g_proc_log);
+}
+
+static int do_bootchart_start() {
+    // We don't care about the content, but we do care that /data/bootchart/enabled actually exists.
+    std::string start;
+    if (!android::base::ReadFileToString("/data/bootchart/enabled", &start)) {
+        LOG(VERBOSE) << "Not bootcharting";
         return 0;
+    }
 
-    if (timeout > BOOTCHART_MAX_TIME_SEC)
-        timeout = BOOTCHART_MAX_TIME_SEC;
-
-    int count = (timeout*1000 + BOOTCHART_POLLING_MS-1)/BOOTCHART_POLLING_MS;
-
-    log_stat = fopen(LOG_STAT, "we");
-    if (log_stat == NULL) {
+    // Open log files.
+    std::unique_ptr<FILE, decltype(&fclose)> stat_log(fopen(LOG_STAT, "we"), fclose);
+    if (!stat_log) {
+        PLOG(ERROR) << "Bootcharting couldn't open " << LOG_STAT;
         return -1;
     }
-    log_procs = fopen(LOG_PROCS, "we");
-    if (log_procs == NULL) {
-        fclose(log_stat);
+    std::unique_ptr<FILE, decltype(&fclose)> proc_log(fopen(LOG_PROC, "we"), fclose);
+    if (!proc_log) {
+        PLOG(ERROR) << "Bootcharting couldn't open " << LOG_PROC;
         return -1;
     }
-    log_disks = fopen(LOG_DISK, "we");
-    if (log_disks == NULL) {
-        fclose(log_stat);
-        fclose(log_procs);
+    std::unique_ptr<FILE, decltype(&fclose)> disk_log(fopen(LOG_DISK, "we"), fclose);
+    if (!disk_log) {
+        PLOG(ERROR) << "Bootcharting couldn't open " << LOG_DISK;
         return -1;
     }
 
-    // Create kernel process accounting file.
-    close(open(LOG_ACCT, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644));
-    acct(LOG_ACCT);
-
+    LOG(INFO) << "Bootcharting started";
+    g_stat_log = stat_log.release();
+    g_proc_log = proc_log.release();
+    g_disk_log = disk_log.release();
+    g_bootcharting = true;
     log_header();
-    return count;
-}
-
-int do_bootchart_init(const std::vector<std::string>& args) {
-    g_remaining_samples = bootchart_init();
-    if (g_remaining_samples < 0) {
-        PLOG(ERROR) << "Bootcharting initialization failed";
-    } else if (g_remaining_samples > 0) {
-        LOG(INFO) << "Bootcharting started (will run for "
-                  << ((g_remaining_samples * BOOTCHART_POLLING_MS) / 1000) << " s).";
-    } else {
-        LOG(VERBOSE) << "Not bootcharting.";
-    }
-    return 0;
-}
-
-static int bootchart_step() {
-    do_log_file(log_stat,   "/proc/stat");
-    do_log_file(log_disks,  "/proc/diskstats");
-    do_log_procs(log_procs);
-
-    // Stop if /data/bootchart/stop contains 1.
-    std::string stop;
-    if (android::base::ReadFileToString(LOG_STOPFILE, &stop) && stop == "1") {
-        return -1;
-    }
 
     return 0;
 }
 
-/* called to get time (in ms) used by bootchart */
-static long long bootchart_gettime() {
-    return 10LL*get_uptime_jiffies();
+static void do_bootchart_step() {
+    log_file(g_stat_log, "/proc/stat");
+    log_file(g_disk_log, "/proc/diskstats");
+    log_processes();
 }
 
-static void bootchart_finish() {
-    unlink(LOG_STOPFILE);
-    fclose(log_stat);
-    fclose(log_disks);
-    fclose(log_procs);
-    acct(NULL);
+static int do_bootchart_stop() {
+    if (!g_bootcharting) return 0;
+
     LOG(INFO) << "Bootcharting finished";
+    g_bootcharting = false;
+    fclose(g_stat_log);
+    fclose(g_disk_log);
+    fclose(g_proc_log);
+    return 0;
+}
+
+int do_bootchart(const std::vector<std::string>& args) {
+    if (args[1] == "start") return do_bootchart_start();
+    return do_bootchart_stop();
 }
 
 void bootchart_sample(int* timeout) {
     // Do we have any more bootcharting to do?
-    if (g_remaining_samples <= 0) {
-        return;
-    }
+    if (!g_bootcharting) return;
 
-    long long current_time = bootchart_gettime();
+    long long current_time = 10LL * get_uptime_jiffies();
     int elapsed_time = current_time - g_last_bootchart_time;
 
     if (elapsed_time >= BOOTCHART_POLLING_MS) {
-        // Count missed samples.
         while (elapsed_time >= BOOTCHART_POLLING_MS) {
             elapsed_time -= BOOTCHART_POLLING_MS;
-            g_remaining_samples--;
         }
-        // Count may be negative, take a sample anyway.
+
         g_last_bootchart_time = current_time;
-        if (bootchart_step() < 0 || g_remaining_samples <= 0) {
-            bootchart_finish();
-            g_remaining_samples = 0;
-        }
+        do_bootchart_step();
     }
-    if (g_remaining_samples > 0) {
+
+    // Schedule another?
+    if (g_bootcharting) {
         int remaining_time = BOOTCHART_POLLING_MS - elapsed_time;
         if (*timeout < 0 || *timeout > remaining_time) {
             *timeout = remaining_time;
