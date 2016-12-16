@@ -33,6 +33,7 @@
 #include "LogBuffer.h"
 #include "LogKlog.h"
 #include "LogReader.h"
+#include "LogUtils.h"
 
 #ifndef __predict_false
 #define __predict_false(exp) __builtin_expect((exp) != 0, 0)
@@ -110,7 +111,63 @@ LogBuffer::LogBuffer(LastLogTimes *times):
         mTimes(*times) {
     pthread_mutex_init(&mLogElementsLock, NULL);
 
+    log_id_for_each(i) {
+        lastLoggedElements[i] = NULL;
+        droppedElements[i] = NULL;
+    }
+
     init();
+}
+
+LogBuffer::~LogBuffer() {
+    log_id_for_each(i) {
+        delete lastLoggedElements[i];
+        delete droppedElements[i];
+    }
+}
+
+static bool identical(LogBufferElement* elem, LogBufferElement* last) {
+    // is it mostly identical?
+//  if (!elem) return false;
+    unsigned short lenl = elem->getMsgLen();
+    if (!lenl) return false;
+//  if (!last) return false;
+    unsigned short lenr = last->getMsgLen();
+    if (!lenr) return false;
+//  if (elem->getLogId() != last->getLogId()) return false;
+    if (elem->getUid() != last->getUid()) return false;
+    if (elem->getPid() != last->getPid()) return false;
+    if (elem->getTid() != last->getTid()) return false;
+
+    // last is more than a minute old, stop squashing identical messages
+    if (elem->getRealTime().nsec() >
+        (last->getRealTime().nsec() + 60 * NS_PER_SEC)) return false;
+
+    // Identical message
+    const char* msgl = elem->getMsg();
+    const char* msgr = last->getMsg();
+    if ((lenl == lenr) && !fastcmp<memcmp>(msgl, msgr, lenl)) return true;
+
+    // audit message (except sequence number) identical?
+    static const char avc[] = "): avc: ";
+
+    if (last->isBinary()) {
+        if (fastcmp<memcmp>(msgl, msgr,
+                            sizeof(android_log_event_string_t) -
+                                sizeof(int32_t))) return false;
+        msgl += sizeof(android_log_event_string_t);
+        lenl -= sizeof(android_log_event_string_t);
+        msgr += sizeof(android_log_event_string_t);
+        lenr -= sizeof(android_log_event_string_t);
+    }
+    const char *avcl = android::strnstr(msgl, lenl, avc);
+    if (!avcl) return false;
+    lenl -= avcl - msgl;
+    const char *avcr = android::strnstr(msgr, lenr, avc);
+    if (!avcr) return false;
+    lenr -= avcr - msgr;
+    if (lenl != lenr) return false;
+    return !fastcmp<memcmp>(avcl + strlen(avc), avcr + strlen(avc), lenl);
 }
 
 int LogBuffer::log(log_id_t log_id, log_time realtime,
@@ -145,14 +202,57 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
     }
 
     pthread_mutex_lock(&mLogElementsLock);
+    LogBufferElement* currentLast = lastLoggedElements[log_id];
+    if (currentLast) {
+        LogBufferElement *dropped = droppedElements[log_id];
+        unsigned short count = dropped ? dropped->getDropped() : 0;
+        if (identical(elem, currentLast)) {
+            if (dropped) {
+                if (count == USHRT_MAX) {
+                    log(dropped);
+                    count = 1;
+                } else {
+                    delete dropped;
+                    ++count;
+                }
+            }
+            if (count) {
+                stats.add(currentLast);
+                stats.subtract(currentLast);
+                currentLast->setDropped(count);
+            }
+            droppedElements[log_id] = currentLast;
+            lastLoggedElements[log_id] = elem;
+            pthread_mutex_unlock(&mLogElementsLock);
+            return len;
+        }
+        if (dropped) {
+            log(dropped);
+            droppedElements[log_id] = NULL;
+        }
+        if (count) {
+            log(currentLast);
+        } else {
+            delete currentLast;
+        }
+    }
+    lastLoggedElements[log_id] = new LogBufferElement(*elem);
 
+    log(elem);
+    pthread_mutex_unlock(&mLogElementsLock);
+
+    return len;
+}
+
+// assumes mLogElementsLock held, owns elem, will look after garbage collection
+void LogBuffer::log(LogBufferElement* elem) {
     // Insert elements in time sorted order if possible
     //  NB: if end is region locked, place element at end of list
     LogBufferElementCollection::iterator it = mLogElements.end();
     LogBufferElementCollection::iterator last = it;
     while (last != mLogElements.begin()) {
         --it;
-        if ((*it)->getRealTime() <= realtime) {
+        if ((*it)->getRealTime() <= elem->getRealTime()) {
             break;
         }
         last = it;
@@ -169,7 +269,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
 
         LastLogTimes::iterator times = mTimes.begin();
         while(times != mTimes.end()) {
-            LogTimeEntry *entry = (*times);
+            LogTimeEntry* entry = (*times);
             if (entry->owned_Locked()) {
                 if (!entry->mNonBlock) {
                     end_always = true;
@@ -187,17 +287,14 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
                 || (end_set && (end >= (*last)->getSequence()))) {
             mLogElements.push_back(elem);
         } else {
-            mLogElements.insert(last,elem);
+            mLogElements.insert(last, elem);
         }
 
         LogTimeEntry::unlock();
     }
 
     stats.add(elem);
-    maybePrune(log_id);
-    pthread_mutex_unlock(&mLogElementsLock);
-
-    return len;
+    maybePrune(elem->getLogId());
 }
 
 // Prune at most 10% of the log entries or maxPrune, whichever is less.
