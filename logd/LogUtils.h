@@ -40,6 +40,9 @@ char *tidToName(pid_t tid);
 // Furnished in main.cpp. Thread safe.
 const char *tagToName(size_t *len, uint32_t tag);
 
+// Furnished by LogKlog.cpp.
+const char* strnstr(const char* s, size_t len, const char* needle);
+
 }
 
 // Furnished in LogCommand.cpp

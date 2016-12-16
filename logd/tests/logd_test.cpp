@@ -778,3 +778,102 @@ TEST(logd, SNDTIMEO) {
 
     close(fd);
 }
+
+static inline int32_t get4LE(const char* src)
+{
+    return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
+}
+
+void __android_log_btwrite_multiple__helper(int count) {
+    log_time ts(CLOCK_MONOTONIC);
+
+    struct logger_list *logger_list;
+    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
+        LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, 0)));
+
+    log_time ts1(CLOCK_MONOTONIC);
+
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        // child
+        for (int i = count; i; --i) {
+            ASSERT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
+            usleep(100);
+        }
+        ASSERT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts1, sizeof(ts1)));
+        usleep(1000000);
+
+        _exit(0);
+    }
+
+    siginfo_t info{};
+    ASSERT_EQ(0, TEMP_FAILURE_RETRY(waitid(P_PID, pid, &info, WEXITED)));
+
+    int expected_count = (count < 2) ? count : 2;
+    int expected_chatty_count = (count <= 2) ? 0 : 1;
+    int expected_expire_count = (count < 2) ? 0 : (count - 2);
+
+    count = 0;
+    int second_count = 0;
+    int chatty_count = 0;
+    int expire_count = 0;
+
+    for (;;) {
+        log_msg log_msg;
+        if (android_logger_list_read(logger_list, &log_msg) <= 0) break;
+
+        if ((log_msg.entry.pid != pid) ||
+            (log_msg.entry.len < (4 + 1 + 8)) ||
+            (log_msg.id() != LOG_ID_EVENTS)) continue;
+
+        char *eventData = log_msg.msg();
+        if (!eventData) continue;
+
+        uint32_t tag = get4LE(eventData);
+
+        if ((eventData[4] == EVENT_TYPE_LONG) && (log_msg.entry.len == (4 + 1 + 8))) {
+            if (tag != 0) continue;
+
+            log_time tx(eventData + 4 + 1);
+            if (ts == tx) {
+                ++count;
+            } else if (ts1 == tx) {
+                ++second_count;
+            }
+        } else if (eventData[4] == EVENT_TYPE_STRING) {
+            // chatty
+            if (tag != 1004) continue;
+            ++chatty_count;
+            // int len = get4LE(eventData + 4 + 1);
+            const char *cp = strstr(eventData + 4 + 1 + 4, " expire ");
+            if (!cp) continue;
+            unsigned val = 0;
+            sscanf(cp, " expire %u lines", &val);
+            expire_count += val;
+        }
+    }
+
+    EXPECT_EQ(expected_count, count);
+    EXPECT_EQ(1, second_count);
+    EXPECT_EQ(expected_chatty_count, chatty_count);
+    EXPECT_EQ(expected_expire_count, expire_count);
+
+    android_logger_list_close(logger_list);
+}
+
+TEST(logd, multiple_test_1) {
+    __android_log_btwrite_multiple__helper(1);
+}
+
+TEST(logd, multiple_test_2) {
+    __android_log_btwrite_multiple__helper(2);
+}
+
+TEST(logd, multiple_test_3) {
+    __android_log_btwrite_multiple__helper(3);
+}
+
+TEST(logd, multiple_test_10) {
+    __android_log_btwrite_multiple__helper(10);
+}
