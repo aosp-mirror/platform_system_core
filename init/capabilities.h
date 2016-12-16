@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef _INIT_CAPABILITIES_H
+#define _INIT_CAPABILITIES_H
+
 #include <linux/capability.h>
 
 #include <bitset>
@@ -20,4 +23,8 @@
 using CapSet = std::bitset<CAP_LAST_CAP + 1>;
 
 int LookupCap(const std::string& cap_name);
+bool CapAmbientSupported();
+unsigned int GetLastValidCap();
 bool SetCapsForExec(const CapSet& to_keep);
+
+#endif  // _INIT_CAPABILITIES_H
