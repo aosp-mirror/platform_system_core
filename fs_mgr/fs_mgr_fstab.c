@@ -62,29 +62,31 @@ static struct flag_list mount_flags[] = {
 };
 
 static struct flag_list fs_mgr_flags[] = {
-    { "wait",        MF_WAIT },
-    { "check",       MF_CHECK },
-    { "encryptable=",MF_CRYPT },
-    { "forceencrypt=",MF_FORCECRYPT },
-    { "fileencryption=",MF_FILEENCRYPTION },
-    { "forcefdeorfbe=",MF_FORCEFDEORFBE },
-    { "nonremovable",MF_NONREMOVABLE },
-    { "voldmanaged=",MF_VOLDMANAGED},
-    { "length=",     MF_LENGTH },
-    { "recoveryonly",MF_RECOVERYONLY },
-    { "swapprio=",   MF_SWAPPRIO },
-    { "zramsize=",   MF_ZRAMSIZE },
-    { "max_comp_streams=",   MF_MAX_COMP_STREAMS },
-    { "verify",      MF_VERIFY },
-    { "noemulatedsd", MF_NOEMULATEDSD },
-    { "notrim",       MF_NOTRIM },
-    { "formattable", MF_FORMATTABLE },
-    { "slotselect",  MF_SLOTSELECT },
-    { "nofail",      MF_NOFAIL },
-    { "latemount",   MF_LATEMOUNT },
-    { "reservedsize=", MF_RESERVEDSIZE },
-    { "defaults",    0 },
-    { 0,             0 },
+    { "wait",               MF_WAIT },
+    { "check",              MF_CHECK },
+    { "encryptable=",       MF_CRYPT },
+    { "forceencrypt=",      MF_FORCECRYPT },
+    { "fileencryption=",    MF_FILEENCRYPTION },
+    { "forcefdeorfbe=",     MF_FORCEFDEORFBE },
+    { "nonremovable",       MF_NONREMOVABLE },
+    { "voldmanaged=",       MF_VOLDMANAGED},
+    { "length=",            MF_LENGTH },
+    { "recoveryonly",       MF_RECOVERYONLY },
+    { "swapprio=",          MF_SWAPPRIO },
+    { "zramsize=",          MF_ZRAMSIZE },
+    { "max_comp_streams=",  MF_MAX_COMP_STREAMS },
+    { "verifyatboot",       MF_VERIFYATBOOT },
+    { "verify",             MF_VERIFY },
+    { "noemulatedsd",       MF_NOEMULATEDSD },
+    { "notrim",             MF_NOTRIM },
+    { "formattable",        MF_FORMATTABLE },
+    { "slotselect",         MF_SLOTSELECT },
+    { "nofail",             MF_NOFAIL },
+    { "latemount",          MF_LATEMOUNT },
+    { "reservedsize=",      MF_RESERVEDSIZE },
+    { "quota",              MF_QUOTA },
+    { "defaults",           0 },
+    { 0,                    0 },
 };
 
 #define EM_SOFTWARE 1
@@ -585,4 +587,9 @@ int fs_mgr_is_nofail(struct fstab_rec *fstab)
 int fs_mgr_is_latemount(struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_LATEMOUNT;
+}
+
+int fs_mgr_is_quota(struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_QUOTA;
 }

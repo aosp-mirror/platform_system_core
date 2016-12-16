@@ -65,28 +65,30 @@ __BEGIN_DECLS
  *
  */
 
-#define MF_WAIT         0x1
-#define MF_CHECK        0x2
-#define MF_CRYPT        0x4
-#define MF_NONREMOVABLE 0x8
-#define MF_VOLDMANAGED  0x10
-#define MF_LENGTH       0x20
-#define MF_RECOVERYONLY 0x40
-#define MF_SWAPPRIO     0x80
-#define MF_ZRAMSIZE     0x100
-#define MF_VERIFY       0x200
-#define MF_FORCECRYPT   0x400
-#define MF_NOEMULATEDSD 0x800 /* no emulated sdcard daemon, sd card is the only
-                                 external storage */
-#define MF_NOTRIM       0x1000
-#define MF_FILEENCRYPTION 0x2000
-#define MF_FORMATTABLE  0x4000
-#define MF_SLOTSELECT   0x8000
-#define MF_FORCEFDEORFBE 0x10000
-#define MF_LATEMOUNT    0x20000
-#define MF_NOFAIL       0x40000
+#define MF_WAIT                  0x1
+#define MF_CHECK                 0x2
+#define MF_CRYPT                 0x4
+#define MF_NONREMOVABLE          0x8
+#define MF_VOLDMANAGED          0x10
+#define MF_LENGTH               0x20
+#define MF_RECOVERYONLY         0x40
+#define MF_SWAPPRIO             0x80
+#define MF_ZRAMSIZE            0x100
+#define MF_VERIFY              0x200
+#define MF_FORCECRYPT          0x400
+#define MF_NOEMULATEDSD        0x800 /* no emulated sdcard daemon, sd card is the only
+                                        external storage */
+#define MF_NOTRIM             0x1000
+#define MF_FILEENCRYPTION     0x2000
+#define MF_FORMATTABLE        0x4000
+#define MF_SLOTSELECT         0x8000
+#define MF_FORCEFDEORFBE     0x10000
+#define MF_LATEMOUNT         0x20000
+#define MF_NOFAIL            0x40000
+#define MF_VERIFYATBOOT      0x80000
 #define MF_MAX_COMP_STREAMS 0x100000
-#define MF_RESERVEDSIZE 0x200000
+#define MF_RESERVEDSIZE     0x200000
+#define MF_QUOTA            0x400000
 
 #define DM_BUF_SIZE 4096
 
