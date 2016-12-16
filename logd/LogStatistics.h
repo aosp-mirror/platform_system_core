@@ -265,7 +265,7 @@ struct UidEntry : public EntryBaseDropped {
         if (pid != element->getPid()) {
             pid = -1;
         }
-        EntryBase::add(element);
+        EntryBaseDropped::add(element);
     }
 
     std::string formatHeader(const std::string &name, log_id_t id) const;
@@ -419,7 +419,7 @@ struct TagEntry : public EntryBaseDropped {
         if (pid != element->getPid()) {
             pid = -1;
         }
-        EntryBase::add(element);
+        EntryBaseDropped::add(element);
     }
 
     std::string formatHeader(const std::string &name, log_id_t id) const;

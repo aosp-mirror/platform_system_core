@@ -71,8 +71,17 @@ void LogStatistics::add(LogBufferElement *element) {
     mSizes[log_id] += size;
     ++mElements[log_id];
 
-    mSizesTotal[log_id] += size;
-    ++mElementsTotal[log_id];
+    if (element->getDropped()) {
+        ++mDroppedElements[log_id];
+    } else {
+        // When caller adding a chatty entry, they will have already
+        // called add() and subtract() for each entry as they are
+        // evaluated and trimmed, thus recording size and number of
+        // elements, but we must recognize the manufactured dropped
+        // entry as not contributing to the lifetime totals.
+        mSizesTotal[log_id] += size;
+        ++mElementsTotal[log_id];
+    }
 
     if (log_id == LOG_ID_KERNEL) {
         return;

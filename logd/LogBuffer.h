@@ -99,10 +99,15 @@ class LogBuffer {
 
     bool monotonic;
 
+    LogBufferElement* lastLoggedElements[LOG_ID_MAX];
+    LogBufferElement* droppedElements[LOG_ID_MAX];
+    void log(LogBufferElement* elem);
+
 public:
     LastLogTimes &mTimes;
 
     explicit LogBuffer(LastLogTimes *times);
+    ~LogBuffer();
     void init();
     bool isMonotonic() { return monotonic; }
 
