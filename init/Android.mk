@@ -95,7 +95,6 @@ LOCAL_STATIC_LIBRARIES := \
     libext4_utils_static \
     libbase \
     libc \
-    libsepol \
     libselinux \
     liblog \
     libcrypto_utils \
