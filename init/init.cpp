@@ -850,8 +850,6 @@ int main(int argc, char** argv) {
         // If there's more work to do, wake up again immediately.
         if (am.HasMoreCommands()) epoll_timeout_ms = 0;
 
-        bootchart_sample(&epoll_timeout_ms);
-
         epoll_event ev;
         int nr = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd, &ev, 1, epoll_timeout_ms));
         if (nr == -1) {
