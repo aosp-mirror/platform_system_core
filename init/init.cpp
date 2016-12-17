@@ -36,8 +36,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <cil/android.h>
-#include <cil/cil.h>
 #include <selinux/selinux.h>
 #include <selinux/label.h>
 #include <selinux/android.h>
@@ -519,13 +517,6 @@ static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_
     return 0;
 }
 
-/* policy is a combination of platform, non-platform and mapping policy files */
-static constexpr const char* pol_files[]  = {
-    "/plat_sepolicy.cil",
-    "/mapping_sepolicy.cil",
-    "/nonplat_sepolicy.cil"  // TODO, switch to different partition when final.
-};
-
 static void selinux_initialize(bool in_kernel_domain) {
     Timer t;
 
@@ -534,24 +525,13 @@ static void selinux_initialize(bool in_kernel_domain) {
     selinux_set_callback(SELINUX_CB_LOG, cb);
     cb.func_audit = audit_callback;
     selinux_set_callback(SELINUX_CB_AUDIT, cb);
-    cil_set_log_handler((void (*)(int, char*))selinux_klog_callback);
 
     if (in_kernel_domain) {
-        void* pol_data = NULL;
-        size_t pol_len = 0;
-
-        LOG(INFO) << "Compiling SELinux policy...";
-        if (cil_android_compile_policy(&pol_data, &pol_len, pol_files,
-                arraysize(pol_files)) < 0) {
-            LOG(ERROR) << "failed to compile policy";
-            security_failure();
-        }
         LOG(INFO) << "Loading SELinux policy...";
-        if (selinux_android_load_policy(pol_data, pol_len) < 0) {
+        if (selinux_android_load_policy() < 0) {
             PLOG(ERROR) << "failed to load policy";
             security_failure();
         }
-        free(pol_data);
 
         bool kernel_enforcing = (security_getenforce() == 1);
         bool is_enforcing = selinux_is_enforcing();
