@@ -21,6 +21,5 @@
 #include <vector>
 
 int do_bootchart(const std::vector<std::string>& args);
-void bootchart_sample(int* timeout);
 
 #endif /* _BOOTCHART_H */
