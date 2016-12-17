@@ -109,8 +109,8 @@ static void setup_trace_mask() {
     }
 
     std::unordered_map<std::string, int> trace_flags = {
-        {"1", 0},
-        {"all", 0},
+        {"1", -1},
+        {"all", -1},
         {"adb", ADB},
         {"sockets", SOCKETS},
         {"packets", PACKETS},
@@ -133,8 +133,8 @@ static void setup_trace_mask() {
             continue;
         }
 
-        if (flag->second == 0) {
-            // 0 is used for the special values "1" and "all" that enable all
+        if (flag->second == -1) {
+            // -1 is used for the special values "1" and "all" that enable all
             // tracing.
             adb_trace_mask = ~0;
             return;
