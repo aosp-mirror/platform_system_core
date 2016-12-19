@@ -70,7 +70,7 @@ static int pmsgAvailable(log_id_t logId)
 /* Determine the credentials of the caller */
 static bool uid_has_log_permission(uid_t uid)
 {
-    return (uid == AID_SYSTEM) || (uid == AID_LOG) || (uid == AID_ROOT);
+    return (uid == AID_SYSTEM) || (uid == AID_LOG) || (uid == AID_ROOT) || (uid == AID_LOGD);
 }
 
 static uid_t get_best_effective_uid()
