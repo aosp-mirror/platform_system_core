@@ -206,6 +206,68 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
     if (currentLast) {
         LogBufferElement *dropped = droppedElements[log_id];
         unsigned short count = dropped ? dropped->getDropped() : 0;
+        //
+        // State Init
+        //     incoming:
+        //         dropped = NULL
+        //         currentLast = NULL;
+        //         elem = incoming message
+        //     outgoing:
+        //         dropped = NULL -> State 0
+        //         currentLast = copy of elem
+        //         log elem
+        // State 0
+        //     incoming:
+        //         count = 0
+        //         dropped = NULL
+        //         currentLast = copy of last message
+        //         elem = incoming message
+        //     outgoing: (if *elem == *currentLast)
+        //         dropped = copy of first identical message -> State 1
+        //         currentLast = reference to elem
+        //     break: (if *elem != *currentLast)
+        //         dropped = NULL -> State 0
+        //         delete copy of last message (incoming currentLast)
+        //         currentLast = copy of elem
+        //         log elem
+        // State 1
+        //     incoming:
+        //         count = 0
+        //         dropped = copy of first identical message
+        //         currentLast = reference to last held-back incoming
+        //                       message
+        //         elem = incoming message
+        //     outgoing: (if *elem == *currentLast)
+        //         delete copy of first identical message (dropped)
+        //         dropped = reference to last held-back incoming
+        //                   message set to chatty count of 1 -> State 2
+        //         currentLast = reference to elem
+        //     break:
+        //         delete dropped
+        //         dropped = NULL -> State 0
+        //         log reference to last held-back (currentLast)
+        //         currentLast = copy of elem
+        //         log elem
+        // State 2
+        //     incoming:
+        //         count = chatty count
+        //         dropped = chatty message holding count
+        //         currentLast = reference to last held-back incoming
+        //                       message.
+        //         dropped = chatty message holding count
+        //         elem = incoming message
+        //     outgoing: (if *elem == *currentLast)
+        //         delete chatty message holding count
+        //         dropped = reference to last held-back incoming
+        //                   message, set to chatty count + 1
+        //         currentLast = reference to elem
+        //     break:
+        //         log dropped (chatty message)
+        //         dropped = NULL -> State 0
+        //         log reference to last held-back (currentLast)
+        //         currentLast = copy of elem
+        //         log elem
+        //
         if (identical(elem, currentLast)) {
             if (dropped) {
                 if (count == USHRT_MAX) {
@@ -226,13 +288,15 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
             pthread_mutex_unlock(&mLogElementsLock);
             return len;
         }
-        if (dropped) {
-            log(dropped);
+        if (dropped) { // State 1 or 2
+            if (count) { // State 2
+               log(dropped); // report chatty
+            } else { // State 1
+               delete dropped;
+            }
             droppedElements[log_id] = NULL;
-        }
-        if (count) {
-            log(currentLast);
-        } else {
+            log(currentLast); // report last message in the series
+        } else { // State 0
             delete currentLast;
         }
     }
