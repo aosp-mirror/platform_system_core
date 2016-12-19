@@ -33,7 +33,9 @@ namespace android {
 char *uidToName(uid_t uid);
 void prdebug(const char *fmt, ...) __printflike(1, 2);
 
-// Furnished in LogStatistics.cpp. Caller must own and free returned value
+// Furnished in LogStatistics.cpp.
+size_t sizesTotal();
+// Caller must own and free returned value
 char *pidToName(pid_t pid);
 char *tidToName(pid_t tid);
 
