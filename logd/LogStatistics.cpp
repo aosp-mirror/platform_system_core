@@ -27,6 +27,8 @@
 
 #include "LogStatistics.h"
 
+size_t LogStatistics::SizesTotal;
+
 LogStatistics::LogStatistics() : enable(false) {
     log_id_for_each(id) {
         mSizes[id] = 0;
@@ -38,6 +40,8 @@ LogStatistics::LogStatistics() : enable(false) {
 }
 
 namespace android {
+
+size_t sizesTotal() { return LogStatistics::sizesTotal(); }
 
 // caller must own and free character string
 char *pidToName(pid_t pid) {
@@ -80,6 +84,7 @@ void LogStatistics::add(LogBufferElement *element) {
         // elements, but we must recognize the manufactured dropped
         // entry as not contributing to the lifetime totals.
         mSizesTotal[log_id] += size;
+        SizesTotal += size;
         ++mElementsTotal[log_id];
     }
 

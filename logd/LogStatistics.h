@@ -472,6 +472,7 @@ class LogStatistics {
     size_t mDroppedElements[LOG_ID_MAX];
     size_t mSizesTotal[LOG_ID_MAX];
     size_t mElementsTotal[LOG_ID_MAX];
+    static size_t SizesTotal;
     bool enable;
 
     // uid to size list
@@ -554,6 +555,7 @@ public:
     }
     size_t sizesTotal(log_id_t id) const { return mSizesTotal[id]; }
     size_t elementsTotal(log_id_t id) const { return mElementsTotal[id]; }
+    static size_t sizesTotal() { return SizesTotal; }
 
     std::string format(uid_t uid, pid_t pid, unsigned int logMask) const;
 
