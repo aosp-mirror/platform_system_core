@@ -17,6 +17,7 @@
 //#define DEBUG_CHECK_FOR_STALE_ENTRIES
 
 #include <ctype.h>
+#include <endian.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -126,27 +127,41 @@ LogBuffer::~LogBuffer() {
     }
 }
 
-static bool identical(LogBufferElement* elem, LogBufferElement* last) {
+enum match_type {
+    DIFFERENT,
+    SAME,
+    SAME_LIBLOG
+};
+
+static enum match_type identical(LogBufferElement* elem, LogBufferElement* last) {
     // is it mostly identical?
-//  if (!elem) return false;
+//  if (!elem) return DIFFERENT;
     unsigned short lenl = elem->getMsgLen();
-    if (!lenl) return false;
-//  if (!last) return false;
+    if (!lenl) return DIFFERENT;
+//  if (!last) return DIFFERENT;
     unsigned short lenr = last->getMsgLen();
-    if (!lenr) return false;
-//  if (elem->getLogId() != last->getLogId()) return false;
-    if (elem->getUid() != last->getUid()) return false;
-    if (elem->getPid() != last->getPid()) return false;
-    if (elem->getTid() != last->getTid()) return false;
+    if (!lenr) return DIFFERENT;
+//  if (elem->getLogId() != last->getLogId()) return DIFFERENT;
+    if (elem->getUid() != last->getUid()) return DIFFERENT;
+    if (elem->getPid() != last->getPid()) return DIFFERENT;
+    if (elem->getTid() != last->getTid()) return DIFFERENT;
 
     // last is more than a minute old, stop squashing identical messages
     if (elem->getRealTime().nsec() >
-        (last->getRealTime().nsec() + 60 * NS_PER_SEC)) return false;
+        (last->getRealTime().nsec() + 60 * NS_PER_SEC)) return DIFFERENT;
 
     // Identical message
     const char* msgl = elem->getMsg();
     const char* msgr = last->getMsg();
-    if ((lenl == lenr) && !fastcmp<memcmp>(msgl, msgr, lenl)) return true;
+    if (lenl == lenr) {
+        if (!fastcmp<memcmp>(msgl, msgr, lenl)) return SAME;
+        // liblog tagged messages (content gets summed)
+        if ((elem->getLogId() == LOG_ID_EVENTS) &&
+            (lenl == sizeof(android_log_event_int_t)) &&
+            !fastcmp<memcmp>(msgl, msgr,
+                             sizeof(android_log_event_int_t) - sizeof(int32_t)) &&
+            (elem->getTag() == LIBLOG_LOG_TAG)) return SAME_LIBLOG;
+    }
 
     // audit message (except sequence number) identical?
     static const char avc[] = "): avc: ";
@@ -154,20 +169,22 @@ static bool identical(LogBufferElement* elem, LogBufferElement* last) {
     if (last->isBinary()) {
         if (fastcmp<memcmp>(msgl, msgr,
                             sizeof(android_log_event_string_t) -
-                                sizeof(int32_t))) return false;
+                                sizeof(int32_t))) return DIFFERENT;
         msgl += sizeof(android_log_event_string_t);
         lenl -= sizeof(android_log_event_string_t);
         msgr += sizeof(android_log_event_string_t);
         lenr -= sizeof(android_log_event_string_t);
     }
     const char *avcl = android::strnstr(msgl, lenl, avc);
-    if (!avcl) return false;
+    if (!avcl) return DIFFERENT;
     lenl -= avcl - msgl;
     const char *avcr = android::strnstr(msgr, lenr, avc);
-    if (!avcr) return false;
+    if (!avcr) return DIFFERENT;
     lenr -= avcr - msgr;
-    if (lenl != lenr) return false;
-    return !fastcmp<memcmp>(avcl + strlen(avc), avcr + strlen(avc), lenl);
+    if (lenl != lenr) return DIFFERENT;
+    if (fastcmp<memcmp>(avcl + strlen(avc),
+                        avcr + strlen(avc), lenl)) return DIFFERENT;
+    return SAME;
 }
 
 int LogBuffer::log(log_id_t log_id, log_time realtime,
@@ -222,10 +239,10 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
         //         dropped = NULL
         //         currentLast = copy of last message
         //         elem = incoming message
-        //     outgoing: (if *elem == *currentLast)
+        //     outgoing: if match != DIFFERENT
         //         dropped = copy of first identical message -> State 1
         //         currentLast = reference to elem
-        //     break: (if *elem != *currentLast)
+        //     break: if match == DIFFERENT
         //         dropped = NULL -> State 0
         //         delete copy of last message (incoming currentLast)
         //         currentLast = copy of elem
@@ -237,12 +254,21 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
         //         currentLast = reference to last held-back incoming
         //                       message
         //         elem = incoming message
-        //     outgoing: (if *elem == *currentLast)
+        //     outgoing: if match == SAME
         //         delete copy of first identical message (dropped)
         //         dropped = reference to last held-back incoming
         //                   message set to chatty count of 1 -> State 2
         //         currentLast = reference to elem
-        //     break:
+        //     outgoing: if match == SAME_LIBLOG
+        //         dropped = copy of first identical message -> State 1
+        //         take sum of currentLast and elem
+        //         if sum overflows:
+        //             log currentLast
+        //             currentLast = reference to elem
+        //         else
+        //             delete currentLast
+        //             currentLast = reference to elem, sum liblog.
+        //     break: if match == DIFFERENT
         //         delete dropped
         //         dropped = NULL -> State 0
         //         log reference to last held-back (currentLast)
@@ -256,20 +282,54 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
         //                       message.
         //         dropped = chatty message holding count
         //         elem = incoming message
-        //     outgoing: (if *elem == *currentLast)
+        //     outgoing: if match != DIFFERENT
         //         delete chatty message holding count
         //         dropped = reference to last held-back incoming
         //                   message, set to chatty count + 1
         //         currentLast = reference to elem
-        //     break:
+        //     break: if match == DIFFERENT
         //         log dropped (chatty message)
         //         dropped = NULL -> State 0
         //         log reference to last held-back (currentLast)
         //         currentLast = copy of elem
         //         log elem
         //
-        if (identical(elem, currentLast)) {
+        enum match_type match = identical(elem, currentLast);
+        if (match != DIFFERENT) {
             if (dropped) {
+                // Sum up liblog tag messages?
+                if ((count == 0) /* at Pass 1 */ && (match == SAME_LIBLOG)) {
+                    android_log_event_int_t* event =
+                        reinterpret_cast<android_log_event_int_t*>(
+                            const_cast<char*>(currentLast->getMsg()));
+                    //
+                    // To unit test, differentiate with something like:
+                    //    event->header.tag = htole32(CHATTY_LOG_TAG);
+                    // here, then instead of delete currentLast below,
+                    // log(currentLast) to see the incremental sums form.
+                    //
+                    uint32_t swab = event->payload.data;
+                    unsigned long long total = htole32(swab);
+                    event = reinterpret_cast<android_log_event_int_t*>(
+                            const_cast<char*>(elem->getMsg()));
+                    swab = event->payload.data;
+
+                    lastLoggedElements[LOG_ID_EVENTS] = elem;
+                    total += htole32(swab);
+                    // check for overflow
+                    if (total >= UINT32_MAX) {
+                        log(currentLast);
+                        pthread_mutex_unlock(&mLogElementsLock);
+                        return len;
+                    }
+                    stats.add(currentLast);
+                    stats.subtract(currentLast);
+                    delete currentLast;
+                    swab = total;
+                    event->payload.data = htole32(swab);
+                    pthread_mutex_unlock(&mLogElementsLock);
+                    return len;
+                }
                 if (count == USHRT_MAX) {
                     log(dropped);
                     count = 1;

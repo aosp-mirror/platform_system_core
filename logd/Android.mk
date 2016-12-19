@@ -40,6 +40,7 @@ LOCAL_SHARED_LIBRARIES := \
 #  event_flag += $(call event_logtags,logd)
 # so make sure we do not regret hard-coding it as follows:
 event_flag := -DAUDITD_LOG_TAG=1003 -DCHATTY_LOG_TAG=1004
+event_flag += -DLIBLOG_LOG_TAG=1006
 
 LOCAL_CFLAGS := -Werror $(event_flag)
 
