@@ -17,11 +17,12 @@
 #ifndef _LOGD_LOG_STATISTICS_H__
 #define _LOGD_LOG_STATISTICS_H__
 
-#include <memory>
+#include <ctype.h>
 #include <stdlib.h>
 #include <sys/types.h>
 
 #include <algorithm> // std::max
+#include <memory>
 #include <string>    // std::string
 #include <unordered_map>
 
@@ -211,14 +212,16 @@ struct EntryBase {
                                     EntryBaseConstants::total_len
                                         - name.length() - drop_len - 1);
 
-        if (pruned.length()) {
-            return android::base::StringPrintf("%s%*s%*s\n", name.c_str(),
-                                               (int)size_len, size.c_str(),
-                                               (int)drop_len, pruned.c_str());
-        } else {
-            return android::base::StringPrintf("%s%*s\n", name.c_str(),
-                                               (int)size_len, size.c_str());
-        }
+        std::string ret = android::base::StringPrintf("%s%*s%*s",
+                                                      name.c_str(),
+                                                      (int)size_len, size.c_str(),
+                                                      (int)drop_len, pruned.c_str());
+        // remove any trailing spaces
+        size_t pos = ret.size();
+        size_t len = 0;
+        while (pos && isspace(ret[--pos])) ++len;
+        if (len) ret.erase(pos + 1, len);
+        return ret + "\n";
     }
 };
 
