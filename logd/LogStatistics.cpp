@@ -309,7 +309,7 @@ std::string UidEntry::format(const LogStatistics &stat, log_id_t id) const {
             if ((spaces <= 0) && pruned.length()) {
                 spaces = 1;
             }
-            if ((spaces > 0) && (pruned.length() != 0)) {
+            if (spaces > 0) {
                 change += android::base::StringPrintf("%*s", (int)spaces, "");
             }
             pruned = change + pruned;
