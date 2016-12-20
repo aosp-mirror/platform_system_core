@@ -464,7 +464,7 @@ static int mount_with_alternatives(struct fstab *fstab, int start_idx, int *end_
     if (!end_idx || !attempted_idx || start_idx >= fstab->num_entries) {
       errno = EINVAL;
       if (end_idx) *end_idx = start_idx;
-      if (attempted_idx) *end_idx = start_idx;
+      if (attempted_idx) *attempted_idx = start_idx;
       return -1;
     }
 
