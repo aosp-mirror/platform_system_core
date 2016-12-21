@@ -97,19 +97,11 @@ cc_library {
     compile_multilib: "both",
 }
 
-// system/core/android/log.h needs some work before it can be included in the
-// NDK. It defines a *lot* of macros that previously were usable names in NDK
-// sources that used android/log.h. As an example, the following file defines
-// LOG_TAG as a variable, but the variable name gets macro replaced if we use
-// the current android/log.h.
-// https://android.googlesource.com/platform/external/deqp/+/4adc1515f867b26c19c2f7498e9de93a230a234d/framework/platform/android/tcuTestLogParserJNI.cpp#41
-//
-// For now, we keep a copy of the old NDK android/log.h in legacy-ndk-includes.
 ndk_headers {
     name: "liblog_headers",
-    from: "legacy-ndk-includes",
+    from: "include/android",
     to: "android",
-    srcs: ["legacy-ndk-includes/log.h"],
+    srcs: ["include/android/log.h"],
     license: "NOTICE",
 }
 
