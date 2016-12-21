@@ -24,7 +24,7 @@
 #include <stdint.h>  /* uint16_t, int32_t */
 #include <stdio.h>
 #include <sys/types.h>
-#include <time.h>    /* clock_gettime */
+#include <time.h>
 #include <unistd.h>
 
 #include <android/log.h>
@@ -810,6 +810,54 @@ int __android_log_error_write(int tag, const char* subTag, int32_t uid,
  * all O_CLOEXEC so wil self clean on exec().
  */
 void __android_log_close();
+#endif
+
+#ifndef __ANDROID_USE_LIBLOG_RATELIMIT_INTERFACE
+#ifndef __ANDROID_API__
+#define __ANDROID_USE_LIBLOG_RATELIMIT_INTERFACE 1
+#elif __ANDROID_API__ > 25 /* > OC */
+#define __ANDROID_USE_LIBLOG_RATELIMIT_INTERFACE 1
+#else
+#define __ANDROID_USE_LIBLOG_RATELIMIT_INTERFACE 0
+#endif
+#endif
+
+#if __ANDROID_USE_LIBLOG_RATELIMIT_INTERFACE
+
+/*
+ * if last is NULL, caller _must_ provide a consistent value for seconds.
+ *
+ * Return -1 if we can not acquire a lock, which below will permit the logging,
+ * error on allowing a log message through.
+ */
+int __android_log_ratelimit(time_t seconds, time_t* last);
+
+/*
+ * Usage:
+ *
+ *   // Global default and state
+ *   IF_ALOG_RATELIMIT() {
+ *      ALOG*(...);
+ *   }
+ *
+ *   // local state, 10 seconds ratelimit
+ *   static time_t local_state;
+ *   IF_ALOG_RATELIMIT_LOCAL(10, &local_state) {
+ *     ALOG*(...);
+ *   }
+ */
+
+#define IF_ALOG_RATELIMIT() \
+      if (__android_log_ratelimit(0, NULL) > 0)
+#define IF_ALOG_RATELIMIT_LOCAL(seconds, state) \
+      if (__android_log_ratelimit(seconds, state) > 0)
+
+#else
+
+/* No ratelimiting as API unsupported */
+#define IF_ALOG_RATELIMIT() if (1)
+#define IF_ALOG_RATELIMIT_LOCAL(...) if (1)
+
 #endif
 
 #if defined(__clang__)
