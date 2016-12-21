@@ -9,8 +9,8 @@ cc_library {
         "liblog",
         "libcutils",
         "libnativebridge",
+        "libbase",
     ],
-    static_libs: ["libbase"],
     target: {
         android: {
             shared_libs: ["libdl"],

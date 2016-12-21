@@ -56,11 +56,13 @@ cc_library {
     name: "libziparchive",
     host_supported: true,
     defaults: ["libziparchive_defaults", "libziparchive_flags"],
-    static_libs: ["libutils"],
     shared_libs: ["liblog", "libbase"],
     target: {
         android: {
-            static_libs: ["libz"],
+            shared_libs: ["libz", "libutils"],
+        },
+        host: {
+            static_libs: ["libutils"],
         },
         linux_bionic: {
             static_libs: ["libz"],
