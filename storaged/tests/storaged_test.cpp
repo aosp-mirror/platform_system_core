@@ -23,7 +23,6 @@
 #include <unistd.h>
 
 #include <gtest/gtest.h>
-//#include <private/android_logger.h>
 
 #include <storaged.h>               // data structures
 #include <storaged_utils.h>         // functions to test

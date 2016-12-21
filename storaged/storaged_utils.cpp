@@ -16,15 +16,15 @@
 
 #define LOG_TAG "storaged"
 
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <linux/time.h>
-
 #include <dirent.h>
-#include <stdio.h>
+#include <fcntl.h>
+#include <linux/time.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <sstream>
@@ -32,17 +32,15 @@
 #include <unordered_map>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <android-base/logging.h>
+#include <cutils/klog.h>
 #include <log/log.h>
 #include <log/log_event_list.h>
-#include <cutils/klog.h>
 
 #include <storaged.h>
 #include <storaged_utils.h>
-
-#include <time.h>
 
 #define SECTOR_SIZE ( 512 )
 #define SEC_TO_MSEC ( 1000 )
@@ -416,7 +414,7 @@ void tasks_t::update_running_tasks(void) {
             }
         }
     }
-    { // update critical area
+    {   // update critical area
         // this is really fast!
         std::unique_ptr<lock_t> lock(new lock_t(&mSem));
         mRunning = tasks_latest;
