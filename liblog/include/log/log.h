@@ -28,6 +28,7 @@
 #include <unistd.h>
 
 #include <android/log.h>
+#include <log/log_id.h>
 #include <log/log_main.h>
 #include <log/uio.h> /* helper to define iovec for portability */
 
@@ -73,16 +74,6 @@ extern "C" {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
 #endif
-
-/*
- * Send a simple string to the log.
- */
-int __android_log_buf_write(int bufID, int prio, const char* tag, const char* text);
-int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fmt, ...)
-#if defined(__GNUC__)
-    __attribute__((__format__(printf, 4, 5)))
-#endif
-    ;
 
 /*
  * Simplified macro to send a verbose system log message using current LOG_TAG.
@@ -320,25 +311,6 @@ typedef enum {
 #define LOG_EVENT_STRING(_tag, _value)                                      \
         (void) __android_log_bswrite(_tag, _value);
 #endif
-
-#ifndef log_id_t_defined
-#define log_id_t_defined
-typedef enum log_id {
-    LOG_ID_MIN = 0,
-
-    LOG_ID_MAIN = 0,
-    LOG_ID_RADIO = 1,
-    LOG_ID_EVENTS = 2,
-    LOG_ID_SYSTEM = 3,
-    LOG_ID_CRASH = 4,
-    LOG_ID_SECURITY = 5,
-    LOG_ID_KERNEL = 6, /* place last, third-parties can not use it */
-
-    LOG_ID_MAX
-} log_id_t;
-#endif
-#define sizeof_log_id_t sizeof(typeof_log_id_t)
-#define typeof_log_id_t unsigned char
 
 /* --------------------------------------------------------------------- */
 
@@ -775,12 +747,6 @@ clockid_t android_log_clockid();
 #endif
 
 #endif /* __linux__ */
-
-/*
- * log_id_t helpers
- */
-log_id_t android_name_to_log_id(const char* logName);
-const char* android_log_id_to_name(log_id_t log_id);
 
 /* --------------------------------------------------------------------- */
 
