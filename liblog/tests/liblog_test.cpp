@@ -2870,3 +2870,35 @@ TEST(liblog, event_log_tags) {
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+
+TEST(liblog, __android_log_ratelimit) {
+    time_t state = 0;
+
+    errno = 42;
+    // Prime
+    __android_log_ratelimit(3, &state);
+    EXPECT_EQ(errno, 42);
+    // Check
+    EXPECT_FALSE(__android_log_ratelimit(3, &state));
+    sleep(1);
+    EXPECT_FALSE(__android_log_ratelimit(3, &state));
+    sleep(4);
+    EXPECT_TRUE(__android_log_ratelimit(3, &state));
+    sleep(5);
+    EXPECT_TRUE(__android_log_ratelimit(3, &state));
+
+    // API checks
+    IF_ALOG_RATELIMIT_LOCAL(3, &state) {
+        EXPECT_FALSE(0 != "IF_ALOG_RATELIMIT_LOCAL(3, &state)");
+    }
+
+    IF_ALOG_RATELIMIT() {
+        ;
+    } else {
+        EXPECT_TRUE(0 == "IF_ALOG_RATELIMIT()");
+    }
+    IF_ALOG_RATELIMIT() {
+        EXPECT_FALSE(0 != "IF_ALOG_RATELIMIT()");
+    }
+    // Do not test default seconds, to allow liblog to tune freely
+}
