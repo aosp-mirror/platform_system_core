@@ -12,7 +12,6 @@ libjnigraphics.so
 liblog.so
 libmediandk.so
 libm.so
-liboboe.so
 libOpenMAXAL.so
 libOpenSLES.so
 libRS.so
