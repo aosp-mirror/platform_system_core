@@ -38,6 +38,7 @@
 #include <linux/loop.h>
 #include <linux/module.h>
 
+#include <string>
 #include <thread>
 
 #include <selinux/android.h>
@@ -66,6 +67,8 @@
 #include "service.h"
 #include "signal_handler.h"
 #include "util.h"
+
+using namespace std::literals::string_literals;
 
 #define chmod DO_NOT_USE_CHMOD_USE_FCHMODAT_SYMLINK_NOFOLLOW
 #define UNMOUNT_CHECK_TIMES 10
@@ -139,8 +142,7 @@ static void turnOffBacklight() {
     }
 }
 
-static int wipe_data_via_recovery(const std::string& reason) {
-    const std::vector<std::string> options = {"--wipe_data", std::string() + "--reason=" + reason};
+static int reboot_into_recovery(const std::vector<std::string>& options) {
     std::string err;
     if (!write_bootloader_message(options, &err)) {
         LOG(ERROR) << "failed to set bootloader message: " << err;
@@ -338,7 +340,10 @@ static int do_mkdir(const std::vector<std::string>& args) {
 
     if (e4crypt_is_native()) {
         if (e4crypt_set_directory_policy(args[1].c_str())) {
-            wipe_data_via_recovery(std::string() + "set_policy_failed:" + args[1]);
+            const std::vector<std::string> options = {
+                "--prompt_and_wipe_data",
+                "--reason=set_policy_failed:"s + args[1]};
+            reboot_into_recovery(options);
             return -1;
         }
     }
@@ -559,7 +564,8 @@ static int queue_fs_event(int code) {
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
         /* Setup a wipe via recovery, and reboot into recovery */
         PLOG(ERROR) << "fs_mgr_mount_all suggested recovery, so wiping data via recovery.";
-        ret = wipe_data_via_recovery("fs_mgr_mount_all");
+        const std::vector<std::string> options = {"--wipe_data", "--reason=fs_mgr_mount_all" };
+        ret = reboot_into_recovery(options);
         /* If reboot worked, there is no return. */
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
         if (e4crypt_install_keyring()) {
