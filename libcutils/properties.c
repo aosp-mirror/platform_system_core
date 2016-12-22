@@ -119,10 +119,7 @@ int property_get(const char *key, char *value, const char *default_value) {
         return len;
     }
     if (default_value) {
-        len = strlen(default_value);
-        if (len >= PROPERTY_VALUE_MAX) {
-            len = PROPERTY_VALUE_MAX - 1;
-        }
+        len = strnlen(default_value, PROPERTY_VALUE_MAX - 1);
         memcpy(value, default_value, len);
         value[len] = '\0';
     }
