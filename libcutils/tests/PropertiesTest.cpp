@@ -159,17 +159,66 @@ TEST_F(PropertiesTest, SetString) {
 
 TEST_F(PropertiesTest, GetString) {
 
-    // Try to use a default value that's too long => set fails
+    // Try to use a default value that's too long => get truncates the value
     {
         ASSERT_OK(property_set(PROPERTY_TEST_KEY, ""));
 
-        std::string maxLengthString = std::string(PROPERTY_VALUE_MAX-1, 'a');
+        std::string maxLengthString = std::string(PROPERTY_VALUE_MAX - 1, 'a');
         std::string oneLongerString = std::string(PROPERTY_VALUE_MAX, 'a');
 
         // Expect that the value is truncated since it's too long (by 1)
         int len = property_get(PROPERTY_TEST_KEY, mValue, oneLongerString.c_str());
-        EXPECT_EQ(PROPERTY_VALUE_MAX-1, len);
+        EXPECT_EQ(PROPERTY_VALUE_MAX - 1, len);
         EXPECT_STREQ(maxLengthString.c_str(), mValue);
+        ResetValue();
+    }
+
+    // Try to use a default value that's the max length => get succeeds
+    {
+        ASSERT_OK(property_set(PROPERTY_TEST_KEY, ""));
+
+        std::string maxLengthString = std::string(PROPERTY_VALUE_MAX - 1, 'b');
+
+        // Expect that the value matches maxLengthString
+        int len = property_get(PROPERTY_TEST_KEY, mValue, maxLengthString.c_str());
+        EXPECT_EQ(PROPERTY_VALUE_MAX - 1, len);
+        EXPECT_STREQ(maxLengthString.c_str(), mValue);
+        ResetValue();
+    }
+
+    // Try to use a default value of length one => get succeeds
+    {
+        ASSERT_OK(property_set(PROPERTY_TEST_KEY, ""));
+
+        std::string oneCharString = std::string(1, 'c');
+
+        // Expect that the value matches oneCharString
+        int len = property_get(PROPERTY_TEST_KEY, mValue, oneCharString.c_str());
+        EXPECT_EQ(1, len);
+        EXPECT_STREQ(oneCharString.c_str(), mValue);
+        ResetValue();
+    }
+
+    // Try to use a default value of length zero => get succeeds
+    {
+        ASSERT_OK(property_set(PROPERTY_TEST_KEY, ""));
+
+        std::string zeroCharString = std::string(0, 'd');
+
+        // Expect that the value matches oneCharString
+        int len = property_get(PROPERTY_TEST_KEY, mValue, zeroCharString.c_str());
+        EXPECT_EQ(0, len);
+        EXPECT_STREQ(zeroCharString.c_str(), mValue);
+        ResetValue();
+    }
+
+    // Try to use a NULL default value => get returns 0
+    {
+        ASSERT_OK(property_set(PROPERTY_TEST_KEY, ""));
+
+        // Expect a return value of 0
+        int len = property_get(PROPERTY_TEST_KEY, mValue, NULL);
+        EXPECT_EQ(0, len);
         ResetValue();
     }
 }
