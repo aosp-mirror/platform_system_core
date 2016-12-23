@@ -27,22 +27,8 @@ cc_defaults {
 
     include_dirs: ["external/libunwind/include/tdep"],
 
-    // TODO: LLVM_DEVICE_BUILD_MK
-    // TODO: LLVM_HOST_BUILD_MK
 
     target: {
-        host: {
-            // -fno-omit-frame-pointer should be set for host build. Because currently
-            // libunwind can't recognize .debug_frame using dwarf version 4, and it relies
-            // on stack frame pointer to do unwinding on x86.
-            // $(LLVM_HOST_BUILD_MK) overwrites -fno-omit-frame-pointer. so the below line
-            // must be after the include.
-            cflags: [
-                "-Wno-extern-c-compat",
-                "-fno-omit-frame-pointer",
-            ],
-        },
-
         darwin: {
             enabled: false,
         },
