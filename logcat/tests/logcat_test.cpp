@@ -451,11 +451,12 @@ TEST(logcat, bad_buffer) {
       "logcat -v brief -b radio,events,bogo,system,main -g 2>/dev/null"));
 }
 
-static void caught_blocking(int /*signum*/)
+static void caught_blocking(int signum)
 {
     unsigned long long v = 0xDEADBEEFA55A0000ULL;
 
     v += getpid() & 0xFFFF;
+    if (signum == 0) ++v;
 
     LOG_FAILURE_RETRY(__android_log_btwrite(0, EVENT_TYPE_LONG, &v, sizeof(v)));
 }
@@ -520,11 +521,12 @@ TEST(logcat, blocking) {
     EXPECT_EQ(1, signals);
 }
 
-static void caught_blocking_tail(int /*signum*/)
+static void caught_blocking_tail(int signum)
 {
     unsigned long long v = 0xA55ADEADBEEF0000ULL;
 
     v += getpid() & 0xFFFF;
+    if (signum == 0) ++v;
 
     LOG_FAILURE_RETRY(__android_log_btwrite(0, EVENT_TYPE_LONG, &v, sizeof(v)));
 }
@@ -955,10 +957,11 @@ TEST(logcat, logrotate_nodir) {
                      " -n 256 -r 1024"));
 }
 
-static void caught_blocking_clear(int /*signum*/) {
+static void caught_blocking_clear(int signum) {
     unsigned long long v = 0xDEADBEEFA55C0000ULL;
 
     v += getpid() & 0xFFFF;
+    if (signum == 0) ++v;
 
     LOG_FAILURE_RETRY(__android_log_btwrite(0, EVENT_TYPE_LONG, &v, sizeof(v)));
 }
