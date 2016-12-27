@@ -214,6 +214,8 @@ static bool isLogdwActive() {
     }
     return false;
 }
+
+bool tested__android_log_close;
 #endif
 
 TEST(liblog, __android_log_btwrite__android_logger_list_read) {
@@ -228,22 +230,33 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     // Check that we can close and reopen the logger
     log_time ts(CLOCK_MONOTONIC);
     ASSERT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
-    bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
-    bool logdwActiveAfter__android_log_btwrite = isLogdwActive();
-    EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
-    EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
+    bool pmsgActiveAfter__android_log_btwrite;
+    bool logdwActiveAfter__android_log_btwrite;
+    if (getuid() == AID_ROOT) {
+        tested__android_log_close = true;
+        pmsgActiveAfter__android_log_btwrite = isPmsgActive();
+        logdwActiveAfter__android_log_btwrite = isLogdwActive();
+        EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
+        EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
+    } else if (!tested__android_log_close) {
+        fprintf(stderr, "WARNING: can not test __android_log_close()\n");
+    }
     __android_log_close();
-    bool pmsgActiveAfter__android_log_close = isPmsgActive();
-    bool logdwActiveAfter__android_log_close = isLogdwActive();
-    EXPECT_FALSE(pmsgActiveAfter__android_log_close);
-    EXPECT_FALSE(logdwActiveAfter__android_log_close);
+    if (getuid() == AID_ROOT) {
+        bool pmsgActiveAfter__android_log_close = isPmsgActive();
+        bool logdwActiveAfter__android_log_close = isLogdwActive();
+        EXPECT_FALSE(pmsgActiveAfter__android_log_close);
+        EXPECT_FALSE(logdwActiveAfter__android_log_close);
+    }
 
     log_time ts1(CLOCK_MONOTONIC);
     ASSERT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts1, sizeof(ts1)));
-    pmsgActiveAfter__android_log_btwrite = isPmsgActive();
-    logdwActiveAfter__android_log_btwrite = isLogdwActive();
-    EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
-    EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
+    if (getuid() == AID_ROOT) {
+        pmsgActiveAfter__android_log_btwrite = isPmsgActive();
+        logdwActiveAfter__android_log_btwrite = isLogdwActive();
+        EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
+        EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
+    }
     usleep(1000000);
 
     int count = 0;
@@ -539,7 +552,6 @@ TEST(liblog, __security_buffer) {
     bool set_persist = false;
     bool allow_security = false;
 
-    setuid(AID_SYSTEM); // only one that can read security buffer
     if (__android_log_security()) {
         allow_security = true;
     } else {
@@ -611,6 +623,8 @@ TEST(liblog, __security_buffer) {
 
         return;
     }
+
+    setuid(AID_SYSTEM); // only one that can read security buffer
 
     pid_t pid = getpid();
 
@@ -2662,10 +2676,15 @@ static const char __pmsg_file[] =
 TEST(liblog, __android_log_pmsg_file_write) {
 #ifdef __ANDROID__
     __android_log_close();
-    bool pmsgActiveAfter__android_log_close = isPmsgActive();
-    bool logdwActiveAfter__android_log_close = isLogdwActive();
-    EXPECT_FALSE(pmsgActiveAfter__android_log_close);
-    EXPECT_FALSE(logdwActiveAfter__android_log_close);
+    if (getuid() == AID_ROOT) {
+        tested__android_log_close = true;
+        bool pmsgActiveAfter__android_log_close = isPmsgActive();
+        bool logdwActiveAfter__android_log_close = isLogdwActive();
+        EXPECT_FALSE(pmsgActiveAfter__android_log_close);
+        EXPECT_FALSE(logdwActiveAfter__android_log_close);
+    } else if (!tested__android_log_close) {
+        fprintf(stderr, "WARNING: can not test __android_log_close()\n");
+    }
     int return__android_log_pmsg_file_write = __android_log_pmsg_file_write(
             LOG_ID_CRASH, ANDROID_LOG_VERBOSE,
             __pmsg_file, max_payload_buf, sizeof(max_payload_buf));
@@ -2679,24 +2698,32 @@ TEST(liblog, __android_log_pmsg_file_write) {
                         "with liblog.__android_log_msg_file_read test\n",
                         __pmsg_file);
     }
-    bool pmsgActiveAfter__android_pmsg_file_write = isPmsgActive();
-    bool logdwActiveAfter__android_pmsg_file_write = isLogdwActive();
-    EXPECT_FALSE(pmsgActiveAfter__android_pmsg_file_write);
-    EXPECT_FALSE(logdwActiveAfter__android_pmsg_file_write);
+    bool pmsgActiveAfter__android_pmsg_file_write;
+    bool logdwActiveAfter__android_pmsg_file_write;
+    if (getuid() == AID_ROOT) {
+        pmsgActiveAfter__android_pmsg_file_write = isPmsgActive();
+        logdwActiveAfter__android_pmsg_file_write = isLogdwActive();
+        EXPECT_FALSE(pmsgActiveAfter__android_pmsg_file_write);
+        EXPECT_FALSE(logdwActiveAfter__android_pmsg_file_write);
+    }
     EXPECT_LT(0, __android_log_buf_print(LOG_ID_MAIN, ANDROID_LOG_INFO,
                                          "TEST__android_log_pmsg_file_write",
                                          "main"));
-    bool pmsgActiveAfter__android_log_buf_print = isPmsgActive();
-    bool logdwActiveAfter__android_log_buf_print = isLogdwActive();
-    EXPECT_TRUE(pmsgActiveAfter__android_log_buf_print);
-    EXPECT_TRUE(logdwActiveAfter__android_log_buf_print);
+    if (getuid() == AID_ROOT) {
+        bool pmsgActiveAfter__android_log_buf_print = isPmsgActive();
+        bool logdwActiveAfter__android_log_buf_print = isLogdwActive();
+        EXPECT_TRUE(pmsgActiveAfter__android_log_buf_print);
+        EXPECT_TRUE(logdwActiveAfter__android_log_buf_print);
+    }
     EXPECT_LT(0, __android_log_pmsg_file_write(
             LOG_ID_CRASH, ANDROID_LOG_VERBOSE,
             __pmsg_file, max_payload_buf, sizeof(max_payload_buf)));
-    pmsgActiveAfter__android_pmsg_file_write = isPmsgActive();
-    logdwActiveAfter__android_pmsg_file_write = isLogdwActive();
-    EXPECT_TRUE(pmsgActiveAfter__android_pmsg_file_write);
-    EXPECT_TRUE(logdwActiveAfter__android_pmsg_file_write);
+    if (getuid() == AID_ROOT) {
+        pmsgActiveAfter__android_pmsg_file_write = isPmsgActive();
+        logdwActiveAfter__android_pmsg_file_write = isLogdwActive();
+        EXPECT_TRUE(pmsgActiveAfter__android_pmsg_file_write);
+        EXPECT_TRUE(logdwActiveAfter__android_pmsg_file_write);
+    }
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
@@ -2731,19 +2758,26 @@ TEST(liblog, __android_log_pmsg_file_read) {
     signaled = 0;
 
     __android_log_close();
-    bool pmsgActiveAfter__android_log_close = isPmsgActive();
-    bool logdwActiveAfter__android_log_close = isLogdwActive();
-    EXPECT_FALSE(pmsgActiveAfter__android_log_close);
-    EXPECT_FALSE(logdwActiveAfter__android_log_close);
+    if (getuid() == AID_ROOT) {
+        tested__android_log_close = true;
+        bool pmsgActiveAfter__android_log_close = isPmsgActive();
+        bool logdwActiveAfter__android_log_close = isLogdwActive();
+        EXPECT_FALSE(pmsgActiveAfter__android_log_close);
+        EXPECT_FALSE(logdwActiveAfter__android_log_close);
+    } else if (!tested__android_log_close) {
+        fprintf(stderr, "WARNING: can not test __android_log_close()\n");
+    }
 
     ssize_t ret = __android_log_pmsg_file_read(
             LOG_ID_CRASH, ANDROID_LOG_VERBOSE,
             __pmsg_file, __pmsg_fn, NULL);
 
-    bool pmsgActiveAfter__android_log_pmsg_file_read = isPmsgActive();
-    bool logdwActiveAfter__android_log_pmsg_file_read = isLogdwActive();
-    EXPECT_FALSE(pmsgActiveAfter__android_log_pmsg_file_read);
-    EXPECT_FALSE(logdwActiveAfter__android_log_pmsg_file_read);
+    if (getuid() == AID_ROOT) {
+        bool pmsgActiveAfter__android_log_pmsg_file_read = isPmsgActive();
+        bool logdwActiveAfter__android_log_pmsg_file_read = isLogdwActive();
+        EXPECT_FALSE(pmsgActiveAfter__android_log_pmsg_file_read);
+        EXPECT_FALSE(logdwActiveAfter__android_log_pmsg_file_read);
+    }
 
     if (ret == -ENOENT) {
         fprintf(stderr,
