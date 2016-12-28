@@ -282,6 +282,11 @@ Commands
 `copy <src> <dst>`
 > Copies a file. Similar to write, but useful for binary/large
   amounts of data.
+  Regarding to the src file, copying from symbol link file and world-writable
+  or group-writable files are not allowed.
+  Regarding to the dst file, the default mode created is 0600 if it does not
+  exist. And it will be truncated if dst file is a normal regular file and
+  already exists.
 
 `domainname <name>`
 > Set the domain name.
