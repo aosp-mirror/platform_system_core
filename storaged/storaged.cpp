@@ -174,9 +174,12 @@ storaged_t::storaged_t(void) {
         }
     }
 
+    mConfig.proc_uid_io_available = (access(UID_IO_STATS_PATH, R_OK) == 0);
+
     mConfig.periodic_chores_interval_unit = DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT;
     mConfig.periodic_chores_interval_disk_stats_publish = DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH;
     mConfig.periodic_chores_interval_emmc_info_publish = DEFAULT_PERIODIC_CHORES_INTERVAL_EMMC_INFO_PUBLISH;
+    mUidm.set_periodic_chores_interval(DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_ALERT);
 
     mStarttime = time(NULL);
 }
@@ -200,6 +203,11 @@ void storaged_t::event(void) {
             (mTimer % mConfig.periodic_chores_interval_emmc_info_publish) == 0) {
         mEmmcInfo.update();
         mEmmcInfo.publish();
+    }
+
+    if (mConfig.proc_uid_io_available && mTimer &&
+            (mTimer % mUidm.get_periodic_chores_interval()) == 0) {
+         mUidm.report();
     }
 
     mTimer += mConfig.periodic_chores_interval_unit;

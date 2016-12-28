@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <stdint.h>
+
 #include <vector>
 
 #include <binder/IBinder.h>
@@ -41,6 +43,22 @@ std::vector<struct task_info> BpStoraged::dump_tasks(const char* /*option*/) {
     return res;
 }
 
+std::vector<struct uid_info> BpStoraged::dump_uids(const char* /*option*/) {
+    Parcel data, reply;
+    data.writeInterfaceToken(IStoraged::getInterfaceDescriptor());
+
+    remote()->transact(DUMPUIDS, data, &reply);
+
+    uint32_t res_size = reply.readInt32();
+    std::vector<struct uid_info> res(res_size);
+    for (auto&& uid : res) {
+        uid.uid = reply.readInt32();
+        uid.name = reply.readCString();
+        reply.read(&uid.io, sizeof(uid.io));
+    }
+    return res;
+}
+
 IMPLEMENT_META_INTERFACE(Storaged, "Storaged");
 
 status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {
@@ -57,12 +75,34 @@ status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply
                 return NO_ERROR;
             }
             break;
+        case DUMPUIDS: {
+                std::vector<struct uid_info> res = dump_uids(NULL);
+                reply->writeInt32(res.size());
+                for (auto uid : res) {
+                    reply->writeInt32(uid.uid);
+                    reply->writeCString(uid.name.c_str());
+                    reply->write(&uid.io, sizeof(uid.io));
+                }
+                return NO_ERROR;
+            }
+            break;
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }
 }
+
 std::vector<struct task_info> Storaged::dump_tasks(const char* /* option */) {
     return storaged.get_tasks();
+}
+
+std::vector<struct uid_info> Storaged::dump_uids(const char* /* option */) {
+    std::vector<struct uid_info> uids_v;
+    std::unordered_map<uint32_t, struct uid_info> uids_m = storaged.get_uids();
+
+    for (const auto& it : uids_m) {
+        uids_v.push_back(it.second);
+    }
+    return uids_v;
 }
 
 sp<IStoraged> get_storaged_service() {

@@ -435,6 +435,54 @@ void log_console_running_tasks_info(std::vector<struct task_info> tasks) {
     fflush(stdout);
 }
 
+static bool cmp_uid_info(struct uid_info l, struct uid_info r) {
+    // Compare background I/O first.
+    for (int i = UID_STATS_SIZE - 1; i >= 0; i--) {
+        uint64_t l_bytes = l.io[i].read_bytes + l.io[i].write_bytes;
+        uint64_t r_bytes = r.io[i].read_bytes + r.io[i].write_bytes;
+        uint64_t l_chars = l.io[i].rchar + l.io[i].wchar;
+        uint64_t r_chars = r.io[i].rchar + r.io[i].wchar;
+
+        if (l_bytes != r_bytes) {
+            return l_bytes > r_bytes;
+        }
+        if (l_chars != r_chars) {
+            return l_chars > r_chars;
+        }
+    }
+
+    return l.name < r.name;
+}
+
+void sort_running_uids_info(std::vector<struct uid_info> &uids) {
+    std::sort(uids.begin(), uids.end(), cmp_uid_info);
+}
+
+// Logging functions
+void log_console_running_uids_info(std::vector<struct uid_info> uids) {
+// Sample Output:
+//                                       Application        FG Read       FG Write        FG Read       FG Write        BG Read       BG Write        BG Read       BG Write
+//                                          NAME/UID     Characters     Characters          Bytes          Bytes     Characters     Characters          Bytes          Bytes
+//                                        ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------
+//                      com.google.android.gsf.login              0              0              0              0       57195097        5137089      176386048        6512640
+//           com.google.android.googlequicksearchbox              0              0              0              0        4196821       12123468       34295808       13225984
+//                                              1037           4572            537              0              0         131352        5145643       34263040        5144576
+//                        com.google.android.youtube           2182             70              0              0       63969383         482939       38731776         466944
+
+    // Title
+    printf("Per-UID I/O stats\n");
+    printf("                                       Application        FG Read       FG Write        FG Read       FG Write        BG Read       BG Write        BG Read       BG Write\n"
+           "                                          NAME/UID     Characters     Characters          Bytes          Bytes     Characters     Characters          Bytes          Bytes\n"
+           "                                        ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------\n");
+
+    for (const auto& uid : uids) {
+        printf("%50s%15ju%15ju%15ju%15ju%15ju%15ju%15ju%15ju\n", uid.name.c_str(),
+            uid.io[0].rchar, uid.io[0].wchar, uid.io[0].read_bytes, uid.io[0].write_bytes,
+            uid.io[1].rchar, uid.io[1].wchar, uid.io[1].read_bytes, uid.io[1].write_bytes);
+    }
+    fflush(stdout);
+}
+
 #if DEBUG
 void log_debug_disk_perf(struct disk_perf* perf, const char* type) {
     // skip if the input structure are all zeros
