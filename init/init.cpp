@@ -542,7 +542,7 @@ static void selinux_initialize(bool in_kernel_domain) {
             }
         }
 
-        if (write_file("/sys/fs/selinux/checkreqprot", "0") == -1) {
+        if (!write_file("/sys/fs/selinux/checkreqprot", "0")) {
             security_failure();
         }
 
