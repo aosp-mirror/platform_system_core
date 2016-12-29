@@ -33,7 +33,7 @@ int create_socket(const char *name, int type, mode_t perm,
                   uid_t uid, gid_t gid, const char *socketcon);
 
 bool read_file(const char* path, std::string* content);
-int write_file(const char* path, const char* content);
+bool write_file(const char* path, const char* content);
 
 // A std::chrono clock based on CLOCK_BOOTTIME.
 class boot_clock {
