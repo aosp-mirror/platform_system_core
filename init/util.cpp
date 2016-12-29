@@ -185,18 +185,18 @@ bool read_file(const char* path, std::string* content) {
     return okay;
 }
 
-int write_file(const char* path, const char* content) {
+bool write_file(const char* path, const char* content) {
     int fd = TEMP_FAILURE_RETRY(open(path, O_WRONLY|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600));
     if (fd == -1) {
         PLOG(ERROR) << "write_file: Unable to open '" << path << "'";
-        return -1;
+        return false;
     }
-    int result = android::base::WriteStringToFd(content, fd) ? 0 : -1;
-    if (result == -1) {
+    bool success = android::base::WriteStringToFd(content, fd);
+    if (!success) {
         PLOG(ERROR) << "write_file: Unable to write to '" << path << "'";
     }
     close(fd);
-    return result;
+    return success;
 }
 
 boot_clock::time_point boot_clock::now() {
