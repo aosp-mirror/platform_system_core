@@ -415,7 +415,13 @@ TEST(logd, benchmark) {
 
     // Introduce some extreme spam for the worst UID filter
     ASSERT_TRUE(NULL != (fp = popen(
-        "/data/nativetest/liblog-benchmarks/liblog-benchmarks",
+        "/data/nativetest/liblog-benchmarks/liblog-benchmarks"
+            " BM_log_maximum_retry"
+            " BM_log_maximum"
+            " BM_clock_overhead"
+            " BM_log_overhead"
+            " BM_log_latency"
+            " BM_log_delay",
         "r")));
 
     char buffer[5120];
@@ -581,10 +587,12 @@ void timeout_negative(const char *command) {
             continue;
         }
 
+        // alarm triggers at 50% of the --wrap time out
         content_wrap = recv(fd, msg_wrap.buf, sizeof(msg_wrap), 0) > 0;
 
         alarm_wrap = alarm(5);
 
+        // alarm triggers at 133% of the --wrap time out
         content_timeout = recv(fd, msg_timeout.buf, sizeof(msg_timeout), 0) > 0;
         if (!content_timeout) { // make sure we hit dumpAndClose
             content_timeout = recv(fd, msg_timeout.buf, sizeof(msg_timeout), 0) > 0;
@@ -629,11 +637,24 @@ TEST(logd, timeout_start_epoch) {
 
 // b/26447386 refined behavior
 TEST(logd, timeout) {
+    // b/33962045 This test interferes with other log reader tests that
+    // follow because of file descriptor socket persistence in the same
+    // process.  So let's fork it to isolate it from giving us pain.
+
+    pid_t pid = fork();
+
+    if (pid) {
+        siginfo_t info = {};
+        ASSERT_EQ(0, TEMP_FAILURE_RETRY(waitid(P_PID, pid, &info, WEXITED)));
+        ASSERT_EQ(0, info.si_status);
+        return;
+    }
+
     log_msg msg_wrap, msg_timeout;
     bool content_wrap = false, content_timeout = false, written = false;
     unsigned int alarm_wrap = 0, alarm_timeout = 0;
     // A few tries to get it right just in case wrap kicks in due to
-    // content providers being active during the test
+    // content providers being active during the test.
     int i = 5;
     log_time now(android_log_clockid());
     now.tv_sec -= 30; // reach back a moderate period of time
@@ -642,7 +663,8 @@ TEST(logd, timeout) {
         int fd = socket_local_client("logdr",
                                      ANDROID_SOCKET_NAMESPACE_RESERVED,
                                      SOCK_SEQPACKET);
-        ASSERT_LT(0, fd);
+        EXPECT_LT(0, fd);
+        if (fd < 0) _exit(fd);
 
         std::string ask = android::base::StringPrintf(
             "dumpAndClose lids=0,1,2,3,4,5 timeout=6 start=%"
@@ -665,10 +687,12 @@ TEST(logd, timeout) {
             continue;
         }
 
+        // alarm triggers at 50% of the --wrap time out
         content_wrap = recv(fd, msg_wrap.buf, sizeof(msg_wrap), 0) > 0;
 
         alarm_wrap = alarm(5);
 
+        // alarm triggers at 133% of the --wrap time out
         content_timeout = recv(fd, msg_timeout.buf, sizeof(msg_timeout), 0) > 0;
         if (!content_timeout) { // make sure we hit dumpAndClose
             content_timeout = recv(fd, msg_timeout.buf, sizeof(msg_timeout), 0) > 0;
@@ -692,6 +716,7 @@ TEST(logd, timeout) {
         if (content_timeout) {
             log_time msg(msg_timeout.entry.sec, msg_timeout.entry.nsec);
             EXPECT_FALSE(msg < now);
+            if (msg < now) _exit(-1);
             if (msg > now) {
                 now = msg;
                 now.tv_sec += 30;
@@ -724,6 +749,8 @@ TEST(logd, timeout) {
     EXPECT_EQ(0U, alarm_wrap);
     EXPECT_TRUE(content_timeout);
     EXPECT_NE(0U, alarm_timeout);
+
+    _exit(!written + content_wrap + alarm_wrap + !content_timeout + !alarm_timeout);
 }
 
 // b/27242723 confirmed fixed
@@ -787,11 +814,10 @@ static inline int32_t get4LE(const char* src)
 void __android_log_btwrite_multiple__helper(int count) {
     log_time ts(CLOCK_MONOTONIC);
 
-    struct logger_list *logger_list;
-    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-        LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, 0)));
-
     log_time ts1(CLOCK_MONOTONIC);
+
+    // We fork to create a unique pid for the submitted log messages
+    // so that we do not collide with the other _multiple_ tests.
 
     pid_t pid = fork();
 
@@ -807,8 +833,13 @@ void __android_log_btwrite_multiple__helper(int count) {
         _exit(0);
     }
 
-    siginfo_t info{};
+    siginfo_t info = {};
     ASSERT_EQ(0, TEMP_FAILURE_RETRY(waitid(P_PID, pid, &info, WEXITED)));
+    ASSERT_EQ(0, info.si_status);
+
+    struct logger_list *logger_list;
+    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
+        LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 0, pid)));
 
     int expected_count = (count < 2) ? count : 2;
     int expected_chatty_count = (count <= 2) ? 0 : 1;
@@ -854,12 +885,12 @@ void __android_log_btwrite_multiple__helper(int count) {
         }
     }
 
+    android_logger_list_close(logger_list);
+
     EXPECT_EQ(expected_count, count);
     EXPECT_EQ(1, second_count);
     EXPECT_EQ(expected_chatty_count, chatty_count);
     EXPECT_EQ(expected_expire_count, expire_count);
-
-    android_logger_list_close(logger_list);
 }
 
 TEST(logd, multiple_test_1) {
