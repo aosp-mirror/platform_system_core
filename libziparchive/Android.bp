@@ -20,6 +20,7 @@ cc_defaults {
         "-DZLIB_CONST",
         "-Werror",
         "-Wall",
+        "-D_FILE_OFFSET_BITS=64",
     ],
     cppflags: [
         "-Wold-style-cast",
