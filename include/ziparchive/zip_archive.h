@@ -26,8 +26,6 @@
 #include <sys/types.h>
 #include <utils/Compat.h>
 
-__BEGIN_DECLS
-
 /* Zip compression methods we support */
 enum {
   kCompressStored     = 0,        // no compression
@@ -227,7 +225,5 @@ typedef bool (*ProcessZipEntryFunction)(const uint8_t* buf, size_t buf_size, voi
 int32_t ProcessZipEntryContents(ZipArchiveHandle handle, ZipEntry* entry,
         ProcessZipEntryFunction func, void* cookie);
 #endif
-
-__END_DECLS
 
 #endif  // LIBZIPARCHIVE_ZIPARCHIVE_H_
