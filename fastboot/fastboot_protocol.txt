@@ -78,7 +78,7 @@ Client:  "OKAY0.4"               return version "0.4"
 
 Host:    "getvar:nonexistant"    request some undefined variable
 
-Client:  "OKAY"                  return value ""
+Client:  "FAILUnknown variable"  getvar failure; see getvar details below
 
 Host:    "download:00001234"     request to send 0x1234 bytes of data
 
@@ -113,7 +113,14 @@ Command Reference
 
  "getvar:%s"           Read a config/version variable from the bootloader.
                        The variable contents will be returned after the
-                       OKAY response.
+                       OKAY response. If the variable is unknown, the bootloader
+                       should return a FAIL response, optionally with an error
+                       message.
+
+                       Previous versions of this document indicated that getvar
+                       should return an empty OKAY response for unknown
+                       variables, so older devices might exhibit this behavior,
+                       but new implementations should return FAIL instead.
 
  "download:%08x"       Write data to memory which will be later used
                        by "boot", "ramdisk", "flash", etc.  The client
@@ -215,7 +222,7 @@ Device  FB01
 Host    [0x00][0x00][0x00][0x00][0x00][0x00][0x00][0x0E]getvar:version
 Device  [0x00][0x00][0x00][0x00][0x00][0x00][0x00][0x07]OKAY0.4
 Host    [0x00][0x00][0x00][0x00][0x00][0x00][0x00][0x0B]getvar:none
-Device  [0x00][0x00][0x00][0x00][0x00][0x00][0x00][0x04]OKAY
+Device  [0x00][0x00][0x00][0x00][0x00][0x00][0x00][0x14]FAILUnknown variable
 Host    <disconnect>
 
 
@@ -364,10 +371,10 @@ ID    Flags SeqH  SeqL  Data            ID    Flags SeqH  SeqL  Data
                                         0x03  0x00  0x00  0x01
 0x03  0x00  0x00  0x02
                                         0x03  0x00  0x00  0x02  OKAY0.4
-0x03  0x00  0x00  0x03  getvar:foo
+0x03  0x00  0x00  0x03  getvar:none
                                         0x03  0x00  0x00  0x03
 0x03  0x00  0x00  0x04
-                                        0x03  0x00  0x00  0x04  OKAY
+                                        0x03  0x00  0x00  0x04  FAILUnknown var
 
 ----------------------------------------------------------------------
 [fastboot "INFO" responses, S = 0x0000]
