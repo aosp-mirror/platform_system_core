@@ -353,9 +353,10 @@ enum {
     NATIVE_WINDOW_SET_SURFACE_DAMAGE        = 20,   /* private */
     NATIVE_WINDOW_SET_SHARED_BUFFER_MODE    = 21,
     NATIVE_WINDOW_SET_AUTO_REFRESH          = 22,
-    NATIVE_WINDOW_ENABLE_FRAME_TIMESTAMPS   = 23,
-    NATIVE_WINDOW_GET_FRAME_TIMESTAMPS      = 24,
-    NATIVE_WINDOW_GET_REFRESH_CYCLE_DURATION= 25,
+    NATIVE_WINDOW_GET_NEXT_FRAME_ID         = 23,
+    NATIVE_WINDOW_ENABLE_FRAME_TIMESTAMPS   = 24,
+    NATIVE_WINDOW_GET_FRAME_TIMESTAMPS      = 25,
+    NATIVE_WINDOW_GET_REFRESH_CYCLE_DURATION= 26,
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -1018,6 +1019,12 @@ static inline int native_window_set_auto_refresh(
     return window->perform(window, NATIVE_WINDOW_SET_AUTO_REFRESH, autoRefresh);
 }
 
+static inline int native_window_get_next_frame_id(
+        struct ANativeWindow* window, uint64_t* frameId)
+{
+    return window->perform(window, NATIVE_WINDOW_GET_NEXT_FRAME_ID, frameId);
+}
+
 static inline int native_window_enable_frame_timestamps(
         struct ANativeWindow* window, bool enable)
 {
@@ -1026,7 +1033,7 @@ static inline int native_window_enable_frame_timestamps(
 }
 
 static inline int native_window_get_frame_timestamps(
-        struct ANativeWindow* window, uint32_t framesAgo,
+        struct ANativeWindow* window, uint64_t frameId,
         int64_t* outRequestedPresentTime, int64_t* outAcquireTime,
         int64_t* outLatchTime, int64_t* outFirstRefreshStartTime,
         int64_t* outLastRefreshStartTime, int64_t* outGlCompositionDoneTime,
@@ -1034,7 +1041,7 @@ static inline int native_window_get_frame_timestamps(
         int64_t* outDequeueReadyTime, int64_t* outReleaseTime)
 {
     return window->perform(window, NATIVE_WINDOW_GET_FRAME_TIMESTAMPS,
-            framesAgo, outRequestedPresentTime, outAcquireTime, outLatchTime,
+            frameId, outRequestedPresentTime, outAcquireTime, outLatchTime,
             outFirstRefreshStartTime, outLastRefreshStartTime,
             outGlCompositionDoneTime, outDisplayPresentTime,
             outDisplayRetireTime, outDequeueReadyTime, outReleaseTime);
