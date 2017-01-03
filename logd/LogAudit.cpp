@@ -98,6 +98,13 @@ int LogAudit::logPrint(const char *fmt, ...) {
     }
 
     char *cp;
+    // Work around kernels missing
+    // https://github.com/torvalds/linux/commit/b8f89caafeb55fba75b74bea25adc4e4cd91be67
+    // Such kernels improperly add newlines inside audit messages.
+    while ((cp = strchr(str, '\n'))) {
+        *cp = ' ';
+    }
+
     while ((cp = strstr(str, "  "))) {
         memmove(cp, cp + 1, strlen(cp + 1) + 1);
     }
