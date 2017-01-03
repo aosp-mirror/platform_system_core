@@ -504,190 +504,6 @@ TEST(liblog, __android_log_buf_write_and_print__newline_space_prefix) {
     buf_write_test("\n Hello World \n");
 }
 
-TEST(liblog, __security) {
-#ifdef __ANDROID__
-    static const char persist_key[] = "persist.logd.security";
-    static const char readonly_key[] = "ro.device_owner";
-    static const char nothing_val[] = "_NOTHING_TO_SEE_HERE_";
-    char persist[PROP_VALUE_MAX];
-    char readonly[PROP_VALUE_MAX];
-
-    property_get(persist_key, persist, "");
-    property_get(readonly_key, readonly, nothing_val);
-
-    if (!strcmp(readonly, nothing_val)) {
-        EXPECT_FALSE(__android_log_security());
-        fprintf(stderr, "Warning, setting ro.device_owner to a domain\n");
-        property_set(readonly_key, "com.google.android.SecOps.DeviceOwner");
-    } else if (!strcasecmp(readonly, "false") || !readonly[0]) {
-        EXPECT_FALSE(__android_log_security());
-        return;
-    }
-
-    if (!strcasecmp(persist, "true")) {
-        EXPECT_TRUE(__android_log_security());
-    } else {
-        EXPECT_FALSE(__android_log_security());
-    }
-    property_set(persist_key, "TRUE");
-    EXPECT_TRUE(__android_log_security());
-    property_set(persist_key, "FALSE");
-    EXPECT_FALSE(__android_log_security());
-    property_set(persist_key, "true");
-    EXPECT_TRUE(__android_log_security());
-    property_set(persist_key, "false");
-    EXPECT_FALSE(__android_log_security());
-    property_set(persist_key, "");
-    EXPECT_FALSE(__android_log_security());
-    property_set(persist_key, persist);
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}
-
-TEST(liblog, __security_buffer) {
-#ifdef __ANDROID__
-    struct logger_list *logger_list;
-    android_event_long_t buffer;
-
-    static const char persist_key[] = "persist.logd.security";
-    char persist[PROP_VALUE_MAX];
-    bool set_persist = false;
-    bool allow_security = false;
-
-    if (__android_log_security()) {
-        allow_security = true;
-    } else {
-        property_get(persist_key, persist, "");
-        if (strcasecmp(persist, "true")) {
-            property_set(persist_key, "TRUE");
-            if (__android_log_security()) {
-                allow_security = true;
-                set_persist = true;
-            } else {
-                property_set(persist_key, persist);
-            }
-        }
-    }
-
-    if (!allow_security) {
-        fprintf(stderr, "WARNING: "
-                "security buffer disabled, bypassing end-to-end test\n");
-
-        log_time ts(CLOCK_MONOTONIC);
-
-        buffer.type = EVENT_TYPE_LONG;
-        buffer.data = *(static_cast<uint64_t *>((void *)&ts));
-
-        // expect failure!
-        ASSERT_GE(0, __android_log_security_bwrite(0, &buffer, sizeof(buffer)));
-
-        return;
-    }
-
-    /* Matches clientHasLogCredentials() in logd */
-    uid_t uid = getuid();
-    gid_t gid = getgid();
-    bool clientHasLogCredentials = true;
-    if ((uid != AID_SYSTEM) && (uid != AID_ROOT) && (uid != AID_LOG)
-     && (gid != AID_SYSTEM) && (gid != AID_ROOT) && (gid != AID_LOG)) {
-        uid_t euid = geteuid();
-        if ((euid != AID_SYSTEM) && (euid != AID_ROOT) && (euid != AID_LOG)) {
-            gid_t egid = getegid();
-            if ((egid != AID_SYSTEM) && (egid != AID_ROOT) && (egid != AID_LOG)) {
-                int num_groups = getgroups(0, NULL);
-                if (num_groups > 0) {
-                    gid_t groups[num_groups];
-                    num_groups = getgroups(num_groups, groups);
-                    while (num_groups > 0) {
-                        if (groups[num_groups - 1] == AID_LOG) {
-                            break;
-                        }
-                        --num_groups;
-                    }
-                }
-                if (num_groups <= 0) {
-                    clientHasLogCredentials = false;
-                }
-            }
-        }
-    }
-    if (!clientHasLogCredentials) {
-        fprintf(stderr, "WARNING: "
-                "not in system context, bypassing end-to-end test\n");
-
-        log_time ts(CLOCK_MONOTONIC);
-
-        buffer.type = EVENT_TYPE_LONG;
-        buffer.data = *(static_cast<uint64_t *>((void *)&ts));
-
-        // expect failure!
-        ASSERT_GE(0, __android_log_security_bwrite(0, &buffer, sizeof(buffer)));
-
-        return;
-    }
-
-    setuid(AID_SYSTEM); // only one that can read security buffer
-
-    pid_t pid = getpid();
-
-    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-        LOG_ID_SECURITY, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK,
-        1000, pid)));
-
-    log_time ts(CLOCK_MONOTONIC);
-
-    buffer.type = EVENT_TYPE_LONG;
-    buffer.data = *(static_cast<uint64_t *>((void *)&ts));
-
-    ASSERT_LT(0, __android_log_security_bwrite(0, &buffer, sizeof(buffer)));
-    usleep(1000000);
-
-    int count = 0;
-
-    for (;;) {
-        log_msg log_msg;
-        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
-            break;
-        }
-
-        ASSERT_EQ(log_msg.entry.pid, pid);
-
-        if ((log_msg.entry.len != sizeof(android_log_event_long_t))
-         || (log_msg.id() != LOG_ID_SECURITY)) {
-            continue;
-        }
-
-        android_log_event_long_t* eventData;
-        eventData = reinterpret_cast<android_log_event_long_t*>(log_msg.msg());
-
-        if (!eventData || (eventData->payload.type != EVENT_TYPE_LONG)) {
-            continue;
-        }
-
-        log_time tx(reinterpret_cast<char*>(&eventData->payload.data));
-        if (ts == tx) {
-            ++count;
-        }
-    }
-
-    if (set_persist) {
-        property_set(persist_key, persist);
-    }
-
-    android_logger_list_close(logger_list);
-
-    bool clientHasSecurityCredentials = (uid == AID_SYSTEM) || (gid == AID_SYSTEM);
-    if (!clientHasSecurityCredentials) {
-        fprintf(stderr, "WARNING: "
-                "not system, content submitted but can not check end-to-end\n");
-    }
-    EXPECT_EQ(clientHasSecurityCredentials ? 1 : 0, count);
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}
-
 #ifdef __ANDROID__
 static unsigned signaled;
 static log_time signal_time;
@@ -1375,6 +1191,9 @@ TEST(liblog, dual_reader) {
 
 TEST(liblog, android_logger_get_) {
 #ifdef __ANDROID__
+    // This test assumes the log buffers are filled with noise from
+    // normal operations. It will fail if done immediately after a
+    // logcat -c.
     struct logger_list * logger_list = android_logger_list_alloc(ANDROID_LOG_WRONLY, 0, 0);
 
     for(int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
@@ -1780,6 +1599,294 @@ TEST(liblog, is_loggable) {
     key[sizeof(log_namespace) - 2] = '\0';
     property_set(key, hold[2]);
     property_set(key + base_offset, hold[3]);
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
+}
+
+#ifdef __ANDROID__
+// helper to liblog.enoent to count end-to-end matching logging messages.
+static int count_matching_ts(log_time ts) {
+    usleep(1000000);
+
+    pid_t pid = getpid();
+
+    struct logger_list* logger_list = android_logger_list_open(
+        LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid);
+
+    int count = 0;
+    if (logger_list == NULL) return count;
+
+    for (;;) {
+        log_msg log_msg;
+        if (android_logger_list_read(logger_list, &log_msg) <= 0) break;
+
+        if (log_msg.entry.len != sizeof(android_log_event_long_t)) continue;
+        if (log_msg.id() != LOG_ID_EVENTS) continue;
+
+        android_log_event_long_t* eventData;
+        eventData = reinterpret_cast<android_log_event_long_t*>(log_msg.msg());
+        if (!eventData) continue;
+        if (eventData->payload.type != EVENT_TYPE_LONG) continue;
+
+        log_time tx(reinterpret_cast<char*>(&eventData->payload.data));
+        if (ts != tx) continue;
+
+        // found event message with matching timestamp signature in payload
+        ++count;
+    }
+    android_logger_list_close(logger_list);
+
+    return count;
+}
+
+// meant to be handed to ASSERT_TRUE / EXPECT_TRUE only to expand the message
+static testing::AssertionResult IsOk(bool ok, std::string &message) {
+    return ok ?
+        testing::AssertionSuccess() :
+        (testing::AssertionFailure() << message);
+}
+#endif
+
+TEST(liblog, enoent) {
+#ifdef __ANDROID__
+    log_time ts(CLOCK_MONOTONIC);
+    EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
+    EXPECT_EQ(1, count_matching_ts(ts));
+
+    // This call will fail if we are setuid(AID_SYSTEM), beware of any
+    // test prior to this one playing with setuid and causing interference.
+    // We need to run before these tests so that they do not interfere with
+    // this test.
+    //
+    // Stopping the logger can affect some other test's expectations as they
+    // count on the log buffers filled with existing content, and this
+    // effectively does a logcat -c emptying it.  So we want this test to be
+    // as near as possible to the bottom of the file.  For example
+    // liblog.android_logger_get_ is one of those tests that has no recourse
+    // and that would be adversely affected by emptying the log if it was run
+    // right after this test.
+    system("stop logd");
+    usleep(1000000);
+
+    // A clean stop like we are testing returns -ENOENT, but in the _real_
+    // world we could get -ENOTCONN or -ECONNREFUSED depending on timing.
+    // Alas we can not test these other return values; accept that they
+    // are treated equally within the open-retry logic in liblog.
+    ts = log_time(CLOCK_MONOTONIC);
+    int ret = __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts));
+    std::string content = android::base::StringPrintf(
+        "__android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)) = %d %s\n",
+        ret, strerror(-ret));
+    EXPECT_TRUE(IsOk((ret == -ENOENT) ||
+                     (ret == -ENOTCONN) ||
+                     (ret == -ECONNREFUSED), content));
+    ret = __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts));
+    content = android::base::StringPrintf(
+        "__android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)) = %d %s\n",
+        ret, strerror(-ret));
+    EXPECT_TRUE(IsOk((ret == -ENOENT) ||
+                     (ret == -ENOTCONN) ||
+                     (ret == -ECONNREFUSED), content));
+    EXPECT_EQ(0, count_matching_ts(ts));
+
+    system("start logd");
+    usleep(1000000);
+
+    EXPECT_EQ(0, count_matching_ts(ts));
+
+    ts = log_time(CLOCK_MONOTONIC);
+    EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
+    EXPECT_EQ(1, count_matching_ts(ts));
+
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
+}
+
+// Below this point we run risks of setuid(AID_SYSTEM) which may affect others.
+
+TEST(liblog, __security) {
+#ifdef __ANDROID__
+    static const char persist_key[] = "persist.logd.security";
+    static const char readonly_key[] = "ro.device_owner";
+    // A silly default value that can never be in readonly_key so
+    // that it can be determined the property is not set.
+    static const char nothing_val[] = "_NOTHING_TO_SEE_HERE_";
+    char persist[PROP_VALUE_MAX];
+    char readonly[PROP_VALUE_MAX];
+
+    property_get(persist_key, persist, "");
+    property_get(readonly_key, readonly, nothing_val);
+
+    if (!strcmp(readonly, nothing_val)) {
+        EXPECT_FALSE(__android_log_security());
+        fprintf(stderr, "Warning, setting ro.device_owner to a domain\n");
+        property_set(readonly_key, "com.google.android.SecOps.DeviceOwner");
+    } else if (!strcasecmp(readonly, "false") || !readonly[0]) {
+        EXPECT_FALSE(__android_log_security());
+        return;
+    }
+
+    if (!strcasecmp(persist, "true")) {
+        EXPECT_TRUE(__android_log_security());
+    } else {
+        EXPECT_FALSE(__android_log_security());
+    }
+    property_set(persist_key, "TRUE");
+    EXPECT_TRUE(__android_log_security());
+    property_set(persist_key, "FALSE");
+    EXPECT_FALSE(__android_log_security());
+    property_set(persist_key, "true");
+    EXPECT_TRUE(__android_log_security());
+    property_set(persist_key, "false");
+    EXPECT_FALSE(__android_log_security());
+    property_set(persist_key, "");
+    EXPECT_FALSE(__android_log_security());
+    property_set(persist_key, persist);
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
+}
+
+TEST(liblog, __security_buffer) {
+#ifdef __ANDROID__
+    struct logger_list *logger_list;
+    android_event_long_t buffer;
+
+    static const char persist_key[] = "persist.logd.security";
+    char persist[PROP_VALUE_MAX];
+    bool set_persist = false;
+    bool allow_security = false;
+
+    if (__android_log_security()) {
+        allow_security = true;
+    } else {
+        property_get(persist_key, persist, "");
+        if (strcasecmp(persist, "true")) {
+            property_set(persist_key, "TRUE");
+            if (__android_log_security()) {
+                allow_security = true;
+                set_persist = true;
+            } else {
+                property_set(persist_key, persist);
+            }
+        }
+    }
+
+    if (!allow_security) {
+        fprintf(stderr, "WARNING: "
+                "security buffer disabled, bypassing end-to-end test\n");
+
+        log_time ts(CLOCK_MONOTONIC);
+
+        buffer.type = EVENT_TYPE_LONG;
+        buffer.data = *(static_cast<uint64_t *>((void *)&ts));
+
+        // expect failure!
+        ASSERT_GE(0, __android_log_security_bwrite(0, &buffer, sizeof(buffer)));
+
+        return;
+    }
+
+    /* Matches clientHasLogCredentials() in logd */
+    uid_t uid = getuid();
+    gid_t gid = getgid();
+    bool clientHasLogCredentials = true;
+    if ((uid != AID_SYSTEM) && (uid != AID_ROOT) && (uid != AID_LOG)
+     && (gid != AID_SYSTEM) && (gid != AID_ROOT) && (gid != AID_LOG)) {
+        uid_t euid = geteuid();
+        if ((euid != AID_SYSTEM) && (euid != AID_ROOT) && (euid != AID_LOG)) {
+            gid_t egid = getegid();
+            if ((egid != AID_SYSTEM) && (egid != AID_ROOT) && (egid != AID_LOG)) {
+                int num_groups = getgroups(0, NULL);
+                if (num_groups > 0) {
+                    gid_t groups[num_groups];
+                    num_groups = getgroups(num_groups, groups);
+                    while (num_groups > 0) {
+                        if (groups[num_groups - 1] == AID_LOG) {
+                            break;
+                        }
+                        --num_groups;
+                    }
+                }
+                if (num_groups <= 0) {
+                    clientHasLogCredentials = false;
+                }
+            }
+        }
+    }
+    if (!clientHasLogCredentials) {
+        fprintf(stderr, "WARNING: "
+                "not in system context, bypassing end-to-end test\n");
+
+        log_time ts(CLOCK_MONOTONIC);
+
+        buffer.type = EVENT_TYPE_LONG;
+        buffer.data = *(static_cast<uint64_t *>((void *)&ts));
+
+        // expect failure!
+        ASSERT_GE(0, __android_log_security_bwrite(0, &buffer, sizeof(buffer)));
+
+        return;
+    }
+
+    setuid(AID_SYSTEM); // only one that can read security buffer
+
+    pid_t pid = getpid();
+
+    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
+        LOG_ID_SECURITY, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK,
+        1000, pid)));
+
+    log_time ts(CLOCK_MONOTONIC);
+
+    buffer.type = EVENT_TYPE_LONG;
+    buffer.data = *(static_cast<uint64_t *>((void *)&ts));
+
+    ASSERT_LT(0, __android_log_security_bwrite(0, &buffer, sizeof(buffer)));
+    usleep(1000000);
+
+    int count = 0;
+
+    for (;;) {
+        log_msg log_msg;
+        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
+            break;
+        }
+
+        ASSERT_EQ(log_msg.entry.pid, pid);
+
+        if ((log_msg.entry.len != sizeof(android_log_event_long_t))
+         || (log_msg.id() != LOG_ID_SECURITY)) {
+            continue;
+        }
+
+        android_log_event_long_t* eventData;
+        eventData = reinterpret_cast<android_log_event_long_t*>(log_msg.msg());
+
+        if (!eventData || (eventData->payload.type != EVENT_TYPE_LONG)) {
+            continue;
+        }
+
+        log_time tx(reinterpret_cast<char*>(&eventData->payload.data));
+        if (ts == tx) {
+            ++count;
+        }
+    }
+
+    if (set_persist) {
+        property_set(persist_key, persist);
+    }
+
+    android_logger_list_close(logger_list);
+
+    bool clientHasSecurityCredentials = (uid == AID_SYSTEM) || (gid == AID_SYSTEM);
+    if (!clientHasSecurityCredentials) {
+        fprintf(stderr, "WARNING: "
+                "not system, content submitted but can not check end-to-end\n");
+    }
+    EXPECT_EQ(clientHasSecurityCredentials ? 1 : 0, count);
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
@@ -2803,13 +2910,6 @@ TEST(liblog, __android_log_pmsg_file_read) {
 }
 
 #ifdef __ANDROID__
-// meant to be handed to ASSERT_TRUE / EXPECT_TRUE only to expand the message
-static testing::AssertionResult IsOk(bool ok, std::string &message) {
-    return ok ?
-        testing::AssertionSuccess() :
-        (testing::AssertionFailure() << message);
-}
-
 // must be: '<needle:> 0 kB'
 static bool isZero(const std::string &content, std::string::size_type pos,
                    const char* needle) {
