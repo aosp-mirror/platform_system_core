@@ -54,7 +54,7 @@ LOCAL_SRC_FILES:= \
     service.cpp \
     util.cpp \
 
-LOCAL_STATIC_LIBRARIES := libbase libselinux liblog libprocessgroup
+LOCAL_STATIC_LIBRARIES := libbase libselinux liblog libprocessgroup libnl
 LOCAL_WHOLE_STATIC_LIBRARIES := libcap
 LOCAL_MODULE := libinit
 LOCAL_SANITIZE := integer
@@ -103,7 +103,8 @@ LOCAL_STATIC_LIBRARIES := \
     libdl \
     libsparse_static \
     libz \
-    libprocessgroup
+    libprocessgroup \
+    libnl \
 
 # Create symlinks.
 LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT)/sbin; \
