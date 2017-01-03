@@ -582,12 +582,15 @@ bool Service::Start() {
             console_ = default_console;
         }
 
-        bool have_console = (access(console_.c_str(), R_OK | W_OK) != -1);
-        if (!have_console) {
-            PLOG(ERROR) << "service '" << name_ << "' cannot gain read/write access to console '" << console_ << "'";
+        // Make sure that open call succeeds to ensure a console driver is
+        // properly registered for the device node
+        int console_fd = open(console_.c_str(), O_RDWR | O_CLOEXEC);
+        if (console_fd < 0) {
+            PLOG(ERROR) << "service '" << name_ << "' couldn't open console '" << console_ << "'";
             flags_ |= SVC_DISABLED;
             return false;
         }
+        close(console_fd);
     }
 
     struct stat sb;
