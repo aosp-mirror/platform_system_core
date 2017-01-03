@@ -26,7 +26,9 @@ class LogReader;
 class LogAudit : public SocketListener {
     LogBuffer *logbuf;
     LogReader *reader;
-    int fdDmesg;
+    int fdDmesg; // fdDmesg >= 0 is functionally bool dmesg
+    bool main;
+    bool events;
     bool initialized;
 
 public:

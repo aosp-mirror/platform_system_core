@@ -47,6 +47,10 @@ LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg) :
         logbuf(buf),
         reader(reader),
         fdDmesg(fdDmesg),
+        main(__android_logger_property_get_bool("ro.logd.auditd.main",
+                                                BOOL_DEFAULT_TRUE)),
+        events(__android_logger_property_get_bool("ro.logd.auditd.events",
+                                                  BOOL_DEFAULT_TRUE)),
         initialized(false) {
     static const char auditd_message[] = { KMSG_PRIORITY(LOG_INFO),
         'l', 'o', 'g', 'd', '.', 'a', 'u', 'd', 'i', 't', 'd', ':',
@@ -172,6 +176,11 @@ int LogAudit::logPrint(const char *fmt, ...) {
         }
     }
 
+    if (!main && !events) {
+        free(str);
+        return 0;
+    }
+
     pid_t pid = getpid();
     pid_t tid = gettid();
     uid_t uid = AID_LOGD;
@@ -222,7 +231,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
 
     bool notify = false;
 
-    {   // begin scope for event buffer
+    if (events) {   // begin scope for event buffer
         uint32_t buffer[(n + sizeof(uint32_t) - 1) / sizeof(uint32_t)];
 
         android_log_event_string_t *event
@@ -277,7 +286,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
     size_t e = strnlen(ecomm, LOGGER_ENTRY_MAX_PAYLOAD - b);
     n = b + e + l + 2;
 
-    {   // begin scope for main buffer
+    if (main) {   // begin scope for main buffer
         char newstr[n];
 
         *newstr = info ? ANDROID_LOG_INFO : ANDROID_LOG_WARN;
