@@ -184,7 +184,7 @@ public:
                     ret = rsp.timeout;
                 }
             });
-            if (!hwRes.getStatus().isOk()) {
+            if (!hwRes.isOk()) {
                 ALOGE("enroll transaction failed\n");
                 ret = -1;
             }
@@ -267,7 +267,7 @@ public:
                         ret = rsp.timeout;
                     }
                 });
-                if (!hwRes.getStatus().isOk()) {
+                if (!hwRes.isOk()) {
                     ALOGE("verify transaction failed\n");
                     ret = -1;
                 }

@@ -171,7 +171,7 @@ int32_t FingerprintDaemonProxy::enroll(const uint8_t* token, ssize_t tokenSize, 
 
     hardware::hidl_array<uint8_t, hw_auth_token_size> hat(token);
     Return<RequestStatus> ret = gBFP->enroll(hat, groupId, timeout);
-    if (!ret.getStatus().isOk()) {
+    if (!ret.isOk()) {
         ALOGE("Unknown transport error");
         return -1;
     }
@@ -186,7 +186,7 @@ uint64_t FingerprintDaemonProxy::preEnroll() {
 
 int32_t FingerprintDaemonProxy::postEnroll() {
     Return<RequestStatus> ret = gBFP->postEnroll();
-    if (!ret.getStatus().isOk()) {
+    if (!ret.isOk()) {
         ALOGE("Unknown transport error");
         return -1;
     }
@@ -198,7 +198,7 @@ int32_t FingerprintDaemonProxy::postEnroll() {
 int32_t FingerprintDaemonProxy::stopEnrollment() {
     ALOG(LOG_VERBOSE, LOG_TAG, "stopEnrollment()\n");
     Return<RequestStatus> ret = gBFP->cancel();
-    if (!ret.getStatus().isOk()) {
+    if (!ret.isOk()) {
         ALOGE("Unknown transport error");
         return -1;
     }
@@ -210,7 +210,7 @@ int32_t FingerprintDaemonProxy::stopEnrollment() {
 int32_t FingerprintDaemonProxy::authenticate(uint64_t sessionId, uint32_t groupId) {
     ALOG(LOG_VERBOSE, LOG_TAG, "authenticate(sid=%" PRId64 ", gid=%d)\n", sessionId, groupId);
     Return<RequestStatus> ret = gBFP->authenticate(sessionId, groupId);
-    if (!ret.getStatus().isOk()) {
+    if (!ret.isOk()) {
         ALOGE("Unknown transport error");
         return -1;
     }
@@ -222,7 +222,7 @@ int32_t FingerprintDaemonProxy::authenticate(uint64_t sessionId, uint32_t groupI
 int32_t FingerprintDaemonProxy::stopAuthentication() {
     ALOG(LOG_VERBOSE, LOG_TAG, "stopAuthentication()\n");
     Return<RequestStatus> ret = gBFP->cancel();
-    if (!ret.getStatus().isOk()) {
+    if (!ret.isOk()) {
         ALOGE("Unknown transport error");
         return -1;
     }
@@ -234,7 +234,7 @@ int32_t FingerprintDaemonProxy::stopAuthentication() {
 int32_t FingerprintDaemonProxy::remove(int32_t fingerId, int32_t groupId) {
     ALOG(LOG_VERBOSE, LOG_TAG, "remove(fid=%d, gid=%d)\n", fingerId, groupId);
     Return<RequestStatus> ret = gBFP->remove(groupId, fingerId);
-    if (!ret.getStatus().isOk()) {
+    if (!ret.isOk()) {
         ALOGE("Unknown transport error");
         return -1;
     }
@@ -246,7 +246,7 @@ int32_t FingerprintDaemonProxy::remove(int32_t fingerId, int32_t groupId) {
 int32_t FingerprintDaemonProxy::enumerate() {
     ALOG(LOG_VERBOSE, LOG_TAG, "enumerate()\n");
     Return<RequestStatus> ret = gBFP->enumerate();
-    if (!ret.getStatus().isOk()) {
+    if (!ret.isOk()) {
         ALOGE("Unknown transport error");
         return -1;
     }
@@ -269,7 +269,7 @@ int32_t FingerprintDaemonProxy::setActiveGroup(int32_t groupId, const uint8_t* p
     pathname.setToExternal(reinterpret_cast<const char*>(path), pathlen);
     ALOG(LOG_VERBOSE, LOG_TAG, "setActiveGroup(%d, %s, %zu)", groupId, pathname.c_str(), pathlen);
     Return<RequestStatus> ret = gBFP->setActiveGroup(groupId, pathname);
-    if (!ret.getStatus().isOk()) {
+    if (!ret.isOk()) {
         ALOGE("Unknown transport error");
         return -1;
     }
