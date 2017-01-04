@@ -98,7 +98,7 @@ int __android_log_write(int prio, const char *tag, const char *text);
  */
 int __android_log_print(int prio, const char *tag,  const char *fmt, ...)
 #if defined(__GNUC__)
-    __attribute__ ((format(printf, 3, 4)))
+    __attribute__((__format__(printf, 3, 4)))
 #endif
     ;
 
@@ -116,8 +116,8 @@ int __android_log_vprint(int prio, const char *tag,
 void __android_log_assert(const char *cond, const char *tag,
 			  const char *fmt, ...)    
 #if defined(__GNUC__)
-    __attribute__ ((noreturn))
-    __attribute__ ((format(printf, 3, 4)))
+    __attribute__((__noreturn__))
+    __attribute__((__format__(printf, 3, 4)))
 #endif
     ;
 
