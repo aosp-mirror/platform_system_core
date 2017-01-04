@@ -49,15 +49,22 @@ using namespace std::chrono_literals;
 #define MAX_PACKET_SIZE_HS 512
 #define MAX_PACKET_SIZE_SS 1024
 
-// Writes larger than 16k fail on some devices (seed with 3.10.49-g209ea2f in particular).
-#define USB_FFS_MAX_WRITE 16384
-
-// The kernel allocates a contiguous buffer for reads, which can fail for large ones due to
-// fragmentation. 16k chosen arbitrarily to match the write limit.
-#define USB_FFS_MAX_READ 16384
+// Kernels before 3.3 have a 16KiB transfer limit  That limit was replaced
+// with a 16MiB global limit in 3.3, but each URB submitted required a
+// contiguous kernel allocation, so you would get ENOMEM if you tried to
+// send something larger than the biggest available contiguous kernel
+// memory region. Large contiguous allocations could be unreliable
+// on a device kernel that has been running for a while fragmenting its
+// memory so we start with a larger allocation, and shrink the amount if
+// necessary.
+#define USB_FFS_BULK_SIZE 16384
 
 #define cpu_to_le16(x) htole16(x)
 #define cpu_to_le32(x) htole32(x)
+
+#define FUNCTIONFS_ENDPOINT_ALLOC       _IOR('g', 231, __u32)
+
+static constexpr size_t ENDPOINT_ALLOC_RETRIES = 10;
 
 static int dummy_fd = -1;
 
@@ -229,6 +236,7 @@ bool init_functionfs(struct usb_handle* h) {
     ssize_t ret;
     struct desc_v1 v1_descriptor;
     struct desc_v2 v2_descriptor;
+    size_t retries = 0;
 
     v2_descriptor.header.magic = cpu_to_le32(FUNCTIONFS_DESCRIPTORS_MAGIC_V2);
     v2_descriptor.header.length = cpu_to_le32(sizeof(v2_descriptor));
@@ -287,6 +295,29 @@ bool init_functionfs(struct usb_handle* h) {
         goto err;
     }
 
+    h->max_rw = MAX_PAYLOAD;
+    while (h->max_rw >= USB_FFS_BULK_SIZE && retries < ENDPOINT_ALLOC_RETRIES) {
+        int ret_in = ioctl(h->bulk_in, FUNCTIONFS_ENDPOINT_ALLOC, static_cast<__u32>(h->max_rw));
+        int errno_in = errno;
+        int ret_out = ioctl(h->bulk_out, FUNCTIONFS_ENDPOINT_ALLOC, static_cast<__u32>(h->max_rw));
+        int errno_out = errno;
+
+        if (ret_in || ret_out) {
+            if (errno_in == ENODEV || errno_out == ENODEV) {
+                std::this_thread::sleep_for(100ms);
+                retries += 1;
+                continue;
+            }
+            h->max_rw /= 2;
+        } else {
+            return true;
+        }
+    }
+
+    D("[ adb: cannot call endpoint alloc: errno=%d ]", errno);
+    // Kernel pre-allocation could have failed for recoverable reasons.
+    // Continue running with a safe max rw size.
+    h->max_rw *= 2;
     return true;
 
 err:
@@ -340,7 +371,7 @@ static int usb_ffs_write(usb_handle* h, const void* data, int len) {
 
     const char* buf = static_cast<const char*>(data);
     while (len > 0) {
-        int write_len = std::min(USB_FFS_MAX_WRITE, len);
+        int write_len = std::min(h->max_rw, len);
         int n = adb_write(h->bulk_in, buf, write_len);
         if (n < 0) {
             D("ERROR: fd = %d, n = %d: %s", h->bulk_in, n, strerror(errno));
@@ -359,7 +390,7 @@ static int usb_ffs_read(usb_handle* h, void* data, int len) {
 
     char* buf = static_cast<char*>(data);
     while (len > 0) {
-        int read_len = std::min(USB_FFS_MAX_READ, len);
+        int read_len = std::min(h->max_rw, len);
         int n = adb_read(h->bulk_out, buf, read_len);
         if (n < 0) {
             D("ERROR: fd = %d, n = %d: %s", h->bulk_out, n, strerror(errno));
