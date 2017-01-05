@@ -21,5 +21,7 @@ LOCAL_SHARED_LIBRARIES := \
         liblog \
         libnl
 
+LOCAL_EXPORT_C_INCLUDE_DIRS := system/core/libsysutils/include
+
 include $(BUILD_SHARED_LIBRARY)
 
