@@ -20,6 +20,9 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <string>
 
@@ -28,7 +31,12 @@
 #include <cutils/sockets.h>
 #include <gtest/gtest.h>
 #include <log/log.h>
+#include <private/android_filesystem_config.h>
+#ifdef __ANDROID__
+#include <selinux/selinux.h>
+#endif
 
+#include "../libaudit.h" // pickup AUDIT_RATE_LIMIT_*
 #include "../LogReader.h" // pickup LOGD_SNDTIMEO
 
 /*
@@ -873,10 +881,10 @@ void __android_log_btwrite_multiple__helper(int count) {
                 ++second_count;
             }
         } else if (eventData[4] == EVENT_TYPE_STRING) {
-            // chatty
-            if (tag != 1004) continue;
+            if (tag != CHATTY_LOG_TAG) continue;
             ++chatty_count;
             // int len = get4LE(eventData + 4 + 1);
+            log_msg.buf[LOGGER_ENTRY_MAX_LEN] = '\0';
             const char *cp = strstr(eventData + 4 + 1 + 4, " expire ");
             if (!cp) continue;
             unsigned val = 0;
@@ -907,4 +915,155 @@ TEST(logd, multiple_test_3) {
 
 TEST(logd, multiple_test_10) {
     __android_log_btwrite_multiple__helper(10);
+}
+
+#ifdef __ANDROID__
+// returns violating pid
+static pid_t sepolicy_rate(unsigned rate, unsigned num) {
+    pid_t pid = fork();
+
+    if (pid) {
+        siginfo_t info = {};
+        if (TEMP_FAILURE_RETRY(waitid(P_PID, pid, &info, WEXITED))) return 0;
+        if (info.si_status) return 0;
+        return pid;
+    }
+
+    // We may have DAC, but let's not have MAC
+    if (setcon("u:object_r:shell:s0") < 0) {
+        int save_errno = errno;
+        security_context_t context;
+        getcon(&context);
+        fprintf(stderr, "setcon(\"u:r:shell:s0\") failed @\"%s\" %s\n",
+                context, strerror(save_errno));
+        freecon(context);
+        _exit(-1);
+        // NOTREACHED
+        return 0;
+    }
+
+    // Requests dac_read_search, falls back to request dac_override
+    rate /= 2;
+    useconds_t usec;
+    if (rate == 0) {
+        rate = 1;
+        usec = 2000000;
+    } else {
+        usec = (1000000 + (rate / 2)) / rate;
+    }
+    num = (num + 1) / 2;
+
+    if (usec < 2) usec = 2;
+
+    while (num > 0) {
+        if (access(android::base::StringPrintf(
+                       "/data/misc/logd/cannot_access_directory_%u",
+                       num).c_str(),
+                   F_OK) == 0) {
+            _exit(-1);
+            // NOTREACHED
+            return 0;
+        }
+        usleep(usec);
+        --num;
+    }
+    _exit(0);
+    // NOTREACHED
+    return 0;
+}
+
+static int count_avc(pid_t pid) {
+    int count = 0;
+
+    if (pid == 0) return count;
+
+    struct logger_list *logger_list;
+    if (!(logger_list = android_logger_list_open(LOG_ID_EVENTS,
+                                                 ANDROID_LOG_RDONLY |
+                                                     ANDROID_LOG_NONBLOCK,
+                                                 0,
+                                                 pid))) return count;
+    for (;;) {
+        log_msg log_msg;
+
+        if (android_logger_list_read(logger_list, &log_msg) <= 0) break;
+
+        if ((log_msg.entry.pid != pid) ||
+            (log_msg.entry.len < (4 + 1 + 8)) ||
+            (log_msg.id() != LOG_ID_EVENTS)) continue;
+
+        char *eventData = log_msg.msg();
+        if (!eventData) continue;
+
+        uint32_t tag = get4LE(eventData);
+        if (tag != AUDITD_LOG_TAG) continue;
+
+        if (eventData[4] != EVENT_TYPE_STRING) continue;
+
+        // int len = get4LE(eventData + 4 + 1);
+        log_msg.buf[LOGGER_ENTRY_MAX_LEN] = '\0';
+        const char *cp = strstr(eventData + 4 + 1 + 4, "): avc: ");
+        if (!cp) continue;
+
+        ++count;
+    }
+
+    android_logger_list_close(logger_list);
+
+    return count;
+}
+#endif
+
+TEST(logd, sepolicy_rate_limiter_maximum) {
+#ifdef __ANDROID__
+    static const int rate = AUDIT_RATE_LIMIT_MAX;
+    static const int duration = 2;
+    // Two seconds of a liveable sustained rate
+    EXPECT_EQ(rate * duration, count_avc(sepolicy_rate(rate, rate * duration)));
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
+}
+
+TEST(logd, sepolicy_rate_limiter_sub_burst) {
+#ifdef __ANDROID__
+    // maximum period below half way between sustainable and burst rate.
+    static const int threshold = ((AUDIT_RATE_LIMIT_BURST_DURATION *
+                                   (AUDIT_RATE_LIMIT_DEFAULT +
+                                    AUDIT_RATE_LIMIT_MAX)) +
+                                  1) / 2;
+    static const int rate = (threshold / AUDIT_RATE_LIMIT_BURST_DURATION) - 1;
+    static const int duration = AUDIT_RATE_LIMIT_BURST_DURATION;
+    EXPECT_EQ(rate * duration, count_avc(sepolicy_rate(rate, rate * duration)));
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
+}
+
+TEST(logd, sepolicy_rate_limiter_spam) {
+#ifdef __ANDROID__
+    // maximum period of double the maximum burst rate
+    static const int threshold = ((AUDIT_RATE_LIMIT_BURST_DURATION *
+                                   (AUDIT_RATE_LIMIT_DEFAULT +
+                                    AUDIT_RATE_LIMIT_MAX)) +
+                                  1) / 2;
+    static const int rate = AUDIT_RATE_LIMIT_DEFAULT * 2;
+    static const int duration = threshold / AUDIT_RATE_LIMIT_DEFAULT;
+    EXPECT_GE(((AUDIT_RATE_LIMIT_DEFAULT * duration) * 115) /
+                                        100, // +15% margin
+              count_avc(sepolicy_rate(rate, rate * duration)));
+    // give logd another 3 seconds to react to the burst before checking
+    sepolicy_rate(rate, rate * 3);
+    // maximum period at double the maximum burst rate (spam filter kicked in)
+    EXPECT_GE(((AUDIT_RATE_LIMIT_MAX * AUDIT_RATE_LIMIT_BURST_DURATION) * 130) /
+                                        100, // +30% margin
+              count_avc(sepolicy_rate(rate,
+                                      rate * AUDIT_RATE_LIMIT_BURST_DURATION)));
+    // cool down, and check unspammy rate still works
+    sleep(2);
+    EXPECT_LE(AUDIT_RATE_LIMIT_BURST_DURATION - 1, // allow _one_ to be lost
+              count_avc(sepolicy_rate(1, AUDIT_RATE_LIMIT_BURST_DURATION)));
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }

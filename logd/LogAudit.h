@@ -17,6 +17,8 @@
 #ifndef _LOGD_LOG_AUDIT_H__
 #define _LOGD_LOG_AUDIT_H__
 
+#include <queue>
+
 #include <sysutils/SocketListener.h>
 
 #include "LogBuffer.h"
@@ -30,6 +32,11 @@ class LogAudit : public SocketListener {
     bool main;
     bool events;
     bool initialized;
+
+    bool tooFast;
+    int mSock;
+    std::queue<log_time> bucket;
+    void checkRateLimit();
 
 public:
     LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg);
