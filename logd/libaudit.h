@@ -33,7 +33,7 @@ __BEGIN_DECLS
 #define MAX_AUDIT_MESSAGE_LENGTH    8970
 
 typedef enum {
-    GET_REPLY_BLOCKING=0,
+    GET_REPLY_BLOCKING = 0,
     GET_REPLY_NONBLOCKING
 } reply_t;
 
@@ -55,7 +55,7 @@ struct audit_message {
  *  A valid fd on success or < 0 on error with errno set.
  *  Returns the same errors as man 2 socket.
  */
-extern int  audit_open(void);
+extern int audit_open(void);
 
 /**
  * Closes the fd returned from audit_open()
@@ -78,19 +78,36 @@ extern void audit_close(int fd);
  * @return
  *  This function returns 0 on success, else -errno.
  */
-extern int  audit_get_reply(int fd, struct audit_message *rep, reply_t block,
-               int peek);
+extern int audit_get_reply(int fd, struct audit_message *rep, reply_t block,
+                           int peek);
 
 /**
- * Sets a pid to recieve audit netlink events from the kernel
+ * Sets a pid to receive audit netlink events from the kernel
  * @param fd
  *  The fd returned by a call to audit_open()
  * @param pid
- *  The pid whom to set as the reciever of audit messages
+ *  The pid whom to set as the receiver of audit messages
  * @return
  *  This function returns 0 on success, -errno on error.
  */
-extern int  audit_setup(int fd, uint32_t pid);
+extern int audit_setup(int fd, pid_t pid);
+
+/**
+ * Sets the rate limit to receive audit netlink events from the kernel
+ * @param fd
+ *  The fd returned by a call to audit_open()
+ * @param max_rate
+ *  The cap of the maximum number of audit messages a second
+ * @return
+ *  This function returns 0 on success, -errno on error.
+ */
+
+/* Guidelines to follow for dynamic rate_limit */
+#define AUDIT_RATE_LIMIT_DEFAULT 20        /* acceptable burst rate      */
+#define AUDIT_RATE_LIMIT_BURST_DURATION 10 /* number of seconds of burst */
+#define AUDIT_RATE_LIMIT_MAX     5         /* acceptable sustained rate  */
+
+extern int audit_rate_limit(int fd, unsigned rate_limit);
 
 __END_DECLS
 

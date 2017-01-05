@@ -27,12 +27,15 @@ test_tags := tests
 # Unit tests.
 # -----------------------------------------------------------------------------
 
+event_flag := -DAUDITD_LOG_TAG=1003 -DCHATTY_LOG_TAG=1004
+
 test_c_flags := \
     -fstack-protector-all \
     -g \
     -Wall -Wextra \
     -Werror \
     -fno-builtin \
+    $(event_flag)
 
 test_src_files := \
     logd_test.cpp
@@ -43,6 +46,6 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := $(test_module_prefix)unit-tests
 LOCAL_MODULE_TAGS := $(test_tags)
 LOCAL_CFLAGS += $(test_c_flags)
-LOCAL_SHARED_LIBRARIES := libbase libcutils liblog
+LOCAL_SHARED_LIBRARIES := libbase libcutils liblog libselinux
 LOCAL_SRC_FILES := $(test_src_files)
 include $(BUILD_NATIVE_TEST)
