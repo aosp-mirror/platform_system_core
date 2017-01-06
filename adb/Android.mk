@@ -330,6 +330,7 @@ LOCAL_STRIP_MODULE := keep_symbols
 LOCAL_STATIC_LIBRARIES := \
     libadbd \
     libbase \
+    libbootloader_message \
     libfs_mgr \
     libfec \
     libfec_rs \
