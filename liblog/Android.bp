@@ -115,4 +115,5 @@ ndk_library {
     name: "liblog.ndk",
     symbol_file: "liblog.map.txt",
     first_version: "9",
+    unversioned_until: "current",
 }
