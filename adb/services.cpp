@@ -39,6 +39,7 @@
 
 #if !ADB_HOST
 #include <android-base/properties.h>
+#include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
 #include <private/android_logger.h>
 #endif
@@ -133,17 +134,12 @@ static bool reboot_service_impl(int fd, const char* arg) {
             return false;
         }
 
-        const char* const recovery_dir = "/cache/recovery";
-        const char* const command_file = "/cache/recovery/command";
-        // Ensure /cache/recovery exists.
-        if (adb_mkdir(recovery_dir, 0770) == -1 && errno != EEXIST) {
-            D("Failed to create directory '%s': %s", recovery_dir, strerror(errno));
-            return false;
-        }
-
-        bool write_status = android::base::WriteStringToFile(
-                auto_reboot ? "--sideload_auto_reboot" : "--sideload", command_file);
-        if (!write_status) {
+        const std::vector<std::string> options = {
+            auto_reboot ? "--sideload_auto_reboot" : "--sideload"
+        };
+        std::string err;
+        if (!write_bootloader_message(options, &err)) {
+            D("Failed to set bootloader message: %s", err.c_str());
             return false;
         }
 
