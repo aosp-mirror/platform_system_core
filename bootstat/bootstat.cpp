@@ -207,6 +207,19 @@ std::string CalculateBootCompletePrefix() {
   return boot_complete_prefix;
 }
 
+// Records the value of a given ro.boottime.init property in milliseconds.
+void RecordInitBootTimeProp(
+    BootEventRecordStore* boot_event_store, const char* property) {
+  std::string value = GetProperty(property);
+
+  int32_t time_in_ns;
+  if (android::base::ParseInt(value, &time_in_ns)) {
+    static constexpr int32_t kNanosecondsPerMillisecond = 1e6;
+    int32_t time_in_ms = static_cast<int32_t>(time_in_ns / kNanosecondsPerMillisecond);
+    boot_event_store->AddBootEventWithValue(property, time_in_ms);
+  }
+}
+
 // Records several metrics related to the time it takes to boot the device,
 // including disambiguating boot time on encrypted or non-encrypted devices.
 void RecordBootComplete() {
@@ -256,6 +269,10 @@ void RecordBootComplete() {
   // Record the total time from device startup to boot complete, regardless of
   // encryption state.
   boot_event_store.AddBootEventWithValue(boot_complete_prefix, uptime);
+
+  RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init");
+  RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init.selinux");
+  RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init.cold_boot_wait");
 }
 
 // Records the boot_reason metric by querying the ro.boot.bootreason system
