@@ -170,7 +170,7 @@ typedef struct radio_program_info {
     bool             stereo;    /* program is stereo or not */
     bool             digital;   /* digital program or not (e.g HD Radio program) */
     uint32_t         signal_strength; /* signal strength from 0 to 100 */
-                                /* non null if meta data are present (e.g PTY, song title ...) */
+                                /* meta data (e.g PTY, song title ...), must not be NULL */
     __attribute__((aligned(8))) radio_metadata_t *metadata;
 } radio_program_info_t;
 
@@ -214,7 +214,7 @@ typedef struct radio_event {
         bool                    on;
         radio_band_config_t     config;
         radio_program_info_t    info;
-                                /* non null if meta data are present (e.g PTY, song title ...) */
+                                /* meta data (e.g PTY, song title ...), must not be NULL */
         __attribute__((aligned(8))) radio_metadata_t *metadata;
     };
 } radio_event_t;
