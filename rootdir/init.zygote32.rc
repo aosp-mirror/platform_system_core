@@ -10,4 +10,5 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
     onrestart restart cameraserver
     onrestart restart media
     onrestart restart netd
+    onrestart restart wificond
     writepid /dev/cpuset/foreground/tasks
