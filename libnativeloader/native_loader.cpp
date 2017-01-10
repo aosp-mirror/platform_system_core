@@ -20,7 +20,7 @@
 #include <dlfcn.h>
 #ifdef __ANDROID__
 #define LOG_TAG "libnativeloader"
-#include "dlext_namespaces.h"
+#include "nativeloader/dlext_namespaces.h"
 #include "cutils/properties.h"
 #include "log/log.h"
 #endif
