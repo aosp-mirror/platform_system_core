@@ -701,7 +701,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
         }
 
         if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
-            int rc = fs_mgr_setup_verity(&fstab->recs[i]);
+            int rc = fs_mgr_setup_verity(&fstab->recs[i], true);
             if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
                 INFO("Verity disabled");
             } else if (rc != FS_MGR_SETUP_VERITY_SUCCESS) {
@@ -870,7 +870,7 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
         }
 
         if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
-            int rc = fs_mgr_setup_verity(&fstab->recs[i]);
+            int rc = fs_mgr_setup_verity(&fstab->recs[i], true);
             if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
                 INFO("Verity disabled");
             } else if (rc != FS_MGR_SETUP_VERITY_SUCCESS) {
@@ -1086,7 +1086,7 @@ int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc, char *real_blk_dev
 int fs_mgr_early_setup_verity(struct fstab_rec *fstab_rec)
 {
     if ((fstab_rec->fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
-        int rc = fs_mgr_setup_verity(fstab_rec);
+        int rc = fs_mgr_setup_verity(fstab_rec, false);
         if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
             INFO("Verity disabled");
             return FS_MGR_EARLY_SETUP_VERITY_NO_VERITY;
