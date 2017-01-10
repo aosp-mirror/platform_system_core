@@ -22,6 +22,6 @@
 
 __BEGIN_DECLS
 
-int fs_mgr_setup_verity(struct fstab_rec *fstab);
+int fs_mgr_setup_verity(struct fstab_rec *fstab, bool verify_dev);
 
 __END_DECLS
