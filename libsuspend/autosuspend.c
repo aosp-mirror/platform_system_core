@@ -18,7 +18,7 @@
 
 #include <stdbool.h>
 
-#include <android/log.h>
+#include <log/log.h>
 
 #include <suspend/autosuspend.h>
 

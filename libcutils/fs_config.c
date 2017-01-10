@@ -33,7 +33,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <android/log.h>
+#include <log/log.h>
 #include <private/android_filesystem_config.h>
 #include <utils/Compat.h>
 

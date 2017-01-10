@@ -29,8 +29,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <ion/ion.h>
+#include <log/log.h>
 
 int ion_open()
 {

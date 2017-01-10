@@ -29,7 +29,7 @@
 #include <vector>
 
 #include <android-base/file.h>
-#include <android/log.h>
+#include <log/log.h>
 
 #include "open_files_list.h"
 

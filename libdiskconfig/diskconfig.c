@@ -28,8 +28,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/config_utils.h>
+#include <log/log.h>
 
 #include <diskconfig/diskconfig.h>
 

@@ -23,7 +23,7 @@
 #include <string.h>
 #include <sys/uio.h>
 
-#include <android/log.h>
+#include <log/log.h>
 #include <trusty/tipc.h>
 #include <trusty/lib/storage.h>
 

@@ -16,7 +16,7 @@
 
 #define LOG_TAG "dlmalloc-stubs"
 
-#include "android/log.h"
+#include "log/log.h"
 
 #define UNUSED __attribute__((__unused__))
 

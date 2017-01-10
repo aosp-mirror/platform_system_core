@@ -27,7 +27,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <android/log.h>
+#include <log/log.h>
 
 #include "signal_sender.h"
 
