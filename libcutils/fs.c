@@ -32,8 +32,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/fs.h>
+#include <log/log.h>
 
 #define ALL_PERMS (S_ISUID | S_ISGID | S_ISVTX | S_IRWXU | S_IRWXG | S_IRWXO)
 #define BUF_SIZE 64

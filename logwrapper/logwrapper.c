@@ -20,8 +20,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/klog.h>
+#include <log/log.h>
 #include <logwrap/logwrap.h>
 
 void fatal(const char *msg) {

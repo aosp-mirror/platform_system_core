@@ -23,8 +23,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <diskconfig/diskconfig.h>
+#include <log/log.h>
 
 struct write_list *
 alloc_wl(uint32_t data_len)

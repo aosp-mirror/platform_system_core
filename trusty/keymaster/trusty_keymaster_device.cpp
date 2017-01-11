@@ -27,9 +27,9 @@
 
 #include <type_traits>
 
-#include <android/log.h>
 #include <hardware/keymaster0.h>
 #include <keymaster/authorization_set.h>
+#include <log/log.h>
 
 #include "trusty_keymaster_device.h"
 #include "trusty_keymaster_ipc.h"

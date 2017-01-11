@@ -19,7 +19,7 @@
 
 #include <stdio.h>
 
-#include <android/log.h>
+#include <log/log.h>
 
 #include "diskconfig.h"
 

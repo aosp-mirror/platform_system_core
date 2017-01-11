@@ -25,9 +25,9 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/android_get_control_file.h>
 #include <cutils/sockets.h>
+#include <log/log.h>
 
 #include "android_get_control_env.h"
 

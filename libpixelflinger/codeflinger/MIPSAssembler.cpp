@@ -47,14 +47,13 @@
 ** functions in ARMAssemblerInterface.cpp so they could be used as static initializers).
 */
 
-
 #define LOG_TAG "MIPSAssembler"
 
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <android/log.h>
 #include <cutils/properties.h>
+#include <log/log.h>
 #include <private/pixelflinger/ggl_context.h>
 
 #include "CodeCache.h"

@@ -27,7 +27,7 @@
 #include <string.h>
 #include <sys/limits.h>
 
-#include <android/log.h>
+#include <log/log.h>
 #include <packagelistparser/packagelistparser.h>
 
 #define CLOGE(fmt, ...) \

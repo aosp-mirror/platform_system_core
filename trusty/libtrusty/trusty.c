@@ -25,7 +25,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-#include <android/log.h>
+#include <log/log.h>
 
 #include "tipc_ioctl.h"
 

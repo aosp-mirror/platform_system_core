@@ -26,9 +26,9 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/properties.h>
 #include <cutils/sockets.h>
+#include <log/log.h>
 
 int8_t property_get_bool(const char *key, int8_t default_value) {
     if (!key) {
