@@ -92,7 +92,7 @@ LOCAL_STATIC_LIBRARIES := \
     libsquashfs_utils \
     liblogwrap \
     libcutils \
-    libext4_utils_static \
+    libext4_utils \
     libbase \
     libc \
     libselinux \
