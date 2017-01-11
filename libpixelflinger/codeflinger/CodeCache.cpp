@@ -23,8 +23,8 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/ashmem.h>
+#include <log/log.h>
 
 #include "CodeCache.h"
 

@@ -28,8 +28,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/klog.h>
+#include <log/log.h>
 #include <logwrap/logwrap.h>
 #include <private/android_filesystem_config.h>
 

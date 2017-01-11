@@ -19,9 +19,10 @@
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
+
 #include <type_traits>
 
-#include <android/log.h>
+#include <log/log.h>
 
 #include "trusty_gatekeeper.h"
 #include "trusty_gatekeeper_ipc.h"

@@ -42,12 +42,12 @@
 
 #include <selinux/android.h>
 
-#include <android/log.h>
 #include <android-base/file.h>
 #include <android-base/unique_fd.h>
 #include <cutils/debugger.h>
 #include <cutils/properties.h>
 #include <cutils/sockets.h>
+#include <log/log.h>
 
 #include <private/android_filesystem_config.h>
 
