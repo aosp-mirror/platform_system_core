@@ -20,7 +20,7 @@
 #include <pthread.h>
 #include <sys/resource.h>
 
-#include <android/log.h>
+#include <log/log.h>
 #include <utils/Vector.h>
 
 #include <adf/adf.h>

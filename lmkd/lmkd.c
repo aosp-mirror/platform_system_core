@@ -31,8 +31,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/sockets.h>
+#include <log/log.h>
 #include <processgroup/processgroup.h>
 
 #ifndef __unused

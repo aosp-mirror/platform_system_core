@@ -22,8 +22,8 @@
 #include <malloc.h>
 #include <string.h>
 
-#include <android/log.h>
 #include <hardware/memtrack.h>
+#include <log/log.h>
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof((x)[0]))
 

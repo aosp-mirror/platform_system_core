@@ -31,8 +31,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/ashmem.h>
+#include <log/log.h>
 
 #define ASHMEM_DEVICE "/dev/ashmem"
 

@@ -22,8 +22,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <android/log.h>
 #include <diskconfig/diskconfig.h>
+#include <log/log.h>
 
 /* start and len are in LBA units */
 static void

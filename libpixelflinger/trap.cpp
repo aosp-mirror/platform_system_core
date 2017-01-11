@@ -21,8 +21,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <android/log.h>
 #include <cutils/memory.h>
+#include <log/log.h>
 
 #include "trap.h"
 #include "picker.h"

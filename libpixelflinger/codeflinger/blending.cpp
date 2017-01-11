@@ -23,7 +23,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-#include <android/log.h>
+#include <log/log.h>
 
 #include "GGLAssembler.h"
 

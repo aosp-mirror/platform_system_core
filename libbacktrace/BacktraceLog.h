@@ -19,7 +19,7 @@
 
 #define LOG_TAG "libbacktrace"
 
-#include <android/log.h>
+#include <log/log.h>
 
 // Macro to log the function name along with the warning message.
 #define BACK_LOGW(format, ...) \
