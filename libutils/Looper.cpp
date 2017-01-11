@@ -21,7 +21,7 @@
 #include <sys/eventfd.h>
 #include <unistd.h>
 
-#include <android/log.h>
+#include <log/log.h>
 #include <utils/Looper.h>
 #include <utils/Timers.h>
 

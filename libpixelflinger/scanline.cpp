@@ -22,8 +22,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <android/log.h>
 #include <cutils/memory.h>
+#include <log/log.h>
 
 #include "buffer.h"
 #include "scanline.h"

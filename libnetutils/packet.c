@@ -28,7 +28,7 @@
 
 #ifdef ANDROID
 #define LOG_TAG "DHCP"
-#include <android/log.h>
+#include <log/log.h>
 #else
 #include <stdio.h>
 #define ALOGD printf

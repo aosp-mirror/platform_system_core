@@ -26,8 +26,9 @@
 #include <memory>
 #include <vector>
 
-#include <android/log.h>
 #include <android-base/file.h>
+#include <log/log.h>
+
 #include <ziparchive/zip_archive.h>
 #include <ziparchive/zip_archive_stream_entry.h>
 #include <zlib.h>

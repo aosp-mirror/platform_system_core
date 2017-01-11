@@ -23,7 +23,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <android/log.h>
+#include <log/log.h>
 #include <trusty/tipc.h>
 
 #include "trusty_keymaster_ipc.h"

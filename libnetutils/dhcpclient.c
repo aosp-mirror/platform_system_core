@@ -31,8 +31,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/properties.h>
+#include <log/log.h>
 
 #include <netutils/ifc.h>
 #include "dhcpmsg.h"

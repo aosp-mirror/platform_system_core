@@ -19,7 +19,7 @@
 #include <limits.h>
 #include <stddef.h>
 
-#include <android/log.h>
+#include <log/log.h>
 #include <utils/Unicode.h>
 
 #if defined(_WIN32)

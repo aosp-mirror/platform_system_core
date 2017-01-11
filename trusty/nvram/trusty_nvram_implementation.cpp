@@ -22,8 +22,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <hardware/nvram.h>
+#include <log/log.h>
 #include <trusty/tipc.h>
 
 #include <nvram/messages/blob.h>

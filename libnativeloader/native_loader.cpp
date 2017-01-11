@@ -19,10 +19,10 @@
 
 #include <dlfcn.h>
 #ifdef __ANDROID__
-#include "dlext_namespaces.h"
 #define LOG_TAG "libnativeloader"
-#include "android/log.h"
+#include "dlext_namespaces.h"
 #include "cutils/properties.h"
+#include "log/log.h"
 #endif
 #include "nativebridge/native_bridge.h"
 

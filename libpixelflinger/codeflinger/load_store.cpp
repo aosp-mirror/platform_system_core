@@ -20,7 +20,7 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include <android/log.h>
+#include <log/log.h>
 
 #include "GGLAssembler.h"
 

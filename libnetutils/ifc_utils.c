@@ -38,8 +38,8 @@
 
 #ifdef ANDROID
 #define LOG_TAG "NetUtils"
-#include <android/log.h>
 #include <cutils/properties.h>
+#include <log/log.h>
 #else
 #define ALOGD printf
 #define ALOGW printf
