@@ -26,7 +26,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <android/log.h>
+#include <log/log.h>
 #include <cutils/qtaguid.h>
 
 static const char* CTRL_PROCPATH = "/proc/net/xt_qtaguid/ctrl";

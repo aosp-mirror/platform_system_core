@@ -30,8 +30,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <android/log.h>
 #include <cutils/properties.h>
+#include <log/log.h>
 #include <private/pixelflinger/ggl_context.h>
 
 #include "MIPS64Assembler.h"
