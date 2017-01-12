@@ -40,13 +40,14 @@
 #include <android-base/properties.h>
 
 #include "adb.h"
+#include "daemon/usb.h"
 #include "transport.h"
 
 using namespace std::chrono_literals;
 
-#define MAX_PACKET_SIZE_FS	64
-#define MAX_PACKET_SIZE_HS	512
-#define MAX_PACKET_SIZE_SS	1024
+#define MAX_PACKET_SIZE_FS 64
+#define MAX_PACKET_SIZE_HS 512
+#define MAX_PACKET_SIZE_SS 1024
 
 // Writes larger than 16k fail on some devices (seed with 3.10.49-g209ea2f in particular).
 #define USB_FFS_MAX_WRITE 16384
@@ -55,30 +56,10 @@ using namespace std::chrono_literals;
 // fragmentation. 16k chosen arbitrarily to match the write limit.
 #define USB_FFS_MAX_READ 16384
 
-#define cpu_to_le16(x)  htole16(x)
-#define cpu_to_le32(x)  htole32(x)
+#define cpu_to_le16(x) htole16(x)
+#define cpu_to_le32(x) htole32(x)
 
 static int dummy_fd = -1;
-
-struct usb_handle {
-    usb_handle() : kicked(false) {
-    }
-
-    std::condition_variable notify;
-    std::mutex lock;
-    std::atomic<bool> kicked;
-    bool open_new_connection = true;
-
-    int (*write)(usb_handle *h, const void *data, int len);
-    int (*read)(usb_handle *h, void *data, int len);
-    void (*kick)(usb_handle *h);
-    void (*close)(usb_handle *h);
-
-    // FunctionFS
-    int control = -1;
-    int bulk_out = -1; /* "out" from the host's perspective => source for adbd */
-    int bulk_in = -1;  /* "in" from the host's perspective => sink for adbd */
-};
 
 struct func_desc {
     struct usb_interface_descriptor intf;
@@ -223,7 +204,6 @@ static struct usb_os_desc_header os_desc_header = {
     .Reserved = cpu_to_le32(0),
 };
 
-
 #define STR_INTERFACE_ "ADB Interface"
 
 static const struct {
@@ -245,7 +225,7 @@ static const struct {
     },
 };
 
-static bool init_functionfs(struct usb_handle* h) {
+bool init_functionfs(struct usb_handle* h) {
     ssize_t ret;
     struct desc_v1 v1_descriptor;
     struct desc_v2 v2_descriptor;
