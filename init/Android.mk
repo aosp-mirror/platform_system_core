@@ -101,7 +101,7 @@ LOCAL_STATIC_LIBRARIES := \
     libcrypto \
     libc++_static \
     libdl \
-    libsparse_static \
+    libsparse \
     libz \
     libprocessgroup \
     libnl \
