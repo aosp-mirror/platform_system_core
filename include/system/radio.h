@@ -84,7 +84,7 @@ typedef enum {
 typedef uint32_t radio_handle_t;
 
 /* Opaque meta data structure used by radio meta data API (see system/radio_metadata.h) */
-typedef struct radio_medtadata radio_metadata_t;
+typedef struct radio_metadata radio_metadata_t;
 
 
 /* Additional attributes for an FM band configuration */
