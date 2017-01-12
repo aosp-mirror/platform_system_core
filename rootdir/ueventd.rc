@@ -38,8 +38,6 @@ subsystem adf
 # these should not be world writable
 /dev/diag                 0660   radio      radio
 /dev/diag_arm9            0660   radio      radio
-/dev/android_adb          0660   adb        adb
-/dev/android_adb_enable   0660   adb        adb
 /dev/ttyMSM0              0600   bluetooth  bluetooth
 /dev/uhid                 0660   system     bluetooth
 /dev/uinput               0660   system     bluetooth
