@@ -27,6 +27,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <iomanip>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -35,8 +36,6 @@
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <cutils/klog.h>
-#include <log/log.h>
 #include <log/log_event_list.h>
 
 #include <storaged.h>
@@ -47,8 +46,6 @@
 #define MSEC_TO_USEC ( 1000 )
 #define USEC_TO_NSEC ( 1000 )
 
-int fd_dmesg = -1;
-
 bool parse_disk_stats(const char* disk_stats_path, struct disk_stats* stats) {
     // Get time
     struct timespec ts;
@@ -56,22 +53,13 @@ bool parse_disk_stats(const char* disk_stats_path, struct disk_stats* stats) {
     // when system is running.
     int ret = clock_gettime(CLOCK_MONOTONIC, &ts);
     if (ret < 0) {
-        if (fd_dmesg >= 0) {
-            std::string error_message = android::base::StringPrintf(
-                "%s clock_gettime() failed with errno %d\n",
-                kmsg_error_prefix, ret);
-            write(fd_dmesg, error_message.c_str(), error_message.length());
-        }
+        PLOG_TO(SYSTEM, ERROR) << "clock_gettime() failed";
         return false;
     }
 
     std::string buffer;
     if (!android::base::ReadFileToString(disk_stats_path, &buffer)) {
-        if (fd_dmesg >= 0) {
-            std::string error_message = android::base::StringPrintf(
-                "%s %s: ReadFileToString failed.\n", kmsg_error_prefix, disk_stats_path);
-            write(fd_dmesg, error_message.c_str(), error_message.length());
-        }
+        PLOG_TO(SYSTEM, ERROR) << disk_stats_path << ": ReadFileToString failed.";
         return false;
     }
 
@@ -149,13 +137,10 @@ struct disk_stats get_inc_disk_stats(struct disk_stats* prev, struct disk_stats*
 
 // Add src to dst
 void add_disk_stats(struct disk_stats* src, struct disk_stats* dst) {
-    if (dst->end_time != 0 && dst->end_time != src->start_time && fd_dmesg >= 0) {
-        std::string warning_message = android::base::StringPrintf(
-            "%s Two dis-continuous periods of diskstats are added. "
-            "dst end with %jd, src start with %jd\n",
-            kmsg_warning_prefix, dst->end_time, src->start_time);
-
-        write(fd_dmesg, warning_message.c_str(), warning_message.length());
+    if (dst->end_time != 0 && dst->end_time != src->start_time) {
+        LOG_TO(SYSTEM, WARNING) << "Two dis-continuous periods of diskstats"
+            << " are added. dst end with " << dst->end_time
+            << ", src start with " << src->start_time;
     }
 
     for (uint i = 0; i < DISK_STATS_SIZE; ++i) {
@@ -193,21 +178,13 @@ bool parse_emmc_ecsd(int ext_csd_fd, struct emmc_info* info) {
     CHECK(lseek(ext_csd_fd, 0, SEEK_SET) == 0);
     std::string buffer;
     if (!android::base::ReadFdToString(ext_csd_fd, &buffer)) {
-        if (fd_dmesg >= 0) {
-            std::string error_message = android::base::StringPrintf(
-                "%s ReadFdToString failed.\n", kmsg_error_prefix);
-            write(fd_dmesg, error_message.c_str(), error_message.length());
-        }
+        PLOG_TO(SYSTEM, ERROR) << "ReadFdToString failed.";
         return false;
     }
 
     if (buffer.length() < EXT_CSD_FILE_MIN_SIZE) {
-        if (fd_dmesg >= 0) {
-            std::string error_message = android::base::StringPrintf(
-                "%s EMMC ext csd file has truncated content. File length: %d\n",
-                kmsg_error_prefix, (int)buffer.length());
-            write(fd_dmesg, error_message.c_str(), error_message.length());
-        }
+        LOG_TO(SYSTEM, ERROR) << "EMMC ext csd file has truncated content. "
+            << "File length: " << buffer.length();
         return false;
     }
 
@@ -219,11 +196,7 @@ bool parse_emmc_ecsd(int ext_csd_fd, struct emmc_info* info) {
     ss << sub;
     ss >> std::hex >> ext_csd_rev;
     if (ext_csd_rev < 0) {
-        if (fd_dmesg >= 0) {
-            std::string error_message = android::base::StringPrintf(
-                "%s Failure on parsing EXT_CSD_REV.\n", kmsg_error_prefix);
-            write(fd_dmesg, error_message.c_str(), error_message.length());
-        }
+        LOG_TO(SYSTEM, ERROR) << "Failure on parsing EXT_CSD_REV.";
         return false;
     }
     ss.clear();
@@ -248,11 +221,7 @@ bool parse_emmc_ecsd(int ext_csd_fd, struct emmc_info* info) {
     ss << sub;
     ss >> std::hex >> info->eol;
     if (info->eol < 0) {
-        if (fd_dmesg >= 0) {
-            std::string error_message = android::base::StringPrintf(
-                "%s Failure on parsing EXT_PRE_EOL_INFO.\n", kmsg_error_prefix);
-            write(fd_dmesg, error_message.c_str(), error_message.length());
-        }
+        LOG_TO(SYSTEM, ERROR) << "Failure on parsing EXT_PRE_EOL_INFO.";
         return false;
     }
     ss.clear();
@@ -263,11 +232,7 @@ bool parse_emmc_ecsd(int ext_csd_fd, struct emmc_info* info) {
     ss << sub;
     ss >> std::hex >> info->lifetime_a;
     if (info->lifetime_a < 0) {
-        if (fd_dmesg >= 0) {
-            std::string error_message = android::base::StringPrintf(
-                "%s Failure on parsing EXT_DEVICE_LIFE_TIME_EST_TYP_A.\n", kmsg_error_prefix);
-            write(fd_dmesg, error_message.c_str(), error_message.length());
-        }
+        LOG_TO(SYSTEM, ERROR) << "Failure on parsing EXT_DEVICE_LIFE_TIME_EST_TYP_A.";
         return false;
     }
     ss.clear();
@@ -277,11 +242,7 @@ bool parse_emmc_ecsd(int ext_csd_fd, struct emmc_info* info) {
     ss << sub;
     ss >> std::hex >> info->lifetime_b;
     if (info->lifetime_b < 0) {
-        if (fd_dmesg >= 0) {
-            std::string error_message = android::base::StringPrintf(
-                "%s Failure on parsing EXT_DEVICE_LIFE_TIME_EST_TYP_B.\n", kmsg_error_prefix);
-            write(fd_dmesg, error_message.c_str(), error_message.length());
-        }
+        LOG_TO(SYSTEM, ERROR) << "Failure on parsing EXT_DEVICE_LIFE_TIME_EST_TYP_B.";
         return false;
     }
     ss.clear();
@@ -481,19 +442,14 @@ void log_kernel_disk_stats(struct disk_stats* stats, const char* type) {
     memset(&zero_cmp, 0, sizeof(zero_cmp));
     if (memcmp(&zero_cmp, stats, sizeof(struct disk_stats)) == 0) return;
 
-    if (fd_dmesg >= 0) {
-        std::string info_message = android::base::StringPrintf(
-            "%s diskstats %s: %ju %ju %ju %ju %ju %ju %ju %ju %ju %ju %.1f %ju %ju\n",
-             kmsg_info_prefix, type, stats->start_time, stats->end_time,
-             stats->read_ios, stats->read_merges,
-             stats->read_sectors, stats->read_ticks,
-             stats->write_ios, stats->write_merges,
-             stats->write_sectors, stats->write_ticks,
-             stats->io_avg, stats->io_ticks,
-             stats->io_in_queue);
-
-        write(fd_dmesg, info_message.c_str(), info_message.length());
-    }
+    LOG_TO(SYSTEM, INFO) << "diskstats " << type << ": "
+              << stats->start_time << " " << stats->end_time << " "
+              << stats->read_ios << " " << stats->read_merges << " "
+              << stats->read_sectors << " " << stats->read_ticks << " "
+              << stats->write_ios << " " << stats->write_merges << " "
+              << stats->write_sectors << " " << stats->write_ticks << " "
+              << std::setprecision(1) << std::fixed << stats->io_avg << " "
+              << stats->io_ticks << " " << stats->io_in_queue;
 }
 
 void log_kernel_disk_perf(struct disk_perf* perf, const char* type) {
@@ -503,16 +459,10 @@ void log_kernel_disk_perf(struct disk_perf* perf, const char* type) {
     memset(&zero_cmp, 0, sizeof(zero_cmp));
     if (memcmp(&zero_cmp, perf, sizeof(struct disk_perf)) == 0) return;
 
-    if (fd_dmesg >= 0) {
-        std::string info_message = android::base::StringPrintf(
-            "%s perf(ios) %s rd:%luKB/s(%lu/s) wr:%luKB/s(%lu/s) q:%lu\n",
-            kmsg_info_prefix, type,
-            (unsigned long)perf->read_perf, (unsigned long)perf->read_ios,
-            (unsigned long)perf->write_perf, (unsigned long)perf->write_ios,
-            (unsigned long)perf->queue);
-
-        write(fd_dmesg, info_message.c_str(), info_message.length());
-    }
+    LOG_TO(SYSTEM, INFO) << "perf(ios) " << type
+              << " rd:" << perf->read_perf << "KB/s(" << perf->read_ios << "/s)"
+              << " wr:" << perf->write_perf << "KB/s(" << perf->write_ios << "/s)"
+              << " q:" << perf->queue;
 }
 
 void log_kernel_emmc_info(struct emmc_info* info) {
@@ -522,13 +472,9 @@ void log_kernel_emmc_info(struct emmc_info* info) {
     memset(&zero_cmp, 0, sizeof(zero_cmp));
     if (memcmp(&zero_cmp, info, sizeof(struct emmc_info)) == 0) return;
 
-    if (fd_dmesg >= 0) {
-        std::string info_message = android::base::StringPrintf(
-            "%s MMC %s eol:%d, lifetime typA:%d, typB:%d\n",
-            kmsg_info_prefix, info->mmc_ver, info->eol, info->lifetime_a, info->lifetime_b);
-
-        write(fd_dmesg, info_message.c_str(), info_message.length());
-    }
+    LOG_TO(SYSTEM, INFO) << "MMC " << info->mmc_ver << " eol:" << info->eol << ", "
+              << "lifetime typA:" << info->lifetime_a
+              << ", typB:" << info->lifetime_b;
 }
 
 void log_event_disk_stats(struct disk_stats* stats, const char* type) {
@@ -539,26 +485,14 @@ void log_event_disk_stats(struct disk_stats* stats, const char* type) {
     // skip event logging diskstats when it is zero increment (all first 11 entries are zero)
     if (memcmp(&zero_cmp, stats, sizeof(uint64_t) * DISK_STATS_SIZE) == 0) return;
 
-    // Construct eventlog list
-    android_log_context ctx = create_android_logger(EVENTLOGTAG_DISKSTATS);
-
-    android_log_write_string8(ctx, type);
-    android_log_write_int64(ctx, stats->start_time);
-    android_log_write_int64(ctx, stats->end_time);
-    android_log_write_int64(ctx, stats->read_ios);
-    android_log_write_int64(ctx, stats->read_merges);
-    android_log_write_int64(ctx, stats->read_sectors);
-    android_log_write_int64(ctx, stats->read_ticks);
-    android_log_write_int64(ctx, stats->write_ios);
-    android_log_write_int64(ctx, stats->write_merges);
-    android_log_write_int64(ctx, stats->write_sectors);
-    android_log_write_int64(ctx, stats->write_ticks);
-    android_log_write_int64(ctx, (uint64_t)stats->io_avg);
-    android_log_write_int64(ctx, stats->io_ticks);
-    android_log_write_int64(ctx, stats->io_in_queue);
-
-    android_log_write_list(ctx, LOG_ID_EVENTS);
-    android_log_destroy(&ctx);
+    android_log_event_list(EVENTLOGTAG_DISKSTATS)
+        << type << stats->start_time << stats->end_time
+        << stats->read_ios << stats->read_merges
+        << stats->read_sectors << stats->read_ticks
+        << stats->write_ios << stats->write_merges
+        << stats->write_sectors << stats->write_ticks
+        << (uint64_t)stats->io_avg << stats->io_ticks << stats->io_in_queue
+        << LOG_ID_EVENTS;
 }
 
 void log_event_emmc_info(struct emmc_info* info) {
@@ -568,13 +502,7 @@ void log_event_emmc_info(struct emmc_info* info) {
     memset(&zero_cmp, 0, sizeof(zero_cmp));
     if (memcmp(&zero_cmp, info, sizeof(struct emmc_info)) == 0) return;
 
-    android_log_context ctx = create_android_logger(EVENTLOGTAG_EMMCINFO);
-
-    android_log_write_string8(ctx, info->mmc_ver);
-    android_log_write_int32(ctx, info->eol);
-    android_log_write_int32(ctx, info->lifetime_a);
-    android_log_write_int32(ctx, info->lifetime_b);
-
-    android_log_write_list(ctx, LOG_ID_EVENTS);
-    android_log_destroy(&ctx);
+    android_log_event_list(EVENTLOGTAG_EMMCINFO)
+        << info->mmc_ver << info->eol << info->lifetime_a << info->lifetime_b
+        << LOG_ID_EVENTS;
 }

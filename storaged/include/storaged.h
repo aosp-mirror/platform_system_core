@@ -17,13 +17,10 @@
 #ifndef _STORAGED_H_
 #define _STORAGED_H_
 
-#define DEBUG
-
 #include <queue>
 #include <semaphore.h>
 #include <stdint.h>
 #include <string>
-#include <syslog.h>
 #include <unordered_map>
 #include <vector>
 
@@ -38,21 +35,6 @@ friend class test_case_name##_##test_name##_Test
 #else
 #define debuginfo(...)
 #endif
-
-#define KMSG_PRIORITY(PRI)                            \
-    '<',                                              \
-    '0' + LOG_MAKEPRI(LOG_DAEMON, LOG_PRI(PRI)) / 10, \
-    '0' + LOG_MAKEPRI(LOG_DAEMON, LOG_PRI(PRI)) % 10, \
-    '>'
-
-static char kmsg_error_prefix[] = { KMSG_PRIORITY(LOG_ERR),
-    's', 't', 'o', 'r', 'a', 'g', 'e', 'd', ':', '\0' };
-
-static char kmsg_info_prefix[] = { KMSG_PRIORITY(LOG_INFO),
-    's', 't', 'o', 'r', 'a', 'g', 'e', 'd', ':', '\0' };
-
-static char kmsg_warning_prefix[] = { KMSG_PRIORITY(LOG_WARNING),
-    's', 't', 'o', 'r', 'a', 'g', 'e', 'd', ':', '\0' };
 
 // number of attributes diskstats has
 #define DISK_STATS_SIZE ( 11 )
