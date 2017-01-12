@@ -57,7 +57,7 @@ LOCAL_STATIC_LIBRARIES := libfs_mgr \
     libcutils \
     liblog \
     libc \
-    libsparse_static \
+    libsparse \
     libz \
     libselinux
 LOCAL_CXX_STL := libc++_static
