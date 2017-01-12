@@ -99,19 +99,34 @@ LIBADB_TEST_windows_SRCS := \
 
 include $(CLEAR_VARS)
 LOCAL_CLANG := true
-LOCAL_MODULE := libadbd
+LOCAL_MODULE := libadbd_usb
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
-LOCAL_SRC_FILES := \
-    $(LIBADB_SRC_FILES) \
-    adbd_auth.cpp \
-    jdwp_service.cpp \
-    usb_linux_client.cpp \
+LOCAL_SRC_FILES := daemon/usb.cpp
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
 LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase
+
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_CLANG := true
+LOCAL_MODULE := libadbd
+LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
+LOCAL_SRC_FILES := \
+    $(LIBADB_SRC_FILES) \
+    adbd_auth.cpp \
+    jdwp_service.cpp \
+
+LOCAL_SANITIZE := $(adb_target_sanitize)
+
+# Even though we're building a static library (and thus there's no link step for
+# this to take effect), this adds the includes to our path.
+LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase
+
+LOCAL_WHOLE_STATIC_LIBRARIES := libadbd_usb
 
 include $(BUILD_STATIC_LIBRARY)
 
@@ -346,3 +361,5 @@ LOCAL_STATIC_LIBRARIES := \
     libdebuggerd_client \
 
 include $(BUILD_EXECUTABLE)
+
+include $(call first-makefiles-under,$(LOCAL_PATH))
