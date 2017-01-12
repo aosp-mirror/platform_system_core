@@ -9,7 +9,7 @@ common_static_libraries := \
     libbase \
     libcrypto_utils \
     libcrypto \
-    libext4_utils_static \
+    libext4_utils \
     libsquashfs_utils \
     libselinux
 
@@ -57,7 +57,7 @@ LOCAL_STATIC_LIBRARIES := libfs_mgr \
     libcutils \
     liblog \
     libc \
-    libsparse_static \
+    libsparse \
     libz \
     libselinux
 LOCAL_CXX_STL := libc++_static

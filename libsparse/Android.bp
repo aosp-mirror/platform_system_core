@@ -1,7 +1,9 @@
 // Copyright 2010 The Android Open Source Project
 
-cc_defaults {
-    name: "libsparse_defaults",
+cc_library {
+    name: "libsparse",
+    host_supported: true,
+    unique_host_soname: true,
     srcs: [
         "backed_block.c",
         "output_file.c",
@@ -13,30 +15,17 @@ cc_defaults {
     cflags: ["-Werror"],
     local_include_dirs: ["include"],
     export_include_dirs: ["include"],
-}
-
-cc_library_host_static {
-    name: "libsparse_host",
-    defaults: ["libsparse_defaults"],
-    static_libs: ["libz"],
     target: {
+        host: {
+            shared_libs: ["libz-host"],
+        },
+        android: {
+            shared_libs: ["libz"],
+        },
         windows: {
             enabled: true,
         },
     },
-}
-
-cc_library_shared {
-    name: "libsparse",
-    defaults: ["libsparse_defaults"],
-    shared_libs: ["libz"],
-}
-
-cc_library_static {
-    name: "libsparse_static",
-    host_supported: true,
-    defaults: ["libsparse_defaults"],
-    static_libs: ["libz"],
 }
 
 cc_binary {
@@ -47,7 +36,7 @@ cc_binary {
         "sparse_crc32.c",
     ],
     static_libs: [
-        "libsparse_static",
+        "libsparse",
         "libz",
     ],
 
@@ -59,7 +48,7 @@ cc_binary {
     host_supported: true,
     srcs: ["img2simg.c"],
     static_libs: [
-        "libsparse_static",
+        "libsparse",
         "libz",
     ],
 
@@ -70,7 +59,7 @@ cc_binary_host {
     name: "append2simg",
     srcs: ["append2simg.c"],
     static_libs: [
-        "libsparse_static",
+        "libsparse",
         "libz",
     ],
 

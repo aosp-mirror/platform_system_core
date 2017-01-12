@@ -57,8 +57,8 @@ LOCAL_C_INCLUDES_windows := development/host/windows/usb/api
 
 LOCAL_STATIC_LIBRARIES := \
     libziparchive \
-    libext4_utils_host \
-    libsparse_host \
+    libext4_utils \
+    libsparse \
     libutils \
     liblog \
     libz \

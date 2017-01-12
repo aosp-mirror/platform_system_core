@@ -92,7 +92,7 @@ LOCAL_STATIC_LIBRARIES := \
     libsquashfs_utils \
     liblogwrap \
     libcutils \
-    libext4_utils_static \
+    libext4_utils \
     libbase \
     libc \
     libselinux \
@@ -101,7 +101,7 @@ LOCAL_STATIC_LIBRARIES := \
     libcrypto \
     libc++_static \
     libdl \
-    libsparse_static \
+    libsparse \
     libz \
     libprocessgroup \
     libnl \
