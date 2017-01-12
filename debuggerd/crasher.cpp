@@ -29,8 +29,8 @@
 #include <unistd.h>
 
 // We test both kinds of logging.
-#include <android/log.h>
 #include <android-base/logging.h>
+#include <log/log.h>
 
 #if defined(STATIC_CRASHER)
 #include "debuggerd/client.h"
