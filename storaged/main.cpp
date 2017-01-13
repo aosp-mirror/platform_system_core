@@ -29,12 +29,12 @@
 #include <vector>
 
 #include <android-base/macros.h>
+#include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <binder/ProcessState.h>
 #include <binder/IServiceManager.h>
 #include <binder/IPCThreadState.h>
 #include <cutils/android_get_control_file.h>
-#include <cutils/klog.h>
 #include <cutils/sched_policy.h>
 #include <private/android_filesystem_config.h>
 
@@ -90,15 +90,10 @@ static int drop_privs() {
 }
 
 // Function of storaged's main thread
-extern int fd_dmesg;
 void* storaged_main(void* s) {
     storaged_t* storaged = (storaged_t*)s;
 
-    if (fd_dmesg >= 0) {
-        static const char start_message[] = {KMSG_PRIORITY(LOG_INFO),
-            's', 't', 'o', 'r', 'a', 'g', 'e', 'd', ':', ' ', 'S', 't', 'a', 'r', 't', '\n'};
-        write(fd_dmesg, start_message, sizeof(start_message));
-    }
+    LOG_TO(SYSTEM, INFO) << "storaged: Start";
 
     for (;;) {
         storaged->event();
@@ -121,7 +116,6 @@ static void help_message(void) {
 #define DAY_TO_SEC ( 3600 * 24 )
 
 int main(int argc, char** argv) {
-    klog_set_level(KLOG_LEVEL);
     int flag_main_service = 0;
     int flag_dump_task = 0;
     int flag_config = 0;
@@ -221,11 +215,6 @@ int main(int argc, char** argv) {
     }
 
     if (flag_main_service) { // start main thread
-        static const char dev_kmsg[] = "/dev/kmsg";
-        fd_dmesg = android_get_control_file(dev_kmsg);
-        if (fd_dmesg < 0)
-            fd_dmesg = TEMP_FAILURE_RETRY(open(dev_kmsg, O_WRONLY));
-
         static const char mmc0_ext_csd[] = "/d/mmc0/mmc0:0001/ext_csd";
         fd_emmc = android_get_control_file(mmc0_ext_csd);
         if (fd_emmc < 0)
@@ -245,12 +234,9 @@ int main(int argc, char** argv) {
 
         // Start the main thread of storaged
         pthread_t storaged_main_thread;
-        if (pthread_create(&storaged_main_thread, NULL, storaged_main, &storaged)) {
-            if (fd_dmesg >= 0) {
-                std::string error_message = android::base::StringPrintf(
-                    "%s Failed to create main thread\n", kmsg_error_prefix);
-                write(fd_dmesg, error_message.c_str(), error_message.length());
-            }
+        errno = pthread_create(&storaged_main_thread, NULL, storaged_main, &storaged);
+        if (errno != 0) {
+            PLOG_TO(SYSTEM, ERROR) << "Failed to create main thread";
             return -1;
         }
 
@@ -259,7 +245,6 @@ int main(int argc, char** argv) {
         IPCThreadState::self()->joinThreadPool();
         pthread_join(storaged_main_thread, NULL);
 
-        close(fd_dmesg);
         close(fd_emmc);
 
         return 0;
