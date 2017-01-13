@@ -646,6 +646,17 @@ static int handle_encryptable(const struct fstab_rec* rec)
     }
 }
 
+int fs_mgr_test_access(const char *device) {
+    int tries = 25;
+    while (tries--) {
+        if (!access(device, F_OK) || errno != ENOENT) {
+            return 0;
+        }
+        usleep(40 * 1000);
+    }
+    return -1;
+}
+
 /* When multiple fstab records share the same mount_point, it will
  * try to mount each one in turn, and ignore any duplicates after a
  * first successful mount.
