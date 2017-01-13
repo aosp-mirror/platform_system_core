@@ -44,6 +44,4 @@ __END_DECLS
 #define KLOG_INFO(tag,x...)    klog_write(KLOG_INFO_LEVEL, "<6>" tag ": " x)
 #define KLOG_DEBUG(tag,x...)   klog_write(KLOG_DEBUG_LEVEL, "<7>" tag ": " x)
 
-#define KLOG_DEFAULT_LEVEL  3  /* messages <= this level are logged */
-
 #endif

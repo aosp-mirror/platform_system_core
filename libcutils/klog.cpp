@@ -27,7 +27,7 @@
 #include <cutils/android_get_control_file.h>
 #include <cutils/klog.h>
 
-static int klog_level = KLOG_DEFAULT_LEVEL;
+static int klog_level = KLOG_INFO_LEVEL;
 
 int klog_get_level(void) {
     return klog_level;
