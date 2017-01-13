@@ -18,6 +18,7 @@ LOCAL_CLANG := true
 LOCAL_SANITIZE := integer
 LOCAL_SRC_FILES:= \
     fs_mgr.c \
+    fs_mgr_dm_ioctl.cpp \
     fs_mgr_format.c \
     fs_mgr_fstab.c \
     fs_mgr_slotselect.c \
