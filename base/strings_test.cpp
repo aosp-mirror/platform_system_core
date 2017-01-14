@@ -244,3 +244,10 @@ TEST(strings, EndsWithIgnoreCase_contains_prefix) {
   ASSERT_FALSE(android::base::EndsWithIgnoreCase("foobar", "OBA"));
   ASSERT_FALSE(android::base::EndsWithIgnoreCase("foobar", "FOO"));
 }
+
+TEST(strings, EqualsIgnoreCase) {
+  ASSERT_TRUE(android::base::EqualsIgnoreCase("foo", "FOO"));
+  ASSERT_TRUE(android::base::EqualsIgnoreCase("FOO", "foo"));
+  ASSERT_FALSE(android::base::EqualsIgnoreCase("foo", "bar"));
+  ASSERT_FALSE(android::base::EqualsIgnoreCase("foo", "fool"));
+}
