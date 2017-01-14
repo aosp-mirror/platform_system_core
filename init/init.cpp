@@ -409,7 +409,7 @@ static void export_kernel_boot_props() {
         const char *default_value;
     } prop_map[] = {
         { "ro.boot.serialno",   "ro.serialno",   "", },
-        { "ro.boot.mode",       "ro.bootmode",   "unknown", },
+        { "ro.boot.mode",       "ro.bootmode",   "normal", },
         { "ro.boot.baseband",   "ro.baseband",   "unknown", },
         { "ro.boot.bootloader", "ro.bootloader", "unknown", },
         { "ro.boot.hardware",   "ro.hardware",   "unknown", },
@@ -800,7 +800,13 @@ int main(int argc, char** argv) {
     parser.AddSectionParser("service",std::make_unique<ServiceParser>());
     parser.AddSectionParser("on", std::make_unique<ActionParser>());
     parser.AddSectionParser("import", std::make_unique<ImportParser>());
-    parser.ParseConfig("/init.rc");
+
+    std::string bootscript = property_get("ro.boot.init_rc");
+    if (bootscript.empty()) {
+        parser.ParseConfig("/init.rc");
+    } else {
+        parser.ParseConfig(bootscript);
+    }
 
     ActionManager& am = ActionManager::GetInstance();
 
@@ -825,7 +831,8 @@ int main(int argc, char** argv) {
     std::string bootmode = property_get("ro.bootmode");
     if (bootmode == "charger") {
         am.QueueEventTrigger("charger");
-    } else {
+    } else if (bootmode == "normal") {
+        // only trigger late-init in normal boot
         am.QueueEventTrigger("late-init");
     }
 
