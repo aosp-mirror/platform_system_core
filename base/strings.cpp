@@ -112,5 +112,9 @@ bool EndsWithIgnoreCase(const std::string& s, const char* suffix) {
   return EndsWith(s, suffix, false);
 }
 
+bool EqualsIgnoreCase(const std::string& lhs, const std::string& rhs) {
+  return strcasecmp(lhs.c_str(), rhs.c_str()) == 0;
+}
+
 }  // namespace base
 }  // namespace android
