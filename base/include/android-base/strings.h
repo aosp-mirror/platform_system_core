@@ -64,6 +64,9 @@ bool StartsWithIgnoreCase(const std::string& s, const char* prefix);
 bool EndsWith(const std::string& s, const char* suffix);
 bool EndsWithIgnoreCase(const std::string& s, const char* suffix);
 
+// Tests whether 'lhs' equals 'rhs', ignoring case.
+bool EqualsIgnoreCase(const std::string& lhs, const std::string& rhs);
+
 }  // namespace base
 }  // namespace android
 
