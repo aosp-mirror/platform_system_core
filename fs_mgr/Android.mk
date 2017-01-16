@@ -27,7 +27,6 @@ LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/include \
     system/vold \
     system/extras/ext4_utils \
-    external/openssl/include \
     bootable/recovery
 LOCAL_MODULE:= libfs_mgr
 LOCAL_STATIC_LIBRARIES := $(common_static_libraries)
