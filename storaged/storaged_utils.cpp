@@ -435,24 +435,8 @@ void log_console_running_tasks_info(std::vector<struct task_info> tasks) {
     fflush(stdout);
 }
 
-void log_kernel_disk_stats(struct disk_stats* stats, const char* type) {
-    // skip if the input structure are all zeros
-    if (stats == NULL) return;
-    struct disk_stats zero_cmp;
-    memset(&zero_cmp, 0, sizeof(zero_cmp));
-    if (memcmp(&zero_cmp, stats, sizeof(struct disk_stats)) == 0) return;
-
-    LOG_TO(SYSTEM, INFO) << "diskstats " << type << ": "
-              << stats->start_time << " " << stats->end_time << " "
-              << stats->read_ios << " " << stats->read_merges << " "
-              << stats->read_sectors << " " << stats->read_ticks << " "
-              << stats->write_ios << " " << stats->write_merges << " "
-              << stats->write_sectors << " " << stats->write_ticks << " "
-              << std::setprecision(1) << std::fixed << stats->io_avg << " "
-              << stats->io_ticks << " " << stats->io_in_queue;
-}
-
-void log_kernel_disk_perf(struct disk_perf* perf, const char* type) {
+#if DEBUG
+void log_debug_disk_perf(struct disk_perf* perf, const char* type) {
     // skip if the input structure are all zeros
     if (perf == NULL) return;
     struct disk_perf zero_cmp;
@@ -464,18 +448,9 @@ void log_kernel_disk_perf(struct disk_perf* perf, const char* type) {
               << " wr:" << perf->write_perf << "KB/s(" << perf->write_ios << "/s)"
               << " q:" << perf->queue;
 }
-
-void log_kernel_emmc_info(struct emmc_info* info) {
-    // skip if the input structure are all zeros
-    if (info == NULL) return;
-    struct emmc_info zero_cmp;
-    memset(&zero_cmp, 0, sizeof(zero_cmp));
-    if (memcmp(&zero_cmp, info, sizeof(struct emmc_info)) == 0) return;
-
-    LOG_TO(SYSTEM, INFO) << "MMC " << info->mmc_ver << " eol:" << info->eol << ", "
-              << "lifetime typA:" << info->lifetime_a
-              << ", typB:" << info->lifetime_b;
-}
+#else
+void log_debug_disk_perf(struct disk_perf* /* perf */, const char* /* type */) {}
+#endif
 
 void log_event_disk_stats(struct disk_stats* stats, const char* type) {
     // skip if the input structure are all zeros

@@ -37,9 +37,8 @@ void sort_running_tasks_info(std::vector<struct task_info> &tasks);
 
 // Logging
 void log_console_running_tasks_info(std::vector<struct task_info> tasks);
-void log_kernel_disk_stats(struct disk_stats* stats, const char* type);
-void log_kernel_disk_perf(struct disk_perf* perf, const char* type);
-void log_kernel_emmc_info(struct emmc_info* info);
+
+void log_debug_disk_perf(struct disk_perf* perf, const char* type);
 
 void log_event_disk_stats(struct disk_stats* stats, const char* type);
 void log_event_emmc_info(struct emmc_info* info_);

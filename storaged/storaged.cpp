@@ -28,9 +28,8 @@
 /* disk_stats_publisher */
 void disk_stats_publisher::publish(void) {
     // Logging
-    log_kernel_disk_stats(&mAccumulate, "regular");
     struct disk_perf perf = get_disk_perf(&mAccumulate);
-    log_kernel_disk_perf(&perf, "regular");
+    log_debug_disk_perf(&perf, "regular");
     log_event_disk_stats(&mAccumulate, "regular");
     // Reset global structures
     memset(&mAccumulate, 0, sizeof(struct disk_stats));
@@ -102,16 +101,12 @@ void disk_stats_monitor::update(struct disk_stats* stats) {
         if (UNLIKELY(detect(&perf))) {
             mStall = true;
             add_disk_stats(&inc, &mAccumulate);
-#ifdef DEBUG
-            log_kernel_disk_perf(&mMean, "stalled_mean");
-            log_kernel_disk_perf(&mStd, "stalled_std");
-#endif
+            log_debug_disk_perf(&mMean, "stalled_mean");
+            log_debug_disk_perf(&mStd, "stalled_std");
         } else {
             if (mStall) {
-                log_kernel_disk_stats(&mAccumulate, "stalled");
                 struct disk_perf acc_perf = get_disk_perf(&mAccumulate);
-                log_kernel_disk_perf(&acc_perf, "stalled");
-
+                log_debug_disk_perf(&acc_perf, "stalled");
                 log_event_disk_stats(&mAccumulate, "stalled");
                 mStall = false;
                 memset(&mAccumulate, 0, sizeof(mAccumulate));
@@ -150,7 +145,6 @@ void disk_stats_monitor::update(void) {
 /* emmc_info_t */
 void emmc_info_t::publish(void) {
     if (mValid) {
-        log_kernel_emmc_info(&mInfo);
         log_event_emmc_info(&mInfo);
     }
 }
