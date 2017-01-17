@@ -1027,14 +1027,16 @@ static inline int native_window_enable_frame_timestamps(
 static inline int native_window_get_frame_timestamps(
         struct ANativeWindow* window, uint32_t framesAgo,
         int64_t* outRequestedPresentTime, int64_t* outAcquireTime,
-        int64_t* outRefreshStartTime, int64_t* outGlCompositionDoneTime,
+        int64_t* outLatchTime, int64_t* outFirstRefreshStartTime,
+        int64_t* outLastRefreshStartTime, int64_t* outGlCompositionDoneTime,
         int64_t* outDisplayPresentTime, int64_t* outDisplayRetireTime,
-        int64_t* outReleaseTime)
+        int64_t* outDequeueReadyTime, int64_t* outReleaseTime)
 {
     return window->perform(window, NATIVE_WINDOW_GET_FRAME_TIMESTAMPS,
-            framesAgo, outRequestedPresentTime, outAcquireTime,
-            outRefreshStartTime, outGlCompositionDoneTime,
-            outDisplayPresentTime, outDisplayRetireTime, outReleaseTime);
+            framesAgo, outRequestedPresentTime, outAcquireTime, outLatchTime,
+            outFirstRefreshStartTime, outLastRefreshStartTime,
+            outGlCompositionDoneTime, outDisplayPresentTime,
+            outDisplayRetireTime, outDequeueReadyTime, outReleaseTime);
 }
 
 
