@@ -439,6 +439,8 @@ static void load_persistent_properties() {
 
 void property_load_boot_defaults() {
     load_properties_from_file(PROP_PATH_RAMDISK_DEFAULT, NULL);
+    load_properties_from_file(PROP_PATH_ODM_DEFAULT, NULL);
+    load_properties_from_file(PROP_PATH_VENDOR_DEFAULT, NULL);
 }
 
 static void load_override_properties() {
@@ -501,6 +503,7 @@ void load_recovery_id_prop() {
 
 void load_system_props() {
     load_properties_from_file(PROP_PATH_SYSTEM_BUILD, NULL);
+    load_properties_from_file(PROP_PATH_ODM_BUILD, NULL);
     load_properties_from_file(PROP_PATH_VENDOR_BUILD, NULL);
     load_properties_from_file(PROP_PATH_FACTORY, "ro.*");
     load_recovery_id_prop();
