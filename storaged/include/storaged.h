@@ -67,7 +67,7 @@ struct disk_stats {
     double   io_avg;         // average io_in_flight for accumulate calculations
 };
 
-#define MMC_VER_STR_LEN ( 8 )   // maximum length of the MMC version string
+#define MMC_VER_STR_LEN ( 9 )   // maximum length of the MMC version string, including NULL terminator
 // minimum size of a ext_csd file
 #define EXT_CSD_FILE_MIN_SIZE ( 1024 )
 struct emmc_info {

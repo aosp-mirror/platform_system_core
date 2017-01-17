@@ -205,7 +205,7 @@ bool parse_emmc_ecsd(int ext_csd_fd, struct emmc_info* info) {
         "4.0", "4.1", "4.2", "4.3", "Obsolete", "4.41", "4.5", "5.0"
     };
 
-    strncpy(info->mmc_ver,
+    strlcpy(info->mmc_ver,
             (ext_csd_rev < (int)(sizeof(ver_str) / sizeof(ver_str[0]))) ?
                            ver_str[ext_csd_rev] :
                            "Unknown",
@@ -276,12 +276,12 @@ bool parse_task_info(uint32_t pid, struct task_info* info) {
     // Get cmd string
     std::string task_cmdline_path = android::base::StringPrintf(PROC_DIR "%u/cmdline", pid);
     if (!android::base::ReadFileToString(task_cmdline_path, &buffer)) return false;
-    strcpy(info->cmd, android::base::Trim(buffer).c_str());
+    strlcpy(info->cmd, android::base::Trim(buffer).c_str(), sizeof(info->cmd));
 
     if (info->cmd[0] == '\0') {
         std::string task_comm_path = android::base::StringPrintf(PROC_DIR "%u/comm", pid);
         if (!android::base::ReadFileToString(task_comm_path, &buffer)) return false;
-        strcpy(info->cmd, android::base::Trim(buffer).c_str());
+        strlcpy(info->cmd, android::base::Trim(buffer).c_str(), sizeof(info->cmd));
     }
 
     // Get task start time
