@@ -86,6 +86,19 @@ extern struct android_namespace_t* android_create_namespace(const char* name,
                                                             const char* permitted_when_isolated_path,
                                                             android_namespace_t* parent);
 
+/*
+ * Get the default library search path.
+ * The path will be copied into buffer, which must have space for at least
+ * buffer_size chars. Elements are separated with ':', and the path will always
+ * be null-terminated.
+ *
+ * If buffer_size is too small to hold the entire default search path and the
+ * null terminator, this function will abort. There is currently no way to find
+ * out what the required buffer size is. At the time of this writing, PATH_MAX
+ * is sufficient and used by all callers of this function.
+ */
+extern void android_get_LD_LIBRARY_PATH(char* buffer, size_t buffer_size);
+
 __END_DECLS
 
 #endif /* __ANDROID_DLEXT_NAMESPACES_H__ */
