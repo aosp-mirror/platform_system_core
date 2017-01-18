@@ -18,6 +18,7 @@
 #ifndef _DEBUGGERD_UTILITY_H
 #define _DEBUGGERD_UTILITY_H
 
+#include <signal.h>
 #include <stdbool.h>
 #include <sys/types.h>
 
@@ -78,7 +79,7 @@ enum logtype {
 void _LOG(log_t* log, logtype ltype, const char *fmt, ...)
         __attribute__ ((format(printf, 3, 4)));
 
-int wait_for_signal(pid_t tid);
+bool wait_for_signal(pid_t tid, siginfo_t* siginfo);
 
 void dump_memory(log_t* log, Backtrace* backtrace, uintptr_t addr, const char* fmt, ...);
 
