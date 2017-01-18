@@ -32,6 +32,7 @@
 #include <memory>
 #include <string>
 
+#include <android/log.h>
 #include <android-base/stringprintf.h>
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
@@ -39,9 +40,8 @@
 #include <log/log.h>
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
-#include <private/android_logger.h>
 
-#include <selinux/android.h>
+#include "debuggerd/handler.h"
 
 #include "backtrace.h"
 #include "elf_utils.h"
@@ -86,6 +86,7 @@ static const char* get_signame(int sig) {
     case SIGSTOP: return "SIGSTOP";
     case SIGSYS: return "SIGSYS";
     case SIGTRAP: return "SIGTRAP";
+    case DEBUGGER_SIGNAL: return "<debuggerd signal>";
     default: return "?";
   }
 }
@@ -625,7 +626,9 @@ static void dump_crash(log_t* log, BacktraceMap* map,
                        const OpenFilesList& open_files, pid_t pid, pid_t tid,
                        const std::set<pid_t>& siblings, uintptr_t abort_msg_address) {
   // don't copy log messages to tombstone unless this is a dev device
-  bool want_logs = __android_log_is_debuggable();
+  char value[PROPERTY_VALUE_MAX];
+  property_get("ro.debuggable", value, "0");
+  bool want_logs = (value[0] == '1');
 
   _LOG(log, logtype::HEADER,
        "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");

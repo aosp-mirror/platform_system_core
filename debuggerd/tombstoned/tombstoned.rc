@@ -1,0 +1,9 @@
+service tombstoned /system/bin/tombstoned
+    class core
+
+    user tombstoned
+    group system
+
+    socket tombstoned_crash seqpacket 0666 system system
+    socket tombstoned_intercept seqpacket 0666 system system
+    writepid /dev/cpuset/system-background/tasks
