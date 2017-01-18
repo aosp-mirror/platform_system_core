@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The Android Open Source Project
+ * Copyright 2016, The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,44 +16,21 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <stdbool.h>
 #include <sys/cdefs.h>
-#include <sys/types.h>
+#include <unistd.h>
 
-// On 32-bit devices, DEBUGGER_SOCKET_NAME is a 32-bit debuggerd.
-// On 64-bit devices, DEBUGGER_SOCKET_NAME is a 64-bit debuggerd.
-#define DEBUGGER_SOCKET_NAME "android:debuggerd"
+#include <android-base/unique_fd.h>
 
-// Used only on 64-bit devices for debuggerd32.
-#define DEBUGGER32_SOCKET_NAME "android:debuggerd32"
+enum DebuggerdDumpType {
+  kDebuggerdBacktrace,
+  kDebuggerdTombstone,
+};
 
-__BEGIN_DECLS
+// Trigger a dump of specified process to output_fd.
+// output_fd is *not* consumed, timeouts <= 0 will wait forever.
+bool debuggerd_trigger_dump(pid_t pid, android::base::unique_fd output_fd,
+                            enum DebuggerdDumpType dump_type, int timeout_ms);
 
-typedef enum {
-  // dump a crash
-  DEBUGGER_ACTION_CRASH,
-  // dump a tombstone file
-  DEBUGGER_ACTION_DUMP_TOMBSTONE,
-  // dump a backtrace only back to the socket
-  DEBUGGER_ACTION_DUMP_BACKTRACE,
-} debugger_action_t;
-
-// Make sure that all values have a fixed size so that this structure
-// is the same for 32 bit and 64 bit processes.
-typedef struct __attribute__((packed)) {
-  int32_t action;
-  pid_t tid;
-  pid_t ignore_tid;
-  uint64_t abort_msg_address;
-} debugger_msg_t;
-
-// These callbacks are called in a signal handler, and thus must be async signal safe.
-// If null, the callbacks will not be called.
-typedef struct {
-  struct abort_msg_t* (*get_abort_message)();
-  void (*post_dump)();
-} debuggerd_callbacks_t;
-
-void debuggerd_init(debuggerd_callbacks_t* callbacks);
-
-__END_DECLS
+int dump_backtrace_to_file(pid_t tid, int fd);
+int dump_backtrace_to_file_timeout(pid_t tid, int fd, int timeout_secs);
