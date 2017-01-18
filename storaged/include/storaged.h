@@ -67,7 +67,7 @@ struct disk_stats {
     double   io_avg;         // average io_in_flight for accumulate calculations
 };
 
-#define MMC_VER_STR_LEN ( 8 )   // maximum length of the MMC version string
+#define MMC_VER_STR_LEN ( 9 )   // maximum length of the MMC version string, including NULL terminator
 // minimum size of a ext_csd file
 #define EXT_CSD_FILE_MIN_SIZE ( 1024 )
 struct emmc_info {
@@ -257,9 +257,9 @@ public:
 };
 
 // Periodic chores intervals in seconds
-#define DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT ( 20 )
-#define DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH ( 60 )
-#define DEFAULT_PERIODIC_CHORES_INTERVAL_EMMC_INFO_PUBLISH ( 60 * 2 )
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT ( 60 )
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH ( 3600 )
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_EMMC_INFO_PUBLISH ( 86400 )
 
 struct storaged_config {
     int periodic_chores_interval_unit;
