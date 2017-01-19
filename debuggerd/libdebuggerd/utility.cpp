@@ -71,21 +71,25 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
   }
 }
 
-int wait_for_signal(pid_t tid) {
+bool wait_for_signal(pid_t tid, siginfo_t* siginfo) {
   while (true) {
     int status;
     pid_t n = TEMP_FAILURE_RETRY(waitpid(tid, &status, __WALL));
     if (n == -1) {
       ALOGE("waitpid failed: tid %d, %s", tid, strerror(errno));
-      return -1;
+      return false;
     } else if (n == tid) {
       if (WIFSTOPPED(status)) {
-        return WSTOPSIG(status);
+        if (ptrace(PTRACE_GETSIGINFO, tid, nullptr, siginfo) != 0) {
+          ALOGE("PTRACE_GETSIGINFO failed: %s", strerror(errno));
+          return false;
+        }
+        return true;
       } else {
         ALOGE("unexpected waitpid response: n=%d, status=%08x\n", n, status);
         // This is the only circumstance under which we can allow a detach
         // to fail with ESRCH, which indicates the tid has exited.
-        return -1;
+        return false;
       }
     }
   }
