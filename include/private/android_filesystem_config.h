@@ -127,6 +127,7 @@
 #define AID_MEDIA_VIDEO   1056 /* GID for video files on internal media storage */
 #define AID_MEDIA_IMAGE   1057 /* GID for image files on internal media storage */
 #define AID_TOMBSTONED    1058  /* tombstoned user */
+#define AID_MEDIA_OBB     1059 /* GID for OBB files on internal media storage */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
@@ -164,6 +165,9 @@
 
 #define AID_CACHE_GID_START  20000 /* start of gids for apps to mark cached data */
 #define AID_CACHE_GID_END    29999 /* end of gids for apps to mark cached data */
+
+#define AID_EXT_GID_START    30000 /* start of gids for apps to mark external data */
+#define AID_EXT_GID_END      39999 /* end of gids for apps to mark external data */
 
 #define AID_SHARED_GID_START 50000 /* start of gids for apps in each user to share */
 #define AID_SHARED_GID_END   59999 /* end of gids for apps in each user to share */
