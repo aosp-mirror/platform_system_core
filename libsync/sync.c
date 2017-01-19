@@ -20,6 +20,8 @@
 #include <malloc.h>
 #include <stdint.h>
 #include <string.h>
+#include <errno.h>
+#include <poll.h>
 
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -40,43 +42,133 @@ struct sw_sync_create_fence_data {
 
 int sync_wait(int fd, int timeout)
 {
-    __s32 to = timeout;
+    struct pollfd fds;
+    int ret;
 
-    return ioctl(fd, SYNC_IOC_LEGACY_WAIT, &to);
+    if (fd < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    fds.fd = fd;
+    fds.events = POLLIN;
+
+    do {
+        ret = poll(&fds, 1, timeout);
+        if (ret > 0) {
+            if (fds.revents & (POLLERR | POLLNVAL)) {
+                errno = EINVAL;
+                return -1;
+            }
+            return 0;
+        } else if (ret == 0) {
+            errno = ETIME;
+            return -1;
+        }
+    } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
+
+    return ret;
 }
 
 int sync_merge(const char *name, int fd1, int fd2)
 {
-    struct sync_legacy_merge_data data;
-    int err;
+    struct sync_legacy_merge_data legacy_data;
+    struct sync_merge_data data;
+    int ret;
 
     data.fd2 = fd2;
     strlcpy(data.name, name, sizeof(data.name));
+    data.flags = 0;
+    data.pad = 0;
 
-    err = ioctl(fd1, SYNC_IOC_LEGACY_MERGE, &data);
-    if (err < 0)
-        return err;
+    ret = ioctl(fd1, SYNC_IOC_MERGE, &data);
+    if (ret < 0 && errno == ENOTTY) {
+        legacy_data.fd2 = fd2;
+        strlcpy(legacy_data.name, name, sizeof(legacy_data.name));
+
+        ret = ioctl(fd1, SYNC_IOC_LEGACY_MERGE, &legacy_data);
+        if (ret < 0)
+            return ret;
+
+        return legacy_data.fence;
+    } else if (ret < 0) {
+        return ret;
+    }
 
     return data.fence;
 }
 
 struct sync_fence_info_data *sync_fence_info(int fd)
 {
-    struct sync_fence_info_data *info;
-    int err;
+    struct sync_fence_info_data *legacy_info;
+    struct sync_pt_info *legacy_pt_info;
+    struct sync_file_info *info;
+    struct sync_fence_info *fence_info;
+    int err, num_fences, i;
 
-    info = malloc(4096);
-    if (info == NULL)
+    legacy_info = malloc(4096);
+    if (legacy_info == NULL)
         return NULL;
 
-    info->len = 4096;
-    err = ioctl(fd, SYNC_IOC_LEGACY_FENCE_INFO, info);
-    if (err < 0) {
-        free(info);
+    legacy_info->len = 4096;
+    err = ioctl(fd, SYNC_IOC_LEGACY_FENCE_INFO, legacy_info);
+    if (err < 0 && errno != ENOTTY) {
+        free(legacy_info);
         return NULL;
+    } else if (err == 0) {
+        return legacy_info;
     }
 
-    return info;
+    info = calloc(1, sizeof(*info));
+    if (info == NULL)
+        goto free;
+
+    err = ioctl(fd, SYNC_IOC_FILE_INFO, info);
+    if (err < 0)
+        goto free;
+
+    num_fences = info->num_fences;
+
+    if (num_fences) {
+        info->flags = 0;
+        info->num_fences = num_fences;
+        info->sync_fence_info = (uint64_t) calloc(num_fences,
+                                        sizeof(struct sync_fence_info));
+        if ((void *)info->sync_fence_info == NULL)
+            goto free;
+
+        err = ioctl(fd, SYNC_IOC_FILE_INFO, info);
+        if (err < 0) {
+            free((void *)info->sync_fence_info);
+            goto free;
+        }
+    }
+
+    legacy_info->len = sizeof(*legacy_info) +
+                        num_fences * sizeof(struct sync_fence_info);
+    strlcpy(legacy_info->name, info->name, sizeof(legacy_info->name));
+    legacy_info->status = info->status;
+
+    legacy_pt_info = (struct sync_pt_info *)legacy_info->pt_info;
+    fence_info = (struct sync_fence_info *)info->sync_fence_info;
+    for (i = 0 ; i < num_fences ; i++) {
+        legacy_pt_info[i].len = sizeof(*legacy_pt_info);
+        strlcpy(legacy_pt_info[i].obj_name, fence_info[i].obj_name,
+                sizeof(legacy_pt_info->obj_name));
+        strlcpy(legacy_pt_info[i].driver_name, fence_info[i].driver_name,
+                sizeof(legacy_pt_info->driver_name));
+        legacy_pt_info[i].status = fence_info[i].status;
+        legacy_pt_info[i].timestamp_ns = fence_info[i].timestamp_ns;
+    }
+
+    free((void *)info->sync_fence_info);
+    free(info);
+    return legacy_info;
+
+free:
+    free(legacy_info);
+    free(info);
+    return NULL;
 }
 
 struct sync_pt_info *sync_pt_info(struct sync_fence_info_data *info,
