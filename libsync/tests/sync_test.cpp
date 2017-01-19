@@ -348,33 +348,6 @@ TEST(FenceTest, MergeSameFence) {
     ASSERT_EQ(selfMergeFence.getSignaledCount(), 1);
 }
 
-TEST(FenceTest, WaitOnDestroyedTimeline) {
-    SyncTimeline timeline;
-    ASSERT_TRUE(timeline.isValid());
-
-    SyncFence fenceSig(timeline, 100);
-    SyncFence fenceKill(timeline, 200);
-
-    // Spawn a thread to wait on a fence when the timeline is killed.
-    thread waitThread{
-        [&]() {
-            ASSERT_EQ(timeline.inc(100), 0);
-
-            ASSERT_EQ(fenceKill.wait(-1), -1);
-            ASSERT_EQ(errno, ENOENT);
-        }
-    };
-
-    // Wait for the thread to spool up.
-    fenceSig.wait();
-
-    // Kill the timeline.
-    timeline.destroy();
-
-    // wait for the thread to clean up.
-    waitThread.join();
-}
-
 TEST(FenceTest, PollOnDestroyedTimeline) {
     SyncTimeline timeline;
     ASSERT_TRUE(timeline.isValid());
