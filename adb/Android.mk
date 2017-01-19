@@ -81,17 +81,17 @@ LIBADB_windows_CFLAGS := \
 
 LIBADB_darwin_SRC_FILES := \
     sysdeps_unix.cpp \
-    usb_osx.cpp \
+    client/usb_osx.cpp \
 
 LIBADB_linux_SRC_FILES := \
     sysdeps_unix.cpp \
-    usb_linux.cpp \
+    client/usb_linux.cpp \
 
 LIBADB_windows_SRC_FILES := \
     sysdeps_win32.cpp \
     sysdeps/win32/errno.cpp \
     sysdeps/win32/stat.cpp \
-    usb_windows.cpp \
+    client/usb_windows.cpp \
 
 LIBADB_TEST_windows_SRCS := \
     sysdeps/win32/errno_test.cpp \
