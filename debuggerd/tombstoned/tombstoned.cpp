@@ -110,7 +110,7 @@ static unique_fd get_tombstone_fd() {
   }
 
   result.reset(
-    openat(tombstone_directory_fd, buf, O_CREAT | O_EXCL | O_WRONLY | O_APPEND, O_CLOEXEC, 0700));
+    openat(tombstone_directory_fd, buf, O_CREAT | O_EXCL | O_WRONLY | O_APPEND | O_CLOEXEC, 0700));
   if (result == -1) {
     PLOG(FATAL) << "failed to create tombstone at " << kTombstoneDirectory << buf;
   }
