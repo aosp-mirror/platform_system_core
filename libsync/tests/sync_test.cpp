@@ -364,8 +364,7 @@ TEST(FenceTest, PollOnDestroyedTimeline) {
             struct pollfd fds;
             fds.fd = fenceKill.getFd();
             fds.events = POLLIN | POLLERR;
-            ASSERT_EQ(poll(&fds, 1, -1), 1);
-            ASSERT_TRUE(fds.revents & POLLERR);
+            ASSERT_EQ(poll(&fds, 1, 0), 0);
         }
     };
 
