@@ -101,7 +101,13 @@ void sync_fence_info_free(struct sync_fence_info_data *info)
 
 int sw_sync_timeline_create(void)
 {
-    return open("/dev/sw_sync", O_RDWR);
+    int ret;
+
+    ret = open("/sys/kernel/debug/sync/sw_sync", O_RDWR);
+    if (ret < 0)
+        ret = open("/dev/sw_sync", O_RDWR);
+
+    return ret;
 }
 
 int sw_sync_timeline_inc(int fd, unsigned count)
