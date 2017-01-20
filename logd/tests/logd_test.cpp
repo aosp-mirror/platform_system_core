@@ -196,7 +196,9 @@ TEST(logd, statistics) {
     EXPECT_TRUE(NULL != main_logs);
 
     char *radio_logs = strstr(cp, "\nChattiest UIDs in radio ");
-    EXPECT_TRUE(NULL != radio_logs);
+    if (!radio_logs) GTEST_LOG_(INFO) << "Value of: NULL != radio_logs\n"
+                                         "Actual: false\n"
+                                         "Expected: false\n";
 
     char *system_logs = strstr(cp, "\nChattiest UIDs in system ");
     EXPECT_TRUE(NULL != system_logs);
@@ -942,8 +944,16 @@ static pid_t sepolicy_rate(unsigned rate, unsigned num) {
         return 0;
     }
 
-    // Requests dac_read_search, falls back to request dac_override
-    rate /= 2;
+    // The key here is we are root, but we are in u:r:shell:s0,
+    // and the directory does not provide us DAC access
+    // (eg: 0700 system system) so we trigger the pair dac_override
+    // and dac_read_search on every try to get past the message
+    // de-duper.  We will also rotate the file name in the directory
+    // as another measure.
+    static const char file[] = "/data/backup/cannot_access_directory_%u";
+    static const unsigned avc_requests_per_access = 2;
+
+    rate /= avc_requests_per_access;
     useconds_t usec;
     if (rate == 0) {
         rate = 1;
@@ -951,15 +961,12 @@ static pid_t sepolicy_rate(unsigned rate, unsigned num) {
     } else {
         usec = (1000000 + (rate / 2)) / rate;
     }
-    num = (num + 1) / 2;
+    num = (num + (avc_requests_per_access / 2)) / avc_requests_per_access;
 
     if (usec < 2) usec = 2;
 
     while (num > 0) {
-        if (access(android::base::StringPrintf(
-                       "/data/misc/logd/cannot_access_directory_%u",
-                       num).c_str(),
-                   F_OK) == 0) {
+        if (access(android::base::StringPrintf(file, num).c_str(), F_OK) == 0) {
             _exit(-1);
             // NOTREACHED
             return 0;
@@ -1002,7 +1009,7 @@ static int count_avc(pid_t pid) {
 
         // int len = get4LE(eventData + 4 + 1);
         log_msg.buf[LOGGER_ENTRY_MAX_LEN] = '\0';
-        const char *cp = strstr(eventData + 4 + 1 + 4, "): avc: ");
+        const char *cp = strstr(eventData + 4 + 1 + 4, "): avc: denied");
         if (!cp) continue;
 
         ++count;
@@ -1055,8 +1062,7 @@ TEST(logd, sepolicy_rate_limiter_spam) {
     // give logd another 3 seconds to react to the burst before checking
     sepolicy_rate(rate, rate * 3);
     // maximum period at double the maximum burst rate (spam filter kicked in)
-    EXPECT_GE(((AUDIT_RATE_LIMIT_MAX * AUDIT_RATE_LIMIT_BURST_DURATION) * 130) /
-                                        100, // +30% margin
+    EXPECT_GE(threshold * 2,
               count_avc(sepolicy_rate(rate,
                                       rate * AUDIT_RATE_LIMIT_BURST_DURATION)));
     // cool down, and check unspammy rate still works
