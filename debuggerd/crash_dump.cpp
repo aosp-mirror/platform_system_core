@@ -57,8 +57,9 @@ static bool pid_contains_tid(pid_t pid, pid_t tid) {
 }
 
 // Attach to a thread, and verify that it's still a member of the given process
-static bool ptrace_attach_thread(pid_t pid, pid_t tid) {
+static bool ptrace_attach_thread(pid_t pid, pid_t tid, std::string* error) {
   if (ptrace(PTRACE_ATTACH, tid, 0, 0) != 0) {
+    *error = StringPrintf("failed to attach to thread %d: %s", tid, strerror(errno));
     return false;
   }
 
@@ -67,7 +68,7 @@ static bool ptrace_attach_thread(pid_t pid, pid_t tid) {
     if (ptrace(PTRACE_DETACH, tid, 0, 0) != 0) {
       PLOG(FATAL) << "failed to detach from thread " << tid;
     }
-    errno = ECHILD;
+    *error = StringPrintf("thread %d is not in process %d", tid, pid);
     return false;
   }
   return true;
@@ -244,9 +245,9 @@ int main(int argc, char** argv) {
 
   check_process(target_proc_fd, target);
 
-  int attach_error = 0;
-  if (!ptrace_attach_thread(target, main_tid)) {
-    PLOG(FATAL) << "failed to attach to thread " << main_tid << " in process " << target;
+  std::string attach_error;
+  if (!ptrace_attach_thread(target, main_tid, &attach_error)) {
+    LOG(FATAL) << attach_error;
   }
 
   check_process(target_proc_fd, target);
@@ -266,10 +267,6 @@ int main(int argc, char** argv) {
   } else {
     unique_fd devnull(TEMP_FAILURE_RETRY(open("/dev/null", O_RDWR)));
     TEMP_FAILURE_RETRY(dup2(devnull.get(), STDOUT_FILENO));
-  }
-
-  if (attach_error != 0) {
-    PLOG(FATAL) << "failed to attach to thread " << main_tid << " in process " << target;
   }
 
   LOG(INFO) << "performing dump of process " << target << " (target tid = " << main_tid << ")";
@@ -307,6 +304,7 @@ int main(int argc, char** argv) {
   bool fatal_signal = signo != DEBUGGER_SIGNAL;
   int resume_signal = fatal_signal ? signo : 0;
   std::set<pid_t> siblings;
+  std::set<pid_t> attached_siblings;
   if (resume_signal == 0) {
     if (!android::procinfo::GetProcessTids(target, &siblings)) {
       PLOG(FATAL) << "failed to get process siblings";
@@ -314,8 +312,10 @@ int main(int argc, char** argv) {
     siblings.erase(main_tid);
 
     for (pid_t sibling_tid : siblings) {
-      if (!ptrace_attach_thread(target, sibling_tid)) {
-        PLOG(FATAL) << "failed to attach to thread " << main_tid << " in process " << target;
+      if (!ptrace_attach_thread(target, sibling_tid, &attach_error)) {
+        LOG(WARNING) << attach_error;
+      } else {
+        attached_siblings.insert(sibling_tid);
       }
     }
   }
@@ -328,14 +328,14 @@ int main(int argc, char** argv) {
   std::string amfd_data;
 
   if (backtrace) {
-    dump_backtrace(output_fd.get(), backtrace_map.get(), target, main_tid, siblings, 0);
+    dump_backtrace(output_fd.get(), backtrace_map.get(), target, main_tid, attached_siblings, 0);
   } else {
     // Collect the list of open files.
     OpenFilesList open_files;
     populate_open_files_list(target, &open_files);
 
-    engrave_tombstone(output_fd.get(), backtrace_map.get(), open_files, target, main_tid, siblings,
-                      abort_address, fatal_signal ? &amfd_data : nullptr);
+    engrave_tombstone(output_fd.get(), backtrace_map.get(), open_files, target, main_tid,
+                      attached_siblings, abort_address, fatal_signal ? &amfd_data : nullptr);
   }
 
   bool wait_for_gdb = android::base::GetBoolProperty("debug.debuggerd.wait_for_gdb", false);
@@ -357,7 +357,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  for (pid_t tid : siblings) {
+  for (pid_t tid : attached_siblings) {
     // Don't send the signal to sibling threads.
     if (ptrace(PTRACE_DETACH, tid, 0, wait_for_gdb ? SIGSTOP : 0) != 0) {
       PLOG(ERROR) << "ptrace detach from " << tid << " failed";
