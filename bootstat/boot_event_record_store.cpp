@@ -46,24 +46,6 @@ bool ParseRecordEventTime(const std::string& path, int32_t* uptime) {
 
   *uptime = file_stat.st_mtime;
 
-  // The following code (till function exit) is a debug test to ensure the
-  // validity of the file mtime value, i.e., to check that the record file
-  // mtime values are not changed once set.
-  // TODO(jhawkins): Remove this code.
-  std::string content;
-  if (!android::base::ReadFileToString(path, &content)) {
-    PLOG(ERROR) << "Failed to read " << path;
-    return false;
-  }
-
-  // Ignore existing bootstat records (which do not contain file content).
-  if (!content.empty()) {
-    int32_t value;
-    if (android::base::ParseInt(content, &value)) {
-      bootstat::LogHistogram("bootstat_mtime_matches_content", value == *uptime);
-    }
-  }
-
   return true;
 }
 
@@ -86,16 +68,6 @@ void BootEventRecordStore::AddBootEventWithValue(
   int record_fd = creat(record_path.c_str(), S_IRUSR | S_IWUSR);
   if (record_fd == -1) {
     PLOG(ERROR) << "Failed to create " << record_path;
-    return;
-  }
-
-  // Writing the value as content in the record file is a debug measure to
-  // ensure the validity of the file mtime value, i.e., to check that the record
-  // file mtime values are not changed once set.
-  // TODO(jhawkins): Remove this block.
-  if (!android::base::WriteStringToFd(std::to_string(value), record_fd)) {
-    PLOG(ERROR) << "Failed to write value to " << record_path;
-    close(record_fd);
     return;
   }
 
