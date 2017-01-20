@@ -263,26 +263,18 @@ static void security_failure() {
     panic();
 }
 
-#define MMAP_RND_PATH "/proc/sys/vm/mmap_rnd_bits"
-#define MMAP_RND_COMPAT_PATH "/proc/sys/vm/mmap_rnd_compat_bits"
-
-/* __attribute__((unused)) due to lack of mips support: see mips block
- * in set_mmap_rnd_bits_action */
-static bool __attribute__((unused)) set_mmap_rnd_bits_min(int start, int min, bool compat) {
-    std::string path;
-    if (compat) {
-        path = MMAP_RND_COMPAT_PATH;
-    } else {
-        path = MMAP_RND_PATH;
-    }
+static bool set_highest_available_option_value(std::string path, int min, int max)
+{
     std::ifstream inf(path, std::fstream::in);
     if (!inf) {
         LOG(ERROR) << "Cannot open for reading: " << path;
         return false;
     }
-    while (start >= min) {
+
+    int current = max;
+    while (current >= min) {
         // try to write out new value
-        std::string str_val = std::to_string(start);
+        std::string str_val = std::to_string(current);
         std::ofstream of(path, std::fstream::out);
         if (!of) {
             LOG(ERROR) << "Cannot open for writing: " << path;
@@ -298,14 +290,31 @@ static bool __attribute__((unused)) set_mmap_rnd_bits_min(int start, int min, bo
         if (str_val.compare(str_rec) == 0) {
             break;
         }
-        start--;
+        current--;
     }
     inf.close();
-    if (start < min) {
-        LOG(ERROR) << "Unable to set minimum required entropy " << min << " in " << path;
+
+    if (current < min) {
+        LOG(ERROR) << "Unable to set minimum option value " << min << " in " << path;
         return false;
     }
     return true;
+}
+
+#define MMAP_RND_PATH "/proc/sys/vm/mmap_rnd_bits"
+#define MMAP_RND_COMPAT_PATH "/proc/sys/vm/mmap_rnd_compat_bits"
+
+/* __attribute__((unused)) due to lack of mips support: see mips block
+ * in set_mmap_rnd_bits_action */
+static bool __attribute__((unused)) set_mmap_rnd_bits_min(int start, int min, bool compat) {
+    std::string path;
+    if (compat) {
+        path = MMAP_RND_COMPAT_PATH;
+    } else {
+        path = MMAP_RND_PATH;
+    }
+
+    return set_highest_available_option_value(path, min, start);
 }
 
 /*
@@ -358,6 +367,25 @@ static int set_mmap_rnd_bits_action(const std::vector<std::string>& args)
         security_failure();
     }
     return ret;
+}
+
+#define KPTR_RESTRICT_PATH "/proc/sys/kernel/kptr_restrict"
+#define KPTR_RESTRICT_MINVALUE 2
+#define KPTR_RESTRICT_MAXVALUE 4
+
+/* Set kptr_restrict to the highest available level.
+ *
+ * Aborts if unable to set this to an acceptable value.
+ */
+static int set_kptr_restrict_action(const std::vector<std::string>& args)
+{
+    std::string path = KPTR_RESTRICT_PATH;
+
+    if (!set_highest_available_option_value(path, KPTR_RESTRICT_MINVALUE, KPTR_RESTRICT_MAXVALUE)) {
+        LOG(ERROR) << "Unable to set adequate kptr_restrict value!";
+        security_failure();
+    }
+    return 0;
 }
 
 static int keychord_init_action(const std::vector<std::string>& args)
@@ -818,6 +846,7 @@ int main(int argc, char** argv) {
     // ... so that we can start queuing up actions that require stuff from /dev.
     am.QueueBuiltinAction(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
     am.QueueBuiltinAction(set_mmap_rnd_bits_action, "set_mmap_rnd_bits");
+    am.QueueBuiltinAction(set_kptr_restrict_action, "set_kptr_restrict");
     am.QueueBuiltinAction(keychord_init_action, "keychord_init");
     am.QueueBuiltinAction(console_init_action, "console_init");
 
