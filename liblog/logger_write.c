@@ -262,6 +262,8 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
     }
 
 #if defined(__ANDROID__)
+    clock_gettime(android_log_clockid(), &ts);
+
     if (log_id == LOG_ID_SECURITY) {
         if (vec[0].iov_len < 4) {
             return -EINVAL;
@@ -351,8 +353,6 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
             return -EPERM;
         }
     }
-
-    clock_gettime(android_log_clockid(), &ts);
 #else
     /* simulate clock_gettime(CLOCK_REALTIME, &ts); */
     {
