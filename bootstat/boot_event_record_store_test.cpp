@@ -45,14 +45,6 @@ bool CreateEmptyBootEventRecord(const std::string& record_path, int32_t value) {
     return false;
   }
 
-  // Writing the value as content in the record file is a debug measure to
-  // ensure the validity of the file mtime value, i.e., to check that the record
-  // file mtime values are not changed once set.
-  // TODO(jhawkins): Remove this block.
-  if (!android::base::WriteStringToFd(std::to_string(value), record_fd)) {
-    return false;
-  }
-
   // Set the |mtime| of the file to store the value of the boot event while
   // preserving the |atime|.
   struct timeval atime = {/* tv_sec */ 0, /* tv_usec */ 0};
