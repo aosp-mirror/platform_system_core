@@ -1,6 +1,4 @@
 service tombstoned /system/bin/tombstoned
-    class core
-
     user tombstoned
     group system
 
