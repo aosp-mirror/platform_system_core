@@ -190,9 +190,11 @@ void storaged_t::event(void) {
         }
     }
 
+#ifdef DEBUG
     if (mConfig.proc_taskio_readable) {
         mTasks.update_running_tasks();
     }
+#endif
 
     if (mConfig.emmc_available && mTimer &&
             (mTimer % mConfig.periodic_chores_interval_emmc_info_publish) == 0) {
