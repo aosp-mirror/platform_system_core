@@ -581,24 +581,36 @@ static log_time lastLogTime(char *outputFileName) {
 
 } /* namespace android */
 
+void reportErrorName(const char **current,
+                     const char* name,
+                     bool blockSecurity) {
+    if (*current) {
+       return;
+    }
+    if (blockSecurity && (android_name_to_log_id(name) == LOG_ID_SECURITY)) {
+       return;
+    }
+    *current = name;
+}
 
 int main(int argc, char **argv)
 {
     using namespace android;
     int err;
     int hasSetLogFormat = 0;
-    int clearLog = 0;
-    int getLogSize = 0;
+    bool clearLog = false;
+    bool allSelected = false;
+    bool getLogSize = false;
+    bool getPruneList = false;
+    bool printStatistics = false;
+    bool printDividers = false;
     unsigned long setLogSize = 0;
-    int getPruneList = 0;
     char *setPruneList = NULL;
     char *setId = NULL;
-    int printStatistics = 0;
     int mode = ANDROID_LOG_RDONLY;
     const char *forceFilters = NULL;
     log_device_t* devices = NULL;
     log_device_t* dev;
-    bool printDividers = false;
     struct logger_list *logger_list;
     size_t tail_lines = 0;
     log_time tail_time(log_time::EPOCH);
@@ -710,7 +722,7 @@ int main(int argc, char **argv)
             break;
 
             case 'c':
-                clearLog = 1;
+                clearLog = true;
                 mode |= ANDROID_LOG_WRONLY;
             break;
 
@@ -771,7 +783,7 @@ int main(int argc, char **argv)
 
             case 'g':
                 if (!optarg) {
-                    getLogSize = 1;
+                    getLogSize = true;
                     break;
                 }
                 // FALLTHRU
@@ -813,7 +825,7 @@ int main(int argc, char **argv)
 
             case 'p':
                 if (!optarg) {
-                    getPruneList = 1;
+                    getPruneList = true;
                     break;
                 }
                 // FALLTHRU
@@ -830,6 +842,7 @@ int main(int argc, char **argv)
                                   (1 << LOG_ID_SYSTEM) |
                                   (1 << LOG_ID_CRASH);
                     } else if (strcmp(optarg, "all") == 0) {
+                        allSelected = true;
                         idMask = (unsigned)-1;
                     } else {
                         log_id_t log_id = android_name_to_log_id(optarg);
@@ -839,6 +852,7 @@ int main(int argc, char **argv)
                             logcat_panic(HELP_TRUE,
                                          "unknown buffer %s\n", optarg);
                         }
+                        if (log_id == LOG_ID_SECURITY) allSelected = false;
                         idMask |= (1 << log_id);
                     }
                     optarg = NULL;
@@ -992,7 +1006,7 @@ int main(int argc, char **argv)
                 break;
 
             case 'S':
-                printStatistics = 1;
+                printStatistics = true;
                 break;
 
             case ':':
@@ -1114,7 +1128,7 @@ int main(int argc, char **argv)
         dev->logger = android_logger_open(logger_list,
                                           android_name_to_log_id(dev->device));
         if (!dev->logger) {
-            openDeviceFail = openDeviceFail ?: dev->device;
+            reportErrorName(&openDeviceFail, dev->device, allSelected);
             dev = dev->next;
             continue;
         }
@@ -1136,7 +1150,7 @@ int main(int argc, char **argv)
 
                     if (file.length() == 0) {
                         perror("while clearing log files");
-                        clearFail = clearFail ?: dev->device;
+                        reportErrorName(&clearFail, dev->device, allSelected);
                         break;
                     }
 
@@ -1144,17 +1158,17 @@ int main(int argc, char **argv)
 
                     if (err < 0 && errno != ENOENT && clearFail == NULL) {
                         perror("while clearing log files");
-                        clearFail = dev->device;
+                        reportErrorName(&clearFail, dev->device, allSelected);
                     }
                 }
             } else if (android_logger_clear(dev->logger)) {
-                clearFail = clearFail ?: dev->device;
+                reportErrorName(&clearFail, dev->device, allSelected);
             }
         }
 
         if (setLogSize) {
             if (android_logger_set_log_size(dev->logger, setLogSize)) {
-                setSizeFail = setSizeFail ?: dev->device;
+                reportErrorName(&setSizeFail, dev->device, allSelected);
             }
         }
 
@@ -1163,7 +1177,7 @@ int main(int argc, char **argv)
             long readable = android_logger_get_log_readable_size(dev->logger);
 
             if ((size < 0) || (readable < 0)) {
-                getSizeFail = getSizeFail ?: dev->device;
+                reportErrorName(&getSizeFail, dev->device, allSelected);
             } else {
                 printf("%s: ring buffer is %ld%sb (%ld%sb consumed), "
                        "max entry is %db, max payload is %db\n", dev->device,
