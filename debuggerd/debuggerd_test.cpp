@@ -340,24 +340,15 @@ TEST_F(CrasherTest, wait_for_gdb) {
   AssertDeath(SIGABRT);
 }
 
+// wait_for_gdb shouldn't trigger on manually sent signals.
 TEST_F(CrasherTest, wait_for_gdb_signal) {
   if (!android::base::SetProperty(kWaitForGdbKey, "1")) {
     FAIL() << "failed to enable wait_for_gdb";
   }
 
   StartCrasher("abort");
-  ASSERT_EQ(0, kill(crasher_pid, SIGABRT)) << strerror(errno);
-
-  std::this_thread::sleep_for(500ms);
-
-  int status;
-  ASSERT_EQ(crasher_pid, (TIMEOUT(1, waitpid(crasher_pid, &status, WUNTRACED))));
-  ASSERT_TRUE(WIFSTOPPED(status));
-  ASSERT_EQ(SIGSTOP, WSTOPSIG(status));
-
-  ASSERT_EQ(0, kill(crasher_pid, SIGCONT)) << strerror(errno);
-
-  AssertDeath(SIGABRT);
+  ASSERT_EQ(0, kill(crasher_pid, SIGSEGV)) << strerror(errno);
+  AssertDeath(SIGSEGV);
 }
 
 TEST_F(CrasherTest, backtrace) {

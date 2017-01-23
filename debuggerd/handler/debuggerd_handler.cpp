@@ -31,6 +31,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <linux/futex.h>
 #include <pthread.h>
 #include <sched.h>
 #include <signal.h>
@@ -46,6 +47,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "private/bionic_futex.h"
 #include "private/libc_logging.h"
 
 // see man(2) prctl, specifically the section about PR_GET_NAME
@@ -151,7 +153,6 @@ static bool have_siginfo(int signum) {
 }
 
 struct debugger_thread_info {
-  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   bool crash_dump_started = false;
   pid_t crashing_tid;
   pid_t pseudothread_tid;
@@ -228,7 +229,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     }
   }
 
-  pthread_mutex_unlock(&thread_info->mutex);
+  syscall(__NR_exit, 0);
   return 0;
 }
 
@@ -267,23 +268,26 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void*) 
   }
 
   debugger_thread_info thread_info = {
+    .pseudothread_tid = -1,
     .crashing_tid = gettid(),
     .signal_number = signal_number,
     .info = info
   };
-  pthread_mutex_lock(&thread_info.mutex);
 
   // Essentially pthread_create without CLONE_FILES (see debuggerd_dispatch_pseudothread).
-  pid_t child_pid = clone(debuggerd_dispatch_pseudothread, pseudothread_stack,
-                          CLONE_THREAD | CLONE_SIGHAND | CLONE_VM | CLONE_CHILD_SETTID,
-                          &thread_info, nullptr, nullptr, &thread_info.pseudothread_tid);
+  pid_t child_pid =
+    clone(debuggerd_dispatch_pseudothread, pseudothread_stack,
+          CLONE_THREAD | CLONE_SIGHAND | CLONE_VM | CLONE_CHILD_SETTID | CLONE_CHILD_CLEARTID,
+          &thread_info, nullptr, nullptr, &thread_info.pseudothread_tid);
   if (child_pid == -1) {
     fatal("failed to spawn debuggerd dispatch thread: %s", strerror(errno));
   }
 
-  // Wait for the child to finish and unlock the mutex.
-  // This relies on bionic behavior that isn't guaranteed by the standard.
-  pthread_mutex_lock(&thread_info.mutex);
+  // Wait for the child to start...
+  __futex_wait(&thread_info.pseudothread_tid, -1, nullptr);
+
+  // and then wait for it to finish.
+  __futex_wait(&thread_info.pseudothread_tid, child_pid, nullptr);
 
   // Signals can either be fatal or nonfatal.
   // For fatal signals, crash_dump will PTRACE_CONT us with the signal we
@@ -363,15 +367,5 @@ void debuggerd_init(debuggerd_callbacks_t* callbacks) {
 
   // Use the alternate signal stack if available so we can catch stack overflows.
   action.sa_flags |= SA_ONSTACK;
-
-  sigaction(SIGABRT, &action, nullptr);
-  sigaction(SIGBUS, &action, nullptr);
-  sigaction(SIGFPE, &action, nullptr);
-  sigaction(SIGILL, &action, nullptr);
-  sigaction(SIGSEGV, &action, nullptr);
-#if defined(SIGSTKFLT)
-  sigaction(SIGSTKFLT, &action, nullptr);
-#endif
-  sigaction(SIGTRAP, &action, nullptr);
-  sigaction(DEBUGGER_SIGNAL, &action, nullptr);
+  debuggerd_register_handlers(&action);
 }

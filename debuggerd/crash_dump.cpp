@@ -57,8 +57,8 @@ static bool pid_contains_tid(pid_t pid, pid_t tid) {
 }
 
 // Attach to a thread, and verify that it's still a member of the given process
-static bool ptrace_attach_thread(pid_t pid, pid_t tid, std::string* error) {
-  if (ptrace(PTRACE_ATTACH, tid, 0, 0) != 0) {
+static bool ptrace_seize_thread(pid_t pid, pid_t tid, std::string* error) {
+  if (ptrace(PTRACE_SEIZE, tid, 0, 0) != 0) {
     *error = StringPrintf("failed to attach to thread %d: %s", tid, strerror(errno));
     return false;
   }
@@ -71,6 +71,12 @@ static bool ptrace_attach_thread(pid_t pid, pid_t tid, std::string* error) {
     *error = StringPrintf("thread %d is not in process %d", tid, pid);
     return false;
   }
+
+  // Put the task into ptrace-stop state.
+  if (ptrace(PTRACE_INTERRUPT, tid, 0, 0) != 0) {
+    PLOG(FATAL) << "failed to interrupt thread " << tid;
+  }
+
   return true;
 }
 
@@ -160,11 +166,15 @@ static bool tombstoned_notify_completion(int tombstoned_socket) {
   return true;
 }
 
+static void signal_handler(int) {
+  // We can't log easily, because the heap might be corrupt.
+  // Just die and let the surrounding log context explain things.
+  _exit(1);
+}
+
 static void abort_handler(pid_t target, const bool& tombstoned_connected,
                           unique_fd& tombstoned_socket, unique_fd& output_fd,
                           const char* abort_msg) {
-  LOG(ERROR) << abort_msg;
-
   // If we abort before we get an output fd, contact tombstoned to let any
   // potential listeners know that we failed.
   if (!tombstoned_connected) {
@@ -177,7 +187,6 @@ static void abort_handler(pid_t target, const bool& tombstoned_connected,
 
   dprintf(output_fd.get(), "crash_dump failed to dump process %d: %s\n", target, abort_msg);
 
-  // Don't dump ourselves.
   _exit(1);
 }
 
@@ -202,6 +211,11 @@ int main(int argc, char** argv) {
   android::base::SetAborter([&](const char* abort_msg) {
     abort_handler(target, tombstoned_connected, tombstoned_socket, output_fd, abort_msg);
   });
+
+  // Don't try to dump ourselves.
+  struct sigaction action = {};
+  action.sa_handler = signal_handler;
+  debuggerd_register_handlers(&action);
 
   if (argc != 2) {
     return 1;
@@ -243,10 +257,13 @@ int main(int argc, char** argv) {
     exit(0);
   }
 
+  // Die if we take too long.
+  alarm(20);
+
   check_process(target_proc_fd, target);
 
   std::string attach_error;
-  if (!ptrace_attach_thread(target, main_tid, &attach_error)) {
+  if (!ptrace_seize_thread(target, main_tid, &attach_error)) {
     LOG(FATAL) << attach_error;
   }
 
@@ -271,9 +288,9 @@ int main(int argc, char** argv) {
 
   LOG(INFO) << "performing dump of process " << target << " (target tid = " << main_tid << ")";
 
-  // At this point, the thread that made the request has been PTRACE_ATTACHed
-  // and has the signal that triggered things queued. Send PTRACE_CONT, and
-  // then wait for the signal.
+  // At this point, the thread that made the request has been attached and is
+  // in ptrace-stopped state. After resumption, the triggering signal that has
+  // been queued will be delivered.
   if (ptrace(PTRACE_CONT, main_tid, 0, 0) != 0) {
     PLOG(ERROR) << "PTRACE_CONT(" << main_tid << ") failed";
     exit(1);
@@ -302,17 +319,16 @@ int main(int argc, char** argv) {
   // Now that we have the signal that kicked things off, attach all of the
   // sibling threads, and then proceed.
   bool fatal_signal = signo != DEBUGGER_SIGNAL;
-  int resume_signal = fatal_signal ? signo : 0;
   std::set<pid_t> siblings;
   std::set<pid_t> attached_siblings;
-  if (resume_signal == 0) {
+  if (fatal_signal) {
     if (!android::procinfo::GetProcessTids(target, &siblings)) {
       PLOG(FATAL) << "failed to get process siblings";
     }
     siblings.erase(main_tid);
 
     for (pid_t sibling_tid : siblings) {
-      if (!ptrace_attach_thread(target, sibling_tid, &attach_error)) {
+      if (!ptrace_seize_thread(target, sibling_tid, &attach_error)) {
         LOG(WARNING) << attach_error;
       } else {
         attached_siblings.insert(sibling_tid);
@@ -338,40 +354,39 @@ int main(int argc, char** argv) {
                       attached_siblings, abort_address, fatal_signal ? &amfd_data : nullptr);
   }
 
+  // We don't actually need to PTRACE_DETACH, as long as our tracees aren't in
+  // group-stop state, which is true as long as no stopping signals are sent.
+
   bool wait_for_gdb = android::base::GetBoolProperty("debug.debuggerd.wait_for_gdb", false);
-  if (wait_for_gdb) {
+  if (!fatal_signal || siginfo.si_code == SI_USER) {
     // Don't wait_for_gdb when the process didn't actually crash.
-    if (!fatal_signal) {
-      wait_for_gdb = false;
-    } else {
-      // Use ALOGI to line up with output from engrave_tombstone.
-      ALOGI(
-        "***********************************************************\n"
-        "* Process %d has been suspended while crashing.\n"
-        "* To attach gdbserver and start gdb, run this on the host:\n"
-        "*\n"
-        "*     gdbclient.py -p %d\n"
-        "*\n"
-        "***********************************************************",
-        target, main_tid);
-    }
+    wait_for_gdb = false;
   }
 
-  for (pid_t tid : attached_siblings) {
-    // Don't send the signal to sibling threads.
-    if (ptrace(PTRACE_DETACH, tid, 0, wait_for_gdb ? SIGSTOP : 0) != 0) {
-      PLOG(ERROR) << "ptrace detach from " << tid << " failed";
+  // If the process crashed or we need to send it SIGSTOP for wait_for_gdb,
+  // get it in a state where it can receive signals, and then send the relevant
+  // signal.
+  if (wait_for_gdb || fatal_signal) {
+    if (ptrace(PTRACE_INTERRUPT, main_tid, 0, 0) != 0) {
+      PLOG(ERROR) << "failed to use PTRACE_INTERRUPT on " << main_tid;
     }
-  }
 
-  if (ptrace(PTRACE_DETACH, main_tid, 0, wait_for_gdb ? SIGSTOP : resume_signal)) {
-    PLOG(ERROR) << "ptrace detach from main thread " << main_tid << " failed";
+    if (tgkill(target, main_tid, wait_for_gdb ? SIGSTOP : signo) != 0) {
+      PLOG(ERROR) << "failed to resend signal " << signo << " to " << main_tid;
+    }
   }
 
   if (wait_for_gdb) {
-    if (tgkill(target, main_tid, resume_signal) != 0) {
-      PLOG(ERROR) << "failed to resend signal to process " << target;
-    }
+    // Use ALOGI to line up with output from engrave_tombstone.
+    ALOGI(
+      "***********************************************************\n"
+      "* Process %d has been suspended while crashing.\n"
+      "* To attach gdbserver and start gdb, run this on the host:\n"
+      "*\n"
+      "*     gdbclient.py -p %d\n"
+      "*\n"
+      "***********************************************************",
+      target, main_tid);
   }
 
   if (fatal_signal) {
