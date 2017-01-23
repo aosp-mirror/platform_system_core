@@ -166,15 +166,6 @@ storaged_t::storaged_t(void) {
         mConfig.diskstats_available = true;
     }
 
-    mConfig.proc_taskio_readable = true;
-    const char* test_paths[] = {"/proc/1/io", "/proc/1/comm", "/proc/1/cmdline", "/proc/1/stat"};
-    for (uint i = 0; i < sizeof(test_paths) / sizeof(const char*); ++i) {
-        if (access(test_paths[i], R_OK) < 0) {
-            mConfig.proc_taskio_readable = false;
-            break;
-        }
-    }
-
     mConfig.proc_uid_io_available = (access(UID_IO_STATS_PATH, R_OK) == 0);
 
     mConfig.periodic_chores_interval_unit =
@@ -204,12 +195,6 @@ void storaged_t::event(void) {
             mDiskStats.publish();
         }
     }
-
-#ifdef DEBUG
-    if (mConfig.proc_taskio_readable) {
-        mTasks.update_running_tasks();
-    }
-#endif
 
     if (mConfig.emmc_available && mTimer &&
             (mTimer % mConfig.periodic_chores_interval_emmc_info_publish) == 0) {

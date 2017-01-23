@@ -61,8 +61,7 @@ static int drop_privs() {
     if (cap_clear(caps.get()) < 0) return -1;
     cap_value_t cap_value[] = {
         CAP_SETGID,
-        CAP_SETUID,
-        CAP_SYS_PTRACE // allow access to proc/<pid>/io as non-root user
+        CAP_SETUID
     };
     if (cap_set_flag(caps.get(), CAP_PERMITTED,
                      arraysize(cap_value), cap_value,
@@ -72,10 +71,6 @@ static int drop_privs() {
                      CAP_SET) < 0) return -1;
     if (cap_set_proc(caps.get()) < 0)
         return -1;
-
-    gid_t groups[] = { AID_READPROC };
-
-    if (setgroups(sizeof(groups) / sizeof(groups[0]), groups) == -1) return -1;
 
     if (setgid(AID_SYSTEM) != 0) return -1;
 
@@ -104,7 +99,6 @@ void* storaged_main(void* s) {
 
 static void help_message(void) {
     printf("usage: storaged [OPTION]\n");
-    printf("  -d    --dump                  Dump task I/O usage to stdout\n");
     printf("  -u    --uid                   Dump uid I/O usage to stdout\n");
     printf("  -s    --start                 Start storaged (default)\n");
     fflush(stdout);
@@ -115,7 +109,6 @@ static void help_message(void) {
 
 int main(int argc, char** argv) {
     int flag_main_service = 0;
-    int flag_dump_task = 0;
     int flag_dump_uid = 0;
     int fd_emmc = -1;
     int opt;
@@ -125,7 +118,6 @@ int main(int argc, char** argv) {
         static struct option long_options[] = {
             {"start",       no_argument,        0, 's'},
             {"kill",        no_argument,        0, 'k'},
-            {"dump",        no_argument,        0, 'd'},
             {"uid",         no_argument,        0, 'u'},
             {"help",        no_argument,        0, 'h'}
         };
@@ -137,9 +129,6 @@ int main(int argc, char** argv) {
         switch (opt) {
         case 's':
             flag_main_service = 1;
-            break;
-        case 'd':
-            flag_dump_task = 1;
             break;
         case 'u':
             flag_dump_uid = 1;
@@ -159,7 +148,7 @@ int main(int argc, char** argv) {
         flag_main_service = 1;
     }
 
-    if (flag_main_service && flag_dump_task) {
+    if (flag_main_service && flag_dump_uid) {
         fprintf(stderr, "Invalid arguments. Option \"start\" and \"dump\" cannot be used together.\n");
         help_message();
         return -1;
@@ -191,34 +180,6 @@ int main(int argc, char** argv) {
         pthread_join(storaged_main_thread, NULL);
 
         close(fd_emmc);
-
-        return 0;
-    }
-
-    if (flag_dump_task) {
-        sp<IStoraged> storaged_service = get_storaged_service();
-        if (storaged_service == NULL) {
-            fprintf(stderr, "Cannot find storaged service.\nMaybe run storaged --start first?\n");
-            return -1;
-        }
-        std::vector<struct task_info> res = storaged_service->dump_tasks(NULL);
-
-        if (res.size() == 0) {
-            fprintf(stderr, "Task I/O is not readable in this version of kernel.\n");
-            return 0;
-        }
-
-        time_t starttime = storaged.get_starttime();
-
-        if (starttime == (time_t)-1) {
-            fprintf(stderr, "Unknown start time\n");
-        } else {
-            char* time_str = ctime(&starttime);
-            printf("Application I/O was collected by storaged since %s", time_str);
-        }
-
-        sort_running_tasks_info(res);
-        log_console_running_tasks_info(res);
 
         return 0;
     }

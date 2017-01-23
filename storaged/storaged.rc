@@ -1,5 +1,4 @@
 service storaged /system/bin/storaged
     class main
     file /d/mmc0/mmc0:0001/ext_csd r
-    group root readproc
     writepid /dev/cpuset/system-background/tasks

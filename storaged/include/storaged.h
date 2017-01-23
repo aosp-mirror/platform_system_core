@@ -123,28 +123,6 @@ public:
     }
 };
 
-class tasks_t {
-private:
-    FRIEND_TEST(storaged_test, tasks_t);
-    sem_t mSem;
-    // hashmap for all running tasks w/ pid as key
-    std::unordered_map<uint32_t, struct task_info> mRunning;
-    // hashmap for all tasks that have been killed (categorized by cmd) w/ cmd as key
-    std::unordered_map<std::string, struct task_info> mOld;
-    std::unordered_map<std::uint32_t, struct task_info> get_running_tasks();
-public:
-    tasks_t() {
-        sem_init(&mSem, 0, 1); // TODO: constructor don't have a return value, what if sem_init fails
-    }
-
-    ~tasks_t() {
-        sem_destroy(&mSem);
-    }
-
-    void update_running_tasks(void);
-    std::vector<struct task_info> get_tasks(void);
-};
-
 class stream_stats {
 private:
     double mSum;
@@ -282,7 +260,6 @@ struct storaged_config {
     int periodic_chores_interval_disk_stats_publish;
     int periodic_chores_interval_emmc_info_publish;
     int periodic_chores_interval_uid_io;
-    bool proc_taskio_readable;  // are /proc/[pid]/{io, comm, cmdline, stat} all readable
     bool proc_uid_io_available;      // whether uid_io is accessible
     bool emmc_available;        // whether eMMC est_csd file is readable
     bool diskstats_available;   // whether diskstats is accessible
@@ -296,7 +273,6 @@ private:
     disk_stats_publisher mDiskStats;
     disk_stats_monitor mDsm;
     emmc_info_t mEmmcInfo;
-    tasks_t mTasks;
     uid_monitor mUidm;
     time_t mStarttime;
 public:
@@ -306,15 +282,6 @@ public:
     void event_checked(void);
     void pause(void) {
         sleep(mConfig.periodic_chores_interval_unit);
-    }
-    std::vector<struct task_info> get_tasks(void) {
-        // There could be a race when get_tasks() and the main thread is updating at the same time
-        // While update_running_tasks() is updating the critical sections at the end of the function
-        // all together atomically, the final state of task_t can only be either the main thread's
-        // update or this update. Since the race can only occur when both threads are updating
-        // "simultaneously", either final state is acceptable.
-        mTasks.update_running_tasks();
-        return mTasks.get_tasks();
     }
 
     void set_privileged_fds(int fd_emmc) {

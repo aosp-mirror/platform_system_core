@@ -29,20 +29,6 @@
 
 extern storaged_t storaged;
 
-std::vector<struct task_info> BpStoraged::dump_tasks(const char* /*option*/) {
-    Parcel data, reply;
-    data.writeInterfaceToken(IStoraged::getInterfaceDescriptor());
-
-    remote()->transact(DUMPTASKS, data, &reply);
-
-    uint32_t res_size = reply.readInt32();
-    std::vector<struct task_info> res(res_size);
-    for (auto&& task : res) {
-        reply.read(&task, sizeof(task));
-    }
-    return res;
-}
-
 std::vector<struct uid_info> BpStoraged::dump_uids(const char* /*option*/) {
     Parcel data, reply;
     data.writeInterfaceToken(IStoraged::getInterfaceDescriptor());
@@ -65,16 +51,6 @@ status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply
     data.checkInterface(this);
 
     switch(code) {
-        case DUMPTASKS: {
-                std::vector<struct task_info> res = dump_tasks(NULL);
-
-                reply->writeInt32(res.size());
-                for (auto task : res) {
-                    reply->write(&task, sizeof(task));
-                }
-                return NO_ERROR;
-            }
-            break;
         case DUMPUIDS: {
                 std::vector<struct uid_info> res = dump_uids(NULL);
                 reply->writeInt32(res.size());
@@ -89,10 +65,6 @@ status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }
-}
-
-std::vector<struct task_info> Storaged::dump_tasks(const char* /* option */) {
-    return storaged.get_tasks();
 }
 
 std::vector<struct uid_info> Storaged::dump_uids(const char* /* option */) {
