@@ -41,11 +41,6 @@
 #include <storaged.h>
 #include <storaged_utils.h>
 
-#define SECTOR_SIZE ( 512 )
-#define SEC_TO_MSEC ( 1000 )
-#define MSEC_TO_USEC ( 1000 )
-#define USEC_TO_NSEC ( 1000 )
-
 bool parse_disk_stats(const char* disk_stats_path, struct disk_stats* stats) {
     // Get time
     struct timespec ts;

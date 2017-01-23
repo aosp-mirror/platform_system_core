@@ -46,11 +46,12 @@ class uid_monitor {
 private:
     std::unordered_map<uint32_t, struct uid_info> last_uids;
     void set_last_uids(std::unordered_map<uint32_t, struct uid_info>&& uids, uint64_t ts);
-    int interval; // monitor interval in seconds
+    int interval;  // monitor interval in seconds
+    int threshold; // monitor threshold in bytes
     uint64_t last_report_ts; // timestamp of last report in nsec
 public:
     uid_monitor();
-    void set_periodic_chores_interval(int t) { interval = t; }
+    void set_periodic_chores_params(int intvl, int thold) { interval = intvl; threshold = thold; }
     int get_periodic_chores_interval() { return interval; }
     std::unordered_map<uint32_t, struct uid_info> get_uids();
     void report();

@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 #include <android-base/logging.h>
+#include <cutils/properties.h>
 
 #include <storaged.h>
 #include <storaged_utils.h>
@@ -176,10 +177,21 @@ storaged_t::storaged_t(void) {
 
     mConfig.proc_uid_io_available = (access(UID_IO_STATS_PATH, R_OK) == 0);
 
-    mConfig.periodic_chores_interval_unit = DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT;
-    mConfig.periodic_chores_interval_disk_stats_publish = DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH;
-    mConfig.periodic_chores_interval_emmc_info_publish = DEFAULT_PERIODIC_CHORES_INTERVAL_EMMC_INFO_PUBLISH;
-    mUidm.set_periodic_chores_interval(DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_ALERT);
+    mConfig.periodic_chores_interval_unit =
+        property_get_int32("ro.storaged.event.interval", DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT);
+
+    mConfig.event_time_check_usec =
+        property_get_int32("ro.storaged.event.perf_check", 0);
+
+    mConfig.periodic_chores_interval_disk_stats_publish =
+        property_get_int32("ro.storaged.disk_stats_pub", DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH);
+
+    mConfig.periodic_chores_interval_emmc_info_publish =
+        property_get_int32("ro.storaged.emmc_info_pub", DEFAULT_PERIODIC_CHORES_INTERVAL_EMMC_INFO_PUBLISH);
+
+    mUidm.set_periodic_chores_params(
+        property_get_int32("ro.storaged.uid_io.interval", DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO),
+        property_get_int32("ro.storaged.uid_io.threshold", DEFAULT_PERIODIC_CHORES_UID_IO_THRESHOLD));
 
     mStarttime = time(NULL);
 }
@@ -211,4 +223,31 @@ void storaged_t::event(void) {
     }
 
     mTimer += mConfig.periodic_chores_interval_unit;
+}
+
+void storaged_t::event_checked(void) {
+    struct timespec start_ts, end_ts;
+    bool check_time = true;
+
+    if (mConfig.event_time_check_usec &&
+        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_ts) < 0) {
+        check_time = false;
+        PLOG_TO(SYSTEM, ERROR) << "clock_gettime() failed";
+    }
+
+    event();
+
+    if (mConfig.event_time_check_usec) {
+        if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_ts) < 0) {
+            PLOG_TO(SYSTEM, ERROR) << "clock_gettime() failed";
+            return;
+        }
+        int64_t cost = (end_ts.tv_sec - start_ts.tv_sec) * SEC_TO_USEC +
+                       (end_ts.tv_nsec - start_ts.tv_nsec) / USEC_TO_NSEC;
+        if (cost > mConfig.event_time_check_usec) {
+            LOG_TO(SYSTEM, ERROR)
+                << "event loop spent " << cost << " usec, threshold "
+                << mConfig.event_time_check_usec << " usec";
+        }
+    }
 }

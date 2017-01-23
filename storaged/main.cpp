@@ -96,7 +96,7 @@ void* storaged_main(void* s) {
     LOG_TO(SYSTEM, INFO) << "storaged: Start";
 
     for (;;) {
-        storaged->event();
+        storaged->event_checked();
         storaged->pause();
     }
     return NULL;
@@ -107,10 +107,6 @@ static void help_message(void) {
     printf("  -d    --dump                  Dump task I/O usage to stdout\n");
     printf("  -u    --uid                   Dump uid I/O usage to stdout\n");
     printf("  -s    --start                 Start storaged (default)\n");
-    printf("        --emmc=INTERVAL         Set publish interval of emmc lifetime information (in days)\n");
-    printf("        --diskstats=INTERVAL    Set publish interval of diskstats (in hours)\n");
-    printf("        --uidio=INTERVAL        Set publish interval of uid io (in hours)\n");
-    printf("        --unit=INTERVAL         Set storaged's refresh interval (in seconds)\n");
     fflush(stdout);
 }
 
@@ -121,11 +117,6 @@ int main(int argc, char** argv) {
     int flag_main_service = 0;
     int flag_dump_task = 0;
     int flag_dump_uid = 0;
-    int flag_config = 0;
-    int unit_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT;
-    int diskstats_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH;
-    int emmc_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_EMMC_INFO_PUBLISH;
-    int uid_io_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_ALERT;
     int fd_emmc = -1;
     int opt;
 
@@ -136,11 +127,7 @@ int main(int argc, char** argv) {
             {"kill",        no_argument,        0, 'k'},
             {"dump",        no_argument,        0, 'd'},
             {"uid",         no_argument,        0, 'u'},
-            {"help",        no_argument,        0, 'h'},
-            {"unit",        required_argument,  0,  0 },
-            {"diskstats",   required_argument,  0,  0 },
-            {"emmc",        required_argument,  0,  0 },
-            {"uidio",       required_argument,  0,  0 }
+            {"help",        no_argument,        0, 'h'}
         };
         opt = getopt_long(argc, argv, ":skdhu0", long_options, &opt_idx);
         if (opt == -1) {
@@ -148,53 +135,6 @@ int main(int argc, char** argv) {
         }
 
         switch (opt) {
-        case 0:
-            printf("option %s", long_options[opt_idx].name);
-            if (optarg) {
-                printf(" with arg %s", optarg);
-                if (strcmp(long_options[opt_idx].name, "unit") == 0) {
-                    unit_interval = atoi(optarg);
-                    if (unit_interval == 0) {
-                        fprintf(stderr, "Invalid argument. Option %s requires an integer argument greater than 0.\n",
-                                long_options[opt_idx].name);
-                        help_message();
-                        return -1;
-                    }
-                } else if (strcmp(long_options[opt_idx].name, "diskstats") == 0) {
-                    diskstats_interval = atoi(optarg) * HOUR_TO_SEC;
-                    if (diskstats_interval == 0) {
-                        fprintf(stderr, "Invalid argument. Option %s requires an integer argument greater than 0.\n",
-                                long_options[opt_idx].name);
-                        help_message();
-                        return -1;
-                    }
-
-                } else if (strcmp(long_options[opt_idx].name, "emmc") == 0) {
-                    emmc_interval = atoi(optarg) * DAY_TO_SEC;
-                    if (emmc_interval == 0) {
-                        fprintf(stderr, "Invalid argument. Option %s requires an integer argument greater than 0.\n",
-                                long_options[opt_idx].name);
-                        help_message();
-                        return -1;
-                    }
-                } else if (strcmp(long_options[opt_idx].name, "uidio") == 0) {
-                    uid_io_interval = atoi(optarg) * HOUR_TO_SEC;
-                    if (uid_io_interval == 0) {
-                        fprintf(stderr, "Invalid argument. Option %s requires an integer argument greater than 0.\n",
-                                long_options[opt_idx].name);
-                        help_message();
-                        return -1;
-                    }
-                }
-                flag_config = 1;
-            } else {
-                fprintf(stderr, "Invalid argument. Option %s requires an argument.\n",
-                        long_options[opt_idx].name);
-                help_message();
-                return -1;
-            }
-            printf("\n");
-            break;
         case 's':
             flag_main_service = 1;
             break;
@@ -225,12 +165,6 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    if (flag_config && flag_dump_task) {
-        fprintf(stderr, "Invalid arguments. Cannot set configs in \'dump\' option.\n");
-        help_message();
-        return -1;
-    }
-
     if (flag_main_service) { // start main thread
         static const char mmc0_ext_csd[] = "/d/mmc0/mmc0:0001/ext_csd";
         fd_emmc = android_get_control_file(mmc0_ext_csd);
@@ -242,13 +176,6 @@ int main(int argc, char** argv) {
         }
 
         storaged.set_privileged_fds(fd_emmc);
-
-        if (flag_config) {
-            storaged.set_unit_interval(unit_interval);
-            storaged.set_diskstats_interval(diskstats_interval);
-            storaged.set_emmc_interval(emmc_interval);
-            storaged.set_uid_io_interval(uid_io_interval);
-        }
 
         // Start the main thread of storaged
         pthread_t storaged_main_thread;

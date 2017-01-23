@@ -40,6 +40,12 @@ friend class test_case_name##_##test_name##_Test
 #define debuginfo(...)
 #endif
 
+#define SECTOR_SIZE ( 512 )
+#define SEC_TO_MSEC ( 1000 )
+#define MSEC_TO_USEC ( 1000 )
+#define USEC_TO_NSEC ( 1000 )
+#define SEC_TO_USEC ( 1000000 )
+
 // number of attributes diskstats has
 #define DISK_STATS_SIZE ( 11 )
 // maximum size limit of a stats file
@@ -266,7 +272,10 @@ public:
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT ( 60 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH ( 3600 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_EMMC_INFO_PUBLISH ( 86400 )
-#define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_ALERT ( 3600 )
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO ( 3600 )
+
+// UID IO threshold in bytes
+#define DEFAULT_PERIODIC_CHORES_UID_IO_THRESHOLD ( 1024 * 1024 * 1024ULL )
 
 struct storaged_config {
     int periodic_chores_interval_unit;
@@ -277,6 +286,7 @@ struct storaged_config {
     bool proc_uid_io_available;      // whether uid_io is accessible
     bool emmc_available;        // whether eMMC est_csd file is readable
     bool diskstats_available;   // whether diskstats is accessible
+    int event_time_check_usec;  // check how much cputime spent in event loop
 };
 
 class storaged_t {
@@ -293,20 +303,9 @@ public:
     storaged_t(void);
     ~storaged_t() {}
     void event(void);
+    void event_checked(void);
     void pause(void) {
         sleep(mConfig.periodic_chores_interval_unit);
-    }
-    void set_unit_interval(int unit) {
-        mConfig.periodic_chores_interval_unit = unit;
-    }
-    void set_diskstats_interval(int disk_stats) {
-        mConfig.periodic_chores_interval_disk_stats_publish = disk_stats;
-    }
-    void set_emmc_interval(int emmc_info) {
-        mConfig.periodic_chores_interval_emmc_info_publish = emmc_info;
-    }
-    void set_uid_io_interval(int uid_io) {
-        mUidm.set_periodic_chores_interval(uid_io);
     }
     std::vector<struct task_info> get_tasks(void) {
         // There could be a race when get_tasks() and the main thread is updating at the same time
