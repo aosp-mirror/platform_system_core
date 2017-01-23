@@ -367,15 +367,5 @@ void debuggerd_init(debuggerd_callbacks_t* callbacks) {
 
   // Use the alternate signal stack if available so we can catch stack overflows.
   action.sa_flags |= SA_ONSTACK;
-
-  sigaction(SIGABRT, &action, nullptr);
-  sigaction(SIGBUS, &action, nullptr);
-  sigaction(SIGFPE, &action, nullptr);
-  sigaction(SIGILL, &action, nullptr);
-  sigaction(SIGSEGV, &action, nullptr);
-#if defined(SIGSTKFLT)
-  sigaction(SIGSTKFLT, &action, nullptr);
-#endif
-  sigaction(SIGTRAP, &action, nullptr);
-  sigaction(DEBUGGER_SIGNAL, &action, nullptr);
+  debuggerd_register_handlers(&action);
 }
