@@ -160,6 +160,12 @@ static bool tombstoned_notify_completion(int tombstoned_socket) {
   return true;
 }
 
+static void signal_handler(int) {
+  // We can't log easily, because the heap might be corrupt.
+  // Just die and let the surrounding log context explain things.
+  _exit(1);
+}
+
 static void abort_handler(pid_t target, const bool& tombstoned_connected,
                           unique_fd& tombstoned_socket, unique_fd& output_fd,
                           const char* abort_msg) {
@@ -177,7 +183,6 @@ static void abort_handler(pid_t target, const bool& tombstoned_connected,
 
   dprintf(output_fd.get(), "crash_dump failed to dump process %d: %s\n", target, abort_msg);
 
-  // Don't dump ourselves.
   _exit(1);
 }
 
@@ -202,6 +207,11 @@ int main(int argc, char** argv) {
   android::base::SetAborter([&](const char* abort_msg) {
     abort_handler(target, tombstoned_connected, tombstoned_socket, output_fd, abort_msg);
   });
+
+  // Don't try to dump ourselves.
+  struct sigaction action = {};
+  action.sa_handler = signal_handler;
+  debuggerd_register_handlers(&action);
 
   if (argc != 2) {
     return 1;
