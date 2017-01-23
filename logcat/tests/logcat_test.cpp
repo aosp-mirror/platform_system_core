@@ -27,6 +27,7 @@
 #include <memory>
 #include <string>
 
+#include <android-base/file.h>
 #include <gtest/gtest.h>
 #include <log/log.h>
 #include <log/log_event_list.h>
@@ -1411,4 +1412,23 @@ TEST(logcat, descriptive) {
         ctx.write();
         EXPECT_TRUE(End_to_End(sync.tagStr, ""));
     }
+}
+
+static bool reportedSecurity(const char* command) {
+    FILE* fp = popen(command, "r");
+    if (!fp) return true;
+
+    std::string ret;
+    bool val = android::base::ReadFdToString(fileno(fp), &ret);
+    pclose(fp);
+
+    if (!val) return true;
+    return std::string::npos != ret.find("'security'");
+}
+
+TEST(logcat, security) {
+    EXPECT_FALSE(reportedSecurity("logcat -b all -g 2>&1"));
+    EXPECT_TRUE(reportedSecurity("logcat -b security -g 2>&1"));
+    EXPECT_TRUE(reportedSecurity("logcat -b security -c 2>&1"));
+    EXPECT_TRUE(reportedSecurity("logcat -b security -G 256K 2>&1"));
 }
