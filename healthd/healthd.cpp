@@ -82,7 +82,7 @@ void healthd_board_init(struct healthd_config *config) {
     // Initialize the board HAL - Equivalent of healthd_board_init(config)
     // in charger/recovery mode.
 
-    gHealth = IHealth::getService("health");
+    gHealth = IHealth::getService();
     if (gHealth == nullptr) {
         KLOG_WARNING(LOG_TAG, "unable to get HAL interface, using defaults\n");
         return;
