@@ -39,4 +39,17 @@ void debuggerd_init(debuggerd_callbacks_t* callbacks);
 // to the log.
 #define DEBUGGER_SIGNAL (__SIGRTMIN + 3)
 
+static void __attribute__((__unused__)) debuggerd_register_handlers(struct sigaction* action) {
+  sigaction(SIGABRT, action, nullptr);
+  sigaction(SIGBUS, action, nullptr);
+  sigaction(SIGFPE, action, nullptr);
+  sigaction(SIGILL, action, nullptr);
+  sigaction(SIGSEGV, action, nullptr);
+#if defined(SIGSTKFLT)
+  sigaction(SIGSTKFLT, action, nullptr);
+#endif
+  sigaction(SIGTRAP, action, nullptr);
+  sigaction(DEBUGGER_SIGNAL, action, nullptr);
+}
+
 __END_DECLS
