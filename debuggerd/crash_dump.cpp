@@ -175,8 +175,6 @@ static void signal_handler(int) {
 static void abort_handler(pid_t target, const bool& tombstoned_connected,
                           unique_fd& tombstoned_socket, unique_fd& output_fd,
                           const char* abort_msg) {
-  LOG(ERROR) << abort_msg;
-
   // If we abort before we get an output fd, contact tombstoned to let any
   // potential listeners know that we failed.
   if (!tombstoned_connected) {
