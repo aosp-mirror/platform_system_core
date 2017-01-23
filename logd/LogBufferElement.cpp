@@ -113,8 +113,8 @@ char *android::tidToName(pid_t tid) {
 }
 
 // assumption: mMsg == NULL
-size_t LogBufferElement::populateDroppedMessage(char *&buffer,
-        LogBuffer *parent) {
+size_t LogBufferElement::populateDroppedMessage(char*& buffer,
+        LogBuffer* parent, bool lastSame) {
     static const char tag[] = "chatty";
 
     if (!__android_log_is_loggable_len(ANDROID_LOG_INFO,
@@ -123,7 +123,7 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
         return 0;
     }
 
-    static const char format_uid[] = "uid=%u%s%s expire %u line%s";
+    static const char format_uid[] = "uid=%u%s%s %s %u line%s";
     parent->lock();
     const char *name = parent->uidToName(mUid);
     parent->unlock();
@@ -165,8 +165,9 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
         }
     }
     // identical to below to calculate the buffer size required
+    const char* type = lastSame ? "identical" : "expire";
     size_t len = snprintf(NULL, 0, format_uid, mUid, name ? name : "",
-                          commName ? commName : "",
+                          commName ? commName : "", type,
                           mDropped, (mDropped > 1) ? "s" : "");
 
     size_t hdrLen;
@@ -198,7 +199,7 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
     }
 
     snprintf(buffer + hdrLen, len + 1, format_uid, mUid, name ? name : "",
-             commName ? commName : "",
+             commName ? commName : "", type,
              mDropped, (mDropped > 1) ? "s" : "");
     free(const_cast<char *>(name));
     free(const_cast<char *>(commName));
@@ -206,8 +207,8 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
     return retval;
 }
 
-uint64_t LogBufferElement::flushTo(SocketClient *reader, LogBuffer *parent,
-                                   bool privileged) {
+uint64_t LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent,
+                                   bool privileged, bool lastSame) {
     struct logger_entry_v4 entry;
 
     memset(&entry, 0, sizeof(struct logger_entry_v4));
@@ -229,7 +230,7 @@ uint64_t LogBufferElement::flushTo(SocketClient *reader, LogBuffer *parent,
     char *buffer = NULL;
 
     if (!mMsg) {
-        entry.len = populateDroppedMessage(buffer, parent);
+        entry.len = populateDroppedMessage(buffer, parent, lastSame);
         if (!entry.len) {
             return mSequence;
         }

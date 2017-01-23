@@ -853,11 +853,13 @@ void __android_log_btwrite_multiple__helper(int count) {
 
     int expected_count = (count < 2) ? count : 2;
     int expected_chatty_count = (count <= 2) ? 0 : 1;
-    int expected_expire_count = (count < 2) ? 0 : (count - 2);
+    int expected_identical_count = (count < 2) ? 0 : (count - 2);
+    static const int expected_expire_count = 0;
 
     count = 0;
     int second_count = 0;
     int chatty_count = 0;
+    int identical_count = 0;
     int expire_count = 0;
 
     for (;;) {
@@ -887,11 +889,16 @@ void __android_log_btwrite_multiple__helper(int count) {
             ++chatty_count;
             // int len = get4LE(eventData + 4 + 1);
             log_msg.buf[LOGGER_ENTRY_MAX_LEN] = '\0';
-            const char *cp = strstr(eventData + 4 + 1 + 4, " expire ");
-            if (!cp) continue;
-            unsigned val = 0;
-            sscanf(cp, " expire %u lines", &val);
-            expire_count += val;
+            const char *cp;
+            if ((cp = strstr(eventData + 4 + 1 + 4, " identical "))) {
+                unsigned val = 0;
+                sscanf(cp, " identical %u lines", &val);
+                identical_count += val;
+            } else if ((cp = strstr(eventData + 4 + 1 + 4, " expire "))) {
+                unsigned val = 0;
+                sscanf(cp, " expire %u lines", &val);
+                expire_count += val;
+            }
         }
     }
 
@@ -900,6 +907,7 @@ void __android_log_btwrite_multiple__helper(int count) {
     EXPECT_EQ(expected_count, count);
     EXPECT_EQ(1, second_count);
     EXPECT_EQ(expected_chatty_count, chatty_count);
+    EXPECT_EQ(expected_identical_count, identical_count);
     EXPECT_EQ(expected_expire_count, expire_count);
 }
 

@@ -1100,6 +1100,10 @@ uint64_t LogBuffer::flushTo(
         }
     }
 
+    // Help detect if the valid message before is from the same source so
+    // we can differentiate chatty filter types.
+    pid_t lastTid[LOG_ID_MAX] = { 0 };
+
     for (; it != mLogElements.end(); ++it) {
         LogBufferElement *element = *it;
 
@@ -1126,10 +1130,19 @@ uint64_t LogBuffer::flushTo(
             }
         }
 
+        bool sameTid = lastTid[element->getLogId()] == element->getTid();
+        // Dropped (chatty) immediately following a valid log from the
+        // same source in the same log buffer indicates we have a
+        // multiple identical squash.  chatty that differs source
+        // is due to spam filter.  chatty to chatty of different
+        // source is also due to spam filter.
+        lastTid[element->getLogId()] = (element->getDropped() && !sameTid) ?
+                0 : element->getTid();
+
         pthread_mutex_unlock(&mLogElementsLock);
 
         // range locking in LastLogTimes looks after us
-        max = element->flushTo(reader, this, privileged);
+        max = element->flushTo(reader, this, privileged, sameTid);
 
         if (max == element->FLUSH_ERROR) {
             return max;
