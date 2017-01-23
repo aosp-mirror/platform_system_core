@@ -57,8 +57,8 @@ static bool pid_contains_tid(pid_t pid, pid_t tid) {
 }
 
 // Attach to a thread, and verify that it's still a member of the given process
-static bool ptrace_attach_thread(pid_t pid, pid_t tid, std::string* error) {
-  if (ptrace(PTRACE_ATTACH, tid, 0, 0) != 0) {
+static bool ptrace_seize_thread(pid_t pid, pid_t tid, std::string* error) {
+  if (ptrace(PTRACE_SEIZE, tid, 0, 0) != 0) {
     *error = StringPrintf("failed to attach to thread %d: %s", tid, strerror(errno));
     return false;
   }
@@ -71,6 +71,12 @@ static bool ptrace_attach_thread(pid_t pid, pid_t tid, std::string* error) {
     *error = StringPrintf("thread %d is not in process %d", tid, pid);
     return false;
   }
+
+  // Put the task into ptrace-stop state.
+  if (ptrace(PTRACE_INTERRUPT, tid, 0, 0) != 0) {
+    PLOG(FATAL) << "failed to interrupt thread " << tid;
+  }
+
   return true;
 }
 
@@ -254,7 +260,7 @@ int main(int argc, char** argv) {
   check_process(target_proc_fd, target);
 
   std::string attach_error;
-  if (!ptrace_attach_thread(target, main_tid, &attach_error)) {
+  if (!ptrace_seize_thread(target, main_tid, &attach_error)) {
     LOG(FATAL) << attach_error;
   }
 
@@ -279,9 +285,9 @@ int main(int argc, char** argv) {
 
   LOG(INFO) << "performing dump of process " << target << " (target tid = " << main_tid << ")";
 
-  // At this point, the thread that made the request has been PTRACE_ATTACHed
-  // and has the signal that triggered things queued. Send PTRACE_CONT, and
-  // then wait for the signal.
+  // At this point, the thread that made the request has been attached and is
+  // in ptrace-stopped state. After resumption, the triggering signal that has
+  // been queued will be delivered.
   if (ptrace(PTRACE_CONT, main_tid, 0, 0) != 0) {
     PLOG(ERROR) << "PTRACE_CONT(" << main_tid << ") failed";
     exit(1);
@@ -320,7 +326,7 @@ int main(int argc, char** argv) {
     siblings.erase(main_tid);
 
     for (pid_t sibling_tid : siblings) {
-      if (!ptrace_attach_thread(target, sibling_tid, &attach_error)) {
+      if (!ptrace_seize_thread(target, sibling_tid, &attach_error)) {
         LOG(WARNING) << attach_error;
       } else {
         attached_siblings.insert(sibling_tid);
