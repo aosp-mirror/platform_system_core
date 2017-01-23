@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #include <memory>
 #include <string>
@@ -53,6 +54,11 @@ static const char begin[] = "--------- beginning of ";
 
 TEST(logcat, buckets) {
     FILE *fp;
+
+#undef LOG_TAG
+#define LOG_TAG "inject"
+    RLOGE("logcat.buckets");
+    sleep(1);
 
     ASSERT_TRUE(NULL != (fp = popen(
       "logcat -b radio -b events -b system -b main -d 2>/dev/null",
@@ -165,11 +171,37 @@ char *fgetLongTime(char *buffer, size_t buflen, FILE *fp) {
         if (!ep) {
             continue;
         }
-        ep -= 7;
+        static const size_t tag_field_width = 7;
+        ep -= tag_field_width;
         *ep = '\0';
         return cp;
     }
     return NULL;
+}
+
+// If there is not enough background noise in the logs, then spam the logs to
+// permit tail checking so that the tests can progress.
+static size_t inject(ssize_t count) {
+    if (count <= 0) return 0;
+
+    static const size_t retry = 3;
+    size_t errors = retry;
+    size_t num = 0;
+    for(;;) {
+        log_time ts(CLOCK_MONOTONIC);
+        if (__android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)) >= 0) {
+            if (++num >= (size_t)count) {
+                sleep(1); // let data settle end-to-end
+                return num;
+            }
+            errors = retry;
+            usleep(50);
+        } else if (--errors <= 0) {
+            return num;
+        }
+    }
+    // NOTREACH
+    return num;
 }
 
 TEST(logcat, tz) {
@@ -201,7 +233,7 @@ TEST(logcat, tz) {
 
         pclose(fp);
 
-    } while ((count < 3) && --tries && (sleep(1), true));
+    } while ((count < 3) && --tries && inject(3 - count));
 
     ASSERT_EQ(3, count);
 }
@@ -236,8 +268,7 @@ void do_tail(int num) {
         char buffer[BIG_BUFFER];
 
         snprintf(buffer, sizeof(buffer),
-          "logcat -v long -b radio -b events -b system -b main -t %d 2>/dev/null",
-          num);
+                 "logcat -v long -b all -t %d 2>/dev/null", num);
 
         FILE *fp;
         ASSERT_TRUE(NULL != (fp = popen(buffer, "r")));
@@ -250,7 +281,7 @@ void do_tail(int num) {
 
         pclose(fp);
 
-    } while ((count < num) && --tries && (sleep(1), true));
+    } while ((count < num) && --tries && inject(num - count));
 
     ASSERT_EQ(num, count);
 }
@@ -273,26 +304,34 @@ TEST(logcat, tail_1000) {
 
 TEST(logcat, tail_time) {
     FILE *fp;
-
-    ASSERT_TRUE(NULL != (fp = popen("logcat -v long -b all -t 10 2>&1", "r")));
-
+    int count;
     char buffer[BIG_BUFFER];
     char *last_timestamp = NULL;
     char *first_timestamp = NULL;
-    int count = 0;
-
     char *cp;
-    while ((cp = fgetLongTime(buffer, sizeof(buffer), fp))) {
-        ++count;
-        if (!first_timestamp) {
-            first_timestamp = strdup(cp);
-        }
-        free(last_timestamp);
-        last_timestamp = strdup(cp);
-    }
-    pclose(fp);
 
-    EXPECT_EQ(10, count);
+    int tries = 3; // in case run too soon after system start or buffer clear
+
+    // Do not be tempted to use -v usec because that increases the
+    // chances of an occasional test failure by 1000 (see below).
+    do {
+        ASSERT_TRUE(NULL != (fp = popen("logcat -v long -b all -t 10 2>&1", "r")));
+
+        count = 0;
+
+        while ((cp = fgetLongTime(buffer, sizeof(buffer), fp))) {
+            ++count;
+            if (!first_timestamp) {
+                first_timestamp = strdup(cp);
+            }
+            free(last_timestamp);
+            last_timestamp = strdup(cp);
+        }
+        pclose(fp);
+
+    } while ((count < 10) && --tries && inject(10 - count));
+
+    EXPECT_EQ(10, count); // We want _some_ history, too small, falses below
     EXPECT_TRUE(last_timestamp != NULL);
     EXPECT_TRUE(first_timestamp != NULL);
 
