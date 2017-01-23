@@ -44,7 +44,7 @@ struct memtrack_proc {
 
 //TODO(b/31632518)
 static android::sp<IMemtrack> get_instance() {
-    static android::sp<IMemtrack> module = IMemtrack::getService("memtrack");
+    static android::sp<IMemtrack> module = IMemtrack::getService();
     if (module == nullptr) {
         ALOGE("Couldn't load memtrack module");
     }
