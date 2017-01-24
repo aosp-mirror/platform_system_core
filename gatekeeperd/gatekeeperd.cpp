@@ -56,7 +56,7 @@ static const String16 DUMP_PERMISSION("android.permission.DUMP");
 class GateKeeperProxy : public BnGateKeeperService {
 public:
     GateKeeperProxy() {
-        hw_device = IGatekeeper::getService("gatekeeper");
+        hw_device = IGatekeeper::getService();
 
         if (hw_device == nullptr) {
             ALOGW("falling back to software GateKeeper");
