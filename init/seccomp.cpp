@@ -170,6 +170,9 @@ bool set_seccomp_filter() {
     // Needed for trusty
     AllowSyscall(f, __NR_syncfs);
 
+    // Needed for strace
+    AllowSyscall(f, __NR_tkill);  // __NR_tkill
+
     // Needed for kernel to restart syscalls
     AllowSyscall(f, __NR_restart_syscall);
 
@@ -203,6 +206,9 @@ bool set_seccomp_filter() {
 
     // Syscalls needed to run GFXBenchmark
     AllowSyscall(f, 190); // __NR_vfork
+
+    // Needed for strace
+    AllowSyscall(f, 238);  // __NR_tkill
 
     // Needed for kernel to restart syscalls
     AllowSyscall(f, 0);  // __NR_restart_syscall
