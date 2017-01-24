@@ -48,6 +48,7 @@ static void __attribute__((__unused__)) debuggerd_register_handlers(struct sigac
 #if defined(SIGSTKFLT)
   sigaction(SIGSTKFLT, action, nullptr);
 #endif
+  sigaction(SIGSYS, action, nullptr);
   sigaction(SIGTRAP, action, nullptr);
   sigaction(DEBUGGER_SIGNAL, action, nullptr);
 }
