@@ -407,7 +407,7 @@ static int __mount(const char *source, const char *target, const struct fstab_re
     return ret;
 }
 
-static int fs_match(char *in1, char *in2)
+static int fs_match(const char *in1, const char *in2)
 {
     char *n1;
     char *n2;
@@ -837,7 +837,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
  * If multiple fstab entries are to be mounted on "n_name", it will try to mount each one
  * in turn, and stop on 1st success, or no more match.
  */
-int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
+int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
                     char *tmp_mount_point)
 {
     int i = 0;
