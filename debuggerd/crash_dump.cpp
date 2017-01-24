@@ -36,7 +36,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
-#include <log/logger.h>
+#include <log/log.h>
 #include <procinfo/process.h>
 #include <selinux/selinux.h>
 
