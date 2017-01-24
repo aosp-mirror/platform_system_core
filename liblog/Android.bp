@@ -79,6 +79,8 @@ cc_library {
         },
     },
 
+    export_include_dirs: ["include"],
+
     cflags: [
         "-Werror",
         "-fvisibility=hidden",
@@ -109,6 +111,11 @@ ndk_headers {
     to: "android",
     srcs: ["legacy-ndk-includes/log.h"],
     license: "NOTICE",
+}
+
+cc_library_headers {
+    name: "liblog_vndk_headers",
+    export_include_dirs: ["include_vndk"],
 }
 
 ndk_library {
