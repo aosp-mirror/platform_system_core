@@ -85,7 +85,13 @@ static void find_oldest_tombstone() {
     std::string path = android::base::StringPrintf("%stombstone_%02zu", kTombstoneDirectory, i);
     struct stat st;
     if (stat(path.c_str(), &st) != 0) {
-      PLOG(ERROR) << "failed to stat " << path;
+      if (errno == ENOENT) {
+        oldest_tombstone = i;
+        break;
+      } else {
+        PLOG(ERROR) << "failed to stat " << path;
+        continue;
+      }
     }
 
     if (st.st_mtime < oldest_time) {
