@@ -68,7 +68,7 @@ bool fs_mgr_get_verity_device_name(struct dm_ioctl *io,
                                    int fd,
                                    std::string *out_dev_name)
 {
-    CHECK(out_dev_name != nullptr);
+    FS_MGR_CHECK(out_dev_name != nullptr);
 
     fs_mgr_verity_ioctl_init(io, name, 0);
     if (ioctl(fd, DM_DEV_STATUS, io)) {

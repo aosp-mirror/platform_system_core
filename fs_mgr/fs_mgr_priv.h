@@ -20,6 +20,17 @@
 #include <cutils/klog.h>
 #include <fs_mgr.h>
 
+#ifdef __cplusplus
+#include <android-base/logging.h>
+/* The CHECK() in logging.h will use program invocation name as the tag.
+ * Thus, the log will have prefix "init: " when libfs_mgr is statically
+ * linked in the init process. This might be opaque when debugging.
+ * Appends "in libfs_mgr" at the end of the abort message to explicitly
+ * indicate the check happens in fs_mgr.
+ */
+#define FS_MGR_CHECK(x) CHECK(x) << "in libfs_mgr "
+#endif
+
 __BEGIN_DECLS
 
 #define INFO(x...)    KLOG_INFO("fs_mgr", x)
@@ -91,6 +102,7 @@ __BEGIN_DECLS
 #define MF_QUOTA            0x400000
 #define MF_ERASEBLKSIZE     0x800000
 #define MF_LOGICALBLKSIZE  0X1000000
+#define MF_AVB             0X2000000
 
 #define DM_BUF_SIZE 4096
 
