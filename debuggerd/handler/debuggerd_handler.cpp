@@ -301,7 +301,14 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void*) 
     // The process has disabled core dumps and PTRACE_ATTACH, and does not want to be dumped.
     __libc_format_log(ANDROID_LOG_INFO, "libc",
                       "Suppressing debuggerd output because prctl(PR_GET_DUMPABLE)==0");
+    resend_signal(info, false);
+    return;
+  }
 
+  if (prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) == 1) {
+    // The process has NO_NEW_PRIVS enabled, so we can't transition to the crash_dump context.
+    __libc_format_log(ANDROID_LOG_INFO, "libc",
+                      "Suppressing debuggerd output because prctl(PR_GET_NO_NEW_PRIVS)==1");
     resend_signal(info, false);
     return;
   }
