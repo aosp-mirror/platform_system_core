@@ -237,6 +237,26 @@ struct android_depth_points {
 #endif
 };
 
+/**
+  * These structures are used to define the reference display's
+  * capabilities for HDR content. Display engine can use this
+  * to better tone map content to user's display.
+  * Color is defined in CIE XYZ coordinates
+  */
+struct android_xy_color {
+    float x;
+    float y;
+};
+
+struct android_smpte2086_metadata {
+    struct android_xy_color displayPrimaryRed;
+    struct android_xy_color displayPrimaryGreen;
+    struct android_xy_color displayPrimaryBlue;
+    struct android_xy_color whitePoint;
+    float maxLuminance;
+    float minLuminance;
+};
+
 #ifdef __cplusplus
 }
 #endif
