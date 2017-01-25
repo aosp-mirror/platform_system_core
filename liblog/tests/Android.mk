@@ -58,7 +58,8 @@ test_src_files := \
     liblog_test.cpp \
     log_id_test.cpp \
     log_radio_test.cpp \
-    log_system_test.cpp
+    log_system_test.cpp \
+    log_time_test.cpp
 
 # to prevent breaking the build if bionic not relatively visible to us
 ifneq ($(wildcard $(LOCAL_PATH)/../../../../bionic/libc/bionic/libc_logging.cpp),)
