@@ -236,7 +236,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   return 0;
 }
 
-static void resend_signal(siginfo_t* info) {
+static void resend_signal(siginfo_t* info, bool crash_dump_started) {
   // Signals can either be fatal or nonfatal.
   // For fatal signals, crash_dump will send us the signal we crashed with
   // before resuming us, so that processes using waitpid on us will see that we
@@ -254,9 +254,11 @@ static void resend_signal(siginfo_t* info) {
   // all signals when registering the handler, so resending the signal (using
   // rt_tgsigqueueinfo(2) to preserve SA_SIGINFO) will cause it to be delivered
   // when our signal handler returns.
-  int rc = syscall(SYS_rt_tgsigqueueinfo, getpid(), gettid(), info->si_signo, info);
-  if (rc != 0) {
-    fatal("failed to resend signal during crash: %s", strerror(errno));
+  if (crash_dump_started || info->si_signo != DEBUGGER_SIGNAL) {
+    int rc = syscall(SYS_rt_tgsigqueueinfo, getpid(), gettid(), info->si_signo, info);
+    if (rc != 0) {
+      fatal("failed to resend signal during crash: %s", strerror(errno));
+    }
   }
 
   if (info->si_signo == DEBUGGER_SIGNAL) {
@@ -299,8 +301,15 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void*) 
     // The process has disabled core dumps and PTRACE_ATTACH, and does not want to be dumped.
     __libc_format_log(ANDROID_LOG_INFO, "libc",
                       "Suppressing debuggerd output because prctl(PR_GET_DUMPABLE)==0");
+    resend_signal(info, false);
+    return;
+  }
 
-    resend_signal(info);
+  if (prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) == 1) {
+    // The process has NO_NEW_PRIVS enabled, so we can't transition to the crash_dump context.
+    __libc_format_log(ANDROID_LOG_INFO, "libc",
+                      "Suppressing debuggerd output because prctl(PR_GET_NO_NEW_PRIVS)==1");
+    resend_signal(info, false);
     return;
   }
 
@@ -346,7 +355,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void*) 
     signal(signal_number, SIG_DFL);
   }
 
-  resend_signal(info);
+  resend_signal(info, thread_info.crash_dump_started);
 }
 
 void debuggerd_init(debuggerd_callbacks_t* callbacks) {
