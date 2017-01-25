@@ -46,6 +46,7 @@
 #include <private/android_logger.h>
 
 #include "fs_mgr_priv.h"
+#include "fs_mgr_priv_avb.h"
 #include "fs_mgr_priv_verity.h"
 
 #define KEY_LOC_PROP   "ro.crypto.keyfile.userdata"
@@ -670,8 +671,14 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
     int mret = -1;
     int mount_errno = 0;
     int attempted_idx = -1;
+    int avb_ret = FS_MGR_SETUP_AVB_FAIL;
 
     if (!fstab) {
+        return -1;
+    }
+
+    if (fs_mgr_is_avb_used() &&
+        (avb_ret = fs_mgr_load_vbmeta_images(fstab)) == FS_MGR_SETUP_AVB_FAIL) {
         return -1;
     }
 
@@ -713,7 +720,22 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
             wait_for_file(fstab->recs[i].blk_device, WAIT_TIMEOUT);
         }
 
-        if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
+        if (fs_mgr_is_avb_used() && (fstab->recs[i].fs_mgr_flags & MF_AVB)) {
+            /* If HASHTREE_DISABLED is set (cf. 'adb disable-verity'), we
+             * should set up the device without using dm-verity.
+             * The actual mounting still take place in the following
+             * mount_with_alternatives().
+             */
+            if (avb_ret == FS_MGR_SETUP_AVB_HASHTREE_DISABLED) {
+                INFO("AVB HASHTREE disabled\n");
+            } else if (fs_mgr_setup_avb(&fstab->recs[i]) !=
+                       FS_MGR_SETUP_AVB_SUCCESS) {
+                ERROR("Failed to set up AVB on partition: %s, skipping!\n",
+                      fstab->recs[i].mount_point);
+                /* Skips mounting the device. */
+                continue;
+            }
+        } else if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
             int rc = fs_mgr_setup_verity(&fstab->recs[i], true);
             if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
                 INFO("Verity disabled");
@@ -722,6 +744,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
                 continue;
             }
         }
+
         int last_idx_inspected;
         int top_idx = i;
 
@@ -825,6 +848,10 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
         }
     }
 
+    if (fs_mgr_is_avb_used()) {
+        fs_mgr_unload_vbmeta_images();
+    }
+
     if (error_count) {
         return -1;
     } else {
@@ -845,8 +872,14 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
     int mount_errors = 0;
     int first_mount_errno = 0;
     char *m;
+    int avb_ret = FS_MGR_SETUP_AVB_FAIL;
 
     if (!fstab) {
+        return ret;
+    }
+
+    if (fs_mgr_is_avb_used() &&
+        (avb_ret = fs_mgr_load_vbmeta_images(fstab)) == FS_MGR_SETUP_AVB_FAIL) {
         return ret;
     }
 
@@ -882,7 +915,22 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
             do_reserved_size(n_blk_device, fstab->recs[i].fs_type, &fstab->recs[i]);
         }
 
-        if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
+        if (fs_mgr_is_avb_used() && (fstab->recs[i].fs_mgr_flags & MF_AVB)) {
+            /* If HASHTREE_DISABLED is set (cf. 'adb disable-verity'), we
+             * should set up the device without using dm-verity.
+             * The actual mounting still take place in the following
+             * mount_with_alternatives().
+             */
+            if (avb_ret == FS_MGR_SETUP_AVB_HASHTREE_DISABLED) {
+                INFO("AVB HASHTREE disabled\n");
+            } else if (fs_mgr_setup_avb(&fstab->recs[i]) !=
+                       FS_MGR_SETUP_AVB_SUCCESS) {
+                ERROR("Failed to set up AVB on partition: %s, skipping!\n",
+                      fstab->recs[i].mount_point);
+                /* Skips mounting the device. */
+                continue;
+            }
+        } else if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
             int rc = fs_mgr_setup_verity(&fstab->recs[i], true);
             if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
                 INFO("Verity disabled");
@@ -921,6 +969,9 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
     }
 
 out:
+    if (fs_mgr_is_avb_used()) {
+        fs_mgr_unload_vbmeta_images();
+    }
     return ret;
 }
 
