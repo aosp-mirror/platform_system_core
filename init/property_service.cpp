@@ -381,7 +381,7 @@ static void handle_property_set(SocketConnection& socket,
 static void handle_property_set_fd() {
     static constexpr uint32_t kDefaultSocketTimeout = 2000; /* ms */
 
-    int s = accept(property_set_fd, nullptr, nullptr);
+    int s = accept4(property_set_fd, nullptr, nullptr, SOCK_CLOEXEC);
     if (s == -1) {
         return;
     }
