@@ -52,6 +52,7 @@ class BnStoraged : public BnInterface<IStoraged> {
 
 class Storaged : public BnStoraged {
     virtual std::vector<struct uid_info> dump_uids(const char* option);
+    virtual status_t dump(int fd, const Vector<String16>& args);
 };
 
 sp<IStoraged> get_storaged_service();

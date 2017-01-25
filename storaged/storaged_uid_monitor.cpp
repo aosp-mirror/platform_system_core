@@ -101,6 +101,28 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uids()
     return uids;
 }
 
+static const int MAX_UID_EVENTS = 1000;
+
+void uid_monitor::add_event(const struct uid_event& event)
+{
+    std::unique_ptr<lock_t> lock(new lock_t(&events_lock));
+
+    if (events.size() > MAX_UID_EVENTS) {
+        LOG_TO(SYSTEM, ERROR) << "event buffer full";
+        return;
+    }
+    events.push_back(event);
+}
+
+std::vector<struct uid_event> uid_monitor::dump_events()
+{
+    std::unique_ptr<lock_t> lock(new lock_t(&events_lock));
+    std::vector<struct uid_event> dump_events = events;
+
+    events.clear();
+    return dump_events;
+}
+
 void uid_monitor::report()
 {
     struct timespec ts;
@@ -129,6 +151,13 @@ void uid_monitor::report()
             last_uids[uid.uid].io[UID_BACKGROUND].write_bytes;
 
         if (bg_read_delta + bg_write_delta >= adjusted_threshold) {
+            struct uid_event event;
+            event.name = uid.name;
+            event.read_bytes = bg_read_delta;
+            event.write_bytes = bg_write_delta;
+            event.interval = uint64_t(ts_delta / NS_PER_SEC);
+            add_event(event);
+
             android_log_event_list(EVENTLOGTAG_UID_IO_ALERT)
                 << uid.name << bg_read_delta << bg_write_delta
                 << uint64_t(ts_delta / NS_PER_SEC) << LOG_ID_EVENTS;
@@ -147,4 +176,11 @@ uid_monitor::uid_monitor()
         return;
     }
     last_report_ts = ts.tv_sec * NS_PER_SEC + ts.tv_nsec;
+
+    sem_init(&events_lock, 0, 1);
+}
+
+uid_monitor::~uid_monitor()
+{
+    sem_destroy(&events_lock);
 }

@@ -283,7 +283,6 @@ public:
     void pause(void) {
         sleep(mConfig.periodic_chores_interval_unit);
     }
-
     void set_privileged_fds(int fd_emmc) {
         mEmmcInfo.set_emmc_fd(fd_emmc);
     }
@@ -294,6 +293,9 @@ public:
 
     std::unordered_map<uint32_t, struct uid_info> get_uids(void) {
         return mUidm.get_uids();
+    }
+    std::vector<struct uid_event> get_uid_events(void) {
+        return mUidm.dump_events();
     }
 };
 
