@@ -35,6 +35,8 @@ struct fs_mgr_flag_values {
     unsigned int zram_size;
     uint64_t reserved_size;
     unsigned int file_encryption_mode;
+    unsigned int erase_blk_size;
+    unsigned int logical_blk_size;
 };
 
 struct flag_list {
@@ -85,6 +87,8 @@ static struct flag_list fs_mgr_flags[] = {
     { "latemount",          MF_LATEMOUNT },
     { "reservedsize=",      MF_RESERVEDSIZE },
     { "quota",              MF_QUOTA },
+    { "eraseblk=",          MF_ERASEBLKSIZE },
+    { "logicalblk=",        MF_LOGICALBLKSIZE },
     { "defaults",           0 },
     { 0,                    0 },
 };
@@ -239,6 +243,22 @@ static int parse_flags(char *flags, struct flag_list *fl,
                      * reserved size of the partition.  Get it and return it.
                      */
                     flag_vals->reserved_size = parse_size(strchr(p, '=') + 1);
+                } else if ((fl[i].flag == MF_ERASEBLKSIZE) && flag_vals) {
+                    /* The erase block size flag is followed by an = and the flash
+                     * erase block size. Get it, check that it is a power of 2 and
+                     * at least 4096, and return it.
+                     */
+                    unsigned int val = strtoul(strchr(p, '=') + 1, NULL, 0);
+                    if (val >= 4096 && (val & (val - 1)) == 0)
+                        flag_vals->erase_blk_size = val;
+                } else if ((fl[i].flag == MF_LOGICALBLKSIZE) && flag_vals) {
+                    /* The logical block size flag is followed by an = and the flash
+                     * logical block size. Get it, check that it is a power of 2 and
+                     * at least 4096, and return it.
+                     */
+                    unsigned int val = strtoul(strchr(p, '=') + 1, NULL, 0);
+                    if (val >= 4096 && (val & (val - 1)) == 0)
+                        flag_vals->logical_blk_size = val;
                 }
                 break;
             }
@@ -385,6 +405,8 @@ struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
         fstab->recs[cnt].zram_size = flag_vals.zram_size;
         fstab->recs[cnt].reserved_size = flag_vals.reserved_size;
         fstab->recs[cnt].file_encryption_mode = flag_vals.file_encryption_mode;
+        fstab->recs[cnt].erase_blk_size = flag_vals.erase_blk_size;
+        fstab->recs[cnt].logical_blk_size = flag_vals.logical_blk_size;
         cnt++;
     }
     /* If an A/B partition, modify block device to be the real block device */
