@@ -105,9 +105,11 @@ void* storaged_main(void* s) {
 static void help_message(void) {
     printf("usage: storaged [OPTION]\n");
     printf("  -d    --dump                  Dump task I/O usage to stdout\n");
+    printf("  -u    --uid                   Dump uid I/O usage to stdout\n");
     printf("  -s    --start                 Start storaged (default)\n");
     printf("        --emmc=INTERVAL         Set publish interval of emmc lifetime information (in days)\n");
     printf("        --diskstats=INTERVAL    Set publish interval of diskstats (in hours)\n");
+    printf("        --uidio=INTERVAL        Set publish interval of uid io (in hours)\n");
     printf("        --unit=INTERVAL         Set storaged's refresh interval (in seconds)\n");
     fflush(stdout);
 }
@@ -118,10 +120,12 @@ static void help_message(void) {
 int main(int argc, char** argv) {
     int flag_main_service = 0;
     int flag_dump_task = 0;
+    int flag_dump_uid = 0;
     int flag_config = 0;
     int unit_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT;
     int diskstats_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH;
     int emmc_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_EMMC_INFO_PUBLISH;
+    int uid_io_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_ALERT;
     int fd_emmc = -1;
     int opt;
 
@@ -131,12 +135,14 @@ int main(int argc, char** argv) {
             {"start",       no_argument,        0, 's'},
             {"kill",        no_argument,        0, 'k'},
             {"dump",        no_argument,        0, 'd'},
+            {"uid",         no_argument,        0, 'u'},
             {"help",        no_argument,        0, 'h'},
             {"unit",        required_argument,  0,  0 },
             {"diskstats",   required_argument,  0,  0 },
-            {"emmc",        required_argument,  0,  0 }
+            {"emmc",        required_argument,  0,  0 },
+            {"uidio",       required_argument,  0,  0 }
         };
-        opt = getopt_long(argc, argv, ":skdh0", long_options, &opt_idx);
+        opt = getopt_long(argc, argv, ":skdhu0", long_options, &opt_idx);
         if (opt == -1) {
             break;
         }
@@ -165,7 +171,15 @@ int main(int argc, char** argv) {
 
                 } else if (strcmp(long_options[opt_idx].name, "emmc") == 0) {
                     emmc_interval = atoi(optarg) * DAY_TO_SEC;
-                    if (diskstats_interval == 0) {
+                    if (emmc_interval == 0) {
+                        fprintf(stderr, "Invalid argument. Option %s requires an integer argument greater than 0.\n",
+                                long_options[opt_idx].name);
+                        help_message();
+                        return -1;
+                    }
+                } else if (strcmp(long_options[opt_idx].name, "uidio") == 0) {
+                    uid_io_interval = atoi(optarg) * HOUR_TO_SEC;
+                    if (uid_io_interval == 0) {
                         fprintf(stderr, "Invalid argument. Option %s requires an integer argument greater than 0.\n",
                                 long_options[opt_idx].name);
                         help_message();
@@ -186,6 +200,9 @@ int main(int argc, char** argv) {
             break;
         case 'd':
             flag_dump_task = 1;
+            break;
+        case 'u':
+            flag_dump_uid = 1;
             break;
         case 'h':
             help_message();
@@ -230,6 +247,7 @@ int main(int argc, char** argv) {
             storaged.set_unit_interval(unit_interval);
             storaged.set_diskstats_interval(diskstats_interval);
             storaged.set_emmc_interval(emmc_interval);
+            storaged.set_uid_io_interval(uid_io_interval);
         }
 
         // Start the main thread of storaged
@@ -274,6 +292,25 @@ int main(int argc, char** argv) {
 
         sort_running_tasks_info(res);
         log_console_running_tasks_info(res);
+
+        return 0;
+    }
+
+    if (flag_dump_uid) {
+        sp<IStoraged> storaged_service = get_storaged_service();
+        if (storaged_service == NULL) {
+            fprintf(stderr, "Cannot find storaged service.\nMaybe run storaged --start first?\n");
+            return -1;
+        }
+        std::vector<struct uid_info> res = storaged_service->dump_uids(NULL);
+
+        if (res.size() == 0) {
+            fprintf(stderr, "UID I/O is not readable in this version of kernel.\n");
+            return 0;
+        }
+
+        sort_running_uids_info(res);
+        log_console_running_uids_info(res);
 
         return 0;
     }
