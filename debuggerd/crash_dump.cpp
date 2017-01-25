@@ -284,6 +284,7 @@ int main(int argc, char** argv) {
   } else {
     unique_fd devnull(TEMP_FAILURE_RETRY(open("/dev/null", O_RDWR)));
     TEMP_FAILURE_RETRY(dup2(devnull.get(), STDOUT_FILENO));
+    output_fd = std::move(devnull);
   }
 
   LOG(INFO) << "performing dump of process " << target << " (target tid = " << main_tid << ")";
@@ -395,7 +396,7 @@ int main(int argc, char** argv) {
 
   // Close stdout before we notify tombstoned of completion.
   close(STDOUT_FILENO);
-  if (!tombstoned_notify_completion(tombstoned_socket.get())) {
+  if (tombstoned_connected && !tombstoned_notify_completion(tombstoned_socket.get())) {
     LOG(ERROR) << "failed to notify tombstoned of completion";
   }
 
