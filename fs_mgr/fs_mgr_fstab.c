@@ -79,6 +79,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "max_comp_streams=",  MF_MAX_COMP_STREAMS },
     { "verifyatboot",       MF_VERIFYATBOOT },
     { "verify",             MF_VERIFY },
+    { "avb",                MF_AVB },
     { "noemulatedsd",       MF_NOEMULATEDSD },
     { "notrim",             MF_NOTRIM },
     { "formattable",        MF_FORMATTABLE },
