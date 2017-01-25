@@ -276,7 +276,7 @@ class SocketConnection {
     while (*timeout_ms > 0) {
       Timer timer;
       int nr = poll(ufds, 1, *timeout_ms);
-      uint64_t millis = timer.duration_ns()/1000000;
+      uint64_t millis = timer.duration_ms();
       *timeout_ms = (millis > *timeout_ms) ? 0 : *timeout_ms - millis;
 
       if (nr > 0) {
