@@ -355,7 +355,8 @@ enum {
     NATIVE_WINDOW_SET_AUTO_REFRESH          = 22,
     NATIVE_WINDOW_ENABLE_FRAME_TIMESTAMPS   = 23,
     NATIVE_WINDOW_GET_FRAME_TIMESTAMPS      = 24,
-    NATIVE_WINDOW_GET_REFRESH_CYCLE_PERIOD  = 25,
+    NATIVE_WINDOW_GET_REFRESH_CYCLE_DURATION= 25,
+    NATIVE_WINDOW_GET_REFRESH_CYCLE_PERIOD  = 26,
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -1038,6 +1039,14 @@ static inline int native_window_get_frame_timestamps(
             outFirstRefreshStartTime, outLastRefreshStartTime,
             outGlCompositionDoneTime, outDisplayPresentTime,
             outDisplayRetireTime, outDequeueReadyTime, outReleaseTime);
+}
+
+static inline int native_window_get_refresh_cycle_duration(
+        struct ANativeWindow* window,
+        int64_t* outRefreshDuration)
+{
+    return window->perform(window, NATIVE_WINDOW_GET_REFRESH_CYCLE_DURATION,
+            outRefreshDuration);
 }
 
 static inline int native_window_get_refresh_cycle_period(
