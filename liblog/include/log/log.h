@@ -30,6 +30,7 @@
 #include <android/log.h>
 #include <log/log_id.h>
 #include <log/log_main.h>
+#include <log/log_radio.h>
 #include <log/uio.h> /* helper to define iovec for portability */
 
 #ifdef __cplusplus
@@ -156,92 +157,6 @@ extern "C" {
 #define SLOGE_IF(cond, ...) \
     ( (__predict_false(cond)) \
     ? ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/* --------------------------------------------------------------------- */
-
-/*
- * Simplified macro to send a verbose radio log message using current LOG_TAG.
- */
-#ifndef RLOGV
-#define __RLOGV(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
-#if LOG_NDEBUG
-#define RLOGV(...) do { if (0) { __RLOGV(__VA_ARGS__); } } while (0)
-#else
-#define RLOGV(...) __RLOGV(__VA_ARGS__)
-#endif
-#endif
-
-#ifndef RLOGV_IF
-#if LOG_NDEBUG
-#define RLOGV_IF(cond, ...)   ((void)0)
-#else
-#define RLOGV_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-#endif
-
-/*
- * Simplified macro to send a debug radio log message using  current LOG_TAG.
- */
-#ifndef RLOGD
-#define RLOGD(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef RLOGD_IF
-#define RLOGD_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/*
- * Simplified macro to send an info radio log message using  current LOG_TAG.
- */
-#ifndef RLOGI
-#define RLOGI(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef RLOGI_IF
-#define RLOGI_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/*
- * Simplified macro to send a warning radio log message using current LOG_TAG.
- */
-#ifndef RLOGW
-#define RLOGW(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef RLOGW_IF
-#define RLOGW_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/*
- * Simplified macro to send an error radio log message using current LOG_TAG.
- */
-#ifndef RLOGE
-#define RLOGE(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef RLOGE_IF
-#define RLOGE_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
 #endif
 
