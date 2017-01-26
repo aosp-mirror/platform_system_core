@@ -31,6 +31,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <android-base/unique_fd.h>
 #include <cutils/android_reboot.h>
 #include <cutils/partition_utils.h>
 #include <cutils/properties.h>
@@ -94,13 +95,13 @@ static int wait_for_file(const char *filename, int timeout)
     return ret;
 }
 
-static void check_fs(char *blk_device, char *fs_type, char *target)
+static void check_fs(const char *blk_device, char *fs_type, char *target)
 {
     int status;
     int ret;
     long tmpmnt_flags = MS_NOATIME | MS_NOEXEC | MS_NOSUID;
     char tmpmnt_opts[64] = "errors=remount-ro";
-    char *e2fsck_argv[] = {
+    const char *e2fsck_argv[] = {
         E2FSCK_BIN,
 #ifndef TARGET_USES_MKE2FS // "-f" only for old ext4 generation tool
         "-f",
@@ -157,9 +158,12 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
         } else {
             INFO("Running %s on %s\n", E2FSCK_BIN, blk_device);
 
-            ret = android_fork_execvp_ext(ARRAY_SIZE(e2fsck_argv), e2fsck_argv,
+            ret = android_fork_execvp_ext(ARRAY_SIZE(e2fsck_argv),
+                                          const_cast<char **>(e2fsck_argv),
                                           &status, true, LOG_KLOG | LOG_FILE,
-                                          true, FSCK_LOG_FILE, NULL, 0);
+                                          true,
+                                          const_cast<char *>(FSCK_LOG_FILE),
+                                          NULL, 0);
 
             if (ret < 0) {
                 /* No need to check for error in fork, we can't really handle it now */
@@ -167,16 +171,18 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
             }
         }
     } else if (!strcmp(fs_type, "f2fs")) {
-            char *f2fs_fsck_argv[] = {
+            const char *f2fs_fsck_argv[] = {
                     F2FS_FSCK_BIN,
                     "-a",
                     blk_device
             };
         INFO("Running %s -a %s\n", F2FS_FSCK_BIN, blk_device);
 
-        ret = android_fork_execvp_ext(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv,
+        ret = android_fork_execvp_ext(ARRAY_SIZE(f2fs_fsck_argv),
+                                      const_cast<char **>(f2fs_fsck_argv),
                                       &status, true, LOG_KLOG | LOG_FILE,
-                                      true, FSCK_LOG_FILE, NULL, 0);
+                                      true, const_cast<char *>(FSCK_LOG_FILE),
+                                      NULL, 0);
         if (ret < 0) {
             /* No need to check for error in fork, we can't really handle it now */
             ERROR("Failed trying to run %s\n", F2FS_FSCK_BIN);
@@ -228,17 +234,18 @@ static int do_quota(char *blk_device, char *fs_type, struct fstab_rec *rec)
             ERROR("Not running %s on %s (executable not in system image)\n",
                   TUNE2FS_BIN, blk_device);
         } else {
-            char* arg1 = NULL;
-            char* arg2 = NULL;
+            const char* arg1 = nullptr;
+            const char* arg2 = nullptr;
             int status = 0;
             int ret = 0;
-            int fd = TEMP_FAILURE_RETRY(open(blk_device, O_RDONLY | O_CLOEXEC));
+            android::base::unique_fd fd(
+                TEMP_FAILURE_RETRY(open(blk_device, O_RDONLY | O_CLOEXEC)));
             if (fd >= 0) {
                 struct ext4_super_block sb;
                 ret = read_super_block(fd, &sb);
                 if (ret < 0) {
                     ERROR("Can't read '%s' super block: %s\n", blk_device, strerror(errno));
-                    goto out;
+                    return force_check;
                 }
 
                 int has_quota = (sb.s_feature_ro_compat
@@ -247,7 +254,7 @@ static int do_quota(char *blk_device, char *fs_type, struct fstab_rec *rec)
 
                 if (has_quota == want_quota) {
                     INFO("Requested quota status is match on %s\n", blk_device);
-                    goto out;
+                    return force_check;
                 } else if (want_quota) {
                     INFO("Enabling quota on %s\n", blk_device);
                     arg1 = "-Oquota";
@@ -263,21 +270,20 @@ static int do_quota(char *blk_device, char *fs_type, struct fstab_rec *rec)
                 return force_check;
             }
 
-            char *tune2fs_argv[] = {
+            const char *tune2fs_argv[] = {
                 TUNE2FS_BIN,
                 arg1,
                 arg2,
                 blk_device,
             };
-            ret = android_fork_execvp_ext(ARRAY_SIZE(tune2fs_argv), tune2fs_argv,
+            ret = android_fork_execvp_ext(ARRAY_SIZE(tune2fs_argv),
+                                          const_cast<char **>(tune2fs_argv),
                                           &status, true, LOG_KLOG | LOG_FILE,
                                           true, NULL, NULL, 0);
             if (ret < 0) {
                 /* No need to check for error in fork, we can't really handle it now */
                 ERROR("Failed trying to run %s\n", TUNE2FS_BIN);
             }
-      out:
-            close(fd);
         }
     }
     return force_check;
@@ -300,13 +306,14 @@ static void do_reserved_size(char *blk_device, char *fs_type, struct fstab_rec *
             int status = 0;
             int ret = 0;
             unsigned long reserved_blocks = 0;
-            int fd = TEMP_FAILURE_RETRY(open(blk_device, O_RDONLY | O_CLOEXEC));
+            android::base::unique_fd fd(
+                TEMP_FAILURE_RETRY(open(blk_device, O_RDONLY | O_CLOEXEC)));
             if (fd >= 0) {
                 struct ext4_super_block sb;
                 ret = read_super_block(fd, &sb);
                 if (ret < 0) {
                     ERROR("Can't read '%s' super block: %s\n", blk_device, strerror(errno));
-                    goto out;
+                    return;
                 }
                 reserved_blocks = rec->reserved_size / EXT4_BLOCK_SIZE(&sb);
                 unsigned long reserved_threshold = ext4_blocks_count(&sb) * 0.02;
@@ -317,7 +324,7 @@ static void do_reserved_size(char *blk_device, char *fs_type, struct fstab_rec *
 
                 if (ext4_r_blocks_count(&sb) == reserved_blocks) {
                     INFO("Have reserved same blocks\n");
-                    goto out;
+                    return;
                 }
             } else {
                 ERROR("Failed to open '%s': %s\n", blk_device, strerror(errno));
@@ -326,13 +333,14 @@ static void do_reserved_size(char *blk_device, char *fs_type, struct fstab_rec *
 
             char buf[16] = {0};
             snprintf(buf, sizeof (buf), "-r %lu", reserved_blocks);
-            char *tune2fs_argv[] = {
+            const char *tune2fs_argv[] = {
                 TUNE2FS_BIN,
                 buf,
                 blk_device,
             };
 
-            ret = android_fork_execvp_ext(ARRAY_SIZE(tune2fs_argv), tune2fs_argv,
+            ret = android_fork_execvp_ext(ARRAY_SIZE(tune2fs_argv),
+                                          const_cast<char **>(tune2fs_argv),
                                           &status, true, LOG_KLOG | LOG_FILE,
                                           true, NULL, NULL, 0);
 
@@ -340,8 +348,6 @@ static void do_reserved_size(char *blk_device, char *fs_type, struct fstab_rec *
                 /* No need to check for error in fork, we can't really handle it now */
                 ERROR("Failed trying to run %s\n", TUNE2FS_BIN);
             }
-      out:
-            close(fd);
         }
     }
 }
@@ -1024,9 +1030,9 @@ int fs_mgr_swapon_all(struct fstab *fstab)
     int err = 0;
     int ret = 0;
     int status;
-    char *mkswap_argv[2] = {
+    const char *mkswap_argv[2] = {
         MKSWAP_BIN,
-        NULL
+        nullptr
     };
 
     if (!fstab) {
@@ -1075,7 +1081,8 @@ int fs_mgr_swapon_all(struct fstab *fstab)
 
         /* Initialize the swap area */
         mkswap_argv[1] = fstab->recs[i].blk_device;
-        err = android_fork_execvp_ext(ARRAY_SIZE(mkswap_argv), mkswap_argv,
+        err = android_fork_execvp_ext(ARRAY_SIZE(mkswap_argv),
+                                      const_cast<char **>(mkswap_argv),
                                       &status, true, LOG_KLOG, false, NULL,
                                       NULL, 0);
         if (err) {
