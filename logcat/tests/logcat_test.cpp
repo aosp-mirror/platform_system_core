@@ -171,8 +171,8 @@ char *fgetLongTime(char *buffer, size_t buflen, FILE *fp) {
         if (!ep) {
             continue;
         }
-        static const size_t tag_field_width = 7;
-        ep -= tag_field_width;
+        static const size_t pid_field_width = 7;
+        ep -= pid_field_width;
         *ep = '\0';
         return cp;
     }
@@ -184,14 +184,15 @@ char *fgetLongTime(char *buffer, size_t buflen, FILE *fp) {
 static size_t inject(ssize_t count) {
     if (count <= 0) return 0;
 
-    static const size_t retry = 3;
+    static const size_t retry = 4;
     size_t errors = retry;
     size_t num = 0;
     for(;;) {
         log_time ts(CLOCK_MONOTONIC);
         if (__android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)) >= 0) {
             if (++num >= (size_t)count) {
-                sleep(1); // let data settle end-to-end
+                // let data settle end-to-end
+                sleep(3);
                 return num;
             }
             errors = retry;
@@ -211,7 +212,7 @@ TEST(logcat, tz) {
         return;
     }
 
-    int tries = 3; // in case run too soon after system start or buffer clear
+    int tries = 4; // in case run too soon after system start or buffer clear
     int count;
 
     do {
@@ -228,6 +229,8 @@ TEST(logcat, tz) {
         while (fgetLongTime(buffer, sizeof(buffer), fp)) {
             if (strstr(buffer, " -0700") || strstr(buffer, " -0800")) {
                 ++count;
+            } else {
+                fprintf(stderr, "ts=\"%s\"\n", buffer + 2);
             }
         }
 
@@ -261,7 +264,7 @@ TEST(logcat, ntz) {
 }
 
 void do_tail(int num) {
-    int tries = 3; // in case run too soon after system start or buffer clear
+    int tries = 4; // in case run too soon after system start or buffer clear
     int count;
 
     do {
@@ -310,7 +313,7 @@ TEST(logcat, tail_time) {
     char *first_timestamp = NULL;
     char *cp;
 
-    int tries = 3; // in case run too soon after system start or buffer clear
+    int tries = 4; // in case run too soon after system start or buffer clear
 
     // Do not be tempted to use -v usec because that increases the
     // chances of an occasional test failure by 1000 (see below).
