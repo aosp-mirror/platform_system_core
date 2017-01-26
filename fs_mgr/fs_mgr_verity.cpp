@@ -285,7 +285,7 @@ static int load_verity_table(struct dm_ioctl *io, const std::string &name,
 
     // set next target boundary
     verity_params += strlen(verity_params) + 1;
-    verity_params = (char*)(((unsigned long)verity_params + 7) & ~8);
+    verity_params = (char*)(((uintptr_t)verity_params + 7) & ~7);
     tgt->next = verity_params - buffer;
 
     // send the ioctl to load the verity table
