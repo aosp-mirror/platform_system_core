@@ -34,8 +34,10 @@
 #include "fs_mgr_priv.h"
 #include "cryptfs.h"
 
+extern "C" {
 extern struct fs_info info;     /* magic global from ext4_utils */
 extern void reset_ext4fs_info();
+}
 
 static int format_ext4(char *fs_blkdev, char *fs_mnt_point, bool crypt_footer)
 {
