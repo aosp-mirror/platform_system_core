@@ -46,6 +46,7 @@
 
 #include "adb.h"
 #include "transport.h"
+#include "usb.h"
 
 using namespace std::chrono_literals;
 using namespace std::literals;
@@ -53,7 +54,8 @@ using namespace std::literals;
 /* usb scan debugging is waaaay too verbose */
 #define DBGX(x...)
 
-struct usb_handle {
+namespace native {
+struct usb_handle : public ::usb_handle {
     ~usb_handle() {
       if (fd != -1) unix_close(fd);
     }
@@ -595,3 +597,4 @@ void usb_init() {
         fatal_errno("cannot create device_poll thread");
     }
 }
+} // namespace native
