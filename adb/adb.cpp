@@ -40,6 +40,7 @@
 #include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/parsenetaddress.h>
+#include <android-base/quick_exit.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 
@@ -1047,7 +1048,7 @@ int handle_host_request(const char* service, TransportType type,
         // may not read the OKAY sent above.
         adb_shutdown(reply_fd);
 
-        exit(0);
+        android::base::quick_exit(0);
     }
 
 #if ADB_HOST
