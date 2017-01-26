@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#define _GNU_SOURCE
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -25,7 +23,7 @@
 #warning "libgen.h must not be included"
 #endif
 
-char *me = "";
+char *me = nullptr;
 
 static void usage(void)
 {
