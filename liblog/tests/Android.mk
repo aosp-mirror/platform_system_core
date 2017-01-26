@@ -58,6 +58,7 @@ test_src_files := \
     liblog_test.cpp \
     log_id_test.cpp \
     log_radio_test.cpp \
+    log_read_test.cpp \
     log_system_test.cpp \
     log_time_test.cpp
 
