@@ -28,6 +28,7 @@
 #include <android-base/errors.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/quick_exit.h>
 #include <android-base/stringprintf.h>
 
 #include "adb.h"
@@ -86,7 +87,7 @@ static void setup_daemon_logging(void) {
 static BOOL WINAPI ctrlc_handler(DWORD type) {
     // TODO: Consider trying to kill a starting up adb server (if we're in
     // launch_server) by calling GenerateConsoleCtrlEvent().
-    exit(STATUS_CONTROL_C_EXIT);
+    android::base::quick_exit(STATUS_CONTROL_C_EXIT);
     return TRUE;
 }
 #endif
@@ -108,6 +109,10 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
     }
 
     SetConsoleCtrlHandler(ctrlc_handler, TRUE);
+#else
+    signal(SIGINT, [](int) {
+        android::base::quick_exit(0);
+    });
 #endif
 
     init_transport_registration();
