@@ -12,6 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+cc_library_headers {
+    name: "libutils_headers",
+    host_supported: true,
+    export_include_dirs: ["include"],
+    target: {
+        windows: {
+           enabled: true,
+      },
+    },
+}
+
 cc_library {
     name: "libutils",
     host_supported: true,
@@ -42,6 +53,8 @@ cc_library {
 
     cflags: ["-Werror"],
     include_dirs: ["external/safe-iop/include"],
+    header_libs: ["libutils_headers"],
+    export_header_lib_headers: ["libutils_headers"],
 
     arch: {
         mips: {
