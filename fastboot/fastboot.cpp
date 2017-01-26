@@ -1648,8 +1648,7 @@ int main(int argc, char **argv)
                     wants_reboot = false;
                     wants_reboot_bootloader = true;
                     skip(1);
-                }
-                if (!strcmp(*argv, "emergency")) {
+                } else if (!strcmp(*argv, "emergency")) {
                     wants_reboot = false;
                     wants_reboot_emergency = true;
                     skip(1);
