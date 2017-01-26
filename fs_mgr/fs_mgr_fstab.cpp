@@ -326,9 +326,10 @@ struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
     }
 
     /* Allocate and init the fstab structure */
-    fstab = calloc(1, sizeof(struct fstab));
+    fstab = static_cast<struct fstab *>(calloc(1, sizeof(struct fstab)));
     fstab->num_entries = entries;
-    fstab->recs = calloc(fstab->num_entries, sizeof(struct fstab_rec));
+    fstab->recs = static_cast<struct fstab_rec *>(
+        calloc(fstab->num_entries, sizeof(struct fstab_rec)));
 
     fseek(fstab_file, 0, SEEK_SET);
 
