@@ -28,6 +28,7 @@
 #include <unistd.h>
 
 #include <android/log.h>
+#include <log/log_main.h>
 #include <log/uio.h> /* helper to define iovec for portability */
 
 #ifdef __cplusplus
@@ -42,6 +43,22 @@ extern "C" {
 
 #ifndef LOG_TAG
 #define LOG_TAG NULL
+#endif
+
+/*
+ * Normally we strip the effects of ALOGV (VERBOSE messages),
+ * LOG_FATAL and LOG_FATAL_IF (FATAL assert messages) from the
+ * release builds be defining NDEBUG.  You can modify this (for
+ * example with "#define LOG_NDEBUG 0" at the top of your source
+ * file) to change that behavior.
+ */
+
+#ifndef LOG_NDEBUG
+#ifdef NDEBUG
+#define LOG_NDEBUG 1
+#else
+#define LOG_NDEBUG 0
+#endif
 #endif
 
 /* --------------------------------------------------------------------- */

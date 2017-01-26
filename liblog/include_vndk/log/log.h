@@ -4,6 +4,7 @@
 #define _LIBS_LOG_LOG_H
 
 #include <android/log.h>
+#include <log/log_main.h>
 
 /*The following files will be included once they are available*/
 /*#include <log/log_id.h>*/
