@@ -55,7 +55,8 @@ test_c_flags := \
     -fno-builtin \
 
 test_src_files := \
-    liblog_test.cpp
+    liblog_test.cpp \
+    log_id_test.cpp
 
 # to prevent breaking the build if bionic not relatively visible to us
 ifneq ($(wildcard $(LOCAL_PATH)/../../../../bionic/libc/bionic/libc_logging.cpp),)
