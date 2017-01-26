@@ -28,6 +28,9 @@
 #include <unistd.h>
 
 #include <android/log.h>
+#include <log/log_id.h>
+#include <log/log_main.h>
+#include <log/log_radio.h>
 #include <log/uio.h> /* helper to define iovec for portability */
 
 #ifdef __cplusplus
@@ -44,6 +47,22 @@ extern "C" {
 #define LOG_TAG NULL
 #endif
 
+/*
+ * Normally we strip the effects of ALOGV (VERBOSE messages),
+ * LOG_FATAL and LOG_FATAL_IF (FATAL assert messages) from the
+ * release builds be defining NDEBUG.  You can modify this (for
+ * example with "#define LOG_NDEBUG 0" at the top of your source
+ * file) to change that behavior.
+ */
+
+#ifndef LOG_NDEBUG
+#ifdef NDEBUG
+#define LOG_NDEBUG 1
+#else
+#define LOG_NDEBUG 0
+#endif
+#endif
+
 /* --------------------------------------------------------------------- */
 
 /*
@@ -56,16 +75,6 @@ extern "C" {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
 #endif
-
-/*
- * Send a simple string to the log.
- */
-int __android_log_buf_write(int bufID, int prio, const char* tag, const char* text);
-int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fmt, ...)
-#if defined(__GNUC__)
-    __attribute__((__format__(printf, 4, 5)))
-#endif
-    ;
 
 /*
  * Simplified macro to send a verbose system log message using current LOG_TAG.
@@ -154,92 +163,6 @@ int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fm
 /* --------------------------------------------------------------------- */
 
 /*
- * Simplified macro to send a verbose radio log message using current LOG_TAG.
- */
-#ifndef RLOGV
-#define __RLOGV(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
-#if LOG_NDEBUG
-#define RLOGV(...) do { if (0) { __RLOGV(__VA_ARGS__); } } while (0)
-#else
-#define RLOGV(...) __RLOGV(__VA_ARGS__)
-#endif
-#endif
-
-#ifndef RLOGV_IF
-#if LOG_NDEBUG
-#define RLOGV_IF(cond, ...)   ((void)0)
-#else
-#define RLOGV_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-#endif
-
-/*
- * Simplified macro to send a debug radio log message using  current LOG_TAG.
- */
-#ifndef RLOGD
-#define RLOGD(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef RLOGD_IF
-#define RLOGD_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/*
- * Simplified macro to send an info radio log message using  current LOG_TAG.
- */
-#ifndef RLOGI
-#define RLOGI(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef RLOGI_IF
-#define RLOGI_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/*
- * Simplified macro to send a warning radio log message using current LOG_TAG.
- */
-#ifndef RLOGW
-#define RLOGW(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef RLOGW_IF
-#define RLOGW_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/*
- * Simplified macro to send an error radio log message using current LOG_TAG.
- */
-#ifndef RLOGE
-#define RLOGE(...) \
-    ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__))
-#endif
-
-#ifndef RLOGE_IF
-#define RLOGE_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
-#endif
-
-/* --------------------------------------------------------------------- */
-
-/*
  * Event logging.
  */
 
@@ -303,25 +226,6 @@ typedef enum {
 #define LOG_EVENT_STRING(_tag, _value)                                      \
         (void) __android_log_bswrite(_tag, _value);
 #endif
-
-#ifndef log_id_t_defined
-#define log_id_t_defined
-typedef enum log_id {
-    LOG_ID_MIN = 0,
-
-    LOG_ID_MAIN = 0,
-    LOG_ID_RADIO = 1,
-    LOG_ID_EVENTS = 2,
-    LOG_ID_SYSTEM = 3,
-    LOG_ID_CRASH = 4,
-    LOG_ID_SECURITY = 5,
-    LOG_ID_KERNEL = 6, /* place last, third-parties can not use it */
-
-    LOG_ID_MAX
-} log_id_t;
-#endif
-#define sizeof_log_id_t sizeof(typeof_log_id_t)
-#define typeof_log_id_t unsigned char
 
 /* --------------------------------------------------------------------- */
 
@@ -758,12 +662,6 @@ clockid_t android_log_clockid();
 #endif
 
 #endif /* __linux__ */
-
-/*
- * log_id_t helpers
- */
-log_id_t android_name_to_log_id(const char* logName);
-const char* android_log_id_to_name(log_id_t log_id);
 
 /* --------------------------------------------------------------------- */
 
