@@ -44,6 +44,7 @@
 
 using namespace std::chrono_literals;
 
+namespace native {
 struct usb_handle
 {
     UInt8 bulkIn;
@@ -298,7 +299,8 @@ AndroidInterfaceAdded(io_iterator_t iterator)
         usb_handle* handle_p = handle.get();
         VLOG(USB) << "Add usb device " << serial;
         AddDevice(std::move(handle));
-        register_usb_transport(handle_p, serial, devpath.c_str(), 1);
+        register_usb_transport(reinterpret_cast<::usb_handle*>(handle_p), serial, devpath.c_str(),
+                               1);
     }
 }
 
@@ -558,3 +560,4 @@ void usb_kick(usb_handle *handle) {
     std::lock_guard<std::mutex> lock_guard(g_usb_handles_mutex);
     usb_kick_locked(handle);
 }
+} // namespace native
