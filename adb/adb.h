@@ -28,6 +28,7 @@
 #include "adb_trace.h"
 #include "fdevent.h"
 #include "socket.h"
+#include "usb.h"
 
 constexpr size_t MAX_PAYLOAD_V1 = 4 * 1024;
 constexpr size_t MAX_PAYLOAD_V2 = 256 * 1024;
@@ -54,7 +55,6 @@ std::string adb_version();
 #define ADB_SERVER_VERSION 38
 
 class atransport;
-struct usb_handle;
 
 struct amessage {
     uint32_t command;     /* command identifier constant      */
@@ -194,18 +194,6 @@ void put_apacket(apacket *p);
 void local_init(int port);
 bool local_connect(int port);
 int  local_connect_arbitrary_ports(int console_port, int adb_port, std::string* error);
-
-// USB host/client interface.
-void usb_init();
-int usb_write(usb_handle *h, const void *data, int len);
-int usb_read(usb_handle *h, void *data, int len);
-int usb_close(usb_handle *h);
-void usb_kick(usb_handle *h);
-
-// USB device detection.
-#if ADB_HOST
-int is_adb_interface(int usb_class, int usb_subclass, int usb_protocol);
-#endif
 
 ConnectionState connection_state(atransport *t);
 
