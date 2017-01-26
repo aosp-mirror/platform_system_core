@@ -1115,47 +1115,6 @@ TEST(liblog, dual_reader) {
 #endif
 }
 
-TEST(liblog, android_logger_get_) {
-#ifdef __ANDROID__
-    // This test assumes the log buffers are filled with noise from
-    // normal operations. It will fail if done immediately after a
-    // logcat -c.
-    struct logger_list * logger_list = android_logger_list_alloc(ANDROID_LOG_WRONLY, 0, 0);
-
-    for(int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
-        log_id_t id = static_cast<log_id_t>(i);
-        const char *name = android_log_id_to_name(id);
-        if (id != android_name_to_log_id(name)) {
-            continue;
-        }
-        fprintf(stderr, "log buffer %s\r", name);
-        struct logger * logger;
-        EXPECT_TRUE(NULL != (logger = android_logger_open(logger_list, id)));
-        EXPECT_EQ(id, android_logger_get_id(logger));
-        ssize_t get_log_size = android_logger_get_log_size(logger);
-        /* security buffer is allowed to be denied */
-        if (strcmp("security", name)) {
-            EXPECT_LT(0, get_log_size);
-            /* crash buffer is allowed to be empty, that is actually healthy! */
-            EXPECT_LE((strcmp("crash", name)) != 0,
-                      android_logger_get_log_readable_size(logger));
-        } else {
-            EXPECT_NE(0, get_log_size);
-            if (get_log_size < 0) {
-                EXPECT_GT(0, android_logger_get_log_readable_size(logger));
-            } else {
-                EXPECT_LE(0, android_logger_get_log_readable_size(logger));
-            }
-        }
-        EXPECT_LT(0, android_logger_get_log_version(logger));
-    }
-
-    android_logger_list_close(logger_list);
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}
-
 #ifdef __ANDROID__
 static bool checkPriForTag(AndroidLogFormat *p_format, const char *tag, android_LogPriority pri) {
     return android_log_shouldPrintLine(p_format, tag, pri)
