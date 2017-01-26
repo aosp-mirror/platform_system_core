@@ -23,6 +23,8 @@
 
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
+#include <binder/PermissionCache.h>
+#include <private/android_filesystem_config.h>
 
 #include <storaged.h>
 #include <storaged_service.h>
@@ -44,14 +46,13 @@ std::vector<struct uid_info> BpStoraged::dump_uids(const char* /*option*/) {
     }
     return res;
 }
-
 IMPLEMENT_META_INTERFACE(Storaged, "Storaged");
 
 status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {
-    data.checkInterface(this);
-
     switch(code) {
         case DUMPUIDS: {
+                if (!data.checkInterface(this))
+                    return BAD_TYPE;
                 std::vector<struct uid_info> res = dump_uids(NULL);
                 reply->writeInt32(res.size());
                 for (auto uid : res) {
@@ -76,6 +77,27 @@ std::vector<struct uid_info> Storaged::dump_uids(const char* /* option */) {
     }
     return uids_v;
 }
+
+status_t Storaged::dump(int fd, const Vector<String16>& /* args */) {
+    IPCThreadState* self = IPCThreadState::self();
+    const int pid = self->getCallingPid();
+    const int uid = self->getCallingUid();
+    if ((uid != AID_SHELL) &&
+        !PermissionCache::checkPermission(
+                String16("android.permission.DUMP"), pid, uid)) {
+        return PERMISSION_DENIED;
+    }
+
+    const std::vector<struct uid_event>& events = storaged.get_uid_events();
+    for (const auto& event : events) {
+        dprintf(fd, "%s %llu %llu %llu\n", event.name.c_str(),
+            (unsigned long long)event.read_bytes,
+            (unsigned long long)event.write_bytes,
+            (unsigned long long)event.interval);
+    }
+    return NO_ERROR;
+}
+
 
 sp<IStoraged> get_storaged_service() {
     sp<IServiceManager> sm = defaultServiceManager();

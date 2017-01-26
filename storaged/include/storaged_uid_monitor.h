@@ -21,6 +21,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 enum {
     UID_FOREGROUND = 0,
@@ -39,22 +40,33 @@ struct uid_info {
     uint32_t uid;                   // user id
     std::string name;               // package name
     struct uid_io_stats io[UID_STATS_SIZE];      // [0]:foreground [1]:background
+};
 
+struct uid_event {
+    std::string name;
+    uint64_t read_bytes;
+    uint64_t write_bytes;
+    uint64_t interval;
 };
 
 class uid_monitor {
 private:
     std::unordered_map<uint32_t, struct uid_info> last_uids;
+    std::vector<struct uid_event> events;
+    sem_t events_lock;
     void set_last_uids(std::unordered_map<uint32_t, struct uid_info>&& uids, uint64_t ts);
     int interval;  // monitor interval in seconds
     int threshold; // monitor threshold in bytes
     uint64_t last_report_ts; // timestamp of last report in nsec
 public:
     uid_monitor();
+    ~uid_monitor();
     void set_periodic_chores_params(int intvl, int thold) { interval = intvl; threshold = thold; }
     int get_periodic_chores_interval() { return interval; }
     std::unordered_map<uint32_t, struct uid_info> get_uids();
     void report();
+    void add_event(const struct uid_event& event);
+    std::vector<struct uid_event> dump_events();
 };
 
 #endif /* _STORAGED_UID_MONITOR_H_ */
