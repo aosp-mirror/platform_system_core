@@ -33,8 +33,6 @@
 #include "storaged.h"
 #include "storaged_uid_monitor.h"
 
-static const uint64_t io_alert_threshold = 1024 * 1024 * 1024; // 1GB
-
 using namespace android;
 using namespace android::base;
 
@@ -116,7 +114,7 @@ void uid_monitor::report()
 
     uint64_t curr_ts = ts.tv_sec * NS_PER_SEC + ts.tv_nsec;
     uint64_t ts_delta = curr_ts - last_report_ts;
-    uint64_t adjusted_threshold = io_alert_threshold * ((double)ts_delta / interval / NS_PER_SEC);
+    uint64_t adjusted_threshold = threshold * ((double)ts_delta / interval / NS_PER_SEC);
 
     std::unordered_map<uint32_t, struct uid_info> uids = get_uids();
     if (uids.empty()) {

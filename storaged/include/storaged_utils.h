@@ -31,14 +31,10 @@ struct disk_stats get_inc_disk_stats(struct disk_stats* prev, struct disk_stats*
 void add_disk_stats(struct disk_stats* src, struct disk_stats* dst);
 bool parse_emmc_ecsd(int ext_csd_fd, struct emmc_info* info);
 
-// Task I/O
-bool parse_task_info(uint32_t pid, struct task_info* info);
-void sort_running_tasks_info(std::vector<struct task_info> &tasks);
 // UID I/O
 void sort_running_uids_info(std::vector<struct uid_info> &uids);
 
 // Logging
-void log_console_running_tasks_info(std::vector<struct task_info> tasks);
 void log_console_running_uids_info(std::vector<struct uid_info> uids);
 
 void log_debug_disk_perf(struct disk_perf* perf, const char* type);
