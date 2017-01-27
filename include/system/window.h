@@ -356,7 +356,6 @@ enum {
     NATIVE_WINDOW_ENABLE_FRAME_TIMESTAMPS   = 23,
     NATIVE_WINDOW_GET_FRAME_TIMESTAMPS      = 24,
     NATIVE_WINDOW_GET_REFRESH_CYCLE_DURATION= 25,
-    NATIVE_WINDOW_GET_REFRESH_CYCLE_PERIOD  = 26,
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -1047,14 +1046,6 @@ static inline int native_window_get_refresh_cycle_duration(
 {
     return window->perform(window, NATIVE_WINDOW_GET_REFRESH_CYCLE_DURATION,
             outRefreshDuration);
-}
-
-static inline int native_window_get_refresh_cycle_period(
-        struct ANativeWindow* window,
-        int64_t* outMinRefreshDuration, int64_t* outMaxRefreshDuration)
-{
-    return window->perform(window, NATIVE_WINDOW_GET_REFRESH_CYCLE_PERIOD,
-            outMinRefreshDuration, outMaxRefreshDuration);
 }
 
 
