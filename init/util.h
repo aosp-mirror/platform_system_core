@@ -55,8 +55,8 @@ class Timer {
     return std::chrono::duration_cast<double_duration>(boot_clock::now() - start_).count();
   }
 
-  int64_t duration_ns() const {
-    return (boot_clock::now() - start_).count();
+  int64_t duration_ms() const {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(boot_clock::now() - start_).count();
   }
 
  private:
