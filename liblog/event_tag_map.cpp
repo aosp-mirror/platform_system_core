@@ -38,10 +38,9 @@ typedef std::experimental::string_view MapString;
 
 typedef std::pair<MapString, MapString> TagFmt;
 
-template <> struct _LIBCPP_TYPE_VIS_ONLY std::hash<TagFmt>
+template <> struct std::hash<TagFmt>
         : public std::unary_function<const TagFmt&, size_t> {
-    _LIBCPP_INLINE_VISIBILITY
-    size_t operator()(const TagFmt& __t) const _NOEXCEPT {
+    size_t operator()(const TagFmt& __t) const noexcept {
         // Tag is typically unique.  Will cost us an extra 100ns for the
         // unordered_map lookup if we instead did a hash that combined
         // both of tag and fmt members, e.g.:
