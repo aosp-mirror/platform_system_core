@@ -7,6 +7,8 @@
 #include <log/log_id.h>
 #include <log/log_main.h>
 #include <log/log_radio.h>
+#include <log/log_read.h>
+#include <log/log_time.h>
 
 /*
  * LOG_TAG is the local tag used for the following simplified
