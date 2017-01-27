@@ -332,6 +332,15 @@ void fb_queue_download(const char *name, void *data, uint32_t size)
     a->msg = mkmsg("downloading '%s'", name);
 }
 
+void fb_queue_download_fd(const char *name, int fd, uint32_t sz)
+{
+    Action *a;
+    a = queue_action(OP_DOWNLOAD_FD, "");
+    a->fd = fd;
+    a->size = sz;
+    a->msg = mkmsg("sending '%s' (%d KB)", name, sz / 1024);
+}
+
 void fb_queue_notice(const char *notice)
 {
     Action *a = queue_action(OP_NOTICE, "");

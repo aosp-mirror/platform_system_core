@@ -371,6 +371,10 @@ static void usage() {
             "  continue                                 Continue with autoboot.\n"
             "  reboot [bootloader|emergency]            Reboot device [into bootloader or emergency mode].\n"
             "  reboot-bootloader                        Reboot device into bootloader.\n"
+            "  oem <parameter1> ... <parameterN>        Executes oem specific command.\n"
+            "  stage <infile>                           Sends contents of <infile> to stage for\n"
+            "                                           the next command. Supported only on\n"
+            "                                           Android Things devices.\n"
             "  help                                     Show this help message.\n"
             "\n"
             "options:\n"
@@ -1806,6 +1810,15 @@ int main(int argc, char **argv)
             }
             fb_set_active(slot.c_str());
             skip(2);
+        } else if(!strcmp(*argv, "stage")) {
+            require(2);
+            std::string infile(argv[1]);
+            skip(2);
+            struct fastboot_buffer buf;
+            if (!load_buf(transport, infile.c_str(), &buf) || buf.type != FB_BUFFER_FD) {
+                die("cannot load '%s'", infile.c_str());
+            }
+            fb_queue_download_fd(infile.c_str(), buf.fd, buf.sz);
         } else if(!strcmp(*argv, "oem")) {
             argc = do_oem_command(argc, argv);
         } else if(!strcmp(*argv, "flashing")) {
