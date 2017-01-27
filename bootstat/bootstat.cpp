@@ -212,10 +212,8 @@ void RecordInitBootTimeProp(
     BootEventRecordStore* boot_event_store, const char* property) {
   std::string value = GetProperty(property);
 
-  int32_t time_in_ns;
-  if (android::base::ParseInt(value, &time_in_ns)) {
-    static constexpr int32_t kNanosecondsPerMillisecond = 1e6;
-    int32_t time_in_ms = static_cast<int32_t>(time_in_ns / kNanosecondsPerMillisecond);
+  int32_t time_in_ms;
+  if (android::base::ParseInt(value, &time_in_ms)) {
     boot_event_store->AddBootEventWithValue(property, time_in_ms);
   }
 }
