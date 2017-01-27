@@ -80,7 +80,7 @@ cc_library {
                 "ashmem-dev.c",
                 "klog.cpp",
                 "partition_utils.c",
-                "properties.c",
+                "properties.cpp",
                 "qtaguid.c",
                 "trace-dev.c",
                 "uevent.c",
