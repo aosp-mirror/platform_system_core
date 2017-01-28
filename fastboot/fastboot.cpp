@@ -358,7 +358,7 @@ static void usage() {
             "  devices [-l]                             List all connected devices [with\n"
             "                                           device paths].\n"
             "  continue                                 Continue with autoboot.\n"
-            "  reboot [bootloader]                      Reboot device [into bootloader].\n"
+            "  reboot [bootloader|emergency]            Reboot device [into bootloader or emergency mode].\n"
             "  reboot-bootloader                        Reboot device into bootloader.\n"
             "  help                                     Show this help message.\n"
             "\n"
@@ -1397,6 +1397,7 @@ int main(int argc, char **argv)
     bool wants_wipe = false;
     bool wants_reboot = false;
     bool wants_reboot_bootloader = false;
+    bool wants_reboot_emergency = false;
     bool skip_reboot = false;
     bool wants_set_active = false;
     bool skip_secondary = false;
@@ -1647,6 +1648,10 @@ int main(int argc, char **argv)
                     wants_reboot = false;
                     wants_reboot_bootloader = true;
                     skip(1);
+                } else if (!strcmp(*argv, "emergency")) {
+                    wants_reboot = false;
+                    wants_reboot_emergency = true;
+                    skip(1);
                 }
             }
             require(0);
@@ -1806,6 +1811,9 @@ int main(int argc, char **argv)
         fb_queue_wait_for_disconnect();
     } else if (wants_reboot_bootloader) {
         fb_queue_command("reboot-bootloader", "rebooting into bootloader");
+        fb_queue_wait_for_disconnect();
+    } else if (wants_reboot_emergency) {
+        fb_queue_command("reboot-emergency", "rebooting into emergency download (EDL) mode");
         fb_queue_wait_for_disconnect();
     }
 

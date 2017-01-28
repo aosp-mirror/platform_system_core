@@ -92,7 +92,6 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
     HRESULT result;
     SInt32 score;
     UInt8 interfaceNumEndpoints;
-    UInt8 configuration;
 
     // Placing the constant KIOUSBFindInterfaceDontCare into the following
     // fields of the IOUSBFindInterfaceRequest structure will allow us to
@@ -101,13 +100,6 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
     request.bInterfaceSubClass = kIOUSBFindInterfaceDontCare;
     request.bInterfaceProtocol = kIOUSBFindInterfaceDontCare;
     request.bAlternateSetting = kIOUSBFindInterfaceDontCare;
-
-    // SetConfiguration will kill an existing UMS connection, so let's
-    // not do this if not necessary.
-    configuration = 0;
-    (*dev)->GetConfiguration(dev, &configuration);
-    if (configuration != 1)
-        (*dev)->SetConfiguration(dev, 1);
 
     // Get an iterator for the interfaces on the device
     kr = (*dev)->CreateInterfaceIterator(dev, &request, &iterator);
