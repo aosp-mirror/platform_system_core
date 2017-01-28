@@ -388,7 +388,13 @@ static void adb_auth_inotify_update(int fd, unsigned fd_event, void*) {
 
 static void adb_auth_inotify_init(const std::set<std::string>& paths) {
     LOG(INFO) << "adb_auth_inotify_init...";
+
     int infd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
+    if (infd < 0) {
+        PLOG(ERROR) << "failed to create inotify fd";
+        return;
+    }
+
     for (const std::string& path : paths) {
         int wd = inotify_add_watch(infd, path.c_str(), IN_CREATE | IN_MOVED_TO);
         if (wd < 0) {
