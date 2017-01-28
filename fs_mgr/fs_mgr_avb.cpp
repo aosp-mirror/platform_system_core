@@ -209,21 +209,21 @@ static bool load_vbmeta_prop(androidboot_vbmeta *vbmeta_prop)
         expected_digest_size = SHA512_DIGEST_LENGTH * 2;
         vbmeta_prop->hash_alg = kSHA512;
     } else {
-        ERROR("Unknown hash algorithm: %s\n", hash_alg.c_str());
+        LERROR << "Unknown hash algorithm: " << hash_alg.c_str();
         return false;
     }
 
     // Reads digest.
     if (digest.size() != expected_digest_size) {
-        ERROR("Unexpected digest size: %zu (expected %zu)\n", digest.size(),
-              expected_digest_size);
+        LERROR << "Unexpected digest size: " << digest.size() << " (expected: "
+               << expected_digest_size << ")";
         return false;
     }
 
     if (!hex_to_bytes(vbmeta_prop->digest, sizeof(vbmeta_prop->digest),
                       digest)) {
-        ERROR("Hash digest contains non-hexidecimal character: %s\n",
-              digest.c_str());
+        LERROR << "Hash digest contains non-hexidecimal character: "
+               << digest.c_str();
         return false;
     }
 
@@ -252,7 +252,7 @@ static bool verify_vbmeta_images(const AvbSlotVerifyData &verify_data,
                                  const androidboot_vbmeta &vbmeta_prop)
 {
     if (verify_data.num_vbmeta_images == 0) {
-        ERROR("No vbmeta images\n");
+        LERROR << "No vbmeta images";
         return false;
     }
 
@@ -268,13 +268,13 @@ static bool verify_vbmeta_images(const AvbSlotVerifyData &verify_data,
     }
 
     if (total_size != vbmeta_prop.vbmeta_size) {
-        ERROR("total vbmeta size mismatch: %zu (expected: %zu)\n", total_size,
-              vbmeta_prop.vbmeta_size);
+        LERROR << "total vbmeta size mismatch: " << total_size
+               << " (expected: " << vbmeta_prop.vbmeta_size << ")";
         return false;
     }
 
     if (!digest_matched) {
-        ERROR("vbmeta digest mismatch\n");
+        LERROR << "vbmeta digest mismatch";
         return false;
     }
 
@@ -326,11 +326,11 @@ static bool hashtree_load_verity_table(
     }
 
     if (res < 0 || (size_t)res >= bufsize) {
-        ERROR("Error building verity table; insufficient buffer size?\n");
+        LERROR << "Error building verity table; insufficient buffer size?";
         return false;
     }
 
-    INFO("loading verity table: '%s'", verity_params);
+    LINFO << "Loading verity table: '" << verity_params << "'";
 
     // Sets ext target boundary.
     verity_params += strlen(verity_params) + 1;
@@ -339,7 +339,7 @@ static bool hashtree_load_verity_table(
 
     // Sends the ioctl to load the verity table.
     if (ioctl(fd, DM_TABLE_LOAD, io)) {
-        ERROR("Error loading verity table (%s)\n", strerror(errno));
+        PERROR << "Error loading verity table";
         return false;
     }
 
@@ -354,7 +354,7 @@ static bool hashtree_dm_verity_setup(struct fstab_rec *fstab_entry,
     // Gets the device mapper fd.
     android::base::unique_fd fd(open("/dev/device-mapper", O_RDWR));
     if (fd < 0) {
-        ERROR("Error opening device mapper (%s)\n", strerror(errno));
+        PERROR << "Error opening device mapper";
         return false;
     }
 
@@ -363,14 +363,14 @@ static bool hashtree_dm_verity_setup(struct fstab_rec *fstab_entry,
     struct dm_ioctl *io = (struct dm_ioctl *)buffer;
     const std::string mount_point(basename(fstab_entry->mount_point));
     if (!fs_mgr_create_verity_device(io, mount_point, fd)) {
-        ERROR("Couldn't create verity device!\n");
+        LERROR << "Couldn't create verity device!";
         return false;
     }
 
     // Gets the name of the device file.
     std::string verity_blk_name;
     if (!fs_mgr_get_verity_device_name(io, mount_point, fd, &verity_blk_name)) {
-        ERROR("Couldn't get verity device number!\n");
+        LERROR << "Couldn't get verity device number!";
         return false;
     }
 
@@ -378,7 +378,7 @@ static bool hashtree_dm_verity_setup(struct fstab_rec *fstab_entry,
     if (!hashtree_load_verity_table(io, mount_point, fd,
                                     std::string(fstab_entry->blk_device),
                                     hashtree_desc, salt, root_digest)) {
-        ERROR("Couldn't load verity table!\n");
+        LERROR << "Couldn't load verity table!";
         return false;
     }
 
@@ -432,16 +432,16 @@ static bool get_hashtree_descriptor(const std::string &partition_name,
             verify_data.vbmeta_images[i].partition_name);
         if (vbmeta_partition_name != "vbmeta" &&
             vbmeta_partition_name != partition_name) {
-            WARNING("Skip vbmeta image at %s for partition: %s\n",
-                    verify_data.vbmeta_images[i].partition_name,
-                    partition_name.c_str());
+            LWARNING << "Skip vbmeta image at "
+                     << verify_data.vbmeta_images[i].partition_name
+                     << " for partition: " << partition_name.c_str();
             continue;
         }
 
         for (size_t j = 0; j < num_descriptors && !found; j++) {
             AvbDescriptor desc;
             if (!avb_descriptor_validate_and_byteswap(descriptors[j], &desc)) {
-                WARNING("Descriptor is invalid.\n");
+                LWARNING << "Descriptor[" << j << "] is invalid";
                 continue;
             }
             if (desc.tag == AVB_DESCRIPTOR_TAG_HASHTREE) {
@@ -468,7 +468,7 @@ static bool get_hashtree_descriptor(const std::string &partition_name,
     }
 
     if (!found) {
-        ERROR("Partition descriptor not found: %s\n", partition_name.c_str());
+        LERROR << "Partition descriptor not found: " << partition_name.c_str();
         return false;
     }
 
@@ -530,7 +530,7 @@ int fs_mgr_load_vbmeta_images(struct fstab *fstab)
     FS_MGR_CHECK(fstab != nullptr);
 
     if (!polling_vbmeta_blk_device(fstab)) {
-        ERROR("Failed to find block device of /vbmeta\n");
+        LERROR << "Failed to find block device of /vbmeta";
         return FS_MGR_SETUP_AVB_FAIL;
     }
 
@@ -542,7 +542,7 @@ int fs_mgr_load_vbmeta_images(struct fstab *fstab)
 
     fs_mgr_avb_ops = fs_mgr_dummy_avb_ops_new(fstab);
     if (fs_mgr_avb_ops == nullptr) {
-        ERROR("Failed to allocate dummy avb_ops\n");
+        LERROR << "Failed to allocate dummy avb_ops";
         return FS_MGR_SETUP_AVB_FAIL;
     }
 
@@ -562,17 +562,17 @@ int fs_mgr_load_vbmeta_images(struct fstab *fstab)
     //   - AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION (for UNLOCKED state).
     if (verify_result == AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION) {
         if (!fs_mgr_vbmeta_prop.allow_verification_error) {
-            ERROR("ERROR_VERIFICATION isn't allowed\n");
+            LERROR << "ERROR_VERIFICATION isn't allowed";
             goto fail;
         }
     } else if (verify_result != AVB_SLOT_VERIFY_RESULT_OK) {
-        ERROR("avb_slot_verify failed, result: %d\n", verify_result);
+        LERROR << "avb_slot_verify failed, result: " << verify_result;
         goto fail;
     }
 
     // Verifies vbmeta images against the digest passed from bootloader.
     if (!verify_vbmeta_images(*fs_mgr_avb_verify_data, fs_mgr_vbmeta_prop)) {
-        ERROR("verify_vbmeta_images failed\n");
+        LERROR << "verify_vbmeta_images failed";
         goto fail;
     } else {
         // Checks whether FLAGS_HASHTREE_DISABLED is set.
@@ -619,8 +619,8 @@ int fs_mgr_setup_avb(struct fstab_rec *fstab_entry)
     std::string partition_name(basename(fstab_entry->mount_point));
     if (!avb_validate_utf8((const uint8_t *)partition_name.c_str(),
                            partition_name.length())) {
-        ERROR("Partition name: %s is not valid UTF-8.\n",
-              partition_name.c_str());
+        LERROR << "Partition name: " << partition_name.c_str()
+               << " is not valid UTF-8.";
         return FS_MGR_SETUP_AVB_FAIL;
     }
 

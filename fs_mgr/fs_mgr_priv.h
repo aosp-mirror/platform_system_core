@@ -17,11 +17,9 @@
 #ifndef __CORE_FS_MGR_PRIV_H
 #define __CORE_FS_MGR_PRIV_H
 
-#include <cutils/klog.h>
+#include <android-base/logging.h>
 #include <fs_mgr.h>
 
-#ifdef __cplusplus
-#include <android-base/logging.h>
 /* The CHECK() in logging.h will use program invocation name as the tag.
  * Thus, the log will have prefix "init: " when libfs_mgr is statically
  * linked in the init process. This might be opaque when debugging.
@@ -29,13 +27,20 @@
  * indicate the check happens in fs_mgr.
  */
 #define FS_MGR_CHECK(x) CHECK(x) << "in libfs_mgr "
-#endif
+
+#define FS_MGR_TAG "[libfs_mgr]"
+
+// Logs a message to kernel
+#define LINFO    LOG(INFO) << FS_MGR_TAG
+#define LWARNING LOG(WARNING) << FS_MGR_TAG
+#define LERROR   LOG(ERROR) << FS_MGR_TAG
+
+// Logs a message with strerror(errno) at the end
+#define PINFO    PLOG(INFO) << FS_MGR_TAG
+#define PWARNING PLOG(WARNING) << FS_MGR_TAG
+#define PERROR   PLOG(ERROR) << FS_MGR_TAG
 
 __BEGIN_DECLS
-
-#define INFO(x...)    KLOG_INFO("fs_mgr", x)
-#define WARNING(x...) KLOG_WARNING("fs_mgr", x)
-#define ERROR(x...)   KLOG_ERROR("fs_mgr", x)
 
 #define CRYPTO_TMPFS_OPTIONS "size=256m,mode=0771,uid=1000,gid=1000"
 
