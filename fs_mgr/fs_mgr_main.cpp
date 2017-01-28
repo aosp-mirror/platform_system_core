@@ -27,7 +27,8 @@ char *me = nullptr;
 
 static void usage(void)
 {
-    ERROR("%s: usage: %s <-a | -n mnt_point blk_dev | -u> <fstab_file>\n", me, me);
+    LERROR << me << ": usage: " << me
+           << " <-a | -n mnt_point blk_dev | -u> <fstab_file>";
     exit(1);
 }
 
@@ -88,7 +89,9 @@ int main(int argc, char * const argv[])
     const char *fstab_file=NULL;
     struct fstab *fstab=NULL;
 
-    klog_set_level(6);
+    setenv("ANDROID_LOG_TAGS", "*:i", 1); // Set log level to INFO
+    android::base::InitLogging(
+        const_cast<char **>(argv), &android::base::KernelLogger);
 
     parse_options(argc, argv, &a_flag, &u_flag, &n_flag, &n_name, &n_blk_dev);
 
@@ -104,7 +107,7 @@ int main(int argc, char * const argv[])
     } else if (u_flag) {
         return fs_mgr_unmount_all(fstab);
     } else {
-        ERROR("%s: Internal error, unknown option\n", me);
+        LERROR << me << ": Internal error, unknown option";
         exit(1);
     }
 
