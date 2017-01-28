@@ -196,7 +196,7 @@ static int parse_flags(char *flags, struct flag_list *fl,
                         }
                     }
                     if (flag_vals->file_encryption_mode == 0) {
-                        ERROR("Unknown file encryption mode: %s\n", mode);
+                        LERROR << "Unknown file encryption mode: " << mode;
                     }
                 } else if ((fl[i].flag == MF_LENGTH) && flag_vals) {
                     /* The length flag is followed by an = and the
@@ -226,7 +226,7 @@ static int parse_flags(char *flags, struct flag_list *fl,
                             flag_vals->partnum = strtol(part_start, NULL, 0);
                         }
                     } else {
-                        ERROR("Warning: voldmanaged= flag malformed\n");
+                        LERROR << "Warning: voldmanaged= flag malformed";
                     }
                 } else if ((fl[i].flag == MF_SWAPPRIO) && flag_vals) {
                     flag_vals->swap_prio = strtoll(strchr(p, '=') + 1, NULL, 0);
@@ -276,7 +276,7 @@ static int parse_flags(char *flags, struct flag_list *fl,
                 /* fs_options was not passed in, so if the flag is unknown
                  * it's an error.
                  */
-                ERROR("Warning: unknown flag %s\n", p);
+                LERROR << "Warning: unknown flag " << p;
             }
         }
         p = strtok_r(NULL, ",", &savep);
@@ -321,7 +321,7 @@ struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
     }
 
     if (!entries) {
-        ERROR("No entries found in fstab\n");
+        LERROR << "No entries found in fstab";
         goto err;
     }
 
@@ -354,30 +354,30 @@ struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
          * between the two reads.
          */
         if (cnt >= entries) {
-            ERROR("Tried to process more entries than counted\n");
+            LERROR << "Tried to process more entries than counted";
             break;
         }
 
         if (!(p = strtok_r(line, delim, &save_ptr))) {
-            ERROR("Error parsing mount source\n");
+            LERROR << "Error parsing mount source";
             goto err;
         }
         fstab->recs[cnt].blk_device = strdup(p);
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
-            ERROR("Error parsing mount_point\n");
+            LERROR << "Error parsing mount_point";
             goto err;
         }
         fstab->recs[cnt].mount_point = strdup(p);
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
-            ERROR("Error parsing fs_type\n");
+            LERROR << "Error parsing fs_type";
             goto err;
         }
         fstab->recs[cnt].fs_type = strdup(p);
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
-            ERROR("Error parsing mount_flags\n");
+            LERROR << "Error parsing mount_flags";
             goto err;
         }
         tmp_fs_options[0] = '\0';
@@ -392,7 +392,7 @@ struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
         }
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
-            ERROR("Error parsing fs_mgr_options\n");
+            LERROR << "Error parsing fs_mgr_options";
             goto err;
         }
         fstab->recs[cnt].fs_mgr_flags = parse_flags(p, fs_mgr_flags,
@@ -413,7 +413,7 @@ struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
     }
     /* If an A/B partition, modify block device to be the real block device */
     if (fs_mgr_update_for_slotselect(fstab) != 0) {
-        ERROR("Error updating for slotselect\n");
+        LERROR << "Error updating for slotselect";
         goto err;
     }
     free(line);
@@ -433,7 +433,7 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
 
     fstab_file = fopen(fstab_path, "r");
     if (!fstab_file) {
-        ERROR("Cannot open file %s\n", fstab_path);
+        LERROR << "Cannot open file " << fstab_path;
         return NULL;
     }
     fstab = fs_mgr_read_fstab_file(fstab_file);
