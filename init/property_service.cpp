@@ -575,16 +575,16 @@ static void load_persistent_properties() {
 }
 
 void property_load_boot_defaults() {
-    load_properties_from_file(PROP_PATH_RAMDISK_DEFAULT, NULL);
-    load_properties_from_file(PROP_PATH_ODM_DEFAULT, NULL);
-    load_properties_from_file(PROP_PATH_VENDOR_DEFAULT, NULL);
+    load_properties_from_file("/default.prop", NULL);
+    load_properties_from_file("/odm/default.prop", NULL);
+    load_properties_from_file("/vendor/default.prop", NULL);
 }
 
 static void load_override_properties() {
     if (ALLOW_LOCAL_PROP_OVERRIDE) {
         std::string debuggable = property_get("ro.debuggable");
         if (debuggable == "1") {
-            load_properties_from_file(PROP_PATH_LOCAL_OVERRIDE, NULL);
+            load_properties_from_file("/data/local.prop", NULL);
         }
     }
 }
@@ -639,10 +639,10 @@ void load_recovery_id_prop() {
 }
 
 void load_system_props() {
-    load_properties_from_file(PROP_PATH_SYSTEM_BUILD, NULL);
-    load_properties_from_file(PROP_PATH_ODM_BUILD, NULL);
-    load_properties_from_file(PROP_PATH_VENDOR_BUILD, NULL);
-    load_properties_from_file(PROP_PATH_FACTORY, "ro.*");
+    load_properties_from_file("/system/build.prop", NULL);
+    load_properties_from_file("/odm/build.prop", NULL);
+    load_properties_from_file("/vendor/build.prop", NULL);
+    load_properties_from_file("/factory/factory.prop", "ro.*");
     load_recovery_id_prop();
 }
 
