@@ -45,12 +45,12 @@ static int format_ext4(char *fs_blkdev, char *fs_mnt_point, bool crypt_footer)
     int fd, rc = 0;
 
     if ((fd = open(fs_blkdev, O_WRONLY)) < 0) {
-        ERROR("Cannot open block device.  %s\n", strerror(errno));
+        PERROR << "Cannot open block device";
         return -1;
     }
 
     if ((ioctl(fd, BLKGETSIZE64, &dev_sz)) == -1) {
-        ERROR("Cannot get block device size.  %s\n", strerror(errno));
+        PERROR << "Cannot get block device size";
         close(fd);
         return -1;
     }
@@ -58,7 +58,7 @@ static int format_ext4(char *fs_blkdev, char *fs_mnt_point, bool crypt_footer)
     struct selabel_handle *sehandle = selinux_android_file_context_handle();
     if (!sehandle) {
         /* libselinux logs specific error */
-        ERROR("Cannot initialize android file_contexts");
+        LERROR << "Cannot initialize android file_contexts";
         close(fd);
         return -1;
     }
@@ -73,7 +73,7 @@ static int format_ext4(char *fs_blkdev, char *fs_mnt_point, bool crypt_footer)
     /* Use make_ext4fs_internal to avoid wiping an already-wiped partition. */
     rc = make_ext4fs_internal(fd, NULL, NULL, fs_mnt_point, 0, 0, 0, 0, 0, 0, sehandle, 0, 0, NULL, NULL, NULL);
     if (rc) {
-        ERROR("make_ext4fs returned %d.\n", rc);
+        LERROR << "make_ext4fs returned " << rc;
     }
     close(fd);
 
@@ -106,19 +106,19 @@ static int format_f2fs(char *fs_blkdev)
     for(;;) {
         pid_t p = waitpid(pid, &rc, 0);
         if (p != pid) {
-            ERROR("Error waiting for child process - %d\n", p);
+            LERROR << "Error waiting for child process - " << p;
             rc = -1;
             break;
         }
         if (WIFEXITED(rc)) {
             rc = WEXITSTATUS(rc);
-            INFO("%s done, status %d\n", args[0], rc);
+            LINFO << args[0] << " done, status " << rc;
             if (rc) {
                 rc = -1;
             }
             break;
         }
-        ERROR("Still waiting for %s...\n", args[0]);
+        LERROR << "Still waiting for " << args[0] << "...";
     }
 
     return rc;
@@ -128,14 +128,15 @@ int fs_mgr_do_format(struct fstab_rec *fstab, bool crypt_footer)
 {
     int rc = -EINVAL;
 
-    ERROR("%s: Format %s as '%s'.\n", __func__, fstab->blk_device, fstab->fs_type);
+    LERROR << __FUNCTION__ << ": Format " << fstab->blk_device
+           << " as '" << fstab->fs_type << "'";
 
     if (!strncmp(fstab->fs_type, "f2fs", 4)) {
         rc = format_f2fs(fstab->blk_device);
     } else if (!strncmp(fstab->fs_type, "ext4", 4)) {
         rc = format_ext4(fstab->blk_device, fstab->mount_point, crypt_footer);
     } else {
-        ERROR("File system type '%s' is not supported\n", fstab->fs_type);
+        LERROR << "File system type '" << fstab->fs_type << "' is not supported";
     }
 
     return rc;

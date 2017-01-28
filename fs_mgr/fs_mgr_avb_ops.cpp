@@ -66,7 +66,7 @@ static AvbIOResult read_from_partition(AvbOps *ops ATTRIBUTE_UNUSED,
         fs_mgr_get_entry_for_mount_point(fs_mgr_fstab, "/misc");
 
     if (fstab_entry == nullptr) {
-        ERROR("Partition (%s) not found in fstab\n", partition);
+        LERROR << "Partition (" << partition << ") not found in fstab";
         return AVB_IO_RESULT_ERROR_IO;
     }
 
@@ -83,7 +83,7 @@ static AvbIOResult read_from_partition(AvbOps *ops ATTRIBUTE_UNUSED,
         TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_CLOEXEC)));
 
     if (fd < 0) {
-        ERROR("Failed to open %s (%s)\n", path.c_str(), strerror(errno));
+        PERROR << "Failed to open " << path.c_str();
         return AVB_IO_RESULT_ERROR_IO;
     }
 
@@ -92,13 +92,13 @@ static AvbIOResult read_from_partition(AvbOps *ops ATTRIBUTE_UNUSED,
     if (offset < 0) {
         off64_t total_size = lseek64(fd, 0, SEEK_END);
         if (total_size == -1) {
-            ERROR("Failed to lseek64 to end of the partition\n");
+            LERROR << "Failed to lseek64 to end of the partition";
             return AVB_IO_RESULT_ERROR_IO;
         }
         offset = total_size + offset;
         // Repositions the offset to the beginning.
         if (lseek64(fd, 0, SEEK_SET) == -1) {
-            ERROR("Failed to lseek64 to the beginning of the partition\n");
+            LERROR << "Failed to lseek64 to the beginning of the partition";
             return AVB_IO_RESULT_ERROR_IO;
         }
     }
@@ -109,8 +109,8 @@ static AvbIOResult read_from_partition(AvbOps *ops ATTRIBUTE_UNUSED,
         TEMP_FAILURE_RETRY(pread64(fd, buffer, num_bytes, offset));
 
     if (num_read < 0 || (size_t)num_read != num_bytes) {
-        ERROR("Failed to read %zu bytes from %s offset %" PRId64 " (%s)\n",
-              num_bytes, path.c_str(), offset, strerror(errno));
+        PERROR << "Failed to read " << num_bytes << " bytes from "
+               << path.c_str() << " offset " << offset;
         return AVB_IO_RESULT_ERROR_IO;
     }
 
@@ -184,7 +184,7 @@ AvbOps *fs_mgr_dummy_avb_ops_new(struct fstab *fstab)
 
     ops = (AvbOps *)calloc(1, sizeof(AvbOps));
     if (ops == nullptr) {
-        ERROR("Error allocating memory for AvbOps.\n");
+        LERROR << "Error allocating memory for AvbOps";
         return nullptr;
     }
 

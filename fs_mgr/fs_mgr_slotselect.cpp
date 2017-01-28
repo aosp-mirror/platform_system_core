@@ -48,9 +48,8 @@ static int get_active_slot_suffix_from_misc(struct fstab *fstab,
         if (strcmp(fstab->recs[n].mount_point, "/misc") == 0) {
             misc_fd = open(fstab->recs[n].blk_device, O_RDONLY);
             if (misc_fd == -1) {
-                ERROR("Error opening misc partition \"%s\" (%s)\n",
-                      fstab->recs[n].blk_device,
-                      strerror(errno));
+                PERROR << "Error opening misc partition '"
+                       << fstab->recs[n].blk_device << "'";
                 return -1;
             } else {
                 break;
@@ -59,7 +58,7 @@ static int get_active_slot_suffix_from_misc(struct fstab *fstab,
     }
 
     if (misc_fd == -1) {
-        ERROR("Error finding misc partition\n");
+        LERROR << "Error finding misc partition";
         return -1;
     }
 
@@ -67,7 +66,7 @@ static int get_active_slot_suffix_from_misc(struct fstab *fstab,
     // Linux will never return partial reads when reading from block
     // devices so no need to worry about them.
     if (num_read != sizeof(msg)) {
-        ERROR("Error reading bootloader_message (%s)\n", strerror(errno));
+        PERROR << "Error reading bootloader_message";
         close(misc_fd);
         return -1;
     }
@@ -98,11 +97,11 @@ static int get_active_slot_suffix(struct fstab *fstab, char *out_suffix,
     // If we couldn't get the suffix from the kernel cmdline, try the
     // the misc partition.
     if (get_active_slot_suffix_from_misc(fstab, out_suffix, suffix_len) == 0) {
-        INFO("Using slot suffix \"%s\" from misc\n", out_suffix);
+        LINFO << "Using slot suffix '" << out_suffix << "' from misc";
         return 0;
     }
 
-    ERROR("Error determining slot_suffix\n");
+    LERROR << "Error determining slot_suffix";
 
     return -1;
 }
