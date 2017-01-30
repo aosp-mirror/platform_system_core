@@ -145,23 +145,20 @@ void uid_monitor::report()
 
     for (const auto& it : uids) {
         const struct uid_info& uid = it.second;
-        uint64_t bg_read_delta = uid.io[UID_BACKGROUND].read_bytes -
-            last_uids[uid.uid].io[UID_BACKGROUND].read_bytes;
-        uint64_t bg_write_delta = uid.io[UID_BACKGROUND].write_bytes -
-            last_uids[uid.uid].io[UID_BACKGROUND].write_bytes;
+        struct uid_event event;
 
-        if (bg_read_delta + bg_write_delta >= adjusted_threshold) {
-            struct uid_event event;
-            event.name = uid.name;
-            event.read_bytes = bg_read_delta;
-            event.write_bytes = bg_write_delta;
-            event.interval = uint64_t(ts_delta / NS_PER_SEC);
-            add_event(event);
+        event.name = uid.name;
+        event.fg_read_bytes = uid.io[UID_FOREGROUND].read_bytes -
+            last_uids[uid.uid].io[UID_FOREGROUND].read_bytes;;
+        event.fg_write_bytes = uid.io[UID_FOREGROUND].write_bytes -
+            last_uids[uid.uid].io[UID_FOREGROUND].write_bytes;;
+        event.bg_read_bytes = uid.io[UID_BACKGROUND].read_bytes -
+            last_uids[uid.uid].io[UID_BACKGROUND].read_bytes;;
+        event.bg_write_bytes = uid.io[UID_BACKGROUND].write_bytes -
+            last_uids[uid.uid].io[UID_BACKGROUND].write_bytes;;
+        event.interval = uint64_t(ts_delta / NS_PER_SEC);
 
-            android_log_event_list(EVENTLOGTAG_UID_IO_ALERT)
-                << uid.name << bg_read_delta << bg_write_delta
-                << uint64_t(ts_delta / NS_PER_SEC) << LOG_ID_EVENTS;
-        }
+        add_event(event);
     }
 
     set_last_uids(std::move(uids), curr_ts);

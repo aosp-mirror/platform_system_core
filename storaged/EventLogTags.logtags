@@ -37,5 +37,3 @@
 2732 storaged_disk_stats (type|3),(start_time|2|3),(end_time|2|3),(read_ios|2|1),(read_merges|2|1),(read_sectors|2|1),(read_ticks|2|3),(write_ios|2|1),(write_merges|2|1),(write_sectors|2|1),(write_ticks|2|3),(o_in_flight|2|1),(io_ticks|2|3),(io_in_queue|2|1)
 
 2733 storaged_emmc_info (mmc_ver|3),(eol|1),(lifetime_a|1),(lifetime_b|1)
-
-2734 storaged_uid_io_alert (name|3),(read|2),(write|2),(interval|2)

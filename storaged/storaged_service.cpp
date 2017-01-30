@@ -90,9 +90,11 @@ status_t Storaged::dump(int fd, const Vector<String16>& /* args */) {
 
     const std::vector<struct uid_event>& events = storaged.get_uid_events();
     for (const auto& event : events) {
-        dprintf(fd, "%s %llu %llu %llu\n", event.name.c_str(),
-            (unsigned long long)event.read_bytes,
-            (unsigned long long)event.write_bytes,
+        dprintf(fd, "%s %llu %llu %llu %llu %llu\n", event.name.c_str(),
+            (unsigned long long)event.fg_read_bytes,
+            (unsigned long long)event.fg_write_bytes,
+            (unsigned long long)event.bg_read_bytes,
+            (unsigned long long)event.bg_write_bytes,
             (unsigned long long)event.interval);
     }
     return NO_ERROR;
