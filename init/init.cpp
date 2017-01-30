@@ -811,7 +811,8 @@ int main(int argc, char** argv) {
     restorecon("/dev/random");
     restorecon("/dev/urandom");
     restorecon("/dev/__properties__");
-    restorecon("/property_contexts");
+    restorecon("/plat_property_contexts");
+    restorecon("/nonplat_property_contexts");
     restorecon("/sys", SELINUX_ANDROID_RESTORECON_RECURSE);
     restorecon("/dev/block", SELINUX_ANDROID_RESTORECON_RECURSE);
     restorecon("/dev/device-mapper");
