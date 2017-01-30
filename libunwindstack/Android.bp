@@ -24,6 +24,12 @@ cc_defaults {
         "-Werror",
         "-Wextra",
     ],
+
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
 }
 
 cc_defaults {
@@ -97,9 +103,6 @@ cc_defaults {
     },
 
     target: {
-        darwin: {
-            enabled: false,
-        },
         linux: {
             host_ldlibs: [
                 "-lrt",
