@@ -88,6 +88,8 @@ static int drop_privs() {
 void* storaged_main(void* s) {
     storaged_t* storaged = (storaged_t*)s;
 
+    storaged->init_battery_service();
+
     LOG_TO(SYSTEM, INFO) << "storaged: Start";
 
     for (;;) {

@@ -23,10 +23,22 @@
 #include <unordered_map>
 #include <vector>
 
-enum {
-    UID_FOREGROUND = 0,
-    UID_BACKGROUND = 1,
-    UID_STATS_SIZE = 2
+enum uid_stat_t {
+    FOREGROUND = 0,
+    BACKGROUND = 1,
+    UID_STATS = 2
+};
+
+enum charger_stat_t {
+    CHARGER_OFF = 0,
+    CHARGER_ON = 1,
+    CHARGER_STATS = 2
+};
+
+enum io_type_t {
+    READ = 0,
+    WRITE = 1,
+    IO_TYPES = 2
 };
 
 struct uid_io_stats {
@@ -39,39 +51,51 @@ struct uid_io_stats {
 struct uid_info {
     uint32_t uid;                   // user id
     std::string name;               // package name
-    struct uid_io_stats io[UID_STATS_SIZE];      // [0]:foreground [1]:background
+    struct uid_io_stats io[UID_STATS];    // [0]:foreground [1]:background
 };
 
-struct uid_event {
+struct uid_io_usage {
+    uint64_t bytes[IO_TYPES][UID_STATS][CHARGER_STATS];
+};
+
+struct uid_record {
     std::string name;
-    uint64_t fg_read_bytes;
-    uint64_t fg_write_bytes;
-    uint64_t bg_read_bytes;
-    uint64_t bg_write_bytes;
-    uint64_t ts;
-    bool operator< (const struct uid_event& e) const {
-        return ts < e.ts;
-    }
+    struct uid_io_usage ios;
 };
 
 class uid_monitor {
 private:
-    std::unordered_map<uint32_t, struct uid_info> last_uids;
-    std::vector<struct uid_event> events;
-    sem_t events_lock;
-    void set_last_uids(std::unordered_map<uint32_t, struct uid_info>&& uids, uint64_t ts);
-    int interval;  // monitor interval in seconds
-    int threshold; // monitor threshold in bytes
-    uint64_t last_report_ts; // timestamp of last report in nsec
+    // last dump from /proc/uid_io/stats, uid -> uid_info
+    std::unordered_map<uint32_t, struct uid_info> last_uid_io_stats;
+    // current io usage for next report, app name -> uid_io_usage
+    std::unordered_map<std::string, struct uid_io_usage> curr_io_stats;
+    // io usage records, timestamp -> vector of events
+    std::map<uint64_t, std::vector<struct uid_record>> records;
+    // charger ON/OFF
+    charger_stat_t charger_stat;
+    // protects curr_io_stats, last_uid_io_stats, records and charger_stat
+    sem_t um_lock;
+
+    // reads from /proc/uid_io/stats
+    std::unordered_map<uint32_t, struct uid_info> get_uid_io_stats_locked();
+    // flushes curr_io_stats to records
+    void add_records_locked(uint64_t curr_ts);
+    // updates curr_io_stats and set last_uid_io_stats
+    void update_curr_io_stats_locked();
+
 public:
     uid_monitor();
     ~uid_monitor();
-    void set_periodic_chores_params(int intvl, int thold) { interval = intvl; threshold = thold; }
-    int get_periodic_chores_interval() { return interval; }
-    std::unordered_map<uint32_t, struct uid_info> get_uids();
+    // called by storaged main thread
+    void init(charger_stat_t stat);
+    // called by storaged -u
+    std::unordered_map<uint32_t, struct uid_info> get_uid_io_stats();
+    // called by dumpsys
+    std::map<uint64_t, std::vector<struct uid_record>> dump(int hours);
+    // called by battery properties listener
+    void set_charger_state(charger_stat_t stat);
+    // called by storaged periodic_chore
     void report();
-    void add_events(const std::vector<struct uid_event>& new_events, uint64_t curr_ts);
-    std::vector<struct uid_event> dump_events(int hours);
 };
 
 #endif /* _STORAGED_UID_MONITOR_H_ */

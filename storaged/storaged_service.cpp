@@ -99,19 +99,25 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
         }
     }
 
-    const std::vector<struct uid_event>& events = storaged.get_uid_events(hours);
-    for (const auto& event : events) {
-        dprintf(fd, "%llu %s %llu %llu %llu %llu\n",
-            (unsigned long long)event.ts,
-            event.name.c_str(),
-            (unsigned long long)event.fg_read_bytes,
-            (unsigned long long)event.fg_write_bytes,
-            (unsigned long long)event.bg_read_bytes,
-            (unsigned long long)event.bg_write_bytes);
+    const std::map<uint64_t, std::vector<struct uid_record>>& records =
+                storaged.get_uid_records(hours);
+    for (const auto& it : records) {
+        dprintf(fd, "%llu\n", (unsigned long long)it.first);
+        for (const auto& record : it.second) {
+            dprintf(fd, "%s %llu %llu %llu %llu %llu %llu %llu %llu\n",
+                record.name.c_str(),
+                (unsigned long long)record.ios.bytes[READ][FOREGROUND][CHARGER_OFF],
+                (unsigned long long)record.ios.bytes[WRITE][FOREGROUND][CHARGER_OFF],
+                (unsigned long long)record.ios.bytes[READ][BACKGROUND][CHARGER_OFF],
+                (unsigned long long)record.ios.bytes[WRITE][BACKGROUND][CHARGER_OFF],
+                (unsigned long long)record.ios.bytes[READ][FOREGROUND][CHARGER_ON],
+                (unsigned long long)record.ios.bytes[WRITE][FOREGROUND][CHARGER_ON],
+                (unsigned long long)record.ios.bytes[READ][BACKGROUND][CHARGER_ON],
+                (unsigned long long)record.ios.bytes[WRITE][BACKGROUND][CHARGER_ON]);
+        }
     }
     return NO_ERROR;
 }
-
 
 sp<IStoraged> get_storaged_service() {
     sp<IServiceManager> sm = defaultServiceManager();

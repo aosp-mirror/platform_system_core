@@ -26,7 +26,11 @@
 #include <unordered_map>
 #include <vector>
 
+#include <batteryservice/IBatteryPropertiesListener.h>
+
 #include "storaged_uid_monitor.h"
+
+using namespace android;
 
 #define FRIEND_TEST(test_case_name, test_name) \
 friend class test_case_name##_##test_name##_Test
@@ -268,7 +272,7 @@ struct storaged_config {
     int event_time_check_usec;  // check how much cputime spent in event loop
 };
 
-class storaged_t {
+class storaged_t : public BnBatteryPropertiesListener {
 private:
     time_t mTimer;
     storaged_config mConfig;
@@ -294,11 +298,14 @@ public:
     }
 
     std::unordered_map<uint32_t, struct uid_info> get_uids(void) {
-        return mUidm.get_uids();
+        return mUidm.get_uid_io_stats();
     }
-    std::vector<struct uid_event> get_uid_events(int hours) {
-        return mUidm.dump_events(hours);
+    std::map<uint64_t, std::vector<struct uid_record>> get_uid_records(int hours) {
+        return mUidm.dump(hours);
     }
+
+    void init_battery_service();
+    virtual void batteryPropertiesChanged(struct BatteryProperties props);
 };
 
 // Eventlog tag
