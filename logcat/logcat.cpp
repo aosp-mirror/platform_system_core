@@ -298,6 +298,8 @@ static void show_help(const char *cmd)
                     "                  and individually flagged modifying adverbs can be added:\n"
                     "                    color descriptive epoch monotonic printable uid\n"
                     "                    usec UTC year zone\n"
+                    // private and undocumented nsec, no signal, too much noise
+                    // useful for -T or -t <timestamp> accurate testing though.
                     "  -D, --dividers  Print dividers between each log buffer\n"
                     "  -c, --clear     Clear (flush) the entire log and exit\n"
                     "                  if Log to File specified, clear fileset instead\n"
