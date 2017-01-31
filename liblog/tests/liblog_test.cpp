@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <pthread.h>
 #include <semaphore.h>
 #include <signal.h>
 #include <stdio.h>
@@ -54,44 +55,6 @@
           || (_rc == -EAGAIN));    \
     _rc; })
 
-TEST(liblog, __android_log_buf_print) {
-#ifdef __ANDROID__
-    EXPECT_LT(0, __android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_INFO,
-                                         "TEST__android_log_buf_print",
-                                         "radio"));
-    usleep(1000);
-    EXPECT_LT(0, __android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_INFO,
-                                         "TEST__android_log_buf_print",
-                                         "system"));
-    usleep(1000);
-    EXPECT_LT(0, __android_log_buf_print(LOG_ID_MAIN, ANDROID_LOG_INFO,
-                                         "TEST__android_log_buf_print",
-                                         "main"));
-    usleep(1000);
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}
-
-TEST(liblog, __android_log_buf_write) {
-#ifdef __ANDROID__
-    EXPECT_LT(0, __android_log_buf_write(LOG_ID_RADIO, ANDROID_LOG_INFO,
-                                         "TEST__android_log_buf_write",
-                                         "radio"));
-    usleep(1000);
-    EXPECT_LT(0, __android_log_buf_write(LOG_ID_SYSTEM, ANDROID_LOG_INFO,
-                                         "TEST__android_log_buf_write",
-                                         "system"));
-    usleep(1000);
-    EXPECT_LT(0, __android_log_buf_write(LOG_ID_MAIN, ANDROID_LOG_INFO,
-                                         "TEST__android_log_buf_write",
-                                         "main"));
-    usleep(1000);
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}
-
 TEST(liblog, __android_log_btwrite) {
 #ifdef __ANDROID__
     int intBuf = 0xDEADBEEF;
@@ -108,43 +71,6 @@ TEST(liblog, __android_log_btwrite) {
                                       EVENT_TYPE_STRING,
                                       Buf, sizeof(Buf) - 1));
     usleep(1000);
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}
-
-#ifdef __ANDROID__
-static void* ConcurrentPrintFn(void *arg) {
-    int ret = __android_log_buf_print(LOG_ID_MAIN, ANDROID_LOG_INFO,
-                                  "TEST__android_log_print", "Concurrent %" PRIuPTR,
-                                  reinterpret_cast<uintptr_t>(arg));
-    return reinterpret_cast<void*>(ret);
-}
-#endif
-
-#define NUM_CONCURRENT 64
-#define _concurrent_name(a,n) a##__concurrent##n
-#define concurrent_name(a,n) _concurrent_name(a,n)
-
-TEST(liblog, concurrent_name(__android_log_buf_print, NUM_CONCURRENT)) {
-#ifdef __ANDROID__
-    pthread_t t[NUM_CONCURRENT];
-    int i;
-    for (i=0; i < NUM_CONCURRENT; i++) {
-        ASSERT_EQ(0, pthread_create(&t[i], NULL,
-                                    ConcurrentPrintFn,
-                                    reinterpret_cast<void *>(i)));
-    }
-    int ret = 0;
-    for (i=0; i < NUM_CONCURRENT; i++) {
-        void* result;
-        ASSERT_EQ(0, pthread_join(t[i], &result));
-        int this_result = reinterpret_cast<uintptr_t>(result);
-        if ((0 == ret) && (0 != this_result)) {
-            ret = this_result;
-        }
-    }
-    ASSERT_LT(0, ret);
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
@@ -1184,47 +1110,6 @@ TEST(liblog, dual_reader) {
 
     EXPECT_EQ(25, count1);
     EXPECT_EQ(15, count2);
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}
-
-TEST(liblog, android_logger_get_) {
-#ifdef __ANDROID__
-    // This test assumes the log buffers are filled with noise from
-    // normal operations. It will fail if done immediately after a
-    // logcat -c.
-    struct logger_list * logger_list = android_logger_list_alloc(ANDROID_LOG_WRONLY, 0, 0);
-
-    for(int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
-        log_id_t id = static_cast<log_id_t>(i);
-        const char *name = android_log_id_to_name(id);
-        if (id != android_name_to_log_id(name)) {
-            continue;
-        }
-        fprintf(stderr, "log buffer %s\r", name);
-        struct logger * logger;
-        EXPECT_TRUE(NULL != (logger = android_logger_open(logger_list, id)));
-        EXPECT_EQ(id, android_logger_get_id(logger));
-        ssize_t get_log_size = android_logger_get_log_size(logger);
-        /* security buffer is allowed to be denied */
-        if (strcmp("security", name)) {
-            EXPECT_LT(0, get_log_size);
-            /* crash buffer is allowed to be empty, that is actually healthy! */
-            EXPECT_LE((strcmp("crash", name)) != 0,
-                      android_logger_get_log_readable_size(logger));
-        } else {
-            EXPECT_NE(0, get_log_size);
-            if (get_log_size < 0) {
-                EXPECT_GT(0, android_logger_get_log_readable_size(logger));
-            } else {
-                EXPECT_LE(0, android_logger_get_log_readable_size(logger));
-            }
-        }
-        EXPECT_LT(0, android_logger_get_log_version(logger));
-    }
-
-    android_logger_list_close(logger_list);
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif

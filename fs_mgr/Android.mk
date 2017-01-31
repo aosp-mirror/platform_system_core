@@ -11,18 +11,21 @@ common_static_libraries := \
     libcrypto \
     libext4_utils \
     libsquashfs_utils \
-    libselinux
+    libselinux \
+    libavb
 
 include $(CLEAR_VARS)
 LOCAL_CLANG := true
 LOCAL_SANITIZE := integer
 LOCAL_SRC_FILES:= \
-    fs_mgr.c \
+    fs_mgr.cpp \
     fs_mgr_dm_ioctl.cpp \
-    fs_mgr_format.c \
-    fs_mgr_fstab.c \
-    fs_mgr_slotselect.c \
-    fs_mgr_verity.cpp
+    fs_mgr_format.cpp \
+    fs_mgr_fstab.cpp \
+    fs_mgr_slotselect.cpp \
+    fs_mgr_verity.cpp \
+    fs_mgr_avb.cpp \
+    fs_mgr_avb_ops.cpp
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/include \
     system/vold \
@@ -45,7 +48,7 @@ include $(BUILD_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_CLANG := true
 LOCAL_SANITIZE := integer
-LOCAL_SRC_FILES:= fs_mgr_main.c
+LOCAL_SRC_FILES:= fs_mgr_main.cpp
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_MODULE:= fs_mgr
 LOCAL_MODULE_TAGS := optional

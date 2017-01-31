@@ -17,14 +17,30 @@
 #ifndef __CORE_FS_MGR_PRIV_H
 #define __CORE_FS_MGR_PRIV_H
 
-#include <cutils/klog.h>
+#include <android-base/logging.h>
 #include <fs_mgr.h>
 
-__BEGIN_DECLS
+/* The CHECK() in logging.h will use program invocation name as the tag.
+ * Thus, the log will have prefix "init: " when libfs_mgr is statically
+ * linked in the init process. This might be opaque when debugging.
+ * Appends "in libfs_mgr" at the end of the abort message to explicitly
+ * indicate the check happens in fs_mgr.
+ */
+#define FS_MGR_CHECK(x) CHECK(x) << "in libfs_mgr "
 
-#define INFO(x...)    KLOG_INFO("fs_mgr", x)
-#define WARNING(x...) KLOG_WARNING("fs_mgr", x)
-#define ERROR(x...)   KLOG_ERROR("fs_mgr", x)
+#define FS_MGR_TAG "[libfs_mgr]"
+
+// Logs a message to kernel
+#define LINFO    LOG(INFO) << FS_MGR_TAG
+#define LWARNING LOG(WARNING) << FS_MGR_TAG
+#define LERROR   LOG(ERROR) << FS_MGR_TAG
+
+// Logs a message with strerror(errno) at the end
+#define PINFO    PLOG(INFO) << FS_MGR_TAG
+#define PWARNING PLOG(WARNING) << FS_MGR_TAG
+#define PERROR   PLOG(ERROR) << FS_MGR_TAG
+
+__BEGIN_DECLS
 
 #define CRYPTO_TMPFS_OPTIONS "size=256m,mode=0771,uid=1000,gid=1000"
 
@@ -89,6 +105,9 @@ __BEGIN_DECLS
 #define MF_MAX_COMP_STREAMS 0x100000
 #define MF_RESERVEDSIZE     0x200000
 #define MF_QUOTA            0x400000
+#define MF_ERASEBLKSIZE     0x800000
+#define MF_LOGICALBLKSIZE  0X1000000
+#define MF_AVB             0X2000000
 
 #define DM_BUF_SIZE 4096
 

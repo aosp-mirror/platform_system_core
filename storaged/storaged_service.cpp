@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <stdint.h>
+
 #include <vector>
 
 #include <binder/IBinder.h>
@@ -21,38 +23,42 @@
 
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
+#include <binder/PermissionCache.h>
+#include <private/android_filesystem_config.h>
 
 #include <storaged.h>
 #include <storaged_service.h>
 
 extern storaged_t storaged;
 
-std::vector<struct task_info> BpStoraged::dump_tasks(const char* /*option*/) {
+std::vector<struct uid_info> BpStoraged::dump_uids(const char* /*option*/) {
     Parcel data, reply;
     data.writeInterfaceToken(IStoraged::getInterfaceDescriptor());
 
-    remote()->transact(DUMPTASKS, data, &reply);
+    remote()->transact(DUMPUIDS, data, &reply);
 
     uint32_t res_size = reply.readInt32();
-    std::vector<struct task_info> res(res_size);
-    for (auto&& task : res) {
-        reply.read(&task, sizeof(task));
+    std::vector<struct uid_info> res(res_size);
+    for (auto&& uid : res) {
+        uid.uid = reply.readInt32();
+        uid.name = reply.readCString();
+        reply.read(&uid.io, sizeof(uid.io));
     }
     return res;
 }
-
 IMPLEMENT_META_INTERFACE(Storaged, "Storaged");
 
 status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {
-    data.checkInterface(this);
-
     switch(code) {
-        case DUMPTASKS: {
-                std::vector<struct task_info> res = dump_tasks(NULL);
-
+        case DUMPUIDS: {
+                if (!data.checkInterface(this))
+                    return BAD_TYPE;
+                std::vector<struct uid_info> res = dump_uids(NULL);
                 reply->writeInt32(res.size());
-                for (auto task : res) {
-                    reply->write(&task, sizeof(task));
+                for (auto uid : res) {
+                    reply->writeInt32(uid.uid);
+                    reply->writeCString(uid.name.c_str());
+                    reply->write(&uid.io, sizeof(uid.io));
                 }
                 return NO_ERROR;
             }
@@ -61,9 +67,37 @@ status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply
             return BBinder::onTransact(code, data, reply, flags);
     }
 }
-std::vector<struct task_info> Storaged::dump_tasks(const char* /* option */) {
-    return storaged.get_tasks();
+
+std::vector<struct uid_info> Storaged::dump_uids(const char* /* option */) {
+    std::vector<struct uid_info> uids_v;
+    std::unordered_map<uint32_t, struct uid_info> uids_m = storaged.get_uids();
+
+    for (const auto& it : uids_m) {
+        uids_v.push_back(it.second);
+    }
+    return uids_v;
 }
+
+status_t Storaged::dump(int fd, const Vector<String16>& /* args */) {
+    IPCThreadState* self = IPCThreadState::self();
+    const int pid = self->getCallingPid();
+    const int uid = self->getCallingUid();
+    if ((uid != AID_SHELL) &&
+        !PermissionCache::checkPermission(
+                String16("android.permission.DUMP"), pid, uid)) {
+        return PERMISSION_DENIED;
+    }
+
+    const std::vector<struct uid_event>& events = storaged.get_uid_events();
+    for (const auto& event : events) {
+        dprintf(fd, "%s %llu %llu %llu\n", event.name.c_str(),
+            (unsigned long long)event.read_bytes,
+            (unsigned long long)event.write_bytes,
+            (unsigned long long)event.interval);
+    }
+    return NO_ERROR;
+}
+
 
 sp<IStoraged> get_storaged_service() {
     sp<IServiceManager> sm = defaultServiceManager();

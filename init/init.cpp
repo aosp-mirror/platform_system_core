@@ -178,7 +178,7 @@ static int wait_for_coldboot_done_action(const std::vector<std::string>& args) {
         panic();
     }
 
-    property_set("ro.boottime.init.cold_boot_wait", std::to_string(t.duration_ns()).c_str());
+    property_set("ro.boottime.init.cold_boot_wait", std::to_string(t.duration_ms()).c_str());
     return 0;
 }
 
@@ -576,7 +576,7 @@ static void selinux_initialize(bool in_kernel_domain) {
         }
 
         // init's first stage can't set properties, so pass the time to the second stage.
-        setenv("INIT_SELINUX_TOOK", std::to_string(t.duration_ns()).c_str(), 1);
+        setenv("INIT_SELINUX_TOOK", std::to_string(t.duration_ms()).c_str(), 1);
     } else {
         selinux_init_all_handles();
     }
@@ -757,8 +757,9 @@ int main(int argc, char** argv) {
 
         setenv("INIT_SECOND_STAGE", "true", 1);
 
-        uint64_t start_ns = start_time.time_since_epoch().count();
-        setenv("INIT_STARTED_AT", StringPrintf("%" PRIu64, start_ns).c_str(), 1);
+        static constexpr uint32_t kNanosecondsPerMillisecond = 1e6;
+        uint64_t start_ms = start_time.time_since_epoch().count() / kNanosecondsPerMillisecond;
+        setenv("INIT_STARTED_AT", StringPrintf("%" PRIu64, start_ms).c_str(), 1);
 
         char* path = argv[0];
         char* args[] = { path, nullptr };
@@ -835,7 +836,12 @@ int main(int argc, char** argv) {
     parser.AddSectionParser("service",std::make_unique<ServiceParser>());
     parser.AddSectionParser("on", std::make_unique<ActionParser>());
     parser.AddSectionParser("import", std::make_unique<ImportParser>());
-    parser.ParseConfig("/init.rc");
+    std::string bootscript = property_get("ro.boot.init_rc");
+    if (bootscript.empty()) {
+        parser.ParseConfig("/init.rc");
+    } else {
+        parser.ParseConfig(bootscript);
+    }
 
     ActionManager& am = ActionManager::GetInstance();
 

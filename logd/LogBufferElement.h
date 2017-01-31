@@ -53,8 +53,9 @@ class LogBufferElement {
     static atomic_int_fast64_t sequence;
 
     // assumption: mMsg == NULL
-    size_t populateDroppedMessage(char *&buffer,
-                                  LogBuffer *parent);
+    size_t populateDroppedMessage(char*& buffer,
+                                  LogBuffer* parent,
+                                  bool lastSame);
 public:
     LogBufferElement(log_id_t log_id, log_time realtime,
                      uid_t uid, pid_t pid, pid_t tid,
@@ -86,7 +87,8 @@ public:
     log_time getRealTime(void) const { return mRealTime; }
 
     static const uint64_t FLUSH_ERROR;
-    uint64_t flushTo(SocketClient *writer, LogBuffer *parent, bool privileged);
+    uint64_t flushTo(SocketClient* writer, LogBuffer* parent,
+                     bool privileged, bool lastSame);
 };
 
 #endif

@@ -63,6 +63,9 @@
 
 static debuggerd_callbacks_t g_callbacks;
 
+// Mutex to ensure only one crashing thread dumps itself.
+static pthread_mutex_t crash_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 // Don't use __libc_fatal because it exits via abort, which might put us back into a signal handler.
 #define fatal(...)                                             \
   do {                                                         \
@@ -153,7 +156,7 @@ static bool have_siginfo(int signum) {
 }
 
 struct debugger_thread_info {
-  bool crash_dump_started = false;
+  bool crash_dump_started;
   pid_t crashing_tid;
   pid_t pseudothread_tid;
   int signal_number;
@@ -233,12 +236,39 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   return 0;
 }
 
+static void resend_signal(siginfo_t* info, bool crash_dump_started) {
+  // Signals can either be fatal or nonfatal.
+  // For fatal signals, crash_dump will send us the signal we crashed with
+  // before resuming us, so that processes using waitpid on us will see that we
+  // exited with the correct exit status (e.g. so that sh will report
+  // "Segmentation fault" instead of "Killed"). For this to work, we need
+  // to deregister our signal handler for that signal before continuing.
+  if (info->si_signo != DEBUGGER_SIGNAL) {
+    signal(info->si_signo, SIG_DFL);
+  }
+
+  // We need to return from our signal handler so that crash_dump can see the
+  // signal via ptrace and dump the thread that crashed. However, returning
+  // does not guarantee that the signal will be thrown again, even for SIGSEGV
+  // and friends, since the signal could have been sent manually. We blocked
+  // all signals when registering the handler, so resending the signal (using
+  // rt_tgsigqueueinfo(2) to preserve SA_SIGINFO) will cause it to be delivered
+  // when our signal handler returns.
+  if (crash_dump_started || info->si_signo != DEBUGGER_SIGNAL) {
+    int rc = syscall(SYS_rt_tgsigqueueinfo, getpid(), gettid(), info->si_signo, info);
+    if (rc != 0) {
+      fatal("failed to resend signal during crash: %s", strerror(errno));
+    }
+  }
+
+  if (info->si_signo == DEBUGGER_SIGNAL) {
+    pthread_mutex_unlock(&crash_mutex);
+  }
+}
+
 // Handler that does crash dumping by forking and doing the processing in the child.
 // Do this by ptracing the relevant thread, and then execing debuggerd to do the actual dump.
 static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void*) {
-  // Mutex to prevent multiple crashing threads from trying to talk
-  // to debuggerd at the same time.
-  static pthread_mutex_t crash_mutex = PTHREAD_MUTEX_INITIALIZER;
   int ret = pthread_mutex_lock(&crash_mutex);
   if (ret != 0) {
     __libc_format_log(ANDROID_LOG_INFO, "libc", "pthread_mutex_lock failed: %s", strerror(ret));
@@ -251,14 +281,28 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void*) 
     info = nullptr;
   }
 
-  log_signal_summary(signal_number, info);
-  if (prctl(PR_GET_DUMPABLE, 0, 0, 0, 0) == 0) {
-    // process has disabled core dumps and PTRACE_ATTACH, and does not want to be dumped.
-    // Honor that intention by not connecting to debuggerd and asking it to dump our internal state.
-    __libc_format_log(ANDROID_LOG_INFO, "libc",
-                      "Suppressing debuggerd output because prctl(PR_GET_DUMPABLE)==0");
+  struct siginfo si = {};
+  if (!info) {
+    memset(&si, 0, sizeof(si));
+    si.si_signo = signal_number;
+    si.si_code = SI_USER;
+    si.si_pid = getpid();
+    si.si_uid = getuid();
+    info = &si;
+  } else if (info->si_code >= 0 || info->si_code == SI_TKILL) {
+    // rt_tgsigqueueinfo(2)'s documentation appears to be incorrect on kernels
+    // that contain commit 66dd34a (3.9+). The manpage claims to only allow
+    // negative si_code values that are not SI_TKILL, but 66dd34a changed the
+    // check to allow all si_code values in calls coming from inside the house.
+  }
 
-    pthread_mutex_unlock(&crash_mutex);
+  log_signal_summary(signal_number, info);
+
+  if (prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) == 1) {
+    // The process has NO_NEW_PRIVS enabled, so we can't transition to the crash_dump context.
+    __libc_format_log(ANDROID_LOG_INFO, "libc",
+                      "Suppressing debuggerd output because prctl(PR_GET_NO_NEW_PRIVS)==1");
+    resend_signal(info, false);
     return;
   }
 
@@ -266,8 +310,13 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void*) 
   if (g_callbacks.get_abort_message) {
     abort_message = g_callbacks.get_abort_message();
   }
+  // Populate si_value with the abort message address, if found.
+  if (abort_message) {
+    info->si_value.sival_ptr = abort_message;
+  }
 
   debugger_thread_info thread_info = {
+    .crash_dump_started = false,
     .pseudothread_tid = -1,
     .crashing_tid = gettid(),
     .signal_number = signal_number,
@@ -299,42 +348,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void*) 
     signal(signal_number, SIG_DFL);
   }
 
-  // We need to return from the signal handler so that debuggerd can dump the
-  // thread that crashed, but returning here does not guarantee that the signal
-  // will be thrown again, even for SIGSEGV and friends, since the signal could
-  // have been sent manually. Resend the signal with rt_tgsigqueueinfo(2) to
-  // preserve the SA_SIGINFO contents.
-  struct siginfo si;
-  if (!info) {
-    memset(&si, 0, sizeof(si));
-    si.si_code = SI_USER;
-    si.si_pid = getpid();
-    si.si_uid = getuid();
-    info = &si;
-  } else if (info->si_code >= 0 || info->si_code == SI_TKILL) {
-    // rt_tgsigqueueinfo(2)'s documentation appears to be incorrect on kernels
-    // that contain commit 66dd34a (3.9+). The manpage claims to only allow
-    // negative si_code values that are not SI_TKILL, but 66dd34a changed the
-    // check to allow all si_code values in calls coming from inside the house.
-  }
-
-  // Populate si_value with the abort message address, if found.
-  if (abort_message) {
-    info->si_value.sival_ptr = abort_message;
-  }
-
-  // Only resend the signal if we know that either crash_dump has ptraced us or
-  // the signal was fatal.
-  if (thread_info.crash_dump_started || signal_number != DEBUGGER_SIGNAL) {
-    int rc = syscall(SYS_rt_tgsigqueueinfo, getpid(), gettid(), signal_number, info);
-    if (rc != 0) {
-      fatal("failed to resend signal during crash: %s", strerror(errno));
-    }
-  }
-
-  if (signal_number == DEBUGGER_SIGNAL) {
-    pthread_mutex_unlock(&crash_mutex);
-  }
+  resend_signal(info, thread_info.crash_dump_started);
 }
 
 void debuggerd_init(debuggerd_callbacks_t* callbacks) {

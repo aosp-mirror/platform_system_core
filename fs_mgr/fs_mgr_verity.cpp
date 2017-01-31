@@ -94,12 +94,12 @@ static RSA *load_key(const char *path)
 
     FILE* f = fopen(path, "r");
     if (!f) {
-        ERROR("Can't open '%s'\n", path);
+        LERROR << "Can't open " << path;
         return NULL;
     }
 
     if (!fread(key_data, sizeof(key_data), 1, f)) {
-        ERROR("Could not read key!\n");
+        LERROR << "Could not read key!";
         fclose(f);
         return NULL;
     }
@@ -108,7 +108,7 @@ static RSA *load_key(const char *path)
 
     RSA* key = NULL;
     if (!android_pubkey_decode(key_data, sizeof(key_data), &key)) {
-        ERROR("Could not parse key!\n");
+        LERROR << "Could not parse key!";
         return NULL;
     }
 
@@ -128,14 +128,14 @@ static int verify_table(const uint8_t *signature, size_t signature_size,
     // Now get the public key from the keyfile
     key = load_key(VERITY_TABLE_RSA_KEY);
     if (!key) {
-        ERROR("Couldn't load verity keys\n");
+        LERROR << "Couldn't load verity keys";
         goto out;
     }
 
     // verify the result
     if (!RSA_verify(NID_sha256, hash_buf, sizeof(hash_buf), signature,
                     signature_size, key)) {
-        ERROR("Couldn't verify table\n");
+        LERROR << "Couldn't verify table";
         goto out;
     }
 
@@ -227,7 +227,7 @@ static bool format_verity_table(char *buf, const size_t bufsize,
     }
 
     if (res < 0 || (size_t)res >= bufsize) {
-        ERROR("Error building verity table; insufficient buffer size?\n");
+        LERROR << "Error building verity table; insufficient buffer size?";
         return false;
     }
 
@@ -246,7 +246,7 @@ static bool format_legacy_verity_table(char *buf, const size_t bufsize,
     }
 
     if (res < 0 || (size_t)res >= bufsize) {
-        ERROR("Error building verity table; insufficient buffer size?\n");
+        LERROR << "Error building verity table; insufficient buffer size?";
         return false;
     }
 
@@ -277,20 +277,20 @@ static int load_verity_table(struct dm_ioctl *io, const std::string &name,
     bufsize = DM_BUF_SIZE - (verity_params - buffer);
 
     if (!format(verity_params, bufsize, params)) {
-        ERROR("Failed to format verity parameters\n");
+        LERROR << "Failed to format verity parameters";
         return -1;
     }
 
-    INFO("loading verity table: '%s'", verity_params);
+    LINFO << "loading verity table: '" << verity_params << "'";
 
     // set next target boundary
     verity_params += strlen(verity_params) + 1;
-    verity_params = (char*)(((unsigned long)verity_params + 7) & ~8);
+    verity_params = (char*)(((uintptr_t)verity_params + 7) & ~7);
     tgt->next = verity_params - buffer;
 
     // send the ioctl to load the verity table
     if (ioctl(fd, DM_TABLE_LOAD, io)) {
-        ERROR("Error loading verity table (%s)\n", strerror(errno));
+        PERROR << "Error loading verity table";
         return -1;
     }
 
@@ -309,13 +309,13 @@ static int check_verity_restart(const char *fname)
 
     if (fd == -1) {
         if (errno != ENOENT) {
-            ERROR("Failed to open %s (%s)\n", fname, strerror(errno));
+            PERROR << "Failed to open " << fname;
         }
         goto out;
     }
 
     if (fstat(fd, &s) == -1) {
-        ERROR("Failed to fstat %s (%s)\n", fname, strerror(errno));
+        PERROR << "Failed to fstat " << fname;
         goto out;
     }
 
@@ -326,14 +326,12 @@ static int check_verity_restart(const char *fname)
     }
 
     if (lseek(fd, s.st_size - size, SEEK_SET) == -1) {
-        ERROR("Failed to lseek %jd %s (%s)\n", (intmax_t)(s.st_size - size), fname,
-            strerror(errno));
+        PERROR << "Failed to lseek " << (intmax_t)(s.st_size - size) << " " << fname;
         goto out;
     }
 
     if (!android::base::ReadFully(fd, buffer, size)) {
-        ERROR("Failed to read %zd bytes from %s (%s)\n", size, fname,
-            strerror(errno));
+        PERROR << "Failed to read " << size << " bytes from " << fname;
         goto out;
     }
 
@@ -405,14 +403,14 @@ static int metadata_find(const char *fname, const char *stag,
     fp = fopen(fname, "r+");
 
     if (!fp) {
-        ERROR("Failed to open %s (%s)\n", fname, strerror(errno));
+        PERROR << "Failed to open " << fname;
         goto out;
     }
 
     /* check magic */
     if (fseek(fp, start, SEEK_SET) < 0 ||
         fread(&magic, sizeof(magic), 1, fp) != 1) {
-        ERROR("Failed to read magic from %s (%s)\n", fname, strerror(errno));
+        PERROR << "Failed to read magic from " << fname;
         goto out;
     }
 
@@ -421,13 +419,13 @@ static int metadata_find(const char *fname, const char *stag,
 
         if (fseek(fp, start, SEEK_SET) < 0 ||
             fwrite(&magic, sizeof(magic), 1, fp) != 1) {
-            ERROR("Failed to write magic to %s (%s)\n", fname, strerror(errno));
+            PERROR << "Failed to write magic to " << fname;
             goto out;
         }
 
         rc = metadata_add(fp, start + sizeof(magic), stag, slength, offset);
         if (rc < 0) {
-            ERROR("Failed to add metadata to %s: %s\n", fname, strerror(errno));
+            PERROR << "Failed to add metadata to " << fname;
         }
 
         goto out;
@@ -452,14 +450,13 @@ static int metadata_find(const char *fname, const char *stag,
             start += length;
 
             if (fseek(fp, length, SEEK_CUR) < 0) {
-                ERROR("Failed to seek %s (%s)\n", fname, strerror(errno));
+                PERROR << "Failed to seek " << fname;
                 goto out;
             }
         } else {
             rc = metadata_add(fp, start, stag, slength, offset);
             if (rc < 0) {
-                ERROR("Failed to write metadata to %s: %s\n", fname,
-                    strerror(errno));
+                PERROR << "Failed to write metadata to " << fname;
             }
             goto out;
         }
@@ -483,13 +480,13 @@ static int write_verity_state(const char *fname, off64_t offset, int32_t mode)
     fd = TEMP_FAILURE_RETRY(open(fname, O_WRONLY | O_SYNC | O_CLOEXEC));
 
     if (fd == -1) {
-        ERROR("Failed to open %s (%s)\n", fname, strerror(errno));
+        PERROR << "Failed to open " << fname;
         goto out;
     }
 
     if (TEMP_FAILURE_RETRY(pwrite64(fd, &s, sizeof(s), offset)) != sizeof(s)) {
-        ERROR("Failed to write %zu bytes to %s to offset %" PRIu64 " (%s)\n",
-            sizeof(s), fname, offset, strerror(errno));
+        PERROR << "Failed to write " << sizeof(s) << " bytes to " << fname
+               << " to offset " << offset;
         goto out;
     }
 
@@ -512,13 +509,13 @@ static int read_verity_state(const char *fname, off64_t offset, int *mode)
     fd = TEMP_FAILURE_RETRY(open(fname, O_RDONLY | O_CLOEXEC));
 
     if (fd == -1) {
-        ERROR("Failed to open %s (%s)\n", fname, strerror(errno));
+        PERROR << "Failed to open " << fname;
         goto out;
     }
 
     if (TEMP_FAILURE_RETRY(pread64(fd, &s, sizeof(s), offset)) != sizeof(s)) {
-        ERROR("Failed to read %zu bytes from %s offset %" PRIu64 " (%s)\n",
-            sizeof(s), fname, offset, strerror(errno));
+        PERROR << "Failed to read " <<  sizeof(s) << " bytes from " << fname
+               << " offset " << offset;
         goto out;
     }
 
@@ -530,13 +527,13 @@ static int read_verity_state(const char *fname, off64_t offset, int *mode)
     }
 
     if (s.version != VERITY_STATE_VERSION) {
-        ERROR("Unsupported verity state version (%u)\n", s.version);
+        LERROR << "Unsupported verity state version (" << s.version << ")";
         goto out;
     }
 
     if (s.mode < VERITY_MODE_EIO ||
         s.mode > VERITY_MODE_LAST) {
-        ERROR("Unsupported verity mode (%u)\n", s.mode);
+        LERROR << "Unsupported verity mode (" << s.mode << ")";
         goto out;
     }
 
@@ -558,15 +555,14 @@ static int read_partition(const char *path, uint64_t size)
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path, O_RDONLY | O_CLOEXEC)));
 
     if (fd == -1) {
-        ERROR("Failed to open %s: %s\n", path, strerror(errno));
+        PERROR << "Failed to open " << path;
         return -errno;
     }
 
     while (size) {
         size_read = TEMP_FAILURE_RETRY(read(fd, buf, READ_BUF_SIZE));
         if (size_read == -1) {
-            ERROR("Error in reading partition %s: %s\n", path,
-                  strerror(errno));
+            PERROR << "Error in reading partition " << path;
             return -errno;
         }
         size -= size_read;
@@ -590,15 +586,13 @@ static int compare_last_signature(struct fstab_rec *fstab, int *match)
 
     if (fec_open(&f, fstab->blk_device, O_RDONLY, FEC_VERITY_DISABLE,
             FEC_DEFAULT_ROOTS) == -1) {
-        ERROR("Failed to open '%s' (%s)\n", fstab->blk_device,
-            strerror(errno));
+        PERROR << "Failed to open '" << fstab->blk_device << "'";
         return rc;
     }
 
     // read verity metadata
     if (fec_verity_get_metadata(f, &verity) == -1) {
-        ERROR("Failed to get verity metadata '%s' (%s)\n", fstab->blk_device,
-            strerror(errno));
+        PERROR << "Failed to get verity metadata '" << fstab->blk_device << "'";
         goto out;
     }
 
@@ -606,7 +600,7 @@ static int compare_last_signature(struct fstab_rec *fstab, int *match)
 
     if (snprintf(tag, sizeof(tag), VERITY_LASTSIG_TAG "_%s",
             basename(fstab->mount_point)) >= (int)sizeof(tag)) {
-        ERROR("Metadata tag name too long for %s\n", fstab->mount_point);
+        LERROR << "Metadata tag name too long for " << fstab->mount_point;
         goto out;
     }
 
@@ -618,14 +612,14 @@ static int compare_last_signature(struct fstab_rec *fstab, int *match)
     fd = TEMP_FAILURE_RETRY(open(fstab->verity_loc, O_RDWR | O_SYNC | O_CLOEXEC));
 
     if (fd == -1) {
-        ERROR("Failed to open %s: %s\n", fstab->verity_loc, strerror(errno));
+        PERROR << "Failed to open " << fstab->verity_loc;
         goto out;
     }
 
     if (TEMP_FAILURE_RETRY(pread64(fd, prev, sizeof(prev),
             offset)) != sizeof(prev)) {
-        ERROR("Failed to read %zu bytes from %s offset %" PRIu64 " (%s)\n",
-            sizeof(prev), fstab->verity_loc, offset, strerror(errno));
+        PERROR << "Failed to read " << sizeof(prev) << " bytes from "
+               << fstab->verity_loc << " offset " << offset;
         goto out;
     }
 
@@ -635,8 +629,8 @@ static int compare_last_signature(struct fstab_rec *fstab, int *match)
         /* update current signature hash */
         if (TEMP_FAILURE_RETRY(pwrite64(fd, curr, sizeof(curr),
                 offset)) != sizeof(curr)) {
-            ERROR("Failed to write %zu bytes to %s offset %" PRIu64 " (%s)\n",
-                sizeof(curr), fstab->verity_loc, offset, strerror(errno));
+            PERROR << "Failed to write " << sizeof(curr) << " bytes to "
+                   << fstab->verity_loc << " offset " << offset;
             goto out;
         }
     }
@@ -654,7 +648,7 @@ static int get_verity_state_offset(struct fstab_rec *fstab, off64_t *offset)
 
     if (snprintf(tag, sizeof(tag), VERITY_STATE_TAG "_%s",
             basename(fstab->mount_point)) >= (int)sizeof(tag)) {
-        ERROR("Metadata tag name too long for %s\n", fstab->mount_point);
+        LERROR << "Metadata tag name too long for " << fstab->mount_point;
         return -1;
     }
 
@@ -720,7 +714,7 @@ int fs_mgr_load_verity_state(int *mode)
     fstab = fs_mgr_read_fstab(fstab_filename);
 
     if (!fstab) {
-        ERROR("Failed to read %s\n", fstab_filename);
+        LERROR << "Failed to read " << fstab_filename;
         goto out;
     }
 
@@ -776,7 +770,7 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
     fd = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));
 
     if (fd == -1) {
-        ERROR("Error opening device mapper (%s)\n", strerror(errno));
+        PERROR << "Error opening device mapper";
         goto out;
     }
 
@@ -789,7 +783,7 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
     fstab = fs_mgr_read_fstab(fstab_filename);
 
     if (!fstab) {
-        ERROR("Failed to read %s\n", fstab_filename);
+        LERROR << "Failed to read " << fstab_filename;
         goto out;
     }
 
@@ -810,8 +804,8 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
             if (fstab->recs[i].fs_mgr_flags & MF_VERIFYATBOOT) {
                 status = "V";
             } else {
-                ERROR("Failed to query DM_TABLE_STATUS for %s (%s)\n",
-                      mount_point.c_str(), strerror(errno));
+                PERROR << "Failed to query DM_TABLE_STATUS for "
+                       << mount_point.c_str();
                 continue;
             }
         }
@@ -881,22 +875,20 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool verify_dev)
 
     if (fec_open(&f, fstab->blk_device, O_RDONLY, FEC_VERITY_DISABLE,
             FEC_DEFAULT_ROOTS) < 0) {
-        ERROR("Failed to open '%s' (%s)\n", fstab->blk_device,
-            strerror(errno));
+        PERROR << "Failed to open '" << fstab->blk_device << "'";
         return retval;
     }
 
     // read verity metadata
     if (fec_verity_get_metadata(f, &verity) < 0) {
-        ERROR("Failed to get verity metadata '%s' (%s)\n", fstab->blk_device,
-            strerror(errno));
+        PERROR << "Failed to get verity metadata '" << fstab->blk_device << "'";
         goto out;
     }
 
 #ifdef ALLOW_ADBD_DISABLE_VERITY
     if (verity.disabled) {
         retval = FS_MGR_SETUP_VERITY_DISABLED;
-        INFO("Attempt to cleanly disable verity - only works in USERDEBUG\n");
+        LINFO << "Attempt to cleanly disable verity - only works in USERDEBUG";
         goto out;
     }
 #endif
@@ -910,19 +902,19 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool verify_dev)
 
     // get the device mapper fd
     if ((fd = open("/dev/device-mapper", O_RDWR)) < 0) {
-        ERROR("Error opening device mapper (%s)\n", strerror(errno));
+        PERROR << "Error opening device mapper";
         goto out;
     }
 
     // create the device
     if (!fs_mgr_create_verity_device(io, mount_point, fd)) {
-        ERROR("Couldn't create verity device!\n");
+        LERROR << "Couldn't create verity device!";
         goto out;
     }
 
     // get the name of the device file
     if (!fs_mgr_get_verity_device_name(io, mount_point, fd, &verity_blk_name)) {
-        ERROR("Couldn't get verity device number!\n");
+        LERROR << "Couldn't get verity device number!";
         goto out;
     }
 
@@ -957,8 +949,8 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool verify_dev)
         }
     }
 
-    INFO("Enabling dm-verity for %s (mode %d)\n",
-         mount_point.c_str(), params.mode);
+    LINFO << "Enabling dm-verity for " << mount_point.c_str()
+          << " (mode " << params.mode << ")";
 
     if (fstab->fs_mgr_flags & MF_SLOTSELECT) {
         // Update the verity params using the actual block device path
@@ -973,7 +965,7 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool verify_dev)
 
     if (params.ecc.valid) {
         // kernel may not support error correction, try without
-        INFO("Disabling error correction for %s\n", mount_point.c_str());
+        LINFO << "Disabling error correction for " << mount_point.c_str();
         params.ecc.valid = false;
 
         if (load_verity_table(io, mount_point, verity.data_size, fd, &params,
@@ -990,7 +982,7 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool verify_dev)
 
     if (params.mode != VERITY_MODE_EIO) {
         // as a last resort, EIO mode should always be supported
-        INFO("Falling back to EIO mode for %s\n", mount_point.c_str());
+        LINFO << "Falling back to EIO mode for " << mount_point.c_str();
         params.mode = VERITY_MODE_EIO;
 
         if (load_verity_table(io, mount_point, verity.data_size, fd, &params,
@@ -999,7 +991,7 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool verify_dev)
         }
     }
 
-    ERROR("Failed to load verity table for %s\n", mount_point.c_str());
+    LERROR << "Failed to load verity table for " << mount_point.c_str();
     goto out;
 
 loaded:
@@ -1015,10 +1007,11 @@ loaded:
     // Verify the entire partition in one go
     // If there is an error, allow it to mount as a normal verity partition.
     if (fstab->fs_mgr_flags & MF_VERIFYATBOOT) {
-        INFO("Verifying partition %s at boot\n", fstab->blk_device);
+        LINFO << "Verifying partition " << fstab->blk_device << " at boot";
         int err = read_partition(verity_blk_name.c_str(), verity.data_size);
         if (!err) {
-            INFO("Verified verity partition %s at boot\n", fstab->blk_device);
+            LINFO << "Verified verity partition "
+                  << fstab->blk_device << " at boot";
             verified_at_boot = true;
         }
     }
@@ -1028,7 +1021,7 @@ loaded:
         free(fstab->blk_device);
         fstab->blk_device = strdup(verity_blk_name.c_str());
     } else if (!fs_mgr_destroy_verity_device(io, mount_point, fd)) {
-        ERROR("Failed to remove verity device %s\n", mount_point.c_str());
+        LERROR << "Failed to remove verity device " << mount_point.c_str();
         goto out;
     }
 

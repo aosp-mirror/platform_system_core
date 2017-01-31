@@ -27,6 +27,7 @@
 #include <sys/poll.h>
 
 #include <memory>
+#include <vector>
 
 #include <cutils/misc.h>
 #include <cutils/sockets.h>
@@ -48,6 +49,7 @@
 
 #include <fs_mgr.h>
 #include <android-base/file.h>
+#include <android-base/strings.h>
 #include "bootimg.h"
 
 #include "property_service.h"
@@ -70,30 +72,30 @@ void property_init() {
     }
 }
 
-static int check_mac_perms(const char *name, char *sctx, struct ucred *cr)
-{
-    char *tctx = NULL;
-    int result = 0;
+static bool check_mac_perms(const std::string& name, char* sctx, struct ucred* cr) {
+
+    if (!sctx) {
+      return false;
+    }
+
+    if (!sehandle_prop) {
+      return false;
+    }
+
+    char* tctx = nullptr;
+    if (selabel_lookup(sehandle_prop, &tctx, name.c_str(), 1) != 0) {
+      return false;
+    }
+
     property_audit_data audit_data;
 
-    if (!sctx)
-        goto err;
-
-    if (!sehandle_prop)
-        goto err;
-
-    if (selabel_lookup(sehandle_prop, &tctx, name, 1) != 0)
-        goto err;
-
-    audit_data.name = name;
+    audit_data.name = name.c_str();
     audit_data.cr = cr;
 
-    if (selinux_check_access(sctx, tctx, "property_service", "set", reinterpret_cast<void*>(&audit_data)) == 0)
-        result = 1;
+    bool has_access = (selinux_check_access(sctx, tctx, "property_service", "set", &audit_data) == 0);
 
     freecon(tctx);
- err:
-    return result;
+    return has_access;
 }
 
 static int check_control_mac_perms(const char *name, char *sctx, struct ucred *cr)
@@ -142,11 +144,9 @@ static void write_persistent_property(const char *name, const char *value)
     }
 }
 
-bool is_legal_property_name(const std::string &name)
-{
+bool is_legal_property_name(const std::string& name) {
     size_t namelen = name.size();
 
-    if (namelen >= PROP_NAME_MAX) return false;
     if (namelen < 1) return false;
     if (name[0] == '.') return false;
     if (name[namelen - 1] == '.') return false;
@@ -169,60 +169,219 @@ bool is_legal_property_name(const std::string &name)
     return true;
 }
 
-int property_set(const char* name, const char* value) {
-    size_t valuelen = strlen(value);
+uint32_t property_set(const std::string& name, const std::string& value) {
+    size_t valuelen = value.size();
 
     if (!is_legal_property_name(name)) {
         LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: bad name";
-        return -1;
+        return PROP_ERROR_INVALID_NAME;
     }
+
     if (valuelen >= PROP_VALUE_MAX) {
         LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: "
                    << "value too long";
-        return -1;
+        return PROP_ERROR_INVALID_VALUE;
     }
 
-    if (strcmp("selinux.restorecon_recursive", name) == 0 && valuelen > 0) {
-        if (restorecon(value, SELINUX_ANDROID_RESTORECON_RECURSE) != 0) {
+    if (name == "selinux.restorecon_recursive" && valuelen > 0) {
+        if (restorecon(value.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE) != 0) {
             LOG(ERROR) << "Failed to restorecon_recursive " << value;
         }
     }
 
-    prop_info* pi = (prop_info*) __system_property_find(name);
+    prop_info* pi = (prop_info*) __system_property_find(name.c_str());
     if (pi != nullptr) {
         // ro.* properties are actually "write-once".
-        if (!strncmp(name, "ro.", 3)) {
+        if (android::base::StartsWith(name, "ro.")) {
             LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: "
                        << "property already set";
-            return -1;
+            return PROP_ERROR_READ_ONLY_PROPERTY;
         }
 
-        __system_property_update(pi, value, valuelen);
+        __system_property_update(pi, value.c_str(), valuelen);
     } else {
-        int rc = __system_property_add(name, strlen(name), value, valuelen);
+        int rc = __system_property_add(name.c_str(), name.size(), value.c_str(), valuelen);
         if (rc < 0) {
             LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: "
                        << "__system_property_add failed";
-            return rc;
+            return PROP_ERROR_SET_FAILED;
         }
     }
 
     // Don't write properties to disk until after we have read all default
     // properties to prevent them from being overwritten by default values.
-    if (persistent_properties_loaded && strncmp("persist.", name, strlen("persist.")) == 0) {
-        write_persistent_property(name, value);
+    if (persistent_properties_loaded && android::base::StartsWith(name, "persist.")) {
+        write_persistent_property(name.c_str(), value.c_str());
     }
-    property_changed(name, value);
-    return 0;
+    property_changed(name.c_str(), value.c_str());
+    return PROP_SUCCESS;
 }
 
-static void handle_property_set_fd()
-{
-    prop_msg msg;
-    int r;
-    char * source_ctx = NULL;
+class SocketConnection {
+ public:
+  SocketConnection(int socket, const struct ucred& cred)
+      : socket_(socket), cred_(cred) {}
 
-    int s = accept(property_set_fd, nullptr, nullptr);
+  ~SocketConnection() {
+    close(socket_);
+  }
+
+  bool RecvUint32(uint32_t* value, uint32_t* timeout_ms) {
+    return RecvFully(value, sizeof(*value), timeout_ms);
+  }
+
+  bool RecvChars(char* chars, size_t size, uint32_t* timeout_ms) {
+    return RecvFully(chars, size, timeout_ms);
+  }
+
+  bool RecvString(std::string* value, uint32_t* timeout_ms) {
+    uint32_t len = 0;
+    if (!RecvUint32(&len, timeout_ms)) {
+      return false;
+    }
+
+    if (len == 0) {
+      *value = "";
+      return true;
+    }
+
+    std::vector<char> chars(len);
+    if (!RecvChars(&chars[0], len, timeout_ms)) {
+      return false;
+    }
+
+    *value = std::string(&chars[0], len);
+    return true;
+  }
+
+  bool SendUint32(uint32_t value) {
+    int result = TEMP_FAILURE_RETRY(send(socket_, &value, sizeof(value), 0));
+    return result == sizeof(value);
+  }
+
+  int socket() {
+    return socket_;
+  }
+
+  const struct ucred& cred() {
+    return cred_;
+  }
+
+ private:
+  bool PollIn(uint32_t* timeout_ms) {
+    struct pollfd ufds[1];
+    ufds[0].fd = socket_;
+    ufds[0].events = POLLIN;
+    ufds[0].revents = 0;
+    while (*timeout_ms > 0) {
+      Timer timer;
+      int nr = poll(ufds, 1, *timeout_ms);
+      uint64_t millis = timer.duration_ms();
+      *timeout_ms = (millis > *timeout_ms) ? 0 : *timeout_ms - millis;
+
+      if (nr > 0) {
+        return true;
+      }
+
+      if (nr == 0) {
+        // Timeout
+        break;
+      }
+
+      if (nr < 0 && errno != EINTR) {
+        PLOG(ERROR) << "sys_prop: error waiting for uid " << cred_.uid << " to send property message";
+        return false;
+      } else { // errno == EINTR
+        // Timer rounds milliseconds down in case of EINTR we want it to be rounded up
+        // to avoid slowing init down by causing EINTR with under millisecond timeout.
+        if (*timeout_ms > 0) {
+          --(*timeout_ms);
+        }
+      }
+    }
+
+    LOG(ERROR) << "sys_prop: timeout waiting for uid " << cred_.uid << " to send property message.";
+    return false;
+  }
+
+  bool RecvFully(void* data_ptr, size_t size, uint32_t* timeout_ms) {
+    size_t bytes_left = size;
+    char* data = static_cast<char*>(data_ptr);
+    while (*timeout_ms > 0 && bytes_left > 0) {
+      if (!PollIn(timeout_ms)) {
+        return false;
+      }
+
+      int result = TEMP_FAILURE_RETRY(recv(socket_, data, bytes_left, MSG_DONTWAIT));
+      if (result <= 0) {
+        return false;
+      }
+
+      bytes_left -= result;
+      data += result;
+    }
+
+    return bytes_left == 0;
+  }
+
+  int socket_;
+  struct ucred cred_;
+
+  DISALLOW_IMPLICIT_CONSTRUCTORS(SocketConnection);
+};
+
+static void handle_property_set(SocketConnection& socket,
+                                const std::string& name,
+                                const std::string& value,
+                                bool legacy_protocol) {
+  const char* cmd_name = legacy_protocol ? "PROP_MSG_SETPROP" : "PROP_MSG_SETPROP2";
+  if (!is_legal_property_name(name)) {
+    LOG(ERROR) << "sys_prop(" << cmd_name << "): illegal property name \"" << name << "\"";
+    socket.SendUint32(PROP_ERROR_INVALID_NAME);
+    return;
+  }
+
+  struct ucred cr = socket.cred();
+  char* source_ctx = nullptr;
+  getpeercon(socket.socket(), &source_ctx);
+
+  if (android::base::StartsWith(name, "ctl.")) {
+    if (check_control_mac_perms(value.c_str(), source_ctx, &cr)) {
+      handle_control_message(name.c_str() + 4, value.c_str());
+      if (!legacy_protocol) {
+        socket.SendUint32(PROP_SUCCESS);
+      }
+    } else {
+      LOG(ERROR) << "sys_prop(" << cmd_name << "): Unable to " << (name.c_str() + 4)
+                 << " service ctl [" << value << "]"
+                 << " uid:" << cr.uid
+                 << " gid:" << cr.gid
+                 << " pid:" << cr.pid;
+      if (!legacy_protocol) {
+        socket.SendUint32(PROP_ERROR_HANDLE_CONTROL_MESSAGE);
+      }
+    }
+  } else {
+    if (check_mac_perms(name, source_ctx, &cr)) {
+      uint32_t result = property_set(name, value);
+      if (!legacy_protocol) {
+        socket.SendUint32(result);
+      }
+    } else {
+      LOG(ERROR) << "sys_prop(" << cmd_name << "): permission denied uid:" << cr.uid << " name:" << name;
+      if (!legacy_protocol) {
+        socket.SendUint32(PROP_ERROR_PERMISSION_DENIED);
+      }
+    }
+  }
+
+  freecon(source_ctx);
+}
+
+static void handle_property_set_fd() {
+    static constexpr uint32_t kDefaultSocketTimeout = 2000; /* ms */
+
+    int s = accept4(property_set_fd, nullptr, nullptr, SOCK_CLOEXEC);
     if (s == -1) {
         return;
     }
@@ -236,72 +395,50 @@ static void handle_property_set_fd()
         return;
     }
 
-    static constexpr int timeout_ms = 2 * 1000;  /* Default 2 sec timeout for caller to send property. */
-    struct pollfd ufds[1];
-    ufds[0].fd = s;
-    ufds[0].events = POLLIN;
-    ufds[0].revents = 0;
-    int nr = TEMP_FAILURE_RETRY(poll(ufds, 1, timeout_ms));
-    if (nr == 0) {
-        LOG(ERROR) << "sys_prop: timeout waiting for uid " << cr.uid << " to send property message.";
-        close(s);
-        return;
-    } else if (nr < 0) {
-        PLOG(ERROR) << "sys_prop: error waiting for uid " << cr.uid << " to send property message";
-        close(s);
+    SocketConnection socket(s, cr);
+    uint32_t timeout_ms = kDefaultSocketTimeout;
+
+    uint32_t cmd = 0;
+
+    if (!socket.RecvUint32(&cmd, &timeout_ms)) {
+        PLOG(ERROR) << "sys_prop: error while reading command from the socket";
+        socket.SendUint32(PROP_ERROR_READ_CMD);
         return;
     }
 
-    r = TEMP_FAILURE_RETRY(recv(s, &msg, sizeof(msg), MSG_DONTWAIT));
-    if(r != sizeof(prop_msg)) {
-        PLOG(ERROR) << "sys_prop: mis-match msg size received: " << r << " expected: " << sizeof(prop_msg);
-        close(s);
-        return;
-    }
+    switch(cmd) {
+    case PROP_MSG_SETPROP: {
+        char prop_name[PROP_NAME_MAX];
+        char prop_value[PROP_VALUE_MAX];
 
-    switch(msg.cmd) {
-    case PROP_MSG_SETPROP:
-        msg.name[PROP_NAME_MAX-1] = 0;
-        msg.value[PROP_VALUE_MAX-1] = 0;
-
-        if (!is_legal_property_name(msg.name)) {
-            LOG(ERROR) << "sys_prop: illegal property name \"" << msg.name << "\"";
-            close(s);
-            return;
+        if (!socket.RecvChars(prop_name, PROP_NAME_MAX, &timeout_ms) ||
+            !socket.RecvChars(prop_value, PROP_VALUE_MAX, &timeout_ms)) {
+          PLOG(ERROR) << "sys_prop(PROP_MSG_SETPROP): error while reading name/value from the socket";
+          return;
         }
 
-        getpeercon(s, &source_ctx);
+        prop_name[PROP_NAME_MAX-1] = 0;
+        prop_value[PROP_VALUE_MAX-1] = 0;
 
-        if(memcmp(msg.name,"ctl.",4) == 0) {
-            // Keep the old close-socket-early behavior when handling
-            // ctl.* properties.
-            close(s);
-            if (check_control_mac_perms(msg.value, source_ctx, &cr)) {
-                handle_control_message((char*) msg.name + 4, (char*) msg.value);
-            } else {
-                LOG(ERROR) << "sys_prop: Unable to " << (msg.name + 4)
-                           << " service ctl [" << msg.value << "]"
-                           << " uid:" << cr.uid
-                           << " gid:" << cr.gid
-                           << " pid:" << cr.pid;
-            }
-        } else {
-            if (check_mac_perms(msg.name, source_ctx, &cr)) {
-                property_set((char*) msg.name, (char*) msg.value);
-            } else {
-                LOG(ERROR) << "sys_prop: permission denied uid:" << cr.uid << " name:" << msg.name;
-            }
-
-            // Note: bionic's property client code assumes that the
-            // property server will not close the socket until *AFTER*
-            // the property is written to memory.
-            close(s);
-        }
-        freecon(source_ctx);
+        handle_property_set(socket, prop_value, prop_value, true);
         break;
+      }
 
+    case PROP_MSG_SETPROP2: {
+        std::string name;
+        std::string value;
+        if (!socket.RecvString(&name, &timeout_ms) ||
+            !socket.RecvString(&value, &timeout_ms)) {
+          PLOG(ERROR) << "sys_prop(PROP_MSG_SETPROP2): error while reading name/value from the socket";
+          socket.SendUint32(PROP_ERROR_READ_DATA);
+          return;
+        }
+
+        handle_property_set(socket, name, value, false);
+        break;
+      }
     default:
-        close(s);
+        socket.SendUint32(PROP_ERROR_INVALID_CMD);
         break;
     }
 }
@@ -438,16 +575,16 @@ static void load_persistent_properties() {
 }
 
 void property_load_boot_defaults() {
-    load_properties_from_file(PROP_PATH_RAMDISK_DEFAULT, NULL);
-    load_properties_from_file(PROP_PATH_ODM_DEFAULT, NULL);
-    load_properties_from_file(PROP_PATH_VENDOR_DEFAULT, NULL);
+    load_properties_from_file("/default.prop", NULL);
+    load_properties_from_file("/odm/default.prop", NULL);
+    load_properties_from_file("/vendor/default.prop", NULL);
 }
 
 static void load_override_properties() {
     if (ALLOW_LOCAL_PROP_OVERRIDE) {
         std::string debuggable = property_get("ro.debuggable");
         if (debuggable == "1") {
-            load_properties_from_file(PROP_PATH_LOCAL_OVERRIDE, NULL);
+            load_properties_from_file("/data/local.prop", NULL);
         }
     }
 }
@@ -502,14 +639,16 @@ void load_recovery_id_prop() {
 }
 
 void load_system_props() {
-    load_properties_from_file(PROP_PATH_SYSTEM_BUILD, NULL);
-    load_properties_from_file(PROP_PATH_ODM_BUILD, NULL);
-    load_properties_from_file(PROP_PATH_VENDOR_BUILD, NULL);
-    load_properties_from_file(PROP_PATH_FACTORY, "ro.*");
+    load_properties_from_file("/system/build.prop", NULL);
+    load_properties_from_file("/odm/build.prop", NULL);
+    load_properties_from_file("/vendor/build.prop", NULL);
+    load_properties_from_file("/factory/factory.prop", "ro.*");
     load_recovery_id_prop();
 }
 
 void start_property_service() {
+    property_set("ro.property_service.version", "2");
+
     property_set_fd = create_socket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
                                     0666, 0, 0, NULL);
     if (property_set_fd == -1) {

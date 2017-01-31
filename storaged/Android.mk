@@ -2,14 +2,16 @@
 
 LOCAL_PATH := $(call my-dir)
 
-LIBSTORAGED_SHARED_LIBRARIES := libbinder libbase libutils libcutils liblog libsysutils libcap
+LIBSTORAGED_SHARED_LIBRARIES := libbinder libbase libutils libcutils liblog libsysutils libcap libpackagelistparser
 
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := storaged.cpp \
                   storaged_service.cpp \
                   storaged_utils.cpp \
+                  storaged_uid_monitor.cpp \
                   EventLogTags.logtags
+
 LOCAL_MODULE := libstoraged
 LOCAL_CFLAGS := -Werror
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include external/googletest/googletest/include

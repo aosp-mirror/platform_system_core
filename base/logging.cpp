@@ -118,27 +118,32 @@ const char* getprogname() {
 namespace android {
 namespace base {
 
-static auto& logging_lock = *new std::mutex();
+static std::mutex& LoggingLock() {
+  static auto& logging_lock = *new std::mutex();
+  return logging_lock;
+}
 
+static LogFunction& Logger() {
 #ifdef __ANDROID__
-static auto& gLogger = *new LogFunction(LogdLogger());
+  static auto& logger = *new LogFunction(LogdLogger());
 #else
-static auto& gLogger = *new LogFunction(StderrLogger);
+  static auto& logger = *new LogFunction(StderrLogger);
 #endif
+  return logger;
+}
 
-static auto& gAborter = *new AbortFunction(DefaultAborter);
+static AbortFunction& Aborter() {
+  static auto& aborter = *new AbortFunction(DefaultAborter);
+  return aborter;
+}
+
+static std::string& ProgramInvocationName() {
+  static auto& programInvocationName = *new std::string(getprogname());
+  return programInvocationName;
+}
 
 static bool gInitialized = false;
 static LogSeverity gMinimumLogSeverity = INFO;
-static auto& gProgramInvocationName = *new std::unique_ptr<std::string>();
-
-static const char* ProgramInvocationName() {
-  if (gProgramInvocationName == nullptr) {
-    gProgramInvocationName.reset(new std::string(getprogname()));
-  }
-
-  return gProgramInvocationName->c_str();
-}
 
 #if defined(__linux__)
 void KernelLogger(android::base::LogId, android::base::LogSeverity severity,
@@ -198,7 +203,7 @@ void StderrLogger(LogId, LogSeverity severity, const char*, const char* file,
   static_assert(arraysize(log_characters) - 1 == FATAL + 1,
                 "Mismatch in size of log_characters and values in LogSeverity");
   char severity_char = log_characters[severity];
-  fprintf(stderr, "%s %c %s %5d %5d %s:%u] %s\n", ProgramInvocationName(),
+  fprintf(stderr, "%s %c %s %5d %5d %s:%u] %s\n", ProgramInvocationName().c_str(),
           severity_char, timestamp, getpid(), GetThreadId(), file, line, message);
 }
 
@@ -262,7 +267,8 @@ void InitLogging(char* argv[], LogFunction&& logger, AbortFunction&& aborter) {
   // Linux to recover this, but we don't have that luxury on the Mac/Windows,
   // and there are a couple of argv[0] variants that are commonly used.
   if (argv != nullptr) {
-    gProgramInvocationName.reset(new std::string(basename(argv[0])));
+    std::lock_guard<std::mutex> lock(LoggingLock());
+    ProgramInvocationName() = basename(argv[0]);
   }
 
   const char* tags = getenv("ANDROID_LOG_TAGS");
@@ -307,13 +313,13 @@ void InitLogging(char* argv[], LogFunction&& logger, AbortFunction&& aborter) {
 }
 
 void SetLogger(LogFunction&& logger) {
-  std::lock_guard<std::mutex> lock(logging_lock);
-  gLogger = std::move(logger);
+  std::lock_guard<std::mutex> lock(LoggingLock());
+  Logger() = std::move(logger);
 }
 
 void SetAborter(AbortFunction&& aborter) {
-  std::lock_guard<std::mutex> lock(logging_lock);
-  gAborter = std::move(aborter);
+  std::lock_guard<std::mutex> lock(LoggingLock());
+  Aborter() = std::move(aborter);
 }
 
 static const char* GetFileBasename(const char* file) {
@@ -403,7 +409,7 @@ LogMessage::~LogMessage() {
 
   {
     // Do the actual logging with the lock held.
-    std::lock_guard<std::mutex> lock(logging_lock);
+    std::lock_guard<std::mutex> lock(LoggingLock());
     if (msg.find('\n') == std::string::npos) {
       LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetId(),
               data_->GetSeverity(), msg.c_str());
@@ -424,7 +430,7 @@ LogMessage::~LogMessage() {
 
   // Abort if necessary.
   if (data_->GetSeverity() == FATAL) {
-    gAborter(msg.c_str());
+    Aborter()(msg.c_str());
   }
 }
 
@@ -434,8 +440,8 @@ std::ostream& LogMessage::stream() {
 
 void LogMessage::LogLine(const char* file, unsigned int line, LogId id,
                          LogSeverity severity, const char* message) {
-  const char* tag = ProgramInvocationName();
-  gLogger(id, severity, tag, file, line, message);
+  const char* tag = ProgramInvocationName().c_str();
+  Logger()(id, severity, tag, file, line, message);
 }
 
 LogSeverity GetMinimumLogSeverity() {

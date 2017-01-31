@@ -30,6 +30,23 @@ libcutils_nonwindows_sources = [
     "str_parms.c",
 ]
 
+cc_library_headers {
+    name: "libcutils_vndk_headers",
+    host_supported: true,
+    export_include_dirs: ["include_vndk"],
+}
+
+cc_library_headers {
+    name: "libcutils_headers",
+    host_supported: true,
+    export_include_dirs: ["include"],
+    target: {
+       windows: {
+          enabled: true,
+       },
+    },
+}
+
 cc_library {
     name: "libcutils",
     host_supported: true,
@@ -50,6 +67,7 @@ cc_library {
         "strlcpy.c",
         "threads.c",
     ],
+
 
     target: {
         host: {
@@ -80,7 +98,7 @@ cc_library {
                 "ashmem-dev.c",
                 "klog.cpp",
                 "partition_utils.c",
-                "properties.c",
+                "properties.cpp",
                 "qtaguid.c",
                 "trace-dev.c",
                 "uevent.c",
@@ -117,6 +135,9 @@ cc_library {
     },
 
     shared_libs: ["liblog"],
+    header_libs: ["libcutils_headers"],
+    export_header_lib_headers: ["libcutils_headers"],
+
     product_variables: {
         cpusets: {
             cflags: ["-DUSE_CPUSETS"],

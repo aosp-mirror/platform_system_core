@@ -45,7 +45,7 @@ bool fs_mgr_create_verity_device(struct dm_ioctl *io,
 {
     fs_mgr_verity_ioctl_init(io, name, 1);
     if (ioctl(fd, DM_DEV_CREATE, io)) {
-        ERROR("Error creating device mapping (%s)", strerror(errno));
+        PERROR << "Error creating device mapping";
         return false;
     }
     return true;
@@ -57,7 +57,7 @@ bool fs_mgr_destroy_verity_device(struct dm_ioctl *io,
 {
     fs_mgr_verity_ioctl_init(io, name, 0);
     if (ioctl(fd, DM_DEV_REMOVE, io)) {
-        ERROR("Error removing device mapping (%s)", strerror(errno));
+        PERROR << "Error removing device mapping";
         return false;
     }
     return true;
@@ -68,11 +68,11 @@ bool fs_mgr_get_verity_device_name(struct dm_ioctl *io,
                                    int fd,
                                    std::string *out_dev_name)
 {
-    CHECK(out_dev_name != nullptr);
+    FS_MGR_CHECK(out_dev_name != nullptr);
 
     fs_mgr_verity_ioctl_init(io, name, 0);
     if (ioctl(fd, DM_DEV_STATUS, io)) {
-        ERROR("Error fetching verity device number (%s)", strerror(errno));
+        PERROR << "Error fetching verity device number";
         return false;
     }
 
@@ -88,7 +88,7 @@ bool fs_mgr_resume_verity_table(struct dm_ioctl *io,
 {
     fs_mgr_verity_ioctl_init(io, name, 0);
     if (ioctl(fd, DM_DEV_SUSPEND, io)) {
-        ERROR("Error activating verity device (%s)", strerror(errno));
+        PERROR << "Error activating verity device";
         return false;
     }
     return true;

@@ -57,7 +57,7 @@ cc_library {
             srcs: liblog_target_sources,
             // AddressSanitizer runtime library depends on liblog.
             sanitize: {
-                never: true,
+                address: false,
             },
         },
         android_arm: {
@@ -78,6 +78,8 @@ cc_library {
             enabled: true,
         },
     },
+
+    export_include_dirs: ["include"],
 
     cflags: [
         "-Werror",
@@ -109,6 +111,11 @@ ndk_headers {
     to: "android",
     srcs: ["legacy-ndk-includes/log.h"],
     license: "NOTICE",
+}
+
+cc_library_headers {
+    name: "liblog_vndk_headers",
+    export_include_dirs: ["include_vndk"],
 }
 
 ndk_library {

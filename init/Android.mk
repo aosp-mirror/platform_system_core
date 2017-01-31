@@ -107,6 +107,7 @@ LOCAL_STATIC_LIBRARIES := \
     libz \
     libprocessgroup \
     libnl \
+    libavb
 
 # Create symlinks.
 LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT)/sbin; \

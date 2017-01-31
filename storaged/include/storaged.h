@@ -17,12 +17,16 @@
 #ifndef _STORAGED_H_
 #define _STORAGED_H_
 
-#include <queue>
 #include <semaphore.h>
 #include <stdint.h>
+#include <time.h>
+
+#include <queue>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "storaged_uid_monitor.h"
 
 #define FRIEND_TEST(test_case_name, test_name) \
 friend class test_case_name##_##test_name##_Test
@@ -35,6 +39,12 @@ friend class test_case_name##_##test_name##_Test
 #else
 #define debuginfo(...)
 #endif
+
+#define SECTOR_SIZE ( 512 )
+#define SEC_TO_MSEC ( 1000 )
+#define MSEC_TO_USEC ( 1000 )
+#define USEC_TO_NSEC ( 1000 )
+#define SEC_TO_USEC ( 1000000 )
 
 // number of attributes diskstats has
 #define DISK_STATS_SIZE ( 11 )
@@ -113,28 +123,6 @@ public:
     }
 };
 
-class tasks_t {
-private:
-    FRIEND_TEST(storaged_test, tasks_t);
-    sem_t mSem;
-    // hashmap for all running tasks w/ pid as key
-    std::unordered_map<uint32_t, struct task_info> mRunning;
-    // hashmap for all tasks that have been killed (categorized by cmd) w/ cmd as key
-    std::unordered_map<std::string, struct task_info> mOld;
-    std::unordered_map<std::uint32_t, struct task_info> get_running_tasks();
-public:
-    tasks_t() {
-        sem_init(&mSem, 0, 1); // TODO: constructor don't have a return value, what if sem_init fails
-    }
-
-    ~tasks_t() {
-        sem_destroy(&mSem);
-    }
-
-    void update_running_tasks(void);
-    std::vector<struct task_info> get_tasks(void);
-};
-
 class stream_stats {
 private:
     double mSum;
@@ -165,6 +153,8 @@ public:
 #define MMC_DISK_STATS_PATH "/sys/block/mmcblk0/stat"
 #define SDA_DISK_STATS_PATH "/sys/block/sda/stat"
 #define EMMC_ECSD_PATH "/d/mmc0/mmc0:0001/ext_csd"
+#define UID_IO_STATS_PATH "/proc/uid_io/stats"
+
 class disk_stats_monitor {
 private:
     FRIEND_TEST(storaged_test, disk_stats_monitor);
@@ -260,14 +250,20 @@ public:
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT ( 60 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH ( 3600 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_EMMC_INFO_PUBLISH ( 86400 )
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO ( 3600 )
+
+// UID IO threshold in bytes
+#define DEFAULT_PERIODIC_CHORES_UID_IO_THRESHOLD ( 1024 * 1024 * 1024ULL )
 
 struct storaged_config {
     int periodic_chores_interval_unit;
     int periodic_chores_interval_disk_stats_publish;
     int periodic_chores_interval_emmc_info_publish;
-    bool proc_taskio_readable;  // are /proc/[pid]/{io, comm, cmdline, stat} all readable
+    int periodic_chores_interval_uid_io;
+    bool proc_uid_io_available;      // whether uid_io is accessible
     bool emmc_available;        // whether eMMC est_csd file is readable
     bool diskstats_available;   // whether diskstats is accessible
+    int event_time_check_usec;  // check how much cputime spent in event loop
 };
 
 class storaged_t {
@@ -277,34 +273,16 @@ private:
     disk_stats_publisher mDiskStats;
     disk_stats_monitor mDsm;
     emmc_info_t mEmmcInfo;
-    tasks_t mTasks;
+    uid_monitor mUidm;
     time_t mStarttime;
 public:
     storaged_t(void);
     ~storaged_t() {}
     void event(void);
+    void event_checked(void);
     void pause(void) {
         sleep(mConfig.periodic_chores_interval_unit);
     }
-    void set_unit_interval(int unit) {
-        mConfig.periodic_chores_interval_unit = unit;
-    }
-    void set_diskstats_interval(int disk_stats) {
-        mConfig.periodic_chores_interval_disk_stats_publish = disk_stats;
-    }
-    void set_emmc_interval(int emmc_info) {
-        mConfig.periodic_chores_interval_emmc_info_publish = emmc_info;
-    }
-    std::vector<struct task_info> get_tasks(void) {
-        // There could be a race when get_tasks() and the main thread is updating at the same time
-        // While update_running_tasks() is updating the critical sections at the end of the function
-        // all together atomically, the final state of task_t can only be either the main thread's
-        // update or this update. Since the race can only occur when both threads are updating
-        // "simultaneously", either final state is acceptable.
-        mTasks.update_running_tasks();
-        return mTasks.get_tasks();
-    }
-
     void set_privileged_fds(int fd_emmc) {
         mEmmcInfo.set_emmc_fd(fd_emmc);
     }
@@ -312,11 +290,19 @@ public:
     time_t get_starttime(void) {
         return mStarttime;
     }
+
+    std::unordered_map<uint32_t, struct uid_info> get_uids(void) {
+        return mUidm.get_uids();
+    }
+    std::vector<struct uid_event> get_uid_events(void) {
+        return mUidm.dump_events();
+    }
 };
 
 // Eventlog tag
 // The content must match the definition in EventLogTags.logtags
 #define EVENTLOGTAG_DISKSTATS ( 2732 )
 #define EVENTLOGTAG_EMMCINFO ( 2733 )
+#define EVENTLOGTAG_UID_IO_ALERT ( 2734 )
 
 #endif /* _STORAGED_H_ */
