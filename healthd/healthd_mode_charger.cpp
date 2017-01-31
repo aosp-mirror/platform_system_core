@@ -39,12 +39,12 @@
 #include <linux/netlink.h>
 
 #include <batteryservice/BatteryService.h>
-#include <cutils/android_reboot.h>
 #include <cutils/klog.h>
 #include <cutils/misc.h>
 #include <cutils/uevent.h>
 #include <cutils/properties.h>
 #include <minui/minui.h>
+#include <sys/reboot.h>
 
 #ifdef CHARGER_ENABLE_SUSPEND
 #include <suspend/autosuspend.h>
@@ -636,7 +636,7 @@ static void process_key(struct charger *charger, int code, int64_t now)
                 } else {
                     if (charger->batt_anim->cur_level >= charger->boot_min_cap) {
                         LOGW("[%" PRId64 "] rebooting\n", now);
-                        android_reboot(ANDROID_RB_RESTART, 0, 0);
+                        reboot(RB_AUTOBOOT);
                     } else {
                         LOGV("[%" PRId64 "] ignore power-button press, battery level "
                             "less than minimum\n", now);
@@ -691,7 +691,7 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
                  now, (int64_t)UNPLUGGED_SHUTDOWN_TIME, charger->next_pwr_check);
         } else if (now >= charger->next_pwr_check) {
             LOGW("[%" PRId64 "] shutting down\n", now);
-            android_reboot(ANDROID_RB_POWEROFF, 0, 0);
+            reboot(RB_POWER_OFF);
         } else {
             /* otherwise we already have a shutdown timer scheduled */
         }
