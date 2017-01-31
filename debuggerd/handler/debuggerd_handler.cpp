@@ -83,6 +83,21 @@ static pthread_mutex_t crash_mutex = PTHREAD_MUTEX_INITIALIZER;
  * could allocate memory or hold a lock.
  */
 static void log_signal_summary(int signum, const siginfo_t* info) {
+  char thread_name[MAX_TASK_NAME_LEN + 1];  // one more for termination
+  if (prctl(PR_GET_NAME, reinterpret_cast<unsigned long>(thread_name), 0, 0, 0) != 0) {
+    strcpy(thread_name, "<name unknown>");
+  } else {
+    // short names are null terminated by prctl, but the man page
+    // implies that 16 byte names are not.
+    thread_name[MAX_TASK_NAME_LEN] = 0;
+  }
+
+  if (signum == DEBUGGER_SIGNAL) {
+    __libc_format_log(ANDROID_LOG_FATAL, "libc", "Requested dump for tid %d (%s)", gettid(),
+                      thread_name);
+    return;
+  }
+
   const char* signal_name = "???";
   bool has_address = false;
   switch (signum) {
@@ -118,15 +133,6 @@ static void log_signal_summary(int signum, const siginfo_t* info) {
       break;
   }
 
-  char thread_name[MAX_TASK_NAME_LEN + 1];  // one more for termination
-  if (prctl(PR_GET_NAME, reinterpret_cast<unsigned long>(thread_name), 0, 0, 0) != 0) {
-    strcpy(thread_name, "<name unknown>");
-  } else {
-    // short names are null terminated by prctl, but the man page
-    // implies that 16 byte names are not.
-    thread_name[MAX_TASK_NAME_LEN] = 0;
-  }
-
   // "info" will be null if the siginfo_t information was not available.
   // Many signals don't have an address or a code.
   char code_desc[32];  // ", code -6"
@@ -138,6 +144,7 @@ static void log_signal_summary(int signum, const siginfo_t* info) {
       __libc_format_buffer(addr_desc, sizeof(addr_desc), ", fault addr %p", info->si_addr);
     }
   }
+
   __libc_format_log(ANDROID_LOG_FATAL, "libc", "Fatal signal %d (%s)%s%s in tid %d (%s)", signum,
                     signal_name, code_desc, addr_desc, gettid(), thread_name);
 }
