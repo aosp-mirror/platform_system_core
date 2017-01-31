@@ -52,6 +52,7 @@ struct AndroidLogFormat_t {
     AndroidLogPrintFormat format;
     bool colored_output;
     bool usec_time_output;
+    bool nsec_time_output;
     bool printable_output;
     bool year_output;
     bool zone_output;
@@ -210,6 +211,7 @@ LIBLOG_ABI_PUBLIC AndroidLogFormat *android_log_format_new()
     p_ret->format = FORMAT_BRIEF;
     p_ret->colored_output = false;
     p_ret->usec_time_output = false;
+    p_ret->nsec_time_output = false;
     p_ret->printable_output = false;
     p_ret->year_output = false;
     p_ret->zone_output = false;
@@ -257,6 +259,9 @@ LIBLOG_ABI_PUBLIC int android_log_setPrintFormat(
         return 0;
     case FORMAT_MODIFIER_TIME_USEC:
         p_format->usec_time_output = true;
+        return 0;
+    case FORMAT_MODIFIER_TIME_NSEC:
+        p_format->nsec_time_output = true;
         return 0;
     case FORMAT_MODIFIER_PRINTABLE:
         p_format->printable_output = true;
@@ -309,6 +314,7 @@ LIBLOG_ABI_PUBLIC AndroidLogPrintFormat android_log_formatFromString(
     else if (strcmp(formatString, "color") == 0) format = FORMAT_MODIFIER_COLOR;
     else if (strcmp(formatString, "colour") == 0) format = FORMAT_MODIFIER_COLOR;
     else if (strcmp(formatString, "usec") == 0) format = FORMAT_MODIFIER_TIME_USEC;
+    else if (strcmp(formatString, "nsec") == 0) format = FORMAT_MODIFIER_TIME_NSEC;
     else if (strcmp(formatString, "printable") == 0) format = FORMAT_MODIFIER_PRINTABLE;
     else if (strcmp(formatString, "year") == 0) format = FORMAT_MODIFIER_YEAR;
     else if (strcmp(formatString, "zone") == 0) format = FORMAT_MODIFIER_ZONE;
@@ -1496,7 +1502,8 @@ LIBLOG_ABI_PUBLIC char *android_log_formatLogLine (
     struct tm tmBuf;
 #endif
     struct tm* ptm;
-    char timeBuf[64]; /* good margin, 23+nul for msec, 26+nul for usec */
+    /* good margin, 23+nul for msec, 26+nul for usec, 29+nul to nsec */
+    char timeBuf[64];
     char prefixBuf[128], suffixBuf[128];
     char priChar;
     int prefixSuffixIsHeaderFooter = 0;
@@ -1550,7 +1557,10 @@ LIBLOG_ABI_PUBLIC char *android_log_formatLogLine (
                  ptm);
     }
     len = strlen(timeBuf);
-    if (p_format->usec_time_output) {
+    if (p_format->nsec_time_output) {
+        len += snprintf(timeBuf + len, sizeof(timeBuf) - len,
+                        ".%09ld", nsec);
+    } else if (p_format->usec_time_output) {
         len += snprintf(timeBuf + len, sizeof(timeBuf) - len,
                         ".%06ld", nsec / US_PER_NSEC);
     } else {

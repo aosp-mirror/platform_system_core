@@ -107,6 +107,32 @@ TEST(logcat, event_tag_filter) {
     EXPECT_LT(4, count);
 }
 
+// If there is not enough background noise in the logs, then spam the logs to
+// permit tail checking so that the tests can progress.
+static size_t inject(ssize_t count) {
+    if (count <= 0) return 0;
+
+    static const size_t retry = 4;
+    size_t errors = retry;
+    size_t num = 0;
+    for(;;) {
+        log_time ts(CLOCK_MONOTONIC);
+        if (__android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)) >= 0) {
+            if (++num >= (size_t)count) {
+                // let data settle end-to-end
+                sleep(3);
+                return num;
+            }
+            errors = retry;
+            usleep(100); // ~32 per timer tick, we are a spammer regardless
+        } else if (--errors <= 0) {
+            return num;
+        }
+    }
+    // NOTREACH
+    return num;
+}
+
 TEST(logcat, year) {
 
     if (android_log_clockid() == CLOCK_MONOTONIC) {
@@ -114,35 +140,40 @@ TEST(logcat, year) {
         return;
     }
 
-    FILE *fp;
+    int count;
+    int tries = 3; // in case run too soon after system start or buffer clear
 
-    char needle[32];
-    time_t now;
-    time(&now);
-    struct tm *ptm;
+    do {
+        FILE *fp;
+
+        char needle[32];
+        time_t now;
+        time(&now);
+        struct tm *ptm;
 #if !defined(_WIN32)
-    struct tm tmBuf;
-    ptm = localtime_r(&now, &tmBuf);
+        struct tm tmBuf;
+        ptm = localtime_r(&now, &tmBuf);
 #else
-    ptm = localtime(&&now);
+        ptm = localtime(&&now);
 #endif
-    strftime(needle, sizeof(needle), "[ %Y-", ptm);
+        strftime(needle, sizeof(needle), "[ %Y-", ptm);
 
-    ASSERT_TRUE(NULL != (fp = popen(
-      "logcat -v long -v year -b all -t 3 2>/dev/null",
-      "r")));
+        ASSERT_TRUE(NULL != (fp = popen(
+          "logcat -v long -v year -b all -t 3 2>/dev/null",
+          "r")));
 
-    char buffer[BIG_BUFFER];
+        char buffer[BIG_BUFFER];
 
-    int count = 0;
+        count = 0;
 
-    while (fgets(buffer, sizeof(buffer), fp)) {
-        if (!strncmp(buffer, needle, strlen(needle))) {
-            ++count;
+        while (fgets(buffer, sizeof(buffer), fp)) {
+            if (!strncmp(buffer, needle, strlen(needle))) {
+                ++count;
+            }
         }
-    }
+        pclose(fp);
 
-    pclose(fp);
+    } while ((count < 3) && --tries && inject(3 - count));
 
     ASSERT_EQ(3, count);
 }
@@ -177,32 +208,6 @@ char *fgetLongTime(char *buffer, size_t buflen, FILE *fp) {
         return cp;
     }
     return NULL;
-}
-
-// If there is not enough background noise in the logs, then spam the logs to
-// permit tail checking so that the tests can progress.
-static size_t inject(ssize_t count) {
-    if (count <= 0) return 0;
-
-    static const size_t retry = 4;
-    size_t errors = retry;
-    size_t num = 0;
-    for(;;) {
-        log_time ts(CLOCK_MONOTONIC);
-        if (__android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)) >= 0) {
-            if (++num >= (size_t)count) {
-                // let data settle end-to-end
-                sleep(3);
-                return num;
-            }
-            errors = retry;
-            usleep(50);
-        } else if (--errors <= 0) {
-            return num;
-        }
-    }
-    // NOTREACH
-    return num;
 }
 
 TEST(logcat, tz) {
@@ -267,6 +272,8 @@ void do_tail(int num) {
     int tries = 4; // in case run too soon after system start or buffer clear
     int count;
 
+    if (num > 10) ++tries;
+    if (num > 100) ++tries;
     do {
         char buffer[BIG_BUFFER];
 
@@ -310,25 +317,32 @@ TEST(logcat, tail_time) {
     int count;
     char buffer[BIG_BUFFER];
     char *last_timestamp = NULL;
+    // Hard to predict 100% if first (overlap) or second line will match.
+    // -v nsec will in a substantial majority be the second line.
     char *first_timestamp = NULL;
-    char *cp;
+    char *second_timestamp = NULL;
+    char *input;
 
     int tries = 4; // in case run too soon after system start or buffer clear
 
-    // Do not be tempted to use -v usec because that increases the
-    // chances of an occasional test failure by 1000 (see below).
     do {
-        ASSERT_TRUE(NULL != (fp = popen("logcat -v long -b all -t 10 2>&1", "r")));
-
+        ASSERT_TRUE(NULL != (fp = popen("logcat"
+                                        " -v long"
+                                        " -v nsec"
+                                        " -b all"
+                                        " -t 10"
+                                        " 2>&1", "r")));
         count = 0;
 
-        while ((cp = fgetLongTime(buffer, sizeof(buffer), fp))) {
+        while ((input = fgetLongTime(buffer, sizeof(buffer), fp))) {
             ++count;
             if (!first_timestamp) {
-                first_timestamp = strdup(cp);
+                first_timestamp = strdup(input);
+            } else if (!second_timestamp) {
+                second_timestamp = strdup(input);
             }
             free(last_timestamp);
-            last_timestamp = strdup(cp);
+            last_timestamp = strdup(input);
         }
         pclose(fp);
 
@@ -337,34 +351,80 @@ TEST(logcat, tail_time) {
     EXPECT_EQ(10, count); // We want _some_ history, too small, falses below
     EXPECT_TRUE(last_timestamp != NULL);
     EXPECT_TRUE(first_timestamp != NULL);
+    EXPECT_TRUE(second_timestamp != NULL);
 
-    snprintf(buffer, sizeof(buffer), "logcat -v long -b all -t '%s' 2>&1",
-             first_timestamp);
+    snprintf(buffer, sizeof(buffer), "logcat"
+                                     " -v long"
+                                     " -v nsec"
+                                     " -b all"
+                                     " -t '%s'"
+                                     " 2>&1",
+                                     first_timestamp);
     ASSERT_TRUE(NULL != (fp = popen(buffer, "r")));
 
     int second_count = 0;
     int last_timestamp_count = -1;
 
-    while ((cp = fgetLongTime(buffer, sizeof(buffer), fp))) {
+    --count; // One less unless we match the first_timestamp
+    bool found = false;
+    while ((input = fgetLongTime(buffer, sizeof(buffer), fp))) {
         ++second_count;
+        // We want to highlight if we skip to the next entry.
+        // WAI, if the time in logd is *exactly*
+        // XX-XX XX:XX:XX.XXXXXX000 (usec) or XX-XX XX:XX:XX.XXX000000
+        // this can happen, but it should not happen with nsec.
+        // We can make this WAI behavior happen 1000 times less
+        // frequently if the caller does not use the -v usec flag,
+        // but always the second (always skip) if they use the
+        // (undocumented) -v nsec flag.
         if (first_timestamp) {
-            // we can get a transitory *extremely* rare failure if hidden
-            // underneath the time is *exactly* XX-XX XX:XX:XX.XXX000000
-            EXPECT_STREQ(cp, first_timestamp);
+            found = !strcmp(input, first_timestamp);
+            if (found) {
+                ++count;
+                GTEST_LOG_(INFO) << "input = first("
+                                 << first_timestamp
+                                 << ")\n";
+            }
             free(first_timestamp);
             first_timestamp = NULL;
         }
-        if (!strcmp(cp, last_timestamp)) {
+        if (second_timestamp) {
+            found = found || !strcmp(input, second_timestamp);
+            if (!found) {
+                GTEST_LOG_(INFO) << "input("
+                                 << input
+                                 << ") != second("
+                                 << second_timestamp
+                                 << ")\n";
+            }
+            free(second_timestamp);
+            second_timestamp = NULL;
+        }
+        if (!strcmp(input, last_timestamp)) {
             last_timestamp_count = second_count;
         }
     }
     pclose(fp);
 
+    EXPECT_TRUE(found);
+    if (!found) {
+        if (first_timestamp) {
+            GTEST_LOG_(INFO) << "first = " << first_timestamp << "\n";
+        }
+        if (second_timestamp) {
+            GTEST_LOG_(INFO) << "second = " << second_timestamp << "\n";
+        }
+        if (last_timestamp) {
+            GTEST_LOG_(INFO) << "last = " << last_timestamp << "\n";
+        }
+    }
     free(last_timestamp);
     last_timestamp = NULL;
     free(first_timestamp);
+    free(second_timestamp);
 
     EXPECT_TRUE(first_timestamp == NULL);
+    EXPECT_TRUE(second_timestamp == NULL);
     EXPECT_LE(count, second_count);
     EXPECT_LE(count, last_timestamp_count);
 }
@@ -747,7 +807,7 @@ TEST(logcat, logrotate_continue) {
     ASSERT_TRUE(NULL != mkdtemp(strcpy(tmp_out_dir, tmp_out_dir_form)));
 
     static const char log_filename[] = "log.txt";
-    static const char logcat_cmd[] = "logcat -b all -d -f %s/%s -n 256 -r 1024";
+    static const char logcat_cmd[] = "logcat -b all -v nsec -d -f %s/%s -n 256 -r 1024";
     static const char cleanup_cmd[] = "rm -rf %s";
     char command[sizeof(tmp_out_dir) + sizeof(logcat_cmd) + sizeof(log_filename)];
     snprintf(command, sizeof(command), logcat_cmd, tmp_out_dir, log_filename);
@@ -769,9 +829,15 @@ TEST(logcat, logrotate_continue) {
     }
     char *line = NULL;
     char *last_line = NULL; // this line is allowed to stutter, one-line overlap
-    char *second_last_line = NULL;
+    char *second_last_line = NULL; // should never stutter
+    char *first_line = NULL; // help diagnose failure?
     size_t len = 0;
     while (getline(&line, &len, fp) != -1) {
+        if (!first_line) {
+            first_line = line;
+            line = NULL;
+            continue;
+        }
         free(second_last_line);
         second_last_line = last_line;
         last_line = line;
@@ -789,6 +855,7 @@ TEST(logcat, logrotate_continue) {
     if (!second_last_line) {
         snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
         EXPECT_FALSE(IsFalse(system(command), command));
+        free(first_line);
         return;
     }
     // re-run the command, it should only add a few lines more content if it
@@ -798,6 +865,8 @@ TEST(logcat, logrotate_continue) {
     if (ret) {
         snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
         EXPECT_FALSE(IsFalse(system(command), command));
+        free(second_last_line);
+        free(first_line);
         return;
     }
     std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(tmp_out_dir), closedir);
@@ -805,6 +874,8 @@ TEST(logcat, logrotate_continue) {
     if (!dir) {
         snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
         EXPECT_FALSE(IsFalse(system(command), command));
+        free(second_last_line);
+        free(first_line);
         return;
     }
     struct dirent *entry;
@@ -834,13 +905,18 @@ TEST(logcat, logrotate_continue) {
     }
     if (count > 1) {
         char *brk = strpbrk(second_last_line, "\r\n");
-        if (!brk) {
-            brk = second_last_line + strlen(second_last_line);
-        }
-        fprintf(stderr, "\"%.*s\" occured %u times\n",
+        if (!brk) brk = second_last_line + strlen(second_last_line);
+        fprintf(stderr, "\"%.*s\" occurred %u times\n",
             (int)(brk - second_last_line), second_last_line, count);
+        if (first_line) {
+            brk = strpbrk(first_line, "\r\n");
+            if (!brk) brk = first_line + strlen(first_line);
+            fprintf(stderr, "\"%.*s\" was first line, fault?\n",
+                (int)(brk - first_line), first_line);
+        }
     }
     free(second_last_line);
+    free(first_line);
 
     snprintf(command, sizeof(command), cleanup_cmd, tmp_out_dir);
     EXPECT_FALSE(IsFalse(system(command), command));
