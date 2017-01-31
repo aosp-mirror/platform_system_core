@@ -322,7 +322,7 @@ int main(int argc, char** argv) {
   bool fatal_signal = signo != DEBUGGER_SIGNAL;
   std::set<pid_t> siblings;
   std::set<pid_t> attached_siblings;
-  if (fatal_signal) {
+  if (fatal_signal || backtrace) {
     if (!android::procinfo::GetProcessTids(target, &siblings)) {
       PLOG(FATAL) << "failed to get process siblings";
     }
