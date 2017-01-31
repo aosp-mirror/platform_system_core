@@ -26,7 +26,6 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
-#include "histogram_logger.h"
 #include "uptime_parser.h"
 
 namespace {

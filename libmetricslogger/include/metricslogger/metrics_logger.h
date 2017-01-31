@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,12 @@
 #include <cstdint>
 #include <string>
 
-namespace bootstat {
+namespace android {
+namespace metricslogger {
 
-// Builds an EventLog buffer named |event| containing |data| and writes
-// the log into the Tron histogram logs.
+// Logs a Tron histogram metric named |event| containing |data| to the Tron log
+// buffer.
 void LogHistogram(const std::string& event, int32_t data);
 
-}  // namespace bootstat
+}  // namespace metricslogger
+}  // namespace android
