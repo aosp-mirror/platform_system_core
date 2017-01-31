@@ -209,6 +209,10 @@ int android_reboot_with_callback(
                            LINUX_REBOOT_CMD_RESTART2, arg);
             break;
 
+        case ANDROID_RB_THERMOFF:
+            ret = reboot(RB_POWER_OFF);
+            break;
+
         default:
             ret = -1;
     }
