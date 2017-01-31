@@ -536,7 +536,7 @@ TEST_P(MergeStressTest, RandomMerge) {
     ASSERT_TRUE(fence.isValid());
 
     unordered_map<int, int> fenceMap;
-    fenceMap.insert(make_tuple(0, 0));
+    fenceMap.insert(make_pair(0, 0));
 
     // Randomly create syncpoints out of a fixed set of timelines, and merge them together.
     for (int i = 0; i < mergeCount; i++) {
@@ -549,12 +549,12 @@ TEST_P(MergeStressTest, RandomMerge) {
         // Keep track of the latest syncpoint in each timeline.
         auto itr = fenceMap.find(timelineOffset);
         if (itr == end(fenceMap)) {
-            fenceMap.insert(tie(timelineOffset, syncPoint));
+            fenceMap.insert(make_pair(timelineOffset, syncPoint));
         }
         else {
             int oldSyncPoint = itr->second;
             fenceMap.erase(itr);
-            fenceMap.insert(tie(timelineOffset, max(syncPoint, oldSyncPoint)));
+            fenceMap.insert(make_pair(timelineOffset, max(syncPoint, oldSyncPoint)));
         }
 
         // Merge.
