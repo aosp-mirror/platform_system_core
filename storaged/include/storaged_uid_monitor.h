@@ -44,8 +44,10 @@ struct uid_info {
 
 struct uid_event {
     std::string name;
-    uint64_t read_bytes;
-    uint64_t write_bytes;
+    uint64_t fg_read_bytes;
+    uint64_t fg_write_bytes;
+    uint64_t bg_read_bytes;
+    uint64_t bg_write_bytes;
     uint64_t interval;
 };
 
