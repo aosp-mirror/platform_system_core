@@ -149,10 +149,12 @@ protected:
     int eng;
 
 private:
-    const static adf_id_t dev_id = 0;
+    const static adf_id_t dev_id;
     const static __u32 fmt8888[];
     const static size_t n_fmt8888;
 };
+
+const adf_id_t AdfTest::dev_id = 0;
 
 const __u32 AdfTest::fmt8888[] = {
    DRM_FORMAT_XRGB8888,
