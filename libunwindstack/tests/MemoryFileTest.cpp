@@ -20,12 +20,9 @@
 
 #include "Memory.h"
 
-#include "LogFake.h"
-
 class MemoryFileTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    ResetLogs();
     tf_ = new TemporaryFile;
   }
 
@@ -86,6 +83,7 @@ TEST_F(MemoryFileTest, offset_pagesize_aligned) {
     data += static_cast<char>((i % 10) + '0');
   }
   ASSERT_TRUE(android::base::WriteStringToFd(data, tf_->fd));
+
   ASSERT_TRUE(memory_.Init(tf_->path, 2 * pagesize));
   std::vector<char> buffer(11);
   ASSERT_TRUE(memory_.Read(0, buffer.data(), 10));
@@ -106,6 +104,7 @@ TEST_F(MemoryFileTest, offset_pagesize_aligned_plus_extra) {
     data += static_cast<char>((i % 10) + '0');
   }
   ASSERT_TRUE(android::base::WriteStringToFd(data, tf_->fd));
+
   ASSERT_TRUE(memory_.Init(tf_->path, 2 * pagesize + 10));
   std::vector<char> buffer(11);
   ASSERT_TRUE(memory_.Read(0, buffer.data(), 10));
@@ -164,4 +163,112 @@ TEST_F(MemoryFileTest, read_string_error) {
 
   // This should fail because there is no terminating \0
   ASSERT_FALSE(memory_.ReadString(0, &name));
+}
+
+TEST_F(MemoryFileTest, read_past_file_within_mapping) {
+  size_t pagesize = getpagesize();
+
+  ASSERT_TRUE(pagesize > 100);
+  std::vector<uint8_t> buffer(pagesize - 100);
+  for (size_t i = 0; i < pagesize - 100; i++) {
+    buffer[i] = static_cast<uint8_t>((i % 0x5e) + 0x20);
+  }
+  ASSERT_TRUE(android::base::WriteFully(tf_->fd, buffer.data(), buffer.size()));
+
+  ASSERT_TRUE(memory_.Init(tf_->path, 0));
+
+  for (size_t i = 0; i < 100; i++) {
+    uint8_t value;
+    ASSERT_FALSE(memory_.Read(buffer.size() + i, &value, 1)) << "Should have failed at value " << i;
+  }
+}
+
+TEST_F(MemoryFileTest, map_partial_offset_aligned) {
+  size_t pagesize = getpagesize();
+  std::vector<uint8_t> buffer(pagesize * 10);
+  for (size_t i = 0; i < pagesize * 10; i++) {
+    buffer[i] = i / pagesize + 1;
+  }
+  ASSERT_TRUE(android::base::WriteFully(tf_->fd, buffer.data(), buffer.size()));
+
+  // Map in only two pages of the data, and after the first page.
+  ASSERT_TRUE(memory_.Init(tf_->path, pagesize, pagesize * 2));
+
+  std::vector<uint8_t> read_buffer(pagesize * 2);
+  // Make sure that reading after mapped data is a failure.
+  ASSERT_FALSE(memory_.Read(pagesize * 2, read_buffer.data(), 1));
+  ASSERT_TRUE(memory_.Read(0, read_buffer.data(), pagesize * 2));
+  for (size_t i = 0; i < pagesize; i++) {
+    ASSERT_EQ(2, read_buffer[i]) << "Failed at byte " << i;
+  }
+  for (size_t i = pagesize; i < pagesize * 2; i++) {
+    ASSERT_EQ(3, read_buffer[i]) << "Failed at byte " << i;
+  }
+}
+
+TEST_F(MemoryFileTest, map_partial_offset_unaligned) {
+  size_t pagesize = getpagesize();
+  ASSERT_TRUE(pagesize > 0x100);
+  std::vector<uint8_t> buffer(pagesize * 10);
+  for (size_t i = 0; i < buffer.size(); i++) {
+    buffer[i] = i / pagesize + 1;
+  }
+  ASSERT_TRUE(android::base::WriteFully(tf_->fd, buffer.data(), buffer.size()));
+
+  // Map in only two pages of the data, and after the first page.
+  ASSERT_TRUE(memory_.Init(tf_->path, pagesize + 0x100, pagesize * 2));
+
+  std::vector<uint8_t> read_buffer(pagesize * 2);
+  // Make sure that reading after mapped data is a failure.
+  ASSERT_FALSE(memory_.Read(pagesize * 2, read_buffer.data(), 1));
+  ASSERT_TRUE(memory_.Read(0, read_buffer.data(), pagesize * 2));
+  for (size_t i = 0; i < pagesize - 0x100; i++) {
+    ASSERT_EQ(2, read_buffer[i]) << "Failed at byte " << i;
+  }
+  for (size_t i = pagesize - 0x100; i < 2 * pagesize - 0x100; i++) {
+    ASSERT_EQ(3, read_buffer[i]) << "Failed at byte " << i;
+  }
+  for (size_t i = 2 * pagesize - 0x100; i < pagesize * 2; i++) {
+    ASSERT_EQ(4, read_buffer[i]) << "Failed at byte " << i;
+  }
+}
+
+TEST_F(MemoryFileTest, map_overflow) {
+  size_t pagesize = getpagesize();
+  ASSERT_TRUE(pagesize > 0x100);
+  std::vector<uint8_t> buffer(pagesize * 10);
+  for (size_t i = 0; i < buffer.size(); i++) {
+    buffer[i] = i / pagesize + 1;
+  }
+  ASSERT_TRUE(android::base::WriteFully(tf_->fd, buffer.data(), buffer.size()));
+
+  // Map in only two pages of the data, and after the first page.
+  ASSERT_TRUE(memory_.Init(tf_->path, pagesize + 0x100, UINT64_MAX));
+
+  std::vector<uint8_t> read_buffer(pagesize * 10);
+  ASSERT_FALSE(memory_.Read(pagesize * 9 - 0x100 + 1, read_buffer.data(), 1));
+  ASSERT_TRUE(memory_.Read(0, read_buffer.data(), pagesize * 9 - 0x100));
+}
+
+TEST_F(MemoryFileTest, init_reinit) {
+  size_t pagesize = getpagesize();
+  std::vector<uint8_t> buffer(pagesize * 2);
+  for (size_t i = 0; i < buffer.size(); i++) {
+    buffer[i] = i / pagesize + 1;
+  }
+  ASSERT_TRUE(android::base::WriteFully(tf_->fd, buffer.data(), buffer.size()));
+
+  ASSERT_TRUE(memory_.Init(tf_->path, 0));
+  std::vector<uint8_t> read_buffer(buffer.size());
+  ASSERT_TRUE(memory_.Read(0, read_buffer.data(), pagesize));
+  for (size_t i = 0; i < pagesize; i++) {
+    ASSERT_EQ(1, read_buffer[i]) << "Failed at byte " << i;
+  }
+
+  // Now reinit.
+  ASSERT_TRUE(memory_.Init(tf_->path, pagesize));
+  ASSERT_TRUE(memory_.Read(0, read_buffer.data(), pagesize));
+  for (size_t i = 0; i < pagesize; i++) {
+    ASSERT_EQ(2, read_buffer[i]) << "Failed at byte " << i;
+  }
 }

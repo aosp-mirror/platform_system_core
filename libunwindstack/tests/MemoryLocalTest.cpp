@@ -23,16 +23,7 @@
 
 #include "Memory.h"
 
-#include "LogFake.h"
-
-class MemoryLocalTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    ResetLogs();
-  }
-};
-
-TEST_F(MemoryLocalTest, read) {
+TEST(MemoryLocalTest, read) {
   std::vector<uint8_t> src(1024);
   memset(src.data(), 0x4c, 1024);
 
@@ -56,7 +47,7 @@ TEST_F(MemoryLocalTest, read) {
   }
 }
 
-TEST_F(MemoryLocalTest, read_string) {
+TEST(MemoryLocalTest, read_string) {
   std::string name("string_in_memory");
 
   MemoryLocal local;
@@ -75,7 +66,7 @@ TEST_F(MemoryLocalTest, read_string) {
   ASSERT_FALSE(local.ReadString(reinterpret_cast<uint64_t>(&name[7]), &dst_name, 9));
 }
 
-TEST_F(MemoryLocalTest, read_illegal) {
+TEST(MemoryLocalTest, read_illegal) {
   MemoryLocal local;
 
   std::vector<uint8_t> dst(100);

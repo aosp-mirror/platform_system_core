@@ -53,16 +53,16 @@ TEST_F(ArmExidxExtractTest, bad_alignment) {
 }
 
 TEST_F(ArmExidxExtractTest, cant_unwind) {
-  elf_memory_.SetData(0x1000, 0x7fff2340);
-  elf_memory_.SetData(0x1004, 1);
+  elf_memory_.SetData32(0x1000, 0x7fff2340);
+  elf_memory_.SetData32(0x1004, 1);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x1000));
   ASSERT_EQ(ARM_STATUS_NO_UNWIND, exidx_->status());
   ASSERT_TRUE(data_->empty());
 }
 
 TEST_F(ArmExidxExtractTest, compact) {
-  elf_memory_.SetData(0x4000, 0x7ffa3000);
-  elf_memory_.SetData(0x4004, 0x80a8b0b0);
+  elf_memory_.SetData32(0x4000, 0x7ffa3000);
+  elf_memory_.SetData32(0x4004, 0x80a8b0b0);
   ASSERT_TRUE(exidx_->ExtractEntryData(0x4000));
   ASSERT_EQ(3U, data_->size());
   ASSERT_EQ(0xa8, data_->at(0));
@@ -71,8 +71,8 @@ TEST_F(ArmExidxExtractTest, compact) {
 
   // Missing finish gets added.
   elf_memory_.Clear();
-  elf_memory_.SetData(0x534, 0x7ffa3000);
-  elf_memory_.SetData(0x538, 0x80a1a2a3);
+  elf_memory_.SetData32(0x534, 0x7ffa3000);
+  elf_memory_.SetData32(0x538, 0x80a1a2a3);
   ASSERT_TRUE(exidx_->ExtractEntryData(0x534));
   ASSERT_EQ(4U, data_->size());
   ASSERT_EQ(0xa1, data_->at(0));
@@ -82,29 +82,29 @@ TEST_F(ArmExidxExtractTest, compact) {
 }
 
 TEST_F(ArmExidxExtractTest, compact_non_zero_personality) {
-  elf_memory_.SetData(0x4000, 0x7ffa3000);
+  elf_memory_.SetData32(0x4000, 0x7ffa3000);
 
   uint32_t compact_value = 0x80a8b0b0;
   for (size_t i = 1; i < 16; i++) {
-    elf_memory_.SetData(0x4004, compact_value | (i << 24));
+    elf_memory_.SetData32(0x4004, compact_value | (i << 24));
     ASSERT_FALSE(exidx_->ExtractEntryData(0x4000));
     ASSERT_EQ(ARM_STATUS_INVALID_PERSONALITY, exidx_->status());
   }
 }
 
 TEST_F(ArmExidxExtractTest, second_read_compact_personality_1_2) {
-  elf_memory_.SetData(0x5000, 0x1234);
-  elf_memory_.SetData(0x5004, 0x00001230);
-  elf_memory_.SetData(0x6234, 0x8100f3b0);
+  elf_memory_.SetData32(0x5000, 0x1234);
+  elf_memory_.SetData32(0x5004, 0x00001230);
+  elf_memory_.SetData32(0x6234, 0x8100f3b0);
   ASSERT_TRUE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(2U, data_->size());
   ASSERT_EQ(0xf3, data_->at(0));
   ASSERT_EQ(0xb0, data_->at(1));
 
   elf_memory_.Clear();
-  elf_memory_.SetData(0x5000, 0x1234);
-  elf_memory_.SetData(0x5004, 0x00001230);
-  elf_memory_.SetData(0x6234, 0x8200f3f4);
+  elf_memory_.SetData32(0x5000, 0x1234);
+  elf_memory_.SetData32(0x5004, 0x00001230);
+  elf_memory_.SetData32(0x6234, 0x8200f3f4);
   ASSERT_TRUE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(3U, data_->size());
   ASSERT_EQ(0xf3, data_->at(0));
@@ -112,10 +112,10 @@ TEST_F(ArmExidxExtractTest, second_read_compact_personality_1_2) {
   ASSERT_EQ(0xb0, data_->at(2));
 
   elf_memory_.Clear();
-  elf_memory_.SetData(0x5000, 0x1234);
-  elf_memory_.SetData(0x5004, 0x00001230);
-  elf_memory_.SetData(0x6234, 0x8201f3f4);
-  elf_memory_.SetData(0x6238, 0x102030b0);
+  elf_memory_.SetData32(0x5000, 0x1234);
+  elf_memory_.SetData32(0x5004, 0x00001230);
+  elf_memory_.SetData32(0x6234, 0x8201f3f4);
+  elf_memory_.SetData32(0x6238, 0x102030b0);
   ASSERT_TRUE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(6U, data_->size());
   ASSERT_EQ(0xf3, data_->at(0));
@@ -126,12 +126,12 @@ TEST_F(ArmExidxExtractTest, second_read_compact_personality_1_2) {
   ASSERT_EQ(0xb0, data_->at(5));
 
   elf_memory_.Clear();
-  elf_memory_.SetData(0x5000, 0x1234);
-  elf_memory_.SetData(0x5004, 0x00001230);
-  elf_memory_.SetData(0x6234, 0x8103f3f4);
-  elf_memory_.SetData(0x6238, 0x10203040);
-  elf_memory_.SetData(0x623c, 0x50607080);
-  elf_memory_.SetData(0x6240, 0x90a0c0d0);
+  elf_memory_.SetData32(0x5000, 0x1234);
+  elf_memory_.SetData32(0x5004, 0x00001230);
+  elf_memory_.SetData32(0x6234, 0x8103f3f4);
+  elf_memory_.SetData32(0x6238, 0x10203040);
+  elf_memory_.SetData32(0x623c, 0x50607080);
+  elf_memory_.SetData32(0x6240, 0x90a0c0d0);
   ASSERT_TRUE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(15U, data_->size());
   ASSERT_EQ(0xf3, data_->at(0));
@@ -152,33 +152,33 @@ TEST_F(ArmExidxExtractTest, second_read_compact_personality_1_2) {
 }
 
 TEST_F(ArmExidxExtractTest, second_read_compact_personality_illegal) {
-  elf_memory_.SetData(0x5000, 0x7ffa1e48);
-  elf_memory_.SetData(0x5004, 0x1230);
-  elf_memory_.SetData(0x6234, 0x832132b0);
+  elf_memory_.SetData32(0x5000, 0x7ffa1e48);
+  elf_memory_.SetData32(0x5004, 0x1230);
+  elf_memory_.SetData32(0x6234, 0x832132b0);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_INVALID_PERSONALITY, exidx_->status());
 
   elf_memory_.Clear();
-  elf_memory_.SetData(0x5000, 0x7ffa1e48);
-  elf_memory_.SetData(0x5004, 0x1230);
-  elf_memory_.SetData(0x6234, 0x842132b0);
+  elf_memory_.SetData32(0x5000, 0x7ffa1e48);
+  elf_memory_.SetData32(0x5004, 0x1230);
+  elf_memory_.SetData32(0x6234, 0x842132b0);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_INVALID_PERSONALITY, exidx_->status());
 }
 
 TEST_F(ArmExidxExtractTest, second_read_offset_is_negative) {
-  elf_memory_.SetData(0x5000, 0x7ffa1e48);
-  elf_memory_.SetData(0x5004, 0x7fffb1e0);
-  elf_memory_.SetData(0x1e4, 0x842132b0);
+  elf_memory_.SetData32(0x5000, 0x7ffa1e48);
+  elf_memory_.SetData32(0x5004, 0x7fffb1e0);
+  elf_memory_.SetData32(0x1e4, 0x842132b0);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_INVALID_PERSONALITY, exidx_->status());
 }
 
 TEST_F(ArmExidxExtractTest, second_read_not_compact) {
-  elf_memory_.SetData(0x5000, 0x1234);
-  elf_memory_.SetData(0x5004, 0x00001230);
-  elf_memory_.SetData(0x6234, 0x1);
-  elf_memory_.SetData(0x6238, 0x001122b0);
+  elf_memory_.SetData32(0x5000, 0x1234);
+  elf_memory_.SetData32(0x5004, 0x00001230);
+  elf_memory_.SetData32(0x6234, 0x1);
+  elf_memory_.SetData32(0x6238, 0x001122b0);
   ASSERT_TRUE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(3U, data_->size());
   ASSERT_EQ(0x11, data_->at(0));
@@ -186,10 +186,10 @@ TEST_F(ArmExidxExtractTest, second_read_not_compact) {
   ASSERT_EQ(0xb0, data_->at(2));
 
   elf_memory_.Clear();
-  elf_memory_.SetData(0x5000, 0x1234);
-  elf_memory_.SetData(0x5004, 0x00001230);
-  elf_memory_.SetData(0x6234, 0x2);
-  elf_memory_.SetData(0x6238, 0x00112233);
+  elf_memory_.SetData32(0x5000, 0x1234);
+  elf_memory_.SetData32(0x5004, 0x00001230);
+  elf_memory_.SetData32(0x6234, 0x2);
+  elf_memory_.SetData32(0x6238, 0x00112233);
   ASSERT_TRUE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(4U, data_->size());
   ASSERT_EQ(0x11, data_->at(0));
@@ -198,11 +198,11 @@ TEST_F(ArmExidxExtractTest, second_read_not_compact) {
   ASSERT_EQ(0xb0, data_->at(3));
 
   elf_memory_.Clear();
-  elf_memory_.SetData(0x5000, 0x1234);
-  elf_memory_.SetData(0x5004, 0x00001230);
-  elf_memory_.SetData(0x6234, 0x3);
-  elf_memory_.SetData(0x6238, 0x01112233);
-  elf_memory_.SetData(0x623c, 0x445566b0);
+  elf_memory_.SetData32(0x5000, 0x1234);
+  elf_memory_.SetData32(0x5004, 0x00001230);
+  elf_memory_.SetData32(0x6234, 0x3);
+  elf_memory_.SetData32(0x6238, 0x01112233);
+  elf_memory_.SetData32(0x623c, 0x445566b0);
   ASSERT_TRUE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(7U, data_->size());
   ASSERT_EQ(0x11, data_->at(0));
@@ -214,15 +214,15 @@ TEST_F(ArmExidxExtractTest, second_read_not_compact) {
   ASSERT_EQ(0xb0, data_->at(6));
 
   elf_memory_.Clear();
-  elf_memory_.SetData(0x5000, 0x1234);
-  elf_memory_.SetData(0x5004, 0x00001230);
-  elf_memory_.SetData(0x6234, 0x3);
-  elf_memory_.SetData(0x6238, 0x05112233);
-  elf_memory_.SetData(0x623c, 0x01020304);
-  elf_memory_.SetData(0x6240, 0x05060708);
-  elf_memory_.SetData(0x6244, 0x090a0b0c);
-  elf_memory_.SetData(0x6248, 0x0d0e0f10);
-  elf_memory_.SetData(0x624c, 0x11121314);
+  elf_memory_.SetData32(0x5000, 0x1234);
+  elf_memory_.SetData32(0x5004, 0x00001230);
+  elf_memory_.SetData32(0x6234, 0x3);
+  elf_memory_.SetData32(0x6238, 0x05112233);
+  elf_memory_.SetData32(0x623c, 0x01020304);
+  elf_memory_.SetData32(0x6240, 0x05060708);
+  elf_memory_.SetData32(0x6244, 0x090a0b0c);
+  elf_memory_.SetData32(0x6248, 0x0d0e0f10);
+  elf_memory_.SetData32(0x624c, 0x11121314);
   ASSERT_TRUE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(24U, data_->size());
   ASSERT_EQ(0x11, data_->at(0));
@@ -255,43 +255,43 @@ TEST_F(ArmExidxExtractTest, read_failures) {
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_READ_FAILED, exidx_->status());
 
-  elf_memory_.SetData(0x5000, 0x100);
+  elf_memory_.SetData32(0x5000, 0x100);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_READ_FAILED, exidx_->status());
 
-  elf_memory_.SetData(0x5004, 0x100);
+  elf_memory_.SetData32(0x5004, 0x100);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_READ_FAILED, exidx_->status());
 
-  elf_memory_.SetData(0x5104, 0x1);
+  elf_memory_.SetData32(0x5104, 0x1);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_READ_FAILED, exidx_->status());
 
-  elf_memory_.SetData(0x5108, 0x01010203);
+  elf_memory_.SetData32(0x5108, 0x01010203);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_READ_FAILED, exidx_->status());
 }
 
 TEST_F(ArmExidxExtractTest, malformed) {
-  elf_memory_.SetData(0x5000, 0x100);
-  elf_memory_.SetData(0x5004, 0x100);
-  elf_memory_.SetData(0x5104, 0x1);
-  elf_memory_.SetData(0x5108, 0x06010203);
+  elf_memory_.SetData32(0x5000, 0x100);
+  elf_memory_.SetData32(0x5004, 0x100);
+  elf_memory_.SetData32(0x5104, 0x1);
+  elf_memory_.SetData32(0x5108, 0x06010203);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_MALFORMED, exidx_->status());
 
   elf_memory_.Clear();
-  elf_memory_.SetData(0x5000, 0x100);
-  elf_memory_.SetData(0x5004, 0x100);
-  elf_memory_.SetData(0x5104, 0x1);
-  elf_memory_.SetData(0x5108, 0x81060203);
+  elf_memory_.SetData32(0x5000, 0x100);
+  elf_memory_.SetData32(0x5004, 0x100);
+  elf_memory_.SetData32(0x5104, 0x1);
+  elf_memory_.SetData32(0x5108, 0x81060203);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_MALFORMED, exidx_->status());
 }
 
 TEST_F(ArmExidxExtractTest, cant_unwind_log) {
-  elf_memory_.SetData(0x1000, 0x7fff2340);
-  elf_memory_.SetData(0x1004, 1);
+  elf_memory_.SetData32(0x1000, 0x7fff2340);
+  elf_memory_.SetData32(0x1004, 1);
 
   exidx_->set_log(true);
   exidx_->set_log_indent(0);
@@ -305,8 +305,8 @@ TEST_F(ArmExidxExtractTest, cant_unwind_log) {
 }
 
 TEST_F(ArmExidxExtractTest, raw_data_compact) {
-  elf_memory_.SetData(0x4000, 0x7ffa3000);
-  elf_memory_.SetData(0x4004, 0x80a8b0b0);
+  elf_memory_.SetData32(0x4000, 0x7ffa3000);
+  elf_memory_.SetData32(0x4004, 0x80a8b0b0);
 
   exidx_->set_log(true);
   exidx_->set_log_indent(0);
@@ -317,10 +317,10 @@ TEST_F(ArmExidxExtractTest, raw_data_compact) {
 }
 
 TEST_F(ArmExidxExtractTest, raw_data_non_compact) {
-  elf_memory_.SetData(0x5000, 0x1234);
-  elf_memory_.SetData(0x5004, 0x00001230);
-  elf_memory_.SetData(0x6234, 0x2);
-  elf_memory_.SetData(0x6238, 0x00112233);
+  elf_memory_.SetData32(0x5000, 0x1234);
+  elf_memory_.SetData32(0x5004, 0x00001230);
+  elf_memory_.SetData32(0x6234, 0x2);
+  elf_memory_.SetData32(0x6238, 0x00112233);
 
   exidx_->set_log(true);
   exidx_->set_log_indent(0);

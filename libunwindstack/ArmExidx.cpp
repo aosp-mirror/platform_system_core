@@ -25,6 +25,8 @@
 #include "ArmExidx.h"
 #include "Log.h"
 #include "Machine.h"
+#include "Memory.h"
+#include "Regs.h"
 
 void ArmExidx::LogRawData() {
   std::string log_str("Raw Data:");
@@ -216,9 +218,15 @@ inline bool ArmExidx::DecodePrefix_10_00(uint8_t byte) {
       cfa_ += 4;
     }
   }
+
   // If the sp register is modified, change the cfa value.
   if (registers & (1 << ARM_REG_SP)) {
     cfa_ = (*regs_)[ARM_REG_SP];
+  }
+
+  // Indicate if the pc register was set.
+  if (registers & (1 << ARM_REG_PC)) {
+    pc_set_ = true;
   }
   return true;
 }
@@ -295,9 +303,6 @@ inline bool ArmExidx::DecodePrefix_10_11_0000() {
       status_ = ARM_STATUS_FINISH;
       return false;
     }
-  }
-  if (!(*regs_)[ARM_REG_PC]) {
-    (*regs_)[ARM_REG_PC] = (*regs_)[ARM_REG_LR];
   }
   status_ = ARM_STATUS_FINISH;
   return false;
@@ -675,6 +680,7 @@ bool ArmExidx::Decode() {
 }
 
 bool ArmExidx::Eval() {
+  pc_set_ = false;
   while (Decode());
   return status_ == ARM_STATUS_FINISH;
 }

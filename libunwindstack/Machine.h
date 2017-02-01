@@ -19,8 +19,6 @@
 
 #include <stdint.h>
 
-class Regs;
-
 enum ArmReg : uint16_t {
   ARM_REG_R0 = 0,
   ARM_REG_R1,
