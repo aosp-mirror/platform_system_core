@@ -103,6 +103,9 @@ cc_library {
                 "trace-dev.c",
                 "uevent.c",
             ],
+            sanitize: {
+                misc_undefined: ["integer"],
+            },
         },
 
         android_arm: {
@@ -153,9 +156,6 @@ cc_library {
     ],
 
     clang: true,
-    sanitize: {
-        misc_undefined: ["integer"],
-    },
 }
 
 subdirs = ["tests"]
