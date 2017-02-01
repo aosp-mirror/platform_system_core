@@ -19,3 +19,5 @@ cc_library_static {
     local_include_dirs: ["include"],
     export_include_dirs: ["include"],
 }
+
+subdirs = ["tests"]
