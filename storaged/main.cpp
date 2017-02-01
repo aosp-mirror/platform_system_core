@@ -104,9 +104,6 @@ static void help_message(void) {
     fflush(stdout);
 }
 
-#define HOUR_TO_SEC ( 3600 )
-#define DAY_TO_SEC ( 3600 * 24 )
-
 int main(int argc, char** argv) {
     int flag_main_service = 0;
     int flag_dump_uid = 0;

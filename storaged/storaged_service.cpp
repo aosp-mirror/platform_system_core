@@ -78,7 +78,7 @@ std::vector<struct uid_info> Storaged::dump_uids(const char* /* option */) {
     return uids_v;
 }
 
-status_t Storaged::dump(int fd, const Vector<String16>& /* args */) {
+status_t Storaged::dump(int fd, const Vector<String16>& args) {
     IPCThreadState* self = IPCThreadState::self();
     const int pid = self->getCallingPid();
     const int uid = self->getCallingUid();
@@ -88,14 +88,26 @@ status_t Storaged::dump(int fd, const Vector<String16>& /* args */) {
         return PERMISSION_DENIED;
     }
 
-    const std::vector<struct uid_event>& events = storaged.get_uid_events();
+    int hours = 0;
+    for (size_t i = 0; i < args.size(); i++) {
+        const auto& arg = args[i];
+        if (arg == String16("--hours")) {
+            if (++i >= args.size())
+                break;
+            hours = stoi(String16::std_string(args[i]));
+            continue;
+        }
+    }
+
+    const std::vector<struct uid_event>& events = storaged.get_uid_events(hours);
     for (const auto& event : events) {
-        dprintf(fd, "%s %llu %llu %llu %llu %llu\n", event.name.c_str(),
+        dprintf(fd, "%llu %s %llu %llu %llu %llu\n",
+            (unsigned long long)event.ts,
+            event.name.c_str(),
             (unsigned long long)event.fg_read_bytes,
             (unsigned long long)event.fg_write_bytes,
             (unsigned long long)event.bg_read_bytes,
-            (unsigned long long)event.bg_write_bytes,
-            (unsigned long long)event.interval);
+            (unsigned long long)event.bg_write_bytes);
     }
     return NO_ERROR;
 }

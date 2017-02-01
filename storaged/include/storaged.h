@@ -45,6 +45,8 @@ friend class test_case_name##_##test_name##_Test
 #define MSEC_TO_USEC ( 1000 )
 #define USEC_TO_NSEC ( 1000 )
 #define SEC_TO_USEC ( 1000000 )
+#define HOUR_TO_SEC ( 3600 )
+#define DAY_TO_SEC ( 3600 * 24 )
 
 // number of attributes diskstats has
 #define DISK_STATS_SIZE ( 11 )
@@ -250,7 +252,7 @@ public:
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT ( 60 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH ( 3600 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_EMMC_INFO_PUBLISH ( 86400 )
-#define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO ( 86400 )
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO ( 3600 )
 
 // UID IO threshold in bytes
 #define DEFAULT_PERIODIC_CHORES_UID_IO_THRESHOLD ( 1024 * 1024 * 1024ULL )
@@ -294,8 +296,8 @@ public:
     std::unordered_map<uint32_t, struct uid_info> get_uids(void) {
         return mUidm.get_uids();
     }
-    std::vector<struct uid_event> get_uid_events(void) {
-        return mUidm.dump_events();
+    std::vector<struct uid_event> get_uid_events(int hours) {
+        return mUidm.dump_events(hours);
     }
 };
 

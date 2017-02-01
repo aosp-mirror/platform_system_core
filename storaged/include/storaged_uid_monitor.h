@@ -48,7 +48,10 @@ struct uid_event {
     uint64_t fg_write_bytes;
     uint64_t bg_read_bytes;
     uint64_t bg_write_bytes;
-    uint64_t interval;
+    uint64_t ts;
+    bool operator< (const struct uid_event& e) const {
+        return ts < e.ts;
+    }
 };
 
 class uid_monitor {
@@ -67,8 +70,8 @@ public:
     int get_periodic_chores_interval() { return interval; }
     std::unordered_map<uint32_t, struct uid_info> get_uids();
     void report();
-    void add_event(const struct uid_event& event);
-    std::vector<struct uid_event> dump_events();
+    void add_events(const std::vector<struct uid_event>& new_events, uint64_t curr_ts);
+    std::vector<struct uid_event> dump_events(int hours);
 };
 
 #endif /* _STORAGED_UID_MONITOR_H_ */
