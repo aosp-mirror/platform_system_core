@@ -12,19 +12,19 @@ on post-fs-data && property:init.svc.bootanim=running
     exec - root root -- /system/bin/bootstat -r post_decrypt_time_elapsed
 
 # sys.logbootcomplete is a signal to enable the bootstat logging mechanism.
-# This signaling is necessary to prevent logging boot metrics after a soft
-# reboot (e.g., adb shell stop && adb shell start).  /proc/uptime is not reset
-# during a soft reboot, which leads to false boot time metrics being reported.
+# This signaling is necessary to prevent logging boot metrics after a runtime
+# restart (e.g., adb shell stop && adb shell start).  /proc/uptime is not reset
+# during a runtime restart, which leads to false boot time metrics being reported.
 #
 # The 'on boot' event occurs once per hard boot (device power on), which
-# switches the flag on. If the device performs a soft reboot, the flag is
+# switches the flag on. If the device performs a runtime restart, the flag is
 # switched off and cannot be switched on until the device hard boots again.
 
 # Enable bootstat logging on boot.
 on boot
     setprop sys.logbootcomplete 1
 
-# Disable further bootstat logging on a soft reboot. A soft reboot is
+# Disable further bootstat logging on a runtime restart. A runtime restart is
 # signaled by the zygote stopping.
 on property:init.svc.zygote=stopping
     setprop sys.logbootcomplete 0
