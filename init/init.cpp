@@ -62,7 +62,6 @@
 #include "keychords.h"
 #include "log.h"
 #include "property_service.h"
-#include "seccomp.h"
 #include "service.h"
 #include "signal_handler.h"
 #include "ueventd.h"
@@ -821,12 +820,6 @@ int main(int argc, char** argv) {
 
         // Now set up SELinux for second stage.
         selinux_initialize(false);
-
-        // Install system-wide seccomp filter
-        if (!set_seccomp_filter()) {
-            LOG(ERROR) << "Failed to set seccomp policy";
-            security_failure();
-        }
     }
 
     // These directories were necessarily created before initial policy load
