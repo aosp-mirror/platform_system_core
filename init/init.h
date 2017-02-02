@@ -36,4 +36,6 @@ void register_epoll_handler(int fd, void (*fn)());
 
 int add_environment(const char* key, const char* val);
 
+bool wait_property(const char *name, const char *value);
+
 #endif  /* _INIT_INIT_H */
