@@ -70,7 +70,6 @@ LOCAL_SRC_FILES:= \
     init.cpp \
     keychords.cpp \
     property_service.cpp \
-    seccomp.cpp \
     signal_handler.cpp \
     ueventd.cpp \
     ueventd_parser.cpp \
@@ -97,7 +96,6 @@ LOCAL_STATIC_LIBRARIES := \
     libbase \
     libc \
     libselinux \
-    libseccomp_policy \
     liblog \
     libcrypto_utils \
     libcrypto \
