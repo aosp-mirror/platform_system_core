@@ -36,6 +36,19 @@
 #include "debuggerd/handler.h"
 #endif
 
+#if defined(__arm__)
+// See https://www.kernel.org/doc/Documentation/arm/kernel_user_helpers.txt for details.
+#define __kuser_helper_version (*(int32_t*) 0xffff0ffc)
+typedef void * (__kuser_get_tls_t)(void);
+#define __kuser_get_tls (*(__kuser_get_tls_t*) 0xffff0fe0)
+typedef int (__kuser_cmpxchg_t)(int oldval, int newval, volatile int *ptr);
+#define __kuser_cmpxchg (*(__kuser_cmpxchg_t*) 0xffff0fc0)
+typedef void (__kuser_dmb_t)(void);
+#define __kuser_dmb (*(__kuser_dmb_t*) 0xffff0fa0)
+typedef int (__kuser_cmpxchg64_t)(const int64_t*, const int64_t*, volatile int64_t*);
+#define __kuser_cmpxchg64 (*(__kuser_cmpxchg64_t*) 0xffff0f60)
+#endif
+
 #define noinline __attribute__((__noinline__))
 
 // Avoid name mangling so that stacks are more readable.
@@ -142,22 +155,36 @@ static int usage() {
     fprintf(stderr, "where KIND is:\n");
     fprintf(stderr, "  smash-stack           overwrite a -fstack-protector guard\n");
     fprintf(stderr, "  stack-overflow        recurse until the stack overflows\n");
+    fprintf(stderr, "  nostack               crash with a NULL stack pointer\n");
+    fprintf(stderr, "\n");
     fprintf(stderr, "  heap-corruption       cause a libc abort by corrupting the heap\n");
     fprintf(stderr, "  heap-usage            cause a libc abort by abusing a heap function\n");
-    fprintf(stderr, "  nostack               crash with a NULL stack pointer\n");
+    fprintf(stderr, "\n");
     fprintf(stderr, "  abort                 call abort()\n");
     fprintf(stderr, "  assert                call assert() without a function\n");
     fprintf(stderr, "  assert2               call assert() with a function\n");
     fprintf(stderr, "  exit                  call exit(1)\n");
+    fprintf(stderr, "\n");
     fprintf(stderr, "  fortify               fail a _FORTIFY_SOURCE check\n");
+    fprintf(stderr, "  seccomp               fail a seccomp check\n");
+#if defined(__arm__)
+    fprintf(stderr, "  kuser_helper_version  call kuser_helper_version\n");
+    fprintf(stderr, "  kuser_get_tls         call kuser_get_tls\n");
+    fprintf(stderr, "  kuser_cmpxchg         call kuser_cmpxchg\n");
+    fprintf(stderr, "  kuser_memory_barrier  call kuser_memory_barrier\n");
+    fprintf(stderr, "  kuser_cmpxchg64       call kuser_cmpxchg64\n");
+#endif
+    fprintf(stderr, "\n");
     fprintf(stderr, "  LOG_ALWAYS_FATAL      call liblog LOG_ALWAYS_FATAL\n");
     fprintf(stderr, "  LOG_ALWAYS_FATAL_IF   call liblog LOG_ALWAYS_FATAL_IF\n");
     fprintf(stderr, "  LOG-FATAL             call libbase LOG(FATAL)\n");
+    fprintf(stderr, "\n");
     fprintf(stderr, "  SIGFPE                cause a SIGFPE\n");
     fprintf(stderr, "  SIGSEGV               cause a SIGSEGV at address 0x0 (synonym: crash)\n");
     fprintf(stderr, "  SIGSEGV-non-null      cause a SIGSEGV at a non-zero address\n");
     fprintf(stderr, "  SIGSEGV-unmapped      mmap/munmap a region of memory and then attempt to access it\n");
     fprintf(stderr, "  SIGTRAP               cause a SIGTRAP\n");
+    fprintf(stderr, "\n");
     fprintf(stderr, "  fprintf-NULL          pass a null pointer to fprintf\n");
     fprintf(stderr, "  readdir-NULL          pass a null pointer to readdir\n");
     fprintf(stderr, "  strlen-NULL           pass a null pointer to strlen\n");
@@ -235,6 +262,20 @@ noinline int do_action(const char* arg) {
                                                  MAP_SHARED | MAP_ANONYMOUS, -1, 0));
         munmap(map, sizeof(int));
         map[0] = '8';
+    } else if (!strcasecmp(arg, "seccomp")) {
+        syscall(99999);
+#if defined(__arm__)
+    } else if (!strcasecmp(arg, "kuser_helper_version")) {
+        return __kuser_helper_version;
+    } else if (!strcasecmp(arg, "kuser_get_tls")) {
+        return !__kuser_get_tls();
+    } else if (!strcasecmp(arg, "kuser_cmpxchg")) {
+        return __kuser_cmpxchg(0, 0, 0);
+    } else if (!strcasecmp(arg, "kuser_memory_barrier")) {
+        __kuser_dmb();
+    } else if (!strcasecmp(arg, "kuser_cmpxchg64")) {
+        return __kuser_cmpxchg64(0, 0, 0);
+#endif
     } else {
         return usage();
     }
