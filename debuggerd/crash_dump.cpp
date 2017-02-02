@@ -51,24 +51,25 @@
 using android::base::unique_fd;
 using android::base::StringPrintf;
 
-static bool pid_contains_tid(pid_t pid, pid_t tid) {
-  std::string task_path = StringPrintf("/proc/%d/task/%d", pid, tid);
-  return access(task_path.c_str(), F_OK) == 0;
+static bool pid_contains_tid(int pid_proc_fd, pid_t tid) {
+  struct stat st;
+  std::string task_path = StringPrintf("task/%d", tid);
+  return fstatat(pid_proc_fd, task_path.c_str(), &st, 0) == 0;
 }
 
 // Attach to a thread, and verify that it's still a member of the given process
-static bool ptrace_seize_thread(pid_t pid, pid_t tid, std::string* error) {
+static bool ptrace_seize_thread(int pid_proc_fd, pid_t tid, std::string* error) {
   if (ptrace(PTRACE_SEIZE, tid, 0, 0) != 0) {
     *error = StringPrintf("failed to attach to thread %d: %s", tid, strerror(errno));
     return false;
   }
 
   // Make sure that the task we attached to is actually part of the pid we're dumping.
-  if (!pid_contains_tid(pid, tid)) {
+  if (!pid_contains_tid(pid_proc_fd, tid)) {
     if (ptrace(PTRACE_DETACH, tid, 0, 0) != 0) {
       PLOG(FATAL) << "failed to detach from thread " << tid;
     }
-    *error = StringPrintf("thread %d is not in process %d", tid, pid);
+    *error = StringPrintf("thread %d is not in process", tid);
     return false;
   }
 
@@ -263,7 +264,7 @@ int main(int argc, char** argv) {
   check_process(target_proc_fd, target);
 
   std::string attach_error;
-  if (!ptrace_seize_thread(target, main_tid, &attach_error)) {
+  if (!ptrace_seize_thread(target_proc_fd, main_tid, &attach_error)) {
     LOG(FATAL) << attach_error;
   }
 
@@ -304,6 +305,7 @@ int main(int argc, char** argv) {
   }
 
   int signo = siginfo.si_signo;
+  bool fatal_signal = signo != DEBUGGER_SIGNAL;
   bool backtrace = false;
   uintptr_t abort_address = 0;
 
@@ -319,17 +321,16 @@ int main(int argc, char** argv) {
 
   // Now that we have the signal that kicked things off, attach all of the
   // sibling threads, and then proceed.
-  bool fatal_signal = signo != DEBUGGER_SIGNAL;
-  std::set<pid_t> siblings;
   std::set<pid_t> attached_siblings;
-  if (fatal_signal || backtrace) {
+  {
+    std::set<pid_t> siblings;
     if (!android::procinfo::GetProcessTids(target, &siblings)) {
       PLOG(FATAL) << "failed to get process siblings";
     }
     siblings.erase(main_tid);
 
     for (pid_t sibling_tid : siblings) {
-      if (!ptrace_seize_thread(target, sibling_tid, &attach_error)) {
+      if (!ptrace_seize_thread(target_proc_fd, sibling_tid, &attach_error)) {
         LOG(WARNING) << attach_error;
       } else {
         attached_siblings.insert(sibling_tid);
