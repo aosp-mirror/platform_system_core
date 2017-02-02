@@ -298,7 +298,8 @@ Commands
 > Fork and execute command with the given arguments. The command starts
   after "--" so that an optional security context, user, and supplementary
   groups can be provided. No other commands will be run until this one
-  finishes. _seclabel_ can be a - to denote default.
+  finishes. _seclabel_ can be a - to denote default. Properties are expanded
+  within _argument_.
 
 `export <name> <value>`
 > Set the environment variable _name_ equal to _value_ in the
@@ -411,6 +412,11 @@ Commands
 > Poll for the existence of the given file and return when found,
   or the timeout has been reached. If timeout is not specified it
   currently defaults to five seconds.
+
+`wait_for_prop <name> <value>`
+> Wait for system property _name_ to be _value_. Properties are expanded
+  within _value_. If property _name_ is already set to _value_, continue
+  immediately.
 
 `write <path> <content>`
 > Open the file at _path_ and write a string to it with write(2).
