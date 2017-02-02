@@ -24,10 +24,10 @@ static bool should_use_libusb() {
 
 void usb_init() {
     if (should_use_libusb()) {
-        LOG(INFO) << "using libusb backend";
+        LOG(DEBUG) << "using libusb backend";
         libusb::usb_init();
     } else {
-        LOG(INFO) << "using native backend";
+        LOG(DEBUG) << "using native backend";
         native::usb_init();
     }
 }
