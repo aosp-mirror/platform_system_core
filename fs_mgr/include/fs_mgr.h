@@ -76,7 +76,8 @@ struct fstab_rec {
     int max_comp_streams;
     unsigned int zram_size;
     uint64_t reserved_size;
-    unsigned int file_encryption_mode;
+    unsigned int file_contents_mode;
+    unsigned int file_names_mode;
     unsigned int erase_blk_size;
     unsigned int logical_blk_size;
 };
@@ -118,7 +119,9 @@ int fs_mgr_is_nonremovable(const struct fstab_rec *fstab);
 int fs_mgr_is_verified(const struct fstab_rec *fstab);
 int fs_mgr_is_encryptable(const struct fstab_rec *fstab);
 int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab);
-const char* fs_mgr_get_file_encryption_mode(const struct fstab_rec *fstab);
+void fs_mgr_get_file_encryption_modes(const struct fstab_rec *fstab,
+                                      const char **contents_mode_ret,
+                                      const char **filenames_mode_ret);
 int fs_mgr_is_convertible_to_fbe(const struct fstab_rec *fstab);
 int fs_mgr_is_noemulatedsd(const struct fstab_rec *fstab);
 int fs_mgr_is_notrim(struct fstab_rec *fstab);

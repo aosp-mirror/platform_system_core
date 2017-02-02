@@ -34,7 +34,8 @@ struct fs_mgr_flag_values {
     int max_comp_streams;
     unsigned int zram_size;
     uint64_t reserved_size;
-    unsigned int file_encryption_mode;
+    unsigned int file_contents_mode;
+    unsigned int file_names_mode;
     unsigned int erase_blk_size;
     unsigned int logical_blk_size;
 };
@@ -94,14 +95,50 @@ static struct flag_list fs_mgr_flags[] = {
     { 0,                    0 },
 };
 
-#define EM_SOFTWARE 1
-#define EM_ICE      2
+#define EM_AES_256_XTS  1
+#define EM_ICE          2
+#define EM_AES_256_CTS  3
+#define EM_AES_256_HEH  4
 
-static struct flag_list encryption_modes[] = {
-    {"software", EM_SOFTWARE},
-    {"ice", EM_ICE},
-    {0, 0}
+static const struct flag_list file_contents_encryption_modes[] = {
+    {"aes-256-xts", EM_AES_256_XTS},
+    {"software", EM_AES_256_XTS}, /* alias for backwards compatibility */
+    {"ice", EM_ICE}, /* hardware-specific inline cryptographic engine */
+    {0, 0},
 };
+
+static const struct flag_list file_names_encryption_modes[] = {
+    {"aes-256-cts", EM_AES_256_CTS},
+    {"aes-256-heh", EM_AES_256_HEH},
+    {0, 0},
+};
+
+static unsigned int encryption_mode_to_flag(const struct flag_list *list,
+                                            const char *mode, const char *type)
+{
+    const struct flag_list *j;
+
+    for (j = list; j->name; ++j) {
+        if (!strcmp(mode, j->name)) {
+            return j->flag;
+        }
+    }
+    LERROR << "Unknown " << type << " encryption mode: " << mode;
+    return 0;
+}
+
+static const char *flag_to_encryption_mode(const struct flag_list *list,
+                                           unsigned int flag)
+{
+    const struct flag_list *j;
+
+    for (j = list; j->name; ++j) {
+        if (flag == j->flag) {
+            return j->name;
+        }
+    }
+    return nullptr;
+}
 
 static uint64_t calculate_zram_size(unsigned int percentage)
 {
@@ -183,20 +220,28 @@ static int parse_flags(char *flags, struct flag_list *fl,
                      * location of the keys.  Get it and return it.
                      */
                     flag_vals->key_loc = strdup(strchr(p, '=') + 1);
-                    flag_vals->file_encryption_mode = EM_SOFTWARE;
+                    flag_vals->file_contents_mode = EM_AES_256_XTS;
+                    flag_vals->file_names_mode = EM_AES_256_CTS;
                 } else if ((fl[i].flag == MF_FILEENCRYPTION) && flag_vals) {
-                    /* The fileencryption flag is followed by an = and the
-                     * type of the encryption.  Get it and return it.
+                    /* The fileencryption flag is followed by an = and
+                     * the mode of contents encryption, then optionally a
+                     * : and the mode of filenames encryption (defaults
+                     * to aes-256-cts).  Get it and return it.
                      */
-                    const struct flag_list *j;
-                    const char *mode = strchr(p, '=') + 1;
-                    for (j = encryption_modes; j->name; ++j) {
-                        if (!strcmp(mode, j->name)) {
-                            flag_vals->file_encryption_mode = j->flag;
-                        }
+                    char *mode = strchr(p, '=') + 1;
+                    char *colon = strchr(mode, ':');
+                    if (colon) {
+                        *colon = '\0';
                     }
-                    if (flag_vals->file_encryption_mode == 0) {
-                        LERROR << "Unknown file encryption mode: " << mode;
+                    flag_vals->file_contents_mode =
+                        encryption_mode_to_flag(file_contents_encryption_modes,
+                                                mode, "file contents");
+                    if (colon) {
+                        flag_vals->file_names_mode =
+                            encryption_mode_to_flag(file_names_encryption_modes,
+                                                    colon + 1, "file names");
+                    } else {
+                        flag_vals->file_names_mode = EM_AES_256_CTS;
                     }
                 } else if ((fl[i].flag == MF_LENGTH) && flag_vals) {
                     /* The length flag is followed by an = and the
@@ -406,7 +451,8 @@ struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
         fstab->recs[cnt].max_comp_streams = flag_vals.max_comp_streams;
         fstab->recs[cnt].zram_size = flag_vals.zram_size;
         fstab->recs[cnt].reserved_size = flag_vals.reserved_size;
-        fstab->recs[cnt].file_encryption_mode = flag_vals.file_encryption_mode;
+        fstab->recs[cnt].file_contents_mode = flag_vals.file_contents_mode;
+        fstab->recs[cnt].file_names_mode = flag_vals.file_names_mode;
         fstab->recs[cnt].erase_blk_size = flag_vals.erase_blk_size;
         fstab->recs[cnt].logical_blk_size = flag_vals.logical_blk_size;
         cnt++;
@@ -567,15 +613,14 @@ int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab)
     return fstab->fs_mgr_flags & MF_FILEENCRYPTION;
 }
 
-const char* fs_mgr_get_file_encryption_mode(const struct fstab_rec *fstab)
+void fs_mgr_get_file_encryption_modes(const struct fstab_rec *fstab,
+                                      const char **contents_mode_ret,
+                                      const char **filenames_mode_ret)
 {
-    const struct flag_list *j;
-    for (j = encryption_modes; j->name; ++j) {
-        if (fstab->file_encryption_mode == j->flag) {
-            return j->name;
-        }
-    }
-    return NULL;
+    *contents_mode_ret = flag_to_encryption_mode(file_contents_encryption_modes,
+                                                 fstab->file_contents_mode);
+    *filenames_mode_ret = flag_to_encryption_mode(file_names_encryption_modes,
+                                                  fstab->file_names_mode);
 }
 
 int fs_mgr_is_convertible_to_fbe(const struct fstab_rec *fstab)
