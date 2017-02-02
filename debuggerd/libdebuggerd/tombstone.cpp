@@ -49,6 +49,8 @@
 #include "open_files_list.h"
 #include "tombstone.h"
 
+using android::base::StringPrintf;
+
 #define STACK_WORDS 16
 
 #define MAX_TOMBSTONES  10
@@ -74,7 +76,7 @@ static bool signal_has_si_addr(int si_signo, int si_code) {
 }
 
 static const char* get_signame(int sig) {
-  switch(sig) {
+  switch (sig) {
     case SIGABRT: return "SIGABRT";
     case SIGBUS: return "SIGBUS";
     case SIGFPE: return "SIGFPE";
@@ -195,6 +197,29 @@ static void dump_header_info(log_t* log) {
   _LOG(log, logtype::HEADER, "ABI: '%s'\n", ABI_STRING);
 }
 
+static void dump_probable_cause(log_t* log, const siginfo_t& si) {
+  std::string cause;
+  if (si.si_signo == SIGSEGV && si.si_code == SEGV_MAPERR) {
+    if (si.si_addr < reinterpret_cast<void*>(4096)) {
+      cause = StringPrintf("null pointer dereference");
+    } else if (si.si_addr == reinterpret_cast<void*>(0xffff0ffc)) {
+      cause = "call to kuser_helper_version";
+    } else if (si.si_addr == reinterpret_cast<void*>(0xffff0fe0)) {
+      cause = "call to kuser_get_tls";
+    } else if (si.si_addr == reinterpret_cast<void*>(0xffff0fc0)) {
+      cause = "call to kuser_cmpxchg";
+    } else if (si.si_addr == reinterpret_cast<void*>(0xffff0fa0)) {
+      cause = "call to kuser_memory_barrier";
+    } else if (si.si_addr == reinterpret_cast<void*>(0xffff0f60)) {
+      cause = "call to kuser_cmpxchg64";
+    }
+  } else if (si.si_signo == SIGSYS && si.si_code == SYS_SECCOMP) {
+    cause = StringPrintf("seccomp prevented call to disallowed system call %d", si.si_syscall);
+  }
+
+  if (!cause.empty()) _LOG(log, logtype::HEADER, "Cause: %s\n", cause.c_str());
+}
+
 static void dump_signal_info(log_t* log, pid_t tid) {
   siginfo_t si;
   memset(&si, 0, sizeof(si));
@@ -212,6 +237,8 @@ static void dump_signal_info(log_t* log, pid_t tid) {
 
   _LOG(log, logtype::HEADER, "signal %d (%s), code %d (%s), fault addr %s\n", si.si_signo,
        get_signame(si.si_signo), si.si_code, get_sigcode(si.si_signo, si.si_code), addr_desc);
+
+  dump_probable_cause(log, si);
 }
 
 static void dump_thread_info(log_t* log, pid_t pid, pid_t tid) {
@@ -262,11 +289,11 @@ static void dump_stack_segment(
     line = "    ";
     if (i == 0 && label >= 0) {
       // Print the label once.
-      line += android::base::StringPrintf("#%02d  ", label);
+      line += StringPrintf("#%02d  ", label);
     } else {
       line += "     ";
     }
-    line += android::base::StringPrintf("%" PRIPTR "  %" PRIPTR, *sp, stack_data[i]);
+    line += StringPrintf("%" PRIPTR "  %" PRIPTR, *sp, stack_data[i]);
 
     backtrace_map_t map;
     backtrace->FillInMap(stack_data[i], &map);
@@ -277,7 +304,7 @@ static void dump_stack_segment(
       if (!func_name.empty()) {
         line += " (" + func_name;
         if (offset) {
-          line += android::base::StringPrintf("+%" PRIuPTR, offset);
+          line += StringPrintf("+%" PRIuPTR, offset);
         }
         line += ')';
       }
@@ -336,11 +363,11 @@ static void dump_stack(Backtrace* backtrace, log_t* log) {
 static std::string get_addr_string(uintptr_t addr) {
   std::string addr_str;
 #if defined(__LP64__)
-  addr_str = android::base::StringPrintf("%08x'%08x",
-                                         static_cast<uint32_t>(addr >> 32),
-                                         static_cast<uint32_t>(addr & 0xffffffff));
+  addr_str = StringPrintf("%08x'%08x",
+                          static_cast<uint32_t>(addr >> 32),
+                          static_cast<uint32_t>(addr & 0xffffffff));
 #else
-  addr_str = android::base::StringPrintf("%08x", addr);
+  addr_str = StringPrintf("%08x", addr);
 #endif
   return addr_str;
 }
@@ -426,8 +453,7 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
     } else {
       line += '-';
     }
-    line += android::base::StringPrintf("  %8" PRIxPTR "  %8" PRIxPTR,
-                                        it->offset, it->end - it->start);
+    line += StringPrintf("  %8" PRIxPTR "  %8" PRIxPTR, it->offset, it->end - it->start);
     bool space_needed = true;
     if (it->name.length() > 0) {
       space_needed = false;
@@ -441,7 +467,7 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
       if (space_needed) {
         line += ' ';
       }
-      line += android::base::StringPrintf(" (load base 0x%" PRIxPTR ")", it->load_base);
+      line += StringPrintf(" (load base 0x%" PRIxPTR ")", it->load_base);
     }
     _LOG(log, logtype::MAPS, "%s\n", line.c_str());
   }
