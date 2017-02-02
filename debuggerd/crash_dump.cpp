@@ -18,10 +18,12 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <stdlib.h>
-#include <syscall.h>
+#include <sys/capability.h>
+#include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <syscall.h>
 #include <unistd.h>
 
 #include <limits>
@@ -191,6 +193,24 @@ static void abort_handler(pid_t target, const bool& tombstoned_connected,
   _exit(1);
 }
 
+static void drop_capabilities() {
+  __user_cap_header_struct capheader;
+  memset(&capheader, 0, sizeof(capheader));
+  capheader.version = _LINUX_CAPABILITY_VERSION_3;
+  capheader.pid = 0;
+
+  __user_cap_data_struct capdata[2];
+  memset(&capdata, 0, sizeof(capdata));
+
+  if (capset(&capheader, &capdata[0]) == -1) {
+    PLOG(FATAL) << "failed to drop capabilities";
+  }
+
+  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
+    PLOG(FATAL) << "failed to set PR_SET_NO_NEW_PRIVS";
+  }
+}
+
 static void check_process(int proc_fd, pid_t expected_pid) {
   android::procinfo::ProcessInfo proc_info;
   if (!android::procinfo::GetProcessInfoFromProcPidFd(proc_fd, &proc_info)) {
@@ -337,6 +357,9 @@ int main(int argc, char** argv) {
       }
     }
   }
+
+  // Drop our capabilities now that we've attached to the threads we care about.
+  drop_capabilities();
 
   check_process(target_proc_fd, target);
 
