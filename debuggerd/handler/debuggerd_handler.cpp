@@ -197,7 +197,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   }
 
   // Don't use fork(2) to avoid calling pthread_atfork handlers.
-  int forkpid = clone(nullptr, nullptr, SIGCHLD, nullptr);
+  int forkpid = clone(nullptr, nullptr, 0, nullptr);
   if (forkpid == -1) {
     __libc_format_log(ANDROID_LOG_FATAL, "libc", "failed to fork in debuggerd signal handler: %s",
                       strerror(errno));
@@ -237,10 +237,12 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     close(pipefds[0]);
 
     // Don't leave a zombie child.
-    siginfo_t child_siginfo;
-    if (TEMP_FAILURE_RETRY(waitid(P_PID, forkpid, &child_siginfo, WEXITED)) != 0) {
+    int status;
+    if (TEMP_FAILURE_RETRY(waitpid(forkpid, &status, __WCLONE)) == -1 && errno != ECHILD) {
       __libc_format_log(ANDROID_LOG_FATAL, "libc", "failed to wait for crash_dump helper: %s",
                         strerror(errno));
+    } else if (WIFSTOPPED(status) || WIFSIGNALED(status)) {
+      __libc_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper crashed or stopped");
       thread_info->crash_dump_started = false;
     }
   }
