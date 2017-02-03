@@ -37,6 +37,7 @@
 
 #include "config_read.h"
 #include "log_portability.h"
+#include "logd_reader.h"
 #include "logger.h"
 
 /* branchless on many architectures. */
@@ -322,6 +323,11 @@ done:
         errno = errno_save;
     }
     return ret;
+}
+
+LIBLOG_HIDDEN ssize_t __send_log_msg(char *buf, size_t buf_size)
+{
+    return send_log_msg(NULL, NULL, buf, buf_size);
 }
 
 static int check_log_success(char *buf, ssize_t ret)
