@@ -28,10 +28,12 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <android/log.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
+#include <android-base/strings.h>
 #include <cutils/properties.h>
 
 #include "boot_event_record_store.h"
@@ -218,6 +220,27 @@ void RecordInitBootTimeProp(
   }
 }
 
+// Parses and records the set of bootloader stages and associated boot times
+// from the ro.boot.boottime system property.
+void RecordBootloaderTimings(BootEventRecordStore* boot_event_store) {
+  // |ro.boot.boottime| is of the form 'stage1:time1,...,stageN:timeN'.
+  std::string value = GetProperty("ro.boot.boottime");
+
+  auto stages = android::base::Split(value, ",");
+  for (auto const &stageTiming : stages) {
+    // |stageTiming| is of the form 'stage:time'.
+    auto stageTimingValues = android::base::Split(stageTiming, ":");
+    DCHECK_EQ(2, stageTimingValues.size());
+
+    std::string stageName = stageTimingValues[0];
+    int32_t time_ms;
+    if (android::base::ParseInt(stageTimingValues[1], &time_ms)) {
+      boot_event_store->AddBootEventWithValue(
+          "boottime.bootloader." + stageName, time_ms);
+    }
+  }
+}
+
 // Records several metrics related to the time it takes to boot the device,
 // including disambiguating boot time on encrypted or non-encrypted devices.
 void RecordBootComplete() {
@@ -271,6 +294,8 @@ void RecordBootComplete() {
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init");
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init.selinux");
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init.cold_boot_wait");
+
+  RecordBootloaderTimings(&boot_event_store);
 }
 
 // Records the boot_reason metric by querying the ro.boot.bootreason system
