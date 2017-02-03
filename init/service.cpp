@@ -997,7 +997,7 @@ bool ServiceManager::ReapOneProcess() {
     }
 
     if (svc->Reap()) {
-        waiting_for_exec = false;
+        stop_waiting_for_exec();
         RemoveService(*svc);
     }
 

@@ -82,7 +82,7 @@ static time_t process_needs_restart_at;
 
 const char *ENV[32];
 
-bool waiting_for_exec = false;
+static std::unique_ptr<Timer> waiting_for_exec(nullptr);
 
 static int epoll_fd = -1;
 
@@ -131,7 +131,24 @@ int add_environment(const char *key, const char *val)
     return -1;
 }
 
-bool wait_property(const char *name, const char *value)
+bool start_waiting_for_exec()
+{
+    if (waiting_for_exec) {
+        return false;
+    }
+    waiting_for_exec.reset(new Timer());
+    return true;
+}
+
+void stop_waiting_for_exec()
+{
+    if (waiting_for_exec) {
+        LOG(INFO) << "Wait for exec took " << *waiting_for_exec;
+        waiting_for_exec.reset();
+    }
+}
+
+bool start_waiting_for_property(const char *name, const char *value)
 {
     if (waiting_for_prop) {
         return false;
@@ -142,7 +159,8 @@ bool wait_property(const char *name, const char *value)
         wait_prop_value = value;
         waiting_for_prop.reset(new Timer());
     } else {
-        LOG(INFO) << "wait_property(\"" << name << "\", \"" << value << "\"): already set";
+        LOG(INFO) << "start_waiting_for_property(\""
+                  << name << "\", \"" << value << "\"): already set";
     }
     return true;
 }
