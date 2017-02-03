@@ -33,7 +33,7 @@
 
 static void pause(uint32_t sec) {
     const char* path = "/cache/test";
-    int fd = open(path, O_WRONLY | O_CREAT);
+    int fd = open(path, O_WRONLY | O_CREAT, 0600);
     ASSERT_LT(-1, fd);
     char buffer[2048];
     memset(buffer, 1, sizeof(buffer));
