@@ -244,7 +244,7 @@ static void *reinit_thread_start(void * /*obj*/) {
     // anything else, we have even lesser privileges and accept our fate. Not
     // worth checking for error returns setting this thread's privileges.
     (void)setgid(AID_SYSTEM); // readonly access to /data/system/packages.list
-    (void)setuid(AID_LOGD);   // access to everything logd.
+    (void)setuid(AID_LOGD);   // access to everything logd, eg /data/misc/logd
 
     while (reinit_running && !sem_wait(&reinit) && reinit_running) {
 
@@ -271,6 +271,7 @@ static void *reinit_thread_start(void * /*obj*/) {
             logBuf->init();
             logBuf->initPrune(NULL);
         }
+        android::ReReadEventLogTags();
     }
 
     return NULL;
@@ -302,24 +303,6 @@ char *android::uidToName(uid_t u) {
 // and as a function that can be provided to signal().
 void reinit_signal_handler(int /*signal*/) {
     sem_post(&reinit);
-}
-
-// tagToName converts an events tag into a name
-const char *android::tagToName(size_t *len, uint32_t tag) {
-    static const EventTagMap *map;
-
-    if (!map) {
-        sem_wait(&sem_name);
-        if (!map) {
-            map = android_openEventTagMap(NULL);
-        }
-        sem_post(&sem_name);
-        if (!map) {
-            if (len) len = 0;
-            return NULL;
-        }
-    }
-    return android_lookupEventTag_len(map, len, tag);
 }
 
 static void readDmesg(LogAudit *al, LogKlog *kl) {

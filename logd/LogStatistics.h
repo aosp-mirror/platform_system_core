@@ -413,7 +413,7 @@ struct TagEntry : public EntryBaseDropped {
     const uint32_t&getKey() const { return tag; }
     const pid_t&getPid() const { return pid; }
     const uid_t&getUid() const { return uid; }
-    const char*getName(size_t &len) const { return android::tagToName(&len, tag); }
+    const char*getName() const { return android::tagToName(tag); }
 
     inline void add(LogBufferElement *element) {
         if (uid != element->getUid()) {
