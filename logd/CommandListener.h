@@ -61,6 +61,7 @@ private:
     LogBufferCmd(GetStatistics);
     LogBufferCmd(GetPruneList);
     LogBufferCmd(SetPruneList);
+    LogBufferCmd(GetEventTag);
 
 #define LogCmd(name)                                             \
     class name##Cmd : public LogCommand {                        \
