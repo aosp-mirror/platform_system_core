@@ -101,25 +101,48 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uids()
     return uids;
 }
 
-static const int MAX_UID_EVENTS = 1000;
+static const int MAX_UID_EVENTS_SIZE = 1000 * 48; // 1000 uids in 48 hours
 
-void uid_monitor::add_event(const struct uid_event& event)
+void uid_monitor::add_events(const std::vector<struct uid_event>& new_events,
+                             uint64_t curr_ts)
 {
     std::unique_ptr<lock_t> lock(new lock_t(&events_lock));
 
-    if (events.size() > MAX_UID_EVENTS) {
-        LOG_TO(SYSTEM, ERROR) << "event buffer full";
-        return;
-    }
-    events.push_back(event);
+    // remove events more than 5 days old
+    struct uid_event first_event;
+    first_event.ts = curr_ts / SEC_TO_USEC - 5 * DAY_TO_SEC;
+    auto it = std::upper_bound(events.begin(), events.end(), first_event);
+    events.erase(events.begin(), it);
+
+    // make some room for new events
+    int overflow = events.size() + new_events.size() - MAX_UID_EVENTS_SIZE;
+    if (overflow > 0)
+        events.erase(events.begin(), events.begin() + overflow);
+
+    events.insert(events.end(), new_events.begin(), new_events.end());
 }
 
-std::vector<struct uid_event> uid_monitor::dump_events()
+std::vector<struct uid_event> uid_monitor::dump_events(int hours)
 {
     std::unique_ptr<lock_t> lock(new lock_t(&events_lock));
-    std::vector<struct uid_event> dump_events = events;
+    std::vector<struct uid_event> dump_events;
+    struct timespec ts;
 
-    events.clear();
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0) {
+        PLOG_TO(SYSTEM, ERROR) << "clock_gettime() failed";
+        return dump_events;
+    }
+
+    struct uid_event first_event;
+    if (hours == 0) {
+        first_event.ts = 0; // dump all events
+    } else {
+        first_event.ts = ts.tv_sec - (uint64_t)hours * HOUR_TO_SEC;
+    }
+    auto it = std::upper_bound(events.begin(), events.end(), first_event);
+
+    dump_events.assign(it, events.end());
+
     return dump_events;
 }
 
@@ -143,10 +166,12 @@ void uid_monitor::report()
         return;
     }
 
+    std::vector<struct uid_event> new_events;
     for (const auto& it : uids) {
         const struct uid_info& uid = it.second;
         struct uid_event event;
 
+        event.ts = ts.tv_sec;
         event.name = uid.name;
         event.fg_read_bytes = uid.io[UID_FOREGROUND].read_bytes -
             last_uids[uid.uid].io[UID_FOREGROUND].read_bytes;;
@@ -156,11 +181,16 @@ void uid_monitor::report()
             last_uids[uid.uid].io[UID_BACKGROUND].read_bytes;;
         event.bg_write_bytes = uid.io[UID_BACKGROUND].write_bytes -
             last_uids[uid.uid].io[UID_BACKGROUND].write_bytes;;
-        event.interval = uint64_t(ts_delta / NS_PER_SEC);
 
-        add_event(event);
+        if (event.fg_read_bytes + event.fg_write_bytes +
+            event.bg_read_bytes + event.bg_write_bytes == 0) {
+            continue;
+        }
+
+        new_events.push_back(event);
     }
 
+    add_events(new_events, curr_ts);
     set_last_uids(std::move(uids), curr_ts);
 }
 
