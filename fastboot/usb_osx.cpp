@@ -293,13 +293,6 @@ static int try_device(io_service_t device, usb_handle *handle) {
 
     // So, we have a device, finally. Grab its vitals.
 
-
-    kr = (*dev)->USBDeviceOpen(dev);
-    if (kr != 0) {
-        WARN("USBDeviceOpen");
-        goto out;
-    }
-
     kr = (*dev)->GetDeviceVendor(dev, &handle->info.dev_vendor);
     if (kr != 0) {
         ERR("GetDeviceVendor");
@@ -372,16 +365,12 @@ static int try_device(io_service_t device, usb_handle *handle) {
         goto error;
     }
 
-    out:
-
-    (*dev)->USBDeviceClose(dev);
     (*dev)->Release(dev);
     return 0;
 
     error:
 
     if (dev != NULL) {
-        (*dev)->USBDeviceClose(dev);
         (*dev)->Release(dev);
     }
 
