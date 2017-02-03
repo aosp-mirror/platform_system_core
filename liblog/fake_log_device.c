@@ -715,6 +715,12 @@ LIBLOG_HIDDEN ssize_t fakeLogWritev(int fd,
     return redirectWritev(fd, vector, count);
 }
 
+LIBLOG_HIDDEN ssize_t __send_log_msg(char *buf __unused,
+                                     size_t buf_size __unused)
+{
+    return -ENODEV;
+}
+
 LIBLOG_ABI_PUBLIC int __android_log_is_loggable(int prio,
                                                 const char *tag __unused,
                                                 int def)
