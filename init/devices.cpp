@@ -249,11 +249,13 @@ static void make_device(const char *path,
 
     mode = get_device_perm(path, links, &uid, &gid) | (block ? S_IFBLK : S_IFCHR);
 
-    if (selabel_lookup_best_match(sehandle, &secontext, path, links, mode)) {
-        PLOG(ERROR) << "Device '" << path << "' not created; cannot find SELinux label";
-        return;
+    if (sehandle) {
+        if (selabel_lookup_best_match(sehandle, &secontext, path, links, mode)) {
+            PLOG(ERROR) << "Device '" << path << "' not created; cannot find SELinux label";
+            return;
+        }
+        setfscreatecon(secontext);
     }
-    setfscreatecon(secontext);
 
     dev = makedev(major, minor);
     /* Temporarily change egid to avoid race condition setting the gid of the
@@ -264,7 +266,7 @@ static void make_device(const char *path,
     setegid(gid);
     /* If the node already exists update its SELinux label to handle cases when
      * it was created with the wrong context during coldboot procedure. */
-    if (mknod(path, mode, dev) && (errno == EEXIST)) {
+    if (mknod(path, mode, dev) && (errno == EEXIST) && secontext) {
 
         char* fcon = nullptr;
         int rc = lgetfilecon(path, &fcon);
@@ -285,8 +287,10 @@ out:
     chown(path, uid, -1);
     setegid(AID_ROOT);
 
-    freecon(secontext);
-    setfscreatecon(NULL);
+    if (secontext) {
+        freecon(secontext);
+        setfscreatecon(NULL);
+    }
 }
 
 static void add_platform_device(const char *path)
