@@ -348,6 +348,7 @@ int BatteryMonitor::getChargeStatus() {
 
 status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
     status_t ret = BAD_VALUE;
+    std::string buf;
 
     val->valueInt64 = LONG_MIN;
 
@@ -398,6 +399,15 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         } else {
             ret = NAME_NOT_FOUND;
         }
+        break;
+
+    case BATTERY_PROP_BATTERY_STATUS:
+        if (mAlwaysPluggedDevice) {
+            val->valueInt64 = BATTERY_STATUS_CHARGING;
+        } else {
+            val->valueInt64 = getChargeStatus();
+        }
+        ret = NO_ERROR;
         break;
 
     default:
