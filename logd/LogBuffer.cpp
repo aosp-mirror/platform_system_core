@@ -199,15 +199,13 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
     if (log_id != LOG_ID_SECURITY) {
         int prio = ANDROID_LOG_INFO;
         const char *tag = NULL;
-        size_t len = 0;
         if (log_id == LOG_ID_EVENTS) {
-            tag = android::tagToName(&len, elem->getTag());
+            tag = tagToName(elem->getTag());
         } else {
             prio = *msg;
             tag = msg + 1;
-            len = strlen(tag);
         }
-        if (!__android_log_is_loggable_len(prio, tag, len, ANDROID_LOG_VERBOSE)) {
+        if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
             // Log traffic received to total
             pthread_mutex_lock(&mLogElementsLock);
             stats.add(elem);

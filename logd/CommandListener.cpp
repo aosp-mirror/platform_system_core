@@ -15,6 +15,7 @@
  */
 
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -47,6 +48,7 @@ CommandListener::CommandListener(LogBuffer *buf, LogReader * /*reader*/,
     registerCmd(new GetStatisticsCmd(buf));
     registerCmd(new SetPruneListCmd(buf));
     registerCmd(new GetPruneListCmd(buf));
+    registerCmd(new GetEventTagCmd(buf));
     registerCmd(new ReinitCmd());
     registerCmd(new ExitCmd(this));
 }
@@ -280,6 +282,41 @@ int CommandListener::SetPruneListCmd::runCommand(SocketClient *cli,
     }
 
     cli->sendMsg("success");
+
+    return 0;
+}
+
+CommandListener::GetEventTagCmd::GetEventTagCmd(LogBuffer *buf) :
+        LogCommand("getEventTag"),
+        mBuf(*buf) {
+}
+
+int CommandListener::GetEventTagCmd::runCommand(SocketClient *cli,
+                                         int argc, char ** argv) {
+    setname();
+    uid_t uid = cli->getUid();
+    if (clientHasLogCredentials(cli)) {
+        uid = AID_ROOT;
+    }
+
+    const char *name = NULL;
+    const char *format = NULL;
+    for (int i = 1; i < argc; ++i) {
+        static const char _name[] = "name=";
+        if (!strncmp(argv[i], _name, strlen(_name))) {
+            name = argv[i] + strlen(_name);
+            continue;
+        }
+
+        static const char _format[] = "format=";
+        if (!strncmp(argv[i], _format, strlen(_format))) {
+            format = argv[i] + strlen(_format);
+            continue;
+        }
+    }
+
+    cli->sendMsg(package_string(mBuf.formatGetEventTag(uid,
+                                                       name, format)).c_str());
 
     return 0;
 }
