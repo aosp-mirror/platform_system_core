@@ -21,6 +21,7 @@ LOCAL_SRC_FILES := \
     libaudit.c \
     LogAudit.cpp \
     LogKlog.cpp \
+    LogTags.cpp \
     event.logtags
 
 LOCAL_SHARED_LIBRARIES := \
@@ -38,12 +39,23 @@ LOCAL_SHARED_LIBRARIES := \
 #        $(LOCAL_PATH)/$2/event.logtags)
 #  event_flag := $(call event_logtags,auditd)
 #  event_flag += $(call event_logtags,logd)
+#  event_flag += $(call event_logtags,tag_def)
 # so make sure we do not regret hard-coding it as follows:
-event_flag := -DAUDITD_LOG_TAG=1003 -DCHATTY_LOG_TAG=1004
+event_flag := -DAUDITD_LOG_TAG=1003 -DCHATTY_LOG_TAG=1004 -DTAG_DEF_LOG_TAG=1005
 event_flag += -DLIBLOG_LOG_TAG=1006
 
 LOCAL_CFLAGS := -Werror $(event_flag)
 
 include $(BUILD_EXECUTABLE)
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := logtagd.rc
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_TAGS := debug
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/init
+
+include $(BUILD_PREBUILT)
 
 include $(call first-makefiles-under,$(LOCAL_PATH))
