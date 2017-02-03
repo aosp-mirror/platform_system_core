@@ -53,21 +53,27 @@ template <> struct std::hash<TagFmt>
 
 // Map
 struct EventTagMap {
+#   define NUM_MAPS 2
     // memory-mapped source file; we get strings from here
-    void*  mapAddr;
-    size_t mapLen;
+    void*  mapAddr[NUM_MAPS];
+    size_t mapLen[NUM_MAPS];
 
 private:
     std::unordered_map<uint32_t, TagFmt> Idx2TagFmt;
 
 public:
-    EventTagMap() : mapAddr(NULL), mapLen(0) { }
+    EventTagMap() {
+        memset(mapAddr, 0, sizeof(mapAddr));
+        memset(mapLen, 0, sizeof(mapLen));
+    }
 
     ~EventTagMap() {
         Idx2TagFmt.clear();
-        if (mapAddr) {
-            munmap(mapAddr, mapLen);
-            mapAddr = 0;
+        for (size_t which = 0; which < NUM_MAPS; ++which) {
+            if (mapAddr[which]) {
+                munmap(mapAddr[which], mapLen[which]);
+                mapAddr[which] = 0;
+            }
         }
     }
 
@@ -157,6 +163,19 @@ static int scanTagLine(EventTagMap* map, char** pData, int lineNum) {
         fmtLen = cp - fmt;
     }
 
+    // KISS Only report identicals if they are global
+    // Ideally we want to check if there are identicals
+    // recorded for the same uid, but recording that
+    // unused detail in our database is too burdensome.
+    bool verbose = true;
+    while ((*cp != '#') && (*cp != '\n')) ++cp;
+    if (*cp == '#') {
+        do {
+            ++cp;
+        } while (isspace(*cp) && (*cp != '\n'));
+        verbose = !!fastcmp<strncmp>(cp, "uid=", strlen("uid="));
+    }
+
     while (*cp != '\n') ++cp;
 #ifdef DEBUG
     fprintf(stderr, "%d: %p: %.*s\n", lineNum, tag, (int)(cp - *pData), *pData);
@@ -164,24 +183,33 @@ static int scanTagLine(EventTagMap* map, char** pData, int lineNum) {
     *pData = cp;
 
     if (map->emplaceUnique(tagIndex, TagFmt(std::make_pair(
-            MapString(tag, tagLen), MapString(fmt, fmtLen))), true)) {
+            MapString(tag, tagLen), MapString(fmt, fmtLen))), verbose)) {
         return 0;
     }
     errno = EMLINK;
     return -1;
 }
 
+static const char* eventTagFiles[NUM_MAPS] = {
+    EVENT_TAG_MAP_FILE,
+    "/dev/event-log-tags",
+};
+
 // Parse the tags out of the file.
-static int parseMapLines(EventTagMap* map) {
-    char* cp = static_cast<char*>(map->mapAddr);
-    size_t len = map->mapLen;
+static int parseMapLines(EventTagMap* map, size_t which) {
+    char* cp = static_cast<char*>(map->mapAddr[which]);
+    size_t len = map->mapLen[which];
     char* endp = cp + len;
 
     // insist on EOL at EOF; simplifies parsing and null-termination
     if (!len || (*(endp - 1) != '\n')) {
 #ifdef DEBUG
-        fprintf(stderr, OUT_TAG ": map file missing EOL on last line\n");
+        fprintf(stderr, OUT_TAG ": map file %zu[%zu] missing EOL on last line\n",
+                which, len);
 #endif
+        if (which) { // do not propagate errors for other files
+            return 0;
+        }
         errno = EINVAL;
         return -1;
     }
@@ -199,7 +227,9 @@ static int parseMapLines(EventTagMap* map) {
             } else if (isdigit(*cp)) {
                 // looks like a tag; scan it out
                 if (scanTagLine(map, &cp, lineNum) != 0) {
-                    return -1;
+                    if (!which || (errno != EMLINK)) {
+                        return -1;
+                    }
                 }
                 lineNum++;      // we eat the '\n'
                 // leave lineStart==true
@@ -226,57 +256,87 @@ static int parseMapLines(EventTagMap* map) {
 // We create a private mapping because we want to terminate the log tag
 // strings with '\0'.
 LIBLOG_ABI_PUBLIC EventTagMap* android_openEventTagMap(const char* fileName) {
-    int save_errno;
+    EventTagMap* newTagMap;
+    off_t end[NUM_MAPS];
+    int save_errno, fd[NUM_MAPS];
+    size_t which;
 
-    const char* tagfile = fileName ? fileName : EVENT_TAG_MAP_FILE;
-    int fd = open(tagfile, O_RDONLY | O_CLOEXEC);
-    if (fd < 0) {
+    memset(fd, -1, sizeof(fd));
+    memset(end, 0, sizeof(end));
+
+    for (which = 0; which < NUM_MAPS; ++which) {
+        const char* tagfile = fileName ? fileName : eventTagFiles[which];
+
+        fd[which] = open(tagfile, O_RDONLY | O_CLOEXEC);
+        if (fd[which] < 0) {
+            if (!which) {
+                save_errno = errno;
+                fprintf(stderr, OUT_TAG ": unable to open map '%s': %s\n",
+                        tagfile, strerror(save_errno));
+                goto fail_errno;
+            }
+            continue;
+        }
+        end[which] = lseek(fd[which], 0L, SEEK_END);
         save_errno = errno;
-        fprintf(stderr, OUT_TAG ": unable to open map '%s': %s\n",
-                tagfile, strerror(save_errno));
-        errno = save_errno;
-        return NULL;
-    }
-    off_t end = lseek(fd, 0L, SEEK_END);
-    save_errno = errno;
-    (void)lseek(fd, 0L, SEEK_SET);
-    if (end < 0) {
-        fprintf(stderr, OUT_TAG ": unable to seek map '%s' %s\n",
-                tagfile, strerror(save_errno));
-        close(fd);
-        errno = save_errno;
-        return NULL;
+        (void)lseek(fd[which], 0L, SEEK_SET);
+        if (!which && (end[0] < 0)) {
+            fprintf(stderr, OUT_TAG ": unable to seek map '%s' %s\n",
+                    tagfile, strerror(save_errno));
+            goto fail_close;
+        }
+        if (fileName) break; // Only allow one as specified
     }
 
-    EventTagMap* newTagMap = new EventTagMap;
+    newTagMap = new EventTagMap;
     if (newTagMap == NULL) {
         save_errno = errno;
-        close(fd);
-        errno = save_errno;
-        return NULL;
+        goto fail_close;
     }
 
-    newTagMap->mapAddr = mmap(NULL, end, PROT_READ | PROT_WRITE,
-                              MAP_PRIVATE, fd, 0);
-    save_errno = errno;
-    close(fd);
-    fd = -1;
-    if ((newTagMap->mapAddr == MAP_FAILED) || (newTagMap->mapAddr == NULL)) {
-        fprintf(stderr, OUT_TAG ": mmap(%s) failed: %s\n",
-                tagfile, strerror(save_errno));
-        delete newTagMap;
-        errno = save_errno;
-        return NULL;
+    for (which = 0; which < NUM_MAPS; ++which) {
+        if (fd[which] >= 0) {
+            newTagMap->mapAddr[which] = mmap(NULL, end[which],
+                                             which ?
+                                                 PROT_READ :
+                                                 PROT_READ | PROT_WRITE,
+                                             which ?
+                                                 MAP_SHARED :
+                                                 MAP_PRIVATE,
+                                             fd[which], 0);
+            save_errno = errno;
+            close(fd[which]);
+            fd[which] = -1;
+            if ((newTagMap->mapAddr[which] != MAP_FAILED) &&
+                (newTagMap->mapAddr[which] != NULL)) {
+                newTagMap->mapLen[which] = end[which];
+            } else if (!which) {
+                const char* tagfile = fileName ? fileName : eventTagFiles[which];
+
+                fprintf(stderr, OUT_TAG ": mmap(%s) failed: %s\n",
+                        tagfile, strerror(save_errno));
+                goto fail_unmap;
+            }
+        }
     }
 
-    newTagMap->mapLen = end;
-
-    if (parseMapLines(newTagMap) != 0) {
-        delete newTagMap;
-        return NULL;
+    for (which = 0; which < NUM_MAPS; ++which) {
+        if (parseMapLines(newTagMap, which) != 0) {
+            delete newTagMap;
+            return NULL;
+        }
     }
 
     return newTagMap;
+
+fail_unmap:
+    save_errno = EINVAL;
+    delete newTagMap;
+fail_close:
+    for (which = 0; which < NUM_MAPS; ++which) close(fd[which]);
+fail_errno:
+    errno = save_errno;
+    return NULL;
 }
 
 // Close the map.
