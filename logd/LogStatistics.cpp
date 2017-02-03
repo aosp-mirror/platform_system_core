@@ -452,12 +452,11 @@ std::string TagEntry::format(const LogStatistics & /* stat */, log_id_t /* id */
         name = android::base::StringPrintf("%7u/%u",
                                            getKey(), uid);
     }
-    size_t len = 0;
-    const char *nameTmp = getName(len);
+    const char *nameTmp = getName();
     if (nameTmp) {
         name += android::base::StringPrintf(
-            "%*s%.*s", (int)std::max(14 - name.length(), (size_t)1),
-            "", (int)len, nameTmp);
+            "%*s%s", (int)std::max(14 - name.length(), (size_t)1),
+            "", nameTmp);
     }
 
     std::string size = android::base::StringPrintf("%zu",
