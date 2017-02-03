@@ -15,6 +15,8 @@
  */
 
 #include <fcntl.h>
+#include <inttypes.h>
+#include <poll.h>
 #include <sys/endian.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -22,6 +24,7 @@
 
 #include <unordered_set>
 
+#include <android-base/file.h>
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
 #include <private/android_logger.h>
@@ -695,7 +698,7 @@ BENCHMARK(BM_security);
 
 // Keep maps around for multiple iterations
 static std::unordered_set<uint32_t> set;
-static const EventTagMap* map;
+static EventTagMap* map;
 
 static bool prechargeEventMap() {
     if (map) return true;
@@ -785,3 +788,142 @@ static void BM_lookupEventFormat(int iters) {
     StopBenchmarkTiming();
 }
 BENCHMARK(BM_lookupEventFormat);
+
+/*
+ *	Measure the time it takes for android_lookupEventTagNum plus above
+ */
+static void BM_lookupEventTagNum(int iters) {
+
+    prechargeEventMap();
+
+    std::unordered_set<uint32_t>::const_iterator it = set.begin();
+
+    for (int i = 0; i < iters; ++i) {
+        size_t len;
+        const char* name = android_lookupEventTag_len(map, &len, (*it));
+        std::string Name(name, len);
+        const char* format = android_lookupEventFormat_len(map, &len, (*it));
+        std::string Format(format, len);
+        StartBenchmarkTiming();
+        android_lookupEventTagNum(map, Name.c_str(), Format.c_str(),
+                                  ANDROID_LOG_UNKNOWN);
+        StopBenchmarkTiming();
+        ++it;
+        if (it == set.end()) it = set.begin();
+    }
+
+}
+BENCHMARK(BM_lookupEventTagNum);
+
+// Must be functionally identical to liblog internal __send_log_msg.
+static void send_to_control(char *buf, size_t len)
+{
+    int sock = socket_local_client("logd",
+                                   ANDROID_SOCKET_NAMESPACE_RESERVED,
+                                   SOCK_STREAM);
+    if (sock < 0) return;
+    size_t writeLen = strlen(buf) + 1;
+
+    ssize_t ret = TEMP_FAILURE_RETRY(write(sock, buf, writeLen));
+    if (ret <= 0) {
+        close(sock);
+        return;
+    }
+    while ((ret = read(sock, buf, len)) > 0) {
+        if (((size_t)ret == len) || (len < PAGE_SIZE)) {
+            break;
+        }
+        len -= ret;
+        buf += ret;
+
+        struct pollfd p = {
+            .fd = sock,
+            .events = POLLIN,
+            .revents = 0
+        };
+
+        ret = poll(&p, 1, 20);
+        if ((ret <= 0) || !(p.revents & POLLIN)) {
+            break;
+        }
+    }
+    close(sock);
+}
+
+static void BM_lookupEventTagNum_logd_new(int iters) {
+    fprintf(stderr, "WARNING: "
+            "This test can cause logd to grow in size and hit DOS limiter\n");
+    // Make copies
+    static const char empty_event_log_tags[] = "# content owned by logd\n";
+    static const char dev_event_log_tags_path[] = "/dev/event-log-tags";
+    std::string dev_event_log_tags;
+    if (android::base::ReadFileToString(dev_event_log_tags_path,
+                                        &dev_event_log_tags) &&
+            (dev_event_log_tags.length() == 0)) {
+        dev_event_log_tags = empty_event_log_tags;
+    }
+    static const char data_event_log_tags_path[] = "/data/misc/logd/event-log-tags";
+    std::string data_event_log_tags;
+    if (android::base::ReadFileToString(data_event_log_tags_path,
+                                        &data_event_log_tags) &&
+            (data_event_log_tags.length() == 0)) {
+        data_event_log_tags = empty_event_log_tags;
+    }
+
+    for (int i = 0; i < iters; ++i) {
+        char buffer[256];
+        memset(buffer, 0, sizeof(buffer));
+        log_time now(CLOCK_MONOTONIC);
+        char name[64];
+        snprintf(name, sizeof(name), "a%" PRIu64, now.nsec());
+        snprintf(buffer, sizeof(buffer),
+                 "getEventTag name=%s format=\"(new|1)\"", name);
+        StartBenchmarkTiming();
+        send_to_control(buffer, sizeof(buffer));
+        StopBenchmarkTiming();
+    }
+
+    // Restore copies (logd still know about them, until crash or reboot)
+    if (dev_event_log_tags.length() &&
+            !android::base::WriteStringToFile(dev_event_log_tags,
+                                              dev_event_log_tags_path)) {
+        fprintf(stderr, "WARNING: "
+                "failed to restore %s\n", dev_event_log_tags_path);
+    }
+    if (data_event_log_tags.length() &&
+            !android::base::WriteStringToFile(data_event_log_tags,
+                                              data_event_log_tags_path)) {
+        fprintf(stderr, "WARNING: "
+                "failed to restore %s\n", data_event_log_tags_path);
+    }
+    fprintf(stderr, "WARNING: "
+            "Restarting logd to make it forget what we just did\n");
+    system("stop logd ; start logd");
+}
+BENCHMARK(BM_lookupEventTagNum_logd_new);
+
+static void BM_lookupEventTagNum_logd_existing(int iters) {
+    prechargeEventMap();
+
+    std::unordered_set<uint32_t>::const_iterator it = set.begin();
+
+    for (int i = 0; i < iters; ++i) {
+        size_t len;
+        const char* name = android_lookupEventTag_len(map, &len, (*it));
+        std::string Name(name, len);
+        const char* format = android_lookupEventFormat_len(map, &len, (*it));
+        std::string Format(format, len);
+
+        char buffer[256];
+        snprintf(buffer, sizeof(buffer),
+                 "getEventTag name=%s format=\"%s\"",
+                 Name.c_str(), Format.c_str());
+
+        StartBenchmarkTiming();
+        send_to_control(buffer, sizeof(buffer));
+        StopBenchmarkTiming();
+        ++it;
+        if (it == set.end()) it = set.begin();
+    }
+}
+BENCHMARK(BM_lookupEventTagNum_logd_existing);

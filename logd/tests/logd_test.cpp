@@ -48,7 +48,7 @@ static void send_to_control(char* buf, size_t len)
         if (write(sock, buf, strlen(buf) + 1) > 0) {
             ssize_t ret;
             while ((ret = read(sock, buf, len)) > 0) {
-                if ((size_t)ret == len) {
+                if (((size_t)ret == len) || (len < PAGE_SIZE)) {
                     break;
                 }
                 len -= ret;
