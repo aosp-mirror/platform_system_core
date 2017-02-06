@@ -39,6 +39,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/capability.h>
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
@@ -215,6 +216,11 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     TEMP_FAILURE_RETRY(dup2(pipefds[1], STDOUT_FILENO));
     close(pipefds[0]);
     close(pipefds[1]);
+
+    // Set all of the ambient capability bits we can, so that crash_dump can ptrace us.
+    for (unsigned long i = 0; prctl(PR_CAPBSET_READ, i, 0, 0, 0); ++i) {
+      prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, i, 0, 0);
+    }
 
     char buf[10];
     snprintf(buf, sizeof(buf), "%d", thread_info->crashing_tid);
