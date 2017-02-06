@@ -39,6 +39,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/capability.h>
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
@@ -207,7 +208,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   }
 
   // Don't use fork(2) to avoid calling pthread_atfork handlers.
-  int forkpid = clone(nullptr, nullptr, SIGCHLD, nullptr);
+  int forkpid = clone(nullptr, nullptr, 0, nullptr);
   if (forkpid == -1) {
     __libc_format_log(ANDROID_LOG_FATAL, "libc", "failed to fork in debuggerd signal handler: %s",
                       strerror(errno));
@@ -215,6 +216,11 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     TEMP_FAILURE_RETRY(dup2(pipefds[1], STDOUT_FILENO));
     close(pipefds[0]);
     close(pipefds[1]);
+
+    // Set all of the ambient capability bits we can, so that crash_dump can ptrace us.
+    for (unsigned long i = 0; prctl(PR_CAPBSET_READ, i, 0, 0, 0); ++i) {
+      prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, i, 0, 0);
+    }
 
     char buf[10];
     snprintf(buf, sizeof(buf), "%d", thread_info->crashing_tid);
@@ -242,10 +248,12 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     close(pipefds[0]);
 
     // Don't leave a zombie child.
-    siginfo_t child_siginfo;
-    if (TEMP_FAILURE_RETRY(waitid(P_PID, forkpid, &child_siginfo, WEXITED)) != 0) {
+    int status;
+    if (TEMP_FAILURE_RETRY(waitpid(forkpid, &status, __WCLONE)) == -1 && errno != ECHILD) {
       __libc_format_log(ANDROID_LOG_FATAL, "libc", "failed to wait for crash_dump helper: %s",
                         strerror(errno));
+    } else if (WIFSTOPPED(status) || WIFSIGNALED(status)) {
+      __libc_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper crashed or stopped");
       thread_info->crash_dump_started = false;
     }
   }
