@@ -1303,6 +1303,36 @@ static int64_t parse_num(const char *arg)
     return num;
 }
 
+static std::string fb_fix_numeric_var(std::string var) {
+    // Some bootloaders (angler, for example), send spurious leading whitespace.
+    var = android::base::Trim(var);
+    // Some bootloaders (hammerhead, for example) use implicit hex.
+    // This code used to use strtol with base 16.
+    if (!android::base::StartsWith(var, "0x")) var = "0x" + var;
+    return var;
+}
+
+static unsigned fb_get_flash_block_size(Transport* transport, std::string name) {
+    std::string sizeString;
+    if (!fb_getvar(transport, name.c_str(), &sizeString)) {
+        /* This device does not report flash block sizes, so return 0 */
+        return 0;
+    }
+    sizeString = fb_fix_numeric_var(sizeString);
+
+    unsigned size;
+    if (!android::base::ParseUint(sizeString, &size)) {
+        fprintf(stderr, "Couldn't parse %s '%s'.\n", name.c_str(), sizeString.c_str());
+        return 0;
+    }
+    if (size < 4096 || (size & (size - 1)) != 0) {
+        fprintf(stderr, "Invalid %s %u: must be a power of 2 and at least 4096.\n",
+                name.c_str(), size);
+        return 0;
+    }
+    return size;
+}
+
 static void fb_perform_format(Transport* transport,
                               const char* partition, int skip_if_not_supported,
                               const char* type_override, const char* size_override,
@@ -1345,11 +1375,7 @@ static void fb_perform_format(Transport* transport,
         }
         partition_size = size_override;
     }
-    // Some bootloaders (angler, for example), send spurious leading whitespace.
-    partition_size = android::base::Trim(partition_size);
-    // Some bootloaders (hammerhead, for example) use implicit hex.
-    // This code used to use strtol with base 16.
-    if (!android::base::StartsWith(partition_size, "0x")) partition_size = "0x" + partition_size;
+    partition_size = fb_fix_numeric_var(partition_size);
 
     gen = fs_get_generator(partition_type);
     if (!gen) {
@@ -1370,7 +1396,12 @@ static void fb_perform_format(Transport* transport,
     }
 
     fd = fileno(tmpfile());
-    if (fs_generator_generate(gen, fd, size, initial_dir)) {
+
+    unsigned eraseBlkSize, logicalBlkSize;
+    eraseBlkSize = fb_get_flash_block_size(transport, "erase-block-size");
+    logicalBlkSize = fb_get_flash_block_size(transport, "logical-block-size");
+
+    if (fs_generator_generate(gen, fd, size, initial_dir, eraseBlkSize, logicalBlkSize)) {
         fprintf(stderr, "Cannot generate image: %s\n", strerror(errno));
         close(fd);
         return;
