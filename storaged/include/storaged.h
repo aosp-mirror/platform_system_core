@@ -302,8 +302,8 @@ public:
         return mUidm.get_uid_io_stats();
     }
     std::map<uint64_t, std::vector<struct uid_record>> get_uid_records(
-            int hours, uint64_t threshold) {
-        return mUidm.dump(hours, threshold);
+            int hours, uint64_t threshold, bool force_report) {
+        return mUidm.dump(hours, threshold, force_report);
     }
     void update_uid_io_interval(int interval) {
         if (interval >= DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_LIMIT) {

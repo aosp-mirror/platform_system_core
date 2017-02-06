@@ -91,6 +91,7 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
     int hours = 0;
     int time_window = 0;
     uint64_t threshold = 0;
+    bool force_report = false;
     for (size_t i = 0; i < args.size(); i++) {
         const auto& arg = args[i];
         if (arg == String16("--hours")) {
@@ -111,10 +112,14 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
             threshold = stoll(String16::std_string(args[i]));
             continue;
         }
+        if (arg == String16("--force")) {
+            force_report = true;
+            continue;
+        }
     }
 
     const std::map<uint64_t, std::vector<struct uid_record>>& records =
-                storaged.get_uid_records(hours, threshold);
+                storaged.get_uid_records(hours, threshold, force_report);
     for (const auto& it : records) {
         dprintf(fd, "%llu\n", (unsigned long long)it.first);
         for (const auto& record : it.second) {
