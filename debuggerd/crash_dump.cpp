@@ -358,6 +358,11 @@ int main(int argc, char** argv) {
     }
   }
 
+  std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::Create(main_tid));
+  if (!backtrace_map) {
+    LOG(FATAL) << "failed to create backtrace map";
+  }
+
   // Drop our capabilities now that we've attached to the threads we care about.
   drop_capabilities();
 
@@ -365,7 +370,6 @@ int main(int argc, char** argv) {
 
   // TODO: Use seccomp to lock ourselves down.
 
-  std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::Create(main_tid));
   std::string amfd_data;
 
   if (backtrace) {
