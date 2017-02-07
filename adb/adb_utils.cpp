@@ -313,3 +313,15 @@ std::string adb_get_android_dir_path() {
 void AdbCloser::Close(int fd) {
     adb_close(fd);
 }
+
+int usage(const char* fmt, ...) {
+    fprintf(stderr, "adb: ");
+
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+
+    fprintf(stderr, "\n");
+    return 1;
+}
