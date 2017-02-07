@@ -231,11 +231,6 @@ static void help() {
     // clang-format on
 }
 
-int usage() {
-    help();
-    return 1;
-}
-
 #if defined(_WIN32)
 
 // Implemented in sysdeps_win32.cpp.
@@ -1235,7 +1230,7 @@ static int backup(int argc, const char** argv) {
 }
 
 static int restore(int argc, const char** argv) {
-    if (argc != 2) return usage();
+    if (argc != 2) return usage("restore requires an argument");
 
     const char* filename = argv[1];
     int tarFd = adb_open(filename, O_RDONLY);
@@ -1443,19 +1438,19 @@ int adb_commandline(int argc, const char** argv) {
             /* this is a special flag used only when the ADB client launches the ADB Server */
             is_daemon = 1;
         } else if (!strcmp(argv[0], "--reply-fd")) {
-            if (argc < 2) return usage();
+            if (argc < 2) return usage("--reply-fd requires an argument");
             const char* reply_fd_str = argv[1];
             argc--;
             argv++;
             ack_reply_fd = strtol(reply_fd_str, nullptr, 10);
             if (!_is_valid_ack_reply_fd(ack_reply_fd)) {
                 fprintf(stderr, "adb: invalid reply fd \"%s\"\n", reply_fd_str);
-                return usage();
+                return 1;
             }
         } else if (!strncmp(argv[0], "-p", 2)) {
             const char* product = nullptr;
             if (argv[0][2] == '\0') {
-                if (argc < 2) return usage();
+                if (argc < 2) return usage("-p requires an argument");
                 product = argv[1];
                 argc--;
                 argv++;
@@ -1465,13 +1460,13 @@ int adb_commandline(int argc, const char** argv) {
             gProductOutPath = find_product_out_path(product);
             if (gProductOutPath.empty()) {
                 fprintf(stderr, "adb: could not resolve \"-p %s\"\n", product);
-                return usage();
+                return 1;
             }
         } else if (argv[0][0]=='-' && argv[0][1]=='s') {
             if (isdigit(argv[0][2])) {
                 serial = argv[0] + 2;
             } else {
-                if (argc < 2 || argv[0][2] != '\0') return usage();
+                if (argc < 2 || argv[0][2] != '\0') return usage("-s requires an argument");
                 serial = argv[1];
                 argc--;
                 argv++;
@@ -1484,7 +1479,7 @@ int adb_commandline(int argc, const char** argv) {
             gListenAll = 1;
         } else if (!strncmp(argv[0], "-H", 2)) {
             if (argv[0][2] == '\0') {
-                if (argc < 2) return usage();
+                if (argc < 2) return usage("-H requires an argument");
                 server_host_str = argv[1];
                 argc--;
                 argv++;
@@ -1493,7 +1488,7 @@ int adb_commandline(int argc, const char** argv) {
             }
         } else if (!strncmp(argv[0], "-P", 2)) {
             if (argv[0][2] == '\0') {
-                if (argc < 2) return usage();
+                if (argc < 2) return usage("-P requires an argument");
                 server_port_str = argv[1];
                 argc--;
                 argv++;
@@ -1501,7 +1496,7 @@ int adb_commandline(int argc, const char** argv) {
                 server_port_str = argv[0] + 2;
             }
         } else if (!strcmp(argv[0], "-L")) {
-            if (argc < 2) return usage();
+            if (argc < 2) return usage("-L requires an argument");
             server_socket_str = argv[1];
             argc--;
             argv++;
@@ -1566,7 +1561,7 @@ int adb_commandline(int argc, const char** argv) {
         if (no_daemon || is_daemon) {
             if (is_daemon && (ack_reply_fd == -1)) {
                 fprintf(stderr, "reply fd for adb server to client communication not specified.\n");
-                return usage();
+                return 1;
             }
             r = adb_server_main(is_daemon, server_socket_str, ack_reply_fd);
         } else {
@@ -1579,7 +1574,8 @@ int adb_commandline(int argc, const char** argv) {
     }
 
     if (argc == 0) {
-        return usage();
+        help();
+        return 1;
     }
 
     /* handle wait-for-* prefix */
@@ -1696,7 +1692,7 @@ int adb_commandline(int argc, const char** argv) {
         }
     }
     else if (!strcmp(argv[0], "sideload")) {
-        if (argc != 2) return usage();
+        if (argc != 2) return usage("sideload requires an argument");
         if (adb_sideload_host(argv[1])) {
             return 1;
         } else {
@@ -1730,7 +1726,7 @@ int adb_commandline(int argc, const char** argv) {
         bool reverse = !strcmp(argv[0], "reverse");
         ++argv;
         --argc;
-        if (argc < 1) return usage();
+        if (argc < 1) return usage("%s requires an argument", argv[0]);
 
         // Determine the <host-prefix> for this command.
         std::string host_prefix;
@@ -1750,24 +1746,24 @@ int adb_commandline(int argc, const char** argv) {
 
         std::string cmd, error;
         if (strcmp(argv[0], "--list") == 0) {
-            if (argc != 1) return usage();
+            if (argc != 1) return usage("--list doesn't take any arguments");
             return adb_query_command(host_prefix + ":list-forward");
         } else if (strcmp(argv[0], "--remove-all") == 0) {
-            if (argc != 1) return usage();
+            if (argc != 1) return usage("--remove-all doesn't take any arguments");
             cmd = host_prefix + ":killforward-all";
         } else if (strcmp(argv[0], "--remove") == 0) {
             // forward --remove <local>
-            if (argc != 2) return usage();
+            if (argc != 2) return usage("--remove requires an argument");
             cmd = host_prefix + ":killforward:" + argv[1];
         } else if (strcmp(argv[0], "--no-rebind") == 0) {
             // forward --no-rebind <local> <remote>
-            if (argc != 3) return usage();
+            if (argc != 3) return usage("--no-rebind takes two arguments");
             if (forward_targets_are_valid(argv[1], argv[2], &error)) {
                 cmd = host_prefix + ":forward:norebind:" + argv[1] + ";" + argv[2];
             }
         } else {
             // forward <local> <remote>
-            if (argc != 2) return usage();
+            if (argc != 2) return usage("forward takes two arguments");
             if (forward_targets_are_valid(argv[0], argv[1], &error)) {
                 cmd = host_prefix + ":forward:" + argv[0] + ";" + argv[1];
             }
@@ -1796,7 +1792,7 @@ int adb_commandline(int argc, const char** argv) {
     }
     /* do_sync_*() commands */
     else if (!strcmp(argv[0], "ls")) {
-        if (argc != 2) return usage();
+        if (argc != 2) return usage("ls requires an argument");
         return do_sync_ls(argv[1]) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "push")) {
@@ -1805,7 +1801,7 @@ int adb_commandline(int argc, const char** argv) {
         const char* dst = nullptr;
 
         parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs);
-        if (srcs.empty() || !dst) return usage();
+        if (srcs.empty() || !dst) return usage("push requires an argument");
         return do_sync_push(srcs, dst) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "pull")) {
@@ -1814,22 +1810,22 @@ int adb_commandline(int argc, const char** argv) {
         const char* dst = ".";
 
         parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs);
-        if (srcs.empty()) return usage();
+        if (srcs.empty()) return usage("pull requires an argument");
         return do_sync_pull(srcs, dst, copy_attrs) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "install")) {
-        if (argc < 2) return usage();
+        if (argc < 2) return usage("install requires an argument");
         if (_use_legacy_install()) {
             return install_app_legacy(transport_type, serial, argc, argv);
         }
         return install_app(transport_type, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "install-multiple")) {
-        if (argc < 2) return usage();
+        if (argc < 2) return usage("install-multiple requires an argument");
         return install_multiple_app(transport_type, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "uninstall")) {
-        if (argc < 2) return usage();
+        if (argc < 2) return usage("uninstall requires an argument");
         if (_use_legacy_install()) {
             return uninstall_app_legacy(transport_type, serial, argc, argv);
         }
@@ -1852,12 +1848,12 @@ int adb_commandline(int argc, const char** argv) {
             // A local path or "android"/"data" arg was specified.
             src = argv[1];
         } else {
-            return usage();
+            return usage("usage: adb sync [-l] [PARTITION]");
         }
 
         if (src != "" &&
             src != "system" && src != "data" && src != "vendor" && src != "oem") {
-            return usage();
+            return usage("don't know how to sync %s partition", src.c_str());
         }
 
         std::string system_src_path = product_file("system");
@@ -1909,7 +1905,7 @@ int adb_commandline(int argc, const char** argv) {
         return restore(argc, argv);
     }
     else if (!strcmp(argv[0], "keygen")) {
-        if (argc < 2) return usage();
+        if (argc != 2) return usage("keygen requires an argument");
         // Always print key generation information for keygen command.
         adb_trace_enable(AUTH);
         return adb_auth_keygen(argv[1]);
@@ -1926,11 +1922,11 @@ int adb_commandline(int argc, const char** argv) {
 
 
     /* "adb /?" is a common idiom under Windows */
-    else if (!strcmp(argv[0], "help") || !strcmp(argv[0], "/?")) {
+    else if (!strcmp(argv[0], "--help") || !strcmp(argv[0], "help") || !strcmp(argv[0], "/?")) {
         help();
         return 0;
     }
-    else if (!strcmp(argv[0], "version")) {
+    else if (!strcmp(argv[0], "--version") || !strcmp(argv[0], "version")) {
         fprintf(stdout, "%s", adb_version().c_str());
         return 0;
     }
@@ -1961,12 +1957,12 @@ int adb_commandline(int argc, const char** argv) {
                 std::string err;
                 return adb_query_command("host:reconnect-offline");
             } else {
-                return usage();
+                return usage("usage: adb reconnect [device|offline]");
             }
         }
     }
 
-    usage();
+    usage("unknown command %s", argv[0]);
     return 1;
 }
 
