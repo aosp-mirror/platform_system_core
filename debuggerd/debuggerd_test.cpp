@@ -40,10 +40,10 @@ using namespace std::chrono_literals;
 using android::base::unique_fd;
 
 #if defined(__LP64__)
-#define CRASHER_PATH  "/system/xbin/crasher64"
+#define CRASHER_PATH  "/system/bin/crasher64"
 #define ARCH_SUFFIX "64"
 #else
-#define CRASHER_PATH "/system/xbin/crasher"
+#define CRASHER_PATH "/system/bin/crasher"
 #define ARCH_SUFFIX ""
 #endif
 
