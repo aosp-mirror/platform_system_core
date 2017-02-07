@@ -363,6 +363,12 @@ int main(int argc, char** argv) {
     LOG(FATAL) << "failed to create backtrace map";
   }
 
+  // Collect the list of open files.
+  OpenFilesList open_files;
+  if (!backtrace) {
+    populate_open_files_list(target, &open_files);
+  }
+
   // Drop our capabilities now that we've attached to the threads we care about.
   drop_capabilities();
 
@@ -375,10 +381,6 @@ int main(int argc, char** argv) {
   if (backtrace) {
     dump_backtrace(output_fd.get(), backtrace_map.get(), target, main_tid, attached_siblings, 0);
   } else {
-    // Collect the list of open files.
-    OpenFilesList open_files;
-    populate_open_files_list(target, &open_files);
-
     engrave_tombstone(output_fd.get(), backtrace_map.get(), open_files, target, main_tid,
                       attached_siblings, abort_address, fatal_signal ? &amfd_data : nullptr);
   }
