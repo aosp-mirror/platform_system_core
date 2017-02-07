@@ -182,11 +182,8 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
     DISALLOW_COPY_AND_ASSIGN(BugreportStandardStreamsCallback);
 };
 
-// Implemented in commandline.cpp
-int usage();
-
 int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, const char** argv) {
-    if (argc > 2) return usage();
+    if (argc > 2) return usage("usage: adb bugreport [PATH]");
 
     // Gets bugreportz version.
     std::string bugz_stdout, bugz_stderr;
