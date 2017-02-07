@@ -218,7 +218,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     close(pipefds[1]);
 
     // Set all of the ambient capability bits we can, so that crash_dump can ptrace us.
-    for (unsigned long i = 0; prctl(PR_CAPBSET_READ, i, 0, 0, 0); ++i) {
+    for (unsigned long i = 0; prctl(PR_CAPBSET_READ, i, 0, 0, 0) != -1; ++i) {
       prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, i, 0, 0);
     }
 
