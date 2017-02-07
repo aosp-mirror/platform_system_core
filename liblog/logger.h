@@ -39,14 +39,16 @@ union android_log_context {
 
 struct android_log_transport_write {
   struct listnode node;
-  const char *name;
-  unsigned logMask; /* cache of available success */
+  const char *name; /* human name to describe the transport */
+  unsigned logMask; /* mask cache of available() success */
   union android_log_context context; /* Initialized by static allocation */
 
-  int (*available)(log_id_t logId);
-  int (*open)();
-  void (*close)();
-  int (*write)(log_id_t logId, struct timespec *ts, struct iovec *vec, size_t nr);
+  int (*available)(log_id_t logId); /* Does not cause resources to be taken */
+  int (*open)();   /* can be called multiple times, reusing current resources */
+  void (*close)(); /* free up resources */
+  /* write log to transport, returns number of bytes propagated, or -errno */
+  int (*write)(log_id_t logId, struct timespec *ts,
+               struct iovec *vec, size_t nr);
 };
 
 struct android_log_logger_list;
@@ -55,22 +57,23 @@ struct android_log_logger;
 
 struct android_log_transport_read {
   struct listnode node;
-  const char *name;
+  const char *name; /* human name to describe the transport */
 
+  /* Does not cause resources to be taken */
   int (*available)(log_id_t logId);
   int (*version)(struct android_log_logger *logger,
                  struct android_log_transport_context *transp);
+  /* Release resources taken by the following interfaces */
   void (*close)(struct android_log_logger_list *logger_list,
                 struct android_log_transport_context *transp);
-
   /*
-   * Expect all to instantiate open on any call, so we do not have
-   * an expicit open call
+   * Expect all to instantiate open automagically on any call,
+   * so we do not have an explicit open call.
    */
   int (*read)(struct android_log_logger_list *logger_list,
               struct android_log_transport_context *transp,
               struct log_msg *log_msg);
-  /* Assumption is only called if not ANDROID_LOG_NONBLOCK */
+  /* Must only be called if not ANDROID_LOG_NONBLOCK (blocking) */
   int (*poll)(struct android_log_logger_list *logger_list,
               struct android_log_transport_context *transp);
 
@@ -117,9 +120,9 @@ struct android_log_transport_context {
   struct android_log_logger_list *parent;
 
   struct android_log_transport_read *transport;
-  unsigned logMask;
-  int ret;
-  struct log_msg logMsg; /* valid is logMsg.len != 0 */
+  unsigned logMask;      /* mask of requested log buffers */
+  int ret;               /* return value associated with following data */
+  struct log_msg logMsg; /* peek at upcoming data, valid if logMsg.len != 0 */
 };
 
 /* assumes caller has structures read-locked, single threaded, or fenced */
