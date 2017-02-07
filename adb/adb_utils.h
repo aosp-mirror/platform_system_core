@@ -21,6 +21,8 @@
 
 #include <android-base/macros.h>
 
+int usage(const char*, ...);
+
 void close_stdin();
 
 bool getcwd(std::string* cwd);
