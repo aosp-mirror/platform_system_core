@@ -625,102 +625,27 @@ static void set_usb_controller() {
     }
 }
 
-/* Returns a new path consisting of base_path and the file name in reference_path. */
-static std::string get_path(const std::string& base_path, const std::string& reference_path) {
-    std::string::size_type pos = reference_path.rfind('/');
-    if (pos == std::string::npos) {
-        return base_path + '/' + reference_path;
-    } else {
-        return base_path + reference_path.substr(pos);
-    }
-}
-
 /* Imports the fstab info from cmdline. */
 static std::string import_cmdline_fstab() {
-    std::string prefix, fstab, fstab_full;
-
+    std::string fstabfile;
     import_kernel_cmdline(false,
         [&](const std::string& key, const std::string& value, bool in_qemu __attribute__((__unused__))) {
-            if (key == "android.early.prefix") {
-                prefix = value;
-            } else if (key == "android.early.fstab") {
-                fstab = value;
+            if (key == "androidboot.fstab") {
+                fstabfile = value;
             }
         });
-    if (!fstab.empty()) {
-        // Convert "mmcblk0p09+/odm+ext4+ro+verify" to "mmcblk0p09 /odm ext4 ro verify"
-        std::replace(fstab.begin(), fstab.end(), '+', ' ');
-        for (const auto& entry : android::base::Split(fstab, "\n")) {
-            fstab_full += prefix + entry + '\n';
-        }
-    }
-    return fstab_full;
+    return fstabfile;
 }
 
 /* Early mount vendor and ODM partitions. The fstab info is read from kernel cmdline. */
 static void early_mount() {
-    std::string fstab_string = import_cmdline_fstab();
-    if (fstab_string.empty()) {
-        LOG(INFO) << "Failed to load vendor fstab from kernel cmdline";
+    // TODO: read fstab entries from device tree, so early mount
+    // entries can be specified for A/B devices where system = root
+    std::string fstab = import_cmdline_fstab();
+    if (fstab.empty()) {
+        LOG(INFO) << "Early mount skipped (missing fstab argument)";
         return;
     }
-    FILE *fstab_file = fmemopen((void *)fstab_string.c_str(), fstab_string.length(), "r");
-    if (!fstab_file) {
-        PLOG(ERROR) << "Failed to open fstab string as FILE";
-        return;
-    }
-    std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_file(fstab_file), fs_mgr_free_fstab);
-    fclose(fstab_file);
-    if (!fstab) {
-        LOG(ERROR) << "Failed to parse fstab string: " << fstab_string;
-        return;
-    }
-    LOG(INFO) << "Loaded vendor fstab from cmdline";
-
-    if (early_device_socket_open()) {
-        LOG(ERROR) << "Failed to open device uevent socket";
-        return;
-    }
-
-    /* Create /dev/device-mapper for dm-verity */
-    early_create_dev("/sys/devices/virtual/misc/device-mapper", EARLY_CHAR_DEV);
-
-    for (int i = 0; i < fstab->num_entries; ++i) {
-        struct fstab_rec *rec = &fstab->recs[i];
-        std::string mount_point = rec->mount_point;
-        std::string syspath = rec->blk_device;
-
-        if (mount_point != "/vendor" && mount_point != "/odm")
-            continue;
-
-        /* Create mount target under /dev/block/ from sysfs via uevent */
-        LOG(INFO) << "Mounting " << mount_point << " from " << syspath << "...";
-        char *devpath = strdup(get_path("/dev/block", syspath).c_str());
-        if (!devpath) {
-            PLOG(ERROR) << "Failed to strdup dev path in early mount " << syspath;
-            continue;
-        }
-        rec->blk_device = devpath;
-        early_create_dev(syspath, EARLY_BLOCK_DEV);
-
-        int rc = fs_mgr_early_setup_verity(rec);
-        if (rc == FS_MGR_EARLY_SETUP_VERITY_SUCCESS) {
-            /* Mount target is changed to /dev/block/dm-<n>; initiate its creation from sysfs counterpart */
-            early_create_dev(get_path("/sys/devices/virtual/block", rec->blk_device), EARLY_BLOCK_DEV);
-        } else if (rc == FS_MGR_EARLY_SETUP_VERITY_FAIL) {
-            LOG(ERROR) << "Failed to set up dm-verity on " << rec->blk_device;
-            continue;
-        } else { /* FS_MGR_EARLY_SETUP_VERITY_NO_VERITY */
-            LOG(INFO) << "dm-verity disabled on debuggable device; mount directly on " << rec->blk_device;
-        }
-
-        mkdir(mount_point.c_str(), 0755);
-        rc = mount(rec->blk_device, mount_point.c_str(), rec->fs_type, rec->flags, rec->fs_options);
-        if (rc) {
-            PLOG(ERROR) << "Failed to mount on " << rec->blk_device;
-        }
-    }
-    early_device_socket_close();
 }
 
 int main(int argc, char** argv) {
