@@ -32,6 +32,7 @@
 
 #include <selinux/selinux.h>
 
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
@@ -47,6 +48,7 @@
 #include "property_service.h"
 #include "util.h"
 
+using android::base::boot_clock;
 using android::base::ParseInt;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
