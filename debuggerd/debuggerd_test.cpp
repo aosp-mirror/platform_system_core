@@ -192,7 +192,7 @@ void CrasherTest::StartCrasher(const std::string& crash_type) {
   std::string type = "wait-" + crash_type;
   StartProcess([type]() {
     execl(CRASHER_PATH, CRASHER_PATH, type.c_str(), nullptr);
-    err(1, "exec failed");
+    exit(errno);
   });
 }
 
@@ -216,7 +216,9 @@ void CrasherTest::AssertDeath(int signo) {
     FAIL() << "failed to wait for crasher: " << strerror(errno);
   }
 
-  if (!WIFSIGNALED(status)) {
+  if (WIFEXITED(status)) {
+    FAIL() << "crasher failed to exec: " << strerror(WEXITSTATUS(status));
+  } else if (!WIFSIGNALED(status)) {
     FAIL() << "crasher didn't terminate via a signal";
   }
   ASSERT_EQ(signo, WTERMSIG(status));
