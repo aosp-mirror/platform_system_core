@@ -40,6 +40,7 @@
 #include <selinux/label.h>
 #include <selinux/android.h>
 
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -68,6 +69,7 @@
 #include "util.h"
 #include "watchdogd.h"
 
+using android::base::boot_clock;
 using android::base::StringPrintf;
 
 struct selabel_handle *sehandle;
@@ -750,7 +752,7 @@ int main(int argc, char** argv) {
         return watchdogd_main(argc, argv);
     }
 
-    boot_clock::time_point start_time = boot_clock::now();
+    boot_clock::time_point start_time = android::base::boot_clock::now();
 
     // Clear the umask.
     umask(0);

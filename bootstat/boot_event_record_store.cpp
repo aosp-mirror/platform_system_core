@@ -20,14 +20,18 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <utime.h>
+
+#include <chrono>
 #include <cstdlib>
 #include <string>
 #include <utility>
+
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
+
 #include "histogram_logger.h"
-#include "uptime_parser.h"
 
 namespace {
 
@@ -56,7 +60,9 @@ BootEventRecordStore::BootEventRecordStore() {
 }
 
 void BootEventRecordStore::AddBootEvent(const std::string& event) {
-  AddBootEventWithValue(event, bootstat::ParseUptime());
+  auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
+      android::base::boot_clock::now().time_since_epoch());
+  AddBootEventWithValue(event, uptime.count());
 }
 
 // The implementation of AddBootEventValue makes use of the mtime file
