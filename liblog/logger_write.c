@@ -343,7 +343,7 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
             }
         }
         /* tag must be nul terminated */
-        if (strnlen(tag, len) >= len) {
+        if (tag && strnlen(tag, len) >= len) {
             tag = NULL;
         }
 
