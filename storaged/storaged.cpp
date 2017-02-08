@@ -21,6 +21,9 @@
 #include <unistd.h>
 
 #include <android-base/logging.h>
+#include <batteryservice/BatteryServiceConstants.h>
+#include <batteryservice/IBatteryPropertiesRegistrar.h>
+#include <binder/IServiceManager.h>
 #include <cutils/properties.h>
 #include <log/log.h>
 
@@ -157,6 +160,43 @@ void emmc_info_t::update(void) {
     }
 }
 
+static sp<IBatteryPropertiesRegistrar> get_battery_properties_service() {
+    sp<IServiceManager> sm = defaultServiceManager();
+    if (sm == NULL) return NULL;
+
+    sp<IBinder> binder = sm->getService(String16("batteryproperties"));
+    if (binder == NULL) return NULL;
+
+    sp<IBatteryPropertiesRegistrar> battery_properties =
+        interface_cast<IBatteryPropertiesRegistrar>(binder);
+
+    return battery_properties;
+}
+
+static inline charger_stat_t is_charger_on(int64_t prop) {
+    return (prop == BATTERY_STATUS_CHARGING || prop == BATTERY_STATUS_FULL) ?
+        CHARGER_ON : CHARGER_OFF;
+}
+
+void storaged_t::batteryPropertiesChanged(struct BatteryProperties props) {
+    mUidm.set_charger_state(is_charger_on(props.batteryStatus));
+}
+
+void storaged_t::init_battery_service() {
+    sp<IBatteryPropertiesRegistrar> battery_properties = get_battery_properties_service();
+    if (battery_properties == NULL) {
+        LOG_TO(SYSTEM, WARNING) << "failed to find batteryproperties service";
+        return;
+    }
+
+    struct BatteryProperty val;
+    battery_properties->getProperty(BATTERY_PROP_BATTERY_STATUS, &val);
+    mUidm.init(is_charger_on(val.valueInt64));
+
+    // register listener after init uid_monitor
+    battery_properties->registerListener(this);
+}
+
 /* storaged_t */
 storaged_t::storaged_t(void) {
     mConfig.emmc_available = (access(EMMC_ECSD_PATH, R_OK) >= 0);
@@ -181,9 +221,8 @@ storaged_t::storaged_t(void) {
     mConfig.periodic_chores_interval_emmc_info_publish =
         property_get_int32("ro.storaged.emmc_info_pub", DEFAULT_PERIODIC_CHORES_INTERVAL_EMMC_INFO_PUBLISH);
 
-    mUidm.set_periodic_chores_params(
-        property_get_int32("ro.storaged.uid_io.interval", DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO),
-        property_get_int32("ro.storaged.uid_io.threshold", DEFAULT_PERIODIC_CHORES_UID_IO_THRESHOLD));
+    mConfig.periodic_chores_interval_uid_io =
+        property_get_int32("ro.storaged.uid_io.interval", DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO);
 
     mStarttime = time(NULL);
 }
@@ -204,7 +243,7 @@ void storaged_t::event(void) {
     }
 
     if (mConfig.proc_uid_io_available && mTimer &&
-            (mTimer % mUidm.get_periodic_chores_interval()) == 0) {
+            (mTimer % mConfig.periodic_chores_interval_uid_io) == 0) {
          mUidm.report();
     }
 

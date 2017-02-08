@@ -247,7 +247,7 @@ bool parse_emmc_ecsd(int ext_csd_fd, struct emmc_info* info) {
 
 static bool cmp_uid_info(struct uid_info l, struct uid_info r) {
     // Compare background I/O first.
-    for (int i = UID_STATS_SIZE - 1; i >= 0; i--) {
+    for (int i = UID_STATS - 1; i >= 0; i--) {
         uint64_t l_bytes = l.io[i].read_bytes + l.io[i].write_bytes;
         uint64_t r_bytes = r.io[i].read_bytes + r.io[i].write_bytes;
         uint64_t l_chars = l.io[i].rchar + l.io[i].wchar;
