@@ -8,7 +8,8 @@ on post-fs-data
 #
 # post-fs-data: /data is writable
 # property:init.svc.bootanim=running: The boot animation is running
-on post-fs-data && property:init.svc.bootanim=running
+# property:ro.crypto.type=block: FDE device
+on post-fs-data && property:init.svc.bootanim=running && property:ro.crypto.type=block
     exec - root root -- /system/bin/bootstat -r post_decrypt_time_elapsed
 
 # sys.logbootcomplete is a signal to enable the bootstat logging mechanism.
