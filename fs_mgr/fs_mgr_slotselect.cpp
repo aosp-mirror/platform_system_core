@@ -25,6 +25,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <android-base/file.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <cutils/properties.h>
 
 #include "fs_mgr.h"
@@ -77,8 +80,51 @@ static int get_active_slot_suffix_from_misc(struct fstab *fstab,
     return 0;
 }
 
-// Gets slot_suffix from either the kernel cmdline / firmware or the
-// misc partition. Sets |out_suffix| on success and returns 0. Returns
+// finds slot_suffix in androidboot.slot_suffix kernel command line argument
+// or in the device tree node at /firmware/android/slot_suffix property
+static int get_active_slot_suffix_from_kernel(char *out_suffix,
+                                              size_t suffix_len)
+{
+    std::string cmdline;
+    if (android::base::ReadFileToString("/proc/cmdline", &cmdline)) {
+        for (const auto& entry : android::base::Split(android::base::Trim(cmdline), " ")) {
+            std::vector<std::string> pieces = android::base::Split(entry, "=");
+            if (pieces.size() == 2) {
+                if (pieces[0] == "androidboot.slot_suffix") {
+                    strncpy(out_suffix, pieces[1].c_str(), suffix_len);
+                    return 0;
+                }
+            }
+        }
+    }
+
+    // if we can't find slot_suffix in cmdline, check the DT
+    static constexpr char android_dt_dir[] = "/proc/device-tree/firmware/android";
+    std::string file_name = android::base::StringPrintf("%s/compatible", android_dt_dir);
+    std::string dt_value;
+    if (android::base::ReadFileToString(file_name, &dt_value)) {
+        if (!dt_value.compare("android,firmware")) {
+            LERROR << "Error finding compatible android DT node";
+            return -1;
+        }
+
+        file_name = android::base::StringPrintf("%s/%s", android_dt_dir, "slot_suffix");
+        if (!android::base::ReadFileToString(file_name, &dt_value)) {
+            LERROR << "Error finding slot_suffix in device tree";
+            return -1;
+        }
+
+        // DT entries have a terminating '\0', so 'suffix_len' is safe.
+        strncpy(out_suffix, dt_value.c_str(), suffix_len);
+        return 0;
+    }
+
+    // slot_suffix missing in kernel cmdline or device tree
+    return -1;
+}
+
+// Gets slot_suffix from either the kernel cmdline / device tree / firmware
+// or the misc partition. Sets |out_suffix| on success and returns 0. Returns
 // -1 if slot_suffix could not be determined.
 static int get_active_slot_suffix(struct fstab *fstab, char *out_suffix,
                                   size_t suffix_len)
@@ -91,6 +137,15 @@ static int get_active_slot_suffix(struct fstab *fstab, char *out_suffix,
     property_get("ro.boot.slot_suffix", propbuf, "");
     if (propbuf[0] != '\0') {
         strncpy(out_suffix, propbuf, suffix_len);
+        return 0;
+    }
+
+    // if the property is not set, we are either being invoked too early
+    // or the slot suffix in mentioned in the misc partition. If its
+    // "too early", try to find the slotsuffix ourselves in the kernel command
+    // line or the device tree
+    if (get_active_slot_suffix_from_kernel(out_suffix, suffix_len) == 0) {
+        LINFO << "Using slot suffix '" << out_suffix << "' from kernel";
         return 0;
     }
 

@@ -62,7 +62,7 @@ static const char *firmware_dirs[] = { "/etc/firmware",
 
 extern struct selabel_handle *sehandle;
 
-static int device_fd = -1;
+static android::base::unique_fd device_fd;
 
 struct perms_ {
     char *name;
@@ -341,6 +341,19 @@ static void remove_platform_device(const char *path)
     }
 }
 
+static void destroy_platform_devices() {
+    struct listnode* node;
+    struct listnode* n;
+    struct platform_node* bus;
+
+    list_for_each_safe(node, n, &platform_names) {
+        list_remove(node);
+        bus = node_to_item(node, struct platform_node, list);
+        free(bus->path);
+        free(bus);
+    }
+}
+
 /* Given a path that may start with a PCI device, populate the supplied buffer
  * with the PCI domain/bus number and the peripheral ID and return 0.
  * If it doesn't start with a PCI device, or there is some error, return -1 */
@@ -507,7 +520,7 @@ static char **get_block_device_symlinks(struct uevent *uevent)
         return NULL;
     memset(links, 0, sizeof(char *) * 4);
 
-    LOG(INFO) << "found " << type << " device " << device;
+    LOG(VERBOSE) << "found " << type << " device " << device;
 
     snprintf(link_path, sizeof(link_path), "/dev/block/%s/%s", type, device);
 
@@ -990,7 +1003,7 @@ void device_init(const char* path, coldboot_callback fn) {
     selinux_status_open(true);
 
     /* is 256K enough? udev uses 16MB! */
-    device_fd = uevent_open_socket(256*1024, true);
+    device_fd.reset(uevent_open_socket(256*1024, true));
     if (device_fd == -1) {
         return;
     }
@@ -1022,6 +1035,11 @@ void device_init(const char* path, coldboot_callback fn) {
     }
 
     LOG(INFO) << "Coldboot took " << t;
+}
+
+void device_close() {
+    destroy_platform_devices();
+    device_fd.reset();
 }
 
 int get_device_fd() {

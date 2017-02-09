@@ -47,6 +47,7 @@ struct uevent {
 typedef std::function<coldboot_action_t(struct uevent* uevent)> coldboot_callback;
 extern coldboot_action_t handle_device_fd(coldboot_callback fn = nullptr);
 extern void device_init(const char* path = nullptr, coldboot_callback fn = nullptr);
+extern void device_close();
 
 extern int add_dev_perms(const char *name, const char *attr,
                          mode_t perm, unsigned int uid,
