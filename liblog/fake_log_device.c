@@ -612,7 +612,12 @@ static ssize_t logWritev(int fd, const struct iovec* vector, int count)
 
 bail:
     unlock();
-    return vector[0].iov_len + vector[1].iov_len + vector[2].iov_len;
+    int len = 0;
+    for (i = 0; i < count; ++i) {
+       len += vector[i].iov_len;
+    }
+    return len;
+
 error:
     unlock();
     return -1;
