@@ -28,22 +28,31 @@ extern LIBLOG_HIDDEN struct listnode __android_log_persist_read;
 
 #define read_transport_for_each(transp, transports)                         \
     for ((transp) = node_to_item((transports)->next,                        \
-                               struct android_log_transport_read, node);    \
-         ((transp) != node_to_item(transports,                              \
-                                 struct android_log_transport_read, node)); \
+                                 struct android_log_transport_read, node);  \
+         ((transp) != node_to_item((transports),                            \
+                                   struct android_log_transport_read,       \
+                                   node)) &&                                \
+         ((transp) != node_to_item((transp)->node.next,                     \
+                                   struct android_log_transport_read,       \
+                                   node));                                  \
          (transp) = node_to_item((transp)->node.next,                       \
-                               struct android_log_transport_read, node))    \
+                                 struct android_log_transport_read, node))
 
 #define read_transport_for_each_safe(transp, n, transports)                 \
     for ((transp) = node_to_item((transports)->next,                        \
-                               struct android_log_transport_read, node),    \
+                                 struct android_log_transport_read, node),  \
          (n) = (transp)->node.next;                                         \
-         ((transp) != node_to_item(transports,                              \
-                                 struct android_log_transport_read, node)); \
-         (transp) = node_to_item(n, struct android_log_transport_read, node), \
+         ((transp) != node_to_item((transports),                            \
+                                   struct android_log_transport_read,       \
+                                   node)) &&                                \
+         ((transp) != node_to_item((n), struct android_log_transport_read,  \
+                                   node));                                  \
+         (transp) = node_to_item((n), struct android_log_transport_read,    \
+                                 node),                                     \
          (n) = (transp)->node.next)
 
 LIBLOG_HIDDEN void __android_log_config_read();
+LIBLOG_HIDDEN void __android_log_config_read_close();
 
 __END_DECLS
 
