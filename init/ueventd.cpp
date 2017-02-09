@@ -60,9 +60,18 @@ int ueventd_main(int argc, char **argv)
     cb.func_log = selinux_klog_callback;
     selinux_set_callback(SELINUX_CB_LOG, cb);
 
-    std::string hardware = property_get("ro.hardware");
-
     ueventd_parse_config_file("/ueventd.rc");
+    ueventd_parse_config_file("/vendor/ueventd.rc");
+    ueventd_parse_config_file("/odm/ueventd.rc");
+
+    /*
+     * keep the current product name base configuration so
+     * we remain backwards compatible and allow it to override
+     * everything
+     * TODO: cleanup platform ueventd.rc to remove vendor specific
+     * device node entries (b/34968103)
+     */
+    std::string hardware = property_get("ro.hardware");
     ueventd_parse_config_file(android::base::StringPrintf("/ueventd.%s.rc", hardware.c_str()).c_str());
 
     device_init();
