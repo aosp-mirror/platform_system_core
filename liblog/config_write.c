@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <log/log_frontend.h>
+
 #include "config_write.h"
 #include "logger.h"
 
@@ -52,17 +54,30 @@ static void __android_log_add_transport(
 }
 
 LIBLOG_HIDDEN void __android_log_config_write() {
+    if (__android_log_frontend & LOGGER_LOCAL) {
+        extern struct android_log_transport_write localLoggerWrite;
+
+        __android_log_add_transport(&__android_log_transport_write,
+                                    &localLoggerWrite);
+    }
+
+    if ((__android_log_frontend == LOGGER_DEFAULT) ||
+        (__android_log_frontend & LOGGER_LOGD)) {
 #if (FAKE_LOG_DEVICE == 0)
-    extern struct android_log_transport_write logdLoggerWrite;
-    extern struct android_log_transport_write pmsgLoggerWrite;
+        extern struct android_log_transport_write logdLoggerWrite;
+        extern struct android_log_transport_write pmsgLoggerWrite;
 
-    __android_log_add_transport(&__android_log_transport_write, &logdLoggerWrite);
-    __android_log_add_transport(&__android_log_persist_write, &pmsgLoggerWrite);
+        __android_log_add_transport(&__android_log_transport_write,
+                                    &logdLoggerWrite);
+        __android_log_add_transport(&__android_log_persist_write,
+                                    &pmsgLoggerWrite);
 #else
-    extern struct android_log_transport_write fakeLoggerWrite;
+        extern struct android_log_transport_write fakeLoggerWrite;
 
-    __android_log_add_transport(&__android_log_transport_write, &fakeLoggerWrite);
+        __android_log_add_transport(&__android_log_transport_write,
+                                    &fakeLoggerWrite);
 #endif
+    }
 }
 
 LIBLOG_HIDDEN void __android_log_config_write_close() {
