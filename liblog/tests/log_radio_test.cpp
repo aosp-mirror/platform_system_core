@@ -27,7 +27,6 @@
 #include <log/log_radio.h>
 
 TEST(liblog, RLOG) {
-#ifdef __ANDROID__
     static const char content[] = "log_radio.h";
     static const char content_false[] = "log_radio.h false";
 
@@ -84,6 +83,7 @@ TEST(liblog, RLOG) {
     usleep(100000);
     RLOGE_IF(false, content_false);
 
+#ifdef __ANDROID__
     // give time for content to long-path through logger
     sleep(1);
 
@@ -112,6 +112,6 @@ TEST(liblog, RLOG) {
 #endif
 
 #else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
+    GTEST_LOG_(INFO) << "This test does not test end-to-end.\n";
 #endif
 }
