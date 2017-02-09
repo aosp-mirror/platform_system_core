@@ -16,13 +16,20 @@
 */
 
 #define _GNU_SOURCE /* for asprintf */
+#ifndef __MINGW32__
+#define HAVE_STRSEP
+#endif
 
-#include <arpa/inet.h>
+//#ifndef __MINGW32__
+//#include <arpa/inet.h>
+//#endif
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <inttypes.h>
+#ifndef __MINGW32__
 #include <pwd.h>
+#endif
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -39,6 +46,10 @@
 
 #define MS_PER_NSEC 1000000
 #define US_PER_NSEC 1000
+
+#ifndef MIN
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#endif
 
 typedef struct FilterInfo_t {
     char *mTag;
@@ -216,7 +227,11 @@ LIBLOG_ABI_PUBLIC AndroidLogFormat *android_log_format_new()
     p_ret->year_output = false;
     p_ret->zone_output = false;
     p_ret->epoch_output = false;
+#ifdef __ANDROID__
     p_ret->monotonic_output = android_log_clockid() == CLOCK_MONOTONIC;
+#else
+    p_ret->monotonic_output = false;
+#endif
     p_ret->uid_output = false;
     p_ret->descriptive_output = false;
     descriptive_output = false;
@@ -322,6 +337,7 @@ LIBLOG_ABI_PUBLIC AndroidLogPrintFormat android_log_formatFromString(
     else if (strcmp(formatString, "monotonic") == 0) format = FORMAT_MODIFIER_MONOTONIC;
     else if (strcmp(formatString, "uid") == 0) format = FORMAT_MODIFIER_UID;
     else if (strcmp(formatString, "descriptive") == 0) format = FORMAT_MODIFIER_DESCRIPT;
+#ifndef __MINGW32__
     else {
         extern char *tzname[2];
         static const char gmt[] = "GMT";
@@ -353,6 +369,7 @@ LIBLOG_ABI_PUBLIC AndroidLogPrintFormat android_log_formatFromString(
         }
         free(cp);
     }
+#endif
 
     return format;
 }
@@ -411,7 +428,7 @@ LIBLOG_ABI_PUBLIC int android_log_addFilterRule(
 
 /*
  * Presently HAVE_STRNDUP is never defined, so the second case is always taken
- * Darwin doesn't have strnup, everything else does
+ * Darwin doesn't have strndup, everything else does
  */
 #ifdef HAVE_STRNDUP
         tagName = strndup(filterExpression, tagNameLength);
@@ -433,6 +450,27 @@ error:
     return -1;
 }
 
+#ifndef HAVE_STRSEP
+/* KISS replacement helper for below */
+static char* strsep(char** stringp, const char* delim)
+{
+    char* token;
+    char* ret = *stringp;
+
+    if (!ret || !*ret) {
+        return NULL;
+    }
+    token = strpbrk(ret, delim);
+    if (token) {
+        *token = '\0';
+        ++token;
+    } else {
+        token = ret + strlen(ret);
+    }
+    *stringp = token;
+    return ret;
+}
+#endif
 
 /**
  * filterString: a comma/whitespace-separated set of filter expressions
@@ -444,7 +482,6 @@ error:
  * Assumes single threaded execution
  *
  */
-
 LIBLOG_ABI_PUBLIC int android_log_addFilterString(
         AndroidLogFormat *p_format,
         const char *filterString)
@@ -728,6 +765,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
             }
         }
     }
+    outCount = 0;
     lval = 0;
     switch (type) {
     case EVENT_TYPE_INT:
@@ -953,7 +991,7 @@ no_room:
 LIBLOG_ABI_PUBLIC int android_log_processBinaryLogBuffer(
         struct logger_entry *buf,
         AndroidLogEntry *entry,
-        const EventTagMap *map,
+        const EventTagMap *map __unused,
         char *messageBuf, int messageBufLen)
 {
     size_t inCount;
@@ -995,11 +1033,12 @@ LIBLOG_ABI_PUBLIC int android_log_processBinaryLogBuffer(
     inCount -= 4;
 
     entry->tagLen = 0;
+    entry->tag = NULL;
+#ifdef __ANDROID__
     if (map != NULL) {
         entry->tag = android_lookupEventTag_len(map, &entry->tagLen, tagIndex);
-    } else {
-        entry->tag = NULL;
     }
+#endif
 
     /*
      * If we don't have a map, or didn't find the tag number in the map,
@@ -1024,9 +1063,11 @@ LIBLOG_ABI_PUBLIC int android_log_processBinaryLogBuffer(
      */
     const char* fmtStr = NULL;
     size_t fmtLen = 0;
+#ifdef __ANDROID__
     if (descriptive_output && map) {
         fmtStr = android_lookupEventFormat_len(map, &fmtLen, tagIndex);
     }
+#endif
 
     char* outBuf = messageBuf;
     size_t outRemaining = messageBufLen - 1; /* leave one for nul byte */
@@ -1250,6 +1291,7 @@ static long long nsecTimespec(struct timespec *now)
     return (long long)now->tv_sec * NS_PER_SEC + now->tv_nsec;
 }
 
+#ifdef __ANDROID__
 static void convertMonotonic(struct timespec *result,
                              const AndroidLogEntry *entry)
 {
@@ -1482,6 +1524,7 @@ static void convertMonotonic(struct timespec *result,
     result->tv_nsec = entry->tv_nsec;
     subTimespec(result, result, &convert);
 }
+#endif
 
 /**
  * Formats a log message into a buffer
@@ -1529,6 +1572,7 @@ LIBLOG_ABI_PUBLIC char *android_log_formatLogLine (
      */
     now = entry->tv_sec;
     nsec = entry->tv_nsec;
+#if __ANDROID__
     if (p_format->monotonic_output) {
         // prevent convertMonotonic from being called if logd is monotonic
         if (android_log_clockid() != CLOCK_MONOTONIC) {
@@ -1538,6 +1582,7 @@ LIBLOG_ABI_PUBLIC char *android_log_formatLogLine (
             nsec = time.tv_nsec;
         }
     }
+#endif
     if (now < 0) {
         nsec = NS_PER_SEC - nsec;
     }
@@ -1591,13 +1636,18 @@ LIBLOG_ABI_PUBLIC char *android_log_formatLogLine (
              * This code is Android specific, bionic guarantees that
              * calls to non-reentrant getpwuid() are thread safe.
              */
+#if !defined(__MINGW32__)
+#if (FAKE_LOG_DEVICE == 0)
 #ifndef __BIONIC__
 #warning "This code assumes that getpwuid is thread safe, only true with Bionic!"
+#endif
 #endif
             struct passwd* pwd = getpwuid(entry->uid);
             if (pwd && (strlen(pwd->pw_name) <= 5)) {
                  snprintf(uid, sizeof(uid), "%5s:", pwd->pw_name);
-            } else {
+            } else
+#endif
+            {
                  // Not worth parsing package list, names all longer than 5
                  snprintf(uid, sizeof(uid), "%5d:", entry->uid);
             }

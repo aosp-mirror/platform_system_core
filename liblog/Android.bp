@@ -15,13 +15,14 @@
 //
 
 liblog_sources = [
+    "config_write.c",
     "log_event_list.c",
     "log_event_write.c",
-    "logger_write.c",
-    "config_write.c",
-    "logger_name.c",
-    "logger_lock.c",
     "log_ratelimit.cpp",
+    "logger_lock.c",
+    "logger_name.c",
+    "logger_write.c",
+    "logprint.c",
 ]
 liblog_host_sources = [
     "fake_log_device.c",
@@ -32,7 +33,6 @@ liblog_target_sources = [
     "config_read.c",
     "log_time.cpp",
     "properties.c",
-    "logprint.c",
     "pmsg_reader.c",
     "pmsg_writer.c",
     "logd_reader.c",
