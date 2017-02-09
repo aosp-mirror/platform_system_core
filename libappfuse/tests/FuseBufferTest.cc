@@ -31,7 +31,7 @@ namespace fuse {
 constexpr char kTempFile[] = "/data/local/tmp/appfuse_test_dump";
 
 void OpenTempFile(android::base::unique_fd* fd) {
-  fd->reset(open(kTempFile, O_CREAT | O_RDWR));
+  fd->reset(open(kTempFile, O_CREAT | O_RDWR, 0600));
   ASSERT_NE(-1, *fd) << strerror(errno);
   unlink(kTempFile);
   ASSERT_NE(-1, *fd) << strerror(errno);
