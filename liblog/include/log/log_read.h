@@ -251,7 +251,11 @@ int android_logger_set_prune_list(struct logger_list* logger_list,
 #define ANDROID_LOG_WRONLY   O_WRONLY
 #define ANDROID_LOG_RDWR     O_RDWR
 #define ANDROID_LOG_ACCMODE  O_ACCMODE
+#ifndef O_NONBLOCK
+#define ANDROID_LOG_NONBLOCK 0x00000800
+#else
 #define ANDROID_LOG_NONBLOCK O_NONBLOCK
+#endif
 #if __ANDROID_USE_LIBLOG_READER_INTERFACE > 2
 #define ANDROID_LOG_WRAP     0x40000000 /* Block until buffer about to wrap */
 #define ANDROID_LOG_WRAP_DEFAULT_TIMEOUT 7200 /* 2 hour default */

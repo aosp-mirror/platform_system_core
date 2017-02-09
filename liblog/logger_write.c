@@ -25,9 +25,11 @@
 #endif
 
 #include <log/event_tag_map.h>
+#include <log/log_frontend.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
+#include "config_read.h" /* __android_log_config_read_close() definition */
 #include "config_write.h"
 #include "log_portability.h"
 #include "logger.h"
@@ -169,6 +171,8 @@ LIBLOG_ABI_PUBLIC void __android_log_close()
             (*transport->close)();
         }
     }
+
+    __android_log_config_write_close();
 
 #if defined(__ANDROID__)
     /*
@@ -617,4 +621,88 @@ LIBLOG_ABI_PUBLIC int __android_log_security_bswrite(int32_t tag,
     vec[3].iov_len = len;
 
     return write_to_log(LOG_ID_SECURITY, vec, 4);
+}
+
+static int __write_to_log_null(log_id_t log_id, struct iovec* vec, size_t nr)
+{
+    size_t len, i;
+
+    if ((log_id < LOG_ID_MIN) || (log_id >= LOG_ID_MAX)) {
+        return -EINVAL;
+    }
+
+    for (len = i = 0; i < nr; ++i) {
+        len += vec[i].iov_len;
+    }
+    if (!len) {
+        return -EINVAL;
+    }
+    return len;
+}
+
+/* Following functions need access to our internal write_to_log status */
+
+LIBLOG_HIDDEN int __android_log_frontend;
+
+LIBLOG_ABI_PUBLIC int android_set_log_frontend(int frontend_flag)
+{
+    int retval;
+
+    if (frontend_flag < 0) {
+        return -EINVAL;
+    }
+
+    retval = LOGGER_NULL;
+
+    __android_log_lock();
+
+    if (frontend_flag & LOGGER_NULL) {
+        write_to_log = __write_to_log_null;
+
+        __android_log_unlock();
+
+        return retval;
+    }
+
+    __android_log_frontend &= LOGGER_LOCAL | LOGGER_LOGD;
+
+    frontend_flag &= LOGGER_LOCAL | LOGGER_LOGD;
+
+    if (__android_log_frontend != frontend_flag) {
+        __android_log_frontend = frontend_flag;
+        __android_log_config_write_close();
+        __android_log_config_read_close();
+
+        write_to_log = __write_to_log_init;
+    /* generically we only expect these two values for write_to_log */
+    } else if ((write_to_log != __write_to_log_init) &&
+               (write_to_log != __write_to_log_daemon)) {
+        write_to_log = __write_to_log_init;
+    }
+
+    retval = __android_log_frontend;
+
+    __android_log_unlock();
+
+    return retval;
+}
+
+LIBLOG_ABI_PUBLIC int android_get_log_frontend()
+{
+    int ret = LOGGER_DEFAULT;
+
+    __android_log_lock();
+    if (write_to_log == __write_to_log_null) {
+        ret = LOGGER_NULL;
+    } else {
+        __android_log_frontend &= LOGGER_LOCAL | LOGGER_LOGD;
+        ret = __android_log_frontend;
+        if ((write_to_log != __write_to_log_init) &&
+            (write_to_log != __write_to_log_daemon)) {
+            ret = -EINVAL;
+        }
+    }
+    __android_log_unlock();
+
+    return ret;
 }

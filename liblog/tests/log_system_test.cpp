@@ -27,7 +27,6 @@
 #include <log/log_system.h>
 
 TEST(liblog, SLOG) {
-#ifdef __ANDROID__
     static const char content[] = "log_system.h";
     static const char content_false[] = "log_system.h false";
 
@@ -84,6 +83,7 @@ TEST(liblog, SLOG) {
     usleep(100000);
     SLOGE_IF(false, content_false);
 
+#ifdef __ANDROID__
     // give time for content to long-path through logger
     sleep(1);
 
@@ -112,6 +112,6 @@ TEST(liblog, SLOG) {
 #endif
 
 #else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
+    GTEST_LOG_(INFO) << "This test does not test end-to-end.\n";
 #endif
 }
