@@ -21,6 +21,7 @@ extern "C" {
 #define LOGGER_LOGD    0x1
 #define LOGGER_KERNEL  0x2 /* Reserved/Deprecated */
 #define LOGGER_NULL    0x4 /* Does not release resources of other selections */
+#define LOGGER_LOCAL   0x8 /* logs sent to local memory */
 
 /* Both return the selected frontend flag mask, or negative errno */
 int android_set_log_frontend(int frontend_flag);
