@@ -27,6 +27,7 @@
 #include <android-base/file.h>
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
+#include <log/log_frontend.h>
 #include <private/android_logger.h>
 
 #include "benchmark.h"
@@ -80,10 +81,29 @@ static void BM_log_maximum(int iters) {
 }
 BENCHMARK(BM_log_maximum);
 
+static void set_log_null() {
+    android_set_log_frontend(LOGGER_NULL);
+}
+
+static void set_log_default() {
+    android_set_log_frontend(LOGGER_DEFAULT);
+}
+
+static void BM_log_maximum_null(int iters) {
+    set_log_null();
+    BM_log_maximum(iters);
+    set_log_default();
+}
+BENCHMARK(BM_log_maximum_null);
+
 /*
- *	Measure the time it takes to submit the android logging call using
- * discrete acquisition under light load. Expect this to be a pair of
- * syscall periods (2us).
+ *	Measure the time it takes to collect the time using
+ * discrete acquisition (StartBenchmarkTiming() -> StopBenchmarkTiming())
+ * under light load. Expect this to be a syscall period (2us) or
+ * data read time if zero-syscall.
+ *
+ * vdso support in the kernel and the library can allow
+ * clock_gettime to be zero-syscall.
  */
 static void BM_clock_overhead(int iters) {
     for (int i = 0; i < iters; ++i) {
@@ -468,19 +488,94 @@ static void BM_pmsg_long_unaligned1(int iters) {
 BENCHMARK(BM_pmsg_long_unaligned1);
 
 /*
- *	Measure the time it takes to submit the android logging call using
- * discrete acquisition under light load. Expect this to be a dozen or so
- * syscall periods (40us).
+ *	Measure the time it takes to form sprintf plus time using
+ * discrete acquisition (StartBenchmarkTiming() -> StopBenchmarkTiming())
+ * under light load. Expect this to be a syscall period (2us) or sprintf
+ * time if zero-syscall time.
  */
-static void BM_log_overhead(int iters) {
+/* helper function */
+static void test_print(const char *fmt, ...) {
+    va_list ap;
+    char buf[1024];
+
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+}
+
+#define logd_yield() sched_yield() // allow logd to catch up
+#define logd_sleep() usleep(50)    // really allow logd to catch up
+
+/* performance test */
+static void BM_sprintf_overhead(int iters) {
+    for (int i = 0; i < iters; ++i) {
+       StartBenchmarkTiming();
+       test_print("BM_sprintf_overhead:%d", i);
+       StopBenchmarkTiming();
+       logd_yield();
+    }
+}
+BENCHMARK(BM_sprintf_overhead);
+
+/*
+ *	Measure the time it takes to submit the android printing logging call
+ * using discrete acquisition discrete acquisition (StartBenchmarkTiming() ->
+ * StopBenchmarkTiming()) under light load. Expect this to be a dozen or so
+ * syscall periods (40us) plus time to run *printf
+ */
+static void BM_log_print_overhead(int iters) {
     for (int i = 0; i < iters; ++i) {
        StartBenchmarkTiming();
        __android_log_print(ANDROID_LOG_INFO, "BM_log_overhead", "%d", i);
        StopBenchmarkTiming();
-       usleep(1000);
+       logd_yield();
     }
 }
-BENCHMARK(BM_log_overhead);
+BENCHMARK(BM_log_print_overhead);
+
+/*
+ *	Measure the time it takes to submit the android event logging call
+ * using discrete acquisition (StartBenchmarkTiming() -> StopBenchmarkTiming())
+ * under light load. Expect this to be a dozen or so syscall periods (40us)
+ */
+static void BM_log_event_overhead(int iters) {
+    for (unsigned long long i = 0; i < (unsigned)iters; ++i) {
+       StartBenchmarkTiming();
+       __android_log_btwrite(0, EVENT_TYPE_LONG, &i, sizeof(i));
+       StopBenchmarkTiming();
+       logd_yield();
+    }
+}
+BENCHMARK(BM_log_event_overhead);
+
+static void BM_log_event_overhead_null(int iters) {
+    set_log_null();
+    BM_log_event_overhead(iters);
+    set_log_default();
+}
+BENCHMARK(BM_log_event_overhead_null);
+
+/*
+ *	Measure the time it takes to submit the android event logging call
+ * using discrete acquisition (StartBenchmarkTiming() -> StopBenchmarkTiming())
+ * under very-light load (<1% CPU utilization).
+ */
+static void BM_log_light_overhead(int iters) {
+    for (unsigned long long i = 0; i < (unsigned)iters; ++i) {
+       StartBenchmarkTiming();
+       __android_log_btwrite(0, EVENT_TYPE_LONG, &i, sizeof(i));
+       StopBenchmarkTiming();
+       usleep(10000);
+    }
+}
+BENCHMARK(BM_log_light_overhead);
+
+static void BM_log_light_overhead_null(int iters) {
+    set_log_null();
+    BM_log_light_overhead(iters);
+    set_log_default();
+}
+BENCHMARK(BM_log_light_overhead_null);
 
 static void caught_latency(int /*signum*/)
 {
