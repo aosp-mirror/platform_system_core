@@ -111,6 +111,7 @@ LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
 LOCAL_CXX_STL := libc++
 LOCAL_SHARED_LIBRARIES := liblog libcutils libbase
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
+LOCAL_LDLIBS_linux := -lrt
 include $(BUILD_HOST_NATIVE_TEST)
 
 endif  # ifeq ($(HOST_OS)-$(HOST_ARCH),$(filter $(HOST_OS)-$(HOST_ARCH),linux-x86 linux-x86_64))
