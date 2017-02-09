@@ -37,6 +37,7 @@
 #include <gtest/gtest.h>
 #include <log/logprint.h>
 #include <log/log_event_list.h>
+#include <log/log_frontend.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
@@ -220,6 +221,75 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     EXPECT_EQ(1, second_count);
 
     android_logger_list_close(logger_list);
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
+}
+
+// This test makes little sense standalone, and requires the tests ahead
+// and behind us, to make us whole.  We could incorporate a prefix and
+// suffix test to make this standalone, but opted to not complicate this.
+TEST(liblog, android_set_log_frontend) {
+#ifdef __ANDROID__
+    int logger = android_get_log_frontend();
+    EXPECT_NE(LOGGER_NULL, logger);
+
+    EXPECT_EQ(LOGGER_NULL, android_set_log_frontend(LOGGER_NULL));
+    EXPECT_EQ(LOGGER_NULL, android_get_log_frontend());
+
+    pid_t pid = getpid();
+
+    struct logger_list *logger_list;
+    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
+        LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
+
+    log_time ts(CLOCK_MONOTONIC);
+    ASSERT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
+
+    usleep(1000000);
+
+    int count = 0;
+
+    for (;;) {
+        log_msg log_msg;
+        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
+            break;
+        }
+
+        ASSERT_EQ(log_msg.entry.pid, pid);
+
+        if ((log_msg.entry.len != sizeof(android_log_event_long_t))
+         || (log_msg.id() != LOG_ID_EVENTS)) {
+            continue;
+        }
+
+        android_log_event_long_t* eventData;
+        eventData = reinterpret_cast<android_log_event_long_t*>(log_msg.msg());
+
+        if (!eventData || (eventData->payload.type != EVENT_TYPE_LONG)) {
+            continue;
+        }
+
+        log_time tx(reinterpret_cast<char*>(&eventData->payload.data));
+        if (ts == tx) {
+            ++count;
+        }
+    }
+
+    android_logger_list_close(logger_list);
+
+    EXPECT_EQ(logger, android_set_log_frontend(logger));
+    EXPECT_EQ(logger, android_get_log_frontend());
+
+    // False negative if liblog.__android_log_btwrite__android_logger_list_read
+    // fails above, so we will likely succeed. But we will have so many
+    // failures elsewhere that it is probably not worthwhile for us to
+    // highlight yet another disappointment.
+    EXPECT_EQ(0, count);
+    // We also expect failures in the following tests if the set does not
+    // react in an appropriate manner internally, yet passes, so we depend
+    // on this test being in the middle of a series of tests performed in
+    // the same process.
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
