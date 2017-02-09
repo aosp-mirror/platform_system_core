@@ -561,10 +561,12 @@ bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
 static const char*
 has_prefix(const char* str, const char* end, const char* prefix, size_t prefixlen)
 {
-    if ((end-str) >= (ptrdiff_t)prefixlen && !memcmp(str, prefix, prefixlen))
+    if ((end - str) >= (ptrdiff_t)prefixlen &&
+        (prefixlen == 0 || !memcmp(str, prefix, prefixlen))) {
         return str + prefixlen;
-    else
+    } else {
         return NULL;
+    }
 }
 
 /* Same as strlen(x) for constant string literals ONLY */
