@@ -99,6 +99,7 @@ struct android_log_transport_read {
 };
 
 struct android_log_logger_list {
+  struct listnode node;
   struct listnode logger;
   struct listnode transport;
   int mode;
@@ -145,6 +146,41 @@ struct android_log_transport_context {
              ((logp)->parent == (logger_list));                     \
          (logp) = node_to_item((logp)->node.next,                   \
                              struct android_log_logger, node))
+
+/*
+ *    Global list of log readers.
+ *
+ * Usage case: search out transport contexts for all readers
+ */
+
+LIBLOG_HIDDEN struct listnode __android_log_readers;
+
+#if defined(_WIN32)
+#define logger_list_rdlock()
+#define logger_list_wrlock()
+#define logger_list_unlock()
+#else
+LIBLOG_HIDDEN pthread_rwlock_t __android_log_readers_lock;
+
+#define logger_list_rdlock() pthread_rwlock_rdlock(&__android_log_readers_lock)
+#define logger_list_wrlock() pthread_rwlock_wrlock(&__android_log_readers_lock)
+#define logger_list_unlock() pthread_rwlock_unlock(&__android_log_readers_lock)
+#endif
+
+/* Must be called with logger_list_rdlock() or logger_list_wrlock() held */
+#define logger_list_for_each(logger_list)                              \
+    for ((logger_list) = node_to_item(&__android_log_readers,          \
+                                      struct android_log_logger_list,  \
+                                      node);                           \
+         (logger_list) != node_to_item(&__android_log_readers,         \
+                                       struct android_log_logger_list, \
+                                       node) &&                        \
+         (logger_list) != node_to_item((logger_list)->node.next,       \
+                                       struct android_log_logger_list, \
+                                       node);                          \
+         (logger_list) = node_to_item((logger_list)->node.next,        \
+                                      struct android_log_logger_list,  \
+                                      node))
 
 /* OS specific dribs and drabs */
 
