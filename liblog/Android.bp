@@ -15,12 +15,15 @@
 //
 
 liblog_sources = [
+    "config_read.c",
     "config_write.c",
+    "local_logger.c",
     "log_event_list.c",
     "log_event_write.c",
     "log_ratelimit.cpp",
     "logger_lock.c",
     "logger_name.c",
+    "logger_read.c",
     "logger_write.c",
     "logprint.c",
 ]
@@ -30,14 +33,12 @@ liblog_host_sources = [
 ]
 liblog_target_sources = [
     "event_tag_map.cpp",
-    "config_read.c",
     "log_time.cpp",
     "properties.c",
     "pmsg_reader.c",
     "pmsg_writer.c",
     "logd_reader.c",
     "logd_writer.c",
-    "logger_read.c",
 ]
 
 // Shared and static library for host and device
