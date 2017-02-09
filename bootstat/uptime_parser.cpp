@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,25 @@
  * limitations under the License.
  */
 
-#include "android-base/chrono_utils.h"
+#include "uptime_parser.h"
 
 #include <time.h>
+#include <cstdlib>
+#include <string>
+#include <android-base/file.h>
+#include <android-base/logging.h>
 
-namespace android {
-namespace base {
+namespace bootstat {
 
-boot_clock::time_point boot_clock::now() {
-  timespec ts;
-  clock_gettime(CLOCK_BOOTTIME, &ts);
-  return boot_clock::time_point(std::chrono::seconds(ts.tv_sec) +
-                                std::chrono::nanoseconds(ts.tv_nsec));
+time_t ParseUptime() {
+  std::string uptime_str;
+  if (!android::base::ReadFileToString("/proc/uptime", &uptime_str)) {
+    PLOG(ERROR) << "Failed to read /proc/uptime";
+    return -1;
+  }
+
+  // Cast intentionally rounds down.
+  return static_cast<time_t>(strtod(uptime_str.c_str(), NULL));
 }
 
-}  // namespace base
-}  // namespace android
+}  // namespace bootstat

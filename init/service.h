@@ -25,8 +25,6 @@
 #include <string>
 #include <vector>
 
-#include <android-base/chrono_utils.h>
-
 #include "action.h"
 #include "capabilities.h"
 #include "descriptors.h"
@@ -137,8 +135,8 @@ private:
 
     unsigned flags_;
     pid_t pid_;
-    android::base::boot_clock::time_point time_started_; // time of last start
-    android::base::boot_clock::time_point time_crashed_; // first crash within inspection window
+    boot_clock::time_point time_started_; // time of last start
+    boot_clock::time_point time_crashed_; // first crash within inspection window
     int crash_count_;                     // number of times crashed within window
 
     uid_t uid_;

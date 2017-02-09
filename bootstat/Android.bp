@@ -17,6 +17,7 @@
 bootstat_lib_src_files = [
     "boot_event_record_store.cpp",
     "histogram_logger.cpp",
+    "uptime_parser.cpp",
 ]
 
 cc_defaults {
