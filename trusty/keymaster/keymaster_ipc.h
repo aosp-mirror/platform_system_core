@@ -43,6 +43,7 @@ enum keymaster_command : uint32_t {
     KM_GET_SUPPORTED_EXPORT_FORMATS = (14 << KEYMASTER_REQ_SHIFT),
     KM_GET_KEY_CHARACTERISTICS      = (15 << KEYMASTER_REQ_SHIFT),
     KM_ATTEST_KEY                   = (16 << KEYMASTER_REQ_SHIFT),
+    KM_UPGRADE_KEY                  = (17 << KEYMASTER_REQ_SHIFT),
     KM_CONFIGURE                    = (18 << KEYMASTER_REQ_SHIFT),
 };
 

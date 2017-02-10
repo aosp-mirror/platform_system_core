@@ -426,6 +426,34 @@ keymaster_error_t TrustyKeymasterDevice::upgrade_key(const keymaster_key_blob_t*
                                                      const keymaster_key_param_set_t* upgrade_params,
                                                      keymaster_key_blob_t* upgraded_key) {
     ALOGD("Device received upgrade_key");
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+    if (!key_to_upgrade || !upgrade_params) {
+        return KM_ERROR_UNEXPECTED_NULL_POINTER;
+    }
+    if (!upgraded_key) {
+        return KM_ERROR_OUTPUT_PARAMETER_NULL;
+    }
+
+    UpgradeKeyRequest request;
+    request.SetKeyMaterial(*key_to_upgrade);
+    request.upgrade_params.Reinitialize(*upgrade_params);
+
+    UpgradeKeyResponse response;
+    keymaster_error_t err = Send(KM_UPGRADE_KEY, request, &response);
+    if (err != KM_ERROR_OK) {
+        return err;
+    }
+
+    upgraded_key->key_material_size = response.upgraded_key.key_material_size;
+    upgraded_key->key_material = DuplicateBuffer(response.upgraded_key.key_material,
+                                                 response.upgraded_key.key_material_size);
+    if (!upgraded_key->key_material) {
+        return KM_ERROR_MEMORY_ALLOCATION_FAILED;
+    }
+
     return KM_ERROR_OK;
 }
 
