@@ -626,7 +626,15 @@ keymaster_error_t TrustyKeymasterDevice::finish(keymaster_operation_handle_t ope
 
 keymaster_error_t TrustyKeymasterDevice::abort(keymaster_operation_handle_t operation_handle) {
     ALOGD("Device received abort");
-    return KM_ERROR_OK;
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+
+    AbortOperationRequest request;
+    request.op_handle = operation_handle;
+    AbortOperationResponse response;
+    return Send(KM_ABORT_OPERATION, request, &response);
 }
 
 hw_device_t* TrustyKeymasterDevice::hw_device() {
