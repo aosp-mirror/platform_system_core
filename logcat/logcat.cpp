@@ -603,7 +603,7 @@ int main(int argc, char** argv) {
     char* setPruneList = NULL;
     char* setId = NULL;
     int mode = ANDROID_LOG_RDONLY;
-    const char* forceFilters = NULL;
+    std::string forceFilters;
     log_device_t* devices = NULL;
     log_device_t* dev;
     struct logger_list* logger_list;
@@ -942,58 +942,39 @@ int main(int argc, char** argv) {
                 // run the program.  If nothing is found, the program should
                 // quit immediately.
                 {
-                    static char cmdline[1024];
+                    std::string cmdline;
+                    android::base::ReadFileToString("/proc/cmdline", &cmdline);
 
-                    int fd = open("/proc/cmdline", O_RDONLY);
-                    if (fd >= 0) {
-                        int n = read(fd, cmdline, sizeof(cmdline) - 1);
-                        if (n < 0) n = 0;
-                        cmdline[n] = 0;
-                        close(fd);
-                    } else {
-                        cmdline[0] = 0;
-                    }
-
-                    char* logcat = strstr(cmdline, KERNEL_OPTION);
-                    char* console = strstr(cmdline, CONSOLE_OPTION);
-                    bool force_exit = true;
-                    if (logcat != NULL) {
-                        char* p = logcat + sizeof(KERNEL_OPTION) - 1;
-                        char* q = strpbrk(p, " \t\n\r");
-
-                        if (q != NULL) *q = 0;
-
-                        forceFilters = p;
-                        force_exit = false;
-                    }
+                    const char* logcat = strstr(cmdline.c_str(), KERNEL_OPTION);
                     // if nothing found or invalid filters, exit quietly
-                    if (force_exit) return EXIT_SUCCESS;
+                    if (!logcat) return EXIT_SUCCESS;
+
+                    const char* p = logcat + strlen(KERNEL_OPTION);
+                    const char* q = strpbrk(p, " \t\n\r");
+                    if (!q) q = p + strlen(p);
+                    forceFilters = std::string(p, q);
 
                     // redirect our output to the emulator console
-                    if (console) {
-                        char* p = console + sizeof(CONSOLE_OPTION) - 1;
-                        char* q = strpbrk(p, " \t\n\r");
-                        char devname[64];
-                        int len;
+                    const char* console =
+                        strstr(cmdline.c_str(), CONSOLE_OPTION);
+                    if (!console) break;
 
-                        if (q != NULL) {
-                            len = q - p;
-                        } else {
-                            len = strlen(p);
-                        }
+                    p = console + strlen(CONSOLE_OPTION);
+                    q = strpbrk(p, " \t\n\r");
+                    int len = q ? q - p : strlen(p);
+                    std::string devname = "/dev/" + std::string(p, len);
+                    cmdline.erase();
 
-                        len = snprintf(devname, sizeof(devname), "/dev/%.*s",
-                                       len, p);
-                        fprintf(stderr, "logcat using %s (%d)\n", devname, len);
-                        if (len < (int)sizeof(devname)) {
-                            fd = open(devname, O_WRONLY);
-                            if (fd >= 0) {
-                                dup2(fd, 1);
-                                dup2(fd, 2);
-                                close(fd);
-                            }
-                        }
-                    }
+                    fprintf(stderr, "logcat using %s\n", devname.c_str());
+
+                    int fd = open(devname.c_str(), O_WRONLY);
+                    devname.erase();
+                    if (fd < 0) break;
+
+                    // close output and error channels, replace with console
+                    dup2(fd, 1);
+                    dup2(fd, 2);
+                    close(fd);
                 }
                 break;
 
@@ -1075,8 +1056,8 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (forceFilters) {
-        err = android_log_addFilterString(g_logformat, forceFilters);
+    if (forceFilters.size()) {
+        err = android_log_addFilterString(g_logformat, forceFilters.c_str());
         if (err < 0) {
             logcat_panic(HELP_FALSE,
                          "Invalid filter expression in logcat args\n");
