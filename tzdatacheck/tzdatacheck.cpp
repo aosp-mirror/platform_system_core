@@ -30,34 +30,34 @@
 
 #include "android-base/logging.h"
 
-static const char* BUNDLE_VERSION_FILENAME = "/bundle_version";
-// bundle_version is an ASCII file consisting of 17 bytes in the form: AAA.BBB|CCCCC|DDD
-// AAA.BBB is the major/minor version of the bundle format (e.g. 001.001),
+static const char* DISTRO_VERSION_FILENAME = "/distro_version";
+// distro_version is an ASCII file consisting of 17 bytes in the form: AAA.BBB|CCCCC|DDD
+// AAA.BBB is the major/minor version of the distro format (e.g. 001.001),
 // CCCCC is the rules version (e.g. 2016g)
-// DDD is the android revision for this rules version to allow for bundle corrections (e.g. 001)
+// DDD is the android revision for this rules version to allow for distro corrections (e.g. 001)
 // We only need the first 13 to determine if it is suitable for the device.
-static const int BUNDLE_VERSION_LENGTH = 13;
-// The major version of the bundle format supported by this code as a null-terminated char[].
-static const char SUPPORTED_BUNDLE_MAJOR_VERSION[] = "001";
-// The length of the bundle format major version excluding the \0
-static const size_t SUPPORTED_BUNDLE_MAJOR_VERSION_LEN = sizeof(SUPPORTED_BUNDLE_MAJOR_VERSION) - 1;
-// The minor version of the bundle format supported by this code as a null-terminated char[].
-static const char SUPPORTED_BUNDLE_MINOR_VERSION[] = "001";
-// The length of the bundle format minor version excluding the \0
-static const size_t SUPPORTED_BUNDLE_MINOR_VERSION_LEN = sizeof(SUPPORTED_BUNDLE_MINOR_VERSION) - 1;
-// The length of the bundle format version. e.g. 001.001
-static const size_t SUPPORTED_BUNDLE_VERSION_LEN =
-        SUPPORTED_BUNDLE_MAJOR_VERSION_LEN + SUPPORTED_BUNDLE_MINOR_VERSION_LEN + 1;
+static const int DISTRO_VERSION_LENGTH = 13;
+// The major version of the distro format supported by this code as a null-terminated char[].
+static const char SUPPORTED_DISTRO_MAJOR_VERSION[] = "001";
+// The length of the distro format major version excluding the \0
+static const size_t SUPPORTED_DISTRO_MAJOR_VERSION_LEN = sizeof(SUPPORTED_DISTRO_MAJOR_VERSION) - 1;
+// The minor version of the distro format supported by this code as a null-terminated char[].
+static const char SUPPORTED_DISTRO_MINOR_VERSION[] = "001";
+// The length of the distro format minor version excluding the \0
+static const size_t SUPPORTED_DISTRO_MINOR_VERSION_LEN = sizeof(SUPPORTED_DISTRO_MINOR_VERSION) - 1;
+// The length of the distro format version. e.g. 001.001
+static const size_t SUPPORTED_DISTRO_VERSION_LEN =
+        SUPPORTED_DISTRO_MAJOR_VERSION_LEN + SUPPORTED_DISTRO_MINOR_VERSION_LEN + 1;
 // The length of the IANA rules version bytes. e.g. 2016a
 static const size_t RULES_VERSION_LEN = 5;
-// Bundle version bytes are: AAA.BBB|CCCCC - the rules version is CCCCC
-static const size_t BUNDLE_VERSION_RULES_IDX = 8;
+// Distro version bytes are: AAA.BBB|CCCCC - the rules version is CCCCC
+static const size_t DISTRO_VERSION_RULES_IDX = 8;
 
 static const char* TZDATA_FILENAME = "/tzdata";
 // tzdata file header (as much as we need for the version):
 // byte[11] tzdata_version  -- e.g. "tzdata2012f"
 static const int TZ_HEADER_LENGTH = 11;
-// The major version of the bundle format supported by this code as a null-terminated char[].
+// The major version of the distro format supported by this code as a null-terminated char[].
 static const char TZ_DATA_HEADER_PREFIX[] = "tzdata";
 static const size_t TZ_DATA_HEADER_PREFIX_LEN = sizeof(TZ_DATA_HEADER_PREFIX) - 1; // exclude \0
 
@@ -65,7 +65,7 @@ static const size_t TZ_DATA_HEADER_PREFIX_LEN = sizeof(TZ_DATA_HEADER_PREFIX) - 
 static void usage() {
     std::cerr << "Usage: tzdatacheck SYSTEM_TZ_DIR DATA_TZ_DIR\n"
             "\n"
-            "Checks whether any timezone update bundle in DATA_TZ_DIR is compatible with the\n"
+            "Checks whether any timezone update distro in DATA_TZ_DIR is compatible with the\n"
             "current Android release and better than or the same as base system timezone rules in\n"
             "SYSTEM_TZ_DIR. If the timezone rules in SYSTEM_TZ_DIR are a higher version than the\n"
             "one in DATA_TZ_DIR the DATA_TZ_DIR is renamed and then deleted.\n";
@@ -116,8 +116,8 @@ static bool checkDigits(const char* buffer, const size_t count, size_t* i) {
     return true;
 }
 
-static bool checkValidBundleVersion(const char* buffer) {
-    // See BUNDLE_VERSION_LENGTH comments above for a description of the format.
+static bool checkValidDistroVersion(const char* buffer) {
+    // See DISTRO_VERSION_LENGTH comments above for a description of the format.
     size_t i = 0;
     if (!checkDigits(buffer, 3, &i)) {
       return false;
@@ -254,13 +254,13 @@ static void deleteConfigUpdaterMetadataDir(const char* dataZoneInfoDir) {
 }
 
 /*
- * Deletes the timezone update bundle directory.
+ * Deletes the timezone update distro directory.
  */
-static void deleteUpdateBundleDir(std::string& bundleDirName) {
-    LOG(INFO) << "Removing: " << bundleDirName;
-    bool deleted = deleteDir(bundleDirName);
+static void deleteUpdateDistroDir(std::string& distroDirName) {
+    LOG(INFO) << "Removing: " << distroDirName;
+    bool deleted = deleteDir(distroDirName);
     if (!deleted) {
-        LOG(WARNING) << "Deletion of bundle dir " << bundleDirName << " was not successful";
+        LOG(WARNING) << "Deletion of distro dir " << distroDirName << " was not successful";
     }
 }
 
@@ -286,83 +286,83 @@ int main(int argc, char* argv[]) {
     const char* systemZoneInfoDir = argv[1];
     const char* dataZoneInfoDir = argv[2];
 
-    // Check the bundle directory exists. If it does not, exit quickly: nothing to do.
+    // Check the distro directory exists. If it does not, exit quickly: nothing to do.
     std::string dataCurrentDirName(dataZoneInfoDir);
     dataCurrentDirName += "/current";
     int dataCurrentDirStatus = checkPath(dataCurrentDirName);
     if (dataCurrentDirStatus == NONE) {
-        LOG(INFO) << "timezone bundle dir " << dataCurrentDirName
+        LOG(INFO) << "timezone distro dir " << dataCurrentDirName
                 << " does not exist. No action required.";
         return 0;
     }
-    // If the bundle directory path is not a directory or we can't stat() the path, exit with a
+    // If the distro directory path is not a directory or we can't stat() the path, exit with a
     // warning: either there's a problem accessing storage or the world is not as it should be;
     // nothing to do.
     if (dataCurrentDirStatus != IS_DIR) {
-        LOG(WARNING) << "Current bundle dir " << dataCurrentDirName
+        LOG(WARNING) << "Current distro dir " << dataCurrentDirName
                 << " could not be accessed or is not a directory. result=" << dataCurrentDirStatus;
         return 2;
     }
 
-    // Check the installed bundle version.
-    std::string bundleVersionFileName(dataCurrentDirName);
-    bundleVersionFileName += BUNDLE_VERSION_FILENAME;
-    std::vector<char> bundleVersion;
-    bundleVersion.reserve(BUNDLE_VERSION_LENGTH);
-    bool bundleVersionReadOk =
-            readBytes(bundleVersionFileName, bundleVersion.data(), BUNDLE_VERSION_LENGTH);
-    if (!bundleVersionReadOk) {
-        LOG(WARNING) << "bundle version file " << bundleVersionFileName
-                << " does not exist or is too short. Deleting bundle dir.";
+    // Check the installed distro version.
+    std::string distroVersionFileName(dataCurrentDirName);
+    distroVersionFileName += DISTRO_VERSION_FILENAME;
+    std::vector<char> distroVersion;
+    distroVersion.reserve(DISTRO_VERSION_LENGTH);
+    bool distroVersionReadOk =
+            readBytes(distroVersionFileName, distroVersion.data(), DISTRO_VERSION_LENGTH);
+    if (!distroVersionReadOk) {
+        LOG(WARNING) << "distro version file " << distroVersionFileName
+                << " does not exist or is too short. Deleting distro dir.";
         // Implies the contents of the data partition is corrupt in some way. Try to clean up.
         deleteConfigUpdaterMetadataDir(dataZoneInfoDir);
-        deleteUpdateBundleDir(dataCurrentDirName);
+        deleteUpdateDistroDir(dataCurrentDirName);
         return 3;
     }
 
-    if (!checkValidBundleVersion(bundleVersion.data())) {
-        LOG(WARNING) << "bundle version file " << bundleVersionFileName
-                << " is not valid. Deleting bundle dir.";
+    if (!checkValidDistroVersion(distroVersion.data())) {
+        LOG(WARNING) << "distro version file " << distroVersionFileName
+                << " is not valid. Deleting distro dir.";
         // Implies the contents of the data partition is corrupt in some way. Try to clean up.
         deleteConfigUpdaterMetadataDir(dataZoneInfoDir);
-        deleteUpdateBundleDir(dataCurrentDirName);
+        deleteUpdateDistroDir(dataCurrentDirName);
         return 4;
     }
 
-    std::string actualBundleVersion =
-            std::string(bundleVersion.data(), SUPPORTED_BUNDLE_VERSION_LEN);
-    // Check the first 3 bytes of the bundle version: these are the major version (e.g. 001).
+    std::string actualDistroVersion =
+            std::string(distroVersion.data(), SUPPORTED_DISTRO_VERSION_LEN);
+    // Check the first 3 bytes of the distro version: these are the major version (e.g. 001).
     // It must match the one we support exactly to be ok.
     if (strncmp(
-            &bundleVersion[0],
-            SUPPORTED_BUNDLE_MAJOR_VERSION,
-            SUPPORTED_BUNDLE_MAJOR_VERSION_LEN) != 0) {
+            &distroVersion[0],
+            SUPPORTED_DISTRO_MAJOR_VERSION,
+            SUPPORTED_DISTRO_MAJOR_VERSION_LEN) != 0) {
 
-        LOG(INFO) << "bundle version file " << bundleVersionFileName
-                << " major version is not the required version " << SUPPORTED_BUNDLE_MAJOR_VERSION
-                << ", was \"" << actualBundleVersion << "\". Deleting bundle dir.";
-        // This implies there has been an OTA and the installed bundle is not compatible with the
-        // new version of Android. Remove the installed bundle.
+        LOG(INFO) << "distro version file " << distroVersionFileName
+                << " major version is not the required version " << SUPPORTED_DISTRO_MAJOR_VERSION
+                << ", was \"" << actualDistroVersion << "\". Deleting distro dir.";
+        // This implies there has been an OTA and the installed distro is not compatible with the
+        // new version of Android. Remove the installed distro.
         deleteConfigUpdaterMetadataDir(dataZoneInfoDir);
-        deleteUpdateBundleDir(dataCurrentDirName);
+        deleteUpdateDistroDir(dataCurrentDirName);
         return 5;
     }
 
-    // Check the last 3 bytes of the bundle version: these are the minor version (e.g. 001).
-    // If the version in the bundle is < the minor version required by this device it cannot be
+    // Check the last 3 bytes of the distro version: these are the minor version (e.g. 001).
+    // If the version in the distro is < the minor version required by this device it cannot be
     // used.
     if (strncmp(
-            &bundleVersion[4],
-            SUPPORTED_BUNDLE_MINOR_VERSION,
-            SUPPORTED_BUNDLE_MINOR_VERSION_LEN) < 0) {
+            &distroVersion[4],
+            SUPPORTED_DISTRO_MINOR_VERSION,
+            SUPPORTED_DISTRO_MINOR_VERSION_LEN) < 0) {
 
-        LOG(INFO) << "bundle version file " << bundleVersionFileName
-                << " minor version is not the required version " << SUPPORTED_BUNDLE_MINOR_VERSION
-                << ", was \"" << actualBundleVersion << "\". Deleting bundle dir.";
-        // This implies there has been an OTA and the installed bundle is not compatible with the
-        // new version of Android. Remove the installed bundle.
+        LOG(INFO) << "distro version file " << distroVersionFileName
+                << " minor version is not the required version " << SUPPORTED_DISTRO_MINOR_VERSION
+                << ", was \"" << actualDistroVersion << "\". Deleting distro dir.";
+        // This implies there has been an OTA and the installed distro is not compatible with the
+        // new version of Android. Remove the installed distro.
         deleteConfigUpdaterMetadataDir(dataZoneInfoDir);
-        deleteUpdateBundleDir(dataCurrentDirName);
+        deleteUpdateDistroDir(dataCurrentDirName);
         return 5;
     }
 
@@ -384,22 +384,22 @@ int main(int argc, char* argv[]) {
         return 7;
     }
 
-    // Compare the bundle rules version against the system rules version.
+    // Compare the distro rules version against the system rules version.
     if (strncmp(
             &systemTzDataHeader[TZ_DATA_HEADER_PREFIX_LEN],
-            &bundleVersion[BUNDLE_VERSION_RULES_IDX],
+            &distroVersion[DISTRO_VERSION_RULES_IDX],
             RULES_VERSION_LEN) <= 0) {
-        LOG(INFO) << "Found an installed bundle but it is valid. No action taken.";
+        LOG(INFO) << "Found an installed distro but it is valid. No action taken.";
         // Implies there is an installed update, but it is good.
         return 0;
     }
 
     // Implies there has been an OTA and the system version of the timezone rules is now newer
-    // than the version installed in /data. Remove the installed bundle.
-    LOG(INFO) << "timezone bundle in " << dataCurrentDirName << " is older than data in "
+    // than the version installed in /data. Remove the installed distro.
+    LOG(INFO) << "timezone distro in " << dataCurrentDirName << " is older than data in "
             << systemTzDataFileName << "; fixing...";
 
     deleteConfigUpdaterMetadataDir(dataZoneInfoDir);
-    deleteUpdateBundleDir(dataCurrentDirName);
+    deleteUpdateDistroDir(dataCurrentDirName);
     return 0;
 }
