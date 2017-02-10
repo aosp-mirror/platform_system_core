@@ -17,6 +17,8 @@
 #ifndef _LIBS_LOGCAT_H /* header boilerplate */
 #define _LIBS_LOGCAT_H
 
+#include <stdio.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -94,6 +96,22 @@ int android_logcat_run_command_thread_running(android_logcat_context ctx);
  * non-zero for any errors.
  */
 int android_logcat_destroy(android_logcat_context* ctx);
+
+/* derived helpers */
+
+/*
+ * In-process thread that acts like somewhat like libc-like system and popen
+ * respectively.  Can not handle shell scripting, only pure calls to the
+ * logcat operations. The android_logcat_system is a wrapper for the
+ * create_android_logcat, android_logcat_run_command and android_logcat_destroy
+ * API above.  The android_logcat_popen is a wrapper for the
+ * android_logcat_run_command_thread API above.  The android_logcat_pclose is
+ * a wrapper for a reasonable wait until output has subsided for command
+ * completion, fclose on the FILE pointer and the android_logcat_destroy API.
+ */
+int android_logcat_system(const char* command);
+FILE* android_logcat_popen(android_logcat_context* ctx, const char* command);
+int android_logcat_pclose(android_logcat_context* ctx, FILE* output);
 
 #endif /* __ANDROID_USE_LIBLOG_LOGCAT_INTERFACE */
 
