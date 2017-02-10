@@ -165,7 +165,15 @@ keymaster_error_t TrustyKeymasterDevice::configure(const keymaster_key_param_set
 
 keymaster_error_t TrustyKeymasterDevice::add_rng_entropy(const uint8_t* data, size_t data_length) {
     ALOGD("Device received add_rng_entropy");
-    return KM_ERROR_OK;
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+
+    AddEntropyRequest request;
+    request.random_data.Reinitialize(data, data_length);
+    AddEntropyResponse response;
+    return Send(KM_ADD_RNG_ENTROPY, request, &response);
 }
 
 keymaster_error_t TrustyKeymasterDevice::generate_key(
