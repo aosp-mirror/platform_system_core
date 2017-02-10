@@ -136,6 +136,20 @@ TrustyKeymasterDevice::~TrustyKeymasterDevice() {
     trusty_keymaster_disconnect();
 }
 
+namespace {
+
+// Allocates a new buffer with malloc and copies the contents of |buffer| to it. Caller takes
+// ownership of the returned buffer.
+uint8_t* DuplicateBuffer(const uint8_t* buffer, size_t size) {
+    uint8_t* tmp = reinterpret_cast<uint8_t*>(malloc(size));
+    if (tmp) {
+        memcpy(tmp, buffer, size);
+    }
+    return tmp;
+}
+
+}  //  unnamed namespace
+
 keymaster_error_t TrustyKeymasterDevice::configure(const keymaster_key_param_set_t* params) {
     ALOGD("Device received configure\n");
 
@@ -180,6 +194,39 @@ keymaster_error_t TrustyKeymasterDevice::generate_key(
     const keymaster_key_param_set_t* params, keymaster_key_blob_t* key_blob,
     keymaster_key_characteristics_t* characteristics) {
     ALOGD("Device received generate_key");
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+    if (!params) {
+        return KM_ERROR_UNEXPECTED_NULL_POINTER;
+    }
+    if (!key_blob) {
+        return KM_ERROR_OUTPUT_PARAMETER_NULL;
+    }
+
+    GenerateKeyRequest request(message_version_);
+    request.key_description.Reinitialize(*params);
+    request.key_description.push_back(TAG_CREATION_DATETIME, java_time(time(NULL)));
+
+    GenerateKeyResponse response(message_version_);
+    keymaster_error_t err = Send(KM_GENERATE_KEY, request, &response);
+    if (err != KM_ERROR_OK) {
+        return err;
+    }
+
+    key_blob->key_material_size = response.key_blob.key_material_size;
+    key_blob->key_material =
+        DuplicateBuffer(response.key_blob.key_material, response.key_blob.key_material_size);
+    if (!key_blob->key_material) {
+        return KM_ERROR_MEMORY_ALLOCATION_FAILED;
+    }
+
+    if (characteristics) {
+        response.enforced.CopyToParamSet(&characteristics->hw_enforced);
+        response.unenforced.CopyToParamSet(&characteristics->sw_enforced);
+    }
+
     return KM_ERROR_OK;
 }
 
