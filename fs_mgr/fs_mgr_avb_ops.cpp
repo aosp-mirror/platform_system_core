@@ -66,7 +66,7 @@ static AvbIOResult read_from_partition(AvbOps *ops ATTRIBUTE_UNUSED,
         fs_mgr_get_entry_for_mount_point(fs_mgr_fstab, "/misc");
 
     if (fstab_entry == nullptr) {
-        LERROR << "Partition (" << partition << ") not found in fstab";
+        LERROR << "/misc mount point not found in fstab";
         return AVB_IO_RESULT_ERROR_IO;
     }
 
@@ -77,6 +77,13 @@ static AvbIOResult read_from_partition(AvbOps *ops ATTRIBUTE_UNUSED,
         size_t end_slash = path.find_last_of("/");
         std::string by_name_prefix(path.substr(0, end_slash + 1));
         path = by_name_prefix + partition_name;
+    }
+
+    // Ensures the device path (a symlink created by init) is ready to
+    // access. fs_mgr_test_access() will test a few iterations if the
+    // path doesn't exist yet.
+    if (fs_mgr_test_access(path.c_str()) < 0) {
+        return AVB_IO_RESULT_ERROR_IO;
     }
 
     android::base::unique_fd fd(
