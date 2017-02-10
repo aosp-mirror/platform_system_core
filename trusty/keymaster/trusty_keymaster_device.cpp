@@ -508,6 +508,58 @@ keymaster_error_t TrustyKeymasterDevice::update(keymaster_operation_handle_t ope
                                                 keymaster_key_param_set_t* out_params,
                                                 keymaster_blob_t* output) {
     ALOGD("Device received update");
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+    if (!input) {
+        return KM_ERROR_UNEXPECTED_NULL_POINTER;
+    }
+    if (!input_consumed) {
+        return KM_ERROR_OUTPUT_PARAMETER_NULL;
+    }
+
+    if (out_params) {
+        *out_params = {};
+    }
+    if (output) {
+        *output = {};
+    }
+
+    UpdateOperationRequest request;
+    request.op_handle = operation_handle;
+    if (in_params) {
+        request.additional_params.Reinitialize(*in_params);
+    }
+    if (input && input->data_length > 0) {
+        size_t max_input_size = SEND_BUF_SIZE - request.SerializedSize();
+        request.input.Reinitialize(input->data, std::min(input->data_length, max_input_size));
+    }
+
+    UpdateOperationResponse response;
+    keymaster_error_t err = Send(KM_UPDATE_OPERATION, request, &response);
+    if (err != KM_ERROR_OK) {
+        return err;
+    }
+
+    if (response.output_params.size() > 0) {
+        if (out_params) {
+            response.output_params.CopyToParamSet(out_params);
+        } else {
+            return KM_ERROR_OUTPUT_PARAMETER_NULL;
+        }
+    }
+    *input_consumed = response.input_consumed;
+    if (output) {
+        output->data_length = response.output.available_read();
+        output->data = DuplicateBuffer(response.output.peek_read(), output->data_length);
+        if (!output->data) {
+            return KM_ERROR_MEMORY_ALLOCATION_FAILED;
+        }
+    } else if (response.output.available_read() > 0) {
+        return KM_ERROR_OUTPUT_PARAMETER_NULL;
+    }
+
     return KM_ERROR_OK;
 }
 
