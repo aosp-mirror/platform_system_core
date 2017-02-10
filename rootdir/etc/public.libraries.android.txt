@@ -1,4 +1,5 @@
 libandroid.so
+libaaudio.so
 libc.so
 libcamera2ndk.so
 libdl.so
@@ -12,7 +13,6 @@ libjnigraphics.so
 liblog.so
 libmediandk.so
 libm.so
-liboboe.so
 libOpenMAXAL.so
 libOpenSLES.so
 libRS.so
