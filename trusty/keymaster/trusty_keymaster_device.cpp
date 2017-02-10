@@ -148,6 +148,18 @@ uint8_t* DuplicateBuffer(const uint8_t* buffer, size_t size) {
     return tmp;
 }
 
+template <typename RequestType>
+void AddClientAndAppData(const keymaster_blob_t* client_id, const keymaster_blob_t* app_data,
+                         RequestType* request) {
+    request->additional_params.Clear();
+    if (client_id) {
+        request->additional_params.push_back(TAG_APPLICATION_ID, *client_id);
+    }
+    if (app_data) {
+        request->additional_params.push_back(TAG_APPLICATION_DATA, *app_data);
+    }
+}
+
 }  //  unnamed namespace
 
 keymaster_error_t TrustyKeymasterDevice::configure(const keymaster_key_param_set_t* params) {
@@ -234,6 +246,30 @@ keymaster_error_t TrustyKeymasterDevice::get_key_characteristics(
     const keymaster_key_blob_t* key_blob, const keymaster_blob_t* client_id,
     const keymaster_blob_t* app_data, keymaster_key_characteristics_t* characteristics) {
     ALOGD("Device received get_key_characteristics");
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+    if (!key_blob || !key_blob->key_material) {
+        return KM_ERROR_UNEXPECTED_NULL_POINTER;
+    }
+    if (!characteristics) {
+        return KM_ERROR_OUTPUT_PARAMETER_NULL;
+    }
+
+    GetKeyCharacteristicsRequest request;
+    request.SetKeyMaterial(*key_blob);
+    AddClientAndAppData(client_id, app_data, &request);
+
+    GetKeyCharacteristicsResponse response;
+    keymaster_error_t err = Send(KM_GET_KEY_CHARACTERISTICS, request, &response);
+    if (err != KM_ERROR_OK) {
+        return err;
+    }
+
+    response.enforced.CopyToParamSet(&characteristics->hw_enforced);
+    response.unenforced.CopyToParamSet(&characteristics->sw_enforced);
+
     return KM_ERROR_OK;
 }
 
