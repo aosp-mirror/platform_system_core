@@ -1,0 +1,7 @@
+service test_service /system/bin/test_service CapAmb 0000000000003000
+    class main
+    user system
+    group system
+    capabilities NET_ADMIN NET_RAW
+    disabled
+    oneshot
