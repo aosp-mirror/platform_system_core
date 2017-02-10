@@ -463,6 +463,41 @@ keymaster_error_t TrustyKeymasterDevice::begin(keymaster_purpose_t purpose,
                                                keymaster_key_param_set_t* out_params,
                                                keymaster_operation_handle_t* operation_handle) {
     ALOGD("Device received begin");
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+    if (!key || !key->key_material) {
+        return KM_ERROR_UNEXPECTED_NULL_POINTER;
+    }
+    if (!operation_handle) {
+        return KM_ERROR_OUTPUT_PARAMETER_NULL;
+    }
+
+    if (out_params) {
+        *out_params = {};
+    }
+
+    BeginOperationRequest request;
+    request.purpose = purpose;
+    request.SetKeyMaterial(*key);
+    request.additional_params.Reinitialize(*in_params);
+
+    BeginOperationResponse response;
+    keymaster_error_t err = Send(KM_BEGIN_OPERATION, request, &response);
+    if (err != KM_ERROR_OK) {
+        return err;
+    }
+
+    if (response.output_params.size() > 0) {
+        if (out_params) {
+            response.output_params.CopyToParamSet(out_params);
+        } else {
+            return KM_ERROR_OUTPUT_PARAMETER_NULL;
+        }
+    }
+    *operation_handle = response.op_handle;
+
     return KM_ERROR_OK;
 }
 
