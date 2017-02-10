@@ -215,8 +215,8 @@ static bool load_vbmeta_prop(androidboot_vbmeta *vbmeta_prop)
 
     // Reads digest.
     if (digest.size() != expected_digest_size) {
-        LERROR << "Unexpected digest size: " << digest.size() << " (expected: "
-               << expected_digest_size << ")";
+        LERROR << "Unexpected digest size: " << digest.size()
+               << " (expected: " << expected_digest_size << ")";
         return false;
     }
 
@@ -482,22 +482,6 @@ static bool get_hashtree_descriptor(const std::string &partition_name,
     return true;
 }
 
-static inline bool polling_vbmeta_blk_device(struct fstab *fstab)
-{
-    // It needs the block device symlink: fstab_rec->blk_device to read
-    // /vbmeta partition. However, the symlink created by ueventd might
-    // not be ready at this point. Use test_access() to poll it before
-    // trying to read the partition.
-    struct fstab_rec *fstab_entry =
-        fs_mgr_get_entry_for_mount_point(fstab, "/vbmeta");
-
-    // Makes sure /vbmeta block device is ready to access.
-    if (fs_mgr_test_access(fstab_entry->blk_device) < 0) {
-        return false;
-    }
-    return true;
-}
-
 static bool init_is_avb_used()
 {
     // When AVB is used, boot loader should set androidboot.vbmeta.{hash_alg,
@@ -528,11 +512,6 @@ bool fs_mgr_is_avb_used()
 int fs_mgr_load_vbmeta_images(struct fstab *fstab)
 {
     FS_MGR_CHECK(fstab != nullptr);
-
-    if (!polling_vbmeta_blk_device(fstab)) {
-        LERROR << "Failed to find block device of /vbmeta";
-        return FS_MGR_SETUP_AVB_FAIL;
-    }
 
     // Gets the expected hash value of vbmeta images from
     // kernel cmdline.
