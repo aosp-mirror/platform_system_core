@@ -278,7 +278,7 @@ static void do_tail(int num) {
         char buffer[BIG_BUFFER];
 
         snprintf(buffer, sizeof(buffer),
-                 "logcat -v long -b all -t %d 2>/dev/null", num);
+                 "ANDROID_PRINTF_LOG=long logcat -b all -t %d 2>/dev/null", num);
 
         FILE* fp;
         ASSERT_TRUE(NULL != (fp = popen(buffer, "r")));
