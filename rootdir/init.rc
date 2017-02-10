@@ -402,6 +402,7 @@ on post-fs-data
     mkdir /data/misc/boottrace 0771 system shell
     mkdir /data/misc/update_engine 0700 root root
     mkdir /data/misc/trace 0700 root root
+    mkdir /data/misc/reboot 0700 root root
     # profile file layout
     mkdir /data/misc/profiles 0771 system system
     mkdir /data/misc/profiles/cur 0771 system system
