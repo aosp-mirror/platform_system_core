@@ -43,7 +43,12 @@ extern "C" {
 ** If the property read fails or returns an empty value, the default
 ** value is used (if nonnull).
 */
-int property_get(const char *key, char *value, const char *default_value);
+int property_get(const char *key, char *value, const char *default_value)
+/* Sometimes we use not-Bionic with this, so we need this check. */
+#if defined(__BIONIC_FORTIFY)
+        __overloadable __RENAME_CLANG(property_get)
+#endif
+        ;
 
 /* property_get_bool: returns the value of key coerced into a
 ** boolean. If the property is not set, then the default value is returned.
@@ -106,14 +111,40 @@ int32_t property_get_int32(const char *key, int32_t default_value);
 /* property_set: returns 0 on success, < 0 on failure
 */
 int property_set(const char *key, const char *value);
-    
-int property_list(void (*propfn)(const char *key, const char *value, void *cookie), void *cookie);    
 
-#if defined(__BIONIC_FORTIFY) && !defined(__clang__)
+int property_list(void (*propfn)(const char *key, const char *value, void *cookie), void *cookie);
+
+#if defined(__BIONIC_FORTIFY)
+#define __property_get_err_str "property_get() called with too small of a buffer"
+
+#if defined(__clang__)
+
+/* Some projects use -Weverything; enable_if is clang-specific.
+** FIXME: This is marked used because we'll otherwise get complaints about an
+** unused static function. This is more robust than marking it unused, since
+** -Wused-but-marked-unused is a thing that will complain if this function is
+** actually used, thus making FORTIFY noisier when an error happens. It's going
+** to go away anyway during our FORTIFY cleanup.
+**/
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wgcc-compat"
+__BIONIC_ERROR_FUNCTION_VISIBILITY
+int property_get(const char *key, char *value, const char *default_value)
+        __overloadable
+        __enable_if(__bos(value) != __BIONIC_FORTIFY_UNKNOWN_SIZE &&
+                    __bos(value) < PROPERTY_VALUE_MAX, __property_get_err_str)
+        __errorattr(__property_get_err_str)
+        __attribute__((used));
+#pragma clang diagnostic pop
+
+/* No object size? No FORTIFY.
+*/
+
+#else /* defined(__clang__) */
 
 extern int __property_get_real(const char *, char *, const char *)
     __asm__(__USER_LABEL_PREFIX__ "property_get");
-__errordecl(__property_get_too_small_error, "property_get() called with too small of a buffer");
+__errordecl(__property_get_too_small_error, __property_get_err_str);
 
 __BIONIC_FORTIFY_INLINE
 int property_get(const char *key, char *value, const char *default_value) {
@@ -124,7 +155,10 @@ int property_get(const char *key, char *value, const char *default_value) {
     return __property_get_real(key, value, default_value);
 }
 
-#endif
+#endif /* defined(__clang__) */
+
+#undef __property_get_err_str
+#endif /* defined(__BIONIC_FORTIFY) */
 
 #ifdef __cplusplus
 }
