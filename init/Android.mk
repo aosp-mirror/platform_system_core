@@ -134,3 +134,8 @@ LOCAL_SANITIZE := integer
 LOCAL_CLANG := true
 LOCAL_CPPFLAGS := -Wall -Wextra -Werror
 include $(BUILD_NATIVE_TEST)
+
+
+# Include targets in subdirs.
+# =========================================================
+include $(call all-makefiles-under,$(LOCAL_PATH))
