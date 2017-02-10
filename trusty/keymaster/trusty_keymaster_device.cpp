@@ -39,6 +39,8 @@
 const uint32_t RECV_BUF_SIZE = PAGE_SIZE;
 const uint32_t SEND_BUF_SIZE = (PAGE_SIZE - sizeof(struct keymaster_message) - 16 /* tipc header */);
 
+const size_t kMaximumAttestationChallengeLength = 128;
+
 namespace keymaster {
 
 static keymaster_error_t translate_error(int err) {
@@ -361,6 +363,62 @@ keymaster_error_t TrustyKeymasterDevice::attest_key(const keymaster_key_blob_t* 
                                                     const keymaster_key_param_set_t* attest_params,
                                                     keymaster_cert_chain_t* cert_chain) {
     ALOGD("Device received attest_key");
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+    if (!key_to_attest || !attest_params) {
+        return KM_ERROR_UNEXPECTED_NULL_POINTER;
+    }
+    if (!cert_chain) {
+        return KM_ERROR_OUTPUT_PARAMETER_NULL;
+    }
+
+    cert_chain->entry_count = 0;
+    cert_chain->entries = nullptr;
+
+    AttestKeyRequest request;
+    request.SetKeyMaterial(*key_to_attest);
+    request.attest_params.Reinitialize(*attest_params);
+
+    keymaster_blob_t attestation_challenge = {};
+    request.attest_params.GetTagValue(TAG_ATTESTATION_CHALLENGE, &attestation_challenge);
+    if (attestation_challenge.data_length > kMaximumAttestationChallengeLength) {
+        ALOGE("%zu-byte attestation challenge; only %zu bytes allowed",
+              attestation_challenge.data_length, kMaximumAttestationChallengeLength);
+        return KM_ERROR_INVALID_INPUT_LENGTH;
+    }
+
+    AttestKeyResponse response;
+    keymaster_error_t err = Send(KM_ATTEST_KEY, request, &response);
+    if (err != KM_ERROR_OK) {
+        return err;
+    }
+
+    // Allocate and clear storage for cert_chain.
+    keymaster_cert_chain_t& rsp_chain = response.certificate_chain;
+    cert_chain->entries = reinterpret_cast<keymaster_blob_t*>(
+        malloc(rsp_chain.entry_count * sizeof(*cert_chain->entries)));
+    if (!cert_chain->entries) {
+        return KM_ERROR_MEMORY_ALLOCATION_FAILED;
+    }
+    cert_chain->entry_count = rsp_chain.entry_count;
+    for (keymaster_blob_t& entry : array_range(cert_chain->entries, cert_chain->entry_count)) {
+        entry = {};
+    }
+
+    // Copy cert_chain contents
+    size_t i = 0;
+    for (keymaster_blob_t& entry : array_range(rsp_chain.entries, rsp_chain.entry_count)) {
+        cert_chain->entries[i].data = DuplicateBuffer(entry.data, entry.data_length);
+        if (!cert_chain->entries[i].data) {
+            keymaster_free_cert_chain(cert_chain);
+            return KM_ERROR_MEMORY_ALLOCATION_FAILED;
+        }
+        cert_chain->entries[i].data_length = entry.data_length;
+        ++i;
+    }
+
     return KM_ERROR_OK;
 }
 
