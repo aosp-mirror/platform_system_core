@@ -38,8 +38,16 @@ static const char* BUNDLE_VERSION_FILENAME = "/bundle_version";
 // We only need the first 13 to determine if it is suitable for the device.
 static const int BUNDLE_VERSION_LENGTH = 13;
 // The major version of the bundle format supported by this code as a null-terminated char[].
-static const char REQUIRED_BUNDLE_VERSION[] = "001";
-static const size_t REQUIRED_BUNDLE_VERSION_LEN = sizeof(REQUIRED_BUNDLE_VERSION) - 1; // exclude \0
+static const char SUPPORTED_BUNDLE_MAJOR_VERSION[] = "001";
+// The length of the bundle format major version excluding the \0
+static const size_t SUPPORTED_BUNDLE_MAJOR_VERSION_LEN = sizeof(SUPPORTED_BUNDLE_MAJOR_VERSION) - 1;
+// The minor version of the bundle format supported by this code as a null-terminated char[].
+static const char SUPPORTED_BUNDLE_MINOR_VERSION[] = "001";
+// The length of the bundle format minor version excluding the \0
+static const size_t SUPPORTED_BUNDLE_MINOR_VERSION_LEN = sizeof(SUPPORTED_BUNDLE_MINOR_VERSION) - 1;
+// The length of the bundle format version. e.g. 001.001
+static const size_t SUPPORTED_BUNDLE_VERSION_LEN =
+        SUPPORTED_BUNDLE_MAJOR_VERSION_LEN + SUPPORTED_BUNDLE_MINOR_VERSION_LEN + 1;
 // The length of the IANA rules version bytes. e.g. 2016a
 static const size_t RULES_VERSION_LEN = 5;
 // Bundle version bytes are: AAA.BBB|CCCCC - the rules version is CCCCC
@@ -321,15 +329,38 @@ int main(int argc, char* argv[]) {
         return 4;
     }
 
-    // Check the first 3 bytes of the bundleVersionHeader: these are the major version (e.g. 001).
-    // It must match exactly to be ok. The minor version is currently ignored.
-    if (strncmp(&bundleVersion[0], REQUIRED_BUNDLE_VERSION, REQUIRED_BUNDLE_VERSION_LEN) != 0) {
+    std::string actualBundleVersion =
+            std::string(bundleVersion.data(), SUPPORTED_BUNDLE_VERSION_LEN);
+    // Check the first 3 bytes of the bundle version: these are the major version (e.g. 001).
+    // It must match the one we support exactly to be ok.
+    if (strncmp(
+            &bundleVersion[0],
+            SUPPORTED_BUNDLE_MAJOR_VERSION,
+            SUPPORTED_BUNDLE_MAJOR_VERSION_LEN) != 0) {
+
         LOG(INFO) << "bundle version file " << bundleVersionFileName
-                << " is not the required version " << REQUIRED_BUNDLE_VERSION
-                << ". Deleting bundle dir.";
-        // This shouldn't happen with 001, but it in future, this will imply there has been an OTA
-        // and the installed bundle is not compatible with the new version of Android. Remove the
-        // installed bundle.
+                << " major version is not the required version " << SUPPORTED_BUNDLE_MAJOR_VERSION
+                << ", was \"" << actualBundleVersion << "\". Deleting bundle dir.";
+        // This implies there has been an OTA and the installed bundle is not compatible with the
+        // new version of Android. Remove the installed bundle.
+        deleteConfigUpdaterMetadataDir(dataZoneInfoDir);
+        deleteUpdateBundleDir(dataCurrentDirName);
+        return 5;
+    }
+
+    // Check the last 3 bytes of the bundle version: these are the minor version (e.g. 001).
+    // If the version in the bundle is < the minor version required by this device it cannot be
+    // used.
+    if (strncmp(
+            &bundleVersion[4],
+            SUPPORTED_BUNDLE_MINOR_VERSION,
+            SUPPORTED_BUNDLE_MINOR_VERSION_LEN) < 0) {
+
+        LOG(INFO) << "bundle version file " << bundleVersionFileName
+                << " minor version is not the required version " << SUPPORTED_BUNDLE_MINOR_VERSION
+                << ", was \"" << actualBundleVersion << "\". Deleting bundle dir.";
+        // This implies there has been an OTA and the installed bundle is not compatible with the
+        // new version of Android. Remove the installed bundle.
         deleteConfigUpdaterMetadataDir(dataZoneInfoDir);
         deleteUpdateBundleDir(dataCurrentDirName);
         return 5;
