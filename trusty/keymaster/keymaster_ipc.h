@@ -22,7 +22,7 @@
 #define KEYMASTER_MAX_BUFFER_LENGTH 4096
 
 // Commands
-enum keymaster_command {
+enum keymaster_command : uint32_t {
     KEYMASTER_RESP_BIT              = 1,
     KEYMASTER_REQ_SHIFT             = 1,
 
@@ -42,6 +42,7 @@ enum keymaster_command {
     KM_GET_SUPPORTED_IMPORT_FORMATS = (13 << KEYMASTER_REQ_SHIFT),
     KM_GET_SUPPORTED_EXPORT_FORMATS = (14 << KEYMASTER_REQ_SHIFT),
     KM_GET_KEY_CHARACTERISTICS      = (15 << KEYMASTER_REQ_SHIFT),
+    KM_CONFIGURE                    = (18 << KEYMASTER_REQ_SHIFT),
 };
 
 #ifdef __ANDROID__

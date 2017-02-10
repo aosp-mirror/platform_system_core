@@ -138,6 +138,28 @@ TrustyKeymasterDevice::~TrustyKeymasterDevice() {
 
 keymaster_error_t TrustyKeymasterDevice::configure(const keymaster_key_param_set_t* params) {
     ALOGD("Device received configure\n");
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+    if (!params) {
+        return KM_ERROR_UNEXPECTED_NULL_POINTER;
+    }
+
+    AuthorizationSet params_copy(*params);
+    ConfigureRequest request;
+    if (!params_copy.GetTagValue(TAG_OS_VERSION, &request.os_version) ||
+        !params_copy.GetTagValue(TAG_OS_PATCHLEVEL, &request.os_patchlevel)) {
+        ALOGD("Configuration parameters must contain OS version and patch level");
+        return KM_ERROR_INVALID_ARGUMENT;
+    }
+
+    ConfigureResponse response;
+    keymaster_error_t err = Send(KM_CONFIGURE, request, &response);
+    if (err != KM_ERROR_OK) {
+        return err;
+    }
+
     return KM_ERROR_OK;
 }
 
