@@ -278,6 +278,42 @@ keymaster_error_t TrustyKeymasterDevice::import_key(
     const keymaster_blob_t* key_data, keymaster_key_blob_t* key_blob,
     keymaster_key_characteristics_t* characteristics) {
     ALOGD("Device received import_key");
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+    if (!params || !key_data) {
+        return KM_ERROR_UNEXPECTED_NULL_POINTER;
+    }
+    if (!key_blob) {
+        return KM_ERROR_OUTPUT_PARAMETER_NULL;
+    }
+
+    ImportKeyRequest request(message_version_);
+    request.key_description.Reinitialize(*params);
+    request.key_description.push_back(TAG_CREATION_DATETIME, java_time(time(NULL)));
+
+    request.key_format = key_format;
+    request.SetKeyMaterial(key_data->data, key_data->data_length);
+
+    ImportKeyResponse response(message_version_);
+    keymaster_error_t err = Send(KM_IMPORT_KEY, request, &response);
+    if (err != KM_ERROR_OK) {
+        return err;
+    }
+
+    key_blob->key_material_size = response.key_blob.key_material_size;
+    key_blob->key_material =
+        DuplicateBuffer(response.key_blob.key_material, response.key_blob.key_material_size);
+    if (!key_blob->key_material) {
+        return KM_ERROR_MEMORY_ALLOCATION_FAILED;
+    }
+
+    if (characteristics) {
+        response.enforced.CopyToParamSet(&characteristics->hw_enforced);
+        response.unenforced.CopyToParamSet(&characteristics->sw_enforced);
+    }
+
     return KM_ERROR_OK;
 }
 
