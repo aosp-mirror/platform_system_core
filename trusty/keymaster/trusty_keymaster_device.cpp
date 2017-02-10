@@ -323,6 +323,37 @@ keymaster_error_t TrustyKeymasterDevice::export_key(keymaster_key_format_t expor
                                                     const keymaster_blob_t* app_data,
                                                     keymaster_blob_t* export_data) {
     ALOGD("Device received export_key");
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+    if (!key_to_export || !key_to_export->key_material) {
+        return KM_ERROR_UNEXPECTED_NULL_POINTER;
+    }
+    if (!export_data) {
+        return KM_ERROR_OUTPUT_PARAMETER_NULL;
+    }
+
+    export_data->data = nullptr;
+    export_data->data_length = 0;
+
+    ExportKeyRequest request(message_version_);
+    request.key_format = export_format;
+    request.SetKeyMaterial(*key_to_export);
+    AddClientAndAppData(client_id, app_data, &request);
+
+    ExportKeyResponse response(message_version_);
+    keymaster_error_t err = Send(KM_EXPORT_KEY, request, &response);
+    if (err != KM_ERROR_OK) {
+        return err;
+    }
+
+    export_data->data_length = response.key_data_length;
+    export_data->data = DuplicateBuffer(response.key_data, response.key_data_length);
+    if (!export_data->data) {
+        return KM_ERROR_MEMORY_ALLOCATION_FAILED;
+    }
+
     return KM_ERROR_OK;
 }
 
