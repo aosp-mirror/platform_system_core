@@ -30,34 +30,48 @@
 
 #include "android-base/logging.h"
 
+// The name of the file containing the distro version information.
+// See also libcore.tzdata.update2.TimeZoneDistro / libcore.tzdata.update2.DistroVersion.
 static const char* DISTRO_VERSION_FILENAME = "/distro_version";
+
 // distro_version is an ASCII file consisting of 17 bytes in the form: AAA.BBB|CCCCC|DDD
 // AAA.BBB is the major/minor version of the distro format (e.g. 001.001),
 // CCCCC is the rules version (e.g. 2016g)
 // DDD is the android revision for this rules version to allow for distro corrections (e.g. 001)
 // We only need the first 13 to determine if it is suitable for the device.
 static const int DISTRO_VERSION_LENGTH = 13;
+
 // The major version of the distro format supported by this code as a null-terminated char[].
+// See also libcore.tzdata.update2.TimeZoneDistro / libcore.tzdata.update2.DistroVersion.
 static const char SUPPORTED_DISTRO_MAJOR_VERSION[] = "001";
+
 // The length of the distro format major version excluding the \0
 static const size_t SUPPORTED_DISTRO_MAJOR_VERSION_LEN = sizeof(SUPPORTED_DISTRO_MAJOR_VERSION) - 1;
+
 // The minor version of the distro format supported by this code as a null-terminated char[].
+// See also libcore.tzdata.update2.TimeZoneDistro / libcore.tzdata.update2.DistroVersion.
 static const char SUPPORTED_DISTRO_MINOR_VERSION[] = "001";
+
 // The length of the distro format minor version excluding the \0
 static const size_t SUPPORTED_DISTRO_MINOR_VERSION_LEN = sizeof(SUPPORTED_DISTRO_MINOR_VERSION) - 1;
+
 // The length of the distro format version. e.g. 001.001
 static const size_t SUPPORTED_DISTRO_VERSION_LEN =
         SUPPORTED_DISTRO_MAJOR_VERSION_LEN + SUPPORTED_DISTRO_MINOR_VERSION_LEN + 1;
+
 // The length of the IANA rules version bytes. e.g. 2016a
 static const size_t RULES_VERSION_LEN = 5;
+
 // Distro version bytes are: AAA.BBB|CCCCC - the rules version is CCCCC
 static const size_t DISTRO_VERSION_RULES_IDX = 8;
 
+// See also libcore.tzdata.update2.TimeZoneDistro.
 static const char* TZDATA_FILENAME = "/tzdata";
+
 // tzdata file header (as much as we need for the version):
 // byte[11] tzdata_version  -- e.g. "tzdata2012f"
 static const int TZ_HEADER_LENGTH = 11;
-// The major version of the distro format supported by this code as a null-terminated char[].
+
 static const char TZ_DATA_HEADER_PREFIX[] = "tzdata";
 static const size_t TZ_DATA_HEADER_PREFIX_LEN = sizeof(TZ_DATA_HEADER_PREFIX) - 1; // exclude \0
 
