@@ -14,18 +14,21 @@
 #include <ext4_utils/make_ext4fs.h>
 #include <sparse/sparse.h>
 
-static int generate_ext4_image(int fd, long long partSize, const std::string& initial_dir)
+static int generate_ext4_image(int fd, long long partSize, const std::string& initial_dir,
+                                       unsigned eraseBlkSize, unsigned logicalBlkSize)
 {
     if (initial_dir.empty()) {
-        make_ext4fs_sparse_fd(fd, partSize, NULL, NULL);
+        make_ext4fs_sparse_fd_align(fd, partSize, NULL, NULL, eraseBlkSize, logicalBlkSize);
     } else {
-        make_ext4fs_sparse_fd_directory(fd, partSize, NULL, NULL, initial_dir.c_str());
+        make_ext4fs_sparse_fd_directory_align(fd, partSize, NULL, NULL, initial_dir.c_str(),
+                                              eraseBlkSize, logicalBlkSize);
     }
     return 0;
 }
 
 #ifdef USE_F2FS
-static int generate_f2fs_image(int fd, long long partSize, const std::string& initial_dir)
+static int generate_f2fs_image(int fd, long long partSize, const std::string& initial_dir,
+                               unsigned /* unused */, unsigned /* unused */)
 {
     if (!initial_dir.empty()) {
         fprintf(stderr, "Unable to set initial directory on F2FS filesystem\n");
@@ -39,7 +42,8 @@ static const struct fs_generator {
     const char* fs_type;  //must match what fastboot reports for partition type
 
     //returns 0 or error value
-    int (*generate)(int fd, long long partSize, const std::string& initial_dir);
+    int (*generate)(int fd, long long partSize, const std::string& initial_dir,
+                    unsigned eraseBlkSize, unsigned logicalBlkSize);
 
 } generators[] = {
     { "ext4", generate_ext4_image},
@@ -58,7 +62,7 @@ const struct fs_generator* fs_get_generator(const std::string& fs_type) {
 }
 
 int fs_generator_generate(const struct fs_generator* gen, int tmpFileNo, long long partSize,
-    const std::string& initial_dir)
+    const std::string& initial_dir, unsigned eraseBlkSize, unsigned logicalBlkSize)
 {
-    return gen->generate(tmpFileNo, partSize, initial_dir);
+    return gen->generate(tmpFileNo, partSize, initial_dir, eraseBlkSize, logicalBlkSize);
 }
