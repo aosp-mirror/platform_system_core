@@ -40,6 +40,7 @@ const uint32_t RECV_BUF_SIZE = PAGE_SIZE;
 const uint32_t SEND_BUF_SIZE = (PAGE_SIZE - sizeof(struct keymaster_message) - 16 /* tipc header */);
 
 const size_t kMaximumAttestationChallengeLength = 128;
+const size_t kMaximumFinishInputLength = 2048;
 
 namespace keymaster {
 
@@ -570,6 +571,56 @@ keymaster_error_t TrustyKeymasterDevice::finish(keymaster_operation_handle_t ope
                                                 keymaster_key_param_set_t* out_params,
                                                 keymaster_blob_t* output) {
     ALOGD("Device received finish");
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+    if (input && input->data_length > kMaximumFinishInputLength) {
+        return KM_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (out_params) {
+        *out_params = {};
+    }
+    if (output) {
+        *output = {};
+    }
+
+    FinishOperationRequest request;
+    request.op_handle = operation_handle;
+    if (signature && signature->data && signature->data_length > 0) {
+        request.signature.Reinitialize(signature->data, signature->data_length);
+    }
+    if (input && input->data && input->data_length) {
+        request.input.Reinitialize(input->data, input->data_length);
+    }
+    if (in_params) {
+        request.additional_params.Reinitialize(*in_params);
+    }
+
+    FinishOperationResponse response;
+    keymaster_error_t err = Send(KM_FINISH_OPERATION, request, &response);
+    if (err != KM_ERROR_OK) {
+        return err;
+    }
+
+    if (response.output_params.size() > 0) {
+        if (out_params) {
+            response.output_params.CopyToParamSet(out_params);
+        } else {
+            return KM_ERROR_OUTPUT_PARAMETER_NULL;
+        }
+    }
+    if (output) {
+        output->data_length = response.output.available_read();
+        output->data = DuplicateBuffer(response.output.peek_read(), output->data_length);
+        if (!output->data) {
+            return KM_ERROR_MEMORY_ALLOCATION_FAILED;
+        }
+    } else if (response.output.available_read() > 0) {
+        return KM_ERROR_OUTPUT_PARAMETER_NULL;
+    }
+
     return KM_ERROR_OK;
 }
 
