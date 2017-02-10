@@ -89,6 +89,8 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
     }
 
     int hours = 0;
+    int time_window = 0;
+    uint64_t threshold = 0;
     for (size_t i = 0; i < args.size(); i++) {
         const auto& arg = args[i];
         if (arg == String16("--hours")) {
@@ -97,10 +99,22 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
             hours = stoi(String16::std_string(args[i]));
             continue;
         }
+        if (arg == String16("--time_window")) {
+            if (++i >= args.size())
+                break;
+            time_window = stoi(String16::std_string(args[i]));
+            continue;
+        }
+        if (arg == String16("--threshold")) {
+            if (++i >= args.size())
+                break;
+            threshold = stoll(String16::std_string(args[i]));
+            continue;
+        }
     }
 
     const std::map<uint64_t, std::vector<struct uid_record>>& records =
-                storaged.get_uid_records(hours);
+                storaged.get_uid_records(hours, threshold);
     for (const auto& it : records) {
         dprintf(fd, "%llu\n", (unsigned long long)it.first);
         for (const auto& record : it.second) {
@@ -116,6 +130,11 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
                 (unsigned long long)record.ios.bytes[WRITE][BACKGROUND][CHARGER_ON]);
         }
     }
+
+    if (time_window) {
+        storaged.update_uid_io_interval(time_window);
+    }
+
     return NO_ERROR;
 }
 

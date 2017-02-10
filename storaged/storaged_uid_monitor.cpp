@@ -149,7 +149,8 @@ void uid_monitor::add_records_locked(uint64_t curr_ts)
         new_records.begin(), new_records.end());
 }
 
-std::map<uint64_t, std::vector<struct uid_record>> uid_monitor::dump(int hours)
+std::map<uint64_t, std::vector<struct uid_record>> uid_monitor::dump(
+    int hours, uint64_t threshold)
 {
     std::unique_ptr<lock_t> lock(new lock_t(&um_lock));
 
@@ -160,7 +161,25 @@ std::map<uint64_t, std::vector<struct uid_record>> uid_monitor::dump(int hours)
         first_ts = time(NULL) - (uint64_t)hours * HOUR_TO_SEC;
     }
 
-    dump_records.insert(records.lower_bound(first_ts), records.end());
+    for (auto it = records.lower_bound(first_ts); it != records.end(); ++it) {
+        const std::vector<struct uid_record>& recs = it->second;
+        std::vector<struct uid_record> filtered;
+
+        for (const auto& rec : recs) {
+            if (rec.ios.bytes[READ][FOREGROUND][CHARGER_ON] +
+                rec.ios.bytes[READ][FOREGROUND][CHARGER_OFF] +
+                rec.ios.bytes[READ][BACKGROUND][CHARGER_ON] +
+                rec.ios.bytes[READ][BACKGROUND][CHARGER_OFF] +
+                rec.ios.bytes[WRITE][FOREGROUND][CHARGER_ON] +
+                rec.ios.bytes[WRITE][FOREGROUND][CHARGER_OFF] +
+                rec.ios.bytes[WRITE][BACKGROUND][CHARGER_ON] +
+                rec.ios.bytes[WRITE][BACKGROUND][CHARGER_OFF] > threshold) {
+                filtered.push_back(rec);
+            }
+        }
+        dump_records.insert(
+            std::pair<uint64_t, std::vector<struct uid_record>>(it->first, filtered));
+    }
 
     return dump_records;
 }
