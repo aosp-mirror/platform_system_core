@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
+#include <keymaster/keymaster_configuration.h>
+
 #include <stdio.h>
+#include <memory>
 
 #include <openssl/evp.h>
 #include <openssl/x509.h>
@@ -102,6 +105,28 @@ unsigned char ec_privkey_pk8_der[] = {
     0xd1, 0x1f, 0xd4, 0x49, 0x49, 0xe0, 0xb2, 0x18, 0x3b, 0xfe};
 unsigned int ec_privkey_pk8_der_len = 138;
 
+keymaster_key_param_t ec_params[] = {
+    keymaster_param_enum(KM_TAG_ALGORITHM, KM_ALGORITHM_EC),
+    keymaster_param_long(KM_TAG_EC_CURVE, KM_EC_CURVE_P_521),
+    keymaster_param_enum(KM_TAG_PURPOSE, KM_PURPOSE_SIGN),
+    keymaster_param_enum(KM_TAG_PURPOSE, KM_PURPOSE_VERIFY),
+    keymaster_param_enum(KM_TAG_DIGEST, KM_DIGEST_NONE),
+    keymaster_param_bool(KM_TAG_NO_AUTH_REQUIRED),
+};
+keymaster_key_param_set_t ec_param_set = {ec_params, sizeof(ec_params) / sizeof(*ec_params)};
+
+keymaster_key_param_t rsa_params[] = {
+    keymaster_param_enum(KM_TAG_ALGORITHM, KM_ALGORITHM_RSA),
+    keymaster_param_int(KM_TAG_KEY_SIZE, 1024),
+    keymaster_param_long(KM_TAG_RSA_PUBLIC_EXPONENT, 65537),
+    keymaster_param_enum(KM_TAG_PURPOSE, KM_PURPOSE_SIGN),
+    keymaster_param_enum(KM_TAG_PURPOSE, KM_PURPOSE_VERIFY),
+    keymaster_param_enum(KM_TAG_PADDING, KM_PAD_NONE),
+    keymaster_param_enum(KM_TAG_DIGEST, KM_DIGEST_NONE),
+    keymaster_param_bool(KM_TAG_NO_AUTH_REQUIRED),
+};
+keymaster_key_param_set_t rsa_param_set = {rsa_params, sizeof(rsa_params) / sizeof(*rsa_params)};
+
 struct EVP_PKEY_Delete {
     void operator()(EVP_PKEY* p) const { EVP_PKEY_free(p); }
 };
@@ -110,41 +135,70 @@ struct EVP_PKEY_CTX_Delete {
     void operator()(EVP_PKEY_CTX* p) { EVP_PKEY_CTX_free(p); }
 };
 
+static bool do_operation(TrustyKeymasterDevice* device, keymaster_purpose_t purpose,
+                         keymaster_key_blob_t* key, keymaster_blob_t* input,
+                         keymaster_blob_t* signature, keymaster_blob_t* output) {
+    keymaster_key_param_t params[] = {
+        keymaster_param_enum(KM_TAG_PADDING, KM_PAD_NONE),
+        keymaster_param_enum(KM_TAG_DIGEST, KM_DIGEST_NONE),
+    };
+    keymaster_key_param_set_t param_set = {params, sizeof(params) / sizeof(*params)};
+    keymaster_operation_handle_t op_handle;
+    keymaster_error_t error = device->begin(purpose, key, &param_set, nullptr, &op_handle);
+    if (error != KM_ERROR_OK) {
+        printf("Keymaster begin() failed: %d\n", error);
+        return false;
+    }
+    size_t input_consumed;
+    error = device->update(op_handle, nullptr, input, &input_consumed, nullptr, nullptr);
+    if (error != KM_ERROR_OK) {
+        printf("Keymaster update() failed: %d\n", error);
+        return false;
+    }
+    if (input_consumed != input->data_length) {
+        // This should never happen. If it does, it's a bug in the keymaster implementation.
+        printf("Keymaster update() did not consume all data.\n");
+        device->abort(op_handle);
+        return false;
+    }
+    error = device->finish(op_handle, nullptr, nullptr, signature, nullptr, output);
+    if (error != KM_ERROR_OK) {
+        printf("Keymaster finish() failed: %d\n", error);
+        return false;
+    }
+    return true;
+}
+
 static bool test_import_rsa(TrustyKeymasterDevice* device) {
     printf("===================\n");
     printf("= RSA Import Test =\n");
     printf("===================\n\n");
 
     printf("=== Importing RSA keypair === \n");
-    uint8_t* key;
-    size_t size;
-    int error = device->import_keypair(rsa_privkey_pk8_der, rsa_privkey_pk8_der_len, &key, &size);
+    keymaster_key_blob_t key;
+    keymaster_blob_t private_key = {rsa_privkey_pk8_der, rsa_privkey_pk8_der_len};
+    int error = device->import_key(&rsa_param_set, KM_KEY_FORMAT_PKCS8, &private_key, &key, nullptr);
     if (error != KM_ERROR_OK) {
-        printf("Error importing key pair: %d\n\n", error);
+        printf("Error importing RSA key: %d\n\n", error);
         return false;
     }
-    UniquePtr<uint8_t[]> key_deleter(key);
+    std::unique_ptr<const uint8_t[]> key_deleter(key.key_material);
 
     printf("=== Signing with imported RSA key ===\n");
-    keymaster_rsa_sign_params_t sign_params = {DIGEST_NONE, PADDING_NONE};
     size_t message_len = 1024 / 8;
-    UniquePtr<uint8_t[]> message(new uint8_t[message_len]);
+    std::unique_ptr<uint8_t[]> message(new uint8_t[message_len]);
     memset(message.get(), 'a', message_len);
-    uint8_t* signature;
-    size_t signature_len;
-    error = device->sign_data(&sign_params, key, size, message.get(), message_len, &signature,
-                              &signature_len);
-    if (error != KM_ERROR_OK) {
-        printf("Error signing data with imported RSA key: %d\n\n", error);
+    keymaster_blob_t input = {message.get(), message_len}, signature;
+
+    if (!do_operation(device, KM_PURPOSE_SIGN, &key, &input, nullptr, &signature)) {
+        printf("Error signing data with imported RSA key\n\n");
         return false;
     }
-    UniquePtr<uint8_t[]> signature_deleter(signature);
+    std::unique_ptr<const uint8_t[]> signature_deleter(signature.data);
 
     printf("=== Verifying with imported RSA key === \n");
-    error = device->verify_data(&sign_params, key, size, message.get(), message_len, signature,
-                                signature_len);
-    if (error != KM_ERROR_OK) {
-        printf("Error verifying data with imported RSA key: %d\n\n", error);
+    if (!do_operation(device, KM_PURPOSE_VERIFY, &key, &input, &signature, nullptr)) {
+        printf("Error verifying data with imported RSA key\n\n");
         return false;
     }
 
@@ -158,67 +212,58 @@ static bool test_rsa(TrustyKeymasterDevice* device) {
     printf("============\n\n");
 
     printf("=== Generating RSA key pair ===\n");
-    keymaster_rsa_keygen_params_t params;
-    params.public_exponent = 65537;
-    params.modulus_size = 2048;
-
-    uint8_t* key;
-    size_t size;
-    int error = device->generate_keypair(TYPE_RSA, &params, &key, &size);
+    keymaster_key_blob_t key;
+    int error = device->generate_key(&rsa_param_set, &key, nullptr);
     if (error != KM_ERROR_OK) {
         printf("Error generating RSA key pair: %d\n\n", error);
         return false;
     }
-    UniquePtr<uint8_t[]> deleter(key);
+    std::unique_ptr<const uint8_t[]> key_deleter(key.key_material);
 
     printf("=== Signing with RSA key === \n");
-    keymaster_rsa_sign_params_t sign_params = {DIGEST_NONE, PADDING_NONE};
-    size_t message_len = params.modulus_size / 8;
-    UniquePtr<uint8_t[]> message(new uint8_t[message_len]);
+    size_t message_len = 1024 / 8;
+    std::unique_ptr<uint8_t[]> message(new uint8_t[message_len]);
     memset(message.get(), 'a', message_len);
-    uint8_t* signature;
-    size_t signature_len;
-    error = device->sign_data(&sign_params, key, size, message.get(), message_len, &signature,
-                              &signature_len);
-    if (error != KM_ERROR_OK) {
-        printf("Error signing data with RSA key: %d\n\n", error);
+    keymaster_blob_t input = {message.get(), message_len}, signature;
+
+    if (!do_operation(device, KM_PURPOSE_SIGN, &key, &input, nullptr, &signature)) {
+        printf("Error signing data with RSA key\n\n");
         return false;
     }
-    UniquePtr<uint8_t[]> signature_deleter(signature);
+    std::unique_ptr<const uint8_t[]> signature_deleter(signature.data);
 
     printf("=== Verifying with RSA key === \n");
-    error = device->verify_data(&sign_params, key, size, message.get(), message_len, signature,
-                                signature_len);
-    if (error != KM_ERROR_OK) {
-        printf("Error verifying data with RSA key: %d\n\n", error);
+    if (!do_operation(device, KM_PURPOSE_VERIFY, &key, &input, &signature, nullptr)) {
+        printf("Error verifying data with RSA key\n\n");
         return false;
     }
 
     printf("=== Exporting RSA public key ===\n");
-    uint8_t* exported_key;
-    size_t exported_size;
-    error = device->get_keypair_public(key, size, &exported_key, &exported_size);
+    keymaster_blob_t exported_key;
+    error = device->export_key(KM_KEY_FORMAT_X509, &key, nullptr, nullptr, &exported_key);
     if (error != KM_ERROR_OK) {
         printf("Error exporting RSA public key: %d\n\n", error);
         return false;
     }
 
     printf("=== Verifying with exported key ===\n");
-    const uint8_t* tmp = exported_key;
-    UniquePtr<EVP_PKEY, EVP_PKEY_Delete> pkey(d2i_PUBKEY(NULL, &tmp, exported_size));
-    UniquePtr<EVP_PKEY_CTX, EVP_PKEY_CTX_Delete> ctx(EVP_PKEY_CTX_new(pkey.get(), NULL));
+    const uint8_t* tmp = exported_key.data;
+    std::unique_ptr<EVP_PKEY, EVP_PKEY_Delete> pkey(
+        d2i_PUBKEY(NULL, &tmp, exported_key.data_length));
+    std::unique_ptr<EVP_PKEY_CTX, EVP_PKEY_CTX_Delete> ctx(EVP_PKEY_CTX_new(pkey.get(), NULL));
     if (EVP_PKEY_verify_init(ctx.get()) != 1) {
-        printf("Error initializing openss EVP context\n");
+        printf("Error initializing openss EVP context\n\n");
         return false;
     }
     if (EVP_PKEY_type(pkey->type) != EVP_PKEY_RSA) {
-        printf("Exported key was the wrong type?!?\n");
+        printf("Exported key was the wrong type?!?\n\n");
         return false;
     }
 
     EVP_PKEY_CTX_set_rsa_padding(ctx.get(), RSA_NO_PADDING);
-    if (EVP_PKEY_verify(ctx.get(), signature, signature_len, message.get(), message_len) != 1) {
-        printf("Verification with exported pubkey failed.\n");
+    if (EVP_PKEY_verify(ctx.get(), signature.data, signature.data_length, message.get(),
+                        message_len) != 1) {
+        printf("Verification with exported pubkey failed.\n\n");
         return false;
     } else {
         printf("Verification succeeded\n");
@@ -234,35 +279,31 @@ static bool test_import_ecdsa(TrustyKeymasterDevice* device) {
     printf("=====================\n\n");
 
     printf("=== Importing ECDSA keypair === \n");
-    uint8_t* key;
-    size_t size;
-    int error = device->import_keypair(ec_privkey_pk8_der, ec_privkey_pk8_der_len, &key, &size);
+    keymaster_key_blob_t key;
+    keymaster_blob_t private_key = {ec_privkey_pk8_der, ec_privkey_pk8_der_len};
+    int error = device->import_key(&ec_param_set, KM_KEY_FORMAT_PKCS8, &private_key, &key, nullptr);
     if (error != KM_ERROR_OK) {
-        printf("Error importing key pair: %d\n\n", error);
+        printf("Error importing ECDSA key: %d\n\n", error);
         return false;
     }
-    UniquePtr<uint8_t[]> deleter(key);
+    std::unique_ptr<const uint8_t[]> deleter(key.key_material);
 
     printf("=== Signing with imported ECDSA key ===\n");
     keymaster_ec_sign_params_t sign_params = {DIGEST_NONE};
     size_t message_len = 30 /* arbitrary */;
-    UniquePtr<uint8_t[]> message(new uint8_t[message_len]);
+    std::unique_ptr<uint8_t[]> message(new uint8_t[message_len]);
     memset(message.get(), 'a', message_len);
-    uint8_t* signature;
-    size_t signature_len;
-    error = device->sign_data(&sign_params, key, size, message.get(), message_len, &signature,
-                              &signature_len);
-    if (error != KM_ERROR_OK) {
-        printf("Error signing data with imported ECDSA key: %d\n\n", error);
+    keymaster_blob_t input = {message.get(), message_len}, signature;
+
+    if (!do_operation(device, KM_PURPOSE_SIGN, &key, &input, nullptr, &signature)) {
+        printf("Error signing data with imported ECDSA key\n\n");
         return false;
     }
-    UniquePtr<uint8_t[]> signature_deleter(signature);
+    std::unique_ptr<const uint8_t[]> signature_deleter(signature.data);
 
     printf("=== Verifying with imported ECDSA key === \n");
-    error = device->verify_data(&sign_params, key, size, message.get(), message_len, signature,
-                                signature_len);
-    if (error != KM_ERROR_OK) {
-        printf("Error verifying data with imported ECDSA key: %d\n\n", error);
+    if (!do_operation(device, KM_PURPOSE_VERIFY, &key, &input, &signature, nullptr)) {
+        printf("Error verifying data with imported ECDSA key\n\n");
         return false;
     }
 
@@ -276,64 +317,57 @@ static bool test_ecdsa(TrustyKeymasterDevice* device) {
     printf("==============\n\n");
 
     printf("=== Generating ECDSA key pair ===\n");
-    keymaster_ec_keygen_params_t params;
-    params.field_size = 521;
-    uint8_t* key;
-    size_t size;
-    int error = device->generate_keypair(TYPE_EC, &params, &key, &size);
-    if (error != 0) {
+    keymaster_key_blob_t key;
+    int error = device->generate_key(&ec_param_set, &key, nullptr);
+    if (error != KM_ERROR_OK) {
         printf("Error generating ECDSA key pair: %d\n\n", error);
         return false;
     }
-    UniquePtr<uint8_t[]> deleter(key);
+    std::unique_ptr<const uint8_t[]> key_deleter(key.key_material);
 
     printf("=== Signing with ECDSA key === \n");
-    keymaster_ec_sign_params_t sign_params = {DIGEST_NONE};
     size_t message_len = 30 /* arbitrary */;
-    UniquePtr<uint8_t[]> message(new uint8_t[message_len]);
+    std::unique_ptr<uint8_t[]> message(new uint8_t[message_len]);
     memset(message.get(), 'a', message_len);
-    uint8_t* signature;
-    size_t signature_len;
-    error = device->sign_data(&sign_params, key, size, message.get(), message_len, &signature,
-                              &signature_len);
-    if (error != KM_ERROR_OK) {
-        printf("Error signing data with ECDSA key: %d\n\n", error);
+    keymaster_blob_t input = {message.get(), message_len}, signature;
+
+    if (!do_operation(device, KM_PURPOSE_SIGN, &key, &input, nullptr, &signature)) {
+        printf("Error signing data with ECDSA key\n\n");
         return false;
     }
-    UniquePtr<uint8_t[]> signature_deleter(signature);
+    std::unique_ptr<const uint8_t[]> signature_deleter(signature.data);
 
     printf("=== Verifying with ECDSA key === \n");
-    error = device->verify_data(&sign_params, key, size, message.get(), message_len, signature,
-                                signature_len);
-    if (error != KM_ERROR_OK) {
-        printf("Error verifying data with ECDSA key: %d\n\n", error);
+    if (!do_operation(device, KM_PURPOSE_VERIFY, &key, &input, &signature, nullptr)) {
+        printf("Error verifying data with ECDSA key\n\n");
         return false;
     }
 
     printf("=== Exporting ECDSA public key ===\n");
-    uint8_t* exported_key;
-    size_t exported_size;
-    error = device->get_keypair_public(key, size, &exported_key, &exported_size);
+    keymaster_blob_t exported_key;
+    error = device->export_key(KM_KEY_FORMAT_X509, &key, nullptr, nullptr, &exported_key);
     if (error != KM_ERROR_OK) {
         printf("Error exporting ECDSA public key: %d\n\n", error);
         return false;
     }
 
     printf("=== Verifying with exported key ===\n");
-    const uint8_t* tmp = exported_key;
-    UniquePtr<EVP_PKEY, EVP_PKEY_Delete> pkey(d2i_PUBKEY(NULL, &tmp, exported_size));
-    UniquePtr<EVP_PKEY_CTX, EVP_PKEY_CTX_Delete> ctx(EVP_PKEY_CTX_new(pkey.get(), NULL));
+    const uint8_t* tmp = exported_key.data;
+    std::unique_ptr<EVP_PKEY, EVP_PKEY_Delete> pkey(
+        d2i_PUBKEY(NULL, &tmp, exported_key.data_length));
+    std::unique_ptr<EVP_PKEY_CTX, EVP_PKEY_CTX_Delete> ctx(EVP_PKEY_CTX_new(pkey.get(), NULL));
     if (EVP_PKEY_verify_init(ctx.get()) != 1) {
-        printf("Error initializing openss EVP context\n");
+        printf("Error initializing openssl EVP context\n\n");
         return false;
     }
     if (EVP_PKEY_type(pkey->type) != EVP_PKEY_EC) {
-        printf("Exported key was the wrong type?!?\n");
+        printf("Exported key was the wrong type?!?\n\n");
         return false;
     }
 
-    if (EVP_PKEY_verify(ctx.get(), signature, signature_len, message.get(), message_len) != 1) {
-        printf("Verification with exported pubkey failed.\n");
+    if (EVP_PKEY_verify(ctx.get(), signature.data, signature.data_length, message.get(),
+                        message_len) != 1) {
+        printf("Verification with exported pubkey failed.\n\n");
         return false;
     } else {
         printf("Verification succeeded\n");
@@ -344,8 +378,8 @@ static bool test_ecdsa(TrustyKeymasterDevice* device) {
 }
 
 int main(void) {
-
     TrustyKeymasterDevice device(NULL);
+    keymaster::ConfigureDevice(reinterpret_cast<keymaster2_device_t*>(&device));
     if (device.session_error() != KM_ERROR_OK) {
         printf("Failed to initialize Trusty session: %d\n", device.session_error());
         return 1;

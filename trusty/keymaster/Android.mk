@@ -40,6 +40,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libkeymaster1 \
 	libtrusty \
 	libkeymaster_messages \
+	libsoftkeymasterdevice \
 	liblog
 
 include $(BUILD_EXECUTABLE)
