@@ -22,16 +22,15 @@
 __BEGIN_DECLS
 
 /*
- * Initializes public and anonymous namespaces. The public_ns_sonames is the list of sonames
- * to be included into public namespace separated by colon. Example: "libc.so:libm.so:libdl.so".
- * The libraries in this list should be loaded prior to this call.
+ * Initializes anonymous namespaces. The shared_libs_sonames is the list of sonames
+ * to be shared by default namespace separated by colon. Example: "libc.so:libm.so:libdl.so".
  *
- * The anon_ns_library_path is the search path for anonymous namespace. The anonymous namespace
+ * The library_search_path is the search path for anonymous namespace. The anonymous namespace
  * is used in the case when linker cannot identify the caller of dlopen/dlsym. This happens
  * for the code not loaded by dynamic linker; for example calls from the mono-compiled code.
  */
-extern bool android_init_namespaces(const char* public_ns_sonames,
-                                    const char* anon_ns_library_path);
+extern bool android_init_anonymous_namespace(const char* shared_libs_sonames,
+                                             const char* library_search_path);
 
 
 enum {
@@ -85,6 +84,10 @@ extern struct android_namespace_t* android_create_namespace(const char* name,
                                                             uint64_t type,
                                                             const char* permitted_when_isolated_path,
                                                             android_namespace_t* parent);
+
+extern bool android_link_namespaces(android_namespace_t* from,
+                                    android_namespace_t* to,
+                                    const char* shared_libs_sonames);
 
 /*
  * Get the default library search path.
