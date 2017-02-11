@@ -165,6 +165,11 @@ class LibraryNamespaces {
         return false;
       }
 
+      if (!android_link_namespaces(ns, nullptr, public_libraries_.c_str())) {
+        *error_msg = dlerror();
+        return false;
+      }
+
       native_loader_ns = NativeLoaderNamespace(ns);
     } else {
       native_bridge_namespace_t* ns = NativeBridgeCreateNamespace("classloader-namespace",
@@ -310,8 +315,8 @@ class LibraryNamespaces {
     // code is one example) unknown to linker in which  case linker uses anonymous
     // namespace. The second argument specifies the search path for the anonymous
     // namespace which is the library_path of the classloader.
-    initialized_ = android_init_namespaces(public_libraries_.c_str(),
-                                           is_native_bridge ? nullptr : library_path);
+    initialized_ = android_init_anonymous_namespace(public_libraries_.c_str(),
+                                                    is_native_bridge ? nullptr : library_path);
     if (!initialized_) {
       *error_msg = dlerror();
       return false;
