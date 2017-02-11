@@ -58,6 +58,9 @@ template <typename T> T GetUintProperty(const std::string& key,
 // tell you whether or not your call succeeded. A `false` return value definitely means failure.
 bool SetProperty(const std::string& key, const std::string& value);
 
+// Waits for the system property `key` to have the value `expected_value`, .
+void WaitForProperty(const std::string& key, const std::string& expected_value);
+
 } // namespace base
 } // namespace android
 
