@@ -150,7 +150,7 @@ void uid_monitor::add_records_locked(uint64_t curr_ts)
 }
 
 std::map<uint64_t, std::vector<struct uid_record>> uid_monitor::dump(
-    int hours, uint64_t threshold, bool force_report)
+    double hours, uint64_t threshold, bool force_report)
 {
     if (force_report) {
         report();
@@ -162,7 +162,7 @@ std::map<uint64_t, std::vector<struct uid_record>> uid_monitor::dump(
     uint64_t first_ts = 0;
 
     if (hours != 0) {
-        first_ts = time(NULL) - (uint64_t)hours * HOUR_TO_SEC;
+        first_ts = time(NULL) - hours * HOUR_TO_SEC;
     }
 
     for (auto it = records.lower_bound(first_ts); it != records.end(); ++it) {

@@ -88,7 +88,7 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
         return PERMISSION_DENIED;
     }
 
-    int hours = 0;
+    double hours = 0;
     int time_window = 0;
     uint64_t threshold = 0;
     bool force_report = false;
@@ -97,7 +97,7 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
         if (arg == String16("--hours")) {
             if (++i >= args.size())
                 break;
-            hours = stoi(String16::std_string(args[i]));
+            hours = stod(String16::std_string(args[i]));
             continue;
         }
         if (arg == String16("--time_window")) {

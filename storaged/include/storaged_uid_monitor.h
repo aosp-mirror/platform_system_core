@@ -92,7 +92,7 @@ public:
     std::unordered_map<uint32_t, struct uid_info> get_uid_io_stats();
     // called by dumpsys
     std::map<uint64_t, std::vector<struct uid_record>> dump(
-        int hours, uint64_t threshold, bool force_report);
+        double hours, uint64_t threshold, bool force_report);
     // called by battery properties listener
     void set_charger_state(charger_stat_t stat);
     // called by storaged periodic_chore or dump with force_report
