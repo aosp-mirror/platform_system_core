@@ -55,32 +55,6 @@ static int drop_privs() {
 
     if (setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND) < 0) return -1;
 
-    if (prctl(PR_SET_KEEPCAPS, 1) < 0) return -1;
-
-    std::unique_ptr<struct _cap_struct, int(*)(void *)> caps(cap_init(), cap_free);
-    if (cap_clear(caps.get()) < 0) return -1;
-    cap_value_t cap_value[] = {
-        CAP_SETGID,
-        CAP_SETUID
-    };
-    if (cap_set_flag(caps.get(), CAP_PERMITTED,
-                     arraysize(cap_value), cap_value,
-                     CAP_SET) < 0) return -1;
-    if (cap_set_flag(caps.get(), CAP_EFFECTIVE,
-                     arraysize(cap_value), cap_value,
-                     CAP_SET) < 0) return -1;
-    if (cap_set_proc(caps.get()) < 0)
-        return -1;
-
-    if (setgid(AID_SYSTEM) != 0) return -1;
-
-    if (setuid(AID_SYSTEM) != 0) return -1;
-
-    if (cap_set_flag(caps.get(), CAP_PERMITTED, 2, cap_value, CAP_CLEAR) < 0) return -1;
-    if (cap_set_flag(caps.get(), CAP_EFFECTIVE, 2, cap_value, CAP_CLEAR) < 0) return -1;
-    if (cap_set_proc(caps.get()) < 0)
-        return -1;
-
     return 0;
 }
 
