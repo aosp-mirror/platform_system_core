@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include <sync/sync.h>
+#include <android/sync.h>
 #include <sw_sync.h>
 #include <fcntl.h>
 #include <vector>

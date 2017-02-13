@@ -27,7 +27,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <sync/sync.h>
+#include <android/sync.h>
 
 /* Legacy Sync API */
 
