@@ -9,7 +9,6 @@ LIBSTORAGED_SHARED_LIBRARIES := \
     libcutils \
     liblog \
     libsysutils \
-    libcap \
     libpackagelistparser \
     libbatteryservice \
 
