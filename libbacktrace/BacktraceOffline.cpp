@@ -21,6 +21,7 @@ extern "C" {
 #include <dwarf.h>
 }
 
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -282,39 +283,14 @@ bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
 
   // vaddr in the elf file.
   uint64_t ip_vaddr = ip - map.start + debug_frame->min_vaddr;
-  if (debug_frame->has_arm_exidx) {
-    auto& func_vaddrs = debug_frame->arm_exidx.func_vaddr_array;
-    if (ip_vaddr >= func_vaddrs[0] && ip_vaddr < debug_frame->text_end_vaddr) {
-      // Use binary search to find the correct function.
-      auto it = std::upper_bound(func_vaddrs.begin(), func_vaddrs.end(),
-                                 static_cast<uint32_t>(ip_vaddr));
-      if (it != func_vaddrs.begin()) {
-        --it;
-        // Found the exidx entry.
-        size_t index = it - func_vaddrs.begin();
 
-        proc_info->format = UNW_INFO_FORMAT_ARM_EXIDX;
-        proc_info->unwind_info = reinterpret_cast<void*>(
-            static_cast<uintptr_t>(index * sizeof(ArmIdxEntry) +
-                                   debug_frame->arm_exidx.exidx_vaddr +
-                                   debug_frame->min_vaddr));
-
-        // Prepare arm_exidx space and arm_extab space.
-        arm_exidx_space_.start = debug_frame->min_vaddr + debug_frame->arm_exidx.exidx_vaddr;
-        arm_exidx_space_.end = arm_exidx_space_.start +
-            debug_frame->arm_exidx.exidx_data.size() * sizeof(ArmIdxEntry);
-        arm_exidx_space_.data = reinterpret_cast<const uint8_t*>(
-            debug_frame->arm_exidx.exidx_data.data());
-
-        arm_extab_space_.start = debug_frame->min_vaddr + debug_frame->arm_exidx.extab_vaddr;
-        arm_extab_space_.end = arm_extab_space_.start +
-            debug_frame->arm_exidx.extab_data.size();
-        arm_extab_space_.data = debug_frame->arm_exidx.extab_data.data();
-        return true;
-      }
-    }
-  }
-
+  // The unwind info can come from .ARM.exidx or .eh_frame, or .debug_frame/.gnu_debugdata.
+  // First check .eh_frame/.debug_frame, then check .ARM.exidx. Because .eh_frame/.debug_frame has
+  // function range for each entry, by matching ip address with the function range, we know exactly
+  // whether the ip address hits an entry. But .ARM.exidx doesn't have function range for each
+  // entry, it thinks that an ip address hits an entry when (entry.addr <= ip < next_entry.addr).
+  // To prevent ip addresses hit in .eh_frame/.debug_frame being regarded as addresses hit in
+  // .ARM.exidx, we need to check .eh_frame/.debug_frame first.
   if (debug_frame->has_eh_frame) {
     if (ip_vaddr >= debug_frame->eh_frame.min_func_vaddr &&
         ip_vaddr < debug_frame->text_end_vaddr) {
@@ -323,7 +299,6 @@ bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
       eh_frame_hdr_space_.end =
           eh_frame_hdr_space_.start + debug_frame->eh_frame.hdr_data.size();
       eh_frame_hdr_space_.data = debug_frame->eh_frame.hdr_data.data();
-
       eh_frame_space_.start = ip - ip_vaddr + debug_frame->eh_frame.vaddr;
       eh_frame_space_.end = eh_frame_space_.start + debug_frame->eh_frame.data.size();
       eh_frame_space_.data = debug_frame->eh_frame.data.data();
@@ -345,7 +320,6 @@ bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
       }
     }
   }
-
   if (debug_frame->has_debug_frame || debug_frame->has_gnu_debugdata) {
     unw_dyn_info_t di;
     unw_word_t segbase = map.start - map.offset;
@@ -355,6 +329,40 @@ bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
     if (found == 1) {
       int ret = dwarf_search_unwind_table(addr_space, ip, &di, proc_info, need_unwind_info, this);
       if (ret == 0) {
+        return true;
+      }
+    }
+  }
+
+  if (debug_frame->has_arm_exidx) {
+    auto& func_vaddrs = debug_frame->arm_exidx.func_vaddr_array;
+    if (ip_vaddr >= func_vaddrs[0] && ip_vaddr < debug_frame->text_end_vaddr) {
+      // Use binary search to find the correct function.
+      auto it = std::upper_bound(func_vaddrs.begin(), func_vaddrs.end(),
+                                 static_cast<uint32_t>(ip_vaddr));
+      if (it != func_vaddrs.begin()) {
+        --it;
+        // Found the exidx entry.
+        size_t index = it - func_vaddrs.begin();
+        proc_info->start_ip = *it;
+        proc_info->format = UNW_INFO_FORMAT_ARM_EXIDX;
+        proc_info->unwind_info = reinterpret_cast<void*>(
+            static_cast<uintptr_t>(index * sizeof(ArmIdxEntry) +
+                                   debug_frame->arm_exidx.exidx_vaddr +
+                                   debug_frame->min_vaddr));
+        eh_frame_hdr_space_.Clear();
+        eh_frame_space_.Clear();
+        // Prepare arm_exidx space and arm_extab space.
+        arm_exidx_space_.start = debug_frame->min_vaddr + debug_frame->arm_exidx.exidx_vaddr;
+        arm_exidx_space_.end = arm_exidx_space_.start +
+            debug_frame->arm_exidx.exidx_data.size() * sizeof(ArmIdxEntry);
+        arm_exidx_space_.data = reinterpret_cast<const uint8_t*>(
+            debug_frame->arm_exidx.exidx_data.data());
+
+        arm_extab_space_.start = debug_frame->min_vaddr + debug_frame->arm_exidx.extab_vaddr;
+        arm_extab_space_.end = arm_extab_space_.start +
+            debug_frame->arm_exidx.extab_data.size();
+        arm_extab_space_.data = debug_frame->arm_exidx.extab_data.data();
         return true;
       }
     }
@@ -560,7 +568,7 @@ DebugFrameInfo* BacktraceOffline::GetDebugFrameInFile(const std::string& filenam
   }
   DebugFrameInfo* debug_frame = ReadDebugFrameFromFile(filename);
   if (cache_file_) {
-      g_debug_frames.emplace(filename, std::unique_ptr<DebugFrameInfo>(debug_frame));
+    g_debug_frames.emplace(filename, std::unique_ptr<DebugFrameInfo>(debug_frame));
   }
   return debug_frame;
 }
