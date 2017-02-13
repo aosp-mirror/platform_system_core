@@ -173,6 +173,46 @@ static struct sync_fence_info_data *sync_file_info_to_legacy_fence_info(
     return legacy_info;
 }
 
+static struct sync_file_info* legacy_fence_info_to_sync_file_info(
+                                    struct sync_fence_info_data *legacy_info)
+{
+    struct sync_file_info *info;
+    struct sync_pt_info *pt;
+    struct sync_fence_info *fence;
+    size_t num_fences;
+    int err;
+
+    pt = NULL;
+    num_fences = 0;
+    while ((pt = sync_pt_info(legacy_info, pt)) != NULL)
+        num_fences++;
+
+    info = calloc(1, sizeof(struct sync_file_info) +
+                     num_fences * sizeof(struct sync_fence_info));
+    if (!info) {
+        free(legacy_info);
+        return NULL;
+    }
+    info->sync_fence_info = (__u64)(uintptr_t)(info + 1);
+
+    strlcpy(info->name, legacy_info->name, sizeof(info->name));
+    info->status = legacy_info->status;
+    info->num_fences = num_fences;
+
+    pt = NULL;
+    fence = sync_get_fence_info(info);
+    while ((pt = sync_pt_info(legacy_info, pt)) != NULL) {
+        strlcpy(fence->obj_name, pt->obj_name, sizeof(fence->obj_name));
+        strlcpy(fence->driver_name, pt->driver_name,
+                sizeof(fence->driver_name));
+        fence->status = pt->status;
+        fence->timestamp_ns = pt->timestamp_ns;
+        fence++;
+    }
+
+    return info;
+}
+
 struct sync_fence_info_data *sync_fence_info(int fd)
 {
     struct sync_fence_info_data *legacy_info;
@@ -188,6 +228,23 @@ struct sync_fence_info_data *sync_fence_info(int fd)
     legacy_info = sync_file_info_to_legacy_fence_info(file_info);
     sync_file_info_free(file_info);
     return legacy_info;
+}
+
+struct sync_file_info* sync_file_info(int32_t fd)
+{
+    struct sync_file_info *info;
+    struct sync_fence_info_data *legacy_info;
+
+    info = modern_sync_file_info(fd);
+    if (info || errno != ENOTTY)
+        return info;
+
+    legacy_info = legacy_sync_fence_info(fd);
+    if (!legacy_info)
+        return NULL;
+    info = legacy_fence_info_to_sync_file_info(legacy_info);
+    sync_fence_info_free(legacy_info);
+    return info;
 }
 
 struct sync_pt_info *sync_pt_info(struct sync_fence_info_data *info,
