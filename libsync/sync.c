@@ -145,7 +145,7 @@ struct sync_fence_info_data *sync_fence_info(int fd)
     }
 
     legacy_info->len = sizeof(*legacy_info) +
-                        num_fences * sizeof(struct sync_fence_info);
+                        num_fences * sizeof(struct sync_pt_info);
     strlcpy(legacy_info->name, info->name, sizeof(legacy_info->name));
     legacy_info->status = info->status;
 
