@@ -85,6 +85,22 @@ extern struct android_namespace_t* android_create_namespace(const char* name,
                                                             const char* permitted_when_isolated_path,
                                                             android_namespace_t* parent);
 
+/*
+ * Creates a link between namespaces. Every link has list of sonames of
+ * shared libraries. These are the libraries which are accessible from
+ * namespace 'from' but loaded within namespace 'to' context.
+ * When to namespace is nullptr this function establishes a link between
+ * 'from' namespace and the default namespace.
+ *
+ * The lookup order of the libraries in namespaces with links is following:
+ * 1. Look inside current namespace using 'this' namespace search path.
+ * 2. Look in linked namespaces
+ * 2.1. Perform soname check - if library soname is not in the list of shared
+ *      libraries sonames skip this link, otherwise
+ * 2.2. Search library using linked namespace search path. Note that this
+ *      step will not go deeper into linked namespaces for this library but
+ *      will do so for DT_NEEDED libraries.
+ */
 extern bool android_link_namespaces(android_namespace_t* from,
                                     android_namespace_t* to,
                                     const char* shared_libs_sonames);
