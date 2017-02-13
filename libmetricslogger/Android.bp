@@ -1,0 +1,64 @@
+// Copyright 2017 The Android Open Source Project
+
+metricslogger_lib_src_files = [
+    "metrics_logger.cpp",
+]
+
+cc_defaults {
+    name: "metricslogger_defaults",
+
+    clang: true,
+    host_supported: true,
+
+    export_include_dirs: ["include"],
+    local_include_dirs: ["include"],
+    shared_libs: ["liblog"],
+    whole_static_libs: ["libgtest_prod"],
+
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+
+        // 524291 corresponds to sysui_histogram, from
+        // frameworks/base/core/java/com/android/internal/logging/EventLogTags.logtags
+        "-DHISTOGRAM_LOG_TAG=524291",
+    ],
+}
+
+// metricslogger shared library
+// -----------------------------------------------------------------------------
+cc_library_shared {
+    name: "libmetricslogger",
+    srcs: metricslogger_lib_src_files,
+    defaults: ["metricslogger_defaults"],
+}
+
+// metricslogger shared library, debug
+// -----------------------------------------------------------------------------
+cc_library_shared {
+    name: "libmetricslogger_debug",
+    srcs: metricslogger_lib_src_files,
+    defaults: ["metricslogger_defaults"],
+
+    target: {
+        host: {
+            cflags: ["-UNDEBUG"],
+        },
+    },
+}
+
+// Native tests
+// -----------------------------------------------------------------------------
+cc_test {
+    name: "metricslogger_tests",
+    defaults: ["metricslogger_defaults"],
+    shared_libs: [
+        "libbase",
+        "libmetricslogger_debug",
+    ],
+    srcs: [
+        "metrics_logger_test.cpp",
+        "testrunner.cpp",
+    ],
+}
