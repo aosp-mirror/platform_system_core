@@ -35,9 +35,9 @@
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
 #include <cutils/properties.h>
+#include <metricslogger/metrics_logger.h>
 
 #include "boot_event_record_store.h"
-#include "histogram_logger.h"
 #include "uptime_parser.h"
 
 namespace {
@@ -49,7 +49,7 @@ void LogBootEvents() {
 
   auto events = boot_event_store.GetAllBootEvents();
   for (auto i = events.cbegin(); i != events.cend(); ++i) {
-    bootstat::LogHistogram(i->first, i->second);
+    android::metricslogger::LogHistogram(i->first, i->second);
   }
 }
 
@@ -317,18 +317,18 @@ void RecordFactoryReset() {
 
   if (current_time_utc < 0) {
     // UMA does not display negative values in buckets, so convert to positive.
-    bootstat::LogHistogram(
+    android::metricslogger::LogHistogram(
         "factory_reset_current_time_failure", std::abs(current_time_utc));
 
-    // Logging via BootEventRecordStore to see if using bootstat::LogHistogram
+    // Logging via BootEventRecordStore to see if using android::metricslogger::LogHistogram
     // is losing records somehow.
     boot_event_store.AddBootEventWithValue(
         "factory_reset_current_time_failure", std::abs(current_time_utc));
     return;
   } else {
-    bootstat::LogHistogram("factory_reset_current_time", current_time_utc);
+    android::metricslogger::LogHistogram("factory_reset_current_time", current_time_utc);
 
-    // Logging via BootEventRecordStore to see if using bootstat::LogHistogram
+    // Logging via BootEventRecordStore to see if using android::metricslogger::LogHistogram
     // is losing records somehow.
     boot_event_store.AddBootEventWithValue(
         "factory_reset_current_time", current_time_utc);
@@ -347,9 +347,9 @@ void RecordFactoryReset() {
   // Calculate and record the difference in time between now and the
   // factory_reset time.
   time_t factory_reset_utc = record.second;
-  bootstat::LogHistogram("factory_reset_record_value", factory_reset_utc);
+  android::metricslogger::LogHistogram("factory_reset_record_value", factory_reset_utc);
 
-  // Logging via BootEventRecordStore to see if using bootstat::LogHistogram
+  // Logging via BootEventRecordStore to see if using android::metricslogger::LogHistogram
   // is losing records somehow.
   boot_event_store.AddBootEventWithValue(
       "factory_reset_record_value", factory_reset_utc);

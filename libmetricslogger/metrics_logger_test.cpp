@@ -14,19 +14,18 @@
  * limitations under the License.
  */
 
-#include "histogram_logger.h"
+#include "metricslogger/metrics_logger.h"
 
-#include <cstdlib>
+#include <gtest/gtest.h>
 
-#include <android-base/logging.h>
-#include <log/log_event_list.h>
+TEST(MetricsLoggerTest, AddSingleBootEvent) {
+  android::metricslogger::LogHistogram("test_event", 42);
+  /*pid_t pid = getpid();
+  struct logger_list *logger_list = android_logger_list_open(
+      LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 0, pid);
 
-namespace bootstat {
-
-void LogHistogram(const std::string& event, int32_t data) {
-  LOG(INFO) << "Logging histogram: " << event << " " << data;
-  android_log_event_list log(HISTOGRAM_LOG_TAG);
-  log << event << data << LOG_ID_EVENTS;
+  logger_list = NULL;
+  log_msg log_msg;
+  android_logger_list_read(logger_list, &log_msg);
+  std::cout << log_msg.len() << std::endl;*/
 }
-
-}  // namespace bootstat
