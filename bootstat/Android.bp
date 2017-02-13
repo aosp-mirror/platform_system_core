@@ -16,7 +16,6 @@
 
 bootstat_lib_src_files = [
     "boot_event_record_store.cpp",
-    "histogram_logger.cpp",
     "uptime_parser.cpp",
 ]
 
@@ -27,15 +26,12 @@ cc_defaults {
         "-Wall",
         "-Wextra",
         "-Werror",
-
-        // 524291 corresponds to sysui_histogram, from
-        // frameworks/base/core/java/com/android/internal/logging/EventLogTags.logtags
-        "-DHISTOGRAM_LOG_TAG=524291",
     ],
     shared_libs: [
         "libbase",
         "libcutils",
         "liblog",
+        "libmetricslogger",
     ],
     whole_static_libs: ["libgtest_prod"],
     // Clang is required because of C++14
