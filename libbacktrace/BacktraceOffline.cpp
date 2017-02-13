@@ -31,6 +31,7 @@ extern "C" {
 #include <unistd.h>
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -90,9 +91,6 @@ struct DebugFrameInfo {
   DebugFrameInfo() : has_arm_exidx(false), has_eh_frame(false),
       has_debug_frame(false), has_gnu_debugdata(false) { }
 };
-
-static std::unordered_map<std::string, std::unique_ptr<DebugFrameInfo>>& g_debug_frames =
-    *new std::unordered_map<std::string, std::unique_ptr<DebugFrameInfo>>;
 
 void Space::Clear() {
   start = 0;
@@ -557,18 +555,31 @@ std::string BacktraceOffline::GetFunctionNameRaw(uintptr_t, uintptr_t* offset) {
   return "";
 }
 
+static std::mutex g_lock;
+static std::unordered_map<std::string, std::unique_ptr<DebugFrameInfo>>* g_debug_frames = nullptr;
+
 static DebugFrameInfo* ReadDebugFrameFromFile(const std::string& filename);
 
 DebugFrameInfo* BacktraceOffline::GetDebugFrameInFile(const std::string& filename) {
   if (cache_file_) {
-    auto it = g_debug_frames.find(filename);
-    if (it != g_debug_frames.end()) {
-      return it->second.get();
+    std::lock_guard<std::mutex> lock(g_lock);
+    if (g_debug_frames != nullptr) {
+      auto it = g_debug_frames->find(filename);
+      if (it != g_debug_frames->end()) {
+        return it->second.get();
+      }
     }
   }
   DebugFrameInfo* debug_frame = ReadDebugFrameFromFile(filename);
   if (cache_file_) {
-    g_debug_frames.emplace(filename, std::unique_ptr<DebugFrameInfo>(debug_frame));
+    std::lock_guard<std::mutex> lock(g_lock);
+    if (g_debug_frames == nullptr) {
+      g_debug_frames = new std::unordered_map<std::string, std::unique_ptr<DebugFrameInfo>>;
+    }
+    auto pair = g_debug_frames->emplace(filename, std::unique_ptr<DebugFrameInfo>(debug_frame));
+    if (!pair.second) {
+      debug_frame = pair.first->second.get();
+    }
   }
   return debug_frame;
 }
