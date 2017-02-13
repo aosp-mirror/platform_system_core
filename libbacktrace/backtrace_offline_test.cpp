@@ -220,25 +220,7 @@ static std::string GetArch() {
 #endif
 }
 
-static void BacktraceOfflineTest(const std::string& testlib_name) {
-  const std::string arch = GetArch();
-  if (arch.empty()) {
-    GTEST_LOG_(INFO) << "This test does nothing on current arch.";
-    return;
-  }
-  const std::string offline_testdata_path = "testdata/" + arch + "/offline_testdata";
-  std::string testdata;
-  ASSERT_TRUE(android::base::ReadFileToString(offline_testdata_path, &testdata));
-
-  const std::string testlib_path = "testdata/" + arch + "/" + testlib_name;
-  struct stat st;
-  if (stat(testlib_path.c_str(), &st) == -1) {
-    GTEST_LOG_(INFO) << "This test is skipped as " << testlib_path << " doesn't exist.";
-    return;
-  }
-
-  // Parse offline_testdata.
-  std::vector<std::string> lines = android::base::Split(testdata, "\n");
+struct OfflineTestData {
   int pid;
   int tid;
   std::vector<backtrace_map_t> maps;
@@ -246,62 +228,92 @@ static void BacktraceOfflineTest(const std::string& testlib_name) {
   backtrace_stackinfo_t stack_info;
   std::vector<uint8_t> stack;
   std::vector<FunctionSymbol> symbols;
+};
+
+bool ReadOfflineTestData(const std::string offline_testdata_path, OfflineTestData* testdata) {
+  std::string s;
+  if (!android::base::ReadFileToString(offline_testdata_path, &s)) {
+    return false;
+  }
+  // Parse offline_testdata.
+  std::vector<std::string> lines = android::base::Split(s, "\n");
+  memset(&testdata->unw_context, 0, sizeof(testdata->unw_context));
   for (const auto& line : lines) {
     if (android::base::StartsWith(line, "pid:")) {
-      sscanf(line.c_str(), "pid: %d tid: %d", &pid, &tid);
+      sscanf(line.c_str(), "pid: %d tid: %d", &testdata->pid, &testdata->tid);
     } else if (android::base::StartsWith(line, "map:")) {
-      maps.resize(maps.size() + 1);
+      testdata->maps.resize(testdata->maps.size() + 1);
+      backtrace_map_t& map = testdata->maps.back();
       int pos;
       sscanf(line.c_str(),
              "map: start: %" SCNxPTR " end: %" SCNxPTR " offset: %" SCNxPTR
              " load_base: %" SCNxPTR " flags: %d name: %n",
-             &maps.back().start, &maps.back().end, &maps.back().offset,
-             &maps.back().load_base, &maps.back().flags, &pos);
-      maps.back().name = android::base::Trim(line.substr(pos));
+             &map.start, &map.end, &map.offset, &map.load_base, &map.flags, &pos);
+      map.name = android::base::Trim(line.substr(pos));
     } else if (android::base::StartsWith(line, "registers:")) {
       size_t size;
       int pos;
       sscanf(line.c_str(), "registers: %zu %n", &size, &pos);
-      ASSERT_EQ(sizeof(unw_context), size);
-      HexStringToRawData(&line[pos], &unw_context, size);
+      if (sizeof(testdata->unw_context) != size) {
+        return false;
+      }
+      HexStringToRawData(&line[pos], &testdata->unw_context, size);
     } else if (android::base::StartsWith(line, "stack:")) {
       size_t size;
       int pos;
       sscanf(line.c_str(),
              "stack: start: %" SCNx64 " end: %" SCNx64 " size: %zu %n",
-             &stack_info.start, &stack_info.end, &size, &pos);
-      stack.resize(size);
-      HexStringToRawData(&line[pos], &stack[0], size);
-      stack_info.data = stack.data();
+             &testdata->stack_info.start, &testdata->stack_info.end, &size, &pos);
+      testdata->stack.resize(size);
+      HexStringToRawData(&line[pos], &testdata->stack[0], size);
+      testdata->stack_info.data = testdata->stack.data();
     } else if (android::base::StartsWith(line, "function:")) {
-      symbols.resize(symbols.size() + 1);
+      testdata->symbols.resize(testdata->symbols.size() + 1);
+      FunctionSymbol& symbol = testdata->symbols.back();
       int pos;
       sscanf(line.c_str(),
              "function: start: %" SCNxPTR " end: %" SCNxPTR " name: %n",
-             &symbols.back().start, &symbols.back().end,
-             &pos);
-      symbols.back().name = line.substr(pos);
+             &symbol.start, &symbol.end, &pos);
+      symbol.name = line.substr(pos);
     }
   }
+  return true;
+}
+
+static void BacktraceOfflineTest(const std::string& testlib_name) {
+  const std::string arch = GetArch();
+  if (arch.empty()) {
+    GTEST_LOG_(INFO) << "This test does nothing on current arch.";
+    return;
+  }
+  const std::string testlib_path = "testdata/" + arch + "/" + testlib_name;
+  struct stat st;
+  if (stat(testlib_path.c_str(), &st) == -1) {
+    GTEST_LOG_(INFO) << "This test is skipped as " << testlib_path << " doesn't exist.";
+    return;
+  }
+
+  const std::string offline_testdata_path = "testdata/" + arch + "/offline_testdata";
+  OfflineTestData testdata;
+  ASSERT_TRUE(ReadOfflineTestData(offline_testdata_path, &testdata));
 
   // Fix path of libbacktrace_testlib.so.
-  for (auto& map : maps) {
+  for (auto& map : testdata.maps) {
     if (map.name.find("libbacktrace_test.so") != std::string::npos) {
       map.name = testlib_path;
     }
   }
 
   // Do offline backtrace.
-  std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(pid, maps));
+  std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(testdata.pid, testdata.maps));
   ASSERT_TRUE(map != nullptr);
 
   std::unique_ptr<Backtrace> backtrace(
-      Backtrace::CreateOffline(pid, tid, map.get(), stack_info));
+      Backtrace::CreateOffline(testdata.pid, testdata.tid, map.get(), testdata.stack_info));
   ASSERT_TRUE(backtrace != nullptr);
 
-  ucontext_t ucontext = GetUContextFromUnwContext(unw_context);
+  ucontext_t ucontext = GetUContextFromUnwContext(testdata.unw_context);
   ASSERT_TRUE(backtrace->Unwind(0, &ucontext));
-
 
   // Collect pc values of the call stack frames.
   std::vector<uintptr_t> pc_values;
@@ -311,17 +323,20 @@ static void BacktraceOfflineTest(const std::string& testlib_name) {
 
   size_t test_one_index = 0;
   for (size_t i = 0; i < pc_values.size(); ++i) {
-    if (FunctionNameForAddress(pc_values[i], symbols) == "test_level_one") {
+    if (FunctionNameForAddress(pc_values[i], testdata.symbols) == "test_level_one") {
       test_one_index = i;
       break;
     }
   }
 
   ASSERT_GE(test_one_index, 3u);
-  ASSERT_EQ("test_level_one", FunctionNameForAddress(pc_values[test_one_index], symbols));
-  ASSERT_EQ("test_level_two", FunctionNameForAddress(pc_values[test_one_index - 1], symbols));
-  ASSERT_EQ("test_level_three", FunctionNameForAddress(pc_values[test_one_index - 2], symbols));
-  ASSERT_EQ("test_level_four", FunctionNameForAddress(pc_values[test_one_index - 3], symbols));
+  ASSERT_EQ("test_level_one", FunctionNameForAddress(pc_values[test_one_index], testdata.symbols));
+  ASSERT_EQ("test_level_two", FunctionNameForAddress(pc_values[test_one_index - 1],
+                                                     testdata.symbols));
+  ASSERT_EQ("test_level_three", FunctionNameForAddress(pc_values[test_one_index - 2],
+                                                       testdata.symbols));
+  ASSERT_EQ("test_level_four", FunctionNameForAddress(pc_values[test_one_index - 3],
+                                                      testdata.symbols));
 }
 
 TEST(libbacktrace, offline_eh_frame) {
@@ -338,4 +353,48 @@ TEST(libbacktrace, offline_gnu_debugdata) {
 
 TEST(libbacktrace, offline_arm_exidx) {
   BacktraceOfflineTest("libbacktrace_test_arm_exidx.so");
+}
+
+// This test tests the situation that ranges of functions covered by .eh_frame and .ARM.exidx
+// overlap with each other, which appears in /system/lib/libart.so.
+TEST(libbacktrace, offline_unwind_mix_eh_frame_and_arm_exidx) {
+  const std::string arch = GetArch();
+  if (arch.empty() || arch != "arm") {
+    GTEST_LOG_(INFO) << "This test does nothing on current arch.";
+    return;
+  }
+  const std::string testlib_path = "testdata/" + arch + "/libart.so";
+  struct stat st;
+  ASSERT_EQ(0, stat(testlib_path.c_str(), &st)) << "can't find testlib " << testlib_path;
+
+  const std::string offline_testdata_path = "testdata/" + arch + "/offline_testdata_for_libart";
+  OfflineTestData testdata;
+  ASSERT_TRUE(ReadOfflineTestData(offline_testdata_path, &testdata));
+
+  // Fix path of /system/lib/libart.so.
+  for (auto& map : testdata.maps) {
+    if (map.name.find("libart.so") != std::string::npos) {
+      map.name = testlib_path;
+    }
+  }
+
+  // Do offline backtrace.
+  std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(testdata.pid, testdata.maps));
+  ASSERT_TRUE(map != nullptr);
+
+  std::unique_ptr<Backtrace> backtrace(
+      Backtrace::CreateOffline(testdata.pid, testdata.tid, map.get(), testdata.stack_info));
+  ASSERT_TRUE(backtrace != nullptr);
+
+  ucontext_t ucontext = GetUContextFromUnwContext(testdata.unw_context);
+  ASSERT_TRUE(backtrace->Unwind(0, &ucontext));
+
+  // The last frame is outside of libart.so
+  ASSERT_EQ(testdata.symbols.size() + 1, backtrace->NumFrames());
+  for (size_t i = 0; i + 1 < backtrace->NumFrames(); ++i) {
+    uintptr_t vaddr_in_file = backtrace->GetFrame(i)->pc - testdata.maps[0].start +
+        testdata.maps[0].load_base;
+    std::string name = FunctionNameForAddress(vaddr_in_file, testdata.symbols);
+    ASSERT_EQ(name, testdata.symbols[i].name);
+  }
 }
