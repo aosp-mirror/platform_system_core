@@ -14,9 +14,12 @@
  * limitations under the License.
  */
 
+#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
+
 #include "android-base/properties.h"
 
 #include <sys/system_properties.h>
+#include <sys/_system_properties.h>
 
 #include <string>
 
@@ -76,6 +79,44 @@ template uint64_t GetUintProperty(const std::string&, uint64_t, uint64_t);
 
 bool SetProperty(const std::string& key, const std::string& value) {
   return (__system_property_set(key.c_str(), value.c_str()) == 0);
+}
+
+struct WaitForPropertyData {
+  bool done;
+  const std::string* expected_value;
+  unsigned last_read_serial;
+};
+
+static void WaitForPropertyCallback(void* data_ptr, const char*, const char* value, unsigned serial) {
+  WaitForPropertyData* data = reinterpret_cast<WaitForPropertyData*>(data_ptr);
+  if (*data->expected_value == value) {
+    data->done = true;
+  } else {
+    data->last_read_serial = serial;
+  }
+}
+
+void WaitForProperty(const std::string& key, const std::string& expected_value) {
+  // Find the property's prop_info*.
+  const prop_info* pi;
+  unsigned global_serial = 0;
+  while ((pi = __system_property_find(key.c_str())) == nullptr) {
+    // The property doesn't even exist yet.
+    // Wait for a global change and then look again.
+    global_serial = __system_property_wait_any(global_serial);
+  }
+
+  WaitForPropertyData data;
+  data.expected_value = &expected_value;
+  data.done = false;
+  while (true) {
+    // Check whether the property has the value we're looking for?
+    __system_property_read_callback(pi, WaitForPropertyCallback, &data);
+    if (data.done) return;
+
+    // It didn't so wait for it to change before checking again.
+    __system_property_wait(pi, data.last_read_serial);
+  }
 }
 
 }  // namespace base
