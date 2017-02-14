@@ -51,6 +51,8 @@
 #include "property_service.h"
 #include "util.h"
 
+using android::base::boot_clock;
+
 static unsigned int do_decode_uid(const char *s)
 {
     unsigned int v;
@@ -199,11 +201,16 @@ bool write_file(const char* path, const char* content) {
     return success;
 }
 
-boot_clock::time_point boot_clock::now() {
-  timespec ts;
-  clock_gettime(CLOCK_BOOTTIME, &ts);
-  return boot_clock::time_point(std::chrono::seconds(ts.tv_sec) +
-                                std::chrono::nanoseconds(ts.tv_nsec));
+Timer::Timer() : start_(boot_clock::now()) {
+}
+
+double Timer::duration_s() const {
+  typedef std::chrono::duration<double> double_duration;
+  return std::chrono::duration_cast<double_duration>(boot_clock::now() - start_).count();
+}
+
+int64_t Timer::duration_ms() const {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(boot_clock::now() - start_).count();
 }
 
 int mkdir_recursive(const char *pathname, mode_t mode)
