@@ -242,6 +242,15 @@ static int create_service_thread(void (*func)(int, void *), void *cookie)
     }
     D("socketpair: (%d,%d)", s[0], s[1]);
 
+#if !ADB_HOST
+    if (func == &file_sync_service) {
+        // Set file sync service socket to maximum size
+        int max_buf = LINUX_MAX_SOCKET_SIZE;
+        adb_setsockopt(s[0], SOL_SOCKET, SO_SNDBUF, &max_buf, sizeof(max_buf));
+        adb_setsockopt(s[1], SOL_SOCKET, SO_SNDBUF, &max_buf, sizeof(max_buf));
+    }
+#endif // !ADB_HOST
+
     stinfo* sti = reinterpret_cast<stinfo*>(malloc(sizeof(stinfo)));
     if (sti == nullptr) {
         fatal("cannot allocate stinfo");
