@@ -36,11 +36,12 @@ std::vector<std::string> Split(const std::string& s,
 
   size_t base = 0;
   size_t found;
-  do {
+  while (true) {
     found = s.find_first_of(delimiters, base);
     result.push_back(s.substr(base, found - base));
+    if (found == s.npos) break;
     base = found + 1;
-  } while (found != s.npos);
+  }
 
   return result;
 }
