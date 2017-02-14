@@ -34,6 +34,8 @@ constexpr size_t MAX_PAYLOAD_V1 = 4 * 1024;
 constexpr size_t MAX_PAYLOAD_V2 = 256 * 1024;
 constexpr size_t MAX_PAYLOAD = MAX_PAYLOAD_V2;
 
+constexpr size_t LINUX_MAX_SOCKET_SIZE = 4194304;
+
 #define A_SYNC 0x434e5953
 #define A_CNXN 0x4e584e43
 #define A_OPEN 0x4e45504f
