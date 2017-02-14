@@ -251,3 +251,7 @@ TEST(strings, EqualsIgnoreCase) {
   ASSERT_FALSE(android::base::EqualsIgnoreCase("foo", "bar"));
   ASSERT_FALSE(android::base::EqualsIgnoreCase("foo", "fool"));
 }
+
+TEST(strings, ubsan_28729303) {
+  android::base::Split("/dev/null", ":");
+}
