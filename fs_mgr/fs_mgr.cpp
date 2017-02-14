@@ -880,6 +880,24 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
     }
 }
 
+/* wrapper to __mount() and expects a fully prepared fstab_rec,
+ * unlike fs_mgr_do_mount which does more things with avb / verity
+ * etc.
+ */
+int fs_mgr_do_mount_one(struct fstab_rec *rec)
+{
+    if (!rec) {
+        return FS_MGR_DOMNT_FAILED;
+    }
+
+    int ret = __mount(rec->blk_device, rec->mount_point, rec);
+    if (ret) {
+      ret = (errno == EBUSY) ? FS_MGR_DOMNT_BUSY : FS_MGR_DOMNT_FAILED;
+    }
+
+    return ret;
+}
+
 /* If tmp_mount_point is non-null, mount the filesystem there.  This is for the
  * tmp mount we do to check the user password
  * If multiple fstab entries are to be mounted on "n_name", it will try to mount each one
