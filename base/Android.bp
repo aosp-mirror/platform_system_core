@@ -37,6 +37,9 @@ cc_library {
     cppflags: libbase_cppflags,
     export_include_dirs: ["include"],
     shared_libs: ["liblog"],
+    sanitize: {
+        misc_undefined: ["integer"],
+    },
     target: {
         android: {
             srcs: [
@@ -97,6 +100,9 @@ cc_test {
         "strings_test.cpp",
         "test_main.cpp",
     ],
+    sanitize: {
+        misc_undefined: ["integer"],
+    },
     target: {
         android: {
             srcs: [
