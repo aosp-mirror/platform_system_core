@@ -161,7 +161,7 @@ static const struct fs_path_config android_files[] = {
     /* Support wifi_hal_legacy administering a network interface. */
     { 00755, AID_WIFI,      AID_WIFI,      CAP_MASK_LONG(CAP_NET_ADMIN) |
                                            CAP_MASK_LONG(CAP_NET_RAW),
-                                              "system/bin/hw/android.hardware.wifi@1.0-service" },
+                                              "vendor/bin/hw/android.hardware.wifi@1.0-service" },
 
     /* Support Bluetooth legacy hal accessing /sys/class/rfkill */
     { 00700, AID_BLUETOOTH, AID_BLUETOOTH, CAP_MASK_LONG(CAP_NET_ADMIN),
