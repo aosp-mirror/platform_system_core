@@ -249,7 +249,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
 
     // Don't leave a zombie child.
     int status;
-    if (TEMP_FAILURE_RETRY(waitpid(forkpid, &status, __WCLONE)) == -1 && errno != ECHILD) {
+    if (TEMP_FAILURE_RETRY(waitpid(forkpid, &status, 0)) == -1) {
       __libc_format_log(ANDROID_LOG_FATAL, "libc", "failed to wait for crash_dump helper: %s",
                         strerror(errno));
     } else if (WIFSTOPPED(status) || WIFSIGNALED(status)) {
