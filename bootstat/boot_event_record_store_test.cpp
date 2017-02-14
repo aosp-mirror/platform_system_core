@@ -21,18 +21,15 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
-
-#include <chrono>
 #include <cstdint>
 #include <cstdlib>
-
-#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/test_utils.h>
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include "uptime_parser.h"
 
 using testing::UnorderedElementsAreArray;
 
@@ -92,12 +89,6 @@ void DeleteDirectory(const std::string& path) {
   rmdir(path.c_str());
 }
 
-// Returns the time in seconds since boot.
-time_t GetUptimeSeconds() {
-  return std::chrono::duration_cast<std::chrono::seconds>(
-      android::base::boot_clock::now().time_since_epoch()).count();
-}
-
 class BootEventRecordStoreTest : public ::testing::Test {
  public:
   BootEventRecordStoreTest() {
@@ -135,7 +126,7 @@ TEST_F(BootEventRecordStoreTest, AddSingleBootEvent) {
   BootEventRecordStore store;
   store.SetStorePath(GetStorePathForTesting());
 
-  time_t uptime = GetUptimeSeconds();
+  time_t uptime = bootstat::ParseUptime();
   ASSERT_NE(-1, uptime);
 
   store.AddBootEvent("cenozoic");
@@ -150,7 +141,7 @@ TEST_F(BootEventRecordStoreTest, AddMultipleBootEvents) {
   BootEventRecordStore store;
   store.SetStorePath(GetStorePathForTesting());
 
-  time_t uptime = GetUptimeSeconds();
+  time_t uptime = bootstat::ParseUptime();
   ASSERT_NE(-1, uptime);
 
   store.AddBootEvent("cretaceous");
