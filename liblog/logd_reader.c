@@ -90,7 +90,7 @@ LIBLOG_HIDDEN struct android_log_transport_read logdLoggerRead = {
 
 static int logdAvailable(log_id_t logId)
 {
-    if (logId >= LOG_ID_MAX || logId == LOG_ID_KERNEL) {
+    if (logId > LOG_ID_KERNEL) {
         return -EINVAL;
     }
     if (logId == LOG_ID_SECURITY) {
