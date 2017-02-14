@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,24 +14,16 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_CHRONO_UTILS_H
-#define ANDROID_BASE_CHRONO_UTILS_H
+#ifndef UPTIME_PARSER_H_
+#define UPTIME_PARSER_H_
 
-#include <chrono>
+#include <time.h>
 
-namespace android {
-namespace base {
+namespace bootstat {
 
-// A std::chrono clock based on CLOCK_BOOTTIME.
-class boot_clock {
- public:
-  typedef std::chrono::nanoseconds duration;
-  typedef std::chrono::time_point<boot_clock, duration> time_point;
+// Returns the number of seconds the system has been on since reboot.
+time_t ParseUptime();
 
-  static time_point now();
-};
+}  // namespace bootstat
 
-}  // namespace base
-}  // namespace android
-
-#endif  // ANDROID_BASE_CHRONO_UTILS_H
+#endif  // UPTIME_PARSER_H_

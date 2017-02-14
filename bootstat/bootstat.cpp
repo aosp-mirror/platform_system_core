@@ -21,7 +21,6 @@
 #include <getopt.h>
 #include <unistd.h>
 
-#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
@@ -32,7 +31,6 @@
 #include <vector>
 
 #include <android/log.h>
-#include <android-base/chrono_utils.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
@@ -40,6 +38,7 @@
 #include <metricslogger/metrics_logger.h>
 
 #include "boot_event_record_store.h"
+#include "uptime_parser.h"
 
 namespace {
 
@@ -248,8 +247,7 @@ void RecordBootComplete() {
   BootEventRecordStore boot_event_store;
   BootEventRecordStore::BootEventRecord record;
 
-  auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
-      android::base::boot_clock::now().time_since_epoch());
+  time_t uptime = bootstat::ParseUptime();
   time_t current_time_utc = time(nullptr);
 
   if (boot_event_store.GetBootEvent("last_boot_time_utc", &record)) {
@@ -276,22 +274,22 @@ void RecordBootComplete() {
     // Log the amount of time elapsed until the device is decrypted, which
     // includes the variable amount of time the user takes to enter the
     // decryption password.
-    boot_event_store.AddBootEventWithValue("boot_decryption_complete", uptime.count());
+    boot_event_store.AddBootEventWithValue("boot_decryption_complete", uptime);
 
     // Subtract the decryption time to normalize the boot cycle timing.
-    std::chrono::seconds boot_complete = std::chrono::seconds(uptime.count() - record.second);
+    time_t boot_complete = uptime - record.second;
     boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_post_decrypt",
-                                           boot_complete.count());
+                                           boot_complete);
 
 
   } else {
     boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_no_encryption",
-                                           uptime.count());
+                                           uptime);
   }
 
   // Record the total time from device startup to boot complete, regardless of
   // encryption state.
-  boot_event_store.AddBootEventWithValue(boot_complete_prefix, uptime.count());
+  boot_event_store.AddBootEventWithValue(boot_complete_prefix, uptime);
 
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init");
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init.selinux");
