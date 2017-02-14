@@ -18,7 +18,12 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
 #include <string>
+#include <thread>
+
+using namespace std::chrono_literals;
 
 TEST(properties, smoke) {
   android::base::SetProperty("debug.libbase.property_test", "hello");
@@ -119,3 +124,18 @@ TEST(properties, GetUintProperty_uint8_t) { CheckGetUintProperty<uint8_t>(); }
 TEST(properties, GetUintProperty_uint16_t) { CheckGetUintProperty<uint16_t>(); }
 TEST(properties, GetUintProperty_uint32_t) { CheckGetUintProperty<uint32_t>(); }
 TEST(properties, GetUintProperty_uint64_t) { CheckGetUintProperty<uint64_t>(); }
+
+TEST(properties, WaitForProperty) {
+  std::atomic<bool> flag{false};
+  std::thread thread([&]() {
+    std::this_thread::sleep_for(100ms);
+    android::base::SetProperty("debug.libbase.WaitForProperty_test", "a");
+    while (!flag) std::this_thread::yield();
+    android::base::SetProperty("debug.libbase.WaitForProperty_test", "b");
+  });
+
+  android::base::WaitForProperty("debug.libbase.WaitForProperty_test", "a");
+  flag = true;
+  android::base::WaitForProperty("debug.libbase.WaitForProperty_test", "b");
+  thread.join();
+}
