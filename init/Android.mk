@@ -36,7 +36,7 @@ LOCAL_MODULE := init_parser_tests
 LOCAL_SRC_FILES := \
     parser/tokenizer_test.cpp \
 
-LOCAL_STATIC_LIBRARIES := libinit_parser
+LOCAL_STATIC_LIBRARIES := libbase libinit_parser
 LOCAL_CLANG := true
 include $(BUILD_HOST_NATIVE_TEST)
 endif
