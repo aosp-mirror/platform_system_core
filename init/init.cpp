@@ -495,28 +495,48 @@ static void export_kernel_boot_props() {
     }
 }
 
-static void process_kernel_dt() {
-    static const char android_dir[] = "/proc/device-tree/firmware/android";
+static constexpr char android_dt_dir[] = "/proc/device-tree/firmware/android";
 
-    std::string file_name = StringPrintf("%s/compatible", android_dir);
+static bool is_dt_compatible() {
+    std::string dt_value;
+    std::string file_name = StringPrintf("%s/compatible", android_dt_dir);
 
-    std::string dt_file;
-    android::base::ReadFileToString(file_name, &dt_file);
-    if (!dt_file.compare("android,firmware")) {
+    android::base::ReadFileToString(file_name, &dt_value);
+    if (!dt_value.compare("android,firmware")) {
         LOG(ERROR) << "firmware/android is not compatible with 'android,firmware'";
-        return;
+        return false;
     }
 
-    std::unique_ptr<DIR, int(*)(DIR*)>dir(opendir(android_dir), closedir);
+    return true;
+}
+
+static bool is_dt_fstab_compatible() {
+    std::string dt_value;
+    std::string file_name = StringPrintf("%s/%s/compatible", android_dt_dir, "fstab");
+
+    android::base::ReadFileToString(file_name, &dt_value);
+    if (!dt_value.compare("android,fstab")) {
+        LOG(ERROR) << "firmware/android/fstab is not compatible with 'android,fstab'";
+        return false;
+    }
+
+    return true;
+}
+
+static void process_kernel_dt() {
+    if (!is_dt_compatible()) return;
+
+    std::unique_ptr<DIR, int(*)(DIR*)>dir(opendir(android_dt_dir), closedir);
     if (!dir) return;
 
+    std::string dt_file;
     struct dirent *dp;
     while ((dp = readdir(dir.get())) != NULL) {
         if (dp->d_type != DT_REG || !strcmp(dp->d_name, "compatible") || !strcmp(dp->d_name, "name")) {
             continue;
         }
 
-        file_name = StringPrintf("%s/%s", android_dir, dp->d_name);
+        std::string file_name = StringPrintf("%s/%s", android_dt_dir, dp->d_name);
 
         android::base::ReadFileToString(file_name, &dt_file);
         std::replace(dt_file.begin(), dt_file.end(), ',', '.');
@@ -643,102 +663,208 @@ static void set_usb_controller() {
     }
 }
 
-/* Returns a new path consisting of base_path and the file name in reference_path. */
-static std::string get_path(const std::string& base_path, const std::string& reference_path) {
-    std::string::size_type pos = reference_path.rfind('/');
-    if (pos == std::string::npos) {
-        return base_path + '/' + reference_path;
-    } else {
-        return base_path + reference_path.substr(pos);
+static std::string import_dt_fstab() {
+    std::string fstab;
+    if (!is_dt_compatible() || !is_dt_fstab_compatible()) {
+        return fstab;
     }
-}
 
-/* Imports the fstab info from cmdline. */
-static std::string import_cmdline_fstab() {
-    std::string prefix, fstab, fstab_full;
+    std::string fstabdir_name = StringPrintf("%s/fstab", android_dt_dir);
+    std::unique_ptr<DIR, int (*)(DIR*)> fstabdir(opendir(fstabdir_name.c_str()), closedir);
+    if (!fstabdir) return fstab;
 
-    import_kernel_cmdline(false,
-        [&](const std::string& key, const std::string& value, bool in_qemu __attribute__((__unused__))) {
-            if (key == "android.early.prefix") {
-                prefix = value;
-            } else if (key == "android.early.fstab") {
-                fstab = value;
-            }
-        });
-    if (!fstab.empty()) {
-        // Convert "mmcblk0p09+/odm+ext4+ro+verify" to "mmcblk0p09 /odm ext4 ro verify"
-        std::replace(fstab.begin(), fstab.end(), '+', ' ');
-        for (const auto& entry : android::base::Split(fstab, "\n")) {
-            fstab_full += prefix + entry + '\n';
+    dirent* dp;
+    while ((dp = readdir(fstabdir.get())) != NULL) {
+        // skip over name and compatible
+        if (dp->d_type != DT_DIR) {
+            continue;
         }
+
+        // skip if its not 'vendor', 'odm' or 'system'
+        if (strcmp(dp->d_name, "odm") && strcmp(dp->d_name, "system") &&
+            strcmp(dp->d_name, "vendor")) {
+            continue;
+        }
+
+        // create <dev> <mnt_point>  <type>  <mnt_flags>  <fsmgr_flags>\n
+        std::vector<std::string> fstab_entry;
+        std::string file_name;
+        std::string value;
+        file_name = StringPrintf("%s/%s/dev", fstabdir_name.c_str(), dp->d_name);
+        if (!android::base::ReadFileToString(file_name, &value)) {
+            LOG(ERROR) << "dt_fstab: Failed to find device for partition " << dp->d_name;
+            fstab.clear();
+            break;
+        }
+        // trim the terminating '\0' out
+        value.resize(value.size() - 1);
+        fstab_entry.push_back(value);
+        fstab_entry.push_back(StringPrintf("/%s", dp->d_name));
+
+        file_name = StringPrintf("%s/%s/type", fstabdir_name.c_str(), dp->d_name);
+        if (!android::base::ReadFileToString(file_name, &value)) {
+            LOG(ERROR) << "dt_fstab: Failed to find type for partition " << dp->d_name;
+            fstab.clear();
+            break;
+        }
+        value.resize(value.size() - 1);
+        fstab_entry.push_back(value);
+
+        file_name = StringPrintf("%s/%s/mnt_flags", fstabdir_name.c_str(), dp->d_name);
+        if (!android::base::ReadFileToString(file_name, &value)) {
+            LOG(ERROR) << "dt_fstab: Failed to find type for partition " << dp->d_name;
+            fstab.clear();
+            break;
+        }
+        value.resize(value.size() - 1);
+        fstab_entry.push_back(value);
+
+        file_name = StringPrintf("%s/%s/fsmgr_flags", fstabdir_name.c_str(), dp->d_name);
+        if (!android::base::ReadFileToString(file_name, &value)) {
+            LOG(ERROR) << "dt_fstab: Failed to find type for partition " << dp->d_name;
+            fstab.clear();
+            break;
+        }
+        value.resize(value.size() - 1);
+        fstab_entry.push_back(value);
+
+        fstab += android::base::Join(fstab_entry, " ");
+        fstab += '\n';
     }
-    return fstab_full;
+
+    return fstab;
 }
 
-/* Early mount vendor and ODM partitions. The fstab info is read from kernel cmdline. */
-static void early_mount() {
-    std::string fstab_string = import_cmdline_fstab();
-    if (fstab_string.empty()) {
-        LOG(INFO) << "Failed to load vendor fstab from kernel cmdline";
-        return;
+/* Early mount vendor and ODM partitions. The fstab is read from device-tree. */
+static bool early_mount() {
+    std::string fstab = import_dt_fstab();
+    if (fstab.empty()) {
+        LOG(INFO) << "Early mount skipped (missing fstab in device tree)";
+        return true;
     }
-    FILE *fstab_file = fmemopen((void *)fstab_string.c_str(), fstab_string.length(), "r");
+
+    std::unique_ptr<FILE, decltype(&fclose)> fstab_file(
+        fmemopen(static_cast<void*>(const_cast<char*>(fstab.c_str())), fstab.length(), "r"), fclose);
     if (!fstab_file) {
-        PLOG(ERROR) << "Failed to open fstab string as FILE";
-        return;
-    }
-    std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_file(fstab_file), fs_mgr_free_fstab);
-    fclose(fstab_file);
-    if (!fstab) {
-        LOG(ERROR) << "Failed to parse fstab string: " << fstab_string;
-        return;
-    }
-    LOG(INFO) << "Loaded vendor fstab from cmdline";
-
-    if (early_device_socket_open()) {
-        LOG(ERROR) << "Failed to open device uevent socket";
-        return;
+        PLOG(ERROR) << "Early mount failed to open fstab file in memory";
+        return false;
     }
 
-    /* Create /dev/device-mapper for dm-verity */
-    early_create_dev("/sys/devices/virtual/misc/device-mapper", EARLY_CHAR_DEV);
+    std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> tab(
+        fs_mgr_read_fstab_file(fstab_file.get()), fs_mgr_free_fstab);
+    if (!tab) {
+        LOG(ERROR) << "Early mount fsmgr failed to load fstab from kernel:" << std::endl << fstab;
+        return false;
+    }
 
-    for (int i = 0; i < fstab->num_entries; ++i) {
-        struct fstab_rec *rec = &fstab->recs[i];
-        std::string mount_point = rec->mount_point;
-        std::string syspath = rec->blk_device;
+    // find out fstab records for odm, system and vendor
+    fstab_rec* odm_rec = fs_mgr_get_entry_for_mount_point(tab.get(), "/odm");
+    fstab_rec* system_rec = fs_mgr_get_entry_for_mount_point(tab.get(), "/system");
+    fstab_rec* vendor_rec = fs_mgr_get_entry_for_mount_point(tab.get(), "/vendor");
+    if (!odm_rec && !system_rec && !vendor_rec) {
+        // nothing to early mount
+        return true;
+    }
 
-        if (mount_point != "/vendor" && mount_point != "/odm")
-            continue;
+    // assume A/B device if we find 'slotselect' in any fstab entry
+    bool is_ab = ((odm_rec && fs_mgr_is_slotselect(odm_rec)) ||
+                  (system_rec && fs_mgr_is_slotselect(system_rec)) ||
+                  (vendor_rec && fs_mgr_is_slotselect(vendor_rec)));
+    bool found_odm = !odm_rec;
+    bool found_system = !system_rec;
+    bool found_vendor = !vendor_rec;
+    int count_odm = 0, count_vendor = 0, count_system = 0;
 
-        /* Create mount target under /dev/block/ from sysfs via uevent */
-        LOG(INFO) << "Mounting " << mount_point << " from " << syspath << "...";
-        char *devpath = strdup(get_path("/dev/block", syspath).c_str());
-        if (!devpath) {
-            PLOG(ERROR) << "Failed to strdup dev path in early mount " << syspath;
-            continue;
-        }
-        rec->blk_device = devpath;
-        early_create_dev(syspath, EARLY_BLOCK_DEV);
-
-        int rc = fs_mgr_early_setup_verity(rec);
-        if (rc == FS_MGR_EARLY_SETUP_VERITY_SUCCESS) {
-            /* Mount target is changed to /dev/block/dm-<n>; initiate its creation from sysfs counterpart */
-            early_create_dev(get_path("/sys/devices/virtual/block", rec->blk_device), EARLY_BLOCK_DEV);
-        } else if (rc == FS_MGR_EARLY_SETUP_VERITY_FAIL) {
-            LOG(ERROR) << "Failed to set up dm-verity on " << rec->blk_device;
-            continue;
-        } else { /* FS_MGR_EARLY_SETUP_VERITY_NO_VERITY */
-            LOG(INFO) << "dm-verity disabled on debuggable device; mount directly on " << rec->blk_device;
+    // create the devices we need..
+    device_init(nullptr, [&](uevent* uevent) -> coldboot_action_t {
+        if (!strncmp(uevent->subsystem, "firmware", 8)) {
+            return COLDBOOT_CONTINUE;
         }
 
-        mkdir(mount_point.c_str(), 0755);
-        rc = mount(rec->blk_device, mount_point.c_str(), rec->fs_type, rec->flags, rec->fs_options);
-        if (rc) {
-            PLOG(ERROR) << "Failed to mount on " << rec->blk_device;
+        // we need platform devices to create symlinks
+        if (!strncmp(uevent->subsystem, "platform", 8)) {
+            return COLDBOOT_CREATE;
         }
+
+        // Ignore everything that is not a block device
+        if (strncmp(uevent->subsystem, "block", 5)) {
+            return COLDBOOT_CONTINUE;
+        }
+
+        coldboot_action_t ret;
+        bool create_this_node = false;
+        if (uevent->partition_name) {
+            // prefix match partition names so we create device nodes for
+            // A/B-ed partitions
+            if (!found_odm && !strncmp(uevent->partition_name, "odm", 3)) {
+                LOG(VERBOSE) << "early_mount: found (" << uevent->partition_name << ") partition";
+
+                // wait twice for A/B-ed partitions
+                count_odm++;
+                if (!is_ab) {
+                    found_odm = true;
+                } else if (count_odm == 2) {
+                    found_odm = true;
+                }
+
+                create_this_node = true;
+            } else if (!found_system && !strncmp(uevent->partition_name, "system", 6)) {
+                LOG(VERBOSE) << "early_mount: found (" << uevent->partition_name << ") partition";
+
+                count_system++;
+                if (!is_ab) {
+                    found_system = true;
+                } else if (count_system == 2) {
+                    found_system = true;
+                }
+
+                create_this_node = true;
+            } else if (!found_vendor && !strncmp(uevent->partition_name, "vendor", 6)) {
+                LOG(VERBOSE) << "early_mount: found (" << uevent->partition_name << ") partition";
+                count_vendor++;
+                if (!is_ab) {
+                    found_vendor = true;
+                } else if (count_vendor == 2) {
+                    found_vendor = true;
+                }
+
+                create_this_node = true;
+            }
+        }
+
+        // if we found all other partitions already, create this
+        // node and stop coldboot. If this is a prefix matched
+        // partition, create device node and continue. For everything
+        // else skip the device node
+        if (found_odm && found_system && found_vendor) {
+            ret = COLDBOOT_STOP;
+        } else if (create_this_node) {
+            ret = COLDBOOT_CREATE;
+        } else {
+            ret = COLDBOOT_CONTINUE;
+        }
+
+        return ret;
+    });
+
+    // TODO: add support to mount partitions w/ verity
+
+    int ret = 0;
+    if (odm_rec &&
+        (ret = fs_mgr_do_mount(tab.get(), odm_rec->mount_point, odm_rec->blk_device, NULL))) {
+        PLOG(ERROR) << "early_mount: fs_mgr_do_mount returned error for mounting odm";
+        return false;
     }
-    early_device_socket_close();
+
+    if (vendor_rec &&
+        (ret = fs_mgr_do_mount(tab.get(), vendor_rec->mount_point, vendor_rec->blk_device, NULL))) {
+        PLOG(ERROR) << "early_mount: fs_mgr_do_mount returned error for mounting vendor";
+        return false;
+    }
+
+    device_close();
+
+    return true;
 }
 
 int main(int argc, char** argv) {
@@ -787,8 +913,10 @@ int main(int argc, char** argv) {
     LOG(INFO) << "init " << (is_first_stage ? "first" : "second") << " stage started!";
 
     if (is_first_stage) {
-        // Mount devices defined in android.early.* kernel commandline
-        early_mount();
+        if (!early_mount()) {
+            LOG(ERROR) << "Failed to mount required partitions early ...";
+            panic();
+        }
 
         // Set up SELinux, loading the SELinux policy.
         selinux_initialize(true);

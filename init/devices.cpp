@@ -62,19 +62,7 @@ static const char *firmware_dirs[] = { "/etc/firmware",
 
 extern struct selabel_handle *sehandle;
 
-static int device_fd = -1;
-
-struct uevent {
-    const char *action;
-    const char *path;
-    const char *subsystem;
-    const char *firmware;
-    const char *partition_name;
-    const char *device_name;
-    int partition_num;
-    int major;
-    int minor;
-};
+static android::base::unique_fd device_fd;
 
 struct perms_ {
     char *name;
@@ -249,11 +237,13 @@ static void make_device(const char *path,
 
     mode = get_device_perm(path, links, &uid, &gid) | (block ? S_IFBLK : S_IFCHR);
 
-    if (selabel_lookup_best_match(sehandle, &secontext, path, links, mode)) {
-        PLOG(ERROR) << "Device '" << path << "' not created; cannot find SELinux label";
-        return;
+    if (sehandle) {
+        if (selabel_lookup_best_match(sehandle, &secontext, path, links, mode)) {
+            PLOG(ERROR) << "Device '" << path << "' not created; cannot find SELinux label";
+            return;
+        }
+        setfscreatecon(secontext);
     }
-    setfscreatecon(secontext);
 
     dev = makedev(major, minor);
     /* Temporarily change egid to avoid race condition setting the gid of the
@@ -264,7 +254,7 @@ static void make_device(const char *path,
     setegid(gid);
     /* If the node already exists update its SELinux label to handle cases when
      * it was created with the wrong context during coldboot procedure. */
-    if (mknod(path, mode, dev) && (errno == EEXIST)) {
+    if (mknod(path, mode, dev) && (errno == EEXIST) && secontext) {
 
         char* fcon = nullptr;
         int rc = lgetfilecon(path, &fcon);
@@ -285,8 +275,10 @@ out:
     chown(path, uid, -1);
     setegid(AID_ROOT);
 
-    freecon(secontext);
-    setfscreatecon(NULL);
+    if (secontext) {
+        freecon(secontext);
+        setfscreatecon(NULL);
+    }
 }
 
 static void add_platform_device(const char *path)
@@ -346,6 +338,19 @@ static void remove_platform_device(const char *path)
             free(bus);
             return;
         }
+    }
+}
+
+static void destroy_platform_devices() {
+    struct listnode* node;
+    struct listnode* n;
+    struct platform_node* bus;
+
+    list_for_each_safe(node, n, &platform_names) {
+        list_remove(node);
+        bus = node_to_item(node, struct platform_node, list);
+        free(bus->path);
+        free(bus);
     }
 }
 
@@ -515,7 +520,7 @@ static char **get_block_device_symlinks(struct uevent *uevent)
         return NULL;
     memset(links, 0, sizeof(char *) * 4);
 
-    LOG(INFO) << "found " << type << " device " << device;
+    LOG(VERBOSE) << "found " << type << " device " << device;
 
     snprintf(link_path, sizeof(link_path), "/dev/block/%s/%s", type, device);
 
@@ -875,9 +880,15 @@ static void handle_firmware_event(uevent* uevent) {
     }
 }
 
+static bool inline should_stop_coldboot(coldboot_action_t act)
+{
+    return (act == COLDBOOT_STOP || act == COLDBOOT_FINISH);
+}
+
 #define UEVENT_MSG_LEN  2048
 
-static inline void handle_device_fd_with(void (handle_uevent)(struct uevent*))
+static inline coldboot_action_t handle_device_fd_with(
+        std::function<coldboot_action_t(uevent* uevent)> handle_uevent)
 {
     char msg[UEVENT_MSG_LEN+2];
     int n;
@@ -890,14 +901,18 @@ static inline void handle_device_fd_with(void (handle_uevent)(struct uevent*))
 
         struct uevent uevent;
         parse_event(msg, &uevent);
-        handle_uevent(&uevent);
+        coldboot_action_t act = handle_uevent(&uevent);
+        if (should_stop_coldboot(act))
+            return act;
     }
+
+    return COLDBOOT_CONTINUE;
 }
 
-void handle_device_fd()
+coldboot_action_t handle_device_fd(coldboot_callback fn)
 {
-    handle_device_fd_with(
-        [](struct uevent *uevent) {
+    coldboot_action_t ret = handle_device_fd_with(
+        [&](uevent* uevent) -> coldboot_action_t {
             if (selinux_status_updated() > 0) {
                 struct selabel_handle *sehandle2;
                 sehandle2 = selinux_android_file_context_handle();
@@ -907,9 +922,21 @@ void handle_device_fd()
                 }
             }
 
-            handle_device_event(uevent);
-            handle_firmware_event(uevent);
+            // default is to always create the devices
+            coldboot_action_t act = COLDBOOT_CREATE;
+            if (fn) {
+                act = fn(uevent);
+            }
+
+            if (act == COLDBOOT_CREATE || act == COLDBOOT_STOP) {
+                handle_device_event(uevent);
+                handle_firmware_event(uevent);
+            }
+
+            return act;
         });
+
+    return ret;
 }
 
 /* Coldboot walks parts of the /sys tree and pokes the uevent files
@@ -921,21 +948,24 @@ void handle_device_fd()
 ** socket's buffer.
 */
 
-static void do_coldboot(DIR *d)
+static coldboot_action_t do_coldboot(DIR *d, coldboot_callback fn)
 {
     struct dirent *de;
     int dfd, fd;
+    coldboot_action_t act = COLDBOOT_CONTINUE;
 
     dfd = dirfd(d);
 
     fd = openat(dfd, "uevent", O_WRONLY);
-    if(fd >= 0) {
+    if (fd >= 0) {
         write(fd, "add\n", 4);
         close(fd);
-        handle_device_fd();
+        act = handle_device_fd(fn);
+        if (should_stop_coldboot(act))
+            return act;
     }
 
-    while((de = readdir(d))) {
+    while (!should_stop_coldboot(act) && (de = readdir(d))) {
         DIR *d2;
 
         if(de->d_type != DT_DIR || de->d_name[0] == '.')
@@ -949,85 +979,31 @@ static void do_coldboot(DIR *d)
         if(d2 == 0)
             close(fd);
         else {
-            do_coldboot(d2);
+            act = do_coldboot(d2, fn);
             closedir(d2);
         }
     }
+
+    // default is always to continue looking for uevents
+    return act;
 }
 
-static void coldboot(const char *path)
+static coldboot_action_t coldboot(const char *path, coldboot_callback fn)
 {
     std::unique_ptr<DIR, decltype(&closedir)> d(opendir(path), closedir);
-    if(d) {
-        do_coldboot(d.get());
-    }
-}
-
-static void early_uevent_handler(struct uevent *uevent, const char *base, bool is_block)
-{
-    const char *name;
-    char devpath[DEVPATH_LEN];
-
-    if (is_block && strncmp(uevent->subsystem, "block", 5))
-        return;
-
-    name = parse_device_name(uevent, MAX_DEV_NAME);
-    if (!name) {
-        LOG(ERROR) << "Failed to parse dev name from uevent: " << uevent->action
-                   << " " << uevent->partition_name << " " << uevent->partition_num
-                   << " " << uevent->major << ":" << uevent->minor;
-        return;
+    if (d) {
+        return do_coldboot(d.get(), fn);
     }
 
-    snprintf(devpath, sizeof(devpath), "%s%s", base, name);
-    make_dir(base, 0755);
-
-    dev_t dev = makedev(uevent->major, uevent->minor);
-    mode_t mode = 0600 | (is_block ? S_IFBLK : S_IFCHR);
-    mknod(devpath, mode, dev);
+    return COLDBOOT_CONTINUE;
 }
 
-void early_create_dev(const std::string& syspath, early_device_type dev_type)
-{
-    android::base::unique_fd dfd(open(syspath.c_str(), O_RDONLY));
-    if (dfd < 0) {
-        LOG(ERROR) << "Failed to open " << syspath;
-        return;
-    }
-
-    android::base::unique_fd fd(openat(dfd, "uevent", O_WRONLY));
-    if (fd < 0) {
-        LOG(ERROR) << "Failed to open " << syspath << "/uevent";
-        return;
-    }
-
-    fcntl(device_fd, F_SETFL, O_NONBLOCK);
-
-    write(fd, "add\n", 4);
-    handle_device_fd_with(dev_type == EARLY_BLOCK_DEV ?
-        [](struct uevent *uevent) {
-            early_uevent_handler(uevent, "/dev/block/", true);
-        } :
-        [](struct uevent *uevent) {
-            early_uevent_handler(uevent, "/dev/", false);
-        });
-}
-
-int early_device_socket_open() {
-    device_fd = uevent_open_socket(256*1024, true);
-    return device_fd < 0;
-}
-
-void early_device_socket_close() {
-    close(device_fd);
-}
-
-void device_init() {
+void device_init(const char* path, coldboot_callback fn) {
     sehandle = selinux_android_file_context_handle();
     selinux_status_open(true);
 
     /* is 256K enough? udev uses 16MB! */
-    device_fd = uevent_open_socket(256*1024, true);
+    device_fd.reset(uevent_open_socket(256*1024, true));
     if (device_fd == -1) {
         return;
     }
@@ -1039,11 +1015,31 @@ void device_init() {
     }
 
     Timer t;
-    coldboot("/sys/class");
-    coldboot("/sys/block");
-    coldboot("/sys/devices");
-    close(open(COLDBOOT_DONE, O_WRONLY|O_CREAT|O_CLOEXEC, 0000));
+    coldboot_action_t act;
+    if (!path) {
+        act = coldboot("/sys/class", fn);
+        if (!should_stop_coldboot(act)) {
+            act = coldboot("/sys/block", fn);
+            if (!should_stop_coldboot(act)) {
+                act = coldboot("/sys/devices", fn);
+            }
+        }
+    } else {
+        act = coldboot(path, fn);
+    }
+
+    // If we have a callback, then do as it says. If no, then the default is
+    // to always create COLDBOOT_DONE file.
+    if (!fn || (act == COLDBOOT_FINISH)) {
+        close(open(COLDBOOT_DONE, O_WRONLY|O_CREAT|O_CLOEXEC, 0000));
+    }
+
     LOG(INFO) << "Coldboot took " << t;
+}
+
+void device_close() {
+    destroy_platform_devices();
+    device_fd.reset();
 }
 
 int get_device_fd() {
