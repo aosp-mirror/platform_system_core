@@ -407,3 +407,35 @@ TEST_F(CrasherTest, PR_SET_DUMPABLE_0_raise) {
   });
   AssertDeath(SIGUSR1);
 }
+
+TEST(crash_dump, zombie) {
+  pid_t forkpid = fork();
+
+  int pipefd[2];
+  ASSERT_EQ(0, pipe2(pipefd, O_CLOEXEC));
+
+  pid_t rc;
+  int status;
+
+  if (forkpid == 0) {
+    errno = 0;
+    rc = waitpid(-1, &status, WNOHANG | __WALL | __WNOTHREAD);
+    if (rc != -1 || errno != ECHILD) {
+      errx(2, "first waitpid returned %d (%s), expected failure with ECHILD", rc, strerror(errno));
+    }
+
+    raise(DEBUGGER_SIGNAL);
+
+    errno = 0;
+    rc = waitpid(-1, &status, __WALL | __WNOTHREAD);
+    if (rc != -1 || errno != ECHILD) {
+      errx(2, "second waitpid returned %d (%s), expected failure with ECHILD", rc, strerror(errno));
+    }
+    _exit(0);
+  } else {
+    rc = waitpid(forkpid, &status, 0);
+    ASSERT_EQ(forkpid, rc);
+    ASSERT_TRUE(WIFEXITED(status));
+    ASSERT_EQ(0, WEXITSTATUS(status));
+  }
+}
