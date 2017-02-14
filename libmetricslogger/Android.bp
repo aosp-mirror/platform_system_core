@@ -57,8 +57,8 @@ cc_test {
         "libbase",
         "libmetricslogger_debug",
     ],
+    static_libs: ["libBionicGtestMain"],
     srcs: [
         "metrics_logger_test.cpp",
-        "testrunner.cpp",
     ],
 }
