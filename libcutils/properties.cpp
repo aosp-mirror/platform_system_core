@@ -129,7 +129,7 @@ struct callback_data {
     void* cookie;
 };
 
-static void trampoline(void* raw_data, const char* name, const char* value) {
+static void trampoline(void* raw_data, const char* name, const char* value, unsigned /*serial*/) {
     callback_data* data = reinterpret_cast<callback_data*>(raw_data);
     data->callback(name, value, data->cookie);
 }
