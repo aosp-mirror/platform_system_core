@@ -20,12 +20,5 @@
 
 TEST(MetricsLoggerTest, AddSingleBootEvent) {
   android::metricslogger::LogHistogram("test_event", 42);
-  /*pid_t pid = getpid();
-  struct logger_list *logger_list = android_logger_list_open(
-      LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 0, pid);
-
-  logger_list = NULL;
-  log_msg log_msg;
-  android_logger_list_read(logger_list, &log_msg);
-  std::cout << log_msg.len() << std::endl;*/
+  // TODO(jhawkins): Verify the EventLog is updated.
 }
