@@ -37,9 +37,6 @@ cc_library {
     cppflags: libbase_cppflags,
     export_include_dirs: ["include"],
     shared_libs: ["liblog"],
-    sanitize: {
-        misc_undefined: ["integer"],
-    },
     target: {
         android: {
             srcs: [
@@ -47,6 +44,9 @@ cc_library {
                 "properties.cpp",
             ],
             cppflags: ["-Wexit-time-destructors"],
+            sanitize: {
+                misc_undefined: ["integer"],
+            },
         },
         darwin: {
             srcs: ["errors_unix.cpp"],
@@ -89,12 +89,12 @@ cc_test {
         "strings_test.cpp",
         "test_main.cpp",
     ],
-    sanitize: {
-        misc_undefined: ["integer"],
-    },
     target: {
         android: {
             srcs: ["properties_test.cpp"],
+            sanitize: {
+                misc_undefined: ["integer"],
+            },
         },
         windows: {
             srcs: ["utf8_test.cpp"],
