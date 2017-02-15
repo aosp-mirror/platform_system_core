@@ -23,6 +23,10 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <memory>
+#include <vector>
+
 #include <linux/limits.h>
 
 #include <sys/ioctl.h>
@@ -31,52 +35,44 @@
 
 #define ADF_BASE_PATH "/dev/"
 
-static ssize_t adf_find_nodes(const char *pattern, adf_id_t **ids)
+static ssize_t adf_id_vector_to_array(const std::vector<adf_id_t> &in,
+        adf_id_t **out)
 {
-    DIR *dir;
-    struct dirent *dirent;
-    size_t n = 0;
-    ssize_t ret;
-    adf_id_t *ids_ret = NULL;
+    auto size = sizeof(in[0]) * in.size();
+    // We can't use new[] since the existing API says the caller should free()
+    // the returned array
+    auto ret = static_cast<adf_id_t *>(malloc(size));
+    if (!ret)
+        return -ENOMEM;
 
-    dir = opendir(ADF_BASE_PATH);
+    std::copy(in.begin(), in.end(), ret);
+    *out = ret;
+    return in.size();
+}
+
+static ssize_t adf_find_nodes(const char *pattern, adf_id_t **ids_out)
+{
+    struct dirent *dirent;
+    std::unique_ptr<DIR, decltype(&closedir)>
+        dir{opendir(ADF_BASE_PATH), closedir};
     if (!dir)
         return -errno;
 
+    std::vector<adf_id_t> ids;
     errno = 0;
-    while ((dirent = readdir(dir))) {
+    while ((dirent = readdir(dir.get()))) {
         adf_id_t id;
         int matched = sscanf(dirent->d_name, pattern, &id);
 
-        if (matched < 0) {
-            ret = -errno;
-            goto done;
-        } else if (matched != 1) {
-            continue;
-        }
-
-        adf_id_t *new_ids = realloc(ids_ret, (n + 1) * sizeof(ids_ret[0]));
-        if (!new_ids) {
-            ret = -ENOMEM;
-            goto done;
-        }
-
-        ids_ret = new_ids;
-        ids_ret[n] = id;
-        n++;
+        if (matched < 0)
+            return -errno;
+        else if (matched == 1)
+            ids.push_back(id);
     }
     if (errno)
-        ret = -errno;
-    else
-        ret = n;
+        return -errno;
 
-done:
-    closedir(dir);
-    if (ret < 0)
-        free(ids_ret);
-    else
-        *ids = ids_ret;
-    return ret;
+    return adf_id_vector_to_array(ids, ids_out);
 }
 
 ssize_t adf_devices(adf_id_t **ids)
@@ -115,46 +111,29 @@ int adf_get_device_data(struct adf_device *dev, struct adf_device_data *data)
     if (err < 0)
         return -ENOMEM;
 
-    if (data->n_attachments) {
-        data->attachments = malloc(sizeof(data->attachments[0]) *
-                data->n_attachments);
-        if (!data->attachments)
-            return -ENOMEM;
-    }
+    if (data->n_attachments)
+        data->attachments = new adf_attachment_config[data->n_attachments];
 
-    if (data->n_allowed_attachments) {
+    if (data->n_allowed_attachments)
         data->allowed_attachments =
-                malloc(sizeof(data->allowed_attachments[0]) *
-                        data->n_allowed_attachments);
-        if (!data->allowed_attachments) {
-            ret = -ENOMEM;
-            goto done;
-        }
-    }
+                new adf_attachment_config[data->n_allowed_attachments];
 
-    if (data->custom_data_size) {
-        data->custom_data = malloc(data->custom_data_size);
-        if (!data->custom_data) {
-            ret = -ENOMEM;
-            goto done;
-        }
-    }
+    if (data->custom_data_size)
+        data->custom_data = new char[data->custom_data_size];
 
     err = ioctl(dev->fd, ADF_GET_DEVICE_DATA, data);
-    if (err < 0)
+    if (err < 0) {
         ret = -errno;
-
-done:
-    if (ret < 0)
         adf_free_device_data(data);
+    }
     return ret;
 }
 
 void adf_free_device_data(struct adf_device_data *data)
 {
-    free(data->attachments);
-    free(data->allowed_attachments);
-    free(data->custom_data);
+    delete [] data->attachments;
+    delete [] data->allowed_attachments;
+    delete [] static_cast<char *>(data->custom_data);
 }
 
 int adf_device_post(struct adf_device *dev,
@@ -252,39 +231,17 @@ ssize_t adf_interfaces_for_overlay_engine(struct adf_device *dev,
         adf_id_t overlay_engine, adf_id_t **interfaces)
 {
     struct adf_device_data data;
-    ssize_t n = 0;
-    ssize_t ret;
-    adf_id_t *ids_ret = NULL;
+    auto err = adf_get_device_data(dev, &data);
+    if (err < 0)
+        return err;
 
-    ret = adf_get_device_data(dev, &data);
-    if (ret < 0)
-        return ret;
+    std::vector<adf_id_t> ids;
+    for (size_t i = 0; i < data.n_allowed_attachments; i++)
+        if (data.allowed_attachments[i].overlay_engine == overlay_engine)
+            ids.push_back(data.allowed_attachments[i].interface);
 
-    size_t i;
-    for (i = 0; i < data.n_allowed_attachments; i++) {
-        if (data.allowed_attachments[i].overlay_engine != overlay_engine)
-            continue;
-
-        adf_id_t *new_ids = realloc(ids_ret, (n + 1) * sizeof(ids_ret[0]));
-        if (!new_ids) {
-            ret = -ENOMEM;
-            goto done;
-        }
-
-        ids_ret = new_ids;
-        ids_ret[n] = data.allowed_attachments[i].interface;
-        n++;
-    }
-
-    ret = n;
-
-done:
     adf_free_device_data(&data);
-    if (ret < 0)
-        free(ids_ret);
-    else
-        *interfaces = ids_ret;
-    return ret;
+    return adf_id_vector_to_array(ids, interfaces);
 }
 
 static ssize_t adf_interfaces_filter(struct adf_device *dev,
@@ -292,46 +249,23 @@ static ssize_t adf_interfaces_filter(struct adf_device *dev,
         bool (*filter)(struct adf_interface_data *data, __u32 match),
         __u32 match)
 {
-    size_t n = 0;
-    ssize_t ret;
-    adf_id_t *ids_ret = NULL;
-
-    size_t i;
-    for (i = 0; i < n_in; i++) {
+    std::vector<adf_id_t> ids;
+    for (size_t i = 0; i < n_in; i++) {
         int fd = adf_interface_open(dev, in[i], O_RDONLY);
-        if (fd < 0) {
-            ret = fd;
-            goto done;
-        }
+        if (fd < 0)
+            return fd;
 
         struct adf_interface_data data;
-        ret = adf_get_interface_data(fd, &data);
+        auto ret = adf_get_interface_data(fd, &data);
         close(fd);
         if (ret < 0)
-            goto done;
+            return ret;
 
-        if (!filter(&data, match))
-            continue;
-
-        adf_id_t *new_ids = realloc(ids_ret, (n + 1) * sizeof(ids_ret[0]));
-        if (!new_ids) {
-            ret = -ENOMEM;
-            goto done;
-        }
-
-        ids_ret = new_ids;
-        ids_ret[n] = in[i];
-        n++;
+        if (filter(&data, match))
+            ids.push_back(in[i]);
     }
 
-    ret = n;
-
-done:
-    if (ret < 0)
-        free(ids_ret);
-    else
-        *out = ids_ret;
-    return ret;
+    return adf_id_vector_to_array(ids, out);
 }
 
 static bool adf_interface_type_filter(struct adf_interface_data *data,
@@ -385,35 +319,24 @@ int adf_get_interface_data(int fd, struct adf_interface_data *data)
     if (err < 0)
         return -errno;
 
-    if (data->n_available_modes) {
-        data->available_modes = malloc(sizeof(data->available_modes[0]) *
-                data->n_available_modes);
-        if (!data->available_modes)
-            return -ENOMEM;
-    }
+    if (data->n_available_modes)
+        data->available_modes = new drm_mode_modeinfo[data->n_available_modes];
 
-    if (data->custom_data_size) {
-        data->custom_data = malloc(data->custom_data_size);
-        if (!data->custom_data) {
-            ret = -ENOMEM;
-            goto done;
-        }
-    }
+    if (data->custom_data_size)
+        data->custom_data = new char[data->custom_data_size];
 
     err = ioctl(fd, ADF_GET_INTERFACE_DATA, data);
-    if (err < 0)
+    if (err < 0) {
         ret = -errno;
-
-done:
-    if (ret < 0)
         adf_free_interface_data(data);
+    }
     return ret;
 }
 
 void adf_free_interface_data(struct adf_interface_data *data)
 {
-    free(data->available_modes);
-    free(data->custom_data);
+    delete [] data->available_modes;
+    delete [] static_cast<char *>(data->custom_data);
 }
 
 int adf_interface_blank(int fd, __u8 mode)
@@ -522,39 +445,16 @@ ssize_t adf_overlay_engines_for_interface(struct adf_device *dev,
         adf_id_t interface, adf_id_t **overlay_engines)
 {
     struct adf_device_data data;
-    ssize_t n = 0;
-    ssize_t ret;
-    adf_id_t *ids_ret = NULL;
+    auto err = adf_get_device_data(dev, &data);
+    if (err < 0)
+        return err;
 
-    ret = adf_get_device_data(dev, &data);
-    if (ret < 0)
-        return ret;
+    std::vector<adf_id_t> ids;
+    for (size_t i = 0; i < data.n_allowed_attachments; i++)
+        if (data.allowed_attachments[i].interface == interface)
+            ids.push_back(data.allowed_attachments[i].overlay_engine);
 
-    size_t i;
-    for (i = 0; i < data.n_allowed_attachments; i++) {
-        if (data.allowed_attachments[i].interface != interface)
-            continue;
-
-        adf_id_t *new_ids = realloc(ids_ret, (n + 1) * sizeof(ids_ret[0]));
-        if (!new_ids) {
-            ret = -ENOMEM;
-            goto done;
-        }
-
-        ids_ret = new_ids;
-        ids_ret[n] = data.allowed_attachments[i].overlay_engine;
-        n++;
-    }
-
-    ret = n;
-
-done:
-    adf_free_device_data(&data);
-    if (ret < 0)
-        free(ids_ret);
-    else
-        *overlay_engines = ids_ret;
-    return ret;
+    return adf_id_vector_to_array(ids, overlay_engines);
 }
 
 static ssize_t adf_overlay_engines_filter(struct adf_device *dev,
@@ -562,46 +462,24 @@ static ssize_t adf_overlay_engines_filter(struct adf_device *dev,
         bool (*filter)(struct adf_overlay_engine_data *data, void *cookie),
         void *cookie)
 {
-    size_t n = 0;
-    ssize_t ret;
-    adf_id_t *ids_ret = NULL;
-
+    std::vector<adf_id_t> ids;
     size_t i;
     for (i = 0; i < n_in; i++) {
         int fd = adf_overlay_engine_open(dev, in[i], O_RDONLY);
-        if (fd < 0) {
-            ret = fd;
-            goto done;
-        }
+        if (fd < 0)
+            return fd;
 
         struct adf_overlay_engine_data data;
-        ret = adf_get_overlay_engine_data(fd, &data);
+        auto ret = adf_get_overlay_engine_data(fd, &data);
         close(fd);
         if (ret < 0)
-            goto done;
+            return ret;
 
-        if (!filter(&data, cookie))
-            continue;
-
-        adf_id_t *new_ids = realloc(ids_ret, (n + 1) * sizeof(ids_ret[0]));
-        if (!new_ids) {
-            ret = -ENOMEM;
-            goto done;
-        }
-
-        ids_ret = new_ids;
-        ids_ret[n] = in[i];
-        n++;
+        if (filter(&data, cookie))
+            ids.push_back(in[i]);
     }
 
-    ret = n;
-
-done:
-    if (ret < 0)
-        free(ids_ret);
-    else
-        *out = ids_ret;
-    return ret;
+    return adf_id_vector_to_array(ids, out);
 }
 
 struct format_filter_cookie {
@@ -612,7 +490,7 @@ struct format_filter_cookie {
 static bool adf_overlay_engine_format_filter(
         struct adf_overlay_engine_data *data, void *cookie)
 {
-    struct format_filter_cookie *c = cookie;
+    auto c = static_cast<format_filter_cookie *>(cookie);
     size_t i;
     for (i = 0; i < data->n_supported_formats; i++) {
         size_t j;
@@ -656,35 +534,24 @@ int adf_get_overlay_engine_data(int fd, struct adf_overlay_engine_data *data)
     if (err < 0)
         return -errno;
 
-    if (data->n_supported_formats) {
-        data->supported_formats = malloc(sizeof(data->supported_formats[0]) *
-              data->n_supported_formats);
-        if (!data->supported_formats)
-            return -ENOMEM;
-    }
+    if (data->n_supported_formats)
+        data->supported_formats = new __u32[data->n_supported_formats];
 
-    if (data->custom_data_size) {
-      data->custom_data = malloc(data->custom_data_size);
-      if (!data->custom_data) {
-          ret = -ENOMEM;
-          goto done;
-      }
-    }
+    if (data->custom_data_size)
+      data->custom_data = new char[data->custom_data_size];
 
     err = ioctl(fd, ADF_GET_OVERLAY_ENGINE_DATA, data);
-    if (err < 0)
+    if (err < 0) {
         ret = -errno;
-
-done:
-    if (ret < 0)
         adf_free_overlay_engine_data(data);
+    }
     return ret;
 }
 
 void adf_free_overlay_engine_data(struct adf_overlay_engine_data *data)
 {
-    free(data->supported_formats);
-    free(data->custom_data);
+    delete [] data->supported_formats;
+    delete [] static_cast<char *>(data->custom_data);
 }
 
 bool adf_overlay_engine_supports_format(int fd, __u32 format)
@@ -724,12 +591,12 @@ int adf_set_event(int fd, enum adf_event_type type, bool enabled)
 int adf_read_event(int fd, struct adf_event **event)
 {
     struct adf_event header;
-    struct {
+    struct event_with_data {
         struct adf_event base;
         uint8_t data[0];
-    } *event_ret;
+    };
+    using unique_event = std::unique_ptr<event_with_data, decltype(&free)>;
     size_t data_size;
-    int ret = 0;
 
     int err = read(fd, &header, sizeof(header));
     if (err < 0)
@@ -739,28 +606,23 @@ int adf_read_event(int fd, struct adf_event **event)
     if (header.length < sizeof(header))
         return -EIO;
 
-    event_ret = malloc(header.length);
+    // Again, we can't use new[] since the existing API says the caller should
+    // free() the returned event
+    auto event_ptr = static_cast<event_with_data *>(malloc(header.length));
+    unique_event event_ret{event_ptr, free};
     if (!event_ret)
         return -ENOMEM;
     data_size = header.length - sizeof(header);
 
-    memcpy(event_ret, &header, sizeof(header));
+    memcpy(event_ret.get(), &header, sizeof(header));
     ssize_t read_size = read(fd, &event_ret->data, data_size);
-    if (read_size < 0) {
-        ret = -errno;
-        goto done;
-    }
-    if ((size_t)read_size < data_size) {
-        ret = -EIO;
-        goto done;
-    }
+    if (read_size < 0)
+        return -errno;
+    if ((size_t)read_size < data_size)
+        return -EIO;
 
-    *event = &event_ret->base;
-
-done:
-    if (ret < 0)
-        free(event_ret);
-    return ret;
+    *event = &event_ret.release()->base;
+    return 0;
 }
 
 void adf_format_str(__u32 format, char buf[ADF_FORMAT_STR_SIZE])
