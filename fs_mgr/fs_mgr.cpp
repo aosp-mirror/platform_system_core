@@ -103,9 +103,7 @@ static void check_fs(const char *blk_device, char *fs_type, char *target)
     char tmpmnt_opts[64] = "errors=remount-ro";
     const char *e2fsck_argv[] = {
         E2FSCK_BIN,
-#ifndef TARGET_USES_MKE2FS // "-f" only for old ext4 generation tool
         "-f",
-#endif
         "-y",
         blk_device
     };
