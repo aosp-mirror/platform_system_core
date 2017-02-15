@@ -48,7 +48,6 @@
 
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_avb.h"
-#include "fs_mgr_priv_verity.h"
 
 #define KEY_LOC_PROP   "ro.crypto.keyfile.userdata"
 #define KEY_IN_FOOTER  "footer"
@@ -1190,23 +1189,4 @@ int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc, char *real_blk_dev
     }
 
     return 0;
-}
-
-int fs_mgr_early_setup_verity(struct fstab_rec *fstab_rec)
-{
-    if ((fstab_rec->fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
-        int rc = fs_mgr_setup_verity(fstab_rec, false);
-        if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
-            LINFO << "Verity disabled";
-            return FS_MGR_EARLY_SETUP_VERITY_NO_VERITY;
-        } else if (rc == FS_MGR_SETUP_VERITY_SUCCESS) {
-            return FS_MGR_EARLY_SETUP_VERITY_SUCCESS;
-        } else {
-            return FS_MGR_EARLY_SETUP_VERITY_FAIL;
-        }
-    } else if (device_is_secure()) {
-        LERROR << "Verity must be enabled for early mounted partitions on secured devices";
-        return FS_MGR_EARLY_SETUP_VERITY_FAIL;
-    }
-    return FS_MGR_EARLY_SETUP_VERITY_NO_VERITY;
 }

@@ -132,10 +132,10 @@ int fs_mgr_swapon_all(struct fstab *fstab);
 
 int fs_mgr_do_format(struct fstab_rec *fstab, bool reserve_footer);
 
-#define FS_MGR_EARLY_SETUP_VERITY_NO_VERITY -2
-#define FS_MGR_EARLY_SETUP_VERITY_FAIL -1
-#define FS_MGR_EARLY_SETUP_VERITY_SUCCESS 0
-int fs_mgr_early_setup_verity(struct fstab_rec *fstab);
+#define FS_MGR_SETUP_VERITY_DISABLED (-2)
+#define FS_MGR_SETUP_VERITY_FAIL (-1)
+#define FS_MGR_SETUP_VERITY_SUCCESS 0
+int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev);
 
 #ifdef __cplusplus
 }

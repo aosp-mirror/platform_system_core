@@ -45,7 +45,6 @@
 #include "fs_mgr.h"
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_dm_ioctl.h"
-#include "fs_mgr_priv_verity.h"
 
 #define FSTAB_PREFIX "/fstab."
 
