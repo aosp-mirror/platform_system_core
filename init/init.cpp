@@ -736,6 +736,38 @@ static std::string import_dt_fstab() {
     return fstab;
 }
 
+static bool early_mount_one(struct fstab_rec* rec) {
+    if (rec && fs_mgr_is_verified(rec)) {
+        // setup verity and create the dm-XX block device
+        // needed to mount this partition
+        int ret = fs_mgr_setup_verity(rec, false);
+        if (ret == FS_MGR_SETUP_VERITY_FAIL) {
+            PLOG(ERROR) << "early_mount: Failed to setup verity for '" << rec->mount_point << "'";
+            return false;
+        }
+
+        // The exact block device name is added as a mount source by
+        // fs_mgr_setup_verity() in ->blk_device as "/dev/block/dm-XX"
+        // We create that device by running coldboot on /sys/block/dm-XX
+        std::string dm_device(basename(rec->blk_device));
+        std::string syspath = StringPrintf("/sys/block/%s", dm_device.c_str());
+        device_init(syspath.c_str(), [&](uevent* uevent) -> coldboot_action_t {
+            if (uevent->device_name && !strcmp(dm_device.c_str(), uevent->device_name)) {
+                LOG(VERBOSE) << "early_mount: creating dm-verity device : " << dm_device;
+                return COLDBOOT_STOP;
+            }
+            return COLDBOOT_CONTINUE;
+        });
+    }
+
+    if (rec && fs_mgr_do_mount_one(rec)) {
+        PLOG(ERROR) << "early_mount: Failed to mount '" << rec->mount_point << "'";
+        return false;
+    }
+
+    return true;
+}
+
 /* Early mount vendor and ODM partitions. The fstab is read from device-tree. */
 static bool early_mount() {
     std::string fstab = import_dt_fstab();
@@ -802,9 +834,7 @@ static bool early_mount() {
 
                 // wait twice for A/B-ed partitions
                 count_odm++;
-                if (!is_ab) {
-                    found_odm = true;
-                } else if (count_odm == 2) {
+                if (!is_ab || count_odm == 2) {
                     found_odm = true;
                 }
 
@@ -813,9 +843,7 @@ static bool early_mount() {
                 LOG(VERBOSE) << "early_mount: found (" << uevent->partition_name << ") partition";
 
                 count_system++;
-                if (!is_ab) {
-                    found_system = true;
-                } else if (count_system == 2) {
+                if (!is_ab || count_system == 2) {
                     found_system = true;
                 }
 
@@ -823,9 +851,7 @@ static bool early_mount() {
             } else if (!found_vendor && !strncmp(uevent->partition_name, "vendor", 6)) {
                 LOG(VERBOSE) << "early_mount: found (" << uevent->partition_name << ") partition";
                 count_vendor++;
-                if (!is_ab) {
-                    found_vendor = true;
-                } else if (count_vendor == 2) {
+                if (!is_ab || count_vendor == 2) {
                     found_vendor = true;
                 }
 
@@ -848,24 +874,24 @@ static bool early_mount() {
         return ret;
     });
 
-    // TODO: add support to mount partitions w/ verity
-
-    int ret = 0;
-    if (odm_rec &&
-        (ret = fs_mgr_do_mount(tab.get(), odm_rec->mount_point, odm_rec->blk_device, NULL))) {
-        PLOG(ERROR) << "early_mount: fs_mgr_do_mount returned error for mounting odm";
-        return false;
+    // check for verified partitions
+    bool need_verity = ((odm_rec && fs_mgr_is_verified(odm_rec)) ||
+                        (system_rec && fs_mgr_is_verified(system_rec)) ||
+                        (vendor_rec && fs_mgr_is_verified(vendor_rec)));
+    if (need_verity) {
+        // create /dev/device mapper
+        device_init("/sys/devices/virtual/misc/device-mapper",
+                    [&](uevent* uevent) -> coldboot_action_t { return COLDBOOT_STOP; });
     }
 
-    if (vendor_rec &&
-        (ret = fs_mgr_do_mount(tab.get(), vendor_rec->mount_point, vendor_rec->blk_device, NULL))) {
-        PLOG(ERROR) << "early_mount: fs_mgr_do_mount returned error for mounting vendor";
-        return false;
-    }
+    bool success = true;
+    if (odm_rec && !(success = early_mount_one(odm_rec))) goto done;
+    if (system_rec && !(success = early_mount_one(system_rec))) goto done;
+    if (vendor_rec && !(success = early_mount_one(vendor_rec))) goto done;
 
+done:
     device_close();
-
-    return true;
+    return success;
 }
 
 int main(int argc, char** argv) {
