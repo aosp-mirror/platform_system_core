@@ -238,11 +238,12 @@ int main(int argc, char** argv) {
   action.sa_handler = signal_handler;
   debuggerd_register_handlers(&action);
 
-  if (argc != 2) {
+  if (argc != 3) {
     return 1;
   }
 
   pid_t main_tid;
+  pid_t pseudothread_tid;
 
   if (target == 1) {
     LOG(FATAL) << "target died before we could attach";
@@ -250,6 +251,10 @@ int main(int argc, char** argv) {
 
   if (!android::base::ParseInt(argv[1], &main_tid, 1, std::numeric_limits<pid_t>::max())) {
     LOG(FATAL) << "invalid main tid: " << argv[1];
+  }
+
+  if (!android::base::ParseInt(argv[2], &pseudothread_tid, 1, std::numeric_limits<pid_t>::max())) {
+    LOG(FATAL) << "invalid pseudothread tid: " << argv[1];
   }
 
   android::procinfo::ProcessInfo target_info;
@@ -284,16 +289,53 @@ int main(int argc, char** argv) {
   check_process(target_proc_fd, target);
 
   std::string attach_error;
+
+  // Seize the main thread.
   if (!ptrace_seize_thread(target_proc_fd, main_tid, &attach_error)) {
     LOG(FATAL) << attach_error;
   }
 
+  // Seize the siblings.
+  std::set<pid_t> attached_siblings;
+  {
+    std::set<pid_t> siblings;
+    if (!android::procinfo::GetProcessTids(target, &siblings)) {
+      PLOG(FATAL) << "failed to get process siblings";
+    }
+
+    // but not the already attached main thread.
+    siblings.erase(main_tid);
+    // or the handler pseudothread.
+    siblings.erase(pseudothread_tid);
+
+    for (pid_t sibling_tid : siblings) {
+      if (!ptrace_seize_thread(target_proc_fd, sibling_tid, &attach_error)) {
+        LOG(WARNING) << attach_error;
+      } else {
+        attached_siblings.insert(sibling_tid);
+      }
+    }
+  }
+
+  // Collect the backtrace map and open files, while the process still has PR_GET_DUMPABLE=1
+  std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::Create(main_tid));
+  if (!backtrace_map) {
+    LOG(FATAL) << "failed to create backtrace map";
+  }
+
+  // Collect the list of open files.
+  OpenFilesList open_files;
+  populate_open_files_list(target, &open_files);
+
+  // Drop our capabilities now that we've attached to the threads we care about.
+  drop_capabilities();
   check_process(target_proc_fd, target);
 
   LOG(INFO) << "obtaining output fd from tombstoned";
   tombstoned_connected = tombstoned_connect(target, &tombstoned_socket, &output_fd);
 
   // Write a '\1' to stdout to tell the crashing process to resume.
+  // It also restores the value of PR_SET_DUMPABLE at this point.
   if (TEMP_FAILURE_RETRY(write(STDOUT_FILENO, "\1", 1)) == -1) {
     PLOG(ERROR) << "failed to communicate to target process";
   }
@@ -339,45 +381,9 @@ int main(int argc, char** argv) {
     abort_address = reinterpret_cast<uintptr_t>(siginfo.si_value.sival_ptr);
   }
 
-  // Now that we have the signal that kicked things off, attach all of the
-  // sibling threads, and then proceed.
-  std::set<pid_t> attached_siblings;
-  {
-    std::set<pid_t> siblings;
-    if (!android::procinfo::GetProcessTids(target, &siblings)) {
-      PLOG(FATAL) << "failed to get process siblings";
-    }
-    siblings.erase(main_tid);
-
-    for (pid_t sibling_tid : siblings) {
-      if (!ptrace_seize_thread(target_proc_fd, sibling_tid, &attach_error)) {
-        LOG(WARNING) << attach_error;
-      } else {
-        attached_siblings.insert(sibling_tid);
-      }
-    }
-  }
-
-  std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::Create(main_tid));
-  if (!backtrace_map) {
-    LOG(FATAL) << "failed to create backtrace map";
-  }
-
-  // Collect the list of open files.
-  OpenFilesList open_files;
-  if (!backtrace) {
-    populate_open_files_list(target, &open_files);
-  }
-
-  // Drop our capabilities now that we've attached to the threads we care about.
-  drop_capabilities();
-
-  check_process(target_proc_fd, target);
-
   // TODO: Use seccomp to lock ourselves down.
 
   std::string amfd_data;
-
   if (backtrace) {
     dump_backtrace(output_fd.get(), backtrace_map.get(), target, main_tid, attached_siblings, 0);
   } else {
