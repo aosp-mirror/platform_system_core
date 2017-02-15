@@ -174,6 +174,41 @@ static bool have_siginfo(int signum) {
   return (old_action.sa_flags & SA_SIGINFO) != 0;
 }
 
+static void raise_caps() {
+  // Raise CapInh to match CapPrm, so that we can set the ambient bits.
+  __user_cap_header_struct capheader;
+  memset(&capheader, 0, sizeof(capheader));
+  capheader.version = _LINUX_CAPABILITY_VERSION_3;
+  capheader.pid = 0;
+
+  __user_cap_data_struct capdata[2];
+  if (capget(&capheader, &capdata[0]) == -1) {
+    fatal_errno("capget failed");
+  }
+
+  if (capdata[0].permitted != capdata[0].inheritable ||
+      capdata[1].permitted != capdata[1].inheritable) {
+    capdata[0].inheritable = capdata[0].permitted;
+    capdata[1].inheritable = capdata[1].permitted;
+
+    if (capset(&capheader, &capdata[0]) == -1) {
+      __libc_format_log(ANDROID_LOG_ERROR, "libc", "capset failed: %s", strerror(errno));
+    }
+  }
+
+  // Set the ambient capability bits so that crash_dump gets all of our caps and can ptrace us.
+  uint64_t capmask = capdata[0].inheritable;
+  capmask |= static_cast<uint64_t>(capdata[1].inheritable) << 32;
+  for (unsigned long i = 0; i < 64; ++i) {
+    if (capmask & (1 << i)) {
+      if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, i, 0, 0) != 0) {
+        __libc_format_log(ANDROID_LOG_ERROR, "libc", "failed to raise ambient capability %lu: %s",
+                          i, strerror(errno));
+      }
+    }
+  }
+}
+
 struct debugger_thread_info {
   bool crash_dump_started;
   pid_t crashing_tid;
@@ -217,10 +252,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     close(pipefds[0]);
     close(pipefds[1]);
 
-    // Set all of the ambient capability bits we can, so that crash_dump can ptrace us.
-    for (unsigned long i = 0; prctl(PR_CAPBSET_READ, i, 0, 0, 0) != -1; ++i) {
-      prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, i, 0, 0);
-    }
+    raise_caps();
 
     char buf[10];
     snprintf(buf, sizeof(buf), "%d", thread_info->crashing_tid);

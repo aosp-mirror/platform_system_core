@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/prctl.h>
 #include <unistd.h>
 
 // We test both kinds of logging.
@@ -189,6 +190,8 @@ static int usage() {
     fprintf(stderr, "  readdir-NULL          pass a null pointer to readdir\n");
     fprintf(stderr, "  strlen-NULL           pass a null pointer to strlen\n");
     fprintf(stderr, "\n");
+    fprintf(stderr, "  no_new_privs          set PR_SET_NO_NEW_PRIVS and then abort\n");
+    fprintf(stderr, "\n");
     fprintf(stderr, "prefix any of the above with 'thread-' to run on a new thread\n");
     fprintf(stderr, "prefix any of the above with 'exhaustfd-' to exhaust\n");
     fprintf(stderr, "all available file descriptors before crashing.\n");
@@ -276,6 +279,12 @@ noinline int do_action(const char* arg) {
     } else if (!strcasecmp(arg, "kuser_cmpxchg64")) {
         return __kuser_cmpxchg64(0, 0, 0);
 #endif
+    } else if (!strcasecmp(arg, "no_new_privs")) {
+        if (prctl(PR_SET_NO_NEW_PRIVS, 1) != 0) {
+          fprintf(stderr, "prctl(PR_SET_NO_NEW_PRIVS, 1) failed: %s\n", strerror(errno));
+          return EXIT_SUCCESS;
+        }
+        abort();
     } else {
         return usage();
     }
