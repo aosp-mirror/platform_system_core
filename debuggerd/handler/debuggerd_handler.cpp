@@ -254,9 +254,11 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
 
     raise_caps();
 
-    char buf[10];
-    snprintf(buf, sizeof(buf), "%d", thread_info->crashing_tid);
-    execl(CRASH_DUMP_PATH, CRASH_DUMP_NAME, buf, nullptr);
+    char main_tid[10];
+    char pseudothread_tid[10];
+    snprintf(main_tid, sizeof(main_tid), "%d", thread_info->crashing_tid);
+    snprintf(pseudothread_tid, sizeof(pseudothread_tid), "%d", thread_info->pseudothread_tid);
+    execl(CRASH_DUMP_PATH, CRASH_DUMP_NAME, main_tid, pseudothread_tid, nullptr);
 
     fatal_errno("exec failed");
   } else {
@@ -381,6 +383,12 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void*) 
     .info = info
   };
 
+  // Set PR_SET_DUMPABLE to 1, so that crash_dump can ptrace us.
+  int orig_dumpable = prctl(PR_GET_DUMPABLE);
+  if (prctl(PR_SET_DUMPABLE, 1) != 0) {
+    fatal_errno("failed to set dumpable");
+  }
+
   // Essentially pthread_create without CLONE_FILES (see debuggerd_dispatch_pseudothread).
   pid_t child_pid =
     clone(debuggerd_dispatch_pseudothread, pseudothread_stack,
@@ -395,6 +403,11 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void*) 
 
   // and then wait for it to finish.
   __futex_wait(&thread_info.pseudothread_tid, child_pid, nullptr);
+
+  // Restore PR_SET_DUMPABLE to its original value.
+  if (prctl(PR_SET_DUMPABLE, orig_dumpable) != 0) {
+    fatal_errno("failed to restore dumpable");
+  }
 
   // Signals can either be fatal or nonfatal.
   // For fatal signals, crash_dump will PTRACE_CONT us with the signal we
