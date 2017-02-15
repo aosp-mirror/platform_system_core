@@ -35,11 +35,6 @@ LOCAL_MODULE:= libfs_mgr
 LOCAL_STATIC_LIBRARIES := $(common_static_libraries)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_CFLAGS := -Werror
-ifeq ($(TARGET_USERIMAGES_USE_EXT4), true)
-  ifeq ($(TARGET_USES_MKE2FS), true)
-    LOCAL_CFLAGS += -DTARGET_USES_MKE2FS
-  endif
-endif
 ifneq (,$(filter userdebug,$(TARGET_BUILD_VARIANT)))
 LOCAL_CFLAGS += -DALLOW_ADBD_DISABLE_VERITY=1
 endif
