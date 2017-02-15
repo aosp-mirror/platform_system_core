@@ -75,6 +75,29 @@ int adf_device_post(struct adf_device *dev,
         struct adf_buffer_config *bufs, size_t n_bufs,
         void *custom_data, size_t custom_data_size);
 /**
+ * Atomically posts a new display configuration to the specified interfaces.
+ *
+ * Compared to adf_device_post(), adf_device_post_v2():
+ *
+ *  (*) allows the client to choose the kind of sync fence returned
+ *      (through complete_fence_type)
+ *
+ *  (*) stores the returned sync fence fd in a provided buffer, so the client
+ *      can distinguish between a permission error (ret = -1) and a successful
+ *      call that returns no fence (*complete_fence = -1)
+ *
+ * On error, returns -errno.
+ *
+ * On devices without the corresponding kernel support, returns -ENOTTY.
+ */
+int adf_device_post_v2(struct adf_device *dev,
+        adf_id_t *interfaces, __u32 n_interfaces,
+        struct adf_buffer_config *bufs, __u32 n_bufs,
+        void *custom_data, __u64 custom_data_size,
+        enum adf_complete_fence_type complete_fence_type,
+        int *complete_fence);
+
+/**
  * Attaches the specified interface and overlay engine.
  */
 int adf_device_attach(struct adf_device *dev, adf_id_t overlay_engine,
@@ -163,6 +186,28 @@ int adf_interface_simple_buffer_alloc(int fd, __u32 w, __u32 h,
 int adf_interface_simple_post(int fd, adf_id_t overlay_engine,
         __u32 w, __u32 h, __u32 format, int buf_fd, __u32 offset,
         __u32 pitch, int acquire_fence);
+/**
+ * Posts a single-plane RGB buffer to the display using the specified
+ * overlay engine.
+ *
+ * Compared to adf_interface_simple_post(), adf_interface_simple_post_v2():
+ *
+ *  (*) allows the client to choose the kind of sync fence returned
+ *      (through complete_fence_type)
+ *
+ *  (*) stores the returned sync fence fd in a provided buffer, so the client
+ *      can distinguish between a permission error (ret = -1) and a successful
+ *      call that returns no fence (*complete_fence = -1)
+ *
+ * On error, returns -errno.
+ *
+ * On devices without the corresponding kernel support, returns -ENOTTY.
+ */
+int adf_interface_simple_post_v2(int fd, adf_id_t overlay_engine,
+        __u32 w, __u32 h, __u32 format, int buf_fd, __u32 offset,
+        __u32 pitch, int acquire_fence,
+        enum adf_complete_fence_type complete_fence_type,
+        int *complete_fence);
 
 /**
  * Enumerates all overlay engines belonging to an ADF device.

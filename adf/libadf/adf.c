@@ -180,6 +180,37 @@ int adf_device_post(struct adf_device *dev,
     return (int)data.complete_fence;
 }
 
+int adf_device_post_v2(struct adf_device *dev,
+        adf_id_t *interfaces, __u32 n_interfaces,
+        struct adf_buffer_config *bufs, __u32 n_bufs,
+        void *custom_data, __u64 custom_data_size,
+        enum adf_complete_fence_type complete_fence_type,
+        int *complete_fence)
+{
+    int err;
+    struct adf_post_config_v2 data;
+
+    memset(&data, 0, sizeof(data));
+    data.interfaces = (uintptr_t)interfaces;
+    data.n_interfaces = n_interfaces;
+    data.bufs = (uintptr_t)bufs;
+    data.n_bufs = n_bufs;
+    data.custom_data = (uintptr_t)custom_data;
+    data.custom_data_size = custom_data_size;
+    data.complete_fence_type = complete_fence_type;
+
+    err = ioctl(dev->fd, ADF_POST_CONFIG_V2, &data);
+    if (err < 0)
+        return -errno;
+
+    if (complete_fence)
+        *complete_fence = data.complete_fence;
+    else if (data.complete_fence >= 0)
+        close(data.complete_fence);
+
+    return 0;
+}
+
 static int adf_device_attachment(struct adf_device *dev,
         adf_id_t overlay_engine, adf_id_t interface, bool attach)
 {
@@ -421,6 +452,21 @@ int adf_interface_simple_buffer_alloc(int fd, __u32 w, __u32 h,
     return (int)data.fd;
 }
 
+static void adf_interface_simple_post_config_buf(struct adf_buffer_config *buf,
+        __u32 overlay_engine, __u32 w, __u32 h, __u32 format, int buf_fd,
+        __u32 offset, __u32 pitch, int acquire_fence)
+{
+    buf->overlay_engine = overlay_engine;
+    buf->w = w;
+    buf->h = h;
+    buf->format = format;
+    buf->fd[0] = buf_fd;
+    buf->offset[0] = offset;
+    buf->pitch[0] = pitch;
+    buf->n_planes = 1;
+    buf->acquire_fence = acquire_fence;
+}
+
 int adf_interface_simple_post(int fd, __u32 overlay_engine,
         __u32 w, __u32 h, __u32 format, int buf_fd, __u32 offset,
         __u32 pitch, int acquire_fence)
@@ -429,21 +475,39 @@ int adf_interface_simple_post(int fd, __u32 overlay_engine,
     struct adf_simple_post_config data;
 
     memset(&data, 0, sizeof(data));
-    data.buf.overlay_engine = overlay_engine;
-    data.buf.w = w;
-    data.buf.h = h;
-    data.buf.format = format;
-    data.buf.fd[0] = buf_fd;
-    data.buf.offset[0] = offset;
-    data.buf.pitch[0] = pitch;
-    data.buf.n_planes = 1;
-    data.buf.acquire_fence = acquire_fence;
-
+    adf_interface_simple_post_config_buf(&data.buf, overlay_engine, w, h, format,
+            buf_fd, offset, pitch, acquire_fence);
     ret = ioctl(fd, ADF_SIMPLE_POST_CONFIG, &data);
     if (ret < 0)
         return -errno;
 
     return (int)data.complete_fence;
+}
+
+int adf_interface_simple_post_v2(int fd, adf_id_t overlay_engine,
+        __u32 w, __u32 h, __u32 format, int buf_fd, __u32 offset,
+        __u32 pitch, int acquire_fence,
+        enum adf_complete_fence_type complete_fence_type,
+        int *complete_fence)
+{
+    int ret;
+    struct adf_simple_post_config_v2 data;
+
+    memset(&data, 0, sizeof(data));
+    adf_interface_simple_post_config_buf(&data.buf, overlay_engine, w, h, format,
+            buf_fd, offset, pitch, acquire_fence);
+    data.complete_fence_type = complete_fence_type;
+
+    ret = ioctl(fd, ADF_SIMPLE_POST_CONFIG_V2, &data);
+    if (ret < 0)
+        return -errno;
+
+    if (complete_fence)
+        *complete_fence = data.complete_fence;
+    else if (data.complete_fence >= 0)
+        close(data.complete_fence);
+
+    return 0;
 }
 
 ssize_t adf_overlay_engines(struct adf_device *dev, adf_id_t **overlay_engines)

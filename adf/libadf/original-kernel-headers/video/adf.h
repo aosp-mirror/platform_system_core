@@ -46,6 +46,15 @@ enum adf_event_type {
 	ADF_EVENT_TYPE_MAX = 255,
 };
 
+enum adf_complete_fence_type {
+	/* no fence */
+	ADF_COMPLETE_FENCE_NONE = 0,
+	/* fence fires when the configuration appears on the screen */
+	ADF_COMPLETE_FENCE_PRESENT = 1,
+	/* fence fires when the configuration leaves the screen */
+	ADF_COMPLETE_FENCE_RELEASE = 2,
+};
+
 /**
  * struct adf_set_event - start or stop subscribing to ADF events
  *
@@ -131,6 +140,9 @@ struct adf_buffer_config {
 /**
  * struct adf_post_config - request to flip to a new set of buffers
  *
+ * This request is equivalent to &struct adf_post_config_v2 with
+ * @complete_fence_type = %ADF_COMPLETE_FENCE_RELEASE.
+ *
  * @n_interfaces: number of interfaces targeted by the flip (input)
  * @interfaces: ids of interfaces targeted by the flip (input)
  * @n_bufs: number of buffers displayed (input)
@@ -151,6 +163,34 @@ struct adf_post_config {
 	void __user *custom_data;
 
 	__s32 complete_fence;
+};
+
+/**
+ * struct adf_post_config_v2 - request to flip to a new set of buffers
+ *
+ * @n_interfaces: number of interfaces targeted by the flip (input)
+ * @interfaces: ids of interfaces targeted by the flip (input)
+ * @n_bufs: number of buffers displayed (input)
+ * @bufs: description of buffers displayed (input)
+ * @custom_data_size: size of driver-private data (input)
+ * @custom_data: driver-private data (input)
+ * @complete_fence_type: one of &enum adf_complete_fence_type describing what
+ * 	fence to return (input)
+ * @complete_fence: sync_fence fd which will fire at the time
+ * 	requested by @complete_fence_type (output)
+ */
+struct adf_post_config_v2 {
+	__u32 n_interfaces;
+	__u64 interfaces; /* __u32 * packed into __u64 */
+
+	__u32 n_bufs;
+	__u64 bufs; /* struct adf_buffer_config * packed into __u64 */
+
+	__u64 custom_data_size;
+	__u64 custom_data; /* void * packed into __u64 */
+
+	__s32 complete_fence;
+	__u8 complete_fence_type;
 };
 #define ADF_MAX_INTERFACES (4096 / sizeof(__u32))
 
@@ -189,6 +229,9 @@ struct adf_simple_buffer_alloc {
  * struct adf_simple_post_config - request to flip to a single buffer without
  * driver-private data
  *
+ * This request is equivalent to &struct adf_simple_post_config_v2 with
+ * @complete_fence_type = %ADF_COMPLETE_FENCE_RELEASE.
+ *
  * @buf: description of buffer displayed (input)
  * @complete_fence: sync_fence fd which will clear when this buffer has left the
  * screen (output)
@@ -196,6 +239,22 @@ struct adf_simple_buffer_alloc {
 struct adf_simple_post_config {
 	struct adf_buffer_config buf;
 	__s32 complete_fence;
+};
+
+/**
+ * struct adf_simple_post_config_v2 - request to flip to a single buffer without
+ * driver-private data
+ *
+ * @buf: description of buffer displayed (input)
+ * @complete_fence_type: one of &enum adf_complete_fence_type describing what
+ * 	fence to return (input)
+ * @complete_fence: sync_fence fd which will fire at the time
+ * 	requested by @complete_fence_type (output)
+ */
+struct adf_simple_post_config_v2 {
+	struct adf_buffer_config buf;
+	__s32 complete_fence;
+	__u8 complete_fence_type;
 };
 
 /**
@@ -317,5 +376,11 @@ struct adf_overlay_engine_data {
 					struct adf_attachment_config)
 #define ADF_DETACH		_IOW(ADF_IOCTL_TYPE, 10, \
 					struct adf_attachment_config)
+
+#define ADF_POST_CONFIG_V2	_IOW(ADF_IOCTL_TYPE, 11, \
+					struct adf_post_config_v2)
+#define ADF_SIMPLE_POST_CONFIG_V2 \
+				_IOW(ADF_IOCTL_TYPE, 12, \
+					struct adf_simple_post_config_v2)
 
 #endif /* _UAPI_VIDEO_ADF_H_ */
