@@ -20,6 +20,7 @@
 #include <adf/adf.h>
 #include <gtest/gtest.h>
 #include <sys/mman.h>
+#include <sync/sync.h>
 
 class AdfTest : public testing::Test {
 public:
@@ -73,24 +74,6 @@ public:
         FAIL(); /* this should never happen */
     }
 
-    void drawCheckerboard(void *buf, uint32_t w, uint32_t h, uint32_t pitch) {
-        uint8_t *buf8 = reinterpret_cast<uint8_t *>(buf);
-        for (uint32_t y = 0; y < h / 2; y++) {
-            uint32_t *scanline = reinterpret_cast<uint32_t *>(buf8 + y * pitch);
-            for (uint32_t x = 0; x < w / 2; x++)
-                scanline[x] = 0xFF0000FF;
-            for (uint32_t x = w / 2; x < w; x++)
-                scanline[x] = 0xFF00FFFF;
-        }
-        for (uint32_t y = h / 2; y < h; y++) {
-            uint32_t *scanline = reinterpret_cast<uint32_t *>(buf8 + y * pitch);
-            for (uint32_t x = 0; x < w / 2; x++)
-                scanline[x] = 0xFFFF00FF;
-            for (uint32_t x = w / 2; x < w; x++)
-                scanline[x] = 0xFFFFFFFF;
-        }
-    }
-
     /* various helpers to call ADF and die on failure */
 
     void getInterfaceData(adf_interface_data &data) {
@@ -139,6 +122,42 @@ public:
                 reinterpret_cast<adf_vsync_event *>(event);
         timestamp = vsync_event->timestamp;
         free(event);
+    }
+
+    void drawCheckerboard(uint32_t &w, uint32_t &h, uint32_t &format,
+            char format_str[ADF_FORMAT_STR_SIZE], int &buf_fd, uint32_t &offset,
+            uint32_t &pitch) {
+        ASSERT_NO_FATAL_FAILURE(getCurrentMode(w, h));
+        ASSERT_NO_FATAL_FAILURE(get8888Format(format, format_str));
+
+        buf_fd = adf_interface_simple_buffer_alloc(intf, w, h, format, &offset,
+                &pitch);
+        ASSERT_GE(buf_fd, 0) << "allocating " << w << "x" << h << " " <<
+                format_str << " buffer failed: " << strerror(-buf_fd);
+        EXPECT_GE(pitch, w * 4);
+
+        void *mapped = mmap(NULL, pitch * h, PROT_WRITE, MAP_SHARED, buf_fd,
+                offset);
+        ASSERT_NE(mapped, MAP_FAILED) << "mapping " << w << "x" << h << " " <<
+                format_str << " buffer failed: " << strerror(-errno);
+
+        uint8_t *buf8 = static_cast<uint8_t *>(mapped);
+        for (uint32_t y = 0; y < h / 2; y++) {
+            uint32_t *scanline = reinterpret_cast<uint32_t *>(buf8 + y * pitch);
+            for (uint32_t x = 0; x < w / 2; x++)
+                scanline[x] = 0xFF0000FF;
+            for (uint32_t x = w / 2; x < w; x++)
+                scanline[x] = 0xFF00FFFF;
+        }
+        for (uint32_t y = h / 2; y < h; y++) {
+            uint32_t *scanline = reinterpret_cast<uint32_t *>(buf8 + y * pitch);
+            for (uint32_t x = 0; x < w / 2; x++)
+                scanline[x] = 0xFFFF00FF;
+            for (uint32_t x = w / 2; x < w; x++)
+                scanline[x] = 0xFFFFFFFF;
+        }
+
+        munmap(mapped, pitch * h);
     }
 
 protected:
@@ -310,27 +329,11 @@ TEST_F(AdfTest, simple_buffer_alloc) {
 }
 
 TEST_F(AdfTest, simple_buffer) {
-    uint32_t w = 0, h = 0;
-    ASSERT_NO_FATAL_FAILURE(getCurrentMode(w, h));
-
-    uint32_t format = 0;
+    int buf_fd;
+    uint32_t w, h, format, offset, pitch;
     char format_str[ADF_FORMAT_STR_SIZE];
-    ASSERT_NO_FATAL_FAILURE(get8888Format(format, format_str));
-
-    uint32_t offset;
-    uint32_t pitch;
-    int buf_fd = adf_interface_simple_buffer_alloc(intf, w, h, format, &offset,
-            &pitch);
-    ASSERT_GE(buf_fd, 0) << "allocating " << w << "x" << h << " " <<
-            format_str << " buffer failed: " << strerror(-buf_fd);
-    EXPECT_GE(pitch, w * 4);
-
-    void *mapped = mmap(NULL, pitch * h, PROT_WRITE, MAP_SHARED, buf_fd,
-            offset);
-    ASSERT_NE(mapped, MAP_FAILED) << "mapping " << w << "x" << h << " " <<
-            format_str << " buffer failed: " << strerror(-errno);
-    drawCheckerboard(mapped, w, h, pitch);
-    munmap(mapped, pitch * h);
+    ASSERT_NO_FATAL_FAILURE(drawCheckerboard(w, h, format, format_str,
+            buf_fd, offset, pitch));
 
     ASSERT_NO_FATAL_FAILURE(attach());
     ASSERT_NO_FATAL_FAILURE(blank(DRM_MODE_DPMS_ON));
@@ -341,4 +344,60 @@ TEST_F(AdfTest, simple_buffer) {
     ASSERT_GE(release_fence, 0) << "posting " << w << "x" << h << " " <<
             format_str << " buffer failed: " << strerror(-release_fence);
     close(release_fence);
+}
+
+TEST_F(AdfTest, simple_buffer_v2) {
+    int buf_fd;
+    uint32_t w, h, format, offset, pitch;
+    char format_str[ADF_FORMAT_STR_SIZE];
+    ASSERT_NO_FATAL_FAILURE(drawCheckerboard(w, h, format, format_str,
+            buf_fd, offset, pitch));
+
+    ASSERT_NO_FATAL_FAILURE(attach());
+    ASSERT_NO_FATAL_FAILURE(blank(DRM_MODE_DPMS_ON));
+
+    int config_1_release;
+    int err = adf_interface_simple_post_v2(intf, eng_id, w, h,
+            format, buf_fd, offset, pitch, -1, ADF_COMPLETE_FENCE_RELEASE,
+            &config_1_release);
+    if (err == -ENOTTY) {
+        GTEST_LOG_(INFO) << "ADF_SIMPLE_POST_CONFIG_V2 not supported on this kernel";
+        return;
+    }
+    ASSERT_GE(err, 0) << "posting " << w << "x" << h << " " <<
+            format_str << " buffer failed: " << strerror(-err);
+
+    err = sync_wait(config_1_release, 1000);
+    ASSERT_EQ(-1, err) <<
+            "waiting for config 1's release fence should not have suceeded";
+    ASSERT_EQ(ETIME, errno) <<
+            "config 1's release fence should have timed out, but failed instead: " <<
+            strerror(errno);
+
+    int config_2_present;
+    err = adf_interface_simple_post_v2(intf, eng_id, w, h,
+            format, buf_fd, offset, pitch, -1, ADF_COMPLETE_FENCE_PRESENT,
+            &config_2_present);
+    ASSERT_GE(err, 0) << "posting " << w << "x" << h << " " <<
+            format_str << " buffer failed: " << strerror(-err);
+
+    err = sync_wait(config_2_present, 1000);
+    ASSERT_EQ(0, err) <<
+            "waiting for config 2's present fence failed: " << strerror(errno);
+    err = sync_wait(config_1_release, 0);
+    ASSERT_EQ(0, err) <<
+            "waiting for config 1's release fence failed: " << strerror(errno);
+    close(config_1_release);
+    close(config_2_present);
+
+    int config_3_no_fence;
+    err = adf_interface_simple_post_v2(intf, eng_id, w, h,
+            format, buf_fd, offset, pitch, -1, ADF_COMPLETE_FENCE_NONE,
+            &config_3_no_fence);
+    ASSERT_GE(err, 0) << "posting " << w << "x" << h << " " <<
+            format_str << " buffer failed: " << strerror(-err);
+    ASSERT_EQ(-1, config_3_no_fence) <<
+            "fence returned even though the fence type was ADF_COMPLETE_FENCE_NONE";
+
+    close(buf_fd);
 }
