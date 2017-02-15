@@ -661,6 +661,8 @@ static int handle_encryptable(const struct fstab_rec* rec)
     }
 }
 
+// TODO: add ueventd notifiers if they don't exist.
+// This is just doing a wait_for_device for maximum of 1s
 int fs_mgr_test_access(const char *device) {
     int tries = 25;
     while (tries--) {

@@ -859,7 +859,10 @@ static void update_verity_table_blk_device(char *blk_device, char **table)
     *table = strdup(result.c_str());
 }
 
-int fs_mgr_setup_verity(struct fstab_rec *fstab, bool verify_dev)
+// prepares the verity enabled (MF_VERIFY / MF_VERIFYATBOOT) fstab record for
+// mount. The 'wait_for_verity_dev' parameter makes this function wait for the
+// verity device to get created before return
+int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
 {
     int retval = FS_MGR_SETUP_VERITY_FAIL;
     int fd = -1;
@@ -1026,7 +1029,7 @@ loaded:
     }
 
     // make sure we've set everything up properly
-    if (verify_dev && fs_mgr_test_access(fstab->blk_device) < 0) {
+    if (wait_for_verity_dev && fs_mgr_test_access(fstab->blk_device) < 0) {
         goto out;
     }
 
