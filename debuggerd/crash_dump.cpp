@@ -155,6 +155,14 @@ static bool tombstoned_connect(pid_t pid, unique_fd* tombstoned_socket, unique_f
     return false;
   }
 
+  // Make the fd O_APPEND so that our output is guaranteed to be at the end of a file.
+  // (This also makes selinux rules consistent, because selinux distinguishes between writing to
+  // a regular fd, and writing to an fd with O_APPEND).
+  int flags = fcntl(tmp_output_fd.get(), F_GETFL);
+  if (fcntl(tmp_output_fd.get(), F_SETFL, flags | O_APPEND) != 0) {
+    PLOG(WARNING) << "failed to set output fd flags";
+  }
+
   *tombstoned_socket = std::move(sockfd);
   *output_fd = std::move(tmp_output_fd);
   return true;
