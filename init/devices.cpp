@@ -999,15 +999,20 @@ static coldboot_action_t coldboot(const char *path, coldboot_callback fn)
 }
 
 void device_init(const char* path, coldboot_callback fn) {
-    sehandle = selinux_android_file_context_handle();
-    selinux_status_open(true);
-
-    /* is 256K enough? udev uses 16MB! */
-    device_fd.reset(uevent_open_socket(256*1024, true));
-    if (device_fd == -1) {
-        return;
+    if (!sehandle) {
+        sehandle = selinux_android_file_context_handle();
     }
-    fcntl(device_fd, F_SETFL, O_NONBLOCK);
+    // open uevent socket and selinux status only if it hasn't been
+    // done before
+    if (device_fd == -1) {
+        /* is 256K enough? udev uses 16MB! */
+        device_fd.reset(uevent_open_socket(256 * 1024, true));
+        if (device_fd == -1) {
+            return;
+        }
+        fcntl(device_fd, F_SETFL, O_NONBLOCK);
+        selinux_status_open(true);
+    }
 
     if (access(COLDBOOT_DONE, F_OK) == 0) {
         LOG(VERBOSE) << "Skipping coldboot, already done!";
@@ -1040,6 +1045,7 @@ void device_init(const char* path, coldboot_callback fn) {
 void device_close() {
     destroy_platform_devices();
     device_fd.reset();
+    selinux_status_close();
 }
 
 int get_device_fd() {
