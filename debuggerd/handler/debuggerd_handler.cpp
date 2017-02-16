@@ -81,7 +81,7 @@ static void __noreturn __printflike(1, 2) fatal_errno(const char* fmt, ...) {
   va_start(args, fmt);
 
   char buf[4096];
-  vsnprintf(buf, sizeof(buf), fmt, args);
+  __libc_format_buffer_va_list(buf, sizeof(buf), fmt, args);
   fatal("%s: %s", buf, strerror(err));
 }
 
@@ -256,8 +256,9 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
 
     char main_tid[10];
     char pseudothread_tid[10];
-    snprintf(main_tid, sizeof(main_tid), "%d", thread_info->crashing_tid);
-    snprintf(pseudothread_tid, sizeof(pseudothread_tid), "%d", thread_info->pseudothread_tid);
+    __libc_format_buffer(main_tid, sizeof(main_tid), "%d", thread_info->crashing_tid);
+    __libc_format_buffer(pseudothread_tid, sizeof(pseudothread_tid), "%d", thread_info->pseudothread_tid);
+
     execl(CRASH_DUMP_PATH, CRASH_DUMP_NAME, main_tid, pseudothread_tid, nullptr);
 
     fatal_errno("exec failed");
