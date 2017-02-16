@@ -225,7 +225,12 @@ void RecordInitBootTimeProp(
 void RecordBootloaderTimings(BootEventRecordStore* boot_event_store) {
   // |ro.boot.boottime| is of the form 'stage1:time1,...,stageN:timeN'.
   std::string value = GetProperty("ro.boot.boottime");
+  if (value.empty()) {
+    // ro.boot.boottime is not reported on all devices.
+    return;
+  }
 
+  int32_t total_time = 0;
   auto stages = android::base::Split(value, ",");
   for (auto const &stageTiming : stages) {
     // |stageTiming| is of the form 'stage:time'.
@@ -235,10 +240,13 @@ void RecordBootloaderTimings(BootEventRecordStore* boot_event_store) {
     std::string stageName = stageTimingValues[0];
     int32_t time_ms;
     if (android::base::ParseInt(stageTimingValues[1], &time_ms)) {
+      total_time += time_ms;
       boot_event_store->AddBootEventWithValue(
           "boottime.bootloader." + stageName, time_ms);
     }
   }
+
+  boot_event_store->AddBootEventWithValue("boottime.bootloader.total", total_time);
 }
 
 // Records several metrics related to the time it takes to boot the device,
