@@ -183,7 +183,8 @@ static enum match_type identical(LogBufferElement* elem, LogBufferElement* last)
     lenr -= avcr - msgr;
     if (lenl != lenr) return DIFFERENT;
     if (fastcmp<memcmp>(avcl + strlen(avc),
-                        avcr + strlen(avc), lenl)) return DIFFERENT;
+                        avcr + strlen(avc),
+                        lenl - strlen(avc))) return DIFFERENT;
     return SAME;
 }
 
