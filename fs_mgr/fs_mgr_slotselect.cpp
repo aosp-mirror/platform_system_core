@@ -33,53 +33,6 @@
 #include "fs_mgr.h"
 #include "fs_mgr_priv.h"
 
-#include "bootloader.h"
-
-// Copies slot_suffix from misc into |out_suffix|. Returns 0 on
-// success, -1 on error or if there is no non-empty slot_suffix.
-static int get_active_slot_suffix_from_misc(struct fstab *fstab,
-                                            char *out_suffix,
-                                            size_t suffix_len)
-{
-    int n;
-    int misc_fd;
-    ssize_t num_read;
-    struct bootloader_message_ab msg;
-
-    misc_fd = -1;
-    for (n = 0; n < fstab->num_entries; n++) {
-        if (strcmp(fstab->recs[n].mount_point, "/misc") == 0) {
-            misc_fd = open(fstab->recs[n].blk_device, O_RDONLY);
-            if (misc_fd == -1) {
-                PERROR << "Error opening misc partition '"
-                       << fstab->recs[n].blk_device << "'";
-                return -1;
-            } else {
-                break;
-            }
-        }
-    }
-
-    if (misc_fd == -1) {
-        LERROR << "Error finding misc partition";
-        return -1;
-    }
-
-    num_read = TEMP_FAILURE_RETRY(read(misc_fd, &msg, sizeof(msg)));
-    // Linux will never return partial reads when reading from block
-    // devices so no need to worry about them.
-    if (num_read != sizeof(msg)) {
-        PERROR << "Error reading bootloader_message";
-        close(misc_fd);
-        return -1;
-    }
-    close(misc_fd);
-    if (msg.slot_suffix[0] == '\0')
-        return -1;
-    strncpy(out_suffix, msg.slot_suffix, suffix_len);
-    return 0;
-}
-
 // finds slot_suffix in androidboot.slot_suffix kernel command line argument
 // or in the device tree node at /firmware/android/slot_suffix property
 static int get_active_slot_suffix_from_kernel(char *out_suffix,
@@ -123,11 +76,10 @@ static int get_active_slot_suffix_from_kernel(char *out_suffix,
     return -1;
 }
 
-// Gets slot_suffix from either the kernel cmdline / device tree / firmware
-// or the misc partition. Sets |out_suffix| on success and returns 0. Returns
-// -1 if slot_suffix could not be determined.
-static int get_active_slot_suffix(struct fstab *fstab, char *out_suffix,
-                                  size_t suffix_len)
+// Gets slot_suffix from either the kernel cmdline / device tree.  Sets
+// |out_suffix| on success and returns 0. Returns -1 if slot_suffix could not
+// be determined.
+static int get_active_slot_suffix(char *out_suffix, size_t suffix_len)
 {
     char propbuf[PROPERTY_VALUE_MAX];
 
@@ -140,19 +92,11 @@ static int get_active_slot_suffix(struct fstab *fstab, char *out_suffix,
         return 0;
     }
 
-    // if the property is not set, we are either being invoked too early
-    // or the slot suffix in mentioned in the misc partition. If its
-    // "too early", try to find the slotsuffix ourselves in the kernel command
-    // line or the device tree
+    // if the property is not set, we are probably being invoked early during
+    // boot.  Try to find the slotsuffix ourselves in the kernel command line
+    // or the device tree
     if (get_active_slot_suffix_from_kernel(out_suffix, suffix_len) == 0) {
         LINFO << "Using slot suffix '" << out_suffix << "' from kernel";
-        return 0;
-    }
-
-    // If we couldn't get the suffix from the kernel cmdline, try the
-    // the misc partition.
-    if (get_active_slot_suffix_from_misc(fstab, out_suffix, suffix_len) == 0) {
-        LINFO << "Using slot suffix '" << out_suffix << "' from misc";
         return 0;
     }
 
@@ -174,8 +118,7 @@ int fs_mgr_update_for_slotselect(struct fstab *fstab)
 
             if (!got_suffix) {
                 memset(suffix, '\0', sizeof(suffix));
-                if (get_active_slot_suffix(fstab, suffix,
-                                           sizeof(suffix) - 1) != 0) {
+                if (get_active_slot_suffix(suffix, sizeof(suffix) - 1) != 0) {
                   return -1;
                 }
                 got_suffix = 1;
