@@ -220,14 +220,8 @@ static void dump_probable_cause(log_t* log, const siginfo_t& si) {
   if (!cause.empty()) _LOG(log, logtype::HEADER, "Cause: %s\n", cause.c_str());
 }
 
-static void dump_signal_info(log_t* log, pid_t tid) {
-  siginfo_t si;
-  memset(&si, 0, sizeof(si));
-  if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si) == -1) {
-    ALOGE("cannot get siginfo: %s\n", strerror(errno));
-    return;
-  }
-
+static void dump_signal_info(log_t* log, const siginfo_t* siginfo) {
+  const siginfo_t& si = *siginfo;
   char addr_desc[32]; // ", fault addr 0x1234"
   if (signal_has_si_addr(si.si_signo, si.si_code)) {
     snprintf(addr_desc, sizeof(addr_desc), "%p", si.si_addr);
@@ -239,6 +233,17 @@ static void dump_signal_info(log_t* log, pid_t tid) {
        get_signame(si.si_signo), si.si_code, get_sigcode(si.si_signo, si.si_code), addr_desc);
 
   dump_probable_cause(log, si);
+}
+
+static void dump_signal_info(log_t* log, pid_t tid) {
+  siginfo_t si;
+  memset(&si, 0, sizeof(si));
+  if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si) == -1) {
+    ALOGE("cannot get siginfo: %s\n", strerror(errno));
+    return;
+  }
+
+  dump_signal_info(log, &si);
 }
 
 static void dump_thread_info(log_t* log, pid_t pid, pid_t tid) {
@@ -649,8 +654,8 @@ static void dump_logs(log_t* log, pid_t pid, unsigned int tail) {
 
 // Dumps all information about the specified pid to the tombstone.
 static void dump_crash(log_t* log, BacktraceMap* map,
-                       const OpenFilesList& open_files, pid_t pid, pid_t tid,
-                       const std::set<pid_t>& siblings, uintptr_t abort_msg_address) {
+                       const OpenFilesList* open_files, pid_t pid, pid_t tid,
+                       const std::set<pid_t>* siblings, uintptr_t abort_msg_address) {
   // don't copy log messages to tombstone unless this is a dev device
   char value[PROPERTY_VALUE_MAX];
   property_get("ro.debuggable", value, "0");
@@ -664,14 +669,16 @@ static void dump_crash(log_t* log, BacktraceMap* map,
     dump_logs(log, pid, 5);
   }
 
-  if (!siblings.empty()) {
-    for (pid_t sibling : siblings) {
+  if (siblings && !siblings->empty()) {
+    for (pid_t sibling : *siblings) {
       dump_thread(log, pid, sibling, map, 0, false);
     }
   }
 
-  _LOG(log, logtype::OPEN_FILES, "\nopen files:\n");
-  dump_open_files_list_to_log(open_files, log, "    ");
+  if (open_files) {
+    _LOG(log, logtype::OPEN_FILES, "\nopen files:\n");
+    dump_open_files_list_to_log(*open_files, log, "    ");
+  }
 
   if (want_logs) {
     dump_logs(log, pid, 0);
@@ -732,19 +739,34 @@ int open_tombstone(std::string* out_path) {
 }
 
 void engrave_tombstone(int tombstone_fd, BacktraceMap* map,
-                       const OpenFilesList& open_files, pid_t pid, pid_t tid,
-                       const std::set<pid_t>& siblings, uintptr_t abort_msg_address,
+                       const OpenFilesList* open_files, pid_t pid, pid_t tid,
+                       const std::set<pid_t>* siblings, uintptr_t abort_msg_address,
                        std::string* amfd_data) {
   log_t log;
   log.current_tid = tid;
   log.crashed_tid = tid;
-
-  if (tombstone_fd < 0) {
-    ALOGE("debuggerd: skipping tombstone write, nothing to do.\n");
-    return;
-  }
-
   log.tfd = tombstone_fd;
   log.amfd_data = amfd_data;
   dump_crash(&log, map, open_files, pid, tid, siblings, abort_msg_address);
+}
+
+void engrave_tombstone_ucontext(int tombstone_fd, pid_t pid, pid_t tid, uintptr_t abort_msg_address,
+                                siginfo_t* siginfo, ucontext_t* ucontext) {
+  log_t log;
+  log.current_tid = tid;
+  log.crashed_tid = tid;
+  log.tfd = tombstone_fd;
+  log.amfd_data = nullptr;
+
+  dump_thread_info(&log, pid, tid);
+  dump_signal_info(&log, siginfo);
+
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid));
+  dump_abort_message(backtrace.get(), &log, abort_msg_address);
+  // TODO: Dump registers from the ucontext.
+  if (backtrace->Unwind(0, ucontext)) {
+    dump_backtrace_and_stack(backtrace.get(), &log);
+  } else {
+    ALOGE("Unwind failed: pid = %d, tid = %d", pid, tid);
+  }
 }
