@@ -64,7 +64,7 @@ using namespace std::chrono_literals;
 
 #define FUNCTIONFS_ENDPOINT_ALLOC       _IOR('g', 231, __u32)
 
-static constexpr size_t ENDPOINT_ALLOC_RETRIES = 10;
+static constexpr size_t ENDPOINT_ALLOC_RETRIES = 2;
 
 static int dummy_fd = -1;
 
