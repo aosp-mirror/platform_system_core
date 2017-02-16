@@ -47,6 +47,7 @@
 #include <cutils/iosched_policy.h>
 #include <cutils/list.h>
 #include <cutils/sockets.h>
+#include <libavb/libavb.h>
 #include <private/android_filesystem_config.h>
 
 #include <fstream>
@@ -958,6 +959,9 @@ int main(int argc, char** argv) {
         // Make the time that init started available for bootstat to log.
         property_set("ro.boottime.init", getenv("INIT_STARTED_AT"));
         property_set("ro.boottime.init.selinux", getenv("INIT_SELINUX_TOOK"));
+
+        // Set libavb version for Framework-only OTA match in Treble build.
+        property_set("ro.boot.init.avb_version", std::to_string(AVB_MAJOR_VERSION).c_str());
 
         // Clean up our environment.
         unsetenv("INIT_SECOND_STAGE");
