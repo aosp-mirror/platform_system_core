@@ -17,28 +17,18 @@
 #ifndef __CORE_FS_MGR_PRIV_DM_IOCTL_H
 #define __CORE_FS_MGR_PRIV_DM_IOCTL_H
 
-#include <string>
 #include <linux/dm-ioctl.h>
+#include <string>
 
-void fs_mgr_verity_ioctl_init(struct dm_ioctl *io,
-                              const std::string &name,
-                              unsigned flags);
+void fs_mgr_verity_ioctl_init(struct dm_ioctl* io, const std::string& name, unsigned flags);
 
-bool fs_mgr_create_verity_device(struct dm_ioctl *io,
-                                 const std::string &name,
-                                 int fd);
+bool fs_mgr_create_verity_device(struct dm_ioctl* io, const std::string& name, int fd);
 
-bool fs_mgr_destroy_verity_device(struct dm_ioctl *io,
-                                  const std::string &name,
-                                  int fd);
+bool fs_mgr_destroy_verity_device(struct dm_ioctl* io, const std::string& name, int fd);
 
-bool fs_mgr_get_verity_device_name(struct dm_ioctl *io,
-                                   const std::string &name,
-                                   int fd,
-                                   std::string *out_dev_name);
+bool fs_mgr_get_verity_device_name(struct dm_ioctl* io, const std::string& name, int fd,
+                                   std::string* out_dev_name);
 
-bool fs_mgr_resume_verity_table(struct dm_ioctl *io,
-                                const std::string &name,
-                                int fd);
+bool fs_mgr_resume_verity_table(struct dm_ioctl* io, const std::string& name, int fd);
 
 #endif /* __CORE_FS_MGR_PRIV_DM_IOCTL_H */
