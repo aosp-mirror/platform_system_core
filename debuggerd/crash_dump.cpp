@@ -218,7 +218,7 @@ static void check_process(int proc_fd, pid_t expected_pid) {
   }
 
   if (proc_info.pid != expected_pid) {
-    LOG(FATAL) << "pid mismatch: expected " << expected_pid << ", actual " << proc_info.ppid;
+    LOG(FATAL) << "pid mismatch: expected " << expected_pid << ", actual " << proc_info.pid;
   }
 }
 
@@ -254,7 +254,7 @@ int main(int argc, char** argv) {
   }
 
   if (!android::base::ParseInt(argv[2], &pseudothread_tid, 1, std::numeric_limits<pid_t>::max())) {
-    LOG(FATAL) << "invalid pseudothread tid: " << argv[1];
+    LOG(FATAL) << "invalid pseudothread tid: " << argv[2];
   }
 
   android::procinfo::ProcessInfo target_info;
