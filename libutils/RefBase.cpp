@@ -22,7 +22,6 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <typeinfo>
 #include <unistd.h>
 
 #include <utils/RefBase.h>
