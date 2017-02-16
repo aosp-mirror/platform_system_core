@@ -395,8 +395,8 @@ int main(int argc, char** argv) {
   if (backtrace) {
     dump_backtrace(output_fd.get(), backtrace_map.get(), target, main_tid, attached_siblings, 0);
   } else {
-    engrave_tombstone(output_fd.get(), backtrace_map.get(), open_files, target, main_tid,
-                      attached_siblings, abort_address, fatal_signal ? &amfd_data : nullptr);
+    engrave_tombstone(output_fd.get(), backtrace_map.get(), &open_files, target, main_tid,
+                      &attached_siblings, abort_address, fatal_signal ? &amfd_data : nullptr);
   }
 
   // We don't actually need to PTRACE_DETACH, as long as our tracees aren't in
