@@ -62,6 +62,8 @@
 
 #define CRASH_DUMP_PATH "/system/bin/" CRASH_DUMP_NAME
 
+extern "C" bool debuggerd_fallback(ucontext_t*, siginfo_t*, void*);
+
 static debuggerd_callbacks_t g_callbacks;
 
 // Mutex to ensure only one crashing thread dumps itself.
@@ -329,7 +331,7 @@ static void resend_signal(siginfo_t* info, bool crash_dump_started) {
 
 // Handler that does crash dumping by forking and doing the processing in the child.
 // Do this by ptracing the relevant thread, and then execing debuggerd to do the actual dump.
-static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void*) {
+static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* context) {
   int ret = pthread_mutex_lock(&crash_mutex);
   if (ret != 0) {
     __libc_format_log(ANDROID_LOG_INFO, "libc", "pthread_mutex_lock failed: %s", strerror(ret));
@@ -359,18 +361,22 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void*) 
 
   log_signal_summary(signal_number, info);
 
-  if (prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) == 1) {
-    // The process has NO_NEW_PRIVS enabled, so we can't transition to the crash_dump context.
-    __libc_format_log(ANDROID_LOG_INFO, "libc",
-                      "Suppressing debuggerd output because prctl(PR_GET_NO_NEW_PRIVS)==1");
-    resend_signal(info, false);
-    return;
-  }
-
   void* abort_message = nullptr;
   if (g_callbacks.get_abort_message) {
     abort_message = g_callbacks.get_abort_message();
   }
+
+  if (prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) == 1) {
+    ucontext_t* ucontext = static_cast<ucontext_t*>(context);
+    if (signal_number == DEBUGGER_SIGNAL || !debuggerd_fallback(ucontext, info, abort_message)) {
+      // The process has NO_NEW_PRIVS enabled, so we can't transition to the crash_dump context.
+      __libc_format_log(ANDROID_LOG_INFO, "libc",
+                        "Suppressing debuggerd output because prctl(PR_GET_NO_NEW_PRIVS)==1");
+    }
+    resend_signal(info, false);
+    return;
+  }
+
   // Populate si_value with the abort message address, if found.
   if (abort_message) {
     info->si_value.sival_ptr = abort_message;
