@@ -117,6 +117,7 @@ struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const ch
 int fs_mgr_is_voldmanaged(const struct fstab_rec *fstab);
 int fs_mgr_is_nonremovable(const struct fstab_rec *fstab);
 int fs_mgr_is_verified(const struct fstab_rec *fstab);
+int fs_mgr_is_verifyatboot(const struct fstab_rec *fstab);
 int fs_mgr_is_encryptable(const struct fstab_rec *fstab);
 int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab);
 const char* fs_mgr_get_file_encryption_mode(const struct fstab_rec *fstab);

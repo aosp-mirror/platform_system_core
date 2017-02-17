@@ -799,6 +799,14 @@ static bool early_mount() {
         return true;
     }
 
+    // don't allow verifyatboot for early mounted partitions
+    if ((odm_rec && fs_mgr_is_verifyatboot(odm_rec)) ||
+        (system_rec && fs_mgr_is_verifyatboot(system_rec)) ||
+        (vendor_rec && fs_mgr_is_verifyatboot(vendor_rec))) {
+        LOG(ERROR) << "Early mount partitions can't be verified at boot";
+        return false;
+    }
+
     // assume A/B device if we find 'slotselect' in any fstab entry
     bool is_ab = ((odm_rec && fs_mgr_is_slotselect(odm_rec)) ||
                   (system_rec && fs_mgr_is_slotselect(system_rec)) ||
