@@ -204,18 +204,23 @@ void uid_monitor::update_curr_io_stats_locked()
         }
 
         struct uid_io_usage& usage = curr_io_stats[uid.name];
-        usage.bytes[READ][FOREGROUND][charger_stat] +=
-            uid.io[FOREGROUND].read_bytes -
+        int64_t fg_rd_delta = uid.io[FOREGROUND].read_bytes -
             last_uid_io_stats[uid.uid].io[FOREGROUND].read_bytes;
-        usage.bytes[READ][BACKGROUND][charger_stat] +=
-            uid.io[BACKGROUND].read_bytes -
+        int64_t bg_rd_delta = uid.io[BACKGROUND].read_bytes -
             last_uid_io_stats[uid.uid].io[BACKGROUND].read_bytes;
-        usage.bytes[WRITE][FOREGROUND][charger_stat] +=
-            uid.io[FOREGROUND].write_bytes -
+        int64_t fg_wr_delta = uid.io[FOREGROUND].write_bytes -
             last_uid_io_stats[uid.uid].io[FOREGROUND].write_bytes;
+        int64_t bg_wr_delta = uid.io[BACKGROUND].write_bytes -
+            last_uid_io_stats[uid.uid].io[BACKGROUND].write_bytes;
+
+        usage.bytes[READ][FOREGROUND][charger_stat] +=
+            (fg_rd_delta < 0) ? uid.io[FOREGROUND].read_bytes : fg_rd_delta;
+        usage.bytes[READ][BACKGROUND][charger_stat] +=
+            (bg_rd_delta < 0) ? uid.io[BACKGROUND].read_bytes : bg_rd_delta;
+        usage.bytes[WRITE][FOREGROUND][charger_stat] +=
+            (fg_wr_delta < 0) ? uid.io[FOREGROUND].write_bytes : fg_wr_delta;
         usage.bytes[WRITE][BACKGROUND][charger_stat] +=
-            uid.io[BACKGROUND].write_bytes -
-            last_uid_io_stats[uid.uid].io[BACKGROUND].write_bytes;;
+            (bg_wr_delta < 0) ? uid.io[BACKGROUND].write_bytes : bg_wr_delta;
     }
 
     last_uid_io_stats = uid_io_stats;
