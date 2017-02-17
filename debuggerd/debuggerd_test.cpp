@@ -17,12 +17,15 @@
 #include <err.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/capability.h>
 #include <sys/prctl.h>
 #include <sys/types.h>
 
 #include <chrono>
 #include <regex>
 #include <thread>
+
+#include <android/set_abort_message.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -40,10 +43,8 @@ using namespace std::chrono_literals;
 using android::base::unique_fd;
 
 #if defined(__LP64__)
-#define CRASHER_PATH  "/system/bin/crasher64"
 #define ARCH_SUFFIX "64"
 #else
-#define CRASHER_PATH "/system/bin/crasher"
 #define ARCH_SUFFIX ""
 #endif
 
@@ -179,21 +180,12 @@ void CrasherTest::StartProcess(std::function<void()> function) {
   if (crasher_pid == -1) {
     FAIL() << "fork failed: " << strerror(errno);
   } else if (crasher_pid == 0) {
-    unique_fd devnull(open("/dev/null", O_WRONLY));
-    dup2(crasher_read_pipe.get(), STDIN_FILENO);
-    dup2(devnull.get(), STDOUT_FILENO);
-    dup2(devnull.get(), STDERR_FILENO);
+    char dummy;
+    crasher_pipe.reset();
+    TEMP_FAILURE_RETRY(read(crasher_read_pipe.get(), &dummy, 1));
     function();
     _exit(0);
   }
-}
-
-void CrasherTest::StartCrasher(const std::string& crash_type) {
-  std::string type = "wait-" + crash_type;
-  StartProcess([type]() {
-    execl(CRASHER_PATH, CRASHER_PATH, type.c_str(), nullptr);
-    exit(errno);
-  });
 }
 
 void CrasherTest::FinishCrasher() {
@@ -249,7 +241,10 @@ static void ConsumeFd(unique_fd fd, std::string* output) {
 TEST_F(CrasherTest, smoke) {
   int intercept_result;
   unique_fd output_fd;
-  StartCrasher("SIGSEGV");
+  StartProcess([]() {
+    *reinterpret_cast<volatile char*>(0xdead) = '1';
+  });
+
   StartIntercept(&output_fd);
   FinishCrasher();
   AssertDeath(SIGSEGV);
@@ -265,7 +260,9 @@ TEST_F(CrasherTest, smoke) {
 TEST_F(CrasherTest, abort) {
   int intercept_result;
   unique_fd output_fd;
-  StartCrasher("abort");
+  StartProcess([]() {
+    abort();
+  });
   StartIntercept(&output_fd);
   FinishCrasher();
   AssertDeath(SIGABRT);
@@ -281,7 +278,9 @@ TEST_F(CrasherTest, abort) {
 TEST_F(CrasherTest, signal) {
   int intercept_result;
   unique_fd output_fd;
-  StartCrasher("abort");
+  StartProcess([]() {
+    abort();
+  });
   StartIntercept(&output_fd);
 
   // Wait for a bit, or we might end up killing the process before the signal
@@ -303,7 +302,10 @@ TEST_F(CrasherTest, signal) {
 TEST_F(CrasherTest, abort_message) {
   int intercept_result;
   unique_fd output_fd;
-  StartCrasher("smash-stack");
+  StartProcess([]() {
+    android_set_abort_message("abort message goes here");
+    abort();
+  });
   StartIntercept(&output_fd);
   FinishCrasher();
   AssertDeath(SIGABRT);
@@ -313,13 +315,15 @@ TEST_F(CrasherTest, abort_message) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_MATCH(result, R"(Abort message: 'stack corruption detected \(-fstack-protector\)')");
+  ASSERT_MATCH(result, R"(Abort message: 'abort message goes here')");
 }
 
 TEST_F(CrasherTest, intercept_timeout) {
   int intercept_result;
   unique_fd output_fd;
-  StartCrasher("abort");
+  StartProcess([]() {
+    abort();
+  });
   StartIntercept(&output_fd);
 
   // Don't let crasher finish until we timeout.
@@ -338,7 +342,9 @@ TEST_F(CrasherTest, wait_for_gdb) {
   }
   sleep(1);
 
-  StartCrasher("abort");
+  StartProcess([]() {
+    abort();
+  });
   FinishCrasher();
 
   int status;
@@ -357,7 +363,9 @@ TEST_F(CrasherTest, wait_for_gdb_signal) {
     FAIL() << "failed to enable wait_for_gdb";
   }
 
-  StartCrasher("abort");
+  StartProcess([]() {
+    abort();
+  });
   ASSERT_EQ(0, kill(crasher_pid, SIGSEGV)) << strerror(errno);
   AssertDeath(SIGSEGV);
 }
@@ -366,7 +374,10 @@ TEST_F(CrasherTest, backtrace) {
   std::string result;
   int intercept_result;
   unique_fd output_fd;
-  StartCrasher("abort");
+
+  StartProcess([]() {
+    abort();
+  });
   StartIntercept(&output_fd);
 
   std::this_thread::sleep_for(500ms);
@@ -392,20 +403,78 @@ TEST_F(CrasherTest, backtrace) {
 }
 
 TEST_F(CrasherTest, PR_SET_DUMPABLE_0_crash) {
+  int intercept_result;
+  unique_fd output_fd;
   StartProcess([]() {
     prctl(PR_SET_DUMPABLE, 0);
-    volatile char* null = static_cast<char*>(nullptr);
-    *null = '\0';
+    abort();
   });
-  AssertDeath(SIGSEGV);
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(#00 pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX R"(/libc.so \(tgkill)");
 }
 
-TEST_F(CrasherTest, PR_SET_DUMPABLE_0_raise) {
+TEST_F(CrasherTest, capabilities) {
+  ASSERT_EQ(0U, getuid()) << "capability test requires root";
+
   StartProcess([]() {
-    prctl(PR_SET_DUMPABLE, 0);
-    raise(SIGUSR1);
+    if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) != 0) {
+      err(1, "failed to set PR_SET_KEEPCAPS");
+    }
+
+    if (setresuid(1, 1, 1) != 0) {
+      err(1, "setresuid failed");
+    }
+
+    __user_cap_header_struct capheader;
+    __user_cap_data_struct capdata[2];
+    memset(&capheader, 0, sizeof(capheader));
+    memset(&capdata, 0, sizeof(capdata));
+
+    capheader.version = _LINUX_CAPABILITY_VERSION_3;
+    capheader.pid = 0;
+
+    // Turn on every third capability.
+    static_assert(CAP_LAST_CAP > 33, "CAP_LAST_CAP <= 32");
+    for (int i = 0; i < CAP_LAST_CAP; i += 3) {
+      capdata[CAP_TO_INDEX(i)].permitted |= CAP_TO_MASK(i);
+      capdata[CAP_TO_INDEX(i)].effective |= CAP_TO_MASK(i);
+    }
+
+    // Make sure CAP_SYS_PTRACE is off.
+    capdata[CAP_TO_INDEX(CAP_SYS_PTRACE)].permitted &= ~(CAP_TO_MASK(CAP_SYS_PTRACE));
+    capdata[CAP_TO_INDEX(CAP_SYS_PTRACE)].effective &= ~(CAP_TO_MASK(CAP_SYS_PTRACE));
+
+    if (capset(&capheader, &capdata[0]) != 0) {
+      err(1, "capset failed");
+    }
+
+    if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0) != 0) {
+      err(1, "failed to drop ambient capabilities");
+    }
+
+    raise(SIGSYS);
   });
-  AssertDeath(SIGUSR1);
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSYS);
+
+  std::string result;
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(#00 pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX R"(/libc.so \(tgkill)");
 }
 
 TEST(crash_dump, zombie) {
