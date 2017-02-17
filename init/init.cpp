@@ -791,6 +791,8 @@ static bool early_mount() {
     }
 
     // find out fstab records for odm, system and vendor
+    // TODO: add std::map<std::string, fstab_rec*> so all required information about
+    // them can be gathered at once in a single loop
     fstab_rec* odm_rec = fs_mgr_get_entry_for_mount_point(tab.get(), "/odm");
     fstab_rec* system_rec = fs_mgr_get_entry_for_mount_point(tab.get(), "/system");
     fstab_rec* vendor_rec = fs_mgr_get_entry_for_mount_point(tab.get(), "/vendor");
@@ -811,9 +813,29 @@ static bool early_mount() {
     bool is_ab = ((odm_rec && fs_mgr_is_slotselect(odm_rec)) ||
                   (system_rec && fs_mgr_is_slotselect(system_rec)) ||
                   (vendor_rec && fs_mgr_is_slotselect(vendor_rec)));
+
+    // check for verified partitions
+    bool need_verity = ((odm_rec && fs_mgr_is_verified(odm_rec)) ||
+                        (system_rec && fs_mgr_is_verified(system_rec)) ||
+                        (vendor_rec && fs_mgr_is_verified(vendor_rec)));
+
+    // check if verity metadata is on a separate partition and get partition
+    // name from the end of the ->verity_loc path. verity state is not partition
+    // specific, so there must be only 1 additional partition that carries
+    // verity state.
+    std::string meta_partition;
+    if (odm_rec && odm_rec->verity_loc) {
+        meta_partition = basename(odm_rec->verity_loc);
+    } else if (system_rec && system_rec->verity_loc) {
+        meta_partition = basename(system_rec->verity_loc);
+    } else if (vendor_rec && vendor_rec->verity_loc) {
+        meta_partition = basename(vendor_rec->verity_loc);
+    }
+
     bool found_odm = !odm_rec;
     bool found_system = !system_rec;
     bool found_vendor = !vendor_rec;
+    bool found_meta = meta_partition.empty();
     int count_odm = 0, count_vendor = 0, count_system = 0;
 
     // create the devices we need..
@@ -864,6 +886,10 @@ static bool early_mount() {
                 }
 
                 create_this_node = true;
+            } else if (!found_meta && (meta_partition == uevent->partition_name)) {
+                LOG(VERBOSE) <<  "early_mount: found (" << uevent->partition_name << ") partition";
+                found_meta = true;
+                create_this_node = true;
             }
         }
 
@@ -871,7 +897,7 @@ static bool early_mount() {
         // node and stop coldboot. If this is a prefix matched
         // partition, create device node and continue. For everything
         // else skip the device node
-        if (found_odm && found_system && found_vendor) {
+        if (found_meta && found_odm && found_system && found_vendor) {
             ret = COLDBOOT_STOP;
         } else if (create_this_node) {
             ret = COLDBOOT_CREATE;
@@ -882,10 +908,6 @@ static bool early_mount() {
         return ret;
     });
 
-    // check for verified partitions
-    bool need_verity = ((odm_rec && fs_mgr_is_verified(odm_rec)) ||
-                        (system_rec && fs_mgr_is_verified(system_rec)) ||
-                        (vendor_rec && fs_mgr_is_verified(vendor_rec)));
     if (need_verity) {
         // create /dev/device mapper
         device_init("/sys/devices/virtual/misc/device-mapper",
