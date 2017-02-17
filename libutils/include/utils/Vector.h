@@ -20,8 +20,6 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <new>
-
 #include <log/log.h>
 #include <utils/TypeHelpers.h>
 #include <utils/VectorImpl.h>
