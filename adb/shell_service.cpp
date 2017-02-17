@@ -320,6 +320,10 @@ bool Subprocess::ForkAndExec(std::string* error) {
         parent_error_sfd.reset(-1);
         close_on_exec(child_error_sfd);
 
+        // adbd sets SIGPIPE to SIG_IGN to get EPIPE instead, and Linux propagates that to child
+        // processes, so we need to manually reset back to SIG_DFL here (http://b/35209888).
+        signal(SIGPIPE, SIG_DFL);
+
         if (command_.empty()) {
             execle(_PATH_BSHELL, _PATH_BSHELL, "-", nullptr, cenv.data());
         } else {
