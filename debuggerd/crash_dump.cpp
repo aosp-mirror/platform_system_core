@@ -219,17 +219,6 @@ static void drop_capabilities() {
   }
 }
 
-static void check_process(int proc_fd, pid_t expected_pid) {
-  android::procinfo::ProcessInfo proc_info;
-  if (!android::procinfo::GetProcessInfoFromProcPidFd(proc_fd, &proc_info)) {
-    LOG(FATAL) << "failed to fetch process info";
-  }
-
-  if (proc_info.pid != expected_pid) {
-    LOG(FATAL) << "pid mismatch: expected " << expected_pid << ", actual " << proc_info.pid;
-  }
-}
-
 int main(int argc, char** argv) {
   pid_t target = getppid();
   bool tombstoned_connected = false;
@@ -282,6 +271,11 @@ int main(int argc, char** argv) {
     PLOG(FATAL) << "failed to open " << target_proc_path;
   }
 
+  // Make sure our parent didn't die.
+  if (getppid() != target) {
+    PLOG(FATAL) << "parent died";
+  }
+
   // Reparent ourselves to init, so that the signal handler can waitpid on the
   // original process to avoid leaving a zombie for non-fatal dumps.
   pid_t forkpid = fork();
@@ -293,8 +287,6 @@ int main(int argc, char** argv) {
 
   // Die if we take too long.
   alarm(20);
-
-  check_process(target_proc_fd, target);
 
   std::string attach_error;
 
@@ -337,7 +329,6 @@ int main(int argc, char** argv) {
 
   // Drop our capabilities now that we've attached to the threads we care about.
   drop_capabilities();
-  check_process(target_proc_fd, target);
 
   LOG(INFO) << "obtaining output fd from tombstoned";
   tombstoned_connected = tombstoned_connect(target, &tombstoned_socket, &output_fd);

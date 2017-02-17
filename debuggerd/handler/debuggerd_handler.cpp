@@ -202,7 +202,7 @@ static void raise_caps() {
   uint64_t capmask = capdata[0].inheritable;
   capmask |= static_cast<uint64_t>(capdata[1].inheritable) << 32;
   for (unsigned long i = 0; i < 64; ++i) {
-    if (capmask & (1 << i)) {
+    if (capmask & (1ULL << i)) {
       if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, i, 0, 0) != 0) {
         __libc_format_log(ANDROID_LOG_ERROR, "libc", "failed to raise ambient capability %lu: %s",
                           i, strerror(errno));
