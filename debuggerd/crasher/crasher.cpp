@@ -189,6 +189,7 @@ static int usage() {
     fprintf(stderr, "  fprintf-NULL          pass a null pointer to fprintf\n");
     fprintf(stderr, "  readdir-NULL          pass a null pointer to readdir\n");
     fprintf(stderr, "  strlen-NULL           pass a null pointer to strlen\n");
+    fprintf(stderr, "  pthread_join-NULL     pass a null pointer to pthread_join\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "  no_new_privs          set PR_SET_NO_NEW_PRIVS and then abort\n");
     fprintf(stderr, "\n");
@@ -258,6 +259,8 @@ noinline int do_action(const char* arg) {
         readdir_null();
     } else if (!strcasecmp(arg, "strlen-NULL")) {
         return strlen_null();
+    } else if (!strcasecmp(arg, "pthread_join-NULL")) {
+        return pthread_join(0, nullptr);
     } else if (!strcasecmp(arg, "heap-usage")) {
         abuse_heap();
     } else if (!strcasecmp(arg, "SIGSEGV-unmapped")) {
