@@ -25,7 +25,8 @@ LOCAL_SRC_FILES:= \
     fs_mgr_slotselect.cpp \
     fs_mgr_verity.cpp \
     fs_mgr_avb.cpp \
-    fs_mgr_avb_ops.cpp
+    fs_mgr_avb_ops.cpp \
+    fs_mgr_boot_config.cpp
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/include \
     system/vold \

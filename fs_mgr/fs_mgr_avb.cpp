@@ -441,18 +441,23 @@ static bool get_hashtree_descriptor(const std::string& partition_name,
 
 static bool init_is_avb_used() {
     // When AVB is used, boot loader should set androidboot.vbmeta.{hash_alg,
-    // size, digest} in kernel cmdline. They will then be imported by init
-    // process to system properties: ro.boot.vbmeta.{hash_alg, size, digest}.
+    // size, digest} in kernel cmdline or in device tree. They will then be
+    // imported by init process to system properties: ro.boot.vbmeta.{hash_alg, size, digest}.
+    //
+    // In case of early mount, init properties are not initialized, so we also
+    // ensure we look into kernel command line and device tree if the property is
+    // not found
     //
     // Checks hash_alg as an indicator for whether AVB is used.
     // We don't have to parse and check all of them here. The check will
     // be done in fs_mgr_load_vbmeta_images() and FS_MGR_SETUP_AVB_FAIL will
     // be returned when there is an error.
 
-    std::string hash_alg = android::base::GetProperty("ro.boot.vbmeta.hash_alg", "");
-
-    if (hash_alg == "sha256" || hash_alg == "sha512") {
-        return true;
+    std::string hash_alg;
+    if (fs_mgr_get_boot_config("vbmeta.hash_alg", &hash_alg) == 0) {
+        if (hash_alg == "sha256" || hash_alg == "sha512") {
+            return true;
+        }
     }
 
     return false;
@@ -482,10 +487,11 @@ int fs_mgr_load_vbmeta_images(struct fstab* fstab) {
     // Sets requested_partitions to nullptr as it's to copy the contents
     // of HASH partitions into fs_mgr_avb_verify_data, which is not required as
     // fs_mgr only deals with HASHTREE partitions.
-    const char* requested_partitions[] = {nullptr};
-    const char* ab_suffix = android::base::GetProperty("ro.boot.slot_suffix", "").c_str();
+    const char *requested_partitions[] = {nullptr};
+    std::string ab_suffix;
+    fs_mgr_get_boot_config("slot_suffix", &ab_suffix);
     AvbSlotVerifyResult verify_result =
-        avb_slot_verify(fs_mgr_avb_ops, requested_partitions, ab_suffix,
+        avb_slot_verify(fs_mgr_avb_ops, requested_partitions, ab_suffix.c_str(),
                         fs_mgr_vbmeta_prop.allow_verification_error, &fs_mgr_avb_verify_data);
 
     // Only allow two verify results:

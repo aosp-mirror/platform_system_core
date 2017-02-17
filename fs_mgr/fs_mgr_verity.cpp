@@ -657,7 +657,6 @@ static int get_verity_state_offset(struct fstab_rec *fstab, off64_t *offset)
 
 static int load_verity_state(struct fstab_rec *fstab, int *mode)
 {
-    char propbuf[PROPERTY_VALUE_MAX];
     int match = 0;
     off64_t offset = 0;
 
@@ -665,10 +664,9 @@ static int load_verity_state(struct fstab_rec *fstab, int *mode)
     *mode = VERITY_MODE_EIO;
 
     /* use the kernel parameter if set */
-    property_get("ro.boot.veritymode", propbuf, "");
-
-    if (*propbuf != '\0') {
-        if (!strcmp(propbuf, "enforcing")) {
+    std::string veritymode;
+    if (fs_mgr_get_boot_config("veritymode", &veritymode)) {
+        if (veritymode.compare("enforcing")) {
             *mode = VERITY_MODE_DEFAULT;
         }
         return 0;
