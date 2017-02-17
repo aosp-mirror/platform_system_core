@@ -23,6 +23,7 @@
 #error Only bionic supports system properties.
 #endif
 
+#include <chrono>
 #include <limits>
 #include <string>
 
@@ -58,8 +59,12 @@ template <typename T> T GetUintProperty(const std::string& key,
 // tell you whether or not your call succeeded. A `false` return value definitely means failure.
 bool SetProperty(const std::string& key, const std::string& value);
 
-// Waits for the system property `key` to have the value `expected_value`, .
-void WaitForProperty(const std::string& key, const std::string& expected_value);
+// Waits for the system property `key` to have the value `expected_value`.
+// Times out after `relative_timeout`.
+// Returns true on success, false on timeout.
+bool WaitForProperty(const std::string& key,
+                     const std::string& expected_value,
+                     std::chrono::milliseconds relative_timeout);
 
 } // namespace base
 } // namespace android
