@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -49,6 +50,7 @@
 
 #include <fs_mgr.h>
 #include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include "bootimg.h"
 
@@ -56,6 +58,8 @@
 #include "init.h"
 #include "util.h"
 #include "log.h"
+
+using android::base::StringPrintf;
 
 #define PERSISTENT_PROPERTY_DIR  "/data/property"
 #define FSTAB_PREFIX "/fstab."
@@ -605,6 +609,8 @@ void load_persist_props(void) {
     load_override_properties();
     /* Read persistent properties after all default values have been loaded. */
     load_persistent_properties();
+    uint64_t start_ns = boot_clock::now().time_since_epoch().count();
+    property_set("ro.boottime.persistent_properties", StringPrintf("%" PRIu64, start_ns).c_str());
 }
 
 void load_recovery_id_prop() {
