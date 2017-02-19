@@ -51,14 +51,12 @@
     "%u %s %s %u %u "       \
     "%" PRIu64 " %" PRIu64 " %s %s %s "
 
-#define VERITY_TABLE_PARAMS(hashtree_desc, blk_device, digest, salt)  \
-    hashtree_desc.dm_verity_version, blk_device, blk_device,          \
-        hashtree_desc.data_block_size, hashtree_desc.hash_block_size, \
-        hashtree_desc.image_size /                                    \
-            hashtree_desc.data_block_size, /* num_data_blocks. */     \
-        hashtree_desc.tree_offset /                                   \
-            hashtree_desc.hash_block_size, /* hash_start_block. */    \
-        (char *)hashtree_desc.hash_algorithm, digest, salt
+#define VERITY_TABLE_PARAMS(hashtree_desc, blk_device, digest, salt)                        \
+    hashtree_desc.dm_verity_version, blk_device, blk_device, hashtree_desc.data_block_size, \
+        hashtree_desc.hash_block_size,                                                      \
+        hashtree_desc.image_size / hashtree_desc.data_block_size,  /* num_data_blocks. */   \
+        hashtree_desc.tree_offset / hashtree_desc.hash_block_size, /* hash_start_block. */  \
+        (char*)hashtree_desc.hash_algorithm, digest, salt
 
 #define VERITY_TABLE_OPT_RESTART "restart_on_corruption"
 #define VERITY_TABLE_OPT_IGNZERO "ignore_zero_blocks"
@@ -67,32 +65,28 @@
  *     <#opt_params> ignore_zero_blocks restart_on_corruption
  */
 #define VERITY_TABLE_OPT_DEFAULT_FORMAT "2 %s %s"
-#define VERITY_TABLE_OPT_DEFAULT_PARAMS \
-    VERITY_TABLE_OPT_IGNZERO, VERITY_TABLE_OPT_RESTART
+#define VERITY_TABLE_OPT_DEFAULT_PARAMS VERITY_TABLE_OPT_IGNZERO, VERITY_TABLE_OPT_RESTART
 
 /* The FEC (forward error correction) format of dm-verity optional parameters:
  *     <#opt_params> use_fec_from_device <fec_dev>
  *     fec_roots <num> fec_blocks <num> fec_start <offset>
  *     ignore_zero_blocks restart_on_corruption
  */
-#define VERITY_TABLE_OPT_FEC_FORMAT                              \
-    "10 use_fec_from_device %s fec_roots %u fec_blocks %" PRIu64 \
-    " fec_start %" PRIu64 " %s %s"
+#define VERITY_TABLE_OPT_FEC_FORMAT \
+    "10 use_fec_from_device %s fec_roots %u fec_blocks %" PRIu64 " fec_start %" PRIu64 " %s %s"
 
 /* Note that fec_blocks is the size that FEC covers, *not* the
  * size of the FEC data. Since we use FEC for everything up until
  * the FEC data, it's the same as the offset (fec_start).
  */
-#define VERITY_TABLE_OPT_FEC_PARAMS(hashtree_desc, blk_device) \
-    blk_device, hashtree_desc.fec_num_roots,                   \
-        hashtree_desc.fec_offset /                             \
-            hashtree_desc.data_block_size, /* fec_blocks */    \
-        hashtree_desc.fec_offset /                             \
-            hashtree_desc.data_block_size, /* fec_start */     \
+#define VERITY_TABLE_OPT_FEC_PARAMS(hashtree_desc, blk_device)                     \
+    blk_device, hashtree_desc.fec_num_roots,                                       \
+        hashtree_desc.fec_offset / hashtree_desc.data_block_size, /* fec_blocks */ \
+        hashtree_desc.fec_offset / hashtree_desc.data_block_size, /* fec_start */  \
         VERITY_TABLE_OPT_IGNZERO, VERITY_TABLE_OPT_RESTART
 
-AvbSlotVerifyData *fs_mgr_avb_verify_data = nullptr;
-AvbOps *fs_mgr_avb_ops = nullptr;
+AvbSlotVerifyData* fs_mgr_avb_verify_data = nullptr;
+AvbOps* fs_mgr_avb_ops = nullptr;
 
 enum HashAlgorithm {
     kInvalid = 0,
@@ -109,8 +103,7 @@ struct androidboot_vbmeta {
 
 androidboot_vbmeta fs_mgr_vbmeta_prop;
 
-static inline bool nibble_value(const char &c, uint8_t *value)
-{
+static inline bool nibble_value(const char& c, uint8_t* value) {
     FS_MGR_CHECK(value != nullptr);
 
     switch (c) {
@@ -130,10 +123,7 @@ static inline bool nibble_value(const char &c, uint8_t *value)
     return true;
 }
 
-static bool hex_to_bytes(uint8_t *bytes,
-                         size_t bytes_len,
-                         const std::string &hex)
-{
+static bool hex_to_bytes(uint8_t* bytes, size_t bytes_len, const std::string& hex) {
     FS_MGR_CHECK(bytes != nullptr);
 
     if (hex.size() % 2 != 0) {
@@ -156,11 +146,10 @@ static bool hex_to_bytes(uint8_t *bytes,
     return true;
 }
 
-static std::string bytes_to_hex(const uint8_t *bytes, size_t bytes_len)
-{
+static std::string bytes_to_hex(const uint8_t* bytes, size_t bytes_len) {
     FS_MGR_CHECK(bytes != nullptr);
 
-    static const char *hex_digits = "0123456789abcdef";
+    static const char* hex_digits = "0123456789abcdef";
     std::string hex;
 
     for (size_t i = 0; i < bytes_len; i++) {
@@ -170,8 +159,7 @@ static std::string bytes_to_hex(const uint8_t *bytes, size_t bytes_len)
     return hex;
 }
 
-static bool load_vbmeta_prop(androidboot_vbmeta *vbmeta_prop)
-{
+static bool load_vbmeta_prop(androidboot_vbmeta* vbmeta_prop) {
     FS_MGR_CHECK(vbmeta_prop != nullptr);
 
     std::string cmdline;
@@ -180,19 +168,17 @@ static bool load_vbmeta_prop(androidboot_vbmeta *vbmeta_prop)
     std::string hash_alg;
     std::string digest;
 
-    for (const auto &entry :
-         android::base::Split(android::base::Trim(cmdline), " ")) {
+    for (const auto& entry : android::base::Split(android::base::Trim(cmdline), " ")) {
         std::vector<std::string> pieces = android::base::Split(entry, "=");
-        const std::string &key = pieces[0];
-        const std::string &value = pieces[1];
+        const std::string& key = pieces[0];
+        const std::string& value = pieces[1];
 
         if (key == "androidboot.vbmeta.device_state") {
             vbmeta_prop->allow_verification_error = (value == "unlocked");
         } else if (key == "androidboot.vbmeta.hash_alg") {
             hash_alg = value;
         } else if (key == "androidboot.vbmeta.size") {
-            if (!android::base::ParseUint(value.c_str(),
-                                          &vbmeta_prop->vbmeta_size)) {
+            if (!android::base::ParseUint(value.c_str(), &vbmeta_prop->vbmeta_size)) {
                 return false;
             }
         } else if (key == "androidboot.vbmeta.digest") {
@@ -220,10 +206,8 @@ static bool load_vbmeta_prop(androidboot_vbmeta *vbmeta_prop)
         return false;
     }
 
-    if (!hex_to_bytes(vbmeta_prop->digest, sizeof(vbmeta_prop->digest),
-                      digest)) {
-        LERROR << "Hash digest contains non-hexidecimal character: "
-               << digest.c_str();
+    if (!hex_to_bytes(vbmeta_prop->digest, sizeof(vbmeta_prop->digest), digest)) {
+        LERROR << "Hash digest contains non-hexidecimal character: " << digest.c_str();
         return false;
     }
 
@@ -231,9 +215,8 @@ static bool load_vbmeta_prop(androidboot_vbmeta *vbmeta_prop)
 }
 
 template <typename Hasher>
-static std::pair<size_t, bool> verify_vbmeta_digest(
-    const AvbSlotVerifyData &verify_data, const androidboot_vbmeta &vbmeta_prop)
-{
+static std::pair<size_t, bool> verify_vbmeta_digest(const AvbSlotVerifyData& verify_data,
+                                                    const androidboot_vbmeta& vbmeta_prop) {
     size_t total_size = 0;
     Hasher hasher;
     for (size_t n = 0; n < verify_data.num_vbmeta_images; n++) {
@@ -242,15 +225,13 @@ static std::pair<size_t, bool> verify_vbmeta_digest(
         total_size += verify_data.vbmeta_images[n].vbmeta_size;
     }
 
-    bool matched = (memcmp(hasher.finalize(), vbmeta_prop.digest,
-                           Hasher::DIGEST_SIZE) == 0);
+    bool matched = (memcmp(hasher.finalize(), vbmeta_prop.digest, Hasher::DIGEST_SIZE) == 0);
 
     return std::make_pair(total_size, matched);
 }
 
-static bool verify_vbmeta_images(const AvbSlotVerifyData &verify_data,
-                                 const androidboot_vbmeta &vbmeta_prop)
-{
+static bool verify_vbmeta_images(const AvbSlotVerifyData& verify_data,
+                                 const androidboot_vbmeta& vbmeta_prop) {
     if (verify_data.num_vbmeta_images == 0) {
         LERROR << "No vbmeta images";
         return false;
@@ -281,23 +262,17 @@ static bool verify_vbmeta_images(const AvbSlotVerifyData &verify_data,
     return true;
 }
 
-static bool hashtree_load_verity_table(
-    struct dm_ioctl *io,
-    const std::string &dm_device_name,
-    int fd,
-    const std::string &blk_device,
-    const AvbHashtreeDescriptor &hashtree_desc,
-    const std::string &salt,
-    const std::string &root_digest)
-{
+static bool hashtree_load_verity_table(struct dm_ioctl* io, const std::string& dm_device_name,
+                                       int fd, const std::string& blk_device,
+                                       const AvbHashtreeDescriptor& hashtree_desc,
+                                       const std::string& salt, const std::string& root_digest) {
     fs_mgr_verity_ioctl_init(io, dm_device_name, DM_STATUS_TABLE_FLAG);
 
     // The buffer consists of [dm_ioctl][dm_target_spec][verity_params].
-    char *buffer = (char *)io;
+    char* buffer = (char*)io;
 
     // Builds the dm_target_spec arguments.
-    struct dm_target_spec *dm_target =
-        (struct dm_target_spec *)&buffer[sizeof(struct dm_ioctl)];
+    struct dm_target_spec* dm_target = (struct dm_target_spec*)&buffer[sizeof(struct dm_ioctl)];
     io->target_count = 1;
     dm_target->status = 0;
     dm_target->sector_start = 0;
@@ -305,23 +280,19 @@ static bool hashtree_load_verity_table(
     strcpy(dm_target->target_type, "verity");
 
     // Builds the verity params.
-    char *verity_params =
-        buffer + sizeof(struct dm_ioctl) + sizeof(struct dm_target_spec);
+    char* verity_params = buffer + sizeof(struct dm_ioctl) + sizeof(struct dm_target_spec);
     size_t bufsize = DM_BUF_SIZE - (verity_params - buffer);
 
     int res = 0;
     if (hashtree_desc.fec_size > 0) {
-        res = snprintf(
-            verity_params, bufsize,
-            VERITY_TABLE_FORMAT VERITY_TABLE_OPT_FEC_FORMAT,
-            VERITY_TABLE_PARAMS(hashtree_desc, blk_device.c_str(),
-                                root_digest.c_str(), salt.c_str()),
-            VERITY_TABLE_OPT_FEC_PARAMS(hashtree_desc, blk_device.c_str()));
+        res = snprintf(verity_params, bufsize, VERITY_TABLE_FORMAT VERITY_TABLE_OPT_FEC_FORMAT,
+                       VERITY_TABLE_PARAMS(hashtree_desc, blk_device.c_str(), root_digest.c_str(),
+                                           salt.c_str()),
+                       VERITY_TABLE_OPT_FEC_PARAMS(hashtree_desc, blk_device.c_str()));
     } else {
-        res = snprintf(verity_params, bufsize,
-                       VERITY_TABLE_FORMAT VERITY_TABLE_OPT_DEFAULT_FORMAT,
-                       VERITY_TABLE_PARAMS(hashtree_desc, blk_device.c_str(),
-                                           root_digest.c_str(), salt.c_str()),
+        res = snprintf(verity_params, bufsize, VERITY_TABLE_FORMAT VERITY_TABLE_OPT_DEFAULT_FORMAT,
+                       VERITY_TABLE_PARAMS(hashtree_desc, blk_device.c_str(), root_digest.c_str(),
+                                           salt.c_str()),
                        VERITY_TABLE_OPT_DEFAULT_PARAMS);
     }
 
@@ -334,7 +305,7 @@ static bool hashtree_load_verity_table(
 
     // Sets ext target boundary.
     verity_params += strlen(verity_params) + 1;
-    verity_params = (char *)(((unsigned long)verity_params + 7) & ~7);
+    verity_params = (char*)(((unsigned long)verity_params + 7) & ~7);
     dm_target->next = verity_params - buffer;
 
     // Sends the ioctl to load the verity table.
@@ -346,11 +317,9 @@ static bool hashtree_load_verity_table(
     return true;
 }
 
-static bool hashtree_dm_verity_setup(struct fstab_rec *fstab_entry,
-                                     const AvbHashtreeDescriptor &hashtree_desc,
-                                     const std::string &salt,
-                                     const std::string &root_digest)
-{
+static bool hashtree_dm_verity_setup(struct fstab_rec* fstab_entry,
+                                     const AvbHashtreeDescriptor& hashtree_desc,
+                                     const std::string& salt, const std::string& root_digest) {
     // Gets the device mapper fd.
     android::base::unique_fd fd(open("/dev/device-mapper", O_RDWR));
     if (fd < 0) {
@@ -360,7 +329,7 @@ static bool hashtree_dm_verity_setup(struct fstab_rec *fstab_entry,
 
     // Creates the device.
     alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
-    struct dm_ioctl *io = (struct dm_ioctl *)buffer;
+    struct dm_ioctl* io = (struct dm_ioctl*)buffer;
     const std::string mount_point(basename(fstab_entry->mount_point));
     if (!fs_mgr_create_verity_device(io, mount_point, fd)) {
         LERROR << "Couldn't create verity device!";
@@ -375,8 +344,7 @@ static bool hashtree_dm_verity_setup(struct fstab_rec *fstab_entry,
     }
 
     // Loads the verity mapping table.
-    if (!hashtree_load_verity_table(io, mount_point, fd,
-                                    std::string(fstab_entry->blk_device),
+    if (!hashtree_load_verity_table(io, mount_point, fd, std::string(fstab_entry->blk_device),
                                     hashtree_desc, salt, root_digest)) {
         LERROR << "Couldn't load verity table!";
         return false;
@@ -403,24 +371,20 @@ static bool hashtree_dm_verity_setup(struct fstab_rec *fstab_entry,
     return true;
 }
 
-static bool get_hashtree_descriptor(const std::string &partition_name,
-                                    const AvbSlotVerifyData &verify_data,
-                                    AvbHashtreeDescriptor *out_hashtree_desc,
-                                    std::string *out_salt,
-                                    std::string *out_digest)
-{
+static bool get_hashtree_descriptor(const std::string& partition_name,
+                                    const AvbSlotVerifyData& verify_data,
+                                    AvbHashtreeDescriptor* out_hashtree_desc, std::string* out_salt,
+                                    std::string* out_digest) {
     bool found = false;
-    const uint8_t *desc_partition_name;
+    const uint8_t* desc_partition_name;
 
     for (size_t i = 0; i < verify_data.num_vbmeta_images && !found; i++) {
         // Get descriptors from vbmeta_images[i].
         size_t num_descriptors;
-        std::unique_ptr<const AvbDescriptor *[], decltype(&avb_free)>
-            descriptors(
-                avb_descriptor_get_all(verify_data.vbmeta_images[i].vbmeta_data,
-                                       verify_data.vbmeta_images[i].vbmeta_size,
-                                       &num_descriptors),
-                avb_free);
+        std::unique_ptr<const AvbDescriptor* [], decltype(&avb_free)> descriptors(
+            avb_descriptor_get_all(verify_data.vbmeta_images[i].vbmeta_data,
+                                   verify_data.vbmeta_images[i].vbmeta_size, &num_descriptors),
+            avb_free);
 
         if (!descriptors || num_descriptors < 1) {
             continue;
@@ -428,12 +392,9 @@ static bool get_hashtree_descriptor(const std::string &partition_name,
 
         // Ensures that hashtree descriptor is either in /vbmeta or in
         // the same partition for verity setup.
-        std::string vbmeta_partition_name(
-            verify_data.vbmeta_images[i].partition_name);
-        if (vbmeta_partition_name != "vbmeta" &&
-            vbmeta_partition_name != partition_name) {
-            LWARNING << "Skip vbmeta image at "
-                     << verify_data.vbmeta_images[i].partition_name
+        std::string vbmeta_partition_name(verify_data.vbmeta_images[i].partition_name);
+        if (vbmeta_partition_name != "vbmeta" && vbmeta_partition_name != partition_name) {
+            LWARNING << "Skip vbmeta image at " << verify_data.vbmeta_images[i].partition_name
                      << " for partition: " << partition_name.c_str();
             continue;
         }
@@ -445,21 +406,18 @@ static bool get_hashtree_descriptor(const std::string &partition_name,
                 continue;
             }
             if (desc.tag == AVB_DESCRIPTOR_TAG_HASHTREE) {
-                desc_partition_name = (const uint8_t *)descriptors[j] +
-                                      sizeof(AvbHashtreeDescriptor);
+                desc_partition_name =
+                    (const uint8_t*)descriptors[j] + sizeof(AvbHashtreeDescriptor);
                 if (!avb_hashtree_descriptor_validate_and_byteswap(
-                        (AvbHashtreeDescriptor *)descriptors[j],
-                        out_hashtree_desc)) {
+                        (AvbHashtreeDescriptor*)descriptors[j], out_hashtree_desc)) {
                     continue;
                 }
-                if (out_hashtree_desc->partition_name_len !=
-                    partition_name.length()) {
+                if (out_hashtree_desc->partition_name_len != partition_name.length()) {
                     continue;
                 }
                 // Notes that desc_partition_name is not NUL-terminated.
-                std::string hashtree_partition_name(
-                    (const char *)desc_partition_name,
-                    out_hashtree_desc->partition_name_len);
+                std::string hashtree_partition_name((const char*)desc_partition_name,
+                                                    out_hashtree_desc->partition_name_len);
                 if (hashtree_partition_name == partition_name) {
                     found = true;
                 }
@@ -472,18 +430,16 @@ static bool get_hashtree_descriptor(const std::string &partition_name,
         return false;
     }
 
-    const uint8_t *desc_salt =
-        desc_partition_name + out_hashtree_desc->partition_name_len;
+    const uint8_t* desc_salt = desc_partition_name + out_hashtree_desc->partition_name_len;
     *out_salt = bytes_to_hex(desc_salt, out_hashtree_desc->salt_len);
 
-    const uint8_t *desc_digest = desc_salt + out_hashtree_desc->salt_len;
+    const uint8_t* desc_digest = desc_salt + out_hashtree_desc->salt_len;
     *out_digest = bytes_to_hex(desc_digest, out_hashtree_desc->root_digest_len);
 
     return true;
 }
 
-static bool init_is_avb_used()
-{
+static bool init_is_avb_used() {
     // When AVB is used, boot loader should set androidboot.vbmeta.{hash_alg,
     // size, digest} in kernel cmdline. They will then be imported by init
     // process to system properties: ro.boot.vbmeta.{hash_alg, size, digest}.
@@ -493,8 +449,7 @@ static bool init_is_avb_used()
     // be done in fs_mgr_load_vbmeta_images() and FS_MGR_SETUP_AVB_FAIL will
     // be returned when there is an error.
 
-    std::string hash_alg =
-        android::base::GetProperty("ro.boot.vbmeta.hash_alg", "");
+    std::string hash_alg = android::base::GetProperty("ro.boot.vbmeta.hash_alg", "");
 
     if (hash_alg == "sha256" || hash_alg == "sha512") {
         return true;
@@ -503,14 +458,12 @@ static bool init_is_avb_used()
     return false;
 }
 
-bool fs_mgr_is_avb_used()
-{
+bool fs_mgr_is_avb_used() {
     static bool result = init_is_avb_used();
     return result;
 }
 
-int fs_mgr_load_vbmeta_images(struct fstab *fstab)
-{
+int fs_mgr_load_vbmeta_images(struct fstab* fstab) {
     FS_MGR_CHECK(fstab != nullptr);
 
     // Gets the expected hash value of vbmeta images from
@@ -529,12 +482,11 @@ int fs_mgr_load_vbmeta_images(struct fstab *fstab)
     // Sets requested_partitions to nullptr as it's to copy the contents
     // of HASH partitions into fs_mgr_avb_verify_data, which is not required as
     // fs_mgr only deals with HASHTREE partitions.
-    const char *requested_partitions[] = {nullptr};
-    const char *ab_suffix =
-        android::base::GetProperty("ro.boot.slot_suffix", "").c_str();
-    AvbSlotVerifyResult verify_result = avb_slot_verify(
-        fs_mgr_avb_ops, requested_partitions, ab_suffix,
-        fs_mgr_vbmeta_prop.allow_verification_error, &fs_mgr_avb_verify_data);
+    const char* requested_partitions[] = {nullptr};
+    const char* ab_suffix = android::base::GetProperty("ro.boot.slot_suffix", "").c_str();
+    AvbSlotVerifyResult verify_result =
+        avb_slot_verify(fs_mgr_avb_ops, requested_partitions, ab_suffix,
+                        fs_mgr_vbmeta_prop.allow_verification_error, &fs_mgr_avb_verify_data);
 
     // Only allow two verify results:
     //   - AVB_SLOT_VERIFY_RESULT_OK.
@@ -557,12 +509,11 @@ int fs_mgr_load_vbmeta_images(struct fstab *fstab)
         // Checks whether FLAGS_HASHTREE_DISABLED is set.
         AvbVBMetaImageHeader vbmeta_header;
         avb_vbmeta_image_header_to_host_byte_order(
-            (AvbVBMetaImageHeader *)fs_mgr_avb_verify_data->vbmeta_images[0]
-                .vbmeta_data,
+            (AvbVBMetaImageHeader*)fs_mgr_avb_verify_data->vbmeta_images[0].vbmeta_data,
             &vbmeta_header);
 
-        bool hashtree_disabled = ((AvbVBMetaImageFlags)vbmeta_header.flags &
-                                  AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED);
+        bool hashtree_disabled =
+            ((AvbVBMetaImageFlags)vbmeta_header.flags & AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED);
         if (hashtree_disabled) {
             return FS_MGR_SETUP_AVB_HASHTREE_DISABLED;
         }
@@ -577,8 +528,7 @@ fail:
     return FS_MGR_SETUP_AVB_FAIL;
 }
 
-void fs_mgr_unload_vbmeta_images()
-{
+void fs_mgr_unload_vbmeta_images() {
     if (fs_mgr_avb_verify_data != nullptr) {
         avb_slot_verify_data_free(fs_mgr_avb_verify_data);
     }
@@ -588,32 +538,27 @@ void fs_mgr_unload_vbmeta_images()
     }
 }
 
-int fs_mgr_setup_avb(struct fstab_rec *fstab_entry)
-{
-    if (!fstab_entry || !fs_mgr_avb_verify_data ||
-        fs_mgr_avb_verify_data->num_vbmeta_images < 1) {
+int fs_mgr_setup_avb(struct fstab_rec* fstab_entry) {
+    if (!fstab_entry || !fs_mgr_avb_verify_data || fs_mgr_avb_verify_data->num_vbmeta_images < 1) {
         return FS_MGR_SETUP_AVB_FAIL;
     }
 
     std::string partition_name(basename(fstab_entry->mount_point));
-    if (!avb_validate_utf8((const uint8_t *)partition_name.c_str(),
-                           partition_name.length())) {
-        LERROR << "Partition name: " << partition_name.c_str()
-               << " is not valid UTF-8.";
+    if (!avb_validate_utf8((const uint8_t*)partition_name.c_str(), partition_name.length())) {
+        LERROR << "Partition name: " << partition_name.c_str() << " is not valid UTF-8.";
         return FS_MGR_SETUP_AVB_FAIL;
     }
 
     AvbHashtreeDescriptor hashtree_descriptor;
     std::string salt;
     std::string root_digest;
-    if (!get_hashtree_descriptor(partition_name, *fs_mgr_avb_verify_data,
-                                 &hashtree_descriptor, &salt, &root_digest)) {
+    if (!get_hashtree_descriptor(partition_name, *fs_mgr_avb_verify_data, &hashtree_descriptor,
+                                 &salt, &root_digest)) {
         return FS_MGR_SETUP_AVB_FAIL;
     }
 
     // Converts HASHTREE descriptor to verity_table_params.
-    if (!hashtree_dm_verity_setup(fstab_entry, hashtree_descriptor, salt,
-                                  root_digest)) {
+    if (!hashtree_dm_verity_setup(fstab_entry, hashtree_descriptor, salt, root_digest)) {
         return FS_MGR_SETUP_AVB_FAIL;
     }
 

@@ -19,8 +19,7 @@
 
 #include <openssl/sha.h>
 
-class SHA256Hasher
-{
+class SHA256Hasher {
    private:
     SHA256_CTX sha256_ctx;
     uint8_t hash[SHA256_DIGEST_LENGTH];
@@ -28,25 +27,17 @@ class SHA256Hasher
    public:
     enum { DIGEST_SIZE = SHA256_DIGEST_LENGTH };
 
-    SHA256Hasher()
-    {
-        SHA256_Init(&sha256_ctx);
-    }
+    SHA256Hasher() { SHA256_Init(&sha256_ctx); }
 
-    void update(const void *data, size_t data_size)
-    {
-        SHA256_Update(&sha256_ctx, data, data_size);
-    }
+    void update(const void* data, size_t data_size) { SHA256_Update(&sha256_ctx, data, data_size); }
 
-    const uint8_t *finalize()
-    {
+    const uint8_t* finalize() {
         SHA256_Final(hash, &sha256_ctx);
         return hash;
     }
 };
 
-class SHA512Hasher
-{
+class SHA512Hasher {
    private:
     SHA512_CTX sha512_ctx;
     uint8_t hash[SHA512_DIGEST_LENGTH];
@@ -54,18 +45,13 @@ class SHA512Hasher
    public:
     enum { DIGEST_SIZE = SHA512_DIGEST_LENGTH };
 
-    SHA512Hasher()
-    {
-        SHA512_Init(&sha512_ctx);
-    }
+    SHA512Hasher() { SHA512_Init(&sha512_ctx); }
 
-    void update(const uint8_t *data, size_t data_size)
-    {
+    void update(const uint8_t* data, size_t data_size) {
         SHA512_Update(&sha512_ctx, data, data_size);
     }
 
-    const uint8_t *finalize()
-    {
+    const uint8_t* finalize() {
         SHA512_Final(hash, &sha512_ctx);
         return hash;
     }
