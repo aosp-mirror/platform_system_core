@@ -45,11 +45,11 @@ bool fs_mgr_is_avb_used();
  *     developers to make the filesystem writable to allow replacing
  *     binaries on the device.
  */
-int fs_mgr_load_vbmeta_images(struct fstab *fstab);
+int fs_mgr_load_vbmeta_images(struct fstab* fstab);
 
 void fs_mgr_unload_vbmeta_images();
 
-int fs_mgr_setup_avb(struct fstab_rec *fstab_entry);
+int fs_mgr_setup_avb(struct fstab_rec* fstab_entry);
 
 __END_DECLS
 
