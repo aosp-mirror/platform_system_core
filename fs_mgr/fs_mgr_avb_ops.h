@@ -49,10 +49,10 @@ __BEGIN_DECLS
  *
  * Frees with fs_mgr_dummy_avb_ops_free().
  */
-AvbOps *fs_mgr_dummy_avb_ops_new(struct fstab *fstab);
+AvbOps* fs_mgr_dummy_avb_ops_new(struct fstab* fstab);
 
 /* Frees an AvbOps instance previously allocated with fs_mgr_avb_ops_new(). */
-void fs_mgr_dummy_avb_ops_free(AvbOps *ops);
+void fs_mgr_dummy_avb_ops_free(AvbOps* ops);
 
 __END_DECLS
 

@@ -39,15 +39,11 @@
 #include "fs_mgr_avb_ops.h"
 #include "fs_mgr_priv.h"
 
-static struct fstab *fs_mgr_fstab = nullptr;
+static struct fstab* fs_mgr_fstab = nullptr;
 
-static AvbIOResult read_from_partition(AvbOps *ops ATTRIBUTE_UNUSED,
-                                       const char *partition,
-                                       int64_t offset,
-                                       size_t num_bytes,
-                                       void *buffer,
-                                       size_t *out_num_read)
-{
+static AvbIOResult read_from_partition(AvbOps* ops ATTRIBUTE_UNUSED, const char* partition,
+                                       int64_t offset, size_t num_bytes, void* buffer,
+                                       size_t* out_num_read) {
     // The input |partition| name is with ab_suffix, e.g. system_a.
     // Slot suffix (e.g. _a) will be appended to the device file path
     // for partitions having 'slotselect' optin in fstab file, but it
@@ -62,8 +58,7 @@ static AvbIOResult read_from_partition(AvbOps *ops ATTRIBUTE_UNUSED,
     //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/misc ->
     //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/system_a
 
-    struct fstab_rec *fstab_entry =
-        fs_mgr_get_entry_for_mount_point(fs_mgr_fstab, "/misc");
+    struct fstab_rec* fstab_entry = fs_mgr_get_entry_for_mount_point(fs_mgr_fstab, "/misc");
 
     if (fstab_entry == nullptr) {
         LERROR << "/misc mount point not found in fstab";
@@ -86,8 +81,7 @@ static AvbIOResult read_from_partition(AvbOps *ops ATTRIBUTE_UNUSED,
         return AVB_IO_RESULT_ERROR_IO;
     }
 
-    android::base::unique_fd fd(
-        TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_CLOEXEC)));
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_CLOEXEC)));
 
     if (fd < 0) {
         PERROR << "Failed to open " << path.c_str();
@@ -112,12 +106,11 @@ static AvbIOResult read_from_partition(AvbOps *ops ATTRIBUTE_UNUSED,
 
     // On Linux, we never get partial reads from block devices (except
     // for EOF).
-    ssize_t num_read =
-        TEMP_FAILURE_RETRY(pread64(fd, buffer, num_bytes, offset));
+    ssize_t num_read = TEMP_FAILURE_RETRY(pread64(fd, buffer, num_bytes, offset));
 
     if (num_read < 0 || (size_t)num_read != num_bytes) {
-        PERROR << "Failed to read " << num_bytes << " bytes from "
-               << path.c_str() << " offset " << offset;
+        PERROR << "Failed to read " << num_bytes << " bytes from " << path.c_str() << " offset "
+               << offset;
         return AVB_IO_RESULT_ERROR_IO;
     }
 
@@ -128,11 +121,9 @@ static AvbIOResult read_from_partition(AvbOps *ops ATTRIBUTE_UNUSED,
     return AVB_IO_RESULT_OK;
 }
 
-static AvbIOResult dummy_read_rollback_index(AvbOps *ops ATTRIBUTE_UNUSED,
-                                             size_t rollback_index_location
-                                                 ATTRIBUTE_UNUSED,
-                                             uint64_t *out_rollback_index)
-{
+static AvbIOResult dummy_read_rollback_index(AvbOps* ops ATTRIBUTE_UNUSED,
+                                             size_t rollback_index_location ATTRIBUTE_UNUSED,
+                                             uint64_t* out_rollback_index) {
     // rollback_index has been checked in bootloader phase.
     // In user-space, returns the smallest value 0 to pass the check.
     *out_rollback_index = 0;
@@ -140,13 +131,9 @@ static AvbIOResult dummy_read_rollback_index(AvbOps *ops ATTRIBUTE_UNUSED,
 }
 
 static AvbIOResult dummy_validate_vbmeta_public_key(
-    AvbOps *ops ATTRIBUTE_UNUSED,
-    const uint8_t *public_key_data ATTRIBUTE_UNUSED,
-    size_t public_key_length ATTRIBUTE_UNUSED,
-    const uint8_t *public_key_metadata ATTRIBUTE_UNUSED,
-    size_t public_key_metadata_length ATTRIBUTE_UNUSED,
-    bool *out_is_trusted)
-{
+    AvbOps* ops ATTRIBUTE_UNUSED, const uint8_t* public_key_data ATTRIBUTE_UNUSED,
+    size_t public_key_length ATTRIBUTE_UNUSED, const uint8_t* public_key_metadata ATTRIBUTE_UNUSED,
+    size_t public_key_metadata_length ATTRIBUTE_UNUSED, bool* out_is_trusted) {
     // vbmeta public key has been checked in bootloader phase.
     // In user-space, returns true to pass the check.
     //
@@ -158,9 +145,8 @@ static AvbIOResult dummy_validate_vbmeta_public_key(
     return AVB_IO_RESULT_OK;
 }
 
-static AvbIOResult dummy_read_is_device_unlocked(AvbOps *ops ATTRIBUTE_UNUSED,
-                                                 bool *out_is_unlocked)
-{
+static AvbIOResult dummy_read_is_device_unlocked(AvbOps* ops ATTRIBUTE_UNUSED,
+                                                 bool* out_is_unlocked) {
     // The function is for bootloader to update the value into
     // androidboot.vbmeta.device_state in kernel cmdline.
     // In user-space, returns true as we don't need to update it anymore.
@@ -168,12 +154,9 @@ static AvbIOResult dummy_read_is_device_unlocked(AvbOps *ops ATTRIBUTE_UNUSED,
     return AVB_IO_RESULT_OK;
 }
 
-static AvbIOResult dummy_get_unique_guid_for_partition(
-    AvbOps *ops ATTRIBUTE_UNUSED,
-    const char *partition ATTRIBUTE_UNUSED,
-    char *guid_buf,
-    size_t guid_buf_size)
-{
+static AvbIOResult dummy_get_unique_guid_for_partition(AvbOps* ops ATTRIBUTE_UNUSED,
+                                                       const char* partition ATTRIBUTE_UNUSED,
+                                                       char* guid_buf, size_t guid_buf_size) {
     // The function is for bootloader to set the correct UUID
     // for a given partition in kernel cmdline.
     // In user-space, returns a faking one as we don't need to update
@@ -182,14 +165,13 @@ static AvbIOResult dummy_get_unique_guid_for_partition(
     return AVB_IO_RESULT_OK;
 }
 
-AvbOps *fs_mgr_dummy_avb_ops_new(struct fstab *fstab)
-{
-    AvbOps *ops;
+AvbOps* fs_mgr_dummy_avb_ops_new(struct fstab* fstab) {
+    AvbOps* ops;
 
     // Assigns the fstab to the static variable for later use.
     fs_mgr_fstab = fstab;
 
-    ops = (AvbOps *)calloc(1, sizeof(AvbOps));
+    ops = (AvbOps*)calloc(1, sizeof(AvbOps));
     if (ops == nullptr) {
         LERROR << "Error allocating memory for AvbOps";
         return nullptr;
@@ -207,7 +189,4 @@ AvbOps *fs_mgr_dummy_avb_ops_new(struct fstab *fstab)
     return ops;
 }
 
-void fs_mgr_dummy_avb_ops_free(AvbOps *ops)
-{
-    free(ops);
-}
+void fs_mgr_dummy_avb_ops_free(AvbOps* ops) { free(ops); }
