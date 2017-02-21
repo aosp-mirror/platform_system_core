@@ -48,6 +48,7 @@ include $(BUILD_NATIVE_TEST)
 
 test_src_files := \
     logcat_test.cpp \
+    liblogcat_test.cpp \
 
 # Build tests for the device (with .so). Run with:
 #   adb shell /data/nativetest/logcat-unit-tests/logcat-unit-tests
@@ -55,6 +56,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := $(test_module_prefix)unit-tests
 LOCAL_MODULE_TAGS := $(test_tags)
 LOCAL_CFLAGS += $(test_c_flags)
-LOCAL_SHARED_LIBRARIES := liblog libbase
+LOCAL_SHARED_LIBRARIES := liblog libbase liblogcat
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/../include
 LOCAL_SRC_FILES := $(test_src_files)
 include $(BUILD_NATIVE_TEST)
