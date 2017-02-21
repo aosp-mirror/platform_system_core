@@ -117,7 +117,7 @@ static void logdClose()
 
 static int logdAvailable(log_id_t logId)
 {
-    if (logId > LOG_ID_SECURITY) {
+    if (logId >= LOG_ID_MAX || logId == LOG_ID_KERNEL) {
         return -EINVAL;
     }
     if (atomic_load(&logdLoggerWrite.context.sock) < 0) {
