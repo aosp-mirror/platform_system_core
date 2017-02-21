@@ -60,7 +60,7 @@ cc_library {
         "native_handle.c",
         "open_memstream.c",
         "record_stream.c",
-        "sched_policy.c",
+        "sched_policy.cpp",
         "sockets.cpp",
         "strdup16to8.c",
         "strdup8to16.c",
@@ -141,14 +141,6 @@ cc_library {
     header_libs: ["libcutils_headers"],
     export_header_lib_headers: ["libcutils_headers"],
 
-    product_variables: {
-        cpusets: {
-            cflags: ["-DUSE_CPUSETS"],
-        },
-        schedboost: {
-            cflags: ["-DUSE_SCHEDBOOST"],
-        },
-    },
     cflags: [
         "-Werror",
         "-Wall",
