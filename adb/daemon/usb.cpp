@@ -319,7 +319,7 @@ bool init_functionfs(struct usb_handle* h) {
     D("[ adb: cannot call endpoint alloc: errno=%d ]", errno);
     // Kernel pre-allocation could have failed for recoverable reasons.
     // Continue running with a safe max rw size.
-    h->max_rw *= 2;
+    h->max_rw = USB_FFS_BULK_SIZE;
     return true;
 
 err:
