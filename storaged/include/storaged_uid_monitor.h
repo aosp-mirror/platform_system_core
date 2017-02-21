@@ -63,18 +63,25 @@ struct uid_record {
     struct uid_io_usage ios;
 };
 
+struct uid_records {
+    uint64_t start_ts;
+    std::vector<struct uid_record> entries;
+};
+
 class uid_monitor {
 private:
     // last dump from /proc/uid_io/stats, uid -> uid_info
     std::unordered_map<uint32_t, struct uid_info> last_uid_io_stats;
     // current io usage for next report, app name -> uid_io_usage
     std::unordered_map<std::string, struct uid_io_usage> curr_io_stats;
-    // io usage records, timestamp -> vector of events
-    std::map<uint64_t, std::vector<struct uid_record>> records;
+    // io usage records, end timestamp -> {start timestamp, vector of records}
+    std::map<uint64_t, struct uid_records> records;
     // charger ON/OFF
     charger_stat_t charger_stat;
     // protects curr_io_stats, last_uid_io_stats, records and charger_stat
     sem_t um_lock;
+    // start time for IO records
+    uint64_t start_ts;
 
     // reads from /proc/uid_io/stats
     std::unordered_map<uint32_t, struct uid_info> get_uid_io_stats_locked();
@@ -91,7 +98,7 @@ public:
     // called by storaged -u
     std::unordered_map<uint32_t, struct uid_info> get_uid_io_stats();
     // called by dumpsys
-    std::map<uint64_t, std::vector<struct uid_record>> dump(
+    std::map<uint64_t, struct uid_records> dump(
         double hours, uint64_t threshold, bool force_report);
     // called by battery properties listener
     void set_charger_state(charger_stat_t stat);
