@@ -836,6 +836,11 @@ std::string LogTags::formatEntry_locked(uint32_t tag, uid_t uid,
     return ret;
 }
 
+std::string LogTags::formatEntry(uint32_t tag, uid_t uid) {
+    android::RWLock::AutoRLock readLock(rwlock);
+    return formatEntry_locked(tag, uid);
+}
+
 std::string LogTags::formatGetEventTag(uid_t uid,
                                        const char* name, const char* format) {
     bool all = name && (name[0] == '*') && !name[1];

@@ -301,6 +301,7 @@ int CommandListener::GetEventTagCmd::runCommand(SocketClient *cli,
 
     const char *name = NULL;
     const char *format = NULL;
+    const char *id = NULL;
     for (int i = 1; i < argc; ++i) {
         static const char _name[] = "name=";
         if (!strncmp(argv[i], _name, strlen(_name))) {
@@ -313,6 +314,21 @@ int CommandListener::GetEventTagCmd::runCommand(SocketClient *cli,
             format = argv[i] + strlen(_format);
             continue;
         }
+
+        static const char _id[] = "id=";
+        if (!strncmp(argv[i], _id, strlen(_id))) {
+            id = argv[i] + strlen(_id);
+            continue;
+        }
+    }
+
+    if (id) {
+        if (format || name) {
+            cli->sendMsg("can not mix id= with either format= or name=");
+            return 0;
+        }
+        cli->sendMsg(package_string(mBuf.formatEntry(atoi(id), uid)).c_str());
+        return 0;
     }
 
     cli->sendMsg(package_string(mBuf.formatGetEventTag(uid,
