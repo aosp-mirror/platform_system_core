@@ -140,6 +140,9 @@ public:
                                   const char *name, const char *format) {
         return tags.formatGetEventTag(uid, name, format);
     }
+    std::string formatEntry(uint32_t tag, uid_t uid) {
+        return tags.formatEntry(tag, uid);
+    }
     const char *tagToName(uint32_t tag) { return tags.tagToName(tag); }
 
     // helper must be protected directly or implicitly by lock()/unlock()

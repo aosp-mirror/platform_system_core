@@ -836,6 +836,23 @@ TEST(logd, getEventTag_list) {
 #endif
 }
 
+TEST(logd, getEventTag_42) {
+#ifdef __ANDROID__
+    char buffer[256];
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "getEventTag id=42");
+    send_to_control(buffer, sizeof(buffer));
+    buffer[sizeof(buffer) - 1] = '\0';
+    char *cp;
+    long ret = strtol(buffer, &cp, 10);
+    EXPECT_GT(ret, 16);
+    EXPECT_TRUE(strstr(buffer, "\t(to life the universe etc|3)") != NULL);
+    EXPECT_TRUE(strstr(buffer, "answer") != NULL);
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
+}
+
 TEST(logd, getEventTag_newentry) {
 #ifdef __ANDROID__
     char buffer[256];
