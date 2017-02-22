@@ -134,8 +134,19 @@ TEST(properties, WaitForProperty) {
     android::base::SetProperty("debug.libbase.WaitForProperty_test", "b");
   });
 
-  android::base::WaitForProperty("debug.libbase.WaitForProperty_test", "a");
+  ASSERT_TRUE(android::base::WaitForProperty("debug.libbase.WaitForProperty_test", "a", 1s));
   flag = true;
-  android::base::WaitForProperty("debug.libbase.WaitForProperty_test", "b");
+  ASSERT_TRUE(android::base::WaitForProperty("debug.libbase.WaitForProperty_test", "b", 1s));
   thread.join();
+}
+
+TEST(properties, WaitForProperty_timeout) {
+  auto t0 = std::chrono::steady_clock::now();
+  ASSERT_FALSE(android::base::WaitForProperty("debug.libbase.WaitForProperty_timeout_test", "a",
+                                              200ms));
+  auto t1 = std::chrono::steady_clock::now();
+
+  ASSERT_GE(std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0), 200ms);
+  // Upper bounds on timing are inherently flaky, but let's try...
+  ASSERT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0), 600ms);
 }

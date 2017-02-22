@@ -21,9 +21,13 @@
 #include <sys/system_properties.h>
 #include <sys/_system_properties.h>
 
+#include <algorithm>
+#include <chrono>
 #include <string>
 
 #include <android-base/parseint.h>
+
+using namespace std::chrono_literals;
 
 namespace android {
 namespace base {
@@ -96,14 +100,41 @@ static void WaitForPropertyCallback(void* data_ptr, const char*, const char* val
   }
 }
 
-void WaitForProperty(const std::string& key, const std::string& expected_value) {
+// TODO: chrono_utils?
+static void DurationToTimeSpec(timespec& ts, std::chrono::nanoseconds d) {
+  auto s = std::chrono::duration_cast<std::chrono::seconds>(d);
+  auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(d - s);
+  ts.tv_sec = s.count();
+  ts.tv_nsec = ns.count();
+}
+
+static void UpdateTimeSpec(timespec& ts,
+                           const std::chrono::time_point<std::chrono::steady_clock>& timeout) {
+  auto now = std::chrono::steady_clock::now();
+  auto remaining_timeout = std::chrono::duration_cast<std::chrono::nanoseconds>(timeout - now);
+  if (remaining_timeout < 0ns) {
+    ts = { 0, 0 };
+  } else {
+    DurationToTimeSpec(ts, remaining_timeout);
+  }
+}
+
+bool WaitForProperty(const std::string& key,
+                     const std::string& expected_value,
+                     std::chrono::milliseconds relative_timeout) {
+  // TODO: boot_clock?
+  auto now = std::chrono::steady_clock::now();
+  std::chrono::time_point<std::chrono::steady_clock> absolute_timeout = now + relative_timeout;
+  timespec ts;
+
   // Find the property's prop_info*.
   const prop_info* pi;
   unsigned global_serial = 0;
   while ((pi = __system_property_find(key.c_str())) == nullptr) {
     // The property doesn't even exist yet.
     // Wait for a global change and then look again.
-    global_serial = __system_property_wait_any(global_serial);
+    UpdateTimeSpec(ts, absolute_timeout);
+    if (!__system_property_wait(nullptr, global_serial, &global_serial, &ts)) return false;
   }
 
   WaitForPropertyData data;
@@ -112,10 +143,12 @@ void WaitForProperty(const std::string& key, const std::string& expected_value) 
   while (true) {
     // Check whether the property has the value we're looking for?
     __system_property_read_callback(pi, WaitForPropertyCallback, &data);
-    if (data.done) return;
+    if (data.done) return true;
 
-    // It didn't so wait for it to change before checking again.
-    __system_property_wait(pi, data.last_read_serial);
+    // It didn't, so wait for the property to change before checking again.
+    UpdateTimeSpec(ts, absolute_timeout);
+    uint32_t unused;
+    if (!__system_property_wait(pi, data.last_read_serial, &unused, &ts)) return false;
   }
 }
 
