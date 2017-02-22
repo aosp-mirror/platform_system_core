@@ -625,14 +625,14 @@ static inline uint64_t get8LE(const uint8_t* src)
 }
 
 static bool findChar(const char** cp, size_t* len, int c) {
-    while (*len && isspace(**cp)) {
-        ++*cp;
-        --*len;
+    while ((*len) && isspace(*(*cp))) {
+        ++(*cp);
+        --(*len);
     }
     if (c == INT_MAX) return *len;
-    if (*len && (**cp == c)) {
-        ++*cp;
-        --*len;
+    if ((*len) && (*(*cp) == c)) {
+        ++(*cp);
+        --(*len);
         return true;
     }
     return false;
@@ -991,7 +991,7 @@ no_room:
 LIBLOG_ABI_PUBLIC int android_log_processBinaryLogBuffer(
         struct logger_entry *buf,
         AndroidLogEntry *entry,
-        const EventTagMap *map __unused,
+        const EventTagMap *map __unused, // only on !__ANDROID__
         char *messageBuf, int messageBufLen)
 {
     size_t inCount;
