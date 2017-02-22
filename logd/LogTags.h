@@ -106,6 +106,7 @@ public:
     // reverse lookup from tag
     const char* tagToName(uint32_t tag) const;
     const char* tagToFormat(uint32_t tag) const;
+    std::string formatEntry(uint32_t tag, uid_t uid);
     // find associated tag
     uint32_t nameToTag(const char* name) const;
 
