@@ -476,15 +476,18 @@ exit_success:
 static void import_late(const std::vector<std::string>& args, size_t start_index, size_t end_index) {
     Parser& parser = Parser::GetInstance();
     if (end_index <= start_index) {
-        // Use the default set if no path is given
-        static const std::vector<std::string> init_directories = {
-            "/system/etc/init",
-            "/vendor/etc/init",
-            "/odm/etc/init"
-        };
-
-        for (const auto& dir : init_directories) {
-            parser.ParseConfig(dir);
+        // Fallbacks for partitions on which early mount isn't enabled.
+        if (!parser.is_system_etc_init_loaded()) {
+            parser.ParseConfig("/system/etc/init");
+            parser.set_is_system_etc_init_loaded(true);
+        }
+        if (!parser.is_vendor_etc_init_loaded()) {
+            parser.ParseConfig("/vendor/etc/init");
+            parser.set_is_vendor_etc_init_loaded(true);
+        }
+        if (!parser.is_odm_etc_init_loaded()) {
+            parser.ParseConfig("/odm/etc/init");
+            parser.set_is_odm_etc_init_loaded(true);
         }
     } else {
         for (size_t i = start_index; i < end_index; ++i) {
