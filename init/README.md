@@ -26,7 +26,7 @@ message is logged.
 Init .rc Files
 --------------
 The init language is used in plain text files that take the .rc file
-extension.  These are typically multiple of these in multiple
+extension.  There are typically multiple of these in multiple
 locations on the system, described below.
 
 /init.rc is the primary .rc file and is loaded by the init executable
