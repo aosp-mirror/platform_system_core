@@ -118,11 +118,17 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
         }
     }
 
-    const std::map<uint64_t, std::vector<struct uid_record>>& records =
+    uint64_t last_ts = 0;
+    const std::map<uint64_t, struct uid_records>& records =
                 storaged.get_uid_records(hours, threshold, force_report);
     for (const auto& it : records) {
-        dprintf(fd, "%llu\n", (unsigned long long)it.first);
-        for (const auto& record : it.second) {
+        if (last_ts != it.second.start_ts) {
+            dprintf(fd, "%llu", (unsigned long long)it.second.start_ts);
+        }
+        dprintf(fd, ",%llu\n", (unsigned long long)it.first);
+        last_ts = it.first;
+
+        for (const auto& record : it.second.entries) {
             dprintf(fd, "%s %llu %llu %llu %llu %llu %llu %llu %llu\n",
                 record.name.c_str(),
                 (unsigned long long)record.ios.bytes[READ][FOREGROUND][CHARGER_OFF],

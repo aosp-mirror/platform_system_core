@@ -103,11 +103,11 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_lock
 static const int MAX_UID_RECORDS_SIZE = 1000 * 48; // 1000 uids in 48 hours
 
 static inline int records_size(
-    const std::map<uint64_t, std::vector<struct uid_record>>& records)
+    const std::map<uint64_t, struct uid_records>& curr_records)
 {
     int count = 0;
-    for (auto const& it : records) {
-        count += it.second.size();
+    for (auto const& it : curr_records) {
+        count += it.second.entries.size();
     }
     return count;
 }
@@ -122,34 +122,36 @@ void uid_monitor::add_records_locked(uint64_t curr_ts)
         records.erase(records.begin(), it);
     }
 
-    std::vector<struct uid_record> new_records;
+    struct uid_records new_records;
     for (const auto& p : curr_io_stats) {
         struct uid_record record = {};
         record.name = p.first;
         record.ios = p.second;
         if (memcmp(&record.ios, &zero_io_usage, sizeof(struct uid_io_usage))) {
-            new_records.push_back(record);
+            new_records.entries.push_back(record);
         }
     }
 
     curr_io_stats.clear();
+    new_records.start_ts = start_ts;
+    start_ts = curr_ts;
 
-    if (new_records.empty())
+    if (new_records.entries.empty())
       return;
 
     // make some room for new records
     int overflow = records_size(records) +
-        new_records.size() - MAX_UID_RECORDS_SIZE;
+        new_records.entries.size() - MAX_UID_RECORDS_SIZE;
     while (overflow > 0 && records.size() > 0) {
-        overflow -= records[0].size();
+        auto del_it = records.begin();
+        overflow -= del_it->second.entries.size();
         records.erase(records.begin());
     }
 
-    records[curr_ts].insert(records[curr_ts].end(),
-        new_records.begin(), new_records.end());
+    records[curr_ts] = new_records;
 }
 
-std::map<uint64_t, std::vector<struct uid_record>> uid_monitor::dump(
+std::map<uint64_t, struct uid_records> uid_monitor::dump(
     double hours, uint64_t threshold, bool force_report)
 {
     if (force_report) {
@@ -158,7 +160,7 @@ std::map<uint64_t, std::vector<struct uid_record>> uid_monitor::dump(
 
     std::unique_ptr<lock_t> lock(new lock_t(&um_lock));
 
-    std::map<uint64_t, std::vector<struct uid_record>> dump_records;
+    std::map<uint64_t, struct uid_records> dump_records;
     uint64_t first_ts = 0;
 
     if (hours != 0) {
@@ -166,8 +168,8 @@ std::map<uint64_t, std::vector<struct uid_record>> uid_monitor::dump(
     }
 
     for (auto it = records.lower_bound(first_ts); it != records.end(); ++it) {
-        const std::vector<struct uid_record>& recs = it->second;
-        std::vector<struct uid_record> filtered;
+        const std::vector<struct uid_record>& recs = it->second.entries;
+        struct uid_records filtered;
 
         for (const auto& rec : recs) {
             if (rec.ios.bytes[READ][FOREGROUND][CHARGER_ON] +
@@ -178,11 +180,16 @@ std::map<uint64_t, std::vector<struct uid_record>> uid_monitor::dump(
                 rec.ios.bytes[WRITE][FOREGROUND][CHARGER_OFF] +
                 rec.ios.bytes[WRITE][BACKGROUND][CHARGER_ON] +
                 rec.ios.bytes[WRITE][BACKGROUND][CHARGER_OFF] > threshold) {
-                filtered.push_back(rec);
+                filtered.entries.push_back(rec);
             }
         }
+
+        if (filtered.entries.empty())
+            continue;
+
+        filtered.start_ts = it->second.start_ts;
         dump_records.insert(
-            std::pair<uint64_t, std::vector<struct uid_record>>(it->first, filtered));
+            std::pair<uint64_t, struct uid_records>(it->first, filtered));
     }
 
     return dump_records;
@@ -249,6 +256,7 @@ void uid_monitor::set_charger_state(charger_stat_t stat)
 void uid_monitor::init(charger_stat_t stat)
 {
     charger_stat = stat;
+    start_ts = time(NULL);
     last_uid_io_stats = get_uid_io_stats();
 }
 

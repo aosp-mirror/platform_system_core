@@ -301,7 +301,7 @@ public:
     std::unordered_map<uint32_t, struct uid_info> get_uids(void) {
         return mUidm.get_uid_io_stats();
     }
-    std::map<uint64_t, std::vector<struct uid_record>> get_uid_records(
+    std::map<uint64_t, struct uid_records> get_uid_records(
             double hours, uint64_t threshold, bool force_report) {
         return mUidm.dump(hours, threshold, force_report);
     }
