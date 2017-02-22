@@ -1231,8 +1231,11 @@ static int __logcat(android_logcat_context_internal* context) {
                     android::close_error(context);
                     context->stderr_stdout = true;
                     context->output = fp;
-                    context->error = context->output;
-                    if (context->stderr_null) context->error = NULL;
+                    context->output_fd = fileno(fp);
+                    if (context->stderr_null) break;
+                    context->stderr_stdout = true;
+                    context->error = fp;
+                    context->error_fd = fileno(fp);
                 }
                 break;
 
