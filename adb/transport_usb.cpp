@@ -97,3 +97,12 @@ int is_adb_interface(int usb_class, int usb_subclass, int usb_protocol)
 {
     return (usb_class == ADB_CLASS && usb_subclass == ADB_SUBCLASS && usb_protocol == ADB_PROTOCOL);
 }
+
+bool should_use_libusb() {
+#if defined(_WIN32) || !ADB_HOST
+    return false;
+#else
+    static bool enable = getenv("ADB_LIBUSB") && strcmp(getenv("ADB_LIBUSB"), "1") == 0;
+    return enable;
+#endif
+}
