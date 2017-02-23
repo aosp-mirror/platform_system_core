@@ -47,6 +47,8 @@ extern const char* const kFeatureShell2;
 // The 'cmd' command is available
 extern const char* const kFeatureCmd;
 extern const char* const kFeatureStat2;
+// The server is running with libusb enabled.
+extern const char* const kFeatureLibusb;
 
 class atransport {
 public:
