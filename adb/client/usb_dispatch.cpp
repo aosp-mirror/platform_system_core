@@ -17,11 +17,6 @@
 #include <android-base/logging.h>
 #include "usb.h"
 
-static bool should_use_libusb() {
-    static bool enable = getenv("ADB_LIBUSB") && strcmp(getenv("ADB_LIBUSB"), "1") == 0;
-    return enable;
-}
-
 void usb_init() {
     if (should_use_libusb()) {
         LOG(DEBUG) << "using libusb backend";

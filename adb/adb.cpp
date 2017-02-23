@@ -1129,6 +1129,18 @@ int handle_host_request(const char* service, TransportType type,
         return 0;
     }
 
+#if ADB_HOST
+    if (!strcmp(service, "host-features")) {
+        FeatureSet features = supported_features();
+        // Abuse features to report libusb status.
+        if (should_use_libusb()) {
+            features.insert(kFeatureLibusb);
+        }
+        SendOkay(reply_fd, FeatureSetToString(features));
+        return 0;
+    }
+#endif
+
     // remove TCP transport
     if (!strncmp(service, "disconnect:", 11)) {
         const std::string address(service + 11);
