@@ -149,10 +149,6 @@ static const struct fs_path_config android_files[] = {
                                               "system/bin/run-as" },
     { 00700, AID_SYSTEM,    AID_SHELL,     CAP_MASK_LONG(CAP_BLOCK_SUSPEND),
                                               "system/bin/inputflinger" },
-    { 00750, AID_SYSTEM,    AID_SHELL,     CAP_MASK_LONG(CAP_SETUID) |
-                                           CAP_MASK_LONG(CAP_SETGID) |
-                                           CAP_MASK_LONG(CAP_SYS_PTRACE),
-                                              "system/bin/storaged" },
 
     /* Support FIFO scheduling mode in SurfaceFlinger. */
     { 00755, AID_SYSTEM,    AID_GRAPHICS,  CAP_MASK_LONG(CAP_SYS_NICE),
