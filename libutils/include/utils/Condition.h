@@ -86,19 +86,22 @@ private:
 
 #if !defined(_WIN32)
 
-inline Condition::Condition() {
-    pthread_cond_init(&mCond, NULL);
+inline Condition::Condition() : Condition(PRIVATE) {
 }
 inline Condition::Condition(int type) {
+    pthread_condattr_t attr;
+    pthread_condattr_init(&attr);
+#if defined(__linux__)
+    pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+#endif
+
     if (type == SHARED) {
-        pthread_condattr_t attr;
-        pthread_condattr_init(&attr);
         pthread_condattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
-        pthread_cond_init(&mCond, &attr);
-        pthread_condattr_destroy(&attr);
-    } else {
-        pthread_cond_init(&mCond, NULL);
     }
+
+    pthread_cond_init(&mCond, &attr);
+    pthread_condattr_destroy(&attr);
+
 }
 inline Condition::~Condition() {
     pthread_cond_destroy(&mCond);
@@ -109,7 +112,7 @@ inline status_t Condition::wait(Mutex& mutex) {
 inline status_t Condition::waitRelative(Mutex& mutex, nsecs_t reltime) {
     struct timespec ts;
 #if defined(__linux__)
-    clock_gettime(CLOCK_REALTIME, &ts);
+    clock_gettime(CLOCK_MONOTONIC, &ts);
 #else // __APPLE__
     // Apple doesn't support POSIX clocks.
     struct timeval t;
