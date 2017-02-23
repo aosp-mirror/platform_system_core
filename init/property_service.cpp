@@ -245,6 +245,13 @@ class SocketConnection {
       return true;
     }
 
+    // http://b/35166374: don't allow init to make arbitrarily large allocations.
+    if (len > 0xffff) {
+      LOG(ERROR) << "sys_prop: RecvString asked to read huge string: " << len;
+      errno = ENOMEM;
+      return false;
+    }
+
     std::vector<char> chars(len);
     if (!RecvChars(&chars[0], len, timeout_ms)) {
       return false;
@@ -386,12 +393,11 @@ static void handle_property_set_fd() {
         return;
     }
 
-    /* Check socket options here */
     struct ucred cr;
     socklen_t cr_size = sizeof(cr);
     if (getsockopt(s, SOL_SOCKET, SO_PEERCRED, &cr, &cr_size) < 0) {
         close(s);
-        PLOG(ERROR) << "Unable to receive socket options";
+        PLOG(ERROR) << "sys_prop: unable to get SO_PEERCRED";
         return;
     }
 
@@ -399,14 +405,13 @@ static void handle_property_set_fd() {
     uint32_t timeout_ms = kDefaultSocketTimeout;
 
     uint32_t cmd = 0;
-
     if (!socket.RecvUint32(&cmd, &timeout_ms)) {
         PLOG(ERROR) << "sys_prop: error while reading command from the socket";
         socket.SendUint32(PROP_ERROR_READ_CMD);
         return;
     }
 
-    switch(cmd) {
+    switch (cmd) {
     case PROP_MSG_SETPROP: {
         char prop_name[PROP_NAME_MAX];
         char prop_value[PROP_VALUE_MAX];
@@ -437,7 +442,9 @@ static void handle_property_set_fd() {
         handle_property_set(socket, name, value, false);
         break;
       }
+
     default:
+        LOG(ERROR) << "sys_prop: invalid command " << cmd;
         socket.SendUint32(PROP_ERROR_INVALID_CMD);
         break;
     }
