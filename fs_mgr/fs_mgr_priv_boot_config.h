@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 
+#ifndef __CORE_FS_MGR_PRIV_BOOTCONFIG_H
+#define __CORE_FS_MGR_PRIV_BOOTCONFIG_H
+
 #include <sys/cdefs.h>
+#include <string>
 
-#define FS_MGR_SETUP_VERITY_DISABLED (-2)
-#define FS_MGR_SETUP_VERITY_FAIL (-1)
-#define FS_MGR_SETUP_VERITY_SUCCESS 0
+bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val);
 
-__BEGIN_DECLS
-
-int fs_mgr_setup_verity(struct fstab_rec *fstab, bool verify_dev);
-
-__END_DECLS
+#endif /* __CORE_FS_MGR_PRIV_BOOTCONFIG_H */

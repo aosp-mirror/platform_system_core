@@ -603,6 +603,11 @@ int fs_mgr_is_verified(const struct fstab_rec *fstab)
     return fstab->fs_mgr_flags & MF_VERIFY;
 }
 
+int fs_mgr_is_verifyatboot(const struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_VERIFYATBOOT;
+}
+
 int fs_mgr_is_encryptable(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT | MF_FORCEFDEORFBE);

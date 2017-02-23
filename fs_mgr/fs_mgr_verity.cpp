@@ -45,7 +45,6 @@
 #include "fs_mgr.h"
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_dm_ioctl.h"
-#include "fs_mgr_priv_verity.h"
 
 #define FSTAB_PREFIX "/fstab."
 
@@ -658,7 +657,6 @@ static int get_verity_state_offset(struct fstab_rec *fstab, off64_t *offset)
 
 static int load_verity_state(struct fstab_rec *fstab, int *mode)
 {
-    char propbuf[PROPERTY_VALUE_MAX];
     int match = 0;
     off64_t offset = 0;
 
@@ -666,10 +664,9 @@ static int load_verity_state(struct fstab_rec *fstab, int *mode)
     *mode = VERITY_MODE_EIO;
 
     /* use the kernel parameter if set */
-    property_get("ro.boot.veritymode", propbuf, "");
-
-    if (*propbuf != '\0') {
-        if (!strcmp(propbuf, "enforcing")) {
+    std::string veritymode;
+    if (fs_mgr_get_boot_config("veritymode", &veritymode)) {
+        if (veritymode.compare("enforcing")) {
             *mode = VERITY_MODE_DEFAULT;
         }
         return 0;
@@ -859,7 +856,10 @@ static void update_verity_table_blk_device(char *blk_device, char **table)
     *table = strdup(result.c_str());
 }
 
-int fs_mgr_setup_verity(struct fstab_rec *fstab, bool verify_dev)
+// prepares the verity enabled (MF_VERIFY / MF_VERIFYATBOOT) fstab record for
+// mount. The 'wait_for_verity_dev' parameter makes this function wait for the
+// verity device to get created before return
+int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
 {
     int retval = FS_MGR_SETUP_VERITY_FAIL;
     int fd = -1;
@@ -1026,7 +1026,7 @@ loaded:
     }
 
     // make sure we've set everything up properly
-    if (verify_dev && fs_mgr_test_access(fstab->blk_device) < 0) {
+    if (wait_for_verity_dev && fs_mgr_test_access(fstab->blk_device) < 0) {
         goto out;
     }
 
