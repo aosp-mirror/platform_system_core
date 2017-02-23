@@ -251,7 +251,10 @@ static void make_device(const char *path,
      * some device nodes, so the uid has to be set with chown() and is still
      * racy. Fixing the gid race at least fixed the issue with system_server
      * opening dynamic input devices under the AID_INPUT gid. */
-    setegid(gid);
+    if (setegid(gid)) {
+        PLOG(ERROR) << "setegid(" << gid << ") for " << path << " device failed";
+        goto out;
+    }
     /* If the node already exists update its SELinux label to handle cases when
      * it was created with the wrong context during coldboot procedure. */
     if (mknod(path, mode, dev) && (errno == EEXIST) && secontext) {
@@ -273,7 +276,9 @@ static void make_device(const char *path,
 
 out:
     chown(path, uid, -1);
-    setegid(AID_ROOT);
+    if (setegid(AID_ROOT)) {
+        PLOG(FATAL) << "setegid(AID_ROOT) failed";
+    }
 
     if (secontext) {
         freecon(secontext);
