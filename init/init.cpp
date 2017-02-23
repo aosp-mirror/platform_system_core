@@ -736,6 +736,38 @@ static std::string import_dt_fstab() {
     return fstab;
 }
 
+static bool early_mount_one(struct fstab_rec* rec) {
+    if (rec && fs_mgr_is_verified(rec)) {
+        // setup verity and create the dm-XX block device
+        // needed to mount this partition
+        int ret = fs_mgr_setup_verity(rec, false);
+        if (ret == FS_MGR_SETUP_VERITY_FAIL) {
+            PLOG(ERROR) << "early_mount: Failed to setup verity for '" << rec->mount_point << "'";
+            return false;
+        }
+
+        // The exact block device name is added as a mount source by
+        // fs_mgr_setup_verity() in ->blk_device as "/dev/block/dm-XX"
+        // We create that device by running coldboot on /sys/block/dm-XX
+        std::string dm_device(basename(rec->blk_device));
+        std::string syspath = StringPrintf("/sys/block/%s", dm_device.c_str());
+        device_init(syspath.c_str(), [&](uevent* uevent) -> coldboot_action_t {
+            if (uevent->device_name && !strcmp(dm_device.c_str(), uevent->device_name)) {
+                LOG(VERBOSE) << "early_mount: creating dm-verity device : " << dm_device;
+                return COLDBOOT_STOP;
+            }
+            return COLDBOOT_CONTINUE;
+        });
+    }
+
+    if (rec && fs_mgr_do_mount_one(rec)) {
+        PLOG(ERROR) << "early_mount: Failed to mount '" << rec->mount_point << "'";
+        return false;
+    }
+
+    return true;
+}
+
 /* Early mount vendor and ODM partitions. The fstab is read from device-tree. */
 static bool early_mount() {
     std::string fstab = import_dt_fstab();
@@ -759,6 +791,8 @@ static bool early_mount() {
     }
 
     // find out fstab records for odm, system and vendor
+    // TODO: add std::map<std::string, fstab_rec*> so all required information about
+    // them can be gathered at once in a single loop
     fstab_rec* odm_rec = fs_mgr_get_entry_for_mount_point(tab.get(), "/odm");
     fstab_rec* system_rec = fs_mgr_get_entry_for_mount_point(tab.get(), "/system");
     fstab_rec* vendor_rec = fs_mgr_get_entry_for_mount_point(tab.get(), "/vendor");
@@ -767,13 +801,41 @@ static bool early_mount() {
         return true;
     }
 
+    // don't allow verifyatboot for early mounted partitions
+    if ((odm_rec && fs_mgr_is_verifyatboot(odm_rec)) ||
+        (system_rec && fs_mgr_is_verifyatboot(system_rec)) ||
+        (vendor_rec && fs_mgr_is_verifyatboot(vendor_rec))) {
+        LOG(ERROR) << "Early mount partitions can't be verified at boot";
+        return false;
+    }
+
     // assume A/B device if we find 'slotselect' in any fstab entry
     bool is_ab = ((odm_rec && fs_mgr_is_slotselect(odm_rec)) ||
                   (system_rec && fs_mgr_is_slotselect(system_rec)) ||
                   (vendor_rec && fs_mgr_is_slotselect(vendor_rec)));
+
+    // check for verified partitions
+    bool need_verity = ((odm_rec && fs_mgr_is_verified(odm_rec)) ||
+                        (system_rec && fs_mgr_is_verified(system_rec)) ||
+                        (vendor_rec && fs_mgr_is_verified(vendor_rec)));
+
+    // check if verity metadata is on a separate partition and get partition
+    // name from the end of the ->verity_loc path. verity state is not partition
+    // specific, so there must be only 1 additional partition that carries
+    // verity state.
+    std::string meta_partition;
+    if (odm_rec && odm_rec->verity_loc) {
+        meta_partition = basename(odm_rec->verity_loc);
+    } else if (system_rec && system_rec->verity_loc) {
+        meta_partition = basename(system_rec->verity_loc);
+    } else if (vendor_rec && vendor_rec->verity_loc) {
+        meta_partition = basename(vendor_rec->verity_loc);
+    }
+
     bool found_odm = !odm_rec;
     bool found_system = !system_rec;
     bool found_vendor = !vendor_rec;
+    bool found_meta = meta_partition.empty();
     int count_odm = 0, count_vendor = 0, count_system = 0;
 
     // create the devices we need..
@@ -802,9 +864,7 @@ static bool early_mount() {
 
                 // wait twice for A/B-ed partitions
                 count_odm++;
-                if (!is_ab) {
-                    found_odm = true;
-                } else if (count_odm == 2) {
+                if (!is_ab || count_odm == 2) {
                     found_odm = true;
                 }
 
@@ -813,9 +873,7 @@ static bool early_mount() {
                 LOG(VERBOSE) << "early_mount: found (" << uevent->partition_name << ") partition";
 
                 count_system++;
-                if (!is_ab) {
-                    found_system = true;
-                } else if (count_system == 2) {
+                if (!is_ab || count_system == 2) {
                     found_system = true;
                 }
 
@@ -823,12 +881,14 @@ static bool early_mount() {
             } else if (!found_vendor && !strncmp(uevent->partition_name, "vendor", 6)) {
                 LOG(VERBOSE) << "early_mount: found (" << uevent->partition_name << ") partition";
                 count_vendor++;
-                if (!is_ab) {
-                    found_vendor = true;
-                } else if (count_vendor == 2) {
+                if (!is_ab || count_vendor == 2) {
                     found_vendor = true;
                 }
 
+                create_this_node = true;
+            } else if (!found_meta && (meta_partition == uevent->partition_name)) {
+                LOG(VERBOSE) <<  "early_mount: found (" << uevent->partition_name << ") partition";
+                found_meta = true;
                 create_this_node = true;
             }
         }
@@ -837,7 +897,7 @@ static bool early_mount() {
         // node and stop coldboot. If this is a prefix matched
         // partition, create device node and continue. For everything
         // else skip the device node
-        if (found_odm && found_system && found_vendor) {
+        if (found_meta && found_odm && found_system && found_vendor) {
             ret = COLDBOOT_STOP;
         } else if (create_this_node) {
             ret = COLDBOOT_CREATE;
@@ -848,24 +908,20 @@ static bool early_mount() {
         return ret;
     });
 
-    // TODO: add support to mount partitions w/ verity
-
-    int ret = 0;
-    if (odm_rec &&
-        (ret = fs_mgr_do_mount(tab.get(), odm_rec->mount_point, odm_rec->blk_device, NULL))) {
-        PLOG(ERROR) << "early_mount: fs_mgr_do_mount returned error for mounting odm";
-        return false;
+    if (need_verity) {
+        // create /dev/device mapper
+        device_init("/sys/devices/virtual/misc/device-mapper",
+                    [&](uevent* uevent) -> coldboot_action_t { return COLDBOOT_STOP; });
     }
 
-    if (vendor_rec &&
-        (ret = fs_mgr_do_mount(tab.get(), vendor_rec->mount_point, vendor_rec->blk_device, NULL))) {
-        PLOG(ERROR) << "early_mount: fs_mgr_do_mount returned error for mounting vendor";
-        return false;
-    }
+    bool success = true;
+    if (odm_rec && !(success = early_mount_one(odm_rec))) goto done;
+    if (system_rec && !(success = early_mount_one(system_rec))) goto done;
+    if (vendor_rec && !(success = early_mount_one(vendor_rec))) goto done;
 
+done:
     device_close();
-
-    return true;
+    return success;
 }
 
 int main(int argc, char** argv) {

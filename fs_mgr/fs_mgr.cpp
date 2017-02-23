@@ -48,7 +48,6 @@
 
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_avb.h"
-#include "fs_mgr_priv_verity.h"
 
 #define KEY_LOC_PROP   "ro.crypto.keyfile.userdata"
 #define KEY_IN_FOOTER  "footer"
@@ -661,6 +660,8 @@ static int handle_encryptable(const struct fstab_rec* rec)
     }
 }
 
+// TODO: add ueventd notifiers if they don't exist.
+// This is just doing a wait_for_device for maximum of 1s
 int fs_mgr_test_access(const char *device) {
     int tries = 25;
     while (tries--) {
@@ -878,6 +879,24 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
     } else {
         return encryptable;
     }
+}
+
+/* wrapper to __mount() and expects a fully prepared fstab_rec,
+ * unlike fs_mgr_do_mount which does more things with avb / verity
+ * etc.
+ */
+int fs_mgr_do_mount_one(struct fstab_rec *rec)
+{
+    if (!rec) {
+        return FS_MGR_DOMNT_FAILED;
+    }
+
+    int ret = __mount(rec->blk_device, rec->mount_point, rec);
+    if (ret) {
+      ret = (errno == EBUSY) ? FS_MGR_DOMNT_BUSY : FS_MGR_DOMNT_FAILED;
+    }
+
+    return ret;
 }
 
 /* If tmp_mount_point is non-null, mount the filesystem there.  This is for the
@@ -1170,23 +1189,4 @@ int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc, char *real_blk_dev
     }
 
     return 0;
-}
-
-int fs_mgr_early_setup_verity(struct fstab_rec *fstab_rec)
-{
-    if ((fstab_rec->fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
-        int rc = fs_mgr_setup_verity(fstab_rec, false);
-        if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
-            LINFO << "Verity disabled";
-            return FS_MGR_EARLY_SETUP_VERITY_NO_VERITY;
-        } else if (rc == FS_MGR_SETUP_VERITY_SUCCESS) {
-            return FS_MGR_EARLY_SETUP_VERITY_SUCCESS;
-        } else {
-            return FS_MGR_EARLY_SETUP_VERITY_FAIL;
-        }
-    } else if (device_is_secure()) {
-        LERROR << "Verity must be enabled for early mounted partitions on secured devices";
-        return FS_MGR_EARLY_SETUP_VERITY_FAIL;
-    }
-    return FS_MGR_EARLY_SETUP_VERITY_NO_VERITY;
 }
