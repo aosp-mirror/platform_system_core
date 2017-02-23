@@ -216,9 +216,9 @@ LOCAL_SRC_FILES_linux := $(LIBADB_TEST_linux_SRCS)
 LOCAL_SRC_FILES_darwin := $(LIBADB_TEST_darwin_SRCS)
 LOCAL_SRC_FILES_windows := $(LIBADB_TEST_windows_SRCS)
 LOCAL_SANITIZE := $(adb_host_sanitize)
+LOCAL_SHARED_LIBRARIES := libbase
 LOCAL_STATIC_LIBRARIES := \
     libadb \
-    libbase \
     libcrypto_utils \
     libcrypto \
     libcutils \
@@ -232,7 +232,7 @@ LOCAL_STATIC_LIBRARIES_darwin := libusb
 LOCAL_LDFLAGS_windows := -municode
 LOCAL_LDLIBS_linux := -lrt -ldl -lpthread
 LOCAL_LDLIBS_darwin := -framework CoreFoundation -framework IOKit -lobjc
-LOCAL_LDLIBS_windows := -lws2_32 -luserenv -static -lwinpthread
+LOCAL_LDLIBS_windows := -lws2_32 -luserenv
 LOCAL_STATIC_LIBRARIES_windows := AdbWinApi
 
 LOCAL_MULTILIB := first
@@ -249,7 +249,7 @@ LOCAL_LDLIBS_darwin := -lpthread -framework CoreFoundation -framework IOKit -fra
 
 # Use wmain instead of main
 LOCAL_LDFLAGS_windows := -municode
-LOCAL_LDLIBS_windows := -lws2_32 -lgdi32 -static -lwinpthread
+LOCAL_LDLIBS_windows := -lws2_32 -lgdi32
 LOCAL_STATIC_LIBRARIES_windows := AdbWinApi
 LOCAL_REQUIRED_MODULES_windows := AdbWinApi AdbWinUsbApi
 
