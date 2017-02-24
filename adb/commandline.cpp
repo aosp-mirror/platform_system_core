@@ -1933,8 +1933,7 @@ int adb_commandline(int argc, const char** argv) {
     else if (!strcmp(argv[0], "version")) {
         fprintf(stdout, "%s", adb_version().c_str());
         return 0;
-    }
-    else if (!strcmp(argv[0], "features")) {
+    } else if (!strcmp(argv[0], "features")) {
         // Only list the features common to both the adb client and the device.
         FeatureSet features;
         std::string error;
@@ -1949,6 +1948,8 @@ int adb_commandline(int argc, const char** argv) {
             }
         }
         return 0;
+    } else if (!strcmp(argv[0], "host-features")) {
+        return adb_query_command("host:host-features");
     } else if (!strcmp(argv[0], "reconnect")) {
         if (argc == 1) {
             return adb_query_command("host:reconnect");
