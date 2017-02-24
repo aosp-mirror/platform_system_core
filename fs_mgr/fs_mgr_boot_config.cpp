@@ -49,8 +49,7 @@ bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val) {
     }
 
     // lastly, check the device tree
-    static const std::string android_dt_dir("/proc/device-tree/firmware/android");
-    std::string file_name = android_dt_dir + "/compatible";
+    std::string file_name = kAndroidDtDir + "/compatible";
     std::string dt_value;
     if (android::base::ReadFileToString(file_name, &dt_value)) {
         if (dt_value != "android,firmware") {
@@ -58,7 +57,7 @@ bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val) {
             return false;
         }
 
-        file_name = android_dt_dir + "/" + key;
+        file_name = kAndroidDtDir + "/" + key;
         // DT entries terminate with '\0' but so do the properties
         if (android::base::ReadFileToString(file_name, out_val)) {
             return true;
