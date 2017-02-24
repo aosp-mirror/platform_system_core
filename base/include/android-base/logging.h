@@ -17,6 +17,37 @@
 #ifndef ANDROID_BASE_LOGGING_H
 #define ANDROID_BASE_LOGGING_H
 
+//
+// Google-style C++ logging.
+//
+
+// This header provides a C++ stream interface to logging.
+//
+// To log:
+//
+//   LOG(INFO) << "Some text; " << some_value;
+//
+// Replace `INFO` with any severity from `enum LogSeverity`.
+//
+// To log the result of a failed function and include the string
+// representation of `errno` at the end:
+//
+//   PLOG(ERROR) << "Write failed";
+//
+// The output will be something like `Write failed: I/O error`.
+// Remember this as 'P' as in perror(3).
+//
+// To output your own types, simply implement operator<< as normal.
+//
+// By default, output goes to logcat on Android and stderr on the host.
+// A process can use `SetLogger` to decide where all logging goes.
+// Implementations are provided for logcat, stderr, and dmesg.
+
+// This header also provides assertions:
+//
+//   CHECK(must_be_true);
+//   CHECK_EQ(a, b) << z_is_interesting_too;
+
 // NOTE: For Windows, you must include logging.h after windows.h to allow the
 // following code to suppress the evil ERROR macro:
 #ifdef _WIN32
