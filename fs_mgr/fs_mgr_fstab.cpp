@@ -135,6 +135,24 @@ static uint64_t parse_size(const char *arg)
     return size;
 }
 
+/* fills 'dt_value' with the underlying device tree value string without
+ * the trailing '\0'. Returns true if 'dt_value' has a valid string, 'false'
+ * otherwise.
+ */
+static bool read_dt_file(const std::string& file_name, std::string* dt_value)
+{
+    if (android::base::ReadFileToString(file_name, dt_value)) {
+        if (!dt_value->empty()) {
+            // trim the trailing '\0' out, otherwise the comparison
+            // will produce false-negatives.
+            dt_value->resize(dt_value->size() - 1);
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static int parse_flags(char *flags, struct flag_list *fl,
                        struct fs_mgr_flag_values *flag_vals,
                        char *fs_options, int fs_options_len)
@@ -298,11 +316,7 @@ static int parse_flags(char *flags, struct flag_list *fl,
 static bool is_dt_fstab_compatible() {
     std::string dt_value;
     std::string file_name = kAndroidDtDir + "/fstab/compatible";
-
-    if (android::base::ReadFileToString(file_name, &dt_value)) {
-        // trim the trailing '\0' out, otherwise the comparison
-        // will produce false-negatives.
-        dt_value.resize(dt_value.size() - 1);
+    if (read_dt_file(file_name, &dt_value)) {
         if (dt_value == "android,fstab") {
             return true;
         }
@@ -339,41 +353,36 @@ static std::string read_fstab_from_dt() {
         std::string file_name;
         std::string value;
         file_name = android::base::StringPrintf("%s/%s/dev", fstabdir_name.c_str(), dp->d_name);
-        if (!android::base::ReadFileToString(file_name, &value)) {
+        if (!read_dt_file(file_name, &value)) {
             LERROR << "dt_fstab: Failed to find device for partition " << dp->d_name;
             fstab.clear();
             break;
         }
-        // trim the terminating '\0' out
-        value.resize(value.size() - 1);
         fstab_entry.push_back(value);
         fstab_entry.push_back(android::base::StringPrintf("/%s", dp->d_name));
 
         file_name = android::base::StringPrintf("%s/%s/type", fstabdir_name.c_str(), dp->d_name);
-        if (!android::base::ReadFileToString(file_name, &value)) {
+        if (!read_dt_file(file_name, &value)) {
             LERROR << "dt_fstab: Failed to find type for partition " << dp->d_name;
             fstab.clear();
             break;
         }
-        value.resize(value.size() - 1);
         fstab_entry.push_back(value);
 
         file_name = android::base::StringPrintf("%s/%s/mnt_flags", fstabdir_name.c_str(), dp->d_name);
-        if (!android::base::ReadFileToString(file_name, &value)) {
+        if (!read_dt_file(file_name, &value)) {
             LERROR << "dt_fstab: Failed to find type for partition " << dp->d_name;
             fstab.clear();
             break;
         }
-        value.resize(value.size() - 1);
         fstab_entry.push_back(value);
 
         file_name = android::base::StringPrintf("%s/%s/fsmgr_flags", fstabdir_name.c_str(), dp->d_name);
-        if (!android::base::ReadFileToString(file_name, &value)) {
+        if (!read_dt_file(file_name, &value)) {
             LERROR << "dt_fstab: Failed to find type for partition " << dp->d_name;
             fstab.clear();
             break;
         }
-        value.resize(value.size() - 1);
         fstab_entry.push_back(value);
 
         fstab += android::base::Join(fstab_entry, " ");
@@ -386,14 +395,9 @@ static std::string read_fstab_from_dt() {
 bool is_dt_compatible() {
     std::string file_name = kAndroidDtDir + "/compatible";
     std::string dt_value;
-    if (android::base::ReadFileToString(file_name, &dt_value)) {
-        if (!dt_value.empty()) {
-            // trim the trailing '\0' out, otherwise the comparison
-            // will produce false-negatives.
-            dt_value.resize(dt_value.size() - 1);
-            if (dt_value == "android,firmware") {
-                return true;
-            }
+    if (read_dt_file(file_name, &dt_value)) {
+        if (dt_value == "android,firmware") {
+            return true;
         }
     }
 
