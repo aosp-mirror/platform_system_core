@@ -502,26 +502,30 @@ static bool is_dt_compatible() {
     std::string dt_value;
     std::string file_name = StringPrintf("%s/compatible", android_dt_dir);
 
-    android::base::ReadFileToString(file_name, &dt_value);
-    if (!dt_value.compare("android,firmware")) {
-        LOG(ERROR) << "firmware/android is not compatible with 'android,firmware'";
-        return false;
+    if (android::base::ReadFileToString(file_name, &dt_value)) {
+        // trim the trailing '\0' out, otherwise the comparison
+        // will produce false-negatives.
+        dt_value.resize(dt_value.size() - 1);
+        if (dt_value == "android,firmware") {
+            return true;
+        }
     }
 
-    return true;
+    return false;
 }
 
 static bool is_dt_fstab_compatible() {
     std::string dt_value;
     std::string file_name = StringPrintf("%s/%s/compatible", android_dt_dir, "fstab");
 
-    android::base::ReadFileToString(file_name, &dt_value);
-    if (!dt_value.compare("android,fstab")) {
-        LOG(ERROR) << "firmware/android/fstab is not compatible with 'android,fstab'";
-        return false;
+    if (android::base::ReadFileToString(file_name, &dt_value)) {
+        dt_value.resize(dt_value.size() - 1);
+        if (dt_value == "android,fstab") {
+            return true;
+        }
     }
 
-    return true;
+    return false;
 }
 
 static void process_kernel_dt() {
@@ -664,78 +668,6 @@ static void set_usb_controller() {
     }
 }
 
-static std::string import_dt_fstab() {
-    std::string fstab;
-    if (!is_dt_compatible() || !is_dt_fstab_compatible()) {
-        return fstab;
-    }
-
-    std::string fstabdir_name = StringPrintf("%s/fstab", android_dt_dir);
-    std::unique_ptr<DIR, int (*)(DIR*)> fstabdir(opendir(fstabdir_name.c_str()), closedir);
-    if (!fstabdir) return fstab;
-
-    dirent* dp;
-    while ((dp = readdir(fstabdir.get())) != NULL) {
-        // skip over name and compatible
-        if (dp->d_type != DT_DIR) {
-            continue;
-        }
-
-        // skip if its not 'vendor', 'odm' or 'system'
-        if (strcmp(dp->d_name, "odm") && strcmp(dp->d_name, "system") &&
-            strcmp(dp->d_name, "vendor")) {
-            continue;
-        }
-
-        // create <dev> <mnt_point>  <type>  <mnt_flags>  <fsmgr_flags>\n
-        std::vector<std::string> fstab_entry;
-        std::string file_name;
-        std::string value;
-        file_name = StringPrintf("%s/%s/dev", fstabdir_name.c_str(), dp->d_name);
-        if (!android::base::ReadFileToString(file_name, &value)) {
-            LOG(ERROR) << "dt_fstab: Failed to find device for partition " << dp->d_name;
-            fstab.clear();
-            break;
-        }
-        // trim the terminating '\0' out
-        value.resize(value.size() - 1);
-        fstab_entry.push_back(value);
-        fstab_entry.push_back(StringPrintf("/%s", dp->d_name));
-
-        file_name = StringPrintf("%s/%s/type", fstabdir_name.c_str(), dp->d_name);
-        if (!android::base::ReadFileToString(file_name, &value)) {
-            LOG(ERROR) << "dt_fstab: Failed to find type for partition " << dp->d_name;
-            fstab.clear();
-            break;
-        }
-        value.resize(value.size() - 1);
-        fstab_entry.push_back(value);
-
-        file_name = StringPrintf("%s/%s/mnt_flags", fstabdir_name.c_str(), dp->d_name);
-        if (!android::base::ReadFileToString(file_name, &value)) {
-            LOG(ERROR) << "dt_fstab: Failed to find type for partition " << dp->d_name;
-            fstab.clear();
-            break;
-        }
-        value.resize(value.size() - 1);
-        fstab_entry.push_back(value);
-
-        file_name = StringPrintf("%s/%s/fsmgr_flags", fstabdir_name.c_str(), dp->d_name);
-        if (!android::base::ReadFileToString(file_name, &value)) {
-            LOG(ERROR) << "dt_fstab: Failed to find type for partition " << dp->d_name;
-            fstab.clear();
-            break;
-        }
-        value.resize(value.size() - 1);
-        fstab_entry.push_back(value);
-
-        fstab += android::base::Join(fstab_entry, " ");
-        fstab += '\n';
-    }
-
-    return fstab;
-}
-
 static bool early_mount_one(struct fstab_rec* rec) {
     if (rec && fs_mgr_is_verified(rec)) {
         // setup verity and create the dm-XX block device
@@ -770,23 +702,16 @@ static bool early_mount_one(struct fstab_rec* rec) {
 
 /* Early mount vendor and ODM partitions. The fstab is read from device-tree. */
 static bool early_mount() {
-    std::string fstab = import_dt_fstab();
-    if (fstab.empty()) {
-        LOG(INFO) << "Early mount skipped (missing fstab in device tree)";
+    // first check if device tree fstab entries are compatible
+    if (!is_dt_fstab_compatible()) {
+        LOG(INFO) << "Early mount skipped (missing/incompatible fstab in device tree)";
         return true;
     }
 
-    std::unique_ptr<FILE, decltype(&fclose)> fstab_file(
-        fmemopen(static_cast<void*>(const_cast<char*>(fstab.c_str())), fstab.length(), "r"), fclose);
-    if (!fstab_file) {
-        PLOG(ERROR) << "Early mount failed to open fstab file in memory";
-        return false;
-    }
-
-    std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> tab(
-        fs_mgr_read_fstab_file(fstab_file.get()), fs_mgr_free_fstab);
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> tab(
+        fs_mgr_read_fstab_dt(), fs_mgr_free_fstab);
     if (!tab) {
-        LOG(ERROR) << "Early mount fsmgr failed to load fstab from kernel:" << std::endl << fstab;
+        LOG(ERROR) << "Early mount failed to read fstab from device tree";
         return false;
     }
 

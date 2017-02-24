@@ -46,8 +46,6 @@
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_dm_ioctl.h"
 
-#define FSTAB_PREFIX "/fstab."
-
 #define VERITY_TABLE_RSA_KEY "/verity_key"
 #define VERITY_TABLE_HASH_IDX 8
 #define VERITY_TABLE_SALT_IDX 9
@@ -694,8 +692,6 @@ static int load_verity_state(struct fstab_rec *fstab, int *mode)
 
 int fs_mgr_load_verity_state(int *mode)
 {
-    char fstab_filename[PROPERTY_VALUE_MAX + sizeof(FSTAB_PREFIX)];
-    char propbuf[PROPERTY_VALUE_MAX];
     int rc = -1;
     int i;
     int current;
@@ -705,13 +701,9 @@ int fs_mgr_load_verity_state(int *mode)
      * logging mode, in which case return that */
     *mode = VERITY_MODE_DEFAULT;
 
-    property_get("ro.hardware", propbuf, "");
-    snprintf(fstab_filename, sizeof(fstab_filename), FSTAB_PREFIX"%s", propbuf);
-
-    fstab = fs_mgr_read_fstab(fstab_filename);
-
+    fstab = fs_mgr_read_fstab_default();
     if (!fstab) {
-        LERROR << "Failed to read " << fstab_filename;
+        LERROR << "Failed to read default fstab";
         goto out;
     }
 
@@ -745,7 +737,6 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
 {
     alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
     bool system_root = false;
-    char fstab_filename[PROPERTY_VALUE_MAX + sizeof(FSTAB_PREFIX)];
     std::string mount_point;
     char propbuf[PROPERTY_VALUE_MAX];
     const char *status;
@@ -765,22 +756,16 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
     }
 
     fd = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));
-
     if (fd == -1) {
         PERROR << "Error opening device mapper";
         goto out;
     }
 
-    property_get("ro.hardware", propbuf, "");
-    snprintf(fstab_filename, sizeof(fstab_filename), FSTAB_PREFIX"%s", propbuf);
-
     property_get("ro.build.system_root_image", propbuf, "");
     system_root = !strcmp(propbuf, "true");
-
-    fstab = fs_mgr_read_fstab(fstab_filename);
-
+    fstab = fs_mgr_read_fstab_default();
     if (!fstab) {
-        LERROR << "Failed to read " << fstab_filename;
+        LERROR << "Failed to read default fstab";
         goto out;
     }
 
