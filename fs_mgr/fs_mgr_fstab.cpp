@@ -295,21 +295,6 @@ static int parse_flags(char *flags, struct flag_list *fl,
     return f;
 }
 
-static bool is_dt_compatible() {
-    std::string file_name = kAndroidDtDir + "/compatible";
-    std::string dt_value;
-    if (android::base::ReadFileToString(file_name, &dt_value)) {
-        // trim the trailing '\0' out, otherwise the comparison
-        // will produce false-negatives.
-        dt_value.resize(dt_value.size() - 1);
-        if (dt_value == "android,firmware") {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 static bool is_dt_fstab_compatible() {
     std::string dt_value;
     std::string file_name = kAndroidDtDir + "/fstab/compatible";
@@ -398,6 +383,22 @@ static std::string read_fstab_from_dt() {
     return fstab;
 }
 
+bool is_dt_compatible() {
+    std::string file_name = kAndroidDtDir + "/compatible";
+    std::string dt_value;
+    if (android::base::ReadFileToString(file_name, &dt_value)) {
+        if (!dt_value.empty()) {
+            // trim the trailing '\0' out, otherwise the comparison
+            // will produce false-negatives.
+            dt_value.resize(dt_value.size() - 1);
+            if (dt_value == "android,firmware") {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
 
 struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
 {
