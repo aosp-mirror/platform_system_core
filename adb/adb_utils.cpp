@@ -19,16 +19,15 @@
 #include "adb_utils.h"
 #include "adb_unique_fd.h"
 
-#include <libgen.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include <algorithm>
-#include <mutex>
 #include <vector>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
@@ -100,52 +99,6 @@ std::string escape_arg(const std::string& s) {
   return result;
 }
 
-std::string adb_basename(const std::string& path) {
-  static std::mutex& basename_lock = *new std::mutex();
-
-  // Copy path because basename may modify the string passed in.
-  std::string result(path);
-
-  // Use lock because basename() may write to a process global and return a
-  // pointer to that. Note that this locking strategy only works if all other
-  // callers to basename in the process also grab this same lock.
-  std::lock_guard<std::mutex> lock(basename_lock);
-
-  // Note that if std::string uses copy-on-write strings, &str[0] will cause
-  // the copy to be made, so there is no chance of us accidentally writing to
-  // the storage for 'path'.
-  char* name = basename(&result[0]);
-
-  // In case dirname returned a pointer to a process global, copy that string
-  // before leaving the lock.
-  result.assign(name);
-
-  return result;
-}
-
-std::string adb_dirname(const std::string& path) {
-  static std::mutex& dirname_lock = *new std::mutex();
-
-  // Copy path because dirname may modify the string passed in.
-  std::string result(path);
-
-  // Use lock because dirname() may write to a process global and return a
-  // pointer to that. Note that this locking strategy only works if all other
-  // callers to dirname in the process also grab this same lock.
-  std::lock_guard<std::mutex> lock(dirname_lock);
-
-  // Note that if std::string uses copy-on-write strings, &str[0] will cause
-  // the copy to be made, so there is no chance of us accidentally writing to
-  // the storage for 'path'.
-  char* parent = dirname(&result[0]);
-
-  // In case dirname returned a pointer to a process global, copy that string
-  // before leaving the lock.
-  result.assign(parent);
-
-  return result;
-}
-
 // Given a relative or absolute filepath, create the directory hierarchy
 // as needed. Returns true if the hierarchy is/was setup.
 bool mkdirs(const std::string& path) {
@@ -171,7 +124,7 @@ bool mkdirs(const std::string& path) {
     return true;
   }
 
-  const std::string parent(adb_dirname(path));
+  const std::string parent(android::base::Dirname(path));
 
   // If dirname returned the same path as what we passed in, don't go recursive.
   // This can happen on Windows when walking up the directory hierarchy and not

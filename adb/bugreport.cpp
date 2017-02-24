@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include <android-base/file.h>
 #include <android-base/strings.h>
 
 #include "sysdeps.h"
@@ -113,14 +114,14 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
 
   private:
     void SetLineMessage(const std::string& action) {
-        line_message_ = action + " " + adb_basename(dest_file_);
+        line_message_ = action + " " + android::base::Basename(dest_file_);
     }
 
     void SetSrcFile(const std::string path) {
         src_file_ = path;
         if (!dest_dir_.empty()) {
             // Only uses device-provided name when user passed a directory.
-            dest_file_ = adb_basename(path);
+            dest_file_ = android::base::Basename(path);
             SetLineMessage("generating");
         }
     }
