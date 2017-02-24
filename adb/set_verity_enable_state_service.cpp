@@ -108,11 +108,10 @@ void set_verity_enabled_state_service(int fd, void* cookie) {
         return;
     }
 
-    std::string fstab_filename = "/fstab." + android::base::GetProperty("ro.hardware", "");
-
-    fstab = fs_mgr_read_fstab(fstab_filename.c_str());
+    // read all fstab entries at once from all sources
+    fstab = fs_mgr_read_fstab_default();
     if (!fstab) {
-        WriteFdFmt(fd, "Failed to open %s\nMaybe run adb root?\n", fstab_filename.c_str());
+        WriteFdFmt(fd, "Failed to read fstab\nMaybe run adb root?\n");
         return;
     }
 

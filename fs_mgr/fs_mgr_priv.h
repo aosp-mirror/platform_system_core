@@ -41,6 +41,8 @@
 #define PWARNING PLOG(WARNING) << FS_MGR_TAG
 #define PERROR   PLOG(ERROR) << FS_MGR_TAG
 
+const std::string FSTAB_PREFIX("/fstab.");
+
 __BEGIN_DECLS
 
 #define CRYPTO_TMPFS_OPTIONS "size=256m,mode=0771,uid=1000,gid=1000"
