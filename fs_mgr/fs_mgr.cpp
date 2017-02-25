@@ -1020,7 +1020,7 @@ out:
  * mount a tmpfs filesystem at the given point.
  * return 0 on success, non-zero on failure.
  */
-int fs_mgr_do_tmpfs_mount(char *n_name)
+int fs_mgr_do_tmpfs_mount(const char *n_name)
 {
     int ret;
 
