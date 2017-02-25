@@ -78,6 +78,7 @@ cc_test {
     host_supported: true,
     clang: true,
     srcs: [
+        "endian_test.cpp",
         "errors_test.cpp",
         "file_test.cpp",
         "logging_test.cpp",
