@@ -992,8 +992,16 @@ int main(int argc, char** argv) {
     std::string bootscript = property_get("ro.boot.init_rc");
     if (bootscript.empty()) {
         parser.ParseConfig("/init.rc");
+        parser.set_is_system_etc_init_loaded(
+                parser.ParseConfig("/system/etc/init"));
+        parser.set_is_vendor_etc_init_loaded(
+                parser.ParseConfig("/vendor/etc/init"));
+        parser.set_is_odm_etc_init_loaded(parser.ParseConfig("/odm/etc/init"));
     } else {
         parser.ParseConfig(bootscript);
+        parser.set_is_system_etc_init_loaded(true);
+        parser.set_is_vendor_etc_init_loaded(true);
+        parser.set_is_odm_etc_init_loaded(true);
     }
 
     ActionManager& am = ActionManager::GetInstance();
