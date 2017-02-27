@@ -165,7 +165,7 @@ static const struct fs_path_config android_files[] = {
 
     /* Support Bluetooth legacy hal accessing /sys/class/rfkill */
     { 00700, AID_BLUETOOTH, AID_BLUETOOTH, CAP_MASK_LONG(CAP_NET_ADMIN),
-                                              "system/bin/hw/android.hardware.bluetooth@1.0-service" },
+                                              "vendor/bin/hw/android.hardware.bluetooth@1.0-service" },
 
     /* A non-privileged zygote that spawns isolated processes for web rendering. */
     { 0750,  AID_ROOT,      AID_ROOT,      CAP_MASK_LONG(CAP_SETUID) |
