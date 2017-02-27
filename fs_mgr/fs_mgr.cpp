@@ -435,16 +435,6 @@ static int fs_match(const char *in1, const char *in2)
     return ret;
 }
 
-static int device_is_secure() {
-    int ret = -1;
-    char value[PROP_VALUE_MAX];
-    ret = __system_property_get("ro.secure", value);
-    /* If error, we want to fail secure */
-    if (ret < 0)
-        return 1;
-    return strcmp(value, "0") ? 1 : 0;
-}
-
 static int device_is_force_encrypted() {
     int ret = -1;
     char value[PROP_VALUE_MAX];
@@ -673,6 +663,23 @@ int fs_mgr_test_access(const char *device) {
     return -1;
 }
 
+bool is_device_secure() {
+    int ret = -1;
+    char value[PROP_VALUE_MAX];
+    ret = __system_property_get("ro.secure", value);
+    if (ret == 0) {
+#ifdef ALLOW_SKIP_SECURE_CHECK
+        // Allow eng builds to skip this check if the property
+        // is not readable (happens during early mount)
+        return false;
+#else
+        // If error and not an 'eng' build, we want to fail secure.
+        return true;
+#endif
+    }
+    return strcmp(value, "0") ? true : false;
+}
+
 /* When multiple fstab records share the same mount_point, it will
  * try to mount each one in turn, and ignore any duplicates after a
  * first successful mount.
@@ -750,7 +757,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
                 /* Skips mounting the device. */
                 continue;
             }
-        } else if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
+        } else if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && is_device_secure()) {
             int rc = fs_mgr_setup_verity(&fstab->recs[i], true);
             if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
                 LINFO << "Verity disabled";
@@ -970,7 +977,7 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
                 /* Skips mounting the device. */
                 continue;
             }
-        } else if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && device_is_secure()) {
+        } else if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && is_device_secure()) {
             int rc = fs_mgr_setup_verity(&fstab->recs[i], true);
             if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
                 LINFO << "Verity disabled";
