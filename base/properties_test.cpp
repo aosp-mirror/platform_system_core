@@ -150,3 +150,25 @@ TEST(properties, WaitForProperty_timeout) {
   // Upper bounds on timing are inherently flaky, but let's try...
   ASSERT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0), 600ms);
 }
+
+TEST(properties, WaitForPropertyCreation) {
+  std::thread thread([&]() {
+    std::this_thread::sleep_for(100ms);
+    android::base::SetProperty("debug.libbase.WaitForPropertyCreation_test", "a");
+  });
+
+  ASSERT_TRUE(android::base::WaitForPropertyCreation(
+          "debug.libbase.WaitForPropertyCreation_test", 1s));
+  thread.join();
+}
+
+TEST(properties, WaitForPropertyCreation_timeout) {
+  auto t0 = std::chrono::steady_clock::now();
+  ASSERT_FALSE(android::base::WaitForPropertyCreation(
+          "debug.libbase.WaitForPropertyCreation_timeout_test", 200ms));
+  auto t1 = std::chrono::steady_clock::now();
+
+  ASSERT_GE(std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0), 200ms);
+  // Upper bounds on timing are inherently flaky, but let's try...
+  ASSERT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0), 600ms);
+}
