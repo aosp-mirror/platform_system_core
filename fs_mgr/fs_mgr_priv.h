@@ -118,6 +118,7 @@ int fs_mgr_set_blk_ro(const char *blockdev);
 int fs_mgr_test_access(const char *device);
 int fs_mgr_update_for_slotselect(struct fstab *fstab);
 bool is_dt_compatible();
+bool is_device_secure();
 
 __END_DECLS
 
