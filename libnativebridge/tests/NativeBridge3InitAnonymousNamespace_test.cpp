@@ -20,7 +20,7 @@ namespace android {
 
 constexpr const char* kNativeBridgeLibrary3 = "libnativebridge3-dummy.so";
 
-TEST_F(NativeBridgeTest, V3_InitNamespace) {
+TEST_F(NativeBridgeTest, V3_InitAnonymousNamespace) {
     // Init
     ASSERT_TRUE(LoadNativeBridge(kNativeBridgeLibrary3, nullptr));
     ASSERT_TRUE(NativeBridgeAvailable());
@@ -30,7 +30,7 @@ TEST_F(NativeBridgeTest, V3_InitNamespace) {
     ASSERT_TRUE(NativeBridgeAvailable());
 
     ASSERT_EQ(3U, NativeBridgeGetVersion());
-    ASSERT_EQ(true, NativeBridgeInitNamespace(nullptr, nullptr));
+    ASSERT_EQ(true, NativeBridgeInitAnonymousNamespace(nullptr, nullptr));
 
     // Clean-up code_cache
     ASSERT_EQ(0, rmdir(kCodeCache));

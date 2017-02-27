@@ -76,9 +76,9 @@ extern "C" bool native_bridge3_isPathSupported(const char* /* path */) {
   return true;
 }
 
-extern "C" bool native_bridge3_initNamespace(const char* /* public_ns_sonames */,
-                                        const char* /* anon_ns_library_path */) {
-  return true;
+extern "C" bool native_bridge3_initAnonymousNamespace(const char* /* public_ns_sonames */,
+                                                      const char* /* anon_ns_library_path */) {
+    return true;
 }
 
 extern "C" android::native_bridge_namespace_t*
@@ -91,30 +91,34 @@ native_bridge3_createNamespace(const char* /* name */,
   return nullptr;
 }
 
+extern "C" bool native_bridge3_linkNamespaces(android::native_bridge_namespace_t* /* from */,
+                                              android::native_bridge_namespace_t* /* to */,
+                                              const char* /* shared_libs_soname */) {
+    return true;
+}
+
 extern "C" void* native_bridge3_loadLibraryExt(const char* /* libpath */,
                                                int /* flag */,
                                                android::native_bridge_namespace_t* /* ns */) {
   return nullptr;
 }
 
-
-android::NativeBridgeCallbacks NativeBridgeItf {
-  // v1
-  .version = 3,
-  .initialize = &native_bridge3_initialize,
-  .loadLibrary = &native_bridge3_loadLibrary,
-  .getTrampoline = &native_bridge3_getTrampoline,
-  .isSupported = &native_bridge3_isSupported,
-  .getAppEnv = &native_bridge3_getAppEnv,
-  // v2
-  .isCompatibleWith = &native_bridge3_isCompatibleWith,
-  .getSignalHandler = &native_bridge3_getSignalHandler,
-  // v3
-  .unloadLibrary = &native_bridge3_unloadLibrary,
-  .getError = &native_bridge3_getError,
-  .isPathSupported  = &native_bridge3_isPathSupported,
-  .initNamespace = &native_bridge3_initNamespace,
-  .createNamespace = &native_bridge3_createNamespace,
-  .loadLibraryExt = &native_bridge3_loadLibraryExt
-};
-
+android::NativeBridgeCallbacks NativeBridgeItf{
+    // v1
+    .version = 3,
+    .initialize = &native_bridge3_initialize,
+    .loadLibrary = &native_bridge3_loadLibrary,
+    .getTrampoline = &native_bridge3_getTrampoline,
+    .isSupported = &native_bridge3_isSupported,
+    .getAppEnv = &native_bridge3_getAppEnv,
+    // v2
+    .isCompatibleWith = &native_bridge3_isCompatibleWith,
+    .getSignalHandler = &native_bridge3_getSignalHandler,
+    // v3
+    .unloadLibrary = &native_bridge3_unloadLibrary,
+    .getError = &native_bridge3_getError,
+    .isPathSupported = &native_bridge3_isPathSupported,
+    .initAnonymousNamespace = &native_bridge3_initAnonymousNamespace,
+    .createNamespace = &native_bridge3_createNamespace,
+    .linkNamespaces = &native_bridge3_linkNamespaces,
+    .loadLibraryExt = &native_bridge3_loadLibraryExt};

@@ -573,17 +573,17 @@ bool NativeBridgeIsPathSupported(const char* path) {
   return false;
 }
 
-bool NativeBridgeInitNamespace(const char* public_ns_sonames,
-                               const char* anon_ns_library_path) {
-  if (NativeBridgeInitialized()) {
-    if (isCompatibleWith(NAMESPACE_VERSION)) {
-      return callbacks->initNamespace(public_ns_sonames, anon_ns_library_path);
-    } else {
-      ALOGE("not compatible with version %d, cannot init namespace", NAMESPACE_VERSION);
+bool NativeBridgeInitAnonymousNamespace(const char* public_ns_sonames,
+                                        const char* anon_ns_library_path) {
+    if (NativeBridgeInitialized()) {
+        if (isCompatibleWith(NAMESPACE_VERSION)) {
+            return callbacks->initAnonymousNamespace(public_ns_sonames, anon_ns_library_path);
+        } else {
+            ALOGE("not compatible with version %d, cannot init namespace", NAMESPACE_VERSION);
+        }
     }
-  }
 
-  return false;
+    return false;
 }
 
 native_bridge_namespace_t* NativeBridgeCreateNamespace(const char* name,
@@ -606,6 +606,19 @@ native_bridge_namespace_t* NativeBridgeCreateNamespace(const char* name,
   }
 
   return nullptr;
+}
+
+bool NativeBridgeLinkNamespaces(native_bridge_namespace_t* from, native_bridge_namespace_t* to,
+                                const char* shared_libs_sonames) {
+    if (NativeBridgeInitialized()) {
+        if (isCompatibleWith(NAMESPACE_VERSION)) {
+            return callbacks->linkNamespaces(from, to, shared_libs_sonames);
+        } else {
+            ALOGE("not compatible with version %d, cannot init namespace", NAMESPACE_VERSION);
+        }
+    }
+
+    return false;
 }
 
 void* NativeBridgeLoadLibraryExt(const char* libpath, int flag, native_bridge_namespace_t* ns) {
