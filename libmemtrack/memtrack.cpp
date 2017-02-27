@@ -31,6 +31,7 @@ using android::hardware::memtrack::V1_0::MemtrackRecord;
 using android::hardware::memtrack::V1_0::MemtrackFlag;
 using android::hardware::memtrack::V1_0::MemtrackStatus;
 using android::hardware::hidl_vec;
+using android::hardware::Return;
 
 struct memtrack_proc_type {
     MemtrackType type;
@@ -69,7 +70,7 @@ static int memtrack_proc_get_type(memtrack_proc_type *t,
     if (memtrack == nullptr)
         return -1;
 
-    memtrack->getMemory(pid, type,
+    Return<void> ret = memtrack->getMemory(pid, type,
         [&t, &err](MemtrackStatus status, hidl_vec<MemtrackRecord> records) {
             if (status != MemtrackStatus::SUCCESS) {
                 err = -1;
@@ -81,7 +82,7 @@ static int memtrack_proc_get_type(memtrack_proc_type *t,
                 t->records[i].flags = records[i].flags;
             }
     });
-    return err;
+    return ret.isOk() ? err : -1;
 }
 
 /* TODO: sanity checks on return values from HALs:
