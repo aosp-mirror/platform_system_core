@@ -17,59 +17,61 @@
 #include <cutils/multiuser.h>
 #include <gtest/gtest.h>
 
+static constexpr auto ERR_GID = static_cast<gid_t>(-1);
+
 TEST(MultiuserTest, TestMerge) {
-    EXPECT_EQ(0, multiuser_get_uid(0, 0));
-    EXPECT_EQ(1000, multiuser_get_uid(0, 1000));
-    EXPECT_EQ(10000, multiuser_get_uid(0, 10000));
-    EXPECT_EQ(50000, multiuser_get_uid(0, 50000));
-    EXPECT_EQ(1000000, multiuser_get_uid(10, 0));
-    EXPECT_EQ(1001000, multiuser_get_uid(10, 1000));
-    EXPECT_EQ(1010000, multiuser_get_uid(10, 10000));
-    EXPECT_EQ(1050000, multiuser_get_uid(10, 50000));
+    EXPECT_EQ(0U, multiuser_get_uid(0, 0));
+    EXPECT_EQ(1000U, multiuser_get_uid(0, 1000));
+    EXPECT_EQ(10000U, multiuser_get_uid(0, 10000));
+    EXPECT_EQ(50000U, multiuser_get_uid(0, 50000));
+    EXPECT_EQ(1000000U, multiuser_get_uid(10, 0));
+    EXPECT_EQ(1001000U, multiuser_get_uid(10, 1000));
+    EXPECT_EQ(1010000U, multiuser_get_uid(10, 10000));
+    EXPECT_EQ(1050000U, multiuser_get_uid(10, 50000));
 }
 
 TEST(MultiuserTest, TestSplitUser) {
-    EXPECT_EQ(0, multiuser_get_user_id(0));
-    EXPECT_EQ(0, multiuser_get_user_id(1000));
-    EXPECT_EQ(0, multiuser_get_user_id(10000));
-    EXPECT_EQ(0, multiuser_get_user_id(50000));
-    EXPECT_EQ(10, multiuser_get_user_id(1000000));
-    EXPECT_EQ(10, multiuser_get_user_id(1001000));
-    EXPECT_EQ(10, multiuser_get_user_id(1010000));
-    EXPECT_EQ(10, multiuser_get_user_id(1050000));
+    EXPECT_EQ(0U, multiuser_get_user_id(0));
+    EXPECT_EQ(0U, multiuser_get_user_id(1000));
+    EXPECT_EQ(0U, multiuser_get_user_id(10000));
+    EXPECT_EQ(0U, multiuser_get_user_id(50000));
+    EXPECT_EQ(10U, multiuser_get_user_id(1000000));
+    EXPECT_EQ(10U, multiuser_get_user_id(1001000));
+    EXPECT_EQ(10U, multiuser_get_user_id(1010000));
+    EXPECT_EQ(10U, multiuser_get_user_id(1050000));
 }
 
 TEST(MultiuserTest, TestSplitApp) {
-    EXPECT_EQ(0, multiuser_get_app_id(0));
-    EXPECT_EQ(1000, multiuser_get_app_id(1000));
-    EXPECT_EQ(10000, multiuser_get_app_id(10000));
-    EXPECT_EQ(50000, multiuser_get_app_id(50000));
-    EXPECT_EQ(0, multiuser_get_app_id(1000000));
-    EXPECT_EQ(1000, multiuser_get_app_id(1001000));
-    EXPECT_EQ(10000, multiuser_get_app_id(1010000));
-    EXPECT_EQ(50000, multiuser_get_app_id(1050000));
+    EXPECT_EQ(0U, multiuser_get_app_id(0));
+    EXPECT_EQ(1000U, multiuser_get_app_id(1000));
+    EXPECT_EQ(10000U, multiuser_get_app_id(10000));
+    EXPECT_EQ(50000U, multiuser_get_app_id(50000));
+    EXPECT_EQ(0U, multiuser_get_app_id(1000000));
+    EXPECT_EQ(1000U, multiuser_get_app_id(1001000));
+    EXPECT_EQ(10000U, multiuser_get_app_id(1010000));
+    EXPECT_EQ(50000U, multiuser_get_app_id(1050000));
 }
 
 TEST(MultiuserTest, TestCache) {
-    EXPECT_EQ(-1, multiuser_get_cache_gid(0, 0));
-    EXPECT_EQ(-1, multiuser_get_cache_gid(0, 1000));
-    EXPECT_EQ(20000, multiuser_get_cache_gid(0, 10000));
-    EXPECT_EQ(-1, multiuser_get_cache_gid(0, 50000));
-    EXPECT_EQ(1020000, multiuser_get_cache_gid(10, 10000));
+    EXPECT_EQ(ERR_GID, multiuser_get_cache_gid(0, 0));
+    EXPECT_EQ(ERR_GID, multiuser_get_cache_gid(0, 1000));
+    EXPECT_EQ(20000U, multiuser_get_cache_gid(0, 10000));
+    EXPECT_EQ(ERR_GID, multiuser_get_cache_gid(0, 50000));
+    EXPECT_EQ(1020000U, multiuser_get_cache_gid(10, 10000));
 }
 
 TEST(MultiuserTest, TestExt) {
-    EXPECT_EQ(-1, multiuser_get_ext_gid(0, 0));
-    EXPECT_EQ(-1, multiuser_get_ext_gid(0, 1000));
-    EXPECT_EQ(30000, multiuser_get_ext_gid(0, 10000));
-    EXPECT_EQ(-1, multiuser_get_ext_gid(0, 50000));
-    EXPECT_EQ(1030000, multiuser_get_ext_gid(10, 10000));
+    EXPECT_EQ(ERR_GID, multiuser_get_ext_gid(0, 0));
+    EXPECT_EQ(ERR_GID, multiuser_get_ext_gid(0, 1000));
+    EXPECT_EQ(30000U, multiuser_get_ext_gid(0, 10000));
+    EXPECT_EQ(ERR_GID, multiuser_get_ext_gid(0, 50000));
+    EXPECT_EQ(1030000U, multiuser_get_ext_gid(10, 10000));
 }
 
 TEST(MultiuserTest, TestShared) {
-    EXPECT_EQ(-1, multiuser_get_shared_gid(0, 0));
-    EXPECT_EQ(-1, multiuser_get_shared_gid(0, 1000));
-    EXPECT_EQ(50000, multiuser_get_shared_gid(0, 10000));
-    EXPECT_EQ(-1, multiuser_get_shared_gid(0, 50000));
-    EXPECT_EQ(1050000, multiuser_get_shared_gid(10, 10000));
+    EXPECT_EQ(ERR_GID, multiuser_get_shared_gid(0, 0));
+    EXPECT_EQ(ERR_GID, multiuser_get_shared_gid(0, 1000));
+    EXPECT_EQ(50000U, multiuser_get_shared_gid(0, 10000));
+    EXPECT_EQ(ERR_GID, multiuser_get_shared_gid(0, 50000));
+    EXPECT_EQ(1050000U, multiuser_get_shared_gid(10, 10000));
 }
