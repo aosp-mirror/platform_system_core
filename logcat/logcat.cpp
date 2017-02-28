@@ -67,8 +67,8 @@ struct android_logcat_context_internal {
     std::vector<const char*> argv_hold;
     std::vector<std::string> envs;
     std::vector<const char*> envp_hold;
-    int output_fd;
-    int error_fd;
+    int output_fd; // duplication of fileno(output) (below)
+    int error_fd;  // duplication of fileno(error) (below)
 
     // library
     int fds[2];    // From popen call
@@ -284,6 +284,15 @@ static void rotateLogs(android_logcat_context_internal* context) {
         return;
     }
     context->output = fdopen(context->output_fd, "web");
+    if (context->output == NULL) {
+        logcat_panic(context, HELP_FALSE, "couldn't fdopen output file");
+        return;
+    }
+    if (context->stderr_stdout) {
+        close_error(context);
+        context->error = context->output;
+        context->error_fd = context->output_fd;
+    }
 
     context->outByteCount = 0;
 }
@@ -788,6 +797,7 @@ static int __logcat(android_logcat_context_internal* context) {
         // Simulate shell stderr redirect parsing
         if ((argv[i][0] != '2') || (argv[i][1] != '>')) continue;
 
+        // Append to file not implemented, just open file
         size_t skip = (argv[i][2] == '>') + 2;
         if (!strcmp(&argv[i][skip], "/dev/null")) {
             context->stderr_null = true;
@@ -799,16 +809,29 @@ static int __logcat(android_logcat_context_internal* context) {
                     "stderr redirection to file %s unsupported, skipping\n",
                     &argv[i][skip]);
         }
+        // Only the first one
+        break;
+    }
+
+    const char* filename = NULL;
+    for (int i = 0; i < argc; ++i) {
+        // Simulate shell stdout redirect parsing
+        if (argv[i][0] != '>') continue;
+
+        // Append to file not implemented, just open file
+        filename = &argv[i][(argv[i][1] == '>') + 1];
+        // Only the first one
+        break;
     }
 
     // Deal with setting up file descriptors and FILE pointers
-    if (context->error_fd >= 0) {
+    if (context->error_fd >= 0) { // Is an error file descriptor supplied?
         if (context->error_fd == context->output_fd) {
             context->stderr_stdout = true;
-        } else if (context->stderr_null) {
+        } else if (context->stderr_null) { // redirection told us to close it
             close(context->error_fd);
             context->error_fd = -1;
-        } else {
+        } else { // All Ok, convert error to a FILE pointer
             context->error = fdopen(context->error_fd, "web");
             if (!context->error) {
                 context->retval = -errno;
@@ -819,22 +842,32 @@ static int __logcat(android_logcat_context_internal* context) {
             }
         }
     }
-    if (context->output_fd >= 0) {
-        context->output = fdopen(context->output_fd, "web");
-        if (!context->output) {
-            context->retval = -errno;
-            fprintf(context->stderr_stdout ? stdout : context->error,
-                    "Failed to fdopen(output_fd=%d) %s\n", context->output_fd,
-                    strerror(errno));
-            goto exit;
+    if (context->output_fd >= 0) { // Is an output file descriptor supplied?
+        if (filename) { // redirect to file, close the supplied file descriptor.
+            close(context->output_fd);
+            context->output_fd = -1;
+        } else { // All Ok, convert output to a FILE pointer
+            context->output = fdopen(context->output_fd, "web");
+            if (!context->output) {
+                context->retval = -errno;
+                fprintf(context->stderr_stdout ? stdout : context->error,
+                        "Failed to fdopen(output_fd=%d) %s\n",
+                        context->output_fd, strerror(errno));
+                goto exit;
+            }
         }
     }
+    if (filename) { // We supplied an output file redirected in command line
+        context->output = fopen(filename, "web");
+    }
+    // Deal with 2>&1
     if (context->stderr_stdout) context->error = context->output;
+    // Deal with 2>/dev/null
     if (context->stderr_null) {
         context->error_fd = -1;
         context->error = NULL;
     }
-    // Only happens if output=stdout
+    // Only happens if output=stdout or output=filename
     if ((context->output_fd < 0) && context->output) {
         context->output_fd = fileno(context->output);
     }
@@ -1351,6 +1384,8 @@ static int __logcat(android_logcat_context_internal* context) {
         for (int i = optind ; i < argc ; i++) {
             // skip stderr redirections of _all_ kinds
             if ((argv[i][0] == '2') && (argv[i][1] == '>')) continue;
+            // skip stdout redirections of _all_ kinds
+            if (argv[i][0] == '>') continue;
 
             err = android_log_addFilterString(context->logformat, argv[i]);
             if (err < 0) {
