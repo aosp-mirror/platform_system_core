@@ -180,12 +180,6 @@ void Service::NotifyStateChange(const std::string& new_state) const {
     }
 
     std::string prop_name = StringPrintf("init.svc.%s", name_.c_str());
-    if (prop_name.length() >= PROP_NAME_MAX) {
-        // If the property name would be too long, we can't set it.
-        LOG(ERROR) << "Property name \"init.svc." << name_ << "\" too long; not setting to " << new_state;
-        return;
-    }
-
     property_set(prop_name.c_str(), new_state.c_str());
 
     if (new_state == "running") {
@@ -1040,5 +1034,9 @@ void ServiceParser::EndSection() {
 }
 
 bool ServiceParser::IsValidName(const std::string& name) const {
-    return is_legal_property_name("init.svc." + name);
+    // Property names can be any length, but may only contain certain characters.
+    // Property values can contain any characters, but may only be a certain length.
+    // (The latter restriction is needed because `start` and `stop` work by writing
+    // the service name to the "ctl.start" and "ctl.stop" properties.)
+    return is_legal_property_name("init.svc." + name) && name.size() <= PROP_VALUE_MAX;
 }
