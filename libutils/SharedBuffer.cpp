@@ -16,12 +16,12 @@
 
 #define LOG_TAG "sharedbuffer"
 
+#include "SharedBuffer.h"
+
 #include <stdlib.h>
 #include <string.h>
 
 #include <log/log.h>
-
-#include "SharedBuffer.h"
 
 // ---------------------------------------------------------------------------
 

@@ -13,17 +13,8 @@
 // Debugs callback registration and invocation.
 #define DEBUG_CALLBACKS 0
 
-#include <errno.h>
-#include <fcntl.h>
-#include <inttypes.h>
-#include <limits.h>
-#include <string.h>
-#include <sys/eventfd.h>
-#include <unistd.h>
-
-#include <log/log.h>
 #include <utils/Looper.h>
-#include <utils/Timers.h>
+#include <sys/eventfd.h>
 
 namespace android {
 

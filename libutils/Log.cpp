@@ -21,14 +21,14 @@
 
 namespace android {
 
-LogIfSlow::LogIfSlow(const char* tag, android_LogPriority priority,
-        int timeoutMillis, const char* message) :
-        mTag(tag), mPriority(priority), mTimeoutMillis(timeoutMillis), mMessage(message),
-        mStart(systemTime(SYSTEM_TIME_BOOTTIME)) {
+LogIfSlow::LogIfSlow(
+        const char* tag, android_LogPriority priority, int timeoutMillis, const char* message)
+        : mTag(tag), mPriority(priority), mTimeoutMillis(timeoutMillis), mMessage(message),
+          mStart(systemTime(SYSTEM_TIME_BOOTTIME)) {
 }
 
 LogIfSlow::~LogIfSlow() {
-    int durationMillis = nanoseconds_to_milliseconds(systemTime(SYSTEM_TIME_BOOTTIME) - mStart);
+    int durationMillis = (int)nanoseconds_to_milliseconds(systemTime(SYSTEM_TIME_BOOTTIME) - mStart);
     if (durationMillis > mTimeoutMillis) {
         LOG_PRI(mPriority, mTag, "%s: %dms", mMessage, durationMillis);
     }

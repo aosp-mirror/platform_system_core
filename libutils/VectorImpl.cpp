@@ -16,13 +16,13 @@
 
 #define LOG_TAG "Vector"
 
+#include <utils/VectorImpl.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <log/log.h>
-#include <utils/Errors.h>
-#include <utils/VectorImpl.h>
 
 #include <safe_iop.h>
 

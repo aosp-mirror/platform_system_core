@@ -21,11 +21,7 @@
 
 #include <utils/Compat.h>
 #include <utils/Log.h>
-#include <utils/Unicode.h>
 #include <utils/String16.h>
-#include <utils/threads.h>
-
-#include <ctype.h>
 
 #include "SharedBuffer.h"
 

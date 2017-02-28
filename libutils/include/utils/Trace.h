@@ -19,16 +19,8 @@
 
 #if defined(__ANDROID__)
 
-#include <fcntl.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
 
-#include <cutils/compiler.h>
-#include <utils/threads.h>
 #include <cutils/trace.h>
 
 // See <cutils/trace.h> for more ATRACE_* macros.
@@ -37,6 +29,7 @@
 #define _PASTE(x, y) x ## y
 #define PASTE(x, y) _PASTE(x,y)
 #define ATRACE_NAME(name) android::ScopedTrace PASTE(___tracer, __LINE__) (ATRACE_TAG, name)
+
 // ATRACE_CALL is an ATRACE_NAME that uses the current function name.
 #define ATRACE_CALL() ATRACE_NAME(__FUNCTION__)
 
@@ -44,14 +37,13 @@ namespace android {
 
 class ScopedTrace {
 public:
-inline ScopedTrace(uint64_t tag, const char* name)
-    : mTag(tag) {
-    atrace_begin(mTag,name);
-}
+    inline ScopedTrace(uint64_t tag, const char* name) : mTag(tag) {
+        atrace_begin(mTag, name);
+    }
 
-inline ~ScopedTrace() {
-    atrace_end(mTag);
-}
+    inline ~ScopedTrace() {
+        atrace_end(mTag);
+    }
 
 private:
     uint64_t mTag;

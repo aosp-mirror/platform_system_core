@@ -17,18 +17,9 @@
 #define LOG_TAG "RefBase"
 // #define LOG_NDEBUG 0
 
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-
 #include <utils/RefBase.h>
 
 #include <utils/CallStack.h>
-#include <utils/Log.h>
-#include <utils/threads.h>
 
 #ifndef __unused
 #define __unused __attribute__((__unused__))

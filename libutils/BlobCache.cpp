@@ -17,13 +17,10 @@
 #define LOG_TAG "BlobCache"
 //#define LOG_NDEBUG 0
 
-#include <inttypes.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include <utils/BlobCache.h>
-#include <utils/Errors.h>
-#include <utils/Log.h>
+#include <utils/Timers.h>
+
+#include <inttypes.h>
 
 #include <cutils/properties.h>
 

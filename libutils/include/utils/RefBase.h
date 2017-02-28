@@ -371,10 +371,8 @@ protected:
 
 private:
     friend class ReferenceMover;
-    inline static void renameRefs(size_t /*n*/,
-            const ReferenceRenamer& /*renamer*/) { }
-    inline static void renameRefId(T* /*ref*/,
-            const void* /*old_id*/ , const void* /*new_id*/) { }
+    inline static void renameRefs(size_t /*n*/, const ReferenceRenamer& /*renamer*/) { }
+    inline static void renameRefId(T* /*ref*/, const void* /*old_id*/ , const void* /*new_id*/) { }
 
 private:
     mutable std::atomic<int32_t> mCount;

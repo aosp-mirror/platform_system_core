@@ -18,9 +18,12 @@
 #define ANDROID_UTILS_SINGLETON_H
 
 #include <stdint.h>
+
+// some vendor code assumes they have atoi() after including this file.
+#include <stdlib.h>
+
 #include <sys/types.h>
 #include <utils/Mutex.h>
-#include <utils/threads.h>
 #include <cutils/compiler.h>
 
 namespace android {
