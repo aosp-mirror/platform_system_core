@@ -664,9 +664,9 @@ LIBLOG_ABI_PUBLIC int android_set_log_frontend(int frontend_flag)
         return retval;
     }
 
-    __android_log_frontend &= LOGGER_LOCAL | LOGGER_LOGD;
+    __android_log_frontend &= LOGGER_LOCAL | LOGGER_LOGD | LOGGER_STDERR;
 
-    frontend_flag &= LOGGER_LOCAL | LOGGER_LOGD;
+    frontend_flag &= LOGGER_LOCAL | LOGGER_LOGD | LOGGER_STDERR;
 
     if (__android_log_frontend != frontend_flag) {
         __android_log_frontend = frontend_flag;
@@ -695,7 +695,7 @@ LIBLOG_ABI_PUBLIC int android_get_log_frontend()
     if (write_to_log == __write_to_log_null) {
         ret = LOGGER_NULL;
     } else {
-        __android_log_frontend &= LOGGER_LOCAL | LOGGER_LOGD;
+        __android_log_frontend &= LOGGER_LOCAL | LOGGER_LOGD | LOGGER_STDERR;
         ret = __android_log_frontend;
         if ((write_to_log != __write_to_log_init) &&
             (write_to_log != __write_to_log_daemon)) {
