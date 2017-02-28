@@ -66,6 +66,12 @@ bool WaitForProperty(const std::string& key,
                      const std::string& expected_value,
                      std::chrono::milliseconds relative_timeout);
 
+// Waits for the system property `key` to be created.
+// Times out after `relative_timeout`.
+// Returns true on success, false on timeout.
+bool WaitForPropertyCreation(const std::string& key,
+                             std::chrono::milliseconds relative_timeout);
+
 } // namespace base
 } // namespace android
 
