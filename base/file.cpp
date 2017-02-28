@@ -18,11 +18,13 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <libgen.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -234,6 +236,57 @@ std::string GetExecutablePath() {
 #else
 #error unknown OS
 #endif
+}
+
+std::string Basename(const std::string& path) {
+
+  // Copy path because basename may modify the string passed in.
+  std::string result(path);
+
+#if !defined(__BIONIC__)
+  // Use lock because basename() may write to a process global and return a
+  // pointer to that. Note that this locking strategy only works if all other
+  // callers to basename in the process also grab this same lock, but its
+  // better than nothing.  Bionic's basename returns a thread-local buffer.
+  static std::mutex& basename_lock = *new std::mutex();
+  std::lock_guard<std::mutex> lock(basename_lock);
+#endif
+
+  // Note that if std::string uses copy-on-write strings, &str[0] will cause
+  // the copy to be made, so there is no chance of us accidentally writing to
+  // the storage for 'path'.
+  char* name = basename(&result[0]);
+
+  // In case basename returned a pointer to a process global, copy that string
+  // before leaving the lock.
+  result.assign(name);
+
+  return result;
+}
+
+std::string Dirname(const std::string& path) {
+  // Copy path because dirname may modify the string passed in.
+  std::string result(path);
+
+#if !defined(__BIONIC__)
+  // Use lock because dirname() may write to a process global and return a
+  // pointer to that. Note that this locking strategy only works if all other
+  // callers to dirname in the process also grab this same lock, but its
+  // better than nothing.  Bionic's dirname returns a thread-local buffer.
+  static std::mutex& dirname_lock = *new std::mutex();
+  std::lock_guard<std::mutex> lock(dirname_lock);
+#endif
+
+  // Note that if std::string uses copy-on-write strings, &str[0] will cause
+  // the copy to be made, so there is no chance of us accidentally writing to
+  // the storage for 'path'.
+  char* parent = dirname(&result[0]);
+
+  // In case dirname returned a pointer to a process global, copy that string
+  // before leaving the lock.
+  result.assign(parent);
+
+  return result;
 }
 
 }  // namespace base
