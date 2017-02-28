@@ -23,6 +23,7 @@ cc_test {
     srcs: [
         "BitSet_test.cpp",
         "LruCache_test.cpp",
+        "Singleton_test.cpp",
         "String8_test.cpp",
         "StrongPointer_test.cpp",
         "Unicode_test.cpp",
@@ -42,6 +43,8 @@ cc_test {
                 "liblog",
                 "libcutils",
                 "libutils",
+                "libbase",
+                "libdl",
             ],
         },
         linux: {
@@ -54,13 +57,35 @@ cc_test {
             static_libs: [
                 "libutils",
                 "liblog",
+                "libbase",
             ],
+            host_ldlibs: ["-ldl"],
         },
     },
+
+    required: [
+        "libutils_tests_singleton1",
+        "libutils_tests_singleton2",
+    ],
 
     cflags: [
         "-Wall",
         "-Wextra",
         "-Werror",
     ],
+}
+
+cc_test_library {
+    name: "libutils_tests_singleton1",
+    host_supported: true,
+    relative_install_path: "libutils_tests",
+    srcs: ["Singleton_test1.cpp"],
+}
+
+cc_test_library {
+    name: "libutils_tests_singleton2",
+    host_supported: true,
+    relative_install_path: "libutils_tests",
+    srcs: ["Singleton_test2.cpp"],
+    shared_libs: ["libutils_tests_singleton1"],
 }

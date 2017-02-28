@@ -51,6 +51,7 @@ bool Readlink(const std::string& path, std::string* result);
 #endif
 
 std::string GetExecutablePath();
+std::string GetExecutableDirectory();
 
 // Like the regular basename and dirname, but thread-safe on all
 // platforms and capable of correctly handling exotic Windows paths.
