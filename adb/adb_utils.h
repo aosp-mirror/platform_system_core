@@ -28,11 +28,6 @@ void close_stdin();
 bool getcwd(std::string* cwd);
 bool directory_exists(const std::string& path);
 
-// Like the regular basename and dirname, but thread-safe on all
-// platforms and capable of correctly handling exotic Windows paths.
-std::string adb_basename(const std::string& path);
-std::string adb_dirname(const std::string& path);
-
 // Return the user's home directory.
 std::string adb_get_homedir_path();
 

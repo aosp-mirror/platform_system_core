@@ -844,7 +844,8 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* file_lis
         // TODO(b/25566053): Make pushing empty directories work.
         // TODO(b/25457350): We don't preserve permissions on directories.
         sc.Warning("skipping empty directory '%s'", lpath.c_str());
-        copyinfo ci(adb_dirname(lpath), adb_dirname(rpath), adb_basename(lpath), S_IFDIR);
+        copyinfo ci(android::base::Dirname(lpath), android::base::Dirname(rpath),
+                    android::base::Basename(lpath), S_IFDIR);
         ci.skip = true;
         file_list->push_back(ci);
         return true;
@@ -977,7 +978,7 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
                 if (dst_dir.back() != '/') {
                     dst_dir.push_back('/');
                 }
-                dst_dir.append(adb_basename(src_path));
+                dst_dir.append(android::base::Basename(src_path));
             }
 
             success &= copy_local_dir_remote(sc, src_path, dst_dir.c_str(), false, false);
@@ -995,7 +996,7 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
             if (path_holder.back() != '/') {
                 path_holder.push_back('/');
             }
-            path_holder += adb_basename(src_path);
+            path_holder += android::base::Basename(src_path);
             dst_path = path_holder.c_str();
         }
 
@@ -1015,7 +1016,8 @@ static bool remote_build_list(SyncConnection& sc, std::vector<copyinfo>* file_li
     std::vector<copyinfo> linklist;
 
     // Add an entry for the current directory to ensure it gets created before pulling its contents.
-    copyinfo ci(adb_dirname(lpath), adb_dirname(rpath), adb_basename(lpath), S_IFDIR);
+    copyinfo ci(android::base::Dirname(lpath), android::base::Dirname(rpath),
+                android::base::Basename(lpath), S_IFDIR);
     file_list->push_back(ci);
 
     // Put the files/dirs in rpath on the lists.
@@ -1149,7 +1151,7 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
         if (srcs.size() == 1 && errno == ENOENT) {
             // However, its parent must exist.
             struct stat parent_st;
-            if (stat(adb_dirname(dst).c_str(), &parent_st) == -1) {
+            if (stat(android::base::Dirname(dst).c_str(), &parent_st) == -1) {
                 sc.Error("cannot create file/directory '%s': %s", dst, strerror(errno));
                 return false;
             }
@@ -1204,7 +1206,7 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
                 if (!adb_is_separator(dst_dir.back())) {
                     dst_dir.push_back(OS_PATH_SEPARATOR);
                 }
-                dst_dir.append(adb_basename(src_path));
+                dst_dir.append(android::base::Basename(src_path));
             }
 
             success &= copy_remote_dir_local(sc, src_path, dst_dir.c_str(), copy_attrs);
@@ -1220,7 +1222,7 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
             // really want to copy to local_dir + OS_PATH_SEPARATOR +
             // basename(remote).
             path_holder = android::base::StringPrintf("%s%c%s", dst_path, OS_PATH_SEPARATOR,
-                                                      adb_basename(src_path).c_str());
+                                                      android::base::Basename(src_path).c_str());
             dst_path = path_holder.c_str();
         }
 

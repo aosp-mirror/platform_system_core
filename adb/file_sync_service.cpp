@@ -31,6 +31,7 @@
 #include <unistd.h>
 #include <utime.h>
 
+#include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <private/android_filesystem_config.h>
@@ -206,7 +207,7 @@ static bool handle_send_file(int s, const char* path, uid_t uid, gid_t gid, uint
 
     int fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
     if (fd < 0 && errno == ENOENT) {
-        if (!secure_mkdirs(adb_dirname(path))) {
+        if (!secure_mkdirs(android::base::Dirname(path))) {
             SendSyncFailErrno(s, "secure_mkdirs failed");
             goto fail;
         }
@@ -333,7 +334,7 @@ static bool handle_send_link(int s, const std::string& path, std::vector<char>& 
 
     ret = symlink(&buffer[0], path.c_str());
     if (ret && errno == ENOENT) {
-        if (!secure_mkdirs(adb_dirname(path))) {
+        if (!secure_mkdirs(android::base::Dirname(path))) {
             SendSyncFailErrno(s, "secure_mkdirs failed");
             return false;
         }
