@@ -46,6 +46,12 @@ cc_defaults {
             suffix: "64",
         },
     },
+
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+    ],
 }
 
 test_libraries = [
