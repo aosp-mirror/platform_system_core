@@ -44,20 +44,6 @@
 
 storaged_t storaged;
 
-static int drop_privs() {
-    // privilege setting
-    struct sched_param param;
-    memset(&param, 0, sizeof(param));
-
-    if (set_sched_policy(0, SP_BACKGROUND) < 0) return -1;
-
-    if (sched_setscheduler((pid_t) 0, SCHED_BATCH, &param) < 0) return -1;
-
-    if (setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND) < 0) return -1;
-
-    return 0;
-}
-
 // Function of storaged's main thread
 void* storaged_main(void* s) {
     storaged_t* storaged = (storaged_t*)s;
@@ -132,10 +118,6 @@ int main(int argc, char** argv) {
         fd_emmc = android_get_control_file(mmc0_ext_csd);
         if (fd_emmc < 0)
             fd_emmc = TEMP_FAILURE_RETRY(open(mmc0_ext_csd, O_RDONLY));
-
-        if (drop_privs() != 0) {
-            return -1;
-        }
 
         storaged.set_privileged_fds(fd_emmc);
 
