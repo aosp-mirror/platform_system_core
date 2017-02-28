@@ -43,6 +43,7 @@
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/unique_fd.h>
 #include <cutils/fs.h>
 #include <cutils/iosched_policy.h>
 #include <cutils/list.h>
@@ -616,6 +617,133 @@ static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_
     return 0;
 }
 
+/*
+ * Forks, executes the provided program in the child, and waits for the completion in the parent.
+ *
+ * Returns true if the child exited with status code 0, returns false otherwise.
+ */
+static bool fork_execve_and_wait_for_completion(const char* filename, char* const argv[],
+                                                char* const envp[]) {
+    pid_t child_pid = fork();
+    if (child_pid == -1) {
+        PLOG(ERROR) << "Failed to fork for " << filename;
+        return false;
+    }
+
+    if (child_pid == 0) {
+        // fork succeeded -- this is executing in the child process
+        if (execve(filename, argv, envp) == -1) {
+            PLOG(ERROR) << "Failed to execve " << filename;
+            return false;
+        }
+        // Unreachable because execve will have succeeded and replaced this code
+        // with child process's code.
+        _exit(127);
+        return false;
+    } else {
+        // fork succeeded -- this is executing in the original/parent process
+        int status;
+        if (TEMP_FAILURE_RETRY(waitpid(child_pid, &status, 0)) != child_pid) {
+            PLOG(ERROR) << "Failed to wait for " << filename;
+            return false;
+        }
+
+        if (WIFEXITED(status)) {
+            int status_code = WEXITSTATUS(status);
+            if (status_code == 0) {
+                return true;
+            } else {
+                LOG(ERROR) << filename << " exited with status " << status_code;
+            }
+        } else if (WIFSIGNALED(status)) {
+            LOG(ERROR) << filename << " killed by signal " << WTERMSIG(status);
+        } else if (WIFSTOPPED(status)) {
+            LOG(ERROR) << filename << " stopped by signal " << WSTOPSIG(status);
+        } else {
+            LOG(ERROR) << "waitpid for " << filename << " returned unexpected status: " << status;
+        }
+
+        return false;
+    }
+}
+
+static constexpr const char plat_policy_cil_file[] = "/plat_sepolicy.cil";
+
+static bool selinux_is_split_policy_device() { return access(plat_policy_cil_file, R_OK) != -1; }
+
+/*
+ * Loads SELinux policy split across platform/system and non-platform/vendor files.
+ *
+ * Returns true upon success, false otherwise (failure cause is logged).
+ */
+static bool selinux_load_split_policy() {
+    // IMPLEMENTATION NOTE: Split policy consists of three CIL files:
+    // * platform -- policy needed due to logic contained in the system image,
+    // * non-platform -- policy needed due to logic contained in the vendor image,
+    // * mapping -- mapping policy which helps preserve forward-compatibility of non-platform policy
+    //   with newer versions of platform policy.
+    //
+    // secilc is invoked to compile the above three policy files into a single monolithic policy
+    // file. This file is then loaded into the kernel.
+
+    LOG(INFO) << "Compiling SELinux policy";
+
+    // We store the output of the compilation on /dev because this is the most convenient tmpfs
+    // storage mount available this early in the boot sequence.
+    char compiled_sepolicy[] = "/dev/sepolicy.XXXXXX";
+    android::base::unique_fd compiled_sepolicy_fd(mkostemp(compiled_sepolicy, O_CLOEXEC));
+    if (compiled_sepolicy_fd < 0) {
+        PLOG(ERROR) << "Failed to create temporary file " << compiled_sepolicy;
+        return false;
+    }
+
+    const char* compile_args[] = {"/system/bin/secilc", plat_policy_cil_file, "-M", "true", "-c",
+                                  "30",  // TODO: pass in SELinux policy version from build system
+                                  "/mapping_sepolicy.cil", "/nonplat_sepolicy.cil", "-o",
+                                  compiled_sepolicy,
+                                  // We don't care about file_contexts output by the compiler
+                                  "-f", "/sys/fs/selinux/null",  // /dev/null is not yet available
+                                  nullptr};
+
+    if (!fork_execve_and_wait_for_completion(compile_args[0], (char**)compile_args, (char**)ENV)) {
+        unlink(compiled_sepolicy);
+        return false;
+    }
+    unlink(compiled_sepolicy);
+
+    LOG(INFO) << "Loading compiled SELinux policy";
+    if (selinux_android_load_policy_from_fd(compiled_sepolicy_fd, compiled_sepolicy) < 0) {
+        LOG(ERROR) << "Failed to load SELinux policy from " << compiled_sepolicy;
+        return false;
+    }
+
+    return true;
+}
+
+/*
+ * Loads SELinux policy from a monolithic file.
+ *
+ * Returns true upon success, false otherwise (failure cause is logged).
+ */
+static bool selinux_load_monolithic_policy() {
+    LOG(VERBOSE) << "Loading SELinux policy from monolithic file";
+    if (selinux_android_load_policy() < 0) {
+        PLOG(ERROR) << "Failed to load monolithic SELinux policy";
+        return false;
+    }
+    return true;
+}
+
+/*
+ * Loads SELinux policy into the kernel.
+ *
+ * Returns true upon success, false otherwise (failure cause is logged).
+ */
+static bool selinux_load_policy() {
+    return selinux_is_split_policy_device() ? selinux_load_split_policy()
+                                            : selinux_load_monolithic_policy();
+}
+
 static void selinux_initialize(bool in_kernel_domain) {
     Timer t;
 
@@ -626,10 +754,9 @@ static void selinux_initialize(bool in_kernel_domain) {
     selinux_set_callback(SELINUX_CB_AUDIT, cb);
 
     if (in_kernel_domain) {
-        LOG(INFO) << "Loading SELinux policy...";
-        if (selinux_android_load_policy() < 0) {
-            PLOG(ERROR) << "failed to load policy";
-            security_failure();
+        LOG(INFO) << "Loading SELinux policy";
+        if (!selinux_load_policy()) {
+            panic();
         }
 
         bool kernel_enforcing = (security_getenforce() == 1);
