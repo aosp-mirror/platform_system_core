@@ -1,3 +1,17 @@
+ndk_headers {
+    name: "libsync_headers",
+    from: "include/ndk",
+    to: "android",
+    srcs: ["include/ndk/sync.h"],
+    license: "NOTICE",
+}
+
+ndk_library {
+    name: "libsync.ndk",
+    symbol_file: "libsync.map.txt",
+    first_version: "26",
+}
+
 cc_defaults {
     name: "libsync_defaults",
     srcs: ["sync.c"],
