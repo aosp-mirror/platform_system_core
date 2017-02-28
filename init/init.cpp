@@ -52,6 +52,8 @@
 
 #include <fstream>
 #include <memory>
+#include <set>
+#include <vector>
 
 #include "action.h"
 #include "bootchart.h"
@@ -700,6 +702,92 @@ static bool early_mount_one(struct fstab_rec* rec) {
     return true;
 }
 
+// Creates devices with uevent->partition_name matching one in the in/out
+// partition_names. Note that the partition_names MUST have A/B suffix
+// when A/B is used. Found partitions will then be removed from the
+// partition_names for caller to check which devices are NOT created.
+static void early_device_init(std::set<std::string>* partition_names) {
+    if (partition_names->empty()) {
+        return;
+    }
+    device_init(nullptr, [=](uevent* uevent) -> coldboot_action_t {
+        if (!strncmp(uevent->subsystem, "firmware", 8)) {
+            return COLDBOOT_CONTINUE;
+        }
+
+        // we need platform devices to create symlinks
+        if (!strncmp(uevent->subsystem, "platform", 8)) {
+            return COLDBOOT_CREATE;
+        }
+
+        // Ignore everything that is not a block device
+        if (strncmp(uevent->subsystem, "block", 5)) {
+            return COLDBOOT_CONTINUE;
+        }
+
+        if (uevent->partition_name) {
+            // match partition names to create device nodes for partitions
+            // both partition_names and uevent->partition_name have A/B suffix when A/B is used
+            auto iter = partition_names->find(uevent->partition_name);
+            if (iter != partition_names->end()) {
+                LOG(VERBOSE) << "early_mount: found partition: " << *iter;
+                partition_names->erase(iter);
+                if (partition_names->empty()) {
+                    return COLDBOOT_STOP;  // found all partitions, stop coldboot
+                } else {
+                    return COLDBOOT_CREATE;  // create this device and continue to find others
+                }
+            }
+        }
+        // Not found a partition or find an unneeded partition, continue to find others
+        return COLDBOOT_CONTINUE;
+    });
+}
+
+static bool get_early_partitions(const std::vector<fstab_rec*>& early_fstab_recs,
+                                 std::set<std::string>* out_partitions, bool* out_need_verity) {
+    std::string meta_partition;
+    out_partitions->clear();
+    *out_need_verity = false;
+
+    for (auto fstab_rec : early_fstab_recs) {
+        // don't allow verifyatboot for early mounted partitions
+        if (fs_mgr_is_verifyatboot(fstab_rec)) {
+            LOG(ERROR) << "early_mount: partitions can't be verified at boot";
+            return false;
+        }
+        // check for verified partitions
+        if (fs_mgr_is_verified(fstab_rec)) {
+            *out_need_verity = true;
+        }
+        // check if verity metadata is on a separate partition and get partition
+        // name from the end of the ->verity_loc path. verity state is not partition
+        // specific, so there must be only 1 additional partition that carries
+        // verity state.
+        if (fstab_rec->verity_loc) {
+            if (!meta_partition.empty()) {
+                LOG(ERROR) << "early_mount: more than one meta partition found: " << meta_partition
+                           << ", " << basename(fstab_rec->verity_loc);
+                return false;
+            } else {
+                meta_partition = basename(fstab_rec->verity_loc);
+            }
+        }
+    }
+
+    // includes those early mount partitions and meta_partition (if any)
+    // note that fstab_rec->blk_device has A/B suffix updated by fs_mgr when A/B is used
+    for (auto fstab_rec : early_fstab_recs) {
+        out_partitions->emplace(basename(fstab_rec->blk_device));
+    }
+
+    if (!meta_partition.empty()) {
+        out_partitions->emplace(std::move(meta_partition));
+    }
+
+    return true;
+}
+
 /* Early mount vendor and ODM partitions. The fstab is read from device-tree. */
 static bool early_mount() {
     // first check if device tree fstab entries are compatible
@@ -716,122 +804,36 @@ static bool early_mount() {
     }
 
     // find out fstab records for odm, system and vendor
-    // TODO: add std::map<std::string, fstab_rec*> so all required information about
-    // them can be gathered at once in a single loop
-    fstab_rec* odm_rec = fs_mgr_get_entry_for_mount_point(tab.get(), "/odm");
-    fstab_rec* system_rec = fs_mgr_get_entry_for_mount_point(tab.get(), "/system");
-    fstab_rec* vendor_rec = fs_mgr_get_entry_for_mount_point(tab.get(), "/vendor");
-    if (!odm_rec && !system_rec && !vendor_rec) {
-        // nothing to early mount
-        return true;
+    std::vector<fstab_rec*> early_fstab_recs;
+    for (auto mount_point : {"/odm", "/system", "/vendor"}) {
+        fstab_rec* fstab_rec = fs_mgr_get_entry_for_mount_point(tab.get(), mount_point);
+        if (fstab_rec != nullptr) {
+            early_fstab_recs.push_back(fstab_rec);
+        }
     }
 
-    // don't allow verifyatboot for early mounted partitions
-    if ((odm_rec && fs_mgr_is_verifyatboot(odm_rec)) ||
-        (system_rec && fs_mgr_is_verifyatboot(system_rec)) ||
-        (vendor_rec && fs_mgr_is_verifyatboot(vendor_rec))) {
-        LOG(ERROR) << "Early mount partitions can't be verified at boot";
+    // nothing to early mount
+    if (early_fstab_recs.empty()) return true;
+
+    bool need_verity;
+    std::set<std::string> partition_names;
+    // partition_names MUST have A/B suffix when A/B is used
+    if (!get_early_partitions(early_fstab_recs, &partition_names, &need_verity)) {
         return false;
     }
 
-    // assume A/B device if we find 'slotselect' in any fstab entry
-    bool is_ab = ((odm_rec && fs_mgr_is_slotselect(odm_rec)) ||
-                  (system_rec && fs_mgr_is_slotselect(system_rec)) ||
-                  (vendor_rec && fs_mgr_is_slotselect(vendor_rec)));
-
-    // check for verified partitions
-    bool need_verity = ((odm_rec && fs_mgr_is_verified(odm_rec)) ||
-                        (system_rec && fs_mgr_is_verified(system_rec)) ||
-                        (vendor_rec && fs_mgr_is_verified(vendor_rec)));
-
-    // check if verity metadata is on a separate partition and get partition
-    // name from the end of the ->verity_loc path. verity state is not partition
-    // specific, so there must be only 1 additional partition that carries
-    // verity state.
-    std::string meta_partition;
-    if (odm_rec && odm_rec->verity_loc) {
-        meta_partition = basename(odm_rec->verity_loc);
-    } else if (system_rec && system_rec->verity_loc) {
-        meta_partition = basename(system_rec->verity_loc);
-    } else if (vendor_rec && vendor_rec->verity_loc) {
-        meta_partition = basename(vendor_rec->verity_loc);
-    }
-
-    bool found_odm = !odm_rec;
-    bool found_system = !system_rec;
-    bool found_vendor = !vendor_rec;
-    bool found_meta = meta_partition.empty();
-    int count_odm = 0, count_vendor = 0, count_system = 0;
-
+    bool success = false;
     // create the devices we need..
-    device_init(nullptr, [&](uevent* uevent) -> coldboot_action_t {
-        if (!strncmp(uevent->subsystem, "firmware", 8)) {
-            return COLDBOOT_CONTINUE;
-        }
+    early_device_init(&partition_names);
 
-        // we need platform devices to create symlinks
-        if (!strncmp(uevent->subsystem, "platform", 8)) {
-            return COLDBOOT_CREATE;
-        }
-
-        // Ignore everything that is not a block device
-        if (strncmp(uevent->subsystem, "block", 5)) {
-            return COLDBOOT_CONTINUE;
-        }
-
-        coldboot_action_t ret;
-        bool create_this_node = false;
-        if (uevent->partition_name) {
-            // prefix match partition names so we create device nodes for
-            // A/B-ed partitions
-            if (!found_odm && !strncmp(uevent->partition_name, "odm", 3)) {
-                LOG(VERBOSE) << "early_mount: found (" << uevent->partition_name << ") partition";
-
-                // wait twice for A/B-ed partitions
-                count_odm++;
-                if (!is_ab || count_odm == 2) {
-                    found_odm = true;
-                }
-
-                create_this_node = true;
-            } else if (!found_system && !strncmp(uevent->partition_name, "system", 6)) {
-                LOG(VERBOSE) << "early_mount: found (" << uevent->partition_name << ") partition";
-
-                count_system++;
-                if (!is_ab || count_system == 2) {
-                    found_system = true;
-                }
-
-                create_this_node = true;
-            } else if (!found_vendor && !strncmp(uevent->partition_name, "vendor", 6)) {
-                LOG(VERBOSE) << "early_mount: found (" << uevent->partition_name << ") partition";
-                count_vendor++;
-                if (!is_ab || count_vendor == 2) {
-                    found_vendor = true;
-                }
-
-                create_this_node = true;
-            } else if (!found_meta && (meta_partition == uevent->partition_name)) {
-                LOG(VERBOSE) <<  "early_mount: found (" << uevent->partition_name << ") partition";
-                found_meta = true;
-                create_this_node = true;
-            }
-        }
-
-        // if we found all other partitions already, create this
-        // node and stop coldboot. If this is a prefix matched
-        // partition, create device node and continue. For everything
-        // else skip the device node
-        if (found_meta && found_odm && found_system && found_vendor) {
-            ret = COLDBOOT_STOP;
-        } else if (create_this_node) {
-            ret = COLDBOOT_CREATE;
-        } else {
-            ret = COLDBOOT_CONTINUE;
-        }
-
-        return ret;
-    });
+    // early_device_init will remove found partitions from partition_names
+    // So if the partition_names is not empty here, means some partitions
+    // are not found
+    if (!partition_names.empty()) {
+        LOG(ERROR) << "early_mount: partition(s) not found: "
+                   << android::base::Join(partition_names, ", ");
+        goto done;
+    }
 
     if (need_verity) {
         // create /dev/device mapper
@@ -839,10 +841,10 @@ static bool early_mount() {
                     [&](uevent* uevent) -> coldboot_action_t { return COLDBOOT_STOP; });
     }
 
-    bool success = true;
-    if (odm_rec && !(success = early_mount_one(odm_rec))) goto done;
-    if (system_rec && !(success = early_mount_one(system_rec))) goto done;
-    if (vendor_rec && !(success = early_mount_one(vendor_rec))) goto done;
+    for (auto fstab_rec : early_fstab_recs) {
+        if (!early_mount_one(fstab_rec)) goto done;
+    }
+    success = true;
 
 done:
     device_close();
