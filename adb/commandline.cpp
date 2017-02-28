@@ -2115,7 +2115,8 @@ static int install_multiple_app(TransportType transport, const char* serial, int
 
         std::string cmd = android::base::StringPrintf(
                 "%s install-write -S %" PRIu64 " %d %d_%s -",
-                install_cmd.c_str(), static_cast<uint64_t>(sb.st_size), session_id, i, adb_basename(file).c_str());
+                install_cmd.c_str(), static_cast<uint64_t>(sb.st_size), session_id, i,
+                android::base::Basename(file).c_str());
 
         int localFd = adb_open(file, O_RDONLY);
         if (localFd < 0) {
@@ -2233,7 +2234,7 @@ static int install_app_legacy(TransportType transport, const char* serial, int a
     int result = -1;
     std::vector<const char*> apk_file = {argv[last_apk]};
     std::string apk_dest = android::base::StringPrintf(
-        where, adb_basename(argv[last_apk]).c_str());
+        where, android::base::Basename(argv[last_apk]).c_str());
     if (!do_sync_push(apk_file, apk_dest.c_str())) goto cleanup_apk;
     argv[last_apk] = apk_dest.c_str(); /* destination name, not source location */
     result = pm_command(transport, serial, argc, argv);
