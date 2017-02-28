@@ -188,7 +188,7 @@ const __u32 AdfTest::fmt8888[] = {
 const size_t AdfTest::n_fmt8888 = sizeof(fmt8888) / sizeof(fmt8888[0]);
 
 TEST(adf, devices) {
-    adf_id_t *devs;
+    adf_id_t *devs = nullptr;
     ssize_t n_devs = adf_devices(&devs);
     free(devs);
 
