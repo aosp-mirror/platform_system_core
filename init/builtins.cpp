@@ -677,11 +677,11 @@ static int do_sysclktz(const std::vector<std::string>& args) {
 
 static int do_verity_load_state(const std::vector<std::string>& args) {
     int mode = -1;
-    int rc = fs_mgr_load_verity_state(&mode);
-    if (rc == 0 && mode != VERITY_MODE_DEFAULT) {
+    bool loaded = fs_mgr_load_verity_state(&mode);
+    if (loaded && mode != VERITY_MODE_DEFAULT) {
         ActionManager::GetInstance().QueueEventTrigger("verity-logging");
     }
-    return rc;
+    return loaded ? 0 : 1;
 }
 
 static void verity_update_property(fstab_rec *fstab, const char *mount_point,
@@ -691,7 +691,7 @@ static void verity_update_property(fstab_rec *fstab, const char *mount_point,
 }
 
 static int do_verity_update_state(const std::vector<std::string>& args) {
-    return fs_mgr_update_verity_state(verity_update_property);
+    return fs_mgr_update_verity_state(verity_update_property) ? 0 : 1;
 }
 
 static int do_write(const std::vector<std::string>& args) {
