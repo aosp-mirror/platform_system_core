@@ -45,42 +45,6 @@ static bool send_signal(pid_t pid, bool backtrace) {
   return true;
 }
 
-static bool check_dumpable(pid_t pid) {
-  // /proc/<pid> is owned by the effective UID of the process.
-  // Ownership of most of the other files in /proc/<pid> varies based on PR_SET_DUMPABLE.
-  // If PR_GET_DUMPABLE would return 0, they're owned by root, instead.
-  std::string proc_pid_path = android::base::StringPrintf("/proc/%d/", pid);
-  std::string proc_pid_status_path = proc_pid_path + "/status";
-
-  unique_fd proc_pid_fd(open(proc_pid_path.c_str(), O_DIRECTORY | O_RDONLY | O_CLOEXEC));
-  if (proc_pid_fd == -1) {
-    return false;
-  }
-  unique_fd proc_pid_status_fd(openat(proc_pid_fd, "status", O_RDONLY | O_CLOEXEC));
-  if (proc_pid_status_fd == -1) {
-    return false;
-  }
-
-  struct stat proc_pid_st;
-  struct stat proc_pid_status_st;
-  if (fstat(proc_pid_fd.get(), &proc_pid_st) != 0 ||
-      fstat(proc_pid_status_fd.get(), &proc_pid_status_st) != 0) {
-    return false;
-  }
-
-  // We can't figure out if a process is dumpable if its effective UID is root, but that's fine
-  // because being root bypasses the PR_SET_DUMPABLE check for ptrace.
-  if (proc_pid_st.st_uid == 0) {
-    return true;
-  }
-
-  if (proc_pid_status_st.st_uid == 0) {
-    return false;
-  }
-
-  return true;
-}
-
 bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType dump_type,
                             int timeout_ms) {
   LOG(INFO) << "libdebuggerd_client: started dumping process " << pid;
@@ -113,11 +77,6 @@ bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType du
 
     return true;
   };
-
-  if (!check_dumpable(pid)) {
-    dprintf(output_fd.get(), "target pid %d is not dumpable\n", pid);
-    return true;
-  }
 
   sockfd.reset(socket(AF_LOCAL, SOCK_SEQPACKET, 0));
   if (sockfd == -1) {
