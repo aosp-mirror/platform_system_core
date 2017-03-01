@@ -19,34 +19,23 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/system_properties.h>
 #include <unistd.h>
 
-#include <cutils/properties.h>
+#include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <log/log.h>
 #include <sysutils/ServiceManager.h>
 
 ServiceManager::ServiceManager() {
 }
 
-/* The service name should not exceed SERVICE_NAME_MAX to avoid
- * some weird things. This is due to the fact that:
- *
- * - Starting a service is done by writing its name to the "ctl.start"
- *   system property. This triggers the init daemon to actually start
- *   the service for us.
- *
- * - Stopping the service is done by writing its name to "ctl.stop"
- *   in a similar way.
- *
- * - Reading the status of a service is done by reading the property
- *   named "init.svc.<name>"
- *
- * If strlen(<name>) > (PROPERTY_KEY_MAX-1)-9, then you can start/stop
- * the service by writing to ctl.start/stop, but you won't be able to
- * read its state due to the truncation of "init.svc.<name>" into a
- * zero-terminated buffer of PROPERTY_KEY_MAX characters.
- */
-#define SERVICE_NAME_MAX  (PROPERTY_KEY_MAX-10)
+// The length of a service name should not exceed SERVICE_NAME_MAX. Starting
+// a service is done by writing its name to the "ctl.start" system property
+// and stopping a service is done by writing its name to "ctl.stop". If a
+// service name is too long to fit in a property, you won't be able to start
+// or stop it.
+static constexpr size_t SERVICE_NAME_MAX = PROP_VALUE_MAX;
 
 /* The maximum amount of time to wait for a service to start or stop,
  * in micro-seconds (really an approximation) */
@@ -61,13 +50,14 @@ int ServiceManager::start(const char *name) {
         SLOGE("Service name '%s' is too long", name);
         return 0;
     }
+
     if (isRunning(name)) {
         SLOGW("Service '%s' is already running", name);
         return 0;
     }
 
     SLOGD("Starting service '%s'", name);
-    property_set("ctl.start", name);
+    android::base::SetProperty("ctl.start", name);
 
     int count = SLEEP_MAX_USEC;
     while(count > 0) {
@@ -90,13 +80,14 @@ int ServiceManager::stop(const char *name) {
         SLOGE("Service name '%s' is too long", name);
         return 0;
     }
+
     if (!isRunning(name)) {
         SLOGW("Service '%s' is already stopped", name);
         return 0;
     }
 
     SLOGD("Stopping service '%s'", name);
-    property_set("ctl.stop", name);
+    android::base::SetProperty("ctl.stop", name);
 
     int count = SLEEP_MAX_USEC;
     while(count > 0) {
@@ -116,19 +107,6 @@ int ServiceManager::stop(const char *name) {
 }
 
 bool ServiceManager::isRunning(const char *name) {
-    char propVal[PROPERTY_VALUE_MAX];
-    char propName[PROPERTY_KEY_MAX];
-    int  ret;
-
-    ret = snprintf(propName, sizeof(propName), "init.svc.%s", name);
-    if (ret > (int)sizeof(propName)-1) {
-        SLOGD("Service name '%s' is too long", name);
-        return false;
-    }
-
-    if (property_get(propName, propVal, NULL)) {
-        if (!strcmp(propVal, "running"))
-            return true;
-    }
-    return false;
+    std::string property_name = android::base::StringPrintf("init.svc.%s", name);
+    return (android::base::GetProperty(property_name, "") == "running");
 }
