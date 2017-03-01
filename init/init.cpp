@@ -790,6 +790,12 @@ static bool get_early_partitions(const std::vector<fstab_rec*>& early_fstab_recs
 
 /* Early mount vendor and ODM partitions. The fstab is read from device-tree. */
 static bool early_mount() {
+    // skip early mount if we're in recovery mode
+    if (access("/sbin/recovery", F_OK) == 0) {
+        LOG(INFO) << "Early mount skipped (recovery mode)";
+        return true;
+    }
+
     // first check if device tree fstab entries are compatible
     if (!is_dt_fstab_compatible()) {
         LOG(INFO) << "Early mount skipped (missing/incompatible fstab in device tree)";
