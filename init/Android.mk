@@ -109,8 +109,8 @@ LOCAL_STATIC_LIBRARIES := \
     libfec_rs \
     libsquashfs_utils \
     liblogwrap \
-    libcutils \
     libext4_utils \
+    libcutils \
     libbase \
     libc \
     libselinux \

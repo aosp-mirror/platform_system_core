@@ -653,8 +653,7 @@ static int get_verity_state_offset(struct fstab_rec *fstab, off64_t *offset)
                 offset);
 }
 
-static int load_verity_state(struct fstab_rec *fstab, int *mode)
-{
+int load_verity_state(struct fstab_rec* fstab, int* mode) {
     int match = 0;
     off64_t offset = 0;
 
@@ -688,129 +687,6 @@ static int load_verity_state(struct fstab_rec *fstab, int *mode)
     }
 
     return read_verity_state(fstab->verity_loc, offset, mode);
-}
-
-int fs_mgr_load_verity_state(int *mode)
-{
-    int rc = -1;
-    int i;
-    int current;
-    struct fstab *fstab = NULL;
-
-    /* return the default mode, unless any of the verified partitions are in
-     * logging mode, in which case return that */
-    *mode = VERITY_MODE_DEFAULT;
-
-    fstab = fs_mgr_read_fstab_default();
-    if (!fstab) {
-        LERROR << "Failed to read default fstab";
-        goto out;
-    }
-
-    for (i = 0; i < fstab->num_entries; i++) {
-        if (!fs_mgr_is_verified(&fstab->recs[i])) {
-            continue;
-        }
-
-        rc = load_verity_state(&fstab->recs[i], &current);
-        if (rc < 0) {
-            continue;
-        }
-
-        if (current != VERITY_MODE_DEFAULT) {
-            *mode = current;
-            break;
-        }
-    }
-
-    rc = 0;
-
-out:
-    if (fstab) {
-        fs_mgr_free_fstab(fstab);
-    }
-
-    return rc;
-}
-
-int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
-{
-    alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
-    bool system_root = false;
-    std::string mount_point;
-    char propbuf[PROPERTY_VALUE_MAX];
-    const char *status;
-    int fd = -1;
-    int i;
-    int mode;
-    int rc = -1;
-    struct dm_ioctl *io = (struct dm_ioctl *) buffer;
-    struct fstab *fstab = NULL;
-
-    if (!callback) {
-        return -1;
-    }
-
-    if (fs_mgr_load_verity_state(&mode) == -1) {
-        return -1;
-    }
-
-    fd = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));
-    if (fd == -1) {
-        PERROR << "Error opening device mapper";
-        goto out;
-    }
-
-    property_get("ro.build.system_root_image", propbuf, "");
-    system_root = !strcmp(propbuf, "true");
-    fstab = fs_mgr_read_fstab_default();
-    if (!fstab) {
-        LERROR << "Failed to read default fstab";
-        goto out;
-    }
-
-    for (i = 0; i < fstab->num_entries; i++) {
-        if (!fs_mgr_is_verified(&fstab->recs[i])) {
-            continue;
-        }
-
-        if (system_root && !strcmp(fstab->recs[i].mount_point, "/")) {
-            mount_point = "system";
-        } else {
-            mount_point = basename(fstab->recs[i].mount_point);
-        }
-
-        fs_mgr_verity_ioctl_init(io, mount_point, 0);
-
-        if (ioctl(fd, DM_TABLE_STATUS, io)) {
-            if (fstab->recs[i].fs_mgr_flags & MF_VERIFYATBOOT) {
-                status = "V";
-            } else {
-                PERROR << "Failed to query DM_TABLE_STATUS for "
-                       << mount_point.c_str();
-                continue;
-            }
-        }
-
-        status = &buffer[io->data_start + sizeof(struct dm_target_spec)];
-
-        if (*status == 'C' || *status == 'V') {
-            callback(&fstab->recs[i], mount_point.c_str(), mode, *status);
-        }
-    }
-
-    rc = 0;
-
-out:
-    if (fstab) {
-        fs_mgr_free_fstab(fstab);
-    }
-
-    if (fd) {
-        close(fd);
-    }
-
-    return rc;
 }
 
 static void update_verity_table_blk_device(char *blk_device, char **table)
