@@ -446,6 +446,8 @@ static void show_help(android_logcat_context_internal* context) {
                     "                  and individually flagged modifying adverbs can be added:\n"
                     "                    color descriptive epoch monotonic printable uid\n"
                     "                    usec UTC year zone\n"
+                    "                  Multiple -v parameters or comma separated list of format and\n"
+                    "                  format modifiers are allowed.\n"
                     // private and undocumented nsec, no signal, too much noise
                     // useful for -T or -t <timestamp> accurate testing though.
                     "  -D, --dividers  Print dividers between each log buffer\n"
@@ -726,7 +728,7 @@ void reportErrorName(const char** current, const char* name,
 static int __logcat(android_logcat_context_internal* context) {
     using namespace android;
     int err;
-    int hasSetLogFormat = 0;
+    bool hasSetLogFormat = false;
     bool clearLog = false;
     bool allSelected = false;
     bool getLogSize = false;
@@ -848,6 +850,10 @@ static int __logcat(android_logcat_context_internal* context) {
         context->retval = EXIT_SUCCESS;
         goto exit;
     }
+
+    // meant to catch comma-delimited values, but cast a wider
+    // net for stability dealing with possible mistaken inputs.
+    static const char delimiters[] = ",:; \t\n\r\f";
 
     // danger: getopt is _not_ reentrant
     optind = 1;
@@ -1070,8 +1076,12 @@ static int __logcat(android_logcat_context_internal* context) {
                 break;
 
             case 'b': {
+                std::unique_ptr<char, void (*)(void*)> buffers(strdup(optarg),
+                                                               free);
+                optarg = buffers.get();
                 unsigned idMask = 0;
-                while (!!(optarg = strtok(optarg, ",:; \t\n\r\f"))) {
+                char* sv = nullptr;  // protect against -ENOMEM above
+                while (!!(optarg = strtok_r(optarg, delimiters, &sv))) {
                     if (!strcmp(optarg, "default")) {
                         idMask |= (1 << LOG_ID_MAIN) | (1 << LOG_ID_SYSTEM) |
                                   (1 << LOG_ID_CRASH);
@@ -1152,20 +1162,28 @@ static int __logcat(android_logcat_context_internal* context) {
                 }
                 break;
 
-            case 'v':
+            case 'v': {
                 if (!strcmp(optarg, "help") || !strcmp(optarg, "--help")) {
                     show_format_help(context);
                     context->retval = EXIT_SUCCESS;
                     goto exit;
                 }
-                err = setLogFormat(context, optarg);
-                if (err < 0) {
-                    logcat_panic(context, HELP_FORMAT,
-                                 "Invalid parameter \"%s\" to -v\n", optarg);
-                    goto exit;
+                std::unique_ptr<char, void (*)(void*)> formats(strdup(optarg),
+                                                               free);
+                optarg = formats.get();
+                unsigned idMask = 0;
+                char* sv = nullptr;  // protect against -ENOMEM above
+                while (!!(optarg = strtok_r(optarg, delimiters, &sv))) {
+                    err = setLogFormat(context, optarg);
+                    if (err < 0) {
+                        logcat_panic(context, HELP_FORMAT,
+                                     "Invalid parameter \"%s\" to -v\n", optarg);
+                        goto exit;
+                    }
+                    optarg = nullptr;
+                    if (err) hasSetLogFormat = true;
                 }
-                hasSetLogFormat |= err;
-                break;
+            } break;
 
             case 'Q':
 #define KERNEL_OPTION "androidboot.logcat="
@@ -1297,13 +1315,22 @@ static int __logcat(android_logcat_context_internal* context) {
         const char* logFormat = android::getenv(context, "ANDROID_PRINTF_LOG");
 
         if (!!logFormat) {
-            err = setLogFormat(context, logFormat);
-            if ((err < 0) && context->error) {
-                fprintf(context->error,
-                        "invalid format in ANDROID_PRINTF_LOG '%s'\n",
-                        logFormat);
+            std::unique_ptr<char, void (*)(void*)> formats(strdup(logFormat),
+                                                           free);
+            char* sv = nullptr;  // protect against -ENOMEM above
+            char* arg = formats.get();
+            while (!!(arg = strtok_r(arg, delimiters, &sv))) {
+                err = setLogFormat(context, arg);
+                // environment should not cause crash of logcat
+                if ((err < 0) && context->error) {
+                    fprintf(context->error,
+                            "invalid format in ANDROID_PRINTF_LOG '%s'\n", arg);
+                }
+                arg = nullptr;
+                if (err > 0) hasSetLogFormat = true;
             }
-        } else {
+        }
+        if (!hasSetLogFormat) {
             setLogFormat(context, "threadtime");
         }
     }
