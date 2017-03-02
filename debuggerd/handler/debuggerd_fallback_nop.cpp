@@ -26,10 +26,5 @@
  * SUCH DAMAGE.
  */
 
-#include <stddef.h>
-#include <sys/ucontext.h>
-#include <unistd.h>
-
-extern "C" bool debuggerd_fallback(ucontext_t*, siginfo_t*, void*) {
-  return false;
+extern "C" void debuggerd_fallback_handler(struct siginfo_t*, struct ucontext_t*, void*) {
 }

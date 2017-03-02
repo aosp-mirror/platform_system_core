@@ -8,17 +8,35 @@ cc_defaults {
         "-Os",
     ],
 
+    // util.cpp gets async signal safe logging via libc_logging,
+    // which defines its interface in bionic private headers.
+    include_dirs: ["bionic/libc"],
+
     local_include_dirs: ["include"],
 }
 
+// Utility library to tombstoned and get an output fd.
+cc_library_static {
+    name: "libtombstoned_client",
+    defaults: ["debuggerd_defaults"],
+    srcs: [
+        "tombstoned_client.cpp",
+        "util.cpp",
+    ],
+
+    whole_static_libs: [
+        "libc_logging",
+        "libcutils",
+        "libbase",
+    ],
+}
+
+// Core implementation, linked into libdebuggerd_handler and the dynamic linker.
 cc_library_static {
     name: "libdebuggerd_handler_core",
     defaults: ["debuggerd_defaults"],
     srcs: ["handler/debuggerd_handler.cpp"],
 
-    // libdebuggerd_handler gets async signal safe logging via libc_logging,
-    // which defines its interface in bionic private headers.
-    include_dirs: ["bionic/libc"],
     whole_static_libs: [
         "libc_logging",
         "libdebuggerd",
@@ -27,6 +45,7 @@ cc_library_static {
     export_include_dirs: ["include"],
 }
 
+// Implementation with a no-op fallback.
 cc_library_static {
     name: "libdebuggerd_handler",
     defaults: ["debuggerd_defaults"],
@@ -39,15 +58,18 @@ cc_library_static {
     export_include_dirs: ["include"],
 }
 
+// Fallback implementation.
 cc_library_static {
     name: "libdebuggerd_handler_fallback",
     defaults: ["debuggerd_defaults"],
-    srcs: ["handler/debuggerd_fallback.cpp"],
+    srcs: [
+        "handler/debuggerd_fallback.cpp",
+    ],
 
-    // libdebuggerd_handler gets async signal safe logging via libc_logging,
-    // which defines its interface in bionic private headers.
-    include_dirs: ["bionic/libc"],
-    static_libs: [
+    whole_static_libs: [
+        "libdebuggerd_handler_core",
+        "libtombstoned_client",
+        "libbase",
         "libdebuggerd",
         "libbacktrace",
         "libunwind",
@@ -70,6 +92,7 @@ cc_library {
         "libbase",
         "libcutils",
     ],
+
     export_include_dirs: ["include"],
 }
 
@@ -187,6 +210,7 @@ cc_binary {
     },
 
     static_libs: [
+        "libtombstoned_client",
         "libdebuggerd",
         "libcutils",
     ],

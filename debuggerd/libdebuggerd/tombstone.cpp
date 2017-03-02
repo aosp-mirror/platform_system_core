@@ -751,8 +751,11 @@ void engrave_tombstone(int tombstone_fd, BacktraceMap* map,
   dump_crash(&log, map, open_files, pid, tid, siblings, abort_msg_address);
 }
 
-void engrave_tombstone_ucontext(int tombstone_fd, pid_t pid, pid_t tid, uintptr_t abort_msg_address,
-                                siginfo_t* siginfo, ucontext_t* ucontext) {
+void engrave_tombstone_ucontext(int tombstone_fd, uintptr_t abort_msg_address, siginfo_t* siginfo,
+                                ucontext_t* ucontext) {
+  pid_t pid = getpid();
+  pid_t tid = gettid();
+
   log_t log;
   log.current_tid = tid;
   log.crashed_tid = tid;
