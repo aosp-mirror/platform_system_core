@@ -13,13 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef ANDROID_INCLUDE_SYSTEM_QEMU_PIPE_H
-#define ANDROID_INCLUDE_SYSTEM_QEMU_PIPE_H
+
+#include "qemu_pipe.h"
 
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
+#include <stdio.h>
+
 
 // Define QEMU_PIPE_DEBUG if you want to print error messages when an error
 // occurs during pipe operations. The macro should simply take a printf-style
@@ -48,7 +50,7 @@
 // You should be able to open several pipes to the same pipe service,
 // except for a few special cases (e.g. GSM modem), where EBUSY will be
 // returned if more than one client tries to connect to it.
-static __inline__ int qemu_pipe_open(const char* pipeName) {
+int qemu_pipe_open(const char* pipeName) {
     // Sanity check.
     if (!pipeName || memcmp(pipeName, "pipe:", 5) != 0) {
         errno = EINVAL;
@@ -81,9 +83,7 @@ static __inline__ int qemu_pipe_open(const char* pipeName) {
 // Send a framed message |buff| of |len| bytes through the |fd| descriptor.
 // This really adds a 4-hexchar prefix describing the payload size.
 // Returns 0 on success, and -1 on error.
-static int __inline__ qemu_pipe_frame_send(int fd,
-                                           const void* buff,
-                                           size_t len) {
+int qemu_pipe_frame_send(int fd, const void* buff, size_t len) {
     char header[5];
     snprintf(header, sizeof(header), "%04zx", len);
     ssize_t ret = TEMP_FAILURE_RETRY(write(fd, header, 4));
@@ -104,7 +104,7 @@ static int __inline__ qemu_pipe_frame_send(int fd,
 // content is lost. Otherwise, this returns the size of the message. NOTE:
 // empty messages are possible in a framed wire protocol and do not mean
 // end-of-stream.
-static int __inline__ qemu_pipe_frame_recv(int fd, void* buff, size_t len) {
+int qemu_pipe_frame_recv(int fd, void* buff, size_t len) {
     char header[5];
     ssize_t ret = TEMP_FAILURE_RETRY(read(fd, header, 4));
     if (ret != 4) {
@@ -130,5 +130,3 @@ static int __inline__ qemu_pipe_frame_recv(int fd, void* buff, size_t len) {
     }
     return size;
 }
-
-#endif /* ANDROID_INCLUDE_HARDWARE_QEMUD_PIPE_H */
