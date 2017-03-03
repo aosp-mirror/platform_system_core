@@ -27,6 +27,7 @@
 #include <unistd.h>
 
 #include <unordered_map>
+#include <utility>
 
 #include <cutils/properties.h>
 #include <private/android_logger.h>
@@ -374,15 +375,9 @@ void LogBuffer::log(LogBufferElement* elem) {
     //  NB: if end is region locked, place element at end of list
     LogBufferElementCollection::iterator it = mLogElements.end();
     LogBufferElementCollection::iterator last = it;
-    while (last != mLogElements.begin()) {
-        --it;
-        if ((*it)->getRealTime() <= elem->getRealTime()) {
-            break;
-        }
-        last = it;
-    }
-
-    if (last == mLogElements.end()) {
+    if (__predict_true(it != mLogElements.begin())) --it;
+    if (__predict_false(it == mLogElements.begin()) ||
+        __predict_true((*it)->getRealTime() <= elem->getRealTime())) {
         mLogElements.push_back(elem);
     } else {
         uint64_t end = 1;
@@ -399,6 +394,7 @@ void LogBuffer::log(LogBufferElement* elem) {
                     end_always = true;
                     break;
                 }
+                // it passing mEnd is blocked by the following checks.
                 if (!end_set || (end <= entry->mEnd)) {
                     end = entry->mEnd;
                     end_set = true;
@@ -407,12 +403,23 @@ void LogBuffer::log(LogBufferElement* elem) {
             times++;
         }
 
-        if (end_always || (end_set && (end >= (*last)->getSequence()))) {
+        if (end_always || (end_set && (end > (*it)->getSequence()))) {
             mLogElements.push_back(elem);
         } else {
+            // should be short as timestamps are localized near end()
+            do {
+                last = it;
+                if (__predict_false(it == mLogElements.begin())) {
+                    break;
+                }
+
+                std::swap((*it)->mSequence, elem->mSequence);
+
+                --it;
+            } while (((*it)->getRealTime() > elem->getRealTime()) &&
+                     (!end_set || (end <= (*it)->getSequence())));
             mLogElements.insert(last, elem);
         }
-
         LogTimeEntry::unlock();
     }
 
