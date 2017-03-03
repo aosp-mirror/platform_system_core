@@ -20,12 +20,12 @@
 #include <time.h>
 
 #include <string>
-#include <sstream>
 #include <unordered_map>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>
+#include <android-base/strings.h>
 #include <android-base/stringprintf.h>
 #include <log/log_event_list.h>
 #include <packagelistparser/packagelistparser.h>
@@ -64,19 +64,33 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_lock
         return uid_io_stats;
     }
 
-    std::stringstream ss(buffer);
+    std::vector<std::string> io_stats = android::base::Split(buffer, "\n");
     struct uid_info u;
     bool refresh_uid = false;
 
-    while (ss >> u.uid) {
-        ss >> u.io[FOREGROUND].rchar >> u.io[FOREGROUND].wchar
-           >> u.io[FOREGROUND].read_bytes >> u.io[FOREGROUND].write_bytes
-           >> u.io[BACKGROUND].rchar >> u.io[BACKGROUND].wchar
-           >> u.io[BACKGROUND].read_bytes >> u.io[BACKGROUND].write_bytes;
+    for (uint32_t i = 0; i < io_stats.size(); i++) {
+        if (io_stats[i].empty()) {
+            continue;
+        }
+        std::vector<std::string> fields = android::base::Split(io_stats[i], " ");
+        if (fields.size() < 9) {
+            LOG_TO(SYSTEM, WARNING) << "Invalid io stats: \""
+                                    << io_stats[i] << "\"";
+            continue;
+        }
+        u.uid = stoul(fields[0]);
+        u.io[FOREGROUND].rchar = stoull(fields[1]);
+        u.io[FOREGROUND].wchar = stoull(fields[2]);
+        u.io[FOREGROUND].read_bytes = stoull(fields[3]);
+        u.io[FOREGROUND].write_bytes = stoull(fields[4]);
+        u.io[BACKGROUND].rchar = stoull(fields[5]);
+        u.io[BACKGROUND].wchar = stoull(fields[6]);
+        u.io[BACKGROUND].read_bytes = stoull(fields[7]);
+        u.io[BACKGROUND].write_bytes = stoull(fields[8]);
 
-        if (!ss.good()) {
-            ss.clear(std::ios_base::badbit);
-            break;
+        if (fields.size() == 11) {
+            u.io[FOREGROUND].fsync = stoull(fields[9]);
+            u.io[BACKGROUND].fsync = stoull(fields[10]);
         }
 
         if (last_uid_io_stats.find(u.uid) == last_uid_io_stats.end()) {
@@ -86,11 +100,6 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_lock
             u.name = last_uid_io_stats[u.uid].name;
         }
         uid_io_stats[u.uid] = u;
-    }
-
-    if (!ss.eof() || ss.bad()) {
-        uid_io_stats.clear();
-        LOG_TO(SYSTEM, ERROR) << "read UID IO stats failed";
     }
 
     if (refresh_uid) {
