@@ -669,7 +669,7 @@ static bool fork_execve_and_wait_for_completion(const char* filename, char* cons
     }
 }
 
-static constexpr const char plat_policy_cil_file[] = "/plat_sepolicy.cil";
+static constexpr const char plat_policy_cil_file[] = "/system/etc/selinux/plat_sepolicy.cil";
 
 static bool selinux_is_split_policy_device() { return access(plat_policy_cil_file, R_OK) != -1; }
 
@@ -701,7 +701,8 @@ static bool selinux_load_split_policy() {
 
     const char* compile_args[] = {"/system/bin/secilc", plat_policy_cil_file, "-M", "true", "-c",
                                   "30",  // TODO: pass in SELinux policy version from build system
-                                  "/mapping_sepolicy.cil", "/nonplat_sepolicy.cil", "-o",
+                                  "/vendor/etc/selinux/mapping_sepolicy.cil",
+                                  "/vendor/etc/selinux/nonplat_sepolicy.cil", "-o",
                                   compiled_sepolicy,
                                   // We don't care about file_contexts output by the compiler
                                   "-f", "/sys/fs/selinux/null",  // /dev/null is not yet available
