@@ -33,6 +33,8 @@
 #include <android-base/logging.h>
 #include <log/log.h>
 
+#include "seccomp_policy.h"
+
 #if defined(STATIC_CRASHER)
 #include "debuggerd/handler.h"
 #endif
@@ -269,6 +271,7 @@ noinline int do_action(const char* arg) {
         munmap(map, sizeof(int));
         map[0] = '8';
     } else if (!strcasecmp(arg, "seccomp")) {
+        set_seccomp_filter();
         syscall(99999);
 #if defined(__arm__)
     } else if (!strcasecmp(arg, "kuser_helper_version")) {
