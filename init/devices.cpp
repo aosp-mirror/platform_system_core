@@ -390,6 +390,34 @@ static int find_pci_device_prefix(const char *path, char *buf, ssize_t buf_sz)
     return 0;
 }
 
+/* Given a path that may start with a virtual block device, populate
+ * the supplied buffer with the virtual block device ID and return 0.
+ * If it doesn't start with a virtual block device, or there is some
+ * error, return -1 */
+static int find_vbd_device_prefix(const char *path, char *buf, ssize_t buf_sz)
+{
+    const char *start, *end;
+
+    /* Beginning of the prefix is the initial "vbd-" after "/devices/" */
+    if (strncmp(path, "/devices/vbd-", 13))
+        return -1;
+
+    /* End of the prefix is one path '/' later, capturing the
+       virtual block device ID. Example: 768 */
+    start = path + 13;
+    end = strchr(start, '/');
+    if (!end)
+        return -1;
+
+    /* Make sure we have enough room for the string plus null terminator */
+    if (end - start + 1 > buf_sz)
+        return -1;
+
+    strncpy(buf, start, end - start);
+    buf[end - start] = '\0';
+    return 0;
+}
+
 static void parse_event(const char *msg, struct uevent *uevent)
 {
     uevent->action = "";
@@ -516,6 +544,9 @@ static char **get_block_device_symlinks(struct uevent *uevent)
     } else if (!find_pci_device_prefix(uevent->path, buf, sizeof(buf))) {
         device = buf;
         type = "pci";
+    } else if (!find_vbd_device_prefix(uevent->path, buf, sizeof(buf))) {
+        device = buf;
+        type = "vbd";
     } else {
         return NULL;
     }
