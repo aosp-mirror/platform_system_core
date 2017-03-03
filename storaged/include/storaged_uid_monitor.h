@@ -46,6 +46,7 @@ struct uid_io_stats {
     uint64_t wchar;                 // characters written
     uint64_t read_bytes;            // bytes read (from storage layer)
     uint64_t write_bytes;           // bytes written (to storage layer)
+    uint64_t fsync;                 // number of fsync syscalls
 };
 
 struct uid_info {

@@ -281,14 +281,15 @@ void log_console_running_uids_info(std::vector<struct uid_info> uids) {
 
     // Title
     printf("Per-UID I/O stats\n");
-    printf("                                       Application        FG Read       FG Write        FG Read       FG Write        BG Read       BG Write        BG Read       BG Write\n"
-           "                                          NAME/UID     Characters     Characters          Bytes          Bytes     Characters     Characters          Bytes          Bytes\n"
-           "                                        ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------\n");
+    printf("                                       Application        FG Read       FG Write        FG Read       FG Write        BG Read       BG Write        BG Read       BG Write       FG fsync       BG fsync\n"
+           "                                          NAME/UID     Characters     Characters          Bytes          Bytes     Characters     Characters          Bytes          Bytes                              \n"
+           "                                        ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------\n");
 
     for (const auto& uid : uids) {
-        printf("%50s%15ju%15ju%15ju%15ju%15ju%15ju%15ju%15ju\n", uid.name.c_str(),
+        printf("%50s%15ju%15ju%15ju%15ju%15ju%15ju%15ju%15ju%15ju%15ju\n", uid.name.c_str(),
             uid.io[0].rchar, uid.io[0].wchar, uid.io[0].read_bytes, uid.io[0].write_bytes,
-            uid.io[1].rchar, uid.io[1].wchar, uid.io[1].read_bytes, uid.io[1].write_bytes);
+            uid.io[1].rchar, uid.io[1].wchar, uid.io[1].read_bytes, uid.io[1].write_bytes,
+            uid.io[0].fsync, uid.io[1].fsync);
     }
     fflush(stdout);
 }
