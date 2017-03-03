@@ -13,6 +13,7 @@ libjnigraphics.so
 liblog.so
 libmediandk.so
 libm.so
+libnativewindow.so
 libOpenMAXAL.so
 libOpenSLES.so
 libRS.so
