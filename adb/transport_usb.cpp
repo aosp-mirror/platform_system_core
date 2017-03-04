@@ -102,7 +102,7 @@ bool should_use_libusb() {
 #if defined(_WIN32) || !ADB_HOST
     return false;
 #else
-    static bool enable = getenv("ADB_LIBUSB") && strcmp(getenv("ADB_LIBUSB"), "1") == 0;
-    return enable;
+    static bool disable = getenv("ADB_LIBUSB") && strcmp(getenv("ADB_LIBUSB"), "0") == 0;
+    return !disable;
 #endif
 }
