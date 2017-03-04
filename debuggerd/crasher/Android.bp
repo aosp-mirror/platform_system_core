@@ -48,6 +48,7 @@ cc_binary {
     shared_libs: [
         "libbase",
         "liblog",
+        "libseccomp_policy",
     ],
     multilib: {
         lib32: {
@@ -69,6 +70,7 @@ cc_binary {
         "libdebuggerd_handler",
         "libbase",
         "liblog",
+        "libseccomp_policy",
     ],
     multilib: {
         lib32: {

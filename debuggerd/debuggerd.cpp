@@ -34,6 +34,8 @@ using android::base::unique_fd;
 
 static void usage(int exit_code) {
   fprintf(stderr, "usage: debuggerd [-b] PID\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr, "-b, --backtrace    just a backtrace rather than a full tombstone\n");
   _exit(exit_code);
 }
 
@@ -56,7 +58,8 @@ static std::thread spawn_redirect_thread(unique_fd fd) {
 int main(int argc, char* argv[]) {
   if (argc <= 1) usage(0);
   if (argc > 3) usage(1);
-  if (argc == 3 && strcmp(argv[1], "-b") != 0) usage(1);
+  if (argc == 3 && strcmp(argv[1], "-b") != 0 && strcmp(argv[1], "--backtrace") != 0) usage(1);
+  bool backtrace_only = argc == 3;
 
   pid_t pid;
   if (!android::base::ParseInt(argv[argc - 1], &pid, 1, std::numeric_limits<pid_t>::max())) {
@@ -69,9 +72,8 @@ int main(int argc, char* argv[]) {
   }
 
   std::thread redirect_thread = spawn_redirect_thread(std::move(piperead));
-  bool backtrace = argc == 3;
   if (!debuggerd_trigger_dump(pid, std::move(pipewrite),
-                              backtrace ? kDebuggerdBacktrace : kDebuggerdTombstone, 0)) {
+                              backtrace_only ? kDebuggerdBacktrace : kDebuggerdTombstone, 0)) {
     redirect_thread.join();
     errx(1, "failed to dump process %d", pid);
   }

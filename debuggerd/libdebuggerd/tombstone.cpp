@@ -214,7 +214,8 @@ static void dump_probable_cause(log_t* log, const siginfo_t& si) {
       cause = "call to kuser_cmpxchg64";
     }
   } else if (si.si_signo == SIGSYS && si.si_code == SYS_SECCOMP) {
-    cause = StringPrintf("seccomp prevented call to disallowed system call %d", si.si_syscall);
+    cause = StringPrintf("seccomp prevented call to disallowed %s system call %d",
+                         ABI_STRING, si.si_syscall);
   }
 
   if (!cause.empty()) _LOG(log, logtype::HEADER, "Cause: %s\n", cause.c_str());
