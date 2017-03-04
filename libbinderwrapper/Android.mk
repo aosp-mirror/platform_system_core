@@ -41,7 +41,7 @@ LOCAL_SRC_FILES := \
 
 include $(BUILD_SHARED_LIBRARY)
 
-# libbinderwrapper_test_support shared library
+# libbinderwrapper_test_support static library
 # ========================================================
 
 include $(CLEAR_VARS)
@@ -59,4 +59,4 @@ LOCAL_SRC_FILES := \
   binder_test_base.cc \
   stub_binder_wrapper.cc \
 
-include $(BUILD_SHARED_LIBRARY)
+include $(BUILD_STATIC_LIBRARY)
