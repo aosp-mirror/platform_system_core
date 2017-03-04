@@ -17,18 +17,11 @@
 #define LOG_TAG "ProcessCallStack"
 // #define LOG_NDEBUG 0
 
-#include <dirent.h>
-#include <errno.h>
-#include <stdio.h>
-#include <string.h>
-#include <memory>
-
-#include <utils/Log.h>
-#include <utils/Errors.h>
 #include <utils/ProcessCallStack.h>
-#include <utils/Printer.h>
 
-#include <limits.h>
+#include <dirent.h>
+
+#include <utils/Printer.h>
 
 namespace android {
 

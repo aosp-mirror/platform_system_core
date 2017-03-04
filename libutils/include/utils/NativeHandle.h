@@ -24,7 +24,7 @@ typedef struct native_handle native_handle_t;
 
 namespace android {
 
-class NativeHandle: public LightRefBase<NativeHandle> {
+class NativeHandle : public LightRefBase<NativeHandle> {
 public:
     // Create a refcounted wrapper around a native_handle_t, and declare
     // whether the wrapper owns the handle (so that it should clean up the
@@ -41,7 +41,7 @@ private:
     friend class LightRefBase<NativeHandle>;
 
     NativeHandle(native_handle_t* handle, bool ownsHandle);
-    virtual ~NativeHandle();
+    ~NativeHandle();
 
     native_handle_t* mHandle;
     bool mOwnsHandle;

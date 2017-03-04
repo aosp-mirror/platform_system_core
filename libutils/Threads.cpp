@@ -18,16 +18,10 @@
 #define LOG_TAG "libutils.threads"
 
 #include <assert.h>
-#include <errno.h>
-#include <memory.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <utils/Thread.h>
+#include <utils/AndroidThreads.h>
 
 #if !defined(_WIN32)
-# include <pthread.h>
-# include <sched.h>
 # include <sys/resource.h>
 #else
 # include <windows.h>
@@ -40,7 +34,6 @@
 #include <sys/prctl.h>
 #endif
 
-#include <utils/threads.h>
 #include <utils/Log.h>
 
 #include <cutils/sched_policy.h>

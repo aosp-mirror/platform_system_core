@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-#include <utils/misc.h>
 #include <utils/Trace.h>
+#include <utils/misc.h>
 
 static void traceInit() __attribute__((constructor));
 
-static void traceInit()
-{
+static void traceInit() {
     ::android::add_sysprop_change_callback(atrace_update_tags, 0);
 }

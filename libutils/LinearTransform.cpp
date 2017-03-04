@@ -16,10 +16,9 @@
 
 #define __STDC_LIMIT_MACROS
 
-#include <assert.h>
-#include <stdint.h>
-
 #include <utils/LinearTransform.h>
+#include <assert.h>
+
 
 // disable sanitize as these functions may intentionally overflow (see comments below).
 // the ifdef can be removed when host builds use clang.
