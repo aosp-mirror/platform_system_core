@@ -18,6 +18,7 @@ libOpenMAXAL.so
 libOpenSLES.so
 libRS.so
 libstdc++.so
+libsync.so
 libvulkan.so
 libwebviewchromium_plat_support.so
 libz.so
