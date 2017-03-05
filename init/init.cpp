@@ -621,11 +621,21 @@ static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_
 
 /*
  * Forks, executes the provided program in the child, and waits for the completion in the parent.
+ * Child's stderr is captured and logged using LOG(ERROR).
  *
  * Returns true if the child exited with status code 0, returns false otherwise.
  */
 static bool fork_execve_and_wait_for_completion(const char* filename, char* const argv[],
                                                 char* const envp[]) {
+    // Create a pipe used for redirecting child process's output.
+    // * pipe_fds[0] is the FD the parent will use for reading.
+    // * pipe_fds[1] is the FD the child will use for writing.
+    int pipe_fds[2];
+    if (pipe(pipe_fds) == -1) {
+        PLOG(ERROR) << "Failed to create pipe";
+        return false;
+    }
+
     pid_t child_pid = fork();
     if (child_pid == -1) {
         PLOG(ERROR) << "Failed to fork for " << filename;
@@ -634,6 +644,18 @@ static bool fork_execve_and_wait_for_completion(const char* filename, char* cons
 
     if (child_pid == 0) {
         // fork succeeded -- this is executing in the child process
+
+        // Close the pipe FD not used by this process
+        TEMP_FAILURE_RETRY(close(pipe_fds[0]));
+
+        // Redirect stderr to the pipe FD provided by the parent
+        if (TEMP_FAILURE_RETRY(dup2(pipe_fds[1], STDERR_FILENO)) == -1) {
+            PLOG(ERROR) << "Failed to redirect stderr of " << filename;
+            _exit(127);
+            return false;
+        }
+        TEMP_FAILURE_RETRY(close(pipe_fds[1]));
+
         if (execve(filename, argv, envp) == -1) {
             PLOG(ERROR) << "Failed to execve " << filename;
             return false;
@@ -644,6 +666,30 @@ static bool fork_execve_and_wait_for_completion(const char* filename, char* cons
         return false;
     } else {
         // fork succeeded -- this is executing in the original/parent process
+
+        // Close the pipe FD not used by this process
+        TEMP_FAILURE_RETRY(close(pipe_fds[1]));
+
+        // Log the redirected output of the child process.
+        // It's unfortunate that there's no standard way to obtain an istream for a file descriptor.
+        // As a result, we're buffering all output and logging it in one go at the end of the
+        // invocation, instead of logging it as it comes in.
+        const int child_out_fd = pipe_fds[0];
+        std::string child_output;
+        if (!android::base::ReadFdToString(child_out_fd, &child_output)) {
+            PLOG(ERROR) << "Failed to capture full output of " << filename;
+        }
+        TEMP_FAILURE_RETRY(close(child_out_fd));
+        if (!child_output.empty()) {
+            // Log captured output, line by line, because LOG expects to be invoked for each line
+            std::istringstream in(child_output);
+            std::string line;
+            while (std::getline(in, line)) {
+                LOG(ERROR) << filename << ": " << line;
+            }
+        }
+
+        // Wait for child to terminate
         int status;
         if (TEMP_FAILURE_RETRY(waitpid(child_pid, &status, 0)) != child_pid) {
             PLOG(ERROR) << "Failed to wait for " << filename;
