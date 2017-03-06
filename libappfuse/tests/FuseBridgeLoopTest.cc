@@ -50,15 +50,8 @@ class FuseBridgeLoopTest : public ::testing::Test {
 
   void SetUp() override {
     base::SetMinimumLogSeverity(base::VERBOSE);
-    int dev_sockets[2];
-    int proxy_sockets[2];
-    ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_SEQPACKET, 0, dev_sockets));
-    ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_SEQPACKET, 0, proxy_sockets));
-    dev_sockets_[0].reset(dev_sockets[0]);
-    dev_sockets_[1].reset(dev_sockets[1]);
-    proxy_sockets_[0].reset(proxy_sockets[0]);
-    proxy_sockets_[1].reset(proxy_sockets[1]);
-
+    ASSERT_TRUE(SetupMessageSockets(&dev_sockets_));
+    ASSERT_TRUE(SetupMessageSockets(&proxy_sockets_));
     thread_ = std::thread([this] {
       StartFuseBridgeLoop(
           dev_sockets_[1].release(), proxy_sockets_[0].release(), &callback_);

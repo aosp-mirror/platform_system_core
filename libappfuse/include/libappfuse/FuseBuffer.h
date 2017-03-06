@@ -17,6 +17,7 @@
 #ifndef ANDROID_LIBAPPFUSE_FUSEBUFFER_H_
 #define ANDROID_LIBAPPFUSE_FUSEBUFFER_H_
 
+#include <android-base/unique_fd.h>
 #include <linux/fuse.h>
 
 namespace android {
@@ -28,12 +29,24 @@ constexpr size_t kFuseMaxWrite = 256 * 1024;
 constexpr size_t kFuseMaxRead = 128 * 1024;
 constexpr int32_t kFuseSuccess = 0;
 
+// Setup sockets to transfer FuseMessage.
+bool SetupMessageSockets(base::unique_fd (*sockets)[2]);
+
+enum class ResultOrAgain {
+    kSuccess,
+    kFailure,
+    kAgain,
+};
+
 template<typename T>
 class FuseMessage {
  public:
   bool Read(int fd);
   bool Write(int fd) const;
- private:
+  ResultOrAgain ReadOrAgain(int fd);
+  ResultOrAgain WriteOrAgain(int fd) const;
+
+private:
   bool CheckHeaderLength(const char* name) const;
 };
 
@@ -54,7 +67,7 @@ struct FuseRequest : public FuseMessage<FuseRequest> {
     // for FUSE_READ
     fuse_read_in read_in;
     // for FUSE_LOOKUP
-    char lookup_name[0];
+    char lookup_name[kFuseMaxWrite];
   };
   void Reset(uint32_t data_length, uint32_t opcode, uint64_t unique);
 };
