@@ -604,20 +604,27 @@ static int do_mount_all(const std::vector<std::string>& args) {
     int mount_mode = MOUNT_MODE_DEFAULT;
     const char* fstabfile = args[1].c_str();
     std::size_t path_arg_end = args.size();
+    const char* prop_post_fix = "default";
 
     for (na = args.size() - 1; na > 1; --na) {
         if (args[na] == "--early") {
             path_arg_end = na;
             queue_event = false;
             mount_mode = MOUNT_MODE_EARLY;
+            prop_post_fix = "early";
         } else if (args[na] == "--late") {
             path_arg_end = na;
             import_rc = false;
             mount_mode = MOUNT_MODE_LATE;
+            prop_post_fix = "late";
         }
     }
 
+    std::string prop_name = android::base::StringPrintf("ro.boottime.init.mount_all.%s",
+                                                        prop_post_fix);
+    Timer t;
     int ret =  mount_fstab(fstabfile, mount_mode);
+    property_set(prop_name.c_str(), std::to_string(t.duration_ms()).c_str());
 
     if (import_rc) {
         /* Paths of .rc files are specified at the 2nd argument and beyond */
