@@ -37,8 +37,10 @@ class EpollController {
 
     const std::vector<epoll_event>& events() const;
 
-  private:
+  protected:
     bool InvokeControl(int op, int fd, int events, void* data) const;
+
+  private:
     base::unique_fd poll_fd_;
     std::vector<epoll_event> events_;
 
