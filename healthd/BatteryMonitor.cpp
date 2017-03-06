@@ -141,7 +141,6 @@ BatteryMonitor::PowerSupplyType BatteryMonitor::readPowerSupplyType(const String
     struct sysfsStringEnumMap supplyTypeMap[] = {
             { "Unknown", ANDROID_POWER_SUPPLY_TYPE_UNKNOWN },
             { "Battery", ANDROID_POWER_SUPPLY_TYPE_BATTERY },
-            { "BMS", ANDROID_POWER_SUPPLY_TYPE_BATTERY },
             { "UPS", ANDROID_POWER_SUPPLY_TYPE_AC },
             { "Mains", ANDROID_POWER_SUPPLY_TYPE_AC },
             { "USB", ANDROID_POWER_SUPPLY_TYPE_USB },
