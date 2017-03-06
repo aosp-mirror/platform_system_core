@@ -87,8 +87,8 @@ typedef void (*fs_mgr_verity_state_callback)(struct fstab_rec *fstab,
 
 struct fstab *fs_mgr_read_fstab_default();
 struct fstab *fs_mgr_read_fstab_dt();
-struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file);
 struct fstab *fs_mgr_read_fstab(const char *fstab_path);
+struct fstab *fs_mgr_read_fstab_with_dt(const char *fstab_path);
 void fs_mgr_free_fstab(struct fstab *fstab);
 
 #define FS_MGR_MNTALL_DEV_FILE_ENCRYPTED 5
