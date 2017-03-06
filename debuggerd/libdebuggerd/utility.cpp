@@ -41,6 +41,7 @@ bool is_allowed_in_logcat(enum logtype ltype) {
   return false;
 }
 
+__attribute__((__weak__, visibility("default")))
 void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
   bool write_to_tombstone = (log->tfd != -1);
   bool write_to_logcat = is_allowed_in_logcat(ltype)
