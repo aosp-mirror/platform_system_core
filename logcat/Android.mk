@@ -16,7 +16,7 @@ include $(BUILD_EXECUTABLE)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := liblogcat
-LOCAL_SRC_FILES := logcat.cpp logcat_system.cpp
+LOCAL_SRC_FILES := logcat.cpp getopt_long.cpp logcat_system.cpp
 LOCAL_SHARED_LIBRARIES := $(logcatLibs)
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
