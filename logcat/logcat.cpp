@@ -20,7 +20,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <getopt.h>
 #include <math.h>
 #include <pthread.h>
 #include <sched.h>
@@ -47,6 +46,7 @@
 #include <cutils/sched_policy.h>
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
+#include <log/getopt.h>
 #include <log/logcat.h>
 #include <log/logprint.h>
 #include <private/android_logger.h>
@@ -635,19 +635,17 @@ static char* parseTime(log_time& t, const char* cp) {
 }
 
 // Find last logged line in <outputFileName>, or <outputFileName>.1
-static log_time lastLogTime(char* outputFileName) {
+static log_time lastLogTime(const char* outputFileName) {
     log_time retval(log_time::EPOCH);
     if (!outputFileName) return retval;
 
     std::string directory;
-    char* file = strrchr(outputFileName, '/');
+    const char* file = strrchr(outputFileName, '/');
     if (!file) {
         directory = ".";
         file = outputFileName;
     } else {
-        *file = '\0';
-        directory = outputFileName;
-        *file = '/';
+        directory = std::string(outputFileName, file - outputFileName);
         ++file;
     }
 
@@ -736,8 +734,8 @@ static int __logcat(android_logcat_context_internal* context) {
     bool printStatistics = false;
     bool printDividers = false;
     unsigned long setLogSize = 0;
-    char* setPruneList = nullptr;
-    char* setId = nullptr;
+    const char* setPruneList = nullptr;
+    const char* setId = nullptr;
     int mode = ANDROID_LOG_RDONLY;
     std::string forceFilters;
     log_device_t* devices = nullptr;
@@ -855,8 +853,11 @@ static int __logcat(android_logcat_context_internal* context) {
     // net for stability dealing with possible mistaken inputs.
     static const char delimiters[] = ",:; \t\n\r\f";
 
-    // danger: getopt is _not_ reentrant
-    optind = 1;
+    struct getopt_context optctx;
+    INIT_GETOPT_CONTEXT(optctx);
+    optctx.opterr = !!context->error;
+    optctx.optstderr = context->error;
+
     for (;;) {
         int ret;
 
@@ -899,9 +900,9 @@ static int __logcat(android_logcat_context_internal* context) {
         };
         // clang-format on
 
-        ret = getopt_long(argc, argv,
-                          ":cdDLt:T:gG:sQf:r:n:v:b:BSpP:m:e:", long_options,
-                          &option_index);
+        ret = getopt_long_r(argc, argv,
+                            ":cdDLt:T:gG:sQf:r:n:v:b:BSpP:m:e:", long_options,
+                            &option_index, &optctx);
         if (ret < 0) break;
 
         switch (ret) {
@@ -909,9 +910,10 @@ static int __logcat(android_logcat_context_internal* context) {
                 // only long options
                 if (long_options[option_index].name == pid_str) {
                     // ToDo: determine runtime PID_MAX?
-                    if (!getSizeTArg(optarg, &pid, 1)) {
+                    if (!getSizeTArg(optctx.optarg, &pid, 1)) {
                         logcat_panic(context, HELP_TRUE, "%s %s out of range\n",
-                                     long_options[option_index].name, optarg);
+                                     long_options[option_index].name,
+                                     optctx.optarg);
                         goto exit;
                     }
                     break;
@@ -921,9 +923,11 @@ static int __logcat(android_logcat_context_internal* context) {
                             ANDROID_LOG_NONBLOCK;
                     // ToDo: implement API that supports setting a wrap timeout
                     size_t dummy = ANDROID_LOG_WRAP_DEFAULT_TIMEOUT;
-                    if (optarg && !getSizeTArg(optarg, &dummy, 1)) {
+                    if (optctx.optarg &&
+                        !getSizeTArg(optctx.optarg, &dummy, 1)) {
                         logcat_panic(context, HELP_TRUE, "%s %s out of range\n",
-                                     long_options[option_index].name, optarg);
+                                     long_options[option_index].name,
+                                     optctx.optarg);
                         goto exit;
                     }
                     if ((dummy != ANDROID_LOG_WRAP_DEFAULT_TIMEOUT) &&
@@ -944,7 +948,8 @@ static int __logcat(android_logcat_context_internal* context) {
                     break;
                 }
                 if (long_options[option_index].name == id_str) {
-                    setId = (optarg && optarg[0]) ? optarg : nullptr;
+                    setId = (optctx.optarg && optctx.optarg[0]) ? optctx.optarg
+                                                                : nullptr;
                 }
                 break;
 
@@ -972,12 +977,13 @@ static int __logcat(android_logcat_context_internal* context) {
                 mode |= ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK;
             // FALLTHRU
             case 'T':
-                if (strspn(optarg, "0123456789") != strlen(optarg)) {
-                    char* cp = parseTime(tail_time, optarg);
+                if (strspn(optctx.optarg, "0123456789") !=
+                    strlen(optctx.optarg)) {
+                    char* cp = parseTime(tail_time, optctx.optarg);
                     if (!cp) {
                         logcat_panic(context, HELP_FALSE,
                                      "-%c \"%s\" not in time format\n", ret,
-                                     optarg);
+                                     optctx.optarg);
                         goto exit;
                     }
                     if (*cp) {
@@ -987,16 +993,16 @@ static int __logcat(android_logcat_context_internal* context) {
                             fprintf(
                                 context->error,
                                 "WARNING: -%c \"%s\"\"%c%s\" time truncated\n",
-                                ret, optarg, c, cp + 1);
+                                ret, optctx.optarg, c, cp + 1);
                         }
                         *cp = c;
                     }
                 } else {
-                    if (!getSizeTArg(optarg, &tail_lines, 1)) {
+                    if (!getSizeTArg(optctx.optarg, &tail_lines, 1)) {
                         if (context->error) {
                             fprintf(context->error,
                                     "WARNING: -%c %s invalid, setting to 1\n",
-                                    ret, optarg);
+                                    ret, optctx.optarg);
                         }
                         tail_lines = 1;
                     }
@@ -1008,22 +1014,22 @@ static int __logcat(android_logcat_context_internal* context) {
                 break;
 
             case 'e':
-                context->regex = new pcrecpp::RE(optarg);
+                context->regex = new pcrecpp::RE(optctx.optarg);
                 break;
 
             case 'm': {
                 char* end = nullptr;
-                if (!getSizeTArg(optarg, &context->maxCount)) {
+                if (!getSizeTArg(optctx.optarg, &context->maxCount)) {
                     logcat_panic(context, HELP_FALSE,
                                  "-%c \"%s\" isn't an "
                                  "integer greater than zero\n",
-                                 ret, optarg);
+                                 ret, optctx.optarg);
                     goto exit;
                 }
             } break;
 
             case 'g':
-                if (!optarg) {
+                if (!optctx.optarg) {
                     getLogSize = true;
                     break;
                 }
@@ -1031,8 +1037,8 @@ static int __logcat(android_logcat_context_internal* context) {
 
             case 'G': {
                 char* cp;
-                if (strtoll(optarg, &cp, 0) > 0) {
-                    setLogSize = strtoll(optarg, &cp, 0);
+                if (strtoll(optctx.optarg, &cp, 0) > 0) {
+                    setLogSize = strtoll(optctx.optarg, &cp, 0);
                 } else {
                     setLogSize = 0;
                 }
@@ -1065,42 +1071,42 @@ static int __logcat(android_logcat_context_internal* context) {
             } break;
 
             case 'p':
-                if (!optarg) {
+                if (!optctx.optarg) {
                     getPruneList = true;
                     break;
                 }
             // FALLTHRU
 
             case 'P':
-                setPruneList = optarg;
+                setPruneList = optctx.optarg;
                 break;
 
             case 'b': {
-                std::unique_ptr<char, void (*)(void*)> buffers(strdup(optarg),
-                                                               free);
-                optarg = buffers.get();
+                std::unique_ptr<char, void (*)(void*)> buffers(
+                    strdup(optctx.optarg), free);
+                char* arg = buffers.get();
                 unsigned idMask = 0;
                 char* sv = nullptr;  // protect against -ENOMEM above
-                while (!!(optarg = strtok_r(optarg, delimiters, &sv))) {
-                    if (!strcmp(optarg, "default")) {
+                while (!!(arg = strtok_r(arg, delimiters, &sv))) {
+                    if (!strcmp(arg, "default")) {
                         idMask |= (1 << LOG_ID_MAIN) | (1 << LOG_ID_SYSTEM) |
                                   (1 << LOG_ID_CRASH);
-                    } else if (!strcmp(optarg, "all")) {
+                    } else if (!strcmp(arg, "all")) {
                         allSelected = true;
                         idMask = (unsigned)-1;
                     } else {
-                        log_id_t log_id = android_name_to_log_id(optarg);
+                        log_id_t log_id = android_name_to_log_id(arg);
                         const char* name = android_log_id_to_name(log_id);
 
-                        if (!!strcmp(name, optarg)) {
+                        if (!!strcmp(name, arg)) {
                             logcat_panic(context, HELP_TRUE,
-                                         "unknown buffer %s\n", optarg);
+                                         "unknown buffer %s\n", arg);
                             goto exit;
                         }
                         if (log_id == LOG_ID_SECURITY) allSelected = false;
                         idMask |= (1 << log_id);
                     }
-                    optarg = nullptr;
+                    arg = nullptr;
                 }
 
                 for (int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
@@ -1140,47 +1146,51 @@ static int __logcat(android_logcat_context_internal* context) {
 
             case 'f':
                 if ((tail_time == log_time::EPOCH) && !tail_lines) {
-                    tail_time = lastLogTime(optarg);
+                    tail_time = lastLogTime(optctx.optarg);
                 }
                 // redirect output to a file
-                context->outputFileName = optarg;
+                context->outputFileName = optctx.optarg;
                 break;
 
             case 'r':
-                if (!getSizeTArg(optarg, &context->logRotateSizeKBytes, 1)) {
+                if (!getSizeTArg(optctx.optarg, &context->logRotateSizeKBytes,
+                                 1)) {
                     logcat_panic(context, HELP_TRUE,
-                                 "Invalid parameter \"%s\" to -r\n", optarg);
+                                 "Invalid parameter \"%s\" to -r\n",
+                                 optctx.optarg);
                     goto exit;
                 }
                 break;
 
             case 'n':
-                if (!getSizeTArg(optarg, &context->maxRotatedLogs, 1)) {
+                if (!getSizeTArg(optctx.optarg, &context->maxRotatedLogs, 1)) {
                     logcat_panic(context, HELP_TRUE,
-                                 "Invalid parameter \"%s\" to -n\n", optarg);
+                                 "Invalid parameter \"%s\" to -n\n",
+                                 optctx.optarg);
                     goto exit;
                 }
                 break;
 
             case 'v': {
-                if (!strcmp(optarg, "help") || !strcmp(optarg, "--help")) {
+                if (!strcmp(optctx.optarg, "help") ||
+                    !strcmp(optctx.optarg, "--help")) {
                     show_format_help(context);
                     context->retval = EXIT_SUCCESS;
                     goto exit;
                 }
-                std::unique_ptr<char, void (*)(void*)> formats(strdup(optarg),
-                                                               free);
-                optarg = formats.get();
+                std::unique_ptr<char, void (*)(void*)> formats(
+                    strdup(optctx.optarg), free);
+                char* arg = formats.get();
                 unsigned idMask = 0;
                 char* sv = nullptr;  // protect against -ENOMEM above
-                while (!!(optarg = strtok_r(optarg, delimiters, &sv))) {
-                    err = setLogFormat(context, optarg);
+                while (!!(arg = strtok_r(arg, delimiters, &sv))) {
+                    err = setLogFormat(context, arg);
                     if (err < 0) {
                         logcat_panic(context, HELP_FORMAT,
-                                     "Invalid parameter \"%s\" to -v\n", optarg);
+                                     "Invalid parameter \"%s\" to -v\n", arg);
                         goto exit;
                     }
-                    optarg = nullptr;
+                    arg = nullptr;
                     if (err) hasSetLogFormat = true;
                 }
             } break;
@@ -1249,12 +1259,12 @@ static int __logcat(android_logcat_context_internal* context) {
 
             case ':':
                 logcat_panic(context, HELP_TRUE,
-                             "Option -%c needs an argument\n", optopt);
+                             "Option -%c needs an argument\n", optctx.optopt);
                 goto exit;
 
             default:
                 logcat_panic(context, HELP_TRUE, "Unrecognized Option %c\n",
-                             optopt);
+                             optctx.optopt);
                 goto exit;
         }
     }
@@ -1343,7 +1353,7 @@ static int __logcat(android_logcat_context_internal* context) {
                          "Invalid filter expression in logcat args\n");
             goto exit;
         }
-    } else if (argc == optind) {
+    } else if (argc == optctx.optind) {
         // Add from environment variable
         const char* env_tags_orig = android::getenv(context, "ANDROID_LOG_TAGS");
 
@@ -1359,7 +1369,7 @@ static int __logcat(android_logcat_context_internal* context) {
         }
     } else {
         // Add from commandline
-        for (int i = optind ; i < argc ; i++) {
+        for (int i = optctx.optind ; i < argc ; i++) {
             // skip stderr redirections of _all_ kinds
             if ((argv[i][0] == '2') && (argv[i][1] == '>')) continue;
             // skip stdout redirections of _all_ kinds
