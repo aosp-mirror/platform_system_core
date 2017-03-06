@@ -116,7 +116,7 @@ static unique_fd get_tombstone_fd() {
   }
 
   result.reset(
-    openat(tombstone_directory_fd, buf, O_CREAT | O_EXCL | O_WRONLY | O_APPEND | O_CLOEXEC, 0700));
+    openat(tombstone_directory_fd, buf, O_CREAT | O_EXCL | O_WRONLY | O_APPEND | O_CLOEXEC, 0640));
   if (result == -1) {
     PLOG(FATAL) << "failed to create tombstone at " << kTombstoneDirectory << buf;
   }
@@ -254,6 +254,8 @@ fail:
 }
 
 int main(int, char* []) {
+  umask(0137);
+
   tombstone_directory_fd = open(kTombstoneDirectory, O_DIRECTORY | O_RDONLY | O_CLOEXEC);
   if (tombstone_directory_fd == -1) {
     PLOG(FATAL) << "failed to open tombstone directory";
