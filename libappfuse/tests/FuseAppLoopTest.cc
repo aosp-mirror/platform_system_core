@@ -23,6 +23,9 @@
 #include <gtest/gtest.h>
 #include <thread>
 
+#include "libappfuse/EpollController.h"
+#include "libappfuse/FuseBridgeLoop.h"
+
 namespace android {
 namespace fuse {
 namespace {
@@ -37,82 +40,61 @@ struct CallbackRequest {
 class Callback : public FuseAppLoopCallback {
  public:
   std::vector<CallbackRequest> requests;
+  FuseAppLoop* loop;
 
-  bool IsActive() override {
-    return true;
+  void OnGetAttr(uint64_t seq, uint64_t inode) override {
+      EXPECT_NE(FUSE_ROOT_ID, static_cast<int>(inode));
+      EXPECT_TRUE(loop->ReplyGetAttr(seq, inode, kTestFileSize, S_IFREG | 0777));
   }
 
-  int64_t OnGetSize(uint64_t inode) override {
-    if (inode == FUSE_ROOT_ID) {
-      return 0;
-    } else {
-      return kTestFileSize;
-    }
+  void OnLookup(uint64_t unique, uint64_t inode) override {
+      EXPECT_NE(FUSE_ROOT_ID, static_cast<int>(inode));
+      EXPECT_TRUE(loop->ReplyLookup(unique, inode, kTestFileSize));
   }
 
-  int32_t OnFsync(uint64_t inode) override {
-    requests.push_back({
-      .code = FUSE_FSYNC,
-      .inode = inode
-    });
-    return 0;
+  void OnFsync(uint64_t seq, uint64_t inode) override {
+      requests.push_back({.code = FUSE_FSYNC, .inode = inode});
+      loop->ReplySimple(seq, 0);
   }
 
-  int32_t OnWrite(uint64_t inode,
-                  uint64_t offset ATTRIBUTE_UNUSED,
-                  uint32_t size ATTRIBUTE_UNUSED,
-                  const void* data ATTRIBUTE_UNUSED) override {
-    requests.push_back({
-      .code = FUSE_WRITE,
-      .inode = inode
-    });
-    return 0;
+  void OnWrite(uint64_t seq, uint64_t inode, uint64_t offset ATTRIBUTE_UNUSED,
+               uint32_t size ATTRIBUTE_UNUSED, const void* data ATTRIBUTE_UNUSED) override {
+      requests.push_back({.code = FUSE_WRITE, .inode = inode});
+      loop->ReplyWrite(seq, 0);
   }
 
-  int32_t OnRead(uint64_t inode,
-                 uint64_t offset ATTRIBUTE_UNUSED,
-                 uint32_t size ATTRIBUTE_UNUSED,
-                 void* data ATTRIBUTE_UNUSED) override {
-    requests.push_back({
-      .code = FUSE_READ,
-      .inode = inode
-    });
-    return 0;
+  void OnRead(uint64_t seq, uint64_t inode, uint64_t offset ATTRIBUTE_UNUSED,
+              uint32_t size ATTRIBUTE_UNUSED) override {
+      requests.push_back({.code = FUSE_READ, .inode = inode});
+      loop->ReplySimple(seq, 0);
   }
 
-  int32_t OnOpen(uint64_t inode) override {
-    requests.push_back({
-      .code = FUSE_OPEN,
-      .inode = inode
-    });
-    return 0;
+  void OnOpen(uint64_t seq, uint64_t inode) override {
+      requests.push_back({.code = FUSE_OPEN, .inode = inode});
+      loop->ReplyOpen(seq, inode);
   }
 
-  int32_t OnRelease(uint64_t inode) override {
-    requests.push_back({
-      .code = FUSE_RELEASE,
-      .inode = inode
-    });
-    return 0;
+  void OnRelease(uint64_t seq, uint64_t inode) override {
+      requests.push_back({.code = FUSE_RELEASE, .inode = inode});
+      loop->ReplySimple(seq, 0);
   }
 };
 
 class FuseAppLoopTest : public ::testing::Test {
- private:
-  std::thread thread_;
-
  protected:
-  base::unique_fd sockets_[2];
-  Callback callback_;
-  FuseRequest request_;
-  FuseResponse response_;
+   std::thread thread_;
+   base::unique_fd sockets_[2];
+   Callback callback_;
+   FuseRequest request_;
+   FuseResponse response_;
+   std::unique_ptr<FuseAppLoop> loop_;
 
-  void SetUp() override {
-    base::SetMinimumLogSeverity(base::VERBOSE);
-    ASSERT_TRUE(SetupMessageSockets(&sockets_));
-    thread_ = std::thread([this] {
-      StartFuseAppLoop(sockets_[1].release(), &callback_);
-    });
+   void SetUp() override {
+       base::SetMinimumLogSeverity(base::VERBOSE);
+       ASSERT_TRUE(SetupMessageSockets(&sockets_));
+       loop_.reset(new FuseAppLoop(std::move(sockets_[1])));
+       callback_.loop = loop_.get();
+       thread_ = std::thread([this] { loop_->Start(&callback_); });
   }
 
   void CheckCallback(
@@ -298,6 +280,19 @@ TEST_F(FuseAppLoopTest, Read) {
 
 TEST_F(FuseAppLoopTest, Write) {
   CheckCallback(sizeof(fuse_write_in), FUSE_WRITE, sizeof(fuse_write_out));
+}
+
+TEST_F(FuseAppLoopTest, Break) {
+    // Ensure that the loop started.
+    request_.Reset(sizeof(fuse_open_in), FUSE_OPEN, 1);
+    request_.header.nodeid = 10;
+    ASSERT_TRUE(request_.Write(sockets_[0]));
+    ASSERT_TRUE(response_.Read(sockets_[0]));
+
+    loop_->Break();
+    if (thread_.joinable()) {
+        thread_.join();
+    }
 }
 
 }  // namespace fuse
