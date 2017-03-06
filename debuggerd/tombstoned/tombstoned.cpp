@@ -34,6 +34,7 @@
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 
+#include "debuggerd/handler.h"
 #include "debuggerd/protocol.h"
 #include "debuggerd/util.h"
 
@@ -116,7 +117,7 @@ static unique_fd get_tombstone_fd() {
   }
 
   result.reset(
-    openat(tombstone_directory_fd, buf, O_CREAT | O_EXCL | O_WRONLY | O_APPEND | O_CLOEXEC, 0700));
+    openat(tombstone_directory_fd, buf, O_CREAT | O_EXCL | O_WRONLY | O_APPEND | O_CLOEXEC, 0640));
   if (result == -1) {
     PLOG(FATAL) << "failed to create tombstone at " << kTombstoneDirectory << buf;
   }
@@ -254,6 +255,16 @@ fail:
 }
 
 int main(int, char* []) {
+  umask(0137);
+
+  // Don't try to connect to ourselves if we crash.
+  struct sigaction action = {};
+  action.sa_handler = [](int signal) {
+    LOG(ERROR) << "received fatal signal " << signal;
+    _exit(1);
+  };
+  debuggerd_register_handlers(&action);
+
   tombstone_directory_fd = open(kTombstoneDirectory, O_DIRECTORY | O_RDONLY | O_CLOEXEC);
   if (tombstone_directory_fd == -1) {
     PLOG(FATAL) << "failed to open tombstone directory";
