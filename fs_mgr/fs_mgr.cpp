@@ -31,6 +31,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <cutils/android_reboot.h>
 #include <cutils/partition_utils.h>
@@ -64,6 +66,21 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
+// record fs stat
+enum FsStatFlags {
+    FS_STAT_IS_EXT4           = 0x0001,
+    FS_STAT_NEW_IMAGE_VERSION = 0x0002,
+    FS_STAT_E2FSCK_F_ALWAYS   = 0x0004,
+    FS_STAT_UNCLEAN_SHUTDOWN  = 0x0008,
+    FS_STAT_QUOTA_ENABLED     = 0x0010,
+    FS_STAT_TUNE2FS_FAILED    = 0x0020,
+    FS_STAT_RO_MOUNT_FAILED   = 0x0040,
+    FS_STAT_RO_UNMOUNT_FAILED = 0x0080,
+    FS_STAT_FULL_MOUNT_FAILED = 0x0100,
+    FS_STAT_E2FSCK_FAILED     = 0x0200,
+    FS_STAT_E2FSCK_FS_FIXED   = 0x0400,
+};
+
 /*
  * gettime() - returns the time in seconds of the system's monotonic clock or
  * zero on error.
@@ -94,7 +111,18 @@ static int wait_for_file(const char *filename, int timeout)
     return ret;
 }
 
-static void check_fs(const char *blk_device, char *fs_type, char *target)
+static void log_fs_stat(const char* blk_device, int fs_stat)
+{
+    if ((fs_stat & FS_STAT_IS_EXT4) == 0) return; // only log ext4
+    std::string msg = android::base::StringPrintf("\nfs_stat,%s,0x%x\n", blk_device, fs_stat);
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(FSCK_LOG_FILE, O_WRONLY | O_CLOEXEC |
+                                                        O_APPEND | O_CREAT, 0664)));
+    if (fd == -1 || !android::base::WriteStringToFd(msg, fd)) {
+        LWARNING << __FUNCTION__ << "() cannot log " << msg;
+    }
+}
+
+static void check_fs(const char *blk_device, char *fs_type, char *target, int *fs_stat)
 {
     int status;
     int ret;
@@ -141,10 +169,13 @@ static void check_fs(const char *blk_device, char *fs_type, char *target)
                           << ") succeeded";
                     break;
                 }
+                *fs_stat |= FS_STAT_RO_UNMOUNT_FAILED;
                 PERROR << __FUNCTION__ << "(): umount(" << target << ")="
                        << result;
                 sleep(1);
             }
+        } else {
+            *fs_stat |= FS_STAT_RO_MOUNT_FAILED;
         }
 
         /*
@@ -157,6 +188,7 @@ static void check_fs(const char *blk_device, char *fs_type, char *target)
         } else {
             LINFO << "Running " << E2FSCK_BIN << " on " << blk_device;
 
+            *fs_stat |= FS_STAT_E2FSCK_F_ALWAYS;
             ret = android_fork_execvp_ext(ARRAY_SIZE(e2fsck_argv),
                                           const_cast<char **>(e2fsck_argv),
                                           &status, true, LOG_KLOG | LOG_FILE,
@@ -167,6 +199,10 @@ static void check_fs(const char *blk_device, char *fs_type, char *target)
             if (ret < 0) {
                 /* No need to check for error in fork, we can't really handle it now */
                 LERROR << "Failed trying to run " << E2FSCK_BIN;
+                *fs_stat |= FS_STAT_E2FSCK_FAILED;
+            } else if (status != 0) {
+                LINFO << "e2fsck returned status 0x" << std::hex << status;
+                *fs_stat |= FS_STAT_E2FSCK_FS_FIXED;
             }
         }
     } else if (!strcmp(fs_type, "f2fs")) {
@@ -221,7 +257,8 @@ static ext4_fsblk_t ext4_r_blocks_count(struct ext4_super_block *es)
             le32_to_cpu(es->s_r_blocks_count_lo);
 }
 
-static int do_quota(char *blk_device, char *fs_type, struct fstab_rec *rec)
+static int do_quota_with_shutdown_check(char *blk_device, char *fs_type,
+                                        struct fstab_rec *rec, int *fs_stat)
 {
     int force_check = 0;
     if (!strcmp(fs_type, "ext4")) {
@@ -246,7 +283,16 @@ static int do_quota(char *blk_device, char *fs_type, struct fstab_rec *rec)
                     PERROR << "Can't read '" << blk_device << "' super block";
                     return force_check;
                 }
-
+                *fs_stat |= FS_STAT_IS_EXT4;
+                //TODO check if it is new version or not
+                if ((sb.s_feature_incompat & EXT4_FEATURE_INCOMPAT_RECOVER) != 0 ||
+                    (sb.s_state & EXT4_VALID_FS) == 0) {
+                    LINFO << __FUNCTION__ << "(): was not clealy shutdown, state flag:"
+                          << std::hex << sb.s_state
+                          << "incompat flag:" << std::hex << sb.s_feature_incompat;
+                    force_check = 1;
+                    *fs_stat |= FS_STAT_UNCLEAN_SHUTDOWN;
+                }
                 int has_quota = (sb.s_feature_ro_compat
                         & cpu_to_le32(EXT4_FEATURE_RO_COMPAT_QUOTA)) != 0;
                 int want_quota = fs_mgr_is_quota(rec) != 0;
@@ -259,6 +305,7 @@ static int do_quota(char *blk_device, char *fs_type, struct fstab_rec *rec)
                     arg1 = "-Oquota";
                     arg2 = "-Qusrquota,grpquota";
                     force_check = 1;
+                    *fs_stat |= FS_STAT_QUOTA_ENABLED;
                 } else {
                     LINFO << "Disabling quota on " << blk_device;
                     arg1 = "-Q^usrquota,^grpquota";
@@ -282,13 +329,14 @@ static int do_quota(char *blk_device, char *fs_type, struct fstab_rec *rec)
             if (ret < 0) {
                 /* No need to check for error in fork, we can't really handle it now */
                 LERROR << "Failed trying to run " << TUNE2FS_BIN;
+                *fs_stat |= FS_STAT_TUNE2FS_FAILED;
             }
         }
     }
     return force_check;
 }
 
-static void do_reserved_size(char *blk_device, char *fs_type, struct fstab_rec *rec)
+static void do_reserved_size(char *blk_device, char *fs_type, struct fstab_rec *rec, int *fs_stat)
 {
     /* Check for the types of filesystems we know how to check */
     if (!strcmp(fs_type, "ext2") || !strcmp(fs_type, "ext3") || !strcmp(fs_type, "ext4")) {
@@ -347,6 +395,7 @@ static void do_reserved_size(char *blk_device, char *fs_type, struct fstab_rec *
             if (ret < 0) {
                 /* No need to check for error in fork, we can't really handle it now */
                 LERROR << "Failed trying to run " << TUNE2FS_BIN;
+                *fs_stat |= FS_STAT_TUNE2FS_FAILED;
             }
         }
     }
@@ -487,17 +536,19 @@ static int mount_with_alternatives(struct fstab *fstab, int start_idx, int *end_
                 continue;
             }
 
-            int force_check = do_quota(fstab->recs[i].blk_device, fstab->recs[i].fs_type,
-                                       &fstab->recs[i]);
+            int fs_stat = 0;
+            int force_check = do_quota_with_shutdown_check(fstab->recs[i].blk_device,
+                                                           fstab->recs[i].fs_type,
+                                                           &fstab->recs[i], &fs_stat);
 
             if ((fstab->recs[i].fs_mgr_flags & MF_CHECK) || force_check) {
                 check_fs(fstab->recs[i].blk_device, fstab->recs[i].fs_type,
-                         fstab->recs[i].mount_point);
+                         fstab->recs[i].mount_point, &fs_stat);
             }
 
             if (fstab->recs[i].fs_mgr_flags & MF_RESERVEDSIZE) {
                 do_reserved_size(fstab->recs[i].blk_device, fstab->recs[i].fs_type,
-                                 &fstab->recs[i]);
+                                 &fstab->recs[i], &fs_stat);
             }
 
             if (!__mount(fstab->recs[i].blk_device, fstab->recs[i].mount_point, &fstab->recs[i])) {
@@ -511,9 +562,11 @@ static int mount_with_alternatives(struct fstab *fstab, int start_idx, int *end_
                            << fstab->recs[start_idx].fs_type;
                 }
             } else {
+                fs_stat |= FS_STAT_FULL_MOUNT_FAILED;
                 /* back up errno for crypto decisions */
                 mount_errno = errno;
             }
+            log_fs_stat(fstab->recs[i].blk_device, fs_stat);
     }
 
     /* Adjust i for the case where it was still withing the recs[] */
@@ -950,16 +1003,18 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
             wait_for_file(n_blk_device, WAIT_TIMEOUT);
         }
 
-        int force_check = do_quota(fstab->recs[i].blk_device, fstab->recs[i].fs_type,
-                                   &fstab->recs[i]);
+        int fs_stat = 0;
+        int force_check = do_quota_with_shutdown_check(fstab->recs[i].blk_device,
+                                                       fstab->recs[i].fs_type,
+                                                       &fstab->recs[i], &fs_stat);
 
         if ((fstab->recs[i].fs_mgr_flags & MF_CHECK) || force_check) {
             check_fs(n_blk_device, fstab->recs[i].fs_type,
-                     fstab->recs[i].mount_point);
+                     fstab->recs[i].mount_point, &fs_stat);
         }
 
         if (fstab->recs[i].fs_mgr_flags & MF_RESERVEDSIZE) {
-            do_reserved_size(n_blk_device, fstab->recs[i].fs_type, &fstab->recs[i]);
+            do_reserved_size(n_blk_device, fstab->recs[i].fs_type, &fstab->recs[i], &fs_stat);
         }
 
         if (fs_mgr_is_avb_used() && (fstab->recs[i].fs_mgr_flags & MF_AVB)) {
@@ -996,9 +1051,12 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
         if (__mount(n_blk_device, m, &fstab->recs[i])) {
             if (!first_mount_errno) first_mount_errno = errno;
             mount_errors++;
+            fs_stat |= FS_STAT_FULL_MOUNT_FAILED;
+            log_fs_stat(fstab->recs[i].blk_device, fs_stat);
             continue;
         } else {
             ret = 0;
+            log_fs_stat(fstab->recs[i].blk_device, fs_stat);
             goto out;
         }
     }
