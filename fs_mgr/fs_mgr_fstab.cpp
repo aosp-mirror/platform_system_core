@@ -636,8 +636,10 @@ struct fstab *fs_mgr_read_fstab_with_dt(const char *fstab_path)
     return in_place_merge(fstab_dt, fstab);
 }
 
-/* combines fstab entries passed in from device tree with
- * the ones found in /fstab.<hardware>
+/*
+ * tries to load default fstab.<hardware> file from /odm/etc, /vendor/etc
+ * or /. loads the first one found and also combines fstab entries passed
+ * in from device tree.
  */
 struct fstab *fs_mgr_read_fstab_default()
 {
@@ -645,7 +647,10 @@ struct fstab *fs_mgr_read_fstab_default()
     std::string default_fstab;
 
     if (fs_mgr_get_boot_config("hardware", &hw)) {
-        default_fstab = FSTAB_PREFIX + hw;
+        for (const char *prefix : {"/odm/etc/fstab.","/vendor/etc/fstab.", "/fstab."}) {
+            default_fstab = prefix + hw;
+            if (access(default_fstab.c_str(), F_OK) == 0) break;
+        }
     } else {
         LWARNING << __FUNCTION__ << "(): failed to find device hardware name";
     }
