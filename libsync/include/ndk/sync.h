@@ -69,8 +69,7 @@ struct sync_file_info *sync_file_info(int32_t fd);
  * The returned array is owned by the parent sync file info, and has
  * info->num_fences entries.
  */
-inline struct sync_fence_info *sync_get_fence_info(
-        const struct sync_file_info *info) {
+static inline struct sync_fence_info* sync_get_fence_info(const struct sync_file_info* info) {
 // This header should compile in C, but some C++ projects enable
 // warnings-as-error for C-style casts.
 #pragma GCC diagnostic push
