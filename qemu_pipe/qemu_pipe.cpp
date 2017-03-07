@@ -22,6 +22,10 @@
 #include <errno.h>
 #include <stdio.h>
 
+#include <android-base/file.h>
+
+using android::base::ReadFully;
+using android::base::WriteFully;
 
 // Define QEMU_PIPE_DEBUG if you want to print error messages when an error
 // occurs during pipe operations. The macro should simply take a printf-style
@@ -30,29 +34,9 @@
 #  define  QEMU_PIPE_DEBUG(...)   (void)0
 #endif
 
-// Try to open a new Qemu fast-pipe. This function returns a file descriptor
-// that can be used to communicate with a named service managed by the
-// emulator.
-//
-// This file descriptor can be used as a standard pipe/socket descriptor.
-//
-// 'pipeName' is the name of the emulator service you want to connect to,
-// and must begin with 'pipe:' (e.g. 'pipe:camera' or 'pipe:opengles').
-//
-// On success, return a valid file descriptor, or -1/errno on failure. E.g.:
-//
-// EINVAL  -> unknown/unsupported pipeName
-// ENOSYS  -> fast pipes not available in this system.
-//
-// ENOSYS should never happen, except if you're trying to run within a
-// misconfigured emulator.
-//
-// You should be able to open several pipes to the same pipe service,
-// except for a few special cases (e.g. GSM modem), where EBUSY will be
-// returned if more than one client tries to connect to it.
 int qemu_pipe_open(const char* pipeName) {
     // Sanity check.
-    if (!pipeName || memcmp(pipeName, "pipe:", 5) != 0) {
+    if (!pipeName) {
         errno = EINVAL;
         return -1;
     }
@@ -66,48 +50,41 @@ int qemu_pipe_open(const char* pipeName) {
 
     // Write the pipe name, *including* the trailing zero which is necessary.
     size_t pipeNameLen = strlen(pipeName);
-    ssize_t ret = TEMP_FAILURE_RETRY(write(fd, pipeName, pipeNameLen + 1U));
-    if (ret != (ssize_t)pipeNameLen + 1) {
-        QEMU_PIPE_DEBUG("%s: Could not connect to %s pipe service: %s",
-                        __FUNCTION__, pipeName, strerror(errno));
-        if (ret == 0) {
-            errno = ECONNRESET;
-        } else if (ret > 0) {
-            errno = EINVAL;
-        }
-        return -1;
+    if (WriteFully(fd, pipeName, pipeNameLen + 1U)) {
+        return fd;
     }
-    return fd;
+
+    // now, add 'pipe:' prefix and try again
+    // Note: host side will wait for the trailing '\0' to start
+    // service lookup.
+    const char pipe_prefix[] = "pipe:";
+    if (WriteFully(fd, pipe_prefix, strlen(pipe_prefix)) &&
+            WriteFully(fd, pipeName, pipeNameLen + 1U)) {
+        return fd;
+    }
+    QEMU_PIPE_DEBUG("%s: Could not write to %s pipe service: %s",
+            __FUNCTION__, pipeName, strerror(errno));
+    close(fd);
+    return -1;
 }
 
-// Send a framed message |buff| of |len| bytes through the |fd| descriptor.
-// This really adds a 4-hexchar prefix describing the payload size.
-// Returns 0 on success, and -1 on error.
 int qemu_pipe_frame_send(int fd, const void* buff, size_t len) {
     char header[5];
     snprintf(header, sizeof(header), "%04zx", len);
-    ssize_t ret = TEMP_FAILURE_RETRY(write(fd, header, 4));
-    if (ret != 4) {
+    if (!WriteFully(fd, header, 4)) {
         QEMU_PIPE_DEBUG("Can't write qemud frame header: %s", strerror(errno));
         return -1;
     }
-    ret = TEMP_FAILURE_RETRY(write(fd, buff, len));
-    if (ret != (ssize_t)len) {
+    if (!WriteFully(fd, buff, len)) {
         QEMU_PIPE_DEBUG("Can't write qemud frame payload: %s", strerror(errno));
         return -1;
     }
     return 0;
 }
 
-// Read a frame message from |fd|, and store it into |buff| of |len| bytes.
-// If the framed message is larger than |len|, then this returns -1 and the
-// content is lost. Otherwise, this returns the size of the message. NOTE:
-// empty messages are possible in a framed wire protocol and do not mean
-// end-of-stream.
 int qemu_pipe_frame_recv(int fd, void* buff, size_t len) {
     char header[5];
-    ssize_t ret = TEMP_FAILURE_RETRY(read(fd, header, 4));
-    if (ret != 4) {
+    if (!ReadFully(fd, header, 4)) {
         QEMU_PIPE_DEBUG("Can't read qemud frame header: %s", strerror(errno));
         return -1;
     }
@@ -122,8 +99,7 @@ int qemu_pipe_frame_recv(int fd, void* buff, size_t len) {
                         len);
         return -1;
     }
-    ret = TEMP_FAILURE_RETRY(read(fd, buff, size));
-    if (ret != (ssize_t)size) {
+    if (!ReadFully(fd, buff, size)) {
         QEMU_PIPE_DEBUG("Could not read qemud frame payload: %s",
                         strerror(errno));
         return -1;
