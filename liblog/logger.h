@@ -30,7 +30,7 @@ __BEGIN_DECLS
 
 /* Union, sock or fd of zero is not allowed unless static initialized */
 union android_log_context {
-  void* private;
+  void* priv;
   atomic_int sock;
   atomic_int fd;
   struct listnode* node;

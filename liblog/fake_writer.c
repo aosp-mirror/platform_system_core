@@ -34,7 +34,7 @@ static int logFds[(int)LOG_ID_MAX] = { -1, -1, -1, -1, -1, -1 };
 
 LIBLOG_HIDDEN struct android_log_transport_write fakeLoggerWrite = {
   .node = { &fakeLoggerWrite.node, &fakeLoggerWrite.node },
-  .context.private = &logFds,
+  .context.priv = &logFds,
   .name = "fake",
   .available = NULL,
   .open = fakeOpen,

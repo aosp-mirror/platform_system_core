@@ -47,7 +47,7 @@ static int writeToLocalWrite(log_id_t logId, struct timespec* ts,
 
 LIBLOG_HIDDEN struct android_log_transport_write localLoggerWrite = {
   .node = { &localLoggerWrite.node, &localLoggerWrite.node },
-  .context.private = NULL,
+  .context.priv = NULL,
   .name = "local",
   .available = writeToLocalAvailable,
   .open = writeToLocalInit,

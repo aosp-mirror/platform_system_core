@@ -57,7 +57,7 @@ struct stderrContext {
 
 LIBLOG_HIDDEN struct android_log_transport_write stderrLoggerWrite = {
   .node = { &stderrLoggerWrite.node, &stderrLoggerWrite.node },
-  .context.private = NULL,
+  .context.priv = NULL,
   .name = "stderr",
   .available = stderrAvailable,
   .open = stderrOpen,
@@ -74,7 +74,7 @@ static int stderrOpen() {
     return -EBADF;
   }
 
-  if (stderrLoggerWrite.context.private) {
+  if (stderrLoggerWrite.context.priv) {
     return fileno(stderr);
   }
 
@@ -117,16 +117,16 @@ static int stderrOpen() {
   if (envStr) {
     android_log_addFilterString(ctx->logformat, envStr);
   }
-  stderrLoggerWrite.context.private = ctx;
+  stderrLoggerWrite.context.priv = ctx;
 
   return fileno(stderr);
 }
 
 static void stderrClose() {
-  struct stderrContext* ctx = stderrLoggerWrite.context.private;
+  struct stderrContext* ctx = stderrLoggerWrite.context.priv;
 
   if (ctx) {
-    stderrLoggerWrite.context.private = NULL;
+    stderrLoggerWrite.context.priv = NULL;
     if (ctx->logformat) {
       android_log_format_free(ctx->logformat);
       ctx->logformat = NULL;
@@ -154,7 +154,7 @@ static int stderrWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
   char binaryMsgBuf[1024];
   int err;
   size_t i;
-  struct stderrContext* ctx = stderrLoggerWrite.context.private;
+  struct stderrContext* ctx = stderrLoggerWrite.context.priv;
 
   if (!ctx) return -EBADF;
   if (!vec || !nr) return -EINVAL;
