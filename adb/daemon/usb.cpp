@@ -283,6 +283,8 @@ bool init_functionfs(struct usb_handle* h) {
             D("[ %s: writing strings failed: errno=%d]", USB_FFS_ADB_EP0, errno);
             goto err;
         }
+        //Signal only when writing the descriptors to ffs
+        android::base::SetProperty("sys.usb.ffs.ready", "1");
     }
 
     h->bulk_out = adb_open(USB_FFS_ADB_OUT, O_RDWR);
@@ -358,7 +360,6 @@ static void usb_ffs_open_thread(void* x) {
             }
             std::this_thread::sleep_for(1s);
         }
-        android::base::SetProperty("sys.usb.ffs.ready", "1");
 
         D("[ usb_thread - registering device ]");
         register_usb_transport(usb, 0, 0, 1);
