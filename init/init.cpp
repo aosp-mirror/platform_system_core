@@ -715,6 +715,44 @@ static bool fork_execve_and_wait_for_completion(const char* filename, char* cons
     }
 }
 
+static bool read_first_line(const char* file, std::string* line) {
+    line->clear();
+
+    std::string contents;
+    if (!android::base::ReadFileToString(file, &contents, true /* follow symlinks */)) {
+        return false;
+    }
+    std::istringstream in(contents);
+    std::getline(in, *line);
+    return true;
+}
+
+static bool selinux_find_precompiled_split_policy(std::string* file) {
+    file->clear();
+
+    static constexpr const char precompiled_sepolicy[] = "/vendor/etc/selinux/precompiled_sepolicy";
+    if (access(precompiled_sepolicy, R_OK) == -1) {
+        return false;
+    }
+    std::string actual_plat_id;
+    if (!read_first_line("/system/etc/selinux/plat_sepolicy.cil.sha256", &actual_plat_id)) {
+        PLOG(INFO) << "Failed to read /system/etc/selinux/plat_sepolicy.cil.sha256";
+        return false;
+    }
+    std::string precompiled_plat_id;
+    if (!read_first_line("/vendor/etc/selinux/precompiled_sepolicy.plat.sha256",
+                         &precompiled_plat_id)) {
+        PLOG(INFO) << "Failed to read /vendor/etc/selinux/precompiled_sepolicy.plat.sha256";
+        return false;
+    }
+    if ((actual_plat_id.empty()) || (actual_plat_id != precompiled_plat_id)) {
+        return false;
+    }
+
+    *file = precompiled_sepolicy;
+    return true;
+}
+
 static constexpr const char plat_policy_cil_file[] = "/system/etc/selinux/plat_sepolicy.cil";
 
 static bool selinux_is_split_policy_device() { return access(plat_policy_cil_file, R_OK) != -1; }
@@ -733,6 +771,22 @@ static bool selinux_load_split_policy() {
     //
     // secilc is invoked to compile the above three policy files into a single monolithic policy
     // file. This file is then loaded into the kernel.
+
+    // Load precompiled policy from vendor image, if a matching policy is found there. The policy
+    // must match the platform policy on the system image.
+    std::string precompiled_sepolicy_file;
+    if (selinux_find_precompiled_split_policy(&precompiled_sepolicy_file)) {
+        android::base::unique_fd fd(
+            open(precompiled_sepolicy_file.c_str(), O_RDONLY | O_CLOEXEC | O_BINARY));
+        if (fd != -1) {
+            if (selinux_android_load_policy_from_fd(fd, precompiled_sepolicy_file.c_str()) < 0) {
+                LOG(ERROR) << "Failed to load SELinux policy from " << precompiled_sepolicy_file;
+                return false;
+            }
+            return true;
+        }
+    }
+    // No suitable precompiled policy could be loaded
 
     LOG(INFO) << "Compiling SELinux policy";
 
