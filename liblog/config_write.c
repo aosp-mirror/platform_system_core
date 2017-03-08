@@ -78,6 +78,29 @@ LIBLOG_HIDDEN void __android_log_config_write() {
                                     &fakeLoggerWrite);
 #endif
     }
+
+    if (__android_log_frontend & LOGGER_STDERR) {
+        extern struct android_log_transport_write stderrLoggerWrite;
+
+        /*
+         * stderr logger should be primary if we can be the only one, or if
+         * already in the primary list.  Otherwise land in the persist list.
+         * Remember we can be called here if we are already initialized.
+         */
+        if (list_empty(&__android_log_transport_write)) {
+            __android_log_add_transport(&__android_log_transport_write,
+                                        &stderrLoggerWrite);
+        } else {
+            struct android_log_transport_write *transp;
+            write_transport_for_each(transp, &__android_log_transport_write) {
+                if (transp == &stderrLoggerWrite) {
+                    return;
+                }
+            }
+            __android_log_add_transport(&__android_log_persist_write,
+                                        &stderrLoggerWrite);
+        }
+    }
 }
 
 LIBLOG_HIDDEN void __android_log_config_write_close() {
