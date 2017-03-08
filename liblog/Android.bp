@@ -26,6 +26,7 @@ liblog_sources = [
     "logger_read.c",
     "logger_write.c",
     "logprint.c",
+    "stderr_write.c",
 ]
 liblog_host_sources = [
     "fake_log_device.c",
