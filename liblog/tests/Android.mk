@@ -57,6 +57,8 @@ test_c_flags := \
 test_src_files := \
     liblog_test_default.cpp \
     liblog_test_local.cpp \
+    liblog_test_stderr.cpp \
+    liblog_test_stderr_local.cpp \
     log_id_test.cpp \
     log_radio_test.cpp \
     log_read_test.cpp \
