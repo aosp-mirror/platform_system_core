@@ -317,6 +317,12 @@ enum {
      * retire info, 0 if it won't.
      */
     NATIVE_WINDOW_FRAME_TIMESTAMPS_SUPPORTS_RETIRE = 18,
+
+    /*
+     * Returns 1 if the native window is valid, 0 otherwise. native window is valid
+     * if it is safe (i.e. no crash will occur) to call any method on it.
+     */
+    NATIVE_WINDOW_IS_VALID = 19,
 };
 
 /* Valid operations for the (*perform)() hook.
