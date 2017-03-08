@@ -119,7 +119,14 @@ LOCAL_REQUIRED_MODULES += \
     mapping_sepolicy.cil \
     nonplat_sepolicy.cil \
     plat_sepolicy.cil \
+    plat_sepolicy.cil.sha256 \
     secilc
+
+# Include precompiled policy, unless told otherwise
+ifneq ($(PRODUCT_PRECOMPILED_SEPOLICY),false)
+LOCAL_REQUIRED_MODULES += precompiled_sepolicy precompiled_sepolicy.plat.sha256
+endif
+
 else
 # Use monolithic SELinux policy
 LOCAL_REQUIRED_MODULES += sepolicy
