@@ -290,8 +290,7 @@ on late-init
     # /data, which in turn can only be loaded when system properties are present.
     trigger post-fs-data
 
-    # Now we can start zygote for file base encryption devices in
-    # init.{$device}.rc
+    # Now we can start zygote for devices with file based encryption
     trigger zygote-start
 
     # Load persist properties and override properties (if enabled) from /data.
@@ -302,6 +301,12 @@ on late-init
 
     trigger early-boot
     trigger boot
+
+on post-fs-data && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
+    start netd
+
+on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
+    start zygote
 
 on post-fs
     start logd
