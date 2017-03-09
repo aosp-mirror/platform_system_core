@@ -42,4 +42,10 @@ void engrave_tombstone(int tombstone_fd, BacktraceMap* map,
 void engrave_tombstone_ucontext(int tombstone_fd, uintptr_t abort_msg_address, siginfo_t* siginfo,
                                 ucontext_t* ucontext);
 
+// Compatibility shim.
+static void engrave_tombstone_ucontext(int tombstone_fd, pid_t, pid_t, uintptr_t abort_msg_address,
+                                       siginfo_t* siginfo, ucontext_t* ucontext) {
+  engrave_tombstone_ucontext(tombstone_fd, abort_msg_address, siginfo, ucontext);
+}
+
 #endif // _DEBUGGERD_TOMBSTONE_H
