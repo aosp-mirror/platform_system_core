@@ -67,15 +67,15 @@ static void dump_process_footer(log_t* log, pid_t pid) {
   _LOG(log, logtype::BACKTRACE, "\n----- end %d -----\n", pid);
 }
 
-static void dump_thread(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid) {
-  char path[PATH_MAX];
-  char threadnamebuf[1024];
-  char* threadname = NULL;
+static void log_thread_name(log_t* log, pid_t tid) {
   FILE* fp;
+  char buf[1024];
+  char path[PATH_MAX];
+  char* threadname = NULL;
 
   snprintf(path, sizeof(path), "/proc/%d/comm", tid);
   if ((fp = fopen(path, "r"))) {
-    threadname = fgets(threadnamebuf, sizeof(threadnamebuf), fp);
+    threadname = fgets(buf, sizeof(buf), fp);
     fclose(fp);
     if (threadname) {
       size_t len = strlen(threadname);
@@ -84,8 +84,11 @@ static void dump_thread(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid) {
       }
     }
   }
-
   _LOG(log, logtype::BACKTRACE, "\n\"%s\" sysTid=%d\n", threadname ? threadname : "<unknown>", tid);
+}
+
+static void dump_thread(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid) {
+  log_thread_name(log, tid);
 
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map));
   if (backtrace->Unwind(0)) {
@@ -110,6 +113,41 @@ void dump_backtrace(int fd, BacktraceMap* map, pid_t pid, pid_t tid,
   }
 
   dump_process_footer(&log, pid);
+}
+
+void dump_backtrace_ucontext(int output_fd, ucontext_t* ucontext) {
+  pid_t pid = getpid();
+  pid_t tid = gettid();
+
+  log_t log;
+  log.tfd = output_fd;
+  log.amfd_data = nullptr;
+
+  log_thread_name(&log, tid);
+
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid));
+  if (backtrace->Unwind(0, ucontext)) {
+    dump_backtrace_to_log(backtrace.get(), &log, "  ");
+  } else {
+    ALOGE("Unwind failed: tid = %d: %s", tid,
+          backtrace->GetErrorString(backtrace->GetError()).c_str());
+  }
+}
+
+void dump_backtrace_header(int output_fd) {
+  log_t log;
+  log.tfd = output_fd;
+  log.amfd_data = nullptr;
+
+  dump_process_header(&log, getpid());
+}
+
+void dump_backtrace_footer(int output_fd) {
+  log_t log;
+  log.tfd = output_fd;
+  log.amfd_data = nullptr;
+
+  dump_process_footer(&log, getpid());
 }
 
 void dump_backtrace_to_log(Backtrace* backtrace, log_t* log, const char* prefix) {
