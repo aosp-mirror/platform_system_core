@@ -790,6 +790,14 @@ static bool selinux_load_split_policy() {
 
     LOG(INFO) << "Compiling SELinux policy";
 
+    // Determine the highest policy language version supported by the kernel
+    set_selinuxmnt("/sys/fs/selinux");
+    int max_policy_version = security_policyvers();
+    if (max_policy_version == -1) {
+        PLOG(ERROR) << "Failed to determine highest policy version supported by kernel";
+        return false;
+    }
+
     // We store the output of the compilation on /dev because this is the most convenient tmpfs
     // storage mount available this early in the boot sequence.
     char compiled_sepolicy[] = "/dev/sepolicy.XXXXXX";
@@ -799,14 +807,20 @@ static bool selinux_load_split_policy() {
         return false;
     }
 
-    const char* compile_args[] = {"/system/bin/secilc", plat_policy_cil_file, "-M", "true", "-c",
-                                  "30",  // TODO: pass in SELinux policy version from build system
-                                  "/vendor/etc/selinux/mapping_sepolicy.cil",
-                                  "/vendor/etc/selinux/nonplat_sepolicy.cil", "-o",
-                                  compiled_sepolicy,
-                                  // We don't care about file_contexts output by the compiler
-                                  "-f", "/sys/fs/selinux/null",  // /dev/null is not yet available
-                                  nullptr};
+    // clang-format off
+    const char* compile_args[] = {
+        "/system/bin/secilc",
+        plat_policy_cil_file,
+        "-M", "true",
+        // Target the highest policy language version supported by the kernel
+        "-c", std::to_string(max_policy_version).c_str(),
+        "/vendor/etc/selinux/mapping_sepolicy.cil",
+        "/vendor/etc/selinux/nonplat_sepolicy.cil",
+        "-o", compiled_sepolicy,
+        // We don't care about file_contexts output by the compiler
+        "-f", "/sys/fs/selinux/null",  // /dev/null is not yet available
+        nullptr};
+    // clang-format on
 
     if (!fork_execve_and_wait_for_completion(compile_args[0], (char**)compile_args, (char**)ENV)) {
         unlink(compiled_sepolicy);
