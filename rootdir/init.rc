@@ -302,12 +302,6 @@ on late-init
     trigger early-boot
     trigger boot
 
-on post-fs-data && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
-    start netd
-
-on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
-    start zygote
-
 on post-fs
     start logd
     # once everything is setup, no need to modify /
@@ -499,6 +493,13 @@ on post-fs-data
     # won't work.
     # Set indication (checked by vold) that we have finished this action
     #setprop vold.post_fs_data_done 1
+
+# This trigger will be triggered before 'zygote-start' since there is no zygote-start defined in
+# current init.rc. It is recommended to put unnecessary data/ initialization from post-fs-data
+# to start-zygote to unblock zygote start.
+on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
+   start netd
+   start zygote
 
 on boot
     # basic network init
