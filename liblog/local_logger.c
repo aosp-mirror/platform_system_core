@@ -20,11 +20,11 @@
 #if !defined(__MINGW32__)
 #include <pwd.h>
 #endif
+#include <log/uio.h>
 #include <sched.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <log/uio.h>
 
 #include <cutils/list.h> /* template, no library dependency */
 #include <log/log_frontend.h>
@@ -42,56 +42,54 @@ static const char baseServiceName[] = "android.logd";
 static int writeToLocalInit();
 static int writeToLocalAvailable(log_id_t logId);
 static void writeToLocalReset();
-static int writeToLocalWrite(log_id_t logId, struct timespec *ts,
-                             struct iovec *vec, size_t nr);
+static int writeToLocalWrite(log_id_t logId, struct timespec* ts,
+                             struct iovec* vec, size_t nr);
 
 LIBLOG_HIDDEN struct android_log_transport_write localLoggerWrite = {
-    .node = { &localLoggerWrite.node, &localLoggerWrite.node },
-    .context.private = NULL,
-    .name = "local",
-    .available = writeToLocalAvailable,
-    .open = writeToLocalInit,
-    .close = writeToLocalReset,
-    .write = writeToLocalWrite,
+  .node = { &localLoggerWrite.node, &localLoggerWrite.node },
+  .context.private = NULL,
+  .name = "local",
+  .available = writeToLocalAvailable,
+  .open = writeToLocalInit,
+  .close = writeToLocalReset,
+  .write = writeToLocalWrite,
 };
 
-static int writeToLocalVersion(struct android_log_logger *logger,
-                               struct android_log_transport_context *transp);
-static int writeToLocalRead(struct android_log_logger_list *logger_list,
-                            struct android_log_transport_context *transp,
-                            struct log_msg *log_msg);
-static int writeToLocalPoll(struct android_log_logger_list *logger_list,
-                            struct android_log_transport_context *transp);
-static void writeToLocalClose(struct android_log_logger_list *logger_list,
-                              struct android_log_transport_context *transp);
-static int writeToLocalClear(struct android_log_logger *logger,
-                             struct android_log_transport_context *transp);
-static ssize_t writeToLocalGetSize(
-        struct android_log_logger *logger,
-        struct android_log_transport_context *transp);
+static int writeToLocalVersion(struct android_log_logger* logger,
+                               struct android_log_transport_context* transp);
+static int writeToLocalRead(struct android_log_logger_list* logger_list,
+                            struct android_log_transport_context* transp,
+                            struct log_msg* log_msg);
+static int writeToLocalPoll(struct android_log_logger_list* logger_list,
+                            struct android_log_transport_context* transp);
+static void writeToLocalClose(struct android_log_logger_list* logger_list,
+                              struct android_log_transport_context* transp);
+static int writeToLocalClear(struct android_log_logger* logger,
+                             struct android_log_transport_context* transp);
+static ssize_t writeToLocalGetSize(struct android_log_logger* logger,
+                                   struct android_log_transport_context* transp);
 static ssize_t writeToLocalSetSize(
-        struct android_log_logger *logger,
-        struct android_log_transport_context *transp __unused,
-        size_t size);
+    struct android_log_logger* logger,
+    struct android_log_transport_context* transp __unused, size_t size);
 static ssize_t writeToLocalGetReadbleSize(
-        struct android_log_logger *logger,
-        struct android_log_transport_context *transp);
+    struct android_log_logger* logger,
+    struct android_log_transport_context* transp);
 
 struct android_log_transport_read localLoggerRead = {
-    .node = { &localLoggerRead.node, &localLoggerRead.node },
-    .name = "local",
-    .available = writeToLocalAvailable,
-    .version = writeToLocalVersion,
-    .read = writeToLocalRead,
-    .poll = writeToLocalPoll,
-    .close = writeToLocalClose,
-    .clear = writeToLocalClear,
-    .getSize = writeToLocalGetSize,
-    .setSize = writeToLocalSetSize,
-    .getReadableSize = writeToLocalGetReadbleSize,
-    .getPrune = NULL,
-    .setPrune = NULL,
-    .getStats = NULL,
+  .node = { &localLoggerRead.node, &localLoggerRead.node },
+  .name = "local",
+  .available = writeToLocalAvailable,
+  .version = writeToLocalVersion,
+  .read = writeToLocalRead,
+  .poll = writeToLocalPoll,
+  .close = writeToLocalClose,
+  .clear = writeToLocalClear,
+  .getSize = writeToLocalGetSize,
+  .setSize = writeToLocalSetSize,
+  .getReadableSize = writeToLocalGetReadbleSize,
+  .getPrune = NULL,
+  .setPrune = NULL,
+  .getStats = NULL,
 };
 
 struct LogBufferElement {
@@ -115,53 +113,51 @@ static const size_t MAX_SIZE_DEFAULT = 32768;
  *
  * Confirm the following should <log/log_id.h> be adjusted in the future.
  */
-#define NUMBER_OF_LOG_BUFFERS ((LOG_ID_SECURITY == (LOG_ID_MAX - 2)) ? \
-                                  LOG_ID_SECURITY : \
-                                  LOG_ID_KERNEL)
-#define BLOCK_LOG_BUFFERS(id) (((id) == LOG_ID_SECURITY) || \
-                               ((id) == LOG_ID_KERNEL))
+#define NUMBER_OF_LOG_BUFFERS \
+  ((LOG_ID_SECURITY == (LOG_ID_MAX - 2)) ? LOG_ID_SECURITY : LOG_ID_KERNEL)
+#define BLOCK_LOG_BUFFERS(id) \
+  (((id) == LOG_ID_SECURITY) || ((id) == LOG_ID_KERNEL))
 
 static struct LogBuffer {
   struct listnode head;
   pthread_rwlock_t listLock;
-  char *serviceName; /* Also indicates ready by having a value */
+  char* serviceName; /* Also indicates ready by having a value */
   /* Order and proximity important for memset */
   size_t number[NUMBER_OF_LOG_BUFFERS];         /* clear memset          */
   size_t size[NUMBER_OF_LOG_BUFFERS];           /* clear memset          */
   size_t totalSize[NUMBER_OF_LOG_BUFFERS];      /* init memset           */
   size_t maxSize[NUMBER_OF_LOG_BUFFERS];        /* init MAX_SIZE_DEFAULT */
-  struct listnode *last[NUMBER_OF_LOG_BUFFERS]; /* init &head            */
+  struct listnode* last[NUMBER_OF_LOG_BUFFERS]; /* init &head            */
 } logbuf = {
-  .head = { &logbuf.head, &logbuf.head },
-  .listLock = PTHREAD_RWLOCK_INITIALIZER,
+  .head = { &logbuf.head, &logbuf.head }, .listLock = PTHREAD_RWLOCK_INITIALIZER,
 };
 
-static void LogBufferInit(struct LogBuffer *log) {
+static void LogBufferInit(struct LogBuffer* log) {
   size_t i;
 
   pthread_rwlock_wrlock(&log->listLock);
   list_init(&log->head);
   memset(log->number, 0,
-    sizeof(log->number) + sizeof(log->size) + sizeof(log->totalSize));
+         sizeof(log->number) + sizeof(log->size) + sizeof(log->totalSize));
   for (i = 0; i < NUMBER_OF_LOG_BUFFERS; ++i) {
     log->maxSize[i] = MAX_SIZE_DEFAULT;
     log->last[i] = &log->head;
   }
 #ifdef __BIONIC__
-  asprintf(&log->serviceName, "%s@%d:%d", baseServiceName,
-           __android_log_uid(), getpid());
+  asprintf(&log->serviceName, "%s@%d:%d", baseServiceName, __android_log_uid(),
+           getpid());
 #else
   char buffer[sizeof(baseServiceName) + 1 + 5 + 1 + 5 + 8];
   snprintf(buffer, sizeof(buffer), "%s@%d:%d", baseServiceName,
-                                   __android_log_uid(), getpid());
+           __android_log_uid(), getpid());
   log->serviceName = strdup(buffer);
 #endif
   pthread_rwlock_unlock(&log->listLock);
 }
 
-static void LogBufferClear(struct LogBuffer *log) {
+static void LogBufferClear(struct LogBuffer* log) {
   size_t i;
-  struct listnode *node;
+  struct listnode* node;
 
   pthread_rwlock_wrlock(&log->listLock);
   memset(log->number, 0, sizeof(log->number) + sizeof(log->size));
@@ -169,7 +165,7 @@ static void LogBufferClear(struct LogBuffer *log) {
     log->last[i] = &log->head;
   }
   while ((node = list_head(&log->head)) != &log->head) {
-    struct LogBufferElement *element;
+    struct LogBufferElement* element;
 
     element = node_to_item(node, struct LogBufferElement, node);
     list_remove(node);
@@ -178,7 +174,7 @@ static void LogBufferClear(struct LogBuffer *log) {
   pthread_rwlock_unlock(&log->listLock);
 }
 
-static inline void LogBufferFree(struct LogBuffer *log) {
+static inline void LogBufferFree(struct LogBuffer* log) {
   pthread_rwlock_wrlock(&log->listLock);
   free(log->serviceName);
   log->serviceName = NULL;
@@ -186,8 +182,8 @@ static inline void LogBufferFree(struct LogBuffer *log) {
   LogBufferClear(log);
 }
 
-static int LogBufferLog(struct LogBuffer *log,
-                        struct LogBufferElement *element) {
+static int LogBufferLog(struct LogBuffer* log,
+                        struct LogBufferElement* element) {
   log_id_t logId = element->logId;
 
   pthread_rwlock_wrlock(&log->listLock);
@@ -199,16 +195,16 @@ static int LogBufferLog(struct LogBuffer *log,
     log->last[logId] = list_tail(&log->head);
   }
   while (log->size[logId] > log->maxSize[logId]) {
-    struct listnode *node = log->last[logId];
-    struct LogBufferElement *e;
-    struct android_log_logger_list *logger_list;
+    struct listnode* node = log->last[logId];
+    struct LogBufferElement* e;
+    struct android_log_logger_list* logger_list;
 
     e = node_to_item(node, struct LogBufferElement, node);
     log->number[logId]--;
     log->size[logId] -= e->len;
     logger_list_rdlock();
     logger_list_for_each(logger_list) {
-      struct android_log_transport_context *transp;
+      struct android_log_transport_context* transp;
 
       transport_context_for_each(transp, logger_list) {
         if ((transp->transport == &localLoggerRead) &&
@@ -243,7 +239,7 @@ static int LogBufferLog(struct LogBuffer *log,
  */
 static int writeToLocalInit() {
   pthread_attr_t attr;
-  struct LogBuffer *log;
+  struct LogBuffer* log;
 
   if (writeToLocalAvailable(LOG_ID_MAIN) < 0) {
     return -EPERM;
@@ -251,7 +247,7 @@ static int writeToLocalInit() {
 
   log = &logbuf;
   if (!log->serviceName) {
-      LogBufferInit(log);
+    LogBufferInit(log);
   }
 
   if (!log->serviceName) {
@@ -275,7 +271,7 @@ static int writeToLocalAvailable(log_id_t logId) {
     return -EINVAL;
   }
 
-  /* Android hard coded permitted, system goes to logd */
+/* Android hard coded permitted, system goes to logd */
 #if !defined(__MINGW32__)
   if (__android_log_frontend == LOGGER_DEFAULT) {
     uid = __android_log_uid();
@@ -290,10 +286,10 @@ static int writeToLocalAvailable(log_id_t logId) {
   return 0;
 }
 
-static int writeToLocalWrite(log_id_t logId, struct timespec *ts,
-                             struct iovec *vec, size_t nr) {
+static int writeToLocalWrite(log_id_t logId, struct timespec* ts,
+                             struct iovec* vec, size_t nr) {
   size_t len, i;
-  struct LogBufferElement *element;
+  struct LogBufferElement* element;
 
   if ((logId >= NUMBER_OF_LOG_BUFFERS) || BLOCK_LOG_BUFFERS(logId)) {
     return -EINVAL;
@@ -307,8 +303,8 @@ static int writeToLocalWrite(log_id_t logId, struct timespec *ts,
   if (len > LOGGER_ENTRY_MAX_PAYLOAD) {
     len = LOGGER_ENTRY_MAX_PAYLOAD;
   }
-  element = (struct LogBufferElement *)calloc(1,
-      sizeof(struct LogBufferElement) + len + 1);
+  element = (struct LogBufferElement*)calloc(
+      1, sizeof(struct LogBufferElement) + len + 1);
   if (!element) {
     return errno ? -errno : -ENOMEM;
   }
@@ -322,7 +318,7 @@ static int writeToLocalWrite(log_id_t logId, struct timespec *ts,
   element->logId = logId;
   element->len = len;
 
-  char *cp = element->msg;
+  char* cp = element->msg;
   for (i = 0; i < nr; ++i) {
     size_t iov_len = vec[i].iov_len;
     if (iov_len > len) {
@@ -339,17 +335,17 @@ static int writeToLocalWrite(log_id_t logId, struct timespec *ts,
   return LogBufferLog(&logbuf, element);
 }
 
-static int writeToLocalVersion(
-        struct android_log_logger *logger __unused,
-        struct android_log_transport_context *transp __unused) {
+static int writeToLocalVersion(struct android_log_logger* logger __unused,
+                               struct android_log_transport_context* transp
+                                   __unused) {
   return 3;
 }
 
 /* within reader lock, serviceName already validated */
-static struct listnode *writeToLocalNode(
-        struct android_log_logger_list *logger_list,
-        struct android_log_transport_context *transp) {
-  struct listnode *node;
+static struct listnode* writeToLocalNode(
+    struct android_log_logger_list* logger_list,
+    struct android_log_transport_context* transp) {
+  struct listnode* node;
   unsigned logMask;
   unsigned int tail;
 
@@ -366,7 +362,7 @@ static struct listnode *writeToLocalNode(
   tail = logger_list->tail;
 
   for (node = list_head(&logbuf.head); node != &logbuf.head; node = node->next) {
-    struct LogBufferElement *element;
+    struct LogBufferElement* element;
     log_id_t logId;
 
     element = node_to_item(node, struct LogBufferElement, node);
@@ -380,12 +376,11 @@ static struct listnode *writeToLocalNode(
   return transp->context.node = node;
 }
 
-static int writeToLocalRead(
-        struct android_log_logger_list *logger_list,
-        struct android_log_transport_context *transp,
-        struct log_msg *log_msg) {
+static int writeToLocalRead(struct android_log_logger_list* logger_list,
+                            struct android_log_transport_context* transp,
+                            struct log_msg* log_msg) {
   int ret;
-  struct listnode *node;
+  struct listnode* node;
   unsigned logMask;
 
   pthread_rwlock_rdlock(&logbuf.listLock);
@@ -401,7 +396,7 @@ static int writeToLocalRead(
   ret = 0;
 
   while (node != list_head(&logbuf.head)) {
-    struct LogBufferElement *element;
+    struct LogBufferElement* element;
     log_id_t logId;
 
     node = node->prev;
@@ -429,23 +424,22 @@ static int writeToLocalRead(
   return ret;
 }
 
-static int writeToLocalPoll(
-        struct android_log_logger_list *logger_list,
-        struct android_log_transport_context *transp) {
+static int writeToLocalPoll(struct android_log_logger_list* logger_list,
+                            struct android_log_transport_context* transp) {
   int ret = (logger_list->mode & ANDROID_LOG_NONBLOCK) ? -ENODEV : 0;
 
   pthread_rwlock_rdlock(&logbuf.listLock);
 
   if (logbuf.serviceName) {
     unsigned logMask = transp->logMask;
-    struct listnode *node = writeToLocalNode(logger_list, transp);
+    struct listnode* node = writeToLocalNode(logger_list, transp);
 
     ret = (node != list_head(&logbuf.head));
     if (ret) {
       do {
-        ret = !!(logMask & (1 << (node_to_item(node->prev,
-                                               struct LogBufferElement,
-                                               node))->logId));
+        ret = !!(logMask &
+                 (1 << (node_to_item(node->prev, struct LogBufferElement, node))
+                           ->logId));
       } while (!ret && ((node = node->prev) != list_head(&logbuf.head)));
     }
 
@@ -457,17 +451,17 @@ static int writeToLocalPoll(
   return ret;
 }
 
-static void writeToLocalClose(
-        struct android_log_logger_list *logger_list __unused,
-        struct android_log_transport_context *transp) {
+static void writeToLocalClose(struct android_log_logger_list* logger_list
+                                  __unused,
+                              struct android_log_transport_context* transp) {
   pthread_rwlock_wrlock(&logbuf.listLock);
   transp->context.node = list_head(&logbuf.head);
   pthread_rwlock_unlock(&logbuf.listLock);
 }
 
-static int writeToLocalClear(
-        struct android_log_logger *logger,
-        struct android_log_transport_context *unused __unused) {
+static int writeToLocalClear(struct android_log_logger* logger,
+                             struct android_log_transport_context* unused
+                                 __unused) {
   log_id_t logId = logger->logId;
   struct listnode *node, *n;
 
@@ -479,15 +473,15 @@ static int writeToLocalClear(
   logbuf.number[logId] = 0;
   logbuf.last[logId] = &logbuf.head;
   list_for_each_safe(node, n, &logbuf.head) {
-    struct LogBufferElement *element;
+    struct LogBufferElement* element;
     element = node_to_item(node, struct LogBufferElement, node);
 
     if (logId == element->logId) {
-      struct android_log_logger_list *logger_list;
+      struct android_log_logger_list* logger_list;
 
       logger_list_rdlock();
       logger_list_for_each(logger_list) {
-        struct android_log_transport_context *transp;
+        struct android_log_transport_context* transp;
 
         transport_context_for_each(transp, logger_list) {
           if ((transp->transport == &localLoggerRead) &&
@@ -507,9 +501,9 @@ static int writeToLocalClear(
   return 0;
 }
 
-static ssize_t writeToLocalGetSize(
-        struct android_log_logger *logger,
-        struct android_log_transport_context *transp __unused) {
+static ssize_t writeToLocalGetSize(struct android_log_logger* logger,
+                                   struct android_log_transport_context* transp
+                                       __unused) {
   ssize_t ret = -EINVAL;
   log_id_t logId = logger->logId;
 
@@ -523,9 +517,8 @@ static ssize_t writeToLocalGetSize(
 }
 
 static ssize_t writeToLocalSetSize(
-        struct android_log_logger *logger,
-        struct android_log_transport_context *transp __unused,
-        size_t size) {
+    struct android_log_logger* logger,
+    struct android_log_transport_context* transp __unused, size_t size) {
   ssize_t ret = -EINVAL;
 
   if ((size > LOGGER_ENTRY_MAX_LEN) || (size < (4 * 1024 * 1024))) {
@@ -541,8 +534,8 @@ static ssize_t writeToLocalSetSize(
 }
 
 static ssize_t writeToLocalGetReadbleSize(
-        struct android_log_logger *logger,
-        struct android_log_transport_context *transp __unused) {
+    struct android_log_logger* logger,
+    struct android_log_transport_context* transp __unused) {
   ssize_t ret = -EINVAL;
   log_id_t logId = logger->logId;
 

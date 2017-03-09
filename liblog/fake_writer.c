@@ -27,78 +27,77 @@
 
 static int fakeOpen();
 static void fakeClose();
-static int fakeWrite(log_id_t log_id, struct timespec *ts,
-                     struct iovec *vec, size_t nr);
+static int fakeWrite(log_id_t log_id, struct timespec* ts, struct iovec* vec,
+                     size_t nr);
 
 static int logFds[(int)LOG_ID_MAX] = { -1, -1, -1, -1, -1, -1 };
 
 LIBLOG_HIDDEN struct android_log_transport_write fakeLoggerWrite = {
-    .node = { &fakeLoggerWrite.node, &fakeLoggerWrite.node },
-    .context.private = &logFds,
-    .name = "fake",
-    .available = NULL,
-    .open = fakeOpen,
-    .close = fakeClose,
-    .write = fakeWrite,
+  .node = { &fakeLoggerWrite.node, &fakeLoggerWrite.node },
+  .context.private = &logFds,
+  .name = "fake",
+  .available = NULL,
+  .open = fakeOpen,
+  .close = fakeClose,
+  .write = fakeWrite,
 };
 
 static int fakeOpen() {
-    int i;
+  int i;
 
-    for (i = 0; i < LOG_ID_MAX; i++) {
-        /*
-         * Known maximum size string, plus an 8 character margin to deal with
-         * possible independent changes to android_log_id_to_name().
-         */
-        char buf[sizeof("/dev/log_security") + 8];
-        if (logFds[i] >= 0) {
-            continue;
-        }
-        snprintf(buf, sizeof(buf), "/dev/log_%s", android_log_id_to_name(i));
-        logFds[i] = fakeLogOpen(buf, O_WRONLY);
-        if (logFds[i] < 0) {
-            fprintf(stderr, "fakeLogOpen(%s, O_WRONLY) failed\n", buf);
-        }
+  for (i = 0; i < LOG_ID_MAX; i++) {
+    /*
+     * Known maximum size string, plus an 8 character margin to deal with
+     * possible independent changes to android_log_id_to_name().
+     */
+    char buf[sizeof("/dev/log_security") + 8];
+    if (logFds[i] >= 0) {
+      continue;
     }
-    return 0;
+    snprintf(buf, sizeof(buf), "/dev/log_%s", android_log_id_to_name(i));
+    logFds[i] = fakeLogOpen(buf, O_WRONLY);
+    if (logFds[i] < 0) {
+      fprintf(stderr, "fakeLogOpen(%s, O_WRONLY) failed\n", buf);
+    }
+  }
+  return 0;
 }
 
 static void fakeClose() {
-    int i;
+  int i;
 
-    for (i = 0; i < LOG_ID_MAX; i++) {
-        fakeLogClose(logFds[i]);
-        logFds[i] = -1;
-    }
+  for (i = 0; i < LOG_ID_MAX; i++) {
+    fakeLogClose(logFds[i]);
+    logFds[i] = -1;
+  }
 }
 
-static int fakeWrite(log_id_t log_id, struct timespec *ts __unused,
-                      struct iovec *vec, size_t nr)
-{
-    ssize_t ret;
-    size_t i;
-    int logFd, len;
+static int fakeWrite(log_id_t log_id, struct timespec* ts __unused,
+                     struct iovec* vec, size_t nr) {
+  ssize_t ret;
+  size_t i;
+  int logFd, len;
 
-    if (/*(int)log_id >= 0 &&*/ (int)log_id >= (int)LOG_ID_MAX) {
-        return -EINVAL;
-    }
+  if (/*(int)log_id >= 0 &&*/ (int)log_id >= (int)LOG_ID_MAX) {
+    return -EINVAL;
+  }
 
-    len = 0;
-    for (i = 0; i < nr; ++i) {
-        len += vec[i].iov_len;
-    }
+  len = 0;
+  for (i = 0; i < nr; ++i) {
+    len += vec[i].iov_len;
+  }
 
-    if (len > LOGGER_ENTRY_MAX_PAYLOAD) {
-        len = LOGGER_ENTRY_MAX_PAYLOAD;
-    }
+  if (len > LOGGER_ENTRY_MAX_PAYLOAD) {
+    len = LOGGER_ENTRY_MAX_PAYLOAD;
+  }
 
-    logFd = logFds[(int)log_id];
-    ret = TEMP_FAILURE_RETRY(fakeLogWritev(logFd, vec, nr));
-    if (ret < 0) {
-        ret = -errno;
-    } else if (ret > len) {
-        ret = len;
-    }
+  logFd = logFds[(int)log_id];
+  ret = TEMP_FAILURE_RETRY(fakeLogWritev(logFd, vec, nr));
+  if (ret < 0) {
+    ret = -errno;
+  } else if (ret > len) {
+    ret = len;
+  }
 
-    return ret;
+  return ret;
 }
