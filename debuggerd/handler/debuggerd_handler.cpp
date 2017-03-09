@@ -62,7 +62,7 @@
 
 #define CRASH_DUMP_PATH "/system/bin/" CRASH_DUMP_NAME
 
-extern "C" bool debuggerd_fallback(ucontext_t*, siginfo_t*, void*);
+extern "C" void debuggerd_fallback_handler(siginfo_t*, ucontext_t*, void*);
 
 static debuggerd_callbacks_t g_callbacks;
 
@@ -323,21 +323,11 @@ static void resend_signal(siginfo_t* info, bool crash_dump_started) {
       fatal_errno("failed to resend signal during crash");
     }
   }
-
-  if (info->si_signo == DEBUGGER_SIGNAL) {
-    pthread_mutex_unlock(&crash_mutex);
-  }
 }
 
 // Handler that does crash dumping by forking and doing the processing in the child.
 // Do this by ptracing the relevant thread, and then execing debuggerd to do the actual dump.
 static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* context) {
-  int ret = pthread_mutex_lock(&crash_mutex);
-  if (ret != 0) {
-    __libc_format_log(ANDROID_LOG_INFO, "libc", "pthread_mutex_lock failed: %s", strerror(ret));
-    return;
-  }
-
   // It's possible somebody cleared the SA_SIGINFO flag, which would mean
   // our "info" arg holds an undefined value.
   if (!have_siginfo(signal_number)) {
@@ -359,23 +349,28 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // check to allow all si_code values in calls coming from inside the house.
   }
 
-  log_signal_summary(signal_number, info);
-
   void* abort_message = nullptr;
   if (g_callbacks.get_abort_message) {
     abort_message = g_callbacks.get_abort_message();
   }
 
   if (prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) == 1) {
-    ucontext_t* ucontext = static_cast<ucontext_t*>(context);
-    if (signal_number == DEBUGGER_SIGNAL || !debuggerd_fallback(ucontext, info, abort_message)) {
-      // The process has NO_NEW_PRIVS enabled, so we can't transition to the crash_dump context.
-      __libc_format_log(ANDROID_LOG_INFO, "libc",
-                        "Suppressing debuggerd output because prctl(PR_GET_NO_NEW_PRIVS)==1");
-    }
+    // This check might be racy if another thread sets NO_NEW_PRIVS, but this should be unlikely,
+    // you can only set NO_NEW_PRIVS to 1, and the effect should be at worst a single missing
+    // ANR trace.
+    debuggerd_fallback_handler(info, static_cast<ucontext_t*>(context), abort_message);
     resend_signal(info, false);
     return;
   }
+
+  // Only allow one thread to handle a signal at a time.
+  int ret = pthread_mutex_lock(&crash_mutex);
+  if (ret != 0) {
+    __libc_format_log(ANDROID_LOG_INFO, "libc", "pthread_mutex_lock failed: %s", strerror(ret));
+    return;
+  }
+
+  log_signal_summary(signal_number, info);
 
   // Populate si_value with the abort message address, if found.
   if (abort_message) {
@@ -427,6 +422,11 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   }
 
   resend_signal(info, thread_info.crash_dump_started);
+  if (info->si_signo == DEBUGGER_SIGNAL) {
+    // If the signal is fatal, don't unlock the mutex to prevent other crashing threads from
+    // starting to dump right before our death.
+    pthread_mutex_unlock(&crash_mutex);
+  }
 }
 
 void debuggerd_init(debuggerd_callbacks_t* callbacks) {

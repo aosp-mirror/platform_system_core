@@ -18,6 +18,7 @@
 #define _DEBUGGERD_BACKTRACE_H
 
 #include <sys/types.h>
+#include <sys/ucontext.h>
 
 #include <set>
 #include <string>
@@ -34,5 +35,9 @@ void dump_backtrace(int fd, BacktraceMap* map, pid_t pid, pid_t tid,
 
 /* Dumps the backtrace in the backtrace data structure to the log. */
 void dump_backtrace_to_log(Backtrace* backtrace, log_t* log, const char* prefix);
+
+void dump_backtrace_ucontext(int output_fd, ucontext_t* ucontext);
+void dump_backtrace_header(int output_fd);
+void dump_backtrace_footer(int output_fd);
 
 #endif // _DEBUGGERD_BACKTRACE_H
