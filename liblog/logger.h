@@ -193,7 +193,7 @@ LIBLOG_HIDDEN void __android_log_lock();
 LIBLOG_HIDDEN int __android_log_trylock();
 LIBLOG_HIDDEN void __android_log_unlock();
 
-LIBLOG_HIDDEN int __android_log_frontend;
+LIBLOG_HIDDEN int __android_log_transport;
 
 __END_DECLS
 

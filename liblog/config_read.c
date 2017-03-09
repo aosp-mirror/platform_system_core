@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <log/log_frontend.h>
+#include <log/log_transport.h>
 
 #include "config_read.h"
 #include "logger.h"
@@ -55,15 +55,15 @@ static void __android_log_add_transport(
 }
 
 LIBLOG_HIDDEN void __android_log_config_read() {
-  if (__android_log_frontend & LOGGER_LOCAL) {
+  if (__android_log_transport & LOGGER_LOCAL) {
     extern struct android_log_transport_read localLoggerRead;
 
     __android_log_add_transport(&__android_log_transport_read, &localLoggerRead);
   }
 
 #if (FAKE_LOG_DEVICE == 0)
-  if ((__android_log_frontend == LOGGER_DEFAULT) ||
-      (__android_log_frontend & LOGGER_LOGD)) {
+  if ((__android_log_transport == LOGGER_DEFAULT) ||
+      (__android_log_transport & LOGGER_LOGD)) {
     extern struct android_log_transport_read logdLoggerRead;
     extern struct android_log_transport_read pmsgLoggerRead;
 

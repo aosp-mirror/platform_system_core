@@ -25,7 +25,7 @@
 #endif
 
 #include <log/event_tag_map.h>
-#include <log/log_frontend.h>
+#include <log/log_transport.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
@@ -609,12 +609,12 @@ static int __write_to_log_null(log_id_t log_id, struct iovec* vec, size_t nr) {
 
 /* Following functions need access to our internal write_to_log status */
 
-LIBLOG_HIDDEN int __android_log_frontend;
+LIBLOG_HIDDEN int __android_log_transport;
 
-LIBLOG_ABI_PUBLIC int android_set_log_frontend(int frontend_flag) {
+LIBLOG_ABI_PUBLIC int android_set_log_transport(int transport_flag) {
   int retval;
 
-  if (frontend_flag < 0) {
+  if (transport_flag < 0) {
     return -EINVAL;
   }
 
@@ -622,7 +622,7 @@ LIBLOG_ABI_PUBLIC int android_set_log_frontend(int frontend_flag) {
 
   __android_log_lock();
 
-  if (frontend_flag & LOGGER_NULL) {
+  if (transport_flag & LOGGER_NULL) {
     write_to_log = __write_to_log_null;
 
     __android_log_unlock();
@@ -630,12 +630,12 @@ LIBLOG_ABI_PUBLIC int android_set_log_frontend(int frontend_flag) {
     return retval;
   }
 
-  __android_log_frontend &= LOGGER_LOCAL | LOGGER_LOGD | LOGGER_STDERR;
+  __android_log_transport &= LOGGER_LOCAL | LOGGER_LOGD | LOGGER_STDERR;
 
-  frontend_flag &= LOGGER_LOCAL | LOGGER_LOGD | LOGGER_STDERR;
+  transport_flag &= LOGGER_LOCAL | LOGGER_LOGD | LOGGER_STDERR;
 
-  if (__android_log_frontend != frontend_flag) {
-    __android_log_frontend = frontend_flag;
+  if (__android_log_transport != transport_flag) {
+    __android_log_transport = transport_flag;
     __android_log_config_write_close();
     __android_log_config_read_close();
 
@@ -646,22 +646,22 @@ LIBLOG_ABI_PUBLIC int android_set_log_frontend(int frontend_flag) {
     write_to_log = __write_to_log_init;
   }
 
-  retval = __android_log_frontend;
+  retval = __android_log_transport;
 
   __android_log_unlock();
 
   return retval;
 }
 
-LIBLOG_ABI_PUBLIC int android_get_log_frontend() {
+LIBLOG_ABI_PUBLIC int android_get_log_transport() {
   int ret = LOGGER_DEFAULT;
 
   __android_log_lock();
   if (write_to_log == __write_to_log_null) {
     ret = LOGGER_NULL;
   } else {
-    __android_log_frontend &= LOGGER_LOCAL | LOGGER_LOGD | LOGGER_STDERR;
-    ret = __android_log_frontend;
+    __android_log_transport &= LOGGER_LOCAL | LOGGER_LOGD | LOGGER_STDERR;
+    ret = __android_log_transport;
     if ((write_to_log != __write_to_log_init) &&
         (write_to_log != __write_to_log_daemon)) {
       ret = -EINVAL;

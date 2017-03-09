@@ -36,7 +36,7 @@
 #endif
 #include <gtest/gtest.h>
 #include <log/log_event_list.h>
-#include <log/log_frontend.h>
+#include <log/log_transport.h>
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
@@ -255,7 +255,7 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
 }
 
 #if (defined(__ANDROID__) || defined(USING_LOGGER_LOCAL))
-static void print_frontend(const char* prefix, int logger) {
+static void print_transport(const char* prefix, int logger) {
   static const char orstr[] = " | ";
 
   if (!prefix) {
@@ -305,21 +305,21 @@ static void print_frontend(const char* prefix, int logger) {
 // This test makes little sense standalone, and requires the tests ahead
 // and behind us, to make us whole.  We could incorporate a prefix and
 // suffix test to make this standalone, but opted to not complicate this.
-TEST(liblog, android_set_log_frontend) {
+TEST(liblog, android_set_log_transport) {
 #if (defined(__ANDROID__) || defined(USING_LOGGER_LOCAL))
 #ifdef TEST_PREFIX
   TEST_PREFIX
 #endif
 
-  int logger = android_get_log_frontend();
-  print_frontend("android_get_log_frontend = ", logger);
+  int logger = android_get_log_transport();
+  print_transport("android_get_log_transport = ", logger);
   EXPECT_NE(LOGGER_NULL, logger);
 
   int ret;
-  EXPECT_EQ(LOGGER_NULL, ret = android_set_log_frontend(LOGGER_NULL));
-  print_frontend("android_set_log_frontend = ", ret);
-  EXPECT_EQ(LOGGER_NULL, ret = android_get_log_frontend());
-  print_frontend("android_get_log_frontend = ", ret);
+  EXPECT_EQ(LOGGER_NULL, ret = android_set_log_transport(LOGGER_NULL));
+  print_transport("android_set_log_transport = ", ret);
+  EXPECT_EQ(LOGGER_NULL, ret = android_get_log_transport());
+  print_transport("android_get_log_transport = ", ret);
 
   pid_t pid = getpid();
 
@@ -364,10 +364,10 @@ TEST(liblog, android_set_log_frontend) {
 
   android_logger_list_close(logger_list);
 
-  EXPECT_EQ(logger, ret = android_set_log_frontend(logger));
-  print_frontend("android_set_log_frontend = ", ret);
-  EXPECT_EQ(logger, ret = android_get_log_frontend());
-  print_frontend("android_get_log_frontend = ", ret);
+  EXPECT_EQ(logger, ret = android_set_log_transport(logger));
+  print_transport("android_set_log_transport = ", ret);
+  EXPECT_EQ(logger, ret = android_get_log_transport());
+  print_transport("android_get_log_transport = ", ret);
 
   // False negative if liblog.__android_log_btwrite__android_logger_list_read
   // fails above, so we will likely succeed. But we will have so many

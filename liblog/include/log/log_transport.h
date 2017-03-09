@@ -7,15 +7,15 @@
 ** General Public License.
 */
 
-#ifndef _LIBS_LOG_FRONTEND_H
-#define _LIBS_LOG_FRONTEND_H
+#ifndef _LIBS_LOG_TRANSPORT_H
+#define _LIBS_LOG_TRANSPORT_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /*
- * Logging frontends, bit mask to select features. Function returns selection.
+ * Logging transports, bit mask to select features. Function returns selection.
  */
 /* clang-format off */
 #define LOGGER_DEFAULT 0x00
@@ -26,12 +26,12 @@ extern "C" {
 #define LOGGER_STDERR  0x10 /* logs sent to stderr */
 /* clang-format on */
 
-/* Both return the selected frontend flag mask, or negative errno */
-int android_set_log_frontend(int frontend_flag);
-int android_get_log_frontend();
+/* Both return the selected transport flag mask, or negative errno */
+int android_set_log_transport(int transport_flag);
+int android_get_log_transport();
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* _LIBS_LOG_FRONTEND_H */
+#endif /* _LIBS_LOG_TRANSPORT_H */

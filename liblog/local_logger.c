@@ -27,7 +27,7 @@
 #include <sys/types.h>
 
 #include <cutils/list.h> /* template, no library dependency */
-#include <log/log_frontend.h>
+#include <log/log_transport.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 #include <system/thread_defs.h>
@@ -273,7 +273,7 @@ static int writeToLocalAvailable(log_id_t logId) {
 
 /* Android hard coded permitted, system goes to logd */
 #if !defined(__MINGW32__)
-  if (__android_log_frontend == LOGGER_DEFAULT) {
+  if (__android_log_transport == LOGGER_DEFAULT) {
     uid = __android_log_uid();
     if ((uid < AID_APP) && (getpwuid(uid) != NULL)) {
       return -EPERM;

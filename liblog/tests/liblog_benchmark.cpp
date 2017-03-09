@@ -27,7 +27,7 @@
 #include <android-base/file.h>
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
-#include <log/log_frontend.h>
+#include <log/log_transport.h>
 #include <private/android_logger.h>
 
 #include "benchmark.h"
@@ -80,11 +80,11 @@ static void BM_log_maximum(int iters) {
 BENCHMARK(BM_log_maximum);
 
 static void set_log_null() {
-  android_set_log_frontend(LOGGER_NULL);
+  android_set_log_transport(LOGGER_NULL);
 }
 
 static void set_log_default() {
-  android_set_log_frontend(LOGGER_DEFAULT);
+  android_set_log_transport(LOGGER_DEFAULT);
 }
 
 static void BM_log_maximum_null(int iters) {
