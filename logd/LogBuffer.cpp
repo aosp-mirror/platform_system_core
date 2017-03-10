@@ -1078,7 +1078,6 @@ log_time LogBuffer::flushTo(
     SocketClient* reader, const log_time& start, bool privileged, bool security,
     int (*filter)(const LogBufferElement* element, void* arg), void* arg) {
     LogBufferElementCollection::iterator it;
-    log_time max = start;
     uid_t uid = reader->getUid();
 
     pthread_mutex_lock(&mLogElementsLock);
@@ -1087,19 +1086,25 @@ log_time LogBuffer::flushTo(
         // client wants to start from the beginning
         it = mLogElements.begin();
     } else {
+        LogBufferElementCollection::iterator last = mLogElements.begin();
+        // 30 second limit to continue search for out-of-order entries.
+        log_time min = start - log_time(30, 0);
         // Client wants to start from some specified time. Chances are
         // we are better off starting from the end of the time sorted list.
         for (it = mLogElements.end(); it != mLogElements.begin();
              /* do nothing */) {
             --it;
             LogBufferElement* element = *it;
-            if (element->getRealTime() <= start) {
-                it++;
+            if (element->getRealTime() > start) {
+                last = it;
+            } else if (element->getRealTime() < min) {
                 break;
             }
         }
+        it = last;
     }
 
+    log_time max = start;
     // Help detect if the valid message before is from the same source so
     // we can differentiate chatty filter types.
     pid_t lastTid[LOG_ID_MAX] = { 0 };
