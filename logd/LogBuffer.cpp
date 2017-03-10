@@ -27,7 +27,6 @@
 #include <unistd.h>
 
 #include <unordered_map>
-#include <utility>
 
 #include <cutils/properties.h>
 #include <private/android_logger.h>
@@ -182,7 +181,7 @@ static enum match_type identical(LogBufferElement* elem,
     lenr -= avcr - msgr;
     if (lenl != lenr) return DIFFERENT;
     // TODO: After b/35468874 is addressed, revisit "lenl > strlen(avc)"
-    // condition, it might become superflous.
+    // condition, it might become superfluous.
     if (lenl > strlen(avc) &&
         fastcmp<memcmp>(avcl + strlen(avc), avcr + strlen(avc),
                         lenl - strlen(avc))) {
@@ -380,7 +379,7 @@ void LogBuffer::log(LogBufferElement* elem) {
         __predict_true((*it)->getRealTime() <= elem->getRealTime())) {
         mLogElements.push_back(elem);
     } else {
-        uint64_t end = 1;
+        log_time end = log_time::EPOCH;
         bool end_set = false;
         bool end_always = false;
 
@@ -403,7 +402,7 @@ void LogBuffer::log(LogBufferElement* elem) {
             times++;
         }
 
-        if (end_always || (end_set && (end > (*it)->getSequence()))) {
+        if (end_always || (end_set && (end > (*it)->getRealTime()))) {
             mLogElements.push_back(elem);
         } else {
             // should be short as timestamps are localized near end()
@@ -412,12 +411,9 @@ void LogBuffer::log(LogBufferElement* elem) {
                 if (__predict_false(it == mLogElements.begin())) {
                     break;
                 }
-
-                std::swap((*it)->mSequence, elem->mSequence);
-
                 --it;
             } while (((*it)->getRealTime() > elem->getRealTime()) &&
-                     (!end_set || (end <= (*it)->getSequence())));
+                     (!end_set || (end <= (*it)->getRealTime())));
             mLogElements.insert(last, elem);
         }
         LogTimeEntry::unlock();
@@ -594,12 +590,12 @@ class LogBufferElementLast {
     }
 
     void clear(LogBufferElement* element) {
-        uint64_t current =
-            element->getRealTime().nsec() - (EXPIRE_RATELIMIT * NS_PER_SEC);
+        log_time current =
+            element->getRealTime() - log_time(EXPIRE_RATELIMIT, 0);
         for (LogBufferElementMap::iterator it = map.begin(); it != map.end();) {
             LogBufferElement* mapElement = it->second;
             if ((mapElement->getDropped() >= EXPIRE_THRESHOLD) &&
-                (current > mapElement->getRealTime().nsec())) {
+                (current > mapElement->getRealTime())) {
                 it = map.erase(it);
             } else {
                 ++it;
@@ -695,7 +691,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 mLastSet[id] = true;
             }
 
-            if (oldest && (oldest->mStart <= element->getSequence())) {
+            if (oldest && (oldest->mStart <= element->getRealTime().nsec())) {
                 busy = true;
                 if (oldest->mTimeout.tv_sec || oldest->mTimeout.tv_nsec) {
                     oldest->triggerReader_Locked();
@@ -787,7 +783,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         while (it != mLogElements.end()) {
             LogBufferElement* element = *it;
 
-            if (oldest && (oldest->mStart <= element->getSequence())) {
+            if (oldest && (oldest->mStart <= element->getRealTime().nsec())) {
                 busy = true;
                 if (oldest->mTimeout.tv_sec || oldest->mTimeout.tv_nsec) {
                     oldest->triggerReader_Locked();
@@ -941,7 +937,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             mLastSet[id] = true;
         }
 
-        if (oldest && (oldest->mStart <= element->getSequence())) {
+        if (oldest && (oldest->mStart <= element->getRealTime().nsec())) {
             busy = true;
             if (whitelist) {
                 break;
@@ -985,7 +981,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 mLastSet[id] = true;
             }
 
-            if (oldest && (oldest->mStart <= element->getSequence())) {
+            if (oldest && (oldest->mStart <= element->getRealTime().nsec())) {
                 busy = true;
                 if (stats.sizes(id) > (2 * log_buffer_size(id))) {
                     // kick a misbehaving log reader client off the island
@@ -1078,16 +1074,16 @@ unsigned long LogBuffer::getSize(log_id_t id) {
     return retval;
 }
 
-uint64_t LogBuffer::flushTo(
-    SocketClient* reader, const uint64_t start, bool privileged, bool security,
+log_time LogBuffer::flushTo(
+    SocketClient* reader, const log_time& start, bool privileged, bool security,
     int (*filter)(const LogBufferElement* element, void* arg), void* arg) {
     LogBufferElementCollection::iterator it;
-    uint64_t max = start;
+    log_time max = start;
     uid_t uid = reader->getUid();
 
     pthread_mutex_lock(&mLogElementsLock);
 
-    if (start <= 1) {
+    if (start == log_time::EPOCH) {
         // client wants to start from the beginning
         it = mLogElements.begin();
     } else {
@@ -1097,7 +1093,7 @@ uint64_t LogBuffer::flushTo(
              /* do nothing */) {
             --it;
             LogBufferElement* element = *it;
-            if (element->getSequence() <= start) {
+            if (element->getRealTime() <= start) {
                 it++;
                 break;
             }
@@ -1119,7 +1115,7 @@ uint64_t LogBuffer::flushTo(
             continue;
         }
 
-        if (element->getSequence() <= start) {
+        if (element->getRealTime() <= start) {
             continue;
         }
 

@@ -116,57 +116,70 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
         nonBlock = true;
     }
 
-    uint64_t sequence = 1;
-    // Convert realtime to sequence number
-    if (start != log_time::EPOCH) {
-        class LogFindStart {
+    log_time sequence = start;
+    //
+    // This somewhat expensive data validation operation is required
+    // for non-blocking, with timeout.  The incoming timestamp must be
+    // in range of the list, if not, return immediately.  This is
+    // used to prevent us from from getting stuck in timeout processing
+    // with an invalid time.
+    //
+    // Find if time is really present in the logs, monotonic or real, implicit
+    // conversion from monotonic or real as necessary to perform the check.
+    // Exit in the check loop ASAP as you find a transition from older to
+    // newer, but use the last entry found to ensure overlap.
+    //
+    if (nonBlock && (sequence != log_time::EPOCH) && timeout) {
+        class LogFindStart {  // A lambda by another name
+           private:
             const pid_t mPid;
             const unsigned mLogMask;
-            bool startTimeSet;
-            log_time& start;
-            uint64_t& sequence;
-            uint64_t last;
-            bool isMonotonic;
+            bool mStartTimeSet;
+            log_time mStart;
+            log_time& mSequence;
+            log_time mLast;
+            bool mIsMonotonic;
 
            public:
-            LogFindStart(unsigned logMask, pid_t pid, log_time& start,
-                         uint64_t& sequence, bool isMonotonic)
+            LogFindStart(pid_t pid, unsigned logMask, log_time& sequence,
+                         bool isMonotonic)
                 : mPid(pid),
                   mLogMask(logMask),
-                  startTimeSet(false),
-                  start(start),
-                  sequence(sequence),
-                  last(sequence),
-                  isMonotonic(isMonotonic) {
+                  mStartTimeSet(false),
+                  mStart(sequence),
+                  mSequence(sequence),
+                  mLast(sequence),
+                  mIsMonotonic(isMonotonic) {
             }
 
             static int callback(const LogBufferElement* element, void* obj) {
                 LogFindStart* me = reinterpret_cast<LogFindStart*>(obj);
                 if ((!me->mPid || (me->mPid == element->getPid())) &&
                     (me->mLogMask & (1 << element->getLogId()))) {
-                    if (me->start == element->getRealTime()) {
-                        me->sequence = element->getSequence();
-                        me->startTimeSet = true;
+                    log_time real = element->getRealTime();
+                    if (me->mStart == real) {
+                        me->mSequence = real;
+                        me->mStartTimeSet = true;
                         return -1;
-                    } else if (!me->isMonotonic ||
-                               android::isMonotonic(element->getRealTime())) {
-                        if (me->start < element->getRealTime()) {
-                            me->sequence = me->last;
-                            me->startTimeSet = true;
+                    } else if (!me->mIsMonotonic || android::isMonotonic(real)) {
+                        if (me->mStart < real) {
+                            me->mSequence = me->mLast;
+                            me->mStartTimeSet = true;
                             return -1;
                         }
-                        me->last = element->getSequence();
+                        me->mLast = real;
                     } else {
-                        me->last = element->getSequence();
+                        me->mLast = real;
                     }
                 }
                 return false;
             }
 
             bool found() {
-                return startTimeSet;
+                return mStartTimeSet;
             }
-        } logFindStart(logMask, pid, start, sequence,
+
+        } logFindStart(pid, logMask, sequence,
                        logbuf().isMonotonic() && android::isMonotonic(start));
 
         logbuf().flushTo(cli, sequence, FlushCommand::hasReadLogs(cli),
@@ -174,11 +187,8 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
                          logFindStart.callback, &logFindStart);
 
         if (!logFindStart.found()) {
-            if (nonBlock) {
-                doSocketDelete(cli);
-                return false;
-            }
-            sequence = LogBufferElement::getCurrentSequence();
+            doSocketDelete(cli);
+            return false;
         }
     }
 

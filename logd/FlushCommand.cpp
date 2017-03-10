@@ -27,7 +27,7 @@
 #include "LogUtils.h"
 
 FlushCommand::FlushCommand(LogReader& reader, bool nonBlock, unsigned long tail,
-                           unsigned int logMask, pid_t pid, uint64_t start,
+                           unsigned int logMask, pid_t pid, log_time start,
                            uint64_t timeout)
     : mReader(reader),
       mNonBlock(nonBlock),
@@ -35,7 +35,7 @@ FlushCommand::FlushCommand(LogReader& reader, bool nonBlock, unsigned long tail,
       mLogMask(logMask),
       mPid(pid),
       mStart(start),
-      mTimeout((start > 1) ? timeout : 0) {
+      mTimeout((start != log_time::EPOCH) ? timeout : 0) {
 }
 
 // runSocketCommand is called once for every open client on the

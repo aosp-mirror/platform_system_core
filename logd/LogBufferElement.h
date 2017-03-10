@@ -40,7 +40,6 @@ class LogBufferElement {
     const uint32_t mUid;
     const uint32_t mPid;
     const uint32_t mTid;
-    uint64_t mSequence;
     log_time mRealTime;
     char* mMsg;
     union {
@@ -96,18 +95,12 @@ class LogBufferElement {
     const char* getMsg() const {
         return mMsg;
     }
-    uint64_t getSequence(void) const {
-        return mSequence;
-    }
-    static uint64_t getCurrentSequence(void) {
-        return sequence.load(memory_order_relaxed);
-    }
     log_time getRealTime(void) const {
         return mRealTime;
     }
 
-    static const uint64_t FLUSH_ERROR;
-    uint64_t flushTo(SocketClient* writer, LogBuffer* parent, bool privileged,
+    static const log_time FLUSH_ERROR;
+    log_time flushTo(SocketClient* writer, LogBuffer* parent, bool privileged,
                      bool lastSame);
 };
 
