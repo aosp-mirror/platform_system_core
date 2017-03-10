@@ -50,8 +50,8 @@
  * limit (e.g. 1023 characters max).
  *
  * Note that a newline character ("\n") will be appended automatically to your
- * log message, if not already there. It is not possible to send several messages
- * and have them appear on a single line in logcat.
+ * log message, if not already there. It is not possible to send several
+ * messages and have them appear on a single line in logcat.
  *
  * PLEASE USE LOGS WITH MODERATION:
  *
@@ -77,15 +77,15 @@ extern "C" {
  * Android log priority values, in ascending priority order.
  */
 typedef enum android_LogPriority {
-    ANDROID_LOG_UNKNOWN = 0,
-    ANDROID_LOG_DEFAULT,    /* only for SetMinPriority() */
-    ANDROID_LOG_VERBOSE,
-    ANDROID_LOG_DEBUG,
-    ANDROID_LOG_INFO,
-    ANDROID_LOG_WARN,
-    ANDROID_LOG_ERROR,
-    ANDROID_LOG_FATAL,
-    ANDROID_LOG_SILENT,     /* only for SetMinPriority(); must be last */
+  ANDROID_LOG_UNKNOWN = 0,
+  ANDROID_LOG_DEFAULT, /* only for SetMinPriority() */
+  ANDROID_LOG_VERBOSE,
+  ANDROID_LOG_DEBUG,
+  ANDROID_LOG_INFO,
+  ANDROID_LOG_WARN,
+  ANDROID_LOG_ERROR,
+  ANDROID_LOG_FATAL,
+  ANDROID_LOG_SILENT, /* only for SetMinPriority(); must be last */
 } android_LogPriority;
 
 /*
@@ -96,16 +96,16 @@ int __android_log_write(int prio, const char* tag, const char* text);
 /*
  * Send a formatted string to the log, used like printf(fmt,...)
  */
-int __android_log_print(int prio, const char* tag,  const char* fmt, ...)
+int __android_log_print(int prio, const char* tag, const char* fmt, ...)
 #if defined(__GNUC__)
 #ifdef __USE_MINGW_ANSI_STDIO
 #if __USE_MINGW_ANSI_STDIO
-    __attribute__ ((__format__(gnu_printf, 3, 4)))
+    __attribute__((__format__(gnu_printf, 3, 4)))
 #else
-    __attribute__ ((__format__(printf, 3, 4)))
+    __attribute__((__format__(printf, 3, 4)))
 #endif
 #else
-    __attribute__ ((__format__(printf, 3, 4)))
+    __attribute__((__format__(printf, 3, 4)))
 #endif
 #endif
     ;
@@ -114,17 +114,16 @@ int __android_log_print(int prio, const char* tag,  const char* fmt, ...)
  * A variant of __android_log_print() that takes a va_list to list
  * additional parameters.
  */
-int __android_log_vprint(int prio, const char* tag,
-                         const char* fmt, va_list ap)
+int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap)
 #if defined(__GNUC__)
 #ifdef __USE_MINGW_ANSI_STDIO
 #if __USE_MINGW_ANSI_STDIO
-    __attribute__ ((__format__(gnu_printf, 3, 0)))
+    __attribute__((__format__(gnu_printf, 3, 0)))
 #else
-    __attribute__ ((__format__(printf, 3, 0)))
+    __attribute__((__format__(printf, 3, 0)))
 #endif
 #else
-    __attribute__ ((__format__(printf, 3, 0)))
+    __attribute__((__format__(printf, 3, 0)))
 #endif
 #endif
     ;
@@ -133,18 +132,18 @@ int __android_log_vprint(int prio, const char* tag,
  * Log an assertion failure and abort the process to have a chance
  * to inspect it if a debugger is attached. This uses the FATAL priority.
  */
-void __android_log_assert(const char* cond, const char* tag,
-                          const char* fmt, ...)
+void __android_log_assert(const char* cond, const char* tag, const char* fmt,
+                          ...)
 #if defined(__GNUC__)
-    __attribute__ ((__noreturn__))
+    __attribute__((__noreturn__))
 #ifdef __USE_MINGW_ANSI_STDIO
 #if __USE_MINGW_ANSI_STDIO
-    __attribute__ ((__format__(gnu_printf, 3, 4)))
+    __attribute__((__format__(gnu_printf, 3, 4)))
 #else
-    __attribute__ ((__format__(printf, 3, 4)))
+    __attribute__((__format__(printf, 3, 4)))
 #endif
 #else
-    __attribute__ ((__format__(printf, 3, 4)))
+    __attribute__((__format__(printf, 3, 4)))
 #endif
 #endif
     ;

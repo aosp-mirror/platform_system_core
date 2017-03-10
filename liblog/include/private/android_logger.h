@@ -31,8 +31,8 @@ extern "C++" {
 }
 #endif
 
-#include <log/log_event_list.h>
 #include <log/log.h>
+#include <log/log_event_list.h>
 
 #define LOGGER_MAGIC 'l'
 
@@ -42,46 +42,46 @@ extern "C" {
 
 /* Header Structure to pstore */
 typedef struct __attribute__((__packed__)) {
-    uint8_t magic;
-    uint16_t len;
-    uint16_t uid;
-    uint16_t pid;
+  uint8_t magic;
+  uint16_t len;
+  uint16_t uid;
+  uint16_t pid;
 } android_pmsg_log_header_t;
 
 /* Header Structure to logd, and second header for pstore */
 typedef struct __attribute__((__packed__)) {
-    typeof_log_id_t id;
-    uint16_t tid;
-    log_time realtime;
+  typeof_log_id_t id;
+  uint16_t tid;
+  log_time realtime;
 } android_log_header_t;
 
 /* Event Header Structure to logd */
 typedef struct __attribute__((__packed__)) {
-    int32_t tag;  // Little Endian Order
+  int32_t tag;  // Little Endian Order
 } android_event_header_t;
 
 /* Event payload EVENT_TYPE_INT */
 typedef struct __attribute__((__packed__)) {
-    int8_t type;  // EVENT_TYPE_INT
-    int32_t data; // Little Endian Order
+  int8_t type;   // EVENT_TYPE_INT
+  int32_t data;  // Little Endian Order
 } android_event_int_t;
 
 /* Event with single EVENT_TYPE_INT */
 typedef struct __attribute__((__packed__)) {
-    android_event_header_t header;
-    android_event_int_t payload;
+  android_event_header_t header;
+  android_event_int_t payload;
 } android_log_event_int_t;
 
 /* Event payload EVENT_TYPE_LONG */
 typedef struct __attribute__((__packed__)) {
-    int8_t type;  // EVENT_TYPE_LONG
-    int64_t data; // Little Endian Order
+  int8_t type;   // EVENT_TYPE_LONG
+  int64_t data;  // Little Endian Order
 } android_event_long_t;
 
 /* Event with single EVENT_TYPE_LONG */
 typedef struct __attribute__((__packed__)) {
-    android_event_header_t header;
-    android_event_long_t payload;
+  android_event_header_t header;
+  android_event_long_t payload;
 } android_log_event_long_t;
 
 /*
@@ -97,41 +97,39 @@ typedef struct __attribute__((__packed__)) {
  */
 
 typedef struct __attribute__((__packed__)) {
-    int8_t type;    // EVENT_TYPE_STRING;
-    int32_t length; // Little Endian Order
-    char data[];
+  int8_t type;     // EVENT_TYPE_STRING;
+  int32_t length;  // Little Endian Order
+  char data[];
 } android_event_string_t;
 
 /* Event with single EVENT_TYPE_STRING */
 typedef struct __attribute__((__packed__)) {
-    android_event_header_t header;
-    int8_t type;    // EVENT_TYPE_STRING;
-    int32_t length; // Little Endian Order
-    char data[];
+  android_event_header_t header;
+  int8_t type;     // EVENT_TYPE_STRING;
+  int32_t length;  // Little Endian Order
+  char data[];
 } android_log_event_string_t;
 
 #define ANDROID_LOG_PMSG_FILE_MAX_SEQUENCE 256 /* 1MB file */
-#define ANDROID_LOG_PMSG_FILE_SEQUENCE     1000
+#define ANDROID_LOG_PMSG_FILE_SEQUENCE 1000
 
-ssize_t __android_log_pmsg_file_write(
-        log_id_t logId,
-        char prio,
-        const char* filename,
-        const char* buf, size_t len);
+ssize_t __android_log_pmsg_file_write(log_id_t logId, char prio,
+                                      const char* filename, const char* buf,
+                                      size_t len);
 
-#define LOG_ID_ANY      ((log_id_t)-1)
+#define LOG_ID_ANY ((log_id_t)-1)
 #define ANDROID_LOG_ANY ANDROID_LOG_UNKNOWN
 
 /* first 5 arguments match __android_log_msg_file_write, a cast is safe */
-typedef ssize_t (*__android_log_pmsg_file_read_fn)(
-        log_id_t logId,
-        char prio,
-        const char* filename,
-        const char* buf, size_t len, void* arg);
+typedef ssize_t (*__android_log_pmsg_file_read_fn)(log_id_t logId, char prio,
+                                                   const char* filename,
+                                                   const char* buf, size_t len,
+                                                   void* arg);
 
-ssize_t __android_log_pmsg_file_read(
-        log_id_t logId, char prio, const char* prefix,
-        __android_log_pmsg_file_read_fn fn, void* arg);
+ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio,
+                                     const char* prefix,
+                                     __android_log_pmsg_file_read_fn fn,
+                                     void* arg);
 
 int __android_log_security_bwrite(int32_t tag, const void* payload, size_t len);
 int __android_log_security_bswrite(int32_t tag, const char* payload);
@@ -140,14 +138,15 @@ int __android_log_security(); /* Device Owner is present */
 int __android_log_is_debuggable();
 
 #define BOOL_DEFAULT_FLAG_TRUE_FALSE 0x1
-#define BOOL_DEFAULT_FALSE       0x0     /* false if property not present   */
-#define BOOL_DEFAULT_TRUE        0x1     /* true if property not present    */
-#define BOOL_DEFAULT_FLAG_PERSIST    0x2 /* <key>, persist.<key>, ro.<key>  */
-#define BOOL_DEFAULT_FLAG_ENG        0x4 /* off for user                    */
-#define BOOL_DEFAULT_FLAG_SVELTE     0x8 /* off for low_ram                 */
+#define BOOL_DEFAULT_FALSE 0x0        /* false if property not present   */
+#define BOOL_DEFAULT_TRUE 0x1         /* true if property not present    */
+#define BOOL_DEFAULT_FLAG_PERSIST 0x2 /* <key>, persist.<key>, ro.<key>  */
+#define BOOL_DEFAULT_FLAG_ENG 0x4     /* off for user                    */
+#define BOOL_DEFAULT_FLAG_SVELTE 0x8  /* off for low_ram                 */
 bool __android_logger_property_get_bool(const char* key, int flag);
 
-#define LOG_BUFFER_SIZE (256 * 1024) /* Tuned with ro.logd.size per-platform */
+#define LOG_BUFFER_SIZE (256 * 1024) /* Tuned with ro.logd.size per-platform \
+                                      */
 #define LOG_BUFFER_MIN_SIZE (64 * 1024UL)
 #define LOG_BUFFER_MAX_SIZE (256 * 1024 * 1024UL)
 unsigned long __android_logger_get_buffer_size(log_id_t logId);
@@ -163,24 +162,26 @@ int android_log_write_list_buffer(android_log_context ctx, const char** msg);
 /* android_log_context C++ helpers */
 extern "C++" {
 class __android_log_event_list : public android_log_event_list {
-    __android_log_event_list(const android_log_event_list&) = delete;
-    void operator =(const __android_log_event_list&) = delete;
+  __android_log_event_list(const android_log_event_list&) = delete;
+  void operator=(const __android_log_event_list&) = delete;
 
-public:
-    explicit __android_log_event_list(int tag) : android_log_event_list(tag) { }
-    explicit __android_log_event_list(log_msg& log_msg) : android_log_event_list(log_msg) { }
+ public:
+  explicit __android_log_event_list(int tag) : android_log_event_list(tag) {
+  }
+  explicit __android_log_event_list(log_msg& log_msg)
+      : android_log_event_list(log_msg) {
+  }
 
 #if defined(_USING_LIBCXX)
-    operator std::string() {
-        if (ret) return std::string("");
-        const char* cp = NULL;
-        ssize_t len = android_log_write_list_buffer(ctx, &cp);
-        if (len < 0) ret = len;
-        if (!cp || (len <= 0)) return std::string("");
-        return std::string(cp, len);
-    }
+  operator std::string() {
+    if (ret) return std::string("");
+    const char* cp = NULL;
+    ssize_t len = android_log_write_list_buffer(ctx, &cp);
+    if (len < 0) ret = len;
+    if (!cp || (len <= 0)) return std::string("");
+    return std::string(cp, len);
+  }
 #endif
-
 };
 }
 #endif

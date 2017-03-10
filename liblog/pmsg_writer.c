@@ -36,155 +36,149 @@
 static int pmsgOpen();
 static void pmsgClose();
 static int pmsgAvailable(log_id_t logId);
-static int pmsgWrite(log_id_t logId, struct timespec *ts,
-                      struct iovec *vec, size_t nr);
+static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
+                     size_t nr);
 
 LIBLOG_HIDDEN struct android_log_transport_write pmsgLoggerWrite = {
-    .node = { &pmsgLoggerWrite.node, &pmsgLoggerWrite.node },
-    .context.fd = -1,
-    .name = "pmsg",
-    .available = pmsgAvailable,
-    .open = pmsgOpen,
-    .close = pmsgClose,
-    .write = pmsgWrite,
+  .node = { &pmsgLoggerWrite.node, &pmsgLoggerWrite.node },
+  .context.fd = -1,
+  .name = "pmsg",
+  .available = pmsgAvailable,
+  .open = pmsgOpen,
+  .close = pmsgClose,
+  .write = pmsgWrite,
 };
 
-static int pmsgOpen()
-{
-    int fd = atomic_load(&pmsgLoggerWrite.context.fd);
-    if (fd < 0) {
-        int i;
+static int pmsgOpen() {
+  int fd = atomic_load(&pmsgLoggerWrite.context.fd);
+  if (fd < 0) {
+    int i;
 
-        fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
-        i = atomic_exchange(&pmsgLoggerWrite.context.fd, fd);
-        if ((i >= 0) && (i != fd)) {
-            close(i);
-        }
+    fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
+    i = atomic_exchange(&pmsgLoggerWrite.context.fd, fd);
+    if ((i >= 0) && (i != fd)) {
+      close(i);
     }
+  }
 
-    return fd;
+  return fd;
 }
 
-static void pmsgClose()
-{
-    int fd = atomic_exchange(&pmsgLoggerWrite.context.fd, -1);
-    if (fd >= 0) {
-        close(fd);
-    }
+static void pmsgClose() {
+  int fd = atomic_exchange(&pmsgLoggerWrite.context.fd, -1);
+  if (fd >= 0) {
+    close(fd);
+  }
 }
 
-static int pmsgAvailable(log_id_t logId)
-{
-    if (logId > LOG_ID_SECURITY) {
-        return -EINVAL;
+static int pmsgAvailable(log_id_t logId) {
+  if (logId > LOG_ID_SECURITY) {
+    return -EINVAL;
+  }
+  if ((logId != LOG_ID_SECURITY) && (logId != LOG_ID_EVENTS) &&
+      !__android_log_is_debuggable()) {
+    return -EINVAL;
+  }
+  if (atomic_load(&pmsgLoggerWrite.context.fd) < 0) {
+    if (access("/dev/pmsg0", W_OK) == 0) {
+      return 0;
     }
-    if ((logId != LOG_ID_SECURITY) &&
-            (logId != LOG_ID_EVENTS) &&
-            !__android_log_is_debuggable()) {
-        return -EINVAL;
-    }
-    if (atomic_load(&pmsgLoggerWrite.context.fd) < 0) {
-        if (access("/dev/pmsg0", W_OK) == 0) {
-            return 0;
-        }
-        return -EBADF;
-    }
-    return 1;
+    return -EBADF;
+  }
+  return 1;
 }
 
 /*
  * Extract a 4-byte value from a byte stream.
  */
-static inline uint32_t get4LE(const uint8_t* src)
-{
-    return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
+static inline uint32_t get4LE(const uint8_t* src) {
+  return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
 }
 
-static int pmsgWrite(log_id_t logId, struct timespec *ts,
-                      struct iovec *vec, size_t nr)
-{
-    static const unsigned headerLength = 2;
-    struct iovec newVec[nr + headerLength];
-    android_log_header_t header;
-    android_pmsg_log_header_t pmsgHeader;
-    size_t i, payloadSize;
-    ssize_t ret;
+static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
+                     size_t nr) {
+  static const unsigned headerLength = 2;
+  struct iovec newVec[nr + headerLength];
+  android_log_header_t header;
+  android_pmsg_log_header_t pmsgHeader;
+  size_t i, payloadSize;
+  ssize_t ret;
 
-    if ((logId == LOG_ID_EVENTS) && !__android_log_is_debuggable()) {
-        if (vec[0].iov_len < 4) {
-            return -EINVAL;
-        }
-
-        if (SNET_EVENT_LOG_TAG != get4LE(vec[0].iov_base)) {
-            return -EPERM;
-        }
+  if ((logId == LOG_ID_EVENTS) && !__android_log_is_debuggable()) {
+    if (vec[0].iov_len < 4) {
+      return -EINVAL;
     }
 
-    if (atomic_load(&pmsgLoggerWrite.context.fd) < 0) {
-        return -EBADF;
+    if (SNET_EVENT_LOG_TAG != get4LE(vec[0].iov_base)) {
+      return -EPERM;
     }
+  }
 
-    /*
-     *  struct {
-     *      // what we provide to pstore
-     *      android_pmsg_log_header_t pmsgHeader;
-     *      // what we provide to file
-     *      android_log_header_t header;
-     *      // caller provides
-     *      union {
-     *          struct {
-     *              char     prio;
-     *              char     payload[];
-     *          } string;
-     *          struct {
-     *              uint32_t tag
-     *              char     payload[];
-     *          } binary;
-     *      };
-     *  };
-     */
+  if (atomic_load(&pmsgLoggerWrite.context.fd) < 0) {
+    return -EBADF;
+  }
 
-    pmsgHeader.magic = LOGGER_MAGIC;
-    pmsgHeader.len = sizeof(pmsgHeader) + sizeof(header);
-    pmsgHeader.uid = __android_log_uid();
-    pmsgHeader.pid = getpid();
+  /*
+   *  struct {
+   *      // what we provide to pstore
+   *      android_pmsg_log_header_t pmsgHeader;
+   *      // what we provide to file
+   *      android_log_header_t header;
+   *      // caller provides
+   *      union {
+   *          struct {
+   *              char     prio;
+   *              char     payload[];
+   *          } string;
+   *          struct {
+   *              uint32_t tag
+   *              char     payload[];
+   *          } binary;
+   *      };
+   *  };
+   */
 
-    header.id = logId;
-    header.tid = gettid();
-    header.realtime.tv_sec = ts->tv_sec;
-    header.realtime.tv_nsec = ts->tv_nsec;
+  pmsgHeader.magic = LOGGER_MAGIC;
+  pmsgHeader.len = sizeof(pmsgHeader) + sizeof(header);
+  pmsgHeader.uid = __android_log_uid();
+  pmsgHeader.pid = getpid();
 
-    newVec[0].iov_base   = (unsigned char *)&pmsgHeader;
-    newVec[0].iov_len    = sizeof(pmsgHeader);
-    newVec[1].iov_base   = (unsigned char *)&header;
-    newVec[1].iov_len    = sizeof(header);
+  header.id = logId;
+  header.tid = gettid();
+  header.realtime.tv_sec = ts->tv_sec;
+  header.realtime.tv_nsec = ts->tv_nsec;
 
-    for (payloadSize = 0, i = headerLength; i < nr + headerLength; i++) {
-        newVec[i].iov_base = vec[i - headerLength].iov_base;
-        payloadSize += newVec[i].iov_len = vec[i - headerLength].iov_len;
+  newVec[0].iov_base = (unsigned char*)&pmsgHeader;
+  newVec[0].iov_len = sizeof(pmsgHeader);
+  newVec[1].iov_base = (unsigned char*)&header;
+  newVec[1].iov_len = sizeof(header);
 
-        if (payloadSize > LOGGER_ENTRY_MAX_PAYLOAD) {
-            newVec[i].iov_len -= payloadSize - LOGGER_ENTRY_MAX_PAYLOAD;
-            if (newVec[i].iov_len) {
-                ++i;
-            }
-            payloadSize = LOGGER_ENTRY_MAX_PAYLOAD;
-            break;
-        }
+  for (payloadSize = 0, i = headerLength; i < nr + headerLength; i++) {
+    newVec[i].iov_base = vec[i - headerLength].iov_base;
+    payloadSize += newVec[i].iov_len = vec[i - headerLength].iov_len;
+
+    if (payloadSize > LOGGER_ENTRY_MAX_PAYLOAD) {
+      newVec[i].iov_len -= payloadSize - LOGGER_ENTRY_MAX_PAYLOAD;
+      if (newVec[i].iov_len) {
+        ++i;
+      }
+      payloadSize = LOGGER_ENTRY_MAX_PAYLOAD;
+      break;
     }
-    pmsgHeader.len += payloadSize;
+  }
+  pmsgHeader.len += payloadSize;
 
-    ret = TEMP_FAILURE_RETRY(writev(atomic_load(&pmsgLoggerWrite.context.fd),
-                                    newVec, i));
-    if (ret < 0) {
-        ret = errno ? -errno : -ENOTCONN;
-    }
+  ret = TEMP_FAILURE_RETRY(
+      writev(atomic_load(&pmsgLoggerWrite.context.fd), newVec, i));
+  if (ret < 0) {
+    ret = errno ? -errno : -ENOTCONN;
+  }
 
-    if (ret > (ssize_t)(sizeof(header) + sizeof(pmsgHeader))) {
-        ret -= sizeof(header) - sizeof(pmsgHeader);
-    }
+  if (ret > (ssize_t)(sizeof(header) + sizeof(pmsgHeader))) {
+    ret -= sizeof(header) - sizeof(pmsgHeader);
+  }
 
-    return ret;
+  return ret;
 }
 
 /*
@@ -197,116 +191,116 @@ static int pmsgWrite(log_id_t logId, struct timespec *ts,
  * Will hijack the header.realtime.tv_nsec field for a sequence number in usec.
  */
 
-static inline const char *strnrchr(const char *buf, size_t len, char c) {
-    const char *cp = buf + len;
-    while ((--cp > buf) && (*cp != c));
-    if (cp <= buf) {
-        return buf + len;
-    }
-    return cp;
+static inline const char* strnrchr(const char* buf, size_t len, char c) {
+  const char* cp = buf + len;
+  while ((--cp > buf) && (*cp != c))
+    ;
+  if (cp <= buf) {
+    return buf + len;
+  }
+  return cp;
 }
 
 /* Write a buffer as filename references (tag = <basedir>:<basename>) */
-LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_write(
-        log_id_t logId,
-        char prio,
-        const char *filename,
-        const char *buf, size_t len) {
-    bool weOpened;
-    size_t length, packet_len;
-    const char *tag;
-    char *cp, *slash;
-    struct timespec ts;
-    struct iovec vec[3];
+LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_write(log_id_t logId,
+                                                         char prio,
+                                                         const char* filename,
+                                                         const char* buf,
+                                                         size_t len) {
+  bool weOpened;
+  size_t length, packet_len;
+  const char* tag;
+  char *cp, *slash;
+  struct timespec ts;
+  struct iovec vec[3];
 
-    /* Make sure the logId value is not a bad idea */
-    if ((logId == LOG_ID_KERNEL) ||       /* Verbotten */
-            (logId == LOG_ID_EVENTS) ||   /* Do not support binary content */
-            (logId == LOG_ID_SECURITY) || /* Bad idea to allow */
-            ((unsigned)logId >= 32)) {    /* fit within logMask on arch32 */
-        return -EINVAL;
-    }
+  /* Make sure the logId value is not a bad idea */
+  if ((logId == LOG_ID_KERNEL) ||   /* Verbotten */
+      (logId == LOG_ID_EVENTS) ||   /* Do not support binary content */
+      (logId == LOG_ID_SECURITY) || /* Bad idea to allow */
+      ((unsigned)logId >= 32)) {    /* fit within logMask on arch32 */
+    return -EINVAL;
+  }
 
-    clock_gettime(android_log_clockid(), &ts);
+  clock_gettime(android_log_clockid(), &ts);
 
-    cp = strdup(filename);
-    if (!cp) {
-        return -ENOMEM;
-    }
+  cp = strdup(filename);
+  if (!cp) {
+    return -ENOMEM;
+  }
 
-    tag = cp;
+  tag = cp;
+  slash = strrchr(cp, '/');
+  if (slash) {
+    *slash = ':';
     slash = strrchr(cp, '/');
     if (slash) {
-        *slash = ':';
-        slash = strrchr(cp, '/');
-        if (slash) {
-            tag = slash + 1;
-        }
+      tag = slash + 1;
+    }
+  }
+
+  length = strlen(tag) + 1;
+  packet_len = LOGGER_ENTRY_MAX_PAYLOAD - sizeof(char) - length;
+
+  vec[0].iov_base = &prio;
+  vec[0].iov_len = sizeof(char);
+  vec[1].iov_base = (unsigned char*)tag;
+  vec[1].iov_len = length;
+
+  weOpened = false;
+  for (ts.tv_nsec = 0, length = len; length;
+       ts.tv_nsec += ANDROID_LOG_PMSG_FILE_SEQUENCE) {
+    ssize_t ret;
+    size_t transfer;
+
+    if ((ts.tv_nsec / ANDROID_LOG_PMSG_FILE_SEQUENCE) >=
+        ANDROID_LOG_PMSG_FILE_MAX_SEQUENCE) {
+      len -= length;
+      break;
     }
 
-    length = strlen(tag) + 1;
-    packet_len = LOGGER_ENTRY_MAX_PAYLOAD - sizeof(char) - length;
-
-    vec[0].iov_base = &prio;
-    vec[0].iov_len  = sizeof(char);
-    vec[1].iov_base = (unsigned char *)tag;
-    vec[1].iov_len  = length;
-
-    weOpened = false;
-    for (ts.tv_nsec = 0, length = len;
-            length;
-            ts.tv_nsec += ANDROID_LOG_PMSG_FILE_SEQUENCE) {
-        ssize_t ret;
-        size_t transfer;
-
-        if ((ts.tv_nsec / ANDROID_LOG_PMSG_FILE_SEQUENCE) >=
-                ANDROID_LOG_PMSG_FILE_MAX_SEQUENCE) {
-            len -= length;
-            break;
-        }
-
-        transfer = length;
-        if (transfer > packet_len) {
-            transfer = strnrchr(buf, packet_len - 1, '\n') - buf;
-            if ((transfer < length) && (buf[transfer] == '\n')) {
-                ++transfer;
-            }
-        }
-
-        vec[2].iov_base = (unsigned char *)buf;
-        vec[2].iov_len  = transfer;
-
-        if (atomic_load(&pmsgLoggerWrite.context.fd) < 0) {
-            if (!weOpened) { /* Impossible for weOpened = true here */
-                __android_log_lock();
-            }
-            weOpened = atomic_load(&pmsgLoggerWrite.context.fd) < 0;
-            if (!weOpened) {
-                __android_log_unlock();
-            } else if (pmsgOpen() < 0) {
-                __android_log_unlock();
-                free(cp);
-                return -EBADF;
-            }
-        }
-
-        ret = pmsgWrite(logId, &ts, vec, sizeof(vec) / sizeof(vec[0]));
-
-        if (ret <= 0) {
-            if (weOpened) {
-                pmsgClose();
-                __android_log_unlock();
-            }
-            free(cp);
-            return ret ? ret : (len - length);
-        }
-        length -= transfer;
-        buf += transfer;
+    transfer = length;
+    if (transfer > packet_len) {
+      transfer = strnrchr(buf, packet_len - 1, '\n') - buf;
+      if ((transfer < length) && (buf[transfer] == '\n')) {
+        ++transfer;
+      }
     }
-    if (weOpened) {
+
+    vec[2].iov_base = (unsigned char*)buf;
+    vec[2].iov_len = transfer;
+
+    if (atomic_load(&pmsgLoggerWrite.context.fd) < 0) {
+      if (!weOpened) { /* Impossible for weOpened = true here */
+        __android_log_lock();
+      }
+      weOpened = atomic_load(&pmsgLoggerWrite.context.fd) < 0;
+      if (!weOpened) {
+        __android_log_unlock();
+      } else if (pmsgOpen() < 0) {
+        __android_log_unlock();
+        free(cp);
+        return -EBADF;
+      }
+    }
+
+    ret = pmsgWrite(logId, &ts, vec, sizeof(vec) / sizeof(vec[0]));
+
+    if (ret <= 0) {
+      if (weOpened) {
         pmsgClose();
         __android_log_unlock();
+      }
+      free(cp);
+      return ret ? ret : (len - length);
     }
-    free(cp);
-    return len;
+    length -= transfer;
+    buf += transfer;
+  }
+  if (weOpened) {
+    pmsgClose();
+    __android_log_unlock();
+  }
+  free(cp);
+  return len;
 }
