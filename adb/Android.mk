@@ -145,6 +145,7 @@ LOCAL_CFLAGS_darwin := $(LIBADB_darwin_CFLAGS)
 LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
     adb_auth_host.cpp \
+    transport_mdns.cpp \
 
 LOCAL_SRC_FILES_darwin := $(LIBADB_darwin_SRC_FILES)
 LOCAL_SRC_FILES_linux := $(LIBADB_linux_SRC_FILES)
@@ -154,7 +155,7 @@ LOCAL_SANITIZE := $(adb_host_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
-LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase
+LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase libmdnssd
 LOCAL_STATIC_LIBRARIES_linux := libusb
 LOCAL_STATIC_LIBRARIES_darwin := libusb
 
@@ -176,7 +177,7 @@ LOCAL_SRC_FILES := \
     shell_service_test.cpp \
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
-LOCAL_STATIC_LIBRARIES := libadbd libcrypto_utils libcrypto libusb
+LOCAL_STATIC_LIBRARIES := libadbd libcrypto_utils libcrypto libusb libmdnssd
 LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
 include $(BUILD_NATIVE_TEST)
 
@@ -224,7 +225,8 @@ LOCAL_STATIC_LIBRARIES := \
     libcrypto \
     libcutils \
     libdiagnose_usb \
-    libgmock_host \
+    libmdnssd \
+    libgmock_host
 
 LOCAL_STATIC_LIBRARIES_linux := libusb
 LOCAL_STATIC_LIBRARIES_darwin := libusb
@@ -292,6 +294,7 @@ LOCAL_STATIC_LIBRARIES := \
     libcrypto \
     libdiagnose_usb \
     liblog \
+    libmdnssd
 
 # Don't use libcutils on Windows.
 LOCAL_STATIC_LIBRARIES_darwin := libcutils
@@ -325,6 +328,7 @@ LOCAL_CLANG := true
 
 LOCAL_SRC_FILES := \
     daemon/main.cpp \
+    daemon/mdns.cpp \
     services.cpp \
     file_sync_service.cpp \
     framebuffer_service.cpp \
@@ -372,6 +376,7 @@ LOCAL_STATIC_LIBRARIES := \
     libcrypto_utils \
     libcrypto \
     libminijail \
+    libmdnssd \
     libdebuggerd_handler \
 
 include $(BUILD_EXECUTABLE)

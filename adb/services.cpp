@@ -377,45 +377,6 @@ static void wait_for_state(int fd, void* data) {
     D("wait_for_state is done");
 }
 
-static void connect_device(const std::string& address, std::string* response) {
-    if (address.empty()) {
-        *response = "empty address";
-        return;
-    }
-
-    std::string serial;
-    std::string host;
-    int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
-    if (!android::base::ParseNetAddress(address, &host, &port, &serial, response)) {
-        return;
-    }
-
-    std::string error;
-    int fd = network_connect(host.c_str(), port, SOCK_STREAM, 10, &error);
-    if (fd == -1) {
-        *response = android::base::StringPrintf("unable to connect to %s: %s",
-                                                serial.c_str(), error.c_str());
-        return;
-    }
-
-    D("client: connected %s remote on fd %d", serial.c_str(), fd);
-    close_on_exec(fd);
-    disable_tcp_nagle(fd);
-
-    // Send a TCP keepalive ping to the device every second so we can detect disconnects.
-    if (!set_tcp_keepalive(fd, 1)) {
-        D("warning: failed to configure TCP keepalives (%s)", strerror(errno));
-    }
-
-    int ret = register_socket_transport(fd, serial.c_str(), port, 0);
-    if (ret < 0) {
-        adb_close(fd);
-        *response = android::base::StringPrintf("already connected to %s", serial.c_str());
-    } else {
-        *response = android::base::StringPrintf("connected to %s", serial.c_str());
-    }
-}
-
 void connect_emulator(const std::string& port_spec, std::string* response) {
     std::vector<std::string> pieces = android::base::Split(port_spec, ",");
     if (pieces.size() != 2) {
