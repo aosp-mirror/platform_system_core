@@ -21,29 +21,29 @@
 
 TEST(libc, __pstore_append) {
 #ifdef __ANDROID__
-    FILE *fp;
-    ASSERT_TRUE(NULL != (fp = fopen("/dev/pmsg0", "a")));
-    static const char message[] = "libc.__pstore_append\n";
-    ASSERT_EQ((size_t)1, fwrite(message, sizeof(message), 1, fp));
-    int fflushReturn = fflush(fp);
-    int fflushErrno = fflushReturn ? errno : 0;
-    ASSERT_EQ(0, fflushReturn);
-    ASSERT_EQ(0, fflushErrno);
-    int fcloseReturn = fclose(fp);
-    int fcloseErrno = fcloseReturn ? errno : 0;
-    ASSERT_EQ(0, fcloseReturn);
-    ASSERT_EQ(0, fcloseErrno);
-    if ((fcloseErrno == ENOMEM) || (fflushErrno == ENOMEM)) {
-        fprintf(stderr,
-                "Kernel does not have space allocated to pmsg pstore driver configured\n"
-               );
-    }
-    if (!fcloseReturn && !fcloseErrno && !fflushReturn && !fflushReturn) {
-        fprintf(stderr,
-                "Reboot, ensure string libc.__pstore_append is in /sys/fs/pstore/pmsg-ramoops-0\n"
-               );
-    }
+  FILE* fp;
+  ASSERT_TRUE(NULL != (fp = fopen("/dev/pmsg0", "a")));
+  static const char message[] = "libc.__pstore_append\n";
+  ASSERT_EQ((size_t)1, fwrite(message, sizeof(message), 1, fp));
+  int fflushReturn = fflush(fp);
+  int fflushErrno = fflushReturn ? errno : 0;
+  ASSERT_EQ(0, fflushReturn);
+  ASSERT_EQ(0, fflushErrno);
+  int fcloseReturn = fclose(fp);
+  int fcloseErrno = fcloseReturn ? errno : 0;
+  ASSERT_EQ(0, fcloseReturn);
+  ASSERT_EQ(0, fcloseErrno);
+  if ((fcloseErrno == ENOMEM) || (fflushErrno == ENOMEM)) {
+    fprintf(stderr,
+            "Kernel does not have space allocated to pmsg pstore driver "
+            "configured\n");
+  }
+  if (!fcloseReturn && !fcloseErrno && !fflushReturn && !fflushReturn) {
+    fprintf(stderr,
+            "Reboot, ensure string libc.__pstore_append is in "
+            "/sys/fs/pstore/pmsg-ramoops-0\n");
+  }
 #else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
+  GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }

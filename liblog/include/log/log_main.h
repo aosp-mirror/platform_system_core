@@ -56,21 +56,19 @@ extern "C" {
 #define __predict_false(exp) __builtin_expect((exp) != 0, 0)
 #endif
 
-#define android_writeLog(prio, tag, text) \
-    __android_log_write(prio, tag, text)
+#define android_writeLog(prio, tag, text) __android_log_write(prio, tag, text)
 
 #define android_printLog(prio, tag, ...) \
-    __android_log_print(prio, tag, __VA_ARGS__)
+  __android_log_print(prio, tag, __VA_ARGS__)
 
 #define android_vprintLog(prio, cond, tag, ...) \
-    __android_log_vprint(prio, tag, __VA_ARGS__)
+  __android_log_vprint(prio, tag, __VA_ARGS__)
 
 /*
  * Log macro that allows you to specify a number for the priority.
  */
 #ifndef LOG_PRI
-#define LOG_PRI(priority, tag, ...) \
-    android_printLog(priority, tag, __VA_ARGS__)
+#define LOG_PRI(priority, tag, ...) android_printLog(priority, tag, __VA_ARGS__)
 #endif
 
 /*
@@ -78,7 +76,7 @@ extern "C" {
  */
 #ifndef LOG_PRI_VA
 #define LOG_PRI_VA(priority, tag, fmt, args) \
-    android_vprintLog(priority, NULL, tag, fmt, args)
+  android_vprintLog(priority, NULL, tag, fmt, args)
 #endif
 
 /* --------------------------------------------------------------------- */
@@ -91,16 +89,17 @@ extern "C" {
 /* Returns 2nd arg.  Used to substitute default value if caller's vararg list
  * is empty.
  */
-#define __android_second(dummy, second, ...)     second
+#define __android_second(dummy, second, ...) second
 
 /* If passed multiple args, returns ',' followed by all but 1st arg, otherwise
  * returns nothing.
  */
-#define __android_rest(first, ...)               , ## __VA_ARGS__
+#define __android_rest(first, ...) , ##__VA_ARGS__
 
-#define android_printAssert(cond, tag, ...) \
-    __android_log_assert(cond, tag, \
-        __android_second(0, ## __VA_ARGS__, NULL) __android_rest(__VA_ARGS__))
+#define android_printAssert(cond, tag, ...)                     \
+  __android_log_assert(cond, tag,                               \
+                       __android_second(0, ##__VA_ARGS__, NULL) \
+                           __android_rest(__VA_ARGS__))
 
 /*
  * Log a fatal error.  If the given condition fails, this stops program
@@ -109,15 +108,15 @@ extern "C" {
  * is -inverted- from the normal assert() semantics.
  */
 #ifndef LOG_ALWAYS_FATAL_IF
-#define LOG_ALWAYS_FATAL_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)android_printAssert(#cond, LOG_TAG, ## __VA_ARGS__)) \
-    : (void)0 )
+#define LOG_ALWAYS_FATAL_IF(cond, ...)                              \
+  ((__predict_false(cond))                                          \
+       ? ((void)android_printAssert(#cond, LOG_TAG, ##__VA_ARGS__)) \
+       : (void)0)
 #endif
 
 #ifndef LOG_ALWAYS_FATAL
 #define LOG_ALWAYS_FATAL(...) \
-    ( ((void)android_printAssert(NULL, LOG_TAG, ## __VA_ARGS__)) )
+  (((void)android_printAssert(NULL, LOG_TAG, ##__VA_ARGS__)))
 #endif
 
 /*
@@ -137,7 +136,7 @@ extern "C" {
 #else
 
 #ifndef LOG_FATAL_IF
-#define LOG_FATAL_IF(cond, ...) LOG_ALWAYS_FATAL_IF(cond, ## __VA_ARGS__)
+#define LOG_FATAL_IF(cond, ...) LOG_ALWAYS_FATAL_IF(cond, ##__VA_ARGS__)
 #endif
 #ifndef LOG_FATAL
 #define LOG_FATAL(...) LOG_ALWAYS_FATAL(__VA_ARGS__)
@@ -150,7 +149,7 @@ extern "C" {
  * Stripped out of release builds.  Uses the current LOG_TAG.
  */
 #ifndef ALOG_ASSERT
-#define ALOG_ASSERT(cond, ...) LOG_FATAL_IF(!(cond), ## __VA_ARGS__)
+#define ALOG_ASSERT(cond, ...) LOG_FATAL_IF(!(cond), ##__VA_ARGS__)
 #endif
 
 /* --------------------------------------------------------------------- */
@@ -175,7 +174,12 @@ extern "C" {
 #ifndef ALOGV
 #define __ALOGV(...) ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
 #if LOG_NDEBUG
-#define ALOGV(...) do { if (0) { __ALOGV(__VA_ARGS__); } } while (0)
+#define ALOGV(...)          \
+  do {                      \
+    if (0) {                \
+      __ALOGV(__VA_ARGS__); \
+    }                       \
+  } while (0)
 #else
 #define ALOGV(...) __ALOGV(__VA_ARGS__)
 #endif
@@ -183,12 +187,11 @@ extern "C" {
 
 #ifndef ALOGV_IF
 #if LOG_NDEBUG
-#define ALOGV_IF(cond, ...)   ((void)0)
+#define ALOGV_IF(cond, ...) ((void)0)
 #else
-#define ALOGV_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
+#define ALOGV_IF(cond, ...)                                                  \
+  ((__predict_false(cond)) ? ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
+                           : (void)0)
 #endif
 #endif
 
@@ -200,10 +203,9 @@ extern "C" {
 #endif
 
 #ifndef ALOGD_IF
-#define ALOGD_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
+#define ALOGD_IF(cond, ...)                                                \
+  ((__predict_false(cond)) ? ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
+                           : (void)0)
 #endif
 
 /*
@@ -214,10 +216,9 @@ extern "C" {
 #endif
 
 #ifndef ALOGI_IF
-#define ALOGI_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)ALOG(LOG_INFO, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
+#define ALOGI_IF(cond, ...)                                               \
+  ((__predict_false(cond)) ? ((void)ALOG(LOG_INFO, LOG_TAG, __VA_ARGS__)) \
+                           : (void)0)
 #endif
 
 /*
@@ -228,10 +229,9 @@ extern "C" {
 #endif
 
 #ifndef ALOGW_IF
-#define ALOGW_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
+#define ALOGW_IF(cond, ...)                                               \
+  ((__predict_false(cond)) ? ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__)) \
+                           : (void)0)
 #endif
 
 /*
@@ -242,10 +242,9 @@ extern "C" {
 #endif
 
 #ifndef ALOGE_IF
-#define ALOGE_IF(cond, ...) \
-    ( (__predict_false(cond)) \
-    ? ((void)ALOG(LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
-    : (void)0 )
+#define ALOGE_IF(cond, ...)                                                \
+  ((__predict_false(cond)) ? ((void)ALOG(LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
+                           : (void)0)
 #endif
 
 /* --------------------------------------------------------------------- */
@@ -305,16 +304,14 @@ extern "C" {
  * The second argument may be NULL or "" to indicate the "global" tag.
  */
 #ifndef ALOG
-#define ALOG(priority, tag, ...) \
-    LOG_PRI(ANDROID_##priority, tag, __VA_ARGS__)
+#define ALOG(priority, tag, ...) LOG_PRI(ANDROID_##priority, tag, __VA_ARGS__)
 #endif
 
 /*
  * Conditional given a desired logging priority and tag.
  */
 #ifndef IF_ALOG
-#define IF_ALOG(priority, tag) \
-    if (android_testLog(ANDROID_##priority, tag))
+#define IF_ALOG(priority, tag) if (android_testLog(ANDROID_##priority, tag))
 #endif
 
 /* --------------------------------------------------------------------- */
@@ -357,23 +354,23 @@ int __android_log_is_loggable_len(int prio, const char* tag, size_t len,
                                   int default_prio);
 
 #if LOG_NDEBUG /* Production */
-#define android_testLog(prio, tag) \
-    (__android_log_is_loggable_len(prio, tag, (tag && *tag) ? strlen(tag) : 0, \
-                                   ANDROID_LOG_DEBUG) != 0)
+#define android_testLog(prio, tag)                                           \
+  (__android_log_is_loggable_len(prio, tag, (tag && *tag) ? strlen(tag) : 0, \
+                                 ANDROID_LOG_DEBUG) != 0)
 #else
-#define android_testLog(prio, tag) \
-    (__android_log_is_loggable_len(prio, tag, (tag && *tag) ? strlen(tag) : 0, \
-                                   ANDROID_LOG_VERBOSE) != 0)
+#define android_testLog(prio, tag)                                           \
+  (__android_log_is_loggable_len(prio, tag, (tag && *tag) ? strlen(tag) : 0, \
+                                 ANDROID_LOG_VERBOSE) != 0)
 #endif
 
 #else
 
 #if LOG_NDEBUG /* Production */
 #define android_testLog(prio, tag) \
-    (__android_log_is_loggable(prio, tag, ANDROID_LOG_DEBUG) != 0)
+  (__android_log_is_loggable(prio, tag, ANDROID_LOG_DEBUG) != 0)
 #else
 #define android_testLog(prio, tag) \
-    (__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE) != 0)
+  (__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE) != 0)
 #endif
 
 #endif
