@@ -117,6 +117,8 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
 
     init_transport_registration();
 
+    init_mdns_transport_discovery();
+
     usb_init();
     local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
 

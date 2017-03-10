@@ -187,12 +187,16 @@ void kick_transport(atransport* t);
 void update_transports(void);
 
 void init_transport_registration(void);
+void init_mdns_transport_discovery(void);
 std::string list_transports(bool long_listing);
 atransport* find_transport(const char* serial);
 void kick_all_tcp_devices();
 
 void register_usb_transport(usb_handle* h, const char* serial,
                             const char* devpath, unsigned writeable);
+
+/* Connect to a network address and register it as a device */
+void connect_device(const std::string& address, std::string* response);
 
 /* cause new transports to be init'd and added to the list */
 int register_socket_transport(int s, const char* serial, int port, int local);
