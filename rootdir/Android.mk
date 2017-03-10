@@ -53,7 +53,7 @@ endef
 
 # Pretty comprehensive set of native services. This list is helpful if all that's to be checked is an
 # app.
-ifeq ($(SANITIZE_LITE),true)
+ifeq ($(SANITIZE_LITE_SERVICES),true)
 SANITIZE_ASAN_OPTIONS_FOR := \
   adbd \
   ATFWD-daemon \
