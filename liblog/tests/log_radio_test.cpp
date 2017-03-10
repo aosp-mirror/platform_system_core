@@ -27,91 +27,93 @@
 #include <log/log_radio.h>
 
 TEST(liblog, RLOG) {
-    static const char content[] = "log_radio.h";
-    static const char content_false[] = "log_radio.h false";
+  static const char content[] = "log_radio.h";
+  static const char content_false[] = "log_radio.h false";
 
-    // ratelimit content to 10/s to keep away from spam filters
-    // do not send identical content together to keep away from spam filters
+// ratelimit content to 10/s to keep away from spam filters
+// do not send identical content together to keep away from spam filters
 
 #undef LOG_TAG
 #define LOG_TAG "TEST__RLOGV"
-    RLOGV(content);
-    usleep(100000);
+  RLOGV(content);
+  usleep(100000);
 #undef LOG_TAG
 #define LOG_TAG "TEST__RLOGD"
-    RLOGD(content);
-    usleep(100000);
+  RLOGD(content);
+  usleep(100000);
 #undef LOG_TAG
 #define LOG_TAG "TEST__RLOGI"
-    RLOGI(content);
-    usleep(100000);
+  RLOGI(content);
+  usleep(100000);
 #undef LOG_TAG
 #define LOG_TAG "TEST__RLOGW"
-    RLOGW(content);
-    usleep(100000);
+  RLOGW(content);
+  usleep(100000);
 #undef LOG_TAG
 #define LOG_TAG "TEST__RLOGE"
-    RLOGE(content);
-    usleep(100000);
+  RLOGE(content);
+  usleep(100000);
 #undef LOG_TAG
 #define LOG_TAG "TEST__RLOGV"
-    RLOGV_IF(true, content);
-    usleep(100000);
-    RLOGV_IF(false, content_false);
-    usleep(100000);
+  RLOGV_IF(true, content);
+  usleep(100000);
+  RLOGV_IF(false, content_false);
+  usleep(100000);
 #undef LOG_TAG
 #define LOG_TAG "TEST__RLOGD"
-    RLOGD_IF(true, content);
-    usleep(100000);
-    RLOGD_IF(false, content_false);
-    usleep(100000);
+  RLOGD_IF(true, content);
+  usleep(100000);
+  RLOGD_IF(false, content_false);
+  usleep(100000);
 #undef LOG_TAG
 #define LOG_TAG "TEST__RLOGI"
-    RLOGI_IF(true, content);
-    usleep(100000);
-    RLOGI_IF(false, content_false);
-    usleep(100000);
+  RLOGI_IF(true, content);
+  usleep(100000);
+  RLOGI_IF(false, content_false);
+  usleep(100000);
 #undef LOG_TAG
 #define LOG_TAG "TEST__RLOGW"
-    RLOGW_IF(true, content);
-    usleep(100000);
-    RLOGW_IF(false, content_false);
-    usleep(100000);
+  RLOGW_IF(true, content);
+  usleep(100000);
+  RLOGW_IF(false, content_false);
+  usleep(100000);
 #undef LOG_TAG
 #define LOG_TAG "TEST__RLOGE"
-    RLOGE_IF(true, content);
-    usleep(100000);
-    RLOGE_IF(false, content_false);
+  RLOGE_IF(true, content);
+  usleep(100000);
+  RLOGE_IF(false, content_false);
 
 #ifdef __ANDROID__
-    // give time for content to long-path through logger
-    sleep(1);
+  // give time for content to long-path through logger
+  sleep(1);
 
-    std::string buf = android::base::StringPrintf(
-        "logcat -b radio --pid=%u -d -s"
-            " TEST__RLOGV TEST__RLOGD TEST__RLOGI TEST__RLOGW TEST__RLOGE",
-        (unsigned)getpid());
-    FILE* fp = popen(buf.c_str(), "r");
-    int count = 0;
-    int count_false = 0;
-    if (fp) {
-        if (!android::base::ReadFdToString(fileno(fp), &buf)) buf = "";
-        pclose(fp);
-        for (size_t pos = 0; (pos = buf.find(content, pos)) != std::string::npos; ++pos) {
-            ++count;
-        }
-        for (size_t pos = 0; (pos = buf.find(content_false, pos)) != std::string::npos; ++pos) {
-            ++count_false;
-        }
+  std::string buf = android::base::StringPrintf(
+      "logcat -b radio --pid=%u -d -s"
+      " TEST__RLOGV TEST__RLOGD TEST__RLOGI TEST__RLOGW TEST__RLOGE",
+      (unsigned)getpid());
+  FILE* fp = popen(buf.c_str(), "r");
+  int count = 0;
+  int count_false = 0;
+  if (fp) {
+    if (!android::base::ReadFdToString(fileno(fp), &buf)) buf = "";
+    pclose(fp);
+    for (size_t pos = 0; (pos = buf.find(content, pos)) != std::string::npos;
+         ++pos) {
+      ++count;
     }
-    EXPECT_EQ(0, count_false);
+    for (size_t pos = 0;
+         (pos = buf.find(content_false, pos)) != std::string::npos; ++pos) {
+      ++count_false;
+    }
+  }
+  EXPECT_EQ(0, count_false);
 #if LOG_NDEBUG
-    ASSERT_EQ(8, count);
+  ASSERT_EQ(8, count);
 #else
-    ASSERT_EQ(10, count);
+  ASSERT_EQ(10, count);
 #endif
 
 #else
-    GTEST_LOG_(INFO) << "This test does not test end-to-end.\n";
+  GTEST_LOG_(INFO) << "This test does not test end-to-end.\n";
 #endif
 }

@@ -24,17 +24,17 @@ extern "C" {
 #ifndef log_id_t_defined
 #define log_id_t_defined
 typedef enum log_id {
-    LOG_ID_MIN = 0,
+  LOG_ID_MIN = 0,
 
-    LOG_ID_MAIN = 0,
-    LOG_ID_RADIO = 1,
-    LOG_ID_EVENTS = 2,
-    LOG_ID_SYSTEM = 3,
-    LOG_ID_CRASH = 4,
-    LOG_ID_SECURITY = 5,
-    LOG_ID_KERNEL = 6, /* place last, third-parties can not use it */
+  LOG_ID_MAIN = 0,
+  LOG_ID_RADIO = 1,
+  LOG_ID_EVENTS = 2,
+  LOG_ID_SYSTEM = 3,
+  LOG_ID_CRASH = 4,
+  LOG_ID_SECURITY = 5,
+  LOG_ID_KERNEL = 6, /* place last, third-parties can not use it */
 
-    LOG_ID_MAX
+  LOG_ID_MAX
 } log_id_t;
 #endif
 #define sizeof_log_id_t sizeof(typeof_log_id_t)
@@ -43,8 +43,10 @@ typedef enum log_id {
 /*
  * Send a simple string to the log.
  */
-int __android_log_buf_write(int bufID, int prio, const char* tag, const char* text);
-int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fmt, ...)
+int __android_log_buf_write(int bufID, int prio, const char* tag,
+                            const char* text);
+int __android_log_buf_print(int bufID, int prio, const char* tag,
+                            const char* fmt, ...)
 #if defined(__GNUC__)
     __attribute__((__format__(printf, 4, 5)))
 #endif

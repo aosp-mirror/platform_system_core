@@ -108,10 +108,10 @@ SYNOPSIS
 
        int android_log_destroy(android_log_context *ctx)
 
-       #include <log/log_frontend.h>
+       #include <log/log_transport.h>
 
-       int android_set_log_frontend(int frontend_flag)
-       int android_get_log_frontend()
+       int android_set_log_transport(int transport_flag)
+       int android_get_log_transport()
 
        Link with -llog
 
@@ -167,12 +167,12 @@ DESCRIPTION
        when  opening  the  sub-log.    It  is  recommended  to  open  the  log
        ANDROID_LOG_RDONLY in these cases.
 
-       android_set_log_frontend() selects frontend filters. Argument is either
-       LOGGER_DEFAULT, LOGGER_LOGD, LOGGER_NULL or LOGGER_LOCAL. Log to logger
-       daemon for default or logd,  drop contents on floor,  or log into local
-       memory   respectively.          Both   android_set_log_frontend()   and
-       android_get_log_frontend()  return  the  current  frontend mask,   or a
-       negative errno for any problems.
+       android_set_log_transport()  selects  transport  filters.  Argument  is
+       either LOGGER_DEFAULT, LOGGER_LOGD, LOGGER_NULL or LOGGER_LOCAL. Log to
+       logger daemon for default or logd, drop contents on floor,  or log into
+       local   memory   respectively.       Both   android_set_log_transport()
+       and android_get_log_transport() return the current  transport mask,  or
+       a negative errno for any problems.
 
 ERRORS
        If messages fail, a negative error code will be returned to the caller.

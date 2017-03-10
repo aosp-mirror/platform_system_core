@@ -1,5 +1,5 @@
 #ifdef __ANDROID__
-#include <log/log_frontend.h>
-#define TEST_PREFIX android_set_log_frontend(LOGGER_DEFAULT);
+#include <log/log_transport.h>
+#define TEST_PREFIX android_set_log_transport(LOGGER_DEFAULT);
 #endif
 #include "liblog_test.cpp"
