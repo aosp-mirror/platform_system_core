@@ -26,30 +26,26 @@ __BEGIN_DECLS
 extern LIBLOG_HIDDEN struct listnode __android_log_transport_write;
 extern LIBLOG_HIDDEN struct listnode __android_log_persist_write;
 
-#define write_transport_for_each(transp, transports)                         \
-    for ((transp) = node_to_item((transports)->next,                         \
-                                 struct android_log_transport_write, node);  \
-         ((transp) != node_to_item((transports),                             \
-                                   struct android_log_transport_write,       \
-                                   node)) &&                                 \
-         ((transp) != node_to_item((transp)->node.next,                      \
-                                   struct android_log_transport_write,       \
-                                   node));                                   \
-         (transp) = node_to_item((transp)->node.next,                        \
-                                 struct android_log_transport_write, node))
+#define write_transport_for_each(transp, transports)                           \
+  for ((transp) = node_to_item((transports)->next,                             \
+                               struct android_log_transport_write, node);      \
+       ((transp) != node_to_item((transports),                                 \
+                                 struct android_log_transport_write, node)) && \
+       ((transp) != node_to_item((transp)->node.next,                          \
+                                 struct android_log_transport_write, node));   \
+       (transp) = node_to_item((transp)->node.next,                            \
+                               struct android_log_transport_write, node))
 
-#define write_transport_for_each_safe(transp, n, transports)                 \
-    for ((transp) = node_to_item((transports)->next,                         \
-                                 struct android_log_transport_write, node),  \
-         (n) = (transp)->node.next;                                          \
-         ((transp) != node_to_item((transports),                             \
-                                   struct android_log_transport_write,       \
-                                   node)) &&                                 \
-         ((transp) != node_to_item((n), struct android_log_transport_write,  \
-                                   node));                                   \
-         (transp) = node_to_item((n), struct android_log_transport_write,    \
-                                 node),                                      \
-         (n) = (transp)->node.next)
+#define write_transport_for_each_safe(transp, n, transports)                   \
+  for ((transp) = node_to_item((transports)->next,                             \
+                               struct android_log_transport_write, node),      \
+      (n) = (transp)->node.next;                                               \
+       ((transp) != node_to_item((transports),                                 \
+                                 struct android_log_transport_write, node)) && \
+       ((transp) !=                                                            \
+        node_to_item((n), struct android_log_transport_write, node));          \
+       (transp) = node_to_item((n), struct android_log_transport_write, node), \
+      (n) = (transp)->node.next)
 
 LIBLOG_HIDDEN void __android_log_config_write();
 LIBLOG_HIDDEN void __android_log_config_write_close();

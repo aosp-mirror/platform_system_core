@@ -23,9 +23,9 @@
 
 struct iovec;
 
-LIBLOG_HIDDEN int fakeLogOpen(const char *pathName, int flags);
+LIBLOG_HIDDEN int fakeLogOpen(const char* pathName, int flags);
 LIBLOG_HIDDEN int fakeLogClose(int fd);
-LIBLOG_HIDDEN ssize_t fakeLogWritev(int fd,
-                                    const struct iovec* vector, int count);
+LIBLOG_HIDDEN ssize_t fakeLogWritev(int fd, const struct iovec* vector,
+                                    int count);
 
-#endif // _LIBLOG_FAKE_LOG_DEVICE_H
+#endif  // _LIBLOG_FAKE_LOG_DEVICE_H
