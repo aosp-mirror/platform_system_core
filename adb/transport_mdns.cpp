@@ -18,7 +18,11 @@
 
 #include "transport.h"
 
+#ifdef _WIN32
+#include <winsock2.h>
+#else
 #include <arpa/inet.h>
+#endif
 
 #include <android-base/stringprintf.h>
 #include <dns_sd.h>
@@ -31,14 +35,22 @@
 static DNSServiceRef service_ref;
 static fdevent service_ref_fde;
 
-static void register_service_ip(DNSServiceRef sdRef,
-                                DNSServiceFlags flags,
-                                uint32_t interfaceIndex,
-                                DNSServiceErrorType errorCode,
-                                const char* hostname,
-                                const sockaddr* address,
-                                uint32_t ttl,
-                                void* context);
+// Use adb_DNSServiceRefSockFD() instead of calling DNSServiceRefSockFD()
+// directly so that the socket is put through the appropriate compatibility
+// layers to work with the rest of ADB's internal APIs.
+static inline int adb_DNSServiceRefSockFD(DNSServiceRef ref) {
+    return adb_register_socket(DNSServiceRefSockFD(ref));
+}
+#define DNSServiceRefSockFD ___xxx_DNSServiceRefSockFD
+
+static void DNSSD_API register_service_ip(DNSServiceRef sdRef,
+                                          DNSServiceFlags flags,
+                                          uint32_t interfaceIndex,
+                                          DNSServiceErrorType errorCode,
+                                          const char* hostname,
+                                          const sockaddr* address,
+                                          uint32_t ttl,
+                                          void* context);
 
 static void pump_service_ref(int /*fd*/, unsigned ev, void* data) {
     DNSServiceRef* ref = reinterpret_cast<DNSServiceRef*>(data);
@@ -66,7 +78,7 @@ class AsyncServiceRef {
     DNSServiceRef sdRef_;
 
     void Initialize() {
-        fdevent_install(&fde_, DNSServiceRefSockFD(sdRef_),
+        fdevent_install(&fde_, adb_DNSServiceRefSockFD(sdRef_),
                         pump_service_ref, &sdRef_);
         fdevent_set(&fde_, FDE_READ);
         initialized_ = true;
@@ -123,8 +135,9 @@ class ResolvedService : public AsyncServiceRef {
             return;
         }
 
-        if (!inet_ntop(address->sa_family, ip_addr_data, ip_addr,
-                       INET6_ADDRSTRLEN)) {
+        // Winsock version requires the const cast Because Microsoft.
+        if (!inet_ntop(address->sa_family, const_cast<void*>(ip_addr_data),
+                       ip_addr, INET6_ADDRSTRLEN)) {
             D("Could not convert IP address to string.");
             return;
         }
@@ -141,29 +154,30 @@ class ResolvedService : public AsyncServiceRef {
     const uint16_t port_;
 };
 
-static void register_service_ip(DNSServiceRef /*sdRef*/,
-                                DNSServiceFlags /*flags*/,
-                                uint32_t /*interfaceIndex*/,
-                                DNSServiceErrorType /*errorCode*/,
-                                const char* /*hostname*/,
-                                const sockaddr* address,
-                                uint32_t /*ttl*/,
-                                void* context) {
+static void DNSSD_API register_service_ip(DNSServiceRef /*sdRef*/,
+                                          DNSServiceFlags /*flags*/,
+                                          uint32_t /*interfaceIndex*/,
+                                          DNSServiceErrorType /*errorCode*/,
+                                          const char* /*hostname*/,
+                                          const sockaddr* address,
+                                          uint32_t /*ttl*/,
+                                          void* context) {
+    D("Got IP for service.");
     std::unique_ptr<ResolvedService> data(
         reinterpret_cast<ResolvedService*>(context));
     data->Connect(address);
 }
 
-static void register_resolved_mdns_service(DNSServiceRef sdRef,
-                                           DNSServiceFlags flags,
-                                           uint32_t interfaceIndex,
-                                           DNSServiceErrorType errorCode,
-                                           const char* fullname,
-                                           const char* hosttarget,
-                                           uint16_t port,
-                                           uint16_t txtLen,
-                                           const unsigned char* txtRecord,
-                                           void* context);
+static void DNSSD_API register_resolved_mdns_service(DNSServiceRef sdRef,
+                                                     DNSServiceFlags flags,
+                                                     uint32_t interfaceIndex,
+                                                     DNSServiceErrorType errorCode,
+                                                     const char* fullname,
+                                                     const char* hosttarget,
+                                                     uint16_t port,
+                                                     uint16_t txtLen,
+                                                     const unsigned char* txtRecord,
+                                                     void* context);
 
 class DiscoveredService : public AsyncServiceRef {
   public:
@@ -191,16 +205,17 @@ class DiscoveredService : public AsyncServiceRef {
     std::string serviceName_;
 };
 
-static void register_resolved_mdns_service(DNSServiceRef sdRef,
-                                           DNSServiceFlags flags,
-                                           uint32_t interfaceIndex,
-                                           DNSServiceErrorType errorCode,
-                                           const char* fullname,
-                                           const char* hosttarget,
-                                           uint16_t port,
-                                           uint16_t /*txtLen*/,
-                                           const unsigned char* /*txtRecord*/,
-                                           void* context) {
+static void DNSSD_API register_resolved_mdns_service(DNSServiceRef sdRef,
+                                                     DNSServiceFlags flags,
+                                                     uint32_t interfaceIndex,
+                                                     DNSServiceErrorType errorCode,
+                                                     const char* fullname,
+                                                     const char* hosttarget,
+                                                     uint16_t port,
+                                                     uint16_t /*txtLen*/,
+                                                     const unsigned char* /*txtRecord*/,
+                                                     void* context) {
+    D("Resolved a service.");
     std::unique_ptr<DiscoveredService> discovered(
         reinterpret_cast<DiscoveredService*>(context));
 
@@ -223,14 +238,15 @@ static void register_resolved_mdns_service(DNSServiceRef sdRef,
     }
 }
 
-static void register_mdns_transport(DNSServiceRef sdRef,
-                                    DNSServiceFlags flags,
-                                    uint32_t interfaceIndex,
-                                    DNSServiceErrorType errorCode,
-                                    const char* serviceName,
-                                    const char* regtype,
-                                    const char* domain,
-                                    void*  /*context*/) {
+static void DNSSD_API register_mdns_transport(DNSServiceRef sdRef,
+                                              DNSServiceFlags flags,
+                                              uint32_t interfaceIndex,
+                                              DNSServiceErrorType errorCode,
+                                              const char* serviceName,
+                                              const char* regtype,
+                                              const char* domain,
+                                              void*  /*context*/) {
+    D("Registering a transport.");
     if (errorCode != kDNSServiceErr_NoError) {
         D("Got error %d during mDNS browse.", errorCode);
         DNSServiceRefDeallocate(sdRef);
@@ -257,7 +273,7 @@ void init_mdns_transport_discovery(void) {
     }
 
     fdevent_install(&service_ref_fde,
-                    DNSServiceRefSockFD(service_ref),
+                    adb_DNSServiceRefSockFD(service_ref),
                     pump_service_ref,
                     &service_ref);
     fdevent_set(&service_ref_fde, FDE_READ);
