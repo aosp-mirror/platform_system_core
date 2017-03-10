@@ -23,6 +23,8 @@
 #include <utils/Log.h>
 #include <utils/String16.h>
 
+#include <ctype.h>
+
 #include "SharedBuffer.h"
 
 /*
