@@ -126,10 +126,7 @@ typedef struct FHRec_
         SOCKET      socket;
     } u;
 
-    int       mask;
-
     char  name[32];
-
 } FHRec;
 
 #define  fh_handle  u.handle
@@ -577,7 +574,6 @@ extern int adb_poll(adb_pollfd* fds, size_t nfds, int timeout) {
 
 static void _fh_socket_init(FH f) {
     f->fh_socket = INVALID_SOCKET;
-    f->mask      = 0;
 }
 
 static int _fh_socket_close( FH  f ) {
@@ -598,7 +594,6 @@ static int _fh_socket_close( FH  f ) {
         }
         f->fh_socket = INVALID_SOCKET;
     }
-    f->mask = 0;
     return 0;
 }
 
@@ -913,6 +908,12 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
     return fd;
 }
 
+int  adb_register_socket(SOCKET s) {
+    FH f = _fh_alloc( &_fh_socket_class );
+    f->fh_socket = s;
+    return _fh_to_int(f);
+}
+
 #undef accept
 int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrlen)
 {
@@ -1113,18 +1114,22 @@ bool set_file_block_mode(int fd, bool block) {
 
     if (!fh || !fh->used) {
         errno = EBADF;
+        D("Setting nonblocking on bad file descriptor %d", fd);
         return false;
     }
 
     if (fh->clazz == &_fh_socket_class) {
         u_long x = !block;
         if (ioctlsocket(fh->u.socket, FIONBIO, &x) != 0) {
-            _socket_set_errno(WSAGetLastError());
+            int error = WSAGetLastError();
+            _socket_set_errno(error);
+            D("Setting %d nonblocking failed (%d)", fd, error);
             return false;
         }
         return true;
     } else {
         errno = ENOTSOCK;
+        D("Setting nonblocking on non-socket %d", fd);
         return false;
     }
 }
