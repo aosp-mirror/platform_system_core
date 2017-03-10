@@ -571,7 +571,8 @@ static void jdwp_tracker_close(asocket* s) {
     remove_socket(s);
 
     auto pred = [s](const auto& tracker) { return tracker.get() == s; };
-    std::remove_if(_jdwp_trackers.begin(), _jdwp_trackers.end(), pred);
+    _jdwp_trackers.erase(std::remove_if(_jdwp_trackers.begin(), _jdwp_trackers.end(), pred),
+                         _jdwp_trackers.end());
 }
 
 static void jdwp_tracker_ready(asocket* s) {
