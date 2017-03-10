@@ -120,7 +120,9 @@ LOCAL_REQUIRED_MODULES += \
     nonplat_sepolicy.cil \
     plat_sepolicy.cil \
     plat_sepolicy.cil.sha256 \
-    secilc
+    secilc \
+    nonplat_file_contexts \
+    plat_file_contexts
 
 # Include precompiled policy, unless told otherwise
 ifneq ($(PRODUCT_PRECOMPILED_SEPOLICY),false)
@@ -129,7 +131,8 @@ endif
 
 else
 # Use monolithic SELinux policy
-LOCAL_REQUIRED_MODULES += sepolicy
+LOCAL_REQUIRED_MODULES += sepolicy \
+    file_contexts.bin
 endif
 
 # Create symlinks.
