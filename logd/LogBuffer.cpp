@@ -72,8 +72,8 @@ void LogBuffer::init() {
         //
         pthread_mutex_lock(&mLogElementsLock);
         LogBufferElementCollection::iterator it = mLogElements.begin();
-        while((it != mLogElements.end())) {
-            LogBufferElement *e = *it;
+        while ((it != mLogElements.end())) {
+            LogBufferElement* e = *it;
             if (monotonic) {
                 if (!android::isMonotonic(e->mRealTime)) {
                     LogKlog::convertRealToMonotonic(e->mRealTime);
@@ -96,8 +96,8 @@ void LogBuffer::init() {
     LogTimeEntry::lock();
 
     LastLogTimes::iterator times = mTimes.begin();
-    while(times != mTimes.end()) {
-        LogTimeEntry *entry = (*times);
+    while (times != mTimes.end()) {
+        LogTimeEntry* entry = (*times);
         if (entry->owned_Locked()) {
             entry->triggerReader_Locked();
         }
@@ -107,9 +107,8 @@ void LogBuffer::init() {
     LogTimeEntry::unlock();
 }
 
-LogBuffer::LogBuffer(LastLogTimes *times):
-        monotonic(android_log_clockid() == CLOCK_MONOTONIC),
-        mTimes(*times) {
+LogBuffer::LogBuffer(LastLogTimes* times)
+    : monotonic(android_log_clockid() == CLOCK_MONOTONIC), mTimes(*times) {
     pthread_mutex_init(&mLogElementsLock, NULL);
 
     log_id_for_each(i) {
@@ -127,28 +126,26 @@ LogBuffer::~LogBuffer() {
     }
 }
 
-enum match_type {
-    DIFFERENT,
-    SAME,
-    SAME_LIBLOG
-};
+enum match_type { DIFFERENT, SAME, SAME_LIBLOG };
 
-static enum match_type identical(LogBufferElement* elem, LogBufferElement* last) {
+static enum match_type identical(LogBufferElement* elem,
+                                 LogBufferElement* last) {
     // is it mostly identical?
-//  if (!elem) return DIFFERENT;
+    //  if (!elem) return DIFFERENT;
     unsigned short lenl = elem->getMsgLen();
     if (!lenl) return DIFFERENT;
-//  if (!last) return DIFFERENT;
+    //  if (!last) return DIFFERENT;
     unsigned short lenr = last->getMsgLen();
     if (!lenr) return DIFFERENT;
-//  if (elem->getLogId() != last->getLogId()) return DIFFERENT;
+    //  if (elem->getLogId() != last->getLogId()) return DIFFERENT;
     if (elem->getUid() != last->getUid()) return DIFFERENT;
     if (elem->getPid() != last->getPid()) return DIFFERENT;
     if (elem->getTid() != last->getTid()) return DIFFERENT;
 
     // last is more than a minute old, stop squashing identical messages
     if (elem->getRealTime().nsec() >
-        (last->getRealTime().nsec() + 60 * NS_PER_SEC)) return DIFFERENT;
+        (last->getRealTime().nsec() + 60 * NS_PER_SEC))
+        return DIFFERENT;
 
     // Identical message
     const char* msgl = elem->getMsg();
@@ -158,47 +155,47 @@ static enum match_type identical(LogBufferElement* elem, LogBufferElement* last)
         // liblog tagged messages (content gets summed)
         if ((elem->getLogId() == LOG_ID_EVENTS) &&
             (lenl == sizeof(android_log_event_int_t)) &&
-            !fastcmp<memcmp>(msgl, msgr,
-                             sizeof(android_log_event_int_t) - sizeof(int32_t)) &&
-            (elem->getTag() == LIBLOG_LOG_TAG)) return SAME_LIBLOG;
+            !fastcmp<memcmp>(msgl, msgr, sizeof(android_log_event_int_t) -
+                                             sizeof(int32_t)) &&
+            (elem->getTag() == LIBLOG_LOG_TAG))
+            return SAME_LIBLOG;
     }
 
     // audit message (except sequence number) identical?
     static const char avc[] = "): avc: ";
 
     if (last->isBinary()) {
-        if (fastcmp<memcmp>(msgl, msgr,
-                            sizeof(android_log_event_string_t) -
-                                sizeof(int32_t))) return DIFFERENT;
+        if (fastcmp<memcmp>(msgl, msgr, sizeof(android_log_event_string_t) -
+                                            sizeof(int32_t)))
+            return DIFFERENT;
         msgl += sizeof(android_log_event_string_t);
         lenl -= sizeof(android_log_event_string_t);
         msgr += sizeof(android_log_event_string_t);
         lenr -= sizeof(android_log_event_string_t);
     }
-    const char *avcl = android::strnstr(msgl, lenl, avc);
+    const char* avcl = android::strnstr(msgl, lenl, avc);
     if (!avcl) return DIFFERENT;
     lenl -= avcl - msgl;
-    const char *avcr = android::strnstr(msgr, lenr, avc);
+    const char* avcr = android::strnstr(msgr, lenr, avc);
     if (!avcr) return DIFFERENT;
     lenr -= avcr - msgr;
     if (lenl != lenr) return DIFFERENT;
-    if (fastcmp<memcmp>(avcl + strlen(avc),
-                        avcr + strlen(avc), lenl)) return DIFFERENT;
+    if (fastcmp<memcmp>(avcl + strlen(avc), avcr + strlen(avc), lenl))
+        return DIFFERENT;
     return SAME;
 }
 
-int LogBuffer::log(log_id_t log_id, log_time realtime,
-                   uid_t uid, pid_t pid, pid_t tid,
-                   const char *msg, unsigned short len) {
+int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
+                   pid_t tid, const char* msg, unsigned short len) {
     if ((log_id >= LOG_ID_MAX) || (log_id < 0)) {
         return -EINVAL;
     }
 
-    LogBufferElement *elem = new LogBufferElement(log_id, realtime,
-                                                  uid, pid, tid, msg, len);
+    LogBufferElement* elem =
+        new LogBufferElement(log_id, realtime, uid, pid, tid, msg, len);
     if (log_id != LOG_ID_SECURITY) {
         int prio = ANDROID_LOG_INFO;
-        const char *tag = NULL;
+        const char* tag = NULL;
         if (log_id == LOG_ID_EVENTS) {
             tag = tagToName(elem->getTag());
         } else {
@@ -219,7 +216,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
     pthread_mutex_lock(&mLogElementsLock);
     LogBufferElement* currentLast = lastLoggedElements[log_id];
     if (currentLast) {
-        LogBufferElement *dropped = droppedElements[log_id];
+        LogBufferElement* dropped = droppedElements[log_id];
         unsigned short count = dropped ? dropped->getDropped() : 0;
         //
         // State Init
@@ -309,7 +306,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
                     uint32_t swab = event->payload.data;
                     unsigned long long total = htole32(swab);
                     event = reinterpret_cast<android_log_event_int_t*>(
-                            const_cast<char*>(elem->getMsg()));
+                        const_cast<char*>(elem->getMsg()));
                     swab = event->payload.data;
 
                     lastLoggedElements[LOG_ID_EVENTS] = elem;
@@ -346,15 +343,15 @@ int LogBuffer::log(log_id_t log_id, log_time realtime,
             pthread_mutex_unlock(&mLogElementsLock);
             return len;
         }
-        if (dropped) { // State 1 or 2
-            if (count) { // State 2
-               log(dropped); // report chatty
-            } else { // State 1
-               delete dropped;
+        if (dropped) {         // State 1 or 2
+            if (count) {       // State 2
+                log(dropped);  // report chatty
+            } else {           // State 1
+                delete dropped;
             }
             droppedElements[log_id] = NULL;
-            log(currentLast); // report last message in the series
-        } else { // State 0
+            log(currentLast);  // report last message in the series
+        } else {               // State 0
             delete currentLast;
         }
     }
@@ -390,7 +387,7 @@ void LogBuffer::log(LogBufferElement* elem) {
         LogTimeEntry::lock();
 
         LastLogTimes::iterator times = mTimes.begin();
-        while(times != mTimes.end()) {
+        while (times != mTimes.end()) {
             LogTimeEntry* entry = (*times);
             if (entry->owned_Locked()) {
                 if (!entry->mNonBlock) {
@@ -405,8 +402,7 @@ void LogBuffer::log(LogBufferElement* elem) {
             times++;
         }
 
-        if (end_always
-                || (end_set && (end >= (*last)->getSequence()))) {
+        if (end_always || (end_set && (end >= (*last)->getSequence()))) {
             mLogElements.push_back(elem);
         } else {
             mLogElements.insert(last, elem);
@@ -444,30 +440,31 @@ void LogBuffer::maybePrune(log_id_t id) {
 }
 
 LogBufferElementCollection::iterator LogBuffer::erase(
-        LogBufferElementCollection::iterator it, bool coalesce) {
-    LogBufferElement *element = *it;
+    LogBufferElementCollection::iterator it, bool coalesce) {
+    LogBufferElement* element = *it;
     log_id_t id = element->getLogId();
 
     // Remove iterator references in the various lists that will become stale
     // after the element is erased from the main logging list.
 
-    {   // start of scope for found iterator
-        int key = ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY)) ?
-                element->getTag() : element->getUid();
+    {  // start of scope for found iterator
+        int key = ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY))
+                      ? element->getTag()
+                      : element->getUid();
         LogBufferIteratorMap::iterator found = mLastWorst[id].find(key);
         if ((found != mLastWorst[id].end()) && (it == found->second)) {
             mLastWorst[id].erase(found);
         }
     }
 
-    {   // start of scope for pid found iterator
+    {  // start of scope for pid found iterator
         // element->getUid() may not be AID_SYSTEM for next-best-watermark.
         // will not assume id != LOG_ID_EVENTS or LOG_ID_SECURITY for KISS and
         // long term code stability, find() check should be fast for those ids.
         LogBufferPidIteratorMap::iterator found =
             mLastWorstPidOfSystem[id].find(element->getPid());
-        if ((found != mLastWorstPidOfSystem[id].end())
-                && (it == found->second)) {
+        if ((found != mLastWorstPidOfSystem[id].end()) &&
+            (it == found->second)) {
             mLastWorstPidOfSystem[id].erase(found);
         }
     }
@@ -479,34 +476,35 @@ LogBufferElementCollection::iterator LogBuffer::erase(
     }
 #ifdef DEBUG_CHECK_FOR_STALE_ENTRIES
     LogBufferElementCollection::iterator bad = it;
-    int key = ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY)) ?
-            element->getTag() : element->getUid();
+    int key = ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY))
+                  ? element->getTag()
+                  : element->getUid();
 #endif
     it = mLogElements.erase(it);
     if (doSetLast) {
         log_id_for_each(i) {
             if (setLast[i]) {
-                if (__predict_false(it == mLogElements.end())) { // impossible
+                if (__predict_false(it == mLogElements.end())) {  // impossible
                     mLastSet[i] = false;
                     mLast[i] = mLogElements.begin();
                 } else {
-                    mLast[i] = it; // push down the road as next-best-watermark
+                    mLast[i] = it;  // push down the road as next-best-watermark
                 }
             }
         }
     }
 #ifdef DEBUG_CHECK_FOR_STALE_ENTRIES
     log_id_for_each(i) {
-        for(auto b : mLastWorst[i]) {
+        for (auto b : mLastWorst[i]) {
             if (bad == b.second) {
-                android::prdebug("stale mLastWorst[%d] key=%d mykey=%d\n",
-                                 i, b.first, key);
+                android::prdebug("stale mLastWorst[%d] key=%d mykey=%d\n", i,
+                                 b.first, key);
             }
         }
-        for(auto b : mLastWorstPidOfSystem[i]) {
+        for (auto b : mLastWorstPidOfSystem[i]) {
             if (bad == b.second) {
-                android::prdebug("stale mLastWorstPidOfSystem[%d] pid=%d\n",
-                                 i, b.first);
+                android::prdebug("stale mLastWorstPidOfSystem[%d] pid=%d\n", i,
+                                 b.first);
             }
         }
         if (mLastSet[i] && (bad == mLast[i])) {
@@ -539,32 +537,29 @@ class LogBufferElementKey {
         uint64_t value;
     } __packed;
 
-public:
-    LogBufferElementKey(uid_t uid, pid_t pid, pid_t tid):
-            uid(uid),
-            pid(pid),
-            tid(tid)
-    {
+   public:
+    LogBufferElementKey(uid_t uid, pid_t pid, pid_t tid)
+        : uid(uid), pid(pid), tid(tid) {
     }
-    explicit LogBufferElementKey(uint64_t key):value(key) { }
+    explicit LogBufferElementKey(uint64_t key) : value(key) {
+    }
 
-    uint64_t getKey() { return value; }
+    uint64_t getKey() {
+        return value;
+    }
 };
 
 class LogBufferElementLast {
-
-    typedef std::unordered_map<uint64_t, LogBufferElement *> LogBufferElementMap;
+    typedef std::unordered_map<uint64_t, LogBufferElement*> LogBufferElementMap;
     LogBufferElementMap map;
 
-public:
-
-    bool coalesce(LogBufferElement *element, unsigned short dropped) {
-        LogBufferElementKey key(element->getUid(),
-                                element->getPid(),
+   public:
+    bool coalesce(LogBufferElement* element, unsigned short dropped) {
+        LogBufferElementKey key(element->getUid(), element->getPid(),
                                 element->getTid());
         LogBufferElementMap::iterator it = map.find(key.getKey());
         if (it != map.end()) {
-            LogBufferElement *found = it->second;
+            LogBufferElement* found = it->second;
             unsigned short moreDropped = found->getDropped();
             if ((dropped + moreDropped) > USHRT_MAX) {
                 map.erase(it);
@@ -576,9 +571,8 @@ public:
         return false;
     }
 
-    void add(LogBufferElement *element) {
-        LogBufferElementKey key(element->getUid(),
-                                element->getPid(),
+    void add(LogBufferElement* element) {
+        LogBufferElementKey key(element->getUid(), element->getPid(),
                                 element->getTid());
         map[key.getKey()] = element;
     }
@@ -587,20 +581,19 @@ public:
         map.clear();
     }
 
-    void clear(LogBufferElement *element) {
-        uint64_t current = element->getRealTime().nsec()
-                         - (EXPIRE_RATELIMIT * NS_PER_SEC);
-        for(LogBufferElementMap::iterator it = map.begin(); it != map.end();) {
-            LogBufferElement *mapElement = it->second;
-            if ((mapElement->getDropped() >= EXPIRE_THRESHOLD)
-                    && (current > mapElement->getRealTime().nsec())) {
+    void clear(LogBufferElement* element) {
+        uint64_t current =
+            element->getRealTime().nsec() - (EXPIRE_RATELIMIT * NS_PER_SEC);
+        for (LogBufferElementMap::iterator it = map.begin(); it != map.end();) {
+            LogBufferElement* mapElement = it->second;
+            if ((mapElement->getDropped() >= EXPIRE_THRESHOLD) &&
+                (current > mapElement->getRealTime().nsec())) {
                 it = map.erase(it);
             } else {
                 ++it;
             }
         }
     }
-
 };
 
 // prune "pruneRows" of type "id" from the buffer.
@@ -651,7 +644,7 @@ public:
 // mLogElementsLock must be held when this function is called.
 //
 bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
-    LogTimeEntry *oldest = NULL;
+    LogTimeEntry* oldest = NULL;
     bool busy = false;
     bool clearAll = pruneRows == ULONG_MAX;
 
@@ -659,13 +652,12 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
     // Region locked?
     LastLogTimes::iterator times = mTimes.begin();
-    while(times != mTimes.end()) {
-        LogTimeEntry *entry = (*times);
-        if (entry->owned_Locked() && entry->isWatching(id)
-                && (!oldest ||
-                    (oldest->mStart > entry->mStart) ||
-                    ((oldest->mStart == entry->mStart) &&
-                     (entry->mTimeout.tv_sec || entry->mTimeout.tv_nsec)))) {
+    while (times != mTimes.end()) {
+        LogTimeEntry* entry = (*times);
+        if (entry->owned_Locked() && entry->isWatching(id) &&
+            (!oldest || (oldest->mStart > entry->mStart) ||
+             ((oldest->mStart == entry->mStart) &&
+              (entry->mTimeout.tv_sec || entry->mTimeout.tv_nsec)))) {
             oldest = entry;
         }
         times++;
@@ -673,14 +665,15 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
     LogBufferElementCollection::iterator it;
 
-    if (__predict_false(caller_uid != AID_ROOT)) { // unlikely
+    if (__predict_false(caller_uid != AID_ROOT)) {  // unlikely
         // Only here if clear all request from non system source, so chatty
         // filter logistics is not required.
         it = mLastSet[id] ? mLast[id] : mLogElements.begin();
         while (it != mLogElements.end()) {
-            LogBufferElement *element = *it;
+            LogBufferElement* element = *it;
 
-            if ((element->getLogId() != id) || (element->getUid() != caller_uid)) {
+            if ((element->getLogId() != id) ||
+                (element->getUid() != caller_uid)) {
                 ++it;
                 continue;
             }
@@ -713,26 +706,28 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     bool hasBlacklist = (id != LOG_ID_SECURITY) && mPrune.naughty();
     while (!clearAll && (pruneRows > 0)) {
         // recalculate the worst offender on every batched pass
-        int worst = -1; // not valid for getUid() or getKey()
+        int worst = -1;  // not valid for getUid() or getKey()
         size_t worst_sizes = 0;
         size_t second_worst_sizes = 0;
-        pid_t worstPid = 0; // POSIX guarantees PID != 0
+        pid_t worstPid = 0;  // POSIX guarantees PID != 0
 
         if (worstUidEnabledForLogid(id) && mPrune.worstUidEnabled()) {
             // Calculate threshold as 12.5% of available storage
             size_t threshold = log_buffer_size(id) / 8;
 
             if ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY)) {
-                stats.sortTags(AID_ROOT, (pid_t)0, 2, id).findWorst(
-                    worst, worst_sizes, second_worst_sizes, threshold);
+                stats.sortTags(AID_ROOT, (pid_t)0, 2, id)
+                    .findWorst(worst, worst_sizes, second_worst_sizes,
+                               threshold);
                 // per-pid filter for AID_SYSTEM sources is too complex
             } else {
-                stats.sort(AID_ROOT, (pid_t)0, 2, id).findWorst(
-                    worst, worst_sizes, second_worst_sizes, threshold);
+                stats.sort(AID_ROOT, (pid_t)0, 2, id)
+                    .findWorst(worst, worst_sizes, second_worst_sizes,
+                               threshold);
 
                 if ((worst == AID_SYSTEM) && mPrune.worstPidOfSystemEnabled()) {
-                    stats.sortPids(worst, (pid_t)0, 2, id).findWorst(
-                        worstPid, worst_sizes, second_worst_sizes);
+                    stats.sortPids(worst, (pid_t)0, 2, id)
+                        .findWorst(worstPid, worst_sizes, second_worst_sizes);
                 }
             }
         }
@@ -751,35 +746,34 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         // - check age-out of preserved logs
         bool gc = pruneRows <= 1;
         if (!gc && (worst != -1)) {
-            {   // begin scope for worst found iterator
-                LogBufferIteratorMap::iterator found = mLastWorst[id].find(worst);
-                if ((found != mLastWorst[id].end())
-                        && (found->second != mLogElements.end())) {
+            {  // begin scope for worst found iterator
+                LogBufferIteratorMap::iterator found =
+                    mLastWorst[id].find(worst);
+                if ((found != mLastWorst[id].end()) &&
+                    (found->second != mLogElements.end())) {
                     leading = false;
                     it = found->second;
                 }
             }
-            if (worstPid) { // begin scope for pid worst found iterator
+            if (worstPid) {  // begin scope for pid worst found iterator
                 // FYI: worstPid only set if !LOG_ID_EVENTS and
                 //      !LOG_ID_SECURITY, not going to make that assumption ...
-                LogBufferPidIteratorMap::iterator found
-                    = mLastWorstPidOfSystem[id].find(worstPid);
-                if ((found != mLastWorstPidOfSystem[id].end())
-                        && (found->second != mLogElements.end())) {
+                LogBufferPidIteratorMap::iterator found =
+                    mLastWorstPidOfSystem[id].find(worstPid);
+                if ((found != mLastWorstPidOfSystem[id].end()) &&
+                    (found->second != mLogElements.end())) {
                     leading = false;
                     it = found->second;
                 }
             }
         }
-        static const timespec too_old = {
-            EXPIRE_HOUR_THRESHOLD * 60 * 60, 0
-        };
+        static const timespec too_old = { EXPIRE_HOUR_THRESHOLD * 60 * 60, 0 };
         LogBufferElementCollection::iterator lastt;
         lastt = mLogElements.end();
         --lastt;
         LogBufferElementLast last;
         while (it != mLogElements.end()) {
-            LogBufferElement *element = *it;
+            LogBufferElement* element = *it;
 
             if (oldest && (oldest->mStart <= element->getSequence())) {
                 busy = true;
@@ -813,9 +807,9 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
-            int key = ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY)) ?
-                    element->getTag() :
-                    element->getUid();
+            int key = ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY))
+                          ? element->getTag()
+                          : element->getUid();
 
             if (hasBlacklist && mPrune.naughty(element)) {
                 last.clear(element);
@@ -839,32 +833,32 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
-            if ((element->getRealTime() < ((*lastt)->getRealTime() - too_old))
-                    || (element->getRealTime() > (*lastt)->getRealTime())) {
+            if ((element->getRealTime() < ((*lastt)->getRealTime() - too_old)) ||
+                (element->getRealTime() > (*lastt)->getRealTime())) {
                 break;
             }
 
             if (dropped) {
                 last.add(element);
-                if (worstPid
-                        && ((!gc && (element->getPid() == worstPid))
-                           || (mLastWorstPidOfSystem[id].find(element->getPid())
-                                == mLastWorstPidOfSystem[id].end()))) {
+                if (worstPid &&
+                    ((!gc && (element->getPid() == worstPid)) ||
+                     (mLastWorstPidOfSystem[id].find(element->getPid()) ==
+                      mLastWorstPidOfSystem[id].end()))) {
                     // element->getUid() may not be AID_SYSTEM, next best
                     // watermark if current one empty. id is not LOG_ID_EVENTS
                     // or LOG_ID_SECURITY because of worstPid check.
                     mLastWorstPidOfSystem[id][element->getPid()] = it;
                 }
-                if ((!gc && !worstPid && (key == worst))
-                        || (mLastWorst[id].find(key) == mLastWorst[id].end())) {
+                if ((!gc && !worstPid && (key == worst)) ||
+                    (mLastWorst[id].find(key) == mLastWorst[id].end())) {
                     mLastWorst[id][key] = it;
                 }
                 ++it;
                 continue;
             }
 
-            if ((key != worst)
-                    || (worstPid && (element->getPid() != worstPid))) {
+            if ((key != worst) ||
+                (worstPid && (element->getPid() != worstPid))) {
                 leading = false;
                 last.clear(element);
                 ++it;
@@ -892,16 +886,16 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                     it = erase(it, true);
                 } else {
                     last.add(element);
-                    if (worstPid && (!gc
-                                || (mLastWorstPidOfSystem[id].find(worstPid)
-                                    == mLastWorstPidOfSystem[id].end()))) {
+                    if (worstPid &&
+                        (!gc || (mLastWorstPidOfSystem[id].find(worstPid) ==
+                                 mLastWorstPidOfSystem[id].end()))) {
                         // element->getUid() may not be AID_SYSTEM, next best
                         // watermark if current one empty. id is not
                         // LOG_ID_EVENTS or LOG_ID_SECURITY because of worstPid.
                         mLastWorstPidOfSystem[id][worstPid] = it;
                     }
                     if ((!gc && !worstPid) ||
-                         (mLastWorst[id].find(worst) == mLastWorst[id].end())) {
+                        (mLastWorst[id].find(worst) == mLastWorst[id].end())) {
                         mLastWorst[id][worst] = it;
                     }
                     ++it;
@@ -915,15 +909,15 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         last.clear();
 
         if (!kick || !mPrune.worstUidEnabled()) {
-            break; // the following loop will ask bad clients to skip/drop
+            break;  // the following loop will ask bad clients to skip/drop
         }
     }
 
     bool whitelist = false;
     bool hasWhitelist = (id != LOG_ID_SECURITY) && mPrune.nice() && !clearAll;
     it = mLastSet[id] ? mLast[id] : mLogElements.begin();
-    while((pruneRows > 0) && (it != mLogElements.end())) {
-        LogBufferElement *element = *it;
+    while ((pruneRows > 0) && (it != mLogElements.end())) {
+        LogBufferElement* element = *it;
 
         if (element->getLogId() != id) {
             it++;
@@ -966,8 +960,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     // Do not save the whitelist if we are reader range limited
     if (whitelist && (pruneRows > 0)) {
         it = mLastSet[id] ? mLast[id] : mLogElements.begin();
-        while((it != mLogElements.end()) && (pruneRows > 0)) {
-            LogBufferElement *element = *it;
+        while ((it != mLogElements.end()) && (pruneRows > 0)) {
+            LogBufferElement* element = *it;
 
             if (element->getLogId() != id) {
                 ++it;
@@ -1007,7 +1001,7 @@ bool LogBuffer::clear(log_id_t id, uid_t uid) {
     bool busy = true;
     // If it takes more than 4 tries (seconds) to clear, then kill reader(s)
     for (int retry = 4;;) {
-        if (retry == 1) { // last pass
+        if (retry == 1) {  // last pass
             // Check if it is still busy after the sleep, we say prune
             // one entry, not another clear run, so we are looking for
             // the quick side effect of the return value to tell us if
@@ -1023,7 +1017,7 @@ bool LogBuffer::clear(log_id_t id, uid_t uid) {
                 LogTimeEntry::lock();
                 LastLogTimes::iterator times = mTimes.begin();
                 while (times != mTimes.end()) {
-                    LogTimeEntry *entry = (*times);
+                    LogTimeEntry* entry = (*times);
                     // Killer punch
                     if (entry->owned_Locked() && entry->isWatching(id)) {
                         entry->release_Locked();
@@ -1039,7 +1033,7 @@ bool LogBuffer::clear(log_id_t id, uid_t uid) {
         if (!busy || !--retry) {
             break;
         }
-        sleep (1); // Let reader(s) catch up after notification
+        sleep(1);  // Let reader(s) catch up after notification
     }
     return busy;
 }
@@ -1073,9 +1067,8 @@ unsigned long LogBuffer::getSize(log_id_t id) {
 }
 
 uint64_t LogBuffer::flushTo(
-        SocketClient *reader, const uint64_t start,
-        bool privileged, bool security,
-        int (*filter)(const LogBufferElement *element, void *arg), void *arg) {
+    SocketClient* reader, const uint64_t start, bool privileged, bool security,
+    int (*filter)(const LogBufferElement* element, void* arg), void* arg) {
     LogBufferElementCollection::iterator it;
     uint64_t max = start;
     uid_t uid = reader->getUid();
@@ -1088,9 +1081,10 @@ uint64_t LogBuffer::flushTo(
     } else {
         // Client wants to start from some specified time. Chances are
         // we are better off starting from the end of the time sorted list.
-        for (it = mLogElements.end(); it != mLogElements.begin(); /* do nothing */) {
+        for (it = mLogElements.end(); it != mLogElements.begin();
+             /* do nothing */) {
             --it;
-            LogBufferElement *element = *it;
+            LogBufferElement* element = *it;
             if (element->getSequence() <= start) {
                 it++;
                 break;
@@ -1103,7 +1097,7 @@ uint64_t LogBuffer::flushTo(
     pid_t lastTid[LOG_ID_MAX] = { 0 };
 
     for (; it != mLogElements.end(); ++it) {
-        LogBufferElement *element = *it;
+        LogBufferElement* element = *it;
 
         if (!privileged && (element->getUid() != uid)) {
             continue;
@@ -1134,8 +1128,8 @@ uint64_t LogBuffer::flushTo(
         // multiple identical squash.  chatty that differs source
         // is due to spam filter.  chatty to chatty of different
         // source is also due to spam filter.
-        lastTid[element->getLogId()] = (element->getDropped() && !sameTid) ?
-                0 : element->getTid();
+        lastTid[element->getLogId()] =
+            (element->getDropped() && !sameTid) ? 0 : element->getTid();
 
         pthread_mutex_unlock(&mLogElementsLock);
 

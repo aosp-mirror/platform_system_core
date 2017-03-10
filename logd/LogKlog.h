@@ -20,14 +20,14 @@
 #include <private/android_logger.h>
 #include <sysutils/SocketListener.h>
 
-char *log_strntok_r(char *s, size_t *len, char **saveptr, size_t *sublen);
+char* log_strntok_r(char* s, size_t* len, char** saveptr, size_t* sublen);
 
 class LogBuffer;
 class LogReader;
 
 class LogKlog : public SocketListener {
-    LogBuffer *logbuf;
-    LogReader *reader;
+    LogBuffer* logbuf;
+    LogReader* reader;
     const log_time signature;
     // Set once thread is started, separates KLOG_ACTION_READ_ALL
     // and KLOG_ACTION_READ phases.
@@ -40,22 +40,28 @@ class LogKlog : public SocketListener {
 
     static log_time correction;
 
-public:
-    LogKlog(LogBuffer *buf, LogReader *reader, int fdWrite, int fdRead, bool auditd);
-    int log(const char *buf, size_t len);
-    void synchronize(const char *buf, size_t len);
+   public:
+    LogKlog(LogBuffer* buf, LogReader* reader, int fdWrite, int fdRead,
+            bool auditd);
+    int log(const char* buf, size_t len);
+    void synchronize(const char* buf, size_t len);
 
-    bool isMonotonic() { return logbuf->isMonotonic(); }
-    static void convertMonotonicToReal(log_time &real) { real += correction; }
-    static void convertRealToMonotonic(log_time &real) { real -= correction; }
+    bool isMonotonic() {
+        return logbuf->isMonotonic();
+    }
+    static void convertMonotonicToReal(log_time& real) {
+        real += correction;
+    }
+    static void convertRealToMonotonic(log_time& real) {
+        real -= correction;
+    }
 
-protected:
-    void sniffTime(log_time &now, const char **buf, size_t len, bool reverse);
-    pid_t sniffPid(const char **buf, size_t len);
-    void calculateCorrection(const log_time &monotonic,
-                             const char *real_string, size_t len);
-    virtual bool onDataAvailable(SocketClient *cli);
-
+   protected:
+    void sniffTime(log_time& now, const char** buf, size_t len, bool reverse);
+    pid_t sniffPid(const char** buf, size_t len);
+    void calculateCorrection(const log_time& monotonic, const char* real_string,
+                             size_t len);
+    virtual bool onDataAvailable(SocketClient* cli);
 };
 
 #endif

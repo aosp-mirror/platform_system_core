@@ -27,9 +27,9 @@
 #include <sysutils/SocketClient.h>
 
 #include "LogBufferElement.h"
+#include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogTimes.h"
-#include "LogStatistics.h"
 #include "LogWhiteBlackList.h"
 
 //
@@ -41,7 +41,7 @@
 //
 namespace android {
 
-static bool isMonotonic(const log_time &mono) {
+static bool isMonotonic(const log_time& mono) {
     static const uint32_t EPOCH_PLUS_2_YEARS = 2 * 24 * 60 * 60 * 1461 / 4;
     static const uint32_t EPOCH_PLUS_MINUTE = 60;
 
@@ -70,10 +70,9 @@ static bool isMonotonic(const log_time &mono) {
     /* dividing line half way between monotonic and realtime */
     return mono.tv_sec < ((cpu.tv_sec + now.tv_sec) / 2);
 }
-
 }
 
-typedef std::list<LogBufferElement *> LogBufferElementCollection;
+typedef std::list<LogBufferElement*> LogBufferElementCollection;
 
 class LogBuffer {
     LogBufferElementCollection mLogElements;
@@ -86,14 +85,12 @@ class LogBuffer {
     LogBufferElementCollection::iterator mLast[LOG_ID_MAX];
     bool mLastSet[LOG_ID_MAX];
     // watermark of any worst/chatty uid processing
-    typedef std::unordered_map<uid_t,
-                               LogBufferElementCollection::iterator>
-                LogBufferIteratorMap;
+    typedef std::unordered_map<uid_t, LogBufferElementCollection::iterator>
+        LogBufferIteratorMap;
     LogBufferIteratorMap mLastWorst[LOG_ID_MAX];
     // watermark of any worst/chatty pid of system processing
-    typedef std::unordered_map<pid_t,
-                               LogBufferElementCollection::iterator>
-                LogBufferPidIteratorMap;
+    typedef std::unordered_map<pid_t, LogBufferElementCollection::iterator>
+        LogBufferPidIteratorMap;
     LogBufferPidIteratorMap mLastWorstPidOfSystem[LOG_ID_MAX];
 
     unsigned long mMaxSize[LOG_ID_MAX];
@@ -106,21 +103,23 @@ class LogBuffer {
     LogBufferElement* droppedElements[LOG_ID_MAX];
     void log(LogBufferElement* elem);
 
-public:
-    LastLogTimes &mTimes;
+   public:
+    LastLogTimes& mTimes;
 
-    explicit LogBuffer(LastLogTimes *times);
+    explicit LogBuffer(LastLogTimes* times);
     ~LogBuffer();
     void init();
-    bool isMonotonic() { return monotonic; }
+    bool isMonotonic() {
+        return monotonic;
+    }
 
-    int log(log_id_t log_id, log_time realtime,
-            uid_t uid, pid_t pid, pid_t tid,
-            const char *msg, unsigned short len);
-    uint64_t flushTo(SocketClient *writer, const uint64_t start,
+    int log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid,
+            const char* msg, unsigned short len);
+    uint64_t flushTo(SocketClient* writer, const uint64_t start,
                      bool privileged, bool security,
-                     int (*filter)(const LogBufferElement *element, void *arg) = NULL,
-                     void *arg = NULL);
+                     int (*filter)(const LogBufferElement* element,
+                                   void* arg) = NULL,
+                     void* arg = NULL);
 
     bool clear(log_id_t id, uid_t uid = AID_ROOT);
     unsigned long getSize(log_id_t id);
@@ -133,27 +132,42 @@ public:
         stats.enableStatistics();
     }
 
-    int initPrune(const char *cp) { return mPrune.init(cp); }
-    std::string formatPrune() { return mPrune.format(); }
+    int initPrune(const char* cp) {
+        return mPrune.init(cp);
+    }
+    std::string formatPrune() {
+        return mPrune.format();
+    }
 
-    std::string formatGetEventTag(uid_t uid,
-                                  const char *name, const char *format) {
+    std::string formatGetEventTag(uid_t uid, const char* name,
+                                  const char* format) {
         return tags.formatGetEventTag(uid, name, format);
     }
     std::string formatEntry(uint32_t tag, uid_t uid) {
         return tags.formatEntry(tag, uid);
     }
-    const char *tagToName(uint32_t tag) { return tags.tagToName(tag); }
+    const char* tagToName(uint32_t tag) {
+        return tags.tagToName(tag);
+    }
 
     // helper must be protected directly or implicitly by lock()/unlock()
-    const char *pidToName(pid_t pid) { return stats.pidToName(pid); }
-    uid_t pidToUid(pid_t pid) { return stats.pidToUid(pid); }
-    const char *uidToName(uid_t uid) { return stats.uidToName(uid); }
-    void lock() { pthread_mutex_lock(&mLogElementsLock); }
-    void unlock() { pthread_mutex_unlock(&mLogElementsLock); }
+    const char* pidToName(pid_t pid) {
+        return stats.pidToName(pid);
+    }
+    uid_t pidToUid(pid_t pid) {
+        return stats.pidToUid(pid);
+    }
+    const char* uidToName(uid_t uid) {
+        return stats.uidToName(uid);
+    }
+    void lock() {
+        pthread_mutex_lock(&mLogElementsLock);
+    }
+    void unlock() {
+        pthread_mutex_unlock(&mLogElementsLock);
+    }
 
-private:
-
+   private:
     static constexpr size_t minPrune = 4;
     static constexpr size_t maxPrune = 256;
 
@@ -163,4 +177,4 @@ private:
         LogBufferElementCollection::iterator it, bool coalesce = false);
 };
 
-#endif // _LOGD_LOG_BUFFER_H__
+#endif  // _LOGD_LOG_BUFFER_H__
