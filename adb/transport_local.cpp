@@ -30,6 +30,7 @@
 #include <thread>
 #include <vector>
 
+#include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
 
@@ -100,6 +101,46 @@ bool local_connect(int port) {
     std::string dummy;
     return local_connect_arbitrary_ports(port-1, port, &dummy) == 0;
 }
+
+void connect_device(const std::string& address, std::string* response) {
+    if (address.empty()) {
+        *response = "empty address";
+        return;
+    }
+
+    std::string serial;
+    std::string host;
+    int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
+    if (!android::base::ParseNetAddress(address, &host, &port, &serial, response)) {
+        return;
+    }
+
+    std::string error;
+    int fd = network_connect(host.c_str(), port, SOCK_STREAM, 10, &error);
+    if (fd == -1) {
+        *response = android::base::StringPrintf("unable to connect to %s: %s",
+                                                serial.c_str(), error.c_str());
+        return;
+    }
+
+    D("client: connected %s remote on fd %d", serial.c_str(), fd);
+    close_on_exec(fd);
+    disable_tcp_nagle(fd);
+
+    // Send a TCP keepalive ping to the device every second so we can detect disconnects.
+    if (!set_tcp_keepalive(fd, 1)) {
+        D("warning: failed to configure TCP keepalives (%s)", strerror(errno));
+    }
+
+    int ret = register_socket_transport(fd, serial.c_str(), port, 0);
+    if (ret < 0) {
+        adb_close(fd);
+        *response = android::base::StringPrintf("already connected to %s", serial.c_str());
+    } else {
+        *response = android::base::StringPrintf("connected to %s", serial.c_str());
+    }
+}
+
 
 int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* error) {
     int fd = -1;
