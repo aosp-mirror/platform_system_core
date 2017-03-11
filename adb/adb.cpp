@@ -253,6 +253,19 @@ void send_connect(atransport* t) {
     send_packet(cp, t);
 }
 
+#if ADB_HOST
+
+void SendConnectOnHost(atransport* t) {
+    // Send an empty message before A_CNXN message. This is because the data toggle of the ep_out on
+    // host and ep_in on device may not be the same.
+    apacket* p = get_apacket();
+    CHECK(p);
+    send_packet(p, t);
+    send_connect(t);
+}
+
+#endif
+
 // qual_overwrite is used to overwrite a qualifier string.  dst is a
 // pointer to a char pointer.  It is assumed that if *dst is non-NULL, it
 // was malloc'ed and needs to freed.  *dst will be set to a dup of src.
@@ -299,29 +312,29 @@ void parse_banner(const std::string& banner, atransport* t) {
     const std::string& type = pieces[0];
     if (type == "bootloader") {
         D("setting connection_state to kCsBootloader");
-        t->connection_state = kCsBootloader;
+        t->SetConnectionState(kCsBootloader);
         update_transports();
     } else if (type == "device") {
         D("setting connection_state to kCsDevice");
-        t->connection_state = kCsDevice;
+        t->SetConnectionState(kCsDevice);
         update_transports();
     } else if (type == "recovery") {
         D("setting connection_state to kCsRecovery");
-        t->connection_state = kCsRecovery;
+        t->SetConnectionState(kCsRecovery);
         update_transports();
     } else if (type == "sideload") {
         D("setting connection_state to kCsSideload");
-        t->connection_state = kCsSideload;
+        t->SetConnectionState(kCsSideload);
         update_transports();
     } else {
         D("setting connection_state to kCsHost");
-        t->connection_state = kCsHost;
+        t->SetConnectionState(kCsHost);
     }
 }
 
 static void handle_new_connection(atransport* t, apacket* p) {
-    if (t->connection_state != kCsOffline) {
-        t->connection_state = kCsOffline;
+    if (t->GetConnectionState() != kCsOffline) {
+        t->SetConnectionState(kCsOffline);
         handle_offline(t);
     }
 
@@ -355,10 +368,10 @@ void handle_packet(apacket *p, atransport *t)
         if (p->msg.arg0){
             send_packet(p, t);
 #if ADB_HOST
-            send_connect(t);
+            SendConnectOnHost(t);
 #endif
         } else {
-            t->connection_state = kCsOffline;
+            t->SetConnectionState(kCsOffline);
             handle_offline(t);
             send_packet(p, t);
         }
@@ -372,7 +385,9 @@ void handle_packet(apacket *p, atransport *t)
         switch (p->msg.arg0) {
 #if ADB_HOST
             case ADB_AUTH_TOKEN:
-                t->connection_state = kCsUnauthorized;
+                if (t->GetConnectionState() == kCsOffline) {
+                    t->SetConnectionState(kCsUnauthorized);
+                }
                 send_auth_response(p->data, p->msg.data_length, t);
                 break;
 #else
@@ -391,7 +406,7 @@ void handle_packet(apacket *p, atransport *t)
                 break;
 #endif
             default:
-                t->connection_state = kCsOffline;
+                t->SetConnectionState(kCsOffline);
                 handle_offline(t);
                 break;
         }
@@ -1034,7 +1049,6 @@ static int SendOkay(int fd, const std::string& s) {
     SendProtocolString(fd, s);
     return 0;
 }
-#endif
 
 int handle_host_request(const char* service, TransportType type,
                         const char* serial, int reply_fd, asocket* s) {
@@ -1053,7 +1067,6 @@ int handle_host_request(const char* service, TransportType type,
         android::base::quick_exit(0);
     }
 
-#if ADB_HOST
     // "transport:" is used for switching transport with a specified serial number
     // "transport-usb:" is used for switching transport to the only USB transport
     // "transport-local:" is used for switching transport to the only local transport
@@ -1098,16 +1111,10 @@ int handle_host_request(const char* service, TransportType type,
     if (!strcmp(service, "reconnect-offline")) {
         std::string response;
         close_usb_devices([&response](const atransport* transport) {
-            switch (transport->connection_state) {
+            switch (transport->GetConnectionState()) {
                 case kCsOffline:
                 case kCsUnauthorized:
-                    response += "reconnecting ";
-                    if (transport->serial) {
-                        response += transport->serial;
-                    } else {
-                        response += "<unknown>";
-                    }
-                    response += "\n";
+                    response += "reconnecting " + transport->serial_name() + "\n";
                     return true;
                 default:
                     return false;
@@ -1131,7 +1138,6 @@ int handle_host_request(const char* service, TransportType type,
         return 0;
     }
 
-#if ADB_HOST
     if (!strcmp(service, "host-features")) {
         FeatureSet features = supported_features();
         // Abuse features to report libusb status.
@@ -1141,7 +1147,6 @@ int handle_host_request(const char* service, TransportType type,
         SendOkay(reply_fd, FeatureSetToString(features));
         return 0;
     }
-#endif
 
     // remove TCP transport
     if (!strncmp(service, "disconnect:", 11)) {
@@ -1211,15 +1216,19 @@ int handle_host_request(const char* service, TransportType type,
     }
 
     if (!strcmp(service, "reconnect")) {
-        if (s->transport != nullptr) {
-            kick_transport(s->transport);
+        std::string response;
+        atransport* t = acquire_one_transport(type, serial, nullptr, &response, true);
+        if (t != nullptr) {
+            kick_transport(t);
+            response =
+                "reconnecting " + t->serial_name() + " [" + t->connection_state_name() + "]\n";
         }
-        return SendOkay(reply_fd, "done");
+        return SendOkay(reply_fd, response);
     }
-#endif // ADB_HOST
 
     int ret = handle_forward_request(service, type, serial, reply_fd);
     if (ret >= 0)
       return ret - 1;
     return -1;
 }
+#endif  // ADB_HOST

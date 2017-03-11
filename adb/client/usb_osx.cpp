@@ -518,7 +518,7 @@ int usb_read(usb_handle *handle, void *buf, int len)
     }
 
     if (kIOReturnSuccess == result)
-        return 0;
+        return numBytes;
     else {
         LOG(ERROR) << "usb_read failed with status: " << std::hex << result;
     }

@@ -19,10 +19,12 @@
 
 #include <sys/types.h>
 
+#include <atomic>
 #include <deque>
 #include <functional>
 #include <list>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_set>
 
@@ -57,31 +59,35 @@ public:
     // class in one go is a very large change. Given how bad our testing is,
     // it's better to do this piece by piece.
 
-    atransport() {
+    atransport(ConnectionState state = kCsOffline) : connection_state_(state) {
         transport_fde = {};
         protocol_version = A_VERSION;
         max_payload = MAX_PAYLOAD;
     }
-
     virtual ~atransport() {}
 
     int (*read_from_remote)(apacket* p, atransport* t) = nullptr;
-    int (*write_to_remote)(apacket* p, atransport* t) = nullptr;
     void (*close)(atransport* t) = nullptr;
+
+    void SetWriteFunction(int (*write_func)(apacket*, atransport*)) { write_func_ = write_func; }
     void SetKickFunction(void (*kick_func)(atransport*)) {
         kick_func_ = kick_func;
     }
     bool IsKicked() {
         return kicked_;
     }
+    int Write(apacket* p);
     void Kick();
+
+    // ConnectionState can be read by all threads, but can only be written in the main thread.
+    ConnectionState GetConnectionState() const;
+    void SetConnectionState(ConnectionState state);
 
     int fd = -1;
     int transport_socket = -1;
     fdevent transport_fde;
     size_t ref_count = 0;
     uint32_t sync_token = 0;
-    ConnectionState connection_state = kCsOffline;
     bool online = false;
     TransportType type = kTransportAny;
 
@@ -114,11 +120,13 @@ public:
 
 #if ADB_HOST
     std::shared_ptr<RSA> NextKey();
+    bool SetSendConnectOnError();
 #endif
 
     char token[TOKEN_SIZE] = {};
     size_t failed_auth_attempts = 0;
 
+    const std::string serial_name() const { return serial ? serial : "<unknown>"; }
     const std::string connection_state_name() const;
 
     void update_version(int version, size_t payload);
@@ -157,6 +165,7 @@ private:
     int local_port_for_emulator_ = -1;
     bool kicked_ = false;
     void (*kick_func_)(atransport*) = nullptr;
+    int (*write_func_)(apacket*, atransport*) = nullptr;
 
     // A set of features transmitted in the banner with the initial connection.
     // This is stored in the banner as 'features=feature0,feature1,etc'.
@@ -167,8 +176,11 @@ private:
     // A list of adisconnect callbacks called when the transport is kicked.
     std::list<adisconnect*> disconnects_;
 
+    std::atomic<ConnectionState> connection_state_;
 #if ADB_HOST
     std::deque<std::shared_ptr<RSA>> keys_;
+    std::mutex write_msg_lock_;
+    bool has_send_connect_on_error_ = false;
 #endif
 
     DISALLOW_COPY_AND_ASSIGN(atransport);
@@ -181,8 +193,8 @@ private:
  * is set to true and nullptr returned.
  * If no suitable transport is found, error is set and nullptr returned.
  */
-atransport* acquire_one_transport(TransportType type, const char* serial,
-                                  bool* is_ambiguous, std::string* error_out);
+atransport* acquire_one_transport(TransportType type, const char* serial, bool* is_ambiguous,
+                                  std::string* error_out, bool accept_any_state = false);
 void kick_transport(atransport* t);
 void update_transports(void);
 

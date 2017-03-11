@@ -401,7 +401,6 @@ static int usb_bulk_read(usb_handle* h, void* data, int len) {
     }
 }
 
-
 int usb_write(usb_handle *h, const void *_data, int len)
 {
     D("++ usb_write ++");
@@ -429,19 +428,16 @@ int usb_read(usb_handle *h, void *_data, int len)
     int n;
 
     D("++ usb_read ++");
-    while(len > 0) {
+    int orig_len = len;
+    while (len == orig_len) {
         int xfer = len;
 
         D("[ usb read %d fd = %d], path=%s", xfer, h->fd, h->path.c_str());
         n = usb_bulk_read(h, data, xfer);
         D("[ usb read %d ] = %d, path=%s", xfer, n, h->path.c_str());
-        if(n != xfer) {
+        if (n <= 0) {
             if((errno == ETIMEDOUT) && (h->fd != -1)) {
                 D("[ timeout ]");
-                if(n > 0){
-                    data += n;
-                    len -= n;
-                }
                 continue;
             }
             D("ERROR: n = %d, errno = %d (%s)",
@@ -449,12 +445,12 @@ int usb_read(usb_handle *h, void *_data, int len)
             return -1;
         }
 
-        len -= xfer;
-        data += xfer;
+        len -= n;
+        data += n;
     }
 
     D("-- usb_read --");
-    return 0;
+    return orig_len - len;
 }
 
 void usb_kick(usb_handle* h) {
