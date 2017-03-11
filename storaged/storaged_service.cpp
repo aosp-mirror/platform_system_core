@@ -97,19 +97,19 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
         if (arg == String16("--hours")) {
             if (++i >= args.size())
                 break;
-            hours = stod(String16::std_string(args[i]));
+            hours = std::stod(String8(args[i]).string());
             continue;
         }
         if (arg == String16("--time_window")) {
             if (++i >= args.size())
                 break;
-            time_window = stoi(String16::std_string(args[i]));
+            time_window = std::stoi(String8(args[i]).string());
             continue;
         }
         if (arg == String16("--threshold")) {
             if (++i >= args.size())
                 break;
-            threshold = stoll(String16::std_string(args[i]));
+            threshold = std::stoll(String8(args[i]).string());
             continue;
         }
         if (arg == String16("--force")) {

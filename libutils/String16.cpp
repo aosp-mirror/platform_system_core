@@ -18,6 +18,8 @@
 
 #include <utils/Log.h>
 
+#include <ctype.h>
+
 #include "SharedBuffer.h"
 
 namespace android {
