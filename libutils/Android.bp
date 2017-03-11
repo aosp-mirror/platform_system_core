@@ -65,7 +65,6 @@ cc_library {
     target: {
         android: {
             srcs: [
-                "BlobCache.cpp",
                 "Looper.cpp",
                 "ProcessCallStack.cpp",
                 "Trace.cpp",

@@ -33,7 +33,6 @@ cc_test {
     target: {
         android: {
             srcs: [
-                "BlobCache_test.cpp",
                 "Looper_test.cpp",
                 "RefBase_test.cpp",
                 "SystemClock_test.cpp",
