@@ -64,8 +64,14 @@ public:
     static String8              format(const char* fmt, ...) __attribute__((format (printf, 1, 2)));
     static String8              formatV(const char* fmt, va_list args);
 
+    inline  const char*         c_str() const;
     inline  const char*         string() const;
+
+// TODO(b/35363681): remove
+private:
     static inline std::string   std_string(const String8& str);
+public:
+
     inline  size_t              size() const;
     inline  size_t              bytes() const;
     inline  bool                isEmpty() const;
@@ -259,6 +265,10 @@ inline const String8 String8::empty() {
     return String8();
 }
 
+inline const char* String8::c_str() const
+{
+    return mString;
+}
 inline const char* String8::string() const
 {
     return mString;
