@@ -67,7 +67,10 @@ public:
 
     inline  const char16_t*     string() const;
 
+//TODO(b/35363681): remove
+private:
     static inline std::string   std_string(const String16& str);
+public:
             size_t              size() const;
             void                setTo(const String16& other);
             status_t            setTo(const char16_t* other);

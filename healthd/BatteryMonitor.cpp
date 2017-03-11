@@ -129,7 +129,7 @@ int BatteryMonitor::getBatteryHealth(const char* status) {
 }
 
 int BatteryMonitor::readFromFile(const String8& path, std::string* buf) {
-    if (android::base::ReadFileToString(String8::std_string(path), buf)) {
+    if (android::base::ReadFileToString(path.c_str(), buf)) {
         *buf = android::base::Trim(*buf);
     }
     return buf->length();
