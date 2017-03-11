@@ -148,7 +148,12 @@ static void abort_handler(pid_t target, const bool& tombstoned_connected,
     }
   }
 
-  dprintf(output_fd.get(), "crash_dump failed to dump process %d: %s\n", target, abort_msg);
+  dprintf(output_fd.get(), "crash_dump failed to dump process");
+  if (target != 1) {
+    dprintf(output_fd.get(), " %d: %s\n", target, abort_msg);
+  } else {
+    dprintf(output_fd.get(), ": %s\n", abort_msg);
+  }
 
   _exit(1);
 }
@@ -195,7 +200,7 @@ int main(int argc, char** argv) {
   pid_t pseudothread_tid;
 
   if (target == 1) {
-    LOG(FATAL) << "target died before we could attach";
+    LOG(FATAL) << "target died before we could attach (received main tid = " << main_tid << ")";
   }
 
   if (!android::base::ParseInt(argv[1], &main_tid, 1, std::numeric_limits<pid_t>::max())) {
