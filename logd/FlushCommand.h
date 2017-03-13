@@ -26,7 +26,7 @@ class LogBufferElement;
 class LogReader;
 
 class FlushCommand : public SocketClientCommand {
-    LogReader &mReader;
+    LogReader& mReader;
     bool mNonBlock;
     unsigned long mTail;
     unsigned int mLogMask;
@@ -34,18 +34,15 @@ class FlushCommand : public SocketClientCommand {
     uint64_t mStart;
     uint64_t mTimeout;
 
-public:
-    explicit FlushCommand(LogReader &mReader,
-                 bool nonBlock = false,
-                 unsigned long tail = -1,
-                 unsigned int logMask = -1,
-                 pid_t pid = 0,
-                 uint64_t start = 1,
-                 uint64_t timeout = 0);
-    virtual void runSocketCommand(SocketClient *client);
+   public:
+    explicit FlushCommand(LogReader& mReader, bool nonBlock = false,
+                          unsigned long tail = -1, unsigned int logMask = -1,
+                          pid_t pid = 0, uint64_t start = 1,
+                          uint64_t timeout = 0);
+    virtual void runSocketCommand(SocketClient* client);
 
-    static bool hasReadLogs(SocketClient *client);
-    static bool hasSecurityLogs(SocketClient *client);
+    static bool hasReadLogs(SocketClient* client);
+    static bool hasSecurityLogs(SocketClient* client);
 };
 
 #endif

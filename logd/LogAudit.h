@@ -26,9 +26,9 @@
 class LogReader;
 
 class LogAudit : public SocketListener {
-    LogBuffer *logbuf;
-    LogReader *reader;
-    int fdDmesg; // fdDmesg >= 0 is functionally bool dmesg
+    LogBuffer* logbuf;
+    LogReader* reader;
+    int fdDmesg;  // fdDmesg >= 0 is functionally bool dmesg
     bool main;
     bool events;
     bool initialized;
@@ -38,18 +38,20 @@ class LogAudit : public SocketListener {
     std::queue<log_time> bucket;
     void checkRateLimit();
 
-public:
-    LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg);
-    int log(char *buf, size_t len);
-    bool isMonotonic() { return logbuf->isMonotonic(); }
+   public:
+    LogAudit(LogBuffer* buf, LogReader* reader, int fdDmesg);
+    int log(char* buf, size_t len);
+    bool isMonotonic() {
+        return logbuf->isMonotonic();
+    }
 
-protected:
-    virtual bool onDataAvailable(SocketClient *cli);
+   protected:
+    virtual bool onDataAvailable(SocketClient* cli);
 
-private:
+   private:
     static int getLogSocket();
-    int logPrint(const char *fmt, ...)
-        __attribute__ ((__format__ (__printf__, 2, 3)));
+    int logPrint(const char* fmt, ...)
+        __attribute__((__format__(__printf__, 2, 3)));
 };
 
 #endif
