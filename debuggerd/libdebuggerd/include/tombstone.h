@@ -43,6 +43,7 @@ void engrave_tombstone_ucontext(int tombstone_fd, uintptr_t abort_msg_address, s
                                 ucontext_t* ucontext);
 
 // Compatibility shim.
+__attribute__((__unused__))
 static void engrave_tombstone_ucontext(int tombstone_fd, pid_t, pid_t, uintptr_t abort_msg_address,
                                        siginfo_t* siginfo, ucontext_t* ucontext) {
   engrave_tombstone_ucontext(tombstone_fd, abort_msg_address, siginfo, ucontext);
