@@ -78,7 +78,6 @@ std::string bytes_to_hex(const uint8_t *bytes, size_t bytes_len);
 bool is_dir(const char* pathname);
 bool expand_props(const std::string& src, std::string* dst);
 
-void reboot(const char* destination) __attribute__((__noreturn__));
 void panic() __attribute__((__noreturn__));
 
 #endif

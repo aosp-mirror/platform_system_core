@@ -49,6 +49,7 @@
 #include "init.h"
 #include "log.h"
 #include "property_service.h"
+#include "reboot.h"
 #include "util.h"
 
 static unsigned int do_decode_uid(const char *s)
@@ -410,18 +411,9 @@ bool expand_props(const std::string& src, std::string* dst) {
     return true;
 }
 
-void reboot(const char* destination) {
-    android_reboot(ANDROID_RB_RESTART2, 0, destination);
-    // We're init, so android_reboot will actually have been a syscall so there's nothing
-    // to wait for. If android_reboot returns, just abort so that the kernel will reboot
-    // itself when init dies.
-    PLOG(FATAL) << "reboot failed";
-    abort();
-}
-
 void panic() {
     LOG(ERROR) << "panic: rebooting to bootloader";
-    reboot("bootloader");
+    DoReboot(ANDROID_RB_RESTART2, "reboot", "bootloader", false);
 }
 
 std::ostream& operator<<(std::ostream& os, const Timer& t) {
