@@ -1,14 +1,1 @@
----
-Language:        Cpp
-BasedOnStyle:  Google
-BinPackArguments: true
-BinPackParameters: true
-ColumnLimit:     100
-ConstructorInitializerAllOnOneLineOrOnePerLine: false
-IndentWidth:     4
-Standard:        Auto
-TabWidth:        8
-UseTab:          Never
-DerivePointerAlignment: false
-PointerAlignment: Left
-...
+../.clang-format-4
