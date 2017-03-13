@@ -199,16 +199,16 @@ int main(int argc, char** argv) {
   pid_t main_tid;
   pid_t pseudothread_tid;
 
-  if (target == 1) {
-    LOG(FATAL) << "target died before we could attach (received main tid = " << main_tid << ")";
-  }
-
   if (!android::base::ParseInt(argv[1], &main_tid, 1, std::numeric_limits<pid_t>::max())) {
     LOG(FATAL) << "invalid main tid: " << argv[1];
   }
 
   if (!android::base::ParseInt(argv[2], &pseudothread_tid, 1, std::numeric_limits<pid_t>::max())) {
     LOG(FATAL) << "invalid pseudothread tid: " << argv[2];
+  }
+
+  if (target == 1) {
+    LOG(FATAL) << "target died before we could attach (received main tid = " << main_tid << ")";
   }
 
   android::procinfo::ProcessInfo target_info;
