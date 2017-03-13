@@ -95,11 +95,31 @@ bool BacktraceCurrent::DiscardFrame(const backtrace_frame_data_t& frame) {
 
 static pthread_mutex_t g_sigaction_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+// Since errno is stored per thread, changing it in the signal handler
+// modifies the value on the thread in which the signal handler executes.
+// If a signal occurs between a call and an errno check, it's possible
+// to get the errno set here. Always save and restore it just in case
+// code would modify it.
+class ErrnoRestorer {
+ public:
+  ErrnoRestorer() : saved_errno_(errno) {}
+  ~ErrnoRestorer() {
+    errno = saved_errno_;
+  }
+
+ private:
+  int saved_errno_;
+};
+
 static void SignalLogOnly(int, siginfo_t*, void*) {
+  ErrnoRestorer restore;
+
   BACK_LOGE("pid %d, tid %d: Received a spurious signal %d\n", getpid(), gettid(), THREAD_SIGNAL);
 }
 
 static void SignalHandler(int, siginfo_t*, void* sigcontext) {
+  ErrnoRestorer restore;
+
   ThreadEntry* entry = ThreadEntry::Get(getpid(), gettid(), false);
   if (!entry) {
     BACK_LOGE("pid %d, tid %d entry not found", getpid(), gettid());
