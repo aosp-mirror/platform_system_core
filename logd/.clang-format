@@ -1,0 +1,11 @@
+BasedOnStyle: Google
+AllowShortFunctionsOnASingleLine: false
+
+CommentPragmas: NOLINT:.*
+DerivePointerAlignment: false
+IndentWidth: 4
+PointerAlignment: Left
+TabWidth: 4
+PenaltyExcessCharacter: 32
+
+Cpp11BracedListStyle: false

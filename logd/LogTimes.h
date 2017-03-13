@@ -18,8 +18,8 @@
 #define _LOGD_LOG_TIMES_H__
 
 #include <pthread.h>
-#include <time.h>
 #include <sys/types.h>
+#include <time.h>
 
 #include <list>
 
@@ -38,9 +38,9 @@ class LogTimeEntry {
     bool leadingDropped;
     pthread_cond_t threadTriggeredCondition;
     pthread_t mThread;
-    LogReader &mReader;
-    static void *threadStart(void *me);
-    static void threadStop(void *me);
+    LogReader& mReader;
+    static void* threadStart(void* me);
+    static void threadStop(void* me);
     const unsigned int mLogMask;
     const pid_t mPid;
     unsigned int skipAhead[LOG_ID_MAX];
@@ -48,20 +48,24 @@ class LogTimeEntry {
     unsigned long mTail;
     unsigned long mIndex;
 
-public:
-    LogTimeEntry(LogReader &reader, SocketClient *client, bool nonBlock,
+   public:
+    LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBlock,
                  unsigned long tail, unsigned int logMask, pid_t pid,
                  uint64_t start, uint64_t timeout);
 
-    SocketClient *mClient;
+    SocketClient* mClient;
     uint64_t mStart;
     struct timespec mTimeout;
     const bool mNonBlock;
-    const uint64_t mEnd; // only relevant if mNonBlock
+    const uint64_t mEnd;  // only relevant if mNonBlock
 
     // Protect List manipulations
-    static void lock(void) { pthread_mutex_lock(&timesLock); }
-    static void unlock(void) { pthread_mutex_unlock(&timesLock); }
+    static void lock(void) {
+        pthread_mutex_lock(&timesLock);
+    }
+    static void unlock(void) {
+        pthread_mutex_unlock(&timesLock);
+    }
 
     void startReader_Locked(void);
 
@@ -72,7 +76,9 @@ public:
         pthread_cond_signal(&threadTriggeredCondition);
     }
 
-    void triggerSkip_Locked(log_id_t id, unsigned int skip) { skipAhead[id] = skip; }
+    void triggerSkip_Locked(log_id_t id, unsigned int skip) {
+        skipAhead[id] = skip;
+    }
     void cleanSkip_Locked(void);
 
     // These called after LogTimeEntry removed from list, lock implicitly held
@@ -93,16 +99,28 @@ public:
     }
 
     // Called to mark socket in jeopardy
-    void error_Locked(void) { mError = true; }
-    void error(void) { lock(); error_Locked(); unlock(); }
+    void error_Locked(void) {
+        mError = true;
+    }
+    void error(void) {
+        lock();
+        error_Locked();
+        unlock();
+    }
 
-    bool isError_Locked(void) const { return mRelease || mError; }
+    bool isError_Locked(void) const {
+        return mRelease || mError;
+    }
 
     // Mark Used
     //  Locking implied, grabbed when protection around loop iteration
-    void incRef_Locked(void) { ++mRefCount; }
+    void incRef_Locked(void) {
+        ++mRefCount;
+    }
 
-    bool owned_Locked(void) const { return mRefCount != 0; }
+    bool owned_Locked(void) const {
+        return mRefCount != 0;
+    }
 
     void decRef_Locked(void) {
         if ((mRefCount && --mRefCount) || !mRelease || threadRunning) {
@@ -111,12 +129,14 @@ public:
         // No one else is holding a reference to this
         delete this;
     }
-    bool isWatching(log_id_t id) { return (mLogMask & (1<<id)) != 0; }
+    bool isWatching(log_id_t id) {
+        return (mLogMask & (1 << id)) != 0;
+    }
     // flushTo filter callbacks
-    static int FilterFirstPass(const LogBufferElement *element, void *me);
-    static int FilterSecondPass(const LogBufferElement *element, void *me);
+    static int FilterFirstPass(const LogBufferElement* element, void* me);
+    static int FilterSecondPass(const LogBufferElement* element, void* me);
 };
 
-typedef std::list<LogTimeEntry *> LastLogTimes;
+typedef std::list<LogTimeEntry*> LastLogTimes;
 
-#endif // _LOGD_LOG_TIMES_H__
+#endif  // _LOGD_LOG_TIMES_H__

@@ -50,11 +50,13 @@ static uid_t sniffUid(const char* comment, const char* endp) {
     if (!comment) return AID_ROOT;
 
     if (*comment == '#') ++comment;
-    while ((comment < endp) && (*comment != '\n') && isspace(*comment)) ++comment;
+    while ((comment < endp) && (*comment != '\n') && isspace(*comment))
+        ++comment;
     static const char uid_str[] = "uid=";
     if (((comment + strlen(uid_str)) >= endp) ||
-            fastcmp<strncmp>(comment, uid_str, strlen(uid_str)) ||
-            !isdigit(comment[strlen(uid_str)])) return AID_ROOT;
+        fastcmp<strncmp>(comment, uid_str, strlen(uid_str)) ||
+        !isdigit(comment[strlen(uid_str)]))
+        return AID_ROOT;
     char* cp;
     unsigned long Uid = strtoul(comment + 4, &cp, 10);
     if ((cp > endp) || (Uid >= INT_MAX)) return AID_ROOT;
@@ -86,34 +88,32 @@ bool LogTags::RebuildFileEventLogTags(const char* filename, bool warn) {
         }
 
         // dump what we already know back into the file?
-        fd = TEMP_FAILURE_RETRY(open(filename,
-                                     O_WRONLY | O_TRUNC | O_CLOEXEC |
-                                     O_NOFOLLOW | O_BINARY));
+        fd = TEMP_FAILURE_RETRY(open(
+            filename, O_WRONLY | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_BINARY));
         if (fd >= 0) {
             time_t now = time(NULL);
             struct tm tm;
             localtime_r(&now, &tm);
             char timebuf[20];
-            size_t len = strftime(timebuf, sizeof(timebuf),
-                                  "%Y-%m-%d %H:%M:%S", &tm);
+            size_t len =
+                strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &tm);
             android::base::WriteStringToFd(
                 android::base::StringPrintf(
                     "# Rebuilt %.20s, content owned by logd\n", timebuf),
                 fd);
             for (const auto& it : tag2total) {
-                android::base::WriteStringToFd(formatEntry_locked(it.first,
-                                                                  AID_ROOT),
-                                               fd);
+                android::base::WriteStringToFd(
+                    formatEntry_locked(it.first, AID_ROOT), fd);
             }
             TEMP_FAILURE_RETRY(close(fd));
         }
     }
 
     if (warn) {
-        android::prdebug(((fd < 0) ?
-                              "%s failed to rebuild" :
-                              "%s missing, damaged or truncated; rebuilt"),
-                         filename);
+        android::prdebug(
+            ((fd < 0) ? "%s failed to rebuild"
+                      : "%s missing, damaged or truncated; rebuilt"),
+            filename);
     }
 
     if (fd >= 0) {
@@ -126,10 +126,9 @@ bool LogTags::RebuildFileEventLogTags(const char* filename, bool warn) {
     return true;
 }
 
-void LogTags::AddEventLogTags(uint32_t tag, uid_t uid,
-                              const std::string& Name,
-                              const std::string& Format,
-                              const char* source, bool warn) {
+void LogTags::AddEventLogTags(uint32_t tag, uid_t uid, const std::string& Name,
+                              const std::string& Format, const char* source,
+                              bool warn) {
     std::string Key = Name;
     if (Format.length()) Key += "+" + Format;
 
@@ -178,8 +177,8 @@ void LogTags::AddEventLogTags(uint32_t tag, uid_t uid,
         WritePersistEventLogTags(tag, uid, source);
     } else if (warn && !newOne && source) {
         // For the files, we want to report dupes.
-        android::prdebug("Multiple tag %" PRIu32 " %s %s %s", tag,
-            Name.c_str(), Format.c_str(), source);
+        android::prdebug("Multiple tag %" PRIu32 " %s %s %s", tag, Name.c_str(),
+                         Format.c_str(), source);
     }
 }
 
@@ -193,7 +192,7 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
     }
     std::string content;
     if (android::base::ReadFileToString(filename, &content)) {
-        char* cp = (char*) content.c_str();
+        char* cp = (char*)content.c_str();
         char* endp = cp + content.length();
 
         {
@@ -228,16 +227,19 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
                     std::string Name(name, cp - name);
 #ifdef ALLOW_NOISY_LOGGING_OF_PROBLEM_WITH_LOTS_OF_TECHNICAL_DEBT
                     static const size_t maximum_official_tag_name_size = 24;
-                    if (warn && (Name.length() > maximum_official_tag_name_size)) {
-                       android::prdebug("tag name too long %s", Name.c_str());
+                    if (warn &&
+                        (Name.length() > maximum_official_tag_name_size)) {
+                        android::prdebug("tag name too long %s", Name.c_str());
                     }
 #endif
-                    if (hasAlpha && ((cp >= endp) || (*cp == '#') || isspace(*cp))) {
+                    if (hasAlpha &&
+                        ((cp >= endp) || (*cp == '#') || isspace(*cp))) {
                         if (Tag > emptyTag) {
                             if (*cp != '\n') lineStart = NULL;
                             continue;
                         }
-                        while ((cp < endp) && (*cp != '\n') && isspace(*cp)) ++cp;
+                        while ((cp < endp) && (*cp != '\n') && isspace(*cp))
+                            ++cp;
                         const char* format = cp;
                         uid_t uid = AID_ROOT;
                         while ((cp < endp) && (*cp != '\n')) {
@@ -263,7 +265,9 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
                         }
                         lineStart = NULL;
                     }
-                } else if (!isspace(*cp)) break;
+                } else if (!isspace(*cp)) {
+                    break;
+                }
             }
             cp++;
         }
@@ -273,8 +277,7 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
 }
 
 // Extract a 4-byte value from a byte stream.
-static inline uint32_t get4LE(const char* msg)
-{
+static inline uint32_t get4LE(const char* msg) {
     const uint8_t* src = reinterpret_cast<const uint8_t*>(msg);
     return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
 }
@@ -284,8 +287,8 @@ static inline uint32_t get4LE(const char* msg)
 // database with any found.
 void LogTags::ReadPersistEventLogTags() {
     struct logger_list* logger_list = android_logger_list_alloc(
-        ANDROID_LOG_RDONLY | ANDROID_LOG_PSTORE | ANDROID_LOG_NONBLOCK,
-        0, (pid_t)0);
+        ANDROID_LOG_RDONLY | ANDROID_LOG_PSTORE | ANDROID_LOG_NONBLOCK, 0,
+        (pid_t)0);
     if (!logger_list) return;
 
     struct logger* e = android_logger_open(logger_list, LOG_ID_EVENTS);
@@ -305,8 +308,9 @@ void LogTags::ReadPersistEventLogTags() {
         if (log_msg.entry.len <= sizeof(uint32_t)) continue;
         uint32_t Tag = get4LE(msg);
         if (Tag != TAG_DEF_LOG_TAG) continue;
-        uid_t uid = (log_msg.entry.hdr_size >= sizeof(logger_entry_v4)) ?
-            log_msg.entry.uid : AID_ROOT;
+        uid_t uid = (log_msg.entry.hdr_size >= sizeof(logger_entry_v4))
+                        ? log_msg.entry.uid
+                        : AID_ROOT;
 
         std::string Name;
         std::string Format;
@@ -433,8 +437,7 @@ uint32_t LogTags::nameToTag(const char* name) const {
 // writer lock.  We use this call to invent a new deterministically
 // random tag, unique is cleared if no conflicts.  If format is NULL,
 // we are in readonly mode.
-uint32_t LogTags::nameToTag_locked(const std::string& name,
-                                   const char* format,
+uint32_t LogTags::nameToTag_locked(const std::string& name, const char* format,
                                    bool& unique) {
     key2tag_const_iterator ik;
 
@@ -462,7 +465,7 @@ uint32_t LogTags::nameToTag_locked(const std::string& name,
     size_t Hash = key2tag.hash_function()(Key);
     uint32_t Tag = Hash;
     // This sets an upper limit on the conflics we are allowed to deal with.
-    for (unsigned i = 0; i < 256; ) {
+    for (unsigned i = 0; i < 256;) {
         tag2name_const_iterator it = tag2name.find(Tag);
         if (it == tag2name.end()) return Tag;
         std::string localKey(it->second);
@@ -471,15 +474,14 @@ uint32_t LogTags::nameToTag_locked(const std::string& name,
             localKey += "+" + iform->second;
         }
         unique = !!it->second.compare(localKey);
-        if (!unique) return Tag; // unlikely except in a race
+        if (!unique) return Tag;  // unlikely except in a race
 
         ++i;
         // Algorithm to convert hash to next tag
         if (i < 32) {
             Tag = (Hash >> i);
             // size_t is 32 bits, or upper word zero, rotate
-            if ((sizeof(Hash) <= 4) ||
-                    ((Hash & (uint64_t(-1LL) << 32)) == 0)) {
+            if ((sizeof(Hash) <= 4) || ((Hash & (uint64_t(-1LL) << 32)) == 0)) {
                 Tag |= Hash << (32 - i);
             }
         } else {
@@ -501,7 +503,7 @@ void LogTags::WritePmsgEventLogTags(uint32_t tag, uid_t uid) {
     android::RWLock::AutoRLock readLock(rwlock);
 
     tag2total_const_iterator itot = tag2total.find(tag);
-    if (itot == tag2total.end()) return; // source is a static entry
+    if (itot == tag2total.end()) return;  // source is a static entry
 
     size_t lastTotal = itot->second;
 
@@ -525,7 +527,7 @@ void LogTags::WritePmsgEventLogTags(uint32_t tag, uid_t uid) {
     __android_log_event_list ctx(TAG_DEF_LOG_TAG);
     ctx << tag << Name << Format;
     std::string buffer(ctx);
-    if (buffer.length() <= 0) return; // unlikely
+    if (buffer.length() <= 0) return;  // unlikely
 
     /*
      *  struct {
@@ -562,18 +564,17 @@ void LogTags::WritePmsgEventLogTags(uint32_t tag, uid_t uid) {
 
     android_pmsg_log_header_t pmsgHeader = {
         .magic = LOGGER_MAGIC,
-        .len = (uint16_t)(sizeof(pmsgHeader) + sizeof(header) +
-                          sizeof(outTag) + buffer.length()),
+        .len = (uint16_t)(sizeof(pmsgHeader) + sizeof(header) + sizeof(outTag) +
+                          buffer.length()),
         .uid = (uint16_t)AID_ROOT,
         .pid = (uint16_t)getpid(),
     };
 
-    struct iovec Vec[] = {
-        { (unsigned char*)&pmsgHeader, sizeof(pmsgHeader) },
-        { (unsigned char*)&header, sizeof(header) },
-        { (unsigned char*)&outTag, sizeof(outTag) },
-        { (unsigned char*)const_cast<char*>(buffer.data()), buffer.length() }
-    };
+    struct iovec Vec[] = { { (unsigned char*)&pmsgHeader, sizeof(pmsgHeader) },
+                           { (unsigned char*)&header, sizeof(header) },
+                           { (unsigned char*)&outTag, sizeof(outTag) },
+                           { (unsigned char*)const_cast<char*>(buffer.data()),
+                             buffer.length() } };
 
     tag2uid_const_iterator ut = tag2uid.find(tag);
     if (ut == tag2uid.end()) {
@@ -582,7 +583,7 @@ void LogTags::WritePmsgEventLogTags(uint32_t tag, uid_t uid) {
         pmsgHeader.uid = (uint16_t)uid;
         TEMP_FAILURE_RETRY(writev(pmsg_fd, Vec, arraysize(Vec)));
     } else {
-        for (auto &it : ut->second) {
+        for (auto& it : ut->second) {
             pmsgHeader.uid = (uint16_t)it;
             TEMP_FAILURE_RETRY(writev(pmsg_fd, Vec, arraysize(Vec)));
         }
@@ -590,8 +591,8 @@ void LogTags::WritePmsgEventLogTags(uint32_t tag, uid_t uid) {
 }
 
 void LogTags::WriteDynamicEventLogTags(uint32_t tag, uid_t uid) {
-    static const int mode = O_WRONLY | O_APPEND |
-                            O_CLOEXEC | O_NOFOLLOW | O_BINARY;
+    static const int mode =
+        O_WRONLY | O_APPEND | O_CLOEXEC | O_NOFOLLOW | O_BINARY;
 
     int fd = openFile(dynamic_event_log_tags, mode, true);
     if (fd < 0) return;
@@ -612,8 +613,8 @@ void LogTags::WriteDynamicEventLogTags(uint32_t tag, uid_t uid) {
 }
 
 void LogTags::WriteDebugEventLogTags(uint32_t tag, uid_t uid) {
-    static const int mode = O_WRONLY | O_APPEND |
-                            O_CLOEXEC | O_NOFOLLOW | O_BINARY;
+    static const int mode =
+        O_WRONLY | O_APPEND | O_CLOEXEC | O_NOFOLLOW | O_BINARY;
 
     static bool one = true;
     int fd = openFile(debug_event_log_tags, mode, one);
@@ -636,16 +637,14 @@ void LogTags::WriteDebugEventLogTags(uint32_t tag, uid_t uid) {
 }
 
 // How we maintain some runtime or reboot stickiness
-void LogTags::WritePersistEventLogTags(uint32_t tag,
-                                       uid_t uid, const char* source) {
+void LogTags::WritePersistEventLogTags(uint32_t tag, uid_t uid,
+                                       const char* source) {
     // very unlikely
     bool etc = source && !strcmp(source, system_event_log_tags);
     if (etc) return;
 
     bool dynamic = source && !strcmp(source, dynamic_event_log_tags);
-    bool debug = (!dynamic &&
-                  source &&
-                  !strcmp(source, debug_event_log_tags)) ||
+    bool debug = (!dynamic && source && !strcmp(source, debug_event_log_tags)) ||
                  !__android_log_is_debuggable();
 
     WritePmsgEventLogTags(tag, uid);
@@ -658,7 +657,7 @@ void LogTags::WritePersistEventLogTags(uint32_t tag,
         if (itot != tag2total.end()) lastTotal = itot->second;
     }
 
-    if (lastTotal == 0) { // denotes first time for this one
+    if (lastTotal == 0) {  // denotes first time for this one
         if (!dynamic || !RebuildFileEventLogTags(dynamic_event_log_tags)) {
             WriteDynamicEventLogTags(tag, uid);
         }
@@ -694,9 +693,9 @@ uint32_t LogTags::nameToTag(uid_t uid, const char* name, const char* format) {
             tag2uid_const_iterator ut = tag2uid.find(Tag);
             if (updateUid) {
                 if ((ut != tag2uid.end()) &&
-                        (ut->second.find(uid) == ut->second.end())) {
-                    unique = write; // write passthrough to update uid counts
-                    if (!write) Tag = emptyTag; // deny read access
+                    (ut->second.find(uid) == ut->second.end())) {
+                    unique = write;  // write passthrough to update uid counts
+                    if (!write) Tag = emptyTag;  // deny read access
                 }
             } else {
                 unique = write && (ut != tag2uid.end());
@@ -705,7 +704,7 @@ uint32_t LogTags::nameToTag(uid_t uid, const char* name, const char* format) {
     }
 
     if (Tag == emptyTag) return Tag;
-    WritePmsgEventLogTags(Tag, uid); // record references periodically
+    WritePmsgEventLogTags(Tag, uid);  // record references periodically
     if (!unique) return Tag;
 
     bool updateWrite = false;
@@ -728,7 +727,9 @@ uint32_t LogTags::nameToTag(uid_t uid, const char* name, const char* format) {
                 if (updateUid) {
                     // Add it to the uid list
                     if ((ut == tag2uid.end()) ||
-                        (ut->second.find(uid) != ut->second.end())) return Tag;
+                        (ut->second.find(uid) != ut->second.end())) {
+                        return Tag;
+                    }
                     const_cast<uid_list&>(ut->second).emplace(uid);
                     updateWrite = true;
                 } else {
@@ -791,8 +792,7 @@ uint32_t LogTags::nameToTag(uid_t uid, const char* name, const char* format) {
     return Tag;
 }
 
-std::string LogTags::formatEntry(uint32_t tag, uid_t uid,
-                                 const char* name,
+std::string LogTags::formatEntry(uint32_t tag, uid_t uid, const char* name,
                                  const char* format) {
     if (!format || !format[0]) {
         return android::base::StringPrintf("%" PRIu32 "\t%s\n", tag, name);
@@ -802,9 +802,8 @@ std::string LogTags::formatEntry(uint32_t tag, uid_t uid,
     if (len > strlen(tabs)) len = strlen(tabs);
     std::string Uid;
     if (uid != AID_ROOT) Uid = android::base::StringPrintf(" # uid=%u", uid);
-    return android::base::StringPrintf("%" PRIu32 "\t%s%s\t%s%s\n",
-                                       tag, name, &tabs[len], format,
-                                       Uid.c_str());
+    return android::base::StringPrintf("%" PRIu32 "\t%s%s\t%s%s\n", tag, name,
+                                       &tabs[len], format, Uid.c_str());
 }
 
 std::string LogTags::formatEntry_locked(uint32_t tag, uid_t uid,
@@ -830,7 +829,7 @@ std::string LogTags::formatEntry_locked(uint32_t tag, uid_t uid,
 
     // Show all, one for each registered uid (we are group root)
     std::string ret;
-    for (auto &it : ut->second) {
+    for (auto& it : ut->second) {
         ret += formatEntry(tag, it, name, format);
     }
     return ret;
@@ -841,8 +840,8 @@ std::string LogTags::formatEntry(uint32_t tag, uid_t uid) {
     return formatEntry_locked(tag, uid);
 }
 
-std::string LogTags::formatGetEventTag(uid_t uid,
-                                       const char* name, const char* format) {
+std::string LogTags::formatGetEventTag(uid_t uid, const char* name,
+                                       const char* format) {
     bool all = name && (name[0] == '*') && !name[1];
     bool list = !name || all;
     std::string ret;
@@ -864,7 +863,7 @@ std::string LogTags::formatGetEventTag(uid_t uid,
             // first uid in list so as to manufacture an accurate reference
             tag2uid_const_iterator ut = tag2uid.find(tag);
             if ((ut != tag2uid.end()) &&
-                 (ut->second.begin() != ut->second.end())) {
+                (ut->second.begin() != ut->second.end())) {
                 uid = *(ut->second.begin());
             }
         }

@@ -29,9 +29,8 @@
 #include "LogReader.h"
 #include "LogUtils.h"
 
-LogReader::LogReader(LogBuffer *logbuf) :
-        SocketListener(getLogSocket(), true),
-        mLogbuf(*logbuf) {
+LogReader::LogReader(LogBuffer* logbuf)
+    : SocketListener(getLogSocket(), true), mLogbuf(*logbuf) {
 }
 
 // When we are notified a new log entry is available, inform
@@ -41,7 +40,7 @@ void LogReader::notifyNewLog() {
     runOnEachSocket(&command);
 }
 
-bool LogReader::onDataAvailable(SocketClient *cli) {
+bool LogReader::onDataAvailable(SocketClient* cli) {
     static bool name_set;
     if (!name_set) {
         prctl(PR_SET_NAME, "logd.reader");
@@ -59,7 +58,7 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
 
     unsigned long tail = 0;
     static const char _tail[] = " tail=";
-    char *cp = strstr(buffer, _tail);
+    char* cp = strstr(buffer, _tail);
     if (cp) {
         tail = atol(cp + sizeof(_tail) - 1);
     }
@@ -124,32 +123,33 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
             const pid_t mPid;
             const unsigned mLogMask;
             bool startTimeSet;
-            log_time &start;
-            uint64_t &sequence;
+            log_time& start;
+            uint64_t& sequence;
             uint64_t last;
             bool isMonotonic;
 
-        public:
-            LogFindStart(unsigned logMask, pid_t pid, log_time &start, uint64_t &sequence, bool isMonotonic) :
-                    mPid(pid),
-                    mLogMask(logMask),
-                    startTimeSet(false),
-                    start(start),
-                    sequence(sequence),
-                    last(sequence),
-                    isMonotonic(isMonotonic) {
+           public:
+            LogFindStart(unsigned logMask, pid_t pid, log_time& start,
+                         uint64_t& sequence, bool isMonotonic)
+                : mPid(pid),
+                  mLogMask(logMask),
+                  startTimeSet(false),
+                  start(start),
+                  sequence(sequence),
+                  last(sequence),
+                  isMonotonic(isMonotonic) {
             }
 
-            static int callback(const LogBufferElement *element, void *obj) {
-                LogFindStart *me = reinterpret_cast<LogFindStart *>(obj);
-                if ((!me->mPid || (me->mPid == element->getPid()))
-                        && (me->mLogMask & (1 << element->getLogId()))) {
+            static int callback(const LogBufferElement* element, void* obj) {
+                LogFindStart* me = reinterpret_cast<LogFindStart*>(obj);
+                if ((!me->mPid || (me->mPid == element->getPid())) &&
+                    (me->mLogMask & (1 << element->getLogId()))) {
                     if (me->start == element->getRealTime()) {
                         me->sequence = element->getSequence();
                         me->startTimeSet = true;
                         return -1;
                     } else if (!me->isMonotonic ||
-                            android::isMonotonic(element->getRealTime())) {
+                               android::isMonotonic(element->getRealTime())) {
                         if (me->start < element->getRealTime()) {
                             me->sequence = me->last;
                             me->startTimeSet = true;
@@ -163,7 +163,9 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
                 return false;
             }
 
-            bool found() { return startTimeSet; }
+            bool found() {
+                return startTimeSet;
+            }
         } logFindStart(logMask, pid, start, sequence,
                        logbuf().isMonotonic() && android::isMonotonic(start));
 
@@ -184,18 +186,19 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
 
     // Set acceptable upper limit to wait for slow reader processing b/27242723
     struct timeval t = { LOGD_SNDTIMEO, 0 };
-    setsockopt(cli->getSocket(), SOL_SOCKET, SO_SNDTIMEO, (const char *)&t, sizeof(t));
+    setsockopt(cli->getSocket(), SOL_SOCKET, SO_SNDTIMEO, (const char*)&t,
+               sizeof(t));
 
     command.runSocketCommand(cli);
     return true;
 }
 
-void LogReader::doSocketDelete(SocketClient *cli) {
-    LastLogTimes &times = mLogbuf.mTimes;
+void LogReader::doSocketDelete(SocketClient* cli) {
+    LastLogTimes& times = mLogbuf.mTimes;
     LogTimeEntry::lock();
     LastLogTimes::iterator it = times.begin();
-    while(it != times.end()) {
-        LogTimeEntry *entry = (*it);
+    while (it != times.end()) {
+        LogTimeEntry* entry = (*it);
         if (entry->mClient == cli) {
             times.erase(it);
             entry->release_Locked();
@@ -211,9 +214,8 @@ int LogReader::getLogSocket() {
     int sock = android_get_control_socket(socketName);
 
     if (sock < 0) {
-        sock = socket_local_server(socketName,
-                                   ANDROID_SOCKET_NAMESPACE_RESERVED,
-                                   SOCK_SEQPACKET);
+        sock = socket_local_server(
+            socketName, ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET);
     }
 
     return sock;

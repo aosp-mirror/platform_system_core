@@ -25,17 +25,14 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <linux/netlink.h>
 #include <linux/audit.h>
+#include <linux/netlink.h>
 
 __BEGIN_DECLS
 
-#define MAX_AUDIT_MESSAGE_LENGTH    8970
+#define MAX_AUDIT_MESSAGE_LENGTH 8970
 
-typedef enum {
-    GET_REPLY_BLOCKING = 0,
-    GET_REPLY_NONBLOCKING
-} reply_t;
+typedef enum { GET_REPLY_BLOCKING = 0, GET_REPLY_NONBLOCKING } reply_t;
 
 /* type == AUDIT_SIGNAL_INFO */
 struct audit_sig_info {
@@ -46,7 +43,7 @@ struct audit_sig_info {
 
 struct audit_message {
     struct nlmsghdr nlh;
-    char   data[MAX_AUDIT_MESSAGE_LENGTH];
+    char data[MAX_AUDIT_MESSAGE_LENGTH];
 };
 
 /**
@@ -78,7 +75,7 @@ extern void audit_close(int fd);
  * @return
  *  This function returns 0 on success, else -errno.
  */
-extern int audit_get_reply(int fd, struct audit_message *rep, reply_t block,
+extern int audit_get_reply(int fd, struct audit_message* rep, reply_t block,
                            int peek);
 
 /**
@@ -105,7 +102,7 @@ extern int audit_setup(int fd, pid_t pid);
 /* Guidelines to follow for dynamic rate_limit */
 #define AUDIT_RATE_LIMIT_DEFAULT 20        /* acceptable burst rate      */
 #define AUDIT_RATE_LIMIT_BURST_DURATION 10 /* number of seconds of burst */
-#define AUDIT_RATE_LIMIT_MAX     5         /* acceptable sustained rate  */
+#define AUDIT_RATE_LIMIT_MAX 5             /* acceptable sustained rate  */
 
 extern int audit_rate_limit(int fd, unsigned rate_limit);
 
