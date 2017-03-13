@@ -31,8 +31,7 @@
  * @return
  *  This function returns 0 on success, else -errno.
  */
-static int get_ack(int fd)
-{
+static int get_ack(int fd) {
     int rc;
     struct audit_message rep;
 
@@ -48,7 +47,7 @@ static int get_ack(int fd)
 
     if (rep.nlh.nlmsg_type == NLMSG_ERROR) {
         audit_get_reply(fd, &rep, GET_REPLY_BLOCKING, 0);
-        rc = ((struct nlmsgerr *)rep.data)->error;
+        rc = ((struct nlmsgerr*)rep.data)->error;
         if (rc) {
             return -rc;
         }
@@ -70,8 +69,7 @@ static int get_ack(int fd)
  * @return
  *  This function returns a positive sequence number on success, else -errno.
  */
-static int audit_send(int fd, int type, const void *data, size_t size)
-{
+static int audit_send(int fd, int type, const void* data, size_t size) {
     int rc;
     static int16_t sequence = 0;
     struct audit_message req;
@@ -123,13 +121,13 @@ static int audit_send(int fd, int type, const void *data, size_t size)
     /* While failing and its due to interrupts */
 
     rc = TEMP_FAILURE_RETRY(sendto(fd, &req, req.nlh.nlmsg_len, 0,
-                                   (struct sockaddr*) &addr, sizeof(addr)));
+                                   (struct sockaddr*)&addr, sizeof(addr)));
 
     /* Not all the bytes were sent */
     if (rc < 0) {
         rc = -errno;
         goto out;
-    } else if ((uint32_t) rc != req.nlh.nlmsg_len) {
+    } else if ((uint32_t)rc != req.nlh.nlmsg_len) {
         rc = -EPROTO;
         goto out;
     }
@@ -138,7 +136,7 @@ static int audit_send(int fd, int type, const void *data, size_t size)
     rc = get_ack(fd);
 
     /* If the ack failed, return the error, else return the sequence number */
-    rc = (rc == 0) ? (int) sequence : rc;
+    rc = (rc == 0) ? (int)sequence : rc;
 
 out:
     /* Don't let sequence roll to negative */
@@ -149,8 +147,7 @@ out:
     return rc;
 }
 
-int audit_setup(int fd, pid_t pid)
-{
+int audit_setup(int fd, pid_t pid) {
     int rc;
     struct audit_message rep;
     struct audit_status status;
@@ -186,8 +183,7 @@ int audit_setup(int fd, pid_t pid)
     return 0;
 }
 
-int audit_rate_limit(int fd, unsigned rate_limit)
-{
+int audit_rate_limit(int fd, unsigned rate_limit) {
     int rc;
     struct audit_message rep;
     struct audit_status status;
@@ -207,13 +203,11 @@ int audit_rate_limit(int fd, unsigned rate_limit)
     return 0;
 }
 
-int audit_open()
-{
+int audit_open() {
     return socket(PF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_AUDIT);
 }
 
-int audit_get_reply(int fd, struct audit_message *rep, reply_t block, int peek)
-{
+int audit_get_reply(int fd, struct audit_message* rep, reply_t block, int peek) {
     ssize_t len;
     int flags;
     int rc = 0;
@@ -235,7 +229,7 @@ int audit_get_reply(int fd, struct audit_message *rep, reply_t block, int peek)
      * however, can be returned.
      */
     len = TEMP_FAILURE_RETRY(recvfrom(fd, rep, sizeof(*rep), flags,
-                                      (struct sockaddr*) &nladdr, &nladdrlen));
+                                      (struct sockaddr*)&nladdr, &nladdrlen));
 
     /*
      * EAGAIN should be re-tried until success or another error manifests.
@@ -266,7 +260,6 @@ int audit_get_reply(int fd, struct audit_message *rep, reply_t block, int peek)
     return rc;
 }
 
-void audit_close(int fd)
-{
+void audit_close(int fd) {
     close(fd);
 }

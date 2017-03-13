@@ -17,9 +17,9 @@
 #ifndef _LOGD_LOG_TAGS_H__
 #define _LOGD_LOG_TAGS_H__
 
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
-#include <string>
 
 #include <utils/RWLock.h>
 
@@ -35,64 +35,70 @@ class LogTags {
 
     // key is Name + "+" + Format
     std::unordered_map<std::string, uint32_t> key2tag;
-    typedef std::unordered_map<std::string, uint32_t>::const_iterator key2tag_const_iterator;
+    typedef std::unordered_map<std::string, uint32_t>::const_iterator
+        key2tag_const_iterator;
 
     // Allows us to manage access permissions based on uid registrants
     // Global entries are specifically erased.
     typedef std::unordered_set<uid_t> uid_list;
     std::unordered_map<uint32_t, uid_list> tag2uid;
-    typedef std::unordered_map<uint32_t, uid_list>::const_iterator tag2uid_const_iterator;
+    typedef std::unordered_map<uint32_t, uid_list>::const_iterator
+        tag2uid_const_iterator;
 
     std::unordered_map<uint32_t, std::string> tag2name;
-    typedef std::unordered_map<uint32_t, std::string>::const_iterator tag2name_const_iterator;
+    typedef std::unordered_map<uint32_t, std::string>::const_iterator
+        tag2name_const_iterator;
 
     std::unordered_map<uint32_t, std::string> tag2format;
-    typedef std::unordered_map<uint32_t, std::string>::const_iterator tag2format_const_iterator;
+    typedef std::unordered_map<uint32_t, std::string>::const_iterator
+        tag2format_const_iterator;
 
-    static const size_t max_per_uid = 256; // Put a cap on the tags per uid
+    static const size_t max_per_uid = 256;  // Put a cap on the tags per uid
     std::unordered_map<uid_t, size_t> uid2count;
-    typedef std::unordered_map<uid_t, size_t>::const_iterator uid2count_const_iterator;
+    typedef std::unordered_map<uid_t, size_t>::const_iterator
+        uid2count_const_iterator;
 
     // Dynamic entries are assigned
     std::unordered_map<uint32_t, size_t> tag2total;
-    typedef std::unordered_map<uint32_t, size_t>::const_iterator tag2total_const_iterator;
+    typedef std::unordered_map<uint32_t, size_t>::const_iterator
+        tag2total_const_iterator;
 
     // emplace unique tag
     uint32_t nameToTag(uid_t uid, const char* name, const char* format);
     // find unique or associated tag
-    uint32_t nameToTag_locked(const std::string& name, const char* format, bool &unique);
+    uint32_t nameToTag_locked(const std::string& name, const char* format,
+                              bool& unique);
 
     // Record expected file watermarks to detect corruption.
     std::unordered_map<std::string, size_t> file2watermark;
-    typedef std::unordered_map<std::string, size_t>::const_iterator file2watermark_const_iterator;
+    typedef std::unordered_map<std::string, size_t>::const_iterator
+        file2watermark_const_iterator;
 
     void ReadPersistEventLogTags();
 
     // format helpers
     // format a single entry, does not need object data
-    static std::string formatEntry(uint32_t tag, uid_t uid,
-                                   const char* name, const char* format);
+    static std::string formatEntry(uint32_t tag, uid_t uid, const char* name,
+                                   const char* format);
     // caller locks, database lookup, authenticate against uid
     std::string formatEntry_locked(uint32_t tag, uid_t uid,
                                    bool authenticate = true);
 
     bool RebuildFileEventLogTags(const char* filename, bool warn = true);
 
-    void AddEventLogTags(uint32_t tag, uid_t uid,
-                         const std::string& Name, const std::string& Format,
-                         const char* source = NULL, bool warn = false);
+    void AddEventLogTags(uint32_t tag, uid_t uid, const std::string& Name,
+                         const std::string& Format, const char* source = NULL,
+                         bool warn = false);
 
     void WriteDynamicEventLogTags(uint32_t tag, uid_t uid);
     void WriteDebugEventLogTags(uint32_t tag, uid_t uid);
     // push tag details to persistent storage
-    void WritePersistEventLogTags(uint32_t tag,
-                                  uid_t uid = AID_ROOT,
+    void WritePersistEventLogTags(uint32_t tag, uid_t uid = AID_ROOT,
                                   const char* source = NULL);
 
     static const uint32_t emptyTag = uint32_t(-1);
 
-public:
-
+   public:
     static const char system_event_log_tags[];
     static const char dynamic_event_log_tags[];
     // Only for userdebug and eng
@@ -111,9 +117,8 @@ public:
     uint32_t nameToTag(const char* name) const;
 
     // emplace tag if necessary, provide event-log-tag formated output in string
-    std::string formatGetEventTag(uid_t uid,
-                                  const char* name,
+    std::string formatGetEventTag(uid_t uid, const char* name,
                                   const char* format);
 };
 
-#endif // _LOGD_LOG_TAGS_H__
+#endif  // _LOGD_LOG_TAGS_H__

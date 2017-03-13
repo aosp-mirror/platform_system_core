@@ -18,40 +18,43 @@
 #define _COMMANDLISTENER_H__
 
 #include <sysutils/FrameworkListener.h>
-#include "LogCommand.h"
 #include "LogBuffer.h"
-#include "LogReader.h"
+#include "LogCommand.h"
 #include "LogListener.h"
+#include "LogReader.h"
 
 // See main.cpp for implementation
 void reinit_signal_handler(int /*signal*/);
 
 class CommandListener : public FrameworkListener {
+   public:
+    CommandListener(LogBuffer* buf, LogReader* reader, LogListener* swl);
+    virtual ~CommandListener() {
+    }
 
-public:
-    CommandListener(LogBuffer *buf, LogReader *reader, LogListener *swl);
-    virtual ~CommandListener() {}
-
-private:
+   private:
     static int getLogSocket();
 
     class ShutdownCmd : public LogCommand {
-        LogReader &mReader;
-        LogListener &mSwl;
+        LogReader& mReader;
+        LogListener& mSwl;
 
-    public:
-        ShutdownCmd(LogReader *reader, LogListener *swl);
-        virtual ~ShutdownCmd() {}
-        int runCommand(SocketClient *c, int argc, char ** argv);
+       public:
+        ShutdownCmd(LogReader* reader, LogListener* swl);
+        virtual ~ShutdownCmd() {
+        }
+        int runCommand(SocketClient* c, int argc, char** argv);
     };
 
-#define LogBufferCmd(name)                                       \
-    class name##Cmd : public LogCommand {                        \
-        LogBuffer &mBuf;                                         \
-    public:                                                      \
-        explicit name##Cmd(LogBuffer *buf);                      \
-        virtual ~name##Cmd() {}                                  \
-        int runCommand(SocketClient *c, int argc, char ** argv); \
+#define LogBufferCmd(name)                                      \
+    class name##Cmd : public LogCommand {                       \
+        LogBuffer& mBuf;                                        \
+                                                                \
+       public:                                                  \
+        explicit name##Cmd(LogBuffer* buf);                     \
+        virtual ~name##Cmd() {                                  \
+        }                                                       \
+        int runCommand(SocketClient* c, int argc, char** argv); \
     }
 
     LogBufferCmd(Clear);
@@ -63,29 +66,33 @@ private:
     LogBufferCmd(SetPruneList);
     LogBufferCmd(GetEventTag);
 
-#define LogCmd(name)                                             \
-    class name##Cmd : public LogCommand {                        \
-    public:                                                      \
-        name##Cmd();                                             \
-        virtual ~name##Cmd() {}                                  \
-        int runCommand(SocketClient *c, int argc, char ** argv); \
+#define LogCmd(name)                                            \
+    class name##Cmd : public LogCommand {                       \
+       public:                                                  \
+        name##Cmd();                                            \
+        virtual ~name##Cmd() {                                  \
+        }                                                       \
+        int runCommand(SocketClient* c, int argc, char** argv); \
     }
 
     LogCmd(Reinit);
 
-#define LogParentCmd(name)                                       \
-    class name##Cmd : public LogCommand {                        \
-        CommandListener &mParent;                                \
-    public:                                                      \
-        name##Cmd();                                             \
-        explicit name##Cmd(CommandListener *parent);             \
-        virtual ~name##Cmd() {}                                  \
-        int runCommand(SocketClient *c, int argc, char ** argv); \
-        void release(SocketClient *c) { mParent.release(c); }    \
+#define LogParentCmd(name)                                      \
+    class name##Cmd : public LogCommand {                       \
+        CommandListener& mParent;                               \
+                                                                \
+       public:                                                  \
+        name##Cmd();                                            \
+        explicit name##Cmd(CommandListener* parent);            \
+        virtual ~name##Cmd() {                                  \
+        }                                                       \
+        int runCommand(SocketClient* c, int argc, char** argv); \
+        void release(SocketClient* c) {                         \
+            mParent.release(c);                                 \
+        }                                                       \
     }
 
     LogParentCmd(Exit);
-
 };
 
 #endif
