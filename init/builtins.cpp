@@ -494,6 +494,10 @@ static void import_late(const std::vector<std::string>& args, size_t start_index
             parser.ParseConfig(args[i]);
         }
     }
+
+    // Turning this on and letting the INFO logging be discarded adds 0.2s to
+    // Nexus 9 boot time, so it's disabled by default.
+    if (false) parser.DumpState();
 }
 
 /* mount_fstab
