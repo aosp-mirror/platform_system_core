@@ -17,13 +17,14 @@
 #ifndef _LOGD_COMMAND_H
 #define _LOGD_COMMAND_H
 
-#include <sysutils/SocketClient.h>
 #include <sysutils/FrameworkCommand.h>
+#include <sysutils/SocketClient.h>
 
 class LogCommand : public FrameworkCommand {
-public:
-    explicit LogCommand(const char *cmd);
-    virtual ~LogCommand() {}
+   public:
+    explicit LogCommand(const char* cmd);
+    virtual ~LogCommand() {
+    }
 };
 
 #endif

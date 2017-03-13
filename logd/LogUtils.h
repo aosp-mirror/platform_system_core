@@ -20,9 +20,9 @@
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
-#include <utils/FastStrcmp.h>
 #include <private/android_logger.h>
 #include <sysutils/SocketClient.h>
+#include <utils/FastStrcmp.h>
 
 // Hijack this header as a common include file used by most all sources
 // to report some utilities defined here and there.
@@ -30,31 +30,30 @@
 namespace android {
 
 // Furnished in main.cpp. Caller must own and free returned value
-char *uidToName(uid_t uid);
-void prdebug(const char *fmt, ...) __printflike(1, 2);
+char* uidToName(uid_t uid);
+void prdebug(const char* fmt, ...) __printflike(1, 2);
 
 // Furnished in LogStatistics.cpp.
 size_t sizesTotal();
 // Caller must own and free returned value
-char *pidToName(pid_t pid);
-char *tidToName(pid_t tid);
+char* pidToName(pid_t pid);
+char* tidToName(pid_t tid);
 
 // Furnished in LogTags.cpp. Thread safe.
-const char *tagToName(uint32_t tag);
+const char* tagToName(uint32_t tag);
 void ReReadEventLogTags();
 
 // Furnished by LogKlog.cpp.
 const char* strnstr(const char* s, size_t len, const char* needle);
-
 }
 
 // Furnished in LogCommand.cpp
 bool clientHasLogCredentials(uid_t uid, gid_t gid, pid_t pid);
-bool clientHasLogCredentials(SocketClient *cli);
+bool clientHasLogCredentials(SocketClient* cli);
 
 static inline bool worstUidEnabledForLogid(log_id_t id) {
     return (id == LOG_ID_MAIN) || (id == LOG_ID_SYSTEM) ||
-            (id == LOG_ID_RADIO) || (id == LOG_ID_EVENTS);
+           (id == LOG_ID_RADIO) || (id == LOG_ID_EVENTS);
 }
 
-#endif // _LOGD_LOG_UTILS_H__
+#endif  // _LOGD_LOG_UTILS_H__

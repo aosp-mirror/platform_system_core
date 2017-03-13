@@ -41,12 +41,14 @@ LogStatistics::LogStatistics() : enable(false) {
 
 namespace android {
 
-size_t sizesTotal() { return LogStatistics::sizesTotal(); }
+size_t sizesTotal() {
+    return LogStatistics::sizesTotal();
+}
 
 // caller must own and free character string
-char *pidToName(pid_t pid) {
-    char *retval = NULL;
-    if (pid == 0) { // special case from auditd/klogd for kernel
+char* pidToName(pid_t pid) {
+    char* retval = NULL;
+    if (pid == 0) {  // special case from auditd/klogd for kernel
         retval = strdup("logd");
     } else {
         char buffer[512];
@@ -55,7 +57,7 @@ char *pidToName(pid_t pid) {
         if (fd >= 0) {
             ssize_t ret = read(fd, buffer, sizeof(buffer));
             if (ret > 0) {
-                buffer[sizeof(buffer)-1] = '\0';
+                buffer[sizeof(buffer) - 1] = '\0';
                 // frameworks intermediate state
                 if (fastcmp<strcmp>(buffer, "<pre-initialized>")) {
                     retval = strdup(buffer);
@@ -66,10 +68,9 @@ char *pidToName(pid_t pid) {
     }
     return retval;
 }
-
 }
 
-void LogStatistics::add(LogBufferElement *element) {
+void LogStatistics::add(LogBufferElement* element) {
     log_id_t log_id = element->getLogId();
     unsigned short size = element->getMsgLen();
     mSizes[log_id] += size;
@@ -114,7 +115,7 @@ void LogStatistics::add(LogBufferElement *element) {
     }
 }
 
-void LogStatistics::subtract(LogBufferElement *element) {
+void LogStatistics::subtract(LogBufferElement* element) {
     log_id_t log_id = element->getLogId();
     unsigned short size = element->getMsgLen();
     mSizes[log_id] -= size;
@@ -151,7 +152,7 @@ void LogStatistics::subtract(LogBufferElement *element) {
 
 // Atomically set an entry to drop
 // entry->setDropped(1) must follow this call, caller should do this explicitly.
-void LogStatistics::drop(LogBufferElement *element) {
+void LogStatistics::drop(LogBufferElement* element) {
     log_id_t log_id = element->getLogId();
     unsigned short size = element->getMsgLen();
     mSizes[log_id] -= size;
@@ -180,7 +181,7 @@ void LogStatistics::drop(LogBufferElement *element) {
 }
 
 // caller must own and free character string
-const char *LogStatistics::uidToName(uid_t uid) const {
+const char* LogStatistics::uidToName(uid_t uid) const {
     // Local hard coded favourites
     if (uid == AID_LOGD) {
         return strdup("auditd");
@@ -189,7 +190,7 @@ const char *LogStatistics::uidToName(uid_t uid) const {
     // Android system
     if (uid < AID_APP) {
         // in bionic, thread safe as long as we copy the results
-        struct passwd *pwd = getpwuid(uid);
+        struct passwd* pwd = getpwuid(uid);
         if (pwd) {
             return strdup(pwd->pw_name);
         }
@@ -197,7 +198,7 @@ const char *LogStatistics::uidToName(uid_t uid) const {
 
     // Parse /data/system/packages.list
     uid_t userId = uid % AID_USER_OFFSET;
-    const char *name = android::uidToName(userId);
+    const char* name = android::uidToName(userId);
     if (!name && (userId > (AID_SHARED_GID_START - AID_APP))) {
         name = android::uidToName(userId - (AID_SHARED_GID_START - AID_APP));
     }
@@ -207,24 +208,25 @@ const char *LogStatistics::uidToName(uid_t uid) const {
 
     // Android application
     if (uid >= AID_APP) {
-        struct passwd *pwd = getpwuid(uid);
+        struct passwd* pwd = getpwuid(uid);
         if (pwd) {
             return strdup(pwd->pw_name);
         }
     }
 
     // report uid -> pid(s) -> pidToName if unique
-    for(pidTable_t::const_iterator it = pidTable.begin(); it != pidTable.end(); ++it) {
-        const PidEntry &entry = it->second;
+    for (pidTable_t::const_iterator it = pidTable.begin(); it != pidTable.end();
+         ++it) {
+        const PidEntry& entry = it->second;
 
         if (entry.getUid() == uid) {
-            const char *nameTmp = entry.getName();
+            const char* nameTmp = entry.getName();
 
             if (nameTmp) {
                 if (!name) {
                     name = strdup(nameTmp);
                 } else if (fastcmp<strcmp>(name, nameTmp)) {
-                    free(const_cast<char *>(name));
+                    free(const_cast<char*>(name));
                     name = NULL;
                     break;
                 }
@@ -236,26 +238,24 @@ const char *LogStatistics::uidToName(uid_t uid) const {
     return name;
 }
 
-std::string UidEntry::formatHeader(const std::string &name, log_id_t id) const {
+std::string UidEntry::formatHeader(const std::string& name, log_id_t id) const {
     bool isprune = worstUidEnabledForLogid(id);
-    return formatLine(android::base::StringPrintf(
-                          name.c_str(), android_log_id_to_name(id)),
+    return formatLine(android::base::StringPrintf(name.c_str(),
+                                                  android_log_id_to_name(id)),
                       std::string("Size"),
-                      std::string(isprune ? "+/-  Pruned" : ""))
-         + formatLine(std::string("UID   PACKAGE"),
-                      std::string("BYTES"),
+                      std::string(isprune ? "+/-  Pruned" : "")) +
+           formatLine(std::string("UID   PACKAGE"), std::string("BYTES"),
                       std::string(isprune ? "NUM" : ""));
 }
 
-std::string UidEntry::format(const LogStatistics &stat, log_id_t id) const {
+std::string UidEntry::format(const LogStatistics& stat, log_id_t id) const {
     uid_t uid = getUid();
     std::string name = android::base::StringPrintf("%u", uid);
-    const char *nameTmp = stat.uidToName(uid);
+    const char* nameTmp = stat.uidToName(uid);
     if (nameTmp) {
         name += android::base::StringPrintf(
-            "%*s%s", (int)std::max(6 - name.length(), (size_t)1),
-            "", nameTmp);
-        free(const_cast<char *>(nameTmp));
+            "%*s%s", (int)std::max(6 - name.length(), (size_t)1), "", nameTmp);
+        free(const_cast<char*>(nameTmp));
     }
 
     std::string size = android::base::StringPrintf("%zu", getSizes());
@@ -263,15 +263,16 @@ std::string UidEntry::format(const LogStatistics &stat, log_id_t id) const {
     std::string pruned = "";
     if (worstUidEnabledForLogid(id)) {
         size_t totalDropped = 0;
-        for (LogStatistics::uidTable_t::const_iterator it = stat.uidTable[id].begin();
-                it != stat.uidTable[id].end(); ++it) {
+        for (LogStatistics::uidTable_t::const_iterator it =
+                 stat.uidTable[id].begin();
+             it != stat.uidTable[id].end(); ++it) {
             totalDropped += it->second.getDropped();
         }
         size_t sizes = stat.sizes(id);
         size_t totalSize = stat.sizesTotal(id);
         size_t totalElements = stat.elementsTotal(id);
-        float totalVirtualSize = (float)sizes + (float)totalDropped * totalSize
-                                / totalElements;
+        float totalVirtualSize =
+            (float)sizes + (float)totalDropped * totalSize / totalElements;
         size_t entrySize = getSizes();
         float virtualEntrySize = entrySize;
         int realPermille = virtualEntrySize * 1000.0 / sizes;
@@ -281,31 +282,29 @@ std::string UidEntry::format(const LogStatistics &stat, log_id_t id) const {
             virtualEntrySize += (float)dropped * totalSize / totalElements;
         }
         int virtualPermille = virtualEntrySize * 1000.0 / totalVirtualSize;
-        int permille = (realPermille - virtualPermille) * 1000L
-                     / (virtualPermille ?: 1);
+        int permille =
+            (realPermille - virtualPermille) * 1000L / (virtualPermille ?: 1);
         if ((permille < -1) || (1 < permille)) {
             std::string change;
-            const char *units = "%";
-            const char *prefix = (permille > 0) ? "+" : "";
+            const char* units = "%";
+            const char* prefix = (permille > 0) ? "+" : "";
 
             if (permille > 999) {
-                permille = (permille + 1000) / 100; // Now tenths fold
+                permille = (permille + 1000) / 100;  // Now tenths fold
                 units = "X";
                 prefix = "";
             }
             if ((-99 < permille) && (permille < 99)) {
-                change = android::base::StringPrintf("%s%d.%u%s",
-                    prefix,
-                    permille / 10,
+                change = android::base::StringPrintf(
+                    "%s%d.%u%s", prefix, permille / 10,
                     ((permille < 0) ? (-permille % 10) : (permille % 10)),
                     units);
             } else {
-                change = android::base::StringPrintf("%s%d%s",
-                    prefix,
-                    (permille + 5) / 10, units);
+                change = android::base::StringPrintf(
+                    "%s%d%s", prefix, (permille + 5) / 10, units);
             }
-            ssize_t spaces = EntryBaseConstants::pruned_len
-                           - 2 - pruned.length() - change.length();
+            ssize_t spaces = EntryBaseConstants::pruned_len - 2 -
+                             pruned.length() - change.length();
             if ((spaces <= 0) && pruned.length()) {
                 spaces = 1;
             }
@@ -323,8 +322,8 @@ std::string UidEntry::format(const LogStatistics &stat, log_id_t id) const {
     }
 
     static const size_t maximum_sorted_entries = 32;
-    std::unique_ptr<const PidEntry *[]> sorted
-        = stat.pidSystemTable[id].sort(uid, (pid_t)0, maximum_sorted_entries);
+    std::unique_ptr<const PidEntry* []> sorted =
+        stat.pidSystemTable[id].sort(uid, (pid_t)0, maximum_sorted_entries);
 
     if (!sorted.get()) {
         return output;
@@ -333,7 +332,7 @@ std::string UidEntry::format(const LogStatistics &stat, log_id_t id) const {
     size_t index;
     bool hasDropped = false;
     for (index = 0; index < maximum_sorted_entries; ++index) {
-        const PidEntry *entry = sorted[index];
+        const PidEntry* entry = sorted[index];
         if (!entry) {
             break;
         }
@@ -345,43 +344,39 @@ std::string UidEntry::format(const LogStatistics &stat, log_id_t id) const {
         }
         byPid += entry->format(stat, id);
     }
-    if (index > 1) { // print this only if interesting
+    if (index > 1) {  // print this only if interesting
         std::string ditto("\" ");
-        output += formatLine(std::string("  PID/UID   COMMAND LINE"),
-                             ditto, hasDropped ? ditto : std::string(""));
+        output += formatLine(std::string("  PID/UID   COMMAND LINE"), ditto,
+                             hasDropped ? ditto : std::string(""));
         output += byPid;
     }
 
     return output;
 }
 
-std::string PidEntry::formatHeader(const std::string &name, log_id_t /* id */) const {
-    return formatLine(name,
-                      std::string("Size"),
-                      std::string("Pruned"))
-         + formatLine(std::string("  PID/UID   COMMAND LINE"),
-                      std::string("BYTES"),
-                      std::string("NUM"));
+std::string PidEntry::formatHeader(const std::string& name,
+                                   log_id_t /* id */) const {
+    return formatLine(name, std::string("Size"), std::string("Pruned")) +
+           formatLine(std::string("  PID/UID   COMMAND LINE"),
+                      std::string("BYTES"), std::string("NUM"));
 }
 
-std::string PidEntry::format(const LogStatistics &stat, log_id_t /* id */) const {
+std::string PidEntry::format(const LogStatistics& stat,
+                             log_id_t /* id */) const {
     uid_t uid = getUid();
     pid_t pid = getPid();
     std::string name = android::base::StringPrintf("%5u/%u", pid, uid);
-    const char *nameTmp = getName();
+    const char* nameTmp = getName();
     if (nameTmp) {
         name += android::base::StringPrintf(
-            "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
-            "", nameTmp);
+            "%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", nameTmp);
     } else if ((nameTmp = stat.uidToName(uid))) {
         name += android::base::StringPrintf(
-            "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
-            "", nameTmp);
-        free(const_cast<char *>(nameTmp));
+            "%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", nameTmp);
+        free(const_cast<char*>(nameTmp));
     }
 
-    std::string size = android::base::StringPrintf("%zu",
-                                                   getSizes());
+    std::string size = android::base::StringPrintf("%zu", getSizes());
 
     std::string pruned = "";
     size_t dropped = getDropped();
@@ -392,36 +387,31 @@ std::string PidEntry::format(const LogStatistics &stat, log_id_t /* id */) const
     return formatLine(name, size, pruned);
 }
 
-std::string TidEntry::formatHeader(const std::string &name, log_id_t /* id */) const {
-    return formatLine(name,
-                      std::string("Size"),
-                      std::string("Pruned"))
-         + formatLine(std::string("  TID/UID   COMM"),
-                      std::string("BYTES"),
+std::string TidEntry::formatHeader(const std::string& name,
+                                   log_id_t /* id */) const {
+    return formatLine(name, std::string("Size"), std::string("Pruned")) +
+           formatLine(std::string("  TID/UID   COMM"), std::string("BYTES"),
                       std::string("NUM"));
 }
 
-std::string TidEntry::format(const LogStatistics &stat, log_id_t /* id */) const {
+std::string TidEntry::format(const LogStatistics& stat,
+                             log_id_t /* id */) const {
     uid_t uid = getUid();
-    std::string name = android::base::StringPrintf("%5u/%u",
-                                                   getTid(), uid);
-    const char *nameTmp = getName();
+    std::string name = android::base::StringPrintf("%5u/%u", getTid(), uid);
+    const char* nameTmp = getName();
     if (nameTmp) {
         name += android::base::StringPrintf(
-            "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
-            "", nameTmp);
+            "%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", nameTmp);
     } else if ((nameTmp = stat.uidToName(uid))) {
         // if we do not have a PID name, lets punt to try UID name?
         name += android::base::StringPrintf(
-            "%*s%s", (int)std::max(12 - name.length(), (size_t)1),
-            "", nameTmp);
-        free(const_cast<char *>(nameTmp));
+            "%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", nameTmp);
+        free(const_cast<char*>(nameTmp));
         // We tried, better to not have a name at all, we still
         // have TID/UID by number to report in any case.
     }
 
-    std::string size = android::base::StringPrintf("%zu",
-                                                   getSizes());
+    std::string size = android::base::StringPrintf("%zu", getSizes());
 
     std::string pruned = "";
     size_t dropped = getDropped();
@@ -432,35 +422,30 @@ std::string TidEntry::format(const LogStatistics &stat, log_id_t /* id */) const
     return formatLine(name, size, pruned);
 }
 
-std::string TagEntry::formatHeader(const std::string &name, log_id_t id) const {
+std::string TagEntry::formatHeader(const std::string& name, log_id_t id) const {
     bool isprune = worstUidEnabledForLogid(id);
-    return formatLine(name,
-                      std::string("Size"),
-                      std::string(isprune ? "Prune" : ""))
-         + formatLine(std::string("    TAG/UID   TAGNAME"),
-                      std::string("BYTES"),
-                      std::string(isprune ? "NUM" : ""));
+    return formatLine(name, std::string("Size"),
+                      std::string(isprune ? "Prune" : "")) +
+           formatLine(std::string("    TAG/UID   TAGNAME"),
+                      std::string("BYTES"), std::string(isprune ? "NUM" : ""));
 }
 
-std::string TagEntry::format(const LogStatistics & /* stat */, log_id_t /* id */) const {
+std::string TagEntry::format(const LogStatistics& /* stat */,
+                             log_id_t /* id */) const {
     std::string name;
     uid_t uid = getUid();
     if (uid == (uid_t)-1) {
-        name = android::base::StringPrintf("%7u",
-                                           getKey());
+        name = android::base::StringPrintf("%7u", getKey());
     } else {
-        name = android::base::StringPrintf("%7u/%u",
-                                           getKey(), uid);
+        name = android::base::StringPrintf("%7u/%u", getKey(), uid);
     }
-    const char *nameTmp = getName();
+    const char* nameTmp = getName();
     if (nameTmp) {
         name += android::base::StringPrintf(
-            "%*s%s", (int)std::max(14 - name.length(), (size_t)1),
-            "", nameTmp);
+            "%*s%s", (int)std::max(14 - name.length(), (size_t)1), "", nameTmp);
     }
 
-    std::string size = android::base::StringPrintf("%zu",
-                                                   getSizes());
+    std::string size = android::base::StringPrintf("%zu", getSizes());
 
     std::string pruned = "";
     size_t dropped = getDropped();
@@ -506,11 +491,13 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
         totalSize += szs;
         size_t els = elementsTotal(id);
         totalEls += els;
-        output += android::base::StringPrintf("%*s%zu/%zu", spaces, "", szs, els);
+        output +=
+            android::base::StringPrintf("%*s%zu/%zu", spaces, "", szs, els);
         spaces += spaces_total + oldLength - output.length();
     }
     if (spaces < 0) spaces = 0;
-    output += android::base::StringPrintf("%*s%zu/%zu", spaces, "", totalSize, totalEls);
+    output += android::base::StringPrintf("%*s%zu/%zu", spaces, "", totalSize,
+                                          totalEls);
 
     static const char NowStr[] = "\nNow";
     spaces = 10 - strlen(NowStr);
@@ -528,13 +515,15 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
             size_t szs = sizes(id);
             totalSize += szs;
             totalEls += els;
-            output += android::base::StringPrintf("%*s%zu/%zu", spaces, "", szs, els);
+            output +=
+                android::base::StringPrintf("%*s%zu/%zu", spaces, "", szs, els);
             spaces -= output.length() - oldLength;
         }
         spaces += spaces_total;
     }
     if (spaces < 0) spaces = 0;
-    output += android::base::StringPrintf("%*s%zu/%zu", spaces, "", totalSize, totalEls);
+    output += android::base::StringPrintf("%*s%zu/%zu", spaces, "", totalSize,
+                                          totalEls);
 
     static const char OverheadStr[] = "\nOverhead";
     spaces = 10 - strlen(OverheadStr);
@@ -551,7 +540,7 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
             // estimate the std::list overhead.
             static const size_t overhead =
                 ((sizeof(LogBufferElement) + sizeof(uint64_t) - 1) &
-                    -sizeof(uint64_t)) +
+                 -sizeof(uint64_t)) +
                 sizeof(std::list<LogBufferElement*>);
             size_t szs = sizes(id) + els * overhead;
             totalSize += szs;
@@ -572,16 +561,14 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
     log_id_for_each(id) {
         if (!(logMask & (1 << id))) continue;
 
-        name = (uid == AID_ROOT)
-            ? "Chattiest UIDs in %s log buffer:"
-            : "Logging for your UID in %s log buffer:";
+        name = (uid == AID_ROOT) ? "Chattiest UIDs in %s log buffer:"
+                                 : "Logging for your UID in %s log buffer:";
         output += uidTable[id].format(*this, uid, pid, name, id);
     }
 
     if (enable) {
-        name = ((uid == AID_ROOT) && !pid)
-            ? "Chattiest PIDs:"
-            : "Logging for this PID:";
+        name = ((uid == AID_ROOT) && !pid) ? "Chattiest PIDs:"
+                                           : "Logging for this PID:";
         output += pidTable.format(*this, uid, pid, name);
         name = "Chattiest TIDs";
         if (pid) name += android::base::StringPrintf(" for PID %d", pid);
@@ -600,7 +587,8 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
         name = "Chattiest security log buffer TAGs";
         if (pid) name += android::base::StringPrintf(" for PID %d", pid);
         name += ":";
-        output += securityTagTable.format(*this, uid, pid, name, LOG_ID_SECURITY);
+        output +=
+            securityTagTable.format(*this, uid, pid, name, LOG_ID_SECURITY);
     }
 
     return output;
@@ -611,7 +599,7 @@ namespace android {
 uid_t pidToUid(pid_t pid) {
     char buffer[512];
     snprintf(buffer, sizeof(buffer), "/proc/%u/status", pid);
-    FILE *fp = fopen(buffer, "r");
+    FILE* fp = fopen(buffer, "r");
     if (fp) {
         while (fgets(buffer, sizeof(buffer), fp)) {
             int uid;
@@ -622,9 +610,8 @@ uid_t pidToUid(pid_t pid) {
         }
         fclose(fp);
     }
-    return AID_LOGD; // associate this with the logger
+    return AID_LOGD;  // associate this with the logger
 }
-
 }
 
 uid_t LogStatistics::pidToUid(pid_t pid) {
@@ -632,10 +619,10 @@ uid_t LogStatistics::pidToUid(pid_t pid) {
 }
 
 // caller must free character string
-const char *LogStatistics::pidToName(pid_t pid) const {
+const char* LogStatistics::pidToName(pid_t pid) const {
     // An inconvenient truth ... getName() can alter the object
-    pidTable_t &writablePidTable = const_cast<pidTable_t &>(pidTable);
-    const char *name = writablePidTable.add(pid)->second.getName();
+    pidTable_t& writablePidTable = const_cast<pidTable_t&>(pidTable);
+    const char* name = writablePidTable.add(pid)->second.getName();
     if (!name) {
         return NULL;
     }

@@ -25,25 +25,22 @@
 #include <sys/uio.h>
 #include <syslog.h>
 
-#include <private/android_logger.h>
 #include <private/android_filesystem_config.h>
+#include <private/android_logger.h>
 
 #include "LogBuffer.h"
 #include "LogKlog.h"
 #include "LogReader.h"
 
-#define KMSG_PRIORITY(PRI)           \
-    '<',                             \
-    '0' + (LOG_SYSLOG | (PRI)) / 10, \
-    '0' + (LOG_SYSLOG | (PRI)) % 10, \
-    '>'
+#define KMSG_PRIORITY(PRI) \
+    '<', '0' + (LOG_SYSLOG | (PRI)) / 10, '0' + (LOG_SYSLOG | (PRI)) % 10, '>'
 
 static const char priority_message[] = { KMSG_PRIORITY(LOG_INFO), '\0' };
 
 // Parsing is hard
 
 // called if we see a '<', s is the next character, returns pointer after '>'
-static char *is_prio(char *s, size_t len) {
+static char* is_prio(char* s, size_t len) {
     if (!len || !isdigit(*s++)) {
         return NULL;
     }
@@ -60,7 +57,7 @@ static char *is_prio(char *s, size_t len) {
 }
 
 // called if we see a '[', s is the next character, returns pointer after ']'
-static char *is_timestamp(char *s, size_t len) {
+static char* is_timestamp(char* s, size_t len) {
     while (len && (*s == ' ')) {
         ++s;
         --len;
@@ -83,19 +80,20 @@ static char *is_timestamp(char *s, size_t len) {
 }
 
 // Like strtok_r with "\r\n" except that we look for log signatures (regex)
-//  \(\(<[0-9]\{1,4\}>\)\([[] *[0-9]+[.][0-9]+[]] \)\{0,1\}\|[[] *[0-9]+[.][0-9]+[]] \)
+//  \(\(<[0-9]\{1,4\}>\)\([[] *[0-9]+[.][0-9]+[]] \)\{0,1\}\|[[]
+//  *[0-9]+[.][0-9]+[]] \)
 // and split if we see a second one without a newline.
 // We allow nuls in content, monitoring the overall length and sub-length of
 // the discovered tokens.
 
-#define SIGNATURE_MASK     0xF0
+#define SIGNATURE_MASK 0xF0
 // <digit> following ('0' to '9' masked with ~SIGNATURE_MASK) added to signature
-#define LESS_THAN_SIG      SIGNATURE_MASK
-#define OPEN_BRACKET_SIG   ((SIGNATURE_MASK << 1) & SIGNATURE_MASK)
+#define LESS_THAN_SIG SIGNATURE_MASK
+#define OPEN_BRACKET_SIG ((SIGNATURE_MASK << 1) & SIGNATURE_MASK)
 // space is one more than <digit> of 9
 #define OPEN_BRACKET_SPACE ((char)(OPEN_BRACKET_SIG | 10))
 
-char *log_strntok_r(char *s, size_t *len, char **last, size_t *sublen) {
+char* log_strntok_r(char* s, size_t* len, char** last, size_t* sublen) {
     *sublen = 0;
     if (!*len) {
         return NULL;
@@ -144,32 +142,24 @@ char *log_strntok_r(char *s, size_t *len, char **last, size_t *sublen) {
         --*len;
         size_t adjust;
         switch (c) {
-        case '\r':
-        case '\n':
-            s[-1] = '\0';
-            *last = s;
-            return tok;
-
-        case '<':
-            peek = is_prio(s, *len);
-            if (!peek) {
-                break;
-            }
-            if (s != (tok + 1)) { // not first?
+            case '\r':
+            case '\n':
                 s[-1] = '\0';
-                *s &= ~SIGNATURE_MASK;
-                *s |= LESS_THAN_SIG; // signature for '<'
                 *last = s;
                 return tok;
-            }
-            adjust = peek - s;
-            if (adjust > *len) {
-                adjust = *len;
-            }
-            *sublen += adjust;
-            *len -= adjust;
-            s = peek;
-            if ((*s == '[') && ((peek = is_timestamp(s + 1, *len - 1)))) {
+
+            case '<':
+                peek = is_prio(s, *len);
+                if (!peek) {
+                    break;
+                }
+                if (s != (tok + 1)) {  // not first?
+                    s[-1] = '\0';
+                    *s &= ~SIGNATURE_MASK;
+                    *s |= LESS_THAN_SIG;  // signature for '<'
+                    *last = s;
+                    return tok;
+                }
                 adjust = peek - s;
                 if (adjust > *len) {
                     adjust = *len;
@@ -177,33 +167,41 @@ char *log_strntok_r(char *s, size_t *len, char **last, size_t *sublen) {
                 *sublen += adjust;
                 *len -= adjust;
                 s = peek;
-            }
-            break;
-
-        case '[':
-            peek = is_timestamp(s, *len);
-            if (!peek) {
-                break;
-            }
-            if (s != (tok + 1)) { // not first?
-                s[-1] = '\0';
-                if (*s == ' ') {
-                    *s = OPEN_BRACKET_SPACE;
-                } else {
-                    *s &= ~SIGNATURE_MASK;
-                    *s |= OPEN_BRACKET_SIG; // signature for '['
+                if ((*s == '[') && ((peek = is_timestamp(s + 1, *len - 1)))) {
+                    adjust = peek - s;
+                    if (adjust > *len) {
+                        adjust = *len;
+                    }
+                    *sublen += adjust;
+                    *len -= adjust;
+                    s = peek;
                 }
-                *last = s;
-                return tok;
-            }
-            adjust = peek - s;
-            if (adjust > *len) {
-                adjust = *len;
-            }
-            *sublen += adjust;
-            *len -= adjust;
-            s = peek;
-            break;
+                break;
+
+            case '[':
+                peek = is_timestamp(s, *len);
+                if (!peek) {
+                    break;
+                }
+                if (s != (tok + 1)) {  // not first?
+                    s[-1] = '\0';
+                    if (*s == ' ') {
+                        *s = OPEN_BRACKET_SPACE;
+                    } else {
+                        *s &= ~SIGNATURE_MASK;
+                        *s |= OPEN_BRACKET_SIG;  // signature for '['
+                    }
+                    *last = s;
+                    return tok;
+                }
+                adjust = peek - s;
+                if (adjust > *len) {
+                    adjust = *len;
+                }
+                *sublen += adjust;
+                *len -= adjust;
+                s = peek;
+                break;
         }
         ++*sublen;
     }
@@ -215,22 +213,23 @@ log_time LogKlog::correction =
         ? log_time::EPOCH
         : (log_time(CLOCK_REALTIME) - log_time(CLOCK_MONOTONIC));
 
-LogKlog::LogKlog(LogBuffer *buf, LogReader *reader, int fdWrite, int fdRead, bool auditd) :
-        SocketListener(fdRead, false),
-        logbuf(buf),
-        reader(reader),
-        signature(CLOCK_MONOTONIC),
-        initialized(false),
-        enableLogging(true),
-        auditd(auditd) {
+LogKlog::LogKlog(LogBuffer* buf, LogReader* reader, int fdWrite, int fdRead,
+                 bool auditd)
+    : SocketListener(fdRead, false),
+      logbuf(buf),
+      reader(reader),
+      signature(CLOCK_MONOTONIC),
+      initialized(false),
+      enableLogging(true),
+      auditd(auditd) {
     static const char klogd_message[] = "%slogd.klogd: %" PRIu64 "\n";
     char buffer[sizeof(priority_message) + sizeof(klogd_message) + 20 - 4];
     snprintf(buffer, sizeof(buffer), klogd_message, priority_message,
-        signature.nsec());
+             signature.nsec());
     write(fdWrite, buffer, strlen(buffer));
 }
 
-bool LogKlog::onDataAvailable(SocketClient *cli) {
+bool LogKlog::onDataAvailable(SocketClient* cli) {
     if (!initialized) {
         prctl(PR_SET_NAME, "logd.klogd");
         initialized = true;
@@ -240,10 +239,11 @@ bool LogKlog::onDataAvailable(SocketClient *cli) {
     char buffer[LOGGER_ENTRY_MAX_PAYLOAD];
     size_t len = 0;
 
-    for(;;) {
+    for (;;) {
         ssize_t retval = 0;
         if ((sizeof(buffer) - 1 - len) > 0) {
-            retval = read(cli->getSocket(), buffer + len, sizeof(buffer) - 1 - len);
+            retval =
+                read(cli->getSocket(), buffer + len, sizeof(buffer) - 1 - len);
         }
         if ((retval == 0) && (len == 0)) {
             break;
@@ -253,12 +253,11 @@ bool LogKlog::onDataAvailable(SocketClient *cli) {
         }
         len += retval;
         bool full = len == (sizeof(buffer) - 1);
-        char *ep = buffer + len;
+        char* ep = buffer + len;
         *ep = '\0';
         size_t sublen;
-        for(char *ptr = NULL, *tok = buffer;
-                ((tok = log_strntok_r(tok, &len, &ptr, &sublen)));
-                tok = NULL) {
+        for (char *ptr = NULL, *tok = buffer;
+             ((tok = log_strntok_r(tok, &len, &ptr, &sublen))); tok = NULL) {
             if (((tok + sublen) >= ep) && (retval != 0) && full) {
                 memmove(buffer, tok, sublen);
                 len = sublen;
@@ -273,12 +272,10 @@ bool LogKlog::onDataAvailable(SocketClient *cli) {
     return true;
 }
 
-
-void LogKlog::calculateCorrection(const log_time &monotonic,
-                                  const char *real_string,
-                                  size_t len) {
+void LogKlog::calculateCorrection(const log_time& monotonic,
+                                  const char* real_string, size_t len) {
     log_time real;
-    const char *ep = real.strptime(real_string, "%Y-%m-%d %H:%M:%S.%09q UTC");
+    const char* ep = real.strptime(real_string, "%Y-%m-%d %H:%M:%S.%09q UTC");
     if (!ep || (ep > &real_string[len]) || (real > log_time(CLOCK_REALTIME))) {
         return;
     }
@@ -323,10 +320,9 @@ const char* android::strnstr(const char* s, size_t len, const char* needle) {
     return s;
 }
 
-void LogKlog::sniffTime(log_time &now,
-                        const char **buf, size_t len,
+void LogKlog::sniffTime(log_time& now, const char** buf, size_t len,
                         bool reverse) {
-    const char *cp = now.strptime(*buf, "[ %s.%q]");
+    const char* cp = now.strptime(*buf, "[ %s.%q]");
     if (cp && (cp >= &(*buf)[len])) {
         cp = NULL;
     }
@@ -346,28 +342,28 @@ void LogKlog::sniffTime(log_time &now,
         }
 
         const char* b;
-        if (((b = android::strnstr(cp, len, suspendStr)))
-                && ((size_t)((b += sizeof(suspendStr) - 1) - cp) < len)) {
+        if (((b = android::strnstr(cp, len, suspendStr))) &&
+            ((size_t)((b += sizeof(suspendStr) - 1) - cp) < len)) {
             len -= b - cp;
             calculateCorrection(now, b, len);
-        } else if (((b = android::strnstr(cp, len, resumeStr)))
-                && ((size_t)((b += sizeof(resumeStr) - 1) - cp) < len)) {
+        } else if (((b = android::strnstr(cp, len, resumeStr))) &&
+                   ((size_t)((b += sizeof(resumeStr) - 1) - cp) < len)) {
             len -= b - cp;
             calculateCorrection(now, b, len);
-        } else if (((b = android::strnstr(cp, len, healthd)))
-                && ((size_t)((b += sizeof(healthd) - 1) - cp) < len)
-                && ((b = android::strnstr(b, len -= b - cp, battery)))
-                && ((size_t)((b += sizeof(battery) - 1) - cp) < len)) {
+        } else if (((b = android::strnstr(cp, len, healthd))) &&
+                   ((size_t)((b += sizeof(healthd) - 1) - cp) < len) &&
+                   ((b = android::strnstr(b, len -= b - cp, battery))) &&
+                   ((size_t)((b += sizeof(battery) - 1) - cp) < len)) {
             // NB: healthd is roughly 150us late, so we use it instead to
             //     trigger a check for ntp-induced or hardware clock drift.
             log_time real(CLOCK_REALTIME);
             log_time mono(CLOCK_MONOTONIC);
             correction = (real < mono) ? log_time::EPOCH : (real - mono);
-        } else if (((b = android::strnstr(cp, len, suspendedStr)))
-                && ((size_t)((b += sizeof(suspendStr) - 1) - cp) < len)) {
+        } else if (((b = android::strnstr(cp, len, suspendedStr))) &&
+                   ((size_t)((b += sizeof(suspendStr) - 1) - cp) < len)) {
             len -= b - cp;
             log_time real;
-            char *endp;
+            char* endp;
             real.tv_sec = strtol(b, &endp, 10);
             if ((*endp == '.') && ((size_t)(endp - b) < len)) {
                 unsigned long multiplier = NS_PER_SEC;
@@ -398,14 +394,11 @@ void LogKlog::sniffTime(log_time &now,
     }
 }
 
-pid_t LogKlog::sniffPid(const char **buf, size_t len) {
-    const char *cp = *buf;
+pid_t LogKlog::sniffPid(const char** buf, size_t len) {
+    const char* cp = *buf;
     // HTC kernels with modified printk "c0   1648 "
-    if ((len > 9) &&
-            (cp[0] == 'c') &&
-            isdigit(cp[1]) &&
-            (isdigit(cp[2]) || (cp[2] == ' ')) &&
-            (cp[3] == ' ')) {
+    if ((len > 9) && (cp[0] == 'c') && isdigit(cp[1]) &&
+        (isdigit(cp[2]) || (cp[2] == ' ')) && (cp[3] == ' ')) {
         bool gotDigit = false;
         int i;
         for (i = 4; i < 9; ++i) {
@@ -419,7 +412,7 @@ pid_t LogKlog::sniffPid(const char **buf, size_t len) {
             int pid = 0;
             char dummy;
             if (sscanf(cp + 4, "%d%c", &pid, &dummy) == 2) {
-                *buf = cp + 10; // skip-it-all
+                *buf = cp + 10;  // skip-it-all
                 return pid;
             }
         }
@@ -432,7 +425,7 @@ pid_t LogKlog::sniffPid(const char **buf, size_t len) {
             if (sscanf(cp, "[%d:%*[a-z_./0-9:A-Z]]%c", &pid, &dummy) == 2) {
                 return pid;
             }
-            break; // Only the first one
+            break;  // Only the first one
         }
         ++cp;
         --len;
@@ -441,12 +434,12 @@ pid_t LogKlog::sniffPid(const char **buf, size_t len) {
 }
 
 // kernel log prefix, convert to a kernel log priority number
-static int parseKernelPrio(const char **buf, size_t len) {
+static int parseKernelPrio(const char** buf, size_t len) {
     int pri = LOG_USER | LOG_INFO;
-    const char *cp = *buf;
+    const char* cp = *buf;
     if (len && (*cp == '<')) {
         pri = 0;
-        while(--len && isdigit(*++cp)) {
+        while (--len && isdigit(*++cp)) {
             pri = (pri * 10) + *cp - '0';
         }
         if (len && (*cp == '>')) {
@@ -502,42 +495,42 @@ void LogKlog::synchronize(const char* buf, size_t len) {
 
 // Convert kernel log priority number into an Android Logger priority number
 static int convertKernelPrioToAndroidPrio(int pri) {
-    switch(pri & LOG_PRIMASK) {
-    case LOG_EMERG:
+    switch (pri & LOG_PRIMASK) {
+        case LOG_EMERG:
         // FALLTHRU
-    case LOG_ALERT:
+        case LOG_ALERT:
         // FALLTHRU
-    case LOG_CRIT:
-        return ANDROID_LOG_FATAL;
+        case LOG_CRIT:
+            return ANDROID_LOG_FATAL;
 
-    case LOG_ERR:
-        return ANDROID_LOG_ERROR;
+        case LOG_ERR:
+            return ANDROID_LOG_ERROR;
 
-    case LOG_WARNING:
-        return ANDROID_LOG_WARN;
+        case LOG_WARNING:
+            return ANDROID_LOG_WARN;
 
-    default:
+        default:
         // FALLTHRU
-    case LOG_NOTICE:
+        case LOG_NOTICE:
         // FALLTHRU
-    case LOG_INFO:
-        break;
+        case LOG_INFO:
+            break;
 
-    case LOG_DEBUG:
-        return ANDROID_LOG_DEBUG;
+        case LOG_DEBUG:
+            return ANDROID_LOG_DEBUG;
     }
 
     return ANDROID_LOG_INFO;
 }
 
-static const char *strnrchr(const char *s, size_t len, char c) {
-  const char *save = NULL;
-  for (;len; ++s, len--) {
-    if (*s == c) {
-      save = s;
+static const char* strnrchr(const char* s, size_t len, char c) {
+    const char* save = NULL;
+    for (; len; ++s, len--) {
+        if (*s == c) {
+            save = s;
+        }
     }
-  }
-  return save;
+    return save;
 }
 
 //
@@ -621,38 +614,41 @@ int LogKlog::log(const char* buf, size_t len) {
     while ((p < &buf[len]) && (isspace(*p) || !*p)) {
         ++p;
     }
-    if (p >= &buf[len]) { // timestamp, no content
+    if (p >= &buf[len]) {  // timestamp, no content
         return 0;
     }
     start = p;
-    const char *tag = "";
-    const char *etag = tag;
+    const char* tag = "";
+    const char* etag = tag;
     size_t taglen = len - (p - buf);
-    const char *bt = p;
+    const char* bt = p;
 
     static const char infoBrace[] = "[INFO]";
     static const size_t infoBraceLen = strlen(infoBrace);
-    if ((taglen >= infoBraceLen) && !fastcmp<strncmp>(p, infoBrace, infoBraceLen)) {
+    if ((taglen >= infoBraceLen) &&
+        !fastcmp<strncmp>(p, infoBrace, infoBraceLen)) {
         // <PRI>[<TIME>] "[INFO]"<tag> ":" message
         bt = p + infoBraceLen;
         taglen -= infoBraceLen;
     }
 
-    const char *et;
-    for (et = bt; taglen && *et && (*et != ':') && !isspace(*et); ++et, --taglen) {
-       // skip ':' within [ ... ]
-       if (*et == '[') {
-           while (taglen && *et && *et != ']') {
-               ++et;
-               --taglen;
-           }
-           if (!taglen) {
-               break;
-           }
-       }
+    const char* et;
+    for (et = bt; taglen && *et && (*et != ':') && !isspace(*et);
+         ++et, --taglen) {
+        // skip ':' within [ ... ]
+        if (*et == '[') {
+            while (taglen && *et && *et != ']') {
+                ++et;
+                --taglen;
+            }
+            if (!taglen) {
+                break;
+            }
+        }
     }
-    const char *cp;
-    for (cp = et; taglen && isspace(*cp); ++cp, --taglen);
+    const char* cp;
+    for (cp = et; taglen && isspace(*cp); ++cp, --taglen) {
+    }
 
     // Validate tag
     size_t size = et - bt;
@@ -667,18 +663,20 @@ int LogKlog::log(const char* buf, size_t len) {
             p = cp + 1;
         } else if ((taglen > size) && (tolower(*bt) == tolower(*cp))) {
             // clean up any tag stutter
-            if (!fastcmp<strncasecmp>(bt + 1, cp + 1, size - 1)) { // no match
+            if (!fastcmp<strncasecmp>(bt + 1, cp + 1, size - 1)) {  // no match
                 // <PRI>[<TIME>] <tag> <tag> : message
                 // <PRI>[<TIME>] <tag> <tag>: message
                 // <PRI>[<TIME>] <tag> '<tag>.<num>' : message
                 // <PRI>[<TIME>] <tag> '<tag><num>' : message
                 // <PRI>[<TIME>] <tag> '<tag><stuff>' : message
-                const char *b = cp;
+                const char* b = cp;
                 cp += size;
                 taglen -= size;
-                while (--taglen && !isspace(*++cp) && (*cp != ':'));
-                const char *e;
-                for (e = cp; taglen && isspace(*cp); ++cp, --taglen);
+                while (--taglen && !isspace(*++cp) && (*cp != ':')) {
+                }
+                const char* e;
+                for (e = cp; taglen && isspace(*cp); ++cp, --taglen) {
+                }
                 if (taglen && (*cp == ':')) {
                     tag = b;
                     etag = e;
@@ -689,15 +687,17 @@ int LogKlog::log(const char* buf, size_t len) {
                 static const char host[] = "_host";
                 static const size_t hostlen = strlen(host);
                 if ((size > hostlen) &&
-                        !fastcmp<strncmp>(bt + size - hostlen, host, hostlen) &&
-                        !fastcmp<strncmp>(bt + 1, cp + 1, size - hostlen - 1)) {
-                    const char *b = cp;
+                    !fastcmp<strncmp>(bt + size - hostlen, host, hostlen) &&
+                    !fastcmp<strncmp>(bt + 1, cp + 1, size - hostlen - 1)) {
+                    const char* b = cp;
                     cp += size - hostlen;
                     taglen -= size - hostlen;
                     if (*cp == '.') {
-                        while (--taglen && !isspace(*++cp) && (*cp != ':'));
-                        const char *e;
-                        for (e = cp; taglen && isspace(*cp); ++cp, --taglen);
+                        while (--taglen && !isspace(*++cp) && (*cp != ':')) {
+                        }
+                        const char* e;
+                        for (e = cp; taglen && isspace(*cp); ++cp, --taglen) {
+                        }
                         if (taglen && (*cp == ':')) {
                             tag = b;
                             etag = e;
@@ -709,10 +709,13 @@ int LogKlog::log(const char* buf, size_t len) {
                 }
             }
         } else {
-            // <PRI>[<TIME>] <tag> <stuff>' : message
-twoWord:    while (--taglen && !isspace(*++cp) && (*cp != ':'));
-            const char *e;
-            for (e = cp; taglen && isspace(*cp); ++cp, --taglen);
+        // <PRI>[<TIME>] <tag> <stuff>' : message
+        twoWord:
+            while (--taglen && !isspace(*++cp) && (*cp != ':')) {
+            }
+            const char* e;
+            for (e = cp; taglen && isspace(*cp); ++cp, --taglen) {
+            }
             // Two words
             if (taglen && (*cp == ':')) {
                 tag = bt;
@@ -720,7 +723,7 @@ twoWord:    while (--taglen && !isspace(*++cp) && (*cp != ':'));
                 p = cp + 1;
             }
         }
-    } // else no tag
+    }  // else no tag
 
     static const char cpu[] = "CPU";
     static const size_t cpuLen = strlen(cpu);
@@ -732,16 +735,17 @@ twoWord:    while (--taglen && !isspace(*++cp) && (*cp != ':'));
     static const size_t infoLen = strlen(info);
 
     size = etag - tag;
-    if ((size <= 1)
+    if ((size <= 1) ||
         // register names like x9
-            || ((size == 2) && (isdigit(tag[0]) || isdigit(tag[1])))
+        ((size == 2) && (isdigit(tag[0]) || isdigit(tag[1]))) ||
         // register names like x18 but not driver names like en0
-            || ((size == 3) && (isdigit(tag[1]) && isdigit(tag[2])))
+        ((size == 3) && (isdigit(tag[1]) && isdigit(tag[2]))) ||
         // blacklist
-            || ((size == cpuLen) && !fastcmp<strncmp>(tag, cpu, cpuLen))
-            || ((size == warningLen) && !fastcmp<strncasecmp>(tag, warning, warningLen))
-            || ((size == errorLen) && !fastcmp<strncasecmp>(tag, error, errorLen))
-            || ((size == infoLen) && !fastcmp<strncasecmp>(tag, info, infoLen))) {
+        ((size == cpuLen) && !fastcmp<strncmp>(tag, cpu, cpuLen)) ||
+        ((size == warningLen) &&
+         !fastcmp<strncasecmp>(tag, warning, warningLen)) ||
+        ((size == errorLen) && !fastcmp<strncasecmp>(tag, error, errorLen)) ||
+        ((size == infoLen) && !fastcmp<strncasecmp>(tag, info, infoLen))) {
         p = start;
         etag = tag = "";
     }
@@ -750,7 +754,7 @@ twoWord:    while (--taglen && !isspace(*++cp) && (*cp != ':'));
     //   eg: [143:healthd]healthd -> [143:healthd]
     taglen = etag - tag;
     // Mediatek-special printk induced stutter
-    const char *mp = strnrchr(tag, ']', taglen);
+    const char* mp = strnrchr(tag, ']', taglen);
     if (mp && (++mp < etag)) {
         size_t s = etag - mp;
         if (((s + s) < taglen) && !fastcmp<memcmp>(mp, mp - 1 - s, s)) {
@@ -767,7 +771,7 @@ twoWord:    while (--taglen && !isspace(*++cp) && (*cp != ':'));
     }
     // truncate trailing space or nuls
     size_t b = len - (p - buf);
-    while (b && (isspace(p[b-1]) || !p[b-1])) {
+    while (b && (isspace(p[b - 1]) || !p[b - 1])) {
         --b;
     }
     // trick ... allow tag with empty content to be logged. log() drops empty
@@ -796,7 +800,7 @@ twoWord:    while (--taglen && !isspace(*++cp) && (*cp != ':'));
     // truncating length argument to logbuf->log() below. Gain is protection
     // of stack sanity and speedup, loss is truncated long-line content.
     char newstr[n];
-    char *np = newstr;
+    char* np = newstr;
 
     // Convert priority into single-byte Android logger priority
     *np = convertKernelPrioToAndroidPrio(pri);
@@ -828,10 +832,10 @@ twoWord:    while (--taglen && !isspace(*++cp) && (*cp != ':'));
             unsigned abs0 = (diff0 < 0) ? -diff0 : diff0;
             int diff1 = (vote_time[1] - vote_time[2]) / near_seconds;
             unsigned abs1 = (diff1 < 0) ? -diff1 : diff1;
-            if ((abs1 <= 1) && // last two were in agreement on timezone
-                    ((abs0 + 1) % (timezones_seconds / near_seconds)) <= 2) {
+            if ((abs1 <= 1) &&  // last two were in agreement on timezone
+                ((abs0 + 1) % (timezones_seconds / near_seconds)) <= 2) {
                 abs0 = (abs0 + 1) / (timezones_seconds / near_seconds) *
-                                     timezones_seconds;
+                       timezones_seconds;
                 now.tv_sec -= (diff0 < 0) ? -abs0 : abs0;
             }
         }
@@ -839,7 +843,7 @@ twoWord:    while (--taglen && !isspace(*++cp) && (*cp != ':'));
 
     // Log message
     int rc = logbuf->log(LOG_ID_KERNEL, now, uid, pid, tid, newstr,
-                         (unsigned short) n);
+                         (unsigned short)n);
 
     // notify readers
     if (!rc) {
