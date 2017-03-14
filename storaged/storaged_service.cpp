@@ -136,16 +136,16 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
         last_ts = it.first;
 
         for (const auto& record : it.second.entries) {
-            dprintf(fd, "%s %llu %llu %llu %llu %llu %llu %llu %llu\n",
+            dprintf(fd, "%s %ju %ju %ju %ju %ju %ju %ju %ju\n",
                 record.name.c_str(),
-                (unsigned long long)record.ios.bytes[READ][FOREGROUND][CHARGER_OFF],
-                (unsigned long long)record.ios.bytes[WRITE][FOREGROUND][CHARGER_OFF],
-                (unsigned long long)record.ios.bytes[READ][BACKGROUND][CHARGER_OFF],
-                (unsigned long long)record.ios.bytes[WRITE][BACKGROUND][CHARGER_OFF],
-                (unsigned long long)record.ios.bytes[READ][FOREGROUND][CHARGER_ON],
-                (unsigned long long)record.ios.bytes[WRITE][FOREGROUND][CHARGER_ON],
-                (unsigned long long)record.ios.bytes[READ][BACKGROUND][CHARGER_ON],
-                (unsigned long long)record.ios.bytes[WRITE][BACKGROUND][CHARGER_ON]);
+                record.ios.bytes[READ][FOREGROUND][CHARGER_OFF],
+                record.ios.bytes[WRITE][FOREGROUND][CHARGER_OFF],
+                record.ios.bytes[READ][BACKGROUND][CHARGER_OFF],
+                record.ios.bytes[WRITE][BACKGROUND][CHARGER_OFF],
+                record.ios.bytes[READ][FOREGROUND][CHARGER_ON],
+                record.ios.bytes[WRITE][FOREGROUND][CHARGER_ON],
+                record.ios.bytes[READ][BACKGROUND][CHARGER_ON],
+                record.ios.bytes[WRITE][BACKGROUND][CHARGER_ON]);
         }
     }
 

@@ -270,23 +270,11 @@ void sort_running_uids_info(std::vector<struct uid_info> &uids) {
 
 // Logging functions
 void log_console_running_uids_info(std::vector<struct uid_info> uids) {
-// Sample Output:
-//                                       Application        FG Read       FG Write        FG Read       FG Write        BG Read       BG Write        BG Read       BG Write
-//                                          NAME/UID     Characters     Characters          Bytes          Bytes     Characters     Characters          Bytes          Bytes
-//                                        ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------
-//                      com.google.android.gsf.login              0              0              0              0       57195097        5137089      176386048        6512640
-//           com.google.android.googlequicksearchbox              0              0              0              0        4196821       12123468       34295808       13225984
-//                                              1037           4572            537              0              0         131352        5145643       34263040        5144576
-//                        com.google.android.youtube           2182             70              0              0       63969383         482939       38731776         466944
-
-    // Title
-    printf("Per-UID I/O stats\n");
-    printf("                                       Application        FG Read       FG Write        FG Read       FG Write        BG Read       BG Write        BG Read       BG Write       FG fsync       BG fsync\n"
-           "                                          NAME/UID     Characters     Characters          Bytes          Bytes     Characters     Characters          Bytes          Bytes                              \n"
-           "                                        ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------     ----------\n");
+    printf("name/uid fg_rchar fg_wchar fg_rbytes fg_wbytes "
+           "bg_rchar bg_wchar bg_rbytes bg_wbytes fg_fsync bg_fsync\n");
 
     for (const auto& uid : uids) {
-        printf("%50s%15ju%15ju%15ju%15ju%15ju%15ju%15ju%15ju%15ju%15ju\n", uid.name.c_str(),
+        printf("%s %ju %ju %ju %ju %ju %ju %ju %ju %ju %ju\n", uid.name.c_str(),
             uid.io[0].rchar, uid.io[0].wchar, uid.io[0].read_bytes, uid.io[0].write_bytes,
             uid.io[1].rchar, uid.io[1].wchar, uid.io[1].read_bytes, uid.io[1].write_bytes,
             uid.io[0].fsync, uid.io[1].fsync);
