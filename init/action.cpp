@@ -246,20 +246,16 @@ bool Action::TriggersEqual(const Action& other) const {
 }
 
 std::string Action::BuildTriggersString() const {
-    std::string result;
+    std::vector<std::string> triggers;
 
     for (const auto& [trigger_name, trigger_value] : property_triggers_) {
-        result += trigger_name;
-        result += '=';
-        result += trigger_value;
-        result += ' ';
+        triggers.emplace_back(trigger_name + '=' + trigger_value);
     }
     if (!event_trigger_.empty()) {
-        result += event_trigger_;
-        result += ' ';
+        triggers.emplace_back(event_trigger_);
     }
-    result.pop_back();
-    return result;
+
+    return Join(triggers, " && ");
 }
 
 void Action::DumpState() const {
@@ -268,7 +264,7 @@ void Action::DumpState() const {
 
     for (const auto& c : commands_) {
         std::string cmd_str = c.BuildCommandString();
-        LOG(INFO) << "  %s" << cmd_str;
+        LOG(INFO) << "  " << cmd_str;
     }
 }
 
