@@ -1254,6 +1254,10 @@ int main(int argc, char** argv) {
         parser.set_is_odm_etc_init_loaded(true);
     }
 
+    // Turning this on and letting the INFO logging be discarded adds 0.2s to
+    // Nexus 9 boot time, so it's disabled by default.
+    if (false) parser.DumpState();
+
     ActionManager& am = ActionManager::GetInstance();
 
     am.QueueEventTrigger("early-init");
