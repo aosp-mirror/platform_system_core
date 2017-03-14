@@ -169,6 +169,9 @@ static bool tested__android_log_close;
 
 TEST(liblog, __android_log_btwrite__android_logger_list_read) {
 #if (defined(__ANDROID__) || defined(USING_LOGGER_LOCAL))
+#ifdef TEST_PREFIX
+  TEST_PREFIX
+#endif
   struct logger_list* logger_list;
 
   pid_t pid = getpid();
