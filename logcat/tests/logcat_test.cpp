@@ -329,7 +329,7 @@ TEST(logcat, tail_1000) {
     do_tail(1000);
 }
 
-TEST(logcat, tail_time) {
+static void do_tail_time(const char* cmd) {
     FILE* fp;
     int count;
     char buffer[BIG_BUFFER];
@@ -343,14 +343,9 @@ TEST(logcat, tail_time) {
     int tries = 4;  // in case run too soon after system start or buffer clear
 
     do {
+        snprintf(buffer, sizeof(buffer), "%s -t 10 2>&1", cmd);
         logcat_define(ctx);
-        ASSERT_TRUE(NULL != (fp = logcat_popen(ctx,
-                                               "logcat"
-                                               " -v long"
-                                               " -v nsec"
-                                               " -b all"
-                                               " -t 10"
-                                               " 2>&1")));
+        ASSERT_TRUE(NULL != (fp = logcat_popen(ctx, buffer)));
         count = 0;
 
         while ((input = fgetLongTime(buffer, sizeof(buffer), fp))) {
@@ -372,14 +367,7 @@ TEST(logcat, tail_time) {
     EXPECT_TRUE(first_timestamp != NULL);
     EXPECT_TRUE(second_timestamp != NULL);
 
-    snprintf(buffer, sizeof(buffer),
-             "logcat"
-             " -v long"
-             " -v nsec"
-             " -b all"
-             " -t '%s'"
-             " 2>&1",
-             first_timestamp);
+    snprintf(buffer, sizeof(buffer), "%s -t '%s' 2>&1", cmd, first_timestamp);
     logcat_define(ctx);
     ASSERT_TRUE(NULL != (fp = logcat_popen(ctx, buffer)));
 
@@ -444,6 +432,14 @@ TEST(logcat, tail_time) {
     EXPECT_TRUE(second_timestamp == NULL);
     EXPECT_LE(count, second_count);
     EXPECT_LE(count, last_timestamp_count);
+}
+
+TEST(logcat, tail_time) {
+    do_tail_time("logcat -v long -v nsec -b all");
+}
+
+TEST(logcat, tail_time_epoch) {
+    do_tail_time("logcat -v long -v nsec -v epoch -b all");
 }
 
 TEST(logcat, End_to_End) {
