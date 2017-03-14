@@ -112,30 +112,6 @@ TEST(FuseMessageTest, Write_TooShort) {
   TestWriteInvalidLength(sizeof(fuse_in_header) - 1);
 }
 
-TEST(FuseMessageTest, ShortWriteAndRead) {
-  int raw_fds[2];
-  ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_STREAM, 0, raw_fds));
-
-  android::base::unique_fd fds[2];
-  fds[0].reset(raw_fds[0]);
-  fds[1].reset(raw_fds[1]);
-
-  const int send_buffer_size = 1024;
-  ASSERT_EQ(0, setsockopt(fds[0], SOL_SOCKET, SO_SNDBUF, &send_buffer_size,
-                          sizeof(int)));
-
-  bool succeed = false;
-  const int sender_fd = fds[0].get();
-  std::thread thread([sender_fd, &succeed] {
-    FuseRequest request;
-    request.header.len = 1024 * 4;
-    succeed = request.Write(sender_fd);
-  });
-  thread.detach();
-  FuseRequest request;
-  ASSERT_TRUE(request.Read(fds[1]));
-}
-
 TEST(FuseResponseTest, Reset) {
   FuseResponse response;
   // Write 1 to the first ten bytes.
@@ -209,6 +185,30 @@ TEST(FuseBufferTest, HandleNotImpl) {
 
   ASSERT_EQ(sizeof(fuse_out_header), buffer.response.header.len);
   EXPECT_EQ(-ENOSYS, buffer.response.header.error);
+}
+
+TEST(SetupMessageSocketsTest, Stress) {
+    constexpr int kCount = 1000;
+
+    FuseRequest request;
+    request.header.len = sizeof(FuseRequest);
+
+    base::unique_fd fds[2];
+    SetupMessageSockets(&fds);
+
+    std::thread thread([&fds] {
+        FuseRequest request;
+        for (int i = 0; i < kCount; ++i) {
+            ASSERT_TRUE(request.Read(fds[1]));
+            usleep(1000);
+        }
+    });
+
+    for (int i = 0; i < kCount; ++i) {
+        ASSERT_TRUE(request.Write(fds[0]));
+    }
+
+    thread.join();
 }
 
 } // namespace fuse

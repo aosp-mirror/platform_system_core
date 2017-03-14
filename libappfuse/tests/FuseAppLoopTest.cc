@@ -109,10 +109,7 @@ class FuseAppLoopTest : public ::testing::Test {
 
   void SetUp() override {
     base::SetMinimumLogSeverity(base::VERBOSE);
-    int sockets[2];
-    ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets));
-    sockets_[0].reset(sockets[0]);
-    sockets_[1].reset(sockets[1]);
+    ASSERT_TRUE(SetupMessageSockets(&sockets_));
     thread_ = std::thread([this] {
       StartFuseAppLoop(sockets_[1].release(), &callback_);
     });
