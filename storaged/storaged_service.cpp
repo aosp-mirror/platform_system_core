@@ -18,6 +18,8 @@
 
 #include <vector>
 
+#include <android-base/parseint.h>
+#include <android-base/parsedouble.h>
 #include <binder/IBinder.h>
 #include <binder/IInterface.h>
 
@@ -28,6 +30,8 @@
 
 #include <storaged.h>
 #include <storaged_service.h>
+
+using namespace android::base;
 
 extern storaged_t storaged;
 
@@ -97,19 +101,22 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
         if (arg == String16("--hours")) {
             if (++i >= args.size())
                 break;
-            hours = std::stod(String8(args[i]).string());
+            if(!ParseDouble(String8(args[i]).c_str(), &hours))
+                return BAD_VALUE;
             continue;
         }
         if (arg == String16("--time_window")) {
             if (++i >= args.size())
                 break;
-            time_window = std::stoi(String8(args[i]).string());
+            if(!ParseInt(String8(args[i]).c_str(), &time_window))
+                return BAD_VALUE;
             continue;
         }
         if (arg == String16("--threshold")) {
             if (++i >= args.size())
                 break;
-            threshold = std::stoll(String8(args[i]).string());
+            if(!ParseUint(String8(args[i]).c_str(), &threshold))
+                return BAD_VALUE;
             continue;
         }
         if (arg == String16("--force")) {

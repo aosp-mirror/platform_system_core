@@ -25,6 +25,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>
+#include <android-base/parseint.h>
 #include <android-base/strings.h>
 #include <android-base/stringprintf.h>
 #include <log/log_event_list.h>
@@ -59,12 +60,12 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_lock
 {
     std::unordered_map<uint32_t, struct uid_info> uid_io_stats;
     std::string buffer;
-    if (!android::base::ReadFileToString(UID_IO_STATS_PATH, &buffer)) {
+    if (!ReadFileToString(UID_IO_STATS_PATH, &buffer)) {
         PLOG_TO(SYSTEM, ERROR) << UID_IO_STATS_PATH << ": ReadFileToString failed";
         return uid_io_stats;
     }
 
-    std::vector<std::string> io_stats = android::base::Split(buffer, "\n");
+    std::vector<std::string> io_stats = Split(buffer, "\n");
     struct uid_info u;
     bool refresh_uid = false;
 
@@ -72,25 +73,22 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_lock
         if (io_stats[i].empty()) {
             continue;
         }
-        std::vector<std::string> fields = android::base::Split(io_stats[i], " ");
-        if (fields.size() < 9) {
-            LOG_TO(SYSTEM, WARNING) << "Invalid io stats: \""
+        std::vector<std::string> fields = Split(io_stats[i], " ");
+        if (fields.size() < 11 ||
+            !ParseUint(fields[0],  &u.uid) ||
+            !ParseUint(fields[1],  &u.io[FOREGROUND].rchar) ||
+            !ParseUint(fields[2],  &u.io[FOREGROUND].wchar) ||
+            !ParseUint(fields[3],  &u.io[FOREGROUND].read_bytes) ||
+            !ParseUint(fields[4],  &u.io[FOREGROUND].write_bytes) ||
+            !ParseUint(fields[5],  &u.io[BACKGROUND].rchar) ||
+            !ParseUint(fields[6],  &u.io[BACKGROUND].wchar) ||
+            !ParseUint(fields[7],  &u.io[BACKGROUND].read_bytes) ||
+            !ParseUint(fields[8],  &u.io[BACKGROUND].write_bytes) ||
+            !ParseUint(fields[9],  &u.io[FOREGROUND].fsync) ||
+            !ParseUint(fields[10], &u.io[BACKGROUND].fsync)) {
+            LOG_TO(SYSTEM, WARNING) << "Invalid I/O stats: \""
                                     << io_stats[i] << "\"";
             continue;
-        }
-        u.uid = stoul(fields[0]);
-        u.io[FOREGROUND].rchar = stoull(fields[1]);
-        u.io[FOREGROUND].wchar = stoull(fields[2]);
-        u.io[FOREGROUND].read_bytes = stoull(fields[3]);
-        u.io[FOREGROUND].write_bytes = stoull(fields[4]);
-        u.io[BACKGROUND].rchar = stoull(fields[5]);
-        u.io[BACKGROUND].wchar = stoull(fields[6]);
-        u.io[BACKGROUND].read_bytes = stoull(fields[7]);
-        u.io[BACKGROUND].write_bytes = stoull(fields[8]);
-
-        if (fields.size() == 11) {
-            u.io[FOREGROUND].fsync = stoull(fields[9]);
-            u.io[BACKGROUND].fsync = stoull(fields[10]);
         }
 
         if (last_uid_io_stats.find(u.uid) == last_uid_io_stats.end()) {
