@@ -43,6 +43,15 @@ cc_library {
     ],
 }
 
+cc_binary {
+    name: "demangle",
+    defaults: ["libdemangle_defaults"],
+    srcs: ["demangle.cpp"],
+    host_supported: true,
+
+    shared_libs: ["libdemangle"],
+}
+
 //-------------------------------------------------------------------------
 // Unit Tests
 //-------------------------------------------------------------------------
