@@ -37,6 +37,7 @@ UnwindPtrace::~UnwindPtrace() {
     _UPT_destroy(upt_info_);
     upt_info_ = nullptr;
   }
+
   if (addr_space_) {
     // Remove the map from the address space before destroying it.
     // It will be freed in the UnwindMap destructor.
@@ -47,18 +48,14 @@ UnwindPtrace::~UnwindPtrace() {
   }
 }
 
-bool UnwindPtrace::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
-  if (GetMap() == nullptr) {
-    // Without a map object, we can't do anything.
-    error_ = BACKTRACE_UNWIND_ERROR_MAP_MISSING;
-    return false;
+bool UnwindPtrace::Init() {
+  if (upt_info_) {
+    return true;
   }
 
-  error_ = BACKTRACE_UNWIND_NO_ERROR;
-
-  if (ucontext) {
-    BACK_LOGW("Unwinding from a specified context not supported yet.");
-    error_ = BACKTRACE_UNWIND_ERROR_UNSUPPORTED_OPERATION;
+  if (addr_space_) {
+    // If somehow the addr_space_ gets initialized but upt_info_ doesn't,
+    // then that indicates there is some kind of failure.
     return false;
   }
 
@@ -76,6 +73,28 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
   if (!upt_info_) {
     BACK_LOGW("Failed to create upt info.");
     error_ = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
+    return false;
+  }
+
+  return true;
+}
+
+bool UnwindPtrace::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
+  if (GetMap() == nullptr) {
+    // Without a map object, we can't do anything.
+    error_ = BACKTRACE_UNWIND_ERROR_MAP_MISSING;
+    return false;
+  }
+
+  error_ = BACKTRACE_UNWIND_NO_ERROR;
+
+  if (ucontext) {
+    BACK_LOGW("Unwinding from a specified context not supported yet.");
+    error_ = BACKTRACE_UNWIND_ERROR_UNSUPPORTED_OPERATION;
+    return false;
+  }
+
+  if (!Init()) {
     return false;
   }
 
@@ -115,9 +134,9 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
         prev->stack_size = frame->sp - prev->sp;
       }
 
-      frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
-
       FillInMap(frame->pc, &frame->map);
+
+      frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
 
       num_frames++;
     } else {
@@ -130,6 +149,10 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
 }
 
 std::string UnwindPtrace::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
+  if (!Init()) {
+    return "";
+  }
+
   *offset = 0;
   char buf[512];
   unw_word_t value;
