@@ -16,12 +16,13 @@
  *  limitations under the License.
  */
 
+#include <errno.h>
 #include <fcntl.h>
 #include <malloc.h>
+#include <poll.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <string.h>
-#include <errno.h>
-#include <poll.h>
 
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -79,6 +80,24 @@ struct sw_sync_create_fence_data {
 #define SW_SYNC_IOC_CREATE_FENCE _IOWR(SW_SYNC_IOC_MAGIC, 0, struct sw_sync_create_fence_data)
 #define SW_SYNC_IOC_INC _IOW(SW_SYNC_IOC_MAGIC, 1, __u32)
 
+// ---------------------------------------------------------------------------
+// Support for caching the sync uapi version.
+//
+// This library supports both legacy (android/staging) uapi and modern
+// (mainline) sync uapi. Library calls first try one uapi, and if that fails,
+// try the other. Since any given kernel only supports one uapi version, after
+// the first successful syscall we know what the kernel supports and can skip
+// trying the other.
+
+enum uapi_version {
+    UAPI_UNKNOWN,
+    UAPI_MODERN,
+    UAPI_LEGACY
+};
+static atomic_int g_uapi_version = ATOMIC_VAR_INIT(UAPI_UNKNOWN);
+
+// ---------------------------------------------------------------------------
+
 int sync_wait(int fd, int timeout)
 {
     struct pollfd fds;
@@ -109,9 +128,21 @@ int sync_wait(int fd, int timeout)
     return ret;
 }
 
-int sync_merge(const char *name, int fd1, int fd2)
+static int legacy_sync_merge(const char *name, int fd1, int fd2)
 {
-    struct sync_legacy_merge_data legacy_data;
+    struct sync_legacy_merge_data data;
+    int ret;
+
+    data.fd2 = fd2;
+    strlcpy(data.name, name, sizeof(data.name));
+    ret = ioctl(fd1, SYNC_IOC_LEGACY_MERGE, &data);
+    if (ret < 0)
+        return ret;
+    return data.fence;
+}
+
+static int modern_sync_merge(const char *name, int fd1, int fd2)
+{
     struct sync_merge_data data;
     int ret;
 
@@ -121,20 +152,35 @@ int sync_merge(const char *name, int fd1, int fd2)
     data.pad = 0;
 
     ret = ioctl(fd1, SYNC_IOC_MERGE, &data);
-    if (ret < 0 && errno == ENOTTY) {
-        legacy_data.fd2 = fd2;
-        strlcpy(legacy_data.name, name, sizeof(legacy_data.name));
-
-        ret = ioctl(fd1, SYNC_IOC_LEGACY_MERGE, &legacy_data);
-        if (ret < 0)
-            return ret;
-
-        return legacy_data.fence;
-    } else if (ret < 0) {
+    if (ret < 0)
         return ret;
+    return data.fence;
+}
+
+int sync_merge(const char *name, int fd1, int fd2)
+{
+    int uapi;
+    int ret;
+
+    uapi = atomic_load_explicit(&g_uapi_version, memory_order_acquire);
+
+    if (uapi == UAPI_MODERN || uapi == UAPI_UNKNOWN) {
+        ret = modern_sync_merge(name, fd1, fd2);
+        if (ret >= 0 || errno != ENOTTY) {
+            if (ret >= 0 && uapi == UAPI_UNKNOWN) {
+                atomic_store_explicit(&g_uapi_version, UAPI_MODERN,
+                                      memory_order_release);
+            }
+            return ret;
+        }
     }
 
-    return data.fence;
+    ret = legacy_sync_merge(name, fd1, fd2);
+    if (ret >= 0 && uapi == UAPI_UNKNOWN) {
+        atomic_store_explicit(&g_uapi_version, UAPI_LEGACY,
+                              memory_order_release);
+    }
+    return ret;
 }
 
 static struct sync_fence_info_data *legacy_sync_fence_info(int fd)
@@ -255,15 +301,29 @@ static struct sync_file_info* legacy_fence_info_to_sync_file_info(
 struct sync_fence_info_data *sync_fence_info(int fd)
 {
     struct sync_fence_info_data *legacy_info;
+    int uapi;
 
-    legacy_info = legacy_sync_fence_info(fd);
-    if (legacy_info || errno != ENOTTY)
-        return legacy_info;
+    uapi = atomic_load_explicit(&g_uapi_version, memory_order_acquire);
+
+    if (uapi == UAPI_LEGACY || uapi == UAPI_UNKNOWN) {
+        legacy_info = legacy_sync_fence_info(fd);
+        if (legacy_info || errno != ENOTTY) {
+            if (legacy_info && uapi == UAPI_UNKNOWN) {
+                atomic_store_explicit(&g_uapi_version, UAPI_LEGACY,
+                                      memory_order_release);
+            }
+            return legacy_info;
+        }
+    }
 
     struct sync_file_info* file_info;
     file_info = modern_sync_file_info(fd);
     if (!file_info)
         return NULL;
+    if (uapi == UAPI_UNKNOWN) {
+        atomic_store_explicit(&g_uapi_version, UAPI_MODERN,
+                              memory_order_release);
+    }
     legacy_info = sync_file_info_to_legacy_fence_info(file_info);
     sync_file_info_free(file_info);
     return legacy_info;
@@ -272,15 +332,29 @@ struct sync_fence_info_data *sync_fence_info(int fd)
 struct sync_file_info* sync_file_info(int32_t fd)
 {
     struct sync_file_info *info;
+    int uapi;
+
+    uapi = atomic_load_explicit(&g_uapi_version, memory_order_acquire);
+
+    if (uapi == UAPI_MODERN || uapi == UAPI_UNKNOWN) {
+        info = modern_sync_file_info(fd);
+        if (info || errno != ENOTTY) {
+            if (info && uapi == UAPI_UNKNOWN) {
+                atomic_store_explicit(&g_uapi_version, UAPI_MODERN,
+                                      memory_order_release);
+            }
+            return info;
+        }
+    }
+
     struct sync_fence_info_data *legacy_info;
-
-    info = modern_sync_file_info(fd);
-    if (info || errno != ENOTTY)
-        return info;
-
     legacy_info = legacy_sync_fence_info(fd);
     if (!legacy_info)
         return NULL;
+    if (uapi == UAPI_UNKNOWN) {
+        atomic_store_explicit(&g_uapi_version, UAPI_LEGACY,
+                              memory_order_release);
+    }
     info = legacy_fence_info_to_sync_file_info(legacy_info);
     sync_fence_info_free(legacy_info);
     return info;
