@@ -754,7 +754,7 @@ int LogKlog::log(const char* buf, size_t len) {
     //   eg: [143:healthd]healthd -> [143:healthd]
     taglen = etag - tag;
     // Mediatek-special printk induced stutter
-    const char* mp = strnrchr(tag, ']', taglen);
+    const char* mp = strnrchr(tag, taglen, ']');
     if (mp && (++mp < etag)) {
         size_t s = etag - mp;
         if (((s + s) < taglen) && !fastcmp<memcmp>(mp, mp - 1 - s, s)) {
