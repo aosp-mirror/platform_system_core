@@ -1,8 +1,4 @@
 BasedOnStyle: Google
-AllowShortBlocksOnASingleLine: false
-AllowShortFunctionsOnASingleLine: true
-
-AccessModifierOffset: -1
 ColumnLimit: 100
 CommentPragmas: NOLINT:.*
 DerivePointerAlignment: false
