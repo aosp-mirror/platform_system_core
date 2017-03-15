@@ -35,6 +35,9 @@ cc_library {
         darwin: {
             enabled: false,
         },
+        linux_bionic: {
+            enabled: true,
+        },
         windows: {
             enabled: false,
         },
