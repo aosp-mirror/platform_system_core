@@ -1245,20 +1245,17 @@ static int do_bypass_unlock_command(int argc, char **argv)
     return 0;
 }
 
-static int do_oem_command(int argc, char **argv)
-{
-    char command[256];
+static int do_oem_command(int argc, char** argv) {
     if (argc <= 1) return 0;
 
-    command[0] = 0;
-    while(1) {
-        strcat(command,*argv);
+    std::string command;
+    while (argc > 0) {
+        command += *argv;
         skip(1);
-        if(argc == 0) break;
-        strcat(command," ");
+        if (argc != 0) command += " ";
     }
 
-    fb_queue_command(command,"");
+    fb_queue_command(command.c_str(), "");
     return 0;
 }
 
