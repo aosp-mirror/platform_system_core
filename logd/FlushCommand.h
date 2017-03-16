@@ -16,7 +16,7 @@
 #ifndef _FLUSH_COMMAND_H
 #define _FLUSH_COMMAND_H
 
-#include <android/log.h>
+#include <private/android_logger.h>
 #include <sysutils/SocketClientCommand.h>
 
 class LogBufferElement;
@@ -31,13 +31,13 @@ class FlushCommand : public SocketClientCommand {
     unsigned long mTail;
     unsigned int mLogMask;
     pid_t mPid;
-    uint64_t mStart;
+    log_time mStart;
     uint64_t mTimeout;
 
    public:
     explicit FlushCommand(LogReader& mReader, bool nonBlock = false,
                           unsigned long tail = -1, unsigned int logMask = -1,
-                          pid_t pid = 0, uint64_t start = 1,
+                          pid_t pid = 0, log_time start = log_time::EPOCH,
                           uint64_t timeout = 0);
     virtual void runSocketCommand(SocketClient* client);
 
