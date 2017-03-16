@@ -41,9 +41,12 @@ cc_library_headers {
     host_supported: true,
     export_include_dirs: ["include"],
     target: {
-       windows: {
-          enabled: true,
-       },
+        linux_bionic: {
+            enabled: true,
+        },
+        windows: {
+            enabled: true,
+        },
     },
 }
 
@@ -68,10 +71,13 @@ cc_library {
         "threads.c",
     ],
 
-
     target: {
         host: {
             srcs: ["dlmalloc_stubs.c"],
+        },
+        linux_bionic: {
+            enabled: true,
+            exclude_srcs: ["dlmalloc_stubs.c"],
         },
         not_windows: {
             srcs: libcutils_nonwindows_sources + [
