@@ -158,93 +158,6 @@ void add_disk_stats(struct disk_stats* src, struct disk_stats* dst) {
     }
 }
 
-bool parse_emmc_ecsd(int ext_csd_fd, struct emmc_info* info) {
-    CHECK(ext_csd_fd >= 0);
-    struct hex {
-        char str[2];
-    };
-    // List of interesting offsets
-    static const size_t EXT_CSD_REV_IDX = 192 * sizeof(hex);
-    static const size_t EXT_PRE_EOL_INFO_IDX = 267 * sizeof(hex);
-    static const size_t EXT_DEVICE_LIFE_TIME_EST_A_IDX = 268 * sizeof(hex);
-    static const size_t EXT_DEVICE_LIFE_TIME_EST_B_IDX = 269 * sizeof(hex);
-
-    // Read file
-    CHECK(lseek(ext_csd_fd, 0, SEEK_SET) == 0);
-    std::string buffer;
-    if (!android::base::ReadFdToString(ext_csd_fd, &buffer)) {
-        PLOG_TO(SYSTEM, ERROR) << "ReadFdToString failed.";
-        return false;
-    }
-
-    if (buffer.length() < EXT_CSD_FILE_MIN_SIZE) {
-        LOG_TO(SYSTEM, ERROR) << "EMMC ext csd file has truncated content. "
-            << "File length: " << buffer.length();
-        return false;
-    }
-
-    std::string sub;
-    std::stringstream ss;
-    // Parse EXT_CSD_REV
-    int ext_csd_rev = -1;
-    sub = buffer.substr(EXT_CSD_REV_IDX, sizeof(hex));
-    ss << sub;
-    ss >> std::hex >> ext_csd_rev;
-    if (ext_csd_rev < 0) {
-        LOG_TO(SYSTEM, ERROR) << "Failure on parsing EXT_CSD_REV.";
-        return false;
-    }
-    ss.clear();
-
-    static const char* ver_str[] = {
-        "4.0", "4.1", "4.2", "4.3", "Obsolete", "4.41", "4.5", "5.0"
-    };
-
-    strlcpy(info->mmc_ver,
-            (ext_csd_rev < (int)(sizeof(ver_str) / sizeof(ver_str[0]))) ?
-                           ver_str[ext_csd_rev] :
-                           "Unknown",
-            MMC_VER_STR_LEN);
-
-    if (ext_csd_rev < 7) {
-        return 0;
-    }
-
-    // Parse EXT_PRE_EOL_INFO
-    info->eol = -1;
-    sub = buffer.substr(EXT_PRE_EOL_INFO_IDX, sizeof(hex));
-    ss << sub;
-    ss >> std::hex >> info->eol;
-    if (info->eol < 0) {
-        LOG_TO(SYSTEM, ERROR) << "Failure on parsing EXT_PRE_EOL_INFO.";
-        return false;
-    }
-    ss.clear();
-
-    // Parse DEVICE_LIFE_TIME_EST
-    info->lifetime_a = -1;
-    sub = buffer.substr(EXT_DEVICE_LIFE_TIME_EST_A_IDX, sizeof(hex));
-    ss << sub;
-    ss >> std::hex >> info->lifetime_a;
-    if (info->lifetime_a < 0) {
-        LOG_TO(SYSTEM, ERROR) << "Failure on parsing EXT_DEVICE_LIFE_TIME_EST_TYP_A.";
-        return false;
-    }
-    ss.clear();
-
-    info->lifetime_b = -1;
-    sub = buffer.substr(EXT_DEVICE_LIFE_TIME_EST_B_IDX, sizeof(hex));
-    ss << sub;
-    ss >> std::hex >> info->lifetime_b;
-    if (info->lifetime_b < 0) {
-        LOG_TO(SYSTEM, ERROR) << "Failure on parsing EXT_DEVICE_LIFE_TIME_EST_TYP_B.";
-        return false;
-    }
-    ss.clear();
-
-    return true;
-}
-
 static bool cmp_uid_info(struct uid_info l, struct uid_info r) {
     // Compare background I/O first.
     for (int i = UID_STATS - 1; i >= 0; i--) {
@@ -317,14 +230,3 @@ void log_event_disk_stats(struct disk_stats* stats, const char* type) {
         << LOG_ID_EVENTS;
 }
 
-void log_event_emmc_info(struct emmc_info* info) {
-    // skip if the input structure are all zeros
-    if (info == NULL) return;
-    struct emmc_info zero_cmp;
-    memset(&zero_cmp, 0, sizeof(zero_cmp));
-    if (memcmp(&zero_cmp, info, sizeof(struct emmc_info)) == 0) return;
-
-    android_log_event_list(EVENTLOGTAG_EMMCINFO)
-        << info->mmc_ver << info->eol << info->lifetime_a << info->lifetime_b
-        << LOG_ID_EVENTS;
-}

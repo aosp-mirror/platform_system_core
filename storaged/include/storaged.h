@@ -28,6 +28,7 @@
 
 #include <batteryservice/IBatteryPropertiesListener.h>
 
+#include "storaged_info.h"
 #include "storaged_uid_monitor.h"
 
 using namespace android;
@@ -43,6 +44,8 @@ friend class test_case_name##_##test_name##_Test
 #else
 #define debuginfo(...)
 #endif
+
+#define ARRAY_SIZE(x)   (sizeof(x) / sizeof((x)[0]))
 
 #define SECTOR_SIZE ( 512 )
 #define SEC_TO_MSEC ( 1000 )
@@ -83,15 +86,7 @@ struct disk_stats {
     double   io_avg;         // average io_in_flight for accumulate calculations
 };
 
-#define MMC_VER_STR_LEN ( 9 )   // maximum length of the MMC version string, including NULL terminator
-// minimum size of a ext_csd file
-#define EXT_CSD_FILE_MIN_SIZE ( 1024 )
-struct emmc_info {
-    int eol;                        // pre-eol (end of life) information
-    int lifetime_a;                 // device life time estimation (type A)
-    int lifetime_b;                 // device life time estimation (type B)
-    char mmc_ver[MMC_VER_STR_LEN];  // device version string
-};
+
 
 struct disk_perf {
     uint32_t read_perf;         // read speed (kbytes/s)
@@ -232,26 +227,6 @@ public:
     void update(void);
 };
 
-class emmc_info_t {
-private:
-    struct emmc_info mInfo;
-    bool mValid;
-    int mFdEmmc;
-public:
-    emmc_info_t(void) :
-            mValid(false),
-            mFdEmmc(-1) {
-        memset(&mInfo, 0, sizeof(struct emmc_info));
-    }
-    ~emmc_info_t(void) {}
-
-    void publish(void);
-    void update(void);
-    void set_emmc_fd(int fd) {
-        mFdEmmc = fd;
-    }
-};
-
 // Periodic chores intervals in seconds
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT ( 60 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH ( 3600 )
@@ -268,7 +243,6 @@ struct storaged_config {
     int periodic_chores_interval_emmc_info_publish;
     int periodic_chores_interval_uid_io;
     bool proc_uid_io_available;      // whether uid_io is accessible
-    bool emmc_available;        // whether eMMC est_csd file is readable
     bool diskstats_available;   // whether diskstats is accessible
     int event_time_check_usec;  // check how much cputime spent in event loop
 };
@@ -279,7 +253,7 @@ private:
     storaged_config mConfig;
     disk_stats_publisher mDiskStats;
     disk_stats_monitor mDsm;
-    emmc_info_t mEmmcInfo;
+    storage_info_t *info = nullptr;
     uid_monitor mUidm;
     time_t mStarttime;
 public:
@@ -290,8 +264,8 @@ public:
     void pause(void) {
         sleep(mConfig.periodic_chores_interval_unit);
     }
-    void set_privileged_fds(int fd_emmc) {
-        mEmmcInfo.set_emmc_fd(fd_emmc);
+    void set_storage_info(storage_info_t *storage_info) {
+        info = storage_info;
     }
 
     time_t get_starttime(void) {
