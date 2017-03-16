@@ -30,7 +30,7 @@
 #include "LogReader.h"
 #include "LogUtils.h"
 
-const uint64_t LogBufferElement::FLUSH_ERROR(0);
+const log_time LogBufferElement::FLUSH_ERROR((uint32_t)-1, (uint32_t)-1);
 atomic_int_fast64_t LogBufferElement::sequence(1);
 
 LogBufferElement::LogBufferElement(log_id_t log_id, log_time realtime,
@@ -39,7 +39,6 @@ LogBufferElement::LogBufferElement(log_id_t log_id, log_time realtime,
     : mUid(uid),
       mPid(pid),
       mTid(tid),
-      mSequence(sequence.fetch_add(1, memory_order_relaxed)),
       mRealTime(realtime),
       mMsgLen(len),
       mLogId(log_id) {
@@ -55,7 +54,6 @@ LogBufferElement::LogBufferElement(const LogBufferElement& elem)
       mUid(elem.mUid),
       mPid(elem.mPid),
       mTid(elem.mTid),
-      mSequence(elem.mSequence),
       mRealTime(elem.mRealTime),
       mMsgLen(elem.mMsgLen),
       mLogId(elem.mLogId) {
@@ -206,7 +204,7 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent
     return retval;
 }
 
-uint64_t LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent,
+log_time LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent,
                                    bool privileged, bool lastSame) {
     struct logger_entry_v4 entry;
 
@@ -229,7 +227,7 @@ uint64_t LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent,
 
     if (!mMsg) {
         entry.len = populateDroppedMessage(buffer, parent, lastSame);
-        if (!entry.len) return mSequence;
+        if (!entry.len) return mRealTime;
         iovec[1].iov_base = buffer;
     } else {
         entry.len = mMsgLen;
@@ -237,7 +235,7 @@ uint64_t LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent,
     }
     iovec[1].iov_len = entry.len;
 
-    uint64_t retval = reader->sendDatav(iovec, 2) ? FLUSH_ERROR : mSequence;
+    log_time retval = reader->sendDatav(iovec, 2) ? FLUSH_ERROR : mRealTime;
 
     if (buffer) free(buffer);
 

@@ -115,7 +115,7 @@ class LogBuffer {
 
     int log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid,
             const char* msg, unsigned short len);
-    uint64_t flushTo(SocketClient* writer, const uint64_t start,
+    log_time flushTo(SocketClient* writer, const log_time& start,
                      bool privileged, bool security,
                      int (*filter)(const LogBufferElement* element,
                                    void* arg) = NULL,
