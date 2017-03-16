@@ -17,6 +17,8 @@
 #include <errno.h>
 #include <sys/prctl.h>
 
+#include <private/android_logger.h>
+
 #include "FlushCommand.h"
 #include "LogBuffer.h"
 #include "LogReader.h"
@@ -26,7 +28,7 @@ pthread_mutex_t LogTimeEntry::timesLock = PTHREAD_MUTEX_INITIALIZER;
 
 LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client,
                            bool nonBlock, unsigned long tail,
-                           unsigned int logMask, pid_t pid, uint64_t start,
+                           unsigned int logMask, pid_t pid, log_time start,
                            uint64_t timeout)
     : mRefCount(1),
       mRelease(false),
@@ -42,7 +44,7 @@ LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client,
       mClient(client),
       mStart(start),
       mNonBlock(nonBlock),
-      mEnd(LogBufferElement::getCurrentSequence()) {
+      mEnd(log_time(android_log_clockid())) {
     mTimeout.tv_sec = timeout / NS_PER_SEC;
     mTimeout.tv_nsec = timeout % NS_PER_SEC;
     pthread_cond_init(&threadTriggeredCondition, NULL);
@@ -132,7 +134,7 @@ void* LogTimeEntry::threadStart(void* obj) {
 
     lock();
 
-    uint64_t start = me->mStart;
+    log_time start = me->mStart;
 
     while (me->threadRunning && !me->isError_Locked()) {
         if (me->mTimeout.tv_sec || me->mTimeout.tv_nsec) {
@@ -163,7 +165,7 @@ void* LogTimeEntry::threadStart(void* obj) {
             break;
         }
 
-        me->mStart = start + 1;
+        me->mStart = start + log_time(0, 1);
 
         if (me->mNonBlock || !me->threadRunning || me->isError_Locked()) {
             break;
@@ -198,7 +200,7 @@ int LogTimeEntry::FilterFirstPass(const LogBufferElement* element, void* obj) {
     }
 
     if (me->mCount == 0) {
-        me->mStart = element->getSequence();
+        me->mStart = element->getRealTime();
     }
 
     if ((!me->mPid || (me->mPid == element->getPid())) &&
@@ -217,7 +219,7 @@ int LogTimeEntry::FilterSecondPass(const LogBufferElement* element, void* obj) {
 
     LogTimeEntry::lock();
 
-    me->mStart = element->getSequence();
+    me->mStart = element->getRealTime();
 
     if (me->skipAhead[element->getLogId()]) {
         me->skipAhead[element->getLogId()]--;
