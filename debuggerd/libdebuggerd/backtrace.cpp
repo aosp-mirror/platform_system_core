@@ -38,18 +38,7 @@
 
 #include "utility.h"
 
-static void dump_process_header(log_t* log, pid_t pid) {
-  char path[PATH_MAX];
-  char procnamebuf[1024];
-  char* procname = NULL;
-  FILE* fp;
-
-  snprintf(path, sizeof(path), "/proc/%d/cmdline", pid);
-  if ((fp = fopen(path, "r"))) {
-    procname = fgets(procnamebuf, sizeof(procnamebuf), fp);
-    fclose(fp);
-  }
-
+static void dump_process_header(log_t* log, pid_t pid, const char* process_name) {
   time_t t = time(NULL);
   struct tm tm;
   localtime_r(&t, &tm);
@@ -57,8 +46,8 @@ static void dump_process_header(log_t* log, pid_t pid) {
   strftime(timestr, sizeof(timestr), "%F %T", &tm);
   _LOG(log, logtype::BACKTRACE, "\n\n----- pid %d at %s -----\n", pid, timestr);
 
-  if (procname) {
-    _LOG(log, logtype::BACKTRACE, "Cmd line: %s\n", procname);
+  if (process_name) {
+    _LOG(log, logtype::BACKTRACE, "Cmd line: %s\n", process_name);
   }
   _LOG(log, logtype::BACKTRACE, "ABI: '%s'\n", ABI_STRING);
 }
@@ -67,28 +56,13 @@ static void dump_process_footer(log_t* log, pid_t pid) {
   _LOG(log, logtype::BACKTRACE, "\n----- end %d -----\n", pid);
 }
 
-static void log_thread_name(log_t* log, pid_t tid) {
-  FILE* fp;
-  char buf[1024];
-  char path[PATH_MAX];
-  char* threadname = NULL;
-
-  snprintf(path, sizeof(path), "/proc/%d/comm", tid);
-  if ((fp = fopen(path, "r"))) {
-    threadname = fgets(buf, sizeof(buf), fp);
-    fclose(fp);
-    if (threadname) {
-      size_t len = strlen(threadname);
-      if (len && threadname[len - 1] == '\n') {
-          threadname[len - 1] = '\0';
-      }
-    }
-  }
-  _LOG(log, logtype::BACKTRACE, "\n\"%s\" sysTid=%d\n", threadname ? threadname : "<unknown>", tid);
+static void log_thread_name(log_t* log, pid_t tid, const char* thread_name) {
+  _LOG(log, logtype::BACKTRACE, "\n\"%s\" sysTid=%d\n", thread_name, tid);
 }
 
-static void dump_thread(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid) {
-  log_thread_name(log, tid);
+static void dump_thread(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid,
+                        const std::string& thread_name) {
+  log_thread_name(log, tid, thread_name.c_str());
 
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map));
   if (backtrace->Unwind(0)) {
@@ -99,17 +73,21 @@ static void dump_thread(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid) {
   }
 }
 
-void dump_backtrace(int fd, BacktraceMap* map, pid_t pid, pid_t tid,
-                    const std::set<pid_t>& siblings, std::string* amfd_data) {
+void dump_backtrace(int fd, BacktraceMap* map, pid_t pid, pid_t tid, const std::string& process_name,
+                    const std::map<pid_t, std::string>& threads, std::string* amfd_data) {
   log_t log;
   log.tfd = fd;
   log.amfd_data = amfd_data;
 
-  dump_process_header(&log, pid);
-  dump_thread(&log, map, pid, tid);
+  dump_process_header(&log, pid, process_name.c_str());
+  dump_thread(&log, map, pid, tid, threads.find(tid)->second.c_str());
 
-  for (pid_t sibling : siblings) {
-    dump_thread(&log, map, pid, sibling);
+  for (const auto& it : threads) {
+    pid_t thread_tid = it.first;
+    const std::string& thread_name = it.second;
+    if (thread_tid != tid) {
+      dump_thread(&log, map, pid, thread_tid, thread_name.c_str());
+    }
   }
 
   dump_process_footer(&log, pid);
@@ -123,7 +101,9 @@ void dump_backtrace_ucontext(int output_fd, ucontext_t* ucontext) {
   log.tfd = output_fd;
   log.amfd_data = nullptr;
 
-  log_thread_name(&log, tid);
+  char thread_name[16];
+  read_with_default("/proc/self/comm", thread_name, sizeof(thread_name), "<unknown>");
+  log_thread_name(&log, tid, thread_name);
 
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid));
   if (backtrace->Unwind(0, ucontext)) {
@@ -139,7 +119,9 @@ void dump_backtrace_header(int output_fd) {
   log.tfd = output_fd;
   log.amfd_data = nullptr;
 
-  dump_process_header(&log, getpid());
+  char process_name[128];
+  read_with_default("/proc/self/cmdline", process_name, sizeof(process_name), "<unknown>");
+  dump_process_header(&log, getpid(), process_name);
 }
 
 void dump_backtrace_footer(int output_fd) {

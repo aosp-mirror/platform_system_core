@@ -32,8 +32,10 @@
 #include <memory>
 #include <string>
 
-#include <android/log.h>
+#include <android-base/file.h>
 #include <android-base/stringprintf.h>
+#include <android-base/unique_fd.h>
+#include <android/log.h>
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 #include <cutils/properties.h>
@@ -247,41 +249,16 @@ static void dump_signal_info(log_t* log, pid_t tid) {
   dump_signal_info(log, &si);
 }
 
-static void dump_thread_info(log_t* log, pid_t pid, pid_t tid) {
-  char path[64];
-  char threadnamebuf[1024];
-  char* threadname = nullptr;
-  FILE *fp;
-
-  snprintf(path, sizeof(path), "/proc/%d/comm", tid);
-  if ((fp = fopen(path, "r"))) {
-    threadname = fgets(threadnamebuf, sizeof(threadnamebuf), fp);
-    fclose(fp);
-    if (threadname) {
-      size_t len = strlen(threadname);
-      if (len && threadname[len - 1] == '\n') {
-        threadname[len - 1] = '\0';
-      }
-    }
-  }
+static void dump_thread_info(log_t* log, pid_t pid, pid_t tid, const char* process_name,
+                             const char* thread_name) {
   // Blacklist logd, logd.reader, logd.writer, logd.auditd, logd.control ...
-  static const char logd[] = "logd";
-  if (threadname != nullptr && !strncmp(threadname, logd, sizeof(logd) - 1)
-      && (!threadname[sizeof(logd) - 1] || (threadname[sizeof(logd) - 1] == '.'))) {
+  // TODO: Why is this controlled by thread name?
+  if (strcmp(thread_name, "logd") == 0 || strncmp(thread_name, "logd.", 4) == 0) {
     log->should_retrieve_logcat = false;
   }
 
-  char procnamebuf[1024];
-  char* procname = nullptr;
-
-  snprintf(path, sizeof(path), "/proc/%d/cmdline", pid);
-  if ((fp = fopen(path, "r"))) {
-    procname = fgets(procnamebuf, sizeof(procnamebuf), fp);
-    fclose(fp);
-  }
-
-  _LOG(log, logtype::HEADER, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", pid, tid,
-       threadname ? threadname : "UNKNOWN", procname ? procname : "UNKNOWN");
+  _LOG(log, logtype::HEADER, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", pid, tid, thread_name,
+       process_name);
 }
 
 static void dump_stack_segment(
@@ -493,13 +470,14 @@ static void dump_backtrace_and_stack(Backtrace* backtrace, log_t* log) {
   }
 }
 
-static void dump_thread(log_t* log, pid_t pid, pid_t tid, BacktraceMap* map,
+static void dump_thread(log_t* log, pid_t pid, pid_t tid, const std::string& process_name,
+                        const std::string& thread_name, BacktraceMap* map,
                         uintptr_t abort_msg_address, bool primary_thread) {
   log->current_tid = tid;
   if (!primary_thread) {
     _LOG(log, logtype::THREAD, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
   }
-  dump_thread_info(log, pid, tid);
+  dump_thread_info(log, pid, tid, process_name.c_str(), thread_name.c_str());
   dump_signal_info(log, tid);
 
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map));
@@ -654,9 +632,9 @@ static void dump_logs(log_t* log, pid_t pid, unsigned int tail) {
 }
 
 // Dumps all information about the specified pid to the tombstone.
-static void dump_crash(log_t* log, BacktraceMap* map,
-                       const OpenFilesList* open_files, pid_t pid, pid_t tid,
-                       const std::set<pid_t>* siblings, uintptr_t abort_msg_address) {
+static void dump_crash(log_t* log, BacktraceMap* map, const OpenFilesList* open_files, pid_t pid,
+                       pid_t tid, const std::string& process_name,
+                       const std::map<pid_t, std::string>& threads, uintptr_t abort_msg_address) {
   // don't copy log messages to tombstone unless this is a dev device
   char value[PROPERTY_VALUE_MAX];
   property_get("ro.debuggable", value, "0");
@@ -665,14 +643,17 @@ static void dump_crash(log_t* log, BacktraceMap* map,
   _LOG(log, logtype::HEADER,
        "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
   dump_header_info(log);
-  dump_thread(log, pid, tid, map, abort_msg_address, true);
+  dump_thread(log, pid, tid, process_name, threads.find(tid)->second, map, abort_msg_address, true);
   if (want_logs) {
     dump_logs(log, pid, 5);
   }
 
-  if (siblings && !siblings->empty()) {
-    for (pid_t sibling : *siblings) {
-      dump_thread(log, pid, sibling, map, 0, false);
+  for (const auto& it : threads) {
+    pid_t thread_tid = it.first;
+    const std::string& thread_name = it.second;
+
+    if (thread_tid != tid) {
+      dump_thread(log, pid, thread_tid, process_name, thread_name, map, 0, false);
     }
   }
 
@@ -739,16 +720,16 @@ int open_tombstone(std::string* out_path) {
   return fd;
 }
 
-void engrave_tombstone(int tombstone_fd, BacktraceMap* map,
-                       const OpenFilesList* open_files, pid_t pid, pid_t tid,
-                       const std::set<pid_t>* siblings, uintptr_t abort_msg_address,
+void engrave_tombstone(int tombstone_fd, BacktraceMap* map, const OpenFilesList* open_files,
+                       pid_t pid, pid_t tid, const std::string& process_name,
+                       const std::map<pid_t, std::string>& threads, uintptr_t abort_msg_address,
                        std::string* amfd_data) {
   log_t log;
   log.current_tid = tid;
   log.crashed_tid = tid;
   log.tfd = tombstone_fd;
   log.amfd_data = amfd_data;
-  dump_crash(&log, map, open_files, pid, tid, siblings, abort_msg_address);
+  dump_crash(&log, map, open_files, pid, tid, process_name, threads, abort_msg_address);
 }
 
 void engrave_tombstone_ucontext(int tombstone_fd, uintptr_t abort_msg_address, siginfo_t* siginfo,
@@ -762,7 +743,13 @@ void engrave_tombstone_ucontext(int tombstone_fd, uintptr_t abort_msg_address, s
   log.tfd = tombstone_fd;
   log.amfd_data = nullptr;
 
-  dump_thread_info(&log, pid, tid);
+  char thread_name[16];
+  char process_name[128];
+
+  read_with_default("/proc/self/comm", thread_name, sizeof(thread_name), "<unknown>");
+  read_with_default("/proc/self/cmdline", process_name, sizeof(process_name), "<unknown>");
+
+  dump_thread_info(&log, pid, tid, thread_name, process_name);
   dump_signal_info(&log, siginfo);
 
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid));
