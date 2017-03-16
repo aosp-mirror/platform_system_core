@@ -80,6 +80,18 @@ cc_library {
             static_libs: ["libcutils"],
             host_ldlibs: ["-lrt"],
         },
+        linux_bionic: {
+            enabled: true,
+            srcs: libbacktrace_sources,
+
+            shared_libs: [
+                "libbase",
+                "liblog",
+                "libunwind",
+            ],
+
+            static_libs: ["libcutils"],
+        },
         android: {
             srcs: libbacktrace_sources,
 
