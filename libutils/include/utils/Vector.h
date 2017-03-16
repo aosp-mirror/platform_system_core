@@ -42,11 +42,11 @@ class Vector : private VectorImpl
 {
 public:
             typedef TYPE    value_type;
-    
-    /*! 
+
+    /*!
      * Constructors and destructors
      */
-    
+
                             Vector();
                             Vector(const Vector<TYPE>& rhs);
     explicit                Vector(const SortedVector<TYPE>& rhs);
@@ -54,7 +54,7 @@ public:
 
     /*! copy operator */
             const Vector<TYPE>&     operator = (const Vector<TYPE>& rhs) const;
-            Vector<TYPE>&           operator = (const Vector<TYPE>& rhs);    
+            Vector<TYPE>&           operator = (const Vector<TYPE>& rhs);
 
             const Vector<TYPE>&     operator = (const SortedVector<TYPE>& rhs) const;
             Vector<TYPE>&           operator = (const SortedVector<TYPE>& rhs);
@@ -65,7 +65,7 @@ public:
 
     inline  void            clear()             { VectorImpl::clear(); }
 
-    /*! 
+    /*!
      * vector stats
      */
 
@@ -87,13 +87,13 @@ public:
     /*!
      * C-style array access
      */
-     
-    //! read-only C-style access 
+
+    //! read-only C-style access
     inline  const TYPE*     array() const;
     //! read-write C-style access
             TYPE*           editArray();
-    
-    /*! 
+
+    /*!
      * accessors
      */
 
@@ -113,10 +113,10 @@ public:
     //! grants right access to the top of the stack (last element)
             TYPE&           editTop();
 
-            /*! 
+            /*!
              * append/insert another vector
              */
-            
+
     //! insert another vector at a given index
             ssize_t         insertVectorAt(const Vector<TYPE>& vector, size_t index);
 
@@ -130,10 +130,10 @@ public:
     //! append an array at the end of this vector
             ssize_t         appendArray(const TYPE* array, size_t length);
 
-            /*! 
+            /*!
              * add/insert/replace items
              */
-             
+
     //! insert one or several items initialized with their default constructor
     inline  ssize_t         insertAt(size_t index, size_t numItems = 1);
     //! insert one or several items initialized from a prototype item
@@ -147,7 +147,7 @@ public:
     //! same as push() but returns the index the item was added at (or an error)
     inline  ssize_t         add();
     //! same as push() but returns the index the item was added at (or an error)
-            ssize_t         add(const TYPE& item);            
+            ssize_t         add(const TYPE& item);
     //! replace an item with a new one initialized with its default constructor
     inline  ssize_t         replaceAt(size_t index);
     //! replace an item with a new one
@@ -165,10 +165,10 @@ public:
     /*!
      * sort (stable) the array
      */
-     
+
      typedef int (*compar_t)(const TYPE* lhs, const TYPE* rhs);
      typedef int (*compar_r_t)(const TYPE* lhs, const TYPE* rhs, void* state);
-     
+
      inline status_t        sort(compar_t cmp);
      inline status_t        sort(compar_r_t cmp, void* state);
 
@@ -237,7 +237,7 @@ Vector<TYPE>::~Vector() {
 template<class TYPE> inline
 Vector<TYPE>& Vector<TYPE>::operator = (const Vector<TYPE>& rhs) {
     VectorImpl::operator = (rhs);
-    return *this; 
+    return *this;
 }
 
 template<class TYPE> inline
@@ -255,7 +255,7 @@ Vector<TYPE>& Vector<TYPE>::operator = (const SortedVector<TYPE>& rhs) {
 template<class TYPE> inline
 const Vector<TYPE>& Vector<TYPE>::operator = (const SortedVector<TYPE>& rhs) const {
     VectorImpl::operator = (rhs);
-    return *this; 
+    return *this;
 }
 
 template<class TYPE> inline

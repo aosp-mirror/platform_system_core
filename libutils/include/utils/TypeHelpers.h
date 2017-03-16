@@ -36,7 +36,7 @@ template <typename T> struct trait_trivial_ctor { enum { value = false }; };
 template <typename T> struct trait_trivial_dtor { enum { value = false }; };
 template <typename T> struct trait_trivial_copy { enum { value = false }; };
 template <typename T> struct trait_trivial_move { enum { value = false }; };
-template <typename T> struct trait_pointer      { enum { value = false }; };    
+template <typename T> struct trait_pointer      { enum { value = false }; };
 template <typename T> struct trait_pointer<T*>  { enum { value = true }; };
 
 template <typename TYPE>
@@ -59,13 +59,13 @@ template <typename T, typename U>
 struct aggregate_traits {
     enum {
         is_pointer          = false,
-        has_trivial_ctor    = 
+        has_trivial_ctor    =
             traits<T>::has_trivial_ctor && traits<U>::has_trivial_ctor,
-        has_trivial_dtor    = 
+        has_trivial_dtor    =
             traits<T>::has_trivial_dtor && traits<U>::has_trivial_dtor,
-        has_trivial_copy    = 
+        has_trivial_copy    =
             traits<T>::has_trivial_copy && traits<U>::has_trivial_copy,
-        has_trivial_move    = 
+        has_trivial_move    =
             traits<T>::has_trivial_move && traits<U>::has_trivial_move
     };
 };
