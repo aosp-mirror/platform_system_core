@@ -212,6 +212,20 @@ bool Readlink(const std::string& path, std::string* result) {
 }
 #endif
 
+#if !defined(_WIN32)
+bool Realpath(const std::string& path, std::string* result) {
+  result->clear();
+
+  char* realpath_buf = realpath(path.c_str(), nullptr);
+  if (realpath_buf == nullptr) {
+    return false;
+  }
+  result->assign(realpath_buf);
+  free(realpath_buf);
+  return true;
+}
+#endif
+
 std::string GetExecutablePath() {
 #if defined(__linux__)
   std::string path;
