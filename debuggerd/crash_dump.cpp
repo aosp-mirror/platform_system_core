@@ -27,6 +27,7 @@
 #include <unistd.h>
 
 #include <limits>
+#include <map>
 #include <memory>
 #include <set>
 #include <vector>
@@ -36,6 +37,7 @@
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 #include <log/log.h>
@@ -52,7 +54,21 @@
 #include "debuggerd/util.h"
 
 using android::base::unique_fd;
+using android::base::ReadFileToString;
 using android::base::StringPrintf;
+using android::base::Trim;
+
+static std::string get_process_name(pid_t pid) {
+  std::string result = "<unknown>";
+  ReadFileToString(StringPrintf("/proc/%d/cmdline", pid), &result);
+  return result;
+}
+
+static std::string get_thread_name(pid_t tid) {
+  std::string result = "<unknown>";
+  ReadFileToString(StringPrintf("/proc/%d/comm", tid), &result);
+  return Trim(result);
+}
 
 static bool pid_contains_tid(int pid_proc_fd, pid_t tid) {
   struct stat st;
@@ -253,7 +269,7 @@ int main(int argc, char** argv) {
   }
 
   // Seize the siblings.
-  std::set<pid_t> attached_siblings;
+  std::map<pid_t, std::string> threads;
   {
     std::set<pid_t> siblings;
     if (!android::procinfo::GetProcessTids(target, &siblings)) {
@@ -269,12 +285,12 @@ int main(int argc, char** argv) {
       if (!ptrace_seize_thread(target_proc_fd, sibling_tid, &attach_error)) {
         LOG(WARNING) << attach_error;
       } else {
-        attached_siblings.insert(sibling_tid);
+        threads.emplace(sibling_tid, get_thread_name(sibling_tid));
       }
     }
   }
 
-  // Collect the backtrace map and open files, while the process still has PR_GET_DUMPABLE=1
+  // Collect the backtrace map, open files, and process/thread names, while we still have caps.
   std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::Create(main_tid));
   if (!backtrace_map) {
     LOG(FATAL) << "failed to create backtrace map";
@@ -283,6 +299,9 @@ int main(int argc, char** argv) {
   // Collect the list of open files.
   OpenFilesList open_files;
   populate_open_files_list(target, &open_files);
+
+  std::string process_name = get_process_name(main_tid);
+  threads.emplace(main_tid, get_thread_name(main_tid));
 
   // Drop our capabilities now that we've attached to the threads we care about.
   drop_capabilities();
@@ -341,10 +360,10 @@ int main(int argc, char** argv) {
 
   std::string amfd_data;
   if (backtrace) {
-    dump_backtrace(output_fd.get(), backtrace_map.get(), target, main_tid, attached_siblings, 0);
+    dump_backtrace(output_fd.get(), backtrace_map.get(), target, main_tid, process_name, threads, 0);
   } else {
     engrave_tombstone(output_fd.get(), backtrace_map.get(), &open_files, target, main_tid,
-                      &attached_siblings, abort_address, fatal_signal ? &amfd_data : nullptr);
+                      process_name, threads, abort_address, fatal_signal ? &amfd_data : nullptr);
   }
 
   // We don't actually need to PTRACE_DETACH, as long as our tracees aren't in
