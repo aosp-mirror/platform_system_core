@@ -159,6 +159,38 @@ TEST(file, Readlink) {
 #endif
 }
 
+TEST(file, Realpath) {
+#if !defined(_WIN32)
+  TemporaryDir td;
+  std::string basename = android::base::Basename(td.path);
+  std::string dir_name = android::base::Dirname(td.path);
+  std::string base_dir_name = android::base::Basename(dir_name);
+
+  {
+    std::string path = dir_name + "/../" + base_dir_name + "/" + basename;
+    std::string result;
+    ASSERT_TRUE(android::base::Realpath(path, &result));
+    ASSERT_EQ(td.path, result);
+  }
+
+  {
+    std::string path = std::string(td.path) + "/..";
+    std::string result;
+    ASSERT_TRUE(android::base::Realpath(path, &result));
+    ASSERT_EQ(dir_name, result);
+  }
+
+  {
+    errno = 0;
+    std::string path = std::string(td.path) + "/foo.noent";
+    std::string result = "wrong";
+    ASSERT_TRUE(!android::base::Realpath(path, &result));
+    ASSERT_TRUE(result.empty());
+    ASSERT_EQ(ENOENT, errno);
+  }
+#endif
+}
+
 TEST(file, GetExecutableDirectory) {
   std::string path = android::base::GetExecutableDirectory();
   ASSERT_NE("", path);
