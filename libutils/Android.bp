@@ -17,9 +17,12 @@ cc_library_headers {
     host_supported: true,
     export_include_dirs: ["include"],
     target: {
+        linux_bionic: {
+            enabled: true,
+        },
         windows: {
-           enabled: true,
-      },
+            enabled: true,
+        },
     },
 }
 
