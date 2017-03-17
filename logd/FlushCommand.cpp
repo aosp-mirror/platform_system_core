@@ -57,8 +57,18 @@ void FlushCommand::runSocketCommand(SocketClient* client) {
         entry = (*it);
         if (entry->mClient == client) {
             if (entry->mTimeout.tv_sec || entry->mTimeout.tv_nsec) {
-                LogTimeEntry::unlock();
-                return;
+                if (mReader.logbuf().isMonotonic()) {
+                    LogTimeEntry::unlock();
+                    return;
+                }
+                // If the user changes the time in a gross manner that
+                // invalidates the timeout, fall through and trigger.
+                log_time now(CLOCK_REALTIME);
+                if (((entry->mEnd + entry->mTimeout) > now) &&
+                    (now > entry->mEnd)) {
+                    LogTimeEntry::unlock();
+                    return;
+                }
             }
             entry->triggerReader_Locked();
             if (entry->runningReader_Locked()) {
