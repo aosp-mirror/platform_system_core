@@ -230,7 +230,6 @@ public:
 // Periodic chores intervals in seconds
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT ( 60 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH ( 3600 )
-#define DEFAULT_PERIODIC_CHORES_INTERVAL_EMMC_INFO_PUBLISH ( 86400 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO ( 3600 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_LIMIT (300)
 
@@ -240,7 +239,6 @@ public:
 struct storaged_config {
     int periodic_chores_interval_unit;
     int periodic_chores_interval_disk_stats_publish;
-    int periodic_chores_interval_emmc_info_publish;
     int periodic_chores_interval_uid_io;
     bool proc_uid_io_available;      // whether uid_io is accessible
     bool diskstats_available;   // whether diskstats is accessible
@@ -253,7 +251,6 @@ private:
     storaged_config mConfig;
     disk_stats_publisher mDiskStats;
     disk_stats_monitor mDsm;
-    storage_info_t *info = nullptr;
     uid_monitor mUidm;
     time_t mStarttime;
 public:
@@ -263,9 +260,6 @@ public:
     void event_checked(void);
     void pause(void) {
         sleep(mConfig.periodic_chores_interval_unit);
-    }
-    void set_storage_info(storage_info_t *storage_info) {
-        info = storage_info;
     }
 
     time_t get_starttime(void) {
