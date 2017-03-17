@@ -604,7 +604,7 @@ struct fstab *fs_mgr_read_fstab_dt()
 {
     std::string fstab_buf = read_fstab_from_dt();
     if (fstab_buf.empty()) {
-        LERROR << __FUNCTION__ << "(): failed to read fstab from dt";
+        LINFO << __FUNCTION__ << "(): failed to read fstab from dt";
         return nullptr;
     }
 
