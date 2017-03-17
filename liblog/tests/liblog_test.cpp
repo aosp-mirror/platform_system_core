@@ -42,7 +42,10 @@
 #include <private/android_logger.h>
 
 #ifndef TEST_PREFIX
-#ifdef __ANDROID__  // make sure we always run code if compiled for android
+#ifdef TEST_LOGGER
+#define TEST_PREFIX android_set_log_transport(TEST_LOGGER);
+// make sure we always run code despite overrides if compiled for android
+#elif defined(__ANDROID__)
 #define TEST_PREFIX
 #endif
 #endif
@@ -2137,10 +2140,19 @@ static void android_errorWriteWithInfoLog_helper(int TAG, const char* SUBTAG,
 }
 #endif
 
+// Make multiple tests and re-tests orthogonal to prevent falsing.
+#ifdef TEST_LOGGER
+#define UNIQUE_TAG(X) \
+  (0x12340000 + (((X) + sizeof(int) + sizeof(void*)) << 8) + TEST_LOGGER)
+#else
+#define UNIQUE_TAG(X) \
+  (0x12340000 + (((X) + sizeof(int) + sizeof(void*)) << 8) + 0xBA)
+#endif
+
 TEST(liblog, android_errorWriteWithInfoLog__android_logger_list_read__typical) {
 #ifdef TEST_PREFIX
   int count;
-  android_errorWriteWithInfoLog_helper(123456781, "test-subtag", -1,
+  android_errorWriteWithInfoLog_helper(UNIQUE_TAG(1), "test-subtag", -1,
                                        max_payload_buf, 200, count);
   EXPECT_EQ(SUPPORTS_END_TO_END, count);
 #else
@@ -2152,7 +2164,7 @@ TEST(liblog,
      android_errorWriteWithInfoLog__android_logger_list_read__data_too_large) {
 #ifdef TEST_PREFIX
   int count;
-  android_errorWriteWithInfoLog_helper(123456782, "test-subtag", -1,
+  android_errorWriteWithInfoLog_helper(UNIQUE_TAG(2), "test-subtag", -1,
                                        max_payload_buf, sizeof(max_payload_buf),
                                        count);
   EXPECT_EQ(SUPPORTS_END_TO_END, count);
@@ -2165,8 +2177,8 @@ TEST(liblog,
      android_errorWriteWithInfoLog__android_logger_list_read__null_data) {
 #ifdef TEST_PREFIX
   int count;
-  android_errorWriteWithInfoLog_helper(123456783, "test-subtag", -1, NULL, 200,
-                                       count);
+  android_errorWriteWithInfoLog_helper(UNIQUE_TAG(3), "test-subtag", -1, NULL,
+                                       200, count);
   EXPECT_EQ(0, count);
 #else
   GTEST_LOG_(INFO) << "This test does nothing.\n";
@@ -2178,7 +2190,7 @@ TEST(liblog,
 #ifdef TEST_PREFIX
   int count;
   android_errorWriteWithInfoLog_helper(
-      123456784, "abcdefghijklmnopqrstuvwxyz now i know my abc", -1,
+      UNIQUE_TAG(4), "abcdefghijklmnopqrstuvwxyz now i know my abc", -1,
       max_payload_buf, 200, count);
   EXPECT_EQ(SUPPORTS_END_TO_END, count);
 #else
@@ -2313,7 +2325,7 @@ static void android_errorWriteLog_helper(int TAG, const char* SUBTAG,
 TEST(liblog, android_errorWriteLog__android_logger_list_read__success) {
 #ifdef TEST_PREFIX
   int count;
-  android_errorWriteLog_helper(123456785, "test-subtag", count);
+  android_errorWriteLog_helper(UNIQUE_TAG(5), "test-subtag", count);
   EXPECT_EQ(SUPPORTS_END_TO_END, count);
 #else
   GTEST_LOG_(INFO) << "This test does nothing.\n";
@@ -2323,7 +2335,7 @@ TEST(liblog, android_errorWriteLog__android_logger_list_read__success) {
 TEST(liblog, android_errorWriteLog__android_logger_list_read__null_subtag) {
 #ifdef TEST_PREFIX
   int count;
-  android_errorWriteLog_helper(123456786, NULL, count);
+  android_errorWriteLog_helper(UNIQUE_TAG(6), NULL, count);
   EXPECT_EQ(0, count);
 #else
   GTEST_LOG_(INFO) << "This test does nothing.\n";
