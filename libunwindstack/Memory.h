@@ -22,10 +22,7 @@
 #include <unistd.h>
 
 #include <string>
-
-#include <android-base/unique_fd.h>
-
-constexpr bool kMemoryStatsEnabled = true;
+#include <vector>
 
 class Memory {
  public:
@@ -50,14 +47,33 @@ class Memory {
   }
 };
 
+class MemoryBuffer : public Memory {
+ public:
+  MemoryBuffer() = default;
+  virtual ~MemoryBuffer() = default;
+
+  bool Read(uint64_t addr, void* dst, size_t size) override;
+
+  uint8_t* GetPtr(size_t offset);
+
+  void Resize(size_t size) { raw_.resize(size); }
+
+  uint64_t Size() { return raw_.size(); }
+
+ private:
+  std::vector<uint8_t> raw_;
+};
+
 class MemoryFileAtOffset : public Memory {
  public:
   MemoryFileAtOffset() = default;
   virtual ~MemoryFileAtOffset();
 
-  bool Init(const std::string& file, uint64_t offset);
+  bool Init(const std::string& file, uint64_t offset, uint64_t size = UINT64_MAX);
 
   bool Read(uint64_t addr, void* dst, size_t size) override;
+
+  void Clear();
 
  protected:
   size_t size_ = 0;

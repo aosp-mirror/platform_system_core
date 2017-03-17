@@ -21,57 +21,107 @@
 
 #include <vector>
 
+// Forward declarations.
+class Elf;
+struct MapInfo;
+
 class Regs {
  public:
-  Regs(uint16_t pc_reg, uint16_t sp_reg, uint16_t total_regs)
-      : pc_reg_(pc_reg), sp_reg_(sp_reg), total_regs_(total_regs) {
-  }
+  enum LocationEnum : uint8_t {
+    LOCATION_UNKNOWN = 0,
+    LOCATION_REGISTER,
+    LOCATION_SP_OFFSET,
+  };
+
+  struct Location {
+    Location(LocationEnum type, int16_t value) : type(type), value(value) {}
+
+    LocationEnum type;
+    int16_t value;
+  };
+
+  Regs(uint16_t total_regs, uint16_t sp_reg, const Location& return_loc)
+      : total_regs_(total_regs), sp_reg_(sp_reg), return_loc_(return_loc) {}
   virtual ~Regs() = default;
 
-  uint16_t pc_reg() { return pc_reg_; }
-  uint16_t sp_reg() { return sp_reg_; }
-  uint16_t total_regs() { return total_regs_; }
-
-  virtual void* raw_data() = 0;
+  virtual void* RawData() = 0;
   virtual uint64_t pc() = 0;
   virtual uint64_t sp() = 0;
 
+  virtual bool GetReturnAddressFromDefault(Memory* memory, uint64_t* value) = 0;
+
+  virtual uint64_t GetRelPc(Elf* elf, const MapInfo* map_info) = 0;
+
+  virtual uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) = 0;
+
+  uint16_t sp_reg() { return sp_reg_; }
+  uint16_t total_regs() { return total_regs_; }
+
+  static Regs* RemoteGet(pid_t pid, uint32_t* machine_type);
+
  protected:
-  uint16_t pc_reg_;
-  uint16_t sp_reg_;
   uint16_t total_regs_;
+  uint16_t sp_reg_;
+  Location return_loc_;
 };
 
 template <typename AddressType>
 class RegsTmpl : public Regs {
  public:
-  RegsTmpl(uint16_t pc_reg, uint16_t sp_reg, uint16_t total_regs)
-      : Regs(pc_reg, sp_reg, total_regs), regs_(total_regs) {}
+  RegsTmpl(uint16_t total_regs, uint16_t sp_reg, Location return_loc)
+      : Regs(total_regs, sp_reg, return_loc), regs_(total_regs) {}
   virtual ~RegsTmpl() = default;
 
-  uint64_t pc() override { return regs_[pc_reg_]; }
-  uint64_t sp() override { return regs_[sp_reg_]; }
+  uint64_t GetRelPc(Elf* elf, const MapInfo* map_info) override;
+
+  bool GetReturnAddressFromDefault(Memory* memory, uint64_t* value) override;
+
+  uint64_t pc() override { return pc_; }
+  uint64_t sp() override { return sp_; }
+
+  void set_pc(AddressType pc) { pc_ = pc; }
+  void set_sp(AddressType sp) { sp_ = sp; }
 
   inline AddressType& operator[](size_t reg) { return regs_[reg]; }
 
-  void* raw_data() override { return regs_.data(); }
+  void* RawData() override { return regs_.data(); }
 
- private:
+ protected:
+  AddressType pc_;
+  AddressType sp_;
   std::vector<AddressType> regs_;
 };
 
-class Regs32 : public RegsTmpl<uint32_t> {
+class RegsArm : public RegsTmpl<uint32_t> {
  public:
-  Regs32(uint16_t pc_reg, uint16_t sp_reg, uint16_t total_regs)
-      : RegsTmpl(pc_reg, sp_reg, total_regs) {}
-  virtual ~Regs32() = default;
+  RegsArm();
+  virtual ~RegsArm() = default;
+
+  uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
 };
 
-class Regs64 : public RegsTmpl<uint64_t> {
+class RegsArm64 : public RegsTmpl<uint64_t> {
  public:
-  Regs64(uint16_t pc_reg, uint16_t sp_reg, uint16_t total_regs)
-      : RegsTmpl(pc_reg, sp_reg, total_regs) {}
-  virtual ~Regs64() = default;
+  RegsArm64();
+  virtual ~RegsArm64() = default;
+
+  uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
+};
+
+class RegsX86 : public RegsTmpl<uint32_t> {
+ public:
+  RegsX86();
+  virtual ~RegsX86() = default;
+
+  uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
+};
+
+class RegsX86_64 : public RegsTmpl<uint64_t> {
+ public:
+  RegsX86_64();
+  virtual ~RegsX86_64() = default;
+
+  uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
 };
 
 #endif  // _LIBUNWINDSTACK_REGS_H

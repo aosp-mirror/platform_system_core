@@ -34,7 +34,19 @@ class MemoryFake : public Memory {
 
   void SetMemory(uint64_t addr, const void* memory, size_t length);
 
-  void SetData(uint64_t addr, uint32_t value) {
+  void SetData8(uint64_t addr, uint8_t value) {
+    SetMemory(addr, &value, sizeof(value));
+  }
+
+  void SetData16(uint64_t addr, uint16_t value) {
+    SetMemory(addr, &value, sizeof(value));
+  }
+
+  void SetData32(uint64_t addr, uint32_t value) {
+    SetMemory(addr, &value, sizeof(value));
+  }
+
+  void SetData64(uint64_t addr, uint64_t value) {
     SetMemory(addr, &value, sizeof(value));
   }
 
