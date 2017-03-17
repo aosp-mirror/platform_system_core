@@ -1108,27 +1108,26 @@ int main(int argc, char** argv) {
         return watchdogd_main(argc, argv);
     }
 
-    boot_clock::time_point start_time = boot_clock::now();
-
-    // Clear the umask.
-    umask(0);
-
     add_environment("PATH", _PATH_DEFPATH);
 
     bool is_first_stage = (getenv("INIT_SECOND_STAGE") == nullptr);
 
-    // Don't expose the raw commandline to unprivileged processes.
-    chmod("/proc/cmdline", 0440);
-
-    // Get the basic filesystem setup we need put together in the initramdisk
-    // on / and then we'll let the rc file figure out the rest.
     if (is_first_stage) {
+        boot_clock::time_point start_time = boot_clock::now();
+
+        // Clear the umask.
+        umask(0);
+
+        // Get the basic filesystem setup we need put together in the initramdisk
+        // on / and then we'll let the rc file figure out the rest.
         mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755");
         mkdir("/dev/pts", 0755);
         mkdir("/dev/socket", 0755);
         mount("devpts", "/dev/pts", "devpts", 0, NULL);
         #define MAKE_STR(x) __STRING(x)
         mount("proc", "/proc", "proc", 0, "hidepid=2,gid=" MAKE_STR(AID_READPROC));
+        // Don't expose the raw commandline to unprivileged processes.
+        chmod("/proc/cmdline", 0440);
         gid_t groups[] = { AID_READPROC };
         setgroups(arraysize(groups), groups);
         mount("sysfs", "/sys", "sysfs", 0, NULL);
@@ -1136,15 +1135,13 @@ int main(int argc, char** argv) {
         mknod("/dev/kmsg", S_IFCHR | 0600, makedev(1, 11));
         mknod("/dev/random", S_IFCHR | 0666, makedev(1, 8));
         mknod("/dev/urandom", S_IFCHR | 0666, makedev(1, 9));
-    }
 
-    // Now that tmpfs is mounted on /dev and we have /dev/kmsg, we can actually
-    // talk to the outside world...
-    InitKernelLogging(argv);
+        // Now that tmpfs is mounted on /dev and we have /dev/kmsg, we can actually
+        // talk to the outside world...
+        InitKernelLogging(argv);
 
-    LOG(INFO) << "init " << (is_first_stage ? "first" : "second") << " stage started!";
+        LOG(INFO) << "init first stage started!";
 
-    if (is_first_stage) {
         if (!early_mount()) {
             LOG(ERROR) << "Failed to mount required partitions early ...";
             panic();
@@ -1168,40 +1165,46 @@ int main(int argc, char** argv) {
 
         char* path = argv[0];
         char* args[] = { path, nullptr };
-        if (execv(path, args) == -1) {
-            PLOG(ERROR) << "execv(\"" << path << "\") failed";
-            security_failure();
-        }
-    } else {
-        // Indicate that booting is in progress to background fw loaders, etc.
-        close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
+        execv(path, args);
 
-        property_init();
-
-        // If arguments are passed both on the command line and in DT,
-        // properties set in DT always have priority over the command-line ones.
-        process_kernel_dt();
-        process_kernel_cmdline();
-
-        // Propagate the kernel variables to internal variables
-        // used by init as well as the current required properties.
-        export_kernel_boot_props();
-
-        // Make the time that init started available for bootstat to log.
-        property_set("ro.boottime.init", getenv("INIT_STARTED_AT"));
-        property_set("ro.boottime.init.selinux", getenv("INIT_SELINUX_TOOK"));
-
-        // Set libavb version for Framework-only OTA match in Treble build.
-        property_set("ro.boot.init.avb_version", std::to_string(AVB_MAJOR_VERSION).c_str());
-
-        // Clean up our environment.
-        unsetenv("INIT_SECOND_STAGE");
-        unsetenv("INIT_STARTED_AT");
-        unsetenv("INIT_SELINUX_TOOK");
-
-        // Now set up SELinux for second stage.
-        selinux_initialize(false);
+        // execv() only returns if an error happened, in which case we
+        // panic and never fall through this conditional.
+        PLOG(ERROR) << "execv(\"" << path << "\") failed";
+        security_failure();
     }
+
+    // At this point we're in the second stage of init.
+    InitKernelLogging(argv);
+    LOG(INFO) << "init second stage started!";
+
+    // Indicate that booting is in progress to background fw loaders, etc.
+    close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
+
+    property_init();
+
+    // If arguments are passed both on the command line and in DT,
+    // properties set in DT always have priority over the command-line ones.
+    process_kernel_dt();
+    process_kernel_cmdline();
+
+    // Propagate the kernel variables to internal variables
+    // used by init as well as the current required properties.
+    export_kernel_boot_props();
+
+    // Make the time that init started available for bootstat to log.
+    property_set("ro.boottime.init", getenv("INIT_STARTED_AT"));
+    property_set("ro.boottime.init.selinux", getenv("INIT_SELINUX_TOOK"));
+
+    // Set libavb version for Framework-only OTA match in Treble build.
+    property_set("ro.boot.init.avb_version", std::to_string(AVB_MAJOR_VERSION).c_str());
+
+    // Clean up our environment.
+    unsetenv("INIT_SECOND_STAGE");
+    unsetenv("INIT_STARTED_AT");
+    unsetenv("INIT_SELINUX_TOOK");
+
+    // Now set up SELinux for second stage.
+    selinux_initialize(false);
 
     // These directories were necessarily created before initial policy load
     // and therefore need their security context restored to the proper value.
