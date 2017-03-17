@@ -23,13 +23,11 @@
 
 #include "Memory.h"
 
-#include "LogFake.h"
 #include "MemoryFake.h"
 
 class MemoryRangeTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    ResetLogs();
     memory_ = new MemoryFake;
   }
 
