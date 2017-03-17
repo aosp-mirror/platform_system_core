@@ -41,6 +41,7 @@
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <cutils/sched_policy.h>
@@ -1195,39 +1196,71 @@ static int __logcat(android_logcat_context_internal* context) {
             } break;
 
             case 'Q':
-#define KERNEL_OPTION "androidboot.logcat="
+#define LOGCAT_FILTER "androidboot.logcat="
+#define CONSOLE_PIPE_OPTION "androidboot.consolepipe="
 #define CONSOLE_OPTION "androidboot.console="
+#define QEMU_PROPERTY "ro.kernel.qemu"
+#define QEMU_CMDLINE "qemu.cmdline"
                 // This is a *hidden* option used to start a version of logcat
                 // in an emulated device only.  It basically looks for
                 // androidboot.logcat= on the kernel command line.  If
                 // something is found, it extracts a log filter and uses it to
-                // run the program.  If nothing is found, the program should
-                // quit immediately.
+                // run the program. The logcat output will go to consolepipe if
+                // androiboot.consolepipe (e.g. qemu_pipe) is given, otherwise,
+                // it goes to androidboot.console (e.g. tty)
                 {
-                    std::string cmdline;
-                    android::base::ReadFileToString("/proc/cmdline", &cmdline);
-
-                    const char* logcat = strstr(cmdline.c_str(), KERNEL_OPTION);
-                    // if nothing found or invalid filters, exit quietly
-                    if (!logcat) {
+                    // if not in emulator, exit quietly
+                    if (false == android::base::GetBoolProperty(QEMU_PROPERTY, false)) {
                         context->retval = EXIT_SUCCESS;
                         goto exit;
                     }
 
-                    const char* p = logcat + strlen(KERNEL_OPTION);
+                    std::string cmdline = android::base::GetProperty(QEMU_CMDLINE, "");
+                    if (cmdline.empty()) {
+                        android::base::ReadFileToString("/proc/cmdline", &cmdline);
+                    }
+
+                    const char* logcatFilter = strstr(cmdline.c_str(), LOGCAT_FILTER);
+                    // if nothing found or invalid filters, exit quietly
+                    if (!logcatFilter) {
+                        context->retval = EXIT_SUCCESS;
+                        goto exit;
+                    }
+
+                    const char* p = logcatFilter + strlen(LOGCAT_FILTER);
                     const char* q = strpbrk(p, " \t\n\r");
                     if (!q) q = p + strlen(p);
                     forceFilters = std::string(p, q);
 
-                    // redirect our output to the emulator console
+                    // redirect our output to the emulator console pipe or console
+                    const char* consolePipe =
+                        strstr(cmdline.c_str(), CONSOLE_PIPE_OPTION);
                     const char* console =
                         strstr(cmdline.c_str(), CONSOLE_OPTION);
-                    if (!console) break;
 
-                    p = console + strlen(CONSOLE_OPTION);
+                    if (consolePipe) {
+                        p = consolePipe + strlen(CONSOLE_PIPE_OPTION);
+                    } else if (console) {
+                        p = console + strlen(CONSOLE_OPTION);
+                    } else {
+                        context->retval = EXIT_FAILURE;
+                        goto exit;
+                    }
+
                     q = strpbrk(p, " \t\n\r");
                     int len = q ? q - p : strlen(p);
                     std::string devname = "/dev/" + std::string(p, len);
+                    std::string pipePurpose("pipe:logcat");
+                    if (consolePipe) {
+                        // example: "qemu_pipe,pipe:logcat"
+                        // upon opening of /dev/qemu_pipe, the "pipe:logcat"
+                        // string with trailing '\0' should be written to the fd
+                        size_t pos = devname.find(",");
+                        if (pos != std::string::npos) {
+                            pipePurpose = devname.substr(pos + 1);
+                            devname = devname.substr(0, pos);
+                        }
+                    }
                     cmdline.erase();
 
                     if (context->error) {
@@ -1238,6 +1271,16 @@ static int __logcat(android_logcat_context_internal* context) {
                     FILE* fp = fopen(devname.c_str(), "web");
                     devname.erase();
                     if (!fp) break;
+
+                    if (consolePipe) {
+                        // need the trailing '\0'
+                        if(!android::base::WriteFully(fileno(fp), pipePurpose.c_str(),
+                                    pipePurpose.size() + 1)) {
+                            fclose(fp);
+                            context->retval = EXIT_FAILURE;
+                            goto exit;
+                        }
+                    }
 
                     // close output and error channels, replace with console
                     android::close_output(context);
