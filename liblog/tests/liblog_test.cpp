@@ -1778,7 +1778,14 @@ TEST(liblog, enoent) {
   // liblog.android_logger_get_ is one of those tests that has no recourse
   // and that would be adversely affected by emptying the log if it was run
   // right after this test.
-  system("stop logd");
+  if (getuid() != AID_ROOT) {
+    fprintf(
+        stderr,
+        "WARNING: test conditions request being run as root and not AID=%d\n",
+        getuid());
+  }
+
+  system((getuid() == AID_ROOT) ? "stop logd" : "su 0 stop logd");
   usleep(1000000);
 
   // A clean stop like we are testing returns -ENOENT, but in the _real_
@@ -1789,20 +1796,20 @@ TEST(liblog, enoent) {
   int ret = __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts));
   std::string content = android::base::StringPrintf(
       "__android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)) = %d %s\n",
-      ret, strerror(-ret));
+      ret, (ret <= 0) ? strerror(-ret) : "(content sent)");
   EXPECT_TRUE(
       IsOk((ret == -ENOENT) || (ret == -ENOTCONN) || (ret == -ECONNREFUSED),
            content));
   ret = __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts));
   content = android::base::StringPrintf(
       "__android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)) = %d %s\n",
-      ret, strerror(-ret));
+      ret, (ret <= 0) ? strerror(-ret) : "(content sent)");
   EXPECT_TRUE(
       IsOk((ret == -ENOENT) || (ret == -ENOTCONN) || (ret == -ECONNREFUSED),
            content));
   EXPECT_EQ(0, count_matching_ts(ts));
 
-  system("start logd");
+  system((getuid() == AID_ROOT) ? "start logd" : "su 0 start logd");
   usleep(1000000);
 
   EXPECT_EQ(0, count_matching_ts(ts));
@@ -1831,14 +1838,24 @@ TEST(liblog, __security) {
   char persist[PROP_VALUE_MAX];
   char readonly[PROP_VALUE_MAX];
 
+  // First part of this test requires the test itself to have the appropriate
+  // permissions. If we do not have them, we can not override them, so we
+  // bail rather than give a failing grade.
   property_get(persist_key, persist, "");
+  fprintf(stderr, "INFO: getprop %s -> %s\n", persist_key, persist);
   property_get(readonly_key, readonly, nothing_val);
+  fprintf(stderr, "INFO: getprop %s -> %s\n", readonly_key, readonly);
 
   if (!strcmp(readonly, nothing_val)) {
     EXPECT_FALSE(__android_log_security());
-    fprintf(stderr, "Warning, setting ro.device_owner to a domain\n");
-    property_set(readonly_key, "com.google.android.SecOps.DeviceOwner");
+    fprintf(stderr, "WARNING: setting ro.device_owner to a domain\n");
+    static const char domain[] = "com.google.android.SecOps.DeviceOwner";
+    property_set(readonly_key, domain);
+    usleep(20000);  // property system does not guarantee performance, rest ...
+    property_get(readonly_key, readonly, nothing_val);
+    EXPECT_STREQ(readonly, domain);
   } else if (!strcasecmp(readonly, "false") || !readonly[0]) {
+    // not enough permissions to run
     EXPECT_FALSE(__android_log_security());
     return;
   }
