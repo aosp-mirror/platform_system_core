@@ -30,6 +30,15 @@ cc_defaults {
             enabled: false,
         },
     },
+
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
 }
 
 cc_defaults {
@@ -38,8 +47,12 @@ cc_defaults {
 
     srcs: [
         "ArmExidx.cpp",
-        "Memory.cpp",
+        "Elf.cpp",
+        "ElfInterface.cpp",
+        "ElfInterfaceArm.cpp",
         "Log.cpp",
+        "Regs.cpp",
+        "Memory.cpp",
     ],
 
     shared_libs: [
@@ -74,6 +87,9 @@ cc_defaults {
     srcs: [
         "tests/ArmExidxDecodeTest.cpp",
         "tests/ArmExidxExtractTest.cpp",
+        "tests/ElfInterfaceArmTest.cpp",
+        "tests/ElfInterfaceTest.cpp",
+        "tests/ElfTest.cpp",
         "tests/LogFake.cpp",
         "tests/MemoryFake.cpp",
         "tests/MemoryFileTest.cpp",
@@ -92,15 +108,6 @@ cc_defaults {
         "libbase",
         "liblog",
     ],
-
-    multilib: {
-        lib32: {
-            suffix: "32",
-        },
-        lib64: {
-            suffix: "64",
-        },
-    },
 
     target: {
         linux: {
@@ -128,5 +135,33 @@ cc_test {
 
     static_libs: [
         "libunwindstack_debug",
+    ],
+}
+
+//-------------------------------------------------------------------------
+// Utility Executables
+//-------------------------------------------------------------------------
+cc_defaults {
+    name: "libunwindstack_executables",
+    defaults: ["libunwindstack_flags"],
+
+    shared_libs: [
+        "libunwindstack",
+        "libbase",
+    ],
+
+    static_libs: [
+        "liblog",
+    ],
+
+    compile_multilib: "both",
+}
+
+cc_binary {
+    name: "unwind_info",
+    defaults: ["libunwindstack_executables"],
+
+    srcs: [
+        "unwind_info.cpp",
     ],
 }

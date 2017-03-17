@@ -33,14 +33,8 @@
 
 #include "Memory.h"
 
-#include "LogFake.h"
-
 class MemoryRemoteTest : public ::testing::Test {
  protected:
-  void SetUp() override {
-    ResetLogs();
-  }
-
   static uint64_t NanoTime() {
     struct timespec t = { 0, 0 };
     clock_gettime(CLOCK_MONOTONIC, &t);

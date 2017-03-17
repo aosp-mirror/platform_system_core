@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include "ArmExidx.h"
+#include "Regs.h"
 #include "Log.h"
 
 #include "LogFake.h"
@@ -38,12 +39,14 @@ class ArmExidxDecodeTest : public ::testing::TestWithParam<std::string> {
       process_memory = &process_memory_;
     }
 
-    regs32_.reset(new Regs32(0, 1, 32));
-    for (size_t i = 0; i < 32; i++) {
-      (*regs32_)[i] = 0;
+    regs_arm_.reset(new RegsArm());
+    for (size_t i = 0; i < regs_arm_->total_regs(); i++) {
+      (*regs_arm_)[i] = 0;
     }
+    regs_arm_->set_pc(0);
+    regs_arm_->set_sp(0);
 
-    exidx_.reset(new ArmExidx(regs32_.get(), &elf_memory_, process_memory));
+    exidx_.reset(new ArmExidx(regs_arm_.get(), &elf_memory_, process_memory));
     if (log_) {
       exidx_->set_log(true);
       exidx_->set_log_indent(0);
@@ -66,7 +69,7 @@ class ArmExidxDecodeTest : public ::testing::TestWithParam<std::string> {
   }
 
   std::unique_ptr<ArmExidx> exidx_;
-  std::unique_ptr<Regs32> regs32_;
+  std::unique_ptr<RegsArm> regs_arm_;
   std::deque<uint8_t>* data_;
 
   MemoryFake elf_memory_;
@@ -78,6 +81,7 @@ TEST_P(ArmExidxDecodeTest, vsp_incr) {
   // 00xxxxxx: vsp = vsp + (xxxxxx << 2) + 4
   data_->push_back(0x00);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind vsp = vsp + 4\n", GetFakeLogPrint());
@@ -90,6 +94,7 @@ TEST_P(ArmExidxDecodeTest, vsp_incr) {
   data_->clear();
   data_->push_back(0x01);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind vsp = vsp + 8\n", GetFakeLogPrint());
@@ -102,6 +107,7 @@ TEST_P(ArmExidxDecodeTest, vsp_incr) {
   data_->clear();
   data_->push_back(0x3f);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind vsp = vsp + 256\n", GetFakeLogPrint());
@@ -115,6 +121,7 @@ TEST_P(ArmExidxDecodeTest, vsp_decr) {
   // 01xxxxxx: vsp = vsp - (xxxxxx << 2) + 4
   data_->push_back(0x40);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind vsp = vsp - 4\n", GetFakeLogPrint());
@@ -127,6 +134,7 @@ TEST_P(ArmExidxDecodeTest, vsp_decr) {
   data_->clear();
   data_->push_back(0x41);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind vsp = vsp - 8\n", GetFakeLogPrint());
@@ -139,6 +147,7 @@ TEST_P(ArmExidxDecodeTest, vsp_decr) {
   data_->clear();
   data_->push_back(0x7f);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind vsp = vsp - 256\n", GetFakeLogPrint());
@@ -164,26 +173,29 @@ TEST_P(ArmExidxDecodeTest, refuse_unwind) {
 
 TEST_P(ArmExidxDecodeTest, pop_up_to_12) {
   // 1000iiii iiiiiiii: Pop up to 12 integer registers
-  data_->push_back(0x80);
-  data_->push_back(0x01);
-  process_memory_.SetData(0x10000, 0x10);
+  data_->push_back(0x88);
+  data_->push_back(0x00);
+  process_memory_.SetData32(0x10000, 0x10);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_TRUE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
-    ASSERT_EQ("4 unwind pop {r4}\n", GetFakeLogPrint());
+    ASSERT_EQ("4 unwind pop {r15}\n", GetFakeLogPrint());
   } else {
     ASSERT_EQ("", GetFakeLogPrint());
   }
   ASSERT_EQ(0x10004U, exidx_->cfa());
-  ASSERT_EQ(0x10U, (*exidx_->regs())[4]);
+  ASSERT_EQ(0x10U, (*exidx_->regs())[15]);
 
   ResetLogs();
   data_->push_back(0x8f);
   data_->push_back(0xff);
   for (size_t i = 0; i < 12; i++) {
-    process_memory_.SetData(0x10004 + i * 4, i + 0x20);
+    process_memory_.SetData32(0x10004 + i * 4, i + 0x20);
   }
+  exidx_->set_pc_set(false);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_TRUE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15}\n",
@@ -211,10 +223,12 @@ TEST_P(ArmExidxDecodeTest, pop_up_to_12) {
   exidx_->set_cfa(0x10034);
   data_->push_back(0x81);
   data_->push_back(0x28);
-  process_memory_.SetData(0x10034, 0x11);
-  process_memory_.SetData(0x10038, 0x22);
-  process_memory_.SetData(0x1003c, 0x33);
+  process_memory_.SetData32(0x10034, 0x11);
+  process_memory_.SetData32(0x10038, 0x22);
+  process_memory_.SetData32(0x1003c, 0x33);
+  exidx_->set_pc_set(false);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {r7, r9, r12}\n", GetFakeLogPrint());
@@ -231,11 +245,12 @@ TEST_P(ArmExidxDecodeTest, set_vsp_from_register) {
   // 1001nnnn: Set vsp = r[nnnn] (nnnn != 13, 15)
   exidx_->set_cfa(0x100);
   for (size_t i = 0; i < 15; i++) {
-    (*regs32_)[i] = i + 1;
+    (*regs_arm_)[i] = i + 1;
   }
 
   data_->push_back(0x90);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind vsp = r0\n", GetFakeLogPrint());
@@ -247,6 +262,7 @@ TEST_P(ArmExidxDecodeTest, set_vsp_from_register) {
   ResetLogs();
   data_->push_back(0x93);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind vsp = r3\n", GetFakeLogPrint());
@@ -258,6 +274,7 @@ TEST_P(ArmExidxDecodeTest, set_vsp_from_register) {
   ResetLogs();
   data_->push_back(0x9e);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind vsp = r14\n", GetFakeLogPrint());
@@ -295,8 +312,9 @@ TEST_P(ArmExidxDecodeTest, reserved_prefix) {
 TEST_P(ArmExidxDecodeTest, pop_registers) {
   // 10100nnn: Pop r4-r[4+nnn]
   data_->push_back(0xa0);
-  process_memory_.SetData(0x10000, 0x14);
+  process_memory_.SetData32(0x10000, 0x14);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {r4}\n", GetFakeLogPrint());
@@ -308,11 +326,12 @@ TEST_P(ArmExidxDecodeTest, pop_registers) {
 
   ResetLogs();
   data_->push_back(0xa3);
-  process_memory_.SetData(0x10004, 0x20);
-  process_memory_.SetData(0x10008, 0x30);
-  process_memory_.SetData(0x1000c, 0x40);
-  process_memory_.SetData(0x10010, 0x50);
+  process_memory_.SetData32(0x10004, 0x20);
+  process_memory_.SetData32(0x10008, 0x30);
+  process_memory_.SetData32(0x1000c, 0x40);
+  process_memory_.SetData32(0x10010, 0x50);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {r4-r7}\n", GetFakeLogPrint());
@@ -327,15 +346,16 @@ TEST_P(ArmExidxDecodeTest, pop_registers) {
 
   ResetLogs();
   data_->push_back(0xa7);
-  process_memory_.SetData(0x10014, 0x41);
-  process_memory_.SetData(0x10018, 0x51);
-  process_memory_.SetData(0x1001c, 0x61);
-  process_memory_.SetData(0x10020, 0x71);
-  process_memory_.SetData(0x10024, 0x81);
-  process_memory_.SetData(0x10028, 0x91);
-  process_memory_.SetData(0x1002c, 0xa1);
-  process_memory_.SetData(0x10030, 0xb1);
+  process_memory_.SetData32(0x10014, 0x41);
+  process_memory_.SetData32(0x10018, 0x51);
+  process_memory_.SetData32(0x1001c, 0x61);
+  process_memory_.SetData32(0x10020, 0x71);
+  process_memory_.SetData32(0x10024, 0x81);
+  process_memory_.SetData32(0x10028, 0x91);
+  process_memory_.SetData32(0x1002c, 0xa1);
+  process_memory_.SetData32(0x10030, 0xb1);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {r4-r11}\n", GetFakeLogPrint());
@@ -356,9 +376,10 @@ TEST_P(ArmExidxDecodeTest, pop_registers) {
 TEST_P(ArmExidxDecodeTest, pop_registers_with_r14) {
   // 10101nnn: Pop r4-r[4+nnn], r14
   data_->push_back(0xa8);
-  process_memory_.SetData(0x10000, 0x12);
-  process_memory_.SetData(0x10004, 0x22);
+  process_memory_.SetData32(0x10000, 0x12);
+  process_memory_.SetData32(0x10004, 0x22);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {r4, r14}\n", GetFakeLogPrint());
@@ -371,12 +392,13 @@ TEST_P(ArmExidxDecodeTest, pop_registers_with_r14) {
 
   ResetLogs();
   data_->push_back(0xab);
-  process_memory_.SetData(0x10008, 0x1);
-  process_memory_.SetData(0x1000c, 0x2);
-  process_memory_.SetData(0x10010, 0x3);
-  process_memory_.SetData(0x10014, 0x4);
-  process_memory_.SetData(0x10018, 0x5);
+  process_memory_.SetData32(0x10008, 0x1);
+  process_memory_.SetData32(0x1000c, 0x2);
+  process_memory_.SetData32(0x10010, 0x3);
+  process_memory_.SetData32(0x10014, 0x4);
+  process_memory_.SetData32(0x10018, 0x5);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {r4-r7, r14}\n", GetFakeLogPrint());
@@ -392,16 +414,17 @@ TEST_P(ArmExidxDecodeTest, pop_registers_with_r14) {
 
   ResetLogs();
   data_->push_back(0xaf);
-  process_memory_.SetData(0x1001c, 0x1a);
-  process_memory_.SetData(0x10020, 0x2a);
-  process_memory_.SetData(0x10024, 0x3a);
-  process_memory_.SetData(0x10028, 0x4a);
-  process_memory_.SetData(0x1002c, 0x5a);
-  process_memory_.SetData(0x10030, 0x6a);
-  process_memory_.SetData(0x10034, 0x7a);
-  process_memory_.SetData(0x10038, 0x8a);
-  process_memory_.SetData(0x1003c, 0x9a);
+  process_memory_.SetData32(0x1001c, 0x1a);
+  process_memory_.SetData32(0x10020, 0x2a);
+  process_memory_.SetData32(0x10024, 0x3a);
+  process_memory_.SetData32(0x10028, 0x4a);
+  process_memory_.SetData32(0x1002c, 0x5a);
+  process_memory_.SetData32(0x10030, 0x6a);
+  process_memory_.SetData32(0x10034, 0x7a);
+  process_memory_.SetData32(0x10038, 0x8a);
+  process_memory_.SetData32(0x1003c, 0x9a);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {r4-r11, r14}\n", GetFakeLogPrint());
@@ -550,8 +573,9 @@ TEST_P(ArmExidxDecodeTest, pop_registers_under_mask) {
   // 10110001 0000iiii: Pop integer registers {r0, r1, r2, r3}
   data_->push_back(0xb1);
   data_->push_back(0x01);
-  process_memory_.SetData(0x10000, 0x45);
+  process_memory_.SetData32(0x10000, 0x45);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {r0}\n", GetFakeLogPrint());
@@ -564,9 +588,10 @@ TEST_P(ArmExidxDecodeTest, pop_registers_under_mask) {
   ResetLogs();
   data_->push_back(0xb1);
   data_->push_back(0x0a);
-  process_memory_.SetData(0x10004, 0x23);
-  process_memory_.SetData(0x10008, 0x24);
+  process_memory_.SetData32(0x10004, 0x23);
+  process_memory_.SetData32(0x10008, 0x24);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {r1, r3}\n", GetFakeLogPrint());
@@ -580,11 +605,12 @@ TEST_P(ArmExidxDecodeTest, pop_registers_under_mask) {
   ResetLogs();
   data_->push_back(0xb1);
   data_->push_back(0x0f);
-  process_memory_.SetData(0x1000c, 0x65);
-  process_memory_.SetData(0x10010, 0x54);
-  process_memory_.SetData(0x10014, 0x43);
-  process_memory_.SetData(0x10018, 0x32);
+  process_memory_.SetData32(0x1000c, 0x65);
+  process_memory_.SetData32(0x10010, 0x54);
+  process_memory_.SetData32(0x10014, 0x43);
+  process_memory_.SetData32(0x10018, 0x32);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {r0, r1, r2, r3}\n", GetFakeLogPrint());
@@ -603,6 +629,7 @@ TEST_P(ArmExidxDecodeTest, vsp_large_incr) {
   data_->push_back(0xb2);
   data_->push_back(0x7f);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind vsp = vsp + 1024\n", GetFakeLogPrint());
@@ -616,6 +643,7 @@ TEST_P(ArmExidxDecodeTest, vsp_large_incr) {
   data_->push_back(0xff);
   data_->push_back(0x02);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind vsp = vsp + 2048\n", GetFakeLogPrint());
@@ -630,6 +658,7 @@ TEST_P(ArmExidxDecodeTest, vsp_large_incr) {
   data_->push_back(0x82);
   data_->push_back(0x30);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind vsp = vsp + 3147776\n", GetFakeLogPrint());
@@ -644,6 +673,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp_fstmfdx) {
   data_->push_back(0xb3);
   data_->push_back(0x00);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d0}\n", GetFakeLogPrint());
@@ -656,6 +686,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp_fstmfdx) {
   data_->push_back(0xb3);
   data_->push_back(0x48);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d4-d12}\n", GetFakeLogPrint());
@@ -669,6 +700,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp8_fstmfdx) {
   // 10111nnn: Pop VFP double precision registers D[8]-D[8+nnn] by FSTMFDX
   data_->push_back(0xb8);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d8}\n", GetFakeLogPrint());
@@ -680,6 +712,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp8_fstmfdx) {
   ResetLogs();
   data_->push_back(0xbb);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d8-d11}\n", GetFakeLogPrint());
@@ -691,6 +724,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp8_fstmfdx) {
   ResetLogs();
   data_->push_back(0xbf);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d8-d15}\n", GetFakeLogPrint());
@@ -704,6 +738,7 @@ TEST_P(ArmExidxDecodeTest, pop_mmx_wr10) {
   // 11000nnn: Intel Wireless MMX pop wR[10]-wR[10+nnn] (nnn != 6, 7)
   data_->push_back(0xc0);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {wR10}\n", GetFakeLogPrint());
@@ -715,6 +750,7 @@ TEST_P(ArmExidxDecodeTest, pop_mmx_wr10) {
   ResetLogs();
   data_->push_back(0xc2);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {wR10-wR12}\n", GetFakeLogPrint());
@@ -726,6 +762,7 @@ TEST_P(ArmExidxDecodeTest, pop_mmx_wr10) {
   ResetLogs();
   data_->push_back(0xc5);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {wR10-wR15}\n", GetFakeLogPrint());
@@ -740,6 +777,7 @@ TEST_P(ArmExidxDecodeTest, pop_mmx_wr) {
   data_->push_back(0xc6);
   data_->push_back(0x00);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {wR0}\n", GetFakeLogPrint());
@@ -752,6 +790,7 @@ TEST_P(ArmExidxDecodeTest, pop_mmx_wr) {
   data_->push_back(0xc6);
   data_->push_back(0x25);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {wR2-wR7}\n", GetFakeLogPrint());
@@ -764,6 +803,7 @@ TEST_P(ArmExidxDecodeTest, pop_mmx_wr) {
   data_->push_back(0xc6);
   data_->push_back(0xff);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {wR15-wR30}\n", GetFakeLogPrint());
@@ -778,6 +818,7 @@ TEST_P(ArmExidxDecodeTest, pop_mmx_wcgr) {
   data_->push_back(0xc7);
   data_->push_back(0x01);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {wCGR0}\n", GetFakeLogPrint());
@@ -790,6 +831,7 @@ TEST_P(ArmExidxDecodeTest, pop_mmx_wcgr) {
   data_->push_back(0xc7);
   data_->push_back(0x0a);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {wCGR1, wCGR3}\n", GetFakeLogPrint());
@@ -802,6 +844,7 @@ TEST_P(ArmExidxDecodeTest, pop_mmx_wcgr) {
   data_->push_back(0xc7);
   data_->push_back(0x0f);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {wCGR0, wCGR1, wCGR2, wCGR3}\n", GetFakeLogPrint());
@@ -816,6 +859,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp16_vpush) {
   data_->push_back(0xc8);
   data_->push_back(0x00);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d16}\n", GetFakeLogPrint());
@@ -828,6 +872,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp16_vpush) {
   data_->push_back(0xc8);
   data_->push_back(0x14);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d17-d21}\n", GetFakeLogPrint());
@@ -840,6 +885,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp16_vpush) {
   data_->push_back(0xc8);
   data_->push_back(0xff);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d31-d46}\n", GetFakeLogPrint());
@@ -854,6 +900,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp_vpush) {
   data_->push_back(0xc9);
   data_->push_back(0x00);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d0}\n", GetFakeLogPrint());
@@ -866,6 +913,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp_vpush) {
   data_->push_back(0xc9);
   data_->push_back(0x23);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d2-d5}\n", GetFakeLogPrint());
@@ -878,6 +926,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp_vpush) {
   data_->push_back(0xc9);
   data_->push_back(0xff);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d15-d30}\n", GetFakeLogPrint());
@@ -891,6 +940,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp8_vpush) {
   // 11010nnn: Pop VFP double precision registers D[8]-D[8+nnn] by VPUSH
   data_->push_back(0xd0);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d8}\n", GetFakeLogPrint());
@@ -902,6 +952,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp8_vpush) {
   ResetLogs();
   data_->push_back(0xd2);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d8-d10}\n", GetFakeLogPrint());
@@ -913,6 +964,7 @@ TEST_P(ArmExidxDecodeTest, pop_vfp8_vpush) {
   ResetLogs();
   data_->push_back(0xd7);
   ASSERT_TRUE(exidx_->Decode());
+  ASSERT_FALSE(exidx_->pc_set());
   ASSERT_EQ("", GetFakeLogBuf());
   if (log_) {
     ASSERT_EQ("4 unwind pop {d8-d15}\n", GetFakeLogPrint());
@@ -987,6 +1039,56 @@ TEST_P(ArmExidxDecodeTest, verify_no_truncated) {
       }
     }
   }
+}
+
+TEST_P(ArmExidxDecodeTest, eval_multiple_decodes) {
+  // vsp = vsp + 4
+  data_->push_back(0x00);
+  // vsp = vsp + 8
+  data_->push_back(0x02);
+  // Finish
+  data_->push_back(0xb0);
+
+  ASSERT_TRUE(exidx_->Eval());
+  if (log_) {
+    ASSERT_EQ("4 unwind vsp = vsp + 4\n"
+              "4 unwind vsp = vsp + 12\n"
+              "4 unwind finish\n", GetFakeLogPrint());
+  } else {
+    ASSERT_EQ("", GetFakeLogPrint());
+  }
+  ASSERT_EQ(0x10010U, exidx_->cfa());
+  ASSERT_FALSE(exidx_->pc_set());
+}
+
+TEST_P(ArmExidxDecodeTest, eval_pc_set) {
+  // vsp = vsp + 4
+  data_->push_back(0x00);
+  // vsp = vsp + 8
+  data_->push_back(0x02);
+  // Pop {r15}
+  data_->push_back(0x88);
+  data_->push_back(0x00);
+  // vsp = vsp + 8
+  data_->push_back(0x02);
+  // Finish
+  data_->push_back(0xb0);
+
+  process_memory_.SetData32(0x10010, 0x10);
+
+  ASSERT_TRUE(exidx_->Eval());
+  if (log_) {
+    ASSERT_EQ("4 unwind vsp = vsp + 4\n"
+              "4 unwind vsp = vsp + 12\n"
+              "4 unwind pop {r15}\n"
+              "4 unwind vsp = vsp + 12\n"
+              "4 unwind finish\n", GetFakeLogPrint());
+  } else {
+    ASSERT_EQ("", GetFakeLogPrint());
+  }
+  ASSERT_EQ(0x10020U, exidx_->cfa());
+  ASSERT_TRUE(exidx_->pc_set());
+  ASSERT_EQ(0x10U, (*exidx_->regs())[15]);
 }
 
 INSTANTIATE_TEST_CASE_P(, ArmExidxDecodeTest, ::testing::Values("logging", "no_logging"));
