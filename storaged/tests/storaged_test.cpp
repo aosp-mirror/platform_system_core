@@ -58,13 +58,11 @@ static void pause(uint32_t sec) {
 const char* DISK_STATS_PATH;
 TEST(storaged_test, retvals) {
     struct disk_stats stats;
-    struct emmc_info info;
+    emmc_info_t info;
     memset(&stats, 0, sizeof(struct disk_stats));
-    memset(&info, 0, sizeof(struct emmc_info));
 
-    int emmc_fd = open(EMMC_EXT_CSD_PATH, O_RDONLY);
-    if (emmc_fd >= 0) {
-        EXPECT_TRUE(parse_emmc_ecsd(emmc_fd, &info));
+    if (info.init()) {
+        EXPECT_TRUE(info.update());
     }
 
     if (access(MMC_DISK_STATS_PATH, R_OK) >= 0) {
@@ -129,17 +127,17 @@ TEST(storaged_test, disk_stats) {
     }
 }
 
-TEST(storaged_test, emmc_info) {
-    struct emmc_info info, void_info;
-    memset(&info, 0, sizeof(struct emmc_info));
-    memset(&void_info, 0, sizeof(struct emmc_info));
+TEST(storaged_test, storage_info_t) {
+    emmc_info_t info;
 
     if (access(EMMC_EXT_CSD_PATH, R_OK) >= 0) {
-        int emmc_fd = open(EMMC_EXT_CSD_PATH, O_RDONLY);
-        ASSERT_GE(emmc_fd, 0);
-        ASSERT_TRUE(parse_emmc_ecsd(emmc_fd, &info));
-        // parse_emmc_ecsd() should put something in info.
-        EXPECT_NE(0, memcmp(&void_info, &info, sizeof(struct emmc_info)));
+        int ret = info.init();
+        if (ret) {
+            EXPECT_TRUE(info.version.empty());
+            ASSERT_TRUE(info.update());
+            // update should put something in info.
+            EXPECT_TRUE(info.eol || info.lifetime_a || info.lifetime_b);
+        }
     }
 }
 

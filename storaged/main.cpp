@@ -43,6 +43,7 @@
 #include <storaged_utils.h>
 
 storaged_t storaged;
+emmc_info_t emmc_info;
 
 // Function of storaged's main thread
 void* storaged_main(void* s) {
@@ -69,7 +70,6 @@ static void help_message(void) {
 int main(int argc, char** argv) {
     int flag_main_service = 0;
     int flag_dump_uid = 0;
-    int fd_emmc = -1;
     int opt;
 
     for (;;) {
@@ -114,12 +114,9 @@ int main(int argc, char** argv) {
     }
 
     if (flag_main_service) { // start main thread
-        static const char mmc0_ext_csd[] = "/d/mmc0/mmc0:0001/ext_csd";
-        fd_emmc = android_get_control_file(mmc0_ext_csd);
-        if (fd_emmc < 0)
-            fd_emmc = TEMP_FAILURE_RETRY(open(mmc0_ext_csd, O_RDONLY));
-
-        storaged.set_privileged_fds(fd_emmc);
+        if (emmc_info.init()) {
+            storaged.set_storage_info(&emmc_info);
+        }
 
         // Start the main thread of storaged
         pthread_t storaged_main_thread;
@@ -133,8 +130,6 @@ int main(int argc, char** argv) {
         android::ProcessState::self()->startThreadPool();
         IPCThreadState::self()->joinThreadPool();
         pthread_join(storaged_main_thread, NULL);
-
-        close(fd_emmc);
 
         return 0;
     }

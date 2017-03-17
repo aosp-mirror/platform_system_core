@@ -147,19 +147,6 @@ void disk_stats_monitor::update(void) {
     }
 }
 
-/* emmc_info_t */
-void emmc_info_t::publish(void) {
-    if (mValid) {
-        log_event_emmc_info(&mInfo);
-    }
-}
-
-void emmc_info_t::update(void) {
-    if (mFdEmmc >= 0) {
-        mValid = parse_emmc_ecsd(mFdEmmc, &mInfo);
-    }
-}
-
 static sp<IBatteryPropertiesRegistrar> get_battery_properties_service() {
     sp<IServiceManager> sm = defaultServiceManager();
     if (sm == NULL) return NULL;
@@ -199,8 +186,6 @@ void storaged_t::init_battery_service() {
 
 /* storaged_t */
 storaged_t::storaged_t(void) {
-    mConfig.emmc_available = (access(EMMC_ECSD_PATH, R_OK) >= 0);
-
     if (access(MMC_DISK_STATS_PATH, R_OK) < 0 && access(SDA_DISK_STATS_PATH, R_OK) < 0) {
         mConfig.diskstats_available = false;
     } else {
@@ -236,10 +221,10 @@ void storaged_t::event(void) {
         }
     }
 
-    if (mConfig.emmc_available && mTimer &&
-            (mTimer % mConfig.periodic_chores_interval_emmc_info_publish) == 0) {
-        mEmmcInfo.update();
-        mEmmcInfo.publish();
+    if (info && mTimer &&
+        (mTimer % mConfig.periodic_chores_interval_emmc_info_publish) == 0) {
+        info->update();
+        info->publish();
     }
 
     if (mConfig.proc_uid_io_available && mTimer &&
