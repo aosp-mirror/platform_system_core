@@ -718,6 +718,9 @@ static int do_powerctl(const std::vector<std::string>& args) {
     } else if (strncmp(command, "reboot", 6) == 0) {
         cmd = ANDROID_RB_RESTART2;
         len = 6;
+    } else if (strncmp(command, "thermal-shutdown", 16) == 0) {
+        cmd = ANDROID_RB_THERMOFF;
+        len = 16;
     } else {
         LOG(ERROR) << "powerctl: unrecognized command '" << command << "'";
         return -EINVAL;
