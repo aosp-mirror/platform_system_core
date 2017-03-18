@@ -30,6 +30,9 @@ __BEGIN_DECLS
 /* Properties */
 #define ANDROID_RB_PROPERTY "sys.powerctl"
 
+/* Android reboot reason stored in this file */
+#define LAST_REBOOT_REASON_FILE "/data/misc/reboot/last_reboot_reason"
+
 int android_reboot(int cmd, int flags, const char *arg);
 int android_reboot_with_callback(
     int cmd, int flags, const char *arg,
