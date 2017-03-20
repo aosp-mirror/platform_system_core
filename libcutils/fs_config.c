@@ -115,31 +115,46 @@ static const char conf_file[] = "/system/etc/fs_config_files";
 
 static const struct fs_path_config android_files[] = {
     /* clang-format off */
+    { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app/*" },
+    { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app-ephemeral/*" },
+    { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app-private/*" },
+    { 00644, AID_APP,       AID_APP,       0, "data/data/*" },
+    { 00644, AID_MEDIA_RW,  AID_MEDIA_RW,  0, "data/media/*" },
+    { 00640, AID_ROOT,      AID_SHELL,     0, "data/nativetest/tests.txt" },
+    { 00640, AID_ROOT,      AID_SHELL,     0, "data/nativetest64/tests.txt" },
+    { 00750, AID_ROOT,      AID_SHELL,     0, "data/nativetest/*" },
+    { 00750, AID_ROOT,      AID_SHELL,     0, "data/nativetest64/*" },
+    { 00600, AID_ROOT,      AID_ROOT,      0, "default.prop" },
+    { 00600, AID_ROOT,      AID_ROOT,      0, "odm/build.prop" },
+    { 00600, AID_ROOT,      AID_ROOT,      0, "odm/default.prop" },
+    { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/fs_mgr" },
+    { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump32" },
+    { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump64" },
+    { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/debuggerd" },
+    { 00750, AID_ROOT,      AID_ROOT,      0, "system/bin/install-recovery.sh" },
+    { 00700, AID_ROOT,      AID_ROOT,      0, "system/bin/secilc" },
+    { 00750, AID_ROOT,      AID_ROOT,      0, "system/bin/uncrypt" },
+    { 00600, AID_ROOT,      AID_ROOT,      0, "system/build.prop" },
+    { 00444, AID_ROOT,      AID_ROOT,      0, conf_dir + 1 },
+    { 00444, AID_ROOT,      AID_ROOT,      0, conf_file + 1 },
     { 00440, AID_ROOT,      AID_SHELL,     0, "system/etc/init.goldfish.rc" },
     { 00550, AID_ROOT,      AID_SHELL,     0, "system/etc/init.goldfish.sh" },
     { 00550, AID_ROOT,      AID_SHELL,     0, "system/etc/init.ril" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/ppp/*" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/rc.*" },
     { 00440, AID_ROOT,      AID_ROOT,      0, "system/etc/recovery.img" },
-    { 00444, AID_ROOT,      AID_ROOT,      0, conf_dir + 1 },
-    { 00444, AID_ROOT,      AID_ROOT,      0, conf_file + 1 },
-    { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app/*" },
-    { 00644, AID_MEDIA_RW,  AID_MEDIA_RW,  0, "data/media/*" },
-    { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app-private/*" },
-    { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app-ephemeral/*" },
-    { 00644, AID_APP,       AID_APP,       0, "data/data/*" },
-    { 00640, AID_ROOT,      AID_SHELL,     0, "data/nativetest/tests.txt" },
-    { 00640, AID_ROOT,      AID_SHELL,     0, "data/nativetest64/tests.txt" },
-    { 00750, AID_ROOT,      AID_SHELL,     0, "data/nativetest/*" },
-    { 00750, AID_ROOT,      AID_SHELL,     0, "data/nativetest64/*" },
+    { 00600, AID_ROOT,      AID_ROOT,      0, "vendor/build.prop" },
+    { 00600, AID_ROOT,      AID_ROOT,      0, "vendor/default.prop" },
 
     /* the following two files are INTENTIONALLY set-uid, but they
      * are NOT included on user builds. */
-    { 04750, AID_ROOT,      AID_SHELL,     0, "system/xbin/su" },
     { 06755, AID_ROOT,      AID_ROOT,      0, "system/xbin/procmem" },
+    { 04750, AID_ROOT,      AID_SHELL,     0, "system/xbin/su" },
 
     /* the following files have enhanced capabilities and ARE included
      * in user builds. */
+    { 00700, AID_SYSTEM,    AID_SHELL,     CAP_MASK_LONG(CAP_BLOCK_SUSPEND),
+                                              "system/bin/inputflinger" },
     { 00550, AID_LOGD,      AID_LOGD,      CAP_MASK_LONG(CAP_SYSLOG) |
                                            CAP_MASK_LONG(CAP_AUDIT_CONTROL) |
                                            CAP_MASK_LONG(CAP_SETGID),
@@ -147,25 +162,24 @@ static const struct fs_path_config android_files[] = {
     { 00750, AID_ROOT,      AID_SHELL,     CAP_MASK_LONG(CAP_SETUID) |
                                            CAP_MASK_LONG(CAP_SETGID),
                                               "system/bin/run-as" },
-    { 00700, AID_SYSTEM,    AID_SHELL,     CAP_MASK_LONG(CAP_BLOCK_SUSPEND),
-                                              "system/bin/inputflinger" },
 
     /* Support FIFO scheduling mode in SurfaceFlinger. */
-    { 00755, AID_SYSTEM,    AID_GRAPHICS,     CAP_MASK_LONG(CAP_SYS_NICE), "system/bin/surfaceflinger" },
+    { 00755, AID_SYSTEM,    AID_GRAPHICS,  CAP_MASK_LONG(CAP_SYS_NICE),
+                                              "system/bin/surfaceflinger" },
 
     /* Support hostapd administering a network interface. */
     { 00755, AID_WIFI,      AID_WIFI,      CAP_MASK_LONG(CAP_NET_ADMIN) |
                                            CAP_MASK_LONG(CAP_NET_RAW),
                                               "system/bin/hostapd" },
 
+    /* Support Bluetooth legacy hal accessing /sys/class/rfkill */
+    { 00700, AID_BLUETOOTH, AID_BLUETOOTH, CAP_MASK_LONG(CAP_NET_ADMIN),
+                                              "vendor/bin/hw/android.hardware.bluetooth@1.0-service" },
+
     /* Support wifi_hal_legacy administering a network interface. */
     { 00755, AID_WIFI,      AID_WIFI,      CAP_MASK_LONG(CAP_NET_ADMIN) |
                                            CAP_MASK_LONG(CAP_NET_RAW),
                                               "vendor/bin/hw/android.hardware.wifi@1.0-service" },
-
-    /* Support Bluetooth legacy hal accessing /sys/class/rfkill */
-    { 00700, AID_BLUETOOTH, AID_BLUETOOTH, CAP_MASK_LONG(CAP_NET_ADMIN),
-                                              "vendor/bin/hw/android.hardware.bluetooth@1.0-service" },
 
     /* A non-privileged zygote that spawns
      * isolated processes for web rendering. */
@@ -178,31 +192,19 @@ static const struct fs_path_config android_files[] = {
                                            CAP_MASK_LONG(CAP_SETPCAP),
                                               "system/bin/webview_zygote64" },
 
-    { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump32" },
-    { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump64" },
-    { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/debuggerd" },
-    { 00700, AID_ROOT,      AID_ROOT,      0, "system/bin/secilc" },
-    { 00750, AID_ROOT,      AID_ROOT,      0, "system/bin/uncrypt" },
-    { 00750, AID_ROOT,      AID_ROOT,      0, "system/bin/install-recovery.sh" },
+    /* generic defaults */
+    { 00755, AID_ROOT,      AID_ROOT,      0, "bin/*" },
+    { 00640, AID_ROOT,      AID_SHELL,     0, "fstab.*" },
+    { 00750, AID_ROOT,      AID_SHELL,     0, "init*" },
+    { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib/valgrind/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib64/valgrind/*" },
-    { 00755, AID_ROOT,      AID_SHELL,     0, "system/xbin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/vendor/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/vendor/xbin/*" },
+    { 00755, AID_ROOT,      AID_SHELL,     0, "system/xbin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/xbin/*" },
-    { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/*" },
-    { 00755, AID_ROOT,      AID_ROOT,      0, "bin/*" },
-    { 00750, AID_ROOT,      AID_SHELL,     0, "init*" },
-    { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/fs_mgr" },
-    { 00640, AID_ROOT,      AID_SHELL,     0, "fstab.*" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "system/build.prop" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "vendor/build.prop" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "odm/build.prop" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "default.prop" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "vendor/default.prop" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "odm/default.prop" },
     { 00644, AID_ROOT,      AID_ROOT,      0, 0 },
     /* clang-format on */
 };
