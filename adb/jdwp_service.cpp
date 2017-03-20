@@ -179,8 +179,6 @@ struct JdwpProcess {
     fdevent* fde = nullptr;
 
     std::vector<unique_fd> out_fds;
-    char in_buf[PID_LEN + 1];
-    ssize_t in_len = 0;
 };
 
 static size_t jdwp_process_list(char* buffer, size_t bufferlen) {
@@ -224,29 +222,16 @@ static void jdwp_process_event(int socket, unsigned events, void* _proc) {
     if (events & FDE_READ) {
         if (proc->pid < 0) {
             /* read the PID as a 4-hexchar string */
-            if (proc->in_len < 0) {
-                fatal("attempting to read JDWP pid again?");
-            }
-
-            char* p = proc->in_buf + proc->in_len;
-            size_t size = PID_LEN - proc->in_len;
-
-            ssize_t rc = TEMP_FAILURE_RETRY(recv(socket, p, size, 0));
-            if (rc <= 0) {
+            char buf[PID_LEN + 1];
+            ssize_t rc = TEMP_FAILURE_RETRY(recv(socket, buf, PID_LEN, 0));
+            if (rc != PID_LEN) {
                 D("failed to read jdwp pid: %s", strerror(errno));
                 goto CloseProcess;
             }
+            buf[PID_LEN] = '\0';
 
-            proc->in_len += rc;
-            if (proc->in_len != PID_LEN) {
-                return;
-            }
-
-            proc->in_buf[PID_LEN] = '\0';
-            proc->in_len = -1;
-
-            if (sscanf(proc->in_buf, "%04x", &proc->pid) != 1) {
-                D("could not decode JDWP %p PID number: '%s'", proc, p);
+            if (sscanf(buf, "%04x", &proc->pid) != 1) {
+                D("could not decode JDWP %p PID number: '%s'", proc, buf);
                 goto CloseProcess;
             }
 
@@ -401,7 +386,7 @@ static int jdwp_control_init(JdwpControl* control, const char* sockname, int soc
     addr.sun_family = AF_UNIX;
     memcpy(addr.sun_path, sockname, socknamelen);
 
-    s = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    s = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
     if (s < 0) {
         D("could not create vm debug control socket. %d: %s", errno, strerror(errno));
         return -1;
