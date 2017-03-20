@@ -110,8 +110,20 @@ static const struct fs_path_config android_dirs[] = {
 ** way up to the root. Prefixes ending in * denotes wildcard
 ** and will allow partial matches.
 */
-static const char conf_dir[] = "/system/etc/fs_config_dirs";
-static const char conf_file[] = "/system/etc/fs_config_files";
+static const char sys_conf_dir[] = "/system/etc/fs_config_dirs";
+static const char sys_conf_file[] = "/system/etc/fs_config_files";
+/* No restrictions are placed on the vendor file-system config files,
+ * although the developer is advised to restrict the scope to the /vendor
+ * file-system since the intent is to provide support for customized
+ * portions of a separate vendor.img.  Has to remain open so that
+ * customization can also land on /system/vendor.  We expect build-time
+ * checking or filtering when constructing /vendor/etc/fs_config_* files.
+ */
+static const char ven_conf_dir[] = "/vendor/etc/fs_config_dirs";
+static const char ven_conf_file[] = "/vendor/etc/fs_config_files";
+static const char* conf[][2] = {
+    {sys_conf_file, sys_conf_dir}, {ven_conf_file, ven_conf_dir},
+};
 
 static const struct fs_path_config android_files[] = {
     /* clang-format off */
@@ -135,8 +147,8 @@ static const struct fs_path_config android_files[] = {
     { 00700, AID_ROOT,      AID_ROOT,      0, "system/bin/secilc" },
     { 00750, AID_ROOT,      AID_ROOT,      0, "system/bin/uncrypt" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "system/build.prop" },
-    { 00444, AID_ROOT,      AID_ROOT,      0, conf_dir + 1 },
-    { 00444, AID_ROOT,      AID_ROOT,      0, conf_file + 1 },
+    { 00444, AID_ROOT,      AID_ROOT,      0, sys_conf_dir + 1 },
+    { 00444, AID_ROOT,      AID_ROOT,      0, sys_conf_file + 1 },
     { 00440, AID_ROOT,      AID_SHELL,     0, "system/etc/init.goldfish.rc" },
     { 00550, AID_ROOT,      AID_SHELL,     0, "system/etc/init.goldfish.sh" },
     { 00550, AID_ROOT,      AID_SHELL,     0, "system/etc/init.ril" },
@@ -145,6 +157,8 @@ static const struct fs_path_config android_files[] = {
     { 00440, AID_ROOT,      AID_ROOT,      0, "system/etc/recovery.img" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "vendor/build.prop" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "vendor/default.prop" },
+    { 00444, AID_ROOT,      AID_ROOT,      0, ven_conf_dir + 1 },
+    { 00444, AID_ROOT,      AID_ROOT,      0, ven_conf_file + 1 },
 
     /* the following two files are INTENTIONALLY set-uid, but they
      * are NOT included on user builds. */
@@ -209,7 +223,7 @@ static const struct fs_path_config android_files[] = {
     /* clang-format on */
 };
 
-static int fs_config_open(int dir, const char* target_out_path) {
+static int fs_config_open(int dir, int which, const char* target_out_path) {
     int fd = -1;
 
     if (target_out_path && *target_out_path) {
@@ -223,13 +237,13 @@ static int fs_config_open(int dir, const char* target_out_path) {
         if (target_out_path[target_out_path_len] == '/') {
             skip_len++;
         }
-        if (asprintf(&name, "%s%s", target_out_path, (dir ? conf_dir : conf_file) + skip_len) != -1) {
+        if (asprintf(&name, "%s%s", target_out_path, conf[which][dir] + skip_len) != -1) {
             fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY | O_BINARY));
             free(name);
         }
     }
     if (fd < 0) {
-        fd = TEMP_FAILURE_RETRY(open(dir ? conf_dir : conf_file, O_RDONLY | O_BINARY));
+        fd = TEMP_FAILURE_RETRY(open(conf[which][dir], O_RDONLY | O_BINARY));
     }
     return fd;
 }
@@ -254,8 +268,7 @@ static bool fs_config_cmp(bool dir, const char* prefix, size_t len, const char* 
 void fs_config(const char* path, int dir, const char* target_out_path, unsigned* uid, unsigned* gid,
                unsigned* mode, uint64_t* capabilities) {
     const struct fs_path_config* pc;
-    size_t plen;
-    int fd;
+    size_t which, plen;
 
     if (path[0] == '/') {
         path++;
@@ -263,32 +276,34 @@ void fs_config(const char* path, int dir, const char* target_out_path, unsigned*
 
     plen = strlen(path);
 
-    fd = fs_config_open(dir, target_out_path);
-    if (fd >= 0) {
+    for (which = 0; which < (sizeof(conf) / sizeof(conf[0])); ++which) {
         struct fs_path_config_from_file header;
+
+        int fd = fs_config_open(dir, which, target_out_path);
+        if (fd < 0) continue;
 
         while (TEMP_FAILURE_RETRY(read(fd, &header, sizeof(header))) == sizeof(header)) {
             char* prefix;
             uint16_t host_len = get2LE((const uint8_t*)&header.len);
             ssize_t len, remainder = host_len - sizeof(header);
             if (remainder <= 0) {
-                ALOGE("%s len is corrupted", dir ? conf_dir : conf_file);
+                ALOGE("%s len is corrupted", conf[which][dir]);
                 break;
             }
             prefix = calloc(1, remainder);
             if (!prefix) {
-                ALOGE("%s out of memory", dir ? conf_dir : conf_file);
+                ALOGE("%s out of memory", conf[which][dir]);
                 break;
             }
             if (TEMP_FAILURE_RETRY(read(fd, prefix, remainder)) != remainder) {
                 free(prefix);
-                ALOGE("%s prefix is truncated", dir ? conf_dir : conf_file);
+                ALOGE("%s prefix is truncated", conf[which][dir]);
                 break;
             }
             len = strnlen(prefix, remainder);
             if (len >= remainder) { /* missing a terminating null */
                 free(prefix);
-                ALOGE("%s is corrupted", dir ? conf_dir : conf_file);
+                ALOGE("%s is corrupted", conf[which][dir]);
                 break;
             }
             if (fs_config_cmp(dir, prefix, len, path, plen)) {
