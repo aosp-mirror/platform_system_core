@@ -232,11 +232,7 @@ static void jdwp_process_event(int socket, unsigned events, void* _proc) {
             size_t size = PID_LEN - proc->in_len;
 
             ssize_t rc = TEMP_FAILURE_RETRY(recv(socket, p, size, 0));
-            if (rc < 0) {
-                if (errno == EAGAIN) {
-                    return;
-                }
-
+            if (rc <= 0) {
                 D("failed to read jdwp pid: %s", strerror(errno));
                 goto CloseProcess;
             }
