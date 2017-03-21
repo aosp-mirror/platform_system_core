@@ -39,7 +39,6 @@
 #include <openssl/obj_mac.h>
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
-#include <private/android_filesystem_config.h>
 
 #include "fec/io.h"
 
