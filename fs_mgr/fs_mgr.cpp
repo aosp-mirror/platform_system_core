@@ -45,8 +45,7 @@
 #include <linux/fs.h>
 #include <linux/loop.h>
 #include <logwrap/logwrap.h>
-#include <private/android_filesystem_config.h>
-#include <private/android_logger.h>
+#include <private/android_logger.h>  // for __android_log_is_debuggable()
 
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_avb.h"
