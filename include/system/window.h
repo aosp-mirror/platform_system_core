@@ -307,22 +307,10 @@ enum {
     NATIVE_WINDOW_LAYER_COUNT = 16,
 
     /*
-     * Returns 1 if NATIVE_WINDOW_GET_FRAME_TIMESTAMPS will return display
-     * present info, 0 if it won't.
-     */
-    NATIVE_WINDOW_FRAME_TIMESTAMPS_SUPPORTS_PRESENT = 17,
-
-    /*
-     * Returns 1 if NATIVE_WINDOW_GET_FRAME_TIMESTAMPS will return display
-     * retire info, 0 if it won't.
-     */
-    NATIVE_WINDOW_FRAME_TIMESTAMPS_SUPPORTS_RETIRE = 18,
-
-    /*
      * Returns 1 if the native window is valid, 0 otherwise. native window is valid
      * if it is safe (i.e. no crash will occur) to call any method on it.
      */
-    NATIVE_WINDOW_IS_VALID = 19,
+    NATIVE_WINDOW_IS_VALID = 17,
 };
 
 /* Valid operations for the (*perform)() hook.
@@ -1065,14 +1053,14 @@ static inline int native_window_get_frame_timestamps(
         int64_t* outRequestedPresentTime, int64_t* outAcquireTime,
         int64_t* outLatchTime, int64_t* outFirstRefreshStartTime,
         int64_t* outLastRefreshStartTime, int64_t* outGpuCompositionDoneTime,
-        int64_t* outDisplayPresentTime, int64_t* outDisplayRetireTime,
-        int64_t* outDequeueReadyTime, int64_t* outReleaseTime)
+        int64_t* outDisplayPresentTime, int64_t* outDequeueReadyTime,
+        int64_t* outReleaseTime)
 {
     return window->perform(window, NATIVE_WINDOW_GET_FRAME_TIMESTAMPS,
             frameId, outRequestedPresentTime, outAcquireTime, outLatchTime,
             outFirstRefreshStartTime, outLastRefreshStartTime,
             outGpuCompositionDoneTime, outDisplayPresentTime,
-            outDisplayRetireTime, outDequeueReadyTime, outReleaseTime);
+            outDequeueReadyTime, outReleaseTime);
 }
 
 static inline int native_window_get_wide_color_support(
