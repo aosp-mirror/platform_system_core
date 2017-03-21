@@ -1099,6 +1099,31 @@ done:
     return success;
 }
 
+static void install_reboot_signal_handlers() {
+    // Instead of panic'ing the kernel as is the default behavior when init crashes,
+    // we prefer to reboot to bootloader on development builds, as this will prevent
+    // boot looping bad configurations and allow both developers and test farms to easily
+    // recover.
+    struct sigaction action;
+    memset(&action, 0, sizeof(action));
+    sigfillset(&action.sa_mask);
+    action.sa_handler = [](int) {
+        // panic() reboots to bootloader
+        panic();
+    };
+    action.sa_flags = SA_RESTART;
+    sigaction(SIGABRT, &action, nullptr);
+    sigaction(SIGBUS, &action, nullptr);
+    sigaction(SIGFPE, &action, nullptr);
+    sigaction(SIGILL, &action, nullptr);
+    sigaction(SIGSEGV, &action, nullptr);
+#if defined(SIGSTKFLT)
+    sigaction(SIGSTKFLT, &action, nullptr);
+#endif
+    sigaction(SIGSYS, &action, nullptr);
+    sigaction(SIGTRAP, &action, nullptr);
+}
+
 int main(int argc, char** argv) {
     if (!strcmp(basename(argv[0]), "ueventd")) {
         return ueventd_main(argc, argv);
@@ -1106,6 +1131,10 @@ int main(int argc, char** argv) {
 
     if (!strcmp(basename(argv[0]), "watchdogd")) {
         return watchdogd_main(argc, argv);
+    }
+
+    if (REBOOT_BOOTLOADER_ON_PANIC) {
+        install_reboot_signal_handlers();
     }
 
     add_environment("PATH", _PATH_DEFPATH);
