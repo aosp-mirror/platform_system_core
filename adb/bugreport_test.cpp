@@ -50,9 +50,7 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst, bool co
 
 // Empty functions so tests don't need to be linked against commandline.cpp
 DefaultStandardStreamsCallback DEFAULT_STANDARD_STREAMS_CALLBACK(nullptr, nullptr);
-int usage() {
-    return -42;
-}
+
 int send_shell_command(TransportType transport_type, const char* serial, const std::string& command,
                        bool disable_shell_protocol, StandardStreamsCallbackInterface* callback) {
     ADD_FAILURE() << "send_shell_command() should have been mocked";
@@ -155,7 +153,7 @@ class BugreportTest : public ::testing::Test {
 // Tests when called with invalid number of arguments
 TEST_F(BugreportTest, InvalidNumberArgs) {
     const char* args[] = {"bugreport", "to", "principal"};
-    ASSERT_EQ(-42, br_.DoIt(kTransportLocal, "HannibalLecter", 3, args));
+    ASSERT_EQ(1, br_.DoIt(kTransportLocal, "HannibalLecter", 3, args));
 }
 
 // Tests the 'adb bugreport' option when the device does not support 'bugreportz' - it falls back
@@ -272,6 +270,35 @@ TEST_F(BugreportTest, OkProgress) {
             // Split last message as well, just in case
             WithArg<4>(WriteOnStdout("OK:/device/bugreport")),
             WithArg<4>(WriteOnStdout(".zip")),
+            WithArg<4>(ReturnCallbackDone())));
+    // clang-format on
+    EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
+                                true, StrEq("pulling file.zip")))
+        .WillOnce(Return(true));
+
+    const char* args[] = {"bugreport", "file.zip"};
+    ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
+}
+
+// Tests 'adb bugreport file.zip' when it succeeds and displays progress, even if progress recedes.
+TEST_F(BugreportTest, OkProgressAlwaysForward) {
+    ExpectBugreportzVersion("1.1");
+    ExpectProgress(1, 100);
+    ExpectProgress(50, 100);
+    ExpectProgress(75, 100);
+    // clang-format off
+    EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
+        // NOTE: DoAll accepts at most 10 arguments, and we're almost reached that limit...
+        .WillOnce(DoAll(
+            WithArg<4>(WriteOnStdout("BEGIN:/device/bugreport.zip\n")),
+            WithArg<4>(WriteOnStdout("PROGRESS:1/100\n")),
+            WithArg<4>(WriteOnStdout("PROGRESS:50/100\n")),
+            // 25 should be ignored becaused it receded.
+            WithArg<4>(WriteOnStdout("PROGRESS:25/100\n")),
+            WithArg<4>(WriteOnStdout("PROGRESS:75/100\n")),
+            // 75 should be ignored becaused it didn't change.
+            WithArg<4>(WriteOnStdout("PROGRESS:75/100\n")),
+            WithArg<4>(WriteOnStdout("OK:/device/bugreport.zip")),
             WithArg<4>(ReturnCallbackDone())));
     // clang-format on
     EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
