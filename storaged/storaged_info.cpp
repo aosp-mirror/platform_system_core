@@ -22,6 +22,7 @@
 #include <android-base/file.h>
 #include <android-base/parseint.h>
 #include <android-base/logging.h>
+#include <android-base/strings.h>
 #include <log/log_event_list.h>
 
 #include "storaged.h"
@@ -32,7 +33,10 @@ using namespace android::base;
 void report_storage_health()
 {
     emmc_info_t mmc;
+    ufs_info_t ufs;
+
     mmc.report();
+    ufs.report();
 }
 
 void storage_info_t::publish()
@@ -131,3 +135,50 @@ bool emmc_info_t::report_debugfs()
 
     return true;
 }
+
+bool ufs_info_t::report()
+{
+    string buffer;
+    if (!ReadFileToString(health_file, &buffer)) {
+        return false;
+    }
+
+    vector<string> lines = Split(buffer, "\n");
+    if (lines.empty()) {
+        return false;
+    }
+
+    char rev[8];
+    if (sscanf(lines[0].c_str(), "ufs version: 0x%7s\n", rev) < 1) {
+        return false;
+    }
+
+    version = "ufs " + string(rev);
+
+    for (size_t i = 1; i < lines.size(); i++) {
+        char token[32];
+        uint16_t val;
+        int ret;
+        if ((ret = sscanf(lines[i].c_str(),
+                   "Health Descriptor[Byte offset 0x%*d]: %31s = 0x%hx",
+                   token, &val)) < 2) {
+            continue;
+        }
+
+        if (string(token) == "bPreEOLInfo") {
+            eol = val;
+        } else if (string(token) == "bDeviceLifeTimeEstA") {
+            lifetime_a = val;
+        } else if (string(token) == "bDeviceLifeTimeEstB") {
+            lifetime_b = val;
+        }
+    }
+
+    if (eol == 0 || (lifetime_a == 0 && lifetime_b == 0)) {
+        return false;
+    }
+
+    publish();
+    return true;
+}
+

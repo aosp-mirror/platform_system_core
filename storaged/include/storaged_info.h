@@ -52,6 +52,14 @@ public:
     bool report_debugfs();
 };
 
+class ufs_info_t : public storage_info_t {
+private:
+    const string health_file = "/sys/devices/soc/624000.ufshc/health";
+public:
+    virtual ~ufs_info_t() {}
+    bool report();
+};
+
 void report_storage_health();
 
 #endif /* _STORAGED_INFO_H_ */
