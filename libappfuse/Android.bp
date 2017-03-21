@@ -19,6 +19,7 @@ cc_library_shared {
         "FuseAppLoop.cc",
         "FuseBuffer.cc",
         "FuseBridgeLoop.cc",
+        "EpollController.cc",
     ]
 }
 
