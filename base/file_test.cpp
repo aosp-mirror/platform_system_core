@@ -214,3 +214,46 @@ TEST(file, Dirname) {
   EXPECT_EQ(".", android::base::Dirname("sh"));
   EXPECT_EQ("/system/bin", android::base::Dirname("/system/bin/sh/"));
 }
+
+TEST(file, ReadFileToString_capacity) {
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+
+  // For a huge file, the overhead should still be small.
+  std::string s;
+  size_t size = 16 * 1024 * 1024;
+  ASSERT_TRUE(android::base::WriteStringToFile(std::string(size, 'x'), tf.path));
+  ASSERT_TRUE(android::base::ReadFileToString(tf.path, &s));
+  EXPECT_EQ(size, s.size());
+  EXPECT_LT(s.capacity(), size + 16);
+
+  // Even for weird badly-aligned sizes.
+  size += 12345;
+  ASSERT_TRUE(android::base::WriteStringToFile(std::string(size, 'x'), tf.path));
+  ASSERT_TRUE(android::base::ReadFileToString(tf.path, &s));
+  EXPECT_EQ(size, s.size());
+  EXPECT_LT(s.capacity(), size + 16);
+
+  // We'll shrink an enormous string if you read a small file into it.
+  size = 64;
+  ASSERT_TRUE(android::base::WriteStringToFile(std::string(size, 'x'), tf.path));
+  ASSERT_TRUE(android::base::ReadFileToString(tf.path, &s));
+  EXPECT_EQ(size, s.size());
+  EXPECT_LT(s.capacity(), size + 16);
+}
+
+TEST(file, ReadFileToString_capacity_0) {
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+
+  // Because /proc reports its files as zero-length, we don't actually trust
+  // any file that claims to be zero-length. Rather than add increasingly
+  // complex heuristics for shrinking the passed-in string in that case, we
+  // currently leave it alone.
+  std::string s;
+  size_t initial_capacity = s.capacity();
+  ASSERT_TRUE(android::base::WriteStringToFile("", tf.path));
+  ASSERT_TRUE(android::base::ReadFileToString(tf.path, &s));
+  EXPECT_EQ(0U, s.size());
+  EXPECT_EQ(initial_capacity, s.capacity());
+}

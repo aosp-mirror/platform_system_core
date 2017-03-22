@@ -49,6 +49,14 @@ using namespace android::base::utf8;
 bool ReadFdToString(int fd, std::string* content) {
   content->clear();
 
+  // Although original we had small files in mind, this code gets used for
+  // very large files too, where the std::string growth heuristics might not
+  // be suitable. https://code.google.com/p/android/issues/detail?id=258500.
+  struct stat sb;
+  if (fstat(fd, &sb) != -1 && sb.st_size > 0) {
+    content->reserve(sb.st_size);
+  }
+
   char buf[BUFSIZ];
   ssize_t n;
   while ((n = TEMP_FAILURE_RETRY(read(fd, &buf[0], sizeof(buf)))) > 0) {
