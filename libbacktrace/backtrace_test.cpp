@@ -43,6 +43,7 @@
 #include <backtrace/BacktraceMap.h>
 
 #include <android-base/stringprintf.h>
+#include <android-base/unique_fd.h>
 #include <cutils/atomic.h>
 #include <cutils/threads.h>
 
@@ -85,13 +86,13 @@ int test_level_one(int, int, int, int, void (*)(void*), void*);
 int test_recursive_call(int, void (*)(void*), void*);
 }
 
-uint64_t NanoTime() {
+static uint64_t NanoTime() {
   struct timespec t = { 0, 0 };
   clock_gettime(CLOCK_MONOTONIC, &t);
   return static_cast<uint64_t>(t.tv_sec * NS_PER_SEC + t.tv_nsec);
 }
 
-std::string DumpFrames(Backtrace* backtrace) {
+static std::string DumpFrames(Backtrace* backtrace) {
   if (backtrace->NumFrames() == 0) {
     return "   No frames to dump.\n";
   }
@@ -103,7 +104,7 @@ std::string DumpFrames(Backtrace* backtrace) {
   return frame;
 }
 
-void WaitForStop(pid_t pid) {
+static void WaitForStop(pid_t pid) {
   uint64_t start = NanoTime();
 
   siginfo_t si;
@@ -116,7 +117,28 @@ void WaitForStop(pid_t pid) {
   }
 }
 
-bool ReadyLevelBacktrace(Backtrace* backtrace) {
+static void CreateRemoteProcess(pid_t* pid) {
+  if ((*pid = fork()) == 0) {
+    while (true)
+      ;
+    _exit(0);
+  }
+  ASSERT_NE(-1, *pid);
+
+  ASSERT_TRUE(ptrace(PTRACE_ATTACH, *pid, 0, 0) == 0);
+
+  // Wait for the process to get to a stopping point.
+  WaitForStop(*pid);
+}
+
+static void FinishRemoteProcess(pid_t pid) {
+  ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
+
+  kill(pid, SIGKILL);
+  ASSERT_EQ(waitpid(pid, nullptr, 0), pid);
+}
+
+static bool ReadyLevelBacktrace(Backtrace* backtrace) {
   // See if test_level_four is in the backtrace.
   bool found = false;
   for (Backtrace::const_iterator it = backtrace->begin(); it != backtrace->end(); ++it) {
@@ -129,7 +151,7 @@ bool ReadyLevelBacktrace(Backtrace* backtrace) {
   return found;
 }
 
-void VerifyLevelDump(Backtrace* backtrace) {
+static void VerifyLevelDump(Backtrace* backtrace) {
   ASSERT_GT(backtrace->NumFrames(), static_cast<size_t>(0))
     << DumpFrames(backtrace);
   ASSERT_LT(backtrace->NumFrames(), static_cast<size_t>(MAX_BACKTRACE_FRAMES))
@@ -157,7 +179,7 @@ void VerifyLevelDump(Backtrace* backtrace) {
     << DumpFrames(backtrace);
 }
 
-void VerifyLevelBacktrace(void*) {
+static void VerifyLevelBacktrace(void*) {
   std::unique_ptr<Backtrace> backtrace(
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
   ASSERT_TRUE(backtrace.get() != nullptr);
@@ -167,11 +189,11 @@ void VerifyLevelBacktrace(void*) {
   VerifyLevelDump(backtrace.get());
 }
 
-bool ReadyMaxBacktrace(Backtrace* backtrace) {
+static bool ReadyMaxBacktrace(Backtrace* backtrace) {
   return (backtrace->NumFrames() == MAX_BACKTRACE_FRAMES);
 }
 
-void VerifyMaxDump(Backtrace* backtrace) {
+static void VerifyMaxDump(Backtrace* backtrace) {
   ASSERT_EQ(backtrace->NumFrames(), static_cast<size_t>(MAX_BACKTRACE_FRAMES))
     << DumpFrames(backtrace);
   // Verify that the last frame is our recursive call.
@@ -179,7 +201,7 @@ void VerifyMaxDump(Backtrace* backtrace) {
     << DumpFrames(backtrace);
 }
 
-void VerifyMaxBacktrace(void*) {
+static void VerifyMaxBacktrace(void*) {
   std::unique_ptr<Backtrace> backtrace(
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
   ASSERT_TRUE(backtrace.get() != nullptr);
@@ -189,7 +211,7 @@ void VerifyMaxBacktrace(void*) {
   VerifyMaxDump(backtrace.get());
 }
 
-void ThreadSetState(void* data) {
+static void ThreadSetState(void* data) {
   thread_t* thread = reinterpret_cast<thread_t*>(data);
   android_atomic_acquire_store(1, &thread->state);
   volatile int i = 0;
@@ -198,16 +220,7 @@ void ThreadSetState(void* data) {
   }
 }
 
-void VerifyThreadTest(pid_t tid, void (*VerifyFunc)(Backtrace*)) {
-  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), tid));
-  ASSERT_TRUE(backtrace.get() != nullptr);
-  ASSERT_TRUE(backtrace->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
-
-  VerifyFunc(backtrace.get());
-}
-
-bool WaitForNonZero(int32_t* value, uint64_t seconds) {
+static bool WaitForNonZero(int32_t* value, uint64_t seconds) {
   uint64_t start = NanoTime();
   do {
     if (android_atomic_acquire_load(value)) {
@@ -240,9 +253,8 @@ TEST(libbacktrace, local_trace) {
   ASSERT_NE(test_level_one(1, 2, 3, 4, VerifyLevelBacktrace, nullptr), 0);
 }
 
-void VerifyIgnoreFrames(
-    Backtrace* bt_all, Backtrace* bt_ign1,
-    Backtrace* bt_ign2, const char* cur_proc) {
+static void VerifyIgnoreFrames(Backtrace* bt_all, Backtrace* bt_ign1, Backtrace* bt_ign2,
+                               const char* cur_proc) {
   EXPECT_EQ(bt_all->NumFrames(), bt_ign1->NumFrames() + 1)
     << "All backtrace:\n" << DumpFrames(bt_all) << "Ignore 1 backtrace:\n" << DumpFrames(bt_ign1);
   EXPECT_EQ(bt_all->NumFrames(), bt_ign2->NumFrames() + 2)
@@ -266,7 +278,7 @@ void VerifyIgnoreFrames(
   }
 }
 
-void VerifyLevelIgnoreFrames(void*) {
+static void VerifyLevelIgnoreFrames(void*) {
   std::unique_ptr<Backtrace> all(
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
   ASSERT_TRUE(all.get() != nullptr);
@@ -296,9 +308,8 @@ TEST(libbacktrace, local_max_trace) {
   ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, VerifyMaxBacktrace, nullptr), 0);
 }
 
-void VerifyProcTest(pid_t pid, pid_t tid, bool share_map,
-                    bool (*ReadyFunc)(Backtrace*),
-                    void (*VerifyFunc)(Backtrace*)) {
+static void VerifyProcTest(pid_t pid, pid_t tid, bool share_map, bool (*ReadyFunc)(Backtrace*),
+                           void (*VerifyFunc)(Backtrace*)) {
   pid_t ptrace_tid;
   if (tid < 0) {
     ptrace_tid = pid;
@@ -376,7 +387,7 @@ TEST(libbacktrace, ptrace_max_trace) {
   ASSERT_EQ(waitpid(pid, &status, 0), pid);
 }
 
-void VerifyProcessIgnoreFrames(Backtrace* bt_all) {
+static void VerifyProcessIgnoreFrames(Backtrace* bt_all) {
   std::unique_ptr<Backtrace> ign1(Backtrace::Create(bt_all->Pid(), BACKTRACE_CURRENT_THREAD));
   ASSERT_TRUE(ign1.get() != nullptr);
   ASSERT_TRUE(ign1->Unwind(1));
@@ -404,12 +415,12 @@ TEST(libbacktrace, ptrace_ignore_frames) {
 }
 
 // Create a process with multiple threads and dump all of the threads.
-void* PtraceThreadLevelRun(void*) {
+static void* PtraceThreadLevelRun(void*) {
   EXPECT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
   return nullptr;
 }
 
-void GetThreads(pid_t pid, std::vector<pid_t>* threads) {
+static void GetThreads(pid_t pid, std::vector<pid_t>* threads) {
   // Get the list of tasks.
   char task_path[128];
   snprintf(task_path, sizeof(task_path), "/proc/%d/task", pid);
@@ -461,11 +472,8 @@ TEST(libbacktrace, ptrace_threads) {
     }
     VerifyProcTest(pid, *it, false, ReadyLevelBacktrace, VerifyLevelDump);
   }
-  ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
 
-  kill(pid, SIGKILL);
-  int status;
-  ASSERT_EQ(waitpid(pid, &status, 0), pid);
+  FinishRemoteProcess(pid);
 }
 
 void VerifyLevelThread(void*) {
@@ -481,7 +489,7 @@ TEST(libbacktrace, thread_current_level) {
   ASSERT_NE(test_level_one(1, 2, 3, 4, VerifyLevelThread, nullptr), 0);
 }
 
-void VerifyMaxThread(void*) {
+static void VerifyMaxThread(void*) {
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), gettid()));
   ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
@@ -494,7 +502,7 @@ TEST(libbacktrace, thread_current_max) {
   ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, VerifyMaxThread, nullptr), 0);
 }
 
-void* ThreadLevelRun(void* data) {
+static void* ThreadLevelRun(void* data) {
   thread_t* thread = reinterpret_cast<thread_t*>(data);
 
   thread->tid = gettid();
@@ -585,7 +593,7 @@ TEST(libbacktrace, thread_ignore_frames) {
   android_atomic_acquire_store(0, &thread_data.state);
 }
 
-void* ThreadMaxRun(void* data) {
+static void* ThreadMaxRun(void* data) {
   thread_t* thread = reinterpret_cast<thread_t*>(data);
 
   thread->tid = gettid();
@@ -616,7 +624,7 @@ TEST(libbacktrace, thread_max_trace) {
   android_atomic_acquire_store(0, &thread_data.state);
 }
 
-void* ThreadDump(void* data) {
+static void* ThreadDump(void* data) {
   dump_thread_t* dump = reinterpret_cast<dump_thread_t*>(data);
   while (true) {
     if (android_atomic_acquire_load(dump->now)) {
@@ -873,11 +881,9 @@ struct map_test_t {
   uintptr_t end;
 };
 
-bool map_sort(map_test_t i, map_test_t j) {
-  return i.start < j.start;
-}
+static bool map_sort(map_test_t i, map_test_t j) { return i.start < j.start; }
 
-void VerifyMap(pid_t pid) {
+static void VerifyMap(pid_t pid) {
   char buffer[4096];
   snprintf(buffer, sizeof(buffer), "/proc/%d/maps", pid);
 
@@ -908,29 +914,15 @@ void VerifyMap(pid_t pid) {
 
 TEST(libbacktrace, verify_map_remote) {
   pid_t pid;
-
-  if ((pid = fork()) == 0) {
-    while (true) {
-    }
-    _exit(0);
-  }
-  ASSERT_LT(0, pid);
-
-  ASSERT_TRUE(ptrace(PTRACE_ATTACH, pid, 0, 0) == 0);
-
-  // Wait for the process to get to a stopping point.
-  WaitForStop(pid);
+  CreateRemoteProcess(&pid);
 
   // The maps should match exactly since the forked process has been paused.
   VerifyMap(pid);
 
-  ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
-
-  kill(pid, SIGKILL);
-  ASSERT_EQ(waitpid(pid, nullptr, 0), pid);
+  FinishRemoteProcess(pid);
 }
 
-void InitMemory(uint8_t* memory, size_t bytes) {
+static void InitMemory(uint8_t* memory, size_t bytes) {
   for (size_t i = 0; i < bytes; i++) {
     memory[i] = i;
     if (memory[i] == '\0') {
@@ -941,7 +933,7 @@ void InitMemory(uint8_t* memory, size_t bytes) {
   }
 }
 
-void* ThreadReadTest(void* data) {
+static void* ThreadReadTest(void* data) {
   thread_t* thread_data = reinterpret_cast<thread_t*>(data);
 
   thread_data->tid = gettid();
@@ -982,7 +974,7 @@ void* ThreadReadTest(void* data) {
   return nullptr;
 }
 
-void RunReadTest(Backtrace* backtrace, uintptr_t read_addr) {
+static void RunReadTest(Backtrace* backtrace, uintptr_t read_addr) {
   size_t pagesize = static_cast<size_t>(sysconf(_SC_PAGE_SIZE));
 
   // Create a page of data to use to do quick compares.
@@ -1043,7 +1035,7 @@ TEST(libbacktrace, thread_read) {
 volatile uintptr_t g_ready = 0;
 volatile uintptr_t g_addr = 0;
 
-void ForkedReadTest() {
+static void ForkedReadTest() {
   // Create two map pages.
   size_t pagesize = static_cast<size_t>(sysconf(_SC_PAGE_SIZE));
   uint8_t* memory;
@@ -1117,7 +1109,7 @@ TEST(libbacktrace, process_read) {
   ASSERT_TRUE(test_executed);
 }
 
-void VerifyFunctionsFound(const std::vector<std::string>& found_functions) {
+static void VerifyFunctionsFound(const std::vector<std::string>& found_functions) {
   // We expect to find these functions in libbacktrace_test. If we don't
   // find them, that's a bug in the memory read handling code in libunwind.
   std::list<std::string> expected_functions;
@@ -1137,7 +1129,7 @@ void VerifyFunctionsFound(const std::vector<std::string>& found_functions) {
   ASSERT_TRUE(expected_functions.empty()) << "Not all functions found in shared library.";
 }
 
-const char* CopySharedLibrary() {
+static const char* CopySharedLibrary() {
 #if defined(__LP64__)
   const char* lib_name = "lib64";
 #else
@@ -1293,7 +1285,7 @@ TEST(libbacktrace, check_unreadable_elf_remote) {
   VerifyFunctionsFound(found_functions);
 }
 
-bool FindFuncFrameInBacktrace(Backtrace* backtrace, uintptr_t test_func, size_t* frame_num) {
+static bool FindFuncFrameInBacktrace(Backtrace* backtrace, uintptr_t test_func, size_t* frame_num) {
   backtrace_map_t map;
   backtrace->FillInMap(test_func, &map);
   if (!BacktraceMap::IsValid(map)) {
@@ -1312,7 +1304,7 @@ bool FindFuncFrameInBacktrace(Backtrace* backtrace, uintptr_t test_func, size_t*
   return false;
 }
 
-void VerifyUnreadableElfFrame(Backtrace* backtrace, uintptr_t test_func, size_t frame_num) {
+static void VerifyUnreadableElfFrame(Backtrace* backtrace, uintptr_t test_func, size_t frame_num) {
   ASSERT_LT(backtrace->NumFrames(), static_cast<size_t>(MAX_BACKTRACE_FRAMES))
     << DumpFrames(backtrace);
 
@@ -1324,7 +1316,7 @@ void VerifyUnreadableElfFrame(Backtrace* backtrace, uintptr_t test_func, size_t 
   ASSERT_LT(diff, 200U) << DumpFrames(backtrace);
 }
 
-void VerifyUnreadableElfBacktrace(uintptr_t test_func) {
+static void VerifyUnreadableElfBacktrace(uintptr_t test_func) {
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS,
                                                          BACKTRACE_CURRENT_THREAD));
   ASSERT_TRUE(backtrace.get() != nullptr);
@@ -1418,12 +1410,38 @@ TEST(libbacktrace, unwind_thread_doesnt_exist) {
   ASSERT_EQ(BACKTRACE_UNWIND_ERROR_THREAD_DOESNT_EXIST, backtrace->GetError());
 }
 
+TEST(libbacktrace, local_get_function_name_before_unwind) {
+  std::unique_ptr<Backtrace> backtrace(
+      Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(backtrace.get() != nullptr);
+
+  // Verify that trying to get a function name before doing an unwind works.
+  uintptr_t cur_func_offset = reinterpret_cast<uintptr_t>(&test_level_one) + 1;
+  size_t offset;
+  ASSERT_NE(std::string(""), backtrace->GetFunctionName(cur_func_offset, &offset));
+}
+
+TEST(libbacktrace, remote_get_function_name_before_unwind) {
+  pid_t pid;
+  CreateRemoteProcess(&pid);
+
+  // Now create an unwind object.
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, pid));
+
+  // Verify that trying to get a function name before doing an unwind works.
+  uintptr_t cur_func_offset = reinterpret_cast<uintptr_t>(&test_level_one) + 1;
+  size_t offset;
+  ASSERT_NE(std::string(""), backtrace->GetFunctionName(cur_func_offset, &offset));
+
+  FinishRemoteProcess(pid);
+}
+
 #if defined(ENABLE_PSS_TESTS)
 #include "GetPss.h"
 
 #define MAX_LEAK_BYTES (32*1024UL)
 
-void CheckForLeak(pid_t pid, pid_t tid) {
+static void CheckForLeak(pid_t pid, pid_t tid) {
   // Do a few runs to get the PSS stable.
   for (size_t i = 0; i < 100; i++) {
     Backtrace* backtrace = Backtrace::Create(pid, tid);
@@ -1472,24 +1490,10 @@ TEST(libbacktrace, check_for_leak_local_thread) {
 
 TEST(libbacktrace, check_for_leak_remote) {
   pid_t pid;
-
-  if ((pid = fork()) == 0) {
-    while (true) {
-    }
-    _exit(0);
-  }
-  ASSERT_LT(0, pid);
-
-  ASSERT_TRUE(ptrace(PTRACE_ATTACH, pid, 0, 0) == 0);
-
-  // Wait for the process to get to a stopping point.
-  WaitForStop(pid);
+  CreateRemoteProcess(&pid);
 
   CheckForLeak(pid, BACKTRACE_CURRENT_THREAD);
 
-  ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
-
-  kill(pid, SIGKILL);
-  ASSERT_EQ(waitpid(pid, nullptr, 0), pid);
+  FinishRemoteProcess(pid);
 }
 #endif
