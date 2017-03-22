@@ -32,3 +32,22 @@ cc_binary {
         "-Werror",
     ],
 }
+
+// ========================================================
+// Benchmark
+// ========================================================
+cc_benchmark {
+    name: "android_fork_execvp_ext_benchmark",
+    srcs: [
+        "android_fork_execvp_ext_benchmark.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "liblog",
+        "liblogwrap",
+    ],
+    cflags: [
+        "-Werror",
+    ]
+}
