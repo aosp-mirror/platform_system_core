@@ -101,6 +101,21 @@ ifneq ($(SANITIZE_ASAN_OPTIONS_FOR),)
   $(foreach binary, $(SANITIZE_ASAN_OPTIONS_FOR), $(eval $(call create-asan-options-module,$(binary))))
 endif
 
+# ASAN extration.
+ASAN_EXTRACT_FILES :=
+ifeq ($(SANITIZE_TARGET_SYSTEM),true)
+include $(CLEAR_VARS)
+LOCAL_MODULE:= asan_extract
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_CLASS := EXECUTABLES
+LOCAL_SRC_FILES := asan_extract.sh
+LOCAL_INIT_RC := asan_extract.rc
+# We need bzip2 on device for extraction.
+LOCAL_REQUIRED_MODULES := bzip2
+include $(BUILD_PREBUILT)
+ASAN_EXTRACT_FILES := asan_extract
+endif
+
 endif
 
 #######################################
@@ -114,7 +129,7 @@ LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 EXPORT_GLOBAL_ASAN_OPTIONS :=
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
   EXPORT_GLOBAL_ASAN_OPTIONS := export ASAN_OPTIONS include=/system/asan.options
-  LOCAL_REQUIRED_MODULES := asan.options $(ASAN_OPTIONS_FILES)
+  LOCAL_REQUIRED_MODULES := asan.options $(ASAN_OPTIONS_FILES) $(ASAN_EXTRACT_FILES)
 endif
 
 EXPORT_GLOBAL_GCOV_OPTIONS :=
