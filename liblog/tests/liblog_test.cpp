@@ -1854,8 +1854,22 @@ TEST(liblog, __security) {
     fprintf(stderr, "WARNING: setting ro.device_owner to a domain\n");
     static const char domain[] = "com.google.android.SecOps.DeviceOwner";
     property_set(readonly_key, domain);
-    usleep(20000);  // property system does not guarantee performance, rest ...
-    property_get(readonly_key, readonly, nothing_val);
+    useconds_t total_time = 0;
+    static const useconds_t seconds = 1000000;
+    static const useconds_t max_time = 5 * seconds;  // not going to happen
+    static const useconds_t rest = 20 * 1000;
+    for (; total_time < max_time; total_time += rest) {
+      usleep(rest);  // property system does not guarantee performance.
+      property_get(readonly_key, readonly, nothing_val);
+      if (!strcmp(readonly, domain)) {
+        if (total_time > rest) {
+          fprintf(stderr, "INFO: took %u.%06u seconds to set property\n",
+                  (unsigned)(total_time / seconds),
+                  (unsigned)(total_time % seconds));
+        }
+        break;
+      }
+    }
     EXPECT_STREQ(readonly, domain);
   } else if (!strcasecmp(readonly, "false") || !readonly[0]) {
     // not enough permissions to run
