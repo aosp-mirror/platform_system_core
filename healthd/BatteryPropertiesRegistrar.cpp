@@ -77,6 +77,10 @@ status_t BatteryPropertiesRegistrar::getProperty(int id, struct BatteryProperty 
     return healthd_get_property(id, val);
 }
 
+void BatteryPropertiesRegistrar::scheduleUpdate() {
+    healthd_battery_update();
+}
+
 status_t BatteryPropertiesRegistrar::dump(int fd, const Vector<String16>& /*args*/) {
     IPCThreadState* self = IPCThreadState::self();
     const int pid = self->getCallingPid();
