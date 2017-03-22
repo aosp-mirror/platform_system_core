@@ -64,6 +64,7 @@
 #include "init_parser.h"
 #include "log.h"
 #include "property_service.h"
+#include "reboot.h"
 #include "service.h"
 #include "signal_handler.h"
 #include "util.h"
@@ -71,7 +72,6 @@
 using namespace std::literals::string_literals;
 
 #define chmod DO_NOT_USE_CHMOD_USE_FCHMODAT_SYMLINK_NOFOLLOW
-#define UNMOUNT_CHECK_TIMES 10
 
 static constexpr std::chrono::nanoseconds kCommandRetryTimeout = 5s;
 
@@ -116,114 +116,14 @@ done:
     return ret;
 }
 
-// Turn off backlight while we are performing power down cleanup activities.
-static void turnOffBacklight() {
-    static const char off[] = "0";
-
-    android::base::WriteStringToFile(off, "/sys/class/leds/lcd-backlight/brightness");
-
-    static const char backlightDir[] = "/sys/class/backlight";
-    std::unique_ptr<DIR, int(*)(DIR*)> dir(opendir(backlightDir), closedir);
-    if (!dir) {
-        return;
-    }
-
-    struct dirent *dp;
-    while ((dp = readdir(dir.get())) != NULL) {
-        if (((dp->d_type != DT_DIR) && (dp->d_type != DT_LNK)) ||
-                (dp->d_name[0] == '.')) {
-            continue;
-        }
-
-        std::string fileName = android::base::StringPrintf("%s/%s/brightness",
-                                                           backlightDir,
-                                                           dp->d_name);
-        android::base::WriteStringToFile(off, fileName);
-    }
-}
-
 static int reboot_into_recovery(const std::vector<std::string>& options) {
     std::string err;
     if (!write_bootloader_message(options, &err)) {
         LOG(ERROR) << "failed to set bootloader message: " << err;
         return -1;
     }
-    reboot("recovery");
-}
-
-static void unmount_and_fsck(const struct mntent *entry) {
-    if (strcmp(entry->mnt_type, "f2fs") && strcmp(entry->mnt_type, "ext4"))
-        return;
-
-    /* First, lazily unmount the directory. This unmount request finishes when
-     * all processes that open a file or directory in |entry->mnt_dir| exit.
-     */
-    TEMP_FAILURE_RETRY(umount2(entry->mnt_dir, MNT_DETACH));
-
-    /* Next, kill all processes except init, kthreadd, and kthreadd's
-     * children to finish the lazy unmount. Killing all processes here is okay
-     * because this callback function is only called right before reboot().
-     * It might be cleaner to selectively kill processes that actually use
-     * |entry->mnt_dir| rather than killing all, probably by reusing a function
-     * like killProcessesWithOpenFiles() in vold/, but the selinux policy does
-     * not allow init to scan /proc/<pid> files which the utility function
-     * heavily relies on. The policy does not allow the process to execute
-     * killall/pkill binaries either. Note that some processes might
-     * automatically restart after kill(), but that is not really a problem
-     * because |entry->mnt_dir| is no longer visible to such new processes.
-     */
-    ServiceManager::GetInstance().ForEachService([] (Service* s) { s->Stop(); });
-    TEMP_FAILURE_RETRY(kill(-1, SIGKILL));
-
-    // Restart Watchdogd to allow us to complete umounting and fsck
-    Service *svc = ServiceManager::GetInstance().FindServiceByName("watchdogd");
-    if (svc) {
-        do {
-            sched_yield(); // do not be so eager, let cleanup have priority
-            ServiceManager::GetInstance().ReapAnyOutstandingChildren();
-        } while (svc->flags() & SVC_RUNNING); // Paranoid Cargo
-        svc->Start();
-    }
-
-    turnOffBacklight();
-
-    int count = 0;
-    while (count++ < UNMOUNT_CHECK_TIMES) {
-        int fd = TEMP_FAILURE_RETRY(open(entry->mnt_fsname, O_RDONLY | O_EXCL));
-        if (fd >= 0) {
-            /* |entry->mnt_dir| has sucessfully been unmounted. */
-            close(fd);
-            break;
-        } else if (errno == EBUSY) {
-            // Some processes using |entry->mnt_dir| are still alive. Wait for a
-            // while then retry.
-            std::this_thread::sleep_for(5000ms / UNMOUNT_CHECK_TIMES);
-            continue;
-        } else {
-            /* Cannot open the device. Give up. */
-            return;
-        }
-    }
-
-    // NB: With watchdog still running, there is no cap on the time it takes
-    // to complete the fsck, from the users perspective the device graphics
-    // and responses are locked-up and they may choose to hold the power
-    // button in frustration if it drags out.
-
-    int st;
-    if (!strcmp(entry->mnt_type, "f2fs")) {
-        const char *f2fs_argv[] = {
-            "/system/bin/fsck.f2fs", "-f", entry->mnt_fsname,
-        };
-        android_fork_execvp_ext(arraysize(f2fs_argv), (char **)f2fs_argv,
-                                &st, true, LOG_KLOG, true, NULL, NULL, 0);
-    } else if (!strcmp(entry->mnt_type, "ext4")) {
-        const char *ext4_argv[] = {
-            "/system/bin/e2fsck", "-f", "-y", entry->mnt_fsname,
-        };
-        android_fork_execvp_ext(arraysize(ext4_argv), (char **)ext4_argv,
-                                &st, true, LOG_KLOG, true, NULL, NULL, 0);
-    }
+    DoReboot(ANDROID_RB_RESTART2, "reboot", "recovery", false);
+    return 0;
 }
 
 static int do_class_start(const std::vector<std::string>& args) {
@@ -706,86 +606,51 @@ static int do_restart(const std::vector<std::string>& args) {
 }
 
 static int do_powerctl(const std::vector<std::string>& args) {
-    const char* command = args[1].c_str();
-    int len = 0;
+    const std::string& command = args[1];
     unsigned int cmd = 0;
-    const char *reboot_target = "";
-    void (*callback_on_ro_remount)(const struct mntent*) = NULL;
+    std::vector<std::string> cmd_params = android::base::Split(command, ",");
+    std::string reason_string = cmd_params[0];
+    std::string reboot_target = "";
+    bool runFsck = false;
+    bool commandInvalid = false;
 
-    if (strncmp(command, "shutdown", 8) == 0) {
+    if (cmd_params.size() > 2) {
+        commandInvalid = true;
+    } else if (cmd_params[0] == "shutdown") {
         cmd = ANDROID_RB_POWEROFF;
-        len = 8;
-    } else if (strncmp(command, "reboot", 6) == 0) {
+        if (cmd_params.size() == 2 && cmd_params[1] == "userrequested") {
+            // The shutdown reason is PowerManager.SHUTDOWN_USER_REQUESTED.
+            // Run fsck once the file system is remounted in read-only mode.
+            runFsck = true;
+            reason_string = cmd_params[1];
+        }
+    } else if (cmd_params[0] == "reboot") {
         cmd = ANDROID_RB_RESTART2;
-        len = 6;
-    } else if (strncmp(command, "thermal-shutdown", 16) == 0) {
+        if (cmd_params.size() == 2) {
+            reboot_target = cmd_params[1];
+            // When rebooting to the bootloader notify the bootloader writing
+            // also the BCB.
+            if (reboot_target == "bootloader") {
+                std::string err;
+                if (!write_reboot_bootloader(&err)) {
+                    LOG(ERROR) << "reboot-bootloader: Error writing "
+                                  "bootloader_message: "
+                               << err;
+                }
+            }
+        }
+    } else if (command == "thermal-shutdown") {  // no additional parameter allowed
         cmd = ANDROID_RB_THERMOFF;
-        len = 16;
     } else {
+        commandInvalid = true;
+    }
+    if (commandInvalid) {
         LOG(ERROR) << "powerctl: unrecognized command '" << command << "'";
         return -EINVAL;
     }
 
-    if (command[len] == ',') {
-        if (cmd == ANDROID_RB_POWEROFF &&
-            !strcmp(&command[len + 1], "userrequested")) {
-            // The shutdown reason is PowerManager.SHUTDOWN_USER_REQUESTED.
-            // Run fsck once the file system is remounted in read-only mode.
-            callback_on_ro_remount = unmount_and_fsck;
-        } else if (cmd == ANDROID_RB_RESTART2) {
-            reboot_target = &command[len + 1];
-            // When rebooting to the bootloader notify the bootloader writing
-            // also the BCB.
-            if (strcmp(reboot_target, "bootloader") == 0) {
-                std::string err;
-                if (!write_reboot_bootloader(&err)) {
-                    LOG(ERROR) << "reboot-bootloader: Error writing "
-                                  "bootloader_message: " << err;
-                }
-            }
-        }
-    } else if (command[len] != '\0') {
-        LOG(ERROR) << "powerctl: unrecognized reboot target '" << &command[len] << "'";
-        return -EINVAL;
-    }
-
-    std::string timeout = property_get("ro.build.shutdown_timeout");
-    unsigned int delay = 0;
-
-    if (android::base::ParseUint(timeout, &delay) && delay > 0) {
-        Timer t;
-        // Ask all services to terminate.
-        ServiceManager::GetInstance().ForEachService(
-            [] (Service* s) { s->Terminate(); });
-
-        while (t.duration_s() < delay) {
-            ServiceManager::GetInstance().ReapAnyOutstandingChildren();
-
-            int service_count = 0;
-            ServiceManager::GetInstance().ForEachService(
-                [&service_count] (Service* s) {
-                    // Count the number of services running.
-                    // Exclude the console as it will ignore the SIGTERM signal
-                    // and not exit.
-                    // Note: SVC_CONSOLE actually means "requires console" but
-                    // it is only used by the shell.
-                    if (s->pid() != 0 && (s->flags() & SVC_CONSOLE) == 0) {
-                        service_count++;
-                    }
-                });
-
-            if (service_count == 0) {
-                // All terminable services terminated. We can exit early.
-                break;
-            }
-
-            // Wait a bit before recounting the number or running services.
-            std::this_thread::sleep_for(50ms);
-        }
-        LOG(VERBOSE) << "Terminating running services took " << t;
-    }
-
-    return android_reboot_with_callback(cmd, 0, reboot_target, callback_on_ro_remount);
+    DoReboot(cmd, reason_string, reboot_target, runFsck);
+    return 0;
 }
 
 static int do_trigger(const std::vector<std::string>& args) {
