@@ -77,6 +77,7 @@ LOCAL_SRC_FILES:= \
     init.cpp \
     keychords.cpp \
     property_service.cpp \
+    reboot.cpp \
     signal_handler.cpp \
     ueventd.cpp \
     ueventd_parser.cpp \
