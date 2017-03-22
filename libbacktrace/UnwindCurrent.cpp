@@ -23,12 +23,23 @@
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
 
+#include <android-base/logging.h>
 #include <backtrace/Backtrace.h>
 
 #include "BacktraceLog.h"
 #include "UnwindCurrent.h"
 
 std::string UnwindCurrent::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
+  if (!initialized_) {
+    // If init local is not called, then trying to get a function name will
+    // fail, so try to initialize first.
+    std::unique_ptr<unw_cursor_t> cursor(new unw_cursor_t);
+    if (unw_init_local(cursor.get(), &context_) < 0) {
+      return "";
+    }
+    initialized_ = true;
+  }
+
   *offset = 0;
   char buf[512];
   unw_word_t value;
@@ -85,6 +96,7 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucon
     error_ = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
     return false;
   }
+  initialized_ = true;
 
   size_t num_frames = 0;
   do {
@@ -124,6 +136,11 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucon
         num_frames++;
       } else {
         num_ignore_frames--;
+        // Set the number of frames to zero to remove the frame added
+        // above. By definition, if we still have frames to ignore
+        // there should only be one frame in the vector.
+        CHECK(num_frames == 0);
+        frames_.resize(0);
       }
     }
     ret = unw_step (cursor.get());

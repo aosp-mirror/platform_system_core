@@ -28,28 +28,28 @@
 // libunwind.h first then this header.
 
 class UnwindMap : public BacktraceMap {
-public:
+ public:
   explicit UnwindMap(pid_t pid);
 
   unw_map_cursor_t* GetMapCursor() { return &map_cursor_; }
 
-protected:
+ protected:
   unw_map_cursor_t map_cursor_;
 };
 
 class UnwindMapRemote : public UnwindMap {
-public:
+ public:
   explicit UnwindMapRemote(pid_t pid);
   virtual ~UnwindMapRemote();
 
   bool Build() override;
 
-private:
+ private:
   bool GenerateMap();
 };
 
 class UnwindMapLocal : public UnwindMap {
-public:
+ public:
   UnwindMapLocal();
   virtual ~UnwindMapLocal();
 
@@ -60,7 +60,7 @@ public:
   void LockIterator() override { pthread_rwlock_rdlock(&map_lock_); }
   void UnlockIterator() override { pthread_rwlock_unlock(&map_lock_); }
 
-private:
+ private:
   bool GenerateMap();
 
   bool map_created_;

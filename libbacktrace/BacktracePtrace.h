@@ -25,7 +25,7 @@
 class BacktraceMap;
 
 class BacktracePtrace : public Backtrace {
-public:
+ public:
   BacktracePtrace(pid_t pid, pid_t tid, BacktraceMap* map) : Backtrace(pid, tid, map) {}
   virtual ~BacktracePtrace() {}
 
