@@ -22,7 +22,7 @@
 #include <ucontext.h>
 
 class ThreadEntry {
-public:
+ public:
   static ThreadEntry* Get(pid_t pid, pid_t tid, bool create = true);
 
   static void Remove(ThreadEntry* entry);
@@ -47,7 +47,7 @@ public:
 
   inline ucontext_t* GetUcontext() { return &ucontext_; }
 
-private:
+ private:
   ThreadEntry(pid_t pid, pid_t tid);
   ~ThreadEntry();
 

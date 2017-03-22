@@ -30,7 +30,7 @@
 #include "BacktracePtrace.h"
 
 class UnwindPtrace : public BacktracePtrace {
-public:
+ public:
   UnwindPtrace(pid_t pid, pid_t tid, BacktraceMap* map);
   virtual ~UnwindPtrace();
 
@@ -38,7 +38,9 @@ public:
 
   std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) override;
 
-private:
+ private:
+  bool Init();
+
   unw_addr_space_t addr_space_;
   struct UPT_info* upt_info_;
 };
