@@ -182,6 +182,7 @@ static void LogShutdownTime(UmountStat stat, Timer* t) {
 
 static void __attribute__((noreturn))
 RebootSystem(unsigned int cmd, const std::string& rebootTarget) {
+    LOG(INFO) << "Reboot ending, jumping to kernel";
     switch (cmd) {
         case ANDROID_RB_POWEROFF:
             reboot(RB_POWER_OFF);
@@ -320,6 +321,7 @@ static void __attribute__((noreturn)) DoThermalOff() {
 void DoReboot(unsigned int cmd, const std::string& reason, const std::string& rebootTarget,
               bool runFsck) {
     Timer t;
+    LOG(INFO) << "Reboot start, reason: " << reason << ", rebootTarget: " << rebootTarget;
     std::string timeout = property_get("ro.build.shutdown_timeout");
     unsigned int delay = 0;
 
