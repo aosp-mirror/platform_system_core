@@ -252,7 +252,7 @@ ssize_t SortedVector<TYPE>::removeItemsAt(size_t index, size_t count) {
 // ---------------------------------------------------------------------------
 
 template<class TYPE>
-void SortedVector<TYPE>::do_construct(void* storage, size_t num) const {
+UTILS_VECTOR_NO_CFI void SortedVector<TYPE>::do_construct(void* storage, size_t num) const {
     construct_type( reinterpret_cast<TYPE*>(storage), num );
 }
 
@@ -262,22 +262,22 @@ void SortedVector<TYPE>::do_destroy(void* storage, size_t num) const {
 }
 
 template<class TYPE>
-void SortedVector<TYPE>::do_copy(void* dest, const void* from, size_t num) const {
+UTILS_VECTOR_NO_CFI void SortedVector<TYPE>::do_copy(void* dest, const void* from, size_t num) const {
     copy_type( reinterpret_cast<TYPE*>(dest), reinterpret_cast<const TYPE*>(from), num );
 }
 
 template<class TYPE>
-void SortedVector<TYPE>::do_splat(void* dest, const void* item, size_t num) const {
+UTILS_VECTOR_NO_CFI void SortedVector<TYPE>::do_splat(void* dest, const void* item, size_t num) const {
     splat_type( reinterpret_cast<TYPE*>(dest), reinterpret_cast<const TYPE*>(item), num );
 }
 
 template<class TYPE>
-void SortedVector<TYPE>::do_move_forward(void* dest, const void* from, size_t num) const {
+UTILS_VECTOR_NO_CFI void SortedVector<TYPE>::do_move_forward(void* dest, const void* from, size_t num) const {
     move_forward_type( reinterpret_cast<TYPE*>(dest), reinterpret_cast<const TYPE*>(from), num );
 }
 
 template<class TYPE>
-void SortedVector<TYPE>::do_move_backward(void* dest, const void* from, size_t num) const {
+UTILS_VECTOR_NO_CFI void SortedVector<TYPE>::do_move_backward(void* dest, const void* from, size_t num) const {
     move_backward_type( reinterpret_cast<TYPE*>(dest), reinterpret_cast<const TYPE*>(from), num );
 }
 

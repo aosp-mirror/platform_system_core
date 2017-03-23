@@ -24,6 +24,20 @@
 #include <utils/TypeHelpers.h>
 #include <utils/VectorImpl.h>
 
+/*
+ * Used to blacklist some functions from CFI.
+ *
+ */
+#ifndef __has_attribute
+#define __has_attribute(x) 0
+#endif
+
+#if __has_attribute(no_sanitize)
+#define UTILS_VECTOR_NO_CFI __attribute__((no_sanitize("cfi")))
+#else
+#define UTILS_VECTOR_NO_CFI
+#endif
+
 // ---------------------------------------------------------------------------
 
 namespace android {
@@ -380,7 +394,7 @@ status_t Vector<TYPE>::sort(Vector<TYPE>::compar_r_t cmp, void* state) {
 // ---------------------------------------------------------------------------
 
 template<class TYPE>
-void Vector<TYPE>::do_construct(void* storage, size_t num) const {
+UTILS_VECTOR_NO_CFI void Vector<TYPE>::do_construct(void* storage, size_t num) const {
     construct_type( reinterpret_cast<TYPE*>(storage), num );
 }
 
@@ -390,22 +404,22 @@ void Vector<TYPE>::do_destroy(void* storage, size_t num) const {
 }
 
 template<class TYPE>
-void Vector<TYPE>::do_copy(void* dest, const void* from, size_t num) const {
+UTILS_VECTOR_NO_CFI void Vector<TYPE>::do_copy(void* dest, const void* from, size_t num) const {
     copy_type( reinterpret_cast<TYPE*>(dest), reinterpret_cast<const TYPE*>(from), num );
 }
 
 template<class TYPE>
-void Vector<TYPE>::do_splat(void* dest, const void* item, size_t num) const {
+UTILS_VECTOR_NO_CFI void Vector<TYPE>::do_splat(void* dest, const void* item, size_t num) const {
     splat_type( reinterpret_cast<TYPE*>(dest), reinterpret_cast<const TYPE*>(item), num );
 }
 
 template<class TYPE>
-void Vector<TYPE>::do_move_forward(void* dest, const void* from, size_t num) const {
+UTILS_VECTOR_NO_CFI void Vector<TYPE>::do_move_forward(void* dest, const void* from, size_t num) const {
     move_forward_type( reinterpret_cast<TYPE*>(dest), reinterpret_cast<const TYPE*>(from), num );
 }
 
 template<class TYPE>
-void Vector<TYPE>::do_move_backward(void* dest, const void* from, size_t num) const {
+UTILS_VECTOR_NO_CFI void Vector<TYPE>::do_move_backward(void* dest, const void* from, size_t num) const {
     move_backward_type( reinterpret_cast<TYPE*>(dest), reinterpret_cast<const TYPE*>(from), num );
 }
 
