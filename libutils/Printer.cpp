@@ -47,9 +47,11 @@ void Printer::printFormatLine(const char* format, ...) {
 #ifndef _WIN32
     if (vasprintf(&formattedString, format, arglist) < 0) { // returns -1 on error
         ALOGE("%s: Failed to format string", __FUNCTION__);
+        va_end(arglist);
         return;
     }
 #else
+    va_end(arglist);
     return;
 #endif
 

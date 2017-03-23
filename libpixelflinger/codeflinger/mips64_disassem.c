@@ -555,6 +555,7 @@ static void db_printf(const char* fmt, ...)
     } else {
         vprintf(fmt, argp);
     }
+    va_end(argp);
 }
 
 /*
