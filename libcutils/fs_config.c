@@ -116,16 +116,21 @@ static const char sys_conf_file[] = "/system/etc/fs_config_files";
  * although the developer is advised to restrict the scope to the /vendor or
  * oem/ file-system since the intent is to provide support for customized
  * portions of a separate vendor.img or oem.img.  Has to remain open so that
- * customization can also land on /system/vendor or /system/orm.  We expect
- * build-time checking or filtering when constructing the associated
- * fs_config_* files.
+ * customization can also land on /system/vendor, /system/oem or /system/odm.
+ * We expect build-time checking or filtering when constructing the associated
+ * fs_config_* files (see build/tools/fs_config/fs_config_generate.c)
  */
 static const char ven_conf_dir[] = "/vendor/etc/fs_config_dirs";
 static const char ven_conf_file[] = "/vendor/etc/fs_config_files";
 static const char oem_conf_dir[] = "/oem/etc/fs_config_dirs";
 static const char oem_conf_file[] = "/oem/etc/fs_config_files";
+static const char odm_conf_dir[] = "/odm/etc/fs_config_dirs";
+static const char odm_conf_file[] = "/odm/etc/fs_config_files";
 static const char* conf[][2] = {
-    {sys_conf_file, sys_conf_dir}, {ven_conf_file, ven_conf_dir}, {oem_conf_file, oem_conf_dir},
+    {sys_conf_file, sys_conf_dir},
+    {ven_conf_file, ven_conf_dir},
+    {oem_conf_file, oem_conf_dir},
+    {odm_conf_file, odm_conf_dir},
 };
 
 static const struct fs_path_config android_files[] = {
@@ -142,6 +147,8 @@ static const struct fs_path_config android_files[] = {
     { 00600, AID_ROOT,      AID_ROOT,      0, "default.prop" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "odm/build.prop" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "odm/default.prop" },
+    { 00444, AID_ROOT,      AID_ROOT,      0, odm_conf_dir + 1 },
+    { 00444, AID_ROOT,      AID_ROOT,      0, odm_conf_file + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, oem_conf_dir + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, oem_conf_file + 1 },
     { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/fs_mgr" },
