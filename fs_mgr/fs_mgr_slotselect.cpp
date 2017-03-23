@@ -35,6 +35,8 @@ int fs_mgr_update_for_slotselect(struct fstab *fstab)
                   return -1;
                 }
                 got_suffix = 1;
+                // remove below line when bootloaders fix androidboot.slot_suffix param
+                if (suffix[0] == '_') suffix.erase(suffix.begin());
             }
 
             if (asprintf(&tmp, "%s_%s", fstab->recs[n].blk_device, suffix.c_str()) > 0) {
