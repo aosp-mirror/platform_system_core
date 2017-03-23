@@ -377,7 +377,7 @@ TEST_F(zipwriter, TruncateFileAfterBackup) {
   ASSERT_EQ(0, writer.WriteBytes(data.data(), data.size()));
   ASSERT_EQ(0, writer.FinishEntry());
 
-  off64_t before_len = ftello64(file_);
+  off_t before_len = ftello(file_);
 
   ZipWriter::FileEntry entry;
   ASSERT_EQ(0, writer.GetLastEntry(&entry));
@@ -385,7 +385,7 @@ TEST_F(zipwriter, TruncateFileAfterBackup) {
 
   ASSERT_EQ(0, writer.Finish());
 
-  off64_t after_len = ftello64(file_);
+  off_t after_len = ftello(file_);
 
   ASSERT_GT(before_len, after_len);
 }
