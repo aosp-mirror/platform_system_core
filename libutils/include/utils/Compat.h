@@ -37,6 +37,10 @@ static inline ssize_t pwrite64(int fd, const void* buf, size_t nbytes, off64_t o
     return pwrite(fd, buf, nbytes, offset);
 }
 
+static inline int ftruncate64(int fd, off64_t length) {
+    return ftruncate(fd, length);
+}
+
 #endif /* __APPLE__ */
 
 #if defined(_WIN32)
