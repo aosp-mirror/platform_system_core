@@ -23,6 +23,10 @@
 #include <memory>
 #include <vector>
 
+static ::testing::AssertionResult AssertFileEntryContentsEq(const std::string& expected,
+                                                            ZipArchiveHandle handle,
+                                                            ZipEntry* zip_entry);
+
 struct zipwriter : public ::testing::Test {
   TemporaryFile* temp_file_;
   int fd_;
@@ -59,16 +63,10 @@ TEST_F(zipwriter, WriteUncompressedZipWithOneFile) {
 
   ZipEntry data;
   ASSERT_EQ(0, FindEntry(handle, ZipString("file.txt"), &data));
-  EXPECT_EQ(strlen(expected), data.compressed_length);
-  EXPECT_EQ(strlen(expected), data.uncompressed_length);
   EXPECT_EQ(kCompressStored, data.method);
-
-  char buffer[6];
-  EXPECT_EQ(0,
-            ExtractToMemory(handle, &data, reinterpret_cast<uint8_t*>(&buffer), sizeof(buffer)));
-  buffer[5] = 0;
-
-  EXPECT_STREQ(expected, buffer);
+  EXPECT_EQ(strlen(expected), data.compressed_length);
+  ASSERT_EQ(strlen(expected), data.uncompressed_length);
+  ASSERT_TRUE(AssertFileEntryContentsEq(expected, handle, &data));
 
   CloseArchive(handle);
 }
@@ -94,26 +92,19 @@ TEST_F(zipwriter, WriteUncompressedZipWithMultipleFiles) {
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
 
-  char buffer[4];
   ZipEntry data;
 
   ASSERT_EQ(0, FindEntry(handle, ZipString("file.txt"), &data));
   EXPECT_EQ(kCompressStored, data.method);
   EXPECT_EQ(2u, data.compressed_length);
-  EXPECT_EQ(2u, data.uncompressed_length);
-  ASSERT_EQ(0,
-            ExtractToMemory(handle, &data, reinterpret_cast<uint8_t*>(buffer), arraysize(buffer)));
-  buffer[2] = 0;
-  EXPECT_STREQ("he", buffer);
+  ASSERT_EQ(2u, data.uncompressed_length);
+  ASSERT_TRUE(AssertFileEntryContentsEq("he", handle, &data));
 
   ASSERT_EQ(0, FindEntry(handle, ZipString("file/file.txt"), &data));
   EXPECT_EQ(kCompressStored, data.method);
   EXPECT_EQ(3u, data.compressed_length);
-  EXPECT_EQ(3u, data.uncompressed_length);
-  ASSERT_EQ(0,
-            ExtractToMemory(handle, &data, reinterpret_cast<uint8_t*>(buffer), arraysize(buffer)));
-  buffer[3] = 0;
-  EXPECT_STREQ("llo", buffer);
+  ASSERT_EQ(3u, data.uncompressed_length);
+  ASSERT_TRUE(AssertFileEntryContentsEq("llo", handle, &data));
 
   ASSERT_EQ(0, FindEntry(handle, ZipString("file/file2.txt"), &data));
   EXPECT_EQ(kCompressStored, data.method);
@@ -143,7 +134,7 @@ TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedFlag) {
   CloseArchive(handle);
 }
 
-void ConvertZipTimeToTm(uint32_t& zip_time, struct tm* tm) {
+static void ConvertZipTimeToTm(uint32_t& zip_time, struct tm* tm) {
   memset(tm, 0, sizeof(struct tm));
   tm->tm_hour = (zip_time >> 11) & 0x1f;
   tm->tm_min = (zip_time >> 5) & 0x3f;
@@ -264,14 +255,8 @@ TEST_F(zipwriter, WriteCompressedZipWithOneFile) {
   ZipEntry data;
   ASSERT_EQ(0, FindEntry(handle, ZipString("file.txt"), &data));
   EXPECT_EQ(kCompressDeflated, data.method);
-  EXPECT_EQ(4u, data.uncompressed_length);
-
-  char buffer[5];
-  ASSERT_EQ(0,
-            ExtractToMemory(handle, &data, reinterpret_cast<uint8_t*>(buffer), arraysize(buffer)));
-  buffer[4] = 0;
-
-  EXPECT_STREQ("helo", buffer);
+  ASSERT_EQ(4u, data.uncompressed_length);
+  ASSERT_TRUE(AssertFileEntryContentsEq("helo", handle, &data));
 
   CloseArchive(handle);
 }
@@ -318,4 +303,112 @@ TEST_F(zipwriter, CheckStartEntryErrors) {
 
   ASSERT_EQ(-5, writer.StartAlignedEntry("align.txt", ZipWriter::kAlign32, 4096));
   ASSERT_EQ(-6, writer.StartAlignedEntry("align.txt", 0, 3));
+}
+
+TEST_F(zipwriter, BackupRemovesTheLastFile) {
+  ZipWriter writer(file_);
+
+  const char* kKeepThis = "keep this";
+  const char* kDropThis = "drop this";
+  const char* kReplaceWithThis = "replace with this";
+
+  ZipWriter::FileEntry entry;
+  EXPECT_LT(writer.GetLastEntry(&entry), 0);
+
+  ASSERT_EQ(0, writer.StartEntry("keep.txt", 0));
+  ASSERT_EQ(0, writer.WriteBytes(kKeepThis, strlen(kKeepThis)));
+  ASSERT_EQ(0, writer.FinishEntry());
+
+  ASSERT_EQ(0, writer.GetLastEntry(&entry));
+  EXPECT_EQ("keep.txt", entry.path);
+
+  ASSERT_EQ(0, writer.StartEntry("drop.txt", 0));
+  ASSERT_EQ(0, writer.WriteBytes(kDropThis, strlen(kDropThis)));
+  ASSERT_EQ(0, writer.FinishEntry());
+
+  ASSERT_EQ(0, writer.GetLastEntry(&entry));
+  EXPECT_EQ("drop.txt", entry.path);
+
+  ASSERT_EQ(0, writer.DiscardLastEntry());
+
+  ASSERT_EQ(0, writer.GetLastEntry(&entry));
+  EXPECT_EQ("keep.txt", entry.path);
+
+  ASSERT_EQ(0, writer.StartEntry("replace.txt", 0));
+  ASSERT_EQ(0, writer.WriteBytes(kReplaceWithThis, strlen(kReplaceWithThis)));
+  ASSERT_EQ(0, writer.FinishEntry());
+
+  ASSERT_EQ(0, writer.GetLastEntry(&entry));
+  EXPECT_EQ("replace.txt", entry.path);
+
+  ASSERT_EQ(0, writer.Finish());
+
+  // Verify that "drop.txt" does not exist.
+
+  ASSERT_GE(0, lseek(fd_, 0, SEEK_SET));
+
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
+
+  ZipEntry data;
+  ASSERT_EQ(0, FindEntry(handle, ZipString("keep.txt"), &data));
+  ASSERT_TRUE(AssertFileEntryContentsEq(kKeepThis, handle, &data));
+
+  ASSERT_NE(0, FindEntry(handle, ZipString("drop.txt"), &data));
+
+  ASSERT_EQ(0, FindEntry(handle, ZipString("replace.txt"), &data));
+  ASSERT_TRUE(AssertFileEntryContentsEq(kReplaceWithThis, handle, &data));
+
+  CloseArchive(handle);
+}
+
+TEST_F(zipwriter, TruncateFileAfterBackup) {
+  ZipWriter writer(file_);
+
+  const char* kSmall = "small";
+
+  ASSERT_EQ(0, writer.StartEntry("small.txt", 0));
+  ASSERT_EQ(0, writer.WriteBytes(kSmall, strlen(kSmall)));
+  ASSERT_EQ(0, writer.FinishEntry());
+
+  ASSERT_EQ(0, writer.StartEntry("large.txt", 0));
+  std::vector<uint8_t> data;
+  data.resize(1024*1024, 0xef);
+  ASSERT_EQ(0, writer.WriteBytes(data.data(), data.size()));
+  ASSERT_EQ(0, writer.FinishEntry());
+
+  off64_t before_len = ftello64(file_);
+
+  ZipWriter::FileEntry entry;
+  ASSERT_EQ(0, writer.GetLastEntry(&entry));
+  ASSERT_EQ(0, writer.DiscardLastEntry());
+
+  ASSERT_EQ(0, writer.Finish());
+
+  off64_t after_len = ftello64(file_);
+
+  ASSERT_GT(before_len, after_len);
+}
+
+static ::testing::AssertionResult AssertFileEntryContentsEq(const std::string& expected,
+                                                            ZipArchiveHandle handle,
+                                                            ZipEntry* zip_entry) {
+  if (expected.size() != zip_entry->uncompressed_length) {
+    return ::testing::AssertionFailure() << "uncompressed entry size "
+        << zip_entry->uncompressed_length << " does not match expected size " << expected.size();
+  }
+
+  std::string actual;
+  actual.resize(expected.size());
+
+  uint8_t* buffer = reinterpret_cast<uint8_t*>(&*actual.begin());
+  if (ExtractToMemory(handle, zip_entry, buffer, actual.size()) != 0) {
+    return ::testing::AssertionFailure() << "failed to extract entry";
+  }
+
+  if (expected != actual) {
+    return ::testing::AssertionFailure() << "actual zip_entry data '" << actual
+        << "' does not match expected '" << expected << "'";
+  }
+  return ::testing::AssertionSuccess();
 }
