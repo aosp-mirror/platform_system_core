@@ -77,7 +77,9 @@ class TombstoneTest : public ::testing::Test {
     resetLogs();
     elf_set_fake_build_id("");
     siginfo_t si;
+    memset(&si, 0, sizeof(si));
     si.si_signo = SIGABRT;
+    si.si_code = SI_KERNEL;
     ptrace_set_fake_getsiginfo(si);
   }
 
@@ -292,7 +294,9 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_before) {
   map_mock_->AddMap(map);
 
   siginfo_t si;
+  memset(&si, 0, sizeof(si));
   si.si_signo = SIGBUS;
+  si.si_code = SI_KERNEL;
   si.si_addr = reinterpret_cast<void*>(0x1000);
   ptrace_set_fake_getsiginfo(si);
   dump_all_maps(backtrace_mock_.get(), map_mock_.get(), &log_, 100);
@@ -348,7 +352,9 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_between) {
   map_mock_->AddMap(map);
 
   siginfo_t si;
+  memset(&si, 0, sizeof(si));
   si.si_signo = SIGBUS;
+  si.si_code = SI_KERNEL;
   si.si_addr = reinterpret_cast<void*>(0xa533000);
   ptrace_set_fake_getsiginfo(si);
   dump_all_maps(backtrace_mock_.get(), map_mock_.get(), &log_, 100);
@@ -404,7 +410,9 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_in_map) {
   map_mock_->AddMap(map);
 
   siginfo_t si;
+  memset(&si, 0, sizeof(si));
   si.si_signo = SIGBUS;
+  si.si_code = SI_KERNEL;
   si.si_addr = reinterpret_cast<void*>(0xa534040);
   ptrace_set_fake_getsiginfo(si);
   dump_all_maps(backtrace_mock_.get(), map_mock_.get(), &log_, 100);
@@ -458,7 +466,9 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_after) {
   map_mock_->AddMap(map);
 
   siginfo_t si;
+  memset(&si, 0, sizeof(si));
   si.si_signo = SIGBUS;
+  si.si_code = SI_KERNEL;
 #if defined(__LP64__)
   si.si_addr = reinterpret_cast<void*>(0x12345a534040UL);
 #else
@@ -503,7 +513,7 @@ TEST_F(TombstoneTest, multiple_maps_getsiginfo_fail) {
   map_mock_->AddMap(map);
 
   siginfo_t si;
-  si.si_signo = 0;
+  memset(&si, 0, sizeof(si));
   ptrace_set_fake_getsiginfo(si);
   dump_all_maps(backtrace_mock_.get(), map_mock_.get(), &log_, 100);
 
@@ -539,7 +549,9 @@ TEST_F(TombstoneTest, multiple_maps_check_signal_has_si_addr) {
     ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
 
     siginfo_t si;
+    memset(&si, 0, sizeof(si));
     si.si_signo = i;
+    si.si_code = SI_KERNEL;
     si.si_addr = reinterpret_cast<void*>(0x1000);
     ptrace_set_fake_getsiginfo(si);
     dump_all_maps(backtrace_mock_.get(), map_mock_.get(), &log_, 100);
@@ -592,7 +604,7 @@ TEST_F(TombstoneTest, multiple_maps_check_signal_has_si_addr) {
 
 TEST_F(TombstoneTest, dump_signal_info_error) {
   siginfo_t si;
-  si.si_signo = 0;
+  memset(&si, 0, sizeof(si));
   ptrace_set_fake_getsiginfo(si);
 
   dump_signal_info(&log_, 123);
