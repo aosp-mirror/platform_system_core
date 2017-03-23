@@ -411,6 +411,9 @@ on post-fs-data
     mkdir /data/misc/profman 0770 system shell
     mkdir /data/misc/gcov 0770 root root
 
+    mkdir /data/vendor 0771 root root
+    mkdir /data/vendor/hardware 0771 root root
+
     # For security reasons, /data/local/tmp should always be empty.
     # Do not place files or directories in /data/local/tmp
     mkdir /data/local/tmp 0771 shell shell
