@@ -127,7 +127,7 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucon
       if (num_ignore_frames == 0) {
         // GetFunctionName is an expensive call, only do it if we are
         // keeping the frame.
-        frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
+        frame->func_name = GetFunctionName(frame->pc, &frame->func_offset, &frame->map);
         if (num_frames > 0) {
           // Set the stack size for the previous frame.
           backtrace_frame_data_t* prev = &frames_.at(num_frames-1);
@@ -142,6 +142,16 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucon
         CHECK(num_frames == 0);
         frames_.resize(0);
       }
+    }
+    // If the pc is in a device map, then don't try to step.
+    if (frame->map.flags & PROT_DEVICE_MAP) {
+      break;
+    }
+    // Verify the sp is not in a device map too.
+    backtrace_map_t map;
+    FillInMap(frame->sp, &map);
+    if (map.flags & PROT_DEVICE_MAP) {
+      break;
     }
     ret = unw_step (cursor.get());
   } while (ret > 0 && num_frames < MAX_BACKTRACE_FRAMES);

@@ -42,6 +42,7 @@
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 
+#include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <cutils/atomic.h>
@@ -1434,6 +1435,171 @@ TEST(libbacktrace, remote_get_function_name_before_unwind) {
   ASSERT_NE(std::string(""), backtrace->GetFunctionName(cur_func_offset, &offset));
 
   FinishRemoteProcess(pid);
+}
+
+static void SetUcontextSp(uintptr_t sp, ucontext_t* ucontext) {
+#if defined(__arm__)
+  ucontext->uc_mcontext.arm_sp = sp;
+#elif defined(__aarch64__)
+  ucontext->uc_mcontext.sp = sp;
+#elif defined(__i386__)
+  ucontext->uc_mcontext.gregs[REG_ESP] = sp;
+#elif defined(__x86_64__)
+  ucontext->uc_mcontext.gregs[REG_RSP] = sp;
+#else
+  UNUSED(sp);
+  UNUSED(ucontext);
+  ASSERT_TRUE(false) << "Unsupported architecture";
+#endif
+}
+
+static void SetUcontextPc(uintptr_t pc, ucontext_t* ucontext) {
+#if defined(__arm__)
+  ucontext->uc_mcontext.arm_pc = pc;
+#elif defined(__aarch64__)
+  ucontext->uc_mcontext.pc = pc;
+#elif defined(__i386__)
+  ucontext->uc_mcontext.gregs[REG_EIP] = pc;
+#elif defined(__x86_64__)
+  ucontext->uc_mcontext.gregs[REG_RIP] = pc;
+#else
+  UNUSED(pc);
+  UNUSED(ucontext);
+  ASSERT_TRUE(false) << "Unsupported architecture";
+#endif
+}
+
+static void SetUcontextLr(uintptr_t lr, ucontext_t* ucontext) {
+#if defined(__arm__)
+  ucontext->uc_mcontext.arm_lr = lr;
+#elif defined(__aarch64__)
+  ucontext->uc_mcontext.regs[30] = lr;
+#elif defined(__i386__)
+  // The lr is on the stack.
+  ASSERT_TRUE(lr != 0);
+  ASSERT_TRUE(ucontext != nullptr);
+#elif defined(__x86_64__)
+  // The lr is on the stack.
+  ASSERT_TRUE(lr != 0);
+  ASSERT_TRUE(ucontext != nullptr);
+#else
+  UNUSED(lr);
+  UNUSED(ucontext);
+  ASSERT_TRUE(false) << "Unsupported architecture";
+#endif
+}
+
+static constexpr size_t DEVICE_MAP_SIZE = 1024;
+
+static void SetupDeviceMap(void** device_map) {
+  // Make sure that anything in a device map will result in fails
+  // to read.
+  android::base::unique_fd device_fd(open("/dev/zero", O_RDONLY | O_CLOEXEC));
+
+  *device_map = mmap(nullptr, 1024, PROT_READ, MAP_PRIVATE, device_fd, 0);
+  ASSERT_TRUE(*device_map != MAP_FAILED);
+
+  // Make sure the map is readable.
+  ASSERT_EQ(0, reinterpret_cast<int*>(*device_map)[0]);
+}
+
+static void UnwindFromDevice(Backtrace* backtrace, void* device_map) {
+  uintptr_t device_map_uint = reinterpret_cast<uintptr_t>(device_map);
+
+  backtrace_map_t map;
+  backtrace->FillInMap(device_map_uint, &map);
+  // Verify the flag is set.
+  ASSERT_EQ(PROT_DEVICE_MAP, map.flags & PROT_DEVICE_MAP);
+
+  // Quick sanity checks.
+  size_t offset;
+  ASSERT_EQ(std::string(""), backtrace->GetFunctionName(device_map_uint, &offset));
+  ASSERT_EQ(std::string(""), backtrace->GetFunctionName(device_map_uint, &offset, &map));
+  ASSERT_EQ(std::string(""), backtrace->GetFunctionName(0, &offset));
+
+  uintptr_t cur_func_offset = reinterpret_cast<uintptr_t>(&test_level_one) + 1;
+  // Now verify the device map flag actually causes the function name to be empty.
+  backtrace->FillInMap(cur_func_offset, &map);
+  ASSERT_TRUE((map.flags & PROT_DEVICE_MAP) == 0);
+  ASSERT_NE(std::string(""), backtrace->GetFunctionName(cur_func_offset, &offset, &map));
+  map.flags |= PROT_DEVICE_MAP;
+  ASSERT_EQ(std::string(""), backtrace->GetFunctionName(cur_func_offset, &offset, &map));
+
+  ucontext_t ucontext;
+
+  // Create a context that has the pc in the device map, but the sp
+  // in a non-device map.
+  memset(&ucontext, 0, sizeof(ucontext));
+  SetUcontextSp(reinterpret_cast<uintptr_t>(&ucontext), &ucontext);
+  SetUcontextPc(device_map_uint, &ucontext);
+  SetUcontextLr(cur_func_offset, &ucontext);
+
+  ASSERT_TRUE(backtrace->Unwind(0, &ucontext));
+
+  // The buffer should only be a single element.
+  ASSERT_EQ(1U, backtrace->NumFrames());
+  const backtrace_frame_data_t* frame = backtrace->GetFrame(0);
+  ASSERT_EQ(device_map_uint, frame->pc);
+  ASSERT_EQ(reinterpret_cast<uintptr_t>(&ucontext), frame->sp);
+
+  // Check what happens when skipping the first frame.
+  ASSERT_TRUE(backtrace->Unwind(1, &ucontext));
+  ASSERT_EQ(0U, backtrace->NumFrames());
+
+  // Create a context that has the sp in the device map, but the pc
+  // in a non-device map.
+  memset(&ucontext, 0, sizeof(ucontext));
+  SetUcontextSp(device_map_uint, &ucontext);
+  SetUcontextPc(cur_func_offset, &ucontext);
+  SetUcontextLr(cur_func_offset, &ucontext);
+
+  ASSERT_TRUE(backtrace->Unwind(0, &ucontext));
+
+  // The buffer should only be a single element.
+  ASSERT_EQ(1U, backtrace->NumFrames());
+  frame = backtrace->GetFrame(0);
+  ASSERT_EQ(cur_func_offset, frame->pc);
+  ASSERT_EQ(device_map_uint, frame->sp);
+
+  // Check what happens when skipping the first frame.
+  ASSERT_TRUE(backtrace->Unwind(1, &ucontext));
+  ASSERT_EQ(0U, backtrace->NumFrames());
+}
+
+TEST(libbacktrace, unwind_disallow_device_map_local) {
+  void* device_map;
+  SetupDeviceMap(&device_map);
+
+  // Now create an unwind object.
+  std::unique_ptr<Backtrace> backtrace(
+      Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(backtrace);
+
+  UnwindFromDevice(backtrace.get(), device_map);
+
+  munmap(device_map, DEVICE_MAP_SIZE);
+}
+
+TEST(libbacktrace, unwind_disallow_device_map_remote) {
+  void* device_map;
+  SetupDeviceMap(&device_map);
+
+  // Fork a process to do a remote backtrace.
+  pid_t pid;
+  CreateRemoteProcess(&pid);
+
+  // Now create an unwind object.
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, pid));
+
+  // TODO: Currently unwind from context doesn't work on remote
+  // unwind. Keep this test because the new unwinder should support
+  // this eventually, or we can delete this test.
+  // properly with unwind from context.
+  // UnwindFromDevice(backtrace.get(), device_map);
+
+  FinishRemoteProcess(pid);
+
+  munmap(device_map, DEVICE_MAP_SIZE);
 }
 
 #if defined(ENABLE_PSS_TESTS)

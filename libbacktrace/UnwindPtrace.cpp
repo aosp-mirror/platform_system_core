@@ -136,11 +136,27 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
 
       FillInMap(frame->pc, &frame->map);
 
-      frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
+      frame->func_name = GetFunctionName(frame->pc, &frame->func_offset, &frame->map);
 
       num_frames++;
+      // If the pc is in a device map, then don't try to step.
+      if (frame->map.flags & PROT_DEVICE_MAP) {
+        break;
+      }
     } else {
+      // If the pc is in a device map, then don't try to step.
+      backtrace_map_t map;
+      FillInMap(pc, &map);
+      if (map.flags & PROT_DEVICE_MAP) {
+        break;
+      }
       num_ignore_frames--;
+    }
+    // Verify the sp is not in a device map.
+    backtrace_map_t map;
+    FillInMap(sp, &map);
+    if (map.flags & PROT_DEVICE_MAP) {
+      break;
     }
     ret = unw_step (&cursor);
   } while (ret > 0 && num_frames < MAX_BACKTRACE_FRAMES);
