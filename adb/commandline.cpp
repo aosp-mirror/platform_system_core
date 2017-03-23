@@ -782,9 +782,16 @@ static int adb_shell(int argc, const char** argv) {
     return RemoteShell(use_shell_protocol, shell_type_arg, escape_char, command);
 }
 
-static int adb_download_buffer(const char *service, const char *fn, const void* data, unsigned sz,
-                               bool show_progress)
-{
+static int adb_download_buffer(const char* service, const char* filename) {
+    std::string content;
+    if (!android::base::ReadFileToString(filename, &content)) {
+        fprintf(stderr, "error: couldn't read %s: %s\n", filename, strerror(errno));
+        return -1;
+    }
+
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(content.data());
+    unsigned sz = content.size();
+
     std::string error;
     int fd = adb_connect(android::base::StringPrintf("%s:%d", service, sz), &error);
     if (fd < 0) {
@@ -798,10 +805,8 @@ static int adb_download_buffer(const char *service, const char *fn, const void* 
     unsigned total = sz;
     const uint8_t* ptr = reinterpret_cast<const uint8_t*>(data);
 
-    if (show_progress) {
-        const char* x = strrchr(service, ':');
-        if (x) service = x + 1;
-    }
+    const char* x = strrchr(service, ':');
+    if (x) service = x + 1;
 
     while (sz > 0) {
         unsigned xfer = (sz > CHUNK_SIZE) ? CHUNK_SIZE : sz;
@@ -814,14 +819,10 @@ static int adb_download_buffer(const char *service, const char *fn, const void* 
         }
         sz -= xfer;
         ptr += xfer;
-        if (show_progress) {
-            printf("sending: '%s' %4d%%    \r", fn, (int)(100LL - ((100LL * sz) / (total))));
-            fflush(stdout);
-        }
+        printf("sending: '%s' %4d%%    \r", filename, (int)(100LL - ((100LL * sz) / (total))));
+        fflush(stdout);
     }
-    if (show_progress) {
-        printf("\n");
-    }
+    printf("\n");
 
     if (!adb_status(fd, &error)) {
         fprintf(stderr,"* error response '%s' *\n", error.c_str());
@@ -854,38 +855,40 @@ static int adb_download_buffer(const char *service, const char *fn, const void* 
  * - When the other side sends "DONEDONE" instead of a block number,
  *   we hang up.
  */
-static int adb_sideload_host(const char* fn) {
-    fprintf(stderr, "loading: '%s'...\n", fn);
-
-    std::string content;
-    if (!android::base::ReadFileToString(fn, &content)) {
-        fprintf(stderr, "failed: %s\n", strerror(errno));
+static int adb_sideload_host(const char* filename) {
+    fprintf(stderr, "opening '%s'...\n", filename);
+    struct stat sb;
+    if (stat(filename, &sb) == -1) {
+        fprintf(stderr, "failed to stat file %s: %s\n", filename, strerror(errno));
+        return -1;
+    }
+    unique_fd package_fd(adb_open(filename, O_RDONLY));
+    if (package_fd == -1) {
+        fprintf(stderr, "failed to open file %s: %s\n", filename, strerror(errno));
         return -1;
     }
 
-    const uint8_t* data = reinterpret_cast<const uint8_t*>(content.data());
-    unsigned sz = content.size();
-
     fprintf(stderr, "connecting...\n");
-    std::string service =
-            android::base::StringPrintf("sideload-host:%d:%d", sz, SIDELOAD_HOST_BLOCK_SIZE);
+    std::string service = android::base::StringPrintf(
+        "sideload-host:%d:%d", static_cast<int>(sb.st_size), SIDELOAD_HOST_BLOCK_SIZE);
     std::string error;
-    unique_fd fd(adb_connect(service, &error));
-    if (fd < 0) {
-        // Try falling back to the older sideload method.  Maybe this
+    unique_fd device_fd(adb_connect(service, &error));
+    if (device_fd < 0) {
+        // Try falling back to the older (<= K) sideload method. Maybe this
         // is an older device that doesn't support sideload-host.
         fprintf(stderr, "falling back to older sideload method...\n");
-        return adb_download_buffer("sideload", fn, data, sz, true);
+        return adb_download_buffer("sideload", filename);
     }
 
     int opt = SIDELOAD_HOST_BLOCK_SIZE;
-    adb_setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &opt, sizeof(opt));
+    adb_setsockopt(device_fd, SOL_SOCKET, SO_SNDBUF, &opt, sizeof(opt));
+
+    char buf[SIDELOAD_HOST_BLOCK_SIZE];
 
     size_t xfer = 0;
     int last_percent = -1;
     while (true) {
-        char buf[9];
-        if (!ReadFdExactly(fd, buf, 8)) {
+        if (!ReadFdExactly(device_fd, buf, 8)) {
             fprintf(stderr, "* failed to read command: %s\n", strerror(errno));
             return -1;
         }
@@ -893,26 +896,35 @@ static int adb_sideload_host(const char* fn) {
 
         if (strcmp("DONEDONE", buf) == 0) {
             printf("\rTotal xfer: %.2fx%*s\n",
-                   (double)xfer / (sz ? sz : 1), (int)strlen(fn)+10, "");
+                   static_cast<double>(xfer) / (sb.st_size ? sb.st_size : 1),
+                   static_cast<int>(strlen(filename) + 10), "");
             return 0;
         }
 
         int block = strtol(buf, NULL, 10);
 
         size_t offset = block * SIDELOAD_HOST_BLOCK_SIZE;
-        if (offset >= sz) {
+        if (offset >= static_cast<size_t>(sb.st_size)) {
             fprintf(stderr, "* attempt to read block %d past end\n", block);
             return -1;
         }
-        const uint8_t* start = data + offset;
-        size_t offset_end = offset + SIDELOAD_HOST_BLOCK_SIZE;
+
         size_t to_write = SIDELOAD_HOST_BLOCK_SIZE;
-        if (offset_end > sz) {
-            to_write = sz - offset;
+        if ((offset + SIDELOAD_HOST_BLOCK_SIZE) > static_cast<size_t>(sb.st_size)) {
+            to_write = sb.st_size - offset;
         }
 
-        if (!WriteFdExactly(fd, start, to_write)) {
-            adb_status(fd, &error);
+        if (adb_lseek(package_fd, offset, SEEK_SET) != static_cast<int>(offset)) {
+            fprintf(stderr, "* failed to seek to package block: %s\n", strerror(errno));
+            return -1;
+        }
+        if (!ReadFdExactly(package_fd, buf, to_write)) {
+            fprintf(stderr, "* failed to read package block: %s\n", strerror(errno));
+            return -1;
+        }
+
+        if (!WriteFdExactly(device_fd, buf, to_write)) {
+            adb_status(device_fd, &error);
             fprintf(stderr,"* failed to write data '%s' *\n", error.c_str());
             return -1;
         }
@@ -924,9 +936,9 @@ static int adb_sideload_host(const char* fn) {
         // extra access to things like the zip central directory).
         // This estimate of the completion becomes 100% when we've
         // transferred ~2.13 (=100/47) times the package size.
-        int percent = (int)(xfer * 47LL / (sz ? sz : 1));
+        int percent = static_cast<int>(xfer * 47LL / (sb.st_size ? sb.st_size : 1));
         if (percent != last_percent) {
-            printf("\rserving: '%s'  (~%d%%)    ", fn, percent);
+            printf("\rserving: '%s'  (~%d%%)    ", filename, percent);
             fflush(stdout);
             last_percent = percent;
         }
