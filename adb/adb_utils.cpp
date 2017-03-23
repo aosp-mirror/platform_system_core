@@ -75,7 +75,7 @@ bool getcwd(std::string* s) {
 
 bool directory_exists(const std::string& path) {
   struct stat sb;
-  return lstat(path.c_str(), &sb) != -1 && S_ISDIR(sb.st_mode);
+  return stat(path.c_str(), &sb) != -1 && S_ISDIR(sb.st_mode);
 }
 
 std::string escape_arg(const std::string& s) {
