@@ -52,7 +52,16 @@ Backtrace::~Backtrace() {
   }
 }
 
-std::string Backtrace::GetFunctionName(uintptr_t pc, uintptr_t* offset) {
+std::string Backtrace::GetFunctionName(uintptr_t pc, uintptr_t* offset, const backtrace_map_t* map) {
+  backtrace_map_t map_value;
+  if (map == nullptr) {
+    FillInMap(pc, &map_value);
+    map = &map_value;
+  }
+  // If no map is found, or this map is backed by a device, then return nothing.
+  if (map->start == 0 || (map->flags & PROT_DEVICE_MAP)) {
+    return "";
+  }
   std::string func_name = GetFunctionNameRaw(pc, offset);
   return func_name;
 }

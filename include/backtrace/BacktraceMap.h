@@ -33,6 +33,10 @@
 #include <string>
 #include <vector>
 
+// Special flag to indicate a map is in /dev/. However, a map in
+// /dev/ashmem/... does not set this flag.
+static constexpr int PROT_DEVICE_MAP = 0x8000;
+
 struct backtrace_map_t {
   uintptr_t start = 0;
   uintptr_t end = 0;
