@@ -104,8 +104,10 @@ public:
   virtual bool Unwind(size_t num_ignore_frames, ucontext_t* context = NULL) = 0;
 
   // Get the function name and offset into the function given the pc.
-  // If the string is empty, then no valid function name was found.
-  virtual std::string GetFunctionName(uintptr_t pc, uintptr_t* offset);
+  // If the string is empty, then no valid function name was found,
+  // or the pc is not in any valid map.
+  virtual std::string GetFunctionName(uintptr_t pc, uintptr_t* offset,
+                                      const backtrace_map_t* map = NULL);
 
   // Fill in the map data associated with the given pc.
   virtual void FillInMap(uintptr_t pc, backtrace_map_t* map);
