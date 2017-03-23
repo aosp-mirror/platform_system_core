@@ -43,11 +43,9 @@ class FuseMessage {
  public:
   bool Read(int fd);
   bool Write(int fd) const;
+  bool WriteWithBody(int fd, size_t max_size, const void* data) const;
   ResultOrAgain ReadOrAgain(int fd);
   ResultOrAgain WriteOrAgain(int fd) const;
-
-private:
-  bool CheckHeaderLength(const char* name) const;
 };
 
 // FuseRequest represents file operation requests from /dev/fuse. It starts
@@ -74,25 +72,29 @@ struct FuseRequest : public FuseMessage<FuseRequest> {
 
 // FuseResponse represents file operation responses to /dev/fuse. It starts
 // from fuse_out_header. The body layout depends on the operation code.
-struct FuseResponse : public FuseMessage<FuseResponse> {
-  fuse_out_header header;
-  union {
-    // for FUSE_INIT
-    fuse_init_out init_out;
-    // for FUSE_LOOKUP
-    fuse_entry_out entry_out;
-    // for FUSE_GETATTR
-    fuse_attr_out attr_out;
-    // for FUSE_OPEN
-    fuse_open_out open_out;
-    // for FUSE_READ
-    char read_data[kFuseMaxRead];
-    // for FUSE_WRITE
-    fuse_write_out write_out;
-  };
-  void Reset(uint32_t data_length, int32_t error, uint64_t unique);
-  void ResetHeader(uint32_t data_length, int32_t error, uint64_t unique);
+template <size_t N>
+struct FuseResponseBase : public FuseMessage<FuseResponseBase<N>> {
+    fuse_out_header header;
+    union {
+        // for FUSE_INIT
+        fuse_init_out init_out;
+        // for FUSE_LOOKUP
+        fuse_entry_out entry_out;
+        // for FUSE_GETATTR
+        fuse_attr_out attr_out;
+        // for FUSE_OPEN
+        fuse_open_out open_out;
+        // for FUSE_READ
+        char read_data[N];
+        // for FUSE_WRITE
+        fuse_write_out write_out;
+    };
+    void Reset(uint32_t data_length, int32_t error, uint64_t unique);
+    void ResetHeader(uint32_t data_length, int32_t error, uint64_t unique);
 };
+
+using FuseResponse = FuseResponseBase<kFuseMaxRead>;
+using FuseSimpleResponse = FuseResponseBase<0u>;
 
 // To reduce memory usage, FuseBuffer shares the memory region for request and
 // response.

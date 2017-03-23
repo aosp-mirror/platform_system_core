@@ -24,6 +24,7 @@
 #include <type_traits>
 
 #include <sys/socket.h>
+#include <sys/uio.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -34,9 +35,9 @@ namespace fuse {
 namespace {
 
 template <typename T>
-bool CheckHeaderLength(const FuseMessage<T>* self, const char* name) {
+bool CheckHeaderLength(const FuseMessage<T>* self, const char* name, size_t max_size) {
     const auto& header = static_cast<const T*>(self)->header;
-    if (header.len >= sizeof(header) && header.len <= sizeof(T)) {
+    if (header.len >= sizeof(header) && header.len <= max_size) {
         return true;
     } else {
         LOG(ERROR) << "Invalid header length is found in " << name << ": " << header.len;
@@ -68,7 +69,7 @@ ResultOrAgain ReadInternal(FuseMessage<T>* self, int fd, int sockflag) {
         return ResultOrAgain::kFailure;
     }
 
-    if (!CheckHeaderLength<T>(self, "Read")) {
+    if (!CheckHeaderLength<T>(self, "Read", sizeof(T))) {
         return ResultOrAgain::kFailure;
     }
 
@@ -81,15 +82,26 @@ ResultOrAgain ReadInternal(FuseMessage<T>* self, int fd, int sockflag) {
 }
 
 template <typename T>
-ResultOrAgain WriteInternal(const FuseMessage<T>* self, int fd, int sockflag) {
-    if (!CheckHeaderLength<T>(self, "Write")) {
+ResultOrAgain WriteInternal(const FuseMessage<T>* self, int fd, int sockflag, const void* data,
+                            size_t max_size) {
+    if (!CheckHeaderLength<T>(self, "Write", max_size)) {
         return ResultOrAgain::kFailure;
     }
 
     const char* const buf = reinterpret_cast<const char*>(self);
     const auto& header = static_cast<const T*>(self)->header;
-    const int result = sockflag ? TEMP_FAILURE_RETRY(send(fd, buf, header.len, sockflag))
-                                : TEMP_FAILURE_RETRY(write(fd, buf, header.len));
+
+    int result;
+    if (sockflag) {
+        CHECK(data == nullptr);
+        result = TEMP_FAILURE_RETRY(send(fd, buf, header.len, sockflag));
+    } else if (data) {
+        const struct iovec vec[] = {{const_cast<char*>(buf), sizeof(header)},
+                                    {const_cast<void*>(data), header.len - sizeof(header)}};
+        result = TEMP_FAILURE_RETRY(writev(fd, vec, arraysize(vec)));
+    } else {
+        result = TEMP_FAILURE_RETRY(write(fd, buf, header.len));
+    }
 
     if (result == -1) {
         if (errno == EAGAIN) {
@@ -143,16 +155,19 @@ ResultOrAgain FuseMessage<T>::ReadOrAgain(int fd) {
 
 template <typename T>
 bool FuseMessage<T>::Write(int fd) const {
-    return WriteInternal(this, fd, 0) == ResultOrAgain::kSuccess;
+    return WriteInternal(this, fd, 0, nullptr, sizeof(T)) == ResultOrAgain::kSuccess;
+}
+
+template <typename T>
+bool FuseMessage<T>::WriteWithBody(int fd, size_t max_size, const void* data) const {
+    CHECK(data != nullptr);
+    return WriteInternal<T>(this, fd, 0, data, max_size) == ResultOrAgain::kSuccess;
 }
 
 template <typename T>
 ResultOrAgain FuseMessage<T>::WriteOrAgain(int fd) const {
-    return WriteInternal(this, fd, MSG_DONTWAIT);
+    return WriteInternal(this, fd, MSG_DONTWAIT, nullptr, sizeof(T));
 }
-
-template class FuseMessage<FuseRequest>;
-template class FuseMessage<FuseResponse>;
 
 void FuseRequest::Reset(
     uint32_t data_length, uint32_t opcode, uint64_t unique) {
@@ -162,17 +177,18 @@ void FuseRequest::Reset(
   header.unique = unique;
 }
 
-void FuseResponse::ResetHeader(
-    uint32_t data_length, int32_t error, uint64_t unique) {
-  CHECK_LE(error, 0) << "error should be zero or negative.";
-  header.len = sizeof(fuse_out_header) + data_length;
-  header.error = error;
-  header.unique = unique;
+template <size_t N>
+void FuseResponseBase<N>::ResetHeader(uint32_t data_length, int32_t error, uint64_t unique) {
+    CHECK_LE(error, 0) << "error should be zero or negative.";
+    header.len = sizeof(fuse_out_header) + data_length;
+    header.error = error;
+    header.unique = unique;
 }
 
-void FuseResponse::Reset(uint32_t data_length, int32_t error, uint64_t unique) {
-  memset(this, 0, sizeof(fuse_out_header) + data_length);
-  ResetHeader(data_length, error, unique);
+template <size_t N>
+void FuseResponseBase<N>::Reset(uint32_t data_length, int32_t error, uint64_t unique) {
+    memset(this, 0, sizeof(fuse_out_header) + data_length);
+    ResetHeader(data_length, error, unique);
 }
 
 void FuseBuffer::HandleInit() {
@@ -221,6 +237,12 @@ void FuseBuffer::HandleNotImpl() {
   const uint64_t unique = request.header.unique;
   response.Reset(0, -ENOSYS, unique);
 }
+
+template class FuseMessage<FuseRequest>;
+template class FuseMessage<FuseResponse>;
+template class FuseMessage<FuseSimpleResponse>;
+template struct FuseResponseBase<0u>;
+template struct FuseResponseBase<kFuseMaxRead>;
 
 }  // namespace fuse
 }  // namespace android
