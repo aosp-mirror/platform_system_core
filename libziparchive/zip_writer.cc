@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "android-base/logging.h"
+#include "utils/Compat.h"
 #include "utils/Log.h"
 
 #include "entry_name_utils-inl.h"
