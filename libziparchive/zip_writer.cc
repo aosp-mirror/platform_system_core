@@ -14,20 +14,21 @@
  * limitations under the License.
  */
 
-#include "entry_name_utils-inl.h"
-#include "zip_archive_common.h"
 #include "ziparchive/zip_writer.h"
 
-#include <utils/Log.h>
-
-#include <sys/param.h>
-
-#include <cassert>
 #include <cstdio>
-#include <memory>
-#include <vector>
+#include <sys/param.h>
 #include <zlib.h>
 #define DEF_MEM_LEVEL 8                // normally in zutil.h?
+
+#include <memory>
+#include <vector>
+
+#include "android-base/logging.h"
+#include "utils/Log.h"
+
+#include "entry_name_utils-inl.h"
+#include "zip_archive_common.h"
 
 #if !defined(powerof2)
 #define powerof2(x) ((((x)-1)&(x))==0)
@@ -171,12 +172,12 @@ int32_t ZipWriter::StartAlignedEntryWithTime(const char* path, size_t flags,
     return kInvalidAlignment;
   }
 
-  FileInfo fileInfo = {};
-  fileInfo.path = std::string(path);
-  fileInfo.local_file_header_offset = current_offset_;
+  current_file_entry_ = {};
+  current_file_entry_.path = path;
+  current_file_entry_.local_file_header_offset = current_offset_;
 
-  if (!IsValidEntryName(reinterpret_cast<const uint8_t*>(fileInfo.path.data()),
-                       fileInfo.path.size())) {
+  if (!IsValidEntryName(reinterpret_cast<const uint8_t*>(current_file_entry_.path.data()),
+                        current_file_entry_.path.size())) {
     return kInvalidEntryName;
   }
 
@@ -188,24 +189,24 @@ int32_t ZipWriter::StartAlignedEntryWithTime(const char* path, size_t flags,
   header.gpb_flags |= kGPBDDFlagMask;
 
   if (flags & ZipWriter::kCompress) {
-    fileInfo.compression_method = kCompressDeflated;
+    current_file_entry_.compression_method = kCompressDeflated;
 
     int32_t result = PrepareDeflate();
     if (result != kNoError) {
       return result;
     }
   } else {
-    fileInfo.compression_method = kCompressStored;
+    current_file_entry_.compression_method = kCompressStored;
   }
-  header.compression_method = fileInfo.compression_method;
+  header.compression_method = current_file_entry_.compression_method;
 
-  ExtractTimeAndDate(time, &fileInfo.last_mod_time, &fileInfo.last_mod_date);
-  header.last_mod_time = fileInfo.last_mod_time;
-  header.last_mod_date = fileInfo.last_mod_date;
+  ExtractTimeAndDate(time, &current_file_entry_.last_mod_time, &current_file_entry_.last_mod_date);
+  header.last_mod_time = current_file_entry_.last_mod_time;
+  header.last_mod_date = current_file_entry_.last_mod_date;
 
-  header.file_name_length = fileInfo.path.size();
+  header.file_name_length = current_file_entry_.path.size();
 
-  off64_t offset = current_offset_ + sizeof(header) + fileInfo.path.size();
+  off64_t offset = current_offset_ + sizeof(header) + current_file_entry_.path.size();
   std::vector<char> zero_padding;
   if (alignment != 0 && (offset & (alignment - 1))) {
     // Pad the extra field so the data will be aligned.
@@ -220,7 +221,8 @@ int32_t ZipWriter::StartAlignedEntryWithTime(const char* path, size_t flags,
     return HandleError(kIoError);
   }
 
-  if (fwrite(path, sizeof(*path), fileInfo.path.size(), file_) != fileInfo.path.size()) {
+  if (fwrite(path, sizeof(*path), current_file_entry_.path.size(), file_)
+      != current_file_entry_.path.size()) {
     return HandleError(kIoError);
   }
 
@@ -230,15 +232,37 @@ int32_t ZipWriter::StartAlignedEntryWithTime(const char* path, size_t flags,
     return HandleError(kIoError);
   }
 
-  files_.emplace_back(std::move(fileInfo));
-
   current_offset_ = offset;
   state_ = State::kWritingEntry;
   return kNoError;
 }
 
+int32_t ZipWriter::DiscardLastEntry() {
+  if (state_ != State::kWritingZip || files_.empty()) {
+    return kInvalidState;
+  }
+
+  FileEntry& last_entry = files_.back();
+  current_offset_ = last_entry.local_file_header_offset;
+  if (fseeko(file_, current_offset_, SEEK_SET) != 0) {
+    return HandleError(kIoError);
+  }
+  files_.pop_back();
+  return kNoError;
+}
+
+int32_t ZipWriter::GetLastEntry(FileEntry* out_entry) {
+  CHECK(out_entry != nullptr);
+
+  if (files_.empty()) {
+    return kInvalidState;
+  }
+  *out_entry = files_.back();
+  return kNoError;
+}
+
 int32_t ZipWriter::PrepareDeflate() {
-  assert(state_ == State::kWritingZip);
+  CHECK(state_ == State::kWritingZip);
 
   // Initialize the z_stream for compression.
   z_stream_ = std::unique_ptr<z_stream, void(*)(z_stream*)>(new z_stream(), DeleteZStream);
@@ -269,25 +293,25 @@ int32_t ZipWriter::WriteBytes(const void* data, size_t len) {
     return HandleError(kInvalidState);
   }
 
-  FileInfo& currentFile = files_.back();
   int32_t result = kNoError;
-  if (currentFile.compression_method & kCompressDeflated) {
-    result = CompressBytes(&currentFile, data, len);
+  if (current_file_entry_.compression_method & kCompressDeflated) {
+    result = CompressBytes(&current_file_entry_, data, len);
   } else {
-    result = StoreBytes(&currentFile, data, len);
+    result = StoreBytes(&current_file_entry_, data, len);
   }
 
   if (result != kNoError) {
     return result;
   }
 
-  currentFile.crc32 = crc32(currentFile.crc32, reinterpret_cast<const Bytef*>(data), len);
-  currentFile.uncompressed_size += len;
+  current_file_entry_.crc32 = crc32(current_file_entry_.crc32,
+                                    reinterpret_cast<const Bytef*>(data), len);
+  current_file_entry_.uncompressed_size += len;
   return kNoError;
 }
 
-int32_t ZipWriter::StoreBytes(FileInfo* file, const void* data, size_t len) {
-  assert(state_ == State::kWritingEntry);
+int32_t ZipWriter::StoreBytes(FileEntry* file, const void* data, size_t len) {
+  CHECK(state_ == State::kWritingEntry);
 
   if (fwrite(data, 1, len, file_) != len) {
     return HandleError(kIoError);
@@ -297,11 +321,11 @@ int32_t ZipWriter::StoreBytes(FileInfo* file, const void* data, size_t len) {
   return kNoError;
 }
 
-int32_t ZipWriter::CompressBytes(FileInfo* file, const void* data, size_t len) {
-  assert(state_ == State::kWritingEntry);
-  assert(z_stream_);
-  assert(z_stream_->next_out != nullptr);
-  assert(z_stream_->avail_out != 0);
+int32_t ZipWriter::CompressBytes(FileEntry* file, const void* data, size_t len) {
+  CHECK(state_ == State::kWritingEntry);
+  CHECK(z_stream_);
+  CHECK(z_stream_->next_out != nullptr);
+  CHECK(z_stream_->avail_out != 0);
 
   // Prepare the input.
   z_stream_->next_in = reinterpret_cast<const uint8_t*>(data);
@@ -331,17 +355,17 @@ int32_t ZipWriter::CompressBytes(FileInfo* file, const void* data, size_t len) {
   return kNoError;
 }
 
-int32_t ZipWriter::FlushCompressedBytes(FileInfo* file) {
-  assert(state_ == State::kWritingEntry);
-  assert(z_stream_);
-  assert(z_stream_->next_out != nullptr);
-  assert(z_stream_->avail_out != 0);
+int32_t ZipWriter::FlushCompressedBytes(FileEntry* file) {
+  CHECK(state_ == State::kWritingEntry);
+  CHECK(z_stream_);
+  CHECK(z_stream_->next_out != nullptr);
+  CHECK(z_stream_->avail_out != 0);
 
   // Keep deflating while there isn't enough space in the buffer to
   // to complete the compress.
   int zerr;
   while ((zerr = deflate(z_stream_.get(), Z_FINISH)) == Z_OK) {
-    assert(z_stream_->avail_out == 0);
+    CHECK(z_stream_->avail_out == 0);
     size_t write_bytes = z_stream_->next_out - buffer_.data();
     if (fwrite(buffer_.data(), 1, write_bytes, file_) != write_bytes) {
       return HandleError(kIoError);
@@ -373,9 +397,8 @@ int32_t ZipWriter::FinishEntry() {
     return kInvalidState;
   }
 
-  FileInfo& currentFile = files_.back();
-  if (currentFile.compression_method & kCompressDeflated) {
-    int32_t result = FlushCompressedBytes(&currentFile);
+  if (current_file_entry_.compression_method & kCompressDeflated) {
+    int32_t result = FlushCompressedBytes(&current_file_entry_);
     if (result != kNoError) {
       return result;
     }
@@ -388,12 +411,14 @@ int32_t ZipWriter::FinishEntry() {
   }
 
   DataDescriptor dd = {};
-  dd.crc32 = currentFile.crc32;
-  dd.compressed_size = currentFile.compressed_size;
-  dd.uncompressed_size = currentFile.uncompressed_size;
+  dd.crc32 = current_file_entry_.crc32;
+  dd.compressed_size = current_file_entry_.compressed_size;
+  dd.uncompressed_size = current_file_entry_.uncompressed_size;
   if (fwrite(&dd, sizeof(dd), 1, file_) != 1) {
     return HandleError(kIoError);
   }
+
+  files_.emplace_back(std::move(current_file_entry_));
 
   current_offset_ += sizeof(DataDescriptor::kOptSignature) + sizeof(dd);
   state_ = State::kWritingZip;
@@ -406,7 +431,7 @@ int32_t ZipWriter::Finish() {
   }
 
   off64_t startOfCdr = current_offset_;
-  for (FileInfo& file : files_) {
+  for (FileEntry& file : files_) {
     CentralDirectoryRecord cdr = {};
     cdr.record_signature = CentralDirectoryRecord::kSignature;
     cdr.gpb_flags |= kGPBDDFlagMask;
@@ -442,11 +467,19 @@ int32_t ZipWriter::Finish() {
     return HandleError(kIoError);
   }
 
+  current_offset_ += sizeof(er);
+
+  // Since we can BackUp() and potentially finish writing at an offset less than one we had
+  // already written at, we must truncate the file.
+
+  if (ftruncate64(fileno(file_), current_offset_) != 0) {
+    return HandleError(kIoError);
+  }
+
   if (fflush(file_) != 0) {
     return HandleError(kIoError);
   }
 
-  current_offset_ += sizeof(er);
   state_ = State::kDone;
   return kNoError;
 }
