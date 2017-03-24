@@ -52,6 +52,8 @@
 #include "reboot.h"
 #include "util.h"
 
+using android::base::boot_clock;
+
 static unsigned int do_decode_uid(const char *s)
 {
     unsigned int v;
@@ -196,13 +198,6 @@ bool write_file(const char* path, const char* content) {
         PLOG(ERROR) << "write_file: Unable to write to '" << path << "'";
     }
     return success;
-}
-
-boot_clock::time_point boot_clock::now() {
-  timespec ts;
-  clock_gettime(CLOCK_BOOTTIME, &ts);
-  return boot_clock::time_point(std::chrono::seconds(ts.tv_sec) +
-                                std::chrono::nanoseconds(ts.tv_nsec));
 }
 
 int mkdir_recursive(const char *pathname, mode_t mode)
