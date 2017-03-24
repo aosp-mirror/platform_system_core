@@ -120,7 +120,7 @@ static void log_signal_summary(int signum, const siginfo_t* info) {
   }
 
   if (signum == DEBUGGER_SIGNAL) {
-    __libc_format_log(ANDROID_LOG_FATAL, "libc", "Requested dump for tid %d (%s)", gettid(),
+    __libc_format_log(ANDROID_LOG_INFO, "libc", "Requested dump for tid %d (%s)", gettid(),
                       thread_name);
     return;
   }
