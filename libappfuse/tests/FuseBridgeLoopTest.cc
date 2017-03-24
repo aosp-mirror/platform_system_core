@@ -32,10 +32,12 @@ namespace {
 class Callback : public FuseBridgeLoopCallback {
  public:
   bool mounted;
-  Callback() : mounted(false) {}
-  void OnMount() override {
-    mounted = true;
-  }
+  bool closed;
+  Callback() : mounted(false), closed(false) {}
+
+  void OnMount(int /*mount_id*/) override { mounted = true; }
+
+  void OnClosed(int /* mount_id */) override { closed = true; }
 };
 
 class FuseBridgeLoopTest : public ::testing::Test {
@@ -53,8 +55,9 @@ class FuseBridgeLoopTest : public ::testing::Test {
     ASSERT_TRUE(SetupMessageSockets(&dev_sockets_));
     ASSERT_TRUE(SetupMessageSockets(&proxy_sockets_));
     thread_ = std::thread([this] {
-      StartFuseBridgeLoop(
-          dev_sockets_[1].release(), proxy_sockets_[0].release(), &callback_);
+        FuseBridgeLoop loop;
+        loop.AddBridge(1, std::move(dev_sockets_[1]), std::move(proxy_sockets_[0]));
+        loop.Start(&callback_);
     });
   }
 
@@ -115,6 +118,7 @@ class FuseBridgeLoopTest : public ::testing::Test {
     if (thread_.joinable()) {
       thread_.join();
     }
+    ASSERT_TRUE(callback_.closed);
   }
 
   void TearDown() override {
