@@ -889,15 +889,10 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
         }
     }
 
-    std::unique_ptr<Service> svc_p(new Service(name, "default", flags, uid, gid, supp_gids,
-                                               no_capabilities, namespace_flags, seclabel,
-                                               str_args));
-    if (!svc_p) {
-        LOG(ERROR) << "Couldn't allocate service for exec of '" << str_args[0] << "'";
-        return nullptr;
-    }
+    auto svc_p = std::make_unique<Service>(name, "default", flags, uid, gid, supp_gids,
+                                           no_capabilities, namespace_flags, seclabel, str_args);
     Service* svc = svc_p.get();
-    services_.push_back(std::move(svc_p));
+    services_.emplace_back(std::move(svc_p));
 
     return svc;
 }
