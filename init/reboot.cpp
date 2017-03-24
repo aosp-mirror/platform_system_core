@@ -202,6 +202,16 @@ RebootSystem(unsigned int cmd, const std::string& rebootTarget) {
     abort();
 }
 
+static void DoSync() {
+    // quota sync is not done by sync call, so should be done separately.
+    // quota sync is in VFS level, so do it before sync, which goes down to fs level.
+    int r = quotactl(QCMD(Q_SYNC, 0), nullptr, 0 /* do not care */, 0 /* do not care */);
+    if (r < 0) {
+        PLOG(ERROR) << "quotactl failed";
+    }
+    sync();
+}
+
 /* Find all read+write block devices and emulated devices in /proc/mounts
  * and add them to correpsponding list.
  */
@@ -280,6 +290,7 @@ static UmountStat TryUmountAndFsck(bool runFsck) {
             UmountPartitions(&emulatedPartitions, 1, MNT_DETACH);
         }
     }
+    DoSync();  // emulated partition change can lead to update
     UmountStat stat = UMOUNT_STAT_SUCCESS;
     /* data partition needs all pending writes to be completed and all emulated partitions
      * umounted. If umount failed in the above step, it DETACH is requested, so umount can
@@ -301,15 +312,7 @@ static UmountStat TryUmountAndFsck(bool runFsck) {
     return stat;
 }
 
-static void DoSync() {
-    // quota sync is not done by sync cal, so should be done separately.
-    // quota sync is in VFS level, so do it before sync, which goes down to fs level.
-    int r = quotactl(QCMD(Q_SYNC, 0), nullptr, 0 /* do not care */, 0 /* do not care */);
-    if (r < 0) {
-        PLOG(ERROR) << "quotactl failed";
-    }
-    sync();
-}
+static void KillAllProcesses() { android::base::WriteStringToFile("i", "/proc/sysrq-trigger"); }
 
 static void __attribute__((noreturn)) DoThermalOff() {
     LOG(WARNING) << "Thermal system shutdown";
@@ -322,12 +325,6 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
               bool runFsck) {
     Timer t;
     LOG(INFO) << "Reboot start, reason: " << reason << ", rebootTarget: " << rebootTarget;
-    std::string timeout = property_get("ro.build.shutdown_timeout");
-    unsigned int delay = 0;
-
-    if (!android::base::ParseUint(timeout, &delay)) {
-        delay = 3;  // force service termination by default
-    }
 
     android::base::WriteStringToFile(StringPrintf("%s\n", reason.c_str()), LAST_REBOOT_REASON_FILE);
 
@@ -335,6 +332,15 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         DoThermalOff();
         abort();
     }
+
+    std::string timeout = property_get("ro.build.shutdown_timeout");
+    unsigned int delay = 0;
+    if (!android::base::ParseUint(timeout, &delay)) {
+        delay = 3;  // force service termination by default
+    } else {
+        LOG(INFO) << "ro.build.shutdown_timeout set:" << delay;
+    }
+
     static const constexpr char* shutdown_critical_services[] = {"vold", "watchdogd"};
     for (const char* name : shutdown_critical_services) {
         Service* s = ServiceManager::GetInstance().FindServiceByName(name);
@@ -400,11 +406,12 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     Service* voldService = ServiceManager::GetInstance().FindServiceByName("vold");
     if (voldService != nullptr && voldService->IsRunning()) {
         ShutdownVold();
-        voldService->Terminate();
     } else {
         LOG(INFO) << "vold not running, skipping vold shutdown";
     }
-
+    if (delay == 0) {  // no processes terminated. kill all instead.
+        KillAllProcesses();
+    }
     // 4. sync, try umount, and optionally run fsck for user shutdown
     DoSync();
     UmountStat stat = TryUmountAndFsck(runFsck);
