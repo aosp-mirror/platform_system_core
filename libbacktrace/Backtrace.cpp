@@ -155,7 +155,7 @@ std::string Backtrace::GetErrorString(BacktraceUnwindError error) {
   case BACKTRACE_UNWIND_ERROR_THREAD_DOESNT_EXIST:
     return "Thread doesn't exist";
   case BACKTRACE_UNWIND_ERROR_THREAD_TIMEOUT:
-    return "Thread has not repsonded to signal in time";
+    return "Thread has not responded to signal in time";
   case BACKTRACE_UNWIND_ERROR_UNSUPPORTED_OPERATION:
     return "Attempt to use an unsupported feature";
   case BACKTRACE_UNWIND_ERROR_NO_CONTEXT:
