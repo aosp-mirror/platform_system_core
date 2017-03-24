@@ -55,7 +55,6 @@ TEST(adb_utils, directory_exists) {
   ASSERT_FALSE(directory_exists(subdir(profiles_dir, "does-not-exist")));
 #else
   ASSERT_TRUE(directory_exists("/proc"));
-  ASSERT_FALSE(directory_exists("/proc/self")); // Symbolic link.
   ASSERT_FALSE(directory_exists("/proc/does-not-exist"));
 #endif
 }
