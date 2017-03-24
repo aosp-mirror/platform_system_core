@@ -36,6 +36,7 @@
 #include <algorithm>
 #include <list>
 #include <memory>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -52,6 +53,7 @@
 
 // For the THREAD_SIGNAL definition.
 #include "BacktraceCurrent.h"
+#include "backtrace_testlib.h"
 #include "thread_utils.h"
 
 // Number of microseconds per milliseconds.
@@ -79,13 +81,6 @@ struct dump_thread_t {
   int32_t* now;
   int32_t done;
 };
-
-extern "C" {
-// Prototypes for functions in the test library.
-int test_level_one(int, int, int, int, void (*)(void*), void*);
-
-int test_recursive_call(int, void (*)(void*), void*);
-}
 
 static uint64_t NanoTime() {
   struct timespec t = { 0, 0 };
@@ -1601,6 +1596,150 @@ TEST(libbacktrace, unwind_disallow_device_map_remote) {
 
   munmap(device_map, DEVICE_MAP_SIZE);
 }
+
+class ScopedSignalHandler {
+ public:
+  ScopedSignalHandler(int signal_number, void (*handler)(int)) : signal_number_(signal_number) {
+    memset(&action_, 0, sizeof(action_));
+    action_.sa_handler = handler;
+    sigaction(signal_number_, &action_, &old_action_);
+  }
+
+  ScopedSignalHandler(int signal_number, void (*action)(int, siginfo_t*, void*))
+      : signal_number_(signal_number) {
+    memset(&action_, 0, sizeof(action_));
+    action_.sa_flags = SA_SIGINFO;
+    action_.sa_sigaction = action;
+    sigaction(signal_number_, &action_, &old_action_);
+  }
+
+  ~ScopedSignalHandler() { sigaction(signal_number_, &old_action_, nullptr); }
+
+ private:
+  struct sigaction action_;
+  struct sigaction old_action_;
+  const int signal_number_;
+};
+
+static void SetValueAndLoop(void* data) {
+  volatile int* value = reinterpret_cast<volatile int*>(data);
+
+  *value = 1;
+  for (volatile int i = 0;; i++)
+    ;
+}
+
+static void UnwindThroughSignal(bool use_action) {
+  volatile int value = 0;
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    if (use_action) {
+      ScopedSignalHandler ssh(SIGUSR1, test_signal_action);
+
+      test_level_one(1, 2, 3, 4, SetValueAndLoop, const_cast<int*>(&value));
+    } else {
+      ScopedSignalHandler ssh(SIGUSR1, test_signal_handler);
+
+      test_level_one(1, 2, 3, 4, SetValueAndLoop, const_cast<int*>(&value));
+    }
+  }
+  ASSERT_NE(-1, pid);
+
+  int read_value = 0;
+  uint64_t start = NanoTime();
+  while (read_value == 0) {
+    usleep(1000);
+
+    // Loop until the remote function gets into the final function.
+    ASSERT_TRUE(ptrace(PTRACE_ATTACH, pid, 0, 0) == 0);
+
+    WaitForStop(pid);
+
+    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, pid));
+
+    size_t bytes_read = backtrace->Read(reinterpret_cast<uintptr_t>(const_cast<int*>(&value)),
+                                        reinterpret_cast<uint8_t*>(&read_value), sizeof(read_value));
+    ASSERT_EQ(sizeof(read_value), bytes_read);
+
+    ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
+
+    ASSERT_TRUE(NanoTime() - start < 5 * NS_PER_SEC)
+        << "Remote process did not execute far enough in 5 seconds.";
+  }
+
+  // Now need to send a signal to the remote process.
+  kill(pid, SIGUSR1);
+
+  // Wait for the process to get to the signal handler loop.
+  Backtrace::const_iterator frame_iter;
+  start = NanoTime();
+  std::unique_ptr<Backtrace> backtrace;
+  while (true) {
+    usleep(1000);
+
+    ASSERT_TRUE(ptrace(PTRACE_ATTACH, pid, 0, 0) == 0);
+
+    WaitForStop(pid);
+
+    backtrace.reset(Backtrace::Create(pid, pid));
+    ASSERT_TRUE(backtrace->Unwind(0));
+    bool found = false;
+    for (frame_iter = backtrace->begin(); frame_iter != backtrace->end(); ++frame_iter) {
+      if (frame_iter->func_name == "test_loop_forever") {
+        ++frame_iter;
+        found = true;
+        break;
+      }
+    }
+    if (found) {
+      break;
+    }
+
+    ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
+
+    ASSERT_TRUE(NanoTime() - start < 5 * NS_PER_SEC)
+        << "Remote process did not get in signal handler in 5 seconds." << std::endl
+        << DumpFrames(backtrace.get());
+  }
+
+  std::vector<std::string> names;
+  // Loop through the frames, and save the function names.
+  size_t frame = 0;
+  for (; frame_iter != backtrace->end(); ++frame_iter) {
+    if (frame_iter->func_name == "test_level_four") {
+      frame = names.size() + 1;
+    }
+    names.push_back(frame_iter->func_name);
+  }
+  ASSERT_NE(0U, frame) << "Unable to find test_level_four in backtrace" << std::endl
+                       << DumpFrames(backtrace.get());
+
+  // The expected order of the frames:
+  //   test_loop_forever
+  //   test_signal_handler|test_signal_action
+  //   <OPTIONAL_FRAME> May or may not exist.
+  //   SetValueAndLoop (but the function name might be empty)
+  //   test_level_four
+  //   test_level_three
+  //   test_level_two
+  //   test_level_one
+  ASSERT_LE(frame + 2, names.size()) << DumpFrames(backtrace.get());
+  ASSERT_LE(2U, frame) << DumpFrames(backtrace.get());
+  if (use_action) {
+    ASSERT_EQ("test_signal_action", names[0]) << DumpFrames(backtrace.get());
+  } else {
+    ASSERT_EQ("test_signal_handler", names[0]) << DumpFrames(backtrace.get());
+  }
+  ASSERT_EQ("test_level_three", names[frame]) << DumpFrames(backtrace.get());
+  ASSERT_EQ("test_level_two", names[frame + 1]) << DumpFrames(backtrace.get());
+  ASSERT_EQ("test_level_one", names[frame + 2]) << DumpFrames(backtrace.get());
+
+  FinishRemoteProcess(pid);
+}
+
+TEST(libbacktrace, unwind_remote_through_signal_using_handler) { UnwindThroughSignal(false); }
+
+TEST(libbacktrace, unwind_remote_through_signal_using_action) { UnwindThroughSignal(true); }
 
 #if defined(ENABLE_PSS_TESTS)
 #include "GetPss.h"
