@@ -1322,22 +1322,24 @@ int main(int argc, char** argv) {
     am.QueueBuiltinAction(queue_property_triggers_action, "queue_property_triggers");
 
     while (true) {
-        if (!(waiting_for_exec || waiting_for_prop)) {
-            am.ExecuteOneCommand();
-            restart_processes();
-        }
-
         // By default, sleep until something happens.
         int epoll_timeout_ms = -1;
 
-        // If there's a process that needs restarting, wake up in time for that.
-        if (process_needs_restart_at != 0) {
-            epoll_timeout_ms = (process_needs_restart_at - time(nullptr)) * 1000;
-            if (epoll_timeout_ms < 0) epoll_timeout_ms = 0;
+        if (!(waiting_for_exec || waiting_for_prop)) {
+            am.ExecuteOneCommand();
         }
+        if (!(waiting_for_exec || waiting_for_prop)) {
+            restart_processes();
 
-        // If there's more work to do, wake up again immediately.
-        if (am.HasMoreCommands()) epoll_timeout_ms = 0;
+            // If there's a process that needs restarting, wake up in time for that.
+            if (process_needs_restart_at != 0) {
+                epoll_timeout_ms = (process_needs_restart_at - time(nullptr)) * 1000;
+                if (epoll_timeout_ms < 0) epoll_timeout_ms = 0;
+            }
+
+            // If there's more work to do, wake up again immediately.
+            if (am.HasMoreCommands()) epoll_timeout_ms = 0;
+        }
 
         epoll_event ev;
         int nr = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd, &ev, 1, epoll_timeout_ms));
