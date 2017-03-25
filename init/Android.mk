@@ -129,6 +129,7 @@ include $(BUILD_EXECUTABLE)
 # =========================================================
 include $(CLEAR_VARS)
 LOCAL_MODULE := init_tests
+LOCAL_COMPATIBILITY_SUITE := device-tests
 LOCAL_SRC_FILES := \
     init_parser_test.cpp \
     property_service_test.cpp \
