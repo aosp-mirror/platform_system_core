@@ -1,0 +1,47 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Bionic loader config file.
+#
+
+#dir.vendor=/vendor/bin/
+#dir.system=/system/bin/
+
+[vendor]
+
+# When this flag is set to true linker will
+# set target_sdk_version for this binary to
+# the version specified in <dirname>/.version
+# file, where <dirname> = dirname(executable_path)
+#
+# default value is false
+enable.target.sdk.version = true
+
+# There is always the default namespace no
+# need to mention it in this list
+additional.namespaces=system
+
+# Is the namespace isolated
+namespace.default.isolated = true
+namespace.default.search.paths = /vendor/${LIB}
+
+# TODO: property for asan search path?
+namespace.default.permitted.paths = /vendor/${LIB}
+namespace.default.asan.permitted.paths = /data/vendor/${LIB}
+namespace.default.links = system
+
+# Todo complete this list
+namespace.default.link.system.shared_libs = libc.so:libm.so:libdl.so:libstdc++.so
+
+namespace.system.isolated = true
+namespace.system.search.paths = /system/${LIB}:/system/${LIB}/framework
+namespace.system.permitted.paths = /system/${LIB}
+
+[system]
+namespace.default.isolated = true
+namespace.default.search.paths = /system/${LIB}
+namespace.default.permitted.paths = /system/${LIB}
+
+# app_process will setup additional vendor namespace manually.
+# Note that zygote will need vendor namespace to setup list of public
+# libraries provided by vendors to apps.
+
