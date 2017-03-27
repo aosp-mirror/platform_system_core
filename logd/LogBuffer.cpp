@@ -132,11 +132,11 @@ static enum match_type identical(LogBufferElement* elem,
                                  LogBufferElement* last) {
     // is it mostly identical?
     //  if (!elem) return DIFFERENT;
-    unsigned short lenl = elem->getMsgLen();
-    if (!lenl) return DIFFERENT;
+    ssize_t lenl = elem->getMsgLen();
+    if (lenl <= 0) return DIFFERENT;  // value if this represents a chatty elem
     //  if (!last) return DIFFERENT;
-    unsigned short lenr = last->getMsgLen();
-    if (!lenr) return DIFFERENT;
+    ssize_t lenr = last->getMsgLen();
+    if (lenr <= 0) return DIFFERENT;  // value if this represents a chatty elem
     //  if (elem->getLogId() != last->getLogId()) return DIFFERENT;
     if (elem->getUid() != last->getUid()) return DIFFERENT;
     if (elem->getPid() != last->getPid()) return DIFFERENT;
@@ -163,8 +163,6 @@ static enum match_type identical(LogBufferElement* elem,
     }
 
     // audit message (except sequence number) identical?
-    static const char avc[] = "): avc: ";
-
     if (last->isBinary()) {
         if (fastcmp<memcmp>(msgl, msgr, sizeof(android_log_event_string_t) -
                                             sizeof(int32_t))) {
@@ -175,6 +173,7 @@ static enum match_type identical(LogBufferElement* elem,
         msgr += sizeof(android_log_event_string_t);
         lenr -= sizeof(android_log_event_string_t);
     }
+    static const char avc[] = "): avc: ";
     const char* avcl = android::strnstr(msgl, lenl, avc);
     if (!avcl) return DIFFERENT;
     lenl -= avcl - msgl;
@@ -182,10 +181,7 @@ static enum match_type identical(LogBufferElement* elem,
     if (!avcr) return DIFFERENT;
     lenr -= avcr - msgr;
     if (lenl != lenr) return DIFFERENT;
-    // TODO: After b/35468874 is addressed, revisit "lenl > strlen(avc)"
-    // condition, it might become superfluous.
-    if (lenl > strlen(avc) &&
-        fastcmp<memcmp>(avcl + strlen(avc), avcr + strlen(avc),
+    if (fastcmp<memcmp>(avcl + strlen(avc), avcr + strlen(avc),
                         lenl - strlen(avc))) {
         return DIFFERENT;
     }
@@ -1094,12 +1090,12 @@ log_time LogBuffer::flushTo(
         // client wants to start from the beginning
         it = mLogElements.begin();
     } else {
-        LogBufferElementCollection::iterator last = mLogElements.begin();
+        LogBufferElementCollection::iterator last;
         // 30 second limit to continue search for out-of-order entries.
         log_time min = start - log_time(30, 0);
         // Client wants to start from some specified time. Chances are
         // we are better off starting from the end of the time sorted list.
-        for (it = mLogElements.end(); it != mLogElements.begin();
+        for (last = it = mLogElements.end(); it != mLogElements.begin();
              /* do nothing */) {
             --it;
             LogBufferElement* element = *it;
