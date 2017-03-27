@@ -201,7 +201,7 @@ runs the service.
 `onrestart`
 > Execute a Command (see below) when service restarts.
 
-`writepid <file...>`
+`writepid <file> [ <file>\* ]`
 > Write the child's pid to the given files when it forks. Meant for
   cgroup/cpuset usage. If no files under /dev/cpuset/ are specified, but the
   system property 'ro.cpuset.default' is set to a non-empty cpuset name (e.g.
