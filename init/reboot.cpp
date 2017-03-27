@@ -263,6 +263,8 @@ static bool UmountPartitions(std::vector<MountEntry>* partitions, int maxRetry, 
     return umountDone;
 }
 
+static void KillAllProcesses() { android::base::WriteStringToFile("i", "/proc/sysrq-trigger"); }
+
 /* Try umounting all emulated file systems R/W block device cfile systems.
  * This will just try umount and give it up if it fails.
  * For fs like ext4, this is ok as file system will be marked as unclean shutdown
@@ -272,7 +274,8 @@ static bool UmountPartitions(std::vector<MountEntry>* partitions, int maxRetry, 
  *
  * return true when umount was successful. false when timed out.
  */
-static UmountStat TryUmountAndFsck(bool runFsck) {
+static UmountStat TryUmountAndFsck(bool runFsck, int timeoutMs) {
+    Timer t;
     std::vector<MountEntry> emulatedPartitions;
     std::vector<MountEntry> blockDevRwPartitions;
 
@@ -297,12 +300,20 @@ static UmountStat TryUmountAndFsck(bool runFsck) {
      * still happen while waiting for /data. If the current waiting is not good enough, give
      * up and leave it to e2fsck after reboot to fix it.
      */
-    /* TODO update max waiting time based on usage data */
-    if (!UmountPartitions(&blockDevRwPartitions, 100, 0)) {
-        /* Last resort, detach and hope it finish before shutdown. */
-        UmountPartitions(&blockDevRwPartitions, 1, MNT_DETACH);
-        stat = UMOUNT_STAT_TIMEOUT;
+    int remainingTimeMs = timeoutMs - t.duration_ms();
+    // each retry takes 100ms, and run at least once.
+    int retry = std::max(remainingTimeMs / 100, 1);
+    if (!UmountPartitions(&blockDevRwPartitions, retry, 0)) {
+        /* Last resort, kill all and try again */
+        LOG(WARNING) << "umount still failing, trying kill all";
+        KillAllProcesses();
+        DoSync();
+        if (!UmountPartitions(&blockDevRwPartitions, 1, 0)) {
+            stat = UMOUNT_STAT_TIMEOUT;
+        }
     }
+    // fsck part is excluded from timeout check. It only runs for user initiated shutdown
+    // and should not affect reboot time.
     if (stat == UMOUNT_STAT_SUCCESS && runFsck) {
         for (auto& entry : blockDevRwPartitions) {
             DoFsck(entry);
@@ -311,8 +322,6 @@ static UmountStat TryUmountAndFsck(bool runFsck) {
 
     return stat;
 }
-
-static void KillAllProcesses() { android::base::WriteStringToFile("i", "/proc/sysrq-trigger"); }
 
 static void __attribute__((noreturn)) DoThermalOff() {
     LOG(WARNING) << "Thermal system shutdown";
@@ -334,11 +343,10 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     }
 
     std::string timeout = property_get("ro.build.shutdown_timeout");
-    unsigned int delay = 0;
-    if (!android::base::ParseUint(timeout, &delay)) {
-        delay = 3;  // force service termination by default
-    } else {
-        LOG(INFO) << "ro.build.shutdown_timeout set:" << delay;
+    /* TODO update default waiting time based on usage data */
+    unsigned int shutdownTimeout = 10;  // default value
+    if (android::base::ParseUint(timeout, &shutdownTimeout)) {
+        LOG(INFO) << "ro.build.shutdown_timeout set:" << shutdownTimeout;
     }
 
     static const constexpr char* shutdown_critical_services[] = {"vold", "watchdogd"};
@@ -353,7 +361,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     }
     // optional shutdown step
     // 1. terminate all services except shutdown critical ones. wait for delay to finish
-    if (delay > 0) {
+    if (shutdownTimeout > 0) {
         LOG(INFO) << "terminating init services";
         // tombstoned can write to data when other services are killed. so finish it first.
         static const constexpr char* first_to_kill[] = {"tombstoned"};
@@ -368,7 +376,9 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         });
 
         int service_count = 0;
-        while (t.duration_s() < delay) {
+        // Up to half as long as shutdownTimeout or 3 seconds, whichever is lower.
+        unsigned int terminationWaitTimeout = std::min<unsigned int>((shutdownTimeout + 1) / 2, 3);
+        while (t.duration_s() < terminationWaitTimeout) {
             ServiceManager::GetInstance().ReapAnyOutstandingChildren();
 
             service_count = 0;
@@ -409,12 +419,9 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     } else {
         LOG(INFO) << "vold not running, skipping vold shutdown";
     }
-    if (delay == 0) {  // no processes terminated. kill all instead.
-        KillAllProcesses();
-    }
     // 4. sync, try umount, and optionally run fsck for user shutdown
     DoSync();
-    UmountStat stat = TryUmountAndFsck(runFsck);
+    UmountStat stat = TryUmountAndFsck(runFsck, shutdownTimeout * 1000 - t.duration_ms());
     LogShutdownTime(stat, &t);
     // Reboot regardless of umount status. If umount fails, fsck after reboot will fix it.
     RebootSystem(cmd, rebootTarget);
