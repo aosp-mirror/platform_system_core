@@ -479,6 +479,56 @@ TEST(logcat, End_to_End) {
     ASSERT_EQ(1, count);
 }
 
+TEST(logcat, End_to_End_multitude) {
+    pid_t pid = getpid();
+
+    log_time ts(CLOCK_MONOTONIC);
+
+    ASSERT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
+
+    FILE* fp[256];  // does this count as a multitude!
+    memset(fp, 0, sizeof(fp));
+    logcat_define(ctx[sizeof(fp) / sizeof(fp[0])]);
+    size_t num = 0;
+    do {
+        EXPECT_TRUE(NULL !=
+                    (fp[num] = logcat_popen(
+                         ctx[num], "logcat -v brief -b events -t 100")));
+        if (!fp[num]) {
+            fprintf(stderr,
+                    "WARNING: limiting to %zu simultaneous logcat operations\n",
+                    num);
+            break;
+        }
+    } while (++num < sizeof(fp) / sizeof(fp[0]));
+
+    char buffer[BIG_BUFFER];
+
+    size_t count = 0;
+
+    for (size_t idx = 0; idx < sizeof(fp) / sizeof(fp[0]); ++idx) {
+        if (!fp[idx]) break;
+        while (fgets(buffer, sizeof(buffer), fp[idx])) {
+            int p;
+            unsigned long long t;
+
+            if ((2 != sscanf(buffer, "I/[0]     ( %d): %llu", &p, &t)) ||
+                (p != pid)) {
+                continue;
+            }
+
+            log_time tx((const char*)&t);
+            if (ts == tx) {
+                ++count;
+            }
+        }
+
+        logcat_pclose(ctx[idx], fp[idx]);
+    }
+
+    ASSERT_EQ(num, count);
+}
+
 static int get_groups(const char* cmd) {
     FILE* fp;
     logcat_define(ctx);
