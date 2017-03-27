@@ -299,6 +299,8 @@ on late-init
 
 on post-fs
     start logd
+    start hwservicemanager
+
     # once everything is setup, no need to modify /
     mount rootfs rootfs / ro remount
     # Mount shared so changes propagate into child namespaces
@@ -590,8 +592,9 @@ on boot
     # Define default initial receive window size in segments.
     setprop net.tcp.default_init_rwnd 60
 
-    # Start all binderized HAL daemons
-    start hwservicemanager
+    # Start standard binderized HAL daemons
+    class_start hal
+
     class_start core
 
 on nonencrypted
