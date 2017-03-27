@@ -43,8 +43,25 @@ char* tidToName(pid_t tid);
 const char* tagToName(uint32_t tag);
 void ReReadEventLogTags();
 
-// Furnished by LogKlog.cpp.
-const char* strnstr(const char* s, size_t len, const char* needle);
+// Furnished by LogKlog.cpp
+char* log_strntok_r(char* s, ssize_t& len, char*& saveptr, ssize_t& sublen);
+
+// needle should reference a string longer than 1 character
+static inline const char* strnstr(const char* s, ssize_t len,
+                                  const char* needle) {
+    if (len <= 0) return nullptr;
+
+    const char c = *needle++;
+    const size_t needleLen = strlen(needle);
+    do {
+        do {
+            if (len <= (ssize_t)needleLen) return nullptr;
+            --len;
+        } while (*s++ != c);
+    } while (fastcmp<memcmp>(s, needle, needleLen));
+    s--;
+    return s;
+}
 }
 
 // Furnished in LogCommand.cpp
