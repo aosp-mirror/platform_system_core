@@ -1088,12 +1088,12 @@ log_time LogBuffer::flushTo(
         // client wants to start from the beginning
         it = mLogElements.begin();
     } else {
-        LogBufferElementCollection::iterator last = mLogElements.begin();
+        LogBufferElementCollection::iterator last;
         // 30 second limit to continue search for out-of-order entries.
         log_time min = start - log_time(30, 0);
         // Client wants to start from some specified time. Chances are
         // we are better off starting from the end of the time sorted list.
-        for (it = mLogElements.end(); it != mLogElements.begin();
+        for (last = it = mLogElements.end(); it != mLogElements.begin();
              /* do nothing */) {
             --it;
             LogBufferElement* element = *it;
