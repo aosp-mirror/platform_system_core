@@ -174,8 +174,8 @@ Service::Service(const std::string& name, const std::string& classname,
 }
 
 void Service::NotifyStateChange(const std::string& new_state) const {
-    if ((flags_ & SVC_EXEC) != 0) {
-        // 'exec' commands don't have properties tracking their state.
+    if ((flags_ & SVC_TEMPORARY) != 0) {
+        // Services created by 'exec' are temporary and don't have properties tracking their state.
         return;
     }
 
@@ -242,7 +242,7 @@ void Service::SetProcessAttributes() {
     }
 }
 
-bool Service::Reap() {
+void Service::Reap() {
     if (!(flags_ & SVC_ONESHOT) || (flags_ & SVC_RESTART)) {
         KillProcessGroup(SIGKILL);
     }
@@ -253,7 +253,10 @@ bool Service::Reap() {
 
     if (flags_ & SVC_EXEC) {
         LOG(INFO) << "SVC_EXEC pid " << pid_ << " finished...";
-        return true;
+    }
+
+    if (flags_ & SVC_TEMPORARY) {
+        return;
     }
 
     pid_ = 0;
@@ -268,7 +271,7 @@ bool Service::Reap() {
     // Disabled and reset processes do not get restarted automatically.
     if (flags_ & (SVC_DISABLED | SVC_RESET))  {
         NotifyStateChange("stopped");
-        return false;
+        return;
     }
 
     // If we crash > 4 times in 4 minutes, reboot into recovery.
@@ -292,7 +295,7 @@ bool Service::Reap() {
     onrestart_.ExecuteAllCommands();
 
     NotifyStateChange("restarting");
-    return false;
+    return;
 }
 
 void Service::DumpState() const {
@@ -556,6 +559,18 @@ bool Service::ParseLine(const std::vector<std::string>& args, std::string* err) 
     }
 
     return (this->*parser)(args, err);
+}
+
+bool Service::ExecStart(std::unique_ptr<Timer>* exec_waiter) {
+    flags_ |= SVC_EXEC | SVC_ONESHOT;
+
+    exec_waiter->reset(new Timer);
+
+    if (!Start()) {
+        exec_waiter->reset();
+        return false;
+    }
+    return true;
 }
 
 bool Service::Start() {
@@ -844,6 +859,35 @@ void ServiceManager::AddService(std::unique_ptr<Service> service) {
     services_.emplace_back(std::move(service));
 }
 
+bool ServiceManager::Exec(const std::vector<std::string>& args) {
+    Service* svc = MakeExecOneshotService(args);
+    if (!svc) {
+        LOG(ERROR) << "Could not create exec service";
+        return false;
+    }
+    if (!svc->ExecStart(&exec_waiter_)) {
+        LOG(ERROR) << "Could not start exec service";
+        ServiceManager::GetInstance().RemoveService(*svc);
+        return false;
+    }
+    return true;
+}
+
+bool ServiceManager::ExecStart(const std::string& name) {
+    Service* svc = FindServiceByName(name);
+    if (!svc) {
+        LOG(ERROR) << "ExecStart(" << name << "): Service not found";
+        return false;
+    }
+    if (!svc->ExecStart(&exec_waiter_)) {
+        LOG(ERROR) << "ExecStart(" << name << "): Could not start Service";
+        return false;
+    }
+    return true;
+}
+
+bool ServiceManager::IsWaitingForExec() const { return exec_waiter_ != nullptr; }
+
 Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& args) {
     // Parse the arguments: exec [SECLABEL [UID [GID]*] --] COMMAND ARGS...
     // SECLABEL can be a - to denote default
@@ -867,7 +911,7 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
 
     exec_count_++;
     std::string name = StringPrintf("exec %d (%s)", exec_count_, str_args[0].c_str());
-    unsigned flags = SVC_EXEC | SVC_ONESHOT;
+    unsigned flags = SVC_EXEC | SVC_ONESHOT | SVC_TEMPORARY;
     CapSet no_capabilities;
     unsigned namespace_flags = 0;
 
@@ -1007,8 +1051,13 @@ bool ServiceManager::ReapOneProcess() {
         return true;
     }
 
-    if (svc->Reap()) {
-        stop_waiting_for_exec();
+    svc->Reap();
+
+    if (svc->flags() & SVC_EXEC) {
+        LOG(INFO) << "Wait for exec took " << *exec_waiter_;
+        exec_waiter_.reset();
+    }
+    if (svc->flags() & SVC_TEMPORARY) {
         RemoveService(*svc);
     }
 

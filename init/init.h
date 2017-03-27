@@ -35,10 +35,6 @@ void register_epoll_handler(int fd, void (*fn)());
 
 int add_environment(const char* key, const char* val);
 
-bool start_waiting_for_exec();
-
-void stop_waiting_for_exec();
-
 bool start_waiting_for_property(const char *name, const char *value);
 
 #endif  /* _INIT_INIT_H */

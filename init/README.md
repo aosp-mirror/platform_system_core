@@ -307,6 +307,12 @@ Commands
   groups can be provided. No other commands will be run until this one
   finishes. _seclabel_ can be a - to denote default. Properties are expanded
   within _argument_.
+  Init halts executing commands until the forked process exits.
+
+`exec_start <service>`
+> Start service a given service and halt processing of additional init commands
+  until it returns.  It functions similarly to the `exec` command, but uses an
+  existing service definition instead of providing them as arguments.
 
 `export <name> <value>`
 > Set the environment variable _name_ equal to _value_ in the

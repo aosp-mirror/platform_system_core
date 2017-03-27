@@ -86,8 +86,6 @@ static time_t process_needs_restart_at;
 
 const char *ENV[32];
 
-static std::unique_ptr<Timer> waiting_for_exec(nullptr);
-
 static int epoll_fd = -1;
 
 static std::unique_ptr<Timer> waiting_for_prop(nullptr);
@@ -133,23 +131,6 @@ int add_environment(const char *key, const char *val)
     LOG(ERROR) << "No env. room to store: '" << key << "':'" << val << "'";
 
     return -1;
-}
-
-bool start_waiting_for_exec()
-{
-    if (waiting_for_exec) {
-        return false;
-    }
-    waiting_for_exec.reset(new Timer());
-    return true;
-}
-
-void stop_waiting_for_exec()
-{
-    if (waiting_for_exec) {
-        LOG(INFO) << "Wait for exec took " << *waiting_for_exec;
-        waiting_for_exec.reset();
-    }
 }
 
 bool start_waiting_for_property(const char *name, const char *value)
@@ -1325,10 +1306,10 @@ int main(int argc, char** argv) {
         // By default, sleep until something happens.
         int epoll_timeout_ms = -1;
 
-        if (!(waiting_for_exec || waiting_for_prop)) {
+        if (!(waiting_for_prop || ServiceManager::GetInstance().IsWaitingForExec())) {
             am.ExecuteOneCommand();
         }
-        if (!(waiting_for_exec || waiting_for_prop)) {
+        if (!(waiting_for_prop || ServiceManager::GetInstance().IsWaitingForExec())) {
             restart_processes();
 
             // If there's a process that needs restarting, wake up in time for that.
