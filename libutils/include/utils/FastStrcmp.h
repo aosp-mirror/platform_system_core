@@ -17,6 +17,13 @@
 #ifndef _ANDROID_UTILS_FASTSTRCMP_H__
 #define _ANDROID_UTILS_FASTSTRCMP_H__
 
+#include <ctype.h>
+#include <string.h>
+
+#ifndef __predict_true
+#define __predict_true(exp) __builtin_expect((exp) != 0, 1)
+#endif
+
 #ifdef __cplusplus
 
 // Optimized for instruction cache locality
@@ -28,25 +35,41 @@
 //
 //  fastcmp<strncmp>(str1, str2, len)
 //
-// NB: Does not work for the case insensitive str*cmp functions.
+// NB: use fasticmp for the case insensitive str*cmp functions.
 // NB: Returns boolean, do not use if expecting to check negative value.
 //     Thus not semantically identical to the expected function behavior.
 
-template <int (*cmp)(const char *l, const char *r, const size_t s)>
-static inline int fastcmp(const char *l, const char *r, const size_t s) {
-    return (*l != *r) || cmp(l + 1, r + 1, s - 1);
+template <int (*cmp)(const char* l, const char* r, const size_t s)>
+static inline int fastcmp(const char* l, const char* r, const size_t s) {
+    const ssize_t n = s;  // To help reject negative sizes, treat like zero
+    return __predict_true(n > 0) &&
+           ((*l != *r) || (__predict_true(n > 1) && cmp(l + 1, r + 1, n - 1)));
 }
 
-template <int (*cmp)(const void *l, const void *r, const size_t s)>
-static inline int fastcmp(const void *lv, const void *rv, const size_t s) {
-    const char *l = static_cast<const char *>(lv);
-    const char *r = static_cast<const char *>(rv);
-    return (*l != *r) || cmp(l + 1, r + 1, s - 1);
+template <int (*cmp)(const char* l, const char* r, const size_t s)>
+static inline int fasticmp(const char* l, const char* r, const size_t s) {
+    const ssize_t n = s;  // To help reject negative sizes, treat like zero
+    return __predict_true(n > 0) &&
+           ((tolower(*l) != tolower(*r)) || (__predict_true(n > 1) && cmp(l + 1, r + 1, n - 1)));
 }
 
-template <int (*cmp)(const char *l, const char *r)>
-static inline int fastcmp(const char *l, const char *r) {
-    return (*l != *r) || cmp(l + 1, r + 1);
+template <int (*cmp)(const void* l, const void* r, const size_t s)>
+static inline int fastcmp(const void* lv, const void* rv, const size_t s) {
+    const char* l = static_cast<const char*>(lv);
+    const char* r = static_cast<const char*>(rv);
+    const ssize_t n = s;  // To help reject negative sizes, treat like zero
+    return __predict_true(n > 0) &&
+           ((*l != *r) || (__predict_true(n > 1) && cmp(l + 1, r + 1, n - 1)));
+}
+
+template <int (*cmp)(const char* l, const char* r)>
+static inline int fastcmp(const char* l, const char* r) {
+    return (*l != *r) || (__predict_true(*l) && cmp(l + 1, r + 1));
+}
+
+template <int (*cmp)(const char* l, const char* r)>
+static inline int fasticmp(const char* l, const char* r) {
+    return (tolower(*l) != tolower(*r)) || (__predict_true(*l) && cmp(l + 1, r + 1));
 }
 
 #endif
