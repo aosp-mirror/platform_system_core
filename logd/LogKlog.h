@@ -20,8 +20,6 @@
 #include <private/android_logger.h>
 #include <sysutils/SocketListener.h>
 
-char* log_strntok_r(char* s, size_t* len, char** saveptr, size_t* sublen);
-
 class LogBuffer;
 class LogReader;
 
@@ -43,8 +41,8 @@ class LogKlog : public SocketListener {
    public:
     LogKlog(LogBuffer* buf, LogReader* reader, int fdWrite, int fdRead,
             bool auditd);
-    int log(const char* buf, size_t len);
-    void synchronize(const char* buf, size_t len);
+    int log(const char* buf, ssize_t len);
+    void synchronize(const char* buf, ssize_t len);
 
     bool isMonotonic() {
         return logbuf->isMonotonic();
@@ -57,10 +55,10 @@ class LogKlog : public SocketListener {
     }
 
    protected:
-    void sniffTime(log_time& now, const char** buf, size_t len, bool reverse);
-    pid_t sniffPid(const char** buf, size_t len);
+    void sniffTime(log_time& now, const char*& buf, ssize_t len, bool reverse);
+    pid_t sniffPid(const char*& buf, ssize_t len);
     void calculateCorrection(const log_time& monotonic, const char* real_string,
-                             size_t len);
+                             ssize_t len);
     virtual bool onDataAvailable(SocketClient* cli);
 };
 
