@@ -192,11 +192,12 @@ runs the service.
 `oneshot`
 > Do not restart the service when it exits.
 
-`class <name>`
-> Specify a class name for the service.  All services in a
+`class <name> [ <name>\* ]`
+> Specify class names for the service.  All services in a
   named class may be started or stopped together.  A service
   is in the class "default" if one is not specified via the
-  class option.
+  class option. Additional classnames beyond the (required) first
+  one are used to group services.
 
 `onrestart`
 > Execute a Command (see below) when service restarts.
