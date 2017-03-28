@@ -51,7 +51,6 @@
 #include <android-base/strings.h>
 #include <android-base/stringprintf.h>
 #include <bootloader_message/bootloader_message.h>
-#include <cutils/partition_utils.h>
 #include <cutils/android_reboot.h>
 #include <ext4_utils/ext4_crypt.h>
 #include <ext4_utils/ext4_crypt_init_extensions.h>
