@@ -161,6 +161,7 @@ cc_test {
     target: {
         android: {
             srcs: [
+                "client/debuggerd_client_test.cpp",
                 "debuggerd_test.cpp",
                 "util.cpp"
             ],
@@ -171,6 +172,7 @@ cc_test {
         "libbacktrace",
         "libbase",
         "libcutils",
+        "libdebuggerd_client",
     ],
 
     static_libs: [
