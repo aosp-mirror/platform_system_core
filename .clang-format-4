@@ -1,5 +1,6 @@
 BasedOnStyle: Google
 AccessModifierOffset: -2
+AllowShortFunctionsOnASingleLine: Inline
 ColumnLimit: 100
 CommentPragmas: NOLINT:.*
 DerivePointerAlignment: false
