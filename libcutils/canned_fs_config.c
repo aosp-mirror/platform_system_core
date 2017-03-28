@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,7 +42,7 @@ static int path_compare(const void* a, const void* b) {
 }
 
 int load_canned_fs_config(const char* fn) {
-    char line[PATH_MAX + 200];
+    char buf[PATH_MAX + 200];
     FILE* f;
 
     f = fopen(fn, "r");
@@ -50,17 +51,21 @@ int load_canned_fs_config(const char* fn) {
         return -1;
     }
 
-    while (fgets(line, sizeof(line), f)) {
+    while (fgets(buf, sizeof(buf), f)) {
         Path* p;
         char* token;
+        char* line = buf;
+        bool rootdir;
 
         while (canned_used >= canned_alloc) {
             canned_alloc = (canned_alloc+1) * 2;
             canned_data = (Path*) realloc(canned_data, canned_alloc * sizeof(Path));
         }
         p = canned_data + canned_used;
-        p->path = strdup(strtok(line, " "));
-        p->uid = atoi(strtok(NULL, " "));
+        if (line[0] == '/') line++;
+        rootdir = line[0] == ' ';
+        p->path = strdup(rootdir ? "" : strtok(line, " "));
+        p->uid = atoi(strtok(rootdir ? line : NULL, " "));
         p->gid = atoi(strtok(NULL, " "));
         p->mode = strtol(strtok(NULL, " "), NULL, 8);   // mode is in octal
         p->capabilities = 0;
