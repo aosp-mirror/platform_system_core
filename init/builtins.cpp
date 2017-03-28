@@ -45,15 +45,16 @@
 #include <selinux/selinux.h>
 #include <selinux/label.h>
 
-#include <fs_mgr.h>
 #include <android-base/file.h>
 #include <android-base/parseint.h>
-#include <android-base/strings.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
 #include <ext4_utils/ext4_crypt.h>
 #include <ext4_utils/ext4_crypt_init_extensions.h>
+#include <fs_mgr.h>
 #include <logwrap/logwrap.h>
 
 #include "action.h"
@@ -879,8 +880,7 @@ static int do_installkeys_ensure_dir_exists(const char* dir) {
 }
 
 static bool is_file_crypto() {
-    std::string value = property_get("ro.crypto.type");
-    return value == "file";
+    return android::base::GetProperty("ro.crypto.type", "") == "file";
 }
 
 static int do_installkey(const std::vector<std::string>& args) {
