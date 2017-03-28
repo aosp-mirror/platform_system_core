@@ -235,7 +235,9 @@ log_time LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent,
     }
     iovec[1].iov_len = entry.len;
 
-    log_time retval = reader->sendDatav(iovec, 2) ? FLUSH_ERROR : mRealTime;
+    log_time retval = reader->sendDatav(iovec, 1 + (entry.len != 0))
+                          ? FLUSH_ERROR
+                          : mRealTime;
 
     if (buffer) free(buffer);
 
