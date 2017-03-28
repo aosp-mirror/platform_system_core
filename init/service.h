@@ -22,6 +22,7 @@
 #include <cutils/iosched_policy.h>
 
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -61,12 +62,10 @@ struct ServiceEnvironmentInfo {
 };
 
 class Service {
-public:
-    Service(const std::string& name, const std::string& classname,
-            const std::vector<std::string>& args);
+  public:
+    Service(const std::string& name, const std::vector<std::string>& args);
 
-    Service(const std::string& name, const std::string& classname,
-            unsigned flags, uid_t uid, gid_t gid,
+    Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
             const std::vector<gid_t>& supp_gids, const CapSet& capabilities,
             unsigned namespace_flags, const std::string& seclabel,
             const std::vector<std::string>& args);
@@ -84,10 +83,10 @@ public:
     bool Reap();
     void DumpState() const;
     void SetShutdownCritical() { flags_ |= SVC_SHUTDOWN_CRITICAL; }
-    bool IsShutdownCritical() { return (flags_ & SVC_SHUTDOWN_CRITICAL) != 0; }
+    bool IsShutdownCritical() const { return (flags_ & SVC_SHUTDOWN_CRITICAL) != 0; }
 
     const std::string& name() const { return name_; }
-    const std::string& classname() const { return classname_; }
+    const std::set<std::string>& classnames() const { return classnames_; }
     unsigned flags() const { return flags_; }
     pid_t pid() const { return pid_; }
     uid_t uid() const { return uid_; }
@@ -100,7 +99,7 @@ public:
     void set_keychord_id(int keychord_id) { keychord_id_ = keychord_id; }
     const std::vector<std::string>& args() const { return args_; }
 
-private:
+  private:
     using OptionParser = bool (Service::*) (const std::vector<std::string>& args,
                                             std::string* err);
     class OptionParserMap;
@@ -136,7 +135,7 @@ private:
     bool AddDescriptor(const std::vector<std::string>& args, std::string* err);
 
     std::string name_;
-    std::string classname_;
+    std::set<std::string> classnames_;
     std::string console_;
 
     unsigned flags_;
