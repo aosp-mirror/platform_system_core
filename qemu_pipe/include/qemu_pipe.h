@@ -28,10 +28,8 @@ extern "C" {
 // This file descriptor can be used as a standard pipe/socket descriptor.
 //
 // 'pipeName' is the name of the emulator service you want to connect to,
-// and should begin with 'pipe:' (e.g. 'pipe:camera' or 'pipe:opengles').
-// For backward compatibility, the 'pipe:' prefix can be omitted, and in
-// that case, qemu_pipe_open will add it for you.
-
+// and must begin with 'pipe:' (e.g. 'pipe:camera' or 'pipe:opengles').
+//
 // On success, return a valid file descriptor, or -1/errno on failure. E.g.:
 //
 // EINVAL  -> unknown/unsupported pipeName
