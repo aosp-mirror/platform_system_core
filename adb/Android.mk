@@ -128,7 +128,7 @@ LOCAL_SANITIZE := $(adb_target_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
-LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libqemu_pipe libbase
+LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase
 
 LOCAL_WHOLE_STATIC_LIBRARIES := libadbd_usb
 
@@ -361,7 +361,6 @@ LOCAL_STRIP_MODULE := keep_symbols
 LOCAL_STATIC_LIBRARIES := \
     libadbd \
     libbase \
-    libqemu_pipe \
     libbootloader_message \
     libfs_mgr \
     libfec \
