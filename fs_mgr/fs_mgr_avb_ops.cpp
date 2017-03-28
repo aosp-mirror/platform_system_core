@@ -78,7 +78,7 @@ static AvbIOResult read_from_partition(AvbOps* ops ATTRIBUTE_UNUSED, const char*
     // access. fs_mgr_test_access() will test a few iterations if the
     // path doesn't exist yet.
     if (fs_mgr_test_access(path.c_str()) < 0) {
-        return AVB_IO_RESULT_ERROR_IO;
+        return AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION;
     }
 
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_CLOEXEC)));
