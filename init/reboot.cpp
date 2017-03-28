@@ -32,7 +32,7 @@
 
 #include <android-base/file.h>
 #include <android-base/macros.h>
-#include <android-base/parseint.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <bootloader_message/bootloader_message.h>
@@ -41,7 +41,6 @@
 #include <logwrap/logwrap.h>
 
 #include "log.h"
-#include "property_service.h"
 #include "reboot.h"
 #include "service.h"
 #include "util.h"
@@ -341,12 +340,9 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         abort();
     }
 
-    std::string timeout = property_get("ro.build.shutdown_timeout");
     /* TODO update default waiting time based on usage data */
-    unsigned int shutdownTimeout = 10;  // default value
-    if (android::base::ParseUint(timeout, &shutdownTimeout)) {
-        LOG(INFO) << "ro.build.shutdown_timeout set:" << shutdownTimeout;
-    }
+    unsigned int shutdownTimeout = android::base::GetUintProperty("ro.build.shutdown_timeout", 10u);
+    LOG(INFO) << "Shutdown timeout: " << shutdownTimeout;
 
     static const constexpr char* shutdown_critical_services[] = {"vold", "watchdogd"};
     for (const char* name : shutdown_critical_services) {

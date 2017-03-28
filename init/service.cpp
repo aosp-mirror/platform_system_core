@@ -34,6 +34,7 @@
 
 #include <android-base/file.h>
 #include <android-base/parseint.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <system/thread_defs.h>
@@ -672,7 +673,7 @@ bool Service::Start() {
         if (iter == writepid_files_.end()) {
             // There were no "writepid" instructions for cpusets, check if the system default
             // cpuset is specified to be used for the process.
-            std::string default_cpuset = property_get("ro.cpuset.default");
+            std::string default_cpuset = android::base::GetProperty("ro.cpuset.default", "");
             if (!default_cpuset.empty()) {
                 // Make sure the cpuset name starts and ends with '/'.
                 // A single '/' means the 'root' cpuset.

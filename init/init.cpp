@@ -41,6 +41,7 @@
 #include <selinux/android.h>
 
 #include <android-base/file.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
@@ -68,6 +69,7 @@
 #include "util.h"
 #include "watchdogd.h"
 
+using android::base::GetProperty;
 using android::base::StringPrintf;
 
 struct selabel_handle *sehandle;
@@ -134,7 +136,7 @@ bool start_waiting_for_property(const char *name, const char *value)
     if (waiting_for_prop) {
         return false;
     }
-    if (property_get(name) != value) {
+    if (GetProperty(name, "") != value) {
         // Current property value is not equal to expected value
         wait_prop_name = name;
         wait_prop_value = value;
@@ -422,7 +424,7 @@ static int keychord_init_action(const std::vector<std::string>& args)
 
 static int console_init_action(const std::vector<std::string>& args)
 {
-    std::string console = property_get("ro.boot.console");
+    std::string console = GetProperty("ro.boot.console", "");
     if (!console.empty()) {
         default_console = "/dev/" + console;
     }
@@ -446,11 +448,11 @@ static void import_kernel_nv(const std::string& key, const std::string& value, b
 }
 
 static void export_oem_lock_status() {
-    if (property_get("ro.oem_unlock_supported") != "1") {
+    if (!android::base::GetBoolProperty("ro.oem_unlock_supported", false)) {
         return;
     }
 
-    std::string value = property_get("ro.boot.verifiedbootstate");
+    std::string value = GetProperty("ro.boot.verifiedbootstate", "");
 
     if (!value.empty()) {
         property_set("ro.boot.flash.locked", value == "orange" ? "0" : "1");
@@ -471,7 +473,7 @@ static void export_kernel_boot_props() {
         { "ro.boot.revision",   "ro.revision",   "0", },
     };
     for (size_t i = 0; i < arraysize(prop_map); i++) {
-        std::string value = property_get(prop_map[i].src_prop);
+        std::string value = GetProperty(prop_map[i].src_prop, "");
         property_set(prop_map[i].dst_prop, (!value.empty()) ? value.c_str() : prop_map[i].default_value);
     }
 }
@@ -1248,7 +1250,7 @@ int main(int argc, char** argv) {
     parser.AddSectionParser("service",std::make_unique<ServiceParser>());
     parser.AddSectionParser("on", std::make_unique<ActionParser>());
     parser.AddSectionParser("import", std::make_unique<ImportParser>());
-    std::string bootscript = property_get("ro.boot.init_rc");
+    std::string bootscript = GetProperty("ro.boot.init_rc", "");
     if (bootscript.empty()) {
         parser.ParseConfig("/init.rc");
         parser.set_is_system_etc_init_loaded(
@@ -1288,7 +1290,7 @@ int main(int argc, char** argv) {
     am.QueueBuiltinAction(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
 
     // Don't mount filesystems or start core system services in charger mode.
-    std::string bootmode = property_get("ro.bootmode");
+    std::string bootmode = GetProperty("ro.bootmode", "");
     if (bootmode == "charger") {
         am.QueueEventTrigger("charger");
     } else {
