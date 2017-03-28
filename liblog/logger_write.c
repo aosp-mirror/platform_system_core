@@ -410,16 +410,46 @@ LIBLOG_ABI_PUBLIC int __android_log_buf_write(int bufID, int prio,
   if (!tag) tag = "";
 
   /* XXX: This needs to go! */
-  if ((bufID != LOG_ID_RADIO) &&
-      (!strcmp(tag, "HTC_RIL") ||
-       !strncmp(tag, "RIL", 3) || /* Any log tag with "RIL" as the prefix */
-       !strncmp(tag, "IMS", 3) || /* Any log tag with "IMS" as the prefix */
-       !strcmp(tag, "AT") || !strcmp(tag, "GSM") || !strcmp(tag, "STK") ||
-       !strcmp(tag, "CDMA") || !strcmp(tag, "PHONE") || !strcmp(tag, "SMS"))) {
-    bufID = LOG_ID_RADIO;
-    /* Inform third party apps/ril/radio.. to use Rlog or RLOG */
-    snprintf(tmp_tag, sizeof(tmp_tag), "use-Rlog/RLOG-%s", tag);
-    tag = tmp_tag;
+  if (bufID != LOG_ID_RADIO) {
+    switch (tag[0]) {
+      case 'H':
+        if (strcmp(tag + 1, "HTC_RIL" + 1)) break;
+        goto inform;
+      case 'R':
+        /* Any log tag with "RIL" as the prefix */
+        if (strncmp(tag + 1, "RIL" + 1, strlen("RIL") - 1)) break;
+        goto inform;
+      case 'Q':
+        /* Any log tag with "QC_RIL" as the prefix */
+        if (strncmp(tag + 1, "QC_RIL" + 1, strlen("QC_RIL") - 1)) break;
+        goto inform;
+      case 'I':
+        /* Any log tag with "IMS" as the prefix */
+        if (strncmp(tag + 1, "IMS" + 1, strlen("IMS") - 1)) break;
+        goto inform;
+      case 'A':
+        if (strcmp(tag + 1, "AT" + 1)) break;
+        goto inform;
+      case 'G':
+        if (strcmp(tag + 1, "GSM" + 1)) break;
+        goto inform;
+      case 'S':
+        if (strcmp(tag + 1, "STK" + 1) && strcmp(tag + 1, "SMS" + 1)) break;
+        goto inform;
+      case 'C':
+        if (strcmp(tag + 1, "CDMA" + 1)) break;
+        goto inform;
+      case 'P':
+        if (strcmp(tag + 1, "PHONE" + 1)) break;
+      /* FALLTHRU */
+      inform:
+        bufID = LOG_ID_RADIO;
+        snprintf(tmp_tag, sizeof(tmp_tag), "use-Rlog/RLOG-%s", tag);
+        tag = tmp_tag;
+      /* FALLTHRU */
+      default:
+        break;
+    }
   }
 
 #if __BIONIC__
