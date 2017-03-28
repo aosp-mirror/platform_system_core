@@ -1,4 +1,5 @@
 BasedOnStyle: Google
+AllowShortFunctionsOnASingleLine: Inline
 ColumnLimit: 100
 CommentPragmas: NOLINT:.*
 DerivePointerAlignment: false
