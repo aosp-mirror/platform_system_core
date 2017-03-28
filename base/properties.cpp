@@ -101,22 +101,24 @@ static void WaitForPropertyCallback(void* data_ptr, const char*, const char* val
 }
 
 // TODO: chrono_utils?
-static void DurationToTimeSpec(timespec& ts, std::chrono::nanoseconds d) {
+static void DurationToTimeSpec(timespec& ts, const std::chrono::milliseconds d) {
   auto s = std::chrono::duration_cast<std::chrono::seconds>(d);
   auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(d - s);
   ts.tv_sec = s.count();
   ts.tv_nsec = ns.count();
 }
 
+// TODO: boot_clock?
 using AbsTime = std::chrono::time_point<std::chrono::steady_clock>;
 
-static void UpdateTimeSpec(timespec& ts,
-                           const AbsTime& timeout) {
+static void UpdateTimeSpec(timespec& ts, std::chrono::milliseconds relative_timeout,
+                           const AbsTime& start_time) {
   auto now = std::chrono::steady_clock::now();
-  auto remaining_timeout = std::chrono::duration_cast<std::chrono::nanoseconds>(timeout - now);
-  if (remaining_timeout < 0ns) {
+  auto time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
+  if (time_elapsed >= relative_timeout) {
     ts = { 0, 0 };
   } else {
+    auto remaining_timeout = relative_timeout - time_elapsed;
     DurationToTimeSpec(ts, remaining_timeout);
   }
 }
@@ -127,11 +129,7 @@ static void UpdateTimeSpec(timespec& ts,
 // Returns nullptr on timeout.
 static const prop_info* WaitForPropertyCreation(const std::string& key,
                                                 const std::chrono::milliseconds& relative_timeout,
-                                                AbsTime& absolute_timeout) {
-  // TODO: boot_clock?
-  auto now = std::chrono::steady_clock::now();
-  absolute_timeout = now + relative_timeout;
-
+                                                const AbsTime& start_time) {
   // Find the property's prop_info*.
   const prop_info* pi;
   unsigned global_serial = 0;
@@ -139,17 +137,16 @@ static const prop_info* WaitForPropertyCreation(const std::string& key,
     // The property doesn't even exist yet.
     // Wait for a global change and then look again.
     timespec ts;
-    UpdateTimeSpec(ts, absolute_timeout);
+    UpdateTimeSpec(ts, relative_timeout, start_time);
     if (!__system_property_wait(nullptr, global_serial, &global_serial, &ts)) return nullptr;
   }
   return pi;
 }
 
-bool WaitForProperty(const std::string& key,
-                     const std::string& expected_value,
+bool WaitForProperty(const std::string& key, const std::string& expected_value,
                      std::chrono::milliseconds relative_timeout) {
-  AbsTime absolute_timeout;
-  const prop_info* pi = WaitForPropertyCreation(key, relative_timeout, absolute_timeout);
+  auto start_time = std::chrono::steady_clock::now();
+  const prop_info* pi = WaitForPropertyCreation(key, relative_timeout, start_time);
   if (pi == nullptr) return false;
 
   WaitForPropertyData data;
@@ -162,7 +159,7 @@ bool WaitForProperty(const std::string& key,
     if (data.done) return true;
 
     // It didn't, so wait for the property to change before checking again.
-    UpdateTimeSpec(ts, absolute_timeout);
+    UpdateTimeSpec(ts, relative_timeout, start_time);
     uint32_t unused;
     if (!__system_property_wait(pi, data.last_read_serial, &unused, &ts)) return false;
   }
@@ -170,8 +167,8 @@ bool WaitForProperty(const std::string& key,
 
 bool WaitForPropertyCreation(const std::string& key,
                              std::chrono::milliseconds relative_timeout) {
-  AbsTime absolute_timeout;
-  return (WaitForPropertyCreation(key, relative_timeout, absolute_timeout) != nullptr);
+  auto start_time = std::chrono::steady_clock::now();
+  return (WaitForPropertyCreation(key, relative_timeout, start_time) != nullptr);
 }
 
 }  // namespace base
