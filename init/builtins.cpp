@@ -148,6 +148,12 @@ static int do_class_reset(const std::vector<std::string>& args) {
     return 0;
 }
 
+static int do_class_restart(const std::vector<std::string>& args) {
+    ServiceManager::GetInstance().
+        ForEachServiceInClass(args[1], [] (Service* s) { s->Restart(); });
+    return 0;
+}
+
 static int do_domainname(const std::vector<std::string>& args) {
     return write_file("/proc/sys/kernel/domainname", args[1].c_str()) ? 0 : 1;
 }
@@ -897,6 +903,7 @@ BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"chmod",                   {2,     2,    do_chmod}},
         {"chown",                   {2,     3,    do_chown}},
         {"class_reset",             {1,     1,    do_class_reset}},
+        {"class_restart",           {1,     1,    do_class_restart}},
         {"class_start",             {1,     1,    do_class_start}},
         {"class_stop",              {1,     1,    do_class_stop}},
         {"copy",                    {2,     2,    do_copy}},
