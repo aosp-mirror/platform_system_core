@@ -19,9 +19,6 @@
 
 #include <string>
 
-class Action;
-class Service;
-
 extern const char *ENV[32];
 extern std::string default_console;
 extern struct selabel_handle *sehandle;
