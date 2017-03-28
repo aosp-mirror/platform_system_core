@@ -149,27 +149,44 @@ ServiceEnvironmentInfo::ServiceEnvironmentInfo(const std::string& name,
     : name(name), value(value) {
 }
 
-Service::Service(const std::string& name, const std::string& classname,
-                 const std::vector<std::string>& args)
-    : name_(name), classname_(classname), flags_(0), pid_(0),
-      crash_count_(0), uid_(0), gid_(0), namespace_flags_(0),
-      seclabel_(""), ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0),
-      priority_(0), oom_score_adjust_(-1000), args_(args) {
+Service::Service(const std::string& name, const std::vector<std::string>& args)
+    : name_(name),
+      classnames_({"default"}),
+      flags_(0),
+      pid_(0),
+      crash_count_(0),
+      uid_(0),
+      gid_(0),
+      namespace_flags_(0),
+      seclabel_(""),
+      ioprio_class_(IoSchedClass_NONE),
+      ioprio_pri_(0),
+      priority_(0),
+      oom_score_adjust_(-1000),
+      args_(args) {
     onrestart_.InitSingleTrigger("onrestart");
 }
 
-Service::Service(const std::string& name, const std::string& classname,
-                 unsigned flags, uid_t uid, gid_t gid,
-                 const std::vector<gid_t>& supp_gids,
-                 const CapSet& capabilities, unsigned namespace_flags,
-                 const std::string& seclabel,
+Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
+                 const std::vector<gid_t>& supp_gids, const CapSet& capabilities,
+                 unsigned namespace_flags, const std::string& seclabel,
                  const std::vector<std::string>& args)
-    : name_(name), classname_(classname), flags_(flags), pid_(0),
-      crash_count_(0), uid_(uid), gid_(gid),
-      supp_gids_(supp_gids), capabilities_(capabilities),
-      namespace_flags_(namespace_flags), seclabel_(seclabel),
-      ioprio_class_(IoSchedClass_NONE), ioprio_pri_(0), priority_(0),
-      oom_score_adjust_(-1000), args_(args) {
+    : name_(name),
+      classnames_({"default"}),
+      flags_(flags),
+      pid_(0),
+      crash_count_(0),
+      uid_(uid),
+      gid_(gid),
+      supp_gids_(supp_gids),
+      capabilities_(capabilities),
+      namespace_flags_(namespace_flags),
+      seclabel_(seclabel),
+      ioprio_class_(IoSchedClass_NONE),
+      ioprio_pri_(0),
+      priority_(0),
+      oom_score_adjust_(-1000),
+      args_(args) {
     onrestart_.InitSingleTrigger("onrestart");
 }
 
@@ -297,7 +314,7 @@ bool Service::Reap() {
 
 void Service::DumpState() const {
     LOG(INFO) << "service " << name_;
-    LOG(INFO) << "  class '" << classname_ << "'";
+    LOG(INFO) << "  class '" << android::base::Join(classnames_, " ") << "'";
     LOG(INFO) << "  exec "<< android::base::Join(args_, " ");
     std::for_each(descriptors_.begin(), descriptors_.end(),
                   [] (const auto& info) { LOG(INFO) << *info; });
@@ -334,7 +351,7 @@ bool Service::ParseCapabilities(const std::vector<std::string>& args, std::strin
 }
 
 bool Service::ParseClass(const std::vector<std::string>& args, std::string* err) {
-    classname_ = args[1];
+    classnames_ = std::set<std::string>(args.begin() + 1, args.end());
     return true;
 }
 
@@ -516,10 +533,11 @@ private:
 
 Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
+    // clang-format off
     static const Map option_parsers = {
         {"capabilities",
                         {1,     kMax, &Service::ParseCapabilities}},
-        {"class",       {1,     1,    &Service::ParseClass}},
+        {"class",       {1,     kMax, &Service::ParseClass}},
         {"console",     {0,     1,    &Service::ParseConsole}},
         {"critical",    {0,     0,    &Service::ParseCritical}},
         {"disabled",    {0,     0,    &Service::ParseDisabled}},
@@ -539,6 +557,7 @@ Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
         {"user",        {1,     1,    &Service::ParseUser}},
         {"writepid",    {1,     kMax, &Service::ParseWritepid}},
     };
+    // clang-format on
     return option_parsers;
 }
 
@@ -889,8 +908,8 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
         }
     }
 
-    auto svc_p = std::make_unique<Service>(name, "default", flags, uid, gid, supp_gids,
-                                           no_capabilities, namespace_flags, seclabel, str_args);
+    auto svc_p = std::make_unique<Service>(name, flags, uid, gid, supp_gids, no_capabilities,
+                                           namespace_flags, seclabel, str_args);
     Service* svc = svc_p.get();
     services_.emplace_back(std::move(svc_p));
 
@@ -940,7 +959,7 @@ void ServiceManager::ForEachService(const std::function<void(Service*)>& callbac
 void ServiceManager::ForEachServiceInClass(const std::string& classname,
                                            void (*func)(Service* svc)) const {
     for (const auto& s : services_) {
-        if (classname == s->classname()) {
+        if (s->classnames().find(classname) != s->classnames().end()) {
             func(s.get());
         }
     }
@@ -1034,7 +1053,7 @@ bool ServiceParser::ParseSection(const std::vector<std::string>& args,
     }
 
     std::vector<std::string> str_args(args.begin() + 2, args.end());
-    service_ = std::make_unique<Service>(name, "default", str_args);
+    service_ = std::make_unique<Service>(name, str_args);
     return true;
 }
 
