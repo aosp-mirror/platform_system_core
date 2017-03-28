@@ -51,12 +51,7 @@ static inline SchedPolicy _policy(SchedPolicy p)
 
 static pthread_once_t the_once = PTHREAD_ONCE_INIT;
 
-static int __sys_supports_schedgroups = -1;
 static int __sys_supports_timerslack = -1;
-
-// File descriptors open to /dev/cpuctl/../tasks, setup by initialize, or -1 on error.
-static int bg_cgroup_fd = -1;
-static int fg_cgroup_fd = -1;
 
 // File descriptors open to /dev/cpuset/../tasks, setup by initialize, or -1 on error
 static int system_bg_cpuset_fd = -1;
@@ -151,23 +146,6 @@ bool schedboost_enabled() {
 
 static void __initialize() {
     const char* filename;
-    if (!access("/dev/cpuctl/tasks", W_OK)) {
-        __sys_supports_schedgroups = 1;
-
-        filename = "/dev/cpuctl/tasks";
-        fg_cgroup_fd = open(filename, O_WRONLY | O_CLOEXEC);
-        if (fg_cgroup_fd < 0) {
-            SLOGE("open of %s failed: %s\n", filename, strerror(errno));
-        }
-
-        filename = "/dev/cpuctl/bg_non_interactive/tasks";
-        bg_cgroup_fd = open(filename, O_WRONLY | O_CLOEXEC);
-        if (bg_cgroup_fd < 0) {
-            SLOGE("open of %s failed: %s\n", filename, strerror(errno));
-        }
-    } else {
-        __sys_supports_schedgroups = 0;
-    }
 
     if (cpusets_enabled()) {
         if (!access("/dev/cpuset/tasks", W_OK)) {
@@ -276,35 +254,21 @@ int get_sched_policy(int tid, SchedPolicy *policy)
     }
     pthread_once(&the_once, __initialize);
 
-    if (__sys_supports_schedgroups) {
-        char grpBuf[32];
+    char grpBuf[32];
 
-        if (cpusets_enabled()) {
-            if (getCGroupSubsys(tid, "cpuset", grpBuf, sizeof(grpBuf)) < 0)
-                return -1;
-            if (grpBuf[0] == '\0') {
-                *policy = SP_FOREGROUND;
-            } else if (!strcmp(grpBuf, "foreground")) {
-                *policy = SP_FOREGROUND;
-            } else if (!strcmp(grpBuf, "background")) {
-                *policy = SP_BACKGROUND;
-            } else if (!strcmp(grpBuf, "top-app")) {
-                *policy = SP_TOP_APP;
-            } else {
-                errno = ERANGE;
-                return -1;
-            }
+    if (cpusets_enabled()) {
+        if (getCGroupSubsys(tid, "cpuset", grpBuf, sizeof(grpBuf)) < 0) return -1;
+        if (grpBuf[0] == '\0') {
+            *policy = SP_FOREGROUND;
+        } else if (!strcmp(grpBuf, "foreground")) {
+            *policy = SP_FOREGROUND;
+        } else if (!strcmp(grpBuf, "background")) {
+            *policy = SP_BACKGROUND;
+        } else if (!strcmp(grpBuf, "top-app")) {
+            *policy = SP_TOP_APP;
         } else {
-            if (getCGroupSubsys(tid, "cpu", grpBuf, sizeof(grpBuf)) < 0)
-                return -1;
-            if (grpBuf[0] == '\0') {
-                *policy = SP_FOREGROUND;
-            } else if (!strcmp(grpBuf, "bg_non_interactive")) {
-                *policy = SP_BACKGROUND;
-            } else {
-                errno = ERANGE;
-                return -1;
-            }
+            errno = ERANGE;
+            return -1;
         }
     } else {
         int rc = sched_getscheduler(tid);
@@ -440,41 +404,30 @@ int set_sched_policy(int tid, SchedPolicy policy)
     }
 #endif
 
-    if (__sys_supports_schedgroups) {
-        int fd = -1;
+    if (schedboost_enabled()) {
         int boost_fd = -1;
         switch (policy) {
         case SP_BACKGROUND:
-            fd = bg_cgroup_fd;
             boost_fd = bg_schedboost_fd;
             break;
         case SP_FOREGROUND:
         case SP_AUDIO_APP:
         case SP_AUDIO_SYS:
-            fd = fg_cgroup_fd;
             boost_fd = fg_schedboost_fd;
             break;
         case SP_TOP_APP:
-            fd = fg_cgroup_fd;
             boost_fd = ta_schedboost_fd;
             break;
         default:
-            fd = -1;
             boost_fd = -1;
             break;
         }
 
-        if (fd > 0 && add_tid_to_cgroup(tid, fd) != 0) {
+        if (boost_fd > 0 && add_tid_to_cgroup(tid, boost_fd) != 0) {
             if (errno != ESRCH && errno != ENOENT)
                 return -errno;
         }
 
-        if (schedboost_enabled()) {
-            if (boost_fd > 0 && add_tid_to_cgroup(tid, boost_fd) != 0) {
-                if (errno != ESRCH && errno != ENOENT)
-                    return -errno;
-            }
-        }
     } else {
         struct sched_param param;
 
