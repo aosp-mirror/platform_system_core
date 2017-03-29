@@ -16,6 +16,14 @@ init_options += \
     -DREBOOT_BOOTLOADER_ON_PANIC=0
 endif
 
+ifneq (,$(filter eng,$(TARGET_BUILD_VARIANT)))
+init_options += \
+    -DSHUTDOWN_ZERO_TIMEOUT=1
+else
+init_options += \
+    -DSHUTDOWN_ZERO_TIMEOUT=0
+endif
+
 init_options += -DLOG_UEVENTS=0
 
 init_cflags += \
