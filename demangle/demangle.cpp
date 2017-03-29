@@ -20,22 +20,25 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <cctype>
 #include <string>
 
 #include <demangle.h>
 
 extern "C" char* __cxa_demangle(const char*, char*, size_t*, int*);
 
-void usage(const char* prog_name) {
-  printf("Usage: %s [-c] <NAME_TO_DEMANGLE>\n", prog_name);
-  printf("  -c\n");
-  printf("    Compare the results of __cxa_demangle against the current\n");
-  printf("    demangler.\n");
+static void Usage(const char* prog_name) {
+  printf("usage: %s [-c] [NAME_TO_DEMANGLE...]\n", prog_name);
+  printf("\n");
+  printf("Demangles C++ mangled names if supplied on the command-line, or found\n");
+  printf("reading from stdin otherwise.\n");
+  printf("\n");
+  printf("-c\tCompare against __cxa_demangle\n");
+  printf("\n");
 }
 
-std::string DemangleWithCxa(const char* name) {
+static std::string DemangleWithCxa(const char* name) {
   const char* cxa_demangle = __cxa_demangle(name, nullptr, nullptr, nullptr);
-
   if (cxa_demangle == nullptr) {
     return name;
   }
@@ -54,6 +57,49 @@ std::string DemangleWithCxa(const char* name) {
   return demangled_str;
 }
 
+static void Compare(const char* name, const std::string& demangled_name) {
+  std::string cxa_demangled_name(DemangleWithCxa(name));
+  if (cxa_demangled_name != demangled_name) {
+    printf("\nMismatch!\n");
+    printf("\tmangled name: %s\n", name);
+    printf("\tour demangle: %s\n", demangled_name.c_str());
+    printf("\tcxa demangle: %s\n", cxa_demangled_name.c_str());
+    exit(1);
+  }
+}
+
+static int Filter(bool compare) {
+  char* line = nullptr;
+  size_t line_length = 0;
+
+  while ((getline(&line, &line_length, stdin)) != -1) {
+    char* p = line;
+    char* name;
+    while ((name = strstr(p, "_Z")) != nullptr) {
+      // Output anything before the identifier.
+      *name = 0;
+      printf("%s", p);
+      *name = '_';
+
+      // Extract the identifier.
+      p = name;
+      while (*p && (std::isalnum(*p) || *p == '_' || *p == '.' || *p == '$')) ++p;
+
+      // Demangle and output.
+      std::string identifier(name, p);
+      std::string demangled_name = demangle(identifier.c_str());
+      printf("%s", demangled_name.c_str());
+
+      if (compare) Compare(identifier.c_str(), demangled_name);
+    }
+    // Output anything after the last identifier.
+    printf("%s", p);
+  }
+
+  free(line);
+  return 0;
+}
+
 int main(int argc, char** argv) {
 #ifdef __BIONIC__
   const char* prog_name = getprogname();
@@ -67,31 +113,21 @@ int main(int argc, char** argv) {
     if (opt_char == 'c') {
       compare = true;
     } else {
-      usage(prog_name);
+      Usage(prog_name);
       return 1;
     }
   }
-  if (optind >= argc || argc - optind != 1) {
-    printf("Must supply a single argument.\n\n");
-    usage(prog_name);
-    return 1;
-  }
-  const char* name = argv[optind];
 
-  std::string demangled_name = demangle(name);
+  // With no arguments, act as a filter.
+  if (optind == argc) return Filter(compare);
 
-  printf("%s\n", demangled_name.c_str());
+  // Otherwise demangle each argument.
+  while (optind < argc) {
+    const char* name = argv[optind++];
+    std::string demangled_name = demangle(name);
+    printf("%s\n", demangled_name.c_str());
 
-  if (compare) {
-    std::string cxa_demangle_str(DemangleWithCxa(name));
-
-    if (cxa_demangle_str != demangled_name) {
-      printf("Mismatch\n");
-      printf("cxa demangle: %s\n", cxa_demangle_str.c_str());
-      return 1;
-    } else {
-      printf("Match\n");
-    }
+    if (compare) Compare(name, demangled_name);
   }
   return 0;
 }
