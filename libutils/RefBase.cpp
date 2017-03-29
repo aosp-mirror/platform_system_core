@@ -760,6 +760,4 @@ void RefBase::renameRefId(RefBase* ref,
     ref->mRefs->renameWeakRefId(old_id, new_id);
 }
 
-VirtualLightRefBase::~VirtualLightRefBase() {}
-
 }; // namespace android
