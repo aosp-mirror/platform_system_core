@@ -44,10 +44,13 @@
 #define SVC_RC_DISABLED 0x080     // Remember if the disabled flag was set in the rc script.
 #define SVC_RESTART 0x100         // Use to safely restart (stop, wait, start) a service.
 #define SVC_DISABLED_START 0x200  // A start was requested but it was disabled at the time.
-#define SVC_EXEC 0x400            // This synthetic service corresponds to an 'exec'.
+#define SVC_EXEC 0x400  // This service was started by either 'exec' or 'exec_start' and stops
+                        // init from processing more commands until it completes
 
 #define SVC_SHUTDOWN_CRITICAL 0x800  // This service is critical for shutdown and
                                      // should not be killed during shutdown
+#define SVC_TEMPORARY 0x1000  // This service was started by 'exec' and should be removed from the
+                              // service list once it is reaped.
 
 #define NR_SVC_SUPP_GIDS 12    // twelve supplementary groups
 
@@ -72,6 +75,7 @@ class Service {
 
     bool IsRunning() { return (flags_ & SVC_RUNNING) != 0; }
     bool ParseLine(const std::vector<std::string>& args, std::string* err);
+    bool ExecStart(std::unique_ptr<Timer>* exec_waiter);
     bool Start();
     bool StartIfNotDisabled();
     bool Enable();
@@ -80,7 +84,7 @@ class Service {
     void Terminate();
     void Restart();
     void RestartIfNeeded(time_t* process_needs_restart_at);
-    bool Reap();
+    void Reap();
     void DumpState() const;
     void SetShutdownCritical() { flags_ |= SVC_SHUTDOWN_CRITICAL; }
     bool IsShutdownCritical() const { return (flags_ & SVC_SHUTDOWN_CRITICAL) != 0; }
@@ -178,6 +182,9 @@ public:
 
     void AddService(std::unique_ptr<Service> service);
     Service* MakeExecOneshotService(const std::vector<std::string>& args);
+    bool Exec(const std::vector<std::string>& args);
+    bool ExecStart(const std::string& name);
+    bool IsWaitingForExec() const;
     Service* FindServiceByName(const std::string& name) const;
     Service* FindServiceByPid(pid_t pid) const;
     Service* FindServiceByKeychord(int keychord_id) const;
@@ -198,6 +205,8 @@ private:
     bool ReapOneProcess();
 
     static int exec_count_; // Every service needs a unique name.
+    std::unique_ptr<Timer> exec_waiter_;
+
     std::vector<std::unique_ptr<Service>> services_;
 };
 
