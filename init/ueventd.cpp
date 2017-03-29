@@ -26,6 +26,7 @@
 
 #include <sys/types.h>
 
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <selinux/selinux.h>
 
@@ -34,7 +35,6 @@
 #include "util.h"
 #include "devices.h"
 #include "ueventd_parser.h"
-#include "property_service.h"
 
 int ueventd_main(int argc, char **argv)
 {
@@ -71,7 +71,7 @@ int ueventd_main(int argc, char **argv)
      * TODO: cleanup platform ueventd.rc to remove vendor specific
      * device node entries (b/34968103)
      */
-    std::string hardware = property_get("ro.hardware");
+    std::string hardware = android::base::GetProperty("ro.hardware", "");
     ueventd_parse_config_file(android::base::StringPrintf("/ueventd.%s.rc", hardware.c_str()).c_str());
 
     device_init();
