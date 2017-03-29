@@ -426,7 +426,7 @@ TEST(logd, benchmark) {
                     " BM_log_maximum_retry"
                     " BM_log_maximum"
                     " BM_clock_overhead"
-                    " BM_log_overhead"
+                    " BM_log_print_overhead"
                     " BM_log_latency"
                     " BM_log_delay",
                     "r")));
@@ -434,13 +434,13 @@ TEST(logd, benchmark) {
     char buffer[5120];
 
     static const char* benchmarks[] = {
-        "BM_log_maximum_retry ", "BM_log_maximum ", "BM_clock_overhead ",
-        "BM_log_overhead ",      "BM_log_latency ", "BM_log_delay "
+        "BM_log_maximum_retry ",  "BM_log_maximum ", "BM_clock_overhead ",
+        "BM_log_print_overhead ", "BM_log_latency ", "BM_log_delay "
     };
     static const unsigned int log_maximum_retry = 0;
     static const unsigned int log_maximum = 1;
     static const unsigned int clock_overhead = 2;
-    static const unsigned int log_overhead = 3;
+    static const unsigned int log_print_overhead = 3;
     static const unsigned int log_latency = 4;
     static const unsigned int log_delay = 5;
 
@@ -469,21 +469,23 @@ TEST(logd, benchmark) {
     }
 
     EXPECT_GE(200000UL, ns[log_maximum_retry]);  // 104734 user
+    EXPECT_NE(0UL, ns[log_maximum_retry]);       // failure to parse
 
     EXPECT_GE(90000UL, ns[log_maximum]);  // 46913 user
+    EXPECT_NE(0UL, ns[log_maximum]);      // failure to parse
 
     EXPECT_GE(4096UL, ns[clock_overhead]);  // 4095
+    EXPECT_NE(0UL, ns[clock_overhead]);     // failure to parse
 
-    EXPECT_GE(250000UL, ns[log_overhead]);  // 126886 user
+    EXPECT_GE(250000UL, ns[log_print_overhead]);  // 126886 user
+    EXPECT_NE(0UL, ns[log_print_overhead]);       // failure to parse
 
     EXPECT_GE(10000000UL,
               ns[log_latency]);  // 1453559 user space (background cgroup)
+    EXPECT_NE(0UL, ns[log_latency]);  // failure to parse
 
     EXPECT_GE(20000000UL, ns[log_delay]);  // 10500289 user
-
-    for (unsigned i = 0; i < arraysize(ns); ++i) {
-        EXPECT_NE(0UL, ns[i]);
-    }
+    EXPECT_NE(0UL, ns[log_delay]);         // failure to parse
 
     alloc_statistics(&buf, &len);
 
