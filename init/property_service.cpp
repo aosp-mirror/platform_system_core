@@ -114,12 +114,6 @@ static int check_control_mac_perms(const char *name, char *sctx, struct ucred *c
     return check_mac_perms(ctl_name, sctx, cr);
 }
 
-std::string property_get(const char* name) {
-    char value[PROP_VALUE_MAX] = {0};
-    __system_property_get(name, value);
-    return value;
-}
-
 static void write_persistent_property(const char *name, const char *value)
 {
     char tempPath[PATH_MAX];
@@ -588,10 +582,7 @@ void property_load_boot_defaults() {
 
 static void load_override_properties() {
     if (ALLOW_LOCAL_PROP_OVERRIDE) {
-        std::string debuggable = property_get("ro.debuggable");
-        if (debuggable == "1") {
-            load_properties_from_file("/data/local.prop", NULL);
-        }
+        load_properties_from_file("/data/local.prop", NULL);
     }
 }
 
