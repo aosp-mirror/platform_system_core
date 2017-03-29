@@ -886,8 +886,18 @@ static void selinux_restore_context() {
     restorecon("/dev/random");
     restorecon("/dev/urandom");
     restorecon("/dev/__properties__");
+
+    restorecon("/file_contexts.bin");
+    restorecon("/plat_file_contexts");
+    restorecon("/nonplat_file_contexts");
     restorecon("/plat_property_contexts");
     restorecon("/nonplat_property_contexts");
+    restorecon("/plat_seapp_contexts");
+    restorecon("/nonplat_seapp_contexts");
+    restorecon("/plat_service_contexts");
+    restorecon("/nonplat_service_contexts");
+    restorecon("/sepolicy");
+
     restorecon("/sys", SELINUX_ANDROID_RESTORECON_RECURSE);
     restorecon("/dev/block", SELINUX_ANDROID_RESTORECON_RECURSE);
     restorecon("/dev/device-mapper");
