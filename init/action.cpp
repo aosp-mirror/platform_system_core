@@ -18,14 +18,14 @@
 
 #include <errno.h>
 
-#include <android-base/strings.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 
 #include "builtins.h"
 #include "error.h"
 #include "init_parser.h"
 #include "log.h"
-#include "property_service.h"
 #include "util.h"
 
 using android::base::Join;
@@ -219,9 +219,8 @@ bool Action::CheckPropertyTriggers(const std::string& name,
                 found = true;
             }
         } else {
-            std::string prop_val = property_get(trigger_name.c_str());
-            if (prop_val.empty() || (trigger_value != "*" &&
-                                     trigger_value != prop_val)) {
+            std::string prop_val = android::base::GetProperty(trigger_name, "");
+            if (prop_val.empty() || (trigger_value != "*" && trigger_value != prop_val)) {
                 return false;
             }
         }

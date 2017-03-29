@@ -38,6 +38,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
@@ -48,7 +49,6 @@
 
 #include "init.h"
 #include "log.h"
-#include "property_service.h"
 #include "reboot.h"
 #include "util.h"
 
@@ -395,7 +395,7 @@ bool expand_props(const std::string& src, std::string* dst) {
             return false;
         }
 
-        std::string prop_val = property_get(prop_name.c_str());
+        std::string prop_val = android::base::GetProperty(prop_name, "");
         if (prop_val.empty()) {
             if (def_val.empty()) {
                 LOG(ERROR) << "property '" << prop_name << "' doesn't exist while expanding '" << src << "'";

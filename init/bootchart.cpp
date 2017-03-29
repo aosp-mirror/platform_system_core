@@ -16,8 +16,6 @@
 
 #include "bootchart.h"
 
-#include "property_service.h"
-
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -39,6 +37,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 
 using android::base::StringPrintf;
@@ -72,7 +71,7 @@ static void log_header() {
   utsname uts;
   if (uname(&uts) == -1) return;
 
-  std::string fingerprint = property_get("ro.build.fingerprint");
+  std::string fingerprint = android::base::GetProperty("ro.build.fingerprint", "");
   if (fingerprint.empty()) return;
 
   std::string kernel_cmdline;
