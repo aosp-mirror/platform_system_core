@@ -94,7 +94,7 @@ int ueventd_main(int argc, char **argv)
     return 0;
 }
 
-void set_device_permission(int nargs, char **args)
+void set_device_permission(const char* fn, int line, int nargs, char **args)
 {
     char *name;
     char *attr = 0;
@@ -121,7 +121,7 @@ void set_device_permission(int nargs, char **args)
     }
 
     if (nargs != 4) {
-        LOG(ERROR) << "invalid line ueventd.rc line for '" << args[0] << "'";
+        LOG(ERROR) << "invalid line (" << fn << ":" << line << ") line for '" << args[0] << "'";
         return;
     }
 
@@ -136,20 +136,20 @@ void set_device_permission(int nargs, char **args)
 
     perm = strtol(args[1], &endptr, 8);
     if (!endptr || *endptr != '\0') {
-        LOG(ERROR) << "invalid mode '" << args[1] << "'";
+        LOG(ERROR) << "invalid mode (" << fn << ":" << line << ") '" << args[1] << "'";
         return;
     }
 
     struct passwd* pwd = getpwnam(args[2]);
     if (!pwd) {
-        LOG(ERROR) << "invalid uid '" << args[2] << "'";
+        LOG(ERROR) << "invalid uid (" << fn << ":" << line << ") '" << args[2] << "'";
         return;
     }
     uid = pwd->pw_uid;
 
     struct group* grp = getgrnam(args[3]);
     if (!grp) {
-        LOG(ERROR) << "invalid gid '" << args[3] << "'";
+        LOG(ERROR) << "invalid gid (" << fn << ":" << line << ") '" << args[3] << "'";
         return;
     }
     gid = grp->gr_gid;
