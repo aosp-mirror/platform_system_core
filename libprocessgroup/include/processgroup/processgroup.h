@@ -24,6 +24,8 @@ __BEGIN_DECLS
 
 int killProcessGroup(uid_t uid, int initialPid, int signal);
 
+int killProcessGroupOnce(uid_t uid, int initialPid, int signal);
+
 int createProcessGroup(uid_t uid, int initialPid);
 
 void removeAllProcessGroups(void);
