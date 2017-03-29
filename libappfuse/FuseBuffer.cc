@@ -34,6 +34,8 @@ namespace android {
 namespace fuse {
 namespace {
 
+constexpr useconds_t kRetrySleepForWriting = 1000;  // 1 ms
+
 template <typename T>
 bool CheckHeaderLength(const FuseMessage<T>* self, const char* name, size_t max_size) {
     const auto& header = static_cast<const T*>(self)->header;
@@ -91,28 +93,35 @@ ResultOrAgain WriteInternal(const FuseMessage<T>* self, int fd, int sockflag, co
     const char* const buf = reinterpret_cast<const char*>(self);
     const auto& header = static_cast<const T*>(self)->header;
 
-    int result;
-    if (sockflag) {
-        CHECK(data == nullptr);
-        result = TEMP_FAILURE_RETRY(send(fd, buf, header.len, sockflag));
-    } else if (data) {
-        const struct iovec vec[] = {{const_cast<char*>(buf), sizeof(header)},
-                                    {const_cast<void*>(data), header.len - sizeof(header)}};
-        result = TEMP_FAILURE_RETRY(writev(fd, vec, arraysize(vec)));
-    } else {
-        result = TEMP_FAILURE_RETRY(write(fd, buf, header.len));
-    }
-
-    if (result == -1) {
-        if (errno == EAGAIN) {
-            return ResultOrAgain::kAgain;
+    while (true) {
+        int result;
+        if (sockflag) {
+            CHECK(data == nullptr);
+            result = TEMP_FAILURE_RETRY(send(fd, buf, header.len, sockflag));
+        } else if (data) {
+            const struct iovec vec[] = {{const_cast<char*>(buf), sizeof(header)},
+                                        {const_cast<void*>(data), header.len - sizeof(header)}};
+            result = TEMP_FAILURE_RETRY(writev(fd, vec, arraysize(vec)));
+        } else {
+            result = TEMP_FAILURE_RETRY(write(fd, buf, header.len));
         }
-        PLOG(ERROR) << "Failed to write a FUSE message";
-        return ResultOrAgain::kFailure;
+        if (result == -1) {
+            switch (errno) {
+                case ENOBUFS:
+                    // When returning ENOBUFS, epoll still reports the FD is writable. Just usleep
+                    // and retry again.
+                    usleep(kRetrySleepForWriting);
+                    continue;
+                case EAGAIN:
+                    return ResultOrAgain::kAgain;
+                default:
+                    PLOG(ERROR) << "Failed to write a FUSE message";
+                    return ResultOrAgain::kFailure;
+            }
+        }
+        CHECK(static_cast<uint32_t>(result) == header.len);
+        return ResultOrAgain::kSuccess;
     }
-
-    CHECK(static_cast<uint32_t>(result) == header.len);
-    return ResultOrAgain::kSuccess;
 }
 }
 
@@ -161,7 +170,7 @@ bool FuseMessage<T>::Write(int fd) const {
 template <typename T>
 bool FuseMessage<T>::WriteWithBody(int fd, size_t max_size, const void* data) const {
     CHECK(data != nullptr);
-    return WriteInternal<T>(this, fd, 0, data, max_size) == ResultOrAgain::kSuccess;
+    return WriteInternal(this, fd, 0, data, max_size) == ResultOrAgain::kSuccess;
 }
 
 template <typename T>
