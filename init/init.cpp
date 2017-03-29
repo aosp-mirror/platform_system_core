@@ -44,10 +44,6 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <cutils/fs.h>
-#include <cutils/iosched_policy.h>
-#include <cutils/list.h>
-#include <cutils/sockets.h>
 #include <libavb/libavb.h>
 #include <private/android_filesystem_config.h>
 

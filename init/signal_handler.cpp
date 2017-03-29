@@ -24,8 +24,6 @@
 #include <unistd.h>
 
 #include <android-base/stringprintf.h>
-#include <cutils/list.h>
-#include <cutils/sockets.h>
 
 #include "action.h"
 #include "init.h"
