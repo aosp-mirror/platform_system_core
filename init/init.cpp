@@ -875,6 +875,24 @@ static void selinux_initialize(bool in_kernel_domain) {
     }
 }
 
+// The files and directories that were created before initial sepolicy load
+// need to have their security context restored to the proper value.
+// This must happen before /dev is populated by ueventd.
+static void selinux_restore_context() {
+    LOG(INFO) << "Running restorecon...";
+    restorecon("/dev");
+    restorecon("/dev/kmsg");
+    restorecon("/dev/socket");
+    restorecon("/dev/random");
+    restorecon("/dev/urandom");
+    restorecon("/dev/__properties__");
+    restorecon("/plat_property_contexts");
+    restorecon("/nonplat_property_contexts");
+    restorecon("/sys", SELINUX_ANDROID_RESTORECON_RECURSE);
+    restorecon("/dev/block", SELINUX_ANDROID_RESTORECON_RECURSE);
+    restorecon("/dev/device-mapper");
+}
+
 // Set the UDC controller for the ConfigFS USB Gadgets.
 // Read the UDC controller in use from "/sys/class/udc".
 // In case of multiple UDC controllers select the first one.
@@ -1213,22 +1231,7 @@ int main(int argc, char** argv) {
 
     // Now set up SELinux for second stage.
     selinux_initialize(false);
-
-    // These directories were necessarily created before initial policy load
-    // and therefore need their security context restored to the proper value.
-    // This must happen before /dev is populated by ueventd.
-    LOG(INFO) << "Running restorecon...";
-    restorecon("/dev");
-    restorecon("/dev/kmsg");
-    restorecon("/dev/socket");
-    restorecon("/dev/random");
-    restorecon("/dev/urandom");
-    restorecon("/dev/__properties__");
-    restorecon("/plat_property_contexts");
-    restorecon("/nonplat_property_contexts");
-    restorecon("/sys", SELINUX_ANDROID_RESTORECON_RECURSE);
-    restorecon("/dev/block", SELINUX_ANDROID_RESTORECON_RECURSE);
-    restorecon("/dev/device-mapper");
+    selinux_restore_context();
 
     epoll_fd = epoll_create1(EPOLL_CLOEXEC);
     if (epoll_fd == -1) {
