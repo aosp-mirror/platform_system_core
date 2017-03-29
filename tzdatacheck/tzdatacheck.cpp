@@ -30,6 +30,19 @@
 
 #include "android-base/logging.h"
 
+// The name of the directory that holds a staged time zone update distro. If this exists it should
+// replace the one in CURRENT_DIR_NAME.
+// See also libcore.tzdata.update2.TimeZoneDistroInstaller.
+static const char* STAGED_DIR_NAME = "/staged";
+
+// The name of the directory that holds the (optional) installed time zone update distro.
+// See also libcore.tzdata.update2.TimeZoneDistroInstaller.
+static const char* CURRENT_DIR_NAME = "/current";
+
+// The name of a file in the staged dir that indicates the staged operation is an "uninstall".
+// See also libcore.tzdata.update2.TimeZoneDistroInstaller.
+static const char* UNINSTALL_TOMBSTONE_FILE_NAME = "/STAGED_UNINSTALL_TOMBSTONE";
+
 // The name of the file containing the distro version information.
 // See also libcore.tzdata.shared2.TimeZoneDistro / libcore.tzdata.shared2.DistroVersion.
 static const char* DISTRO_VERSION_FILENAME = "/distro_version";
@@ -74,7 +87,6 @@ static const int TZ_HEADER_LENGTH = 11;
 
 static const char TZ_DATA_HEADER_PREFIX[] = "tzdata";
 static const size_t TZ_DATA_HEADER_PREFIX_LEN = sizeof(TZ_DATA_HEADER_PREFIX) - 1; // exclude \0
-
 
 static void usage() {
     std::cerr << "Usage: tzdatacheck SYSTEM_TZ_DIR DATA_TZ_DIR\n"
@@ -184,7 +196,7 @@ static int deleteFn(const char* fpath, const struct stat*, int typeflag, struct 
     return 0;
 }
 
-enum PathStatus { ERR, NONE, IS_DIR, NOT_DIR };
+enum PathStatus { ERR, NONE, IS_DIR, IS_REG, UNKNOWN };
 
 static PathStatus checkPath(const std::string& path) {
     struct stat buf;
@@ -195,7 +207,31 @@ static PathStatus checkPath(const std::string& path) {
         }
         return NONE;
     }
-    return S_ISDIR(buf.st_mode) ? IS_DIR : NOT_DIR;
+    return S_ISDIR(buf.st_mode) ? IS_DIR : S_ISREG(buf.st_mode) ? IS_REG : UNKNOWN;
+}
+
+/*
+ * Deletes fileToDelete and returns true if it is successful. If fileToDelete is not a file or
+ * cannot be accessed this method returns false.
+ */
+static bool deleteFile(const std::string& fileToDelete) {
+    // Check whether the file exists.
+    PathStatus pathStatus = checkPath(fileToDelete);
+    if (pathStatus == NONE) {
+        LOG(INFO) << "Path " << fileToDelete << " does not exist";
+        return true;
+    }
+    if (pathStatus != IS_REG) {
+        LOG(WARNING) << "Path " << fileToDelete << " failed to stat() or is not a file.";
+        return false;
+    }
+
+    // Attempt the deletion.
+    int rc = unlink(fileToDelete.c_str());
+    if (rc != 0) {
+        PLOG(WARNING) << "unlink() failed for " << fileToDelete;
+    }
+    return rc == 0;
 }
 
 /*
@@ -260,8 +296,7 @@ static void deleteConfigUpdaterMetadataDir(const char* dataZoneInfoDir) {
     std::string dataUpdatesDirName(dataZoneInfoDir);
     dataUpdatesDirName += "/updates";
     LOG(INFO) << "Removing: " << dataUpdatesDirName;
-    bool deleted = deleteDir(dataUpdatesDirName);
-    if (!deleted) {
+    if (!deleteDir(dataUpdatesDirName)) {
         LOG(WARNING) << "Deletion of install metadata " << dataUpdatesDirName
                 << " was not successful";
     }
@@ -270,11 +305,148 @@ static void deleteConfigUpdaterMetadataDir(const char* dataZoneInfoDir) {
 /*
  * Deletes the timezone update distro directory.
  */
-static void deleteUpdateDistroDir(std::string& distroDirName) {
+static void deleteUpdateDistroDir(const std::string& distroDirName) {
     LOG(INFO) << "Removing: " << distroDirName;
-    bool deleted = deleteDir(distroDirName);
-    if (!deleted) {
+    if (!deleteDir(distroDirName)) {
         LOG(WARNING) << "Deletion of distro dir " << distroDirName << " was not successful";
+    }
+}
+
+static void handleStagedUninstall(const std::string& dataStagedDirName,
+                                  const std::string& dataCurrentDirName,
+                                  const PathStatus dataCurrentDirStatus) {
+    LOG(INFO) << "Staged operation is an uninstall.";
+
+    // Delete the current install directory.
+    switch (dataCurrentDirStatus) {
+        case NONE:
+            // This is unexpected: No uninstall should be staged if there is nothing to
+            // uninstall. Carry on anyway.
+            LOG(WARNING) << "No current install to delete.";
+            break;
+        case IS_DIR:
+            // This is normal. Delete the current install dir.
+            if (!deleteDir(dataCurrentDirName)) {
+                LOG(WARNING) << "Deletion of current distro " << dataCurrentDirName
+                             << " was not successful";
+                // If this happens we don't know whether we were able to delete or not. We don't
+                // delete the staged operation so it will be retried next boot unless overridden.
+                return;
+            }
+            break;
+        case IS_REG:
+        default:
+            // This is unexpected: We can try to delete the unexpected file and carry on.
+            LOG(WARNING) << "Current distro dir " << dataCurrentDirName
+                         << " is not actually a directory. Attempting deletion.";
+            if (!deleteFile(dataCurrentDirName)) {
+                LOG(WARNING) << "Could not delete " << dataCurrentDirName;
+                return;
+            }
+            break;
+    }
+
+    // Delete the staged uninstall dir.
+    if (!deleteDir(dataStagedDirName)) {
+        LOG(WARNING) << "Deletion of current distro " << dataCurrentDirName
+                     << " was not successful";
+        // If this happens we don't know whether we were able to delete the staged operation
+        // or not.
+        return;
+    }
+    LOG(INFO) << "Staged uninstall complete.";
+}
+
+static void handleStagedInstall(const std::string& dataStagedDirName,
+                                const std::string& dataCurrentDirName,
+                                const PathStatus dataCurrentDirStatus) {
+    LOG(INFO) << "Staged operation is an install.";
+
+    switch (dataCurrentDirStatus) {
+        case NONE:
+            // This is expected: This is the first install.
+            LOG(INFO) << "No current install to replace.";
+            break;
+        case IS_DIR:
+            // This is expected: We are replacing an existing install.
+            // Delete the current dir so we can replace it.
+            if (!deleteDir(dataCurrentDirName)) {
+                LOG(WARNING) << "Deletion of current distro " << dataCurrentDirName
+                             << " was not successful";
+                // If this happens, we cannot proceed.
+                return;
+            }
+            break;
+        case IS_REG:
+        default:
+            // This is unexpected: We can try to delete the unexpected file and carry on.
+            LOG(WARNING) << "Current distro dir " << dataCurrentDirName
+                         << " is not actually a directory. Attempting deletion.";
+            if (!deleteFile(dataCurrentDirName)) {
+                LOG(WARNING) << "Could not delete " << dataCurrentDirName;
+                return;
+            }
+            break;
+    }
+
+    // Move the staged dir so it is the new current dir, completing the install.
+    LOG(INFO) << "Moving " << dataStagedDirName << " to " << dataCurrentDirName;
+    int rc = rename(dataStagedDirName.c_str(), dataCurrentDirName.c_str());
+    if (rc == -1) {
+        PLOG(WARNING) << "Unable to rename directory from " << dataStagedDirName << " to "
+                      << &dataCurrentDirName[0];
+        return;
+    }
+
+    LOG(INFO) << "Staged install complete.";
+}
+/*
+ * Process a staged operation if there is one.
+ */
+static void processStagedOperation(const std::string& dataStagedDirName,
+                                   const std::string& dataCurrentDirName) {
+    PathStatus dataStagedDirStatus = checkPath(dataStagedDirName);
+
+    // Exit early for the common case.
+    if (dataStagedDirStatus == NONE) {
+        LOG(DEBUG) << "No staged time zone operation.";
+        return;
+    }
+
+    // Check known directory names are in a good starting state.
+    if (dataStagedDirStatus != IS_DIR) {
+        LOG(WARNING) << "Staged distro dir " << dataStagedDirName
+                     << " could not be accessed or is not a directory."
+                     << " stagedDirStatus=" << dataStagedDirStatus;
+        return;
+    }
+
+    // dataStagedDirStatus == IS_DIR.
+
+    // Work out whether there is anything currently installed.
+    PathStatus dataCurrentDirStatus = checkPath(dataCurrentDirName);
+    if (dataCurrentDirStatus == ERR) {
+        LOG(WARNING) << "Current install dir " << dataCurrentDirName << " could not be accessed"
+                     << " dataCurrentDirStatus=" << dataCurrentDirStatus;
+        return;
+    }
+
+    // We must perform the staged operation.
+
+    // Check to see if the staged directory contains an uninstall or an install operation.
+    std::string uninstallTombStoneFile(dataStagedDirName);
+    uninstallTombStoneFile += UNINSTALL_TOMBSTONE_FILE_NAME;
+    int uninstallTombStoneFileStatus = checkPath(uninstallTombStoneFile);
+    if (uninstallTombStoneFileStatus != IS_REG && uninstallTombStoneFileStatus != NONE) {
+        // Error case.
+        LOG(WARNING) << "Unable to determine if the staged operation is an uninstall.";
+        return;
+    }
+    if (uninstallTombStoneFileStatus == IS_REG) {
+        handleStagedUninstall(dataStagedDirName, dataCurrentDirName, dataCurrentDirStatus);
+    } else {
+        // uninstallTombStoneFileStatus == NONE meaning this is a staged install.
+        handleStagedInstall(dataStagedDirName, dataCurrentDirName, dataCurrentDirStatus);
     }
 }
 
@@ -300,15 +472,25 @@ int main(int argc, char* argv[]) {
     const char* systemZoneInfoDir = argv[1];
     const char* dataZoneInfoDir = argv[2];
 
-    // Check the distro directory exists. If it does not, exit quickly: nothing to do.
+    std::string dataStagedDirName(dataZoneInfoDir);
+    dataStagedDirName += STAGED_DIR_NAME;
+
     std::string dataCurrentDirName(dataZoneInfoDir);
-    dataCurrentDirName += "/current";
-    int dataCurrentDirStatus = checkPath(dataCurrentDirName);
+    dataCurrentDirName += CURRENT_DIR_NAME;
+
+    // Check for an process any staged operation.
+    // If the staged operation could not be handled we still have to validate the current installed
+    // directory so we do not check for errors and do not quit early.
+    processStagedOperation(dataStagedDirName, dataCurrentDirName);
+
+    // Check the distro directory exists. If it does not, exit quickly: nothing to do.
+    PathStatus dataCurrentDirStatus = checkPath(dataCurrentDirName);
     if (dataCurrentDirStatus == NONE) {
         LOG(INFO) << "timezone distro dir " << dataCurrentDirName
                 << " does not exist. No action required.";
         return 0;
     }
+
     // If the distro directory path is not a directory or we can't stat() the path, exit with a
     // warning: either there's a problem accessing storage or the world is not as it should be;
     // nothing to do.
