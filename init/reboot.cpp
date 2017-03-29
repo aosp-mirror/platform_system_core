@@ -37,7 +37,6 @@
 #include <android-base/strings.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
-#include <cutils/partition_utils.h>
 #include <fs_mgr.h>
 #include <logwrap/logwrap.h>
 
