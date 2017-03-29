@@ -64,6 +64,7 @@ TEST_F(zipwriter, WriteUncompressedZipWithOneFile) {
   ZipEntry data;
   ASSERT_EQ(0, FindEntry(handle, ZipString("file.txt"), &data));
   EXPECT_EQ(kCompressStored, data.method);
+  EXPECT_EQ(0u, data.has_data_descriptor);
   EXPECT_EQ(strlen(expected), data.compressed_length);
   ASSERT_EQ(strlen(expected), data.uncompressed_length);
   ASSERT_TRUE(AssertFileEntryContentsEq(expected, handle, &data));
