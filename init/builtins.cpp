@@ -167,19 +167,11 @@ static int do_enable(const std::vector<std::string>& args) {
 }
 
 static int do_exec(const std::vector<std::string>& args) {
-    Service* svc = ServiceManager::GetInstance().MakeExecOneshotService(args);
-    if (!svc) {
-        return -1;
-    }
-    if (!start_waiting_for_exec()) {
-        return -1;
-    }
-    if (!svc->Start()) {
-        stop_waiting_for_exec();
-        ServiceManager::GetInstance().RemoveService(*svc);
-        return -1;
-    }
-    return 0;
+    return ServiceManager::GetInstance().Exec(args) ? 0 : -1;
+}
+
+static int do_exec_start(const std::vector<std::string>& args) {
+    return ServiceManager::GetInstance().ExecStart(args[1]) ? 0 : -1;
 }
 
 static int do_export(const std::vector<std::string>& args) {
@@ -897,6 +889,7 @@ static int do_init_user0(const std::vector<std::string>& args) {
 
 BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
+    // clang-format off
     static const Map builtin_functions = {
         {"bootchart",               {1,     1,    do_bootchart}},
         {"chmod",                   {2,     2,    do_chmod}},
@@ -909,6 +902,7 @@ BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"domainname",              {1,     1,    do_domainname}},
         {"enable",                  {1,     1,    do_enable}},
         {"exec",                    {1,     kMax, do_exec}},
+        {"exec_start",              {1,     1,    do_exec_start}},
         {"export",                  {2,     2,    do_export}},
         {"hostname",                {1,     1,    do_hostname}},
         {"ifup",                    {1,     1,    do_ifup}},
@@ -942,5 +936,6 @@ BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"wait_for_prop",           {2,     2,    do_wait_for_prop}},
         {"write",                   {2,     2,    do_write}},
     };
+    // clang-format on
     return builtin_functions;
 }
