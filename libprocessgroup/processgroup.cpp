@@ -252,8 +252,7 @@ void removeAllProcessGroups()
     }
 }
 
-static int killProcessGroupOnce(uid_t uid, int initialPid, int signal)
-{
+static int doKillProcessGroupOnce(uid_t uid, int initialPid, int signal) {
     int processes = 0;
     struct ctx ctx;
     pid_t pid;
@@ -282,13 +281,11 @@ static int killProcessGroupOnce(uid_t uid, int initialPid, int signal)
     return processes;
 }
 
-int killProcessGroup(uid_t uid, int initialPid, int signal)
-{
+static int killProcessGroup(uid_t uid, int initialPid, int signal, int retry) {
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
 
-    int retry = 40;
     int processes;
-    while ((processes = killProcessGroupOnce(uid, initialPid, signal)) > 0) {
+    while ((processes = doKillProcessGroupOnce(uid, initialPid, signal)) > 0) {
         LOG(VERBOSE) << "killed " << processes << " processes for processgroup " << initialPid;
         if (retry > 0) {
             std::this_thread::sleep_for(5ms);
@@ -311,6 +308,14 @@ int killProcessGroup(uid_t uid, int initialPid, int signal)
     } else {
         return -1;
     }
+}
+
+int killProcessGroup(uid_t uid, int initialPid, int signal) {
+    return killProcessGroup(uid, initialPid, signal, 40 /*maxRetry*/);
+}
+
+int killProcessGroupOnce(uid_t uid, int initialPid, int signal) {
+    return killProcessGroup(uid, initialPid, signal, 0 /*maxRetry*/);
 }
 
 static bool mkdirAndChown(const char *path, mode_t mode, uid_t uid, gid_t gid)
