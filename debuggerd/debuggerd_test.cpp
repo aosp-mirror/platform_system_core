@@ -36,6 +36,7 @@
 #include <cutils/sockets.h>
 #include <debuggerd/handler.h>
 #include <debuggerd/protocol.h>
+#include <debuggerd/tombstoned.h>
 #include <debuggerd/util.h>
 #include <gtest/gtest.h>
 
@@ -523,5 +524,99 @@ TEST(crash_dump, zombie) {
     ASSERT_EQ(forkpid, rc);
     ASSERT_TRUE(WIFEXITED(status));
     ASSERT_EQ(0, WEXITSTATUS(status));
+  }
+}
+
+TEST(tombstoned, no_notify) {
+  // Do this a few times.
+  for (int i = 0; i < 3; ++i) {
+    pid_t pid = 123'456'789 + i;
+
+    unique_fd intercept_fd, output_fd;
+    tombstoned_intercept(pid, &intercept_fd, &output_fd);
+
+    {
+      unique_fd tombstoned_socket, input_fd;
+      ASSERT_TRUE(tombstoned_connect(pid, &tombstoned_socket, &input_fd));
+      ASSERT_TRUE(android::base::WriteFully(input_fd.get(), &pid, sizeof(pid)));
+    }
+
+    pid_t read_pid;
+    ASSERT_TRUE(android::base::ReadFully(output_fd.get(), &read_pid, sizeof(read_pid)));
+    ASSERT_EQ(read_pid, pid);
+  }
+}
+
+TEST(tombstoned, stress) {
+  // Spawn threads to simultaneously do a bunch of failing dumps and a bunch of successful dumps.
+  static constexpr int kDumpCount = 100;
+
+  std::atomic<bool> start(false);
+  std::vector<std::thread> threads;
+  threads.emplace_back([&start]() {
+    while (!start) {
+      continue;
+    }
+
+    // Use a way out of range pid, to avoid stomping on an actual process.
+    pid_t pid_base = 1'000'000;
+
+    for (int dump = 0; dump < kDumpCount; ++dump) {
+      pid_t pid = pid_base + dump;
+
+      unique_fd intercept_fd, output_fd;
+      tombstoned_intercept(pid, &intercept_fd, &output_fd);
+
+      // Pretend to crash, and then immediately close the socket.
+      unique_fd sockfd(socket_local_client(kTombstonedCrashSocketName,
+                                           ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET));
+      if (sockfd == -1) {
+        FAIL() << "failed to connect to tombstoned: " << strerror(errno);
+      }
+      TombstonedCrashPacket packet = {};
+      packet.packet_type = CrashPacketType::kDumpRequest;
+      packet.packet.dump_request.pid = pid;
+      if (TEMP_FAILURE_RETRY(write(sockfd, &packet, sizeof(packet))) != sizeof(packet)) {
+        FAIL() << "failed to write to tombstoned: " << strerror(errno);
+      }
+
+      continue;
+    }
+  });
+
+  threads.emplace_back([&start]() {
+    while (!start) {
+      continue;
+    }
+
+    // Use a way out of range pid, to avoid stomping on an actual process.
+    pid_t pid_base = 2'000'000;
+
+    for (int dump = 0; dump < kDumpCount; ++dump) {
+      pid_t pid = pid_base + dump;
+
+      unique_fd intercept_fd, output_fd;
+      tombstoned_intercept(pid, &intercept_fd, &output_fd);
+
+      {
+        unique_fd tombstoned_socket, input_fd;
+        ASSERT_TRUE(tombstoned_connect(pid, &tombstoned_socket, &input_fd));
+        ASSERT_TRUE(android::base::WriteFully(input_fd.get(), &pid, sizeof(pid)));
+        tombstoned_notify_completion(tombstoned_socket.get());
+      }
+
+      // TODO: Fix the race that requires this sleep.
+      std::this_thread::sleep_for(50ms);
+
+      pid_t read_pid;
+      ASSERT_TRUE(android::base::ReadFully(output_fd.get(), &read_pid, sizeof(read_pid)));
+      ASSERT_EQ(read_pid, pid);
+    }
+  });
+
+  start = true;
+
+  for (std::thread& thread : threads) {
+    thread.join();
   }
 }
