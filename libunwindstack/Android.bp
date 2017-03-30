@@ -47,6 +47,7 @@ cc_defaults {
 
     srcs: [
         "ArmExidx.cpp",
+        "DwarfMemory.cpp",
         "Elf.cpp",
         "ElfInterface.cpp",
         "ElfInterfaceArm.cpp",
@@ -87,6 +88,7 @@ cc_defaults {
     srcs: [
         "tests/ArmExidxDecodeTest.cpp",
         "tests/ArmExidxExtractTest.cpp",
+        "tests/DwarfMemoryTest.cpp",
         "tests/ElfInterfaceArmTest.cpp",
         "tests/ElfInterfaceTest.cpp",
         "tests/ElfTest.cpp",
