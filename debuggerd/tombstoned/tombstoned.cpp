@@ -127,8 +127,6 @@ static unique_fd get_tombstone_fd() {
 }
 
 static void dequeue_request(Crash* crash) {
-  ++num_concurrent_dumps;
-
   unique_fd output_fd;
   if (!intercept_manager->GetIntercept(crash->crash_pid, &output_fd)) {
     output_fd = get_tombstone_fd();
@@ -153,6 +151,8 @@ static void dequeue_request(Crash* crash) {
                  crash_completed_cb, crash);
     event_add(crash->crash_event, &timeout);
   }
+
+  ++num_concurrent_dumps;
   return;
 
 fail:
