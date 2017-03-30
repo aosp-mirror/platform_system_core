@@ -17,40 +17,77 @@
 #ifndef __CORE_FS_MGR_PRIV_AVB_H
 #define __CORE_FS_MGR_PRIV_AVB_H
 
-#ifndef __cplusplus
-#include <stdbool.h>
-#endif
+#include <memory>
+#include <string>
+
+#include <libavb/libavb.h>
 
 #include "fs_mgr.h"
 
-__BEGIN_DECLS
+enum FsManagerAvbHandleStatus {
+    kFsManagerAvbHandleSuccess = 0,
+    kFsManagerAvbHandleHashtreeDisabled = 1,
+    kFsManagerAvbHandleFail = 2,
+};
 
-#define FS_MGR_SETUP_AVB_HASHTREE_DISABLED (-2)
-#define FS_MGR_SETUP_AVB_FAIL (-1)
-#define FS_MGR_SETUP_AVB_SUCCESS 0
+class FsManagerAvbHandle;
+using FsManagerAvbUniquePtr = std::unique_ptr<FsManagerAvbHandle>;
 
-bool fs_mgr_is_avb_used();
+// Provides a factory method to return a unique_ptr pointing to itself and the
+// SetUpAvb() function to extract dm-verity parameters from AVB metadata to
+// load verity table into kernel through ioctl.
+class FsManagerAvbHandle {
+  public:
+    // The factory method to return a FsManagerAvbUniquePtr that holds
+    // the verified AVB (external/avb) metadata of all verified partitions
+    // in avb_slot_data_.vbmeta_images[].
+    //
+    // The metadata is checked against the following values from /proc/cmdline.
+    //   - androidboot.vbmeta.{hash_alg, size, digest}.
+    //
+    // A typical usage will be:
+    //   - FsManagerAvbUniquePtr handle = FsManagerAvbHandle::Open();
+    //
+    // Possible return values:
+    //   - nullptr: any error when reading and verifying the metadata,
+    //     e.g., I/O error, digest value mismatch, size mismatch, etc.
+    //
+    //   - a valid unique_ptr with status kFsMgrAvbHandleHashtreeDisabled:
+    //     to support the existing 'adb disable-verity' feature in Android.
+    //     It's very helpful for developers to make the filesystem writable to
+    //     allow replacing binaries on the device.
+    //
+    //   - a valid unique_ptr with status kFsMgrAvbHandleSuccess: the metadata
+    //     is verified and can be trusted.
+    //
+    static FsManagerAvbUniquePtr Open(const std::string& device_file_by_name_prefix);
 
-/* Gets AVB metadata through external/avb/libavb for all partitions:
- * AvbSlotVerifyData.vbmeta_images[] and checks their integrity
- * against the androidboot.vbmeta.{hash_alg, size, digest} values
- * from /proc/cmdline.
- *
- * Return values:
- *   - FS_MGR_SETUP_AVB_SUCCESS: the metadata cab be trusted.
- *   - FS_MGR_SETUP_AVB_FAIL: any error when reading and verifying the
- *     metadata, e.g. I/O error, digest value mismatch, size mismatch.
- *   - FS_MGR_SETUP_AVB_HASHTREE_DISABLED: to support the existing
- *     'adb disable-verity' feature in Android. It's very helpful for
- *     developers to make the filesystem writable to allow replacing
- *     binaries on the device.
- */
-int fs_mgr_load_vbmeta_images(struct fstab* fstab);
+    // Sets up dm-verity on the given fstab entry.
+    // Returns true if the mount point is eligible to mount, it includes:
+    //   - status_ is kFsMgrAvbHandleHashtreeDisabled or
+    //   - status_ is kFsMgrAvbHandleSuccess and sending ioctl DM_TABLE_LOAD
+    //     to load verity table is success.
+    // Otherwise, returns false.
+    bool SetUpAvb(fstab_rec* fstab_entry);
 
-void fs_mgr_unload_vbmeta_images();
+    FsManagerAvbHandle(const FsManagerAvbHandle&) = delete; // no copy
+    FsManagerAvbHandle& operator=(const FsManagerAvbHandle&) = delete; // no assignment
 
-int fs_mgr_setup_avb(struct fstab_rec* fstab_entry);
+    FsManagerAvbHandle(FsManagerAvbHandle&&) noexcept = delete;  // no move
+    FsManagerAvbHandle& operator=(FsManagerAvbHandle&&) noexcept = delete; // no move assignment
 
-__END_DECLS
+    ~FsManagerAvbHandle() {
+        if (avb_slot_data_) {
+            avb_slot_verify_data_free(avb_slot_data_);
+        }
+    };
+
+  protected:
+    FsManagerAvbHandle() : avb_slot_data_(nullptr), status_(kFsManagerAvbHandleFail) {}
+
+  private:
+    AvbSlotVerifyData* avb_slot_data_;
+    FsManagerAvbHandleStatus status_;
+};
 
 #endif /* __CORE_FS_MGR_PRIV_AVB_H */

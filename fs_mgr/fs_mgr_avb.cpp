@@ -28,6 +28,7 @@
 #include <android-base/file.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/properties.h>
@@ -85,24 +86,6 @@
         hashtree_desc.fec_offset / hashtree_desc.data_block_size, /* fec_start */  \
         VERITY_TABLE_OPT_IGNZERO, VERITY_TABLE_OPT_RESTART
 
-AvbSlotVerifyData* fs_mgr_avb_verify_data = nullptr;
-AvbOps* fs_mgr_avb_ops = nullptr;
-
-enum HashAlgorithm {
-    kInvalid = 0,
-    kSHA256 = 1,
-    kSHA512 = 2,
-};
-
-struct androidboot_vbmeta {
-    HashAlgorithm hash_alg;
-    uint8_t digest[SHA512_DIGEST_LENGTH];
-    size_t vbmeta_size;
-    bool allow_verification_error;
-};
-
-androidboot_vbmeta fs_mgr_vbmeta_prop;
-
 static inline bool nibble_value(const char& c, uint8_t* value) {
     FS_MGR_CHECK(value != nullptr);
 
@@ -159,27 +142,78 @@ static std::string bytes_to_hex(const uint8_t* bytes, size_t bytes_len) {
     return hex;
 }
 
-static bool load_vbmeta_prop(androidboot_vbmeta* vbmeta_prop) {
-    FS_MGR_CHECK(vbmeta_prop != nullptr);
+template <typename Hasher>
+static std::pair<size_t, bool> verify_vbmeta_digest(const AvbSlotVerifyData& verify_data,
+                                                    const uint8_t* expected_digest) {
+    size_t total_size = 0;
+    Hasher hasher;
+    for (size_t n = 0; n < verify_data.num_vbmeta_images; n++) {
+        hasher.update(verify_data.vbmeta_images[n].vbmeta_data,
+                      verify_data.vbmeta_images[n].vbmeta_size);
+        total_size += verify_data.vbmeta_images[n].vbmeta_size;
+    }
 
+    bool matched = (memcmp(hasher.finalize(), expected_digest, Hasher::DIGEST_SIZE) == 0);
+
+    return std::make_pair(total_size, matched);
+}
+
+// Reads the following values from kernel cmdline and provides the
+// VerifyVbmetaImages() to verify AvbSlotVerifyData.
+//   - androidboot.vbmeta.device_state
+//   - androidboot.vbmeta.hash_alg
+//   - androidboot.vbmeta.size
+//   - androidboot.vbmeta.digest
+class FsManagerAvbVerifier {
+  public:
+    // The factory method to return a unique_ptr<FsManagerAvbVerifier>
+    static std::unique_ptr<FsManagerAvbVerifier> Create();
+    bool VerifyVbmetaImages(const AvbSlotVerifyData& verify_data);
+    bool IsDeviceUnlocked() { return is_device_unlocked_; }
+
+  protected:
+    FsManagerAvbVerifier() = default;
+
+  private:
+    enum HashAlgorithm {
+        kInvalid = 0,
+        kSHA256 = 1,
+        kSHA512 = 2,
+    };
+
+    HashAlgorithm hash_alg_;
+    uint8_t digest_[SHA512_DIGEST_LENGTH];
+    size_t vbmeta_size_;
+    bool is_device_unlocked_;
+};
+
+std::unique_ptr<FsManagerAvbVerifier> FsManagerAvbVerifier::Create() {
     std::string cmdline;
-    android::base::ReadFileToString("/proc/cmdline", &cmdline);
+    if (!android::base::ReadFileToString("/proc/cmdline", &cmdline)) {
+        LERROR << "Failed to read /proc/cmdline";
+        return nullptr;
+    }
 
-    std::string hash_alg;
+    std::unique_ptr<FsManagerAvbVerifier> avb_verifier(new FsManagerAvbVerifier());
+    if (!avb_verifier) {
+        LERROR << "Failed to create unique_ptr<FsManagerAvbVerifier>";
+        return nullptr;
+    }
+
     std::string digest;
-
+    std::string hash_alg;
     for (const auto& entry : android::base::Split(android::base::Trim(cmdline), " ")) {
         std::vector<std::string> pieces = android::base::Split(entry, "=");
         const std::string& key = pieces[0];
         const std::string& value = pieces[1];
 
         if (key == "androidboot.vbmeta.device_state") {
-            vbmeta_prop->allow_verification_error = (value == "unlocked");
+            avb_verifier->is_device_unlocked_ = (value == "unlocked");
         } else if (key == "androidboot.vbmeta.hash_alg") {
             hash_alg = value;
         } else if (key == "androidboot.vbmeta.size") {
-            if (!android::base::ParseUint(value.c_str(), &vbmeta_prop->vbmeta_size)) {
-                return false;
+            if (!android::base::ParseUint(value.c_str(), &avb_verifier->vbmeta_size_)) {
+                return nullptr;
             }
         } else if (key == "androidboot.vbmeta.digest") {
             digest = value;
@@ -190,48 +224,31 @@ static bool load_vbmeta_prop(androidboot_vbmeta* vbmeta_prop) {
     size_t expected_digest_size = 0;
     if (hash_alg == "sha256") {
         expected_digest_size = SHA256_DIGEST_LENGTH * 2;
-        vbmeta_prop->hash_alg = kSHA256;
+        avb_verifier->hash_alg_ = kSHA256;
     } else if (hash_alg == "sha512") {
         expected_digest_size = SHA512_DIGEST_LENGTH * 2;
-        vbmeta_prop->hash_alg = kSHA512;
+        avb_verifier->hash_alg_ = kSHA512;
     } else {
         LERROR << "Unknown hash algorithm: " << hash_alg.c_str();
-        return false;
+        return nullptr;
     }
 
     // Reads digest.
     if (digest.size() != expected_digest_size) {
         LERROR << "Unexpected digest size: " << digest.size()
                << " (expected: " << expected_digest_size << ")";
-        return false;
+        return nullptr;
     }
 
-    if (!hex_to_bytes(vbmeta_prop->digest, sizeof(vbmeta_prop->digest), digest)) {
+    if (!hex_to_bytes(avb_verifier->digest_, sizeof(avb_verifier->digest_), digest)) {
         LERROR << "Hash digest contains non-hexidecimal character: " << digest.c_str();
-        return false;
+        return nullptr;
     }
 
-    return true;
+    return avb_verifier;
 }
 
-template <typename Hasher>
-static std::pair<size_t, bool> verify_vbmeta_digest(const AvbSlotVerifyData& verify_data,
-                                                    const androidboot_vbmeta& vbmeta_prop) {
-    size_t total_size = 0;
-    Hasher hasher;
-    for (size_t n = 0; n < verify_data.num_vbmeta_images; n++) {
-        hasher.update(verify_data.vbmeta_images[n].vbmeta_data,
-                      verify_data.vbmeta_images[n].vbmeta_size);
-        total_size += verify_data.vbmeta_images[n].vbmeta_size;
-    }
-
-    bool matched = (memcmp(hasher.finalize(), vbmeta_prop.digest, Hasher::DIGEST_SIZE) == 0);
-
-    return std::make_pair(total_size, matched);
-}
-
-static bool verify_vbmeta_images(const AvbSlotVerifyData& verify_data,
-                                 const androidboot_vbmeta& vbmeta_prop) {
+bool FsManagerAvbVerifier::VerifyVbmetaImages(const AvbSlotVerifyData& verify_data) {
     if (verify_data.num_vbmeta_images == 0) {
         LERROR << "No vbmeta images";
         return false;
@@ -240,17 +257,17 @@ static bool verify_vbmeta_images(const AvbSlotVerifyData& verify_data,
     size_t total_size = 0;
     bool digest_matched = false;
 
-    if (vbmeta_prop.hash_alg == kSHA256) {
+    if (hash_alg_ == kSHA256) {
         std::tie(total_size, digest_matched) =
-            verify_vbmeta_digest<SHA256Hasher>(verify_data, vbmeta_prop);
-    } else if (vbmeta_prop.hash_alg == kSHA512) {
+            verify_vbmeta_digest<SHA256Hasher>(verify_data, digest_);
+    } else if (hash_alg_ == kSHA512) {
         std::tie(total_size, digest_matched) =
-            verify_vbmeta_digest<SHA512Hasher>(verify_data, vbmeta_prop);
+            verify_vbmeta_digest<SHA512Hasher>(verify_data, digest_);
     }
 
-    if (total_size != vbmeta_prop.vbmeta_size) {
-        LERROR << "total vbmeta size mismatch: " << total_size
-               << " (expected: " << vbmeta_prop.vbmeta_size << ")";
+    if (total_size != vbmeta_size_) {
+        LERROR << "total vbmeta size mismatch: " << total_size << " (expected: " << vbmeta_size_
+               << ")";
         return false;
     }
 
@@ -408,8 +425,7 @@ static bool get_hashtree_descriptor(const std::string& partition_name,
                 continue;
             }
             if (desc.tag == AVB_DESCRIPTOR_TAG_HASHTREE) {
-                desc_partition_name =
-                    (const uint8_t*)descriptors[j] + sizeof(AvbHashtreeDescriptor);
+                desc_partition_name = (const uint8_t*)descriptors[j] + sizeof(AvbHashtreeDescriptor);
                 if (!avb_hashtree_descriptor_validate_and_byteswap(
                         (AvbHashtreeDescriptor*)descriptors[j], out_hashtree_desc)) {
                     continue;
@@ -441,134 +457,96 @@ static bool get_hashtree_descriptor(const std::string& partition_name,
     return true;
 }
 
-static bool init_is_avb_used() {
-    // When AVB is used, boot loader should set androidboot.vbmeta.{hash_alg,
-    // size, digest} in kernel cmdline or in device tree. They will then be
-    // imported by init process to system properties: ro.boot.vbmeta.{hash_alg, size, digest}.
-    //
-    // In case of early mount, init properties are not initialized, so we also
-    // ensure we look into kernel command line and device tree if the property is
-    // not found
-    //
-    // Checks hash_alg as an indicator for whether AVB is used.
-    // We don't have to parse and check all of them here. The check will
-    // be done in fs_mgr_load_vbmeta_images() and FS_MGR_SETUP_AVB_FAIL will
-    // be returned when there is an error.
-
-    std::string hash_alg;
-    if (!fs_mgr_get_boot_config("vbmeta.hash_alg", &hash_alg)) {
-        return false;
-    }
-    if (hash_alg == "sha256" || hash_alg == "sha512") {
-        return true;
-    }
-    return false;
-}
-
-bool fs_mgr_is_avb_used() {
-    static bool result = init_is_avb_used();
-    return result;
-}
-
-int fs_mgr_load_vbmeta_images(struct fstab* fstab) {
-    FS_MGR_CHECK(fstab != nullptr);
-
-    // Gets the expected hash value of vbmeta images from
-    // kernel cmdline.
-    if (!load_vbmeta_prop(&fs_mgr_vbmeta_prop)) {
-        return FS_MGR_SETUP_AVB_FAIL;
+FsManagerAvbUniquePtr FsManagerAvbHandle::Open(const std::string& device_file_by_name_prefix) {
+    if (device_file_by_name_prefix.empty()) {
+        LERROR << "Missing device file by-name prefix";
+        return nullptr;
     }
 
-    fs_mgr_avb_ops = fs_mgr_dummy_avb_ops_new(fstab);
-    if (fs_mgr_avb_ops == nullptr) {
-        LERROR << "Failed to allocate dummy avb_ops";
-        return FS_MGR_SETUP_AVB_FAIL;
+    // Gets the expected hash value of vbmeta images from kernel cmdline.
+    std::unique_ptr<FsManagerAvbVerifier> avb_verifier = FsManagerAvbVerifier::Create();
+    if (!avb_verifier) {
+        LERROR << "Failed to create FsManagerAvbVerifier";
+        return nullptr;
     }
 
-    // Invokes avb_slot_verify() to load and verify all vbmeta images.
-    // Sets requested_partitions to nullptr as it's to copy the contents
-    // of HASH partitions into fs_mgr_avb_verify_data, which is not required as
-    // fs_mgr only deals with HASHTREE partitions.
-    const char* requested_partitions[] = {nullptr};
-    std::string ab_suffix = fs_mgr_get_slot_suffix();
+    FsManagerAvbUniquePtr avb_handle(new FsManagerAvbHandle());
+    if (!avb_handle) {
+        LERROR << "Failed to allocate FsManagerAvbHandle";
+        return nullptr;
+    }
 
-    AvbSlotVerifyResult verify_result =
-        avb_slot_verify(fs_mgr_avb_ops, requested_partitions, ab_suffix.c_str(),
-                        fs_mgr_vbmeta_prop.allow_verification_error, &fs_mgr_avb_verify_data);
+    FsManagerAvbOps avb_ops(device_file_by_name_prefix);
+    AvbSlotVerifyResult verify_result = avb_ops.AvbSlotVerify(
+        fs_mgr_get_slot_suffix(), avb_verifier->IsDeviceUnlocked(), &avb_handle->avb_slot_data_);
 
     // Only allow two verify results:
     //   - AVB_SLOT_VERIFY_RESULT_OK.
     //   - AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION (for UNLOCKED state).
     if (verify_result == AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION) {
-        if (!fs_mgr_vbmeta_prop.allow_verification_error) {
+        if (!avb_verifier->IsDeviceUnlocked()) {
             LERROR << "ERROR_VERIFICATION isn't allowed";
-            goto fail;
+            return nullptr;
         }
     } else if (verify_result != AVB_SLOT_VERIFY_RESULT_OK) {
         LERROR << "avb_slot_verify failed, result: " << verify_result;
-        goto fail;
+        return nullptr;
     }
 
     // Verifies vbmeta images against the digest passed from bootloader.
-    if (!verify_vbmeta_images(*fs_mgr_avb_verify_data, fs_mgr_vbmeta_prop)) {
-        LERROR << "verify_vbmeta_images failed";
-        goto fail;
+    if (!avb_verifier->VerifyVbmetaImages(*avb_handle->avb_slot_data_)) {
+        LERROR << "VerifyVbmetaImages failed";
+        return nullptr;
     } else {
         // Checks whether FLAGS_HASHTREE_DISABLED is set.
         AvbVBMetaImageHeader vbmeta_header;
         avb_vbmeta_image_header_to_host_byte_order(
-            (AvbVBMetaImageHeader*)fs_mgr_avb_verify_data->vbmeta_images[0].vbmeta_data,
+            (AvbVBMetaImageHeader*)avb_handle->avb_slot_data_->vbmeta_images[0].vbmeta_data,
             &vbmeta_header);
 
         bool hashtree_disabled =
             ((AvbVBMetaImageFlags)vbmeta_header.flags & AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED);
         if (hashtree_disabled) {
-            return FS_MGR_SETUP_AVB_HASHTREE_DISABLED;
+            avb_handle->status_ = kFsManagerAvbHandleHashtreeDisabled;
+            return avb_handle;
         }
     }
 
     if (verify_result == AVB_SLOT_VERIFY_RESULT_OK) {
-        return FS_MGR_SETUP_AVB_SUCCESS;
+        avb_handle->status_ = kFsManagerAvbHandleSuccess;
+        return avb_handle;
     }
-
-fail:
-    fs_mgr_unload_vbmeta_images();
-    return FS_MGR_SETUP_AVB_FAIL;
+    return nullptr;
 }
 
-void fs_mgr_unload_vbmeta_images() {
-    if (fs_mgr_avb_verify_data != nullptr) {
-        avb_slot_verify_data_free(fs_mgr_avb_verify_data);
+bool FsManagerAvbHandle::SetUpAvb(struct fstab_rec* fstab_entry) {
+    if (!fstab_entry) return false;
+    if (!avb_slot_data_ || avb_slot_data_->num_vbmeta_images < 1) {
+        return false;
     }
-
-    if (fs_mgr_avb_ops != nullptr) {
-        fs_mgr_dummy_avb_ops_free(fs_mgr_avb_ops);
+    if (status_ == kFsManagerAvbHandleHashtreeDisabled) {
+        LINFO << "AVB HASHTREE disabled on:" << fstab_entry->mount_point;
+        return true;
     }
-}
-
-int fs_mgr_setup_avb(struct fstab_rec* fstab_entry) {
-    if (!fstab_entry || !fs_mgr_avb_verify_data || fs_mgr_avb_verify_data->num_vbmeta_images < 1) {
-        return FS_MGR_SETUP_AVB_FAIL;
-    }
+    if (status_ != kFsManagerAvbHandleSuccess) return false;
 
     std::string partition_name(basename(fstab_entry->mount_point));
     if (!avb_validate_utf8((const uint8_t*)partition_name.c_str(), partition_name.length())) {
         LERROR << "Partition name: " << partition_name.c_str() << " is not valid UTF-8.";
-        return FS_MGR_SETUP_AVB_FAIL;
+        return false;
     }
 
     AvbHashtreeDescriptor hashtree_descriptor;
     std::string salt;
     std::string root_digest;
-    if (!get_hashtree_descriptor(partition_name, *fs_mgr_avb_verify_data, &hashtree_descriptor,
-                                 &salt, &root_digest)) {
-        return FS_MGR_SETUP_AVB_FAIL;
+    if (!get_hashtree_descriptor(partition_name, *avb_slot_data_, &hashtree_descriptor, &salt,
+                                 &root_digest)) {
+        return false;
     }
 
     // Converts HASHTREE descriptor to verity_table_params.
     if (!hashtree_dm_verity_setup(fstab_entry, hashtree_descriptor, salt, root_digest)) {
-        return FS_MGR_SETUP_AVB_FAIL;
+        return false;
     }
-
-    return FS_MGR_SETUP_AVB_SUCCESS;
+    return true;
 }
