@@ -69,6 +69,7 @@ cc_test {
 
 cc_test {
     name: "libcutils_test_static",
+    test_suites: ["device-tests"],
     defaults: ["libcutils_test_default"],
     static_libs: ["libc"] + test_libraries,
     stl: "libc++_static",
