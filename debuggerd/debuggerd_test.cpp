@@ -77,6 +77,54 @@ constexpr char kWaitForGdbKey[] = "debug.debuggerd.wait_for_gdb";
     }                                                                           \
   } while (0)
 
+static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, unique_fd* output_fd) {
+  intercept_fd->reset(socket_local_client(kTombstonedInterceptSocketName,
+                                          ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET));
+  if (intercept_fd->get() == -1) {
+    FAIL() << "failed to contact tombstoned: " << strerror(errno);
+  }
+
+  InterceptRequest req = {.pid = target_pid};
+
+  unique_fd output_pipe_write;
+  if (!Pipe(output_fd, &output_pipe_write)) {
+    FAIL() << "failed to create output pipe: " << strerror(errno);
+  }
+
+  std::string pipe_size_str;
+  int pipe_buffer_size;
+  if (!android::base::ReadFileToString("/proc/sys/fs/pipe-max-size", &pipe_size_str)) {
+    FAIL() << "failed to read /proc/sys/fs/pipe-max-size: " << strerror(errno);
+  }
+
+  pipe_size_str = android::base::Trim(pipe_size_str);
+
+  if (!android::base::ParseInt(pipe_size_str.c_str(), &pipe_buffer_size, 0)) {
+    FAIL() << "failed to parse pipe max size";
+  }
+
+  if (fcntl(output_fd->get(), F_SETPIPE_SZ, pipe_buffer_size) != pipe_buffer_size) {
+    FAIL() << "failed to set pipe size: " << strerror(errno);
+  }
+
+  if (send_fd(intercept_fd->get(), &req, sizeof(req), std::move(output_pipe_write)) != sizeof(req)) {
+    FAIL() << "failed to send output fd to tombstoned: " << strerror(errno);
+  }
+
+  InterceptResponse response;
+  ssize_t rc = TEMP_FAILURE_RETRY(read(intercept_fd->get(), &response, sizeof(response)));
+  if (rc == -1) {
+    FAIL() << "failed to read response from tombstoned: " << strerror(errno);
+  } else if (rc == 0) {
+    FAIL() << "failed to read response from tombstoned (EOF)";
+  } else if (rc != sizeof(response)) {
+    FAIL() << "received packet of unexpected length from tombstoned: expected " << sizeof(response)
+           << ", received " << rc;
+  }
+
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status);
+}
+
 class CrasherTest : public ::testing::Test {
  public:
   pid_t crasher_pid = -1;
@@ -118,38 +166,7 @@ void CrasherTest::StartIntercept(unique_fd* output_fd) {
     FAIL() << "crasher hasn't been started";
   }
 
-  intercept_fd.reset(socket_local_client(kTombstonedInterceptSocketName,
-                                         ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET));
-  if (intercept_fd == -1) {
-    FAIL() << "failed to contact tombstoned: " << strerror(errno);
-  }
-
-  InterceptRequest req = {.pid = crasher_pid };
-
-  unique_fd output_pipe_write;
-  if (!Pipe(output_fd, &output_pipe_write)) {
-    FAIL() << "failed to create output pipe: " << strerror(errno);
-  }
-
-  std::string pipe_size_str;
-  int pipe_buffer_size;
-  if (!android::base::ReadFileToString("/proc/sys/fs/pipe-max-size", &pipe_size_str)) {
-    FAIL() << "failed to read /proc/sys/fs/pipe-max-size: " << strerror(errno);
-  }
-
-  pipe_size_str = android::base::Trim(pipe_size_str);
-
-  if (!android::base::ParseInt(pipe_size_str.c_str(), &pipe_buffer_size, 0)) {
-    FAIL() << "failed to parse pipe max size";
-  }
-
-  if (fcntl(output_fd->get(), F_SETPIPE_SZ, pipe_buffer_size) != pipe_buffer_size) {
-    FAIL() << "failed to set pipe size: " << strerror(errno);
-  }
-
-  if (send_fd(intercept_fd.get(), &req, sizeof(req), std::move(output_pipe_write)) != sizeof(req)) {
-    FAIL() << "failed to send output fd to tombstoned: " << strerror(errno);
-  }
+  tombstoned_intercept(crasher_pid, &this->intercept_fd, output_fd);
 }
 
 void CrasherTest::FinishIntercept(int* result) {
@@ -165,7 +182,7 @@ void CrasherTest::FinishIntercept(int* result) {
     FAIL() << "received packet of unexpected length from tombstoned: expected " << sizeof(response)
            << ", received " << rc;
   } else {
-    *result = response.success;
+    *result = response.status == InterceptStatus::kStarted ? 1 : 0;
   }
 }
 
