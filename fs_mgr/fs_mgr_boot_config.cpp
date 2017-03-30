@@ -56,7 +56,7 @@ bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val) {
             return true;
         }
 
-        LERROR << "Error finding '" << key << "' in device tree";
+        LINFO << "Error finding '" << key << "' in device tree";
     }
 
     return false;
