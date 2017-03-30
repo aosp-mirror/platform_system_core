@@ -105,6 +105,7 @@ static void intercept_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
     // We trust the other side, so only do minimal validity checking.
     if (intercept_request.pid <= 0 || intercept_request.pid > std::numeric_limits<pid_t>::max()) {
       InterceptResponse response = {};
+      response.status = InterceptStatus::kFailed;
       snprintf(response.error_message, sizeof(response.error_message), "invalid pid %" PRId32,
                intercept_request.pid);
       TEMP_FAILURE_RETRY(write(sockfd, &response, sizeof(response)));
@@ -113,13 +114,23 @@ static void intercept_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
 
     intercept->intercept_pid = intercept_request.pid;
 
-    // Register the intercept with the InterceptManager.
+    // Check if it's already registered.
     if (intercept_manager->intercepts.count(intercept_request.pid) > 0) {
       InterceptResponse response = {};
+      response.status = InterceptStatus::kFailed;
       snprintf(response.error_message, sizeof(response.error_message),
                "pid %" PRId32 " already intercepted", intercept_request.pid);
       TEMP_FAILURE_RETRY(write(sockfd, &response, sizeof(response)));
       LOG(WARNING) << response.error_message;
+      goto fail;
+    }
+
+    // Let the other side know that the intercept has been registered, now that we know we can't
+    // fail. tombstoned is single threaded, so this isn't racy.
+    InterceptResponse response = {};
+    response.status = InterceptStatus::kRegistered;
+    if (TEMP_FAILURE_RETRY(write(sockfd, &response, sizeof(response))) == -1) {
+      PLOG(WARNING) << "failed to notify interceptor of registration";
       goto fail;
     }
 
@@ -174,7 +185,7 @@ bool InterceptManager::GetIntercept(pid_t pid, android::base::unique_fd* out_fd)
 
   LOG(INFO) << "found intercept fd " << intercept->output_fd.get() << " for pid " << pid;
   InterceptResponse response = {};
-  response.success = 1;
+  response.status = InterceptStatus::kStarted;
   TEMP_FAILURE_RETRY(write(intercept->sockfd, &response, sizeof(response)));
   *out_fd = std::move(intercept->output_fd);
 
