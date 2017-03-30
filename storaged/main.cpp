@@ -43,7 +43,6 @@
 #include <storaged_utils.h>
 
 storaged_t storaged;
-emmc_info_t emmc_info;
 
 // Function of storaged's main thread
 void* storaged_main(void* s) {
@@ -114,10 +113,7 @@ int main(int argc, char** argv) {
     }
 
     if (flag_main_service) { // start main thread
-        if (emmc_info.init()) {
-            storaged.set_storage_info(&emmc_info);
-        }
-
+        report_storage_health();
         // Start the main thread of storaged
         pthread_t storaged_main_thread;
         errno = pthread_create(&storaged_main_thread, NULL, storaged_main, &storaged);

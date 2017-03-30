@@ -29,7 +29,6 @@
 
 #define MMC_DISK_STATS_PATH "/sys/block/mmcblk0/stat"
 #define SDA_DISK_STATS_PATH "/sys/block/sda/stat"
-#define EMMC_EXT_CSD_PATH "/d/mmc0/mmc0:0001/ext_csd"
 
 static void pause(uint32_t sec) {
     const char* path = "/cache/test";
@@ -58,12 +57,7 @@ static void pause(uint32_t sec) {
 const char* DISK_STATS_PATH;
 TEST(storaged_test, retvals) {
     struct disk_stats stats;
-    emmc_info_t info;
     memset(&stats, 0, sizeof(struct disk_stats));
-
-    if (info.init()) {
-        EXPECT_TRUE(info.update());
-    }
 
     if (access(MMC_DISK_STATS_PATH, R_OK) >= 0) {
         DISK_STATS_PATH = MMC_DISK_STATS_PATH;
@@ -124,20 +118,6 @@ TEST(storaged_test, disk_stats) {
     for (uint i = 0; i < DISK_STATS_SIZE; ++i) {
         if (i == 8) continue; // skip io_in_flight which can be 0
         EXPECT_EQ(*((uint64_t*)&overall_inc + i), *((uint64_t*)&acc + i));
-    }
-}
-
-TEST(storaged_test, storage_info_t) {
-    emmc_info_t info;
-
-    if (access(EMMC_EXT_CSD_PATH, R_OK) >= 0) {
-        int ret = info.init();
-        if (ret) {
-            EXPECT_TRUE(info.version.empty());
-            ASSERT_TRUE(info.update());
-            // update should put something in info.
-            EXPECT_TRUE(info.eol || info.lifetime_a || info.lifetime_b);
-        }
     }
 }
 
