@@ -267,10 +267,6 @@ extern int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  
 #undef   accept
 #define  accept  ___xxx_accept
 
-int adb_getsockname(int fd, struct sockaddr* sockaddr, socklen_t* optlen);
-#undef getsockname
-#define getsockname(...) ___xxx_getsockname(__VA__ARGS__)
-
 // Returns the local port number of a bound socket, or -1 on failure.
 int adb_socket_get_local_port(int fd);
 
