@@ -211,7 +211,13 @@ void Service::KillProcessGroup(int signal) {
     LOG(INFO) << "Sending signal " << signal
               << " to service '" << name_
               << "' (pid " << pid_ << ") process group...";
-    if (killProcessGroup(uid_, pid_, signal) == -1) {
+    int r;
+    if (signal == SIGTERM) {
+        r = killProcessGroupOnce(uid_, pid_, signal);
+    } else {
+        r = killProcessGroup(uid_, pid_, signal);
+    }
+    if (r == -1) {
         PLOG(ERROR) << "killProcessGroup(" << uid_ << ", " << pid_ << ", " << signal << ") failed";
     }
     if (kill(-pid_, signal) == -1) {
