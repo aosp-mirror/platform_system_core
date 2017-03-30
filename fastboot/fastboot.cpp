@@ -1536,6 +1536,7 @@ int main(int argc, char **argv)
                 setvbuf(stderr, nullptr, _IONBF, 0);
             } else if (strcmp("version", longopts[longindex].name) == 0) {
                 fprintf(stdout, "fastboot version %s\n", FASTBOOT_REVISION);
+                fprintf(stdout, "Installed as %s\n", android::base::GetExecutablePath().c_str());
                 return 0;
             } else if (strcmp("slot", longopts[longindex].name) == 0) {
                 slot_override = std::string(optarg);
