@@ -36,6 +36,7 @@
 #include <cutils/sockets.h>
 #include <debuggerd/handler.h>
 #include <debuggerd/protocol.h>
+#include <debuggerd/tombstoned.h>
 #include <debuggerd/util.h>
 #include <gtest/gtest.h>
 
@@ -76,6 +77,54 @@ constexpr char kWaitForGdbKey[] = "debug.debuggerd.wait_for_gdb";
       FAIL() << "regex mismatch: expected " << (pattern) << " in: \n" << (str); \
     }                                                                           \
   } while (0)
+
+static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, unique_fd* output_fd) {
+  intercept_fd->reset(socket_local_client(kTombstonedInterceptSocketName,
+                                          ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET));
+  if (intercept_fd->get() == -1) {
+    FAIL() << "failed to contact tombstoned: " << strerror(errno);
+  }
+
+  InterceptRequest req = {.pid = target_pid};
+
+  unique_fd output_pipe_write;
+  if (!Pipe(output_fd, &output_pipe_write)) {
+    FAIL() << "failed to create output pipe: " << strerror(errno);
+  }
+
+  std::string pipe_size_str;
+  int pipe_buffer_size;
+  if (!android::base::ReadFileToString("/proc/sys/fs/pipe-max-size", &pipe_size_str)) {
+    FAIL() << "failed to read /proc/sys/fs/pipe-max-size: " << strerror(errno);
+  }
+
+  pipe_size_str = android::base::Trim(pipe_size_str);
+
+  if (!android::base::ParseInt(pipe_size_str.c_str(), &pipe_buffer_size, 0)) {
+    FAIL() << "failed to parse pipe max size";
+  }
+
+  if (fcntl(output_fd->get(), F_SETPIPE_SZ, pipe_buffer_size) != pipe_buffer_size) {
+    FAIL() << "failed to set pipe size: " << strerror(errno);
+  }
+
+  if (send_fd(intercept_fd->get(), &req, sizeof(req), std::move(output_pipe_write)) != sizeof(req)) {
+    FAIL() << "failed to send output fd to tombstoned: " << strerror(errno);
+  }
+
+  InterceptResponse response;
+  ssize_t rc = TEMP_FAILURE_RETRY(read(intercept_fd->get(), &response, sizeof(response)));
+  if (rc == -1) {
+    FAIL() << "failed to read response from tombstoned: " << strerror(errno);
+  } else if (rc == 0) {
+    FAIL() << "failed to read response from tombstoned (EOF)";
+  } else if (rc != sizeof(response)) {
+    FAIL() << "received packet of unexpected length from tombstoned: expected " << sizeof(response)
+           << ", received " << rc;
+  }
+
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status);
+}
 
 class CrasherTest : public ::testing::Test {
  public:
@@ -118,38 +167,7 @@ void CrasherTest::StartIntercept(unique_fd* output_fd) {
     FAIL() << "crasher hasn't been started";
   }
 
-  intercept_fd.reset(socket_local_client(kTombstonedInterceptSocketName,
-                                         ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET));
-  if (intercept_fd == -1) {
-    FAIL() << "failed to contact tombstoned: " << strerror(errno);
-  }
-
-  InterceptRequest req = {.pid = crasher_pid };
-
-  unique_fd output_pipe_write;
-  if (!Pipe(output_fd, &output_pipe_write)) {
-    FAIL() << "failed to create output pipe: " << strerror(errno);
-  }
-
-  std::string pipe_size_str;
-  int pipe_buffer_size;
-  if (!android::base::ReadFileToString("/proc/sys/fs/pipe-max-size", &pipe_size_str)) {
-    FAIL() << "failed to read /proc/sys/fs/pipe-max-size: " << strerror(errno);
-  }
-
-  pipe_size_str = android::base::Trim(pipe_size_str);
-
-  if (!android::base::ParseInt(pipe_size_str.c_str(), &pipe_buffer_size, 0)) {
-    FAIL() << "failed to parse pipe max size";
-  }
-
-  if (fcntl(output_fd->get(), F_SETPIPE_SZ, pipe_buffer_size) != pipe_buffer_size) {
-    FAIL() << "failed to set pipe size: " << strerror(errno);
-  }
-
-  if (send_fd(intercept_fd.get(), &req, sizeof(req), std::move(output_pipe_write)) != sizeof(req)) {
-    FAIL() << "failed to send output fd to tombstoned: " << strerror(errno);
-  }
+  tombstoned_intercept(crasher_pid, &this->intercept_fd, output_fd);
 }
 
 void CrasherTest::FinishIntercept(int* result) {
@@ -165,7 +183,7 @@ void CrasherTest::FinishIntercept(int* result) {
     FAIL() << "received packet of unexpected length from tombstoned: expected " << sizeof(response)
            << ", received " << rc;
   } else {
-    *result = response.success;
+    *result = response.status == InterceptStatus::kStarted ? 1 : 0;
   }
 }
 
@@ -506,5 +524,99 @@ TEST(crash_dump, zombie) {
     ASSERT_EQ(forkpid, rc);
     ASSERT_TRUE(WIFEXITED(status));
     ASSERT_EQ(0, WEXITSTATUS(status));
+  }
+}
+
+TEST(tombstoned, no_notify) {
+  // Do this a few times.
+  for (int i = 0; i < 3; ++i) {
+    pid_t pid = 123'456'789 + i;
+
+    unique_fd intercept_fd, output_fd;
+    tombstoned_intercept(pid, &intercept_fd, &output_fd);
+
+    {
+      unique_fd tombstoned_socket, input_fd;
+      ASSERT_TRUE(tombstoned_connect(pid, &tombstoned_socket, &input_fd));
+      ASSERT_TRUE(android::base::WriteFully(input_fd.get(), &pid, sizeof(pid)));
+    }
+
+    pid_t read_pid;
+    ASSERT_TRUE(android::base::ReadFully(output_fd.get(), &read_pid, sizeof(read_pid)));
+    ASSERT_EQ(read_pid, pid);
+  }
+}
+
+TEST(tombstoned, stress) {
+  // Spawn threads to simultaneously do a bunch of failing dumps and a bunch of successful dumps.
+  static constexpr int kDumpCount = 100;
+
+  std::atomic<bool> start(false);
+  std::vector<std::thread> threads;
+  threads.emplace_back([&start]() {
+    while (!start) {
+      continue;
+    }
+
+    // Use a way out of range pid, to avoid stomping on an actual process.
+    pid_t pid_base = 1'000'000;
+
+    for (int dump = 0; dump < kDumpCount; ++dump) {
+      pid_t pid = pid_base + dump;
+
+      unique_fd intercept_fd, output_fd;
+      tombstoned_intercept(pid, &intercept_fd, &output_fd);
+
+      // Pretend to crash, and then immediately close the socket.
+      unique_fd sockfd(socket_local_client(kTombstonedCrashSocketName,
+                                           ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET));
+      if (sockfd == -1) {
+        FAIL() << "failed to connect to tombstoned: " << strerror(errno);
+      }
+      TombstonedCrashPacket packet = {};
+      packet.packet_type = CrashPacketType::kDumpRequest;
+      packet.packet.dump_request.pid = pid;
+      if (TEMP_FAILURE_RETRY(write(sockfd, &packet, sizeof(packet))) != sizeof(packet)) {
+        FAIL() << "failed to write to tombstoned: " << strerror(errno);
+      }
+
+      continue;
+    }
+  });
+
+  threads.emplace_back([&start]() {
+    while (!start) {
+      continue;
+    }
+
+    // Use a way out of range pid, to avoid stomping on an actual process.
+    pid_t pid_base = 2'000'000;
+
+    for (int dump = 0; dump < kDumpCount; ++dump) {
+      pid_t pid = pid_base + dump;
+
+      unique_fd intercept_fd, output_fd;
+      tombstoned_intercept(pid, &intercept_fd, &output_fd);
+
+      {
+        unique_fd tombstoned_socket, input_fd;
+        ASSERT_TRUE(tombstoned_connect(pid, &tombstoned_socket, &input_fd));
+        ASSERT_TRUE(android::base::WriteFully(input_fd.get(), &pid, sizeof(pid)));
+        tombstoned_notify_completion(tombstoned_socket.get());
+      }
+
+      // TODO: Fix the race that requires this sleep.
+      std::this_thread::sleep_for(50ms);
+
+      pid_t read_pid;
+      ASSERT_TRUE(android::base::ReadFully(output_fd.get(), &read_pid, sizeof(read_pid)));
+      ASSERT_EQ(read_pid, pid);
+    }
+  });
+
+  start = true;
+
+  for (std::thread& thread : threads) {
+    thread.join();
   }
 }
