@@ -27,6 +27,7 @@
 #include <vector>
 
 #include <batteryservice/IBatteryPropertiesListener.h>
+#include <batteryservice/IBatteryPropertiesRegistrar.h>
 
 #include "storaged_info.h"
 #include "storaged_uid_monitor.h"
@@ -245,7 +246,8 @@ struct storaged_config {
     int event_time_check_usec;  // check how much cputime spent in event loop
 };
 
-class storaged_t : public BnBatteryPropertiesListener {
+class storaged_t : public BnBatteryPropertiesListener,
+                   public IBinder::DeathRecipient {
 private:
     time_t mTimer;
     storaged_config mConfig;
@@ -253,6 +255,7 @@ private:
     disk_stats_monitor mDsm;
     uid_monitor mUidm;
     time_t mStarttime;
+    sp<IBatteryPropertiesRegistrar> battery_properties;
 public:
     storaged_t(void);
     ~storaged_t() {}
@@ -281,6 +284,7 @@ public:
 
     void init_battery_service();
     virtual void batteryPropertiesChanged(struct BatteryProperties props);
+    void binderDied(const wp<IBinder>& who);
 };
 
 // Eventlog tag
