@@ -40,6 +40,7 @@
 #include <selinux/label.h>
 #include <selinux/android.h>
 
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
@@ -69,6 +70,7 @@
 #include "util.h"
 #include "watchdogd.h"
 
+using android::base::boot_clock;
 using android::base::GetProperty;
 using android::base::StringPrintf;
 
