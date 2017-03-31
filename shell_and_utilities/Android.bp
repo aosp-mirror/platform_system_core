@@ -1,0 +1,13 @@
+phony {
+    name: "shell_and_utilities",
+    required: [
+        "bzip2",
+        "grep",
+        "gzip",
+        "mkshrc",
+        "reboot",
+        "sh",
+        "toolbox",
+        "toybox",
+    ],
+}
