@@ -126,9 +126,7 @@ static unique_fd get_tombstone_fd() {
   return result;
 }
 
-static void dequeue_request(Crash* crash) {
-  ++num_concurrent_dumps;
-
+static void perform_request(Crash* crash) {
   unique_fd output_fd;
   if (!intercept_manager->GetIntercept(crash->crash_pid, &output_fd)) {
     output_fd = get_tombstone_fd();
@@ -153,10 +151,20 @@ static void dequeue_request(Crash* crash) {
                  crash_completed_cb, crash);
     event_add(crash->crash_event, &timeout);
   }
+
+  ++num_concurrent_dumps;
   return;
 
 fail:
   delete crash;
+}
+
+static void dequeue_requests() {
+  while (!queued_requests.empty() && num_concurrent_dumps < kMaxConcurrentDumps) {
+    Crash* next_crash = queued_requests.front();
+    queued_requests.pop_front();
+    perform_request(next_crash);
+  }
 }
 
 static void crash_accept_cb(evconnlistener* listener, evutil_socket_t sockfd, sockaddr*, int,
@@ -207,7 +215,7 @@ static void crash_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
     LOG(INFO) << "enqueueing crash request for pid " << crash->crash_pid;
     queued_requests.push_back(crash);
   } else {
-    dequeue_request(crash);
+    perform_request(crash);
   }
 
   return;
@@ -247,11 +255,7 @@ fail:
   delete crash;
 
   // If there's something queued up, let them proceed.
-  if (!queued_requests.empty()) {
-    Crash* next_crash = queued_requests.front();
-    queued_requests.pop_front();
-    dequeue_request(next_crash);
-  }
+  dequeue_requests();
 }
 
 int main(int, char* []) {
