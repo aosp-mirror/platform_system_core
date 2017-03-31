@@ -163,6 +163,7 @@ cc_test {
             srcs: [
                 "client/debuggerd_client_test.cpp",
                 "debuggerd_test.cpp",
+                "tombstoned_client.cpp",
                 "util.cpp"
             ],
         },
@@ -176,7 +177,8 @@ cc_test {
     ],
 
     static_libs: [
-        "libdebuggerd"
+        "libdebuggerd",
+        "libc_logging",
     ],
 
     local_include_dirs: [
