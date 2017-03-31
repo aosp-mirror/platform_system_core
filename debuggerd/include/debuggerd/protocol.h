@@ -56,8 +56,14 @@ struct InterceptRequest {
   int32_t pid;
 };
 
+enum class InterceptStatus : uint8_t {
+  kFailed,
+  kStarted,
+  kRegistered,
+};
+
 // Sent either immediately upon failure, or when the intercept has been used.
 struct InterceptResponse {
-  uint8_t success;          // 0 or 1
+  InterceptStatus status;
   char error_message[127];  // always null-terminated
 };
