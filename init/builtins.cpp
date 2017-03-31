@@ -929,8 +929,14 @@ static int do_installkey(const std::vector<std::string>& args) {
     if (!is_file_crypto()) {
         return 0;
     }
-    return e4crypt_create_device_key(args[1].c_str(),
-                                     do_installkeys_ensure_dir_exists);
+    auto unencrypted_dir = args[1] + e4crypt_unencrypted_folder;
+    if (do_installkeys_ensure_dir_exists(unencrypted_dir.c_str())) {
+        PLOG(ERROR) << "Failed to create " << unencrypted_dir;
+        return -1;
+    }
+    std::vector<std::string> exec_args = {"exec", "/system/bin/vdc", "--wait", "cryptfs",
+                                          "enablefilecrypto"};
+    return do_exec(exec_args);
 }
 
 static int do_init_user0(const std::vector<std::string>& args) {
