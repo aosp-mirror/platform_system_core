@@ -18,6 +18,7 @@
 
 #include <errno.h>
 
+#include <android-base/test_utils.h>
 #include <gtest/gtest.h>
 
 TEST(util, read_file_ENOENT) {
@@ -35,6 +36,23 @@ TEST(util, read_file_success) {
   EXPECT_EQ('\n', s[s.length() - 1]);
   s[5] = 0;
   EXPECT_STREQ("Linux", s.c_str());
+}
+
+TEST(util, write_file_binary) {
+    std::string contents("abcd");
+    contents.push_back('\0');
+    contents.push_back('\0');
+    contents.append("dcba");
+    ASSERT_EQ(10u, contents.size());
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    EXPECT_TRUE(write_file(tf.path, contents)) << strerror(errno);
+
+    std::string read_back_contents;
+    EXPECT_TRUE(read_file(tf.path, &read_back_contents)) << strerror(errno);
+    EXPECT_EQ(contents, read_back_contents);
+    EXPECT_EQ(10u, read_back_contents.size());
 }
 
 TEST(util, decode_uid) {

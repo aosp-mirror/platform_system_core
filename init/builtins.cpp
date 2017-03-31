@@ -155,7 +155,7 @@ static int do_class_restart(const std::vector<std::string>& args) {
 }
 
 static int do_domainname(const std::vector<std::string>& args) {
-    return write_file("/proc/sys/kernel/domainname", args[1].c_str()) ? 0 : 1;
+    return write_file("/proc/sys/kernel/domainname", args[1]) ? 0 : 1;
 }
 
 static int do_enable(const std::vector<std::string>& args) {
@@ -179,7 +179,7 @@ static int do_export(const std::vector<std::string>& args) {
 }
 
 static int do_hostname(const std::vector<std::string>& args) {
-    return write_file("/proc/sys/kernel/hostname", args[1].c_str()) ? 0 : 1;
+    return write_file("/proc/sys/kernel/hostname", args[1]) ? 0 : 1;
 }
 
 static int do_ifup(const std::vector<std::string>& args) {
@@ -648,9 +648,7 @@ static int do_verity_update_state(const std::vector<std::string>& args) {
 }
 
 static int do_write(const std::vector<std::string>& args) {
-    const char* path = args[1].c_str();
-    const char* value = args[2].c_str();
-    return write_file(path, value) ? 0 : 1;
+    return write_file(args[1], args[2]) ? 0 : 1;
 }
 
 static int do_copy(const std::vector<std::string>& args) {
