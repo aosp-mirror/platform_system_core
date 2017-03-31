@@ -65,24 +65,25 @@ bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType du
   auto time_left = [timeout_ms, &end]() { return end - std::chrono::steady_clock::now(); };
   auto set_timeout = [timeout_ms, &time_left](int sockfd) {
     if (timeout_ms <= 0) {
-      return true;
+      return -1;
     }
 
     auto remaining = time_left();
     if (remaining < decltype(remaining)::zero()) {
-      return false;
+      LOG(ERROR) << "timeout expired";
+      return -1;
     }
     struct timeval timeout;
     populate_timeval(&timeout, remaining);
 
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0) {
-      return false;
+      return -1;
     }
     if (setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) != 0) {
-      return false;
+      return -1;
     }
 
-    return true;
+    return sockfd;
   };
 
   sockfd.reset(socket(AF_LOCAL, SOCK_SEQPACKET, 0));
@@ -91,12 +92,7 @@ bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType du
     return false;
   }
 
-  if (!set_timeout(sockfd)) {
-    PLOG(ERROR) << "libdebugger_client: failed to set timeout";
-    return false;
-  }
-
-  if (socket_local_client_connect(sockfd.get(), kTombstonedInterceptSocketName,
+  if (socket_local_client_connect(set_timeout(sockfd.get()), kTombstonedInterceptSocketName,
                                   ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET) == -1) {
     PLOG(ERROR) << "libdebuggerd_client: failed to connect to tombstoned";
     return false;
@@ -115,21 +111,35 @@ bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType du
     return false;
   }
 
-  if (send_fd(sockfd.get(), &req, sizeof(req), std::move(pipe_write)) != sizeof(req)) {
+  if (send_fd(set_timeout(sockfd), &req, sizeof(req), std::move(pipe_write)) != sizeof(req)) {
     PLOG(ERROR) << "libdebuggerd_client: failed to send output fd to tombstoned";
+    return false;
+  }
+
+  // Check to make sure we've successfully registered.
+  InterceptResponse response;
+  ssize_t rc =
+      TEMP_FAILURE_RETRY(recv(set_timeout(sockfd.get()), &response, sizeof(response), MSG_TRUNC));
+  if (rc == 0) {
+    LOG(ERROR) << "libdebuggerd_client: failed to read response from tombstoned: timeout reached?";
+    return false;
+  } else if (rc != sizeof(response)) {
+    LOG(ERROR)
+        << "libdebuggerd_client: received packet of unexpected length from tombstoned: expected "
+        << sizeof(response) << ", received " << rc;
+    return false;
+  }
+
+  if (response.status != InterceptStatus::kRegistered) {
+    LOG(ERROR) << "libdebuggerd_client: unexpected registration response: "
+               << static_cast<int>(response.status);
     return false;
   }
 
   bool backtrace = dump_type == kDebuggerdBacktrace;
   send_signal(pid, backtrace);
 
-  if (!set_timeout(sockfd)) {
-    PLOG(ERROR) << "libdebuggerd_client: failed to set timeout";
-    return false;
-  }
-
-  InterceptResponse response;
-  ssize_t rc = TEMP_FAILURE_RETRY(recv(sockfd.get(), &response, sizeof(response), MSG_TRUNC));
+  rc = TEMP_FAILURE_RETRY(recv(set_timeout(sockfd.get()), &response, sizeof(response), MSG_TRUNC));
   if (rc == 0) {
     LOG(ERROR) << "libdebuggerd_client: failed to read response from tombstoned: timeout reached?";
     return false;
@@ -140,7 +150,7 @@ bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType du
     return false;
   }
 
-  if (response.success != 1) {
+  if (response.status != InterceptStatus::kStarted) {
     response.error_message[sizeof(response.error_message) - 1] = '\0';
     LOG(ERROR) << "libdebuggerd_client: tombstoned reported failure: " << response.error_message;
     return false;
