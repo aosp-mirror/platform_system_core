@@ -173,7 +173,7 @@ void storaged_t::init_battery_service() {
     if (!mConfig.proc_uid_io_available)
         return;
 
-    sp<IBatteryPropertiesRegistrar> battery_properties = get_battery_properties_service();
+    battery_properties = get_battery_properties_service();
     if (battery_properties == NULL) {
         LOG_TO(SYSTEM, WARNING) << "failed to find batteryproperties service";
         return;
@@ -185,6 +185,17 @@ void storaged_t::init_battery_service() {
 
     // register listener after init uid_monitor
     battery_properties->registerListener(this);
+    IInterface::asBinder(battery_properties)->linkToDeath(this);
+}
+
+void storaged_t::binderDied(const wp<IBinder>& who) {
+    if (battery_properties != NULL &&
+        IInterface::asBinder(battery_properties) == who) {
+        LOG_TO(SYSTEM, ERROR) << "batteryproperties service died, exiting";
+        exit(1);
+    } else {
+        LOG_TO(SYSTEM, ERROR) << "unknown service died";
+    }
 }
 
 /* storaged_t */
