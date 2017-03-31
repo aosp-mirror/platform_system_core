@@ -39,7 +39,28 @@
 #include "fs_mgr_avb_ops.h"
 #include "fs_mgr_priv.h"
 
-static struct fstab* fs_mgr_fstab = nullptr;
+static std::string fstab_by_name_prefix;
+
+static std::string extract_by_name_prefix(struct fstab* fstab) {
+    // In AVB, we can assume that there's an entry for the /misc mount
+    // point in the fstab file and use that to get the device file for
+    // the misc partition. The device needs not to have an actual /misc
+    // partition. Then returns the prefix by removing the trailing "misc":
+    //
+    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/misc ->
+    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/
+
+    struct fstab_rec* fstab_entry = fs_mgr_get_entry_for_mount_point(fstab, "/misc");
+    if (fstab_entry == nullptr) {
+        LERROR << "/misc mount point not found in fstab";
+        return "";
+    }
+
+    std::string full_path(fstab_entry->blk_device);
+    size_t end_slash = full_path.find_last_of("/");
+
+    return full_path.substr(0, end_slash + 1);
+}
 
 static AvbIOResult read_from_partition(AvbOps* ops ATTRIBUTE_UNUSED, const char* partition,
                                        int64_t offset, size_t num_bytes, void* buffer,
@@ -49,30 +70,14 @@ static AvbIOResult read_from_partition(AvbOps* ops ATTRIBUTE_UNUSED, const char*
     // for partitions having 'slotselect' optin in fstab file, but it
     // won't be appended to the mount point.
     //
-    // In AVB, we can assume that there's an entry for the /misc mount
-    // point and use that to get the device file for the misc partition.
-    // From there we'll assume that a by-name scheme is used
-    // so we can just replace the trailing "misc" by the given
-    // |partition|, e.g.
+    // Appends |partition| to the fstab_by_name_prefix, which is obtained
+    // by removing the trailing "misc" from the device file of /misc mount
+    // point. e.g.,
     //
-    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/misc ->
+    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/ ->
     //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/system_a
 
-    struct fstab_rec* fstab_entry = fs_mgr_get_entry_for_mount_point(fs_mgr_fstab, "/misc");
-
-    if (fstab_entry == nullptr) {
-        LERROR << "/misc mount point not found in fstab";
-        return AVB_IO_RESULT_ERROR_IO;
-    }
-
-    std::string partition_name(partition);
-    std::string path(fstab_entry->blk_device);
-    // Replaces the last field of device file if it's not misc.
-    if (!android::base::StartsWith(partition_name, "misc")) {
-        size_t end_slash = path.find_last_of("/");
-        std::string by_name_prefix(path.substr(0, end_slash + 1));
-        path = by_name_prefix + partition_name;
-    }
+    std::string path = fstab_by_name_prefix + partition;
 
     // Ensures the device path (a symlink created by init) is ready to
     // access. fs_mgr_test_access() will test a few iterations if the
@@ -168,8 +173,8 @@ static AvbIOResult dummy_get_unique_guid_for_partition(AvbOps* ops ATTRIBUTE_UNU
 AvbOps* fs_mgr_dummy_avb_ops_new(struct fstab* fstab) {
     AvbOps* ops;
 
-    // Assigns the fstab to the static variable for later use.
-    fs_mgr_fstab = fstab;
+    fstab_by_name_prefix = extract_by_name_prefix(fstab);
+    if (fstab_by_name_prefix.empty()) return nullptr;
 
     ops = (AvbOps*)calloc(1, sizeof(AvbOps));
     if (ops == nullptr) {
