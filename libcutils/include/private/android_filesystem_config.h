@@ -130,6 +130,7 @@
 #define AID_MEDIA_OBB 1059       /* GID for OBB files on internal media storage */
 #define AID_ESE 1060             /* embedded secure element (eSE) subsystem */
 #define AID_OTA_UPDATE 1061      /* resource tracking UID for OTA updates */
+#define AID_DISK_RESERVED 1062   /* GID that has access to reserved disk space */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
