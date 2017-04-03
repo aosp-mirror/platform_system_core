@@ -182,7 +182,7 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
         } logFindStart(pid, logMask, sequence,
                        logbuf().isMonotonic() && android::isMonotonic(start));
 
-        logbuf().flushTo(cli, sequence, FlushCommand::hasReadLogs(cli),
+        logbuf().flushTo(cli, sequence, nullptr, FlushCommand::hasReadLogs(cli),
                          FlushCommand::hasSecurityLogs(cli),
                          logFindStart.callback, &logFindStart);
 
