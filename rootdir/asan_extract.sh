@@ -25,6 +25,7 @@
 
 SRC=/system/asan.tar.bz2
 MD5_FILE=/data/asan.md5sum
+ASAN_DIR=/data/asan
 
 if ! test -f $SRC ; then
   log -p i -t asan_install "Did not find $SRC!"
@@ -43,7 +44,7 @@ if test -f $MD5_FILE ; then
 fi
 
 # Just clean up, helps with restorecon.
-rm -rf /data/lib /data/lib64 /data/vendor/lib*
+rm -rf $ASAN_DIR
 
 log -p i -t asan_install "Untarring $SRC..."
 
@@ -52,7 +53,7 @@ bzip2 -c -d $SRC | tar -x -f - --no-same-owner -C / || exit 1
 
 # Cannot log here, log would run with system_data_file.
 
-restorecon -R -F /data/lib* /data/vendor/lib*
+restorecon -R -F $ASAN_DIR/*/lib*
 
 log -p i -t asan_install "Fixed selinux labels..."
 
