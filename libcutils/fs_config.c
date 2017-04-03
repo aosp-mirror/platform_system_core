@@ -35,21 +35,12 @@
 
 #include <log/log.h>
 #include <private/android_filesystem_config.h>
+#include <private/fs_config.h>
 #include <utils/Compat.h>
 
 #ifndef O_BINARY
 #define O_BINARY 0
 #endif
-
-/* The following structure is stored little endian */
-struct fs_path_config_from_file {
-    uint16_t len;
-    uint16_t mode;
-    uint16_t uid;
-    uint16_t gid;
-    uint64_t capabilities;
-    char prefix[];
-} __attribute__((__aligned__(sizeof(uint64_t))));
 
 /* My kingdom for <endian.h> */
 static inline uint16_t get2LE(const uint8_t* src) { return src[0] | (src[1] << 8); }
