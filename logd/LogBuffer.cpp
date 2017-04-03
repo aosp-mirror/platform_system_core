@@ -109,11 +109,11 @@ void LogBuffer::init() {
 
 LogBuffer::LogBuffer(LastLogTimes* times)
     : monotonic(android_log_clockid() == CLOCK_MONOTONIC), mTimes(*times) {
-    pthread_mutex_init(&mLogElementsLock, NULL);
+    pthread_mutex_init(&mLogElementsLock, nullptr);
 
     log_id_for_each(i) {
-        lastLoggedElements[i] = NULL;
-        droppedElements[i] = NULL;
+        lastLoggedElements[i] = nullptr;
+        droppedElements[i] = nullptr;
     }
 
     init();
@@ -198,7 +198,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
         new LogBufferElement(log_id, realtime, uid, pid, tid, msg, len);
     if (log_id != LOG_ID_SECURITY) {
         int prio = ANDROID_LOG_INFO;
-        const char* tag = NULL;
+        const char* tag = nullptr;
         if (log_id == LOG_ID_EVENTS) {
             tag = tagToName(elem->getTag());
         } else {
@@ -224,24 +224,24 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
         //
         // State Init
         //     incoming:
-        //         dropped = NULL
-        //         currentLast = NULL;
+        //         dropped = nullptr
+        //         currentLast = nullptr;
         //         elem = incoming message
         //     outgoing:
-        //         dropped = NULL -> State 0
+        //         dropped = nullptr -> State 0
         //         currentLast = copy of elem
         //         log elem
         // State 0
         //     incoming:
         //         count = 0
-        //         dropped = NULL
+        //         dropped = nullptr
         //         currentLast = copy of last message
         //         elem = incoming message
         //     outgoing: if match != DIFFERENT
         //         dropped = copy of first identical message -> State 1
         //         currentLast = reference to elem
         //     break: if match == DIFFERENT
-        //         dropped = NULL -> State 0
+        //         dropped = nullptr -> State 0
         //         delete copy of last message (incoming currentLast)
         //         currentLast = copy of elem
         //         log elem
@@ -268,7 +268,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
         //             currentLast = reference to elem, sum liblog.
         //     break: if match == DIFFERENT
         //         delete dropped
-        //         dropped = NULL -> State 0
+        //         dropped = nullptr -> State 0
         //         log reference to last held-back (currentLast)
         //         currentLast = copy of elem
         //         log elem
@@ -287,7 +287,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
         //         currentLast = reference to elem
         //     break: if match == DIFFERENT
         //         log dropped (chatty message)
-        //         dropped = NULL -> State 0
+        //         dropped = nullptr -> State 0
         //         log reference to last held-back (currentLast)
         //         currentLast = copy of elem
         //         log elem
@@ -352,7 +352,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
             } else {           // State 1
                 delete dropped;
             }
-            droppedElements[log_id] = NULL;
+            droppedElements[log_id] = nullptr;
             log(currentLast);  // report last message in the series
         } else {               // State 0
             delete currentLast;
@@ -656,7 +656,7 @@ class LogBufferElementLast {
 // mLogElementsLock must be held when this function is called.
 //
 bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
-    LogTimeEntry* oldest = NULL;
+    LogTimeEntry* oldest = nullptr;
     bool busy = false;
     bool clearAll = pruneRows == ULONG_MAX;
 
@@ -1078,9 +1078,11 @@ unsigned long LogBuffer::getSize(log_id_t id) {
     return retval;
 }
 
-log_time LogBuffer::flushTo(
-    SocketClient* reader, const log_time& start, bool privileged, bool security,
-    int (*filter)(const LogBufferElement* element, void* arg), void* arg) {
+log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
+                            pid_t* lastTid, bool privileged, bool security,
+                            int (*filter)(const LogBufferElement* element,
+                                          void* arg),
+                            void* arg) {
     LogBufferElementCollection::iterator it;
     uid_t uid = reader->getUid();
 
@@ -1109,9 +1111,6 @@ log_time LogBuffer::flushTo(
     }
 
     log_time max = start;
-    // Help detect if the valid message before is from the same source so
-    // we can differentiate chatty filter types.
-    pid_t lastTid[LOG_ID_MAX] = { 0 };
 
     for (; it != mLogElements.end(); ++it) {
         LogBufferElement* element = *it;
@@ -1139,14 +1138,17 @@ log_time LogBuffer::flushTo(
             }
         }
 
-        bool sameTid = lastTid[element->getLogId()] == element->getTid();
-        // Dropped (chatty) immediately following a valid log from the
-        // same source in the same log buffer indicates we have a
-        // multiple identical squash.  chatty that differs source
-        // is due to spam filter.  chatty to chatty of different
-        // source is also due to spam filter.
-        lastTid[element->getLogId()] =
-            (element->getDropped() && !sameTid) ? 0 : element->getTid();
+        bool sameTid = false;
+        if (lastTid) {
+            sameTid = lastTid[element->getLogId()] == element->getTid();
+            // Dropped (chatty) immediately following a valid log from the
+            // same source in the same log buffer indicates we have a
+            // multiple identical squash.  chatty that differs source
+            // is due to spam filter.  chatty to chatty of different
+            // source is also due to spam filter.
+            lastTid[element->getLogId()] =
+                (element->getDropped() && !sameTid) ? 0 : element->getTid();
+        }
 
         pthread_mutex_unlock(&mLogElementsLock);
 
