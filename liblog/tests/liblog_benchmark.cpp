@@ -527,17 +527,41 @@ BENCHMARK(BM_log_print_overhead);
 /*
  *	Measure the time it takes to submit the android event logging call
  * using discrete acquisition (StartBenchmarkTiming() -> StopBenchmarkTiming())
- * under light load. Expect this to be a dozen or so syscall periods (40us)
+ * under light load. Expect this to be a long path to logger to convert the
+ * unknown tag (0) into a tagname (less than 200us).
  */
 static void BM_log_event_overhead(int iters) {
   for (unsigned long long i = 0; i < (unsigned)iters; ++i) {
     StartBenchmarkTiming();
+    // log tag number 0 is not known, nor shall it ever be known
     __android_log_btwrite(0, EVENT_TYPE_LONG, &i, sizeof(i));
     StopBenchmarkTiming();
     logd_yield();
   }
 }
 BENCHMARK(BM_log_event_overhead);
+
+/*
+ *	Measure the time it takes to submit the android event logging call
+ * using discrete acquisition (StartBenchmarkTiming() -> StopBenchmarkTiming())
+ * under light load with a known logtag.  Expect this to be a dozen or so
+ * syscall periods (less than 40us)
+ */
+static void BM_log_event_overhead_42(int iters) {
+  for (unsigned long long i = 0; i < (unsigned)iters; ++i) {
+    StartBenchmarkTiming();
+    // In system/core/logcat/event.logtags:
+    // # These are used for testing, do not modify without updating
+    // # tests/framework-tests/src/android/util/EventLogFunctionalTest.java.
+    // # system/core/liblog/tests/liblog_benchmark.cpp
+    // # system/core/liblog/tests/liblog_test.cpp
+    // 42    answer (to life the universe etc|3)
+    __android_log_btwrite(42, EVENT_TYPE_LONG, &i, sizeof(i));
+    StopBenchmarkTiming();
+    logd_yield();
+  }
+}
+BENCHMARK(BM_log_event_overhead_42);
 
 static void BM_log_event_overhead_null(int iters) {
   set_log_null();
