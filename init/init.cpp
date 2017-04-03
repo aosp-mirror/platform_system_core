@@ -897,6 +897,7 @@ static void selinux_restore_context() {
     restorecon("/plat_service_contexts");
     restorecon("/nonplat_service_contexts");
     restorecon("/sepolicy");
+    restorecon("/vndservice_contexts");
 
     restorecon("/sys", SELINUX_ANDROID_RESTORECON_RECURSE);
     restorecon("/dev/block", SELINUX_ANDROID_RESTORECON_RECURSE);
