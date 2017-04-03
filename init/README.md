@@ -198,6 +198,13 @@ runs the service.
   is in the class "default" if one is not specified via the
   class option. Additional classnames beyond the (required) first
   one are used to group services.
+`animation class`
+> 'animation' class should include all services necessary for both
+  boot animation and shutdown animation. As these services can be
+  launched very early during bootup and can run until the last stage
+  of shutdown, access to /data partition is not guaranteed. These
+  services can check files under /data but it should not keep files opened
+  and should work when /data is not available.
 
 `onrestart`
 > Execute a Command (see below) when service restarts.
