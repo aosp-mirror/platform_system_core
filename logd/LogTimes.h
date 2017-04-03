@@ -44,6 +44,7 @@ class LogTimeEntry {
     const unsigned int mLogMask;
     const pid_t mPid;
     unsigned int skipAhead[LOG_ID_MAX];
+    pid_t mLastTid[LOG_ID_MAX];
     unsigned long mCount;
     unsigned long mTail;
     unsigned long mIndex;
