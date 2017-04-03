@@ -85,10 +85,10 @@ bool ElfInterfaceArm::HandleType(uint64_t offset, uint32_t type) {
   }
 
   Elf32_Phdr phdr;
-  if (!memory_->Read(offset, &phdr, &phdr.p_vaddr, sizeof(phdr.p_vaddr))) {
+  if (!memory_->ReadField(offset, &phdr, &phdr.p_vaddr, sizeof(phdr.p_vaddr))) {
     return true;
   }
-  if (!memory_->Read(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
+  if (!memory_->ReadField(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
     return true;
   }
   // The load_bias_ should always be set by this time.
@@ -98,13 +98,15 @@ bool ElfInterfaceArm::HandleType(uint64_t offset, uint32_t type) {
 }
 
 bool ElfInterfaceArm::Step(uint64_t pc, Regs* regs, Memory* process_memory) {
-  return StepExidx(pc, regs, process_memory) ||
-      ElfInterface32::Step(pc, regs, process_memory);
+  // Dwarf unwind information is precise about whether a pc is covered or not,
+  // but arm unwind information only has ranges of pc. In order to avoid
+  // incorrectly doing a bad unwind using arm unwind information for a
+  // different function, always try and unwind with the dwarf information first.
+  return ElfInterface32::Step(pc, regs, process_memory) || StepExidx(pc, regs, process_memory);
 }
 
 bool ElfInterfaceArm::StepExidx(uint64_t pc, Regs* regs, Memory* process_memory) {
   RegsArm* regs_arm = reinterpret_cast<RegsArm*>(regs);
-  // First try arm, then try dwarf.
   uint64_t entry_offset;
   if (!FindEntry(pc, &entry_offset)) {
     return false;
