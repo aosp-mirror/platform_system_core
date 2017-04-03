@@ -15,6 +15,16 @@ include $(BUILD_EXECUTABLE)
 
 include $(CLEAR_VARS)
 
+LOCAL_MODULE := logcatd
+LOCAL_MODULE_TAGS := debug
+LOCAL_SRC_FILES := logcatd_main.cpp event.logtags
+LOCAL_SHARED_LIBRARIES := liblogcat $(logcatLibs)
+LOCAL_CFLAGS := -Werror
+
+include $(BUILD_EXECUTABLE)
+
+include $(CLEAR_VARS)
+
 LOCAL_MODULE := liblogcat
 LOCAL_SRC_FILES := logcat.cpp getopt_long.cpp logcat_system.cpp
 LOCAL_SHARED_LIBRARIES := $(logcatLibs)
