@@ -30,13 +30,17 @@ void android_convertGralloc0To1Usage(int32_t usage, uint64_t* producerUsage,
                                        /* ProducerUsage::CPU_WRITE_OFTEN | */
                                        ProducerUsage::GPU_RENDER_TARGET | ProducerUsage::PROTECTED |
                                        ProducerUsage::CAMERA | ProducerUsage::VIDEO_DECODER |
-                                       ProducerUsage::SENSOR_DIRECT_DATA;
+                                       ProducerUsage::SENSOR_DIRECT_DATA |
+                                       /* Private flags may be consumer or producer */
+                                       GRALLOC_USAGE_PRIVATE_MASK;
     constexpr uint64_t CONSUMER_MASK = ConsumerUsage::CPU_READ |
                                        /* ConsumerUsage::CPU_READ_OFTEN | */
                                        ConsumerUsage::GPU_TEXTURE | ConsumerUsage::HWCOMPOSER |
                                        ConsumerUsage::CLIENT_TARGET | ConsumerUsage::CURSOR |
                                        ConsumerUsage::VIDEO_ENCODER | ConsumerUsage::CAMERA |
-                                       ConsumerUsage::RENDERSCRIPT | ConsumerUsage::GPU_DATA_BUFFER;
+                                       ConsumerUsage::RENDERSCRIPT | ConsumerUsage::GPU_DATA_BUFFER |
+                                       /* Private flags may be consumer or producer */
+                                       GRALLOC_USAGE_PRIVATE_MASK;
     *producerUsage = static_cast<uint64_t>(usage) & PRODUCER_MASK;
     *consumerUsage = static_cast<uint64_t>(usage) & CONSUMER_MASK;
     if ((static_cast<uint32_t>(usage) & GRALLOC_USAGE_SW_READ_OFTEN) == GRALLOC_USAGE_SW_READ_OFTEN) {
