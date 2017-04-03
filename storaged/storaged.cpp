@@ -203,9 +203,6 @@ storaged_t::storaged_t(void) {
     mConfig.periodic_chores_interval_disk_stats_publish =
         property_get_int32("ro.storaged.disk_stats_pub", DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH);
 
-    mConfig.periodic_chores_interval_emmc_info_publish =
-        property_get_int32("ro.storaged.emmc_info_pub", DEFAULT_PERIODIC_CHORES_INTERVAL_EMMC_INFO_PUBLISH);
-
     mConfig.periodic_chores_interval_uid_io =
         property_get_int32("ro.storaged.uid_io.interval", DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO);
 
@@ -219,12 +216,6 @@ void storaged_t::event(void) {
         if (mTimer && (mTimer % mConfig.periodic_chores_interval_disk_stats_publish) == 0) {
             mDiskStats.publish();
         }
-    }
-
-    if (info && mTimer &&
-        (mTimer % mConfig.periodic_chores_interval_emmc_info_publish) == 0) {
-        info->update();
-        info->publish();
     }
 
     if (mConfig.proc_uid_io_available && mTimer &&

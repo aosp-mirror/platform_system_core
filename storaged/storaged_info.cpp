@@ -16,81 +16,116 @@
 
 #define LOG_TAG "storaged"
 
+#include <stdio.h>
 #include <string.h>
 
 #include <android-base/file.h>
-#include <android-base/logging.h>
 #include <android-base/parseint.h>
+#include <android-base/logging.h>
 #include <log/log_event_list.h>
 
 #include "storaged.h"
 
 using namespace std;
-using namespace android;
 using namespace android::base;
+
+void report_storage_health()
+{
+    emmc_info_t mmc;
+    mmc.report();
+}
 
 void storage_info_t::publish()
 {
-    if (eol == 0 && lifetime_a == 0 && lifetime_b == 0) {
-        return;
-    }
-
     android_log_event_list(EVENTLOGTAG_EMMCINFO)
         << version << eol << lifetime_a << lifetime_b
         << LOG_ID_EVENTS;
 }
 
-bool emmc_info_t::init()
+bool emmc_info_t::report()
+{
+    if (!report_sysfs() && !report_debugfs())
+        return false;
+
+    publish();
+    return true;
+}
+
+bool emmc_info_t::report_sysfs()
 {
     string buffer;
-    if (!ReadFileToString(ext_csd_file, &buffer) ||
-        buffer.length() < (size_t)EXT_CSD_FILE_MIN_SIZE) {
+    uint16_t rev = 0;
+
+    if (!ReadFileToString(emmc_sysfs + "rev", &buffer)) {
         return false;
     }
 
-    string ver_str = buffer.substr(EXT_CSD_REV_IDX, sizeof(str_hex));
-    uint8_t ext_csd_rev;
-    if (!ParseUint(ver_str, &ext_csd_rev)) {
-        LOG_TO(SYSTEM, ERROR) << "Failure on parsing EXT_CSD_REV.";
+    if (sscanf(buffer.c_str(), "0x%hx", &rev) < 1 ||
+        rev < 7 || rev > ARRAY_SIZE(emmc_ver_str)) {
         return false;
     }
 
     version = "emmc ";
-    version += (ext_csd_rev < ARRAY_SIZE(emmc_ver_str)) ?
-                emmc_ver_str[ext_csd_rev] : "Unknown";
+    version += emmc_ver_str[rev];
 
-    if (ext_csd_rev < 7) {
+    if (!ReadFileToString(emmc_sysfs + "pre_eol_info", &buffer)) {
         return false;
     }
 
-    return update();
+    if (sscanf(buffer.c_str(), "%hx", &eol) < 1 || eol == 0) {
+        return false;
+    }
+
+    if (!ReadFileToString(emmc_sysfs + "life_time", &buffer)) {
+        return false;
+    }
+
+    if (sscanf(buffer.c_str(), "0x%hx 0x%hx", &lifetime_a, &lifetime_b) < 2 ||
+        (lifetime_a == 0 && lifetime_b == 0)) {
+        return false;
+    }
+
+    return true;
 }
 
-bool emmc_info_t::update()
+const size_t EXT_CSD_FILE_MIN_SIZE = 1024;
+/* 2 characters in string for each byte */
+const size_t EXT_CSD_REV_IDX = 192 * 2;
+const size_t EXT_PRE_EOL_INFO_IDX = 267 * 2;
+const size_t EXT_DEVICE_LIFE_TIME_EST_A_IDX = 268 * 2;
+const size_t EXT_DEVICE_LIFE_TIME_EST_B_IDX = 269 * 2;
+
+bool emmc_info_t::report_debugfs()
 {
     string buffer;
-    if (!ReadFileToString(ext_csd_file, &buffer) ||
+    uint16_t rev = 0;
+
+    if (!ReadFileToString(emmc_debugfs, &buffer) ||
         buffer.length() < (size_t)EXT_CSD_FILE_MIN_SIZE) {
         return false;
     }
 
-    string str = buffer.substr(EXT_PRE_EOL_INFO_IDX, sizeof(str_hex));
+    string str = buffer.substr(EXT_CSD_REV_IDX, 2);
+    if (!ParseUint(str, &rev) ||
+        rev < 7 || rev > ARRAY_SIZE(emmc_ver_str)) {
+        return false;
+    }
+
+    version = "emmc ";
+    version += emmc_ver_str[rev];
+
+    str = buffer.substr(EXT_PRE_EOL_INFO_IDX, 2);
     if (!ParseUint(str, &eol)) {
-        LOG_TO(SYSTEM, ERROR) << "Failure on parsing EXT_PRE_EOL_INFO.";
         return false;
     }
 
-    str = buffer.substr(EXT_DEVICE_LIFE_TIME_EST_A_IDX, sizeof(str_hex));
+    str = buffer.substr(EXT_DEVICE_LIFE_TIME_EST_A_IDX, 2);
     if (!ParseUint(str, &lifetime_a)) {
-        LOG_TO(SYSTEM, ERROR)
-            << "Failure on parsing EXT_DEVICE_LIFE_TIME_EST_TYP_A.";
         return false;
     }
 
-    str = buffer.substr(EXT_DEVICE_LIFE_TIME_EST_B_IDX, sizeof(str_hex));
+    str = buffer.substr(EXT_DEVICE_LIFE_TIME_EST_B_IDX, 2);
     if (!ParseUint(str, &lifetime_b)) {
-        LOG_TO(SYSTEM, ERROR)
-            << "Failure on parsing EXT_DEVICE_LIFE_TIME_EST_TYP_B.";
         return false;
     }
 
