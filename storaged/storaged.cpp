@@ -170,6 +170,9 @@ void storaged_t::batteryPropertiesChanged(struct BatteryProperties props) {
 }
 
 void storaged_t::init_battery_service() {
+    if (!mConfig.proc_uid_io_available)
+        return;
+
     sp<IBatteryPropertiesRegistrar> battery_properties = get_battery_properties_service();
     if (battery_properties == NULL) {
         LOG_TO(SYSTEM, WARNING) << "failed to find batteryproperties service";
