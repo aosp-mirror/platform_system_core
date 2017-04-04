@@ -55,6 +55,7 @@ cc_defaults {
         "Log.cpp",
         "Regs.cpp",
         "Memory.cpp",
+        "Symbols.cpp",
     ],
 
     shared_libs: [
@@ -102,6 +103,7 @@ cc_defaults {
         "tests/MemoryRangeTest.cpp",
         "tests/MemoryRemoteTest.cpp",
         "tests/RegsTest.cpp",
+        "tests/SymbolsTest.cpp",
     ],
 
     cflags: [
