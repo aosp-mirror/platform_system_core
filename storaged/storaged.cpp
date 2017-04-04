@@ -23,6 +23,7 @@
 #include <android-base/logging.h>
 #include <batteryservice/BatteryServiceConstants.h>
 #include <batteryservice/IBatteryPropertiesRegistrar.h>
+#include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <cutils/properties.h>
 #include <log/log.h>
@@ -192,6 +193,7 @@ void storaged_t::binderDied(const wp<IBinder>& who) {
     if (battery_properties != NULL &&
         IInterface::asBinder(battery_properties) == who) {
         LOG_TO(SYSTEM, ERROR) << "batteryproperties service died, exiting";
+        IPCThreadState::self()->stopProcess();
         exit(1);
     } else {
         LOG_TO(SYSTEM, ERROR) << "unknown service died";

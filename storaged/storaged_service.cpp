@@ -33,7 +33,7 @@
 
 using namespace android::base;
 
-extern storaged_t storaged;
+extern sp<storaged_t> storaged;
 
 std::vector<struct uid_info> BpStoraged::dump_uids(const char* /*option*/) {
     Parcel data, reply;
@@ -74,7 +74,7 @@ status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply
 
 std::vector<struct uid_info> Storaged::dump_uids(const char* /* option */) {
     std::vector<struct uid_info> uids_v;
-    std::unordered_map<uint32_t, struct uid_info> uids_m = storaged.get_uids();
+    std::unordered_map<uint32_t, struct uid_info> uids_m = storaged->get_uids();
 
     for (const auto& it : uids_m) {
         uids_v.push_back(it.second);
@@ -127,7 +127,7 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
 
     uint64_t last_ts = 0;
     const std::map<uint64_t, struct uid_records>& records =
-                storaged.get_uid_records(hours, threshold, force_report);
+                storaged->get_uid_records(hours, threshold, force_report);
     for (const auto& it : records) {
         if (last_ts != it.second.start_ts) {
             dprintf(fd, "%llu", (unsigned long long)it.second.start_ts);
@@ -150,7 +150,7 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
     }
 
     if (time_window) {
-        storaged.update_uid_io_interval(time_window);
+        storaged->update_uid_io_interval(time_window);
     }
 
     return NO_ERROR;
