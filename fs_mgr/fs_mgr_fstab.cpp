@@ -671,17 +671,6 @@ struct fstab *fs_mgr_read_fstab_dt()
     return fstab;
 }
 
-/* combines fstab entries passed in from device tree with
- * the ones found from fstab_path
- */
-struct fstab *fs_mgr_read_fstab_with_dt(const char *fstab_path)
-{
-    struct fstab *fstab_dt = fs_mgr_read_fstab_dt();
-    struct fstab *fstab = fs_mgr_read_fstab(fstab_path);
-
-    return in_place_merge(fstab_dt, fstab);
-}
-
 /*
  * tries to load default fstab.<hardware> file from /odm/etc, /vendor/etc
  * or /. loads the first one found and also combines fstab entries passed
@@ -704,7 +693,12 @@ struct fstab *fs_mgr_read_fstab_default()
         LWARNING << __FUNCTION__ << "(): failed to find device hardware name";
     }
 
-    return fs_mgr_read_fstab_with_dt(default_fstab.c_str());
+    // combines fstab entries passed in from device tree with
+    // the ones found from default_fstab file
+    struct fstab *fstab_dt = fs_mgr_read_fstab_dt();
+    struct fstab *fstab = fs_mgr_read_fstab(default_fstab.c_str());
+
+    return in_place_merge(fstab_dt, fstab);
 }
 
 void fs_mgr_free_fstab(struct fstab *fstab)
