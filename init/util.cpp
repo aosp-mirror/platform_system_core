@@ -188,8 +188,8 @@ bool read_file(const std::string& path, std::string* content) {
 }
 
 bool write_file(const std::string& path, const std::string& content) {
-    android::base::unique_fd fd(
-        TEMP_FAILURE_RETRY(open(path.c_str(), O_WRONLY | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0600)));
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(
+        open(path.c_str(), O_WRONLY | O_CREAT | O_NOFOLLOW | O_TRUNC | O_CLOEXEC, 0600)));
     if (fd == -1) {
         PLOG(ERROR) << "write_file: Unable to open '" << path << "'";
         return false;
