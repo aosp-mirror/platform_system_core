@@ -306,14 +306,6 @@ static void poll_for_devices() {
             }
             device_serial.resize(rc);
 
-            // Try to reset the device.
-            rc = libusb_reset_device(handle_raw);
-            if (rc != 0) {
-                LOG(WARNING) << "failed to reset opened device '" << device_serial
-                             << "': " << libusb_error_name(rc);
-                continue;
-            }
-
             // WARNING: this isn't released via RAII.
             rc = libusb_claim_interface(handle.get(), interface_num);
             if (rc != 0) {
