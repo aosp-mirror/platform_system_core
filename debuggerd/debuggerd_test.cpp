@@ -479,6 +479,7 @@ TEST_F(CrasherTest, capabilities) {
       err(1, "failed to drop ambient capabilities");
     }
 
+    pthread_setname_np(pthread_self(), "thread_name");
     raise(SIGSYS);
   });
 
@@ -492,6 +493,7 @@ TEST_F(CrasherTest, capabilities) {
   FinishIntercept(&intercept_result);
   ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
   ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(name: thread_name\s+>>> .+debuggerd_test(32|64) <<<)");
   ASSERT_MATCH(result, R"(#00 pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX R"(/libc.so \(tgkill)");
 }
 
