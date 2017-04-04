@@ -679,7 +679,6 @@ static void mkdir_recursive_for_devpath(const char *devpath)
 
 static void handle_generic_device_event(struct uevent *uevent)
 {
-    const char *base;
     const char *name;
     char devpath[DEVPATH_LEN] = {0};
 
@@ -735,39 +734,13 @@ static void handle_generic_device_event(struct uevent *uevent)
              /* ignore other USB events */
              return;
          }
-     } else if (!strncmp(uevent->subsystem, "graphics", 8)) {
-         base = "/dev/graphics/";
-         make_dir(base, 0755);
-     } else if (!strncmp(uevent->subsystem, "drm", 3)) {
-         base = "/dev/dri/";
-         make_dir(base, 0755);
-     } else if (!strncmp(uevent->subsystem, "oncrpc", 6)) {
-         base = "/dev/oncrpc/";
-         make_dir(base, 0755);
-     } else if (!strncmp(uevent->subsystem, "adsp", 4)) {
-         base = "/dev/adsp/";
-         make_dir(base, 0755);
-     } else if (!strncmp(uevent->subsystem, "msm_camera", 10)) {
-         base = "/dev/msm_camera/";
-         make_dir(base, 0755);
-     } else if(!strncmp(uevent->subsystem, "input", 5)) {
-         base = "/dev/input/";
-         make_dir(base, 0755);
-     } else if(!strncmp(uevent->subsystem, "mtd", 3)) {
-         base = "/dev/mtd/";
-         make_dir(base, 0755);
-     } else if(!strncmp(uevent->subsystem, "sound", 5)) {
-         base = "/dev/snd/";
-         make_dir(base, 0755);
-     } else
-         base = "/dev/";
-     auto links = get_character_device_symlinks(uevent);
+    } else {
+        snprintf(devpath, sizeof(devpath), "/dev/%s", name);
+    }
 
-     if (!devpath[0])
-         snprintf(devpath, sizeof(devpath), "%s%s", base, name);
+    auto links = get_character_device_symlinks(uevent);
 
-     handle_device(uevent->action, devpath, uevent->path, 0,
-             uevent->major, uevent->minor, links);
+    handle_device(uevent->action, devpath, uevent->path, 0, uevent->major, uevent->minor, links);
 }
 
 static void handle_device_event(struct uevent *uevent)
