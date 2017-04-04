@@ -1984,6 +1984,8 @@ TEST(liblog, __security_buffer) {
 
   EXPECT_EQ(0, setuid(AID_SYSTEM));  // only one that can read security buffer
 
+  uid = getuid();
+  gid = getgid();
   pid_t pid = getpid();
 
   ASSERT_TRUE(NULL !=
