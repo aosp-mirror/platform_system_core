@@ -96,7 +96,7 @@ bool Parser::ParseConfigFile(const std::string& path) {
     LOG(INFO) << "Parsing file " << path << "...";
     Timer t;
     std::string data;
-    if (!read_file(path.c_str(), &data)) {
+    if (!read_file(path, &data)) {
         return false;
     }
 
