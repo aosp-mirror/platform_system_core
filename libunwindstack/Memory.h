@@ -17,6 +17,7 @@
 #ifndef _LIBUNWINDSTACK_MEMORY_H
 #define _LIBUNWINDSTACK_MEMORY_H
 
+#include <assert.h>
 #include <stdint.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -33,9 +34,16 @@ class Memory {
 
   virtual bool Read(uint64_t addr, void* dst, size_t size) = 0;
 
-  inline bool Read(uint64_t addr, void* start, void* field, size_t size) {
-    return Read(addr + reinterpret_cast<uintptr_t>(field) - reinterpret_cast<uintptr_t>(start),
-                field, size);
+  inline bool ReadField(uint64_t addr, void* start, void* field, size_t size) {
+    if (reinterpret_cast<uintptr_t>(field) < reinterpret_cast<uintptr_t>(start)) {
+      return false;
+    }
+    uint64_t offset = reinterpret_cast<uintptr_t>(field) - reinterpret_cast<uintptr_t>(start);
+    if (__builtin_add_overflow(addr, offset, &offset)) {
+      return false;
+    }
+    // The read will check if offset + size overflows.
+    return Read(offset, field, size);
   }
 
   inline bool Read32(uint64_t addr, uint32_t* dst) {
@@ -103,6 +111,9 @@ class MemoryRemote : public Memory {
 
   pid_t pid() { return pid_; }
 
+ protected:
+  virtual bool PtraceRead(uint64_t addr, long* value);
+
  private:
   pid_t pid_;
 };
@@ -118,15 +129,12 @@ class MemoryLocal : public Memory {
 class MemoryRange : public Memory {
  public:
   MemoryRange(Memory* memory, uint64_t begin, uint64_t end)
-      : memory_(memory), begin_(begin), length_(end - begin_) {}
+      : memory_(memory), begin_(begin), length_(end - begin) {
+    assert(end > begin);
+  }
   virtual ~MemoryRange() { delete memory_; }
 
-  inline bool Read(uint64_t addr, void* dst, size_t size) override {
-    if (addr + size <= length_) {
-      return memory_->Read(addr + begin_, dst, size);
-    }
-    return false;
-  }
+  bool Read(uint64_t addr, void* dst, size_t size) override;
 
  private:
   Memory* memory_;
