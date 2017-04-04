@@ -1668,3 +1668,22 @@ TEST(logcat, security) {
     EXPECT_TRUE(reportedSecurity("logcat -b security -c 2>&1"));
     EXPECT_TRUE(reportedSecurity("logcat -b security -G 256K 2>&1"));
 }
+
+static size_t commandOutputSize(const char* command) {
+    logcat_define(ctx);
+    FILE* fp = logcat_popen(ctx, command);
+    if (!fp) return 0;
+
+    std::string ret;
+    if (!android::base::ReadFdToString(fileno(fp), &ret)) return 0;
+    if (logcat_pclose(ctx, fp) != 0) return 0;
+
+    return ret.size();
+}
+
+TEST(logcat, help) {
+    size_t logcatHelpTextSize = commandOutputSize("logcat -h 2>&1");
+    EXPECT_LT(4096UL, logcatHelpTextSize);
+    size_t logcatLastHelpTextSize = commandOutputSize("logcat -L -h 2>&1");
+    EXPECT_EQ(logcatHelpTextSize, logcatLastHelpTextSize);
+}
