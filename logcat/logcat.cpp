@@ -882,6 +882,7 @@ static int __logcat(android_logcat_context_internal* context) {
           { "grep",          required_argument, nullptr, 'e' },
           // hidden and undocumented reserved alias for --max-count
           { "head",          required_argument, nullptr, 'm' },
+          { "help",          no_argument,       nullptr, 'h' },
           { id_str,          required_argument, nullptr, 0 },
           { "last",          no_argument,       nullptr, 'L' },
           { "max-count",     required_argument, nullptr, 'm' },
@@ -900,9 +901,8 @@ static int __logcat(android_logcat_context_internal* context) {
         };
         // clang-format on
 
-        ret = getopt_long_r(argc, argv,
-                            ":cdDLt:T:gG:sQf:r:n:v:b:BSpP:m:e:", long_options,
-                            &option_index, &optctx);
+        ret = getopt_long_r(argc, argv, ":cdDhLt:T:gG:sQf:r:n:v:b:BSpP:m:e:",
+                            long_options, &option_index, &optctx);
         if (ret < 0) break;
 
         switch (ret) {
@@ -1302,6 +1302,11 @@ static int __logcat(android_logcat_context_internal* context) {
             case ':':
                 logcat_panic(context, HELP_TRUE,
                              "Option -%c needs an argument\n", optctx.optopt);
+                goto exit;
+
+            case 'h':
+                show_help(context);
+                show_format_help(context);
                 goto exit;
 
             default:
