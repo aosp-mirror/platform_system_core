@@ -328,11 +328,11 @@ void fb_queue_wait_for_disconnect(void)
     queue_action(OP_WAIT_FOR_DISCONNECT, "");
 }
 
-int fb_execute_queue(Transport* transport)
+int64_t fb_execute_queue(Transport* transport)
 {
     Action *a;
     char resp[FB_RESPONSE_SZ+1];
-    int status = 0;
+    int64_t status = 0;
 
     a = action_list;
     if (!a)
