@@ -75,4 +75,16 @@ class MemoryFakeAlwaysReadZero : public Memory {
   }
 };
 
+class MemoryFakeRemote : public MemoryRemote {
+ public:
+  MemoryFakeRemote() : MemoryRemote(0) {}
+  virtual ~MemoryFakeRemote() = default;
+
+ protected:
+  bool PtraceRead(uint64_t, long* value) override {
+    *value = 0;
+    return true;
+  }
+};
+
 #endif  // _LIBUNWINDSTACK_TESTS_MEMORY_FAKE_H

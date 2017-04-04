@@ -42,7 +42,7 @@ bool ElfInterface::ReadProgramHeaders(const EhdrType& ehdr) {
   uint64_t offset = ehdr.e_phoff;
   for (size_t i = 0; i < ehdr.e_phnum; i++, offset += ehdr.e_phentsize) {
     PhdrType phdr;
-    if (!memory_->Read(offset, &phdr, &phdr.p_type, sizeof(phdr.p_type))) {
+    if (!memory_->ReadField(offset, &phdr, &phdr.p_type, sizeof(phdr.p_type))) {
       return false;
     }
 
@@ -54,20 +54,20 @@ bool ElfInterface::ReadProgramHeaders(const EhdrType& ehdr) {
     case PT_LOAD:
     {
       // Get the flags first, if this isn't an executable header, ignore it.
-      if (!memory_->Read(offset, &phdr, &phdr.p_flags, sizeof(phdr.p_flags))) {
+      if (!memory_->ReadField(offset, &phdr, &phdr.p_flags, sizeof(phdr.p_flags))) {
         return false;
       }
       if ((phdr.p_flags & PF_X) == 0) {
         continue;
       }
 
-      if (!memory_->Read(offset, &phdr, &phdr.p_vaddr, sizeof(phdr.p_vaddr))) {
+      if (!memory_->ReadField(offset, &phdr, &phdr.p_vaddr, sizeof(phdr.p_vaddr))) {
         return false;
       }
-      if (!memory_->Read(offset, &phdr, &phdr.p_offset, sizeof(phdr.p_offset))) {
+      if (!memory_->ReadField(offset, &phdr, &phdr.p_offset, sizeof(phdr.p_offset))) {
         return false;
       }
-      if (!memory_->Read(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
+      if (!memory_->ReadField(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
         return false;
       }
       pt_loads_[phdr.p_offset] = LoadInfo{phdr.p_offset, phdr.p_vaddr,
@@ -79,22 +79,22 @@ bool ElfInterface::ReadProgramHeaders(const EhdrType& ehdr) {
     }
 
     case PT_GNU_EH_FRAME:
-      if (!memory_->Read(offset, &phdr, &phdr.p_offset, sizeof(phdr.p_offset))) {
+      if (!memory_->ReadField(offset, &phdr, &phdr.p_offset, sizeof(phdr.p_offset))) {
         return false;
       }
       eh_frame_offset_ = phdr.p_offset;
-      if (!memory_->Read(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
+      if (!memory_->ReadField(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
         return false;
       }
       eh_frame_size_ = phdr.p_memsz;
       break;
 
     case PT_DYNAMIC:
-      if (!memory_->Read(offset, &phdr, &phdr.p_offset, sizeof(phdr.p_offset))) {
+      if (!memory_->ReadField(offset, &phdr, &phdr.p_offset, sizeof(phdr.p_offset))) {
         return false;
       }
       dynamic_offset_ = phdr.p_offset;
-      if (!memory_->Read(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
+      if (!memory_->ReadField(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
         return false;
       }
       dynamic_size_ = phdr.p_memsz;
@@ -116,8 +116,8 @@ bool ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
   ShdrType shdr;
   if (ehdr.e_shstrndx < ehdr.e_shnum) {
     uint64_t sh_offset = offset + ehdr.e_shstrndx * ehdr.e_shentsize;
-    if (memory_->Read(sh_offset, &shdr, &shdr.sh_offset, sizeof(shdr.sh_offset))
-        && memory_->Read(sh_offset, &shdr, &shdr.sh_size, sizeof(shdr.sh_size))) {
+    if (memory_->ReadField(sh_offset, &shdr, &shdr.sh_offset, sizeof(shdr.sh_offset)) &&
+        memory_->ReadField(sh_offset, &shdr, &shdr.sh_size, sizeof(shdr.sh_size))) {
       sec_offset = shdr.sh_offset;
       sec_size = shdr.sh_size;
     }
@@ -125,27 +125,27 @@ bool ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
 
   // Skip the first header, it's always going to be NULL.
   for (size_t i = 1; i < ehdr.e_shnum; i++, offset += ehdr.e_shentsize) {
-    if (!memory_->Read(offset, &shdr, &shdr.sh_type, sizeof(shdr.sh_type))) {
+    if (!memory_->ReadField(offset, &shdr, &shdr.sh_type, sizeof(shdr.sh_type))) {
       return false;
     }
 
     if (shdr.sh_type == SHT_PROGBITS) {
       // Look for the .debug_frame and .gnu_debugdata.
-      if (!memory_->Read(offset, &shdr, &shdr.sh_name, sizeof(shdr.sh_name))) {
+      if (!memory_->ReadField(offset, &shdr, &shdr.sh_name, sizeof(shdr.sh_name))) {
         return false;
       }
       if (shdr.sh_name < sec_size) {
         std::string name;
         if (memory_->ReadString(sec_offset + shdr.sh_name, &name)) {
           if (name == ".debug_frame") {
-            if (memory_->Read(offset, &shdr, &shdr.sh_offset, sizeof(shdr.sh_offset))
-                && memory_->Read(offset, &shdr, &shdr.sh_size, sizeof(shdr.sh_size))) {
+            if (memory_->ReadField(offset, &shdr, &shdr.sh_offset, sizeof(shdr.sh_offset)) &&
+                memory_->ReadField(offset, &shdr, &shdr.sh_size, sizeof(shdr.sh_size))) {
               debug_frame_offset_ = shdr.sh_offset;
               debug_frame_size_ = shdr.sh_size;
             }
           } else if (name == ".gnu_debugdata") {
-            if (memory_->Read(offset, &shdr, &shdr.sh_offset, sizeof(shdr.sh_offset))
-                && memory_->Read(offset, &shdr, &shdr.sh_size, sizeof(shdr.sh_size))) {
+            if (memory_->ReadField(offset, &shdr, &shdr.sh_offset, sizeof(shdr.sh_offset)) &&
+                memory_->ReadField(offset, &shdr, &shdr.sh_size, sizeof(shdr.sh_size))) {
               gnu_debugdata_offset_ = shdr.sh_offset;
               gnu_debugdata_size_ = shdr.sh_size;
             }
