@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/cdefs.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -38,6 +39,10 @@
 #define logcat_popen(context, command) popen((command), "r")
 #define logcat_pclose(context, fp) pclose(fp)
 #define logcat_system(command) system(command)
+#endif
+#ifndef logcat_executable
+#define USING_LOGCAT_EXECUTABLE_DEFAULT
+#define logcat_executable "logcat"
 #endif
 
 #define BIG_BUFFER (5 * 1024)
@@ -64,14 +69,13 @@ TEST(logcat, buckets) {
 
 #undef LOG_TAG
 #define LOG_TAG "inject"
-    RLOGE("logcat.buckets");
+    RLOGE(logcat_executable ".buckets");
     sleep(1);
 
-    ASSERT_TRUE(
-        NULL !=
-        (fp = logcat_popen(
-             ctx,
-             "logcat -b radio -b events -b system -b main -d 2>/dev/null")));
+    ASSERT_TRUE(NULL !=
+                (fp = logcat_popen(
+                     ctx, logcat_executable
+                     " -b radio -b events -b system -b main -d 2>/dev/null")));
 
     char buffer[BIG_BUFFER];
 
@@ -101,8 +105,8 @@ TEST(logcat, event_tag_filter) {
     logcat_define(ctx);
 
     ASSERT_TRUE(NULL !=
-                (fp = logcat_popen(ctx,
-                                   "logcat -b events -d -s auditd "
+                (fp = logcat_popen(ctx, logcat_executable
+                                   " -b events -d -s auditd "
                                    "am_proc_start am_pss am_proc_bound "
                                    "dvm_lock_sample am_wtf 2>/dev/null")));
 
@@ -170,10 +174,9 @@ TEST(logcat, year) {
 #endif
         strftime(needle, sizeof(needle), "[ %Y-", ptm);
 
-        ASSERT_TRUE(
-            NULL !=
-            (fp = logcat_popen(
-                 ctx, "logcat -v long -v year -b all -t 3 2>/dev/null")));
+        ASSERT_TRUE(NULL != (fp = logcat_popen(
+                                 ctx, logcat_executable
+                                 " -v long -v year -b all -t 3 2>/dev/null")));
 
         char buffer[BIG_BUFFER];
 
@@ -237,8 +240,8 @@ TEST(logcat, tz) {
         logcat_define(ctx);
 
         ASSERT_TRUE(NULL !=
-                    (fp = logcat_popen(ctx,
-                                       "logcat -v long -v America/Los_Angeles "
+                    (fp = logcat_popen(ctx, logcat_executable
+                                       " -v long -v America/Los_Angeles "
                                        "-b all -t 3 2>/dev/null")));
 
         char buffer[BIG_BUFFER];
@@ -264,10 +267,9 @@ TEST(logcat, ntz) {
     FILE* fp;
     logcat_define(ctx);
 
-    ASSERT_TRUE(NULL !=
-                (fp = logcat_popen(ctx,
-                                   "logcat -v long -v America/Los_Angeles -v "
-                                   "zone -b all -t 3 2>/dev/null")));
+    ASSERT_TRUE(NULL != (fp = logcat_popen(ctx, logcat_executable
+                                           " -v long -v America/Los_Angeles -v "
+                                           "zone -b all -t 3 2>/dev/null")));
 
     char buffer[BIG_BUFFER];
 
@@ -435,11 +437,11 @@ static void do_tail_time(const char* cmd) {
 }
 
 TEST(logcat, tail_time) {
-    do_tail_time("logcat -v long -v nsec -b all");
+    do_tail_time(logcat_executable " -v long -v nsec -b all");
 }
 
 TEST(logcat, tail_time_epoch) {
-    do_tail_time("logcat -v long -v nsec -v epoch -b all");
+    do_tail_time(logcat_executable " -v long -v nsec -v epoch -b all");
 }
 
 TEST(logcat, End_to_End) {
@@ -452,8 +454,8 @@ TEST(logcat, End_to_End) {
     FILE* fp;
     logcat_define(ctx);
     ASSERT_TRUE(NULL !=
-                (fp = logcat_popen(
-                     ctx, "logcat -v brief -b events -t 100 2>/dev/null")));
+                (fp = logcat_popen(ctx, logcat_executable
+                                   " -v brief -b events -t 100 2>/dev/null")));
 
     char buffer[BIG_BUFFER];
 
@@ -492,8 +494,8 @@ TEST(logcat, End_to_End_multitude) {
     size_t num = 0;
     do {
         EXPECT_TRUE(NULL !=
-                    (fp[num] = logcat_popen(
-                         ctx[num], "logcat -v brief -b events -t 100")));
+                    (fp[num] = logcat_popen(ctx[num], logcat_executable
+                                            " -v brief -b events -t 100")));
         if (!fp[num]) {
             fprintf(stderr,
                     "WARNING: limiting to %zu simultaneous logcat operations\n",
@@ -604,22 +606,23 @@ static int get_groups(const char* cmd) {
 }
 
 TEST(logcat, get_size) {
-    ASSERT_EQ(4, get_groups("logcat -v brief -b radio -b events -b system -b "
+    ASSERT_EQ(4, get_groups(logcat_executable
+                            " -v brief -b radio -b events -b system -b "
                             "main -g 2>/dev/null"));
 }
 
 // duplicate test for get_size, but use comma-separated list of buffers
 TEST(logcat, multiple_buffer) {
     ASSERT_EQ(
-        4, get_groups(
-               "logcat -v brief -b radio,events,system,main -g 2>/dev/null"));
+        4, get_groups(logcat_executable
+                      " -v brief -b radio,events,system,main -g 2>/dev/null"));
 }
 
 TEST(logcat, bad_buffer) {
-    ASSERT_EQ(
-        0,
-        get_groups(
-            "logcat -v brief -b radio,events,bogo,system,main -g 2>/dev/null"));
+    ASSERT_EQ(0,
+              get_groups(
+                  logcat_executable
+                  " -v brief -b radio,events,bogo,system,main -g 2>/dev/null"));
 }
 
 #ifndef logcat
@@ -774,8 +777,8 @@ TEST(logcat, logrotate) {
     char buf[sizeof(form)];
     ASSERT_TRUE(NULL != mkdtemp(strcpy(buf, form)));
 
-    static const char comm[] =
-        "logcat -b radio -b events -b system -b main"
+    static const char comm[] = logcat_executable
+        " -b radio -b events -b system -b main"
         " -d -f %s/log.txt -n 7 -r 1";
     char command[sizeof(buf) + sizeof(comm)];
     snprintf(command, sizeof(command), comm, buf);
@@ -820,8 +823,8 @@ TEST(logcat, logrotate_suffix) {
     char tmp_out_dir[sizeof(tmp_out_dir_form)];
     ASSERT_TRUE(NULL != mkdtemp(strcpy(tmp_out_dir, tmp_out_dir_form)));
 
-    static const char logcat_cmd[] =
-        "logcat -b radio -b events -b system -b main"
+    static const char logcat_cmd[] = logcat_executable
+        " -b radio -b events -b system -b main"
         " -d -f %s/log.txt -n 10 -r 1";
     char command[sizeof(tmp_out_dir) + sizeof(logcat_cmd)];
     snprintf(command, sizeof(command), logcat_cmd, tmp_out_dir);
@@ -880,7 +883,7 @@ TEST(logcat, logrotate_continue) {
 
     static const char log_filename[] = "log.txt";
     static const char logcat_cmd[] =
-        "logcat -b all -v nsec -d -f %s/%s -n 256 -r 1024";
+        logcat_executable " -b all -v nsec -d -f %s/%s -n 256 -r 1024";
     static const char cleanup_cmd[] = "rm -rf %s";
     char command[sizeof(tmp_out_dir) + sizeof(logcat_cmd) + sizeof(log_filename)];
     snprintf(command, sizeof(command), logcat_cmd, tmp_out_dir, log_filename);
@@ -1005,7 +1008,8 @@ TEST(logcat, logrotate_clear) {
 
     static const char log_filename[] = "log.txt";
     static const unsigned num_val = 32;
-    static const char logcat_cmd[] = "logcat -b all -d -f %s/%s -n %d -r 1";
+    static const char logcat_cmd[] =
+        logcat_executable " -b all -d -f %s/%s -n %d -r 1";
     static const char clear_cmd[] = " -c";
     static const char cleanup_cmd[] = "rm -rf %s";
     char command[sizeof(tmp_out_dir) + sizeof(logcat_cmd) +
@@ -1109,9 +1113,9 @@ static int logrotate_count_id(const char* logcat_cmd, const char* tmp_out_dir) {
 
 TEST(logcat, logrotate_id) {
     static const char logcat_cmd[] =
-        "logcat -b all -d -f %s/%s -n 32 -r 1 --id=test";
+        logcat_executable " -b all -d -f %s/%s -n 32 -r 1 --id=test";
     static const char logcat_short_cmd[] =
-        "logcat -b all -t 10 -f %s/%s -n 32 -r 1 --id=test";
+        logcat_executable " -b all -t 10 -f %s/%s -n 32 -r 1 --id=test";
     static const char tmp_out_dir_form[] =
         "/data/local/tmp/logcat.logrotate.XXXXXX";
     static const char log_filename[] = "log.txt";
@@ -1155,8 +1159,8 @@ TEST(logcat, logrotate_id) {
 
 TEST(logcat, logrotate_nodir) {
     // expect logcat to error out on writing content and not exit(0) for nodir
-    static const char command[] =
-        "logcat -b all -d"
+    static const char command[] = logcat_executable
+        " -b all -d"
         " -f /das/nein/gerfingerpoken/logcat/log.txt"
         " -n 256 -r 1024";
     EXPECT_FALSE(IsFalse(0 == logcat_system(command), command));
@@ -1292,7 +1296,7 @@ static bool get_white_black(char** list) {
     FILE* fp;
     logcat_define(ctx);
 
-    fp = logcat_popen(ctx, "logcat -p 2>/dev/null");
+    fp = logcat_popen(ctx, logcat_executable " -p 2>/dev/null");
     if (fp == NULL) {
         fprintf(stderr, "ERROR: logcat -p 2>/dev/null\n");
         return false;
@@ -1330,7 +1334,8 @@ static bool set_white_black(const char* list) {
 
     char buffer[BIG_BUFFER];
 
-    snprintf(buffer, sizeof(buffer), "logcat -P '%s' 2>&1", list ? list : "");
+    snprintf(buffer, sizeof(buffer), logcat_executable " -P '%s' 2>&1",
+             list ? list : "");
     fp = logcat_popen(ctx, buffer);
     if (fp == NULL) {
         fprintf(stderr, "ERROR: %s\n", buffer);
@@ -1392,15 +1397,11 @@ TEST(logcat, regex) {
     int count = 0;
 
     char buffer[BIG_BUFFER];
-// Have to make liblogcat data unique from logcat data injection
-#ifdef logcat
-#define logcat_regex_prefix "lolcat_test"
-#else
-#define logcat_regex_prefix "logcat_test"
-#endif
+#define logcat_regex_prefix ___STRING(logcat) "_test"
 
     snprintf(buffer, sizeof(buffer),
-             "logcat --pid %d -d -e " logcat_regex_prefix "_a+b", getpid());
+             logcat_executable " --pid %d -d -e " logcat_regex_prefix "_a+b",
+             getpid());
 
     LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_WARN, logcat_regex_prefix,
                                           logcat_regex_prefix "_ab"));
@@ -1437,8 +1438,8 @@ TEST(logcat, maxcount) {
 
     char buffer[BIG_BUFFER];
 
-    snprintf(buffer, sizeof(buffer), "logcat --pid %d -d --max-count 3",
-             getpid());
+    snprintf(buffer, sizeof(buffer),
+             logcat_executable " --pid %d -d --max-count 3", getpid());
 
     LOG_FAILURE_RETRY(
         __android_log_print(ANDROID_LOG_WARN, "logcat_test", "logcat_test"));
@@ -1663,10 +1664,11 @@ static bool reportedSecurity(const char* command) {
 }
 
 TEST(logcat, security) {
-    EXPECT_FALSE(reportedSecurity("logcat -b all -g 2>&1"));
-    EXPECT_TRUE(reportedSecurity("logcat -b security -g 2>&1"));
-    EXPECT_TRUE(reportedSecurity("logcat -b security -c 2>&1"));
-    EXPECT_TRUE(reportedSecurity("logcat -b security -G 256K 2>&1"));
+    EXPECT_FALSE(reportedSecurity(logcat_executable " -b all -g 2>&1"));
+    EXPECT_TRUE(reportedSecurity(logcat_executable " -b security -g 2>&1"));
+    EXPECT_TRUE(reportedSecurity(logcat_executable " -b security -c 2>&1"));
+    EXPECT_TRUE(
+        reportedSecurity(logcat_executable " -b security -G 256K 2>&1"));
 }
 
 static size_t commandOutputSize(const char* command) {
@@ -1682,8 +1684,14 @@ static size_t commandOutputSize(const char* command) {
 }
 
 TEST(logcat, help) {
-    size_t logcatHelpTextSize = commandOutputSize("logcat -h 2>&1");
+    size_t logcatHelpTextSize = commandOutputSize(logcat_executable " -h 2>&1");
     EXPECT_LT(4096UL, logcatHelpTextSize);
-    size_t logcatLastHelpTextSize = commandOutputSize("logcat -L -h 2>&1");
+    size_t logcatLastHelpTextSize =
+        commandOutputSize(logcat_executable " -L -h 2>&1");
+#ifdef USING_LOGCAT_EXECUTABLE_DEFAULT  // logcat and liblogcat
     EXPECT_EQ(logcatHelpTextSize, logcatLastHelpTextSize);
+#else
+    // logcatd -L -h prints the help twice, as designed.
+    EXPECT_EQ(logcatHelpTextSize * 2, logcatLastHelpTextSize);
+#endif
 }
