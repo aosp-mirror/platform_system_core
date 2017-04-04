@@ -59,10 +59,12 @@ using namespace std::chrono_literals;
 
 std::string adb_version() {
     // Don't change the format of this --- it's parsed by ddmlib.
-    return android::base::StringPrintf("Android Debug Bridge version %d.%d.%d\n"
-                                       "Revision %s\n",
-                                       ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION,
-                                       ADB_REVISION);
+    return android::base::StringPrintf(
+        "Android Debug Bridge version %d.%d.%d\n"
+        "Revision %s\n"
+        "Installed as %s\n",
+        ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION, ADB_REVISION,
+        android::base::GetExecutablePath().c_str());
 }
 
 void fatal(const char *fmt, ...) {
