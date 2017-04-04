@@ -17,7 +17,10 @@
 #include "util.h"
 
 #include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
+#include <android-base/stringprintf.h>
 #include <android-base/test_utils.h>
 #include <gtest/gtest.h>
 
@@ -27,6 +30,35 @@ TEST(util, read_file_ENOENT) {
   EXPECT_FALSE(read_file("/proc/does-not-exist", &s));
   EXPECT_EQ(ENOENT, errno);
   EXPECT_EQ("", s); // s was cleared.
+}
+
+TEST(util, read_file_group_writeable) {
+    std::string s("hello");
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    EXPECT_TRUE(write_file(tf.path, s)) << strerror(errno);
+    EXPECT_NE(-1, fchmodat(AT_FDCWD, tf.path, 0620, AT_SYMLINK_NOFOLLOW)) << strerror(errno);
+    EXPECT_FALSE(read_file(tf.path, &s)) << strerror(errno);
+    EXPECT_EQ("", s);  // s was cleared.
+}
+
+TEST(util, read_file_world_writeable) {
+    std::string s("hello");
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    EXPECT_TRUE(write_file(tf.path, s.c_str())) << strerror(errno);
+    EXPECT_NE(-1, fchmodat(AT_FDCWD, tf.path, 0602, AT_SYMLINK_NOFOLLOW)) << strerror(errno);
+    EXPECT_FALSE(read_file(tf.path, &s)) << strerror(errno);
+    EXPECT_EQ("", s);  // s was cleared.
+}
+
+TEST(util, read_file_symbolic_link) {
+    std::string s("hello");
+    errno = 0;
+    // lrwxrwxrwx 1 root root 13 1970-01-01 00:00 charger -> /sbin/healthd
+    EXPECT_FALSE(read_file("/charger", &s));
+    EXPECT_EQ(ELOOP, errno);
+    EXPECT_EQ("", s);  // s was cleared.
 }
 
 TEST(util, read_file_success) {
@@ -53,6 +85,34 @@ TEST(util, write_file_binary) {
     EXPECT_TRUE(read_file(tf.path, &read_back_contents)) << strerror(errno);
     EXPECT_EQ(contents, read_back_contents);
     EXPECT_EQ(10u, read_back_contents.size());
+}
+
+TEST(util, write_file_not_exist) {
+    std::string s("hello");
+    std::string s2("hello");
+    TemporaryDir test_dir;
+    std::string path = android::base::StringPrintf("%s/does-not-exist", test_dir.path);
+    EXPECT_TRUE(write_file(path, s));
+    EXPECT_TRUE(read_file(path, &s2));
+    EXPECT_EQ(s, s2);
+    struct stat sb;
+    int fd = open(path.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    EXPECT_NE(-1, fd);
+    EXPECT_EQ(0, fstat(fd, &sb));
+    EXPECT_EQ((const unsigned int)(S_IRUSR | S_IWUSR), sb.st_mode & 0777);
+    EXPECT_EQ(0, unlink(path.c_str()));
+}
+
+TEST(util, write_file_exist) {
+    std::string s2("");
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    EXPECT_TRUE(write_file(tf.path, "1hello1")) << strerror(errno);
+    EXPECT_TRUE(read_file(tf.path, &s2));
+    EXPECT_STREQ("1hello1", s2.c_str());
+    EXPECT_TRUE(write_file(tf.path, "2ll2"));
+    EXPECT_TRUE(read_file(tf.path, &s2));
+    EXPECT_STREQ("2ll2", s2.c_str());
 }
 
 TEST(util, decode_uid) {
