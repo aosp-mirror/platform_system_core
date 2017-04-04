@@ -50,6 +50,7 @@ include $(BUILD_NATIVE_BENCHMARK)
 
 test_src_files := \
     logcat_test.cpp \
+    logcatd_test.cpp \
     liblogcat_test.cpp \
 
 # Build tests for the device (with .so). Run with:
