@@ -236,6 +236,6 @@ int ueventd_parse_config_file(const char *fn)
     return 0;
 }
 
-static void parse_line_device(parse_state*, int nargs, char** args) {
-    set_device_permission(nargs, args);
+static void parse_line_device(parse_state* state, int nargs, char** args) {
+    set_device_permission(state->filename, state->line, nargs, args);
 }
