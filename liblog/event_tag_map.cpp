@@ -445,7 +445,7 @@ LIBLOG_ABI_PUBLIC EventTagMap* android_openEventTagMap(const char* fileName) {
           mmap(NULL, end[which], which ? PROT_READ : PROT_READ | PROT_WRITE,
                which ? MAP_SHARED : MAP_PRIVATE, fd[which], 0);
       save_errno = errno;
-      close(fd[which]);
+      close(fd[which]); /* fd DONE */
       fd[which] = -1;
       if ((newTagMap->mapAddr[which] != MAP_FAILED) &&
           (newTagMap->mapAddr[which] != NULL)) {
@@ -465,6 +465,7 @@ LIBLOG_ABI_PUBLIC EventTagMap* android_openEventTagMap(const char* fileName) {
       delete newTagMap;
       return NULL;
     }
+    /* See 'fd DONE' comments above and below, no need to clean up here */
   }
 
   return newTagMap;
@@ -473,7 +474,7 @@ fail_unmap:
   save_errno = EINVAL;
   delete newTagMap;
 fail_close:
-  for (which = 0; which < NUM_MAPS; ++which) close(fd[which]);
+  for (which = 0; which < NUM_MAPS; ++which) close(fd[which]); /* fd DONE */
 fail_errno:
   errno = save_errno;
   return NULL;
