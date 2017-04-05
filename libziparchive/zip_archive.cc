@@ -622,15 +622,18 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
   const uint8_t* const cd_end = cd_ptr + cd_length;
   const uint8_t* ptr = cd_ptr;
   for (uint16_t i = 0; i < num_entries; i++) {
+    if (ptr > cd_end - sizeof(CentralDirectoryRecord)) {
+      ALOGW("Zip: ran off the end (at %" PRIu16 ")", i);
+#if defined(__ANDROID__)
+      android_errorWriteLog(0x534e4554, "36392138");
+#endif
+      goto bail;
+    }
+
     const CentralDirectoryRecord* cdr =
         reinterpret_cast<const CentralDirectoryRecord*>(ptr);
     if (cdr->record_signature != CentralDirectoryRecord::kSignature) {
       ALOGW("Zip: missed a central dir sig (at %" PRIu16 ")", i);
-      goto bail;
-    }
-
-    if (ptr + sizeof(CentralDirectoryRecord) > cd_end) {
-      ALOGW("Zip: ran off the end (at %" PRIu16 ")", i);
       goto bail;
     }
 
