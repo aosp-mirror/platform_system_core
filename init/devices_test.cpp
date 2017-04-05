@@ -22,36 +22,22 @@
 #include <android-base/scopeguard.h>
 #include <gtest/gtest.h>
 
-template <char** (*Function)(uevent*)>
+template <std::vector<std::string> (*Function)(uevent*)>
 void test_get_symlinks(const std::string& platform_device_name, uevent* uevent,
                        const std::vector<std::string> expected_links) {
     add_platform_device(platform_device_name.c_str());
     auto platform_device_remover = android::base::make_scope_guard(
         [&platform_device_name]() { remove_platform_device(platform_device_name.c_str()); });
 
-    char** result = Function(uevent);
-    auto result_freer = android::base::make_scope_guard([result]() {
-        if (result) {
-            for (int i = 0; result[i]; i++) {
-                free(result[i]);
-            }
-            free(result);
-        }
-    });
+    std::vector<std::string> result = Function(uevent);
 
     auto expected_size = expected_links.size();
-    if (expected_size == 0) {
-        ASSERT_EQ(nullptr, result);
-    } else {
-        ASSERT_NE(nullptr, result);
-        // First assert size is equal, so we don't overrun expected_links
-        unsigned int size = 0;
-        while (result[size]) ++size;
-        ASSERT_EQ(expected_size, size);
+    ASSERT_EQ(expected_size, result.size());
+    if (expected_size == 0) return;
 
-        for (unsigned int i = 0; i < size; ++i) {
-            EXPECT_EQ(expected_links[i], result[i]);
-        }
+    // Explicitly iterate so the results are visible if a failure occurs
+    for (unsigned int i = 0; i < expected_size; ++i) {
+        EXPECT_EQ(expected_links[i], result[i]);
     }
 }
 
@@ -208,12 +194,32 @@ TEST(devices, get_block_device_symlinks_success_pci) {
     test_get_symlinks<get_block_device_symlinks>(platform_device, &uevent, expected_result);
 }
 
+TEST(devices, get_block_device_symlinks_pci_bad_format) {
+    const char* platform_device = "/devices/do/not/match";
+    uevent uevent = {
+        .path = "/devices/pci//mmcblk0", .partition_name = nullptr, .partition_num = -1,
+    };
+    std::vector<std::string> expected_result{};
+
+    test_get_symlinks<get_block_device_symlinks>(platform_device, &uevent, expected_result);
+}
+
 TEST(devices, get_block_device_symlinks_success_vbd) {
     const char* platform_device = "/devices/do/not/match";
     uevent uevent = {
         .path = "/devices/vbd-1234/mmcblk0", .partition_name = nullptr, .partition_num = -1,
     };
     std::vector<std::string> expected_result{"/dev/block/vbd/1234/mmcblk0"};
+
+    test_get_symlinks<get_block_device_symlinks>(platform_device, &uevent, expected_result);
+}
+
+TEST(devices, get_block_device_symlinks_vbd_bad_format) {
+    const char* platform_device = "/devices/do/not/match";
+    uevent uevent = {
+        .path = "/devices/vbd-/mmcblk0", .partition_name = nullptr, .partition_num = -1,
+    };
+    std::vector<std::string> expected_result{};
 
     test_get_symlinks<get_block_device_symlinks>(platform_device, &uevent, expected_result);
 }
@@ -236,7 +242,7 @@ TEST(devices, sanitize_null) {
 
 TEST(devices, sanitize_empty) {
     std::string empty;
-    sanitize_partition_name(&empty[0]);
+    sanitize_partition_name(&empty);
     EXPECT_EQ(0u, empty.size());
 }
 
@@ -247,24 +253,24 @@ TEST(devices, sanitize_allgood) {
         "0123456789"
         "_-.";
     std::string good_copy = good;
-    sanitize_partition_name(&good[0]);
+    sanitize_partition_name(&good);
     EXPECT_EQ(good_copy, good);
 }
 
 TEST(devices, sanitize_somebad) {
     std::string string = "abc!@#$%^&*()";
-    sanitize_partition_name(&string[0]);
+    sanitize_partition_name(&string);
     EXPECT_EQ("abc__________", string);
 }
 
 TEST(devices, sanitize_allbad) {
     std::string string = "!@#$%^&*()";
-    sanitize_partition_name(&string[0]);
+    sanitize_partition_name(&string);
     EXPECT_EQ("__________", string);
 }
 
 TEST(devices, sanitize_onebad) {
     std::string string = ")";
-    sanitize_partition_name(&string[0]);
+    sanitize_partition_name(&string);
     EXPECT_EQ("_", string);
 }
