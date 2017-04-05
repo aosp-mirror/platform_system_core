@@ -28,8 +28,9 @@
 #include <string>
 #include <vector>
 
-#include "android-base/macros.h"  // For TEMP_FAILURE_RETRY on Darwin.
 #include "android-base/logging.h"
+#include "android-base/macros.h"  // For TEMP_FAILURE_RETRY on Darwin.
+#include "android-base/unique_fd.h"
 #include "android-base/utf8.h"
 #include "utils/Compat.h"
 
@@ -69,13 +70,11 @@ bool ReadFileToString(const std::string& path, std::string* content, bool follow
   content->clear();
 
   int flags = O_RDONLY | O_CLOEXEC | O_BINARY | (follow_symlinks ? 0 : O_NOFOLLOW);
-  int fd = TEMP_FAILURE_RETRY(open(path.c_str(), flags));
+  android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path.c_str(), flags)));
   if (fd == -1) {
     return false;
   }
-  bool result = ReadFdToString(fd, content);
-  close(fd);
-  return result;
+  return ReadFdToString(fd, content);
 }
 
 bool WriteStringToFd(const std::string& content, int fd) {
@@ -106,7 +105,7 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
                        bool follow_symlinks) {
   int flags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_BINARY |
               (follow_symlinks ? 0 : O_NOFOLLOW);
-  int fd = TEMP_FAILURE_RETRY(open(path.c_str(), flags, mode));
+  android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path.c_str(), flags, mode)));
   if (fd == -1) {
     PLOG(ERROR) << "android::WriteStringToFile open failed";
     return false;
@@ -126,7 +125,6 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
     PLOG(ERROR) << "android::WriteStringToFile write failed";
     return CleanUpAfterFailedWrite(path);
   }
-  close(fd);
   return true;
 }
 #endif
@@ -135,14 +133,11 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
                        bool follow_symlinks) {
   int flags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_BINARY |
               (follow_symlinks ? 0 : O_NOFOLLOW);
-  int fd = TEMP_FAILURE_RETRY(open(path.c_str(), flags, DEFFILEMODE));
+  android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path.c_str(), flags, DEFFILEMODE)));
   if (fd == -1) {
     return false;
   }
-
-  bool result = WriteStringToFd(content, fd);
-  close(fd);
-  return result || CleanUpAfterFailedWrite(path);
+  return WriteStringToFd(content, fd) || CleanUpAfterFailedWrite(path);
 }
 
 bool ReadFully(int fd, void* data, size_t byte_count) {
