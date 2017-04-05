@@ -62,6 +62,7 @@ test_libraries = [
 
 cc_test {
     name: "libcutils_test",
+    test_suites: ["device-tests"],
     defaults: ["libcutils_test_default"],
     host_supported: true,
     shared_libs: test_libraries,
