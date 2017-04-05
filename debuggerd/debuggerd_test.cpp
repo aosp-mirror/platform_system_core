@@ -500,9 +500,6 @@ TEST_F(CrasherTest, capabilities) {
 TEST(crash_dump, zombie) {
   pid_t forkpid = fork();
 
-  int pipefd[2];
-  ASSERT_EQ(0, pipe2(pipefd, O_CLOEXEC));
-
   pid_t rc;
   int status;
 

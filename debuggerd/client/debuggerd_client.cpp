@@ -58,28 +58,31 @@ static void populate_timeval(struct timeval* tv, const Duration& duration) {
 }
 
 bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType dump_type,
-                            int timeout_ms) {
+                            unsigned int timeout_ms) {
   LOG(INFO) << "libdebuggerd_client: started dumping process " << pid;
   unique_fd sockfd;
   const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
-  auto time_left = [timeout_ms, &end]() { return end - std::chrono::steady_clock::now(); };
+  auto time_left = [&end]() { return end - std::chrono::steady_clock::now(); };
   auto set_timeout = [timeout_ms, &time_left](int sockfd) {
     if (timeout_ms <= 0) {
-      return -1;
+      return sockfd;
     }
 
     auto remaining = time_left();
     if (remaining < decltype(remaining)::zero()) {
-      LOG(ERROR) << "timeout expired";
+      LOG(ERROR) << "libdebuggerd_client: timeout expired";
       return -1;
     }
+
     struct timeval timeout;
     populate_timeval(&timeout, remaining);
 
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0) {
+      PLOG(ERROR) << "libdebuggerd_client: failed to set receive timeout";
       return -1;
     }
     if (setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) != 0) {
+      PLOG(ERROR) << "libdebuggerd_client: failed to set send timeout";
       return -1;
     }
 
@@ -158,8 +161,10 @@ bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType du
 
   // Forward output from the pipe to the output fd.
   while (true) {
-    auto remaining_ms = std::chrono::duration_cast<std::chrono::milliseconds>(time_left());
-    if (remaining_ms <= 1ms) {
+    auto remaining_ms = std::chrono::duration_cast<std::chrono::milliseconds>(time_left()).count();
+    if (timeout_ms <= 0) {
+      remaining_ms = -1;
+    } else if (remaining_ms < 0) {
       LOG(ERROR) << "libdebuggerd_client: timeout expired";
       return false;
     }
@@ -168,7 +173,7 @@ bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType du
         .fd = pipe_read.get(), .events = POLLIN, .revents = 0,
     };
 
-    rc = poll(&pfd, 1, remaining_ms.count());
+    rc = poll(&pfd, 1, remaining_ms);
     if (rc == -1) {
       if (errno == EINTR) {
         continue;
