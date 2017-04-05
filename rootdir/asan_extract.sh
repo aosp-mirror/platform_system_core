@@ -75,10 +75,16 @@ bzip2 -c -d $SRC | tar -x -f - --no-same-owner -C / || exit 1
 
 # Cannot log here, log would run with system_data_file.
 
+# Set correct permission bits.
+chmod -R 744 $ASAN_DIR
+cd $ASAN_DIR ; find . -type d -exec chmod 755 {} \;
+
 restorecon -R -F $ASAN_DIR/*/lib*
 
 log -p i -t asan_install "Fixed selinux labels..."
 
+
+# Now write down our checksum to mark the extraction complete.
 echo "$ASAN_TAR_MD5" > $MD5_FILE
 
 # We want to reboot now. It seems it is not possible to run "reboot" here, the device will
