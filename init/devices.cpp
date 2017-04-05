@@ -286,8 +286,7 @@ out:
     }
 }
 
-static void add_platform_device(const char *path)
-{
+void add_platform_device(const char* path) {
     int path_len = strlen(path);
     struct platform_node *bus;
     const char *name = path;
@@ -329,8 +328,7 @@ static struct platform_node *find_platform_device(const char *path)
     return NULL;
 }
 
-static void remove_platform_device(const char *path)
-{
+void remove_platform_device(const char* path) {
     struct listnode *node;
     struct platform_node *bus;
 
@@ -473,8 +471,7 @@ static void parse_event(const char *msg, struct uevent *uevent)
     }
 }
 
-static char **get_character_device_symlinks(struct uevent *uevent)
-{
+char** get_character_device_symlinks(struct uevent* uevent) {
     const char *parent;
     const char *slash;
     char **links;
@@ -526,8 +523,24 @@ err:
     return NULL;
 }
 
-static char **get_block_device_symlinks(struct uevent *uevent)
-{
+// replaces any unacceptable characters with '_', the
+// length of the resulting string is equal to the input string
+void sanitize_partition_name(char* s) {
+    const char* accept =
+        "abcdefghijklmnopqrstuvwxyz"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "0123456789"
+        "_-.";
+
+    if (!s) return;
+
+    while (*s) {
+        s += strspn(s, accept);
+        if (*s) *s++ = '_';
+    }
+}
+
+char** get_block_device_symlinks(struct uevent* uevent) {
     const char *device;
     struct platform_node *pdev;
     const char *slash;
@@ -562,7 +575,7 @@ static char **get_block_device_symlinks(struct uevent *uevent)
 
     if (uevent->partition_name) {
         p = strdup(uevent->partition_name);
-        sanitize(p);
+        sanitize_partition_name(p);
         if (strcmp(uevent->partition_name, p)) {
             LOG(VERBOSE) << "Linking partition '" << uevent->partition_name << "' as '" << p << "'";
         }
