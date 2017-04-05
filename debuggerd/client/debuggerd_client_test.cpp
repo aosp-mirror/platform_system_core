@@ -89,3 +89,23 @@ TEST(debuggerd_client, race) {
 
   EXPECT_EQ(1, found_end) << "\nOutput: \n" << result;
 }
+
+TEST(debuggerd_client, no_timeout) {
+  unique_fd pipe_read, pipe_write;
+  ASSERT_TRUE(Pipe(&pipe_read, &pipe_write));
+
+  pid_t forkpid = fork();
+  ASSERT_NE(-1, forkpid);
+  if (forkpid == 0) {
+    pipe_write.reset();
+    char dummy;
+    TEMP_FAILURE_RETRY(read(pipe_read.get(), &dummy, sizeof(dummy)));
+    exit(0);
+  }
+
+  pipe_read.reset();
+
+  unique_fd output_read, output_write;
+  ASSERT_TRUE(Pipe(&output_read, &output_write));
+  ASSERT_TRUE(debuggerd_trigger_dump(forkpid, std::move(output_write), kDebuggerdBacktrace, 0));
+}
