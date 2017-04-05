@@ -24,6 +24,7 @@ cc_library_shared {
 
 cc_test {
     name: "libappfuse_test",
+    test_suites: ["device-tests"],
     defaults: ["libappfuse_defaults"],
     shared_libs: ["libappfuse"],
     srcs: [
