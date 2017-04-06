@@ -18,6 +18,7 @@
 #define _INIT_DEVICES_H
 
 #include <sys/stat.h>
+#include <sys/types.h>
 
 #include <functional>
 #include <string>
@@ -47,15 +48,48 @@ struct uevent {
     int minor;
 };
 
+class Permissions {
+  public:
+    Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t gid);
+
+    bool Match(const std::string& path) const;
+
+    mode_t perm() const { return perm_; }
+    uid_t uid() const { return uid_; }
+    gid_t gid() const { return gid_; }
+
+  protected:
+    const std::string& name() const { return name_; }
+
+  private:
+    std::string name_;
+    mode_t perm_;
+    uid_t uid_;
+    gid_t gid_;
+    bool prefix_;
+    bool wildcard_;
+};
+
+class SysfsPermissions : public Permissions {
+  public:
+    SysfsPermissions(const std::string& name, const std::string& attribute, mode_t perm, uid_t uid,
+                     gid_t gid)
+        : Permissions(name, perm, uid, gid), attribute_(attribute) {}
+
+    bool MatchWithSubsystem(const std::string& path, const std::string& subsystem) const;
+    void SetPermissions(const std::string& path) const;
+
+  private:
+    const std::string attribute_;
+};
+
+extern std::vector<Permissions> dev_permissions;
+extern std::vector<SysfsPermissions> sysfs_permissions;
+
 typedef std::function<coldboot_action_t(struct uevent* uevent)> coldboot_callback;
 extern coldboot_action_t handle_device_fd(coldboot_callback fn = nullptr);
 extern void device_init(const char* path = nullptr, coldboot_callback fn = nullptr);
 extern void device_close();
-
-extern int add_dev_perms(const char *name, const char *attr,
-                         mode_t perm, unsigned int uid,
-                         unsigned int gid, unsigned short prefix,
-                         unsigned short wildcard);
 int get_device_fd();
 
 // Exposed for testing
