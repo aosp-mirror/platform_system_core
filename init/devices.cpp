@@ -76,16 +76,8 @@ struct perm_node {
     struct listnode plist;
 };
 
-struct platform_node {
-    char *name;
-    char *path;
-    int path_len;
-    struct listnode list;
-};
-
 static list_declare(sys_perms);
 static list_declare(dev_perms);
-static list_declare(platform_names);
 
 int add_dev_perms(const char *name, const char *attr,
                   mode_t perm, unsigned int uid, unsigned int gid,
@@ -270,74 +262,25 @@ out:
     }
 }
 
-void add_platform_device(const char* path) {
-    int path_len = strlen(path);
-    struct platform_node *bus;
-    const char *name = path;
+// TODO: Move this to be a member variable of a future devices class.
+std::vector<std::string> platform_devices;
 
-    if (!strncmp(path, "/devices/", 9)) {
-        name += 9;
-        if (!strncmp(name, "platform/", 9))
-            name += 9;
-    }
-
-    LOG(VERBOSE) << "adding platform device " << name << " (" << path << ")";
-
-    bus = (platform_node*) calloc(1, sizeof(struct platform_node));
-    bus->path = strdup(path);
-    bus->path_len = path_len;
-    bus->name = bus->path + (name - path);
-    list_add_tail(&platform_names, &bus->list);
-}
-
-/*
- * given a path that may start with a platform device, find the length of the
- * platform device prefix.  If it doesn't start with a platform device, return
- * 0.
- */
-static struct platform_node* find_platform_device(const char* path) {
-    int path_len = strlen(path);
-    struct listnode *node;
-    struct platform_node *bus;
-
-    list_for_each_reverse(node, &platform_names) {
-        bus = node_to_item(node, struct platform_node, list);
-        if ((bus->path_len < path_len) &&
-                (path[bus->path_len] == '/') &&
-                !strncmp(path, bus->path, bus->path_len))
-            return bus;
-    }
-
-    return NULL;
-}
-
-void remove_platform_device(const char* path) {
-    struct listnode *node;
-    struct platform_node *bus;
-
-    list_for_each_reverse(node, &platform_names) {
-        bus = node_to_item(node, struct platform_node, list);
-        if (!strcmp(path, bus->path)) {
-            LOG(INFO) << "removing platform device " << bus->name;
-            free(bus->path);
-            list_remove(node);
-            free(bus);
-            return;
+// Given a path that may start with a platform device, find the length of the
+// platform device prefix.  If it doesn't start with a platform device, return false
+bool find_platform_device(const std::string& path, std::string* out_path) {
+    out_path->clear();
+    // platform_devices is searched backwards, since parents are added before their children,
+    // and we want to match as deep of a child as we can.
+    for (auto it = platform_devices.rbegin(); it != platform_devices.rend(); ++it) {
+        auto platform_device_path_length = it->length();
+        if (platform_device_path_length < path.length() &&
+            path[platform_device_path_length] == '/' &&
+            android::base::StartsWith(path, it->c_str())) {
+            *out_path = *it;
+            return true;
         }
     }
-}
-
-static void destroy_platform_devices() {
-    struct listnode* node;
-    struct listnode* n;
-    struct platform_node* bus;
-
-    list_for_each_safe(node, n, &platform_names) {
-        list_remove(node);
-        bus = node_to_item(node, struct platform_node, list);
-        free(bus->path);
-        free(bus);
-    }
+    return false;
 }
 
 /* Given a path that may start with a PCI device, populate the supplied buffer
@@ -442,16 +385,13 @@ void parse_event(const char* msg, uevent* uevent) {
 }
 
 std::vector<std::string> get_character_device_symlinks(uevent* uevent) {
-    platform_node* pdev = find_platform_device(uevent->path.c_str());
-    if (!pdev) return {};
+    std::string parent_device;
+    if (!find_platform_device(uevent->path, &parent_device)) return {};
 
-    /* skip "/devices/platform/<driver>" */
-    auto parent_start = uevent->path.find('/', pdev->path_len);
-    if (parent_start == std::string::npos) return {};
+    // skip path to the parent driver
+    std::string path = uevent->path.substr(parent_device.length());
 
-    std::string parent = uevent->path.substr(parent_start);
-
-    if (!android::base::StartsWith(parent, "/usb")) return {};
+    if (!android::base::StartsWith(path, "/usb")) return {};
 
     // skip root hub name and device. use device interface
     // skip 3 slashes, including the first / by starting the search at the 1st character, not 0th.
@@ -459,13 +399,13 @@ std::vector<std::string> get_character_device_symlinks(uevent* uevent) {
     // e.g. "/usb/usb_device/name/tty2-1:1.0" -> "name"
 
     std::string::size_type start = 0;
-    start = parent.find('/', start + 1);
+    start = path.find('/', start + 1);
     if (start == std::string::npos) return {};
 
-    start = parent.find('/', start + 1);
+    start = path.find('/', start + 1);
     if (start == std::string::npos) return {};
 
-    auto end = parent.find('/', start + 1);
+    auto end = path.find('/', start + 1);
     if (end == std::string::npos) return {};
 
     start++;  // Skip the first '/'
@@ -473,7 +413,7 @@ std::vector<std::string> get_character_device_symlinks(uevent* uevent) {
     auto length = end - start;
     if (length == 0) return {};
 
-    auto name_string = parent.substr(start, length);
+    auto name_string = path.substr(start, length);
 
     std::vector<std::string> links;
     links.emplace_back("/dev/usb/" + uevent->subsystem + name_string);
@@ -502,12 +442,19 @@ void sanitize_partition_name(std::string* string) {
 
 std::vector<std::string> get_block_device_symlinks(uevent* uevent) {
     std::string device;
-    struct platform_node* pdev;
     std::string type;
 
-    pdev = find_platform_device(uevent->path.c_str());
-    if (pdev) {
-        device = pdev->name;
+    if (find_platform_device(uevent->path, &device)) {
+        // Skip /devices/platform or /devices/ if present
+        static const std::string devices_platform_prefix = "/devices/platform/";
+        static const std::string devices_prefix = "/devices/";
+
+        if (android::base::StartsWith(device, devices_platform_prefix.c_str())) {
+            device = device.substr(devices_platform_prefix.length());
+        } else if (android::base::StartsWith(device, devices_prefix.c_str())) {
+            device = device.substr(devices_prefix.length());
+        }
+
         type = "platform";
     } else if (find_pci_device_prefix(uevent->path, &device)) {
         type = "pci";
@@ -575,11 +522,12 @@ static void handle_device(const std::string& action, const std::string& devpath,
     }
 }
 
-static void handle_platform_device_event(uevent* uevent) {
+void handle_platform_device_event(uevent* uevent) {
     if (uevent->action == "add") {
-        add_platform_device(uevent->path.c_str());
+        platform_devices.emplace_back(uevent->path);
     } else if (uevent->action == "remove") {
-        remove_platform_device(uevent->path.c_str());
+        auto it = std::find(platform_devices.begin(), platform_devices.end(), uevent->path);
+        if (it != platform_devices.end()) platform_devices.erase(it);
     }
 }
 
@@ -920,7 +868,7 @@ void device_init(const char* path, coldboot_callback fn) {
 }
 
 void device_close() {
-    destroy_platform_devices();
+    platform_devices.clear();
     device_fd.reset();
     selinux_status_close();
 }

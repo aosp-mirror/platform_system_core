@@ -22,12 +22,26 @@
 #include <android-base/scopeguard.h>
 #include <gtest/gtest.h>
 
+void add_platform_device(const std::string& path) {
+    uevent uevent = {
+        .action = "add", .subsystem = "platform", .path = path,
+    };
+    handle_platform_device_event(&uevent);
+}
+
+void remove_platform_device(const std::string& path) {
+    uevent uevent = {
+        .action = "remove", .subsystem = "platform", .path = path,
+    };
+    handle_platform_device_event(&uevent);
+}
+
 template <std::vector<std::string> (*Function)(uevent*)>
 void test_get_symlinks(const std::string& platform_device_name, uevent* uevent,
                        const std::vector<std::string> expected_links) {
-    add_platform_device(platform_device_name.c_str());
+    add_platform_device(platform_device_name);
     auto platform_device_remover = android::base::make_scope_guard(
-        [&platform_device_name]() { remove_platform_device(platform_device_name.c_str()); });
+        [&platform_device_name]() { remove_platform_device(platform_device_name); });
 
     std::vector<std::string> result = Function(uevent);
 
@@ -39,6 +53,36 @@ void test_get_symlinks(const std::string& platform_device_name, uevent* uevent,
     for (unsigned int i = 0; i < expected_size; ++i) {
         EXPECT_EQ(expected_links[i], result[i]);
     }
+}
+
+TEST(devices, handle_platform_device_event) {
+    platform_devices.clear();
+    add_platform_device("/devices/platform/some_device_name");
+    ASSERT_EQ(1U, platform_devices.size());
+    remove_platform_device("/devices/platform/some_device_name");
+    ASSERT_EQ(0U, platform_devices.size());
+}
+
+TEST(devices, find_platform_device) {
+    platform_devices.clear();
+    add_platform_device("/devices/platform/some_device_name");
+    add_platform_device("/devices/platform/some_device_name/longer");
+    add_platform_device("/devices/platform/other_device_name");
+    EXPECT_EQ(3U, platform_devices.size());
+
+    std::string out_path;
+    EXPECT_FALSE(find_platform_device("/devices/platform/not_found", &out_path));
+    EXPECT_EQ("", out_path);
+
+    EXPECT_FALSE(
+        find_platform_device("/devices/platform/some_device_name_with_same_prefix", &out_path));
+
+    EXPECT_TRUE(
+        find_platform_device("/devices/platform/some_device_name/longer/longer_child", &out_path));
+    EXPECT_EQ("/devices/platform/some_device_name/longer", out_path);
+
+    EXPECT_TRUE(find_platform_device("/devices/platform/some_device_name/other_child", &out_path));
+    EXPECT_EQ("/devices/platform/some_device_name", out_path);
 }
 
 TEST(devices, get_character_device_symlinks_success) {
