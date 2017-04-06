@@ -75,7 +75,8 @@ public:
     uint32_t uncompressed_size;
     uint16_t last_mod_time;
     uint16_t last_mod_date;
-    uint32_t local_file_header_offset;
+    uint32_t padding_length;
+    off64_t local_file_header_offset;
   };
 
   static const char* ErrorCodeString(int32_t error_code);
@@ -172,6 +173,7 @@ private:
   };
 
   FILE* file_;
+  bool seekable_;
   off64_t current_offset_;
   State state_;
   std::vector<FileEntry> files_;
