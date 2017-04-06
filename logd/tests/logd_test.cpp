@@ -999,16 +999,18 @@ static pid_t sepolicy_rate(unsigned rate, unsigned num) {
     }
 
     // We may have DAC, but let's not have MAC
-    if (setcon("u:object_r:shell:s0") < 0) {
+    if ((setcon("u:object_r:shell:s0") < 0) && (setcon("u:r:shell:s0") < 0)) {
         int save_errno = errno;
         security_context_t context;
         getcon(&context);
-        fprintf(stderr, "setcon(\"u:r:shell:s0\") failed @\"%s\" %s\n", context,
-                strerror(save_errno));
-        freecon(context);
-        _exit(-1);
-        // NOTREACHED
-        return 0;
+        if (strcmp(context, "u:r:shell:s0")) {
+            fprintf(stderr, "setcon(\"u:r:shell:s0\") failed @\"%s\" %s\n",
+                    context, strerror(save_errno));
+            freecon(context);
+            _exit(-1);
+            // NOTREACHED
+            return 0;
+        }
     }
 
     // The key here is we are root, but we are in u:r:shell:s0,
