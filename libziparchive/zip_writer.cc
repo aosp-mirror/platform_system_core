@@ -18,6 +18,7 @@
 
 #include <cstdio>
 #include <sys/param.h>
+#include <sys/stat.h>
 #include <zlib.h>
 #define DEF_MEM_LEVEL 8                // normally in zutil.h?
 
@@ -84,11 +85,19 @@ static void DeleteZStream(z_stream* stream) {
   delete stream;
 }
 
-ZipWriter::ZipWriter(FILE* f) : file_(f), current_offset_(0), state_(State::kWritingZip),
-                                z_stream_(nullptr, DeleteZStream), buffer_(kBufSize) {
+ZipWriter::ZipWriter(FILE* f) : file_(f), seekable_(false), current_offset_(0),
+                                state_(State::kWritingZip), z_stream_(nullptr, DeleteZStream),
+                                buffer_(kBufSize) {
+  // Check if the file is seekable (regular file). If fstat fails, that's fine, subsequent calls
+  // will fail as well.
+  struct stat file_stats;
+  if (fstat(fileno(f), &file_stats) == 0) {
+    seekable_ = S_ISREG(file_stats.st_mode);
+  }
 }
 
 ZipWriter::ZipWriter(ZipWriter&& writer) : file_(writer.file_),
+                                           seekable_(writer.seekable_),
                                            current_offset_(writer.current_offset_),
                                            state_(writer.state_),
                                            files_(std::move(writer.files_)),
@@ -100,6 +109,7 @@ ZipWriter::ZipWriter(ZipWriter&& writer) : file_(writer.file_),
 
 ZipWriter& ZipWriter::operator=(ZipWriter&& writer) {
   file_ = writer.file_;
+  seekable_ = writer.seekable_;
   current_offset_ = writer.current_offset_;
   state_ = writer.state_;
   files_ = std::move(writer.files_);
@@ -159,6 +169,30 @@ static void ExtractTimeAndDate(time_t when, uint16_t* out_time, uint16_t* out_da
   *out_time = ptm->tm_hour << 11 | ptm->tm_min << 5 | ptm->tm_sec >> 1;
 }
 
+static void CopyFromFileEntry(const ZipWriter::FileEntry& src, bool use_data_descriptor,
+                              LocalFileHeader* dst) {
+  dst->lfh_signature = LocalFileHeader::kSignature;
+  if (use_data_descriptor) {
+    // Set this flag to denote that a DataDescriptor struct will appear after the data,
+    // containing the crc and size fields.
+    dst->gpb_flags |= kGPBDDFlagMask;
+
+    // The size and crc fields must be 0.
+    dst->compressed_size = 0u;
+    dst->uncompressed_size = 0u;
+    dst->crc32 = 0u;
+  } else {
+    dst->compressed_size = src.compressed_size;
+    dst->uncompressed_size = src.uncompressed_size;
+    dst->crc32 = src.crc32;
+  }
+  dst->compression_method = src.compression_method;
+  dst->last_mod_time = src.last_mod_time;
+  dst->last_mod_date = src.last_mod_date;
+  dst->file_name_length = src.path.size();
+  dst->extra_field_length = src.padding_length;
+}
+
 int32_t ZipWriter::StartAlignedEntryWithTime(const char* path, size_t flags,
                                              time_t time, uint32_t alignment) {
   if (state_ != State::kWritingZip) {
@@ -173,66 +207,58 @@ int32_t ZipWriter::StartAlignedEntryWithTime(const char* path, size_t flags,
     return kInvalidAlignment;
   }
 
-  current_file_entry_ = {};
-  current_file_entry_.path = path;
-  current_file_entry_.local_file_header_offset = current_offset_;
+  FileEntry file_entry = {};
+  file_entry.local_file_header_offset = current_offset_;
+  file_entry.path = path;
 
-  if (!IsValidEntryName(reinterpret_cast<const uint8_t*>(current_file_entry_.path.data()),
-                        current_file_entry_.path.size())) {
+  if (!IsValidEntryName(reinterpret_cast<const uint8_t*>(file_entry.path.data()),
+                        file_entry.path.size())) {
     return kInvalidEntryName;
   }
 
-  LocalFileHeader header = {};
-  header.lfh_signature = LocalFileHeader::kSignature;
-
-  // Set this flag to denote that a DataDescriptor struct will appear after the data,
-  // containing the crc and size fields.
-  header.gpb_flags |= kGPBDDFlagMask;
-
   if (flags & ZipWriter::kCompress) {
-    current_file_entry_.compression_method = kCompressDeflated;
+    file_entry.compression_method = kCompressDeflated;
 
     int32_t result = PrepareDeflate();
     if (result != kNoError) {
       return result;
     }
   } else {
-    current_file_entry_.compression_method = kCompressStored;
+    file_entry.compression_method = kCompressStored;
   }
-  header.compression_method = current_file_entry_.compression_method;
 
-  ExtractTimeAndDate(time, &current_file_entry_.last_mod_time, &current_file_entry_.last_mod_date);
-  header.last_mod_time = current_file_entry_.last_mod_time;
-  header.last_mod_date = current_file_entry_.last_mod_date;
+  ExtractTimeAndDate(time, &file_entry.last_mod_time, &file_entry.last_mod_date);
 
-  header.file_name_length = current_file_entry_.path.size();
-
-  off64_t offset = current_offset_ + sizeof(header) + current_file_entry_.path.size();
+  off_t offset = current_offset_ + sizeof(LocalFileHeader) + file_entry.path.size();
   std::vector<char> zero_padding;
   if (alignment != 0 && (offset & (alignment - 1))) {
     // Pad the extra field so the data will be aligned.
     uint16_t padding = alignment - (offset % alignment);
-    header.extra_field_length = padding;
+    file_entry.padding_length = padding;
     offset += padding;
-    zero_padding.resize(padding);
-    memset(zero_padding.data(), 0, zero_padding.size());
+    zero_padding.resize(padding, 0);
   }
+
+  LocalFileHeader header = {};
+  // Always start expecting a data descriptor. When the data has finished being written,
+  // if it is possible to seek back, the GPB flag will reset and the sizes written.
+  CopyFromFileEntry(file_entry, true /*use_data_descriptor*/, &header);
 
   if (fwrite(&header, sizeof(header), 1, file_) != 1) {
     return HandleError(kIoError);
   }
 
-  if (fwrite(path, sizeof(*path), current_file_entry_.path.size(), file_)
-      != current_file_entry_.path.size()) {
+  if (fwrite(path, sizeof(*path), file_entry.path.size(), file_) != file_entry.path.size()) {
     return HandleError(kIoError);
   }
 
-  if (header.extra_field_length != 0 &&
-      fwrite(zero_padding.data(), 1, header.extra_field_length, file_)
-      != header.extra_field_length) {
+  if (file_entry.padding_length != 0 &&
+      fwrite(zero_padding.data(), 1, file_entry.padding_length, file_)
+      != file_entry.padding_length) {
     return HandleError(kIoError);
   }
 
+  current_file_entry_ = std::move(file_entry);
   current_offset_ = offset;
   state_ = State::kWritingEntry;
   return kNoError;
@@ -405,23 +431,41 @@ int32_t ZipWriter::FinishEntry() {
     }
   }
 
-  const uint32_t sig = DataDescriptor::kOptSignature;
-  if (fwrite(&sig, sizeof(sig), 1, file_) != 1) {
-    state_ = State::kError;
-    return kIoError;
-  }
+  if ((current_file_entry_.compression_method & kCompressDeflated) || !seekable_) {
+    // Some versions of ZIP don't allow STORED data to have a trailing DataDescriptor.
+    // If this file is not seekable, or if the data is compressed, write a DataDescriptor.
+    const uint32_t sig = DataDescriptor::kOptSignature;
+    if (fwrite(&sig, sizeof(sig), 1, file_) != 1) {
+      return HandleError(kIoError);
+    }
 
-  DataDescriptor dd = {};
-  dd.crc32 = current_file_entry_.crc32;
-  dd.compressed_size = current_file_entry_.compressed_size;
-  dd.uncompressed_size = current_file_entry_.uncompressed_size;
-  if (fwrite(&dd, sizeof(dd), 1, file_) != 1) {
-    return HandleError(kIoError);
+    DataDescriptor dd = {};
+    dd.crc32 = current_file_entry_.crc32;
+    dd.compressed_size = current_file_entry_.compressed_size;
+    dd.uncompressed_size = current_file_entry_.uncompressed_size;
+    if (fwrite(&dd, sizeof(dd), 1, file_) != 1) {
+      return HandleError(kIoError);
+    }
+    current_offset_ += sizeof(DataDescriptor::kOptSignature) + sizeof(dd);
+  } else {
+    // Seek back to the header and rewrite to include the size.
+    if (fseeko(file_, current_file_entry_.local_file_header_offset, SEEK_SET) != 0) {
+      return HandleError(kIoError);
+    }
+
+    LocalFileHeader header = {};
+    CopyFromFileEntry(current_file_entry_, false /*use_data_descriptor*/, &header);
+
+    if (fwrite(&header, sizeof(header), 1, file_) != 1) {
+      return HandleError(kIoError);
+    }
+
+    if (fseeko(file_, current_offset_, SEEK_SET) != 0) {
+      return HandleError(kIoError);
+    }
   }
 
   files_.emplace_back(std::move(current_file_entry_));
-
-  current_offset_ += sizeof(DataDescriptor::kOptSignature) + sizeof(dd);
   state_ = State::kWritingZip;
   return kNoError;
 }
@@ -431,7 +475,7 @@ int32_t ZipWriter::Finish() {
     return kInvalidState;
   }
 
-  off64_t startOfCdr = current_offset_;
+  off_t startOfCdr = current_offset_;
   for (FileEntry& file : files_) {
     CentralDirectoryRecord cdr = {};
     cdr.record_signature = CentralDirectoryRecord::kSignature;
@@ -443,7 +487,7 @@ int32_t ZipWriter::Finish() {
     cdr.compressed_size = file.compressed_size;
     cdr.uncompressed_size = file.uncompressed_size;
     cdr.file_name_length = file.path.size();
-    cdr.local_file_header_offset = file.local_file_header_offset;
+    cdr.local_file_header_offset = static_cast<uint32_t>(file.local_file_header_offset);
     if (fwrite(&cdr, sizeof(cdr), 1, file_) != 1) {
       return HandleError(kIoError);
     }
@@ -473,7 +517,7 @@ int32_t ZipWriter::Finish() {
   // Since we can BackUp() and potentially finish writing at an offset less than one we had
   // already written at, we must truncate the file.
 
-  if (ftruncate64(fileno(file_), current_offset_) != 0) {
+  if (ftruncate(fileno(file_), current_offset_) != 0) {
     return HandleError(kIoError);
   }
 
