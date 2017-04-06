@@ -74,6 +74,7 @@ cc_binary {
 // -----------------------------------------------------------------------------
 cc_test {
     name: "bootstat_tests",
+    test_suites: ["device-tests"],
     defaults: ["bootstat_defaults"],
     host_supported: true,
     static_libs: [
