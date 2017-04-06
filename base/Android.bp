@@ -98,6 +98,7 @@ cc_test {
         "parseint_test.cpp",
         "parsenetaddress_test.cpp",
         "quick_exit_test.cpp",
+        "scopeguard_test.cpp",
         "stringprintf_test.cpp",
         "strings_test.cpp",
         "test_main.cpp",
