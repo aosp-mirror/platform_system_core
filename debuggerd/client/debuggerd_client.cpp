@@ -140,7 +140,9 @@ bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType du
   }
 
   bool backtrace = dump_type == kDebuggerdBacktrace;
-  send_signal(pid, backtrace);
+  if (!send_signal(pid, backtrace)) {
+    return false;
+  }
 
   rc = TEMP_FAILURE_RETRY(recv(set_timeout(sockfd.get()), &response, sizeof(response), MSG_TRUNC));
   if (rc == 0) {
