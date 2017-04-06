@@ -14,46 +14,44 @@
  * limitations under the License.
  */
 
+#include "property_service.h"
+
+#include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <inttypes.h>
+#include <limits.h>
+#include <netinet/in.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <ctype.h>
-#include <fcntl.h>
-#include <stdarg.h>
-#include <dirent.h>
-#include <limits.h>
-#include <errno.h>
+#include <sys/mman.h>
 #include <sys/poll.h>
-
-#include <memory>
-#include <vector>
+#include <sys/select.h>
+#include <sys/types.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/select.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <sys/mman.h>
+#include <memory>
+#include <vector>
 
-#include <selinux/android.h>
-#include <selinux/selinux.h>
-#include <selinux/label.h>
-
-#include <fs_mgr.h>
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include "bootimg.h"
+#include <bootimg.h>
+#include <fs_mgr.h>
+#include <selinux/android.h>
+#include <selinux/label.h>
+#include <selinux/selinux.h>
 
-#include "property_service.h"
 #include "init.h"
 #include "util.h"
-#include "log.h"
 
 using android::base::StringPrintf;
 

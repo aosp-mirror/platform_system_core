@@ -17,7 +17,6 @@
 #include "bootchart.h"
 
 #include <dirent.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,9 +30,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
-#include <string>
 #include <thread>
-#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>

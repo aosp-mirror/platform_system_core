@@ -17,8 +17,9 @@
 #ifndef _INIT_UEVENTD_H_
 #define _INIT_UEVENTD_H_
 
-#include <cutils/list.h>
 #include <sys/types.h>
+
+#include <cutils/list.h>
 
 enum devname_src_t {
     DEVNAME_UNKNOWN = 0,

@@ -14,25 +14,20 @@
  * limitations under the License.
  */
 
+#include "util.h"
+
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <ftw.h>
 #include <pwd.h>
 #include <stdarg.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
-
-#include <selinux/android.h>
-#include <selinux/label.h>
-
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/un.h>
 
 #include <thread>
 
@@ -42,15 +37,13 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-
 #include <cutils/android_reboot.h>
-/* for ANDROID_SOCKET_* */
 #include <cutils/sockets.h>
+#include <selinux/android.h>
+#include <selinux/label.h>
 
 #include "init.h"
-#include "log.h"
 #include "reboot.h"
-#include "util.h"
 
 using android::base::boot_clock;
 

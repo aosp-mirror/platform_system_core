@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
+#include "init_parser.h"
+
 #include <dirent.h>
-#include <errno.h>
 #include <fcntl.h>
 
+#include <android-base/logging.h>
+#include <android-base/stringprintf.h>
+
 #include "action.h"
-#include "init_parser.h"
-#include "log.h"
 #include "parser.h"
 #include "service.h"
-#include "util.h"
-
-#include <android-base/stringprintf.h>
 
 Parser::Parser() {
 }

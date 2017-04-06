@@ -17,8 +17,9 @@
 #ifndef _INIT_DEVICES_H
 #define _INIT_DEVICES_H
 
-#include <functional>
 #include <sys/stat.h>
+
+#include <functional>
 
 enum coldboot_action_t {
     // coldboot continues without creating the device for the uevent

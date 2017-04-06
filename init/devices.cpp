@@ -19,41 +19,37 @@
 #include <fcntl.h>
 #include <fnmatch.h>
 #include <libgen.h>
+#include <linux/netlink.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/sendfile.h>
 #include <sys/socket.h>
-#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <linux/netlink.h>
-
 #include <memory>
 #include <thread>
 
-#include <selinux/selinux.h>
-#include <selinux/label.h>
-#include <selinux/android.h>
-#include <selinux/avc.h>
-
-#include <private/android_filesystem_config.h>
-
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <cutils/list.h>
 #include <cutils/uevent.h>
+#include <private/android_filesystem_config.h>
+#include <selinux/android.h>
+#include <selinux/avc.h>
+#include <selinux/label.h>
+#include <selinux/selinux.h>
 
 #include "devices.h"
 #include "ueventd_parser.h"
 #include "util.h"
-#include "log.h"
 
 #define SYSFS_PREFIX    "/sys"
 static const char *firmware_dirs[] = { "/etc/firmware",
