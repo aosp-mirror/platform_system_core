@@ -16,12 +16,8 @@
 
 #include "import_parser.h"
 
-#include "errno.h"
+#include <android-base/logging.h>
 
-#include <string>
-#include <vector>
-
-#include "log.h"
 #include "util.h"
 
 bool ImportParser::ParseSection(const std::vector<std::string>& args,

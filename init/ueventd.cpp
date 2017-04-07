@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "ueventd.h"
+
 #include <ctype.h>
 #include <fcntl.h>
 #include <grp.h>
@@ -24,17 +26,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <sys/types.h>
-
+#include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <selinux/selinux.h>
 
-#include "ueventd.h"
-#include "log.h"
-#include "util.h"
 #include "devices.h"
+#include "log.h"
 #include "ueventd_parser.h"
+#include "util.h"
 
 int ueventd_main(int argc, char **argv)
 {

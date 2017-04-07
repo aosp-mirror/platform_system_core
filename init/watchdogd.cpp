@@ -16,11 +16,12 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/watchdog.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#include <linux/watchdog.h>
+#include <android-base/logging.h>
 
 #include "log.h"
 #include "util.h"

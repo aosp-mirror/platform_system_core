@@ -18,6 +18,7 @@
 #define _INIT_INIT_PARSER_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
