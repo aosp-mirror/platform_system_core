@@ -19,33 +19,27 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/loop.h>
+#include <linux/module.h>
 #include <mntent.h>
 #include <net/if.h>
-#include <signal.h>
 #include <sched.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <sys/mount.h>
 #include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <linux/loop.h>
-#include <linux/module.h>
-
-#include <string>
-#include <thread>
-
-#include <selinux/android.h>
-#include <selinux/selinux.h>
-#include <selinux/label.h>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
@@ -55,14 +49,14 @@
 #include <ext4_utils/ext4_crypt.h>
 #include <ext4_utils/ext4_crypt_init_extensions.h>
 #include <fs_mgr.h>
-#include <logwrap/logwrap.h>
+#include <selinux/android.h>
+#include <selinux/label.h>
+#include <selinux/selinux.h>
 
 #include "action.h"
 #include "bootchart.h"
-#include "devices.h"
 #include "init.h"
 #include "init_parser.h"
-#include "log.h"
 #include "property_service.h"
 #include "reboot.h"
 #include "service.h"

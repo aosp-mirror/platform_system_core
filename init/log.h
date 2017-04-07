@@ -17,7 +17,7 @@
 #ifndef _INIT_LOG_H_
 #define _INIT_LOG_H_
 
-#include <android-base/logging.h>
+#include <sys/cdefs.h>
 
 void InitKernelLogging(char* argv[]);
 

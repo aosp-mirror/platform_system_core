@@ -18,9 +18,7 @@
 
 #include "init.h"
 #include "service.h"
-#include "util.h"
 
-#include <errno.h>
 #include <gtest/gtest.h>
 
 #include <string>
