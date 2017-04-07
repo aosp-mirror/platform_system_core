@@ -17,9 +17,10 @@
 #include "log.h"
 
 #include <fcntl.h>
+#include <linux/audit.h>
 #include <string.h>
 
-#include <linux/audit.h>
+#include <android-base/logging.h>
 #include <netlink/netlink.h>
 #include <selinux/selinux.h>
 
