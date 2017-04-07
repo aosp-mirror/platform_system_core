@@ -718,14 +718,18 @@ static bool selinux_find_precompiled_split_policy(std::string* file) {
         return false;
     }
     std::string actual_plat_id;
-    if (!read_first_line("/system/etc/selinux/plat_sepolicy.cil.sha256", &actual_plat_id)) {
-        PLOG(INFO) << "Failed to read /system/etc/selinux/plat_sepolicy.cil.sha256";
+    if (!read_first_line("/system/etc/selinux/plat_and_mapping_sepolicy.cil.sha256",
+                         &actual_plat_id)) {
+        PLOG(INFO) << "Failed to read "
+                      "/system/etc/selinux/plat_and_mapping_sepolicy.cil.sha256";
         return false;
     }
     std::string precompiled_plat_id;
-    if (!read_first_line("/vendor/etc/selinux/precompiled_sepolicy.plat.sha256",
+    if (!read_first_line("/vendor/etc/selinux/precompiled_sepolicy.plat_and_mapping.sha256",
                          &precompiled_plat_id)) {
-        PLOG(INFO) << "Failed to read /vendor/etc/selinux/precompiled_sepolicy.plat.sha256";
+        PLOG(INFO) << "Failed to read "
+                      "/vendor/etc/selinux/"
+                      "precompiled_sepolicy.plat_and_mapping.sha256";
         return false;
     }
     if ((actual_plat_id.empty()) || (actual_plat_id != precompiled_plat_id)) {
@@ -797,7 +801,7 @@ static bool selinux_load_split_policy() {
         "-M", "true",
         // Target the highest policy language version supported by the kernel
         "-c", std::to_string(max_policy_version).c_str(),
-        "/vendor/etc/selinux/mapping_sepolicy.cil",
+        "/system/etc/selinux/mapping_sepolicy.cil",
         "/vendor/etc/selinux/nonplat_sepolicy.cil",
         "-o", compiled_sepolicy,
         // We don't care about file_contexts output by the compiler
