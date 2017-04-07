@@ -235,27 +235,6 @@ int mkdir_recursive(const char *pathname, mode_t mode)
     return 0;
 }
 
-/*
- * replaces any unacceptable characters with '_', the
- * length of the resulting string is equal to the input string
- */
-void sanitize(char *s)
-{
-    const char* accept =
-            "abcdefghijklmnopqrstuvwxyz"
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            "0123456789"
-            "_-.";
-
-    if (!s)
-        return;
-
-    while (*s) {
-        s += strspn(s, accept);
-        if (*s) *s++ = '_';
-    }
-}
-
 int wait_for_file(const char* filename, std::chrono::nanoseconds timeout) {
     boot_clock::time_point timeout_time = boot_clock::now() + timeout;
     while (boot_clock::now() < timeout_time) {

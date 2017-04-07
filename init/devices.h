@@ -55,4 +55,11 @@ extern int add_dev_perms(const char *name, const char *attr,
                          unsigned short wildcard);
 int get_device_fd();
 
-#endif	/* _INIT_DEVICES_H */
+// Exposed for testing
+void add_platform_device(const char* path);
+void remove_platform_device(const char* path);
+char** get_character_device_symlinks(uevent* uevent);
+char** get_block_device_symlinks(struct uevent* uevent);
+void sanitize_partition_name(char* s);
+
+#endif /* _INIT_DEVICES_H */
