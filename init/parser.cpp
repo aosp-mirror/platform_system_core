@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "log.h"
+#include <android-base/logging.h>
 
 void parse_error(struct parse_state *state, const char *fmt, ...)
 {
