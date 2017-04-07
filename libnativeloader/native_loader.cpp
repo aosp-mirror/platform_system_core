@@ -183,6 +183,11 @@ class LibraryNamespaces {
         return false;
       }
 
+      if (!NativeBridgeLinkNamespaces(ns, nullptr, public_libraries_.c_str())) {
+        *error_msg = NativeBridgeGetError();
+        return false;
+      }
+
       native_loader_ns = NativeLoaderNamespace(ns);
     }
 
@@ -324,8 +329,8 @@ class LibraryNamespaces {
 
     // and now initialize native bridge namespaces if necessary.
     if (NativeBridgeInitialized()) {
-      initialized_ = NativeBridgeInitNamespace(public_libraries_.c_str(),
-                                               is_native_bridge ? library_path : nullptr);
+      initialized_ = NativeBridgeInitAnonymousNamespace(public_libraries_.c_str(),
+                                                        is_native_bridge ? library_path : nullptr);
       if (!initialized_) {
         *error_msg = NativeBridgeGetError();
       }
