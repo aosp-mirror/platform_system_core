@@ -232,20 +232,16 @@ static int fs_config_open(int dir, int which, const char* target_out_path) {
 
     if (target_out_path && *target_out_path) {
         /* target_out_path is the path to the directory holding content of
-         * system partition but as we cannot guarantee it ends with '/system'
-         * or a trailing slash or not, we need to strip them off. */
+         * system partition but as we cannot guaranty it ends with '/system'
+         * we need this below skip_len logic */
         char* name = NULL;
         int target_out_path_len = strlen(target_out_path);
+        int skip_len = strlen("/system");
 
-        while ((target_out_path_len > 0) &&
-               (target_out_path[target_out_path_len - strlen("/")] == '/')) {
-            --target_out_path_len;
+        if (target_out_path[target_out_path_len] == '/') {
+            skip_len++;
         }
-        if ((target_out_path_len >= (int)strlen("/system")) &&
-            !strcmp(target_out_path + target_out_path_len - strlen("/system"), "/system")) {
-            target_out_path_len -= strlen("/system");
-        }
-        if (asprintf(&name, "%.*s%s", target_out_path_len, target_out_path, conf[which][dir]) != -1) {
+        if (asprintf(&name, "%s%s", target_out_path, conf[which][dir] + skip_len) != -1) {
             fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY | O_BINARY));
             free(name);
         }
