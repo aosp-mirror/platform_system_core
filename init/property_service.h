@@ -17,9 +17,7 @@
 #ifndef _INIT_PROPERTY_H
 #define _INIT_PROPERTY_H
 
-#include <stddef.h>
 #include <sys/socket.h>
-#include <sys/system_properties.h>
 
 #include <string>
 
