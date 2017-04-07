@@ -62,6 +62,7 @@ LOCAL_SRC_FILES:= \
     action.cpp \
     capabilities.cpp \
     descriptors.cpp \
+    devices.cpp \
     import_parser.cpp \
     init_parser.cpp \
     log.cpp \
@@ -81,7 +82,6 @@ LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES:= \
     bootchart.cpp \
     builtins.cpp \
-    devices.cpp \
     init.cpp \
     keychords.cpp \
     property_service.cpp \
@@ -138,6 +138,7 @@ include $(BUILD_EXECUTABLE)
 include $(CLEAR_VARS)
 LOCAL_MODULE := init_tests
 LOCAL_SRC_FILES := \
+    devices_test.cpp \
     init_parser_test.cpp \
     property_service_test.cpp \
     util_test.cpp \
