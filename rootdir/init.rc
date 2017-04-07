@@ -301,9 +301,6 @@ on post-fs
     start logd
     start hwservicemanager
 
-    # HALs required before data is mounted
-    class_start early_hal
-
     # once everything is setup, no need to modify /
     mount rootfs rootfs / ro remount
     # Mount shared so changes propagate into child namespaces
@@ -351,6 +348,10 @@ on post-fs
 
     # create the lost+found directories, so as to enforce our permissions
     mkdir /cache/lost+found 0770 root root
+
+on late-fs
+    # HALs required before storage encryption can get unlocked (FBE/FDE)
+    class_start early_hal
 
 on post-fs-data
     # We chown/chmod /data again so because mount is run as root + defaults
