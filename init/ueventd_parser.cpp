@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
+#include "ueventd_parser.h"
+
 #include <ctype.h>
-#include <errno.h>
-#include <stdio.h>
-#include <unistd.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
-#include "ueventd.h"
-#include "ueventd_parser.h"
+#include <android-base/logging.h>
+
 #include "parser.h"
-#include "log.h"
 #include "util.h"
 
 static list_declare(subsystem_list);

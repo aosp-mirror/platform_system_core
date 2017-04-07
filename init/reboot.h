@@ -17,6 +17,8 @@
 #ifndef _INIT_REBOOT_H
 #define _INIT_REBOOT_H
 
+#include <string>
+
 /* Reboot / shutdown the system.
  * cmd ANDROID_RB_* as defined in android_reboot.h
  * reason Reason string like "reboot", "userrequested"
