@@ -95,7 +95,7 @@ static int __android_log_level(const char* tag, size_t len, int default_prio) {
   /* calculate the size of our key temporary buffer */
   const size_t taglen = tag ? len : 0;
   /* sizeof(log_namespace) = strlen(log_namespace) + 1 */
-  char key[sizeof(log_namespace) + taglen]; /* may be > PROP_NAME_MAX */
+  char key[sizeof(log_namespace) + taglen];
   char* kp;
   size_t i;
   char c = 0;
@@ -108,7 +108,8 @@ static int __android_log_level(const char* tag, size_t len, int default_prio) {
    * Where the missing tag matches all tags and becomes the
    * system global default. We do not support ro.log.tag* .
    */
-  static char last_tag[PROP_NAME_MAX];
+  static char* last_tag;
+  static size_t last_tag_len;
   static uint32_t global_serial;
   /* some compilers erroneously see uninitialized use. !not_locked */
   uint32_t current_global_serial = 0;
@@ -147,25 +148,29 @@ static int __android_log_level(const char* tag, size_t len, int default_prio) {
   if (taglen) {
     int local_change_detected = change_detected;
     if (!not_locked) {
-      if (!last_tag[0] || (last_tag[0] != tag[0]) ||
-          strncmp(
-              last_tag + 1, tag + 1,
-              (len < sizeof(last_tag)) ? (len - 1) : (sizeof(last_tag) - 1)) ||
-          ((len < sizeof(last_tag)) && last_tag[len])) {
+      if (!last_tag || !last_tag[0] || (last_tag[0] != tag[0]) ||
+          strncmp(last_tag + 1, tag + 1, last_tag_len - 1)) {
         /* invalidate log.tag.<tag> cache */
         for (i = 0; i < (sizeof(tag_cache) / sizeof(tag_cache[0])); ++i) {
           tag_cache[i].cache.pinfo = NULL;
           tag_cache[i].c = '\0';
         }
-        last_tag[0] = '\0';
+        if (last_tag) last_tag[0] = '\0';
         local_change_detected = 1;
       }
-      if (!last_tag[0]) {
-        if (len < sizeof(last_tag)) {
+      if (!last_tag || !last_tag[0]) {
+        if (!last_tag) {
+          last_tag = calloc(1, len + 1);
+          last_tag_len = 0;
+          if (last_tag) last_tag_len = len + 1;
+        } else if (len >= last_tag_len) {
+          last_tag = realloc(last_tag, len + 1);
+          last_tag_len = 0;
+          if (last_tag) last_tag_len = len + 1;
+        }
+        if (last_tag) {
           strncpy(last_tag, tag, len);
           last_tag[len] = '\0';
-        } else {
-          strncpy(last_tag, tag, sizeof(last_tag));
         }
       }
     }
@@ -435,7 +440,7 @@ LIBLOG_ABI_PRIVATE bool __android_logger_property_get_bool(const char* key,
                                                            int flag) {
   struct cache_property property = { { NULL, -1 }, { 0 } };
   if (flag & BOOL_DEFAULT_FLAG_PERSIST) {
-    char newkey[PROP_NAME_MAX];
+    char newkey[strlen("persist.") + strlen(key) + 1];
     snprintf(newkey, sizeof(newkey), "ro.%s", key);
     refresh_cache_property(&property, newkey);
     property.cache.pinfo = NULL;
@@ -600,8 +605,8 @@ LIBLOG_ABI_PRIVATE unsigned long __android_logger_get_buffer_size(log_id_t logId
     evaluate_property_get_size
     /* clang-format on */
   };
-  char key_persist[PROP_NAME_MAX];
-  char key_ro[PROP_NAME_MAX];
+  char key_persist[strlen(global_tunable) + strlen(".security") + 1];
+  char key_ro[strlen(global_default) + strlen(".security") + 1];
   struct cache2_property_size local = {
     /* clang-format off */
     PTHREAD_MUTEX_INITIALIZER, 0,
