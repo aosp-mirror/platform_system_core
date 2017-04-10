@@ -7,7 +7,7 @@ ndk_headers {
 }
 
 ndk_library {
-    name: "libsync.ndk",
+    name: "libsync",
     symbol_file: "libsync.map.txt",
     first_version: "26",
 }
