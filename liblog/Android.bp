@@ -107,14 +107,16 @@ ndk_headers {
     license: "NOTICE",
 }
 
-cc_library_headers {
-    name: "liblog_vndk_headers",
-    export_include_dirs: ["include_vndk"],
-}
-
 ndk_library {
     name: "liblog.ndk",
     symbol_file: "liblog.map.txt",
     first_version: "9",
     unversioned_until: "current",
+}
+
+llndk_library {
+    name: "liblog.llndk",
+    symbol_file: "liblog.map.txt",
+    unversioned: true,
+    export_include_dirs: ["include_vndk"],
 }
