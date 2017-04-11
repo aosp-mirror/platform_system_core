@@ -39,6 +39,10 @@ void TestProtDenied(const unique_fd &fd, size_t size, int prot) {
     EXPECT_EQ(MAP_FAILED, mmap(nullptr, size, prot, MAP_SHARED, fd, 0));
 }
 
+void TestProtIs(const unique_fd& fd, int prot) {
+    EXPECT_EQ(prot, ioctl(fd, ASHMEM_GET_PROT_MASK));
+}
+
 void FillData(uint8_t* data, size_t dataLen) {
     for (size_t i = 0; i < dataLen; i++) {
         data[i] = i & 0xFF;
@@ -166,13 +170,25 @@ TEST(AshmemTest, ProtTest) {
 
     ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ));
     TestProtDenied(fd, size, PROT_WRITE);
+    TestProtIs(fd, PROT_READ);
     ASSERT_NO_FATAL_FAILURE(TestMmap(fd, size, PROT_READ, &region));
     EXPECT_EQ(0, munmap(region, size));
 
     ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_WRITE));
     TestProtDenied(fd, size, PROT_READ);
+    TestProtIs(fd, PROT_WRITE);
     ASSERT_NO_FATAL_FAILURE(TestMmap(fd, size, PROT_WRITE, &region));
     EXPECT_EQ(0, munmap(region, size));
+
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
+    TestProtIs(fd, PROT_READ | PROT_WRITE);
+    ASSERT_EQ(0, ashmem_set_prot_region(fd, PROT_READ));
+    errno = 0;
+    ASSERT_EQ(-1, ashmem_set_prot_region(fd, PROT_READ | PROT_WRITE))
+        << "kernel shouldn't allow adding protection bits";
+    EXPECT_EQ(EINVAL, errno);
+    TestProtIs(fd, PROT_READ);
+    TestProtDenied(fd, size, PROT_WRITE);
 }
 
 TEST(AshmemTest, ForkProtTest) {
