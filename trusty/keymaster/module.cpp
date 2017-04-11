@@ -26,14 +26,15 @@ using keymaster::TrustyKeymasterDevice;
 /*
  * Generic device handling
  */
-static int trusty_keymaster_open(const hw_module_t* module, const char* name,
-                                 hw_device_t** device) {
-    if (strcmp(name, KEYSTORE_KEYMASTER) != 0)
+static int trusty_keymaster_open(const hw_module_t* module, const char* name, hw_device_t** device) {
+    if (strcmp(name, KEYSTORE_KEYMASTER) != 0) {
         return -EINVAL;
+    }
 
     TrustyKeymasterDevice* dev = new TrustyKeymasterDevice(module);
-    if (dev == NULL)
+    if (dev == NULL) {
         return -ENOMEM;
+    }
     *device = dev->hw_device();
     // Do not delete dev; it will get cleaned up when the caller calls device->close(), and must
     // exist until then.
@@ -47,14 +48,14 @@ static struct hw_module_methods_t keystore_module_methods = {
 struct keystore_module HAL_MODULE_INFO_SYM __attribute__((visibility("default"))) = {
     .common =
         {
-         .tag = HARDWARE_MODULE_TAG,
-         .module_api_version = KEYMASTER_MODULE_API_VERSION_0_3,
-         .hal_api_version = HARDWARE_HAL_API_VERSION,
-         .id = KEYSTORE_HARDWARE_MODULE_ID,
-         .name = "Trusty Keymaster HAL",
-         .author = "The Android Open Source Project",
-         .methods = &keystore_module_methods,
-         .dso = 0,
-         .reserved = {},
+            .tag = HARDWARE_MODULE_TAG,
+            .module_api_version = KEYMASTER_MODULE_API_VERSION_2_0,
+            .hal_api_version = HARDWARE_HAL_API_VERSION,
+            .id = KEYSTORE_HARDWARE_MODULE_ID,
+            .name = "Trusty Keymaster HAL",
+            .author = "The Android Open Source Project",
+            .methods = &keystore_module_methods,
+            .dso = 0,
+            .reserved = {},
         },
 };
