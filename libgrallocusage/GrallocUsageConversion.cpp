@@ -16,49 +16,51 @@
 
 #include <grallocusage/GrallocUsageConversion.h>
 
-#include <android/hardware/graphics/allocator/2.0/types.h>
 #include <hardware/gralloc.h>
-
-using android::hardware::graphics::allocator::V2_0::ProducerUsage;
-using android::hardware::graphics::allocator::V2_0::ConsumerUsage;
+#include <hardware/gralloc1.h>
 
 void android_convertGralloc0To1Usage(int32_t usage, uint64_t* producerUsage,
                                      uint64_t* consumerUsage) {
-    constexpr uint64_t PRODUCER_MASK = ProducerUsage::CPU_READ |
-                                       /* ProducerUsage::CPU_READ_OFTEN | */
-                                       ProducerUsage::CPU_WRITE |
-                                       /* ProducerUsage::CPU_WRITE_OFTEN | */
-                                       ProducerUsage::GPU_RENDER_TARGET | ProducerUsage::PROTECTED |
-                                       ProducerUsage::CAMERA | ProducerUsage::VIDEO_DECODER |
-                                       ProducerUsage::SENSOR_DIRECT_DATA;
-    constexpr uint64_t CONSUMER_MASK = ConsumerUsage::CPU_READ |
-                                       /* ConsumerUsage::CPU_READ_OFTEN | */
-                                       ConsumerUsage::GPU_TEXTURE | ConsumerUsage::HWCOMPOSER |
-                                       ConsumerUsage::CLIENT_TARGET | ConsumerUsage::CURSOR |
-                                       ConsumerUsage::VIDEO_ENCODER | ConsumerUsage::CAMERA |
-                                       ConsumerUsage::RENDERSCRIPT | ConsumerUsage::GPU_DATA_BUFFER;
+    constexpr uint64_t PRODUCER_MASK =
+        GRALLOC1_PRODUCER_USAGE_CPU_READ |
+        /* GRALLOC1_PRODUCER_USAGE_CPU_READ_OFTEN | */
+        GRALLOC1_PRODUCER_USAGE_CPU_WRITE |
+        /* GRALLOC1_PRODUCER_USAGE_CPU_WRITE_OFTEN | */
+        GRALLOC1_PRODUCER_USAGE_GPU_RENDER_TARGET | GRALLOC1_PRODUCER_USAGE_PROTECTED |
+        GRALLOC1_PRODUCER_USAGE_CAMERA | GRALLOC1_PRODUCER_USAGE_VIDEO_DECODER |
+        GRALLOC1_PRODUCER_USAGE_SENSOR_DIRECT_DATA;
+    constexpr uint64_t CONSUMER_MASK =
+        GRALLOC1_CONSUMER_USAGE_CPU_READ |
+        /* GRALLOC1_CONSUMER_USAGE_CPU_READ_OFTEN | */
+        GRALLOC1_CONSUMER_USAGE_GPU_TEXTURE | GRALLOC1_CONSUMER_USAGE_HWCOMPOSER |
+        GRALLOC1_CONSUMER_USAGE_CLIENT_TARGET | GRALLOC1_CONSUMER_USAGE_CURSOR |
+        GRALLOC1_CONSUMER_USAGE_VIDEO_ENCODER | GRALLOC1_CONSUMER_USAGE_CAMERA |
+        GRALLOC1_CONSUMER_USAGE_RENDERSCRIPT | GRALLOC1_CONSUMER_USAGE_GPU_DATA_BUFFER;
     *producerUsage = static_cast<uint64_t>(usage) & PRODUCER_MASK;
     *consumerUsage = static_cast<uint64_t>(usage) & CONSUMER_MASK;
     if ((static_cast<uint32_t>(usage) & GRALLOC_USAGE_SW_READ_OFTEN) == GRALLOC_USAGE_SW_READ_OFTEN) {
-        *producerUsage |= ProducerUsage::CPU_READ_OFTEN;
-        *consumerUsage |= ConsumerUsage::CPU_READ_OFTEN;
+        *producerUsage |= GRALLOC1_PRODUCER_USAGE_CPU_READ_OFTEN;
+        *consumerUsage |= GRALLOC1_CONSUMER_USAGE_CPU_READ_OFTEN;
     }
     if ((static_cast<uint32_t>(usage) & GRALLOC_USAGE_SW_WRITE_OFTEN) ==
         GRALLOC_USAGE_SW_WRITE_OFTEN) {
-        *producerUsage |= ProducerUsage::CPU_WRITE_OFTEN;
+        *producerUsage |= GRALLOC1_PRODUCER_USAGE_CPU_WRITE_OFTEN;
     }
 }
 
 int32_t android_convertGralloc1To0Usage(uint64_t producerUsage, uint64_t consumerUsage) {
-    static_assert(uint64_t(ConsumerUsage::CPU_READ_OFTEN) == uint64_t(ProducerUsage::CPU_READ_OFTEN),
+    static_assert(uint64_t(GRALLOC1_CONSUMER_USAGE_CPU_READ_OFTEN) ==
+                      uint64_t(GRALLOC1_PRODUCER_USAGE_CPU_READ_OFTEN),
                   "expected ConsumerUsage and ProducerUsage CPU_READ_OFTEN bits to match");
     uint64_t merged = producerUsage | consumerUsage;
-    if ((merged & (ConsumerUsage::CPU_READ_OFTEN)) != 0) {
-        merged &= ~uint64_t(ConsumerUsage::CPU_READ_OFTEN);
+    if ((merged & (GRALLOC1_CONSUMER_USAGE_CPU_READ_OFTEN)) ==
+        GRALLOC1_CONSUMER_USAGE_CPU_READ_OFTEN) {
+        merged &= ~uint64_t(GRALLOC1_CONSUMER_USAGE_CPU_READ_OFTEN);
         merged |= GRALLOC_USAGE_SW_READ_OFTEN;
     }
-    if ((merged & (ProducerUsage::CPU_WRITE_OFTEN)) != 0) {
-        merged &= ~uint64_t(ProducerUsage::CPU_WRITE_OFTEN);
+    if ((merged & (GRALLOC1_PRODUCER_USAGE_CPU_WRITE_OFTEN)) ==
+        GRALLOC1_PRODUCER_USAGE_CPU_WRITE_OFTEN) {
+        merged &= ~uint64_t(GRALLOC1_PRODUCER_USAGE_CPU_WRITE_OFTEN);
         merged |= GRALLOC_USAGE_SW_WRITE_OFTEN;
     }
     return static_cast<int32_t>(merged);
