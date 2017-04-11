@@ -26,8 +26,8 @@
 #include <log/log.h>
 #include <trusty/tipc.h>
 
-#include "trusty_keymaster_ipc.h"
 #include "keymaster_ipc.h"
+#include "trusty_keymaster_ipc.h"
 
 #define TRUSTY_DEVICE_NAME "/dev/trusty-ipc-dev0"
 
@@ -43,15 +43,15 @@ int trusty_keymaster_connect() {
     return 0;
 }
 
-int trusty_keymaster_call(uint32_t cmd, void *in, uint32_t in_size, uint8_t *out,
-                          uint32_t *out_size)  {
+int trusty_keymaster_call(uint32_t cmd, void* in, uint32_t in_size, uint8_t* out,
+                          uint32_t* out_size) {
     if (handle_ == 0) {
         ALOGE("not connected\n");
         return -EINVAL;
     }
 
     size_t msg_size = in_size + sizeof(struct keymaster_message);
-    struct keymaster_message *msg = malloc(msg_size);
+    struct keymaster_message* msg = reinterpret_cast<struct keymaster_message*>(malloc(msg_size));
     msg->cmd = cmd;
     memcpy(msg->payload, in, in_size);
 
@@ -59,31 +59,30 @@ int trusty_keymaster_call(uint32_t cmd, void *in, uint32_t in_size, uint8_t *out
     free(msg);
 
     if (rc < 0) {
-        ALOGE("failed to send cmd (%d) to %s: %s\n", cmd,
-                KEYMASTER_PORT, strerror(errno));
+        ALOGE("failed to send cmd (%d) to %s: %s\n", cmd, KEYMASTER_PORT, strerror(errno));
         return -errno;
     }
 
     rc = read(handle_, out, *out_size);
     if (rc < 0) {
-        ALOGE("failed to retrieve response for cmd (%d) to %s: %s\n",
-                cmd, KEYMASTER_PORT, strerror(errno));
+        ALOGE("failed to retrieve response for cmd (%d) to %s: %s\n", cmd, KEYMASTER_PORT,
+              strerror(errno));
         return -errno;
     }
 
-    if ((size_t) rc < sizeof(struct keymaster_message)) {
-        ALOGE("invalid response size (%d)\n", (int) rc);
+    if ((size_t)rc < sizeof(struct keymaster_message)) {
+        ALOGE("invalid response size (%d)\n", (int)rc);
         return -EINVAL;
     }
 
-    msg = (struct keymaster_message *) out;
+    msg = (struct keymaster_message*)out;
 
     if ((cmd | KEYMASTER_RESP_BIT) != msg->cmd) {
         ALOGE("invalid command (%d)", msg->cmd);
         return -EINVAL;
     }
 
-    *out_size = ((size_t) rc) - sizeof(struct keymaster_message);
+    *out_size = ((size_t)rc) - sizeof(struct keymaster_message);
     return rc;
 }
 
@@ -92,4 +91,3 @@ void trusty_keymaster_disconnect() {
         tipc_close(handle_);
     }
 }
-
