@@ -604,93 +604,35 @@ static void handle_platform_device_event(struct uevent *uevent)
         remove_platform_device(path);
 }
 
-static const char *parse_device_name(struct uevent *uevent, unsigned int len)
-{
-    const char *name;
+static void handle_block_device_event(uevent* uevent) {
+    // if it's not a /dev device, nothing to do
+    if (uevent->major < 0 || uevent->minor < 0) return;
 
-    /* if it's not a /dev device, nothing else to do */
-    if((uevent->major < 0) || (uevent->minor < 0))
-        return NULL;
-
-    /* do we have a name? */
-    name = strrchr(uevent->path, '/');
-    if(!name)
-        return NULL;
-    name++;
-
-    /* too-long names would overrun our buffer */
-    if(strlen(name) > len) {
-        LOG(ERROR) << "DEVPATH=" << name << " exceeds " << len << "-character limit on filename; ignoring event";
-        return NULL;
-    }
-
-    return name;
-}
-
-#define DEVPATH_LEN 96
-#define MAX_DEV_NAME 64
-
-static void handle_block_device_event(struct uevent *uevent)
-{
-    const char *base = "/dev/block/";
-    const char *name;
-    char devpath[DEVPATH_LEN];
-
-    name = parse_device_name(uevent, MAX_DEV_NAME);
-    if (!name)
-        return;
-
-    snprintf(devpath, sizeof(devpath), "%s%s", base, name);
+    const char* base = "/dev/block/";
     make_dir(base, 0755);
+
+    std::string name = android::base::Basename(uevent->path);
+    std::string devpath = base + name;
 
     std::vector<std::string> links;
     if (!strncmp(uevent->path, "/devices/", 9))
         links = get_block_device_symlinks(uevent);
 
-    handle_device(uevent->action, devpath, uevent->path, 1,
-            uevent->major, uevent->minor, links);
+    handle_device(uevent->action, devpath.c_str(), uevent->path, 1, uevent->major, uevent->minor,
+                  links);
 }
 
-static bool assemble_devpath(char *devpath, const char *dirname,
-        const char *devname)
-{
-    int s = snprintf(devpath, DEVPATH_LEN, "%s/%s", dirname, devname);
-    if (s < 0) {
-        PLOG(ERROR) << "failed to assemble device path; ignoring event";
-        return false;
-    } else if (s >= DEVPATH_LEN) {
-        LOG(ERROR) << dirname << "/" << devname
-                   << " exceeds " << DEVPATH_LEN << "-character limit on path; ignoring event";
-        return false;
-    }
-    return true;
-}
+static void handle_generic_device_event(uevent* uevent) {
+    // if it's not a /dev device, nothing to do
+    if (uevent->major < 0 || uevent->minor < 0) return;
 
-static void mkdir_recursive_for_devpath(const char *devpath)
-{
-    char dir[DEVPATH_LEN];
-    char *slash;
+    std::string name = android::base::Basename(uevent->path);
+    ueventd_subsystem* subsystem = ueventd_subsystem_find_by_name(uevent->subsystem);
 
-    strcpy(dir, devpath);
-    slash = strrchr(dir, '/');
-    *slash = '\0';
-    mkdir_recursive(dir, 0755);
-}
-
-static void handle_generic_device_event(struct uevent *uevent)
-{
-    const char *name;
-    char devpath[DEVPATH_LEN] = {0};
-
-    name = parse_device_name(uevent, MAX_DEV_NAME);
-    if (!name)
-        return;
-
-    struct ueventd_subsystem *subsystem =
-            ueventd_subsystem_find_by_name(uevent->subsystem);
+    std::string devpath;
 
     if (subsystem) {
-        const char *devname;
+        std::string devname;
 
         switch (subsystem->devname_src) {
         case DEVNAME_UEVENT_DEVNAME:
@@ -706,41 +648,35 @@ static void handle_generic_device_event(struct uevent *uevent)
             return;
         }
 
-        if (!assemble_devpath(devpath, subsystem->dirname, devname))
-            return;
-        mkdir_recursive_for_devpath(devpath);
+        // TODO: Remove std::string()
+        devpath = std::string(subsystem->dirname) + "/" + devname;
+        mkdir_recursive(android::base::Dirname(devpath), 0755);
     } else if (!strncmp(uevent->subsystem, "usb", 3)) {
-         if (!strcmp(uevent->subsystem, "usb")) {
+        if (!strcmp(uevent->subsystem, "usb")) {
             if (uevent->device_name) {
-                if (!assemble_devpath(devpath, "/dev", uevent->device_name))
-                    return;
-                mkdir_recursive_for_devpath(devpath);
-             }
-             else {
-                 /* This imitates the file system that would be created
-                  * if we were using devfs instead.
-                  * Minors are broken up into groups of 128, starting at "001"
-                  */
-                 int bus_id = uevent->minor / 128 + 1;
-                 int device_id = uevent->minor % 128 + 1;
-                 /* build directories */
-                 make_dir("/dev/bus", 0755);
-                 make_dir("/dev/bus/usb", 0755);
-                 snprintf(devpath, sizeof(devpath), "/dev/bus/usb/%03d", bus_id);
-                 make_dir(devpath, 0755);
-                 snprintf(devpath, sizeof(devpath), "/dev/bus/usb/%03d/%03d", bus_id, device_id);
-             }
-         } else {
-             /* ignore other USB events */
-             return;
-         }
+                // TODO: Remove std::string
+                devpath = "/dev/" + std::string(uevent->device_name);
+            } else {
+                // This imitates the file system that would be created
+                // if we were using devfs instead.
+                // Minors are broken up into groups of 128, starting at "001"
+                int bus_id = uevent->minor / 128 + 1;
+                int device_id = uevent->minor % 128 + 1;
+                devpath = android::base::StringPrintf("/dev/bus/usb/%03d/%03d", bus_id, device_id);
+            }
+            mkdir_recursive(android::base::Dirname(devpath), 0755);
+        } else {
+            // ignore other USB events
+            return;
+        }
     } else {
-        snprintf(devpath, sizeof(devpath), "/dev/%s", name);
+        devpath = "/dev/" + name;
     }
 
     auto links = get_character_device_symlinks(uevent);
 
-    handle_device(uevent->action, devpath, uevent->path, 0, uevent->major, uevent->minor, links);
+    handle_device(uevent->action, devpath.c_str(), uevent->path, 0, uevent->major, uevent->minor,
+                  links);
 }
 
 static void handle_device_event(struct uevent *uevent)
