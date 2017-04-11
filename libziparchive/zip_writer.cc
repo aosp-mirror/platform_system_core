@@ -479,7 +479,9 @@ int32_t ZipWriter::Finish() {
   for (FileEntry& file : files_) {
     CentralDirectoryRecord cdr = {};
     cdr.record_signature = CentralDirectoryRecord::kSignature;
-    cdr.gpb_flags |= kGPBDDFlagMask;
+    if ((file.compression_method & kCompressDeflated) || !seekable_) {
+      cdr.gpb_flags |= kGPBDDFlagMask;
+    }
     cdr.compression_method = file.compression_method;
     cdr.last_mod_time = file.last_mod_time;
     cdr.last_mod_date = file.last_mod_date;
