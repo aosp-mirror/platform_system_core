@@ -55,6 +55,11 @@ libbacktrace_sources = [
     "UnwindPtrace.cpp",
 ]
 
+cc_library_headers {
+    name: "libbacktrace_headers",
+    export_include_dirs: ["include"],
+}
+
 cc_library {
     name: "libbacktrace",
     defaults: ["libbacktrace_common"],
@@ -63,6 +68,8 @@ cc_library {
     srcs: [
         "BacktraceMap.cpp",
     ],
+
+    export_include_dirs: ["include"],
 
     target: {
         darwin: {
