@@ -108,14 +108,14 @@ ndk_headers {
 }
 
 ndk_library {
-    name: "liblog.ndk",
+    name: "liblog",
     symbol_file: "liblog.map.txt",
     first_version: "9",
     unversioned_until: "current",
 }
 
 llndk_library {
-    name: "liblog.llndk",
+    name: "liblog",
     symbol_file: "liblog.map.txt",
     unversioned: true,
     export_include_dirs: ["include_vndk"],
