@@ -36,12 +36,12 @@ enum coldboot_action_t {
 };
 
 struct uevent {
-    const char* action;
-    const char* path;
-    const char* subsystem;
-    const char* firmware;
-    const char* partition_name;
-    const char* device_name;
+    std::string action;
+    std::string path;
+    std::string subsystem;
+    std::string firmware;
+    std::string partition_name;
+    std::string device_name;
     int partition_num;
     int major;
     int minor;

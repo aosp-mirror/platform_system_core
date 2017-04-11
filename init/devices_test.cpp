@@ -127,7 +127,7 @@ TEST(devices, get_block_device_symlinks_success_platform) {
     const char* platform_device = "/devices/soc.0/f9824900.sdhci";
     uevent uevent = {
         .path = "/devices/soc.0/f9824900.sdhci/mmc_host/mmc0/mmc0:0001/block/mmcblk0",
-        .partition_name = nullptr,
+        .partition_name = "",
         .partition_num = -1,
     };
     std::vector<std::string> expected_result{"/dev/block/platform/soc.0/f9824900.sdhci/mmcblk0"};
@@ -156,7 +156,7 @@ TEST(devices, get_block_device_symlinks_success_platform_with_partition_only_num
     const char* platform_device = "/devices/soc.0/f9824900.sdhci";
     uevent uevent = {
         .path = "/devices/soc.0/f9824900.sdhci/mmc_host/mmc0/mmc0:0001/block/mmcblk0p1",
-        .partition_name = nullptr,
+        .partition_name = "",
         .partition_num = 1,
     };
     std::vector<std::string> expected_result{
@@ -185,9 +185,7 @@ TEST(devices, get_block_device_symlinks_success_platform_with_partition_only_nam
 TEST(devices, get_block_device_symlinks_success_pci) {
     const char* platform_device = "/devices/do/not/match";
     uevent uevent = {
-        .path = "/devices/pci0000:00/0000:00:1f.2/mmcblk0",
-        .partition_name = nullptr,
-        .partition_num = -1,
+        .path = "/devices/pci0000:00/0000:00:1f.2/mmcblk0", .partition_name = "", .partition_num = -1,
     };
     std::vector<std::string> expected_result{"/dev/block/pci/pci0000:00/0000:00:1f.2/mmcblk0"};
 
@@ -197,7 +195,7 @@ TEST(devices, get_block_device_symlinks_success_pci) {
 TEST(devices, get_block_device_symlinks_pci_bad_format) {
     const char* platform_device = "/devices/do/not/match";
     uevent uevent = {
-        .path = "/devices/pci//mmcblk0", .partition_name = nullptr, .partition_num = -1,
+        .path = "/devices/pci//mmcblk0", .partition_name = "", .partition_num = -1,
     };
     std::vector<std::string> expected_result{};
 
@@ -207,7 +205,7 @@ TEST(devices, get_block_device_symlinks_pci_bad_format) {
 TEST(devices, get_block_device_symlinks_success_vbd) {
     const char* platform_device = "/devices/do/not/match";
     uevent uevent = {
-        .path = "/devices/vbd-1234/mmcblk0", .partition_name = nullptr, .partition_num = -1,
+        .path = "/devices/vbd-1234/mmcblk0", .partition_name = "", .partition_num = -1,
     };
     std::vector<std::string> expected_result{"/dev/block/vbd/1234/mmcblk0"};
 
@@ -217,7 +215,7 @@ TEST(devices, get_block_device_symlinks_success_vbd) {
 TEST(devices, get_block_device_symlinks_vbd_bad_format) {
     const char* platform_device = "/devices/do/not/match";
     uevent uevent = {
-        .path = "/devices/vbd-/mmcblk0", .partition_name = nullptr, .partition_num = -1,
+        .path = "/devices/vbd-/mmcblk0", .partition_name = "", .partition_num = -1,
     };
     std::vector<std::string> expected_result{};
 
@@ -228,7 +226,7 @@ TEST(devices, get_block_device_symlinks_no_matches) {
     const char* platform_device = "/devices/soc.0/f9824900.sdhci";
     uevent uevent = {
         .path = "/devices/soc.0/not_the_device/mmc_host/mmc0/mmc0:0001/block/mmcblk0p1",
-        .partition_name = nullptr,
+        .partition_name = "",
         .partition_num = -1,
     };
     std::vector<std::string> expected_result;
