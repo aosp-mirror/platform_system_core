@@ -18,10 +18,12 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <linux/fs.h>
 #include <mntent.h>
+#include <selinux/selinux.h>
 #include <sys/cdefs.h>
+#include <sys/ioctl.h>
 #include <sys/mount.h>
-#include <sys/quota.h>
 #include <sys/reboot.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -39,6 +41,7 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/unique_fd.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
 #include <fs_mgr.h>
@@ -67,39 +70,58 @@ enum UmountStat {
 // Utility for struct mntent
 class MountEntry {
   public:
-    explicit MountEntry(const mntent& entry, bool isMounted = true)
+    explicit MountEntry(const mntent& entry)
         : mnt_fsname_(entry.mnt_fsname),
           mnt_dir_(entry.mnt_dir),
           mnt_type_(entry.mnt_type),
-          is_mounted_(isMounted) {}
+          mnt_opts_(entry.mnt_opts) {}
 
-    bool IsF2Fs() const { return mnt_type_ == "f2fs"; }
+    bool Umount() {
+        int r = umount2(mnt_dir_.c_str(), 0);
+        if (r == 0) {
+            LOG(INFO) << "umounted " << mnt_fsname_ << ":" << mnt_dir_ << " opts " << mnt_opts_;
+            return true;
+        } else {
+            PLOG(WARNING) << "cannot umount " << mnt_fsname_ << ":" << mnt_dir_ << " opts "
+                          << mnt_opts_;
+            return false;
+        }
+    }
 
-    bool IsExt4() const { return mnt_type_ == "ext4"; }
-
-    bool is_mounted() const { return is_mounted_; }
-
-    void set_is_mounted() { is_mounted_ = false; }
-
-    const std::string& mnt_fsname() const { return mnt_fsname_; }
-
-    const std::string& mnt_dir() const { return mnt_dir_; }
+    void DoFsck() {
+        int st;
+        if (IsF2Fs()) {
+            const char* f2fs_argv[] = {
+                "/system/bin/fsck.f2fs", "-f", mnt_fsname_.c_str(),
+            };
+            android_fork_execvp_ext(arraysize(f2fs_argv), (char**)f2fs_argv, &st, true, LOG_KLOG,
+                                    true, nullptr, nullptr, 0);
+        } else if (IsExt4()) {
+            const char* ext4_argv[] = {
+                "/system/bin/e2fsck", "-f", "-y", mnt_fsname_.c_str(),
+            };
+            android_fork_execvp_ext(arraysize(ext4_argv), (char**)ext4_argv, &st, true, LOG_KLOG,
+                                    true, nullptr, nullptr, 0);
+        }
+    }
 
     static bool IsBlockDevice(const struct mntent& mntent) {
         return android::base::StartsWith(mntent.mnt_fsname, "/dev/block");
     }
 
     static bool IsEmulatedDevice(const struct mntent& mntent) {
-        static const std::string SDCARDFS_NAME = "sdcardfs";
-        return android::base::StartsWith(mntent.mnt_fsname, "/data/") &&
-               SDCARDFS_NAME == mntent.mnt_type;
+        return android::base::StartsWith(mntent.mnt_fsname, "/data/");
     }
 
   private:
+    bool IsF2Fs() const { return mnt_type_ == "f2fs"; }
+
+    bool IsExt4() const { return mnt_type_ == "ext4"; }
+
     std::string mnt_fsname_;
     std::string mnt_dir_;
     std::string mnt_type_;
-    bool is_mounted_;
+    std::string mnt_opts_;
 };
 
 // Turn off backlight while we are performing power down cleanup activities.
@@ -122,50 +144,6 @@ static void TurnOffBacklight() {
 
         std::string fileName = StringPrintf("%s/%s/brightness", backlightDir, dp->d_name);
         android::base::WriteStringToFile(OFF, fileName);
-    }
-}
-
-static void DoFsck(const MountEntry& entry) {
-    static constexpr int UNMOUNT_CHECK_TIMES = 10;
-
-    if (!entry.IsF2Fs() && !entry.IsExt4()) return;
-
-    int count = 0;
-    while (count++ < UNMOUNT_CHECK_TIMES) {
-        int fd = TEMP_FAILURE_RETRY(open(entry.mnt_fsname().c_str(), O_RDONLY | O_EXCL));
-        if (fd >= 0) {
-            /* |entry->mnt_dir| has sucessfully been unmounted. */
-            close(fd);
-            break;
-        } else if (errno == EBUSY) {
-            // Some processes using |entry->mnt_dir| are still alive. Wait for a
-            // while then retry.
-            std::this_thread::sleep_for(5000ms / UNMOUNT_CHECK_TIMES);
-            continue;
-        } else {
-            /* Cannot open the device. Give up. */
-            return;
-        }
-    }
-
-    // NB: With watchdog still running, there is no cap on the time it takes
-    // to complete the fsck, from the users perspective the device graphics
-    // and responses are locked-up and they may choose to hold the power
-    // button in frustration if it drags out.
-
-    int st;
-    if (entry.IsF2Fs()) {
-        const char* f2fs_argv[] = {
-            "/system/bin/fsck.f2fs", "-f", entry.mnt_fsname().c_str(),
-        };
-        android_fork_execvp_ext(arraysize(f2fs_argv), (char**)f2fs_argv, &st, true, LOG_KLOG, true,
-                                nullptr, nullptr, 0);
-    } else if (entry.IsExt4()) {
-        const char* ext4_argv[] = {
-            "/system/bin/e2fsck", "-f", "-y", entry.mnt_fsname().c_str(),
-        };
-        android_fork_execvp_ext(arraysize(ext4_argv), (char**)ext4_argv, &st, true, LOG_KLOG, true,
-                                nullptr, nullptr, 0);
     }
 }
 
@@ -202,21 +180,11 @@ RebootSystem(unsigned int cmd, const std::string& rebootTarget) {
     abort();
 }
 
-static void DoSync() {
-    // quota sync is not done by sync call, so should be done separately.
-    // quota sync is in VFS level, so do it before sync, which goes down to fs level.
-    int r = quotactl(QCMD(Q_SYNC, 0), nullptr, 0 /* do not care */, 0 /* do not care */);
-    if (r < 0) {
-        PLOG(ERROR) << "quotactl failed";
-    }
-    sync();
-}
-
 /* Find all read+write block devices and emulated devices in /proc/mounts
  * and add them to correpsponding list.
  */
 static bool FindPartitionsToUmount(std::vector<MountEntry>* blockDevPartitions,
-                                   std::vector<MountEntry>* emulatedPartitions) {
+                                   std::vector<MountEntry>* emulatedPartitions, bool dump) {
     std::unique_ptr<std::FILE, int (*)(std::FILE*)> fp(setmntent("/proc/mounts", "r"), endmntent);
     if (fp == nullptr) {
         PLOG(ERROR) << "Failed to open /proc/mounts";
@@ -224,44 +192,63 @@ static bool FindPartitionsToUmount(std::vector<MountEntry>* blockDevPartitions,
     }
     mntent* mentry;
     while ((mentry = getmntent(fp.get())) != nullptr) {
-        if (MountEntry::IsBlockDevice(*mentry) && hasmntopt(mentry, "rw")) {
-            blockDevPartitions->emplace_back(*mentry);
+        if (dump) {
+            LOG(INFO) << "mount entry " << mentry->mnt_fsname << ":" << mentry->mnt_dir << " opts "
+                      << mentry->mnt_opts << " type " << mentry->mnt_type;
+        } else if (MountEntry::IsBlockDevice(*mentry) && hasmntopt(mentry, "rw")) {
+            blockDevPartitions->emplace(blockDevPartitions->begin(), *mentry);
         } else if (MountEntry::IsEmulatedDevice(*mentry)) {
-            emulatedPartitions->emplace_back(*mentry);
+            emulatedPartitions->emplace(emulatedPartitions->begin(), *mentry);
         }
     }
     return true;
 }
 
-static bool UmountPartitions(std::vector<MountEntry>* partitions, int maxRetry, int flags) {
-    static constexpr int SLEEP_AFTER_RETRY_US = 100000;
-
-    bool umountDone;
-    int retryCounter = 0;
-
-    while (true) {
-        umountDone = true;
-        for (auto& entry : *partitions) {
-            if (entry.is_mounted()) {
-                int r = umount2(entry.mnt_dir().c_str(), flags);
-                if (r == 0) {
-                    entry.set_is_mounted();
-                    LOG(INFO) << StringPrintf("umounted %s, flags:0x%x", entry.mnt_fsname().c_str(),
-                                              flags);
-                } else {
-                    umountDone = false;
-                    PLOG(WARNING) << StringPrintf("cannot umount %s, mnt_dir %s, flags:0x%x",
-                                                  entry.mnt_fsname().c_str(),
-                                                  entry.mnt_dir().c_str(), flags);
-                }
-            }
-        }
-        if (umountDone) break;
-        retryCounter++;
-        if (retryCounter >= maxRetry) break;
-        usleep(SLEEP_AFTER_RETRY_US);
+static void DumpUmountDebuggingInfo() {
+    int status;
+    if (!security_getenforce()) {
+        LOG(INFO) << "Run lsof";
+        const char* lsof_argv[] = {"/system/bin/lsof"};
+        android_fork_execvp_ext(arraysize(lsof_argv), (char**)lsof_argv, &status, true, LOG_KLOG,
+                                true, nullptr, nullptr, 0);
     }
-    return umountDone;
+    FindPartitionsToUmount(nullptr, nullptr, true);
+}
+
+static UmountStat UmountPartitions(int timeoutMs) {
+    Timer t;
+    UmountStat stat = UMOUNT_STAT_TIMEOUT;
+    int retry = 0;
+    /* data partition needs all pending writes to be completed and all emulated partitions
+     * umounted.If the current waiting is not good enough, give
+     * up and leave it to e2fsck after reboot to fix it.
+     */
+    while (true) {
+        std::vector<MountEntry> block_devices;
+        std::vector<MountEntry> emulated_devices;
+        if (!FindPartitionsToUmount(&block_devices, &emulated_devices, false)) {
+            return UMOUNT_STAT_ERROR;
+        }
+        if (block_devices.size() == 0) {
+            stat = UMOUNT_STAT_SUCCESS;
+            break;
+        }
+        if ((timeoutMs < t.duration_ms()) && retry > 0) {  // try umount at least once
+            stat = UMOUNT_STAT_TIMEOUT;
+            break;
+        }
+        if (emulated_devices.size() > 0 &&
+            std::all_of(emulated_devices.begin(), emulated_devices.end(),
+                        [](auto& entry) { return entry.Umount(); })) {
+            sync();
+        }
+        for (auto& entry : block_devices) {
+            entry.Umount();
+        }
+        retry++;
+        std::this_thread::sleep_for(100ms);
+    }
+    return stat;
 }
 
 static void KillAllProcesses() { android::base::WriteStringToFile("i", "/proc/sysrq-trigger"); }
@@ -277,56 +264,38 @@ static void KillAllProcesses() { android::base::WriteStringToFile("i", "/proc/sy
  */
 static UmountStat TryUmountAndFsck(bool runFsck, int timeoutMs) {
     Timer t;
-    std::vector<MountEntry> emulatedPartitions;
-    std::vector<MountEntry> blockDevRwPartitions;
+    std::vector<MountEntry> block_devices;
+    std::vector<MountEntry> emulated_devices;
 
     TurnOffBacklight();  // this part can take time. save power.
 
-    if (!FindPartitionsToUmount(&blockDevRwPartitions, &emulatedPartitions)) {
+    if (runFsck && !FindPartitionsToUmount(&block_devices, &emulated_devices, false)) {
         return UMOUNT_STAT_ERROR;
     }
-    if (emulatedPartitions.size() > 0) {
-        LOG(WARNING) << "emulated partitions still exist, will umount";
-        /* Pending writes in emulated partitions can fail umount. After a few trials, detach
-         * it so that it can be umounted when all writes are done.
-         */
-        if (!UmountPartitions(&emulatedPartitions, 1, 0)) {
-            UmountPartitions(&emulatedPartitions, 1, MNT_DETACH);
-        }
-    }
-    DoSync();  // emulated partition change can lead to update
-    UmountStat stat = UMOUNT_STAT_SUCCESS;
-    /* data partition needs all pending writes to be completed and all emulated partitions
-     * umounted. If umount failed in the above step, it DETACH is requested, so umount can
-     * still happen while waiting for /data. If the current waiting is not good enough, give
-     * up and leave it to e2fsck after reboot to fix it.
-     */
-    int remainingTimeMs = timeoutMs - t.duration_ms();
-    // each retry takes 100ms, and run at least once.
-    int retry = std::max(remainingTimeMs / 100, 1);
-    if (!UmountPartitions(&blockDevRwPartitions, retry, 0)) {
-        /* Last resort, kill all and try again */
-        LOG(WARNING) << "umount still failing, trying kill all";
+
+    UmountStat stat = UmountPartitions(timeoutMs - t.duration_ms());
+    if (stat != UMOUNT_STAT_SUCCESS) {
+        LOG(INFO) << "umount timeout, last resort, kill all and try";
+        if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo();
         KillAllProcesses();
-        DoSync();
-        if (!UmountPartitions(&blockDevRwPartitions, 1, 0)) {
-            stat = UMOUNT_STAT_TIMEOUT;
-        }
-    }
-    // fsck part is excluded from timeout check. It only runs for user initiated shutdown
-    // and should not affect reboot time.
-    if (stat == UMOUNT_STAT_SUCCESS && runFsck) {
-        for (auto& entry : blockDevRwPartitions) {
-            DoFsck(entry);
-        }
+        // even if it succeeds, still it is timeout and do not run fsck with all processes killed
+        UmountPartitions(0);
+        if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo();
     }
 
+    if (stat == UMOUNT_STAT_SUCCESS && runFsck) {
+        // fsck part is excluded from timeout check. It only runs for user initiated shutdown
+        // and should not affect reboot time.
+        for (auto& entry : block_devices) {
+            entry.DoFsck();
+        }
+    }
     return stat;
 }
 
 static void __attribute__((noreturn)) DoThermalOff() {
     LOG(WARNING) << "Thermal system shutdown";
-    DoSync();
+    sync();
     RebootSystem(ANDROID_RB_THERMOFF, "");
     abort();
 }
@@ -426,8 +395,8 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
 
     // minimum safety steps before restarting
     // 2. kill all services except ones that are necessary for the shutdown sequence.
-    ServiceManager::GetInstance().ForEachService([&kill_after_apps](Service* s) {
-        if (!s->IsShutdownCritical() || kill_after_apps.count(s->name())) s->Stop();
+    ServiceManager::GetInstance().ForEachService([](Service* s) {
+        if (!s->IsShutdownCritical()) s->Stop();
     });
     ServiceManager::GetInstance().ReapAnyOutstandingChildren();
 
@@ -435,12 +404,20 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     Service* voldService = ServiceManager::GetInstance().FindServiceByName("vold");
     if (voldService != nullptr && voldService->IsRunning()) {
         ShutdownVold();
+        voldService->Stop();
     } else {
         LOG(INFO) << "vold not running, skipping vold shutdown";
     }
+    // logcat stopped here
+    ServiceManager::GetInstance().ForEachService([&kill_after_apps](Service* s) {
+        if (kill_after_apps.count(s->name())) s->Stop();
+    });
     // 4. sync, try umount, and optionally run fsck for user shutdown
-    DoSync();
+    sync();
     UmountStat stat = TryUmountAndFsck(runFsck, shutdownTimeout * 1000 - t.duration_ms());
+    // Follow what linux shutdown is doing: one more sync with little bit delay
+    sync();
+    std::this_thread::sleep_for(100ms);
     LogShutdownTime(stat, &t);
     // Reboot regardless of umount status. If umount fails, fsck after reboot will fix it.
     RebootSystem(cmd, rebootTarget);
