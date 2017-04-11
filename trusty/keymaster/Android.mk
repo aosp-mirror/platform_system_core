@@ -32,7 +32,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := trusty_keymaster_tipc
 LOCAL_SRC_FILES := \
 	trusty_keymaster_device.cpp \
-	trusty_keymaster_ipc.c \
+	trusty_keymaster_ipc.cpp \
 	trusty_keymaster_main.cpp
 LOCAL_SHARED_LIBRARIES := \
 	libcrypto \
@@ -40,6 +40,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libkeymaster1 \
 	libtrusty \
 	libkeymaster_messages \
+	libsoftkeymasterdevice \
 	liblog
 
 include $(BUILD_EXECUTABLE)
@@ -53,7 +54,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := keystore.trusty
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_SRC_FILES := module.cpp \
-	trusty_keymaster_ipc.c \
+	trusty_keymaster_ipc.cpp \
 	trusty_keymaster_device.cpp
 LOCAL_CLFAGS = -fvisibility=hidden -Wall -Werror
 LOCAL_SHARED_LIBRARIES := \
