@@ -577,9 +577,9 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   // Paranoia: Match the values specified in the local file header
   // to those specified in the central directory.
 
-  // Verify that the central directory and local file header agree on the use of a trailing
-  // Data Descriptor.
-  if ((lfh->gpb_flags & kGPBDDFlagMask) != (cdr->gpb_flags & kGPBDDFlagMask)) {
+  // Verify that the central directory and local file header have the same general purpose bit
+  // flags set.
+  if (lfh->gpb_flags != cdr->gpb_flags) {
     ALOGW("Zip: gpb flag mismatch. expected {%04" PRIx16 "}, was {%04" PRIx16 "}",
           cdr->gpb_flags, lfh->gpb_flags);
     return kInconsistentInformation;
