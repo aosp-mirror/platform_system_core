@@ -194,37 +194,18 @@ bool write_file(const std::string& path, const std::string& content) {
     return success;
 }
 
-int mkdir_recursive(const char *pathname, mode_t mode)
-{
-    char buf[128];
-    const char *slash;
-    const char *p = pathname;
-    int width;
-    int ret;
-    struct stat info;
-
-    while ((slash = strchr(p, '/')) != NULL) {
-        width = slash - pathname;
-        p = slash + 1;
-        if (width < 0)
-            break;
-        if (width == 0)
-            continue;
-        if ((unsigned int)width > sizeof(buf) - 1) {
-            LOG(ERROR) << "path too long for mkdir_recursive";
-            return -1;
-        }
-        memcpy(buf, pathname, width);
-        buf[width] = 0;
-        if (stat(buf, &info) != 0) {
-            ret = make_dir(buf, mode);
-            if (ret && errno != EEXIST)
-                return ret;
+int mkdir_recursive(const std::string& path, mode_t mode) {
+    std::string::size_type slash = 0;
+    while ((slash = path.find('/', slash + 1)) != std::string::npos) {
+        auto directory = path.substr(0, slash);
+        struct stat info;
+        if (stat(directory.c_str(), &info) != 0) {
+            auto ret = make_dir(directory.c_str(), mode);
+            if (ret && errno != EEXIST) return ret;
         }
     }
-    ret = make_dir(pathname, mode);
-    if (ret && errno != EEXIST)
-        return ret;
+    auto ret = make_dir(path.c_str(), mode);
+    if (ret && errno != EEXIST) return ret;
     return 0;
 }
 
