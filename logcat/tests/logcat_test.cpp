@@ -1677,7 +1677,7 @@ TEST(logcat, descriptive) {
         // Invent new entries because existing can not serve
         EventTagMap* map = android_openEventTagMap(nullptr);
         ASSERT_TRUE(nullptr != map);
-        static const char name[] = ___STRING(logcat) "_descriptive_monotonic";
+        static const char name[] = ___STRING(logcat) ".descriptive-monotonic";
         int myTag = android_lookupEventTagNum(map, name, "(new|1|s)",
                                               ANDROID_LOG_UNKNOWN);
         android_closeEventTagMap(map);
