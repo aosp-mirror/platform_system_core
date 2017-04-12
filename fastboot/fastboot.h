@@ -42,6 +42,7 @@ struct sparse_file;
 int fb_command(Transport* transport, const char* cmd);
 int fb_command_response(Transport* transport, const char* cmd, char* response);
 int64_t fb_download_data(Transport* transport, const void* data, uint32_t size);
+int64_t fb_download_data_fd(Transport* transport, int fd, uint32_t size);
 int fb_download_data_sparse(Transport* transport, struct sparse_file* s);
 const std::string fb_get_error();
 
@@ -51,6 +52,7 @@ const std::string fb_get_error();
 /* engine.c - high level command queue engine */
 bool fb_getvar(Transport* transport, const std::string& key, std::string* value);
 void fb_queue_flash(const char *ptn, void *data, uint32_t sz);
+void fb_queue_flash_fd(const char *ptn, int fd, uint32_t sz);
 void fb_queue_flash_sparse(const char* ptn, struct sparse_file* s, uint32_t sz, size_t current,
                            size_t total);
 void fb_queue_erase(const char *ptn);

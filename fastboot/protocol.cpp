@@ -38,6 +38,7 @@
 
 #include <android-base/stringprintf.h>
 #include <sparse/sparse.h>
+#include <utils/FileMap.h>
 
 #include "fastboot.h"
 #include "transport.h"
@@ -168,6 +169,39 @@ static int64_t _command_send(Transport* transport, const char* cmd, const void* 
     return size;
 }
 
+static int64_t _command_send_fd(Transport* transport, const char* cmd, int fd, uint32_t size,
+                                char* response) {
+    static constexpr uint32_t MAX_MAP_SIZE = 512 * 1024 * 1024;
+    off64_t offset = 0;
+    uint32_t remaining = size;
+
+    if (_command_start(transport, cmd, size, response) < 0) {
+        return -1;
+    }
+
+    while (remaining) {
+        android::FileMap filemap;
+        size_t len = std::min(remaining, MAX_MAP_SIZE);
+
+        if (!filemap.create(NULL, fd, offset, len, true)) {
+            return -1;
+        }
+
+        if (_command_data(transport, filemap.getDataPtr(), len) < 0) {
+            return -1;
+        }
+
+        remaining -= len;
+        offset += len;
+    }
+
+    if (_command_end(transport) < 0) {
+        return -1;
+    }
+
+    return size;
+}
+
 static int _command_send_no_data(Transport* transport, const char* cmd, char* response) {
     return _command_start(transport, cmd, 0, response);
 }
@@ -181,9 +215,13 @@ int fb_command_response(Transport* transport, const char* cmd, char* response) {
 }
 
 int64_t fb_download_data(Transport* transport, const void* data, uint32_t size) {
-    char cmd[64];
-    snprintf(cmd, sizeof(cmd), "download:%08x", size);
-    return _command_send(transport, cmd, data, size, 0) < 0 ? -1 : 0;
+    std::string cmd(android::base::StringPrintf("download:%08x", size));
+    return _command_send(transport, cmd.c_str(), data, size, 0) < 0 ? -1 : 0;
+}
+
+int64_t fb_download_data_fd(Transport* transport, int fd, uint32_t size) {
+    std::string cmd(android::base::StringPrintf("download:%08x", size));
+    return _command_send_fd(transport, cmd.c_str(), fd, size, 0) < 0 ? -1 : 0;
 }
 
 #define TRANSPORT_BUF_SIZE 1024
@@ -257,9 +295,8 @@ int fb_download_data_sparse(Transport* transport, struct sparse_file* s) {
         return -1;
     }
 
-    char cmd[64];
-    snprintf(cmd, sizeof(cmd), "download:%08x", size);
-    int r = _command_start(transport, cmd, size, 0);
+    std::string cmd(android::base::StringPrintf("download:%08x", size));
+    int r = _command_start(transport, cmd.c_str(), size, 0);
     if (r < 0) {
         return -1;
     }
