@@ -32,12 +32,16 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <memory>
+#include <string>
 #include <thread>
+#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/list.h>
 #include <cutils/uevent.h>
@@ -178,9 +182,8 @@ static void fixup_sys_perms(const char* upath, const char* subsystem) {
     }
 }
 
-static mode_t get_device_perm(const char *path, const char **links,
-                unsigned *uid, unsigned *gid)
-{
+static mode_t get_device_perm(const char* path, const std::vector<std::string>& links,
+                              unsigned* uid, unsigned* gid) {
     struct listnode *node;
     struct perm_node *perm_node;
     struct perms_ *dp;
@@ -189,26 +192,12 @@ static mode_t get_device_perm(const char *path, const char **links,
      * override ueventd.rc
      */
     list_for_each_reverse(node, &dev_perms) {
-        bool match = false;
-
         perm_node = node_to_item(node, struct perm_node, plist);
         dp = &perm_node->dp;
 
-        if (perm_path_matches(path, dp)) {
-            match = true;
-        } else {
-            if (links) {
-                int i;
-                for (i = 0; links[i]; i++) {
-                    if (perm_path_matches(links[i], dp)) {
-                        match = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (match) {
+        if (perm_path_matches(path, dp) ||
+            std::any_of(links.begin(), links.end(),
+                        [dp](const auto& link) { return perm_path_matches(link.c_str(), dp); })) {
             *uid = dp->uid;
             *gid = dp->gid;
             return dp->perm;
@@ -220,11 +209,8 @@ static mode_t get_device_perm(const char *path, const char **links,
     return 0600;
 }
 
-static void make_device(const char *path,
-                        const char */*upath*/,
-                        int block, int major, int minor,
-                        const char **links)
-{
+static void make_device(const char* path, const char* /*upath*/, int block, int major, int minor,
+                        const std::vector<std::string>& links) {
     unsigned uid;
     unsigned gid;
     mode_t mode;
@@ -234,7 +220,12 @@ static void make_device(const char *path,
     mode = get_device_perm(path, links, &uid, &gid) | (block ? S_IFBLK : S_IFCHR);
 
     if (sehandle) {
-        if (selabel_lookup_best_match(sehandle, &secontext, path, links, mode)) {
+        std::vector<const char*> c_links;
+        for (const auto& link : links) {
+            c_links.emplace_back(link.c_str());
+        }
+        c_links.emplace_back(nullptr);
+        if (selabel_lookup_best_match(sehandle, &secontext, path, &c_links[0], mode)) {
             PLOG(ERROR) << "Device '" << path << "' not created; cannot find SELinux label";
             return;
         }
@@ -356,60 +347,55 @@ static void destroy_platform_devices() {
 /* Given a path that may start with a PCI device, populate the supplied buffer
  * with the PCI domain/bus number and the peripheral ID and return 0.
  * If it doesn't start with a PCI device, or there is some error, return -1 */
-static int find_pci_device_prefix(const char *path, char *buf, ssize_t buf_sz)
-{
-    const char *start, *end;
+static bool find_pci_device_prefix(const std::string& path, std::string* result) {
+    result->clear();
 
-    if (strncmp(path, "/devices/pci", 12))
-        return -1;
+    if (!android::base::StartsWith(path, "/devices/pci")) return false;
 
     /* Beginning of the prefix is the initial "pci" after "/devices/" */
-    start = path + 9;
+    std::string::size_type start = 9;
 
     /* End of the prefix is two path '/' later, capturing the domain/bus number
      * and the peripheral ID. Example: pci0000:00/0000:00:1f.2 */
-    end = strchr(start, '/');
-    if (!end)
-        return -1;
-    end = strchr(end + 1, '/');
-    if (!end)
-        return -1;
+    auto end = path.find('/', start);
+    if (end == std::string::npos) return false;
 
-    /* Make sure we have enough room for the string plus null terminator */
-    if (end - start + 1 > buf_sz)
-        return -1;
+    end = path.find('/', end + 1);
+    if (end == std::string::npos) return false;
 
-    strncpy(buf, start, end - start);
-    buf[end - start] = '\0';
-    return 0;
+    auto length = end - start;
+    if (length <= 4) {
+        // The minimum string that will get to this check is 'pci/', which is malformed,
+        // so return false
+        return false;
+    }
+
+    *result = path.substr(start, length);
+    return true;
 }
 
 /* Given a path that may start with a virtual block device, populate
  * the supplied buffer with the virtual block device ID and return 0.
  * If it doesn't start with a virtual block device, or there is some
  * error, return -1 */
-static int find_vbd_device_prefix(const char *path, char *buf, ssize_t buf_sz)
-{
-    const char *start, *end;
+static bool find_vbd_device_prefix(const std::string& path, std::string* result) {
+    result->clear();
+
+    if (!android::base::StartsWith(path, "/devices/vbd-")) return false;
 
     /* Beginning of the prefix is the initial "vbd-" after "/devices/" */
-    if (strncmp(path, "/devices/vbd-", 13))
-        return -1;
+    std::string::size_type start = 13;
 
     /* End of the prefix is one path '/' later, capturing the
        virtual block device ID. Example: 768 */
-    start = path + 13;
-    end = strchr(start, '/');
-    if (!end)
-        return -1;
+    auto end = path.find('/', start);
+    if (end == std::string::npos) return false;
 
-    /* Make sure we have enough room for the string plus null terminator */
-    if (end - start + 1 > buf_sz)
-        return -1;
+    auto length = end - start;
+    if (length == 0) return false;
 
-    strncpy(buf, start, end - start);
-    buf[end - start] = '\0';
-    return 0;
+    *result = path.substr(start, length);
+    return true;
 }
 
 static void parse_event(const char *msg, struct uevent *uevent)
@@ -467,133 +453,108 @@ static void parse_event(const char *msg, struct uevent *uevent)
     }
 }
 
-char** get_character_device_symlinks(struct uevent* uevent) {
-    const char *parent;
-    const char *slash;
-    char **links;
-    int link_num = 0;
-    int width;
-    struct platform_node *pdev;
-
-    pdev = find_platform_device(uevent->path);
-    if (!pdev)
-        return NULL;
-
-    links = (char**) malloc(sizeof(char *) * 2);
-    if (!links)
-        return NULL;
-    memset(links, 0, sizeof(char *) * 2);
+std::vector<std::string> get_character_device_symlinks(uevent* uevent) {
+    platform_node* pdev = find_platform_device(uevent->path);
+    if (!pdev) return {};
 
     /* skip "/devices/platform/<driver>" */
-    parent = strchr(uevent->path + pdev->path_len, '/');
-    if (!parent)
-        goto err;
+    std::string parent = std::string(uevent->path);
+    auto parent_start = parent.find('/', pdev->path_len);
+    if (parent_start == std::string::npos) return {};
 
-    if (!strncmp(parent, "/usb", 4)) {
-        /* skip root hub name and device. use device interface */
-        while (*++parent && *parent != '/');
-        if (*parent)
-            while (*++parent && *parent != '/');
-        if (!*parent)
-            goto err;
-        slash = strchr(++parent, '/');
-        if (!slash)
-            goto err;
-        width = slash - parent;
-        if (width <= 0)
-            goto err;
+    parent.erase(0, parent_start);
 
-        if (asprintf(&links[link_num], "/dev/usb/%s%.*s", uevent->subsystem, width, parent) > 0)
-            link_num++;
-        else
-            links[link_num] = NULL;
-        mkdir("/dev/usb", 0755);
-    }
-    else {
-        goto err;
-    }
+    if (!android::base::StartsWith(parent, "/usb")) return {};
+
+    // skip root hub name and device. use device interface
+    // skip 3 slashes, including the first / by starting the search at the 1st character, not 0th.
+    // then extract what comes between the 3rd and 4th slash
+    // e.g. "/usb/usb_device/name/tty2-1:1.0" -> "name"
+
+    std::string::size_type start = 0;
+    start = parent.find('/', start + 1);
+    if (start == std::string::npos) return {};
+
+    start = parent.find('/', start + 1);
+    if (start == std::string::npos) return {};
+
+    auto end = parent.find('/', start + 1);
+    if (end == std::string::npos) return {};
+
+    start++;  // Skip the first '/'
+
+    auto length = end - start;
+    if (length == 0) return {};
+
+    auto name_string = parent.substr(start, length);
+
+    // TODO: remove std::string() when uevent->subsystem is an std::string
+    std::vector<std::string> links;
+    links.emplace_back("/dev/usb/" + std::string(uevent->subsystem) + name_string);
+
+    mkdir("/dev/usb", 0755);
 
     return links;
-err:
-    free(links);
-    return NULL;
 }
 
 // replaces any unacceptable characters with '_', the
 // length of the resulting string is equal to the input string
-void sanitize_partition_name(char* s) {
+void sanitize_partition_name(std::string* string) {
     const char* accept =
         "abcdefghijklmnopqrstuvwxyz"
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         "0123456789"
         "_-.";
 
-    if (!s) return;
+    if (!string) return;
 
-    while (*s) {
-        s += strspn(s, accept);
-        if (*s) *s++ = '_';
+    std::string::size_type pos = 0;
+    while ((pos = string->find_first_not_of(accept, pos)) != std::string::npos) {
+        (*string)[pos] = '_';
     }
 }
 
-char** get_block_device_symlinks(struct uevent* uevent) {
-    const char *device;
-    struct platform_node *pdev;
-    const char *slash;
-    const char *type;
-    char buf[256];
-    char link_path[256];
-    int link_num = 0;
-    char *p;
+std::vector<std::string> get_block_device_symlinks(uevent* uevent) {
+    std::string device;
+    struct platform_node* pdev;
+    std::string type;
 
     pdev = find_platform_device(uevent->path);
     if (pdev) {
         device = pdev->name;
         type = "platform";
-    } else if (!find_pci_device_prefix(uevent->path, buf, sizeof(buf))) {
-        device = buf;
+    } else if (find_pci_device_prefix(uevent->path, &device)) {
         type = "pci";
-    } else if (!find_vbd_device_prefix(uevent->path, buf, sizeof(buf))) {
-        device = buf;
+    } else if (find_vbd_device_prefix(uevent->path, &device)) {
         type = "vbd";
     } else {
-        return NULL;
+        return {};
     }
 
-    char **links = (char**) malloc(sizeof(char *) * 4);
-    if (!links)
-        return NULL;
-    memset(links, 0, sizeof(char *) * 4);
+    std::vector<std::string> links;
 
     LOG(VERBOSE) << "found " << type << " device " << device;
 
-    snprintf(link_path, sizeof(link_path), "/dev/block/%s/%s", type, device);
+    auto link_path = "/dev/block/" + type + "/" + device;
 
     if (uevent->partition_name) {
-        p = strdup(uevent->partition_name);
-        sanitize_partition_name(p);
-        if (strcmp(uevent->partition_name, p)) {
-            LOG(VERBOSE) << "Linking partition '" << uevent->partition_name << "' as '" << p << "'";
+        std::string partition_name_sanitized(uevent->partition_name);
+        sanitize_partition_name(&partition_name_sanitized);
+        if (partition_name_sanitized != uevent->partition_name) {
+            LOG(VERBOSE) << "Linking partition '" << uevent->partition_name << "' as '"
+                         << partition_name_sanitized << "'";
         }
-        if (asprintf(&links[link_num], "%s/by-name/%s", link_path, p) > 0)
-            link_num++;
-        else
-            links[link_num] = NULL;
-        free(p);
+        links.emplace_back(link_path + "/by-name/" + partition_name_sanitized);
     }
 
     if (uevent->partition_num >= 0) {
-        if (asprintf(&links[link_num], "%s/by-num/p%d", link_path, uevent->partition_num) > 0)
-            link_num++;
-        else
-            links[link_num] = NULL;
+        links.emplace_back(link_path + "/by-num/p" + std::to_string(uevent->partition_num));
     }
 
-    slash = strrchr(uevent->path, '/');
-    if (asprintf(&links[link_num], "%s/%s", link_path, slash + 1) > 0)
-        link_num++;
-    else
-        links[link_num] = NULL;
+    // TODO: remove uevent_path when uevent->path is an std::string
+    std::string uevent_path = uevent->path;
+    auto last_slash = uevent_path.rfind('/');
+    links.emplace_back(link_path + "/" + uevent_path.substr(last_slash + 1));
 
     return links;
 }
@@ -616,32 +577,20 @@ static void remove_link(const char* oldpath, const char* newpath) {
   if (android::base::Readlink(newpath, &path) && path == oldpath) unlink(newpath);
 }
 
-static void handle_device(const char *action, const char *devpath,
-        const char *path, int block, int major, int minor, char **links)
-{
+static void handle_device(const char* action, const char* devpath, const char* path, int block,
+                          int major, int minor, const std::vector<std::string>& links) {
     if(!strcmp(action, "add")) {
-        make_device(devpath, path, block, major, minor, (const char **)links);
-        if (links) {
-            for (int i = 0; links[i]; i++) {
-                make_link_init(devpath, links[i]);
-            }
+        make_device(devpath, path, block, major, minor, links);
+        for (const auto& link : links) {
+            make_link_init(devpath, link.c_str());
         }
     }
 
     if(!strcmp(action, "remove")) {
-        if (links) {
-            for (int i = 0; links[i]; i++) {
-                remove_link(devpath, links[i]);
-            }
+        for (const auto& link : links) {
+            remove_link(devpath, link.c_str());
         }
         unlink(devpath);
-    }
-
-    if (links) {
-        for (int i = 0; links[i]; i++) {
-            free(links[i]);
-        }
-        free(links);
     }
 }
 
@@ -686,7 +635,6 @@ static void handle_block_device_event(struct uevent *uevent)
     const char *base = "/dev/block/";
     const char *name;
     char devpath[DEVPATH_LEN];
-    char **links = NULL;
 
     name = parse_device_name(uevent, MAX_DEV_NAME);
     if (!name)
@@ -695,6 +643,7 @@ static void handle_block_device_event(struct uevent *uevent)
     snprintf(devpath, sizeof(devpath), "%s%s", base, name);
     make_dir(base, 0755);
 
+    std::vector<std::string> links;
     if (!strncmp(uevent->path, "/devices/", 9))
         links = get_block_device_symlinks(uevent);
 
@@ -733,7 +682,6 @@ static void handle_generic_device_event(struct uevent *uevent)
     const char *base;
     const char *name;
     char devpath[DEVPATH_LEN] = {0};
-    char **links = NULL;
 
     name = parse_device_name(uevent, MAX_DEV_NAME);
     if (!name)
@@ -818,7 +766,7 @@ static void handle_generic_device_event(struct uevent *uevent)
          name += 4;
      } else
          base = "/dev/";
-     links = get_character_device_symlinks(uevent);
+     auto links = get_character_device_symlinks(uevent);
 
      if (!devpath[0])
          snprintf(devpath, sizeof(devpath), "%s%s", base, name);
