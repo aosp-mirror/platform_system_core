@@ -33,6 +33,7 @@ public:
         VERIFY_CHALLENGE = IBinder::FIRST_CALL_TRANSACTION + 2,
         GET_SECURE_USER_ID = IBinder::FIRST_CALL_TRANSACTION + 3,
         CLEAR_SECURE_USER_ID = IBinder::FIRST_CALL_TRANSACTION + 4,
+        REPORT_DEVICE_SETUP_COMPLETE = IBinder::FIRST_CALL_TRANSACTION + 5,
     };
 
     enum {
@@ -95,6 +96,12 @@ public:
      * Clears the secure user ID associated with the user.
      */
     virtual void clearSecureUserId(uint32_t uid) = 0;
+
+    /**
+     * Notifies gatekeeper that device setup has been completed and any potentially still existing
+     * state from before a factory reset can be cleaned up (if it has not been already).
+     */
+    virtual void reportDeviceSetupComplete() = 0;
 };
 
 // ----------------------------------------------------------------------------
