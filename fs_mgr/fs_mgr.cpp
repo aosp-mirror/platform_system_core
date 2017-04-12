@@ -44,6 +44,7 @@
 #include <ext4_utils/wipe.h>
 #include <linux/fs.h>
 #include <linux/loop.h>
+#include <linux/magic.h>
 #include <logwrap/logwrap.h>
 #include <private/android_logger.h>  // for __android_log_is_debuggable()
 
@@ -67,17 +68,18 @@
 
 // record fs stat
 enum FsStatFlags {
-    FS_STAT_IS_EXT4           = 0x0001,
+    FS_STAT_IS_EXT4 = 0x0001,
     FS_STAT_NEW_IMAGE_VERSION = 0x0002,
-    FS_STAT_E2FSCK_F_ALWAYS   = 0x0004,
-    FS_STAT_UNCLEAN_SHUTDOWN  = 0x0008,
-    FS_STAT_QUOTA_ENABLED     = 0x0010,
-    FS_STAT_TUNE2FS_FAILED    = 0x0020,
-    FS_STAT_RO_MOUNT_FAILED   = 0x0040,
+    FS_STAT_E2FSCK_F_ALWAYS = 0x0004,
+    FS_STAT_UNCLEAN_SHUTDOWN = 0x0008,
+    FS_STAT_QUOTA_ENABLED = 0x0010,
+    FS_STAT_TUNE2FS_FAILED = 0x0020,
+    FS_STAT_RO_MOUNT_FAILED = 0x0040,
     FS_STAT_RO_UNMOUNT_FAILED = 0x0080,
     FS_STAT_FULL_MOUNT_FAILED = 0x0100,
-    FS_STAT_E2FSCK_FAILED     = 0x0200,
-    FS_STAT_E2FSCK_FS_FIXED   = 0x0400,
+    FS_STAT_E2FSCK_FAILED = 0x0200,
+    FS_STAT_E2FSCK_FS_FIXED = 0x0400,
+    FS_STAT_EXT4_INVALID_MAGIC = 0x0800,
 };
 
 /*
@@ -136,6 +138,9 @@ static void check_fs(const char *blk_device, char *fs_type, char *target, int *f
 
     /* Check for the types of filesystems we know how to check */
     if (!strcmp(fs_type, "ext2") || !strcmp(fs_type, "ext3") || !strcmp(fs_type, "ext4")) {
+        if (*fs_stat & FS_STAT_EXT4_INVALID_MAGIC) {  // will fail, so do not try
+            return;
+        }
         /*
          * First try to mount and unmount the filesystem.  We do this because
          * the kernel is more efficient than e2fsck in running the journal and
@@ -281,6 +286,11 @@ static int do_quota_with_shutdown_check(char *blk_device, char *fs_type,
                 if (ret < 0) {
                     PERROR << "Can't read '" << blk_device << "' super block";
                     return force_check;
+                }
+                if (sb.s_magic != EXT4_SUPER_MAGIC) {
+                    LINFO << "Invalid ext4 magic:0x" << std::hex << sb.s_magic << "," << blk_device;
+                    *fs_stat |= FS_STAT_EXT4_INVALID_MAGIC;
+                    return 0;  // not a valid fs, tune2fs, fsck, and mount  will all fail.
                 }
                 *fs_stat |= FS_STAT_IS_EXT4;
                 LINFO << "superblock s_max_mnt_count:" << sb.s_max_mnt_count << "," << blk_device;
@@ -542,7 +552,13 @@ static int mount_with_alternatives(struct fstab *fstab, int start_idx, int *end_
             int force_check = do_quota_with_shutdown_check(fstab->recs[i].blk_device,
                                                            fstab->recs[i].fs_type,
                                                            &fstab->recs[i], &fs_stat);
-
+            if (fs_stat & FS_STAT_EXT4_INVALID_MAGIC) {
+                LERROR << __FUNCTION__ << "(): skipping mount, invalid ext4, mountpoint="
+                       << fstab->recs[i].mount_point << " rec[" << i
+                       << "].fs_type=" << fstab->recs[i].fs_type;
+                mount_errno = EINVAL;  // continue bootup for FDE
+                continue;
+            }
             if ((fstab->recs[i].fs_mgr_flags & MF_CHECK) || force_check) {
                 check_fs(fstab->recs[i].blk_device, fstab->recs[i].fs_type,
                          fstab->recs[i].mount_point, &fs_stat);
