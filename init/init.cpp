@@ -740,6 +740,18 @@ static bool selinux_find_precompiled_split_policy(std::string* file) {
     return true;
 }
 
+static bool selinux_get_vendor_mapping_version(std::string* plat_vers) {
+    if (!read_first_line("/vendor/etc/selinux/plat_sepolicy_vers.txt", plat_vers)) {
+        PLOG(ERROR) << "Failed to read /vendor/etc/selinux/plat_sepolicy_vers.txt";
+        return false;
+    }
+    if (plat_vers->empty()) {
+        LOG(ERROR) << "No version present in plat_sepolicy_vers.txt";
+        return false;
+    }
+    return true;
+}
+
 static constexpr const char plat_policy_cil_file[] = "/system/etc/selinux/plat_sepolicy.cil";
 
 static bool selinux_is_split_policy_device() { return access(plat_policy_cil_file, R_OK) != -1; }
@@ -794,6 +806,12 @@ static bool selinux_load_split_policy() {
         return false;
     }
 
+    // Determine which mapping file to include
+    std::string vend_plat_vers;
+    if (!selinux_get_vendor_mapping_version(&vend_plat_vers)) {
+        return false;
+    }
+    std::string mapping_file("/system/etc/selinux/mapping/" + vend_plat_vers + ".cil");
     // clang-format off
     const char* compile_args[] = {
         "/system/bin/secilc",
@@ -801,7 +819,7 @@ static bool selinux_load_split_policy() {
         "-M", "true",
         // Target the highest policy language version supported by the kernel
         "-c", std::to_string(max_policy_version).c_str(),
-        "/system/etc/selinux/mapping_sepolicy.cil",
+        mapping_file.c_str(),
         "/vendor/etc/selinux/nonplat_sepolicy.cil",
         "-o", compiled_sepolicy,
         // We don't care about file_contexts output by the compiler
