@@ -262,6 +262,8 @@ int get_sched_policy(int tid, SchedPolicy *policy)
             *policy = SP_FOREGROUND;
         } else if (!strcmp(grpBuf, "foreground")) {
             *policy = SP_FOREGROUND;
+        } else if (!strcmp(grpBuf, "system-background")) {
+            *policy = SP_SYSTEM;
         } else if (!strcmp(grpBuf, "background")) {
             *policy = SP_BACKGROUND;
         } else if (!strcmp(grpBuf, "top-app")) {
