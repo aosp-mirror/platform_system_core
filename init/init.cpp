@@ -794,7 +794,7 @@ static bool selinux_load_split_policy() {
     const char* compile_args[] = {
         "/system/bin/secilc",
         plat_policy_cil_file,
-        "-M", "true",
+        "-M", "true", "-G",
         // Target the highest policy language version supported by the kernel
         "-c", std::to_string(max_policy_version).c_str(),
         "/system/etc/selinux/mapping_sepolicy.cil",
