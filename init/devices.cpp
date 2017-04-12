@@ -759,11 +759,6 @@ static void handle_generic_device_event(struct uevent *uevent)
      } else if(!strncmp(uevent->subsystem, "sound", 5)) {
          base = "/dev/snd/";
          make_dir(base, 0755);
-     } else if(!strncmp(uevent->subsystem, "misc", 4) && !strncmp(name, "log_", 4)) {
-         LOG(INFO) << "kernel logger is deprecated";
-         base = "/dev/log/";
-         make_dir(base, 0755);
-         name += 4;
      } else
          base = "/dev/";
      auto links = get_character_device_symlinks(uevent);
