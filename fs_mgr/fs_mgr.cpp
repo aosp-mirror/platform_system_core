@@ -283,7 +283,10 @@ static int do_quota_with_shutdown_check(char *blk_device, char *fs_type,
                     return force_check;
                 }
                 *fs_stat |= FS_STAT_IS_EXT4;
-                //TODO check if it is new version or not
+                LINFO << "superblock s_max_mnt_count:" << sb.s_max_mnt_count << "," << blk_device;
+                if (sb.s_max_mnt_count == 0xffff) {  // -1 (int16) in ext2, but uint16 in ext4
+                    *fs_stat |= FS_STAT_NEW_IMAGE_VERSION;
+                }
                 if ((sb.s_feature_incompat & EXT4_FEATURE_INCOMPAT_RECOVER) != 0 ||
                     (sb.s_state & EXT4_VALID_FS) == 0) {
                     LINFO << __FUNCTION__ << "(): was not clealy shutdown, state flag:"
