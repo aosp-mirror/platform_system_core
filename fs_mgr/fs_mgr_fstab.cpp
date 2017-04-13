@@ -526,7 +526,7 @@ static struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
         cnt++;
     }
     /* If an A/B partition, modify block device to be the real block device */
-    if (fs_mgr_update_for_slotselect(fstab) != 0) {
+    if (!fs_mgr_update_for_slotselect(fstab)) {
         LERROR << "Error updating for slotselect";
         goto err;
     }
