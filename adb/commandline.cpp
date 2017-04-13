@@ -663,13 +663,8 @@ static int RemoteShell(bool use_shell_protocol, const std::string& type_arg,
 #endif
 
     // TODO: combine read_and_dump with stdin_read_thread to make life simpler?
-    int exit_code = 1;
-    if (!adb_thread_create(stdin_read_thread_loop, args)) {
-        PLOG(ERROR) << "error starting stdin read thread";
-        delete args;
-    } else {
-        exit_code = read_and_dump(fd, use_shell_protocol);
-    }
+    std::thread(stdin_read_thread_loop, args).detach();
+    int exit_code = read_and_dump(fd, use_shell_protocol);
 
     // TODO: properly exit stdin_read_thread_loop and close |fd|.
 

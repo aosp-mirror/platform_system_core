@@ -25,54 +25,6 @@
 #include "sysdeps.h"
 #include "sysdeps/chrono.h"
 
-static void increment_atomic_int(void* c) {
-    std::this_thread::sleep_for(1s);
-    reinterpret_cast<std::atomic<int>*>(c)->fetch_add(1);
-}
-
-TEST(sysdeps_thread, smoke) {
-    std::atomic<int> counter(0);
-
-    for (int i = 0; i < 100; ++i) {
-        ASSERT_TRUE(adb_thread_create(increment_atomic_int, &counter));
-    }
-
-    std::this_thread::sleep_for(2s);
-    ASSERT_EQ(100, counter.load());
-}
-
-TEST(sysdeps_thread, join) {
-    std::atomic<int> counter(0);
-    std::vector<adb_thread_t> threads(500);
-    for (size_t i = 0; i < threads.size(); ++i) {
-        ASSERT_TRUE(adb_thread_create(increment_atomic_int, &counter, &threads[i]));
-    }
-
-    int current = counter.load();
-    ASSERT_GE(current, 0);
-    // Make sure that adb_thread_create actually creates threads, and doesn't do something silly
-    // like synchronously run the function passed in. The sleep in increment_atomic_int should be
-    // enough to keep this from being flakey.
-    ASSERT_LT(current, 500);
-
-    for (const auto& thread : threads) {
-        ASSERT_TRUE(adb_thread_join(thread));
-    }
-
-    ASSERT_EQ(500, counter.load());
-}
-
-TEST(sysdeps_thread, exit) {
-    adb_thread_t thread;
-    ASSERT_TRUE(adb_thread_create(
-        [](void*) {
-            adb_thread_exit();
-            for (;;) continue;
-        },
-        nullptr, &thread));
-    ASSERT_TRUE(adb_thread_join(thread));
-}
-
 TEST(sysdeps_socketpair, smoke) {
     int fds[2];
     ASSERT_EQ(0, adb_socketpair(fds)) << strerror(errno);
@@ -254,13 +206,13 @@ TEST(sysdeps_mutex, mutex_smoke) {
     static std::mutex &m = *new std::mutex();
     m.lock();
     ASSERT_FALSE(m.try_lock());
-    adb_thread_create([](void*) {
+    std::thread thread([]() {
         ASSERT_FALSE(m.try_lock());
         m.lock();
         finished.store(true);
         std::this_thread::sleep_for(200ms);
         m.unlock();
-    }, nullptr);
+    });
 
     ASSERT_FALSE(finished.load());
     std::this_thread::sleep_for(100ms);
@@ -270,6 +222,8 @@ TEST(sysdeps_mutex, mutex_smoke) {
     m.lock();
     ASSERT_TRUE(finished.load());
     m.unlock();
+
+    thread.join();
 }
 
 TEST(sysdeps_mutex, recursive_mutex_smoke) {
@@ -279,12 +233,12 @@ TEST(sysdeps_mutex, recursive_mutex_smoke) {
     ASSERT_TRUE(m.try_lock());
     m.unlock();
 
-    adb_thread_create([](void*) {
+    std::thread thread([]() {
         ASSERT_FALSE(m.try_lock());
         m.lock();
         std::this_thread::sleep_for(500ms);
         m.unlock();
-    }, nullptr);
+    });
 
     std::this_thread::sleep_for(100ms);
     m.unlock();
@@ -292,6 +246,8 @@ TEST(sysdeps_mutex, recursive_mutex_smoke) {
     ASSERT_FALSE(m.try_lock());
     m.lock();
     m.unlock();
+
+    thread.join();
 }
 
 TEST(sysdeps_condition_variable, smoke) {
@@ -300,14 +256,16 @@ TEST(sysdeps_condition_variable, smoke) {
     static volatile bool flag = false;
 
     std::unique_lock<std::mutex> lock(m);
-    adb_thread_create([](void*) {
+    std::thread thread([]() {
         m.lock();
         flag = true;
         cond.notify_one();
         m.unlock();
-    }, nullptr);
+    });
 
     while (!flag) {
         cond.wait(lock);
     }
+
+    thread.join();
 }
