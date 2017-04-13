@@ -489,15 +489,9 @@ int fs_mgr_load_vbmeta_images(struct fstab* fstab) {
     // Sets requested_partitions to nullptr as it's to copy the contents
     // of HASH partitions into fs_mgr_avb_verify_data, which is not required as
     // fs_mgr only deals with HASHTREE partitions.
-    const char *requested_partitions[] = {nullptr};
-    std::string ab_suffix;
-    std::string slot;
-    if (fs_mgr_get_boot_config("slot", &slot)) {
-        ab_suffix = "_" + slot;
-    } else {
-        // remove slot_suffix once bootloaders update to new androidboot.slot param
-        fs_mgr_get_boot_config("slot_suffix", &ab_suffix);
-    }
+    const char* requested_partitions[] = {nullptr};
+    std::string ab_suffix = fs_mgr_get_slot_suffix();
+
     AvbSlotVerifyResult verify_result =
         avb_slot_verify(fs_mgr_avb_ops, requested_partitions, ab_suffix.c_str(),
                         fs_mgr_vbmeta_prop.allow_verification_error, &fs_mgr_avb_verify_data);
