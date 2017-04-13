@@ -1034,10 +1034,11 @@ static bool vboot_2_0_mount_partitions(const std::vector<fstab_rec*>& fstab_recs
         return false;
     }
 
+    setenv("INIT_AVB_VERSION", avb_handle->avb_version().c_str(), 1);
     for (auto rec : fstab_recs) {
         bool need_create_dm_device = false;
         if (fs_mgr_is_avb(rec)) {
-            if (avb_handle->AvbHashtreeDisabled()) {
+            if (avb_handle->hashtree_disabled()) {
                 LOG(INFO) << "avb hashtree disabled for '" << rec->mount_point << "'";
             } else if (avb_handle->SetUpAvb(rec, false /* wait_for_verity_dev */)) {
                 need_create_dm_device = true;
@@ -1384,12 +1385,14 @@ int main(int argc, char** argv) {
     property_set("ro.boottime.init.selinux", getenv("INIT_SELINUX_TOOK"));
 
     // Set libavb version for Framework-only OTA match in Treble build.
-    property_set("ro.boot.init.avb_version", std::to_string(AVB_MAJOR_VERSION).c_str());
+    const char* avb_version = getenv("INIT_AVB_VERSION");
+    if (avb_version) property_set("ro.boot.avb_version", avb_version);
 
     // Clean up our environment.
     unsetenv("INIT_SECOND_STAGE");
     unsetenv("INIT_STARTED_AT");
     unsetenv("INIT_SELINUX_TOOK");
+    unsetenv("INIT_AVB_VERSION");
 
     // Now set up SELinux for second stage.
     selinux_initialize(false);
