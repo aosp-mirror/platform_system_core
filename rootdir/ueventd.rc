@@ -1,5 +1,37 @@
 subsystem adf
-	devname uevent_devname
+    devname uevent_devname
+
+subsystem graphics
+    devname uevent_devpath
+    dirname /dev/graphics
+
+subsystem drm
+    devname uevent_devpath
+    dirname /dev/dri
+
+subsystem oncrpc
+    devname uevent_devpath
+    dirname /dev/oncrpc
+
+subsystem adsp
+    devname uevent_devpath
+    dirname /dev/adsp
+
+subsystem msm_camera
+    devname uevent_devpath
+    dirname /dev/msm_camera
+
+subsystem input
+    devname uevent_devpath
+    dirname /dev/input
+
+subsystem mtd
+    devname uevent_devpath
+    dirname /dev/mtd
+
+subsystem sound
+    devname uevent_devpath
+    dirname /dev/snd
 
 # ueventd can only set permissions on device nodes and their associated
 # sysfs attributes, not on arbitrary paths.
