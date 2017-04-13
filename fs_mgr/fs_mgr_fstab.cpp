@@ -814,6 +814,11 @@ int fs_mgr_is_verified(const struct fstab_rec *fstab)
     return fstab->fs_mgr_flags & MF_VERIFY;
 }
 
+int fs_mgr_is_avb(const struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_AVB;
+}
+
 int fs_mgr_is_verifyatboot(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_VERIFYATBOOT;

@@ -38,9 +38,9 @@
 #include <utils/Compat.h>
 
 #include "fs_mgr.h"
+#include "fs_mgr_avb.h"
 #include "fs_mgr_avb_ops.h"
 #include "fs_mgr_priv.h"
-#include "fs_mgr_priv_avb.h"
 #include "fs_mgr_priv_dm_ioctl.h"
 #include "fs_mgr_priv_sha.h"
 
@@ -336,7 +336,8 @@ static bool hashtree_load_verity_table(struct dm_ioctl* io, const std::string& d
 
 static bool hashtree_dm_verity_setup(struct fstab_rec* fstab_entry,
                                      const AvbHashtreeDescriptor& hashtree_desc,
-                                     const std::string& salt, const std::string& root_digest) {
+                                     const std::string& salt, const std::string& root_digest,
+                                     bool wait_for_verity_dev) {
     // Gets the device mapper fd.
     android::base::unique_fd fd(open("/dev/device-mapper", O_RDWR));
     if (fd < 0) {
@@ -375,13 +376,12 @@ static bool hashtree_dm_verity_setup(struct fstab_rec* fstab_entry,
     // Marks the underlying block device as read-only.
     fs_mgr_set_blk_ro(fstab_entry->blk_device);
 
-    // TODO(bowgotsai): support verified all partition at boot.
     // Updates fstab_rec->blk_device to verity device name.
     free(fstab_entry->blk_device);
     fstab_entry->blk_device = strdup(verity_blk_name.c_str());
 
     // Makes sure we've set everything up properly.
-    if (fs_mgr_test_access(verity_blk_name.c_str()) < 0) {
+    if (wait_for_verity_dev && fs_mgr_test_access(verity_blk_name.c_str()) < 0) {
         return false;
     }
 
@@ -519,7 +519,7 @@ FsManagerAvbUniquePtr FsManagerAvbHandle::Open(const std::string& device_file_by
     return nullptr;
 }
 
-bool FsManagerAvbHandle::SetUpAvb(struct fstab_rec* fstab_entry) {
+bool FsManagerAvbHandle::SetUpAvb(struct fstab_rec* fstab_entry, bool wait_for_verity_dev) {
     if (!fstab_entry) return false;
     if (!avb_slot_data_ || avb_slot_data_->num_vbmeta_images < 1) {
         return false;
@@ -545,7 +545,8 @@ bool FsManagerAvbHandle::SetUpAvb(struct fstab_rec* fstab_entry) {
     }
 
     // Converts HASHTREE descriptor to verity_table_params.
-    if (!hashtree_dm_verity_setup(fstab_entry, hashtree_descriptor, salt, root_digest)) {
+    if (!hashtree_dm_verity_setup(fstab_entry, hashtree_descriptor, salt, root_digest,
+                                  wait_for_verity_dev)) {
         return false;
     }
     return true;
