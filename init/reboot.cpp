@@ -43,6 +43,7 @@
 #include <cutils/android_reboot.h>
 #include <fs_mgr.h>
 #include <logwrap/logwrap.h>
+#include <private/android_filesystem_config.h>
 
 #include "log.h"
 #include "property_service.h"
@@ -305,7 +306,8 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     Timer t;
     LOG(INFO) << "Reboot start, reason: " << reason << ", rebootTarget: " << rebootTarget;
 
-    android::base::WriteStringToFile(StringPrintf("%s\n", reason.c_str()), LAST_REBOOT_REASON_FILE);
+    android::base::WriteStringToFile(StringPrintf("%s\n", reason.c_str()), LAST_REBOOT_REASON_FILE,
+                                     S_IRUSR | S_IWUSR, AID_SYSTEM, AID_SYSTEM);
 
     if (cmd == ANDROID_RB_THERMOFF) {  // do not wait if it is thermal
         DoThermalOff();
