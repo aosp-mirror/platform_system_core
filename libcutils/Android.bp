@@ -31,16 +31,14 @@ libcutils_nonwindows_sources = [
 ]
 
 cc_library_headers {
-    name: "libcutils_vndk_headers",
-    host_supported: true,
-    export_include_dirs: ["include_vndk"],
-}
-
-cc_library_headers {
     name: "libcutils_headers",
+    vendor_available: true,
     host_supported: true,
     export_include_dirs: ["include"],
     target: {
+        vendor: {
+            export_include_dirs: ["include_vndk"],
+        },
         linux_bionic: {
             enabled: true,
         },
@@ -52,6 +50,7 @@ cc_library_headers {
 
 cc_library {
     name: "libcutils",
+    vendor_available: true,
     host_supported: true,
     srcs: [
         "config_utils.c",
