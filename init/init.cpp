@@ -900,6 +900,8 @@ static void selinux_restore_context() {
     restorecon("/nonplat_seapp_contexts");
     restorecon("/plat_service_contexts");
     restorecon("/nonplat_service_contexts");
+    restorecon("/plat_hwservice_contexts");
+    restorecon("/nonplat_hwservice_contexts");
     restorecon("/sepolicy");
     restorecon("/vndservice_contexts");
 
