@@ -607,7 +607,7 @@ static int do_powerctl(const std::vector<std::string>& args) {
     bool runFsck = false;
     bool commandInvalid = false;
 
-    if (cmd_params.size() > 2) {
+    if (cmd_params.size() > 3) {
         commandInvalid = true;
     } else if (cmd_params[0] == "shutdown") {
         cmd = ANDROID_RB_POWEROFF;
@@ -619,7 +619,7 @@ static int do_powerctl(const std::vector<std::string>& args) {
         }
     } else if (cmd_params[0] == "reboot") {
         cmd = ANDROID_RB_RESTART2;
-        if (cmd_params.size() == 2) {
+        if (cmd_params.size() >= 2) {
             reboot_target = cmd_params[1];
             // When rebooting to the bootloader notify the bootloader writing
             // also the BCB.
@@ -630,6 +630,10 @@ static int do_powerctl(const std::vector<std::string>& args) {
                                   "bootloader_message: "
                                << err;
                 }
+            }
+            // If there is an additional bootloader parameter, pass it along
+            if (cmd_params.size() == 3) {
+                reboot_target += "," + cmd_params[2];
             }
         }
     } else if (command == "thermal-shutdown") {  // no additional parameter allowed
