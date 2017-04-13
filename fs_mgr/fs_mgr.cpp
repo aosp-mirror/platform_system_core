@@ -707,6 +707,23 @@ static int handle_encryptable(const struct fstab_rec* rec)
     }
 }
 
+static std::string extract_by_name_prefix(struct fstab* fstab) {
+    // We assume that there's an entry for the /misc mount point in the
+    // fstab file and use that to get the device file by-name prefix.
+    // The device needs not to have an actual /misc partition.
+    // e.g.,
+    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/misc ->
+    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/
+    struct fstab_rec* fstab_entry = fs_mgr_get_entry_for_mount_point(fstab, "/misc");
+    if (fstab_entry == nullptr) {
+        LERROR << "/misc mount point not found in fstab";
+        return "";
+    }
+    std::string full_path(fstab_entry->blk_device);
+    size_t end_slash = full_path.find_last_of("/");
+    return full_path.substr(0, end_slash + 1);
+}
+
 // TODO: add ueventd notifiers if they don't exist.
 // This is just doing a wait_for_device for maximum of 1s
 int fs_mgr_test_access(const char *device) {
@@ -750,14 +767,9 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
     int mret = -1;
     int mount_errno = 0;
     int attempted_idx = -1;
-    int avb_ret = FS_MGR_SETUP_AVB_FAIL;
+    FsManagerAvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
-        return -1;
-    }
-
-    if (fs_mgr_is_avb_used() &&
-        (avb_ret = fs_mgr_load_vbmeta_images(fstab)) == FS_MGR_SETUP_AVB_FAIL) {
         return -1;
     }
 
@@ -799,16 +811,15 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
             wait_for_file(fstab->recs[i].blk_device, WAIT_TIMEOUT);
         }
 
-        if (fs_mgr_is_avb_used() && (fstab->recs[i].fs_mgr_flags & MF_AVB)) {
-            /* If HASHTREE_DISABLED is set (cf. 'adb disable-verity'), we
-             * should set up the device without using dm-verity.
-             * The actual mounting still take place in the following
-             * mount_with_alternatives().
-             */
-            if (avb_ret == FS_MGR_SETUP_AVB_HASHTREE_DISABLED) {
-                LINFO << "AVB HASHTREE disabled";
-            } else if (fs_mgr_setup_avb(&fstab->recs[i]) !=
-                       FS_MGR_SETUP_AVB_SUCCESS) {
+        if (fstab->recs[i].fs_mgr_flags & MF_AVB) {
+            if (!avb_handle) {
+                avb_handle = FsManagerAvbHandle::Open(extract_by_name_prefix(fstab));
+                if (!avb_handle) {
+                    LERROR << "Failed to open FsManagerAvbHandle";
+                    return -1;
+                }
+            }
+            if (!avb_handle->SetUpAvb(&fstab->recs[i])) {
                 LERROR << "Failed to set up AVB on partition: "
                        << fstab->recs[i].mount_point << ", skipping!";
                 /* Skips mounting the device. */
@@ -934,10 +945,6 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
         }
     }
 
-    if (fs_mgr_is_avb_used()) {
-        fs_mgr_unload_vbmeta_images();
-    }
-
     if (error_count) {
         return -1;
     } else {
@@ -976,14 +983,9 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
     int mount_errors = 0;
     int first_mount_errno = 0;
     char *m;
-    int avb_ret = FS_MGR_SETUP_AVB_FAIL;
+    FsManagerAvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
-        return ret;
-    }
-
-    if (fs_mgr_is_avb_used() &&
-        (avb_ret = fs_mgr_load_vbmeta_images(fstab)) == FS_MGR_SETUP_AVB_FAIL) {
         return ret;
     }
 
@@ -1021,16 +1023,15 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
             do_reserved_size(n_blk_device, fstab->recs[i].fs_type, &fstab->recs[i], &fs_stat);
         }
 
-        if (fs_mgr_is_avb_used() && (fstab->recs[i].fs_mgr_flags & MF_AVB)) {
-            /* If HASHTREE_DISABLED is set (cf. 'adb disable-verity'), we
-             * should set up the device without using dm-verity.
-             * The actual mounting still take place in the following
-             * mount_with_alternatives().
-             */
-            if (avb_ret == FS_MGR_SETUP_AVB_HASHTREE_DISABLED) {
-                LINFO << "AVB HASHTREE disabled";
-            } else if (fs_mgr_setup_avb(&fstab->recs[i]) !=
-                       FS_MGR_SETUP_AVB_SUCCESS) {
+        if (fstab->recs[i].fs_mgr_flags & MF_AVB) {
+            if (!avb_handle) {
+                avb_handle = FsManagerAvbHandle::Open(extract_by_name_prefix(fstab));
+                if (!avb_handle) {
+                    LERROR << "Failed to open FsManagerAvbHandle";
+                    return -1;
+                }
+            }
+            if (!avb_handle->SetUpAvb(&fstab->recs[i])) {
                 LERROR << "Failed to set up AVB on partition: "
                        << fstab->recs[i].mount_point << ", skipping!";
                 /* Skips mounting the device. */
@@ -1079,9 +1080,6 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
     }
 
 out:
-    if (fs_mgr_is_avb_used()) {
-        fs_mgr_unload_vbmeta_images();
-    }
     return ret;
 }
 
