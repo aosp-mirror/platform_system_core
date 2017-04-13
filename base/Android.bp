@@ -22,6 +22,7 @@ libbase_cppflags = [
 
 cc_library {
     name: "libbase",
+    vendor_available: true,
     clang: true,
     host_supported: true,
     srcs: [
@@ -37,6 +38,7 @@ cc_library {
     cppflags: libbase_cppflags,
     export_include_dirs: ["include"],
     shared_libs: ["liblog"],
+    header_libs: ["libutils_headers"],
     target: {
         android: {
             srcs: [
