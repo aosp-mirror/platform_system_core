@@ -20,16 +20,18 @@
 #include <openssl/sha.h>
 
 class SHA256Hasher {
-   private:
+  private:
     SHA256_CTX sha256_ctx;
     uint8_t hash[SHA256_DIGEST_LENGTH];
 
-   public:
+  public:
     enum { DIGEST_SIZE = SHA256_DIGEST_LENGTH };
 
     SHA256Hasher() { SHA256_Init(&sha256_ctx); }
 
-    void update(const void* data, size_t data_size) { SHA256_Update(&sha256_ctx, data, data_size); }
+    void update(const uint8_t* data, size_t data_size) {
+        SHA256_Update(&sha256_ctx, data, data_size);
+    }
 
     const uint8_t* finalize() {
         SHA256_Final(hash, &sha256_ctx);
@@ -38,11 +40,11 @@ class SHA256Hasher {
 };
 
 class SHA512Hasher {
-   private:
+  private:
     SHA512_CTX sha512_ctx;
     uint8_t hash[SHA512_DIGEST_LENGTH];
 
-   public:
+  public:
     enum { DIGEST_SIZE = SHA512_DIGEST_LENGTH };
 
     SHA512Hasher() { SHA512_Init(&sha512_ctx); }
