@@ -148,8 +148,9 @@ LOCAL_SRC_FILES := \
     util_test.cpp \
 
 LOCAL_SHARED_LIBRARIES += \
-    libcutils \
     libbase \
+    libcutils \
+    libselinux \
 
 LOCAL_STATIC_LIBRARIES := libinit
 LOCAL_SANITIZE := integer
