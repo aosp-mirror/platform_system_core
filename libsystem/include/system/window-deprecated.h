@@ -32,6 +32,8 @@
  **************************************************************************************************
  **************************************************************************************************/
 
+#pragma once
+
 #include <cutils/native_handle.h>
 #include <errno.h>
 #include <limits.h>
@@ -326,6 +328,12 @@ enum {
      * if it is safe (i.e. no crash will occur) to call any method on it.
      */
     NATIVE_WINDOW_IS_VALID = 17,
+
+    /*
+     * Returns 1 if NATIVE_WINDOW_GET_FRAME_TIMESTAMPS will return display
+     * present info, 0 if it won't.
+     */
+    NATIVE_WINDOW_FRAME_TIMESTAMPS_SUPPORTS_PRESENT = 18,
 };
 
 /* Valid operations for the (*perform)() hook.
@@ -444,6 +452,14 @@ enum {
  * defined directly to avoid problems with C99/C++ inclusion of stdint.h.
  */
 static const int64_t NATIVE_WINDOW_TIMESTAMP_AUTO = (-9223372036854775807LL-1);
+
+/* parameter for NATIVE_WINDOW_GET_FRAME_TIMESTAMPS
+ *
+ * Special timestamp value to indicate the timestamps aren't yet known or
+ * that they are invalid.
+ */
+static const int64_t NATIVE_WINDOW_TIMESTAMP_PENDING = -2;
+static const int64_t NATIVE_WINDOW_TIMESTAMP_INVALID = -1;
 
 struct ANativeWindow
 {

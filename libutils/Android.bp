@@ -58,8 +58,14 @@ cc_library {
 
     cflags: ["-Werror"],
     include_dirs: ["external/safe-iop/include"],
-    header_libs: ["libutils_headers"],
-    export_header_lib_headers: ["libutils_headers"],
+    header_libs: [
+        "libsystem_headers",
+        "libutils_headers",
+    ],
+    export_header_lib_headers: [
+        "libsystem_headers",
+        "libutils_headers",
+    ],
 
     arch: {
         mips: {
