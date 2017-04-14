@@ -114,8 +114,8 @@ int fs_mgr_do_tmpfs_mount(const char *n_name);
 int fs_mgr_unmount_all(struct fstab *fstab);
 int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc,
                           char *real_blk_device, int size);
-int fs_mgr_load_verity_state(int *mode);
-int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback);
+bool fs_mgr_load_verity_state(int* mode);
+bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback);
 int fs_mgr_add_entry(struct fstab *fstab,
                      const char *mount_point, const char *fs_type,
                      const char *blk_device);
