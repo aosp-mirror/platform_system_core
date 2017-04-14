@@ -17,11 +17,13 @@
 #include "adb_mdns.h"
 #include "sysdeps.h"
 
-#include <chrono>
 #include <dns_sd.h>
 #include <endian.h>
-#include <mutex>
 #include <unistd.h>
+
+#include <chrono>
+#include <mutex>
+#include <thread>
 
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -58,7 +60,7 @@ static void mdns_callback(DNSServiceRef /*ref*/,
     }
 }
 
-static void setup_mdns_thread(void* /* unused */) {
+static void setup_mdns_thread() {
     start_mdns();
     std::lock_guard<std::mutex> lock(mdns_lock);
 
@@ -88,7 +90,7 @@ static void teardown_mdns() {
 
 void setup_mdns(int port_in) {
     port = port_in;
-    adb_thread_create(setup_mdns_thread, nullptr, nullptr);
+    std::thread(setup_mdns_thread).detach();
 
     // TODO: Make this more robust against a hard kill.
     atexit(teardown_mdns);

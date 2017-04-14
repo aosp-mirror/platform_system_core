@@ -405,7 +405,7 @@ err_get_num_ep:
 
 std::mutex& operate_device_lock = *new std::mutex();
 
-static void RunLoopThread(void* unused) {
+static void RunLoopThread() {
     adb_thread_setname("RunLoop");
 
     VLOG(USB) << "RunLoopThread started";
@@ -436,9 +436,7 @@ void usb_init() {
 
         usb_inited_flag = false;
 
-        if (!adb_thread_create(RunLoopThread, nullptr)) {
-            fatal_errno("cannot create RunLoop thread");
-        }
+        std::thread(RunLoopThread).detach();
 
         // Wait for initialization to finish
         while (!usb_inited_flag) {
