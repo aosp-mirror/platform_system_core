@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <list>
 #include <mutex>
+#include <thread>
 
 #include <android-base/logging.h>
 #include <android-base/parsenetaddress.h>
@@ -509,13 +510,8 @@ static void transport_registration_func(int _fd, unsigned ev, void* data) {
 
         fdevent_set(&(t->transport_fde), FDE_READ);
 
-        if (!adb_thread_create(write_transport_thread, t)) {
-            fatal_errno("cannot create write_transport thread");
-        }
-
-        if (!adb_thread_create(read_transport_thread, t)) {
-            fatal_errno("cannot create read_transport thread");
-        }
+        std::thread(write_transport_thread, t).detach();
+        std::thread(read_transport_thread, t).detach();
     }
 
     {
