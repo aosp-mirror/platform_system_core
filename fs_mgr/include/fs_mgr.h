@@ -124,6 +124,7 @@ int fs_mgr_is_voldmanaged(const struct fstab_rec *fstab);
 int fs_mgr_is_nonremovable(const struct fstab_rec *fstab);
 int fs_mgr_is_verified(const struct fstab_rec *fstab);
 int fs_mgr_is_verifyatboot(const struct fstab_rec *fstab);
+int fs_mgr_is_avb(const struct fstab_rec *fstab);
 int fs_mgr_is_encryptable(const struct fstab_rec *fstab);
 int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab);
 void fs_mgr_get_file_encryption_modes(const struct fstab_rec *fstab,
