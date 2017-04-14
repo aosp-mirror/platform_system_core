@@ -208,8 +208,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
         if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
             // Log traffic received to total
             pthread_mutex_lock(&mLogElementsLock);
-            stats.add(elem);
-            stats.subtract(elem);
+            stats.addTotal(elem);
             pthread_mutex_unlock(&mLogElementsLock);
             delete elem;
             return -EACCES;
@@ -320,8 +319,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
                         pthread_mutex_unlock(&mLogElementsLock);
                         return len;
                     }
-                    stats.add(currentLast);
-                    stats.subtract(currentLast);
+                    stats.addTotal(currentLast);
                     delete currentLast;
                     swab = total;
                     event->payload.data = htole32(swab);
@@ -337,8 +335,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
                 }
             }
             if (count) {
-                stats.add(currentLast);
-                stats.subtract(currentLast);
+                stats.addTotal(currentLast);
                 currentLast->setDropped(count);
             }
             droppedElements[log_id] = currentLast;
