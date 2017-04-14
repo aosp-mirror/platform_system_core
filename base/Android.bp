@@ -20,6 +20,25 @@ libbase_cppflags = [
     "-Werror",
 ]
 
+cc_library_headers {
+    name: "libbase_headers",
+    vendor_available: true,
+    host_supported: true,
+    export_include_dirs: ["include"],
+
+    header_libs: ["libutils_headers"],
+    export_header_lib_headers: ["libutils_headers"],
+
+    target: {
+        linux_bionic: {
+            enabled: true,
+        },
+        windows: {
+            enabled: true,
+        },
+    },
+}
+
 cc_library {
     name: "libbase",
     clang: true,
@@ -33,9 +52,11 @@ cc_library {
         "strings.cpp",
         "test_utils.cpp",
     ],
-    local_include_dirs: ["include"],
+
+    header_libs: ["libbase_headers"],
+    export_header_lib_headers: ["libbase_headers"],
+
     cppflags: libbase_cppflags,
-    export_include_dirs: ["include"],
     shared_libs: ["liblog"],
     target: {
         android: {
