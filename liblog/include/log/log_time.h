@@ -22,6 +22,8 @@
 
 /* struct log_time is a wire-format variant of struct timespec */
 #define NS_PER_SEC 1000000000ULL
+#define US_PER_SEC 1000000ULL
+#define MS_PER_SEC 1000ULL
 
 #ifndef __struct_log_time_defined
 #define __struct_log_time_defined
@@ -147,6 +149,14 @@ struct log_time {
 
   uint64_t nsec() const {
     return static_cast<uint64_t>(tv_sec) * NS_PER_SEC + tv_nsec;
+  }
+  uint64_t usec() const {
+    return static_cast<uint64_t>(tv_sec) * US_PER_SEC +
+           tv_nsec / (NS_PER_SEC / US_PER_SEC);
+  }
+  uint64_t msec() const {
+    return static_cast<uint64_t>(tv_sec) * MS_PER_SEC +
+           tv_nsec / (NS_PER_SEC / MS_PER_SEC);
   }
 
 #ifdef _SYSTEM_CORE_INCLUDE_PRIVATE_ANDROID_LOGGER_H_
