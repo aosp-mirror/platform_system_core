@@ -31,7 +31,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <memory>
+
 #include <android-base/file.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <cutils/android_reboot.h>
@@ -50,6 +53,7 @@
 #include "fs_mgr.h"
 #include "fs_mgr_avb.h"
 #include "fs_mgr_priv.h"
+#include "fs_mgr_priv_dm_ioctl.h"
 
 #define KEY_LOC_PROP   "ro.crypto.keyfile.userdata"
 #define KEY_IN_FOOTER  "footer"
@@ -1257,4 +1261,98 @@ int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc, char *real_blk_dev
     }
 
     return 0;
+}
+
+bool fs_mgr_load_verity_state(int* mode) {
+    /* return the default mode, unless any of the verified partitions are in
+     * logging mode, in which case return that */
+    *mode = VERITY_MODE_DEFAULT;
+
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
+    if (!fstab) {
+        LERROR << "Failed to read default fstab";
+        return false;
+    }
+
+    for (int i = 0; i < fstab->num_entries; i++) {
+        if (fs_mgr_is_avb(&fstab->recs[i])) {
+            *mode = VERITY_MODE_RESTART;  // avb only supports restart mode.
+            break;
+        } else if (!fs_mgr_is_verified(&fstab->recs[i])) {
+            continue;
+        }
+
+        int current;
+        if (load_verity_state(&fstab->recs[i], &current) < 0) {
+            continue;
+        }
+        if (current != VERITY_MODE_DEFAULT) {
+            *mode = current;
+            break;
+        }
+    }
+
+    return true;
+}
+
+bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback) {
+    if (!callback) {
+        return false;
+    }
+
+    int mode;
+    if (!fs_mgr_load_verity_state(&mode)) {
+        return false;
+    }
+
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC)));
+    if (fd == -1) {
+        PERROR << "Error opening device mapper";
+        return false;
+    }
+
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
+    if (!fstab) {
+        LERROR << "Failed to read default fstab";
+        return false;
+    }
+
+    alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
+    struct dm_ioctl* io = (struct dm_ioctl*)buffer;
+    bool system_root = android::base::GetProperty("ro.build.system_root_image", "") == "true";
+
+    for (int i = 0; i < fstab->num_entries; i++) {
+        if (!fs_mgr_is_verified(&fstab->recs[i]) && !fs_mgr_is_avb(&fstab->recs[i])) {
+            continue;
+        }
+
+        std::string mount_point;
+        if (system_root && !strcmp(fstab->recs[i].mount_point, "/")) {
+            mount_point = "system";
+        } else {
+            mount_point = basename(fstab->recs[i].mount_point);
+        }
+
+        fs_mgr_verity_ioctl_init(io, mount_point, 0);
+
+        const char* status;
+        if (ioctl(fd, DM_TABLE_STATUS, io)) {
+            if (fstab->recs[i].fs_mgr_flags & MF_VERIFYATBOOT) {
+                status = "V";
+            } else {
+                PERROR << "Failed to query DM_TABLE_STATUS for " << mount_point.c_str();
+                continue;
+            }
+        }
+
+        status = &buffer[io->data_start + sizeof(struct dm_target_spec)];
+
+        if (*status == 'C' || *status == 'V') {
+            callback(&fstab->recs[i], mount_point.c_str(), mode, *status);
+        }
+    }
+
+    return true;
 }
