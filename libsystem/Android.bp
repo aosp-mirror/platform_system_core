@@ -2,6 +2,10 @@ cc_library_headers {
     name: "libsystem_headers",
     vendor_available: true,
     host_supported: true,
+
+    header_libs: ["libaudio_system_headers"],
+    export_header_lib_headers: ["libaudio_system_headers"],
+
     export_include_dirs: ["include"],
 
     target: {
