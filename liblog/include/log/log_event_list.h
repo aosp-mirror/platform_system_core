@@ -17,6 +17,7 @@
 #ifndef _LIBS_LOG_EVENT_LIST_H
 #define _LIBS_LOG_EVENT_LIST_H
 
+#include <errno.h>
 #include <stdint.h>
 
 #if (defined(__cplusplus) && defined(_USING_LIBCXX))
@@ -148,6 +149,7 @@ class android_log_event_list {
     return ctx;
   }
 
+  /* return errors or transmit status */
   int status() const {
     return ret;
   }
@@ -209,14 +211,16 @@ class android_log_event_list {
   }
 
   int write(log_id_t id = LOG_ID_EVENTS) {
+    /* facilitate -EBUSY retry */
+    if ((ret == -EBUSY) || (ret > 0)) ret = 0;
     int retval = android_log_write_list(ctx, id);
-    if (retval < 0) ret = retval;
+    /* existing errors trump transmission errors */
+    if (!ret) ret = retval;
     return ret;
   }
 
   int operator<<(log_id_t id) {
-    int retval = android_log_write_list(ctx, id);
-    if (retval < 0) ret = retval;
+    write(id);
     android_log_destroy(&ctx);
     return ret;
   }
