@@ -326,6 +326,7 @@ android_log_formatFromString(const char* formatString) {
   else if (!strcmp(formatString, "uid")) format = FORMAT_MODIFIER_UID;
   else if (!strcmp(formatString, "descriptive")) format = FORMAT_MODIFIER_DESCRIPT;
   /* clang-format on */
+
 #ifndef __MINGW32__
   else {
     extern char* tzname[2];
@@ -637,7 +638,8 @@ enum objectType {
   TYPE_MILLISECONDS = '3',
   TYPE_ALLOCATIONS = '4',
   TYPE_ID = '5',
-  TYPE_PERCENT = '6'
+  TYPE_PERCENT = '6',
+  TYPE_MONOTONIC = 's'
 };
 
 static int android_log_printBinaryEvent(const unsigned char** pEventData,
@@ -651,7 +653,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
   size_t outBufLen = *pOutBufLen;
   size_t outBufLenSave = outBufLen;
   unsigned char type;
-  size_t outCount;
+  size_t outCount = 0;
   int result = 0;
   const char* cp;
   size_t len;
@@ -690,6 +692,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
    * 4: Number of allocations
    * 5: Id
    * 6: Percent
+   * s: Number of seconds (monotonic time)
    * Default value for data of type int/long is 2 (bytes).
    */
   if (!cp || !findChar(&cp, &len, '(')) {
@@ -921,6 +924,42 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
             outCount = snprintf(outBuf, outBufLen, "ms");
           }
           break;
+        case TYPE_MONOTONIC: {
+          static const uint64_t minute = 60;
+          static const uint64_t hour = 60 * minute;
+          static const uint64_t day = 24 * hour;
+
+          /* Repaint as unsigned seconds, minutes, hours ... */
+          outBuf -= outCount;
+          outBufLen += outCount;
+          uint64_t val = lval;
+          if (val >= day) {
+            outCount = snprintf(outBuf, outBufLen, "%" PRIu64 "d ", val / day);
+            if (outCount >= outBufLen) break;
+            outBuf += outCount;
+            outBufLen -= outCount;
+            val = (val % day) + day;
+          }
+          if (val >= minute) {
+            if (val >= hour) {
+              outCount = snprintf(outBuf, outBufLen, "%" PRIu64 ":",
+                                  (val / hour) % (day / hour));
+              if (outCount >= outBufLen) break;
+              outBuf += outCount;
+              outBufLen -= outCount;
+            }
+            outCount =
+                snprintf(outBuf, outBufLen,
+                         (val >= hour) ? "%02" PRIu64 ":" : "%" PRIu64 ":",
+                         (val / minute) % (hour / minute));
+            if (outCount >= outBufLen) break;
+            outBuf += outCount;
+            outBufLen -= outCount;
+          }
+          outCount = snprintf(outBuf, outBufLen,
+                              (val >= minute) ? "%02" PRIu64 : "%" PRIu64 "s",
+                              val % minute);
+        } break;
         case TYPE_ALLOCATIONS:
           outCount = 0;
           /* outCount = snprintf(outBuf, outBufLen, " allocations"); */
