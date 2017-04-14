@@ -299,7 +299,9 @@ on late-init
 
 on post-fs
     start logd
+    start servicemanager
     start hwservicemanager
+    start vndservicemanager
 
     # once everything is setup, no need to modify /
     mount rootfs rootfs / ro remount
