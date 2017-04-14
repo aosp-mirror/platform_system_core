@@ -128,18 +128,20 @@ static void log_fs_stat(const char* blk_device, int fs_stat)
     }
 }
 
+static bool should_force_check(int fs_stat) {
+    return fs_stat & (FS_STAT_E2FSCK_F_ALWAYS | FS_STAT_UNCLEAN_SHUTDOWN | FS_STAT_QUOTA_ENABLED |
+                      FS_STAT_TUNE2FS_FAILED | FS_STAT_RO_MOUNT_FAILED | FS_STAT_RO_UNMOUNT_FAILED |
+                      FS_STAT_FULL_MOUNT_FAILED | FS_STAT_E2FSCK_FAILED);
+}
+
 static void check_fs(const char *blk_device, char *fs_type, char *target, int *fs_stat)
 {
     int status;
     int ret;
     long tmpmnt_flags = MS_NOATIME | MS_NOEXEC | MS_NOSUID;
     char tmpmnt_opts[64] = "errors=remount-ro";
-    const char *e2fsck_argv[] = {
-        E2FSCK_BIN,
-        "-f",
-        "-y",
-        blk_device
-    };
+    const char* e2fsck_argv[] = {E2FSCK_BIN, "-y", blk_device};
+    const char* e2fsck_forced_argv[] = {E2FSCK_BIN, "-f", "-y", blk_device};
 
     /* Check for the types of filesystems we know how to check */
     if (!strcmp(fs_type, "ext2") || !strcmp(fs_type, "ext3") || !strcmp(fs_type, "ext4")) {
@@ -159,32 +161,35 @@ static void check_fs(const char *blk_device, char *fs_type, char *target, int *f
          * filesytsem due to an error, e2fsck is still run to do a full check
          * fix the filesystem.
          */
-        errno = 0;
-        if (!strcmp(fs_type, "ext4")) {
-            // This option is only valid with ext4
-            strlcat(tmpmnt_opts, ",nomblk_io_submit", sizeof(tmpmnt_opts));
-        }
-        ret = mount(blk_device, target, fs_type, tmpmnt_flags, tmpmnt_opts);
-        PINFO << __FUNCTION__ << "(): mount(" << blk_device <<  "," << target
-              << "," << fs_type << ")=" << ret;
-        if (!ret) {
-            int i;
-            for (i = 0; i < 5; i++) {
-                // Try to umount 5 times before continuing on.
-                // Should we try rebooting if all attempts fail?
-                int result = umount(target);
-                if (result == 0) {
-                    LINFO << __FUNCTION__ << "(): unmount(" << target
-                          << ") succeeded";
-                    break;
-                }
-                *fs_stat |= FS_STAT_RO_UNMOUNT_FAILED;
-                PERROR << __FUNCTION__ << "(): umount(" << target << ")="
-                       << result;
-                sleep(1);
+        if (!(*fs_stat & FS_STAT_FULL_MOUNT_FAILED)) {  // already tried if full mount failed
+            errno = 0;
+            if (!strcmp(fs_type, "ext4")) {
+                // This option is only valid with ext4
+                strlcat(tmpmnt_opts, ",nomblk_io_submit", sizeof(tmpmnt_opts));
             }
-        } else {
-            *fs_stat |= FS_STAT_RO_MOUNT_FAILED;
+            ret = mount(blk_device, target, fs_type, tmpmnt_flags, tmpmnt_opts);
+            PINFO << __FUNCTION__ << "(): mount(" << blk_device << "," << target << "," << fs_type
+                  << ")=" << ret;
+            if (!ret) {
+                bool umounted = false;
+                int retry_count = 5;
+                while (retry_count-- > 0) {
+                    umounted = umount(target) == 0;
+                    if (umounted) {
+                        LINFO << __FUNCTION__ << "(): unmount(" << target << ") succeeded";
+                        break;
+                    }
+                    PERROR << __FUNCTION__ << "(): umount(" << target << ") failed";
+                    if (retry_count) sleep(1);
+                }
+                if (!umounted) {
+                    // boot may fail but continue and leave it to later stage for now.
+                    PERROR << __FUNCTION__ << "(): umount(" << target << ") timed out";
+                    *fs_stat |= FS_STAT_RO_UNMOUNT_FAILED;
+                }
+            } else {
+                *fs_stat |= FS_STAT_RO_MOUNT_FAILED;
+            }
         }
 
         /*
@@ -196,14 +201,15 @@ static void check_fs(const char *blk_device, char *fs_type, char *target, int *f
                   << " (executable not in system image)";
         } else {
             LINFO << "Running " << E2FSCK_BIN << " on " << blk_device;
-
-            *fs_stat |= FS_STAT_E2FSCK_F_ALWAYS;
-            ret = android_fork_execvp_ext(ARRAY_SIZE(e2fsck_argv),
-                                          const_cast<char **>(e2fsck_argv),
-                                          &status, true, LOG_KLOG | LOG_FILE,
-                                          true,
-                                          const_cast<char *>(FSCK_LOG_FILE),
-                                          NULL, 0);
+            if (should_force_check(*fs_stat)) {
+                ret = android_fork_execvp_ext(
+                    ARRAY_SIZE(e2fsck_forced_argv), const_cast<char**>(e2fsck_forced_argv), &status,
+                    true, LOG_KLOG | LOG_FILE, true, const_cast<char*>(FSCK_LOG_FILE), NULL, 0);
+            } else {
+                ret = android_fork_execvp_ext(
+                    ARRAY_SIZE(e2fsck_argv), const_cast<char**>(e2fsck_argv), &status, true,
+                    LOG_KLOG | LOG_FILE, true, const_cast<char*>(FSCK_LOG_FILE), NULL, 0);
+            }
 
             if (ret < 0) {
                 /* No need to check for error in fork, we can't really handle it now */
@@ -574,21 +580,31 @@ static int mount_with_alternatives(struct fstab *fstab, int start_idx, int *end_
                                  &fstab->recs[i], &fs_stat);
             }
 
-            if (!__mount(fstab->recs[i].blk_device, fstab->recs[i].mount_point, &fstab->recs[i])) {
-                *attempted_idx = i;
-                mounted = 1;
-                if (i != start_idx) {
-                    LERROR << __FUNCTION__ << "(): Mounted "
-                           << fstab->recs[i].blk_device << " on "
-                           << fstab->recs[i].mount_point << " with fs_type="
-                           << fstab->recs[i].fs_type << " instead of "
-                           << fstab->recs[start_idx].fs_type;
-                }
-            } else {
-                fs_stat |= FS_STAT_FULL_MOUNT_FAILED;
-                /* back up the first errno for crypto decisions */
-                if (mount_errno == 0) {
-                    mount_errno = errno;
+            int retry_count = 2;
+            while (retry_count-- > 0) {
+                if (!__mount(fstab->recs[i].blk_device, fstab->recs[i].mount_point,
+                             &fstab->recs[i])) {
+                    *attempted_idx = i;
+                    mounted = 1;
+                    if (i != start_idx) {
+                        LERROR << __FUNCTION__ << "(): Mounted " << fstab->recs[i].blk_device
+                               << " on " << fstab->recs[i].mount_point
+                               << " with fs_type=" << fstab->recs[i].fs_type << " instead of "
+                               << fstab->recs[start_idx].fs_type;
+                    }
+                    fs_stat &= ~FS_STAT_FULL_MOUNT_FAILED;
+                    mount_errno = 0;
+                    break;
+                } else {
+                    if (retry_count <= 0) break;  // run check_fs only once
+                    fs_stat |= FS_STAT_FULL_MOUNT_FAILED;
+                    /* back up the first errno for crypto decisions */
+                    if (mount_errno == 0) {
+                        mount_errno = errno;
+                    }
+                    // retry after fsck
+                    check_fs(fstab->recs[i].blk_device, fstab->recs[i].fs_type,
+                             fstab->recs[i].mount_point, &fs_stat);
                 }
             }
             log_fs_stat(fstab->recs[i].blk_device, fs_stat);
@@ -1074,17 +1090,22 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
         } else {
             m = fstab->recs[i].mount_point;
         }
-        if (__mount(n_blk_device, m, &fstab->recs[i])) {
-            if (!first_mount_errno) first_mount_errno = errno;
-            mount_errors++;
-            fs_stat |= FS_STAT_FULL_MOUNT_FAILED;
-            log_fs_stat(fstab->recs[i].blk_device, fs_stat);
-            continue;
-        } else {
-            ret = 0;
-            log_fs_stat(fstab->recs[i].blk_device, fs_stat);
-            goto out;
+        int retry_count = 2;
+        while (retry_count-- > 0) {
+            if (!__mount(n_blk_device, m, &fstab->recs[i])) {
+                ret = 0;
+                fs_stat &= ~FS_STAT_FULL_MOUNT_FAILED;
+                goto out;
+            } else {
+                if (retry_count <= 0) break;  // run check_fs only once
+                if (!first_mount_errno) first_mount_errno = errno;
+                mount_errors++;
+                fs_stat |= FS_STAT_FULL_MOUNT_FAILED;
+                // try again after fsck
+                check_fs(n_blk_device, fstab->recs[i].fs_type, fstab->recs[i].mount_point, &fs_stat);
+            }
         }
+        log_fs_stat(fstab->recs[i].blk_device, fs_stat);
     }
     if (mount_errors) {
         PERROR << "Cannot mount filesystem on " << n_blk_device
