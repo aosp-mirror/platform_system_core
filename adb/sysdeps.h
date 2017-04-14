@@ -35,6 +35,7 @@
 #include <android-base/utf8.h>
 
 #include "sysdeps/errno.h"
+#include "sysdeps/network.h"
 #include "sysdeps/stat.h"
 
 /*
@@ -248,8 +249,6 @@ extern int unix_open(const char* path, int options, ...);
 int unix_isatty(int fd);
 #define  isatty  ___xxx_isatty
 
-int network_loopback_client(int port, int type, std::string* error);
-int network_loopback_server(int port, int type, std::string* error);
 int network_inaddr_any_server(int port, int type, std::string* error);
 
 inline int network_local_client(const char* name, int namespace_id, int type, std::string* error) {
@@ -585,17 +584,6 @@ inline int _fd_set_error_str(int fd, std::string* error) {
     *error = strerror(errno);
   }
   return fd;
-}
-
-inline int network_loopback_client(int port, int type, std::string* error) {
-  return _fd_set_error_str(socket_network_client("localhost", port, type), error);
-}
-
-inline int network_loopback_server(int port, int type, std::string* error) {
-  int fd = socket_loopback_server(port, type);
-  if (fd < 0 && errno == EAFNOSUPPORT)
-      return _fd_set_error_str(socket_loopback_server6(port, type), error);
-  return _fd_set_error_str(fd, error);
 }
 
 inline int network_inaddr_any_server(int port, int type, std::string* error) {
