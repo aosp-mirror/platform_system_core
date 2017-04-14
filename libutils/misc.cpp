@@ -16,15 +16,11 @@
 
 #define LOG_TAG "misc"
 
-//
-// Miscellaneous utility functions.
-//
 #include <utils/misc.h>
+
+#include <pthread.h>
+
 #include <utils/Log.h>
-
-#if !defined(_WIN32)
-#endif
-
 #include <utils/Vector.h>
 
 using namespace android;
