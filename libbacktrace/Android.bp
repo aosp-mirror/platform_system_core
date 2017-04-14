@@ -63,6 +63,7 @@ cc_library_headers {
 
 cc_library {
     name: "libbacktrace",
+    vendor_available: true,
     defaults: ["libbacktrace_common"],
     host_supported: true,
 
