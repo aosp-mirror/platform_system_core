@@ -103,7 +103,7 @@ static void kick_devices();
 
 /// Entry point for thread that polls (every second) for new usb interfaces.
 /// This routine calls find_devices in infinite loop.
-static void device_poll_thread(void*);
+static void device_poll_thread();
 
 /// Initializes this module
 void usb_init();
@@ -174,7 +174,7 @@ int register_new_device(usb_handle* handle) {
   return 1;
 }
 
-void device_poll_thread(void*) {
+void device_poll_thread() {
   adb_thread_setname("Device Poll");
   D("Created device thread");
 
@@ -203,7 +203,7 @@ static LRESULT CALLBACK _power_window_proc(HWND hwnd, UINT uMsg, WPARAM wParam,
   return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
-static void _power_notification_thread(void*) {
+static void _power_notification_thread() {
   // This uses a thread with its own window message pump to get power
   // notifications. If adb runs from a non-interactive service account, this
   // might not work (not sure). If that happens to not work, we could use
@@ -258,12 +258,8 @@ static void _power_notification_thread(void*) {
 }
 
 void usb_init() {
-  if (!adb_thread_create(device_poll_thread, nullptr)) {
-    fatal_errno("cannot create device poll thread");
-  }
-  if (!adb_thread_create(_power_notification_thread, nullptr)) {
-    fatal_errno("cannot create power notification thread");
-  }
+  std::thread(device_poll_thread).detach();
+  std::thread(_power_notification_thread).detach();
 }
 
 usb_handle* do_usb_open(const wchar_t* interface_name) {
