@@ -574,7 +574,7 @@ static void register_device(const char* dev_name, const char* dev_path,
     register_usb_transport(done_usb, serial.c_str(), dev_path, done_usb->writeable);
 }
 
-static void device_poll_thread(void*) {
+static void device_poll_thread() {
     adb_thread_setname("device poll");
     D("Created device thread");
     while (true) {
@@ -593,8 +593,6 @@ void usb_init() {
     actions.sa_handler = [](int) {};
     sigaction(SIGALRM, &actions, nullptr);
 
-    if (!adb_thread_create(device_poll_thread, nullptr)) {
-        fatal_errno("cannot create device_poll thread");
-    }
+    std::thread(device_poll_thread).detach();
 }
 } // namespace native
