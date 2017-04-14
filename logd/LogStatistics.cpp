@@ -248,17 +248,37 @@ std::string UidEntry::formatHeader(const std::string& name, log_id_t id) const {
                       std::string(isprune ? "NUM" : ""));
 }
 
+// Helper to truncate name, if too long, and add name dressings
+static void formatTmp(const LogStatistics& stat, const char* nameTmp, uid_t uid,
+                      std::string& name, std::string& size, size_t nameLen) {
+    const char* allocNameTmp = nullptr;
+    if (!nameTmp) nameTmp = allocNameTmp = stat.uidToName(uid);
+    if (nameTmp) {
+        size_t lenSpace = std::max(nameLen - name.length(), (size_t)1);
+        size_t len = EntryBaseConstants::total_len -
+                     EntryBaseConstants::pruned_len - size.length() -
+                     name.length() - lenSpace - 2;
+        size_t lenNameTmp = strlen(nameTmp);
+        while ((len < lenNameTmp) && (lenSpace > 1)) {
+            ++len;
+            --lenSpace;
+        }
+        name += android::base::StringPrintf("%*s", (int)lenSpace, "");
+        if (len < lenNameTmp) {
+            name += "...";
+            nameTmp += lenNameTmp - std::max(len - 3, (size_t)1);
+        }
+        name += nameTmp;
+        free(const_cast<char*>(allocNameTmp));
+    }
+}
+
 std::string UidEntry::format(const LogStatistics& stat, log_id_t id) const {
     uid_t uid = getUid();
     std::string name = android::base::StringPrintf("%u", uid);
-    const char* nameTmp = stat.uidToName(uid);
-    if (nameTmp) {
-        name += android::base::StringPrintf(
-            "%*s%s", (int)std::max(6 - name.length(), (size_t)1), "", nameTmp);
-        free(const_cast<char*>(nameTmp));
-    }
-
     std::string size = android::base::StringPrintf("%zu", getSizes());
+
+    formatTmp(stat, nullptr, uid, name, size, 6);
 
     std::string pruned = "";
     if (worstUidEnabledForLogid(id)) {
@@ -366,17 +386,9 @@ std::string PidEntry::format(const LogStatistics& stat,
     uid_t uid = getUid();
     pid_t pid = getPid();
     std::string name = android::base::StringPrintf("%5u/%u", pid, uid);
-    const char* nameTmp = getName();
-    if (nameTmp) {
-        name += android::base::StringPrintf(
-            "%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", nameTmp);
-    } else if ((nameTmp = stat.uidToName(uid))) {
-        name += android::base::StringPrintf(
-            "%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", nameTmp);
-        free(const_cast<char*>(nameTmp));
-    }
-
     std::string size = android::base::StringPrintf("%zu", getSizes());
+
+    formatTmp(stat, getName(), uid, name, size, 12);
 
     std::string pruned = "";
     size_t dropped = getDropped();
@@ -398,20 +410,9 @@ std::string TidEntry::format(const LogStatistics& stat,
                              log_id_t /* id */) const {
     uid_t uid = getUid();
     std::string name = android::base::StringPrintf("%5u/%u", getTid(), uid);
-    const char* nameTmp = getName();
-    if (nameTmp) {
-        name += android::base::StringPrintf(
-            "%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", nameTmp);
-    } else if ((nameTmp = stat.uidToName(uid))) {
-        // if we do not have a PID name, lets punt to try UID name?
-        name += android::base::StringPrintf(
-            "%*s%s", (int)std::max(12 - name.length(), (size_t)1), "", nameTmp);
-        free(const_cast<char*>(nameTmp));
-        // We tried, better to not have a name at all, we still
-        // have TID/UID by number to report in any case.
-    }
-
     std::string size = android::base::StringPrintf("%zu", getSizes());
+
+    formatTmp(stat, getName(), uid, name, size, 12);
 
     std::string pruned = "";
     size_t dropped = getDropped();
