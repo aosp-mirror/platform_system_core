@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef __CORE_FS_MGR_PRIV_AVB_H
-#define __CORE_FS_MGR_PRIV_AVB_H
+#ifndef __CORE_FS_MGR_AVB_H
+#define __CORE_FS_MGR_AVB_H
 
 #include <memory>
 #include <string>
@@ -63,18 +63,22 @@ class FsManagerAvbHandle {
     static FsManagerAvbUniquePtr Open(const std::string& device_file_by_name_prefix);
 
     // Sets up dm-verity on the given fstab entry.
+    // The 'wait_for_verity_dev' parameter makes this function wait for the
+    // verity device to get created before return.
     // Returns true if the mount point is eligible to mount, it includes:
     //   - status_ is kFsMgrAvbHandleHashtreeDisabled or
     //   - status_ is kFsMgrAvbHandleSuccess and sending ioctl DM_TABLE_LOAD
     //     to load verity table is success.
     // Otherwise, returns false.
-    bool SetUpAvb(fstab_rec* fstab_entry);
+    bool SetUpAvb(fstab_rec* fstab_entry, bool wait_for_verity_dev);
 
-    FsManagerAvbHandle(const FsManagerAvbHandle&) = delete; // no copy
-    FsManagerAvbHandle& operator=(const FsManagerAvbHandle&) = delete; // no assignment
+    bool AvbHashtreeDisabled() { return status_ == kFsManagerAvbHandleHashtreeDisabled; }
 
-    FsManagerAvbHandle(FsManagerAvbHandle&&) noexcept = delete;  // no move
-    FsManagerAvbHandle& operator=(FsManagerAvbHandle&&) noexcept = delete; // no move assignment
+    FsManagerAvbHandle(const FsManagerAvbHandle&) = delete;             // no copy
+    FsManagerAvbHandle& operator=(const FsManagerAvbHandle&) = delete;  // no assignment
+
+    FsManagerAvbHandle(FsManagerAvbHandle&&) noexcept = delete;             // no move
+    FsManagerAvbHandle& operator=(FsManagerAvbHandle&&) noexcept = delete;  // no move assignment
 
     ~FsManagerAvbHandle() {
         if (avb_slot_data_) {
@@ -90,4 +94,4 @@ class FsManagerAvbHandle {
     FsManagerAvbHandleStatus status_;
 };
 
-#endif /* __CORE_FS_MGR_PRIV_AVB_H */
+#endif /* __CORE_FS_MGR_AVB_H */
