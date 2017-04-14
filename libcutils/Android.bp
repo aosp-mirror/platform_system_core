@@ -144,7 +144,10 @@ cc_library {
     },
 
     shared_libs: ["liblog"],
-    header_libs: ["libcutils_headers"],
+    header_libs: [
+        "libcutils_headers",
+        "libutils_headers",
+    ],
     export_header_lib_headers: ["libcutils_headers"],
 
     cflags: [

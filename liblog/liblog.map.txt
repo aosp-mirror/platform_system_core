@@ -39,4 +39,5 @@ LIBLOG_M {
 LIBLOG_O {
   global:
     __android_log_is_loggable_len;
+    __android_log_is_debuggable; # vndk
 };
