@@ -958,7 +958,7 @@ static void device_init_dm_device(const std::string& dm_device) {
     const std::string syspath = "/sys/block/" + device_name;
 
     device_init(syspath.c_str(), [&](uevent* uevent) -> coldboot_action_t {
-        if (uevent->device_name && device_name == uevent->device_name) {
+        if (uevent->device_name == device_name) {
             LOG(VERBOSE) << "early_mount: creating dm-verity device : " << dm_device;
             return COLDBOOT_STOP;
         }
@@ -1055,21 +1055,17 @@ static void early_device_init(std::set<std::string>* partition_names) {
         return;
     }
     device_init(nullptr, [=](uevent* uevent) -> coldboot_action_t {
-        if (!strncmp(uevent->subsystem, "firmware", 8)) {
-            return COLDBOOT_CONTINUE;
-        }
-
         // we need platform devices to create symlinks
-        if (!strncmp(uevent->subsystem, "platform", 8)) {
+        if (uevent->subsystem == "platform") {
             return COLDBOOT_CREATE;
         }
 
         // Ignore everything that is not a block device
-        if (strncmp(uevent->subsystem, "block", 5)) {
+        if (uevent->subsystem != "block") {
             return COLDBOOT_CONTINUE;
         }
 
-        if (uevent->partition_name) {
+        if (!uevent->partition_name.empty()) {
             // match partition names to create device nodes for partitions
             // both partition_names and uevent->partition_name have A/B suffix when A/B is used
             auto iter = partition_names->find(uevent->partition_name);
