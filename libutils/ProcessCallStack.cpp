@@ -20,6 +20,8 @@
 #include <utils/ProcessCallStack.h>
 
 #include <dirent.h>
+#include <unistd.h>
+
 #include <memory>
 
 #include <utils/Printer.h>
