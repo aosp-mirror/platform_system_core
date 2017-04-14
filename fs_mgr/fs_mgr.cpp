@@ -47,8 +47,9 @@
 #include <logwrap/logwrap.h>
 #include <private/android_logger.h>  // for __android_log_is_debuggable()
 
+#include "fs_mgr.h"
+#include "fs_mgr_avb.h"
 #include "fs_mgr_priv.h"
-#include "fs_mgr_priv_avb.h"
 
 #define KEY_LOC_PROP   "ro.crypto.keyfile.userdata"
 #define KEY_IN_FOOTER  "footer"
@@ -819,7 +820,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
                     return -1;
                 }
             }
-            if (!avb_handle->SetUpAvb(&fstab->recs[i])) {
+            if (!avb_handle->SetUpAvb(&fstab->recs[i], true /* wait_for_verity_dev */)) {
                 LERROR << "Failed to set up AVB on partition: "
                        << fstab->recs[i].mount_point << ", skipping!";
                 /* Skips mounting the device. */
@@ -1031,7 +1032,7 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
                     return -1;
                 }
             }
-            if (!avb_handle->SetUpAvb(&fstab->recs[i])) {
+            if (!avb_handle->SetUpAvb(&fstab->recs[i], true /* wait_for_verity_dev */)) {
                 LERROR << "Failed to set up AVB on partition: "
                        << fstab->recs[i].mount_point << ", skipping!";
                 /* Skips mounting the device. */
