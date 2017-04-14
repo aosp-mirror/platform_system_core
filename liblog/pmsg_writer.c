@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <time.h>
 
+#include <log/log_properties.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 

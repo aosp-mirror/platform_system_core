@@ -32,10 +32,10 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <libminijail.h>
+#include <log/log_properties.h>
 #include <scoped_minijail.h>
 
 #include <private/android_filesystem_config.h>
-#include <private/android_logger.h>
 #include "debuggerd/handler.h"
 #include "selinux/android.h"
 

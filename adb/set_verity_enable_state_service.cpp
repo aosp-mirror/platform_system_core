@@ -26,7 +26,7 @@
 
 #include "android-base/properties.h"
 #include "android-base/stringprintf.h"
-#include <private/android_logger.h>
+#include <log/log_properties.h>
 
 #include "adb.h"
 #include "adb_io.h"
