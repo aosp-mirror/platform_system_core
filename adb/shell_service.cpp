@@ -90,6 +90,7 @@
 
 #include <memory>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -392,12 +393,7 @@ bool Subprocess::ForkAndExec(std::string* error) {
 
 bool Subprocess::StartThread(std::unique_ptr<Subprocess> subprocess, std::string* error) {
     Subprocess* raw = subprocess.release();
-    if (!adb_thread_create(ThreadHandler, raw)) {
-        *error =
-            android::base::StringPrintf("failed to create subprocess thread: %s", strerror(errno));
-        kill(raw->pid_, SIGKILL);
-        return false;
-    }
+    std::thread(ThreadHandler, raw).detach();
 
     return true;
 }

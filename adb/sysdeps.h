@@ -35,6 +35,7 @@
 #include <android-base/utf8.h>
 
 #include "sysdeps/errno.h"
+#include "sysdeps/network.h"
 #include "sysdeps/stat.h"
 
 /*
@@ -98,77 +99,11 @@ static __inline__ bool adb_is_separator(char c) {
     return c == '\\' || c == '/';
 }
 
-typedef void (*adb_thread_func_t)(void* arg);
-typedef HANDLE adb_thread_t;
-
-struct adb_winthread_args {
-    adb_thread_func_t func;
-    void* arg;
-};
-
-static unsigned __stdcall adb_winthread_wrapper(void* heap_args) {
-    // Move the arguments from the heap onto the thread's stack.
-    adb_winthread_args thread_args = *static_cast<adb_winthread_args*>(heap_args);
-    delete static_cast<adb_winthread_args*>(heap_args);
-    thread_args.func(thread_args.arg);
-    return 0;
-}
-
-static __inline__ bool adb_thread_create(adb_thread_func_t func, void* arg,
-                                         adb_thread_t* thread = nullptr) {
-    adb_winthread_args* args = new adb_winthread_args{.func = func, .arg = arg};
-    uintptr_t handle = _beginthreadex(nullptr, 0, adb_winthread_wrapper, args, 0, nullptr);
-    if (handle != static_cast<uintptr_t>(0)) {
-        if (thread) {
-            *thread = reinterpret_cast<HANDLE>(handle);
-        } else {
-            CloseHandle(thread);
-        }
-        return true;
-    }
-    return false;
-}
-
-static __inline__ bool adb_thread_join(adb_thread_t thread) {
-    switch (WaitForSingleObject(thread, INFINITE)) {
-        case WAIT_OBJECT_0:
-            CloseHandle(thread);
-            return true;
-
-        case WAIT_FAILED:
-            fprintf(stderr, "adb_thread_join failed: %s\n",
-                    android::base::SystemErrorCodeToString(GetLastError()).c_str());
-            break;
-
-        default:
-            abort();
-    }
-
-    return false;
-}
-
-static __inline__ bool adb_thread_detach(adb_thread_t thread) {
-    CloseHandle(thread);
-    return true;
-}
-
-static __inline__ void __attribute__((noreturn)) adb_thread_exit() {
-    _endthreadex(0);
-}
-
 static __inline__ int adb_thread_setname(const std::string& name) {
     // TODO: See https://msdn.microsoft.com/en-us/library/xcb2z8hs.aspx for how to set
     // the thread name in Windows. Unfortunately, it only works during debugging, but
     // our build process doesn't generate PDB files needed for debugging.
     return 0;
-}
-
-static __inline__ adb_thread_t adb_thread_self() {
-    return GetCurrentThread();
-}
-
-static __inline__ bool adb_thread_equal(adb_thread_t lhs, adb_thread_t rhs) {
-    return GetThreadId(lhs) == GetThreadId(rhs);
 }
 
 static __inline__  unsigned long adb_thread_id()
@@ -248,8 +183,6 @@ extern int unix_open(const char* path, int options, ...);
 int unix_isatty(int fd);
 #define  isatty  ___xxx_isatty
 
-int network_loopback_client(int port, int type, std::string* error);
-int network_loopback_server(int port, int type, std::string* error);
 int network_inaddr_any_server(int port, int type, std::string* error);
 
 inline int network_local_client(const char* name, int namespace_id, int type, std::string* error) {
@@ -587,17 +520,6 @@ inline int _fd_set_error_str(int fd, std::string* error) {
   return fd;
 }
 
-inline int network_loopback_client(int port, int type, std::string* error) {
-  return _fd_set_error_str(socket_network_client("localhost", port, type), error);
-}
-
-inline int network_loopback_server(int port, int type, std::string* error) {
-  int fd = socket_loopback_server(port, type);
-  if (fd < 0 && errno == EAFNOSUPPORT)
-      return _fd_set_error_str(socket_loopback_server6(port, type), error);
-  return _fd_set_error_str(fd, error);
-}
-
 inline int network_inaddr_any_server(int port, int type, std::string* error) {
   return _fd_set_error_str(socket_inaddr_any_server(port, type), error);
 }
@@ -655,55 +577,6 @@ inline int adb_socket_get_local_port(int fd) {
 #define  unix_read   adb_read
 #define  unix_write  adb_write
 #define  unix_close  adb_close
-
-// Win32 is limited to DWORDs for thread return values; limit the POSIX systems to this as well to
-// ensure compatibility.
-typedef void (*adb_thread_func_t)(void* arg);
-typedef pthread_t adb_thread_t;
-
-struct adb_pthread_args {
-    adb_thread_func_t func;
-    void* arg;
-};
-
-static void* adb_pthread_wrapper(void* heap_args) {
-    // Move the arguments from the heap onto the thread's stack.
-    adb_pthread_args thread_args = *reinterpret_cast<adb_pthread_args*>(heap_args);
-    delete static_cast<adb_pthread_args*>(heap_args);
-    thread_args.func(thread_args.arg);
-    return nullptr;
-}
-
-static __inline__ bool adb_thread_create(adb_thread_func_t start, void* arg,
-                                         adb_thread_t* thread = nullptr) {
-    pthread_t temp;
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, thread ? PTHREAD_CREATE_JOINABLE : PTHREAD_CREATE_DETACHED);
-    auto* pthread_args = new adb_pthread_args{.func = start, .arg = arg};
-    errno = pthread_create(&temp, &attr, adb_pthread_wrapper, pthread_args);
-    if (errno == 0) {
-        if (thread) {
-            *thread = temp;
-        }
-        return true;
-    }
-    return false;
-}
-
-static __inline__ bool adb_thread_join(adb_thread_t thread) {
-    errno = pthread_join(thread, nullptr);
-    return errno == 0;
-}
-
-static __inline__ bool adb_thread_detach(adb_thread_t thread) {
-    errno = pthread_detach(thread);
-    return errno == 0;
-}
-
-static __inline__ void __attribute__((noreturn)) adb_thread_exit() {
-    pthread_exit(nullptr);
-}
 
 static __inline__ int adb_thread_setname(const std::string& name) {
 #ifdef __APPLE__

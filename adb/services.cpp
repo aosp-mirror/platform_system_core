@@ -31,6 +31,8 @@
 #include <unistd.h>
 #endif
 
+#include <thread>
+
 #include <android-base/file.h>
 #include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
@@ -259,13 +261,7 @@ static int create_service_thread(void (*func)(int, void *), void *cookie)
     sti->cookie = cookie;
     sti->fd = s[1];
 
-    if (!adb_thread_create(service_bootstrap_func, sti)) {
-        free(sti);
-        adb_close(s[0]);
-        adb_close(s[1]);
-        printf("cannot create service thread\n");
-        return -1;
-    }
+    std::thread(service_bootstrap_func, sti).detach();
 
     D("service thread started, %d:%d",s[0], s[1]);
     return s[0];

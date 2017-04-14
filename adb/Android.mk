@@ -81,12 +81,14 @@ LIBADB_windows_CFLAGS := \
 
 LIBADB_darwin_SRC_FILES := \
     sysdeps_unix.cpp \
+    sysdeps/posix/network.cpp \
     client/usb_dispatch.cpp \
     client/usb_libusb.cpp \
     client/usb_osx.cpp \
 
 LIBADB_linux_SRC_FILES := \
     sysdeps_unix.cpp \
+    sysdeps/posix/network.cpp \
     client/usb_dispatch.cpp \
     client/usb_libusb.cpp \
     client/usb_linux.cpp \
@@ -123,6 +125,7 @@ LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
     adbd_auth.cpp \
     jdwp_service.cpp \
+    sysdeps/posix/network.cpp \
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
 
@@ -217,9 +220,9 @@ LOCAL_SRC_FILES_linux := $(LIBADB_TEST_linux_SRCS)
 LOCAL_SRC_FILES_darwin := $(LIBADB_TEST_darwin_SRCS)
 LOCAL_SRC_FILES_windows := $(LIBADB_TEST_windows_SRCS)
 LOCAL_SANITIZE := $(adb_host_sanitize)
-LOCAL_SHARED_LIBRARIES := libbase
 LOCAL_STATIC_LIBRARIES := \
     libadb \
+    libbase \
     libcrypto_utils \
     libcrypto \
     libcutils \

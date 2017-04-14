@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <thread>
+
 #include "socket.h"
 #include "sysdeps.h"
 
@@ -59,10 +61,10 @@ class FdeventTest : public ::testing::Test {
 #endif
     }
 
-    void TerminateThread(adb_thread_t thread) {
+    void TerminateThread(std::thread& thread) {
         fdevent_terminate_loop();
         ASSERT_TRUE(WriteFdExactly(dummy, "", 1));
-        ASSERT_TRUE(adb_thread_join(thread));
+        thread.join();
         ASSERT_EQ(0, adb_close(dummy));
     }
 };

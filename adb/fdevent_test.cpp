@@ -21,6 +21,7 @@
 #include <limits>
 #include <queue>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "adb_io.h"
@@ -77,9 +78,9 @@ struct ThreadArg {
 };
 
 TEST_F(FdeventTest, fdevent_terminate) {
-    adb_thread_t thread;
     PrepareThread();
-    ASSERT_TRUE(adb_thread_create([](void*) { fdevent_loop(); }, nullptr, &thread));
+
+    std::thread thread(fdevent_loop);
     TerminateThread(thread);
 }
 
@@ -112,7 +113,6 @@ TEST_F(FdeventTest, smoke) {
     int fd_pair2[2];
     ASSERT_EQ(0, adb_socketpair(fd_pair1));
     ASSERT_EQ(0, adb_socketpair(fd_pair2));
-    adb_thread_t thread;
     ThreadArg thread_arg;
     thread_arg.first_read_fd = fd_pair1[0];
     thread_arg.last_write_fd = fd_pair2[1];
@@ -121,8 +121,7 @@ TEST_F(FdeventTest, smoke) {
     int reader = fd_pair2[0];
 
     PrepareThread();
-    ASSERT_TRUE(adb_thread_create(reinterpret_cast<void (*)(void*)>(FdEventThreadFunc), &thread_arg,
-                                  &thread));
+    std::thread thread(FdEventThreadFunc, &thread_arg);
 
     for (size_t i = 0; i < MESSAGE_LOOP_COUNT; ++i) {
         std::string read_buffer = MESSAGE;
@@ -152,7 +151,7 @@ static void InvalidFdEventCallback(int fd, unsigned events, void* userdata) {
     }
 }
 
-static void InvalidFdThreadFunc(void*) {
+static void InvalidFdThreadFunc() {
     const int INVALID_READ_FD = std::numeric_limits<int>::max() - 1;
     size_t happened_event_count = 0;
     InvalidFdArg read_arg;
@@ -171,7 +170,6 @@ static void InvalidFdThreadFunc(void*) {
 }
 
 TEST_F(FdeventTest, invalid_fd) {
-    adb_thread_t thread;
-    ASSERT_TRUE(adb_thread_create(InvalidFdThreadFunc, nullptr, &thread));
-    ASSERT_TRUE(adb_thread_join(thread));
+    std::thread thread(InvalidFdThreadFunc);
+    thread.join();
 }
