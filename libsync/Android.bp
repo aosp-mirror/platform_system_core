@@ -22,6 +22,7 @@ cc_defaults {
 
 cc_library_shared {
     name: "libsync",
+    vendor_available: true,
     defaults: ["libsync_defaults"],
 }
 
