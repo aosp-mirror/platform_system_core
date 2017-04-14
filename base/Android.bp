@@ -41,6 +41,7 @@ cc_library_headers {
 
 cc_library {
     name: "libbase",
+    vendor_available: true,
     clang: true,
     host_supported: true,
     srcs: [
@@ -58,6 +59,7 @@ cc_library {
 
     cppflags: libbase_cppflags,
     shared_libs: ["liblog"],
+    header_libs: ["libutils_headers"],
     target: {
         android: {
             srcs: [
