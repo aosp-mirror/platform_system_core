@@ -3,45 +3,94 @@
 # Bionic loader config file.
 #
 
-#dir.vendor=/vendor/bin/
-#dir.system=/system/bin/
-
-[vendor]
-
-# When this flag is set to true linker will
-# set target_sdk_version for this binary to
-# the version specified in <dirname>/.version
-# file, where <dirname> = dirname(executable_path)
-#
-# default value is false
-enable.target.sdk.version = true
-
-# There is always the default namespace no
-# need to mention it in this list
-additional.namespaces=system
-
-# Is the namespace isolated
-namespace.default.isolated = true
-namespace.default.search.paths = /vendor/${LIB}
-
-# TODO: property for asan search path?
-namespace.default.permitted.paths = /vendor/${LIB}
-namespace.default.asan.permitted.paths = /data/vendor/${LIB}
-namespace.default.links = system
-
-# Todo complete this list
-namespace.default.link.system.shared_libs = libc.so:libm.so:libdl.so:libstdc++.so
-
-namespace.system.isolated = true
-namespace.system.search.paths = /system/${LIB}:/system/${LIB}/framework
-namespace.system.permitted.paths = /system/${LIB}
+# Don't change the order here.
+dir.system = /system/bin/
+dir.system = /system/xbin/
+dir.vendor = /vendor/bin/
+dir.legacy = /
 
 [system]
-namespace.default.isolated = true
-namespace.default.search.paths = /system/${LIB}
-namespace.default.permitted.paths = /system/${LIB}
+additional.namespaces = sphal,vndk,rs
 
-# app_process will setup additional vendor namespace manually.
-# Note that zygote will need vendor namespace to setup list of public
-# libraries provided by vendors to apps.
+###############################################################################
+# "default" namespace
+#
+# Framework-side code runs in this namespace. Anything from /vendor partition
+# can't be loaded in this namespace.
+###############################################################################
+namespace.default.isolated = false
+namespace.default.search.paths = /system/${LIB}:/vendor/${LIB}
+namespace.default.permitted.paths = /system/${LIB}:/vendor/${LIB}
 
+# TODO(b/37013858): remove all dependencies to /vendor/lib from system processes
+# When this is done, comment out following three lines and remove the three
+# lines above
+#namespace.default.isolated = true
+#namespace.default.search.paths = /system/${LIB}
+#namespace.default.permitted.paths = /system/${LIB}
+
+###############################################################################
+# "sphal" namespace
+#
+# SP-HAL(Sameprocess-HAL)s are the only vendor libraries that are allowed to be
+# loaded inside system processes. libEGL_<chipset>.so, libGLESv2_<chipset>.so,
+# android.hardware.graphics.mapper@2.0-impl.so, etc are SP-HALs.
+#
+# This namespace is exclusivly for SP-HALs. When the framework tries to dynami-
+# cally load SP-HALs, android_dlopen_ext() is used to explicitly specifying
+# that they should be searched and loaded from this namespace.
+#
+# Note that there is no link from the default namespace to this namespace.
+###############################################################################
+namespace.sphal.isolated = true
+namespace.sphal.visible = true
+namespace.sphal.search.paths = /vendor/${LIB}/egl:/vendor/${LIB}/hw:/vendor/${LIB}
+namespace.sphal.permitted.paths = /vendor/${LIB}
+
+# Once in this namespace, access to libraries in /system/lib is restricted. Only
+# libs listed here can be used.
+namespace.sphal.links = default,vndk
+
+# WARNING: only NDK libs can be listed here.
+# However, this is commented out because some SP-HALs (gralloc.msm8996.so, etc)
+# are currently using some non-stable libs such as libui.so. We will get back
+# to this list once the dependencies are fixed.
+#namespace.sphal.link.default.shared_libs = libc.so:libz.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libsync.so
+namespace.sphal.link.default.shared_libs = libc.so:libz.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libEGL.so:libsync.so:libui.so:libbacktrace.so:libGLESv1_CM.so:libGLESv2.so
+
+# WARNING: only VNDK-SP libs can be listed here. DO NOT EDIT this line.
+namespace.sphal.link.vndk.shared_libs = android.hardware.graphics.allocator@2.0.so:android.hardware.graphics.mapper@2.0.so:android.hardware.graphics.common@1.0.so:android.hidl.base@1.0.so:libhwbinder.so:libbase.so:libcutils.so:libhardware.so:libhidlbase.so:libhidltransport.so:libutils.so:libc++.so
+
+###############################################################################
+# "vndk" namespace
+#
+# This namespace is exclusively for vndk-sp libs.
+###############################################################################
+namespace.vndk.isolated = true
+namespace.vndk.search.paths = /vendor/${LIB}/vndk-sp:/vendor/${LIB}
+namespace.vndk.permitted.paths = /vendor/${LIB}/hw:/vendor/${LIB}/egl
+
+# When these NDK libs are required inside this namespace, then it is redirected
+# to the default namespace. This is possible since their ABI is stable across
+# Android releases.
+namespace.vndk.links = default
+
+# WARNING: only NDK libs can be listed here.
+# However, this is commented out because some SP-HALs (gralloc.msm8996.so, etc)
+# are currently using some non-stable libs such as libui.so. We will get back
+# to this list once the dependencies are fixed.
+#namespace.vndk.link.default.shared_libs = libc.so:libz.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libsync.so
+namespace.vndk.link.default.shared_libs = libc.so:libz.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libEGL.so:libsync.so:libui.so:libbacktrace.so
+
+
+[vendor]
+namespace.default.isolated = false
+namespace.default.search.paths = /vendor/${LIB}:/vendor/${LIB}/vndk-sp:/system/${LIB}
+
+# If a binary does not belong to any of the sections above, it falls back to
+# this section, which is identical to the namespace configuration setup
+# in pre-O.
+[legacy]
+namespace.default.isolated = false
+namespace.default.search.path = /system/${LIB}:/vendor/${LIB}
+namespace.default.asan.search.path = /data/asan/system/${LIB}:/system/${LIB}:/data/asan/vendor/${LIB}:/vendor/${LIB}

@@ -188,4 +188,18 @@ $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in $(bcp_dep)
 
 bcp_md5 :=
 bcp_dep :=
+
 #######################################
+# ld.config.txt
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := ld.config.txt
+ifeq ($(PRODUCT_FULL_TREBLE),true)
+LOCAL_SRC_FILES := etc/ld.config.txt
+else
+LOCAL_SRC_FILES := etc/ld.config.legacy.txt
+endif
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+LOCAL_MODULE_STEM := $(LOCAL_MODULE)
+include $(BUILD_PREBUILT)
