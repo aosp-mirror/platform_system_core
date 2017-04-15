@@ -41,8 +41,6 @@
 #define PWARNING PLOG(WARNING) << FS_MGR_TAG
 #define PERROR   PLOG(ERROR) << FS_MGR_TAG
 
-__BEGIN_DECLS
-
 #define CRYPTO_TMPFS_OPTIONS "size=256m,mode=0771,uid=1000,gid=1000"
 
 #define WAIT_TIMEOUT 20
@@ -114,10 +112,9 @@ __BEGIN_DECLS
 
 int fs_mgr_set_blk_ro(const char *blockdev);
 int fs_mgr_test_access(const char *device);
-int fs_mgr_update_for_slotselect(struct fstab *fstab);
+bool fs_mgr_update_for_slotselect(struct fstab *fstab);
 bool is_dt_compatible();
 bool is_device_secure();
-
-__END_DECLS
+int load_verity_state(struct fstab_rec* fstab, int* mode);
 
 #endif /* __CORE_FS_MGR_PRIV_H */

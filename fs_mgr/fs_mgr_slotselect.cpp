@@ -16,37 +16,47 @@
 
 #include <stdio.h>
 
+#include <string>
+
 #include "fs_mgr.h"
 #include "fs_mgr_priv.h"
 
-// Updates |fstab| for slot_suffix. Returns 0 on success, -1 on error.
-int fs_mgr_update_for_slotselect(struct fstab *fstab)
-{
+// Returns "_a" or "_b" based on two possible values in kernel cmdline:
+//   - androidboot.slot = a or b OR
+//   - androidboot.slot_suffix = _a or _b
+// TODO: remove slot_suffix once it's deprecated.
+std::string fs_mgr_get_slot_suffix() {
+    std::string slot;
+    std::string ab_suffix;
+
+    if (fs_mgr_get_boot_config("slot", &slot)) {
+        ab_suffix = "_" + slot;
+    } else if (!fs_mgr_get_boot_config("slot_suffix", &ab_suffix)) {
+        ab_suffix = "";
+    }
+    return ab_suffix;
+}
+
+// Updates |fstab| for slot_suffix. Returns true on success, false on error.
+bool fs_mgr_update_for_slotselect(struct fstab *fstab) {
     int n;
-    int got_suffix = 0;
-    std::string suffix;
+    std::string ab_suffix;
 
     for (n = 0; n < fstab->num_entries; n++) {
         if (fstab->recs[n].fs_mgr_flags & MF_SLOTSELECT) {
             char *tmp;
-
-            if (!got_suffix) {
-                std::string slot;
-                if (fs_mgr_get_boot_config("slot", &slot)) {
-                    suffix = "_" + slot;
-                } else if (!fs_mgr_get_boot_config("slot_suffix", &suffix)) {
-                    // remove slot_suffix once bootloaders update to new androidboot.slot param
-                    return -1;
-                }
+            if (ab_suffix.empty()) {
+                ab_suffix = fs_mgr_get_slot_suffix();
+                // Returns false as non A/B devices should not have MF_SLOTSELECT.
+                if (ab_suffix.empty()) return false;
             }
-
-            if (asprintf(&tmp, "%s%s", fstab->recs[n].blk_device, suffix.c_str()) > 0) {
+            if (asprintf(&tmp, "%s%s", fstab->recs[n].blk_device, ab_suffix.c_str()) > 0) {
                 free(fstab->recs[n].blk_device);
                 fstab->recs[n].blk_device = tmp;
             } else {
-                return -1;
+                return false;
             }
         }
     }
-    return 0;
+    return true;
 }

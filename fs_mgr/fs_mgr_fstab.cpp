@@ -572,7 +572,7 @@ static struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
         cnt++;
     }
     /* If an A/B partition, modify block device to be the real block device */
-    if (fs_mgr_update_for_slotselect(fstab) != 0) {
+    if (!fs_mgr_update_for_slotselect(fstab)) {
         LERROR << "Error updating for slotselect";
         goto err;
     }
@@ -812,6 +812,11 @@ int fs_mgr_is_nonremovable(const struct fstab_rec *fstab)
 int fs_mgr_is_verified(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_VERIFY;
+}
+
+int fs_mgr_is_avb(const struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_AVB;
 }
 
 int fs_mgr_is_verifyatboot(const struct fstab_rec *fstab)

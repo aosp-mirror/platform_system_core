@@ -29,31 +29,34 @@
 
 #include "fs_mgr.h"
 
-__BEGIN_DECLS
+// This class provides C++ bindings to interact with libavb, a small
+// self-contained piece of code that's intended to be used in bootloaders.
+// It mainly contains two functions:
+//   - ReadFromPartition(): to read AVB metadata from a given partition.
+//     It provides the implementation of AvbOps.read_from_partition() when
+//     reading metadata through libavb.
+//   - AvbSlotVerify(): the C++ binding of libavb->avb_slot_verify() to
+//     read and verify the metadata and store it into the out_data parameter.
+//     The caller MUST check the integrity of metadata against the
+//     androidboot.vbmeta.{hash_alg, size, digest} values from /proc/cmdline.
+//     e.g., see class FsManagerAvbVerifier for more details.
+//
+class FsManagerAvbOps {
+  public:
+    FsManagerAvbOps(const std::string& device_file_by_name_prefix);
 
-/* Allocates a "dummy" AvbOps instance solely for use in user-space.
- * Returns nullptr on OOM.
- *
- * It mainly provides read_from_partitions() for user-space to get
- * AvbSlotVerifyData.vbmeta_images[] and the caller MUST check their
- * integrity against the androidboot.vbmeta.{hash_alg, size, digest}
- * values from /proc/cmdline, e.g. verify_vbmeta_images()
- * in fs_mgr_avb.cpp.
- *
- * Other I/O operations are only required in boot loader so we set
- * them as dummy operations here.
- *  - Will allow any public key for signing.
- *  - returns 0 for any rollback index location.
- *  - returns device is unlocked regardless of the actual state.
- *  - returns a dummy guid for any partition.
- *
- * Frees with fs_mgr_dummy_avb_ops_free().
- */
-AvbOps* fs_mgr_dummy_avb_ops_new(struct fstab* fstab);
+    static FsManagerAvbOps* GetInstanceFromAvbOps(AvbOps* ops) {
+        return reinterpret_cast<FsManagerAvbOps*>(ops->user_data);
+    }
 
-/* Frees an AvbOps instance previously allocated with fs_mgr_avb_ops_new(). */
-void fs_mgr_dummy_avb_ops_free(AvbOps* ops);
+    AvbIOResult ReadFromPartition(const char* partition, int64_t offset, size_t num_bytes,
+                                  void* buffer, size_t* out_num_read);
 
-__END_DECLS
+    AvbSlotVerifyResult AvbSlotVerify(const std::string& ab_suffix, bool allow_verification_error,
+                                      AvbSlotVerifyData** out_data);
 
+  private:
+    AvbOps avb_ops_;
+    std::string device_file_by_name_prefix_;
+};
 #endif /* __CORE_FS_MGR_AVB_OPS_H */

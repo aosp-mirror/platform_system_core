@@ -31,7 +31,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <memory>
+
 #include <android-base/file.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <cutils/android_reboot.h>
@@ -47,8 +50,10 @@
 #include <logwrap/logwrap.h>
 #include <private/android_logger.h>  // for __android_log_is_debuggable()
 
+#include "fs_mgr.h"
+#include "fs_mgr_avb.h"
 #include "fs_mgr_priv.h"
-#include "fs_mgr_priv_avb.h"
+#include "fs_mgr_priv_dm_ioctl.h"
 
 #define KEY_LOC_PROP   "ro.crypto.keyfile.userdata"
 #define KEY_IN_FOOTER  "footer"
@@ -707,6 +712,23 @@ static int handle_encryptable(const struct fstab_rec* rec)
     }
 }
 
+static std::string extract_by_name_prefix(struct fstab* fstab) {
+    // We assume that there's an entry for the /misc mount point in the
+    // fstab file and use that to get the device file by-name prefix.
+    // The device needs not to have an actual /misc partition.
+    // e.g.,
+    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/misc ->
+    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/
+    struct fstab_rec* fstab_entry = fs_mgr_get_entry_for_mount_point(fstab, "/misc");
+    if (fstab_entry == nullptr) {
+        LERROR << "/misc mount point not found in fstab";
+        return "";
+    }
+    std::string full_path(fstab_entry->blk_device);
+    size_t end_slash = full_path.find_last_of("/");
+    return full_path.substr(0, end_slash + 1);
+}
+
 // TODO: add ueventd notifiers if they don't exist.
 // This is just doing a wait_for_device for maximum of 1s
 int fs_mgr_test_access(const char *device) {
@@ -750,14 +772,9 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
     int mret = -1;
     int mount_errno = 0;
     int attempted_idx = -1;
-    int avb_ret = FS_MGR_SETUP_AVB_FAIL;
+    FsManagerAvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
-        return -1;
-    }
-
-    if (fs_mgr_is_avb_used() &&
-        (avb_ret = fs_mgr_load_vbmeta_images(fstab)) == FS_MGR_SETUP_AVB_FAIL) {
         return -1;
     }
 
@@ -799,16 +816,15 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
             wait_for_file(fstab->recs[i].blk_device, WAIT_TIMEOUT);
         }
 
-        if (fs_mgr_is_avb_used() && (fstab->recs[i].fs_mgr_flags & MF_AVB)) {
-            /* If HASHTREE_DISABLED is set (cf. 'adb disable-verity'), we
-             * should set up the device without using dm-verity.
-             * The actual mounting still take place in the following
-             * mount_with_alternatives().
-             */
-            if (avb_ret == FS_MGR_SETUP_AVB_HASHTREE_DISABLED) {
-                LINFO << "AVB HASHTREE disabled";
-            } else if (fs_mgr_setup_avb(&fstab->recs[i]) !=
-                       FS_MGR_SETUP_AVB_SUCCESS) {
+        if (fstab->recs[i].fs_mgr_flags & MF_AVB) {
+            if (!avb_handle) {
+                avb_handle = FsManagerAvbHandle::Open(extract_by_name_prefix(fstab));
+                if (!avb_handle) {
+                    LERROR << "Failed to open FsManagerAvbHandle";
+                    return -1;
+                }
+            }
+            if (!avb_handle->SetUpAvb(&fstab->recs[i], true /* wait_for_verity_dev */)) {
                 LERROR << "Failed to set up AVB on partition: "
                        << fstab->recs[i].mount_point << ", skipping!";
                 /* Skips mounting the device. */
@@ -934,10 +950,6 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
         }
     }
 
-    if (fs_mgr_is_avb_used()) {
-        fs_mgr_unload_vbmeta_images();
-    }
-
     if (error_count) {
         return -1;
     } else {
@@ -976,14 +988,9 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
     int mount_errors = 0;
     int first_mount_errno = 0;
     char *m;
-    int avb_ret = FS_MGR_SETUP_AVB_FAIL;
+    FsManagerAvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
-        return ret;
-    }
-
-    if (fs_mgr_is_avb_used() &&
-        (avb_ret = fs_mgr_load_vbmeta_images(fstab)) == FS_MGR_SETUP_AVB_FAIL) {
         return ret;
     }
 
@@ -1021,16 +1028,15 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
             do_reserved_size(n_blk_device, fstab->recs[i].fs_type, &fstab->recs[i], &fs_stat);
         }
 
-        if (fs_mgr_is_avb_used() && (fstab->recs[i].fs_mgr_flags & MF_AVB)) {
-            /* If HASHTREE_DISABLED is set (cf. 'adb disable-verity'), we
-             * should set up the device without using dm-verity.
-             * The actual mounting still take place in the following
-             * mount_with_alternatives().
-             */
-            if (avb_ret == FS_MGR_SETUP_AVB_HASHTREE_DISABLED) {
-                LINFO << "AVB HASHTREE disabled";
-            } else if (fs_mgr_setup_avb(&fstab->recs[i]) !=
-                       FS_MGR_SETUP_AVB_SUCCESS) {
+        if (fstab->recs[i].fs_mgr_flags & MF_AVB) {
+            if (!avb_handle) {
+                avb_handle = FsManagerAvbHandle::Open(extract_by_name_prefix(fstab));
+                if (!avb_handle) {
+                    LERROR << "Failed to open FsManagerAvbHandle";
+                    return -1;
+                }
+            }
+            if (!avb_handle->SetUpAvb(&fstab->recs[i], true /* wait_for_verity_dev */)) {
                 LERROR << "Failed to set up AVB on partition: "
                        << fstab->recs[i].mount_point << ", skipping!";
                 /* Skips mounting the device. */
@@ -1079,9 +1085,6 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
     }
 
 out:
-    if (fs_mgr_is_avb_used()) {
-        fs_mgr_unload_vbmeta_images();
-    }
     return ret;
 }
 
@@ -1258,4 +1261,98 @@ int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc, char *real_blk_dev
     }
 
     return 0;
+}
+
+bool fs_mgr_load_verity_state(int* mode) {
+    /* return the default mode, unless any of the verified partitions are in
+     * logging mode, in which case return that */
+    *mode = VERITY_MODE_DEFAULT;
+
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
+    if (!fstab) {
+        LERROR << "Failed to read default fstab";
+        return false;
+    }
+
+    for (int i = 0; i < fstab->num_entries; i++) {
+        if (fs_mgr_is_avb(&fstab->recs[i])) {
+            *mode = VERITY_MODE_RESTART;  // avb only supports restart mode.
+            break;
+        } else if (!fs_mgr_is_verified(&fstab->recs[i])) {
+            continue;
+        }
+
+        int current;
+        if (load_verity_state(&fstab->recs[i], &current) < 0) {
+            continue;
+        }
+        if (current != VERITY_MODE_DEFAULT) {
+            *mode = current;
+            break;
+        }
+    }
+
+    return true;
+}
+
+bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback) {
+    if (!callback) {
+        return false;
+    }
+
+    int mode;
+    if (!fs_mgr_load_verity_state(&mode)) {
+        return false;
+    }
+
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC)));
+    if (fd == -1) {
+        PERROR << "Error opening device mapper";
+        return false;
+    }
+
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
+    if (!fstab) {
+        LERROR << "Failed to read default fstab";
+        return false;
+    }
+
+    alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
+    struct dm_ioctl* io = (struct dm_ioctl*)buffer;
+    bool system_root = android::base::GetProperty("ro.build.system_root_image", "") == "true";
+
+    for (int i = 0; i < fstab->num_entries; i++) {
+        if (!fs_mgr_is_verified(&fstab->recs[i]) && !fs_mgr_is_avb(&fstab->recs[i])) {
+            continue;
+        }
+
+        std::string mount_point;
+        if (system_root && !strcmp(fstab->recs[i].mount_point, "/")) {
+            mount_point = "system";
+        } else {
+            mount_point = basename(fstab->recs[i].mount_point);
+        }
+
+        fs_mgr_verity_ioctl_init(io, mount_point, 0);
+
+        const char* status;
+        if (ioctl(fd, DM_TABLE_STATUS, io)) {
+            if (fstab->recs[i].fs_mgr_flags & MF_VERIFYATBOOT) {
+                status = "V";
+            } else {
+                PERROR << "Failed to query DM_TABLE_STATUS for " << mount_point.c_str();
+                continue;
+            }
+        }
+
+        status = &buffer[io->data_start + sizeof(struct dm_target_spec)];
+
+        if (*status == 'C' || *status == 'V') {
+            callback(&fstab->recs[i], mount_point.c_str(), mode, *status);
+        }
+    }
+
+    return true;
 }
