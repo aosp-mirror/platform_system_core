@@ -204,15 +204,17 @@ bool Action::CheckPropertyTriggers(const std::string& name,
     return found;
 }
 
-bool Action::CheckEventTrigger(const std::string& trigger) const {
-    return !event_trigger_.empty() &&
-        trigger == event_trigger_ &&
-        CheckPropertyTriggers();
+bool Action::CheckEvent(const EventTrigger& event_trigger) const {
+    return event_trigger == event_trigger_ && CheckPropertyTriggers();
 }
 
-bool Action::CheckPropertyTrigger(const std::string& name,
-                                  const std::string& value) const {
+bool Action::CheckEvent(const PropertyChange& property_change) const {
+    const auto& [name, value] = property_change;
     return event_trigger_.empty() && CheckPropertyTriggers(name, value);
+}
+
+bool Action::CheckEvent(const BuiltinAction& builtin_action) const {
+    return this == builtin_action;
 }
 
 std::string Action::BuildTriggersString() const {
@@ -238,41 +240,6 @@ void Action::DumpState() const {
     }
 }
 
-class EventTrigger : public Trigger {
-public:
-    explicit EventTrigger(const std::string& trigger) : trigger_(trigger) {
-    }
-    bool CheckTriggers(const Action& action) const override {
-        return action.CheckEventTrigger(trigger_);
-    }
-private:
-    const std::string trigger_;
-};
-
-class PropertyTrigger : public Trigger {
-public:
-    PropertyTrigger(const std::string& name, const std::string& value)
-        : name_(name), value_(value) {
-    }
-    bool CheckTriggers(const Action& action) const override {
-        return action.CheckPropertyTrigger(name_, value_);
-    }
-private:
-    const std::string name_;
-    const std::string value_;
-};
-
-class BuiltinTrigger : public Trigger {
-public:
-    explicit BuiltinTrigger(Action* action) : action_(action) {
-    }
-    bool CheckTriggers(const Action& action) const override {
-        return action_ == &action;
-    }
-private:
-    const Action* action_;
-};
-
 ActionManager::ActionManager() : current_command_(0) {
 }
 
@@ -286,16 +253,15 @@ void ActionManager::AddAction(std::unique_ptr<Action> action) {
 }
 
 void ActionManager::QueueEventTrigger(const std::string& trigger) {
-    trigger_queue_.push(std::make_unique<EventTrigger>(trigger));
+    event_queue_.emplace(trigger);
 }
 
-void ActionManager::QueuePropertyTrigger(const std::string& name,
-                                         const std::string& value) {
-    trigger_queue_.push(std::make_unique<PropertyTrigger>(name, value));
+void ActionManager::QueuePropertyChange(const std::string& name, const std::string& value) {
+    event_queue_.emplace(std::make_pair(name, value));
 }
 
-void ActionManager::QueueAllPropertyTriggers() {
-    QueuePropertyTrigger("", "");
+void ActionManager::QueueAllPropertyActions() {
+    QueuePropertyChange("", "");
 }
 
 void ActionManager::QueueBuiltinAction(BuiltinFunction func, const std::string& name) {
@@ -308,19 +274,20 @@ void ActionManager::QueueBuiltinAction(BuiltinFunction func, const std::string& 
 
     action->AddCommand(func, name_vector, 0);
 
-    trigger_queue_.push(std::make_unique<BuiltinTrigger>(action.get()));
+    event_queue_.emplace(action.get());
     actions_.emplace_back(std::move(action));
 }
 
 void ActionManager::ExecuteOneCommand() {
-    // Loop through the trigger queue until we have an action to execute
-    while (current_executing_actions_.empty() && !trigger_queue_.empty()) {
+    // Loop through the event queue until we have an action to execute
+    while (current_executing_actions_.empty() && !event_queue_.empty()) {
         for (const auto& action : actions_) {
-            if (trigger_queue_.front()->CheckTriggers(*action)) {
+            if (std::visit([&action](const auto& event) { return action->CheckEvent(event); },
+                           event_queue_.front())) {
                 current_executing_actions_.emplace(action.get());
             }
         }
-        trigger_queue_.pop();
+        event_queue_.pop();
     }
 
     if (current_executing_actions_.empty()) {
@@ -354,7 +321,7 @@ void ActionManager::ExecuteOneCommand() {
 }
 
 bool ActionManager::HasMoreCommands() const {
-    return !current_executing_actions_.empty() || !trigger_queue_.empty();
+    return !current_executing_actions_.empty() || !event_queue_.empty();
 }
 
 void ActionManager::DumpState() const {
