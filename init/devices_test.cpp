@@ -316,3 +316,94 @@ TEST(devices, sanitize_onebad) {
     sanitize_partition_name(&string);
     EXPECT_EQ("_", string);
 }
+
+TEST(devices, DevPermissionsMatchNormal) {
+    // Basic from ueventd.rc
+    // /dev/null                 0666   root       root
+    Permissions permissions("/dev/null", 0666, 0, 0);
+    EXPECT_TRUE(permissions.Match("/dev/null"));
+    EXPECT_FALSE(permissions.Match("/dev/nullsuffix"));
+    EXPECT_FALSE(permissions.Match("/dev/nul"));
+    EXPECT_EQ(0666U, permissions.perm());
+    EXPECT_EQ(0U, permissions.uid());
+    EXPECT_EQ(0U, permissions.gid());
+}
+
+TEST(devices, DevPermissionsMatchPrefix) {
+    // Prefix from ueventd.rc
+    // /dev/dri/*                0666   root       graphics
+    Permissions permissions("/dev/dri/*", 0666, 0, 1000);
+    EXPECT_TRUE(permissions.Match("/dev/dri/some_dri_device"));
+    EXPECT_TRUE(permissions.Match("/dev/dri/some_other_dri_device"));
+    EXPECT_TRUE(permissions.Match("/dev/dri/"));
+    EXPECT_FALSE(permissions.Match("/dev/dr/non_match"));
+    EXPECT_EQ(0666U, permissions.perm());
+    EXPECT_EQ(0U, permissions.uid());
+    EXPECT_EQ(1000U, permissions.gid());
+}
+
+TEST(devices, DevPermissionsMatchWildcard) {
+    // Wildcard example
+    // /dev/device*name                0666   root       graphics
+    Permissions permissions("/dev/device*name", 0666, 0, 1000);
+    EXPECT_TRUE(permissions.Match("/dev/devicename"));
+    EXPECT_TRUE(permissions.Match("/dev/device123name"));
+    EXPECT_TRUE(permissions.Match("/dev/deviceabcname"));
+    EXPECT_FALSE(permissions.Match("/dev/device123name/subdevice"));
+    EXPECT_FALSE(permissions.Match("/dev/deviceame"));
+    EXPECT_EQ(0666U, permissions.perm());
+    EXPECT_EQ(0U, permissions.uid());
+    EXPECT_EQ(1000U, permissions.gid());
+}
+
+TEST(devices, DevPermissionsMatchWildcardPrefix) {
+    // Wildcard+Prefix example
+    // /dev/device*name*                0666   root       graphics
+    Permissions permissions("/dev/device*name*", 0666, 0, 1000);
+    EXPECT_TRUE(permissions.Match("/dev/devicename"));
+    EXPECT_TRUE(permissions.Match("/dev/device123name"));
+    EXPECT_TRUE(permissions.Match("/dev/deviceabcname"));
+    EXPECT_TRUE(permissions.Match("/dev/device123namesomething"));
+    // FNM_PATHNAME doesn't match '/' with *
+    EXPECT_FALSE(permissions.Match("/dev/device123name/something"));
+    EXPECT_FALSE(permissions.Match("/dev/deviceame"));
+    EXPECT_EQ(0666U, permissions.perm());
+    EXPECT_EQ(0U, permissions.uid());
+    EXPECT_EQ(1000U, permissions.gid());
+}
+
+TEST(devices, SysfsPermissionsMatchWithSubsystemNormal) {
+    // /sys/devices/virtual/input/input*   enable      0660  root   input
+    SysfsPermissions permissions("/sys/devices/virtual/input/input*", "enable", 0660, 0, 1001);
+    EXPECT_TRUE(permissions.MatchWithSubsystem("/sys/devices/virtual/input/input0", "input"));
+    EXPECT_FALSE(permissions.MatchWithSubsystem("/sys/devices/virtual/input/not_input0", "input"));
+    EXPECT_EQ(0660U, permissions.perm());
+    EXPECT_EQ(0U, permissions.uid());
+    EXPECT_EQ(1001U, permissions.gid());
+}
+
+TEST(devices, SysfsPermissionsMatchWithSubsystemClass) {
+    // /sys/class/input/event*   enable      0660  root   input
+    SysfsPermissions permissions("/sys/class/input/event*", "enable", 0660, 0, 1001);
+    EXPECT_TRUE(permissions.MatchWithSubsystem(
+        "/sys/devices/soc.0/f9924000.i2c/i2c-2/2-0020/input/input0/event0", "input"));
+    EXPECT_FALSE(permissions.MatchWithSubsystem(
+        "/sys/devices/soc.0/f9924000.i2c/i2c-2/2-0020/input/input0/not_event0", "input"));
+    EXPECT_FALSE(permissions.MatchWithSubsystem(
+        "/sys/devices/soc.0/f9924000.i2c/i2c-2/2-0020/input/input0/event0", "not_input"));
+    EXPECT_EQ(0660U, permissions.perm());
+    EXPECT_EQ(0U, permissions.uid());
+    EXPECT_EQ(1001U, permissions.gid());
+}
+
+TEST(devices, SysfsPermissionsMatchWithSubsystemBus) {
+    // /sys/bus/i2c/devices/i2c-*   enable      0660  root   input
+    SysfsPermissions permissions("/sys/bus/i2c/devices/i2c-*", "enable", 0660, 0, 1001);
+    EXPECT_TRUE(permissions.MatchWithSubsystem("/sys/devices/soc.0/f9967000.i2c/i2c-5", "i2c"));
+    EXPECT_FALSE(permissions.MatchWithSubsystem("/sys/devices/soc.0/f9967000.i2c/not-i2c", "i2c"));
+    EXPECT_FALSE(
+        permissions.MatchWithSubsystem("/sys/devices/soc.0/f9967000.i2c/i2c-5", "not_i2c"));
+    EXPECT_EQ(0660U, permissions.perm());
+    EXPECT_EQ(0U, permissions.uid());
+    EXPECT_EQ(1001U, permissions.gid());
+}
