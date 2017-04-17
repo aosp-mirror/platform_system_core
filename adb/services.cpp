@@ -41,7 +41,7 @@
 #include <android-base/properties.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
-#include <private/android_logger.h>
+#include <log/log_properties.h>
 #endif
 
 #include "adb.h"

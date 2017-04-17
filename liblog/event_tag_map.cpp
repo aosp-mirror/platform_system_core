@@ -31,6 +31,7 @@
 #include <unordered_map>
 
 #include <log/event_tag_map.h>
+#include <log/log_properties.h>
 #include <private/android_logger.h>
 #include <utils/FastStrcmp.h>
 #include <utils/RWLock.h>
