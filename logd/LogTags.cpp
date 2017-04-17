@@ -32,8 +32,8 @@
 #include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <log/log_event_list.h>
+#include <log/log_properties.h>
 #include <private/android_filesystem_config.h>
-#include <private/android_logger.h>
 
 #include "LogTags.h"
 #include "LogUtils.h"

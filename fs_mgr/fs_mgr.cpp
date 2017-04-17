@@ -48,8 +48,8 @@
 #include <linux/fs.h>
 #include <linux/loop.h>
 #include <linux/magic.h>
+#include <log/log_properties.h>
 #include <logwrap/logwrap.h>
-#include <private/android_logger.h>  // for __android_log_is_debuggable()
 
 #include "fs_mgr.h"
 #include "fs_mgr_avb.h"
