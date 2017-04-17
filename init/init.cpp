@@ -50,16 +50,14 @@
 
 #include <fstream>
 #include <memory>
-#include <set>
 #include <vector>
 
 #include "action.h"
 #include "bootchart.h"
 #include "devices.h"
-#include "fs_mgr.h"
-#include "fs_mgr_avb.h"
 #include "import_parser.h"
 #include "init.h"
+#include "init_first_stage.h"
 #include "init_parser.h"
 #include "keychords.h"
 #include "log.h"
@@ -485,71 +483,10 @@ static void export_kernel_boot_props() {
     }
 }
 
-/* Reads the content of device tree file into dt_value.
- * Returns true if the read is success, false otherwise.
- */
-static bool read_dt_file(const std::string& file_name, std::string* dt_value) {
-    if (android::base::ReadFileToString(file_name, dt_value)) {
-        if (!dt_value->empty()) {
-            dt_value->pop_back();  // Trim the trailing '\0' out.
-            return true;
-        }
-    }
-    return false;
-}
-
-static const std::string kAndroidDtDir("/proc/device-tree/firmware/android/");
-
-static bool is_dt_value_expected(const std::string& dt_file_suffix,
-                                 const std::string& expected_value) {
-    std::string dt_value;
-    std::string file_name = kAndroidDtDir + dt_file_suffix;
-
-    if (read_dt_file(file_name, &dt_value)) {
-        if (dt_value == expected_value) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static inline bool is_dt_compatible() {
-    return is_dt_value_expected("compatible", "android,firmware");
-}
-
-static inline bool is_dt_fstab_compatible() {
-    return is_dt_value_expected("fstab/compatible", "android,fstab");
-}
-
-static inline bool is_dt_vbmeta_compatible() {
-    return is_dt_value_expected("vbmeta/compatible", "android,vbmeta");
-}
-
-// Gets the vbmeta config from device tree. Specifically, the 'parts' and 'by_name_prefix'.
-// /{
-//     firmware {
-//         android {
-//             vbmeta {
-//                 compatible = "android,vbmeta";
-//                 parts = "vbmeta,boot,system,vendor"
-//                 by_name_prefix="/dev/block/platform/soc.0/f9824900.sdhci/by-name/"
-//             };
-//         };
-//     };
-//  }
-static bool get_vbmeta_config_from_dt(std::string* vbmeta_partitions,
-                                      std::string* device_file_by_name_prefix) {
-    std::string file_name = kAndroidDtDir + "vbmeta/parts";
-    if (!read_dt_file(file_name, vbmeta_partitions)) return false;
-
-    file_name = kAndroidDtDir + "vbmeta/by_name_prefix";
-    if (!read_dt_file(file_name, device_file_by_name_prefix)) return false;
-
-    return true;
-}
-
 static void process_kernel_dt() {
-    if (!is_dt_compatible()) return;
+    if (!is_android_dt_value_expected("compatible", "android,firmware")) {
+        return;
+    }
 
     std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(kAndroidDtDir.c_str()), closedir);
     if (!dir) return;
@@ -982,289 +919,6 @@ static void set_usb_controller() {
     }
 }
 
-// Creates "/dev/block/dm-XX" for dm-verity by running coldboot on /sys/block/dm-XX.
-static void device_init_dm_device(const std::string& dm_device) {
-    const std::string device_name(basename(dm_device.c_str()));
-    const std::string syspath = "/sys/block/" + device_name;
-
-    device_init(syspath.c_str(), [&](uevent* uevent) -> coldboot_action_t {
-        if (uevent->device_name && device_name == uevent->device_name) {
-            LOG(VERBOSE) << "early_mount: creating dm-verity device : " << dm_device;
-            return COLDBOOT_STOP;
-        }
-        return COLDBOOT_CONTINUE;
-    });
-    device_close();
-}
-
-static bool vboot_1_0_mount_partitions(const std::vector<fstab_rec*>& fstab_recs) {
-    if (fstab_recs.empty()) return false;
-
-    for (auto rec : fstab_recs) {
-        bool need_create_dm_device = false;
-        if (fs_mgr_is_verified(rec)) {
-            // setup verity and create the dm-XX block device
-            // needed to mount this partition
-            int ret = fs_mgr_setup_verity(rec, false /* wait_for_verity_dev */);
-            if (ret == FS_MGR_SETUP_VERITY_DISABLED) {
-                LOG(INFO) << "verity disabled for '" << rec->mount_point << "'";
-            } else if (ret == FS_MGR_SETUP_VERITY_SUCCESS) {
-                need_create_dm_device = true;
-            } else {
-                PLOG(ERROR) << "early_mount: failed to setup verity for '" << rec->mount_point
-                            << "'";
-                return false;
-            }
-        }
-        if (need_create_dm_device) {
-            // The exact block device name (rec->blk_device) is changed to "/dev/block/dm-XX".
-            // Need to create it because ueventd isn't started during early mount.
-            device_init_dm_device(rec->blk_device);
-        }
-        if (fs_mgr_do_mount_one(rec)) {
-            PLOG(ERROR) << "early_mount: failed to mount '" << rec->mount_point << "'";
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool vboot_2_0_mount_partitions(const std::vector<fstab_rec*>& fstab_recs,
-                                       const std::string& device_file_by_name_prefix) {
-    if (fstab_recs.empty()) return false;
-
-    FsManagerAvbUniquePtr avb_handle = FsManagerAvbHandle::Open(device_file_by_name_prefix);
-    if (!avb_handle) {
-        LOG(INFO) << "Failed to Open FsManagerAvbHandle";
-        return false;
-    }
-
-    setenv("INIT_AVB_VERSION", avb_handle->avb_version().c_str(), 1);
-    for (auto rec : fstab_recs) {
-        bool need_create_dm_device = false;
-        if (fs_mgr_is_avb(rec)) {
-            if (avb_handle->hashtree_disabled()) {
-                LOG(INFO) << "avb hashtree disabled for '" << rec->mount_point << "'";
-            } else if (avb_handle->SetUpAvb(rec, false /* wait_for_verity_dev */)) {
-                need_create_dm_device = true;
-            } else {
-                PLOG(ERROR) << "early_mount: failed to set up AVB on partition: '"
-                            << rec->mount_point << "'";
-                return false;
-            }
-        }
-        if (need_create_dm_device) {
-            // The exact block device name (rec->blk_device) is changed to "/dev/block/dm-XX".
-            // Need to create it because ueventd isn't started during early mount.
-            device_init_dm_device(rec->blk_device);
-        }
-        if (fs_mgr_do_mount_one(rec)) {
-            PLOG(ERROR) << "early_mount: failed to mount '" << rec->mount_point << "'";
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool mount_early_partitions(const std::vector<fstab_rec*>& fstab_recs,
-                                   const std::string& device_file_by_name_prefix) {
-    if (is_dt_vbmeta_compatible()) {  // AVB (external/avb) is used to setup dm-verity.
-        return vboot_2_0_mount_partitions(fstab_recs, device_file_by_name_prefix);
-    } else {
-        return vboot_1_0_mount_partitions(fstab_recs);
-    }
-}
-
-// Creates devices with uevent->partition_name matching one in the in/out
-// partition_names. Note that the partition_names MUST have A/B suffix
-// when A/B is used. Found partitions will then be removed from the
-// partition_names for caller to check which devices are NOT created.
-static void early_device_init(std::set<std::string>* partition_names) {
-    if (partition_names->empty()) {
-        return;
-    }
-    device_init(nullptr, [=](uevent* uevent) -> coldboot_action_t {
-        if (!strncmp(uevent->subsystem, "firmware", 8)) {
-            return COLDBOOT_CONTINUE;
-        }
-
-        // we need platform devices to create symlinks
-        if (!strncmp(uevent->subsystem, "platform", 8)) {
-            return COLDBOOT_CREATE;
-        }
-
-        // Ignore everything that is not a block device
-        if (strncmp(uevent->subsystem, "block", 5)) {
-            return COLDBOOT_CONTINUE;
-        }
-
-        if (uevent->partition_name) {
-            // match partition names to create device nodes for partitions
-            // both partition_names and uevent->partition_name have A/B suffix when A/B is used
-            auto iter = partition_names->find(uevent->partition_name);
-            if (iter != partition_names->end()) {
-                LOG(VERBOSE) << "early_mount: found partition: " << *iter;
-                partition_names->erase(iter);
-                if (partition_names->empty()) {
-                    return COLDBOOT_STOP;  // found all partitions, stop coldboot
-                } else {
-                    return COLDBOOT_CREATE;  // create this device and continue to find others
-                }
-            }
-        }
-        // Not found a partition or find an unneeded partition, continue to find others
-        return COLDBOOT_CONTINUE;
-    });
-}
-
-static bool vboot_1_0_early_partitions(const std::vector<fstab_rec*>& early_fstab_recs,
-                                       std::set<std::string>* out_partitions,
-                                       bool* out_need_verity) {
-    std::string meta_partition;
-    for (auto fstab_rec : early_fstab_recs) {
-        // don't allow verifyatboot for early mounted partitions
-        if (fs_mgr_is_verifyatboot(fstab_rec)) {
-            LOG(ERROR) << "early_mount: partitions can't be verified at boot";
-            return false;
-        }
-        // check for verified partitions
-        if (fs_mgr_is_verified(fstab_rec)) {
-            *out_need_verity = true;
-        }
-        // check if verity metadata is on a separate partition and get partition
-        // name from the end of the ->verity_loc path. verity state is not partition
-        // specific, so there must be only 1 additional partition that carries
-        // verity state.
-        if (fstab_rec->verity_loc) {
-            if (!meta_partition.empty()) {
-                LOG(ERROR) << "early_mount: more than one meta partition found: " << meta_partition
-                           << ", " << basename(fstab_rec->verity_loc);
-                return false;
-            } else {
-                meta_partition = basename(fstab_rec->verity_loc);
-            }
-        }
-    }
-
-    // includes those early mount partitions and meta_partition (if any)
-    // note that fstab_rec->blk_device has A/B suffix updated by fs_mgr when A/B is used
-    for (auto fstab_rec : early_fstab_recs) {
-        out_partitions->emplace(basename(fstab_rec->blk_device));
-    }
-
-    if (!meta_partition.empty()) {
-        out_partitions->emplace(std::move(meta_partition));
-    }
-
-    return true;
-}
-
-// a.k.a. AVB (external/avb)
-static bool vboot_2_0_early_partitions(std::set<std::string>* out_partitions, bool* out_need_verity,
-                                       std::string* out_device_file_by_name_prefix) {
-    std::string vbmeta_partitions;
-    if (!get_vbmeta_config_from_dt(&vbmeta_partitions, out_device_file_by_name_prefix)) {
-        return false;
-    }
-    // libavb verifies AVB metadata on all verified partitions at once.
-    // e.g., The vbmeta_partitions will be "vbmeta,boot,system,vendor"
-    // for libavb to verify metadata, even if we only need to early mount /vendor.
-    std::vector<std::string> partitions = android::base::Split(vbmeta_partitions, ",");
-    std::string ab_suffix = fs_mgr_get_slot_suffix();
-    for (const auto& partition : partitions) {
-        out_partitions->emplace(partition + ab_suffix);
-    }
-    *out_need_verity = true;
-    return true;
-}
-
-static bool get_early_partitions(const std::vector<fstab_rec*>& early_fstab_recs,
-                                 std::set<std::string>* out_partitions, bool* out_need_verity,
-                                 std::string* out_device_file_by_name_prefix) {
-    *out_need_verity = false;
-    out_partitions->clear();
-    out_device_file_by_name_prefix->clear();
-
-    if (is_dt_vbmeta_compatible()) {  // AVB (external/avb) is used to setup dm-verity.
-        return vboot_2_0_early_partitions(out_partitions, out_need_verity,
-                                          out_device_file_by_name_prefix);
-    } else {
-        return vboot_1_0_early_partitions(early_fstab_recs, out_partitions, out_need_verity);
-    }
-}
-
-/* Early mount vendor and ODM partitions. The fstab is read from device-tree. */
-static bool early_mount() {
-    // skip early mount if we're in recovery mode
-    if (access("/sbin/recovery", F_OK) == 0) {
-        LOG(INFO) << "Early mount skipped (recovery mode)";
-        return true;
-    }
-
-    // first check if device tree fstab entries are compatible
-    if (!is_dt_fstab_compatible()) {
-        LOG(INFO) << "Early mount skipped (missing/incompatible fstab in device tree)";
-        return true;
-    }
-
-    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> tab(
-        fs_mgr_read_fstab_dt(), fs_mgr_free_fstab);
-    if (!tab) {
-        LOG(ERROR) << "Early mount failed to read fstab from device tree";
-        return false;
-    }
-
-    // find out fstab records for odm, system and vendor
-    std::vector<fstab_rec*> early_fstab_recs;
-    for (auto mount_point : {"/odm", "/system", "/vendor"}) {
-        fstab_rec* fstab_rec = fs_mgr_get_entry_for_mount_point(tab.get(), mount_point);
-        if (fstab_rec != nullptr) {
-            early_fstab_recs.push_back(fstab_rec);
-        }
-    }
-
-    // nothing to early mount
-    if (early_fstab_recs.empty()) return true;
-
-    bool need_verity;
-    std::string device_file_by_name_prefix;
-    std::set<std::string> partition_names;
-    // partition_names MUST have A/B suffix when A/B is used
-    if (!get_early_partitions(early_fstab_recs, &partition_names, &need_verity,
-                              &device_file_by_name_prefix)) {
-        return false;
-    }
-
-    bool success = false;
-    // create the devices we need..
-    early_device_init(&partition_names);
-
-    // early_device_init will remove found partitions from partition_names
-    // So if the partition_names is not empty here, means some partitions
-    // are not found
-    if (!partition_names.empty()) {
-        LOG(ERROR) << "early_mount: partition(s) not found: "
-                   << android::base::Join(partition_names, ", ");
-        goto done;
-    }
-
-    if (need_verity) {
-        // create /dev/device mapper
-        device_init("/sys/devices/virtual/misc/device-mapper",
-                    [&](uevent* uevent) -> coldboot_action_t { return COLDBOOT_STOP; });
-    }
-
-    if (mount_early_partitions(early_fstab_recs, device_file_by_name_prefix)) {
-        success = true;
-    }
-
-done:
-    device_close();
-    return success;
-}
-
 static void install_reboot_signal_handlers() {
     // Instead of panic'ing the kernel as is the default behavior when init crashes,
     // we prefer to reboot to bootloader on development builds, as this will prevent
@@ -1337,7 +991,7 @@ int main(int argc, char** argv) {
 
         LOG(INFO) << "init first stage started!";
 
-        if (!early_mount()) {
+        if (!DoFirstStageMount()) {
             LOG(ERROR) << "Failed to mount required partitions early ...";
             panic();
         }

@@ -85,6 +85,7 @@ LOCAL_SRC_FILES:= \
     builtins.cpp \
     devices.cpp \
     init.cpp \
+    init_first_stage.cpp \
     keychords.cpp \
     property_service.cpp \
     reboot.cpp \
