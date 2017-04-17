@@ -365,10 +365,6 @@ Commands
   _options_ include "barrier=1", "noauto\_da\_alloc", "discard", ... as
   a comma separated string, eg: barrier=1,noauto\_da\_alloc
 
-`powerctl`
-> Internal implementation detail used to respond to changes to the
-  "sys.powerctl" system property, used to implement rebooting.
-
 `restart <service>`
 > Stops and restarts a running service, does nothing if the service is currently
   restarting, otherwise, it just starts the service.

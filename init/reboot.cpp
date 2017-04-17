@@ -425,3 +425,54 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     RebootSystem(cmd, rebootTarget);
     abort();
 }
+
+bool HandlePowerctlMessage(const std::string& command) {
+    unsigned int cmd = 0;
+    std::vector<std::string> cmd_params = android::base::Split(command, ",");
+    std::string reason_string = cmd_params[0];
+    std::string reboot_target = "";
+    bool run_fsck = false;
+    bool command_invalid = false;
+
+    if (cmd_params.size() > 3) {
+        command_invalid = true;
+    } else if (cmd_params[0] == "shutdown") {
+        cmd = ANDROID_RB_POWEROFF;
+        if (cmd_params.size() == 2 && cmd_params[1] == "userrequested") {
+            // The shutdown reason is PowerManager.SHUTDOWN_USER_REQUESTED.
+            // Run fsck once the file system is remounted in read-only mode.
+            run_fsck = true;
+            reason_string = cmd_params[1];
+        }
+    } else if (cmd_params[0] == "reboot") {
+        cmd = ANDROID_RB_RESTART2;
+        if (cmd_params.size() >= 2) {
+            reboot_target = cmd_params[1];
+            // When rebooting to the bootloader notify the bootloader writing
+            // also the BCB.
+            if (reboot_target == "bootloader") {
+                std::string err;
+                if (!write_reboot_bootloader(&err)) {
+                    LOG(ERROR) << "reboot-bootloader: Error writing "
+                                  "bootloader_message: "
+                               << err;
+                }
+            }
+            // If there is an additional bootloader parameter, pass it along
+            if (cmd_params.size() == 3) {
+                reboot_target += "," + cmd_params[2];
+            }
+        }
+    } else if (command == "thermal-shutdown") {  // no additional parameter allowed
+        cmd = ANDROID_RB_THERMOFF;
+    } else {
+        command_invalid = true;
+    }
+    if (command_invalid) {
+        LOG(ERROR) << "powerctl: unrecognized command '" << command << "'";
+        return false;
+    }
+
+    DoReboot(cmd, reason_string, reboot_target, run_fsck);
+    return true;
+}

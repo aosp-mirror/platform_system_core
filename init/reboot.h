@@ -27,4 +27,7 @@
 void DoReboot(unsigned int cmd, const std::string& reason, const std::string& rebootTarget,
               bool runFsck) __attribute__((__noreturn__));
 
+// Parses and handles a setprop sys.powerctl message.
+bool HandlePowerctlMessage(const std::string& command);
+
 #endif
