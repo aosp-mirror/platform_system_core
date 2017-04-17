@@ -28,6 +28,13 @@
 
 #define UNUSED __attribute__((__unused__))
 
+#ifndef SLOGE
+#define SLOGE ALOGE
+#endif
+#ifndef SLOGW
+#define SLOGW ALOGW
+#endif
+
 /* Re-map SP_DEFAULT to the system default policy, and leave other values unchanged.
  * Call this any place a SchedPolicy is used as an input parameter.
  * Returns the possibly re-mapped policy.

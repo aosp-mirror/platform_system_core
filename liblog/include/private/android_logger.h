@@ -135,8 +135,6 @@ int __android_log_security_bwrite(int32_t tag, const void* payload, size_t len);
 int __android_log_security_bswrite(int32_t tag, const char* payload);
 int __android_log_security(); /* Device Owner is present */
 
-int __android_log_is_debuggable();
-
 #define BOOL_DEFAULT_FLAG_TRUE_FALSE 0x1
 #define BOOL_DEFAULT_FALSE 0x0        /* false if property not present   */
 #define BOOL_DEFAULT_TRUE 0x1         /* true if property not present    */
