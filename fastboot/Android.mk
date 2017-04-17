@@ -51,7 +51,7 @@ LOCAL_CFLAGS_darwin := -Wno-unused-parameter
 
 LOCAL_SRC_FILES_windows := usb_windows.cpp
 LOCAL_STATIC_LIBRARIES_windows := AdbWinApi
-LOCAL_REQUIRED_MODULES_windows := AdbWinApi
+LOCAL_REQUIRED_MODULES_windows := AdbWinApi AdbWinUsbApi
 LOCAL_LDLIBS_windows := -lws2_32
 LOCAL_C_INCLUDES_windows := development/host/windows/usb/api
 
