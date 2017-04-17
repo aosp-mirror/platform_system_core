@@ -101,8 +101,6 @@ void set_device_permission(const char* fn, int line, int nargs, char **args)
     mode_t perm;
     uid_t uid;
     gid_t gid;
-    int prefix = 0;
-    int wildcard = 0;
     char *endptr;
 
     if (nargs == 0)
@@ -125,15 +123,6 @@ void set_device_permission(const char* fn, int line, int nargs, char **args)
         return;
     }
 
-    int len = strlen(name);
-    char *wildcard_chr = strchr(name, '*');
-    if ((name[len - 1] == '*') && (wildcard_chr == (name + len - 1))) {
-        prefix = 1;
-        name[len - 1] = '\0';
-    } else if (wildcard_chr) {
-        wildcard = 1;
-    }
-
     perm = strtol(args[1], &endptr, 8);
     if (!endptr || *endptr != '\0') {
         LOG(ERROR) << "invalid mode (" << fn << ":" << line << ") '" << args[1] << "'";
@@ -154,13 +143,9 @@ void set_device_permission(const char* fn, int line, int nargs, char **args)
     }
     gid = grp->gr_gid;
 
-    if (add_dev_perms(name, attr, perm, uid, gid, prefix, wildcard) != 0) {
-        PLOG(ERROR) << "add_dev_perms(name=" << name <<
-                       ", attr=" << attr <<
-                       ", perm=" << std::oct << perm << std::dec <<
-                       ", uid=" << uid << ", gid=" << gid <<
-                       ", prefix=" << prefix << ", wildcard=" << wildcard <<
-                       ")";
-        return;
+    if (attr) {
+        sysfs_permissions.emplace_back(name, attr, perm, uid, gid);
+    } else {
+        dev_permissions.emplace_back(name, perm, uid, gid);
     }
 }
