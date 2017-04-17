@@ -38,6 +38,7 @@
 
 #include <android-base/stringprintf.h>
 #include <sparse/sparse.h>
+#include <utils/FileMap.h>
 
 #include "fastboot.h"
 #include "transport.h"
@@ -48,7 +49,7 @@ const std::string fb_get_error() {
     return g_error;
 }
 
-static int check_response(Transport* transport, uint32_t size, char* response) {
+static int64_t check_response(Transport* transport, uint32_t size, char* response) {
     char status[65];
 
     while (true) {
@@ -105,7 +106,7 @@ static int check_response(Transport* transport, uint32_t size, char* response) {
     return -1;
 }
 
-static int _command_start(Transport* transport, const char* cmd, uint32_t size, char* response) {
+static int64_t _command_start(Transport* transport, const char* cmd, uint32_t size, char* response) {
     size_t cmdsize = strlen(cmd);
     if (cmdsize > 64) {
         g_error = android::base::StringPrintf("command too large (%zu)", cmdsize);
@@ -125,14 +126,14 @@ static int _command_start(Transport* transport, const char* cmd, uint32_t size, 
     return check_response(transport, size, response);
 }
 
-static int _command_data(Transport* transport, const void* data, uint32_t size) {
-    int r = transport->Write(data, size);
+static int64_t _command_data(Transport* transport, const void* data, uint32_t size) {
+    int64_t r = transport->Write(data, size);
     if (r < 0) {
         g_error = android::base::StringPrintf("data transfer failure (%s)", strerror(errno));
         transport->Close();
         return -1;
     }
-    if (r != ((int) size)) {
+    if (r != static_cast<int64_t>(size)) {
         g_error = "data transfer failure (short transfer)";
         transport->Close();
         return -1;
@@ -140,17 +141,17 @@ static int _command_data(Transport* transport, const void* data, uint32_t size) 
     return r;
 }
 
-static int _command_end(Transport* transport) {
+static int64_t _command_end(Transport* transport) {
     return check_response(transport, 0, 0) < 0 ? -1 : 0;
 }
 
-static int _command_send(Transport* transport, const char* cmd, const void* data, uint32_t size,
+static int64_t _command_send(Transport* transport, const char* cmd, const void* data, uint32_t size,
                          char* response) {
     if (size == 0) {
         return -1;
     }
 
-    int r = _command_start(transport, cmd, size, response);
+    int64_t r = _command_start(transport, cmd, size, response);
     if (r < 0) {
         return -1;
     }
@@ -162,6 +163,39 @@ static int _command_send(Transport* transport, const char* cmd, const void* data
 
     r = _command_end(transport);
     if (r < 0) {
+        return -1;
+    }
+
+    return size;
+}
+
+static int64_t _command_send_fd(Transport* transport, const char* cmd, int fd, uint32_t size,
+                                char* response) {
+    static constexpr uint32_t MAX_MAP_SIZE = 512 * 1024 * 1024;
+    off64_t offset = 0;
+    uint32_t remaining = size;
+
+    if (_command_start(transport, cmd, size, response) < 0) {
+        return -1;
+    }
+
+    while (remaining) {
+        android::FileMap filemap;
+        size_t len = std::min(remaining, MAX_MAP_SIZE);
+
+        if (!filemap.create(NULL, fd, offset, len, true)) {
+            return -1;
+        }
+
+        if (_command_data(transport, filemap.getDataPtr(), len) < 0) {
+            return -1;
+        }
+
+        remaining -= len;
+        offset += len;
+    }
+
+    if (_command_end(transport) < 0) {
         return -1;
     }
 
@@ -180,10 +214,14 @@ int fb_command_response(Transport* transport, const char* cmd, char* response) {
     return _command_send_no_data(transport, cmd, response);
 }
 
-int fb_download_data(Transport* transport, const void* data, uint32_t size) {
-    char cmd[64];
-    snprintf(cmd, sizeof(cmd), "download:%08x", size);
-    return _command_send(transport, cmd, data, size, 0) < 0 ? -1 : 0;
+int64_t fb_download_data(Transport* transport, const void* data, uint32_t size) {
+    std::string cmd(android::base::StringPrintf("download:%08x", size));
+    return _command_send(transport, cmd.c_str(), data, size, 0) < 0 ? -1 : 0;
+}
+
+int64_t fb_download_data_fd(Transport* transport, int fd, uint32_t size) {
+    std::string cmd(android::base::StringPrintf("download:%08x", size));
+    return _command_send_fd(transport, cmd.c_str(), fd, size, 0) < 0 ? -1 : 0;
 }
 
 #define TRANSPORT_BUF_SIZE 1024
@@ -242,7 +280,8 @@ static int fb_download_data_sparse_write(void *priv, const void *data, int len)
 
 static int fb_download_data_sparse_flush(Transport* transport) {
     if (transport_buf_len > 0) {
-        if (_command_data(transport, transport_buf, transport_buf_len) != transport_buf_len) {
+        int64_t r = _command_data(transport, transport_buf, transport_buf_len);
+        if (r != static_cast<int64_t>(transport_buf_len)) {
             return -1;
         }
         transport_buf_len = 0;
@@ -256,9 +295,8 @@ int fb_download_data_sparse(Transport* transport, struct sparse_file* s) {
         return -1;
     }
 
-    char cmd[64];
-    snprintf(cmd, sizeof(cmd), "download:%08x", size);
-    int r = _command_start(transport, cmd, size, 0);
+    std::string cmd(android::base::StringPrintf("download:%08x", size));
+    int r = _command_start(transport, cmd.c_str(), size, 0);
     if (r < 0) {
         return -1;
     }
