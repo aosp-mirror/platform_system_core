@@ -598,58 +598,6 @@ static int do_restart(const std::vector<std::string>& args) {
     return 0;
 }
 
-static int do_powerctl(const std::vector<std::string>& args) {
-    const std::string& command = args[1];
-    unsigned int cmd = 0;
-    std::vector<std::string> cmd_params = android::base::Split(command, ",");
-    std::string reason_string = cmd_params[0];
-    std::string reboot_target = "";
-    bool runFsck = false;
-    bool commandInvalid = false;
-
-    if (cmd_params.size() > 3) {
-        commandInvalid = true;
-    } else if (cmd_params[0] == "shutdown") {
-        cmd = ANDROID_RB_POWEROFF;
-        if (cmd_params.size() == 2 && cmd_params[1] == "userrequested") {
-            // The shutdown reason is PowerManager.SHUTDOWN_USER_REQUESTED.
-            // Run fsck once the file system is remounted in read-only mode.
-            runFsck = true;
-            reason_string = cmd_params[1];
-        }
-    } else if (cmd_params[0] == "reboot") {
-        cmd = ANDROID_RB_RESTART2;
-        if (cmd_params.size() >= 2) {
-            reboot_target = cmd_params[1];
-            // When rebooting to the bootloader notify the bootloader writing
-            // also the BCB.
-            if (reboot_target == "bootloader") {
-                std::string err;
-                if (!write_reboot_bootloader(&err)) {
-                    LOG(ERROR) << "reboot-bootloader: Error writing "
-                                  "bootloader_message: "
-                               << err;
-                }
-            }
-            // If there is an additional bootloader parameter, pass it along
-            if (cmd_params.size() == 3) {
-                reboot_target += "," + cmd_params[2];
-            }
-        }
-    } else if (command == "thermal-shutdown") {  // no additional parameter allowed
-        cmd = ANDROID_RB_THERMOFF;
-    } else {
-        commandInvalid = true;
-    }
-    if (commandInvalid) {
-        LOG(ERROR) << "powerctl: unrecognized command '" << command << "'";
-        return -EINVAL;
-    }
-
-    DoReboot(cmd, reason_string, reboot_target, runFsck);
-    return 0;
-}
-
 static int do_trigger(const std::vector<std::string>& args) {
     ActionManager::GetInstance().QueueEventTrigger(args[1]);
     return 0;
@@ -919,7 +867,6 @@ BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"mount_all",               {1,     kMax, do_mount_all}},
         {"mount",                   {3,     kMax, do_mount}},
         {"umount",                  {1,     1,    do_umount}},
-        {"powerctl",                {1,     1,    do_powerctl}},
         {"restart",                 {1,     1,    do_restart}},
         {"restorecon",              {1,     kMax, do_restorecon}},
         {"restorecon_recursive",    {1,     kMax, do_restorecon_recursive}},
