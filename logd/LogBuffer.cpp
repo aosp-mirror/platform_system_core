@@ -1118,8 +1118,21 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
 
     log_time max = start;
 
+    LogBufferElement* lastElement = nullptr;  // iterator corruption paranoia
+    static const size_t maxSkip = 4194304;    // maximum entries to skip
+    size_t skip = maxSkip;
     for (; it != mLogElements.end(); ++it) {
         LogBufferElement* element = *it;
+
+        if (!--skip) {
+            android::prdebug("reader.per: too many elements skipped");
+            break;
+        }
+        if (element == lastElement) {
+            android::prdebug("reader.per: identical elements");
+            break;
+        }
+        lastElement = element;
 
         if (!privileged && (element->getUid() != uid)) {
             continue;
@@ -1165,6 +1178,7 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
             return max;
         }
 
+        skip = maxSkip;
         pthread_mutex_lock(&mLogElementsLock);
     }
     pthread_mutex_unlock(&mLogElementsLock);
