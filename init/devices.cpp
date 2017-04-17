@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "devices.h"
+
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -27,23 +29,19 @@
 #include <sys/sendfile.h>
 #include <sys/socket.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #include <algorithm>
 #include <memory>
-#include <string>
 #include <thread>
-#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <cutils/list.h>
 #include <cutils/uevent.h>
 #include <private/android_filesystem_config.h>
 #include <selinux/android.h>
@@ -51,119 +49,67 @@
 #include <selinux/label.h>
 #include <selinux/selinux.h>
 
-#include "devices.h"
 #include "ueventd_parser.h"
 #include "util.h"
-
-#define SYSFS_PREFIX    "/sys"
 
 extern struct selabel_handle *sehandle;
 
 static android::base::unique_fd device_fd;
 
-struct perms_ {
-    char *name;
-    char *attr;
-    mode_t perm;
-    unsigned int uid;
-    unsigned int gid;
-    unsigned short prefix;
-    unsigned short wildcard;
-};
-
-struct perm_node {
-    struct perms_ dp;
-    struct listnode plist;
-};
-
-static list_declare(sys_perms);
-static list_declare(dev_perms);
-
-int add_dev_perms(const char *name, const char *attr,
-                  mode_t perm, unsigned int uid, unsigned int gid,
-                  unsigned short prefix,
-                  unsigned short wildcard) {
-    struct perm_node *node = (perm_node*) calloc(1, sizeof(*node));
-    if (!node)
-        return -ENOMEM;
-
-    node->dp.name = strdup(name);
-    if (!node->dp.name) {
-        free(node);
-        return -ENOMEM;
+Permissions::Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t gid)
+    : name_(name), perm_(perm), uid_(uid), gid_(gid), prefix_(false), wildcard_(false) {
+    // If the first * is the last character, then we'll treat name_ as a prefix
+    // Otherwise, if a * is present, then we do a full fnmatch().
+    auto wildcard_position = name_.find('*');
+    if (wildcard_position == name_.length() - 1) {
+        prefix_ = true;
+        name_.pop_back();
+    } else if (wildcard_position != std::string::npos) {
+        wildcard_ = true;
     }
-
-    if (attr) {
-        node->dp.attr = strdup(attr);
-        if (!node->dp.attr) {
-            free(node->dp.name);
-            free(node);
-            return -ENOMEM;
-        }
-    }
-
-    node->dp.perm = perm;
-    node->dp.uid = uid;
-    node->dp.gid = gid;
-    node->dp.prefix = prefix;
-    node->dp.wildcard = wildcard;
-
-    if (attr)
-        list_add_tail(&sys_perms, &node->plist);
-    else
-        list_add_tail(&dev_perms, &node->plist);
-
-    return 0;
 }
 
-static bool perm_path_matches(const char *path, struct perms_ *dp)
-{
-    if (dp->prefix) {
-        if (strncmp(path, dp->name, strlen(dp->name)) == 0)
-            return true;
-    } else if (dp->wildcard) {
-        if (fnmatch(dp->name, path, FNM_PATHNAME) == 0)
-            return true;
+bool Permissions::Match(const std::string& path) const {
+    if (prefix_) {
+        return android::base::StartsWith(path, name_.c_str());
+    } else if (wildcard_) {
+        return fnmatch(name_.c_str(), path.c_str(), FNM_PATHNAME) == 0;
     } else {
-        if (strcmp(path, dp->name) == 0)
-            return true;
+        return path == name_;
     }
 
     return false;
 }
 
-static bool match_subsystem(perms_* dp, const char* pattern,
-                            const char* path, const char* subsystem) {
-    if (!pattern || !subsystem || strstr(dp->name, subsystem) == NULL) {
-        return false;
+bool SysfsPermissions::MatchWithSubsystem(const std::string& path,
+                                          const std::string& subsystem) const {
+    std::string path_basename = android::base::Basename(path);
+    if (name().find(subsystem) != std::string::npos) {
+        if (Match("/sys/class/" + subsystem + "/" + path_basename)) return true;
+        if (Match("/sys/bus/" + subsystem + "/devices/" + path_basename)) return true;
     }
-
-    std::string subsys_path = android::base::StringPrintf(pattern, subsystem, basename(path));
-    return perm_path_matches(subsys_path.c_str(), dp);
+    return Match(path);
 }
 
-static void fixup_sys_perms(const std::string& upath, const std::string& subsystem) {
+void SysfsPermissions::SetPermissions(const std::string& path) const {
+    std::string attribute_file = path + "/" + attribute_;
+    LOG(INFO) << "fixup " << attribute_file << " " << uid() << " " << gid() << " " << std::oct
+              << perm();
+    chown(attribute_file.c_str(), uid(), gid());
+    chmod(attribute_file.c_str(), perm());
+}
+
+// TODO: Move these to be member variables of a future devices class.
+std::vector<Permissions> dev_permissions;
+std::vector<SysfsPermissions> sysfs_permissions;
+
+static void fixup_sys_permissions(const std::string& upath, const std::string& subsystem) {
     // upaths omit the "/sys" that paths in this list
     // contain, so we prepend it...
-    std::string path = SYSFS_PREFIX + upath;
+    std::string path = "/sys" + upath;
 
-    listnode* node;
-    list_for_each(node, &sys_perms) {
-        perms_* dp = &(node_to_item(node, perm_node, plist))->dp;
-        if (match_subsystem(dp, SYSFS_PREFIX "/class/%s/%s", path.c_str(), subsystem.c_str())) {
-            ; // matched
-        } else if (match_subsystem(dp, SYSFS_PREFIX "/bus/%s/devices/%s", path.c_str(),
-                                   subsystem.c_str())) {
-            ; // matched
-        } else if (!perm_path_matches(path.c_str(), dp)) {
-            continue;
-        }
-
-        std::string attr_file = path + "/" + dp->attr;
-        LOG(INFO) << "fixup " << attr_file
-                  << " " << dp->uid << " " << dp->gid << " " << std::oct << dp->perm;
-        chown(attr_file.c_str(), dp->uid, dp->gid);
-        chmod(attr_file.c_str(), dp->perm);
+    for (const auto& s : sysfs_permissions) {
+        if (s.MatchWithSubsystem(path, subsystem)) s.SetPermissions(path);
     }
 
     if (access(path.c_str(), F_OK) == 0) {
@@ -172,42 +118,26 @@ static void fixup_sys_perms(const std::string& upath, const std::string& subsyst
     }
 }
 
-static mode_t get_device_perm(const char* path, const std::vector<std::string>& links,
-                              unsigned* uid, unsigned* gid) {
-    struct listnode *node;
-    struct perm_node *perm_node;
-    struct perms_ *dp;
-
-    /* search the perms list in reverse so that ueventd.$hardware can
-     * override ueventd.rc
-     */
-    list_for_each_reverse(node, &dev_perms) {
-        perm_node = node_to_item(node, struct perm_node, plist);
-        dp = &perm_node->dp;
-
-        if (perm_path_matches(path, dp) ||
-            std::any_of(links.begin(), links.end(),
-                        [dp](const auto& link) { return perm_path_matches(link.c_str(), dp); })) {
-            *uid = dp->uid;
-            *gid = dp->gid;
-            return dp->perm;
+static std::tuple<mode_t, uid_t, gid_t> get_device_permissions(
+    const std::string& path, const std::vector<std::string>& links) {
+    // Search the perms list in reverse so that ueventd.$hardware can override ueventd.rc.
+    for (auto it = dev_permissions.rbegin(); it != dev_permissions.rend(); ++it) {
+        if (it->Match(path) || std::any_of(links.begin(), links.end(),
+                                           [it](const auto& link) { return it->Match(link); })) {
+            return {it->perm(), it->uid(), it->gid()};
         }
     }
     /* Default if nothing found. */
-    *uid = 0;
-    *gid = 0;
-    return 0600;
+    return {0600, 0, 0};
 }
 
 static void make_device(const std::string& path, int block, int major, int minor,
                         const std::vector<std::string>& links) {
-    unsigned uid;
-    unsigned gid;
-    mode_t mode;
     dev_t dev;
     char *secontext = NULL;
 
-    mode = get_device_perm(path.c_str(), links, &uid, &gid) | (block ? S_IFBLK : S_IFCHR);
+    auto [mode, uid, gid] = get_device_permissions(path, links);
+    mode |= (block ? S_IFBLK : S_IFCHR);
 
     if (sehandle) {
         std::vector<const char*> c_links;
@@ -607,7 +537,7 @@ static void handle_generic_device_event(uevent* uevent) {
 static void handle_device_event(struct uevent *uevent)
 {
     if (uevent->action == "add" || uevent->action == "change" || uevent->action == "online") {
-        fixup_sys_perms(uevent->path, uevent->subsystem);
+        fixup_sys_permissions(uevent->path, uevent->subsystem);
     }
 
     if (uevent->subsystem == "block") {
