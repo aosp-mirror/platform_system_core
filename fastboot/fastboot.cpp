@@ -55,6 +55,7 @@
 #include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/unique_fd.h>
 #include <sparse/sparse.h>
 #include <ziparchive/zip_archive.h>
 
@@ -67,6 +68,8 @@
 #include "udp.h"
 #include "usb.h"
 
+using android::base::unique_fd;
+
 #ifndef O_BINARY
 #define O_BINARY 0
 #endif
@@ -78,6 +81,10 @@ static const char* product = nullptr;
 static const char* cmdline = nullptr;
 static unsigned short vendor_id = 0;
 static int long_listing = 0;
+// Don't resparse files in too-big chunks.
+// libsparse will support INT_MAX, but this results in large allocations, so
+// let's keep it at 1GB to avoid memory pressure on the host.
+static constexpr int64_t RESPARSE_LIMIT = 1 * 1024 * 1024 * 1024;
 static int64_t sparse_limit = -1;
 static int64_t target_sparse_limit = -1;
 
@@ -91,7 +98,7 @@ static unsigned tags_offset    = 0x00000100;
 static const std::string convert_fbe_marker_filename("convert_fbe");
 
 enum fb_buffer_type {
-    FB_BUFFER,
+    FB_BUFFER_FD,
     FB_BUFFER_SPARSE,
 };
 
@@ -99,6 +106,7 @@ struct fastboot_buffer {
     enum fb_buffer_type type;
     void* data;
     int64_t sz;
+    int fd;
 };
 
 static struct {
@@ -789,7 +797,7 @@ static int64_t get_sparse_limit(Transport* transport, int64_t size) {
     }
 
     if (size > limit) {
-        return limit;
+        return std::min(limit, RESPARSE_LIMIT);
     }
 
     return 0;
@@ -822,10 +830,9 @@ static bool load_buf_fd(Transport* transport, int fd, struct fastboot_buffer* bu
         buf->type = FB_BUFFER_SPARSE;
         buf->data = s;
     } else {
-        void* data = load_fd(fd, &sz);
-        if (data == nullptr) return -1;
-        buf->type = FB_BUFFER;
-        buf->data = data;
+        buf->type = FB_BUFFER_FD;
+        buf->data = nullptr;
+        buf->fd = fd;
         buf->sz = sz;
     }
 
@@ -833,11 +840,22 @@ static bool load_buf_fd(Transport* transport, int fd, struct fastboot_buffer* bu
 }
 
 static bool load_buf(Transport* transport, const char* fname, struct fastboot_buffer* buf) {
-    int fd = open(fname, O_RDONLY | O_BINARY);
+    unique_fd fd(TEMP_FAILURE_RETRY(open(fname, O_RDONLY | O_BINARY)));
+
     if (fd == -1) {
         return false;
     }
-    return load_buf_fd(transport, fd, buf);
+
+    struct stat s;
+    if (fstat(fd, &s)) {
+        return false;
+    }
+    if (!S_ISREG(s.st_mode)) {
+        errno = S_ISDIR(s.st_mode) ? EISDIR : EINVAL;
+        return false;
+    }
+
+    return load_buf_fd(transport, fd.release(), buf);
 }
 
 static void flash_buf(const char *pname, struct fastboot_buffer *buf)
@@ -860,9 +878,8 @@ static void flash_buf(const char *pname, struct fastboot_buffer *buf)
             }
             break;
         }
-
-        case FB_BUFFER:
-            fb_queue_flash(pname, buf->data, buf->sz);
+        case FB_BUFFER_FD:
+            fb_queue_flash_fd(pname, buf->fd, buf->sz);
             break;
         default:
             die("unknown buffer type: %d", buf->type);
