@@ -26,7 +26,7 @@ extern struct selabel_handle *sehandle_prop;
 
 void handle_control_message(const std::string& msg, const std::string& arg);
 
-void property_changed(const char *name, const char *value);
+void property_changed(const std::string& name, const std::string& value);
 
 void register_epoll_handler(int fd, void (*fn)());
 
