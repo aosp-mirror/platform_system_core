@@ -10,17 +10,23 @@ cc_library {
         "sparse.c",
         "sparse_crc32.c",
         "sparse_err.c",
-        "sparse_read.c",
+        "sparse_read.cpp",
     ],
     cflags: ["-Werror"],
     local_include_dirs: ["include"],
     export_include_dirs: ["include"],
     target: {
         host: {
-            shared_libs: ["libz-host"],
+            shared_libs: [
+                "libz-host",
+                "libbase",
+            ],
         },
         android: {
-            shared_libs: ["libz"],
+            shared_libs: [
+                "libz",
+                "libbase",
+            ],
         },
         windows: {
             enabled: true,
@@ -38,6 +44,7 @@ cc_binary {
     static_libs: [
         "libsparse",
         "libz",
+        "libbase",
     ],
 
     cflags: ["-Werror"],
@@ -50,6 +57,7 @@ cc_binary {
     static_libs: [
         "libsparse",
         "libz",
+        "libbase",
     ],
 
     cflags: ["-Werror"],
@@ -61,6 +69,7 @@ cc_binary_host {
     static_libs: [
         "libsparse",
         "libz",
+        "libbase",
     ],
 
     cflags: ["-Werror"],
