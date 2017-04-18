@@ -174,6 +174,7 @@ class LogBuffer {
    private:
     static constexpr size_t minPrune = 4;
     static constexpr size_t maxPrune = 256;
+    static const log_time pruneMargin;
 
     void maybePrune(log_id_t id);
     bool prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT);
