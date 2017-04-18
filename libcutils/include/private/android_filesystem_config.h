@@ -171,6 +171,9 @@
 #define AID_EXT_GID_START 30000 /* start of gids for apps to mark external data */
 #define AID_EXT_GID_END 39999   /* end of gids for apps to mark external data */
 
+#define AID_EXT_CACHE_GID_START 40000 /* start of gids for apps to mark external cached data */
+#define AID_EXT_CACHE_GID_END 49999   /* end of gids for apps to mark external cached data */
+
 #define AID_SHARED_GID_START 50000 /* start of gids for apps in each user to share */
 #define AID_SHARED_GID_END 59999   /* end of gids for apps in each user to share */
 

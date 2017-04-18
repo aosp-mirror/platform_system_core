@@ -68,6 +68,14 @@ TEST(MultiuserTest, TestExt) {
     EXPECT_EQ(1030000U, multiuser_get_ext_gid(10, 10000));
 }
 
+TEST(MultiuserTest, TestExtCache) {
+    EXPECT_EQ(ERR_GID, multiuser_get_ext_cache_gid(0, 0));
+    EXPECT_EQ(ERR_GID, multiuser_get_ext_cache_gid(0, 1000));
+    EXPECT_EQ(40000U, multiuser_get_ext_cache_gid(0, 10000));
+    EXPECT_EQ(ERR_GID, multiuser_get_ext_cache_gid(0, 50000));
+    EXPECT_EQ(1040000U, multiuser_get_ext_cache_gid(10, 10000));
+}
+
 TEST(MultiuserTest, TestShared) {
     EXPECT_EQ(ERR_GID, multiuser_get_shared_gid(0, 0));
     EXPECT_EQ(ERR_GID, multiuser_get_shared_gid(0, 1000));
