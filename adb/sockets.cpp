@@ -32,7 +32,7 @@
 
 #if !ADB_HOST
 #include <android-base/properties.h>
-#include <private/android_logger.h>
+#include <log/log_properties.h>
 #endif
 
 #include "adb.h"
