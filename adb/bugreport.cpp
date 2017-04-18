@@ -137,7 +137,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
             SetSrcFile(&line[strlen(BUGZ_OK_PREFIX)]);
         } else if (android::base::StartsWith(line, BUGZ_FAIL_PREFIX)) {
             const char* error_message = &line[strlen(BUGZ_FAIL_PREFIX)];
-            fprintf(stderr, "Device failed to take a zipped bugreport: %s\n", error_message);
+            fprintf(stderr, "adb: device failed to take a zipped bugreport: %s\n", error_message);
             status_ = -1;
         } else if (show_progress_ && android::base::StartsWith(line, BUGZ_PROGRESS_PREFIX)) {
             // progress_line should have the following format:
@@ -195,7 +195,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
 };
 
 int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, const char** argv) {
-    if (argc > 2) return usage("usage: adb bugreport [PATH]");
+    if (argc > 2) return syntax_error("adb bugreport [PATH]");
 
     // Gets bugreportz version.
     std::string bugz_stdout, bugz_stderr;

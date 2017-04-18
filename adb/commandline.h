@@ -87,7 +87,6 @@ class DefaultStandardStreamsCallback : public StandardStreamsCallbackInterface {
 extern DefaultStandardStreamsCallback DEFAULT_STANDARD_STREAMS_CALLBACK;
 
 int adb_commandline(int argc, const char** argv);
-int usage();
 
 // Connects to the device "shell" service with |command| and prints the
 // resulting output.
