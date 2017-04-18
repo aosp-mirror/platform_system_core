@@ -26,6 +26,24 @@
 SRC=/system/asan.tar.bz2
 MD5_FILE=/data/asan.md5sum
 ASAN_DIR=/data/asan
+# Minimum /data size in blocks. Arbitrarily 512M.
+MIN_DATA_SIZE=131072
+
+# Checks for FDE pre-decrypt state.
+
+VOLD_STATUS=$(getprop vold.decrypt)
+if [ "$VOLD_STATUS" = "trigger_restart_min_framework" ] ; then
+  log -p i -t asan_install "Pre-decrypt FDE detected (by vold property)!"
+  exit 1
+fi
+
+STATFS_BLOCKS=$(stat -f -c '%b' /data)
+if [ "$STATFS_BLOCKS" -le "$MIN_DATA_SIZE" ] ; then
+  log -p i -t asan_install "Pre-decrypt FDE detected (by /data size)!"
+  exit 1
+fi
+
+# Check for ASAN source.
 
 if ! test -f $SRC ; then
   log -p i -t asan_install "Did not find $SRC!"
@@ -33,6 +51,8 @@ if ! test -f $SRC ; then
 fi
 
 log -p i -t asan_install "Found $SRC, checking whether we need to apply it."
+
+# Checksum check.
 
 ASAN_TAR_MD5=$(md5sum $SRC)
 if test -f $MD5_FILE ; then
@@ -42,6 +62,8 @@ if test -f $MD5_FILE ; then
     exit 0
   fi
 fi
+
+# Actually apply the source.
 
 # Just clean up, helps with restorecon.
 rm -rf $ASAN_DIR
