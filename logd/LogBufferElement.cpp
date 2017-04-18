@@ -121,7 +121,7 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent
     }
 
     static const char format_uid[] = "uid=%u%s%s %s %u line%s";
-    parent->lock();
+    parent->wrlock();
     const char* name = parent->uidToName(mUid);
     parent->unlock();
     const char* commName = android::tidToName(mTid);
@@ -129,7 +129,7 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent
         commName = android::tidToName(mPid);
     }
     if (!commName) {
-        parent->lock();
+        parent->wrlock();
         commName = parent->pidToName(mPid);
         parent->unlock();
     }
