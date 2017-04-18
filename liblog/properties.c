@@ -459,6 +459,9 @@ LIBLOG_ABI_PRIVATE bool __android_logger_property_get_bool(const char* key,
   if (check_flag(property.property, "false")) {
     return false;
   }
+  if (property.property[0]) {
+    flag &= ~(BOOL_DEFAULT_FLAG_ENG | BOOL_DEFAULT_FLAG_SVELTE);
+  }
   if (check_flag(property.property, "eng")) {
     flag |= BOOL_DEFAULT_FLAG_ENG;
   }
