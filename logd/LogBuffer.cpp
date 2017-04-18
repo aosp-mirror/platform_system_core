@@ -43,6 +43,8 @@
 // Default
 #define log_buffer_size(id) mMaxSize[id]
 
+const log_time LogBuffer::pruneMargin(3, 0);
+
 void LogBuffer::init() {
     log_id_for_each(i) {
         mLastSet[i] = false;
@@ -674,6 +676,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         }
         times++;
     }
+    log_time watermark(log_time::tv_sec_max, log_time::tv_nsec_max);
+    if (oldest) watermark = oldest->mStart - pruneMargin;
 
     LogBufferElementCollection::iterator it;
 
@@ -695,7 +699,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 mLastSet[id] = true;
             }
 
-            if (oldest && (oldest->mStart <= element->getRealTime().nsec())) {
+            if (oldest && (watermark <= element->getRealTime())) {
                 busy = true;
                 if (oldest->mTimeout.tv_sec || oldest->mTimeout.tv_nsec) {
                     oldest->triggerReader_Locked();
@@ -787,7 +791,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         while (it != mLogElements.end()) {
             LogBufferElement* element = *it;
 
-            if (oldest && (oldest->mStart <= element->getRealTime().nsec())) {
+            if (oldest && (watermark <= element->getRealTime())) {
                 busy = true;
                 if (oldest->mTimeout.tv_sec || oldest->mTimeout.tv_nsec) {
                     oldest->triggerReader_Locked();
@@ -941,7 +945,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             mLastSet[id] = true;
         }
 
-        if (oldest && (oldest->mStart <= element->getRealTime().nsec())) {
+        if (oldest && (watermark <= element->getRealTime())) {
             busy = true;
             if (whitelist) {
                 break;
@@ -985,7 +989,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 mLastSet[id] = true;
             }
 
-            if (oldest && (oldest->mStart <= element->getRealTime().nsec())) {
+            if (oldest && (watermark <= element->getRealTime())) {
                 busy = true;
                 if (stats.sizes(id) > (2 * log_buffer_size(id))) {
                     // kick a misbehaving log reader client off the island
@@ -1092,13 +1096,15 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
         // client wants to start from the beginning
         it = mLogElements.begin();
     } else {
-        LogBufferElementCollection::iterator last;
         // 3 second limit to continue search for out-of-order entries.
-        log_time min = start - log_time(3, 0);
+        log_time min = start - pruneMargin;
+
         // Cap to 300 iterations we look back for out-of-order entries.
         size_t count = 300;
+
         // Client wants to start from some specified time. Chances are
         // we are better off starting from the end of the time sorted list.
+        LogBufferElementCollection::iterator last;
         for (last = it = mLogElements.end(); it != mLogElements.begin();
              /* do nothing */) {
             --it;
