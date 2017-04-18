@@ -45,6 +45,14 @@ gid_t multiuser_get_ext_gid(userid_t user_id, appid_t app_id) {
     }
 }
 
+gid_t multiuser_get_ext_cache_gid(userid_t user_id, appid_t app_id) {
+    if (app_id >= AID_APP_START && app_id <= AID_APP_END) {
+        return multiuser_get_uid(user_id, (app_id - AID_APP_START) + AID_EXT_CACHE_GID_START);
+    } else {
+        return -1;
+    }
+}
+
 gid_t multiuser_get_shared_gid(userid_t user_id, appid_t app_id) {
     if (app_id >= AID_APP_START && app_id <= AID_APP_END) {
         return multiuser_get_uid(user_id, (app_id - AID_APP_START) + AID_SHARED_GID_START);
