@@ -277,7 +277,7 @@ LIBLOG_ABI_PUBLIC int __android_log_is_loggable(int prio, const char* tag,
   return logLevel >= 0 && prio >= logLevel;
 }
 
-LIBLOG_ABI_PRIVATE int __android_log_is_debuggable() {
+LIBLOG_ABI_PUBLIC int __android_log_is_debuggable() {
   static uint32_t serial;
   static struct cache_char tag_cache;
   static const char key[] = "ro.debuggable";
