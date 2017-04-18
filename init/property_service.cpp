@@ -205,7 +205,7 @@ uint32_t property_set(const std::string& name, const std::string& value) {
     if (persistent_properties_loaded && android::base::StartsWith(name, "persist.")) {
         write_persistent_property(name.c_str(), value.c_str());
     }
-    property_changed(name.c_str(), value.c_str());
+    property_changed(name, value);
     return PROP_SUCCESS;
 }
 
