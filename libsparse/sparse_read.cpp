@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-#define _GNU_SOURCE
 #define _FILE_OFFSET_BITS 64
 #define _LARGEFILE64_SOURCE 1
 
+#include <algorithm>
 #include <inttypes.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -25,16 +25,18 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <string>
 #include <unistd.h>
 
 #include <sparse/sparse.h>
 
+#include "android-base/stringprintf.h"
 #include "defs.h"
 #include "output_file.h"
 #include "sparse_crc32.h"
 #include "sparse_file.h"
 #include "sparse_format.h"
+
 
 #if defined(__APPLE__) && defined(__MACH__)
 #define lseek64 lseek
@@ -45,57 +47,30 @@
 #define SPARSE_HEADER_LEN       (sizeof(sparse_header_t))
 #define CHUNK_HEADER_LEN (sizeof(chunk_header_t))
 
-#define COPY_BUF_SIZE (1024U*1024U)
+static constexpr int64_t COPY_BUF_SIZE = 1024 * 1024;
 static char *copybuf;
 
-#define min(a, b) \
-	({ typeof(a) _a = (a); typeof(b) _b = (b); (_a < _b) ? _a : _b; })
+static std::string ErrorString(int err)
+{
+	if (err == -EOVERFLOW) return "EOF while reading file";
+	if (err == -EINVAL) return "Invalid sparse file format";
+	if (err == -ENOMEM) return "Failed allocation while reading file";
+	return android::base::StringPrintf("Unknown error %d", err);
+}
 
 static void verbose_error(bool verbose, int err, const char *fmt, ...)
 {
-	char *s = "";
-	char *at = "";
+	if (!verbose) return;
+
+	std::string msg = ErrorString(err);
 	if (fmt) {
+		msg += " at ";
 		va_list argp;
-		int size;
-
 		va_start(argp, fmt);
-		size = vsnprintf(NULL, 0, fmt, argp);
+		android::base::StringAppendV(&msg, fmt, argp);
 		va_end(argp);
-
-		if (size < 0) {
-			return;
-		}
-
-		at = malloc(size + 1);
-		if (at == NULL) {
-			return;
-		}
-
-		va_start(argp, fmt);
-		vsnprintf(at, size, fmt, argp);
-		va_end(argp);
-		at[size] = 0;
-		s = " at ";
 	}
-	if (verbose) {
-#ifndef _WIN32
-		if (err == -EOVERFLOW) {
-			sparse_print_verbose("EOF while reading file%s%s\n", s, at);
-		} else
-#endif
-		if (err == -EINVAL) {
-			sparse_print_verbose("Invalid sparse file format%s%s\n", s, at);
-		} else if (err == -ENOMEM) {
-			sparse_print_verbose("Failed allocation while reading file%s%s\n",
-					s, at);
-		} else {
-			sparse_print_verbose("Unknown error %d%s%s\n", err, s, at);
-		}
-	}
-	if (fmt) {
-		free(at);
-	}
+	sparse_print_verbose("%s\n", msg.c_str());
 }
 
 static int process_raw_chunk(struct sparse_file *s, unsigned int chunk_size,
@@ -104,7 +79,7 @@ static int process_raw_chunk(struct sparse_file *s, unsigned int chunk_size,
 {
 	int ret;
 	int chunk;
-	unsigned int len = blocks * s->block_size;
+	int64_t len = blocks * s->block_size;
 
 	if (chunk_size % s->block_size != 0) {
 		return -EINVAL;
@@ -121,7 +96,7 @@ static int process_raw_chunk(struct sparse_file *s, unsigned int chunk_size,
 
 	if (crc32) {
 		while (len) {
-			chunk = min(len, COPY_BUF_SIZE);
+			chunk = std::min(len, COPY_BUF_SIZE);
 			ret = read_all(fd, copybuf, chunk);
 			if (ret < 0) {
 				return ret;
@@ -168,7 +143,7 @@ static int process_fill_chunk(struct sparse_file *s, unsigned int chunk_size,
 		}
 
 		while (len) {
-			chunk = min(len, COPY_BUF_SIZE);
+			chunk = std::min(len, COPY_BUF_SIZE);
 			*crc32 = sparse_crc32(*crc32, copybuf, chunk);
 			len -= chunk;
 		}
@@ -190,7 +165,7 @@ static int process_skip_chunk(struct sparse_file *s, unsigned int chunk_size,
 		memset(copybuf, 0, COPY_BUF_SIZE);
 
 		while (len) {
-			int chunk = min(len, COPY_BUF_SIZE);
+			int chunk = std::min(len, COPY_BUF_SIZE);
 			*crc32 = sparse_crc32(*crc32, copybuf, chunk);
 			len -= chunk;
 		}
@@ -284,7 +259,7 @@ static int sparse_file_read_sparse(struct sparse_file *s, int fd, bool crc)
 	off64_t offset;
 
 	if (!copybuf) {
-		copybuf = malloc(COPY_BUF_SIZE);
+		copybuf = (char *)malloc(COPY_BUF_SIZE);
 	}
 
 	if (!copybuf) {
@@ -357,7 +332,7 @@ static int sparse_file_read_sparse(struct sparse_file *s, int fd, bool crc)
 static int sparse_file_read_normal(struct sparse_file *s, int fd)
 {
 	int ret;
-	uint32_t *buf = malloc(s->block_size);
+	uint32_t *buf = (uint32_t *)malloc(s->block_size);
 	unsigned int block = 0;
 	int64_t remain = s->len;
 	int64_t offset = 0;
@@ -370,7 +345,7 @@ static int sparse_file_read_normal(struct sparse_file *s, int fd)
 	}
 
 	while (remain > 0) {
-		to_read = min(remain, s->block_size);
+		to_read = std::min(remain, (int64_t)(s->block_size));
 		ret = read_all(fd, buf, to_read);
 		if (ret < 0) {
 			error("failed to read sparse file");
