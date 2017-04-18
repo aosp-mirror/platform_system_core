@@ -23,20 +23,20 @@
 #include <vector>
 
 class ImportParser : public SectionParser {
-public:
+  public:
     ImportParser()  {
     }
-    bool ParseSection(const std::vector<std::string>& args,
+    bool ParseSection(const std::vector<std::string>& args, const std::string& filename, int line,
                       std::string* err) override;
-    bool ParseLineSection(const std::vector<std::string>& args,
-                          const std::string& filename, int line,
-                          std::string* err) const override {
+    bool ParseLineSection(const std::vector<std::string>& args, int line,
+                          std::string* err) override {
         return true;
     }
     void EndSection() override {
     }
     void EndFile(const std::string& filename) override;
-private:
+
+  private:
     std::vector<std::string> imports_;
 };
 

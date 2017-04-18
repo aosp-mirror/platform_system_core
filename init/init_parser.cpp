@@ -71,14 +71,13 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
                 }
                 section_parser = section_parsers_[args[0]].get();
                 std::string ret_err;
-                if (!section_parser->ParseSection(args, &ret_err)) {
+                if (!section_parser->ParseSection(args, state.filename, state.line, &ret_err)) {
                     parse_error(&state, "%s\n", ret_err.c_str());
                     section_parser = nullptr;
                 }
             } else if (section_parser) {
                 std::string ret_err;
-                if (!section_parser->ParseLineSection(args, state.filename,
-                                                      state.line, &ret_err)) {
+                if (!section_parser->ParseLineSection(args, state.line, &ret_err)) {
                     parse_error(&state, "%s\n", ret_err.c_str());
                 }
             }
