@@ -277,7 +277,7 @@ int LogAudit::logPrint(const char* fmt, ...) {
             ++cp;
         }
         tid = pid;
-        logbuf->lock();
+        logbuf->wrlock();
         uid = logbuf->pidToUid(pid);
         logbuf->unlock();
         memmove(pidptr, cp, strlen(cp) + 1);
@@ -322,7 +322,7 @@ int LogAudit::logPrint(const char* fmt, ...) {
         pid = tid;
         comm = "auditd";
     } else {
-        logbuf->lock();
+        logbuf->wrlock();
         comm = commfree = logbuf->pidToName(pid);
         logbuf->unlock();
         if (!comm) {

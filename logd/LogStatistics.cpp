@@ -192,6 +192,7 @@ void LogStatistics::drop(LogBufferElement* element) {
 }
 
 // caller must own and free character string
+// Requires parent LogBuffer::wrlock() to be held
 const char* LogStatistics::uidToName(uid_t uid) const {
     // Local hard coded favourites
     if (uid == AID_LOGD) {
