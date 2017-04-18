@@ -67,6 +67,7 @@
 #include "keychords.h"
 #include "log.h"
 #include "property_service.h"
+#include "reboot.h"
 #include "service.h"
 #include "signal_handler.h"
 #include "ueventd.h"
@@ -153,8 +154,13 @@ bool start_waiting_for_property(const char *name, const char *value)
     return true;
 }
 
-void property_changed(const char *name, const char *value)
-{
+void property_changed(const std::string& name, const std::string& value) {
+    // If the property is sys.powerctl, we bypass the event queue and immediately handle it.
+    // This is to ensure that init will always and immediately shutdown/reboot, regardless of
+    // if there are other pending events to process or if init is waiting on an exec service or
+    // waiting on a property.
+    if (name == "sys.powerctl") HandlePowerctlMessage(value);
+
     if (property_triggers_enabled)
         ActionManager::GetInstance().QueuePropertyTrigger(name, value);
     if (waiting_for_prop) {
