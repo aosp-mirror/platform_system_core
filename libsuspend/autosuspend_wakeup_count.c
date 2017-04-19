@@ -24,6 +24,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <string.h>
+#include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -35,12 +36,24 @@
 #define SYS_POWER_STATE "/sys/power/state"
 #define SYS_POWER_WAKEUP_COUNT "/sys/power/wakeup_count"
 
+#define BASE_SLEEP_TIME 100000
+
 static int state_fd;
 static int wakeup_count_fd;
 static pthread_t suspend_thread;
 static sem_t suspend_lockout;
 static const char *sleep_state = "mem";
 static void (*wakeup_func)(bool success) = NULL;
+static int sleep_time = BASE_SLEEP_TIME;
+
+static void update_sleep_time(bool success) {
+    if (success) {
+        sleep_time = BASE_SLEEP_TIME;
+        return;
+    }
+    // double sleep time after each failure up to one minute
+    sleep_time = MIN(sleep_time * 2, 60000000);
+}
 
 static void *suspend_thread_func(void *arg __attribute__((unused)))
 {
@@ -48,10 +61,12 @@ static void *suspend_thread_func(void *arg __attribute__((unused)))
     char wakeup_count[20];
     int wakeup_count_len;
     int ret;
-    bool success;
+    bool success = true;
 
     while (1) {
-        usleep(100000);
+        update_sleep_time(success);
+        usleep(sleep_time);
+        success = false;
         ALOGV("%s: read wakeup_count\n", __func__);
         lseek(wakeup_count_fd, 0, SEEK_SET);
         wakeup_count_len = TEMP_FAILURE_RETRY(read(wakeup_count_fd, wakeup_count,
@@ -75,7 +90,6 @@ static void *suspend_thread_func(void *arg __attribute__((unused)))
             continue;
         }
 
-        success = true;
         ALOGV("%s: write %*s to wakeup_count\n", __func__, wakeup_count_len, wakeup_count);
         ret = TEMP_FAILURE_RETRY(write(wakeup_count_fd, wakeup_count, wakeup_count_len));
         if (ret < 0) {
@@ -84,8 +98,8 @@ static void *suspend_thread_func(void *arg __attribute__((unused)))
         } else {
             ALOGV("%s: write %s to %s\n", __func__, sleep_state, SYS_POWER_STATE);
             ret = TEMP_FAILURE_RETRY(write(state_fd, sleep_state, strlen(sleep_state)));
-            if (ret < 0) {
-                success = false;
+            if (ret >= 0) {
+                success = true;
             }
             void (*func)(bool success) = wakeup_func;
             if (func != NULL) {
