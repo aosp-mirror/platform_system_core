@@ -16,9 +16,7 @@ Actions and Services implicitly declare a new section.  All commands
 or options belong to the section most recently declared.  Commands
 or options before the first section are ignored.
 
-Actions and Services have unique names.  If a second Action is defined
-with the same name as an existing one, its commands are appended to
-the commands of the existing action.  If a second Service is defined
+Services have unique names.  If a second Service is defined
 with the same name as an existing one, it is ignored and an error
 message is logged.
 
@@ -31,13 +29,21 @@ locations on the system, described below.
 
 /init.rc is the primary .rc file and is loaded by the init executable
 at the beginning of its execution.  It is responsible for the initial
-set up of the system.  It imports /init.${ro.hardware}.rc which is the
-primary vendor supplied .rc file.
+set up of the system.
 
-During the mount\_all command, the init executable loads all of the
-files contained within the /{system,vendor,odm}/etc/init/ directories.
-These directories are intended for all Actions and Services used after
-file system mounting.
+Devices that mount /system, /vendor through the early mount mechanism
+load all of the files contained within the
+/{system,vendor,odm}/etc/init/ directories immediately after loading
+the primary /init.rc.  This is explained in more details in the
+Imports section of this file.
+
+Legacy devices without the early mount mechanism do the following:
+1. /init.rc imports /init.${ro.hardware}.rc which is the primary
+   vendor supplied .rc file.
+2. During the mount\_all command, the init executable loads all of the
+   files contained within the /{system,vendor,odm}/etc/init/ directories.
+   These directories are intended for all Actions and Services used after
+   file system mounting.
 
 One may specify paths in the mount\_all command line to have it import
 .rc files at the specified paths instead of the default ones listed above.
@@ -89,7 +95,7 @@ process all entries in the given fstab.
 Actions
 -------
 Actions are named sequences of commands.  Actions have a trigger which
-is used to determine when the action should occur.  When an event
+is used to determine when the action is executed.  When an event
 occurs which matches an action's trigger, that action is added to
 the tail of a to-be-executed queue (unless it is already on the
 queue).
@@ -105,6 +111,34 @@ Actions take the form of:
        <command>
        <command>
        <command>
+
+Actions are added to the queue and executed based on the order that
+the file that contains them was parsed (see the Imports section), then
+sequentially within an individual file.
+
+For example if a file contains:
+
+    on boot
+       setprop a 1
+       setprop b 2
+
+    on boot && property:true=true
+       setprop c 1
+       setprop d 2
+
+    on boot
+       setprop e 1
+       setprop f 2
+
+Then when the `boot` trigger occurs and assuming the property `true`
+equals `true`, then the order of the commands executed will be:
+
+    setprop a 1
+    setprop b 2
+    setprop c 1
+    setprop d 2
+    setprop e 1
+    setprop f 2
 
 
 Services
@@ -458,21 +492,54 @@ Commands
 
 Imports
 -------
-The import keyword is not a command, but rather its own section and is
-handled immediately after the .rc file that contains it has finished
-being parsed.  It takes the below form:
-
 `import <path>`
 > Parse an init config file, extending the current configuration.
   If _path_ is a directory, each file in the directory is parsed as
   a config file. It is not recursive, nested directories will
   not be parsed.
 
-There are only two times where the init executable imports .rc files:
+The import keyword is not a command, but rather its own section,
+meaning that it does not happen as part of an Action, but rather,
+imports are handled as a file is being parsed and follow the below logic.
 
-   1. When it imports /init.rc during initial boot
-   2. When it imports /{system,vendor,odm}/etc/init/ or .rc files at specified
-      paths during mount_all
+There are only three times where the init executable imports .rc files:
+
+   1. When it imports /init.rc or the script indicated by the property
+      `ro.boot.init_rc` during initial boot.
+   2. When it imports /{system,vendor,odm}/etc/init/ for early mount
+      devices immediately after importing /init.rc.
+   3. When it imports /{system,vendor,odm}/etc/init/ or .rc files at specified
+      paths during mount_all.
+
+The order that files are imported is a bit complex for legacy reasons
+and to keep backwards compatibility.  It is not strictly guaranteed.
+
+The only correct way to guarantee that a command has been run before a
+different command is to either 1) place it in an Action with an
+earlier executed trigger, or 2) place it in an Action with the same
+trigger within the same file at an earlier line.
+
+Nonetheless, the defacto order for early mount devices is:
+1. /init.rc is parsed then recursively each of its imports are
+   parsed.
+2. The contents of /system/etc/init/ are alphabetized and parsed
+   sequentially, with imports happening recursively after each file is
+   parsed.
+3. Step 2 is repeated for /vendor/etc/init then /odm/etc/init
+
+The below pseudocode may explain this more clearly:
+
+    fn Import(file)
+      Parse(file)
+      for (import : file.imports)
+        Import(import)
+
+    Import(/init.rc)
+    Directories = [/system/etc/init, /vendor/etc/init, /odm/etc/init]
+    for (directory : Directories)
+      files = <Alphabetical order of directory's contents>
+      for (file : files)
+        Import(file)
 
 
 Properties

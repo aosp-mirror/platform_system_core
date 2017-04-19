@@ -157,6 +157,7 @@ Service::Service(const std::string& name, const std::vector<std::string>& args)
       gid_(0),
       namespace_flags_(0),
       seclabel_(""),
+      onrestart_(false, "<Service '" + name + "' onrestart>", 0),
       ioprio_class_(IoSchedClass_NONE),
       ioprio_pri_(0),
       priority_(0),
@@ -180,6 +181,7 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       capabilities_(capabilities),
       namespace_flags_(namespace_flags),
       seclabel_(seclabel),
+      onrestart_(false, "<Service '" + name + "' onrestart>", 0),
       ioprio_class_(IoSchedClass_NONE),
       ioprio_pri_(0),
       priority_(0),
@@ -438,7 +440,8 @@ bool Service::ParseOneshot(const std::vector<std::string>& args, std::string* er
 
 bool Service::ParseOnrestart(const std::vector<std::string>& args, std::string* err) {
     std::vector<std::string> str_args(args.begin() + 1, args.end());
-    onrestart_.AddCommand(str_args, "", 0, err);
+    int line = onrestart_.NumCommands() + 1;
+    onrestart_.AddCommand(str_args, line, err);
     return true;
 }
 
@@ -1092,8 +1095,8 @@ void ServiceManager::ReapAnyOutstandingChildren() {
     }
 }
 
-bool ServiceParser::ParseSection(const std::vector<std::string>& args,
-                                 std::string* err) {
+bool ServiceParser::ParseSection(const std::vector<std::string>& args, const std::string& filename,
+                                 int line, std::string* err) {
     if (args.size() < 3) {
         *err = "services must have a name and a program";
         return false;
@@ -1110,9 +1113,8 @@ bool ServiceParser::ParseSection(const std::vector<std::string>& args,
     return true;
 }
 
-bool ServiceParser::ParseLineSection(const std::vector<std::string>& args,
-                                     const std::string& filename, int line,
-                                     std::string* err) const {
+bool ServiceParser::ParseLineSection(const std::vector<std::string>& args, int line,
+                                     std::string* err) {
     return service_ ? service_->ParseLine(args, err) : false;
 }
 
