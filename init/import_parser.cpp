@@ -20,8 +20,8 @@
 
 #include "util.h"
 
-bool ImportParser::ParseSection(const std::vector<std::string>& args,
-                                std::string* err) {
+bool ImportParser::ParseSection(const std::vector<std::string>& args, const std::string& filename,
+                                int line, std::string* err) {
     if (args.size() != 2) {
         *err = "single argument needed for import\n";
         return false;

@@ -27,31 +27,26 @@
 #include "keyword_map.h"
 
 class Command {
-public:
-    Command(BuiltinFunction f, const std::vector<std::string>& args,
-            const std::string& filename, int line);
+  public:
+    Command(BuiltinFunction f, const std::vector<std::string>& args, int line);
 
     int InvokeFunc() const;
     std::string BuildCommandString() const;
-    std::string BuildSourceString() const;
 
-private:
+    int line() const { return line_; }
+
+  private:
     BuiltinFunction func_;
     std::vector<std::string> args_;
-    std::string filename_;
     int line_;
 };
 
 class Action {
-public:
-    explicit Action(bool oneshot = false);
+  public:
+    explicit Action(bool oneshot, const std::string& filename, int line);
 
-    bool AddCommand(const std::vector<std::string>& args,
-                    const std::string& filename, int line, std::string* err);
-    void AddCommand(BuiltinFunction f,
-                    const std::vector<std::string>& args,
-                    const std::string& filename = "", int line = 0);
-    void CombineAction(const Action& action);
+    bool AddCommand(const std::vector<std::string>& args, int line, std::string* err);
+    void AddCommand(BuiltinFunction f, const std::vector<std::string>& args, int line);
     bool InitTriggers(const std::vector<std::string>& args, std::string* err);
     bool InitSingleTrigger(const std::string& trigger);
     std::size_t NumCommands() const;
@@ -60,11 +55,12 @@ public:
     bool CheckEventTrigger(const std::string& trigger) const;
     bool CheckPropertyTrigger(const std::string& name,
                               const std::string& value) const;
-    bool TriggersEqual(const Action& other) const;
     std::string BuildTriggersString() const;
     void DumpState() const;
 
     bool oneshot() const { return oneshot_; }
+    const std::string& filename() const { return filename_; }
+    int line() const { return line_; }
     static void set_function_map(const KeywordMap<BuiltinFunction>* function_map) {
         function_map_ = function_map;
     }
@@ -80,6 +76,8 @@ private:
     std::string event_trigger_;
     std::vector<Command> commands_;
     bool oneshot_;
+    std::string filename_;
+    int line_;
     static const KeywordMap<BuiltinFunction>* function_map_;
 };
 
@@ -115,18 +113,17 @@ private:
 };
 
 class ActionParser : public SectionParser {
-public:
+  public:
     ActionParser() : action_(nullptr) {
     }
-    bool ParseSection(const std::vector<std::string>& args,
+    bool ParseSection(const std::vector<std::string>& args, const std::string& filename, int line,
                       std::string* err) override;
-    bool ParseLineSection(const std::vector<std::string>& args,
-                          const std::string& filename, int line,
-                          std::string* err) const override;
+    bool ParseLineSection(const std::vector<std::string>& args, int line, std::string* err) override;
     void EndSection() override;
     void EndFile(const std::string&) override {
     }
-private:
+
+  private:
     std::unique_ptr<Action> action_;
 };
 
