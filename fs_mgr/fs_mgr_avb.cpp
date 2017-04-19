@@ -493,6 +493,10 @@ FsManagerAvbUniquePtr FsManagerAvbHandle::Open(const std::string& device_file_by
         return nullptr;
     }
 
+    // Sets the MAJOR.MINOR for init to set it into "ro.boot.avb_version".
+    avb_handle->avb_version_ =
+        android::base::StringPrintf("%d.%d", AVB_VERSION_MAJOR, AVB_VERSION_MINOR);
+
     // Verifies vbmeta images against the digest passed from bootloader.
     if (!avb_verifier->VerifyVbmetaImages(*avb_handle->avb_slot_data_)) {
         LERROR << "VerifyVbmetaImages failed";
