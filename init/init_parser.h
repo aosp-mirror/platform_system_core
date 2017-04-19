@@ -26,11 +26,10 @@ class SectionParser {
 public:
     virtual ~SectionParser() {
     }
-    virtual bool ParseSection(const std::vector<std::string>& args,
-                              std::string* err) = 0;
-    virtual bool ParseLineSection(const std::vector<std::string>& args,
-                                  const std::string& filename, int line,
-                                  std::string* err) const = 0;
+    virtual bool ParseSection(const std::vector<std::string>& args, const std::string& filename,
+                              int line, std::string* err) = 0;
+    virtual bool ParseLineSection(const std::vector<std::string>& args, int line,
+                                  std::string* err) = 0;
     virtual void EndSection() = 0;
     virtual void EndFile(const std::string& filename) = 0;
 };
