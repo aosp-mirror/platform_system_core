@@ -155,7 +155,7 @@ static int do_class_restart(const std::vector<std::string>& args) {
 }
 
 static int do_domainname(const std::vector<std::string>& args) {
-    return write_file("/proc/sys/kernel/domainname", args[1].c_str()) ? 0 : 1;
+    return write_file("/proc/sys/kernel/domainname", args[1]) ? 0 : 1;
 }
 
 static int do_enable(const std::vector<std::string>& args) {
@@ -179,7 +179,7 @@ static int do_export(const std::vector<std::string>& args) {
 }
 
 static int do_hostname(const std::vector<std::string>& args) {
-    return write_file("/proc/sys/kernel/hostname", args[1].c_str()) ? 0 : 1;
+    return write_file("/proc/sys/kernel/hostname", args[1]) ? 0 : 1;
 }
 
 static int do_ifup(const std::vector<std::string>& args) {
@@ -648,57 +648,15 @@ static int do_verity_update_state(const std::vector<std::string>& args) {
 }
 
 static int do_write(const std::vector<std::string>& args) {
-    const char* path = args[1].c_str();
-    const char* value = args[2].c_str();
-    return write_file(path, value) ? 0 : 1;
+    return write_file(args[1], args[2]) ? 0 : 1;
 }
 
 static int do_copy(const std::vector<std::string>& args) {
-    char* buffer = NULL;
-    int rc = 0;
-    int fd1 = -1, fd2 = -1;
-    struct stat info;
-    int brtw, brtr;
-    char* p;
-
-    if (stat(args[1].c_str(), &info) < 0) return -1;
-
-    if ((fd1 = open(args[1].c_str(), O_RDONLY | O_CLOEXEC)) < 0) goto out_err;
-
-    if ((fd2 = open(args[2].c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0660)) < 0)
-        goto out_err;
-
-    if (!(buffer = (char*)malloc(info.st_size))) goto out_err;
-
-    p = buffer;
-    brtr = info.st_size;
-    while (brtr) {
-        rc = read(fd1, p, brtr);
-        if (rc < 0) goto out_err;
-        if (rc == 0) break;
-        p += rc;
-        brtr -= rc;
+    std::string data;
+    if (read_file(args[1], &data)) {
+        return write_file(args[2], data) ? 0 : 1;
     }
-
-    p = buffer;
-    brtw = info.st_size;
-    while (brtw) {
-        rc = write(fd2, p, brtw);
-        if (rc < 0) goto out_err;
-        if (rc == 0) break;
-        p += rc;
-        brtw -= rc;
-    }
-
-    rc = 0;
-    goto out;
-out_err:
-    rc = -1;
-out:
-    if (buffer) free(buffer);
-    if (fd1 >= 0) close(fd1);
-    if (fd2 >= 0) close(fd2);
-    return rc;
+    return 1;
 }
 
 static int do_chown(const std::vector<std::string>& args) {
