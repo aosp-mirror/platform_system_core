@@ -276,7 +276,8 @@ Commands
 
 `class_start <serviceclass>`
 > Start all services of the specified class if they are
-  not already running.
+  not already running.  See the start entry for more information on
+  starting services.
 
 `class_stop <serviceclass>`
 > Stop and disable all services of the specified class if they are
@@ -401,6 +402,16 @@ Commands
 
 `start <service>`
 > Start a service running if it is not already running.
+  Note that this is _not_ synchronous, and even if it were, there is
+  no guarantee that the operating system's scheduler will execute the
+  service sufficiently to guarantee anything about the service's status.
+
+> This creates an important consequence that if the service offers
+  functionality to other services, such as providing a
+  communication channel, simply starting this service before those
+  services is _not_ sufficient to guarantee that the channel has
+  been set up before those services ask for it.  There must be a
+  separate mechanism to make any such guarantees.
 
 `stop <service>`
 > Stop a service from running if it is currently running.
