@@ -245,10 +245,6 @@ on property:sys.boot_from_charger_mode=1
     class_stop charger
     trigger late-init
 
-# Load properties from /system/ + /factory after fs mount.
-on load_system_props_action
-    load_system_props
-
 on load_persist_props_action
     load_persist_props
     start logd
@@ -268,11 +264,6 @@ on late-init
     # while /data is optional.
     trigger fs
     trigger post-fs
-
-    # Load properties from /system/ + /factory after fs mount. Place
-    # this in another action so that the load will be scheduled after the prior
-    # issued fs triggers have completed.
-    trigger load_system_props_action
 
     # Mount fstab in init.{$device}.rc by mount_all with '--late' parameter
     # to only mount entries with 'latemount'. This is needed if '--early' is
@@ -298,6 +289,13 @@ on late-init
     trigger boot
 
 on post-fs
+    # Load properties from
+    #     /system/build.prop,
+    #     /odm/build.prop,
+    #     /vendor/build.prop and
+    #     /factory/factory.prop
+    load_system_props
+    # start essential services
     start logd
     start servicemanager
     start hwservicemanager
