@@ -838,7 +838,7 @@ static int do_init_user0(const std::vector<std::string>& args) {
     return e4crypt_do_init_user0();
 }
 
-BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
+const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     // clang-format off
     static const Map builtin_functions = {

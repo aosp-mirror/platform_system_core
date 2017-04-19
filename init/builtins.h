@@ -17,19 +17,20 @@
 #ifndef _INIT_BUILTINS_H
 #define _INIT_BUILTINS_H
 
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
 
 #include "keyword_map.h"
 
-using BuiltinFunction = int (*) (const std::vector<std::string>& args);
+using BuiltinFunction = std::function<int(const std::vector<std::string>&)>;
 class BuiltinFunctionMap : public KeywordMap<BuiltinFunction> {
-public:
-    BuiltinFunctionMap() {
-    }
-private:
-    Map& map() const override;
+  public:
+    BuiltinFunctionMap() {}
+
+  private:
+    const Map& map() const override;
 };
 
 #endif

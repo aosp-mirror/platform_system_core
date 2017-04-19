@@ -56,11 +56,16 @@ class SectionParser {
 };
 
 class Parser {
-public:
+  public:
     static Parser& GetInstance();
+
+    // Exposed for testing
+    Parser();
+
     bool ParseConfig(const std::string& path);
     void AddSectionParser(const std::string& name,
                           std::unique_ptr<SectionParser> parser);
+
     void set_is_system_etc_init_loaded(bool loaded) {
         is_system_etc_init_loaded_ = loaded;
     }
@@ -74,9 +79,7 @@ public:
     bool is_vendor_etc_init_loaded() { return is_vendor_etc_init_loaded_; }
     bool is_odm_etc_init_loaded() { return is_odm_etc_init_loaded_; }
 
-private:
-    Parser();
-
+  private:
     void ParseData(const std::string& filename, const std::string& data);
     bool ParseConfigFile(const std::string& path);
     bool ParseConfigDir(const std::string& path);

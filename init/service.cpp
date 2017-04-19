@@ -534,14 +534,14 @@ bool Service::ParseWritepid(const std::vector<std::string>& args, std::string* e
 }
 
 class Service::OptionParserMap : public KeywordMap<OptionParser> {
-public:
-    OptionParserMap() {
-    }
-private:
-    Map& map() const override;
+  public:
+    OptionParserMap() {}
+
+  private:
+    const Map& map() const override;
 };
 
-Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
+const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     // clang-format off
     static const Map option_parsers = {

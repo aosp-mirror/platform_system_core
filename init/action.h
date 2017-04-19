@@ -88,8 +88,11 @@ public:
 };
 
 class ActionManager {
-public:
+  public:
     static ActionManager& GetInstance();
+
+    // Exposed for testing
+    ActionManager();
 
     void AddAction(std::unique_ptr<Action> action);
     void QueueEventTrigger(const std::string& trigger);
@@ -100,9 +103,7 @@ public:
     bool HasMoreCommands() const;
     void DumpState() const;
 
-private:
-    ActionManager();
-
+  private:
     ActionManager(ActionManager const&) = delete;
     void operator=(ActionManager const&) = delete;
 
