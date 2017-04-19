@@ -26,10 +26,8 @@
 using android::base::Join;
 using android::base::StringPrintf;
 
-Command::Command(BuiltinFunction f, const std::vector<std::string>& args,
-                 const std::string& filename, int line)
-    : func_(f), args_(args), filename_(filename), line_(line) {
-}
+Command::Command(BuiltinFunction f, const std::vector<std::string>& args, int line)
+    : func_(f), args_(args), line_(line) {}
 
 int Command::InvokeFunc() const {
     std::vector<std::string> expanded_args;
@@ -49,21 +47,12 @@ std::string Command::BuildCommandString() const {
     return Join(args_, ' ');
 }
 
-std::string Command::BuildSourceString() const {
-    if (!filename_.empty()) {
-        return StringPrintf(" (%s:%d)", filename_.c_str(), line_);
-    } else {
-        return std::string();
-    }
-}
-
-Action::Action(bool oneshot) : oneshot_(oneshot) {
-}
+Action::Action(bool oneshot, const std::string& filename, int line)
+    : oneshot_(oneshot), filename_(filename), line_(line) {}
 
 const KeywordMap<BuiltinFunction>* Action::function_map_ = nullptr;
 
-bool Action::AddCommand(const std::vector<std::string>& args,
-                        const std::string& filename, int line, std::string* err) {
+bool Action::AddCommand(const std::vector<std::string>& args, int line, std::string* err) {
     if (!function_map_) {
         *err = "no function map available";
         return false;
@@ -79,20 +68,12 @@ bool Action::AddCommand(const std::vector<std::string>& args,
         return false;
     }
 
-    AddCommand(function, args, filename, line);
+    AddCommand(function, args, line);
     return true;
 }
 
-void Action::AddCommand(BuiltinFunction f,
-                        const std::vector<std::string>& args,
-                        const std::string& filename, int line) {
-    commands_.emplace_back(f, args, filename, line);
-}
-
-void Action::CombineAction(const Action& action) {
-    for (const auto& c : action.commands_) {
-        commands_.emplace_back(c);
-    }
+void Action::AddCommand(BuiltinFunction f, const std::vector<std::string>& args, int line) {
+    commands_.emplace_back(f, args, line);
 }
 
 std::size_t Action::NumCommands() const {
@@ -122,7 +103,7 @@ void Action::ExecuteCommand(const Command& command) const {
         android::base::GetMinimumLogSeverity() <= android::base::DEBUG) {
         std::string trigger_name = BuildTriggersString();
         std::string cmd_str = command.BuildCommandString();
-        std::string source = command.BuildSourceString();
+        std::string source = StringPrintf(" (%s:%d)", filename_.c_str(), command.line());
 
         LOG(INFO) << "Command '" << cmd_str << "' action=" << trigger_name << source
                   << " returned " << result << " took " << duration_ms << "ms.";
@@ -234,11 +215,6 @@ bool Action::CheckPropertyTrigger(const std::string& name,
     return event_trigger_.empty() && CheckPropertyTriggers(name, value);
 }
 
-bool Action::TriggersEqual(const Action& other) const {
-    return property_triggers_ == other.property_triggers_ &&
-        event_trigger_ == other.event_trigger_;
-}
-
 std::string Action::BuildTriggersString() const {
     std::vector<std::string> triggers;
 
@@ -306,17 +282,7 @@ ActionManager& ActionManager::GetInstance() {
 }
 
 void ActionManager::AddAction(std::unique_ptr<Action> action) {
-    auto old_action_it =
-        std::find_if(actions_.begin(), actions_.end(),
-                     [&action] (std::unique_ptr<Action>& a) {
-                         return action->TriggersEqual(*a);
-                     });
-
-    if (old_action_it != actions_.end()) {
-        (*old_action_it)->CombineAction(*action);
-    } else {
-        actions_.emplace_back(std::move(action));
-    }
+    actions_.emplace_back(std::move(action));
 }
 
 void ActionManager::QueueEventTrigger(const std::string& trigger) {
@@ -332,16 +298,15 @@ void ActionManager::QueueAllPropertyTriggers() {
     QueuePropertyTrigger("", "");
 }
 
-void ActionManager::QueueBuiltinAction(BuiltinFunction func,
-                                       const std::string& name) {
-    auto action = std::make_unique<Action>(true);
+void ActionManager::QueueBuiltinAction(BuiltinFunction func, const std::string& name) {
+    auto action = std::make_unique<Action>(true, "<Builtin Action>", 0);
     std::vector<std::string> name_vector{name};
 
     if (!action->InitSingleTrigger(name)) {
         return;
     }
 
-    action->AddCommand(func, name_vector);
+    action->AddCommand(func, name_vector, 0);
 
     trigger_queue_.push(std::make_unique<BuiltinTrigger>(action.get()));
     actions_.emplace_back(std::move(action));
@@ -366,7 +331,8 @@ void ActionManager::ExecuteOneCommand() {
 
     if (current_command_ == 0) {
         std::string trigger_name = action->BuildTriggersString();
-        LOG(INFO) << "processing action (" << trigger_name << ")";
+        LOG(INFO) << "processing action (" << trigger_name << ") from (" << action->filename()
+                  << ":" << action->line() << ")";
     }
 
     action->ExecuteOneCommand(current_command_);
@@ -397,15 +363,15 @@ void ActionManager::DumpState() const {
     }
 }
 
-bool ActionParser::ParseSection(const std::vector<std::string>& args,
-                                std::string* err) {
+bool ActionParser::ParseSection(const std::vector<std::string>& args, const std::string& filename,
+                                int line, std::string* err) {
     std::vector<std::string> triggers(args.begin() + 1, args.end());
     if (triggers.size() < 1) {
         *err = "actions must have a trigger";
         return false;
     }
 
-    auto action = std::make_unique<Action>(false);
+    auto action = std::make_unique<Action>(false, filename, line);
     if (!action->InitTriggers(triggers, err)) {
         return false;
     }
@@ -414,10 +380,9 @@ bool ActionParser::ParseSection(const std::vector<std::string>& args,
     return true;
 }
 
-bool ActionParser::ParseLineSection(const std::vector<std::string>& args,
-                                    const std::string& filename, int line,
-                                    std::string* err) const {
-    return action_ ? action_->AddCommand(args, filename, line, err) : false;
+bool ActionParser::ParseLineSection(const std::vector<std::string>& args, int line,
+                                    std::string* err) {
+    return action_ ? action_->AddCommand(args, line, err) : false;
 }
 
 void ActionParser::EndSection() {
