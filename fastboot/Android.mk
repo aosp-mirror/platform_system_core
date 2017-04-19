@@ -40,6 +40,7 @@ LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
 LOCAL_MODULE_HOST_OS := darwin linux windows
 LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
+LOCAL_REQUIRED_MODULES := mke2fs e2fsdroid
 
 LOCAL_SRC_FILES_linux := usb_linux.cpp
 LOCAL_STATIC_LIBRARIES_linux := libselinux
