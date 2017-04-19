@@ -1,0 +1,10 @@
+cc_library {
+    srcs: ["processgroup.cpp"],
+    name: "libprocessgroup",
+    shared_libs: ["libbase"],
+    export_include_dirs: ["include"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}
