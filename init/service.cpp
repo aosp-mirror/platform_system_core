@@ -217,7 +217,7 @@ void Service::KillProcessGroup(int signal) {
         r = killProcessGroup(uid_, pid_, signal);
     }
     if (r == -1) {
-        PLOG(ERROR) << "killProcessGroup(" << uid_ << ", " << pid_ << ", " << signal << ") failed";
+        LOG(ERROR) << "killProcessGroup(" << uid_ << ", " << pid_ << ", " << signal << ") failed";
     }
     if (kill(-pid_, signal) == -1) {
         PLOG(ERROR) << "kill(" << pid_ << ", " << signal << ") failed";
