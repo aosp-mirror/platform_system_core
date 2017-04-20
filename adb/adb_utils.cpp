@@ -267,8 +267,8 @@ void AdbCloser::Close(int fd) {
     adb_close(fd);
 }
 
-int usage(const char* fmt, ...) {
-    fprintf(stderr, "adb: ");
+int syntax_error(const char* fmt, ...) {
+    fprintf(stderr, "adb: usage: ");
 
     va_list ap;
     va_start(ap, fmt);

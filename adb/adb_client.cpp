@@ -164,21 +164,21 @@ int adb_connect(const std::string& service, std::string* error) {
 
     D("adb_connect: service %s", service.c_str());
     if (fd == -2 && !is_local_socket_spec(__adb_server_socket_spec)) {
-        fprintf(stderr,"** Cannot start server on remote host\n");
+        fprintf(stderr, "* cannot start server on remote host\n");
         // error is the original network connection error
         return fd;
     } else if (fd == -2) {
-        fprintf(stdout, "* daemon not running. starting it now at %s *\n", __adb_server_socket_spec);
+        fprintf(stderr, "* daemon not running; starting now at %s\n", __adb_server_socket_spec);
     start_server:
         if (launch_server(__adb_server_socket_spec)) {
-            fprintf(stderr,"* failed to start daemon *\n");
+            fprintf(stderr, "* failed to start daemon\n");
             // launch_server() has already printed detailed error info, so just
             // return a generic error string about the overall adb_connect()
             // that the caller requested.
             *error = "cannot connect to daemon";
             return -1;
         } else {
-            fprintf(stdout,"* daemon started successfully *\n");
+            fprintf(stderr, "* daemon started successfully\n");
         }
         // Give the server some time to start properly and detect devices.
         std::this_thread::sleep_for(3s);
@@ -213,8 +213,8 @@ int adb_connect(const std::string& service, std::string* error) {
         }
 
         if (version != ADB_SERVER_VERSION) {
-            printf("adb server version (%d) doesn't match this client (%d); killing...\n",
-                   version, ADB_SERVER_VERSION);
+            fprintf(stderr, "adb server version (%d) doesn't match this client (%d); killing...\n",
+                    version, ADB_SERVER_VERSION);
             fd = _adb_connect("host:kill", error);
             if (fd >= 0) {
                 ReadOrderlyShutdown(fd);
@@ -240,7 +240,7 @@ int adb_connect(const std::string& service, std::string* error) {
     if (fd == -1) {
         D("_adb_connect error: %s", error->c_str());
     } else if(fd == -2) {
-        fprintf(stderr,"** daemon still not running\n");
+        fprintf(stderr, "* daemon still not running\n");
     }
     D("adb_connect: return fd %d", fd);
 
