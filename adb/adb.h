@@ -139,7 +139,7 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
 int get_available_local_transport_index();
 #endif
 int  init_socket_transport(atransport *t, int s, int port, int local);
-void init_usb_transport(atransport *t, usb_handle *usb, ConnectionState state);
+void init_usb_transport(atransport* t, usb_handle* usb);
 
 std::string getEmulatorSerialString(int console_port);
 #if ADB_HOST
@@ -222,6 +222,9 @@ void handle_online(atransport *t);
 void handle_offline(atransport *t);
 
 void send_connect(atransport *t);
+#if ADB_HOST
+void SendConnectOnHost(atransport* t);
+#endif
 
 void parse_banner(const std::string&, atransport* t);
 
