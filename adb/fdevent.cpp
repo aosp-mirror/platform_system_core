@@ -75,13 +75,13 @@ static std::atomic<bool> terminate_loop(false);
 static bool main_thread_valid;
 static unsigned long main_thread_id;
 
-static void check_main_thread() {
+void check_main_thread() {
     if (main_thread_valid) {
         CHECK_EQ(main_thread_id, adb_thread_id());
     }
 }
 
-static void set_main_thread() {
+void set_main_thread() {
     main_thread_valid = true;
     main_thread_id = adb_thread_id();
 }

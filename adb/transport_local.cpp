@@ -515,12 +515,11 @@ int init_socket_transport(atransport *t, int s, int adb_port, int local)
     int  fail = 0;
 
     t->SetKickFunction(remote_kick);
+    t->SetWriteFunction(remote_write);
     t->close = remote_close;
     t->read_from_remote = remote_read;
-    t->write_to_remote = remote_write;
     t->sfd = s;
     t->sync_token = 1;
-    t->connection_state = kCsOffline;
     t->type = kTransportLocal;
 
 #if ADB_HOST
