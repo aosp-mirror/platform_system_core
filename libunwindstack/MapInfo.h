@@ -39,6 +39,7 @@ struct MapInfo {
   uint64_t elf_offset;
 
   Memory* CreateMemory(pid_t pid);
+  Elf* GetElf(pid_t pid, bool init_gnu_debugdata = false);
 };
 
 #endif  // _LIBUNWINDSTACK_MAP_INFO_H
