@@ -1216,7 +1216,12 @@ TEST(logcat, blocking_clear) {
     signal(SIGALRM, caught_blocking_clear);
     alarm(2);
     while (fgets(buffer, sizeof(buffer), fp)) {
-        if (!strncmp(buffer, "clearLog: ", 10)) {
+        if (!strncmp(buffer, "clearLog: ", strlen("clearLog: "))) {
+            fprintf(stderr, "WARNING: Test lacks permission to run :-(\n");
+            count = signals = 1;
+            break;
+        }
+        if (!strncmp(buffer, "failed to clear", strlen("failed to clear"))) {
             fprintf(stderr, "WARNING: Test lacks permission to run :-(\n");
             count = signals = 1;
             break;

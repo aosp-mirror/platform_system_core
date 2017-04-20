@@ -61,7 +61,10 @@ class LogTimeEntry {
     const log_time mEnd;  // only relevant if mNonBlock
 
     // Protect List manipulations
-    static void lock(void) {
+    static void wrlock(void) {
+        pthread_mutex_lock(&timesLock);
+    }
+    static void rdlock(void) {
         pthread_mutex_lock(&timesLock);
     }
     static void unlock(void) {
@@ -104,7 +107,7 @@ class LogTimeEntry {
         mError = true;
     }
     void error(void) {
-        lock();
+        wrlock();
         error_Locked();
         unlock();
     }
