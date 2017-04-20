@@ -21,7 +21,7 @@
 
 #include <android-base/macros.h>
 
-int usage(const char*, ...);
+int syntax_error(const char*, ...);
 
 void close_stdin();
 
