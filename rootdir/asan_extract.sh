@@ -92,4 +92,4 @@ echo "$ASAN_TAR_MD5" > $MD5_FILE
 
 log -p i -t asan_install "Signaling init to reboot..."
 
-setprop asan.restore_reboot 1
+setprop sys.powerctl reboot
