@@ -212,6 +212,7 @@ static void help() {
         " kill-server              kill the server if it is running\n"
         " reconnect                kick connection from host side to force reconnect\n"
         " reconnect device         kick connection from device side to force reconnect\n"
+        " reconnect offline        reset offline/unauthorized devices to force reconnect\n"
         "\n"
         "environment variables:\n"
         " $ADB_TRACE\n"
@@ -1929,7 +1930,7 @@ int adb_commandline(int argc, const char** argv) {
         return adb_query_command("host:host-features");
     } else if (!strcmp(argv[0], "reconnect")) {
         if (argc == 1) {
-            return adb_query_command("host:reconnect");
+            return adb_query_command(format_host_command(argv[0], transport_type, serial));
         } else if (argc == 2) {
             if (!strcmp(argv[1], "device")) {
                 std::string err;
