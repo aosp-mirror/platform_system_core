@@ -16,6 +16,32 @@
 */
 #ifndef _LIBS_CUTIL_LOG_H
 #define _LIBS_CUTIL_LOG_H
-#warning "Deprecated: don't include cutils/log.h, use either android/log.h or log/log.h"
+
+/* We do not know if developer wanted log/log.h or subset android/log.h */
 #include <log/log.h>
+
+#if defined(__GNUC__)
+#if defined( __clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic warning "-W#warnings"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpedantic"
+#elif (__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR > 9))
+#pragma GCC diagnostic push
+#pragma GCC diagnostic warning "-W#warnings"
+#else
+#pragma GCC diagnostic push
+#pragma GCC diagnostic warning "-Wcpp"
+#endif
+#endif
+
+#warning "Deprecated: don't include cutils/log.h, use either android/log.h or log/log.h"
+
+#if defined(__GNUC__)
+#if defined( __clang__)
+#pragma clang diagnostic pop
+#endif
+#pragma GCC diagnostic pop
+#endif
+
 #endif /* _LIBS_CUTIL_LOG_H */
