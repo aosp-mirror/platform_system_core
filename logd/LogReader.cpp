@@ -111,7 +111,7 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
     if (!fastcmp<strncmp>(buffer, "dumpAndClose", 12)) {
         // Allow writer to get some cycles, and wait for pending notifications
         sched_yield();
-        LogTimeEntry::lock();
+        LogTimeEntry::wrlock();
         LogTimeEntry::unlock();
         sched_yield();
         nonBlock = true;
@@ -212,7 +212,7 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
 
 void LogReader::doSocketDelete(SocketClient* cli) {
     LastLogTimes& times = mLogbuf.mTimes;
-    LogTimeEntry::lock();
+    LogTimeEntry::wrlock();
     LastLogTimes::iterator it = times.begin();
     while (it != times.end()) {
         LogTimeEntry* entry = (*it);
