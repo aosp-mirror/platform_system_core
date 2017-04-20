@@ -24,19 +24,26 @@
 
 #include <list>
 
-#include <android/log.h>
+#include <private/android_logger.h>
 
 #include "LogStatistics.h"
+
+static const uint64_t hourSec = 60 * 60;
+static const uint64_t monthSec = 31 * 24 * hourSec;
 
 size_t LogStatistics::SizesTotal;
 
 LogStatistics::LogStatistics() : enable(false) {
+    log_time now(CLOCK_REALTIME);
     log_id_for_each(id) {
         mSizes[id] = 0;
         mElements[id] = 0;
         mDroppedElements[id] = 0;
         mSizesTotal[id] = 0;
         mElementsTotal[id] = 0;
+        mOldest[id] = now;
+        mNewest[id] = now;
+        mNewestDropped[id] = now;
     }
 }
 
@@ -100,6 +107,27 @@ void LogStatistics::add(LogBufferElement* element) {
         ++mElementsTotal[log_id];
     }
 
+    log_time stamp(element->getRealTime());
+    if (mNewest[log_id] < stamp) {
+        // A major time update invalidates the statistics :-(
+        log_time diff = stamp - mNewest[log_id];
+        mNewest[log_id] = stamp;
+
+        if (diff.tv_sec > hourSec) {
+            // approximate Do-Your-Best fixup
+            diff += mOldest[log_id];
+            if ((diff > stamp) && ((diff - stamp).tv_sec < hourSec)) {
+                diff = stamp;
+            }
+            if (diff <= stamp) {
+                mOldest[log_id] = diff;
+                if (mNewestDropped[log_id] < diff) {
+                    mNewestDropped[log_id] = diff;
+                }
+            }
+        }
+    }
+
     if (log_id == LOG_ID_KERNEL) {
         return;
     }
@@ -135,6 +163,10 @@ void LogStatistics::subtract(LogBufferElement* element) {
         --mDroppedElements[log_id];
     }
 
+    if (mOldest[log_id] < element->getRealTime()) {
+        mOldest[log_id] = element->getRealTime();
+    }
+
     if (log_id == LOG_ID_KERNEL) {
         return;
     }
@@ -168,6 +200,10 @@ void LogStatistics::drop(LogBufferElement* element) {
     unsigned short size = element->getMsgLen();
     mSizes[log_id] -= size;
     ++mDroppedElements[log_id];
+
+    if (mNewestDropped[log_id] < element->getRealTime()) {
+        mNewestDropped[log_id] = element->getRealTime();
+    }
 
     uidTable[log_id].drop(element->getUid(), element);
     if (element->getUid() == AID_SYSTEM) {
@@ -468,6 +504,45 @@ std::string TagEntry::format(const LogStatistics& /* stat */,
     return formatLine(name, size, pruned);
 }
 
+static std::string formatMsec(uint64_t val) {
+    static const unsigned subsecDigits = 3;
+    static const uint64_t sec = MS_PER_SEC;
+
+    static const uint64_t minute = 60 * sec;
+    static const uint64_t hour = 60 * minute;
+    static const uint64_t day = 24 * hour;
+
+    std::string output;
+    if (val < sec) return output;
+
+    if (val >= day) {
+        output = android::base::StringPrintf("%" PRIu64 "d ", val / day);
+        val = (val % day) + day;
+    }
+    if (val >= minute) {
+        if (val >= hour) {
+            output += android::base::StringPrintf("%" PRIu64 ":",
+                                                  (val / hour) % (day / hour));
+        }
+        output += android::base::StringPrintf(
+            (val >= hour) ? "%02" PRIu64 ":" : "%" PRIu64 ":",
+            (val / minute) % (hour / minute));
+    }
+    output +=
+        android::base::StringPrintf((val >= minute) ? "%02" PRIu64 : "%" PRIu64,
+                                    (val / sec) % (minute / sec));
+    val %= sec;
+    unsigned digits = subsecDigits;
+    while (digits && ((val % 10) == 0)) {
+        val /= 10;
+        --digits;
+    }
+    if (digits) {
+        output += android::base::StringPrintf(".%0*" PRIu64, digits, val);
+    }
+    return output;
+}
+
 std::string LogStatistics::format(uid_t uid, pid_t pid,
                                   unsigned int logMask) const {
     static const unsigned short spaces_total = 19;
@@ -536,6 +611,67 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
     if (spaces < 0) spaces = 0;
     output += android::base::StringPrintf("%*s%zu/%zu", spaces, "", totalSize,
                                           totalEls);
+
+    static const char SpanStr[] = "\nLogspan";
+    spaces = 10 - strlen(SpanStr);
+    output += SpanStr;
+
+    // Total reports the greater of the individual maximum time span, or the
+    // validated minimum start and maximum end time span if it makes sense.
+    uint64_t minTime = UINT64_MAX;
+    uint64_t maxTime = 0;
+    uint64_t maxSpan = 0;
+    totalSize = 0;
+
+    log_id_for_each(id) {
+        if (!(logMask & (1 << id))) continue;
+
+        // validity checking
+        uint64_t oldest = mOldest[id].msec();
+        uint64_t newest = mNewest[id].msec();
+        if (newest <= oldest) {
+            spaces += spaces_total;
+            continue;
+        }
+
+        uint64_t span = newest - oldest;
+        if (span > (monthSec * MS_PER_SEC)) {
+            spaces += spaces_total;
+            continue;
+        }
+
+        // total span
+        if (minTime > oldest) minTime = oldest;
+        if (maxTime < newest) maxTime = newest;
+        if (span > maxSpan) maxSpan = span;
+        totalSize += span;
+
+        uint64_t dropped = mNewestDropped[id].msec();
+        if (dropped < oldest) dropped = oldest;
+        if (dropped > newest) dropped = newest;
+
+        oldLength = output.length();
+        output += android::base::StringPrintf("%*s%s", spaces, "",
+                                              formatMsec(span).c_str());
+        unsigned permille = ((newest - dropped) * 1000 + (span / 2)) / span;
+        if ((permille > 1) && (permille < 999)) {
+            output += android::base::StringPrintf("(%u", permille / 10);
+            permille %= 10;
+            if (permille) {
+                output += android::base::StringPrintf(".%u", permille);
+            }
+            output += android::base::StringPrintf("%%)");
+        }
+        spaces -= output.length() - oldLength;
+        spaces += spaces_total;
+    }
+    if ((maxTime > minTime) && ((maxTime -= minTime) < totalSize) &&
+        (maxTime > maxSpan)) {
+        maxSpan = maxTime;
+    }
+    if (spaces < 0) spaces = 0;
+    output += android::base::StringPrintf("%*s%s", spaces, "",
+                                          formatMsec(maxSpan).c_str());
 
     static const char OverheadStr[] = "\nOverhead";
     spaces = 10 - strlen(OverheadStr);
