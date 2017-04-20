@@ -504,6 +504,7 @@ on post-fs-data
 on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
    start netd
    start zygote
+   start zygote_secondary
 
 on boot
     # basic network init
