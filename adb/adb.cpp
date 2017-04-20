@@ -507,8 +507,8 @@ static bool _make_handle_noninheritable(HANDLE h) {
     if (!_try_make_handle_noninheritable(h)) {
         // Show the handle value to give us a clue in case we have problems
         // with pseudo-handle values.
-        fprintf(stderr, "Cannot make handle 0x%p non-inheritable: %s\n",
-                h, android::base::SystemErrorCodeToString(GetLastError()).c_str());
+        fprintf(stderr, "adb: cannot make handle 0x%p non-inheritable: %s\n", h,
+                android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return false;
     }
 
@@ -523,7 +523,7 @@ static bool _create_anonymous_pipe(unique_handle* pipe_read_out,
     HANDLE pipe_read_raw = NULL;
     HANDLE pipe_write_raw = NULL;
     if (!CreatePipe(&pipe_read_raw, &pipe_write_raw, sa, 0)) {
-        fprintf(stderr, "Cannot create pipe: %s\n",
+        fprintf(stderr, "adb: CreatePipe failed: %s\n",
                 android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return false;
     }
@@ -554,7 +554,8 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
     std::unique_ptr<FILE, decltype(&fclose)> stream(nullptr, fclose);
 
     if (original_fd == -1) {
-        fprintf(stderr, "Failed to get file descriptor for %s: %s\n", output_name, strerror(errno));
+        fprintf(stderr, "adb: failed to get file descriptor for %s: %s\n", output_name,
+                strerror(errno));
         return EXIT_FAILURE;
     }
 
@@ -566,7 +567,7 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
         // call this function if subprocesses may be started concurrently.
         const int fd = dup(original_fd);
         if (fd == -1) {
-            fprintf(stderr, "Failed to duplicate file descriptor for %s: %s\n", output_name,
+            fprintf(stderr, "adb: failed to duplicate file descriptor for %s: %s\n", output_name,
                     strerror(errno));
             return EXIT_FAILURE;
         }
@@ -574,7 +575,7 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
         // Note that although we call fdopen() below with a binary flag, it may not adhere to that
         // flag, so we have to set the mode manually.
         if (_setmode(fd, _O_BINARY) == -1) {
-            fprintf(stderr, "Failed to set binary mode for duplicate of %s: %s\n", output_name,
+            fprintf(stderr, "adb: failed to set binary mode for duplicate of %s: %s\n", output_name,
                     strerror(errno));
             unix_close(fd);
             return EXIT_FAILURE;
@@ -582,7 +583,7 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
 
         stream.reset(fdopen(fd, "wb"));
         if (stream.get() == nullptr) {
-            fprintf(stderr, "Failed to open duplicate stream for %s: %s\n", output_name,
+            fprintf(stderr, "adb: failed to open duplicate stream for %s: %s\n", output_name,
                     strerror(errno));
             unix_close(fd);
             return EXIT_FAILURE;
@@ -591,7 +592,7 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
         // Unbuffer the stream because it will be buffered by default and we want subprocess output
         // to be shown immediately.
         if (setvbuf(stream.get(), NULL, _IONBF, 0) == -1) {
-            fprintf(stderr, "Failed to unbuffer %s: %s\n", output_name, strerror(errno));
+            fprintf(stderr, "adb: failed to unbuffer %s: %s\n", output_name, strerror(errno));
             return EXIT_FAILURE;
         }
 
@@ -608,7 +609,7 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
             if (err == ERROR_BROKEN_PIPE) {
                 return EXIT_SUCCESS;
             } else {
-                fprintf(stderr, "Failed to read from %s: %s\n", output_name,
+                fprintf(stderr, "adb: failed to read from %s: %s\n", output_name,
                         android::base::SystemErrorCodeToString(err).c_str());
                 return EXIT_FAILURE;
             }
@@ -619,8 +620,8 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
             // fwrite() actually calls adb_fwrite() which can write UTF-8 to the console.
             const size_t bytes_written = fwrite(buf, 1, bytes_read, stream.get());
             if (bytes_written != bytes_read) {
-                fprintf(stderr, "Only wrote %zu of %lu bytes to %s\n", bytes_written, bytes_read,
-                        output_name);
+                fprintf(stderr, "adb: error: only wrote %zu of %lu bytes to %s\n", bytes_written,
+                        bytes_read, output_name);
                 return EXIT_FAILURE;
             }
         }
@@ -663,7 +664,7 @@ int launch_server(const std::string& socket_spec) {
             FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING,
             FILE_ATTRIBUTE_NORMAL, NULL));
     if (nul_read.get() == INVALID_HANDLE_VALUE) {
-        fprintf(stderr, "Cannot open 'nul': %s\n",
+        fprintf(stderr, "adb: CreateFileW 'nul' failed: %s\n",
                 android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
@@ -725,8 +726,7 @@ int launch_server(const std::string& socket_spec) {
         // If this fires, either handle values are larger than 32-bits or else
         // there is a bug in our casting.
         // https://msdn.microsoft.com/en-us/library/windows/desktop/aa384203%28v=vs.85%29.aspx
-        fprintf(stderr, "Cannot fit pipe handle value into 32-bits: 0x%p\n",
-                ack_write.get());
+        fprintf(stderr, "adb: cannot fit pipe handle value into 32-bits: 0x%p\n", ack_write.get());
         return -1;
     }
 
@@ -736,7 +736,7 @@ int launch_server(const std::string& socket_spec) {
                                                    arraysize(program_path));
     if ((module_result >= arraysize(program_path)) || (module_result == 0)) {
         // String truncation or some other error.
-        fprintf(stderr, "Cannot get executable path: %s\n",
+        fprintf(stderr, "adb: cannot get executable path: %s\n",
                 android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
@@ -761,7 +761,7 @@ int launch_server(const std::string& socket_spec) {
             NULL,                    /* use parent's starting directory */
             &startup,                 /* startup info, i.e. std handles */
             &pinfo )) {
-        fprintf(stderr, "Cannot create process: %s\n",
+        fprintf(stderr, "adb: CreateProcessW failed: %s\n",
                 android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
@@ -791,7 +791,7 @@ int launch_server(const std::string& socket_spec) {
             _beginthreadex(NULL, 0, _redirect_stdout_thread, stdout_read.get(),
                            0, NULL)));
     if (stdout_thread.get() == nullptr) {
-        fprintf(stderr, "Cannot create thread: %s\n", strerror(errno));
+        fprintf(stderr, "adb: cannot create thread: %s\n", strerror(errno));
         return -1;
     }
     stdout_read.release();  // Transfer ownership to new thread
@@ -800,7 +800,7 @@ int launch_server(const std::string& socket_spec) {
             _beginthreadex(NULL, 0, _redirect_stderr_thread, stderr_read.get(),
                            0, NULL)));
     if (stderr_thread.get() == nullptr) {
-        fprintf(stderr, "Cannot create thread: %s\n", strerror(errno));
+        fprintf(stderr, "adb: cannot create thread: %s\n", strerror(errno));
         return -1;
     }
     stderr_read.release();  // Transfer ownership to new thread
@@ -845,22 +845,20 @@ int launch_server(const std::string& socket_spec) {
     if (wait_result == WAIT_TIMEOUT) {
         // Threads did not finish after waiting a little while. Perhaps the
         // server didn't close pipes, or it is hung.
-        fprintf(stderr, "Timed-out waiting for threads to finish reading from "
-                "ADB Server\n");
+        fprintf(stderr, "adb: timed out waiting for threads to finish reading from ADB server\n");
         // Process handles are signaled when the process exits, so if we wait
         // on the handle for 0 seconds and it returns 'timeout', that means that
         // the process is still running.
         if (WaitForSingleObject(process_handle.get(), 0) == WAIT_TIMEOUT) {
             // We could TerminateProcess(), but that seems somewhat presumptive.
-            fprintf(stderr, "ADB Server is running: process id %lu\n",
-                    pinfo.dwProcessId);
+            fprintf(stderr, "adb: server is running with process id %lu\n", pinfo.dwProcessId);
         }
         return -1;
     }
 
     if (wait_result != WAIT_OBJECT_0) {
-        fprintf(stderr, "Unexpected result waiting for threads: %lu: %s\n",
-                wait_result, android::base::SystemErrorCodeToString(GetLastError()).c_str());
+        fprintf(stderr, "adb: unexpected result waiting for threads: %lu: %s\n", wait_result,
+                android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
 
@@ -894,7 +892,7 @@ int launch_server(const std::string& socket_spec) {
         int result = execl(path.c_str(), "adb", "-L", socket_spec.c_str(), "fork-server", "server",
                            "--reply-fd", reply_fd, NULL);
         // this should not return
-        fprintf(stderr, "OOPS! execl returned %d, errno: %d\n", result, errno);
+        fprintf(stderr, "adb: execl returned %d: %s\n", result, strerror(errno));
     } else  {
         // parent side of the fork
 
