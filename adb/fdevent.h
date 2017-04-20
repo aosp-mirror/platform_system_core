@@ -76,9 +76,12 @@ void fdevent_set_timeout(fdevent *fde, int64_t  timeout_ms);
 */
 void fdevent_loop();
 
+void check_main_thread();
+
 // The following functions are used only for tests.
 void fdevent_terminate_loop();
 size_t fdevent_installed_count();
 void fdevent_reset();
+void set_main_thread();
 
 #endif

@@ -1188,6 +1188,77 @@ class FileOperationsTest(DeviceTest):
         self.device.shell(['rm', '-f', '/data/local/tmp/adb-test-*'])
 
 
+class DeviceOfflineTest(DeviceTest):
+    def _get_device_state(self, serialno):
+        output = subprocess.check_output(self.device.adb_cmd + ['devices'])
+        for line in output.split('\n'):
+            m = re.match('(\S+)\s+(\S+)', line)
+            if m and m.group(1) == serialno:
+                return m.group(2)
+        return None
+
+    def test_killed_when_pushing_a_large_file(self):
+        """
+           While running adb push with a large file, kill adb server.
+           Occasionally the device becomes offline. Because the device is still
+           reading data without realizing that the adb server has been restarted.
+           Test if we can bring the device online automatically now.
+           http://b/32952319
+        """
+        serialno = subprocess.check_output(self.device.adb_cmd + ['get-serialno']).strip()
+        # 1. Push a large file
+        file_path = 'tmp_large_file'
+        try:
+            fh = open(file_path, 'w')
+            fh.write('\0' * (100 * 1024 * 1024))
+            fh.close()
+            subproc = subprocess.Popen(self.device.adb_cmd + ['push', file_path, '/data/local/tmp'])
+            time.sleep(0.1)
+            # 2. Kill the adb server
+            subprocess.check_call(self.device.adb_cmd + ['kill-server'])
+            subproc.terminate()
+        finally:
+            try:
+                os.unlink(file_path)
+            except:
+                pass
+        # 3. See if the device still exist.
+        # Sleep to wait for the adb server exit.
+        time.sleep(0.5)
+        # 4. The device should be online
+        self.assertEqual(self._get_device_state(serialno), 'device')
+
+    def test_killed_when_pulling_a_large_file(self):
+        """
+           While running adb pull with a large file, kill adb server.
+           Occasionally the device can't be connected. Because the device is trying to
+           send a message larger than what is expected by the adb server.
+           Test if we can bring the device online automatically now.
+        """
+        serialno = subprocess.check_output(self.device.adb_cmd + ['get-serialno']).strip()
+        file_path = 'tmp_large_file'
+        try:
+            # 1. Create a large file on device.
+            self.device.shell(['dd', 'if=/dev/zero', 'of=/data/local/tmp/tmp_large_file',
+                               'bs=1000000', 'count=100'])
+            # 2. Pull the large file on host.
+            subproc = subprocess.Popen(self.device.adb_cmd +
+                                       ['pull','/data/local/tmp/tmp_large_file', file_path])
+            time.sleep(0.1)
+            # 3. Kill the adb server
+            subprocess.check_call(self.device.adb_cmd + ['kill-server'])
+            subproc.terminate()
+        finally:
+            try:
+                os.unlink(file_path)
+            except:
+                pass
+        # 4. See if the device still exist.
+        # Sleep to wait for the adb server exit.
+        time.sleep(0.5)
+        self.assertEqual(self._get_device_state(serialno), 'device')
+
+
 def main():
     random.seed(0)
     if len(adb.get_devices()) > 0:

@@ -155,7 +155,7 @@ void adb_trace_init(char** argv) {
     }
 #endif
 
-#if !defined(_WIN32)
+#if ADB_HOST && !defined(_WIN32)
     // adb historically ignored $ANDROID_LOG_TAGS but passed it through to logcat.
     // If set, move it out of the way so that libbase logging doesn't try to parse it.
     std::string log_tags;
@@ -168,7 +168,7 @@ void adb_trace_init(char** argv) {
 
     android::base::InitLogging(argv, &AdbLogger);
 
-#if !defined(_WIN32)
+#if ADB_HOST && !defined(_WIN32)
     // Put $ANDROID_LOG_TAGS back so we can pass it to logcat.
     if (!log_tags.empty()) setenv("ANDROID_LOG_TAGS", log_tags.c_str(), 1);
 #endif
