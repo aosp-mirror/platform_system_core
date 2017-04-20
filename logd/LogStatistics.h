@@ -28,6 +28,7 @@
 
 #include <android-base/stringprintf.h>
 #include <android/log.h>
+#include <log/log_time.h>
 #include <private/android_filesystem_config.h>
 
 #include "LogBufferElement.h"
@@ -520,6 +521,9 @@ class LogStatistics {
     size_t mDroppedElements[LOG_ID_MAX];
     size_t mSizesTotal[LOG_ID_MAX];
     size_t mElementsTotal[LOG_ID_MAX];
+    log_time mOldest[LOG_ID_MAX];
+    log_time mNewest[LOG_ID_MAX];
+    log_time mNewestDropped[LOG_ID_MAX];
     static size_t SizesTotal;
     bool enable;
 
