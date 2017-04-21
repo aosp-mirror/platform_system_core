@@ -1839,6 +1839,7 @@ TEST(liblog, __security) {
   // that it can be determined the property is not set.
   static const char nothing_val[] = "_NOTHING_TO_SEE_HERE_";
   char persist[PROP_VALUE_MAX];
+  char persist_hold[PROP_VALUE_MAX];
   char readonly[PROP_VALUE_MAX];
 
   // First part of this test requires the test itself to have the appropriate
@@ -1846,14 +1847,16 @@ TEST(liblog, __security) {
   // bail rather than give a failing grade.
   property_get(persist_key, persist, "");
   fprintf(stderr, "INFO: getprop %s -> %s\n", persist_key, persist);
+  strncpy(persist_hold, persist, PROP_VALUE_MAX);
   property_get(readonly_key, readonly, nothing_val);
   fprintf(stderr, "INFO: getprop %s -> %s\n", readonly_key, readonly);
 
   if (!strcmp(readonly, nothing_val)) {
+    // Lets check if we can set the value (we should not be allowed to do so)
     EXPECT_FALSE(__android_log_security());
     fprintf(stderr, "WARNING: setting ro.device_owner to a domain\n");
     static const char domain[] = "com.google.android.SecOps.DeviceOwner";
-    property_set(readonly_key, domain);
+    EXPECT_NE(0, property_set(readonly_key, domain));
     useconds_t total_time = 0;
     static const useconds_t seconds = 1000000;
     static const useconds_t max_time = 5 * seconds;  // not going to happen
@@ -1870,9 +1873,12 @@ TEST(liblog, __security) {
         break;
       }
     }
-    EXPECT_STREQ(readonly, domain);
-  } else if (!strcasecmp(readonly, "false") || !readonly[0]) {
-    // not enough permissions to run
+    EXPECT_STRNE(domain, readonly);
+  }
+
+  if (!strcasecmp(readonly, "false") || !readonly[0] ||
+      !strcmp(readonly, nothing_val)) {
+    // not enough permissions to run tests surrounding persist.logd.security
     EXPECT_FALSE(__android_log_security());
     return;
   }
@@ -1883,16 +1889,51 @@ TEST(liblog, __security) {
     EXPECT_FALSE(__android_log_security());
   }
   property_set(persist_key, "TRUE");
-  EXPECT_TRUE(__android_log_security());
+  property_get(persist_key, persist, "");
+  uid_t uid = getuid();
+  gid_t gid = getgid();
+  bool perm = (gid == AID_ROOT) || (uid == AID_ROOT);
+  EXPECT_STREQ(perm ? "TRUE" : persist_hold, persist);
+  if (!strcasecmp(persist, "true")) {
+    EXPECT_TRUE(__android_log_security());
+  } else {
+    EXPECT_FALSE(__android_log_security());
+  }
   property_set(persist_key, "FALSE");
-  EXPECT_FALSE(__android_log_security());
+  property_get(persist_key, persist, "");
+  EXPECT_STREQ(perm ? "FALSE" : persist_hold, persist);
+  if (!strcasecmp(persist, "true")) {
+    EXPECT_TRUE(__android_log_security());
+  } else {
+    EXPECT_FALSE(__android_log_security());
+  }
   property_set(persist_key, "true");
-  EXPECT_TRUE(__android_log_security());
+  property_get(persist_key, persist, "");
+  EXPECT_STREQ(perm ? "true" : persist_hold, persist);
+  if (!strcasecmp(persist, "true")) {
+    EXPECT_TRUE(__android_log_security());
+  } else {
+    EXPECT_FALSE(__android_log_security());
+  }
   property_set(persist_key, "false");
-  EXPECT_FALSE(__android_log_security());
+  property_get(persist_key, persist, "");
+  EXPECT_STREQ(perm ? "false" : persist_hold, persist);
+  if (!strcasecmp(persist, "true")) {
+    EXPECT_TRUE(__android_log_security());
+  } else {
+    EXPECT_FALSE(__android_log_security());
+  }
   property_set(persist_key, "");
-  EXPECT_FALSE(__android_log_security());
-  property_set(persist_key, persist);
+  property_get(persist_key, persist, "");
+  EXPECT_STREQ(perm ? "" : persist_hold, persist);
+  if (!strcasecmp(persist, "true")) {
+    EXPECT_TRUE(__android_log_security());
+  } else {
+    EXPECT_FALSE(__android_log_security());
+  }
+  property_set(persist_key, persist_hold);
+  property_get(persist_key, persist, "");
+  EXPECT_STREQ(persist_hold, persist);
 #else
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
