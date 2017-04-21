@@ -55,8 +55,6 @@ bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val) {
         if (android::base::ReadFileToString(file_name, out_val)) {
             return true;
         }
-
-        LINFO << "Error finding '" << key << "' in device tree";
     }
 
     return false;
