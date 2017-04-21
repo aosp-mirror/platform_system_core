@@ -22,7 +22,6 @@ cc_defaults {
     local_include_dirs: ["include/"],
     cppflags: ["-Werror"],
     static_libs: [
-        "liblogwrap",
         "libfec",
         "libfec_rs",
         "libbase",
@@ -32,6 +31,9 @@ cc_defaults {
         "libsquashfs_utils",
         "libselinux",
         "libavb",
+    ],
+    whole_static_libs: [
+        "liblogwrap",
     ],
 }
 
