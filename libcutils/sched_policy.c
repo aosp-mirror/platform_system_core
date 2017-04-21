@@ -404,7 +404,7 @@ int set_sched_policy(int tid, SchedPolicy policy)
         }
 
 
-        if (fd > 0 && add_tid_to_cgroup(tid, fd) != 0) {
+        if (add_tid_to_cgroup(tid, fd) != 0) {
             if (errno != ESRCH && errno != ENOENT)
                 return -errno;
         }
