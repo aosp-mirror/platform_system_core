@@ -37,7 +37,6 @@ cc_library_static {
         "fs_mgr_avb_ops.cpp",
     ],
     static_libs: [
-        "liblogwrap",
         "libfec",
         "libfec_rs",
         "libbase",
@@ -53,6 +52,7 @@ cc_library_static {
         "libfstab",
     ],
     whole_static_libs: [
+        "liblogwrap",
         "libfstab",
     ],
     product_variables: {
