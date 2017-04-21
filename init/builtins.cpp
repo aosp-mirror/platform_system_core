@@ -481,6 +481,23 @@ static int queue_fs_event(int code) {
         // Although encrypted, we have device key, so we do not need to
         // do anything different from the nonencrypted case.
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
+    } else if (code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED) {
+        if (e4crypt_install_keyring()) {
+            return -1;
+        }
+        property_set("ro.crypto.state", "encrypted");
+        property_set("ro.crypto.type", "file");
+
+        // defaultcrypto detects file/block encryption. init flow is same for each.
+        ActionManager::GetInstance().QueueEventTrigger("defaultcrypto");
+    } else if (code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
+        if (e4crypt_install_keyring()) {
+            return -1;
+        }
+        property_set("ro.crypto.type", "file");
+
+        // encrypt detects file/block encryption. init flow is same for each.
+        ActionManager::GetInstance().QueueEventTrigger("encrypt");
     } else if (code > 0) {
         PLOG(ERROR) << "fs_mgr_mount_all returned unexpected error " << code;
     }
