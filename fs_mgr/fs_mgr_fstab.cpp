@@ -31,6 +31,7 @@
 
 struct fs_mgr_flag_values {
     char *key_loc;
+    char* key_dir;
     char *verity_loc;
     long long part_length;
     char *label;
@@ -70,34 +71,35 @@ static struct flag_list mount_flags[] = {
 };
 
 static struct flag_list fs_mgr_flags[] = {
-    { "wait",               MF_WAIT },
-    { "check",              MF_CHECK },
-    { "encryptable=",       MF_CRYPT },
-    { "forceencrypt=",      MF_FORCECRYPT },
-    { "fileencryption=",    MF_FILEENCRYPTION },
-    { "forcefdeorfbe=",     MF_FORCEFDEORFBE },
-    { "nonremovable",       MF_NONREMOVABLE },
-    { "voldmanaged=",       MF_VOLDMANAGED},
-    { "length=",            MF_LENGTH },
-    { "recoveryonly",       MF_RECOVERYONLY },
-    { "swapprio=",          MF_SWAPPRIO },
-    { "zramsize=",          MF_ZRAMSIZE },
-    { "max_comp_streams=",  MF_MAX_COMP_STREAMS },
-    { "verifyatboot",       MF_VERIFYATBOOT },
-    { "verify",             MF_VERIFY },
-    { "avb",                MF_AVB },
-    { "noemulatedsd",       MF_NOEMULATEDSD },
-    { "notrim",             MF_NOTRIM },
-    { "formattable",        MF_FORMATTABLE },
-    { "slotselect",         MF_SLOTSELECT },
-    { "nofail",             MF_NOFAIL },
-    { "latemount",          MF_LATEMOUNT },
-    { "reservedsize=",      MF_RESERVEDSIZE },
-    { "quota",              MF_QUOTA },
-    { "eraseblk=",          MF_ERASEBLKSIZE },
-    { "logicalblk=",        MF_LOGICALBLKSIZE },
-    { "defaults",           0 },
-    { 0,                    0 },
+    {"wait", MF_WAIT},
+    {"check", MF_CHECK},
+    {"encryptable=", MF_CRYPT},
+    {"forceencrypt=", MF_FORCECRYPT},
+    {"fileencryption=", MF_FILEENCRYPTION},
+    {"forcefdeorfbe=", MF_FORCEFDEORFBE},
+    {"keydirectory=", MF_KEYDIRECTORY},
+    {"nonremovable", MF_NONREMOVABLE},
+    {"voldmanaged=", MF_VOLDMANAGED},
+    {"length=", MF_LENGTH},
+    {"recoveryonly", MF_RECOVERYONLY},
+    {"swapprio=", MF_SWAPPRIO},
+    {"zramsize=", MF_ZRAMSIZE},
+    {"max_comp_streams=", MF_MAX_COMP_STREAMS},
+    {"verifyatboot", MF_VERIFYATBOOT},
+    {"verify", MF_VERIFY},
+    {"avb", MF_AVB},
+    {"noemulatedsd", MF_NOEMULATEDSD},
+    {"notrim", MF_NOTRIM},
+    {"formattable", MF_FORMATTABLE},
+    {"slotselect", MF_SLOTSELECT},
+    {"nofail", MF_NOFAIL},
+    {"latemount", MF_LATEMOUNT},
+    {"reservedsize=", MF_RESERVEDSIZE},
+    {"quota", MF_QUOTA},
+    {"eraseblk=", MF_ERASEBLKSIZE},
+    {"logicalblk=", MF_LOGICALBLKSIZE},
+    {"defaults", 0},
+    {0, 0},
 };
 
 #define EM_AES_256_XTS  1
@@ -266,6 +268,11 @@ static int parse_flags(char *flags, struct flag_list *fl,
                     } else {
                         flag_vals->file_names_mode = EM_AES_256_CTS;
                     }
+                } else if ((fl[i].flag == MF_KEYDIRECTORY) && flag_vals) {
+                    /* The metadata flag is followed by an = and the
+                     * directory for the keys.  Get it and return it.
+                     */
+                    flag_vals->key_dir = strdup(strchr(p, '=') + 1);
                 } else if ((fl[i].flag == MF_LENGTH) && flag_vals) {
                     /* The length flag is followed by an = and the
                      * size of the partition.  Get it and return it.
@@ -557,6 +564,7 @@ static struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
         fstab->recs[cnt].fs_mgr_flags = parse_flags(p, fs_mgr_flags,
                                                     &flag_vals, NULL, 0);
         fstab->recs[cnt].key_loc = flag_vals.key_loc;
+        fstab->recs[cnt].key_dir = flag_vals.key_dir;
         fstab->recs[cnt].verity_loc = flag_vals.verity_loc;
         fstab->recs[cnt].length = flag_vals.part_length;
         fstab->recs[cnt].label = flag_vals.label;
@@ -716,6 +724,7 @@ void fs_mgr_free_fstab(struct fstab *fstab)
         free(fstab->recs[i].fs_type);
         free(fstab->recs[i].fs_options);
         free(fstab->recs[i].key_loc);
+        free(fstab->recs[i].key_dir);
         free(fstab->recs[i].label);
     }
 

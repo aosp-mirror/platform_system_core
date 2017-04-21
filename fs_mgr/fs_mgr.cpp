@@ -721,6 +721,12 @@ static bool needs_block_encryption(const struct fstab_rec* rec)
     return false;
 }
 
+static bool should_use_metadata_encryption(const struct fstab_rec* rec) {
+    if (!(rec->fs_mgr_flags & (MF_FILEENCRYPTION | MF_FORCEFDEORFBE))) return false;
+    if (!(rec->fs_mgr_flags & MF_KEYDIRECTORY)) return false;
+    return true;
+}
+
 // Check to see if a mountable volume has encryption requirements
 static int handle_encryptable(const struct fstab_rec* rec)
 {
@@ -733,8 +739,14 @@ static int handle_encryptable(const struct fstab_rec* rec)
                      << " - allow continue unencrypted";
             return FS_MGR_MNTALL_DEV_NOT_ENCRYPTED;
         }
+    } else if (should_use_metadata_encryption(rec)) {
+        if (umount(rec->mount_point) == 0) {
+            return FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION;
+        } else {
+            PERROR << "Could not umount " << rec->mount_point << " - fail since can't encrypt";
+            return FS_MGR_MNTALL_FAIL;
+        }
     } else if (rec->fs_mgr_flags & (MF_FILEENCRYPTION | MF_FORCEFDEORFBE)) {
-        // Deal with file level encryption
         LINFO << rec->mount_point << " is file encrypted";
         return FS_MGR_MNTALL_DEV_FILE_ENCRYPTED;
     } else if (fs_mgr_is_encryptable(rec)) {
@@ -900,7 +912,6 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
             continue;
         }
 
-        /* mount(2) returned an error, handle the encryptable/formattable case */
         bool wiped = partition_wiped(fstab->recs[top_idx].blk_device);
         bool crypt_footer = false;
         if (mret && mount_errno != EBUSY && mount_errno != EACCES &&
@@ -940,6 +951,8 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
                 continue;
             }
         }
+
+        /* mount(2) returned an error, handle the encryptable/formattable case */
         if (mret && mount_errno != EBUSY && mount_errno != EACCES &&
             fs_mgr_is_encryptable(&fstab->recs[attempted_idx])) {
             if (wiped) {
@@ -965,6 +978,9 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
                 }
             }
             encryptable = FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED;
+        } else if (mret && mount_errno != EBUSY && mount_errno != EACCES &&
+                   should_use_metadata_encryption(&fstab->recs[attempted_idx])) {
+            encryptable = FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED;
         } else {
             if (fs_mgr_is_nofail(&fstab->recs[attempted_idx])) {
                 PERROR << "Ignoring failure to mount an un-encryptable or wiped partition on"
@@ -1256,48 +1272,46 @@ int fs_mgr_swapon_all(struct fstab *fstab)
     return ret;
 }
 
-/*
- * key_loc must be at least PROPERTY_VALUE_MAX bytes long
- *
- * real_blk_device must be at least PROPERTY_VALUE_MAX bytes long
- */
-int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc, char *real_blk_device, int size)
-{
-    int i = 0;
+struct fstab_rec const* fs_mgr_get_crypt_entry(struct fstab const* fstab) {
+    int i;
 
     if (!fstab) {
-        return -1;
-    }
-    /* Initialize return values to null strings */
-    if (key_loc) {
-        *key_loc = '\0';
-    }
-    if (real_blk_device) {
-        *real_blk_device = '\0';
+        return NULL;
     }
 
     /* Look for the encryptable partition to find the data */
     for (i = 0; i < fstab->num_entries; i++) {
         /* Don't deal with vold managed enryptable partitions here */
-        if (fstab->recs[i].fs_mgr_flags & MF_VOLDMANAGED) {
-            continue;
+        if (!(fstab->recs[i].fs_mgr_flags & MF_VOLDMANAGED) &&
+            (fstab->recs[i].fs_mgr_flags &
+             (MF_CRYPT | MF_FORCECRYPT | MF_FORCEFDEORFBE | MF_FILEENCRYPTION))) {
+            return &fstab->recs[i];
         }
-        if (!(fstab->recs[i].fs_mgr_flags
-              & (MF_CRYPT | MF_FORCECRYPT | MF_FORCEFDEORFBE))) {
-            continue;
-        }
-
-        /* We found a match */
-        if (key_loc) {
-            strlcpy(key_loc, fstab->recs[i].key_loc, size);
-        }
-        if (real_blk_device) {
-            strlcpy(real_blk_device, fstab->recs[i].blk_device, size);
-        }
-        break;
     }
+    return NULL;
+}
 
-    return 0;
+/*
+ * key_loc must be at least PROPERTY_VALUE_MAX bytes long
+ *
+ * real_blk_device must be at least PROPERTY_VALUE_MAX bytes long
+ */
+void fs_mgr_get_crypt_info(struct fstab* fstab, char* key_loc, char* real_blk_device, size_t size) {
+    struct fstab_rec const* rec = fs_mgr_get_crypt_entry(fstab);
+    if (key_loc) {
+        if (rec) {
+            strlcpy(key_loc, rec->key_loc, size);
+        } else {
+            *key_loc = '\0';
+        }
+    }
+    if (real_blk_device) {
+        if (rec) {
+            strlcpy(real_blk_device, rec->blk_device, size);
+        } else {
+            *real_blk_device = '\0';
+        }
+    }
 }
 
 bool fs_mgr_load_verity_state(int* mode) {
