@@ -92,7 +92,6 @@ LOCAL_SRC_FILES:= \
     reboot.cpp \
     signal_handler.cpp \
     ueventd.cpp \
-    ueventd_parser.cpp \
     watchdogd.cpp \
 
 LOCAL_MODULE:= init

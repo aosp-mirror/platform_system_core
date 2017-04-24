@@ -24,6 +24,8 @@
 #include <string>
 #include <vector>
 
+#include "init_parser.h"
+
 enum coldboot_action_t {
     // coldboot continues without creating the device for the uevent
     COLDBOOT_CONTINUE = 0,
@@ -83,9 +85,45 @@ class SysfsPermissions : public Permissions {
     const std::string attribute_;
 };
 
-extern std::vector<Permissions> dev_permissions;
-extern std::vector<SysfsPermissions> sysfs_permissions;
+class Subsystem {
+  public:
+    friend class SubsystemParser;
 
+    Subsystem() {}
+
+    // Returns the full path for a uevent of a device that is a member of this subsystem,
+    // according to the rules parsed from ueventd.rc
+    std::string ParseDevPath(uevent* uevent) const;
+
+    bool operator==(const std::string& string_name) { return name_ == string_name; }
+
+  private:
+    enum class DevnameSource {
+        DEVNAME_UEVENT_DEVNAME,
+        DEVNAME_UEVENT_DEVPATH,
+    };
+
+    std::string name_;
+    std::string dir_name_ = "/dev";
+    DevnameSource devname_source_;
+};
+
+class SubsystemParser : public SectionParser {
+  public:
+    SubsystemParser() {}
+    bool ParseSection(std::vector<std::string>&& args, const std::string& filename, int line,
+                      std::string* err) override;
+    bool ParseLineSection(std::vector<std::string>&& args, int line, std::string* err) override;
+    void EndSection() override;
+
+  private:
+    bool ParseDevName(std::vector<std::string>&& args, std::string* err);
+    bool ParseDirName(std::vector<std::string>&& args, std::string* err);
+
+    Subsystem subsystem_;
+};
+
+bool ParsePermissionsLine(std::vector<std::string>&& args, std::string* err, bool is_sysfs);
 typedef std::function<coldboot_action_t(struct uevent* uevent)> coldboot_callback;
 extern coldboot_action_t handle_device_fd(coldboot_callback fn = nullptr);
 extern void device_init(const char* path = nullptr, coldboot_callback fn = nullptr);
