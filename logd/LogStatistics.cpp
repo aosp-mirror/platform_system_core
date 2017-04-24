@@ -32,7 +32,6 @@ static const uint64_t hourSec = 60 * 60;
 static const uint64_t monthSec = 31 * 24 * hourSec;
 
 size_t LogStatistics::SizesTotal;
-size_t TagNameEntry::droppedElsewhere;
 
 LogStatistics::LogStatistics() : enable(false) {
     log_time now(CLOCK_REALTIME);
@@ -153,8 +152,6 @@ void LogStatistics::add(LogBufferElement* element) {
             tagTable.add(tag, element);
         }
     }
-
-    tagNameTable.add(TagNameEntry(element).getKey(), element);
 }
 
 void LogStatistics::subtract(LogBufferElement* element) {
@@ -194,8 +191,6 @@ void LogStatistics::subtract(LogBufferElement* element) {
             tagTable.subtract(tag, element);
         }
     }
-
-    tagNameTable.subtract(TagNameEntry(element).getKey(), element);
 }
 
 // Atomically set an entry to drop
@@ -230,8 +225,6 @@ void LogStatistics::drop(LogBufferElement* element) {
             tagTable.drop(tag, element);
         }
     }
-
-    tagNameTable.drop(TagNameEntry(element).getKey(), element);
 }
 
 // caller must own and free character string
@@ -512,71 +505,6 @@ std::string TagEntry::format(const LogStatistics& /* stat */,
     return formatLine(name, size, pruned);
 }
 
-std::string TagNameEntry::formatHeader(const std::string& name,
-                                       log_id_t /* id */) const {
-    return formatLine(name, std::string("Size"), std::string("Prune")) +
-           formatLine(std::string("  TID/PID/UID   LOG_TAG NAME"),
-                      std::string("BYTES"), std::string("NUM"));
-}
-
-std::string TagNameEntry::format(const LogStatistics& /* stat */,
-                                 log_id_t /* id */) const {
-    std::string name;
-    pid_t tid = getTid();
-    pid_t pid = getPid();
-    std::string pidstr;
-    if (pid != (pid_t)-1) {
-        pidstr = android::base::StringPrintf("%u", pid);
-        if ((tid != (pid_t)-1) && (tid != pid)) pidstr = "/" + pidstr;
-    }
-    int len = 9 - pidstr.length();
-    if (len < 0) len = 0;
-    if ((tid == (pid_t)-1) || (tid == pid)) {
-        name = android::base::StringPrintf("%*s", len, "");
-    } else {
-        name = android::base::StringPrintf("%*u", len, tid);
-    }
-    name += pidstr;
-    uid_t uid = getUid();
-    if (uid != (uid_t)-1) {
-        name += android::base::StringPrintf("/%u", uid);
-    }
-
-    std::string size = android::base::StringPrintf("%zu", getSizes());
-
-    const char* nameTmp = getName();
-    if (nameTmp) {
-        size_t lenSpace = std::max(16 - name.length(), (size_t)1);
-        size_t len = EntryBaseConstants::total_len -
-                     EntryBaseConstants::pruned_len - size.length() -
-                     name.length() - lenSpace - 2;
-        size_t lenNameTmp = strlen(nameTmp);
-        while ((len < lenNameTmp) && (lenSpace > 1)) {
-            ++len;
-            --lenSpace;
-        }
-        name += android::base::StringPrintf("%*s", (int)lenSpace, "");
-        if (len < lenNameTmp) {
-            name += "...";
-            nameTmp += lenNameTmp - std::max(len - 3, (size_t)1);
-        }
-        name += nameTmp;
-    }
-
-    std::string pruned = "";
-
-    // Because of TagNameEntry::droppedElsewhere, dropped count can get
-    // modified for "chatty" tags.  Since the size is always zero this
-    // modification is a "can not happen".
-    TagNameEntry& me = const_cast<TagNameEntry&>(*this);
-    size_t dropped = me.getDropped();
-    if (dropped) {
-        pruned = android::base::StringPrintf("%zu", dropped);
-    }
-
-    return formatLine(name, size, pruned);
-}
-
 static std::string formatMsec(uint64_t val) {
     static const unsigned subsecDigits = 3;
     static const uint64_t sec = MS_PER_SEC;
@@ -795,13 +723,6 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
         if (pid) name += android::base::StringPrintf(" for PID %d", pid);
         name += ":";
         output += tidTable.format(*this, uid, pid, name);
-    }
-
-    if (enable) {
-        name = "Chattiest TAGs";
-        if (pid) name += android::base::StringPrintf(" for PID %d", pid);
-        name += ":";
-        output += tagNameTable.format(*this, uid, pid, name);
     }
 
     if (enable && (logMask & (1 << LOG_ID_EVENTS))) {
