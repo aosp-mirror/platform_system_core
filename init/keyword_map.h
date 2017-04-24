@@ -24,9 +24,9 @@
 
 template <typename Function>
 class KeywordMap {
-public:
+  public:
     using FunctionInfo = std::tuple<std::size_t, std::size_t, Function>;
-    using Map = const std::map<std::string, FunctionInfo>;
+    using Map = std::map<std::string, FunctionInfo>;
 
     virtual ~KeywordMap() {
     }
@@ -68,10 +68,10 @@ public:
         return std::get<Function>(function_info);
     }
 
-private:
-//Map of keyword ->
-//(minimum number of arguments, maximum number of arguments, function pointer)
-    virtual Map& map() const = 0;
+  private:
+    // Map of keyword ->
+    // (minimum number of arguments, maximum number of arguments, function pointer)
+    virtual const Map& map() const = 0;
 };
 
 #endif

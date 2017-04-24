@@ -213,16 +213,17 @@ private:
 
 class ServiceParser : public SectionParser {
   public:
-    ServiceParser() : service_(nullptr) {}
-    bool ParseSection(const std::vector<std::string>& args, const std::string& filename, int line,
+    ServiceParser(ServiceManager* service_manager)
+        : service_manager_(service_manager), service_(nullptr) {}
+    bool ParseSection(std::vector<std::string>&& args, const std::string& filename, int line,
                       std::string* err) override;
-    bool ParseLineSection(const std::vector<std::string>& args, int line, std::string* err) override;
+    bool ParseLineSection(std::vector<std::string>&& args, int line, std::string* err) override;
     void EndSection() override;
-    void EndFile(const std::string&) override {}
 
   private:
     bool IsValidName(const std::string& name) const;
 
+    ServiceManager* service_manager_;
     std::unique_ptr<Service> service_;
 };
 
