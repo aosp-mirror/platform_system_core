@@ -20,6 +20,7 @@
 
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 
 #include "parser.h"
 #include "util.h"
@@ -35,6 +36,10 @@ Parser& Parser::GetInstance() {
 void Parser::AddSectionParser(const std::string& name,
                               std::unique_ptr<SectionParser> parser) {
     section_parsers_[name] = std::move(parser);
+}
+
+void Parser::AddSingleLineParser(const std::string& prefix, LineCallback callback) {
+    line_callbacks_.emplace_back(prefix, callback);
 }
 
 void Parser::ParseData(const std::string& filename, const std::string& data) {
@@ -62,6 +67,20 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
             state.line++;
             if (args.empty()) {
                 break;
+            }
+            // If we have a line matching a prefix we recognize, call its callback and unset any
+            // current section parsers.  This is meant for /sys/ and /dev/ line entries for uevent.
+            for (const auto& [prefix, callback] : line_callbacks_) {
+                if (android::base::StartsWith(args[0], prefix.c_str())) {
+                    if (section_parser) section_parser->EndSection();
+
+                    std::string ret_err;
+                    if (!callback(std::move(args), &ret_err)) {
+                        parse_error(&state, "%s\n", ret_err.c_str());
+                    }
+                    section_parser = nullptr;
+                    break;
+                }
             }
             if (section_parsers_.count(args[0])) {
                 if (section_parser) {
