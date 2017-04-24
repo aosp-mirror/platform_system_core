@@ -44,10 +44,11 @@
 #include <selinux/selinux.h>
 #include <selinux/label.h>
 
-#include <fs_mgr.h>
 #include <android-base/file.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <fs_mgr.h>
 #include "bootimg.h"
 
 #include "property_service.h"
@@ -574,10 +575,28 @@ static void load_persistent_properties() {
     }
 }
 
+// persist.sys.usb.config values can't be combined on build-time when property
+// files are split into each partition.
+// So we need to apply the same rule of build/make/tools/post_process_props.py
+// on runtime.
+static void update_sys_usb_config() {
+    bool is_debuggable = android::base::GetBoolProperty("ro.debuggable", false);
+    std::string config = android::base::GetProperty("persist.sys.usb.config", "");
+    if (config.empty()) {
+        property_set("persist.sys.usb.config", is_debuggable ? "adb" : "none");
+    } else if (is_debuggable && config.find("adb") == std::string::npos &&
+               config.length() + 4 < PROP_VALUE_MAX) {
+        config.append(",adb");
+        property_set("persist.sys.usb.config", config);
+    }
+}
+
 void property_load_boot_defaults() {
     load_properties_from_file("/default.prop", NULL);
     load_properties_from_file("/odm/default.prop", NULL);
     load_properties_from_file("/vendor/default.prop", NULL);
+
+    update_sys_usb_config();
 }
 
 static void load_override_properties() {
