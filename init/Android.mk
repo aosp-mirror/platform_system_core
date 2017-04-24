@@ -143,6 +143,7 @@ LOCAL_MODULE := init_tests
 LOCAL_SRC_FILES := \
     devices_test.cpp \
     init_parser_test.cpp \
+    init_test.cpp \
     property_service_test.cpp \
     util_test.cpp \
 
@@ -154,7 +155,7 @@ LOCAL_SHARED_LIBRARIES += \
 LOCAL_STATIC_LIBRARIES := libinit
 LOCAL_SANITIZE := integer
 LOCAL_CLANG := true
-LOCAL_CPPFLAGS := -Wall -Wextra -Werror
+LOCAL_CPPFLAGS := -Wall -Wextra -Werror -std=gnu++1z
 include $(BUILD_NATIVE_TEST)
 
 

@@ -34,4 +34,6 @@ int add_environment(const char* key, const char* val);
 
 bool start_waiting_for_property(const char *name, const char *value);
 
+void DumpState();
+
 #endif  /* _INIT_INIT_H */

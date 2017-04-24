@@ -88,8 +88,11 @@ public:
 };
 
 class ActionManager {
-public:
+  public:
     static ActionManager& GetInstance();
+
+    // Exposed for testing
+    ActionManager();
 
     void AddAction(std::unique_ptr<Action> action);
     void QueueEventTrigger(const std::string& trigger);
@@ -100,9 +103,7 @@ public:
     bool HasMoreCommands() const;
     void DumpState() const;
 
-private:
-    ActionManager();
-
+  private:
     ActionManager(ActionManager const&) = delete;
     void operator=(ActionManager const&) = delete;
 
@@ -114,16 +115,15 @@ private:
 
 class ActionParser : public SectionParser {
   public:
-    ActionParser() : action_(nullptr) {
-    }
-    bool ParseSection(const std::vector<std::string>& args, const std::string& filename, int line,
+    ActionParser(ActionManager* action_manager)
+        : action_manager_(action_manager), action_(nullptr) {}
+    bool ParseSection(std::vector<std::string>&& args, const std::string& filename, int line,
                       std::string* err) override;
-    bool ParseLineSection(const std::vector<std::string>& args, int line, std::string* err) override;
+    bool ParseLineSection(std::vector<std::string>&& args, int line, std::string* err) override;
     void EndSection() override;
-    void EndFile(const std::string&) override {
-    }
 
   private:
+    ActionManager* action_manager_;
     std::unique_ptr<Action> action_;
 };
 

@@ -24,20 +24,17 @@
 
 class ImportParser : public SectionParser {
   public:
-    ImportParser()  {
-    }
-    bool ParseSection(const std::vector<std::string>& args, const std::string& filename, int line,
+    ImportParser(Parser* parser) : parser_(parser) {}
+    bool ParseSection(std::vector<std::string>&& args, const std::string& filename, int line,
                       std::string* err) override;
-    bool ParseLineSection(const std::vector<std::string>& args, int line,
-                          std::string* err) override {
-        return true;
-    }
-    void EndSection() override {
-    }
-    void EndFile(const std::string& filename) override;
+    void EndFile() override;
 
   private:
-    std::vector<std::string> imports_;
+    Parser* parser_;
+    // Store filename for later error reporting.
+    std::string filename_;
+    // Vector of imports and their line numbers for later error reporting.
+    std::vector<std::pair<std::string, int>> imports_;
 };
 
 #endif
