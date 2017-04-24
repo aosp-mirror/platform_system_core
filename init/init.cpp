@@ -978,6 +978,8 @@ int main(int argc, char** argv) {
             panic();
         }
 
+        SetInitAvbVersionInRecovery();
+
         // Set up SELinux, loading the SELinux policy.
         selinux_initialize(true);
 
