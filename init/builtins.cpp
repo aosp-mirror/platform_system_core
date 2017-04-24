@@ -390,7 +390,7 @@ static void import_late(const std::vector<std::string>& args, size_t start_index
 
     // Turning this on and letting the INFO logging be discarded adds 0.2s to
     // Nexus 9 boot time, so it's disabled by default.
-    if (false) parser.DumpState();
+    if (false) DumpState();
 }
 
 /* mount_fstab
@@ -855,7 +855,7 @@ static int do_init_user0(const std::vector<std::string>& args) {
     return e4crypt_do_init_user0();
 }
 
-BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
+const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     // clang-format off
     static const Map builtin_functions = {
