@@ -363,7 +363,7 @@ void ActionManager::DumpState() const {
     }
 }
 
-bool ActionParser::ParseSection(const std::vector<std::string>& args, const std::string& filename,
+bool ActionParser::ParseSection(std::vector<std::string>&& args, const std::string& filename,
                                 int line, std::string* err) {
     std::vector<std::string> triggers(args.begin() + 1, args.end());
     if (triggers.size() < 1) {
@@ -380,13 +380,12 @@ bool ActionParser::ParseSection(const std::vector<std::string>& args, const std:
     return true;
 }
 
-bool ActionParser::ParseLineSection(const std::vector<std::string>& args, int line,
-                                    std::string* err) {
-    return action_ ? action_->AddCommand(args, line, err) : false;
+bool ActionParser::ParseLineSection(std::vector<std::string>&& args, int line, std::string* err) {
+    return action_ ? action_->AddCommand(std::move(args), line, err) : false;
 }
 
 void ActionParser::EndSection() {
     if (action_ && action_->NumCommands() > 0) {
-        ActionManager::GetInstance().AddAction(std::move(action_));
+        action_manager_->AddAction(std::move(action_));
     }
 }

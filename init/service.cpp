@@ -534,14 +534,14 @@ bool Service::ParseWritepid(const std::vector<std::string>& args, std::string* e
 }
 
 class Service::OptionParserMap : public KeywordMap<OptionParser> {
-public:
-    OptionParserMap() {
-    }
-private:
-    Map& map() const override;
+  public:
+    OptionParserMap() {}
+
+  private:
+    const Map& map() const override;
 };
 
-Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
+const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     // clang-format off
     static const Map option_parsers = {
@@ -877,11 +877,6 @@ ServiceManager& ServiceManager::GetInstance() {
 }
 
 void ServiceManager::AddService(std::unique_ptr<Service> service) {
-    Service* old_service = FindServiceByName(service->name());
-    if (old_service) {
-        LOG(ERROR) << "ignored duplicate definition of service '" << service->name() << "'";
-        return;
-    }
     services_.emplace_back(std::move(service));
 }
 
@@ -1095,7 +1090,7 @@ void ServiceManager::ReapAnyOutstandingChildren() {
     }
 }
 
-bool ServiceParser::ParseSection(const std::vector<std::string>& args, const std::string& filename,
+bool ServiceParser::ParseSection(std::vector<std::string>&& args, const std::string& filename,
                                  int line, std::string* err) {
     if (args.size() < 3) {
         *err = "services must have a name and a program";
@@ -1108,19 +1103,24 @@ bool ServiceParser::ParseSection(const std::vector<std::string>& args, const std
         return false;
     }
 
+    Service* old_service = service_manager_->FindServiceByName(name);
+    if (old_service) {
+        *err = "ignored duplicate definition of service '" + name + "'";
+        return false;
+    }
+
     std::vector<std::string> str_args(args.begin() + 2, args.end());
     service_ = std::make_unique<Service>(name, str_args);
     return true;
 }
 
-bool ServiceParser::ParseLineSection(const std::vector<std::string>& args, int line,
-                                     std::string* err) {
-    return service_ ? service_->ParseLine(args, err) : false;
+bool ServiceParser::ParseLineSection(std::vector<std::string>&& args, int line, std::string* err) {
+    return service_ ? service_->ParseLine(std::move(args), err) : false;
 }
 
 void ServiceParser::EndSection() {
     if (service_) {
-        ServiceManager::GetInstance().AddService(std::move(service_));
+        service_manager_->AddService(std::move(service_));
     }
 }
 
