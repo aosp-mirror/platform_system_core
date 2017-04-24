@@ -18,14 +18,10 @@
 #define _LOGD_LOG_STATISTICS_H__
 
 #include <ctype.h>
-#include <inttypes.h>
-#include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/types.h>
 
 #include <algorithm>  // std::max
-#include <experimental/string_view>
 #include <memory>
 #include <string>  // std::string
 #include <unordered_map>
@@ -81,7 +77,7 @@ class LogHashtable {
     std::unique_ptr<const TEntry* []> sort(uid_t uid, pid_t pid,
                                            size_t len) const {
         if (!len) {
-            std::unique_ptr<const TEntry* []> sorted(nullptr);
+            std::unique_ptr<const TEntry* []> sorted(NULL);
             return sorted;
         }
 
@@ -322,7 +318,7 @@ struct PidEntry : public EntryBaseDropped {
         : EntryBaseDropped(element),
           pid(element.pid),
           uid(element.uid),
-          name(element.name ? strdup(element.name) : nullptr) {
+          name(element.name ? strdup(element.name) : NULL) {
     }
     ~PidEntry() {
         free(name);
@@ -344,7 +340,7 @@ struct PidEntry : public EntryBaseDropped {
     inline void add(pid_t newPid) {
         if (name && !fastcmp<strncmp>(name, "zygote", 6)) {
             free(name);
-            name = nullptr;
+            name = NULL;
         }
         if (!name) {
             name = android::pidToName(newPid);
@@ -392,7 +388,7 @@ struct TidEntry : public EntryBaseDropped {
           tid(element.tid),
           pid(element.pid),
           uid(element.uid),
-          name(element.name ? strdup(element.name) : nullptr) {
+          name(element.name ? strdup(element.name) : NULL) {
     }
     ~TidEntry() {
         free(name);
@@ -417,7 +413,7 @@ struct TidEntry : public EntryBaseDropped {
     inline void add(pid_t incomingTid) {
         if (name && !fastcmp<strncmp>(name, "zygote", 6)) {
             free(name);
-            name = nullptr;
+            name = NULL;
         }
         if (!name) {
             name = android::tidToName(incomingTid);
@@ -475,141 +471,6 @@ struct TagEntry : public EntryBaseDropped {
             pid = -1;
         }
         EntryBaseDropped::add(element);
-    }
-
-    std::string formatHeader(const std::string& name, log_id_t id) const;
-    std::string format(const LogStatistics& stat, log_id_t id) const;
-};
-
-struct TagNameEntry : public EntryBaseDropped {
-    // We do not care that a dropped entry does, or does not exist, because
-    // the size will always report zero.  But if it does, we need to account
-    // for the ones that transitioned from a known tag to chatty so that we
-    // do not spring a leak on the dropped counts.
-    static size_t droppedElsewhere;
-
-    pid_t tid;
-    pid_t pid;
-    uid_t uid;
-    std::string* alloc;
-    std::experimental::string_view name;  // Saves space if const char*
-
-    explicit TagNameEntry(LogBufferElement* element)
-        : EntryBaseDropped(element),
-          tid(element->getTid()),
-          pid(element->getPid()),
-          uid(element->getUid()),
-          alloc(nullptr) {
-        if (element->isBinary()) {
-            uint32_t tag = element->getTag();
-            if (tag) {
-                const char* cp = android::tagToName(tag);
-                if (cp) {
-                    name = std::experimental::string_view(cp, strlen(cp));
-                    return;
-                }
-            }
-            alloc = new std::string(
-                android::base::StringPrintf("[%" PRIu32 "]", tag));
-            if (!alloc) return;
-            name = std::experimental::string_view(alloc->c_str(), alloc->size());
-            return;
-        }
-        const char* msg = element->getMsg();
-        if (!msg) {
-            name = std::experimental::string_view("chatty", strlen("chatty"));
-            return;
-        }
-        ++msg;
-        unsigned short len = element->getMsgLen();
-        len = (len <= 1) ? 0 : strnlen(msg, len - 1);
-        if (!len) {
-            name = std::experimental::string_view("<NULL>", strlen("<NULL>"));
-            return;
-        }
-        alloc = new std::string(msg, len);
-        if (!alloc) return;
-        name = std::experimental::string_view(alloc->c_str(), alloc->size());
-    }
-
-    explicit TagNameEntry(TagNameEntry&& rval)
-        : tid(rval.tid),
-          pid(rval.pid),
-          uid(rval.uid),
-          alloc(rval.alloc),
-          name(rval.name.data(), rval.name.length()) {
-        rval.alloc = nullptr;
-    }
-
-    explicit TagNameEntry(const TagNameEntry& rval)
-        : tid(rval.tid),
-          pid(rval.pid),
-          uid(rval.uid),
-          alloc(rval.alloc ? new std::string(*rval.alloc) : nullptr),
-          name(alloc ? alloc->data() : rval.name.data(), rval.name.length()) {
-    }
-
-    ~TagNameEntry() {
-        if (alloc) delete alloc;
-    }
-
-    const std::experimental::string_view& getKey() const {
-        return name;
-    }
-    const pid_t& getTid() const {
-        return tid;
-    }
-    const pid_t& getPid() const {
-        return pid;
-    }
-    const uid_t& getUid() const {
-        return uid;
-    }
-    const char* getName() const {
-        return name.data();
-    }
-    size_t getNameAllocLength() const {
-        return alloc ? alloc->length() + 1 : 0;
-    }
-
-    size_t getDropped() {
-        if (__predict_false(name == "chatty")) {  // plug the leak
-            dropped += droppedElsewhere;
-            droppedElsewhere = 0;
-        }
-        return EntryBaseDropped::getDropped();
-    }
-
-    inline void add(LogBufferElement* element) {
-        if (uid != element->getUid()) {
-            uid = -1;
-        }
-        if (pid != element->getPid()) {
-            pid = -1;
-        }
-        if (tid != element->getTid()) {
-            tid = -1;
-        }
-        // Fixup of dropped can be deferred.
-        EntryBaseDropped::add(element);
-    }
-
-    inline bool subtract(LogBufferElement* element) {
-        if (__predict_false(name == "chatty")) {  // plug the leak
-            dropped += droppedElsewhere;
-            droppedElsewhere = 0;
-        }
-        return EntryBaseDropped::subtract(element);
-    }
-
-    inline void drop(LogBufferElement* element) {
-        if (__predict_false(name == "chatty")) {  // plug the leak
-            dropped += droppedElsewhere;
-            droppedElsewhere = 0;
-        } else {
-            ++droppedElsewhere;
-        }
-        return EntryBaseDropped::drop(element);
     }
 
     std::string formatHeader(const std::string& name, log_id_t id) const;
@@ -689,15 +550,9 @@ class LogStatistics {
     // security tag list
     tagTable_t securityTagTable;
 
-    // global tag list
-    typedef LogHashtable<std::experimental::string_view, TagNameEntry>
-        tagNameTable_t;
-    tagNameTable_t tagNameTable;
-
     size_t sizeOf() const {
         size_t size = sizeof(*this) + pidTable.sizeOf() + tidTable.sizeOf() +
                       tagTable.sizeOf() + securityTagTable.sizeOf() +
-                      tagNameTable.sizeOf() +
                       (pidTable.size() * sizeof(pidTable_t::iterator)) +
                       (tagTable.size() * sizeof(tagTable_t::iterator));
         for (auto it : pidTable) {
@@ -708,7 +563,6 @@ class LogStatistics {
             const char* name = it.second.getName();
             if (name) size += strlen(name) + 1;
         }
-        for (auto it : tagNameTable) size += it.second.getNameAllocLength();
         log_id_for_each(id) {
             size += uidTable[id].sizeOf();
             size += uidTable[id].size() * sizeof(uidTable_t::iterator);
