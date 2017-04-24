@@ -48,7 +48,6 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
     data_copy.push_back('\0');
 
     parse_state state;
-    state.filename = filename.c_str();
     state.line = 0;
     state.ptr = &data_copy[0];
     state.nexttoken = 0;
@@ -76,7 +75,7 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
 
                     std::string ret_err;
                     if (!callback(std::move(args), &ret_err)) {
-                        parse_error(&state, "%s\n", ret_err.c_str());
+                        LOG(ERROR) << filename << ": " << state.line << ": " << ret_err;
                     }
                     section_parser = nullptr;
                     break;
@@ -88,15 +87,14 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
                 }
                 section_parser = section_parsers_[args[0]].get();
                 std::string ret_err;
-                if (!section_parser->ParseSection(std::move(args), state.filename, state.line,
-                                                  &ret_err)) {
-                    parse_error(&state, "%s\n", ret_err.c_str());
+                if (!section_parser->ParseSection(std::move(args), filename, state.line, &ret_err)) {
+                    LOG(ERROR) << filename << ": " << state.line << ": " << ret_err;
                     section_parser = nullptr;
                 }
             } else if (section_parser) {
                 std::string ret_err;
                 if (!section_parser->ParseLineSection(std::move(args), state.line, &ret_err)) {
-                    parse_error(&state, "%s\n", ret_err.c_str());
+                    LOG(ERROR) << filename << ": " << state.line << ": " << ret_err;
                 }
             }
             args.clear();
