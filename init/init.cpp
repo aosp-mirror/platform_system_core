@@ -96,6 +96,11 @@ static std::unique_ptr<Timer> waiting_for_prop(nullptr);
 static std::string wait_prop_name;
 static std::string wait_prop_value;
 
+void DumpState() {
+    ServiceManager::GetInstance().DumpState();
+    ActionManager::GetInstance().DumpState();
+}
+
 void register_epoll_handler(int fd, void (*fn)()) {
     epoll_event ev;
     ev.events = EPOLLIN;
@@ -1398,10 +1403,13 @@ int main(int argc, char** argv) {
     const BuiltinFunctionMap function_map;
     Action::set_function_map(&function_map);
 
+    ActionManager& am = ActionManager::GetInstance();
+    ServiceManager& sm = ServiceManager::GetInstance();
     Parser& parser = Parser::GetInstance();
-    parser.AddSectionParser("service",std::make_unique<ServiceParser>());
-    parser.AddSectionParser("on", std::make_unique<ActionParser>());
-    parser.AddSectionParser("import", std::make_unique<ImportParser>());
+
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&sm));
+    parser.AddSectionParser("on", std::make_unique<ActionParser>(&am));
+    parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
     std::string bootscript = GetProperty("ro.boot.init_rc", "");
     if (bootscript.empty()) {
         parser.ParseConfig("/init.rc");
@@ -1419,9 +1427,7 @@ int main(int argc, char** argv) {
 
     // Turning this on and letting the INFO logging be discarded adds 0.2s to
     // Nexus 9 boot time, so it's disabled by default.
-    if (false) parser.DumpState();
-
-    ActionManager& am = ActionManager::GetInstance();
+    if (false) DumpState();
 
     am.QueueEventTrigger("early-init");
 
@@ -1456,10 +1462,10 @@ int main(int argc, char** argv) {
         // By default, sleep until something happens.
         int epoll_timeout_ms = -1;
 
-        if (!(waiting_for_prop || ServiceManager::GetInstance().IsWaitingForExec())) {
+        if (!(waiting_for_prop || sm.IsWaitingForExec())) {
             am.ExecuteOneCommand();
         }
-        if (!(waiting_for_prop || ServiceManager::GetInstance().IsWaitingForExec())) {
+        if (!(waiting_for_prop || sm.IsWaitingForExec())) {
             restart_processes();
 
             // If there's a process that needs restarting, wake up in time for that.
