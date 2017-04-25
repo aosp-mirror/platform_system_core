@@ -33,6 +33,8 @@
 #include "fs_mgr_avb.h"
 #include "util.h"
 
+// Class Declarations
+// ------------------
 class FirstStageMount {
   public:
     FirstStageMount();
@@ -42,6 +44,7 @@ class FirstStageMount {
     // based on device tree configurations.
     static std::unique_ptr<FirstStageMount> Create();
     bool DoFirstStageMount();  // Mounts fstab entries read from device tree.
+    bool InitDevices();
 
   protected:
     void InitRequiredDevices(std::set<std::string>* devices_partition_names);
@@ -74,6 +77,8 @@ class FirstStageMountVBootV2 : public FirstStageMount {
     FirstStageMountVBootV2();
     ~FirstStageMountVBootV2() override = default;
 
+    const std::string& by_name_prefix() const { return device_tree_by_name_prefix_; }
+
   protected:
     bool GetRequiredDevices(std::set<std::string>* out_devices_partition_names,
                             bool* out_need_dm_verity) override;
@@ -85,6 +90,18 @@ class FirstStageMountVBootV2 : public FirstStageMount {
     FsManagerAvbUniquePtr avb_handle_;
 };
 
+// Static Functions
+// ----------------
+static inline bool IsDtVbmetaCompatible() {
+    return is_android_dt_value_expected("vbmeta/compatible", "android,vbmeta");
+}
+
+static bool inline IsRecoveryMode() {
+    return access("/sbin/recovery", F_OK) == 0;
+}
+
+// Class Definitions
+// -----------------
 FirstStageMount::FirstStageMount() : device_tree_fstab_(fs_mgr_read_fstab_dt(), fs_mgr_free_fstab) {
     if (!device_tree_fstab_) {
         LOG(ERROR) << "Failed to read fstab from device tree";
@@ -100,7 +117,7 @@ FirstStageMount::FirstStageMount() : device_tree_fstab_(fs_mgr_read_fstab_dt(), 
 }
 
 std::unique_ptr<FirstStageMount> FirstStageMount::Create() {
-    if (is_android_dt_value_expected("vbmeta/compatible", "android,vbmeta")) {
+    if (IsDtVbmetaCompatible()) {
         return std::make_unique<FirstStageMountVBootV2>();
     } else {
         return std::make_unique<FirstStageMountVBootV1>();
@@ -111,6 +128,14 @@ bool FirstStageMount::DoFirstStageMount() {
     // Nothing to mount.
     if (mount_fstab_recs_.empty()) return true;
 
+    if (!InitDevices()) return false;
+
+    if (!MountPartitions()) return false;
+
+    return true;
+}
+
+bool FirstStageMount::InitDevices() {
     bool need_dm_verity;
     std::set<std::string> devices_partition_names;
 
@@ -133,8 +158,6 @@ bool FirstStageMount::DoFirstStageMount() {
     } else {
         success = true;
     }
-
-    if (MountPartitions()) success = true;
 
     device_close();
     return success;
@@ -361,7 +384,7 @@ bool FirstStageMountVBootV2::InitAvbHandle() {
 // Mounts /system, /vendor, and/or /odm if they are present in the fstab provided by device tree.
 bool DoFirstStageMount() {
     // Skips first stage mount if we're in recovery mode.
-    if (access("/sbin/recovery", F_OK) == 0) {
+    if (IsRecoveryMode()) {
         LOG(INFO) << "First stage mount skipped (recovery mode)";
         return true;
     }
@@ -378,4 +401,34 @@ bool DoFirstStageMount() {
         return false;
     }
     return handle->DoFirstStageMount();
+}
+
+void SetInitAvbVersionInRecovery() {
+    if (!IsRecoveryMode()) {
+        LOG(INFO) << "Skipped setting INIT_AVB_VERSION (not in recovery mode)";
+        return;
+    }
+
+    if (!IsDtVbmetaCompatible()) {
+        LOG(INFO) << "Skipped setting INIT_AVB_VERSION (not vbmeta compatible)";
+        return;
+    }
+
+    // Initializes required devices for the subsequent FsManagerAvbHandle::Open()
+    // to verify AVB metadata on all partitions in the verified chain.
+    // We only set INIT_AVB_VERSION when the AVB verification succeeds, i.e., the
+    // Open() function returns a valid handle.
+    // We don't need to mount partitions here in recovery mode.
+    FirstStageMountVBootV2 avb_first_mount;
+    if (!avb_first_mount.InitDevices()) {
+        LOG(ERROR) << "Failed to init devices for INIT_AVB_VERSION";
+        return;
+    }
+
+    FsManagerAvbUniquePtr avb_handle = FsManagerAvbHandle::Open(avb_first_mount.by_name_prefix());
+    if (!avb_handle) {
+        PLOG(ERROR) << "Failed to open FsManagerAvbHandle for INIT_AVB_VERSION";
+        return;
+    }
+    setenv("INIT_AVB_VERSION", avb_handle->avb_version().c_str(), 1);
 }
