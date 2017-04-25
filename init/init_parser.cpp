@@ -17,14 +17,12 @@
 #include "init_parser.h"
 
 #include <dirent.h>
-#include <fcntl.h>
 
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 
-#include "action.h"
 #include "parser.h"
-#include "service.h"
+#include "util.h"
 
 Parser::Parser() {
 }
@@ -71,13 +69,14 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
                 }
                 section_parser = section_parsers_[args[0]].get();
                 std::string ret_err;
-                if (!section_parser->ParseSection(args, state.filename, state.line, &ret_err)) {
+                if (!section_parser->ParseSection(std::move(args), state.filename, state.line,
+                                                  &ret_err)) {
                     parse_error(&state, "%s\n", ret_err.c_str());
                     section_parser = nullptr;
                 }
             } else if (section_parser) {
                 std::string ret_err;
-                if (!section_parser->ParseLineSection(args, state.line, &ret_err)) {
+                if (!section_parser->ParseLineSection(std::move(args), state.line, &ret_err)) {
                     parse_error(&state, "%s\n", ret_err.c_str());
                 }
             }
@@ -100,8 +99,8 @@ bool Parser::ParseConfigFile(const std::string& path) {
 
     data.push_back('\n'); // TODO: fix parse_config.
     ParseData(path, data);
-    for (const auto& sp : section_parsers_) {
-        sp.second->EndFile(path);
+    for (const auto& [section_name, section_parser] : section_parsers_) {
+        section_parser->EndFile();
     }
 
     LOG(VERBOSE) << "(Parsing " << path << " took " << t << ".)";
@@ -140,9 +139,4 @@ bool Parser::ParseConfig(const std::string& path) {
         return ParseConfigDir(path);
     }
     return ParseConfigFile(path);
-}
-
-void Parser::DumpState() const {
-    ServiceManager::GetInstance().DumpState();
-    ActionManager::GetInstance().DumpState();
 }

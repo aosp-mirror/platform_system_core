@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,10 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_BUILTINS_H
-#define _INIT_BUILTINS_H
+#ifndef _INIT_FIRST_STAGE_H
+#define _INIT_FIRST_STAGE_H
 
-#include <functional>
-#include <map>
-#include <string>
-#include <vector>
-
-#include "keyword_map.h"
-
-using BuiltinFunction = std::function<int(const std::vector<std::string>&)>;
-class BuiltinFunctionMap : public KeywordMap<BuiltinFunction> {
-  public:
-    BuiltinFunctionMap() {}
-
-  private:
-    const Map& map() const override;
-};
+bool DoFirstStageMount();
+void SetInitAvbVersionInRecovery();
 
 #endif
