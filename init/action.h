@@ -20,6 +20,7 @@
 #include <map>
 #include <queue>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "builtins.h"
@@ -41,6 +42,10 @@ class Command {
     int line_;
 };
 
+using EventTrigger = std::string;
+using PropertyChange = std::pair<std::string, std::string>;
+using BuiltinAction = class Action*;
+
 class Action {
   public:
     explicit Action(bool oneshot, const std::string& filename, int line);
@@ -52,9 +57,9 @@ class Action {
     std::size_t NumCommands() const;
     void ExecuteOneCommand(std::size_t command) const;
     void ExecuteAllCommands() const;
-    bool CheckEventTrigger(const std::string& trigger) const;
-    bool CheckPropertyTrigger(const std::string& name,
-                              const std::string& value) const;
+    bool CheckEvent(const EventTrigger& event_trigger) const;
+    bool CheckEvent(const PropertyChange& property_change) const;
+    bool CheckEvent(const BuiltinAction& builtin_action) const;
     std::string BuildTriggersString() const;
     void DumpState() const;
 
@@ -81,12 +86,6 @@ private:
     static const KeywordMap<BuiltinFunction>* function_map_;
 };
 
-class Trigger {
-public:
-    virtual ~Trigger() { }
-    virtual bool CheckTriggers(const Action& action) const = 0;
-};
-
 class ActionManager {
   public:
     static ActionManager& GetInstance();
@@ -96,8 +95,8 @@ class ActionManager {
 
     void AddAction(std::unique_ptr<Action> action);
     void QueueEventTrigger(const std::string& trigger);
-    void QueuePropertyTrigger(const std::string& name, const std::string& value);
-    void QueueAllPropertyTriggers();
+    void QueuePropertyChange(const std::string& name, const std::string& value);
+    void QueueAllPropertyActions();
     void QueueBuiltinAction(BuiltinFunction func, const std::string& name);
     void ExecuteOneCommand();
     bool HasMoreCommands() const;
@@ -108,7 +107,7 @@ class ActionManager {
     void operator=(ActionManager const&) = delete;
 
     std::vector<std::unique_ptr<Action>> actions_;
-    std::queue<std::unique_ptr<Trigger>> trigger_queue_;
+    std::queue<std::variant<EventTrigger, PropertyChange, BuiltinAction>> event_queue_;
     std::queue<const Action*> current_executing_actions_;
     std::size_t current_command_;
 };
