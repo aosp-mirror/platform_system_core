@@ -31,10 +31,15 @@ class KeywordMap {
     virtual ~KeywordMap() {
     }
 
-    const Function FindFunction(const std::string& keyword,
-                                size_t num_args,
-                                std::string* err) const {
+    const Function FindFunction(const std::vector<std::string>& args, std::string* err) const {
         using android::base::StringPrintf;
+
+        if (args.empty()) {
+            *err = "keyword needed, but not provided";
+            return nullptr;
+        }
+        auto& keyword = args[0];
+        auto num_args = args.size() - 1;
 
         auto function_info_it = map().find(keyword);
         if (function_info_it == map().end()) {

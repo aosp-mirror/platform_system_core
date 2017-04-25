@@ -572,13 +572,8 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
 }
 
 bool Service::ParseLine(const std::vector<std::string>& args, std::string* err) {
-    if (args.empty()) {
-        *err = "option needed, but not provided";
-        return false;
-    }
-
     static const OptionParserMap parser_map;
-    auto parser = parser_map.FindFunction(args[0], args.size() - 1, err);
+    auto parser = parser_map.FindFunction(args, err);
 
     if (!parser) {
         return false;

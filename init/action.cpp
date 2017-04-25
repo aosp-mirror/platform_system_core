@@ -58,12 +58,7 @@ bool Action::AddCommand(const std::vector<std::string>& args, int line, std::str
         return false;
     }
 
-    if (args.empty()) {
-        *err = "command needed, but not provided";
-        return false;
-    }
-
-    auto function = function_map_->FindFunction(args[0], args.size() - 1, err);
+    auto function = function_map_->FindFunction(args, err);
     if (!function) {
         return false;
     }

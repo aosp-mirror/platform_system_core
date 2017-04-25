@@ -57,24 +57,26 @@ class SectionParser {
 
 class Parser {
   public:
+    //  LineCallback is the type for callbacks that can parse a line starting with a given prefix.
+    //
+    //  They take the form of bool Callback(std::vector<std::string>&& args, std::string* err)
+    //
+    //  Similar to ParseSection() and ParseLineSection(), this function returns bool with false
+    //  indicating a failure and has an std::string* err parameter into which an error string can
+    //  be written.
+    using LineCallback = std::function<bool(std::vector<std::string>&&, std::string*)>;
+
     static Parser& GetInstance();
 
     // Exposed for testing
     Parser();
 
     bool ParseConfig(const std::string& path);
-    void AddSectionParser(const std::string& name,
-                          std::unique_ptr<SectionParser> parser);
-
-    void set_is_system_etc_init_loaded(bool loaded) {
-        is_system_etc_init_loaded_ = loaded;
-    }
-    void set_is_vendor_etc_init_loaded(bool loaded) {
-        is_vendor_etc_init_loaded_ = loaded;
-    }
-    void set_is_odm_etc_init_loaded(bool loaded) {
-        is_odm_etc_init_loaded_ = loaded;
-    }
+    void AddSectionParser(const std::string& name, std::unique_ptr<SectionParser> parser);
+    void AddSingleLineParser(const std::string& prefix, LineCallback callback);
+    void set_is_system_etc_init_loaded(bool loaded) { is_system_etc_init_loaded_ = loaded; }
+    void set_is_vendor_etc_init_loaded(bool loaded) { is_vendor_etc_init_loaded_ = loaded; }
+    void set_is_odm_etc_init_loaded(bool loaded) { is_odm_etc_init_loaded_ = loaded; }
     bool is_system_etc_init_loaded() { return is_system_etc_init_loaded_; }
     bool is_vendor_etc_init_loaded() { return is_vendor_etc_init_loaded_; }
     bool is_odm_etc_init_loaded() { return is_odm_etc_init_loaded_; }
@@ -85,6 +87,7 @@ class Parser {
     bool ParseConfigDir(const std::string& path);
 
     std::map<std::string, std::unique_ptr<SectionParser>> section_parsers_;
+    std::vector<std::pair<std::string, LineCallback>> line_callbacks_;
     bool is_system_etc_init_loaded_ = false;
     bool is_vendor_etc_init_loaded_ = false;
     bool is_odm_etc_init_loaded_ = false;
