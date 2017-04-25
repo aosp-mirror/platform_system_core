@@ -369,3 +369,26 @@ std::ostream& operator<<(std::ostream& os, const Timer& t) {
     os << t.duration_s() << " seconds";
     return os;
 }
+
+// Reads the content of device tree file under kAndroidDtDir directory.
+// Returns true if the read is success, false otherwise.
+bool read_android_dt_file(const std::string& sub_path, std::string* dt_content) {
+    const std::string file_name = kAndroidDtDir + sub_path;
+    if (android::base::ReadFileToString(file_name, dt_content)) {
+        if (!dt_content->empty()) {
+            dt_content->pop_back();  // Trims the trailing '\0' out.
+            return true;
+        }
+    }
+    return false;
+}
+
+bool is_android_dt_value_expected(const std::string& sub_path, const std::string& expected_content) {
+    std::string dt_content;
+    if (read_android_dt_file(sub_path, &dt_content)) {
+        if (dt_content == expected_content) {
+            return true;
+        }
+    }
+    return false;
+}
