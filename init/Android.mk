@@ -87,6 +87,7 @@ LOCAL_SRC_FILES:= \
     bootchart.cpp \
     builtins.cpp \
     init.cpp \
+    init_first_stage.cpp \
     keychords.cpp \
     property_service.cpp \
     reboot.cpp \
