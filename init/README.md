@@ -31,13 +31,13 @@ locations on the system, described below.
 at the beginning of its execution.  It is responsible for the initial
 set up of the system.
 
-Devices that mount /system, /vendor through the early mount mechanism
+Devices that mount /system, /vendor through the first stage mount mechanism
 load all of the files contained within the
 /{system,vendor,odm}/etc/init/ directories immediately after loading
 the primary /init.rc.  This is explained in more details in the
 Imports section of this file.
 
-Legacy devices without the early mount mechanism do the following:
+Legacy devices without the first stage mount mechanism do the following:
 1. /init.rc imports /init.${ro.hardware}.rc which is the primary
    vendor supplied .rc file.
 2. During the mount\_all command, the init executable loads all of the
@@ -506,7 +506,7 @@ There are only three times where the init executable imports .rc files:
 
    1. When it imports /init.rc or the script indicated by the property
       `ro.boot.init_rc` during initial boot.
-   2. When it imports /{system,vendor,odm}/etc/init/ for early mount
+   2. When it imports /{system,vendor,odm}/etc/init/ for first stage mount
       devices immediately after importing /init.rc.
    3. When it imports /{system,vendor,odm}/etc/init/ or .rc files at specified
       paths during mount_all.
@@ -519,7 +519,7 @@ different command is to either 1) place it in an Action with an
 earlier executed trigger, or 2) place it in an Action with the same
 trigger within the same file at an earlier line.
 
-Nonetheless, the defacto order for early mount devices is:
+Nonetheless, the defacto order for first stage mount devices is:
 1. /init.rc is parsed then recursively each of its imports are
    parsed.
 2. The contents of /system/etc/init/ are alphabetized and parsed
