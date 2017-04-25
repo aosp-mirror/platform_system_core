@@ -20,8 +20,10 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <fnmatch.h>
+#include <grp.h>
 #include <libgen.h>
 #include <linux/netlink.h>
+#include <pwd.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,7 +51,8 @@
 #include <selinux/label.h>
 #include <selinux/selinux.h>
 
-#include "ueventd_parser.h"
+#include "keyword_map.h"
+#include "ueventd.h"
 #include "util.h"
 
 extern struct selabel_handle *sehandle;
@@ -102,6 +105,137 @@ void SysfsPermissions::SetPermissions(const std::string& path) const {
 // TODO: Move these to be member variables of a future devices class.
 std::vector<Permissions> dev_permissions;
 std::vector<SysfsPermissions> sysfs_permissions;
+
+bool ParsePermissionsLine(std::vector<std::string>&& args, std::string* err, bool is_sysfs) {
+    if (is_sysfs && args.size() != 5) {
+        *err = "/sys/ lines must have 5 entries";
+        return false;
+    }
+
+    if (!is_sysfs && args.size() != 4) {
+        *err = "/dev/ lines must have 4 entries";
+        return false;
+    }
+
+    auto it = args.begin();
+    const std::string& name = *it++;
+
+    std::string sysfs_attribute;
+    if (is_sysfs) sysfs_attribute = *it++;
+
+    // args is now common to both sys and dev entries and contains: <perm> <uid> <gid>
+    std::string& perm_string = *it++;
+    char* end_pointer = 0;
+    mode_t perm = strtol(perm_string.c_str(), &end_pointer, 8);
+    if (end_pointer == nullptr || *end_pointer != '\0') {
+        *err = "invalid mode '" + perm_string + "'";
+        return false;
+    }
+
+    std::string& uid_string = *it++;
+    passwd* pwd = getpwnam(uid_string.c_str());
+    if (!pwd) {
+        *err = "invalid uid '" + uid_string + "'";
+        return false;
+    }
+    uid_t uid = pwd->pw_uid;
+
+    std::string& gid_string = *it++;
+    struct group* grp = getgrnam(gid_string.c_str());
+    if (!grp) {
+        *err = "invalid gid '" + gid_string + "'";
+        return false;
+    }
+    gid_t gid = grp->gr_gid;
+
+    if (is_sysfs) {
+        sysfs_permissions.emplace_back(name, sysfs_attribute, perm, uid, gid);
+    } else {
+        dev_permissions.emplace_back(name, perm, uid, gid);
+    }
+    return true;
+}
+
+// TODO: Move this to be a member variable of a future devices class.
+static std::vector<Subsystem> subsystems;
+
+std::string Subsystem::ParseDevPath(uevent* uevent) const {
+    std::string devname = devname_source_ == DevnameSource::DEVNAME_UEVENT_DEVNAME
+                              ? uevent->device_name
+                              : android::base::Basename(uevent->path);
+
+    return dir_name_ + "/" + devname;
+}
+
+bool SubsystemParser::ParseSection(std::vector<std::string>&& args, const std::string& filename,
+                                   int line, std::string* err) {
+    if (args.size() != 2) {
+        *err = "subsystems must have exactly one name";
+        return false;
+    }
+
+    if (std::find(subsystems.begin(), subsystems.end(), args[1]) != subsystems.end()) {
+        *err = "ignoring duplicate subsystem entry";
+        return false;
+    }
+
+    subsystem_.name_ = args[1];
+
+    return true;
+}
+
+bool SubsystemParser::ParseDevName(std::vector<std::string>&& args, std::string* err) {
+    if (args[1] == "uevent_devname") {
+        subsystem_.devname_source_ = Subsystem::DevnameSource::DEVNAME_UEVENT_DEVNAME;
+        return true;
+    }
+    if (args[1] == "uevent_devpath") {
+        subsystem_.devname_source_ = Subsystem::DevnameSource::DEVNAME_UEVENT_DEVPATH;
+        return true;
+    }
+
+    *err = "invalid devname '" + args[1] + "'";
+    return false;
+}
+
+bool SubsystemParser::ParseDirName(std::vector<std::string>&& args, std::string* err) {
+    if (args[1].front() != '/') {
+        *err = "dirname '" + args[1] + " ' does not start with '/'";
+        return false;
+    }
+
+    subsystem_.dir_name_ = args[1];
+    return true;
+}
+
+bool SubsystemParser::ParseLineSection(std::vector<std::string>&& args, int line, std::string* err) {
+    using OptionParser =
+        bool (SubsystemParser::*)(std::vector<std::string> && args, std::string * err);
+    static class OptionParserMap : public KeywordMap<OptionParser> {
+      private:
+        const Map& map() const override {
+            // clang-format off
+            static const Map option_parsers = {
+                {"devname",     {1,     1,      &SubsystemParser::ParseDevName}},
+                {"dirname",     {1,     1,      &SubsystemParser::ParseDirName}},
+            };
+            // clang-format on
+            return option_parsers;
+        }
+    } parser_map;
+
+    auto parser = parser_map.FindFunction(args, err);
+
+    if (!parser) {
+        return false;
+    }
+
+    return (this->*parser)(std::move(args), err);
+}
+
+void SubsystemParser::EndSection() {
+    subsystems.emplace_back(std::move(subsystem_));
+}
 
 static void fixup_sys_permissions(const std::string& upath, const std::string& subsystem) {
     // upaths omit the "/sys" that paths in this list
@@ -483,32 +617,9 @@ static void handle_generic_device_event(uevent* uevent) {
     // if it's not a /dev device, nothing to do
     if (uevent->major < 0 || uevent->minor < 0) return;
 
-    std::string name = android::base::Basename(uevent->path);
-    ueventd_subsystem* subsystem = ueventd_subsystem_find_by_name(uevent->subsystem.c_str());
-
     std::string devpath;
 
-    if (subsystem) {
-        std::string devname;
-
-        switch (subsystem->devname_src) {
-        case DEVNAME_UEVENT_DEVNAME:
-            devname = uevent->device_name;
-            break;
-
-        case DEVNAME_UEVENT_DEVPATH:
-            devname = name;
-            break;
-
-        default:
-            LOG(ERROR) << uevent->subsystem << " subsystem's devpath option is not set; ignoring event";
-            return;
-        }
-
-        // TODO: Remove std::string()
-        devpath = std::string(subsystem->dirname) + "/" + devname;
-        mkdir_recursive(android::base::Dirname(devpath), 0755);
-    } else if (android::base::StartsWith(uevent->subsystem, "usb")) {
+    if (android::base::StartsWith(uevent->subsystem, "usb")) {
         if (uevent->subsystem == "usb") {
             if (!uevent->device_name.empty()) {
                 devpath = "/dev/" + uevent->device_name;
@@ -520,14 +631,18 @@ static void handle_generic_device_event(uevent* uevent) {
                 int device_id = uevent->minor % 128 + 1;
                 devpath = android::base::StringPrintf("/dev/bus/usb/%03d/%03d", bus_id, device_id);
             }
-            mkdir_recursive(android::base::Dirname(devpath), 0755);
         } else {
             // ignore other USB events
             return;
         }
+    } else if (auto subsystem = std::find(subsystems.begin(), subsystems.end(), uevent->subsystem);
+               subsystem != subsystems.end()) {
+        devpath = subsystem->ParseDevPath(uevent);
     } else {
-        devpath = "/dev/" + name;
+        devpath = "/dev/" + android::base::Basename(uevent->path);
     }
+
+    mkdir_recursive(android::base::Dirname(devpath), 0755);
 
     auto links = get_character_device_symlinks(uevent);
 
