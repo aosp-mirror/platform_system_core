@@ -164,8 +164,8 @@ void property_changed(const std::string& name, const std::string& value) {
     // waiting on a property.
     if (name == "sys.powerctl") HandlePowerctlMessage(value);
 
-    if (property_triggers_enabled)
-        ActionManager::GetInstance().QueuePropertyTrigger(name, value);
+    if (property_triggers_enabled) ActionManager::GetInstance().QueuePropertyChange(name, value);
+
     if (waiting_for_prop) {
         if (wait_prop_name == name && wait_prop_value == value) {
             wait_prop_name.clear();
@@ -535,7 +535,7 @@ static int property_enable_triggers_action(const std::vector<std::string>& args)
 static int queue_property_triggers_action(const std::vector<std::string>& args)
 {
     ActionManager::GetInstance().QueueBuiltinAction(property_enable_triggers_action, "enable_property_trigger");
-    ActionManager::GetInstance().QueueAllPropertyTriggers();
+    ActionManager::GetInstance().QueueAllPropertyActions();
     return 0;
 }
 
