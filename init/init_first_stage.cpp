@@ -232,7 +232,7 @@ bool FirstStageMount::MountPartitions() {
 
 bool FirstStageMountVBootV1::GetRequiredDevices(std::set<std::string>* out_devices_partition_names,
                                                 bool* out_need_dm_verity) {
-    std::string meta_partition;
+    std::string verity_loc_device;
     *out_need_dm_verity = false;
 
     for (auto fstab_rec : mount_fstab_recs_) {
@@ -245,29 +245,28 @@ bool FirstStageMountVBootV1::GetRequiredDevices(std::set<std::string>* out_devic
         if (fs_mgr_is_verified(fstab_rec)) {
             *out_need_dm_verity = true;
         }
-        // Checks if verity metadata is on a separate partition and get partition
-        // name from the end of the ->verity_loc path. Verity state is not partition
-        // specific, so there must be only one additional partition that carries
-        // verity state.
+        // Checks if verity metadata is on a separate partition. Note that it is
+        // not partition specific, so there must be only one additional partition
+        // that carries verity state.
         if (fstab_rec->verity_loc) {
-            if (meta_partition.empty()) {
-                meta_partition = basename(fstab_rec->verity_loc);
-            } else if (meta_partition != fstab_rec->verity_loc) {
-                LOG(ERROR) << "More than one meta partition found: " << meta_partition << ", "
-                           << basename(fstab_rec->verity_loc);
+            if (verity_loc_device.empty()) {
+                verity_loc_device = fstab_rec->verity_loc;
+            } else if (verity_loc_device != fstab_rec->verity_loc) {
+                LOG(ERROR) << "More than one verity_loc found: " << verity_loc_device << ", "
+                           << fstab_rec->verity_loc;
                 return false;
             }
         }
     }
 
-    // Includes those fstab partitions and meta_partition (if any).
+    // Includes the partition names of fstab records and verity_loc_device (if any).
     // Notes that fstab_rec->blk_device has A/B suffix updated by fs_mgr when A/B is used.
     for (auto fstab_rec : mount_fstab_recs_) {
         out_devices_partition_names->emplace(basename(fstab_rec->blk_device));
     }
 
-    if (!meta_partition.empty()) {
-        out_devices_partition_names->emplace(std::move(meta_partition));
+    if (!verity_loc_device.empty()) {
+        out_devices_partition_names->emplace(basename(verity_loc_device.c_str()));
     }
 
     return true;
