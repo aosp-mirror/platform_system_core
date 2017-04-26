@@ -634,7 +634,6 @@ bool Service::Start() {
     if (!seclabel_.empty()) {
         scon = seclabel_;
     } else {
-        LOG(INFO) << "computing context for service '" << name_ << "'";
         scon = ComputeContextFromExecutable(name_, args_[0]);
         if (scon == "") {
             return false;
