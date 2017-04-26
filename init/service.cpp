@@ -926,7 +926,9 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
     std::vector<std::string> str_args(args.begin() + command_arg, args.end());
 
     exec_count_++;
-    std::string name = StringPrintf("exec %d (%s)", exec_count_, str_args[0].c_str());
+    std::string name =
+        "exec " + std::to_string(exec_count_) + " (" + android::base::Join(str_args, " ") + ")";
+
     unsigned flags = SVC_EXEC | SVC_ONESHOT | SVC_TEMPORARY;
     CapSet no_capabilities;
     unsigned namespace_flags = 0;
