@@ -189,8 +189,10 @@ static const struct fs_path_config android_files[] = {
                                            CAP_MASK_LONG(CAP_NET_RAW),
                                               "system/bin/hostapd" },
 
-    /* Support Bluetooth legacy hal accessing /sys/class/rfkill */
-    { 00700, AID_BLUETOOTH, AID_BLUETOOTH, CAP_MASK_LONG(CAP_NET_ADMIN),
+    /* Support Bluetooth legacy hal accessing /sys/class/rfkill
+     * Support RT scheduling in Bluetooth */
+    { 00700, AID_BLUETOOTH, AID_BLUETOOTH, CAP_MASK_LONG(CAP_NET_ADMIN) |
+                                           CAP_MASK_LONG(CAP_SYS_NICE),
                                               "vendor/bin/hw/android.hardware.bluetooth@1.0-service" },
 
     /* Support wifi_hal_legacy administering a network interface. */
