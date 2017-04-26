@@ -318,8 +318,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         abort();
     }
 
-    /* TODO update default waiting time based on usage data */
-    constexpr unsigned int shutdownTimeoutDefault = 10;
+    constexpr unsigned int shutdownTimeoutDefault = 6;
     unsigned int shutdownTimeout = shutdownTimeoutDefault;
     if (SHUTDOWN_ZERO_TIMEOUT) {  // eng build
         shutdownTimeout = 0;
