@@ -152,6 +152,10 @@ void LogStatistics::add(LogBufferElement* element) {
             tagTable.add(tag, element);
         }
     }
+
+    if (!element->getDropped()) {
+        tagNameTable.add(TagNameKey(element), element);
+    }
 }
 
 void LogStatistics::subtract(LogBufferElement* element) {
@@ -191,6 +195,10 @@ void LogStatistics::subtract(LogBufferElement* element) {
             tagTable.subtract(tag, element);
         }
     }
+
+    if (!element->getDropped()) {
+        tagNameTable.subtract(TagNameKey(element), element);
+    }
 }
 
 // Atomically set an entry to drop
@@ -225,6 +233,8 @@ void LogStatistics::drop(LogBufferElement* element) {
             tagTable.drop(tag, element);
         }
     }
+
+    tagNameTable.subtract(TagNameKey(element), element);
 }
 
 // caller must own and free character string
@@ -505,6 +515,62 @@ std::string TagEntry::format(const LogStatistics& /* stat */,
     return formatLine(name, size, pruned);
 }
 
+std::string TagNameEntry::formatHeader(const std::string& name,
+                                       log_id_t /* id */) const {
+    return formatLine(name, std::string("Size"), std::string("")) +
+           formatLine(std::string("  TID/PID/UID   LOG_TAG NAME"),
+                      std::string("BYTES"), std::string(""));
+}
+
+std::string TagNameEntry::format(const LogStatistics& /* stat */,
+                                 log_id_t /* id */) const {
+    std::string name;
+    pid_t tid = getTid();
+    pid_t pid = getPid();
+    std::string pidstr;
+    if (pid != (pid_t)-1) {
+        pidstr = android::base::StringPrintf("%u", pid);
+        if ((tid != (pid_t)-1) && (tid != pid)) pidstr = "/" + pidstr;
+    }
+    int len = 9 - pidstr.length();
+    if (len < 0) len = 0;
+    if ((tid == (pid_t)-1) || (tid == pid)) {
+        name = android::base::StringPrintf("%*s", len, "");
+    } else {
+        name = android::base::StringPrintf("%*u", len, tid);
+    }
+    name += pidstr;
+    uid_t uid = getUid();
+    if (uid != (uid_t)-1) {
+        name += android::base::StringPrintf("/%u", uid);
+    }
+
+    std::string size = android::base::StringPrintf("%zu", getSizes());
+
+    const char* nameTmp = getName();
+    if (nameTmp) {
+        size_t lenSpace = std::max(16 - name.length(), (size_t)1);
+        size_t len = EntryBaseConstants::total_len -
+                     EntryBaseConstants::pruned_len - size.length() -
+                     name.length() - lenSpace - 2;
+        size_t lenNameTmp = strlen(nameTmp);
+        while ((len < lenNameTmp) && (lenSpace > 1)) {
+            ++len;
+            --lenSpace;
+        }
+        name += android::base::StringPrintf("%*s", (int)lenSpace, "");
+        if (len < lenNameTmp) {
+            name += "...";
+            nameTmp += lenNameTmp - std::max(len - 3, (size_t)1);
+        }
+        name += nameTmp;
+    }
+
+    std::string pruned = "";
+
+    return formatLine(name, size, pruned);
+}
+
 static std::string formatMsec(uint64_t val) {
     static const unsigned subsecDigits = 3;
     static const uint64_t sec = MS_PER_SEC;
@@ -738,6 +804,13 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
         name += ":";
         output +=
             securityTagTable.format(*this, uid, pid, name, LOG_ID_SECURITY);
+    }
+
+    if (enable) {
+        name = "Chattiest TAGs";
+        if (pid) name += android::base::StringPrintf(" for PID %d", pid);
+        name += ":";
+        output += tagNameTable.format(*this, uid, pid, name);
     }
 
     return output;
