@@ -57,7 +57,7 @@ namespace.sphal.asan.permitted.paths = /data/asan/vendor/${LIB}:/vendor/${LIB}
 
 # Once in this namespace, access to libraries in /system/lib is restricted. Only
 # libs listed here can be used.
-namespace.sphal.links = default,vndk
+namespace.sphal.links = default,vndk,rs
 
 # WARNING: only NDK libs can be listed here.
 # However, this is commented out because some SP-HALs (gralloc.msm8996.so, etc)
@@ -67,7 +67,26 @@ namespace.sphal.links = default,vndk
 namespace.sphal.link.default.shared_libs = libc.so:libz.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libEGL.so:libsync.so:libbacktrace.so:libGLESv1_CM.so:libGLESv2.so
 
 # WARNING: only VNDK-SP libs can be listed here. DO NOT EDIT this line.
-namespace.sphal.link.vndk.shared_libs = android.hardware.graphics.allocator@2.0.so:android.hardware.graphics.mapper@2.0.so:android.hardware.graphics.common@1.0.so:android.hidl.base@1.0.so:libhwbinder.so:libbase.so:libcutils.so:libhardware.so:libhidlbase.so:libhidltransport.so:libutils.so:libc++.so
+namespace.sphal.link.vndk.shared_libs = android.hardware.renderscript@1.0.so:android.hardware.graphics.allocator@2.0.so:android.hardware.graphics.mapper@2.0.so:android.hardware.graphics.common@1.0.so:android.hidl.base@1.0.so:libhwbinder.so:libbase.so:libcutils.so:libhardware.so:libhidlbase.so:libhidltransport.so:libutils.so:libc++.so
+
+# Renderscript gets separate namespace
+namespace.sphal.link.rs.shared_libs = libRS_internal.so
+
+###############################################################################
+# "rs" namespace
+#
+# This namespace is exclusively for Renderscript internal libraries.
+# This namespace has slightly looser restriction than the vndk namespace because
+# of the genuine characteristics of Renderscript; /data is in the permitted path
+# to load the compiled *.so file and libmediandk.so can be used here.
+###############################################################################
+namespace.rs.isolated = true
+namespace.rs.search.paths = /system/${LIB}/vndk-sp:/vendor/${LIB}
+namespace.rs.permitted.paths = /vendor/${LIB}:/data
+
+namespace.rs.links = default,vndk
+namespace.rs.link.default.shared_libs = libc.so:libz.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libEGL.so:libsync.so:libbacktrace.so:libGLESv1_CM.so:libGLESv2.so:libmediandk.so:libui.so
+namespace.rs.link.vndk.shared_libs = android.hardware.renderscript@1.0.so:android.hardware.graphics.allocator@2.0.so:android.hardware.graphics.mapper@2.0.so:android.hardware.graphics.common@1.0.so:android.hidl.base@1.0.so:libhwbinder.so:libbase.so:libcutils.so:libhardware.so:libhidlbase.so:libhidltransport.so:libutils.so:libc++.so
 
 ###############################################################################
 # "vndk" namespace
@@ -75,7 +94,7 @@ namespace.sphal.link.vndk.shared_libs = android.hardware.graphics.allocator@2.0.
 # This namespace is exclusively for vndk-sp libs.
 ###############################################################################
 namespace.vndk.isolated = true
-namespace.vndk.search.paths = /vendor/${LIB}/vndk-sp:/vendor/${LIB}
+namespace.vndk.search.paths = /system/${LIB}/vndk-sp:/vendor/${LIB}
 namespace.vndk.permitted.paths = /vendor/${LIB}/hw:/vendor/${LIB}/egl
 
 namespace.vndk.asan.search.paths = /data/asan/vendor/${LIB}/vndk-sp:/vendor/${LIB}/vndk-sp:/data/asan/vendor/${LIB}:/vendor/${LIB}
@@ -88,7 +107,7 @@ namespace.vndk.links = default
 
 # WARNING: only NDK libs can be listed here.
 # However, this is commented out because some SP-HALs (gralloc.msm8996.so, etc)
-# are currently using some non-stable libs such as libacktrace.so. We will get back
+# are currently using some non-stable libs such as libbacktrace.so. We will get back
 # to this list once the dependencies are fixed.
 #namespace.vndk.link.default.shared_libs = libc.so:libz.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libsync.so
 namespace.vndk.link.default.shared_libs = libc.so:libz.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libEGL.so:libsync.so:libbacktrace.so
