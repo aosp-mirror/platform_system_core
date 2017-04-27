@@ -33,7 +33,8 @@ cc_binary {
     shared_libs: [
         "libcrypto",
         "libcutils",
-        "libkeymaster1",
+        "libkeymaster_portable",
+        "libkeymaster_staging",
         "libtrusty",
         "libkeymaster_messages",
         "libsoftkeymasterdevice",
