@@ -274,10 +274,6 @@ void Service::Reap() {
     std::for_each(descriptors_.begin(), descriptors_.end(),
                   std::bind(&DescriptorInfo::Clean, std::placeholders::_1));
 
-    if (flags_ & SVC_EXEC) {
-        LOG(INFO) << "SVC_EXEC pid " << pid_ << " finished...";
-    }
-
     if (flags_ & SVC_TEMPORARY) {
         return;
     }
@@ -1047,21 +1043,26 @@ bool ServiceManager::ReapOneProcess() {
     Service* svc = FindServiceByPid(pid);
 
     std::string name;
+    std::string wait_string;
     if (svc) {
         name = android::base::StringPrintf("Service '%s' (pid %d)",
                                            svc->name().c_str(), pid);
+        if (svc->flags() & SVC_EXEC) {
+            wait_string =
+                android::base::StringPrintf(" waiting took %f seconds", exec_waiter_->duration_s());
+        }
     } else {
         name = android::base::StringPrintf("Untracked pid %d", pid);
     }
 
     if (WIFEXITED(status)) {
-        LOG(INFO) << name << " exited with status " << WEXITSTATUS(status);
+        LOG(INFO) << name << " exited with status " << WEXITSTATUS(status) << wait_string;
     } else if (WIFSIGNALED(status)) {
-        LOG(INFO) << name << " killed by signal " << WTERMSIG(status);
+        LOG(INFO) << name << " killed by signal " << WTERMSIG(status) << wait_string;
     } else if (WIFSTOPPED(status)) {
-        LOG(INFO) << name << " stopped by signal " << WSTOPSIG(status);
+        LOG(INFO) << name << " stopped by signal " << WSTOPSIG(status) << wait_string;
     } else {
-        LOG(INFO) << name << " state changed";
+        LOG(INFO) << name << " state changed" << wait_string;
     }
 
     if (!svc) {
@@ -1071,7 +1072,6 @@ bool ServiceManager::ReapOneProcess() {
     svc->Reap();
 
     if (svc->flags() & SVC_EXEC) {
-        LOG(INFO) << "Wait for exec took " << *exec_waiter_;
         exec_waiter_.reset();
     }
     if (svc->flags() & SVC_TEMPORARY) {
