@@ -12,6 +12,9 @@ on property:sys.usb.config=none && property:sys.usb.configfs=1
     rmdir /config/usb_gadget/g1/functions/rndis.gs4
     setprop sys.usb.state ${sys.usb.config}
 
+on property:init.svc.adbd=stopped
+    setprop sys.usb.ffs.ready 0
+
 on property:sys.usb.config=adb && property:sys.usb.configfs=1
     start adbd
 
