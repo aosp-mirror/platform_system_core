@@ -5,7 +5,7 @@ service logd /system/bin/logd
     file /proc/kmsg r
     file /dev/kmsg w
     user logd
-    group logd system readproc
+    group logd system package_info readproc
     writepid /dev/cpuset/system-background/tasks
 
 service logd-reinit /system/bin/logd --reinit
