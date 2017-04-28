@@ -78,6 +78,14 @@ constexpr char kWaitForGdbKey[] = "debug.debuggerd.wait_for_gdb";
     }                                                                           \
   } while (0)
 
+#define ASSERT_NOT_MATCH(str, pattern)                                                      \
+  do {                                                                                      \
+    std::regex r((pattern));                                                                \
+    if (std::regex_search((str), r)) {                                                      \
+      FAIL() << "regex mismatch: expected to not find " << (pattern) << " in: \n" << (str); \
+    }                                                                                       \
+  } while (0)
+
 static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, unique_fd* output_fd) {
   intercept_fd->reset(socket_local_client(kTombstonedInterceptSocketName,
                                           ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET));
@@ -226,12 +234,14 @@ void CrasherTest::AssertDeath(int signo) {
     FAIL() << "failed to wait for crasher: " << strerror(errno);
   }
 
-  if (WIFEXITED(status)) {
-    FAIL() << "crasher failed to exec: " << strerror(WEXITSTATUS(status));
-  } else if (!WIFSIGNALED(status)) {
-    FAIL() << "crasher didn't terminate via a signal";
+  if (signo == 0) {
+    ASSERT_TRUE(WIFEXITED(status));
+    ASSERT_EQ(0, WEXITSTATUS(signo));
+  } else {
+    ASSERT_FALSE(WIFEXITED(status));
+    ASSERT_TRUE(WIFSIGNALED(status)) << "crasher didn't terminate via a signal";
+    ASSERT_EQ(signo, WTERMSIG(status));
   }
-  ASSERT_EQ(signo, WTERMSIG(status));
   crasher_pid = -1;
 }
 
@@ -334,6 +344,26 @@ TEST_F(CrasherTest, abort_message) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_MATCH(result, R"(Abort message: 'abort message goes here')");
+}
+
+TEST_F(CrasherTest, abort_message_backtrace) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    android_set_abort_message("not actually aborting");
+    raise(DEBUGGER_SIGNAL);
+    exit(0);
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(0);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_NOT_MATCH(result, R"(Abort message:)");
 }
 
 TEST_F(CrasherTest, intercept_timeout) {
