@@ -389,8 +389,9 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
 
   log_signal_summary(signal_number, info);
 
-  // Populate si_value with the abort message address, if found.
-  if (abort_message) {
+  // If this was a fatal crash, populate si_value with the abort message address if possible.
+  // Note that applications can set an abort message without aborting.
+  if (abort_message && signal_number != DEBUGGER_SIGNAL) {
     info->si_value.sival_ptr = abort_message;
   }
 
