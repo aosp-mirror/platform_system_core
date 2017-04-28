@@ -126,6 +126,16 @@ The various currently defined commands are:
                        space in RAM or "FAIL" if not.  The size of
                        the download is remembered.
 
+    upload             Read data from memory which was staged by the last
+                       command, e.g. an oem command.  The client will reply
+                       with "DATA%08x" if it is ready to send %08x bytes of
+                       data.  If no data was staged in the last command,
+                       the client must reply with "FAIL".  After the client
+                       successfully sends %08x bytes, the client shall send
+                       a single packet starting with "OKAY".  Clients
+                       should not support "upload" unless it supports an
+                       oem command that requires "upload" capabilities.
+
     verify:%08x        Send a digital signature to verify the downloaded
                        data.  Required if the bootloader is "secure"
                        otherwise "flash" and "boot" will be ignored.
