@@ -36,6 +36,7 @@
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
+#include <android-base/test_utils.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 #include <gtest/gtest.h>
@@ -74,22 +75,6 @@ constexpr char kWaitForGdbKey[] = "debug.debuggerd.wait_for_gdb";
     errno = saved_errno;                                           \
     return value;                                                  \
   }()
-
-#define ASSERT_MATCH(str, pattern)                                              \
-  do {                                                                          \
-    std::regex r((pattern));                                                    \
-    if (!std::regex_search((str), r)) {                                         \
-      FAIL() << "regex mismatch: expected " << (pattern) << " in: \n" << (str); \
-    }                                                                           \
-  } while (0)
-
-#define ASSERT_NOT_MATCH(str, pattern)                                                      \
-  do {                                                                                      \
-    std::regex r((pattern));                                                                \
-    if (std::regex_search((str), r)) {                                                      \
-      FAIL() << "regex mismatch: expected to not find " << (pattern) << " in: \n" << (str); \
-    }                                                                                       \
-  } while (0)
 
 #define ASSERT_BACKTRACE_FRAME(result, frame_name)                        \
   ASSERT_MATCH(result, R"(#\d\d pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX \
