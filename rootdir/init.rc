@@ -272,7 +272,6 @@ on late-init
     # some services can be started.
     trigger late-fs
 
-on later-init
     # Now we can mount /data. File encryption requires keymaster to decrypt
     # /data, which in turn can only be loaded when system properties are present.
     trigger post-fs-data
@@ -620,7 +619,6 @@ on boot
     class_start core
 
 on nonencrypted
-    trigger later-init
     class_start main
     class_start late_start
 
@@ -639,7 +637,7 @@ on property:vold.decrypt=trigger_load_persist_props
     start logd-reinit
 
 on property:vold.decrypt=trigger_post_fs_data
-    trigger later-init
+    trigger post-fs-data
 
 on property:vold.decrypt=trigger_restart_min_framework
     # A/B update verifier that marks a successful boot.
