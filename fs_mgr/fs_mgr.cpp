@@ -819,7 +819,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
     FsManagerAvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
-        return -1;
+        return FS_MGR_MNTALL_FAIL;
     }
 
     for (i = 0; i < fstab->num_entries; i++) {
@@ -865,7 +865,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
                 avb_handle = FsManagerAvbHandle::Open(extract_by_name_prefix(fstab));
                 if (!avb_handle) {
                     LERROR << "Failed to open FsManagerAvbHandle";
-                    return -1;
+                    return FS_MGR_MNTALL_FAIL;
                 }
             }
             if (!avb_handle->SetUpAvb(&fstab->recs[i], true /* wait_for_verity_dev */)) {
@@ -999,7 +999,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
     }
 
     if (error_count) {
-        return -1;
+        return FS_MGR_MNTALL_FAIL;
     } else {
         return encryptable;
     }
@@ -1032,14 +1032,13 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
                     char *tmp_mount_point)
 {
     int i = 0;
-    int ret = FS_MGR_DOMNT_FAILED;
     int mount_errors = 0;
     int first_mount_errno = 0;
-    char *m;
+    char* mount_point;
     FsManagerAvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
-        return ret;
+        return FS_MGR_DOMNT_FAILED;
     }
 
     for (i = 0; i < fstab->num_entries; i++) {
@@ -1054,7 +1053,7 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
             !strcmp(fstab->recs[i].fs_type, "mtd")) {
             LERROR << "Cannot mount filesystem of type "
                    << fstab->recs[i].fs_type << " on " << n_blk_device;
-            goto out;
+            return FS_MGR_DOMNT_FAILED;
         }
 
         /* First check the filesystem if requested */
@@ -1081,7 +1080,7 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
                 avb_handle = FsManagerAvbHandle::Open(extract_by_name_prefix(fstab));
                 if (!avb_handle) {
                     LERROR << "Failed to open FsManagerAvbHandle";
-                    return -1;
+                    return FS_MGR_DOMNT_FAILED;
                 }
             }
             if (!avb_handle->SetUpAvb(&fstab->recs[i], true /* wait_for_verity_dev */)) {
@@ -1102,16 +1101,15 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
 
         /* Now mount it where requested */
         if (tmp_mount_point) {
-            m = tmp_mount_point;
+            mount_point = tmp_mount_point;
         } else {
-            m = fstab->recs[i].mount_point;
+            mount_point = fstab->recs[i].mount_point;
         }
         int retry_count = 2;
         while (retry_count-- > 0) {
-            if (!__mount(n_blk_device, m, &fstab->recs[i])) {
-                ret = 0;
+            if (!__mount(n_blk_device, mount_point, &fstab->recs[i])) {
                 fs_stat &= ~FS_STAT_FULL_MOUNT_FAILED;
-                goto out;
+                return FS_MGR_DOMNT_SUCCESS;
             } else {
                 if (retry_count <= 0) break;  // run check_fs only once
                 if (!first_mount_errno) first_mount_errno = errno;
@@ -1123,22 +1121,16 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
         }
         log_fs_stat(fstab->recs[i].blk_device, fs_stat);
     }
+
+    // Reach here means the mount attempt fails.
     if (mount_errors) {
-        PERROR << "Cannot mount filesystem on " << n_blk_device
-               << " at " << m;
-        if (first_mount_errno == EBUSY) {
-            ret = FS_MGR_DOMNT_BUSY;
-        } else {
-            ret = FS_MGR_DOMNT_FAILED;
-        }
+        PERROR << "Cannot mount filesystem on " << n_blk_device << " at " << mount_point;
+        if (first_mount_errno == EBUSY) return FS_MGR_DOMNT_BUSY;
     } else {
         /* We didn't find a match, say so and return an error */
-        LERROR << "Cannot find mount point " << fstab->recs[i].mount_point
-               << " in fstab";
+        LERROR << "Cannot find mount point " << n_name << " in fstab";
     }
-
-out:
-    return ret;
+    return FS_MGR_DOMNT_FAILED;
 }
 
 /*
