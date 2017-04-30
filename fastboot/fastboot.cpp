@@ -371,6 +371,13 @@ static void usage() {
             "  continue                                 Continue with autoboot.\n"
             "  reboot [bootloader|emergency]            Reboot device [into bootloader or emergency mode].\n"
             "  reboot-bootloader                        Reboot device into bootloader.\n"
+            "  oem <parameter1> ... <parameterN>        Executes oem specific command.\n"
+            "  stage <infile>                           Sends contents of <infile> to stage for\n"
+            "                                           the next command. Supported only on\n"
+            "                                           Android Things devices.\n"
+            "  get_staged <outfile>                     Receives data to <outfile> staged by the\n"
+            "                                           last command. Supported only on Android\n"
+            "                                           Things devices.\n"
             "  help                                     Show this help message.\n"
             "\n"
             "options:\n"
@@ -494,8 +501,7 @@ static void* load_bootable_image(const char* kernel, const char* ramdisk,
     return bdata;
 }
 
-static void* unzip_file(ZipArchiveHandle zip, const char* entry_name, int64_t* sz)
-{
+static void* unzip_file(ZipArchiveHandle zip, const char* entry_name, int64_t* sz) {
     ZipString zip_entry_name(entry_name);
     ZipEntry zip_entry;
     if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
@@ -505,6 +511,7 @@ static void* unzip_file(ZipArchiveHandle zip, const char* entry_name, int64_t* s
 
     *sz = zip_entry.uncompressed_length;
 
+    fprintf(stderr, "extracting %s (%" PRId64 " MB)...\n", entry_name, *sz / 1024 / 1024);
     uint8_t* data = reinterpret_cast<uint8_t*>(malloc(zip_entry.uncompressed_length));
     if (data == nullptr) {
         fprintf(stderr, "failed to allocate %" PRId64 " bytes for '%s'\n", *sz, entry_name);
@@ -553,20 +560,37 @@ static std::string make_temporary_directory() {
     return "";
 }
 
+static int make_temporary_fd() {
+    // TODO: reimplement to avoid leaking a FILE*.
+    return fileno(tmpfile());
+}
+
 #else
 
+static std::string make_temporary_template() {
+    const char* tmpdir = getenv("TMPDIR");
+    if (tmpdir == nullptr) tmpdir = P_tmpdir;
+    return std::string(tmpdir) + "/fastboot_userdata_XXXXXX";
+}
+
 static std::string make_temporary_directory() {
-    const char *tmpdir = getenv("TMPDIR");
-    if (tmpdir == nullptr) {
-        tmpdir = P_tmpdir;
-    }
-    std::string result = std::string(tmpdir) + "/fastboot_userdata_XXXXXX";
-    if (mkdtemp(&result[0]) == NULL) {
-        fprintf(stderr, "Unable to create temporary directory: %s\n",
-            strerror(errno));
+    std::string result(make_temporary_template());
+    if (mkdtemp(&result[0]) == nullptr) {
+        fprintf(stderr, "Unable to create temporary directory: %s\n", strerror(errno));
         return "";
     }
     return result;
+}
+
+static int make_temporary_fd() {
+    std::string path_template(make_temporary_template());
+    int fd = mkstemp(&path_template[0]);
+    if (fd == -1) {
+        fprintf(stderr, "Unable to create temporary file: %s\n", strerror(errno));
+        return -1;
+    }
+    unlink(path_template.c_str());
+    return fd;
 }
 
 #endif
@@ -603,8 +627,8 @@ static void delete_fbemarker_tmpdir(const std::string& dir) {
 }
 
 static int unzip_to_file(ZipArchiveHandle zip, char* entry_name) {
-    FILE* fp = tmpfile();
-    if (fp == nullptr) {
+    unique_fd fd(make_temporary_fd());
+    if (fd == -1) {
         fprintf(stderr, "failed to create temporary file for '%s': %s\n",
                 entry_name, strerror(errno));
         return -1;
@@ -614,21 +638,20 @@ static int unzip_to_file(ZipArchiveHandle zip, char* entry_name) {
     ZipEntry zip_entry;
     if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
         fprintf(stderr, "archive does not contain '%s'\n", entry_name);
-        fclose(fp);
         return -1;
     }
 
-    int fd = fileno(fp);
+    fprintf(stderr, "extracting %s (%" PRIu32 " MB)...\n", entry_name,
+            zip_entry.uncompressed_length / 1024 / 1024);
     int error = ExtractEntryToFile(zip, &zip_entry, fd);
     if (error != 0) {
         fprintf(stderr, "failed to extract '%s': %s\n", entry_name, ErrorCodeString(error));
-        fclose(fp);
         return -1;
     }
 
     lseek(fd, 0, SEEK_SET);
     // TODO: We're leaking 'fp' here.
-    return fd;
+    return fd.release();
 }
 
 static char *strip(char *s)
@@ -1151,7 +1174,7 @@ static void do_update(Transport* transport, const char* filename, const std::str
             }
             flash_buf(partition.c_str(), &buf);
             /* not closing the fd here since the sparse code keeps the fd around
-             * but hasn't mmaped data yet. The tmpfile will get cleaned up when the
+             * but hasn't mmaped data yet. The temporary file will get cleaned up when the
              * program exits.
              */
         };
@@ -1412,7 +1435,8 @@ static void fb_perform_format(Transport* transport,
         return;
     }
 
-    fd = fileno(tmpfile());
+    fd = make_temporary_fd();
+    if (fd == -1) return;
 
     unsigned eraseBlkSize, logicalBlkSize;
     eraseBlkSize = fb_get_flash_block_size(transport, "erase-block-size");
@@ -1806,6 +1830,20 @@ int main(int argc, char **argv)
             }
             fb_set_active(slot.c_str());
             skip(2);
+        } else if(!strcmp(*argv, "stage")) {
+            require(2);
+            std::string infile(argv[1]);
+            skip(2);
+            struct fastboot_buffer buf;
+            if (!load_buf(transport, infile.c_str(), &buf) || buf.type != FB_BUFFER_FD) {
+                die("cannot load '%s'", infile.c_str());
+            }
+            fb_queue_download_fd(infile.c_str(), buf.fd, buf.sz);
+        } else if(!strcmp(*argv, "get_staged")) {
+            require(2);
+            char *outfile = argv[1];
+            skip(2);
+            fb_queue_upload(outfile);
         } else if(!strcmp(*argv, "oem")) {
             argc = do_oem_command(argc, argv);
         } else if(!strcmp(*argv, "flashing")) {
