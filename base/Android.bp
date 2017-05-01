@@ -42,7 +42,6 @@ cc_library {
     clang: true,
     host_supported: true,
     srcs: [
-        "chrono_utils.cpp",
         "file.cpp",
         "logging.cpp",
         "parsenetaddress.cpp",
@@ -65,6 +64,7 @@ cc_library {
             srcs: [
                 "errors_unix.cpp",
                 "properties.cpp",
+                "chrono_utils.cpp",
             ],
             cppflags: ["-Wexit-time-destructors"],
             sanitize: {
@@ -74,12 +74,14 @@ cc_library {
         },
         darwin: {
             srcs: [
+                "chrono_utils.cpp",
                 "errors_unix.cpp",
             ],
             cppflags: ["-Wexit-time-destructors"],
         },
         linux_bionic: {
             srcs: [
+                "chrono_utils.cpp",
                 "errors_unix.cpp",
             ],
             cppflags: ["-Wexit-time-destructors"],
@@ -87,6 +89,7 @@ cc_library {
         },
         linux: {
             srcs: [
+                "chrono_utils.cpp",
                 "errors_unix.cpp",
             ],
             cppflags: ["-Wexit-time-destructors"],
