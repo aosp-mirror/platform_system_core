@@ -343,16 +343,25 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
 static void set_timerslack_ns(int tid, unsigned long long slack) {
     // v4.6+ kernels support the /proc/<tid>/timerslack_ns interface.
     // TODO: once we've backported this, log if the open(2) fails.
-    char buf[64];
-    snprintf(buf, sizeof(buf), "/proc/%d/timerslack_ns", tid);
-    int fd = open(buf, O_WRONLY | O_CLOEXEC);
-    if (fd != -1) {
-        int len = snprintf(buf, sizeof(buf), "%llu", slack);
-        if (write(fd, buf, len) != len) {
-            SLOGE("set_timerslack_ns write failed: %s\n", strerror(errno));
+    if (__sys_supports_timerslack) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "/proc/%d/timerslack_ns", tid);
+        int fd = open(buf, O_WRONLY | O_CLOEXEC);
+        if (fd != -1) {
+            int len = snprintf(buf, sizeof(buf), "%llu", slack);
+            if (write(fd, buf, len) != len) {
+                SLOGE("set_timerslack_ns write failed: %s\n", strerror(errno));
+            }
+            close(fd);
+            return;
         }
-        close(fd);
-        return;
+    }
+
+    // TODO: Remove when /proc/<tid>/timerslack_ns interface is backported.
+    if ((tid == 0) || (tid == gettid())) {
+        if (prctl(PR_SET_TIMERSLACK, slack) == -1) {
+            SLOGE("set_timerslack_ns prctl failed: %s\n", strerror(errno));
+        }
     }
 }
 
@@ -431,10 +440,7 @@ int set_sched_policy(int tid, SchedPolicy policy)
 
     }
 
-    if (__sys_supports_timerslack) {
-        set_timerslack_ns(tid, policy == SP_BACKGROUND ?
-                               TIMER_SLACK_BG : TIMER_SLACK_FG);
-    }
+    set_timerslack_ns(tid, policy == SP_BACKGROUND ? TIMER_SLACK_BG : TIMER_SLACK_FG);
 
     return 0;
 }
