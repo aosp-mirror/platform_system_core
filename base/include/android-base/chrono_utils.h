@@ -22,7 +22,6 @@
 namespace android {
 namespace base {
 
-#if defined(__linux__)
 // A std::chrono clock based on CLOCK_BOOTTIME.
 class boot_clock {
  public:
@@ -31,7 +30,6 @@ class boot_clock {
 
   static time_point now();
 };
-#endif  // defined(__linux__)
 
 }  // namespace base
 }  // namespace android
