@@ -16,6 +16,7 @@
 
 #include "android-base/chrono_utils.h"
 
+#include <err.h>
 #include <time.h>
 
 #include <chrono>
@@ -25,9 +26,12 @@
 namespace android {
 namespace base {
 
+#if defined(__linux__)
 std::chrono::seconds GetBootTimeSeconds() {
   struct timespec now;
-  clock_gettime(CLOCK_BOOTTIME, &now);
+  if (clock_gettime(CLOCK_BOOTTIME, &now) != 0) {
+    err(1, "clock_gettime failed");
+  }
 
   auto now_tp = boot_clock::time_point(std::chrono::seconds(now.tv_sec) +
                                        std::chrono::nanoseconds(now.tv_nsec));
@@ -41,6 +45,7 @@ TEST(ChronoUtilsTest, BootClockNowSeconds) {
       std::chrono::duration_cast<std::chrono::seconds>(boot_clock::now().time_since_epoch());
   EXPECT_EQ(now, boot_seconds);
 }
+#endif  // defined(__linux__)
 
 }  // namespace base
 }  // namespace android
