@@ -124,6 +124,8 @@ extern bool android_link_namespaces(android_namespace_t* from,
  */
 extern void android_get_LD_LIBRARY_PATH(char* buffer, size_t buffer_size);
 
+extern android_namespace_t* android_get_exported_namespace(const char* name);
+
 __END_DECLS
 
 #endif /* __ANDROID_DLEXT_NAMESPACES_H__ */
