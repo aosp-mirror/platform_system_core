@@ -33,6 +33,7 @@ LIBLOG_M {
     android_logger_get_prune_list; # vndk
     android_logger_set_prune_list; # vndk
     android_logger_get_statistics; # vndk
+    __android_log_error_write; # vndk
     __android_log_is_loggable;
 };
 
