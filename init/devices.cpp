@@ -47,7 +47,6 @@
 #include <cutils/uevent.h>
 #include <private/android_filesystem_config.h>
 #include <selinux/android.h>
-#include <selinux/avc.h>
 #include <selinux/label.h>
 #include <selinux/selinux.h>
 
@@ -783,15 +782,6 @@ coldboot_action_t handle_device_fd(coldboot_callback fn)
 {
     coldboot_action_t ret = handle_device_fd_with(
         [&](uevent* uevent) -> coldboot_action_t {
-            if (selinux_status_updated() > 0) {
-                struct selabel_handle *sehandle2;
-                sehandle2 = selinux_android_file_context_handle();
-                if (sehandle2) {
-                    selabel_close(sehandle);
-                    sehandle = sehandle2;
-                }
-            }
-
             // default is to always create the devices
             coldboot_action_t act = COLDBOOT_CREATE;
             if (fn) {
@@ -881,7 +871,6 @@ void device_init(const char* path, coldboot_callback fn) {
             return;
         }
         fcntl(device_fd, F_SETFL, O_NONBLOCK);
-        selinux_status_open(true);
     }
 
     if (access(COLDBOOT_DONE, F_OK) == 0) {
@@ -915,7 +904,6 @@ void device_init(const char* path, coldboot_callback fn) {
 void device_close() {
     platform_devices.clear();
     device_fd.reset();
-    selinux_status_close();
 }
 
 int get_device_fd() {
