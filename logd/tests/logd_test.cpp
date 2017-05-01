@@ -39,6 +39,7 @@
 #include "../LogReader.h"  // pickup LOGD_SNDTIMEO
 #include "../libaudit.h"   // pickup AUDIT_RATE_LIMIT_*
 
+#ifdef __ANDROID__
 static void send_to_control(char* buf, size_t len) {
     int sock = socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_RESERVED,
                                    SOCK_STREAM);
@@ -157,8 +158,10 @@ static char* find_benchmark_spam(char* cp) {
     } while (*cp);
     return benchmark;
 }
+#endif
 
 TEST(logd, statistics) {
+#ifdef __ANDROID__
     size_t len;
     char* buf;
 
@@ -204,8 +207,12 @@ TEST(logd, statistics) {
     EXPECT_TRUE(NULL != events_logs);
 
     delete[] buf;
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
 
+#ifdef __ANDROID__
 static void caught_signal(int /* signum */) {
 }
 
@@ -315,8 +322,10 @@ static void dump_log_msg(const char* prefix, log_msg* msg, unsigned int version,
     fprintf(stderr, "}\n");
     fflush(stderr);
 }
+#endif
 
 TEST(logd, both) {
+#ifdef __ANDROID__
     log_msg msg;
 
     // check if we can read any logs from logd
@@ -390,8 +399,12 @@ TEST(logd, both) {
     EXPECT_EQ(0, !user_logger_available && !kernel_logger_available);
     EXPECT_EQ(0, user_logger_content && kernel_logger_content);
     EXPECT_EQ(0, !user_logger_content && !kernel_logger_content);
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
 
+#ifdef __ANDROID__
 // BAD ROBOT
 //   Benchmark threshold are generally considered bad form unless there is
 //   is some human love applied to the continued maintenance and whether the
@@ -560,9 +573,11 @@ TEST(logd, benchmark) {
     // 50% threshold for SPAM filter (<20% typical, lots of engineering margin)
     ASSERT_GT(totalSize, nowSpamSize * 2);
 }
+#endif
 
 // b/26447386 confirm fixed
 void timeout_negative(const char* command) {
+#ifdef __ANDROID__
     log_msg msg_wrap, msg_timeout;
     bool content_wrap = false, content_timeout = false, written = false;
     unsigned int alarm_wrap = 0, alarm_timeout = 0;
@@ -632,6 +647,10 @@ void timeout_negative(const char* command) {
     EXPECT_NE(0U, alarm_wrap);
     EXPECT_TRUE(content_timeout);
     EXPECT_NE(0U, alarm_timeout);
+#else
+    command = NULL;
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
 
 TEST(logd, timeout_no_start) {
@@ -645,6 +664,7 @@ TEST(logd, timeout_start_epoch) {
 
 // b/26447386 refined behavior
 TEST(logd, timeout) {
+#ifdef __ANDROID__
     // b/33962045 This test interferes with other log reader tests that
     // follow because of file descriptor socket persistence in the same
     // process.  So let's fork it to isolate it from giving us pain.
@@ -768,10 +788,14 @@ TEST(logd, timeout) {
 
     _exit(!written + content_wrap + alarm_wrap + !content_timeout +
           !alarm_timeout);
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
 
 // b/27242723 confirmed fixed
 TEST(logd, SNDTIMEO) {
+#ifdef __ANDROID__
     static const unsigned sndtimeo =
         LOGD_SNDTIMEO;  // <sigh> it has to be done!
     static const unsigned sleep_time = sndtimeo + 3;
@@ -822,6 +846,9 @@ TEST(logd, SNDTIMEO) {
     EXPECT_EQ(0, save_errno);
 
     close(fd);
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
 
 TEST(logd, getEventTag_list) {
@@ -879,11 +906,14 @@ TEST(logd, getEventTag_newentry) {
 #endif
 }
 
+#ifdef __ANDROID__
 static inline int32_t get4LE(const char* src) {
     return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
 }
+#endif
 
 void __android_log_btwrite_multiple__helper(int count) {
+#ifdef __ANDROID__
     log_time ts(CLOCK_MONOTONIC);
 
     log_time ts1(CLOCK_MONOTONIC);
@@ -976,6 +1006,10 @@ void __android_log_btwrite_multiple__helper(int count) {
     EXPECT_EQ(expected_chatty_count, chatty_count);
     EXPECT_EQ(expected_identical_count, identical_count);
     EXPECT_EQ(expected_expire_count, expire_count);
+#else
+    count = 0;
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
 
 TEST(logd, multiple_test_1) {
