@@ -32,6 +32,7 @@
 #include <log/log_main.h>
 #include <log/log_radio.h>
 #include <log/log_read.h>
+#include <log/log_safetynet.h>
 #include <log/log_system.h>
 #include <log/log_time.h>
 #include <log/uio.h> /* helper to define iovec for portability */
@@ -164,31 +165,6 @@ clockid_t android_log_clockid();
 #endif
 
 #endif /* __linux__ */
-
-/* --------------------------------------------------------------------- */
-
-#ifndef _ANDROID_USE_LIBLOG_SAFETYNET_INTERFACE
-#ifndef __ANDROID_API__
-#define __ANDROID_USE_LIBLOG_SAFETYNET_INTERFACE 1
-#elif __ANDROID_API__ > 22 /* > Lollipop */
-#define __ANDROID_USE_LIBLOG_SAFETYNET_INTERFACE 1
-#else
-#define __ANDROID_USE_LIBLOG_SAFETYNET_INTERFACE 0
-#endif
-#endif
-
-#if __ANDROID_USE_LIBLOG_SAFETYNET_INTERFACE
-
-#define android_errorWriteLog(tag, subTag) \
-  __android_log_error_write(tag, subTag, -1, NULL, 0)
-
-#define android_errorWriteWithInfoLog(tag, subTag, uid, data, dataLen) \
-  __android_log_error_write(tag, subTag, uid, data, dataLen)
-
-int __android_log_error_write(int tag, const char* subTag, int32_t uid,
-                              const char* data, uint32_t dataLen);
-
-#endif /* __ANDROID_USE_LIBLOG_SAFETYNET_INTERFACE */
 
 /* --------------------------------------------------------------------- */
 
