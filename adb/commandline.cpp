@@ -68,20 +68,17 @@ static int uninstall_app(TransportType t, const char* serial, int argc, const ch
 static int install_app_legacy(TransportType t, const char* serial, int argc, const char** argv);
 static int uninstall_app_legacy(TransportType t, const char* serial, int argc, const char** argv);
 
-static auto& gProductOutPath = *new std::string();
 extern int gListenAll;
 
 DefaultStandardStreamsCallback DEFAULT_STANDARD_STREAMS_CALLBACK(nullptr, nullptr);
 
-static std::string product_file(const char *extra) {
-    if (gProductOutPath.empty()) {
-        fprintf(stderr, "adb: Product directory not specified; "
-                "use -p or define ANDROID_PRODUCT_OUT\n");
+static std::string product_file(const char* file) {
+    const char* ANDROID_PRODUCT_OUT = getenv("ANDROID_PRODUCT_OUT");
+    if (ANDROID_PRODUCT_OUT == nullptr) {
+        fprintf(stderr, "adb: product directory not specified; set $ANDROID_PRODUCT_OUT\n");
         exit(1);
     }
-
-    return android::base::StringPrintf("%s%s%s",
-                                       gProductOutPath.c_str(), OS_PATH_SEPARATOR_STR, extra);
+    return android::base::StringPrintf("%s%s%s", ANDROID_PRODUCT_OUT, OS_PATH_SEPARATOR_STR, file);
 }
 
 static void help() {
@@ -92,11 +89,7 @@ static void help() {
         " -a         listen on all network interfaces, not just localhost\n"
         " -d         use USB device (error if multiple devices connected)\n"
         " -e         use TCP/IP device (error if multiple TCP/IP devices available)\n"
-        " -s SERIAL\n"
-        "     use device with given serial number (overrides $ANDROID_SERIAL)\n"
-        " -p PRODUCT\n"
-        "     name or path ('angler'/'out/target/product/angler');\n"
-        "     default $ANDROID_PRODUCT_OUT\n"
+        " -s SERIAL  use device with given serial (overrides $ANDROID_SERIAL)\n"
         " -H         name of adb server host [default=localhost]\n"
         " -P         port of adb server [default=5037]\n"
         " -L SOCKET  listen on given socket for adb server [default=tcp:localhost:5037]\n"
@@ -138,9 +131,8 @@ static void help() {
         " pull [-a] REMOTE... LOCAL\n"
         "     copy files/dirs from device\n"
         "     -a: preserve file timestamp and mode\n"
-        " sync [DIR]\n"
-        "     copy all changed files to device; if DIR is \"system\", \"vendor\", \"oem\",\n"
-        "     or \"data\", only sync that partition (default all)\n"
+        " sync [system|vendor|oem|data|all]\n"
+        "     sync a local build from $ANDROID_PRODUCT_OUT to the device (default all)\n"
         "     -l: list but don't copy\n"
         "\n"
         "shell:\n"
@@ -1254,66 +1246,6 @@ static int restore(int argc, const char** argv) {
     return 0;
 }
 
-/* <hint> may be:
- * - A simple product name
- *   e.g., "sooner"
- * - A relative path from the CWD to the ANDROID_PRODUCT_OUT dir
- *   e.g., "out/target/product/sooner"
- * - An absolute path to the PRODUCT_OUT dir
- *   e.g., "/src/device/out/target/product/sooner"
- *
- * Given <hint>, try to construct an absolute path to the
- * ANDROID_PRODUCT_OUT dir.
- */
-static std::string find_product_out_path(const std::string& hint) {
-    if (hint.empty()) {
-        return "";
-    }
-
-    // If it's already absolute, don't bother doing any work.
-    if (adb_is_absolute_host_path(hint.c_str())) {
-        return hint;
-    }
-
-    // If any of the OS_PATH_SEPARATORS is found, assume it's a relative path;
-    // make it absolute.
-    // NOLINT: Do not complain if OS_PATH_SEPARATORS has only one character.
-    if (hint.find_first_of(OS_PATH_SEPARATORS) != std::string::npos) {  // NOLINT
-        std::string cwd;
-        if (!getcwd(&cwd)) {
-            perror("adb: getcwd failed");
-            return "";
-        }
-        return android::base::StringPrintf("%s%c%s", cwd.c_str(), OS_PATH_SEPARATOR, hint.c_str());
-    }
-
-    // It's a string without any slashes.  Try to do something with it.
-    //
-    // Try to find the root of the build tree, and build a PRODUCT_OUT
-    // path from there.
-    char* top = getenv("ANDROID_BUILD_TOP");
-    if (top == nullptr) {
-        fprintf(stderr, "adb: ANDROID_BUILD_TOP not set!\n");
-        return "";
-    }
-
-    std::string path = top;
-    path += OS_PATH_SEPARATOR_STR;
-    path += "out";
-    path += OS_PATH_SEPARATOR_STR;
-    path += "target";
-    path += OS_PATH_SEPARATOR_STR;
-    path += "product";
-    path += OS_PATH_SEPARATOR_STR;
-    path += hint;
-    if (!directory_exists(path)) {
-        fprintf(stderr, "adb: Couldn't find a product dir based on -p %s; "
-                        "\"%s\" doesn't exist\n", hint.c_str(), path.c_str());
-        return "";
-    }
-    return path;
-}
-
 static void parse_push_pull_args(const char** arg, int narg,
                                  std::vector<const char*>* srcs,
                                  const char** dst, bool* copy_attrs) {
@@ -1404,17 +1336,6 @@ int adb_commandline(int argc, const char** argv) {
     signal(SIGPIPE, SIG_IGN);
 #endif
 
-    // If defined, this should be an absolute path to
-    // the directory containing all of the various system images
-    // for a particular product.  If not defined, and the adb
-    // command requires this information, then the user must
-    // specify the path using "-p".
-    char* ANDROID_PRODUCT_OUT = getenv("ANDROID_PRODUCT_OUT");
-    if (ANDROID_PRODUCT_OUT != nullptr) {
-        gProductOutPath = ANDROID_PRODUCT_OUT;
-    }
-    // TODO: also try TARGET_PRODUCT/TARGET_DEVICE as a hint
-
     const char* server_host_str = nullptr;
     const char* server_port_str = nullptr;
     const char* server_socket_str = nullptr;
@@ -1438,21 +1359,6 @@ int adb_commandline(int argc, const char** argv) {
             ack_reply_fd = strtol(reply_fd_str, nullptr, 10);
             if (!_is_valid_ack_reply_fd(ack_reply_fd)) {
                 fprintf(stderr, "adb: invalid reply fd \"%s\"\n", reply_fd_str);
-                return 1;
-            }
-        } else if (!strncmp(argv[0], "-p", 2)) {
-            const char* product = nullptr;
-            if (argv[0][2] == '\0') {
-                if (argc < 2) return syntax_error("-p requires an argument");
-                product = argv[1];
-                argc--;
-                argv++;
-            } else {
-                product = argv[0] + 2;
-            }
-            gProductOutPath = find_product_out_path(product);
-            if (gProductOutPath.empty()) {
-                fprintf(stderr, "adb: could not resolve \"-p %s\"\n", product);
                 return 1;
             }
         } else if (argv[0][0]=='-' && argv[0][1]=='s') {
@@ -1832,6 +1738,8 @@ int adb_commandline(int argc, const char** argv) {
         } else {
             return syntax_error("adb sync [-l] [PARTITION]");
         }
+
+        if (src == "all") src = "";
 
         if (src != "" &&
             src != "system" && src != "data" && src != "vendor" && src != "oem") {
