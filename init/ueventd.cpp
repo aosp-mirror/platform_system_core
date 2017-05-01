@@ -33,9 +33,6 @@
 #include "log.h"
 #include "util.h"
 
-template <bool sysfs>
-static bool ParseSingleLine(std::vector<std::string>&& line, std::string* err);
-
 int ueventd_main(int argc, char **argv)
 {
     /*
