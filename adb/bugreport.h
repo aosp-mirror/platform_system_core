@@ -43,7 +43,7 @@ class Bugreport {
                             const char* name);
 
   private:
-    virtual void UpdateProgress(const std::string& file_name, int progress, int total);
+    virtual void UpdateProgress(const std::string& file_name, int progress_percentage);
     LinePrinter line_printer_;
     DISALLOW_COPY_AND_ASSIGN(Bugreport);
 };
