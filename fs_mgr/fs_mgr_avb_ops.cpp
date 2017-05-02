@@ -96,7 +96,9 @@ FsManagerAvbOps::FsManagerAvbOps(const std::string& device_file_by_name_prefix)
     // We only need to provide the implementation of read_from_partition()
     // operation since that's all what is being used by the avb_slot_verify().
     // Other I/O operations are only required in bootloader but not in
-    // user-space so we set them as dummy operations.
+    // user-space so we set them as dummy operations. Also zero the entire
+    // struct so operations added in the future will be set to NULL.
+    memset(&avb_ops_, 0, sizeof(AvbOps));
     avb_ops_.read_from_partition = read_from_partition;
     avb_ops_.read_rollback_index = dummy_read_rollback_index;
     avb_ops_.validate_vbmeta_public_key = dummy_validate_vbmeta_public_key;
