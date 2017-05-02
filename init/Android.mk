@@ -146,6 +146,7 @@ LOCAL_SRC_FILES := \
     init_parser_test.cpp \
     init_test.cpp \
     property_service_test.cpp \
+    service_test.cpp \
     util_test.cpp \
 
 LOCAL_SHARED_LIBRARIES += \
