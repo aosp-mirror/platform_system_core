@@ -769,55 +769,46 @@ static int adb_shell(int argc, const char** argv) {
     return RemoteShell(use_shell_protocol, shell_type_arg, escape_char, command);
 }
 
-static int adb_download_buffer(const char* service, const char* filename) {
-    std::string content;
-    if (!android::base::ReadFileToString(filename, &content)) {
-        fprintf(stderr, "error: couldn't read %s: %s\n", filename, strerror(errno));
-        return -1;
-    }
-
-    const uint8_t* data = reinterpret_cast<const uint8_t*>(content.data());
-    unsigned sz = content.size();
-
+static int adb_sideload_legacy(const char* filename, int in_fd, int size) {
     std::string error;
-    int fd = adb_connect(android::base::StringPrintf("%s:%d", service, sz), &error);
-    if (fd < 0) {
-        fprintf(stderr,"error: %s\n", error.c_str());
+    int out_fd = adb_connect(android::base::StringPrintf("sideload:%d", size), &error);
+    if (out_fd < 0) {
+        fprintf(stderr, "adb: pre-KitKat sideload connection failed: %s\n", error.c_str());
         return -1;
     }
 
     int opt = CHUNK_SIZE;
-    opt = adb_setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
+    opt = adb_setsockopt(out_fd, SOL_SOCKET, SO_SNDBUF, &opt, sizeof(opt));
 
-    unsigned total = sz;
-    const uint8_t* ptr = reinterpret_cast<const uint8_t*>(data);
-
-    const char* x = strrchr(service, ':');
-    if (x) service = x + 1;
-
-    while (sz > 0) {
-        unsigned xfer = (sz > CHUNK_SIZE) ? CHUNK_SIZE : sz;
-        if (!WriteFdExactly(fd, ptr, xfer)) {
-            std::string error;
-            adb_status(fd, &error);
-            fprintf(stderr,"* failed to write data '%s' *\n", error.c_str());
-            adb_close(fd);
+    char buf[CHUNK_SIZE];
+    int total = size;
+    while (size > 0) {
+        unsigned xfer = (size > CHUNK_SIZE) ? CHUNK_SIZE : size;
+        if (!ReadFdExactly(in_fd, buf, xfer)) {
+            fprintf(stderr, "adb: failed to read data from %s: %s\n", filename, strerror(errno));
+            adb_close(out_fd);
             return -1;
         }
-        sz -= xfer;
-        ptr += xfer;
-        printf("sending: '%s' %4d%%    \r", filename, (int)(100LL - ((100LL * sz) / (total))));
+        if (!WriteFdExactly(out_fd, buf, xfer)) {
+            std::string error;
+            adb_status(out_fd, &error);
+            fprintf(stderr, "adb: failed to write data: %s\n", error.c_str());
+            adb_close(out_fd);
+            return -1;
+        }
+        size -= xfer;
+        printf("sending: '%s' %4d%%    \r", filename, (int)(100LL - ((100LL * size) / (total))));
         fflush(stdout);
     }
     printf("\n");
 
-    if (!adb_status(fd, &error)) {
-        fprintf(stderr,"* error response '%s' *\n", error.c_str());
-        adb_close(fd);
+    if (!adb_status(out_fd, &error)) {
+        fprintf(stderr, "adb: error response: %s\n", error.c_str());
+        adb_close(out_fd);
         return -1;
     }
 
-    adb_close(fd);
+    adb_close(out_fd);
     return 0;
 }
 
@@ -844,22 +835,17 @@ static int adb_download_buffer(const char* service, const char* filename) {
  */
 static int adb_sideload_host(const char* filename) {
     // TODO: use a LinePrinter instead...
-    fprintf(stdout, "opening '%s'...\n", filename);
-    fflush(stdout);
-
     struct stat sb;
     if (stat(filename, &sb) == -1) {
-        fprintf(stderr, "failed to stat file %s: %s\n", filename, strerror(errno));
+        fprintf(stderr, "adb: failed to stat file %s: %s\n", filename, strerror(errno));
         return -1;
     }
     unique_fd package_fd(adb_open(filename, O_RDONLY));
     if (package_fd == -1) {
-        fprintf(stderr, "failed to open file %s: %s\n", filename, strerror(errno));
+        fprintf(stderr, "adb: failed to open file %s: %s\n", filename, strerror(errno));
         return -1;
     }
 
-    fprintf(stdout, "connecting...\n");
-    fflush(stdout);
     std::string service = android::base::StringPrintf(
         "sideload-host:%d:%d", static_cast<int>(sb.st_size), SIDELOAD_HOST_BLOCK_SIZE);
     std::string error;
@@ -867,8 +853,9 @@ static int adb_sideload_host(const char* filename) {
     if (device_fd < 0) {
         // Try falling back to the older (<= K) sideload method. Maybe this
         // is an older device that doesn't support sideload-host.
-        fprintf(stderr, "falling back to older sideload method...\n");
-        return adb_download_buffer("sideload", filename);
+        fprintf(stderr, "adb: sideload connection failed: %s\n", error.c_str());
+        fprintf(stderr, "adb: trying pre-KitKat sideload method...\n");
+        return adb_sideload_legacy(filename, package_fd, static_cast<int>(sb.st_size));
     }
 
     int opt = SIDELOAD_HOST_BLOCK_SIZE;
@@ -880,7 +867,7 @@ static int adb_sideload_host(const char* filename) {
     int last_percent = -1;
     while (true) {
         if (!ReadFdExactly(device_fd, buf, 8)) {
-            fprintf(stderr, "* failed to read command: %s\n", strerror(errno));
+            fprintf(stderr, "adb: failed to read command: %s\n", strerror(errno));
             return -1;
         }
         buf[8] = '\0';
@@ -896,7 +883,7 @@ static int adb_sideload_host(const char* filename) {
 
         size_t offset = block * SIDELOAD_HOST_BLOCK_SIZE;
         if (offset >= static_cast<size_t>(sb.st_size)) {
-            fprintf(stderr, "* attempt to read block %d past end\n", block);
+            fprintf(stderr, "adb: failed to read block %d past end\n", block);
             return -1;
         }
 
@@ -906,17 +893,17 @@ static int adb_sideload_host(const char* filename) {
         }
 
         if (adb_lseek(package_fd, offset, SEEK_SET) != static_cast<int>(offset)) {
-            fprintf(stderr, "* failed to seek to package block: %s\n", strerror(errno));
+            fprintf(stderr, "adb: failed to seek to package block: %s\n", strerror(errno));
             return -1;
         }
         if (!ReadFdExactly(package_fd, buf, to_write)) {
-            fprintf(stderr, "* failed to read package block: %s\n", strerror(errno));
+            fprintf(stderr, "adb: failed to read package block: %s\n", strerror(errno));
             return -1;
         }
 
         if (!WriteFdExactly(device_fd, buf, to_write)) {
             adb_status(device_fd, &error);
-            fprintf(stderr,"* failed to write data '%s' *\n", error.c_str());
+            fprintf(stderr, "adb: failed to write data '%s' *\n", error.c_str());
             return -1;
         }
         xfer += to_write;
