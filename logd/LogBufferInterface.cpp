@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,24 +14,9 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_LISTENER_H__
-#define _LOGD_LOG_LISTENER_H__
+#include "LogBufferInterface.h"
 
-#include <sysutils/SocketListener.h>
-#include "LogReader.h"
-
-class LogListener : public SocketListener {
-    LogBufferInterface* logbuf;
-    LogReader* reader;
-
-   public:
-    LogListener(LogBufferInterface* buf, LogReader* reader /* nullable */);
-
-   protected:
-    virtual bool onDataAvailable(SocketClient* cli);
-
-   private:
-    static int getLogSocket();
-};
-
-#endif
+LogBufferInterface::LogBufferInterface() {
+}
+LogBufferInterface::~LogBufferInterface() {
+}
