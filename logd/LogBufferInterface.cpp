@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,28 +14,9 @@
  * limitations under the License.
  */
 
-#ifndef __CUTILS_BITOPS_H
-#define __CUTILS_BITOPS_H
+#include "LogBufferInterface.h"
 
-#include <stdbool.h>
-#include <string.h>
-#include <strings.h>
-#include <sys/cdefs.h>
-
-__BEGIN_DECLS
-
-static inline int popcount(unsigned int x) {
-    return __builtin_popcount(x);
+LogBufferInterface::LogBufferInterface() {
 }
-
-static inline int popcountl(unsigned long x) {
-    return __builtin_popcountl(x);
+LogBufferInterface::~LogBufferInterface() {
 }
-
-static inline int popcountll(unsigned long long x) {
-    return __builtin_popcountll(x);
-}
-
-__END_DECLS
-
-#endif /* __CUTILS_BITOPS_H */

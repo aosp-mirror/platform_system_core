@@ -21,11 +21,11 @@
 #include "LogReader.h"
 
 class LogListener : public SocketListener {
-    LogBuffer* logbuf;
+    LogBufferInterface* logbuf;
     LogReader* reader;
 
    public:
-    LogListener(LogBuffer* buf, LogReader* reader);
+    LogListener(LogBufferInterface* buf, LogReader* reader /* nullable */);
 
    protected:
     virtual bool onDataAvailable(SocketClient* cli);

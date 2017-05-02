@@ -133,13 +133,13 @@ AvbIOResult FsManagerAvbOps::ReadFromPartition(const char* partition, int64_t of
     if (offset < 0) {
         off64_t total_size = lseek64(fd, 0, SEEK_END);
         if (total_size == -1) {
-            LERROR << "Failed to lseek64 to end of the partition";
+            PERROR << "Failed to lseek64 to end of the partition";
             return AVB_IO_RESULT_ERROR_IO;
         }
         offset = total_size + offset;
         // Repositions the offset to the beginning.
         if (lseek64(fd, 0, SEEK_SET) == -1) {
-            LERROR << "Failed to lseek64 to the beginning of the partition";
+            PERROR << "Failed to lseek64 to the beginning of the partition";
             return AVB_IO_RESULT_ERROR_IO;
         }
     }

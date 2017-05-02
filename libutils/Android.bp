@@ -17,8 +17,14 @@ cc_library_headers {
     vendor_available: true,
     host_supported: true,
 
-    header_libs: ["libsystem_headers",],
-    export_header_lib_headers: ["libsystem_headers",],
+    header_libs: [
+        "libsystem_headers",
+        "libcutils_headers"
+    ],
+    export_header_lib_headers: [
+        "libsystem_headers",
+        "libcutils_headers"
+    ],
     export_include_dirs: ["include"],
 
     target: {
