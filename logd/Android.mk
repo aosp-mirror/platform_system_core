@@ -2,12 +2,9 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE:= logd
-
-LOCAL_INIT_RC := logd.rc
+LOCAL_MODULE:= liblogd
 
 LOCAL_SRC_FILES := \
-    main.cpp \
     LogCommand.cpp \
     CommandListener.cpp \
     LogListener.cpp \
@@ -15,6 +12,7 @@ LOCAL_SRC_FILES := \
     FlushCommand.cpp \
     LogBuffer.cpp \
     LogBufferElement.cpp \
+    LogBufferInterface.cpp \
     LogTimes.cpp \
     LogStatistics.cpp \
     LogWhiteBlackList.cpp \
@@ -25,12 +23,9 @@ LOCAL_SRC_FILES := \
     event.logtags
 
 LOCAL_SHARED_LIBRARIES := \
-    libsysutils \
-    liblog \
-    libcutils \
-    libbase \
-    libpackagelistparser \
-    libcap
+    libbase
+
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)
 
 # This is what we want to do:
 #  event_logtags = $(shell \
@@ -45,6 +40,30 @@ event_flag := -DAUDITD_LOG_TAG=1003 -DCHATTY_LOG_TAG=1004 -DTAG_DEF_LOG_TAG=1005
 event_flag += -DLIBLOG_LOG_TAG=1006
 
 LOCAL_CFLAGS := -Werror $(event_flag)
+
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE:= logd
+
+LOCAL_INIT_RC := logd.rc
+
+LOCAL_SRC_FILES := \
+    main.cpp
+
+LOCAL_STATIC_LIBRARIES := \
+    liblogd
+
+LOCAL_SHARED_LIBRARIES := \
+    libsysutils \
+    liblog \
+    libcutils \
+    libbase \
+    libpackagelistparser \
+    libcap
+
+LOCAL_CFLAGS := -Werror
 
 include $(BUILD_EXECUTABLE)
 
