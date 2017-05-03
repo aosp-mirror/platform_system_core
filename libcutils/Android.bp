@@ -53,7 +53,7 @@ cc_library {
     host_supported: true,
     srcs: [
         "config_utils.c",
-        "fs_config.c",
+        "fs_config.cpp",
         "canned_fs_config.c",
         "hashmap.c",
         "iosched_policy.c",
@@ -94,6 +94,9 @@ cc_library {
             shared: {
                 enabled: false,
             },
+            cflags: [
+                "-D_GNU_SOURCE",
+            ],
         },
 
         android: {
