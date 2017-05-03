@@ -80,7 +80,7 @@ int SocketInfo::Create(const std::string& context) const {
   int flags = ((type() == "stream" ? SOCK_STREAM :
                 (type() == "dgram" ? SOCK_DGRAM :
                  SOCK_SEQPACKET)));
-  return create_socket(name().c_str(), flags, perm(), uid(), gid(), context.c_str());
+  return create_socket(name().c_str(), flags, perm(), uid(), gid(), context.c_str(), sehandle);
 }
 
 const std::string SocketInfo::key() const {
