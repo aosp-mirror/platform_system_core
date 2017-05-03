@@ -124,6 +124,7 @@ static struct {
     {"vendor.img", "vendor.sig", "vendor", true, false},
     {"vendor_other.img", "vendor.sig", "vendor", true, true},
     {"vbmeta.img", "vbmeta.sig", "vbmeta", true, false},
+    {"dtbo.img", "dtbo.sig", "dtbo", true, false},
 };
 
 static std::string find_item_given_name(const char* img_name, const char* product) {
@@ -155,6 +156,8 @@ std::string find_item(const char* item, const char* product) {
         fn = "vendor.img";
     } else if(!strcmp(item,"vbmeta")) {
         fn = "vbmeta.img";
+    } else if(!strcmp(item,"dtbo")) {
+        fn = "dtbo.img";
     } else if(!strcmp(item,"userdata")) {
         fn = "userdata.img";
     } else if(!strcmp(item,"cache")) {
