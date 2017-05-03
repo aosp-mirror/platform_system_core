@@ -164,6 +164,24 @@ class ErrnoRestorer {
   using ::android::base::FATAL;               \
   return (severity); }())
 
+#ifdef __clang_analyzer__
+// Clang's static analyzer does not see the conditional statement inside
+// LogMessage's destructor that will abort on FATAL severity.
+#define ABORT_AFTER_LOG_FATAL for (;; abort())
+
+struct LogAbortAfterFullExpr {
+  ~LogAbortAfterFullExpr() __attribute__((noreturn)) { abort(); }
+  explicit operator bool() const { return false; }
+};
+// Provides an expression that evaluates to the truthiness of `x`, automatically
+// aborting if `c` is true.
+#define ABORT_AFTER_LOG_EXPR_IF(c, x) (((c) && ::android::base::LogAbortAfterFullExpr()) || (x))
+#else
+#define ABORT_AFTER_LOG_FATAL
+#define ABORT_AFTER_LOG_EXPR_IF(c, x) (x)
+#endif
+#define ABORT_AFTER_LOG_FATAL_EXPR(x) ABORT_AFTER_LOG_EXPR_IF(true, x)
+
 // Defines whether the given severity will be logged or silently swallowed.
 #define WOULD_LOG(severity) \
   UNLIKELY((SEVERITY_LAMBDA(severity)) >= ::android::base::GetMinimumLogSeverity())
@@ -190,41 +208,34 @@ class ErrnoRestorer {
 //     LOG(FATAL) << "We didn't expect to reach here";
 #define LOG(severity) LOG_TO(DEFAULT, severity)
 
+// Checks if we want to log something, and sets up appropriate RAII objects if
+// so.
+// Note: DO NOT USE DIRECTLY. This is an implementation detail.
+#define LOGGING_PREAMBLE(severity)                                                         \
+  (WOULD_LOG(severity) &&                                                                  \
+   ABORT_AFTER_LOG_EXPR_IF((SEVERITY_LAMBDA(severity)) == ::android::base::FATAL, true) && \
+   ::android::base::ErrnoRestorer())
+
 // Logs a message to logcat with the specified log ID on Android otherwise to
 // stderr. If the severity is FATAL it also causes an abort.
-// Use an if-else statement instead of just an if statement here. So if there is a
-// else statement after LOG() macro, it won't bind to the if statement in the macro.
-// do-while(0) statement doesn't work here. Because we need to support << operator
-// following the macro, like "LOG(DEBUG) << xxx;".
-
-#define LOG_TO(dest, severity) \
-  WOULD_LOG(severity) &&                   \
-    ::android::base::ErrnoRestorer() &&    \
-      LOG_STREAM_TO(dest, severity)
+// Use an expression here so we can support the << operator following the macro,
+// like "LOG(DEBUG) << xxx;".
+#define LOG_TO(dest, severity) LOGGING_PREAMBLE(severity) && LOG_STREAM_TO(dest, severity)
 
 // A variant of LOG that also logs the current errno value. To be used when
 // library calls fail.
 #define PLOG(severity) PLOG_TO(DEFAULT, severity)
 
 // Behaves like PLOG, but logs to the specified log ID.
-#define PLOG_TO(dest, severity)                         \
-  WOULD_LOG(SEVERITY_LAMBDA(severity)) &&               \
-    ::android::base::ErrnoRestorer() &&                 \
-      ::android::base::LogMessage(__FILE__, __LINE__,   \
-          ::android::base::dest,                        \
-          SEVERITY_LAMBDA(severity), errno).stream()
+#define PLOG_TO(dest, severity)                                              \
+  LOGGING_PREAMBLE(severity) &&                                              \
+      ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::dest, \
+                                  SEVERITY_LAMBDA(severity), errno)          \
+          .stream()
 
 // Marker that code is yet to be implemented.
 #define UNIMPLEMENTED(level) \
   LOG(level) << __PRETTY_FUNCTION__ << " unimplemented "
-
-#ifdef __clang_analyzer__
-// ClangL static analyzer does not see the conditional statement inside
-// LogMessage's destructor that will abort on FATAL severity.
-#define ABORT_AFTER_LOG_FATAL for (;;abort())
-#else
-#define ABORT_AFTER_LOG_FATAL
-#endif
 
 // Check whether condition x holds and LOG(FATAL) if not. The value of the
 // expression x is only evaluated once. Extra logging can be appended using <<
@@ -232,12 +243,12 @@ class ErrnoRestorer {
 //
 //     CHECK(false == true) results in a log message of
 //       "Check failed: false == true".
-#define CHECK(x)                                                              \
-  LIKELY((x)) ||                                                              \
-    ABORT_AFTER_LOG_FATAL                                                     \
-    ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::DEFAULT, \
-                                ::android::base::FATAL, -1).stream()          \
-        << "Check failed: " #x << " "
+#define CHECK(x)                                                                \
+  LIKELY((x)) || ABORT_AFTER_LOG_FATAL_EXPR(false) ||                           \
+      ::android::base::LogMessage(                                              \
+          __FILE__, __LINE__, ::android::base::DEFAULT, ::android::base::FATAL, \
+          -1).stream()                                                          \
+          << "Check failed: " #x << " "
 
 // Helper for CHECK_xx(x,y) macros.
 #define CHECK_OP(LHS, RHS, OP)                                              \
