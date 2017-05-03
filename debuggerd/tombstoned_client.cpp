@@ -22,11 +22,11 @@
 #include <utility>
 
 #include <android-base/unique_fd.h>
+#include <async_safe/log.h>
 #include <cutils/sockets.h>
 
 #include "debuggerd/protocol.h"
 #include "debuggerd/util.h"
-#include "private/libc_logging.h"
 
 using android::base::unique_fd;
 
@@ -34,8 +34,8 @@ bool tombstoned_connect(pid_t pid, unique_fd* tombstoned_socket, unique_fd* outp
   unique_fd sockfd(socket_local_client(kTombstonedCrashSocketName,
                                        ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET));
   if (sockfd == -1) {
-    __libc_format_log(ANDROID_LOG_ERROR, "libc", "failed to connect to tombstoned: %s",
-                      strerror(errno));
+    async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to connect to tombstoned: %s",
+                          strerror(errno));
     return false;
   }
 
@@ -43,22 +43,22 @@ bool tombstoned_connect(pid_t pid, unique_fd* tombstoned_socket, unique_fd* outp
   packet.packet_type = CrashPacketType::kDumpRequest;
   packet.packet.dump_request.pid = pid;
   if (TEMP_FAILURE_RETRY(write(sockfd, &packet, sizeof(packet))) != sizeof(packet)) {
-    __libc_format_log(ANDROID_LOG_ERROR, "libc", "failed to write DumpRequest packet: %s",
-                      strerror(errno));
+    async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to write DumpRequest packet: %s",
+                          strerror(errno));
     return false;
   }
 
   unique_fd tmp_output_fd;
   ssize_t rc = recv_fd(sockfd, &packet, sizeof(packet), &tmp_output_fd);
   if (rc == -1) {
-    __libc_format_log(ANDROID_LOG_ERROR, "libc",
-                      "failed to read response to DumpRequest packet: %s", strerror(errno));
+    async_safe_format_log(ANDROID_LOG_ERROR, "libc",
+                          "failed to read response to DumpRequest packet: %s", strerror(errno));
     return false;
   } else if (rc != sizeof(packet)) {
-    __libc_format_log(
-      ANDROID_LOG_ERROR, "libc",
-      "received DumpRequest response packet of incorrect length (expected %zu, got %zd)",
-      sizeof(packet), rc);
+    async_safe_format_log(
+        ANDROID_LOG_ERROR, "libc",
+        "received DumpRequest response packet of incorrect length (expected %zu, got %zd)",
+        sizeof(packet), rc);
     return false;
   }
 
@@ -67,8 +67,8 @@ bool tombstoned_connect(pid_t pid, unique_fd* tombstoned_socket, unique_fd* outp
   // a regular fd, and writing to an fd with O_APPEND).
   int flags = fcntl(tmp_output_fd.get(), F_GETFL);
   if (fcntl(tmp_output_fd.get(), F_SETFL, flags | O_APPEND) != 0) {
-    __libc_format_log(ANDROID_LOG_WARN, "libc", "failed to set output fd flags: %s",
-                      strerror(errno));
+    async_safe_format_log(ANDROID_LOG_WARN, "libc", "failed to set output fd flags: %s",
+                          strerror(errno));
   }
 
   *tombstoned_socket = std::move(sockfd);
