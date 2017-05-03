@@ -201,55 +201,6 @@ TEST_F(sysdeps_poll, fd_count) {
     }
 }
 
-TEST(sysdeps_mutex, mutex_smoke) {
-    static std::atomic<bool> finished(false);
-    static std::mutex &m = *new std::mutex();
-    m.lock();
-    ASSERT_FALSE(m.try_lock());
-    std::thread thread([]() {
-        ASSERT_FALSE(m.try_lock());
-        m.lock();
-        finished.store(true);
-        std::this_thread::sleep_for(200ms);
-        m.unlock();
-    });
-
-    ASSERT_FALSE(finished.load());
-    std::this_thread::sleep_for(100ms);
-    ASSERT_FALSE(finished.load());
-    m.unlock();
-    std::this_thread::sleep_for(100ms);
-    m.lock();
-    ASSERT_TRUE(finished.load());
-    m.unlock();
-
-    thread.join();
-}
-
-TEST(sysdeps_mutex, recursive_mutex_smoke) {
-    static std::recursive_mutex &m = *new std::recursive_mutex();
-
-    m.lock();
-    ASSERT_TRUE(m.try_lock());
-    m.unlock();
-
-    std::thread thread([]() {
-        ASSERT_FALSE(m.try_lock());
-        m.lock();
-        std::this_thread::sleep_for(500ms);
-        m.unlock();
-    });
-
-    std::this_thread::sleep_for(100ms);
-    m.unlock();
-    std::this_thread::sleep_for(100ms);
-    ASSERT_FALSE(m.try_lock());
-    m.lock();
-    m.unlock();
-
-    thread.join();
-}
-
 TEST(sysdeps_condition_variable, smoke) {
     static std::mutex &m = *new std::mutex;
     static std::condition_variable &cond = *new std::condition_variable;
