@@ -40,10 +40,12 @@
 #include <cutils/android_reboot.h>
 #include <cutils/sockets.h>
 #include <selinux/android.h>
-#include <selinux/label.h>
 
-#include "init.h"
 #include "reboot.h"
+
+#ifdef _INIT_INIT_H
+#error "Do not include init.h in files used by ueventd or watchdogd; it will expose init's globals"
+#endif
 
 using android::base::boot_clock;
 
@@ -87,9 +89,8 @@ unsigned int decode_uid(const char *s) {
  * daemon. We communicate the file descriptor's value via the environment
  * variable ANDROID_SOCKET_ENV_PREFIX<name> ("ANDROID_SOCKET_foo").
  */
-int create_socket(const char *name, int type, mode_t perm, uid_t uid,
-                  gid_t gid, const char *socketcon)
-{
+int create_socket(const char* name, int type, mode_t perm, uid_t uid, gid_t gid,
+                  const char* socketcon, selabel_handle* sehandle) {
     if (socketcon) {
         if (setsockcreatecon(socketcon) == -1) {
             PLOG(ERROR) << "setsockcreatecon(\"" << socketcon << "\") failed";
@@ -194,17 +195,17 @@ bool write_file(const std::string& path, const std::string& content) {
     return success;
 }
 
-int mkdir_recursive(const std::string& path, mode_t mode) {
+int mkdir_recursive(const std::string& path, mode_t mode, selabel_handle* sehandle) {
     std::string::size_type slash = 0;
     while ((slash = path.find('/', slash + 1)) != std::string::npos) {
         auto directory = path.substr(0, slash);
         struct stat info;
         if (stat(directory.c_str(), &info) != 0) {
-            auto ret = make_dir(directory.c_str(), mode);
+            auto ret = make_dir(directory.c_str(), mode, sehandle);
             if (ret && errno != EEXIST) return ret;
         }
     }
-    auto ret = make_dir(path.c_str(), mode);
+    auto ret = make_dir(path.c_str(), mode, sehandle);
     if (ret && errno != EEXIST) return ret;
     return 0;
 }
@@ -233,8 +234,7 @@ void import_kernel_cmdline(bool in_qemu,
     }
 }
 
-int make_dir(const char *path, mode_t mode)
-{
+int make_dir(const char* path, mode_t mode, selabel_handle* sehandle) {
     int rc;
 
     char *secontext = NULL;
