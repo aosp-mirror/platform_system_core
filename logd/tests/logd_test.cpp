@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <poll.h>
@@ -26,6 +27,7 @@
 
 #include <string>
 
+#include <android-base/file.h>
 #include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
@@ -85,7 +87,7 @@ static void alloc_statistics(char** buffer, size_t* length) {
         size_t ret = atol(buf) + 1;
         if (ret < 4) {
             delete[] buf;
-            buf = NULL;
+            buf = nullptr;
             break;
         }
         bool check = ret <= len;
@@ -107,7 +109,7 @@ static char* find_benchmark_spam(char* cp) {
     // UID   PACKAGE                                                BYTES LINES
     // 0     root                                                  54164 147569
     //
-    char* benchmark = NULL;
+    char* benchmark = nullptr;
     do {
         static const char signature[] = "\n0     root ";
 
@@ -122,7 +124,7 @@ static char* find_benchmark_spam(char* cp) {
         benchmark = cp;
 #ifdef DEBUG
         char* end = strstr(benchmark, "\n");
-        if (end == NULL) {
+        if (end == nullptr) {
             end = benchmark + strlen(benchmark);
         }
         fprintf(stderr, "parse for spam counter in \"%.*s\"\n",
@@ -154,7 +156,7 @@ static char* find_benchmark_spam(char* cp) {
         if (value > 10UL) {
             break;
         }
-        benchmark = NULL;
+        benchmark = nullptr;
     } while (*cp);
     return benchmark;
 }
@@ -165,9 +167,14 @@ TEST(logd, statistics) {
     size_t len;
     char* buf;
 
+    // Drop cache so that any access problems can be discovered.
+    if (!android::base::WriteStringToFile("3\n", "/proc/sys/vm/drop_caches")) {
+        GTEST_LOG_(INFO) << "Could not open trigger dropping inode cache";
+    }
+
     alloc_statistics(&buf, &len);
 
-    ASSERT_TRUE(NULL != buf);
+    ASSERT_TRUE(nullptr != buf);
 
     // remove trailing FF
     char* cp = buf + len - 1;
@@ -192,19 +199,38 @@ TEST(logd, statistics) {
     EXPECT_EQ(0, truncated);
 
     char* main_logs = strstr(cp, "\nChattiest UIDs in main ");
-    EXPECT_TRUE(NULL != main_logs);
+    EXPECT_TRUE(nullptr != main_logs);
 
     char* radio_logs = strstr(cp, "\nChattiest UIDs in radio ");
     if (!radio_logs)
-        GTEST_LOG_(INFO) << "Value of: NULL != radio_logs\n"
+        GTEST_LOG_(INFO) << "Value of: nullptr != radio_logs\n"
                             "Actual: false\n"
                             "Expected: false\n";
 
     char* system_logs = strstr(cp, "\nChattiest UIDs in system ");
-    EXPECT_TRUE(NULL != system_logs);
+    EXPECT_TRUE(nullptr != system_logs);
 
     char* events_logs = strstr(cp, "\nChattiest UIDs in events ");
-    EXPECT_TRUE(NULL != events_logs);
+    EXPECT_TRUE(nullptr != events_logs);
+
+    // Check if there is any " u0_a#### " as this means packagelistparser broken
+    char* used_getpwuid = nullptr;
+    int used_getpwuid_len;
+    char* uid_name = cp;
+    static const char getpwuid_prefix[] = " u0_a";
+    while ((uid_name = strstr(uid_name, getpwuid_prefix)) != nullptr) {
+        used_getpwuid = uid_name + 1;
+        uid_name += strlen(getpwuid_prefix);
+        while (isdigit(*uid_name)) ++uid_name;
+        used_getpwuid_len = uid_name - used_getpwuid;
+        if (isspace(*uid_name)) break;
+        used_getpwuid = nullptr;
+    }
+    EXPECT_TRUE(nullptr == used_getpwuid);
+    if (used_getpwuid) {
+        fprintf(stderr, "libpackagelistparser failed to pick up %.*s\n",
+                used_getpwuid_len, used_getpwuid);
+    }
 
     delete[] buf;
 #else
@@ -352,7 +378,7 @@ TEST(logd, both) {
         }
 
         alarm(old_alarm);
-        sigaction(SIGALRM, &old_sigaction, NULL);
+        sigaction(SIGALRM, &old_sigaction, nullptr);
 
         close(fd);
     }
@@ -434,7 +460,7 @@ TEST(logd, benchmark) {
 
     // Introduce some extreme spam for the worst UID filter
     ASSERT_TRUE(
-        NULL !=
+        nullptr !=
         (fp = popen("/data/nativetest/liblog-benchmarks/liblog-benchmarks"
                     " BM_log_maximum_retry"
                     " BM_log_maximum"
@@ -505,10 +531,10 @@ TEST(logd, benchmark) {
     bool collected_statistics = !!buf;
     EXPECT_EQ(true, collected_statistics);
 
-    ASSERT_TRUE(NULL != buf);
+    ASSERT_TRUE(nullptr != buf);
 
     char* benchmark_statistics_found = find_benchmark_spam(buf);
-    ASSERT_TRUE(benchmark_statistics_found != NULL);
+    ASSERT_TRUE(benchmark_statistics_found != nullptr);
 
     // Check how effective the SPAM filter is, parse out Now size.
     // 0     root                      54164 147569
@@ -603,7 +629,7 @@ void timeout_negative(const char* command) {
         written = write(fd, ask.c_str(), len) == (ssize_t)len;
         if (!written) {
             alarm(old_alarm);
-            sigaction(SIGALRM, &old_sigaction, NULL);
+            sigaction(SIGALRM, &old_sigaction, nullptr);
             close(fd);
             continue;
         }
@@ -625,7 +651,7 @@ void timeout_negative(const char* command) {
                                    : (old_alarm > (1 + 3 - alarm_wrap))
                                          ? old_alarm - 3 + alarm_wrap
                                          : 2);
-        sigaction(SIGALRM, &old_sigaction, NULL);
+        sigaction(SIGALRM, &old_sigaction, nullptr);
 
         close(fd);
 
@@ -648,7 +674,7 @@ void timeout_negative(const char* command) {
     EXPECT_TRUE(content_timeout);
     EXPECT_NE(0U, alarm_timeout);
 #else
-    command = NULL;
+    command = nullptr;
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
@@ -713,7 +739,7 @@ TEST(logd, timeout) {
         written = write(fd, ask.c_str(), len) == (ssize_t)len;
         if (!written) {
             alarm(old_alarm);
-            sigaction(SIGALRM, &old_sigaction, NULL);
+            sigaction(SIGALRM, &old_sigaction, nullptr);
             close(fd);
             continue;
         }
@@ -735,7 +761,7 @@ TEST(logd, timeout) {
                                    : (old_alarm > (1 + 3 - alarm_wrap))
                                          ? old_alarm - 3 + alarm_wrap
                                          : 2);
-        sigaction(SIGALRM, &old_sigaction, NULL);
+        sigaction(SIGALRM, &old_sigaction, nullptr);
 
         close(fd);
 
@@ -837,7 +863,7 @@ TEST(logd, SNDTIMEO) {
     int save_errno = (recv_ret < 0) ? errno : 0;
 
     EXPECT_NE(0U, alarm(old_alarm));
-    sigaction(SIGALRM, &old_sigaction, NULL);
+    sigaction(SIGALRM, &old_sigaction, nullptr);
 
     EXPECT_EQ(0, recv_ret);
     if (recv_ret > 0) {
@@ -876,8 +902,8 @@ TEST(logd, getEventTag_42) {
     char* cp;
     long ret = strtol(buffer, &cp, 10);
     EXPECT_GT(ret, 16);
-    EXPECT_TRUE(strstr(buffer, "\t(to life the universe etc|3)") != NULL);
-    EXPECT_TRUE(strstr(buffer, "answer") != NULL);
+    EXPECT_TRUE(strstr(buffer, "\t(to life the universe etc|3)") != nullptr);
+    EXPECT_TRUE(strstr(buffer, "answer") != nullptr);
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
@@ -897,8 +923,8 @@ TEST(logd, getEventTag_newentry) {
     char* cp;
     long ret = strtol(buffer, &cp, 10);
     EXPECT_GT(ret, 16);
-    EXPECT_TRUE(strstr(buffer, "\t(new|1)") != NULL);
-    EXPECT_TRUE(strstr(buffer, name) != NULL);
+    EXPECT_TRUE(strstr(buffer, "\t(new|1)") != nullptr);
+    EXPECT_TRUE(strstr(buffer, name) != nullptr);
 // ToDo: also look for this in /data/misc/logd/event-log-tags and
 // /dev/event-log-tags.
 #else
@@ -942,7 +968,7 @@ void __android_log_btwrite_multiple__helper(int count) {
     ASSERT_EQ(0, info.si_status);
 
     struct logger_list* logger_list;
-    ASSERT_TRUE(NULL !=
+    ASSERT_TRUE(nullptr !=
                 (logger_list = android_logger_list_open(
                      LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK,
                      0, pid)));
