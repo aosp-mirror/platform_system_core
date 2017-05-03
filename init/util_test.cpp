@@ -128,15 +128,10 @@ TEST(util, is_dir) {
     EXPECT_FALSE(is_dir(tf.path));
 }
 
-// sehandle is needed for make_dir()
-// TODO: Remove once sehandle is encapsulated
-#include <selinux/label.h>
-selabel_handle* sehandle;
-
 TEST(util, mkdir_recursive) {
     TemporaryDir test_dir;
     std::string path = android::base::StringPrintf("%s/three/directories/deep", test_dir.path);
-    EXPECT_EQ(0, mkdir_recursive(path, 0755));
+    EXPECT_EQ(0, mkdir_recursive(path, 0755, nullptr));
     std::string path1 = android::base::StringPrintf("%s/three", test_dir.path);
     EXPECT_TRUE(is_dir(path1.c_str()));
     std::string path2 = android::base::StringPrintf("%s/three/directories", test_dir.path);
@@ -148,7 +143,7 @@ TEST(util, mkdir_recursive) {
 TEST(util, mkdir_recursive_extra_slashes) {
     TemporaryDir test_dir;
     std::string path = android::base::StringPrintf("%s/three////directories/deep//", test_dir.path);
-    EXPECT_EQ(0, mkdir_recursive(path, 0755));
+    EXPECT_EQ(0, mkdir_recursive(path, 0755, nullptr));
     std::string path1 = android::base::StringPrintf("%s/three", test_dir.path);
     EXPECT_TRUE(is_dir(path1.c_str()));
     std::string path2 = android::base::StringPrintf("%s/three/directories", test_dir.path);

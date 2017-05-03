@@ -205,7 +205,7 @@ static int do_mkdir(const std::vector<std::string>& args) {
         mode = std::strtoul(args[2].c_str(), 0, 8);
     }
 
-    ret = make_dir(args[1].c_str(), mode);
+    ret = make_dir(args[1].c_str(), mode, sehandle);
     /* chmod in case the directory already exists */
     if (ret == -1 && errno == EEXIST) {
         ret = fchmodat(AT_FDCWD, args[1].c_str(), mode, AT_SYMLINK_NOFOLLOW);
@@ -826,7 +826,7 @@ static int do_wait_for_prop(const std::vector<std::string>& args) {
  * Callback to make a directory from the ext4 code
  */
 static int do_installkeys_ensure_dir_exists(const char* dir) {
-    if (make_dir(dir, 0700) && errno != EEXIST) {
+    if (make_dir(dir, 0700, sehandle) && errno != EEXIST) {
         return -1;
     }
 
