@@ -139,14 +139,8 @@ static const struct fs_path_config android_files[] = {
     { 00600, AID_ROOT,      AID_ROOT,      0, "odm/default.prop" },
     { 00444, AID_ROOT,      AID_ROOT,      0, odm_conf_dir + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, odm_conf_file + 1 },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "system/odm/build.prop" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "system/odm/default.prop" },
-    { 00444, AID_ROOT,      AID_ROOT,      0, "system/odm/etc/fs_config_dirs" },
-    { 00444, AID_ROOT,      AID_ROOT,      0, "system/odm/etc/fs_config_files" },
     { 00444, AID_ROOT,      AID_ROOT,      0, oem_conf_dir + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, oem_conf_file + 1 },
-    { 00444, AID_ROOT,      AID_ROOT,      0, "system/oem/etc/fs_config_dirs" },
-    { 00444, AID_ROOT,      AID_ROOT,      0, "system/oem/etc/fs_config_files" },
     { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/fs_mgr" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump32" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump64" },
@@ -163,10 +157,6 @@ static const struct fs_path_config android_files[] = {
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/ppp/*" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/rc.*" },
     { 00440, AID_ROOT,      AID_ROOT,      0, "system/etc/recovery.img" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "system/vendor/build.prop" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "system/vendor/default.prop" },
-    { 00444, AID_ROOT,      AID_ROOT,      0, "system/vendor/etc/fs_config_dirs" },
-    { 00444, AID_ROOT,      AID_ROOT,      0, "system/vendor/etc/fs_config_files" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "vendor/build.prop" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "vendor/default.prop" },
     { 00444, AID_ROOT,      AID_ROOT,      0, ven_conf_dir + 1 },
@@ -202,15 +192,9 @@ static const struct fs_path_config android_files[] = {
     // Support RT scheduling in Bluetooth
     { 00700, AID_BLUETOOTH, AID_BLUETOOTH, CAP_MASK_LONG(CAP_NET_ADMIN) |
                                            CAP_MASK_LONG(CAP_SYS_NICE),
-                                              "system/vendor/bin/hw/android.hardware.bluetooth@1.0-service" },
-    { 00700, AID_BLUETOOTH, AID_BLUETOOTH, CAP_MASK_LONG(CAP_NET_ADMIN) |
-                                           CAP_MASK_LONG(CAP_SYS_NICE),
                                               "vendor/bin/hw/android.hardware.bluetooth@1.0-service" },
 
     // Support wifi_hal_legacy administering a network interface.
-    { 00755, AID_WIFI,      AID_WIFI,      CAP_MASK_LONG(CAP_NET_ADMIN) |
-                                           CAP_MASK_LONG(CAP_NET_RAW),
-                                              "system/vendor/bin/hw/android.hardware.wifi@1.0-service" },
     { 00755, AID_WIFI,      AID_WIFI,      CAP_MASK_LONG(CAP_NET_ADMIN) |
                                            CAP_MASK_LONG(CAP_NET_RAW),
                                               "vendor/bin/hw/android.hardware.wifi@1.0-service" },
@@ -233,8 +217,6 @@ static const struct fs_path_config android_files[] = {
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib/valgrind/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib64/valgrind/*" },
-    { 00755, AID_ROOT,      AID_SHELL,     0, "system/vendor/bin/*" },
-    { 00755, AID_ROOT,      AID_SHELL,     0, "system/vendor/xbin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/xbin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/xbin/*" },
