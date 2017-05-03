@@ -30,7 +30,6 @@ cc_library_shared {
 
     static_libs: [
         "libc_malloc_debug_backtrace",
-        "libc_logging",
     ],
     // Only need this for arm since libc++ uses its own unwind code that
     // doesn't mix with the other default unwind code.

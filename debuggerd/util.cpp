@@ -24,8 +24,6 @@
 #include <cutils/sockets.h>
 #include <debuggerd/protocol.h>
 
-#include "private/libc_logging.h"
-
 using android::base::unique_fd;
 
 ssize_t send_fd(int sockfd, const void* data, size_t len, unique_fd fd) {
