@@ -852,7 +852,9 @@ static int do_installkey(const std::vector<std::string>& args) {
 }
 
 static int do_init_user0(const std::vector<std::string>& args) {
-    return e4crypt_do_init_user0();
+    std::vector<std::string> exec_args = {"exec", "/system/bin/vdc", "--wait", "cryptfs",
+                                          "init_user0"};
+    return do_exec(exec_args);
 }
 
 const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
