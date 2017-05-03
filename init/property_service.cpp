@@ -659,7 +659,7 @@ void start_property_service() {
     property_set("ro.property_service.version", "2");
 
     property_set_fd = create_socket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
-                                    0666, 0, 0, NULL);
+                                    0666, 0, 0, nullptr, sehandle);
     if (property_set_fd == -1) {
         PLOG(ERROR) << "start_property_service socket creation failed";
         exit(1);
