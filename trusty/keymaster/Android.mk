@@ -37,8 +37,7 @@ LOCAL_SRC_FILES := \
 LOCAL_SHARED_LIBRARIES := \
 	libcrypto \
 	libcutils \
-	libkeymaster_portable \
-	libkeymaster \
+	libkeymaster1 \
 	libtrusty \
 	libkeymaster_messages \
 	libsoftkeymasterdevice \
