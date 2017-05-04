@@ -51,15 +51,21 @@ struct usb_handle
     UInt8 bulkOut;
     IOUSBInterfaceInterface190** interface;
     unsigned int zero_mask;
+    size_t max_packet_size;
 
     // For garbage collecting disconnected devices.
     bool mark;
     std::string devpath;
     std::atomic<bool> dead;
 
-    usb_handle() : bulkIn(0), bulkOut(0), interface(nullptr),
-        zero_mask(0), mark(false), dead(false) {
-    }
+    usb_handle()
+        : bulkIn(0),
+          bulkOut(0),
+          interface(nullptr),
+          zero_mask(0),
+          max_packet_size(0),
+          mark(false),
+          dead(false) {}
 };
 
 static std::atomic<bool> usb_inited_flag;
@@ -390,6 +396,7 @@ CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 pro
         }
 
         handle->zero_mask = maxPacketSize - 1;
+        handle->max_packet_size = maxPacketSize;
     }
 
     handle->interface = interface;
@@ -558,4 +565,9 @@ void usb_kick(usb_handle *handle) {
     std::lock_guard<std::mutex> lock_guard(g_usb_handles_mutex);
     usb_kick_locked(handle);
 }
+
+size_t usb_get_max_packet_size(usb_handle* handle) {
+    return handle->max_packet_size;
+}
+
 } // namespace native
