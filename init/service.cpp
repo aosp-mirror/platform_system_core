@@ -209,20 +209,32 @@ void Service::NotifyStateChange(const std::string& new_state) const {
 }
 
 void Service::KillProcessGroup(int signal) {
-    LOG(INFO) << "Sending signal " << signal
-              << " to service '" << name_
-              << "' (pid " << pid_ << ") process group...";
-    int r;
-    if (signal == SIGTERM) {
-        r = killProcessGroupOnce(uid_, pid_, signal);
-    } else {
-        r = killProcessGroup(uid_, pid_, signal);
-    }
-    if (r == -1) {
-        LOG(ERROR) << "killProcessGroup(" << uid_ << ", " << pid_ << ", " << signal << ") failed";
-    }
-    if (kill(-pid_, signal) == -1) {
+    // We ignore reporting errors of ESRCH as this commonly happens in the below case,
+    // 1) Terminate() is called, which sends SIGTERM to the process
+    // 2) The process successfully exits
+    // 3) ReapOneProcess() is called, which calls waitpid(-1, ...) which removes the pid entry.
+    // 4) Reap() is called, which sends SIGKILL, but the pid no longer exists.
+    // TODO: sigaction for SIGCHLD reports the pid of the exiting process,
+    // we should do this kill with that pid first before calling waitpid().
+    if (kill(-pid_, signal) == -1 && errno != ESRCH) {
         PLOG(ERROR) << "kill(" << pid_ << ", " << signal << ") failed";
+    }
+
+    // If we've already seen a successful result from killProcessGroup*(), then we have removed
+    // the cgroup already and calling these functions a second time will simply result in an error.
+    // This is true regardless of which signal was sent.
+    // These functions handle their own logging, so no additional logging is needed.
+    if (!process_cgroup_empty_) {
+        LOG(INFO) << "Sending signal " << signal << " to service '" << name_ << "' (pid " << pid_
+                  << ") process group...";
+        int r;
+        if (signal == SIGTERM) {
+            r = killProcessGroupOnce(uid_, pid_, signal);
+        } else {
+            r = killProcessGroup(uid_, pid_, signal);
+        }
+
+        if (r == 0) process_cgroup_empty_ = true;
     }
 }
 
@@ -736,6 +748,7 @@ bool Service::Start() {
     time_started_ = boot_clock::now();
     pid_ = pid;
     flags_ |= SVC_RUNNING;
+    process_cgroup_empty_ = false;
 
     errno = -createProcessGroup(uid_, pid_);
     if (errno != 0) {
