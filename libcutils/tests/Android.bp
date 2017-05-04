@@ -27,7 +27,8 @@ cc_defaults {
                 "test_str_parms.cpp",
                 "android_get_control_socket_test.cpp",
                 "android_get_control_file_test.cpp",
-                "multiuser_test.cpp"
+                "multiuser_test.cpp",
+                "fs_config.cpp",
             ],
         },
 
