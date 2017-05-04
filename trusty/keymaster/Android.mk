@@ -38,7 +38,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libcrypto \
 	libcutils \
 	libkeymaster_portable \
-	libkeymaster \
+	libkeymaster_staging \
 	libtrusty \
 	libkeymaster_messages \
 	libsoftkeymasterdevice \
