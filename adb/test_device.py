@@ -1259,6 +1259,26 @@ class DeviceOfflineTest(DeviceTest):
         self.assertEqual(self._get_device_state(serialno), 'device')
 
 
+    def test_packet_size_regression(self):
+        """Test for http://b/37783561
+
+        Receiving packets of a length divisible by 512 but not 1024 resulted in
+        the adb client waiting indefinitely for more input.
+        """
+        # The values that trigger things are 507 (512 - 5 bytes from shell protocol) + 1024*n
+        # Probe some surrounding values as well, for the hell of it.
+        for length in [506, 507, 508, 1018, 1019, 1020, 1530, 1531, 1532]:
+            cmd = ['dd', 'if=/dev/zero', 'bs={}'.format(length), 'count=1', '2>/dev/null;'
+                   'echo', 'foo']
+            rc, stdout, _ = self.device.shell_nocheck(cmd)
+
+            self.assertEqual(0, rc)
+
+            # Output should be '\0' * length, followed by "foo\n"
+            self.assertEqual(length, len(stdout) - 4)
+            self.assertEqual(stdout, "\0" * length + "foo\n")
+
+
 def main():
     random.seed(0)
     if len(adb.get_devices()) > 0:

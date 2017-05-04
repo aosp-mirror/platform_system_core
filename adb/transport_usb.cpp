@@ -27,57 +27,43 @@
 
 #if ADB_HOST
 
-static constexpr size_t MAX_USB_BULK_PACKET_SIZE = 1024u;
-
-// Call usb_read using a buffer having a multiple of MAX_USB_BULK_PACKET_SIZE bytes
+// Call usb_read using a buffer having a multiple of usb_get_max_packet_size() bytes
 // to avoid overflow. See http://libusb.sourceforge.net/api-1.0/packetoverflow.html.
 static int UsbReadMessage(usb_handle* h, amessage* msg) {
     D("UsbReadMessage");
-    char buffer[MAX_USB_BULK_PACKET_SIZE];
-    int n = usb_read(h, buffer, sizeof(buffer));
-    if (n == sizeof(*msg)) {
-        memcpy(msg, buffer, sizeof(*msg));
+
+    size_t usb_packet_size = usb_get_max_packet_size(h);
+    CHECK(usb_packet_size >= sizeof(*msg));
+    CHECK(usb_packet_size < 4096);
+
+    char buffer[4096];
+    int n = usb_read(h, buffer, usb_packet_size);
+    if (n != sizeof(*msg)) {
+        D("usb_read returned unexpected length %d (expected %zu)", n, sizeof(*msg));
+        return -1;
     }
+    memcpy(msg, buffer, sizeof(*msg));
     return n;
 }
 
-// Call usb_read using a buffer having a multiple of MAX_USB_BULK_PACKET_SIZE bytes
+// Call usb_read using a buffer having a multiple of usb_get_max_packet_size() bytes
 // to avoid overflow. See http://libusb.sourceforge.net/api-1.0/packetoverflow.html.
 static int UsbReadPayload(usb_handle* h, apacket* p) {
-    D("UsbReadPayload");
-    size_t need_size = p->msg.data_length;
-    size_t data_pos = 0u;
-    while (need_size > 0u) {
-        int n = 0;
-        if (data_pos + MAX_USB_BULK_PACKET_SIZE <= sizeof(p->data)) {
-            // Read directly to p->data.
-            size_t rem_size = need_size % MAX_USB_BULK_PACKET_SIZE;
-            size_t direct_read_size = need_size - rem_size;
-            if (rem_size &&
-                data_pos + direct_read_size + MAX_USB_BULK_PACKET_SIZE <= sizeof(p->data)) {
-                direct_read_size += MAX_USB_BULK_PACKET_SIZE;
-            }
-            n = usb_read(h, &p->data[data_pos], direct_read_size);
-            if (n < 0) {
-                D("usb_read(size %zu) failed", direct_read_size);
-                return n;
-            }
-        } else {
-            // Read indirectly using a buffer.
-            char buffer[MAX_USB_BULK_PACKET_SIZE];
-            n = usb_read(h, buffer, sizeof(buffer));
-            if (n < 0) {
-                D("usb_read(size %zu) failed", sizeof(buffer));
-                return -1;
-            }
-            size_t copy_size = std::min(static_cast<size_t>(n), need_size);
-            D("usb read %d bytes, need %zu bytes, copy %zu bytes", n, need_size, copy_size);
-            memcpy(&p->data[data_pos], buffer, copy_size);
-        }
-        data_pos += n;
-        need_size -= std::min(static_cast<size_t>(n), need_size);
+    D("UsbReadPayload(%d)", p->msg.data_length);
+
+    size_t usb_packet_size = usb_get_max_packet_size(h);
+    CHECK(sizeof(p->data) % usb_packet_size == 0);
+
+    // Round the data length up to the nearest packet size boundary.
+    // The device won't send a zero packet for packet size aligned payloads,
+    // so don't read any more packets than needed.
+    size_t len = p->msg.data_length;
+    size_t rem_size = len % usb_packet_size;
+    if (rem_size) {
+        len += usb_packet_size - rem_size;
     }
-    return static_cast<int>(data_pos);
+    CHECK(len <= sizeof(p->data));
+    return usb_read(h, &p->data, len);
 }
 
 static int remote_read(apacket* p, atransport* t) {
