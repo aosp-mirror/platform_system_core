@@ -53,11 +53,11 @@ class FdeventTest : public ::testing::Test {
 
     size_t GetAdditionalLocalSocketCount() {
 #if ADB_HOST
-        // dummy socket installed in PrepareThread()
-        return 1;
-#else
-        // dummy socket and one more socket installed in fdevent_subproc_setup()
+        // dummy socket installed in PrepareThread() + fdevent_run_on_main_thread socket
         return 2;
+#else
+        // dummy socket + fdevent_run_on_main_thread + fdevent_subproc_setup() sockets
+        return 3;
 #endif
     }
 
