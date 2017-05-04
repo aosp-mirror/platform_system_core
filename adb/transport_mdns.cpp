@@ -24,6 +24,8 @@
 #include <arpa/inet.h>
 #endif
 
+#include <thread>
+
 #include <android-base/stringprintf.h>
 #include <dns_sd.h>
 
@@ -262,19 +264,22 @@ static void DNSSD_API register_mdns_transport(DNSServiceRef sdRef,
     }
 }
 
-void init_mdns_transport_discovery(void) {
-    DNSServiceErrorType errorCode =
-        DNSServiceBrowse(&service_ref, 0, 0, kADBServiceType, nullptr,
-                         register_mdns_transport, nullptr);
+void init_mdns_transport_discovery_thread(void) {
+    DNSServiceErrorType errorCode = DNSServiceBrowse(&service_ref, 0, 0, kADBServiceType, nullptr,
+                                                     register_mdns_transport, nullptr);
 
     if (errorCode != kDNSServiceErr_NoError) {
         D("Got %d initiating mDNS browse.", errorCode);
         return;
     }
 
-    fdevent_install(&service_ref_fde,
-                    adb_DNSServiceRefSockFD(service_ref),
-                    pump_service_ref,
-                    &service_ref);
-    fdevent_set(&service_ref_fde, FDE_READ);
+    fdevent_run_on_main_thread([]() {
+        fdevent_install(&service_ref_fde, adb_DNSServiceRefSockFD(service_ref), pump_service_ref,
+                        &service_ref);
+        fdevent_set(&service_ref_fde, FDE_READ);
+    });
+}
+
+void init_mdns_transport_discovery(void) {
+    std::thread(init_mdns_transport_discovery_thread).detach();
 }

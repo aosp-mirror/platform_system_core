@@ -228,4 +228,18 @@ void SendConnectOnHost(atransport* t);
 
 void parse_banner(const std::string&, atransport* t);
 
+// On startup, the adb server needs to wait until all of the connected devices are ready.
+// To do this, we need to know when the scan has identified all of the potential new transports, and
+// when each transport becomes ready.
+// TODO: Do this for mDNS as well, instead of just USB?
+
+// We've found all of the transports we potentially care about.
+void adb_notify_device_scan_complete();
+
+// One or more transports have changed status, check to see if we're ready.
+void update_transport_status();
+
+// Wait until device scan has completed and every transport is ready, or a timeout elapses.
+void adb_wait_for_device_initialization();
+
 #endif
