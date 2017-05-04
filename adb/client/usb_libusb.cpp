@@ -352,6 +352,8 @@ static void poll_for_devices() {
         }
         libusb_free_device_list(list, 1);
 
+        adb_notify_device_scan_complete();
+
         std::this_thread::sleep_for(500ms);
     }
 }
