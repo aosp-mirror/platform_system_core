@@ -356,9 +356,9 @@ Commands
   Init halts executing commands until the forked process exits.
 
 `exec_start <service>`
-> Start service a given service and halt processing of additional init commands
-  until it returns.  It functions similarly to the `exec` command, but uses an
-  existing service definition instead of providing them as arguments.
+> Start a given service and halt the processing of additional init commands
+  until it returns.  The command functions similarly to the `exec` command,
+  but uses an existing service definition in place of the exec argument vector.
 
 `export <name> <value>`
 > Set the environment variable _name_ equal to _value_ in the
