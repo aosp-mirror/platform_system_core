@@ -864,9 +864,9 @@ static void selinux_initialize(bool in_kernel_domain) {
     }
 }
 
-// The files and directories that were created before initial sepolicy load
-// need to have their security context restored to the proper value.
-// This must happen before /dev is populated by ueventd.
+// The files and directories that were created before initial sepolicy load or
+// files on ramdisk need to have their security context restored to the proper
+// value. This must happen before /dev is populated by ueventd.
 static void selinux_restore_context() {
     LOG(INFO) << "Running restorecon...";
     restorecon("/dev");
@@ -883,6 +883,9 @@ static void selinux_restore_context() {
     restorecon("/sys", SELINUX_ANDROID_RESTORECON_RECURSE);
     restorecon("/dev/block", SELINUX_ANDROID_RESTORECON_RECURSE);
     restorecon("/dev/device-mapper");
+
+    restorecon("/sbin/mke2fs");
+    restorecon("/sbin/e2fsdroid");
 }
 
 // Set the UDC controller for the ConfigFS USB Gadgets.
