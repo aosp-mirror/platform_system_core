@@ -21,7 +21,7 @@
 #include <time.h>
 #include <ucontext.h>
 
-#include "BacktraceLog.h"
+#include "BacktraceAsyncSafeLog.h"
 #include "ThreadEntry.h"
 
 // Initialize static member variables.
@@ -106,7 +106,7 @@ bool ThreadEntry::Wait(int value) {
   while (wait_value_ != value) {
     int ret = pthread_cond_timedwait(&wait_cond_, &wait_mutex_, &ts);
     if (ret != 0) {
-      BACK_LOGW("pthread_cond_timedwait for value %d failed: %s", value, strerror(ret));
+      BACK_ASYNC_SAFE_LOGW("pthread_cond_timedwait for value %d failed: %s", value, strerror(ret));
       wait_completed = false;
       break;
     }
