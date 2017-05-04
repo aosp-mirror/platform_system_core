@@ -65,6 +65,7 @@ struct usb_handle : public ::usb_handle {
     unsigned char ep_in;
     unsigned char ep_out;
 
+    size_t max_packet_size;
     unsigned zero_mask;
     unsigned writeable = 1;
 
@@ -120,9 +121,9 @@ static inline bool contains_non_digit(const char* name) {
 }
 
 static void find_usb_device(const std::string& base,
-        void (*register_device_callback)
-                (const char*, const char*, unsigned char, unsigned char, int, int, unsigned))
-{
+                            void (*register_device_callback)(const char*, const char*,
+                                                             unsigned char, unsigned char, int, int,
+                                                             unsigned, size_t)) {
     std::unique_ptr<DIR, int(*)(DIR*)> bus_dir(opendir(base.c_str()), closedir);
     if (!bus_dir) return;
 
@@ -144,6 +145,7 @@ static void find_usb_device(const std::string& base,
             struct usb_interface_descriptor* interface;
             struct usb_endpoint_descriptor *ep1, *ep2;
             unsigned zero_mask = 0;
+            size_t max_packet_size = 0;
             unsigned vid, pid;
 
             if (contains_non_digit(de->d_name)) continue;
@@ -251,7 +253,8 @@ static void find_usb_device(const std::string& base,
                             continue;
                         }
                             /* aproto 01 needs 0 termination */
-                        if(interface->bInterfaceProtocol == 0x01) {
+                        if (interface->bInterfaceProtocol == 0x01) {
+                            max_packet_size = ep1->wMaxPacketSize;
                             zero_mask = ep1->wMaxPacketSize - 1;
                         }
 
@@ -281,9 +284,9 @@ static void find_usb_device(const std::string& base,
                             }
                         }
 
-                        register_device_callback(dev_name.c_str(), devpath,
-                                local_ep_in, local_ep_out,
-                                interface->bInterfaceNumber, device->iSerialNumber, zero_mask);
+                        register_device_callback(dev_name.c_str(), devpath, local_ep_in,
+                                                 local_ep_out, interface->bInterfaceNumber,
+                                                 device->iSerialNumber, zero_mask, max_packet_size);
                         break;
                     }
                 } else {
@@ -497,10 +500,13 @@ int usb_close(usb_handle* h) {
     return 0;
 }
 
-static void register_device(const char* dev_name, const char* dev_path,
-                            unsigned char ep_in, unsigned char ep_out,
-                            int interface, int serial_index,
-                            unsigned zero_mask) {
+size_t usb_get_max_packet_size(usb_handle* h) {
+    return h->max_packet_size;
+}
+
+static void register_device(const char* dev_name, const char* dev_path, unsigned char ep_in,
+                            unsigned char ep_out, int interface, int serial_index,
+                            unsigned zero_mask, size_t max_packet_size) {
     // Since Linux will not reassign the device ID (and dev_name) as long as the
     // device is open, we can add to the list here once we open it and remove
     // from the list when we're finally closed and everything will work out
@@ -523,6 +529,7 @@ static void register_device(const char* dev_name, const char* dev_path,
     usb->ep_in = ep_in;
     usb->ep_out = ep_out;
     usb->zero_mask = zero_mask;
+    usb->max_packet_size = max_packet_size;
 
     // Initialize mark so we don't get garbage collected after the device scan.
     usb->mark = true;

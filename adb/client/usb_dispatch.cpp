@@ -48,3 +48,9 @@ void usb_kick(usb_handle* h) {
     should_use_libusb() ? libusb::usb_kick(reinterpret_cast<libusb::usb_handle*>(h))
                         : native::usb_kick(reinterpret_cast<native::usb_handle*>(h));
 }
+
+size_t usb_get_max_packet_size(usb_handle* h) {
+    return should_use_libusb()
+               ? libusb::usb_get_max_packet_size(reinterpret_cast<libusb::usb_handle*>(h))
+               : native::usb_get_max_packet_size(reinterpret_cast<native::usb_handle*>(h));
+}
