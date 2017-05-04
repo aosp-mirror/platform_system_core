@@ -33,6 +33,9 @@ class LogBufferInterface {
     virtual int log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
                     pid_t tid, const char* msg, unsigned short len) = 0;
 
+    virtual uid_t pidToUid(pid_t pid);
+    virtual pid_t tidToPid(pid_t tid);
+
    private:
     DISALLOW_COPY_AND_ASSIGN(LogBufferInterface);
 };
