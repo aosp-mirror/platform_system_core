@@ -156,33 +156,38 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
         }
 #endif
 
-        // Inform our parent that we are up and running.
+        // Wait for the USB scan to complete before notifying the parent that we're up.
+        // We need to perform this in a thread, because we would otherwise block the event loop.
+        std::thread notify_thread([ack_reply_fd]() {
+            adb_wait_for_device_initialization();
 
-        // Any error output written to stderr now goes to adb.log. We could
-        // keep around a copy of the stderr fd and use that to write any errors
-        // encountered by the following code, but that is probably overkill.
+            // Any error output written to stderr now goes to adb.log. We could
+            // keep around a copy of the stderr fd and use that to write any errors
+            // encountered by the following code, but that is probably overkill.
 #if defined(_WIN32)
-        const HANDLE ack_reply_handle = cast_int_to_handle(ack_reply_fd);
-        const CHAR ack[] = "OK\n";
-        const DWORD bytes_to_write = arraysize(ack) - 1;
-        DWORD written = 0;
-        if (!WriteFile(ack_reply_handle, ack, bytes_to_write, &written, NULL)) {
-            fatal("adb: cannot write ACK to handle 0x%p: %s", ack_reply_handle,
-                  android::base::SystemErrorCodeToString(GetLastError()).c_str());
-        }
-        if (written != bytes_to_write) {
-            fatal("adb: cannot write %lu bytes of ACK: only wrote %lu bytes",
-                  bytes_to_write, written);
-        }
-        CloseHandle(ack_reply_handle);
+            const HANDLE ack_reply_handle = cast_int_to_handle(ack_reply_fd);
+            const CHAR ack[] = "OK\n";
+            const DWORD bytes_to_write = arraysize(ack) - 1;
+            DWORD written = 0;
+            if (!WriteFile(ack_reply_handle, ack, bytes_to_write, &written, NULL)) {
+                fatal("adb: cannot write ACK to handle 0x%p: %s", ack_reply_handle,
+                      android::base::SystemErrorCodeToString(GetLastError()).c_str());
+            }
+            if (written != bytes_to_write) {
+                fatal("adb: cannot write %lu bytes of ACK: only wrote %lu bytes", bytes_to_write,
+                      written);
+            }
+            CloseHandle(ack_reply_handle);
 #else
-        // TODO(danalbert): Can't use SendOkay because we're sending "OK\n", not
-        // "OKAY".
-        if (!android::base::WriteStringToFd("OK\n", ack_reply_fd)) {
-            fatal_errno("error writing ACK to fd %d", ack_reply_fd);
-        }
-        unix_close(ack_reply_fd);
+            // TODO(danalbert): Can't use SendOkay because we're sending "OK\n", not
+            // "OKAY".
+            if (!android::base::WriteStringToFd("OK\n", ack_reply_fd)) {
+                fatal_errno("error writing ACK to fd %d", ack_reply_fd);
+            }
+            unix_close(ack_reply_fd);
 #endif
+        });
+        notify_thread.detach();
     }
 
     D("Event loop starting");
