@@ -42,11 +42,9 @@ bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
   } else {
     Range overlap = inserted.first->first;
     if (overlap != range) {
-      ALOGE("range %p-%p overlaps with existing range %p-%p",
-          reinterpret_cast<void*>(begin),
-          reinterpret_cast<void*>(end),
-          reinterpret_cast<void*>(overlap.begin),
-          reinterpret_cast<void*>(overlap.end));
+      MEM_ALOGE("range %p-%p overlaps with existing range %p-%p", reinterpret_cast<void*>(begin),
+                reinterpret_cast<void*>(end), reinterpret_cast<void*>(overlap.begin),
+                reinterpret_cast<void*>(overlap.end));
     }
     return false;
   }
@@ -154,7 +152,7 @@ static bool MapOverPage(void* addr) {
 
   void* ret = mmap(page, page_size, PROT_READ, MAP_ANONYMOUS|MAP_PRIVATE|MAP_FIXED, -1, 0);
   if (ret == MAP_FAILED) {
-    ALOGE("failed to map page at %p: %s", page, strerror(errno));
+    MEM_ALOGE("failed to map page at %p: %s", page, strerror(errno));
     return false;
   }
 
@@ -167,7 +165,7 @@ void HeapWalker::HandleSegFault(ScopedSignalHandler& handler, int signal, siginf
     handler.reset();
     return;
   }
-  ALOGW("failed to read page at %p, signal %d", si->si_addr, signal);
+  MEM_ALOGW("failed to read page at %p, signal %d", si->si_addr, signal);
   if (!MapOverPage(si->si_addr)) {
     handler.reset();
   }

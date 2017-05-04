@@ -70,7 +70,7 @@ PtracerThread::PtracerThread(const std::function<int()>& func) :
     child_pid_(0) {
   stack_ = std::make_unique<Stack>(PTHREAD_STACK_MIN);
   if (stack_->top() == nullptr) {
-    LOG_ALWAYS_FATAL("failed to mmap child stack: %s", strerror(errno));
+    MEM_LOG_ALWAYS_FATAL("failed to mmap child stack: %s", strerror(errno));
   }
 
   func_ = std::function<int()>{[&, func]() -> int {
@@ -102,7 +102,7 @@ bool PtracerThread::Start() {
        CLONE_VM|CLONE_FS|CLONE_FILES/*|CLONE_UNTRACED*/,
        reinterpret_cast<void*>(&func_));
   if (child_pid_ < 0) {
-    ALOGE("failed to clone child: %s", strerror(errno));
+    MEM_ALOGE("failed to clone child: %s", strerror(errno));
     return false;
   }
 
@@ -120,7 +120,7 @@ int PtracerThread::Join() {
   int status;
   int ret = TEMP_FAILURE_RETRY(waitpid(child_pid_, &status, __WALL));
   if (ret < 0) {
-    ALOGE("waitpid %d failed: %s", child_pid_, strerror(errno));
+    MEM_ALOGE("waitpid %d failed: %s", child_pid_, strerror(errno));
     return -1;
   }
 
@@ -131,7 +131,7 @@ int PtracerThread::Join() {
   } else if (WIFSIGNALED(status)) {
     return -WTERMSIG(status);
   } else {
-    ALOGE("unexpected status %x", status);
+    MEM_ALOGE("unexpected status %x", status);
     return -1;
   }
 }
