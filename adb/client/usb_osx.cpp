@@ -38,6 +38,7 @@
 
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/thread_annotations.h>
 
 #include "adb.h"
 #include "transport.h"
@@ -429,7 +430,7 @@ static void RunLoopThread() {
     VLOG(USB) << "RunLoopThread done";
 }
 
-static void usb_cleanup() {
+static void usb_cleanup() NO_THREAD_SAFETY_ANALYSIS {
     VLOG(USB) << "usb_cleanup";
     // Wait until usb operations in RunLoopThread finish, and prevent further operations.
     operate_device_lock.lock();
