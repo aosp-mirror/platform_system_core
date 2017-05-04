@@ -9,8 +9,16 @@ cc_defaults {
     clang: true,
     shared_libs: [
         "libbase",
-        "liblog",
     ],
+
+    target: {
+        android: {
+            static_libs: ["libasync_safe"],
+        },
+        host: {
+            shared_libs: ["liblog"],
+        }
+    },
 }
 
 cc_library_shared {

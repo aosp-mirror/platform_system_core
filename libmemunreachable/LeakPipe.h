@@ -36,7 +36,7 @@ class LeakPipe {
   LeakPipe() {
     int ret = socketpair(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0, sv_);
     if (ret < 0) {
-      LOG_ALWAYS_FATAL("failed to create socketpair: %s", strerror(errno));
+      MEM_LOG_ALWAYS_FATAL("failed to create socketpair: %s", strerror(errno));
     }
   }
 
@@ -105,10 +105,10 @@ class LeakPipe {
     bool Send(const T& value) {
       ssize_t ret = TEMP_FAILURE_RETRY(write(fd_, &value, sizeof(T)));
       if (ret < 0) {
-        ALOGE("failed to send value: %s", strerror(errno));
+        MEM_ALOGE("failed to send value: %s", strerror(errno));
         return false;
       } else if (static_cast<size_t>(ret) != sizeof(T)) {
-        ALOGE("eof while writing value");
+        MEM_ALOGE("eof while writing value");
         return false;
       }
 
@@ -124,10 +124,10 @@ class LeakPipe {
 
       ssize_t ret = TEMP_FAILURE_RETRY(write(fd_, vector.data(), size));
       if (ret < 0) {
-        ALOGE("failed to send vector: %s", strerror(errno));
+        MEM_ALOGE("failed to send vector: %s", strerror(errno));
         return false;
       } else if (static_cast<size_t>(ret) != size) {
-        ALOGE("eof while writing vector");
+        MEM_ALOGE("eof while writing vector");
         return false;
       }
 
@@ -143,10 +143,10 @@ class LeakPipe {
     bool Receive(T* value) {
       ssize_t ret = TEMP_FAILURE_RETRY(read(fd_, reinterpret_cast<void*>(value), sizeof(T)));
       if (ret < 0) {
-        ALOGE("failed to receive value: %s", strerror(errno));
+        MEM_ALOGE("failed to receive value: %s", strerror(errno));
         return false;
       } else if (static_cast<size_t>(ret) != sizeof(T)) {
-        ALOGE("eof while receiving value");
+        MEM_ALOGE("eof while receiving value");
         return false;
       }
 
@@ -166,10 +166,10 @@ class LeakPipe {
       while (size > 0) {
         ssize_t ret = TEMP_FAILURE_RETRY(read(fd_, ptr, size));
         if (ret < 0) {
-          ALOGE("failed to send vector: %s", strerror(errno));
+          MEM_ALOGE("failed to send vector: %s", strerror(errno));
           return false;
         } else if (ret == 0) {
-          ALOGE("eof while reading vector");
+          MEM_ALOGE("eof while reading vector");
           return false;
         }
         size -= ret;
