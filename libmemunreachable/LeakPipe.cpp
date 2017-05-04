@@ -44,11 +44,11 @@ bool LeakPipe::SendFd(int sock, int fd) {
 
   int ret = sendmsg(sock, &hdr, 0);
   if (ret < 0) {
-    ALOGE("failed to send fd: %s", strerror(errno));
+    MEM_ALOGE("failed to send fd: %s", strerror(errno));
     return false;
   }
   if (ret == 0) {
-    ALOGE("eof when sending fd");
+    MEM_ALOGE("eof when sending fd");
     return false;
   }
 
@@ -71,17 +71,17 @@ int LeakPipe::ReceiveFd(int sock) {
 
   int ret = recvmsg(sock, &hdr, 0);
   if (ret < 0) {
-    ALOGE("failed to receive fd: %s", strerror(errno));
+    MEM_ALOGE("failed to receive fd: %s", strerror(errno));
     return -1;
   }
   if (ret == 0) {
-    ALOGE("eof when receiving fd");
+    MEM_ALOGE("eof when receiving fd");
     return -1;
   }
 
   struct cmsghdr* cmsg = CMSG_FIRSTHDR(&hdr);
   if (cmsg == NULL || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_type != SCM_RIGHTS) {
-    ALOGE("missing fd while receiving fd");
+    MEM_ALOGE("missing fd while receiving fd");
     return -1;
   }
 
