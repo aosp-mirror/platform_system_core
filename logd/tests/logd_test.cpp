@@ -32,8 +32,8 @@
 #include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
 #include <gtest/gtest.h>
-#include <log/log.h>
 #include <private/android_filesystem_config.h>
+#include <private/android_logger.h>
 #ifdef __ANDROID__
 #include <selinux/selinux.h>
 #endif
@@ -1061,8 +1061,8 @@ static pid_t sepolicy_rate(unsigned rate, unsigned num) {
 
     if (pid) {
         siginfo_t info = {};
-        if (TEMP_FAILURE_RETRY(waitid(P_PID, pid, &info, WEXITED))) return 0;
-        if (info.si_status) return 0;
+        if (TEMP_FAILURE_RETRY(waitid(P_PID, pid, &info, WEXITED))) return -1;
+        if (info.si_status) return -1;
         return pid;
     }
 
@@ -1077,7 +1077,7 @@ static pid_t sepolicy_rate(unsigned rate, unsigned num) {
             freecon(context);
             _exit(-1);
             // NOTREACHED
-            return 0;
+            return -1;
         }
     }
 
@@ -1106,25 +1106,39 @@ static pid_t sepolicy_rate(unsigned rate, unsigned num) {
         if (access(android::base::StringPrintf(file, num).c_str(), F_OK) == 0) {
             _exit(-1);
             // NOTREACHED
-            return 0;
+            return -1;
         }
         usleep(usec);
         --num;
     }
     _exit(0);
     // NOTREACHED
-    return 0;
+    return -1;
 }
+
+static constexpr int background_period = 10;
 
 static int count_avc(pid_t pid) {
     int count = 0;
 
-    if (pid == 0) return count;
+    // pid=-1 skip as pid is in error
+    if (pid == (pid_t)-1) return count;
 
-    struct logger_list* logger_list;
-    if (!(logger_list = android_logger_list_open(
-              LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 0, pid)))
+    // pid=0 means we want to report the background count of avc: activities
+    struct logger_list* logger_list =
+        pid ? android_logger_list_alloc(
+                  ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 0, pid)
+            : android_logger_list_alloc_time(
+                  ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK,
+                  log_time(android_log_clockid()) -
+                      log_time(background_period, 0),
+                  0);
+    if (!logger_list) return count;
+    struct logger* logger = android_logger_open(logger_list, LOG_ID_EVENTS);
+    if (!logger) {
+        android_logger_list_close(logger_list);
         return count;
+    }
     for (;;) {
         log_msg log_msg;
 
@@ -1156,56 +1170,64 @@ static int count_avc(pid_t pid) {
 }
 #endif
 
-TEST(logd, sepolicy_rate_limiter_maximum) {
+TEST(logd, sepolicy_rate_limiter) {
 #ifdef __ANDROID__
-    static const int rate = AUDIT_RATE_LIMIT_MAX;
-    static const int duration = 2;
-    // Two seconds of a liveable sustained rate
-    EXPECT_EQ(rate * duration, count_avc(sepolicy_rate(rate, rate * duration)));
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}
-
-TEST(logd, sepolicy_rate_limiter_sub_burst) {
-#ifdef __ANDROID__
-    // maximum period below half way between sustainable and burst rate.
-    static const int threshold =
-        ((AUDIT_RATE_LIMIT_BURST_DURATION *
-          (AUDIT_RATE_LIMIT_DEFAULT + AUDIT_RATE_LIMIT_MAX)) +
-         1) /
-        2;
-    static const int rate = (threshold / AUDIT_RATE_LIMIT_BURST_DURATION) - 1;
-    static const int duration = AUDIT_RATE_LIMIT_BURST_DURATION;
-    EXPECT_EQ(rate * duration, count_avc(sepolicy_rate(rate, rate * duration)));
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}
-
-TEST(logd, sepolicy_rate_limiter_spam) {
-#ifdef __ANDROID__
-    // maximum period of double the maximum burst rate
-    static const int threshold =
-        ((AUDIT_RATE_LIMIT_BURST_DURATION *
-          (AUDIT_RATE_LIMIT_DEFAULT + AUDIT_RATE_LIMIT_MAX)) +
-         1) /
-        2;
-    static const int rate = AUDIT_RATE_LIMIT_DEFAULT * 2;
-    static const int duration = threshold / AUDIT_RATE_LIMIT_DEFAULT;
-    EXPECT_GE(
-        ((AUDIT_RATE_LIMIT_DEFAULT * duration) * 115) / 100,  // +15% margin
-        count_avc(sepolicy_rate(rate, rate * duration)));
-    // give logd another 3 seconds to react to the burst before checking
-    sepolicy_rate(rate, rate * 3);
-    // maximum period at double the maximum burst rate (spam filter kicked in)
-    EXPECT_GE(
-        threshold * 2,
-        count_avc(sepolicy_rate(rate, rate * AUDIT_RATE_LIMIT_BURST_DURATION)));
-    // cool down, and check unspammy rate still works
-    sleep(2);
-    EXPECT_LE(AUDIT_RATE_LIMIT_BURST_DURATION - 1,  // allow _one_ to be lost
-              count_avc(sepolicy_rate(1, AUDIT_RATE_LIMIT_BURST_DURATION)));
+    int background_selinux_activity_too_high = count_avc(0);
+    if (background_selinux_activity_too_high > 2) {
+        GTEST_LOG_(ERROR) << "Too much background selinux activity "
+                          << background_selinux_activity_too_high * 60 /
+                                 background_period
+                          << "/minute on the device, this test\n"
+                          << "can not measure the functionality of the "
+                          << "sepolicy rate limiter.  Expect test to\n"
+                          << "fail as this device is in a bad state, "
+                          << "but is not strictly a unit test failure.";
+    }
+    // sepolicy_rate_limiter_maximum
+    {  // maximum precharch test block.
+        static constexpr int rate = AUDIT_RATE_LIMIT_MAX;
+        static constexpr int duration = 2;
+        // Two seconds of a liveable sustained rate
+        EXPECT_EQ(rate * duration,
+                  count_avc(sepolicy_rate(rate, rate * duration)));
+    }
+    // sepolicy_rate_limiter_sub_burst
+    {  // maximum period below half way between sustainable and burst rate
+        static constexpr int threshold =
+            ((AUDIT_RATE_LIMIT_BURST_DURATION *
+              (AUDIT_RATE_LIMIT_DEFAULT + AUDIT_RATE_LIMIT_MAX)) +
+             1) /
+            2;
+        static constexpr int rate =
+            (threshold / AUDIT_RATE_LIMIT_BURST_DURATION) - 1;
+        static constexpr int duration = AUDIT_RATE_LIMIT_BURST_DURATION;
+        EXPECT_EQ(rate * duration,
+                  count_avc(sepolicy_rate(rate, rate * duration)));
+    }
+    // sepolicy_rate_limiter_spam
+    {  // hit avc: hard beyond reason block.
+        // maximum period of double the maximum burst rate
+        static constexpr int threshold =
+            ((AUDIT_RATE_LIMIT_BURST_DURATION *
+              (AUDIT_RATE_LIMIT_DEFAULT + AUDIT_RATE_LIMIT_MAX)) +
+             1) /
+            2;
+        static constexpr int rate = AUDIT_RATE_LIMIT_DEFAULT * 2;
+        static constexpr int duration = threshold / AUDIT_RATE_LIMIT_DEFAULT;
+        EXPECT_GE(
+            ((AUDIT_RATE_LIMIT_DEFAULT * duration) * 115) / 100,  // +15% margin
+            count_avc(sepolicy_rate(rate, rate * duration)));
+        // give logd another 3 seconds to react to the burst before checking
+        sepolicy_rate(rate, rate * 3);
+        // maximum period at double maximum burst rate (spam filter kicked in)
+        EXPECT_GE(threshold * 2,
+                  count_avc(sepolicy_rate(
+                      rate, rate * AUDIT_RATE_LIMIT_BURST_DURATION)));
+        // cool down, and check unspammy rate still works
+        sleep(2);
+        EXPECT_LE(AUDIT_RATE_LIMIT_BURST_DURATION - 1,  // allow _one_ lost
+                  count_avc(sepolicy_rate(1, AUDIT_RATE_LIMIT_BURST_DURATION)));
+    }
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
