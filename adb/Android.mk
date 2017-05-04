@@ -17,11 +17,15 @@ ADB_COMMON_CFLAGS := \
     -Wvla \
     -DADB_REVISION='"$(adb_version)"' \
 
-ADB_COMMON_linux_CFLAGS := \
+ADB_COMMON_posix_CFLAGS := \
     -Wexit-time-destructors \
+    -Wthread-safety
+
+ADB_COMMON_linux_CFLAGS := \
+    $(ADB_COMMON_posix_CFLAGS) \
 
 ADB_COMMON_darwin_CFLAGS := \
-    -Wexit-time-destructors \
+    $(ADB_COMMON_posix_CFLAGS) \
 
 # Define windows.h and tchar.h Unicode preprocessor symbols so that
 # CreateFile(), _tfopen(), etc. map to versions that take wchar_t*, breaking the

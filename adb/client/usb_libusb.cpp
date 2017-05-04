@@ -91,7 +91,7 @@ namespace libusb {
 struct usb_handle : public ::usb_handle {
     usb_handle(const std::string& device_address, const std::string& serial,
                unique_device_handle&& device_handle, uint8_t interface, uint8_t bulk_in,
-               uint8_t bulk_out, size_t zero_mask)
+               uint8_t bulk_out, size_t zero_mask, size_t max_packet_size)
         : device_address(device_address),
           serial(serial),
           closing(false),
@@ -100,7 +100,8 @@ struct usb_handle : public ::usb_handle {
           write("write", zero_mask, true),
           interface(interface),
           bulk_in(bulk_in),
-          bulk_out(bulk_out) {}
+          bulk_out(bulk_out),
+          max_packet_size(max_packet_size) {}
 
     ~usb_handle() {
         Close();
@@ -143,6 +144,8 @@ struct usb_handle : public ::usb_handle {
     uint8_t interface;
     uint8_t bulk_in;
     uint8_t bulk_out;
+
+    size_t max_packet_size;
 };
 
 static auto& usb_handles = *new std::unordered_map<std::string, std::unique_ptr<usb_handle>>();
@@ -206,6 +209,7 @@ static void poll_for_devices() {
             size_t interface_num;
             uint16_t zero_mask;
             uint8_t bulk_in = 0, bulk_out = 0;
+            size_t packet_size = 0;
             bool found_adb = false;
 
             for (interface_num = 0; interface_num < config->bNumInterfaces; ++interface_num) {
@@ -252,6 +256,14 @@ static void poll_for_devices() {
                         found_in = true;
                         bulk_in = endpoint_addr;
                     }
+
+                    size_t endpoint_packet_size = endpoint_desc.wMaxPacketSize;
+                    CHECK(endpoint_packet_size != 0);
+                    if (packet_size == 0) {
+                        packet_size = endpoint_packet_size;
+                    } else {
+                        CHECK(packet_size == endpoint_packet_size);
+                    }
                 }
 
                 if (found_in && found_out) {
@@ -280,7 +292,7 @@ static void poll_for_devices() {
             }
 
             libusb_device_handle* handle_raw;
-            rc = libusb_open(list[i], &handle_raw);
+            rc = libusb_open(device, &handle_raw);
             if (rc != 0) {
                 LOG(WARNING) << "failed to open usb device at " << device_address << ": "
                              << libusb_error_name(rc);
@@ -324,9 +336,9 @@ static void poll_for_devices() {
                 }
             }
 
-            auto result =
-                std::make_unique<usb_handle>(device_address, device_serial, std::move(handle),
-                                             interface_num, bulk_in, bulk_out, zero_mask);
+            auto result = std::make_unique<usb_handle>(device_address, device_serial,
+                                                       std::move(handle), interface_num, bulk_in,
+                                                       bulk_out, zero_mask, packet_size);
             usb_handle* usb_handle_raw = result.get();
 
             {
@@ -507,4 +519,10 @@ int usb_close(usb_handle* h) {
 void usb_kick(usb_handle* h) {
     h->Close();
 }
+
+size_t usb_get_max_packet_size(usb_handle* h) {
+    CHECK(h->max_packet_size != 0);
+    return h->max_packet_size;
+}
+
 } // namespace libusb
