@@ -483,13 +483,34 @@ FsManagerAvbUniquePtr FsManagerAvbHandle::Open(const std::string& device_file_by
     // Only allow two verify results:
     //   - AVB_SLOT_VERIFY_RESULT_OK.
     //   - AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION (for UNLOCKED state).
-    if (verify_result == AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION) {
-        if (!avb_verifier->IsDeviceUnlocked()) {
-            LERROR << "ERROR_VERIFICATION isn't allowed";
+    //     If the device is UNLOCKED, i.e., |allow_verification_error| is true for
+    //     AvbSlotVerify(), then the following return values are all non-fatal:
+    //       * AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION
+    //       * AVB_SLOT_VERIFY_RESULT_ERROR_PUBLIC_KEY_REJECTED
+    //       * AVB_SLOT_VERIFY_RESULT_ERROR_ROLLBACK_INDEX
+    //     The latter two results were checked by bootloader prior to start fs_mgr so
+    //     we just need to handle the first result here. See *dummy* operations in
+    //     FsManagerAvbOps and the comments in external/avb/libavb/avb_slot_verify.h
+    //     for more details.
+    switch (verify_result) {
+        case AVB_SLOT_VERIFY_RESULT_OK:
+            avb_handle->status_ = kFsManagerAvbHandleSuccess;
+            break;
+        case AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION:
+            if (!avb_verifier->IsDeviceUnlocked()) {
+                LERROR << "ERROR_VERIFICATION isn't allowed when the device is LOCKED";
+                return nullptr;
+            }
+            avb_handle->status_ = kFsManagerAvbHandleErrorVerification;
+            break;
+        default:
+            LERROR << "avb_slot_verify failed, result: " << verify_result;
             return nullptr;
-        }
-    } else if (verify_result != AVB_SLOT_VERIFY_RESULT_OK) {
-        LERROR << "avb_slot_verify failed, result: " << verify_result;
+    }
+
+    // Verifies vbmeta images against the digest passed from bootloader.
+    if (!avb_verifier->VerifyVbmetaImages(*avb_handle->avb_slot_data_)) {
+        LERROR << "VerifyVbmetaImages failed";
         return nullptr;
     }
 
@@ -497,30 +518,20 @@ FsManagerAvbUniquePtr FsManagerAvbHandle::Open(const std::string& device_file_by
     avb_handle->avb_version_ =
         android::base::StringPrintf("%d.%d", AVB_VERSION_MAJOR, AVB_VERSION_MINOR);
 
-    // Verifies vbmeta images against the digest passed from bootloader.
-    if (!avb_verifier->VerifyVbmetaImages(*avb_handle->avb_slot_data_)) {
-        LERROR << "VerifyVbmetaImages failed";
-        return nullptr;
-    } else {
-        // Checks whether FLAGS_HASHTREE_DISABLED is set.
-        AvbVBMetaImageHeader vbmeta_header;
-        avb_vbmeta_image_header_to_host_byte_order(
-            (AvbVBMetaImageHeader*)avb_handle->avb_slot_data_->vbmeta_images[0].vbmeta_data,
-            &vbmeta_header);
+    // Checks whether FLAGS_HASHTREE_DISABLED is set.
+    AvbVBMetaImageHeader vbmeta_header;
+    avb_vbmeta_image_header_to_host_byte_order(
+        (AvbVBMetaImageHeader*)avb_handle->avb_slot_data_->vbmeta_images[0].vbmeta_data,
+        &vbmeta_header);
 
-        bool hashtree_disabled =
-            ((AvbVBMetaImageFlags)vbmeta_header.flags & AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED);
-        if (hashtree_disabled) {
-            avb_handle->status_ = kFsManagerAvbHandleHashtreeDisabled;
-            return avb_handle;
-        }
+    bool hashtree_disabled =
+        ((AvbVBMetaImageFlags)vbmeta_header.flags & AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED);
+    if (hashtree_disabled) {
+        avb_handle->status_ = kFsManagerAvbHandleHashtreeDisabled;
     }
 
-    if (verify_result == AVB_SLOT_VERIFY_RESULT_OK) {
-        avb_handle->status_ = kFsManagerAvbHandleSuccess;
-        return avb_handle;
-    }
-    return nullptr;
+    LINFO << "Returning avb_handle with status: " << avb_handle->status_;
+    return avb_handle;
 }
 
 bool FsManagerAvbHandle::SetUpAvb(struct fstab_rec* fstab_entry, bool wait_for_verity_dev) {
@@ -528,11 +539,12 @@ bool FsManagerAvbHandle::SetUpAvb(struct fstab_rec* fstab_entry, bool wait_for_v
     if (!avb_slot_data_ || avb_slot_data_->num_vbmeta_images < 1) {
         return false;
     }
+
+    if (status_ == kFsManagerAvbHandleUninitialized) return false;
     if (status_ == kFsManagerAvbHandleHashtreeDisabled) {
         LINFO << "AVB HASHTREE disabled on:" << fstab_entry->mount_point;
         return true;
     }
-    if (status_ != kFsManagerAvbHandleSuccess) return false;
 
     std::string partition_name(basename(fstab_entry->mount_point));
     if (!avb_validate_utf8((const uint8_t*)partition_name.c_str(), partition_name.length())) {
