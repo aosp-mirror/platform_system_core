@@ -1367,7 +1367,8 @@ bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback) {
 
         std::string mount_point;
         if (system_root && !strcmp(fstab->recs[i].mount_point, "/")) {
-            mount_point = "system";
+            // In AVB, the dm device name is vroot instead of system.
+            mount_point = fs_mgr_is_avb(&fstab->recs[i]) ? "vroot" : "system";
         } else {
             mount_point = basename(fstab->recs[i].mount_point);
         }
@@ -1386,6 +1387,10 @@ bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback) {
 
         status = &buffer[io->data_start + sizeof(struct dm_target_spec)];
 
+        // To be consistent in vboot 1.0 and vboot 2.0 (AVB), change the mount_point
+        // back to 'system' for the callback. So it has property [partition.system.verified]
+        // instead of [partition.vroot.verified].
+        if (mount_point == "vroot") mount_point = "system";
         if (*status == 'C' || *status == 'V') {
             callback(&fstab->recs[i], mount_point.c_str(), mode, *status);
         }
