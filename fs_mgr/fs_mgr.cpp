@@ -1046,8 +1046,7 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
         }
 
         int fs_stat = 0;
-        int force_check = do_quota_with_shutdown_check(fstab->recs[i].blk_device,
-                                                       fstab->recs[i].fs_type,
+        int force_check = do_quota_with_shutdown_check(n_blk_device, fstab->recs[i].fs_type,
                                                        &fstab->recs[i], &fs_stat);
 
         if ((fstab->recs[i].fs_mgr_flags & MF_CHECK) || force_check) {
