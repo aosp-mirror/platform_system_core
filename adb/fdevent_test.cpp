@@ -173,3 +173,24 @@ TEST_F(FdeventTest, invalid_fd) {
     std::thread thread(InvalidFdThreadFunc);
     thread.join();
 }
+
+TEST_F(FdeventTest, run_on_main_thread) {
+    std::vector<int> vec;
+
+    PrepareThread();
+    std::thread thread(fdevent_loop);
+
+    for (int i = 0; i < 100; ++i) {
+        fdevent_run_on_main_thread([i, &vec]() {
+            check_main_thread();
+            vec.push_back(i);
+        });
+    }
+
+    TerminateThread(thread);
+
+    ASSERT_EQ(100u, vec.size());
+    for (int i = 0; i < 100; ++i) {
+        ASSERT_EQ(i, vec[i]);
+    }
+}
