@@ -215,11 +215,19 @@ static int do_mkdir(const std::vector<std::string>& args) {
     }
 
     if (args.size() >= 4) {
-        uid_t uid = decode_uid(args[3].c_str());
+        uid_t uid;
+        std::string decode_uid_err;
+        if (!DecodeUid(args[3], &uid, &decode_uid_err)) {
+            LOG(ERROR) << "Unable to find UID for '" << args[3] << "': " << decode_uid_err;
+            return -1;
+        }
         gid_t gid = -1;
 
         if (args.size() == 5) {
-            gid = decode_uid(args[4].c_str());
+            if (!DecodeUid(args[4], &gid, &decode_uid_err)) {
+                LOG(ERROR) << "Unable to find GID for '" << args[3] << "': " << decode_uid_err;
+                return -1;
+            }
         }
 
         if (lchown(args[1].c_str(), uid, gid) == -1) {
@@ -655,17 +663,26 @@ static int do_copy(const std::vector<std::string>& args) {
 }
 
 static int do_chown(const std::vector<std::string>& args) {
-    /* GID is optional. */
-    if (args.size() == 3) {
-        if (lchown(args[2].c_str(), decode_uid(args[1].c_str()), -1) == -1)
-            return -errno;
-    } else if (args.size() == 4) {
-        if (lchown(args[3].c_str(), decode_uid(args[1].c_str()),
-                   decode_uid(args[2].c_str())) == -1)
-            return -errno;
-    } else {
+    uid_t uid;
+    std::string decode_uid_err;
+    if (!DecodeUid(args[1], &uid, &decode_uid_err)) {
+        LOG(ERROR) << "Unable to find UID for '" << args[1] << "': " << decode_uid_err;
         return -1;
     }
+
+    // GID is optional and pushes the index of path out by one if specified.
+    const std::string& path = (args.size() == 4) ? args[3] : args[2];
+    gid_t gid = -1;
+
+    if (args.size() == 4) {
+        if (!DecodeUid(args[2], &gid, &decode_uid_err)) {
+            LOG(ERROR) << "Unable to find GID for '" << args[2] << "': " << decode_uid_err;
+            return -1;
+        }
+    }
+
+    if (lchown(path.c_str(), uid, gid) == -1) return -errno;
+
     return 0;
 }
 

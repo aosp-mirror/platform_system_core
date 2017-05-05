@@ -61,7 +61,7 @@ class Timer {
 
 std::ostream& operator<<(std::ostream& os, const Timer& t);
 
-unsigned int decode_uid(const char *s);
+bool DecodeUid(const std::string& name, uid_t* uid, std::string* err);
 
 int mkdir_recursive(const std::string& pathname, mode_t mode, selabel_handle* sehandle);
 int wait_for_file(const char *filename, std::chrono::nanoseconds timeout);

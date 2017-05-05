@@ -115,10 +115,21 @@ TEST(util, write_file_exist) {
     EXPECT_STREQ("2ll2", s2.c_str());
 }
 
-TEST(util, decode_uid) {
-  EXPECT_EQ(0U, decode_uid("root"));
-  EXPECT_EQ(UINT_MAX, decode_uid("toot"));
-  EXPECT_EQ(123U, decode_uid("123"));
+TEST(util, DecodeUid) {
+    uid_t decoded_uid;
+    std::string err;
+
+    EXPECT_TRUE(DecodeUid("root", &decoded_uid, &err));
+    EXPECT_EQ("", err);
+    EXPECT_EQ(0U, decoded_uid);
+
+    EXPECT_FALSE(DecodeUid("toot", &decoded_uid, &err));
+    EXPECT_EQ("getpwnam failed: No such file or directory", err);
+    EXPECT_EQ(UINT_MAX, decoded_uid);
+
+    EXPECT_TRUE(DecodeUid("123", &decoded_uid, &err));
+    EXPECT_EQ("", err);
+    EXPECT_EQ(123U, decoded_uid);
 }
 
 TEST(util, is_dir) {
