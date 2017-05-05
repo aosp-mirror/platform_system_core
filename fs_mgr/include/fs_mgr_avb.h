@@ -25,9 +25,10 @@
 #include "fs_mgr.h"
 
 enum FsManagerAvbHandleStatus {
+    kFsManagerAvbHandleUninitialized = -1,
     kFsManagerAvbHandleSuccess = 0,
     kFsManagerAvbHandleHashtreeDisabled = 1,
-    kFsManagerAvbHandleFail = 2,
+    kFsManagerAvbHandleErrorVerification = 2,
 };
 
 class FsManagerAvbHandle;
@@ -88,7 +89,7 @@ class FsManagerAvbHandle {
     };
 
   protected:
-    FsManagerAvbHandle() : avb_slot_data_(nullptr), status_(kFsManagerAvbHandleFail) {}
+    FsManagerAvbHandle() : avb_slot_data_(nullptr), status_(kFsManagerAvbHandleUninitialized) {}
 
   private:
     AvbSlotVerifyData* avb_slot_data_;
