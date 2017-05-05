@@ -75,7 +75,6 @@ using android::base::unique_fd;
 char cur_product[FB_RESPONSE_SZ + 1];
 
 static const char* serial = nullptr;
-static const char* product = nullptr;
 static const char* cmdline = nullptr;
 static unsigned short vendor_id = 0;
 static int long_listing = 0;
@@ -108,66 +107,46 @@ struct fastboot_buffer {
 };
 
 static struct {
-    char img_name[17];
-    char sig_name[17];
-    char part_name[9];
+    const char* nickname;
+    const char* img_name;
+    const char* sig_name;
+    const char* part_name;
     bool is_optional;
     bool is_secondary;
 } images[] = {
-    {"boot.img", "boot.sig", "boot", false, false},
-    {"boot_other.img", "boot.sig", "boot", true, true},
-    {"recovery.img", "recovery.sig", "recovery", true, false},
-    {"system.img", "system.sig", "system", false, false},
-    {"system_other.img", "system.sig", "system", true, true},
-    {"vendor.img", "vendor.sig", "vendor", true, false},
-    {"vendor_other.img", "vendor.sig", "vendor", true, true},
-    {"vbmeta.img", "vbmeta.sig", "vbmeta", true, false},
-    {"dtbo.img", "dtbo.sig", "dtbo", true, false},
+    // clang-format off
+    { "boot",     "boot.img",         "boot.sig",     "boot",     false, false },
+    { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  true  },
+    { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  false },
+    { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  false },
+    { "system",   "system.img",       "system.sig",   "system",   false, false },
+    { nullptr,    "system_other.img", "system.sig",   "system",   true,  true  },
+    { "vbmeta",   "vbmeta.img",       "vbmeta.sig",   "vbmeta",   true,  false },
+    { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  false },
+    { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  true  },
+    // clang-format on
 };
 
-static std::string find_item_given_name(const char* img_name, const char* product) {
-    if(product) {
-        std::string path = android::base::GetExecutablePath();
-        path.erase(path.find_last_of('/'));
-        return android::base::StringPrintf("%s/../../../target/product/%s/%s",
-                                           path.c_str(), product, img_name);
-    }
-
-    char *dir = getenv("ANDROID_PRODUCT_OUT");
+static std::string find_item_given_name(const char* img_name) {
+    char* dir = getenv("ANDROID_PRODUCT_OUT");
     if (dir == nullptr || dir[0] == '\0') {
-        die("neither -p product specified nor ANDROID_PRODUCT_OUT set");
+        die("ANDROID_PRODUCT_OUT not set");
     }
-
     return android::base::StringPrintf("%s/%s", dir, img_name);
 }
 
-std::string find_item(const char* item, const char* product) {
-    const char *fn;
-
-    if (!strcmp(item,"boot")) {
-        fn = "boot.img";
-    } else if(!strcmp(item,"recovery")) {
-        fn = "recovery.img";
-    } else if(!strcmp(item,"system")) {
-        fn = "system.img";
-    } else if(!strcmp(item,"vendor")) {
-        fn = "vendor.img";
-    } else if(!strcmp(item,"vbmeta")) {
-        fn = "vbmeta.img";
-    } else if(!strcmp(item,"dtbo")) {
-        fn = "dtbo.img";
-    } else if(!strcmp(item,"userdata")) {
-        fn = "userdata.img";
-    } else if(!strcmp(item,"cache")) {
-        fn = "cache.img";
-    } else if(!strcmp(item,"info")) {
-        fn = "android-info.txt";
-    } else {
-        fprintf(stderr,"unknown partition '%s'\n", item);
-        return "";
+std::string find_item(const char* item) {
+    for (size_t i = 0; i < arraysize(images); ++i) {
+        if (images[i].nickname && !strcmp(images[i].nickname, item)) {
+            return find_item_given_name(images[i].img_name);
+        }
     }
 
-    return find_item_given_name(fn, product);
+    if (!strcmp(item, "userdata")) return find_item_given_name("userdata.img");
+    if (!strcmp(item, "cache")) return find_item_given_name("cache.img");
+
+    fprintf(stderr, "unknown partition '%s'\n", item);
+    return "";
 }
 
 static int64_t get_file_size(int fd) {
@@ -391,7 +370,6 @@ static void usage() {
             "                                           For ethernet, provide an address in the\n"
             "                                           form <protocol>:<hostname>[:port] where\n"
             "                                           <protocol> is either tcp or udp.\n"
-            "  -p <product>                             Specify product name.\n"
             "  -c <cmdline>                             Override kernel commandline.\n"
             "  -i <vendor id>                           Specify a custom USB vendor id.\n"
             "  -b, --base <base_addr>                   Specify a custom kernel base\n"
@@ -627,7 +605,7 @@ static void delete_fbemarker_tmpdir(const std::string& dir) {
     }
 }
 
-static int unzip_to_file(ZipArchiveHandle zip, char* entry_name) {
+static int unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
     unique_fd fd(make_temporary_fd());
     if (fd == -1) {
         fprintf(stderr, "failed to create temporary file for '%s': %s\n",
@@ -1081,9 +1059,9 @@ static void do_flash(Transport* transport, const char* pname, const char* fname)
     flash_buf(pname, &buf);
 }
 
-static void do_update_signature(ZipArchiveHandle zip, char* fn) {
+static void do_update_signature(ZipArchiveHandle zip, const char* filename) {
     int64_t sz;
-    void* data = unzip_file(zip, fn, &sz);
+    void* data = unzip_file(zip, filename, &sz);
     if (data == nullptr) return;
     fb_queue_download("signature", data, sz);
     fb_queue_command("signature", "installing signature");
@@ -1210,7 +1188,7 @@ static void do_flashall(Transport* transport, const std::string& slot_override, 
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
-    fname = find_item("info", product);
+    fname = find_item_given_name("android-info.txt");
     if (fname.empty()) die("cannot find android-info.txt");
 
     int64_t sz;
@@ -1242,7 +1220,7 @@ static void do_flashall(Transport* transport, const std::string& slot_override, 
             slot = slot_override.c_str();
         }
         if (!slot) continue;
-        fname = find_item_given_name(images[i].img_name, product);
+        fname = find_item_given_name(images[i].img_name);
         fastboot_buffer buf;
         if (!load_buf(transport, fname.c_str(), &buf)) {
             if (images[i].is_optional) continue;
@@ -1509,7 +1487,7 @@ int main(int argc, char **argv)
     serial = getenv("ANDROID_SERIAL");
 
     while (1) {
-        int c = getopt_long(argc, argv, "wub:k:n:r:t:s:S:lp:c:i:m:ha::", longopts, &longindex);
+        int c = getopt_long(argc, argv, "wub:k:n:r:t:s:S:lc:i:m:ha::", longopts, &longindex);
         if (c < 0) {
             break;
         }
@@ -1548,9 +1526,6 @@ int main(int argc, char **argv)
         case 'n':
             page_size = (unsigned)strtoul(optarg, nullptr, 0);
             if (!page_size) die("invalid page size");
-            break;
-        case 'p':
-            product = optarg;
             break;
         case 'r':
             ramdisk_offset = strtoul(optarg, 0, 16);
@@ -1764,7 +1739,7 @@ int main(int argc, char **argv)
                 fname = argv[2];
                 skip(3);
             } else {
-                fname = find_item(pname, product);
+                fname = find_item(pname);
                 skip(2);
             }
             if (fname.empty()) die("cannot determine image filename for '%s'", pname);
