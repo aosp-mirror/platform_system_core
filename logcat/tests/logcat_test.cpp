@@ -31,6 +31,7 @@
 #include <string>
 
 #include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <gtest/gtest.h>
 #include <log/event_tag_map.h>
 #include <log/log.h>
@@ -80,8 +81,13 @@ TEST(logcat, buckets) {
     logcat_define(ctx);
 
 #undef LOG_TAG
-#define LOG_TAG "inject"
-    RLOGE(logcat_executable ".buckets");
+#define LOG_TAG "inject.buckets"
+    // inject messages into radio, system, main and events buffers to
+    // ensure that we see all the begin[] bucket messages.
+    RLOGE(logcat_executable);
+    SLOGE(logcat_executable);
+    ALOGE(logcat_executable);
+    __android_log_bswrite(0, logcat_executable ".inject.buckets");
     rest();
 
     ASSERT_TRUE(NULL !=
@@ -107,32 +113,45 @@ TEST(logcat, buckets) {
 
     logcat_pclose(ctx, fp);
 
-    EXPECT_EQ(15, ids);
+    EXPECT_EQ(ids, 15);
 
-    EXPECT_EQ(4, count);
+    EXPECT_EQ(count, 4);
 }
 
 TEST(logcat, event_tag_filter) {
     FILE* fp;
     logcat_define(ctx);
 
-    ASSERT_TRUE(NULL !=
-                (fp = logcat_popen(ctx, logcat_executable
-                                   " -b events -d -s auditd "
-                                   "am_proc_start am_pss am_proc_bound "
-                                   "dvm_lock_sample am_wtf 2>/dev/null")));
+#undef LOG_TAG
+#define LOG_TAG "inject.filter"
+    // inject messages into radio, system and main buffers
+    // with our unique log tag to test logcat filter.
+    RLOGE(logcat_executable);
+    SLOGE(logcat_executable);
+    ALOGE(logcat_executable);
+    rest();
+
+    std::string command = android::base::StringPrintf(
+        logcat_executable
+        " -b radio -b system -b main --pid=%d -d -s inject.filter 2>/dev/null",
+        getpid());
+    ASSERT_TRUE(NULL != (fp = logcat_popen(ctx, command.c_str())));
 
     char buffer[BIG_BUFFER];
 
     int count = 0;
 
     while (fgets(buffer, sizeof(buffer), fp)) {
-        ++count;
+        if (strncmp(begin, buffer, sizeof(begin) - 1)) ++count;
     }
 
     logcat_pclose(ctx, fp);
 
-    EXPECT_LT(4, count);
+    // logcat, liblogcat and logcatd test instances result in the progression
+    // of 3, 6 and 9 for our counts as each round is performed.
+    EXPECT_GE(count, 3);
+    EXPECT_LE(count, 9);
+    EXPECT_EQ(count % 3, 0);
 }
 
 // If there is not enough background noise in the logs, then spam the logs to
@@ -376,7 +395,7 @@ static void do_tail_time(const char* cmd) {
 
     } while ((count < 10) && --tries && inject(10 - count));
 
-    EXPECT_EQ(10, count);  // We want _some_ history, too small, falses below
+    EXPECT_EQ(count, 10);  // We want _some_ history, too small, falses below
     EXPECT_TRUE(last_timestamp != NULL);
     EXPECT_TRUE(first_timestamp != NULL);
     EXPECT_TRUE(second_timestamp != NULL);
@@ -701,9 +720,9 @@ TEST(logcat, blocking) {
 
     pclose(fp);
 
-    EXPECT_LE(2, count);
+    EXPECT_GE(count, 2);
 
-    EXPECT_EQ(1, signals);
+    EXPECT_EQ(signals, 1);
 }
 
 static void caught_blocking_tail(int signum) {
@@ -771,9 +790,9 @@ TEST(logcat, blocking_tail) {
 
     pclose(fp);
 
-    EXPECT_LE(2, count);
+    EXPECT_GE(count, 2);
 
-    EXPECT_EQ(1, signals);
+    EXPECT_EQ(signals, 1);
 }
 #endif
 
@@ -881,7 +900,7 @@ TEST(logcat, logrotate_suffix) {
             ADD_FAILURE();
         }
         pclose(fp);
-        EXPECT_EQ(11, log_file_count);
+        EXPECT_EQ(log_file_count, 11);
     }
     snprintf(command, sizeof(command), "rm -rf %s", tmp_out_dir);
     EXPECT_FALSE(IsFalse(system(command), command));
@@ -1134,17 +1153,17 @@ TEST(logcat, logrotate_id) {
     char tmp_out_dir[strlen(tmp_out_dir_form) + 1];
     ASSERT_TRUE(NULL != mkdtemp(strcpy(tmp_out_dir, tmp_out_dir_form)));
 
-    EXPECT_EQ(34, logrotate_count_id(logcat_cmd, tmp_out_dir));
-    EXPECT_EQ(34, logrotate_count_id(logcat_short_cmd, tmp_out_dir));
+    EXPECT_EQ(logrotate_count_id(logcat_cmd, tmp_out_dir), 34);
+    EXPECT_EQ(logrotate_count_id(logcat_short_cmd, tmp_out_dir), 34);
 
     char id_file[strlen(tmp_out_dir_form) + strlen(log_filename) + 5];
     snprintf(id_file, sizeof(id_file), "%s/%s.id", tmp_out_dir, log_filename);
     if (getuid() != 0) {
         chmod(id_file, 0);
-        EXPECT_EQ(34, logrotate_count_id(logcat_short_cmd, tmp_out_dir));
+        EXPECT_EQ(logrotate_count_id(logcat_short_cmd, tmp_out_dir), 34);
     }
     unlink(id_file);
-    EXPECT_EQ(34, logrotate_count_id(logcat_short_cmd, tmp_out_dir));
+    EXPECT_EQ(logrotate_count_id(logcat_short_cmd, tmp_out_dir), 34);
 
     FILE* fp = fopen(id_file, "w");
     if (fp) {
@@ -1159,9 +1178,9 @@ TEST(logcat, logrotate_id) {
     }
 
     int new_signature;
-    EXPECT_LE(
-        2, (new_signature = logrotate_count_id(logcat_short_cmd, tmp_out_dir)));
-    EXPECT_GT(34, new_signature);
+    EXPECT_GE(
+        (new_signature = logrotate_count_id(logcat_short_cmd, tmp_out_dir)), 2);
+    EXPECT_LT(new_signature, 34);
 
     static const char cleanup_cmd[] = "rm -rf %s";
     char command[strlen(cleanup_cmd) + strlen(tmp_out_dir_form)];
@@ -1302,10 +1321,10 @@ TEST(logcat, blocking_clear) {
 
     pclose(fp);
 
-    EXPECT_LE(1, count);
-    EXPECT_EQ(1, minus_g);
+    EXPECT_GE(count, 1);
+    EXPECT_EQ(minus_g, 1);
 
-    EXPECT_EQ(1, signals);
+    EXPECT_EQ(signals, 1);
 }
 #endif
 
@@ -1560,7 +1579,7 @@ TEST(logcat, descriptive) {
         ctx << theAnswer;
         // crafted to rest at least once after, and rest between retries.
         for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-        EXPECT_LE(0, ret);
+        EXPECT_GE(ret, 0);
         EXPECT_TRUE(
             End_to_End(hhgtg.tagStr, "to life the universe etc=%s", theAnswer));
     }
@@ -1572,7 +1591,7 @@ TEST(logcat, descriptive) {
             android_log_event_list ctx(sync.tagNo);
             ctx << id << (int32_t)42 << (int32_t)-1 << (int32_t)0;
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(End_to_End(sync.tagStr,
                                    "[id=%s,event=42,source=-1,account=0]", id));
         }
@@ -1582,7 +1601,7 @@ TEST(logcat, descriptive) {
             android_log_event_list ctx(sync.tagNo);
             ctx << id << (int32_t)43 << (int64_t)-1 << (int32_t)0;
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(End_to_End(sync.tagStr, "[id=%s,event=43,-1,0]", id));
         }
 
@@ -1591,7 +1610,7 @@ TEST(logcat, descriptive) {
             android_log_event_list ctx(sync.tagNo);
             ctx << id << (int32_t)44 << (int32_t)-1 << (int64_t)0;
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             fprintf(stderr, "Expect a \"Closest match\" message\n");
             EXPECT_FALSE(End_to_End(
                 sync.tagStr, "[id=%s,event=44,source=-1,account=0]", id));
@@ -1604,7 +1623,7 @@ TEST(logcat, descriptive) {
             android_log_event_list ctx(sync.tagNo);
             ctx << (uint64_t)30 << (int32_t)2;
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(
                 End_to_End(sync.tagStr, "[aggregation time=30ms,count=2]"));
         }
@@ -1613,7 +1632,7 @@ TEST(logcat, descriptive) {
             android_log_event_list ctx(sync.tagNo);
             ctx << (uint64_t)31570 << (int32_t)911;
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(
                 End_to_End(sync.tagStr, "[aggregation time=31.57s,count=911]"));
         }
@@ -1625,7 +1644,7 @@ TEST(logcat, descriptive) {
             android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)512;
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(End_to_End(sync.tagStr, "current=512B"));
         }
 
@@ -1633,7 +1652,7 @@ TEST(logcat, descriptive) {
             android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)3072;
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(End_to_End(sync.tagStr, "current=3KB"));
         }
 
@@ -1641,7 +1660,7 @@ TEST(logcat, descriptive) {
             android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)2097152;
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(End_to_End(sync.tagStr, "current=2MB"));
         }
 
@@ -1649,7 +1668,7 @@ TEST(logcat, descriptive) {
             android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)2097153;
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(End_to_End(sync.tagStr, "current=2097153B"));
         }
 
@@ -1657,7 +1676,7 @@ TEST(logcat, descriptive) {
             android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)1073741824;
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(End_to_End(sync.tagStr, "current=1GB"));
         }
 
@@ -1665,7 +1684,7 @@ TEST(logcat, descriptive) {
             android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)3221225472;  // 3MB, but on purpose overflowed
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(End_to_End(sync.tagStr, "current=-1GB"));
         }
     }
@@ -1674,7 +1693,7 @@ TEST(logcat, descriptive) {
         static const struct tag sync = { 27501, "notification_panel_hidden" };
         android_log_event_list ctx(sync.tagNo);
         for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-        EXPECT_LE(0, ret);
+        EXPECT_GE(ret, 0);
         EXPECT_TRUE(End_to_End(sync.tagStr, ""));
     }
 
@@ -1694,28 +1713,28 @@ TEST(logcat, descriptive) {
             android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)7;
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(End_to_End(sync.tagStr, "new=7s"));
         }
         {
             android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)62;
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(End_to_End(sync.tagStr, "new=1:02"));
         }
         {
             android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)3673;
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(End_to_End(sync.tagStr, "new=1:01:13"));
         }
         {
             android_log_event_list ctx(sync.tagNo);
             ctx << (uint32_t)(86400 + 7200 + 180 + 58);
             for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_LE(0, ret);
+            EXPECT_GE(ret, 0);
             EXPECT_TRUE(End_to_End(sync.tagStr, "new=1d 2:03:58"));
         }
     }
@@ -1756,7 +1775,7 @@ static size_t commandOutputSize(const char* command) {
 
 TEST(logcat, help) {
     size_t logcatHelpTextSize = commandOutputSize(logcat_executable " -h 2>&1");
-    EXPECT_LT(4096UL, logcatHelpTextSize);
+    EXPECT_GT(logcatHelpTextSize, 4096UL);
     size_t logcatLastHelpTextSize =
         commandOutputSize(logcat_executable " -L -h 2>&1");
 #ifdef USING_LOGCAT_EXECUTABLE_DEFAULT  // logcat and liblogcat
