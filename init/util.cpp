@@ -151,12 +151,14 @@ out_unlink:
     return -1;
 }
 
-bool read_file(const std::string& path, std::string* content) {
+bool ReadFile(const std::string& path, std::string* content, std::string* err) {
     content->clear();
+    *err = "";
 
     android::base::unique_fd fd(
         TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (fd == -1) {
+        *err = "Unable to open '" + path + "': " + strerror(errno);
         return false;
     }
 
@@ -164,29 +166,35 @@ bool read_file(const std::string& path, std::string* content) {
     // or group-writable files.
     struct stat sb;
     if (fstat(fd, &sb) == -1) {
-        PLOG(ERROR) << "fstat failed for '" << path << "'";
+        *err = "fstat failed for '" + path + "': " + strerror(errno);
         return false;
     }
     if ((sb.st_mode & (S_IWGRP | S_IWOTH)) != 0) {
-        LOG(ERROR) << "skipping insecure file '" << path << "'";
+        *err = "Skipping insecure file '" + path + "'";
         return false;
     }
 
-    return android::base::ReadFdToString(fd, content);
+    if (!android::base::ReadFdToString(fd, content)) {
+        *err = "Unable to read '" + path + "': " + strerror(errno);
+        return false;
+    }
+    return true;
 }
 
-bool write_file(const std::string& path, const std::string& content) {
+bool WriteFile(const std::string& path, const std::string& content, std::string* err) {
+    *err = "";
+
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(
         open(path.c_str(), O_WRONLY | O_CREAT | O_NOFOLLOW | O_TRUNC | O_CLOEXEC, 0600)));
     if (fd == -1) {
-        PLOG(ERROR) << "write_file: Unable to open '" << path << "'";
+        *err = "Unable to open '" + path + "': " + strerror(errno);
         return false;
     }
-    bool success = android::base::WriteStringToFd(content, fd);
-    if (!success) {
-        PLOG(ERROR) << "write_file: Unable to write to '" << path << "'";
+    if (!android::base::WriteStringToFd(content, fd)) {
+        *err = "Unable to write to '" + path + "': " + strerror(errno);
+        return false;
     }
-    return success;
+    return true;
 }
 
 int mkdir_recursive(const std::string& path, mode_t mode, selabel_handle* sehandle) {

@@ -150,7 +150,12 @@ static int do_class_restart(const std::vector<std::string>& args) {
 }
 
 static int do_domainname(const std::vector<std::string>& args) {
-    return write_file("/proc/sys/kernel/domainname", args[1]) ? 0 : 1;
+    std::string err;
+    if (!WriteFile("/proc/sys/kernel/domainname", args[1], &err)) {
+        LOG(ERROR) << err;
+        return -1;
+    }
+    return 0;
 }
 
 static int do_enable(const std::vector<std::string>& args) {
@@ -174,7 +179,12 @@ static int do_export(const std::vector<std::string>& args) {
 }
 
 static int do_hostname(const std::vector<std::string>& args) {
-    return write_file("/proc/sys/kernel/hostname", args[1]) ? 0 : 1;
+    std::string err;
+    if (!WriteFile("/proc/sys/kernel/hostname", args[1], &err)) {
+        LOG(ERROR) << err;
+        return -1;
+    }
+    return 0;
 }
 
 static int do_ifup(const std::vector<std::string>& args) {
@@ -651,15 +661,26 @@ static int do_verity_update_state(const std::vector<std::string>& args) {
 }
 
 static int do_write(const std::vector<std::string>& args) {
-    return write_file(args[1], args[2]) ? 0 : 1;
+    std::string err;
+    if (!WriteFile(args[1], args[2], &err)) {
+        LOG(ERROR) << err;
+        return -1;
+    }
+    return 0;
 }
 
 static int do_copy(const std::vector<std::string>& args) {
     std::string data;
-    if (read_file(args[1], &data)) {
-        return write_file(args[2], data) ? 0 : 1;
+    std::string err;
+    if (!ReadFile(args[1], &data, &err)) {
+        LOG(ERROR) << err;
+        return -1;
     }
-    return 1;
+    if (!WriteFile(args[2], data, &err)) {
+        LOG(ERROR) << err;
+        return -1;
+    }
+    return 0;
 }
 
 static int do_chown(const std::vector<std::string>& args) {
