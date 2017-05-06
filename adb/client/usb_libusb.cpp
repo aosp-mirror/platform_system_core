@@ -159,6 +159,7 @@ static std::string get_device_address(libusb_device* device) {
                         libusb_get_device_address(device));
 }
 
+#if defined(__linux__)
 static std::string get_device_serial_path(libusb_device* device) {
     uint8_t ports[7];
     int port_count = libusb_get_port_numbers(device, ports, 7);
@@ -172,6 +173,7 @@ static std::string get_device_serial_path(libusb_device* device) {
     path += "/serial";
     return path;
 }
+#endif
 
 static bool endpoint_is_output(uint8_t endpoint) {
     return (endpoint & LIBUSB_ENDPOINT_DIR_MASK) == LIBUSB_ENDPOINT_OUT;
