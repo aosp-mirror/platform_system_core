@@ -8,14 +8,12 @@ LOCAL_PATH:= $(call my-dir)
 adb_host_sanitize :=
 adb_target_sanitize :=
 
-adb_version := $(shell git -C $(LOCAL_PATH) rev-parse --short=12 HEAD 2>/dev/null)-android
-
 ADB_COMMON_CFLAGS := \
     -Wall -Wextra -Werror \
     -Wno-unused-parameter \
     -Wno-missing-field-initializers \
     -Wvla \
-    -DADB_REVISION='"$(adb_version)"' \
+    -DADB_REVISION=\"$(BUILD_NUMBER_FROM_FILE)\" \
 
 ADB_COMMON_posix_CFLAGS := \
     -Wexit-time-destructors \
