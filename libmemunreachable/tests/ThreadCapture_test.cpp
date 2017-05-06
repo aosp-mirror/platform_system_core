@@ -55,7 +55,7 @@ class ThreadListTest : public ::testing::TestWithParam<int> {
     threads_.reserve(threads);
     tids_.reserve(threads);
     for (unsigned int i = 0; i < threads; i++) {
-      threads_.emplace_back([&, i, threads, this]() {
+      threads_.emplace_back([&, threads, this]() {
         {
           std::lock_guard<std::mutex> lk(m_);
           tids_.push_back(gettid());
