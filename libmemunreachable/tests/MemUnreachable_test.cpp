@@ -23,8 +23,6 @@
 
 #include <memunreachable/memunreachable.h>
 
-void* ptr;
-
 class HiddenPointer {
  public:
   explicit HiddenPointer(size_t size = 256) {
@@ -92,10 +90,12 @@ TEST(MemunreachableTest, stack) {
   }
 }
 
+void* g_ptr;
+
 TEST(MemunreachableTest, global) {
   HiddenPointer hidden_ptr;
 
-  ptr = hidden_ptr.Get();
+  g_ptr = hidden_ptr.Get();
 
   {
     UnreachableMemoryInfo info;
@@ -104,7 +104,7 @@ TEST(MemunreachableTest, global) {
     ASSERT_EQ(0U, info.leaks.size());
   }
 
-  ptr = NULL;
+  g_ptr = nullptr;
 
   {
     UnreachableMemoryInfo info;
@@ -126,7 +126,7 @@ TEST(MemunreachableTest, global) {
 TEST(MemunreachableTest, tls) {
   HiddenPointer hidden_ptr;
   pthread_key_t key;
-  pthread_key_create(&key, NULL);
+  pthread_key_create(&key, nullptr);
 
   pthread_setspecific(key, hidden_ptr.Get());
 
