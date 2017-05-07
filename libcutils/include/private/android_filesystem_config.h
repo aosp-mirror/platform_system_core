@@ -53,7 +53,7 @@
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
-#if defined(__ANDROID__)
+#if defined(__BIONIC__)
 #include <linux/capability.h>
 #else
 #include "android_filesystem_capability.h"
