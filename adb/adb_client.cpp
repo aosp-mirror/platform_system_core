@@ -28,12 +28,15 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <condition_variable>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/thread_annotations.h>
 #include <cutils/sockets.h>
 
 #include "adb_io.h"
@@ -177,9 +180,8 @@ int adb_connect(const std::string& service, std::string* error) {
         } else {
             fprintf(stderr, "* daemon started successfully\n");
         }
-        // Give the server some time to start properly and detect devices.
-        std::this_thread::sleep_for(3s);
-        // fall through to _adb_connect
+        // The server will wait until it detects all of its connected devices before acking.
+        // Fall through to _adb_connect.
     } else {
         // If a server is already running, check its version matches.
         int version = ADB_SERVER_VERSION - 1;

@@ -26,7 +26,7 @@ class ScopedPipe {
   ScopedPipe() : pipefd_{-1, -1} {
     int ret = pipe2(pipefd_, O_CLOEXEC);
     if (ret < 0) {
-      LOG_ALWAYS_FATAL("failed to open pipe");
+      MEM_LOG_ALWAYS_FATAL("failed to open pipe");
     }
   }
   ~ScopedPipe() {

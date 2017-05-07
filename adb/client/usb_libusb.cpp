@@ -159,6 +159,22 @@ static std::string get_device_address(libusb_device* device) {
                         libusb_get_device_address(device));
 }
 
+#if defined(__linux__)
+static std::string get_device_serial_path(libusb_device* device) {
+    uint8_t ports[7];
+    int port_count = libusb_get_port_numbers(device, ports, 7);
+    if (port_count < 0) return "";
+
+    std::string path =
+        StringPrintf("/sys/bus/usb/devices/%d-%d", libusb_get_bus_number(device), ports[0]);
+    for (int port = 1; port < port_count; ++port) {
+        path += StringPrintf(".%d", ports[port]);
+    }
+    path += "/serial";
+    return path;
+}
+#endif
+
 static bool endpoint_is_output(uint8_t endpoint) {
     return (endpoint & LIBUSB_ENDPOINT_DIR_MASK) == LIBUSB_ENDPOINT_OUT;
 }
@@ -291,49 +307,67 @@ static void poll_for_devices() {
                 }
             }
 
-            libusb_device_handle* handle_raw;
+            bool writable = true;
+            libusb_device_handle* handle_raw = nullptr;
             rc = libusb_open(device, &handle_raw);
-            if (rc != 0) {
-                LOG(WARNING) << "failed to open usb device at " << device_address << ": "
-                             << libusb_error_name(rc);
-                continue;
-            }
-
             unique_device_handle handle(handle_raw);
-            LOG(DEBUG) << "successfully opened adb device at " << device_address << ", "
-                       << StringPrintf("bulk_in = %#x, bulk_out = %#x", bulk_in, bulk_out);
-
-            device_serial.resize(255);
-            rc = libusb_get_string_descriptor_ascii(
-                handle_raw, device_desc.iSerialNumber,
-                reinterpret_cast<unsigned char*>(&device_serial[0]), device_serial.length());
             if (rc == 0) {
-                LOG(WARNING) << "received empty serial from device at " << device_address;
-                continue;
-            } else if (rc < 0) {
-                LOG(WARNING) << "failed to get serial from device at " << device_address
-                             << libusb_error_name(rc);
-                continue;
-            }
-            device_serial.resize(rc);
+                LOG(DEBUG) << "successfully opened adb device at " << device_address << ", "
+                           << StringPrintf("bulk_in = %#x, bulk_out = %#x", bulk_in, bulk_out);
 
-            // WARNING: this isn't released via RAII.
-            rc = libusb_claim_interface(handle.get(), interface_num);
-            if (rc != 0) {
-                LOG(WARNING) << "failed to claim adb interface for device '" << device_serial << "'"
-                             << libusb_error_name(rc);
-                continue;
-            }
-
-            for (uint8_t endpoint : {bulk_in, bulk_out}) {
-                rc = libusb_clear_halt(handle.get(), endpoint);
-                if (rc != 0) {
-                    LOG(WARNING) << "failed to clear halt on device '" << device_serial
-                                 << "' endpoint 0x" << std::hex << endpoint << ": "
+                device_serial.resize(255);
+                rc = libusb_get_string_descriptor_ascii(
+                    handle_raw, device_desc.iSerialNumber,
+                    reinterpret_cast<unsigned char*>(&device_serial[0]), device_serial.length());
+                if (rc == 0) {
+                    LOG(WARNING) << "received empty serial from device at " << device_address;
+                    continue;
+                } else if (rc < 0) {
+                    LOG(WARNING) << "failed to get serial from device at " << device_address
                                  << libusb_error_name(rc);
-                    libusb_release_interface(handle.get(), interface_num);
                     continue;
                 }
+                device_serial.resize(rc);
+
+                // WARNING: this isn't released via RAII.
+                rc = libusb_claim_interface(handle.get(), interface_num);
+                if (rc != 0) {
+                    LOG(WARNING) << "failed to claim adb interface for device '" << device_serial
+                                 << "'" << libusb_error_name(rc);
+                    continue;
+                }
+
+                for (uint8_t endpoint : {bulk_in, bulk_out}) {
+                    rc = libusb_clear_halt(handle.get(), endpoint);
+                    if (rc != 0) {
+                        LOG(WARNING) << "failed to clear halt on device '" << device_serial
+                                     << "' endpoint 0x" << std::hex << endpoint << ": "
+                                     << libusb_error_name(rc);
+                        libusb_release_interface(handle.get(), interface_num);
+                        continue;
+                    }
+                }
+            } else {
+                LOG(WARNING) << "failed to open usb device at " << device_address << ": "
+                             << libusb_error_name(rc);
+                writable = false;
+
+#if defined(__linux__)
+                // libusb doesn't think we should be messing around with devices we don't have
+                // write access to, but Linux at least lets us get the serial number anyway.
+                if (!android::base::ReadFileToString(get_device_serial_path(device),
+                                                     &device_serial)) {
+                    // We don't actually want to treat an unknown serial as an error because
+                    // devices aren't able to communicate a serial number in early bringup.
+                    // http://b/20883914
+                    device_serial = "unknown";
+                }
+                device_serial = android::base::Trim(device_serial);
+#else
+                // On Mac OS and Windows, we're screwed. But I don't think this situation actually
+                // happens on those OSes.
+                continue;
+#endif
             }
 
             auto result = std::make_unique<usb_handle>(device_address, device_serial,
@@ -346,11 +380,14 @@ static void poll_for_devices() {
                 usb_handles[device_address] = std::move(result);
             }
 
-            register_usb_transport(usb_handle_raw, device_serial.c_str(), device_address.c_str(), 1);
+            register_usb_transport(usb_handle_raw, device_serial.c_str(), device_address.c_str(),
+                                   writable);
 
             LOG(INFO) << "registered new usb device '" << device_serial << "'";
         }
         libusb_free_device_list(list, 1);
+
+        adb_notify_device_scan_complete();
 
         std::this_thread::sleep_for(500ms);
     }
