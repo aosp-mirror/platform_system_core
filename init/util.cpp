@@ -78,13 +78,13 @@ bool DecodeUid(const std::string& name, uid_t* uid, std::string* err) {
 }
 
 /*
- * create_socket - creates a Unix domain socket in ANDROID_SOCKET_DIR
+ * CreateSocket - creates a Unix domain socket in ANDROID_SOCKET_DIR
  * ("/dev/socket") as dictated in init.rc. This socket is inherited by the
  * daemon. We communicate the file descriptor's value via the environment
  * variable ANDROID_SOCKET_ENV_PREFIX<name> ("ANDROID_SOCKET_foo").
  */
-int create_socket(const char* name, int type, mode_t perm, uid_t uid, gid_t gid,
-                  const char* socketcon, selabel_handle* sehandle) {
+int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t uid, gid_t gid,
+                 const char* socketcon, selabel_handle* sehandle) {
     if (socketcon) {
         if (setsockcreatecon(socketcon) == -1) {
             PLOG(ERROR) << "setsockcreatecon(\"" << socketcon << "\") failed";
@@ -115,6 +115,14 @@ int create_socket(const char* name, int type, mode_t perm, uid_t uid, gid_t gid,
     if (sehandle) {
         if (selabel_lookup(sehandle, &filecon, addr.sun_path, S_IFSOCK) == 0) {
             setfscreatecon(filecon);
+        }
+    }
+
+    if (passcred) {
+        int on = 1;
+        if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &on, sizeof(on))) {
+            PLOG(ERROR) << "Failed to set SO_PASSCRED '" << name << "'";
+            return -1;
         }
     }
 
