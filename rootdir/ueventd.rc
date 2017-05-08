@@ -68,7 +68,7 @@ subsystem sound
 /dev/diag                 0660   radio      radio
 /dev/diag_arm9            0660   radio      radio
 /dev/ttyMSM0              0600   bluetooth  bluetooth
-/dev/uhid                 0660   system     bluetooth
+/dev/uhid                 0660   uhid       uhid
 /dev/uinput               0660   system     bluetooth
 /dev/alarm                0664   system     radio
 /dev/rtc0                 0640   system     system
