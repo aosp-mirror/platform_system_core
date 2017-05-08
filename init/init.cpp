@@ -871,7 +871,9 @@ static void selinux_initialize(bool in_kernel_domain) {
             }
         }
 
-        if (!write_file("/sys/fs/selinux/checkreqprot", "0")) {
+        std::string err;
+        if (!WriteFile("/sys/fs/selinux/checkreqprot", "0", &err)) {
+            LOG(ERROR) << err;
             security_failure();
         }
 
