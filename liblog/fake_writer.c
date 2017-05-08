@@ -55,9 +55,9 @@ static int fakeOpen() {
       continue;
     }
     snprintf(buf, sizeof(buf), "/dev/log_%s", android_log_id_to_name(i));
-    logFds[i] = fakeLogOpen(buf, O_WRONLY);
+    logFds[i] = fakeLogOpen(buf);
     if (logFds[i] < 0) {
-      fprintf(stderr, "fakeLogOpen(%s, O_WRONLY) failed\n", buf);
+      fprintf(stderr, "fakeLogOpen(%s) failed\n", buf);
     }
   }
   return 0;
