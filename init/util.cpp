@@ -48,39 +48,33 @@
 #endif
 
 using android::base::boot_clock;
+using namespace std::literals::string_literals;
 
-static unsigned int do_decode_uid(const char *s)
-{
-    unsigned int v;
+// DecodeUid() - decodes and returns the given string, which can be either the
+// numeric or name representation, into the integer uid or gid. Returns
+// UINT_MAX on error.
+bool DecodeUid(const std::string& name, uid_t* uid, std::string* err) {
+    *uid = UINT_MAX;
+    *err = "";
 
-    if (!s || *s == '\0')
-        return UINT_MAX;
-
-    if (isalpha(s[0])) {
-        struct passwd* pwd = getpwnam(s);
-        if (!pwd)
-            return UINT_MAX;
-        return pwd->pw_uid;
+    if (isalpha(name[0])) {
+        passwd* pwd = getpwnam(name.c_str());
+        if (!pwd) {
+            *err = "getpwnam failed: "s + strerror(errno);
+            return false;
+        }
+        *uid = pwd->pw_uid;
+        return true;
     }
 
     errno = 0;
-    v = (unsigned int) strtoul(s, 0, 0);
-    if (errno)
-        return UINT_MAX;
-    return v;
-}
-
-/*
- * decode_uid - decodes and returns the given string, which can be either the
- * numeric or name representation, into the integer uid or gid. Returns
- * UINT_MAX on error.
- */
-unsigned int decode_uid(const char *s) {
-    unsigned int v = do_decode_uid(s);
-    if (v == UINT_MAX) {
-        LOG(ERROR) << "decode_uid: Unable to find UID for '" << s << "'; returning UINT_MAX";
+    uid_t result = static_cast<uid_t>(strtoul(name.c_str(), 0, 0));
+    if (errno) {
+        *err = "strtoul failed: "s + strerror(errno);
+        return false;
     }
-    return v;
+    *uid = result;
+    return true;
 }
 
 /*
@@ -157,12 +151,14 @@ out_unlink:
     return -1;
 }
 
-bool read_file(const std::string& path, std::string* content) {
+bool ReadFile(const std::string& path, std::string* content, std::string* err) {
     content->clear();
+    *err = "";
 
     android::base::unique_fd fd(
         TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (fd == -1) {
+        *err = "Unable to open '" + path + "': " + strerror(errno);
         return false;
     }
 
@@ -170,29 +166,35 @@ bool read_file(const std::string& path, std::string* content) {
     // or group-writable files.
     struct stat sb;
     if (fstat(fd, &sb) == -1) {
-        PLOG(ERROR) << "fstat failed for '" << path << "'";
+        *err = "fstat failed for '" + path + "': " + strerror(errno);
         return false;
     }
     if ((sb.st_mode & (S_IWGRP | S_IWOTH)) != 0) {
-        LOG(ERROR) << "skipping insecure file '" << path << "'";
+        *err = "Skipping insecure file '" + path + "'";
         return false;
     }
 
-    return android::base::ReadFdToString(fd, content);
+    if (!android::base::ReadFdToString(fd, content)) {
+        *err = "Unable to read '" + path + "': " + strerror(errno);
+        return false;
+    }
+    return true;
 }
 
-bool write_file(const std::string& path, const std::string& content) {
+bool WriteFile(const std::string& path, const std::string& content, std::string* err) {
+    *err = "";
+
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(
         open(path.c_str(), O_WRONLY | O_CREAT | O_NOFOLLOW | O_TRUNC | O_CLOEXEC, 0600)));
     if (fd == -1) {
-        PLOG(ERROR) << "write_file: Unable to open '" << path << "'";
+        *err = "Unable to open '" + path + "': " + strerror(errno);
         return false;
     }
-    bool success = android::base::WriteStringToFd(content, fd);
-    if (!success) {
-        PLOG(ERROR) << "write_file: Unable to write to '" << path << "'";
+    if (!android::base::WriteStringToFd(content, fd)) {
+        *err = "Unable to write to '" + path + "': " + strerror(errno);
+        return false;
     }
-    return success;
+    return true;
 }
 
 int mkdir_recursive(const std::string& path, mode_t mode, selabel_handle* sehandle) {

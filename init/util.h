@@ -38,8 +38,8 @@ using namespace std::chrono_literals;
 int create_socket(const char* name, int type, mode_t perm, uid_t uid, gid_t gid,
                   const char* socketcon, selabel_handle* sehandle);
 
-bool read_file(const std::string& path, std::string* content);
-bool write_file(const std::string& path, const std::string& content);
+bool ReadFile(const std::string& path, std::string* content, std::string* err);
+bool WriteFile(const std::string& path, const std::string& content, std::string* err);
 
 class Timer {
   public:
@@ -61,7 +61,7 @@ class Timer {
 
 std::ostream& operator<<(std::ostream& os, const Timer& t);
 
-unsigned int decode_uid(const char *s);
+bool DecodeUid(const std::string& name, uid_t* uid, std::string* err);
 
 int mkdir_recursive(const std::string& pathname, mode_t mode, selabel_handle* sehandle);
 int wait_for_file(const char *filename, std::chrono::nanoseconds timeout);
