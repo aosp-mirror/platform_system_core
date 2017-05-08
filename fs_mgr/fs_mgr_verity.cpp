@@ -663,7 +663,7 @@ int load_verity_state(struct fstab_rec* fstab, int* mode) {
     /* use the kernel parameter if set */
     std::string veritymode;
     if (fs_mgr_get_boot_config("veritymode", &veritymode)) {
-        if (veritymode.compare("enforcing")) {
+        if (veritymode == "enforcing") {
             *mode = VERITY_MODE_DEFAULT;
         }
         return 0;
