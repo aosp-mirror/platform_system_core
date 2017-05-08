@@ -61,6 +61,16 @@
 
 #define CRASH_DUMP_PATH "/system/bin/" CRASH_DUMP_NAME
 
+// Wrappers that directly invoke the respective syscalls, in case the cached values are invalid.
+#pragma GCC poison getpid gettid
+static pid_t __getpid() {
+  return syscall(__NR_getpid);
+}
+
+static pid_t __gettid() {
+  return syscall(__NR_gettid);
+}
+
 static inline void futex_wait(volatile void* ftx, int value) {
   syscall(__NR_futex, ftx, FUTEX_WAIT, value, nullptr, nullptr, 0);
 }
@@ -124,7 +134,7 @@ static void log_signal_summary(int signum, const siginfo_t* info) {
   }
 
   if (signum == DEBUGGER_SIGNAL) {
-    async_safe_format_log(ANDROID_LOG_INFO, "libc", "Requested dump for tid %d (%s)", gettid(),
+    async_safe_format_log(ANDROID_LOG_INFO, "libc", "Requested dump for tid %d (%s)", __gettid(),
                           thread_name);
     return;
   }
@@ -177,7 +187,7 @@ static void log_signal_summary(int signum, const siginfo_t* info) {
   }
 
   async_safe_format_log(ANDROID_LOG_FATAL, "libc", "Fatal signal %d (%s)%s%s in tid %d (%s)",
-                        signum, signal_name, code_desc, addr_desc, gettid(), thread_name);
+                        signum, signal_name, code_desc, addr_desc, __gettid(), thread_name);
 }
 
 /*
@@ -337,7 +347,7 @@ static void resend_signal(siginfo_t* info, bool crash_dump_started) {
   // rt_tgsigqueueinfo(2) to preserve SA_SIGINFO) will cause it to be delivered
   // when our signal handler returns.
   if (crash_dump_started || info->si_signo != DEBUGGER_SIGNAL) {
-    int rc = syscall(SYS_rt_tgsigqueueinfo, getpid(), gettid(), info->si_signo, info);
+    int rc = syscall(SYS_rt_tgsigqueueinfo, __getpid(), __gettid(), info->si_signo, info);
     if (rc != 0) {
       fatal_errno("failed to resend signal during crash");
     }
@@ -362,7 +372,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     memset(&si, 0, sizeof(si));
     si.si_signo = signal_number;
     si.si_code = SI_USER;
-    si.si_pid = getpid();
+    si.si_pid = __getpid();
     si.si_uid = getuid();
     info = &si;
   } else if (info->si_code >= 0 || info->si_code == SI_TKILL) {
@@ -404,7 +414,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   debugger_thread_info thread_info = {
     .crash_dump_started = false,
     .pseudothread_tid = -1,
-    .crashing_tid = gettid(),
+    .crashing_tid = __gettid(),
     .signal_number = signal_number,
     .info = info
   };
