@@ -510,8 +510,9 @@ static void load_properties(char *data, const char *filter)
 static void load_properties_from_file(const char* filename, const char* filter) {
     Timer t;
     std::string data;
-    if (!read_file(filename, &data)) {
-        PLOG(WARNING) << "Couldn't load properties from " << filename;
+    std::string err;
+    if (!ReadFile(filename, &data, &err)) {
+        PLOG(WARNING) << "Couldn't load property file: " << err;
         return;
     }
     data.push_back('\n');
