@@ -35,8 +35,8 @@ const std::string kAndroidDtDir("/proc/device-tree/firmware/android/");
 using android::base::boot_clock;
 using namespace std::chrono_literals;
 
-int create_socket(const char* name, int type, mode_t perm, uid_t uid, gid_t gid,
-                  const char* socketcon, selabel_handle* sehandle);
+int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t uid, gid_t gid,
+                 const char* socketcon, selabel_handle* sehandle);
 
 bool ReadFile(const std::string& path, std::string* content, std::string* err);
 bool WriteFile(const std::string& path, const std::string& content, std::string* err);
