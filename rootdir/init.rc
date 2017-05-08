@@ -422,6 +422,7 @@ on post-fs-data
     # For security reasons, /data/local/tmp should always be empty.
     # Do not place files or directories in /data/local/tmp
     mkdir /data/local/tmp 0771 shell shell
+    mkdir /data/data 0771 system system
     mkdir /data/app-private 0771 system system
     mkdir /data/app-ephemeral 0771 system system
     mkdir /data/app-asec 0700 root root
@@ -474,8 +475,7 @@ on post-fs-data
 
     mkdir /data/user 0711 system system
     mkdir /data/user_de 0711 system system
-    mkdir /data/user/0 0711 system system
-    symlink /data/user/0 /data/data
+    symlink /data/data /data/user/0
 
     mkdir /data/media 0770 media_rw media_rw
     mkdir /data/media/obb 0770 media_rw media_rw
