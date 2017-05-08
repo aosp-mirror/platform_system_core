@@ -754,6 +754,8 @@ void engrave_tombstone_ucontext(int tombstone_fd, uintptr_t abort_msg_address, s
   read_with_default("/proc/self/comm", thread_name, sizeof(thread_name), "<unknown>");
   read_with_default("/proc/self/cmdline", process_name, sizeof(process_name), "<unknown>");
 
+  _LOG(&log, logtype::HEADER, "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
+  dump_header_info(&log);
   dump_thread_info(&log, pid, tid, thread_name, process_name);
   dump_signal_info(&log, siginfo);
 
