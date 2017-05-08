@@ -525,7 +525,9 @@ bool Service::AddDescriptor(const std::vector<std::string>& args, std::string* e
 
 // name type perm [ uid gid context ]
 bool Service::ParseSocket(const std::vector<std::string>& args, std::string* err) {
-    if (args[2] != "dgram" && args[2] != "stream" && args[2] != "seqpacket") {
+    if (!android::base::StartsWith(args[2], "dgram") &&
+        !android::base::StartsWith(args[2], "stream") &&
+        !android::base::StartsWith(args[2], "seqpacket")) {
         *err = "socket type must be 'dgram', 'stream' or 'seqpacket'";
         return false;
     }
