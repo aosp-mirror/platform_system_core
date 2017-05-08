@@ -15,9 +15,7 @@
  */
 /*
  * Intercepts log messages intended for the Android log device.
- * When running in the context of the simulator, the messages are
- * passed on to the underlying (fake) log device.  When not in the
- * simulator, messages are printed to stderr.
+ * Messages are printed to stderr.
  */
 #include <ctype.h>
 #include <errno.h>
@@ -561,7 +559,8 @@ static void showLog(LogState* state, int logPrio, const char* tag,
  *  tag (N bytes -- null-terminated ASCII string)
  *  message (N bytes -- null-terminated ASCII string)
  */
-static ssize_t logWritev(int fd, const struct iovec* vector, int count) {
+LIBLOG_HIDDEN ssize_t fakeLogWritev(int fd, const struct iovec* vector,
+                                    int count) {
   LogState* state;
 
   /* Make sure that no-one frees the LogState while we're using it.
@@ -626,8 +625,18 @@ error:
 
 /*
  * Free up our state and close the fake descriptor.
+ *
+ * The logger API has no means or need to 'stop' or 'close' using the logs,
+ * and as such, there is no way for that 'stop' or 'close' to translate into
+ * a close operation to the fake log handler. fakeLogClose is provided for
+ * completeness only.
+ *
+ * We have no intention of adding a log close operation as it would complicate
+ * every user of the logging API with no gain since the only valid place to
+ * call is in the exit handler. Logging can continue in the exit handler to
+ * help debug HOST tools ...
  */
-static int logClose(int fd) {
+LIBLOG_HIDDEN int fakeLogClose(int fd) {
   deleteFakeFd(fd);
   return 0;
 }
@@ -635,7 +644,7 @@ static int logClose(int fd) {
 /*
  * Open a log output device and return a fake fd.
  */
-static int logOpen(const char* pathName, int flags __unused) {
+LIBLOG_HIDDEN int fakeLogOpen(const char* pathName) {
   LogState* logState;
   int fd = -1;
 
@@ -652,66 +661,6 @@ static int logOpen(const char* pathName, int flags __unused) {
   unlock();
 
   return fd;
-}
-
-/*
- * Runtime redirection.  If this binary is running in the simulator,
- * just pass log messages to the emulated device.  If it's running
- * outside of the simulator, write the log messages to stderr.
- */
-
-static int (*redirectOpen)(const char* pathName, int flags) = NULL;
-static int (*redirectClose)(int fd) = NULL;
-static ssize_t (*redirectWritev)(int fd, const struct iovec* vector,
-                                 int count) = NULL;
-
-static void setRedirects() {
-  const char* ws;
-
-  /* Wrapsim sets this environment variable on children that it's
-   * created using its LD_PRELOAD wrapper.
-   */
-  ws = getenv("ANDROID_WRAPSIM");
-  if (ws != NULL && strcmp(ws, "1") == 0) {
-    /* We're running inside wrapsim, so we can just write to the device. */
-    redirectOpen = (int (*)(const char* pathName, int flags))open;
-    redirectClose = close;
-    redirectWritev = writev;
-  } else {
-    /* There's no device to delegate to; handle the logging ourselves. */
-    redirectOpen = logOpen;
-    redirectClose = logClose;
-    redirectWritev = logWritev;
-  }
-}
-
-LIBLOG_HIDDEN int fakeLogOpen(const char* pathName, int flags) {
-  if (redirectOpen == NULL) {
-    setRedirects();
-  }
-  return redirectOpen(pathName, flags);
-}
-
-/*
- * The logger API has no means or need to 'stop' or 'close' using the logs,
- * and as such, there is no way for that 'stop' or 'close' to translate into
- * a close operation to the fake log handler. fakeLogClose is provided for
- * completeness only.
- *
- * We have no intention of adding a log close operation as it would complicate
- * every user of the logging API with no gain since the only valid place to
- * call is in the exit handler. Logging can continue in the exit handler to
- * help debug HOST tools ...
- */
-LIBLOG_HIDDEN int fakeLogClose(int fd) {
-  /* Assume that open() was called first. */
-  return redirectClose(fd);
-}
-
-LIBLOG_HIDDEN ssize_t fakeLogWritev(int fd, const struct iovec* vector,
-                                    int count) {
-  /* Assume that open() was called first. */
-  return redirectWritev(fd, vector, count);
 }
 
 LIBLOG_HIDDEN ssize_t __send_log_msg(char* buf __unused,
