@@ -22,3 +22,5 @@ cc_library {
         },
     },
 }
+
+subdirs = ["tests"]
