@@ -744,23 +744,6 @@ static int handle_encryptable(const struct fstab_rec* rec)
     }
 }
 
-static std::string extract_by_name_prefix(struct fstab* fstab) {
-    // We assume that there's an entry for the /misc mount point in the
-    // fstab file and use that to get the device file by-name prefix.
-    // The device needs not to have an actual /misc partition.
-    // e.g.,
-    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/misc ->
-    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/
-    struct fstab_rec* fstab_entry = fs_mgr_get_entry_for_mount_point(fstab, "/misc");
-    if (fstab_entry == nullptr) {
-        LERROR << "/misc mount point not found in fstab";
-        return "";
-    }
-    std::string full_path(fstab_entry->blk_device);
-    size_t end_slash = full_path.find_last_of("/");
-    return full_path.substr(0, end_slash + 1);
-}
-
 // TODO: add ueventd notifiers if they don't exist.
 // This is just doing a wait_for_device for maximum of 1s
 int fs_mgr_test_access(const char *device) {
@@ -850,7 +833,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
 
         if (fstab->recs[i].fs_mgr_flags & MF_AVB) {
             if (!avb_handle) {
-                avb_handle = FsManagerAvbHandle::Open(extract_by_name_prefix(fstab));
+                avb_handle = FsManagerAvbHandle::Open(*fstab);
                 if (!avb_handle) {
                     LERROR << "Failed to open FsManagerAvbHandle";
                     return -1;
@@ -1061,7 +1044,7 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
 
         if (fstab->recs[i].fs_mgr_flags & MF_AVB) {
             if (!avb_handle) {
-                avb_handle = FsManagerAvbHandle::Open(extract_by_name_prefix(fstab));
+                avb_handle = FsManagerAvbHandle::Open(*fstab);
                 if (!avb_handle) {
                     LERROR << "Failed to open FsManagerAvbHandle";
                     return -1;
