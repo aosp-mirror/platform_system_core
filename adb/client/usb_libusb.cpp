@@ -152,7 +152,9 @@ static auto& usb_handles = *new std::unordered_map<std::string, std::unique_ptr<
 static auto& usb_handles_mutex = *new std::mutex();
 
 static std::thread* device_poll_thread = nullptr;
-static std::atomic<bool> terminate_device_poll_thread(false);
+static bool terminate_device_poll_thread = false;
+static auto& device_poll_mutex = *new std::mutex();
+static auto& device_poll_cv = *new std::condition_variable();
 
 static std::string get_device_address(libusb_device* device) {
     return StringPrintf("usb:%d:%d", libusb_get_bus_number(device),
@@ -376,7 +378,7 @@ static void process_device(libusb_device* device) {
 static void poll_for_devices() {
     libusb_device** list;
     adb_thread_setname("device poll");
-    while (!terminate_device_poll_thread) {
+    while (true) {
         const ssize_t device_count = libusb_get_device_list(nullptr, &list);
 
         LOG(VERBOSE) << "found " << device_count << " attached devices";
@@ -389,7 +391,10 @@ static void poll_for_devices() {
 
         adb_notify_device_scan_complete();
 
-        std::this_thread::sleep_for(500ms);
+        std::unique_lock<std::mutex> lock(device_poll_mutex);
+        if (device_poll_cv.wait_for(lock, 500ms, []() { return terminate_device_poll_thread; })) {
+            return;
+        }
     }
 }
 
@@ -412,7 +417,11 @@ void usb_init() {
     // TODO: Use libusb_hotplug_* instead?
     device_poll_thread = new std::thread(poll_for_devices);
     android::base::at_quick_exit([]() {
-        terminate_device_poll_thread = true;
+        {
+            std::unique_lock<std::mutex> lock(device_poll_mutex);
+            terminate_device_poll_thread = true;
+        }
+        device_poll_cv.notify_all();
         device_poll_thread->join();
     });
 }
