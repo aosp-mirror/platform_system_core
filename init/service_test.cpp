@@ -45,6 +45,7 @@ TEST(service, pod_initialized) {
     EXPECT_EQ(0, service_in_old_memory->ioprio_pri());
     EXPECT_EQ(0, service_in_old_memory->priority());
     EXPECT_EQ(-1000, service_in_old_memory->oom_score_adjust());
+    EXPECT_FALSE(service_in_old_memory->process_cgroup_empty());
 
     for (std::size_t i = 0; i < memory_size; ++i) {
         old_memory[i] = 0xFF;
@@ -64,4 +65,5 @@ TEST(service, pod_initialized) {
     EXPECT_EQ(0, service_in_old_memory2->ioprio_pri());
     EXPECT_EQ(0, service_in_old_memory2->priority());
     EXPECT_EQ(-1000, service_in_old_memory2->oom_score_adjust());
+    EXPECT_FALSE(service_in_old_memory->process_cgroup_empty());
 }
