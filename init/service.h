@@ -107,6 +107,7 @@ class Service {
     int ioprio_pri() const { return ioprio_pri_; }
     int priority() const { return priority_; }
     int oom_score_adjust() const { return oom_score_adjust_; }
+    bool process_cgroup_empty() const { return process_cgroup_empty_; }
     const std::vector<std::string>& args() const { return args_; }
 
   private:
@@ -178,6 +179,8 @@ class Service {
     int priority_;
 
     int oom_score_adjust_;
+
+    bool process_cgroup_empty_ = false;
 
     std::vector<std::string> args_;
 };
