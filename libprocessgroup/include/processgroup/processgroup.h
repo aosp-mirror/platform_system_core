@@ -22,8 +22,13 @@
 
 __BEGIN_DECLS
 
+// Return 0 and removes the cgroup if there are no longer any processes in it.
+// Returns -1 in the case of an error occurring or if there are processes still running
+// even after retrying for up to 200ms.
 int killProcessGroup(uid_t uid, int initialPid, int signal);
 
+// Returns the same as killProcessGroup(), however it does not retry, which means
+// that it only returns 0 in the case that the cgroup exists and it contains no processes.
 int killProcessGroupOnce(uid_t uid, int initialPid, int signal);
 
 int createProcessGroup(uid_t uid, int initialPid);
