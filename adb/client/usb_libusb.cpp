@@ -415,15 +415,21 @@ void usb_init() {
 
     // Spawn a thread to do device enumeration.
     // TODO: Use libusb_hotplug_* instead?
+    std::unique_lock<std::mutex> lock(device_poll_mutex);
     device_poll_thread = new std::thread(poll_for_devices);
-    android::base::at_quick_exit([]() {
-        {
-            std::unique_lock<std::mutex> lock(device_poll_mutex);
-            terminate_device_poll_thread = true;
+}
+
+void usb_cleanup() {
+    {
+        std::unique_lock<std::mutex> lock(device_poll_mutex);
+        terminate_device_poll_thread = true;
+
+        if (!device_poll_thread) {
+            return;
         }
-        device_poll_cv.notify_all();
-        device_poll_thread->join();
-    });
+    }
+    device_poll_cv.notify_all();
+    device_poll_thread->join();
 }
 
 // Dispatch a libusb transfer, unlock |device_lock|, and then wait for the result.

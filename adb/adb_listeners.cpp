@@ -19,8 +19,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <algorithm>
+#include <list>
+
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/thread_annotations.h>
 #include <cutils/sockets.h>
 
 #include "socket_spec.h"
@@ -64,8 +68,9 @@ alistener::~alistener() {
 
 // listener_list retains ownership of all created alistener objects. Removing an alistener from
 // this list will cause it to be deleted.
+static auto& listener_list_mutex = *new std::mutex();
 typedef std::list<std::unique_ptr<alistener>> ListenerList;
-static ListenerList& listener_list = *new ListenerList();
+static ListenerList& listener_list GUARDED_BY(listener_list_mutex) = *new ListenerList();
 
 static void ss_listener_event_func(int _fd, unsigned ev, void *_l) {
     if (ev & FDE_READ) {
@@ -108,7 +113,8 @@ static void listener_event_func(int _fd, unsigned ev, void* _l)
 }
 
 // Called as a transport disconnect function. |arg| is the raw alistener*.
-static void listener_disconnect(void* arg, atransport*) {
+static void listener_disconnect(void* arg, atransport*) EXCLUDES(listener_list_mutex) {
+    std::lock_guard<std::mutex> lock(listener_list_mutex);
     for (auto iter = listener_list.begin(); iter != listener_list.end(); ++iter) {
         if (iter->get() == arg) {
             (*iter)->transport = nullptr;
@@ -119,7 +125,8 @@ static void listener_disconnect(void* arg, atransport*) {
 }
 
 // Write the list of current listeners (network redirections) into a string.
-std::string format_listeners() {
+std::string format_listeners() EXCLUDES(listener_list_mutex) {
+    std::lock_guard<std::mutex> lock(listener_list_mutex);
     std::string result;
     for (auto& l : listener_list) {
         // Ignore special listeners like those for *smartsocket*
@@ -135,7 +142,9 @@ std::string format_listeners() {
     return result;
 }
 
-InstallStatus remove_listener(const char* local_name, atransport* transport) {
+InstallStatus remove_listener(const char* local_name, atransport* transport)
+    EXCLUDES(listener_list_mutex) {
+    std::lock_guard<std::mutex> lock(listener_list_mutex);
     for (auto iter = listener_list.begin(); iter != listener_list.end(); ++iter) {
         if (local_name == (*iter)->local_name) {
             listener_list.erase(iter);
@@ -145,7 +154,8 @@ InstallStatus remove_listener(const char* local_name, atransport* transport) {
     return INSTALL_STATUS_LISTENER_NOT_FOUND;
 }
 
-void remove_all_listeners() {
+void remove_all_listeners() EXCLUDES(listener_list_mutex) {
+    std::lock_guard<std::mutex> lock(listener_list_mutex);
     auto iter = listener_list.begin();
     while (iter != listener_list.end()) {
         // Never remove smart sockets.
@@ -157,9 +167,18 @@ void remove_all_listeners() {
     }
 }
 
+void close_smartsockets() EXCLUDES(listener_list_mutex) {
+    std::lock_guard<std::mutex> lock(listener_list_mutex);
+    auto pred = [](const std::unique_ptr<alistener>& listener) {
+        return listener->local_name == "*smartsocket*";
+    };
+    listener_list.erase(std::remove_if(listener_list.begin(), listener_list.end(), pred));
+}
+
 InstallStatus install_listener(const std::string& local_name, const char* connect_to,
                                atransport* transport, int no_rebind, int* resolved_tcp_port,
-                               std::string* error) {
+                               std::string* error) EXCLUDES(listener_list_mutex) {
+    std::lock_guard<std::mutex> lock(listener_list_mutex);
     for (auto& l : listener_list) {
         if (local_name == l->local_name) {
             // Can't repurpose a smartsocket.
@@ -212,7 +231,7 @@ InstallStatus install_listener(const std::string& local_name, const char* connec
 
     if (transport) {
         listener->disconnect.opaque = listener.get();
-        listener->disconnect.func   = listener_disconnect;
+        listener->disconnect.func = listener_disconnect;
         transport->AddDisconnect(&listener->disconnect);
     }
 
