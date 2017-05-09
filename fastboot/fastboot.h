@@ -66,7 +66,7 @@ void fb_queue_reboot(void);
 void fb_queue_command(const char *cmd, const char *msg);
 void fb_queue_download(const char *name, void *data, uint32_t size);
 void fb_queue_download_fd(const char *name, int fd, uint32_t sz);
-void fb_queue_upload(char *outfile);
+void fb_queue_upload(const char* outfile);
 void fb_queue_notice(const char *notice);
 void fb_queue_wait_for_disconnect(void);
 int64_t fb_execute_queue(Transport* transport);
