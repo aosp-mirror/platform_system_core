@@ -1,7 +1,7 @@
 service logd /system/bin/logd
     socket logd stream 0666 logd logd
     socket logdr seqpacket 0666 logd logd
-    socket logdw dgram 0222 logd logd
+    socket logdw dgram+passcred 0222 logd logd
     file /proc/kmsg r
     file /dev/kmsg w
     user logd
