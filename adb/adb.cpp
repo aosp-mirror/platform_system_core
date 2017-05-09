@@ -1054,15 +1054,12 @@ int handle_host_request(const char* service, TransportType type,
     if (strcmp(service, "kill") == 0) {
         fprintf(stderr, "adb server killed by remote request\n");
         fflush(stdout);
+
+        // Send a reply even though we don't read it anymore, so that old versions
+        // of adb that do read it don't spew error messages.
         SendOkay(reply_fd);
 
-        // On Windows, if the process exits with open sockets that
-        // shutdown(SD_SEND) has not been called on, TCP RST segments will be
-        // sent to the peers which will cause their next recv() to error-out
-        // with WSAECONNRESET. In the case of this code, that means the client
-        // may not read the OKAY sent above.
-        adb_shutdown(reply_fd);
-
+        // Rely on process exit to close the socket for us.
         android::base::quick_exit(0);
     }
 
