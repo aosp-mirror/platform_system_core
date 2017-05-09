@@ -258,6 +258,12 @@ static int cb_reject(Action* a, int status, const char* resp) {
     return cb_check(a, status, resp, 1);
 }
 
+static char* xstrdup(const char* s) {
+    char* result = strdup(s);
+    if (!result) die("out of memory");
+    return result;
+}
+
 void fb_queue_require(const char *prod, const char *var,
                       bool invert, size_t nvalues, const char **value)
 {
@@ -276,16 +282,14 @@ static int cb_display(Action* a, int status, const char* resp) {
         fprintf(stderr, "%s FAILED (%s)\n", a->cmd, resp);
         return status;
     }
-    fprintf(stderr, "%s: %s\n", (char*) a->data, resp);
+    fprintf(stderr, "%s: %s\n", static_cast<const char*>(a->data), resp);
+    free(static_cast<char*>(a->data));
     return 0;
 }
 
-void fb_queue_display(const char *var, const char *prettyname)
-{
-    Action *a;
-    a = queue_action(OP_QUERY, "getvar:%s", var);
-    a->data = strdup(prettyname);
-    if (a->data == nullptr) die("out of memory");
+void fb_queue_display(const char* var, const char* prettyname) {
+    Action* a = queue_action(OP_QUERY, "getvar:%s", var);
+    a->data = xstrdup(prettyname);
     a->func = cb_display;
 }
 
@@ -298,11 +302,9 @@ static int cb_save(Action* a, int status, const char* resp) {
     return 0;
 }
 
-void fb_queue_query_save(const char *var, char *dest, uint32_t dest_size)
-{
-    Action *a;
-    a = queue_action(OP_QUERY, "getvar:%s", var);
-    a->data = (void *)dest;
+void fb_queue_query_save(const char* var, char* dest, uint32_t dest_size) {
+    Action* a = queue_action(OP_QUERY, "getvar:%s", var);
+    a->data = dest;
     a->size = dest_size;
     a->func = cb_save;
 }
@@ -342,15 +344,13 @@ void fb_queue_download_fd(const char *name, int fd, uint32_t sz)
     a->msg = mkmsg("sending '%s' (%d KB)", name, sz / 1024);
 }
 
-void fb_queue_upload(char *outfile)
-{
-    Action *a = queue_action(OP_UPLOAD, "");
-    a->data = outfile;
+void fb_queue_upload(const char* outfile) {
+    Action* a = queue_action(OP_UPLOAD, "");
+    a->data = xstrdup(outfile);
     a->msg = mkmsg("uploading '%s'", outfile);
 }
 
-void fb_queue_notice(const char *notice)
-{
+void fb_queue_notice(const char* notice) {
     Action *a = queue_action(OP_NOTICE, "");
     a->data = (void*) notice;
 }
