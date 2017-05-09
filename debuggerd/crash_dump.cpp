@@ -42,7 +42,6 @@
 #include <cutils/sockets.h>
 #include <log/log.h>
 #include <procinfo/process.h>
-#include <selinux/selinux.h>
 
 #include "backtrace.h"
 #include "tombstone.h"
