@@ -221,7 +221,6 @@ cc_binary {
         "libbase",
         "liblog",
         "libprocinfo",
-        "libselinux",
     ],
 }
 
