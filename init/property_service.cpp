@@ -177,7 +177,7 @@ uint32_t property_set(const std::string& name, const std::string& value) {
     }
 
     if (name == "selinux.restorecon_recursive" && valuelen > 0) {
-        if (restorecon(value.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE) != 0) {
+        if (selinux_android_restorecon(value.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE) != 0) {
             LOG(ERROR) << "Failed to restorecon_recursive " << value;
         }
     }
@@ -510,8 +510,9 @@ static void load_properties(char *data, const char *filter)
 static void load_properties_from_file(const char* filename, const char* filter) {
     Timer t;
     std::string data;
-    if (!read_file(filename, &data)) {
-        PLOG(WARNING) << "Couldn't load properties from " << filename;
+    std::string err;
+    if (!ReadFile(filename, &data, &err)) {
+        PLOG(WARNING) << "Couldn't load property file: " << err;
         return;
     }
     data.push_back('\n');
@@ -658,8 +659,8 @@ void load_system_props() {
 void start_property_service() {
     property_set("ro.property_service.version", "2");
 
-    property_set_fd = create_socket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
-                                    0666, 0, 0, nullptr, sehandle);
+    property_set_fd = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+                                   false, 0666, 0, 0, nullptr, sehandle);
     if (property_set_fd == -1) {
         PLOG(ERROR) << "start_property_service socket creation failed";
         exit(1);

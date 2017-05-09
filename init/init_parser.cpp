@@ -110,7 +110,9 @@ bool Parser::ParseConfigFile(const std::string& path) {
     LOG(INFO) << "Parsing file " << path << "...";
     Timer t;
     std::string data;
-    if (!read_file(path, &data)) {
+    std::string err;
+    if (!ReadFile(path, &data, &err)) {
+        LOG(ERROR) << err;
         return false;
     }
 

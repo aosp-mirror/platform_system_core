@@ -35,11 +35,11 @@ const std::string kAndroidDtDir("/proc/device-tree/firmware/android/");
 using android::base::boot_clock;
 using namespace std::chrono_literals;
 
-int create_socket(const char* name, int type, mode_t perm, uid_t uid, gid_t gid,
-                  const char* socketcon, selabel_handle* sehandle);
+int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t uid, gid_t gid,
+                 const char* socketcon, selabel_handle* sehandle);
 
-bool read_file(const std::string& path, std::string* content);
-bool write_file(const std::string& path, const std::string& content);
+bool ReadFile(const std::string& path, std::string* content, std::string* err);
+bool WriteFile(const std::string& path, const std::string& content, std::string* err);
 
 class Timer {
   public:
@@ -61,14 +61,13 @@ class Timer {
 
 std::ostream& operator<<(std::ostream& os, const Timer& t);
 
-unsigned int decode_uid(const char *s);
+bool DecodeUid(const std::string& name, uid_t* uid, std::string* err);
 
 int mkdir_recursive(const std::string& pathname, mode_t mode, selabel_handle* sehandle);
 int wait_for_file(const char *filename, std::chrono::nanoseconds timeout);
 void import_kernel_cmdline(bool in_qemu,
                            const std::function<void(const std::string&, const std::string&, bool)>&);
 int make_dir(const char* path, mode_t mode, selabel_handle* sehandle);
-int restorecon(const char *pathname, int flags = 0);
 std::string bytes_to_hex(const uint8_t *bytes, size_t bytes_len);
 bool is_dir(const char* pathname);
 bool expand_props(const std::string& src, std::string* dst);
