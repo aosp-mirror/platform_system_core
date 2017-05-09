@@ -251,7 +251,7 @@ static void fixup_sys_permissions(const std::string& upath, const std::string& s
 
     if (access(path.c_str(), F_OK) == 0) {
         LOG(VERBOSE) << "restorecon_recursive: " << path;
-        restorecon(path.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE);
+        selinux_android_restorecon(path.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE);
     }
 }
 
