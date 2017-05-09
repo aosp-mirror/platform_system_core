@@ -266,11 +266,6 @@ int make_dir(const char* path, mode_t mode, selabel_handle* sehandle) {
     return rc;
 }
 
-int restorecon(const char* pathname, int flags)
-{
-    return selinux_android_restorecon(pathname, flags);
-}
-
 /*
  * Writes hex_len hex characters (1/2 byte) to hex from bytes.
  */

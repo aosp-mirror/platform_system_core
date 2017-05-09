@@ -762,7 +762,7 @@ static int do_restorecon(const std::vector<std::string>& args) {
             }
         } else {
             in_flags = false;
-            if (restorecon(args[i].c_str(), flag) < 0) {
+            if (selinux_android_restorecon(args[i].c_str(), flag) < 0) {
                 ret = -errno;
             }
         }
