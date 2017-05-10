@@ -18,7 +18,7 @@ include $(LOCAL_PATH)/../platform_tools_tool_version.mk
 
 include $(CLEAR_VARS)
 
-LOCAL_CFLAGS += -DFASTBOOT_VERSION=\"$(tool_version)\"
+LOCAL_CFLAGS += -DFASTBOOT_VERSION="\"$(tool_version)\""
 
 LOCAL_C_INCLUDES := \
   $(LOCAL_PATH)/../adb \
