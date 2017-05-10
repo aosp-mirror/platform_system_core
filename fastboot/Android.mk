@@ -14,7 +14,11 @@
 
 LOCAL_PATH:= $(call my-dir)
 
+include $(LOCAL_PATH)/../platform_tools_tool_version.mk
+
 include $(CLEAR_VARS)
+
+LOCAL_CFLAGS += -DFASTBOOT_VERSION=\"$(tool_version)\"
 
 LOCAL_C_INCLUDES := \
   $(LOCAL_PATH)/../adb \
@@ -36,8 +40,6 @@ LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
 LOCAL_MODULE_HOST_OS := darwin linux windows
 LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
-
-LOCAL_CFLAGS += -DFASTBOOT_REVISION=\"$(BUILD_NUMBER_FROM_FILE)\"
 
 LOCAL_SRC_FILES_linux := usb_linux.cpp
 LOCAL_STATIC_LIBRARIES_linux := libselinux
