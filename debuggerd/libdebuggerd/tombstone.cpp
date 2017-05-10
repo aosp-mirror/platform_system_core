@@ -470,6 +470,11 @@ static void dump_backtrace_and_stack(Backtrace* backtrace, log_t* log) {
   }
 }
 
+// Weak noop implementation, real implementations are in <arch>/machine.cpp.
+__attribute__((weak)) void dump_registers(log_t* log, const ucontext_t*) {
+  _LOG(log, logtype::REGISTERS, "    register dumping unimplemented on this architecture");
+}
+
 static void dump_thread(log_t* log, pid_t pid, pid_t tid, const std::string& process_name,
                         const std::string& thread_name, BacktraceMap* map,
                         uintptr_t abort_msg_address, bool primary_thread) {
@@ -749,11 +754,15 @@ void engrave_tombstone_ucontext(int tombstone_fd, uintptr_t abort_msg_address, s
   read_with_default("/proc/self/comm", thread_name, sizeof(thread_name), "<unknown>");
   read_with_default("/proc/self/cmdline", process_name, sizeof(process_name), "<unknown>");
 
+  _LOG(&log, logtype::HEADER, "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
+  dump_header_info(&log);
   dump_thread_info(&log, pid, tid, thread_name, process_name);
   dump_signal_info(&log, siginfo);
 
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid));
   dump_abort_message(backtrace.get(), &log, abort_msg_address);
+  dump_registers(&log, ucontext);
+
   // TODO: Dump registers from the ucontext.
   if (backtrace->Unwind(0, ucontext)) {
     dump_backtrace_and_stack(backtrace.get(), &log);
