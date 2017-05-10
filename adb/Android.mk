@@ -5,6 +5,8 @@
 
 LOCAL_PATH:= $(call my-dir)
 
+include $(LOCAL_PATH)/../platform_tools_tool_version.mk
+
 adb_host_sanitize :=
 adb_target_sanitize :=
 
@@ -13,7 +15,7 @@ ADB_COMMON_CFLAGS := \
     -Wno-unused-parameter \
     -Wno-missing-field-initializers \
     -Wvla \
-    -DADB_REVISION=\"$(BUILD_NUMBER_FROM_FILE)\" \
+    -DADB_VERSION=\"$(tool_version)\" \
 
 ADB_COMMON_posix_CFLAGS := \
     -Wexit-time-destructors \
