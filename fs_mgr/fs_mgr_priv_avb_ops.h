@@ -22,8 +22,11 @@
  * SOFTWARE.
  */
 
-#ifndef __CORE_FS_MGR_AVB_OPS_H
-#define __CORE_FS_MGR_AVB_OPS_H
+#ifndef __CORE_FS_MGR_PRIV_AVB_OPS_H
+#define __CORE_FS_MGR_PRIV_AVB_OPS_H
+
+#include <map>
+#include <string>
 
 #include <libavb/libavb.h>
 
@@ -43,7 +46,8 @@
 //
 class FsManagerAvbOps {
   public:
-    FsManagerAvbOps(const std::string& device_file_by_name_prefix);
+    FsManagerAvbOps(const fstab& fstab);
+    FsManagerAvbOps(std::map<std::string, std::string>&& by_name_symlink_map);
 
     static FsManagerAvbOps* GetInstanceFromAvbOps(AvbOps* ops) {
         return reinterpret_cast<FsManagerAvbOps*>(ops->user_data);
@@ -56,7 +60,9 @@ class FsManagerAvbOps {
                                       AvbSlotVerifyData** out_data);
 
   private:
+    void InitializeAvbOps();
+
     AvbOps avb_ops_;
-    std::string device_file_by_name_prefix_;
+    std::map<std::string, std::string> by_name_symlink_map_;
 };
-#endif /* __CORE_FS_MGR_AVB_OPS_H */
+#endif /* __CORE_FS_MGR_PRIV_AVB_OPS_H */
