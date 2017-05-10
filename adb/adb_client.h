@@ -26,7 +26,9 @@
 // Connect to adb, connect to the named service, and return a valid fd for
 // interacting with that service upon success or a negative number on failure.
 int adb_connect(const std::string& service, std::string* _Nonnull error);
-int _adb_connect(const std::string& service, std::string* _Nonnull error);
+
+// Kill the currently running adb server, if it exists.
+bool adb_kill_server();
 
 // Connect to adb, connect to the named service, returns true if the connection
 // succeeded AND the service returned OKAY. Outputs any returned error otherwise.

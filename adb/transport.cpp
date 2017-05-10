@@ -568,15 +568,14 @@ void init_transport_registration(void) {
                     transport_registration_func, 0);
 
     fdevent_set(&transport_registration_fde, FDE_READ);
-#if ADB_HOST
-    android::base::at_quick_exit([]() {
-        // To avoid only writing part of a packet to a transport after exit, kick all transports.
-        std::lock_guard<std::mutex> lock(transport_lock);
-        for (auto t : transport_list) {
-            t->Kick();
-        }
-    });
-#endif
+}
+
+void kick_all_transports() {
+    // To avoid only writing part of a packet to a transport after exit, kick all transports.
+    std::lock_guard<std::mutex> lock(transport_lock);
+    for (auto t : transport_list) {
+        t->Kick();
+    }
 }
 
 /* the fdevent select pump is single threaded */
