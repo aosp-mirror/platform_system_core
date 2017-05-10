@@ -30,6 +30,8 @@ void usb_init() {
 void usb_cleanup() {
     if (should_use_libusb()) {
         libusb::usb_cleanup();
+    } else {
+        native::usb_cleanup();
     }
 }
 
