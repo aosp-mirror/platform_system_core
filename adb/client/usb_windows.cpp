@@ -265,6 +265,8 @@ void usb_init() {
   std::thread(_power_notification_thread).detach();
 }
 
+void usb_cleanup() {}
+
 usb_handle* do_usb_open(const wchar_t* interface_name) {
   unsigned long name_len = 0;
 
