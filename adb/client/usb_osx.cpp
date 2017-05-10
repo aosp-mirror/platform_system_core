@@ -430,7 +430,7 @@ static void RunLoopThread() {
     VLOG(USB) << "RunLoopThread done";
 }
 
-static void usb_cleanup() NO_THREAD_SAFETY_ANALYSIS {
+void usb_cleanup() NO_THREAD_SAFETY_ANALYSIS {
     VLOG(USB) << "usb_cleanup";
     // Wait until usb operations in RunLoopThread finish, and prevent further operations.
     operate_device_lock.lock();
@@ -440,8 +440,6 @@ static void usb_cleanup() NO_THREAD_SAFETY_ANALYSIS {
 void usb_init() {
     static bool initialized = false;
     if (!initialized) {
-        atexit(usb_cleanup);
-
         usb_inited_flag = false;
 
         std::thread(RunLoopThread).detach();
