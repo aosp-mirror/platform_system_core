@@ -598,4 +598,7 @@ void usb_init() {
 
     std::thread(device_poll_thread).detach();
 }
+
+void usb_cleanup() {}
+
 } // namespace native
