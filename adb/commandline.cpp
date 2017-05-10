@@ -1546,25 +1546,7 @@ int adb_commandline(int argc, const char** argv) {
         return 0;
     }
     else if (!strcmp(argv[0], "kill-server")) {
-        std::string error;
-        int fd = _adb_connect("host:kill", &error);
-        if (fd == -2) {
-            // Failed to make network connection to server. Don't output the
-            // network error since that is expected.
-            fprintf(stderr,"* server not running *\n");
-            // Successful exit code because the server is already "killed".
-            return 0;
-        } else if (fd == -1) {
-            // Some other error.
-            fprintf(stderr, "error: %s\n", error.c_str());
-            return 1;
-        } else {
-            // Successfully connected, kill command sent, okay status came back.
-            // Server should exit() in a moment, if not already.
-            ReadOrderlyShutdown(fd);
-            adb_close(fd);
-            return 0;
-        }
+        return adb_kill_server() ? 0 : 1;
     }
     else if (!strcmp(argv[0], "sideload")) {
         if (argc != 2) return syntax_error("sideload requires an argument");
