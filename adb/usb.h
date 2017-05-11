@@ -22,6 +22,7 @@
 
 #define ADB_USB_INTERFACE(handle_ref_type)                       \
     void usb_init();                                             \
+    void usb_cleanup();                                          \
     int usb_write(handle_ref_type h, const void* data, int len); \
     int usb_read(handle_ref_type h, void* data, int len);        \
     int usb_close(handle_ref_type h);                            \

@@ -92,6 +92,16 @@ static BOOL WINAPI ctrlc_handler(DWORD type) {
 }
 #endif
 
+void adb_server_cleanup() {
+    // Upon exit, we want to clean up in the following order:
+    //   1. close_smartsockets, so that we don't get any new clients
+    //   2. kick_all_transports, to avoid writing only part of a packet to a transport.
+    //   3. usb_cleanup, to tear down the USB stack.
+    close_smartsockets();
+    kick_all_transports();
+    usb_cleanup();
+}
+
 int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply_fd) {
 #if defined(_WIN32)
     // adb start-server starts us up with stdout and stderr hooked up to
@@ -111,12 +121,13 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
     SetConsoleCtrlHandler(ctrlc_handler, TRUE);
 #else
     signal(SIGINT, [](int) {
-        android::base::quick_exit(0);
+        fdevent_run_on_main_thread([]() { android::base::quick_exit(0); });
     });
 #endif
 
-    init_transport_registration();
+    android::base::at_quick_exit(adb_server_cleanup);
 
+    init_transport_registration();
     init_mdns_transport_discovery();
 
     usb_init();

@@ -27,6 +27,14 @@ void usb_init() {
     }
 }
 
+void usb_cleanup() {
+    if (should_use_libusb()) {
+        libusb::usb_cleanup();
+    } else {
+        native::usb_cleanup();
+    }
+}
+
 int usb_write(usb_handle* h, const void* data, int len) {
     return should_use_libusb()
                ? libusb::usb_write(reinterpret_cast<libusb::usb_handle*>(h), data, len)

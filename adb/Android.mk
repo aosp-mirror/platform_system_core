@@ -15,11 +15,11 @@ ADB_COMMON_CFLAGS := \
     -Wno-unused-parameter \
     -Wno-missing-field-initializers \
     -Wvla \
-    -DADB_VERSION=\"$(tool_version)\" \
+    -DADB_VERSION="\"$(tool_version)\"" \
 
 ADB_COMMON_posix_CFLAGS := \
     -Wexit-time-destructors \
-    -Wthread-safety
+    -Wthread-safety \
 
 ADB_COMMON_linux_CFLAGS := \
     $(ADB_COMMON_posix_CFLAGS) \
@@ -232,7 +232,7 @@ LOCAL_STATIC_LIBRARIES := \
     libcutils \
     libdiagnose_usb \
     libmdnssd \
-    libgmock_host
+    libgmock_host \
 
 LOCAL_STATIC_LIBRARIES_linux := libusb
 LOCAL_STATIC_LIBRARIES_darwin := libusb
@@ -300,7 +300,7 @@ LOCAL_STATIC_LIBRARIES := \
     libcrypto \
     libdiagnose_usb \
     liblog \
-    libmdnssd
+    libmdnssd \
 
 # Don't use libcutils on Windows.
 LOCAL_STATIC_LIBRARIES_darwin := libcutils
