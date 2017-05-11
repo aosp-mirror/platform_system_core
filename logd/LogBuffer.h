@@ -180,6 +180,9 @@ class LogBuffer {
     static const log_time pruneMargin;
 
     void maybePrune(log_id_t id);
+    bool isBusy(log_time watermark);
+    void kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows);
+
     bool prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT);
     LogBufferElementCollection::iterator erase(
         LogBufferElementCollection::iterator it, bool coalesce = false);
