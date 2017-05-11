@@ -61,6 +61,8 @@ include $(BUILD_HOST_NATIVE_TEST)
 endif
 
 include $(CLEAR_VARS)
+# b/38002385, work around clang-tidy segmentation fault.
+LOCAL_TIDY_CHECKS := -misc-forwarding-reference-overload
 LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES:= \
     action.cpp \
@@ -82,6 +84,8 @@ LOCAL_CLANG := true
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+# b/38002385, work around clang-tidy segmentation fault.
+LOCAL_TIDY_CHECKS := -misc-forwarding-reference-overload
 LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES:= \
     bootchart.cpp \
@@ -139,6 +143,8 @@ include $(BUILD_EXECUTABLE)
 # Unit tests.
 # =========================================================
 include $(CLEAR_VARS)
+# b/38002385, work around clang-tidy segmentation fault.
+LOCAL_TIDY_CHECKS := -misc-forwarding-reference-overload
 LOCAL_MODULE := init_tests
 LOCAL_COMPATIBILITY_SUITE := device-tests
 LOCAL_SRC_FILES := \
