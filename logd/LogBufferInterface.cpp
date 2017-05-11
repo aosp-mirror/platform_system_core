@@ -15,8 +15,15 @@
  */
 
 #include "LogBufferInterface.h"
+#include "LogUtils.h"
 
 LogBufferInterface::LogBufferInterface() {
 }
 LogBufferInterface::~LogBufferInterface() {
+}
+uid_t LogBufferInterface::pidToUid(pid_t pid) {
+    return android::pidToUid(pid);
+}
+pid_t LogBufferInterface::tidToPid(pid_t tid) {
+    return android::tidToPid(tid);
 }
