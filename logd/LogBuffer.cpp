@@ -605,6 +605,33 @@ class LogBufferElementLast {
     }
 };
 
+// Determine if watermark is within pruneMargin + 1s from the end of the list,
+// the caller will use this result to set an internal busy flag indicating
+// the prune operation could not be completed because a reader is blocking
+// the request.
+bool LogBuffer::isBusy(log_time watermark) {
+    LogBufferElementCollection::iterator ei = mLogElements.end();
+    --ei;
+    return watermark < ((*ei)->getRealTime() - pruneMargin - log_time(1, 0));
+}
+
+// If the selected reader is blocking our pruning progress, decide on
+// what kind of mitigation is necessary to unblock the situation.
+void LogBuffer::kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows) {
+    if (stats.sizes(id) > (2 * log_buffer_size(id))) {  // +100%
+        // A misbehaving or slow reader has its connection
+        // dropped if we hit too much memory pressure.
+        me->release_Locked();
+    } else if (me->mTimeout.tv_sec || me->mTimeout.tv_nsec) {
+        // Allow a blocked WRAP timeout reader to
+        // trigger and start reporting the log data.
+        me->triggerReader_Locked();
+    } else {
+        // tell slow reader to skip entries to catch up
+        me->triggerSkip_Locked(id, pruneRows);
+    }
+}
+
 // prune "pruneRows" of type "id" from the buffer.
 //
 // This garbage collection task is used to expire log entries. It is called to
@@ -695,12 +722,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             }
 
             if (oldest && (watermark <= element->getRealTime())) {
-                busy = true;
-                if (oldest->mTimeout.tv_sec || oldest->mTimeout.tv_nsec) {
-                    oldest->triggerReader_Locked();
-                } else {
-                    oldest->triggerSkip_Locked(id, pruneRows);
-                }
+                busy = isBusy(watermark);
+                if (busy) kickMe(oldest, id, pruneRows);
                 break;
             }
 
@@ -787,10 +810,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             LogBufferElement* element = *it;
 
             if (oldest && (watermark <= element->getRealTime())) {
-                busy = true;
-                if (oldest->mTimeout.tv_sec || oldest->mTimeout.tv_nsec) {
-                    oldest->triggerReader_Locked();
-                }
+                busy = isBusy(watermark);
+                // Do not let chatty eliding trigger any reader mitigation
                 break;
             }
 
@@ -941,19 +962,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         }
 
         if (oldest && (watermark <= element->getRealTime())) {
-            busy = true;
-            if (whitelist) {
-                break;
-            }
-
-            if (stats.sizes(id) > (2 * log_buffer_size(id))) {
-                // kick a misbehaving log reader client off the island
-                oldest->release_Locked();
-            } else if (oldest->mTimeout.tv_sec || oldest->mTimeout.tv_nsec) {
-                oldest->triggerReader_Locked();
-            } else {
-                oldest->triggerSkip_Locked(id, pruneRows);
-            }
+            busy = isBusy(watermark);
+            if (!whitelist && busy) kickMe(oldest, id, pruneRows);
             break;
         }
 
@@ -985,15 +995,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             }
 
             if (oldest && (watermark <= element->getRealTime())) {
-                busy = true;
-                if (stats.sizes(id) > (2 * log_buffer_size(id))) {
-                    // kick a misbehaving log reader client off the island
-                    oldest->release_Locked();
-                } else if (oldest->mTimeout.tv_sec || oldest->mTimeout.tv_nsec) {
-                    oldest->triggerReader_Locked();
-                } else {
-                    oldest->triggerSkip_Locked(id, pruneRows);
-                }
+                busy = isBusy(watermark);
+                if (busy) kickMe(oldest, id, pruneRows);
                 break;
             }
 
