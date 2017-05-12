@@ -20,6 +20,16 @@
 #include <sysutils/SocketListener.h>
 #include "LogReader.h"
 
+// DEFAULT_OVERFLOWUID is defined in linux/highuid.h, which is not part of
+// the uapi headers for userspace to use.  This value is filled in on the
+// out-of-band socket credentials if the OS fails to find one available.
+// One of the causes of this is if SO_PASSCRED is set, all the packets before
+// that point will have this value.  We also use it in a fake credential if
+// no socket credentials are supplied.
+#ifndef DEFAULT_OVERFLOWUID
+#define DEFAULT_OVERFLOWUID 65534
+#endif
+
 class LogListener : public SocketListener {
     LogBufferInterface* logbuf;
     LogReader* reader;
