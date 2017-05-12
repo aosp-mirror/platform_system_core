@@ -172,6 +172,17 @@ static std::string get_device_serial_path(libusb_device* device) {
     path += "/serial";
     return path;
 }
+
+static std::string get_device_dev_path(libusb_device* device) {
+    uint8_t ports[7];
+    int port_count = libusb_get_port_numbers(device, ports, 7);
+    if (port_count < 0) return "";
+    return StringPrintf("/dev/bus/usb/%03u/%03u", libusb_get_bus_number(device), ports[0]);
+}
+
+static bool is_device_accessible(libusb_device* device) {
+    return access(get_device_dev_path(device).c_str(), R_OK | W_OK) == 0;
+}
 #endif
 
 static bool endpoint_is_output(uint8_t endpoint) {
@@ -368,11 +379,38 @@ static void process_device(libusb_device* device) {
     }
 
     register_usb_transport(usb_handle_raw, device_serial.c_str(), device_address.c_str(), writable);
-
     LOG(INFO) << "registered new usb device '" << device_serial << "'";
 }
 
-static void remove_device(libusb_device* device) {
+static std::atomic<int> connecting_devices(0);
+
+static void device_connected(libusb_device* device) {
+#if defined(__linux__)
+    // Android's host linux libusb uses netlink instead of udev for device hotplug notification,
+    // which means we can get hotplug notifications before udev has updated ownership/perms on the
+    // device. Since we're not going to be able to link against the system's libudev any time soon,
+    // hack around this by checking for accessibility in a loop.
+    ++connecting_devices;
+    auto thread = std::thread([device]() {
+        std::string device_path = get_device_dev_path(device);
+        auto start = std::chrono::steady_clock::now();
+        while (std::chrono::steady_clock::now() - start < 500ms) {
+            if (is_device_accessible(device)) {
+                break;
+            }
+            std::this_thread::sleep_for(10ms);
+        }
+
+        process_device(device);
+        --connecting_devices;
+    });
+    thread.detach();
+#else
+    process_device(device);
+#endif
+}
+
+static void device_disconnected(libusb_device* device) {
     std::string device_address = get_device_address(device);
 
     LOG(INFO) << "device disconnected: " << device_address;
@@ -390,9 +428,9 @@ static void remove_device(libusb_device* device) {
 static int hotplug_callback(libusb_context*, libusb_device* device, libusb_hotplug_event event,
                             void*) {
     if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
-        process_device(device);
+        device_connected(device);
     } else if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT) {
-        remove_device(device);
+        device_disconnected(device);
     }
     return 0;
 }
@@ -413,6 +451,11 @@ void usb_init() {
 
     if (rc != LIBUSB_SUCCESS) {
         LOG(FATAL) << "failed to register libusb hotplug callback";
+    }
+
+    // Wait for all of the connecting devices to finish.
+    while (connecting_devices != 0) {
+        std::this_thread::sleep_for(10ms);
     }
 
     adb_notify_device_scan_complete();
