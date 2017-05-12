@@ -151,10 +151,7 @@ struct usb_handle : public ::usb_handle {
 static auto& usb_handles = *new std::unordered_map<std::string, std::unique_ptr<usb_handle>>();
 static auto& usb_handles_mutex = *new std::mutex();
 
-static std::thread* device_poll_thread = nullptr;
-static bool terminate_device_poll_thread = false;
-static auto& device_poll_mutex = *new std::mutex();
-static auto& device_poll_cv = *new std::condition_variable();
+static libusb_hotplug_callback_handle hotplug_handle;
 
 static std::string get_device_address(libusb_device* device) {
     return StringPrintf("usb:%d:%d", libusb_get_bus_number(device),
@@ -375,27 +372,29 @@ static void process_device(libusb_device* device) {
     LOG(INFO) << "registered new usb device '" << device_serial << "'";
 }
 
-static void poll_for_devices() {
-    libusb_device** list;
-    adb_thread_setname("device poll");
-    while (true) {
-        const ssize_t device_count = libusb_get_device_list(nullptr, &list);
+static void remove_device(libusb_device* device) {
+    std::string device_address = get_device_address(device);
 
-        LOG(VERBOSE) << "found " << device_count << " attached devices";
-
-        for (ssize_t i = 0; i < device_count; ++i) {
-            process_device(list[i]);
+    LOG(INFO) << "device disconnected: " << device_address;
+    std::unique_lock<std::mutex> lock(usb_handles_mutex);
+    auto it = usb_handles.find(device_address);
+    if (it != usb_handles.end()) {
+        if (!it->second->device_handle) {
+            // If the handle is null, we were never able to open the device.
+            unregister_usb_transport(it->second.get());
         }
-
-        libusb_free_device_list(list, 1);
-
-        adb_notify_device_scan_complete();
-
-        std::unique_lock<std::mutex> lock(device_poll_mutex);
-        if (device_poll_cv.wait_for(lock, 500ms, []() { return terminate_device_poll_thread; })) {
-            return;
-        }
+        usb_handles.erase(it);
     }
+}
+
+static int hotplug_callback(libusb_context*, libusb_device* device, libusb_hotplug_event event,
+                            void*) {
+    if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
+        process_device(device);
+    } else if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT) {
+        remove_device(device);
+    }
+    return 0;
 }
 
 void usb_init() {
@@ -405,6 +404,19 @@ void usb_init() {
         LOG(FATAL) << "failed to initialize libusb: " << libusb_error_name(rc);
     }
 
+    // Register the hotplug callback.
+    rc = libusb_hotplug_register_callback(
+        nullptr, static_cast<libusb_hotplug_event>(LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED |
+                                                   LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT),
+        LIBUSB_HOTPLUG_ENUMERATE, LIBUSB_HOTPLUG_MATCH_ANY, LIBUSB_HOTPLUG_MATCH_ANY,
+        LIBUSB_CLASS_PER_INTERFACE, hotplug_callback, nullptr, &hotplug_handle);
+
+    if (rc != LIBUSB_SUCCESS) {
+        LOG(FATAL) << "failed to register libusb hotplug callback";
+    }
+
+    adb_notify_device_scan_complete();
+
     // Spawn a thread for libusb_handle_events.
     std::thread([]() {
         adb_thread_setname("libusb");
@@ -412,24 +424,10 @@ void usb_init() {
             libusb_handle_events(nullptr);
         }
     }).detach();
-
-    // Spawn a thread to do device enumeration.
-    // TODO: Use libusb_hotplug_* instead?
-    std::unique_lock<std::mutex> lock(device_poll_mutex);
-    device_poll_thread = new std::thread(poll_for_devices);
 }
 
 void usb_cleanup() {
-    {
-        std::unique_lock<std::mutex> lock(device_poll_mutex);
-        terminate_device_poll_thread = true;
-
-        if (!device_poll_thread) {
-            return;
-        }
-    }
-    device_poll_cv.notify_all();
-    device_poll_thread->join();
+    libusb_hotplug_deregister_callback(nullptr, hotplug_handle);
 }
 
 // Dispatch a libusb transfer, unlock |device_lock|, and then wait for the result.
