@@ -56,7 +56,7 @@ class FsManagerAvbOps {
     AvbIOResult ReadFromPartition(const char* partition, int64_t offset, size_t num_bytes,
                                   void* buffer, size_t* out_num_read);
 
-    AvbSlotVerifyResult AvbSlotVerify(const std::string& ab_suffix, bool allow_verification_error,
+    AvbSlotVerifyResult AvbSlotVerify(const std::string& ab_suffix, AvbSlotVerifyFlags flags,
                                       AvbSlotVerifyData** out_data);
 
   private:
