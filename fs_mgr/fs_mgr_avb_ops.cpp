@@ -177,13 +177,15 @@ AvbIOResult FsManagerAvbOps::ReadFromPartition(const char* partition, int64_t of
 }
 
 AvbSlotVerifyResult FsManagerAvbOps::AvbSlotVerify(const std::string& ab_suffix,
-                                                   bool allow_verification_error,
+                                                   AvbSlotVerifyFlags flags,
                                                    AvbSlotVerifyData** out_data) {
     // Invokes avb_slot_verify() to load and verify all vbmeta images.
     // Sets requested_partitions to nullptr as it's to copy the contents
     // of HASH partitions into handle>avb_slot_data_, which is not required as
     // fs_mgr only deals with HASHTREE partitions.
     const char* requested_partitions[] = {nullptr};
-    return avb_slot_verify(&avb_ops_, requested_partitions, ab_suffix.c_str(),
-                           allow_verification_error, out_data);
+    // The |hashtree_error_mode| field doesn't matter as it only
+    // influences the generated kernel cmdline parameters.
+    return avb_slot_verify(&avb_ops_, requested_partitions, ab_suffix.c_str(), flags,
+                           AVB_HASHTREE_ERROR_MODE_RESTART_AND_INVALIDATE, out_data);
 }
