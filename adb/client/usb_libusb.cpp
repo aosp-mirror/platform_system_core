@@ -237,7 +237,7 @@ static void process_device(libusb_device* device) {
             // TODO: Is this assumption valid?
             LOG(VERBOSE) << "skipping interface with incorrect num_altsetting at " << device_address
                          << " (interface " << interface_num << ")";
-            return;
+            continue;
         }
 
         const libusb_interface_descriptor& interface_desc = interface.altsetting[0];
@@ -245,7 +245,7 @@ static void process_device(libusb_device* device) {
                               interface_desc.bInterfaceProtocol)) {
             LOG(VERBOSE) << "skipping non-adb interface at " << device_address << " (interface "
                          << interface_num << ")";
-            return;
+            continue;
         }
 
         LOG(VERBOSE) << "found potential adb interface at " << device_address << " (interface "
@@ -261,7 +261,7 @@ static void process_device(libusb_device* device) {
             const uint8_t transfer_type = endpoint_attr & LIBUSB_TRANSFER_TYPE_MASK;
 
             if (transfer_type != LIBUSB_TRANSFER_TYPE_BULK) {
-                return;
+                continue;
             }
 
             if (endpoint_is_output(endpoint_addr) && !found_out) {
