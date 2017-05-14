@@ -21,7 +21,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <keyutils.h>
 #include <libgen.h>
 #include <paths.h>
 #include <signal.h>
@@ -39,10 +38,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <selinux/selinux.h>
-#include <selinux/label.h>
-#include <selinux/android.h>
-
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -50,8 +45,12 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <keyutils.h>
 #include <libavb/libavb.h>
 #include <private/android_filesystem_config.h>
+#include <selinux/android.h>
+#include <selinux/label.h>
+#include <selinux/selinux.h>
 
 #include <fstream>
 #include <memory>
@@ -1055,7 +1054,7 @@ int main(int argc, char** argv) {
     // Set up a session keyring that all processes will have access to. It
     // will hold things like FBE encryption keys. No process should override
     // its session keyring.
-    keyctl(KEYCTL_GET_KEYRING_ID, KEY_SPEC_SESSION_KEYRING, 1);
+    keyctl_get_keyring_ID(KEY_SPEC_SESSION_KEYRING, 1);
 
     // Indicate that booting is in progress to background fw loaders, etc.
     close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
