@@ -1241,10 +1241,7 @@ void update_transport_status() {
         return true;
     });
 
-    D("update_transport_status: transports_ready = %s", result ? "true" : "false");
-
     bool ready;
-
     {
         std::lock_guard<std::mutex> lock(init_mutex);
         transports_ready = result;
@@ -1252,14 +1249,11 @@ void update_transport_status() {
     }
 
     if (ready) {
-        D("update_transport_status: notifying");
         init_cv.notify_all();
     }
 }
 
 void adb_notify_device_scan_complete() {
-    D("device scan complete");
-
     {
         std::lock_guard<std::mutex> lock(init_mutex);
         device_scan_complete = true;
