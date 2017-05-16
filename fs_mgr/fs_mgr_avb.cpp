@@ -16,15 +16,14 @@
 
 #include "fs_mgr_avb.h"
 
-#include <errno.h>
 #include <fcntl.h>
-#include <inttypes.h>
 #include <libgen.h>
-#include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <sys/types.h>
-#include <unistd.h>
+
+#include <sstream>
+#include <string>
 #include <vector>
 
 #include <android-base/file.h>
@@ -33,59 +32,13 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <cutils/properties.h>
 #include <libavb/libavb.h>
-#include <openssl/sha.h>
-#include <sys/ioctl.h>
-#include <utils/Compat.h>
 
 #include "fs_mgr.h"
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_avb_ops.h"
 #include "fs_mgr_priv_dm_ioctl.h"
 #include "fs_mgr_priv_sha.h"
-
-/* The format of dm-verity construction parameters:
- *     <version> <dev> <hash_dev> <data_block_size> <hash_block_size>
- *     <num_data_blocks> <hash_start_block> <algorithm> <digest> <salt>
- */
-#define VERITY_TABLE_FORMAT \
-    "%u %s %s %u %u "       \
-    "%" PRIu64 " %" PRIu64 " %s %s %s "
-
-#define VERITY_TABLE_PARAMS(hashtree_desc, blk_device, digest, salt)                        \
-    hashtree_desc.dm_verity_version, blk_device, blk_device, hashtree_desc.data_block_size, \
-        hashtree_desc.hash_block_size,                                                      \
-        hashtree_desc.image_size / hashtree_desc.data_block_size,  /* num_data_blocks. */   \
-        hashtree_desc.tree_offset / hashtree_desc.hash_block_size, /* hash_start_block. */  \
-        (char*)hashtree_desc.hash_algorithm, digest, salt
-
-#define VERITY_TABLE_OPT_RESTART "restart_on_corruption"
-#define VERITY_TABLE_OPT_IGNZERO "ignore_zero_blocks"
-
-/* The default format of dm-verity optional parameters:
- *     <#opt_params> ignore_zero_blocks restart_on_corruption
- */
-#define VERITY_TABLE_OPT_DEFAULT_FORMAT "2 %s %s"
-#define VERITY_TABLE_OPT_DEFAULT_PARAMS VERITY_TABLE_OPT_IGNZERO, VERITY_TABLE_OPT_RESTART
-
-/* The FEC (forward error correction) format of dm-verity optional parameters:
- *     <#opt_params> use_fec_from_device <fec_dev>
- *     fec_roots <num> fec_blocks <num> fec_start <offset>
- *     ignore_zero_blocks restart_on_corruption
- */
-#define VERITY_TABLE_OPT_FEC_FORMAT \
-    "10 use_fec_from_device %s fec_roots %u fec_blocks %" PRIu64 " fec_start %" PRIu64 " %s %s"
-
-/* Note that fec_blocks is the size that FEC covers, *not* the
- * size of the FEC data. Since we use FEC for everything up until
- * the FEC data, it's the same as the offset (fec_start).
- */
-#define VERITY_TABLE_OPT_FEC_PARAMS(hashtree_desc, blk_device)                     \
-    blk_device, hashtree_desc.fec_num_roots,                                       \
-        hashtree_desc.fec_offset / hashtree_desc.data_block_size, /* fec_blocks */ \
-        hashtree_desc.fec_offset / hashtree_desc.data_block_size, /* fec_start */  \
-        VERITY_TABLE_OPT_IGNZERO, VERITY_TABLE_OPT_RESTART
 
 static inline bool nibble_value(const char& c, uint8_t* value) {
     FS_MGR_CHECK(value != nullptr);
@@ -280,10 +233,81 @@ bool FsManagerAvbVerifier::VerifyVbmetaImages(const AvbSlotVerifyData& verify_da
     return true;
 }
 
-static bool hashtree_load_verity_table(struct dm_ioctl* io, const std::string& dm_device_name,
-                                       int fd, const std::string& blk_device,
-                                       const AvbHashtreeDescriptor& hashtree_desc,
-                                       const std::string& salt, const std::string& root_digest) {
+// Constructs dm-verity arguments for sending DM_TABLE_LOAD ioctl to kernel.
+// See the following link for more details:
+// https://gitlab.com/cryptsetup/cryptsetup/wikis/DMVerity
+static std::string construct_verity_table(const AvbHashtreeDescriptor& hashtree_desc,
+                                          const std::string& salt, const std::string& root_digest,
+                                          const std::string& blk_device) {
+    // Loads androidboot.veritymode from kernel cmdline.
+    std::string verity_mode;
+    if (!fs_mgr_get_boot_config("veritymode", &verity_mode)) {
+        verity_mode = "enforcing";  // Defaults to enforcing when it's absent.
+    }
+
+    // Converts veritymode to the format used in kernel.
+    std::string dm_verity_mode;
+    if (verity_mode == "enforcing") {
+        dm_verity_mode = "restart_on_corruption";
+    } else if (verity_mode == "logging") {
+        dm_verity_mode = "ignore_corruption";
+    } else if (verity_mode != "eio") {  // Default dm_verity_mode is eio.
+        LERROR << "Unknown androidboot.veritymode: " << verity_mode;
+        return "";
+    }
+
+    // dm-verity construction parameters:
+    //   <version> <dev> <hash_dev>
+    //   <data_block_size> <hash_block_size>
+    //   <num_data_blocks> <hash_start_block>
+    //   <algorithm> <digest> <salt>
+    //   [<#opt_params> <opt_params>]
+    std::ostringstream verity_table;
+    verity_table << hashtree_desc.dm_verity_version << " " << blk_device << " " << blk_device << " "
+                 << hashtree_desc.data_block_size << " " << hashtree_desc.hash_block_size << " "
+                 << hashtree_desc.image_size / hashtree_desc.data_block_size << " "
+                 << hashtree_desc.tree_offset / hashtree_desc.hash_block_size << " "
+                 << hashtree_desc.hash_algorithm << " " << root_digest << " " << salt;
+
+    // Continued from the above optional parameters:
+    //   [<#opt_params> <opt_params>]
+    int optional_argc = 0;
+    std::ostringstream optional_args;
+
+    // dm-verity optional parameters for FEC (forward error correction):
+    //   use_fec_from_device <fec_dev>
+    //   fec_roots <num>
+    //   fec_blocks <num>
+    //   fec_start <offset>
+    if (hashtree_desc.fec_size > 0) {
+        // Note that fec_blocks is the size that FEC covers, *NOT* the
+        // size of the FEC data. Since we use FEC for everything up until
+        // the FEC data, it's the same as the offset (fec_start).
+        optional_argc += 8;
+        // clang-format off
+        optional_args << "use_fec_from_device " << blk_device
+                      << " fec_roots " << hashtree_desc.fec_num_roots
+                      << " fec_blocks " << hashtree_desc.fec_offset / hashtree_desc.data_block_size
+                      << " fec_start " << hashtree_desc.fec_offset / hashtree_desc.data_block_size
+                      << " ";
+        // clang-format on
+    }
+
+    if (!dm_verity_mode.empty()) {
+        optional_argc += 1;
+        optional_args << dm_verity_mode << " ";
+    }
+
+    // Always use ignore_zero_blocks.
+    optional_argc += 1;
+    optional_args << "ignore_zero_blocks";
+
+    verity_table << " " << optional_argc << " " << optional_args.str();
+    return verity_table.str();
+}
+
+static bool load_verity_table(struct dm_ioctl* io, const std::string& dm_device_name, int fd,
+                              uint64_t image_size, const std::string& verity_table) {
     fs_mgr_verity_ioctl_init(io, dm_device_name, DM_STATUS_TABLE_FLAG);
 
     // The buffer consists of [dm_ioctl][dm_target_spec][verity_params].
@@ -294,35 +318,25 @@ static bool hashtree_load_verity_table(struct dm_ioctl* io, const std::string& d
     io->target_count = 1;
     dm_target->status = 0;
     dm_target->sector_start = 0;
-    dm_target->length = hashtree_desc.image_size / 512;
+    dm_target->length = image_size / 512;
     strcpy(dm_target->target_type, "verity");
 
     // Builds the verity params.
     char* verity_params = buffer + sizeof(struct dm_ioctl) + sizeof(struct dm_target_spec);
     size_t bufsize = DM_BUF_SIZE - (verity_params - buffer);
 
-    int res = 0;
-    if (hashtree_desc.fec_size > 0) {
-        res = snprintf(verity_params, bufsize, VERITY_TABLE_FORMAT VERITY_TABLE_OPT_FEC_FORMAT,
-                       VERITY_TABLE_PARAMS(hashtree_desc, blk_device.c_str(), root_digest.c_str(),
-                                           salt.c_str()),
-                       VERITY_TABLE_OPT_FEC_PARAMS(hashtree_desc, blk_device.c_str()));
-    } else {
-        res = snprintf(verity_params, bufsize, VERITY_TABLE_FORMAT VERITY_TABLE_OPT_DEFAULT_FORMAT,
-                       VERITY_TABLE_PARAMS(hashtree_desc, blk_device.c_str(), root_digest.c_str(),
-                                           salt.c_str()),
-                       VERITY_TABLE_OPT_DEFAULT_PARAMS);
-    }
+    LINFO << "Loading verity table: '" << verity_table << "'";
 
-    if (res < 0 || (size_t)res >= bufsize) {
-        LERROR << "Error building verity table; insufficient buffer size?";
+    // Copies verity_table to verity_params (including the terminating null byte).
+    if (verity_table.size() > bufsize - 1) {
+        LERROR << "Verity table size too large: " << verity_table.size()
+               << " (max allowable size: " << bufsize - 1 << ")";
         return false;
     }
-
-    LINFO << "Loading verity table: '" << verity_params << "'";
+    memcpy(verity_params, verity_table.c_str(), verity_table.size() + 1);
 
     // Sets ext target boundary.
-    verity_params += strlen(verity_params) + 1;
+    verity_params += verity_table.size() + 1;
     verity_params = (char*)(((unsigned long)verity_params + 7) & ~7);
     dm_target->next = verity_params - buffer;
 
@@ -362,9 +376,15 @@ static bool hashtree_dm_verity_setup(struct fstab_rec* fstab_entry,
         return false;
     }
 
+    std::string verity_table =
+        construct_verity_table(hashtree_desc, salt, root_digest, fstab_entry->blk_device);
+    if (verity_table.empty()) {
+        LERROR << "Failed to construct verity table.";
+        return false;
+    }
+
     // Loads the verity mapping table.
-    if (!hashtree_load_verity_table(io, mount_point, fd, std::string(fstab_entry->blk_device),
-                                    hashtree_desc, salt, root_digest)) {
+    if (!load_verity_table(io, mount_point, fd, hashtree_desc.image_size, verity_table)) {
         LERROR << "Couldn't load verity table!";
         return false;
     }
