@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "fs_mgr_avb.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -38,9 +40,8 @@
 #include <utils/Compat.h>
 
 #include "fs_mgr.h"
-#include "fs_mgr_avb.h"
-#include "fs_mgr_avb_ops.h"
 #include "fs_mgr_priv.h"
+#include "fs_mgr_priv_avb_ops.h"
 #include "fs_mgr_priv_dm_ioctl.h"
 #include "fs_mgr_priv_sha.h"
 
@@ -457,12 +458,21 @@ static bool get_hashtree_descriptor(const std::string& partition_name,
     return true;
 }
 
-FsManagerAvbUniquePtr FsManagerAvbHandle::Open(const std::string& device_file_by_name_prefix) {
-    if (device_file_by_name_prefix.empty()) {
-        LERROR << "Missing device file by-name prefix";
+FsManagerAvbUniquePtr FsManagerAvbHandle::Open(const fstab& fstab) {
+    FsManagerAvbOps avb_ops(fstab);
+    return DoOpen(&avb_ops);
+}
+
+FsManagerAvbUniquePtr FsManagerAvbHandle::Open(ByNameSymlinkMap&& by_name_symlink_map) {
+    if (by_name_symlink_map.empty()) {
+        LERROR << "Empty by_name_symlink_map when opening FsManagerAvbHandle";
         return nullptr;
     }
+    FsManagerAvbOps avb_ops(std::move(by_name_symlink_map));
+    return DoOpen(&avb_ops);
+}
 
+FsManagerAvbUniquePtr FsManagerAvbHandle::DoOpen(FsManagerAvbOps* avb_ops) {
     // Gets the expected hash value of vbmeta images from kernel cmdline.
     std::unique_ptr<FsManagerAvbVerifier> avb_verifier = FsManagerAvbVerifier::Create();
     if (!avb_verifier) {
@@ -476,8 +486,7 @@ FsManagerAvbUniquePtr FsManagerAvbHandle::Open(const std::string& device_file_by
         return nullptr;
     }
 
-    FsManagerAvbOps avb_ops(device_file_by_name_prefix);
-    AvbSlotVerifyResult verify_result = avb_ops.AvbSlotVerify(
+    AvbSlotVerifyResult verify_result = avb_ops->AvbSlotVerify(
         fs_mgr_get_slot_suffix(), avb_verifier->IsDeviceUnlocked(), &avb_handle->avb_slot_data_);
 
     // Only allow two verify results:
