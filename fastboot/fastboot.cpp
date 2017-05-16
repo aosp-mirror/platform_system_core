@@ -118,6 +118,7 @@ static struct {
     { "boot",     "boot.img",         "boot.sig",     "boot",     false, false },
     { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  true  },
     { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  false },
+    { "dts",      "dt.img",           "dt.sig",       "dts",      true,  false },
     { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  false },
     { "system",   "system.img",       "system.sig",   "system",   false, false },
     { nullptr,    "system_other.img", "system.sig",   "system",   true,  true  },
@@ -135,7 +136,7 @@ static std::string find_item_given_name(const char* img_name) {
     return android::base::StringPrintf("%s/%s", dir, img_name);
 }
 
-std::string find_item(const std::string& item) {
+static std::string find_item(const std::string& item) {
     for (size_t i = 0; i < arraysize(images); ++i) {
         if (images[i].nickname && item == images[i].nickname) {
             return find_item_given_name(images[i].img_name);
@@ -1262,12 +1263,10 @@ static void do_bypass_unlock_command(std::vector<std::string>* args) {
 static void do_oem_command(std::vector<std::string>* args) {
     if (args->empty()) syntax_error("empty oem command");
 
-    std::string command;
+    std::string command("oem");
     while (!args->empty()) {
-        if (!command.empty()) command += ' ';
-        command += next_arg(args);
+        command += " " + next_arg(args);
     }
-
     fb_queue_command(command.c_str(), "");
 }
 

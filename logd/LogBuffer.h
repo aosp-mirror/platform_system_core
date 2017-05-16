@@ -159,8 +159,11 @@ class LogBuffer : public LogBufferInterface {
     const char* pidToName(pid_t pid) {
         return stats.pidToName(pid);
     }
-    uid_t pidToUid(pid_t pid) {
+    virtual uid_t pidToUid(pid_t pid) override {
         return stats.pidToUid(pid);
+    }
+    virtual pid_t tidToPid(pid_t tid) override {
+        return stats.tidToPid(tid);
     }
     const char* uidToName(uid_t uid) {
         return stats.uidToName(uid);
@@ -181,6 +184,9 @@ class LogBuffer : public LogBufferInterface {
     static const log_time pruneMargin;
 
     void maybePrune(log_id_t id);
+    bool isBusy(log_time watermark);
+    void kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows);
+
     bool prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT);
     LogBufferElementCollection::iterator erase(
         LogBufferElementCollection::iterator it, bool coalesce = false);

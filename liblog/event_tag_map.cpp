@@ -297,9 +297,9 @@ static int scanTagLine(EventTagMap* map, const char*& pData, int lineNum) {
   while (isspace(*cp) && (*cp != '\n')) ++cp;
   const char* fmt = NULL;
   size_t fmtLen = 0;
-  if (*cp != '#') {
+  if (*cp && (*cp != '#')) {
     fmt = cp;
-    while ((*cp != '\n') && (*cp != '#')) ++cp;
+    while (*cp && (*cp != '\n') && (*cp != '#')) ++cp;
     while ((cp > fmt) && isspace(*(cp - 1))) --cp;
     fmtLen = cp - fmt;
   }
@@ -309,7 +309,7 @@ static int scanTagLine(EventTagMap* map, const char*& pData, int lineNum) {
   // recorded for the same uid, but recording that
   // unused detail in our database is too burdensome.
   bool verbose = true;
-  while ((*cp != '#') && (*cp != '\n')) ++cp;
+  while (*cp && (*cp != '#') && (*cp != '\n')) ++cp;
   if (*cp == '#') {
     do {
       ++cp;
@@ -317,7 +317,7 @@ static int scanTagLine(EventTagMap* map, const char*& pData, int lineNum) {
     verbose = !!fastcmp<strncmp>(cp, "uid=", strlen("uid="));
   }
 
-  while (*cp != '\n') ++cp;
+  while (*cp && (*cp != '\n')) ++cp;
 #ifdef DEBUG
   fprintf(stderr, "%d: %p: %.*s\n", lineNum, tag, (int)(cp - pData), pData);
 #endif
