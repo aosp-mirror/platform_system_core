@@ -221,8 +221,8 @@ int register_socket_transport(int s, const char* serial, int port, int local);
 // This should only be used for transports with connection_state == kCsNoPerm.
 void unregister_usb_transport(usb_handle* usb);
 
-int check_header(apacket* p, atransport* t);
-int check_data(apacket* p);
+bool check_header(apacket* p, atransport* t);
+bool check_data(apacket* p);
 
 void close_usb_devices();
 void close_usb_devices(std::function<bool(const atransport*)> predicate);
