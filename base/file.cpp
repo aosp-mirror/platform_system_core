@@ -32,13 +32,14 @@
 #include "android-base/macros.h"  // For TEMP_FAILURE_RETRY on Darwin.
 #include "android-base/unique_fd.h"
 #include "android-base/utf8.h"
-#include "utils/Compat.h"
 
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
 #endif
 #if defined(_WIN32)
 #include <windows.h>
+#define O_CLOEXEC O_NOINHERIT
+#define O_NOFOLLOW 0
 #endif
 
 namespace android {
@@ -133,7 +134,7 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
                        bool follow_symlinks) {
   int flags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_BINARY |
               (follow_symlinks ? 0 : O_NOFOLLOW);
-  android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path.c_str(), flags, DEFFILEMODE)));
+  android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path.c_str(), flags, 0666)));
   if (fd == -1) {
     return false;
   }
