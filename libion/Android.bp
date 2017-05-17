@@ -1,6 +1,7 @@
 
 cc_library {
     name: "libion",
+		vendor_available: true,
     srcs: ["ion.c"],
     shared_libs: ["liblog"],
     local_include_dirs: [
