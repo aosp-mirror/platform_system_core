@@ -506,8 +506,11 @@ FsManagerAvbUniquePtr FsManagerAvbHandle::DoOpen(FsManagerAvbOps* avb_ops) {
         return nullptr;
     }
 
-    AvbSlotVerifyResult verify_result = avb_ops->AvbSlotVerify(
-        fs_mgr_get_slot_suffix(), avb_verifier->IsDeviceUnlocked(), &avb_handle->avb_slot_data_);
+    AvbSlotVerifyFlags flags = avb_verifier->IsDeviceUnlocked()
+                                   ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
+                                   : AVB_SLOT_VERIFY_FLAGS_NONE;
+    AvbSlotVerifyResult verify_result =
+        avb_ops->AvbSlotVerify(fs_mgr_get_slot_suffix(), flags, &avb_handle->avb_slot_data_);
 
     // Only allow two verify results:
     //   - AVB_SLOT_VERIFY_RESULT_OK.

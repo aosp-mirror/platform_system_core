@@ -1144,10 +1144,6 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
             continue;
         }
 
-        if (element->getRealTime() <= start) {
-            continue;
-        }
-
         // NB: calling out to another object with wrlock() held (safe)
         if (filter) {
             int ret = (*filter)(element, arg);
@@ -1174,11 +1170,10 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
         unlock();
 
         // range locking in LastLogTimes looks after us
-        max = element->flushTo(reader, this, privileged, sameTid);
+        log_time next = element->flushTo(reader, this, privileged, sameTid);
 
-        if (max == element->FLUSH_ERROR) {
-            return max;
-        }
+        if (next == element->FLUSH_ERROR) return next;
+        if (next > max) max = next;
 
         skip = maxSkip;
         rdlock();

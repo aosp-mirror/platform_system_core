@@ -17,3 +17,17 @@ cc_library_shared {
 
     export_include_dirs: ["include"],
 }
+
+cc_binary {
+    name: "dhcptool",
+
+    srcs: [
+        "dhcptool.c",
+    ],
+
+    shared_libs: [
+        "libnetutils",
+    ],
+
+    cflags: ["-Werror"],
+}
