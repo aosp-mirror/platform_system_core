@@ -1,6 +1,5 @@
 cc_defaults {
     name: "debuggerd_defaults",
-    defaults: ["linux_bionic_supported"],
     cflags: [
         "-Wall",
         "-Wextra",
@@ -8,10 +7,6 @@ cc_defaults {
         "-Wno-nullability-completeness",
         "-Os",
     ],
-
-    // util.cpp gets async signal safe logging via libc_logging,
-    // which defines its interface in bionic private headers.
-    include_dirs: ["bionic/libc"],
 
     local_include_dirs: ["include"],
 }
@@ -26,7 +21,7 @@ cc_library_static {
     ],
 
     whole_static_libs: [
-        "libc_logging",
+        "libasync_safe",
         "libcutils",
         "libbase",
     ],
@@ -39,7 +34,7 @@ cc_library_static {
     srcs: ["handler/debuggerd_handler.cpp"],
 
     whole_static_libs: [
-        "libc_logging",
+        "libasync_safe",
         "libdebuggerd",
     ],
 
@@ -70,6 +65,7 @@ cc_library_static {
     whole_static_libs: [
         "libdebuggerd_handler_core",
         "libtombstoned_client",
+        "libasync_safe",
         "libbase",
         "libdebuggerd",
         "libbacktrace",
@@ -166,6 +162,7 @@ cc_test {
                 "tombstoned_client.cpp",
                 "util.cpp"
             ],
+            static_libs: ["libasync_safe"],
         },
     },
 
@@ -178,7 +175,6 @@ cc_test {
 
     static_libs: [
         "libdebuggerd",
-        "libc_logging",
     ],
 
     local_include_dirs: [
@@ -225,7 +221,6 @@ cc_binary {
         "libbase",
         "liblog",
         "libprocinfo",
-        "libselinux",
     ],
 }
 

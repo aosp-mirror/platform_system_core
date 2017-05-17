@@ -65,6 +65,9 @@ struct usb_handle {
   /// Interface name
   wchar_t*      interface_name;
 
+  /// Maximum packet size.
+  unsigned max_packet_size;
+
   /// Mask for determining when to use zero length packets
   unsigned zero_mask;
 };
@@ -261,6 +264,8 @@ void usb_init() {
   std::thread(device_poll_thread).detach();
   std::thread(_power_notification_thread).detach();
 }
+
+void usb_cleanup() {}
 
 usb_handle* do_usb_open(const wchar_t* interface_name) {
   unsigned long name_len = 0;
@@ -522,6 +527,10 @@ int usb_close(usb_handle* handle) {
   return 0;
 }
 
+size_t usb_get_max_packet_size(usb_handle* handle) {
+    return handle->max_packet_size;
+}
+
 int recognized_device(usb_handle* handle) {
   if (NULL == handle)
     return 0;
@@ -557,6 +566,7 @@ int recognized_device(usb_handle* handle) {
       AdbEndpointInformation endpoint_info;
       // assuming zero is a valid bulk endpoint ID
       if (AdbGetEndpointInformation(handle->adb_interface, 0, &endpoint_info)) {
+        handle->max_packet_size = endpoint_info.max_packet_size;
         handle->zero_mask = endpoint_info.max_packet_size - 1;
         D("device zero_mask: 0x%x", handle->zero_mask);
       } else {

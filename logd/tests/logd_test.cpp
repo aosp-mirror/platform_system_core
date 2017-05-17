@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <poll.h>
@@ -26,12 +27,13 @@
 
 #include <string>
 
+#include <android-base/file.h>
 #include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
 #include <gtest/gtest.h>
-#include <log/log.h>
 #include <private/android_filesystem_config.h>
+#include <private/android_logger.h>
 #ifdef __ANDROID__
 #include <selinux/selinux.h>
 #endif
@@ -39,6 +41,7 @@
 #include "../LogReader.h"  // pickup LOGD_SNDTIMEO
 #include "../libaudit.h"   // pickup AUDIT_RATE_LIMIT_*
 
+#ifdef __ANDROID__
 static void send_to_control(char* buf, size_t len) {
     int sock = socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_RESERVED,
                                    SOCK_STREAM);
@@ -84,7 +87,7 @@ static void alloc_statistics(char** buffer, size_t* length) {
         size_t ret = atol(buf) + 1;
         if (ret < 4) {
             delete[] buf;
-            buf = NULL;
+            buf = nullptr;
             break;
         }
         bool check = ret <= len;
@@ -106,7 +109,7 @@ static char* find_benchmark_spam(char* cp) {
     // UID   PACKAGE                                                BYTES LINES
     // 0     root                                                  54164 147569
     //
-    char* benchmark = NULL;
+    char* benchmark = nullptr;
     do {
         static const char signature[] = "\n0     root ";
 
@@ -121,7 +124,7 @@ static char* find_benchmark_spam(char* cp) {
         benchmark = cp;
 #ifdef DEBUG
         char* end = strstr(benchmark, "\n");
-        if (end == NULL) {
+        if (end == nullptr) {
             end = benchmark + strlen(benchmark);
         }
         fprintf(stderr, "parse for spam counter in \"%.*s\"\n",
@@ -153,18 +156,25 @@ static char* find_benchmark_spam(char* cp) {
         if (value > 10UL) {
             break;
         }
-        benchmark = NULL;
+        benchmark = nullptr;
     } while (*cp);
     return benchmark;
 }
+#endif
 
 TEST(logd, statistics) {
+#ifdef __ANDROID__
     size_t len;
     char* buf;
 
+    // Drop cache so that any access problems can be discovered.
+    if (!android::base::WriteStringToFile("3\n", "/proc/sys/vm/drop_caches")) {
+        GTEST_LOG_(INFO) << "Could not open trigger dropping inode cache";
+    }
+
     alloc_statistics(&buf, &len);
 
-    ASSERT_TRUE(NULL != buf);
+    ASSERT_TRUE(nullptr != buf);
 
     // remove trailing FF
     char* cp = buf + len - 1;
@@ -189,23 +199,46 @@ TEST(logd, statistics) {
     EXPECT_EQ(0, truncated);
 
     char* main_logs = strstr(cp, "\nChattiest UIDs in main ");
-    EXPECT_TRUE(NULL != main_logs);
+    EXPECT_TRUE(nullptr != main_logs);
 
     char* radio_logs = strstr(cp, "\nChattiest UIDs in radio ");
     if (!radio_logs)
-        GTEST_LOG_(INFO) << "Value of: NULL != radio_logs\n"
+        GTEST_LOG_(INFO) << "Value of: nullptr != radio_logs\n"
                             "Actual: false\n"
                             "Expected: false\n";
 
     char* system_logs = strstr(cp, "\nChattiest UIDs in system ");
-    EXPECT_TRUE(NULL != system_logs);
+    EXPECT_TRUE(nullptr != system_logs);
 
     char* events_logs = strstr(cp, "\nChattiest UIDs in events ");
-    EXPECT_TRUE(NULL != events_logs);
+    EXPECT_TRUE(nullptr != events_logs);
+
+    // Check if there is any " u0_a#### " as this means packagelistparser broken
+    char* used_getpwuid = nullptr;
+    int used_getpwuid_len;
+    char* uid_name = cp;
+    static const char getpwuid_prefix[] = " u0_a";
+    while ((uid_name = strstr(uid_name, getpwuid_prefix)) != nullptr) {
+        used_getpwuid = uid_name + 1;
+        uid_name += strlen(getpwuid_prefix);
+        while (isdigit(*uid_name)) ++uid_name;
+        used_getpwuid_len = uid_name - used_getpwuid;
+        if (isspace(*uid_name)) break;
+        used_getpwuid = nullptr;
+    }
+    EXPECT_TRUE(nullptr == used_getpwuid);
+    if (used_getpwuid) {
+        fprintf(stderr, "libpackagelistparser failed to pick up %.*s\n",
+                used_getpwuid_len, used_getpwuid);
+    }
 
     delete[] buf;
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
 
+#ifdef __ANDROID__
 static void caught_signal(int /* signum */) {
 }
 
@@ -315,8 +348,10 @@ static void dump_log_msg(const char* prefix, log_msg* msg, unsigned int version,
     fprintf(stderr, "}\n");
     fflush(stderr);
 }
+#endif
 
 TEST(logd, both) {
+#ifdef __ANDROID__
     log_msg msg;
 
     // check if we can read any logs from logd
@@ -343,7 +378,7 @@ TEST(logd, both) {
         }
 
         alarm(old_alarm);
-        sigaction(SIGALRM, &old_sigaction, NULL);
+        sigaction(SIGALRM, &old_sigaction, nullptr);
 
         close(fd);
     }
@@ -390,8 +425,12 @@ TEST(logd, both) {
     EXPECT_EQ(0, !user_logger_available && !kernel_logger_available);
     EXPECT_EQ(0, user_logger_content && kernel_logger_content);
     EXPECT_EQ(0, !user_logger_content && !kernel_logger_content);
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
 
+#ifdef __ANDROID__
 // BAD ROBOT
 //   Benchmark threshold are generally considered bad form unless there is
 //   is some human love applied to the continued maintenance and whether the
@@ -421,7 +460,7 @@ TEST(logd, benchmark) {
 
     // Introduce some extreme spam for the worst UID filter
     ASSERT_TRUE(
-        NULL !=
+        nullptr !=
         (fp = popen("/data/nativetest/liblog-benchmarks/liblog-benchmarks"
                     " BM_log_maximum_retry"
                     " BM_log_maximum"
@@ -492,10 +531,10 @@ TEST(logd, benchmark) {
     bool collected_statistics = !!buf;
     EXPECT_EQ(true, collected_statistics);
 
-    ASSERT_TRUE(NULL != buf);
+    ASSERT_TRUE(nullptr != buf);
 
     char* benchmark_statistics_found = find_benchmark_spam(buf);
-    ASSERT_TRUE(benchmark_statistics_found != NULL);
+    ASSERT_TRUE(benchmark_statistics_found != nullptr);
 
     // Check how effective the SPAM filter is, parse out Now size.
     // 0     root                      54164 147569
@@ -560,9 +599,11 @@ TEST(logd, benchmark) {
     // 50% threshold for SPAM filter (<20% typical, lots of engineering margin)
     ASSERT_GT(totalSize, nowSpamSize * 2);
 }
+#endif
 
 // b/26447386 confirm fixed
 void timeout_negative(const char* command) {
+#ifdef __ANDROID__
     log_msg msg_wrap, msg_timeout;
     bool content_wrap = false, content_timeout = false, written = false;
     unsigned int alarm_wrap = 0, alarm_timeout = 0;
@@ -588,7 +629,7 @@ void timeout_negative(const char* command) {
         written = write(fd, ask.c_str(), len) == (ssize_t)len;
         if (!written) {
             alarm(old_alarm);
-            sigaction(SIGALRM, &old_sigaction, NULL);
+            sigaction(SIGALRM, &old_sigaction, nullptr);
             close(fd);
             continue;
         }
@@ -610,7 +651,7 @@ void timeout_negative(const char* command) {
                                    : (old_alarm > (1 + 3 - alarm_wrap))
                                          ? old_alarm - 3 + alarm_wrap
                                          : 2);
-        sigaction(SIGALRM, &old_sigaction, NULL);
+        sigaction(SIGALRM, &old_sigaction, nullptr);
 
         close(fd);
 
@@ -632,6 +673,10 @@ void timeout_negative(const char* command) {
     EXPECT_NE(0U, alarm_wrap);
     EXPECT_TRUE(content_timeout);
     EXPECT_NE(0U, alarm_timeout);
+#else
+    command = nullptr;
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
 
 TEST(logd, timeout_no_start) {
@@ -645,6 +690,7 @@ TEST(logd, timeout_start_epoch) {
 
 // b/26447386 refined behavior
 TEST(logd, timeout) {
+#ifdef __ANDROID__
     // b/33962045 This test interferes with other log reader tests that
     // follow because of file descriptor socket persistence in the same
     // process.  So let's fork it to isolate it from giving us pain.
@@ -693,7 +739,7 @@ TEST(logd, timeout) {
         written = write(fd, ask.c_str(), len) == (ssize_t)len;
         if (!written) {
             alarm(old_alarm);
-            sigaction(SIGALRM, &old_sigaction, NULL);
+            sigaction(SIGALRM, &old_sigaction, nullptr);
             close(fd);
             continue;
         }
@@ -715,7 +761,7 @@ TEST(logd, timeout) {
                                    : (old_alarm > (1 + 3 - alarm_wrap))
                                          ? old_alarm - 3 + alarm_wrap
                                          : 2);
-        sigaction(SIGALRM, &old_sigaction, NULL);
+        sigaction(SIGALRM, &old_sigaction, nullptr);
 
         close(fd);
 
@@ -768,10 +814,14 @@ TEST(logd, timeout) {
 
     _exit(!written + content_wrap + alarm_wrap + !content_timeout +
           !alarm_timeout);
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
 
 // b/27242723 confirmed fixed
 TEST(logd, SNDTIMEO) {
+#ifdef __ANDROID__
     static const unsigned sndtimeo =
         LOGD_SNDTIMEO;  // <sigh> it has to be done!
     static const unsigned sleep_time = sndtimeo + 3;
@@ -813,7 +863,7 @@ TEST(logd, SNDTIMEO) {
     int save_errno = (recv_ret < 0) ? errno : 0;
 
     EXPECT_NE(0U, alarm(old_alarm));
-    sigaction(SIGALRM, &old_sigaction, NULL);
+    sigaction(SIGALRM, &old_sigaction, nullptr);
 
     EXPECT_EQ(0, recv_ret);
     if (recv_ret > 0) {
@@ -822,6 +872,9 @@ TEST(logd, SNDTIMEO) {
     EXPECT_EQ(0, save_errno);
 
     close(fd);
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
 
 TEST(logd, getEventTag_list) {
@@ -849,8 +902,8 @@ TEST(logd, getEventTag_42) {
     char* cp;
     long ret = strtol(buffer, &cp, 10);
     EXPECT_GT(ret, 16);
-    EXPECT_TRUE(strstr(buffer, "\t(to life the universe etc|3)") != NULL);
-    EXPECT_TRUE(strstr(buffer, "answer") != NULL);
+    EXPECT_TRUE(strstr(buffer, "\t(to life the universe etc|3)") != nullptr);
+    EXPECT_TRUE(strstr(buffer, "answer") != nullptr);
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
@@ -870,8 +923,8 @@ TEST(logd, getEventTag_newentry) {
     char* cp;
     long ret = strtol(buffer, &cp, 10);
     EXPECT_GT(ret, 16);
-    EXPECT_TRUE(strstr(buffer, "\t(new|1)") != NULL);
-    EXPECT_TRUE(strstr(buffer, name) != NULL);
+    EXPECT_TRUE(strstr(buffer, "\t(new|1)") != nullptr);
+    EXPECT_TRUE(strstr(buffer, name) != nullptr);
 // ToDo: also look for this in /data/misc/logd/event-log-tags and
 // /dev/event-log-tags.
 #else
@@ -879,11 +932,14 @@ TEST(logd, getEventTag_newentry) {
 #endif
 }
 
+#ifdef __ANDROID__
 static inline int32_t get4LE(const char* src) {
     return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
 }
+#endif
 
 void __android_log_btwrite_multiple__helper(int count) {
+#ifdef __ANDROID__
     log_time ts(CLOCK_MONOTONIC);
 
     log_time ts1(CLOCK_MONOTONIC);
@@ -912,7 +968,7 @@ void __android_log_btwrite_multiple__helper(int count) {
     ASSERT_EQ(0, info.si_status);
 
     struct logger_list* logger_list;
-    ASSERT_TRUE(NULL !=
+    ASSERT_TRUE(nullptr !=
                 (logger_list = android_logger_list_open(
                      LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK,
                      0, pid)));
@@ -976,6 +1032,10 @@ void __android_log_btwrite_multiple__helper(int count) {
     EXPECT_EQ(expected_chatty_count, chatty_count);
     EXPECT_EQ(expected_identical_count, identical_count);
     EXPECT_EQ(expected_expire_count, expire_count);
+#else
+    count = 0;
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
 }
 
 TEST(logd, multiple_test_1) {
@@ -1001,8 +1061,8 @@ static pid_t sepolicy_rate(unsigned rate, unsigned num) {
 
     if (pid) {
         siginfo_t info = {};
-        if (TEMP_FAILURE_RETRY(waitid(P_PID, pid, &info, WEXITED))) return 0;
-        if (info.si_status) return 0;
+        if (TEMP_FAILURE_RETRY(waitid(P_PID, pid, &info, WEXITED))) return -1;
+        if (info.si_status) return -1;
         return pid;
     }
 
@@ -1017,7 +1077,7 @@ static pid_t sepolicy_rate(unsigned rate, unsigned num) {
             freecon(context);
             _exit(-1);
             // NOTREACHED
-            return 0;
+            return -1;
         }
     }
 
@@ -1046,25 +1106,39 @@ static pid_t sepolicy_rate(unsigned rate, unsigned num) {
         if (access(android::base::StringPrintf(file, num).c_str(), F_OK) == 0) {
             _exit(-1);
             // NOTREACHED
-            return 0;
+            return -1;
         }
         usleep(usec);
         --num;
     }
     _exit(0);
     // NOTREACHED
-    return 0;
+    return -1;
 }
+
+static constexpr int background_period = 10;
 
 static int count_avc(pid_t pid) {
     int count = 0;
 
-    if (pid == 0) return count;
+    // pid=-1 skip as pid is in error
+    if (pid == (pid_t)-1) return count;
 
-    struct logger_list* logger_list;
-    if (!(logger_list = android_logger_list_open(
-              LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 0, pid)))
+    // pid=0 means we want to report the background count of avc: activities
+    struct logger_list* logger_list =
+        pid ? android_logger_list_alloc(
+                  ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 0, pid)
+            : android_logger_list_alloc_time(
+                  ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK,
+                  log_time(android_log_clockid()) -
+                      log_time(background_period, 0),
+                  0);
+    if (!logger_list) return count;
+    struct logger* logger = android_logger_open(logger_list, LOG_ID_EVENTS);
+    if (!logger) {
+        android_logger_list_close(logger_list);
         return count;
+    }
     for (;;) {
         log_msg log_msg;
 
@@ -1096,56 +1170,64 @@ static int count_avc(pid_t pid) {
 }
 #endif
 
-TEST(logd, sepolicy_rate_limiter_maximum) {
+TEST(logd, sepolicy_rate_limiter) {
 #ifdef __ANDROID__
-    static const int rate = AUDIT_RATE_LIMIT_MAX;
-    static const int duration = 2;
-    // Two seconds of a liveable sustained rate
-    EXPECT_EQ(rate * duration, count_avc(sepolicy_rate(rate, rate * duration)));
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}
-
-TEST(logd, sepolicy_rate_limiter_sub_burst) {
-#ifdef __ANDROID__
-    // maximum period below half way between sustainable and burst rate.
-    static const int threshold =
-        ((AUDIT_RATE_LIMIT_BURST_DURATION *
-          (AUDIT_RATE_LIMIT_DEFAULT + AUDIT_RATE_LIMIT_MAX)) +
-         1) /
-        2;
-    static const int rate = (threshold / AUDIT_RATE_LIMIT_BURST_DURATION) - 1;
-    static const int duration = AUDIT_RATE_LIMIT_BURST_DURATION;
-    EXPECT_EQ(rate * duration, count_avc(sepolicy_rate(rate, rate * duration)));
-#else
-    GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}
-
-TEST(logd, sepolicy_rate_limiter_spam) {
-#ifdef __ANDROID__
-    // maximum period of double the maximum burst rate
-    static const int threshold =
-        ((AUDIT_RATE_LIMIT_BURST_DURATION *
-          (AUDIT_RATE_LIMIT_DEFAULT + AUDIT_RATE_LIMIT_MAX)) +
-         1) /
-        2;
-    static const int rate = AUDIT_RATE_LIMIT_DEFAULT * 2;
-    static const int duration = threshold / AUDIT_RATE_LIMIT_DEFAULT;
-    EXPECT_GE(
-        ((AUDIT_RATE_LIMIT_DEFAULT * duration) * 115) / 100,  // +15% margin
-        count_avc(sepolicy_rate(rate, rate * duration)));
-    // give logd another 3 seconds to react to the burst before checking
-    sepolicy_rate(rate, rate * 3);
-    // maximum period at double the maximum burst rate (spam filter kicked in)
-    EXPECT_GE(
-        threshold * 2,
-        count_avc(sepolicy_rate(rate, rate * AUDIT_RATE_LIMIT_BURST_DURATION)));
-    // cool down, and check unspammy rate still works
-    sleep(2);
-    EXPECT_LE(AUDIT_RATE_LIMIT_BURST_DURATION - 1,  // allow _one_ to be lost
-              count_avc(sepolicy_rate(1, AUDIT_RATE_LIMIT_BURST_DURATION)));
+    int background_selinux_activity_too_high = count_avc(0);
+    if (background_selinux_activity_too_high > 2) {
+        GTEST_LOG_(ERROR) << "Too much background selinux activity "
+                          << background_selinux_activity_too_high * 60 /
+                                 background_period
+                          << "/minute on the device, this test\n"
+                          << "can not measure the functionality of the "
+                          << "sepolicy rate limiter.  Expect test to\n"
+                          << "fail as this device is in a bad state, "
+                          << "but is not strictly a unit test failure.";
+    }
+    // sepolicy_rate_limiter_maximum
+    {  // maximum precharch test block.
+        static constexpr int rate = AUDIT_RATE_LIMIT_MAX;
+        static constexpr int duration = 2;
+        // Two seconds of a liveable sustained rate
+        EXPECT_EQ(rate * duration,
+                  count_avc(sepolicy_rate(rate, rate * duration)));
+    }
+    // sepolicy_rate_limiter_sub_burst
+    {  // maximum period below half way between sustainable and burst rate
+        static constexpr int threshold =
+            ((AUDIT_RATE_LIMIT_BURST_DURATION *
+              (AUDIT_RATE_LIMIT_DEFAULT + AUDIT_RATE_LIMIT_MAX)) +
+             1) /
+            2;
+        static constexpr int rate =
+            (threshold / AUDIT_RATE_LIMIT_BURST_DURATION) - 1;
+        static constexpr int duration = AUDIT_RATE_LIMIT_BURST_DURATION;
+        EXPECT_EQ(rate * duration,
+                  count_avc(sepolicy_rate(rate, rate * duration)));
+    }
+    // sepolicy_rate_limiter_spam
+    {  // hit avc: hard beyond reason block.
+        // maximum period of double the maximum burst rate
+        static constexpr int threshold =
+            ((AUDIT_RATE_LIMIT_BURST_DURATION *
+              (AUDIT_RATE_LIMIT_DEFAULT + AUDIT_RATE_LIMIT_MAX)) +
+             1) /
+            2;
+        static constexpr int rate = AUDIT_RATE_LIMIT_DEFAULT * 2;
+        static constexpr int duration = threshold / AUDIT_RATE_LIMIT_DEFAULT;
+        EXPECT_GE(
+            ((AUDIT_RATE_LIMIT_DEFAULT * duration) * 115) / 100,  // +15% margin
+            count_avc(sepolicy_rate(rate, rate * duration)));
+        // give logd another 3 seconds to react to the burst before checking
+        sepolicy_rate(rate, rate * 3);
+        // maximum period at double maximum burst rate (spam filter kicked in)
+        EXPECT_GE(threshold * 2,
+                  count_avc(sepolicy_rate(
+                      rate, rate * AUDIT_RATE_LIMIT_BURST_DURATION)));
+        // cool down, and check unspammy rate still works
+        sleep(2);
+        EXPECT_LE(AUDIT_RATE_LIMIT_BURST_DURATION - 1,  // allow _one_ lost
+                  count_avc(sepolicy_rate(1, AUDIT_RATE_LIMIT_BURST_DURATION)));
+    }
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif

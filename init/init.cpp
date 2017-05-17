@@ -38,10 +38,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <selinux/selinux.h>
-#include <selinux/label.h>
-#include <selinux/android.h>
-
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -49,8 +45,12 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <keyutils.h>
 #include <libavb/libavb.h>
 #include <private/android_filesystem_config.h>
+#include <selinux/android.h>
+#include <selinux/label.h>
+#include <selinux/selinux.h>
 
 #include <fstream>
 #include <memory>
@@ -870,7 +870,9 @@ static void selinux_initialize(bool in_kernel_domain) {
             }
         }
 
-        if (!write_file("/sys/fs/selinux/checkreqprot", "0")) {
+        std::string err;
+        if (!WriteFile("/sys/fs/selinux/checkreqprot", "0", &err)) {
+            LOG(ERROR) << err;
             security_failure();
         }
 
@@ -881,38 +883,41 @@ static void selinux_initialize(bool in_kernel_domain) {
     }
 }
 
-// The files and directories that were created before initial sepolicy load
-// need to have their security context restored to the proper value.
-// This must happen before /dev is populated by ueventd.
+// The files and directories that were created before initial sepolicy load or
+// files on ramdisk need to have their security context restored to the proper
+// value. This must happen before /dev is populated by ueventd.
 static void selinux_restore_context() {
     LOG(INFO) << "Running restorecon...";
-    restorecon("/dev");
-    restorecon("/dev/kmsg");
+    selinux_android_restorecon("/dev", 0);
+    selinux_android_restorecon("/dev/kmsg", 0);
     if constexpr (WORLD_WRITABLE_KMSG) {
-      restorecon("/dev/kmsg_debug");
+        selinux_android_restorecon("/dev/kmsg_debug", 0);
     }
-    restorecon("/dev/socket");
-    restorecon("/dev/random");
-    restorecon("/dev/urandom");
-    restorecon("/dev/__properties__");
+    selinux_android_restorecon("/dev/socket", 0);
+    selinux_android_restorecon("/dev/random", 0);
+    selinux_android_restorecon("/dev/urandom", 0);
+    selinux_android_restorecon("/dev/__properties__", 0);
 
-    restorecon("/file_contexts.bin");
-    restorecon("/plat_file_contexts");
-    restorecon("/nonplat_file_contexts");
-    restorecon("/plat_property_contexts");
-    restorecon("/nonplat_property_contexts");
-    restorecon("/plat_seapp_contexts");
-    restorecon("/nonplat_seapp_contexts");
-    restorecon("/plat_service_contexts");
-    restorecon("/nonplat_service_contexts");
-    restorecon("/plat_hwservice_contexts");
-    restorecon("/nonplat_hwservice_contexts");
-    restorecon("/sepolicy");
-    restorecon("/vndservice_contexts");
+    selinux_android_restorecon("/file_contexts.bin", 0);
+    selinux_android_restorecon("/plat_file_contexts", 0);
+    selinux_android_restorecon("/nonplat_file_contexts", 0);
+    selinux_android_restorecon("/plat_property_contexts", 0);
+    selinux_android_restorecon("/nonplat_property_contexts", 0);
+    selinux_android_restorecon("/plat_seapp_contexts", 0);
+    selinux_android_restorecon("/nonplat_seapp_contexts", 0);
+    selinux_android_restorecon("/plat_service_contexts", 0);
+    selinux_android_restorecon("/nonplat_service_contexts", 0);
+    selinux_android_restorecon("/plat_hwservice_contexts", 0);
+    selinux_android_restorecon("/nonplat_hwservice_contexts", 0);
+    selinux_android_restorecon("/sepolicy", 0);
+    selinux_android_restorecon("/vndservice_contexts", 0);
 
-    restorecon("/sys", SELINUX_ANDROID_RESTORECON_RECURSE);
-    restorecon("/dev/block", SELINUX_ANDROID_RESTORECON_RECURSE);
-    restorecon("/dev/device-mapper");
+    selinux_android_restorecon("/sys", SELINUX_ANDROID_RESTORECON_RECURSE);
+    selinux_android_restorecon("/dev/block", SELINUX_ANDROID_RESTORECON_RECURSE);
+    selinux_android_restorecon("/dev/device-mapper", 0);
+
+    selinux_android_restorecon("/sbin/mke2fs", 0);
+    selinux_android_restorecon("/sbin/e2fsdroid", 0);
 }
 
 // Set the UDC controller for the ConfigFS USB Gadgets.
@@ -1021,7 +1026,7 @@ int main(int argc, char** argv) {
 
         // We're in the kernel domain, so re-exec init to transition to the init domain now
         // that the SELinux policy has been loaded.
-        if (restorecon("/init") == -1) {
+        if (selinux_android_restorecon("/init", 0) == -1) {
             PLOG(ERROR) << "restorecon failed";
             security_failure();
         }
@@ -1045,6 +1050,11 @@ int main(int argc, char** argv) {
     // At this point we're in the second stage of init.
     InitKernelLogging(argv);
     LOG(INFO) << "init second stage started!";
+
+    // Set up a session keyring that all processes will have access to. It
+    // will hold things like FBE encryption keys. No process should override
+    // its session keyring.
+    keyctl_get_keyring_ID(KEY_SPEC_SESSION_KEYRING, 1);
 
     // Indicate that booting is in progress to background fw loaders, etc.
     close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));

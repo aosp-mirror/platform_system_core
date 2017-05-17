@@ -240,23 +240,36 @@ static void* reinit_thread_start(void* /*obj*/) {
     set_sched_policy(0, SP_BACKGROUND);
     setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND);
 
+    // We should drop to AID_LOGD, if we are anything else, we have
+    // even lesser privileges and accept our fate.
+    gid_t groups[] = {
+        AID_SYSTEM,        // search access to /data/system path
+        AID_PACKAGE_INFO,  // readonly access to /data/system/packages.list
+    };
+    if (setgroups(arraysize(groups), groups) == -1) {
+        android::prdebug(
+            "logd.daemon: failed to set AID_SYSTEM AID_PACKAGE_INFO groups");
+    }
+    if (setgid(AID_LOGD) != 0) {
+        android::prdebug("logd.daemon: failed to set AID_LOGD gid");
+    }
+    if (setuid(AID_LOGD) != 0) {
+        android::prdebug("logd.daemon: failed to set AID_LOGD uid");
+    }
+
     cap_t caps = cap_init();
     (void)cap_clear(caps);
     (void)cap_set_proc(caps);
     (void)cap_free(caps);
-
-    // If we are AID_ROOT, we should drop to AID_LOGD+AID_SYSTEM, if we are
-    // anything else, we have even lesser privileges and accept our fate. Not
-    // worth checking for error returns setting this thread's privileges.
-    (void)setgid(AID_SYSTEM);  // readonly access to /data/system/packages.list
-    (void)setuid(AID_LOGD);    // access to everything logd, eg /data/misc/logd
 
     while (reinit_running && !sem_wait(&reinit) && reinit_running) {
         // uidToName Privileged Worker
         if (uid) {
             name = nullptr;
 
-            packagelist_parse(package_list_parser_cb, nullptr);
+            // if we got the perms wrong above, this would spam if we reported
+            // problems with acquisition of an uid name from the packages.
+            (void)packagelist_parse(package_list_parser_cb, nullptr);
 
             uid = 0;
             sem_post(&uidName);

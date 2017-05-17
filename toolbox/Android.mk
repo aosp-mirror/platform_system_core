@@ -95,13 +95,3 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/upstream-netbsd/include/
 LOCAL_MODULE := grep
 LOCAL_POST_INSTALL_CMD := $(hide) $(foreach t,egrep fgrep,ln -sf grep $(TARGET_OUT)/bin/$(t);)
 include $(BUILD_EXECUTABLE)
-
-
-# We build gzip separately, so it can provide gunzip and zcat too.
-include $(CLEAR_VARS)
-LOCAL_MODULE := gzip
-LOCAL_SRC_FILES := gzip.c
-LOCAL_CFLAGS += -Wall -Werror
-LOCAL_SHARED_LIBRARIES += libz
-LOCAL_POST_INSTALL_CMD := $(hide) $(foreach t,gunzip zcat,ln -sf gzip $(TARGET_OUT)/bin/$(t);)
-include $(BUILD_EXECUTABLE)

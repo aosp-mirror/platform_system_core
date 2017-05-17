@@ -400,8 +400,27 @@ asocket* create_device_tracker(void) {
     return &tracker->socket;
 }
 
+// Check if all of the USB transports are connected.
+bool iterate_transports(std::function<bool(const atransport*)> fn) {
+    std::lock_guard<std::mutex> lock(transport_lock);
+    for (const auto& t : transport_list) {
+        if (!fn(t)) {
+            return false;
+        }
+    }
+    for (const auto& t : pending_list) {
+        if (!fn(t)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Call this function each time the transport list has changed.
 void update_transports() {
+    update_transport_status();
+
+    // Notify `adb track-devices` clients.
     std::string transports = list_transports(false);
 
     device_tracker* tracker = device_tracker_list;
@@ -549,15 +568,14 @@ void init_transport_registration(void) {
                     transport_registration_func, 0);
 
     fdevent_set(&transport_registration_fde, FDE_READ);
-#if ADB_HOST
-    android::base::at_quick_exit([]() {
-        // To avoid only writing part of a packet to a transport after exit, kick all transports.
-        std::lock_guard<std::mutex> lock(transport_lock);
-        for (auto t : transport_list) {
-            t->Kick();
-        }
-    });
-#endif
+}
+
+void kick_all_transports() {
+    // To avoid only writing part of a packet to a transport after exit, kick all transports.
+    std::lock_guard<std::mutex> lock(transport_lock);
+    for (auto t : transport_list) {
+        t->Kick();
+    }
 }
 
 /* the fdevent select pump is single threaded */

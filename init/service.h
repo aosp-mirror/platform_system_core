@@ -94,14 +94,20 @@ class Service {
     const std::set<std::string>& classnames() const { return classnames_; }
     unsigned flags() const { return flags_; }
     pid_t pid() const { return pid_; }
+    int crash_count() const { return crash_count_; }
     uid_t uid() const { return uid_; }
     gid_t gid() const { return gid_; }
-    int priority() const { return priority_; }
+    unsigned namespace_flags() const { return namespace_flags_; }
     const std::vector<gid_t>& supp_gids() const { return supp_gids_; }
     const std::string& seclabel() const { return seclabel_; }
     const std::vector<int>& keycodes() const { return keycodes_; }
     int keychord_id() const { return keychord_id_; }
     void set_keychord_id(int keychord_id) { keychord_id_ = keychord_id; }
+    IoSchedClass ioprio_class() const { return ioprio_class_; }
+    int ioprio_pri() const { return ioprio_pri_; }
+    int priority() const { return priority_; }
+    int oom_score_adjust() const { return oom_score_adjust_; }
+    bool process_cgroup_empty() const { return process_cgroup_empty_; }
     const std::vector<std::string>& args() const { return args_; }
 
   private:
@@ -174,12 +180,17 @@ class Service {
 
     int oom_score_adjust_;
 
+    bool process_cgroup_empty_ = false;
+
     std::vector<std::string> args_;
 };
 
 class ServiceManager {
 public:
     static ServiceManager& GetInstance();
+
+    // Exposed for testing
+    ServiceManager();
 
     void AddService(std::unique_ptr<Service> service);
     Service* MakeExecOneshotService(const std::vector<std::string>& args);
@@ -199,8 +210,6 @@ public:
     void DumpState() const;
 
 private:
-    ServiceManager();
-
     // Cleans up a child process that exited.
     // Returns true iff a children was cleaned up.
     bool ReapOneProcess();

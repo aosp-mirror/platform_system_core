@@ -28,12 +28,15 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <condition_variable>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/thread_annotations.h>
 #include <cutils/sockets.h>
 
 #include "adb_io.h"
@@ -120,7 +123,7 @@ bool adb_status(int fd, std::string* error) {
     return false;
 }
 
-int _adb_connect(const std::string& service, std::string* error) {
+static int _adb_connect(const std::string& service, std::string* error) {
     D("_adb_connect: %s", service.c_str());
     if (service.empty() || service.size() > MAX_PAYLOAD_V1) {
         *error = android::base::StringPrintf("bad service name length (%zd)",
@@ -155,6 +158,25 @@ int _adb_connect(const std::string& service, std::string* error) {
     return fd;
 }
 
+bool adb_kill_server() {
+    D("adb_kill_server");
+    std::string reason;
+    int fd = socket_spec_connect(__adb_server_socket_spec, &reason);
+    if (fd < 0) {
+        fprintf(stderr, "cannot connect to daemon at %s: %s\n", __adb_server_socket_spec,
+                reason.c_str());
+        return true;
+    }
+
+    if (!SendProtocolString(fd, "host:kill")) {
+        fprintf(stderr, "error: write failure during connection: %s\n", strerror(errno));
+        return false;
+    }
+
+    ReadOrderlyShutdown(fd);
+    return true;
+}
+
 int adb_connect(const std::string& service, std::string* error) {
     // first query the adb server's version
     int fd = _adb_connect("host:version", error);
@@ -177,9 +199,8 @@ int adb_connect(const std::string& service, std::string* error) {
         } else {
             fprintf(stderr, "* daemon started successfully\n");
         }
-        // Give the server some time to start properly and detect devices.
-        std::this_thread::sleep_for(3s);
-        // fall through to _adb_connect
+        // The server will wait until it detects all of its connected devices before acking.
+        // Fall through to _adb_connect.
     } else {
         // If a server is already running, check its version matches.
         int version = ADB_SERVER_VERSION - 1;
@@ -212,18 +233,7 @@ int adb_connect(const std::string& service, std::string* error) {
         if (version != ADB_SERVER_VERSION) {
             fprintf(stderr, "adb server version (%d) doesn't match this client (%d); killing...\n",
                     version, ADB_SERVER_VERSION);
-            fd = _adb_connect("host:kill", error);
-            if (fd >= 0) {
-                ReadOrderlyShutdown(fd);
-                adb_close(fd);
-            } else {
-                // If we couldn't connect to the server or had some other error,
-                // report it, but still try to start the server.
-                fprintf(stderr, "error: %s\n", error->c_str());
-            }
-
-            /* XXX can we better detect its death? */
-            std::this_thread::sleep_for(2s);
+            adb_kill_server();
             goto start_server;
         }
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,16 @@
  * limitations under the License.
  */
 
-#ifndef SYSTEM_CORE_INCLUDE_ANDROID_WINDOW_H
-#define SYSTEM_CORE_INCLUDE_ANDROID_WINDOW_H
+#include "LogBufferInterface.h"
+#include "LogUtils.h"
 
-#include <system/window-deprecated.h>
-
-#endif /* SYSTEM_CORE_INCLUDE_ANDROID_WINDOW_H */
+LogBufferInterface::LogBufferInterface() {
+}
+LogBufferInterface::~LogBufferInterface() {
+}
+uid_t LogBufferInterface::pidToUid(pid_t pid) {
+    return android::pidToUid(pid);
+}
+pid_t LogBufferInterface::tidToPid(pid_t tid) {
+    return android::tidToPid(tid);
+}

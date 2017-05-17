@@ -48,6 +48,21 @@ void dump_memory_and_code(log_t* log, Backtrace* backtrace) {
   }
 }
 
+#define DUMP_GP_REGISTERS(log, reg_prefix)                                             \
+  _LOG(log, logtype::REGISTERS, "    r0 %08x  r1 %08x  r2 %08x  r3 %08x\n",            \
+       static_cast<uint32_t>(reg_prefix##r0), static_cast<uint32_t>(reg_prefix##r1),   \
+       static_cast<uint32_t>(reg_prefix##r2), static_cast<uint32_t>(reg_prefix##r3));  \
+  _LOG(log, logtype::REGISTERS, "    r4 %08x  r5 %08x  r6 %08x  r7 %08x\n",            \
+       static_cast<uint32_t>(reg_prefix##r4), static_cast<uint32_t>(reg_prefix##r5),   \
+       static_cast<uint32_t>(reg_prefix##r6), static_cast<uint32_t>(reg_prefix##r7));  \
+  _LOG(log, logtype::REGISTERS, "    r8 %08x  r9 %08x  sl %08x  fp %08x\n",            \
+       static_cast<uint32_t>(reg_prefix##r8), static_cast<uint32_t>(reg_prefix##r9),   \
+       static_cast<uint32_t>(reg_prefix##r10), static_cast<uint32_t>(reg_prefix##fp)); \
+  _LOG(log, logtype::REGISTERS, "    ip %08x  sp %08x  lr %08x  pc %08x  cpsr %08x\n", \
+       static_cast<uint32_t>(reg_prefix##ip), static_cast<uint32_t>(reg_prefix##sp),   \
+       static_cast<uint32_t>(reg_prefix##lr), static_cast<uint32_t>(reg_prefix##pc),   \
+       static_cast<uint32_t>(reg_prefix##cpsr))
+
 void dump_registers(log_t* log, pid_t tid) {
   pt_regs r;
   if (ptrace(PTRACE_GETREGS, tid, 0, &r)) {
@@ -55,19 +70,7 @@ void dump_registers(log_t* log, pid_t tid) {
     return;
   }
 
-  _LOG(log, logtype::REGISTERS, "    r0 %08x  r1 %08x  r2 %08x  r3 %08x\n",
-       static_cast<uint32_t>(r.ARM_r0), static_cast<uint32_t>(r.ARM_r1),
-       static_cast<uint32_t>(r.ARM_r2), static_cast<uint32_t>(r.ARM_r3));
-  _LOG(log, logtype::REGISTERS, "    r4 %08x  r5 %08x  r6 %08x  r7 %08x\n",
-       static_cast<uint32_t>(r.ARM_r4), static_cast<uint32_t>(r.ARM_r5),
-       static_cast<uint32_t>(r.ARM_r6), static_cast<uint32_t>(r.ARM_r7));
-  _LOG(log, logtype::REGISTERS, "    r8 %08x  r9 %08x  sl %08x  fp %08x\n",
-       static_cast<uint32_t>(r.ARM_r8), static_cast<uint32_t>(r.ARM_r9),
-       static_cast<uint32_t>(r.ARM_r10), static_cast<uint32_t>(r.ARM_fp));
-  _LOG(log, logtype::REGISTERS, "    ip %08x  sp %08x  lr %08x  pc %08x  cpsr %08x\n",
-       static_cast<uint32_t>(r.ARM_ip), static_cast<uint32_t>(r.ARM_sp),
-       static_cast<uint32_t>(r.ARM_lr), static_cast<uint32_t>(r.ARM_pc),
-       static_cast<uint32_t>(r.ARM_cpsr));
+  DUMP_GP_REGISTERS(log, r.ARM_);
 
   user_vfp vfp_regs;
   if (ptrace(PTRACE_GETVFPREGS, tid, 0, &vfp_regs)) {
@@ -80,4 +83,8 @@ void dump_registers(log_t* log, pid_t tid) {
          i, vfp_regs.fpregs[i], i+1, vfp_regs.fpregs[i+1]);
   }
   _LOG(log, logtype::FP_REGISTERS, "    scr %08lx\n", vfp_regs.fpscr);
+}
+
+void dump_registers(log_t* log, const ucontext_t* uc) {
+  DUMP_GP_REGISTERS(log, uc->uc_mcontext.arm_);
 }

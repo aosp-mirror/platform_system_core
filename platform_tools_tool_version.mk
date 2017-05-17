@@ -1,5 +1,4 @@
-#
-# Copyright (C) 2015 The Android Open-Source Project
+# Copyright (C) 2017 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,14 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
 
-LOCAL_PATH:= $(call my-dir)
-
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := libtrustystorageinterface
-
-LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
-
-include $(BUILD_STATIC_LIBRARY)
+# We rewrite ${PLATFORM_SDK_VERSION} with 0 rather than $(PLATFORM_SDK_VERSION)
+# because on the actual platform tools release branches the file contains a
+# literal instead. Using 0 lets us easily distinguish non-canonical builds.
+platform_tools_version := $(shell sed \
+    's/$${PLATFORM_SDK_VERSION}/0/ ; s/^Pkg.Revision=\(.*\)/\1/p ; d' \
+    $(ANDROID_BUILD_TOP)/development/sdk/plat_tools_source.prop_template \
+  )
+tool_version := $(platform_tools_version)-$(BUILD_NUMBER_FROM_FILE)

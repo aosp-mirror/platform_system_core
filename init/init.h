@@ -19,6 +19,9 @@
 
 #include <string>
 
+// Note: These globals are *only* valid in init, so they should not be used in ueventd,
+// watchdogd, or any files that may be included in those, such as devices.cpp and util.cpp.
+// TODO: Have an Init class and remove all globals.
 extern const char *ENV[32];
 extern std::string default_console;
 extern struct selabel_handle *sehandle;

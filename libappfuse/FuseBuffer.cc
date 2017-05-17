@@ -119,7 +119,12 @@ ResultOrAgain WriteInternal(const FuseMessage<T>* self, int fd, int sockflag, co
                     return ResultOrAgain::kFailure;
             }
         }
-        CHECK(static_cast<uint32_t>(result) == header.len);
+
+        if (static_cast<unsigned int>(result) != header.len) {
+            LOG(ERROR) << "Written bytes " << result << " is different from length in header "
+                       << header.len;
+            return ResultOrAgain::kFailure;
+        }
         return ResultOrAgain::kSuccess;
     }
 }
@@ -141,8 +146,8 @@ bool SetupMessageSockets(base::unique_fd (*result)[2]) {
     }
 
     constexpr int kMaxMessageSize = sizeof(FuseBuffer);
-    if (setsockopt(fds[0], SOL_SOCKET, SO_SNDBUF, &kMaxMessageSize, sizeof(int)) != 0 ||
-        setsockopt(fds[1], SOL_SOCKET, SO_SNDBUF, &kMaxMessageSize, sizeof(int)) != 0) {
+    if (setsockopt(fds[0], SOL_SOCKET, SO_SNDBUFFORCE, &kMaxMessageSize, sizeof(int)) != 0 ||
+        setsockopt(fds[1], SOL_SOCKET, SO_SNDBUFFORCE, &kMaxMessageSize, sizeof(int)) != 0) {
         PLOG(ERROR) << "Failed to update buffer size for socket";
         return false;
     }

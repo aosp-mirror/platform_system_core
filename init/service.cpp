@@ -158,6 +158,7 @@ Service::Service(const std::string& name, const std::vector<std::string>& args)
       namespace_flags_(0),
       seclabel_(""),
       onrestart_(false, "<Service '" + name + "' onrestart>", 0),
+      keychord_id_(0),
       ioprio_class_(IoSchedClass_NONE),
       ioprio_pri_(0),
       priority_(0),
@@ -182,6 +183,7 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       namespace_flags_(namespace_flags),
       seclabel_(seclabel),
       onrestart_(false, "<Service '" + name + "' onrestart>", 0),
+      keychord_id_(0),
       ioprio_class_(IoSchedClass_NONE),
       ioprio_pri_(0),
       priority_(0),
@@ -207,20 +209,32 @@ void Service::NotifyStateChange(const std::string& new_state) const {
 }
 
 void Service::KillProcessGroup(int signal) {
-    LOG(INFO) << "Sending signal " << signal
-              << " to service '" << name_
-              << "' (pid " << pid_ << ") process group...";
-    int r;
-    if (signal == SIGTERM) {
-        r = killProcessGroupOnce(uid_, pid_, signal);
-    } else {
-        r = killProcessGroup(uid_, pid_, signal);
-    }
-    if (r == -1) {
-        LOG(ERROR) << "killProcessGroup(" << uid_ << ", " << pid_ << ", " << signal << ") failed";
-    }
-    if (kill(-pid_, signal) == -1) {
+    // We ignore reporting errors of ESRCH as this commonly happens in the below case,
+    // 1) Terminate() is called, which sends SIGTERM to the process
+    // 2) The process successfully exits
+    // 3) ReapOneProcess() is called, which calls waitpid(-1, ...) which removes the pid entry.
+    // 4) Reap() is called, which sends SIGKILL, but the pid no longer exists.
+    // TODO: sigaction for SIGCHLD reports the pid of the exiting process,
+    // we should do this kill with that pid first before calling waitpid().
+    if (kill(-pid_, signal) == -1 && errno != ESRCH) {
         PLOG(ERROR) << "kill(" << pid_ << ", " << signal << ") failed";
+    }
+
+    // If we've already seen a successful result from killProcessGroup*(), then we have removed
+    // the cgroup already and calling these functions a second time will simply result in an error.
+    // This is true regardless of which signal was sent.
+    // These functions handle their own logging, so no additional logging is needed.
+    if (!process_cgroup_empty_) {
+        LOG(INFO) << "Sending signal " << signal << " to service '" << name_ << "' (pid " << pid_
+                  << ") process group...";
+        int r;
+        if (signal == SIGTERM) {
+            r = killProcessGroupOnce(uid_, pid_, signal);
+        } else {
+            r = killProcessGroup(uid_, pid_, signal);
+        }
+
+        if (r == 0) process_cgroup_empty_ = true;
     }
 }
 
@@ -378,9 +392,18 @@ bool Service::ParseDisabled(const std::vector<std::string>& args, std::string* e
 }
 
 bool Service::ParseGroup(const std::vector<std::string>& args, std::string* err) {
-    gid_ = decode_uid(args[1].c_str());
+    std::string decode_uid_err;
+    if (!DecodeUid(args[1], &gid_, &decode_uid_err)) {
+        *err = "Unable to find GID for '" + args[1] + "': " + decode_uid_err;
+        return false;
+    }
     for (std::size_t n = 2; n < args.size(); n++) {
-        supp_gids_.emplace_back(decode_uid(args[n].c_str()));
+        gid_t gid;
+        if (!DecodeUid(args[n], &gid, &decode_uid_err)) {
+            *err = "Unable to find GID for '" + args[n] + "': " + decode_uid_err;
+            return false;
+        }
+        supp_gids_.emplace_back(gid);
     }
     return true;
 }
@@ -478,9 +501,24 @@ bool Service::ParseSetenv(const std::vector<std::string>& args, std::string* err
 template <typename T>
 bool Service::AddDescriptor(const std::vector<std::string>& args, std::string* err) {
     int perm = args.size() > 3 ? std::strtoul(args[3].c_str(), 0, 8) : -1;
-    uid_t uid = args.size() > 4 ? decode_uid(args[4].c_str()) : 0;
-    gid_t gid = args.size() > 5 ? decode_uid(args[5].c_str()) : 0;
+    uid_t uid = 0;
+    gid_t gid = 0;
     std::string context = args.size() > 6 ? args[6] : "";
+
+    std::string decode_uid_err;
+    if (args.size() > 4) {
+        if (!DecodeUid(args[4], &uid, &decode_uid_err)) {
+            *err = "Unable to find UID for '" + args[4] + "': " + decode_uid_err;
+            return false;
+        }
+    }
+
+    if (args.size() > 5) {
+        if (!DecodeUid(args[5], &gid, &decode_uid_err)) {
+            *err = "Unable to find GID for '" + args[5] + "': " + decode_uid_err;
+            return false;
+        }
+    }
 
     auto descriptor = std::make_unique<T>(args[1], args[2], uid, gid, perm, context);
 
@@ -499,7 +537,9 @@ bool Service::AddDescriptor(const std::vector<std::string>& args, std::string* e
 
 // name type perm [ uid gid context ]
 bool Service::ParseSocket(const std::vector<std::string>& args, std::string* err) {
-    if (args[2] != "dgram" && args[2] != "stream" && args[2] != "seqpacket") {
+    if (!android::base::StartsWith(args[2], "dgram") &&
+        !android::base::StartsWith(args[2], "stream") &&
+        !android::base::StartsWith(args[2], "seqpacket")) {
         *err = "socket type must be 'dgram', 'stream' or 'seqpacket'";
         return false;
     }
@@ -520,7 +560,11 @@ bool Service::ParseFile(const std::vector<std::string>& args, std::string* err) 
 }
 
 bool Service::ParseUser(const std::vector<std::string>& args, std::string* err) {
-    uid_ = decode_uid(args[1].c_str());
+    std::string decode_uid_err;
+    if (!DecodeUid(args[1], &uid_, &decode_uid_err)) {
+        *err = "Unable to find UID for '" + args[1] + "': " + decode_uid_err;
+        return false;
+    }
     return true;
 }
 
@@ -734,6 +778,7 @@ bool Service::Start() {
     time_started_ = boot_clock::now();
     pid_ = pid;
     flags_ |= SVC_RUNNING;
+    process_cgroup_empty_ = false;
 
     errno = -createProcessGroup(uid_, pid_);
     if (errno != 0) {
@@ -934,15 +979,28 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
     }
     uid_t uid = 0;
     if (command_arg > 3) {
-        uid = decode_uid(args[2].c_str());
+        std::string decode_uid_err;
+        if (!DecodeUid(args[2], &uid, &decode_uid_err)) {
+            LOG(ERROR) << "Unable to find UID for '" << args[2] << "': " << decode_uid_err;
+            return nullptr;
+        }
     }
     gid_t gid = 0;
     std::vector<gid_t> supp_gids;
     if (command_arg > 4) {
-        gid = decode_uid(args[3].c_str());
+        std::string decode_uid_err;
+        if (!DecodeUid(args[3], &gid, &decode_uid_err)) {
+            LOG(ERROR) << "Unable to find GID for '" << args[3] << "': " << decode_uid_err;
+            return nullptr;
+        }
         std::size_t nr_supp_gids = command_arg - 1 /* -- */ - 4 /* exec SECLABEL UID GID */;
         for (size_t i = 0; i < nr_supp_gids; ++i) {
-            supp_gids.push_back(decode_uid(args[4 + i].c_str()));
+            gid_t supp_gid;
+            if (!DecodeUid(args[4 + i], &supp_gid, &decode_uid_err)) {
+                LOG(ERROR) << "Unable to find UID for '" << args[4 + i] << "': " << decode_uid_err;
+                return nullptr;
+            }
+            supp_gids.push_back(supp_gid);
         }
     }
 

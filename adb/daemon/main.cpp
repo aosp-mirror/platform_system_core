@@ -107,10 +107,10 @@ static void drop_privileges(int server_port) {
     // AID_SDCARD_RW to allow writing to the SD card
     // AID_NET_BW_STATS to read out qtaguid statistics
     // AID_READPROC for reading /proc entries across UID boundaries
-    gid_t groups[] = {AID_ADB,      AID_LOG,       AID_INPUT,
-                      AID_INET,     AID_NET_BT,    AID_NET_BT_ADMIN,
-                      AID_SDCARD_R, AID_SDCARD_RW, AID_NET_BW_STATS,
-                      AID_READPROC};
+    // AID_UHID for using 'hid' command to read/write to /dev/uhid
+    gid_t groups[] = {AID_ADB,          AID_LOG,          AID_INPUT,    AID_INET,
+                      AID_NET_BT,       AID_NET_BT_ADMIN, AID_SDCARD_R, AID_SDCARD_RW,
+                      AID_NET_BW_STATS, AID_READPROC,     AID_UHID};
     minijail_set_supplementary_gids(jail.get(), arraysize(groups), groups);
 
     // Don't listen on a port (default 5037) if running in secure mode.
@@ -233,9 +233,8 @@ int main(int argc, char** argv) {
             adb_device_banner = optarg;
             break;
         case 'v':
-            printf("Android Debug Bridge Daemon version %d.%d.%d %s\n",
-                   ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION,
-                   ADB_REVISION);
+            printf("Android Debug Bridge Daemon version %d.%d.%d (%s)\n", ADB_VERSION_MAJOR,
+                   ADB_VERSION_MINOR, ADB_SERVER_VERSION, ADB_VERSION);
             return 0;
         default:
             // getopt already prints "adbd: invalid option -- %c" for us.

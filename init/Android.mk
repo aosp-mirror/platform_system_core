@@ -61,6 +61,8 @@ include $(BUILD_HOST_NATIVE_TEST)
 endif
 
 include $(CLEAR_VARS)
+# b/38002385, work around clang-tidy segmentation fault.
+LOCAL_TIDY_CHECKS := -misc-forwarding-reference-overload
 LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES:= \
     action.cpp \
@@ -82,6 +84,8 @@ LOCAL_CLANG := true
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+# b/38002385, work around clang-tidy segmentation fault.
+LOCAL_TIDY_CHECKS := -misc-forwarding-reference-overload
 LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES:= \
     bootchart.cpp \
@@ -124,7 +128,8 @@ LOCAL_STATIC_LIBRARIES := \
     libsparse \
     libz \
     libprocessgroup \
-    libavb
+    libavb \
+    libkeyutils \
 
 # Create symlinks.
 LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT)/sbin; \
@@ -139,6 +144,8 @@ include $(BUILD_EXECUTABLE)
 # Unit tests.
 # =========================================================
 include $(CLEAR_VARS)
+# b/38002385, work around clang-tidy segmentation fault.
+LOCAL_TIDY_CHECKS := -misc-forwarding-reference-overload
 LOCAL_MODULE := init_tests
 LOCAL_COMPATIBILITY_SUITE := device-tests
 LOCAL_SRC_FILES := \
@@ -146,6 +153,7 @@ LOCAL_SRC_FILES := \
     init_parser_test.cpp \
     init_test.cpp \
     property_service_test.cpp \
+    service_test.cpp \
     util_test.cpp \
 
 LOCAL_SHARED_LIBRARIES += \

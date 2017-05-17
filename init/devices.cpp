@@ -47,7 +47,6 @@
 #include <cutils/uevent.h>
 #include <private/android_filesystem_config.h>
 #include <selinux/android.h>
-#include <selinux/avc.h>
 #include <selinux/label.h>
 #include <selinux/selinux.h>
 
@@ -55,7 +54,11 @@
 #include "ueventd.h"
 #include "util.h"
 
-extern struct selabel_handle *sehandle;
+#ifdef _INIT_INIT_H
+#error "Do not include init.h in files used by ueventd or watchdogd; it will expose init's globals"
+#endif
+
+static selabel_handle* sehandle;
 
 static android::base::unique_fd device_fd;
 
@@ -248,7 +251,7 @@ static void fixup_sys_permissions(const std::string& upath, const std::string& s
 
     if (access(path.c_str(), F_OK) == 0) {
         LOG(VERBOSE) << "restorecon_recursive: " << path;
-        restorecon(path.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE);
+        selinux_android_restorecon(path.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE);
     }
 }
 
@@ -555,7 +558,7 @@ std::vector<std::string> get_block_device_symlinks(uevent* uevent) {
 }
 
 static void make_link_init(const std::string& oldpath, const std::string& newpath) {
-    if (mkdir_recursive(dirname(newpath.c_str()), 0755)) {
+    if (mkdir_recursive(dirname(newpath.c_str()), 0755, sehandle)) {
         PLOG(ERROR) << "Failed to create directory " << dirname(newpath.c_str());
     }
 
@@ -600,7 +603,7 @@ static void handle_block_device_event(uevent* uevent) {
     if (uevent->major < 0 || uevent->minor < 0) return;
 
     const char* base = "/dev/block/";
-    make_dir(base, 0755);
+    make_dir(base, 0755, sehandle);
 
     std::string name = android::base::Basename(uevent->path);
     std::string devpath = base + name;
@@ -642,7 +645,7 @@ static void handle_generic_device_event(uevent* uevent) {
         devpath = "/dev/" + android::base::Basename(uevent->path);
     }
 
-    mkdir_recursive(android::base::Dirname(devpath), 0755);
+    mkdir_recursive(android::base::Dirname(devpath), 0755, sehandle);
 
     auto links = get_character_device_symlinks(uevent);
 
@@ -783,15 +786,6 @@ coldboot_action_t handle_device_fd(coldboot_callback fn)
 {
     coldboot_action_t ret = handle_device_fd_with(
         [&](uevent* uevent) -> coldboot_action_t {
-            if (selinux_status_updated() > 0) {
-                struct selabel_handle *sehandle2;
-                sehandle2 = selinux_android_file_context_handle();
-                if (sehandle2) {
-                    selabel_close(sehandle);
-                    sehandle = sehandle2;
-                }
-            }
-
             // default is to always create the devices
             coldboot_action_t act = COLDBOOT_CREATE;
             if (fn) {
@@ -881,7 +875,6 @@ void device_init(const char* path, coldboot_callback fn) {
             return;
         }
         fcntl(device_fd, F_SETFL, O_NONBLOCK);
-        selinux_status_open(true);
     }
 
     if (access(COLDBOOT_DONE, F_OK) == 0) {
@@ -915,7 +908,6 @@ void device_init(const char* path, coldboot_callback fn) {
 void device_close() {
     platform_devices.clear();
     device_fd.reset();
-    selinux_status_close();
 }
 
 int get_device_fd() {

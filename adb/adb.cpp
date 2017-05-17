@@ -31,6 +31,8 @@
 #include <time.h>
 
 #include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -48,6 +50,7 @@
 #include "adb_io.h"
 #include "adb_listeners.h"
 #include "adb_utils.h"
+#include "sysdeps/chrono.h"
 #include "transport.h"
 
 #if !ADB_HOST
@@ -61,9 +64,9 @@ std::string adb_version() {
     // Don't change the format of this --- it's parsed by ddmlib.
     return android::base::StringPrintf(
         "Android Debug Bridge version %d.%d.%d\n"
-        "Revision %s\n"
+        "Version %s\n"
         "Installed as %s\n",
-        ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION, ADB_REVISION,
+        ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION, ADB_VERSION,
         android::base::GetExecutablePath().c_str());
 }
 
@@ -313,19 +316,15 @@ void parse_banner(const std::string& banner, atransport* t) {
     if (type == "bootloader") {
         D("setting connection_state to kCsBootloader");
         t->SetConnectionState(kCsBootloader);
-        update_transports();
     } else if (type == "device") {
         D("setting connection_state to kCsDevice");
         t->SetConnectionState(kCsDevice);
-        update_transports();
     } else if (type == "recovery") {
         D("setting connection_state to kCsRecovery");
         t->SetConnectionState(kCsRecovery);
-        update_transports();
     } else if (type == "sideload") {
         D("setting connection_state to kCsSideload");
         t->SetConnectionState(kCsSideload);
-        update_transports();
     } else {
         D("setting connection_state to kCsHost");
         t->SetConnectionState(kCsHost);
@@ -353,6 +352,8 @@ static void handle_new_connection(atransport* t, apacket* p) {
         send_auth_request(t);
     }
 #endif
+
+    update_transports();
 }
 
 void handle_packet(apacket *p, atransport *t)
@@ -1053,15 +1054,12 @@ int handle_host_request(const char* service, TransportType type,
     if (strcmp(service, "kill") == 0) {
         fprintf(stderr, "adb server killed by remote request\n");
         fflush(stdout);
+
+        // Send a reply even though we don't read it anymore, so that old versions
+        // of adb that do read it don't spew error messages.
         SendOkay(reply_fd);
 
-        // On Windows, if the process exits with open sockets that
-        // shutdown(SD_SEND) has not been called on, TCP RST segments will be
-        // sent to the peers which will cause their next recv() to error-out
-        // with WSAECONNRESET. In the case of this code, that means the client
-        // may not read the OKAY sent above.
-        adb_shutdown(reply_fd);
-
+        // Rely on process exit to close the socket for us.
         android::base::quick_exit(0);
     }
 
@@ -1229,4 +1227,44 @@ int handle_host_request(const char* service, TransportType type,
       return ret - 1;
     return -1;
 }
+
+static auto& init_mutex = *new std::mutex();
+static auto& init_cv = *new std::condition_variable();
+static bool device_scan_complete = false;
+static bool transports_ready = false;
+
+void update_transport_status() {
+    bool result = iterate_transports([](const atransport* t) {
+        if (t->type == kTransportUsb && t->online != 1) {
+            return false;
+        }
+        return true;
+    });
+
+    bool ready;
+    {
+        std::lock_guard<std::mutex> lock(init_mutex);
+        transports_ready = result;
+        ready = transports_ready && device_scan_complete;
+    }
+
+    if (ready) {
+        init_cv.notify_all();
+    }
+}
+
+void adb_notify_device_scan_complete() {
+    {
+        std::lock_guard<std::mutex> lock(init_mutex);
+        device_scan_complete = true;
+    }
+
+    update_transport_status();
+}
+
+void adb_wait_for_device_initialization() {
+    std::unique_lock<std::mutex> lock(init_mutex);
+    init_cv.wait_for(lock, 3s, []() { return device_scan_complete && transports_ready; });
+}
+
 #endif  // ADB_HOST

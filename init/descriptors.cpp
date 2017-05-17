@@ -23,6 +23,7 @@
 
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/android_get_control_file.h>
 #include <cutils/sockets.h>
@@ -77,10 +78,12 @@ void SocketInfo::Clean() const {
 }
 
 int SocketInfo::Create(const std::string& context) const {
-  int flags = ((type() == "stream" ? SOCK_STREAM :
-                (type() == "dgram" ? SOCK_DGRAM :
-                 SOCK_SEQPACKET)));
-  return create_socket(name().c_str(), flags, perm(), uid(), gid(), context.c_str());
+    auto types = android::base::Split(type(), "+");
+    int flags =
+        ((types[0] == "stream" ? SOCK_STREAM : (types[0] == "dgram" ? SOCK_DGRAM : SOCK_SEQPACKET)));
+    bool passcred = types.size() > 1 && types[1] == "passcred";
+    return CreateSocket(name().c_str(), flags, passcred, perm(), uid(), gid(), context.c_str(),
+                        sehandle);
 }
 
 const std::string SocketInfo::key() const {
