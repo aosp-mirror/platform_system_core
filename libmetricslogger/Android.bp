@@ -22,7 +22,7 @@ cc_defaults {
 
         // 524291 corresponds to sysui_histogram, from
         // frameworks/base/core/java/com/android/internal/logging/EventLogTags.logtags
-        "-DHISTOGRAM_LOG_TAG=524291",
+        "-DHISTOGRAM_LOG_TAG=524292",
     ],
 }
 
