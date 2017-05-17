@@ -1260,10 +1260,10 @@ static void do_bypass_unlock_command(std::vector<std::string>* args) {
     fb_queue_command("flashing unlock_bootloader", "unlocking bootloader");
 }
 
-static void do_oem_command(std::vector<std::string>* args) {
+static void do_oem_command(const std::string& cmd, std::vector<std::string>* args) {
     if (args->empty()) syntax_error("empty oem command");
 
-    std::string command("oem");
+    std::string command(cmd);
     while (!args->empty()) {
         command += " " + next_arg(args);
     }
@@ -1766,7 +1766,7 @@ int main(int argc, char **argv)
             std::string filename = next_arg(&args);
             fb_queue_upload(filename.c_str());
         } else if (command == "oem") {
-            do_oem_command(&args);
+            do_oem_command("oem", &args);
         } else if (command == "flashing") {
             if (args.empty()) {
                 syntax_error("missing 'flashing' command");
@@ -1776,7 +1776,7 @@ int main(int argc, char **argv)
                                             args[0] == "get_unlock_ability" ||
                                             args[0] == "get_unlock_bootloader_nonce" ||
                                             args[0] == "lock_bootloader")) {
-                do_oem_command(&args);
+                do_oem_command("flashing", &args);
             } else if (args.size() == 2 && args[0] == "unlock_bootloader") {
                 do_bypass_unlock_command(&args);
             } else {
