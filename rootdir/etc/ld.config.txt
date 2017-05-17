@@ -77,8 +77,11 @@ namespace.sphal.link.rs.shared_libs = libRS_internal.so
 # to load the compiled *.so file and libmediandk.so can be used here.
 ###############################################################################
 namespace.rs.isolated = true
-namespace.rs.search.paths = /system/${LIB}/vndk-sp:/vendor/${LIB}
+namespace.rs.search.paths = /vendor/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/vendor/${LIB}
 namespace.rs.permitted.paths = /vendor/${LIB}:/data
+
+namespace.rs.asan.search.paths = /data/asan/vendor/${LIB}/vndk-sp:/vendor/${LIB}/vndk-sp:/data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/data/asan/vendor/${LIB}:/vendor/${LIB}
+namespace.rs.asan.permitted.paths = /data/asan/vendor/${LIB}:/vendor/${LIB}:/data
 
 namespace.rs.links = default,vndk
 namespace.rs.link.default.shared_libs = libc.so:libz.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libEGL.so:libsync.so:libGLESv1_CM.so:libGLESv2.so:libmediandk.so:libui.so:libvndksupport.so
@@ -90,10 +93,10 @@ namespace.rs.link.vndk.shared_libs = android.hardware.renderscript@1.0.so:androi
 # This namespace is exclusively for vndk-sp libs.
 ###############################################################################
 namespace.vndk.isolated = true
-namespace.vndk.search.paths = /system/${LIB}/vndk-sp:/vendor/${LIB}
+namespace.vndk.search.paths = /vendor/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/vendor/${LIB}
 namespace.vndk.permitted.paths = /vendor/${LIB}/hw:/vendor/${LIB}/egl
 
-namespace.vndk.asan.search.paths = /data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/data/asan/vendor/${LIB}:/vendor/${LIB}
+namespace.vndk.asan.search.paths = /data/asan/vendor/${LIB}/vndk-sp:/vendor/${LIB}/vndk-sp:/data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/data/asan/vendor/${LIB}:/vendor/${LIB}
 namespace.vndk.asan.permitted.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl
 
 # When these NDK libs are required inside this namespace, then it is redirected
@@ -105,6 +108,6 @@ namespace.vndk.link.default.shared_libs = libc.so:libz.so:libm.so:libdl.so:libst
 
 [vendor]
 namespace.default.isolated = false
-namespace.default.search.paths = /vendor/${LIB}:/system/${LIB}/vndk-sp:/system/${LIB}
+namespace.default.search.paths = /vendor/${LIB}:/vendor/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/system/${LIB}
 
-namespace.default.asan.search.paths = /data/asan/vendor/${LIB}:/vendor/${LIB}:/data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/data/asan/system/${LIB}:/system/${LIB}
+namespace.default.asan.search.paths = /data/asan/vendor/${LIB}:/vendor/${LIB}:/data/asan/vendor/${LIB}/vndk-sp:/vendor/${LIB}/vndk-sp:/data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/data/asan/system/${LIB}:/system/${LIB}
