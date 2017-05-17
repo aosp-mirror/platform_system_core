@@ -19,6 +19,10 @@
 #include <gtest/gtest.h>
 
 TEST(MetricsLoggerTest, AddSingleBootEvent) {
-  android::metricslogger::LogHistogram("test_event", 42);
-  // TODO(jhawkins): Verify the EventLog is updated.
+    android::metricslogger::LogHistogram("test_event", 42);
+    // TODO(jhawkins): Verify the EventLog is updated.
+}
+
+TEST(MetricsLoggerTest, AddCounterVal) {
+    android::metricslogger::LogCounter("test_count", 10);
 }
