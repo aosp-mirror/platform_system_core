@@ -119,7 +119,12 @@ ResultOrAgain WriteInternal(const FuseMessage<T>* self, int fd, int sockflag, co
                     return ResultOrAgain::kFailure;
             }
         }
-        CHECK(static_cast<uint32_t>(result) == header.len);
+
+        if (static_cast<unsigned int>(result) != header.len) {
+            LOG(ERROR) << "Written bytes " << result << " is different from length in header "
+                       << header.len;
+            return ResultOrAgain::kFailure;
+        }
         return ResultOrAgain::kSuccess;
     }
 }
