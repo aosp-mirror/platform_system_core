@@ -24,13 +24,18 @@ namespace metricslogger {
 // buffer.
 void LogHistogram(const std::string& event, int32_t data);
 
+// Logs a Tron counter metric named |name| containing |val| count to the Tron
+// log buffer.
+void LogCounter(const std::string& name, int32_t val);
+
 // TODO: replace these with the metric_logger.proto definitions
 enum {
-  LOGBUILDER_CATEGORY = 757,
-  LOGBUILDER_NAME = 799,
-  LOGBUILDER_BUCKET = 801,
-  LOGBUILDER_VALUE = 802,
-  LOGBUILDER_HISTOGRAM = 804,
+    LOGBUILDER_CATEGORY = 757,
+    LOGBUILDER_NAME = 799,
+    LOGBUILDER_BUCKET = 801,
+    LOGBUILDER_VALUE = 802,
+    LOGBUILDER_COUNTER = 803,
+    LOGBUILDER_HISTOGRAM = 804,
 };
 
 }  // namespace metricslogger

@@ -40,7 +40,7 @@ int main(int argc, char* argv[]) {
     if (rc) {
         err(errno, "dhcptool %s: do_dhcp failed", interface);
     }
-
+    warn("IP assignment is for debug purposes ONLY");
     ifc_close();
 
     return rc ? EXIT_FAILURE : EXIT_SUCCESS;
