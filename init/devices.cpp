@@ -30,6 +30,7 @@
 #include <string.h>
 #include <sys/sendfile.h>
 #include <sys/socket.h>
+#include <sys/sysmacros.h>
 #include <sys/time.h>
 #include <sys/un.h>
 #include <sys/wait.h>
