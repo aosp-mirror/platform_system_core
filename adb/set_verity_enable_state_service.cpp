@@ -139,25 +139,36 @@ void set_verity_enabled_state_service(int fd, void* cookie) {
     bool any_changed = false;
 
     bool enable = (cookie != NULL);
-    if (!kAllowDisableVerity) {
-        WriteFdFmt(fd, "%s-verity only works for userdebug builds\n",
-                   enable ? "enable" : "disable");
+
+    // Figure out if we're using VB1.0 or VB2.0 (aka AVB) - by
+    // contract, androidboot.vbmeta.digest is set by the bootloader
+    // when using AVB).
+    bool using_avb = !android::base::GetProperty("ro.boot.vbmeta.digest", "").empty();
+
+    // If using AVB, dm-verity is used on any build so we want it to
+    // be possible to disable/enable on any build (except USER). For
+    // VB1.0 dm-verity is only enabled on certain builds.
+    if (!using_avb) {
+        if (!kAllowDisableVerity) {
+            WriteFdFmt(fd, "%s-verity only works for userdebug builds\n",
+                       enable ? "enable" : "disable");
+        }
+
+        if (!android::base::GetBoolProperty("ro.secure", false)) {
+            WriteFdFmt(fd, "verity not enabled - ENG build\n");
+            return;
+        }
     }
 
-    if (!android::base::GetBoolProperty("ro.secure", false)) {
-        WriteFdFmt(fd, "verity not enabled - ENG build\n");
-        return;
-    }
+    // Should never be possible to disable dm-verity on a USER build
+    // regardless of using AVB or VB1.0.
     if (!__android_log_is_debuggable()) {
         WriteFdFmt(fd, "verity cannot be disabled/enabled - USER build\n");
         return;
     }
 
-    // Figure out if we're using VB1.0 or VB2.0 (aka AVB).
-    std::string vbmeta_hash = android::base::GetProperty("ro.boot.vbmeta.digest", "");
-    if (vbmeta_hash != "") {
-        // Yep, the system is using AVB (by contract, androidboot.vbmeta.hash is
-        // set by the bootloader when using AVB).
+    if (using_avb) {
+        // Yep, the system is using AVB.
         AvbOps* ops = avb_ops_user_new();
         if (ops == nullptr) {
             WriteFdFmt(fd, "Error getting AVB ops\n");
