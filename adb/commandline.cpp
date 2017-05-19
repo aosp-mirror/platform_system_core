@@ -126,8 +126,9 @@ static void help() {
         " reverse --remove-all     remove all reverse socket connections from device\n"
         "\n"
         "file transfer:\n"
-        " push LOCAL... REMOTE\n"
+        " push [--sync] LOCAL... REMOTE\n"
         "     copy local files/directories to device\n"
+        "     --sync: only push files that are newer on the host than the device\n"
         " pull [-a] REMOTE... LOCAL\n"
         "     copy files/dirs from device\n"
         "     -a: preserve file timestamp and mode\n"
@@ -1233,9 +1234,8 @@ static int restore(int argc, const char** argv) {
     return 0;
 }
 
-static void parse_push_pull_args(const char** arg, int narg,
-                                 std::vector<const char*>* srcs,
-                                 const char** dst, bool* copy_attrs) {
+static void parse_push_pull_args(const char** arg, int narg, std::vector<const char*>* srcs,
+                                 const char** dst, bool* copy_attrs, bool* sync) {
     *copy_attrs = false;
 
     srcs->clear();
@@ -1248,6 +1248,10 @@ static void parse_push_pull_args(const char** arg, int narg,
                 // Silently ignore for backwards compatibility.
             } else if (!strcmp(*arg, "-a")) {
                 *copy_attrs = true;
+            } else if (!strcmp(*arg, "--sync")) {
+                if (sync != nullptr) {
+                    *sync = true;
+                }
             } else if (!strcmp(*arg, "--")) {
                 ignore_flags = true;
             } else {
@@ -1654,19 +1658,20 @@ int adb_commandline(int argc, const char** argv) {
     }
     else if (!strcmp(argv[0], "push")) {
         bool copy_attrs = false;
+        bool sync = false;
         std::vector<const char*> srcs;
         const char* dst = nullptr;
 
-        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs);
+        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, &sync);
         if (srcs.empty() || !dst) return syntax_error("push requires an argument");
-        return do_sync_push(srcs, dst) ? 0 : 1;
+        return do_sync_push(srcs, dst, sync) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "pull")) {
         bool copy_attrs = false;
         std::vector<const char*> srcs;
         const char* dst = ".";
 
-        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs);
+        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, nullptr);
         if (srcs.empty()) return syntax_error("pull requires an argument");
         return do_sync_pull(srcs, dst, copy_attrs) ? 0 : 1;
     }
@@ -2086,7 +2091,7 @@ static int install_app_legacy(TransportType transport, const char* serial, int a
     std::vector<const char*> apk_file = {argv[last_apk]};
     std::string apk_dest = android::base::StringPrintf(
         where, android::base::Basename(argv[last_apk]).c_str());
-    if (!do_sync_push(apk_file, apk_dest.c_str())) goto cleanup_apk;
+    if (!do_sync_push(apk_file, apk_dest.c_str(), false)) goto cleanup_apk;
     argv[last_apk] = apk_dest.c_str(); /* destination name, not source location */
     result = pm_command(transport, serial, argc, argv);
 
