@@ -331,7 +331,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     // keep debugging tools until non critical ones are all gone.
     const std::set<std::string> kill_after_apps{"tombstoned", "logd", "adbd"};
     // watchdogd is a vendor specific component but should be alive to complete shutdown safely.
-    const std::set<std::string> to_starts{"watchdogd", "vold"};
+    const std::set<std::string> to_starts{"watchdogd", "vold", "ueventd"};
     ServiceManager::GetInstance().ForEachService([&kill_after_apps, &to_starts](Service* s) {
         if (kill_after_apps.count(s->name())) {
             s->SetShutdownCritical();
