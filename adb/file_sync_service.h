@@ -81,7 +81,7 @@ union syncmsg {
 
 void file_sync_service(int fd, void* cookie);
 bool do_sync_ls(const char* path);
-bool do_sync_push(const std::vector<const char*>& srcs, const char* dst);
+bool do_sync_push(const std::vector<const char*>& srcs, const char* dst, bool sync);
 bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
                   bool copy_attrs, const char* name=nullptr);
 
