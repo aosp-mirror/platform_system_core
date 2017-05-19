@@ -21,6 +21,7 @@
 // Sockets in the ANDROID_SOCKET_NAMESPACE_RESERVED namespace.
 // Both sockets are SOCK_SEQPACKET sockets, so no explicit length field is needed.
 constexpr char kTombstonedCrashSocketName[] = "tombstoned_crash";
+constexpr char kTombstonedJavaTraceSocketName[] = "tombstoned_java_trace";
 constexpr char kTombstonedInterceptSocketName[] = "tombstoned_intercept";
 
 enum class CrashPacketType : uint8_t {
