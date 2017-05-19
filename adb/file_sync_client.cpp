@@ -674,10 +674,21 @@ static bool sync_stat_fallback(SyncConnection& sc, const char* path, struct stat
     return true;
 }
 
-static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath,
-                      unsigned mtime, mode_t mode)
-{
+static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath, unsigned mtime,
+                      mode_t mode, bool sync) {
     std::string path_and_mode = android::base::StringPrintf("%s,%d", rpath, mode);
+
+    if (sync) {
+        struct stat st;
+        if (sync_lstat(sc, rpath, &st)) {
+            // For links, we cannot update the atime/mtime.
+            if ((S_ISREG(mode & st.st_mode) && st.st_mtime == static_cast<time_t>(mtime)) ||
+                (S_ISLNK(mode & st.st_mode) && st.st_mtime >= static_cast<time_t>(mtime))) {
+                sc.RecordFilesSkipped(1);
+                return true;
+            }
+        }
+    }
 
     if (S_ISLNK(mode)) {
 #if !defined(_WIN32)
@@ -902,7 +913,7 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
             if (list_only) {
                 sc.Println("would push: %s -> %s", ci.lpath.c_str(), ci.rpath.c_str());
             } else {
-                if (!sync_send(sc, ci.lpath.c_str(), ci.rpath.c_str(), ci.time, ci.mode)) {
+                if (!sync_send(sc, ci.lpath.c_str(), ci.rpath.c_str(), ci.time, ci.mode, false)) {
                     return false;
                 }
             }
@@ -916,7 +927,7 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
     return true;
 }
 
-bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
+bool do_sync_push(const std::vector<const char*>& srcs, const char* dst, bool sync) {
     SyncConnection sc;
     if (!sc.IsValid()) return false;
 
@@ -981,7 +992,7 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
                 dst_dir.append(android::base::Basename(src_path));
             }
 
-            success &= copy_local_dir_remote(sc, src_path, dst_dir.c_str(), false, false);
+            success &= copy_local_dir_remote(sc, src_path, dst_dir.c_str(), sync, false);
             continue;
         } else if (!should_push_file(st.st_mode)) {
             sc.Warning("skipping special file '%s' (mode = 0o%o)", src_path, st.st_mode);
@@ -1002,7 +1013,7 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst) {
 
         sc.NewTransfer();
         sc.SetExpectedTotalBytes(st.st_size);
-        success &= sync_send(sc, src_path, dst_path, st.st_mtime, st.st_mode);
+        success &= sync_send(sc, src_path, dst_path, st.st_mtime, st.st_mode, sync);
         sc.ReportTransferRate(src_path, TransferDirection::push);
     }
 
