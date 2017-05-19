@@ -1130,8 +1130,18 @@ class FileOperationsTest(DeviceTest):
             if host_dir is not None:
                 shutil.rmtree(host_dir)
 
+    def verify_sync(self, device, temp_files, device_dir):
+        """Verifies that a list of temp files was synced to the device."""
+        # Confirm that every file on the device mirrors that on the host.
+        for temp_file in temp_files:
+            device_full_path = posixpath.join(
+                device_dir, temp_file.base_name)
+            dev_md5, _ = device.shell(
+                [get_md5_prog(self.device), device_full_path])[0].split()
+            self.assertEqual(temp_file.checksum, dev_md5)
+
     def test_sync(self):
-        """Sync a randomly generated directory of files to specified device."""
+        """Sync a host directory to the data partition."""
 
         try:
             base_dir = tempfile.mkdtemp()
@@ -1141,9 +1151,10 @@ class FileOperationsTest(DeviceTest):
             os.makedirs(full_dir_path)
 
             # Create 32 random files within the host mirror.
-            temp_files = make_random_host_files(in_dir=full_dir_path, num_files=32)
+            temp_files = make_random_host_files(
+                in_dir=full_dir_path, num_files=32)
 
-            # Clean up any trash on the device.
+            # Clean up any stale files on the device.
             device = adb.get_device()  # pylint: disable=no-member
             device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
 
@@ -1155,18 +1166,34 @@ class FileOperationsTest(DeviceTest):
             else:
                 os.environ['ANDROID_PRODUCT_OUT'] = old_product_out
 
-            # Confirm that every file on the device mirrors that on the host.
-            for temp_file in temp_files:
-                device_full_path = posixpath.join(self.DEVICE_TEMP_DIR,
-                                                  temp_file.base_name)
-                dev_md5, _ = device.shell(
-                    [get_md5_prog(self.device), device_full_path])[0].split()
-                self.assertEqual(temp_file.checksum, dev_md5)
+            self.verify_sync(device, temp_files, self.DEVICE_TEMP_DIR)
 
-            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+            #self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
         finally:
             if base_dir is not None:
                 shutil.rmtree(base_dir)
+
+    def test_push_sync(self):
+        """Sync a host directory to a specific path."""
+
+        try:
+            temp_dir = tempfile.mkdtemp()
+            temp_files = make_random_host_files(in_dir=temp_dir, num_files=32)
+
+            device_dir = posixpath.join(self.DEVICE_TEMP_DIR, 'sync_src_dst')
+
+            # Clean up any stale files on the device.
+            device = adb.get_device()  # pylint: disable=no-member
+            device.shell(['rm', '-rf', device_dir])
+
+            device.push(temp_dir, device_dir, sync=True)
+
+            self.verify_sync(device, temp_files, device_dir)
+
+            self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+        finally:
+            if temp_dir is not None:
+                shutil.rmtree(temp_dir)
 
     def test_unicode_paths(self):
         """Ensure that we can support non-ASCII paths, even on Windows."""
