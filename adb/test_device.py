@@ -1144,10 +1144,16 @@ class FileOperationsTest(DeviceTest):
             temp_files = make_random_host_files(in_dir=full_dir_path, num_files=32)
 
             # Clean up any trash on the device.
-            device = adb.get_device(product=base_dir)
+            device = adb.get_device()  # pylint: disable=no-member
             device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
 
+            old_product_out = os.environ.get('ANDROID_PRODUCT_OUT')
+            os.environ['ANDROID_PRODUCT_OUT'] = base_dir
             device.sync('data')
+            if old_product_out is None:
+                del os.environ['ANDROID_PRODUCT_OUT']
+            else:
+                os.environ['ANDROID_PRODUCT_OUT'] = old_product_out
 
             # Confirm that every file on the device mirrors that on the host.
             for temp_file in temp_files:
