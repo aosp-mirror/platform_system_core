@@ -139,14 +139,8 @@ static const struct fs_path_config android_files[] = {
     { 00600, AID_ROOT,      AID_ROOT,      0, "odm/default.prop" },
     { 00444, AID_ROOT,      AID_ROOT,      0, odm_conf_dir + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, odm_conf_file + 1 },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "system/odm/build.prop" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "system/odm/default.prop" },
-    { 00444, AID_ROOT,      AID_ROOT,      0, "system/odm/etc/fs_config_dirs" },
-    { 00444, AID_ROOT,      AID_ROOT,      0, "system/odm/etc/fs_config_files" },
     { 00444, AID_ROOT,      AID_ROOT,      0, oem_conf_dir + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, oem_conf_file + 1 },
-    { 00444, AID_ROOT,      AID_ROOT,      0, "system/oem/etc/fs_config_dirs" },
-    { 00444, AID_ROOT,      AID_ROOT,      0, "system/oem/etc/fs_config_files" },
     { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/fs_mgr" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump32" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump64" },
@@ -163,10 +157,6 @@ static const struct fs_path_config android_files[] = {
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/ppp/*" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/rc.*" },
     { 00440, AID_ROOT,      AID_ROOT,      0, "system/etc/recovery.img" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "system/vendor/build.prop" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "system/vendor/default.prop" },
-    { 00444, AID_ROOT,      AID_ROOT,      0, "system/vendor/etc/fs_config_dirs" },
-    { 00444, AID_ROOT,      AID_ROOT,      0, "system/vendor/etc/fs_config_files" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "vendor/build.prop" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "vendor/default.prop" },
     { 00444, AID_ROOT,      AID_ROOT,      0, ven_conf_dir + 1 },
@@ -196,16 +186,10 @@ static const struct fs_path_config android_files[] = {
     // Support hostapd administering a network interface.
     { 00755, AID_WIFI,      AID_WIFI,      CAP_MASK_LONG(CAP_NET_ADMIN) |
                                            CAP_MASK_LONG(CAP_NET_RAW),
-                                              "system/vendor/bin/hostapd" },
-    { 00755, AID_WIFI,      AID_WIFI,      CAP_MASK_LONG(CAP_NET_ADMIN) |
-                                           CAP_MASK_LONG(CAP_NET_RAW),
                                               "vendor/bin/hostapd" },
 
     // Support Bluetooth legacy hal accessing /sys/class/rfkill
     // Support RT scheduling in Bluetooth
-    { 00700, AID_BLUETOOTH, AID_BLUETOOTH, CAP_MASK_LONG(CAP_NET_ADMIN) |
-                                           CAP_MASK_LONG(CAP_SYS_NICE),
-                                              "system/vendor/bin/hw/android.hardware.bluetooth@1.0-service" },
     { 00700, AID_BLUETOOTH, AID_BLUETOOTH, CAP_MASK_LONG(CAP_NET_ADMIN) |
                                            CAP_MASK_LONG(CAP_SYS_NICE),
                                               "vendor/bin/hw/android.hardware.bluetooth@1.0-service" },
@@ -233,8 +217,6 @@ static const struct fs_path_config android_files[] = {
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib/valgrind/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib64/valgrind/*" },
-    { 00755, AID_ROOT,      AID_SHELL,     0, "system/vendor/bin/*" },
-    { 00755, AID_ROOT,      AID_SHELL,     0, "system/vendor/xbin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/xbin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/xbin/*" },
@@ -273,6 +255,36 @@ static int fs_config_open(int dir, int which, const char* target_out_path) {
     return fd;
 }
 
+// if path is "vendor/<stuff>", "oem/<stuff>" or "odm/<stuff>"
+static bool is_partition(const char* path, size_t len) {
+    static const char* partitions[] = {"vendor/", "oem/", "odm/"};
+    for (size_t i = 0; i < (sizeof(partitions) / sizeof(partitions[0])); ++i) {
+        size_t plen = strlen(partitions[i]);
+        if (len <= plen) continue;
+        if (!strncmp(path, partitions[i], plen)) return true;
+    }
+    return false;
+}
+
+// alias prefixes of "<partition>/<stuff>" to "system/<partition>/<stuff>" or
+// "system/<partition>/<stuff>" to "<partition>/<stuff>"
+static bool prefix_cmp(const char* prefix, const char* path, size_t len) {
+    if (!strncmp(prefix, path, len)) return true;
+
+    static const char system[] = "system/";
+    if (!strncmp(path, system, strlen(system))) {
+        path += strlen(system);
+    } else if (len <= strlen(system)) {
+        return false;
+    } else if (strncmp(prefix, system, strlen(system))) {
+        return false;
+    } else {
+        prefix += strlen(system);
+        len -= strlen(system);
+    }
+    return is_partition(prefix, len) && !strncmp(prefix, path, len);
+}
+
 static bool fs_config_cmp(bool dir, const char* prefix, size_t len, const char* path, size_t plen) {
     if (dir) {
         if (plen < len) {
@@ -281,13 +293,13 @@ static bool fs_config_cmp(bool dir, const char* prefix, size_t len, const char* 
     } else {
         // If name ends in * then allow partial matches.
         if (prefix[len - 1] == '*') {
-            return !strncmp(prefix, path, len - 1);
+            return prefix_cmp(prefix, path, len - 1);
         }
         if (plen != len) {
             return false;
         }
     }
-    return !strncmp(prefix, path, len);
+    return prefix_cmp(prefix, path, len);
 }
 
 void fs_config(const char* path, int dir, const char* target_out_path, unsigned* uid, unsigned* gid,

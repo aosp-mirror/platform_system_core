@@ -79,10 +79,16 @@ void LogBuffer::init() {
             if (monotonic) {
                 if (!android::isMonotonic(e->mRealTime)) {
                     LogKlog::convertRealToMonotonic(e->mRealTime);
+                    if ((e->mRealTime.tv_nsec % 1000) == 0) {
+                        e->mRealTime.tv_nsec++;
+                    }
                 }
             } else {
                 if (android::isMonotonic(e->mRealTime)) {
                     LogKlog::convertMonotonicToReal(e->mRealTime);
+                    if ((e->mRealTime.tv_nsec % 1000) == 0) {
+                        e->mRealTime.tv_nsec++;
+                    }
                 }
             }
             ++it;
@@ -195,6 +201,11 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
     if ((log_id >= LOG_ID_MAX) || (log_id < 0)) {
         return -EINVAL;
     }
+
+    // Slip the time by 1 nsec if the incoming lands on xxxxxx000 ns.
+    // This prevents any chance that an outside source can request an
+    // exact entry with time specified in ms or us precision.
+    if ((realtime.tv_nsec % 1000) == 0) ++realtime.tv_nsec;
 
     LogBufferElement* elem =
         new LogBufferElement(log_id, realtime, uid, pid, tid, msg, len);
@@ -1111,6 +1122,9 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
             LogBufferElement* element = *it;
             if (element->getRealTime() > start) {
                 last = it;
+            } else if (element->getRealTime() == start) {
+                last = ++it;
+                break;
             } else if (!--count || (element->getRealTime() < min)) {
                 break;
             }
@@ -1118,7 +1132,7 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
         it = last;
     }
 
-    log_time max = start;
+    log_time curr = start;
 
     LogBufferElement* lastElement = nullptr;  // iterator corruption paranoia
     static const size_t maxSkip = 4194304;    // maximum entries to skip
@@ -1141,10 +1155,6 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
         }
 
         if (!security && (element->getLogId() == LOG_ID_SECURITY)) {
-            continue;
-        }
-
-        if (element->getRealTime() <= start) {
             continue;
         }
 
@@ -1174,10 +1184,10 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
         unlock();
 
         // range locking in LastLogTimes looks after us
-        max = element->flushTo(reader, this, privileged, sameTid);
+        curr = element->flushTo(reader, this, privileged, sameTid);
 
-        if (max == element->FLUSH_ERROR) {
-            return max;
+        if (curr == element->FLUSH_ERROR) {
+            return curr;
         }
 
         skip = maxSkip;
@@ -1185,7 +1195,7 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
     }
     unlock();
 
-    return max;
+    return curr;
 }
 
 std::string LogBuffer::formatStatistics(uid_t uid, pid_t pid,
