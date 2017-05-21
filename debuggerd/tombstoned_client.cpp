@@ -30,9 +30,11 @@
 
 using android::base::unique_fd;
 
-bool tombstoned_connect(pid_t pid, unique_fd* tombstoned_socket, unique_fd* output_fd) {
-  unique_fd sockfd(socket_local_client(kTombstonedCrashSocketName,
-                                       ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET));
+bool tombstoned_connect(pid_t pid, unique_fd* tombstoned_socket, unique_fd* output_fd,
+                        bool is_native_crash) {
+  unique_fd sockfd(socket_local_client(
+      (is_native_crash ? kTombstonedCrashSocketName : kTombstonedJavaTraceSocketName),
+      ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET));
   if (sockfd == -1) {
     async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to connect to tombstoned: %s",
                           strerror(errno));
