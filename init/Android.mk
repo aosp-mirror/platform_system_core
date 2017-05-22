@@ -147,7 +147,6 @@ include $(CLEAR_VARS)
 # b/38002385, work around clang-tidy segmentation fault.
 LOCAL_TIDY_CHECKS := -misc-forwarding-reference-overload
 LOCAL_MODULE := init_tests
-LOCAL_COMPATIBILITY_SUITE := device-tests
 LOCAL_SRC_FILES := \
     devices_test.cpp \
     init_parser_test.cpp \
