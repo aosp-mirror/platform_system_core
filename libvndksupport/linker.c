@@ -30,21 +30,19 @@ void* android_load_sphal_library(const char* name, int flag) {
             .flags = ANDROID_DLEXT_USE_NAMESPACE, .library_namespace = sphal_namespace,
         };
         void* handle = android_dlopen_ext(name, flag, &dlextinfo);
-        if (handle) {
-            return handle;
-        } else {
-            ALOGW(
-                "Could not load %s from sphal namespace: %s. "
-                "Falling back to loading it from the current namespace,",
+        if (!handle) {
+            ALOGE(
+                "Could not load %s from sphal namespace: %s. ",
                 name, dlerror());
         }
+        return handle;
     } else {
         ALOGI(
             "sphal namespace is not configured for this process. "
             "Loading %s from the current namespace instead.",
             name);
+        return dlopen(name, flag);
     }
-    return dlopen(name, flag);
 }
 
 int android_unload_sphal_library(void* handle) {
