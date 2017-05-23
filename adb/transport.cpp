@@ -1050,27 +1050,24 @@ void unregister_usb_transport(usb_handle* usb) {
         [usb](atransport* t) { return t->usb == usb && t->GetConnectionState() == kCsNoPerm; });
 }
 
-int check_header(apacket* p, atransport* t) {
+bool check_header(apacket* p, atransport* t) {
     if (p->msg.magic != (p->msg.command ^ 0xffffffff)) {
         VLOG(RWX) << "check_header(): invalid magic command = " << std::hex << p->msg.command
                   << ", magic = " << p->msg.magic;
-        return -1;
+        return false;
     }
 
     if (p->msg.data_length > t->get_max_payload()) {
         VLOG(RWX) << "check_header(): " << p->msg.data_length
                   << " atransport::max_payload = " << t->get_max_payload();
-        return -1;
+        return false;
     }
 
-    return 0;
+    return true;
 }
 
-int check_data(apacket* p) {
-    if (calculate_apacket_checksum(p) != p->msg.data_check) {
-        return -1;
-    }
-    return 0;
+bool check_data(apacket* p) {
+    return calculate_apacket_checksum(p) == p->msg.data_check;
 }
 
 #if ADB_HOST
