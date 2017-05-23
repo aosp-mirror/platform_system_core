@@ -62,22 +62,22 @@ static atransport*  local_transports[ ADB_LOCAL_TRANSPORT_MAX ];
 
 static int remote_read(apacket *p, atransport *t)
 {
-    if(!ReadFdExactly(t->sfd, &p->msg, sizeof(amessage))){
+    if (!ReadFdExactly(t->sfd, &p->msg, sizeof(amessage))) {
         D("remote local: read terminated (message)");
         return -1;
     }
 
-    if(check_header(p, t)) {
+    if (!check_header(p, t)) {
         D("bad header: terminated (data)");
         return -1;
     }
 
-    if(!ReadFdExactly(t->sfd, p->data, p->msg.data_length)){
+    if (!ReadFdExactly(t->sfd, p->data, p->msg.data_length)) {
         D("remote local: terminated (data)");
         return -1;
     }
 
-    if(check_data(p)) {
+    if (!check_data(p)) {
         D("bad data: terminated (data)");
         return -1;
     }
