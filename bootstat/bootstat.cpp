@@ -221,19 +221,24 @@ void RecordInitBootTimeProp(
   }
 }
 
-// Parses and records the set of bootloader stages and associated boot times
-// from the ro.boot.boottime system property.
-void RecordBootloaderTimings(BootEventRecordStore* boot_event_store) {
-  // |ro.boot.boottime| is of the form 'stage1:time1,...,stageN:timeN'.
+// A map from bootloader timing stage to the time that stage took during boot.
+typedef std::map<std::string, int32_t> BootloaderTimingMap;
+
+// Returns a mapping from bootloader stage names to the time those stages
+// took to boot.
+const BootloaderTimingMap GetBootLoaderTimings() {
+  BootloaderTimingMap timings;
+
+  // |ro.boot.boottime| is of the form 'stage1:time1,...,stageN:timeN',
+  // where timeN is in milliseconds.
   std::string value = GetProperty("ro.boot.boottime");
   if (value.empty()) {
     // ro.boot.boottime is not reported on all devices.
-    return;
+    return BootloaderTimingMap();
   }
 
-  int32_t total_time = 0;
   auto stages = android::base::Split(value, ",");
-  for (auto const &stageTiming : stages) {
+  for (const auto& stageTiming : stages) {
     // |stageTiming| is of the form 'stage:time'.
     auto stageTimingValues = android::base::Split(stageTiming, ":");
     DCHECK_EQ(2, stageTimingValues.size());
@@ -241,13 +246,43 @@ void RecordBootloaderTimings(BootEventRecordStore* boot_event_store) {
     std::string stageName = stageTimingValues[0];
     int32_t time_ms;
     if (android::base::ParseInt(stageTimingValues[1], &time_ms)) {
-      total_time += time_ms;
-      boot_event_store->AddBootEventWithValue(
-          "boottime.bootloader." + stageName, time_ms);
+      timings[stageName] = time_ms;
     }
   }
 
+  return timings;
+}
+
+// Parses and records the set of bootloader stages and associated boot times
+// from the ro.boot.boottime system property.
+void RecordBootloaderTimings(BootEventRecordStore* boot_event_store,
+                             const BootloaderTimingMap& bootloader_timings) {
+  int32_t total_time = 0;
+  for (const auto& timing : bootloader_timings) {
+    total_time += timing.second;
+    boot_event_store->AddBootEventWithValue("boottime.bootloader." + timing.first, timing.second);
+  }
+
   boot_event_store->AddBootEventWithValue("boottime.bootloader.total", total_time);
+}
+
+// Records the closest estimation to the absolute device boot time, i.e.,
+// from power on to boot_complete, including bootloader times.
+void RecordAbsoluteBootTime(BootEventRecordStore* boot_event_store,
+                            const BootloaderTimingMap& bootloader_timings,
+                            std::chrono::milliseconds uptime) {
+  int32_t bootloader_time_ms = 0;
+
+  for (const auto& timing : bootloader_timings) {
+    if (timing.first.compare("SW") != 0) {
+      bootloader_time_ms += timing.second;
+    }
+  }
+
+  auto bootloader_duration = std::chrono::milliseconds(bootloader_time_ms);
+  auto absolute_total =
+      std::chrono::duration_cast<std::chrono::seconds>(bootloader_duration + uptime);
+  boot_event_store->AddBootEventWithValue("absolute_boot_time", absolute_total.count());
 }
 
 // Records several metrics related to the time it takes to boot the device,
@@ -256,8 +291,8 @@ void RecordBootComplete() {
   BootEventRecordStore boot_event_store;
   BootEventRecordStore::BootEventRecord record;
 
-  auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
-      android::base::boot_clock::now().time_since_epoch());
+  auto time_since_epoch = android::base::boot_clock::now().time_since_epoch();
+  auto uptime = std::chrono::duration_cast<std::chrono::seconds>(time_since_epoch);
   time_t current_time_utc = time(nullptr);
 
   if (boot_event_store.GetBootEvent("last_boot_time_utc", &record)) {
@@ -290,7 +325,6 @@ void RecordBootComplete() {
     std::chrono::seconds boot_complete = std::chrono::seconds(uptime.count() - record.second);
     boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_post_decrypt",
                                            boot_complete.count());
-
   } else {
       boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_no_encryption",
                                              uptime.count());
@@ -304,7 +338,11 @@ void RecordBootComplete() {
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init.selinux");
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init.cold_boot_wait");
 
-  RecordBootloaderTimings(&boot_event_store);
+  const BootloaderTimingMap bootloader_timings = GetBootLoaderTimings();
+  RecordBootloaderTimings(&boot_event_store, bootloader_timings);
+
+  auto uptime_ms = std::chrono::duration_cast<std::chrono::milliseconds>(time_since_epoch);
+  RecordAbsoluteBootTime(&boot_event_store, bootloader_timings, uptime_ms);
 }
 
 // Records the boot_reason metric by querying the ro.boot.bootreason system
