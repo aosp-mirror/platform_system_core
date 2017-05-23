@@ -51,6 +51,8 @@ extern const char* const kFeatureCmd;
 extern const char* const kFeatureStat2;
 // The server is running with libusb enabled.
 extern const char* const kFeatureLibusb;
+// The server supports `push --sync`.
+extern const char* const kFeaturePushSync;
 
 class atransport {
 public:
