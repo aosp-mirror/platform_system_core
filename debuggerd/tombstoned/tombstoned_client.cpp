@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "debuggerd/tombstoned.h"
+#include "tombstoned/tombstoned.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -25,8 +25,8 @@
 #include <async_safe/log.h>
 #include <cutils/sockets.h>
 
-#include "debuggerd/protocol.h"
-#include "debuggerd/util.h"
+#include "protocol.h"
+#include "util.h"
 
 using android::base::unique_fd;
 

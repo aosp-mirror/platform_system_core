@@ -42,8 +42,8 @@
 #include <async_safe/log.h>
 
 #include "debuggerd/handler.h"
-#include "debuggerd/tombstoned.h"
-#include "debuggerd/util.h"
+#include "tombstoned/tombstoned.h"
+#include "util.h"
 
 #include "backtrace.h"
 #include "tombstone.h"
