@@ -55,6 +55,7 @@ const char* const kFeatureShell2 = "shell_v2";
 const char* const kFeatureCmd = "cmd";
 const char* const kFeatureStat2 = "stat_v2";
 const char* const kFeatureLibusb = "libusb";
+const char* const kFeaturePushSync = "push_sync";
 
 static std::string dump_packet(const char* name, const char* func, apacket* p) {
     unsigned command = p->msg.command;
