@@ -1140,6 +1140,7 @@ int handle_host_request(const char* service, TransportType type,
         if (should_use_libusb()) {
             features.insert(kFeatureLibusb);
         }
+        features.insert(kFeaturePushSync);
         SendOkay(reply_fd, FeatureSetToString(features));
         return 0;
     }
