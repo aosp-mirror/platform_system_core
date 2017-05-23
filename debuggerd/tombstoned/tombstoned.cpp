@@ -35,8 +35,8 @@
 #include <cutils/sockets.h>
 
 #include "debuggerd/handler.h"
-#include "debuggerd/protocol.h"
-#include "debuggerd/util.h"
+#include "protocol.h"
+#include "util.h"
 
 #include "intercept_manager.h"
 

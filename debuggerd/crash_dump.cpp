@@ -48,9 +48,9 @@
 #include "utility.h"
 
 #include "debuggerd/handler.h"
-#include "debuggerd/protocol.h"
-#include "debuggerd/tombstoned.h"
-#include "debuggerd/util.h"
+#include "protocol.h"
+#include "tombstoned/tombstoned.h"
+#include "util.h"
 
 using android::base::unique_fd;
 using android::base::ReadFileToString;
