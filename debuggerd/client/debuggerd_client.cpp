@@ -31,9 +31,10 @@
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
-#include <debuggerd/handler.h>
-#include <debuggerd/protocol.h>
-#include <debuggerd/util.h>
+
+#include "debuggerd/handler.h"
+#include "protocol.h"
+#include "util.h"
 
 using namespace std::chrono_literals;
 
