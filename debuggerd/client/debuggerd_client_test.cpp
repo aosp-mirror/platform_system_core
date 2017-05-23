@@ -31,7 +31,7 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 
-#include <debuggerd/util.h>
+#include "util.h"
 
 using namespace std::chrono_literals;
 using android::base::unique_fd;
