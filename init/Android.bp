@@ -1,0 +1,164 @@
+//
+// Copyright (C) 2017 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+cc_defaults {
+    name: "init_defaults",
+    cpp_std: "experimental",
+    sanitize: {
+        misc_undefined: ["integer"],
+    },
+    tidy_checks: ["-misc-forwarding-reference-overload"],
+    cppflags: [
+        "-DLOG_UEVENTS=0",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Werror",
+        "-DALLOW_LOCAL_PROP_OVERRIDE=0",
+        "-DALLOW_PERMISSIVE_SELINUX=0",
+        "-DREBOOT_BOOTLOADER_ON_PANIC=0",
+        "-DWORLD_WRITABLE_KMSG=0",
+        "-DDUMP_ON_UMOUNT_FAILURE=0",
+        "-DSHUTDOWN_ZERO_TIMEOUT=0",
+    ],
+    product_variables: {
+        debuggable: {
+            cppflags: [
+                "-UALLOW_LOCAL_PROP_OVERRIDE",
+                "-DALLOW_LOCAL_PROP_OVERRIDE=1",
+                "-UALLOW_PERMISSIVE_SELINUX",
+                "-DALLOW_PERMISSIVE_SELINUX=1",
+                "-UREBOOT_BOOTLOADER_ON_PANIC",
+                "-DREBOOT_BOOTLOADER_ON_PANIC=1",
+                "-UWORLD_WRITABLE_KMSG",
+                "-DWORLD_WRITABLE_KMSG=1",
+                "-UDUMP_ON_UMOUNT_FAILURE",
+                "-DDUMP_ON_UMOUNT_FAILURE=1",
+            ],
+        },
+        eng: {
+            cppflags: [
+                "-USHUTDOWN_ZERO_TIMEOUT",
+                "-DSHUTDOWN_ZERO_TIMEOUT=1",
+            ],
+        },
+    },
+}
+
+cc_library_static {
+    name: "libinit",
+    defaults: ["init_defaults"],
+    srcs: [
+        "action.cpp",
+        "capabilities.cpp",
+        "descriptors.cpp",
+        "devices.cpp",
+        "import_parser.cpp",
+        "init_parser.cpp",
+        "log.cpp",
+        "parser.cpp",
+        "service.cpp",
+        "util.cpp",
+    ],
+    whole_static_libs: ["libcap"],
+    static_libs: [
+        "libbase",
+        "libselinux",
+        "liblog",
+        "libprocessgroup",
+    ],
+}
+
+/*
+This is not yet ready, see the below TODOs for what is missing
+
+cc_binary {
+    // TODO: Missing,
+    //LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
+    //LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
+
+    name: "init",
+    defaults: ["init_defaults"],
+    static_executable: true,
+    srcs: [
+        "bootchart.cpp",
+        "builtins.cpp",
+        "init.cpp",
+        "init_first_stage.cpp",
+        "keychords.cpp",
+        "property_service.cpp",
+        "reboot.cpp",
+        "signal_handler.cpp",
+        "ueventd.cpp",
+        "watchdogd.cpp",
+    ],
+    include_dirs: [
+        "system/core/mkbootimg"
+    ],
+    static_libs: [
+        "libinit",
+        "libbootloader_message",
+        "libfs_mgr",
+        "libfec",
+        "libfec_rs",
+        "libsquashfs_utils",
+        "liblogwrap",
+        "libext4_utils",
+        "libcutils",
+        "libbase",
+        "libc",
+        "libselinux",
+        "liblog",
+        "libcrypto_utils",
+        "libcrypto",
+        "libc++_static",
+        "libdl",
+        "libsparse",
+        "libz",
+        "libprocessgroup",
+        "libavb",
+        "libkeyutils",
+    ],
+    symlinks: [
+        "sbin/ueventd",
+        "sbin/watchdogd",
+    ],
+}
+*/
+
+// Tests
+// ------------------------------------------------------------------------------
+
+cc_test {
+    name: "init_tests",
+    defaults: ["init_defaults"],
+    srcs: [
+        "devices_test.cpp",
+        "init_parser_test.cpp",
+        "init_test.cpp",
+        "property_service_test.cpp",
+        "service_test.cpp",
+        "util_test.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libselinux",
+    ],
+    static_libs: ["libinit"],
+}
+
+subdirs = ["*"]
