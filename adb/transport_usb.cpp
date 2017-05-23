@@ -72,7 +72,7 @@ static int remote_read(apacket* p, atransport* t) {
         D("remote usb: read terminated (message)");
         return -1;
     }
-    if (static_cast<size_t>(n) != sizeof(p->msg) || check_header(p, t)) {
+    if (static_cast<size_t>(n) != sizeof(p->msg) || !check_header(p, t)) {
         D("remote usb: check_header failed, skip it");
         goto err_msg;
     }
@@ -95,7 +95,7 @@ static int remote_read(apacket* p, atransport* t) {
             goto err_msg;
         }
     }
-    if (check_data(p)) {
+    if (!check_data(p)) {
         D("remote usb: check_data failed, skip it");
         goto err_msg;
     }
@@ -124,19 +124,19 @@ static int remote_read(apacket *p, atransport *t)
         return -1;
     }
 
-    if(check_header(p, t)) {
+    if (!check_header(p, t)) {
         D("remote usb: check_header failed");
         return -1;
     }
 
-    if(p->msg.data_length) {
+    if (p->msg.data_length) {
         if (usb_read(t->usb, p->data, p->msg.data_length)) {
             D("remote usb: terminated (data)");
             return -1;
         }
     }
 
-    if(check_data(p)) {
+    if (!check_data(p)) {
         D("remote usb: check_data failed");
         return -1;
     }

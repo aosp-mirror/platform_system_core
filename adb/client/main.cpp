@@ -125,6 +125,11 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
     });
 #endif
 
+    if (is_daemon) {
+        close_stdin();
+        setup_daemon_logging();
+    }
+
     android::base::at_quick_exit(adb_server_cleanup);
 
     init_transport_registration();
@@ -146,11 +151,6 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
         }
 
         std::this_thread::sleep_for(100ms);
-    }
-
-    if (is_daemon) {
-        close_stdin();
-        setup_daemon_logging();
     }
 
     adb_auth_init();

@@ -1,0 +1,44 @@
+common_cflags = [
+    "-Werror",
+    "-Wno-unused-parameter",
+    "-Wno-unused-const-variable",
+    "-include bsd-compatibility.h"
+]
+
+cc_library_static {
+    srcs: [
+        "upstream-netbsd/bin/dd/args.c",
+        "upstream-netbsd/bin/dd/conv.c",
+        "upstream-netbsd/bin/dd/dd.c",
+        "upstream-netbsd/bin/dd/dd_hostops.c",
+        "upstream-netbsd/bin/dd/misc.c",
+        "upstream-netbsd/bin/dd/position.c",
+        "upstream-netbsd/lib/libc/gen/getbsize.c",
+        "upstream-netbsd/lib/libc/gen/humanize_number.c",
+        "upstream-netbsd/lib/libc/stdlib/strsuftoll.c",
+        "upstream-netbsd/lib/libc/string/swab.c",
+        "upstream-netbsd/lib/libutil/raise_default_signal.c",
+    ],
+    cflags: common_cflags + [
+        "-Dmain=dd_main",
+        "-DNO_CONV",
+    ],
+    local_include_dirs: ["upstream-netbsd/include/"],
+    name: "libtoolbox_dd",
+}
+
+// We build BSD grep separately, so it can provide egrep and fgrep too.
+cc_binary {
+    name: "grep",
+    srcs: [
+        "upstream-netbsd/usr.bin/grep/fastgrep.c",
+        "upstream-netbsd/usr.bin/grep/file.c",
+        "upstream-netbsd/usr.bin/grep/grep.c",
+        "upstream-netbsd/usr.bin/grep/queue.c",
+        "upstream-netbsd/usr.bin/grep/util.c",
+    ],
+    cflags: common_cflags,
+    local_include_dirs: ["upstream-netbsd/include/"],
+    symlinks: ["egrep", "fgrep"],
+
+}

@@ -39,50 +39,6 @@ init_cflags += \
 
 # --
 
-# If building on Linux, then build unit test for the host.
-ifeq ($(HOST_OS),linux)
-include $(CLEAR_VARS)
-LOCAL_CPPFLAGS := $(init_cflags)
-LOCAL_SRC_FILES:= \
-    parser/tokenizer.cpp \
-
-LOCAL_MODULE := libinit_parser
-LOCAL_CLANG := true
-include $(BUILD_HOST_STATIC_LIBRARY)
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := init_parser_tests
-LOCAL_SRC_FILES := \
-    parser/tokenizer_test.cpp \
-
-LOCAL_STATIC_LIBRARIES := libinit_parser
-LOCAL_CLANG := true
-include $(BUILD_HOST_NATIVE_TEST)
-endif
-
-include $(CLEAR_VARS)
-# b/38002385, work around clang-tidy segmentation fault.
-LOCAL_TIDY_CHECKS := -misc-forwarding-reference-overload
-LOCAL_CPPFLAGS := $(init_cflags)
-LOCAL_SRC_FILES:= \
-    action.cpp \
-    capabilities.cpp \
-    descriptors.cpp \
-    devices.cpp \
-    import_parser.cpp \
-    init_parser.cpp \
-    log.cpp \
-    parser.cpp \
-    service.cpp \
-    util.cpp \
-
-LOCAL_STATIC_LIBRARIES := libbase libselinux liblog libprocessgroup
-LOCAL_WHOLE_STATIC_LIBRARIES := libcap
-LOCAL_MODULE := libinit
-LOCAL_SANITIZE := integer
-LOCAL_CLANG := true
-include $(BUILD_STATIC_LIBRARY)
-
 include $(CLEAR_VARS)
 # b/38002385, work around clang-tidy segmentation fault.
 LOCAL_TIDY_CHECKS := -misc-forwarding-reference-overload
@@ -139,35 +95,3 @@ LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT)/sbin; \
 LOCAL_SANITIZE := integer
 LOCAL_CLANG := true
 include $(BUILD_EXECUTABLE)
-
-
-# Unit tests.
-# =========================================================
-include $(CLEAR_VARS)
-# b/38002385, work around clang-tidy segmentation fault.
-LOCAL_TIDY_CHECKS := -misc-forwarding-reference-overload
-LOCAL_MODULE := init_tests
-LOCAL_COMPATIBILITY_SUITE := device-tests
-LOCAL_SRC_FILES := \
-    devices_test.cpp \
-    init_parser_test.cpp \
-    init_test.cpp \
-    property_service_test.cpp \
-    service_test.cpp \
-    util_test.cpp \
-
-LOCAL_SHARED_LIBRARIES += \
-    libbase \
-    libcutils \
-    libselinux \
-
-LOCAL_STATIC_LIBRARIES := libinit
-LOCAL_SANITIZE := integer
-LOCAL_CLANG := true
-LOCAL_CPPFLAGS := -Wall -Wextra -Werror -std=gnu++1z
-include $(BUILD_NATIVE_TEST)
-
-
-# Include targets in subdirs.
-# =========================================================
-include $(call all-makefiles-under,$(LOCAL_PATH))
