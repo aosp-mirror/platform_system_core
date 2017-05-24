@@ -311,6 +311,29 @@ TEST_F(BugreportTest, OkProgressAlwaysForward) {
     ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
 }
 
+// Tests 'adb bugreport file.zip' when it succeeds and displays the initial progress of 0%
+TEST_F(BugreportTest, OkProgressZeroPercentIsNotIgnored) {
+    ExpectBugreportzVersion("1.1");
+    ExpectProgress(0);
+    ExpectProgress(1);
+    // clang-format off
+    EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
+        // NOTE: DoAll accepts at most 10 arguments, and we're almost reached that limit...
+        .WillOnce(DoAll(
+            WithArg<4>(WriteOnStdout("BEGIN:/device/bugreport.zip\n")),
+            WithArg<4>(WriteOnStdout("PROGRESS:1/100000\n")),
+            WithArg<4>(WriteOnStdout("PROGRESS:1/100\n")), // 1%
+            WithArg<4>(WriteOnStdout("OK:/device/bugreport.zip")),
+            WithArg<4>(ReturnCallbackDone())));
+    // clang-format on
+    EXPECT_CALL(br_, DoSyncPull(ElementsAre(StrEq("/device/bugreport.zip")), StrEq("file.zip"),
+                                true, StrEq("pulling file.zip")))
+        .WillOnce(Return(true));
+
+    const char* args[] = {"bugreport", "file.zip"};
+    ASSERT_EQ(0, br_.DoIt(kTransportLocal, "HannibalLecter", 2, args));
+}
+
 // Tests 'adb bugreport dir' when it succeeds and destination is a directory.
 TEST_F(BugreportTest, OkDirectory) {
     ExpectBugreportzVersion("1.1");
