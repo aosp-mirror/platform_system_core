@@ -149,7 +149,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
             int progress = std::stoi(line.substr(idx1, (idx2 - idx1)));
             int total = std::stoi(line.substr(idx2 + 1));
             int progress_percentage = (progress * 100 / total);
-            if (progress_percentage <= last_progress_percentage_) {
+            if (progress_percentage != 0 && progress_percentage <= last_progress_percentage_) {
                 // Ignore.
                 return;
             }
