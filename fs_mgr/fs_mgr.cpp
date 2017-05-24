@@ -965,16 +965,20 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
                    should_use_metadata_encryption(&fstab->recs[attempted_idx])) {
             encryptable = FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED;
         } else {
+            // fs_options might be null so we cannot use PERROR << directly.
+            // Use StringPrintf to output "(null)" instead.
             if (fs_mgr_is_nofail(&fstab->recs[attempted_idx])) {
-                PERROR << "Ignoring failure to mount an un-encryptable or wiped partition on"
-                       << fstab->recs[attempted_idx].blk_device << " at "
-                       << fstab->recs[attempted_idx].mount_point << " options: "
-                       << fstab->recs[attempted_idx].fs_options;
+                PERROR << android::base::StringPrintf(
+                    "Ignoring failure to mount an un-encryptable or wiped "
+                    "partition on %s at %s options: %s",
+                    fstab->recs[attempted_idx].blk_device, fstab->recs[attempted_idx].mount_point,
+                    fstab->recs[attempted_idx].fs_options);
             } else {
-                PERROR << "Failed to mount an un-encryptable or wiped partition on"
-                       << fstab->recs[attempted_idx].blk_device << " at "
-                       << fstab->recs[attempted_idx].mount_point << " options: "
-                       << fstab->recs[attempted_idx].fs_options;
+                PERROR << android::base::StringPrintf(
+                    "Failed to mount an un-encryptable or wiped partition "
+                    "on %s at %s options: %s",
+                    fstab->recs[attempted_idx].blk_device, fstab->recs[attempted_idx].mount_point,
+                    fstab->recs[attempted_idx].fs_options);
                 ++error_count;
             }
             continue;

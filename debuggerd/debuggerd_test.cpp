@@ -35,11 +35,12 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
-#include <debuggerd/handler.h>
-#include <debuggerd/protocol.h>
-#include <debuggerd/tombstoned.h>
-#include <debuggerd/util.h>
 #include <gtest/gtest.h>
+
+#include "debuggerd/handler.h"
+#include "protocol.h"
+#include "tombstoned/tombstoned.h"
+#include "util.h"
 
 using namespace std::chrono_literals;
 using android::base::unique_fd;
