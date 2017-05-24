@@ -36,6 +36,7 @@
 #endif
 #include <gtest/gtest.h>
 #include <log/log_event_list.h>
+#include <log/log_properties.h>
 #include <log/log_transport.h>
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
@@ -1786,6 +1787,12 @@ TEST(liblog, enoent) {
         stderr,
         "WARNING: test conditions request being run as root and not AID=%d\n",
         getuid());
+    if (!__android_log_is_debuggable()) {
+      fprintf(
+          stderr,
+          "WARNING: can not run test on a \"user\" build, bypassing test\n");
+      return;
+    }
   }
 
   system((getuid() == AID_ROOT) ? "stop logd" : "su 0 stop logd");
