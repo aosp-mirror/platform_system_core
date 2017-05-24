@@ -50,6 +50,8 @@
 
 #include <async_safe/log.h>
 
+#include "dump_type.h"
+
 // see man(2) prctl, specifically the section about PR_GET_NAME
 #define MAX_TASK_NAME_LEN (16)
 
@@ -253,6 +255,14 @@ struct debugger_thread_info {
 // process.
 static void* pseudothread_stack;
 
+static DebuggerdDumpType get_dump_type(const debugger_thread_info* thread_info) {
+  if (thread_info->signal_number == DEBUGGER_SIGNAL && thread_info->info->si_value.sival_int) {
+    return kDebuggerdNativeBacktrace;
+  }
+
+  return kDebuggerdTombstone;
+}
+
 static int debuggerd_dispatch_pseudothread(void* arg) {
   debugger_thread_info* thread_info = static_cast<debugger_thread_info*>(arg);
 
@@ -285,11 +295,15 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
 
     char main_tid[10];
     char pseudothread_tid[10];
+    char debuggerd_dump_type[10];
     async_safe_format_buffer(main_tid, sizeof(main_tid), "%d", thread_info->crashing_tid);
     async_safe_format_buffer(pseudothread_tid, sizeof(pseudothread_tid), "%d",
                              thread_info->pseudothread_tid);
+    async_safe_format_buffer(debuggerd_dump_type, sizeof(debuggerd_dump_type), "%d",
+                             get_dump_type(thread_info));
 
-    execl(CRASH_DUMP_PATH, CRASH_DUMP_NAME, main_tid, pseudothread_tid, nullptr);
+    execl(CRASH_DUMP_PATH, CRASH_DUMP_NAME, main_tid, pseudothread_tid, debuggerd_dump_type,
+          nullptr);
 
     fatal_errno("exec failed");
   } else {
