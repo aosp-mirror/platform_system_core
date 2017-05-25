@@ -1,5 +1,6 @@
 cc_library_shared {
     name: "libnetutils",
+    vendor_available: true,
 
     srcs: [
         "dhcpclient.c",
