@@ -58,7 +58,6 @@
 
 #include "action.h"
 #include "bootchart.h"
-#include "devices.h"
 #include "import_parser.h"
 #include "init_first_stage.h"
 #include "init_parser.h"
