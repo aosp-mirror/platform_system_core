@@ -31,6 +31,7 @@ cc_defaults {
 // -----------------------------------------------------------------------------
 cc_library_shared {
     name: "libmetricslogger",
+    vendor_available: true,
     srcs: metricslogger_lib_src_files,
     defaults: ["metricslogger_defaults"],
 }
