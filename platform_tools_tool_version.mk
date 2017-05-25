@@ -17,6 +17,6 @@
 # literal instead. Using 0 lets us easily distinguish non-canonical builds.
 platform_tools_version := $(shell sed \
     's/$${PLATFORM_SDK_VERSION}/0/ ; s/^Pkg.Revision=\(.*\)/\1/p ; d' \
-    $(ANDROID_BUILD_TOP)/development/sdk/plat_tools_source.prop_template \
+    development/sdk/plat_tools_source.prop_template \
   )
 tool_version := $(platform_tools_version)-$(BUILD_NUMBER_FROM_FILE)
