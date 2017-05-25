@@ -443,7 +443,7 @@ static void handle_property_set_fd() {
     }
 }
 
-static void load_properties_from_file(const char *, const char *);
+static bool load_properties_from_file(const char *, const char *);
 
 /*
  * Filter is used to decide which properties to load: NULL loads all keys,
@@ -507,17 +507,18 @@ static void load_properties(char *data, const char *filter)
 
 // Filter is used to decide which properties to load: NULL loads all keys,
 // "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
-static void load_properties_from_file(const char* filename, const char* filter) {
+static bool load_properties_from_file(const char* filename, const char* filter) {
     Timer t;
     std::string data;
     std::string err;
     if (!ReadFile(filename, &data, &err)) {
-        PLOG(WARNING) << "Couldn't load property file: " << err;
-        return;
+        PLOG(WARNING) << "Couldn't load property file: " << filename << ": " << err;
+        return false;
     }
     data.push_back('\n');
     load_properties(&data[0], filter);
     LOG(VERBOSE) << "(Loading properties from " << filename << " took " << t << ".)";
+    return true;
 }
 
 static void load_persistent_properties() {
@@ -592,16 +593,21 @@ static void update_sys_usb_config() {
 }
 
 void property_load_boot_defaults() {
-    load_properties_from_file("/default.prop", NULL);
-    load_properties_from_file("/odm/default.prop", NULL);
-    load_properties_from_file("/vendor/default.prop", NULL);
+    if (!load_properties_from_file("/system/etc/prop.default", nullptr)) {
+        // for legacy devices
+        if (!load_properties_from_file("/default.prop", nullptr)) {
+            PLOG(ERROR) << "Failed to load default prop";
+        }
+    }
+    load_properties_from_file("/odm/etc/prop.default", nullptr);
+    load_properties_from_file("/vendor/etc/prop.default", nullptr);
 
     update_sys_usb_config();
 }
 
 static void load_override_properties() {
     if (ALLOW_LOCAL_PROP_OVERRIDE) {
-        load_properties_from_file("/data/local.prop", NULL);
+        load_properties_from_file("/data/local.prop", nullptr);
     }
 }
 
@@ -649,9 +655,15 @@ void load_recovery_id_prop() {
 }
 
 void load_system_props() {
-    load_properties_from_file("/system/build.prop", NULL);
-    load_properties_from_file("/odm/build.prop", NULL);
-    load_properties_from_file("/vendor/build.prop", NULL);
+    if (!load_properties_from_file("/system/etc/prop.build", nullptr)) {
+        // for legacy devices
+        load_properties_from_file("/system/build.prop", nullptr);
+    }
+    load_properties_from_file("/odm/etc/prop.build", nullptr);
+    if (!load_properties_from_file("/vendor/etc/prop.build", nullptr)) {
+        // for legacy devices
+        load_properties_from_file("/vendor/build.prop", nullptr);
+    }
     load_properties_from_file("/factory/factory.prop", "ro.*");
     load_recovery_id_prop();
 }
