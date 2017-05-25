@@ -2,6 +2,8 @@
 
 cc_library {
     name: "libsuspend",
+    vendor_available: true,
+
     srcs: [
         "autosuspend.c",
         "autosuspend_autosleep.c",
