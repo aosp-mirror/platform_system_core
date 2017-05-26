@@ -1,6 +1,6 @@
 subdirs = ["tests"]
 
-cc_library_shared {
+cc_library {
     name: "libvndksupport",
     srcs: ["linker.c"],
     local_include_dirs: ["include/vndksupport"],
