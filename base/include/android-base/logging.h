@@ -315,7 +315,7 @@ struct LogAbortAfterFullExpr {
 // DCHECKs are debug variants of CHECKs only enabled in debug builds. Generally
 // CHECK should be used unless profiling identifies a CHECK as being in
 // performance critical code.
-#if defined(NDEBUG)
+#if defined(NDEBUG) && !defined(__clang_analyzer__)
 static constexpr bool kEnableDChecks = false;
 #else
 static constexpr bool kEnableDChecks = true;
@@ -339,7 +339,7 @@ static constexpr bool kEnableDChecks = true;
   if (::android::base::kEnableDChecks) CHECK_STREQ(s1, s2)
 #define DCHECK_STRNE(s1, s2) \
   if (::android::base::kEnableDChecks) CHECK_STRNE(s1, s2)
-#if defined(NDEBUG)
+#if defined(NDEBUG) && !defined(__clang_analyzer__)
 #define DCHECK_CONSTEXPR(x, out, dummy)
 #else
 #define DCHECK_CONSTEXPR(x, out, dummy) CHECK_CONSTEXPR(x, out, dummy)
