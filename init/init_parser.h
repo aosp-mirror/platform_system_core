@@ -66,9 +66,9 @@ class Parser {
     //  be written.
     using LineCallback = std::function<bool(std::vector<std::string>&&, std::string*)>;
 
+    // TODO: init is the only user of this as a singleton; remove it.
     static Parser& GetInstance();
 
-    // Exposed for testing
     Parser();
 
     bool ParseConfig(const std::string& path);

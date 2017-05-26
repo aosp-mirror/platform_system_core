@@ -20,35 +20,14 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <functional>
+#include <algorithm>
 #include <string>
 #include <vector>
 
-#include "init_parser.h"
+#include <android-base/file.h>
+#include <selinux/label.h>
 
-enum coldboot_action_t {
-    // coldboot continues without creating the device for the uevent
-    COLDBOOT_CONTINUE = 0,
-    // coldboot continues after creating the device for the uevent
-    COLDBOOT_CREATE,
-    // coldboot stops after creating the device for uevent but doesn't
-    // create the COLDBOOT_DONE file
-    COLDBOOT_STOP,
-    // same as COLDBOOT_STOP, but creates the COLDBOOT_DONE file
-    COLDBOOT_FINISH
-};
-
-struct uevent {
-    std::string action;
-    std::string path;
-    std::string subsystem;
-    std::string firmware;
-    std::string partition_name;
-    std::string device_name;
-    int partition_num;
-    int major;
-    int minor;
-};
+#include "uevent.h"
 
 class Permissions {
   public:
@@ -93,9 +72,15 @@ class Subsystem {
 
     // Returns the full path for a uevent of a device that is a member of this subsystem,
     // according to the rules parsed from ueventd.rc
-    std::string ParseDevPath(uevent* uevent) const;
+    std::string ParseDevPath(const Uevent& uevent) const {
+        std::string devname = devname_source_ == DevnameSource::DEVNAME_UEVENT_DEVNAME
+                                  ? uevent.device_name
+                                  : android::base::Basename(uevent.path);
 
-    bool operator==(const std::string& string_name) { return name_ == string_name; }
+        return dir_name_ + "/" + devname;
+    }
+
+    bool operator==(const std::string& string_name) const { return name_ == string_name; }
 
   private:
     enum class DevnameSource {
@@ -108,34 +93,54 @@ class Subsystem {
     DevnameSource devname_source_;
 };
 
-class SubsystemParser : public SectionParser {
+class PlatformDeviceList {
   public:
-    SubsystemParser() {}
-    bool ParseSection(std::vector<std::string>&& args, const std::string& filename, int line,
-                      std::string* err) override;
-    bool ParseLineSection(std::vector<std::string>&& args, int line, std::string* err) override;
-    void EndSection() override;
+    void Add(const std::string& path) { platform_devices_.emplace_back(path); }
+    void Remove(const std::string& path) {
+        auto it = std::find(platform_devices_.begin(), platform_devices_.end(), path);
+        if (it != platform_devices_.end()) platform_devices_.erase(it);
+    }
+    bool Find(const std::string& path, std::string* out_path) const;
+    auto size() const { return platform_devices_.size(); }
 
   private:
-    bool ParseDevName(std::vector<std::string>&& args, std::string* err);
-    bool ParseDirName(std::vector<std::string>&& args, std::string* err);
-
-    Subsystem subsystem_;
+    std::vector<std::string> platform_devices_;
 };
 
-bool ParsePermissionsLine(std::vector<std::string>&& args, std::string* err, bool is_sysfs);
-typedef std::function<coldboot_action_t(struct uevent* uevent)> coldboot_callback;
-extern coldboot_action_t handle_device_fd(coldboot_callback fn = nullptr);
-extern void device_init(const char* path = nullptr, coldboot_callback fn = nullptr);
-extern void device_close();
-int get_device_fd();
+class DeviceHandler {
+  public:
+    friend class DeviceHandlerTester;
+
+    DeviceHandler();
+    DeviceHandler(std::vector<Permissions> dev_permissions,
+                  std::vector<SysfsPermissions> sysfs_permissions,
+                  std::vector<Subsystem> subsystems);
+    ~DeviceHandler(){};
+
+    void HandleDeviceEvent(const Uevent& uevent);
+    std::vector<std::string> GetBlockDeviceSymlinks(const Uevent& uevent) const;
+
+  private:
+    void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;
+    std::tuple<mode_t, uid_t, gid_t> GetDevicePermissions(
+        const std::string& path, const std::vector<std::string>& links) const;
+    void MakeDevice(const std::string& path, int block, int major, int minor,
+                    const std::vector<std::string>& links) const;
+    std::vector<std::string> GetCharacterDeviceSymlinks(const Uevent& uevent) const;
+    void HandleDevice(const std::string& action, const std::string& devpath, int block, int major,
+                      int minor, const std::vector<std::string>& links) const;
+    void HandlePlatformDeviceEvent(const Uevent& uevent);
+    void HandleBlockDeviceEvent(const Uevent& uevent) const;
+    void HandleGenericDeviceEvent(const Uevent& uevent) const;
+
+    std::vector<Permissions> dev_permissions_;
+    std::vector<SysfsPermissions> sysfs_permissions_;
+    std::vector<Subsystem> subsystems_;
+    PlatformDeviceList platform_devices_;
+    selabel_handle* sehandle_;
+};
 
 // Exposed for testing
-extern std::vector<std::string> platform_devices;
-bool find_platform_device(const std::string& path, std::string* out_path);
-std::vector<std::string> get_character_device_symlinks(uevent* uevent);
-std::vector<std::string> get_block_device_symlinks(uevent* uevent);
-void sanitize_partition_name(std::string* string);
-void handle_platform_device_event(uevent* uevent);
+void SanitizePartitionName(std::string* string);
 
-#endif /* _INIT_DEVICES_H */
+#endif
