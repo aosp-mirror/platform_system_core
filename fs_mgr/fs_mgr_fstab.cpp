@@ -397,6 +397,15 @@ static std::string read_fstab_from_dt() {
         std::vector<std::string> fstab_entry;
         std::string file_name;
         std::string value;
+        // skip a partition entry if the status property is present and not set to ok
+        file_name = android::base::StringPrintf("%s/%s/status", fstabdir_name.c_str(), dp->d_name);
+        if (read_dt_file(file_name, &value)) {
+            if (value != "okay" && value != "ok") {
+                LINFO << "dt_fstab: Skip disabled entry for partition " << dp->d_name;
+                continue;
+            }
+        }
+
         file_name = android::base::StringPrintf("%s/%s/dev", fstabdir_name.c_str(), dp->d_name);
         if (!read_dt_file(file_name, &value)) {
             LERROR << "dt_fstab: Failed to find device for partition " << dp->d_name;
