@@ -1720,6 +1720,7 @@ TEST(liblog, is_loggable) {
 // Kills logd and toss all collected data, equivalent to logcat -b all -c,
 // except we also return errors to the logging callers.
 #ifdef USING_LOGGER_DEFAULT
+#ifdef __ANDROID__
 #ifdef TEST_PREFIX
 // helper to liblog.enoent to count end-to-end matching logging messages.
 static int count_matching_ts(log_time ts) {
@@ -1832,7 +1833,8 @@ TEST(liblog, enoent) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
-#endif  // USING_LOCAL_LOGD
+#endif  // __ANDROID__
+#endif  // USING_LOGGER_DEFAULT
 
 // Below this point we run risks of setuid(AID_SYSTEM) which may affect others.
 
