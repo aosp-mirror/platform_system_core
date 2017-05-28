@@ -83,6 +83,12 @@ static constexpr const char* kPublicNativeLibrariesSystemConfigPathFromRoot =
 static constexpr const char* kPublicNativeLibrariesVendorConfig =
                                   "/vendor/etc/public.libraries.txt";
 
+// The device may be configured to have the vendor libraries loaded to a separate namespace.
+// For historical reasons this namespace was named sphal but effectively it is intended
+// to use to load vendor libraries to separate namespace with controlled interface between
+// vendor and system namespaces.
+static constexpr const char* kVendorNamespaceName = "sphal";
+
 // (http://b/27588281) This is a workaround for apps using custom classloaders and calling
 // System.load() with an absolute path which is outside of the classloader library search path.
 // This list includes all directories app is allowed to access this way.
@@ -170,9 +176,21 @@ class LibraryNamespaces {
         return false;
       }
 
-      if (!android_link_namespaces(ns, nullptr, public_libraries_.c_str())) {
+      // Note that when vendor_ns is not configured this function will return nullptr
+      // and it will result in linking vendor_public_libraries_ to the default namespace
+      // which is expected behavior in this case.
+      android_namespace_t* vendor_ns = android_get_exported_namespace(kVendorNamespaceName);
+
+      if (!android_link_namespaces(ns, nullptr, system_public_libraries_.c_str())) {
         *error_msg = dlerror();
         return false;
+      }
+
+      if (!vendor_public_libraries_.empty()) {
+        if (!android_link_namespaces(ns, vendor_ns, vendor_public_libraries_.c_str())) {
+          *error_msg = dlerror();
+          return false;
+        }
       }
 
       native_loader_ns = NativeLoaderNamespace(ns);
@@ -183,14 +201,24 @@ class LibraryNamespaces {
                                                                   namespace_type,
                                                                   permitted_path.c_str(),
                                                                   parent_ns.get_native_bridge_ns());
+
       if (ns == nullptr) {
         *error_msg = NativeBridgeGetError();
         return false;
       }
 
-      if (!NativeBridgeLinkNamespaces(ns, nullptr, public_libraries_.c_str())) {
+      native_bridge_namespace_t* vendor_ns = NativeBridgeGetVendorNamespace();
+
+      if (!NativeBridgeLinkNamespaces(ns, nullptr, system_public_libraries_.c_str())) {
+        *error_msg = NativeBridgeGetError();
+        return false;
+      }
+
+      if (!vendor_public_libraries_.empty()) {
+        if (!NativeBridgeLinkNamespaces(ns, vendor_ns, vendor_public_libraries_.c_str())) {
           *error_msg = NativeBridgeGetError();
           return false;
+        }
       }
 
       native_loader_ns = NativeLoaderNamespace(ns);
@@ -249,9 +277,6 @@ class LibraryNamespaces {
       }
     }
 
-    // This file is optional, quietly ignore if the file does not exist.
-    ReadConfig(kPublicNativeLibrariesVendorConfig, &sonames);
-
     // android_init_namespaces() expects all the public libraries
     // to be loaded so that they can be found by soname alone.
     //
@@ -266,7 +291,13 @@ class LibraryNamespaces {
                           soname.c_str(), dlerror());
     }
 
-    public_libraries_ = base::Join(sonames, ':');
+    system_public_libraries_ = base::Join(sonames, ':');
+
+    sonames.clear();
+    // This file is optional, quietly ignore if the file does not exist.
+    ReadConfig(kPublicNativeLibrariesVendorConfig, &sonames);
+
+    vendor_public_libraries_ = base::Join(sonames, ':');
   }
 
   void Reset() {
@@ -325,7 +356,7 @@ class LibraryNamespaces {
     // code is one example) unknown to linker in which  case linker uses anonymous
     // namespace. The second argument specifies the search path for the anonymous
     // namespace which is the library_path of the classloader.
-    initialized_ = android_init_anonymous_namespace(public_libraries_.c_str(),
+    initialized_ = android_init_anonymous_namespace(system_public_libraries_.c_str(),
                                                     is_native_bridge ? nullptr : library_path);
     if (!initialized_) {
       *error_msg = dlerror();
@@ -334,10 +365,10 @@ class LibraryNamespaces {
 
     // and now initialize native bridge namespaces if necessary.
     if (NativeBridgeInitialized()) {
-        initialized_ = NativeBridgeInitAnonymousNamespace(
-            public_libraries_.c_str(), is_native_bridge ? library_path : nullptr);
-        if (!initialized_) {
-            *error_msg = NativeBridgeGetError();
+      initialized_ = NativeBridgeInitAnonymousNamespace(system_public_libraries_.c_str(),
+                                                        is_native_bridge ? library_path : nullptr);
+      if (!initialized_) {
+        *error_msg = NativeBridgeGetError();
       }
     }
 
@@ -371,8 +402,8 @@ class LibraryNamespaces {
 
   bool initialized_;
   std::vector<std::pair<jweak, NativeLoaderNamespace>> namespaces_;
-  std::string public_libraries_;
-
+  std::string system_public_libraries_;
+  std::string vendor_public_libraries_;
 
   DISALLOW_COPY_AND_ASSIGN(LibraryNamespaces);
 };
