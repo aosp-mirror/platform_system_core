@@ -56,6 +56,8 @@ cc_defaults {
 cc_library {
     name: "libziparchive",
     host_supported: true,
+    vendor_available:true,
+
     defaults: ["libziparchive_defaults", "libziparchive_flags"],
     shared_libs: ["liblog", "libbase"],
     target: {

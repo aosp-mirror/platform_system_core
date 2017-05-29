@@ -85,12 +85,14 @@ static NativeBridgeState state = NativeBridgeState::kNotSetup;
 // Nativebridge implementation.
 // Used by isCompatibleWith() which is introduced in v2.
 enum NativeBridgeImplementationVersion {
-    // first version, not used.
-    DEFAULT_VERSION = 1,
-    // The version which signal semantic is introduced.
-    SIGNAL_VERSION = 2,
-    // The version which namespace semantic is introduced.
-    NAMESPACE_VERSION = 3,
+  // first version, not used.
+  DEFAULT_VERSION = 1,
+  // The version which signal semantic is introduced.
+  SIGNAL_VERSION = 2,
+  // The version which namespace semantic is introduced.
+  NAMESPACE_VERSION = 3,
+  // The version with vendor namespaces
+  VENDOR_NAMESPACE_VERSION = 4,
 };
 
 // Whether we had an error at some point.
@@ -619,6 +621,14 @@ bool NativeBridgeLinkNamespaces(native_bridge_namespace_t* from, native_bridge_n
   }
 
   return false;
+}
+
+native_bridge_namespace_t* NativeBridgeGetVendorNamespace() {
+  if (!NativeBridgeInitialized() || !isCompatibleWith(VENDOR_NAMESPACE_VERSION)) {
+    return nullptr;
+  }
+
+  return callbacks->getVendorNamespace();
 }
 
 void* NativeBridgeLoadLibraryExt(const char* libpath, int flag, native_bridge_namespace_t* ns) {

@@ -388,4 +388,9 @@ LOCAL_STATIC_LIBRARIES := \
 
 include $(BUILD_EXECUTABLE)
 
+# adb integration test
+# =========================================================
+$(call dist-for-goals,sdk,$(ALL_MODULES.adb_integration_test_adb.BUILT))
+$(call dist-for-goals,sdk,$(ALL_MODULES.adb_integration_test_device.BUILT))
+
 include $(call first-makefiles-under,$(LOCAL_PATH))

@@ -1,5 +1,7 @@
 cc_library_shared {
     name: "libsysutils",
+    vendor_available: true,
+
     srcs: [
         "src/SocketListener.cpp",
         "src/FrameworkListener.cpp",
