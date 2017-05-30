@@ -95,11 +95,6 @@ static bool ptrace_seize_thread(int pid_proc_fd, pid_t tid, std::string* error) 
     return false;
   }
 
-  // Put the task into ptrace-stop state.
-  if (ptrace(PTRACE_INTERRUPT, tid, 0, 0) != 0) {
-    PLOG(FATAL) << "failed to interrupt thread " << tid;
-  }
-
   return true;
 }
 
@@ -284,36 +279,38 @@ int main(int argc, char** argv) {
   // Die if we take too long.
   alarm(2);
 
+  std::string process_name = get_process_name(main_tid);
   std::string attach_error;
 
   std::map<pid_t, std::string> threads;
 
   {
-    ATRACE_NAME("ptrace");
+    ATRACE_NAME("ptrace_interrupt");
+
     // Seize the main thread.
     if (!ptrace_seize_thread(target_proc_fd, main_tid, &attach_error)) {
       LOG(FATAL) << attach_error;
     }
 
-    // Seize the siblings.
-    {
-      std::set<pid_t> siblings;
-      if (!android::procinfo::GetProcessTids(target, &siblings)) {
-        PLOG(FATAL) << "failed to get process siblings";
-      }
+    threads.emplace(main_tid, get_thread_name(main_tid));
 
-      // but not the already attached main thread.
-      siblings.erase(main_tid);
-      // or the handler pseudothread.
-      siblings.erase(pseudothread_tid);
+    // Seize its siblings.
+    std::set<pid_t> siblings;
+    if (!android::procinfo::GetProcessTids(target, &siblings)) {
+      PLOG(FATAL) << "failed to get process siblings";
+    }
 
-      for (pid_t sibling_tid : siblings) {
-        if (!ptrace_seize_thread(target_proc_fd, sibling_tid, &attach_error)) {
-          LOG(WARNING) << attach_error;
-        } else {
-          threads.emplace(sibling_tid, get_thread_name(sibling_tid));
-        }
+    // but not the already attached main thread.
+    siblings.erase(main_tid);
+    // or the handler pseudothread.
+    siblings.erase(pseudothread_tid);
+
+    for (pid_t sibling_tid : siblings) {
+      if (!ptrace_seize_thread(target_proc_fd, sibling_tid, &attach_error)) {
+        LOG(WARNING) << attach_error;
+        continue;
       }
+      threads.emplace(sibling_tid, get_thread_name(sibling_tid));
     }
   }
 
@@ -334,9 +331,6 @@ int main(int argc, char** argv) {
     populate_open_files_list(target, &open_files);
   }
 
-  std::string process_name = get_process_name(main_tid);
-  threads.emplace(main_tid, get_thread_name(main_tid));
-
   // Drop our capabilities now that we've attached to the threads we care about.
   drop_capabilities();
 
@@ -345,6 +339,16 @@ int main(int argc, char** argv) {
     const DebuggerdDumpType dump_type_enum = static_cast<DebuggerdDumpType>(dump_type);
     LOG(INFO) << "obtaining output fd from tombstoned, type: " << dump_type_enum;
     tombstoned_connected = tombstoned_connect(target, &tombstoned_socket, &output_fd, dump_type_enum);
+  }
+
+  // Pause the threads.
+  {
+    ATRACE_NAME("ptrace_interrupt");
+    for (const auto& [sibling_tid, _] : threads) {
+      if (ptrace(PTRACE_INTERRUPT, sibling_tid, 0, 0) != 0) {
+        PLOG(FATAL) << "failed to interrupt thread " << sibling_tid;
+      }
+    }
   }
 
   // Write a '\1' to stdout to tell the crashing process to resume.

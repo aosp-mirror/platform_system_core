@@ -7,6 +7,7 @@ cc_defaults {
         "-Wno-nullability-completeness",
         "-Os",
     ],
+    cpp_std: "experimental",
 
     local_include_dirs: ["include"],
 }
