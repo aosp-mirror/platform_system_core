@@ -122,3 +122,29 @@ cc_test {
         },
     },
 }
+
+// Performance benchmarks.
+cc_benchmark {
+    name: "ziparchive-benchmarks",
+    defaults: ["libziparchive_flags"],
+
+    srcs: [
+        "zip_archive_benchmark.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+
+    static_libs: [
+        "libziparchive",
+        "libz",
+        "libutils",
+    ],
+
+    target: {
+        host: {
+            cppflags: ["-Wno-unnamed-type-template-args"],
+        },
+    },
+}
