@@ -145,7 +145,7 @@ bool is_legal_property_name(const std::string& name) {
     if (name[0] == '.') return false;
     if (name[namelen - 1] == '.') return false;
 
-    /* Only allow alphanumeric, plus '.', '-', '@', or '_' */
+    /* Only allow alphanumeric, plus '.', '-', '@', ':', or '_' */
     /* Don't allow ".." to appear in a property name */
     for (size_t i = 0; i < namelen; i++) {
         if (name[i] == '.') {
@@ -153,7 +153,7 @@ bool is_legal_property_name(const std::string& name) {
             if (name[i-1] == '.') return false;
             continue;
         }
-        if (name[i] == '_' || name[i] == '-' || name[i] == '@') continue;
+        if (name[i] == '_' || name[i] == '-' || name[i] == '@' || name[i] == ':') continue;
         if (name[i] >= 'a' && name[i] <= 'z') continue;
         if (name[i] >= 'A' && name[i] <= 'Z') continue;
         if (name[i] >= '0' && name[i] <= '9') continue;
