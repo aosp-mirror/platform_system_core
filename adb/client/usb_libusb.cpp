@@ -427,11 +427,15 @@ static void device_disconnected(libusb_device* device) {
 
 static int hotplug_callback(libusb_context*, libusb_device* device, libusb_hotplug_event event,
                             void*) {
-    if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
-        device_connected(device);
-    } else if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT) {
-        device_disconnected(device);
-    }
+    // We're called with the libusb lock taken. Call these on the main thread outside of this
+    // function so that the usb_handle mutex is always taken before the libusb mutex.
+    fdevent_run_on_main_thread([device, event]() {
+        if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
+            device_connected(device);
+        } else if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT) {
+            device_disconnected(device);
+        }
+    });
     return 0;
 }
 
