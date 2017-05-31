@@ -151,7 +151,7 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
 
   // Fetch output fd from tombstoned.
   unique_fd tombstone_socket, output_fd;
-  if (!tombstoned_connect(getpid(), &tombstone_socket, &output_fd)) {
+  if (!tombstoned_connect(getpid(), &tombstone_socket, &output_fd, kDebuggerdNativeBacktrace)) {
     goto exit;
   }
 
@@ -215,7 +215,8 @@ static void crash_handler(siginfo_t* info, ucontext_t* ucontext, void* abort_mes
   }
 
   unique_fd tombstone_socket, output_fd;
-  bool tombstoned_connected = tombstoned_connect(getpid(), &tombstone_socket, &output_fd);
+  bool tombstoned_connected =
+      tombstoned_connect(getpid(), &tombstone_socket, &output_fd, kDebuggerdTombstone);
   debuggerd_fallback_tombstone(output_fd.get(), ucontext, info, abort_message);
   if (tombstoned_connected) {
     tombstoned_notify_completion(tombstone_socket.get());

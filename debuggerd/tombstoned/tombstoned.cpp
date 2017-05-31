@@ -35,6 +35,7 @@
 #include <cutils/sockets.h>
 
 #include "debuggerd/handler.h"
+#include "dump_type.h"
 #include "protocol.h"
 #include "util.h"
 
@@ -52,10 +53,10 @@ enum CrashStatus {
 
 struct Crash;
 
-class CrashType {
+class CrashQueue {
  public:
-  CrashType(const std::string& dir_path, const std::string& file_name_prefix, size_t max_artifacts,
-            size_t max_concurrent_dumps)
+  CrashQueue(const std::string& dir_path, const std::string& file_name_prefix, size_t max_artifacts,
+             size_t max_concurrent_dumps)
       : file_name_prefix_(file_name_prefix),
         dir_path_(dir_path),
         dir_fd_(open(dir_path.c_str(), O_DIRECTORY | O_RDONLY | O_CLOEXEC)),
@@ -114,8 +115,8 @@ class CrashType {
 
   void on_crash_completed() { --num_concurrent_dumps_; }
 
-  static CrashType* const tombstone;
-  static CrashType* const java_trace;
+  static CrashQueue* const tombstone;
+  static CrashQueue* const java_trace;
 
  private:
   void find_oldest_artifact() {
@@ -158,19 +159,19 @@ class CrashType {
 
   std::deque<Crash*> queued_requests_;
 
-  DISALLOW_COPY_AND_ASSIGN(CrashType);
+  DISALLOW_COPY_AND_ASSIGN(CrashQueue);
 };
 
 // Whether java trace dumps are produced via tombstoned.
 static constexpr bool kJavaTraceDumpsEnabled = false;
 
-/* static */ CrashType* const CrashType::tombstone =
-    new CrashType("/data/tombstones", "tombstone_" /* file_name_prefix */, 10 /* max_artifacts */,
-                  1 /* max_concurrent_dumps */);
+/* static */ CrashQueue* const CrashQueue::tombstone =
+    new CrashQueue("/data/tombstones", "tombstone_" /* file_name_prefix */, 10 /* max_artifacts */,
+                   1 /* max_concurrent_dumps */);
 
-/* static */ CrashType* const CrashType::java_trace =
-    (kJavaTraceDumpsEnabled ? new CrashType("/data/anr", "anr_" /* file_name_prefix */,
-                                            64 /* max_artifacts */, 4 /* max_concurrent_dumps */)
+/* static */ CrashQueue* const CrashQueue::java_trace =
+    (kJavaTraceDumpsEnabled ? new CrashQueue("/data/anr", "anr_" /* file_name_prefix */,
+                                             64 /* max_artifacts */, 4 /* max_concurrent_dumps */)
                             : nullptr);
 
 // Ownership of Crash is a bit messy.
@@ -183,9 +184,16 @@ struct Crash {
   pid_t crash_pid;
   event* crash_event = nullptr;
 
-  // Not owned by |Crash|.
-  CrashType* crash_type = nullptr;
+  DebuggerdDumpType crash_type;
 };
+
+static CrashQueue* get_crash_queue(const Crash* crash) {
+  if (crash->crash_type == kDebuggerdJavaBacktrace) {
+    return CrashQueue::java_trace;
+  }
+
+  return CrashQueue::tombstone;
+}
 
 // Forward declare the callbacks so they can be placed in a sensible order.
 static void crash_accept_cb(evconnlistener* listener, evutil_socket_t sockfd, sockaddr*, int, void*);
@@ -194,10 +202,8 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg);
 
 static void perform_request(Crash* crash) {
   unique_fd output_fd;
-  // Note that java traces are not interceptible.
-  if ((crash->crash_type == CrashType::java_trace) ||
-      !intercept_manager->GetIntercept(crash->crash_pid, &output_fd)) {
-    output_fd = crash->crash_type->get_output_fd();
+  if (!intercept_manager->GetIntercept(crash->crash_pid, crash->crash_type, &output_fd)) {
+    output_fd = get_crash_queue(crash)->get_output_fd();
   }
 
   TombstonedCrashPacket response = {
@@ -220,7 +226,7 @@ static void perform_request(Crash* crash) {
     event_add(crash->crash_event, &timeout);
   }
 
-  crash->crash_type->on_crash_started();
+  get_crash_queue(crash)->on_crash_started();
   return;
 
 fail:
@@ -228,22 +234,22 @@ fail:
 }
 
 static void crash_accept_cb(evconnlistener* listener, evutil_socket_t sockfd, sockaddr*, int,
-                            void* crash_type) {
+                            void*) {
   event_base* base = evconnlistener_get_base(listener);
   Crash* crash = new Crash();
 
+  // TODO: Make sure that only java crashes come in on the java socket
+  // and only native crashes on the native socket.
   struct timeval timeout = { 1, 0 };
   event* crash_event = event_new(base, sockfd, EV_TIMEOUT | EV_READ, crash_request_cb, crash);
   crash->crash_fd.reset(sockfd);
   crash->crash_event = crash_event;
-  crash->crash_type = static_cast<CrashType*>(crash_type);
   event_add(crash_event, &timeout);
 }
 
 static void crash_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
   ssize_t rc;
   Crash* crash = static_cast<Crash*>(arg);
-  CrashType* type = crash->crash_type;
 
   TombstonedCrashPacket request = {};
 
@@ -271,7 +277,13 @@ static void crash_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
     goto fail;
   }
 
-  if (type == CrashType::tombstone) {
+  crash->crash_type = request.packet.dump_request.dump_type;
+  if (crash->crash_type < 0 || crash->crash_type > kDebuggerdAnyIntercept) {
+    LOG(WARNING) << "unexpected crash dump type: " << crash->crash_type;
+    goto fail;
+  }
+
+  if (crash->crash_type != kDebuggerdJavaBacktrace) {
     crash->crash_pid = request.packet.dump_request.pid;
   } else {
     // Requests for java traces are sent from untrusted processes, so we
@@ -290,7 +302,7 @@ static void crash_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
 
   LOG(INFO) << "received crash request for pid " << crash->crash_pid;
 
-  if (type->maybe_enqueue_crash(crash)) {
+  if (get_crash_queue(crash)->maybe_enqueue_crash(crash)) {
     LOG(INFO) << "enqueueing crash request for pid " << crash->crash_pid;
   } else {
     perform_request(crash);
@@ -307,7 +319,7 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
   Crash* crash = static_cast<Crash*>(arg);
   TombstonedCrashPacket request = {};
 
-  crash->crash_type->on_crash_completed();
+  get_crash_queue(crash)->on_crash_completed();
 
   if ((ev & EV_READ) == 0) {
     goto fail;
@@ -330,11 +342,11 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
   }
 
 fail:
-  CrashType* type = crash->crash_type;
+  CrashQueue* queue = get_crash_queue(crash);
   delete crash;
 
   // If there's something queued up, let them proceed.
-  type->maybe_dequeue_crashes(perform_request);
+  queue->maybe_dequeue_crashes(perform_request);
 }
 
 int main(int, char* []) {
@@ -366,7 +378,7 @@ int main(int, char* []) {
   intercept_manager = new InterceptManager(base, intercept_socket);
 
   evconnlistener* tombstone_listener = evconnlistener_new(
-      base, crash_accept_cb, CrashType::tombstone, -1, LEV_OPT_CLOSE_ON_FREE, crash_socket);
+      base, crash_accept_cb, CrashQueue::tombstone, -1, LEV_OPT_CLOSE_ON_FREE, crash_socket);
   if (!tombstone_listener) {
     LOG(FATAL) << "failed to create evconnlistener for tombstones.";
   }
@@ -379,7 +391,7 @@ int main(int, char* []) {
 
     evutil_make_socket_nonblocking(java_trace_socket);
     evconnlistener* java_trace_listener = evconnlistener_new(
-        base, crash_accept_cb, CrashType::java_trace, -1, LEV_OPT_CLOSE_ON_FREE, java_trace_socket);
+        base, crash_accept_cb, CrashQueue::java_trace, -1, LEV_OPT_CLOSE_ON_FREE, java_trace_socket);
     if (!java_trace_listener) {
       LOG(FATAL) << "failed to create evconnlistener for java traces.";
     }
