@@ -22,15 +22,13 @@
 
 #include <android-base/unique_fd.h>
 
-enum DebuggerdDumpType {
-  kDebuggerdBacktrace,
-  kDebuggerdTombstone,
-};
+#include "dump_type.h"
 
 // Trigger a dump of specified process to output_fd.
 // output_fd is consumed, timeout of 0 will wait forever.
-bool debuggerd_trigger_dump(pid_t pid, android::base::unique_fd output_fd,
-                            enum DebuggerdDumpType dump_type, unsigned int timeout_ms);
+bool debuggerd_trigger_dump(pid_t pid, enum DebuggerdDumpType dump_type, unsigned int timeout_ms,
+                            android::base::unique_fd output_fd);
 
-int dump_backtrace_to_file(pid_t tid, int fd);
-int dump_backtrace_to_file_timeout(pid_t tid, int fd, int timeout_secs);
+int dump_backtrace_to_file(pid_t tid, enum DebuggerdDumpType dump_type, int output_fd);
+int dump_backtrace_to_file_timeout(pid_t tid, enum DebuggerdDumpType dump_type, int timeout_secs,
+                                   int output_fd);

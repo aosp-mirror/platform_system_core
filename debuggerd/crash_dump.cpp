@@ -150,13 +150,13 @@ static void signal_handler(int) {
   _exit(1);
 }
 
-static void abort_handler(pid_t target, const bool& tombstoned_connected,
+static void abort_handler(pid_t target, const bool tombstoned_connected,
                           unique_fd& tombstoned_socket, unique_fd& output_fd,
                           const char* abort_msg) {
   // If we abort before we get an output fd, contact tombstoned to let any
   // potential listeners know that we failed.
   if (!tombstoned_connected) {
-    if (!tombstoned_connect(target, &tombstoned_socket, &output_fd)) {
+    if (!tombstoned_connect(target, &tombstoned_socket, &output_fd, kDebuggerdAnyIntercept)) {
       // We failed to connect, not much we can do.
       LOG(ERROR) << "failed to connected to tombstoned to report failure";
       _exit(1);
@@ -207,12 +207,14 @@ int main(int argc, char** argv) {
   action.sa_handler = signal_handler;
   debuggerd_register_handlers(&action);
 
-  if (argc != 3) {
+  if (argc != 4) {
+    LOG(FATAL) << "Wrong number of args: " << argc << " (expected 4)";
     return 1;
   }
 
   pid_t main_tid;
   pid_t pseudothread_tid;
+  int dump_type;
 
   if (!android::base::ParseInt(argv[1], &main_tid, 1, std::numeric_limits<pid_t>::max())) {
     LOG(FATAL) << "invalid main tid: " << argv[1];
@@ -220,6 +222,10 @@ int main(int argc, char** argv) {
 
   if (!android::base::ParseInt(argv[2], &pseudothread_tid, 1, std::numeric_limits<pid_t>::max())) {
     LOG(FATAL) << "invalid pseudothread tid: " << argv[2];
+  }
+
+  if (!android::base::ParseInt(argv[3], &dump_type, 0, 1)) {
+    LOG(FATAL) << "invalid requested dump type: " << argv[3];
   }
 
   if (target == 1) {
@@ -305,8 +311,9 @@ int main(int argc, char** argv) {
   // Drop our capabilities now that we've attached to the threads we care about.
   drop_capabilities();
 
-  LOG(INFO) << "obtaining output fd from tombstoned";
-  tombstoned_connected = tombstoned_connect(target, &tombstoned_socket, &output_fd);
+  const DebuggerdDumpType dump_type_enum = static_cast<DebuggerdDumpType>(dump_type);
+  LOG(INFO) << "obtaining output fd from tombstoned, type: " << dump_type_enum;
+  tombstoned_connected = tombstoned_connect(target, &tombstoned_socket, &output_fd, dump_type_enum);
 
   // Write a '\1' to stdout to tell the crashing process to resume.
   // It also restores the value of PR_SET_DUMPABLE at this point.

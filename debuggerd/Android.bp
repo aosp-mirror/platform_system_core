@@ -11,6 +11,11 @@ cc_defaults {
     local_include_dirs: ["include"],
 }
 
+cc_library_headers {
+    name: "libdebuggerd_common_headers",
+    export_include_dirs: ["common/include"]
+}
+
 cc_library_shared {
     name: "libtombstoned_client",
     defaults: ["debuggerd_defaults"],
@@ -19,15 +24,18 @@ cc_library_shared {
         "util.cpp",
     ],
 
+    header_libs: ["libdebuggerd_common_headers"],
+
     static_libs: [
-        "libasync_safe"
+        "libasync_safe",
     ],
 
     shared_libs: [
-        "libcutils",
         "libbase",
+        "libcutils",
     ],
 
+    export_header_lib_headers: ["libdebuggerd_common_headers"],
     export_include_dirs: ["tombstoned/include"]
 }
 
@@ -40,12 +48,15 @@ cc_library_static {
         "util.cpp",
     ],
 
+    header_libs: ["libdebuggerd_common_headers"],
+
     whole_static_libs: [
         "libasync_safe",
         "libcutils",
         "libbase",
     ],
 
+    export_header_lib_headers: ["libdebuggerd_common_headers"],
     export_include_dirs: ["tombstoned/include"]
 }
 
@@ -55,11 +66,14 @@ cc_library_static {
     defaults: ["debuggerd_defaults"],
     srcs: ["handler/debuggerd_handler.cpp"],
 
+    header_libs: ["libdebuggerd_common_headers"],
+
     whole_static_libs: [
         "libasync_safe",
         "libdebuggerd",
     ],
 
+    export_header_lib_headers: ["libdebuggerd_common_headers"],
     export_include_dirs: ["include"],
 }
 
@@ -107,11 +121,14 @@ cc_library {
         "util.cpp",
     ],
 
+    header_libs: ["libdebuggerd_common_headers"],
+
     shared_libs: [
         "libbase",
         "libcutils",
     ],
 
+    export_header_lib_headers: ["libdebuggerd_common_headers"],
     export_include_dirs: ["include"],
 }
 
@@ -191,7 +208,8 @@ cc_test {
         "libbase",
         "libcutils",
         "libdebuggerd_client",
-        "liblog"
+        "liblog",
+        "libnativehelper"
     ],
 
     static_libs: [
@@ -270,6 +288,8 @@ cc_binary {
         "tombstoned/tombstoned.cpp",
     ],
     defaults: ["debuggerd_defaults"],
+
+    header_libs: ["libdebuggerd_common_headers"],
 
     static_libs: [
         "libbase",
