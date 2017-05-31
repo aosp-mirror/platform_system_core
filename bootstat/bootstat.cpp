@@ -201,8 +201,10 @@ std::string CalculateBootCompletePrefix() {
 
   BootEventRecordStore boot_event_store;
   BootEventRecordStore::BootEventRecord record;
-  if (!boot_event_store.GetBootEvent(kBuildDateKey, &record) ||
-      build_date != record.second) {
+  if (!boot_event_store.GetBootEvent(kBuildDateKey, &record)) {
+    boot_complete_prefix = "factory_reset_" + boot_complete_prefix;
+    boot_event_store.AddBootEventWithValue(kBuildDateKey, build_date);
+  } else if (build_date != record.second) {
     boot_complete_prefix = "ota_" + boot_complete_prefix;
     boot_event_store.AddBootEventWithValue(kBuildDateKey, build_date);
   }
@@ -241,7 +243,7 @@ const BootloaderTimingMap GetBootLoaderTimings() {
   for (const auto& stageTiming : stages) {
     // |stageTiming| is of the form 'stage:time'.
     auto stageTimingValues = android::base::Split(stageTiming, ":");
-    DCHECK_EQ(2, stageTimingValues.size());
+    DCHECK_EQ(2U, stageTimingValues.size());
 
     std::string stageName = stageTimingValues[0];
     int32_t time_ms;
