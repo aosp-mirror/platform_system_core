@@ -40,10 +40,12 @@ using namespace std::chrono_literals;
 
 using android::base::unique_fd;
 
-static bool send_signal(pid_t pid, bool backtrace) {
+static bool send_signal(pid_t pid, const DebuggerdDumpType dump_type) {
+  const int signal = (dump_type == kDebuggerdJavaBacktrace) ? SIGQUIT : DEBUGGER_SIGNAL;
   sigval val;
-  val.sival_int = backtrace;
-  if (sigqueue(pid, DEBUGGER_SIGNAL, val) != 0) {
+  val.sival_int = (dump_type == kDebuggerdNativeBacktrace) ? 1 : 0;
+
+  if (sigqueue(pid, signal, val) != 0) {
     PLOG(ERROR) << "libdebuggerd_client: failed to send signal to pid " << pid;
     return false;
   }
@@ -58,8 +60,8 @@ static void populate_timeval(struct timeval* tv, const Duration& duration) {
   tv->tv_usec = static_cast<long>(microseconds.count());
 }
 
-bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType dump_type,
-                            unsigned int timeout_ms) {
+bool debuggerd_trigger_dump(pid_t pid, DebuggerdDumpType dump_type, unsigned int timeout_ms,
+                            unique_fd output_fd) {
   LOG(INFO) << "libdebuggerd_client: started dumping process " << pid;
   unique_fd sockfd;
   const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
@@ -102,7 +104,7 @@ bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType du
     return false;
   }
 
-  InterceptRequest req = {.pid = pid };
+  InterceptRequest req = {.pid = pid, .dump_type = dump_type};
   if (!set_timeout(sockfd)) {
     PLOG(ERROR) << "libdebugger_client: failed to set timeout";
     return false;
@@ -140,8 +142,7 @@ bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType du
     return false;
   }
 
-  bool backtrace = dump_type == kDebuggerdBacktrace;
-  if (!send_signal(pid, backtrace)) {
+  if (!send_signal(pid, dump_type)) {
     return false;
   }
 
@@ -210,15 +211,16 @@ bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType du
   return true;
 }
 
-int dump_backtrace_to_file(pid_t tid, int fd) {
-  return dump_backtrace_to_file_timeout(tid, fd, 0);
+int dump_backtrace_to_file(pid_t tid, DebuggerdDumpType dump_type, int fd) {
+  return dump_backtrace_to_file_timeout(tid, dump_type, 0, fd);
 }
 
-int dump_backtrace_to_file_timeout(pid_t tid, int fd, int timeout_secs) {
+int dump_backtrace_to_file_timeout(pid_t tid, DebuggerdDumpType dump_type, int timeout_secs,
+                                   int fd) {
   android::base::unique_fd copy(dup(fd));
   if (copy == -1) {
     return -1;
   }
   int timeout_ms = timeout_secs > 0 ? timeout_secs * 1000 : 0;
-  return debuggerd_trigger_dump(tid, std::move(copy), kDebuggerdBacktrace, timeout_ms) ? 0 : -1;
+  return debuggerd_trigger_dump(tid, dump_type, timeout_ms, std::move(copy)) ? 0 : -1;
 }
