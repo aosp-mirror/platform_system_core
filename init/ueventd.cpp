@@ -18,7 +18,6 @@
 
 #include <ctype.h>
 #include <fcntl.h>
-#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,8 +29,43 @@
 #include <selinux/selinux.h>
 
 #include "devices.h"
+#include "firmware_handler.h"
 #include "log.h"
+#include "uevent_listener.h"
+#include "ueventd_parser.h"
 #include "util.h"
+
+DeviceHandler CreateDeviceHandler() {
+    Parser parser;
+
+    std::vector<Subsystem> subsystems;
+    parser.AddSectionParser("subsystem", std::make_unique<SubsystemParser>(&subsystems));
+
+    using namespace std::placeholders;
+    std::vector<SysfsPermissions> sysfs_permissions;
+    std::vector<Permissions> dev_permissions;
+    parser.AddSingleLineParser(
+        "/sys/", std::bind(ParsePermissionsLine, _1, _2, &sysfs_permissions, nullptr));
+    parser.AddSingleLineParser("/dev/",
+                               std::bind(ParsePermissionsLine, _1, _2, nullptr, &dev_permissions));
+
+    parser.ParseConfig("/ueventd.rc");
+    parser.ParseConfig("/vendor/ueventd.rc");
+    parser.ParseConfig("/odm/ueventd.rc");
+
+    /*
+     * keep the current product name base configuration so
+     * we remain backwards compatible and allow it to override
+     * everything
+     * TODO: cleanup platform ueventd.rc to remove vendor specific
+     * device node entries (b/34968103)
+     */
+    std::string hardware = android::base::GetProperty("ro.hardware", "");
+    parser.ParseConfig("/ueventd." + hardware + ".rc");
+
+    return DeviceHandler(std::move(dev_permissions), std::move(sysfs_permissions),
+                         std::move(subsystems));
+}
 
 int ueventd_main(int argc, char **argv)
 {
@@ -57,41 +91,26 @@ int ueventd_main(int argc, char **argv)
     cb.func_log = selinux_klog_callback;
     selinux_set_callback(SELINUX_CB_LOG, cb);
 
-    Parser& parser = Parser::GetInstance();
-    parser.AddSectionParser("subsystem", std::make_unique<SubsystemParser>());
-    using namespace std::placeholders;
-    parser.AddSingleLineParser("/sys/", std::bind(ParsePermissionsLine, _1, _2, true));
-    parser.AddSingleLineParser("/dev/", std::bind(ParsePermissionsLine, _1, _2, false));
-    parser.ParseConfig("/ueventd.rc");
-    parser.ParseConfig("/vendor/ueventd.rc");
-    parser.ParseConfig("/odm/ueventd.rc");
+    DeviceHandler device_handler = CreateDeviceHandler();
+    UeventListener uevent_listener;
 
-    /*
-     * keep the current product name base configuration so
-     * we remain backwards compatible and allow it to override
-     * everything
-     * TODO: cleanup platform ueventd.rc to remove vendor specific
-     * device node entries (b/34968103)
-     */
-    std::string hardware = android::base::GetProperty("ro.hardware", "");
-    parser.ParseConfig("/ueventd." + hardware + ".rc");
+    if (access(COLDBOOT_DONE, F_OK) != 0) {
+        Timer t;
 
-    device_init();
+        uevent_listener.RegenerateUevents([&device_handler](const Uevent& uevent) {
+            HandleFirmwareEvent(uevent);
+            device_handler.HandleDeviceEvent(uevent);
+            return RegenerationAction::kContinue;
+        });
 
-    pollfd ufd;
-    ufd.events = POLLIN;
-    ufd.fd = get_device_fd();
-
-    while (true) {
-        ufd.revents = 0;
-        int nr = poll(&ufd, 1, -1);
-        if (nr <= 0) {
-            continue;
-        }
-        if (ufd.revents & POLLIN) {
-            handle_device_fd();
-        }
+        close(open(COLDBOOT_DONE, O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
+        LOG(INFO) << "Coldboot took " << t;
     }
+
+    uevent_listener.DoPolling([&device_handler](const Uevent& uevent) {
+        HandleFirmwareEvent(uevent);
+        device_handler.HandleDeviceEvent(uevent);
+    });
 
     return 0;
 }

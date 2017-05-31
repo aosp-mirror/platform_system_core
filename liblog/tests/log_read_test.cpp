@@ -23,6 +23,7 @@
 #include <android-base/stringprintf.h>
 #include <android/log.h>  // minimal logging API
 #include <gtest/gtest.h>
+#include <log/log_properties.h>
 // Test the APIs in this standalone include file
 #include <log/log_read.h>
 // Do not use anything in log/log_time.h despite side effects of the above.
@@ -97,9 +98,12 @@ TEST(liblog, android_logger_get_) {
     /* security buffer is allowed to be denied */
     if (strcmp("security", name)) {
       EXPECT_LT(0, get_log_size);
-      /* crash buffer is allowed to be empty, that is actually healthy! */
-      EXPECT_LE((strcmp("crash", name)) != 0,
-                android_logger_get_log_readable_size(logger));
+      // crash buffer is allowed to be empty, that is actually healthy!
+      // kernel buffer is allowed to be empty on "user" builds
+      EXPECT_LE(  // boolean 1 or 0 depending on expected content or empty
+          !!((strcmp("crash", name) != 0) &&
+             ((strcmp("kernel", name) != 0) || __android_log_is_debuggable())),
+          android_logger_get_log_readable_size(logger));
     } else {
       EXPECT_NE(0, get_log_size);
       if (get_log_size < 0) {

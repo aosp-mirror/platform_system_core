@@ -56,18 +56,12 @@ static const String16 DUMP_PERMISSION("android.permission.DUMP");
 class GateKeeperProxy : public BnGateKeeperService {
 public:
     GateKeeperProxy() {
+        clear_state_if_needed_done = false;
         hw_device = IGatekeeper::getService();
 
         if (hw_device == nullptr) {
             ALOGW("falling back to software GateKeeper");
             soft_device.reset(new SoftGateKeeperDevice());
-        }
-
-        if (mark_cold_boot()) {
-            ALOGI("cold boot: clearing state");
-            if (hw_device != nullptr) {
-                hw_device->deleteAllUsers([](const GatekeeperResponse &){});
-            }
         }
     }
 
@@ -84,6 +78,21 @@ public:
         }
         write(fd, &sid, sizeof(sid));
         close(fd);
+    }
+
+    void clear_state_if_needed() {
+        if (clear_state_if_needed_done) {
+            return;
+        }
+
+        if (mark_cold_boot()) {
+            ALOGI("cold boot: clearing state");
+            if (hw_device != nullptr) {
+                hw_device->deleteAllUsers([](const GatekeeperResponse &){});
+            }
+        }
+
+        clear_state_if_needed_done = true;
     }
 
     bool mark_cold_boot() {
@@ -139,6 +148,10 @@ public:
         if (!PermissionCache::checkPermission(KEYGUARD_PERMISSION, calling_pid, calling_uid)) {
             return PERMISSION_DENIED;
         }
+
+        // Make sure to clear any state from before factory reset as soon as a credential is
+        // enrolled (which may happen during device setup).
+        clear_state_if_needed();
 
         // need a desired password to enroll
         if (desired_password_length == 0) return -EINVAL;
@@ -354,6 +367,18 @@ public:
         }
     }
 
+    virtual void reportDeviceSetupComplete() {
+        IPCThreadState* ipc = IPCThreadState::self();
+        const int calling_pid = ipc->getCallingPid();
+        const int calling_uid = ipc->getCallingUid();
+        if (!PermissionCache::checkPermission(KEYGUARD_PERMISSION, calling_pid, calling_uid)) {
+            ALOGE("%s: permission denied for [%d:%d]", __func__, calling_pid, calling_uid);
+            return;
+        }
+
+        clear_state_if_needed();
+    }
+
     virtual status_t dump(int fd, const Vector<String16> &) {
         IPCThreadState* ipc = IPCThreadState::self();
         const int pid = ipc->getCallingPid();
@@ -376,6 +401,8 @@ public:
 private:
     sp<IGatekeeper> hw_device;
     UniquePtr<SoftGateKeeperDevice> soft_device;
+
+    bool clear_state_if_needed_done;
 };
 }// namespace android
 

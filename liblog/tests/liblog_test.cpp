@@ -36,6 +36,7 @@
 #endif
 #include <gtest/gtest.h>
 #include <log/log_event_list.h>
+#include <log/log_properties.h>
 #include <log/log_transport.h>
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
@@ -1719,6 +1720,7 @@ TEST(liblog, is_loggable) {
 // Kills logd and toss all collected data, equivalent to logcat -b all -c,
 // except we also return errors to the logging callers.
 #ifdef USING_LOGGER_DEFAULT
+#ifdef __ANDROID__
 #ifdef TEST_PREFIX
 // helper to liblog.enoent to count end-to-end matching logging messages.
 static int count_matching_ts(log_time ts) {
@@ -1786,6 +1788,12 @@ TEST(liblog, enoent) {
         stderr,
         "WARNING: test conditions request being run as root and not AID=%d\n",
         getuid());
+    if (!__android_log_is_debuggable()) {
+      fprintf(
+          stderr,
+          "WARNING: can not run test on a \"user\" build, bypassing test\n");
+      return;
+    }
   }
 
   system((getuid() == AID_ROOT) ? "stop logd" : "su 0 stop logd");
@@ -1825,7 +1833,8 @@ TEST(liblog, enoent) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
-#endif  // USING_LOCAL_LOGD
+#endif  // __ANDROID__
+#endif  // USING_LOGGER_DEFAULT
 
 // Below this point we run risks of setuid(AID_SYSTEM) which may affect others.
 

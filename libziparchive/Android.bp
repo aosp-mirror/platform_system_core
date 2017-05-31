@@ -56,6 +56,8 @@ cc_defaults {
 cc_library {
     name: "libziparchive",
     host_supported: true,
+    vendor_available:true,
+
     defaults: ["libziparchive_defaults", "libziparchive_flags"],
     shared_libs: ["liblog", "libbase"],
     target: {
@@ -119,6 +121,32 @@ cc_test {
         },
         windows: {
             enabled: true,
+        },
+    },
+}
+
+// Performance benchmarks.
+cc_benchmark {
+    name: "ziparchive-benchmarks",
+    defaults: ["libziparchive_flags"],
+
+    srcs: [
+        "zip_archive_benchmark.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+
+    static_libs: [
+        "libziparchive",
+        "libz",
+        "libutils",
+    ],
+
+    target: {
+        host: {
+            cppflags: ["-Wno-unnamed-type-template-args"],
         },
     },
 }

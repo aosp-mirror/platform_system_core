@@ -161,6 +161,9 @@ bool NativeBridgeLinkNamespaces(native_bridge_namespace_t* from, native_bridge_n
 // Use NativeBridgeLoadLibrary() instead in non-namespace scenario.
 void* NativeBridgeLoadLibraryExt(const char* libpath, int flag, native_bridge_namespace_t* ns);
 
+// Returns vendor namespace if it is enabled for the device and null otherwise
+native_bridge_namespace_t* NativeBridgeGetVendorNamespace();
+
 // Native bridge interfaces to runtime.
 struct NativeBridgeCallbacks {
   // Version number of the interface.
@@ -348,6 +351,15 @@ struct NativeBridgeCallbacks {
   // Starting with v3, NativeBridge has two scenarios: with/without namespace.
   // Use loadLibrary instead in non-namespace scenario.
   void* (*loadLibraryExt)(const char* libpath, int flag, native_bridge_namespace_t* ns);
+
+  // Get native bridge version of vendor namespace.
+  // The vendor namespace is the namespace used to load vendor public libraries.
+  // With O release this namespace can be different from the default namespace.
+  // For the devices without enable vendor namespaces this function should return null
+  //
+  // Returns:
+  //   vendor namespace or null if it was not set up for the device
+  native_bridge_namespace_t* (*getVendorNamespace)();
 };
 
 // Runtime interfaces to native bridge.

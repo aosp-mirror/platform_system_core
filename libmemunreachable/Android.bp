@@ -23,6 +23,7 @@ cc_defaults {
 
 cc_library_shared {
     name: "libmemunreachable",
+    vendor_available: true,
     defaults: ["libmemunreachable_defaults"],
     srcs: [
         "Allocator.cpp",
