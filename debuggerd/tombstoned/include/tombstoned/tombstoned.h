@@ -20,7 +20,9 @@
 
 #include <android-base/unique_fd.h>
 
+#include "dump_type.h"
+
 bool tombstoned_connect(pid_t pid, android::base::unique_fd* tombstoned_socket,
-                        android::base::unique_fd* output_fd, bool is_native_crash = true);
+                        android::base::unique_fd* output_fd, DebuggerdDumpType dump_type);
 
 bool tombstoned_notify_completion(int tombstoned_socket);
