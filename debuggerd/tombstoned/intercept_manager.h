@@ -25,6 +25,8 @@
 
 #include <android-base/unique_fd.h>
 
+#include "dump_type.h"
+
 struct InterceptManager;
 
 struct Intercept {
@@ -39,6 +41,7 @@ struct Intercept {
   pid_t intercept_pid = -1;
   android::base::unique_fd output_fd;
   bool registered = false;
+  DebuggerdDumpType dump_type = kDebuggerdNativeBacktrace;
 };
 
 struct InterceptManager {
@@ -50,5 +53,5 @@ struct InterceptManager {
   InterceptManager(InterceptManager& copy) = delete;
   InterceptManager(InterceptManager&& move) = delete;
 
-  bool GetIntercept(pid_t pid, android::base::unique_fd* out_fd);
+  bool GetIntercept(pid_t pid, DebuggerdDumpType dump_type, android::base::unique_fd* out_fd);
 };
