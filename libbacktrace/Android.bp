@@ -113,6 +113,7 @@ cc_library {
             static_libs: ["libasync_safe", "libcutils"],
         },
     },
+    whole_static_libs: ["libdemangle"],
 }
 
 cc_library_shared {
