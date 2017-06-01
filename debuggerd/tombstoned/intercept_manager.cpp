@@ -61,9 +61,22 @@ static void intercept_close_cb(evutil_socket_t sockfd, short event, void* arg) {
       reason = "due to input";
     }
 
-    LOG(INFO) << "intercept for pid " << intercept->intercept_pid << " terminated " << reason;
+    LOG(INFO) << "intercept for pid " << intercept->intercept_pid << " and type "
+              << intercept->dump_type << " terminated: " << reason;
     intercept_manager->intercepts.erase(it);
   }
+}
+
+static bool is_intercept_request_valid(const InterceptRequest& request) {
+  if (request.pid <= 0 || request.pid > std::numeric_limits<pid_t>::max()) {
+    return false;
+  }
+
+  if (request.dump_type < 0 || request.dump_type > kDebuggerdJavaBacktrace) {
+    return false;
+  }
+
+  return true;
 }
 
 static void intercept_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
@@ -103,23 +116,24 @@ static void intercept_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
     rcv_fd.reset(moved_fd);
 
     // We trust the other side, so only do minimal validity checking.
-    if (intercept_request.pid <= 0 || intercept_request.pid > std::numeric_limits<pid_t>::max()) {
+    if (!is_intercept_request_valid(intercept_request)) {
       InterceptResponse response = {};
       response.status = InterceptStatus::kFailed;
-      snprintf(response.error_message, sizeof(response.error_message), "invalid pid %" PRId32,
-               intercept_request.pid);
+      snprintf(response.error_message, sizeof(response.error_message), "invalid intercept request");
       TEMP_FAILURE_RETRY(write(sockfd, &response, sizeof(response)));
       goto fail;
     }
 
     intercept->intercept_pid = intercept_request.pid;
+    intercept->dump_type = intercept_request.dump_type;
 
     // Check if it's already registered.
     if (intercept_manager->intercepts.count(intercept_request.pid) > 0) {
       InterceptResponse response = {};
-      response.status = InterceptStatus::kFailed;
+      response.status = InterceptStatus::kFailedAlreadyRegistered;
       snprintf(response.error_message, sizeof(response.error_message),
-               "pid %" PRId32 " already intercepted", intercept_request.pid);
+               "pid %" PRId32 " already intercepted, type %d", intercept_request.pid,
+               intercept_request.dump_type);
       TEMP_FAILURE_RETRY(write(sockfd, &response, sizeof(response)));
       LOG(WARNING) << response.error_message;
       goto fail;
@@ -138,7 +152,8 @@ static void intercept_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
     intercept_manager->intercepts[intercept_request.pid] = std::unique_ptr<Intercept>(intercept);
     intercept->registered = true;
 
-    LOG(INFO) << "tombstoned registered intercept for pid " << intercept_request.pid;
+    LOG(INFO) << "registered intercept for pid " << intercept_request.pid << " and type "
+              << intercept_request.dump_type;
 
     // Register a different read event on the socket so that we can remove intercepts if the socket
     // closes (e.g. if a user CTRL-C's the process that requested the intercept).
@@ -174,16 +189,27 @@ InterceptManager::InterceptManager(event_base* base, int intercept_socket) : bas
                                       intercept_socket);
 }
 
-bool InterceptManager::GetIntercept(pid_t pid, android::base::unique_fd* out_fd) {
+bool InterceptManager::GetIntercept(pid_t pid, DebuggerdDumpType dump_type,
+                                    android::base::unique_fd* out_fd) {
   auto it = this->intercepts.find(pid);
   if (it == this->intercepts.end()) {
+    return false;
+  }
+
+  if (dump_type == kDebuggerdAnyIntercept) {
+    LOG(INFO) << "found registered intercept of type " << it->second->dump_type
+              << " for requested type kDebuggerdAnyIntercept";
+  } else if (it->second->dump_type != dump_type) {
+    LOG(WARNING) << "found non-matching intercept of type " << it->second->dump_type
+                 << " for requested type: " << dump_type;
     return false;
   }
 
   auto intercept = std::move(it->second);
   this->intercepts.erase(it);
 
-  LOG(INFO) << "found intercept fd " << intercept->output_fd.get() << " for pid " << pid;
+  LOG(INFO) << "found intercept fd " << intercept->output_fd.get() << " for pid " << pid
+            << " and type " << intercept->dump_type;
   InterceptResponse response = {};
   response.status = InterceptStatus::kStarted;
   TEMP_FAILURE_RETRY(write(intercept->sockfd, &response, sizeof(response)));

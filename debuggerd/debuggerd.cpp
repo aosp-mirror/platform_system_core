@@ -72,8 +72,8 @@ int main(int argc, char* argv[]) {
   }
 
   std::thread redirect_thread = spawn_redirect_thread(std::move(piperead));
-  if (!debuggerd_trigger_dump(pid, std::move(pipewrite),
-                              backtrace_only ? kDebuggerdBacktrace : kDebuggerdTombstone, 0)) {
+  if (!debuggerd_trigger_dump(pid, backtrace_only ? kDebuggerdNativeBacktrace : kDebuggerdTombstone,
+                              0, std::move(pipewrite))) {
     redirect_thread.join();
     errx(1, "failed to dump process %d", pid);
   }

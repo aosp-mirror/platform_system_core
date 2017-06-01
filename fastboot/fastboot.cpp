@@ -53,6 +53,7 @@
 #include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/test_utils.h>
 #include <android-base/unique_fd.h>
 #include <sparse/sparse.h>
 #include <ziparchive/zip_archive.h>
@@ -1350,7 +1351,8 @@ static void fb_perform_format(Transport* transport,
     struct fastboot_buffer buf;
     const char* errMsg = nullptr;
     const struct fs_generator* gen = nullptr;
-    int fd;
+    TemporaryFile output;
+    unique_fd fd;
 
     unsigned int limit = INT_MAX;
     if (target_sparse_limit > 0 && target_sparse_limit < limit) {
@@ -1403,22 +1405,23 @@ static void fb_perform_format(Transport* transport,
         return;
     }
 
-    fd = make_temporary_fd();
-    if (fd == -1) return;
-
     unsigned eraseBlkSize, logicalBlkSize;
     eraseBlkSize = fb_get_flash_block_size(transport, "erase-block-size");
     logicalBlkSize = fb_get_flash_block_size(transport, "logical-block-size");
 
-    if (fs_generator_generate(gen, fd, size, initial_dir, eraseBlkSize, logicalBlkSize)) {
+    if (fs_generator_generate(gen, output.path, size, initial_dir,
+            eraseBlkSize, logicalBlkSize)) {
         fprintf(stderr, "Cannot generate image: %s\n", strerror(errno));
-        close(fd);
         return;
     }
 
-    if (!load_buf_fd(transport, fd, &buf)) {
+    fd.reset(open(output.path, O_RDONLY));
+    if (fd == -1) {
+        fprintf(stderr, "Cannot open generated image: %s\n", strerror(errno));
+        return;
+    }
+    if (!load_buf_fd(transport, fd.release(), &buf)) {
         fprintf(stderr, "Cannot read image: %s\n", strerror(errno));
-        close(fd);
         return;
     }
     flash_buf(partition, &buf);

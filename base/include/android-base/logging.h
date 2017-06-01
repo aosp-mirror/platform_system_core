@@ -176,15 +176,19 @@ struct LogAbortAfterFullExpr {
 // Provides an expression that evaluates to the truthiness of `x`, automatically
 // aborting if `c` is true.
 #define ABORT_AFTER_LOG_EXPR_IF(c, x) (((c) && ::android::base::LogAbortAfterFullExpr()) || (x))
+// Note to the static analyzer that we always execute FATAL logs in practice.
+#define MUST_LOG_MESSAGE(severity) (SEVERITY_LAMBDA(severity) == ::android::base::FATAL)
 #else
 #define ABORT_AFTER_LOG_FATAL
 #define ABORT_AFTER_LOG_EXPR_IF(c, x) (x)
+#define MUST_LOG_MESSAGE(severity) false
 #endif
 #define ABORT_AFTER_LOG_FATAL_EXPR(x) ABORT_AFTER_LOG_EXPR_IF(true, x)
 
 // Defines whether the given severity will be logged or silently swallowed.
 #define WOULD_LOG(severity) \
-  UNLIKELY((SEVERITY_LAMBDA(severity)) >= ::android::base::GetMinimumLogSeverity())
+  (UNLIKELY((SEVERITY_LAMBDA(severity)) >= ::android::base::GetMinimumLogSeverity()) || \
+   MUST_LOG_MESSAGE(severity))
 
 // Get an ostream that can be used for logging at the given severity and to the default
 // destination.
