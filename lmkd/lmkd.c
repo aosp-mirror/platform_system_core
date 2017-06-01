@@ -40,7 +40,8 @@
 #endif
 
 #define MEMCG_SYSFS_PATH "/dev/memcg/"
-#define MEMPRESSURE_WATCH_LEVEL "low"
+#define MEMPRESSURE_WATCH_MEDIUM_LEVEL "medium"
+#define MEMPRESSURE_WATCH_CRITICAL_LEVEL "critical"
 #define ZONEINFO_PATH "/proc/zoneinfo"
 #define LINE_MAX 128
 
@@ -48,6 +49,7 @@
 #define INKERNEL_ADJ_PATH "/sys/module/lowmemorykiller/parameters/adj"
 
 #define ARRAY_SIZE(x)   (sizeof(x) / sizeof(*(x)))
+#define EIGHT_MEGA (1 << 23)
 
 enum lmk_cmd {
     LMK_TARGET,
@@ -66,15 +68,17 @@ enum lmk_cmd {
 static int use_inkernel_interface = 1;
 
 /* memory pressure level medium event */
-static int mpevfd;
+static int mpevfd[2];
+#define CRITICAL_INDEX 1
+#define MEDIUM_INDEX 0
 
 /* control socket listen and data */
 static int ctrl_lfd;
 static int ctrl_dfd = -1;
 static int ctrl_dfd_reopened; /* did we reopen ctrl conn on this loop? */
 
-/* 1 memory pressure level, 1 ctrl listen socket, 1 ctrl data socket */
-#define MAX_EPOLL_EVENTS 3
+/* 2 memory pressure levels, 1 ctrl listen socket, 1 ctrl data socket */
+#define MAX_EPOLL_EVENTS 4
 static int epollfd;
 static int maxevents;
 
@@ -112,14 +116,6 @@ static struct proc *pidhash[PIDHASH_SZ];
 
 #define ADJTOSLOT(adj) ((adj) + -OOM_SCORE_ADJ_MIN)
 static struct adjslot_list procadjslot_list[ADJTOSLOT(OOM_SCORE_ADJ_MAX) + 1];
-
-/*
- * Wait 1-2 seconds for the death report of a killed process prior to
- * considering killing more processes.
- */
-#define KILL_TIMEOUT 2
-/* Time of last process kill we initiated, stop me before I kill again */
-static time_t kill_lasttime;
 
 /* PAGE_SIZE / 1024 */
 static long page_k;
@@ -241,6 +237,7 @@ static void cmd_procprio(int pid, int uid, int oomadj) {
     struct proc *procp;
     char path[80];
     char val[20];
+    int soft_limit_mult;
 
     if (oomadj < OOM_SCORE_ADJ_MIN || oomadj > OOM_SCORE_ADJ_MAX) {
         ALOGE("Invalid PROCPRIO oomadj argument %d", oomadj);
@@ -253,6 +250,36 @@ static void cmd_procprio(int pid, int uid, int oomadj) {
 
     if (use_inkernel_interface)
         return;
+
+    if (oomadj >= 900) {
+        soft_limit_mult = 0;
+    } else if (oomadj >= 800) {
+        soft_limit_mult = 0;
+    } else if (oomadj >= 700) {
+        soft_limit_mult = 0;
+    } else if (oomadj >= 600) {
+        soft_limit_mult = 0;
+    } else if (oomadj >= 500) {
+        soft_limit_mult = 0;
+    } else if (oomadj >= 400) {
+        soft_limit_mult = 0;
+    } else if (oomadj >= 300) {
+        soft_limit_mult = 1;
+    } else if (oomadj >= 200) {
+        soft_limit_mult = 2;
+    } else if (oomadj >= 100) {
+        soft_limit_mult = 10;
+    } else if (oomadj >=   0) {
+        soft_limit_mult = 20;
+    } else {
+        // Persistent processes will have a large
+        // soft limit 512MB.
+        soft_limit_mult = 64;
+    }
+
+    snprintf(path, sizeof(path), "/dev/memcg/apps/uid_%d/pid_%d/memory.soft_limit_in_bytes", uid, pid);
+    snprintf(val, sizeof(val), "%d", soft_limit_mult * EIGHT_MEGA);
+    writefilestring(path, val);
 
     procp = pid_lookup(pid);
     if (!procp) {
@@ -278,7 +305,6 @@ static void cmd_procremove(int pid) {
         return;
 
     pid_remove(pid);
-    kill_lasttime = 0;
 }
 
 static void cmd_target(int ntargets, int *params) {
@@ -574,7 +600,6 @@ static int kill_one_process(struct proc *procp, int other_free, int other_file,
           first ? "" : "~", other_file * page_k, minfree * page_k, min_score_adj,
           first ? "" : "~", other_free * page_k, other_free >= 0 ? "above" : "below");
     r = kill(pid, SIGKILL);
-    killProcessGroup(uid, pid, SIGKILL);
     pid_remove(pid);
 
     if (r) {
@@ -589,23 +614,11 @@ static int kill_one_process(struct proc *procp, int other_free, int other_file,
  * Find a process to kill based on the current (possibly estimated) free memory
  * and cached memory sizes.  Returns the size of the killed processes.
  */
-static int find_and_kill_process(int other_free, int other_file, bool first)
+static int find_and_kill_process(int other_free, int other_file, bool first, int min_score_adj)
 {
     int i;
-    int min_score_adj = OOM_SCORE_ADJ_MAX + 1;
     int minfree = 0;
     int killed_size = 0;
-
-    for (i = 0; i < lowmem_targets_size; i++) {
-        minfree = lowmem_minfree[i];
-        if (other_free < minfree && other_file < minfree) {
-            min_score_adj = lowmem_adj[i];
-            break;
-        }
-    }
-
-    if (min_score_adj == OOM_SCORE_ADJ_MAX + 1)
-        return 0;
 
     for (i = OOM_SCORE_ADJ_MAX; i >= min_score_adj; i--) {
         struct proc *procp;
@@ -626,42 +639,33 @@ retry:
     return 0;
 }
 
-static void mp_event(uint32_t events __unused) {
+static void mp_event_common(bool is_critical) {
     int ret;
     unsigned long long evcount;
-    struct sysmeminfo mi;
-    int other_free;
-    int other_file;
-    int killed_size;
     bool first = true;
+    int min_adj_score = is_critical ? 0 : 800;
+    int index = is_critical ? CRITICAL_INDEX : MEDIUM_INDEX;
 
-    ret = read(mpevfd, &evcount, sizeof(evcount));
+    ret = read(mpevfd[index], &evcount, sizeof(evcount));
     if (ret < 0)
         ALOGE("Error reading memory pressure event fd; errno=%d",
               errno);
 
-    if (time(NULL) - kill_lasttime < KILL_TIMEOUT)
-        return;
-
-    while (zoneinfo_parse(&mi) < 0) {
-        // Failed to read /proc/zoneinfo, assume ENOMEM and kill something
-        find_and_kill_process(0, 0, true);
+    if (find_and_kill_process(0, 0, first, min_adj_score) == 0) {
+        ALOGI("Nothing to kill");
     }
-
-    other_free = mi.nr_free_pages - mi.totalreserve_pages;
-    other_file = mi.nr_file_pages - mi.nr_shmem;
-
-    do {
-        killed_size = find_and_kill_process(other_free, other_file, first);
-        if (killed_size > 0) {
-            first = false;
-            other_free += killed_size;
-            other_file += killed_size;
-        }
-    } while (killed_size > 0);
 }
 
-static int init_mp(char *levelstr, void *event_handler)
+static void mp_event(uint32_t events __unused) {
+    mp_event_common(false);
+}
+
+static void mp_event_critical(uint32_t events __unused) {
+    ALOGI("Memory pressure critical");
+    mp_event_common(true);
+}
+
+static int init_mp_common(char *levelstr, void *event_handler, bool is_critical)
 {
     int mpfd;
     int evfd;
@@ -669,6 +673,7 @@ static int init_mp(char *levelstr, void *event_handler)
     char buf[256];
     struct epoll_event epev;
     int ret;
+    int mpevfd_index = is_critical ? CRITICAL_INDEX : MEDIUM_INDEX;
 
     mpfd = open(MEMCG_SYSFS_PATH "memory.pressure_level", O_RDONLY | O_CLOEXEC);
     if (mpfd < 0) {
@@ -709,7 +714,7 @@ static int init_mp(char *levelstr, void *event_handler)
         goto err;
     }
     maxevents++;
-    mpevfd = evfd;
+    mpevfd[mpevfd_index] = evfd;
     return 0;
 
 err:
@@ -720,6 +725,16 @@ err_open_evctlfd:
     close(mpfd);
 err_open_mpfd:
     return -1;
+}
+
+static int init_mp_medium()
+{
+    return init_mp_common(MEMPRESSURE_WATCH_MEDIUM_LEVEL, (void *)&mp_event, false);
+}
+
+static int init_mp_critical()
+{
+    return init_mp_common(MEMPRESSURE_WATCH_CRITICAL_LEVEL, (void *)&mp_event_critical, true);
 }
 
 static int init(void) {
@@ -763,7 +778,8 @@ static int init(void) {
     if (use_inkernel_interface) {
         ALOGI("Using in-kernel low memory killer interface");
     } else {
-        ret = init_mp(MEMPRESSURE_WATCH_LEVEL, (void *)&mp_event);
+        ret = init_mp_medium();
+        ret |= init_mp_critical();
         if (ret)
             ALOGE("Kernel does not support memory pressure events or in-kernel low memory killer");
     }
