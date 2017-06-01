@@ -67,7 +67,8 @@ TEST(debuggerd_client, race) {
   // Wait for a bit to let the child spawn all of its threads.
   std::this_thread::sleep_for(250ms);
 
-  ASSERT_TRUE(debuggerd_trigger_dump(forkpid, std::move(pipe_write), kDebuggerdBacktrace, 10000));
+  ASSERT_TRUE(
+      debuggerd_trigger_dump(forkpid, kDebuggerdNativeBacktrace, 10000, std::move(pipe_write)));
   // Immediately kill the forked child, to make sure that the dump didn't return early.
   ASSERT_EQ(0, kill(forkpid, SIGKILL)) << strerror(errno);
 
@@ -107,5 +108,6 @@ TEST(debuggerd_client, no_timeout) {
 
   unique_fd output_read, output_write;
   ASSERT_TRUE(Pipe(&output_read, &output_write));
-  ASSERT_TRUE(debuggerd_trigger_dump(forkpid, std::move(output_write), kDebuggerdBacktrace, 0));
+  ASSERT_TRUE(
+      debuggerd_trigger_dump(forkpid, kDebuggerdNativeBacktrace, 0, std::move(output_write)));
 }
