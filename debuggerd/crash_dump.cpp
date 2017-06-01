@@ -212,6 +212,12 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  sigset_t mask;
+  sigemptyset(&mask);
+  if (sigprocmask(SIG_SETMASK, &mask, nullptr) != 0) {
+    PLOG(FATAL) << "failed to set signal mask";
+  }
+
   pid_t main_tid;
   pid_t pseudothread_tid;
 
@@ -259,7 +265,7 @@ int main(int argc, char** argv) {
   }
 
   // Die if we take too long.
-  alarm(20);
+  alarm(2);
 
   std::string attach_error;
 
