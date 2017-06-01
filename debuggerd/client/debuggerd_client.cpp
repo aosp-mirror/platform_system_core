@@ -28,7 +28,9 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 #include <debuggerd/handler.h>
@@ -112,6 +114,20 @@ bool debuggerd_trigger_dump(pid_t pid, unique_fd output_fd, DebuggerdDumpType du
   if (!Pipe(&pipe_read, &pipe_write)) {
     PLOG(ERROR) << "libdebuggerd_client: failed to create pipe";
     return false;
+  }
+
+  std::string pipe_size_str;
+  int pipe_buffer_size = 1024 * 1024;
+  if (android::base::ReadFileToString("/proc/sys/fs/pipe-max-size", &pipe_size_str)) {
+    pipe_size_str = android::base::Trim(pipe_size_str);
+
+    if (!android::base::ParseInt(pipe_size_str.c_str(), &pipe_buffer_size, 0)) {
+      LOG(FATAL) << "failed to parse pipe max size '" << pipe_size_str << "'";
+    }
+  }
+
+  if (fcntl(pipe_read.get(), F_SETPIPE_SZ, pipe_buffer_size) != pipe_buffer_size) {
+    PLOG(ERROR) << "failed to set pipe buffer size";
   }
 
   if (send_fd(set_timeout(sockfd), &req, sizeof(req), std::move(pipe_write)) != sizeof(req)) {
