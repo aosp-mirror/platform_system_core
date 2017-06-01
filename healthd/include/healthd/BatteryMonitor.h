@@ -18,7 +18,6 @@
 #define HEALTHD_BATTERYMONITOR_H
 
 #include <batteryservice/BatteryService.h>
-#include <binder/IInterface.h>
 #include <utils/String8.h>
 #include <utils/Vector.h>
 
