@@ -377,9 +377,10 @@ static void process_device(libusb_device* device) {
     {
         std::unique_lock<std::mutex> lock(usb_handles_mutex);
         usb_handles[device_address] = std::move(result);
-    }
 
-    register_usb_transport(usb_handle_raw, device_serial.c_str(), device_address.c_str(), writable);
+        register_usb_transport(usb_handle_raw, device_serial.c_str(), device_address.c_str(),
+                               writable);
+    }
     LOG(INFO) << "registered new usb device '" << device_serial << "'";
 }
 
