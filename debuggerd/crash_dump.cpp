@@ -41,6 +41,7 @@
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 #include <log/log.h>
+#include <private/android_filesystem_config.h>
 #include <procinfo/process.h>
 #include <selinux/selinux.h>
 
@@ -100,8 +101,9 @@ static bool ptrace_seize_thread(int pid_proc_fd, pid_t tid, std::string* error) 
   return true;
 }
 
-static bool activity_manager_notify(int pid, int signal, const std::string& amfd_data) {
-  android::base::unique_fd amfd(socket_local_client("/data/system/ndebugsocket", ANDROID_SOCKET_NAMESPACE_FILESYSTEM, SOCK_STREAM));
+static bool activity_manager_notify(pid_t pid, int signal, const std::string& amfd_data) {
+  android::base::unique_fd amfd(socket_local_client(
+      "/data/system/ndebugsocket", ANDROID_SOCKET_NAMESPACE_FILESYSTEM, SOCK_STREAM));
   if (amfd.get() == -1) {
     PLOG(ERROR) << "unable to connect to activity manager";
     return false;
@@ -408,7 +410,10 @@ int main(int argc, char** argv) {
   }
 
   if (fatal_signal) {
-    activity_manager_notify(target, signo, amfd_data);
+    // Don't try to notify ActivityManager if it just crashed, or we might hang until timeout.
+    if (target_info.name != "system_server" || target_info.uid != AID_SYSTEM) {
+      activity_manager_notify(target, signo, amfd_data);
+    }
   }
 
   // Close stdout before we notify tombstoned of completion.
