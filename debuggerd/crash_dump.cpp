@@ -207,9 +207,14 @@ int main(int argc, char** argv) {
   action.sa_handler = signal_handler;
   debuggerd_register_handlers(&action);
 
+  sigset_t mask;
+  sigemptyset(&mask);
+  if (sigprocmask(SIG_SETMASK, &mask, nullptr) != 0) {
+    PLOG(FATAL) << "failed to set signal mask";
+  }
+
   if (argc != 4) {
     LOG(FATAL) << "Wrong number of args: " << argc << " (expected 4)";
-    return 1;
   }
 
   pid_t main_tid;
@@ -264,7 +269,7 @@ int main(int argc, char** argv) {
   }
 
   // Die if we take too long.
-  alarm(20);
+  alarm(2);
 
   std::string attach_error;
 
