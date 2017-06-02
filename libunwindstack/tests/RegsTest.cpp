@@ -48,13 +48,13 @@ class ElfInterfaceFake : public ElfInterface {
 };
 
 template <typename TypeParam>
-class RegsTestTmpl : public RegsTmpl<TypeParam> {
+class RegsTestImpl : public RegsImpl<TypeParam> {
  public:
-  RegsTestTmpl(uint16_t total_regs, uint16_t regs_sp)
-      : RegsTmpl<TypeParam>(total_regs, regs_sp, Regs::Location(Regs::LOCATION_UNKNOWN, 0)) {}
-  RegsTestTmpl(uint16_t total_regs, uint16_t regs_sp, Regs::Location return_loc)
-      : RegsTmpl<TypeParam>(total_regs, regs_sp, return_loc) {}
-  virtual ~RegsTestTmpl() = default;
+  RegsTestImpl(uint16_t total_regs, uint16_t regs_sp)
+      : RegsImpl<TypeParam>(total_regs, regs_sp, Regs::Location(Regs::LOCATION_UNKNOWN, 0)) {}
+  RegsTestImpl(uint16_t total_regs, uint16_t regs_sp, Regs::Location return_loc)
+      : RegsImpl<TypeParam>(total_regs, regs_sp, return_loc) {}
+  virtual ~RegsTestImpl() = default;
 
   uint64_t GetAdjustedPc(uint64_t, Elf*) { return 0; }
 };
@@ -80,7 +80,7 @@ class RegsTest : public ::testing::Test {
 };
 
 TEST_F(RegsTest, regs32) {
-  RegsTestTmpl<uint32_t> regs32(50, 10);
+  RegsTestImpl<uint32_t> regs32(50, 10);
   ASSERT_EQ(50U, regs32.total_regs());
   ASSERT_EQ(10U, regs32.sp_reg());
 
@@ -103,7 +103,7 @@ TEST_F(RegsTest, regs32) {
 }
 
 TEST_F(RegsTest, regs64) {
-  RegsTestTmpl<uint64_t> regs64(30, 12);
+  RegsTestImpl<uint64_t> regs64(30, 12);
   ASSERT_EQ(30U, regs64.total_regs());
   ASSERT_EQ(12U, regs64.sp_reg());
 
@@ -127,7 +127,7 @@ TEST_F(RegsTest, regs64) {
 
 template <typename AddressType>
 void RegsTest::regs_rel_pc() {
-  RegsTestTmpl<AddressType> regs(30, 12);
+  RegsTestImpl<AddressType> regs(30, 12);
 
   elf_interface_->set_load_bias(0);
   MapInfo map_info{.start = 0x1000, .end = 0x2000};
@@ -147,7 +147,7 @@ TEST_F(RegsTest, regs64_rel_pc) {
 
 template <typename AddressType>
 void RegsTest::regs_return_address_register() {
-  RegsTestTmpl<AddressType> regs(20, 10, Regs::Location(Regs::LOCATION_REGISTER, 5));
+  RegsTestImpl<AddressType> regs(20, 10, Regs::Location(Regs::LOCATION_REGISTER, 5));
 
   regs[5] = 0x12345;
   uint64_t value;
@@ -164,7 +164,7 @@ TEST_F(RegsTest, regs64_return_address_register) {
 }
 
 TEST_F(RegsTest, regs32_return_address_sp_offset) {
-  RegsTestTmpl<uint32_t> regs(20, 10, Regs::Location(Regs::LOCATION_SP_OFFSET, -2));
+  RegsTestImpl<uint32_t> regs(20, 10, Regs::Location(Regs::LOCATION_SP_OFFSET, -2));
 
   regs.set_sp(0x2002);
   memory_->SetData32(0x2000, 0x12345678);
@@ -174,7 +174,7 @@ TEST_F(RegsTest, regs32_return_address_sp_offset) {
 }
 
 TEST_F(RegsTest, regs64_return_address_sp_offset) {
-  RegsTestTmpl<uint64_t> regs(20, 10, Regs::Location(Regs::LOCATION_SP_OFFSET, -8));
+  RegsTestImpl<uint64_t> regs(20, 10, Regs::Location(Regs::LOCATION_SP_OFFSET, -8));
 
   regs.set_sp(0x2008);
   memory_->SetData64(0x2000, 0x12345678aabbccddULL);
