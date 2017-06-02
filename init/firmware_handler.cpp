@@ -18,6 +18,7 @@
 
 #include <fcntl.h>
 #include <sys/sendfile.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <string>
@@ -103,14 +104,29 @@ void HandleFirmwareEvent(const Uevent& uevent) {
     if (uevent.subsystem != "firmware" || uevent.action != "add") return;
 
     // Loading the firmware in a child means we can do that in parallel...
-    // (We ignore SIGCHLD rather than wait for our children.)
+    // We double fork instead of waiting for these processes.
     pid_t pid = fork();
-    if (pid == 0) {
-        Timer t;
-        ProcessFirmwareEvent(uevent);
-        LOG(INFO) << "loading " << uevent.path << " took " << t;
-        _exit(EXIT_SUCCESS);
-    } else if (pid == -1) {
+    if (pid == -1) {
         PLOG(ERROR) << "could not fork to process firmware event for " << uevent.firmware;
+        return;
     }
+
+    if (pid == 0) {
+        pid = fork();
+        if (pid == -1) {
+            PLOG(ERROR) << "could not fork a sceond time to process firmware event for "
+                        << uevent.firmware;
+            _exit(EXIT_FAILURE);
+        }
+        if (pid == 0) {
+            Timer t;
+            ProcessFirmwareEvent(uevent);
+            LOG(INFO) << "loading " << uevent.path << " took " << t;
+            _exit(EXIT_SUCCESS);
+        }
+
+        _exit(EXIT_SUCCESS);
+    }
+
+    waitpid(pid, nullptr, 0);
 }
