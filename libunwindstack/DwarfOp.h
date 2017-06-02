@@ -37,7 +37,7 @@ enum DwarfVersion : uint8_t {
 class DwarfMemory;
 class Memory;
 template <typename AddressType>
-class RegsTmpl;
+class RegsImpl;
 
 template <typename AddressType>
 class DwarfOp {
@@ -67,7 +67,7 @@ class DwarfOp {
   AddressType StackAt(size_t index) { return stack_[index]; }
   size_t StackSize() { return stack_.size(); }
 
-  void set_regs(RegsTmpl<AddressType>* regs) { regs_ = regs; }
+  void set_regs(RegsImpl<AddressType>* regs) { regs_ = regs; }
 
   DwarfError last_error() { return last_error_; }
 
@@ -91,7 +91,7 @@ class DwarfOp {
   DwarfMemory* memory_;
   Memory* regular_memory_;
 
-  RegsTmpl<AddressType>* regs_;
+  RegsImpl<AddressType>* regs_;
   bool is_register_ = false;
   DwarfError last_error_ = DWARF_ERROR_NONE;
   uint8_t cur_op_;

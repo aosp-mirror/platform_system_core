@@ -86,7 +86,7 @@ bool DwarfSectionImpl<AddressType>::EvalExpression(const DwarfLocation& loc, uin
 template <typename AddressType>
 bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_memory,
                                          const dwarf_loc_regs_t& loc_regs, Regs* regs) {
-  RegsTmpl<AddressType>* cur_regs = reinterpret_cast<RegsTmpl<AddressType>*>(regs);
+  RegsImpl<AddressType>* cur_regs = reinterpret_cast<RegsImpl<AddressType>*>(regs);
   if (cie->return_address_register >= cur_regs->total_regs()) {
     last_error_ = DWARF_ERROR_ILLEGAL_VALUE;
     return false;
