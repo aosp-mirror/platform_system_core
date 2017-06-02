@@ -196,6 +196,14 @@ TEST(DemangleTest, FunctionStartsWithNumber) {
   ASSERT_EQ("value(one, signed char)", demangler.Parse("_Z5value3onea"));
 }
 
+TEST(DemangleTest, FunctionStartsWithLPlusNumber) {
+  Demangler demangler;
+
+  ASSERT_EQ("value(char, int)", demangler.Parse("_ZL5valueci"));
+  ASSERT_EQ("abcdefjklmn(signed char)", demangler.Parse("_ZL11abcdefjklmna"));
+  ASSERT_EQ("value(one, signed char)", demangler.Parse("_ZL5value3onea"));
+}
+
 TEST(DemangleTest, StdTypes) {
   Demangler demangler;
 
