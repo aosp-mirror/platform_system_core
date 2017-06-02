@@ -17,7 +17,10 @@
 #ifndef _ADB_UTILS_H_
 #define _ADB_UTILS_H_
 
+#include <condition_variable>
+#include <mutex>
 #include <string>
+#include <vector>
 
 #include <android-base/macros.h>
 
@@ -52,5 +55,33 @@ extern int adb_close(int fd);
 // if needed.
 bool forward_targets_are_valid(const std::string& source, const std::string& dest,
                                std::string* error);
+
+// A thread-safe blocking queue.
+template <typename T>
+class BlockingQueue {
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::vector<T> queue;
+
+  public:
+    void Push(const T& t) {
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+            queue.push_back(t);
+        }
+        cv.notify_one();
+    }
+
+    template <typename Fn>
+    void PopAll(Fn fn) {
+        std::unique_lock<std::mutex> lock(mutex);
+        cv.wait(lock, [this]() { return !queue.empty(); });
+
+        for (const T& t : queue) {
+            fn(t);
+        }
+        queue.clear();
+    }
+};
 
 #endif

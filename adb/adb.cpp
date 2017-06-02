@@ -1257,6 +1257,10 @@ void update_transport_status() {
 void adb_notify_device_scan_complete() {
     {
         std::lock_guard<std::mutex> lock(init_mutex);
+        if (device_scan_complete) {
+            return;
+        }
+
         device_scan_complete = true;
     }
 
