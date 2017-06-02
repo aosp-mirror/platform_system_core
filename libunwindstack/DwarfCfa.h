@@ -63,7 +63,7 @@ class DwarfCfa {
   typedef typename std::make_signed<AddressType>::type SignedType;
 
  public:
-  DwarfCfa(DwarfMemory* memory, const DwarfFDE* fde) : memory_(memory), fde_(fde) {}
+  DwarfCfa(DwarfMemory* memory, const DwarfFde* fde) : memory_(memory), fde_(fde) {}
   virtual ~DwarfCfa() = default;
 
   bool GetLocationInfo(uint64_t pc, uint64_t start_offset, uint64_t end_offset,
@@ -88,7 +88,7 @@ class DwarfCfa {
  private:
   DwarfError last_error_;
   DwarfMemory* memory_;
-  const DwarfFDE* fde_;
+  const DwarfFde* fde_;
 
   AddressType cur_pc_;
   const dwarf_loc_regs_t* cie_loc_regs_ = nullptr;

@@ -60,8 +60,8 @@ class DwarfCfaLogTest : public ::testing::Test {
   MemoryFake memory_;
   std::unique_ptr<DwarfMemory> dmem_;
   std::unique_ptr<DwarfCfa<TypeParam>> cfa_;
-  DwarfCIE cie_;
-  DwarfFDE fde_;
+  DwarfCie cie_;
+  DwarfFde fde_;
 };
 TYPED_TEST_CASE_P(DwarfCfaLogTest);
 
