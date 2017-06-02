@@ -50,6 +50,7 @@ cc_defaults {
         "DwarfCfa.cpp",
         "DwarfMemory.cpp",
         "DwarfOp.cpp",
+        "DwarfSection.cpp",
         "Elf.cpp",
         "ElfInterface.cpp",
         "ElfInterfaceArm.cpp",
@@ -98,6 +99,8 @@ cc_defaults {
         "tests/DwarfMemoryTest.cpp",
         "tests/DwarfOpLogTest.cpp",
         "tests/DwarfOpTest.cpp",
+        "tests/DwarfSectionTest.cpp",
+        "tests/DwarfSectionImplTest.cpp",
         "tests/ElfInterfaceArmTest.cpp",
         "tests/ElfInterfaceTest.cpp",
         "tests/ElfTest.cpp",
@@ -121,6 +124,10 @@ cc_defaults {
     shared_libs: [
         "libbase",
         "liblog",
+    ],
+
+    static_libs: [
+        "libgmock",
     ],
 
     target: {
