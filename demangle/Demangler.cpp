@@ -698,6 +698,8 @@ const char* Demangler::FindFunctionName(const char* name) {
 
   if (std::isdigit(*name)) {
     name = GetStringFromLength(name, &function_name_);
+  } else if (*name == 'L' && std::isdigit(name[1])) {
+    name = GetStringFromLength(name + 1, &function_name_);
   } else {
     name = AppendOperatorString(name);
     function_name_ = cur_state_.str;
