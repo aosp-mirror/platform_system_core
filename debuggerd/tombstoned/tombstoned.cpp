@@ -61,6 +61,7 @@ struct Crash {
   unique_fd crash_fd;
   pid_t crash_pid;
   event* crash_event = nullptr;
+  std::string crash_path;
 };
 
 static constexpr char kTombstoneDirectory[] = "/data/tombstones/";
@@ -104,32 +105,31 @@ static void find_oldest_tombstone() {
   next_tombstone = oldest_tombstone;
 }
 
-static unique_fd get_tombstone_fd() {
+static std::pair<unique_fd, std::string> get_tombstone() {
   // If kMaxConcurrentDumps is greater than 1, then theoretically the same
   // filename could be handed out to multiple processes. Unlink and create the
   // file, instead of using O_TRUNC, to avoid two processes interleaving their
   // output.
   unique_fd result;
-  char buf[PATH_MAX];
-  snprintf(buf, sizeof(buf), "tombstone_%02d", next_tombstone);
-  if (unlinkat(tombstone_directory_fd, buf, 0) != 0 && errno != ENOENT) {
-    PLOG(FATAL) << "failed to unlink tombstone at " << kTombstoneDirectory << buf;
+  std::string file_name = StringPrintf("tombstone_%02d", next_tombstone);
+  if (unlinkat(tombstone_directory_fd, file_name.c_str(), 0) != 0 && errno != ENOENT) {
+    PLOG(FATAL) << "failed to unlink tombstone at " << kTombstoneDirectory << "/" << file_name;
   }
 
-  result.reset(
-    openat(tombstone_directory_fd, buf, O_CREAT | O_EXCL | O_WRONLY | O_APPEND | O_CLOEXEC, 0640));
+  result.reset(openat(tombstone_directory_fd, file_name.c_str(),
+                      O_CREAT | O_EXCL | O_WRONLY | O_APPEND | O_CLOEXEC, 0640));
   if (result == -1) {
-    PLOG(FATAL) << "failed to create tombstone at " << kTombstoneDirectory << buf;
+    PLOG(FATAL) << "failed to create tombstone at " << kTombstoneDirectory << "/" << file_name;
   }
 
   next_tombstone = (next_tombstone + 1) % kTombstoneCount;
-  return result;
+  return {std::move(result), std::string(kTombstoneDirectory) + "/" + file_name};
 }
 
 static void perform_request(Crash* crash) {
   unique_fd output_fd;
   if (!intercept_manager->GetIntercept(crash->crash_pid, &output_fd)) {
-    output_fd = get_tombstone_fd();
+    std::tie(output_fd, crash->crash_path) = get_tombstone();
   }
 
   TombstonedCrashPacket response = {
@@ -249,6 +249,10 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
     LOG(WARNING) << "unexpected crash packet type, expected kCompletedDump, received "
                  << uint32_t(request.packet_type);
     goto fail;
+  }
+
+  if (!crash->crash_path.empty()) {
+    LOG(ERROR) << "Tombstone written to: " << crash->crash_path;
   }
 
 fail:
