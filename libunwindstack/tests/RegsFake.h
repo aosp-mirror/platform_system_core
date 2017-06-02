@@ -14,21 +14,23 @@
  * limitations under the License.
  */
 
-#ifndef _LIBUNWINDSTACK_DWARF_ERROR_H
-#define _LIBUNWINDSTACK_DWARF_ERROR_H
+#ifndef _LIBUNWINDSTACK_TESTS_REGS_FAKE_H
+#define _LIBUNWINDSTACK_TESTS_REGS_FAKE_H
 
 #include <stdint.h>
 
-enum DwarfError : uint8_t {
-  DWARF_ERROR_NONE,
-  DWARF_ERROR_MEMORY_INVALID,
-  DWARF_ERROR_ILLEGAL_VALUE,
-  DWARF_ERROR_ILLEGAL_STATE,
-  DWARF_ERROR_STACK_INDEX_NOT_VALID,
-  DWARF_ERROR_NOT_IMPLEMENTED,
-  DWARF_ERROR_TOO_MANY_ITERATIONS,
-  DWARF_ERROR_CFA_NOT_DEFINED,
-  DWARF_ERROR_UNSUPPORTED_VERSION,
+#include "Regs.h"
+
+template <typename TypeParam>
+class RegsFake : public RegsTmpl<TypeParam> {
+ public:
+  RegsFake(uint16_t total_regs, uint16_t sp_reg)
+      : RegsTmpl<TypeParam>(total_regs, sp_reg, Regs::Location(Regs::LOCATION_UNKNOWN, 0)) {}
+  virtual ~RegsFake() = default;
+
+  uint64_t GetRelPc(Elf*, const MapInfo*) override { return 0; }
+  uint64_t GetAdjustedPc(uint64_t, Elf*) override { return 0; }
+  bool GetReturnAddressFromDefault(Memory*, uint64_t*) { return false; }
 };
 
-#endif  // _LIBUNWINDSTACK_DWARF_ERROR_H
+#endif  // _LIBUNWINDSTACK_TESTS_REGS_FAKE_H
