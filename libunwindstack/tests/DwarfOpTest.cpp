@@ -25,21 +25,9 @@
 #include "DwarfMemory.h"
 #include "DwarfOp.h"
 #include "Log.h"
-#include "Regs.h"
 
 #include "MemoryFake.h"
-
-template <typename TypeParam>
-class RegsFake : public RegsTmpl<TypeParam> {
- public:
-  RegsFake(uint16_t total_regs, uint16_t sp_reg)
-      : RegsTmpl<TypeParam>(total_regs, sp_reg, Regs::Location(Regs::LOCATION_UNKNOWN, 0)) {}
-  virtual ~RegsFake() = default;
-
-  uint64_t GetRelPc(Elf*, const MapInfo*) override { return 0; }
-  uint64_t GetAdjustedPc(uint64_t, Elf*) override { return 0; }
-  bool GetReturnAddressFromDefault(Memory*, uint64_t*) { return false; }
-};
+#include "RegsFake.h"
 
 template <typename TypeParam>
 class DwarfOpTest : public ::testing::Test {
