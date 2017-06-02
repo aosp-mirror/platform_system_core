@@ -23,7 +23,7 @@
 
 #include "DwarfEncoding.h"
 
-struct DwarfCIE {
+struct DwarfCie {
   uint8_t version = 0;
   uint8_t fde_address_encoding = DW_EH_PE_absptr;
   uint8_t lsda_encoding = DW_EH_PE_omit;
@@ -37,14 +37,14 @@ struct DwarfCIE {
   uint64_t return_address_register = 0;
 };
 
-struct DwarfFDE {
+struct DwarfFde {
   uint64_t cie_offset = 0;
   uint64_t cfa_instructions_offset = 0;
   uint64_t cfa_instructions_end = 0;
   uint64_t pc_start = 0;
   uint64_t pc_end = 0;
   uint64_t lsda_address = 0;
-  const DwarfCIE* cie = nullptr;
+  const DwarfCie* cie = nullptr;
 };
 
 constexpr uint16_t CFA_REG = static_cast<uint16_t>(-1);
