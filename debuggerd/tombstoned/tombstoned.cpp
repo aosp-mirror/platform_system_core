@@ -23,7 +23,9 @@
 
 #include <array>
 #include <deque>
+#include <string>
 #include <unordered_map>
+#include <utility>
 
 #include <event2/event.h>
 #include <event2/listener.h>
@@ -75,23 +77,24 @@ class CrashQueue {
     find_oldest_artifact();
   }
 
-  unique_fd get_output_fd() {
+  std::pair<unique_fd, std::string> get_output() {
     unique_fd result;
-    char buf[PATH_MAX];
-    snprintf(buf, sizeof(buf), "%s%02d", file_name_prefix_.c_str(), next_artifact_);
+    std::string file_name = StringPrintf("%s%02d", file_name_prefix_.c_str(), next_artifact_);
+
     // Unlink and create the file, instead of using O_TRUNC, to avoid two processes
     // interleaving their output in case we ever get into that situation.
-    if (unlinkat(dir_fd_, buf, 0) != 0 && errno != ENOENT) {
-      PLOG(FATAL) << "failed to unlink tombstone at " << dir_path_ << buf;
+    if (unlinkat(dir_fd_, file_name.c_str(), 0) != 0 && errno != ENOENT) {
+      PLOG(FATAL) << "failed to unlink tombstone at " << dir_path_ << "/" << file_name;
     }
 
-    result.reset(openat(dir_fd_, buf, O_CREAT | O_EXCL | O_WRONLY | O_APPEND | O_CLOEXEC, 0640));
+    result.reset(openat(dir_fd_, file_name.c_str(),
+                        O_CREAT | O_EXCL | O_WRONLY | O_APPEND | O_CLOEXEC, 0640));
     if (result == -1) {
-      PLOG(FATAL) << "failed to create tombstone at " << dir_path_ << buf;
+      PLOG(FATAL) << "failed to create tombstone at " << dir_path_ << "/" << file_name;
     }
 
     next_artifact_ = (next_artifact_ + 1) % max_artifacts_;
-    return result;
+    return {std::move(result), dir_path_ + "/" + file_name};
   }
 
   bool maybe_enqueue_crash(Crash* crash) {
@@ -124,8 +127,7 @@ class CrashQueue {
     time_t oldest_time = std::numeric_limits<time_t>::max();
 
     for (size_t i = 0; i < max_artifacts_; ++i) {
-      std::string path = android::base::StringPrintf("%s/%s%02zu", dir_path_.c_str(),
-                                                     file_name_prefix_.c_str(), i);
+      std::string path = StringPrintf("%s/%s%02zu", dir_path_.c_str(), file_name_prefix_.c_str(), i);
       struct stat st;
       if (stat(path.c_str(), &st) != 0) {
         if (errno == ENOENT) {
@@ -183,6 +185,7 @@ struct Crash {
   unique_fd crash_fd;
   pid_t crash_pid;
   event* crash_event = nullptr;
+  std::string crash_path;
 
   DebuggerdDumpType crash_type;
 };
@@ -203,7 +206,7 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg);
 static void perform_request(Crash* crash) {
   unique_fd output_fd;
   if (!intercept_manager->GetIntercept(crash->crash_pid, crash->crash_type, &output_fd)) {
-    output_fd = get_crash_queue(crash)->get_output_fd();
+    std::tie(output_fd, crash->crash_path) = get_crash_queue(crash)->get_output();
   }
 
   TombstonedCrashPacket response = {
@@ -339,6 +342,10 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
     LOG(WARNING) << "unexpected crash packet type, expected kCompletedDump, received "
                  << uint32_t(request.packet_type);
     goto fail;
+  }
+
+  if (!crash->crash_path.empty()) {
+    LOG(ERROR) << "Tombstone written to: " << crash->crash_path;
   }
 
 fail:
