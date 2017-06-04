@@ -117,6 +117,8 @@ static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, uniq
     FAIL() << "failed to set pipe size: " << strerror(errno);
   }
 
+  ASSERT_GE(pipe_buffer_size, 1024 * 1024);
+
   if (send_fd(intercept_fd->get(), &req, sizeof(req), std::move(output_pipe_write)) != sizeof(req)) {
     FAIL() << "failed to send output fd to tombstoned: " << strerror(errno);
   }
