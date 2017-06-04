@@ -37,10 +37,11 @@
 */
 /* This version number defines the format of the fbinfo struct.
    It must match versioning in ddms where this data is consumed. */
-#define DDMS_RAWIMAGE_VERSION 1
+#define DDMS_RAWIMAGE_VERSION 2
 struct fbinfo {
     unsigned int version;
     unsigned int bpp;
+    unsigned int colorSpace;
     unsigned int size;
     unsigned int width;
     unsigned int height;
@@ -60,7 +61,7 @@ void framebuffer_service(int fd, void *cookie)
     unsigned int i, bsize;
     char buf[640];
     int fd_screencap;
-    int w, h, f;
+    int w, h, f, c;
     int fds[2];
     pid_t pid;
 
@@ -82,12 +83,14 @@ void framebuffer_service(int fd, void *cookie)
     adb_close(fds[1]);
     fd_screencap = fds[0];
 
-    /* read w, h & format */
+    /* read w, h, format & color space */
     if(!ReadFdExactly(fd_screencap, &w, 4)) goto done;
     if(!ReadFdExactly(fd_screencap, &h, 4)) goto done;
     if(!ReadFdExactly(fd_screencap, &f, 4)) goto done;
+    if(!ReadFdExactly(fd_screencap, &c, 4)) goto done;
 
     fbinfo.version = DDMS_RAWIMAGE_VERSION;
+    fbinfo.colorSpace = c;
     /* see hardware/hardware.h */
     switch (f) {
         case 1: /* RGBA_8888 */
