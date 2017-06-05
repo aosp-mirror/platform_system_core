@@ -37,6 +37,7 @@
 #include <android-base/strings.h>
 
 #include "adb.h"
+#include "adb_utils.h"
 #include "transport.h"
 #include "usb.h"
 
@@ -387,10 +388,9 @@ static std::atomic<int> connecting_devices(0);
 static void device_connected(libusb_device* device) {
 #if defined(__linux__)
     // Android's host linux libusb uses netlink instead of udev for device hotplug notification,
-    // which means we can get hotplug notifications before udev has updated ownership/perms on the
-    // device. Since we're not going to be able to link against the system's libudev any time soon,
-    // hack around this by checking for accessibility in a loop.
-    ++connecting_devices;
+    // which means we can get hotplug notifications before udev has updated ownership/perms on
+    // the device. Since we're not going to be able to link against the system's libudev any
+    // time soon, hack around this by checking for accessibility in a loop.
     auto thread = std::thread([device]() {
         std::string device_path = get_device_dev_path(device);
         auto start = std::chrono::steady_clock::now();
@@ -402,7 +402,9 @@ static void device_connected(libusb_device* device) {
         }
 
         process_device(device);
-        --connecting_devices;
+        if (--connecting_devices == 0) {
+            adb_notify_device_scan_complete();
+        }
     });
     thread.detach();
 #else
@@ -425,17 +427,33 @@ static void device_disconnected(libusb_device* device) {
     }
 }
 
+static auto& hotplug_queue = *new BlockingQueue<std::pair<libusb_hotplug_event, libusb_device*>>();
+static void hotplug_thread() {
+    adb_thread_setname("libusb hotplug");
+    while (true) {
+        hotplug_queue.PopAll([](std::pair<libusb_hotplug_event, libusb_device*> pair) {
+            libusb_hotplug_event event = pair.first;
+            libusb_device* device = pair.second;
+            if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
+                device_connected(device);
+            } else if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT) {
+                device_disconnected(device);
+            }
+        });
+    }
+}
+
 static int hotplug_callback(libusb_context*, libusb_device* device, libusb_hotplug_event event,
                             void*) {
-    // We're called with the libusb lock taken. Call these on the main thread outside of this
+    // We're called with the libusb lock taken. Call these on a separate thread outside of this
     // function so that the usb_handle mutex is always taken before the libusb mutex.
-    fdevent_run_on_main_thread([device, event]() {
-        if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
-            device_connected(device);
-        } else if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT) {
-            device_disconnected(device);
-        }
-    });
+    static std::once_flag once;
+    std::call_once(once, []() { std::thread(hotplug_thread).detach(); });
+
+    if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
+        ++connecting_devices;
+    }
+    hotplug_queue.Push({event, device});
     return 0;
 }
 
@@ -456,13 +474,6 @@ void usb_init() {
     if (rc != LIBUSB_SUCCESS) {
         LOG(FATAL) << "failed to register libusb hotplug callback";
     }
-
-    // Wait for all of the connecting devices to finish.
-    while (connecting_devices != 0) {
-        std::this_thread::sleep_for(10ms);
-    }
-
-    adb_notify_device_scan_complete();
 
     // Spawn a thread for libusb_handle_events.
     std::thread([]() {

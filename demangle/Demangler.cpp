@@ -542,9 +542,8 @@ const char* Demangler::ParseArguments(const char* name) {
     } else {
       suffix = " volatile";
     }
-    if (name[-1] == 'K' || name[-1] == 'V') {
+    if (!cur_state_.suffixes.empty() && (name[-1] == 'K' || name[-1] == 'V')) {
       // Special case, const/volatile apply as a single entity.
-      assert(!cur_state_.suffixes.empty());
       size_t index = cur_state_.suffixes.size();
       cur_state_.suffixes[index-1].insert(0, suffix);
     } else {
@@ -699,6 +698,8 @@ const char* Demangler::FindFunctionName(const char* name) {
 
   if (std::isdigit(*name)) {
     name = GetStringFromLength(name, &function_name_);
+  } else if (*name == 'L' && std::isdigit(name[1])) {
+    name = GetStringFromLength(name + 1, &function_name_);
   } else {
     name = AppendOperatorString(name);
     function_name_ = cur_state_.str;
@@ -723,7 +724,8 @@ std::string Demangler::Parse(const char* name, size_t max_length) {
       && static_cast<size_t>(cur_name - name) < max_length) {
     cur_name = (this->*parse_func_)(cur_name);
   }
-  if (cur_name == nullptr || *cur_name != '\0' || function_name_.empty()) {
+  if (cur_name == nullptr || *cur_name != '\0' || function_name_.empty() ||
+      !cur_state_.suffixes.empty()) {
     return name;
   }
 

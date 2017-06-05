@@ -22,7 +22,14 @@
 
 #include "Demangler.h"
 
-TEST(DemangleTest, VoidArgumentTest) {
+TEST(DemangleTest, IllegalArgumentModifiers) {
+  Demangler demangler;
+
+  ASSERT_EQ("_Zpp4FUNKK", demangler.Parse("_Zpp4FUNKK"));
+  ASSERT_EQ("_Zpp4FUNVV", demangler.Parse("_Zpp4FUNVV"));
+}
+
+TEST(DemangleTest, VoidArgument) {
   Demangler demangler;
 
   ASSERT_EQ("func()", demangler.Parse("_ZN4funcEv"));
@@ -187,6 +194,14 @@ TEST(DemangleTest, FunctionStartsWithNumber) {
   ASSERT_EQ("value(char, int)", demangler.Parse("_Z5valueci"));
   ASSERT_EQ("abcdefjklmn(signed char)", demangler.Parse("_Z11abcdefjklmna"));
   ASSERT_EQ("value(one, signed char)", demangler.Parse("_Z5value3onea"));
+}
+
+TEST(DemangleTest, FunctionStartsWithLPlusNumber) {
+  Demangler demangler;
+
+  ASSERT_EQ("value(char, int)", demangler.Parse("_ZL5valueci"));
+  ASSERT_EQ("abcdefjklmn(signed char)", demangler.Parse("_ZL11abcdefjklmna"));
+  ASSERT_EQ("value(one, signed char)", demangler.Parse("_ZL5value3onea"));
 }
 
 TEST(DemangleTest, StdTypes) {

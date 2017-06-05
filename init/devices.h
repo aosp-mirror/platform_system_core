@@ -114,14 +114,21 @@ class DeviceHandler {
     DeviceHandler();
     DeviceHandler(std::vector<Permissions> dev_permissions,
                   std::vector<SysfsPermissions> sysfs_permissions,
-                  std::vector<Subsystem> subsystems);
+                  std::vector<Subsystem> subsystems, bool skip_restorecon);
     ~DeviceHandler(){};
 
     void HandleDeviceEvent(const Uevent& uevent);
+
+    void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;
+
+    void HandlePlatformDeviceEvent(const Uevent& uevent);
+    void HandleBlockDeviceEvent(const Uevent& uevent) const;
+    void HandleGenericDeviceEvent(const Uevent& uevent) const;
+
     std::vector<std::string> GetBlockDeviceSymlinks(const Uevent& uevent) const;
+    void set_skip_restorecon(bool value) { skip_restorecon_ = value; }
 
   private:
-    void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;
     std::tuple<mode_t, uid_t, gid_t> GetDevicePermissions(
         const std::string& path, const std::vector<std::string>& links) const;
     void MakeDevice(const std::string& path, int block, int major, int minor,
@@ -129,15 +136,13 @@ class DeviceHandler {
     std::vector<std::string> GetCharacterDeviceSymlinks(const Uevent& uevent) const;
     void HandleDevice(const std::string& action, const std::string& devpath, int block, int major,
                       int minor, const std::vector<std::string>& links) const;
-    void HandlePlatformDeviceEvent(const Uevent& uevent);
-    void HandleBlockDeviceEvent(const Uevent& uevent) const;
-    void HandleGenericDeviceEvent(const Uevent& uevent) const;
 
     std::vector<Permissions> dev_permissions_;
     std::vector<SysfsPermissions> sysfs_permissions_;
     std::vector<Subsystem> subsystems_;
     PlatformDeviceList platform_devices_;
     selabel_handle* sehandle_;
+    bool skip_restorecon_;
 };
 
 // Exposed for testing

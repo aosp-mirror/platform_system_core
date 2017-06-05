@@ -1211,7 +1211,7 @@ int fs_mgr_swapon_all(struct fstab *fstab)
                 ret = -1;
                 continue;
             }
-            fprintf(zram_fp, "%d\n", fstab->recs[i].zram_size);
+            fprintf(zram_fp, "%u\n", fstab->recs[i].zram_size);
             fclose(zram_fp);
         }
 

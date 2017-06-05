@@ -27,6 +27,8 @@
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 
+#include <demangle.h>
+
 #include "BacktraceLog.h"
 #include "thread_utils.h"
 #include "UnwindCurrent.h"
@@ -62,8 +64,7 @@ std::string Backtrace::GetFunctionName(uintptr_t pc, uintptr_t* offset, const ba
   if (map->start == 0 || (map->flags & PROT_DEVICE_MAP)) {
     return "";
   }
-  std::string func_name = GetFunctionNameRaw(pc, offset);
-  return func_name;
+  return demangle(GetFunctionNameRaw(pc, offset).c_str());
 }
 
 bool Backtrace::VerifyReadWordArgs(uintptr_t ptr, word_t* out_value) {

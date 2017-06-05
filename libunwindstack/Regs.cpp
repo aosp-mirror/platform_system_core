@@ -30,7 +30,7 @@
 #include "User.h"
 
 template <typename AddressType>
-uint64_t RegsTmpl<AddressType>::GetRelPc(Elf* elf, const MapInfo* map_info) {
+uint64_t RegsImpl<AddressType>::GetRelPc(Elf* elf, const MapInfo* map_info) {
   uint64_t load_bias = 0;
   if (elf->valid()) {
     load_bias = elf->interface()->load_bias();
@@ -40,7 +40,7 @@ uint64_t RegsTmpl<AddressType>::GetRelPc(Elf* elf, const MapInfo* map_info) {
 }
 
 template <typename AddressType>
-bool RegsTmpl<AddressType>::GetReturnAddressFromDefault(Memory* memory, uint64_t* value) {
+bool RegsImpl<AddressType>::GetReturnAddressFromDefault(Memory* memory, uint64_t* value) {
   switch (return_loc_.type) {
   case LOCATION_REGISTER:
     assert(return_loc_.value < total_regs_);
@@ -59,9 +59,8 @@ bool RegsTmpl<AddressType>::GetReturnAddressFromDefault(Memory* memory, uint64_t
   }
 }
 
-RegsArm::RegsArm() : RegsTmpl<uint32_t>(ARM_REG_LAST, ARM_REG_SP,
-                                        Location(LOCATION_REGISTER, ARM_REG_LR)) {
-}
+RegsArm::RegsArm()
+    : RegsImpl<uint32_t>(ARM_REG_LAST, ARM_REG_SP, Location(LOCATION_REGISTER, ARM_REG_LR)) {}
 
 uint64_t RegsArm::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
   if (!elf->valid()) {
@@ -89,9 +88,8 @@ uint64_t RegsArm::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
   return rel_pc - 4;
 }
 
-RegsArm64::RegsArm64() : RegsTmpl<uint64_t>(ARM64_REG_LAST, ARM64_REG_SP,
-                                            Location(LOCATION_REGISTER, ARM64_REG_LR)) {
-}
+RegsArm64::RegsArm64()
+    : RegsImpl<uint64_t>(ARM64_REG_LAST, ARM64_REG_SP, Location(LOCATION_REGISTER, ARM64_REG_LR)) {}
 
 uint64_t RegsArm64::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
   if (!elf->valid()) {
@@ -104,9 +102,8 @@ uint64_t RegsArm64::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
   return rel_pc - 4;
 }
 
-RegsX86::RegsX86() : RegsTmpl<uint32_t>(X86_REG_LAST, X86_REG_SP,
-                                        Location(LOCATION_SP_OFFSET, -4)) {
-}
+RegsX86::RegsX86()
+    : RegsImpl<uint32_t>(X86_REG_LAST, X86_REG_SP, Location(LOCATION_SP_OFFSET, -4)) {}
 
 uint64_t RegsX86::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
   if (!elf->valid()) {
@@ -119,9 +116,8 @@ uint64_t RegsX86::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
   return rel_pc - 1;
 }
 
-RegsX86_64::RegsX86_64() : RegsTmpl<uint64_t>(X86_64_REG_LAST, X86_64_REG_SP,
-                                              Location(LOCATION_SP_OFFSET, -8)) {
-}
+RegsX86_64::RegsX86_64()
+    : RegsImpl<uint64_t>(X86_64_REG_LAST, X86_64_REG_SP, Location(LOCATION_SP_OFFSET, -8)) {}
 
 uint64_t RegsX86_64::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
   if (!elf->valid()) {

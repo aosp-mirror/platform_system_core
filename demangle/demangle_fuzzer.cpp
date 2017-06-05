@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,21 +14,23 @@
  * limitations under the License.
  */
 
-#ifndef _LIBUNWINDSTACK_DWARF_ERROR_H
-#define _LIBUNWINDSTACK_DWARF_ERROR_H
-
+#include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
-enum DwarfError : uint8_t {
-  DWARF_ERROR_NONE,
-  DWARF_ERROR_MEMORY_INVALID,
-  DWARF_ERROR_ILLEGAL_VALUE,
-  DWARF_ERROR_ILLEGAL_STATE,
-  DWARF_ERROR_STACK_INDEX_NOT_VALID,
-  DWARF_ERROR_NOT_IMPLEMENTED,
-  DWARF_ERROR_TOO_MANY_ITERATIONS,
-  DWARF_ERROR_CFA_NOT_DEFINED,
-  DWARF_ERROR_UNSUPPORTED_VERSION,
-};
+#include <string>
 
-#endif  // _LIBUNWINDSTACK_DWARF_ERROR_H
+#include "Demangler.h"
+
+extern "C" void LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
+  std::vector<char> data_str(size + 1);
+  memcpy(data_str.data(), data, size);
+  data_str[size] = '\0';
+
+  Demangler demangler;
+  std::string demangled_name = demangler.Parse(data_str.data());
+  if (size != 0 && data_str[0] != '\0' && demangled_name.empty()) {
+    abort();
+  }
+}
