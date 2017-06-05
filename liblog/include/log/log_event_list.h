@@ -177,6 +177,12 @@ class android_log_event_list {
     return *this;
   }
 
+  android_log_event_list& operator<<(bool value) {
+    int retval = android_log_write_int32(ctx, value ? 1 : 0);
+    if (retval < 0) ret = retval;
+    return *this;
+  }
+
   android_log_event_list& operator<<(int64_t value) {
     int retval = android_log_write_int64(ctx, value);
     if (retval < 0) ret = retval;
