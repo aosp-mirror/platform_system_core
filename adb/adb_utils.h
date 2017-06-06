@@ -74,13 +74,18 @@ class BlockingQueue {
 
     template <typename Fn>
     void PopAll(Fn fn) {
-        std::unique_lock<std::mutex> lock(mutex);
-        cv.wait(lock, [this]() { return !queue.empty(); });
+        std::vector<T> popped;
 
-        for (const T& t : queue) {
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+            cv.wait(lock, [this]() { return !queue.empty(); });
+            popped = std::move(queue);
+            queue.clear();
+        }
+
+        for (const T& t : popped) {
             fn(t);
         }
-        queue.clear();
     }
 };
 
