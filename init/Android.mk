@@ -40,8 +40,6 @@ init_cflags += \
 # --
 
 include $(CLEAR_VARS)
-# b/38002385, work around clang-tidy segmentation fault.
-LOCAL_TIDY_CHECKS := -misc-forwarding-reference-overload
 LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES:= \
     bootchart.cpp \
