@@ -14,6 +14,7 @@
      limitations under the License.
 -->
 <configuration description="Config for CTS Logging Library test cases">
+    <option name="config-descriptor:metadata" key="component" value="systems" />
     <target_preparer class="com.android.compatibility.common.tradefed.targetprep.FilePusher">
         <option name="cleanup" value="true" />
         <option name="push" value="CtsLiblogTestCases->/data/local/tmp/CtsLiblogTestCases" />
