@@ -35,8 +35,6 @@ enum class RegenerationAction {
 using RegenerateCallback = std::function<RegenerationAction(const Uevent&)>;
 using PollCallback = std::function<void(const Uevent&)>;
 
-extern const char* kRegenerationPaths[3];
-
 class UeventListener {
   public:
     UeventListener();
