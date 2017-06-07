@@ -333,6 +333,13 @@ static void process_device(libusb_device* device) {
             return;
         }
 
+        rc = libusb_set_interface_alt_setting(handle.get(), interface_num, 0);
+        if (rc != 0) {
+            LOG(WARNING) << "failed to set interface alt setting for device '" << device_serial
+                         << "'" << libusb_error_name(rc);
+            return;
+        }
+
         for (uint8_t endpoint : {bulk_in, bulk_out}) {
             rc = libusb_clear_halt(handle.get(), endpoint);
             if (rc != 0) {
