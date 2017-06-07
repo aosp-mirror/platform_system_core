@@ -122,7 +122,6 @@ class atransport {
 
 #if ADB_HOST
     std::shared_ptr<RSA> NextKey();
-    bool SetSendConnectOnError();
 #endif
 
     char token[TOKEN_SIZE] = {};
@@ -181,7 +180,6 @@ private:
     std::atomic<ConnectionState> connection_state_;
 #if ADB_HOST
     std::deque<std::shared_ptr<RSA>> keys_;
-    bool has_send_connect_on_error_ = false;
 #endif
 
     DISALLOW_COPY_AND_ASSIGN(atransport);
