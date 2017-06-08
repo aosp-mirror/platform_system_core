@@ -389,16 +389,8 @@ static std::string read_fstab_from_dt() {
 
     dirent* dp;
     while ((dp = readdir(fstabdir.get())) != NULL) {
-        // skip over name and compatible
-        if (dp->d_type != DT_DIR) {
-            continue;
-        }
-
-        // skip if its not 'vendor', 'odm' or 'system'
-        if (strcmp(dp->d_name, "odm") && strcmp(dp->d_name, "system") &&
-            strcmp(dp->d_name, "vendor")) {
-            continue;
-        }
+        // skip over name, compatible and .
+        if (dp->d_type != DT_DIR || dp->d_name[0] == '.') continue;
 
         // create <dev> <mnt_point>  <type>  <mnt_flags>  <fsmgr_flags>\n
         std::vector<std::string> fstab_entry;
