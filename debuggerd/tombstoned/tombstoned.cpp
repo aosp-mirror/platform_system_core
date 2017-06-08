@@ -163,7 +163,7 @@ class CrashQueue {
 };
 
 // Whether java trace dumps are produced via tombstoned.
-static constexpr bool kJavaTraceDumpsEnabled = false;
+static constexpr bool kJavaTraceDumpsEnabled = true;
 
 /* static */ CrashQueue* const CrashQueue::tombstone =
     new CrashQueue("/data/tombstones", "tombstone_" /* file_name_prefix */, 10 /* max_artifacts */,
