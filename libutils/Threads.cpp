@@ -156,14 +156,16 @@ int androidCreateRawThreadEtc(android_thread_func_t entryFunction,
     }
 
     errno = 0;
+    int lasterr = 0;
     pthread_t thread;
     int result = pthread_create(&thread, &attr,
                     (android_pthread_entry)entryFunction, userData);
+    lasterr = errno;
     pthread_attr_destroy(&attr);
     if (result != 0) {
         ALOGE("androidCreateRawThreadEtc failed (entry=%p, res=%d, %s)\n"
              "(android threadPriority=%d)",
-            entryFunction, result, strerror(errno), threadPriority);
+            entryFunction, result, strerror(lasterr), threadPriority);
         return 0;
     }
 
