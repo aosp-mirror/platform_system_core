@@ -1085,6 +1085,8 @@ bool ServiceManager::ReapOneProcess() {
     } else if (pid == -1) {
         PLOG(ERROR) << "waitpid failed";
         return false;
+    } else if (PropertyChildReap(pid)) {
+        return true;
     }
 
     Service* svc = FindServiceByPid(pid);
