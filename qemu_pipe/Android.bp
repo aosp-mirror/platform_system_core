@@ -2,6 +2,7 @@
 
 cc_library_static {
     name: "libqemu_pipe",
+    vendor_available: true,
     sanitize: {
         misc_undefined: ["integer"],
     },
