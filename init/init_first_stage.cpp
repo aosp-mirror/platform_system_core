@@ -60,9 +60,8 @@ class FirstStageMount {
     virtual bool SetUpDmVerity(fstab_rec* fstab_rec) = 0;
 
     bool need_dm_verity_;
-    // Device tree fstab entries.
+
     std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> device_tree_fstab_;
-    // Eligible first stage mount candidates, only allow /system, /vendor and/or /odm.
     std::vector<fstab_rec*> mount_fstab_recs_;
     std::set<std::string> required_devices_partition_names_;
     DeviceHandler device_handler_;
@@ -115,12 +114,10 @@ FirstStageMount::FirstStageMount()
         LOG(ERROR) << "Failed to read fstab from device tree";
         return;
     }
-    for (auto mount_point : {"/system", "/vendor", "/odm"}) {
-        fstab_rec* fstab_rec =
-            fs_mgr_get_entry_for_mount_point(device_tree_fstab_.get(), mount_point);
-        if (fstab_rec != nullptr) {
-            mount_fstab_recs_.push_back(fstab_rec);
-        }
+    // Stores device_tree_fstab_->recs[] into mount_fstab_recs_ (vector<fstab_rec*>)
+    // for easier manipulation later, e.g., range-base for loop.
+    for (int i = 0; i < device_tree_fstab_->num_entries; i++) {
+        mount_fstab_recs_.push_back(&device_tree_fstab_->recs[i]);
     }
 }
 
@@ -420,7 +417,7 @@ bool FirstStageMountVBootV2::InitAvbHandle() {
 
 // Public functions
 // ----------------
-// Mounts /system, /vendor, and/or /odm if they are present in the fstab provided by device tree.
+// Mounts partitions specified by fstab in device tree.
 bool DoFirstStageMount() {
     // Skips first stage mount if we're in recovery mode.
     if (IsRecoveryMode()) {
