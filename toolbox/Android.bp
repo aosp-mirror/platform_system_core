@@ -28,8 +28,8 @@ cc_library_static {
 }
 
 // We build BSD grep separately, so it can provide egrep and fgrep too.
-cc_binary {
-    name: "grep",
+cc_defaults {
+    name: "grep_common",
     srcs: [
         "upstream-netbsd/usr.bin/grep/fastgrep.c",
         "upstream-netbsd/usr.bin/grep/file.c",
@@ -40,5 +40,19 @@ cc_binary {
     cflags: common_cflags,
     local_include_dirs: ["upstream-netbsd/include/"],
     symlinks: ["egrep", "fgrep"],
+}
 
+cc_binary {
+    name: "grep",
+    defaults: ["grep_common"],
+}
+
+// Build vendor grep.
+// TODO: Add vendor_available to "grep" module and remove "grep_vendor" module
+//       when vendor_available is fully supported.
+cc_binary {
+    name: "grep_vendor",
+    stem: "grep",
+    vendor: true,
+    defaults: ["grep_common"],
 }
