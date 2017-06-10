@@ -689,27 +689,55 @@ int load_verity_state(struct fstab_rec* fstab, int* mode) {
     return read_verity_state(fstab->verity_loc, offset, mode);
 }
 
-static void update_verity_table_blk_device(char *blk_device, char **table)
-{
-    std::string result, word;
+// Update the verity table using the actual block device path.
+// Two cases:
+// Case-1: verity table is shared for devices with different by-name prefix.
+// Example:
+//   verity table token:       /dev/block/bootdevice/by-name/vendor
+//   blk_device-1 (non-A/B):   /dev/block/platform/soc.0/7824900.sdhci/by-name/vendor
+//   blk_device-2 (A/B):       /dev/block/platform/soc.0/f9824900.sdhci/by-name/vendor_a
+//
+// Case-2: append A/B suffix in the verity table.
+// Example:
+//   verity table token: /dev/block/platform/soc.0/7824900.sdhci/by-name/vendor
+//   blk_device:         /dev/block/platform/soc.0/7824900.sdhci/by-name/vendor_a
+static void update_verity_table_blk_device(const std::string& blk_device, char** table,
+                                           bool slot_select) {
+    bool updated = false;
+    std::string result, ab_suffix;
     auto tokens = android::base::Split(*table, " ");
 
+    // If slot_select is set, it means blk_device is already updated with ab_suffix.
+    if (slot_select) ab_suffix = fs_mgr_get_slot_suffix();
+
     for (const auto& token : tokens) {
-        if (android::base::StartsWith(token, "/dev/block/") &&
-            android::base::StartsWith(blk_device, token.c_str())) {
-            word = blk_device;
+        std::string new_token;
+        if (android::base::StartsWith(token, "/dev/block/")) {
+            if (token == blk_device) return;  // no need to update if they're already the same.
+            std::size_t found1 = blk_device.find("by-name");
+            std::size_t found2 = token.find("by-name");
+            if (found1 != std::string::npos && found2 != std::string::npos &&
+                blk_device.substr(found1) == token.substr(found2) + ab_suffix) {
+                new_token = blk_device;
+            }
+        }
+
+        if (!new_token.empty()) {
+            updated = true;
+            LINFO << "Verity table: updated block device from '" << token << "' to '" << new_token
+                  << "'";
         } else {
-            word = token;
+            new_token = token;
         }
 
         if (result.empty()) {
-            result = word;
+            result = new_token;
         } else {
-            result += " " + word;
+            result += " " + new_token;
         }
     }
 
-    if (result.empty()) {
+    if (!updated) {
         return;
     }
 
@@ -825,10 +853,9 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
     LINFO << "Enabling dm-verity for " << mount_point.c_str()
           << " (mode " << params.mode << ")";
 
-    if (fstab->fs_mgr_flags & MF_SLOTSELECT) {
-        // Update the verity params using the actual block device path
-        update_verity_table_blk_device(fstab->blk_device, &params.table);
-    }
+    // Update the verity params using the actual block device path
+    update_verity_table_blk_device(fstab->blk_device, &params.table,
+                                   fstab->fs_mgr_flags & MF_SLOTSELECT);
 
     // load the verity mapping table
     if (load_verity_table(io, mount_point, verity.data_size, fd, &params,
