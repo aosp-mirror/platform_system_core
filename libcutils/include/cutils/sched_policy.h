@@ -34,7 +34,7 @@ extern bool cpusets_enabled();
  * Check if Linux kernel enables SCHEDTUNE feature (only available in Android
  * common kernel or Linaro LSK, not in mainline Linux as of v4.9)
  *
- * Return value: 1 if Linux kernel CONFIG_SCHEDTUNE=y; 0 otherwise.
+ * Return value: 1 if Linux kernel CONFIG_CGROUP_SCHEDTUNE=y; 0 otherwise.
  */
 extern bool schedboost_enabled();
 

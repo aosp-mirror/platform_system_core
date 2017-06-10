@@ -136,7 +136,7 @@ bool cpusets_enabled() {
 
 /*
     Similar to CONFIG_CPUSETS above, but with a different configuration
-    CONFIG_SCHEDTUNE that's in Android common Linux kernel and Linaro
+    CONFIG_CGROUP_SCHEDTUNE that's in Android common Linux kernel and Linaro
     Stable Kernel (LSK), but not in mainline Linux as of v4.9.
 
     With runtime check using the following function, build time
