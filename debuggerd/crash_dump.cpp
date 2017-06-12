@@ -44,6 +44,9 @@
 #include <private/android_filesystem_config.h>
 #include <procinfo/process.h>
 
+#define ATRACE_TAG ATRACE_TAG_BIONIC
+#include <utils/Trace.h>
+
 #include "backtrace.h"
 #include "tombstone.h"
 #include "utility.h"
@@ -92,15 +95,11 @@ static bool ptrace_seize_thread(int pid_proc_fd, pid_t tid, std::string* error) 
     return false;
   }
 
-  // Put the task into ptrace-stop state.
-  if (ptrace(PTRACE_INTERRUPT, tid, 0, 0) != 0) {
-    PLOG(FATAL) << "failed to interrupt thread " << tid;
-  }
-
   return true;
 }
 
 static bool activity_manager_notify(pid_t pid, int signal, const std::string& amfd_data) {
+  ATRACE_CALL();
   android::base::unique_fd amfd(socket_local_client(
       "/data/system/ndebugsocket", ANDROID_SOCKET_NAMESPACE_FILESYSTEM, SOCK_STREAM));
   if (amfd.get() == -1) {
@@ -176,6 +175,7 @@ static void abort_handler(pid_t target, const bool tombstoned_connected,
 }
 
 static void drop_capabilities() {
+  ATRACE_CALL();
   __user_cap_header_struct capheader;
   memset(&capheader, 0, sizeof(capheader));
   capheader.version = _LINUX_CAPABILITY_VERSION_3;
@@ -194,6 +194,8 @@ static void drop_capabilities() {
 }
 
 int main(int argc, char** argv) {
+  atrace_begin(ATRACE_TAG, "before reparent");
+
   pid_t target = getppid();
   bool tombstoned_connected = false;
   unique_fd tombstoned_socket;
@@ -261,6 +263,8 @@ int main(int argc, char** argv) {
     PLOG(FATAL) << "parent died";
   }
 
+  atrace_end(ATRACE_TAG);
+
   // Reparent ourselves to init, so that the signal handler can waitpid on the
   // original process to avoid leaving a zombie for non-fatal dumps.
   pid_t forkpid = fork();
@@ -270,19 +274,27 @@ int main(int argc, char** argv) {
     exit(0);
   }
 
+  ATRACE_NAME("after reparent");
+
   // Die if we take too long.
   alarm(2);
 
+  std::string process_name = get_process_name(main_tid);
   std::string attach_error;
 
-  // Seize the main thread.
-  if (!ptrace_seize_thread(target_proc_fd, main_tid, &attach_error)) {
-    LOG(FATAL) << attach_error;
-  }
-
-  // Seize the siblings.
   std::map<pid_t, std::string> threads;
+
   {
+    ATRACE_NAME("ptrace_interrupt");
+
+    // Seize the main thread.
+    if (!ptrace_seize_thread(target_proc_fd, main_tid, &attach_error)) {
+      LOG(FATAL) << attach_error;
+    }
+
+    threads.emplace(main_tid, get_thread_name(main_tid));
+
+    // Seize its siblings.
     std::set<pid_t> siblings;
     if (!android::procinfo::GetProcessTids(target, &siblings)) {
       PLOG(FATAL) << "failed to get process siblings";
@@ -296,31 +308,48 @@ int main(int argc, char** argv) {
     for (pid_t sibling_tid : siblings) {
       if (!ptrace_seize_thread(target_proc_fd, sibling_tid, &attach_error)) {
         LOG(WARNING) << attach_error;
-      } else {
-        threads.emplace(sibling_tid, get_thread_name(sibling_tid));
+        continue;
       }
+      threads.emplace(sibling_tid, get_thread_name(sibling_tid));
     }
   }
 
   // Collect the backtrace map, open files, and process/thread names, while we still have caps.
-  std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::Create(main_tid));
-  if (!backtrace_map) {
-    LOG(FATAL) << "failed to create backtrace map";
+  std::unique_ptr<BacktraceMap> backtrace_map;
+  {
+    ATRACE_NAME("backtrace map");
+    backtrace_map.reset(BacktraceMap::Create(main_tid));
+    if (!backtrace_map) {
+      LOG(FATAL) << "failed to create backtrace map";
+    }
   }
 
   // Collect the list of open files.
   OpenFilesList open_files;
-  populate_open_files_list(target, &open_files);
-
-  std::string process_name = get_process_name(main_tid);
-  threads.emplace(main_tid, get_thread_name(main_tid));
+  {
+    ATRACE_NAME("open files");
+    populate_open_files_list(target, &open_files);
+  }
 
   // Drop our capabilities now that we've attached to the threads we care about.
   drop_capabilities();
 
-  const DebuggerdDumpType dump_type_enum = static_cast<DebuggerdDumpType>(dump_type);
-  LOG(INFO) << "obtaining output fd from tombstoned, type: " << dump_type_enum;
-  tombstoned_connected = tombstoned_connect(target, &tombstoned_socket, &output_fd, dump_type_enum);
+  {
+    ATRACE_NAME("tombstoned_connect");
+    const DebuggerdDumpType dump_type_enum = static_cast<DebuggerdDumpType>(dump_type);
+    LOG(INFO) << "obtaining output fd from tombstoned, type: " << dump_type_enum;
+    tombstoned_connected = tombstoned_connect(target, &tombstoned_socket, &output_fd, dump_type_enum);
+  }
+
+  // Pause the threads.
+  {
+    ATRACE_NAME("ptrace_interrupt");
+    for (const auto& [sibling_tid, _] : threads) {
+      if (ptrace(PTRACE_INTERRUPT, sibling_tid, 0, 0) != 0) {
+        PLOG(FATAL) << "failed to interrupt thread " << sibling_tid;
+      }
+    }
+  }
 
   // Write a '\1' to stdout to tell the crashing process to resume.
   // It also restores the value of PR_SET_DUMPABLE at this point.
@@ -349,9 +378,12 @@ int main(int argc, char** argv) {
   }
 
   siginfo_t siginfo = {};
-  if (!wait_for_signal(main_tid, &siginfo)) {
-    printf("failed to wait for signal in tid %d: %s\n", main_tid, strerror(errno));
-    exit(1);
+  {
+    ATRACE_NAME("wait_for_signal");
+    if (!wait_for_signal(main_tid, &siginfo)) {
+      printf("failed to wait for signal in tid %d: %s\n", main_tid, strerror(errno));
+      exit(1);
+    }
   }
 
   int signo = siginfo.si_signo;
@@ -373,8 +405,10 @@ int main(int argc, char** argv) {
 
   std::string amfd_data;
   if (backtrace) {
+    ATRACE_NAME("dump_backtrace");
     dump_backtrace(output_fd.get(), backtrace_map.get(), target, main_tid, process_name, threads, 0);
   } else {
+    ATRACE_NAME("engrave_tombstone");
     engrave_tombstone(output_fd.get(), backtrace_map.get(), &open_files, target, main_tid,
                       process_name, threads, abort_address, fatal_signal ? &amfd_data : nullptr);
   }
