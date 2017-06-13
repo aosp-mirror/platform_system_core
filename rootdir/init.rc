@@ -317,7 +317,6 @@ on post-fs
     # Make sure /sys/kernel/debug (if present) is labeled properly
     # Note that tracefs may be mounted under debug, so we need to cross filesystems
     restorecon --recursive --cross-filesystems /sys/kernel/debug
-    chmod 0755 /sys/kernel/debug/tracing
 
     # We chown/chmod /cache again so because mount is run as root + defaults
     chown system cache /cache
@@ -355,6 +354,10 @@ on post-fs
     mkdir /cache/lost+found 0770 root root
 
 on late-fs
+    # Ensure that tracefs has the correct permissions.
+    # This does not work correctly if it is called in post-fs.
+    chmod 0755 /sys/kernel/debug/tracing
+
     # HALs required before storage encryption can get unlocked (FBE/FDE)
     class_start early_hal
 
