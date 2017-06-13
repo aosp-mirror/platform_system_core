@@ -594,8 +594,11 @@ static void update_sys_usb_config() {
 
 void property_load_boot_defaults() {
     if (!load_properties_from_file("/system/etc/prop.default", NULL)) {
-        // legacy path
-        load_properties_from_file("/default.prop", NULL);
+        // Try recovery path
+        if (!load_properties_from_file("/prop.default", NULL)) {
+            // Try legacy path
+            load_properties_from_file("/default.prop", NULL);
+        }
     }
     load_properties_from_file("/odm/default.prop", NULL);
     load_properties_from_file("/vendor/default.prop", NULL);
