@@ -397,7 +397,7 @@ static bool hashtree_dm_verity_setup(struct fstab_rec* fstab_entry,
     fstab_entry->blk_device = strdup(verity_blk_name.c_str());
 
     // Makes sure we've set everything up properly.
-    if (wait_for_verity_dev && fs_mgr_test_access(verity_blk_name.c_str()) < 0) {
+    if (wait_for_verity_dev && !fs_mgr_wait_for_file(verity_blk_name, 1s)) {
         return false;
     }
 
