@@ -897,7 +897,6 @@ static void selinux_restore_context() {
     selinux_android_restorecon("/dev/urandom", 0);
     selinux_android_restorecon("/dev/__properties__", 0);
 
-    selinux_android_restorecon("/file_contexts.bin", 0);
     selinux_android_restorecon("/plat_file_contexts", 0);
     selinux_android_restorecon("/nonplat_file_contexts", 0);
     selinux_android_restorecon("/plat_property_contexts", 0);
