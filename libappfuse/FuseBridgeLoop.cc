@@ -57,6 +57,12 @@ void GetObservedEvents(FuseBridgeState state, int* device_events, int* proxy_eve
             return;
     }
 }
+
+void LogResponseError(const std::string& message, const FuseResponse& response) {
+    LOG(ERROR) << message << ": header.len=" << response.header.len
+               << " header.error=" << response.header.error
+               << " header.unique=" << response.header.unique;
+}
 }
 
 class FuseBridgeEntry {
@@ -135,6 +141,7 @@ class FuseBridgeEntry {
         }
 
         if (!buffer_.response.Write(device_fd_)) {
+            LogResponseError("Failed to write a reply from proxy to device", buffer_.response);
             return FuseBridgeState::kClosing;
         }
 
@@ -200,6 +207,7 @@ class FuseBridgeEntry {
         }
 
         if (!buffer_.response.Write(device_fd_)) {
+            LogResponseError("Failed to write a response to device", buffer_.response);
             return FuseBridgeState::kClosing;
         }
 
@@ -215,6 +223,11 @@ class FuseBridgeEntry {
             case ResultOrAgain::kSuccess:
                 return FuseBridgeState::kWaitToReadEither;
             case ResultOrAgain::kFailure:
+                LOG(ERROR) << "Failed to write a request to proxy:"
+                           << " header.len=" << buffer_.request.header.len
+                           << " header.opcode=" << buffer_.request.header.opcode
+                           << " header.unique=" << buffer_.request.header.unique
+                           << " header.nodeid=" << buffer_.request.header.nodeid;
                 return FuseBridgeState::kClosing;
             case ResultOrAgain::kAgain:
                 return FuseBridgeState::kWaitToWriteProxy;
