@@ -71,7 +71,16 @@ struct ZipEntry {
   // Modification time. The zipfile format specifies
   // that the first two little endian bytes contain the time
   // and the last two little endian bytes contain the date.
+  // See `GetModificationTime`.
+  // TODO: should be overridden by extra time field, if present.
   uint32_t mod_time;
+
+  // Returns `mod_time` as a broken-down struct tm.
+  struct tm GetModificationTime() const;
+
+  // Suggested Unix mode for this entry, from the zip archive if created on
+  // Unix, or a default otherwise.
+  mode_t unix_mode;
 
   // 1 if this entry contains a data descriptor segment, 0
   // otherwise.
