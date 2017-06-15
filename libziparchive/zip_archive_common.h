@@ -73,7 +73,7 @@ struct CentralDirectoryRecord {
 
   // The start of record signature. Must be |kSignature|.
   uint32_t record_signature;
-  // Tool version. Ignored by this implementation.
+  // Source tool version. Top byte gives source OS.
   uint16_t version_made_by;
   // Tool version. Ignored by this implementation.
   uint16_t version_needed;
@@ -106,7 +106,7 @@ struct CentralDirectoryRecord {
   uint16_t file_start_disk;
   // File attributes. Ignored by this implementation.
   uint16_t internal_file_attributes;
-  // File attributes. Ignored by this implementation.
+  // File attributes. For archives created on Unix, the top bits are the mode.
   uint32_t external_file_attributes;
   // The offset to the local file header for this entry, from the
   // beginning of this archive.
