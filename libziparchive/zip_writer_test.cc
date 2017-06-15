@@ -135,17 +135,6 @@ TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedFlag) {
   CloseArchive(handle);
 }
 
-static void ConvertZipTimeToTm(uint32_t& zip_time, struct tm* tm) {
-  memset(tm, 0, sizeof(struct tm));
-  tm->tm_hour = (zip_time >> 11) & 0x1f;
-  tm->tm_min = (zip_time >> 5) & 0x3f;
-  tm->tm_sec = (zip_time & 0x1f) << 1;
-
-  tm->tm_year = ((zip_time >> 25) & 0x7f) + 80;
-  tm->tm_mon = ((zip_time >> 21) & 0xf) - 1;
-  tm->tm_mday = (zip_time >> 16) & 0x1f;
-}
-
 static struct tm MakeTm() {
   struct tm tm;
   memset(&tm, 0, sizeof(struct tm));
@@ -177,8 +166,7 @@ TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedFlagAndTime) {
   ASSERT_EQ(0, FindEntry(handle, ZipString("align.txt"), &data));
   EXPECT_EQ(0, data.offset & 0x03);
 
-  struct tm mod;
-  ConvertZipTimeToTm(data.mod_time, &mod);
+  struct tm mod = data.GetModificationTime();
   EXPECT_EQ(tm.tm_sec, mod.tm_sec);
   EXPECT_EQ(tm.tm_min, mod.tm_min);
   EXPECT_EQ(tm.tm_hour, mod.tm_hour);
@@ -228,8 +216,7 @@ TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedValueAndTime) {
   ASSERT_EQ(0, FindEntry(handle, ZipString("align.txt"), &data));
   EXPECT_EQ(0, data.offset & 0xfff);
 
-  struct tm mod;
-  ConvertZipTimeToTm(data.mod_time, &mod);
+  struct tm mod = data.GetModificationTime();
   EXPECT_EQ(tm.tm_sec, mod.tm_sec);
   EXPECT_EQ(tm.tm_min, mod.tm_min);
   EXPECT_EQ(tm.tm_hour, mod.tm_hour);
