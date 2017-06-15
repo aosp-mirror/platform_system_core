@@ -48,6 +48,10 @@
 
 using android::base::get_unaligned;
 
+// Used to turn on crc checks - verify that the content CRC matches the values
+// specified in the local file header and the central directory.
+static const bool kCrcChecksEnabled = false;
+
 // This is for windows. If we don't open a file in binary mode, weird
 // things will happen.
 #ifndef O_BINARY
@@ -483,8 +487,7 @@ void CloseArchive(ZipArchiveHandle handle) {
   delete archive;
 }
 
-static int32_t UpdateEntryFromDataDescriptor(MappedZipFile& mapped_zip,
-                                             ZipEntry *entry) {
+static int32_t ValidateDataDescriptor(MappedZipFile& mapped_zip, ZipEntry* entry) {
   uint8_t ddBuf[sizeof(DataDescriptor) + sizeof(DataDescriptor::kOptSignature)];
   if (!mapped_zip.ReadData(ddBuf, sizeof(ddBuf))) {
     return kIoError;
@@ -494,9 +497,17 @@ static int32_t UpdateEntryFromDataDescriptor(MappedZipFile& mapped_zip,
   const uint16_t offset = (ddSignature == DataDescriptor::kOptSignature) ? 4 : 0;
   const DataDescriptor* descriptor = reinterpret_cast<const DataDescriptor*>(ddBuf + offset);
 
-  entry->crc32 = descriptor->crc32;
-  entry->compressed_length = descriptor->compressed_size;
-  entry->uncompressed_length = descriptor->uncompressed_size;
+  // Validate that the values in the data descriptor match those in the central
+  // directory.
+  if (entry->compressed_length != descriptor->compressed_size ||
+      entry->uncompressed_length != descriptor->uncompressed_size ||
+      entry->crc32 != descriptor->crc32) {
+    ALOGW("Zip: size/crc32 mismatch. expected {%" PRIu32 ", %" PRIu32 ", %" PRIx32
+          "}, was {%" PRIu32 ", %" PRIu32 ", %" PRIx32 "}",
+          entry->compressed_length, entry->uncompressed_length, entry->crc32,
+          descriptor->compressed_size, descriptor->uncompressed_size, descriptor->crc32);
+    return kInconsistentInformation;
+  }
 
   return 0;
 }
@@ -564,12 +575,22 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   // Paranoia: Match the values specified in the local file header
   // to those specified in the central directory.
 
-  // Verify that the central directory and local file header have the same general purpose bit
-  // flags set.
-  if (lfh->gpb_flags != cdr->gpb_flags) {
-    ALOGW("Zip: gpb flag mismatch. expected {%04" PRIx16 "}, was {%04" PRIx16 "}",
+  // Warn if central directory and local file header don't agree on the use
+  // of a trailing Data Descriptor. The reference implementation is inconsistent
+  // and appears to use the LFH value during extraction (unzip) but the CD value
+  // while displayng information about archives (zipinfo). The spec remains
+  // silent on this inconsistency as well.
+  //
+  // For now, always use the version from the LFH but make sure that the values
+  // specified in the central directory match those in the data descriptor.
+  //
+  // NOTE: It's also worth noting that unzip *does* warn about inconsistencies in
+  // bit 11 (EFS: The language encoding flag, marking that filename and comment are
+  // encoded using UTF-8). This implementation does not check for the presence of
+  // that flag and always enforces that entry names are valid UTF-8.
+  if ((lfh->gpb_flags & kGPBDDFlagMask) != (cdr->gpb_flags & kGPBDDFlagMask)) {
+    ALOGW("Zip: gpb flag mismatch at bit 3. expected {%04" PRIx16 "}, was {%04" PRIx16 "}",
           cdr->gpb_flags, lfh->gpb_flags);
-    return kInconsistentInformation;
   }
 
   // If there is no trailing data descriptor, verify that the central directory and local file
@@ -932,6 +953,7 @@ static int32_t InflateEntryToWriter(MappedZipFile& mapped_zip, const ZipEntry* e
 
   const uint32_t uncompressed_length = entry->uncompressed_length;
 
+  uint64_t crc = 0;
   uint32_t compressed_length = entry->compressed_length;
   do {
     /* read as much as we can */
@@ -964,6 +986,8 @@ static int32_t InflateEntryToWriter(MappedZipFile& mapped_zip, const ZipEntry* e
       if (!writer->Append(&write_buf[0], write_size)) {
         // The file might have declared a bogus length.
         return kInconsistentInformation;
+      } else {
+        crc = crc32(crc, &write_buf[0], write_size);
       }
 
       zstream.next_out = &write_buf[0];
@@ -973,8 +997,13 @@ static int32_t InflateEntryToWriter(MappedZipFile& mapped_zip, const ZipEntry* e
 
   assert(zerr == Z_STREAM_END);     /* other errors should've been caught */
 
-  // stream.adler holds the crc32 value for such streams.
-  *crc_out = zstream.adler;
+  // NOTE: zstream.adler is always set to 0, because we're using the -MAX_WBITS
+  // "feature" of zlib to tell it there won't be a zlib file header. zlib
+  // doesn't bother calculating the checksum in that scenario. We just do
+  // it ourselves above because there are no additional gains to be made by
+  // having zlib calculate it for us, since they do it by calling crc32 in
+  // the same manner that we have above.
+  *crc_out = crc;
 
   if (zstream.total_out != uncompressed_length || compressed_length != 0) {
     ALOGW("Zip: size mismatch on inflated file (%lu vs %" PRIu32 ")",
@@ -1037,15 +1066,14 @@ int32_t ExtractToWriter(ZipArchiveHandle handle,
   }
 
   if (!return_value && entry->has_data_descriptor) {
-    return_value = UpdateEntryFromDataDescriptor(archive->mapped_zip, entry);
+    return_value = ValidateDataDescriptor(archive->mapped_zip, entry);
     if (return_value) {
       return return_value;
     }
   }
 
-  // TODO: Fix this check by passing the right flags to inflate2 so that
-  // it calculates the CRC for us.
-  if (entry->crc32 != crc && false) {
+  // Validate that the CRC matches the calculated value.
+  if (kCrcChecksEnabled && (entry->crc32 != static_cast<uint32_t>(crc))) {
     ALOGW("Zip: crc mismatch: expected %" PRIu32 ", was %" PRIu64, entry->crc32, crc);
     return kInconsistentInformation;
   }
