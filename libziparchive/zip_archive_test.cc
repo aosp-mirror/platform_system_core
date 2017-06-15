@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "zip_archive_private.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -708,8 +710,7 @@ TEST(ziparchive, InvalidDataDescriptors) {
   int32_t error_code = 0;
   ExtractEntryToMemory(invalid_csize, &entry, &error_code);
 
-  ASSERT_GT(0, error_code);
-  ASSERT_STREQ("Inconsistent information", ErrorCodeString(error_code));
+  ASSERT_EQ(kInconsistentInformation, error_code);
 
   std::vector<uint8_t> invalid_size = kDataDescriptorZipFile;
   invalid_csize[kSizeOffset] = 0xfe;
@@ -718,8 +719,17 @@ TEST(ziparchive, InvalidDataDescriptors) {
   entry.clear();
   ExtractEntryToMemory(invalid_csize, &entry, &error_code);
 
-  ASSERT_GT(0, error_code);
-  ASSERT_STREQ("Inconsistent information", ErrorCodeString(error_code));
+  ASSERT_EQ(kInconsistentInformation, error_code);
+}
+
+TEST(ziparchive, ErrorCodeString) {
+  ASSERT_STREQ("Success", ErrorCodeString(0));
+
+  // Out of bounds.
+  ASSERT_STREQ("Unknown return code", ErrorCodeString(1));
+  ASSERT_STREQ("Unknown return code", ErrorCodeString(-13));
+
+  ASSERT_STREQ("I/O error", ErrorCodeString(kIoError));
 }
 
 int main(int argc, char** argv) {

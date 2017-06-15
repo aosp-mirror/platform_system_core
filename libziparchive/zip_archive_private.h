@@ -26,6 +26,69 @@
 
 #include <utils/FileMap.h>
 #include <ziparchive/zip_archive.h>
+#include "android-base/macros.h"
+
+static const char* kErrorMessages[] = {
+    "Success",
+    "Iteration ended",
+    "Zlib error",
+    "Invalid file",
+    "Invalid handle",
+    "Duplicate entries in archive",
+    "Empty archive",
+    "Entry not found",
+    "Invalid offset",
+    "Inconsistent information",
+    "Invalid entry name",
+    "I/O error",
+    "File mapping failed",
+};
+
+enum ErrorCodes : int32_t {
+  kIterationEnd = -1,
+
+  // We encountered a Zlib error when inflating a stream from this file.
+  // Usually indicates file corruption.
+  kZlibError = -2,
+
+  // The input file cannot be processed as a zip archive. Usually because
+  // it's too small, too large or does not have a valid signature.
+  kInvalidFile = -3,
+
+  // An invalid iteration / ziparchive handle was passed in as an input
+  // argument.
+  kInvalidHandle = -4,
+
+  // The zip archive contained two (or possibly more) entries with the same
+  // name.
+  kDuplicateEntry = -5,
+
+  // The zip archive contains no entries.
+  kEmptyArchive = -6,
+
+  // The specified entry was not found in the archive.
+  kEntryNotFound = -7,
+
+  // The zip archive contained an invalid local file header pointer.
+  kInvalidOffset = -8,
+
+  // The zip archive contained inconsistent entry information. This could
+  // be because the central directory & local file header did not agree, or
+  // if the actual uncompressed length or crc32 do not match their declared
+  // values.
+  kInconsistentInformation = -9,
+
+  // An invalid entry name was encountered.
+  kInvalidEntryName = -10,
+
+  // An I/O related system call (read, lseek, ftruncate, map) failed.
+  kIoError = -11,
+
+  // We were not able to mmap the central directory or entry contents.
+  kMmapFailed = -12,
+
+  kLastErrorCode = kMmapFailed,
+};
 
 class MappedZipFile {
  public:
