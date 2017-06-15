@@ -55,6 +55,12 @@ enum {
    * permitted_path from the caller's namespace.
    */
   ANDROID_NAMESPACE_TYPE_SHARED = 2,
+
+  /* This flag instructs linker to enable grey-list workaround for the namespace.
+   * See http://b/26394120 for details.
+   */
+  ANDROID_NAMESPACE_TYPE_GREYLIST_ENABLED = 0x08000000,
+
   ANDROID_NAMESPACE_TYPE_SHARED_ISOLATED = ANDROID_NAMESPACE_TYPE_SHARED |
                                            ANDROID_NAMESPACE_TYPE_ISOLATED,
 };

@@ -668,8 +668,12 @@ TEST(logd, timeout) {
     while (--i) {
         int fd = socket_local_client("logdr", ANDROID_SOCKET_NAMESPACE_RESERVED,
                                      SOCK_SEQPACKET);
-        EXPECT_LT(0, fd);
-        if (fd < 0) _exit(fd);
+        int save_errno = errno;
+        if (fd < 0) {
+            fprintf(stderr, "failed to open /dev/socket/logdr %s\n",
+                    strerror(save_errno));
+            _exit(fd);
+        }
 
         std::string ask = android::base::StringPrintf(
             "dumpAndClose lids=0,1,2,3,4,5 timeout=6 start=%" PRIu32
@@ -721,8 +725,12 @@ TEST(logd, timeout) {
         // active _or_ inactive during the test.
         if (content_timeout) {
             log_time msg(msg_timeout.entry.sec, msg_timeout.entry.nsec);
-            EXPECT_FALSE(msg < now);
-            if (msg < now) _exit(-1);
+            if (msg < now) {
+                fprintf(stderr, "%u.%09u < %u.%09u\n", msg_timeout.entry.sec,
+                        msg_timeout.entry.nsec, (unsigned)now.tv_sec,
+                        (unsigned)now.tv_nsec);
+                _exit(-1);
+            }
             if (msg > now) {
                 now = msg;
                 now.tv_sec += 30;

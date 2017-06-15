@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,18 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#ifndef VNDKSUPPORT_LINKER_H_
+#define VNDKSUPPORT_LINKER_H_
 
-#ifndef _DEBUGGERD_MACHINE_H
-#define _DEBUGGERD_MACHINE_H
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#include <sys/types.h>
+void* android_load_sphal_library(const char* name, int flag);
 
-#include <backtrace/Backtrace.h>
+int android_unload_sphal_library(void* handle);
 
-#include "utility.h"
+#ifdef __cplusplus
+}
+#endif
 
-void dump_memory_and_code(log_t* log, Backtrace* backtrace);
-void dump_registers(log_t* log, pid_t tid);
-void dump_registers(log_t* log, const ucontext_t* uc);
-
-#endif // _DEBUGGERD_MACHINE_H
+#endif  // VNDKSUPPORT_LINKER_H_

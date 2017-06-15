@@ -55,4 +55,6 @@ extern int add_dev_perms(const char *name, const char *attr,
                          unsigned short wildcard);
 int get_device_fd();
 
+char** get_block_device_symlinks(struct uevent* uevent);
+
 #endif	/* _INIT_DEVICES_H */

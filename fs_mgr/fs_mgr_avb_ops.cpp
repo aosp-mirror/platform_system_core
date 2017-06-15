@@ -22,6 +22,8 @@
  * SOFTWARE.
  */
 
+#include "fs_mgr_priv_avb_ops.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -36,7 +38,6 @@
 #include <utils/Compat.h>
 
 #include "fs_mgr.h"
-#include "fs_mgr_avb_ops.h"
 #include "fs_mgr_priv.h"
 
 static AvbIOResult read_from_partition(AvbOps* ops, const char* partition, int64_t offset,
@@ -88,11 +89,7 @@ static AvbIOResult dummy_get_unique_guid_for_partition(AvbOps* ops ATTRIBUTE_UNU
     return AVB_IO_RESULT_OK;
 }
 
-FsManagerAvbOps::FsManagerAvbOps(const std::string& device_file_by_name_prefix)
-    : device_file_by_name_prefix_(device_file_by_name_prefix) {
-    if (device_file_by_name_prefix_.back() != '/') {
-        device_file_by_name_prefix_ += '/';
-    }
+void FsManagerAvbOps::InitializeAvbOps() {
     // We only need to provide the implementation of read_from_partition()
     // operation since that's all what is being used by the avb_slot_verify().
     // Other I/O operations are only required in bootloader but not in
@@ -107,13 +104,31 @@ FsManagerAvbOps::FsManagerAvbOps(const std::string& device_file_by_name_prefix)
     avb_ops_.user_data = this;
 }
 
+FsManagerAvbOps::FsManagerAvbOps(std::map<std::string, std::string>&& by_name_symlink_map)
+    : by_name_symlink_map_(std::move(by_name_symlink_map)) {
+    InitializeAvbOps();
+}
+
+FsManagerAvbOps::FsManagerAvbOps(const fstab& fstab) {
+    // Constructs the by-name symlink map for each fstab record.
+    // /dev/block/platform/soc.0/7824900.sdhci/by-name/system_a =>
+    // by_name_symlink_map_["system_a"] = "/dev/block/platform/soc.0/7824900.sdhci/by-name/system_a"
+    for (int i = 0; i < fstab.num_entries; i++) {
+        std::string partition_name = basename(fstab.recs[i].blk_device);
+        by_name_symlink_map_[partition_name] = fstab.recs[i].blk_device;
+    }
+    InitializeAvbOps();
+}
+
 AvbIOResult FsManagerAvbOps::ReadFromPartition(const char* partition, int64_t offset,
                                                size_t num_bytes, void* buffer,
                                                size_t* out_num_read) {
-    // Appends |partition| to the device_file_by_name_prefix_, e.g.,
-    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/ ->
-    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/system_a
-    std::string path = device_file_by_name_prefix_ + partition;
+    const auto iter = by_name_symlink_map_.find(partition);
+    if (iter == by_name_symlink_map_.end()) {
+        LERROR << "by-name symlink not found for partition: '" << partition << "'";
+        return AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION;
+    }
+    std::string path = iter->second;
 
     // Ensures the device path (a symlink created by init) is ready to
     // access. fs_mgr_test_access() will test a few iterations if the
@@ -124,7 +139,7 @@ AvbIOResult FsManagerAvbOps::ReadFromPartition(const char* partition, int64_t of
 
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_CLOEXEC)));
     if (fd < 0) {
-        PERROR << "Failed to open " << path.c_str();
+        PERROR << "Failed to open " << path;
         return AVB_IO_RESULT_ERROR_IO;
     }
 
@@ -148,8 +163,7 @@ AvbIOResult FsManagerAvbOps::ReadFromPartition(const char* partition, int64_t of
     // for EOF).
     ssize_t num_read = TEMP_FAILURE_RETRY(pread64(fd, buffer, num_bytes, offset));
     if (num_read < 0 || (size_t)num_read != num_bytes) {
-        PERROR << "Failed to read " << num_bytes << " bytes from " << path.c_str() << " offset "
-               << offset;
+        PERROR << "Failed to read " << num_bytes << " bytes from " << path << " offset " << offset;
         return AVB_IO_RESULT_ERROR_IO;
     }
 

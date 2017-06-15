@@ -387,6 +387,7 @@ on post-fs-data
     mkdir /data/misc/radio 0770 system radio
     mkdir /data/misc/sms 0770 system radio
     mkdir /data/misc/zoneinfo 0775 system system
+    mkdir /data/misc/textclassifier 0771 system system
     mkdir /data/misc/vpn 0770 system vpn
     mkdir /data/misc/shared_relro 0771 shared_relro shared_relro
     mkdir /data/misc/systemkeys 0700 system system
@@ -498,12 +499,28 @@ on post-fs-data
     # Set indication (checked by vold) that we have finished this action
     #setprop vold.post_fs_data_done 1
 
-# This trigger will be triggered before 'zygote-start' since there is no zygote-start defined in
-# current init.rc. It is recommended to put unnecessary data/ initialization from post-fs-data
-# to start-zygote to unblock zygote start.
+# It is recommended to put unnecessary data/ initialization from post-fs-data
+# to start-zygote in device's init.rc to unblock zygote start.
+on zygote-start && property:ro.crypto.state=unencrypted
+    # A/B update verifier that marks a successful boot.
+    exec_start update_verifier_nonencrypted
+    start netd
+    start zygote
+    start zygote_secondary
+
+on zygote-start && property:ro.crypto.state=unsupported
+    # A/B update verifier that marks a successful boot.
+    exec_start update_verifier_nonencrypted
+    start netd
+    start zygote
+    start zygote_secondary
+
 on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
-   start netd
-   start zygote
+    # A/B update verifier that marks a successful boot.
+    exec_start update_verifier_nonencrypted
+    start netd
+    start zygote
+    start zygote_secondary
 
 on boot
     # basic network init
@@ -602,8 +619,6 @@ on boot
     class_start core
 
 on nonencrypted
-    # A/B update verifier that marks a successful boot.
-    exec_start update_verifier_nonencrypted
     class_start main
     class_start late_start
 
@@ -641,12 +656,6 @@ on property:vold.decrypt=trigger_shutdown_framework
 
 on property:sys.boot_completed=1
     bootchart stop
-
-on property:sys.boot_completed=1 && property:ro.build.type=user
-    write /proc/sys/kernel/modules_disabled 1
-
-on property:sys.boot_completed=1 && property:ro.build.type=userdebug
-    write /proc/sys/kernel/modules_disabled 1
 
 # system server cannot write to /proc/sys files,
 # and chown/chmod does not work for /proc/sys/ entries.

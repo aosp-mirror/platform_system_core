@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,10 @@
  * limitations under the License.
  */
 
-#ifndef _DEBUGGERD_MACHINE_H
-#define _DEBUGGERD_MACHINE_H
+#ifndef _INIT_FIRST_STAGE_H
+#define _INIT_FIRST_STAGE_H
 
-#include <sys/types.h>
+bool DoFirstStageMount();
+void SetInitAvbVersionInRecovery();
 
-#include <backtrace/Backtrace.h>
-
-#include "utility.h"
-
-void dump_memory_and_code(log_t* log, Backtrace* backtrace);
-void dump_registers(log_t* log, pid_t tid);
-void dump_registers(log_t* log, const ucontext_t* uc);
-
-#endif // _DEBUGGERD_MACHINE_H
+#endif

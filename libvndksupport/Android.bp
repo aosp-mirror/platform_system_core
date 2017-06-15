@@ -1,0 +1,15 @@
+subdirs = ["tests"]
+
+cc_library_shared {
+    name: "libvndksupport",
+    srcs: ["linker.c"],
+    local_include_dirs: ["include/vndksupport"],
+    export_include_dirs: ["include"],
+    shared_libs: ["liblog"],
+}
+
+llndk_library {
+    name: "libvndksupport",
+    symbol_file: "libvndksupport.map.txt",
+    export_include_dirs: ["include"],
+}

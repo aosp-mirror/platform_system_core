@@ -52,6 +52,17 @@ void dump_memory_and_code(log_t* log, Backtrace* backtrace) {
   }
 }
 
+#define DUMP_GP_REGISTERS(log)                                                                   \
+  for (int i = 0; i < 28; i += 4) {                                                              \
+    const char* fmt = "    x%-2d  %016llx  x%-2d  %016llx  x%-2d  %016llx  x%-2d  %016llx\n";    \
+    _LOG(log, logtype::REGISTERS, fmt, i, r.regs[i], i + 1, r.regs[i + 1], i + 2, r.regs[i + 2], \
+         i + 3, r.regs[i + 3]);                                                                  \
+  }                                                                                              \
+  _LOG(log, logtype::REGISTERS, "    x28  %016llx  x29  %016llx  x30  %016llx\n", r.regs[28],    \
+       r.regs[29], r.regs[30]);                                                                  \
+  _LOG(log, logtype::REGISTERS, "    sp   %016llx  pc   %016llx  pstate %016llx\n", r.sp, r.pc,  \
+       r.pstate)
+
 void dump_registers(log_t* log, pid_t tid) {
   struct user_pt_regs r;
   struct iovec io;
@@ -63,20 +74,7 @@ void dump_registers(log_t* log, pid_t tid) {
     return;
   }
 
-  for (int i = 0; i < 28; i += 4) {
-    _LOG(log, logtype::REGISTERS,
-         "    x%-2d  %016llx  x%-2d  %016llx  x%-2d  %016llx  x%-2d  %016llx\n",
-         i, r.regs[i],
-         i+1, r.regs[i+1],
-         i+2, r.regs[i+2],
-         i+3, r.regs[i+3]);
-  }
-
-  _LOG(log, logtype::REGISTERS, "    x28  %016llx  x29  %016llx  x30  %016llx\n",
-       r.regs[28], r.regs[29], r.regs[30]);
-
-  _LOG(log, logtype::REGISTERS, "    sp   %016llx  pc   %016llx  pstate %016llx\n",
-       r.sp, r.pc, r.pstate);
+  DUMP_GP_REGISTERS(log);
 
   struct user_fpsimd_state f;
   io.iov_base = &f;
@@ -98,4 +96,9 @@ void dump_registers(log_t* log, pid_t tid) {
          static_cast<uint64_t>(f.vregs[i+1]));
   }
   _LOG(log, logtype::FP_REGISTERS, "    fpsr %08x  fpcr %08x\n", f.fpsr, f.fpcr);
+}
+
+void dump_registers(log_t* log, const ucontext_t* ucontext) {
+  const mcontext_t& r = ucontext->uc_mcontext;
+  DUMP_GP_REGISTERS(log);
 }

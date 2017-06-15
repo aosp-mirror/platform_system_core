@@ -48,7 +48,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
           show_progress_(show_progress),
           status_(0),
           line_(),
-          last_progress_(0) {
+          last_progress_percentage_(0) {
         SetLineMessage("generating");
     }
 
@@ -147,13 +147,14 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
             size_t idx1 = line.rfind(BUGZ_PROGRESS_PREFIX) + strlen(BUGZ_PROGRESS_PREFIX);
             size_t idx2 = line.rfind(BUGZ_PROGRESS_SEPARATOR);
             int progress = std::stoi(line.substr(idx1, (idx2 - idx1)));
-            if (progress <= last_progress_) {
+            int total = std::stoi(line.substr(idx2 + 1));
+            int progress_percentage = (progress * 100 / total);
+            if (progress_percentage <= last_progress_percentage_) {
                 // Ignore.
                 return;
             }
-            last_progress_ = progress;
-            int total = std::stoi(line.substr(idx2 + 1));
-            br_->UpdateProgress(line_message_, progress, total);
+            last_progress_percentage_ = progress_percentage;
+            br_->UpdateProgress(line_message_, progress_percentage);
         } else {
             invalid_lines_.push_back(line);
         }
@@ -189,7 +190,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
 
     // Last displayed progress.
     // Since dumpstate progress can recede, only forward progress should be displayed
-    int last_progress_;
+    int last_progress_percentage_;
 
     DISALLOW_COPY_AND_ASSIGN(BugreportStandardStreamsCallback);
 };
@@ -267,8 +268,7 @@ int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, 
     return SendShellCommand(transport_type, serial, bugz_command, false, &bugz_callback);
 }
 
-void Bugreport::UpdateProgress(const std::string& message, int progress, int total) {
-    int progress_percentage = (progress * 100 / total);
+void Bugreport::UpdateProgress(const std::string& message, int progress_percentage) {
     line_printer_.Print(
         android::base::StringPrintf("[%3d%%] %s", progress_percentage, message.c_str()),
         LinePrinter::INFO);

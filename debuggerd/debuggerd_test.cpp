@@ -29,6 +29,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/macros.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
@@ -76,6 +77,14 @@ constexpr char kWaitForGdbKey[] = "debug.debuggerd.wait_for_gdb";
     if (!std::regex_search((str), r)) {                                         \
       FAIL() << "regex mismatch: expected " << (pattern) << " in: \n" << (str); \
     }                                                                           \
+  } while (0)
+
+#define ASSERT_NOT_MATCH(str, pattern)                                                      \
+  do {                                                                                      \
+    std::regex r((pattern));                                                                \
+    if (std::regex_search((str), r)) {                                                      \
+      FAIL() << "regex mismatch: expected to not find " << (pattern) << " in: \n" << (str); \
+    }                                                                                       \
   } while (0)
 
 static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, unique_fd* output_fd) {
@@ -141,7 +150,7 @@ class CrasherTest : public ::testing::Test {
   // Returns -1 if we fail to read a response from tombstoned, otherwise the received return code.
   void FinishIntercept(int* result);
 
-  void StartProcess(std::function<void()> function);
+  void StartProcess(std::function<void()> function, std::function<pid_t()> forker = fork);
   void StartCrasher(const std::string& crash_type);
   void FinishCrasher();
   void AssertDeath(int signo);
@@ -187,14 +196,14 @@ void CrasherTest::FinishIntercept(int* result) {
   }
 }
 
-void CrasherTest::StartProcess(std::function<void()> function) {
+void CrasherTest::StartProcess(std::function<void()> function, std::function<pid_t()> forker) {
   unique_fd read_pipe;
   unique_fd crasher_read_pipe;
   if (!Pipe(&crasher_read_pipe, &crasher_pipe)) {
     FAIL() << "failed to create pipe: " << strerror(errno);
   }
 
-  crasher_pid = fork();
+  crasher_pid = forker();
   if (crasher_pid == -1) {
     FAIL() << "fork failed: " << strerror(errno);
   } else if (crasher_pid == 0) {
@@ -226,12 +235,14 @@ void CrasherTest::AssertDeath(int signo) {
     FAIL() << "failed to wait for crasher: " << strerror(errno);
   }
 
-  if (WIFEXITED(status)) {
-    FAIL() << "crasher failed to exec: " << strerror(WEXITSTATUS(status));
-  } else if (!WIFSIGNALED(status)) {
-    FAIL() << "crasher didn't terminate via a signal";
+  if (signo == 0) {
+    ASSERT_TRUE(WIFEXITED(status));
+    ASSERT_EQ(0, WEXITSTATUS(signo));
+  } else {
+    ASSERT_FALSE(WIFEXITED(status));
+    ASSERT_TRUE(WIFSIGNALED(status)) << "crasher didn't terminate via a signal";
+    ASSERT_EQ(signo, WTERMSIG(status));
   }
-  ASSERT_EQ(signo, WTERMSIG(status));
   crasher_pid = -1;
 }
 
@@ -334,6 +345,26 @@ TEST_F(CrasherTest, abort_message) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_MATCH(result, R"(Abort message: 'abort message goes here')");
+}
+
+TEST_F(CrasherTest, abort_message_backtrace) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    android_set_abort_message("not actually aborting");
+    raise(DEBUGGER_SIGNAL);
+    exit(0);
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(0);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_NOT_MATCH(result, R"(Abort message:)");
 }
 
 TEST_F(CrasherTest, intercept_timeout) {
@@ -494,6 +525,37 @@ TEST_F(CrasherTest, capabilities) {
   ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_MATCH(result, R"(name: thread_name\s+>>> .+debuggerd_test(32|64) <<<)");
+  ASSERT_MATCH(result, R"(#00 pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX R"(/libc.so \(tgkill)");
+}
+
+TEST_F(CrasherTest, fake_pid) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  // Prime the getpid/gettid caches.
+  UNUSED(getpid());
+  UNUSED(gettid());
+
+  std::function<pid_t()> clone_fn = []() {
+    return syscall(__NR_clone, SIGCHLD, nullptr, nullptr, nullptr, nullptr);
+  };
+  StartProcess(
+      []() {
+        ASSERT_NE(getpid(), syscall(__NR_getpid));
+        ASSERT_NE(gettid(), syscall(__NR_gettid));
+        raise(SIGSEGV);
+      },
+      clone_fn);
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
   ASSERT_MATCH(result, R"(#00 pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX R"(/libc.so \(tgkill)");
 }
 

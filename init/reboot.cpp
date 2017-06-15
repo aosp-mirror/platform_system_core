@@ -205,7 +205,7 @@ static bool FindPartitionsToUmount(std::vector<MountEntry>* blockDevPartitions,
     return true;
 }
 
-static void DumpUmountDebuggingInfo() {
+static void DumpUmountDebuggingInfo(bool dump_all) {
     int status;
     if (!security_getenforce()) {
         LOG(INFO) << "Run lsof";
@@ -214,6 +214,10 @@ static void DumpUmountDebuggingInfo() {
                                 true, nullptr, nullptr, 0);
     }
     FindPartitionsToUmount(nullptr, nullptr, true);
+    if (dump_all) {
+        // dump current tasks, this log can be lengthy, so only dump with dump_all
+        android::base::WriteStringToFile("t", "/proc/sysrq-trigger");
+    }
 }
 
 static UmountStat UmountPartitions(int timeoutMs) {
@@ -277,11 +281,11 @@ static UmountStat TryUmountAndFsck(bool runFsck, int timeoutMs) {
     UmountStat stat = UmountPartitions(timeoutMs - t.duration_ms());
     if (stat != UMOUNT_STAT_SUCCESS) {
         LOG(INFO) << "umount timeout, last resort, kill all and try";
-        if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo();
+        if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo(false);
         KillAllProcesses();
         // even if it succeeds, still it is timeout and do not run fsck with all processes killed
         UmountPartitions(0);
-        if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo();
+        if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo(true);
     }
 
     if (stat == UMOUNT_STAT_SUCCESS && runFsck) {
@@ -314,8 +318,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         abort();
     }
 
-    /* TODO update default waiting time based on usage data */
-    constexpr unsigned int shutdownTimeoutDefault = 10;
+    constexpr unsigned int shutdownTimeoutDefault = 6;
     unsigned int shutdownTimeout = shutdownTimeoutDefault;
     if (SHUTDOWN_ZERO_TIMEOUT) {  // eng build
         shutdownTimeout = 0;
@@ -328,7 +331,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     // keep debugging tools until non critical ones are all gone.
     const std::set<std::string> kill_after_apps{"tombstoned", "logd", "adbd"};
     // watchdogd is a vendor specific component but should be alive to complete shutdown safely.
-    const std::set<std::string> to_starts{"watchdogd", "vold"};
+    const std::set<std::string> to_starts{"watchdogd", "vold", "ueventd"};
     ServiceManager::GetInstance().ForEachService([&kill_after_apps, &to_starts](Service* s) {
         if (kill_after_apps.count(s->name())) {
             s->SetShutdownCritical();
@@ -420,7 +423,6 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
 bool HandlePowerctlMessage(const std::string& command) {
     unsigned int cmd = 0;
     std::vector<std::string> cmd_params = android::base::Split(command, ",");
-    std::string reason_string = cmd_params[0];
     std::string reboot_target = "";
     bool run_fsck = false;
     bool command_invalid = false;
@@ -433,7 +435,6 @@ bool HandlePowerctlMessage(const std::string& command) {
             // The shutdown reason is PowerManager.SHUTDOWN_USER_REQUESTED.
             // Run fsck once the file system is remounted in read-only mode.
             run_fsck = true;
-            reason_string = cmd_params[1];
         }
     } else if (cmd_params[0] == "reboot") {
         cmd = ANDROID_RB_RESTART2;
@@ -464,6 +465,6 @@ bool HandlePowerctlMessage(const std::string& command) {
         return false;
     }
 
-    DoReboot(cmd, reason_string, reboot_target, run_fsck);
+    DoReboot(cmd, command, reboot_target, run_fsck);
     return true;
 }

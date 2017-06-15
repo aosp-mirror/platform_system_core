@@ -17,6 +17,7 @@
 #ifndef __CORE_FS_MGR_AVB_H
 #define __CORE_FS_MGR_AVB_H
 
+#include <map>
 #include <memory>
 #include <string>
 
@@ -25,13 +26,18 @@
 #include "fs_mgr.h"
 
 enum FsManagerAvbHandleStatus {
+    kFsManagerAvbHandleUninitialized = -1,
     kFsManagerAvbHandleSuccess = 0,
     kFsManagerAvbHandleHashtreeDisabled = 1,
-    kFsManagerAvbHandleFail = 2,
+    kFsManagerAvbHandleErrorVerification = 2,
 };
+
+class FsManagerAvbOps;
 
 class FsManagerAvbHandle;
 using FsManagerAvbUniquePtr = std::unique_ptr<FsManagerAvbHandle>;
+
+using ByNameSymlinkMap = std::map<std::string, std::string>;
 
 // Provides a factory method to return a unique_ptr pointing to itself and the
 // SetUpAvb() function to extract dm-verity parameters from AVB metadata to
@@ -48,6 +54,13 @@ class FsManagerAvbHandle {
     // A typical usage will be:
     //   - FsManagerAvbUniquePtr handle = FsManagerAvbHandle::Open();
     //
+    // There are two overloaded Open() functions with a single parameter.
+    // The argument can be a ByNameSymlinkMap describing the mapping from partition
+    // name to by-name symlink, or a fstab file to which the ByNameSymlinkMap is
+    // constructed from. e.g.,
+    //   - /dev/block/platform/soc.0/7824900.sdhci/by-name/system_a ->
+    //   - ByNameSymlinkMap["system_a"] = "/dev/block/platform/soc.0/7824900.sdhci/by-name/system_a"
+    //
     // Possible return values:
     //   - nullptr: any error when reading and verifying the metadata,
     //     e.g., I/O error, digest value mismatch, size mismatch, etc.
@@ -60,7 +73,8 @@ class FsManagerAvbHandle {
     //   - a valid unique_ptr with status kFsMgrAvbHandleSuccess: the metadata
     //     is verified and can be trusted.
     //
-    static FsManagerAvbUniquePtr Open(const std::string& device_file_by_name_prefix);
+    static FsManagerAvbUniquePtr Open(const fstab& fstab);
+    static FsManagerAvbUniquePtr Open(ByNameSymlinkMap&& by_name_symlink_map);
 
     // Sets up dm-verity on the given fstab entry.
     // The 'wait_for_verity_dev' parameter makes this function wait for the
@@ -87,10 +101,10 @@ class FsManagerAvbHandle {
         }
     };
 
-  protected:
-    FsManagerAvbHandle() : avb_slot_data_(nullptr), status_(kFsManagerAvbHandleFail) {}
-
   private:
+    FsManagerAvbHandle() : avb_slot_data_(nullptr), status_(kFsManagerAvbHandleUninitialized) {}
+    static FsManagerAvbUniquePtr DoOpen(FsManagerAvbOps* avb_ops);
+
     AvbSlotVerifyData* avb_slot_data_;
     FsManagerAvbHandleStatus status_;
     std::string avb_version_;

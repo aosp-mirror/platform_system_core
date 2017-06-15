@@ -334,6 +334,12 @@ enum {
      * present info, 0 if it won't.
      */
     NATIVE_WINDOW_FRAME_TIMESTAMPS_SUPPORTS_PRESENT = 18,
+
+    /*
+     * The consumer end is capable of handling protected buffers, i.e. buffer
+     * with GRALLOC_USAGE_PROTECTED usage bits on.
+     */
+    NATIVE_WINDOW_CONSUMER_IS_PROTECTED = 19,
 };
 
 /* Valid operations for the (*perform)() hook.

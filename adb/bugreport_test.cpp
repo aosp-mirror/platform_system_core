@@ -123,7 +123,7 @@ class BugreportMock : public Bugreport {
                      bool disable_shell_protocol, StandardStreamsCallbackInterface* callback));
     MOCK_METHOD4(DoSyncPull, bool(const std::vector<const char*>& srcs, const char* dst,
                                   bool copy_attrs, const char* name));
-    MOCK_METHOD3(UpdateProgress, void(const std::string&, int, int));
+    MOCK_METHOD2(UpdateProgress, void(const std::string&, int));
 };
 
 class BugreportTest : public ::testing::Test {
@@ -142,8 +142,8 @@ class BugreportTest : public ::testing::Test {
                             WithArg<4>(ReturnCallbackDone(0))));
     }
 
-    void ExpectProgress(int progress, int total, const std::string& file = "file.zip") {
-        EXPECT_CALL(br_, UpdateProgress(StrEq("generating " + file), progress, total));
+    void ExpectProgress(int progress_percentage, const std::string& file = "file.zip") {
+        EXPECT_CALL(br_, UpdateProgress(StrEq("generating " + file), progress_percentage));
     }
 
     BugreportMock br_;
@@ -200,7 +200,7 @@ TEST_F(BugreportTest, NoArgumentsPostNDevice) {
     ExpectBugreportzVersion("1.1");
     std::string dest_file =
         android::base::StringPrintf("%s%cda_bugreport.zip", cwd_.c_str(), OS_PATH_SEPARATOR);
-    ExpectProgress(50, 100, "da_bugreport.zip");
+    ExpectProgress(50, "da_bugreport.zip");
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         .WillOnce(DoAll(WithArg<4>(WriteOnStdout("BEGIN:/device/da_bugreport.zip\n")),
                         WithArg<4>(WriteOnStdout("PROGRESS:50/100\n")),
@@ -247,10 +247,10 @@ TEST_F(BugreportTest, OkNDeviceSplitBuffer) {
 // Tests 'adb bugreport file.zip' when it succeeds and displays progress.
 TEST_F(BugreportTest, OkProgress) {
     ExpectBugreportzVersion("1.1");
-    ExpectProgress(1, 100);
-    ExpectProgress(10, 100);
-    ExpectProgress(50, 100);
-    ExpectProgress(99, 100);
+    ExpectProgress(1);
+    ExpectProgress(10);
+    ExpectProgress(50);
+    ExpectProgress(99);
     // clang-format off
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         // NOTE: DoAll accepts at most 10 arguments, and we're almost reached that limit...
@@ -283,21 +283,23 @@ TEST_F(BugreportTest, OkProgress) {
 // Tests 'adb bugreport file.zip' when it succeeds and displays progress, even if progress recedes.
 TEST_F(BugreportTest, OkProgressAlwaysForward) {
     ExpectBugreportzVersion("1.1");
-    ExpectProgress(1, 100);
-    ExpectProgress(50, 100);
-    ExpectProgress(75, 100);
+    ExpectProgress(1);
+    ExpectProgress(50);
+    ExpectProgress(75);
     // clang-format off
     EXPECT_CALL(br_, SendShellCommand(kTransportLocal, "HannibalLecter", "bugreportz -p", false, _))
         // NOTE: DoAll accepts at most 10 arguments, and we're almost reached that limit...
         .WillOnce(DoAll(
             WithArg<4>(WriteOnStdout("BEGIN:/device/bugreport.zip\n")),
-            WithArg<4>(WriteOnStdout("PROGRESS:1/100\n")),
-            WithArg<4>(WriteOnStdout("PROGRESS:50/100\n")),
-            // 25 should be ignored becaused it receded.
-            WithArg<4>(WriteOnStdout("PROGRESS:25/100\n")),
-            WithArg<4>(WriteOnStdout("PROGRESS:75/100\n")),
-            // 75 should be ignored becaused it didn't change.
-            WithArg<4>(WriteOnStdout("PROGRESS:75/100\n")),
+            WithArg<4>(WriteOnStdout("PROGRESS:1/100\n")), // 1%
+            WithArg<4>(WriteOnStdout("PROGRESS:50/100\n")), // 50%
+            // 25% should be ignored becaused it receded.
+            WithArg<4>(WriteOnStdout("PROGRESS:25/100\n")), // 25%
+            WithArg<4>(WriteOnStdout("PROGRESS:75/100\n")), // 75%
+            // 75% should be ignored becaused it didn't change.
+            WithArg<4>(WriteOnStdout("PROGRESS:75/100\n")), // 75%
+            // Try a receeding percentage with a different max progress
+            WithArg<4>(WriteOnStdout("PROGRESS:700/1000\n")), // 70%
             WithArg<4>(WriteOnStdout("OK:/device/bugreport.zip")),
             WithArg<4>(ReturnCallbackDone())));
     // clang-format on

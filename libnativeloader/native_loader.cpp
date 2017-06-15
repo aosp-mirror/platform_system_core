@@ -99,6 +99,7 @@ class LibraryNamespaces {
   LibraryNamespaces() : initialized_(false) { }
 
   bool Create(JNIEnv* env,
+              uint32_t target_sdk_version,
               jobject class_loader,
               bool is_shared,
               jstring java_library_path,
@@ -139,6 +140,10 @@ class LibraryNamespaces {
     uint64_t namespace_type = ANDROID_NAMESPACE_TYPE_ISOLATED;
     if (is_shared) {
       namespace_type |= ANDROID_NAMESPACE_TYPE_SHARED;
+    }
+
+    if (target_sdk_version < 24) {
+      namespace_type |= ANDROID_NAMESPACE_TYPE_GREYLIST_ENABLED;
     }
 
     NativeLoaderNamespace parent_ns;
@@ -397,12 +402,12 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
                                    jstring library_path,
                                    jstring permitted_path) {
 #if defined(__ANDROID__)
-  UNUSED(target_sdk_version);
   std::lock_guard<std::mutex> guard(g_namespaces_mutex);
 
   std::string error_msg;
   NativeLoaderNamespace ns;
   bool success = g_namespaces->Create(env,
+                                      target_sdk_version,
                                       class_loader,
                                       is_shared,
                                       library_path,
@@ -439,7 +444,14 @@ void* OpenNativeLibrary(JNIEnv* env,
   if (!g_namespaces->FindNamespaceByClassLoader(env, class_loader, &ns)) {
     // This is the case where the classloader was not created by ApplicationLoaders
     // In this case we create an isolated not-shared namespace for it.
-    if (!g_namespaces->Create(env, class_loader, false, library_path, nullptr, &ns, error_msg)) {
+    if (!g_namespaces->Create(env,
+                              target_sdk_version,
+                              class_loader,
+                              false,
+                              library_path,
+                              nullptr,
+                              &ns,
+                              error_msg)) {
       return nullptr;
     }
   }

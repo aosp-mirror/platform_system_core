@@ -744,23 +744,6 @@ static int handle_encryptable(const struct fstab_rec* rec)
     }
 }
 
-static std::string extract_by_name_prefix(struct fstab* fstab) {
-    // We assume that there's an entry for the /misc mount point in the
-    // fstab file and use that to get the device file by-name prefix.
-    // The device needs not to have an actual /misc partition.
-    // e.g.,
-    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/misc ->
-    //    - /dev/block/platform/soc.0/7824900.sdhci/by-name/
-    struct fstab_rec* fstab_entry = fs_mgr_get_entry_for_mount_point(fstab, "/misc");
-    if (fstab_entry == nullptr) {
-        LERROR << "/misc mount point not found in fstab";
-        return "";
-    }
-    std::string full_path(fstab_entry->blk_device);
-    size_t end_slash = full_path.find_last_of("/");
-    return full_path.substr(0, end_slash + 1);
-}
-
 // TODO: add ueventd notifiers if they don't exist.
 // This is just doing a wait_for_device for maximum of 1s
 int fs_mgr_test_access(const char *device) {
@@ -850,7 +833,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
 
         if (fstab->recs[i].fs_mgr_flags & MF_AVB) {
             if (!avb_handle) {
-                avb_handle = FsManagerAvbHandle::Open(extract_by_name_prefix(fstab));
+                avb_handle = FsManagerAvbHandle::Open(*fstab);
                 if (!avb_handle) {
                     LERROR << "Failed to open FsManagerAvbHandle";
                     return -1;
@@ -1047,8 +1030,7 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
         }
 
         int fs_stat = 0;
-        int force_check = do_quota_with_shutdown_check(fstab->recs[i].blk_device,
-                                                       fstab->recs[i].fs_type,
+        int force_check = do_quota_with_shutdown_check(n_blk_device, fstab->recs[i].fs_type,
                                                        &fstab->recs[i], &fs_stat);
 
         if ((fstab->recs[i].fs_mgr_flags & MF_CHECK) || force_check) {
@@ -1062,7 +1044,7 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
 
         if (fstab->recs[i].fs_mgr_flags & MF_AVB) {
             if (!avb_handle) {
-                avb_handle = FsManagerAvbHandle::Open(extract_by_name_prefix(fstab));
+                avb_handle = FsManagerAvbHandle::Open(*fstab);
                 if (!avb_handle) {
                     LERROR << "Failed to open FsManagerAvbHandle";
                     return -1;
@@ -1367,7 +1349,8 @@ bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback) {
 
         std::string mount_point;
         if (system_root && !strcmp(fstab->recs[i].mount_point, "/")) {
-            mount_point = "system";
+            // In AVB, the dm device name is vroot instead of system.
+            mount_point = fs_mgr_is_avb(&fstab->recs[i]) ? "vroot" : "system";
         } else {
             mount_point = basename(fstab->recs[i].mount_point);
         }
@@ -1386,6 +1369,10 @@ bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback) {
 
         status = &buffer[io->data_start + sizeof(struct dm_target_spec)];
 
+        // To be consistent in vboot 1.0 and vboot 2.0 (AVB), change the mount_point
+        // back to 'system' for the callback. So it has property [partition.system.verified]
+        // instead of [partition.vroot.verified].
+        if (mount_point == "vroot") mount_point = "system";
         if (*status == 'C' || *status == 'V') {
             callback(&fstab->recs[i], mount_point.c_str(), mode, *status);
         }
