@@ -20,7 +20,6 @@ cc_defaults {
     sanitize: {
         misc_undefined: ["integer"],
     },
-    tidy_checks: ["-misc-forwarding-reference-overload"],
     cppflags: [
         "-DLOG_UEVENTS=0",
         "-Wall",
