@@ -52,17 +52,25 @@ cc_defaults {
     ],
 }
 
-
 cc_library {
     name: "libziparchive",
     host_supported: true,
-    vendor_available:true,
+    vendor_available: true,
 
-    defaults: ["libziparchive_defaults", "libziparchive_flags"],
-    shared_libs: ["liblog", "libbase"],
+    defaults: [
+        "libziparchive_defaults",
+        "libziparchive_flags",
+    ],
+    shared_libs: [
+        "liblog",
+        "libbase",
+    ],
     target: {
         android: {
-            shared_libs: ["libz", "libutils"],
+            shared_libs: [
+                "libz",
+                "libutils",
+            ],
         },
         host: {
             static_libs: ["libutils"],
@@ -88,7 +96,10 @@ cc_library {
     name: "libziparchive-host",
     host_supported: true,
     device_supported: false,
-    defaults: ["libziparchive_defaults", "libziparchive_flags"],
+    defaults: [
+        "libziparchive_defaults",
+        "libziparchive_flags",
+    ],
     shared_libs: ["libz-host"],
     static_libs: ["libutils"],
 }
@@ -149,4 +160,14 @@ cc_benchmark {
             cppflags: ["-Wno-unnamed-type-template-args"],
         },
     },
+}
+
+cc_binary {
+    name: "unzip",
+    defaults: ["libziparchive_flags"],
+    srcs: ["unzip.cpp"],
+    shared_libs: [
+        "libbase",
+        "libziparchive",
+    ],
 }
