@@ -27,10 +27,12 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <thread>
 
 #include <android-base/logging.h>
@@ -258,6 +260,12 @@ static int doKillProcessGroupOnce(uid_t uid, int initialPid, int signal) {
         return -errno;
     }
 
+    // We separate all of the pids in the cgroup into those pids that are also the leaders of
+    // process groups (stored in the pgids set) and those that are not (stored in the pids set).
+    std::set<pid_t> pgids;
+    pgids.emplace(initialPid);
+    std::set<pid_t> pids;
+
     int ret;
     pid_t pid;
     int processes = 0;
@@ -269,8 +277,40 @@ static int doKillProcessGroupOnce(uid_t uid, int initialPid, int signal) {
             LOG(WARNING) << "Yikes, we've been told to kill pid 0!  How about we don't do that?";
             continue;
         }
+        pid_t pgid = getpgid(pid);
+        if (pgid == -1) PLOG(ERROR) << "getpgid(" << pid << ") failed";
+        if (pgid == pid) {
+            pgids.emplace(pid);
+        } else {
+            pids.emplace(pid);
+        }
+    }
+
+    // Erase all pids that will be killed when we kill the process groups.
+    for (auto it = pids.begin(); it != pids.end();) {
+        pid_t pgid = getpgid(pid);
+        if (pgids.count(pgid) == 1) {
+            it = pids.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Kill all process groups.
+    for (const auto pgid : pgids) {
+        LOG(VERBOSE) << "Killing process group " << -pgid << " in uid " << uid
+                     << " as part of process cgroup " << initialPid;
+
+        if (kill(-pgid, signal) == -1) {
+            PLOG(WARNING) << "kill(" << -pgid << ", " << signal << ") failed";
+        }
+    }
+
+    // Kill remaining pids.
+    for (const auto pid : pids) {
         LOG(VERBOSE) << "Killing pid " << pid << " in uid " << uid << " as part of process cgroup "
                      << initialPid;
+
         if (kill(pid, signal) == -1) {
             PLOG(WARNING) << "kill(" << pid << ", " << signal << ") failed";
         }
