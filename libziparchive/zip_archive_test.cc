@@ -632,6 +632,96 @@ TEST(ziparchive, StreamUncompressedBadCrc) {
   CloseArchive(handle);
 }
 
+// Generated using the following Java program:
+//     public static void main(String[] foo) throws Exception {
+//       FileOutputStream fos = new
+//       FileOutputStream("/tmp/data_descriptor.zip");
+//       ZipOutputStream zos = new ZipOutputStream(fos);
+//       ZipEntry ze = new ZipEntry("name");
+//       ze.setMethod(ZipEntry.DEFLATED);
+//       zos.putNextEntry(ze);
+//       zos.write("abdcdefghijk".getBytes());
+//       zos.closeEntry();
+//       zos.close();
+//     }
+//
+// cat /tmp/data_descriptor.zip | xxd -i
+//
+static const std::vector<uint8_t> kDataDescriptorZipFile{
+    0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x08, 0x08, 0x08, 0x00, 0x30, 0x59, 0xce, 0x4a, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x6e, 0x61,
+    0x6d, 0x65, 0x4b, 0x4c, 0x4a, 0x49, 0x4e, 0x49, 0x4d, 0x4b, 0xcf, 0xc8, 0xcc, 0xca, 0x06, 0x00,
+    //[sig---------------], [crc32---------------], [csize---------------], [size----------------]
+    0x50, 0x4b, 0x07, 0x08, 0x3d, 0x4e, 0x0e, 0xf9, 0x0e, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00,
+    0x50, 0x4b, 0x01, 0x02, 0x14, 0x00, 0x14, 0x00, 0x08, 0x08, 0x08, 0x00, 0x30, 0x59, 0xce, 0x4a,
+    0x3d, 0x4e, 0x0e, 0xf9, 0x0e, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x6e, 0x61,
+    0x6d, 0x65, 0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x32, 0x00,
+    0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+// The offsets of the data descriptor in this file, so we can mess with
+// them later in the test.
+static constexpr uint32_t kDataDescriptorOffset = 48;
+static constexpr uint32_t kCSizeOffset = kDataDescriptorOffset + 8;
+static constexpr uint32_t kSizeOffset = kCSizeOffset + 4;
+
+static void ExtractEntryToMemory(const std::vector<uint8_t>& zip_data,
+                                 std::vector<uint8_t>* entry_out, int32_t* error_code_out) {
+  TemporaryFile tmp_file;
+  ASSERT_NE(-1, tmp_file.fd);
+  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, &zip_data[0], zip_data.size()));
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "ExtractEntryToMemory", &handle));
+
+  // This function expects a variant of kDataDescriptorZipFile, for look for
+  // an entry whose name is "name" and whose size is 12 (contents =
+  // "abdcdefghijk").
+  ZipEntry entry;
+  ZipString empty_name;
+  SetZipString(&empty_name, "name");
+
+  ASSERT_EQ(0, FindEntry(handle, empty_name, &entry));
+  ASSERT_EQ(static_cast<uint32_t>(12), entry.uncompressed_length);
+
+  entry_out->resize(12);
+  (*error_code_out) = ExtractToMemory(handle, &entry, &((*entry_out)[0]), 12);
+
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, ValidDataDescriptors) {
+  std::vector<uint8_t> entry;
+  int32_t error_code = 0;
+  ExtractEntryToMemory(kDataDescriptorZipFile, &entry, &error_code);
+
+  ASSERT_EQ(0, error_code);
+  ASSERT_EQ(12u, entry.size());
+  ASSERT_EQ('a', entry[0]);
+  ASSERT_EQ('k', entry[11]);
+}
+
+TEST(ziparchive, InvalidDataDescriptors) {
+  std::vector<uint8_t> invalid_csize = kDataDescriptorZipFile;
+  invalid_csize[kCSizeOffset] = 0xfe;
+
+  std::vector<uint8_t> entry;
+  int32_t error_code = 0;
+  ExtractEntryToMemory(invalid_csize, &entry, &error_code);
+
+  ASSERT_GT(0, error_code);
+  ASSERT_STREQ("Inconsistent information", ErrorCodeString(error_code));
+
+  std::vector<uint8_t> invalid_size = kDataDescriptorZipFile;
+  invalid_csize[kSizeOffset] = 0xfe;
+
+  error_code = 0;
+  entry.clear();
+  ExtractEntryToMemory(invalid_csize, &entry, &error_code);
+
+  ASSERT_GT(0, error_code);
+  ASSERT_STREQ("Inconsistent information", ErrorCodeString(error_code));
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
 
