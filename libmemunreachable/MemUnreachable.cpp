@@ -502,7 +502,10 @@ std::string UnreachableMemoryInfo::ToString(bool log_contents) const {
 std::string GetUnreachableMemoryString(bool log_contents, size_t limit) {
   UnreachableMemoryInfo info;
   if (!GetUnreachableMemory(info, limit)) {
-    return "Failed to get unreachable memory\n";
+    return "Failed to get unreachable memory\n"
+           "If you are trying to get unreachable memory from a system app\n"
+           "(like com.android.systemui), disable selinux first using\n"
+           "setenforce 0\n";
   }
 
   return info.ToString(log_contents);
