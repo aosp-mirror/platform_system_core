@@ -599,6 +599,13 @@ static int RemoteShell(bool use_shell_protocol, const std::string& type_arg,
     std::string service_string = ShellServiceString(use_shell_protocol,
                                                     type_arg, command);
 
+    // Old devices can't handle a service string that's longer than MAX_PAYLOAD_V1.
+    // Use |use_shell_protocol| to determine whether to allow a command longer than that.
+    if (service_string.size() > MAX_PAYLOAD_V1 && !use_shell_protocol) {
+        fprintf(stderr, "error: shell command too long\n");
+        return 1;
+    }
+
     // Make local stdin raw if the device allocates a PTY, which happens if:
     //   1. We are explicitly asking for a PTY shell, or
     //   2. We don't specify shell type and are starting an interactive session.
