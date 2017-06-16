@@ -44,7 +44,7 @@ static const char* CURRENT_DIR_NAME = "/current";
 static const char* UNINSTALL_TOMBSTONE_FILE_NAME = "/STAGED_UNINSTALL_TOMBSTONE";
 
 // The name of the file containing the distro version information.
-// See also libcore.tzdata.shared2.TimeZoneDistro / libcore.tzdata.shared2.DistroVersion.
+// See also com.android.timezone.distro.TimeZoneDistro / com.android.timezone.distro.DistroVersion.
 static const char* DISTRO_VERSION_FILENAME = "/distro_version";
 
 // distro_version is an ASCII file consisting of 17 bytes in the form: AAA.BBB|CCCCC|DDD
@@ -55,14 +55,14 @@ static const char* DISTRO_VERSION_FILENAME = "/distro_version";
 static const int DISTRO_VERSION_LENGTH = 13;
 
 // The major version of the distro format supported by this code as a null-terminated char[].
-// See also libcore.tzdata.shared2.TimeZoneDistro / libcore.tzdata.shared2.DistroVersion.
+// See also com.android.timezone.distro.TimeZoneDistro / com.android.timezone.distro.DistroVersion.
 static const char SUPPORTED_DISTRO_MAJOR_VERSION[] = "001";
 
 // The length of the distro format major version excluding the \0
 static const size_t SUPPORTED_DISTRO_MAJOR_VERSION_LEN = sizeof(SUPPORTED_DISTRO_MAJOR_VERSION) - 1;
 
 // The minor version of the distro format supported by this code as a null-terminated char[].
-// See also libcore.tzdata.shared2.TimeZoneDistro / libcore.tzdata.shared2.DistroVersion.
+// See also com.android.timezone.distro.TimeZoneDistro / com.android.timezone.distro.DistroVersion.
 static const char SUPPORTED_DISTRO_MINOR_VERSION[] = "001";
 
 // The length of the distro format minor version excluding the \0
@@ -78,7 +78,7 @@ static const size_t RULES_VERSION_LEN = 5;
 // Distro version bytes are: AAA.BBB|CCCCC - the rules version is CCCCC
 static const size_t DISTRO_VERSION_RULES_IDX = 8;
 
-// See also libcore.tzdata.shared2.TimeZoneDistro.
+// See also com.android.timezone.distro.TimeZoneDistro.
 static const char* TZDATA_FILENAME = "/tzdata";
 
 // tzdata file header (as much as we need for the version):
