@@ -342,6 +342,13 @@ class ShellTest(DeviceTest):
         out = self.device.shell(['echo', 'foo'])[0]
         self.assertEqual(out, 'foo' + self.device.linesep)
 
+    def test_shell_command_length(self):
+        # Devices that have shell_v2 should be able to handle long commands.
+        if self.device.has_shell_protocol():
+            rc, out, err = self.device.shell_nocheck(['echo', 'x' * 16384])
+            self.assertEqual(rc, 0)
+            self.assertTrue(out == ('x' * 16384 + '\n'))
+
     def test_shell_nocheck_failure(self):
         rc, out, _ = self.device.shell_nocheck(['false'])
         self.assertNotEqual(rc, 0)
