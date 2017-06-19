@@ -48,6 +48,8 @@ cc_defaults {
     srcs: [
         "ArmExidx.cpp",
         "DwarfCfa.cpp",
+        "DwarfDebugFrame.cpp",
+        "DwarfEhFrame.cpp",
         "DwarfMemory.cpp",
         "DwarfOp.cpp",
         "DwarfSection.cpp",
@@ -96,6 +98,8 @@ cc_defaults {
         "tests/ArmExidxExtractTest.cpp",
         "tests/DwarfCfaLogTest.cpp",
         "tests/DwarfCfaTest.cpp",
+        "tests/DwarfDebugFrameTest.cpp",
+        "tests/DwarfEhFrameTest.cpp",
         "tests/DwarfMemoryTest.cpp",
         "tests/DwarfOpLogTest.cpp",
         "tests/DwarfOpTest.cpp",
