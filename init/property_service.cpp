@@ -39,6 +39,7 @@
 #include <sys/_system_properties.h>
 
 #include <memory>
+#include <queue>
 #include <vector>
 
 #include <android-base/file.h>
@@ -162,7 +163,7 @@ bool is_legal_property_name(const std::string& name) {
     return true;
 }
 
-uint32_t property_set(const std::string& name, const std::string& value) {
+static uint32_t PropertySetImpl(const std::string& name, const std::string& value) {
     size_t valuelen = value.size();
 
     if (!is_legal_property_name(name)) {
@@ -174,12 +175,6 @@ uint32_t property_set(const std::string& name, const std::string& value) {
         LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: "
                    << "value too long";
         return PROP_ERROR_INVALID_VALUE;
-    }
-
-    if (name == "selinux.restorecon_recursive" && valuelen > 0) {
-        if (selinux_android_restorecon(value.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE) != 0) {
-            LOG(ERROR) << "Failed to restorecon_recursive " << value;
-        }
     }
 
     prop_info* pi = (prop_info*) __system_property_find(name.c_str());
@@ -208,6 +203,85 @@ uint32_t property_set(const std::string& name, const std::string& value) {
     }
     property_changed(name, value);
     return PROP_SUCCESS;
+}
+
+typedef int (*PropertyAsyncFunc)(const std::string&, const std::string&);
+
+struct PropertyChildInfo {
+    pid_t pid;
+    PropertyAsyncFunc func;
+    std::string name;
+    std::string value;
+};
+
+static std::queue<PropertyChildInfo> property_children;
+
+static void PropertyChildLaunch() {
+    auto& info = property_children.front();
+    pid_t pid = fork();
+    if (pid < 0) {
+        LOG(ERROR) << "Failed to fork for property_set_async";
+        while (!property_children.empty()) {
+            property_children.pop();
+        }
+        return;
+    }
+    if (pid != 0) {
+        info.pid = pid;
+    } else {
+        if (info.func(info.name, info.value) != 0) {
+            LOG(ERROR) << "property_set_async(\"" << info.name << "\", \"" << info.value
+                       << "\") failed";
+        }
+        exit(0);
+    }
+}
+
+bool PropertyChildReap(pid_t pid) {
+    if (property_children.empty()) {
+        return false;
+    }
+    auto& info = property_children.front();
+    if (info.pid != pid) {
+        return false;
+    }
+    if (PropertySetImpl(info.name, info.value) != PROP_SUCCESS) {
+        LOG(ERROR) << "Failed to set async property " << info.name;
+    }
+    property_children.pop();
+    if (!property_children.empty()) {
+        PropertyChildLaunch();
+    }
+    return true;
+}
+
+static uint32_t PropertySetAsync(const std::string& name, const std::string& value,
+                                 PropertyAsyncFunc func) {
+    if (value.empty()) {
+        return PropertySetImpl(name, value);
+    }
+
+    PropertyChildInfo info;
+    info.func = func;
+    info.name = name;
+    info.value = value;
+    property_children.push(info);
+    if (property_children.size() == 1) {
+        PropertyChildLaunch();
+    }
+    return PROP_SUCCESS;
+}
+
+static int RestoreconRecursiveAsync(const std::string& name, const std::string& value) {
+    return selinux_android_restorecon(value.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE);
+}
+
+uint32_t property_set(const std::string& name, const std::string& value) {
+    if (name == "selinux.restorecon_recursive") {
+        return PropertySetAsync(name, value, RestoreconRecursiveAsync);
+    }
+
+    return PropertySetImpl(name, value);
 }
 
 class SocketConnection {
