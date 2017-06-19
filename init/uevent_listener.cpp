@@ -165,7 +165,7 @@ RegenerationAction UeventListener::RegenerateUeventsForPath(const std::string& p
     return RegenerateUeventsForDir(d.get(), callback);
 }
 
-const char* kRegenerationPaths[] = {"/sys/class", "/sys/block", "/sys/devices"};
+static const char* kRegenerationPaths[] = {"/sys/class", "/sys/block", "/sys/devices"};
 
 void UeventListener::RegenerateUevents(RegenerateCallback callback) const {
     for (const auto path : kRegenerationPaths) {
