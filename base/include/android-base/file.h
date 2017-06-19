@@ -42,6 +42,17 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
 #endif
 
 bool ReadFully(int fd, void* data, size_t byte_count);
+
+// Reads `byte_count` bytes from the file descriptor at the specified offset.
+// Returns false if there was an IO error or EOF was reached before reading `byte_count` bytes.
+//
+// NOTE: On Linux/Mac, this function wraps pread, which provides atomic read support without
+// modifying the read pointer of the file descriptor. On Windows, however, the read pointer does
+// get modified. This means that ReadFullyAtOffset can be used concurrently with other calls to the
+// same function, but concurrently seeking or reading incrementally can lead to unexpected
+// behavior.
+bool ReadFullyAtOffset(int fd, void* data, size_t byte_count, off64_t offset);
+
 bool WriteFully(int fd, const void* data, size_t byte_count);
 
 bool RemoveFileIfExists(const std::string& path, std::string* err = nullptr);
