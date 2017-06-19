@@ -67,6 +67,18 @@ class ElfInterfaceTest : public ::testing::Test {
   template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
   void SonameSize();
 
+  template <typename ElfType>
+  void InitHeadersEhFrameTest();
+
+  template <typename ElfType>
+  void InitHeadersDebugFrame();
+
+  template <typename ElfType>
+  void InitHeadersEhFrameFail();
+
+  template <typename ElfType>
+  void InitHeadersDebugFrameFail();
+
   MemoryFake memory_;
 };
 
@@ -570,4 +582,139 @@ TEST_F(ElfInterfaceTest, elf32_soname_size) {
 
 TEST_F(ElfInterfaceTest, elf64_soname_size) {
   SonameSize<Elf64_Ehdr, Elf64_Phdr, Elf64_Dyn, ElfInterface64>();
+}
+
+class MockElfInterface32 : public ElfInterface32 {
+ public:
+  MockElfInterface32(Memory* memory) : ElfInterface32(memory) {}
+  virtual ~MockElfInterface32() = default;
+
+  void TestSetEhFrameOffset(uint64_t offset) { eh_frame_offset_ = offset; }
+  void TestSetEhFrameSize(uint64_t size) { eh_frame_size_ = size; }
+
+  void TestSetDebugFrameOffset(uint64_t offset) { debug_frame_offset_ = offset; }
+  void TestSetDebugFrameSize(uint64_t size) { debug_frame_size_ = size; }
+};
+
+class MockElfInterface64 : public ElfInterface64 {
+ public:
+  MockElfInterface64(Memory* memory) : ElfInterface64(memory) {}
+  virtual ~MockElfInterface64() = default;
+
+  void TestSetEhFrameOffset(uint64_t offset) { eh_frame_offset_ = offset; }
+  void TestSetEhFrameSize(uint64_t size) { eh_frame_size_ = size; }
+
+  void TestSetDebugFrameOffset(uint64_t offset) { debug_frame_offset_ = offset; }
+  void TestSetDebugFrameSize(uint64_t size) { debug_frame_size_ = size; }
+};
+
+template <typename ElfType>
+void ElfInterfaceTest::InitHeadersEhFrameTest() {
+  ElfType elf(&memory_);
+
+  elf.TestSetEhFrameOffset(0x10000);
+  elf.TestSetEhFrameSize(0);
+  elf.TestSetDebugFrameOffset(0);
+  elf.TestSetDebugFrameSize(0);
+
+  memory_.SetMemory(0x10000,
+                    std::vector<uint8_t>{0x1, DW_EH_PE_udata2, DW_EH_PE_udata2, DW_EH_PE_udata2});
+  memory_.SetData32(0x10004, 0x500);
+  memory_.SetData32(0x10008, 250);
+
+  elf.InitHeaders();
+
+  EXPECT_FALSE(elf.eh_frame() == nullptr);
+  EXPECT_TRUE(elf.debug_frame() == nullptr);
+}
+
+TEST_F(ElfInterfaceTest, init_headers_eh_frame32) {
+  InitHeadersEhFrameTest<MockElfInterface32>();
+}
+
+TEST_F(ElfInterfaceTest, init_headers_eh_frame64) {
+  InitHeadersEhFrameTest<MockElfInterface64>();
+}
+
+template <typename ElfType>
+void ElfInterfaceTest::InitHeadersDebugFrame() {
+  ElfType elf(&memory_);
+
+  elf.TestSetEhFrameOffset(0);
+  elf.TestSetEhFrameSize(0);
+  elf.TestSetDebugFrameOffset(0x5000);
+  elf.TestSetDebugFrameSize(0x200);
+
+  memory_.SetData32(0x5000, 0xfc);
+  memory_.SetData32(0x5004, 0xffffffff);
+  memory_.SetData8(0x5008, 1);
+  memory_.SetData8(0x5009, '\0');
+
+  memory_.SetData32(0x5100, 0xfc);
+  memory_.SetData32(0x5104, 0);
+  memory_.SetData32(0x5108, 0x1500);
+  memory_.SetData32(0x510c, 0x200);
+
+  elf.InitHeaders();
+
+  EXPECT_TRUE(elf.eh_frame() == nullptr);
+  EXPECT_FALSE(elf.debug_frame() == nullptr);
+}
+
+TEST_F(ElfInterfaceTest, init_headers_debug_frame32) {
+  InitHeadersDebugFrame<MockElfInterface32>();
+}
+
+TEST_F(ElfInterfaceTest, init_headers_debug_frame64) {
+  InitHeadersDebugFrame<MockElfInterface64>();
+}
+
+template <typename ElfType>
+void ElfInterfaceTest::InitHeadersEhFrameFail() {
+  ElfType elf(&memory_);
+
+  elf.TestSetEhFrameOffset(0x1000);
+  elf.TestSetEhFrameSize(0x100);
+  elf.TestSetDebugFrameOffset(0);
+  elf.TestSetDebugFrameSize(0);
+
+  elf.InitHeaders();
+
+  EXPECT_TRUE(elf.eh_frame() == nullptr);
+  EXPECT_EQ(0U, elf.eh_frame_offset());
+  EXPECT_EQ(static_cast<uint64_t>(-1), elf.eh_frame_size());
+  EXPECT_TRUE(elf.debug_frame() == nullptr);
+}
+
+TEST_F(ElfInterfaceTest, init_headers_eh_frame32_fail) {
+  InitHeadersEhFrameFail<MockElfInterface32>();
+}
+
+TEST_F(ElfInterfaceTest, init_headers_eh_frame64_fail) {
+  InitHeadersEhFrameFail<MockElfInterface64>();
+}
+
+template <typename ElfType>
+void ElfInterfaceTest::InitHeadersDebugFrameFail() {
+  ElfType elf(&memory_);
+
+  elf.TestSetEhFrameOffset(0);
+  elf.TestSetEhFrameSize(0);
+  elf.TestSetDebugFrameOffset(0x1000);
+  elf.TestSetDebugFrameSize(0x100);
+
+  elf.InitHeaders();
+
+  EXPECT_TRUE(elf.eh_frame() == nullptr);
+  EXPECT_TRUE(elf.debug_frame() == nullptr);
+  EXPECT_EQ(0U, elf.debug_frame_offset());
+  EXPECT_EQ(static_cast<uint64_t>(-1), elf.debug_frame_size());
+}
+
+TEST_F(ElfInterfaceTest, init_headers_debug_frame32_fail) {
+  InitHeadersDebugFrameFail<MockElfInterface32>();
+}
+
+TEST_F(ElfInterfaceTest, init_headers_debug_frame64_fail) {
+  InitHeadersDebugFrameFail<MockElfInterface64>();
 }

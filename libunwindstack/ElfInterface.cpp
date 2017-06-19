@@ -20,9 +20,32 @@
 #include <memory>
 #include <string>
 
+#include "DwarfDebugFrame.h"
+#include "DwarfEhFrame.h"
 #include "ElfInterface.h"
 #include "Memory.h"
 #include "Regs.h"
+
+template <typename AddressType>
+void ElfInterface::InitHeadersWithTemplate() {
+  if (eh_frame_offset_ != 0) {
+    eh_frame_.reset(new DwarfEhFrame<AddressType>(memory_));
+    if (!eh_frame_->Init(eh_frame_offset_, eh_frame_size_)) {
+      eh_frame_.reset(nullptr);
+      eh_frame_offset_ = 0;
+      eh_frame_size_ = static_cast<uint64_t>(-1);
+    }
+  }
+
+  if (debug_frame_offset_ != 0) {
+    debug_frame_.reset(new DwarfDebugFrame<AddressType>(memory_));
+    if (!debug_frame_->Init(debug_frame_offset_, debug_frame_size_)) {
+      debug_frame_.reset(nullptr);
+      debug_frame_offset_ = 0;
+      debug_frame_size_ = static_cast<uint64_t>(-1);
+    }
+  }
+}
 
 template <typename EhdrType, typename PhdrType, typename ShdrType>
 bool ElfInterface::ReadAllHeaders() {
@@ -210,6 +233,9 @@ bool ElfInterface::Step(uint64_t, Regs*, Memory*) {
 }
 
 // Instantiate all of the needed template functions.
+template void ElfInterface::InitHeadersWithTemplate<uint32_t>();
+template void ElfInterface::InitHeadersWithTemplate<uint64_t>();
+
 template bool ElfInterface::ReadAllHeaders<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr>();
 template bool ElfInterface::ReadAllHeaders<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr>();
 
