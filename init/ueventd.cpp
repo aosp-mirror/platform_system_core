@@ -174,9 +174,7 @@ void ColdBoot::ForkSubProcesses() {
 }
 
 void ColdBoot::DoRestoreCon() {
-    for (const char* path : kRegenerationPaths) {
-        selinux_android_restorecon(path, SELINUX_ANDROID_RESTORECON_RECURSE);
-    }
+    selinux_android_restorecon("/sys", SELINUX_ANDROID_RESTORECON_RECURSE);
     device_handler_.set_skip_restorecon(false);
 }
 
