@@ -933,8 +933,12 @@ TEST(logd, getEventTag_newentry) {
 }
 
 #ifdef __ANDROID__
-static inline int32_t get4LE(const char* src) {
-    return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
+static inline uint32_t get4LE(const uint8_t* src) {
+  return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
+}
+
+static inline uint32_t get4LE(const char* src) {
+  return get4LE(reinterpret_cast<const uint8_t*>(src));
 }
 #endif
 
