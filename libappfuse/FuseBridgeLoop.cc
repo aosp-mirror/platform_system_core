@@ -173,13 +173,20 @@ class FuseBridgeEntry {
     }
 
     FuseBridgeState ReadFromDevice(FuseBridgeLoopCallback* callback) {
+        // To observe APCT failures.
+        base::ScopedLogSeverity log_severity(base::VERBOSE);
+
         LOG(VERBOSE) << "ReadFromDevice";
         if (!buffer_.request.Read(device_fd_)) {
             return FuseBridgeState::kClosing;
         }
 
         const uint32_t opcode = buffer_.request.header.opcode;
-        LOG(VERBOSE) << "Read a fuse packet, opcode=" << opcode;
+        const uint64_t unique = buffer_.request.header.unique;
+        LOG(VERBOSE) << "Read a fuse packet, opcode=" << opcode << " unique=" << unique;
+        if (unique == 0) {
+            return FuseBridgeState::kWaitToReadEither;
+        }
         switch (opcode) {
             case FUSE_FORGET:
                 // Do not reply to FUSE_FORGET.
