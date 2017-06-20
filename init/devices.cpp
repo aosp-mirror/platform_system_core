@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <fnmatch.h>
 #include <libgen.h>
+#include <poll.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1028,6 +1029,37 @@ void device_close() {
     selinux_status_close();
 }
 
-int get_device_fd() {
-    return device_fd;
+void device_poll(const coldboot_callback& callback,
+                 const std::optional<std::chrono::milliseconds> relative_timeout) {
+    using namespace std::chrono;
+
+    pollfd ufd;
+    ufd.events = POLLIN;
+    ufd.fd = device_fd;
+
+    auto start_time = steady_clock::now();
+
+    while (true) {
+        ufd.revents = 0;
+
+        int timeout_ms = -1;
+        if (relative_timeout) {
+            auto now = steady_clock::now();
+            auto time_elapsed = duration_cast<milliseconds>(now - start_time);
+            if (time_elapsed > *relative_timeout) return;
+
+            auto remaining_timeout = *relative_timeout - time_elapsed;
+            timeout_ms = remaining_timeout.count();
+        }
+
+        int nr = poll(&ufd, 1, timeout_ms);
+        if (nr == 0) return;
+        if (nr < 0) {
+            continue;
+        }
+        if (ufd.revents & POLLIN) {
+            auto ret = handle_device_fd(callback);
+            if (should_stop_coldboot(ret)) return;
+        }
+    }
 }

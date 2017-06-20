@@ -17,8 +17,11 @@
 #ifndef _INIT_DEVICES_H
 #define _INIT_DEVICES_H
 
-#include <functional>
 #include <sys/stat.h>
+
+#include <chrono>
+#include <functional>
+#include <optional>
 
 enum coldboot_action_t {
     // coldboot continues without creating the device for the uevent
@@ -53,8 +56,10 @@ extern int add_dev_perms(const char *name, const char *attr,
                          mode_t perm, unsigned int uid,
                          unsigned int gid, unsigned short prefix,
                          unsigned short wildcard);
-int get_device_fd();
 
 char** get_block_device_symlinks(struct uevent* uevent);
+
+void device_poll(const coldboot_callback& callback = nullptr,
+                 const std::optional<std::chrono::milliseconds> relative_timeout = {});
 
 #endif	/* _INIT_DEVICES_H */
