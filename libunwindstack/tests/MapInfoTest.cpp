@@ -75,7 +75,7 @@ TEST_F(MapInfoTest, end_le_start) {
   // Make sure this test is valid.
   info.end = 0x101;
   memory.reset(info.CreateMemory(getpid()));
-  ASSERT_FALSE(info.CreateMemory(getpid()) == nullptr);
+  ASSERT_TRUE(memory.get() != nullptr);
 }
 
 // Verify that if the offset is non-zero but there is no elf at the offset,
@@ -212,8 +212,8 @@ TEST_F(MapInfoTest, get_elf) {
   MapInfo info{.start = start, .end = start + 1024, .offset = 0, .name = ""};
 
   // The map contains garbage, but this should still produce an elf object.
-  Elf* elf = info.GetElf(getpid(), false);
-  ASSERT_TRUE(elf != nullptr);
+  std::unique_ptr<Elf> elf(info.GetElf(getpid(), false));
+  ASSERT_TRUE(elf.get() != nullptr);
   ASSERT_FALSE(elf->valid());
 
   ASSERT_EQ(0, munmap(map, 1024));
