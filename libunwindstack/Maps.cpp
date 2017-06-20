@@ -71,15 +71,17 @@ bool Maps::ParseLine(const char* line, MapInfo* map_info) {
     map_info->flags |= PROT_EXEC;
   }
 
-  map_info->name = &line[name_pos];
-  size_t length = map_info->name.length() - 1;
-  if (map_info->name[length] == '\n') {
-    map_info->name.erase(length);
-  }
-  // Mark a device map in /dev/and not in /dev/ashmem/ specially.
-  if (!map_info->name.empty() && map_info->name.substr(0, 5) == "/dev/" &&
-      map_info->name.substr(5, 7) != "ashmem/") {
-    map_info->flags |= MAPS_FLAGS_DEVICE_MAP;
+  if (line[name_pos] != '\0') {
+    map_info->name = &line[name_pos];
+    size_t length = map_info->name.length() - 1;
+    if (map_info->name[length] == '\n') {
+      map_info->name.erase(length);
+    }
+
+    // Mark a device map in /dev/and not in /dev/ashmem/ specially.
+    if (map_info->name.substr(0, 5) == "/dev/" && map_info->name.substr(5, 7) != "ashmem/") {
+      map_info->flags |= MAPS_FLAGS_DEVICE_MAP;
+    }
   }
 
   return true;
