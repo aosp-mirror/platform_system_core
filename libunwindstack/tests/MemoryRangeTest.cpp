@@ -26,21 +26,13 @@
 
 #include "MemoryFake.h"
 
-class MemoryRangeTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    memory_ = new MemoryFake;
-  }
-
-  MemoryFake* memory_;
-};
-
-TEST_F(MemoryRangeTest, read) {
+TEST(MemoryRangeTest, read) {
   std::vector<uint8_t> src(1024);
   memset(src.data(), 0x4c, 1024);
-  memory_->SetMemory(9001, src);
+  MemoryFake* memory = new MemoryFake;
+  memory->SetMemory(9001, src);
 
-  MemoryRange range(memory_, 9001, 9001 + src.size());
+  MemoryRange range(memory, 9001, 9001 + src.size());
 
   std::vector<uint8_t> dst(1024);
   ASSERT_TRUE(range.Read(0, dst.data(), src.size()));
@@ -49,12 +41,13 @@ TEST_F(MemoryRangeTest, read) {
   }
 }
 
-TEST_F(MemoryRangeTest, read_near_limit) {
+TEST(MemoryRangeTest, read_near_limit) {
   std::vector<uint8_t> src(4096);
   memset(src.data(), 0x4c, 4096);
-  memory_->SetMemory(1000, src);
+  MemoryFake* memory = new MemoryFake;
+  memory->SetMemory(1000, src);
 
-  MemoryRange range(memory_, 1000, 2024);
+  MemoryRange range(memory, 1000, 2024);
 
   std::vector<uint8_t> dst(1024);
   ASSERT_TRUE(range.Read(1020, dst.data(), 4));
@@ -71,7 +64,7 @@ TEST_F(MemoryRangeTest, read_near_limit) {
   ASSERT_TRUE(range.Read(1020, dst.data(), 4));
 }
 
-TEST_F(MemoryRangeTest, read_overflow) {
+TEST(MemoryRangeTest, read_overflow) {
   std::vector<uint8_t> buffer(100);
 
   std::unique_ptr<MemoryRange> overflow(new MemoryRange(new MemoryFakeAlwaysReadZero, 100, 200));
