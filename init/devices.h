@@ -93,6 +93,20 @@ class Subsystem {
     DevnameSource devname_source_;
 };
 
+class PlatformDeviceList {
+  public:
+    void Add(const std::string& path) { platform_devices_.emplace_back(path); }
+    void Remove(const std::string& path) {
+        auto it = std::find(platform_devices_.begin(), platform_devices_.end(), path);
+        if (it != platform_devices_.end()) platform_devices_.erase(it);
+    }
+    bool Find(const std::string& path, std::string* out_path) const;
+    auto size() const { return platform_devices_.size(); }
+
+  private:
+    std::vector<std::string> platform_devices_;
+};
+
 class DeviceHandler {
   public:
     friend class DeviceHandlerTester;
@@ -105,11 +119,16 @@ class DeviceHandler {
 
     void HandleDeviceEvent(const Uevent& uevent);
 
+    void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;
+
+    void HandlePlatformDeviceEvent(const Uevent& uevent);
+    void HandleBlockDeviceEvent(const Uevent& uevent) const;
+    void HandleGenericDeviceEvent(const Uevent& uevent) const;
+
     std::vector<std::string> GetBlockDeviceSymlinks(const Uevent& uevent) const;
     void set_skip_restorecon(bool value) { skip_restorecon_ = value; }
 
   private:
-    bool FindPlatformDevice(std::string path, std::string* platform_device_path) const;
     std::tuple<mode_t, uid_t, gid_t> GetDevicePermissions(
         const std::string& path, const std::vector<std::string>& links) const;
     void MakeDevice(const std::string& path, int block, int major, int minor,
@@ -117,17 +136,13 @@ class DeviceHandler {
     std::vector<std::string> GetCharacterDeviceSymlinks(const Uevent& uevent) const;
     void HandleDevice(const std::string& action, const std::string& devpath, int block, int major,
                       int minor, const std::vector<std::string>& links) const;
-    void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;
-
-    void HandleBlockDeviceEvent(const Uevent& uevent) const;
-    void HandleGenericDeviceEvent(const Uevent& uevent) const;
 
     std::vector<Permissions> dev_permissions_;
     std::vector<SysfsPermissions> sysfs_permissions_;
     std::vector<Subsystem> subsystems_;
+    PlatformDeviceList platform_devices_;
     selabel_handle* sehandle_;
     bool skip_restorecon_;
-    std::string sysfs_mount_point_;
 };
 
 // Exposed for testing
