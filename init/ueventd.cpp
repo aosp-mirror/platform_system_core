@@ -138,7 +138,7 @@ void ColdBoot::RegenerateUevents() {
         HandleFirmwareEvent(uevent);
 
         uevent_queue_.emplace_back(std::move(uevent));
-        return ListenerAction::kContinue;
+        return RegenerationAction::kContinue;
     });
 }
 
@@ -268,10 +268,9 @@ int ueventd_main(int argc, char** argv) {
         cold_boot.Run();
     }
 
-    uevent_listener.Poll([&device_handler](const Uevent& uevent) {
+    uevent_listener.DoPolling([&device_handler](const Uevent& uevent) {
         HandleFirmwareEvent(uevent);
         device_handler.HandleDeviceEvent(uevent);
-        return ListenerAction::kContinue;
     });
 
     return 0;
