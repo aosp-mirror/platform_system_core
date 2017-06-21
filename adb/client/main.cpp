@@ -39,33 +39,7 @@
 #include "sysdeps/chrono.h"
 #include "transport.h"
 
-static std::string GetLogFilePath() {
-#if defined(_WIN32)
-    const char log_name[] = "adb.log";
-    WCHAR temp_path[MAX_PATH];
-
-    // https://msdn.microsoft.com/en-us/library/windows/desktop/aa364992%28v=vs.85%29.aspx
-    DWORD nchars = GetTempPathW(arraysize(temp_path), temp_path);
-    if (nchars >= arraysize(temp_path) || nchars == 0) {
-        // If string truncation or some other error.
-        fatal("cannot retrieve temporary file path: %s\n",
-              android::base::SystemErrorCodeToString(GetLastError()).c_str());
-    }
-
-    std::string temp_path_utf8;
-    if (!android::base::WideToUTF8(temp_path, &temp_path_utf8)) {
-        fatal_errno("cannot convert temporary file path from UTF-16 to UTF-8");
-    }
-
-    return temp_path_utf8 + log_name;
-#else
-    const char* tmp_dir = getenv("TMPDIR");
-    if (tmp_dir == nullptr) tmp_dir = "/tmp";
-    return android::base::StringPrintf("%s/adb.%u.log", tmp_dir, getuid());
-#endif
-}
-
-static void setup_daemon_logging(void) {
+static void setup_daemon_logging() {
     const std::string log_file_path(GetLogFilePath());
     int fd = unix_open(log_file_path.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0640);
     if (fd == -1) {
