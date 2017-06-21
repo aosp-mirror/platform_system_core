@@ -49,6 +49,7 @@
 #include "adb_auth.h"
 #include "adb_io.h"
 #include "adb_listeners.h"
+#include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "sysdeps/chrono.h"
 #include "transport.h"
@@ -656,6 +657,26 @@ static unsigned __stdcall _redirect_stderr_thread(HANDLE h) {
 
 #endif
 
+static void ReportServerStartupFailure(pid_t pid) {
+    fprintf(stderr, "ADB server didn't ACK\n");
+    fprintf(stderr, "Full server startup log: %s\n", GetLogFilePath().c_str());
+    fprintf(stderr, "Server had pid: %d\n", pid);
+
+    unique_fd fd(adb_open(GetLogFilePath().c_str(), O_RDONLY));
+    if (fd == -1) return;
+
+    // Let's not show more than 128KiB of log...
+    adb_lseek(fd, -128 * 1024, SEEK_END);
+    std::string content;
+    if (!android::base::ReadFdToString(fd, &content)) return;
+
+    std::string header = android::base::StringPrintf("--- adb starting (pid %d) ---", pid);
+    std::vector<std::string> lines = android::base::Split(content, "\n");
+    int i = lines.size() - 1;
+    while (i >= 0 && lines[i] != header) --i;
+    while (static_cast<size_t>(i) < lines.size()) fprintf(stderr, "%s\n", lines[i++].c_str());
+}
+
 int launch_server(const std::string& socket_spec) {
 #if defined(_WIN32)
     /* we need to start the server in the background                    */
@@ -835,7 +856,8 @@ int launch_server(const std::string& socket_spec) {
                 memcmp(temp, expected, expected_length) == 0) {
                 got_ack = true;
             } else {
-                fprintf(stderr, "ADB server didn't ACK\n");
+                ReportServerStartupFailure(GetProcessId(process_handle.get()));
+                return -1;
             }
         } else {
             const DWORD err = GetLastError();
@@ -909,12 +931,9 @@ int launch_server(const std::string& socket_spec) {
                            "--reply-fd", reply_fd, NULL);
         // this should not return
         fprintf(stderr, "adb: execl returned %d: %s\n", result, strerror(errno));
-    } else  {
+    } else {
         // parent side of the fork
-
-        char  temp[3];
-
-        temp[0] = 'A'; temp[1] = 'B'; temp[2] = 'C';
+        char temp[3] = {};
         // wait for the "OK\n" message
         adb_close(fd[1]);
         int ret = adb_read(fd[0], temp, 3);
@@ -925,7 +944,7 @@ int launch_server(const std::string& socket_spec) {
             return -1;
         }
         if (ret != 3 || temp[0] != 'O' || temp[1] != 'K' || temp[2] != '\n') {
-            fprintf(stderr, "ADB server didn't ACK\n" );
+            ReportServerStartupFailure(pid);
             return -1;
         }
     }
