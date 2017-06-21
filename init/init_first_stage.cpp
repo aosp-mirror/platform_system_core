@@ -181,12 +181,6 @@ void FirstStageMount::InitRequiredDevices() {
 }
 
 RegenerationAction FirstStageMount::UeventCallback(const Uevent& uevent) {
-    // We need platform devices to create symlinks.
-    if (uevent.subsystem == "platform") {
-        device_handler_.HandleDeviceEvent(uevent);
-        return RegenerationAction::kContinue;
-    }
-
     // Ignores everything that is not a block device.
     if (uevent.subsystem != "block") {
         return RegenerationAction::kContinue;
