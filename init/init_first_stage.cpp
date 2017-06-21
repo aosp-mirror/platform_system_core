@@ -178,6 +178,11 @@ void FirstStageMount::InitRequiredDevices() {
 }
 
 coldboot_action_t FirstStageMount::ColdbootCallback(uevent* uevent) {
+    // We need platform devices to create symlinks.
+    if (!strncmp(uevent->subsystem, "platform", 8)) {
+        return COLDBOOT_CREATE;
+    }
+
     // Ignores everything that is not a block device.
     if (strncmp(uevent->subsystem, "block", 5)) {
         return COLDBOOT_CONTINUE;
