@@ -286,13 +286,17 @@ bool FirstStageMountVBootV1::GetRequiredDevices() {
 bool FirstStageMountVBootV1::SetUpDmVerity(fstab_rec* fstab_rec) {
     if (fs_mgr_is_verified(fstab_rec)) {
         int ret = fs_mgr_setup_verity(fstab_rec, false /* wait_for_verity_dev */);
-        if (ret == FS_MGR_SETUP_VERITY_DISABLED) {
-            LOG(INFO) << "Verity disabled for '" << fstab_rec->mount_point << "'";
-        } else if (ret == FS_MGR_SETUP_VERITY_SUCCESS) {
+        switch (ret) {
+        case FS_MGR_SETUP_VERITY_SKIPPED:
+        case FS_MGR_SETUP_VERITY_DISABLED:
+            LOG(INFO) << "Verity disabled/skipped for '" << fstab_rec->mount_point << "'";
+            break;
+        case FS_MGR_SETUP_VERITY_SUCCESS:
             // The exact block device name (fstab_rec->blk_device) is changed to "/dev/block/dm-XX".
             // Needs to create it because ueventd isn't started in init first stage.
             InitVerityDevice(fstab_rec->blk_device);
-        } else {
+            break;
+        default:
             return false;
         }
     }
