@@ -19,7 +19,9 @@
 
 #include <dirent.h>
 
+#include <chrono>
 #include <functional>
+#include <optional>
 
 #include <android-base/unique_fd.h>
 
@@ -27,13 +29,12 @@
 
 #define UEVENT_MSG_LEN 2048
 
-enum class RegenerationAction {
+enum class ListenerAction {
     kStop = 0,  // Stop regenerating uevents as we've handled the one(s) we're interested in.
     kContinue,  // Continue regenerating uevents as we haven't seen the one(s) we're interested in.
 };
 
-using RegenerateCallback = std::function<RegenerationAction(const Uevent&)>;
-using PollCallback = std::function<void(const Uevent&)>;
+using ListenerCallback = std::function<ListenerAction(const Uevent&)>;
 
 extern const char* kRegenerationPaths[3];
 
@@ -41,14 +42,15 @@ class UeventListener {
   public:
     UeventListener();
 
-    void RegenerateUevents(RegenerateCallback callback) const;
-    RegenerationAction RegenerateUeventsForPath(const std::string& path,
-                                                RegenerateCallback callback) const;
-    void DoPolling(PollCallback callback) const;
+    void RegenerateUevents(const ListenerCallback& callback) const;
+    ListenerAction RegenerateUeventsForPath(const std::string& path,
+                                            const ListenerCallback& callback) const;
+    void Poll(const ListenerCallback& callback,
+              const std::optional<std::chrono::milliseconds> relative_timeout = {}) const;
 
   private:
     bool ReadUevent(Uevent* uevent) const;
-    RegenerationAction RegenerateUeventsForDir(DIR* d, RegenerateCallback callback) const;
+    ListenerAction RegenerateUeventsForDir(DIR* d, const ListenerCallback& callback) const;
 
     android::base::unique_fd device_fd_;
 };

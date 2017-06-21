@@ -121,8 +121,8 @@ bool UeventListener::ReadUevent(Uevent* uevent) const {
 // make sure we don't overrun the socket's buffer.
 //
 
-RegenerationAction UeventListener::RegenerateUeventsForDir(DIR* d,
-                                                           RegenerateCallback callback) const {
+ListenerAction UeventListener::RegenerateUeventsForDir(DIR* d,
+                                                       const ListenerCallback& callback) const {
     int dfd = dirfd(d);
 
     int fd = openat(dfd, "uevent", O_WRONLY);
@@ -132,7 +132,7 @@ RegenerationAction UeventListener::RegenerateUeventsForDir(DIR* d,
 
         Uevent uevent;
         while (ReadUevent(&uevent)) {
-            if (callback(uevent) == RegenerationAction::kStop) return RegenerationAction::kStop;
+            if (callback(uevent) == ListenerAction::kStop) return ListenerAction::kStop;
         }
     }
 
@@ -147,49 +147,67 @@ RegenerationAction UeventListener::RegenerateUeventsForDir(DIR* d,
         if (d2 == 0) {
             close(fd);
         } else {
-            if (RegenerateUeventsForDir(d2.get(), callback) == RegenerationAction::kStop) {
-                return RegenerationAction::kStop;
+            if (RegenerateUeventsForDir(d2.get(), callback) == ListenerAction::kStop) {
+                return ListenerAction::kStop;
             }
         }
     }
 
     // default is always to continue looking for uevents
-    return RegenerationAction::kContinue;
+    return ListenerAction::kContinue;
 }
 
-RegenerationAction UeventListener::RegenerateUeventsForPath(const std::string& path,
-                                                            RegenerateCallback callback) const {
+ListenerAction UeventListener::RegenerateUeventsForPath(const std::string& path,
+                                                        const ListenerCallback& callback) const {
     std::unique_ptr<DIR, decltype(&closedir)> d(opendir(path.c_str()), closedir);
-    if (!d) return RegenerationAction::kContinue;
+    if (!d) return ListenerAction::kContinue;
 
     return RegenerateUeventsForDir(d.get(), callback);
 }
 
 const char* kRegenerationPaths[] = {"/sys/class", "/sys/block", "/sys/devices"};
 
-void UeventListener::RegenerateUevents(RegenerateCallback callback) const {
+void UeventListener::RegenerateUevents(const ListenerCallback& callback) const {
     for (const auto path : kRegenerationPaths) {
-        if (RegenerateUeventsForPath(path, callback) == RegenerationAction::kStop) return;
+        if (RegenerateUeventsForPath(path, callback) == ListenerAction::kStop) return;
     }
 }
 
-void UeventListener::DoPolling(PollCallback callback) const {
+void UeventListener::Poll(const ListenerCallback& callback,
+                          const std::optional<std::chrono::milliseconds> relative_timeout) const {
+    using namespace std::chrono;
+
     pollfd ufd;
     ufd.events = POLLIN;
     ufd.fd = device_fd_;
 
+    auto start_time = steady_clock::now();
+
     while (true) {
         ufd.revents = 0;
-        int nr = poll(&ufd, 1, -1);
-        if (nr <= 0) {
+
+        int timeout_ms = -1;
+        if (relative_timeout) {
+            auto now = steady_clock::now();
+            auto time_elapsed = duration_cast<milliseconds>(now - start_time);
+            if (time_elapsed > *relative_timeout) return;
+
+            auto remaining_timeout = *relative_timeout - time_elapsed;
+            timeout_ms = remaining_timeout.count();
+        }
+
+        int nr = poll(&ufd, 1, timeout_ms);
+        if (nr == 0) return;
+        if (nr < 0) {
+            PLOG(ERROR) << "poll() of uevent socket failed, continuing";
             continue;
         }
         if (ufd.revents & POLLIN) {
-            // We're non-blocking, so if we receive a poll event keep processing until there
+            // We're non-blocking, so if we receive a poll event keep processing until
             // we have exhausted all uevent messages.
             Uevent uevent;
             while (ReadUevent(&uevent)) {
-                callback(uevent);
+                if (callback(uevent) == ListenerAction::kStop) return;
             }
         }
     }
