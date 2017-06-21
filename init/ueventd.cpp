@@ -128,7 +128,15 @@ class ColdBoot {
 void ColdBoot::UeventHandlerMain(unsigned int process_num, unsigned int total_processes) {
     for (unsigned int i = process_num; i < uevent_queue_.size(); i += total_processes) {
         auto& uevent = uevent_queue_[i];
-        device_handler_.HandleDeviceEvent(uevent);
+        if (uevent.action == "add" || uevent.action == "change" || uevent.action == "online") {
+            device_handler_.FixupSysPermissions(uevent.path, uevent.subsystem);
+        }
+
+        if (uevent.subsystem == "block") {
+            device_handler_.HandleBlockDeviceEvent(uevent);
+        } else {
+            device_handler_.HandleGenericDeviceEvent(uevent);
+        }
     }
     _exit(EXIT_SUCCESS);
 }
@@ -136,6 +144,14 @@ void ColdBoot::UeventHandlerMain(unsigned int process_num, unsigned int total_pr
 void ColdBoot::RegenerateUevents() {
     uevent_listener_.RegenerateUevents([this](const Uevent& uevent) {
         HandleFirmwareEvent(uevent);
+
+        // This is the one mutable part of DeviceHandler, in which platform devices are
+        // added to a vector for later reference.  Since there is no communication after
+        // fork()'ing subprocess handlers, all platform devices must be in the vector before
+        // we fork, and therefore they must be handled in this loop.
+        if (uevent.subsystem == "platform") {
+            device_handler_.HandlePlatformDeviceEvent(uevent);
+        }
 
         uevent_queue_.emplace_back(std::move(uevent));
         return RegenerationAction::kContinue;
