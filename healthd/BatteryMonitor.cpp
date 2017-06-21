@@ -116,6 +116,10 @@ int BatteryMonitor::getBatteryHealth(const char* status) {
         { "Over voltage", BATTERY_HEALTH_OVER_VOLTAGE },
         { "Unspecified failure", BATTERY_HEALTH_UNSPECIFIED_FAILURE },
         { "Cold", BATTERY_HEALTH_COLD },
+        // battery health values from JEITA spec
+        { "Warm", BATTERY_HEALTH_GOOD },
+        { "Cool", BATTERY_HEALTH_GOOD },
+        { "Hot", BATTERY_HEALTH_OVERHEAT },
         { NULL, 0 },
     };
 
