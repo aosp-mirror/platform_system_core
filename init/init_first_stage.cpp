@@ -19,7 +19,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <chrono>
 #include <memory>
 #include <set>
 #include <string>
@@ -36,8 +35,6 @@
 #include "uevent_listener.h"
 #include "util.h"
 
-using namespace std::chrono_literals;
-
 // Class Declarations
 // ------------------
 class FirstStageMount {
@@ -52,11 +49,11 @@ class FirstStageMount {
     bool InitDevices();
 
   protected:
-    bool InitRequiredDevices();
-    bool InitVerityDevice(const std::string& verity_device);
+    void InitRequiredDevices();
+    void InitVerityDevice(const std::string& verity_device);
     bool MountPartitions();
 
-    virtual ListenerAction UeventCallback(const Uevent& uevent);
+    virtual RegenerationAction UeventCallback(const Uevent& uevent);
 
     // Pure virtual functions.
     virtual bool GetRequiredDevices() = 0;
@@ -89,7 +86,7 @@ class FirstStageMountVBootV2 : public FirstStageMount {
     ~FirstStageMountVBootV2() override = default;
 
   protected:
-    ListenerAction UeventCallback(const Uevent& uevent) override;
+    RegenerationAction UeventCallback(const Uevent& uevent) override;
     bool GetRequiredDevices() override;
     bool SetUpDmVerity(fstab_rec* fstab_rec) override;
     bool InitAvbHandle();
@@ -144,60 +141,49 @@ bool FirstStageMount::DoFirstStageMount() {
 }
 
 bool FirstStageMount::InitDevices() {
-    return GetRequiredDevices() && InitRequiredDevices();
+    if (!GetRequiredDevices()) return false;
+
+    InitRequiredDevices();
+
+    // InitRequiredDevices() will remove found partitions from required_devices_partition_names_.
+    // So if it isn't empty here, it means some partitions are not found.
+    if (!required_devices_partition_names_.empty()) {
+        LOG(ERROR) << __FUNCTION__ << "(): partition(s) not found: "
+                   << android::base::Join(required_devices_partition_names_, ", ");
+        return false;
+    } else {
+        return true;
+    }
 }
 
 // Creates devices with uevent->partition_name matching one in the member variable
 // required_devices_partition_names_. Found partitions will then be removed from it
 // for the subsequent member function to check which devices are NOT created.
-bool FirstStageMount::InitRequiredDevices() {
+void FirstStageMount::InitRequiredDevices() {
     if (required_devices_partition_names_.empty()) {
-        return true;
+        return;
     }
 
     if (need_dm_verity_) {
         const std::string dm_path = "/devices/virtual/misc/device-mapper";
-        bool found = false;
-        auto dm_callback = [this, &dm_path, &found](const Uevent& uevent) {
-            if (uevent.path == dm_path) {
-                device_handler_.HandleDeviceEvent(uevent);
-                found = true;
-                return ListenerAction::kStop;
-            }
-            return ListenerAction::kContinue;
-        };
-        uevent_listener_.RegenerateUeventsForPath("/sys" + dm_path, dm_callback);
-        if (!found) {
-            uevent_listener_.Poll(dm_callback, 10s);
-        }
-        if (!found) {
-            LOG(ERROR) << "device-mapper device not found";
-            return false;
-        }
+        uevent_listener_.RegenerateUeventsForPath("/sys" + dm_path,
+                                                  [this, &dm_path](const Uevent& uevent) {
+                                                      if (uevent.path == dm_path) {
+                                                          device_handler_.HandleDeviceEvent(uevent);
+                                                          return RegenerationAction::kStop;
+                                                      }
+                                                      return RegenerationAction::kContinue;
+                                                  });
     }
 
-    auto uevent_callback = [this](const Uevent& uevent) { return UeventCallback(uevent); };
-    uevent_listener_.RegenerateUevents(uevent_callback);
-
-    // UeventCallback() will remove found partitions from required_devices_partition_names_.
-    // So if it isn't empty here, it means some partitions are not found.
-    if (!required_devices_partition_names_.empty()) {
-        uevent_listener_.Poll(uevent_callback, 10s);
-    }
-
-    if (!required_devices_partition_names_.empty()) {
-        LOG(ERROR) << __PRETTY_FUNCTION__ << ": partition(s) not found: "
-                   << android::base::Join(required_devices_partition_names_, ", ");
-        return false;
-    }
-
-    return true;
+    uevent_listener_.RegenerateUevents(
+        [this](const Uevent& uevent) { return UeventCallback(uevent); });
 }
 
-ListenerAction FirstStageMount::UeventCallback(const Uevent& uevent) {
+RegenerationAction FirstStageMount::UeventCallback(const Uevent& uevent) {
     // Ignores everything that is not a block device.
     if (uevent.subsystem != "block") {
-        return ListenerAction::kContinue;
+        return RegenerationAction::kContinue;
     }
 
     if (!uevent.partition_name.empty()) {
@@ -206,46 +192,34 @@ ListenerAction FirstStageMount::UeventCallback(const Uevent& uevent) {
         // suffix when A/B is used.
         auto iter = required_devices_partition_names_.find(uevent.partition_name);
         if (iter != required_devices_partition_names_.end()) {
-            LOG(VERBOSE) << __PRETTY_FUNCTION__ << ": found partition: " << *iter;
+            LOG(VERBOSE) << __FUNCTION__ << "(): found partition: " << *iter;
             required_devices_partition_names_.erase(iter);
             device_handler_.HandleDeviceEvent(uevent);
             if (required_devices_partition_names_.empty()) {
-                return ListenerAction::kStop;
+                return RegenerationAction::kStop;
             } else {
-                return ListenerAction::kContinue;
+                return RegenerationAction::kContinue;
             }
         }
     }
     // Not found a partition or find an unneeded partition, continue to find others.
-    return ListenerAction::kContinue;
+    return RegenerationAction::kContinue;
 }
 
 // Creates "/dev/block/dm-XX" for dm-verity by running coldboot on /sys/block/dm-XX.
-bool FirstStageMount::InitVerityDevice(const std::string& verity_device) {
+void FirstStageMount::InitVerityDevice(const std::string& verity_device) {
     const std::string device_name(basename(verity_device.c_str()));
     const std::string syspath = "/sys/block/" + device_name;
-    bool found = false;
 
-    auto verity_callback = [&device_name, &verity_device, this, &found](const Uevent& uevent) {
-        if (uevent.device_name == device_name) {
-            LOG(VERBOSE) << "Creating dm-verity device : " << verity_device;
-            device_handler_.HandleDeviceEvent(uevent);
-            found = true;
-            return ListenerAction::kStop;
-        }
-        return ListenerAction::kContinue;
-    };
-
-    uevent_listener_.RegenerateUeventsForPath(syspath, verity_callback);
-    if (!found) {
-        uevent_listener_.Poll(verity_callback, 10s);
-    }
-    if (!found) {
-        LOG(ERROR) << "dm-verity device not found";
-        return false;
-    }
-
-    return true;
+    uevent_listener_.RegenerateUeventsForPath(
+        syspath, [&device_name, &verity_device, this](const Uevent& uevent) {
+            if (uevent.device_name == device_name) {
+                LOG(VERBOSE) << "Creating dm-verity device : " << verity_device;
+                device_handler_.HandleDeviceEvent(uevent);
+                return RegenerationAction::kStop;
+            }
+            return RegenerationAction::kContinue;
+        });
 }
 
 bool FirstStageMount::MountPartitions() {
@@ -311,7 +285,7 @@ bool FirstStageMountVBootV1::SetUpDmVerity(fstab_rec* fstab_rec) {
         } else if (ret == FS_MGR_SETUP_VERITY_SUCCESS) {
             // The exact block device name (fstab_rec->blk_device) is changed to "/dev/block/dm-XX".
             // Needs to create it because ueventd isn't started in init first stage.
-            return InitVerityDevice(fstab_rec->blk_device);
+            InitVerityDevice(fstab_rec->blk_device);
         } else {
             return false;
         }
@@ -371,7 +345,7 @@ bool FirstStageMountVBootV2::GetRequiredDevices() {
     return true;
 }
 
-ListenerAction FirstStageMountVBootV2::UeventCallback(const Uevent& uevent) {
+RegenerationAction FirstStageMountVBootV2::UeventCallback(const Uevent& uevent) {
     // Check if this uevent corresponds to one of the required partitions and store its symlinks if
     // so, in order to create FsManagerAvbHandle later.
     // Note that the parent callback removes partitions from the list of required partitions
