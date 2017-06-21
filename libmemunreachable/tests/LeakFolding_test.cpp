@@ -21,6 +21,8 @@
 #include <gtest/gtest.h>
 #include "Allocator.h"
 
+namespace android {
+
 class LeakFoldingTest : public ::testing::Test {
  public:
   LeakFoldingTest() : disable_malloc_(), heap_() {}
@@ -425,3 +427,5 @@ TEST_F(LeakFoldingTest, multicycle) {
   EXPECT_EQ(3U, leaked[3].referenced_count);
   EXPECT_EQ(6 * sizeof(uintptr_t), leaked[3].referenced_size);
 }
+
+}  // namespace android

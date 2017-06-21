@@ -24,6 +24,8 @@
 
 #include "Allocator.h"
 
+namespace android {
+
 template <class T>
 class Node {
  public:
@@ -130,5 +132,7 @@ void Tarjan(Graph<T>& graph, SCCList<T>& out) {
   TarjanAlgorithm<T> tarjan{graph.get_allocator()};
   tarjan.Execute(graph, out);
 }
+
+}  // namespace android
 
 #endif  // LIBMEMUNREACHABLE_TARJAN_H_

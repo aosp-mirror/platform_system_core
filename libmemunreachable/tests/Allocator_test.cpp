@@ -19,6 +19,8 @@
 #include <ScopedDisableMalloc.h>
 #include <gtest/gtest.h>
 
+namespace android {
+
 std::function<void()> ScopedAlarm::func_;
 
 class AllocatorTest : public testing::Test {
@@ -170,3 +172,5 @@ TEST_F(AllocatorTest, unique) {
 
   ASSERT_NE(ptr, nullptr);
 }
+
+}  // namespace android

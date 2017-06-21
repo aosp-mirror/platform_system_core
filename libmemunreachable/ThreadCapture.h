@@ -21,6 +21,8 @@
 
 #include "Allocator.h"
 
+namespace android {
+
 struct ThreadInfo {
   pid_t tid;
   allocator::vector<uintptr_t> regs;
@@ -50,5 +52,7 @@ class ThreadCapture {
 
   Allocator<ThreadCaptureImpl>::unique_ptr impl_;
 };
+
+}  // namespace android
 
 #endif

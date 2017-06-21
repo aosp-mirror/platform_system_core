@@ -22,6 +22,8 @@
 
 #include "android-base/macros.h"
 
+namespace android {
+
 class Semaphore {
  public:
   explicit Semaphore(int count = 0) : count_(count) {}
@@ -52,5 +54,7 @@ class Semaphore {
   std::mutex m_;
   std::condition_variable cv_;
 };
+
+}  // namespace android
 
 #endif  // LIBMEMUNREACHABLE_SEMAPHORE_H_
