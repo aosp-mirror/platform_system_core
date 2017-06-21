@@ -37,7 +37,7 @@ class ScopedSignalHandler {
 
   template <class F>
   void install(int signal, F&& f) {
-    MEM_LOG_ALWAYS_FATAL_IF(signal_ != -1, "ScopedSignalHandler already installed");
+    if (signal != -1) MEM_LOG_ALWAYS_FATAL("ScopedSignalHandler already installed");
 
     handler_ = SignalFn(std::allocator_arg, allocator_,
                         [=](int signal, siginfo_t* si, void* uctx) { f(*this, signal, si, uctx); });
