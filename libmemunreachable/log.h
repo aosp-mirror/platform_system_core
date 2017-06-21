@@ -30,9 +30,6 @@
 
 #define MEM_LOG_ALWAYS_FATAL(...) async_safe_fatal(__VA_ARGS__)
 
-#define MEM_LOG_ALWAYS_FATAL_IF(cond, ...) \
-  ((__predict_false(cond)) ? async_safe_fatal(__VA_ARGS__) : (void)0)
-
 #else
 
 #include <log/log.h>
@@ -43,7 +40,6 @@
 #define MEM_ALOGI ALOGI
 
 #define MEM_LOG_ALWAYS_FATAL LOG_ALWAYS_FATAL
-#define MEM_LOG_ALWAYS_FATAL_IF LOG_ALWAYS_FATAL_IF
 
 #endif
 
