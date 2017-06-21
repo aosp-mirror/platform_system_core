@@ -31,7 +31,7 @@
 
 bool SendProtocolString(int fd, const std::string& s) {
     unsigned int length = s.size();
-    if (length > MAX_PAYLOAD_V1 - 4) {
+    if (length > MAX_PAYLOAD - 4) {
         errno = EMSGSIZE;
         return false;
     }
