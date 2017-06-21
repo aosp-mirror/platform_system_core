@@ -89,4 +89,6 @@ class BlockingQueue {
     }
 };
 
+std::string GetLogFilePath();
+
 #endif
