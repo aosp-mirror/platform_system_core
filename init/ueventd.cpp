@@ -17,6 +17,7 @@
 #include <ctype.h>
 #include <fcntl.h>
 #include <grp.h>
+#include <poll.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdio.h>
@@ -75,7 +76,20 @@ int ueventd_main(int argc, char **argv)
 
     device_init();
 
-    device_poll();
+    pollfd ufd;
+    ufd.events = POLLIN;
+    ufd.fd = get_device_fd();
+
+    while (true) {
+        ufd.revents = 0;
+        int nr = poll(&ufd, 1, -1);
+        if (nr <= 0) {
+            continue;
+        }
+        if (ufd.revents & POLLIN) {
+            handle_device_fd();
+        }
+    }
 
     return 0;
 }

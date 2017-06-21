@@ -19,7 +19,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <chrono>
 #include <memory>
 #include <set>
 #include <string>
@@ -33,8 +32,6 @@
 #include "fs_mgr.h"
 #include "fs_mgr_avb.h"
 #include "util.h"
-
-using namespace std::chrono_literals;
 
 // Class Declarations
 // ------------------
@@ -50,8 +47,8 @@ class FirstStageMount {
     bool InitDevices();
 
   protected:
-    bool InitRequiredDevices();
-    bool InitVerityDevice(const std::string& verity_device);
+    void InitRequiredDevices();
+    void InitVerityDevice(const std::string& verity_device);
     bool MountPartitions();
 
     virtual coldboot_action_t ColdbootCallback(uevent* uevent);
@@ -142,53 +139,42 @@ bool FirstStageMount::DoFirstStageMount() {
     return true;
 }
 
-bool FirstStageMount::InitDevices() { return GetRequiredDevices() && InitRequiredDevices(); }
+bool FirstStageMount::InitDevices() {
+    if (!GetRequiredDevices()) return false;
+
+    InitRequiredDevices();
+
+    // InitRequiredDevices() will remove found partitions from required_devices_partition_names_.
+    // So if it isn't empty here, it means some partitions are not found.
+    if (!required_devices_partition_names_.empty()) {
+        LOG(ERROR) << __FUNCTION__ << "(): partition(s) not found: "
+                   << android::base::Join(required_devices_partition_names_, ", ");
+        return false;
+    } else {
+        return true;
+    }
+}
 
 // Creates devices with uevent->partition_name matching one in the member variable
 // required_devices_partition_names_. Found partitions will then be removed from it
 // for the subsequent member function to check which devices are NOT created.
-bool FirstStageMount::InitRequiredDevices() {
+void FirstStageMount::InitRequiredDevices() {
     if (required_devices_partition_names_.empty()) {
-        return true;
+        return;
     }
 
     if (need_dm_verity_) {
         const std::string dm_path = "/devices/virtual/misc/device-mapper";
-        bool found = false;
-        auto dm_callback = [&dm_path, &found](uevent* uevent) -> coldboot_action_t {
-            if (uevent->path && uevent->path == dm_path) {
-                found = true;
-                return COLDBOOT_STOP;
-            }
+        device_init(("/sys" + dm_path).c_str(), [&dm_path](uevent* uevent) -> coldboot_action_t {
+            if (uevent->path && uevent->path == dm_path) return COLDBOOT_STOP;
             return COLDBOOT_CONTINUE;  // dm_path not found, continue to find it.
-        };
-        device_init(("/sys" + dm_path).c_str(), dm_callback);
-        if (!found) {
-            device_poll(dm_callback, 10s);
-        }
-        if (!found) {
-            LOG(ERROR) << "device-mapper device not found";
-            return false;
-        }
+        });
     }
 
-    auto uevent_callback = [this](uevent* uevent) -> coldboot_action_t {
-        return ColdbootCallback(uevent);
-    };
-
-    device_init(nullptr, uevent_callback);
-    if (!required_devices_partition_names_.empty()) {
-        device_poll(uevent_callback, 10s);
-    }
-
-    if (!required_devices_partition_names_.empty()) {
-        LOG(ERROR) << __PRETTY_FUNCTION__ << ": partition(s) not found: "
-                   << android::base::Join(required_devices_partition_names_, ", ");
-        return false;
-    }
+    device_init(nullptr,
+                [this](uevent* uevent) -> coldboot_action_t { return ColdbootCallback(uevent); });
 
     device_close();
-    return true;
 }
 
 coldboot_action_t FirstStageMount::ColdbootCallback(uevent* uevent) {
@@ -217,30 +203,18 @@ coldboot_action_t FirstStageMount::ColdbootCallback(uevent* uevent) {
 }
 
 // Creates "/dev/block/dm-XX" for dm-verity by running coldboot on /sys/block/dm-XX.
-bool FirstStageMount::InitVerityDevice(const std::string& verity_device) {
+void FirstStageMount::InitVerityDevice(const std::string& verity_device) {
     const std::string device_name(basename(verity_device.c_str()));
     const std::string syspath = "/sys/block/" + device_name;
-    bool found = false;
 
-    auto verity_callback = [&](uevent* uevent) -> coldboot_action_t {
+    device_init(syspath.c_str(), [&](uevent* uevent) -> coldboot_action_t {
         if (uevent->device_name && uevent->device_name == device_name) {
             LOG(VERBOSE) << "Creating dm-verity device : " << verity_device;
-            found = true;
             return COLDBOOT_STOP;
         }
         return COLDBOOT_CONTINUE;
-    };
-
-    device_init(syspath.c_str(), verity_callback);
-    if (!found) {
-        device_poll(verity_callback, 10s);
-    }
-    if (!found) {
-        LOG(ERROR) << "dm-verity device not found";
-        return false;
-    }
+    });
     device_close();
-    return true;
 }
 
 bool FirstStageMount::MountPartitions() {
@@ -306,7 +280,7 @@ bool FirstStageMountVBootV1::SetUpDmVerity(fstab_rec* fstab_rec) {
         } else if (ret == FS_MGR_SETUP_VERITY_SUCCESS) {
             // The exact block device name (fstab_rec->blk_device) is changed to "/dev/block/dm-XX".
             // Needs to create it because ueventd isn't started in init first stage.
-            return InitVerityDevice(fstab_rec->blk_device);
+            InitVerityDevice(fstab_rec->blk_device);
         } else {
             return false;
         }
