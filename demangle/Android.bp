@@ -28,6 +28,9 @@ cc_defaults {
 
 cc_library {
     name: "libdemangle",
+
+    vendor_available: true,
+
     defaults: ["libdemangle_defaults"],
 
     srcs: [
