@@ -21,8 +21,8 @@
 
 #ifdef __cplusplus
 
-#include <vector>
 #include <string>
+#include <vector>
 
 struct Leak {
   uintptr_t begin;
@@ -83,4 +83,4 @@ bool NoLeaks();
 
 __END_DECLS
 
-#endif // LIBMEMUNREACHABLE_MEMUNREACHABLE_H_
+#endif  // LIBMEMUNREACHABLE_MEMUNREACHABLE_H_
