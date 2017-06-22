@@ -31,9 +31,7 @@ class ScopedSignalHandler {
   using Fn = std::function<void(ScopedSignalHandler&, int, siginfo_t*, void*)>;
 
   explicit ScopedSignalHandler(Allocator<Fn> allocator) : allocator_(allocator), signal_(-1) {}
-  ~ScopedSignalHandler() {
-    reset();
-  }
+  ~ScopedSignalHandler() { reset(); }
 
   template <class F>
   void install(int signal, F&& f) {
@@ -65,7 +63,6 @@ class ScopedSignalHandler {
     }
   }
 
-
  private:
   using SignalFn = std::function<void(int, siginfo_t*, void*)>;
   DISALLOW_COPY_AND_ASSIGN(ScopedSignalHandler);
@@ -77,4 +74,4 @@ class ScopedSignalHandler {
   static SignalFn handler_;
 };
 
-#endif // LIBMEMUNREACHABLE_SCOPED_SIGNAL_HANDLER_H_
+#endif  // LIBMEMUNREACHABLE_SCOPED_SIGNAL_HANDLER_H_

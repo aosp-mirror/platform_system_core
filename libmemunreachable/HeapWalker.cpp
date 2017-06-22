@@ -114,8 +114,8 @@ bool HeapWalker::DetectLeaks() {
   return true;
 }
 
-bool HeapWalker::Leaked(allocator::vector<Range>& leaked, size_t limit,
-    size_t* num_leaks_out, size_t* leak_bytes_out) {
+bool HeapWalker::Leaked(allocator::vector<Range>& leaked, size_t limit, size_t* num_leaks_out,
+                        size_t* leak_bytes_out) {
   leaked.clear();
 
   size_t num_leaks = 0;
@@ -148,9 +148,9 @@ bool HeapWalker::Leaked(allocator::vector<Range>& leaked, size_t limit,
 
 static bool MapOverPage(void* addr) {
   const size_t page_size = sysconf(_SC_PAGE_SIZE);
-  void *page = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(addr) & ~(page_size-1));
+  void* page = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(addr) & ~(page_size - 1));
 
-  void* ret = mmap(page, page_size, PROT_READ, MAP_ANONYMOUS|MAP_PRIVATE|MAP_FIXED, -1, 0);
+  void* ret = mmap(page, page_size, PROT_READ, MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0);
   if (ret == MAP_FAILED) {
     MEM_ALOGE("failed to map page at %p: %s", page, strerror(errno));
     return false;
@@ -159,7 +159,8 @@ static bool MapOverPage(void* addr) {
   return true;
 }
 
-void HeapWalker::HandleSegFault(ScopedSignalHandler& handler, int signal, siginfo_t* si, void* /*uctx*/) {
+void HeapWalker::HandleSegFault(ScopedSignalHandler& handler, int signal, siginfo_t* si,
+                                void* /*uctx*/) {
   uintptr_t addr = reinterpret_cast<uintptr_t>(si->si_addr);
   if (addr != walking_ptr_) {
     handler.reset();

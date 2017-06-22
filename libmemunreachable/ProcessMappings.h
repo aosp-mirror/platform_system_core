@@ -33,4 +33,4 @@ struct Mapping {
 // the line data.
 bool ProcessMappings(pid_t pid, allocator::vector<Mapping>& mappings);
 
-#endif // LIBMEMUNREACHABLE_PROCESS_MAPPING_H_
+#endif  // LIBMEMUNREACHABLE_PROCESS_MAPPING_H_
