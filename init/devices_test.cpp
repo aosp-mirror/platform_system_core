@@ -24,6 +24,9 @@
 
 using namespace std::string_literals;
 
+namespace android {
+namespace init {
+
 class DeviceHandlerTester {
   public:
     void TestGetSymlinks(const std::string& platform_device, const Uevent& uevent,
@@ -400,3 +403,6 @@ TEST(device_handler, SysfsPermissionsMatchWithSubsystemBus) {
     EXPECT_EQ(0U, permissions.uid());
     EXPECT_EQ(1001U, permissions.gid());
 }
+
+}  // namespace init
+}  // namespace android

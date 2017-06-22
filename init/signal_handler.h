@@ -17,6 +17,12 @@
 #ifndef _INIT_SIGNAL_HANDLER_H_
 #define _INIT_SIGNAL_HANDLER_H_
 
+namespace android {
+namespace init {
+
 void signal_handler_init(void);
+
+}  // namespace init
+}  // namespace android
 
 #endif

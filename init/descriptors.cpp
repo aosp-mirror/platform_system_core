@@ -31,6 +31,9 @@
 #include "init.h"
 #include "util.h"
 
+namespace android {
+namespace init {
+
 DescriptorInfo::DescriptorInfo(const std::string& name, const std::string& type, uid_t uid,
                                gid_t gid, int perm, const std::string& context)
         : name_(name), type_(type), uid_(uid), gid_(gid), perm_(perm), context_(context) {
@@ -126,3 +129,6 @@ int FileInfo::Create(const std::string&) const {
 const std::string FileInfo::key() const {
   return ANDROID_FILE_ENV_PREFIX;
 }
+
+}  // namespace init
+}  // namespace android

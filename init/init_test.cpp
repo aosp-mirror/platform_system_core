@@ -27,6 +27,9 @@
 #include "keyword_map.h"
 #include "util.h"
 
+namespace android {
+namespace init {
+
 class TestFunctionMap : public KeywordMap<BuiltinFunction> {
   public:
     // Helper for argument-less functions
@@ -185,3 +188,6 @@ TEST(init, EventTriggerOrderMultipleFiles) {
 
     EXPECT_EQ(6, num_executed);
 }
+
+}  // namespace init
+}  // namespace android

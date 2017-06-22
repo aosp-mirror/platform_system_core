@@ -20,6 +20,12 @@
 #include <string>
 #include <vector>
 
+namespace android {
+namespace init {
+
 int do_bootchart(const std::vector<std::string>& args);
+
+}  // namespace init
+}  // namespace android
 
 #endif /* _BOOTCHART_H */

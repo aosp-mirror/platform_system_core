@@ -53,6 +53,9 @@
 
 using android::base::StringPrintf;
 
+namespace android {
+namespace init {
+
 // represents umount status during reboot / shutdown.
 enum UmountStat {
     /* umount succeeded. */
@@ -468,3 +471,6 @@ bool HandlePowerctlMessage(const std::string& command) {
     DoReboot(cmd, command, reboot_target, run_fsck);
     return true;
 }
+
+}  // namespace init
+}  // namespace android
