@@ -25,6 +25,8 @@
 #include "bionic.h"
 #include "log.h"
 
+namespace android {
+
 class DisableMallocGuard {
  public:
   DisableMallocGuard() : disabled_(false) {}
@@ -101,5 +103,7 @@ class ScopedDisableMallocTimeout {
   std::unique_ptr<ScopedAlarm> alarm_;
   DisableMallocGuard disable_malloc_;
 };
+
+}  // namespace android
 
 #endif  // LIBMEMUNREACHABLE_SCOPED_DISABLE_MALLOC_H_
