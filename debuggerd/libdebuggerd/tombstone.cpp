@@ -168,6 +168,26 @@ static const char* get_sigcode(int signo, int code) {
         case TRAP_BRANCH: return "TRAP_BRANCH";
         case TRAP_HWBKPT: return "TRAP_HWBKPT";
       }
+      if ((code & 0xff) == SIGTRAP) {
+        switch ((code >> 8) & 0xff) {
+          case PTRACE_EVENT_FORK:
+            return "PTRACE_EVENT_FORK";
+          case PTRACE_EVENT_VFORK:
+            return "PTRACE_EVENT_VFORK";
+          case PTRACE_EVENT_CLONE:
+            return "PTRACE_EVENT_CLONE";
+          case PTRACE_EVENT_EXEC:
+            return "PTRACE_EVENT_EXEC";
+          case PTRACE_EVENT_VFORK_DONE:
+            return "PTRACE_EVENT_VFORK_DONE";
+          case PTRACE_EVENT_EXIT:
+            return "PTRACE_EVENT_EXIT";
+          case PTRACE_EVENT_SECCOMP:
+            return "PTRACE_EVENT_SECCOMP";
+          case PTRACE_EVENT_STOP:
+            return "PTRACE_EVENT_STOP";
+        }
+      }
       static_assert(NSIGTRAP == TRAP_HWBKPT, "missing TRAP_* si_code");
       break;
   }
