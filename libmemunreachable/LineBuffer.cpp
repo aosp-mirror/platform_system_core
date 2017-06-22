@@ -23,8 +23,8 @@
 
 #include "LineBuffer.h"
 
-LineBuffer::LineBuffer(int fd, char* buffer, size_t buffer_len) : fd_(fd), buffer_(buffer), buffer_len_(buffer_len) {
-}
+LineBuffer::LineBuffer(int fd, char* buffer, size_t buffer_len)
+    : fd_(fd), buffer_(buffer), buffer_len_(buffer_len) {}
 
 bool LineBuffer::GetLine(char** line, size_t* line_len) {
   while (true) {

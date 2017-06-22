@@ -16,8 +16,8 @@
 
 #include <fcntl.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <sys/prctl.h>
+#include <unistd.h>
 
 #include <gtest/gtest.h>
 
@@ -25,23 +25,16 @@
 
 class HiddenPointer {
  public:
-  explicit HiddenPointer(size_t size = 256) {
-    Set(malloc(size));
-  }
-  ~HiddenPointer() {
-    Free();
-  }
-  void* Get() {
-    return reinterpret_cast<void*>(~ptr_);
-  }
+  explicit HiddenPointer(size_t size = 256) { Set(malloc(size)); }
+  ~HiddenPointer() { Free(); }
+  void* Get() { return reinterpret_cast<void*>(~ptr_); }
   void Free() {
     free(Get());
     Set(nullptr);
   }
+
  private:
-  void Set(void* ptr) {
-    ptr_ = ~reinterpret_cast<uintptr_t>(ptr);
-  }
+  void Set(void* ptr) { ptr_ = ~reinterpret_cast<uintptr_t>(ptr); }
   volatile uintptr_t ptr_;
 };
 

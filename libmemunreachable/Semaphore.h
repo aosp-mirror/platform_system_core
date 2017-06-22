@@ -29,7 +29,7 @@ class Semaphore {
 
   void Wait(std::chrono::milliseconds ms) {
     std::unique_lock<std::mutex> lk(m_);
-    cv_.wait_for(lk, ms, [&]{
+    cv_.wait_for(lk, ms, [&] {
       if (count_ > 0) {
         count_--;
         return true;
@@ -44,6 +44,7 @@ class Semaphore {
     }
     cv_.notify_one();
   }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(Semaphore);
 
@@ -52,5 +53,4 @@ class Semaphore {
   std::condition_variable cv_;
 };
 
-
-#endif // LIBMEMUNREACHABLE_SEMAPHORE_H_
+#endif  // LIBMEMUNREACHABLE_SEMAPHORE_H_

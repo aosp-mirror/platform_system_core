@@ -21,16 +21,14 @@
 
 #include "android-base/macros.h"
 
+#include "ScopedAlarm.h"
 #include "bionic.h"
 #include "log.h"
-#include "ScopedAlarm.h"
 
-class DisableMallocGuard{
+class DisableMallocGuard {
  public:
-  DisableMallocGuard() : disabled_(false){}
-  ~DisableMallocGuard() {
-    Enable();
-  }
+  DisableMallocGuard() : disabled_(false) {}
+  ~DisableMallocGuard() { Enable(); }
 
   void Disable() {
     if (!disabled_) {
@@ -45,6 +43,7 @@ class DisableMallocGuard{
       disabled_ = false;
     }
   }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(DisableMallocGuard);
   bool disabled_;
@@ -59,13 +58,9 @@ class DisableMallocGuard{
 // here.
 class ScopedDisableMalloc {
  public:
-  ScopedDisableMalloc() {
-    disable_malloc_.Disable();
-  }
+  ScopedDisableMalloc() { disable_malloc_.Disable(); }
 
-  ~ScopedDisableMalloc() {
-    disable_malloc_.Enable();
-  }
+  ~ScopedDisableMalloc() { disable_malloc_.Enable(); }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ScopedDisableMalloc);
@@ -74,18 +69,15 @@ class ScopedDisableMalloc {
 
 class ScopedDisableMallocTimeout {
  public:
-  explicit ScopedDisableMallocTimeout(std::chrono::milliseconds timeout = std::chrono::milliseconds(2000)) :
-    timeout_(timeout), timed_out_(false), disable_malloc_() {
+  explicit ScopedDisableMallocTimeout(
+      std::chrono::milliseconds timeout = std::chrono::milliseconds(2000))
+      : timeout_(timeout), timed_out_(false), disable_malloc_() {
     Disable();
   }
 
-  ~ScopedDisableMallocTimeout() {
-    Enable();
-  }
+  ~ScopedDisableMallocTimeout() { Enable(); }
 
-  bool timed_out() {
-    return timed_out_;
-  }
+  bool timed_out() { return timed_out_; }
 
   void Enable() {
     disable_malloc_.Enable();
@@ -110,4 +102,4 @@ class ScopedDisableMallocTimeout {
   DisableMallocGuard disable_malloc_;
 };
 
-#endif // LIBMEMUNREACHABLE_SCOPED_DISABLE_MALLOC_H_
+#endif  // LIBMEMUNREACHABLE_SCOPED_DISABLE_MALLOC_H_
