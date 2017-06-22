@@ -172,7 +172,7 @@ static constexpr bool kJavaTraceDumpsEnabled = true;
                    1 /* max_concurrent_dumps */);
 
 /* static */ CrashQueue* const CrashQueue::java_trace =
-    (kJavaTraceDumpsEnabled ? new CrashQueue("/data/anr", "anr_" /* file_name_prefix */,
+    (kJavaTraceDumpsEnabled ? new CrashQueue("/data/anr", "trace_" /* file_name_prefix */,
                                              64 /* max_artifacts */, 4 /* max_concurrent_dumps */)
                             : nullptr);
 
