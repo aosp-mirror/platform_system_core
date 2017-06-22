@@ -89,6 +89,15 @@ static AvbIOResult dummy_get_unique_guid_for_partition(AvbOps* ops ATTRIBUTE_UNU
     return AVB_IO_RESULT_OK;
 }
 
+static AvbIOResult dummy_get_size_of_partition(AvbOps* ops ATTRIBUTE_UNUSED,
+                                               const char* partition ATTRIBUTE_UNUSED,
+                                               uint64_t* out_size_num_byte) {
+    // The function is for bootloader to load entire content of AVB HASH partitions.
+    // In user-space, returns 0 as we only need to set up AVB HASHTHREE partitions.
+    *out_size_num_byte = 0;
+    return AVB_IO_RESULT_OK;
+}
+
 void FsManagerAvbOps::InitializeAvbOps() {
     // We only need to provide the implementation of read_from_partition()
     // operation since that's all what is being used by the avb_slot_verify().
@@ -101,6 +110,7 @@ void FsManagerAvbOps::InitializeAvbOps() {
     avb_ops_.validate_vbmeta_public_key = dummy_validate_vbmeta_public_key;
     avb_ops_.read_is_device_unlocked = dummy_read_is_device_unlocked;
     avb_ops_.get_unique_guid_for_partition = dummy_get_unique_guid_for_partition;
+    avb_ops_.get_size_of_partition = dummy_get_size_of_partition;
 
     // Sets user_data for GetInstanceFromAvbOps() to convert it back to FsManagerAvbOps.
     avb_ops_.user_data = this;

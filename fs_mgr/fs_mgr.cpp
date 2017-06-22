@@ -851,7 +851,8 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
                     return FS_MGR_MNTALL_FAIL;
                 }
             }
-            if (!avb_handle->SetUpAvb(&fstab->recs[i], true /* wait_for_verity_dev */)) {
+            if (avb_handle->SetUpAvbHashtree(&fstab->recs[i], true /* wait_for_verity_dev */) ==
+                SetUpAvbHashtreeResult::kFail) {
                 LERROR << "Failed to set up AVB on partition: "
                        << fstab->recs[i].mount_point << ", skipping!";
                 /* Skips mounting the device. */
@@ -1071,7 +1072,8 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
                     return FS_MGR_DOMNT_FAILED;
                 }
             }
-            if (!avb_handle->SetUpAvb(&fstab->recs[i], true /* wait_for_verity_dev */)) {
+            if (avb_handle->SetUpAvbHashtree(&fstab->recs[i], true /* wait_for_verity_dev */) ==
+                SetUpAvbHashtreeResult::kFail) {
                 LERROR << "Failed to set up AVB on partition: "
                        << fstab->recs[i].mount_point << ", skipping!";
                 /* Skips mounting the device. */
