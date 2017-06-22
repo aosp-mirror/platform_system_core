@@ -25,6 +25,8 @@
 #include "ScopedSignalHandler.h"
 #include "Tarjan.h"
 
+namespace android {
+
 // A range [begin, end)
 struct Range {
   uintptr_t begin;
@@ -124,5 +126,7 @@ inline void HeapWalker::ForEachAllocation(F&& f) {
     f(range, allocation);
   }
 }
+
+}  // namespace android
 
 #endif

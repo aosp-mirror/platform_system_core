@@ -24,6 +24,8 @@
 
 using namespace std::chrono_literals;
 
+namespace android {
+
 class DisableMallocTest : public ::testing::Test {
  protected:
   void alarm(std::chrono::microseconds us) {
@@ -124,3 +126,5 @@ TEST_F(DisableMallocTest, deadlock_fork) {
 }
 }, "");
 }
+
+}  // namespace android

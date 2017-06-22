@@ -23,6 +23,8 @@
 
 #include <memunreachable/memunreachable.h>
 
+namespace android {
+
 class HiddenPointer {
  public:
   explicit HiddenPointer(size_t size = 256) { Set(malloc(size)); }
@@ -209,3 +211,5 @@ TEST(MemunreachableTest, leak_lots) {
 
   ASSERT_TRUE(LogUnreachableMemory(true, 100));
 }
+
+}  // namespace android

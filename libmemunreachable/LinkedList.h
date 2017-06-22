@@ -17,6 +17,8 @@
 #ifndef LIBMEMUNREACHABLE_LINKED_LIST_H_
 #define LIBMEMUNREACHABLE_LINKED_LIST_H_
 
+namespace android {
+
 template <class T>
 class LinkedList {
  public:
@@ -55,5 +57,7 @@ class LinkedListHead {
  private:
   LinkedList<T> node_;
 };
+
+}  // namespace android
 
 #endif

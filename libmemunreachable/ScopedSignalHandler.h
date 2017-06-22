@@ -26,6 +26,8 @@
 
 #include "log.h"
 
+namespace android {
+
 class ScopedSignalHandler {
  public:
   using Fn = std::function<void(ScopedSignalHandler&, int, siginfo_t*, void*)>;
@@ -73,5 +75,7 @@ class ScopedSignalHandler {
   // to be a static map of signals to handlers, but allocated with Allocator.
   static SignalFn handler_;
 };
+
+}  // namespace android
 
 #endif  // LIBMEMUNREACHABLE_SCOPED_SIGNAL_HANDLER_H_
