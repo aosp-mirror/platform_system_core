@@ -29,7 +29,6 @@
 
 #include <android-base/logging.h>
 #include <android-base/properties.h>
-#include <android-base/stringprintf.h>
 #include <selinux/android.h>
 #include <selinux/selinux.h>
 

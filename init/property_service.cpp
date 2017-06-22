@@ -45,7 +45,6 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
-#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <bootimg.h>
 #include <fs_mgr.h>
@@ -55,8 +54,6 @@
 
 #include "init.h"
 #include "util.h"
-
-using android::base::StringPrintf;
 
 #define PERSISTENT_PROPERTY_DIR  "/data/property"
 #define RECOVERY_MOUNT_POINT "/recovery"
@@ -714,7 +711,7 @@ void load_recovery_id_prop() {
     boot_img_hdr hdr;
     if (android::base::ReadFully(fd, &hdr, sizeof(hdr))) {
         std::string hex = bytes_to_hex(reinterpret_cast<uint8_t*>(hdr.id), sizeof(hdr.id));
-        property_set("ro.recovery_id", hex.c_str());
+        property_set("ro.recovery_id", hex);
     } else {
         PLOG(ERROR) << "error reading /recovery";
     }

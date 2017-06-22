@@ -21,7 +21,6 @@
 #include <unistd.h>
 
 #include <android-base/logging.h>
-#include <android-base/stringprintf.h>
 
 #include "init.h"
 #include "service.h"

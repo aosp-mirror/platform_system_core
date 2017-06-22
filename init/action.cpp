@@ -18,13 +18,11 @@
 
 #include <android-base/logging.h>
 #include <android-base/properties.h>
-#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 
 #include "util.h"
 
 using android::base::Join;
-using android::base::StringPrintf;
 
 Command::Command(BuiltinFunction f, const std::vector<std::string>& args, int line)
     : func_(f), args_(args), line_(line) {}
@@ -98,10 +96,10 @@ void Action::ExecuteCommand(const Command& command) const {
         android::base::GetMinimumLogSeverity() <= android::base::DEBUG) {
         std::string trigger_name = BuildTriggersString();
         std::string cmd_str = command.BuildCommandString();
-        std::string source = StringPrintf(" (%s:%d)", filename_.c_str(), command.line());
 
-        LOG(INFO) << "Command '" << cmd_str << "' action=" << trigger_name << source
-                  << " returned " << result << " took " << duration_ms << "ms.";
+        LOG(INFO) << "Command '" << cmd_str << "' action=" << trigger_name << " (" << filename_
+                  << ":" << command.line() << ") returned " << result << " took " << duration_ms
+                  << "ms.";
     }
 }
 
