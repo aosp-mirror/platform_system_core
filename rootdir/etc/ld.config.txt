@@ -103,7 +103,7 @@ namespace.vndk.asan.permitted.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}
 # to the default namespace. This is possible since their ABI is stable across
 # Android releases.
 namespace.vndk.links = default
-namespace.vndk.link.default.shared_libs = libc.so:libz.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libEGL.so:libsync.so:libvndksupport.so
+namespace.vndk.link.default.shared_libs = android.hidl.memory@1.0-impl.so:libc.so:libz.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libEGL.so:libsync.so:libvndksupport.so
 
 
 [vendor]
