@@ -19,8 +19,8 @@
 
 #include "HeapWalker.h"
 
-#include <gtest/gtest.h>
 #include <ScopedDisableMalloc.h>
+#include <gtest/gtest.h>
 #include "Allocator.h"
 
 class HeapWalkerTest : public ::testing::Test {
@@ -172,20 +172,20 @@ TEST_F(HeapWalkerTest, cycle) {
   ASSERT_EQ(true, heap_walker.Leaked(leaked, 100, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(2U, num_leaks);
-  EXPECT_EQ(2*sizeof(uintptr_t), leaked_bytes);
+  EXPECT_EQ(2 * sizeof(uintptr_t), leaked_bytes);
   ASSERT_EQ(2U, leaked.size());
 }
 
 TEST_F(HeapWalkerTest, segv) {
   const size_t page_size = sysconf(_SC_PAGE_SIZE);
-  void* buffer1 = mmap(NULL, page_size, PROT_NONE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+  void* buffer1 = mmap(NULL, page_size, PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
   ASSERT_NE(buffer1, nullptr);
   void* buffer2;
 
   buffer2 = &buffer1;
 
   HeapWalker heap_walker(heap_);
-  heap_walker.Allocation(buffer_begin(buffer1), buffer_begin(buffer1)+page_size);
+  heap_walker.Allocation(buffer_begin(buffer1), buffer_begin(buffer1) + page_size);
   heap_walker.Root(buffer_begin(buffer2), buffer_end(buffer2));
 
   ASSERT_EQ(true, heap_walker.DetectLeaks());
