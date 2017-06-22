@@ -22,8 +22,8 @@
 #include "log.h"
 
 bool LeakPipe::SendFd(int sock, int fd) {
-  struct msghdr hdr{};
-  struct iovec iov{};
+  struct msghdr hdr {};
+  struct iovec iov {};
   unsigned int data = 0xfdfdfdfd;
   alignas(struct cmsghdr) char cmsgbuf[CMSG_SPACE(sizeof(int))];
 
@@ -56,8 +56,8 @@ bool LeakPipe::SendFd(int sock, int fd) {
 }
 
 int LeakPipe::ReceiveFd(int sock) {
-  struct msghdr hdr{};
-  struct iovec iov{};
+  struct msghdr hdr {};
+  struct iovec iov {};
   unsigned int data;
   alignas(struct cmsghdr) char cmsgbuf[CMSG_SPACE(sizeof(int))];
 

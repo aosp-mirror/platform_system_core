@@ -23,17 +23,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #include "android-base/macros.h"
 
+#include "PtracerThread.h"
 #include "anon_vma_naming.h"
 #include "log.h"
-#include "PtracerThread.h"
 
 class Stack {
  public:
@@ -41,7 +41,7 @@ class Stack {
     int prot = PROT_READ | PROT_WRITE;
     int flags = MAP_PRIVATE | MAP_ANONYMOUS;
     page_size_ = sysconf(_SC_PAGE_SIZE);
-    size_ += page_size_*2; // guard pages
+    size_ += page_size_ * 2;  // guard pages
     base_ = mmap(NULL, size_, prot, flags, -1, 0);
     if (base_ == MAP_FAILED) {
       base_ = NULL;
@@ -52,22 +52,20 @@ class Stack {
     mprotect(base_, page_size_, PROT_NONE);
     mprotect(top(), page_size_, PROT_NONE);
   };
-  ~Stack() {
-    munmap(base_, size_);
-  };
+  ~Stack() { munmap(base_, size_); };
   void* top() {
     return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(base_) + size_ - page_size_);
   };
+
  private:
   DISALLOW_COPY_AND_ASSIGN(Stack);
 
-  void *base_;
+  void* base_;
   size_t size_;
   size_t page_size_;
 };
 
-PtracerThread::PtracerThread(const std::function<int()>& func) :
-    child_pid_(0) {
+PtracerThread::PtracerThread(const std::function<int()>& func) : child_pid_(0) {
   stack_ = std::make_unique<Stack>(PTHREAD_STACK_MIN);
   if (stack_->top() == nullptr) {
     MEM_LOG_ALWAYS_FATAL("failed to mmap child stack: %s", strerror(errno));
@@ -93,14 +91,13 @@ bool PtracerThread::Start() {
   std::unique_lock<std::mutex> lk(m_);
 
   // Convert from void(*)(void*) to lambda with captures
-  auto proxy = [](void *arg) -> int {
+  auto proxy = [](void* arg) -> int {
     prctl(PR_SET_NAME, "libmemunreachable ptrace thread");
     return (*reinterpret_cast<std::function<int()>*>(arg))();
   };
 
-  child_pid_ = clone(proxy, stack_->top(),
-       CLONE_VM|CLONE_FS|CLONE_FILES/*|CLONE_UNTRACED*/,
-       reinterpret_cast<void*>(&func_));
+  child_pid_ = clone(proxy, stack_->top(), CLONE_VM | CLONE_FS | CLONE_FILES /*|CLONE_UNTRACED*/,
+                     reinterpret_cast<void*>(&func_));
   if (child_pid_ < 0) {
     MEM_ALOGE("failed to clone child: %s", strerror(errno));
     return false;

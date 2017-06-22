@@ -19,8 +19,8 @@
 #include <chrono>
 #include <functional>
 
-#include <gtest/gtest.h>
 #include <ScopedDisableMalloc.h>
+#include <gtest/gtest.h>
 
 using namespace std::chrono_literals;
 
@@ -36,75 +36,83 @@ class DisableMallocTest : public ::testing::Test {
 };
 
 TEST_F(DisableMallocTest, reenable) {
-  ASSERT_EXIT({
-    alarm(100ms);
-    void *ptr1 = malloc(128);
-    ASSERT_NE(ptr1, nullptr);
-    free(ptr1);
-    {
-      ScopedDisableMalloc disable_malloc;
-    }
-    void *ptr2 = malloc(128);
-    ASSERT_NE(ptr2, nullptr);
-    free(ptr2);
-    _exit(1);
-  }, ::testing::ExitedWithCode(1), "");
+  ASSERT_EXIT(
+      {
+        alarm(100ms);
+        void* ptr1 = malloc(128);
+        ASSERT_NE(ptr1, nullptr);
+        free(ptr1);
+        { ScopedDisableMalloc disable_malloc; }
+        void* ptr2 = malloc(128);
+        ASSERT_NE(ptr2, nullptr);
+        free(ptr2);
+        _exit(1);
+      },
+      ::testing::ExitedWithCode(1), "");
 }
 
 TEST_F(DisableMallocTest, deadlock_allocate) {
-  ASSERT_DEATH({
-    void *ptr = malloc(128);
-    ASSERT_NE(ptr, nullptr);
-    free(ptr);
-    {
-      alarm(100ms);
-      ScopedDisableMalloc disable_malloc;
-      void* ptr = malloc(128);
-      ASSERT_NE(ptr, nullptr);
-      free(ptr);
-    }
-  }, "");
+  ASSERT_DEATH(
+      {
+        void* ptr = malloc(128);
+        ASSERT_NE(ptr, nullptr);
+        free(ptr);
+        {
+          alarm(100ms);
+          ScopedDisableMalloc disable_malloc;
+          void* ptr = malloc(128);
+          ASSERT_NE(ptr, nullptr);
+          free(ptr);
+        }
+      },
+      "");
 }
 
 TEST_F(DisableMallocTest, deadlock_new) {
-  ASSERT_DEATH({
-    char* ptr = new(char);
-    ASSERT_NE(ptr, nullptr);
-    delete(ptr);
-    {
-      alarm(100ms);
-      ScopedDisableMalloc disable_malloc;
-      char* ptr = new (std::nothrow)(char);
-      ASSERT_NE(ptr, nullptr);
-      delete(ptr);
-    }
-  }, "");
+  ASSERT_DEATH(
+      {
+        char* ptr = new (char);
+        ASSERT_NE(ptr, nullptr);
+        delete (ptr);
+        {
+          alarm(100ms);
+          ScopedDisableMalloc disable_malloc;
+          char* ptr = new (std::nothrow)(char);
+          ASSERT_NE(ptr, nullptr);
+          delete (ptr);
+        }
+      },
+      "");
 }
 
 TEST_F(DisableMallocTest, deadlock_delete) {
-  ASSERT_DEATH({
-    char* ptr = new(char);
-    ASSERT_NE(ptr, nullptr);
-    {
-      alarm(250ms);
-      ScopedDisableMalloc disable_malloc;
-      delete(ptr);
-      // Force ptr usage or this code gets optimized away by the arm64 compiler.
-      ASSERT_NE(ptr, nullptr);
-    }
-  }, "");
+  ASSERT_DEATH(
+      {
+        char* ptr = new (char);
+        ASSERT_NE(ptr, nullptr);
+        {
+          alarm(250ms);
+          ScopedDisableMalloc disable_malloc;
+          delete (ptr);
+          // Force ptr usage or this code gets optimized away by the arm64 compiler.
+          ASSERT_NE(ptr, nullptr);
+        }
+      },
+      "");
 }
 
 TEST_F(DisableMallocTest, deadlock_free) {
-  ASSERT_DEATH({
-    void *ptr = malloc(128);
-    ASSERT_NE(ptr, nullptr);
-    {
-      alarm(100ms);
-      ScopedDisableMalloc disable_malloc;
-      free(ptr);
-    }
-  }, "");
+  ASSERT_DEATH(
+      {
+        void* ptr = malloc(128);
+        ASSERT_NE(ptr, nullptr);
+        {
+          alarm(100ms);
+          ScopedDisableMalloc disable_malloc;
+          free(ptr);
+        }
+      },
+      "");
 }
 
 TEST_F(DisableMallocTest, deadlock_fork) {
@@ -113,6 +121,6 @@ TEST_F(DisableMallocTest, deadlock_fork) {
       alarm(100ms);
       ScopedDisableMalloc disable_malloc;
       fork();
-    }
-  }, "");
+}
+}, "");
 }

@@ -43,4 +43,4 @@
 
 #endif
 
-#endif // LIBMEMUNREACHABLE_LOG_H_
+#endif  // LIBMEMUNREACHABLE_LOG_H_

@@ -36,6 +36,7 @@ class PtracerThread {
   ~PtracerThread();
   bool Start();
   int Join();
+
  private:
   void SetTracer(pid_t);
   void ClearTracer();
@@ -47,4 +48,4 @@ class PtracerThread {
   pid_t child_pid_;
 };
 
-#endif // LIBMEMUNREACHABLE_PTRACER_THREAD_H_
+#endif  // LIBMEMUNREACHABLE_PTRACER_THREAD_H_
