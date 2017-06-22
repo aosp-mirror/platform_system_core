@@ -114,7 +114,6 @@ static std::pair<size_t, bool> verify_vbmeta_digest(const AvbSlotVerifyData& ver
 
 // Reads the following values from kernel cmdline and provides the
 // VerifyVbmetaImages() to verify AvbSlotVerifyData.
-//   - androidboot.vbmeta.device_state
 //   - androidboot.vbmeta.hash_alg
 //   - androidboot.vbmeta.size
 //   - androidboot.vbmeta.digest
@@ -123,7 +122,6 @@ class FsManagerAvbVerifier {
     // The factory method to return a unique_ptr<FsManagerAvbVerifier>
     static std::unique_ptr<FsManagerAvbVerifier> Create();
     bool VerifyVbmetaImages(const AvbSlotVerifyData& verify_data);
-    bool IsDeviceUnlocked() { return is_device_unlocked_; }
 
   protected:
     FsManagerAvbVerifier() = default;
@@ -138,7 +136,6 @@ class FsManagerAvbVerifier {
     HashAlgorithm hash_alg_;
     uint8_t digest_[SHA512_DIGEST_LENGTH];
     size_t vbmeta_size_;
-    bool is_device_unlocked_;
 };
 
 std::unique_ptr<FsManagerAvbVerifier> FsManagerAvbVerifier::Create() {
@@ -161,9 +158,7 @@ std::unique_ptr<FsManagerAvbVerifier> FsManagerAvbVerifier::Create() {
         const std::string& key = pieces[0];
         const std::string& value = pieces[1];
 
-        if (key == "androidboot.vbmeta.device_state") {
-            avb_verifier->is_device_unlocked_ = (value == "unlocked");
-        } else if (key == "androidboot.vbmeta.hash_alg") {
+        if (key == "androidboot.vbmeta.hash_alg") {
             hash_alg = value;
         } else if (key == "androidboot.vbmeta.size") {
             if (!android::base::ParseUint(value.c_str(), &avb_verifier->vbmeta_size_)) {
@@ -478,6 +473,16 @@ static bool get_hashtree_descriptor(const std::string& partition_name,
     return true;
 }
 
+// Orange state means the device is unlocked, see the following link for details.
+// https://source.android.com/security/verifiedboot/verified-boot#device_state
+static inline bool IsDeviceUnlocked() {
+    std::string verified_boot_state;
+    if (fs_mgr_get_boot_config("verifiedbootstate", &verified_boot_state)) {
+        return verified_boot_state == "orange";
+    }
+    return false;
+}
+
 FsManagerAvbUniquePtr FsManagerAvbHandle::Open(const fstab& fstab) {
     FsManagerAvbOps avb_ops(fstab);
     return DoOpen(&avb_ops);
@@ -493,12 +498,7 @@ FsManagerAvbUniquePtr FsManagerAvbHandle::Open(ByNameSymlinkMap&& by_name_symlin
 }
 
 FsManagerAvbUniquePtr FsManagerAvbHandle::DoOpen(FsManagerAvbOps* avb_ops) {
-    // Gets the expected hash value of vbmeta images from kernel cmdline.
-    std::unique_ptr<FsManagerAvbVerifier> avb_verifier = FsManagerAvbVerifier::Create();
-    if (!avb_verifier) {
-        LERROR << "Failed to create FsManagerAvbVerifier";
-        return nullptr;
-    }
+    bool is_device_unlocked = IsDeviceUnlocked();
 
     FsManagerAvbUniquePtr avb_handle(new FsManagerAvbHandle());
     if (!avb_handle) {
@@ -506,9 +506,8 @@ FsManagerAvbUniquePtr FsManagerAvbHandle::DoOpen(FsManagerAvbOps* avb_ops) {
         return nullptr;
     }
 
-    AvbSlotVerifyFlags flags = avb_verifier->IsDeviceUnlocked()
-                                   ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
-                                   : AVB_SLOT_VERIFY_FLAGS_NONE;
+    AvbSlotVerifyFlags flags = is_device_unlocked ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
+                                                  : AVB_SLOT_VERIFY_FLAGS_NONE;
     AvbSlotVerifyResult verify_result =
         avb_ops->AvbSlotVerify(fs_mgr_get_slot_suffix(), flags, &avb_handle->avb_slot_data_);
 
@@ -526,62 +525,81 @@ FsManagerAvbUniquePtr FsManagerAvbHandle::DoOpen(FsManagerAvbOps* avb_ops) {
     //     for more details.
     switch (verify_result) {
         case AVB_SLOT_VERIFY_RESULT_OK:
-            avb_handle->status_ = kFsManagerAvbHandleSuccess;
+            avb_handle->status_ = kAvbHandleSuccess;
             break;
         case AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION:
-            if (!avb_verifier->IsDeviceUnlocked()) {
+            if (!is_device_unlocked) {
                 LERROR << "ERROR_VERIFICATION isn't allowed when the device is LOCKED";
                 return nullptr;
             }
-            avb_handle->status_ = kFsManagerAvbHandleErrorVerification;
+            avb_handle->status_ = kAvbHandleVerificationError;
             break;
         default:
             LERROR << "avb_slot_verify failed, result: " << verify_result;
             return nullptr;
     }
 
-    // Verifies vbmeta images against the digest passed from bootloader.
-    if (!avb_verifier->VerifyVbmetaImages(*avb_handle->avb_slot_data_)) {
-        LERROR << "VerifyVbmetaImages failed";
-        return nullptr;
-    }
-
     // Sets the MAJOR.MINOR for init to set it into "ro.boot.avb_version".
     avb_handle->avb_version_ =
         android::base::StringPrintf("%d.%d", AVB_VERSION_MAJOR, AVB_VERSION_MINOR);
 
-    // Checks whether FLAGS_HASHTREE_DISABLED is set.
+    // Checks whether FLAGS_VERIFICATION_DISABLED is set:
+    //   - Only the top-level vbmeta struct is read.
+    //   - vbmeta struct in other partitions are NOT processed, including AVB HASH descriptor(s)
+    //     and AVB HASHTREE descriptor(s).
     AvbVBMetaImageHeader vbmeta_header;
     avb_vbmeta_image_header_to_host_byte_order(
         (AvbVBMetaImageHeader*)avb_handle->avb_slot_data_->vbmeta_images[0].vbmeta_data,
         &vbmeta_header);
+    bool verification_disabled =
+        ((AvbVBMetaImageFlags)vbmeta_header.flags & AVB_VBMETA_IMAGE_FLAGS_VERIFICATION_DISABLED);
 
-    bool hashtree_disabled =
-        ((AvbVBMetaImageFlags)vbmeta_header.flags & AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED);
-    if (hashtree_disabled) {
-        avb_handle->status_ = kFsManagerAvbHandleHashtreeDisabled;
+    if (verification_disabled) {
+        avb_handle->status_ = kAvbHandleVerificationDisabled;
+    } else {
+        // Verifies vbmeta structs against the digest passed from bootloader in kernel cmdline.
+        std::unique_ptr<FsManagerAvbVerifier> avb_verifier = FsManagerAvbVerifier::Create();
+        if (!avb_verifier) {
+            LERROR << "Failed to create FsManagerAvbVerifier";
+            return nullptr;
+        }
+        if (!avb_verifier->VerifyVbmetaImages(*avb_handle->avb_slot_data_)) {
+            LERROR << "VerifyVbmetaImages failed";
+            return nullptr;
+        }
+
+        // Checks whether FLAGS_HASHTREE_DISABLED is set.
+        bool hashtree_disabled =
+            ((AvbVBMetaImageFlags)vbmeta_header.flags & AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED);
+        if (hashtree_disabled) {
+            avb_handle->status_ = kAvbHandleHashtreeDisabled;
+        }
     }
 
     LINFO << "Returning avb_handle with status: " << avb_handle->status_;
     return avb_handle;
 }
 
-bool FsManagerAvbHandle::SetUpAvb(struct fstab_rec* fstab_entry, bool wait_for_verity_dev) {
-    if (!fstab_entry) return false;
-    if (!avb_slot_data_ || avb_slot_data_->num_vbmeta_images < 1) {
-        return false;
+SetUpAvbHashtreeResult FsManagerAvbHandle::SetUpAvbHashtree(struct fstab_rec* fstab_entry,
+                                                            bool wait_for_verity_dev) {
+    if (!fstab_entry || status_ == kAvbHandleUninitialized || !avb_slot_data_ ||
+        avb_slot_data_->num_vbmeta_images < 1) {
+        return SetUpAvbHashtreeResult::kFail;
     }
 
-    if (status_ == kFsManagerAvbHandleUninitialized) return false;
-    if (status_ == kFsManagerAvbHandleHashtreeDisabled) {
-        LINFO << "AVB HASHTREE disabled on:" << fstab_entry->mount_point;
-        return true;
+    if (status_ == kAvbHandleHashtreeDisabled || status_ == kAvbHandleVerificationDisabled) {
+        LINFO << "AVB HASHTREE disabled on: " << fstab_entry->mount_point;
+        return SetUpAvbHashtreeResult::kDisabled;
     }
 
-    std::string partition_name(basename(fstab_entry->mount_point));
-    if (!avb_validate_utf8((const uint8_t*)partition_name.c_str(), partition_name.length())) {
-        LERROR << "Partition name: " << partition_name.c_str() << " is not valid UTF-8.";
-        return false;
+    // Derives partition_name from blk_device to query the corresponding AVB HASHTREE descriptor
+    // to setup dm-verity. The partition_names in AVB descriptors are without A/B suffix.
+    std::string partition_name(basename(fstab_entry->blk_device));
+    if (fstab_entry->fs_mgr_flags & MF_SLOTSELECT) {
+        auto ab_suffix = partition_name.rfind(fs_mgr_get_slot_suffix());
+        if (ab_suffix != std::string::npos) {
+            partition_name.erase(ab_suffix);
+        }
     }
 
     AvbHashtreeDescriptor hashtree_descriptor;
@@ -589,13 +607,14 @@ bool FsManagerAvbHandle::SetUpAvb(struct fstab_rec* fstab_entry, bool wait_for_v
     std::string root_digest;
     if (!get_hashtree_descriptor(partition_name, *avb_slot_data_, &hashtree_descriptor, &salt,
                                  &root_digest)) {
-        return false;
+        return SetUpAvbHashtreeResult::kFail;
     }
 
     // Converts HASHTREE descriptor to verity_table_params.
     if (!hashtree_dm_verity_setup(fstab_entry, hashtree_descriptor, salt, root_digest,
                                   wait_for_verity_dev)) {
-        return false;
+        return SetUpAvbHashtreeResult::kFail;
     }
-    return true;
+
+    return SetUpAvbHashtreeResult::kSuccess;
 }
