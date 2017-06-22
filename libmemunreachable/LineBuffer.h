@@ -19,6 +19,8 @@
 
 #include <stdint.h>
 
+namespace android {
+
 class LineBuffer {
  public:
   LineBuffer(int fd, char* buffer, size_t buffer_len);
@@ -32,5 +34,7 @@ class LineBuffer {
   size_t start_ = 0;
   size_t bytes_ = 0;
 };
+
+}  // namespace android
 
 #endif  // _LIBMEMUNREACHABLE_LINE_BUFFER_H

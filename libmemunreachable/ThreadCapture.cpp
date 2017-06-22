@@ -39,6 +39,8 @@
 #include "Allocator.h"
 #include "log.h"
 
+namespace android {
+
 // bionic interfaces used:
 // atoi
 // strlcat
@@ -361,3 +363,5 @@ bool ThreadCapture::CapturedThreadInfo(ThreadInfoList& threads) {
 void ThreadCapture::InjectTestFunc(std::function<void(pid_t)>&& f) {
   impl_->InjectTestFunc(std::forward<std::function<void(pid_t)>>(f));
 }
+
+}  // namespace android

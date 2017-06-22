@@ -15,6 +15,7 @@
  */
 
 #include <inttypes.h>
+#include <string.h>
 
 #include <functional>
 #include <iomanip>
@@ -41,9 +42,11 @@
 #include "log.h"
 #include "memunreachable/memunreachable.h"
 
-const size_t Leak::contents_length;
-
 using namespace std::chrono_literals;
+
+namespace android {
+
+const size_t Leak::contents_length;
 
 class MemUnreachable {
  public:
@@ -510,9 +513,11 @@ std::string GetUnreachableMemoryString(bool log_contents, size_t limit) {
   return info.ToString(log_contents);
 }
 
+}  // namespace android
+
 bool LogUnreachableMemory(bool log_contents, size_t limit) {
-  UnreachableMemoryInfo info;
-  if (!GetUnreachableMemory(info, limit)) {
+  android::UnreachableMemoryInfo info;
+  if (!android::GetUnreachableMemory(info, limit)) {
     return false;
   }
 
@@ -523,8 +528,8 @@ bool LogUnreachableMemory(bool log_contents, size_t limit) {
 }
 
 bool NoLeaks() {
-  UnreachableMemoryInfo info;
-  if (!GetUnreachableMemory(info, 0)) {
+  android::UnreachableMemoryInfo info;
+  if (!android::GetUnreachableMemory(info, 0)) {
     return false;
   }
 

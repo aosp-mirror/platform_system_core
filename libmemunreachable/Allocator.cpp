@@ -37,6 +37,8 @@
 #include "LinkedList.h"
 #include "anon_vma_naming.h"
 
+namespace android {
+
 // runtime interfaces used:
 // abort
 // assert - fprintf + mmap
@@ -462,3 +464,5 @@ void Heap::deallocate(HeapImpl* impl, void* ptr) {
 bool Heap::empty() {
   return impl_->Empty();
 }
+
+}  // namespace android

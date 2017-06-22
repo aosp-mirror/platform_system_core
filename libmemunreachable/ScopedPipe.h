@@ -21,6 +21,8 @@
 
 #include "log.h"
 
+namespace android {
+
 class ScopedPipe {
  public:
   ScopedPipe() : pipefd_{-1, -1} {
@@ -72,4 +74,7 @@ class ScopedPipe {
 
   int pipefd_[2];
 };
+
+}  // namespace android
+
 #endif

@@ -35,6 +35,8 @@
 #include "anon_vma_naming.h"
 #include "log.h"
 
+namespace android {
+
 class Stack {
  public:
   explicit Stack(size_t size) : size_(size) {
@@ -148,3 +150,5 @@ void PtracerThread::SetTracer(pid_t tracer_pid) {
 void PtracerThread::ClearTracer() {
   prctl(PR_SET_PTRACER, 0);
 }
+
+}  // namespace android

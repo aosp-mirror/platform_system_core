@@ -19,6 +19,8 @@
 
 #include "HeapWalker.h"
 
+namespace android {
+
 class LeakFolding {
  public:
   LeakFolding(Allocator<void> allocator, HeapWalker& heap_walker)
@@ -92,5 +94,7 @@ class LeakFolding {
   Graph<LeakInfo> leak_graph_;
   allocator::vector<Allocator<SCCInfo>::unique_ptr> leak_scc_;
 };
+
+}  // namespace android
 
 #endif  // LIBMEMUNREACHABLE_LEAK_FOLDING_H_
