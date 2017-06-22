@@ -859,7 +859,9 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
             }
         } else if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && is_device_secure()) {
             int rc = fs_mgr_setup_verity(&fstab->recs[i], true);
-            if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
+            if (__android_log_is_debuggable() &&
+                    (rc == FS_MGR_SETUP_VERITY_DISABLED ||
+                     rc == FS_MGR_SETUP_VERITY_SKIPPED)) {
                 LINFO << "Verity disabled";
             } else if (rc != FS_MGR_SETUP_VERITY_SUCCESS) {
                 LERROR << "Could not set up verified partition, skipping!";
@@ -1077,7 +1079,9 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
             }
         } else if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) && is_device_secure()) {
             int rc = fs_mgr_setup_verity(&fstab->recs[i], true);
-            if (__android_log_is_debuggable() && rc == FS_MGR_SETUP_VERITY_DISABLED) {
+            if (__android_log_is_debuggable() &&
+                    (rc == FS_MGR_SETUP_VERITY_DISABLED ||
+                     rc == FS_MGR_SETUP_VERITY_SKIPPED)) {
                 LINFO << "Verity disabled";
             } else if (rc != FS_MGR_SETUP_VERITY_SUCCESS) {
                 LERROR << "Could not set up verified partition, skipping!";
