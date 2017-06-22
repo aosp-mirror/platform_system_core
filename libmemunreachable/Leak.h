@@ -26,7 +26,7 @@
 // as a key in std::unordered_map.
 namespace std {
 
-template<>
+template <>
 struct hash<Leak::Backtrace> {
   std::size_t operator()(const Leak::Backtrace& key) const {
     std::size_t seed = 0;
@@ -40,7 +40,7 @@ struct hash<Leak::Backtrace> {
   }
 
  private:
-  template<typename T>
+  template <typename T>
   inline void hash_combine(std::size_t& seed, const T& v) const {
     std::hash<T> hasher;
     seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
@@ -51,7 +51,7 @@ struct hash<Leak::Backtrace> {
 
 static bool operator==(const Leak::Backtrace& lhs, const Leak::Backtrace& rhs) {
   return (lhs.num_frames == rhs.num_frames) &&
-      memcmp(lhs.frames, rhs.frames, lhs.num_frames * sizeof(lhs.frames[0])) == 0;
+         memcmp(lhs.frames, rhs.frames, lhs.num_frames * sizeof(lhs.frames[0])) == 0;
 }
 
 #endif

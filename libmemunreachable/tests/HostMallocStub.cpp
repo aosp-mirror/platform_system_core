@@ -16,8 +16,6 @@
 
 #include "bionic.h"
 
-void malloc_disable() {
-}
+void malloc_disable() {}
 
-void malloc_enable() {
-}
+void malloc_enable() {}

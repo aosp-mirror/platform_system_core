@@ -21,13 +21,13 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <sys/ptrace.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #include <map>
 #include <memory>
@@ -50,12 +50,12 @@
 // Convert a pid > 0 to a string.  sprintf might allocate, so we can't use it.
 // Returns a pointer somewhere in buf to a null terminated string, or NULL
 // on error.
-static char *pid_to_str(char *buf, size_t len, pid_t pid) {
+static char* pid_to_str(char* buf, size_t len, pid_t pid) {
   if (pid <= 0) {
     return nullptr;
   }
 
-  char *ptr = buf + len - 1;
+  char* ptr = buf + len - 1;
   *ptr = 0;
   while (pid > 0) {
     ptr--;
@@ -79,6 +79,7 @@ class ThreadCaptureImpl {
   bool ReleaseThread(pid_t tid);
   bool CapturedThreadInfo(ThreadInfoList& threads);
   void InjectTestFunc(std::function<void(pid_t)>&& f) { inject_test_func_ = f; }
+
  private:
   int CaptureThread(pid_t tid);
   bool ReleaseThread(pid_t tid, unsigned int signal);
@@ -92,9 +93,8 @@ class ThreadCaptureImpl {
   std::function<void(pid_t)> inject_test_func_;
 };
 
-ThreadCaptureImpl::ThreadCaptureImpl(pid_t pid, Allocator<ThreadCaptureImpl>& allocator) :
-    captured_threads_(allocator), allocator_(allocator), pid_(pid) {
-}
+ThreadCaptureImpl::ThreadCaptureImpl(pid_t pid, Allocator<ThreadCaptureImpl>& allocator)
+    : captured_threads_(allocator), allocator_(allocator), pid_(pid) {}
 
 bool ThreadCaptureImpl::ListThreads(TidList& tids) {
   tids.clear();
@@ -115,11 +115,11 @@ bool ThreadCaptureImpl::ListThreads(TidList& tids) {
   }
 
   struct linux_dirent64 {
-    uint64_t  d_ino;
-    int64_t   d_off;
-    uint16_t  d_reclen;
-    char      d_type;
-    char      d_name[];
+    uint64_t d_ino;
+    int64_t d_off;
+    uint16_t d_reclen;
+    char d_type;
+    char d_name[];
   } __attribute((packed));
   char dirent_buf[4096];
   ssize_t nread;
@@ -209,7 +209,7 @@ int ThreadCaptureImpl::PtraceAttach(pid_t tid) {
 bool ThreadCaptureImpl::PtraceThreadInfo(pid_t tid, ThreadInfo& thread_info) {
   thread_info.tid = tid;
 
-  const unsigned int max_num_regs = 128; // larger than number of registers on any device
+  const unsigned int max_num_regs = 128;  // larger than number of registers on any device
   uintptr_t regs[max_num_regs];
   struct iovec iovec;
   iovec.iov_base = &regs;
@@ -243,7 +243,7 @@ bool ThreadCaptureImpl::PtraceThreadInfo(pid_t tid, ThreadInfo& thread_info) {
 
   thread_info.stack = std::pair<uintptr_t, uintptr_t>(regs[sp], 0);
 
-   return true;
+  return true;
 }
 
 int ThreadCaptureImpl::CaptureThread(pid_t tid) {
@@ -266,7 +266,7 @@ int ThreadCaptureImpl::CaptureThread(pid_t tid) {
 
   unsigned int resume_signal = 0;
 
-  unsigned int signal =  WSTOPSIG(status);
+  unsigned int signal = WSTOPSIG(status);
   if ((status >> 16) == PTRACE_EVENT_STOP) {
     switch (signal) {
       case SIGSTOP:
@@ -307,7 +307,7 @@ bool ThreadCaptureImpl::ReleaseThread(pid_t tid, unsigned int signal) {
 
 bool ThreadCaptureImpl::ReleaseThreads() {
   bool ret = true;
-  for (auto it = captured_threads_.begin(); it != captured_threads_.end(); ) {
+  for (auto it = captured_threads_.begin(); it != captured_threads_.end();) {
     if (ReleaseThread(it->first, it->second)) {
       it = captured_threads_.erase(it);
     } else {

@@ -33,4 +33,4 @@ class LineBuffer {
   size_t bytes_ = 0;
 };
 
-#endif // _LIBMEMUNREACHABLE_LINE_BUFFER_H
+#endif  // _LIBMEMUNREACHABLE_LINE_BUFFER_H

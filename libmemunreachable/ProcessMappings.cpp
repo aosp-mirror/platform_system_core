@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include <inttypes.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -42,8 +42,8 @@ bool ProcessMappings(pid_t pid, allocator::vector<Mapping>& mappings) {
     int name_pos;
     char perms[5];
     Mapping mapping{};
-    if (sscanf(line, "%" SCNxPTR "-%" SCNxPTR " %4s %*x %*x:%*x %*d %n",
-        &mapping.begin, &mapping.end, perms, &name_pos) == 3) {
+    if (sscanf(line, "%" SCNxPTR "-%" SCNxPTR " %4s %*x %*x:%*x %*d %n", &mapping.begin,
+               &mapping.end, perms, &name_pos) == 3) {
       if (perms[0] == 'r') {
         mapping.read = true;
       }

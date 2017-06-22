@@ -33,7 +33,7 @@ using ThreadInfoList = allocator::vector<ThreadInfo>;
 class ThreadCaptureImpl;
 
 class ThreadCapture {
-public:
+ public:
   ThreadCapture(pid_t pid, Allocator<ThreadCapture> allocator);
   ~ThreadCapture();
 
@@ -44,7 +44,7 @@ public:
   bool CapturedThreadInfo(ThreadInfoList& threads);
   void InjectTestFunc(std::function<void(pid_t)>&& f);
 
-private:
+ private:
   ThreadCapture(const ThreadCapture&) = delete;
   void operator=(const ThreadCapture&) = delete;
 
