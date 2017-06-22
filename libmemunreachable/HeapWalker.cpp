@@ -28,6 +28,8 @@
 #include "ScopedSignalHandler.h"
 #include "log.h"
 
+namespace android {
+
 bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
   if (end == begin) {
     end = begin + 1;
@@ -173,3 +175,5 @@ void HeapWalker::HandleSegFault(ScopedSignalHandler& handler, int signal, siginf
 }
 
 ScopedSignalHandler::SignalFn ScopedSignalHandler::handler_;
+
+}  // namespace android

@@ -22,6 +22,8 @@
 #include "Tarjan.h"
 #include "log.h"
 
+namespace android {
+
 // Converts possibly cyclic graph of leaks to a DAG by combining
 // strongly-connected components into a object, stored in the scc pointer
 // of each node in the component.
@@ -132,3 +134,5 @@ bool LeakFolding::Leaked(allocator::vector<LeakFolding::Leak>& leaked, size_t* n
 
   return true;
 }
+
+}  // namespace android

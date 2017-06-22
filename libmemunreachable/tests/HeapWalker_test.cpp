@@ -23,6 +23,8 @@
 #include <gtest/gtest.h>
 #include "Allocator.h"
 
+namespace android {
+
 class HeapWalkerTest : public ::testing::Test {
  public:
   HeapWalkerTest() : disable_malloc_(), heap_() {}
@@ -199,3 +201,5 @@ TEST_F(HeapWalkerTest, segv) {
   EXPECT_EQ(0U, leaked_bytes);
   ASSERT_EQ(0U, leaked.size());
 }
+
+}  // namespace android

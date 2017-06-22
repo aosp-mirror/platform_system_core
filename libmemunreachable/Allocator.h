@@ -27,6 +27,9 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+namespace android {
+
 extern std::atomic<int> heap_count;
 
 class HeapImpl;
@@ -209,5 +212,7 @@ using set = std::set<Key, Compare, Allocator<Key>>;
 
 using string = std::basic_string<char, std::char_traits<char>, Allocator<char>>;
 }
+
+}  // namespace android
 
 #endif
