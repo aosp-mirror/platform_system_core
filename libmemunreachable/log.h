@@ -26,7 +26,18 @@
 #define MEM_ALOGE(...) async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, ##__VA_ARGS__)
 #define MEM_ALOGW(...) async_safe_format_log(ANDROID_LOG_WARN, LOG_TAG, ##__VA_ARGS__)
 #define MEM_ALOGI(...) async_safe_format_log(ANDROID_LOG_INFO, LOG_TAG, ##__VA_ARGS__)
-#define MEM_ALOGV(...) async_safe_format_log(ANDROID_LOG_VERBOSE, LOG_TAG, ##__VA_ARGS__)
+#define MEM_ALOGV_IMPL(...) async_safe_format_log(ANDROID_LOG_VERBOSE, LOG_TAG, ##__VA_ARGS__)
+
+#ifdef NDEBUG
+#define MEM_ALOGV(...)             \
+  do {                             \
+    if (0) {                       \
+      MEM_ALOGV_IMPL(__VA_ARGS__); \
+    }                              \
+  } while (0)
+#else
+#define MEM_ALOGV(...) MEM_ALOGV_IMPL(__VA_ARGS__)
+#endif
 
 #define MEM_LOG_ALWAYS_FATAL(...) async_safe_fatal(__VA_ARGS__)
 
