@@ -27,8 +27,8 @@
 namespace std {
 
 template <>
-struct hash<Leak::Backtrace> {
-  std::size_t operator()(const Leak::Backtrace& key) const {
+struct hash<android::Leak::Backtrace> {
+  std::size_t operator()(const android::Leak::Backtrace& key) const {
     std::size_t seed = 0;
 
     hash_combine(seed, key.num_frames);
@@ -49,9 +49,12 @@ struct hash<Leak::Backtrace> {
 
 }  // namespace std
 
+namespace android {
+
 static bool operator==(const Leak::Backtrace& lhs, const Leak::Backtrace& rhs) {
   return (lhs.num_frames == rhs.num_frames) &&
          memcmp(lhs.frames, rhs.frames, lhs.num_frames * sizeof(lhs.frames[0])) == 0;
+}
 }
 
 #endif

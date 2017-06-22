@@ -21,6 +21,8 @@
 
 #include "log.h"
 
+namespace android {
+
 bool LeakPipe::SendFd(int sock, int fd) {
   struct msghdr hdr {};
   struct iovec iov {};
@@ -87,3 +89,5 @@ int LeakPipe::ReceiveFd(int sock) {
 
   return *(int*)CMSG_DATA(cmsg);
 }
+
+}  // namespace android

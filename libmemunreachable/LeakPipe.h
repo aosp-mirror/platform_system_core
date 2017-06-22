@@ -26,6 +26,8 @@
 #include "ScopedPipe.h"
 #include "log.h"
 
+namespace android {
+
 // LeakPipe implements a pipe that can transfer vectors of simple objects
 // between processes.  The pipe is created in the sending process and
 // transferred over a socketpair that was created before forking.  This ensures
@@ -186,5 +188,7 @@ class LeakPipe {
   DISALLOW_COPY_AND_ASSIGN(LeakPipe);
   int sv_[2];
 };
+
+}  // namespace android
 
 #endif  // LIBMEMUNREACHABLE_LEAK_PIPE_H_

@@ -25,6 +25,8 @@
 #include "ProcessMappings.h"
 #include "log.h"
 
+namespace android {
+
 // This function is not re-entrant since it uses a static buffer for
 // the line data.
 bool ProcessMappings(pid_t pid, allocator::vector<Mapping>& mappings) {
@@ -64,3 +66,5 @@ bool ProcessMappings(pid_t pid, allocator::vector<Mapping>& mappings) {
   }
   return true;
 }
+
+}  // namespace android

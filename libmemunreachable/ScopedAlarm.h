@@ -23,6 +23,8 @@
 #include <chrono>
 #include <functional>
 
+namespace android {
+
 class ScopedAlarm {
  public:
   ScopedAlarm(std::chrono::microseconds us, std::function<void()> func) {
@@ -49,4 +51,7 @@ class ScopedAlarm {
  private:
   static std::function<void()> func_;
 };
+
+}  // namespace android
+
 #endif

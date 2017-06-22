@@ -34,6 +34,8 @@
 
 using namespace std::chrono_literals;
 
+namespace android {
+
 class ThreadListTest : public ::testing::TestWithParam<int> {
  public:
   ThreadListTest() : stop_(false) {}
@@ -343,3 +345,5 @@ TEST_F(ThreadCaptureTest, capture_signal) {
         }
       });
 }
+
+}  // namespace android
