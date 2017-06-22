@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <inttypes.h>
 #include <stdint.h>
 
 #include <vector>
@@ -47,6 +48,15 @@ std::vector<struct uid_info> BpStoraged::dump_uids(const char* /*option*/) {
         uid.uid = reply.readInt32();
         uid.name = reply.readCString();
         reply.read(&uid.io, sizeof(uid.io));
+
+        uint32_t tasks_size = reply.readInt32();
+        for (uint32_t i = 0; i < tasks_size; i++) {
+            struct task_info task;
+            task.pid = reply.readInt32();
+            task.comm = reply.readCString();
+            reply.read(&task.io, sizeof(task.io));
+            uid.tasks[task.pid] = task;
+        }
     }
     return res;
 }
@@ -59,10 +69,17 @@ status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply
                     return BAD_TYPE;
                 std::vector<struct uid_info> res = dump_uids(NULL);
                 reply->writeInt32(res.size());
-                for (auto uid : res) {
+                for (const auto& uid : res) {
                     reply->writeInt32(uid.uid);
                     reply->writeCString(uid.name.c_str());
                     reply->write(&uid.io, sizeof(uid.io));
+
+                    reply->writeInt32(uid.tasks.size());
+                    for (const auto& task_it : uid.tasks) {
+                        reply->writeInt32(task_it.first);
+                        reply->writeCString(task_it.second.comm.c_str());
+                        reply->write(&task_it.second.io, sizeof(task_it.second.io));
+                    }
                 }
                 return NO_ERROR;
             }
@@ -96,6 +113,7 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
     int time_window = 0;
     uint64_t threshold = 0;
     bool force_report = false;
+    bool debug = false;
     for (size_t i = 0; i < args.size(); i++) {
         const auto& arg = args[i];
         if (arg == String16("--hours")) {
@@ -123,6 +141,10 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
             force_report = true;
             continue;
         }
+        if (arg == String16("--debug")) {
+            debug = true;
+            continue;
+        }
     }
 
     uint64_t last_ts = 0;
@@ -130,22 +152,41 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
                 storaged->get_uid_records(hours, threshold, force_report);
     for (const auto& it : records) {
         if (last_ts != it.second.start_ts) {
-            dprintf(fd, "%llu", (unsigned long long)it.second.start_ts);
+            dprintf(fd, "%" PRIu64, it.second.start_ts);
         }
-        dprintf(fd, ",%llu\n", (unsigned long long)it.first);
+        dprintf(fd, ",%" PRIu64 "\n", it.first);
         last_ts = it.first;
 
         for (const auto& record : it.second.entries) {
-            dprintf(fd, "%s %ju %ju %ju %ju %ju %ju %ju %ju\n",
+            const struct io_usage& uid_usage = record.ios.uid_ios;
+            dprintf(fd, "%s %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
+                    " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
                 record.name.c_str(),
-                record.ios.bytes[READ][FOREGROUND][CHARGER_OFF],
-                record.ios.bytes[WRITE][FOREGROUND][CHARGER_OFF],
-                record.ios.bytes[READ][BACKGROUND][CHARGER_OFF],
-                record.ios.bytes[WRITE][BACKGROUND][CHARGER_OFF],
-                record.ios.bytes[READ][FOREGROUND][CHARGER_ON],
-                record.ios.bytes[WRITE][FOREGROUND][CHARGER_ON],
-                record.ios.bytes[READ][BACKGROUND][CHARGER_ON],
-                record.ios.bytes[WRITE][BACKGROUND][CHARGER_ON]);
+                uid_usage.bytes[READ][FOREGROUND][CHARGER_OFF],
+                uid_usage.bytes[WRITE][FOREGROUND][CHARGER_OFF],
+                uid_usage.bytes[READ][BACKGROUND][CHARGER_OFF],
+                uid_usage.bytes[WRITE][BACKGROUND][CHARGER_OFF],
+                uid_usage.bytes[READ][FOREGROUND][CHARGER_ON],
+                uid_usage.bytes[WRITE][FOREGROUND][CHARGER_ON],
+                uid_usage.bytes[READ][BACKGROUND][CHARGER_ON],
+                uid_usage.bytes[WRITE][BACKGROUND][CHARGER_ON]);
+            if (debug) {
+                for (const auto& task_it : record.ios.task_ios) {
+                    const struct io_usage& task_usage = task_it.second;
+                    const std::string& comm = task_it.first;
+                    dprintf(fd, "-> %s %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
+                            " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+                        comm.c_str(),
+                        task_usage.bytes[READ][FOREGROUND][CHARGER_OFF],
+                        task_usage.bytes[WRITE][FOREGROUND][CHARGER_OFF],
+                        task_usage.bytes[READ][BACKGROUND][CHARGER_OFF],
+                        task_usage.bytes[WRITE][BACKGROUND][CHARGER_OFF],
+                        task_usage.bytes[READ][FOREGROUND][CHARGER_ON],
+                        task_usage.bytes[WRITE][FOREGROUND][CHARGER_ON],
+                        task_usage.bytes[READ][BACKGROUND][CHARGER_ON],
+                        task_usage.bytes[WRITE][BACKGROUND][CHARGER_ON]);
+                }
+            }
         }
     }
 

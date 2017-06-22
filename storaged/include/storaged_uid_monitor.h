@@ -41,7 +41,7 @@ enum io_type_t {
     IO_TYPES = 2
 };
 
-struct uid_io_stats {
+struct io_stats {
     uint64_t rchar;                 // characters read
     uint64_t wchar;                 // characters written
     uint64_t read_bytes;            // bytes read (from storage layer)
@@ -49,14 +49,30 @@ struct uid_io_stats {
     uint64_t fsync;                 // number of fsync syscalls
 };
 
+struct task_info {
+    std::string comm;
+    pid_t pid;
+    struct io_stats io[UID_STATS];
+    bool parse_task_io_stats(std::string&& s);
+};
+
 struct uid_info {
     uint32_t uid;                   // user id
     std::string name;               // package name
-    struct uid_io_stats io[UID_STATS];    // [0]:foreground [1]:background
+    struct io_stats io[UID_STATS];    // [0]:foreground [1]:background
+    std::unordered_map<uint32_t, task_info> tasks; // mapped from pid
+    bool parse_uid_io_stats(std::string&& s);
+};
+
+struct io_usage {
+    uint64_t bytes[IO_TYPES][UID_STATS][CHARGER_STATS];
+    bool is_zero() const;
 };
 
 struct uid_io_usage {
-    uint64_t bytes[IO_TYPES][UID_STATS][CHARGER_STATS];
+    struct io_usage uid_ios;
+    // mapped from task comm to task io usage
+    std::map<std::string, struct io_usage> task_ios;
 };
 
 struct uid_record {

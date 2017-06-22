@@ -62,13 +62,15 @@ void* storaged_main(void* /* unused */) {
 static void help_message(void) {
     printf("usage: storaged [OPTION]\n");
     printf("  -u    --uid                   Dump uid I/O usage to stdout\n");
+    printf("  -t    --task                  Dump task I/O usage to stdout\n");
     printf("  -s    --start                 Start storaged (default)\n");
     fflush(stdout);
 }
 
 int main(int argc, char** argv) {
-    int flag_main_service = 0;
-    int flag_dump_uid = 0;
+    bool flag_main_service = false;
+    bool flag_dump_uid = false;
+    bool flag_dump_task = false;
     int opt;
 
     for (;;) {
@@ -77,19 +79,23 @@ int main(int argc, char** argv) {
             {"start",       no_argument,        0, 's'},
             {"kill",        no_argument,        0, 'k'},
             {"uid",         no_argument,        0, 'u'},
+            {"task",        no_argument,        0, 't'},
             {"help",        no_argument,        0, 'h'}
         };
-        opt = getopt_long(argc, argv, ":skdhu0", long_options, &opt_idx);
+        opt = getopt_long(argc, argv, ":skdhu0t", long_options, &opt_idx);
         if (opt == -1) {
             break;
         }
 
         switch (opt) {
         case 's':
-            flag_main_service = 1;
+            flag_main_service = true;
             break;
         case 'u':
-            flag_dump_uid = 1;
+            flag_dump_uid = true;
+            break;
+        case 't':
+            flag_dump_task = true;
             break;
         case 'h':
             help_message();
@@ -103,10 +109,10 @@ int main(int argc, char** argv) {
     }
 
     if (argc == 1) {
-        flag_main_service = 1;
+        flag_main_service = true;
     }
 
-    if (flag_main_service && flag_dump_uid) {
+    if (flag_main_service && (flag_dump_uid || flag_dump_task)) {
         fprintf(stderr, "Invalid arguments. Option \"start\" and \"dump\" cannot be used together.\n");
         help_message();
         return -1;
@@ -130,7 +136,7 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    if (flag_dump_uid) {
+    if (flag_dump_uid || flag_dump_task) {
         sp<IStoraged> storaged_service = get_storaged_service();
         if (storaged_service == NULL) {
             fprintf(stderr, "Cannot find storaged service.\nMaybe run storaged --start first?\n");
@@ -144,7 +150,7 @@ int main(int argc, char** argv) {
         }
 
         sort_running_uids_info(res);
-        log_console_running_uids_info(res);
+        log_console_running_uids_info(res, flag_dump_task);
 
         return 0;
     }
