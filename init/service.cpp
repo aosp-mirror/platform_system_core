@@ -198,13 +198,12 @@ void Service::NotifyStateChange(const std::string& new_state) const {
         return;
     }
 
-    std::string prop_name = StringPrintf("init.svc.%s", name_.c_str());
-    property_set(prop_name.c_str(), new_state.c_str());
+    std::string prop_name = "init.svc." + name_;
+    property_set(prop_name, new_state);
 
     if (new_state == "running") {
         uint64_t start_ns = time_started_.time_since_epoch().count();
-        property_set(StringPrintf("ro.boottime.%s", name_.c_str()).c_str(),
-                     StringPrintf("%" PRIu64, start_ns).c_str());
+        property_set("ro.boottime." + name_, std::to_string(start_ns));
     }
 }
 
@@ -716,7 +715,7 @@ bool Service::Start() {
                     StringPrintf("/dev/cpuset%stasks", default_cpuset.c_str()));
             }
         }
-        std::string pid_str = StringPrintf("%d", getpid());
+        std::string pid_str = std::to_string(getpid());
         for (const auto& file : writepid_files_) {
             if (!WriteStringToFile(pid_str, file)) {
                 PLOG(ERROR) << "couldn't write " << pid_str << " to " << file;
@@ -757,7 +756,7 @@ bool Service::Start() {
     }
 
     if (oom_score_adjust_ != -1000) {
-        std::string oom_str = StringPrintf("%d", oom_score_adjust_);
+        std::string oom_str = std::to_string(oom_score_adjust_);
         std::string oom_file = StringPrintf("/proc/%d/oom_score_adj", pid);
         if (!WriteStringToFile(oom_str, oom_file)) {
             PLOG(ERROR) << "couldn't write oom_score_adj: " << strerror(errno);
@@ -776,9 +775,9 @@ bool Service::Start() {
     }
 
     if ((flags_ & SVC_EXEC) != 0) {
-        LOG(INFO) << android::base::StringPrintf(
-            "SVC_EXEC pid %d (uid %d gid %d+%zu context %s) started; waiting...", pid_, uid_, gid_,
-            supp_gids_.size(), !seclabel_.empty() ? seclabel_.c_str() : "default");
+        LOG(INFO) << "SVC_EXEC pid " << pid_ << " (uid " << uid_ << " gid " << gid_ << "+"
+                  << supp_gids_.size() << " context "
+                  << (!seclabel_.empty() ? seclabel_ : "default") << ") started; waiting...";
     }
 
     NotifyStateChange("running");
