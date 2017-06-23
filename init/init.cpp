@@ -888,9 +888,6 @@ static void selinux_restore_context() {
     LOG(INFO) << "Running restorecon...";
     selinux_android_restorecon("/dev", 0);
     selinux_android_restorecon("/dev/kmsg", 0);
-    if constexpr (WORLD_WRITABLE_KMSG) {
-        selinux_android_restorecon("/dev/kmsg_debug", 0);
-    }
     selinux_android_restorecon("/dev/socket", 0);
     selinux_android_restorecon("/dev/random", 0);
     selinux_android_restorecon("/dev/urandom", 0);
@@ -995,13 +992,7 @@ int main(int argc, char** argv) {
         setgroups(arraysize(groups), groups);
         mount("sysfs", "/sys", "sysfs", 0, NULL);
         mount("selinuxfs", "/sys/fs/selinux", "selinuxfs", 0, NULL);
-
         mknod("/dev/kmsg", S_IFCHR | 0600, makedev(1, 11));
-
-        if constexpr (WORLD_WRITABLE_KMSG) {
-          mknod("/dev/kmsg_debug", S_IFCHR | 0622, makedev(1, 11));
-        }
-
         mknod("/dev/random", S_IFCHR | 0666, makedev(1, 8));
         mknod("/dev/urandom", S_IFCHR | 0666, makedev(1, 9));
 
