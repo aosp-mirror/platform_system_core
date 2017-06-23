@@ -22,21 +22,15 @@
 #include <signal.h>
 #include <string.h>
 #include <sys/ptrace.h>
-#include <sys/uio.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #include <string>
 
-#include <android-base/logging.h>
-#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
-#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <backtrace/Backtrace.h>
 #include <log/log.h>
-
-using android::base::unique_fd;
 
 // Whitelist output desired in the logcat output.
 bool is_allowed_in_logcat(enum logtype ltype) {
@@ -48,19 +42,6 @@ bool is_allowed_in_logcat(enum logtype ltype) {
   return false;
 }
 
-static bool should_write_to_kmsg() {
-  // Write to kmsg if tombstoned isn't up, and we're able to do so.
-  if (!android::base::GetBoolProperty("ro.debuggable", false)) {
-    return false;
-  }
-
-  if (android::base::GetProperty("init.svc.tombstoned", "") == "running") {
-    return false;
-  }
-
-  return true;
-}
-
 __attribute__((__weak__, visibility("default")))
 void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
   bool write_to_tombstone = (log->tfd != -1);
@@ -68,7 +49,6 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
                       && log->crashed_tid != -1
                       && log->current_tid != -1
                       && (log->crashed_tid == log->current_tid);
-  static bool write_to_kmsg = should_write_to_kmsg();
 
   char buf[512];
   va_list ap;
@@ -89,30 +69,6 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
     __android_log_buf_write(LOG_ID_CRASH, ANDROID_LOG_FATAL, LOG_TAG, buf);
     if (log->amfd_data != nullptr) {
       *log->amfd_data += buf;
-    }
-
-    if (write_to_kmsg) {
-      unique_fd kmsg_fd(open("/dev/kmsg_debug", O_WRONLY | O_APPEND | O_CLOEXEC));
-      if (kmsg_fd.get() >= 0) {
-        // Our output might contain newlines which would otherwise be handled by the android logger.
-        // Split the lines up ourselves before sending to the kernel logger.
-        if (buf[len - 1] == '\n') {
-          buf[len - 1] = '\0';
-        }
-
-        std::vector<std::string> fragments = android::base::Split(buf, "\n");
-        for (const std::string& fragment : fragments) {
-          static constexpr char prefix[] = "<3>DEBUG: ";
-          struct iovec iov[3];
-          iov[0].iov_base = const_cast<char*>(prefix);
-          iov[0].iov_len = strlen(prefix);
-          iov[1].iov_base = const_cast<char*>(fragment.c_str());
-          iov[1].iov_len = fragment.length();
-          iov[2].iov_base = const_cast<char*>("\n");
-          iov[2].iov_len = 1;
-          TEMP_FAILURE_RETRY(writev(kmsg_fd.get(), iov, 3));
-        }
-      }
     }
   }
 }
@@ -249,7 +205,7 @@ void dump_memory(log_t* log, Backtrace* backtrace, uintptr_t addr, const char* f
 }
 
 void read_with_default(const char* path, char* buf, size_t len, const char* default_value) {
-  unique_fd fd(open(path, O_RDONLY | O_CLOEXEC));
+  android::base::unique_fd fd(open(path, O_RDONLY));
   if (fd != -1) {
     int rc = TEMP_FAILURE_RETRY(read(fd.get(), buf, len - 1));
     if (rc != -1) {
