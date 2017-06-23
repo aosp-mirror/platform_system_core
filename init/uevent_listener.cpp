@@ -26,6 +26,9 @@
 #include <android-base/logging.h>
 #include <cutils/uevent.h>
 
+namespace android {
+namespace init {
+
 static void ParseEvent(const char* msg, Uevent* uevent) {
     uevent->partition_num = -1;
     uevent->major = -1;
@@ -212,3 +215,6 @@ void UeventListener::Poll(const ListenerCallback& callback,
         }
     }
 }
+
+}  // namespace init
+}  // namespace android

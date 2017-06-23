@@ -38,6 +38,9 @@
 
 using namespace std::chrono_literals;
 
+namespace android {
+namespace init {
+
 // Class Declarations
 // ------------------
 class FirstStageMount {
@@ -493,3 +496,6 @@ void SetInitAvbVersionInRecovery() {
     }
     setenv("INIT_AVB_VERSION", avb_handle->avb_version().c_str(), 1);
 }
+
+}  // namespace init
+}  // namespace android

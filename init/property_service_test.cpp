@@ -23,6 +23,9 @@
 
 #include <gtest/gtest.h>
 
+namespace android {
+namespace init {
+
 TEST(property_service, very_long_name_35166374) {
   // Connect to the property service directly...
   int fd = socket(AF_LOCAL, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -46,3 +49,6 @@ TEST(property_service, very_long_name_35166374) {
   ASSERT_EQ(static_cast<ssize_t>(sizeof(data)), send(fd, &data, sizeof(data), 0));
   ASSERT_EQ(0, close(fd));
 }
+
+}  // namespace init
+}  // namespace android

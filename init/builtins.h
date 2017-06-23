@@ -24,6 +24,9 @@
 
 #include "keyword_map.h"
 
+namespace android {
+namespace init {
+
 using BuiltinFunction = std::function<int(const std::vector<std::string>&)>;
 class BuiltinFunctionMap : public KeywordMap<BuiltinFunction> {
   public:
@@ -32,5 +35,8 @@ class BuiltinFunctionMap : public KeywordMap<BuiltinFunction> {
   private:
     const Map& map() const override;
 };
+
+}  // namespace init
+}  // namespace android
 
 #endif

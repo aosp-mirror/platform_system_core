@@ -37,13 +37,23 @@
 #error "Do not include init.h in files used by ueventd or watchdogd; it will expose init's globals"
 #endif
 
+using android::base::Basename;
+using android::base::Dirname;
+using android::base::Readlink;
+using android::base::Realpath;
+using android::base::StartsWith;
+using android::base::StringPrintf;
+
+namespace android {
+namespace init {
+
 /* Given a path that may start with a PCI device, populate the supplied buffer
  * with the PCI domain/bus number and the peripheral ID and return 0.
  * If it doesn't start with a PCI device, or there is some error, return -1 */
 static bool FindPciDevicePrefix(const std::string& path, std::string* result) {
     result->clear();
 
-    if (!android::base::StartsWith(path, "/devices/pci")) return false;
+    if (!StartsWith(path, "/devices/pci")) return false;
 
     /* Beginning of the prefix is the initial "pci" after "/devices/" */
     std::string::size_type start = 9;
@@ -74,7 +84,7 @@ static bool FindPciDevicePrefix(const std::string& path, std::string* result) {
 static bool FindVbdDevicePrefix(const std::string& path, std::string* result) {
     result->clear();
 
-    if (!android::base::StartsWith(path, "/devices/vbd-")) return false;
+    if (!StartsWith(path, "/devices/vbd-")) return false;
 
     /* Beginning of the prefix is the initial "vbd-" after "/devices/" */
     std::string::size_type start = 13;
@@ -116,14 +126,14 @@ Permissions::Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t 
 }
 
 bool Permissions::Match(const std::string& path) const {
-    if (prefix_) return android::base::StartsWith(path, name_.c_str());
+    if (prefix_) return StartsWith(path, name_.c_str());
     if (wildcard_) return fnmatch(name_.c_str(), path.c_str(), FNM_PATHNAME) == 0;
     return path == name_;
 }
 
 bool SysfsPermissions::MatchWithSubsystem(const std::string& path,
                                           const std::string& subsystem) const {
-    std::string path_basename = android::base::Basename(path);
+    std::string path_basename = Basename(path);
     if (name().find(subsystem) != std::string::npos) {
         if (Match("/sys/class/" + subsystem + "/" + path_basename)) return true;
         if (Match("/sys/bus/" + subsystem + "/devices/" + path_basename)) return true;
@@ -156,11 +166,11 @@ bool DeviceHandler::FindPlatformDevice(std::string path, std::string* platform_d
     // Uevents don't contain the mount point, so we need to add it here.
     path.insert(0, sysfs_mount_point_);
 
-    std::string directory = android::base::Dirname(path);
+    std::string directory = Dirname(path);
 
     while (directory != "/" && directory != ".") {
         std::string subsystem_link_path;
-        if (android::base::Realpath(directory + "/subsystem", &subsystem_link_path) &&
+        if (Realpath(directory + "/subsystem", &subsystem_link_path) &&
             subsystem_link_path == sysfs_mount_point_ + "/bus/platform") {
             // We need to remove the mount point that we added above before returning.
             directory.erase(0, sysfs_mount_point_.size());
@@ -172,7 +182,7 @@ bool DeviceHandler::FindPlatformDevice(std::string path, std::string* platform_d
         if (last_slash == std::string::npos) return false;
 
         path.erase(last_slash);
-        directory = android::base::Dirname(path);
+        directory = Dirname(path);
     }
 
     return false;
@@ -276,7 +286,7 @@ std::vector<std::string> DeviceHandler::GetCharacterDeviceSymlinks(const Uevent&
     // skip path to the parent driver
     std::string path = uevent.path.substr(parent_device.length());
 
-    if (!android::base::StartsWith(path, "/usb")) return {};
+    if (!StartsWith(path, "/usb")) return {};
 
     // skip root hub name and device. use device interface
     // skip 3 slashes, including the first / by starting the search at the 1st character, not 0th.
@@ -334,9 +344,9 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
         static const std::string devices_platform_prefix = "/devices/platform/";
         static const std::string devices_prefix = "/devices/";
 
-        if (android::base::StartsWith(device, devices_platform_prefix.c_str())) {
+        if (StartsWith(device, devices_platform_prefix.c_str())) {
             device = device.substr(devices_platform_prefix.length());
-        } else if (android::base::StartsWith(device, devices_prefix.c_str())) {
+        } else if (StartsWith(device, devices_prefix.c_str())) {
             device = device.substr(devices_prefix.length());
         }
 
@@ -380,8 +390,8 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
     if (action == "add") {
         MakeDevice(devpath, block, major, minor, links);
         for (const auto& link : links) {
-            if (mkdir_recursive(android::base::Dirname(link), 0755, sehandle_)) {
-                PLOG(ERROR) << "Failed to create directory " << android::base::Dirname(link);
+            if (mkdir_recursive(Dirname(link), 0755, sehandle_)) {
+                PLOG(ERROR) << "Failed to create directory " << Dirname(link);
             }
 
             if (symlink(devpath.c_str(), link.c_str()) && errno != EEXIST) {
@@ -393,7 +403,7 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
     if (action == "remove") {
         for (const auto& link : links) {
             std::string link_path;
-            if (android::base::Readlink(link, &link_path) && link_path == devpath) {
+            if (Readlink(link, &link_path) && link_path == devpath) {
                 unlink(link.c_str());
             }
         }
@@ -408,11 +418,11 @@ void DeviceHandler::HandleBlockDeviceEvent(const Uevent& uevent) const {
     const char* base = "/dev/block/";
     make_dir(base, 0755, sehandle_);
 
-    std::string name = android::base::Basename(uevent.path);
+    std::string name = Basename(uevent.path);
     std::string devpath = base + name;
 
     std::vector<std::string> links;
-    if (android::base::StartsWith(uevent.path, "/devices")) {
+    if (StartsWith(uevent.path, "/devices")) {
         links = GetBlockDeviceSymlinks(uevent);
     }
 
@@ -425,7 +435,7 @@ void DeviceHandler::HandleGenericDeviceEvent(const Uevent& uevent) const {
 
     std::string devpath;
 
-    if (android::base::StartsWith(uevent.subsystem, "usb")) {
+    if (StartsWith(uevent.subsystem, "usb")) {
         if (uevent.subsystem == "usb") {
             if (!uevent.device_name.empty()) {
                 devpath = "/dev/" + uevent.device_name;
@@ -435,7 +445,7 @@ void DeviceHandler::HandleGenericDeviceEvent(const Uevent& uevent) const {
                 // Minors are broken up into groups of 128, starting at "001"
                 int bus_id = uevent.minor / 128 + 1;
                 int device_id = uevent.minor % 128 + 1;
-                devpath = android::base::StringPrintf("/dev/bus/usb/%03d/%03d", bus_id, device_id);
+                devpath = StringPrintf("/dev/bus/usb/%03d/%03d", bus_id, device_id);
             }
         } else {
             // ignore other USB events
@@ -446,10 +456,10 @@ void DeviceHandler::HandleGenericDeviceEvent(const Uevent& uevent) const {
                subsystem != subsystems_.cend()) {
         devpath = subsystem->ParseDevPath(uevent);
     } else {
-        devpath = "/dev/" + android::base::Basename(uevent.path);
+        devpath = "/dev/" + Basename(uevent.path);
     }
 
-    mkdir_recursive(android::base::Dirname(devpath), 0755, sehandle_);
+    mkdir_recursive(Dirname(devpath), 0755, sehandle_);
 
     auto links = GetCharacterDeviceSymlinks(uevent);
 
@@ -481,3 +491,6 @@ DeviceHandler::DeviceHandler(std::vector<Permissions> dev_permissions,
 DeviceHandler::DeviceHandler()
     : DeviceHandler(std::vector<Permissions>{}, std::vector<SysfsPermissions>{},
                     std::vector<Subsystem>{}, false) {}
+
+}  // namespace init
+}  // namespace android

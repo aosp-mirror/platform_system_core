@@ -17,6 +17,12 @@
 #ifndef _INIT_WATCHDOGD_H_
 #define _INIT_WATCHDOGD_H_
 
+namespace android {
+namespace init {
+
 int watchdogd_main(int argc, char **argv);
+
+}  // namespace init
+}  // namespace android
 
 #endif

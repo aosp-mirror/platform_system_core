@@ -19,6 +19,9 @@
 
 #include <string>
 
+namespace android {
+namespace init {
+
 struct Uevent {
     std::string action;
     std::string path;
@@ -30,5 +33,8 @@ struct Uevent {
     int major;
     int minor;
 };
+
+}  // namespace init
+}  // namespace android
 
 #endif

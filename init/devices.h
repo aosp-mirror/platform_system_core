@@ -29,6 +29,9 @@
 
 #include "uevent.h"
 
+namespace android {
+namespace init {
+
 class Permissions {
   public:
     Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t gid);
@@ -132,5 +135,8 @@ class DeviceHandler {
 
 // Exposed for testing
 void SanitizePartitionName(std::string* string);
+
+}  // namespace init
+}  // namespace android
 
 #endif

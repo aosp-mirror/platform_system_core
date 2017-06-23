@@ -25,6 +25,9 @@
 
 #define CAP_MAP_ENTRY(cap) { #cap, CAP_##cap }
 
+namespace android {
+namespace init {
+
 static const std::map<std::string, int> cap_map = {
     CAP_MAP_ENTRY(CHOWN),
     CAP_MAP_ENTRY(DAC_OVERRIDE),
@@ -192,3 +195,6 @@ bool SetCapsForExec(const CapSet& to_keep) {
     // See http://man7.org/linux/man-pages/man7/capabilities.7.html.
     return SetAmbientCaps(to_keep);
 }
+
+}  // namespace init
+}  // namespace android

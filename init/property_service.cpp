@@ -58,6 +58,9 @@
 #define PERSISTENT_PROPERTY_DIR  "/data/property"
 #define RECOVERY_MOUNT_POINT "/recovery"
 
+namespace android {
+namespace init {
+
 static int persistent_properties_loaded = 0;
 
 static int property_set_fd = -1;
@@ -741,3 +744,6 @@ void start_property_service() {
 
     register_epoll_handler(property_set_fd, handle_property_set_fd);
 }
+
+}  // namespace init
+}  // namespace android

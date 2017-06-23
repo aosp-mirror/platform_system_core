@@ -24,6 +24,9 @@
 
 using android::base::Join;
 
+namespace android {
+namespace init {
+
 Command::Command(BuiltinFunction f, const std::vector<std::string>& args, int line)
     : func_(f), args_(args), line_(line) {}
 
@@ -349,3 +352,6 @@ void ActionParser::EndSection() {
         action_manager_->AddAction(std::move(action_));
     }
 }
+
+}  // namespace init
+}  // namespace android

@@ -21,6 +21,9 @@
 
 #include "keyword_map.h"
 
+namespace android {
+namespace init {
+
 bool ParsePermissionsLine(std::vector<std::string>&& args, std::string* err,
                           std::vector<SysfsPermissions>* out_sysfs_permissions,
                           std::vector<Permissions>* out_dev_permissions) {
@@ -143,3 +146,6 @@ bool SubsystemParser::ParseLineSection(std::vector<std::string>&& args, int line
 void SubsystemParser::EndSection() {
     subsystems_->emplace_back(std::move(subsystem_));
 }
+
+}  // namespace init
+}  // namespace android
