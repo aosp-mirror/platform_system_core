@@ -23,6 +23,9 @@
 #include "devices.h"
 #include "init_parser.h"
 
+namespace android {
+namespace init {
+
 class SubsystemParser : public SectionParser {
   public:
     SubsystemParser(std::vector<Subsystem>* subsystems) : subsystems_(subsystems) {}
@@ -42,5 +45,8 @@ class SubsystemParser : public SectionParser {
 bool ParsePermissionsLine(std::vector<std::string>&& args, std::string* err,
                           std::vector<SysfsPermissions>* out_sysfs_permissions,
                           std::vector<Permissions>* out_dev_permissions);
+
+}  // namespace init
+}  // namespace android
 
 #endif

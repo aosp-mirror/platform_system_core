@@ -22,6 +22,9 @@
 #include <string>
 #include <vector>
 
+namespace android {
+namespace init {
+
 class ImportParser : public SectionParser {
   public:
     ImportParser(Parser* parser) : parser_(parser) {}
@@ -36,5 +39,8 @@ class ImportParser : public SectionParser {
     // Vector of imports and their line numbers for later error reporting.
     std::vector<std::pair<std::string, int>> imports_;
 };
+
+}  // namespace init
+}  // namespace android
 
 #endif

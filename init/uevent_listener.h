@@ -29,6 +29,9 @@
 
 #define UEVENT_MSG_LEN 2048
 
+namespace android {
+namespace init {
+
 enum class ListenerAction {
     kStop = 0,  // Stop regenerating uevents as we've handled the one(s) we're interested in.
     kContinue,  // Continue regenerating uevents as we haven't seen the one(s) we're interested in.
@@ -52,5 +55,8 @@ class UeventListener {
 
     android::base::unique_fd device_fd_;
 };
+
+}  // namespace init
+}  // namespace android
 
 #endif

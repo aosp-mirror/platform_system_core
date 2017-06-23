@@ -22,6 +22,9 @@
 
 #include <android-base/stringprintf.h>
 
+namespace android {
+namespace init {
+
 template <typename Function>
 class KeywordMap {
   public:
@@ -78,5 +81,8 @@ class KeywordMap {
     // (minimum number of arguments, maximum number of arguments, function pointer)
     virtual const Map& map() const = 0;
 };
+
+}  // namespace init
+}  // namespace android
 
 #endif
