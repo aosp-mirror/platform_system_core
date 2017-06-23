@@ -282,7 +282,10 @@ int main(int argc, char** argv) {
   ATRACE_NAME("after reparent");
 
   // Die if we take too long.
-  alarm(2);
+  //
+  // Note: processes with many threads and minidebug-info can take a bit to
+  //       unwind, do not make this too small. b/62828735
+  alarm(5);
 
   std::string attach_error;
 
