@@ -68,7 +68,7 @@ bool FrameworkListener::onDataAvailable(SocketClient *c) {
         android_errorWriteLog(0x534e4554, "29831647");
         c->sendMsg(500, "Command too large for buffer", false);
         mSkipToNextNullByte = true;
-        return false;
+        return true;
     }
 
     int offset = 0;
