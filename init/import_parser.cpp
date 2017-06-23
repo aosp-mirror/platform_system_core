@@ -20,6 +20,9 @@
 
 #include "util.h"
 
+namespace android {
+namespace init {
+
 bool ImportParser::ParseSection(std::vector<std::string>&& args, const std::string& filename,
                                 int line, std::string* err) {
     if (args.size() != 2) {
@@ -50,3 +53,6 @@ void ImportParser::EndFile() {
         }
     }
 }
+
+}  // namespace init
+}  // namespace android

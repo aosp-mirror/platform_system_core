@@ -45,6 +45,9 @@
 //    This function is called at the end of the file.
 //    It indicates that the parsing has completed and any relevant objects should be committed.
 
+namespace android {
+namespace init {
+
 class SectionParser {
   public:
     virtual ~SectionParser() {}
@@ -92,5 +95,8 @@ class Parser {
     bool is_vendor_etc_init_loaded_ = false;
     bool is_odm_etc_init_loaded_ = false;
 };
+
+}  // namespace init
+}  // namespace android
 
 #endif

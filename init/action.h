@@ -27,6 +27,9 @@
 #include "init_parser.h"
 #include "keyword_map.h"
 
+namespace android {
+namespace init {
+
 class Command {
   public:
     Command(BuiltinFunction f, const std::vector<std::string>& args, int line);
@@ -125,5 +128,8 @@ class ActionParser : public SectionParser {
     ActionManager* action_manager_;
     std::unique_ptr<Action> action_;
 };
+
+}  // namespace init
+}  // namespace android
 
 #endif

@@ -48,7 +48,6 @@
 #include <libavb/libavb.h>
 #include <private/android_filesystem_config.h>
 #include <selinux/android.h>
-#include <selinux/label.h>
 #include <selinux/selinux.h>
 
 #include <fstream>
@@ -74,6 +73,9 @@ using namespace std::string_literals;
 
 using android::base::boot_clock;
 using android::base::GetProperty;
+
+namespace android {
+namespace init {
 
 struct selabel_handle *sehandle;
 struct selabel_handle *sehandle_prop;
@@ -1177,4 +1179,11 @@ int main(int argc, char** argv) {
     }
 
     return 0;
+}
+
+}  // namespace init
+}  // namespace android
+
+int main(int argc, char** argv) {
+    android::init::main(argc, argv);
 }

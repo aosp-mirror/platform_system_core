@@ -40,6 +40,9 @@
 using android::base::StringPrintf;
 using namespace std::chrono_literals;
 
+namespace android {
+namespace init {
+
 static std::thread* g_bootcharting_thread;
 
 static std::mutex g_bootcharting_finished_mutex;
@@ -192,3 +195,6 @@ int do_bootchart(const std::vector<std::string>& args) {
   if (args[1] == "start") return do_bootchart_start();
   return do_bootchart_stop();
 }
+
+}  // namespace init
+}  // namespace android
