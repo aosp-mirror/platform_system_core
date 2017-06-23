@@ -305,7 +305,7 @@ TEST_F(CrasherTest, abort) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_MATCH(result, R"(#00 pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX R"(/libc.so \(tgkill)");
+  ASSERT_MATCH(result, R"(#00 pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX R"(/libc.so \(abort)");
 }
 
 TEST_F(CrasherTest, signal) {
@@ -452,7 +452,7 @@ TEST_F(CrasherTest, backtrace) {
   FinishIntercept(&intercept_result);
   ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_MATCH(result, R"(#00 pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX R"(/libc.so \(tgkill)");
+  ASSERT_MATCH(result, R"(#00 pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX R"(/libc.so \(abort)");
 }
 
 TEST_F(CrasherTest, PR_SET_DUMPABLE_0_crash) {
@@ -472,7 +472,7 @@ TEST_F(CrasherTest, PR_SET_DUMPABLE_0_crash) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_MATCH(result, R"(#00 pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX R"(/libc.so \(tgkill)");
+  ASSERT_MATCH(result, R"(#00 pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX R"(/libc.so \(abort)");
 }
 
 TEST_F(CrasherTest, capabilities) {
