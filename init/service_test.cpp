@@ -23,6 +23,9 @@
 
 #include <gtest/gtest.h>
 
+namespace android {
+namespace init {
+
 TEST(service, pod_initialized) {
     constexpr auto memory_size = sizeof(Service);
     alignas(alignof(Service)) char old_memory[memory_size];
@@ -67,3 +70,6 @@ TEST(service, pod_initialized) {
     EXPECT_EQ(-1000, service_in_old_memory2->oom_score_adjust());
     EXPECT_FALSE(service_in_old_memory->process_cgroup_empty());
 }
+
+}  // namespace init
+}  // namespace android

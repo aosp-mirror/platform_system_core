@@ -26,6 +26,9 @@
 
 using namespace std::literals::string_literals;
 
+namespace android {
+namespace init {
+
 TEST(util, ReadFile_ENOENT) {
     std::string s("hello");
     std::string err;
@@ -187,3 +190,6 @@ TEST(util, mkdir_recursive_extra_slashes) {
     std::string path3 = android::base::StringPrintf("%s/three/directories/deep", test_dir.path);
     EXPECT_TRUE(is_dir(path1.c_str()));
 }
+
+}  // namespace init
+}  // namespace android

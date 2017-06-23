@@ -24,6 +24,9 @@
 #include <string>
 #include <vector>
 
+namespace android {
+namespace init {
+
 TEST(init_parser, make_exec_oneshot_service_invalid_syntax) {
     ServiceManager& sm = ServiceManager::GetInstance();
     std::vector<std::string> args;
@@ -141,3 +144,6 @@ TEST(init_parser, make_exec_oneshot_service_with_just_command) {
 TEST(init_parser, make_exec_oneshot_service_with_just_command_no_dash) {
     Test_make_exec_oneshot_service(false, false, false, false, false);
 }
+
+}  // namespace init
+}  // namespace android

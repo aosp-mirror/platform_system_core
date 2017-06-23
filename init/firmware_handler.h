@@ -19,6 +19,12 @@
 
 #include "uevent.h"
 
+namespace android {
+namespace init {
+
 void HandleFirmwareEvent(const Uevent& uevent);
+
+}  // namespace init
+}  // namespace android
 
 #endif
