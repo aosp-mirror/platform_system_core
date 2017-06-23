@@ -31,6 +31,9 @@
 
 #define DEV_NAME "/dev/watchdog"
 
+namespace android {
+namespace init {
+
 int watchdogd_main(int argc, char **argv) {
     InitKernelLogging(argv);
 
@@ -73,3 +76,6 @@ int watchdogd_main(int argc, char **argv) {
         sleep(interval);
     }
 }
+
+}  // namespace init
+}  // namespace android

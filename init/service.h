@@ -55,8 +55,8 @@
 
 #define NR_SVC_SUPP_GIDS 12    // twelve supplementary groups
 
-class Action;
-class ServiceManager;
+namespace android {
+namespace init {
 
 struct ServiceEnvironmentInfo {
     ServiceEnvironmentInfo();
@@ -235,5 +235,8 @@ class ServiceParser : public SectionParser {
     ServiceManager* service_manager_;
     std::unique_ptr<Service> service_;
 };
+
+}  // namespace init
+}  // namespace android
 
 #endif

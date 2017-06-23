@@ -99,6 +99,9 @@
 // the uevent listener resumes in polling mode and will handle the uevents that occurred during
 // coldboot.
 
+namespace android {
+namespace init {
+
 class ColdBoot {
   public:
     ColdBoot(UeventListener& uevent_listener, DeviceHandler& device_handler)
@@ -273,3 +276,6 @@ int ueventd_main(int argc, char** argv) {
 
     return 0;
 }
+
+}  // namespace init
+}  // namespace android

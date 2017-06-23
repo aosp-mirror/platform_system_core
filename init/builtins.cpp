@@ -67,6 +67,9 @@ using namespace std::literals::string_literals;
 
 #define chmod DO_NOT_USE_CHMOD_USE_FCHMODAT_SYMLINK_NOFOLLOW
 
+namespace android {
+namespace init {
+
 static constexpr std::chrono::nanoseconds kCommandRetryTimeout = 5s;
 
 static int insmod(const char *filename, const char *options, int flags) {
@@ -924,3 +927,6 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     // clang-format on
     return builtin_functions;
 }
+
+}  // namespace init
+}  // namespace android

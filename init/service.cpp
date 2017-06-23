@@ -45,9 +45,15 @@
 #include "util.h"
 
 using android::base::boot_clock;
+using android::base::GetProperty;
+using android::base::Join;
 using android::base::ParseInt;
+using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
+
+namespace android {
+namespace init {
 
 static std::string ComputeContextFromExecutable(std::string& service_name,
                                                 const std::string& service_path) {
@@ -321,8 +327,8 @@ void Service::Reap() {
 
 void Service::DumpState() const {
     LOG(INFO) << "service " << name_;
-    LOG(INFO) << "  class '" << android::base::Join(classnames_, " ") << "'";
-    LOG(INFO) << "  exec "<< android::base::Join(args_, " ");
+    LOG(INFO) << "  class '" << Join(classnames_, " ") << "'";
+    LOG(INFO) << "  exec " << Join(args_, " ");
     std::for_each(descriptors_.begin(), descriptors_.end(),
                   [] (const auto& info) { LOG(INFO) << *info; });
 }
@@ -525,9 +531,8 @@ bool Service::AddDescriptor(const std::vector<std::string>& args, std::string* e
 
 // name type perm [ uid gid context ]
 bool Service::ParseSocket(const std::vector<std::string>& args, std::string* err) {
-    if (!android::base::StartsWith(args[2], "dgram") &&
-        !android::base::StartsWith(args[2], "stream") &&
-        !android::base::StartsWith(args[2], "seqpacket")) {
+    if (!StartsWith(args[2], "dgram") && !StartsWith(args[2], "stream") &&
+        !StartsWith(args[2], "seqpacket")) {
         *err = "socket type must be 'dgram', 'stream' or 'seqpacket'";
         return false;
     }
@@ -695,13 +700,13 @@ bool Service::Start() {
 
         // See if there were "writepid" instructions to write to files under /dev/cpuset/.
         auto cpuset_predicate = [](const std::string& path) {
-            return android::base::StartsWith(path, "/dev/cpuset/");
+            return StartsWith(path, "/dev/cpuset/");
         };
         auto iter = std::find_if(writepid_files_.begin(), writepid_files_.end(), cpuset_predicate);
         if (iter == writepid_files_.end()) {
             // There were no "writepid" instructions for cpusets, check if the system default
             // cpuset is specified to be used for the process.
-            std::string default_cpuset = android::base::GetProperty("ro.cpuset.default", "");
+            std::string default_cpuset = GetProperty("ro.cpuset.default", "");
             if (!default_cpuset.empty()) {
                 // Make sure the cpuset name starts and ends with '/'.
                 // A single '/' means the 'root' cpuset.
@@ -954,8 +959,7 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
     std::vector<std::string> str_args(args.begin() + command_arg, args.end());
 
     exec_count_++;
-    std::string name =
-        "exec " + std::to_string(exec_count_) + " (" + android::base::Join(str_args, " ") + ")";
+    std::string name = "exec " + std::to_string(exec_count_) + " (" + Join(str_args, " ") + ")";
 
     unsigned flags = SVC_EXEC | SVC_ONESHOT | SVC_TEMPORARY;
     CapSet no_capabilities;
@@ -1093,14 +1097,12 @@ bool ServiceManager::ReapOneProcess() {
     std::string name;
     std::string wait_string;
     if (svc) {
-        name = android::base::StringPrintf("Service '%s' (pid %d)",
-                                           svc->name().c_str(), pid);
+        name = StringPrintf("Service '%s' (pid %d)", svc->name().c_str(), pid);
         if (svc->flags() & SVC_EXEC) {
-            wait_string =
-                android::base::StringPrintf(" waiting took %f seconds", exec_waiter_->duration_s());
+            wait_string = StringPrintf(" waiting took %f seconds", exec_waiter_->duration_s());
         }
     } else {
-        name = android::base::StringPrintf("Untracked pid %d", pid);
+        name = StringPrintf("Untracked pid %d", pid);
     }
 
     if (WIFEXITED(status)) {
@@ -1175,3 +1177,6 @@ bool ServiceParser::IsValidName(const std::string& name) const {
     // the service name to the "ctl.start" and "ctl.stop" properties.)
     return is_legal_property_name("init.svc." + name) && name.size() <= PROP_VALUE_MAX;
 }
+
+}  // namespace init
+}  // namespace android

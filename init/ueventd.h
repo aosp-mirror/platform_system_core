@@ -17,6 +17,12 @@
 #ifndef _INIT_UEVENTD_H_
 #define _INIT_UEVENTD_H_
 
+namespace android {
+namespace init {
+
 int ueventd_main(int argc, char** argv);
+
+}  // namespace init
+}  // namespace android
 
 #endif

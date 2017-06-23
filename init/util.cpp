@@ -50,6 +50,9 @@
 using android::base::boot_clock;
 using namespace std::literals::string_literals;
 
+namespace android {
+namespace init {
+
 // DecodeUid() - decodes and returns the given string, which can be either the
 // numeric or name representation, into the integer uid or gid. Returns
 // UINT_MAX on error.
@@ -397,3 +400,6 @@ bool is_android_dt_value_expected(const std::string& sub_path, const std::string
     }
     return false;
 }
+
+}  // namespace init
+}  // namespace android
