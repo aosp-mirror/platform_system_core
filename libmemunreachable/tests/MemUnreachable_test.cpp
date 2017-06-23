@@ -40,7 +40,8 @@ class HiddenPointer {
   volatile uintptr_t ptr_;
 };
 
-static void Ref(void* ptr) {
+// Trick the compiler into thinking a value on the stack is still referenced.
+static void Ref(void** ptr) {
   write(0, ptr, 0);
 }
 
@@ -58,14 +59,14 @@ TEST(MemunreachableTest, stack) {
 
   {
     void* ptr = hidden_ptr.Get();
-    Ref(ptr);
+    Ref(&ptr);
 
     UnreachableMemoryInfo info;
 
     ASSERT_TRUE(GetUnreachableMemory(info));
     ASSERT_EQ(0U, info.leaks.size());
 
-    Ref(ptr);
+    ptr = nullptr;
   }
 
   {
