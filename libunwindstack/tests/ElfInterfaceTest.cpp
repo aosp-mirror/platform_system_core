@@ -79,8 +79,36 @@ class ElfInterfaceTest : public ::testing::Test {
   template <typename ElfType>
   void InitHeadersDebugFrameFail();
 
+  template <typename Ehdr, typename Shdr, typename ElfInterfaceType>
+  void InitSectionHeadersMalformed();
+
+  template <typename Ehdr, typename Shdr, typename Sym, typename ElfInterfaceType>
+  void InitSectionHeaders(uint64_t entry_size);
+
+  template <typename Ehdr, typename Shdr, typename ElfInterfaceType>
+  void InitSectionHeadersOffsets();
+
+  template <typename Sym>
+  void InitSym(uint64_t offset, uint32_t value, uint32_t size, uint32_t name_offset,
+               uint64_t sym_offset, const char* name);
+
   MemoryFake memory_;
 };
+
+template <typename Sym>
+void ElfInterfaceTest::InitSym(uint64_t offset, uint32_t value, uint32_t size, uint32_t name_offset,
+                               uint64_t sym_offset, const char* name) {
+  Sym sym;
+  memset(&sym, 0, sizeof(sym));
+  sym.st_info = STT_FUNC;
+  sym.st_value = value;
+  sym.st_size = size;
+  sym.st_name = name_offset;
+  sym.st_shndx = SHN_COMMON;
+
+  memory_.SetMemory(offset, &sym, sizeof(sym));
+  memory_.SetMemory(sym_offset + name_offset, name, strlen(name) + 1);
+}
 
 template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
 void ElfInterfaceTest::SinglePtLoad() {
@@ -717,4 +745,179 @@ TEST_F(ElfInterfaceTest, init_headers_debug_frame32_fail) {
 
 TEST_F(ElfInterfaceTest, init_headers_debug_frame64_fail) {
   InitHeadersDebugFrameFail<MockElfInterface64>();
+}
+
+template <typename Ehdr, typename Shdr, typename ElfInterfaceType>
+void ElfInterfaceTest::InitSectionHeadersMalformed() {
+  std::unique_ptr<ElfInterfaceType> elf(new ElfInterfaceType(&memory_));
+
+  Ehdr ehdr;
+  memset(&ehdr, 0, sizeof(ehdr));
+  ehdr.e_shoff = 0x1000;
+  ehdr.e_shnum = 10;
+  ehdr.e_shentsize = sizeof(Shdr);
+  memory_.SetMemory(0, &ehdr, sizeof(ehdr));
+
+  ASSERT_TRUE(elf->Init());
+}
+
+TEST_F(ElfInterfaceTest, init_section_headers_malformed32) {
+  InitSectionHeadersMalformed<Elf32_Ehdr, Elf32_Shdr, ElfInterface32>();
+}
+
+TEST_F(ElfInterfaceTest, init_section_headers_malformed64) {
+  InitSectionHeadersMalformed<Elf64_Ehdr, Elf64_Shdr, ElfInterface64>();
+}
+
+template <typename Ehdr, typename Shdr, typename Sym, typename ElfInterfaceType>
+void ElfInterfaceTest::InitSectionHeaders(uint64_t entry_size) {
+  std::unique_ptr<ElfInterfaceType> elf(new ElfInterfaceType(&memory_));
+
+  uint64_t offset = 0x1000;
+
+  Ehdr ehdr;
+  memset(&ehdr, 0, sizeof(ehdr));
+  ehdr.e_shoff = offset;
+  ehdr.e_shnum = 10;
+  ehdr.e_shentsize = entry_size;
+  memory_.SetMemory(0, &ehdr, sizeof(ehdr));
+
+  offset += ehdr.e_shentsize;
+
+  Shdr shdr;
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_SYMTAB;
+  shdr.sh_link = 4;
+  shdr.sh_addr = 0x5000;
+  shdr.sh_offset = 0x5000;
+  shdr.sh_entsize = sizeof(Sym);
+  shdr.sh_size = shdr.sh_entsize * 10;
+  memory_.SetMemory(offset, &shdr, sizeof(shdr));
+  offset += ehdr.e_shentsize;
+
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_DYNSYM;
+  shdr.sh_link = 4;
+  shdr.sh_addr = 0x6000;
+  shdr.sh_offset = 0x6000;
+  shdr.sh_entsize = sizeof(Sym);
+  shdr.sh_size = shdr.sh_entsize * 10;
+  memory_.SetMemory(offset, &shdr, sizeof(shdr));
+  offset += ehdr.e_shentsize;
+
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_PROGBITS;
+  shdr.sh_name = 0xa000;
+  memory_.SetMemory(offset, &shdr, sizeof(shdr));
+  offset += ehdr.e_shentsize;
+
+  // The string data for the entries.
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_STRTAB;
+  shdr.sh_name = 0x20000;
+  shdr.sh_offset = 0xf000;
+  shdr.sh_size = 0x1000;
+  memory_.SetMemory(offset, &shdr, sizeof(shdr));
+  offset += ehdr.e_shentsize;
+
+  InitSym<Sym>(0x5000, 0x90000, 0x1000, 0x100, 0xf000, "function_one");
+  InitSym<Sym>(0x6000, 0xd0000, 0x1000, 0x300, 0xf000, "function_two");
+
+  ASSERT_TRUE(elf->Init());
+  EXPECT_EQ(0U, elf->debug_frame_offset());
+  EXPECT_EQ(0U, elf->debug_frame_size());
+  EXPECT_EQ(0U, elf->gnu_debugdata_offset());
+  EXPECT_EQ(0U, elf->gnu_debugdata_size());
+
+  // Look in the first symbol table.
+  std::string name;
+  uint64_t name_offset;
+  ASSERT_TRUE(elf->GetFunctionName(0x90010, &name, &name_offset));
+  EXPECT_EQ("function_one", name);
+  EXPECT_EQ(16U, name_offset);
+  ASSERT_TRUE(elf->GetFunctionName(0xd0020, &name, &name_offset));
+  EXPECT_EQ("function_two", name);
+  EXPECT_EQ(32U, name_offset);
+}
+
+TEST_F(ElfInterfaceTest, init_section_headers32) {
+  InitSectionHeaders<Elf32_Ehdr, Elf32_Shdr, Elf32_Sym, ElfInterface32>(sizeof(Elf32_Shdr));
+}
+
+TEST_F(ElfInterfaceTest, init_section_headers64) {
+  InitSectionHeaders<Elf64_Ehdr, Elf64_Shdr, Elf64_Sym, ElfInterface64>(sizeof(Elf64_Shdr));
+}
+
+TEST_F(ElfInterfaceTest, init_section_headers_non_std_entry_size32) {
+  InitSectionHeaders<Elf32_Ehdr, Elf32_Shdr, Elf32_Sym, ElfInterface32>(0x100);
+}
+
+TEST_F(ElfInterfaceTest, init_section_headers_non_std_entry_size64) {
+  InitSectionHeaders<Elf64_Ehdr, Elf64_Shdr, Elf64_Sym, ElfInterface64>(0x100);
+}
+
+template <typename Ehdr, typename Shdr, typename ElfInterfaceType>
+void ElfInterfaceTest::InitSectionHeadersOffsets() {
+  std::unique_ptr<ElfInterfaceType> elf(new ElfInterfaceType(&memory_));
+
+  uint64_t offset = 0x2000;
+
+  Ehdr ehdr;
+  memset(&ehdr, 0, sizeof(ehdr));
+  ehdr.e_shoff = offset;
+  ehdr.e_shnum = 10;
+  ehdr.e_shentsize = sizeof(Shdr);
+  ehdr.e_shstrndx = 2;
+  memory_.SetMemory(0, &ehdr, sizeof(ehdr));
+
+  offset += ehdr.e_shentsize;
+
+  Shdr shdr;
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_PROGBITS;
+  shdr.sh_link = 2;
+  shdr.sh_name = 0x200;
+  shdr.sh_addr = 0x5000;
+  shdr.sh_offset = 0x5000;
+  shdr.sh_entsize = 0x100;
+  shdr.sh_size = 0x800;
+  memory_.SetMemory(offset, &shdr, sizeof(shdr));
+  offset += ehdr.e_shentsize;
+
+  // The string data for section header names.
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_STRTAB;
+  shdr.sh_name = 0x20000;
+  shdr.sh_offset = 0xf000;
+  shdr.sh_size = 0x1000;
+  memory_.SetMemory(offset, &shdr, sizeof(shdr));
+  offset += ehdr.e_shentsize;
+
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_PROGBITS;
+  shdr.sh_link = 2;
+  shdr.sh_name = 0x100;
+  shdr.sh_addr = 0x6000;
+  shdr.sh_offset = 0x6000;
+  shdr.sh_entsize = 0x100;
+  shdr.sh_size = 0x500;
+  memory_.SetMemory(offset, &shdr, sizeof(shdr));
+  offset += ehdr.e_shentsize;
+
+  memory_.SetMemory(0xf100, ".debug_frame", sizeof(".debug_frame"));
+  memory_.SetMemory(0xf200, ".gnu_debugdata", sizeof(".gnu_debugdata"));
+
+  ASSERT_TRUE(elf->Init());
+  EXPECT_EQ(0x6000U, elf->debug_frame_offset());
+  EXPECT_EQ(0x500U, elf->debug_frame_size());
+  EXPECT_EQ(0x5000U, elf->gnu_debugdata_offset());
+  EXPECT_EQ(0x800U, elf->gnu_debugdata_size());
+}
+
+TEST_F(ElfInterfaceTest, init_section_headers_offsets32) {
+  InitSectionHeadersOffsets<Elf32_Ehdr, Elf32_Shdr, ElfInterface32>();
+}
+
+TEST_F(ElfInterfaceTest, init_section_headers_offsets64) {
+  InitSectionHeadersOffsets<Elf64_Ehdr, Elf64_Shdr, ElfInterface64>();
 }

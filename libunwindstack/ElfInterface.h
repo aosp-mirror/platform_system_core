@@ -30,6 +30,7 @@
 // Forward declarations.
 class Memory;
 class Regs;
+class Symbols;
 
 struct LoadInfo {
   uint64_t offset;
@@ -46,7 +47,7 @@ enum : uint8_t {
 class ElfInterface {
  public:
   ElfInterface(Memory* memory) : memory_(memory) {}
-  virtual ~ElfInterface() = default;
+  virtual ~ElfInterface();
 
   virtual bool Init() = 0;
 
@@ -94,6 +95,9 @@ class ElfInterface {
   template <typename DynType>
   bool GetSonameWithTemplate(std::string* soname);
 
+  template <typename SymType>
+  bool GetFunctionNameWithTemplate(uint64_t addr, std::string* name, uint64_t* func_offset);
+
   virtual bool HandleType(uint64_t, uint32_t) { return false; }
 
   Memory* memory_;
@@ -118,6 +122,8 @@ class ElfInterface {
 
   std::unique_ptr<DwarfSection> eh_frame_;
   std::unique_ptr<DwarfSection> debug_frame_;
+
+  std::vector<Symbols*> symbols_;
 };
 
 class ElfInterface32 : public ElfInterface {
@@ -135,8 +141,8 @@ class ElfInterface32 : public ElfInterface {
     return ElfInterface::GetSonameWithTemplate<Elf32_Dyn>(soname);
   }
 
-  bool GetFunctionName(uint64_t, std::string*, uint64_t*) override {
-    return false;
+  bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) override {
+    return ElfInterface::GetFunctionNameWithTemplate<Elf32_Sym>(addr, name, func_offset);
   }
 };
 
@@ -155,8 +161,8 @@ class ElfInterface64 : public ElfInterface {
     return ElfInterface::GetSonameWithTemplate<Elf64_Dyn>(soname);
   }
 
-  bool GetFunctionName(uint64_t, std::string*, uint64_t*) override {
-    return false;
+  bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) override {
+    return ElfInterface::GetFunctionNameWithTemplate<Elf64_Sym>(addr, name, func_offset);
   }
 };
 
