@@ -310,17 +310,17 @@ bool FirstStageMountVBootV1::SetUpDmVerity(fstab_rec* fstab_rec) {
     if (fs_mgr_is_verified(fstab_rec)) {
         int ret = fs_mgr_setup_verity(fstab_rec, false /* wait_for_verity_dev */);
         switch (ret) {
-        case FS_MGR_SETUP_VERITY_SKIPPED:
-        case FS_MGR_SETUP_VERITY_DISABLED:
-            LOG(INFO) << "Verity disabled/skipped for '" << fstab_rec->mount_point << "'";
-            break;
-        case FS_MGR_SETUP_VERITY_SUCCESS:
-            // The exact block device name (fstab_rec->blk_device) is changed to "/dev/block/dm-XX".
-            // Needs to create it because ueventd isn't started in init first stage.
-            return InitVerityDevice(fstab_rec->blk_device);
-            break;
-        default:
-            return false;
+            case FS_MGR_SETUP_VERITY_SKIPPED:
+            case FS_MGR_SETUP_VERITY_DISABLED:
+                LOG(INFO) << "Verity disabled/skipped for '" << fstab_rec->mount_point << "'";
+                return true;
+            case FS_MGR_SETUP_VERITY_SUCCESS:
+                // The exact block device name (fstab_rec->blk_device) is changed to
+                // "/dev/block/dm-XX". Needs to create it because ueventd isn't started in init
+                // first stage.
+                return InitVerityDevice(fstab_rec->blk_device);
+            default:
+                return false;
         }
     }
     return true;  // Returns true to mount the partition.
@@ -409,14 +409,18 @@ ListenerAction FirstStageMountVBootV2::UeventCallback(const Uevent& uevent) {
 bool FirstStageMountVBootV2::SetUpDmVerity(fstab_rec* fstab_rec) {
     if (fs_mgr_is_avb(fstab_rec)) {
         if (!InitAvbHandle()) return false;
-        if (avb_handle_->hashtree_disabled()) {
-            LOG(INFO) << "avb hashtree disabled for '" << fstab_rec->mount_point << "'";
-        } else if (avb_handle_->SetUpAvb(fstab_rec, false /* wait_for_verity_dev */)) {
-            // The exact block device name (fstab_rec->blk_device) is changed to "/dev/block/dm-XX".
-            // Needs to create it because ueventd isn't started in init first stage.
-            InitVerityDevice(fstab_rec->blk_device);
-        } else {
-            return false;
+        SetUpAvbHashtreeResult hashtree_result =
+            avb_handle_->SetUpAvbHashtree(fstab_rec, false /* wait_for_verity_dev */);
+        switch (hashtree_result) {
+            case SetUpAvbHashtreeResult::kDisabled:
+                return true;  // Returns true to mount the partition.
+            case SetUpAvbHashtreeResult::kSuccess:
+                // The exact block device name (fstab_rec->blk_device) is changed to
+                // "/dev/block/dm-XX". Needs to create it because ueventd isn't started in init
+                // first stage.
+                return InitVerityDevice(fstab_rec->blk_device);
+            default:
+                return false;
         }
     }
     return true;  // Returns true to mount the partition.
