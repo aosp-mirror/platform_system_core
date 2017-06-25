@@ -19,6 +19,8 @@
 
 #include "Allocator.h"
 
+namespace android {
+
 struct Mapping {
   uintptr_t begin;
   uintptr_t end;
@@ -33,4 +35,6 @@ struct Mapping {
 // the line data.
 bool ProcessMappings(pid_t pid, allocator::vector<Mapping>& mappings);
 
-#endif // LIBMEMUNREACHABLE_PROCESS_MAPPING_H_
+}  // namespace android
+
+#endif  // LIBMEMUNREACHABLE_PROCESS_MAPPING_H_

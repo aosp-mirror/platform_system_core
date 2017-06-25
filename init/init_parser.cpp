@@ -25,6 +25,9 @@
 #include "parser.h"
 #include "util.h"
 
+namespace android {
+namespace init {
+
 Parser::Parser() {
 }
 
@@ -159,3 +162,6 @@ bool Parser::ParseConfig(const std::string& path) {
     }
     return ParseConfigFile(path);
 }
+
+}  // namespace init
+}  // namespace android

@@ -31,6 +31,9 @@
 #include "init.h"
 #include "util.h"
 
+namespace android {
+namespace init {
+
 DescriptorInfo::DescriptorInfo(const std::string& name, const std::string& type, uid_t uid,
                                gid_t gid, int perm, const std::string& context)
         : name_(name), type_(type), uid_(uid), gid_(gid), perm_(perm), context_(context) {
@@ -58,7 +61,7 @@ void DescriptorInfo::CreateAndPublish(const std::string& globalContext) const {
   std::for_each(publishedName.begin(), publishedName.end(),
                 [] (char& c) { c = isalnum(c) ? c : '_'; });
 
-  std::string val = android::base::StringPrintf("%d", fd);
+  std::string val = std::to_string(fd);
   add_environment(publishedName.c_str(), val.c_str());
 
   // make sure we don't close on exec
@@ -74,7 +77,8 @@ SocketInfo::SocketInfo(const std::string& name, const std::string& type, uid_t u
 }
 
 void SocketInfo::Clean() const {
-  unlink(android::base::StringPrintf(ANDROID_SOCKET_DIR "/%s", name().c_str()).c_str());
+    std::string path = android::base::StringPrintf("%s/%s", ANDROID_SOCKET_DIR, name().c_str());
+    unlink(path.c_str());
 }
 
 int SocketInfo::Create(const std::string& context) const {
@@ -125,3 +129,6 @@ int FileInfo::Create(const std::string&) const {
 const std::string FileInfo::key() const {
   return ANDROID_FILE_ENV_PREFIX;
 }
+
+}  // namespace init
+}  // namespace android

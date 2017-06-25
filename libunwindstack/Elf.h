@@ -45,8 +45,8 @@ class Elf {
     return valid_ && interface_->GetSoname(name);
   }
 
-  bool GetFunctionName(uint64_t, std::string*, uint64_t*) {
-    return false;
+  bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) {
+    return valid_ && interface_->GetFunctionName(addr, name, func_offset);
   }
 
   bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory) {

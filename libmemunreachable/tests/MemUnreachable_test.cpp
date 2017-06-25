@@ -16,36 +16,32 @@
 
 #include <fcntl.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <sys/prctl.h>
+#include <unistd.h>
 
 #include <gtest/gtest.h>
 
 #include <memunreachable/memunreachable.h>
 
+namespace android {
+
 class HiddenPointer {
  public:
-  explicit HiddenPointer(size_t size = 256) {
-    Set(malloc(size));
-  }
-  ~HiddenPointer() {
-    Free();
-  }
-  void* Get() {
-    return reinterpret_cast<void*>(~ptr_);
-  }
+  explicit HiddenPointer(size_t size = 256) { Set(malloc(size)); }
+  ~HiddenPointer() { Free(); }
+  void* Get() { return reinterpret_cast<void*>(~ptr_); }
   void Free() {
     free(Get());
     Set(nullptr);
   }
+
  private:
-  void Set(void* ptr) {
-    ptr_ = ~reinterpret_cast<uintptr_t>(ptr);
-  }
+  void Set(void* ptr) { ptr_ = ~reinterpret_cast<uintptr_t>(ptr); }
   volatile uintptr_t ptr_;
 };
 
-static void Ref(void* ptr) {
+// Trick the compiler into thinking a value on the stack is still referenced.
+static void Ref(void** ptr) {
   write(0, ptr, 0);
 }
 
@@ -63,14 +59,14 @@ TEST(MemunreachableTest, stack) {
 
   {
     void* ptr = hidden_ptr.Get();
-    Ref(ptr);
+    Ref(&ptr);
 
     UnreachableMemoryInfo info;
 
     ASSERT_TRUE(GetUnreachableMemory(info));
     ASSERT_EQ(0U, info.leaks.size());
 
-    Ref(ptr);
+    ptr = nullptr;
   }
 
   {
@@ -216,3 +212,5 @@ TEST(MemunreachableTest, leak_lots) {
 
   ASSERT_TRUE(LogUnreachableMemory(true, 100));
 }
+
+}  // namespace android

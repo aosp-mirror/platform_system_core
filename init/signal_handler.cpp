@@ -21,10 +21,12 @@
 #include <unistd.h>
 
 #include <android-base/logging.h>
-#include <android-base/stringprintf.h>
 
 #include "init.h"
 #include "service.h"
+
+namespace android {
+namespace init {
 
 static int signal_write_fd = -1;
 static int signal_read_fd = -1;
@@ -65,3 +67,6 @@ void signal_handler_init() {
 
     register_epoll_handler(signal_read_fd, handle_signal);
 }
+
+}  // namespace init
+}  // namespace android

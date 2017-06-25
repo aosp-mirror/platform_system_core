@@ -29,7 +29,6 @@
 
 #include <android-base/logging.h>
 #include <android-base/properties.h>
-#include <android-base/stringprintf.h>
 #include <selinux/android.h>
 #include <selinux/selinux.h>
 
@@ -99,6 +98,9 @@
 // paused while the uevent handler and restorecon actions take place.  Once coldboot completes,
 // the uevent listener resumes in polling mode and will handle the uevents that occurred during
 // coldboot.
+
+namespace android {
+namespace init {
 
 class ColdBoot {
   public:
@@ -274,3 +276,6 @@ int ueventd_main(int argc, char** argv) {
 
     return 0;
 }
+
+}  // namespace init
+}  // namespace android

@@ -25,6 +25,8 @@
 #include "ScopedSignalHandler.h"
 #include "Tarjan.h"
 
+namespace android {
+
 // A range [begin, end)
 struct Range {
   uintptr_t begin;
@@ -34,31 +36,31 @@ struct Range {
   bool operator==(const Range& other) const {
     return this->begin == other.begin && this->end == other.end;
   }
-  bool operator!=(const Range& other) const {
-    return !(*this == other);
-  }
+  bool operator!=(const Range& other) const { return !(*this == other); }
 };
 
 // Comparator for Ranges that returns equivalence for overlapping ranges
 struct compare_range {
-  bool operator()(const Range& a, const Range& b) const {
-    return a.end <= b.begin;
-  }
+  bool operator()(const Range& a, const Range& b) const { return a.end <= b.begin; }
 };
 
 class HeapWalker {
  public:
-  explicit HeapWalker(Allocator<HeapWalker> allocator) : allocator_(allocator),
-    allocations_(allocator), allocation_bytes_(0),
-	roots_(allocator), root_vals_(allocator),
-	segv_handler_(allocator), walking_ptr_(0) {
+  explicit HeapWalker(Allocator<HeapWalker> allocator)
+      : allocator_(allocator),
+        allocations_(allocator),
+        allocation_bytes_(0),
+        roots_(allocator),
+        root_vals_(allocator),
+        segv_handler_(allocator),
+        walking_ptr_(0) {
     valid_allocations_range_.end = 0;
     valid_allocations_range_.begin = ~valid_allocations_range_.end;
 
-    segv_handler_.install(SIGSEGV,
-        [=](ScopedSignalHandler& handler, int signal, siginfo_t* siginfo, void* uctx) {
+    segv_handler_.install(
+        SIGSEGV, [=](ScopedSignalHandler& handler, int signal, siginfo_t* siginfo, void* uctx) {
           this->HandleSegFault(handler, signal, siginfo, uctx);
-      });
+        });
   }
 
   ~HeapWalker() {}
@@ -68,15 +70,14 @@ class HeapWalker {
 
   bool DetectLeaks();
 
-  bool Leaked(allocator::vector<Range>&, size_t limit, size_t* num_leaks,
-      size_t* leak_bytes);
+  bool Leaked(allocator::vector<Range>&, size_t limit, size_t* num_leaks, size_t* leak_bytes);
   size_t Allocations();
   size_t AllocationBytes();
 
-  template<class F>
+  template <class F>
   void ForEachPtrInRange(const Range& range, F&& f);
 
-  template<class F>
+  template <class F>
   void ForEachAllocation(F&& f);
 
   struct AllocationInfo {
@@ -84,7 +85,6 @@ class HeapWalker {
   };
 
  private:
-
   void RecurseRoot(const Range& root);
   bool WordContainsAllocationPtr(uintptr_t ptr, Range* range, AllocationInfo** info);
   void HandleSegFault(ScopedSignalHandler&, int, siginfo_t*, void*);
@@ -103,7 +103,7 @@ class HeapWalker {
   uintptr_t walking_ptr_;
 };
 
-template<class F>
+template <class F>
 inline void HeapWalker::ForEachPtrInRange(const Range& range, F&& f) {
   uintptr_t begin = (range.begin + (sizeof(uintptr_t) - 1)) & ~(sizeof(uintptr_t) - 1);
   // TODO(ccross): we might need to consider a pointer to the end of a buffer
@@ -118,7 +118,7 @@ inline void HeapWalker::ForEachPtrInRange(const Range& range, F&& f) {
   }
 }
 
-template<class F>
+template <class F>
 inline void HeapWalker::ForEachAllocation(F&& f) {
   for (auto& it : allocations_) {
     const Range& range = it.first;
@@ -126,5 +126,7 @@ inline void HeapWalker::ForEachAllocation(F&& f) {
     f(range, allocation);
   }
 }
+
+}  // namespace android
 
 #endif

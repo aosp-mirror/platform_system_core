@@ -172,7 +172,7 @@ static constexpr bool kJavaTraceDumpsEnabled = true;
                    1 /* max_concurrent_dumps */);
 
 /* static */ CrashQueue* const CrashQueue::java_trace =
-    (kJavaTraceDumpsEnabled ? new CrashQueue("/data/anr", "anr_" /* file_name_prefix */,
+    (kJavaTraceDumpsEnabled ? new CrashQueue("/data/anr", "trace_" /* file_name_prefix */,
                                              64 /* max_artifacts */, 4 /* max_concurrent_dumps */)
                             : nullptr);
 
@@ -345,7 +345,14 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
   }
 
   if (!crash->crash_path.empty()) {
-    LOG(ERROR) << "Tombstone written to: " << crash->crash_path;
+    if (crash->crash_type == kDebuggerdJavaBacktrace) {
+      LOG(ERROR) << "Traces for pid " << crash->crash_pid << " written to: " << crash->crash_path;
+    } else {
+      // NOTE: Several tools parse this log message to figure out where the
+      // tombstone associated with a given native crash was written. Any changes
+      // to this message must be carefully considered.
+      LOG(ERROR) << "Tombstone written to: " << crash->crash_path;
+    }
   }
 
 fail:

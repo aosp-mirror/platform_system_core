@@ -19,11 +19,16 @@
 
 #include "HeapWalker.h"
 
+namespace android {
+
 class LeakFolding {
  public:
   LeakFolding(Allocator<void> allocator, HeapWalker& heap_walker)
-   : allocator_(allocator), heap_walker_(heap_walker),
-     leak_map_(allocator), leak_graph_(allocator), leak_scc_(allocator) {}
+      : allocator_(allocator),
+        heap_walker_(heap_walker),
+        leak_map_(allocator),
+        leak_graph_(allocator),
+        leak_scc_(allocator) {}
 
   bool FoldLeaks();
 
@@ -33,8 +38,7 @@ class LeakFolding {
     size_t referenced_size;
   };
 
-  bool Leaked(allocator::vector<Leak>& leaked,
-      size_t* num_leaks_out, size_t* leak_bytes_out);
+  bool Leaked(allocator::vector<Leak>& leaked, size_t* num_leaks_out, size_t* leak_bytes_out);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(LeakFolding);
@@ -54,9 +58,15 @@ class LeakFolding {
     bool dominator;
     SCCInfo* accumulator;
 
-    explicit SCCInfo(Allocator<SCCInfo> allocator) : node(this, allocator),
-        count(0), size(0), cuumulative_count(0), cuumulative_size(0),
-        dominator(false), accumulator(nullptr) {}
+    explicit SCCInfo(Allocator<SCCInfo> allocator)
+        : node(this, allocator),
+          count(0),
+          size(0),
+          cuumulative_count(0),
+          cuumulative_size(0),
+          dominator(false),
+          accumulator(nullptr) {}
+
    private:
     SCCInfo(SCCInfo&&) = delete;
     DISALLOW_COPY_AND_ASSIGN(SCCInfo);
@@ -71,8 +81,7 @@ class LeakFolding {
     SCCInfo* scc;
 
     LeakInfo(const Range& range, Allocator<LeakInfo> allocator)
-        : node(this, allocator), range(range),
-          scc(nullptr) {}
+        : node(this, allocator), range(range), scc(nullptr) {}
 
    private:
     DISALLOW_COPY_AND_ASSIGN(LeakInfo);
@@ -86,4 +95,6 @@ class LeakFolding {
   allocator::vector<Allocator<SCCInfo>::unique_ptr> leak_scc_;
 };
 
-#endif // LIBMEMUNREACHABLE_LEAK_FOLDING_H_
+}  // namespace android
+
+#endif  // LIBMEMUNREACHABLE_LEAK_FOLDING_H_

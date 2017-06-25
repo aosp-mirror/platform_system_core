@@ -1,5 +1,8 @@
 #include "parser.h"
 
+namespace android {
+namespace init {
+
 int next_token(struct parse_state *state)
 {
     char *x = state->ptr;
@@ -116,3 +119,6 @@ textresume:
     }
     return T_EOF;
 }
+
+}  // namespace init
+}  // namespace android

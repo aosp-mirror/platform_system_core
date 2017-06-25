@@ -43,7 +43,6 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
-#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
@@ -67,6 +66,9 @@
 using namespace std::literals::string_literals;
 
 #define chmod DO_NOT_USE_CHMOD_USE_FCHMODAT_SYMLINK_NOFOLLOW
+
+namespace android {
+namespace init {
 
 static constexpr std::chrono::nanoseconds kCommandRetryTimeout = 5s;
 
@@ -552,11 +554,10 @@ static int do_mount_all(const std::vector<std::string>& args) {
         }
     }
 
-    std::string prop_name = android::base::StringPrintf("ro.boottime.init.mount_all.%s",
-                                                        prop_post_fix);
+    std::string prop_name = "ro.boottime.init.mount_all."s + prop_post_fix;
     Timer t;
     int ret =  mount_fstab(fstabfile, mount_mode);
-    property_set(prop_name.c_str(), std::to_string(t.duration_ms()).c_str());
+    property_set(prop_name, std::to_string(t.duration_ms()));
 
     if (import_rc) {
         /* Paths of .rc files are specified at the 2nd argument and beyond */
@@ -584,9 +585,7 @@ static int do_swapon_all(const std::vector<std::string>& args) {
 }
 
 static int do_setprop(const std::vector<std::string>& args) {
-    const char* name = args[1].c_str();
-    const char* value = args[2].c_str();
-    property_set(name, value);
+    property_set(args[1], args[2]);
     return 0;
 }
 
@@ -669,8 +668,7 @@ static int do_verity_load_state(const std::vector<std::string>& args) {
 
 static void verity_update_property(fstab_rec *fstab, const char *mount_point,
                                    int mode, int status) {
-    property_set(android::base::StringPrintf("partition.%s.verified", mount_point).c_str(),
-                 android::base::StringPrintf("%d", mode).c_str());
+    property_set("partition."s + mount_point + ".verified", std::to_string(mode));
 }
 
 static int do_verity_update_state(const std::vector<std::string>& args) {
@@ -946,3 +944,6 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     // clang-format on
     return builtin_functions;
 }
+
+}  // namespace init
+}  // namespace android

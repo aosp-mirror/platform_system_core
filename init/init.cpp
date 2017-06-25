@@ -42,14 +42,12 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
-#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <keyutils.h>
 #include <libavb/libavb.h>
 #include <private/android_filesystem_config.h>
 #include <selinux/android.h>
-#include <selinux/label.h>
 #include <selinux/selinux.h>
 
 #include <fstream>
@@ -71,9 +69,13 @@
 #include "util.h"
 #include "watchdogd.h"
 
+using namespace std::string_literals;
+
 using android::base::boot_clock;
 using android::base::GetProperty;
-using android::base::StringPrintf;
+
+namespace android {
+namespace init {
 
 struct selabel_handle *sehandle;
 struct selabel_handle *sehandle_prop;
@@ -219,7 +221,7 @@ static int wait_for_coldboot_done_action(const std::vector<std::string>& args) {
         panic();
     }
 
-    property_set("ro.boottime.init.cold_boot_wait", std::to_string(t.duration_ms()).c_str());
+    property_set("ro.boottime.init.cold_boot_wait", std::to_string(t.duration_ms()));
     return 0;
 }
 
@@ -449,14 +451,14 @@ static void import_kernel_nv(const std::string& key, const std::string& value, b
 
     if (for_emulator) {
         // In the emulator, export any kernel option with the "ro.kernel." prefix.
-        property_set(StringPrintf("ro.kernel.%s", key.c_str()).c_str(), value.c_str());
+        property_set("ro.kernel." + key, value);
         return;
     }
 
     if (key == "qemu") {
         strlcpy(qemu, value.c_str(), sizeof(qemu));
     } else if (android::base::StartsWith(key, "androidboot.")) {
-        property_set(StringPrintf("ro.boot.%s", key.c_str() + 12).c_str(), value.c_str());
+        property_set("ro.boot." + key.substr(12), value);
     }
 }
 
@@ -487,7 +489,7 @@ static void export_kernel_boot_props() {
     };
     for (size_t i = 0; i < arraysize(prop_map); i++) {
         std::string value = GetProperty(prop_map[i].src_prop, "");
-        property_set(prop_map[i].dst_prop, (!value.empty()) ? value.c_str() : prop_map[i].default_value);
+        property_set(prop_map[i].dst_prop, (!value.empty()) ? value : prop_map[i].default_value);
     }
 }
 
@@ -511,8 +513,7 @@ static void process_kernel_dt() {
         android::base::ReadFileToString(file_name, &dt_file);
         std::replace(dt_file.begin(), dt_file.end(), ',', '.');
 
-        std::string property_name = StringPrintf("ro.boot.%s", dp->d_name);
-        property_set(property_name.c_str(), dt_file.c_str());
+        property_set("ro.boot."s + dp->d_name, dt_file);
     }
 }
 
@@ -889,9 +890,6 @@ static void selinux_restore_context() {
     LOG(INFO) << "Running restorecon...";
     selinux_android_restorecon("/dev", 0);
     selinux_android_restorecon("/dev/kmsg", 0);
-    if constexpr (WORLD_WRITABLE_KMSG) {
-        selinux_android_restorecon("/dev/kmsg_debug", 0);
-    }
     selinux_android_restorecon("/dev/socket", 0);
     selinux_android_restorecon("/dev/random", 0);
     selinux_android_restorecon("/dev/urandom", 0);
@@ -995,13 +993,7 @@ int main(int argc, char** argv) {
         setgroups(arraysize(groups), groups);
         mount("sysfs", "/sys", "sysfs", 0, NULL);
         mount("selinuxfs", "/sys/fs/selinux", "selinuxfs", 0, NULL);
-
         mknod("/dev/kmsg", S_IFCHR | 0600, makedev(1, 11));
-
-        if constexpr (WORLD_WRITABLE_KMSG) {
-          mknod("/dev/kmsg_debug", S_IFCHR | 0622, makedev(1, 11));
-        }
-
         mknod("/dev/random", S_IFCHR | 0666, makedev(1, 8));
         mknod("/dev/urandom", S_IFCHR | 0666, makedev(1, 9));
 
@@ -1032,7 +1024,7 @@ int main(int argc, char** argv) {
 
         static constexpr uint32_t kNanosecondsPerMillisecond = 1e6;
         uint64_t start_ms = start_time.time_since_epoch().count() / kNanosecondsPerMillisecond;
-        setenv("INIT_STARTED_AT", StringPrintf("%" PRIu64, start_ms).c_str(), 1);
+        setenv("INIT_STARTED_AT", std::to_string(start_ms).c_str(), 1);
 
         char* path = argv[0];
         char* args[] = { path, nullptr };
@@ -1186,4 +1178,11 @@ int main(int argc, char** argv) {
     }
 
     return 0;
+}
+
+}  // namespace init
+}  // namespace android
+
+int main(int argc, char** argv) {
+    android::init::main(argc, argv);
 }

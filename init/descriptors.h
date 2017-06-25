@@ -22,6 +22,9 @@
 
 #include <string>
 
+namespace android {
+namespace init {
+
 class DescriptorInfo {
  public:
   DescriptorInfo(const std::string& name, const std::string& type, uid_t uid,
@@ -74,5 +77,8 @@ class FileInfo : public DescriptorInfo {
   virtual int Create(const std::string& context) const override;
   virtual const std::string key() const override;
 };
+
+}  // namespace init
+}  // namespace android
 
 #endif

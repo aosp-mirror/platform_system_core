@@ -311,7 +311,7 @@ TEST_F(CrasherTest, abort) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_BACKTRACE_FRAME(result, "tgkill");
+  ASSERT_BACKTRACE_FRAME(result, "abort");
 }
 
 TEST_F(CrasherTest, signal) {
@@ -458,7 +458,7 @@ TEST_F(CrasherTest, backtrace) {
   FinishIntercept(&intercept_result);
   ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_BACKTRACE_FRAME(result, "tgkill");
+  ASSERT_BACKTRACE_FRAME(result, "abort");
 }
 
 TEST_F(CrasherTest, PR_SET_DUMPABLE_0_crash) {
@@ -478,7 +478,7 @@ TEST_F(CrasherTest, PR_SET_DUMPABLE_0_crash) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_BACKTRACE_FRAME(result, "tgkill");
+  ASSERT_BACKTRACE_FRAME(result, "abort");
 }
 
 TEST_F(CrasherTest, capabilities) {

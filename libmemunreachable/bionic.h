@@ -17,9 +17,9 @@
 #ifndef LIBMEMUNREACHABLE_BIONIC_H_
 #define LIBMEMUNREACHABLE_BIONIC_H_
 
-#include <sys/cdefs.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <sys/cdefs.h>
 
 __BEGIN_DECLS
 
@@ -27,9 +27,9 @@ __BEGIN_DECLS
 extern void malloc_disable();
 extern void malloc_enable();
 extern int malloc_iterate(uintptr_t base, size_t size,
-    void (*callback)(uintptr_t base, size_t size, void* arg), void* arg);
+                          void (*callback)(uintptr_t base, size_t size, void* arg), void* arg);
 extern ssize_t malloc_backtrace(void* pointer, uintptr_t* frames, size_t frame_count);
 
 __END_DECLS
 
-#endif // LIBMEMUNREACHABLE_BIONIC_H_
+#endif  // LIBMEMUNREACHABLE_BIONIC_H_
