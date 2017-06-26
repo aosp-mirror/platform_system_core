@@ -32,6 +32,7 @@
 #include <event2/thread.h>
 
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
@@ -43,6 +44,7 @@
 
 #include "intercept_manager.h"
 
+using android::base::GetIntProperty;
 using android::base::StringPrintf;
 using android::base::unique_fd;
 
@@ -53,7 +55,19 @@ enum CrashStatus {
   kCrashStatusQueued,
 };
 
-struct Crash;
+// Ownership of Crash is a bit messy.
+// It's either owned by an active event that must have a timeout, or owned by
+// queued_requests, in the case that multiple crashes come in at the same time.
+struct Crash {
+  ~Crash() { event_free(crash_event); }
+
+  unique_fd crash_fd;
+  pid_t crash_pid;
+  event* crash_event = nullptr;
+  std::string crash_path;
+
+  DebuggerdDumpType crash_type;
+};
 
 class CrashQueue {
  public:
@@ -75,6 +89,24 @@ class CrashQueue {
     CHECK(max_artifacts_ > max_concurrent_dumps_);
 
     find_oldest_artifact();
+  }
+
+  static CrashQueue* for_crash(const Crash* crash) {
+    return (crash->crash_type == kDebuggerdJavaBacktrace) ? for_anrs() : for_tombstones();
+  }
+
+  static CrashQueue* for_tombstones() {
+    static CrashQueue queue("/data/tombstones", "tombstone_" /* file_name_prefix */,
+                            GetIntProperty("tombstoned.max_tombstone_count", 10),
+                            1 /* max_concurrent_dumps */);
+    return &queue;
+  }
+
+  static CrashQueue* for_anrs() {
+    static CrashQueue queue("/data/anr", "trace_" /* file_name_prefix */,
+                            GetIntProperty("tombstoned.max_anr_count", 64),
+                            4 /* max_concurrent_dumps */);
+    return &queue;
   }
 
   std::pair<unique_fd, std::string> get_output() {
@@ -117,9 +149,6 @@ class CrashQueue {
   void on_crash_started() { ++num_concurrent_dumps_; }
 
   void on_crash_completed() { --num_concurrent_dumps_; }
-
-  static CrashQueue* const tombstone;
-  static CrashQueue* const java_trace;
 
  private:
   void find_oldest_artifact() {
@@ -167,37 +196,6 @@ class CrashQueue {
 // Whether java trace dumps are produced via tombstoned.
 static constexpr bool kJavaTraceDumpsEnabled = true;
 
-/* static */ CrashQueue* const CrashQueue::tombstone =
-    new CrashQueue("/data/tombstones", "tombstone_" /* file_name_prefix */, 10 /* max_artifacts */,
-                   1 /* max_concurrent_dumps */);
-
-/* static */ CrashQueue* const CrashQueue::java_trace =
-    (kJavaTraceDumpsEnabled ? new CrashQueue("/data/anr", "trace_" /* file_name_prefix */,
-                                             64 /* max_artifacts */, 4 /* max_concurrent_dumps */)
-                            : nullptr);
-
-// Ownership of Crash is a bit messy.
-// It's either owned by an active event that must have a timeout, or owned by
-// queued_requests, in the case that multiple crashes come in at the same time.
-struct Crash {
-  ~Crash() { event_free(crash_event); }
-
-  unique_fd crash_fd;
-  pid_t crash_pid;
-  event* crash_event = nullptr;
-  std::string crash_path;
-
-  DebuggerdDumpType crash_type;
-};
-
-static CrashQueue* get_crash_queue(const Crash* crash) {
-  if (crash->crash_type == kDebuggerdJavaBacktrace) {
-    return CrashQueue::java_trace;
-  }
-
-  return CrashQueue::tombstone;
-}
-
 // Forward declare the callbacks so they can be placed in a sensible order.
 static void crash_accept_cb(evconnlistener* listener, evutil_socket_t sockfd, sockaddr*, int, void*);
 static void crash_request_cb(evutil_socket_t sockfd, short ev, void* arg);
@@ -206,7 +204,7 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg);
 static void perform_request(Crash* crash) {
   unique_fd output_fd;
   if (!intercept_manager->GetIntercept(crash->crash_pid, crash->crash_type, &output_fd)) {
-    std::tie(output_fd, crash->crash_path) = get_crash_queue(crash)->get_output();
+    std::tie(output_fd, crash->crash_path) = CrashQueue::for_crash(crash)->get_output();
   }
 
   TombstonedCrashPacket response = {
@@ -229,7 +227,7 @@ static void perform_request(Crash* crash) {
     event_add(crash->crash_event, &timeout);
   }
 
-  get_crash_queue(crash)->on_crash_started();
+  CrashQueue::for_crash(crash)->on_crash_started();
   return;
 
 fail:
@@ -305,7 +303,7 @@ static void crash_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
 
   LOG(INFO) << "received crash request for pid " << crash->crash_pid;
 
-  if (get_crash_queue(crash)->maybe_enqueue_crash(crash)) {
+  if (CrashQueue::for_crash(crash)->maybe_enqueue_crash(crash)) {
     LOG(INFO) << "enqueueing crash request for pid " << crash->crash_pid;
   } else {
     perform_request(crash);
@@ -322,7 +320,7 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
   Crash* crash = static_cast<Crash*>(arg);
   TombstonedCrashPacket request = {};
 
-  get_crash_queue(crash)->on_crash_completed();
+  CrashQueue::for_crash(crash)->on_crash_completed();
 
   if ((ev & EV_READ) == 0) {
     goto fail;
@@ -349,7 +347,7 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
   }
 
 fail:
-  CrashQueue* queue = get_crash_queue(crash);
+  CrashQueue* queue = CrashQueue::for_crash(crash);
   delete crash;
 
   // If there's something queued up, let them proceed.
@@ -385,7 +383,7 @@ int main(int, char* []) {
   intercept_manager = new InterceptManager(base, intercept_socket);
 
   evconnlistener* tombstone_listener = evconnlistener_new(
-      base, crash_accept_cb, CrashQueue::tombstone, -1, LEV_OPT_CLOSE_ON_FREE, crash_socket);
+      base, crash_accept_cb, CrashQueue::for_tombstones(), -1, LEV_OPT_CLOSE_ON_FREE, crash_socket);
   if (!tombstone_listener) {
     LOG(FATAL) << "failed to create evconnlistener for tombstones.";
   }
@@ -398,7 +396,7 @@ int main(int, char* []) {
 
     evutil_make_socket_nonblocking(java_trace_socket);
     evconnlistener* java_trace_listener = evconnlistener_new(
-        base, crash_accept_cb, CrashQueue::java_trace, -1, LEV_OPT_CLOSE_ON_FREE, java_trace_socket);
+        base, crash_accept_cb, CrashQueue::for_anrs(), -1, LEV_OPT_CLOSE_ON_FREE, java_trace_socket);
     if (!java_trace_listener) {
       LOG(FATAL) << "failed to create evconnlistener for java traces.";
     }
