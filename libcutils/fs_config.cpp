@@ -266,14 +266,27 @@ static bool is_partition(const char* path, size_t len) {
     return false;
 }
 
+static inline bool prefix_cmp(bool partial, const char* prefix, size_t len, const char* path,
+                              size_t plen) {
+    return ((partial && plen >= len) || (plen == len)) && !strncmp(prefix, path, len);
+}
+
 // alias prefixes of "<partition>/<stuff>" to "system/<partition>/<stuff>" or
 // "system/<partition>/<stuff>" to "<partition>/<stuff>"
-static bool prefix_cmp(const char* prefix, const char* path, size_t len) {
-    if (!strncmp(prefix, path, len)) return true;
+static bool fs_config_cmp(bool partial, const char* prefix, size_t len, const char* path,
+                          size_t plen) {
+    // If name ends in * then allow partial matches.
+    if (!partial && prefix[len - 1] == '*') {
+        len--;
+        partial = true;
+    }
+
+    if (prefix_cmp(partial, prefix, len, path, plen)) return true;
 
     static const char system[] = "system/";
     if (!strncmp(path, system, strlen(system))) {
         path += strlen(system);
+        plen -= strlen(system);
     } else if (len <= strlen(system)) {
         return false;
     } else if (strncmp(prefix, system, strlen(system))) {
@@ -282,25 +295,11 @@ static bool prefix_cmp(const char* prefix, const char* path, size_t len) {
         prefix += strlen(system);
         len -= strlen(system);
     }
-    return is_partition(prefix, len) && !strncmp(prefix, path, len);
+    return is_partition(prefix, len) && prefix_cmp(partial, prefix, len, path, plen);
 }
-
-static bool fs_config_cmp(bool dir, const char* prefix, size_t len, const char* path, size_t plen) {
-    if (dir) {
-        if (plen < len) {
-            return false;
-        }
-    } else {
-        // If name ends in * then allow partial matches.
-        if (prefix[len - 1] == '*') {
-            return prefix_cmp(prefix, path, len - 1);
-        }
-        if (plen != len) {
-            return false;
-        }
-    }
-    return prefix_cmp(prefix, path, len);
-}
+#ifndef __ANDROID_VNDK__
+auto __for_testing_only__fs_config_cmp = fs_config_cmp;
+#endif
 
 void fs_config(const char* path, int dir, const char* target_out_path, unsigned* uid, unsigned* gid,
                unsigned* mode, uint64_t* capabilities) {
