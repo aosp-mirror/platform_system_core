@@ -76,6 +76,13 @@ cc_library {
     header_libs: ["libutils_headers"],
     export_header_lib_headers: ["libutils_headers"],
 
+    shared_libs: [
+        "liblog",
+    ],
+    export_shared_lib_headers: [
+        "liblog",
+    ],
+
     arch: {
         mips: {
             cflags: ["-DALIGN_DOUBLE"],
@@ -97,7 +104,6 @@ cc_library {
                 "libbacktrace",
                 "libcutils",
                 "libdl",
-                "liblog",
             ],
 
             sanitize: {
