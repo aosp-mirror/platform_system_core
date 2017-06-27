@@ -35,8 +35,18 @@ namespace procinfo {
 
 #if defined(__linux__)
 
+enum ProcessState {
+  kProcessStateUnknown,
+  kProcessStateRunning,
+  kProcessStateSleeping,
+  kProcessStateUninterruptibleWait,
+  kProcessStateStopped,
+  kProcessStateZombie,
+};
+
 struct ProcessInfo {
   std::string name;
+  ProcessState state;
   pid_t tid;
   pid_t pid;
   pid_t ppid;
