@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <set>
 #include <thread>
 #include <vector>
@@ -28,6 +29,8 @@
 #include <gtest/gtest.h>
 
 #include <android-base/stringprintf.h>
+
+using namespace std::chrono_literals;
 
 #if !defined(__BIONIC__)
 #include <syscall.h>
@@ -81,4 +84,35 @@ TEST(process_info, process_tids_smoke) {
       ASSERT_EQ(1, std::count(set.begin(), set.end(), thread_tid));
     }
   }).join();
+}
+
+TEST(process_info, process_state) {
+  int pipefd[2];
+  ASSERT_EQ(0, pipe2(pipefd, O_CLOEXEC));
+  pid_t forkpid = fork();
+
+  ASSERT_NE(-1, forkpid);
+  if (forkpid == 0) {
+    close(pipefd[1]);
+    char buf;
+    TEMP_FAILURE_RETRY(read(pipefd[0], &buf, 1));
+    _exit(0);
+  }
+
+  // Give the child some time to get to the read.
+  std::this_thread::sleep_for(100ms);
+
+  android::procinfo::ProcessInfo procinfo;
+  ASSERT_TRUE(android::procinfo::GetProcessInfo(forkpid, &procinfo));
+  ASSERT_EQ(android::procinfo::kProcessStateSleeping, procinfo.state);
+
+  ASSERT_EQ(0, kill(forkpid, SIGKILL));
+
+  // Give the kernel some time to kill the child.
+  std::this_thread::sleep_for(100ms);
+
+  ASSERT_TRUE(android::procinfo::GetProcessInfo(forkpid, &procinfo));
+  ASSERT_EQ(android::procinfo::kProcessStateZombie, procinfo.state);
+
+  ASSERT_EQ(forkpid, waitpid(forkpid, nullptr, 0));
 }
