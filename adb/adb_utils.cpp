@@ -157,7 +157,12 @@ bool mkdirs(const std::string& path) {
 }
 
 std::string dump_hex(const void* data, size_t byte_count) {
-    byte_count = std::min(byte_count, size_t(16));
+    size_t truncate_len = 16;
+    bool truncated = false;
+    if (byte_count > truncate_len) {
+        byte_count = truncate_len;
+        truncated = true;
+    }
 
     const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
 
@@ -170,6 +175,10 @@ std::string dump_hex(const void* data, size_t byte_count) {
     for (size_t i = 0; i < byte_count; ++i) {
         int ch = p[i];
         line.push_back(isprint(ch) ? ch : '.');
+    }
+
+    if (truncated) {
+        line += " [truncated]";
     }
 
     return line;
