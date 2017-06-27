@@ -348,10 +348,13 @@ out:
 
 static int was_verity_restart()
 {
-    static const char *files[] = {
+    static const char* files[] = {
+        // clang-format off
+        "/sys/fs/pstore/console-ramoops-0",
         "/sys/fs/pstore/console-ramoops",
         "/proc/last_kmsg",
         NULL
+        // clang-format on
     };
     int i;
 

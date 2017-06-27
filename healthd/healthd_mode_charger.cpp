@@ -33,6 +33,7 @@
 #include <functional>
 
 #include <android-base/file.h>
+#include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 
 #include <sys/socket.h>
@@ -76,8 +77,6 @@ char *locale;
 #define POWER_ON_KEY_TIME       (2 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
-#define LAST_KMSG_PATH          "/proc/last_kmsg"
-#define LAST_KMSG_PSTORE_PATH   "/sys/fs/pstore/console-ramoops"
 #define LAST_KMSG_MAX_SZ        (32 * 1024)
 
 #define LOGE(x...) do { KLOG_ERROR("charger", x); } while (0)
@@ -217,14 +216,21 @@ static void dump_last_kmsg(void)
     LOGW("\n");
     LOGW("*************** LAST KMSG ***************\n");
     LOGW("\n");
-    buf = (char *)load_file(LAST_KMSG_PSTORE_PATH, &sz);
+    const char* kmsg[] = {
+        // clang-format off
+        "/sys/fs/pstore/console-ramoops-0",
+        "/sys/fs/pstore/console-ramoops",
+        "/proc/last_kmsg",
+        // clang-format on
+    };
+    for (size_t i = 0; i < arraysize(kmsg); ++i) {
+        buf = (char*)load_file(kmsg[i], &sz);
+        if (buf && sz) break;
+    }
 
     if (!buf || !sz) {
-        buf = (char *)load_file(LAST_KMSG_PATH, &sz);
-        if (!buf || !sz) {
-            LOGW("last_kmsg not found. Cold reset?\n");
-            goto out;
-        }
+        LOGW("last_kmsg not found. Cold reset?\n");
+        goto out;
     }
 
     len = min(sz, LAST_KMSG_MAX_SZ);
