@@ -20,6 +20,10 @@
 #include <memory>
 #include <string>
 
+#include <7zCrc.h>
+#include <Xz.h>
+#include <XzCrc64.h>
+
 #include "DwarfDebugFrame.h"
 #include "DwarfEhFrame.h"
 #include "DwarfSection.h"
@@ -33,6 +37,60 @@ ElfInterface::~ElfInterface() {
   for (auto symbol : symbols_) {
     delete symbol;
   }
+}
+
+Memory* ElfInterface::CreateGnuDebugdataMemory() {
+  if (gnu_debugdata_offset_ == 0 || gnu_debugdata_size_ == 0) {
+    return nullptr;
+  }
+
+  // TODO: Only call these initialization functions once.
+  CrcGenerateTable();
+  Crc64GenerateTable();
+
+  std::vector<uint8_t> src(gnu_debugdata_size_);
+  if (!memory_->Read(gnu_debugdata_offset_, src.data(), gnu_debugdata_size_)) {
+    gnu_debugdata_offset_ = 0;
+    gnu_debugdata_size_ = static_cast<uint64_t>(-1);
+    return nullptr;
+  }
+
+  ISzAlloc alloc;
+  CXzUnpacker state;
+  alloc.Alloc = [](void*, size_t size) { return malloc(size); };
+  alloc.Free = [](void*, void* ptr) { return free(ptr); };
+
+  XzUnpacker_Construct(&state, &alloc);
+
+  std::unique_ptr<MemoryBuffer> dst(new MemoryBuffer);
+  int return_val;
+  size_t src_offset = 0;
+  size_t dst_offset = 0;
+  ECoderStatus status;
+  dst->Resize(5 * gnu_debugdata_size_);
+  do {
+    size_t src_remaining = src.size() - src_offset;
+    size_t dst_remaining = dst->Size() - dst_offset;
+    if (dst_remaining < 2 * gnu_debugdata_size_) {
+      dst->Resize(dst->Size() + 2 * gnu_debugdata_size_);
+      dst_remaining += 2 * gnu_debugdata_size_;
+    }
+    return_val = XzUnpacker_Code(&state, dst->GetPtr(dst_offset), &dst_remaining, &src[src_offset],
+                                 &src_remaining, CODER_FINISH_ANY, &status);
+    src_offset += src_remaining;
+    dst_offset += dst_remaining;
+  } while (return_val == SZ_OK && status == CODER_STATUS_NOT_FINISHED);
+  XzUnpacker_Free(&state);
+  if (return_val != SZ_OK || !XzUnpacker_IsStreamWasFinished(&state)) {
+    gnu_debugdata_offset_ = 0;
+    gnu_debugdata_size_ = static_cast<uint64_t>(-1);
+    return nullptr;
+  }
+
+  // Shrink back down to the exact size.
+  dst->Resize(dst_offset);
+
+  return dst.release();
 }
 
 template <typename AddressType>

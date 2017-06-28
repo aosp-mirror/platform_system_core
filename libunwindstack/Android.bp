@@ -57,16 +57,17 @@ cc_defaults {
         "ElfInterface.cpp",
         "ElfInterfaceArm.cpp",
         "Log.cpp",
-        "Regs.cpp",
         "MapInfo.cpp",
         "Maps.cpp",
         "Memory.cpp",
+        "Regs.cpp",
         "Symbols.cpp",
     ],
 
     shared_libs: [
         "libbase",
         "liblog",
+        "liblzma",
     ],
 }
 
@@ -128,6 +129,7 @@ cc_defaults {
     shared_libs: [
         "libbase",
         "liblog",
+        "liblzma",
     ],
 
     static_libs: [
@@ -151,6 +153,11 @@ cc_test {
     shared_libs: [
         "libunwindstack",
     ],
+
+    data: [
+        "tests/elf32.xz",
+        "tests/elf64.xz",
+    ],
 }
 
 // These unit tests run against the static debug library.
@@ -160,6 +167,11 @@ cc_test {
 
     static_libs: [
         "libunwindstack_debug",
+    ],
+
+    data: [
+        "tests/elf32.xz",
+        "tests/elf64.xz",
     ],
 }
 
@@ -173,6 +185,7 @@ cc_defaults {
     shared_libs: [
         "libunwindstack",
         "libbase",
+        "liblzma",
     ],
 
     static_libs: [
@@ -188,5 +201,21 @@ cc_binary {
 
     srcs: [
         "unwind_info.cpp",
+    ],
+}
+
+// Generates the elf data for use in the tests for .gnu_debugdata frames.
+// Once these files are generated, use the xz command to compress the data.
+cc_binary_host {
+    name: "gen_gnudebugdata",
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wextra",
+    ],
+
+    srcs: [
+        "tests/GenGnuDebugdata.cpp",
     ],
 }
