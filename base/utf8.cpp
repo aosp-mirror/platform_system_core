@@ -19,7 +19,9 @@
 #include "android-base/utf8.h"
 
 #include <fcntl.h>
+#include <stdio.h>
 
+#include <algorithm>
 #include <string>
 
 #include "android-base/logging.h"
@@ -153,12 +155,58 @@ bool UTF8ToWide(const std::string& utf8, std::wstring* utf16) {
   return UTF8ToWide(utf8.c_str(), utf8.length(), utf16);
 }
 
+static bool isDriveLetter(wchar_t c) {
+  return (c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z');
+}
+
+bool UTF8PathToWindowsLongPath(const char* utf8, std::wstring* utf16) {
+  if (!UTF8ToWide(utf8, utf16)) {
+    return false;
+  }
+  // Note: Although most Win32 File I/O API are limited to MAX_PATH (260
+  //       characters), the CreateDirectory API is limited to 248 characters.
+  if (utf16->length() >= 248) {
+    // If path is of the form "x:\" or "x:/"
+    if (isDriveLetter((*utf16)[0]) && (*utf16)[1] == L':' &&
+        ((*utf16)[2] == L'\\' || (*utf16)[2] == L'/')) {
+      // Append long path prefix, and make sure there are no unix-style
+      // separators to ensure a fully compliant Win32 long path string.
+      utf16->insert(0, LR"(\\?\)");
+      std::replace(utf16->begin(), utf16->end(), L'/', L'\\');
+    }
+  }
+  return true;
+}
+
 // Versions of standard library APIs that support UTF-8 strings.
 namespace utf8 {
 
+FILE* fopen(const char* name, const char* mode) {
+  std::wstring name_utf16;
+  if (!UTF8PathToWindowsLongPath(name, &name_utf16)) {
+    return nullptr;
+  }
+
+  std::wstring mode_utf16;
+  if (!UTF8ToWide(mode, &mode_utf16)) {
+    return nullptr;
+  }
+
+  return _wfopen(name_utf16.c_str(), mode_utf16.c_str());
+}
+
+int mkdir(const char* name, mode_t mode) {
+  std::wstring name_utf16;
+  if (!UTF8PathToWindowsLongPath(name, &name_utf16)) {
+    return -1;
+  }
+
+  return _wmkdir(name_utf16.c_str());
+}
+
 int open(const char* name, int flags, ...) {
   std::wstring name_utf16;
-  if (!UTF8ToWide(name, &name_utf16)) {
+  if (!UTF8PathToWindowsLongPath(name, &name_utf16)) {
     return -1;
   }
 
@@ -175,7 +223,7 @@ int open(const char* name, int flags, ...) {
 
 int unlink(const char* name) {
   std::wstring name_utf16;
-  if (!UTF8ToWide(name, &name_utf16)) {
+  if (!UTF8PathToWindowsLongPath(name, &name_utf16)) {
     return -1;
   }
 
