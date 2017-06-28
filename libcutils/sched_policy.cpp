@@ -123,9 +123,7 @@ static int add_tid_to_cgroup(int tid, int fd)
     on where init.rc mounts cpuset. That's why we'd better require this
     configuration be set if CONFIG_CPUSETS is set.
 
-    With runtime check using the following function, build time
-    variables like ENABLE_CPUSETS (used in Android.mk) or cpusets (used
-    in Android.bp) are not needed.
+    In older releases, this was controlled by build-time configuration.
  */
 
 bool cpusets_enabled() {
