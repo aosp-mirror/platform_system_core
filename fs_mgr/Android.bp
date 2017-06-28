@@ -21,18 +21,6 @@ cc_defaults {
     },
     local_include_dirs: ["include/"],
     cppflags: ["-Werror"],
-    static_libs: [
-        "liblogwrap",
-        "libfec",
-        "libfec_rs",
-        "libbase",
-        "libcrypto_utils",
-        "libcrypto",
-        "libext4_utils",
-        "libsquashfs_utils",
-        "libselinux",
-        "libavb",
-    ],
 }
 
 cc_library_static {
@@ -44,12 +32,28 @@ cc_library_static {
         "fs_mgr.cpp",
         "fs_mgr_dm_ioctl.cpp",
         "fs_mgr_format.cpp",
-        "fs_mgr_fstab.cpp",
-        "fs_mgr_slotselect.cpp",
         "fs_mgr_verity.cpp",
         "fs_mgr_avb.cpp",
         "fs_mgr_avb_ops.cpp",
-        "fs_mgr_boot_config.cpp",
+    ],
+    static_libs: [
+        "libfec",
+        "libfec_rs",
+        "libbase",
+        "libcrypto_utils",
+        "libcrypto",
+        "libext4_utils",
+        "libsquashfs_utils",
+        "libselinux",
+        "libavb",
+        "libfstab",
+    ],
+    export_static_lib_headers: [
+        "libfstab",
+    ],
+    whole_static_libs: [
+        "liblogwrap",
+        "libfstab",
     ],
     product_variables: {
         debuggable: {
@@ -59,4 +63,17 @@ cc_library_static {
             cppflags: ["-DALLOW_SKIP_SECURE_CHECK=1"],
         },
     },
+}
+
+cc_library_static {
+    name: "libfstab",
+    vendor_available: true,
+    defaults: ["fs_mgr_defaults"],
+    srcs: [
+        "fs_mgr_fstab.cpp",
+        "fs_mgr_boot_config.cpp",
+        "fs_mgr_slotselect.cpp",
+    ],
+    export_include_dirs: ["include_fstab"],
+    header_libs: ["libbase_headers"],
 }
