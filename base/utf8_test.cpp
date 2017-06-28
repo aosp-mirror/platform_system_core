@@ -18,7 +18,12 @@
 
 #include <gtest/gtest.h>
 
+#include <fcntl.h>
+#include <stdlib.h>
+
 #include "android-base/macros.h"
+#include "android-base/test_utils.h"
+#include "android-base/unique_fd.h"
 
 namespace android {
 namespace base {
@@ -408,5 +413,76 @@ TEST(SysStrings, SysUTF8ToWide) {
   EXPECT_EQ(expected_null, SysUTF8ToWide(utf8_null));
 }
 
+TEST(UTF8PathToWindowsLongPathTest, DontAddPrefixIfShorterThanMaxPath) {
+  std::string utf8 = "c:\\mypath\\myfile.txt";
+
+  std::wstring wide;
+  EXPECT_TRUE(UTF8PathToWindowsLongPath(utf8.c_str(), &wide));
+
+  EXPECT_EQ(std::string::npos, wide.find(LR"(\\?\)"));
+}
+
+TEST(UTF8PathToWindowsLongPathTest, AddPrefixIfLongerThanMaxPath) {
+  std::string utf8 = "c:\\mypath";
+  while (utf8.length() < 300 /* MAX_PATH is 260 */) {
+    utf8 += "\\mypathsegment";
+  }
+
+  std::wstring wide;
+  EXPECT_TRUE(UTF8PathToWindowsLongPath(utf8.c_str(), &wide));
+
+  EXPECT_EQ(0U, wide.find(LR"(\\?\)"));
+  EXPECT_EQ(std::string::npos, wide.find(L"/"));
+}
+
+TEST(UTF8PathToWindowsLongPathTest, AddPrefixAndFixSeparatorsIfLongerThanMaxPath) {
+  std::string utf8 = "c:/mypath";
+  while (utf8.length() < 300 /* MAX_PATH is 260 */) {
+    utf8 += "/mypathsegment";
+  }
+
+  std::wstring wide;
+  EXPECT_TRUE(UTF8PathToWindowsLongPath(utf8.c_str(), &wide));
+
+  EXPECT_EQ(0U, wide.find(LR"(\\?\)"));
+  EXPECT_EQ(std::string::npos, wide.find(L"/"));
+}
+
+namespace utf8 {
+
+TEST(Utf8FilesTest, CanCreateOpenAndDeleteFileWithLongPath) {
+  TemporaryDir td;
+
+  // Create long directory path
+  std::string utf8 = td.path;
+  while (utf8.length() < 300 /* MAX_PATH is 260 */) {
+    utf8 += "\\mypathsegment";
+    EXPECT_EQ(0, mkdir(utf8.c_str(), 0));
+  }
+
+  // Create file
+  utf8 += "\\test-file.bin";
+  int flags = O_WRONLY | O_CREAT | O_TRUNC | O_BINARY;
+  int mode = 0666;
+  android::base::unique_fd fd(open(utf8.c_str(), flags, mode));
+  EXPECT_NE(-1, fd.get());
+
+  // Close file
+  fd.reset();
+  EXPECT_EQ(-1, fd.get());
+
+  // Open file with fopen
+  FILE* file = fopen(utf8.c_str(), "rb");
+  EXPECT_NE(nullptr, file);
+
+  if (file) {
+    fclose(file);
+  }
+
+  // Delete file
+  EXPECT_EQ(0, unlink(utf8.c_str()));
+}
+
+}  // namespace utf8
 }  // namespace base
 }  // namespace android
