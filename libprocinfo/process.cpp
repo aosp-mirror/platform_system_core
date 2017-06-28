@@ -44,6 +44,24 @@ bool GetProcessInfo(pid_t tid, ProcessInfo* process_info) {
   return GetProcessInfoFromProcPidFd(dirfd.get(), process_info);
 }
 
+static ProcessState parse_state(const char* state) {
+  switch (*state) {
+    case 'R':
+      return kProcessStateRunning;
+    case 'S':
+      return kProcessStateSleeping;
+    case 'D':
+      return kProcessStateUninterruptibleWait;
+    case 'T':
+      return kProcessStateStopped;
+    case 'Z':
+      return kProcessStateZombie;
+    default:
+      LOG(ERROR) << "unknown process state: " << *state;
+      return kProcessStateUnknown;
+  }
+}
+
 bool GetProcessInfoFromProcPidFd(int fd, ProcessInfo* process_info) {
   int status_fd = openat(fd, "status", O_RDONLY | O_CLOEXEC);
 
@@ -60,7 +78,7 @@ bool GetProcessInfoFromProcPidFd(int fd, ProcessInfo* process_info) {
   }
 
   int field_bitmap = 0;
-  static constexpr int finished_bitmap = 127;
+  static constexpr int finished_bitmap = 255;
   char* line = nullptr;
   size_t len = 0;
 
@@ -98,6 +116,9 @@ bool GetProcessInfoFromProcPidFd(int fd, ProcessInfo* process_info) {
     } else if (header == "Gid:") {
       process_info->gid = atoi(tab + 1);
       field_bitmap |= 64;
+    } else if (header == "State:") {
+      process_info->state = parse_state(tab + 1);
+      field_bitmap |= 128;
     }
   }
 

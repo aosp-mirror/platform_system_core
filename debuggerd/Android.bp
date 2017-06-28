@@ -274,6 +274,7 @@ cc_binary {
         "libbase",
         "libdebuggerd_client",
         "liblog",
+        "libprocinfo",
         "libselinux",
     ],
 
