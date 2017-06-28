@@ -443,7 +443,7 @@ static void handle_property_set_fd() {
     }
 }
 
-static void load_properties_from_file(const char *, const char *);
+static bool load_properties_from_file(const char *, const char *);
 
 /*
  * Filter is used to decide which properties to load: NULL loads all keys,
@@ -507,17 +507,18 @@ static void load_properties(char *data, const char *filter)
 
 // Filter is used to decide which properties to load: NULL loads all keys,
 // "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
-static void load_properties_from_file(const char* filename, const char* filter) {
+static bool load_properties_from_file(const char* filename, const char* filter) {
     Timer t;
     std::string data;
     std::string err;
     if (!ReadFile(filename, &data, &err)) {
         PLOG(WARNING) << "Couldn't load property file: " << err;
-        return;
+        return false;
     }
     data.push_back('\n');
     load_properties(&data[0], filter);
     LOG(VERBOSE) << "(Loading properties from " << filename << " took " << t << ".)";
+    return true;
 }
 
 static void load_persistent_properties() {
@@ -592,7 +593,13 @@ static void update_sys_usb_config() {
 }
 
 void property_load_boot_defaults() {
-    load_properties_from_file("/default.prop", NULL);
+    if (!load_properties_from_file("/system/etc/prop.default", NULL)) {
+        // Try recovery path
+        if (!load_properties_from_file("/prop.default", NULL)) {
+            // Try legacy path
+            load_properties_from_file("/default.prop", NULL);
+        }
+    }
     load_properties_from_file("/odm/default.prop", NULL);
     load_properties_from_file("/vendor/default.prop", NULL);
 
