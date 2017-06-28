@@ -21,7 +21,6 @@
 #include <linux/fs.h>
 #include <mntent.h>
 #include <selinux/selinux.h>
-#include <sys/capability.h>
 #include <sys/cdefs.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
@@ -40,7 +39,6 @@
 #include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/properties.h>
-#include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
@@ -164,30 +162,9 @@ static void LogShutdownTime(UmountStat stat, Timer* t) {
     LOG(WARNING) << "powerctl_shutdown_time_ms:" << std::to_string(t->duration_ms()) << ":" << stat;
 }
 
-static bool IsRebootCapable() {
-    cap_t caps = cap_init();
-    auto scopeguard = android::base::make_scope_guard([&caps] { cap_free(caps); });
-
-    // Assume we have the capability.
-    cap_flag_value_t value = CAP_SET;
-    if (!CAP_IS_SUPPORTED(CAP_SYS_BOOT) ||
-        cap_get_flag(caps, CAP_SYS_BOOT, CAP_EFFECTIVE, &value) != 0) {
-        PLOG(ERROR) << "cap_get_flag(CAP_BOOT, EFFECTIVE) failed";
-    }
-
-    return value == CAP_SET;
-}
-
 static void __attribute__((noreturn))
 RebootSystem(unsigned int cmd, const std::string& rebootTarget) {
     LOG(INFO) << "Reboot ending, jumping to kernel";
-
-    if (!IsRebootCapable()) {
-        // On systems where init does not have the capability of rebooting the
-        // device, just exit cleanly.
-        exit(0);
-    }
-
     switch (cmd) {
         case ANDROID_RB_POWEROFF:
             reboot(RB_POWER_OFF);
