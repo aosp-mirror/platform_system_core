@@ -34,6 +34,7 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
+#include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <processgroup/processgroup.h>
@@ -47,6 +48,7 @@
 using android::base::boot_clock;
 using android::base::GetProperty;
 using android::base::Join;
+using android::base::make_scope_guard;
 using android::base::ParseInt;
 using android::base::StartsWith;
 using android::base::StringPrintf;
@@ -1081,14 +1083,24 @@ void ServiceManager::DumpState() const {
 }
 
 bool ServiceManager::ReapOneProcess() {
-    int status;
-    pid_t pid = TEMP_FAILURE_RETRY(waitpid(-1, &status, WNOHANG));
-    if (pid == 0) {
+    siginfo_t siginfo = {};
+    // This returns a zombie pid or informs us that there are no zombies left to be reaped.
+    // It does NOT reap the pid; that is done below.
+    if (TEMP_FAILURE_RETRY(waitid(P_ALL, 0, &siginfo, WEXITED | WNOHANG | WNOWAIT)) != 0) {
+        PLOG(ERROR) << "waitid failed";
         return false;
-    } else if (pid == -1) {
-        PLOG(ERROR) << "waitpid failed";
-        return false;
-    } else if (PropertyChildReap(pid)) {
+    }
+
+    auto pid = siginfo.si_pid;
+    if (pid == 0) return false;
+
+    // At this point we know we have a zombie pid, so we use this scopeguard to reap the pid
+    // whenever the function returns from this point forward.
+    // We do NOT want to reap the zombie earlier as in Service::Reap(), we kill(-pid, ...) and we
+    // want the pid to remain valid throughout that (and potentially future) usages.
+    auto reaper = make_scope_guard([pid] { TEMP_FAILURE_RETRY(waitpid(pid, nullptr, WNOHANG)); });
+
+    if (PropertyChildReap(pid)) {
         return true;
     }
 
@@ -1105,14 +1117,11 @@ bool ServiceManager::ReapOneProcess() {
         name = StringPrintf("Untracked pid %d", pid);
     }
 
+    auto status = siginfo.si_status;
     if (WIFEXITED(status)) {
         LOG(INFO) << name << " exited with status " << WEXITSTATUS(status) << wait_string;
     } else if (WIFSIGNALED(status)) {
         LOG(INFO) << name << " killed by signal " << WTERMSIG(status) << wait_string;
-    } else if (WIFSTOPPED(status)) {
-        LOG(INFO) << name << " stopped by signal " << WSTOPSIG(status) << wait_string;
-    } else {
-        LOG(INFO) << name << " state changed" << wait_string;
     }
 
     if (!svc) {
