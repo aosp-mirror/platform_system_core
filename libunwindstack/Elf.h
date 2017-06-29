@@ -46,11 +46,15 @@ class Elf {
   }
 
   bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) {
-    return valid_ && interface_->GetFunctionName(addr, name, func_offset);
+    return valid_ && (interface_->GetFunctionName(addr, name, func_offset) ||
+                      (gnu_debugdata_interface_ &&
+                       gnu_debugdata_interface_->GetFunctionName(addr, name, func_offset)));
   }
 
   bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory) {
-    return valid_ && interface_->Step(rel_pc, regs, process_memory);
+    return valid_ && (interface_->Step(rel_pc, regs, process_memory) ||
+                      (gnu_debugdata_interface_ &&
+                       gnu_debugdata_interface_->Step(rel_pc, regs, process_memory)));
   }
 
   ElfInterface* CreateInterfaceFromMemory(Memory* memory);
@@ -65,6 +69,8 @@ class Elf {
 
   ElfInterface* interface() { return interface_.get(); }
 
+  ElfInterface* gnu_debugdata_interface() { return gnu_debugdata_interface_.get(); }
+
   static bool IsValidElf(Memory* memory);
 
  protected:
@@ -73,6 +79,9 @@ class Elf {
   std::unique_ptr<Memory> memory_;
   uint32_t machine_type_;
   uint8_t class_type_;
+
+  std::unique_ptr<Memory> gnu_debugdata_memory_;
+  std::unique_ptr<ElfInterface> gnu_debugdata_interface_;
 };
 
 #endif  // _LIBUNWINDSTACK_ELF_H
