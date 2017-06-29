@@ -76,17 +76,6 @@ cc_library {
     defaults: ["libunwindstack_common"],
 }
 
-cc_library {
-    name: "libunwindstack_debug",
-    defaults: ["libunwindstack_common"],
-
-    cflags: [
-        "-UNDEBUG",
-        "-O0",
-        "-g",
-    ],
-}
-
 //-------------------------------------------------------------------------
 // Unit Tests
 //-------------------------------------------------------------------------
@@ -152,21 +141,6 @@ cc_test {
 
     shared_libs: [
         "libunwindstack",
-    ],
-
-    data: [
-        "tests/elf32.xz",
-        "tests/elf64.xz",
-    ],
-}
-
-// These unit tests run against the static debug library.
-cc_test {
-    name: "libunwindstack_test_debug",
-    defaults: ["libunwindstack_test_common"],
-
-    static_libs: [
-        "libunwindstack_debug",
     ],
 
     data: [
