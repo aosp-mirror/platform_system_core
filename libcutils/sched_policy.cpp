@@ -125,7 +125,6 @@ static int add_tid_to_cgroup(int tid, int fd)
 
     In older releases, this was controlled by build-time configuration.
  */
-
 bool cpusets_enabled() {
     static bool enabled = (access("/dev/cpuset/tasks", F_OK) == 0);
 
@@ -137,12 +136,8 @@ bool cpusets_enabled() {
     CONFIG_CGROUP_SCHEDTUNE that's in Android common Linux kernel and Linaro
     Stable Kernel (LSK), but not in mainline Linux as of v4.9.
 
-    With runtime check using the following function, build time
-    variables like ENABLE_SCHEDBOOST (used in Android.mk) or schedboost
-    (used in Android.bp) are not needed.
-
+    In older releases, this was controlled by build-time configuration.
  */
-
 bool schedboost_enabled() {
     static bool enabled = (access("/dev/stune/tasks", F_OK) == 0);
 
