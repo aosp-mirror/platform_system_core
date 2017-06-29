@@ -28,13 +28,6 @@
 
 #define UNUSED __attribute__((__unused__))
 
-#ifndef SLOGE
-#define SLOGE ALOGE
-#endif
-#ifndef SLOGW
-#define SLOGW ALOGW
-#endif
-
 /* Re-map SP_DEFAULT to the system default policy, and leave other values unchanged.
  * Call this any place a SchedPolicy is used as an input parameter.
  * Returns the possibly re-mapped policy.
@@ -124,9 +117,7 @@ static int add_tid_to_cgroup(int tid, int fd)
     on where init.rc mounts cpuset. That's why we'd better require this
     configuration be set if CONFIG_CPUSETS is set.
 
-    With runtime check using the following function, build time
-    variables like ENABLE_CPUSETS (used in Android.mk) or cpusets (used
-    in Android.bp) are not needed.
+    In older releases, this was controlled by build-time configuration.
  */
 
 bool cpusets_enabled() {
