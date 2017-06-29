@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <assert.h>
 #include <stdint.h>
 
 #include <deque>
@@ -23,6 +22,7 @@
 #include <android-base/stringprintf.h>
 
 #include "ArmExidx.h"
+#include "Check.h"
 #include "Log.h"
 #include "Machine.h"
 #include "Memory.h"
@@ -173,7 +173,7 @@ inline bool ArmExidx::GetByte(uint8_t* byte) {
 }
 
 inline bool ArmExidx::DecodePrefix_10_00(uint8_t byte) {
-  assert((byte >> 4) == 0x8);
+  CHECK((byte >> 4) == 0x8);
 
   uint16_t registers = (byte & 0xf) << 8;
   if (!GetByte(&byte)) {
@@ -232,7 +232,7 @@ inline bool ArmExidx::DecodePrefix_10_00(uint8_t byte) {
 }
 
 inline bool ArmExidx::DecodePrefix_10_01(uint8_t byte) {
-  assert((byte >> 4) == 0x9);
+  CHECK((byte >> 4) == 0x9);
 
   uint8_t bits = byte & 0xf;
   if (bits == 13 || bits == 15) {
@@ -258,7 +258,7 @@ inline bool ArmExidx::DecodePrefix_10_01(uint8_t byte) {
 }
 
 inline bool ArmExidx::DecodePrefix_10_10(uint8_t byte) {
-  assert((byte >> 4) == 0xa);
+  CHECK((byte >> 4) == 0xa);
 
   // 10100nnn: Pop r4-r[4+nnn]
   // 10101nnn: Pop r4-r[4+nnn], r14
@@ -419,7 +419,7 @@ inline bool ArmExidx::DecodePrefix_10_11_01nn() {
 }
 
 inline bool ArmExidx::DecodePrefix_10_11_1nnn(uint8_t byte) {
-  assert((byte & ~0x07) == 0xb8);
+  CHECK((byte & ~0x07) == 0xb8);
 
   // 10111nnn: Pop VFP double-precision registers D[8]-D[8+nnn] by FSTMFDX
   if (log_) {
@@ -439,7 +439,7 @@ inline bool ArmExidx::DecodePrefix_10_11_1nnn(uint8_t byte) {
 }
 
 inline bool ArmExidx::DecodePrefix_10(uint8_t byte) {
-  assert((byte >> 6) == 0x2);
+  CHECK((byte >> 6) == 0x2);
 
   switch ((byte >> 4) & 0x3) {
   case 0:
@@ -469,7 +469,7 @@ inline bool ArmExidx::DecodePrefix_10(uint8_t byte) {
 }
 
 inline bool ArmExidx::DecodePrefix_11_000(uint8_t byte) {
-  assert((byte & ~0x07) == 0xc0);
+  CHECK((byte & ~0x07) == 0xc0);
 
   uint8_t bits = byte & 0x7;
   if (bits == 6) {
@@ -550,7 +550,7 @@ inline bool ArmExidx::DecodePrefix_11_000(uint8_t byte) {
 }
 
 inline bool ArmExidx::DecodePrefix_11_001(uint8_t byte) {
-  assert((byte & ~0x07) == 0xc8);
+  CHECK((byte & ~0x07) == 0xc8);
 
   uint8_t bits = byte & 0x7;
   if (bits == 0) {
@@ -605,7 +605,7 @@ inline bool ArmExidx::DecodePrefix_11_001(uint8_t byte) {
 }
 
 inline bool ArmExidx::DecodePrefix_11_010(uint8_t byte) {
-  assert((byte & ~0x07) == 0xd0);
+  CHECK((byte & ~0x07) == 0xd0);
 
   // 11010nnn: Pop VFP double precision registers D[8]-D[8+nnn] by VPUSH
   if (log_) {
@@ -624,7 +624,7 @@ inline bool ArmExidx::DecodePrefix_11_010(uint8_t byte) {
 }
 
 inline bool ArmExidx::DecodePrefix_11(uint8_t byte) {
-  assert((byte >> 6) == 0x3);
+  CHECK((byte >> 6) == 0x3);
 
   switch ((byte >> 3) & 0x7) {
   case 0:
