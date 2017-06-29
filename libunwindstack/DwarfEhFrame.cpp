@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include <assert.h>
 #include <stdint.h>
 
+#include "Check.h"
 #include "DwarfEhFrame.h"
 #include "DwarfMemory.h"
 #include "DwarfSection.h"
@@ -105,8 +105,8 @@ const typename DwarfEhFrame<AddressType>::FdeInfo* DwarfEhFrame<AddressType>::Ge
 template <typename AddressType>
 bool DwarfEhFrame<AddressType>::GetFdeOffsetBinary(uint64_t pc, uint64_t* fde_offset,
                                                    uint64_t total_entries) {
-  assert(fde_count_ > 0);
-  assert(total_entries <= fde_count_);
+  CHECK(fde_count_ > 0);
+  CHECK(total_entries <= fde_count_);
 
   size_t first = 0;
   size_t last = total_entries;
@@ -133,7 +133,7 @@ bool DwarfEhFrame<AddressType>::GetFdeOffsetBinary(uint64_t pc, uint64_t* fde_of
 
 template <typename AddressType>
 bool DwarfEhFrame<AddressType>::GetFdeOffsetSequential(uint64_t pc, uint64_t* fde_offset) {
-  assert(fde_count_ != 0);
+  CHECK(fde_count_ != 0);
   last_error_ = DWARF_ERROR_NONE;
   // We can do a binary search if the pc is in the range of the elements
   // that have already been cached.

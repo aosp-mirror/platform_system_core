@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <assert.h>
 #include <elf.h>
 #include <stdint.h>
 #include <sys/ptrace.h>
@@ -22,6 +21,7 @@
 
 #include <vector>
 
+#include "Check.h"
 #include "Elf.h"
 #include "ElfInterface.h"
 #include "Machine.h"
@@ -43,7 +43,7 @@ template <typename AddressType>
 bool RegsImpl<AddressType>::GetReturnAddressFromDefault(Memory* memory, uint64_t* value) {
   switch (return_loc_.type) {
   case LOCATION_REGISTER:
-    assert(return_loc_.value < total_regs_);
+    CHECK(return_loc_.value < total_regs_);
     *value = regs_[return_loc_.value];
     return true;
   case LOCATION_SP_OFFSET:
