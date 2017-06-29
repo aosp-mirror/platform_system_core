@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-#include <assert.h>
 #include <stdint.h>
 
 #include <string>
 
+#include "Check.h"
 #include "DwarfEncoding.h"
 #include "DwarfMemory.h"
 #include "Memory.h"
@@ -100,8 +100,8 @@ size_t DwarfMemory::GetEncodedSize(uint8_t encoding) {
 }
 
 bool DwarfMemory::AdjustEncodedValue(uint8_t encoding, uint64_t* value) {
-  assert((encoding & 0x0f) == 0);
-  assert(encoding != DW_EH_PE_aligned);
+  CHECK((encoding & 0x0f) == 0);
+  CHECK(encoding != DW_EH_PE_aligned);
 
   // Handle the encoding.
   switch (encoding) {
