@@ -218,4 +218,10 @@ cc_binary_host {
     srcs: [
         "tests/GenGnuDebugdata.cpp",
     ],
+
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
 }
