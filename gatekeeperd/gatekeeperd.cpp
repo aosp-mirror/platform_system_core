@@ -37,7 +37,6 @@
 #include <utils/String16.h>
 
 #include "SoftGateKeeperDevice.h"
-#include "IUserManager.h"
 
 #include <hidl/HidlSupport.h>
 #include <android/hardware/gatekeeper/1.0/IGatekeeper.h>
@@ -334,23 +333,7 @@ public:
         return ret;
     }
 
-    virtual uint64_t getSecureUserId(uint32_t uid) {
-        uint64_t sid = read_sid(uid);
-         if (sid == 0) {
-            // might be a work profile, look up the parent
-            sp<IServiceManager> sm = defaultServiceManager();
-            sp<IBinder> binder = sm->getService(String16("user"));
-            sp<IUserManager> um = interface_cast<IUserManager>(binder);
-            int32_t parent = um->getCredentialOwnerProfile(uid);
-            if (parent < 0) {
-                return 0;
-            } else if (parent != (int32_t) uid) {
-                return read_sid(parent);
-            }
-        }
-        return sid;
-
-    }
+    virtual uint64_t getSecureUserId(uint32_t uid) { return read_sid(uid); }
 
     virtual void clearSecureUserId(uint32_t uid) {
         IPCThreadState* ipc = IPCThreadState::self();
