@@ -17,13 +17,14 @@
 #ifndef _LIBUNWINDSTACK_MEMORY_H
 #define _LIBUNWINDSTACK_MEMORY_H
 
-#include <assert.h>
 #include <stdint.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include <string>
 #include <vector>
+
+#include "Check.h"
 
 class Memory {
  public:
@@ -130,7 +131,7 @@ class MemoryRange : public Memory {
  public:
   MemoryRange(Memory* memory, uint64_t begin, uint64_t end)
       : memory_(memory), begin_(begin), length_(end - begin) {
-    assert(end > begin);
+    CHECK(end > begin);
   }
   virtual ~MemoryRange() { delete memory_; }
 

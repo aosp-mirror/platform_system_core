@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-#include <assert.h>
 #include <elf.h>
 #include <stdint.h>
 
 #include <string>
 
+#include "Check.h"
 #include "Memory.h"
 #include "Symbols.h"
 
@@ -58,7 +58,7 @@ bool Symbols::GetName(uint64_t addr, uint64_t load_bias, Memory* elf_memory, std
   if (symbols_.size() != 0) {
     const Info* info = GetInfoFromCache(addr);
     if (info) {
-      assert(addr >= info->start_offset && addr <= info->end_offset);
+      CHECK(addr >= info->start_offset && addr <= info->end_offset);
       *func_offset = addr - info->start_offset;
       return elf_memory->ReadString(info->str_offset, name, str_end_ - info->str_offset);
     }
