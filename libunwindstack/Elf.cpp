@@ -49,6 +49,28 @@ bool Elf::Init() {
   return valid_;
 }
 
+// It is expensive to initialize the .gnu_debugdata section. Provide a method
+// to initialize this data separately.
+void Elf::InitGnuDebugdata() {
+  if (!valid_ || interface_->gnu_debugdata_offset() == 0) {
+    return;
+  }
+
+  gnu_debugdata_memory_.reset(interface_->CreateGnuDebugdataMemory());
+  gnu_debugdata_interface_.reset(CreateInterfaceFromMemory(gnu_debugdata_memory_.get()));
+  ElfInterface* gnu = gnu_debugdata_interface_.get();
+  if (gnu == nullptr) {
+    return;
+  }
+  if (gnu->Init()) {
+    gnu->InitHeaders();
+  } else {
+    // Free all of the memory associated with the gnu_debugdata section.
+    gnu_debugdata_memory_.reset(nullptr);
+    gnu_debugdata_interface_.reset(nullptr);
+  }
+}
+
 bool Elf::IsValidElf(Memory* memory) {
   if (memory == nullptr) {
     return false;

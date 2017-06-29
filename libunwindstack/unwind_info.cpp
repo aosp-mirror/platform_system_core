@@ -26,6 +26,8 @@
 #include <unistd.h>
 
 #include "ArmExidx.h"
+#include "DwarfSection.h"
+#include "DwarfStructs.h"
 #include "Elf.h"
 #include "ElfInterface.h"
 #include "ElfInterfaceArm.h"
@@ -46,12 +48,14 @@ void DumpArm(ElfInterfaceArm* interface) {
       std::string name;
       printf("  PC 0x%" PRIx64, addr + load_bias);
       uint64_t func_offset;
-      if (interface->GetFunctionName(addr + load_bias + 1, &name, &func_offset) && !name.empty()) {
+      uint64_t pc = addr + load_bias;
+      // This might be a thumb function, so set the low bit.
+      if (interface->GetFunctionName(pc | 1, &name, &func_offset) && !name.empty()) {
         printf(" <%s>", name.c_str());
       }
       printf("\n");
       uint64_t entry;
-      if (!interface->FindEntry(addr + load_bias, &entry)) {
+      if (!interface->FindEntry(pc, &entry)) {
         printf("    Cannot find entry for address.\n");
         continue;
       }
@@ -73,6 +77,27 @@ void DumpArm(ElfInterfaceArm* interface) {
     }
   }
   printf("\n");
+}
+
+void DumpDwarfSection(ElfInterface* interface, DwarfSection* section, uint64_t load_bias) {
+  for (const DwarfFde* fde : *section) {
+    // Sometimes there are entries that have empty length, skip those since
+    // they don't contain any interesting information.
+    if (fde->pc_start == fde->pc_end) {
+      continue;
+    }
+    printf("\n  PC 0x%" PRIx64, fde->pc_start + load_bias);
+    std::string name;
+    uint64_t func_offset;
+    if (interface->GetFunctionName(fde->pc_start + load_bias, &name, &func_offset) &&
+        !name.empty()) {
+      printf(" <%s>", name.c_str());
+    }
+    printf("\n");
+    if (!section->Log(2, UINT64_MAX, load_bias, fde)) {
+      printf("Failed to process cfa information for entry at 0x%" PRIx64 "\n", fde->pc_start);
+    }
+  }
 }
 
 int main(int argc, char** argv) {
@@ -115,6 +140,39 @@ int main(int argc, char** argv) {
   if (elf.machine_type() == EM_ARM) {
     DumpArm(reinterpret_cast<ElfInterfaceArm*>(interface));
     printf("\n");
+  }
+
+  if (interface->eh_frame() != nullptr) {
+    printf("eh_frame information:\n");
+    DumpDwarfSection(interface, interface->eh_frame(), interface->load_bias());
+    printf("\n");
+  } else {
+    printf("\nno eh_frame information\n");
+  }
+
+  if (interface->debug_frame() != nullptr) {
+    printf("\ndebug_frame information:\n");
+    DumpDwarfSection(interface, interface->debug_frame(), interface->load_bias());
+    printf("\n");
+  } else {
+    printf("\nno debug_frame information\n");
+  }
+
+  // If there is a gnu_debugdata interface, dump the information for that.
+  ElfInterface* gnu_debugdata_interface = elf.gnu_debugdata_interface();
+  if (gnu_debugdata_interface != nullptr) {
+    if (gnu_debugdata_interface->eh_frame() != nullptr) {
+      printf("\ngnu_debugdata (eh_frame):\n");
+      DumpDwarfSection(gnu_debugdata_interface, gnu_debugdata_interface->eh_frame(), 0);
+      printf("\n");
+    }
+    if (gnu_debugdata_interface->debug_frame() != nullptr) {
+      printf("\ngnu_debugdata (debug_frame):\n");
+      DumpDwarfSection(gnu_debugdata_interface, gnu_debugdata_interface->debug_frame(), 0);
+      printf("\n");
+    }
+  } else {
+    printf("\nno valid gnu_debugdata information\n");
   }
 
   return 0;
