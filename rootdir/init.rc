@@ -36,6 +36,8 @@ on early-init
     mount cgroup none /dev/memcg memory
     # app mem cgroups, used by activity manager, lmkd and zygote
     mkdir /dev/memcg/apps/ 0755 system system
+    # cgroup for system_server and surfaceflinger
+    mkdir /dev/memcg/system 0755 system system
 
     start ueventd
 
