@@ -20,7 +20,6 @@
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <mntent.h>
-#include <selinux/selinux.h>
 #include <sys/capability.h>
 #include <sys/cdefs.h>
 #include <sys/ioctl.h>
