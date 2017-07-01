@@ -28,7 +28,6 @@
 #include <android-base/unique_fd.h>
 #include <debuggerd/client.h>
 #include <procinfo/process.h>
-#include <selinux/selinux.h>
 #include "util.h"
 
 using android::base::unique_fd;
