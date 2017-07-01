@@ -275,7 +275,6 @@ cc_binary {
         "libdebuggerd_client",
         "liblog",
         "libprocinfo",
-        "libselinux",
     ],
 
     local_include_dirs: ["include"],
