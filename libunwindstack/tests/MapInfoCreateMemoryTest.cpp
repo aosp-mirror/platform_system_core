@@ -34,7 +34,7 @@
 #include "MapInfo.h"
 #include "Memory.h"
 
-class MapInfoTest : public ::testing::Test {
+class MapInfoCreateMemoryTest : public ::testing::Test {
  protected:
   static void SetUpTestCase() {
     std::vector<uint8_t> buffer(1024);
@@ -58,10 +58,10 @@ class MapInfoTest : public ::testing::Test {
 
   static TemporaryFile elf_at_100_;
 };
-TemporaryFile MapInfoTest::elf_;
-TemporaryFile MapInfoTest::elf_at_100_;
+TemporaryFile MapInfoCreateMemoryTest::elf_;
+TemporaryFile MapInfoCreateMemoryTest::elf_at_100_;
 
-TEST_F(MapInfoTest, end_le_start) {
+TEST_F(MapInfoCreateMemoryTest, end_le_start) {
   MapInfo info{.start = 0x100, .end = 0x100, .offset = 0, .name = elf_.path};
 
   std::unique_ptr<Memory> memory;
@@ -80,7 +80,7 @@ TEST_F(MapInfoTest, end_le_start) {
 
 // Verify that if the offset is non-zero but there is no elf at the offset,
 // that the full file is used.
-TEST_F(MapInfoTest, create_memory_file_backed_non_zero_offset_full_file) {
+TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_full_file) {
   MapInfo info{.start = 0x100, .end = 0x200, .offset = 0x100, .name = elf_.path};
 
   std::unique_ptr<Memory> memory(info.CreateMemory(getpid()));
@@ -100,7 +100,7 @@ TEST_F(MapInfoTest, create_memory_file_backed_non_zero_offset_full_file) {
 
 // Verify that if the offset is non-zero and there is an elf at that
 // offset, that only part of the file is used.
-TEST_F(MapInfoTest, create_memory_file_backed_non_zero_offset_partial_file) {
+TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file) {
   MapInfo info{.start = 0x100, .end = 0x200, .offset = 0x100, .name = elf_at_100_.path};
 
   std::unique_ptr<Memory> memory(info.CreateMemory(getpid()));
@@ -119,7 +119,7 @@ TEST_F(MapInfoTest, create_memory_file_backed_non_zero_offset_partial_file) {
 }
 
 // Verify that device file names will never result in Memory object creation.
-TEST_F(MapInfoTest, create_memory_check_device_maps) {
+TEST_F(MapInfoCreateMemoryTest, check_device_maps) {
   // Set up some memory so that a valid local memory object would
   // be returned if the file mapping fails, but the device check is incorrect.
   std::vector<uint8_t> buffer(1024);
@@ -135,7 +135,7 @@ TEST_F(MapInfoTest, create_memory_check_device_maps) {
   ASSERT_TRUE(memory.get() == nullptr);
 }
 
-TEST_F(MapInfoTest, create_memory_local_memory) {
+TEST_F(MapInfoCreateMemoryTest, local_memory) {
   // Set up some memory for a valid local memory object.
   std::vector<uint8_t> buffer(1024);
   for (size_t i = 0; i < buffer.size(); i++) {
@@ -160,7 +160,7 @@ TEST_F(MapInfoTest, create_memory_local_memory) {
   ASSERT_FALSE(memory->Read(read_buffer.size(), read_buffer.data(), 1));
 }
 
-TEST_F(MapInfoTest, create_memory_remote_memory) {
+TEST_F(MapInfoCreateMemoryTest, remote_memory) {
   std::vector<uint8_t> buffer(1024);
   memset(buffer.data(), 0xa, buffer.size());
 
@@ -201,20 +201,4 @@ TEST_F(MapInfoTest, create_memory_remote_memory) {
   ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
 
   kill(pid, SIGKILL);
-}
-
-TEST_F(MapInfoTest, get_elf) {
-  // Create a map to use as initialization data.
-  void* map = mmap(nullptr, 1024, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  ASSERT_NE(MAP_FAILED, map);
-
-  uint64_t start = reinterpret_cast<uint64_t>(map);
-  MapInfo info{.start = start, .end = start + 1024, .offset = 0, .name = ""};
-
-  // The map contains garbage, but this should still produce an elf object.
-  std::unique_ptr<Elf> elf(info.GetElf(getpid(), false));
-  ASSERT_TRUE(elf.get() != nullptr);
-  ASSERT_FALSE(elf->valid());
-
-  ASSERT_EQ(0, munmap(map, 1024));
 }
