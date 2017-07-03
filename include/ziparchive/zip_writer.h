@@ -17,9 +17,9 @@
 #ifndef LIBZIPARCHIVE_ZIPWRITER_H_
 #define LIBZIPARCHIVE_ZIPWRITER_H_
 
+#include <zlib.h>
 #include <cstdio>
 #include <ctime>
-#include <zlib.h>
 
 #include <memory>
 #include <string>
@@ -50,7 +50,7 @@
  *   fclose(file);
  */
 class ZipWriter {
-public:
+ public:
   enum {
     /**
      * Flag to compress the zip entry using deflate.
@@ -120,8 +120,7 @@ public:
   /**
    * Same as StartAlignedEntry(const char*, size_t), but sets a last modified time for the entry.
    */
-  int32_t StartAlignedEntryWithTime(const char* path, size_t flags, time_t time,
-                                    uint32_t alignment);
+  int32_t StartAlignedEntryWithTime(const char* path, size_t flags, time_t time, uint32_t alignment);
 
   /**
    * Writes bytes to the zip file for the previously started zip entry.
@@ -156,7 +155,7 @@ public:
    */
   int32_t Finish();
 
-private:
+ private:
   DISALLOW_COPY_AND_ASSIGN(ZipWriter);
 
   int32_t HandleError(int32_t error_code);
@@ -179,7 +178,7 @@ private:
   std::vector<FileEntry> files_;
   FileEntry current_file_entry_;
 
-  std::unique_ptr<z_stream, void(*)(z_stream*)> z_stream_;
+  std::unique_ptr<z_stream, void (*)(z_stream*)> z_stream_;
   std::vector<uint8_t> buffer_;
 };
 

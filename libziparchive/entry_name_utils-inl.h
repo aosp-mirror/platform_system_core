@@ -55,5 +55,4 @@ inline bool IsValidEntryName(const uint8_t* entry_name, const size_t length) {
   return true;
 }
 
-
 #endif  // LIBZIPARCHIVE_ENTRY_NAME_UTILS_INL_H_
