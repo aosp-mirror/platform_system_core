@@ -92,21 +92,17 @@ enum ErrorCodes : int32_t {
 
 class MappedZipFile {
  public:
-  explicit MappedZipFile(const int fd) :
-    has_fd_(true),
-    fd_(fd),
-    base_ptr_(nullptr),
-    data_length_(0),
-    read_pos_(0) {}
+  explicit MappedZipFile(const int fd)
+      : has_fd_(true), fd_(fd), base_ptr_(nullptr), data_length_(0), read_pos_(0) {}
 
-  explicit MappedZipFile(void* address, size_t length) :
-    has_fd_(false),
-    fd_(-1),
-    base_ptr_(address),
-    data_length_(static_cast<off64_t>(length)),
-    read_pos_(0) {}
+  explicit MappedZipFile(void* address, size_t length)
+      : has_fd_(false),
+        fd_(-1),
+        base_ptr_(address),
+        data_length_(static_cast<off64_t>(length)),
+        read_pos_(0) {}
 
-  bool HasFd() const {return has_fd_;}
+  bool HasFd() const { return has_fd_; }
 
   int GetFileDescriptor() const;
 
@@ -137,13 +133,11 @@ class MappedZipFile {
 
 class CentralDirectory {
  public:
-  CentralDirectory(void) :
-    base_ptr_(nullptr),
-    length_(0) {}
+  CentralDirectory(void) : base_ptr_(nullptr), length_(0) {}
 
-  const uint8_t* GetBasePtr() const {return base_ptr_;}
+  const uint8_t* GetBasePtr() const { return base_ptr_; }
 
-  size_t GetMapLength() const {return length_;}
+  size_t GetMapLength() const { return length_; }
 
   void Initialize(void* map_base_ptr, off64_t cd_start_offset, size_t cd_size);
 
@@ -172,25 +166,25 @@ struct ZipArchive {
   uint32_t hash_table_size;
   ZipString* hash_table;
 
-  ZipArchive(const int fd, bool assume_ownership) :
-    mapped_zip(fd),
-    close_file(assume_ownership),
-    directory_offset(0),
-    central_directory(),
-    directory_map(new android::FileMap()),
-    num_entries(0),
-    hash_table_size(0),
-    hash_table(nullptr) {}
+  ZipArchive(const int fd, bool assume_ownership)
+      : mapped_zip(fd),
+        close_file(assume_ownership),
+        directory_offset(0),
+        central_directory(),
+        directory_map(new android::FileMap()),
+        num_entries(0),
+        hash_table_size(0),
+        hash_table(nullptr) {}
 
-  ZipArchive(void* address, size_t length) :
-    mapped_zip(address, length),
-    close_file(false),
-    directory_offset(0),
-    central_directory(),
-    directory_map(new android::FileMap()),
-    num_entries(0),
-    hash_table_size(0),
-    hash_table(nullptr) {}
+  ZipArchive(void* address, size_t length)
+      : mapped_zip(address, length),
+        close_file(false),
+        directory_offset(0),
+        central_directory(),
+        directory_map(new android::FileMap()),
+        num_entries(0),
+        hash_table_size(0),
+        hash_table(nullptr) {}
 
   ~ZipArchive() {
     if (close_file && mapped_zip.GetFileDescriptor() >= 0) {
@@ -202,7 +196,6 @@ struct ZipArchive {
 
   bool InitializeCentralDirectory(const char* debug_file_name, off64_t cd_start_offset,
                                   size_t cd_size);
-
 };
 
 #endif  // LIBZIPARCHIVE_ZIPARCHIVE_PRIVATE_H_

@@ -162,8 +162,7 @@ bool ZipArchiveStreamEntryCompressed::Init(const ZipEntry& entry) {
   int zerr = zlib_inflateInit2(&z_stream_, -MAX_WBITS);
   if (zerr != Z_OK) {
     if (zerr == Z_VERSION_ERROR) {
-      ALOGE("Installed zlib is not compatible with linked version (%s)",
-        ZLIB_VERSION);
+      ALOGE("Installed zlib is not compatible with linked version (%s)", ZLIB_VERSION);
     } else {
       ALOGE("Call to inflateInit2 failed (zerr=%d)", zerr);
     }
@@ -193,13 +192,14 @@ ZipArchiveStreamEntryCompressed::~ZipArchiveStreamEntryCompressed() {
 
 bool ZipArchiveStreamEntryCompressed::Verify() {
   return z_stream_init_ && uncompressed_length_ == 0 && compressed_length_ == 0 &&
-      crc32_ == computed_crc32_;
+         crc32_ == computed_crc32_;
 }
 
 const std::vector<uint8_t>* ZipArchiveStreamEntryCompressed::Read() {
   if (z_stream_.avail_out == 0) {
     z_stream_.next_out = out_.data();
-    z_stream_.avail_out = out_.size();;
+    z_stream_.avail_out = out_.size();
+    ;
   }
 
   while (true) {
@@ -226,9 +226,8 @@ const std::vector<uint8_t>* ZipArchiveStreamEntryCompressed::Read() {
 
     int zerr = inflate(&z_stream_, Z_NO_FLUSH);
     if (zerr != Z_OK && zerr != Z_STREAM_END) {
-      ALOGE("inflate zerr=%d (nIn=%p aIn=%u nOut=%p aOut=%u)",
-          zerr, z_stream_.next_in, z_stream_.avail_in,
-          z_stream_.next_out, z_stream_.avail_out);
+      ALOGE("inflate zerr=%d (nIn=%p aIn=%u nOut=%p aOut=%u)", zerr, z_stream_.next_in,
+            z_stream_.avail_in, z_stream_.next_out, z_stream_.avail_out);
       return nullptr;
     }
 
@@ -276,8 +275,8 @@ bool ZipArchiveStreamEntryRawCompressed::Verify() {
   return length_ == 0;
 }
 
-ZipArchiveStreamEntry* ZipArchiveStreamEntry::Create(
-    ZipArchiveHandle handle, const ZipEntry& entry) {
+ZipArchiveStreamEntry* ZipArchiveStreamEntry::Create(ZipArchiveHandle handle,
+                                                     const ZipEntry& entry) {
   ZipArchiveStreamEntry* stream = nullptr;
   if (entry.method != kCompressStored) {
     stream = new ZipArchiveStreamEntryCompressed(handle);
@@ -292,8 +291,8 @@ ZipArchiveStreamEntry* ZipArchiveStreamEntry::Create(
   return stream;
 }
 
-ZipArchiveStreamEntry* ZipArchiveStreamEntry::CreateRaw(
-    ZipArchiveHandle handle, const ZipEntry& entry) {
+ZipArchiveStreamEntry* ZipArchiveStreamEntry::CreateRaw(ZipArchiveHandle handle,
+                                                        const ZipEntry& entry) {
   ZipArchiveStreamEntry* stream = nullptr;
   if (entry.method == kCompressStored) {
     // Not compressed, don't need to do anything special.
