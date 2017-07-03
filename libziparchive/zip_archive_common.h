@@ -57,6 +57,7 @@ struct EocdRecord {
   uint32_t cd_start_offset;
   // Length of the central directory comment.
   uint16_t comment_length;
+
  private:
   EocdRecord() = default;
   DISALLOW_COPY_AND_ASSIGN(EocdRecord);
@@ -111,6 +112,7 @@ struct CentralDirectoryRecord {
   // The offset to the local file header for this entry, from the
   // beginning of this archive.
   uint32_t local_file_header_offset;
+
  private:
   CentralDirectoryRecord() = default;
   DISALLOW_COPY_AND_ASSIGN(CentralDirectoryRecord);
@@ -149,6 +151,7 @@ struct LocalFileHeader {
   // The length of the extra field info (in bytes). This data
   // will appear immediately after the entry file name.
   uint16_t extra_field_length;
+
  private:
   LocalFileHeader() = default;
   DISALLOW_COPY_AND_ASSIGN(LocalFileHeader);
@@ -164,6 +167,7 @@ struct DataDescriptor {
   uint32_t compressed_size;
   // Uncompressed size of the entry.
   uint32_t uncompressed_size;
+
  private:
   DataDescriptor() = default;
   DISALLOW_COPY_AND_ASSIGN(DataDescriptor);
