@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include "ziparchive/zip_archive.h"
 #include "ziparchive/zip_writer.h"
+#include "ziparchive/zip_archive.h"
 
 #include <android-base/test_utils.h>
 #include <gtest/gtest.h>
@@ -361,7 +361,7 @@ TEST_F(zipwriter, TruncateFileAfterBackup) {
 
   ASSERT_EQ(0, writer.StartEntry("large.txt", 0));
   std::vector<uint8_t> data;
-  data.resize(1024*1024, 0xef);
+  data.resize(1024 * 1024, 0xef);
   ASSERT_EQ(0, writer.WriteBytes(data.data(), data.size()));
   ASSERT_EQ(0, writer.FinishEntry());
 
@@ -382,8 +382,9 @@ static ::testing::AssertionResult AssertFileEntryContentsEq(const std::string& e
                                                             ZipArchiveHandle handle,
                                                             ZipEntry* zip_entry) {
   if (expected.size() != zip_entry->uncompressed_length) {
-    return ::testing::AssertionFailure() << "uncompressed entry size "
-        << zip_entry->uncompressed_length << " does not match expected size " << expected.size();
+    return ::testing::AssertionFailure()
+           << "uncompressed entry size " << zip_entry->uncompressed_length
+           << " does not match expected size " << expected.size();
   }
 
   std::string actual;
@@ -396,7 +397,7 @@ static ::testing::AssertionResult AssertFileEntryContentsEq(const std::string& e
 
   if (expected != actual) {
     return ::testing::AssertionFailure() << "actual zip_entry data '" << actual
-        << "' does not match expected '" << expected << "'";
+                                         << "' does not match expected '" << expected << "'";
   }
   return ::testing::AssertionSuccess();
 }

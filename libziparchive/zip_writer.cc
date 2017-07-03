@@ -16,11 +16,11 @@
 
 #include "ziparchive/zip_writer.h"
 
-#include <cstdio>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <zlib.h>
-#define DEF_MEM_LEVEL 8                // normally in zutil.h?
+#include <cstdio>
+#define DEF_MEM_LEVEL 8  // normally in zutil.h?
 
 #include <memory>
 #include <vector>
@@ -33,13 +33,13 @@
 #include "zip_archive_common.h"
 
 #if !defined(powerof2)
-#define powerof2(x) ((((x)-1)&(x))==0)
+#define powerof2(x) ((((x)-1) & (x)) == 0)
 #endif
 
 /* Zip compression methods we support */
 enum {
-  kCompressStored     = 0,        // no compression
-  kCompressDeflated   = 8,        // standard deflate
+  kCompressStored = 0,    // no compression
+  kCompressDeflated = 8,  // standard deflate
 };
 
 // Size of the output buffer used for compression.
@@ -67,10 +67,7 @@ static const int32_t kInvalidAlign32Flag = -5;
 static const int32_t kInvalidAlignment = -6;
 
 static const char* sErrorCodes[] = {
-    "Invalid state",
-    "IO error",
-    "Invalid entry name",
-    "Zlib error",
+    "Invalid state", "IO error", "Invalid entry name", "Zlib error",
 };
 
 const char* ZipWriter::ErrorCodeString(int32_t error_code) {
@@ -85,9 +82,13 @@ static void DeleteZStream(z_stream* stream) {
   delete stream;
 }
 
-ZipWriter::ZipWriter(FILE* f) : file_(f), seekable_(false), current_offset_(0),
-                                state_(State::kWritingZip), z_stream_(nullptr, DeleteZStream),
-                                buffer_(kBufSize) {
+ZipWriter::ZipWriter(FILE* f)
+    : file_(f),
+      seekable_(false),
+      current_offset_(0),
+      state_(State::kWritingZip),
+      z_stream_(nullptr, DeleteZStream),
+      buffer_(kBufSize) {
   // Check if the file is seekable (regular file). If fstat fails, that's fine, subsequent calls
   // will fail as well.
   struct stat file_stats;
@@ -96,13 +97,14 @@ ZipWriter::ZipWriter(FILE* f) : file_(f), seekable_(false), current_offset_(0),
   }
 }
 
-ZipWriter::ZipWriter(ZipWriter&& writer) : file_(writer.file_),
-                                           seekable_(writer.seekable_),
-                                           current_offset_(writer.current_offset_),
-                                           state_(writer.state_),
-                                           files_(std::move(writer.files_)),
-                                           z_stream_(std::move(writer.z_stream_)),
-                                           buffer_(std::move(writer.buffer_)){
+ZipWriter::ZipWriter(ZipWriter&& writer)
+    : file_(writer.file_),
+      seekable_(writer.seekable_),
+      current_offset_(writer.current_offset_),
+      state_(writer.state_),
+      files_(std::move(writer.files_)),
+      z_stream_(std::move(writer.z_stream_)),
+      buffer_(std::move(writer.buffer_)) {
   writer.file_ = nullptr;
   writer.state_ = State::kError;
 }
@@ -154,10 +156,10 @@ static void ExtractTimeAndDate(time_t when, uint16_t* out_time, uint16_t* out_da
 
   struct tm* ptm;
 #if !defined(_WIN32)
-    struct tm tm_result;
-    ptm = localtime_r(&when, &tm_result);
+  struct tm tm_result;
+  ptm = localtime_r(&when, &tm_result);
 #else
-    ptm = localtime(&when);
+  ptm = localtime(&when);
 #endif
 
   int year = ptm->tm_year;
@@ -193,8 +195,8 @@ static void CopyFromFileEntry(const ZipWriter::FileEntry& src, bool use_data_des
   dst->extra_field_length = src.padding_length;
 }
 
-int32_t ZipWriter::StartAlignedEntryWithTime(const char* path, size_t flags,
-                                             time_t time, uint32_t alignment) {
+int32_t ZipWriter::StartAlignedEntryWithTime(const char* path, size_t flags, time_t time,
+                                             uint32_t alignment) {
   if (state_ != State::kWritingZip) {
     return kInvalidState;
   }
@@ -252,9 +254,8 @@ int32_t ZipWriter::StartAlignedEntryWithTime(const char* path, size_t flags,
     return HandleError(kIoError);
   }
 
-  if (file_entry.padding_length != 0 &&
-      fwrite(zero_padding.data(), 1, file_entry.padding_length, file_)
-      != file_entry.padding_length) {
+  if (file_entry.padding_length != 0 && fwrite(zero_padding.data(), 1, file_entry.padding_length,
+                                               file_) != file_entry.padding_length) {
     return HandleError(kIoError);
   }
 
@@ -292,7 +293,7 @@ int32_t ZipWriter::PrepareDeflate() {
   CHECK(state_ == State::kWritingZip);
 
   // Initialize the z_stream for compression.
-  z_stream_ = std::unique_ptr<z_stream, void(*)(z_stream*)>(new z_stream(), DeleteZStream);
+  z_stream_ = std::unique_ptr<z_stream, void (*)(z_stream*)>(new z_stream(), DeleteZStream);
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wold-style-cast"
@@ -331,8 +332,8 @@ int32_t ZipWriter::WriteBytes(const void* data, size_t len) {
     return result;
   }
 
-  current_file_entry_.crc32 = crc32(current_file_entry_.crc32,
-                                    reinterpret_cast<const Bytef*>(data), len);
+  current_file_entry_.crc32 =
+      crc32(current_file_entry_.crc32, reinterpret_cast<const Bytef*>(data), len);
   current_file_entry_.uncompressed_size += len;
   return kNoError;
 }
