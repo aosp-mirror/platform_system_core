@@ -78,13 +78,14 @@ enum FsStatFlags {
     FS_STAT_E2FSCK_F_ALWAYS = 0x0004,
     FS_STAT_UNCLEAN_SHUTDOWN = 0x0008,
     FS_STAT_QUOTA_ENABLED = 0x0010,
-    FS_STAT_TUNE2FS_FAILED = 0x0020,
     FS_STAT_RO_MOUNT_FAILED = 0x0040,
     FS_STAT_RO_UNMOUNT_FAILED = 0x0080,
     FS_STAT_FULL_MOUNT_FAILED = 0x0100,
     FS_STAT_E2FSCK_FAILED = 0x0200,
     FS_STAT_E2FSCK_FS_FIXED = 0x0400,
     FS_STAT_EXT4_INVALID_MAGIC = 0x0800,
+    FS_STAT_TOGGLE_QUOTAS_FAILED = 0x10000,
+    FS_STAT_SET_RESERVED_BLOCKS_FAILED = 0x20000,
 };
 
 /*
@@ -128,10 +129,15 @@ static void log_fs_stat(const char* blk_device, int fs_stat)
     }
 }
 
+static bool is_extfs(const std::string& fs_type) {
+    return fs_type == "ext4" || fs_type == "ext3" || fs_type == "ext2";
+}
+
 static bool should_force_check(int fs_stat) {
     return fs_stat & (FS_STAT_E2FSCK_F_ALWAYS | FS_STAT_UNCLEAN_SHUTDOWN | FS_STAT_QUOTA_ENABLED |
-                      FS_STAT_TUNE2FS_FAILED | FS_STAT_RO_MOUNT_FAILED | FS_STAT_RO_UNMOUNT_FAILED |
-                      FS_STAT_FULL_MOUNT_FAILED | FS_STAT_E2FSCK_FAILED);
+                      FS_STAT_RO_MOUNT_FAILED | FS_STAT_RO_UNMOUNT_FAILED |
+                      FS_STAT_FULL_MOUNT_FAILED | FS_STAT_E2FSCK_FAILED |
+                      FS_STAT_TOGGLE_QUOTAS_FAILED | FS_STAT_SET_RESERVED_BLOCKS_FAILED);
 }
 
 static void check_fs(const char *blk_device, char *fs_type, char *target, int *fs_stat)
@@ -144,7 +150,7 @@ static void check_fs(const char *blk_device, char *fs_type, char *target, int *f
     const char* e2fsck_forced_argv[] = {E2FSCK_BIN, "-f", "-y", blk_device};
 
     /* Check for the types of filesystems we know how to check */
-    if (!strcmp(fs_type, "ext2") || !strcmp(fs_type, "ext3") || !strcmp(fs_type, "ext4")) {
+    if (is_extfs(fs_type)) {
         if (*fs_stat & FS_STAT_EXT4_INVALID_MAGIC) {  // will fail, so do not try
             return;
         }
@@ -242,186 +248,181 @@ static void check_fs(const char *blk_device, char *fs_type, char *target, int *f
     return;
 }
 
-/* Function to read the primary superblock */
-static int read_super_block(int fd, struct ext4_super_block *sb)
-{
-    off64_t ret;
-
-    ret = lseek64(fd, 1024, SEEK_SET);
-    if (ret < 0)
-        return ret;
-
-    ret = read(fd, sb, sizeof(*sb));
-    if (ret < 0)
-        return ret;
-    if (ret != sizeof(*sb))
-        return ret;
-
-    return 0;
-}
-
-static ext4_fsblk_t ext4_blocks_count(struct ext4_super_block *es)
-{
+static ext4_fsblk_t ext4_blocks_count(const struct ext4_super_block* es) {
     return ((ext4_fsblk_t)le32_to_cpu(es->s_blocks_count_hi) << 32) |
-            le32_to_cpu(es->s_blocks_count_lo);
+           le32_to_cpu(es->s_blocks_count_lo);
 }
 
-static ext4_fsblk_t ext4_r_blocks_count(struct ext4_super_block *es)
-{
+static ext4_fsblk_t ext4_r_blocks_count(const struct ext4_super_block* es) {
     return ((ext4_fsblk_t)le32_to_cpu(es->s_r_blocks_count_hi) << 32) |
-            le32_to_cpu(es->s_r_blocks_count_lo);
+           le32_to_cpu(es->s_r_blocks_count_lo);
 }
 
-static int do_quota_with_shutdown_check(char *blk_device, char *fs_type,
-                                        struct fstab_rec *rec, int *fs_stat)
-{
-    int force_check = 0;
-    if (!strcmp(fs_type, "ext4")) {
-        /*
-         * Some system images do not have tune2fs for licensing reasons
-         * Detect these and skip reserve blocks.
-         */
-        if (access(TUNE2FS_BIN, X_OK)) {
-            LERROR << "Not running " << TUNE2FS_BIN << " on "
-                   << blk_device << " (executable not in system image)";
-        } else {
-            const char* arg1 = nullptr;
-            const char* arg2 = nullptr;
-            int status = 0;
-            int ret = 0;
-            android::base::unique_fd fd(
-                TEMP_FAILURE_RETRY(open(blk_device, O_RDONLY | O_CLOEXEC)));
-            if (fd >= 0) {
-                struct ext4_super_block sb;
-                ret = read_super_block(fd, &sb);
-                if (ret < 0) {
-                    PERROR << "Can't read '" << blk_device << "' super block";
-                    return force_check;
-                }
-                if (sb.s_magic != EXT4_SUPER_MAGIC) {
-                    LINFO << "Invalid ext4 magic:0x" << std::hex << sb.s_magic << "," << blk_device;
-                    *fs_stat |= FS_STAT_EXT4_INVALID_MAGIC;
-                    return 0;  // not a valid fs, tune2fs, fsck, and mount  will all fail.
-                }
-                *fs_stat |= FS_STAT_IS_EXT4;
-                LINFO << "superblock s_max_mnt_count:" << sb.s_max_mnt_count << "," << blk_device;
-                if (sb.s_max_mnt_count == 0xffff) {  // -1 (int16) in ext2, but uint16 in ext4
-                    *fs_stat |= FS_STAT_NEW_IMAGE_VERSION;
-                }
-                if ((sb.s_feature_incompat & EXT4_FEATURE_INCOMPAT_RECOVER) != 0 ||
-                    (sb.s_state & EXT4_VALID_FS) == 0) {
-                    LINFO << __FUNCTION__ << "(): was not clealy shutdown, state flag:"
-                          << std::hex << sb.s_state
-                          << "incompat flag:" << std::hex << sb.s_feature_incompat;
-                    force_check = 1;
-                    *fs_stat |= FS_STAT_UNCLEAN_SHUTDOWN;
-                }
-                int has_quota = (sb.s_feature_ro_compat
-                        & cpu_to_le32(EXT4_FEATURE_RO_COMPAT_QUOTA)) != 0;
-                int want_quota = fs_mgr_is_quota(rec) != 0;
+// Read the primary superblock from an ext4 filesystem.  On failure return
+// false.  If it's not an ext4 filesystem, also set FS_STAT_EXT4_INVALID_MAGIC.
+static bool read_ext4_superblock(const char* blk_device, struct ext4_super_block* sb, int* fs_stat) {
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(blk_device, O_RDONLY | O_CLOEXEC)));
 
-                if (has_quota == want_quota) {
-                    LINFO << "Requested quota status is match on " << blk_device;
-                    return force_check;
-                } else if (want_quota) {
-                    LINFO << "Enabling quota on " << blk_device;
-                    arg1 = "-Oquota";
-                    arg2 = "-Qusrquota,grpquota";
-                    force_check = 1;
-                    *fs_stat |= FS_STAT_QUOTA_ENABLED;
-                } else {
-                    LINFO << "Disabling quota on " << blk_device;
-                    arg1 = "-Q^usrquota,^grpquota";
-                    arg2 = "-O^quota";
-                }
-            } else {
-                PERROR << "Failed to open '" << blk_device << "'";
-                return force_check;
-            }
-
-            const char *tune2fs_argv[] = {
-                TUNE2FS_BIN,
-                arg1,
-                arg2,
-                blk_device,
-            };
-            ret = android_fork_execvp_ext(ARRAY_SIZE(tune2fs_argv),
-                                          const_cast<char **>(tune2fs_argv),
-                                          &status, true, LOG_KLOG | LOG_FILE,
-                                          true, NULL, NULL, 0);
-            if (ret < 0) {
-                /* No need to check for error in fork, we can't really handle it now */
-                LERROR << "Failed trying to run " << TUNE2FS_BIN;
-                *fs_stat |= FS_STAT_TUNE2FS_FAILED;
-            }
-        }
+    if (fd < 0) {
+        PERROR << "Failed to open '" << blk_device << "'";
+        return false;
     }
-    return force_check;
+
+    if (pread(fd, sb, sizeof(*sb), 1024) != sizeof(*sb)) {
+        PERROR << "Can't read '" << blk_device << "' superblock";
+        return false;
+    }
+
+    if (sb->s_magic != EXT4_SUPER_MAGIC) {
+        LINFO << "Invalid ext4 magic:0x" << std::hex << sb->s_magic << " "
+              << "on '" << blk_device << "'";
+        // not a valid fs, tune2fs, fsck, and mount  will all fail.
+        *fs_stat |= FS_STAT_EXT4_INVALID_MAGIC;
+        return false;
+    }
+    *fs_stat |= FS_STAT_IS_EXT4;
+    LINFO << "superblock s_max_mnt_count:" << sb->s_max_mnt_count << "," << blk_device;
+    if (sb->s_max_mnt_count == 0xffff) {  // -1 (int16) in ext2, but uint16 in ext4
+        *fs_stat |= FS_STAT_NEW_IMAGE_VERSION;
+    }
+    return true;
 }
 
-static void do_reserved_size(char *blk_device, char *fs_type, struct fstab_rec *rec, int *fs_stat)
-{
-    /* Check for the types of filesystems we know how to check */
-    if (!strcmp(fs_type, "ext2") || !strcmp(fs_type, "ext3") || !strcmp(fs_type, "ext4")) {
-        /*
-         * Some system images do not have tune2fs for licensing reasons
-         * Detect these and skip reserve blocks.
-         */
-        if (access(TUNE2FS_BIN, X_OK)) {
-            LERROR << "Not running " << TUNE2FS_BIN << " on "
-                   << blk_device << " (executable not in system image)";
+// Some system images do not have tune2fs for licensing reasons.
+// Detect these and skip running it.
+static bool tune2fs_available(void) {
+    return access(TUNE2FS_BIN, X_OK) == 0;
+}
+
+static bool run_tune2fs(const char* argv[], int argc) {
+    int ret;
+
+    ret = android_fork_execvp_ext(argc, const_cast<char**>(argv), nullptr, true,
+                                  LOG_KLOG | LOG_FILE, true, nullptr, nullptr, 0);
+    return ret == 0;
+}
+
+// Enable/disable quota support on the filesystem if needed.
+static void tune_quota(const char* blk_device, const struct fstab_rec* rec,
+                       const struct ext4_super_block* sb, int* fs_stat) {
+    bool has_quota = (sb->s_feature_ro_compat & cpu_to_le32(EXT4_FEATURE_RO_COMPAT_QUOTA)) != 0;
+    bool want_quota = fs_mgr_is_quota(rec) != 0;
+
+    if (has_quota == want_quota) {
+        return;
+    }
+
+    if (!tune2fs_available()) {
+        LERROR << "Unable to " << (want_quota ? "enable" : "disable") << " quotas on " << blk_device
+               << " because " TUNE2FS_BIN " is missing";
+        return;
+    }
+
+    const char* argv[] = {TUNE2FS_BIN, nullptr, nullptr, blk_device};
+
+    if (want_quota) {
+        LINFO << "Enabling quotas on " << blk_device;
+        argv[1] = "-Oquota";
+        argv[2] = "-Qusrquota,grpquota";
+        *fs_stat |= FS_STAT_QUOTA_ENABLED;
+    } else {
+        LINFO << "Disabling quotas on " << blk_device;
+        argv[1] = "-O^quota";
+        argv[2] = "-Q^usrquota,^grpquota";
+    }
+
+    if (!run_tune2fs(argv, ARRAY_SIZE(argv))) {
+        LERROR << "Failed to run " TUNE2FS_BIN " to " << (want_quota ? "enable" : "disable")
+               << " quotas on " << blk_device;
+        *fs_stat |= FS_STAT_TOGGLE_QUOTAS_FAILED;
+    }
+}
+
+// Set the number of reserved filesystem blocks if needed.
+static void tune_reserved_size(const char* blk_device, const struct fstab_rec* rec,
+                               const struct ext4_super_block* sb, int* fs_stat) {
+    if (!(rec->fs_mgr_flags & MF_RESERVEDSIZE)) {
+        return;
+    }
+
+    // The size to reserve is given in the fstab, but we won't reserve more
+    // than 2% of the filesystem.
+    const uint64_t max_reserved_blocks = ext4_blocks_count(sb) * 0.02;
+    uint64_t reserved_blocks = rec->reserved_size / EXT4_BLOCK_SIZE(sb);
+
+    if (reserved_blocks > max_reserved_blocks) {
+        LWARNING << "Reserved blocks " << reserved_blocks << " is too large; "
+                 << "capping to " << max_reserved_blocks;
+        reserved_blocks = max_reserved_blocks;
+    }
+
+    if (ext4_r_blocks_count(sb) == reserved_blocks) {
+        return;
+    }
+
+    if (!tune2fs_available()) {
+        LERROR << "Unable to set the number of reserved blocks on " << blk_device
+               << " because " TUNE2FS_BIN " is missing";
+        return;
+    }
+
+    char buf[32];
+    const char* argv[] = {TUNE2FS_BIN, "-r", buf, blk_device};
+
+    snprintf(buf, sizeof(buf), "%" PRIu64, reserved_blocks);
+    LINFO << "Setting reserved block count on " << blk_device << " to " << reserved_blocks;
+    if (!run_tune2fs(argv, ARRAY_SIZE(argv))) {
+        LERROR << "Failed to run " TUNE2FS_BIN " to set the number of reserved blocks on "
+               << blk_device;
+        *fs_stat |= FS_STAT_SET_RESERVED_BLOCKS_FAILED;
+    }
+}
+
+//
+// Prepare the filesystem on the given block device to be mounted.
+//
+// If the "check" option was given in the fstab record, or it seems that the
+// filesystem was uncleanly shut down, we'll run fsck on the filesystem.
+//
+// If needed, we'll also enable (or disable) filesystem features as specified by
+// the fstab record.
+//
+static int prepare_fs_for_mount(const char* blk_device, const struct fstab_rec* rec) {
+    int fs_stat = 0;
+
+    if (is_extfs(rec->fs_type)) {
+        struct ext4_super_block sb;
+
+        if (read_ext4_superblock(blk_device, &sb, &fs_stat)) {
+            if ((sb.s_feature_incompat & EXT4_FEATURE_INCOMPAT_RECOVER) != 0 ||
+                (sb.s_state & EXT4_VALID_FS) == 0) {
+                LINFO << "Filesystem on " << blk_device << " was not cleanly shutdown; "
+                      << "state flags: 0x" << std::hex << sb.s_state << ", "
+                      << "incompat feature flags: 0x" << std::hex << sb.s_feature_incompat;
+                fs_stat |= FS_STAT_UNCLEAN_SHUTDOWN;
+            }
+
+            // Note: quotas should be enabled before running fsck.
+            tune_quota(blk_device, rec, &sb, &fs_stat);
         } else {
-            LINFO << "Running " << TUNE2FS_BIN << " on " << blk_device;
-
-            int status = 0;
-            int ret = 0;
-            unsigned long reserved_blocks = 0;
-            android::base::unique_fd fd(
-                TEMP_FAILURE_RETRY(open(blk_device, O_RDONLY | O_CLOEXEC)));
-            if (fd >= 0) {
-                struct ext4_super_block sb;
-                ret = read_super_block(fd, &sb);
-                if (ret < 0) {
-                    PERROR << "Can't read '" << blk_device << "' super block";
-                    return;
-                }
-                reserved_blocks = rec->reserved_size / EXT4_BLOCK_SIZE(&sb);
-                unsigned long reserved_threshold = ext4_blocks_count(&sb) * 0.02;
-                if (reserved_threshold < reserved_blocks) {
-                    LWARNING << "Reserved blocks " << reserved_blocks
-                             << " is too large";
-                    reserved_blocks = reserved_threshold;
-                }
-
-                if (ext4_r_blocks_count(&sb) == reserved_blocks) {
-                    LINFO << "Have reserved same blocks";
-                    return;
-                }
-            } else {
-                PERROR << "Failed to open '" << blk_device << "'";
-                return;
-            }
-
-            char buf[16] = {0};
-            snprintf(buf, sizeof (buf), "-r %lu", reserved_blocks);
-            const char *tune2fs_argv[] = {
-                TUNE2FS_BIN,
-                buf,
-                blk_device,
-            };
-
-            ret = android_fork_execvp_ext(ARRAY_SIZE(tune2fs_argv),
-                                          const_cast<char **>(tune2fs_argv),
-                                          &status, true, LOG_KLOG | LOG_FILE,
-                                          true, NULL, NULL, 0);
-
-            if (ret < 0) {
-                /* No need to check for error in fork, we can't really handle it now */
-                LERROR << "Failed trying to run " << TUNE2FS_BIN;
-                *fs_stat |= FS_STAT_TUNE2FS_FAILED;
-            }
+            return fs_stat;
         }
     }
+
+    if ((rec->fs_mgr_flags & MF_CHECK) ||
+        (fs_stat & (FS_STAT_UNCLEAN_SHUTDOWN | FS_STAT_QUOTA_ENABLED))) {
+        check_fs(blk_device, rec->fs_type, rec->mount_point, &fs_stat);
+    }
+
+    if (is_extfs(rec->fs_type) && (rec->fs_mgr_flags & MF_RESERVEDSIZE)) {
+        struct ext4_super_block sb;
+
+        if (read_ext4_superblock(blk_device, &sb, &fs_stat)) {
+            tune_reserved_size(blk_device, rec, &sb, &fs_stat);
+        }
+    }
+
+    return fs_stat;
 }
 
 static void remove_trailing_slashes(char *n)
@@ -559,25 +560,13 @@ static int mount_with_alternatives(struct fstab *fstab, int start_idx, int *end_
                 continue;
             }
 
-            int fs_stat = 0;
-            int force_check = do_quota_with_shutdown_check(fstab->recs[i].blk_device,
-                                                           fstab->recs[i].fs_type,
-                                                           &fstab->recs[i], &fs_stat);
+            int fs_stat = prepare_fs_for_mount(fstab->recs[i].blk_device, &fstab->recs[i]);
             if (fs_stat & FS_STAT_EXT4_INVALID_MAGIC) {
                 LERROR << __FUNCTION__ << "(): skipping mount, invalid ext4, mountpoint="
                        << fstab->recs[i].mount_point << " rec[" << i
                        << "].fs_type=" << fstab->recs[i].fs_type;
                 mount_errno = EINVAL;  // continue bootup for FDE
                 continue;
-            }
-            if ((fstab->recs[i].fs_mgr_flags & MF_CHECK) || force_check) {
-                check_fs(fstab->recs[i].blk_device, fstab->recs[i].fs_type,
-                         fstab->recs[i].mount_point, &fs_stat);
-            }
-
-            if (fstab->recs[i].fs_mgr_flags & MF_RESERVEDSIZE) {
-                do_reserved_size(fstab->recs[i].blk_device, fstab->recs[i].fs_type,
-                                 &fstab->recs[i], &fs_stat);
             }
 
             int retry_count = 2;
@@ -817,9 +806,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
         }
 
         /* Translate LABEL= file system labels into block devices */
-        if (!strcmp(fstab->recs[i].fs_type, "ext2") ||
-            !strcmp(fstab->recs[i].fs_type, "ext3") ||
-            !strcmp(fstab->recs[i].fs_type, "ext4")) {
+        if (is_extfs(fstab->recs[i].fs_type)) {
             int tret = translate_ext_labels(&fstab->recs[i]);
             if (tret < 0) {
                 LERROR << "Could not translate label to block device";
@@ -1035,18 +1022,7 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
             wait_for_file(n_blk_device, WAIT_TIMEOUT);
         }
 
-        int fs_stat = 0;
-        int force_check = do_quota_with_shutdown_check(n_blk_device, fstab->recs[i].fs_type,
-                                                       &fstab->recs[i], &fs_stat);
-
-        if ((fstab->recs[i].fs_mgr_flags & MF_CHECK) || force_check) {
-            check_fs(n_blk_device, fstab->recs[i].fs_type,
-                     fstab->recs[i].mount_point, &fs_stat);
-        }
-
-        if (fstab->recs[i].fs_mgr_flags & MF_RESERVEDSIZE) {
-            do_reserved_size(n_blk_device, fstab->recs[i].fs_type, &fstab->recs[i], &fs_stat);
-        }
+        int fs_stat = prepare_fs_for_mount(n_blk_device, &fstab->recs[i]);
 
         if (fstab->recs[i].fs_mgr_flags & MF_AVB) {
             if (!avb_handle) {
