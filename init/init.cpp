@@ -94,6 +94,7 @@ static int epoll_fd = -1;
 static std::unique_ptr<Timer> waiting_for_prop(nullptr);
 static std::string wait_prop_name;
 static std::string wait_prop_value;
+static bool shutting_down;
 
 void DumpState() {
     ServiceManager::GetInstance().DumpState();
@@ -158,21 +159,31 @@ bool start_waiting_for_property(const char *name, const char *value)
     return true;
 }
 
+void ResetWaitForProp() {
+    wait_prop_name.clear();
+    wait_prop_value.clear();
+    waiting_for_prop.reset();
+}
+
 void property_changed(const std::string& name, const std::string& value) {
     // If the property is sys.powerctl, we bypass the event queue and immediately handle it.
     // This is to ensure that init will always and immediately shutdown/reboot, regardless of
     // if there are other pending events to process or if init is waiting on an exec service or
     // waiting on a property.
-    if (name == "sys.powerctl") HandlePowerctlMessage(value);
+    // In non-thermal-shutdown case, 'shutdown' trigger will be fired to let device specific
+    // commands to be executed.
+    if (name == "sys.powerctl") {
+        if (HandlePowerctlMessage(value)) {
+            shutting_down = true;
+        }
+    }
 
     if (property_triggers_enabled) ActionManager::GetInstance().QueuePropertyChange(name, value);
 
     if (waiting_for_prop) {
         if (wait_prop_name == name && wait_prop_value == value) {
-            wait_prop_name.clear();
-            wait_prop_value.clear();
             LOG(INFO) << "Wait for property took " << *waiting_for_prop;
-            waiting_for_prop.reset();
+            ResetWaitForProp();
         }
     }
 }
@@ -1157,7 +1168,7 @@ int main(int argc, char** argv) {
             am.ExecuteOneCommand();
         }
         if (!(waiting_for_prop || sm.IsWaitingForExec())) {
-            restart_processes();
+            if (!shutting_down) restart_processes();
 
             // If there's a process that needs restarting, wake up in time for that.
             if (process_needs_restart_at != 0) {
