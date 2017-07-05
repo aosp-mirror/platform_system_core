@@ -30,7 +30,7 @@ namespace init {
 class DeviceHandlerTester {
   public:
     void TestGetSymlinks(const std::string& platform_device, const Uevent& uevent,
-                         const std::vector<std::string> expected_links, bool block) {
+                         const std::vector<std::string> expected_links) {
         TemporaryDir fake_sys_root;
         device_handler_.sysfs_mount_point_ = fake_sys_root.path;
 
@@ -44,11 +44,7 @@ class DeviceHandlerTester {
         mkdir_recursive(android::base::Dirname(fake_sys_root.path + uevent.path), 0777, nullptr);
 
         std::vector<std::string> result;
-        if (block) {
-            result = device_handler_.GetBlockDeviceSymlinks(uevent);
-        } else {
-            result = device_handler_.GetCharacterDeviceSymlinks(uevent);
-        }
+        result = device_handler_.GetBlockDeviceSymlinks(uevent);
 
         auto expected_size = expected_links.size();
         ASSERT_EQ(expected_size, result.size());
@@ -64,95 +60,6 @@ class DeviceHandlerTester {
     DeviceHandler device_handler_;
 };
 
-TEST(device_handler, get_character_device_symlinks_success) {
-    const char* platform_device = "/devices/platform/some_device_name";
-    Uevent uevent = {
-        .path = "/devices/platform/some_device_name/usb/usb_device/name/tty2-1:1.0",
-        .subsystem = "tty",
-    };
-    std::vector<std::string> expected_result{"/dev/usb/ttyname"};
-
-    DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, false);
-}
-
-TEST(device_handler, get_character_device_symlinks_no_pdev_match) {
-    const char* platform_device = "/devices/platform/some_device_name";
-    Uevent uevent = {
-        .path = "/device/name/tty2-1:1.0", .subsystem = "tty",
-    };
-    std::vector<std::string> expected_result;
-
-    DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, false);
-}
-
-TEST(device_handler, get_character_device_symlinks_nothing_after_platform_device) {
-    const char* platform_device = "/devices/platform/some_device_name";
-    Uevent uevent = {
-        .path = "/devices/platform/some_device_name", .subsystem = "tty",
-    };
-    std::vector<std::string> expected_result;
-
-    DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, false);
-}
-
-TEST(device_handler, get_character_device_symlinks_no_usb_found) {
-    const char* platform_device = "/devices/platform/some_device_name";
-    Uevent uevent = {
-        .path = "/devices/platform/some_device_name/bad/bad/", .subsystem = "tty",
-    };
-    std::vector<std::string> expected_result;
-
-    DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, false);
-}
-
-TEST(device_handler, get_character_device_symlinks_no_roothub) {
-    const char* platform_device = "/devices/platform/some_device_name";
-    Uevent uevent = {
-        .path = "/devices/platform/some_device_name/usb/", .subsystem = "tty",
-    };
-    std::vector<std::string> expected_result;
-
-    DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, false);
-}
-
-TEST(device_handler, get_character_device_symlinks_no_usb_device) {
-    const char* platform_device = "/devices/platform/some_device_name";
-    Uevent uevent = {
-        .path = "/devices/platform/some_device_name/usb/usb_device/", .subsystem = "tty",
-    };
-    std::vector<std::string> expected_result;
-
-    DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, false);
-}
-
-TEST(device_handler, get_character_device_symlinks_no_final_slash) {
-    const char* platform_device = "/devices/platform/some_device_name";
-    Uevent uevent = {
-        .path = "/devices/platform/some_device_name/usb/usb_device/name", .subsystem = "tty",
-    };
-    std::vector<std::string> expected_result;
-
-    DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, false);
-}
-
-TEST(device_handler, get_character_device_symlinks_no_final_name) {
-    const char* platform_device = "/devices/platform/some_device_name";
-    Uevent uevent = {
-        .path = "/devices/platform/some_device_name/usb/usb_device//", .subsystem = "tty",
-    };
-    std::vector<std::string> expected_result;
-
-    DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, false);
-}
-
 TEST(device_handler, get_block_device_symlinks_success_platform) {
     // These are actual paths from bullhead
     const char* platform_device = "/devices/soc.0/f9824900.sdhci";
@@ -164,7 +71,7 @@ TEST(device_handler, get_block_device_symlinks_success_platform) {
     std::vector<std::string> expected_result{"/dev/block/platform/soc.0/f9824900.sdhci/mmcblk0"};
 
     DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, true);
+    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result);
 }
 
 TEST(device_handler, get_block_device_symlinks_success_platform_with_partition) {
@@ -182,7 +89,7 @@ TEST(device_handler, get_block_device_symlinks_success_platform_with_partition) 
     };
 
     DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, true);
+    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result);
 }
 
 TEST(device_handler, get_block_device_symlinks_success_platform_with_partition_only_num) {
@@ -198,7 +105,7 @@ TEST(device_handler, get_block_device_symlinks_success_platform_with_partition_o
     };
 
     DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, true);
+    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result);
 }
 
 TEST(device_handler, get_block_device_symlinks_success_platform_with_partition_only_name) {
@@ -214,7 +121,7 @@ TEST(device_handler, get_block_device_symlinks_success_platform_with_partition_o
     };
 
     DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, true);
+    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result);
 }
 
 TEST(device_handler, get_block_device_symlinks_success_pci) {
@@ -225,7 +132,7 @@ TEST(device_handler, get_block_device_symlinks_success_pci) {
     std::vector<std::string> expected_result{"/dev/block/pci/pci0000:00/0000:00:1f.2/mmcblk0"};
 
     DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, true);
+    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result);
 }
 
 TEST(device_handler, get_block_device_symlinks_pci_bad_format) {
@@ -236,7 +143,7 @@ TEST(device_handler, get_block_device_symlinks_pci_bad_format) {
     std::vector<std::string> expected_result{};
 
     DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, true);
+    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result);
 }
 
 TEST(device_handler, get_block_device_symlinks_success_vbd) {
@@ -247,7 +154,7 @@ TEST(device_handler, get_block_device_symlinks_success_vbd) {
     std::vector<std::string> expected_result{"/dev/block/vbd/1234/mmcblk0"};
 
     DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, true);
+    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result);
 }
 
 TEST(device_handler, get_block_device_symlinks_vbd_bad_format) {
@@ -258,7 +165,7 @@ TEST(device_handler, get_block_device_symlinks_vbd_bad_format) {
     std::vector<std::string> expected_result{};
 
     DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, true);
+    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result);
 }
 
 TEST(device_handler, get_block_device_symlinks_no_matches) {
@@ -271,7 +178,7 @@ TEST(device_handler, get_block_device_symlinks_no_matches) {
     std::vector<std::string> expected_result;
 
     DeviceHandlerTester device_handler_tester_;
-    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result, true);
+    device_handler_tester_.TestGetSymlinks(platform_device, uevent, expected_result);
 }
 
 TEST(device_handler, sanitize_null) {
