@@ -476,10 +476,11 @@ static int __mount(const char *source, const char *target, const struct fstab_re
         if ((info.st_mode & S_IFMT) == S_IFLNK)
             unlink(target);
     mkdir(target, 0755);
+    errno = 0;
     ret = mount(source, target, rec->fs_type, mountflags, rec->fs_options);
     save_errno = errno;
-    LINFO << __FUNCTION__ << "(source=" << source << ",target="
-          << target << ",type=" << rec->fs_type << ")=" << ret;
+    PINFO << __FUNCTION__ << "(source=" << source << ",target=" << target
+          << ",type=" << rec->fs_type << ")=" << ret;
     if ((ret == 0) && (mountflags & MS_RDONLY) != 0) {
         fs_mgr_set_blk_ro(source);
     }
