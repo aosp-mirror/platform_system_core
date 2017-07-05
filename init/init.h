@@ -44,6 +44,8 @@ bool start_waiting_for_property(const char *name, const char *value);
 
 void DumpState();
 
+void ResetWaitForProp();
+
 }  // namespace init
 }  // namespace android
 
