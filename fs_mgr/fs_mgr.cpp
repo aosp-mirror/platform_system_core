@@ -86,6 +86,7 @@ enum FsStatFlags {
     FS_STAT_EXT4_INVALID_MAGIC = 0x0800,
     FS_STAT_TOGGLE_QUOTAS_FAILED = 0x10000,
     FS_STAT_SET_RESERVED_BLOCKS_FAILED = 0x20000,
+    FS_STAT_ENABLE_ENCRYPTION_FAILED = 0x40000,
 };
 
 /*
@@ -134,10 +135,11 @@ static bool is_extfs(const std::string& fs_type) {
 }
 
 static bool should_force_check(int fs_stat) {
-    return fs_stat & (FS_STAT_E2FSCK_F_ALWAYS | FS_STAT_UNCLEAN_SHUTDOWN | FS_STAT_QUOTA_ENABLED |
-                      FS_STAT_RO_MOUNT_FAILED | FS_STAT_RO_UNMOUNT_FAILED |
-                      FS_STAT_FULL_MOUNT_FAILED | FS_STAT_E2FSCK_FAILED |
-                      FS_STAT_TOGGLE_QUOTAS_FAILED | FS_STAT_SET_RESERVED_BLOCKS_FAILED);
+    return fs_stat &
+           (FS_STAT_E2FSCK_F_ALWAYS | FS_STAT_UNCLEAN_SHUTDOWN | FS_STAT_QUOTA_ENABLED |
+            FS_STAT_RO_MOUNT_FAILED | FS_STAT_RO_UNMOUNT_FAILED | FS_STAT_FULL_MOUNT_FAILED |
+            FS_STAT_E2FSCK_FAILED | FS_STAT_TOGGLE_QUOTAS_FAILED |
+            FS_STAT_SET_RESERVED_BLOCKS_FAILED | FS_STAT_ENABLE_ENCRYPTION_FAILED);
 }
 
 static void check_fs(const char *blk_device, char *fs_type, char *target, int *fs_stat)
@@ -378,6 +380,32 @@ static void tune_reserved_size(const char* blk_device, const struct fstab_rec* r
     }
 }
 
+// Enable file-based encryption if needed.
+static void tune_encrypt(const char* blk_device, const struct fstab_rec* rec,
+                         const struct ext4_super_block* sb, int* fs_stat) {
+    bool has_encrypt = (sb->s_feature_incompat & cpu_to_le32(EXT4_FEATURE_INCOMPAT_ENCRYPT)) != 0;
+    bool want_encrypt = fs_mgr_is_file_encrypted(rec) != 0;
+
+    if (has_encrypt || !want_encrypt) {
+        return;
+    }
+
+    if (!tune2fs_available()) {
+        LERROR << "Unable to enable ext4 encryption on " << blk_device
+               << " because " TUNE2FS_BIN " is missing";
+        return;
+    }
+
+    const char* argv[] = {TUNE2FS_BIN, "-Oencrypt", blk_device};
+
+    LINFO << "Enabling ext4 encryption on " << blk_device;
+    if (!run_tune2fs(argv, ARRAY_SIZE(argv))) {
+        LERROR << "Failed to run " TUNE2FS_BIN " to enable "
+               << "ext4 encryption on " << blk_device;
+        *fs_stat |= FS_STAT_ENABLE_ENCRYPTION_FAILED;
+    }
+}
+
 //
 // Prepare the filesystem on the given block device to be mounted.
 //
@@ -414,11 +442,12 @@ static int prepare_fs_for_mount(const char* blk_device, const struct fstab_rec* 
         check_fs(blk_device, rec->fs_type, rec->mount_point, &fs_stat);
     }
 
-    if (is_extfs(rec->fs_type) && (rec->fs_mgr_flags & MF_RESERVEDSIZE)) {
+    if (is_extfs(rec->fs_type) && (rec->fs_mgr_flags & (MF_RESERVEDSIZE | MF_FILEENCRYPTION))) {
         struct ext4_super_block sb;
 
         if (read_ext4_superblock(blk_device, &sb, &fs_stat)) {
             tune_reserved_size(blk_device, rec, &sb, &fs_stat);
+            tune_encrypt(blk_device, rec, &sb, &fs_stat);
         }
     }
 
