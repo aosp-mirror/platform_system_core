@@ -168,10 +168,13 @@ bool FirstStageMount::InitRequiredDevices() {
         };
         uevent_listener_.RegenerateUeventsForPath("/sys" + dm_path, dm_callback);
         if (!found) {
+            LOG(INFO) << "device-mapper device not found in /sys, waiting for its uevent";
+            Timer t;
             uevent_listener_.Poll(dm_callback, 10s);
+            LOG(INFO) << "Wait for device-mapper returned after " << t;
         }
         if (!found) {
-            LOG(ERROR) << "device-mapper device not found";
+            LOG(ERROR) << "device-mapper device not found after polling timeout";
             return false;
         }
     }
@@ -182,11 +185,16 @@ bool FirstStageMount::InitRequiredDevices() {
     // UeventCallback() will remove found partitions from required_devices_partition_names_.
     // So if it isn't empty here, it means some partitions are not found.
     if (!required_devices_partition_names_.empty()) {
+        LOG(INFO) << __PRETTY_FUNCTION__
+                  << ": partition(s) not found in /sys, waiting for their uevent(s): "
+                  << android::base::Join(required_devices_partition_names_, ", ");
+        Timer t;
         uevent_listener_.Poll(uevent_callback, 10s);
+        LOG(INFO) << "Wait for partitions returned after " << t;
     }
 
     if (!required_devices_partition_names_.empty()) {
-        LOG(ERROR) << __PRETTY_FUNCTION__ << ": partition(s) not found: "
+        LOG(ERROR) << __PRETTY_FUNCTION__ << ": partition(s) not found after polling timeout: "
                    << android::base::Join(required_devices_partition_names_, ", ");
         return false;
     }
@@ -238,10 +246,13 @@ bool FirstStageMount::InitVerityDevice(const std::string& verity_device) {
 
     uevent_listener_.RegenerateUeventsForPath(syspath, verity_callback);
     if (!found) {
+        LOG(INFO) << "dm-verity device not found in /sys, waiting for its uevent";
+        Timer t;
         uevent_listener_.Poll(verity_callback, 10s);
+        LOG(INFO) << "wait for dm-verity device returned after " << t;
     }
     if (!found) {
-        LOG(ERROR) << "dm-verity device not found";
+        LOG(ERROR) << "dm-verity device not found after polling timeout";
         return false;
     }
 
