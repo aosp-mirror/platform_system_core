@@ -50,6 +50,8 @@ cc_defaults {
         "libbase",
         "liblog",
     ],
+
+    export_include_dirs: ["include"],
 }
 
 cc_library {
@@ -65,7 +67,6 @@ cc_library {
         "liblog",
         "libbase",
     ],
-    export_include_dirs: ["include"],
     target: {
         android: {
             shared_libs: [
