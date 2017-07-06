@@ -473,16 +473,6 @@ static bool get_hashtree_descriptor(const std::string& partition_name,
     return true;
 }
 
-// Orange state means the device is unlocked, see the following link for details.
-// https://source.android.com/security/verifiedboot/verified-boot#device_state
-static inline bool IsDeviceUnlocked() {
-    std::string verified_boot_state;
-    if (fs_mgr_get_boot_config("verifiedbootstate", &verified_boot_state)) {
-        return verified_boot_state == "orange";
-    }
-    return false;
-}
-
 FsManagerAvbUniquePtr FsManagerAvbHandle::Open(const fstab& fstab) {
     FsManagerAvbOps avb_ops(fstab);
     return DoOpen(&avb_ops);
@@ -498,7 +488,7 @@ FsManagerAvbUniquePtr FsManagerAvbHandle::Open(ByNameSymlinkMap&& by_name_symlin
 }
 
 FsManagerAvbUniquePtr FsManagerAvbHandle::DoOpen(FsManagerAvbOps* avb_ops) {
-    bool is_device_unlocked = IsDeviceUnlocked();
+    bool is_device_unlocked = fs_mgr_is_device_unlocked();
 
     FsManagerAvbUniquePtr avb_handle(new FsManagerAvbHandle());
     if (!avb_handle) {
