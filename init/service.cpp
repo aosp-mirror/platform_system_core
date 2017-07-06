@@ -34,6 +34,7 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
+#include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <processgroup/processgroup.h>
@@ -47,6 +48,7 @@
 using android::base::boot_clock;
 using android::base::GetProperty;
 using android::base::Join;
+using android::base::make_scope_guard;
 using android::base::ParseInt;
 using android::base::StartsWith;
 using android::base::StringPrintf;
@@ -499,6 +501,14 @@ bool Service::ParseSetenv(const std::vector<std::string>& args, std::string* err
     return true;
 }
 
+bool Service::ParseShutdown(const std::vector<std::string>& args, std::string* err) {
+    if (args[1] == "critical") {
+        flags_ |= SVC_SHUTDOWN_CRITICAL;
+        return true;
+    }
+    return false;
+}
+
 template <typename T>
 bool Service::AddDescriptor(const std::vector<std::string>& args, std::string* err) {
     int perm = args.size() > 3 ? std::strtoul(args[3].c_str(), 0, 8) : -1;
@@ -602,6 +612,7 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
         {"namespace",   {1,     2,    &Service::ParseNamespace}},
         {"seclabel",    {1,     1,    &Service::ParseSeclabel}},
         {"setenv",      {2,     2,    &Service::ParseSetenv}},
+        {"shutdown",    {1,     1,    &Service::ParseShutdown}},
         {"socket",      {3,     6,    &Service::ParseSocket}},
         {"file",        {2,     2,    &Service::ParseFile}},
         {"user",        {1,     1,    &Service::ParseUser}},
@@ -1088,14 +1099,24 @@ void ServiceManager::DumpState() const {
 }
 
 bool ServiceManager::ReapOneProcess() {
-    int status;
-    pid_t pid = TEMP_FAILURE_RETRY(waitpid(-1, &status, WNOHANG));
-    if (pid == 0) {
+    siginfo_t siginfo = {};
+    // This returns a zombie pid or informs us that there are no zombies left to be reaped.
+    // It does NOT reap the pid; that is done below.
+    if (TEMP_FAILURE_RETRY(waitid(P_ALL, 0, &siginfo, WEXITED | WNOHANG | WNOWAIT)) != 0) {
+        PLOG(ERROR) << "waitid failed";
         return false;
-    } else if (pid == -1) {
-        PLOG(ERROR) << "waitpid failed";
-        return false;
-    } else if (PropertyChildReap(pid)) {
+    }
+
+    auto pid = siginfo.si_pid;
+    if (pid == 0) return false;
+
+    // At this point we know we have a zombie pid, so we use this scopeguard to reap the pid
+    // whenever the function returns from this point forward.
+    // We do NOT want to reap the zombie earlier as in Service::Reap(), we kill(-pid, ...) and we
+    // want the pid to remain valid throughout that (and potentially future) usages.
+    auto reaper = make_scope_guard([pid] { TEMP_FAILURE_RETRY(waitpid(pid, nullptr, WNOHANG)); });
+
+    if (PropertyChildReap(pid)) {
         return true;
     }
 
@@ -1112,14 +1133,11 @@ bool ServiceManager::ReapOneProcess() {
         name = StringPrintf("Untracked pid %d", pid);
     }
 
+    auto status = siginfo.si_status;
     if (WIFEXITED(status)) {
         LOG(INFO) << name << " exited with status " << WEXITSTATUS(status) << wait_string;
     } else if (WIFSIGNALED(status)) {
         LOG(INFO) << name << " killed by signal " << WTERMSIG(status) << wait_string;
-    } else if (WIFSTOPPED(status)) {
-        LOG(INFO) << name << " stopped by signal " << WSTOPSIG(status) << wait_string;
-    } else {
-        LOG(INFO) << name << " state changed" << wait_string;
     }
 
     if (!svc) {
@@ -1141,6 +1159,15 @@ bool ServiceManager::ReapOneProcess() {
 void ServiceManager::ReapAnyOutstandingChildren() {
     while (ReapOneProcess()) {
     }
+}
+
+void ServiceManager::ClearExecWait() {
+    // Clear EXEC flag if there is one pending
+    // And clear the wait flag
+    for (const auto& s : services_) {
+        s->UnSetExec();
+    }
+    exec_waiter_.reset();
 }
 
 bool ServiceParser::ParseSection(std::vector<std::string>&& args, const std::string& filename,

@@ -115,15 +115,11 @@ class DeviceHandler {
     bool FindPlatformDevice(std::string path, std::string* platform_device_path) const;
     std::tuple<mode_t, uid_t, gid_t> GetDevicePermissions(
         const std::string& path, const std::vector<std::string>& links) const;
-    void MakeDevice(const std::string& path, int block, int major, int minor,
+    void MakeDevice(const std::string& path, bool block, int major, int minor,
                     const std::vector<std::string>& links) const;
-    std::vector<std::string> GetCharacterDeviceSymlinks(const Uevent& uevent) const;
-    void HandleDevice(const std::string& action, const std::string& devpath, int block, int major,
+    void HandleDevice(const std::string& action, const std::string& devpath, bool block, int major,
                       int minor, const std::vector<std::string>& links) const;
     void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;
-
-    void HandleBlockDeviceEvent(const Uevent& uevent) const;
-    void HandleGenericDeviceEvent(const Uevent& uevent) const;
 
     std::vector<Permissions> dev_permissions_;
     std::vector<SysfsPermissions> sysfs_permissions_;

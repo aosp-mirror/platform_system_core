@@ -49,6 +49,7 @@
 #include <private/android_filesystem_config.h>
 
 #include "capabilities.h"
+#include "init.h"
 #include "property_service.h"
 #include "service.h"
 
@@ -364,13 +365,15 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     // keep debugging tools until non critical ones are all gone.
     const std::set<std::string> kill_after_apps{"tombstoned", "logd", "adbd"};
     // watchdogd is a vendor specific component but should be alive to complete shutdown safely.
-    const std::set<std::string> to_starts{"watchdogd", "vold", "ueventd"};
+    const std::set<std::string> to_starts{"watchdogd"};
     ServiceManager::GetInstance().ForEachService([&kill_after_apps, &to_starts](Service* s) {
         if (kill_after_apps.count(s->name())) {
             s->SetShutdownCritical();
         } else if (to_starts.count(s->name())) {
             s->Start();
             s->SetShutdownCritical();
+        } else if (s->IsShutdownCritical()) {
+            s->Start();  // start shutdown critical service if not started
         }
     });
 
@@ -490,6 +493,9 @@ bool HandlePowerctlMessage(const std::string& command) {
         }
     } else if (command == "thermal-shutdown") {  // no additional parameter allowed
         cmd = ANDROID_RB_THERMOFF;
+        // Do not queue "shutdown" trigger since we want to shutdown immediately
+        DoReboot(cmd, command, reboot_target, run_fsck);
+        return true;
     } else {
         command_invalid = true;
     }
@@ -498,7 +504,26 @@ bool HandlePowerctlMessage(const std::string& command) {
         return false;
     }
 
-    DoReboot(cmd, command, reboot_target, run_fsck);
+    LOG(INFO) << "Clear action queue and start shutdown trigger";
+    ActionManager::GetInstance().ClearQueue();
+    // Queue shutdown trigger first
+    ActionManager::GetInstance().QueueEventTrigger("shutdown");
+    // Queue built-in shutdown_done
+    auto shutdown_handler = [cmd, command, reboot_target,
+                             run_fsck](const std::vector<std::string>&) {
+        DoReboot(cmd, command, reboot_target, run_fsck);
+        return 0;
+    };
+    ActionManager::GetInstance().QueueBuiltinAction(shutdown_handler, "shutdown_done");
+
+    // Skip wait for prop if it is in progress
+    ResetWaitForProp();
+
+    // Skip wait for exec if it is in progress
+    if (ServiceManager::GetInstance().IsWaitingForExec()) {
+        ServiceManager::GetInstance().ClearExecWait();
+    }
+
     return true;
 }
 
