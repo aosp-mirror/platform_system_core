@@ -73,6 +73,7 @@ using namespace std::string_literals;
 
 using android::base::boot_clock;
 using android::base::GetProperty;
+using android::base::Timer;
 
 namespace android {
 namespace init {
@@ -232,7 +233,7 @@ static int wait_for_coldboot_done_action(const std::vector<std::string>& args) {
         panic();
     }
 
-    property_set("ro.boottime.init.cold_boot_wait", std::to_string(t.duration_ms()));
+    property_set("ro.boottime.init.cold_boot_wait", std::to_string(t.duration().count()));
     return 0;
 }
 
@@ -870,7 +871,7 @@ static void selinux_initialize(bool in_kernel_domain) {
         }
 
         // init's first stage can't set properties, so pass the time to the second stage.
-        setenv("INIT_SELINUX_TOOK", std::to_string(t.duration_ms()).c_str(), 1);
+        setenv("INIT_SELINUX_TOOK", std::to_string(t.duration().count()).c_str(), 1);
     } else {
         selinux_init_all_handles();
     }

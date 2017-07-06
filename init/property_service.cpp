@@ -42,6 +42,7 @@
 #include <queue>
 #include <vector>
 
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -54,6 +55,8 @@
 
 #include "init.h"
 #include "util.h"
+
+using android::base::Timer;
 
 #define PERSISTENT_PROPERTY_DIR  "/data/property"
 #define RECOVERY_MOUNT_POINT "/recovery"
@@ -350,7 +353,7 @@ class SocketConnection {
     while (*timeout_ms > 0) {
       Timer timer;
       int nr = poll(ufds, 1, *timeout_ms);
-      uint64_t millis = timer.duration_ms();
+      uint64_t millis = timer.duration().count();
       *timeout_ms = (millis > *timeout_ms) ? 0 : *timeout_ms - millis;
 
       if (nr > 0) {
