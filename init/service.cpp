@@ -487,6 +487,14 @@ bool Service::ParseSetenv(const std::vector<std::string>& args, std::string* err
     return true;
 }
 
+bool Service::ParseShutdown(const std::vector<std::string>& args, std::string* err) {
+    if (args[1] == "critical") {
+        flags_ |= SVC_SHUTDOWN_CRITICAL;
+        return true;
+    }
+    return false;
+}
+
 template <typename T>
 bool Service::AddDescriptor(const std::vector<std::string>& args, std::string* err) {
     int perm = args.size() > 3 ? std::strtoul(args[3].c_str(), 0, 8) : -1;
@@ -591,6 +599,7 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
         {"namespace",   {1,     2,    &Service::ParseNamespace}},
         {"seclabel",    {1,     1,    &Service::ParseSeclabel}},
         {"setenv",      {2,     2,    &Service::ParseSetenv}},
+        {"shutdown",    {1,     1,    &Service::ParseShutdown}},
         {"socket",      {3,     6,    &Service::ParseSocket}},
         {"file",        {2,     2,    &Service::ParseFile}},
         {"user",        {1,     1,    &Service::ParseUser}},
