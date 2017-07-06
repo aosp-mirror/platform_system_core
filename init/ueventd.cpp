@@ -268,6 +268,13 @@ int ueventd_main(int argc, char** argv) {
         cold_boot.Run();
     }
 
+    // We use waitpid() in ColdBoot, so we can't ignore SIGCHLD until now.
+    signal(SIGCHLD, SIG_IGN);
+    // Reap and pending children that exited between the last call to waitpid() and setting SIG_IGN
+    // for SIGCHLD above.
+    while (waitpid(-1, nullptr, WNOHANG) > 0) {
+    }
+
     uevent_listener.Poll([&device_handler](const Uevent& uevent) {
         HandleFirmwareEvent(uevent);
         device_handler.HandleDeviceEvent(uevent);
