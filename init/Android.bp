@@ -94,6 +94,10 @@ cc_binary {
 
     name: "init",
     defaults: ["init_defaults"],
+    required: [
+        "e2fsdroid",
+        "mke2fs",
+    ],
     static_executable: true,
     srcs: [
         "bootchart.cpp",
