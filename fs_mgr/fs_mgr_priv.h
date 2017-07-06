@@ -113,6 +113,7 @@
 int fs_mgr_set_blk_ro(const char *blockdev);
 int fs_mgr_test_access(const char *device);
 bool fs_mgr_update_for_slotselect(struct fstab *fstab);
+bool fs_mgr_is_device_unlocked();
 bool is_dt_compatible();
 bool is_device_secure();
 int load_verity_state(struct fstab_rec* fstab, int* mode);
