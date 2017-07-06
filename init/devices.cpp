@@ -219,7 +219,7 @@ std::tuple<mode_t, uid_t, gid_t> DeviceHandler::GetDevicePermissions(
     return {0600, 0, 0};
 }
 
-void DeviceHandler::MakeDevice(const std::string& path, int block, int major, int minor,
+void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, int minor,
                                const std::vector<std::string>& links) const {
     auto[mode, uid, gid] = GetDevicePermissions(path, links);
     mode |= (block ? S_IFBLK : S_IFCHR);
@@ -277,45 +277,6 @@ out:
         freecon(secontext);
         setfscreatecon(nullptr);
     }
-}
-
-std::vector<std::string> DeviceHandler::GetCharacterDeviceSymlinks(const Uevent& uevent) const {
-    std::string parent_device;
-    if (!FindPlatformDevice(uevent.path, &parent_device)) return {};
-
-    // skip path to the parent driver
-    std::string path = uevent.path.substr(parent_device.length());
-
-    if (!StartsWith(path, "/usb")) return {};
-
-    // skip root hub name and device. use device interface
-    // skip 3 slashes, including the first / by starting the search at the 1st character, not 0th.
-    // then extract what comes between the 3rd and 4th slash
-    // e.g. "/usb/usb_device/name/tty2-1:1.0" -> "name"
-
-    std::string::size_type start = 0;
-    start = path.find('/', start + 1);
-    if (start == std::string::npos) return {};
-
-    start = path.find('/', start + 1);
-    if (start == std::string::npos) return {};
-
-    auto end = path.find('/', start + 1);
-    if (end == std::string::npos) return {};
-
-    start++;  // Skip the first '/'
-
-    auto length = end - start;
-    if (length == 0) return {};
-
-    auto name_string = path.substr(start, length);
-
-    std::vector<std::string> links;
-    links.emplace_back("/dev/usb/" + uevent.subsystem + name_string);
-
-    mkdir("/dev/usb", 0755);
-
-    return links;
 }
 
 // replaces any unacceptable characters with '_', the
@@ -385,7 +346,7 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
     return links;
 }
 
-void DeviceHandler::HandleDevice(const std::string& action, const std::string& devpath, int block,
+void DeviceHandler::HandleDevice(const std::string& action, const std::string& devpath, bool block,
                                  int major, int minor, const std::vector<std::string>& links) const {
     if (action == "add") {
         MakeDevice(devpath, block, major, minor, links);
@@ -411,31 +372,26 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
     }
 }
 
-void DeviceHandler::HandleBlockDeviceEvent(const Uevent& uevent) const {
-    // if it's not a /dev device, nothing to do
-    if (uevent.major < 0 || uevent.minor < 0) return;
-
-    const char* base = "/dev/block/";
-    make_dir(base, 0755, sehandle_);
-
-    std::string name = Basename(uevent.path);
-    std::string devpath = base + name;
-
-    std::vector<std::string> links;
-    if (StartsWith(uevent.path, "/devices")) {
-        links = GetBlockDeviceSymlinks(uevent);
+void DeviceHandler::HandleDeviceEvent(const Uevent& uevent) {
+    if (uevent.action == "add" || uevent.action == "change" || uevent.action == "online") {
+        FixupSysPermissions(uevent.path, uevent.subsystem);
     }
 
-    HandleDevice(uevent.action, devpath, 1, uevent.major, uevent.minor, links);
-}
-
-void DeviceHandler::HandleGenericDeviceEvent(const Uevent& uevent) const {
     // if it's not a /dev device, nothing to do
     if (uevent.major < 0 || uevent.minor < 0) return;
 
     std::string devpath;
+    std::vector<std::string> links;
+    bool block = false;
 
-    if (StartsWith(uevent.subsystem, "usb")) {
+    if (uevent.subsystem == "block") {
+        block = true;
+        devpath = "/dev/block/" + Basename(uevent.path);
+
+        if (StartsWith(uevent.path, "/devices")) {
+            links = GetBlockDeviceSymlinks(uevent);
+        }
+    } else if (StartsWith(uevent.subsystem, "usb")) {
         if (uevent.subsystem == "usb") {
             if (!uevent.device_name.empty()) {
                 devpath = "/dev/" + uevent.device_name;
@@ -461,21 +417,7 @@ void DeviceHandler::HandleGenericDeviceEvent(const Uevent& uevent) const {
 
     mkdir_recursive(Dirname(devpath), 0755, sehandle_);
 
-    auto links = GetCharacterDeviceSymlinks(uevent);
-
-    HandleDevice(uevent.action, devpath, 0, uevent.major, uevent.minor, links);
-}
-
-void DeviceHandler::HandleDeviceEvent(const Uevent& uevent) {
-    if (uevent.action == "add" || uevent.action == "change" || uevent.action == "online") {
-        FixupSysPermissions(uevent.path, uevent.subsystem);
-    }
-
-    if (uevent.subsystem == "block") {
-        HandleBlockDeviceEvent(uevent);
-    } else {
-        HandleGenericDeviceEvent(uevent);
-    }
+    HandleDevice(uevent.action, devpath, block, uevent.major, uevent.minor, links);
 }
 
 DeviceHandler::DeviceHandler(std::vector<Permissions> dev_permissions,
