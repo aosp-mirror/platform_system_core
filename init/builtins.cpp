@@ -117,7 +117,7 @@ static int reboot_into_recovery(const std::vector<std::string>& options) {
         LOG(ERROR) << "failed to set bootloader message: " << err;
         return -1;
     }
-    DoReboot(ANDROID_RB_RESTART2, "reboot", "recovery", false);
+    property_set("sys.powerctl", "reboot,recovery");
     return 0;
 }
 

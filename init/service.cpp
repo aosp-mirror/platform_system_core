@@ -1142,6 +1142,15 @@ void ServiceManager::ReapAnyOutstandingChildren() {
     }
 }
 
+void ServiceManager::ClearExecWait() {
+    // Clear EXEC flag if there is one pending
+    // And clear the wait flag
+    for (const auto& s : services_) {
+        s->UnSetExec();
+    }
+    exec_waiter_.reset();
+}
+
 bool ServiceParser::ParseSection(std::vector<std::string>&& args, const std::string& filename,
                                  int line, std::string* err) {
     if (args.size() < 3) {
