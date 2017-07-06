@@ -691,6 +691,7 @@ service ueventd /sbin/ueventd
     class core
     critical
     seclabel u:r:ueventd:s0
+    shutdown critical
 
 service healthd /sbin/healthd
     class core

@@ -138,6 +138,7 @@ class Service {
     bool ParseNamespace(const std::vector<std::string>& args, std::string* err);
     bool ParseSeclabel(const std::vector<std::string>& args, std::string* err);
     bool ParseSetenv(const std::vector<std::string>& args, std::string* err);
+    bool ParseShutdown(const std::vector<std::string>& args, std::string* err);
     bool ParseSocket(const std::vector<std::string>& args, std::string* err);
     bool ParseFile(const std::vector<std::string>& args, std::string* err);
     bool ParseUser(const std::vector<std::string>& args, std::string* err);
