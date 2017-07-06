@@ -260,6 +260,14 @@ runs the service.
 > Sets the child's /proc/self/oom\_score\_adj to the specified value,
   which must range from -1000 to 1000.
 
+`shutdown <shutdown_behavior>`
+> Set shutdown behavior of the service process. When this is not specified,
+  the service is killed during shutdown process by using SIGTERM and SIGKILL.
+  The service with shutdown_behavior of "critical" is not killed during shutdown
+  until shutdown times out. When shutdown times out, even services tagged with
+  "shutdown critical" will be killed. When the service tagged with "shutdown critical"
+  is not running when shut down starts, it will be started.
+
 
 Triggers
 --------
