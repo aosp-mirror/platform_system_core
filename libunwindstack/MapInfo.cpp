@@ -73,13 +73,15 @@ Memory* MapInfo::CreateMemory(pid_t pid) {
   return new MemoryRange(memory, start, end);
 }
 
-Elf* MapInfo::GetElf(pid_t pid, bool) {
+Elf* MapInfo::GetElf(pid_t pid, bool init_gnu_debugdata) {
   if (elf) {
     return elf;
   }
 
   elf = new Elf(CreateMemory(pid));
-  elf->Init();
+  if (elf->Init() && init_gnu_debugdata) {
+    elf->InitGnuDebugdata();
+  }
   // If the init fails, keep the elf around as an invalid object so we
   // don't try to reinit the object.
   return elf;
