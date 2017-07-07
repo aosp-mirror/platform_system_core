@@ -85,12 +85,13 @@ void ShowHelp(const char *cmd) {
   fprintf(stderr, "Usage: %s [options]\n", cmd);
   fprintf(stderr,
           "options include:\n"
-          "  -h, --help            Show this help\n"
-          "  -l, --log             Log all metrics to logstorage\n"
-          "  -p, --print           Dump the boot event records to the console\n"
-          "  -r, --record          Record the timestamp of a named boot event\n"
-          "  --value               Optional value to associate with the boot event\n"
-          "  --record_boot_reason  Record the reason why the device booted\n"
+          "  -h, --help              Show this help\n"
+          "  -l, --log               Log all metrics to logstorage\n"
+          "  -p, --print             Dump the boot event records to the console\n"
+          "  -r, --record            Record the timestamp of a named boot event\n"
+          "  --value                 Optional value to associate with the boot event\n"
+          "  --record_boot_complete  Record metrics related to the time for the device boot\n"
+          "  --record_boot_reason    Record the reason why the device booted\n"
           "  --record_time_since_factory_reset Record the time since the device was reset\n");
 }
 
