@@ -23,6 +23,7 @@ cc_defaults {
         "-Wextra",
         "-Werror",
     ],
+    header_libs: ["libnativebridge-dummy-headers"],
     cppflags: ["-fvisibility=protected"],
     target: {
         android: {
