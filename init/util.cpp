@@ -367,6 +367,7 @@ bool expand_props(const std::string& src, std::string* dst) {
 
 void panic() {
     LOG(ERROR) << "panic: rebooting to bootloader";
+    // Do not queue "shutdown" trigger since we want to shutdown immediately
     DoReboot(ANDROID_RB_RESTART2, "reboot", "bootloader", false);
 }
 

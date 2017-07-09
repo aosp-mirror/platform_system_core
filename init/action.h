@@ -101,6 +101,7 @@ class ActionManager {
     void ExecuteOneCommand();
     bool HasMoreCommands() const;
     void DumpState() const;
+    void ClearQueue();
 
   private:
     ActionManager(ActionManager const&) = delete;

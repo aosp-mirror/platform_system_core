@@ -89,6 +89,7 @@ class Service {
     void DumpState() const;
     void SetShutdownCritical() { flags_ |= SVC_SHUTDOWN_CRITICAL; }
     bool IsShutdownCritical() const { return (flags_ & SVC_SHUTDOWN_CRITICAL) != 0; }
+    void UnSetExec() { flags_ &= ~SVC_EXEC; }
 
     const std::string& name() const { return name_; }
     const std::set<std::string>& classnames() const { return classnames_; }
@@ -137,6 +138,7 @@ class Service {
     bool ParseNamespace(const std::vector<std::string>& args, std::string* err);
     bool ParseSeclabel(const std::vector<std::string>& args, std::string* err);
     bool ParseSetenv(const std::vector<std::string>& args, std::string* err);
+    bool ParseShutdown(const std::vector<std::string>& args, std::string* err);
     bool ParseSocket(const std::vector<std::string>& args, std::string* err);
     bool ParseFile(const std::vector<std::string>& args, std::string* err);
     bool ParseUser(const std::vector<std::string>& args, std::string* err);
@@ -186,7 +188,7 @@ class Service {
 };
 
 class ServiceManager {
-public:
+  public:
     static ServiceManager& GetInstance();
 
     // Exposed for testing
@@ -208,8 +210,9 @@ public:
     void ReapAnyOutstandingChildren();
     void RemoveService(const Service& svc);
     void DumpState() const;
+    void ClearExecWait();
 
-private:
+  private:
     // Cleans up a child process that exited.
     // Returns true iff a children was cleaned up.
     bool ReapOneProcess();
