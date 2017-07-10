@@ -16,13 +16,14 @@
 
 #include "init_parser.h"
 
-#include "init.h"
-#include "service.h"
+#include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 
-#include <string>
-#include <vector>
+#include "init.h"
+#include "service.h"
+#include "util.h"
 
 namespace android {
 namespace init {
