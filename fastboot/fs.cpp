@@ -12,10 +12,14 @@
 #include <sys/types.h>
 #ifndef WIN32
 #include <sys/wait.h>
+#else
+#include <tchar.h>
+#include <windows.h>
 #endif
 #include <unistd.h>
 #include <vector>
 
+#include <android-base/errors.h>
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
@@ -26,21 +30,49 @@ using android::base::StringPrintf;
 using android::base::unique_fd;
 
 #ifdef WIN32
-static int generate_ext4_image(const char* fileName, long long partSize, const std::string& initial_dir,
-                                       unsigned eraseBlkSize, unsigned logicalBlkSize)
-{
-    unique_fd fd(open(fileName, O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR));
-    if (fd == -1) {
-        fprintf(stderr, "Unable to open output file for EXT4 filesystem: %s\n", strerror(errno));
+static int exec_e2fs_cmd(const char* path, char* const argv[]) {
+    std::string cmd;
+    int i = 0;
+    while (argv[i] != nullptr) {
+        cmd += argv[i++];
+        cmd += " ";
+    }
+    cmd = cmd.substr(0, cmd.size() - 1);
+
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
+    DWORD exit_code = 0;
+
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    ZeroMemory(&pi, sizeof(pi));
+
+    SetEnvironmentVariableA("MKE2FS_CONFIG", "");
+
+    if (!CreateProcessA(nullptr,                         // No module name (use command line)
+                        const_cast<char*>(cmd.c_str()),  // Command line
+                        nullptr,                         // Process handle not inheritable
+                        nullptr,                         // Thread handle not inheritable
+                        FALSE,                           // Set handle inheritance to FALSE
+                        0,                               // No creation flags
+                        nullptr,                         // Use parent's environment block
+                        nullptr,                         // Use parent's starting directory
+                        &si,                             // Pointer to STARTUPINFO structure
+                        &pi)                             // Pointer to PROCESS_INFORMATION structure
+    ) {
+        fprintf(stderr, "CreateProcess failed: %s\n",
+                android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
-    if (initial_dir.empty()) {
-        make_ext4fs_sparse_fd_align(fd, partSize, NULL, NULL, eraseBlkSize, logicalBlkSize);
-    } else {
-        make_ext4fs_sparse_fd_directory_align(fd, partSize, NULL, NULL, initial_dir.c_str(),
-                                              eraseBlkSize, logicalBlkSize);
-    }
-    return 0;
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+    return exit_code != 0;
 }
 #else
 static int exec_e2fs_cmd(const char* path, char* const argv[]) {
@@ -68,6 +100,7 @@ static int exec_e2fs_cmd(const char* path, char* const argv[]) {
     }
     return ret;
 }
+#endif
 
 static int generate_ext4_image(const char* fileName, long long partSize,
                                const std::string& initial_dir, unsigned eraseBlkSize,
@@ -119,7 +152,6 @@ static int generate_ext4_image(const char* fileName, long long partSize,
 
     return 0;
 }
-#endif
 
 #ifdef USE_F2FS
 static int generate_f2fs_image(const char* fileName, long long partSize, const std::string& initial_dir,
