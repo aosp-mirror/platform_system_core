@@ -32,7 +32,6 @@
 #include "descriptors.h"
 #include "init_parser.h"
 #include "keyword_map.h"
-#include "util.h"
 
 #define SVC_DISABLED 0x001        // do not autostart with class
 #define SVC_ONESHOT 0x002         // do not restart on exit
@@ -76,7 +75,7 @@ class Service {
 
     bool IsRunning() { return (flags_ & SVC_RUNNING) != 0; }
     bool ParseLine(const std::vector<std::string>& args, std::string* err);
-    bool ExecStart(std::unique_ptr<Timer>* exec_waiter);
+    bool ExecStart(std::unique_ptr<android::base::Timer>* exec_waiter);
     bool Start();
     bool StartIfNotDisabled();
     bool Enable();
@@ -218,7 +217,7 @@ class ServiceManager {
     bool ReapOneProcess();
 
     static int exec_count_; // Every service needs a unique name.
-    std::unique_ptr<Timer> exec_waiter_;
+    std::unique_ptr<android::base::Timer> exec_waiter_;
 
     std::vector<std::unique_ptr<Service>> services_;
 };

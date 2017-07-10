@@ -24,12 +24,12 @@
 #include <string>
 #include <thread>
 
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 
-#include "util.h"
-
+using android::base::Timer;
 using android::base::unique_fd;
 using android::base::WriteFully;
 

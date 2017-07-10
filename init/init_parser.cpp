@@ -18,6 +18,7 @@
 
 #include <dirent.h>
 
+#include <android-base/chrono_utils.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -111,7 +112,7 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
 
 bool Parser::ParseConfigFile(const std::string& path) {
     LOG(INFO) << "Parsing file " << path << "...";
-    Timer t;
+    android::base::Timer t;
     std::string data;
     std::string err;
     if (!ReadFile(path, &data, &err)) {

@@ -633,10 +633,10 @@ bool Service::ParseLine(const std::vector<std::string>& args, std::string* err) 
     return (this->*parser)(args, err);
 }
 
-bool Service::ExecStart(std::unique_ptr<Timer>* exec_waiter) {
+bool Service::ExecStart(std::unique_ptr<android::base::Timer>* exec_waiter) {
     flags_ |= SVC_EXEC | SVC_ONESHOT;
 
-    exec_waiter->reset(new Timer);
+    exec_waiter->reset(new android::base::Timer);
 
     if (!Start()) {
         exec_waiter->reset();
@@ -1127,7 +1127,8 @@ bool ServiceManager::ReapOneProcess() {
     if (svc) {
         name = StringPrintf("Service '%s' (pid %d)", svc->name().c_str(), pid);
         if (svc->flags() & SVC_EXEC) {
-            wait_string = StringPrintf(" waiting took %f seconds", exec_waiter_->duration_s());
+            wait_string = StringPrintf(" waiting took %f seconds",
+                                       exec_waiter_->duration().count() / 1000.0f);
         }
     } else {
         name = StringPrintf("Untracked pid %d", pid);

@@ -374,11 +374,6 @@ void panic() {
     DoReboot(ANDROID_RB_RESTART2, "reboot", "bootloader", false);
 }
 
-std::ostream& operator<<(std::ostream& os, const Timer& t) {
-    os << t.duration_s() << " seconds";
-    return os;
-}
-
 // Reads the content of device tree file under kAndroidDtDir directory.
 // Returns true if the read is success, false otherwise.
 bool read_android_dt_file(const std::string& sub_path, std::string* dt_content) {

@@ -33,5 +33,10 @@ boot_clock::time_point boot_clock::now() {
 #endif  // __ANDROID__
 }
 
+std::ostream& operator<<(std::ostream& os, const Timer& t) {
+  os << t.duration().count() << "ms";
+  return os;
+}
+
 }  // namespace base
 }  // namespace android
