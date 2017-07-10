@@ -44,26 +44,6 @@ int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t u
 bool ReadFile(const std::string& path, std::string* content, std::string* err);
 bool WriteFile(const std::string& path, const std::string& content, std::string* err);
 
-class Timer {
-  public:
-    Timer() : start_(boot_clock::now()) {}
-
-    double duration_s() const {
-        typedef std::chrono::duration<double> double_duration;
-        return std::chrono::duration_cast<double_duration>(boot_clock::now() - start_).count();
-    }
-
-    int64_t duration_ms() const {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(boot_clock::now() - start_)
-            .count();
-    }
-
-  private:
-    android::base::boot_clock::time_point start_;
-};
-
-std::ostream& operator<<(std::ostream& os, const Timer& t);
-
 bool DecodeUid(const std::string& name, uid_t* uid, std::string* err);
 
 int mkdir_recursive(const std::string& pathname, mode_t mode, selabel_handle* sehandle);

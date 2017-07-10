@@ -39,6 +39,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
@@ -538,9 +539,9 @@ static int do_mount_all(const std::vector<std::string>& args) {
     }
 
     std::string prop_name = "ro.boottime.init.mount_all."s + prop_post_fix;
-    Timer t;
+    android::base::Timer t;
     int ret =  mount_fstab(fstabfile, mount_mode);
-    property_set(prop_name, std::to_string(t.duration_ms()));
+    property_set(prop_name, std::to_string(t.duration().count()));
 
     if (import_rc) {
         /* Paths of .rc files are specified at the 2nd argument and beyond */
