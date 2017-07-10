@@ -35,6 +35,7 @@
 #include <thread>
 #include <vector>
 
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>
@@ -54,6 +55,7 @@
 #include "service.h"
 
 using android::base::StringPrintf;
+using android::base::Timer;
 
 namespace android {
 namespace init {
@@ -161,7 +163,8 @@ static void ShutdownVold() {
 }
 
 static void LogShutdownTime(UmountStat stat, Timer* t) {
-    LOG(WARNING) << "powerctl_shutdown_time_ms:" << std::to_string(t->duration_ms()) << ":" << stat;
+    LOG(WARNING) << "powerctl_shutdown_time_ms:" << std::to_string(t->duration().count()) << ":"
+                 << stat;
 }
 
 // Determines whether the system is capable of rebooting. This is conservative,
@@ -254,7 +257,7 @@ static void DumpUmountDebuggingInfo(bool dump_all) {
     }
 }
 
-static UmountStat UmountPartitions(int timeoutMs) {
+static UmountStat UmountPartitions(std::chrono::milliseconds timeout) {
     Timer t;
     UmountStat stat = UMOUNT_STAT_TIMEOUT;
     int retry = 0;
@@ -272,7 +275,7 @@ static UmountStat UmountPartitions(int timeoutMs) {
             stat = UMOUNT_STAT_SUCCESS;
             break;
         }
-        if ((timeoutMs < t.duration_ms()) && retry > 0) {  // try umount at least once
+        if ((timeout < t.duration()) && retry > 0) {  // try umount at least once
             stat = UMOUNT_STAT_TIMEOUT;
             break;
         }
@@ -301,7 +304,7 @@ static void KillAllProcesses() { android::base::WriteStringToFile("i", "/proc/sy
  *
  * return true when umount was successful. false when timed out.
  */
-static UmountStat TryUmountAndFsck(bool runFsck, int timeoutMs) {
+static UmountStat TryUmountAndFsck(bool runFsck, std::chrono::milliseconds timeout) {
     Timer t;
     std::vector<MountEntry> block_devices;
     std::vector<MountEntry> emulated_devices;
@@ -312,13 +315,13 @@ static UmountStat TryUmountAndFsck(bool runFsck, int timeoutMs) {
         return UMOUNT_STAT_ERROR;
     }
 
-    UmountStat stat = UmountPartitions(timeoutMs - t.duration_ms());
+    UmountStat stat = UmountPartitions(timeout - t.duration());
     if (stat != UMOUNT_STAT_SUCCESS) {
         LOG(INFO) << "umount timeout, last resort, kill all and try";
         if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo(false);
         KillAllProcesses();
         // even if it succeeds, still it is timeout and do not run fsck with all processes killed
-        UmountPartitions(0);
+        UmountPartitions(0ms);
         if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo(true);
     }
 
@@ -352,15 +355,14 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         abort();
     }
 
-    constexpr unsigned int shutdownTimeoutDefault = 6;
-    unsigned int shutdownTimeout = shutdownTimeoutDefault;
-    if (SHUTDOWN_ZERO_TIMEOUT) {  // eng build
-        shutdownTimeout = 0;
-    } else {
-        shutdownTimeout =
-            android::base::GetUintProperty("ro.build.shutdown_timeout", shutdownTimeoutDefault);
+    auto shutdown_timeout = 0s;
+    if (!SHUTDOWN_ZERO_TIMEOUT) {
+        constexpr unsigned int shutdown_timeout_default = 6;
+        auto shutdown_timeout_property =
+            android::base::GetUintProperty("ro.build.shutdown_timeout", shutdown_timeout_default);
+        shutdown_timeout = std::chrono::seconds(shutdown_timeout_property);
     }
-    LOG(INFO) << "Shutdown timeout: " << shutdownTimeout;
+    LOG(INFO) << "Shutdown timeout: " << shutdown_timeout.count() << " seconds";
 
     // keep debugging tools until non critical ones are all gone.
     const std::set<std::string> kill_after_apps{"tombstoned", "logd", "adbd"};
@@ -387,7 +389,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
 
     // optional shutdown step
     // 1. terminate all services except shutdown critical ones. wait for delay to finish
-    if (shutdownTimeout > 0) {
+    if (shutdown_timeout > 0s) {
         LOG(INFO) << "terminating init services";
 
         // Ask all services to terminate except shutdown critical ones.
@@ -396,9 +398,9 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         });
 
         int service_count = 0;
-        // Up to half as long as shutdownTimeout or 3 seconds, whichever is lower.
-        unsigned int terminationWaitTimeout = std::min<unsigned int>((shutdownTimeout + 1) / 2, 3);
-        while (t.duration_s() < terminationWaitTimeout) {
+        // Up to half as long as shutdown_timeout or 3 seconds, whichever is lower.
+        auto termination_wait_timeout = std::min((shutdown_timeout + 1s) / 2, 3s);
+        while (t.duration() < termination_wait_timeout) {
             ServiceManager::GetInstance().ReapAnyOutstandingChildren();
 
             service_count = 0;
@@ -446,7 +448,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     });
     // 4. sync, try umount, and optionally run fsck for user shutdown
     sync();
-    UmountStat stat = TryUmountAndFsck(runFsck, shutdownTimeout * 1000 - t.duration_ms());
+    UmountStat stat = TryUmountAndFsck(runFsck, shutdown_timeout - t.duration());
     // Follow what linux shutdown is doing: one more sync with little bit delay
     sync();
     std::this_thread::sleep_for(100ms);

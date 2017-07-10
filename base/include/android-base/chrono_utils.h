@@ -18,6 +18,9 @@
 #define ANDROID_BASE_CHRONO_UTILS_H
 
 #include <chrono>
+#include <sstream>
+
+using namespace std::chrono_literals;
 
 namespace android {
 namespace base {
@@ -30,6 +33,20 @@ class boot_clock {
 
   static time_point now();
 };
+
+class Timer {
+ public:
+  Timer() : start_(boot_clock::now()) {}
+
+  std::chrono::milliseconds duration() const {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(boot_clock::now() - start_);
+  }
+
+ private:
+  boot_clock::time_point start_;
+};
+
+std::ostream& operator<<(std::ostream& os, const Timer& t);
 
 }  // namespace base
 }  // namespace android

@@ -16,6 +16,7 @@
 
 #include "action.h"
 
+#include <android-base/chrono_utils.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
@@ -90,19 +91,18 @@ void Action::ExecuteAllCommands() const {
 }
 
 void Action::ExecuteCommand(const Command& command) const {
-    Timer t;
+    android::base::Timer t;
     int result = command.InvokeFunc();
 
-    double duration_ms = t.duration_s() * 1000;
+    auto duration = t.duration();
     // Any action longer than 50ms will be warned to user as slow operation
-    if (duration_ms > 50.0 ||
-        android::base::GetMinimumLogSeverity() <= android::base::DEBUG) {
+    if (duration > 50ms || android::base::GetMinimumLogSeverity() <= android::base::DEBUG) {
         std::string trigger_name = BuildTriggersString();
         std::string cmd_str = command.BuildCommandString();
 
         LOG(INFO) << "Command '" << cmd_str << "' action=" << trigger_name << " (" << filename_
-                  << ":" << command.line() << ") returned " << result << " took " << duration_ms
-                  << "ms.";
+                  << ":" << command.line() << ") returned " << result << " took "
+                  << duration.count() << "ms.";
     }
 }
 

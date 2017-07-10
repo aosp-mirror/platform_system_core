@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
@@ -36,7 +37,7 @@
 #include "uevent_listener.h"
 #include "util.h"
 
-using namespace std::chrono_literals;
+using android::base::Timer;
 
 namespace android {
 namespace init {
