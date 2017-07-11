@@ -31,6 +31,15 @@ cc_defaults {
         },
     },
 
+    arch: {
+        mips: {
+            enabled: false,
+        },
+        mips64: {
+            enabled: false,
+        },
+    },
+
     multilib: {
         lib32: {
             suffix: "32",
