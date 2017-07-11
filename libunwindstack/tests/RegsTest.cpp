@@ -56,7 +56,8 @@ class RegsTestImpl : public RegsImpl<TypeParam> {
       : RegsImpl<TypeParam>(total_regs, regs_sp, return_loc) {}
   virtual ~RegsTestImpl() = default;
 
-  uint64_t GetAdjustedPc(uint64_t, Elf*) { return 0; }
+  uint64_t GetAdjustedPc(uint64_t, Elf*) override { return 0; }
+  void SetFromRaw() override {}
 };
 
 class RegsTest : public ::testing::Test {
@@ -263,4 +264,44 @@ TEST_F(RegsTest, elf_invalid) {
   regs_x86_64.set_pc(0x1800);
   ASSERT_EQ(0x800U, regs_x86_64.GetRelPc(&invalid_elf, &map_info));
   ASSERT_EQ(0x800U, regs_x86_64.GetAdjustedPc(0x800U, &invalid_elf));
+}
+
+TEST_F(RegsTest, arm_set_from_raw) {
+  RegsArm arm;
+  uint32_t* regs = reinterpret_cast<uint32_t*>(arm.RawData());
+  regs[13] = 0x100;
+  regs[15] = 0x200;
+  arm.SetFromRaw();
+  EXPECT_EQ(0x100U, arm.sp());
+  EXPECT_EQ(0x200U, arm.pc());
+}
+
+TEST_F(RegsTest, arm64_set_from_raw) {
+  RegsArm64 arm64;
+  uint64_t* regs = reinterpret_cast<uint64_t*>(arm64.RawData());
+  regs[31] = 0xb100000000ULL;
+  regs[32] = 0xc200000000ULL;
+  arm64.SetFromRaw();
+  EXPECT_EQ(0xb100000000U, arm64.sp());
+  EXPECT_EQ(0xc200000000U, arm64.pc());
+}
+
+TEST_F(RegsTest, x86_set_from_raw) {
+  RegsX86 x86;
+  uint32_t* regs = reinterpret_cast<uint32_t*>(x86.RawData());
+  regs[4] = 0x23450000;
+  regs[8] = 0xabcd0000;
+  x86.SetFromRaw();
+  EXPECT_EQ(0x23450000U, x86.sp());
+  EXPECT_EQ(0xabcd0000U, x86.pc());
+}
+
+TEST_F(RegsTest, x86_64_set_from_raw) {
+  RegsX86_64 x86_64;
+  uint64_t* regs = reinterpret_cast<uint64_t*>(x86_64.RawData());
+  regs[7] = 0x1200000000ULL;
+  regs[16] = 0x4900000000ULL;
+  x86_64.SetFromRaw();
+  EXPECT_EQ(0x1200000000U, x86_64.sp());
+  EXPECT_EQ(0x4900000000U, x86_64.pc());
 }

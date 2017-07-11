@@ -201,4 +201,5 @@ TEST_F(MapInfoCreateMemoryTest, remote_memory) {
   ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
 
   kill(pid, SIGKILL);
+  ASSERT_EQ(pid, wait(nullptr));
 }
