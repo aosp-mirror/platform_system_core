@@ -91,6 +91,7 @@ TEST_F(MemoryRemoteTest, read) {
   ASSERT_TRUE(Detach(pid));
 
   kill(pid, SIGKILL);
+  ASSERT_EQ(pid, wait(nullptr));
 }
 
 TEST_F(MemoryRemoteTest, read_fail) {
@@ -131,6 +132,7 @@ TEST_F(MemoryRemoteTest, read_fail) {
   ASSERT_TRUE(Detach(pid));
 
   kill(pid, SIGKILL);
+  ASSERT_EQ(pid, wait(nullptr));
 }
 
 TEST_F(MemoryRemoteTest, read_overflow) {
@@ -160,4 +162,5 @@ TEST_F(MemoryRemoteTest, read_illegal) {
   ASSERT_TRUE(Detach(pid));
 
   kill(pid, SIGKILL);
+  ASSERT_EQ(pid, wait(nullptr));
 }

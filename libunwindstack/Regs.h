@@ -54,10 +54,15 @@ class Regs {
 
   virtual uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) = 0;
 
+  virtual void SetFromRaw() = 0;
+
   uint16_t sp_reg() { return sp_reg_; }
   uint16_t total_regs() { return total_regs_; }
 
+  static uint32_t GetMachineType();
   static Regs* RemoteGet(pid_t pid, uint32_t* machine_type);
+  static Regs* CreateFromUcontext(uint32_t machine_type, void* ucontext);
+  static Regs* CreateFromLocal();
 
  protected:
   uint16_t total_regs_;
@@ -98,6 +103,8 @@ class RegsArm : public RegsImpl<uint32_t> {
   virtual ~RegsArm() = default;
 
   uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
+
+  void SetFromRaw() override;
 };
 
 class RegsArm64 : public RegsImpl<uint64_t> {
@@ -106,6 +113,8 @@ class RegsArm64 : public RegsImpl<uint64_t> {
   virtual ~RegsArm64() = default;
 
   uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
+
+  void SetFromRaw() override;
 };
 
 class RegsX86 : public RegsImpl<uint32_t> {
@@ -114,6 +123,8 @@ class RegsX86 : public RegsImpl<uint32_t> {
   virtual ~RegsX86() = default;
 
   uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
+
+  void SetFromRaw() override;
 };
 
 class RegsX86_64 : public RegsImpl<uint64_t> {
@@ -122,6 +133,8 @@ class RegsX86_64 : public RegsImpl<uint64_t> {
   virtual ~RegsX86_64() = default;
 
   uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
+
+  void SetFromRaw() override;
 };
 
 #endif  // _LIBUNWINDSTACK_REGS_H

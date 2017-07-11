@@ -30,6 +30,7 @@ class RegsFake : public RegsImpl<TypeParam> {
 
   uint64_t GetRelPc(Elf*, const MapInfo*) override { return 0; }
   uint64_t GetAdjustedPc(uint64_t, Elf*) override { return 0; }
+  void SetFromRaw() override {}
   bool GetReturnAddressFromDefault(Memory*, uint64_t*) { return false; }
 };
 
