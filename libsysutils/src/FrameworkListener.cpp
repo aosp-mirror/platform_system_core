@@ -211,7 +211,6 @@ out:
     return;
 
 overflow:
-    LOG_EVENT_INT(78001, cli->getUid());
     cli->sendMsg(500, "Command too long", false);
     goto out;
 }
