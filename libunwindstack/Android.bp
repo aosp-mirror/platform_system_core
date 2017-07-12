@@ -31,6 +31,15 @@ cc_defaults {
         },
     },
 
+    arch: {
+        mips: {
+            enabled: false,
+        },
+        mips64: {
+            enabled: false,
+        },
+    },
+
     multilib: {
         lib32: {
             suffix: "32",
@@ -63,6 +72,15 @@ cc_defaults {
         "Regs.cpp",
         "Symbols.cpp",
     ],
+
+    arch: {
+        x86: {
+            srcs: ["AsmGetRegsX86.S"],
+        },
+        x86_64: {
+            srcs: ["AsmGetRegsX86_64.S"],
+        },
+    },
 
     shared_libs: [
         "libbase",
@@ -112,6 +130,7 @@ cc_defaults {
         "tests/MemoryTest.cpp",
         "tests/RegsTest.cpp",
         "tests/SymbolsTest.cpp",
+        "tests/UnwindTest.cpp",
     ],
 
     cflags: [
