@@ -42,6 +42,24 @@ liblog_target_sources = [
     "logd_writer.c",
 ]
 
+cc_library_headers {
+    name: "liblog_headers",
+    host_supported: true,
+    vendor_available: true,
+    export_include_dirs: ["include"],
+    target: {
+        windows: {
+            enabled: true,
+        },
+        linux_bionic: {
+            enabled: true,
+        },
+        vendor: {
+            export_include_dirs: ["include_vndk"],
+        },
+    },
+}
+
 // Shared and static library for host and device
 // ========================================================
 cc_library {
@@ -81,7 +99,8 @@ cc_library {
         },
     },
 
-    export_include_dirs: ["include"],
+    header_libs: ["liblog_headers"],
+    export_header_lib_headers: ["liblog_headers"],
 
     cflags: [
         "-Werror",
@@ -100,7 +119,7 @@ cc_library {
 }
 
 ndk_headers {
-    name: "liblog_headers",
+    name: "liblog_ndk_headers",
     from: "include/android",
     to: "android",
     srcs: ["include/android/log.h"],
