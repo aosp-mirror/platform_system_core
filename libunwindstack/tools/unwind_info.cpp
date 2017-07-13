@@ -21,8 +21,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include "ArmExidx.h"
@@ -113,10 +113,6 @@ int main(int argc, char** argv) {
   }
   if (!S_ISREG(st.st_mode)) {
     printf("%s is not a regular file.\n", argv[1]);
-    return 1;
-  }
-  if (S_ISDIR(st.st_mode)) {
-    printf("%s is a directory.\n", argv[1]);
     return 1;
   }
 
