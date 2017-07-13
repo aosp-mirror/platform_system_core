@@ -237,9 +237,13 @@ void DwarfMemoryTest::ReadEncodedValue_omit() {
   ASSERT_EQ(0U, value);
 }
 
-TEST_F(DwarfMemoryTest, ReadEncodedValue_omit_uint32_t) { ReadEncodedValue_omit<uint32_t>(); }
+TEST_F(DwarfMemoryTest, ReadEncodedValue_omit_uint32_t) {
+  ReadEncodedValue_omit<uint32_t>();
+}
 
-TEST_F(DwarfMemoryTest, ReadEncodedValue_omit_uint64_t) { ReadEncodedValue_omit<uint64_t>(); }
+TEST_F(DwarfMemoryTest, ReadEncodedValue_omit_uint64_t) {
+  ReadEncodedValue_omit<uint64_t>();
+}
 
 TEST_F(DwarfMemoryTest, ReadEncodedValue_absptr_uint32_t) {
   uint64_t value = 100;
@@ -302,9 +306,13 @@ void DwarfMemoryTest::ReadEncodedValue_leb128() {
   ASSERT_EQ(0xffffffffffffe100ULL, value);
 }
 
-TEST_F(DwarfMemoryTest, ReadEncodedValue_leb128_uint32_t) { ReadEncodedValue_leb128<uint32_t>(); }
+TEST_F(DwarfMemoryTest, ReadEncodedValue_leb128_uint32_t) {
+  ReadEncodedValue_leb128<uint32_t>();
+}
 
-TEST_F(DwarfMemoryTest, ReadEncodedValue_leb128_uint64_t) { ReadEncodedValue_leb128<uint64_t>(); }
+TEST_F(DwarfMemoryTest, ReadEncodedValue_leb128_uint64_t) {
+  ReadEncodedValue_leb128<uint64_t>();
+}
 
 template <typename AddressType>
 void DwarfMemoryTest::ReadEncodedValue_data1() {
@@ -319,9 +327,13 @@ void DwarfMemoryTest::ReadEncodedValue_data1() {
   ASSERT_EQ(0xffffffffffffffe0ULL, value);
 }
 
-TEST_F(DwarfMemoryTest, ReadEncodedValue_data1_uint32_t) { ReadEncodedValue_data1<uint32_t>(); }
+TEST_F(DwarfMemoryTest, ReadEncodedValue_data1_uint32_t) {
+  ReadEncodedValue_data1<uint32_t>();
+}
 
-TEST_F(DwarfMemoryTest, ReadEncodedValue_data1_uint64_t) { ReadEncodedValue_data1<uint64_t>(); }
+TEST_F(DwarfMemoryTest, ReadEncodedValue_data1_uint64_t) {
+  ReadEncodedValue_data1<uint64_t>();
+}
 
 template <typename AddressType>
 void DwarfMemoryTest::ReadEncodedValue_data2() {
@@ -336,9 +348,13 @@ void DwarfMemoryTest::ReadEncodedValue_data2() {
   ASSERT_EQ(0xffffffffffffe000ULL, value);
 }
 
-TEST_F(DwarfMemoryTest, ReadEncodedValue_data2_uint32_t) { ReadEncodedValue_data2<uint32_t>(); }
+TEST_F(DwarfMemoryTest, ReadEncodedValue_data2_uint32_t) {
+  ReadEncodedValue_data2<uint32_t>();
+}
 
-TEST_F(DwarfMemoryTest, ReadEncodedValue_data2_uint64_t) { ReadEncodedValue_data2<uint64_t>(); }
+TEST_F(DwarfMemoryTest, ReadEncodedValue_data2_uint64_t) {
+  ReadEncodedValue_data2<uint64_t>();
+}
 
 template <typename AddressType>
 void DwarfMemoryTest::ReadEncodedValue_data4() {
@@ -353,9 +369,13 @@ void DwarfMemoryTest::ReadEncodedValue_data4() {
   ASSERT_EQ(0xffffffffe0000000ULL, value);
 }
 
-TEST_F(DwarfMemoryTest, ReadEncodedValue_data4_uint32_t) { ReadEncodedValue_data4<uint32_t>(); }
+TEST_F(DwarfMemoryTest, ReadEncodedValue_data4_uint32_t) {
+  ReadEncodedValue_data4<uint32_t>();
+}
 
-TEST_F(DwarfMemoryTest, ReadEncodedValue_data4_uint64_t) { ReadEncodedValue_data4<uint64_t>(); }
+TEST_F(DwarfMemoryTest, ReadEncodedValue_data4_uint64_t) {
+  ReadEncodedValue_data4<uint64_t>();
+}
 
 template <typename AddressType>
 void DwarfMemoryTest::ReadEncodedValue_data8() {
@@ -370,9 +390,13 @@ void DwarfMemoryTest::ReadEncodedValue_data8() {
   ASSERT_EQ(0xe000000000000000ULL, value);
 }
 
-TEST_F(DwarfMemoryTest, ReadEncodedValue_data8_uint32_t) { ReadEncodedValue_data8<uint32_t>(); }
+TEST_F(DwarfMemoryTest, ReadEncodedValue_data8_uint32_t) {
+  ReadEncodedValue_data8<uint32_t>();
+}
 
-TEST_F(DwarfMemoryTest, ReadEncodedValue_data8_uint64_t) { ReadEncodedValue_data8<uint64_t>(); }
+TEST_F(DwarfMemoryTest, ReadEncodedValue_data8_uint64_t) {
+  ReadEncodedValue_data8<uint64_t>();
+}
 
 template <typename AddressType>
 void DwarfMemoryTest::ReadEncodedValue_non_zero_adjust() {

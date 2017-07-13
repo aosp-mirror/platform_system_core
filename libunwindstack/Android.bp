@@ -39,19 +39,10 @@ cc_defaults {
             enabled: false,
         },
     },
-
-    multilib: {
-        lib32: {
-            suffix: "32",
-        },
-        lib64: {
-            suffix: "64",
-        },
-    },
 }
 
-cc_defaults {
-    name: "libunwindstack_common",
+cc_library {
+    name: "libunwindstack",
     defaults: ["libunwindstack_flags"],
 
     srcs: [
@@ -89,16 +80,11 @@ cc_defaults {
     ],
 }
 
-cc_library {
-    name: "libunwindstack",
-    defaults: ["libunwindstack_common"],
-}
-
 //-------------------------------------------------------------------------
 // Unit Tests
 //-------------------------------------------------------------------------
-cc_defaults {
-    name: "libunwindstack_test_common",
+cc_test {
+    name: "libunwindstack_test",
     defaults: ["libunwindstack_flags"],
 
     srcs: [
@@ -121,7 +107,7 @@ cc_defaults {
         "tests/MapInfoCreateMemoryTest.cpp",
         "tests/MapInfoGetElfTest.cpp",
         "tests/MapsTest.cpp",
-        "tests/MemoryBuffer.cpp",
+        "tests/MemoryBufferTest.cpp",
         "tests/MemoryFake.cpp",
         "tests/MemoryFileTest.cpp",
         "tests/MemoryLocalTest.cpp",
@@ -142,6 +128,7 @@ cc_defaults {
         "libbase",
         "liblog",
         "liblzma",
+        "libunwindstack",
     ],
 
     static_libs: [
@@ -155,16 +142,6 @@ cc_defaults {
             ],
         },
     },
-}
-
-// These unit tests run against the shared library.
-cc_test {
-    name: "libunwindstack_test",
-    defaults: ["libunwindstack_test_common"],
-
-    shared_libs: [
-        "libunwindstack",
-    ],
 
     data: [
         "tests/files/elf32.xz",
@@ -188,8 +165,6 @@ cc_defaults {
     static_libs: [
         "liblog",
     ],
-
-    compile_multilib: "both",
 }
 
 cc_binary {
@@ -205,20 +180,9 @@ cc_binary {
 // Once these files are generated, use the xz command to compress the data.
 cc_binary_host {
     name: "gen_gnudebugdata",
-
-    cflags: [
-        "-Wall",
-        "-Werror",
-        "-Wextra",
-    ],
+    defaults: ["libunwindstack_flags"],
 
     srcs: [
         "tests/GenGnuDebugdata.cpp",
     ],
-
-    target: {
-        darwin: {
-            enabled: false,
-        },
-    },
 }
