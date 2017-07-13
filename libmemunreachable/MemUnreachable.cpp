@@ -28,6 +28,7 @@
 #include <backtrace.h>
 
 #include "Allocator.h"
+#include "Binder.h"
 #include "HeapWalker.h"
 #include "Leak.h"
 #include "LeakFolding.h"
@@ -53,7 +54,8 @@ class MemUnreachable {
   MemUnreachable(pid_t pid, Allocator<void> allocator)
       : pid_(pid), allocator_(allocator), heap_walker_(allocator_) {}
   bool CollectAllocations(const allocator::vector<ThreadInfo>& threads,
-                          const allocator::vector<Mapping>& mappings);
+                          const allocator::vector<Mapping>& mappings,
+                          const allocator::vector<uintptr_t>& refs);
   bool GetUnreachableMemory(allocator::vector<Leak>& leaks, size_t limit, size_t* num_leaks,
                             size_t* leak_bytes);
   size_t Allocations() { return heap_walker_.Allocations(); }
@@ -82,7 +84,8 @@ static void HeapIterate(const Mapping& heap_mapping,
 }
 
 bool MemUnreachable::CollectAllocations(const allocator::vector<ThreadInfo>& threads,
-                                        const allocator::vector<Mapping>& mappings) {
+                                        const allocator::vector<Mapping>& mappings,
+                                        const allocator::vector<uintptr_t>& refs) {
   MEM_ALOGI("searching process %d for allocations", pid_);
   allocator::vector<Mapping> heap_mappings{mappings};
   allocator::vector<Mapping> anon_mappings{mappings};
@@ -117,6 +120,8 @@ bool MemUnreachable::CollectAllocations(const allocator::vector<ThreadInfo>& thr
     }
     heap_walker_.Root(thread_it->regs);
   }
+
+  heap_walker_.Root(refs);
 
   MEM_ALOGI("searching done");
 
@@ -282,6 +287,7 @@ bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
     ThreadCapture thread_capture(parent_pid, heap);
     allocator::vector<ThreadInfo> thread_info(heap);
     allocator::vector<Mapping> mappings(heap);
+    allocator::vector<uintptr_t> refs(heap);
 
     // ptrace all the threads
     if (!thread_capture.CaptureThreads()) {
@@ -297,6 +303,11 @@ bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
 
     // snapshot /proc/pid/maps
     if (!ProcessMappings(parent_pid, mappings)) {
+      continue_parent_sem.Post();
+      return 1;
+    }
+
+    if (!BinderReferences(refs)) {
       continue_parent_sem.Post();
       return 1;
     }
@@ -326,7 +337,7 @@ bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
 
       MemUnreachable unreachable{parent_pid, heap};
 
-      if (!unreachable.CollectAllocations(thread_info, mappings)) {
+      if (!unreachable.CollectAllocations(thread_info, mappings, refs)) {
         _exit(2);
       }
       size_t num_allocations = unreachable.Allocations();
