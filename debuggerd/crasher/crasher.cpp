@@ -134,6 +134,14 @@ noinline void abuse_heap() {
     free(buf); // GCC is smart enough to warn about this, but we're doing it deliberately.
 }
 
+noinline void leak() {
+    while (true) {
+        void* mapping =
+            mmap(nullptr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        static_cast<volatile char*>(mapping)[0] = 'a';
+    }
+}
+
 noinline void sigsegv_non_null() {
     int* a = (int *)(&do_action);
     *a = 42;
@@ -160,8 +168,8 @@ static int usage() {
     fprintf(stderr, "  stack-overflow        recurse until the stack overflows\n");
     fprintf(stderr, "  nostack               crash with a NULL stack pointer\n");
     fprintf(stderr, "\n");
-    fprintf(stderr, "  heap-corruption       cause a libc abort by corrupting the heap\n");
     fprintf(stderr, "  heap-usage            cause a libc abort by abusing a heap function\n");
+    fprintf(stderr, "  leak                  leak memory until we get OOM-killed\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "  abort                 call abort()\n");
     fprintf(stderr, "  assert                call assert() without a function\n");
@@ -265,6 +273,8 @@ noinline int do_action(const char* arg) {
         return pthread_join(0, nullptr);
     } else if (!strcasecmp(arg, "heap-usage")) {
         abuse_heap();
+    } else if (!strcasecmp(arg, "leak")) {
+        leak();
     } else if (!strcasecmp(arg, "SIGSEGV-unmapped")) {
         char* map = reinterpret_cast<char*>(mmap(nullptr, sizeof(int), PROT_READ | PROT_WRITE,
                                                  MAP_SHARED | MAP_ANONYMOUS, -1, 0));
