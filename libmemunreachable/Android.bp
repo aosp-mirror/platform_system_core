@@ -26,6 +26,7 @@ cc_library_shared {
     defaults: ["libmemunreachable_defaults"],
     srcs: [
         "Allocator.cpp",
+        "Binder.cpp",
         "HeapWalker.cpp",
         "LeakFolding.cpp",
         "LeakPipe.cpp",
@@ -83,4 +84,19 @@ cc_test {
             enabled: false,
         },
     },
+}
+
+cc_test {
+    name: "memunreachable_binder_test",
+    defaults: ["libmemunreachable_defaults"],
+    srcs: [
+        "tests/Binder_test.cpp",
+        "tests/MemUnreachable_test.cpp",
+    ],
+    shared_libs: [
+        "libbinder",
+        "libhwbinder",
+        "libmemunreachable",
+        "libutils",
+    ],
 }
