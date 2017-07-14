@@ -864,32 +864,26 @@ int fs_mgr_is_noemulatedsd(const struct fstab_rec *fstab)
     return fstab->fs_mgr_flags & MF_NOEMULATEDSD;
 }
 
-int fs_mgr_is_notrim(struct fstab_rec *fstab)
-{
+int fs_mgr_is_notrim(const struct fstab_rec* fstab) {
     return fstab->fs_mgr_flags & MF_NOTRIM;
 }
 
-int fs_mgr_is_formattable(struct fstab_rec *fstab)
-{
+int fs_mgr_is_formattable(const struct fstab_rec* fstab) {
     return fstab->fs_mgr_flags & (MF_FORMATTABLE);
 }
 
-int fs_mgr_is_slotselect(struct fstab_rec *fstab)
-{
+int fs_mgr_is_slotselect(const struct fstab_rec* fstab) {
     return fstab->fs_mgr_flags & MF_SLOTSELECT;
 }
 
-int fs_mgr_is_nofail(struct fstab_rec *fstab)
-{
+int fs_mgr_is_nofail(const struct fstab_rec* fstab) {
     return fstab->fs_mgr_flags & MF_NOFAIL;
 }
 
-int fs_mgr_is_latemount(struct fstab_rec *fstab)
-{
+int fs_mgr_is_latemount(const struct fstab_rec* fstab) {
     return fstab->fs_mgr_flags & MF_LATEMOUNT;
 }
 
-int fs_mgr_is_quota(struct fstab_rec *fstab)
-{
+int fs_mgr_is_quota(const struct fstab_rec* fstab) {
     return fstab->fs_mgr_flags & MF_QUOTA;
 }
