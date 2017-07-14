@@ -31,9 +31,11 @@
 #include <android-base/file.h>
 #include <gtest/gtest.h>
 
-#include "Memory.h"
+#include <unwindstack/Memory.h>
 
 #include "MemoryFake.h"
+
+namespace unwindstack {
 
 class MemoryRemoteTest : public ::testing::Test {
  protected:
@@ -164,3 +166,5 @@ TEST_F(MemoryRemoteTest, read_illegal) {
   kill(pid, SIGKILL);
   ASSERT_EQ(pid, wait(nullptr));
 }
+
+}  // namespace unwindstack

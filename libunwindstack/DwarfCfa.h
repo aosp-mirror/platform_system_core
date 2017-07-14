@@ -24,10 +24,13 @@
 #include <type_traits>
 #include <vector>
 
+#include <unwindstack/DwarfLocation.h>
+#include <unwindstack/DwarfMemory.h>
+#include <unwindstack/DwarfStructs.h>
+
 #include "DwarfError.h"
-#include "DwarfLocation.h"
-#include "DwarfMemory.h"
-#include "DwarfStructs.h"
+
+namespace unwindstack {
 
 // DWARF Standard home: http://dwarfstd.org/
 // This code is based on DWARF 4: http://http://dwarfstd.org/doc/DWARF4.pdf
@@ -251,5 +254,7 @@ class DwarfCfa {
       nullptr,
   };
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_DWARF_CFA_H

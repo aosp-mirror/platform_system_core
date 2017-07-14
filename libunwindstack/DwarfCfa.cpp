@@ -23,12 +23,15 @@
 
 #include <android-base/stringprintf.h>
 
+#include <unwindstack/DwarfLocation.h>
+#include <unwindstack/Log.h>
+
 #include "DwarfCfa.h"
 #include "DwarfEncoding.h"
-#include "DwarfMemory.h"
+#include "DwarfError.h"
 #include "DwarfOp.h"
-#include "DwarfStructs.h"
-#include "Log.h"
+
+namespace unwindstack {
 
 template <typename AddressType>
 constexpr typename DwarfCfa<AddressType>::process_func DwarfCfa<AddressType>::kCallbackTable[64];
@@ -711,3 +714,5 @@ const DwarfCfaInfo::Info DwarfCfaInfo::kTable[64] = {
 // Explicitly instantiate DwarfCfa.
 template class DwarfCfa<uint32_t>;
 template class DwarfCfa<uint64_t>;
+
+}  // namespace unwindstack

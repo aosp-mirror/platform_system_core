@@ -21,6 +21,8 @@
 
 #include <unordered_map>
 
+namespace unwindstack {
+
 enum DwarfLocationEnum : uint8_t {
   DWARF_LOCATION_INVALID = 0,
   DWARF_LOCATION_UNDEFINED,
@@ -37,5 +39,7 @@ struct DwarfLocation {
 };
 
 typedef std::unordered_map<uint16_t, DwarfLocation> dwarf_loc_regs_t;
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_DWARF_LOCATION_H

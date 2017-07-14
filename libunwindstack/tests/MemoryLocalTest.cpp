@@ -21,7 +21,9 @@
 
 #include <gtest/gtest.h>
 
-#include "Memory.h"
+#include <unwindstack/Memory.h>
+
+namespace unwindstack {
 
 TEST(MemoryLocalTest, read) {
   std::vector<uint8_t> src(1024);
@@ -64,3 +66,5 @@ TEST(MemoryLocalTest, read_overflow) {
   uint64_t value;
   ASSERT_FALSE(local.Read(reinterpret_cast<uint64_t>(&value), dst.data(), SIZE_MAX));
 }
+
+}  // namespace unwindstack

@@ -19,6 +19,8 @@
 
 #include <stdint.h>
 
+namespace unwindstack {
+
 // Forward declarations.
 class Memory;
 
@@ -68,5 +70,7 @@ class DwarfMemory {
   uint64_t func_offset_ = static_cast<uint64_t>(-1);
   uint64_t text_offset_ = static_cast<uint64_t>(-1);
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_DWARF_MEMORY_H

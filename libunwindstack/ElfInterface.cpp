@@ -24,14 +24,17 @@
 #include <Xz.h>
 #include <XzCrc64.h>
 
+#include <unwindstack/DwarfSection.h>
+#include <unwindstack/ElfInterface.h>
+#include <unwindstack/Log.h>
+#include <unwindstack/Memory.h>
+#include <unwindstack/Regs.h>
+
 #include "DwarfDebugFrame.h"
 #include "DwarfEhFrame.h"
-#include "DwarfSection.h"
-#include "ElfInterface.h"
-#include "Log.h"
-#include "Memory.h"
-#include "Regs.h"
 #include "Symbols.h"
+
+namespace unwindstack {
 
 ElfInterface::~ElfInterface() {
   for (auto symbol : symbols_) {
@@ -387,3 +390,5 @@ template bool ElfInterface::GetFunctionNameWithTemplate<Elf32_Sym>(uint64_t, std
                                                                    uint64_t*);
 template bool ElfInterface::GetFunctionNameWithTemplate<Elf64_Sym>(uint64_t, std::string*,
                                                                    uint64_t*);
+
+}  // namespace unwindstack

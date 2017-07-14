@@ -23,14 +23,17 @@
 #include <android-base/stringprintf.h>
 #include <gtest/gtest.h>
 
+#include <unwindstack/DwarfLocation.h>
+#include <unwindstack/DwarfMemory.h>
+#include <unwindstack/DwarfStructs.h>
+#include <unwindstack/Log.h>
+
 #include "DwarfCfa.h"
-#include "DwarfLocation.h"
-#include "DwarfMemory.h"
-#include "DwarfStructs.h"
-#include "Log.h"
 
 #include "LogFake.h"
 #include "MemoryFake.h"
+
+namespace unwindstack {
 
 template <typename TypeParam>
 class DwarfCfaLogTest : public ::testing::Test {
@@ -812,3 +815,5 @@ REGISTER_TYPED_TEST_CASE_P(DwarfCfaLogTest, cfa_illegal, cfa_nop, cfa_offset, cf
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfCfaLogTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(, DwarfCfaLogTest, DwarfCfaLogTestTypes);
+
+}  // namespace unwindstack

@@ -21,6 +21,8 @@
 
 #include <string>
 
+namespace unwindstack {
+
 // Forward declarations.
 class Elf;
 class Memory;
@@ -41,5 +43,7 @@ struct MapInfo {
   Memory* CreateMemory(pid_t pid);
   Elf* GetElf(pid_t pid, bool init_gnu_debugdata = false);
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_MAP_INFO_H

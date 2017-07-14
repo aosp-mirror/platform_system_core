@@ -19,6 +19,8 @@
 
 #include <stdint.h>
 
+namespace unwindstack {
+
 enum DwarfEncoding : uint8_t {
   DW_EH_PE_omit = 0xff,
 
@@ -43,5 +45,7 @@ enum DwarfEncoding : uint8_t {
   DW_EH_PE_sdata1 = 0x0e,
   DW_EH_PE_block = 0x0f,
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_DWARF_ENCODING_H
