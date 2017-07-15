@@ -21,7 +21,9 @@
 
 #include <vector>
 
-#include "DwarfSection.h"
+#include <unwindstack/DwarfSection.h>
+
+namespace unwindstack {
 
 template <typename AddressType>
 class DwarfDebugFrame : public DwarfSectionImpl<AddressType> {
@@ -72,5 +74,7 @@ class DwarfDebugFrame : public DwarfSectionImpl<AddressType> {
 
   std::vector<FdeInfo> fdes_;
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_DWARF_DEBUG_FRAME_H

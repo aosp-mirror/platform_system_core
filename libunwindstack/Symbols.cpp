@@ -19,9 +19,12 @@
 
 #include <string>
 
+#include <unwindstack/Memory.h>
+
 #include "Check.h"
-#include "Memory.h"
 #include "Symbols.h"
+
+namespace unwindstack {
 
 Symbols::Symbols(uint64_t offset, uint64_t size, uint64_t entry_size, uint64_t str_offset,
                  uint64_t str_size)
@@ -108,3 +111,5 @@ bool Symbols::GetName(uint64_t addr, uint64_t load_bias, Memory* elf_memory, std
 // Instantiate all of the needed template functions.
 template bool Symbols::GetName<Elf32_Sym>(uint64_t, uint64_t, Memory*, std::string*, uint64_t*);
 template bool Symbols::GetName<Elf64_Sym>(uint64_t, uint64_t, Memory*, std::string*, uint64_t*);
+
+}  // namespace unwindstack

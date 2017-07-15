@@ -29,6 +29,8 @@
 #ifndef _LIBUNWINDSTACK_REGS_GET_LOCAL_H
 #define _LIBUNWINDSTACK_REGS_GET_LOCAL_H
 
+namespace unwindstack {
+
 #if defined(__arm__)
 
 inline void RegsGetLocal(Regs* regs) {
@@ -96,5 +98,7 @@ inline void RegsGetLocal(Regs* regs) {
 }
 
 #endif
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_REGS_GET_LOCAL_H

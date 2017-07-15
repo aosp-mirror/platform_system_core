@@ -21,9 +21,11 @@
 
 #include <gtest/gtest.h>
 
-#include "DwarfMemory.h"
+#include <unwindstack/DwarfMemory.h>
 
 #include "MemoryFake.h"
+
+namespace unwindstack {
 
 class DwarfMemoryTest : public ::testing::Test {
  protected:
@@ -494,3 +496,5 @@ TEST_F(DwarfMemoryTest, AdjustEncodedValue_funcrel) {
   ASSERT_TRUE(dwarf_mem_->AdjustEncodedValue(0x40, &value));
   ASSERT_EQ(0x14234U, value);
 }
+
+}  // namespace unwindstack

@@ -30,9 +30,11 @@
 #include <android-base/test_utils.h>
 #include <gtest/gtest.h>
 
-#include "Elf.h"
-#include "MapInfo.h"
-#include "Memory.h"
+#include <unwindstack/Elf.h>
+#include <unwindstack/MapInfo.h>
+#include <unwindstack/Memory.h>
+
+namespace unwindstack {
 
 class MapInfoCreateMemoryTest : public ::testing::Test {
  protected:
@@ -203,3 +205,5 @@ TEST_F(MapInfoCreateMemoryTest, remote_memory) {
   kill(pid, SIGKILL);
   ASSERT_EQ(pid, wait(nullptr));
 }
+
+}  // namespace unwindstack

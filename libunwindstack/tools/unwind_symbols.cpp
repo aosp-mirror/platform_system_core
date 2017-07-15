@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <elf.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -22,9 +23,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "Elf.h"
-#include "ElfInterface.h"
-#include "Log.h"
+#include <unwindstack/Elf.h>
+#include <unwindstack/Log.h>
+#include <unwindstack/Memory.h>
 
 int main(int argc, char** argv) {
   if (argc != 2) {
@@ -43,15 +44,15 @@ int main(int argc, char** argv) {
   }
 
   // Send all log messages to stdout.
-  log_to_stdout(true);
+  unwindstack::log_to_stdout(true);
 
-  MemoryFileAtOffset* memory = new MemoryFileAtOffset;
+  unwindstack::MemoryFileAtOffset* memory = new unwindstack::MemoryFileAtOffset;
   if (!memory->Init(argv[1], 0)) {
     printf("Failed to init\n");
     return 1;
   }
 
-  Elf elf(memory);
+  unwindstack::Elf elf(memory);
   if (!elf.Init() || !elf.valid()) {
     printf("%s is not a valid elf file.\n", argv[1]);
     return 1;

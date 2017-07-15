@@ -23,7 +23,9 @@
 #include <vector>
 #include <unordered_map>
 
-#include "Memory.h"
+#include <unwindstack/Memory.h>
+
+namespace unwindstack {
 
 class MemoryFake : public Memory {
  public:
@@ -86,5 +88,7 @@ class MemoryFakeRemote : public MemoryRemote {
     return true;
   }
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_TESTS_MEMORY_FAKE_H
