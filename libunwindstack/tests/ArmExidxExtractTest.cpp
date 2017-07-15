@@ -21,11 +21,14 @@
 
 #include <gtest/gtest.h>
 
+#include <unwindstack/Log.h>
+
 #include "ArmExidx.h"
-#include "Log.h"
 
 #include "LogFake.h"
 #include "MemoryFake.h"
+
+namespace unwindstack {
 
 class ArmExidxExtractTest : public ::testing::Test {
  protected:
@@ -329,3 +332,5 @@ TEST_F(ArmExidxExtractTest, raw_data_non_compact) {
   ASSERT_TRUE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ("4 unwind Raw Data: 0x11 0x22 0x33 0xb0\n", GetFakeLogPrint());
 }
+
+}  // namespace unwindstack

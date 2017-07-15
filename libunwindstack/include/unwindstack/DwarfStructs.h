@@ -21,12 +21,12 @@
 
 #include <vector>
 
-#include "DwarfEncoding.h"
+namespace unwindstack {
 
 struct DwarfCie {
   uint8_t version = 0;
-  uint8_t fde_address_encoding = DW_EH_PE_absptr;
-  uint8_t lsda_encoding = DW_EH_PE_omit;
+  uint8_t fde_address_encoding = 0;
+  uint8_t lsda_encoding = 0;
   uint8_t segment_size = 0;
   std::vector<char> augmentation_string;
   uint64_t personality_handler = 0;
@@ -48,5 +48,7 @@ struct DwarfFde {
 };
 
 constexpr uint16_t CFA_REG = static_cast<uint16_t>(-1);
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_DWARF_STRUCTS_H

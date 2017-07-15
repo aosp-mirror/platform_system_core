@@ -31,12 +31,14 @@
 #include <string>
 #include <thread>
 
-#include "Elf.h"
-#include "MapInfo.h"
-#include "Maps.h"
-#include "Memory.h"
-#include "Regs.h"
-#include "RegsGetLocal.h"
+#include <unwindstack/Elf.h>
+#include <unwindstack/MapInfo.h>
+#include <unwindstack/Maps.h>
+#include <unwindstack/Memory.h>
+#include <unwindstack/Regs.h>
+#include <unwindstack/RegsGetLocal.h>
+
+namespace unwindstack {
 
 static std::atomic_bool g_ready(false);
 static volatile bool g_ready_for_remote = false;
@@ -71,7 +73,7 @@ static void VerifyUnwind(pid_t pid, Memory* memory, Maps* maps, Regs* regs) {
     ASSERT_TRUE(map_info != nullptr) << ErrorMsg(function_names, function_name_index, unwind_stream);
 
     Elf* elf = map_info->GetElf(pid, true);
-    uint64_t rel_pc = regs->GetRelPc(elf, map_info);
+    uint64_t rel_pc = elf->GetRelPc(regs->pc(), map_info);
     uint64_t adjusted_rel_pc = rel_pc;
     if (frame_num != 0) {
       adjusted_rel_pc = regs->GetAdjustedPc(rel_pc, elf);
@@ -210,7 +212,7 @@ TEST(UnwindTest, from_context) {
 
   // Wait for context data.
   void* ucontext;
-  for (size_t i = 0; i < 200; i++) {
+  for (size_t i = 0; i < 2000; i++) {
     ucontext = reinterpret_cast<void*>(g_ucontext.load());
     if (ucontext != nullptr) {
       break;
@@ -231,3 +233,5 @@ TEST(UnwindTest, from_context) {
   g_finish = true;
   thread.join();
 }
+
+}  // namespace unwindstack

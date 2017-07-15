@@ -22,7 +22,8 @@
 
 #include <gtest/gtest.h>
 
-#include "Elf.h"
+#include <unwindstack/Elf.h>
+#include <unwindstack/MapInfo.h>
 
 #include "ElfTestUtils.h"
 #include "MemoryFake.h"
@@ -30,6 +31,8 @@
 #if !defined(PT_ARM_EXIDX)
 #define PT_ARM_EXIDX 0x70000001
 #endif
+
+namespace unwindstack {
 
 class ElfTest : public ::testing::Test {
  protected:
@@ -237,3 +240,33 @@ TEST_F(ElfTest, gnu_debugdata_init64) {
   elf.InitGnuDebugdata();
   ASSERT_TRUE(elf.gnu_debugdata_interface() != nullptr);
 }
+
+class MockElf : public Elf {
+ public:
+  MockElf(Memory* memory) : Elf(memory) {}
+  virtual ~MockElf() = default;
+
+  void set_valid(bool valid) { valid_ = valid; }
+  void set_elf_interface(ElfInterface* interface) { interface_.reset(interface); }
+};
+
+TEST_F(ElfTest, rel_pc) {
+  MockElf elf(memory_);
+
+  ElfInterface* interface = new ElfInterface32(memory_);
+  elf.set_elf_interface(interface);
+
+  elf.set_valid(true);
+  interface->set_load_bias(0);
+  MapInfo map_info{.start = 0x1000, .end = 0x2000};
+
+  ASSERT_EQ(0x101U, elf.GetRelPc(0x1101, &map_info));
+
+  interface->set_load_bias(0x3000);
+  ASSERT_EQ(0x3101U, elf.GetRelPc(0x1101, &map_info));
+
+  elf.set_valid(false);
+  ASSERT_EQ(0x101U, elf.GetRelPc(0x1101, &map_info));
+}
+
+}  // namespace unwindstack

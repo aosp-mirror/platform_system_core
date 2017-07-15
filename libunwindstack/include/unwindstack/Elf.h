@@ -22,14 +22,17 @@
 #include <memory>
 #include <string>
 
-#include "ElfInterface.h"
-#include "Memory.h"
+#include <unwindstack/ElfInterface.h>
+#include <unwindstack/Memory.h>
 
 #if !defined(EM_AARCH64)
 #define EM_AARCH64 183
 #endif
 
+namespace unwindstack {
+
 // Forward declaration.
+struct MapInfo;
 class Regs;
 
 class Elf {
@@ -41,23 +44,17 @@ class Elf {
 
   void InitGnuDebugdata();
 
-  bool GetSoname(std::string* name) {
-    return valid_ && interface_->GetSoname(name);
-  }
+  bool GetSoname(std::string* name);
 
-  bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) {
-    return valid_ && (interface_->GetFunctionName(addr, name, func_offset) ||
-                      (gnu_debugdata_interface_ &&
-                       gnu_debugdata_interface_->GetFunctionName(addr, name, func_offset)));
-  }
+  bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset);
 
-  bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory) {
-    return valid_ && (interface_->Step(rel_pc, regs, process_memory) ||
-                      (gnu_debugdata_interface_ &&
-                       gnu_debugdata_interface_->Step(rel_pc, regs, process_memory)));
-  }
+  uint64_t GetRelPc(uint64_t pc, const MapInfo* map_info);
+
+  bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory);
 
   ElfInterface* CreateInterfaceFromMemory(Memory* memory);
+
+  uint64_t GetLoadBias();
 
   bool valid() { return valid_; }
 
@@ -83,5 +80,7 @@ class Elf {
   std::unique_ptr<Memory> gnu_debugdata_memory_;
   std::unique_ptr<ElfInterface> gnu_debugdata_interface_;
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_ELF_H

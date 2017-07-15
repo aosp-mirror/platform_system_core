@@ -18,12 +18,14 @@
 
 #include <gtest/gtest.h>
 
-#include "Elf.h"
-#include "ElfInterface.h"
-#include "MapInfo.h"
-#include "Regs.h"
+#include <unwindstack/Elf.h>
+#include <unwindstack/ElfInterface.h>
+#include <unwindstack/MapInfo.h>
+#include <unwindstack/Regs.h>
 
 #include "MemoryFake.h"
+
+namespace unwindstack {
 
 class ElfFake : public Elf {
  public:
@@ -68,9 +70,6 @@ class RegsTest : public ::testing::Test {
     elf_interface_ = new ElfInterfaceFake(elf_->memory());
     elf_->set_elf_interface(elf_interface_);
   }
-
-  template <typename AddressType>
-  void regs_rel_pc();
 
   template <typename AddressType>
   void regs_return_address_register();
@@ -124,26 +123,6 @@ TEST_F(RegsTest, regs64) {
 
   regs64[8] = 10;
   ASSERT_EQ(10U, regs64[8]);
-}
-
-template <typename AddressType>
-void RegsTest::regs_rel_pc() {
-  RegsTestImpl<AddressType> regs(30, 12);
-
-  elf_interface_->set_load_bias(0);
-  MapInfo map_info{.start = 0x1000, .end = 0x2000};
-  regs.set_pc(0x1101);
-  ASSERT_EQ(0x101U, regs.GetRelPc(elf_.get(), &map_info));
-  elf_interface_->set_load_bias(0x3000);
-  ASSERT_EQ(0x3101U, regs.GetRelPc(elf_.get(), &map_info));
-}
-
-TEST_F(RegsTest, regs32_rel_pc) {
-  regs_rel_pc<uint32_t>();
-}
-
-TEST_F(RegsTest, regs64_rel_pc) {
-  regs_rel_pc<uint64_t>();
 }
 
 template <typename AddressType>
@@ -250,19 +229,19 @@ TEST_F(RegsTest, elf_invalid) {
   MapInfo map_info{.start = 0x1000, .end = 0x2000};
 
   regs_arm.set_pc(0x1500);
-  ASSERT_EQ(0x500U, regs_arm.GetRelPc(&invalid_elf, &map_info));
+  ASSERT_EQ(0x500U, invalid_elf.GetRelPc(regs_arm.pc(), &map_info));
   ASSERT_EQ(0x500U, regs_arm.GetAdjustedPc(0x500U, &invalid_elf));
 
   regs_arm64.set_pc(0x1600);
-  ASSERT_EQ(0x600U, regs_arm64.GetRelPc(&invalid_elf, &map_info));
+  ASSERT_EQ(0x600U, invalid_elf.GetRelPc(regs_arm64.pc(), &map_info));
   ASSERT_EQ(0x600U, regs_arm64.GetAdjustedPc(0x600U, &invalid_elf));
 
   regs_x86.set_pc(0x1700);
-  ASSERT_EQ(0x700U, regs_x86.GetRelPc(&invalid_elf, &map_info));
+  ASSERT_EQ(0x700U, invalid_elf.GetRelPc(regs_x86.pc(), &map_info));
   ASSERT_EQ(0x700U, regs_x86.GetAdjustedPc(0x700U, &invalid_elf));
 
   regs_x86_64.set_pc(0x1800);
-  ASSERT_EQ(0x800U, regs_x86_64.GetRelPc(&invalid_elf, &map_info));
+  ASSERT_EQ(0x800U, invalid_elf.GetRelPc(regs_x86_64.pc(), &map_info));
   ASSERT_EQ(0x800U, regs_x86_64.GetAdjustedPc(0x800U, &invalid_elf));
 }
 
@@ -305,3 +284,5 @@ TEST_F(RegsTest, x86_64_set_from_raw) {
   EXPECT_EQ(0x1200000000U, x86_64.sp());
   EXPECT_EQ(0x4900000000U, x86_64.pc());
 }
+
+}  // namespace unwindstack

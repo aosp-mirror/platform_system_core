@@ -25,7 +25,9 @@
 
 #include <android-base/stringprintf.h>
 
-#include "Log.h"
+#include <unwindstack/Log.h>
+
+namespace unwindstack {
 
 static bool g_print_to_stdout = false;
 
@@ -51,3 +53,5 @@ void log(uint8_t indent, const char* format, ...) {
   }
   va_end(args);
 }
+
+}  // namespace unwindstack

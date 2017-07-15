@@ -19,12 +19,16 @@
 
 #include <stdlib.h>
 
-#include "Log.h"
+#include <unwindstack/Log.h>
+
+namespace unwindstack {
 
 #define CHECK(assertion)                                   \
   if (__builtin_expect(!(assertion), false)) {             \
     log(0, "%s:%d: %s\n", __FILE__, __LINE__, #assertion); \
     abort();                                               \
   }
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_ERROR_H

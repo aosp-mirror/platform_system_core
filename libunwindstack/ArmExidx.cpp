@@ -21,12 +21,15 @@
 
 #include <android-base/stringprintf.h>
 
+#include <unwindstack/Log.h>
+#include <unwindstack/Memory.h>
+#include <unwindstack/Regs.h>
+
 #include "ArmExidx.h"
 #include "Check.h"
-#include "Log.h"
 #include "Machine.h"
-#include "Memory.h"
-#include "Regs.h"
+
+namespace unwindstack {
 
 void ArmExidx::LogRawData() {
   std::string log_str("Raw Data:");
@@ -684,3 +687,5 @@ bool ArmExidx::Eval() {
   while (Decode());
   return status_ == ARM_STATUS_FINISH;
 }
+
+}  // namespace unwindstack

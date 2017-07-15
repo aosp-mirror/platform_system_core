@@ -25,6 +25,9 @@
 #include <vector>
 
 #include "DwarfEncoding.h"
+#include "DwarfError.h"
+
+namespace unwindstack {
 
 enum DwarfVersion : uint8_t {
   DWARF_VERSION_2 = 2,
@@ -1632,5 +1635,7 @@ class DwarfOp {
       {nullptr, nullptr, 0, 0, 0, {}},  // 0xff DW_OP_hi_user
   };
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_DWARF_OP_H
