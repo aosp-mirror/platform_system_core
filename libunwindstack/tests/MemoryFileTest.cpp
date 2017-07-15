@@ -21,7 +21,9 @@
 #include <android-base/file.h>
 #include <gtest/gtest.h>
 
-#include "Memory.h"
+#include <unwindstack/Memory.h>
+
+namespace unwindstack {
 
 class MemoryFileTest : public ::testing::Test {
  protected:
@@ -269,3 +271,5 @@ TEST_F(MemoryFileTest, init_reinit) {
     ASSERT_EQ(2, read_buffer[i]) << "Failed at byte " << i;
   }
 }
+
+}  // namespace unwindstack

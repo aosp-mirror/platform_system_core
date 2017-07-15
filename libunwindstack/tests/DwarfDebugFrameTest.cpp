@@ -21,10 +21,13 @@
 
 #include "DwarfDebugFrame.h"
 #include "DwarfEncoding.h"
+#include "DwarfError.h"
 
 #include "LogFake.h"
 #include "MemoryFake.h"
 #include "RegsFake.h"
+
+namespace unwindstack {
 
 template <typename TypeParam>
 class MockDwarfDebugFrame : public DwarfDebugFrame<TypeParam> {
@@ -454,3 +457,5 @@ REGISTER_TYPED_TEST_CASE_P(DwarfDebugFrameTest, Init32, Init32_fde_not_following
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfDebugFrameTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(, DwarfDebugFrameTest, DwarfDebugFrameTestTypes);
+
+}  // namespace unwindstack

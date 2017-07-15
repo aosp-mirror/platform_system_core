@@ -30,9 +30,13 @@
 #include <android-base/test_utils.h>
 #include <gtest/gtest.h>
 
-#include "Elf.h"
+#include <unwindstack/Elf.h>
+#include <unwindstack/MapInfo.h>
+#include <unwindstack/Memory.h>
+
 #include "ElfTestUtils.h"
-#include "MapInfo.h"
+
+namespace unwindstack {
 
 class MapInfoGetElfTest : public ::testing::Test {
  protected:
@@ -138,3 +142,5 @@ TEST_F(MapInfoGetElfTest, gnu_debugdata_init64) {
   EXPECT_EQ(ELFCLASS64, elf->class_type());
   EXPECT_TRUE(elf->gnu_debugdata_interface() != nullptr);
 }
+
+}  // namespace unwindstack

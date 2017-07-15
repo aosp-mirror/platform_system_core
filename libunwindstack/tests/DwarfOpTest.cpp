@@ -21,13 +21,16 @@
 
 #include <gtest/gtest.h>
 
+#include <unwindstack/DwarfMemory.h>
+#include <unwindstack/Log.h>
+
 #include "DwarfError.h"
-#include "DwarfMemory.h"
 #include "DwarfOp.h"
-#include "Log.h"
 
 #include "MemoryFake.h"
 #include "RegsFake.h"
+
+namespace unwindstack {
 
 template <typename TypeParam>
 class DwarfOpTest : public ::testing::Test {
@@ -1579,3 +1582,5 @@ REGISTER_TYPED_TEST_CASE_P(DwarfOpTest, decode, eval, illegal_opcode, illegal_in
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfOpTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(, DwarfOpTest, DwarfOpTestTypes);
+
+}  // namespace unwindstack

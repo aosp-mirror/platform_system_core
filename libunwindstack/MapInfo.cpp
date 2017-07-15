@@ -20,10 +20,12 @@
 #include <memory>
 #include <string>
 
-#include "Elf.h"
-#include "MapInfo.h"
-#include "Maps.h"
-#include "Memory.h"
+#include <unwindstack/Elf.h>
+#include <unwindstack/MapInfo.h>
+#include <unwindstack/Maps.h>
+#include <unwindstack/Memory.h>
+
+namespace unwindstack {
 
 Memory* MapInfo::CreateMemory(pid_t pid) {
   if (end <= start) {
@@ -86,3 +88,5 @@ Elf* MapInfo::GetElf(pid_t pid, bool init_gnu_debugdata) {
   // don't try to reinit the object.
   return elf;
 }
+
+}  // namespace unwindstack

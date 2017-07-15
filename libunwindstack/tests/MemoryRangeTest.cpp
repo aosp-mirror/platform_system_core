@@ -22,9 +22,11 @@
 
 #include <gtest/gtest.h>
 
-#include "Memory.h"
+#include <unwindstack/Memory.h>
 
 #include "MemoryFake.h"
+
+namespace unwindstack {
 
 TEST(MemoryRangeTest, read) {
   std::vector<uint8_t> src(1024);
@@ -70,3 +72,5 @@ TEST(MemoryRangeTest, read_overflow) {
   std::unique_ptr<MemoryRange> overflow(new MemoryRange(new MemoryFakeAlwaysReadZero, 100, 200));
   ASSERT_FALSE(overflow->Read(UINT64_MAX - 10, buffer.data(), 100));
 }
+
+}  // namespace unwindstack

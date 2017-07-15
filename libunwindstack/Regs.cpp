@@ -21,24 +21,17 @@
 
 #include <vector>
 
+#include <unwindstack/Elf.h>
+#include <unwindstack/MapInfo.h>
+#include <unwindstack/Memory.h>
+#include <unwindstack/Regs.h>
+
 #include "Check.h"
-#include "Elf.h"
-#include "ElfInterface.h"
 #include "Machine.h"
-#include "MapInfo.h"
-#include "Regs.h"
 #include "Ucontext.h"
 #include "User.h"
 
-template <typename AddressType>
-uint64_t RegsImpl<AddressType>::GetRelPc(Elf* elf, const MapInfo* map_info) {
-  uint64_t load_bias = 0;
-  if (elf->valid()) {
-    load_bias = elf->interface()->load_bias();
-  }
-
-  return pc_ - map_info->start + load_bias + map_info->elf_offset;
-}
+namespace unwindstack {
 
 template <typename AddressType>
 bool RegsImpl<AddressType>::GetReturnAddressFromDefault(Memory* memory, uint64_t* value) {
@@ -354,3 +347,5 @@ Regs* Regs::CreateFromLocal() {
 #endif
   return regs;
 }
+
+}  // namespace unwindstack

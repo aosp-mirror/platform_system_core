@@ -21,6 +21,8 @@
 
 #include <deque>
 
+namespace unwindstack {
+
 // Forward declarations.
 class Memory;
 class RegsArm;
@@ -104,5 +106,7 @@ class ArmExidx {
   bool log_skip_execution_ = false;
   bool pc_set_ = false;
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_ARM_EXIDX_H

@@ -22,6 +22,8 @@
 #include <string>
 #include <vector>
 
+namespace unwindstack {
+
 // Forward declaration.
 class Memory;
 
@@ -60,5 +62,7 @@ class Symbols {
 
   std::vector<Info> symbols_;
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_SYMBOLS_H

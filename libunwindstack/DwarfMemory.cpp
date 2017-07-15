@@ -18,10 +18,13 @@
 
 #include <string>
 
+#include <unwindstack/DwarfMemory.h>
+#include <unwindstack/Memory.h>
+
 #include "Check.h"
 #include "DwarfEncoding.h"
-#include "DwarfMemory.h"
-#include "Memory.h"
+
+namespace unwindstack {
 
 bool DwarfMemory::ReadBytes(void* dst, size_t num_bytes) {
   if (!memory_->Read(cur_offset_, dst, num_bytes)) {
@@ -246,3 +249,5 @@ template size_t DwarfMemory::GetEncodedSize<uint64_t>(uint8_t);
 
 template bool DwarfMemory::ReadEncodedValue<uint32_t>(uint8_t, uint64_t*);
 template bool DwarfMemory::ReadEncodedValue<uint64_t>(uint8_t, uint64_t*);
+
+}  // namespace unwindstack
