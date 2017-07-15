@@ -29,6 +29,8 @@
 #ifndef _LIBUNWINDSTACK_USER_H
 #define _LIBUNWINDSTACK_USER_H
 
+namespace unwindstack {
+
 struct x86_user_regs {
   uint32_t ebx;
   uint32_t ecx;
@@ -92,5 +94,7 @@ struct arm64_user_regs {
 
 // The largest user structure.
 constexpr size_t MAX_USER_REGS_SIZE = sizeof(arm64_user_regs) + 10;
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_USER_H

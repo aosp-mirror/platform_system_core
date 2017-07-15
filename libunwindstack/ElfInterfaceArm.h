@@ -23,8 +23,10 @@
 #include <iterator>
 #include <unordered_map>
 
-#include "ElfInterface.h"
-#include "Memory.h"
+#include <unwindstack/ElfInterface.h>
+#include <unwindstack/Memory.h>
+
+namespace unwindstack {
 
 class ElfInterfaceArm : public ElfInterface32 {
  public:
@@ -86,5 +88,7 @@ class ElfInterfaceArm : public ElfInterface32 {
 
   std::unordered_map<size_t, uint32_t> addrs_;
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_ELF_INTERFACE_ARM_H

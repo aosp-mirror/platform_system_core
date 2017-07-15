@@ -19,7 +19,9 @@
 
 #include <stdint.h>
 
-#include "DwarfSection.h"
+#include <unwindstack/DwarfSection.h>
+
+namespace unwindstack {
 
 // Forward declarations.
 class Memory;
@@ -85,5 +87,7 @@ class DwarfEhFrame : public DwarfSectionImpl<AddressType> {
 
   std::unordered_map<uint64_t, FdeInfo> fde_info_;
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_DWARF_EH_FRAME_H

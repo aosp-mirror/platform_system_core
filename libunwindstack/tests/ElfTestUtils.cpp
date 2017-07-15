@@ -31,6 +31,8 @@
 
 #include "ElfTestUtils.h"
 
+namespace unwindstack {
+
 template <typename Ehdr>
 void TestInitEhdr(Ehdr* ehdr, uint32_t elf_class, uint32_t machine_type) {
   memset(ehdr, 0, sizeof(Ehdr));
@@ -136,3 +138,5 @@ template void TestInitGnuDebugdata<Elf32_Ehdr, Elf32_Shdr>(uint32_t, uint32_t, b
                                                            TestCopyFuncType);
 template void TestInitGnuDebugdata<Elf64_Ehdr, Elf64_Shdr>(uint32_t, uint32_t, bool,
                                                            TestCopyFuncType);
+
+}  // namespace unwindstack

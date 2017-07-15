@@ -19,11 +19,14 @@
 
 #include <algorithm>
 
+#include <unwindstack/DwarfStructs.h>
+#include <unwindstack/Memory.h>
+
 #include "DwarfDebugFrame.h"
-#include "DwarfMemory.h"
-#include "DwarfSection.h"
-#include "DwarfStructs.h"
-#include "Memory.h"
+#include "DwarfEncoding.h"
+#include "DwarfError.h"
+
+namespace unwindstack {
 
 template <typename AddressType>
 bool DwarfDebugFrame<AddressType>::Init(uint64_t offset, uint64_t size) {
@@ -309,3 +312,5 @@ const DwarfFde* DwarfDebugFrame<AddressType>::GetFdeFromIndex(size_t index) {
 // Explicitly instantiate DwarfDebugFrame.
 template class DwarfDebugFrame<uint32_t>;
 template class DwarfDebugFrame<uint64_t>;
+
+}  // namespace unwindstack
