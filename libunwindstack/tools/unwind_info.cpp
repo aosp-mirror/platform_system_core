@@ -25,13 +25,16 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <unwindstack/DwarfSection.h>
+#include <unwindstack/DwarfStructs.h>
+#include <unwindstack/Elf.h>
+#include <unwindstack/ElfInterface.h>
+#include <unwindstack/Log.h>
+
 #include "ArmExidx.h"
-#include "DwarfSection.h"
-#include "DwarfStructs.h"
-#include "Elf.h"
-#include "ElfInterface.h"
 #include "ElfInterfaceArm.h"
-#include "Log.h"
+
+namespace unwindstack {
 
 void DumpArm(ElfInterfaceArm* interface) {
   if (interface == nullptr) {
@@ -100,27 +103,12 @@ void DumpDwarfSection(ElfInterface* interface, DwarfSection* section, uint64_t l
   }
 }
 
-int main(int argc, char** argv) {
-  if (argc != 2) {
-    printf("Need to pass the name of an elf file to the program.\n");
-    return 1;
-  }
-
-  struct stat st;
-  if (stat(argv[1], &st) == -1) {
-    printf("Cannot stat %s: %s\n", argv[1], strerror(errno));
-    return 1;
-  }
-  if (!S_ISREG(st.st_mode)) {
-    printf("%s is not a regular file.\n", argv[1]);
-    return 1;
-  }
-
+int GetElfInfo(const char* file) {
   // Send all log messages to stdout.
   log_to_stdout(true);
 
   MemoryFileAtOffset* memory = new MemoryFileAtOffset;
-  if (!memory->Init(argv[1], 0)) {
+  if (!memory->Init(file, 0)) {
     // Initializatation failed.
     printf("Failed to init\n");
     return 1;
@@ -128,7 +116,7 @@ int main(int argc, char** argv) {
 
   Elf elf(memory);
   if (!elf.Init() || !elf.valid()) {
-    printf("%s is not a valid elf file.\n", argv[1]);
+    printf("%s is not a valid elf file.\n", file);
     return 1;
   }
 
@@ -172,4 +160,25 @@ int main(int argc, char** argv) {
   }
 
   return 0;
+}
+
+}  // namespace unwindstack
+
+int main(int argc, char** argv) {
+  if (argc != 2) {
+    printf("Need to pass the name of an elf file to the program.\n");
+    return 1;
+  }
+
+  struct stat st;
+  if (stat(argv[1], &st) == -1) {
+    printf("Cannot stat %s: %s\n", argv[1], strerror(errno));
+    return 1;
+  }
+  if (!S_ISREG(st.st_mode)) {
+    printf("%s is not a regular file.\n", argv[1]);
+    return 1;
+  }
+
+  return unwindstack::GetElfInfo(argv[1]);
 }

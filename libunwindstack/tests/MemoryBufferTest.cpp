@@ -18,9 +18,11 @@
 
 #include <gtest/gtest.h>
 
-#include "Memory.h"
+#include <unwindstack/Memory.h>
 
 #include "LogFake.h"
+
+namespace unwindstack {
 
 class MemoryBufferTest : public ::testing::Test {
  protected:
@@ -75,3 +77,5 @@ TEST_F(MemoryBufferTest, read_failure_overflow) {
 
   ASSERT_FALSE(memory_->Read(UINT64_MAX - 100, buffer.data(), 200));
 }
+
+}  // namespace unwindstack

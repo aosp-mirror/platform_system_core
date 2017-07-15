@@ -32,9 +32,12 @@
 #include <android-base/test_utils.h>
 #include <gtest/gtest.h>
 
-#include "Memory.h"
+#include <unwindstack/Memory.h>
+
 #include "MemoryFake.h"
 #include "Symbols.h"
+
+namespace unwindstack {
 
 template <typename TypeParam>
 class SymbolsTest : public ::testing::Test {
@@ -333,3 +336,5 @@ REGISTER_TYPED_TEST_CASE_P(SymbolsTest, function_bounds_check, no_symbol, multip
 
 typedef ::testing::Types<Elf32_Sym, Elf64_Sym> SymbolsTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(, SymbolsTest, SymbolsTestTypes);
+
+}  // namespace unwindstack

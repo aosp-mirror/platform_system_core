@@ -22,18 +22,20 @@
 #include <iterator>
 #include <unordered_map>
 
-#include "DwarfError.h"
-#include "DwarfLocation.h"
-#include "DwarfMemory.h"
-#include "DwarfStructs.h"
+#include <unwindstack/DwarfLocation.h>
+#include <unwindstack/DwarfMemory.h>
+#include <unwindstack/DwarfStructs.h>
+
+namespace unwindstack {
 
 // Forward declarations.
+enum DwarfError : uint8_t;
 class Memory;
 class Regs;
 
 class DwarfSection {
  public:
-  DwarfSection(Memory* memory) : memory_(memory) {}
+  DwarfSection(Memory* memory);
   virtual ~DwarfSection() = default;
 
   class iterator : public std::iterator<std::bidirectional_iterator_tag, DwarfFde*> {
@@ -102,7 +104,7 @@ class DwarfSection {
 
  protected:
   DwarfMemory memory_;
-  DwarfError last_error_ = DWARF_ERROR_NONE;
+  DwarfError last_error_;
 
   uint64_t fde_count_;
   std::unordered_map<uint64_t, DwarfFde> fde_entries_;
@@ -133,5 +135,7 @@ class DwarfSectionImpl : public DwarfSection {
   bool EvalExpression(const DwarfLocation& loc, uint8_t version, Memory* regular_memory,
                       AddressType* value);
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_DWARF_SECTION_H

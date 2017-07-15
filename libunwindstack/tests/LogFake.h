@@ -19,8 +19,12 @@
 
 #include <string>
 
+namespace unwindstack {
+
 void ResetLogs();
 std::string GetFakeLogBuf();
 std::string GetFakeLogPrint();
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_TESTS_LOG_FAKE_H

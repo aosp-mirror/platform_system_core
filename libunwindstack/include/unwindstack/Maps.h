@@ -23,8 +23,9 @@
 #include <string>
 #include <vector>
 
-#include "Elf.h"
-#include "MapInfo.h"
+#include <unwindstack/MapInfo.h>
+
+namespace unwindstack {
 
 // Special flag to indicate a map is in /dev/. However, a map in
 // /dev/ashmem/... does not set this flag.
@@ -103,5 +104,7 @@ class OfflineMaps : public FileMaps {
 
   bool Parse() override;
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_MAPS_H

@@ -29,7 +29,11 @@
 #include <string>
 #include <vector>
 
-#include "Maps.h"
+#include <unwindstack/Elf.h>
+#include <unwindstack/Maps.h>
+#include <unwindstack/Memory.h>
+
+namespace unwindstack {
 
 MapInfo* Maps::Find(uint64_t pc) {
   if (maps_.empty()) {
@@ -196,3 +200,5 @@ bool OfflineMaps::Parse() {
   }
   return true;
 }
+
+}  // namespace unwindstack

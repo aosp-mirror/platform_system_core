@@ -19,9 +19,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "DwarfSection.h"
+#include <unwindstack/DwarfSection.h>
 
 #include "MemoryFake.h"
+
+namespace unwindstack {
 
 class MockDwarfSection : public DwarfSection {
  public:
@@ -158,3 +160,5 @@ TEST_F(DwarfSectionTest, Step_pass) {
 
   ASSERT_TRUE(mock_section.Step(0x1000, nullptr, &process));
 }
+
+}  // namespace unwindstack

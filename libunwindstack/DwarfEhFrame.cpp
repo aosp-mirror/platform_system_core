@@ -16,12 +16,14 @@
 
 #include <stdint.h>
 
+#include <unwindstack/DwarfStructs.h>
+#include <unwindstack/Memory.h>
+
 #include "Check.h"
 #include "DwarfEhFrame.h"
-#include "DwarfMemory.h"
-#include "DwarfSection.h"
-#include "DwarfStructs.h"
-#include "Memory.h"
+#include "DwarfError.h"
+
+namespace unwindstack {
 
 template <typename AddressType>
 bool DwarfEhFrame<AddressType>::Init(uint64_t offset, uint64_t size) {
@@ -211,3 +213,5 @@ bool DwarfEhFrame<AddressType>::GetFdeOffsetFromPc(uint64_t pc, uint64_t* fde_of
 // Explicitly instantiate DwarfEhFrame.
 template class DwarfEhFrame<uint32_t>;
 template class DwarfEhFrame<uint64_t>;
+
+}  // namespace unwindstack

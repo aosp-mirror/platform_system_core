@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <elf.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <signal.h>
@@ -27,10 +28,11 @@
 
 #include <string>
 
-#include "Elf.h"
-#include "Maps.h"
-#include "Memory.h"
-#include "Regs.h"
+#include <unwindstack/Elf.h>
+#include <unwindstack/MapInfo.h>
+#include <unwindstack/Maps.h>
+#include <unwindstack/Memory.h>
+#include <unwindstack/Regs.h>
 
 static bool Attach(pid_t pid) {
   if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
@@ -54,14 +56,14 @@ static bool Detach(pid_t pid) {
 }
 
 void DoUnwind(pid_t pid) {
-  RemoteMaps remote_maps(pid);
+  unwindstack::RemoteMaps remote_maps(pid);
   if (!remote_maps.Parse()) {
     printf("Failed to parse map data.\n");
     return;
   }
 
   uint32_t machine_type;
-  Regs* regs = Regs::RemoteGet(pid, &machine_type);
+  unwindstack::Regs* regs = unwindstack::Regs::RemoteGet(pid, &machine_type);
   if (regs == nullptr) {
     printf("Unable to get remote reg data\n");
     return;
@@ -90,20 +92,20 @@ void DoUnwind(pid_t pid) {
   }
   printf("\n");
 
-  MemoryRemote remote_memory(pid);
+  unwindstack::MemoryRemote remote_memory(pid);
   for (size_t frame_num = 0; frame_num < 64; frame_num++) {
     if (regs->pc() == 0) {
       break;
     }
-    MapInfo* map_info = remote_maps.Find(regs->pc());
+    unwindstack::MapInfo* map_info = remote_maps.Find(regs->pc());
     if (map_info == nullptr) {
       printf("Failed to find map data for the pc\n");
       break;
     }
 
-    Elf* elf = map_info->GetElf(pid, true);
+    unwindstack::Elf* elf = map_info->GetElf(pid, true);
 
-    uint64_t rel_pc = regs->GetRelPc(elf, map_info);
+    uint64_t rel_pc = elf->GetRelPc(regs->pc(), map_info);
     uint64_t adjusted_rel_pc = rel_pc;
     // Don't need to adjust the first frame pc.
     if (frame_num != 0) {

@@ -19,11 +19,16 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "DwarfSection.h"
+#include <unwindstack/DwarfSection.h>
+
+#include "DwarfEncoding.h"
+#include "DwarfError.h"
 
 #include "LogFake.h"
 #include "MemoryFake.h"
 #include "RegsFake.h"
+
+namespace unwindstack {
 
 template <typename TypeParam>
 class MockDwarfSectionImpl : public DwarfSectionImpl<TypeParam> {
@@ -830,3 +835,5 @@ REGISTER_TYPED_TEST_CASE_P(
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfSectionImplTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(, DwarfSectionImplTest, DwarfSectionImplTestTypes);
+
+}  // namespace unwindstack
