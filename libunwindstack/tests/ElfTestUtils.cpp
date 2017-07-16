@@ -31,6 +31,8 @@
 
 #include "ElfTestUtils.h"
 
+namespace unwindstack {
+
 template <typename Ehdr>
 void TestInitEhdr(Ehdr* ehdr, uint32_t elf_class, uint32_t machine_type) {
   memset(ehdr, 0, sizeof(Ehdr));
@@ -43,6 +45,15 @@ void TestInitEhdr(Ehdr* ehdr, uint32_t elf_class, uint32_t machine_type) {
   ehdr->e_machine = machine_type;
   ehdr->e_version = EV_CURRENT;
   ehdr->e_ehsize = sizeof(Ehdr);
+}
+
+static std::string GetTestFileDirectory() {
+  std::string exec(testing::internal::GetArgvs()[0]);
+  auto const value = exec.find_last_of('/');
+  if (value == std::string::npos) {
+    return "tests/files/";
+  }
+  return exec.substr(0, value + 1) + "tests/files/";
 }
 
 template <typename Ehdr, typename Shdr>
@@ -91,7 +102,7 @@ void TestInitGnuDebugdata(uint32_t elf_class, uint32_t machine, bool init_gnu_de
   offset = symtab_offset + 0x100;
   if (init_gnu_debugdata) {
     // Read in the compressed elf data and copy it in.
-    name = "tests/files/";
+    name = GetTestFileDirectory();
     if (elf_class == ELFCLASS32) {
       name += "elf32.xz";
     } else {
@@ -127,3 +138,5 @@ template void TestInitGnuDebugdata<Elf32_Ehdr, Elf32_Shdr>(uint32_t, uint32_t, b
                                                            TestCopyFuncType);
 template void TestInitGnuDebugdata<Elf64_Ehdr, Elf64_Shdr>(uint32_t, uint32_t, bool,
                                                            TestCopyFuncType);
+
+}  // namespace unwindstack

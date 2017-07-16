@@ -23,12 +23,15 @@
 
 #include <gtest/gtest.h>
 
+#include <unwindstack/Log.h>
+#include <unwindstack/Regs.h>
+
 #include "ArmExidx.h"
-#include "Regs.h"
-#include "Log.h"
 
 #include "LogFake.h"
 #include "MemoryFake.h"
+
+namespace unwindstack {
 
 class ArmExidxDecodeTest : public ::testing::TestWithParam<std::string> {
  protected:
@@ -1092,3 +1095,5 @@ TEST_P(ArmExidxDecodeTest, eval_pc_set) {
 }
 
 INSTANTIATE_TEST_CASE_P(, ArmExidxDecodeTest, ::testing::Values("logging", "no_logging"));
+
+}  // namespace unwindstack

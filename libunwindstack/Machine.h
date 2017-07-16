@@ -19,6 +19,8 @@
 
 #include <stdint.h>
 
+namespace unwindstack {
+
 enum ArmReg : uint16_t {
   ARM_REG_R0 = 0,
   ARM_REG_R1,
@@ -133,5 +135,7 @@ enum X86_64Reg : uint16_t {
   X86_64_REG_SP = X86_64_REG_RSP,
   X86_64_REG_PC = X86_64_REG_RIP,
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_MACHINE_H

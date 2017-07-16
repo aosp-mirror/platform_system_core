@@ -16,16 +16,22 @@
 
 #include <stdint.h>
 
+#include <unwindstack/DwarfLocation.h>
+#include <unwindstack/DwarfMemory.h>
+#include <unwindstack/DwarfSection.h>
+#include <unwindstack/DwarfStructs.h>
+#include <unwindstack/Log.h>
+#include <unwindstack/Memory.h>
+#include <unwindstack/Regs.h>
+
 #include "DwarfCfa.h"
+#include "DwarfEncoding.h"
 #include "DwarfError.h"
-#include "DwarfLocation.h"
-#include "DwarfMemory.h"
 #include "DwarfOp.h"
-#include "DwarfSection.h"
-#include "DwarfStructs.h"
-#include "Log.h"
-#include "Memory.h"
-#include "Regs.h"
+
+namespace unwindstack {
+
+DwarfSection::DwarfSection(Memory* memory) : memory_(memory), last_error_(DWARF_ERROR_NONE) {}
 
 const DwarfFde* DwarfSection::GetFdeFromPc(uint64_t pc) {
   uint64_t fde_offset;
@@ -42,6 +48,7 @@ const DwarfFde* DwarfSection::GetFdeFromPc(uint64_t pc) {
 }
 
 bool DwarfSection::Step(uint64_t pc, Regs* regs, Memory* process_memory) {
+  last_error_ = DWARF_ERROR_NONE;
   const DwarfFde* fde = GetFdeFromPc(pc);
   if (fde == nullptr || fde->cie == nullptr) {
     last_error_ = DWARF_ERROR_ILLEGAL_STATE;
@@ -248,6 +255,9 @@ bool DwarfSectionImpl<AddressType>::FillInCie(DwarfCie* cie) {
     last_error_ = DWARF_ERROR_MEMORY_INVALID;
     return false;
   }
+  // Set the default for the lsda encoding.
+  cie->lsda_encoding = DW_EH_PE_omit;
+
   if (length32 == static_cast<uint32_t>(-1)) {
     // 64 bit Cie
     uint64_t length64;
@@ -541,3 +551,5 @@ bool DwarfSectionImpl<AddressType>::Log(uint8_t indent, uint64_t pc, uint64_t lo
 // Explicitly instantiate DwarfSectionImpl
 template class DwarfSectionImpl<uint32_t>;
 template class DwarfSectionImpl<uint64_t>;
+
+}  // namespace unwindstack

@@ -25,7 +25,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "DwarfSection.h"
+#include <unwindstack/DwarfSection.h>
+
+namespace unwindstack {
 
 // Forward declarations.
 class Memory;
@@ -165,5 +167,7 @@ class ElfInterface64 : public ElfInterface {
     return ElfInterface::GetFunctionNameWithTemplate<Elf64_Sym>(addr, name, func_offset);
   }
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_ELF_INTERFACE_H

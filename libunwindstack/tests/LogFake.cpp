@@ -25,13 +25,14 @@
 #include "LogFake.h"
 
 // Forward declarations.
-class Backtrace;
 struct EventTagMap;
 struct AndroidLogEntry;
 
 std::string g_fake_log_buf;
 
 std::string g_fake_log_print;
+
+namespace unwindstack {
 
 void ResetLogs() {
   g_fake_log_buf = "";
@@ -45,6 +46,8 @@ std::string GetFakeLogBuf() {
 std::string GetFakeLogPrint() {
   return g_fake_log_print;
 }
+
+}  // namespace unwindstack
 
 extern "C" int __android_log_buf_write(int bufId, int prio, const char* tag, const char* msg) {
   g_fake_log_buf += std::to_string(bufId) + ' ' + std::to_string(prio) + ' ';

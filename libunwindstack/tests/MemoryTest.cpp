@@ -22,9 +22,11 @@
 
 #include <gtest/gtest.h>
 
-#include "Memory.h"
+#include <unwindstack/Memory.h>
 
 #include "MemoryFake.h"
+
+namespace unwindstack {
 
 TEST(MemoryTest, read32) {
   MemoryFakeAlwaysReadZero memory;
@@ -124,3 +126,5 @@ TEST(MemoryTest, read_string_error) {
   ASSERT_TRUE(memory.ReadString(0, &dst_name));
   ASSERT_EQ("short", dst_name);
 }
+
+}  // namespace unwindstack

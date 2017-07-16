@@ -20,11 +20,14 @@
 
 #include <vector>
 
+#include <unwindstack/Regs.h>
+
 #include "ElfInterfaceArm.h"
 #include "Machine.h"
-#include "Regs.h"
 
 #include "MemoryFake.h"
+
+namespace unwindstack {
 
 class ElfInterfaceArmTest : public ::testing::Test {
  protected:
@@ -370,3 +373,5 @@ TEST_F(ElfInterfaceArmTest, StepExidx_pc_set) {
   ASSERT_EQ(0x10U, regs.pc());
   ASSERT_EQ(0x10U, regs[ARM_REG_PC]);
 }
+
+}  // namespace unwindstack

@@ -20,7 +20,9 @@
 
 #include <gtest/gtest.h>
 
-#include "ElfInterface.h"
+#include <unwindstack/ElfInterface.h>
+
+#include "DwarfEncoding.h"
 #include "ElfInterfaceArm.h"
 
 #include "MemoryFake.h"
@@ -32,6 +34,8 @@
 #if !defined(EM_AARCH64)
 #define EM_AARCH64 183
 #endif
+
+namespace unwindstack {
 
 class ElfInterfaceTest : public ::testing::Test {
  protected:
@@ -921,3 +925,5 @@ TEST_F(ElfInterfaceTest, init_section_headers_offsets32) {
 TEST_F(ElfInterfaceTest, init_section_headers_offsets64) {
   InitSectionHeadersOffsets<Elf64_Ehdr, Elf64_Shdr, ElfInterface64>();
 }
+
+}  // namespace unwindstack

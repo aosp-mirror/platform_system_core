@@ -31,6 +31,8 @@
 
 #include <stdint.h>
 
+namespace unwindstack {
+
 //-------------------------------------------------------------------
 // ARM ucontext structures
 //-------------------------------------------------------------------
@@ -176,5 +178,7 @@ typedef struct x86_64_ucontext {
   // Nothing else is used, so don't define it.
 } x86_64_ucontext_t;
 //-------------------------------------------------------------------
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_UCONTEXT_H

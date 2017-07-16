@@ -28,7 +28,11 @@
 
 #include <android-base/unique_fd.h>
 
-#include "Memory.h"
+#include <unwindstack/Memory.h>
+
+#include "Check.h"
+
+namespace unwindstack {
 
 bool Memory::ReadString(uint64_t addr, std::string* string, uint64_t max_read) {
   string->clear();
@@ -245,6 +249,11 @@ bool MemoryOffline::Read(uint64_t addr, void* dst, size_t size) {
   return true;
 }
 
+MemoryRange::MemoryRange(Memory* memory, uint64_t begin, uint64_t end)
+    : memory_(memory), begin_(begin), length_(end - begin) {
+  CHECK(end > begin);
+}
+
 bool MemoryRange::Read(uint64_t addr, void* dst, size_t size) {
   uint64_t max_read;
   if (__builtin_add_overflow(addr, size, &max_read) || max_read > length_) {
@@ -253,3 +262,5 @@ bool MemoryRange::Read(uint64_t addr, void* dst, size_t size) {
   // The check above guarantees that addr + begin_ will not overflow.
   return memory_->Read(addr + begin_, dst, size);
 }
+
+}  // namespace unwindstack

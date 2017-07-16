@@ -17,12 +17,14 @@
 #include <elf.h>
 #include <stdint.h>
 
+#include <unwindstack/Memory.h>
+#include <unwindstack/Regs.h>
+
 #include "ArmExidx.h"
-#include "ElfInterface.h"
 #include "ElfInterfaceArm.h"
 #include "Machine.h"
-#include "Memory.h"
-#include "Regs.h"
+
+namespace unwindstack {
 
 bool ElfInterfaceArm::FindEntry(uint32_t pc, uint64_t* entry_offset) {
   if (start_offset_ == 0 || total_entries_ == 0) {
@@ -127,3 +129,5 @@ bool ElfInterfaceArm::StepExidx(uint64_t pc, Regs* regs, Memory* process_memory)
   }
   return false;
 }
+
+}  // namespace unwindstack

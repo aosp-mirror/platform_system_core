@@ -22,12 +22,15 @@
 
 #include <android-base/stringprintf.h>
 
+#include <unwindstack/DwarfMemory.h>
+#include <unwindstack/Log.h>
+#include <unwindstack/Memory.h>
+#include <unwindstack/Regs.h>
+
 #include "DwarfError.h"
-#include "DwarfMemory.h"
 #include "DwarfOp.h"
-#include "Log.h"
-#include "Memory.h"
-#include "Regs.h"
+
+namespace unwindstack {
 
 template <typename AddressType>
 constexpr typename DwarfOp<AddressType>::OpCallback DwarfOp<AddressType>::kCallbackTable[256];
@@ -460,3 +463,5 @@ bool DwarfOp<AddressType>::op_not_implemented() {
 // Explicitly instantiate DwarfOp.
 template class DwarfOp<uint32_t>;
 template class DwarfOp<uint64_t>;
+
+}  // namespace unwindstack

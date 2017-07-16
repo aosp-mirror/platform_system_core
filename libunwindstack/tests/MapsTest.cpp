@@ -20,7 +20,9 @@
 #include <android-base/test_utils.h>
 #include <gtest/gtest.h>
 
-#include "Maps.h"
+#include <unwindstack/Maps.h>
+
+namespace unwindstack {
 
 TEST(MapsTest, parse_permissions) {
   BufferMaps maps(
@@ -235,3 +237,5 @@ TEST(MapsTest, find) {
   ASSERT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, info->flags);
   ASSERT_EQ("/system/lib/fake5.so", info->name);
 }
+
+}  // namespace unwindstack

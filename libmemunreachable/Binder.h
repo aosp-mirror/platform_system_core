@@ -14,21 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef _LIBUNWINDSTACK_ERROR_H
-#define _LIBUNWINDSTACK_ERROR_H
+#ifndef LIBMEMUNREACHABLE_BINDER_H_
+#define LIBMEMUNREACHABLE_BINDER_H_
 
-#include <stdlib.h>
+#include "Allocator.h"
 
-#include <unwindstack/Log.h>
+namespace android {
 
-namespace unwindstack {
+bool BinderReferences(allocator::vector<uintptr_t>& refs);
 
-#define CHECK(assertion)                                   \
-  if (__builtin_expect(!(assertion), false)) {             \
-    log(0, "%s:%d: %s\n", __FILE__, __LINE__, #assertion); \
-    abort();                                               \
-  }
+}  // namespace android
 
-}  // namespace unwindstack
-
-#endif  // _LIBUNWINDSTACK_ERROR_H
+#endif  // LIBMEMUNREACHABLE_BINDER_H_

@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-#include "Check.h"
+namespace unwindstack {
 
 class Memory {
  public:
@@ -47,13 +47,9 @@ class Memory {
     return Read(offset, field, size);
   }
 
-  inline bool Read32(uint64_t addr, uint32_t* dst) {
-    return Read(addr, dst, sizeof(uint32_t));
-  }
+  inline bool Read32(uint64_t addr, uint32_t* dst) { return Read(addr, dst, sizeof(uint32_t)); }
 
-  inline bool Read64(uint64_t addr, uint64_t* dst) {
-    return Read(addr, dst, sizeof(uint64_t));
-  }
+  inline bool Read64(uint64_t addr, uint64_t* dst) { return Read(addr, dst, sizeof(uint64_t)); }
 };
 
 class MemoryBuffer : public Memory {
@@ -129,10 +125,7 @@ class MemoryLocal : public Memory {
 
 class MemoryRange : public Memory {
  public:
-  MemoryRange(Memory* memory, uint64_t begin, uint64_t end)
-      : memory_(memory), begin_(begin), length_(end - begin) {
-    CHECK(end > begin);
-  }
+  MemoryRange(Memory* memory, uint64_t begin, uint64_t end);
   virtual ~MemoryRange() { delete memory_; }
 
   bool Read(uint64_t addr, void* dst, size_t size) override;
@@ -142,5 +135,7 @@ class MemoryRange : public Memory {
   uint64_t begin_;
   uint64_t length_;
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_MEMORY_H

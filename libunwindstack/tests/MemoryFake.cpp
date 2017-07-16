@@ -21,6 +21,8 @@
 
 #include "MemoryFake.h"
 
+namespace unwindstack {
+
 void MemoryFake::SetMemory(uint64_t addr, const void* memory, size_t length) {
   const uint8_t* src = reinterpret_cast<const uint8_t*>(memory);
   for (size_t i = 0; i < length; i++, addr++) {
@@ -44,3 +46,5 @@ bool MemoryFake::Read(uint64_t addr, void* memory, size_t size) {
   }
   return true;
 }
+
+}  // namespace unwindstack

@@ -19,6 +19,8 @@
 
 #include <stdint.h>
 
+namespace unwindstack {
+
 enum DwarfError : uint8_t {
   DWARF_ERROR_NONE,
   DWARF_ERROR_MEMORY_INVALID,
@@ -30,5 +32,7 @@ enum DwarfError : uint8_t {
   DWARF_ERROR_CFA_NOT_DEFINED,
   DWARF_ERROR_UNSUPPORTED_VERSION,
 };
+
+}  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_DWARF_ERROR_H
