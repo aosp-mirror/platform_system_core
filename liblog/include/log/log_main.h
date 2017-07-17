@@ -18,10 +18,9 @@
 #define _LIBS_LOG_LOG_MAIN_H
 
 #include <android/log.h>
+#include <sys/cdefs.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+__BEGIN_DECLS
 
 /*
  * Normally we strip the effects of ALOGV (VERBOSE messages),
@@ -385,8 +384,6 @@ int __android_log_is_loggable_len(int prio, const char* tag, size_t len,
 #pragma clang diagnostic pop
 #endif
 
-#ifdef __cplusplus
-}
-#endif
+__END_DECLS
 
 #endif /* _LIBS_LOG_LOG_MAIN_H */
