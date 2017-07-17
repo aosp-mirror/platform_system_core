@@ -171,6 +171,9 @@ Service::Service(const std::string& name, const std::vector<std::string>& args)
       ioprio_pri_(0),
       priority_(0),
       oom_score_adjust_(-1000),
+      swappiness_(-1),
+      soft_limit_in_bytes_(-1),
+      limit_in_bytes_(-1),
       args_(args) {
     onrestart_.InitSingleTrigger("onrestart");
 }
@@ -196,6 +199,9 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       ioprio_pri_(0),
       priority_(0),
       oom_score_adjust_(-1000),
+      swappiness_(-1),
+      soft_limit_in_bytes_(-1),
+      limit_in_bytes_(-1),
       args_(args) {
     onrestart_.InitSingleTrigger("onrestart");
 }
@@ -491,6 +497,30 @@ bool Service::ParseOomScoreAdjust(const std::vector<std::string>& args, std::str
     return true;
 }
 
+bool Service::ParseMemcgSwappiness(const std::vector<std::string>& args, std::string* err) {
+    if (!ParseInt(args[1], &swappiness_, 0)) {
+        *err = "swappiness value must be equal or greater than 0";
+        return false;
+    }
+    return true;
+}
+
+bool Service::ParseMemcgLimitInBytes(const std::vector<std::string>& args, std::string* err) {
+    if (!ParseInt(args[1], &limit_in_bytes_, 0)) {
+        *err = "limit_in_bytes value must be equal or greater than 0";
+        return false;
+    }
+    return true;
+}
+
+bool Service::ParseMemcgSoftLimitInBytes(const std::vector<std::string>& args, std::string* err) {
+    if (!ParseInt(args[1], &soft_limit_in_bytes_, 0)) {
+        *err = "soft_limit_in_bytes value must be equal or greater than 0";
+        return false;
+    }
+    return true;
+}
+
 bool Service::ParseSeclabel(const std::vector<std::string>& args, std::string* err) {
     seclabel_ = args[1];
     return true;
@@ -609,6 +639,12 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
         {"onrestart",   {1,     kMax, &Service::ParseOnrestart}},
         {"oom_score_adjust",
                         {1,     1,    &Service::ParseOomScoreAdjust}},
+        {"memcg.swappiness",
+                        {1,     1,    &Service::ParseMemcgSwappiness}},
+        {"memcg.soft_limit_in_bytes",
+                        {1,     1,    &Service::ParseMemcgSoftLimitInBytes}},
+        {"memcg.limit_in_bytes",
+                        {1,     1,    &Service::ParseMemcgLimitInBytes}},
         {"namespace",   {1,     2,    &Service::ParseNamespace}},
         {"seclabel",    {1,     1,    &Service::ParseSeclabel}},
         {"setenv",      {2,     2,    &Service::ParseSetenv}},
@@ -795,6 +831,24 @@ bool Service::Start() {
     if (errno != 0) {
         PLOG(ERROR) << "createProcessGroup(" << uid_ << ", " << pid_ << ") failed for service '"
                     << name_ << "'";
+    } else {
+        if (swappiness_ != -1) {
+            if (!setProcessGroupSwappiness(uid_, pid_, swappiness_)) {
+                PLOG(ERROR) << "setProcessGroupSwappiness failed";
+            }
+        }
+
+        if (soft_limit_in_bytes_ != -1) {
+            if (!setProcessGroupSoftLimit(uid_, pid_, soft_limit_in_bytes_)) {
+                PLOG(ERROR) << "setProcessGroupSoftLimit failed";
+            }
+        }
+
+        if (limit_in_bytes_ != -1) {
+            if (!setProcessGroupLimit(uid_, pid_, limit_in_bytes_)) {
+                PLOG(ERROR) << "setProcessGroupLimit failed";
+            }
+        }
     }
 
     if ((flags_ & SVC_EXEC) != 0) {
