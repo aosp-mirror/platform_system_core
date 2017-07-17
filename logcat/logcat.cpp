@@ -1638,7 +1638,7 @@ static int __logcat(android_logcat_context_internal* context) {
                 logcat_panic(context, HELP_FALSE, "read: unexpected length.\n");
                 break;
             }
-            logcat_panic(context, HELP_FALSE, "logcat read failure");
+            logcat_panic(context, HELP_FALSE, "logcat read failure\n");
             break;
         }
 
