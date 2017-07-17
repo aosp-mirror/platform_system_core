@@ -379,6 +379,20 @@ on post-fs-data
 
     # create basic filesystem structure
     mkdir /data/misc 01771 system misc
+    mkdir /data/misc/recovery 0770 system log
+    copy /data/misc/recovery/default.prop /data/misc/recovery/default.prop.1
+    chmod 0440 /data/misc/recovery/default.prop.1
+    chown system log /data/misc/recovery/default.prop.1
+    copy /default.prop /data/misc/recovery/default.prop
+    chmod 0440 /data/misc/recovery/default.prop
+    chown system log /data/misc/recovery/default.prop
+    mkdir /data/misc/recovery/proc 0770 system log
+    copy /data/misc/recovery/proc/version /data/misc/recovery/proc/version.1
+    chmod 0440 /data/misc/recovery/proc/version.1
+    chown system log /data/misc/recovery/proc/version.1
+    copy /proc/version /data/misc/recovery/proc/version
+    chmod 0440 /data/misc/recovery/proc/version
+    chown system log /data/misc/recovery/proc/version
     mkdir /data/misc/bluedroid 02770 bluetooth bluetooth
     # Fix the access permissions and group ownership for 'bt_config.conf'
     chmod 0660 /data/misc/bluedroid/bt_config.conf
