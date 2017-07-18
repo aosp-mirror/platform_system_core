@@ -391,7 +391,10 @@ static int set_mmap_rnd_bits_action(const std::vector<std::string>& args)
     int ret = -1;
 
     /* values are arch-dependent */
-#if defined(__aarch64__)
+#if defined(USER_MODE_LINUX)
+    /* uml does not support mmap_rnd_bits */
+    ret = 0;
+#elif defined(__aarch64__)
     /* arm64 supports 18 - 33 bits depending on pagesize and VA_SIZE */
     if (set_mmap_rnd_bits_min(33, 24, false)
             && set_mmap_rnd_bits_min(16, 16, true)) {
