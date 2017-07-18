@@ -96,7 +96,8 @@ bool Elf::GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offse
 }
 
 bool Elf::Step(uint64_t rel_pc, Regs* regs, Memory* process_memory) {
-  return valid_ && (interface_->Step(rel_pc, regs, process_memory) ||
+  return valid_ && (regs->StepIfSignalHandler(process_memory) ||
+                    interface_->Step(rel_pc, regs, process_memory) ||
                     (gnu_debugdata_interface_ &&
                      gnu_debugdata_interface_->Step(rel_pc, regs, process_memory)));
 }
@@ -147,21 +148,22 @@ ElfInterface* Elf::CreateInterfaceFromMemory(Memory* memory) {
     machine_type_ = e_machine;
     if (e_machine == EM_ARM) {
       interface.reset(new ElfInterfaceArm(memory));
-    } else {
+    } else if (e_machine == EM_386) {
       interface.reset(new ElfInterface32(memory));
+    } else {
+      ALOGI("32 bit elf that is neither arm nor x86: e_machine = %d\n", e_machine);
+      return nullptr;
     }
   } else if (class_type_ == ELFCLASS64) {
     Elf64_Half e_machine;
     if (!memory->Read(EI_NIDENT + sizeof(Elf64_Half), &e_machine, sizeof(e_machine))) {
       return nullptr;
     }
-
     if (e_machine != EM_AARCH64 && e_machine != EM_X86_64) {
       // Unsupported.
       ALOGI("64 bit elf that is neither aarch64 nor x86_64: e_machine = %d\n", e_machine);
       return nullptr;
     }
-
     machine_type_ = e_machine;
     interface.reset(new ElfInterface64(memory));
   }
