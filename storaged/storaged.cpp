@@ -200,6 +200,10 @@ void storaged_t::binderDied(const wp<IBinder>& who) {
     }
 }
 
+void storaged_t::report_storage_info() {
+    storage_info->report();
+}
+
 /* storaged_t */
 storaged_t::storaged_t(void) {
     if (access(MMC_DISK_STATS_PATH, R_OK) < 0 && access(SDA_DISK_STATS_PATH, R_OK) < 0) {
@@ -222,6 +226,8 @@ storaged_t::storaged_t(void) {
     mConfig.periodic_chores_interval_uid_io =
         property_get_int32("ro.storaged.uid_io.interval", DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO);
 
+    storage_info.reset(storage_info_t::get_storage_info());
+
     mStarttime = time(NULL);
 }
 
@@ -229,6 +235,7 @@ void storaged_t::event(void) {
     if (mConfig.diskstats_available) {
         mDiskStats.update();
         mDsm.update();
+        storage_info->refresh();
         if (mTimer && (mTimer % mConfig.periodic_chores_interval_disk_stats_publish) == 0) {
             mDiskStats.publish();
         }
