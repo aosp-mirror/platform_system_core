@@ -52,7 +52,6 @@ cc_library {
         "CallStack.cpp",
         "FileMap.cpp",
         "JenkinsHash.cpp",
-        "Log.cpp",
         "NativeHandle.cpp",
         "Printer.cpp",
         "PropertyMap.cpp",

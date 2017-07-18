@@ -49,6 +49,7 @@ void* storaged_main(void* /* unused */) {
     storaged = new storaged_t();
 
     storaged->init_battery_service();
+    storaged->report_storage_info();
 
     LOG_TO(SYSTEM, INFO) << "storaged: Start";
 
@@ -113,7 +114,6 @@ int main(int argc, char** argv) {
     }
 
     if (flag_main_service) { // start main thread
-        report_storage_health();
         // Start the main thread of storaged
         pthread_t storaged_main_thread;
         errno = pthread_create(&storaged_main_thread, NULL, storaged_main, NULL);

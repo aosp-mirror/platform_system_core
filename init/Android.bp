@@ -157,6 +157,7 @@ cc_test {
         "init_test.cpp",
         "property_service_test.cpp",
         "service_test.cpp",
+        "ueventd_test.cpp",
         "util_test.cpp",
     ],
     shared_libs: [
