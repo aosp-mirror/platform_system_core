@@ -53,7 +53,6 @@ cc_library {
         "FileMap.cpp",
         "JenkinsHash.cpp",
         "LinearTransform.cpp",
-        "Log.cpp",
         "NativeHandle.cpp",
         "Printer.cpp",
         "PropertyMap.cpp",
