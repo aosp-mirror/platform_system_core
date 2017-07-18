@@ -116,7 +116,7 @@ LOCAL_SANITIZE := $(adb_target_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
-LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase
+LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase libasyncio
 
 include $(BUILD_STATIC_LIBRARY)
 
@@ -362,6 +362,7 @@ LOCAL_SANITIZE := $(adb_target_sanitize)
 LOCAL_STRIP_MODULE := keep_symbols
 LOCAL_STATIC_LIBRARIES := \
     libadbd \
+    libasyncio \
     libavb_user \
     libbase \
     libbootloader_message \

@@ -31,8 +31,7 @@
 #include "usb.h"
 
 constexpr size_t MAX_PAYLOAD_V1 = 4 * 1024;
-constexpr size_t MAX_PAYLOAD_V2 = 256 * 1024;
-constexpr size_t MAX_PAYLOAD = MAX_PAYLOAD_V2;
+constexpr size_t MAX_PAYLOAD = 1024 * 1024;
 
 constexpr size_t LINUX_MAX_SOCKET_SIZE = 4194304;
 
