@@ -19,7 +19,7 @@
 
 #include <gtest/gtest.h>
 #include <hardware/hw_auth_token.h>
-#include <UniquePtr.h>
+#include <nativehelper/UniquePtr.h>
 
 #include "../SoftGateKeeper.h"
 

@@ -26,8 +26,8 @@ extern "C" {
 }
 
 #include <android-base/memory.h>
-#include <UniquePtr.h>
 #include <gatekeeper/gatekeeper.h>
+#include <nativehelper/UniquePtr.h>
 
 #include <iostream>
 #include <unordered_map>
