@@ -170,13 +170,13 @@ struct x86_64_mcontext_t {
   // Only care about the registers, skip everything else.
 };
 
-typedef struct x86_64_ucontext {
+struct x86_64_ucontext_t {
   uint64_t uc_flags;  // unsigned long
   uint64_t uc_link;   // struct ucontext*
   x86_64_stack_t uc_stack;
   x86_64_mcontext_t uc_mcontext;
   // Nothing else is used, so don't define it.
-} x86_64_ucontext_t;
+};
 //-------------------------------------------------------------------
 
 }  // namespace unwindstack
