@@ -15,7 +15,7 @@
  */
 
 #include "nativeloader/native_loader.h"
-#include "ScopedUtfChars.h"
+#include <nativehelper/ScopedUtfChars.h>
 
 #include <dlfcn.h>
 #ifdef __ANDROID__

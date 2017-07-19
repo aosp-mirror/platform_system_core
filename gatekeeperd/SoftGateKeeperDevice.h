@@ -19,7 +19,7 @@
 
 #include "SoftGateKeeper.h"
 
-#include <UniquePtr.h>
+#include <nativehelper/UniquePtr.h>
 
 using namespace gatekeeper;
 
