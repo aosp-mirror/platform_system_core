@@ -63,7 +63,10 @@ void WriteFromMultipleThreads(std::vector<std::pair<std::string, T>>& files_and_
 }
 
 TEST(ueventd, setegid_IsPerThread) {
-    if (getuid() != 0) return;
+    if (getuid() != 0) {
+        GTEST_LOG_(INFO) << "Skipping test, must be run as root.";
+        return;
+    }
 
     TemporaryDir dir;
 
@@ -78,13 +81,20 @@ TEST(ueventd, setegid_IsPerThread) {
 
     for (const auto& [file, expected_gid] : files_and_gids) {
         struct stat info;
-        EXPECT_EQ(0, stat(file.c_str(), &info));
+        ASSERT_EQ(0, stat(file.c_str(), &info));
         EXPECT_EQ(expected_gid, info.st_gid);
     }
 }
 
 TEST(ueventd, setfscreatecon_IsPerThread) {
-    if (getuid() != 0) return;
+    if (getuid() != 0) {
+        GTEST_LOG_(INFO) << "Skipping test, must be run as root.";
+        return;
+    }
+    if (!is_selinux_enabled() || security_getenforce() == 1) {
+        GTEST_LOG_(INFO) << "Skipping test, SELinux must be enabled and in permissive mode.";
+        return;
+    }
 
     const char* const contexts[] = {
         "u:object_r:audio_device:s0",
@@ -105,7 +115,7 @@ TEST(ueventd, setfscreatecon_IsPerThread) {
 
     for (const auto& [file, expected_context] : files_and_contexts) {
         char* file_context;
-        EXPECT_GT(getfilecon(file.c_str(), &file_context), 0);
+        ASSERT_GT(getfilecon(file.c_str(), &file_context), 0);
         EXPECT_EQ(expected_context, file_context);
         freecon(file_context);
     }
