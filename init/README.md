@@ -260,6 +260,18 @@ runs the service.
 > Sets the child's /proc/self/oom\_score\_adj to the specified value,
   which must range from -1000 to 1000.
 
+`memcg.swappiness <value>`
+> Sets the child's memory.swappiness to the specified value (only if memcg is mounted),
+  which must be equal or greater than 0.
+
+`memcg.soft_limit_in_bytes <value>`
+> Sets the child's memory.soft_limit_in_bytes to the specified value (only if memcg is mounted),
+  which must be equal or greater than 0.
+
+`memcg.limit_in_bytes <value>`
+> Sets the child's memory.limit_in_bytes to the specified value (only if memcg is mounted),
+  which must be equal or greater than 0.
+
 `shutdown <shutdown_behavior>`
 > Set shutdown behavior of the service process. When this is not specified,
   the service is killed during shutdown process by using SIGTERM and SIGKILL.

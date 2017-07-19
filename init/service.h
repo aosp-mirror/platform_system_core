@@ -134,6 +134,9 @@ class Service {
     bool ParseOneshot(const std::vector<std::string>& args, std::string* err);
     bool ParseOnrestart(const std::vector<std::string>& args, std::string* err);
     bool ParseOomScoreAdjust(const std::vector<std::string>& args, std::string* err);
+    bool ParseMemcgLimitInBytes(const std::vector<std::string>& args, std::string* err);
+    bool ParseMemcgSoftLimitInBytes(const std::vector<std::string>& args, std::string* err);
+    bool ParseMemcgSwappiness(const std::vector<std::string>& args, std::string* err);
     bool ParseNamespace(const std::vector<std::string>& args, std::string* err);
     bool ParseSeclabel(const std::vector<std::string>& args, std::string* err);
     bool ParseSetenv(const std::vector<std::string>& args, std::string* err);
@@ -180,6 +183,10 @@ class Service {
     int priority_;
 
     int oom_score_adjust_;
+
+    int swappiness_;
+    int soft_limit_in_bytes_;
+    int limit_in_bytes_;
 
     bool process_cgroup_empty_ = false;
 
