@@ -35,11 +35,14 @@
 #include <set>
 #include <thread>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 #include <private/android_filesystem_config.h>
 
 #include <processgroup/processgroup.h>
+
+using android::base::WriteStringToFile;
 
 using namespace std::chrono_literals;
 
@@ -402,22 +405,40 @@ int createProcessGroup(uid_t uid, int initialPid)
 
     strlcat(path, PROCESSGROUP_CGROUP_PROCS_FILE, sizeof(path));
 
-    int fd = open(path, O_WRONLY);
-    if (fd == -1) {
-        int ret = -errno;
-        PLOG(ERROR) << "Failed to open " << path;
-        return ret;
-    }
-
-    char pid[PROCESSGROUP_MAX_PID_LEN + 1] = {0};
-    int len = snprintf(pid, sizeof(pid), "%d", initialPid);
-
     int ret = 0;
-    if (write(fd, pid, len) < 0) {
+    if (!WriteStringToFile(std::to_string(initialPid), path)) {
         ret = -errno;
-        PLOG(ERROR) << "Failed to write '" << pid << "' to " << path;
+        PLOG(ERROR) << "Failed to write '" << initialPid << "' to " << path;
     }
 
-    close(fd);
     return ret;
+}
+
+static bool setProcessGroupValue(uid_t uid, int pid, const char* fileName, int64_t value) {
+    char path[PROCESSGROUP_MAX_PATH_LEN] = {0};
+    if (strcmp(getCgroupRootPath(), MEM_CGROUP_PATH)) {
+        PLOG(ERROR) << "Memcg is not mounted." << path;
+        return false;
+    }
+
+    convertUidPidToPath(path, sizeof(path), uid, pid);
+    strlcat(path, fileName, sizeof(path));
+
+    if (!WriteStringToFile(std::to_string(value), path)) {
+        PLOG(ERROR) << "Failed to write '" << value << "' to " << path;
+        return false;
+    }
+    return true;
+}
+
+bool setProcessGroupSwappiness(uid_t uid, int pid, int swappiness) {
+    return setProcessGroupValue(uid, pid, "/memory.swappiness", swappiness);
+}
+
+bool setProcessGroupSoftLimit(uid_t uid, int pid, int64_t soft_limit_in_bytes) {
+    return setProcessGroupValue(uid, pid, "/memory.soft_limit_in_bytes", soft_limit_in_bytes);
+}
+
+bool setProcessGroupLimit(uid_t uid, int pid, int64_t limit_in_bytes) {
+    return setProcessGroupValue(uid, pid, "/memory.limit_in_bytes", limit_in_bytes);
 }
