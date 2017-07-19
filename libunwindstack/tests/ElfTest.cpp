@@ -26,6 +26,7 @@
 #include <unwindstack/MapInfo.h>
 
 #include "ElfTestUtils.h"
+#include "LogFake.h"
 #include "MemoryFake.h"
 
 #if !defined(PT_ARM_EXIDX)
@@ -129,6 +130,32 @@ TEST_F(ElfTest, elf_invalid) {
   ASSERT_FALSE(elf.GetFunctionName(0, &name, &func_offset));
 
   ASSERT_FALSE(elf.Step(0, nullptr, nullptr));
+}
+
+TEST_F(ElfTest, elf32_invalid_machine) {
+  Elf elf(memory_);
+
+  InitElf32(EM_PPC);
+
+  ResetLogs();
+  ASSERT_FALSE(elf.Init());
+
+  ASSERT_EQ("", GetFakeLogBuf());
+  ASSERT_EQ("4 unwind 32 bit elf that is neither arm nor x86: e_machine = 20\n\n",
+            GetFakeLogPrint());
+}
+
+TEST_F(ElfTest, elf64_invalid_machine) {
+  Elf elf(memory_);
+
+  InitElf64(EM_PPC64);
+
+  ResetLogs();
+  ASSERT_FALSE(elf.Init());
+
+  ASSERT_EQ("", GetFakeLogBuf());
+  ASSERT_EQ("4 unwind 64 bit elf that is neither aarch64 nor x86_64: e_machine = 21\n\n",
+            GetFakeLogPrint());
 }
 
 TEST_F(ElfTest, elf_arm) {
