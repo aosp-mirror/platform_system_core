@@ -7,6 +7,8 @@
 dir.system = /system/bin/
 dir.system = /system/xbin/
 dir.vendor = /vendor/bin/
+dir.system = /data/nativetest/
+dir.system = /data/nativetest64/
 
 [system]
 additional.namespaces = sphal,vndk,rs
