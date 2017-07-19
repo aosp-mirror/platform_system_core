@@ -86,6 +86,8 @@ LOCAL_SHARED_LIBRARIES :=
 include $(BUILD_HOST_EXECUTABLE)
 
 my_dist_files := $(LOCAL_BUILT_MODULE)
+my_dist_files += $(HOST_OUT_EXECUTABLES)/mke2fs$(HOST_EXECUTABLE_SUFFIX)
+my_dist_files += $(HOST_OUT_EXECUTABLES)/e2fsdroid$(HOST_EXECUTABLE_SUFFIX)
 ifeq ($(HOST_OS),linux)
 my_dist_files += $(HOST_LIBRARY_PATH)/libf2fs_fmt_host_dyn$(HOST_SHLIB_SUFFIX)
 endif
