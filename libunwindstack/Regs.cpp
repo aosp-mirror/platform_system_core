@@ -258,49 +258,51 @@ static Regs* CreateFromArm64Ucontext(void* ucontext) {
   return regs;
 }
 
+void RegsX86::SetFromUcontext(x86_ucontext_t* ucontext) {
+  // Put the registers in the expected order.
+  regs_[X86_REG_EDI] = ucontext->uc_mcontext.edi;
+  regs_[X86_REG_ESI] = ucontext->uc_mcontext.esi;
+  regs_[X86_REG_EBP] = ucontext->uc_mcontext.ebp;
+  regs_[X86_REG_ESP] = ucontext->uc_mcontext.esp;
+  regs_[X86_REG_EBX] = ucontext->uc_mcontext.ebx;
+  regs_[X86_REG_EDX] = ucontext->uc_mcontext.edx;
+  regs_[X86_REG_ECX] = ucontext->uc_mcontext.ecx;
+  regs_[X86_REG_EAX] = ucontext->uc_mcontext.eax;
+  regs_[X86_REG_EIP] = ucontext->uc_mcontext.eip;
+  SetFromRaw();
+}
+
 static Regs* CreateFromX86Ucontext(void* ucontext) {
   x86_ucontext_t* x86_ucontext = reinterpret_cast<x86_ucontext_t*>(ucontext);
 
   RegsX86* regs = new RegsX86();
-  // Put the registers in the expected order.
-  (*regs)[X86_REG_GS] = x86_ucontext->uc_mcontext.gs;
-  (*regs)[X86_REG_FS] = x86_ucontext->uc_mcontext.fs;
-  (*regs)[X86_REG_ES] = x86_ucontext->uc_mcontext.es;
-  (*regs)[X86_REG_DS] = x86_ucontext->uc_mcontext.ds;
-  (*regs)[X86_REG_EDI] = x86_ucontext->uc_mcontext.edi;
-  (*regs)[X86_REG_ESI] = x86_ucontext->uc_mcontext.esi;
-  (*regs)[X86_REG_EBP] = x86_ucontext->uc_mcontext.ebp;
-  (*regs)[X86_REG_ESP] = x86_ucontext->uc_mcontext.esp;
-  (*regs)[X86_REG_EBX] = x86_ucontext->uc_mcontext.ebx;
-  (*regs)[X86_REG_EDX] = x86_ucontext->uc_mcontext.edx;
-  (*regs)[X86_REG_ECX] = x86_ucontext->uc_mcontext.ecx;
-  (*regs)[X86_REG_EAX] = x86_ucontext->uc_mcontext.eax;
-  (*regs)[X86_REG_EIP] = x86_ucontext->uc_mcontext.eip;
-  regs->SetFromRaw();
+  regs->SetFromUcontext(x86_ucontext);
   return regs;
+}
+
+void RegsX86_64::SetFromUcontext(x86_64_ucontext_t* ucontext) {
+  // R8-R15
+  memcpy(&regs_[X86_64_REG_R8], &ucontext->uc_mcontext.r8, 8 * sizeof(uint64_t));
+
+  // Rest of the registers.
+  regs_[X86_64_REG_RDI] = ucontext->uc_mcontext.rdi;
+  regs_[X86_64_REG_RSI] = ucontext->uc_mcontext.rsi;
+  regs_[X86_64_REG_RBP] = ucontext->uc_mcontext.rbp;
+  regs_[X86_64_REG_RBX] = ucontext->uc_mcontext.rbx;
+  regs_[X86_64_REG_RDX] = ucontext->uc_mcontext.rdx;
+  regs_[X86_64_REG_RAX] = ucontext->uc_mcontext.rax;
+  regs_[X86_64_REG_RCX] = ucontext->uc_mcontext.rcx;
+  regs_[X86_64_REG_RSP] = ucontext->uc_mcontext.rsp;
+  regs_[X86_64_REG_RIP] = ucontext->uc_mcontext.rip;
+
+  SetFromRaw();
 }
 
 static Regs* CreateFromX86_64Ucontext(void* ucontext) {
   x86_64_ucontext_t* x86_64_ucontext = reinterpret_cast<x86_64_ucontext_t*>(ucontext);
 
   RegsX86_64* regs = new RegsX86_64();
-  // Put the registers in the expected order.
-
-  // R8-R15
-  memcpy(&(*regs)[X86_64_REG_R8], &x86_64_ucontext->uc_mcontext.r8, 8 * sizeof(uint64_t));
-
-  // Rest of the registers.
-  (*regs)[X86_64_REG_RDI] = x86_64_ucontext->uc_mcontext.rdi;
-  (*regs)[X86_64_REG_RSI] = x86_64_ucontext->uc_mcontext.rsi;
-  (*regs)[X86_64_REG_RBP] = x86_64_ucontext->uc_mcontext.rbp;
-  (*regs)[X86_64_REG_RBX] = x86_64_ucontext->uc_mcontext.rbx;
-  (*regs)[X86_64_REG_RDX] = x86_64_ucontext->uc_mcontext.rdx;
-  (*regs)[X86_64_REG_RAX] = x86_64_ucontext->uc_mcontext.rax;
-  (*regs)[X86_64_REG_RCX] = x86_64_ucontext->uc_mcontext.rcx;
-  (*regs)[X86_64_REG_RSP] = x86_64_ucontext->uc_mcontext.rsp;
-  (*regs)[X86_64_REG_RIP] = x86_64_ucontext->uc_mcontext.rip;
-
-  regs->SetFromRaw();
+  regs->SetFromUcontext(x86_64_ucontext);
   return regs;
 }
 
@@ -346,6 +348,180 @@ Regs* Regs::CreateFromLocal() {
   abort();
 #endif
   return regs;
+}
+
+bool RegsArm::StepIfSignalHandler(Memory* memory) {
+  uint32_t data;
+  if (!memory->Read(pc(), &data, sizeof(data))) {
+    return false;
+  }
+
+  uint64_t offset = 0;
+  if (data == 0xe3a07077 || data == 0xef900077 || data == 0xdf002777) {
+    // non-RT sigreturn call.
+    // __restore:
+    //
+    // Form 1 (arm):
+    // 0x77 0x70              mov r7, #0x77
+    // 0xa0 0xe3              svc 0x00000000
+    //
+    // Form 2 (arm):
+    // 0x77 0x00 0x90 0xef    svc 0x00900077
+    //
+    // Form 3 (thumb):
+    // 0x77 0x27              movs r7, #77
+    // 0x00 0xdf              svc 0
+    if (!memory->Read(sp(), &data, sizeof(data))) {
+      return false;
+    }
+    if (data == 0x5ac3c35a) {
+      // SP + uc_mcontext offset + r0 offset.
+      offset = sp() + 0x14 + 0xc;
+    } else {
+      // SP + r0 offset
+      offset = sp() + 0xc;
+    }
+  } else if (data == 0xe3a070ad || data == 0xef9000ad || data == 0xdf0027ad) {
+    // RT sigreturn call.
+    // __restore_rt:
+    //
+    // Form 1 (arm):
+    // 0xad 0x70      mov r7, #0xad
+    // 0xa0 0xe3      svc 0x00000000
+    //
+    // Form 2 (arm):
+    // 0xad 0x00 0x90 0xef    svc 0x009000ad
+    //
+    // Form 3 (thumb):
+    // 0xad 0x27              movs r7, #ad
+    // 0x00 0xdf              svc 0
+    if (!memory->Read(sp(), &data, sizeof(data))) {
+      return false;
+    }
+    if (data == sp() + 8) {
+      // SP + 8 + sizeof(siginfo_t) + uc_mcontext_offset + r0 offset
+      offset = sp() + 8 + 0x80 + 0x14 + 0xc;
+    } else {
+      // SP + sizeof(siginfo_t) + uc_mcontext_offset + r0 offset
+      offset = sp() + 0x80 + 0x14 + 0xc;
+    }
+  }
+  if (offset == 0) {
+    return false;
+  }
+
+  if (!memory->Read(offset, regs_.data(), sizeof(uint32_t) * ARM_REG_LAST)) {
+    return false;
+  }
+  SetFromRaw();
+  return true;
+}
+
+bool RegsArm64::StepIfSignalHandler(Memory* memory) {
+  uint64_t data;
+  if (!memory->Read(pc(), &data, sizeof(data))) {
+    return false;
+  }
+
+  // Look for the kernel sigreturn function.
+  // __kernel_rt_sigreturn:
+  // 0xd2801168     mov x8, #0x8b
+  // 0xd4000001     svc #0x0
+  if (data != 0xd4000001d2801168ULL) {
+    return false;
+  }
+
+  // SP + sizeof(siginfo_t) + uc_mcontext offset + X0 offset.
+  if (!memory->Read(sp() + 0x80 + 0xb0 + 0x08, regs_.data(), sizeof(uint64_t) * ARM64_REG_LAST)) {
+    return false;
+  }
+
+  SetFromRaw();
+  return true;
+}
+
+bool RegsX86::StepIfSignalHandler(Memory* memory) {
+  uint64_t data;
+  if (!memory->Read(pc(), &data, sizeof(data))) {
+    return false;
+  }
+
+  if (data == 0x80cd00000077b858ULL) {
+    // Without SA_SIGINFO set, the return sequence is:
+    //
+    //   __restore:
+    //   0x58                            pop %eax
+    //   0xb8 0x77 0x00 0x00 0x00        movl 0x77,%eax
+    //   0xcd 0x80                       int 0x80
+    //
+    // SP points at arguments:
+    //   int signum
+    //   struct sigcontext (same format as mcontext)
+    struct x86_mcontext_t context;
+    if (!memory->Read(sp() + 4, &context, sizeof(context))) {
+      return false;
+    }
+    regs_[X86_REG_EBP] = context.ebp;
+    regs_[X86_REG_ESP] = context.esp;
+    regs_[X86_REG_EBX] = context.ebx;
+    regs_[X86_REG_EDX] = context.edx;
+    regs_[X86_REG_ECX] = context.ecx;
+    regs_[X86_REG_EAX] = context.eax;
+    regs_[X86_REG_EIP] = context.eip;
+    SetFromRaw();
+    return true;
+  } else if ((data & 0x00ffffffffffffffULL) == 0x0080cd000000adb8ULL) {
+    // With SA_SIGINFO set, the return sequence is:
+    //
+    //   __restore_rt:
+    //   0xb8 0xad 0x00 0x00 0x00        movl 0xad,%eax
+    //   0xcd 0x80                       int 0x80
+    //
+    // SP points at arguments:
+    //   int signum
+    //   siginfo*
+    //   ucontext*
+
+    // Get the location of the sigcontext data.
+    uint32_t ptr;
+    if (!memory->Read(sp() + 8, &ptr, sizeof(ptr))) {
+      return false;
+    }
+    // Only read the portion of the data structure we care about.
+    x86_ucontext_t x86_ucontext;
+    if (!memory->Read(ptr + 0x14, &x86_ucontext.uc_mcontext, sizeof(x86_mcontext_t))) {
+      return false;
+    }
+    SetFromUcontext(&x86_ucontext);
+    return true;
+  }
+  return false;
+}
+
+bool RegsX86_64::StepIfSignalHandler(Memory* memory) {
+  uint64_t data;
+  if (!memory->Read(pc(), &data, sizeof(data)) || data != 0x0f0000000fc0c748) {
+    return false;
+  }
+
+  uint16_t data2;
+  if (!memory->Read(pc() + 8, &data2, sizeof(data2)) || data2 != 0x0f05) {
+    return false;
+  }
+
+  // __restore_rt:
+  // 0x48 0xc7 0xc0 0x0f 0x00 0x00 0x00   mov $0xf,%rax
+  // 0x0f 0x05                            syscall
+  // 0x0f                                 nopl 0x0($rax)
+
+  // Read the mcontext data from the stack.
+  // sp points to the ucontext data structure, read only the mcontext part.
+  x86_64_ucontext_t x86_64_ucontext;
+  if (!memory->Read(sp() + 0x28, &x86_64_ucontext.uc_mcontext, sizeof(x86_64_mcontext_t))) {
+    return false;
+  }
+  SetFromUcontext(&x86_64_ucontext);
+  return true;
 }
 
 }  // namespace unwindstack

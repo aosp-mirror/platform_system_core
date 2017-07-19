@@ -33,6 +33,7 @@ class RegsFake : public RegsImpl<TypeParam> {
 
   uint64_t GetAdjustedPc(uint64_t, Elf*) override { return 0; }
   void SetFromRaw() override {}
+  bool StepIfSignalHandler(Memory*) override { return false; }
   bool GetReturnAddressFromDefault(Memory*, uint64_t*) { return false; }
 };
 
