@@ -16,8 +16,8 @@
 #include <algorithm>
 #include <fstream>
 
-#include <UniquePtr.h>
 #include <gtest/gtest.h>
+#include <nativehelper/UniquePtr.h>
 #include <openssl/engine.h>
 
 #include <hardware/keymaster0.h>
