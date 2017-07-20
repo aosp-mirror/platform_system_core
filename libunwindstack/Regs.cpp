@@ -350,9 +350,12 @@ Regs* Regs::CreateFromLocal() {
   return regs;
 }
 
-bool RegsArm::StepIfSignalHandler(Memory* memory) {
+bool RegsArm::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) {
   uint32_t data;
-  if (!memory->Read(pc(), &data, sizeof(data))) {
+  Memory* elf_memory = elf->memory();
+  // Read from elf memory since it is usually more expensive to read from
+  // process memory.
+  if (!elf_memory->Read(rel_pc, &data, sizeof(data))) {
     return false;
   }
 
@@ -371,7 +374,7 @@ bool RegsArm::StepIfSignalHandler(Memory* memory) {
     // Form 3 (thumb):
     // 0x77 0x27              movs r7, #77
     // 0x00 0xdf              svc 0
-    if (!memory->Read(sp(), &data, sizeof(data))) {
+    if (!process_memory->Read(sp(), &data, sizeof(data))) {
       return false;
     }
     if (data == 0x5ac3c35a) {
@@ -395,7 +398,7 @@ bool RegsArm::StepIfSignalHandler(Memory* memory) {
     // Form 3 (thumb):
     // 0xad 0x27              movs r7, #ad
     // 0x00 0xdf              svc 0
-    if (!memory->Read(sp(), &data, sizeof(data))) {
+    if (!process_memory->Read(sp(), &data, sizeof(data))) {
       return false;
     }
     if (data == sp() + 8) {
@@ -410,16 +413,19 @@ bool RegsArm::StepIfSignalHandler(Memory* memory) {
     return false;
   }
 
-  if (!memory->Read(offset, regs_.data(), sizeof(uint32_t) * ARM_REG_LAST)) {
+  if (!process_memory->Read(offset, regs_.data(), sizeof(uint32_t) * ARM_REG_LAST)) {
     return false;
   }
   SetFromRaw();
   return true;
 }
 
-bool RegsArm64::StepIfSignalHandler(Memory* memory) {
+bool RegsArm64::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) {
   uint64_t data;
-  if (!memory->Read(pc(), &data, sizeof(data))) {
+  Memory* elf_memory = elf->memory();
+  // Read from elf memory since it is usually more expensive to read from
+  // process memory.
+  if (!elf_memory->Read(rel_pc, &data, sizeof(data))) {
     return false;
   }
 
@@ -432,7 +438,8 @@ bool RegsArm64::StepIfSignalHandler(Memory* memory) {
   }
 
   // SP + sizeof(siginfo_t) + uc_mcontext offset + X0 offset.
-  if (!memory->Read(sp() + 0x80 + 0xb0 + 0x08, regs_.data(), sizeof(uint64_t) * ARM64_REG_LAST)) {
+  if (!process_memory->Read(sp() + 0x80 + 0xb0 + 0x08, regs_.data(),
+                            sizeof(uint64_t) * ARM64_REG_LAST)) {
     return false;
   }
 
@@ -440,9 +447,12 @@ bool RegsArm64::StepIfSignalHandler(Memory* memory) {
   return true;
 }
 
-bool RegsX86::StepIfSignalHandler(Memory* memory) {
+bool RegsX86::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) {
   uint64_t data;
-  if (!memory->Read(pc(), &data, sizeof(data))) {
+  Memory* elf_memory = elf->memory();
+  // Read from elf memory since it is usually more expensive to read from
+  // process memory.
+  if (!elf_memory->Read(rel_pc, &data, sizeof(data))) {
     return false;
   }
 
@@ -458,7 +468,7 @@ bool RegsX86::StepIfSignalHandler(Memory* memory) {
     //   int signum
     //   struct sigcontext (same format as mcontext)
     struct x86_mcontext_t context;
-    if (!memory->Read(sp() + 4, &context, sizeof(context))) {
+    if (!process_memory->Read(sp() + 4, &context, sizeof(context))) {
       return false;
     }
     regs_[X86_REG_EBP] = context.ebp;
@@ -484,12 +494,12 @@ bool RegsX86::StepIfSignalHandler(Memory* memory) {
 
     // Get the location of the sigcontext data.
     uint32_t ptr;
-    if (!memory->Read(sp() + 8, &ptr, sizeof(ptr))) {
+    if (!process_memory->Read(sp() + 8, &ptr, sizeof(ptr))) {
       return false;
     }
     // Only read the portion of the data structure we care about.
     x86_ucontext_t x86_ucontext;
-    if (!memory->Read(ptr + 0x14, &x86_ucontext.uc_mcontext, sizeof(x86_mcontext_t))) {
+    if (!process_memory->Read(ptr + 0x14, &x86_ucontext.uc_mcontext, sizeof(x86_mcontext_t))) {
       return false;
     }
     SetFromUcontext(&x86_ucontext);
@@ -498,14 +508,17 @@ bool RegsX86::StepIfSignalHandler(Memory* memory) {
   return false;
 }
 
-bool RegsX86_64::StepIfSignalHandler(Memory* memory) {
+bool RegsX86_64::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) {
   uint64_t data;
-  if (!memory->Read(pc(), &data, sizeof(data)) || data != 0x0f0000000fc0c748) {
+  Memory* elf_memory = elf->memory();
+  // Read from elf memory since it is usually more expensive to read from
+  // process memory.
+  if (!elf_memory->Read(rel_pc, &data, sizeof(data)) || data != 0x0f0000000fc0c748) {
     return false;
   }
 
   uint16_t data2;
-  if (!memory->Read(pc() + 8, &data2, sizeof(data2)) || data2 != 0x0f05) {
+  if (!elf_memory->Read(rel_pc + 8, &data2, sizeof(data2)) || data2 != 0x0f05) {
     return false;
   }
 
@@ -517,7 +530,7 @@ bool RegsX86_64::StepIfSignalHandler(Memory* memory) {
   // Read the mcontext data from the stack.
   // sp points to the ucontext data structure, read only the mcontext part.
   x86_64_ucontext_t x86_64_ucontext;
-  if (!memory->Read(sp() + 0x28, &x86_64_ucontext.uc_mcontext, sizeof(x86_64_mcontext_t))) {
+  if (!process_memory->Read(sp() + 0x28, &x86_64_ucontext.uc_mcontext, sizeof(x86_64_mcontext_t))) {
     return false;
   }
   SetFromUcontext(&x86_64_ucontext);

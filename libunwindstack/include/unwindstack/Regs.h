@@ -57,7 +57,7 @@ class Regs {
 
   virtual uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) = 0;
 
-  virtual bool StepIfSignalHandler(Memory*) = 0;
+  virtual bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) = 0;
 
   virtual void SetFromRaw() = 0;
 
@@ -109,7 +109,7 @@ class RegsArm : public RegsImpl<uint32_t> {
 
   void SetFromRaw() override;
 
-  bool StepIfSignalHandler(Memory* memory) override;
+  bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) override;
 };
 
 class RegsArm64 : public RegsImpl<uint64_t> {
@@ -121,7 +121,7 @@ class RegsArm64 : public RegsImpl<uint64_t> {
 
   void SetFromRaw() override;
 
-  bool StepIfSignalHandler(Memory* memory) override;
+  bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) override;
 };
 
 class RegsX86 : public RegsImpl<uint32_t> {
@@ -133,7 +133,7 @@ class RegsX86 : public RegsImpl<uint32_t> {
 
   void SetFromRaw() override;
 
-  bool StepIfSignalHandler(Memory* memory) override;
+  bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) override;
 
   void SetFromUcontext(x86_ucontext_t* ucontext);
 };
@@ -147,7 +147,7 @@ class RegsX86_64 : public RegsImpl<uint64_t> {
 
   void SetFromRaw() override;
 
-  bool StepIfSignalHandler(Memory* memory) override;
+  bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) override;
 
   void SetFromUcontext(x86_64_ucontext_t* ucontext);
 };
