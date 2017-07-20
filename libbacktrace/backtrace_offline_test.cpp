@@ -167,9 +167,9 @@ TEST(libbacktrace, DISABLED_generate_offline_testdata) {
   // 2. Dump maps
   for (auto it = map->begin(); it != map->end(); ++it) {
     testdata += android::base::StringPrintf(
-        "map: start: %" PRIxPTR " end: %" PRIxPTR " offset: %" PRIxPTR
-        " load_base: %" PRIxPTR " flags: %d name: %s\n",
-        it->start, it->end, it->offset, it->load_base, it->flags, it->name.c_str());
+        "map: start: %" PRIxPTR " end: %" PRIxPTR " offset: %" PRIxPTR " load_bias: %" PRIxPTR
+        " flags: %d name: %s\n",
+        it->start, it->end, it->offset, it->load_bias, it->flags, it->name.c_str());
   }
   // 3. Dump registers
   testdata += android::base::StringPrintf("registers: %zu ", sizeof(arg.unw_context));
@@ -246,9 +246,9 @@ bool ReadOfflineTestData(const std::string offline_testdata_path, OfflineTestDat
       backtrace_map_t& map = testdata->maps.back();
       int pos;
       sscanf(line.c_str(),
-             "map: start: %" SCNxPTR " end: %" SCNxPTR " offset: %" SCNxPTR
-             " load_base: %" SCNxPTR " flags: %d name: %n",
-             &map.start, &map.end, &map.offset, &map.load_base, &map.flags, &pos);
+             "map: start: %" SCNxPTR " end: %" SCNxPTR " offset: %" SCNxPTR " load_bias: %" SCNxPTR
+             " flags: %d name: %n",
+             &map.start, &map.end, &map.offset, &map.load_bias, &map.flags, &pos);
       map.name = android::base::Trim(line.substr(pos));
     } else if (android::base::StartsWith(line, "registers:")) {
       size_t size;
@@ -392,8 +392,8 @@ TEST(libbacktrace, offline_unwind_mix_eh_frame_and_arm_exidx) {
   // The last frame is outside of libart.so
   ASSERT_EQ(testdata.symbols.size() + 1, backtrace->NumFrames());
   for (size_t i = 0; i + 1 < backtrace->NumFrames(); ++i) {
-    uintptr_t vaddr_in_file = backtrace->GetFrame(i)->pc - testdata.maps[0].start +
-        testdata.maps[0].load_base;
+    uintptr_t vaddr_in_file =
+        backtrace->GetFrame(i)->pc - testdata.maps[0].start + testdata.maps[0].load_bias;
     std::string name = FunctionNameForAddress(vaddr_in_file, testdata.symbols);
     ASSERT_EQ(name, testdata.symbols[i].name);
   }

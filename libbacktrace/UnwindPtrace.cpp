@@ -135,6 +135,11 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
       }
 
       FillInMap(frame->pc, &frame->map);
+      if (BacktraceMap::IsValid(frame->map)) {
+        frame->rel_pc = frame->pc - frame->map.start + frame->map.load_bias;
+      } else {
+        frame->rel_pc = frame->pc;
+      }
 
       frame->func_name = GetFunctionName(frame->pc, &frame->func_offset, &frame->map);
 

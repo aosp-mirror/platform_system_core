@@ -84,10 +84,8 @@ std::string Backtrace::FormatFrameData(size_t frame_num) {
 }
 
 std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
-  uintptr_t relative_pc;
   std::string map_name;
   if (BacktraceMap::IsValid(frame->map)) {
-    relative_pc = BacktraceMap::GetRelativePc(frame->map, frame->pc);
     if (!frame->map.name.empty()) {
       map_name = frame->map.name.c_str();
       if (map_name[0] == '[' && map_name[map_name.size() - 1] == ']') {
@@ -99,10 +97,9 @@ std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
     }
   } else {
     map_name = "<unknown>";
-    relative_pc = frame->pc;
   }
 
-  std::string line(StringPrintf("#%02zu pc %" PRIPTR "  ", frame->num, relative_pc));
+  std::string line(StringPrintf("#%02zu pc %" PRIPTR "  ", frame->num, frame->rel_pc));
   line += map_name;
   // Special handling for non-zero offset maps, we need to print that
   // information.
