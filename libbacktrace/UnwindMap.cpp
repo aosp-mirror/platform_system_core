@@ -57,7 +57,7 @@ bool UnwindMapRemote::GenerateMap() {
     map.start = unw_map.start;
     map.end = unw_map.end;
     map.offset = unw_map.offset;
-    map.load_base = unw_map.load_base;
+    map.load_bias = unw_map.load_base;
     map.flags = unw_map.flags;
     map.name = unw_map.path;
 
@@ -106,7 +106,7 @@ bool UnwindMapLocal::GenerateMap() {
       map.start = unw_map.start;
       map.end = unw_map.end;
       map.offset = unw_map.offset;
-      map.load_base = unw_map.load_base;
+      map.load_bias = unw_map.load_base;
       map.flags = unw_map.flags;
       map.name = unw_map.path;
 

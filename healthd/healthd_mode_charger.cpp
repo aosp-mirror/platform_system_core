@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2013 The Android Open Source Project
+ * Copyright (C) 2011-2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <linux/input.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,56 +33,54 @@
 
 #include <android-base/file.h>
 #include <android-base/macros.h>
-#include <android-base/stringprintf.h>
 
-#include <sys/socket.h>
 #include <linux/netlink.h>
+#include <sys/socket.h>
 
-#include <batteryservice/BatteryService.h>
 #include <cutils/klog.h>
 #include <cutils/misc.h>
-#include <cutils/uevent.h>
 #include <cutils/properties.h>
-#include <minui/minui.h>
+#include <cutils/uevent.h>
 #include <sys/reboot.h>
 
 #ifdef CHARGER_ENABLE_SUSPEND
 #include <suspend/autosuspend.h>
 #endif
 
-#include "animation.h"
 #include "AnimationParser.h"
+#include "healthd_draw.h"
 
 #include <healthd/healthd.h>
 
 using namespace android;
 
-char *locale;
+char* locale;
 
 #ifndef max
-#define max(a,b) ((a) > (b) ? (a) : (b))
+#define max(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
 #ifndef min
-#define min(a,b) ((a) < (b) ? (a) : (b))
+#define min(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
-#define ARRAY_SIZE(x)           (sizeof(x)/sizeof((x)[0]))
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
-#define MSEC_PER_SEC            (1000LL)
-#define NSEC_PER_MSEC           (1000000LL)
+#define MSEC_PER_SEC (1000LL)
+#define NSEC_PER_MSEC (1000000LL)
 
-#define BATTERY_UNKNOWN_TIME    (2 * MSEC_PER_SEC)
-#define POWER_ON_KEY_TIME       (2 * MSEC_PER_SEC)
+#define BATTERY_UNKNOWN_TIME (2 * MSEC_PER_SEC)
+#define POWER_ON_KEY_TIME (2 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
-#define LAST_KMSG_MAX_SZ        (32 * 1024)
+#define LAST_KMSG_MAX_SZ (32 * 1024)
 
-#define LOGE(x...) do { KLOG_ERROR("charger", x); } while (0)
-#define LOGW(x...) do { KLOG_WARNING("charger", x); } while (0)
-#define LOGV(x...) do { KLOG_DEBUG("charger", x); } while (0)
+#define LOGE(x...) KLOG_ERROR("charger", x);
+#define LOGW(x...) KLOG_WARNING("charger", x);
+#define LOGV(x...) KLOG_DEBUG("charger", x);
 
-static constexpr const char* animation_desc_path = "/res/values/charger/animation.txt";
+static constexpr const char* animation_desc_path =
+    "/res/values/charger/animation.txt";
 
 struct key_state {
     bool pending;
@@ -98,34 +95,36 @@ struct charger {
     int64_t next_key_check;
     int64_t next_pwr_check;
 
-    struct key_state keys[KEY_MAX + 1];
+    key_state keys[KEY_MAX + 1];
 
-    struct animation *batt_anim;
+    animation* batt_anim;
     GRSurface* surf_unknown;
     int boot_min_cap;
 };
 
-static const struct animation BASE_ANIMATION = {
-    .text_clock = {
-        .pos_x = 0,
-        .pos_y = 0,
+static const animation BASE_ANIMATION = {
+    .text_clock =
+        {
+            .pos_x = 0,
+            .pos_y = 0,
 
-        .color_r = 255,
-        .color_g = 255,
-        .color_b = 255,
-        .color_a = 255,
+            .color_r = 255,
+            .color_g = 255,
+            .color_b = 255,
+            .color_a = 255,
 
-        .font = nullptr,
-    },
-    .text_percent = {
-        .pos_x = 0,
-        .pos_y = 0,
+            .font = nullptr,
+        },
+    .text_percent =
+        {
+            .pos_x = 0,
+            .pos_y = 0,
 
-        .color_r = 255,
-        .color_g = 255,
-        .color_b = 255,
-        .color_a = 255,
-    },
+            .color_r = 255,
+            .color_g = 255,
+            .color_b = 255,
+            .color_a = 255,
+        },
 
     .run = false,
 
@@ -141,8 +140,7 @@ static const struct animation BASE_ANIMATION = {
     .cur_status = BATTERY_STATUS_UNKNOWN,
 };
 
-
-static struct animation::frame default_animation_frames[] = {
+static animation::frame default_animation_frames[] = {
     {
         .disp_time = 750,
         .min_level = 0,
@@ -181,35 +179,25 @@ static struct animation::frame default_animation_frames[] = {
     },
 };
 
-static struct animation battery_animation = BASE_ANIMATION;
+static animation battery_animation = BASE_ANIMATION;
 
-static struct charger charger_state;
-static struct healthd_config *healthd_config;
-static struct android::BatteryProperties *batt_prop;
-static int char_width;
-static int char_height;
-static bool minui_inited;
+static charger charger_state;
+static healthd_config* healthd_config;
+static android::BatteryProperties* batt_prop;
+static std::unique_ptr<HealthdDraw> healthd_draw;
 
 /* current time in milliseconds */
-static int64_t curr_time_ms(void)
-{
-    struct timespec tm;
+static int64_t curr_time_ms() {
+    timespec tm;
     clock_gettime(CLOCK_MONOTONIC, &tm);
     return tm.tv_sec * MSEC_PER_SEC + (tm.tv_nsec / NSEC_PER_MSEC);
 }
 
-static void clear_screen(void)
-{
-    gr_color(0, 0, 0, 255);
-    gr_clear();
-}
-
 #define MAX_KLOG_WRITE_BUF_SZ 256
 
-static void dump_last_kmsg(void)
-{
-    char *buf;
-    char *ptr;
+static void dump_last_kmsg(void) {
+    char* buf;
+    char* ptr;
     unsigned sz = 0;
     int len;
 
@@ -239,11 +227,10 @@ static void dump_last_kmsg(void)
     while (len > 0) {
         int cnt = min(len, MAX_KLOG_WRITE_BUF_SZ);
         char yoink;
-        char *nl;
+        char* nl;
 
-        nl = (char *)memrchr(ptr, '\n', cnt - 1);
-        if (nl)
-            cnt = nl - ptr + 1;
+        nl = (char*)memrchr(ptr, '\n', cnt - 1);
+        if (nl) cnt = nl - ptr + 1;
 
         yoink = ptr[cnt];
         ptr[cnt] = '\0';
@@ -263,241 +250,59 @@ out:
 }
 
 #ifdef CHARGER_ENABLE_SUSPEND
-static int request_suspend(bool enable)
-{
+static int request_suspend(bool enable) {
     if (enable)
         return autosuspend_enable();
     else
         return autosuspend_disable();
 }
 #else
-static int request_suspend(bool /*enable*/)
-{
+static int request_suspend(bool /*enable*/) {
     return 0;
 }
 #endif
 
-static int draw_text(const char *str, int x, int y)
-{
-    int str_len_px = gr_measure(gr_sys_font(), str);
-
-    if (x < 0)
-        x = (gr_fb_width() - str_len_px) / 2;
-    if (y < 0)
-        y = (gr_fb_height() - char_height) / 2;
-    gr_text(gr_sys_font(), x, y, str, 0);
-
-    return y + char_height;
-}
-
-static void android_green(void)
-{
-    gr_color(0xa4, 0xc6, 0x39, 255);
-}
-
-// Negative x or y coordinates position the text away from the opposite edge that positive ones do.
-void determine_xy(const animation::text_field& field, const int length, int* x, int* y)
-{
-    *x = field.pos_x;
-    *y = field.pos_y;
-
-    int str_len_px = length * field.font->char_width;
-    if (field.pos_x == CENTER_VAL) {
-        *x = (gr_fb_width() - str_len_px) / 2;
-    } else if (field.pos_x >= 0) {
-        *x = field.pos_x;
-    } else {  // position from max edge
-        *x = gr_fb_width() + field.pos_x - str_len_px;
-    }
-
-    if (field.pos_y == CENTER_VAL) {
-        *y = (gr_fb_height() - field.font->char_height) / 2;
-    } else if (field.pos_y >= 0) {
-        *y = field.pos_y;
-    } else {  // position from max edge
-        *y = gr_fb_height() + field.pos_y - field.font->char_height;
-    }
-}
-
-static void draw_clock(const animation& anim)
-{
-    static constexpr char CLOCK_FORMAT[] = "%H:%M";
-    static constexpr int CLOCK_LENGTH = 6;
-
-    const animation::text_field& field = anim.text_clock;
-
-    if (field.font == nullptr || field.font->char_width == 0 || field.font->char_height == 0) return;
-
-    time_t rawtime;
-    time(&rawtime);
-    struct tm* time_info = localtime(&rawtime);
-
-    char clock_str[CLOCK_LENGTH];
-    size_t length = strftime(clock_str, CLOCK_LENGTH, CLOCK_FORMAT, time_info);
-    if (length != CLOCK_LENGTH - 1) {
-        LOGE("Could not format time\n");
-        return;
-    }
-
-    int x, y;
-    determine_xy(field, length, &x, &y);
-
-    LOGV("drawing clock %s %d %d\n", clock_str, x, y);
-    gr_color(field.color_r, field.color_g, field.color_b, field.color_a);
-    gr_text(field.font, x, y, clock_str, false);
-}
-
-static void draw_percent(const animation& anim)
-{
-    int cur_level = anim.cur_level;
-    if (anim.cur_status == BATTERY_STATUS_FULL) {
-        cur_level = 100;
-    }
-
-    if (cur_level <= 0) return;
-
-    const animation::text_field& field = anim.text_percent;
-    if (field.font == nullptr || field.font->char_width == 0 || field.font->char_height == 0) {
-        return;
-    }
-
-    std::string str = base::StringPrintf("%d%%", cur_level);
-
-    int x, y;
-    determine_xy(field, str.size(), &x, &y);
-
-    LOGV("drawing percent %s %d %d\n", str.c_str(), x, y);
-    gr_color(field.color_r, field.color_g, field.color_b, field.color_a);
-    gr_text(field.font, x, y, str.c_str(), false);
-}
-
-/* returns the last y-offset of where the surface ends */
-static int draw_surface_centered(GRSurface* surface)
-{
-    int w;
-    int h;
-    int x;
-    int y;
-
-    w = gr_get_width(surface);
-    h = gr_get_height(surface);
-    x = (gr_fb_width() - w) / 2 ;
-    y = (gr_fb_height() - h) / 2 ;
-
-    LOGV("drawing surface %dx%d+%d+%d\n", w, h, x, y);
-    gr_blit(surface, 0, 0, w, h, x, y);
-    return y + h;
-}
-
-static void draw_unknown(struct charger *charger)
-{
-    int y;
-    if (charger->surf_unknown) {
-        draw_surface_centered(charger->surf_unknown);
-    } else {
-        android_green();
-        y = draw_text("Charging!", -1, -1);
-        draw_text("?\?/100", -1, y + 25);
-    }
-}
-
-static void draw_battery(const struct charger* charger)
-{
-    const struct animation& anim = *charger->batt_anim;
-    const struct animation::frame& frame = anim.frames[anim.cur_frame];
-
-    if (anim.num_frames != 0) {
-        draw_surface_centered(frame.surface);
-        LOGV("drawing frame #%d min_cap=%d time=%d\n",
-             anim.cur_frame, frame.min_level,
-             frame.disp_time);
-    }
-    draw_clock(anim);
-    draw_percent(anim);
-}
-
-static void redraw_screen(struct charger *charger)
-{
-    struct animation *batt_anim = charger->batt_anim;
-
-    clear_screen();
-
-    /* try to display *something* */
-    if (batt_anim->cur_level < 0 || batt_anim->num_frames == 0)
-        draw_unknown(charger);
-    else
-        draw_battery(charger);
-    gr_flip();
-}
-
-static void kick_animation(struct animation *anim)
-{
+static void kick_animation(animation* anim) {
     anim->run = true;
 }
 
-static void reset_animation(struct animation *anim)
-{
+static void reset_animation(animation* anim) {
     anim->cur_cycle = 0;
     anim->cur_frame = 0;
     anim->run = false;
 }
 
-static void init_status_display(struct animation* anim)
-{
-    int res;
-
-    if (!anim->text_clock.font_file.empty()) {
-        if ((res =
-                gr_init_font(anim->text_clock.font_file.c_str(), &anim->text_clock.font)) < 0) {
-            LOGE("Could not load time font (%d)\n", res);
-        }
-    }
-
-    if (!anim->text_percent.font_file.empty()) {
-        if ((res =
-                gr_init_font(anim->text_percent.font_file.c_str(), &anim->text_percent.font)) < 0) {
-            LOGE("Could not load percent font (%d)\n", res);
-        }
-    }
-}
-
-static void update_screen_state(struct charger *charger, int64_t now)
-{
-    struct animation *batt_anim = charger->batt_anim;
+static void update_screen_state(charger* charger, int64_t now) {
+    animation* batt_anim = charger->batt_anim;
     int disp_time;
 
     if (!batt_anim->run || now < charger->next_screen_transition) return;
 
-    if (!minui_inited) {
+    if (healthd_draw == nullptr) {
         if (healthd_config && healthd_config->screen_on) {
             if (!healthd_config->screen_on(batt_prop)) {
                 LOGV("[%" PRId64 "] leave screen off\n", now);
                 batt_anim->run = false;
                 charger->next_screen_transition = -1;
-                if (charger->charger_connected)
-                    request_suspend(true);
+                if (charger->charger_connected) request_suspend(true);
                 return;
             }
         }
 
-        gr_init();
-        gr_font_size(gr_sys_font(), &char_width, &char_height);
-        init_status_display(batt_anim);
+        healthd_draw.reset(new HealthdDraw(batt_anim));
 
 #ifndef CHARGER_DISABLE_INIT_BLANK
-        gr_fb_blank(true);
+        healthd_draw->blank_screen(true);
 #endif
-        minui_inited = true;
     }
 
     /* animation is over, blank screen and leave */
     if (batt_anim->num_cycles > 0 && batt_anim->cur_cycle == batt_anim->num_cycles) {
         reset_animation(batt_anim);
         charger->next_screen_transition = -1;
-        gr_fb_blank(true);
+        healthd_draw->blank_screen(true);
         LOGV("[%" PRId64 "] animation done\n", now);
-        if (charger->charger_connected)
-            request_suspend(true);
+        if (charger->charger_connected) request_suspend(true);
         return;
     }
 
@@ -505,7 +310,6 @@ static void update_screen_state(struct charger *charger, int64_t now)
 
     /* animation starting, set up the animation */
     if (batt_anim->cur_frame == 0) {
-
         LOGV("[%" PRId64 "] animation starting\n", now);
         if (batt_prop) {
             batt_anim->cur_level = batt_prop->batteryLevel;
@@ -522,17 +326,16 @@ static void update_screen_state(struct charger *charger, int64_t now)
 
                 // repeat the first frame first_frame_repeats times
                 disp_time = batt_anim->frames[batt_anim->cur_frame].disp_time *
-                    batt_anim->first_frame_repeats;
+                            batt_anim->first_frame_repeats;
             }
         }
     }
 
     /* unblank the screen  on first cycle */
-    if (batt_anim->cur_cycle == 0)
-        gr_fb_blank(false);
+    if (batt_anim->cur_cycle == 0) healthd_draw->blank_screen(false);
 
     /* draw the new frame (@ cur_frame) */
-    redraw_screen(charger);
+    healthd_draw->redraw_screen(charger->batt_anim, charger->surf_unknown);
 
     /* if we don't have anim frames, we only have one image, so just bump
      * the cycle counter and exit
@@ -576,22 +379,18 @@ static void update_screen_state(struct charger *charger, int64_t now)
     }
 }
 
-static int set_key_callback(struct charger *charger, int code, int value)
-{
+static int set_key_callback(charger* charger, int code, int value) {
     int64_t now = curr_time_ms();
     int down = !!value;
 
-    if (code > KEY_MAX)
-        return -1;
+    if (code > KEY_MAX) return -1;
 
     /* ignore events that don't modify our state */
-    if (charger->keys[code].down == down)
-        return 0;
+    if (charger->keys[code].down == down) return 0;
 
     /* only record the down even timestamp, as the amount
      * of time the key spent not being pressed is not useful */
-    if (down)
-        charger->keys[code].timestamp = now;
+    if (down) charger->keys[code].timestamp = now;
     charger->keys[code].down = down;
     charger->keys[code].pending = true;
     if (down) {
@@ -600,34 +399,27 @@ static int set_key_callback(struct charger *charger, int code, int value)
         int64_t duration = now - charger->keys[code].timestamp;
         int64_t secs = duration / 1000;
         int64_t msecs = duration - secs * 1000;
-        LOGV("[%" PRId64 "] key[%d] up (was down for %" PRId64 ".%" PRId64 "sec)\n",
-             now, code, secs, msecs);
+        LOGV("[%" PRId64 "] key[%d] up (was down for %" PRId64 ".%" PRId64 "sec)\n", now, code,
+             secs, msecs);
     }
 
     return 0;
 }
 
-static void update_input_state(struct charger *charger,
-                               struct input_event *ev)
-{
-    if (ev->type != EV_KEY)
-        return;
+static void update_input_state(charger* charger, input_event* ev) {
+    if (ev->type != EV_KEY) return;
     set_key_callback(charger, ev->code, ev->value);
 }
 
-static void set_next_key_check(struct charger *charger,
-                               struct key_state *key,
-                               int64_t timeout)
-{
+static void set_next_key_check(charger* charger, key_state* key, int64_t timeout) {
     int64_t then = key->timestamp + timeout;
 
     if (charger->next_key_check == -1 || then < charger->next_key_check)
         charger->next_key_check = then;
 }
 
-static void process_key(struct charger *charger, int code, int64_t now)
-{
-    struct key_state *key = &charger->keys[code];
+static void process_key(charger* charger, int code, int64_t now) {
+    key_state* key = &charger->keys[code];
 
     if (code == KEY_POWER) {
         if (key->down) {
@@ -644,8 +436,10 @@ static void process_key(struct charger *charger, int code, int64_t now)
                         LOGW("[%" PRId64 "] rebooting\n", now);
                         reboot(RB_AUTOBOOT);
                     } else {
-                        LOGV("[%" PRId64 "] ignore power-button press, battery level "
-                            "less than minimum\n", now);
+                        LOGV("[%" PRId64
+                             "] ignore power-button press, battery level "
+                             "less than minimum\n",
+                             now);
                     }
                 }
             } else {
@@ -654,9 +448,9 @@ static void process_key(struct charger *charger, int code, int64_t now)
                  */
                 set_next_key_check(charger, key, POWER_ON_KEY_TIME);
 
-               /* Turn on the display and kick animation on power-key press
-                * rather than on key release
-                */
+                /* Turn on the display and kick animation on power-key press
+                 * rather than on key release
+                 */
                 kick_animation(charger->batt_anim);
                 request_suspend(false);
             }
@@ -671,21 +465,17 @@ static void process_key(struct charger *charger, int code, int64_t now)
     key->pending = false;
 }
 
-static void handle_input_state(struct charger *charger, int64_t now)
-{
+static void handle_input_state(charger* charger, int64_t now) {
     process_key(charger, KEY_POWER, now);
 
     if (charger->next_key_check != -1 && now > charger->next_key_check)
         charger->next_key_check = -1;
 }
 
-static void handle_power_supply_state(struct charger *charger, int64_t now)
-{
-    if (!charger->have_battery_state)
-        return;
+static void handle_power_supply_state(charger* charger, int64_t now) {
+    if (!charger->have_battery_state) return;
 
     if (!charger->charger_connected) {
-
         /* Last cycle would have stopped at the extreme top of battery-icon
          * Need to show the correct level corresponding to capacity.
          */
@@ -711,9 +501,8 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
     }
 }
 
-void healthd_mode_charger_heartbeat()
-{
-    struct charger *charger = &charger_state;
+void healthd_mode_charger_heartbeat() {
+    charger* charger = &charger_state;
     int64_t now = curr_time_ms();
 
     handle_input_state(charger, now);
@@ -725,14 +514,11 @@ void healthd_mode_charger_heartbeat()
     update_screen_state(charger, now);
 }
 
-void healthd_mode_charger_battery_update(
-    struct android::BatteryProperties *props)
-{
-    struct charger *charger = &charger_state;
+void healthd_mode_charger_battery_update(android::BatteryProperties* props) {
+    charger* charger = &charger_state;
 
     charger->charger_connected =
-        props->chargerAcOnline || props->chargerUsbOnline ||
-        props->chargerWirelessOnline;
+        props->chargerAcOnline || props->chargerUsbOnline || props->chargerWirelessOnline;
 
     if (!charger->have_battery_state) {
         charger->have_battery_state = true;
@@ -743,19 +529,16 @@ void healthd_mode_charger_battery_update(
     batt_prop = props;
 }
 
-int healthd_mode_charger_preparetowait(void)
-{
-    struct charger *charger = &charger_state;
+int healthd_mode_charger_preparetowait(void) {
+    charger* charger = &charger_state;
     int64_t now = curr_time_ms();
     int64_t next_event = INT64_MAX;
     int64_t timeout;
 
-    LOGV("[%" PRId64 "] next screen: %" PRId64 " next key: %" PRId64 " next pwr: %" PRId64 "\n", now,
-         charger->next_screen_transition, charger->next_key_check,
-         charger->next_pwr_check);
+    LOGV("[%" PRId64 "] next screen: %" PRId64 " next key: %" PRId64 " next pwr: %" PRId64 "\n",
+         now, charger->next_screen_transition, charger->next_key_check, charger->next_pwr_check);
 
-    if (charger->next_screen_transition != -1)
-        next_event = charger->next_screen_transition;
+    if (charger->next_screen_transition != -1) next_event = charger->next_screen_transition;
     if (charger->next_key_check != -1 && charger->next_key_check < next_event)
         next_event = charger->next_key_check;
     if (charger->next_pwr_check != -1 && charger->next_pwr_check < next_event)
@@ -766,32 +549,27 @@ int healthd_mode_charger_preparetowait(void)
     else
         timeout = -1;
 
-   return (int)timeout;
+    return (int)timeout;
 }
 
-static int input_callback(struct charger *charger, int fd, unsigned int epevents)
-{
-    struct input_event ev;
+static int input_callback(charger* charger, int fd, unsigned int epevents) {
+    input_event ev;
     int ret;
 
     ret = ev_get_input(fd, epevents, &ev);
-    if (ret)
-        return -1;
+    if (ret) return -1;
     update_input_state(charger, &ev);
     return 0;
 }
 
-static void charger_event_handler(uint32_t /*epevents*/)
-{
+static void charger_event_handler(uint32_t /*epevents*/) {
     int ret;
 
     ret = ev_wait(-1);
-    if (!ret)
-        ev_dispatch();
+    if (!ret) ev_dispatch();
 }
 
-animation* init_animation()
-{
+animation* init_animation() {
     bool parse_success;
 
     std::string content;
@@ -814,32 +592,29 @@ animation* init_animation()
     }
 
     LOGV("Animation Description:\n");
-    LOGV("  animation: %d %d '%s' (%d)\n",
-        battery_animation.num_cycles, battery_animation.first_frame_repeats,
-        battery_animation.animation_file.c_str(), battery_animation.num_frames);
+    LOGV("  animation: %d %d '%s' (%d)\n", battery_animation.num_cycles,
+         battery_animation.first_frame_repeats, battery_animation.animation_file.c_str(),
+         battery_animation.num_frames);
     LOGV("  fail_file: '%s'\n", battery_animation.fail_file.c_str());
-    LOGV("  clock: %d %d %d %d %d %d '%s'\n",
-        battery_animation.text_clock.pos_x, battery_animation.text_clock.pos_y,
-        battery_animation.text_clock.color_r, battery_animation.text_clock.color_g,
-        battery_animation.text_clock.color_b, battery_animation.text_clock.color_a,
-        battery_animation.text_clock.font_file.c_str());
-    LOGV("  percent: %d %d %d %d %d %d '%s'\n",
-        battery_animation.text_percent.pos_x, battery_animation.text_percent.pos_y,
-        battery_animation.text_percent.color_r, battery_animation.text_percent.color_g,
-        battery_animation.text_percent.color_b, battery_animation.text_percent.color_a,
-        battery_animation.text_percent.font_file.c_str());
+    LOGV("  clock: %d %d %d %d %d %d '%s'\n", battery_animation.text_clock.pos_x,
+         battery_animation.text_clock.pos_y, battery_animation.text_clock.color_r,
+         battery_animation.text_clock.color_g, battery_animation.text_clock.color_b,
+         battery_animation.text_clock.color_a, battery_animation.text_clock.font_file.c_str());
+    LOGV("  percent: %d %d %d %d %d %d '%s'\n", battery_animation.text_percent.pos_x,
+         battery_animation.text_percent.pos_y, battery_animation.text_percent.color_r,
+         battery_animation.text_percent.color_g, battery_animation.text_percent.color_b,
+         battery_animation.text_percent.color_a, battery_animation.text_percent.font_file.c_str());
     for (int i = 0; i < battery_animation.num_frames; i++) {
         LOGV("  frame %.2d: %d %d %d\n", i, battery_animation.frames[i].disp_time,
-            battery_animation.frames[i].min_level, battery_animation.frames[i].max_level);
+             battery_animation.frames[i].min_level, battery_animation.frames[i].max_level);
     }
 
     return &battery_animation;
 }
 
-void healthd_mode_charger_init(struct healthd_config* config)
-{
+void healthd_mode_charger_init(struct healthd_config* config) {
     int ret;
-    struct charger *charger = &charger_state;
+    charger* charger = &charger_state;
     int i;
     int epollfd;
 
@@ -847,14 +622,13 @@ void healthd_mode_charger_init(struct healthd_config* config)
 
     LOGW("--------------- STARTING CHARGER MODE ---------------\n");
 
-    ret = ev_init(std::bind(&input_callback, charger, std::placeholders::_1,
-                            std::placeholders::_2));
+    ret = ev_init(std::bind(&input_callback, charger, std::placeholders::_1, std::placeholders::_2));
     if (!ret) {
         epollfd = ev_get_epollfd();
         healthd_register_event(epollfd, charger_event_handler, EVENT_WAKEUP_FD);
     }
 
-    struct animation* anim = init_animation();
+    animation* anim = init_animation();
     charger->batt_anim = anim;
 
     ret = res_create_display_surface(anim->fail_file.c_str(), &charger->surf_unknown);
@@ -871,15 +645,15 @@ void healthd_mode_charger_init(struct healthd_config* config)
     int scale_count;
     int scale_fps;  // Not in use (charger/battery_scale doesn't have FPS text
                     // chunk). We are using hard-coded frame.disp_time instead.
-    ret = res_create_multi_display_surface(anim->animation_file.c_str(),
-        &scale_count, &scale_fps, &scale_frames);
+    ret = res_create_multi_display_surface(anim->animation_file.c_str(), &scale_count, &scale_fps,
+                                           &scale_frames);
     if (ret < 0) {
         LOGE("Cannot load battery_scale image\n");
         anim->num_frames = 0;
         anim->num_cycles = 1;
     } else if (scale_count != anim->num_frames) {
-        LOGE("battery_scale image has unexpected frame count (%d, expected %d)\n",
-             scale_count, anim->num_frames);
+        LOGE("battery_scale image has unexpected frame count (%d, expected %d)\n", scale_count,
+             anim->num_frames);
         anim->num_frames = 0;
         anim->num_cycles = 1;
     } else {
@@ -887,8 +661,8 @@ void healthd_mode_charger_init(struct healthd_config* config)
             anim->frames[i].surface = scale_frames[i];
         }
     }
-    ev_sync_key_state(std::bind(&set_key_callback, charger, std::placeholders::_1,
-                                std::placeholders::_2));
+    ev_sync_key_state(
+        std::bind(&set_key_callback, charger, std::placeholders::_1, std::placeholders::_2));
 
     charger->next_screen_transition = -1;
     charger->next_key_check = -1;

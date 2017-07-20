@@ -60,6 +60,7 @@ class RegsTestImpl : public RegsImpl<TypeParam> {
 
   uint64_t GetAdjustedPc(uint64_t, Elf*) override { return 0; }
   void SetFromRaw() override {}
+  bool StepIfSignalHandler(uint64_t, Elf*, Memory*) override { return false; }
 };
 
 class RegsTest : public ::testing::Test {
@@ -72,7 +73,7 @@ class RegsTest : public ::testing::Test {
   }
 
   template <typename AddressType>
-  void regs_return_address_register();
+  void RegsReturnAddressRegister();
 
   ElfInterfaceFake* elf_interface_;
   MemoryFake* memory_;
@@ -126,7 +127,7 @@ TEST_F(RegsTest, regs64) {
 }
 
 template <typename AddressType>
-void RegsTest::regs_return_address_register() {
+void RegsTest::RegsReturnAddressRegister() {
   RegsTestImpl<AddressType> regs(20, 10, Regs::Location(Regs::LOCATION_REGISTER, 5));
 
   regs[5] = 0x12345;
@@ -136,11 +137,11 @@ void RegsTest::regs_return_address_register() {
 }
 
 TEST_F(RegsTest, regs32_return_address_register) {
-  regs_return_address_register<uint32_t>();
+  RegsReturnAddressRegister<uint32_t>();
 }
 
 TEST_F(RegsTest, regs64_return_address_register) {
-  regs_return_address_register<uint64_t>();
+  RegsReturnAddressRegister<uint64_t>();
 }
 
 TEST_F(RegsTest, regs32_return_address_sp_offset) {
