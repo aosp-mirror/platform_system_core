@@ -841,9 +841,15 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
 
     // verify the signature on the table
     if (verify_verity_signature(verity) < 0) {
+        // Allow signature verification error when the device is unlocked
+        if (fs_mgr_is_device_unlocked()) {
+            retval = FS_MGR_SETUP_VERITY_SKIPPED;
+            LWARNING << "Allow signature verification error when the device is unlocked";
+            goto out;
+        }
         if (params.mode == VERITY_MODE_LOGGING) {
             // the user has been warned, allow mounting without dm-verity
-            retval = FS_MGR_SETUP_VERITY_SUCCESS;
+            retval = FS_MGR_SETUP_VERITY_SKIPPED;
             goto out;
         }
 
