@@ -23,8 +23,6 @@
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Regs.h>
 
-#include "Machine.h"
-
 #include "MemoryFake.h"
 
 namespace unwindstack {
@@ -62,7 +60,7 @@ class RegsTestImpl : public RegsImpl<TypeParam> {
 
   uint64_t GetAdjustedPc(uint64_t, Elf*) override { return 0; }
   void SetFromRaw() override {}
-  bool StepIfSignalHandler(Memory*) override { return false; }
+  bool StepIfSignalHandler(uint64_t, Elf*, Memory*) override { return false; }
 };
 
 class RegsTest : public ::testing::Test {
@@ -76,9 +74,6 @@ class RegsTest : public ::testing::Test {
 
   template <typename AddressType>
   void RegsReturnAddressRegister();
-
-  void ArmStepIfSignalHandlerNonRt(uint32_t pc_data);
-  void ArmStepIfSignalHandlerRt(uint32_t pc_data);
 
   ElfInterfaceFake* elf_interface_;
   MemoryFake* memory_;
@@ -289,162 +284,6 @@ TEST_F(RegsTest, x86_64_set_from_raw) {
   x86_64.SetFromRaw();
   EXPECT_EQ(0x1200000000U, x86_64.sp());
   EXPECT_EQ(0x4900000000U, x86_64.pc());
-}
-
-void RegsTest::ArmStepIfSignalHandlerNonRt(uint32_t pc_data) {
-  uint64_t addr = 0x1000;
-  RegsArm regs;
-  regs[ARM_REG_PC] = 0x5000;
-  regs[ARM_REG_SP] = addr;
-  regs.SetFromRaw();
-
-  memory_->SetData32(0x5000, pc_data);
-
-  for (uint64_t index = 0; index <= 30; index++) {
-    memory_->SetData32(addr + index * 4, index * 0x10);
-  }
-
-  ASSERT_TRUE(regs.StepIfSignalHandler(memory_));
-  EXPECT_EQ(0x100U, regs[ARM_REG_SP]);
-  EXPECT_EQ(0x120U, regs[ARM_REG_PC]);
-  EXPECT_EQ(0x100U, regs.sp());
-  EXPECT_EQ(0x120U, regs.pc());
-}
-
-TEST_F(RegsTest, arm_step_if_signal_handler_non_rt) {
-  // Form 1
-  ArmStepIfSignalHandlerNonRt(0xe3a07077);
-
-  // Form 2
-  ArmStepIfSignalHandlerNonRt(0xef900077);
-
-  // Form 3
-  ArmStepIfSignalHandlerNonRt(0xdf002777);
-}
-
-void RegsTest::ArmStepIfSignalHandlerRt(uint32_t pc_data) {
-  uint64_t addr = 0x1000;
-  RegsArm regs;
-  regs[ARM_REG_PC] = 0x5000;
-  regs[ARM_REG_SP] = addr;
-  regs.SetFromRaw();
-
-  memory_->SetData32(0x5000, pc_data);
-
-  for (uint64_t index = 0; index <= 100; index++) {
-    memory_->SetData32(addr + index * 4, index * 0x10);
-  }
-
-  ASSERT_TRUE(regs.StepIfSignalHandler(memory_));
-  EXPECT_EQ(0x350U, regs[ARM_REG_SP]);
-  EXPECT_EQ(0x370U, regs[ARM_REG_PC]);
-  EXPECT_EQ(0x350U, regs.sp());
-  EXPECT_EQ(0x370U, regs.pc());
-}
-
-TEST_F(RegsTest, arm_step_if_signal_handler_rt) {
-  // Form 1
-  ArmStepIfSignalHandlerRt(0xe3a070ad);
-
-  // Form 2
-  ArmStepIfSignalHandlerRt(0xef9000ad);
-
-  // Form 3
-  ArmStepIfSignalHandlerRt(0xdf0027ad);
-}
-
-TEST_F(RegsTest, arm64_step_if_signal_handler) {
-  uint64_t addr = 0x1000;
-  RegsArm64 regs;
-  regs[ARM64_REG_PC] = 0x8000;
-  regs[ARM64_REG_SP] = addr;
-  regs.SetFromRaw();
-
-  memory_->SetData64(0x8000, 0xd4000001d2801168ULL);
-
-  for (uint64_t index = 0; index <= 100; index++) {
-    memory_->SetData64(addr + index * 8, index * 0x10);
-  }
-
-  ASSERT_TRUE(regs.StepIfSignalHandler(memory_));
-  EXPECT_EQ(0x460U, regs[ARM64_REG_SP]);
-  EXPECT_EQ(0x470U, regs[ARM64_REG_PC]);
-  EXPECT_EQ(0x460U, regs.sp());
-  EXPECT_EQ(0x470U, regs.pc());
-}
-
-TEST_F(RegsTest, x86_step_if_signal_handler_no_siginfo) {
-  uint64_t addr = 0xa00;
-  RegsX86 regs;
-  regs[X86_REG_EIP] = 0x4100;
-  regs[X86_REG_ESP] = addr;
-  regs.SetFromRaw();
-
-  memory_->SetData64(0x4100, 0x80cd00000077b858ULL);
-  for (uint64_t index = 0; index <= 25; index++) {
-    memory_->SetData32(addr + index * 4, index * 0x10);
-  }
-
-  ASSERT_TRUE(regs.StepIfSignalHandler(memory_));
-  EXPECT_EQ(0x70U, regs[X86_REG_EBP]);
-  EXPECT_EQ(0x80U, regs[X86_REG_ESP]);
-  EXPECT_EQ(0x90U, regs[X86_REG_EBX]);
-  EXPECT_EQ(0xa0U, regs[X86_REG_EDX]);
-  EXPECT_EQ(0xb0U, regs[X86_REG_ECX]);
-  EXPECT_EQ(0xc0U, regs[X86_REG_EAX]);
-  EXPECT_EQ(0xf0U, regs[X86_REG_EIP]);
-  EXPECT_EQ(0x80U, regs.sp());
-  EXPECT_EQ(0xf0U, regs.pc());
-}
-
-TEST_F(RegsTest, x86_step_if_signal_handler_siginfo) {
-  uint64_t addr = 0xa00;
-  RegsX86 regs;
-  regs[X86_REG_EIP] = 0x4100;
-  regs[X86_REG_ESP] = addr;
-  regs.SetFromRaw();
-
-  memory_->SetData64(0x4100, 0x0080cd000000adb8ULL);
-  addr += 8;
-  // Pointer to ucontext data.
-  memory_->SetData32(addr, 0x8100);
-
-  addr = 0x8100;
-  for (uint64_t index = 0; index <= 30; index++) {
-    memory_->SetData32(addr + index * 4, index * 0x10);
-  }
-
-  ASSERT_TRUE(regs.StepIfSignalHandler(memory_));
-  EXPECT_EQ(0xb0U, regs[X86_REG_EBP]);
-  EXPECT_EQ(0xc0U, regs[X86_REG_ESP]);
-  EXPECT_EQ(0xd0U, regs[X86_REG_EBX]);
-  EXPECT_EQ(0xe0U, regs[X86_REG_EDX]);
-  EXPECT_EQ(0xf0U, regs[X86_REG_ECX]);
-  EXPECT_EQ(0x100U, regs[X86_REG_EAX]);
-  EXPECT_EQ(0x130U, regs[X86_REG_EIP]);
-  EXPECT_EQ(0xc0U, regs.sp());
-  EXPECT_EQ(0x130U, regs.pc());
-}
-
-TEST_F(RegsTest, x86_64_step_if_signal_handler) {
-  uint64_t addr = 0x500;
-  RegsX86_64 regs;
-  regs[X86_64_REG_RIP] = 0x7000;
-  regs[X86_64_REG_RSP] = addr;
-  regs.SetFromRaw();
-
-  memory_->SetData64(0x7000, 0x0f0000000fc0c748);
-  memory_->SetData16(0x7008, 0x0f05);
-
-  for (uint64_t index = 0; index <= 30; index++) {
-    memory_->SetData64(addr + index * 8, index * 0x10);
-  }
-
-  ASSERT_TRUE(regs.StepIfSignalHandler(memory_));
-  EXPECT_EQ(0x140U, regs[X86_64_REG_RSP]);
-  EXPECT_EQ(0x150U, regs[X86_64_REG_RIP]);
-  EXPECT_EQ(0x140U, regs.sp());
-  EXPECT_EQ(0x150U, regs.pc());
 }
 
 }  // namespace unwindstack
