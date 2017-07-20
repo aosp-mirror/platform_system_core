@@ -287,11 +287,11 @@ static UmountStat TryUmountAndFsck(bool runFsck, int timeoutMs) {
     UmountStat stat = UmountPartitions(timeoutMs - t.duration_ms());
     if (stat != UMOUNT_STAT_SUCCESS) {
         LOG(INFO) << "umount timeout, last resort, kill all and try";
-        if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo(false);
+        if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo(true);
         KillAllProcesses();
         // even if it succeeds, still it is timeout and do not run fsck with all processes killed
-        UmountPartitions(0);
-        if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo(true);
+        UmountStat st = UmountPartitions(0);
+        if ((st != UMOUNT_STAT_SUCCESS) && DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo(false);
     }
 
     if (stat == UMOUNT_STAT_SUCCESS && runFsck) {
