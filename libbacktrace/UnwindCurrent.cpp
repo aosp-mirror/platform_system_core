@@ -133,6 +133,11 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucon
           backtrace_frame_data_t* prev = &frames_.at(num_frames-1);
           prev->stack_size = frame->sp - prev->sp;
         }
+        if (BacktraceMap::IsValid(frame->map)) {
+          frame->rel_pc = frame->pc - frame->map.start + frame->map.load_bias;
+        } else {
+          frame->rel_pc = frame->pc;
+        }
         num_frames++;
       } else {
         num_ignore_frames--;
