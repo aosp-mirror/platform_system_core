@@ -340,13 +340,6 @@ static UmountStat TryUmountAndFsck(bool runFsck, std::chrono::milliseconds timeo
     return stat;
 }
 
-static void __attribute__((noreturn)) DoThermalOff() {
-    LOG(WARNING) << "Thermal system shutdown";
-    sync();
-    RebootSystem(ANDROID_RB_THERMOFF, "");
-    abort();
-}
-
 void DoReboot(unsigned int cmd, const std::string& reason, const std::string& rebootTarget,
               bool runFsck) {
     Timer t;
@@ -355,19 +348,25 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     android::base::WriteStringToFile(StringPrintf("%s\n", reason.c_str()), LAST_REBOOT_REASON_FILE,
                                      S_IRUSR | S_IWUSR, AID_SYSTEM, AID_SYSTEM);
 
-    if (cmd == ANDROID_RB_THERMOFF) {  // do not wait if it is thermal
-        DoThermalOff();
-        abort();
+    bool is_thermal_shutdown = false;
+    if (cmd == ANDROID_RB_THERMOFF) {
+        is_thermal_shutdown = true;
+        runFsck = false;
     }
 
-    auto shutdown_timeout = 0s;
+    auto shutdown_timeout = 0ms;
     if (!SHUTDOWN_ZERO_TIMEOUT) {
-        constexpr unsigned int shutdown_timeout_default = 6;
-        auto shutdown_timeout_property =
-            android::base::GetUintProperty("ro.build.shutdown_timeout", shutdown_timeout_default);
-        shutdown_timeout = std::chrono::seconds(shutdown_timeout_property);
+        if (is_thermal_shutdown) {
+            constexpr unsigned int thermal_shutdown_timeout = 1;
+            shutdown_timeout = std::chrono::seconds(thermal_shutdown_timeout);
+        } else {
+            constexpr unsigned int shutdown_timeout_default = 6;
+            auto shutdown_timeout_property = android::base::GetUintProperty(
+                "ro.build.shutdown_timeout", shutdown_timeout_default);
+            shutdown_timeout = std::chrono::seconds(shutdown_timeout_property);
+        }
     }
-    LOG(INFO) << "Shutdown timeout: " << shutdown_timeout.count() << " seconds";
+    LOG(INFO) << "Shutdown timeout: " << shutdown_timeout.count() << " ms";
 
     // keep debugging tools until non critical ones are all gone.
     const std::set<std::string> kill_after_apps{"tombstoned", "logd", "adbd"};
@@ -394,7 +393,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
 
     // optional shutdown step
     // 1. terminate all services except shutdown critical ones. wait for delay to finish
-    if (shutdown_timeout > 0s) {
+    if (shutdown_timeout > 0ms) {
         LOG(INFO) << "terminating init services";
 
         // Ask all services to terminate except shutdown critical ones.
@@ -403,8 +402,8 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         });
 
         int service_count = 0;
-        // Up to half as long as shutdown_timeout or 3 seconds, whichever is lower.
-        auto termination_wait_timeout = std::min((shutdown_timeout + 1s) / 2, 3s);
+        // Only wait up to half of timeout here
+        auto termination_wait_timeout = shutdown_timeout / 2;
         while (t.duration() < termination_wait_timeout) {
             ServiceManager::GetInstance().ReapAnyOutstandingChildren();
 
@@ -456,7 +455,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     UmountStat stat = TryUmountAndFsck(runFsck, shutdown_timeout - t.duration());
     // Follow what linux shutdown is doing: one more sync with little bit delay
     sync();
-    std::this_thread::sleep_for(100ms);
+    if (!is_thermal_shutdown) std::this_thread::sleep_for(100ms);
     LogShutdownTime(stat, &t);
     // Reboot regardless of umount status. If umount fails, fsck after reboot will fix it.
     RebootSystem(cmd, rebootTarget);
