@@ -466,11 +466,11 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
         line += " (BuildId: " + build_id + ")";
       }
     }
-    if (it->load_base != 0) {
+    if (it->load_bias != 0) {
       if (space_needed) {
         line += ' ';
       }
-      line += StringPrintf(" (load base 0x%" PRIxPTR ")", it->load_base);
+      line += StringPrintf(" (load bias 0x%" PRIxPTR ")", it->load_bias);
     }
     _LOG(log, logtype::MAPS, "%s\n", line.c_str());
   }

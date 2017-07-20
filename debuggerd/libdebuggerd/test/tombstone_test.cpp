@@ -220,21 +220,21 @@ TEST_F(TombstoneTest, multiple_maps) {
   map.start = 0xa434000;
   map.end = 0xa435000;
   map.offset = 0x1000;
-  map.load_base = 0xd000;
+  map.load_bias = 0xd000;
   map.flags = PROT_WRITE;
   map_mock_->AddMap(map);
 
   map.start = 0xa534000;
   map.end = 0xa535000;
   map.offset = 0x3000;
-  map.load_base = 0x2000;
+  map.load_bias = 0x2000;
   map.flags = PROT_EXEC;
   map_mock_->AddMap(map);
 
   map.start = 0xa634000;
   map.end = 0xa635000;
   map.offset = 0;
-  map.load_base = 0;
+  map.load_bias = 0;
   map.flags = PROT_READ | PROT_WRITE | PROT_EXEC;
   map.name = "/system/lib/fake.so";
   map_mock_->AddMap(map);
@@ -244,20 +244,20 @@ TEST_F(TombstoneTest, multiple_maps) {
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  const char* expected_dump = \
-"\nmemory map:\n"
+  const char* expected_dump =
+      "\nmemory map:\n"
 #if defined(__LP64__)
-"    00000000'0a234000-00000000'0a234fff ---         0      1000\n"
-"    00000000'0a334000-00000000'0a334fff r--      f000      1000\n"
-"    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load base 0xd000)\n"
-"    00000000'0a534000-00000000'0a534fff --x      3000      1000  (load base 0x2000)\n"
-"    00000000'0a634000-00000000'0a634fff rwx         0      1000  /system/lib/fake.so\n";
+      "    00000000'0a234000-00000000'0a234fff ---         0      1000\n"
+      "    00000000'0a334000-00000000'0a334fff r--      f000      1000\n"
+      "    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load bias 0xd000)\n"
+      "    00000000'0a534000-00000000'0a534fff --x      3000      1000  (load bias 0x2000)\n"
+      "    00000000'0a634000-00000000'0a634fff rwx         0      1000  /system/lib/fake.so\n";
 #else
-"    0a234000-0a234fff ---         0      1000\n"
-"    0a334000-0a334fff r--      f000      1000\n"
-"    0a434000-0a434fff -w-      1000      1000  (load base 0xd000)\n"
-"    0a534000-0a534fff --x      3000      1000  (load base 0x2000)\n"
-"    0a634000-0a634fff rwx         0      1000  /system/lib/fake.so\n";
+      "    0a234000-0a234fff ---         0      1000\n"
+      "    0a334000-0a334fff r--      f000      1000\n"
+      "    0a434000-0a434fff -w-      1000      1000  (load bias 0xd000)\n"
+      "    0a534000-0a534fff --x      3000      1000  (load bias 0x2000)\n"
+      "    0a634000-0a634fff rwx         0      1000  /system/lib/fake.so\n";
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
 
@@ -274,21 +274,21 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_before) {
   map.start = 0xa434000;
   map.end = 0xa435000;
   map.offset = 0x1000;
-  map.load_base = 0xd000;
+  map.load_bias = 0xd000;
   map.flags = PROT_WRITE;
   map_mock_->AddMap(map);
 
   map.start = 0xa534000;
   map.end = 0xa535000;
   map.offset = 0x3000;
-  map.load_base = 0x2000;
+  map.load_bias = 0x2000;
   map.flags = PROT_EXEC;
   map_mock_->AddMap(map);
 
   map.start = 0xa634000;
   map.end = 0xa635000;
   map.offset = 0;
-  map.load_base = 0;
+  map.load_bias = 0;
   map.flags = PROT_READ | PROT_WRITE | PROT_EXEC;
   map.name = "/system/lib/fake.so";
   map_mock_->AddMap(map);
@@ -304,18 +304,18 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_before) {
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  const char* expected_dump = \
-"\nmemory map: (fault address prefixed with --->)\n"
+  const char* expected_dump =
+      "\nmemory map: (fault address prefixed with --->)\n"
 #if defined(__LP64__)
-"--->Fault address falls at 00000000'00001000 before any mapped regions\n"
-"    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load base 0xd000)\n"
-"    00000000'0a534000-00000000'0a534fff --x      3000      1000  (load base 0x2000)\n"
-"    00000000'0a634000-00000000'0a634fff rwx         0      1000  /system/lib/fake.so\n";
+      "--->Fault address falls at 00000000'00001000 before any mapped regions\n"
+      "    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load bias 0xd000)\n"
+      "    00000000'0a534000-00000000'0a534fff --x      3000      1000  (load bias 0x2000)\n"
+      "    00000000'0a634000-00000000'0a634fff rwx         0      1000  /system/lib/fake.so\n";
 #else
-"--->Fault address falls at 00001000 before any mapped regions\n"
-"    0a434000-0a434fff -w-      1000      1000  (load base 0xd000)\n"
-"    0a534000-0a534fff --x      3000      1000  (load base 0x2000)\n"
-"    0a634000-0a634fff rwx         0      1000  /system/lib/fake.so\n";
+      "--->Fault address falls at 00001000 before any mapped regions\n"
+      "    0a434000-0a434fff -w-      1000      1000  (load bias 0xd000)\n"
+      "    0a534000-0a534fff --x      3000      1000  (load bias 0x2000)\n"
+      "    0a634000-0a634fff rwx         0      1000  /system/lib/fake.so\n";
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
 
@@ -332,21 +332,21 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_between) {
   map.start = 0xa434000;
   map.end = 0xa435000;
   map.offset = 0x1000;
-  map.load_base = 0xd000;
+  map.load_bias = 0xd000;
   map.flags = PROT_WRITE;
   map_mock_->AddMap(map);
 
   map.start = 0xa534000;
   map.end = 0xa535000;
   map.offset = 0x3000;
-  map.load_base = 0x2000;
+  map.load_bias = 0x2000;
   map.flags = PROT_EXEC;
   map_mock_->AddMap(map);
 
   map.start = 0xa634000;
   map.end = 0xa635000;
   map.offset = 0;
-  map.load_base = 0;
+  map.load_bias = 0;
   map.flags = PROT_READ | PROT_WRITE | PROT_EXEC;
   map.name = "/system/lib/fake.so";
   map_mock_->AddMap(map);
@@ -362,18 +362,18 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_between) {
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  const char* expected_dump = \
-"\nmemory map: (fault address prefixed with --->)\n"
+  const char* expected_dump =
+      "\nmemory map: (fault address prefixed with --->)\n"
 #if defined(__LP64__)
-"    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load base 0xd000)\n"
-"--->Fault address falls at 00000000'0a533000 between mapped regions\n"
-"    00000000'0a534000-00000000'0a534fff --x      3000      1000  (load base 0x2000)\n"
-"    00000000'0a634000-00000000'0a634fff rwx         0      1000  /system/lib/fake.so\n";
+      "    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load bias 0xd000)\n"
+      "--->Fault address falls at 00000000'0a533000 between mapped regions\n"
+      "    00000000'0a534000-00000000'0a534fff --x      3000      1000  (load bias 0x2000)\n"
+      "    00000000'0a634000-00000000'0a634fff rwx         0      1000  /system/lib/fake.so\n";
 #else
-"    0a434000-0a434fff -w-      1000      1000  (load base 0xd000)\n"
-"--->Fault address falls at 0a533000 between mapped regions\n"
-"    0a534000-0a534fff --x      3000      1000  (load base 0x2000)\n"
-"    0a634000-0a634fff rwx         0      1000  /system/lib/fake.so\n";
+      "    0a434000-0a434fff -w-      1000      1000  (load bias 0xd000)\n"
+      "--->Fault address falls at 0a533000 between mapped regions\n"
+      "    0a534000-0a534fff --x      3000      1000  (load bias 0x2000)\n"
+      "    0a634000-0a634fff rwx         0      1000  /system/lib/fake.so\n";
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
 
@@ -390,21 +390,21 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_in_map) {
   map.start = 0xa434000;
   map.end = 0xa435000;
   map.offset = 0x1000;
-  map.load_base = 0xd000;
+  map.load_bias = 0xd000;
   map.flags = PROT_WRITE;
   map_mock_->AddMap(map);
 
   map.start = 0xa534000;
   map.end = 0xa535000;
   map.offset = 0x3000;
-  map.load_base = 0x2000;
+  map.load_bias = 0x2000;
   map.flags = PROT_EXEC;
   map_mock_->AddMap(map);
 
   map.start = 0xa634000;
   map.end = 0xa635000;
   map.offset = 0;
-  map.load_base = 0;
+  map.load_bias = 0;
   map.flags = PROT_READ | PROT_WRITE | PROT_EXEC;
   map.name = "/system/lib/fake.so";
   map_mock_->AddMap(map);
@@ -420,16 +420,16 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_in_map) {
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  const char* expected_dump = \
-"\nmemory map: (fault address prefixed with --->)\n"
+  const char* expected_dump =
+      "\nmemory map: (fault address prefixed with --->)\n"
 #if defined(__LP64__)
-"    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load base 0xd000)\n"
-"--->00000000'0a534000-00000000'0a534fff --x      3000      1000  (load base 0x2000)\n"
-"    00000000'0a634000-00000000'0a634fff rwx         0      1000  /system/lib/fake.so\n";
+      "    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load bias 0xd000)\n"
+      "--->00000000'0a534000-00000000'0a534fff --x      3000      1000  (load bias 0x2000)\n"
+      "    00000000'0a634000-00000000'0a634fff rwx         0      1000  /system/lib/fake.so\n";
 #else
-"    0a434000-0a434fff -w-      1000      1000  (load base 0xd000)\n"
-"--->0a534000-0a534fff --x      3000      1000  (load base 0x2000)\n"
-"    0a634000-0a634fff rwx         0      1000  /system/lib/fake.so\n";
+      "    0a434000-0a434fff -w-      1000      1000  (load bias 0xd000)\n"
+      "--->0a534000-0a534fff --x      3000      1000  (load bias 0x2000)\n"
+      "    0a634000-0a634fff rwx         0      1000  /system/lib/fake.so\n";
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
 
@@ -446,21 +446,21 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_after) {
   map.start = 0xa434000;
   map.end = 0xa435000;
   map.offset = 0x1000;
-  map.load_base = 0xd000;
+  map.load_bias = 0xd000;
   map.flags = PROT_WRITE;
   map_mock_->AddMap(map);
 
   map.start = 0xa534000;
   map.end = 0xa535000;
   map.offset = 0x3000;
-  map.load_base = 0x2000;
+  map.load_bias = 0x2000;
   map.flags = PROT_EXEC;
   map_mock_->AddMap(map);
 
   map.start = 0xa634000;
   map.end = 0xa635000;
   map.offset = 0;
-  map.load_base = 0;
+  map.load_bias = 0;
   map.flags = PROT_READ | PROT_WRITE | PROT_EXEC;
   map.name = "/system/lib/fake.so";
   map_mock_->AddMap(map);
@@ -480,18 +480,18 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_after) {
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  const char* expected_dump = \
-"\nmemory map: (fault address prefixed with --->)\n"
+  const char* expected_dump =
+      "\nmemory map: (fault address prefixed with --->)\n"
 #if defined(__LP64__)
-"    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load base 0xd000)\n"
-"    00000000'0a534000-00000000'0a534fff --x      3000      1000  (load base 0x2000)\n"
-"    00000000'0a634000-00000000'0a634fff rwx         0      1000  /system/lib/fake.so\n"
-"--->Fault address falls at 00001234'5a534040 after any mapped regions\n";
+      "    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load bias 0xd000)\n"
+      "    00000000'0a534000-00000000'0a534fff --x      3000      1000  (load bias 0x2000)\n"
+      "    00000000'0a634000-00000000'0a634fff rwx         0      1000  /system/lib/fake.so\n"
+      "--->Fault address falls at 00001234'5a534040 after any mapped regions\n";
 #else
-"    0a434000-0a434fff -w-      1000      1000  (load base 0xd000)\n"
-"    0a534000-0a534fff --x      3000      1000  (load base 0x2000)\n"
-"    0a634000-0a634fff rwx         0      1000  /system/lib/fake.so\n"
-"--->Fault address falls at 0f534040 after any mapped regions\n";
+      "    0a434000-0a434fff -w-      1000      1000  (load bias 0xd000)\n"
+      "    0a534000-0a534fff --x      3000      1000  (load bias 0x2000)\n"
+      "    0a634000-0a634fff rwx         0      1000  /system/lib/fake.so\n"
+      "--->Fault address falls at 0f534040 after any mapped regions\n";
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
 
@@ -508,7 +508,7 @@ TEST_F(TombstoneTest, multiple_maps_getsiginfo_fail) {
   map.start = 0xa434000;
   map.end = 0xa435000;
   map.offset = 0x1000;
-  map.load_base = 0xd000;
+  map.load_bias = 0xd000;
   map.flags = PROT_WRITE;
   map_mock_->AddMap(map);
 
@@ -520,12 +520,12 @@ TEST_F(TombstoneTest, multiple_maps_getsiginfo_fail) {
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  const char* expected_dump = \
-"\nmemory map:\n"
+  const char* expected_dump =
+      "\nmemory map:\n"
 #if defined(__LP64__)
-"    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load base 0xd000)\n";
+      "    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load bias 0xd000)\n";
 #else
-"    0a434000-0a434fff -w-      1000      1000  (load base 0xd000)\n";
+      "    0a434000-0a434fff -w-      1000      1000  (load bias 0xd000)\n";
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
 
