@@ -96,7 +96,7 @@ bool Elf::GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offse
 }
 
 bool Elf::Step(uint64_t rel_pc, Regs* regs, Memory* process_memory) {
-  return valid_ && (regs->StepIfSignalHandler(process_memory) ||
+  return valid_ && (regs->StepIfSignalHandler(rel_pc, this, process_memory) ||
                     interface_->Step(rel_pc, regs, process_memory) ||
                     (gnu_debugdata_interface_ &&
                      gnu_debugdata_interface_->Step(rel_pc, regs, process_memory)));

@@ -115,6 +115,7 @@ cc_test {
         "tests/MemoryRangeTest.cpp",
         "tests/MemoryRemoteTest.cpp",
         "tests/MemoryTest.cpp",
+        "tests/RegsStepIfSignalHandlerTest.cpp",
         "tests/RegsTest.cpp",
         "tests/SymbolsTest.cpp",
         "tests/UnwindTest.cpp",
