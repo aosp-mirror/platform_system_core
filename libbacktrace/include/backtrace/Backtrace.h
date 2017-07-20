@@ -55,6 +55,7 @@ enum BacktraceUnwindError : uint32_t {
 struct backtrace_frame_data_t {
   size_t num;             // The current fame number.
   uintptr_t pc;           // The absolute pc.
+  uintptr_t rel_pc;       // The relative pc.
   uintptr_t sp;           // The top of the stack.
   size_t stack_size;      // The size of the stack, zero indicate an unknown stack size.
   backtrace_map_t map;    // The map associated with the given pc.

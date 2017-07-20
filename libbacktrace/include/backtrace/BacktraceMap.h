@@ -41,7 +41,7 @@ struct backtrace_map_t {
   uintptr_t start = 0;
   uintptr_t end = 0;
   uintptr_t offset = 0;
-  uintptr_t load_base = 0;
+  uintptr_t load_bias = 0;
   int flags = 0;
   std::string name;
 };
@@ -93,14 +93,6 @@ public:
 
   static inline bool IsValid(const backtrace_map_t& map) {
     return map.end > 0;
-  }
-
-  static uintptr_t GetRelativePc(const backtrace_map_t& map, uintptr_t pc) {
-    if (IsValid(map)) {
-      return pc - map.start + map.load_base;
-    } else {
-      return pc;
-    }
   }
 
 protected:
