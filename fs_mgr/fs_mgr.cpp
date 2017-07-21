@@ -249,6 +249,13 @@ static ext4_fsblk_t ext4_r_blocks_count(const struct ext4_super_block* es) {
            le32_to_cpu(es->s_r_blocks_count_lo);
 }
 
+static bool is_ext4_superblock_valid(const struct ext4_super_block* es) {
+    if (es->s_magic != EXT4_SUPER_MAGIC) return false;
+    if (es->s_rev_level != EXT4_DYNAMIC_REV && es->s_rev_level != EXT4_GOOD_OLD_REV) return false;
+    if (EXT4_INODES_PER_GROUP(es) == 0) return false;
+    return true;
+}
+
 // Read the primary superblock from an ext4 filesystem.  On failure return
 // false.  If it's not an ext4 filesystem, also set FS_STAT_EXT4_INVALID_MAGIC.
 static bool read_ext4_superblock(const char* blk_device, struct ext4_super_block* sb, int* fs_stat) {
@@ -264,9 +271,8 @@ static bool read_ext4_superblock(const char* blk_device, struct ext4_super_block
         return false;
     }
 
-    if (sb->s_magic != EXT4_SUPER_MAGIC) {
-        LINFO << "Invalid ext4 magic:0x" << std::hex << sb->s_magic << " "
-              << "on '" << blk_device << "'";
+    if (!is_ext4_superblock_valid(sb)) {
+        LINFO << "Invalid ext4 superblock on '" << blk_device << "'";
         // not a valid fs, tune2fs, fsck, and mount  will all fail.
         *fs_stat |= FS_STAT_EXT4_INVALID_MAGIC;
         return false;
