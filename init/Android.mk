@@ -89,6 +89,10 @@ LOCAL_STATIC_LIBRARIES := \
     libavb \
     libkeyutils \
 
+LOCAL_REQUIRED_MODULES := \
+    e2fsdroid \
+    mke2fs \
+
 # Create symlinks.
 LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT)/sbin; \
     ln -sf ../init $(TARGET_ROOT_OUT)/sbin/ueventd; \

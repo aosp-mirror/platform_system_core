@@ -86,13 +86,15 @@ static int format_ext4(char *fs_blkdev, char *fs_mnt_point, bool crypt_footer)
 
 static int format_f2fs(char *fs_blkdev)
 {
-    char * args[3];
+    char * args[5];
     int pid;
     int rc = 0;
 
-    args[0] = (char *)"/sbin/mkfs.f2fs";
-    args[1] = fs_blkdev;
-    args[2] = (char *)0;
+    args[0] = (char *)"/system/bin/make_f2fs";
+    args[1] = (char *)"-f";
+    args[2] = (char *)"-O encrypt";
+    args[3] = fs_blkdev;
+    args[4] = (char *)0;
 
     pid = fork();
     if (pid < 0) {
@@ -100,7 +102,7 @@ static int format_f2fs(char *fs_blkdev)
     }
     if (!pid) {
         /* This doesn't return */
-        execv("/sbin/mkfs.f2fs", args);
+        execv(args[0], args);
         exit(1);
     }
     for(;;) {

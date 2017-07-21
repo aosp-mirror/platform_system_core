@@ -10,14 +10,22 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#ifndef WIN32
+#include <sys/wait.h>
+#endif
 #include <unistd.h>
+#include <vector>
 
+#include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <ext4_utils/make_ext4fs.h>
 #include <sparse/sparse.h>
 
+using android::base::StringPrintf;
 using android::base::unique_fd;
 
+#ifdef WIN32
 static int generate_ext4_image(const char* fileName, long long partSize, const std::string& initial_dir,
                                        unsigned eraseBlkSize, unsigned logicalBlkSize)
 {
@@ -34,6 +42,84 @@ static int generate_ext4_image(const char* fileName, long long partSize, const s
     }
     return 0;
 }
+#else
+static int exec_e2fs_cmd(const char* path, char* const argv[]) {
+    int status;
+    pid_t child;
+    if ((child = fork()) == 0) {
+        setenv("MKE2FS_CONFIG", "", 1);
+        execvp(path, argv);
+        _exit(EXIT_FAILURE);
+    }
+    if (child < 0) {
+        fprintf(stderr, "%s failed with fork %s\n", path, strerror(errno));
+        return -1;
+    }
+    if (TEMP_FAILURE_RETRY(waitpid(child, &status, 0)) == -1) {
+        fprintf(stderr, "%s failed with waitpid %s\n", path, strerror(errno));
+        return -1;
+    }
+    int ret = -1;
+    if (WIFEXITED(status)) {
+        ret = WEXITSTATUS(status);
+        if (ret != 0) {
+            fprintf(stderr, "%s failed with status %d\n", path, ret);
+        }
+    }
+    return ret;
+}
+
+static int generate_ext4_image(const char* fileName, long long partSize,
+                               const std::string& initial_dir, unsigned eraseBlkSize,
+                               unsigned logicalBlkSize) {
+    static constexpr int block_size = 4096;
+    const std::string exec_dir = android::base::GetExecutableDirectory();
+
+    const std::string mke2fs_path = exec_dir + "/mke2fs";
+    std::vector<const char*> mke2fs_args = {mke2fs_path.c_str(), "-t", "ext4", "-b"};
+
+    std::string block_size_str = std::to_string(block_size);
+    mke2fs_args.push_back(block_size_str.c_str());
+
+    std::string ext_attr = "android_sparse";
+    if (eraseBlkSize != 0 && logicalBlkSize != 0) {
+        int raid_stride = logicalBlkSize / block_size;
+        int raid_stripe_width = eraseBlkSize / block_size;
+        // stride should be the max of 8kb and logical block size
+        if (logicalBlkSize != 0 && logicalBlkSize < 8192) raid_stride = 8192 / block_size;
+        ext_attr += StringPrintf(",stride=%d,stripe-width=%d", raid_stride, raid_stripe_width);
+    }
+    mke2fs_args.push_back("-E");
+    mke2fs_args.push_back(ext_attr.c_str());
+    mke2fs_args.push_back(fileName);
+
+    std::string size_str = std::to_string(partSize / block_size);
+    mke2fs_args.push_back(size_str.c_str());
+    mke2fs_args.push_back(nullptr);
+
+    int ret = exec_e2fs_cmd(mke2fs_args[0], const_cast<char**>(mke2fs_args.data()));
+    if (ret != 0) {
+        fprintf(stderr, "mke2fs failed: %d\n", ret);
+        return -1;
+    }
+
+    if (initial_dir.empty()) {
+        return 0;
+    }
+
+    const std::string e2fsdroid_path = exec_dir + "/e2fsdroid";
+    std::vector<const char*> e2fsdroid_args = {e2fsdroid_path.c_str(), "-f", initial_dir.c_str(),
+                                               fileName, nullptr};
+
+    ret = exec_e2fs_cmd(e2fsdroid_args[0], const_cast<char**>(e2fsdroid_args.data()));
+    if (ret != 0) {
+        fprintf(stderr, "e2fsdroid failed: %d\n", ret);
+        return -1;
+    }
+
+    return 0;
+}
+#endif
 
 #ifdef USE_F2FS
 static int generate_f2fs_image(const char* fileName, long long partSize, const std::string& initial_dir,
