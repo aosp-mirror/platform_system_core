@@ -78,7 +78,7 @@ void LogTimeEntry::startReader_Locked(void) {
 void LogTimeEntry::threadStop(void* obj) {
     LogTimeEntry* me = reinterpret_cast<LogTimeEntry*>(obj);
 
-    lock();
+    wrlock();
 
     if (me->mNonBlock) {
         me->error_Locked();
@@ -134,7 +134,7 @@ void* LogTimeEntry::threadStart(void* obj) {
 
     me->leadingDropped = true;
 
-    lock();
+    wrlock();
 
     log_time start = me->mStart;
 
@@ -160,7 +160,7 @@ void* LogTimeEntry::threadStart(void* obj) {
         start = logbuf.flushTo(client, start, me->mLastTid, privileged,
                                security, FilterSecondPass, me);
 
-        lock();
+        wrlock();
 
         if (start == LogBufferElement::FLUSH_ERROR) {
             me->error_Locked();
@@ -191,7 +191,7 @@ void* LogTimeEntry::threadStart(void* obj) {
 int LogTimeEntry::FilterFirstPass(const LogBufferElement* element, void* obj) {
     LogTimeEntry* me = reinterpret_cast<LogTimeEntry*>(obj);
 
-    LogTimeEntry::lock();
+    LogTimeEntry::wrlock();
 
     if (me->leadingDropped) {
         if (element->getDropped()) {
@@ -219,7 +219,7 @@ int LogTimeEntry::FilterFirstPass(const LogBufferElement* element, void* obj) {
 int LogTimeEntry::FilterSecondPass(const LogBufferElement* element, void* obj) {
     LogTimeEntry* me = reinterpret_cast<LogTimeEntry*>(obj);
 
-    LogTimeEntry::lock();
+    LogTimeEntry::wrlock();
 
     me->mStart = element->getRealTime();
 

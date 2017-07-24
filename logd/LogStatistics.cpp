@@ -15,6 +15,7 @@
  */
 
 #include <fcntl.h>
+#include <inttypes.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <string.h>
@@ -70,20 +71,30 @@ char* pidToName(pid_t pid) {
 }
 }
 
+void LogStatistics::addTotal(LogBufferElement* element) {
+    if (element->getDropped()) return;
+
+    log_id_t log_id = element->getLogId();
+    unsigned short size = element->getMsgLen();
+    mSizesTotal[log_id] += size;
+    SizesTotal += size;
+    ++mElementsTotal[log_id];
+}
+
 void LogStatistics::add(LogBufferElement* element) {
     log_id_t log_id = element->getLogId();
     unsigned short size = element->getMsgLen();
     mSizes[log_id] += size;
     ++mElements[log_id];
 
+    // When caller adding a chatty entry, they will have already
+    // called add() and subtract() for each entry as they are
+    // evaluated and trimmed, thus recording size and number of
+    // elements, but we must recognize the manufactured dropped
+    // entry as not contributing to the lifetime totals.
     if (element->getDropped()) {
         ++mDroppedElements[log_id];
     } else {
-        // When caller adding a chatty entry, they will have already
-        // called add() and subtract() for each entry as they are
-        // evaluated and trimmed, thus recording size and number of
-        // elements, but we must recognize the manufactured dropped
-        // entry as not contributing to the lifetime totals.
         mSizesTotal[log_id] += size;
         SizesTotal += size;
         ++mElementsTotal[log_id];
@@ -181,6 +192,7 @@ void LogStatistics::drop(LogBufferElement* element) {
 }
 
 // caller must own and free character string
+// Requires parent LogBuffer::wrlock() to be held
 const char* LogStatistics::uidToName(uid_t uid) const {
     // Local hard coded favourites
     if (uid == AID_LOGD) {

@@ -76,7 +76,7 @@ typedef std::list<LogBufferElement*> LogBufferElementCollection;
 
 class LogBuffer {
     LogBufferElementCollection mLogElements;
-    pthread_mutex_t mLogElementsLock;
+    pthread_rwlock_t mLogElementsLock;
 
     LogStatistics stats;
 
@@ -154,7 +154,7 @@ class LogBuffer {
         return tags.tagToName(tag);
     }
 
-    // helper must be protected directly or implicitly by lock()/unlock()
+    // helper must be protected directly or implicitly by wrlock()/unlock()
     const char* pidToName(pid_t pid) {
         return stats.pidToName(pid);
     }
@@ -164,11 +164,14 @@ class LogBuffer {
     const char* uidToName(uid_t uid) {
         return stats.uidToName(uid);
     }
-    void lock() {
-        pthread_mutex_lock(&mLogElementsLock);
+    void wrlock() {
+        pthread_rwlock_wrlock(&mLogElementsLock);
+    }
+    void rdlock() {
+        pthread_rwlock_rdlock(&mLogElementsLock);
     }
     void unlock() {
-        pthread_mutex_unlock(&mLogElementsLock);
+        pthread_rwlock_unlock(&mLogElementsLock);
     }
 
    private:
@@ -177,6 +180,9 @@ class LogBuffer {
     static const log_time pruneMargin;
 
     void maybePrune(log_id_t id);
+    bool isBusy(log_time watermark);
+    void kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows);
+
     bool prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT);
     LogBufferElementCollection::iterator erase(
         LogBufferElementCollection::iterator it, bool coalesce = false);
