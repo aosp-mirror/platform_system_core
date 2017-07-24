@@ -16,6 +16,10 @@
 
 cc_library {
     name: "libusbhost",
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
     host_supported: true,
     srcs: ["usbhost.c"],
     cflags: ["-Werror"],
