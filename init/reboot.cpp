@@ -498,10 +498,8 @@ bool HandlePowerctlMessage(const std::string& command) {
             }
         }
     } else if (command == "thermal-shutdown") {  // no additional parameter allowed
+        // run_fsck is false to avoid delay
         cmd = ANDROID_RB_THERMOFF;
-        // Do not queue "shutdown" trigger since we want to shutdown immediately
-        DoReboot(cmd, command, reboot_target, run_fsck);
-        return true;
     } else {
         command_invalid = true;
     }
