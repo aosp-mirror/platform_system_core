@@ -156,27 +156,7 @@ ServiceEnvironmentInfo::ServiceEnvironmentInfo(const std::string& name,
 }
 
 Service::Service(const std::string& name, const std::vector<std::string>& args)
-    : name_(name),
-      classnames_({"default"}),
-      flags_(0),
-      pid_(0),
-      crash_count_(0),
-      uid_(0),
-      gid_(0),
-      namespace_flags_(0),
-      seclabel_(""),
-      onrestart_(false, "<Service '" + name + "' onrestart>", 0),
-      keychord_id_(0),
-      ioprio_class_(IoSchedClass_NONE),
-      ioprio_pri_(0),
-      priority_(0),
-      oom_score_adjust_(-1000),
-      swappiness_(-1),
-      soft_limit_in_bytes_(-1),
-      limit_in_bytes_(-1),
-      args_(args) {
-    onrestart_.InitSingleTrigger("onrestart");
-}
+    : Service(name, 0, 0, 0, {}, 0, 0, "", args) {}
 
 Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
                  const std::vector<gid_t>& supp_gids, const CapSet& capabilities,
