@@ -576,6 +576,7 @@ class LogStatistics {
         enable = true;
     }
 
+    void addTotal(LogBufferElement* entry);
     void add(LogBufferElement* entry);
     void subtract(LogBufferElement* entry);
     // entry->setDropped(1) must follow this call

@@ -44,14 +44,14 @@ FlushCommand::FlushCommand(LogReader& reader, bool nonBlock, unsigned long tail,
 // LogTimeEntrys, and spawn a transitory per-client thread to
 // work at filing data to the  socket.
 //
-// global LogTimeEntry::lock() is used to protect access,
+// global LogTimeEntry::wrlock() is used to protect access,
 // reference counts are used to ensure that individual
 // LogTimeEntry lifetime is managed when not protected.
 void FlushCommand::runSocketCommand(SocketClient* client) {
     LogTimeEntry* entry = NULL;
     LastLogTimes& times = mReader.logbuf().mTimes;
 
-    LogTimeEntry::lock();
+    LogTimeEntry::wrlock();
     LastLogTimes::iterator it = times.begin();
     while (it != times.end()) {
         entry = (*it);

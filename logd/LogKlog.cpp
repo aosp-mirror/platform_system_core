@@ -579,7 +579,7 @@ int LogKlog::log(const char* buf, ssize_t len) {
     const pid_t tid = pid;
     uid_t uid = AID_ROOT;
     if (pid) {
-        logbuf->lock();
+        logbuf->wrlock();
         uid = logbuf->pidToUid(pid);
         logbuf->unlock();
     }
