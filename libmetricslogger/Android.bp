@@ -7,7 +7,6 @@ metricslogger_lib_src_files = [
 cc_defaults {
     name: "metricslogger_defaults",
 
-    clang: true,
     host_supported: true,
 
     export_include_dirs: ["include"],

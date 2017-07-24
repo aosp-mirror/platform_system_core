@@ -6,7 +6,6 @@ cc_defaults {
         "-Wextra",
         "-Werror",
     ],
-    clang: true,
     shared_libs: [
         "libbase",
     ],

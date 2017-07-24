@@ -16,7 +16,6 @@
 
 cc_test {
     name: "ion-unit-tests",
-    clang: true,
     cflags: [
         "-g",
         "-Wall",

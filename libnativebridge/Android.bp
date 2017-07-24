@@ -12,7 +12,6 @@ cc_library {
     host_supported: true,
     srcs: ["native_bridge.cc"],
     shared_libs: ["liblog"],
-    clang: true,
 
     export_include_dirs=["include"],
 

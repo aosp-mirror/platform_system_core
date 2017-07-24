@@ -6,7 +6,6 @@ cc_library {
     local_include_dirs: ["include"],
     export_include_dirs: ["include"],
 
-    clang: true,
     sanitize: {
         misc_undefined: ["integer"],
     },
