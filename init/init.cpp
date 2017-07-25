@@ -23,6 +23,7 @@
 #include <inttypes.h>
 #include <libgen.h>
 #include <paths.h>
+#include <seccomp_policy.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -554,6 +555,15 @@ static int queue_property_triggers_action(const std::vector<std::string>& args)
     return 0;
 }
 
+static void global_seccomp() {
+    import_kernel_cmdline(false, [](const std::string& key, const std::string& value, bool in_qemu) {
+        if (key == "androidboot.seccomp" && value == "global" && !set_global_seccomp_filter()) {
+            LOG(ERROR) << "Failed to globally enable seccomp!";
+            panic();
+        }
+    });
+}
+
 static void selinux_init_all_handles(void)
 {
     sehandle = selinux_android_file_context_handle();
@@ -1034,6 +1044,9 @@ int main(int argc, char** argv) {
         }
 
         SetInitAvbVersionInRecovery();
+
+        // Enable seccomp if global boot option was passed (otherwise it is enabled in zygote).
+        global_seccomp();
 
         // Set up SELinux, loading the SELinux policy.
         selinux_initialize(true);
