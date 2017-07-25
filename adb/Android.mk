@@ -108,7 +108,6 @@ LIBADB_TEST_windows_SRCS := \
     sysdeps_win32_test.cpp \
 
 include $(CLEAR_VARS)
-LOCAL_CLANG := true
 LOCAL_MODULE := libadbd_usb
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
 LOCAL_SRC_FILES := daemon/usb.cpp
@@ -122,7 +121,6 @@ LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_CLANG := true
 LOCAL_MODULE := libadbd
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
 LOCAL_SRC_FILES := \
@@ -171,7 +169,6 @@ LOCAL_MULTILIB := first
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_CLANG := true
 LOCAL_MODULE := adbd_test
 LOCAL_CFLAGS := -DADB_HOST=0 $(LIBADB_CFLAGS)
 LOCAL_SRC_FILES := \
@@ -329,8 +326,6 @@ endif
 # =========================================================
 
 include $(CLEAR_VARS)
-
-LOCAL_CLANG := true
 
 LOCAL_SRC_FILES := \
     daemon/main.cpp \
