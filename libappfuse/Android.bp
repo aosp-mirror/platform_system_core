@@ -8,7 +8,6 @@ cc_defaults {
         "-Wall",
         "-Werror",
     ],
-    clang: true
 }
 
 cc_library_shared {

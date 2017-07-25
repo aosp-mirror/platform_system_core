@@ -156,8 +156,6 @@ cc_library {
         "-Wall",
         "-Wextra",
     ],
-
-    clang: true,
 }
 
 subdirs = ["tests"]
