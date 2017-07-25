@@ -23,6 +23,7 @@ cc_test {
     srcs: [
         "BitSet_test.cpp",
         "LruCache_test.cpp",
+        "Mutex_test.cpp",
         "Singleton_test.cpp",
         "String8_test.cpp",
         "StrongPointer_test.cpp",
@@ -72,6 +73,7 @@ cc_test {
         "-Wall",
         "-Wextra",
         "-Werror",
+        "-Wthread-safety",
     ],
 }
 
