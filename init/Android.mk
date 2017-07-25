@@ -77,6 +77,7 @@ LOCAL_STATIC_LIBRARIES := \
     libcutils \
     libbase \
     libc \
+    libseccomp_policy \
     libselinux \
     liblog \
     libcrypto_utils \
