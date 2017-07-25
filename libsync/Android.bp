@@ -38,5 +38,4 @@ cc_test {
         "-Wno-missing-field-initializers",
         "-Wno-sign-compare",
     ],
-    clang: true,
 }
