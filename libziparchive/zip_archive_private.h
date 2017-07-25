@@ -93,14 +93,10 @@ enum ErrorCodes : int32_t {
 class MappedZipFile {
  public:
   explicit MappedZipFile(const int fd)
-      : has_fd_(true), fd_(fd), base_ptr_(nullptr), data_length_(0), read_pos_(0) {}
+      : has_fd_(true), fd_(fd), base_ptr_(nullptr), data_length_(0) {}
 
   explicit MappedZipFile(void* address, size_t length)
-      : has_fd_(false),
-        fd_(-1),
-        base_ptr_(address),
-        data_length_(static_cast<off64_t>(length)),
-        read_pos_(0) {}
+      : has_fd_(false), fd_(-1), base_ptr_(address), data_length_(static_cast<off64_t>(length)) {}
 
   bool HasFd() const { return has_fd_; }
 
@@ -109,10 +105,6 @@ class MappedZipFile {
   void* GetBasePtr() const;
 
   off64_t GetFileLength() const;
-
-  bool SeekToOffset(off64_t offset);
-
-  bool ReadData(uint8_t* buffer, size_t read_amount);
 
   bool ReadAtOffset(uint8_t* buf, size_t len, off64_t off);
 
@@ -127,8 +119,6 @@ class MappedZipFile {
 
   void* const base_ptr_;
   const off64_t data_length_;
-  // read_pos_ is the offset to the base_ptr_ where we read data from.
-  size_t read_pos_;
 };
 
 class CentralDirectory {
