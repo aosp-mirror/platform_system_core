@@ -19,7 +19,6 @@ cc_library {
             host_ldlibs: ["-ldl"],
         },
     },
-    clang: true,
     cflags: [
         "-Werror",
         "-Wall",

@@ -39,7 +39,6 @@ cc_library_headers {
 cc_library {
     name: "libbase",
     vendor_available: true,
-    clang: true,
     host_supported: true,
     srcs: [
         "file.cpp",
@@ -109,7 +108,6 @@ cc_library {
 cc_test {
     name: "libbase_test",
     host_supported: true,
-    clang: true,
     srcs: [
         "endian_test.cpp",
         "errors_test.cpp",
