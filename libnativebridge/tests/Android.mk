@@ -34,7 +34,6 @@ shared_libraries := \
 
 $(foreach file,$(test_src_files), \
     $(eval include $(CLEAR_VARS)) \
-    $(eval LOCAL_CLANG := true) \
     $(eval LOCAL_SHARED_LIBRARIES := $(shared_libraries)) \
     $(eval LOCAL_SRC_FILES := $(file)) \
     $(eval LOCAL_MODULE := $(notdir $(file:%.cpp=%))) \
@@ -43,7 +42,6 @@ $(foreach file,$(test_src_files), \
 
 $(foreach file,$(test_src_files), \
     $(eval include $(CLEAR_VARS)) \
-    $(eval LOCAL_CLANG := true) \
     $(eval LOCAL_SHARED_LIBRARIES := $(shared_libraries)) \
     $(eval LOCAL_SRC_FILES := $(file)) \
     $(eval LOCAL_MODULE := $(notdir $(file:%.cpp=%))) \
