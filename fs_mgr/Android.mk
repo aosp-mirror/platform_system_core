@@ -15,7 +15,6 @@ common_static_libraries := \
     libavb
 
 include $(CLEAR_VARS)
-LOCAL_CLANG := true
 LOCAL_SANITIZE := integer
 LOCAL_SRC_FILES:= fs_mgr_main.cpp
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include

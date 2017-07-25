@@ -32,9 +32,6 @@ cc_defaults {
         "liblog",
         "libmetricslogger",
     ],
-    whole_static_libs: ["libgtest_prod"],
-    // Clang is required because of C++14
-    clang: true,
 }
 
 // bootstat static library

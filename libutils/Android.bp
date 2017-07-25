@@ -140,8 +140,6 @@ cc_library {
             enabled: true,
         },
     },
-
-    clang: true,
 }
 
 // Include subdirectory makefiles
