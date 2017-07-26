@@ -377,12 +377,12 @@ on post-fs-data
     # create basic filesystem structure
     mkdir /data/misc 01771 system misc
     mkdir /data/misc/recovery 0770 system log
-    copy /data/misc/recovery/default.prop /data/misc/recovery/default.prop.1
-    chmod 0440 /data/misc/recovery/default.prop.1
-    chown system log /data/misc/recovery/default.prop.1
-    copy /default.prop /data/misc/recovery/default.prop
-    chmod 0440 /data/misc/recovery/default.prop
-    chown system log /data/misc/recovery/default.prop
+    copy /data/misc/recovery/ro.build.fingerprint /data/misc/recovery/ro.build.fingerprint.1
+    chmod 0440 /data/misc/recovery/ro.build.fingerprint.1
+    chown system log /data/misc/recovery/ro.build.fingerprint.1
+    write /data/misc/recovery/ro.build.fingerprint ${ro.build.fingerprint}
+    chmod 0440 /data/misc/recovery/ro.build.fingerprint
+    chown system log /data/misc/recovery/ro.build.fingerprint
     mkdir /data/misc/recovery/proc 0770 system log
     copy /data/misc/recovery/proc/version /data/misc/recovery/proc/version.1
     chmod 0440 /data/misc/recovery/proc/version.1
