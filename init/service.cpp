@@ -155,6 +155,8 @@ ServiceEnvironmentInfo::ServiceEnvironmentInfo(const std::string& name,
     : name(name), value(value) {
 }
 
+unsigned long Service::next_start_order_ = 1;
+
 Service::Service(const std::string& name, const std::vector<std::string>& args)
     : Service(name, 0, 0, 0, {}, 0, 0, "", args) {}
 
@@ -182,6 +184,7 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       swappiness_(-1),
       soft_limit_in_bytes_(-1),
       limit_in_bytes_(-1),
+      start_order_(0),
       args_(args) {
     onrestart_.InitSingleTrigger("onrestart");
 }
@@ -283,6 +286,7 @@ void Service::Reap() {
 
     pid_ = 0;
     flags_ &= (~SVC_RUNNING);
+    start_order_ = 0;
 
     // Oneshot processes go into the disabled state on exit,
     // except when manually restarted.
@@ -805,6 +809,7 @@ bool Service::Start() {
     time_started_ = boot_clock::now();
     pid_ = pid;
     flags_ |= SVC_RUNNING;
+    start_order_ = next_start_order_++;
     process_cgroup_empty_ = false;
 
     errno = -createProcessGroup(uid_, pid_);
@@ -1093,6 +1098,19 @@ Service* ServiceManager::FindServiceByKeychord(int keychord_id) const {
 void ServiceManager::ForEachService(const std::function<void(Service*)>& callback) const {
     for (const auto& s : services_) {
         callback(s.get());
+    }
+}
+
+// Shutdown services in the opposite order that they were started.
+void ServiceManager::ForEachServiceShutdownOrder(const std::function<void(Service*)>& callback) const {
+    std::vector<Service*> shutdown_services;
+    for (const auto& service : services_) {
+        if (service->start_order() > 0) shutdown_services.emplace_back(service.get());
+    }
+    std::sort(shutdown_services.begin(), shutdown_services.end(),
+              [](const auto& a, const auto& b) { return a->start_order() > b->start_order(); });
+    for (const auto& service : shutdown_services) {
+        callback(service);
     }
 }
 

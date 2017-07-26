@@ -108,6 +108,7 @@ class Service {
     int priority() const { return priority_; }
     int oom_score_adjust() const { return oom_score_adjust_; }
     bool process_cgroup_empty() const { return process_cgroup_empty_; }
+    unsigned long start_order() const { return start_order_; }
     const std::vector<std::string>& args() const { return args_; }
 
   private:
@@ -148,6 +149,8 @@ class Service {
 
     template <typename T>
     bool AddDescriptor(const std::vector<std::string>& args, std::string* err);
+
+    static unsigned long next_start_order_;
 
     std::string name_;
     std::set<std::string> classnames_;
@@ -190,6 +193,8 @@ class Service {
 
     bool process_cgroup_empty_ = false;
 
+    unsigned long start_order_;
+
     std::vector<std::string> args_;
 };
 
@@ -209,6 +214,7 @@ class ServiceManager {
     Service* FindServiceByPid(pid_t pid) const;
     Service* FindServiceByKeychord(int keychord_id) const;
     void ForEachService(const std::function<void(Service*)>& callback) const;
+    void ForEachServiceShutdownOrder(const std::function<void(Service*)>& callback) const;
     void ForEachServiceInClass(const std::string& classname,
                                void (*func)(Service* svc)) const;
     void ForEachServiceWithFlags(unsigned matchflags,
