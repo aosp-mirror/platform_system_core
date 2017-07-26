@@ -201,7 +201,8 @@ static bool FindPartitionsToUmount(std::vector<MountEntry>* blockDevPartitions,
             std::string mount_dir(mentry->mnt_dir);
             // These are R/O partitions changed to R/W after adb remount.
             // Do not umount them as shutdown critical services may rely on them.
-            if (mount_dir != "/system" && mount_dir != "/vendor" && mount_dir != "/oem") {
+            if (mount_dir != "/" && mount_dir != "/system" && mount_dir != "/vendor" &&
+                mount_dir != "/oem") {
                 blockDevPartitions->emplace(blockDevPartitions->begin(), *mentry);
             }
         } else if (MountEntry::IsEmulatedDevice(*mentry)) {
