@@ -18,10 +18,16 @@
 #define ANDROID_BASE_FILE_H
 
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <string>
 
 #if !defined(_WIN32) && !defined(O_BINARY)
 #define O_BINARY 0
+#endif
+
+#if defined(__APPLE__)
+/* Mac OS has always had a 64-bit off_t, so it doesn't have off64_t. */
+typedef off_t off64_t;
 #endif
 
 namespace android {
