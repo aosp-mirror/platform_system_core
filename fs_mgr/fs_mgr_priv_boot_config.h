@@ -20,8 +20,7 @@
 #include <sys/cdefs.h>
 #include <string>
 
-const std::string kAndroidDtDir("/proc/device-tree/firmware/android");
-
+bool fs_mgr_get_boot_config_from_kernel_cmdline(const std::string& key, std::string* out_val);
 bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val);
 
 #endif /* __CORE_FS_MGR_PRIV_BOOTCONFIG_H */
