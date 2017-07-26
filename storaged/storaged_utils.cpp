@@ -18,6 +18,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <linux/time.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -182,15 +183,28 @@ void sort_running_uids_info(std::vector<struct uid_info> &uids) {
 }
 
 // Logging functions
-void log_console_running_uids_info(std::vector<struct uid_info> uids) {
+void log_console_running_uids_info(const std::vector<struct uid_info>& uids, bool flag_dump_task) {
     printf("name/uid fg_rchar fg_wchar fg_rbytes fg_wbytes "
            "bg_rchar bg_wchar bg_rbytes bg_wbytes fg_fsync bg_fsync\n");
 
     for (const auto& uid : uids) {
-        printf("%s %ju %ju %ju %ju %ju %ju %ju %ju %ju %ju\n", uid.name.c_str(),
+        printf("%s %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
+                " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+            uid.name.c_str(),
             uid.io[0].rchar, uid.io[0].wchar, uid.io[0].read_bytes, uid.io[0].write_bytes,
             uid.io[1].rchar, uid.io[1].wchar, uid.io[1].read_bytes, uid.io[1].write_bytes,
             uid.io[0].fsync, uid.io[1].fsync);
+        if (flag_dump_task) {
+            for (const auto& task_it : uid.tasks) {
+                const struct task_info& task = task_it.second;
+                printf("-> %s %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
+                        " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+                    task.comm.c_str(),
+                    task.io[0].rchar, task.io[0].wchar, task.io[0].read_bytes, task.io[0].write_bytes,
+                    task.io[1].rchar, task.io[1].wchar, task.io[1].read_bytes, task.io[1].write_bytes,
+                    task.io[0].fsync, task.io[1].fsync);
+            }
+        }
     }
     fflush(stdout);
 }

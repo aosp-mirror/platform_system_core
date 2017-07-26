@@ -56,6 +56,66 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats()
     return get_uid_io_stats_locked();
 };
 
+/* return true on parse success and false on failure */
+bool uid_info::parse_uid_io_stats(std::string&& s)
+{
+    std::vector<std::string> fields = Split(s, " ");
+    if (fields.size() < 11 ||
+        !ParseUint(fields[0],  &uid) ||
+        !ParseUint(fields[1],  &io[FOREGROUND].rchar) ||
+        !ParseUint(fields[2],  &io[FOREGROUND].wchar) ||
+        !ParseUint(fields[3],  &io[FOREGROUND].read_bytes) ||
+        !ParseUint(fields[4],  &io[FOREGROUND].write_bytes) ||
+        !ParseUint(fields[5],  &io[BACKGROUND].rchar) ||
+        !ParseUint(fields[6],  &io[BACKGROUND].wchar) ||
+        !ParseUint(fields[7],  &io[BACKGROUND].read_bytes) ||
+        !ParseUint(fields[8],  &io[BACKGROUND].write_bytes) ||
+        !ParseUint(fields[9],  &io[FOREGROUND].fsync) ||
+        !ParseUint(fields[10], &io[BACKGROUND].fsync)) {
+        LOG_TO(SYSTEM, WARNING) << "Invalid I/O stats: \""
+                                << s << "\"";
+        return false;
+    }
+    return true;
+}
+
+/* return true on parse success and false on failure */
+bool task_info::parse_task_io_stats(std::string&& s)
+{
+    std::vector<std::string> fields = Split(s, ",");
+    if (fields.size() < 13 ||
+        !ParseInt(fields[2],  &pid) ||
+        !ParseUint(fields[3],  &io[FOREGROUND].rchar) ||
+        !ParseUint(fields[4],  &io[FOREGROUND].wchar) ||
+        !ParseUint(fields[5],  &io[FOREGROUND].read_bytes) ||
+        !ParseUint(fields[6],  &io[FOREGROUND].write_bytes) ||
+        !ParseUint(fields[7],  &io[BACKGROUND].rchar) ||
+        !ParseUint(fields[8],  &io[BACKGROUND].wchar) ||
+        !ParseUint(fields[9],  &io[BACKGROUND].read_bytes) ||
+        !ParseUint(fields[10], &io[BACKGROUND].write_bytes) ||
+        !ParseUint(fields[11], &io[FOREGROUND].fsync) ||
+        !ParseUint(fields[12], &io[BACKGROUND].fsync)) {
+        LOG_TO(SYSTEM, WARNING) << "Invalid I/O stats: \""
+                                << s << "\"";
+        return false;
+    }
+    comm = fields[1];
+    return true;
+}
+
+bool io_usage::is_zero() const
+{
+    for (int i = 0; i < IO_TYPES; i++) {
+        for (int j = 0; j < UID_STATS; j++) {
+            for (int k = 0; k < CHARGER_STATS; k++) {
+                if (bytes[i][j][k])
+                    return false;
+            }
+        }
+    }
+    return true;
+}
+
 std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_locked()
 {
     std::unordered_map<uint32_t, struct uid_info> uid_io_stats;
@@ -65,7 +125,7 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_lock
         return uid_io_stats;
     }
 
-    std::vector<std::string> io_stats = Split(buffer, "\n");
+    std::vector<std::string> io_stats = Split(std::move(buffer), "\n");
     struct uid_info u;
     bool refresh_uid = false;
 
@@ -73,31 +133,22 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_lock
         if (io_stats[i].empty()) {
             continue;
         }
-        std::vector<std::string> fields = Split(io_stats[i], " ");
-        if (fields.size() < 11 ||
-            !ParseUint(fields[0],  &u.uid) ||
-            !ParseUint(fields[1],  &u.io[FOREGROUND].rchar) ||
-            !ParseUint(fields[2],  &u.io[FOREGROUND].wchar) ||
-            !ParseUint(fields[3],  &u.io[FOREGROUND].read_bytes) ||
-            !ParseUint(fields[4],  &u.io[FOREGROUND].write_bytes) ||
-            !ParseUint(fields[5],  &u.io[BACKGROUND].rchar) ||
-            !ParseUint(fields[6],  &u.io[BACKGROUND].wchar) ||
-            !ParseUint(fields[7],  &u.io[BACKGROUND].read_bytes) ||
-            !ParseUint(fields[8],  &u.io[BACKGROUND].write_bytes) ||
-            !ParseUint(fields[9],  &u.io[FOREGROUND].fsync) ||
-            !ParseUint(fields[10], &u.io[BACKGROUND].fsync)) {
-            LOG_TO(SYSTEM, WARNING) << "Invalid I/O stats: \""
-                                    << io_stats[i] << "\"";
-            continue;
-        }
 
-        if (last_uid_io_stats.find(u.uid) == last_uid_io_stats.end()) {
-            refresh_uid = true;
-            u.name = std::to_string(u.uid);
+        if (io_stats[i].compare(0, 4, "task")) {
+            if (!u.parse_uid_io_stats(std::move(io_stats[i])))
+                continue;
+            if (last_uid_io_stats.find(u.uid) == last_uid_io_stats.end()) {
+                refresh_uid = true;
+                u.name = std::to_string(u.uid);
+            } else
+                u.name = last_uid_io_stats[u.uid].name;
+            uid_io_stats[u.uid] = u;
         } else {
-            u.name = last_uid_io_stats[u.uid].name;
+            struct task_info t;
+            if (!t.parse_task_io_stats(std::move(io_stats[i])))
+                continue;
+            uid_io_stats[u.uid].tasks[t.pid] = t;
         }
-        uid_io_stats[u.uid] = u;
     }
 
     if (refresh_uid) {
@@ -119,8 +170,6 @@ static inline int records_size(
     return count;
 }
 
-static struct uid_io_usage zero_io_usage;
-
 void uid_monitor::add_records_locked(uint64_t curr_ts)
 {
     // remove records more than 5 days old
@@ -133,8 +182,12 @@ void uid_monitor::add_records_locked(uint64_t curr_ts)
     for (const auto& p : curr_io_stats) {
         struct uid_record record = {};
         record.name = p.first;
-        record.ios = p.second;
-        if (memcmp(&record.ios, &zero_io_usage, sizeof(struct uid_io_usage))) {
+        if (!p.second.uid_ios.is_zero()) {
+            record.ios.uid_ios = p.second.uid_ios;
+            for (const auto& p_task : p.second.task_ios) {
+                if (!p_task.second.is_zero())
+                    record.ios.task_ios[p_task.first] = p_task.second;
+            }
             new_records.entries.push_back(record);
         }
     }
@@ -179,14 +232,15 @@ std::map<uint64_t, struct uid_records> uid_monitor::dump(
         struct uid_records filtered;
 
         for (const auto& rec : recs) {
-            if (rec.ios.bytes[READ][FOREGROUND][CHARGER_ON] +
-                rec.ios.bytes[READ][FOREGROUND][CHARGER_OFF] +
-                rec.ios.bytes[READ][BACKGROUND][CHARGER_ON] +
-                rec.ios.bytes[READ][BACKGROUND][CHARGER_OFF] +
-                rec.ios.bytes[WRITE][FOREGROUND][CHARGER_ON] +
-                rec.ios.bytes[WRITE][FOREGROUND][CHARGER_OFF] +
-                rec.ios.bytes[WRITE][BACKGROUND][CHARGER_ON] +
-                rec.ios.bytes[WRITE][BACKGROUND][CHARGER_OFF] > threshold) {
+            const io_usage& uid_usage = rec.ios.uid_ios;
+            if (uid_usage.bytes[READ][FOREGROUND][CHARGER_ON] +
+                uid_usage.bytes[READ][FOREGROUND][CHARGER_OFF] +
+                uid_usage.bytes[READ][BACKGROUND][CHARGER_ON] +
+                uid_usage.bytes[READ][BACKGROUND][CHARGER_OFF] +
+                uid_usage.bytes[WRITE][FOREGROUND][CHARGER_ON] +
+                uid_usage.bytes[WRITE][FOREGROUND][CHARGER_OFF] +
+                uid_usage.bytes[WRITE][BACKGROUND][CHARGER_ON] +
+                uid_usage.bytes[WRITE][BACKGROUND][CHARGER_OFF] > threshold) {
                 filtered.entries.push_back(rec);
             }
         }
@@ -227,14 +281,38 @@ void uid_monitor::update_curr_io_stats_locked()
         int64_t bg_wr_delta = uid.io[BACKGROUND].write_bytes -
             last_uid_io_stats[uid.uid].io[BACKGROUND].write_bytes;
 
-        usage.bytes[READ][FOREGROUND][charger_stat] +=
-            (fg_rd_delta < 0) ? uid.io[FOREGROUND].read_bytes : fg_rd_delta;
-        usage.bytes[READ][BACKGROUND][charger_stat] +=
-            (bg_rd_delta < 0) ? uid.io[BACKGROUND].read_bytes : bg_rd_delta;
-        usage.bytes[WRITE][FOREGROUND][charger_stat] +=
-            (fg_wr_delta < 0) ? uid.io[FOREGROUND].write_bytes : fg_wr_delta;
-        usage.bytes[WRITE][BACKGROUND][charger_stat] +=
-            (bg_wr_delta < 0) ? uid.io[BACKGROUND].write_bytes : bg_wr_delta;
+        usage.uid_ios.bytes[READ][FOREGROUND][charger_stat] +=
+            (fg_rd_delta < 0) ? 0 : fg_rd_delta;
+        usage.uid_ios.bytes[READ][BACKGROUND][charger_stat] +=
+            (bg_rd_delta < 0) ? 0 : bg_rd_delta;
+        usage.uid_ios.bytes[WRITE][FOREGROUND][charger_stat] +=
+            (fg_wr_delta < 0) ? 0 : fg_wr_delta;
+        usage.uid_ios.bytes[WRITE][BACKGROUND][charger_stat] +=
+            (bg_wr_delta < 0) ? 0 : bg_wr_delta;
+
+        for (const auto& task_it : uid.tasks) {
+            const struct task_info& task = task_it.second;
+            const pid_t pid = task_it.first;
+            const std::string& comm = task_it.second.comm;
+            int64_t task_fg_rd_delta = task.io[FOREGROUND].read_bytes -
+                last_uid_io_stats[uid.uid].tasks[pid].io[FOREGROUND].read_bytes;
+            int64_t task_bg_rd_delta = task.io[BACKGROUND].read_bytes -
+                last_uid_io_stats[uid.uid].tasks[pid].io[BACKGROUND].read_bytes;
+            int64_t task_fg_wr_delta = task.io[FOREGROUND].write_bytes -
+                last_uid_io_stats[uid.uid].tasks[pid].io[FOREGROUND].write_bytes;
+            int64_t task_bg_wr_delta = task.io[BACKGROUND].write_bytes -
+                last_uid_io_stats[uid.uid].tasks[pid].io[BACKGROUND].write_bytes;
+
+            struct io_usage& task_usage = usage.task_ios[comm];
+            task_usage.bytes[READ][FOREGROUND][charger_stat] +=
+                (task_fg_rd_delta < 0) ? 0 : task_fg_rd_delta;
+            task_usage.bytes[READ][BACKGROUND][charger_stat] +=
+                (task_bg_rd_delta < 0) ? 0 : task_bg_rd_delta;
+            task_usage.bytes[WRITE][FOREGROUND][charger_stat] +=
+                (task_fg_wr_delta < 0) ? 0 : task_fg_wr_delta;
+            task_usage.bytes[WRITE][BACKGROUND][charger_stat] +=
+                (task_bg_wr_delta < 0) ? 0 : task_bg_wr_delta;
+        }
     }
 
     last_uid_io_stats = uid_io_stats;

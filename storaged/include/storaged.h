@@ -97,22 +97,6 @@ struct disk_perf {
     uint32_t queue;             // I/Os in queue
 };
 
-#define CMD_MAX_LEN ( 64 )
-struct task_info {
-    uint32_t pid;                   // task id
-    uint64_t rchar;                 // characters read
-    uint64_t wchar;                 // characters written
-    uint64_t syscr;                 // read syscalls
-    uint64_t syscw;                 // write syscalls
-    uint64_t read_bytes;            // bytes read (from storage layer)
-    uint64_t write_bytes;           // bytes written (to storage layer)
-    uint64_t cancelled_write_bytes; // cancelled write byte by truncate
-
-    uint64_t starttime;             // start time of task
-
-    char cmd[CMD_MAX_LEN];          // filename of the executable
-};
-
 class lock_t {
     sem_t* mSem;
 public:

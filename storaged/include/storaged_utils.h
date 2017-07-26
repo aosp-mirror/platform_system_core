@@ -35,7 +35,7 @@ bool parse_emmc_ecsd(int ext_csd_fd, struct emmc_info* info);
 void sort_running_uids_info(std::vector<struct uid_info> &uids);
 
 // Logging
-void log_console_running_uids_info(std::vector<struct uid_info> uids);
+void log_console_running_uids_info(const std::vector<struct uid_info>& uids, bool flag_dump_task);
 
 void log_debug_disk_perf(struct disk_perf* perf, const char* type);
 
