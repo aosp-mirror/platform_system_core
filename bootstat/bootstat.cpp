@@ -169,6 +169,13 @@ const std::map<std::string, int32_t> kBootReasonMap = {
   {"wdog_bark", 42},
   {"wdog_bite", 43},
   {"wdog_reset", 44},
+  {"shutdown,", 45},  // Trailing comma is intentional.
+  {"shutdown,userrequested", 46},
+  {"reboot,bootloader", 47},
+  {"reboot,cold", 48},
+  {"reboot,recovery", 49},
+  {"thermal_shutdown", 50},
+  {"s3_wakeup", 51}
 };
 
 // Converts a string value representing the reason the system booted to an
