@@ -24,8 +24,8 @@
 #include <vector>
 
 #include "builtins.h"
-#include "init_parser.h"
 #include "keyword_map.h"
+#include "parser.h"
 
 namespace android {
 namespace init {

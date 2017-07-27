@@ -17,10 +17,10 @@
 #ifndef _INIT_IMPORT_PARSER_H
 #define _INIT_IMPORT_PARSER_H
 
-#include "init_parser.h"
-
 #include <string>
 #include <vector>
+
+#include "parser.h"
 
 namespace android {
 namespace init {

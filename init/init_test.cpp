@@ -23,8 +23,8 @@
 #include "action.h"
 #include "builtins.h"
 #include "import_parser.h"
-#include "init_parser.h"
 #include "keyword_map.h"
+#include "parser.h"
 #include "util.h"
 
 namespace android {

@@ -55,16 +55,13 @@
 #include <memory>
 #include <vector>
 
-#include "action.h"
 #include "bootchart.h"
 #include "import_parser.h"
 #include "init_first_stage.h"
-#include "init_parser.h"
 #include "keychords.h"
 #include "log.h"
 #include "property_service.h"
 #include "reboot.h"
-#include "service.h"
 #include "signal_handler.h"
 #include "ueventd.h"
 #include "util.h"
@@ -98,9 +95,41 @@ static std::string wait_prop_name;
 static std::string wait_prop_value;
 static bool shutting_down;
 
+std::vector<std::string> late_import_paths;
+
 void DumpState() {
     ServiceManager::GetInstance().DumpState();
     ActionManager::GetInstance().DumpState();
+}
+
+Parser CreateParser(ActionManager& action_manager, ServiceManager& service_manager) {
+    Parser parser;
+
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&service_manager));
+    parser.AddSectionParser("on", std::make_unique<ActionParser>(&action_manager));
+    parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
+
+    return parser;
+}
+
+static void LoadBootScripts(ActionManager& action_manager, ServiceManager& service_manager) {
+    Parser parser = CreateParser(action_manager, service_manager);
+
+    std::string bootscript = GetProperty("ro.boot.init_rc", "");
+    if (bootscript.empty()) {
+        parser.ParseConfig("/init.rc");
+        if (!parser.ParseConfig("/system/etc/init")) {
+            late_import_paths.emplace_back("/system/etc/init");
+        }
+        if (!parser.ParseConfig("/vendor/etc/init")) {
+            late_import_paths.emplace_back("/vendor/etc/init");
+        }
+        if (!parser.ParseConfig("/odm/etc/init")) {
+            late_import_paths.emplace_back("/odm/etc/init");
+        }
+    } else {
+        parser.ParseConfig(bootscript);
+    }
 }
 
 void register_epoll_handler(int fd, void (*fn)()) {
@@ -1102,25 +1131,8 @@ int main(int argc, char** argv) {
 
     ActionManager& am = ActionManager::GetInstance();
     ServiceManager& sm = ServiceManager::GetInstance();
-    Parser& parser = Parser::GetInstance();
 
-    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&sm));
-    parser.AddSectionParser("on", std::make_unique<ActionParser>(&am));
-    parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
-    std::string bootscript = GetProperty("ro.boot.init_rc", "");
-    if (bootscript.empty()) {
-        parser.ParseConfig("/init.rc");
-        parser.set_is_system_etc_init_loaded(
-                parser.ParseConfig("/system/etc/init"));
-        parser.set_is_vendor_etc_init_loaded(
-                parser.ParseConfig("/vendor/etc/init"));
-        parser.set_is_odm_etc_init_loaded(parser.ParseConfig("/odm/etc/init"));
-    } else {
-        parser.ParseConfig(bootscript);
-        parser.set_is_system_etc_init_loaded(true);
-        parser.set_is_vendor_etc_init_loaded(true);
-        parser.set_is_odm_etc_init_loaded(true);
-    }
+    LoadBootScripts(am, sm);
 
     // Turning this on and letting the INFO logging be discarded adds 0.2s to
     // Nexus 9 boot time, so it's disabled by default.
