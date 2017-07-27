@@ -217,8 +217,8 @@ void send_auth_request(atransport* t) {
     send_packet(p, t);
 }
 
-void adbd_auth_verified(atransport *t)
-{
+void adbd_auth_verified(atransport* t) {
+    LOG(INFO) << "adb client authorized";
     handle_online(t);
     send_connect(t);
 }
