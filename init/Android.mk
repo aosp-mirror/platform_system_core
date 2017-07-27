@@ -97,5 +97,5 @@ LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT)/sbin; \
     ln -sf ../init $(TARGET_ROOT_OUT)/sbin/ueventd; \
     ln -sf ../init $(TARGET_ROOT_OUT)/sbin/watchdogd
 
-LOCAL_SANITIZE := integer
+LOCAL_SANITIZE := signed-integer-overflow
 include $(BUILD_EXECUTABLE)

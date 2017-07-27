@@ -18,7 +18,7 @@ cc_defaults {
     name: "init_defaults",
     cpp_std: "experimental",
     sanitize: {
-        misc_undefined: ["integer"],
+        misc_undefined: ["signed-integer-overflow"],
     },
     cppflags: [
         "-DLOG_UEVENTS=0",
