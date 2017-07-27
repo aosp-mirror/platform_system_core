@@ -120,24 +120,24 @@ err_msg:
 static int remote_read(apacket *p, atransport *t)
 {
     if (usb_read(t->usb, &p->msg, sizeof(amessage))) {
-        D("remote usb: read terminated (message)");
+        PLOG(ERROR) << "remote usb: read terminated (message)";
         return -1;
     }
 
     if (!check_header(p, t)) {
-        D("remote usb: check_header failed");
+        LOG(ERROR) << "remote usb: check_header failed";
         return -1;
     }
 
     if (p->msg.data_length) {
         if (usb_read(t->usb, p->data, p->msg.data_length)) {
-            D("remote usb: terminated (data)");
+            PLOG(ERROR) << "remote usb: terminated (data)";
             return -1;
         }
     }
 
     if (!check_data(p)) {
-        D("remote usb: check_data failed");
+        LOG(ERROR) << "remote usb: check_data failed";
         return -1;
     }
 
@@ -150,12 +150,12 @@ static int remote_write(apacket *p, atransport *t)
     unsigned size = p->msg.data_length;
 
     if (usb_write(t->usb, &p->msg, sizeof(amessage))) {
-        D("remote usb: 1 - write terminated");
+        PLOG(ERROR) << "remote usb: 1 - write terminated";
         return -1;
     }
-    if(p->msg.data_length == 0) return 0;
+    if (p->msg.data_length == 0) return 0;
     if (usb_write(t->usb, &p->data, size)) {
-        D("remote usb: 2 - write terminated");
+        PLOG(ERROR) << "remote usb: 2 - write terminated";
         return -1;
     }
 
