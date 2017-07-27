@@ -398,7 +398,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         LOG(INFO) << "terminating init services";
 
         // Ask all services to terminate except shutdown critical ones.
-        ServiceManager::GetInstance().ForEachService([](Service* s) {
+        ServiceManager::GetInstance().ForEachServiceShutdownOrder([](Service* s) {
             if (!s->IsShutdownCritical()) s->Terminate();
         });
 
@@ -434,7 +434,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
 
     // minimum safety steps before restarting
     // 2. kill all services except ones that are necessary for the shutdown sequence.
-    ServiceManager::GetInstance().ForEachService([](Service* s) {
+    ServiceManager::GetInstance().ForEachServiceShutdownOrder([](Service* s) {
         if (!s->IsShutdownCritical()) s->Stop();
     });
     ServiceManager::GetInstance().ReapAnyOutstandingChildren();
@@ -448,7 +448,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         LOG(INFO) << "vold not running, skipping vold shutdown";
     }
     // logcat stopped here
-    ServiceManager::GetInstance().ForEachService([&kill_after_apps](Service* s) {
+    ServiceManager::GetInstance().ForEachServiceShutdownOrder([&kill_after_apps](Service* s) {
         if (kill_after_apps.count(s->name())) s->Stop();
     });
     // 4. sync, try umount, and optionally run fsck for user shutdown
