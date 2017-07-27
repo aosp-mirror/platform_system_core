@@ -62,7 +62,7 @@ static bool ReapOneProcess() {
 
     if (PropertyChildReap(pid)) return true;
 
-    Service* service = ServiceManager::GetInstance().FindServiceByPid(pid);
+    Service* service = ServiceList::GetInstance().FindService(pid, &Service::pid);
 
     std::string name;
     std::string wait_string;
@@ -90,7 +90,7 @@ static bool ReapOneProcess() {
     service->Reap();
 
     if (service->flags() & SVC_TEMPORARY) {
-        ServiceManager::GetInstance().RemoveService(*service);
+        ServiceList::GetInstance().RemoveService(*service);
     }
 
     return true;

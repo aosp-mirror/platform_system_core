@@ -206,23 +206,34 @@ class Service {
     std::vector<std::string> args_;
 };
 
-class ServiceManager {
+class ServiceList {
   public:
-    static ServiceManager& GetInstance();
+    static ServiceList& GetInstance();
 
     // Exposed for testing
-    ServiceManager();
+    ServiceList();
 
     void AddService(std::unique_ptr<Service> service);
-    Service* FindServiceByName(const std::string& name) const;
-    Service* FindServiceByPid(pid_t pid) const;
-    Service* FindServiceByKeychord(int keychord_id) const;
-    void ForEachService(const std::function<void(Service*)>& callback) const;
-    void ForEachServiceShutdownOrder(const std::function<void(Service*)>& callback) const;
-    void ForEachServiceInClass(const std::string& classname,
-                               void (*func)(Service* svc)) const;
     void RemoveService(const Service& svc);
+
+    template <typename T, typename F = decltype(&Service::name)>
+    Service* FindService(T value, F function = &Service::name) const {
+        auto svc = std::find_if(services_.begin(), services_.end(),
+                                [&function, &value](const std::unique_ptr<Service>& s) {
+                                    return std::invoke(function, s) == value;
+                                });
+        if (svc != services_.end()) {
+            return svc->get();
+        }
+        return nullptr;
+    }
+
     void DumpState() const;
+
+    auto begin() const { return services_.begin(); }
+    auto end() const { return services_.end(); }
+    const std::vector<std::unique_ptr<Service>>& services() const { return services_; }
+    const std::vector<Service*> services_in_shutdown_order() const;
 
   private:
     std::vector<std::unique_ptr<Service>> services_;
@@ -230,8 +241,7 @@ class ServiceManager {
 
 class ServiceParser : public SectionParser {
   public:
-    ServiceParser(ServiceManager* service_manager)
-        : service_manager_(service_manager), service_(nullptr) {}
+    ServiceParser(ServiceList* service_list) : service_list_(service_list), service_(nullptr) {}
     bool ParseSection(std::vector<std::string>&& args, const std::string& filename, int line,
                       std::string* err) override;
     bool ParseLineSection(std::vector<std::string>&& args, int line, std::string* err) override;
@@ -240,7 +250,7 @@ class ServiceParser : public SectionParser {
   private:
     bool IsValidName(const std::string& name) const;
 
-    ServiceManager* service_manager_;
+    ServiceList* service_list_;
     std::unique_ptr<Service> service_;
 };
 

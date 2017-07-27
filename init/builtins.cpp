@@ -124,31 +124,32 @@ static int reboot_into_recovery(const std::vector<std::string>& options) {
     return 0;
 }
 
+template <typename F>
+static void ForEachServiceInClass(const std::string& classname, F function) {
+    for (const auto& service : ServiceList::GetInstance()) {
+        if (service->classnames().count(classname)) std::invoke(function, service);
+    }
+}
+
 static int do_class_start(const std::vector<std::string>& args) {
-        /* Starting a class does not start services
-         * which are explicitly disabled.  They must
-         * be started individually.
-         */
-    ServiceManager::GetInstance().
-        ForEachServiceInClass(args[1], [] (Service* s) { s->StartIfNotDisabled(); });
+    // Starting a class does not start services which are explicitly disabled.
+    // They must  be started individually.
+    ForEachServiceInClass(args[1], &Service::StartIfNotDisabled);
     return 0;
 }
 
 static int do_class_stop(const std::vector<std::string>& args) {
-    ServiceManager::GetInstance().
-        ForEachServiceInClass(args[1], [] (Service* s) { s->Stop(); });
+    ForEachServiceInClass(args[1], &Service::Stop);
     return 0;
 }
 
 static int do_class_reset(const std::vector<std::string>& args) {
-    ServiceManager::GetInstance().
-        ForEachServiceInClass(args[1], [] (Service* s) { s->Reset(); });
+    ForEachServiceInClass(args[1], &Service::Reset);
     return 0;
 }
 
 static int do_class_restart(const std::vector<std::string>& args) {
-    ServiceManager::GetInstance().
-        ForEachServiceInClass(args[1], [] (Service* s) { s->Restart(); });
+    ForEachServiceInClass(args[1], &Service::Restart);
     return 0;
 }
 
@@ -162,7 +163,7 @@ static int do_domainname(const std::vector<std::string>& args) {
 }
 
 static int do_enable(const std::vector<std::string>& args) {
-    Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
+    Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) {
         return -1;
     }
@@ -179,12 +180,12 @@ static int do_exec(const std::vector<std::string>& args) {
         LOG(ERROR) << "Failed to Start exec service";
         return -1;
     }
-    ServiceManager::GetInstance().AddService(std::move(service));
+    ServiceList::GetInstance().AddService(std::move(service));
     return 0;
 }
 
 static int do_exec_start(const std::vector<std::string>& args) {
-    Service* service = ServiceManager::GetInstance().FindServiceByName(args[1]);
+    Service* service = ServiceList::GetInstance().FindService(args[1]);
     if (!service) {
         LOG(ERROR) << "ExecStart(" << args[1] << "): Service not found";
         return -1;
@@ -408,8 +409,8 @@ exit_success:
  */
 static void import_late(const std::vector<std::string>& args, size_t start_index, size_t end_index) {
     auto& action_manager = ActionManager::GetInstance();
-    auto& service_manager = ServiceManager::GetInstance();
-    Parser parser = CreateParser(action_manager, service_manager);
+    auto& service_list = ServiceList::GetInstance();
+    Parser parser = CreateParser(action_manager, service_list);
     if (end_index <= start_index) {
         // Fallbacks for partitions on which early mount isn't enabled.
         for (const auto& path : late_import_paths) {
@@ -599,7 +600,7 @@ static int do_setrlimit(const std::vector<std::string>& args) {
 }
 
 static int do_start(const std::vector<std::string>& args) {
-    Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
+    Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) {
         LOG(ERROR) << "do_start: Service " << args[1] << " not found";
         return -1;
@@ -610,7 +611,7 @@ static int do_start(const std::vector<std::string>& args) {
 }
 
 static int do_stop(const std::vector<std::string>& args) {
-    Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
+    Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) {
         LOG(ERROR) << "do_stop: Service " << args[1] << " not found";
         return -1;
@@ -620,7 +621,7 @@ static int do_stop(const std::vector<std::string>& args) {
 }
 
 static int do_restart(const std::vector<std::string>& args) {
-    Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
+    Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) {
         LOG(ERROR) << "do_restart: Service " << args[1] << " not found";
         return -1;

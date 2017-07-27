@@ -935,15 +935,14 @@ void Service::OpenConsole() const {
     close(fd);
 }
 
-ServiceManager::ServiceManager() {
-}
+ServiceList::ServiceList() {}
 
-ServiceManager& ServiceManager::GetInstance() {
-    static ServiceManager instance;
+ServiceList& ServiceList::GetInstance() {
+    static ServiceList instance;
     return instance;
 }
 
-void ServiceManager::AddService(std::unique_ptr<Service> service) {
+void ServiceList::AddService(std::unique_ptr<Service> service) {
     services_.emplace_back(std::move(service));
 }
 
@@ -1011,69 +1010,18 @@ std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<
                                      namespace_flags, seclabel, str_args);
 }
 
-Service* ServiceManager::FindServiceByName(const std::string& name) const {
-    auto svc = std::find_if(services_.begin(), services_.end(),
-                            [&name] (const std::unique_ptr<Service>& s) {
-                                return name == s->name();
-                            });
-    if (svc != services_.end()) {
-        return svc->get();
-    }
-    return nullptr;
-}
-
-Service* ServiceManager::FindServiceByPid(pid_t pid) const {
-    auto svc = std::find_if(services_.begin(), services_.end(),
-                            [&pid] (const std::unique_ptr<Service>& s) {
-                                return s->pid() == pid;
-                            });
-    if (svc != services_.end()) {
-        return svc->get();
-    }
-    return nullptr;
-}
-
-Service* ServiceManager::FindServiceByKeychord(int keychord_id) const {
-    auto svc = std::find_if(services_.begin(), services_.end(),
-                            [&keychord_id] (const std::unique_ptr<Service>& s) {
-                                return s->keychord_id() == keychord_id;
-                            });
-
-    if (svc != services_.end()) {
-        return svc->get();
-    }
-    return nullptr;
-}
-
-void ServiceManager::ForEachService(const std::function<void(Service*)>& callback) const {
-    for (const auto& s : services_) {
-        callback(s.get());
-    }
-}
-
 // Shutdown services in the opposite order that they were started.
-void ServiceManager::ForEachServiceShutdownOrder(const std::function<void(Service*)>& callback) const {
+const std::vector<Service*> ServiceList::services_in_shutdown_order() const {
     std::vector<Service*> shutdown_services;
     for (const auto& service : services_) {
         if (service->start_order() > 0) shutdown_services.emplace_back(service.get());
     }
     std::sort(shutdown_services.begin(), shutdown_services.end(),
               [](const auto& a, const auto& b) { return a->start_order() > b->start_order(); });
-    for (const auto& service : shutdown_services) {
-        callback(service);
-    }
+    return shutdown_services;
 }
 
-void ServiceManager::ForEachServiceInClass(const std::string& classname,
-                                           void (*func)(Service* svc)) const {
-    for (const auto& s : services_) {
-        if (s->classnames().find(classname) != s->classnames().end()) {
-            func(s.get());
-        }
-    }
-}
-
-void ServiceManager::RemoveService(const Service& svc) {
+void ServiceList::RemoveService(const Service& svc) {
     auto svc_it = std::find_if(services_.begin(), services_.end(),
                                [&svc] (const std::unique_ptr<Service>& s) {
                                    return svc.name() == s->name();
@@ -1085,7 +1033,7 @@ void ServiceManager::RemoveService(const Service& svc) {
     services_.erase(svc_it);
 }
 
-void ServiceManager::DumpState() const {
+void ServiceList::DumpState() const {
     for (const auto& s : services_) {
         s->DumpState();
     }
@@ -1104,7 +1052,7 @@ bool ServiceParser::ParseSection(std::vector<std::string>&& args, const std::str
         return false;
     }
 
-    Service* old_service = service_manager_->FindServiceByName(name);
+    Service* old_service = service_list_->FindService(name);
     if (old_service) {
         *err = "ignored duplicate definition of service '" + name + "'";
         return false;
@@ -1121,7 +1069,7 @@ bool ServiceParser::ParseLineSection(std::vector<std::string>&& args, int line, 
 
 void ServiceParser::EndSection() {
     if (service_) {
-        service_manager_->AddService(std::move(service_));
+        service_list_->AddService(std::move(service_));
     }
 }
 
