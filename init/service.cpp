@@ -1091,69 +1091,6 @@ void ServiceManager::DumpState() const {
     }
 }
 
-bool ServiceManager::ReapOneProcess() {
-    siginfo_t siginfo = {};
-    // This returns a zombie pid or informs us that there are no zombies left to be reaped.
-    // It does NOT reap the pid; that is done below.
-    if (TEMP_FAILURE_RETRY(waitid(P_ALL, 0, &siginfo, WEXITED | WNOHANG | WNOWAIT)) != 0) {
-        PLOG(ERROR) << "waitid failed";
-        return false;
-    }
-
-    auto pid = siginfo.si_pid;
-    if (pid == 0) return false;
-
-    // At this point we know we have a zombie pid, so we use this scopeguard to reap the pid
-    // whenever the function returns from this point forward.
-    // We do NOT want to reap the zombie earlier as in Service::Reap(), we kill(-pid, ...) and we
-    // want the pid to remain valid throughout that (and potentially future) usages.
-    auto reaper = make_scope_guard([pid] { TEMP_FAILURE_RETRY(waitpid(pid, nullptr, WNOHANG)); });
-
-    if (PropertyChildReap(pid)) {
-        return true;
-    }
-
-    Service* svc = FindServiceByPid(pid);
-
-    std::string name;
-    std::string wait_string;
-    if (svc) {
-        name = StringPrintf("Service '%s' (pid %d)", svc->name().c_str(), pid);
-        if (svc->flags() & SVC_EXEC) {
-            auto exec_duration = boot_clock::now() - svc->time_started();
-            auto exec_duration_ms =
-                std::chrono::duration_cast<std::chrono::milliseconds>(exec_duration).count();
-            wait_string = StringPrintf(" waiting took %f seconds", exec_duration_ms / 1000.0f);
-        }
-    } else {
-        name = StringPrintf("Untracked pid %d", pid);
-    }
-
-    auto status = siginfo.si_status;
-    if (WIFEXITED(status)) {
-        LOG(INFO) << name << " exited with status " << WEXITSTATUS(status) << wait_string;
-    } else if (WIFSIGNALED(status)) {
-        LOG(INFO) << name << " killed by signal " << WTERMSIG(status) << wait_string;
-    }
-
-    if (!svc) {
-        return true;
-    }
-
-    svc->Reap();
-
-    if (svc->flags() & SVC_TEMPORARY) {
-        RemoveService(*svc);
-    }
-
-    return true;
-}
-
-void ServiceManager::ReapAnyOutstandingChildren() {
-    while (ReapOneProcess()) {
-    }
-}
-
 bool ServiceParser::ParseSection(std::vector<std::string>&& args, const std::string& filename,
                                  int line, std::string* err) {
     if (args.size() < 3) {

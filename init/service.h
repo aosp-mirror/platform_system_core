@@ -221,15 +221,10 @@ class ServiceManager {
     void ForEachServiceShutdownOrder(const std::function<void(Service*)>& callback) const;
     void ForEachServiceInClass(const std::string& classname,
                                void (*func)(Service* svc)) const;
-    void ReapAnyOutstandingChildren();
     void RemoveService(const Service& svc);
     void DumpState() const;
 
   private:
-    // Cleans up a child process that exited.
-    // Returns true iff a children was cleaned up.
-    bool ReapOneProcess();
-
     std::vector<std::unique_ptr<Service>> services_;
 };
 

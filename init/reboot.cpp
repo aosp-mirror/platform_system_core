@@ -53,6 +53,7 @@
 #include "init.h"
 #include "property_service.h"
 #include "service.h"
+#include "signal_handler.h"
 
 using android::base::StringPrintf;
 using android::base::Timer;
@@ -406,7 +407,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         // Only wait up to half of timeout here
         auto termination_wait_timeout = shutdown_timeout / 2;
         while (t.duration() < termination_wait_timeout) {
-            ServiceManager::GetInstance().ReapAnyOutstandingChildren();
+            ReapAnyOutstandingChildren();
 
             service_count = 0;
             ServiceManager::GetInstance().ForEachService([&service_count](Service* s) {
@@ -437,7 +438,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     ServiceManager::GetInstance().ForEachServiceShutdownOrder([](Service* s) {
         if (!s->IsShutdownCritical()) s->Stop();
     });
-    ServiceManager::GetInstance().ReapAnyOutstandingChildren();
+    ReapAnyOutstandingChildren();
 
     // 3. send volume shutdown to vold
     Service* voldService = ServiceManager::GetInstance().FindServiceByName("vold");
