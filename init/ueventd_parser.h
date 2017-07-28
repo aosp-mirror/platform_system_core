@@ -21,7 +21,7 @@
 #include <vector>
 
 #include "devices.h"
-#include "init_parser.h"
+#include "parser.h"
 
 namespace android {
 namespace init {

@@ -57,7 +57,7 @@
 #include "action.h"
 #include "bootchart.h"
 #include "init.h"
-#include "init_parser.h"
+#include "parser.h"
 #include "property_service.h"
 #include "reboot.h"
 #include "service.h"
@@ -388,21 +388,15 @@ exit_success:
  * start_index: index of the first path in the args list
  */
 static void import_late(const std::vector<std::string>& args, size_t start_index, size_t end_index) {
-    Parser& parser = Parser::GetInstance();
+    auto& action_manager = ActionManager::GetInstance();
+    auto& service_manager = ServiceManager::GetInstance();
+    Parser parser = CreateParser(action_manager, service_manager);
     if (end_index <= start_index) {
         // Fallbacks for partitions on which early mount isn't enabled.
-        if (!parser.is_system_etc_init_loaded()) {
-            parser.ParseConfig("/system/etc/init");
-            parser.set_is_system_etc_init_loaded(true);
+        for (const auto& path : late_import_paths) {
+            parser.ParseConfig(path);
         }
-        if (!parser.is_vendor_etc_init_loaded()) {
-            parser.ParseConfig("/vendor/etc/init");
-            parser.set_is_vendor_etc_init_loaded(true);
-        }
-        if (!parser.is_odm_etc_init_loaded()) {
-            parser.ParseConfig("/odm/etc/init");
-            parser.set_is_odm_etc_init_loaded(true);
-        }
+        late_import_paths.clear();
     } else {
         for (size_t i = start_index; i < end_index; ++i) {
             parser.ParseConfig(args[i]);
