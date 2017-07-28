@@ -21,6 +21,10 @@
 
 #include <selinux/label.h>
 
+#include "action.h"
+#include "parser.h"
+#include "service.h"
+
 namespace android {
 namespace init {
 
@@ -31,6 +35,10 @@ extern const char *ENV[32];
 extern std::string default_console;
 extern struct selabel_handle *sehandle;
 extern struct selabel_handle *sehandle_prop;
+
+extern std::vector<std::string> late_import_paths;
+
+Parser CreateParser(ActionManager& action_manager, ServiceManager& service_manager);
 
 void handle_control_message(const std::string& msg, const std::string& arg);
 
