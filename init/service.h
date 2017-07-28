@@ -30,8 +30,8 @@
 #include "action.h"
 #include "capabilities.h"
 #include "descriptors.h"
-#include "init_parser.h"
 #include "keyword_map.h"
+#include "parser.h"
 
 #define SVC_DISABLED 0x001        // do not autostart with class
 #define SVC_ONESHOT 0x002         // do not restart on exit

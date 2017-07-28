@@ -14,27 +14,77 @@
  * limitations under the License.
  */
 
-#ifndef PARSER_H_
-#define PARSER_H_
+#ifndef _INIT_PARSER_H_
+#define _INIT_PARSER_H_
 
-#define T_EOF 0
-#define T_TEXT 1
-#define T_NEWLINE 2
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
+//  SectionParser is an interface that can parse a given 'section' in init.
+//
+//  You can implement up to 4 functions below, with ParseSection() being mandatory.
+//  The first two function return bool with false indicating a failure and has a std::string* err
+//  parameter into which an error string can be written.  It will be reported along with the
+//  filename and line number of where the error occurred.
+//
+//  1) bool ParseSection(std::vector<std::string>&& args, const std::string& filename,
+//                       int line, std::string* err)
+//    This function is called when a section is first encountered.
+//
+//  2) bool ParseLineSection(std::vector<std::string>&& args, int line, std::string* err)
+//    This function is called on each subsequent line until the next section is encountered.
+//
+//  3) bool EndSection()
+//    This function is called either when a new section is found or at the end of the file.
+//    It indicates that parsing of the current section is complete and any relevant objects should
+//    be committed.
+//
+//  4) bool EndFile()
+//    This function is called at the end of the file.
+//    It indicates that the parsing has completed and any relevant objects should be committed.
 
 namespace android {
 namespace init {
 
-struct parse_state
-{
-    char *ptr;
-    char *text;
-    int line;
-    int nexttoken;
+class SectionParser {
+  public:
+    virtual ~SectionParser() {}
+    virtual bool ParseSection(std::vector<std::string>&& args, const std::string& filename,
+                              int line, std::string* err) = 0;
+    virtual bool ParseLineSection(std::vector<std::string>&&, int, std::string*) { return true; };
+    virtual void EndSection(){};
+    virtual void EndFile(){};
 };
 
-int next_token(struct parse_state *state);
+class Parser {
+  public:
+    //  LineCallback is the type for callbacks that can parse a line starting with a given prefix.
+    //
+    //  They take the form of bool Callback(std::vector<std::string>&& args, std::string* err)
+    //
+    //  Similar to ParseSection() and ParseLineSection(), this function returns bool with false
+    //  indicating a failure and has an std::string* err parameter into which an error string can
+    //  be written.
+    using LineCallback = std::function<bool(std::vector<std::string>&&, std::string*)>;
+
+    Parser();
+
+    bool ParseConfig(const std::string& path);
+    void AddSectionParser(const std::string& name, std::unique_ptr<SectionParser> parser);
+    void AddSingleLineParser(const std::string& prefix, LineCallback callback);
+
+  private:
+    void ParseData(const std::string& filename, const std::string& data);
+    bool ParseConfigFile(const std::string& path);
+    bool ParseConfigDir(const std::string& path);
+
+    std::map<std::string, std::unique_ptr<SectionParser>> section_parsers_;
+    std::vector<std::pair<std::string, LineCallback>> line_callbacks_;
+};
 
 }  // namespace init
 }  // namespace android
 
-#endif /* PARSER_H_ */
+#endif
