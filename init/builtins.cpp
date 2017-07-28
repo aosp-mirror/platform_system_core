@@ -170,11 +170,30 @@ static int do_enable(const std::vector<std::string>& args) {
 }
 
 static int do_exec(const std::vector<std::string>& args) {
-    return ServiceManager::GetInstance().Exec(args) ? 0 : -1;
+    auto service = Service::MakeTemporaryOneshotService(args);
+    if (!service) {
+        LOG(ERROR) << "Failed to create exec service: " << android::base::Join(args, " ");
+        return -1;
+    }
+    if (!service->ExecStart()) {
+        LOG(ERROR) << "Failed to Start exec service";
+        return -1;
+    }
+    ServiceManager::GetInstance().AddService(std::move(service));
+    return 0;
 }
 
 static int do_exec_start(const std::vector<std::string>& args) {
-    return ServiceManager::GetInstance().ExecStart(args[1]) ? 0 : -1;
+    Service* service = ServiceManager::GetInstance().FindServiceByName(args[1]);
+    if (!service) {
+        LOG(ERROR) << "ExecStart(" << args[1] << "): Service not found";
+        return -1;
+    }
+    if (!service->ExecStart()) {
+        LOG(ERROR) << "ExecStart(" << args[1] << "): Could not start Service";
+        return -1;
+    }
+    return 0;
 }
 
 static int do_export(const std::vector<std::string>& args) {

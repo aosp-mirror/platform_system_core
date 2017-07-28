@@ -524,10 +524,8 @@ bool HandlePowerctlMessage(const std::string& command) {
     // Skip wait for prop if it is in progress
     ResetWaitForProp();
 
-    // Skip wait for exec if it is in progress
-    if (ServiceManager::GetInstance().IsWaitingForExec()) {
-        ServiceManager::GetInstance().ClearExecWait();
-    }
+    // Clear EXEC flag if there is one pending
+    ServiceManager::GetInstance().ForEachService([](Service* s) { s->UnSetExec(); });
 
     return true;
 }

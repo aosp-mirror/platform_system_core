@@ -1180,10 +1180,10 @@ int main(int argc, char** argv) {
         // By default, sleep until something happens.
         int epoll_timeout_ms = -1;
 
-        if (!(waiting_for_prop || sm.IsWaitingForExec())) {
+        if (!(waiting_for_prop || Service::is_exec_service_running())) {
             am.ExecuteOneCommand();
         }
-        if (!(waiting_for_prop || sm.IsWaitingForExec())) {
+        if (!(waiting_for_prop || Service::is_exec_service_running())) {
             if (!shutting_down) {
                 auto next_process_restart_time = RestartProcesses();
 
