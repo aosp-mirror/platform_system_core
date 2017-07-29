@@ -120,6 +120,7 @@ bool fs_mgr_wait_for_file(const std::string& filename,
                           const std::chrono::milliseconds relative_timeout);
 bool fs_mgr_update_for_slotselect(struct fstab *fstab);
 bool fs_mgr_is_device_unlocked();
+const std::string& get_android_dt_dir();
 bool is_dt_compatible();
 bool is_device_secure();
 int load_verity_state(struct fstab_rec* fstab, int* mode);
