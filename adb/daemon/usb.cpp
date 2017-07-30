@@ -235,6 +235,8 @@ static const struct {
 };
 
 bool init_functionfs(struct usb_handle* h) {
+    LOG(INFO) << "initializing functionfs";
+
     ssize_t ret;
     struct desc_v1 v1_descriptor;
     struct desc_v2 v2_descriptor;
@@ -255,10 +257,10 @@ bool init_functionfs(struct usb_handle* h) {
     v2_descriptor.os_desc = os_desc_compat;
 
     if (h->control < 0) { // might have already done this before
-        D("OPENING %s", USB_FFS_ADB_EP0);
+        LOG(INFO) << "opening control endpoint " << USB_FFS_ADB_EP0;
         h->control = adb_open(USB_FFS_ADB_EP0, O_RDWR);
         if (h->control < 0) {
-            D("[ %s: cannot open control endpoint: errno=%d]", USB_FFS_ADB_EP0, errno);
+            PLOG(ERROR) << "cannot open control endpoint " << USB_FFS_ADB_EP0;
             goto err;
         }
 
@@ -289,13 +291,13 @@ bool init_functionfs(struct usb_handle* h) {
 
     h->bulk_out = adb_open(USB_FFS_ADB_OUT, O_RDWR);
     if (h->bulk_out < 0) {
-        D("[ %s: cannot open bulk-out ep: errno=%d ]", USB_FFS_ADB_OUT, errno);
+        PLOG(ERROR) << "cannot open bulk-out endpoint " << USB_FFS_ADB_OUT;
         goto err;
     }
 
     h->bulk_in = adb_open(USB_FFS_ADB_IN, O_RDWR);
     if (h->bulk_in < 0) {
-        D("[ %s: cannot open bulk-in ep: errno=%d ]", USB_FFS_ADB_IN, errno);
+        PLOG(ERROR) << "cannot open bulk-in endpoint " << USB_FFS_ADB_IN;
         goto err;
     }
 
@@ -356,12 +358,13 @@ static void usb_ffs_open_thread(void* x) {
 
         while (true) {
             if (init_functionfs(usb)) {
+                LOG(INFO) << "functionfs successfully initialized";
                 break;
             }
             std::this_thread::sleep_for(1s);
         }
 
-        D("[ usb_thread - registering device ]");
+        LOG(INFO) << "registering usb transport";
         register_usb_transport(usb, 0, 0, 1);
     }
 
@@ -430,6 +433,8 @@ static void usb_ffs_kick(usb_handle* h) {
 }
 
 static void usb_ffs_close(usb_handle* h) {
+    LOG(INFO) << "closing functionfs transport";
+
     h->kicked = false;
     adb_close(h->bulk_out);
     adb_close(h->bulk_in);
