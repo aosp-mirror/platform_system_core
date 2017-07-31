@@ -1,7 +1,11 @@
 
 cc_library {
     name: "libion",
-		vendor_available: true,
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
     srcs: ["ion.c"],
     shared_libs: ["liblog"],
     local_include_dirs: [
