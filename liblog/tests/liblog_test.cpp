@@ -116,6 +116,7 @@ static std::string popenToString(std::string command) {
   return ret;
 }
 
+#ifndef NO_PSTORE
 static bool isPmsgActive() {
   pid_t pid = getpid();
 
@@ -125,6 +126,7 @@ static bool isPmsgActive() {
 
   return std::string::npos != myPidFds.find(" -> /dev/pmsg0");
 }
+#endif /* NO_PSTORE */
 
 static bool isLogdwActive() {
   std::string logdwSignature =
@@ -189,22 +191,25 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
   EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
 #ifdef USING_LOGGER_DEFAULT
   // Check that we can close and reopen the logger
-  bool pmsgActiveAfter__android_log_btwrite;
   bool logdwActiveAfter__android_log_btwrite;
   if (getuid() == AID_ROOT) {
     tested__android_log_close = true;
-    pmsgActiveAfter__android_log_btwrite = isPmsgActive();
-    logdwActiveAfter__android_log_btwrite = isLogdwActive();
+#ifndef NO_PSTORE
+    bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
     EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
+#endif /* NO_PSTORE */
+    logdwActiveAfter__android_log_btwrite = isLogdwActive();
     EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
   } else if (!tested__android_log_close) {
     fprintf(stderr, "WARNING: can not test __android_log_close()\n");
   }
   __android_log_close();
   if (getuid() == AID_ROOT) {
+#ifndef NO_PSTORE
     bool pmsgActiveAfter__android_log_close = isPmsgActive();
-    bool logdwActiveAfter__android_log_close = isLogdwActive();
     EXPECT_FALSE(pmsgActiveAfter__android_log_close);
+#endif /* NO_PSTORE */
+    bool logdwActiveAfter__android_log_close = isLogdwActive();
     EXPECT_FALSE(logdwActiveAfter__android_log_close);
   }
 #endif
@@ -213,9 +218,11 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
   EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts1, sizeof(ts1)));
 #ifdef USING_LOGGER_DEFAULT
   if (getuid() == AID_ROOT) {
-    pmsgActiveAfter__android_log_btwrite = isPmsgActive();
-    logdwActiveAfter__android_log_btwrite = isLogdwActive();
+#ifndef NO_PSTORE
+    bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
     EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
+#endif /* NO_PSTORE */
+    logdwActiveAfter__android_log_btwrite = isLogdwActive();
     EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
   }
 #endif
@@ -3034,12 +3041,15 @@ TEST(liblog, android_log_write_list_buffer) {
 
 #ifdef USING_LOGGER_DEFAULT  // Do not retest pmsg functionality
 #ifdef __ANDROID__
+#ifndef NO_PSTORE
 static const char __pmsg_file[] =
     "/data/william-shakespeare/MuchAdoAboutNothing.txt";
+#endif /* NO_PSTORE */
 #endif
 
 TEST(liblog, __android_log_pmsg_file_write) {
 #ifdef __ANDROID__
+#ifndef NO_PSTORE
   __android_log_close();
   if (getuid() == AID_ROOT) {
     tested__android_log_close = true;
@@ -3090,12 +3100,16 @@ TEST(liblog, __android_log_pmsg_file_write) {
     EXPECT_TRUE(pmsgActiveAfter__android_pmsg_file_write);
     EXPECT_TRUE(logdwActiveAfter__android_pmsg_file_write);
   }
+#else /* NO_PSTORE */
+  GTEST_LOG_(INFO) << "This test does nothing because of NO_PSTORE.\n";
+#endif /* NO_PSTORE */
 #else
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
 
 #ifdef __ANDROID__
+#ifndef NO_PSTORE
 static ssize_t __pmsg_fn(log_id_t logId, char prio, const char* filename,
                          const char* buf, size_t len, void* arg) {
   EXPECT_TRUE(NULL == arg);
@@ -3116,10 +3130,12 @@ static ssize_t __pmsg_fn(log_id_t logId, char prio, const char* filename,
              ? -ENOEXEC
              : 1;
 }
+#endif /* NO_PSTORE */
 #endif
 
 TEST(liblog, __android_log_pmsg_file_read) {
 #ifdef __ANDROID__
+#ifndef NO_PSTORE
   signaled = 0;
 
   __android_log_close();
@@ -3153,6 +3169,9 @@ TEST(liblog, __android_log_pmsg_file_read) {
 
   EXPECT_LT(0, ret);
   EXPECT_EQ(1U, signaled);
+#else /* NO_PSTORE */
+  GTEST_LOG_(INFO) << "This test does nothing because of NO_PSTORE.\n";
+#endif /* NO_PSTORE */
 #else
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif

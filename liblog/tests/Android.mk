@@ -54,7 +54,7 @@ test_c_flags := \
     -Werror \
     -fno-builtin \
 
-test_src_files := \
+cts_src_files := \
     liblog_test_default.cpp \
     liblog_test_local.cpp \
     liblog_test_stderr.cpp \
@@ -64,6 +64,9 @@ test_src_files := \
     log_read_test.cpp \
     log_system_test.cpp \
     log_time_test.cpp
+
+test_src_files := \
+    $(cts_src_files) \
 
 # to prevent breaking the build if bionic not relatively visible to us
 ifneq ($(wildcard $(LOCAL_PATH)/../../../../bionic/libc/bionic/libc_logging.cpp),)
@@ -88,8 +91,8 @@ cts_executable := CtsLiblogTestCases
 include $(CLEAR_VARS)
 LOCAL_MODULE := $(cts_executable)
 LOCAL_MODULE_TAGS := tests
-LOCAL_CFLAGS += $(test_c_flags)
-LOCAL_SRC_FILES := $(test_src_files)
+LOCAL_CFLAGS += $(test_c_flags) -DNO_PSTORE
+LOCAL_SRC_FILES := $(cts_src_files)
 LOCAL_MODULE_PATH := $(TARGET_OUT_DATA)/nativetest
 LOCAL_MULTILIB := both
 LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
