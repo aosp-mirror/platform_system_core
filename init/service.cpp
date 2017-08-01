@@ -890,22 +890,6 @@ void Service::Restart() {
     } /* else: Service is restarting anyways. */
 }
 
-void Service::RestartIfNeeded(time_t* process_needs_restart_at) {
-    boot_clock::time_point now = boot_clock::now();
-    boot_clock::time_point next_start = time_started_ + 5s;
-    if (now > next_start) {
-        flags_ &= (~SVC_RESTARTING);
-        Start();
-        return;
-    }
-
-    time_t next_start_time_t = time(nullptr) +
-        time_t(std::chrono::duration_cast<std::chrono::seconds>(next_start - now).count());
-    if (next_start_time_t < *process_needs_restart_at || *process_needs_restart_at == 0) {
-        *process_needs_restart_at = next_start_time_t;
-    }
-}
-
 // The how field should be either SVC_DISABLED, SVC_RESET, or SVC_RESTART.
 void Service::StopOrReset(int how) {
     // The service is still SVC_RUNNING until its process exits, but if it has
@@ -1118,15 +1102,6 @@ void ServiceManager::ForEachServiceInClass(const std::string& classname,
                                            void (*func)(Service* svc)) const {
     for (const auto& s : services_) {
         if (s->classnames().find(classname) != s->classnames().end()) {
-            func(s.get());
-        }
-    }
-}
-
-void ServiceManager::ForEachServiceWithFlags(unsigned matchflags,
-                                             void (*func)(Service* svc)) const {
-    for (const auto& s : services_) {
-        if (s->flags() & matchflags) {
             func(s.get());
         }
     }
