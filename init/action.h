@@ -26,6 +26,7 @@
 #include "builtins.h"
 #include "keyword_map.h"
 #include "parser.h"
+#include "result.h"
 
 namespace android {
 namespace init {
@@ -34,7 +35,7 @@ class Command {
   public:
     Command(BuiltinFunction f, const std::vector<std::string>& args, int line);
 
-    int InvokeFunc() const;
+    Result<Success> InvokeFunc() const;
     std::string BuildCommandString() const;
 
     int line() const { return line_; }
