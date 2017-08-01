@@ -83,7 +83,6 @@ class Service {
     void Stop();
     void Terminate();
     void Restart();
-    void RestartIfNeeded(time_t* process_needs_restart_at);
     void Reap();
     void DumpState() const;
     void SetShutdownCritical() { flags_ |= SVC_SHUTDOWN_CRITICAL; }
@@ -94,6 +93,7 @@ class Service {
     const std::set<std::string>& classnames() const { return classnames_; }
     unsigned flags() const { return flags_; }
     pid_t pid() const { return pid_; }
+    android::base::boot_clock::time_point time_started() const { return time_started_; }
     int crash_count() const { return crash_count_; }
     uid_t uid() const { return uid_; }
     gid_t gid() const { return gid_; }
@@ -217,8 +217,6 @@ class ServiceManager {
     void ForEachServiceShutdownOrder(const std::function<void(Service*)>& callback) const;
     void ForEachServiceInClass(const std::string& classname,
                                void (*func)(Service* svc)) const;
-    void ForEachServiceWithFlags(unsigned matchflags,
-                             void (*func)(Service* svc)) const;
     void ReapAnyOutstandingChildren();
     void RemoveService(const Service& svc);
     void DumpState() const;
