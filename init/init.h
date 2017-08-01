@@ -38,7 +38,7 @@ extern struct selabel_handle *sehandle_prop;
 
 extern std::vector<std::string> late_import_paths;
 
-Parser CreateParser(ActionManager& action_manager, ServiceManager& service_manager);
+Parser CreateParser(ActionManager& action_manager, ServiceList& service_list);
 
 void handle_control_message(const std::string& msg, const std::string& arg);
 

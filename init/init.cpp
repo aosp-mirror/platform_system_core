@@ -98,22 +98,22 @@ static bool shutting_down;
 std::vector<std::string> late_import_paths;
 
 void DumpState() {
-    ServiceManager::GetInstance().DumpState();
+    ServiceList::GetInstance().DumpState();
     ActionManager::GetInstance().DumpState();
 }
 
-Parser CreateParser(ActionManager& action_manager, ServiceManager& service_manager) {
+Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
     Parser parser;
 
-    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&service_manager));
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&service_list));
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&action_manager));
     parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
 
     return parser;
 }
 
-static void LoadBootScripts(ActionManager& action_manager, ServiceManager& service_manager) {
-    Parser parser = CreateParser(action_manager, service_manager);
+static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_list) {
+    Parser parser = CreateParser(action_manager, service_list);
 
     std::string bootscript = GetProperty("ro.boot.init_rc", "");
     if (bootscript.empty()) {
@@ -221,8 +221,8 @@ void property_changed(const std::string& name, const std::string& value) {
 
 static std::optional<boot_clock::time_point> RestartProcesses() {
     std::optional<boot_clock::time_point> next_process_restart_time;
-    ServiceManager::GetInstance().ForEachService([&next_process_restart_time](Service* s) {
-        if (!(s->flags() & SVC_RESTARTING)) return;
+    for (const auto& s : ServiceList::GetInstance()) {
+        if (!(s->flags() & SVC_RESTARTING)) continue;
 
         auto restart_time = s->time_started() + 5s;
         if (boot_clock::now() > restart_time) {
@@ -232,12 +232,12 @@ static std::optional<boot_clock::time_point> RestartProcesses() {
                 next_process_restart_time = restart_time;
             }
         }
-    });
+    }
     return next_process_restart_time;
 }
 
 void handle_control_message(const std::string& msg, const std::string& name) {
-    Service* svc = ServiceManager::GetInstance().FindServiceByName(name);
+    Service* svc = ServiceList::GetInstance().FindService(name);
     if (svc == nullptr) {
         LOG(ERROR) << "no such service '" << name << "'";
         return;
@@ -1160,7 +1160,7 @@ int main(int argc, char** argv) {
     Action::set_function_map(&function_map);
 
     ActionManager& am = ActionManager::GetInstance();
-    ServiceManager& sm = ServiceManager::GetInstance();
+    ServiceList& sm = ServiceList::GetInstance();
 
     LoadBootScripts(am, sm);
 
@@ -1201,10 +1201,10 @@ int main(int argc, char** argv) {
         // By default, sleep until something happens.
         int epoll_timeout_ms = -1;
 
-        if (!(waiting_for_prop || sm.IsWaitingForExec())) {
+        if (!(waiting_for_prop || Service::is_exec_service_running())) {
             am.ExecuteOneCommand();
         }
-        if (!(waiting_for_prop || sm.IsWaitingForExec())) {
+        if (!(waiting_for_prop || Service::is_exec_service_running())) {
             if (!shutting_down) {
                 auto next_process_restart_time = RestartProcesses();
 
