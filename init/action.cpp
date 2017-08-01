@@ -31,14 +31,13 @@ namespace init {
 Command::Command(BuiltinFunction f, const std::vector<std::string>& args, int line)
     : func_(f), args_(args), line_(line) {}
 
-int Command::InvokeFunc() const {
+Result<Success> Command::InvokeFunc() const {
     std::vector<std::string> expanded_args;
     expanded_args.resize(args_.size());
     expanded_args[0] = args_[0];
     for (std::size_t i = 1; i < args_.size(); ++i) {
         if (!expand_props(args_[i], &expanded_args[i])) {
-            LOG(ERROR) << args_[0] << ": cannot expand '" << args_[i] << "'";
-            return -EINVAL;
+            return Error() << "cannot expand '" << args_[i] << "'";
         }
     }
 
@@ -92,17 +91,17 @@ void Action::ExecuteAllCommands() const {
 
 void Action::ExecuteCommand(const Command& command) const {
     android::base::Timer t;
-    int result = command.InvokeFunc();
-
+    auto result = command.InvokeFunc();
     auto duration = t.duration();
+
     // Any action longer than 50ms will be warned to user as slow operation
     if (duration > 50ms || android::base::GetMinimumLogSeverity() <= android::base::DEBUG) {
         std::string trigger_name = BuildTriggersString();
         std::string cmd_str = command.BuildCommandString();
 
         LOG(INFO) << "Command '" << cmd_str << "' action=" << trigger_name << " (" << filename_
-                  << ":" << command.line() << ") returned " << result << " took "
-                  << duration.count() << "ms.";
+                  << ":" << command.line() << ") took " << duration.count() << "ms and "
+                  << (result ? "succeeded" : "failed: " + result.error());
     }
 }
 

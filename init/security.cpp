@@ -45,24 +45,22 @@ namespace init {
 // devices/configurations where these I/O operations are blocking for a long
 // time. We do not reboot or halt on failures, as this is a best-effort
 // attempt.
-int MixHwrngIntoLinuxRngAction(const std::vector<std::string>& args) {
+Result<Success> MixHwrngIntoLinuxRngAction(const std::vector<std::string>& args) {
     unique_fd hwrandom_fd(
         TEMP_FAILURE_RETRY(open("/dev/hw_random", O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (hwrandom_fd == -1) {
         if (errno == ENOENT) {
             LOG(INFO) << "/dev/hw_random not found";
             // It's not an error to not have a Hardware RNG.
-            return 0;
+            return Success();
         }
-        PLOG(ERROR) << "Failed to open /dev/hw_random";
-        return -1;
+        return ErrnoError() << "Failed to open /dev/hw_random";
     }
 
     unique_fd urandom_fd(
         TEMP_FAILURE_RETRY(open("/dev/urandom", O_WRONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (urandom_fd == -1) {
-        PLOG(ERROR) << "Failed to open /dev/urandom";
-        return -1;
+        return ErrnoError() << "Failed to open /dev/urandom";
     }
 
     char buf[512];
@@ -71,23 +69,20 @@ int MixHwrngIntoLinuxRngAction(const std::vector<std::string>& args) {
         ssize_t chunk_size =
             TEMP_FAILURE_RETRY(read(hwrandom_fd, buf, sizeof(buf) - total_bytes_written));
         if (chunk_size == -1) {
-            PLOG(ERROR) << "Failed to read from /dev/hw_random";
-            return -1;
+            return ErrnoError() << "Failed to read from /dev/hw_random";
         } else if (chunk_size == 0) {
-            LOG(ERROR) << "Failed to read from /dev/hw_random: EOF";
-            return -1;
+            return Error() << "Failed to read from /dev/hw_random: EOF";
         }
 
         chunk_size = TEMP_FAILURE_RETRY(write(urandom_fd, buf, chunk_size));
         if (chunk_size == -1) {
-            PLOG(ERROR) << "Failed to write to /dev/urandom";
-            return -1;
+            return ErrnoError() << "Failed to write to /dev/urandom";
         }
         total_bytes_written += chunk_size;
     }
 
     LOG(INFO) << "Mixed " << total_bytes_written << " bytes from /dev/hw_random into /dev/urandom";
-    return 0;
+    return Success();
 }
 
 static bool SetHighestAvailableOptionValue(std::string path, int min, int max) {
@@ -154,38 +149,38 @@ static bool __attribute__((unused)) SetMmapRndBitsMin(int start, int min, bool c
 // 9e08f57d684a x86: mm: support ARCH_MMAP_RND_BITS
 // ec9ee4acd97c drivers: char: random: add get_random_long()
 // 5ef11c35ce86 mm: ASLR: use get_random_long()
-int SetMmapRndBitsAction(const std::vector<std::string>& args) {
+Result<Success> SetMmapRndBitsAction(const std::vector<std::string>& args) {
 // values are arch-dependent
 #if defined(USER_MODE_LINUX)
     // uml does not support mmap_rnd_bits
-    return 0;
+    return Success();
 #elif defined(__aarch64__)
     // arm64 supports 18 - 33 bits depending on pagesize and VA_SIZE
     if (SetMmapRndBitsMin(33, 24, false) && SetMmapRndBitsMin(16, 16, true)) {
-        return 0;
+        return Success();
     }
 #elif defined(__x86_64__)
     // x86_64 supports 28 - 32 bits
     if (SetMmapRndBitsMin(32, 32, false) && SetMmapRndBitsMin(16, 16, true)) {
-        return 0;
+        return Success();
     }
 #elif defined(__arm__) || defined(__i386__)
     // check to see if we're running on 64-bit kernel
     bool h64 = !access(MMAP_RND_COMPAT_PATH, F_OK);
     // supported 32-bit architecture must have 16 bits set
     if (SetMmapRndBitsMin(16, 16, h64)) {
-        return 0;
+        return Success();
     }
 #elif defined(__mips__) || defined(__mips64__)
     // TODO: add mips support b/27788820
-    return 0;
+    return Success();
 #else
     LOG(ERROR) << "Unknown architecture";
 #endif
 
     LOG(ERROR) << "Unable to set adequate mmap entropy value!";
     panic();
-    return -1;
+    return Error();
 }
 
 #define KPTR_RESTRICT_PATH "/proc/sys/kernel/kptr_restrict"
@@ -195,14 +190,15 @@ int SetMmapRndBitsAction(const std::vector<std::string>& args) {
 // Set kptr_restrict to the highest available level.
 //
 // Aborts if unable to set this to an acceptable value.
-int SetKptrRestrictAction(const std::vector<std::string>& args) {
+Result<Success> SetKptrRestrictAction(const std::vector<std::string>& args) {
     std::string path = KPTR_RESTRICT_PATH;
 
     if (!SetHighestAvailableOptionValue(path, KPTR_RESTRICT_MINVALUE, KPTR_RESTRICT_MAXVALUE)) {
         LOG(ERROR) << "Unable to set adequate kptr_restrict value!";
         panic();
+        return Error();
     }
-    return 0;
+    return Success();
 }
 
 }  // namespace init

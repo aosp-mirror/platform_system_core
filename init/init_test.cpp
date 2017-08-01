@@ -37,7 +37,7 @@ class TestFunctionMap : public KeywordMap<BuiltinFunction> {
     void Add(const std::string& name, const BuiltinFunctionNoArgs function) {
         Add(name, 0, 0, [function](const std::vector<std::string>&) {
             function();
-            return 0;
+            return Success();
         });
     }
 
@@ -174,7 +174,7 @@ TEST(init, EventTriggerOrderMultipleFiles) {
     auto execute_command = [&num_executed](const std::vector<std::string>& args) {
         EXPECT_EQ(2U, args.size());
         EXPECT_EQ(++num_executed, std::stoi(args[1]));
-        return 0;
+        return Success();
     };
 
     TestFunctionMap test_function_map;
