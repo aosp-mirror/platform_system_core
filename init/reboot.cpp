@@ -53,6 +53,7 @@
 #include "init.h"
 #include "property_service.h"
 #include "service.h"
+#include "signal_handler.h"
 
 using android::base::StringPrintf;
 using android::base::Timer;
@@ -373,7 +374,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     const std::set<std::string> kill_after_apps{"tombstoned", "logd", "adbd"};
     // watchdogd is a vendor specific component but should be alive to complete shutdown safely.
     const std::set<std::string> to_starts{"watchdogd"};
-    ServiceManager::GetInstance().ForEachService([&kill_after_apps, &to_starts](Service* s) {
+    for (const auto& s : ServiceList::GetInstance()) {
         if (kill_after_apps.count(s->name())) {
             s->SetShutdownCritical();
         } else if (to_starts.count(s->name())) {
@@ -382,14 +383,15 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         } else if (s->IsShutdownCritical()) {
             s->Start();  // start shutdown critical service if not started
         }
-    });
+    }
 
-    Service* bootAnim = ServiceManager::GetInstance().FindServiceByName("bootanim");
-    Service* surfaceFlinger = ServiceManager::GetInstance().FindServiceByName("surfaceflinger");
+    Service* bootAnim = ServiceList::GetInstance().FindService("bootanim");
+    Service* surfaceFlinger = ServiceList::GetInstance().FindService("surfaceflinger");
     if (bootAnim != nullptr && surfaceFlinger != nullptr && surfaceFlinger->IsRunning()) {
-        ServiceManager::GetInstance().ForEachServiceInClass("animation", [](Service* s) {
-            s->SetShutdownCritical();  // will not check animation class separately
-        });
+        // will not check animation class separately
+        for (const auto& service : ServiceList::GetInstance()) {
+            if (service->classnames().count("animation")) service->SetShutdownCritical();
+        }
     }
 
     // optional shutdown step
@@ -398,18 +400,18 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         LOG(INFO) << "terminating init services";
 
         // Ask all services to terminate except shutdown critical ones.
-        ServiceManager::GetInstance().ForEachServiceShutdownOrder([](Service* s) {
+        for (const auto& s : ServiceList::GetInstance().services_in_shutdown_order()) {
             if (!s->IsShutdownCritical()) s->Terminate();
-        });
+        }
 
         int service_count = 0;
         // Only wait up to half of timeout here
         auto termination_wait_timeout = shutdown_timeout / 2;
         while (t.duration() < termination_wait_timeout) {
-            ServiceManager::GetInstance().ReapAnyOutstandingChildren();
+            ReapAnyOutstandingChildren();
 
             service_count = 0;
-            ServiceManager::GetInstance().ForEachService([&service_count](Service* s) {
+            for (const auto& s : ServiceList::GetInstance()) {
                 // Count the number of services running except shutdown critical.
                 // Exclude the console as it will ignore the SIGTERM signal
                 // and not exit.
@@ -418,7 +420,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
                 if (!s->IsShutdownCritical() && s->pid() != 0 && (s->flags() & SVC_CONSOLE) == 0) {
                     service_count++;
                 }
-            });
+            }
 
             if (service_count == 0) {
                 // All terminable services terminated. We can exit early.
@@ -434,13 +436,13 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
 
     // minimum safety steps before restarting
     // 2. kill all services except ones that are necessary for the shutdown sequence.
-    ServiceManager::GetInstance().ForEachServiceShutdownOrder([](Service* s) {
+    for (const auto& s : ServiceList::GetInstance().services_in_shutdown_order()) {
         if (!s->IsShutdownCritical()) s->Stop();
-    });
-    ServiceManager::GetInstance().ReapAnyOutstandingChildren();
+    }
+    ReapAnyOutstandingChildren();
 
     // 3. send volume shutdown to vold
-    Service* voldService = ServiceManager::GetInstance().FindServiceByName("vold");
+    Service* voldService = ServiceList::GetInstance().FindService("vold");
     if (voldService != nullptr && voldService->IsRunning()) {
         ShutdownVold();
         voldService->Stop();
@@ -448,9 +450,9 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         LOG(INFO) << "vold not running, skipping vold shutdown";
     }
     // logcat stopped here
-    ServiceManager::GetInstance().ForEachServiceShutdownOrder([&kill_after_apps](Service* s) {
+    for (const auto& s : ServiceList::GetInstance().services_in_shutdown_order()) {
         if (kill_after_apps.count(s->name())) s->Stop();
-    });
+    }
     // 4. sync, try umount, and optionally run fsck for user shutdown
     sync();
     UmountStat stat = TryUmountAndFsck(runFsck, shutdown_timeout - t.duration());
@@ -524,9 +526,9 @@ bool HandlePowerctlMessage(const std::string& command) {
     // Skip wait for prop if it is in progress
     ResetWaitForProp();
 
-    // Skip wait for exec if it is in progress
-    if (ServiceManager::GetInstance().IsWaitingForExec()) {
-        ServiceManager::GetInstance().ClearExecWait();
+    // Clear EXEC flag if there is one pending
+    for (const auto& s : ServiceList::GetInstance()) {
+        s->UnSetExec();
     }
 
     return true;
