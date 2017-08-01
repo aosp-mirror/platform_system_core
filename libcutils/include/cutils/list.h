@@ -34,20 +34,20 @@ struct listnode
 
 #define list_declare(name) \
     struct listnode name = { \
-        .next = &name, \
-        .prev = &name, \
+        .next = &(name), \
+        .prev = &(name), \
     }
 
 #define list_for_each(node, list) \
-    for (node = (list)->next; node != (list); node = node->next)
+    for ((node) = (list)->next; (node) != (list); (node) = (node)->next)
 
 #define list_for_each_reverse(node, list) \
-    for (node = (list)->prev; node != (list); node = node->prev)
+    for ((node) = (list)->prev; (node) != (list); (node) = (node)->prev)
 
 #define list_for_each_safe(node, n, list) \
-    for (node = (list)->next, n = node->next; \
-         node != (list); \
-         node = n, n = node->next)
+    for ((node) = (list)->next, (n) = (node)->next; \
+         (node) != (list); \
+         (node) = (n), (n) = (node)->next)
 
 static inline void list_init(struct listnode *node)
 {
