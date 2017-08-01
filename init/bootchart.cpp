@@ -163,37 +163,37 @@ static void bootchart_thread_main() {
   LOG(INFO) << "Bootcharting finished";
 }
 
-static int do_bootchart_start() {
-  // We don't care about the content, but we do care that /data/bootchart/enabled actually exists.
-  std::string start;
-  if (!android::base::ReadFileToString("/data/bootchart/enabled", &start)) {
-    LOG(VERBOSE) << "Not bootcharting";
-    return 0;
-  }
+static Result<Success> do_bootchart_start() {
+    // We don't care about the content, but we do care that /data/bootchart/enabled actually exists.
+    std::string start;
+    if (!android::base::ReadFileToString("/data/bootchart/enabled", &start)) {
+        LOG(VERBOSE) << "Not bootcharting";
+        return Success();
+    }
 
-  g_bootcharting_thread = new std::thread(bootchart_thread_main);
-  return 0;
+    g_bootcharting_thread = new std::thread(bootchart_thread_main);
+    return Success();
 }
 
-static int do_bootchart_stop() {
-  if (!g_bootcharting_thread) return 0;
+static Result<Success> do_bootchart_stop() {
+    if (!g_bootcharting_thread) return Success();
 
-  // Tell the worker thread it's time to quit.
-  {
-    std::lock_guard<std::mutex> lock(g_bootcharting_finished_mutex);
-    g_bootcharting_finished = true;
-    g_bootcharting_finished_cv.notify_one();
-  }
+    // Tell the worker thread it's time to quit.
+    {
+        std::lock_guard<std::mutex> lock(g_bootcharting_finished_mutex);
+        g_bootcharting_finished = true;
+        g_bootcharting_finished_cv.notify_one();
+    }
 
-  g_bootcharting_thread->join();
-  delete g_bootcharting_thread;
-  g_bootcharting_thread = nullptr;
-  return 0;
+    g_bootcharting_thread->join();
+    delete g_bootcharting_thread;
+    g_bootcharting_thread = nullptr;
+    return Success();
 }
 
-int do_bootchart(const std::vector<std::string>& args) {
-  if (args[1] == "start") return do_bootchart_start();
-  return do_bootchart_stop();
+Result<Success> do_bootchart(const std::vector<std::string>& args) {
+    if (args[1] == "start") return do_bootchart_start();
+    return do_bootchart_stop();
 }
 
 }  // namespace init
