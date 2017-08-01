@@ -53,6 +53,7 @@
 
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "bootchart.h"
@@ -84,7 +85,6 @@ static int property_triggers_enabled = 0;
 static char qemu[32];
 
 std::string default_console = "/dev/console";
-static time_t process_needs_restart_at;
 
 const char *ENV[32];
 
@@ -219,12 +219,21 @@ void property_changed(const std::string& name, const std::string& value) {
     }
 }
 
-static void restart_processes()
-{
-    process_needs_restart_at = 0;
-    ServiceManager::GetInstance().ForEachServiceWithFlags(SVC_RESTARTING, [](Service* s) {
-        s->RestartIfNeeded(&process_needs_restart_at);
+static std::optional<boot_clock::time_point> RestartProcesses() {
+    std::optional<boot_clock::time_point> next_process_restart_time;
+    ServiceManager::GetInstance().ForEachService([&next_process_restart_time](Service* s) {
+        if (!(s->flags() & SVC_RESTARTING)) return;
+
+        auto restart_time = s->time_started() + 5s;
+        if (boot_clock::now() > restart_time) {
+            s->Start();
+        } else {
+            if (!next_process_restart_time || restart_time < *next_process_restart_time) {
+                next_process_restart_time = restart_time;
+            }
+        }
     });
+    return next_process_restart_time;
 }
 
 void handle_control_message(const std::string& msg, const std::string& name) {
@@ -1206,12 +1215,16 @@ int main(int argc, char** argv) {
             am.ExecuteOneCommand();
         }
         if (!(waiting_for_prop || sm.IsWaitingForExec())) {
-            if (!shutting_down) restart_processes();
+            if (!shutting_down) {
+                auto next_process_restart_time = RestartProcesses();
 
-            // If there's a process that needs restarting, wake up in time for that.
-            if (process_needs_restart_at != 0) {
-                epoll_timeout_ms = (process_needs_restart_at - time(nullptr)) * 1000;
-                if (epoll_timeout_ms < 0) epoll_timeout_ms = 0;
+                // If there's a process that needs restarting, wake up in time for that.
+                if (next_process_restart_time) {
+                    epoll_timeout_ms = std::chrono::ceil<std::chrono::milliseconds>(
+                                           *next_process_restart_time - boot_clock::now())
+                                           .count();
+                    if (epoll_timeout_ms < 0) epoll_timeout_ms = 0;
+                }
             }
 
             // If there's more work to do, wake up again immediately.
