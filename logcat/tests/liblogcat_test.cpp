@@ -17,8 +17,8 @@
 #include <log/logcat.h>
 
 #define logcat_define(context) android_logcat_context context
-#define logcat_popen(context, command) android_logcat_popen(&context, command)
-#define logcat_pclose(context, fp) android_logcat_pclose(&context, fp)
+#define logcat_popen(context, command) android_logcat_popen(&(context), command)
+#define logcat_pclose(context, fp) android_logcat_pclose(&(context), fp)
 #define logcat_system(command) android_logcat_system(command)
 #define logcat liblogcat
 
