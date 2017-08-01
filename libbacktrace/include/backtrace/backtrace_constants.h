@@ -20,10 +20,10 @@
 // When the pid to be traced is set to this value, then trace the current
 // process. If the tid value is not BACKTRACE_NO_TID, then the specified
 // thread from the current process will be traced.
-#define BACKTRACE_CURRENT_PROCESS -1
+#define BACKTRACE_CURRENT_PROCESS (-1)
 // When the tid to be traced is set to this value, then trace the specified
 // current thread of the specified pid.
-#define BACKTRACE_CURRENT_THREAD -1
+#define BACKTRACE_CURRENT_THREAD (-1)
 
 #define MAX_BACKTRACE_FRAMES 64
 
