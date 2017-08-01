@@ -156,6 +156,7 @@ ServiceEnvironmentInfo::ServiceEnvironmentInfo(const std::string& name,
 }
 
 unsigned long Service::next_start_order_ = 1;
+bool Service::is_exec_service_running_ = false;
 
 Service::Service(const std::string& name, const std::vector<std::string>& args)
     : Service(name, 0, 0, 0, {}, 0, 0, "", args) {}
@@ -280,9 +281,9 @@ void Service::Reap() {
     std::for_each(descriptors_.begin(), descriptors_.end(),
                   std::bind(&DescriptorInfo::Clean, std::placeholders::_1));
 
-    if (flags_ & SVC_TEMPORARY) {
-        return;
-    }
+    if (flags_ & SVC_EXEC) UnSetExec();
+
+    if (flags_ & SVC_TEMPORARY) return;
 
     pid_ = 0;
     flags_ &= (~SVC_RUNNING);
@@ -653,15 +654,20 @@ bool Service::ParseLine(const std::vector<std::string>& args, std::string* err) 
     return (this->*parser)(args, err);
 }
 
-bool Service::ExecStart(std::unique_ptr<android::base::Timer>* exec_waiter) {
-    flags_ |= SVC_EXEC | SVC_ONESHOT;
-
-    exec_waiter->reset(new android::base::Timer);
+bool Service::ExecStart() {
+    flags_ |= SVC_ONESHOT;
 
     if (!Start()) {
-        exec_waiter->reset();
         return false;
     }
+
+    flags_ |= SVC_EXEC;
+    is_exec_service_running_ = true;
+
+    LOG(INFO) << "SVC_EXEC pid " << pid_ << " (uid " << uid_ << " gid " << gid_ << "+"
+              << supp_gids_.size() << " context " << (!seclabel_.empty() ? seclabel_ : "default")
+              << ") started; waiting...";
+
     return true;
 }
 
@@ -836,12 +842,6 @@ bool Service::Start() {
         }
     }
 
-    if ((flags_ & SVC_EXEC) != 0) {
-        LOG(INFO) << "SVC_EXEC pid " << pid_ << " (uid " << uid_ << " gid " << gid_ << "+"
-                  << supp_gids_.size() << " context "
-                  << (!seclabel_.empty() ? seclabel_ : "default") << ") started; waiting...";
-    }
-
     NotifyStateChange("running");
     return true;
 }
@@ -935,50 +935,18 @@ void Service::OpenConsole() const {
     close(fd);
 }
 
-int ServiceManager::exec_count_ = 0;
+ServiceList::ServiceList() {}
 
-ServiceManager::ServiceManager() {
-}
-
-ServiceManager& ServiceManager::GetInstance() {
-    static ServiceManager instance;
+ServiceList& ServiceList::GetInstance() {
+    static ServiceList instance;
     return instance;
 }
 
-void ServiceManager::AddService(std::unique_ptr<Service> service) {
+void ServiceList::AddService(std::unique_ptr<Service> service) {
     services_.emplace_back(std::move(service));
 }
 
-bool ServiceManager::Exec(const std::vector<std::string>& args) {
-    Service* svc = MakeExecOneshotService(args);
-    if (!svc) {
-        LOG(ERROR) << "Could not create exec service";
-        return false;
-    }
-    if (!svc->ExecStart(&exec_waiter_)) {
-        LOG(ERROR) << "Could not start exec service";
-        ServiceManager::GetInstance().RemoveService(*svc);
-        return false;
-    }
-    return true;
-}
-
-bool ServiceManager::ExecStart(const std::string& name) {
-    Service* svc = FindServiceByName(name);
-    if (!svc) {
-        LOG(ERROR) << "ExecStart(" << name << "): Service not found";
-        return false;
-    }
-    if (!svc->ExecStart(&exec_waiter_)) {
-        LOG(ERROR) << "ExecStart(" << name << "): Could not start Service";
-        return false;
-    }
-    return true;
-}
-
-bool ServiceManager::IsWaitingForExec() const { return exec_waiter_ != nullptr; }
-
-Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& args) {
+std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<std::string>& args) {
     // Parse the arguments: exec [SECLABEL [UID [GID]*] --] COMMAND ARGS...
     // SECLABEL can be a - to denote default
     std::size_t command_arg = 1;
@@ -999,10 +967,11 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
     }
     std::vector<std::string> str_args(args.begin() + command_arg, args.end());
 
-    exec_count_++;
-    std::string name = "exec " + std::to_string(exec_count_) + " (" + Join(str_args, " ") + ")";
+    static size_t exec_count = 0;
+    exec_count++;
+    std::string name = "exec " + std::to_string(exec_count) + " (" + Join(str_args, " ") + ")";
 
-    unsigned flags = SVC_EXEC | SVC_ONESHOT | SVC_TEMPORARY;
+    unsigned flags = SVC_ONESHOT | SVC_TEMPORARY;
     CapSet no_capabilities;
     unsigned namespace_flags = 0;
 
@@ -1037,77 +1006,22 @@ Service* ServiceManager::MakeExecOneshotService(const std::vector<std::string>& 
         }
     }
 
-    auto svc_p = std::make_unique<Service>(name, flags, uid, gid, supp_gids, no_capabilities,
-                                           namespace_flags, seclabel, str_args);
-    Service* svc = svc_p.get();
-    services_.emplace_back(std::move(svc_p));
-
-    return svc;
-}
-
-Service* ServiceManager::FindServiceByName(const std::string& name) const {
-    auto svc = std::find_if(services_.begin(), services_.end(),
-                            [&name] (const std::unique_ptr<Service>& s) {
-                                return name == s->name();
-                            });
-    if (svc != services_.end()) {
-        return svc->get();
-    }
-    return nullptr;
-}
-
-Service* ServiceManager::FindServiceByPid(pid_t pid) const {
-    auto svc = std::find_if(services_.begin(), services_.end(),
-                            [&pid] (const std::unique_ptr<Service>& s) {
-                                return s->pid() == pid;
-                            });
-    if (svc != services_.end()) {
-        return svc->get();
-    }
-    return nullptr;
-}
-
-Service* ServiceManager::FindServiceByKeychord(int keychord_id) const {
-    auto svc = std::find_if(services_.begin(), services_.end(),
-                            [&keychord_id] (const std::unique_ptr<Service>& s) {
-                                return s->keychord_id() == keychord_id;
-                            });
-
-    if (svc != services_.end()) {
-        return svc->get();
-    }
-    return nullptr;
-}
-
-void ServiceManager::ForEachService(const std::function<void(Service*)>& callback) const {
-    for (const auto& s : services_) {
-        callback(s.get());
-    }
+    return std::make_unique<Service>(name, flags, uid, gid, supp_gids, no_capabilities,
+                                     namespace_flags, seclabel, str_args);
 }
 
 // Shutdown services in the opposite order that they were started.
-void ServiceManager::ForEachServiceShutdownOrder(const std::function<void(Service*)>& callback) const {
+const std::vector<Service*> ServiceList::services_in_shutdown_order() const {
     std::vector<Service*> shutdown_services;
     for (const auto& service : services_) {
         if (service->start_order() > 0) shutdown_services.emplace_back(service.get());
     }
     std::sort(shutdown_services.begin(), shutdown_services.end(),
               [](const auto& a, const auto& b) { return a->start_order() > b->start_order(); });
-    for (const auto& service : shutdown_services) {
-        callback(service);
-    }
+    return shutdown_services;
 }
 
-void ServiceManager::ForEachServiceInClass(const std::string& classname,
-                                           void (*func)(Service* svc)) const {
-    for (const auto& s : services_) {
-        if (s->classnames().find(classname) != s->classnames().end()) {
-            func(s.get());
-        }
-    }
-}
-
-void ServiceManager::RemoveService(const Service& svc) {
+void ServiceList::RemoveService(const Service& svc) {
     auto svc_it = std::find_if(services_.begin(), services_.end(),
                                [&svc] (const std::unique_ptr<Service>& s) {
                                    return svc.name() == s->name();
@@ -1119,83 +1033,10 @@ void ServiceManager::RemoveService(const Service& svc) {
     services_.erase(svc_it);
 }
 
-void ServiceManager::DumpState() const {
+void ServiceList::DumpState() const {
     for (const auto& s : services_) {
         s->DumpState();
     }
-}
-
-bool ServiceManager::ReapOneProcess() {
-    siginfo_t siginfo = {};
-    // This returns a zombie pid or informs us that there are no zombies left to be reaped.
-    // It does NOT reap the pid; that is done below.
-    if (TEMP_FAILURE_RETRY(waitid(P_ALL, 0, &siginfo, WEXITED | WNOHANG | WNOWAIT)) != 0) {
-        PLOG(ERROR) << "waitid failed";
-        return false;
-    }
-
-    auto pid = siginfo.si_pid;
-    if (pid == 0) return false;
-
-    // At this point we know we have a zombie pid, so we use this scopeguard to reap the pid
-    // whenever the function returns from this point forward.
-    // We do NOT want to reap the zombie earlier as in Service::Reap(), we kill(-pid, ...) and we
-    // want the pid to remain valid throughout that (and potentially future) usages.
-    auto reaper = make_scope_guard([pid] { TEMP_FAILURE_RETRY(waitpid(pid, nullptr, WNOHANG)); });
-
-    if (PropertyChildReap(pid)) {
-        return true;
-    }
-
-    Service* svc = FindServiceByPid(pid);
-
-    std::string name;
-    std::string wait_string;
-    if (svc) {
-        name = StringPrintf("Service '%s' (pid %d)", svc->name().c_str(), pid);
-        if (svc->flags() & SVC_EXEC) {
-            wait_string = StringPrintf(" waiting took %f seconds",
-                                       exec_waiter_->duration().count() / 1000.0f);
-        }
-    } else {
-        name = StringPrintf("Untracked pid %d", pid);
-    }
-
-    auto status = siginfo.si_status;
-    if (WIFEXITED(status)) {
-        LOG(INFO) << name << " exited with status " << WEXITSTATUS(status) << wait_string;
-    } else if (WIFSIGNALED(status)) {
-        LOG(INFO) << name << " killed by signal " << WTERMSIG(status) << wait_string;
-    }
-
-    if (!svc) {
-        return true;
-    }
-
-    svc->Reap();
-
-    if (svc->flags() & SVC_EXEC) {
-        exec_waiter_.reset();
-    }
-    if (svc->flags() & SVC_TEMPORARY) {
-        RemoveService(*svc);
-    }
-
-    return true;
-}
-
-void ServiceManager::ReapAnyOutstandingChildren() {
-    while (ReapOneProcess()) {
-    }
-}
-
-void ServiceManager::ClearExecWait() {
-    // Clear EXEC flag if there is one pending
-    // And clear the wait flag
-    for (const auto& s : services_) {
-        s->UnSetExec();
-    }
-    exec_waiter_.reset();
 }
 
 bool ServiceParser::ParseSection(std::vector<std::string>&& args, const std::string& filename,
@@ -1211,7 +1052,7 @@ bool ServiceParser::ParseSection(std::vector<std::string>&& args, const std::str
         return false;
     }
 
-    Service* old_service = service_manager_->FindServiceByName(name);
+    Service* old_service = service_list_->FindService(name);
     if (old_service) {
         *err = "ignored duplicate definition of service '" + name + "'";
         return false;
@@ -1228,7 +1069,7 @@ bool ServiceParser::ParseLineSection(std::vector<std::string>&& args, int line, 
 
 void ServiceParser::EndSection() {
     if (service_) {
-        service_manager_->AddService(std::move(service_));
+        service_list_->AddService(std::move(service_));
     }
 }
 

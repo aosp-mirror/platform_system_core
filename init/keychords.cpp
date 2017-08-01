@@ -79,7 +79,7 @@ static void handle_keychord() {
     // Only handle keychords if adb is enabled.
     std::string adb_enabled = android::base::GetProperty("init.svc.adbd", "");
     if (adb_enabled == "running") {
-        Service* svc = ServiceManager::GetInstance().FindServiceByKeychord(id);
+        Service* svc = ServiceList::GetInstance().FindService(id, &Service::keychord_id);
         if (svc) {
             LOG(INFO) << "Starting service " << svc->name() << " from keychord " << id;
             svc->Start();
@@ -92,7 +92,9 @@ static void handle_keychord() {
 }
 
 void keychord_init() {
-    ServiceManager::GetInstance().ForEachService(add_service_keycodes);
+    for (const auto& service : ServiceList::GetInstance()) {
+        add_service_keycodes(service.get());
+    }
 
     // Nothing to do if no services require keychords.
     if (!keychords) {
