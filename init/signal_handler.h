@@ -20,6 +20,8 @@
 namespace android {
 namespace init {
 
+void ReapAnyOutstandingChildren();
+
 void signal_handler_init(void);
 
 }  // namespace init

@@ -73,23 +73,21 @@ TEST(service, pod_initialized) {
     EXPECT_FALSE(service_in_old_memory->process_cgroup_empty());
 }
 
-TEST(service, make_exec_oneshot_service_invalid_syntax) {
-    ServiceManager& sm = ServiceManager::GetInstance();
+TEST(service, make_temporary_oneshot_service_invalid_syntax) {
     std::vector<std::string> args;
     // Nothing.
-    ASSERT_EQ(nullptr, sm.MakeExecOneshotService(args));
+    ASSERT_EQ(nullptr, Service::MakeTemporaryOneshotService(args));
 
     // No arguments to 'exec'.
     args.push_back("exec");
-    ASSERT_EQ(nullptr, sm.MakeExecOneshotService(args));
+    ASSERT_EQ(nullptr, Service::MakeTemporaryOneshotService(args));
 
     // No command in "exec --".
     args.push_back("--");
-    ASSERT_EQ(nullptr, sm.MakeExecOneshotService(args));
+    ASSERT_EQ(nullptr, Service::MakeTemporaryOneshotService(args));
 }
 
-TEST(service, make_exec_oneshot_service_too_many_supplementary_gids) {
-    ServiceManager& sm = ServiceManager::GetInstance();
+TEST(service, make_temporary_oneshot_service_too_many_supplementary_gids) {
     std::vector<std::string> args;
     args.push_back("exec");
     args.push_back("seclabel");
@@ -100,12 +98,11 @@ TEST(service, make_exec_oneshot_service_too_many_supplementary_gids) {
     }
     args.push_back("--");
     args.push_back("/system/bin/id");
-    ASSERT_EQ(nullptr, sm.MakeExecOneshotService(args));
+    ASSERT_EQ(nullptr, Service::MakeTemporaryOneshotService(args));
 }
 
-static void Test_make_exec_oneshot_service(bool dash_dash, bool seclabel, bool uid, bool gid,
-                                           bool supplementary_gids) {
-    ServiceManager& sm = ServiceManager::GetInstance();
+static void Test_make_temporary_oneshot_service(bool dash_dash, bool seclabel, bool uid, bool gid,
+                                                bool supplementary_gids) {
     std::vector<std::string> args;
     args.push_back("exec");
     if (seclabel) {
@@ -126,7 +123,7 @@ static void Test_make_exec_oneshot_service(bool dash_dash, bool seclabel, bool u
     }
     args.push_back("/system/bin/toybox");
     args.push_back("id");
-    Service* svc = sm.MakeExecOneshotService(args);
+    auto svc = Service::MakeTemporaryOneshotService(args);
     ASSERT_NE(nullptr, svc);
 
     if (seclabel) {
@@ -167,28 +164,28 @@ static void Test_make_exec_oneshot_service(bool dash_dash, bool seclabel, bool u
     ASSERT_EQ("id", svc->args()[1]);
 }
 
-TEST(service, make_exec_oneshot_service_with_everything) {
-    Test_make_exec_oneshot_service(true, true, true, true, true);
+TEST(service, make_temporary_oneshot_service_with_everything) {
+    Test_make_temporary_oneshot_service(true, true, true, true, true);
 }
 
-TEST(service, make_exec_oneshot_service_with_seclabel_uid_gid) {
-    Test_make_exec_oneshot_service(true, true, true, true, false);
+TEST(service, make_temporary_oneshot_service_with_seclabel_uid_gid) {
+    Test_make_temporary_oneshot_service(true, true, true, true, false);
 }
 
-TEST(service, make_exec_oneshot_service_with_seclabel_uid) {
-    Test_make_exec_oneshot_service(true, true, true, false, false);
+TEST(service, make_temporary_oneshot_service_with_seclabel_uid) {
+    Test_make_temporary_oneshot_service(true, true, true, false, false);
 }
 
-TEST(service, make_exec_oneshot_service_with_seclabel) {
-    Test_make_exec_oneshot_service(true, true, false, false, false);
+TEST(service, make_temporary_oneshot_service_with_seclabel) {
+    Test_make_temporary_oneshot_service(true, true, false, false, false);
 }
 
-TEST(service, make_exec_oneshot_service_with_just_command) {
-    Test_make_exec_oneshot_service(true, false, false, false, false);
+TEST(service, make_temporary_oneshot_service_with_just_command) {
+    Test_make_temporary_oneshot_service(true, false, false, false, false);
 }
 
-TEST(service, make_exec_oneshot_service_with_just_command_no_dash) {
-    Test_make_exec_oneshot_service(false, false, false, false, false);
+TEST(service, make_temporary_oneshot_service_with_just_command_no_dash) {
+    Test_make_temporary_oneshot_service(false, false, false, false, false);
 }
 
 }  // namespace init
