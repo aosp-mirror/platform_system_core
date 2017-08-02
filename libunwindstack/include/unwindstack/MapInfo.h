@@ -41,7 +41,6 @@ struct MapInfo {
   uint64_t elf_offset;
 
   Memory* CreateMemory(pid_t pid);
-  // This function guarantees it will never return nullptr.
   Elf* GetElf(pid_t pid, bool init_gnu_debugdata = false);
 };
 
