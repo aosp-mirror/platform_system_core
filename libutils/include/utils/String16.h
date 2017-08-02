@@ -67,7 +67,6 @@ public:
 
     inline  const char16_t*     string() const;
 
-//TODO(b/35363681): remove
 private:
     static inline std::string   std_string(const String16& str);
 public:
