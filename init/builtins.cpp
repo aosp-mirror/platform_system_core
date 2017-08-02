@@ -44,7 +44,9 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/unique_fd.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
 #include <ext4_utils/ext4_crypt.h>
@@ -66,6 +68,8 @@
 
 using namespace std::literals::string_literals;
 
+using android::base::unique_fd;
+
 #define chmod DO_NOT_USE_CHMOD_USE_FCHMODAT_SYMLINK_NOFOLLOW
 
 namespace android {
@@ -74,44 +78,36 @@ namespace init {
 static constexpr std::chrono::nanoseconds kCommandRetryTimeout = 5s;
 
 static int insmod(const char *filename, const char *options, int flags) {
-    int fd = open(filename, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    unique_fd fd(TEMP_FAILURE_RETRY(open(filename, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (fd == -1) {
         PLOG(ERROR) << "insmod: open(\"" << filename << "\") failed";
         return -1;
     }
-    int rc = syscall(__NR_finit_module, fd, options, flags);
+    int rc = syscall(__NR_finit_module, fd.get(), options, flags);
     if (rc == -1) {
         PLOG(ERROR) << "finit_module for \"" << filename << "\" failed";
     }
-    close(fd);
     return rc;
 }
 
 static int __ifupdown(const char *interface, int up) {
     struct ifreq ifr;
-    int s, ret;
 
     strlcpy(ifr.ifr_name, interface, IFNAMSIZ);
 
-    s = socket(AF_INET, SOCK_DGRAM, 0);
-    if (s < 0)
-        return -1;
+    unique_fd s(TEMP_FAILURE_RETRY(socket(AF_INET, SOCK_DGRAM, 0)));
+    if (s < 0) return -1;
 
-    ret = ioctl(s, SIOCGIFFLAGS, &ifr);
-    if (ret < 0) {
-        goto done;
+    int ret = ioctl(s, SIOCGIFFLAGS, &ifr);
+    if (ret < 0) return ret;
+
+    if (up) {
+        ifr.ifr_flags |= IFF_UP;
+    } else {
+        ifr.ifr_flags &= ~IFF_UP;
     }
 
-    if (up)
-        ifr.ifr_flags |= IFF_UP;
-    else
-        ifr.ifr_flags &= ~IFF_UP;
-
-    ret = ioctl(s, SIOCSIFFLAGS, &ifr);
-
-done:
-    close(s);
-    return ret;
+    return ioctl(s, SIOCSIFFLAGS, &ifr);
 }
 
 static int reboot_into_recovery(const std::vector<std::string>& options) {
@@ -319,15 +315,12 @@ static struct {
 
 /* mount <type> <device> <path> <flags ...> <options> */
 static int do_mount(const std::vector<std::string>& args) {
-    char tmp[64];
-    const char *source, *target, *system;
-    const char *options = NULL;
+    const char* options = nullptr;
     unsigned flags = 0;
-    std::size_t na = 0;
-    int n, i;
-    int wait = 0;
+    bool wait = false;
 
-    for (na = 4; na < args.size(); na++) {
+    for (size_t na = 4; na < args.size(); na++) {
+        size_t i;
         for (i = 0; mount_flags[i].name; i++) {
             if (!args[na].compare(mount_flags[i].name)) {
                 flags |= mount_flags[i].flag;
@@ -336,57 +329,43 @@ static int do_mount(const std::vector<std::string>& args) {
         }
 
         if (!mount_flags[i].name) {
-            if (!args[na].compare("wait"))
-                wait = 1;
-            /* if our last argument isn't a flag, wolf it up as an option string */
-            else if (na + 1 == args.size())
+            if (!args[na].compare("wait")) {
+                wait = true;
+                // If our last argument isn't a flag, wolf it up as an option string.
+            } else if (na + 1 == args.size()) {
                 options = args[na].c_str();
+            }
         }
     }
 
-    system = args[1].c_str();
-    source = args[2].c_str();
-    target = args[3].c_str();
+    const char* system = args[1].c_str();
+    const char* source = args[2].c_str();
+    const char* target = args[3].c_str();
 
-    if (!strncmp(source, "loop@", 5)) {
-        int mode, loop, fd;
-        struct loop_info info;
+    if (android::base::StartsWith(source, "loop@")) {
+        int mode = (flags & MS_RDONLY) ? O_RDONLY : O_RDWR;
+        unique_fd fd(TEMP_FAILURE_RETRY(open(source + 5, mode | O_CLOEXEC)));
+        if (fd < 0) return -1;
 
-        mode = (flags & MS_RDONLY) ? O_RDONLY : O_RDWR;
-        fd = open(source + 5, mode | O_CLOEXEC);
-        if (fd < 0) {
-            return -1;
-        }
+        for (size_t n = 0;; n++) {
+            std::string tmp = android::base::StringPrintf("/dev/block/loop%zu", n);
+            unique_fd loop(TEMP_FAILURE_RETRY(open(tmp.c_str(), mode | O_CLOEXEC)));
+            if (loop < 0) return -1;
 
-        for (n = 0; ; n++) {
-            snprintf(tmp, sizeof(tmp), "/dev/block/loop%d", n);
-            loop = open(tmp, mode | O_CLOEXEC);
-            if (loop < 0) {
-                close(fd);
-                return -1;
-            }
-
+            loop_info info;
             /* if it is a blank loop device */
             if (ioctl(loop, LOOP_GET_STATUS, &info) < 0 && errno == ENXIO) {
                 /* if it becomes our loop device */
-                if (ioctl(loop, LOOP_SET_FD, fd) >= 0) {
-                    close(fd);
-
-                    if (mount(tmp, target, system, flags, options) < 0) {
+                if (ioctl(loop, LOOP_SET_FD, fd.get()) >= 0) {
+                    if (mount(tmp.c_str(), target, system, flags, options) < 0) {
                         ioctl(loop, LOOP_CLR_FD, 0);
-                        close(loop);
                         return -1;
                     }
-
-                    close(loop);
-                    goto exit_success;
+                    return 0;
                 }
             }
-
-            close(loop);
         }
 
-        close(fd);
         LOG(ERROR) << "out of loopback devices";
         return -1;
     } else {
@@ -398,7 +377,6 @@ static int do_mount(const std::vector<std::string>& args) {
 
     }
 
-exit_success:
     return 0;
 
 }
