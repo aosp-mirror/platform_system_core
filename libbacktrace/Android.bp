@@ -53,8 +53,6 @@ libbacktrace_sources = [
     "UnwindCurrent.cpp",
     "UnwindMap.cpp",
     "UnwindPtrace.cpp",
-    "UnwindStack.cpp",
-    "UnwindStackMap.cpp",
 ]
 
 cc_library_headers {
@@ -86,7 +84,6 @@ cc_library {
                 "libbase",
                 "liblog",
                 "libunwind",
-                "libunwindstack",
             ],
 
             static_libs: ["libcutils"],
@@ -100,7 +97,6 @@ cc_library {
                 "libbase",
                 "liblog",
                 "libunwind",
-                "libunwindstack",
             ],
 
             static_libs: ["libcutils"],
@@ -112,7 +108,6 @@ cc_library {
                 "libbase",
                 "liblog",
                 "libunwind",
-                "libunwindstack",
             ],
 
             static_libs: ["libasync_safe", "libcutils"],
@@ -135,13 +130,11 @@ cc_library_shared {
         linux: {
             shared_libs: [
                 "libunwind",
-                "libunwindstack",
             ],
         },
         android: {
             shared_libs: [
                 "libunwind",
-                "libunwindstack",
             ],
         },
     }
@@ -168,7 +161,6 @@ cc_library_static {
     shared_libs = [
         "libbase",
         "libunwind",
-        "libunwindstack",
         "libziparchive",
     ],
 }
@@ -200,7 +192,6 @@ cc_test {
         "libcutils",
         "liblog",
         "libunwind",
-        "libunwindstack",
     ],
 
     group_static_libs: true,
