@@ -67,7 +67,6 @@ public:
     inline  const char*         c_str() const;
     inline  const char*         string() const;
 
-// TODO(b/35363681): remove
 private:
     static inline std::string   std_string(const String8& str);
 public:
