@@ -54,7 +54,7 @@ struct FuseRequest : public FuseMessage<FuseRequest> {
     // for FUSE_READ
     fuse_read_in read_in;
     // for FUSE_LOOKUP
-    char lookup_name[0];
+    char lookup_name[kFuseMaxWrite];
   };
   void Reset(uint32_t data_length, uint32_t opcode, uint64_t unique);
 };
