@@ -97,6 +97,11 @@ inline void RegsGetLocal(Regs* regs) {
   regs->SetFromRaw();
 }
 
+#elif defined(__mips__)
+
+// Stub to allow mips to build.
+void RegsGetLocal(Regs*) {}
+
 #endif
 
 }  // namespace unwindstack
