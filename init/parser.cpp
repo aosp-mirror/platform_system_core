@@ -67,9 +67,8 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
                     if (android::base::StartsWith(args[0], prefix.c_str())) {
                         if (section_parser) section_parser->EndSection();
 
-                        std::string ret_err;
-                        if (!callback(std::move(args), &ret_err)) {
-                            LOG(ERROR) << filename << ": " << state.line << ": " << ret_err;
+                        if (auto result = callback(std::move(args)); !result) {
+                            LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
                         }
                         section_parser = nullptr;
                         break;
@@ -78,16 +77,16 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
                 if (section_parsers_.count(args[0])) {
                     if (section_parser) section_parser->EndSection();
                     section_parser = section_parsers_[args[0]].get();
-                    std::string ret_err;
-                    if (!section_parser->ParseSection(std::move(args), filename, state.line,
-                                                      &ret_err)) {
-                        LOG(ERROR) << filename << ": " << state.line << ": " << ret_err;
+                    if (auto result =
+                            section_parser->ParseSection(std::move(args), filename, state.line);
+                        !result) {
+                        LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
                         section_parser = nullptr;
                     }
                 } else if (section_parser) {
-                    std::string ret_err;
-                    if (!section_parser->ParseLineSection(std::move(args), state.line, &ret_err)) {
-                        LOG(ERROR) << filename << ": " << state.line << ": " << ret_err;
+                    if (auto result = section_parser->ParseLineSection(std::move(args), state.line);
+                        !result) {
+                        LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
                     }
                 }
                 args.clear();
