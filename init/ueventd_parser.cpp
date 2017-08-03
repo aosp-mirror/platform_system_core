@@ -24,18 +24,16 @@
 namespace android {
 namespace init {
 
-bool ParsePermissionsLine(std::vector<std::string>&& args, std::string* err,
-                          std::vector<SysfsPermissions>* out_sysfs_permissions,
-                          std::vector<Permissions>* out_dev_permissions) {
+Result<Success> ParsePermissionsLine(std::vector<std::string>&& args,
+                                     std::vector<SysfsPermissions>* out_sysfs_permissions,
+                                     std::vector<Permissions>* out_dev_permissions) {
     bool is_sysfs = out_sysfs_permissions != nullptr;
     if (is_sysfs && args.size() != 5) {
-        *err = "/sys/ lines must have 5 entries";
-        return false;
+        return Error() << "/sys/ lines must have 5 entries";
     }
 
     if (!is_sysfs && args.size() != 4) {
-        *err = "/dev/ lines must have 4 entries";
-        return false;
+        return Error() << "/dev/ lines must have 4 entries";
     }
 
     auto it = args.begin();
@@ -49,23 +47,20 @@ bool ParsePermissionsLine(std::vector<std::string>&& args, std::string* err,
     char* end_pointer = 0;
     mode_t perm = strtol(perm_string.c_str(), &end_pointer, 8);
     if (end_pointer == nullptr || *end_pointer != '\0') {
-        *err = "invalid mode '" + perm_string + "'";
-        return false;
+        return Error() << "invalid mode '" << perm_string << "'";
     }
 
     std::string& uid_string = *it++;
     passwd* pwd = getpwnam(uid_string.c_str());
     if (!pwd) {
-        *err = "invalid uid '" + uid_string + "'";
-        return false;
+        return Error() << "invalid uid '" << uid_string << "'";
     }
     uid_t uid = pwd->pw_uid;
 
     std::string& gid_string = *it++;
     struct group* grp = getgrnam(gid_string.c_str());
     if (!grp) {
-        *err = "invalid gid '" + gid_string + "'";
-        return false;
+        return Error() << "invalid gid '" << gid_string << "'";
     }
     gid_t gid = grp->gr_gid;
 
@@ -74,53 +69,49 @@ bool ParsePermissionsLine(std::vector<std::string>&& args, std::string* err,
     } else {
         out_dev_permissions->emplace_back(name, perm, uid, gid);
     }
-    return true;
+    return Success();
 }
 
-bool SubsystemParser::ParseSection(std::vector<std::string>&& args, const std::string& filename,
-                                   int line, std::string* err) {
+Result<Success> SubsystemParser::ParseSection(std::vector<std::string>&& args,
+                                              const std::string& filename, int line) {
     if (args.size() != 2) {
-        *err = "subsystems must have exactly one name";
-        return false;
+        return Error() << "subsystems must have exactly one name";
     }
 
     if (std::find(subsystems_->begin(), subsystems_->end(), args[1]) != subsystems_->end()) {
-        *err = "ignoring duplicate subsystem entry";
-        return false;
+        return Error() << "ignoring duplicate subsystem entry";
     }
 
     subsystem_.name_ = args[1];
 
-    return true;
+    return Success();
 }
 
-bool SubsystemParser::ParseDevName(std::vector<std::string>&& args, std::string* err) {
+Result<Success> SubsystemParser::ParseDevName(std::vector<std::string>&& args) {
     if (args[1] == "uevent_devname") {
         subsystem_.devname_source_ = Subsystem::DevnameSource::DEVNAME_UEVENT_DEVNAME;
-        return true;
+        return Success();
     }
     if (args[1] == "uevent_devpath") {
         subsystem_.devname_source_ = Subsystem::DevnameSource::DEVNAME_UEVENT_DEVPATH;
-        return true;
+        return Success();
     }
 
-    *err = "invalid devname '" + args[1] + "'";
-    return false;
+    return Error() << "invalid devname '" << args[1] << "'";
 }
 
-bool SubsystemParser::ParseDirName(std::vector<std::string>&& args, std::string* err) {
+Result<Success> SubsystemParser::ParseDirName(std::vector<std::string>&& args) {
     if (args[1].front() != '/') {
-        *err = "dirname '" + args[1] + " ' does not start with '/'";
-        return false;
+        return Error() << "dirname '" << args[1] << " ' does not start with '/'";
     }
 
     subsystem_.dir_name_ = args[1];
-    return true;
+    return Success();
 }
 
-bool SubsystemParser::ParseLineSection(std::vector<std::string>&& args, int line, std::string* err) {
-    using OptionParser =
-        bool (SubsystemParser::*)(std::vector<std::string> && args, std::string * err);
+Result<Success> SubsystemParser::ParseLineSection(std::vector<std::string>&& args, int line) {
+    using OptionParser = Result<Success> (SubsystemParser::*)(std::vector<std::string> && args);
+
     static class OptionParserMap : public KeywordMap<OptionParser> {
       private:
         const Map& map() const override {
@@ -134,13 +125,11 @@ bool SubsystemParser::ParseLineSection(std::vector<std::string>&& args, int line
         }
     } parser_map;
 
-    auto parser = parser_map.FindFunction(args, err);
+    auto parser = parser_map.FindFunction(args);
 
-    if (!parser) {
-        return false;
-    }
+    if (!parser) return Error() << parser.error();
 
-    return (this->*parser)(std::move(args), err);
+    return std::invoke(*parser, this, std::move(args));
 }
 
 void SubsystemParser::EndSection() {

@@ -54,10 +54,10 @@ class Action {
   public:
     explicit Action(bool oneshot, const std::string& filename, int line);
 
-    bool AddCommand(const std::vector<std::string>& args, int line, std::string* err);
+    Result<Success> AddCommand(const std::vector<std::string>& args, int line);
     void AddCommand(BuiltinFunction f, const std::vector<std::string>& args, int line);
-    bool InitTriggers(const std::vector<std::string>& args, std::string* err);
-    bool InitSingleTrigger(const std::string& trigger);
+    Result<Success> InitTriggers(const std::vector<std::string>& args);
+    Result<Success> InitSingleTrigger(const std::string& trigger);
     std::size_t NumCommands() const;
     void ExecuteOneCommand(std::size_t command) const;
     void ExecuteAllCommands() const;
@@ -79,7 +79,7 @@ private:
     void ExecuteCommand(const Command& command) const;
     bool CheckPropertyTriggers(const std::string& name = "",
                                const std::string& value = "") const;
-    bool ParsePropertyTrigger(const std::string& trigger, std::string* err);
+    Result<Success> ParsePropertyTrigger(const std::string& trigger);
 
     std::map<std::string, std::string> property_triggers_;
     std::string event_trigger_;
@@ -121,9 +121,9 @@ class ActionParser : public SectionParser {
   public:
     ActionParser(ActionManager* action_manager)
         : action_manager_(action_manager), action_(nullptr) {}
-    bool ParseSection(std::vector<std::string>&& args, const std::string& filename, int line,
-                      std::string* err) override;
-    bool ParseLineSection(std::vector<std::string>&& args, int line, std::string* err) override;
+    Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
+                                 int line) override;
+    Result<Success> ParseLineSection(std::vector<std::string>&& args, int line) override;
     void EndSection() override;
 
   private:
