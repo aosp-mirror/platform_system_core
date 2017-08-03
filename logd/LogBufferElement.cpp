@@ -41,28 +41,52 @@ LogBufferElement::LogBufferElement(log_id_t log_id, log_time realtime,
       mTid(tid),
       mRealTime(realtime),
       mMsgLen(len),
-      mLogId(log_id) {
+      mLogId(log_id),
+      mDropped(false) {
     mMsg = new char[len];
     memcpy(mMsg, msg, len);
-    mTag = (isBinary() && (mMsgLen >= sizeof(uint32_t)))
-               ? le32toh(reinterpret_cast<android_event_header_t*>(mMsg)->tag)
-               : 0;
 }
 
 LogBufferElement::LogBufferElement(const LogBufferElement& elem)
-    : mTag(elem.mTag),
-      mUid(elem.mUid),
+    : mUid(elem.mUid),
       mPid(elem.mPid),
       mTid(elem.mTid),
       mRealTime(elem.mRealTime),
       mMsgLen(elem.mMsgLen),
-      mLogId(elem.mLogId) {
+      mLogId(elem.mLogId),
+      mDropped(elem.mDropped) {
     mMsg = new char[mMsgLen];
     memcpy(mMsg, elem.mMsg, mMsgLen);
 }
 
 LogBufferElement::~LogBufferElement() {
     delete[] mMsg;
+}
+
+uint32_t LogBufferElement::getTag() const {
+    return (isBinary() &&
+            ((mDropped && mMsg != nullptr) ||
+             (!mDropped && mMsgLen >= sizeof(android_event_header_t))))
+               ? reinterpret_cast<const android_event_header_t*>(mMsg)->tag
+               : 0;
+}
+
+unsigned short LogBufferElement::setDropped(unsigned short value) {
+    // The tag information is saved in mMsg data, if the tag is non-zero
+    // save only the information needed to get the tag.
+    if (getTag() != 0) {
+        if (mMsgLen > sizeof(android_event_header_t)) {
+            char* truncated_msg = new char[sizeof(android_event_header_t)];
+            memcpy(truncated_msg, mMsg, sizeof(android_event_header_t));
+            delete[] mMsg;
+            mMsg = truncated_msg;
+        }  // mMsgLen == sizeof(android_event_header_t), already at minimum.
+    } else {
+        delete[] mMsg;
+        mMsg = nullptr;
+    }
+    mDropped = true;
+    return mDroppedCount = value;
 }
 
 // caller must own and free character string
@@ -164,8 +188,8 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent
     // identical to below to calculate the buffer size required
     const char* type = lastSame ? "identical" : "expire";
     size_t len = snprintf(NULL, 0, format_uid, mUid, name ? name : "",
-                          commName ? commName : "", type, mDropped,
-                          (mDropped > 1) ? "s" : "");
+                          commName ? commName : "", type, getDropped(),
+                          (getDropped() > 1) ? "s" : "");
 
     size_t hdrLen;
     if (isBinary()) {
@@ -196,8 +220,8 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent
     }
 
     snprintf(buffer + hdrLen, len + 1, format_uid, mUid, name ? name : "",
-             commName ? commName : "", type, mDropped,
-             (mDropped > 1) ? "s" : "");
+             commName ? commName : "", type, getDropped(),
+             (getDropped() > 1) ? "s" : "");
     free(const_cast<char*>(name));
     free(const_cast<char*>(commName));
 
@@ -225,7 +249,7 @@ log_time LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent,
 
     char* buffer = NULL;
 
-    if (!mMsg) {
+    if (mDropped) {
         entry.len = populateDroppedMessage(buffer, parent, lastSame);
         if (!entry.len) return mRealTime;
         iovec[1].iov_base = buffer;
