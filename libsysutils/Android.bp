@@ -1,6 +1,9 @@
 cc_library_shared {
     name: "libsysutils",
     vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
 
     srcs: [
         "src/SocketListener.cpp",
