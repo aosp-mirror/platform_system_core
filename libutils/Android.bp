@@ -46,6 +46,10 @@ cc_library_headers {
 cc_library {
     name: "libutils",
     vendor_available: true,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
     host_supported: true,
 
     srcs: [

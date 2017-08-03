@@ -50,6 +50,10 @@ cc_library_headers {
 cc_library {
     name: "libcutils",
     vendor_available: true,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
     host_supported: true,
     srcs: [
         "config_utils.c",
