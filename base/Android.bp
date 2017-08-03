@@ -40,6 +40,10 @@ cc_library {
     name: "libbase",
     vendor_available: true,
     host_supported: true,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
     srcs: [
         "file.cpp",
         "logging.cpp",
