@@ -339,9 +339,8 @@ void SelinuxInitialize() {
         }
     }
 
-    std::string err;
-    if (!WriteFile("/sys/fs/selinux/checkreqprot", "0", &err)) {
-        LOG(ERROR) << err;
+    if (auto result = WriteFile("/sys/fs/selinux/checkreqprot", "0"); !result) {
+        LOG(ERROR) << "Unable to write to /sys/fs/selinux/checkreqprot: " << result.error();
         panic();
     }
 

@@ -156,10 +156,9 @@ TEST(init, EventTriggerOrderMultipleFiles) {
                                "execute 3";
     // clang-format on
     // WriteFile() ensures the right mode is set
-    std::string err;
-    ASSERT_TRUE(WriteFile(std::string(dir.path) + "/a.rc", dir_a_script, &err));
+    ASSERT_TRUE(WriteFile(std::string(dir.path) + "/a.rc", dir_a_script));
 
-    ASSERT_TRUE(WriteFile(std::string(dir.path) + "/b.rc", "on boot\nexecute 5", &err));
+    ASSERT_TRUE(WriteFile(std::string(dir.path) + "/b.rc", "on boot\nexecute 5"));
 
     // clang-format off
     std::string start_script = "import " + std::string(first_import.path) + "\n"
