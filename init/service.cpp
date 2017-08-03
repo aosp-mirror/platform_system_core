@@ -386,18 +386,20 @@ bool Service::ParseDisabled(const std::vector<std::string>& args, std::string* e
 }
 
 bool Service::ParseGroup(const std::vector<std::string>& args, std::string* err) {
-    std::string decode_uid_err;
-    if (!DecodeUid(args[1], &gid_, &decode_uid_err)) {
-        *err = "Unable to find GID for '" + args[1] + "': " + decode_uid_err;
+    auto gid = DecodeUid(args[1]);
+    if (!gid) {
+        *err = "Unable to decode GID for '" + args[1] + "': " + gid.error();
         return false;
     }
+    gid_ = *gid;
+
     for (std::size_t n = 2; n < args.size(); n++) {
-        gid_t gid;
-        if (!DecodeUid(args[n], &gid, &decode_uid_err)) {
-            *err = "Unable to find GID for '" + args[n] + "': " + decode_uid_err;
+        gid = DecodeUid(args[n]);
+        if (!gid) {
+            *err = "Unable to decode GID for '" + args[n] + "': " + gid.error();
             return false;
         }
-        supp_gids_.emplace_back(gid);
+        supp_gids_.emplace_back(*gid);
     }
     return true;
 }
@@ -527,26 +529,27 @@ bool Service::ParseShutdown(const std::vector<std::string>& args, std::string* e
 template <typename T>
 bool Service::AddDescriptor(const std::vector<std::string>& args, std::string* err) {
     int perm = args.size() > 3 ? std::strtoul(args[3].c_str(), 0, 8) : -1;
-    uid_t uid = 0;
-    gid_t gid = 0;
+    Result<uid_t> uid = 0;
+    Result<gid_t> gid = 0;
     std::string context = args.size() > 6 ? args[6] : "";
 
-    std::string decode_uid_err;
     if (args.size() > 4) {
-        if (!DecodeUid(args[4], &uid, &decode_uid_err)) {
-            *err = "Unable to find UID for '" + args[4] + "': " + decode_uid_err;
+        uid = DecodeUid(args[4]);
+        if (!uid) {
+            *err = "Unable to find UID for '" + args[4] + "': " + uid.error();
             return false;
         }
     }
 
     if (args.size() > 5) {
-        if (!DecodeUid(args[5], &gid, &decode_uid_err)) {
-            *err = "Unable to find GID for '" + args[5] + "': " + decode_uid_err;
+        gid = DecodeUid(args[5]);
+        if (!gid) {
+            *err = "Unable to find GID for '" + args[5] + "': " + gid.error();
             return false;
         }
     }
 
-    auto descriptor = std::make_unique<T>(args[1], args[2], uid, gid, perm, context);
+    auto descriptor = std::make_unique<T>(args[1], args[2], *uid, *gid, perm, context);
 
     auto old =
         std::find_if(descriptors_.begin(), descriptors_.end(),
@@ -585,11 +588,12 @@ bool Service::ParseFile(const std::vector<std::string>& args, std::string* err) 
 }
 
 bool Service::ParseUser(const std::vector<std::string>& args, std::string* err) {
-    std::string decode_uid_err;
-    if (!DecodeUid(args[1], &uid_, &decode_uid_err)) {
-        *err = "Unable to find UID for '" + args[1] + "': " + decode_uid_err;
+    auto uid = DecodeUid(args[1]);
+    if (!uid) {
+        *err = "Unable to find UID for '" + args[1] + "': " + uid.error();
         return false;
     }
+    uid_ = *uid;
     return true;
 }
 
@@ -979,34 +983,35 @@ std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<
     if (command_arg > 2 && args[1] != "-") {
         seclabel = args[1];
     }
-    uid_t uid = 0;
+    Result<uid_t> uid = 0;
     if (command_arg > 3) {
-        std::string decode_uid_err;
-        if (!DecodeUid(args[2], &uid, &decode_uid_err)) {
-            LOG(ERROR) << "Unable to find UID for '" << args[2] << "': " << decode_uid_err;
+        uid = DecodeUid(args[2]);
+        if (!uid) {
+            LOG(ERROR) << "Unable to decode UID for '" << args[2] << "': " << uid.error();
             return nullptr;
         }
     }
-    gid_t gid = 0;
+    Result<gid_t> gid = 0;
     std::vector<gid_t> supp_gids;
     if (command_arg > 4) {
-        std::string decode_uid_err;
-        if (!DecodeUid(args[3], &gid, &decode_uid_err)) {
-            LOG(ERROR) << "Unable to find GID for '" << args[3] << "': " << decode_uid_err;
+        gid = DecodeUid(args[3]);
+        if (!gid) {
+            LOG(ERROR) << "Unable to decode GID for '" << args[3] << "': " << gid.error();
             return nullptr;
         }
         std::size_t nr_supp_gids = command_arg - 1 /* -- */ - 4 /* exec SECLABEL UID GID */;
         for (size_t i = 0; i < nr_supp_gids; ++i) {
-            gid_t supp_gid;
-            if (!DecodeUid(args[4 + i], &supp_gid, &decode_uid_err)) {
-                LOG(ERROR) << "Unable to find UID for '" << args[4 + i] << "': " << decode_uid_err;
+            auto supp_gid = DecodeUid(args[4 + i]);
+            if (!supp_gid) {
+                LOG(ERROR) << "Unable to decode GID for '" << args[4 + i]
+                           << "': " << supp_gid.error();
                 return nullptr;
             }
-            supp_gids.push_back(supp_gid);
+            supp_gids.push_back(*supp_gid);
         }
     }
 
-    return std::make_unique<Service>(name, flags, uid, gid, supp_gids, no_capabilities,
+    return std::make_unique<Service>(name, flags, *uid, *gid, supp_gids, no_capabilities,
                                      namespace_flags, seclabel, str_args);
 }
 
