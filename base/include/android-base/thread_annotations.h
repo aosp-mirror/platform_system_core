@@ -71,11 +71,12 @@
 #define EXCLUDES(...) \
       THREAD_ANNOTATION_ATTRIBUTE__(locks_excluded(__VA_ARGS__))
 
+// b/64226736: assert_capability and assert_shared_capability are non-functional.
 #define ASSERT_CAPABILITY(x) \
-      THREAD_ANNOTATION_ATTRIBUTE__(assert_capability(x))
+      THREAD_ANNOTATION_ATTRIBUTE__(assert_lock(x))
 
 #define ASSERT_SHARED_CAPABILITY(x) \
-      THREAD_ANNOTATION_ATTRIBUTE__(assert_shared_capability(x))
+      THREAD_ANNOTATION_ATTRIBUTE__(assert_shared_lock(x))
 
 #define RETURN_CAPABILITY(x) \
       THREAD_ANNOTATION_ATTRIBUTE__(lock_returned(x))
