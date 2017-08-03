@@ -30,15 +30,6 @@ cc_defaults {
             enabled: false,
         },
     },
-
-    arch: {
-        mips: {
-            enabled: false,
-        },
-        mips64: {
-            enabled: false,
-        },
-    },
 }
 
 cc_library {

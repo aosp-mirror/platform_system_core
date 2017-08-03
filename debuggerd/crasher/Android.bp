@@ -2,7 +2,6 @@ cc_defaults {
     name: "crasher-defaults",
 
     cppflags: [
-        "-std=gnu++14",
         "-W",
         "-Wall",
         "-Wextra",

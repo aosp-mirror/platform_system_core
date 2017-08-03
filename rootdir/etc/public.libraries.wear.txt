@@ -1,3 +1,4 @@
+# See https://android.googlesource.com/platform/ndk/+/master/docs/PlatformApis.md
 libandroid.so
 libaaudio.so
 libc.so
@@ -14,6 +15,7 @@ liblog.so
 libmediandk.so
 libm.so
 libnativewindow.so
+libneuralnetworks.so
 libOpenMAXAL.so
 libOpenSLES.so
 libRS.so

@@ -73,9 +73,11 @@ class Service {
             unsigned namespace_flags, const std::string& seclabel,
             const std::vector<std::string>& args);
 
+    static std::unique_ptr<Service> MakeTemporaryOneshotService(const std::vector<std::string>& args);
+
     bool IsRunning() { return (flags_ & SVC_RUNNING) != 0; }
     bool ParseLine(const std::vector<std::string>& args, std::string* err);
-    bool ExecStart(std::unique_ptr<android::base::Timer>* exec_waiter);
+    bool ExecStart();
     bool Start();
     bool StartIfNotDisabled();
     bool Enable();
@@ -83,17 +85,22 @@ class Service {
     void Stop();
     void Terminate();
     void Restart();
-    void RestartIfNeeded(time_t* process_needs_restart_at);
     void Reap();
     void DumpState() const;
     void SetShutdownCritical() { flags_ |= SVC_SHUTDOWN_CRITICAL; }
     bool IsShutdownCritical() const { return (flags_ & SVC_SHUTDOWN_CRITICAL) != 0; }
-    void UnSetExec() { flags_ &= ~SVC_EXEC; }
+    void UnSetExec() {
+        is_exec_service_running_ = false;
+        flags_ &= ~SVC_EXEC;
+    }
+
+    static bool is_exec_service_running() { return is_exec_service_running_; }
 
     const std::string& name() const { return name_; }
     const std::set<std::string>& classnames() const { return classnames_; }
     unsigned flags() const { return flags_; }
     pid_t pid() const { return pid_; }
+    android::base::boot_clock::time_point time_started() const { return time_started_; }
     int crash_count() const { return crash_count_; }
     uid_t uid() const { return uid_; }
     gid_t gid() const { return gid_; }
@@ -151,6 +158,7 @@ class Service {
     bool AddDescriptor(const std::vector<std::string>& args, std::string* err);
 
     static unsigned long next_start_order_;
+    static bool is_exec_service_running_;
 
     std::string name_;
     std::set<std::string> classnames_;
@@ -198,47 +206,42 @@ class Service {
     std::vector<std::string> args_;
 };
 
-class ServiceManager {
+class ServiceList {
   public:
-    static ServiceManager& GetInstance();
+    static ServiceList& GetInstance();
 
     // Exposed for testing
-    ServiceManager();
+    ServiceList();
 
     void AddService(std::unique_ptr<Service> service);
-    Service* MakeExecOneshotService(const std::vector<std::string>& args);
-    bool Exec(const std::vector<std::string>& args);
-    bool ExecStart(const std::string& name);
-    bool IsWaitingForExec() const;
-    Service* FindServiceByName(const std::string& name) const;
-    Service* FindServiceByPid(pid_t pid) const;
-    Service* FindServiceByKeychord(int keychord_id) const;
-    void ForEachService(const std::function<void(Service*)>& callback) const;
-    void ForEachServiceShutdownOrder(const std::function<void(Service*)>& callback) const;
-    void ForEachServiceInClass(const std::string& classname,
-                               void (*func)(Service* svc)) const;
-    void ForEachServiceWithFlags(unsigned matchflags,
-                             void (*func)(Service* svc)) const;
-    void ReapAnyOutstandingChildren();
     void RemoveService(const Service& svc);
+
+    template <typename T, typename F = decltype(&Service::name)>
+    Service* FindService(T value, F function = &Service::name) const {
+        auto svc = std::find_if(services_.begin(), services_.end(),
+                                [&function, &value](const std::unique_ptr<Service>& s) {
+                                    return std::invoke(function, s) == value;
+                                });
+        if (svc != services_.end()) {
+            return svc->get();
+        }
+        return nullptr;
+    }
+
     void DumpState() const;
-    void ClearExecWait();
+
+    auto begin() const { return services_.begin(); }
+    auto end() const { return services_.end(); }
+    const std::vector<std::unique_ptr<Service>>& services() const { return services_; }
+    const std::vector<Service*> services_in_shutdown_order() const;
 
   private:
-    // Cleans up a child process that exited.
-    // Returns true iff a children was cleaned up.
-    bool ReapOneProcess();
-
-    static int exec_count_; // Every service needs a unique name.
-    std::unique_ptr<android::base::Timer> exec_waiter_;
-
     std::vector<std::unique_ptr<Service>> services_;
 };
 
 class ServiceParser : public SectionParser {
   public:
-    ServiceParser(ServiceManager* service_manager)
-        : service_manager_(service_manager), service_(nullptr) {}
+    ServiceParser(ServiceList* service_list) : service_list_(service_list), service_(nullptr) {}
     bool ParseSection(std::vector<std::string>&& args, const std::string& filename, int line,
                       std::string* err) override;
     bool ParseLineSection(std::vector<std::string>&& args, int line, std::string* err) override;
@@ -247,7 +250,7 @@ class ServiceParser : public SectionParser {
   private:
     bool IsValidName(const std::string& name) const;
 
-    ServiceManager* service_manager_;
+    ServiceList* service_list_;
     std::unique_ptr<Service> service_;
 };
 

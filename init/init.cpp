@@ -53,6 +53,7 @@
 
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "bootchart.h"
@@ -84,7 +85,6 @@ static int property_triggers_enabled = 0;
 static char qemu[32];
 
 std::string default_console = "/dev/console";
-static time_t process_needs_restart_at;
 
 const char *ENV[32];
 
@@ -98,22 +98,22 @@ static bool shutting_down;
 std::vector<std::string> late_import_paths;
 
 void DumpState() {
-    ServiceManager::GetInstance().DumpState();
+    ServiceList::GetInstance().DumpState();
     ActionManager::GetInstance().DumpState();
 }
 
-Parser CreateParser(ActionManager& action_manager, ServiceManager& service_manager) {
+Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
     Parser parser;
 
-    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&service_manager));
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&service_list));
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&action_manager));
     parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
 
     return parser;
 }
 
-static void LoadBootScripts(ActionManager& action_manager, ServiceManager& service_manager) {
-    Parser parser = CreateParser(action_manager, service_manager);
+static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_list) {
+    Parser parser = CreateParser(action_manager, service_list);
 
     std::string bootscript = GetProperty("ro.boot.init_rc", "");
     if (bootscript.empty()) {
@@ -219,16 +219,25 @@ void property_changed(const std::string& name, const std::string& value) {
     }
 }
 
-static void restart_processes()
-{
-    process_needs_restart_at = 0;
-    ServiceManager::GetInstance().ForEachServiceWithFlags(SVC_RESTARTING, [](Service* s) {
-        s->RestartIfNeeded(&process_needs_restart_at);
-    });
+static std::optional<boot_clock::time_point> RestartProcesses() {
+    std::optional<boot_clock::time_point> next_process_restart_time;
+    for (const auto& s : ServiceList::GetInstance()) {
+        if (!(s->flags() & SVC_RESTARTING)) continue;
+
+        auto restart_time = s->time_started() + 5s;
+        if (boot_clock::now() > restart_time) {
+            s->Start();
+        } else {
+            if (!next_process_restart_time || restart_time < *next_process_restart_time) {
+                next_process_restart_time = restart_time;
+            }
+        }
+    }
+    return next_process_restart_time;
 }
 
 void handle_control_message(const std::string& msg, const std::string& name) {
-    Service* svc = ServiceManager::GetInstance().FindServiceByName(name);
+    Service* svc = ServiceList::GetInstance().FindService(name);
     if (svc == nullptr) {
         LOG(ERROR) << "no such service '" << name << "'";
         return;
@@ -1151,7 +1160,7 @@ int main(int argc, char** argv) {
     Action::set_function_map(&function_map);
 
     ActionManager& am = ActionManager::GetInstance();
-    ServiceManager& sm = ServiceManager::GetInstance();
+    ServiceList& sm = ServiceList::GetInstance();
 
     LoadBootScripts(am, sm);
 
@@ -1192,16 +1201,20 @@ int main(int argc, char** argv) {
         // By default, sleep until something happens.
         int epoll_timeout_ms = -1;
 
-        if (!(waiting_for_prop || sm.IsWaitingForExec())) {
+        if (!(waiting_for_prop || Service::is_exec_service_running())) {
             am.ExecuteOneCommand();
         }
-        if (!(waiting_for_prop || sm.IsWaitingForExec())) {
-            if (!shutting_down) restart_processes();
+        if (!(waiting_for_prop || Service::is_exec_service_running())) {
+            if (!shutting_down) {
+                auto next_process_restart_time = RestartProcesses();
 
-            // If there's a process that needs restarting, wake up in time for that.
-            if (process_needs_restart_at != 0) {
-                epoll_timeout_ms = (process_needs_restart_at - time(nullptr)) * 1000;
-                if (epoll_timeout_ms < 0) epoll_timeout_ms = 0;
+                // If there's a process that needs restarting, wake up in time for that.
+                if (next_process_restart_time) {
+                    epoll_timeout_ms = std::chrono::ceil<std::chrono::milliseconds>(
+                                           *next_process_restart_time - boot_clock::now())
+                                           .count();
+                    if (epoll_timeout_ms < 0) epoll_timeout_ms = 0;
+                }
             }
 
             // If there's more work to do, wake up again immediately.
