@@ -228,13 +228,13 @@ void uid_monitor::update_curr_io_stats_locked()
             last_uid_io_stats[uid.uid].io[BACKGROUND].write_bytes;
 
         usage.bytes[READ][FOREGROUND][charger_stat] +=
-            (fg_rd_delta < 0) ? uid.io[FOREGROUND].read_bytes : fg_rd_delta;
+            (fg_rd_delta < 0) ? 0 : fg_rd_delta;
         usage.bytes[READ][BACKGROUND][charger_stat] +=
-            (bg_rd_delta < 0) ? uid.io[BACKGROUND].read_bytes : bg_rd_delta;
+            (bg_rd_delta < 0) ? 0 : bg_rd_delta;
         usage.bytes[WRITE][FOREGROUND][charger_stat] +=
-            (fg_wr_delta < 0) ? uid.io[FOREGROUND].write_bytes : fg_wr_delta;
+            (fg_wr_delta < 0) ? 0 : fg_wr_delta;
         usage.bytes[WRITE][BACKGROUND][charger_stat] +=
-            (bg_wr_delta < 0) ? uid.io[BACKGROUND].write_bytes : bg_wr_delta;
+            (bg_wr_delta < 0) ? 0 : bg_wr_delta;
     }
 
     last_uid_io_stats = uid_io_stats;
