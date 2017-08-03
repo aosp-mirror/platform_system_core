@@ -582,18 +582,12 @@ static __inline__ int adb_thread_setname(const std::string& name) {
 #ifdef __APPLE__
     return pthread_setname_np(name.c_str());
 #else
-    const char *s = name.c_str();
-
-    // pthread_setname_np fails rather than truncating long strings.
-    const int max_task_comm_len = 16; // including the null terminator
-    if (name.length() > (max_task_comm_len - 1)) {
-        char buf[max_task_comm_len];
-        strncpy(buf, name.c_str(), sizeof(buf) - 1);
-        buf[sizeof(buf) - 1] = '\0';
-        s = buf;
-    }
-
-    return pthread_setname_np(pthread_self(), s) ;
+    // Both bionic and glibc's pthread_setname_np fails rather than truncating long strings.
+    // glibc doesn't have strlcpy, so we have to fake it.
+    char buf[16];  // MAX_TASK_COMM_LEN, but that's not exported by the kernel headers.
+    strncpy(buf, name.c_str(), sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    return pthread_setname_np(pthread_self(), buf);
 #endif
 }
 
