@@ -73,6 +73,7 @@ using namespace std::string_literals;
 using android::base::boot_clock;
 using android::base::GetProperty;
 using android::base::Timer;
+using android::base::unique_fd;
 
 namespace android {
 namespace init {
@@ -291,65 +292,49 @@ static int wait_for_coldboot_done_action(const std::vector<std::string>& args) {
  * time. We do not reboot or halt on failures, as this is a best-effort
  * attempt.
  */
-static int mix_hwrng_into_linux_rng_action(const std::vector<std::string>& args)
-{
-    int result = -1;
-    int hwrandom_fd = -1;
-    int urandom_fd = -1;
-    char buf[512];
-    ssize_t chunk_size;
-    size_t total_bytes_written = 0;
-
-    hwrandom_fd = TEMP_FAILURE_RETRY(
-            open("/dev/hw_random", O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+static int mix_hwrng_into_linux_rng_action(const std::vector<std::string>& args) {
+    unique_fd hwrandom_fd(
+        TEMP_FAILURE_RETRY(open("/dev/hw_random", O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (hwrandom_fd == -1) {
         if (errno == ENOENT) {
-            LOG(ERROR) << "/dev/hw_random not found";
+            LOG(INFO) << "/dev/hw_random not found";
             // It's not an error to not have a Hardware RNG.
-            result = 0;
-        } else {
-            PLOG(ERROR) << "Failed to open /dev/hw_random";
+            return 0;
         }
-        goto ret;
+        PLOG(ERROR) << "Failed to open /dev/hw_random";
+        return -1;
     }
 
-    urandom_fd = TEMP_FAILURE_RETRY(
-            open("/dev/urandom", O_WRONLY | O_NOFOLLOW | O_CLOEXEC));
+    unique_fd urandom_fd(
+        TEMP_FAILURE_RETRY(open("/dev/urandom", O_WRONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (urandom_fd == -1) {
         PLOG(ERROR) << "Failed to open /dev/urandom";
-        goto ret;
+        return -1;
     }
 
+    char buf[512];
+    size_t total_bytes_written = 0;
     while (total_bytes_written < sizeof(buf)) {
-        chunk_size = TEMP_FAILURE_RETRY(
-                read(hwrandom_fd, buf, sizeof(buf) - total_bytes_written));
+        ssize_t chunk_size =
+            TEMP_FAILURE_RETRY(read(hwrandom_fd, buf, sizeof(buf) - total_bytes_written));
         if (chunk_size == -1) {
             PLOG(ERROR) << "Failed to read from /dev/hw_random";
-            goto ret;
+            return -1;
         } else if (chunk_size == 0) {
             LOG(ERROR) << "Failed to read from /dev/hw_random: EOF";
-            goto ret;
+            return -1;
         }
 
         chunk_size = TEMP_FAILURE_RETRY(write(urandom_fd, buf, chunk_size));
         if (chunk_size == -1) {
             PLOG(ERROR) << "Failed to write to /dev/urandom";
-            goto ret;
+            return -1;
         }
         total_bytes_written += chunk_size;
     }
 
     LOG(INFO) << "Mixed " << total_bytes_written << " bytes from /dev/hw_random into /dev/urandom";
-    result = 0;
-
-ret:
-    if (hwrandom_fd != -1) {
-        close(hwrandom_fd);
-    }
-    if (urandom_fd != -1) {
-        close(urandom_fd);
-    }
-    return result;
+    return 0;
 }
 
 static void security_failure() {
@@ -425,45 +410,40 @@ static bool __attribute__((unused)) set_mmap_rnd_bits_min(int start, int min, bo
  * ec9ee4acd97c drivers: char: random: add get_random_long()
  * 5ef11c35ce86 mm: ASLR: use get_random_long()
  */
-static int set_mmap_rnd_bits_action(const std::vector<std::string>& args)
-{
-    int ret = -1;
-
-    /* values are arch-dependent */
+static int set_mmap_rnd_bits_action(const std::vector<std::string>& args) {
+/* values are arch-dependent */
 #if defined(USER_MODE_LINUX)
     /* uml does not support mmap_rnd_bits */
-    ret = 0;
+    return 0;
 #elif defined(__aarch64__)
     /* arm64 supports 18 - 33 bits depending on pagesize and VA_SIZE */
     if (set_mmap_rnd_bits_min(33, 24, false)
             && set_mmap_rnd_bits_min(16, 16, true)) {
-        ret = 0;
+        return 0;
     }
 #elif defined(__x86_64__)
     /* x86_64 supports 28 - 32 bits */
     if (set_mmap_rnd_bits_min(32, 32, false)
             && set_mmap_rnd_bits_min(16, 16, true)) {
-        ret = 0;
+        return 0;
     }
 #elif defined(__arm__) || defined(__i386__)
     /* check to see if we're running on 64-bit kernel */
     bool h64 = !access(MMAP_RND_COMPAT_PATH, F_OK);
     /* supported 32-bit architecture must have 16 bits set */
     if (set_mmap_rnd_bits_min(16, 16, h64)) {
-        ret = 0;
+        return 0;
     }
 #elif defined(__mips__) || defined(__mips64__)
     // TODO: add mips support b/27788820
-    ret = 0;
+    return 0;
 #else
     LOG(ERROR) << "Unknown architecture";
 #endif
 
-    if (ret == -1) {
-        LOG(ERROR) << "Unable to set adequate mmap entropy value!";
-        security_failure();
-    }
-    return ret;
+    LOG(ERROR) << "Unable to set adequate mmap entropy value!";
+    security_failure();
+    return -1;
 }
 
 #define KPTR_RESTRICT_PATH "/proc/sys/kernel/kptr_restrict"
