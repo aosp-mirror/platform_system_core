@@ -105,7 +105,7 @@ TEST(liblog, __android_log_btwrite) {
 }
 
 #if (defined(__ANDROID__) && defined(USING_LOGGER_DEFAULT))
-static std::string popenToString(std::string command) {
+static std::string popenToString(const std::string& command) {
   std::string ret;
 
   FILE* fp = popen(command.c_str(), "r");
@@ -129,17 +129,17 @@ static bool isPmsgActive() {
 static bool isLogdwActive() {
   std::string logdwSignature =
       popenToString("grep /dev/socket/logdw /proc/net/unix");
-  size_t beginning = logdwSignature.find(" ");
+  size_t beginning = logdwSignature.find(' ');
   if (beginning == std::string::npos) return true;
-  beginning = logdwSignature.find(" ", beginning + 1);
+  beginning = logdwSignature.find(' ', beginning + 1);
   if (beginning == std::string::npos) return true;
-  size_t end = logdwSignature.find(" ", beginning + 1);
+  size_t end = logdwSignature.find(' ', beginning + 1);
   if (end == std::string::npos) return true;
-  end = logdwSignature.find(" ", end + 1);
+  end = logdwSignature.find(' ', end + 1);
   if (end == std::string::npos) return true;
-  end = logdwSignature.find(" ", end + 1);
+  end = logdwSignature.find(' ', end + 1);
   if (end == std::string::npos) return true;
-  end = logdwSignature.find(" ", end + 1);
+  end = logdwSignature.find(' ', end + 1);
   if (end == std::string::npos) return true;
   std::string allLogdwEndpoints = popenToString(
       "grep ' 00000002" + logdwSignature.substr(beginning, end - beginning) +
@@ -159,7 +159,7 @@ static bool isLogdwActive() {
 
   // NB: fgrep with multiple strings is broken in Android
   for (beginning = 0;
-       (end = allLogdwEndpoints.find("\n", beginning)) != std::string::npos;
+       (end = allLogdwEndpoints.find('\n', beginning)) != std::string::npos;
        beginning = end + 1) {
     if (myPidFds.find(allLogdwEndpoints.substr(beginning, end - beginning)) !=
         std::string::npos)
@@ -3170,7 +3170,7 @@ static bool isZero(const std::string& content, std::string::size_type pos,
   return (offset != std::string::npos) &&
          ((offset = content.find_first_not_of(" \t", offset + strlen(needle))) !=
           std::string::npos) &&
-         (content.find_first_not_of("0", offset) != offset);
+         (content.find_first_not_of('0', offset) != offset);
 }
 
 // must not be: '<needle:> 0 kB'
@@ -3239,7 +3239,7 @@ static void event_log_tags_test_smap(pid_t pid) {
   filename = android::base::StringPrintf("/proc/%d/comm", pid);
   android::base::ReadFileToString(filename, &content);
   content = android::base::StringPrintf(
-      "%d:%s", pid, content.substr(0, content.find("\n")).c_str());
+      "%d:%s", pid, content.substr(0, content.find('\n')).c_str());
 
   EXPECT_TRUE(IsOk(shared_ok, content));
   EXPECT_TRUE(IsOk(private_ok, content));
