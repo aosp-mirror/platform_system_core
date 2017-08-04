@@ -576,7 +576,9 @@ keymaster_error_t TrustyKeymasterDevice::finish(keymaster_operation_handle_t ope
         return error_;
     }
     if (input && input->data_length > kMaximumFinishInputLength) {
-        return KM_ERROR_INVALID_ARGUMENT;
+        ALOGE("%zu-byte input to finish; only %zu bytes allowed",
+              input->data_length, kMaximumFinishInputLength);
+        return KM_ERROR_INVALID_INPUT_LENGTH;
     }
 
     if (out_params) {
