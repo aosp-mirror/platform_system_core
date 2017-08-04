@@ -54,7 +54,7 @@ namespace.default.asan.permitted.paths = /data/asan/system/${LIB}:/system/${LIB}
 namespace.sphal.isolated = true
 namespace.sphal.visible = true
 namespace.sphal.search.paths = /vendor/${LIB}/egl:/vendor/${LIB}/hw:/vendor/${LIB}
-namespace.sphal.permitted.paths = /vendor/${LIB}
+namespace.sphal.permitted.paths = /vendor/${LIB}:/system/${LIB}/vndk-sp/hw
 
 namespace.sphal.asan.search.paths = /data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl:/data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}:/vendor/${LIB}
 namespace.sphal.asan.permitted.paths = /data/asan/vendor/${LIB}:/vendor/${LIB}
