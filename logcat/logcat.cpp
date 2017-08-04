@@ -1256,7 +1256,7 @@ static int __logcat(android_logcat_context_internal* context) {
                         // example: "qemu_pipe,pipe:logcat"
                         // upon opening of /dev/qemu_pipe, the "pipe:logcat"
                         // string with trailing '\0' should be written to the fd
-                        size_t pos = devname.find(",");
+                        size_t pos = devname.find(',');
                         if (pos != std::string::npos) {
                             pipePurpose = devname.substr(pos + 1);
                             devname = devname.substr(0, pos);
