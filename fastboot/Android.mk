@@ -40,6 +40,7 @@ LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
 LOCAL_MODULE_HOST_OS := darwin linux windows
 LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
+LOCAL_REQUIRED_MODULES := mke2fs e2fsdroid
 
 LOCAL_SRC_FILES_linux := usb_linux.cpp
 LOCAL_STATIC_LIBRARIES_linux := libselinux
@@ -85,6 +86,8 @@ LOCAL_SHARED_LIBRARIES :=
 include $(BUILD_HOST_EXECUTABLE)
 
 my_dist_files := $(LOCAL_BUILT_MODULE)
+my_dist_files += $(HOST_OUT_EXECUTABLES)/mke2fs$(HOST_EXECUTABLE_SUFFIX)
+my_dist_files += $(HOST_OUT_EXECUTABLES)/e2fsdroid$(HOST_EXECUTABLE_SUFFIX)
 ifeq ($(HOST_OS),linux)
 my_dist_files += $(HOST_LIBRARY_PATH)/libf2fs_fmt_host_dyn$(HOST_SHLIB_SUFFIX)
 endif
