@@ -3,6 +3,9 @@
 cc_library {
     name: "libsuspend",
     vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
 
     srcs: [
         "autosuspend.c",

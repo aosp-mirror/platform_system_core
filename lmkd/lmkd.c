@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cutils/properties.h>
 #include <cutils/sockets.h>
 #include <log/log.h>
 #include <processgroup/processgroup.h>
@@ -71,6 +72,9 @@ static int use_inkernel_interface = 1;
 static int mpevfd[2];
 #define CRITICAL_INDEX 1
 #define MEDIUM_INDEX 0
+
+static int medium_oomadj;
+static int critical_oomadj;
 
 /* control socket listen and data */
 static int ctrl_lfd;
@@ -643,7 +647,7 @@ static void mp_event_common(bool is_critical) {
     int ret;
     unsigned long long evcount;
     bool first = true;
-    int min_adj_score = is_critical ? 0 : 800;
+    int min_adj_score = is_critical ? critical_oomadj : medium_oomadj;
     int index = is_critical ? CRITICAL_INDEX : MEDIUM_INDEX;
 
     ret = read(mpevfd[index], &evcount, sizeof(evcount));
@@ -821,6 +825,9 @@ int main(int argc __unused, char **argv __unused) {
     struct sched_param param = {
             .sched_priority = 1,
     };
+
+    medium_oomadj = property_get_int32("ro.lmk.medium", 800);
+    critical_oomadj = property_get_int32("ro.lmk.critical", 0);
 
     mlockall(MCL_FUTURE);
     sched_setscheduler(0, SCHED_FIFO, &param);
