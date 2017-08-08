@@ -93,6 +93,9 @@ static unsigned ramdisk_offset = 0x01000000;
 static unsigned second_offset  = 0x00f00000;
 static unsigned tags_offset    = 0x00000100;
 
+static bool g_disable_verity = false;
+static bool g_disable_verification = false;
+
 static const std::string convert_fbe_marker_filename("convert_fbe");
 
 enum fb_buffer_type {
@@ -419,6 +422,10 @@ static int show_help() {
             "  --skip-reboot                            Will not reboot the device when\n"
             "                                           performing commands that normally\n"
             "                                           trigger a reboot.\n"
+            "  --disable-verity                         Set the disable-verity flag in the\n"
+            "                                           the vbmeta image being flashed.\n"
+            "  --disable-verification                   Set the disable-verification flag in"
+            "                                           the vbmeta image being flashed.\n"
 #if !defined(_WIN32)
             "  --wipe-and-use-fbe                       On devices which support it,\n"
             "                                           erase userdata and cache, and\n"
@@ -858,9 +865,54 @@ static bool load_buf(Transport* transport, const char* fname, struct fastboot_bu
     return load_buf_fd(transport, fd.release(), buf);
 }
 
+static void rewrite_vbmeta_buffer(struct fastboot_buffer* buf) {
+    // Buffer needs to be at least the size of the VBMeta struct which
+    // is 256 bytes.
+    if (buf->sz < 256) {
+        return;
+    }
+
+    int fd = make_temporary_fd();
+    if (fd == -1) {
+        die("Failed to create temporary file for vbmeta rewriting");
+    }
+
+    std::string data;
+    if (!android::base::ReadFdToString(buf->fd, &data)) {
+        die("Failed reading from vbmeta");
+    }
+
+    // There's a 32-bit big endian |flags| field at offset 120 where
+    // bit 0 corresponds to disable-verity and bit 1 corresponds to
+    // disable-verification.
+    //
+    // See external/avb/libavb/avb_vbmeta_image.h for the layout of
+    // the VBMeta struct.
+    if (g_disable_verity) {
+        data[123] |= 0x01;
+    }
+    if (g_disable_verification) {
+        data[123] |= 0x02;
+    }
+
+    if (!android::base::WriteStringToFd(data, fd)) {
+        die("Failed writing to modified vbmeta");
+    }
+    close(buf->fd);
+    buf->fd = fd;
+    lseek(fd, 0, SEEK_SET);
+}
+
 static void flash_buf(const char *pname, struct fastboot_buffer *buf)
 {
     sparse_file** s;
+
+    // Rewrite vbmeta if that's what we're flashing and modification has been requested.
+    if ((g_disable_verity || g_disable_verification) &&
+        (strcmp(pname, "vbmeta") == 0 || strcmp(pname, "vbmeta_a") == 0 ||
+         strcmp(pname, "vbmeta_b") == 0)) {
+        rewrite_vbmeta_buffer(buf);
+    }
 
     switch (buf->type) {
         case FB_BUFFER_SPARSE: {
@@ -1470,6 +1522,8 @@ int main(int argc, char **argv)
         {"set-active", optional_argument, 0, 'a'},
         {"skip-secondary", no_argument, 0, 0},
         {"skip-reboot", no_argument, 0, 0},
+        {"disable-verity", no_argument, 0, 0},
+        {"disable-verification", no_argument, 0, 0},
 #if !defined(_WIN32)
         {"wipe-and-use-fbe", no_argument, 0, 0},
 #endif
@@ -1555,6 +1609,10 @@ int main(int argc, char **argv)
                 skip_secondary = true;
             } else if (strcmp("skip-reboot", longopts[longindex].name) == 0 ) {
                 skip_reboot = true;
+            } else if (strcmp("disable-verity", longopts[longindex].name) == 0 ) {
+                g_disable_verity = true;
+            } else if (strcmp("disable-verification", longopts[longindex].name) == 0 ) {
+                g_disable_verification = true;
 #if !defined(_WIN32)
             } else if (strcmp("wipe-and-use-fbe", longopts[longindex].name) == 0) {
                 wants_wipe = true;
