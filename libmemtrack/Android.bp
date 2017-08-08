@@ -2,6 +2,10 @@
 
 cc_library_shared {
     name: "libmemtrack",
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
     srcs: ["memtrack.cpp"],
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],
