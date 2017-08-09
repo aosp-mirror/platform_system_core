@@ -106,7 +106,7 @@ class DwarfSection {
   DwarfMemory memory_;
   DwarfError last_error_;
 
-  uint64_t fde_count_;
+  uint64_t fde_count_ = 0;
   std::unordered_map<uint64_t, DwarfFde> fde_entries_;
   std::unordered_map<uint64_t, DwarfCie> cie_entries_;
   std::unordered_map<uint64_t, dwarf_loc_regs_t> cie_loc_regs_;
