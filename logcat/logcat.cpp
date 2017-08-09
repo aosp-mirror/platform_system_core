@@ -1019,7 +1019,6 @@ static int __logcat(android_logcat_context_internal* context) {
                 break;
 
             case 'm': {
-                char* end = nullptr;
                 if (!getSizeTArg(optctx.optarg, &context->maxCount)) {
                     logcat_panic(context, HELP_FALSE,
                                  "-%c \"%s\" isn't an "
@@ -1182,7 +1181,6 @@ static int __logcat(android_logcat_context_internal* context) {
                 std::unique_ptr<char, void (*)(void*)> formats(
                     strdup(optctx.optarg), free);
                 char* arg = formats.get();
-                unsigned idMask = 0;
                 char* sv = nullptr;  // protect against -ENOMEM above
                 while (!!(arg = strtok_r(arg, delimiters, &sv))) {
                     err = setLogFormat(context, arg);
@@ -1733,7 +1731,7 @@ int android_logcat_run_command_thread(android_logcat_context ctx,
     pthread_attr_setschedparam(&attr, &param);
     pthread_attr_setschedpolicy(&attr, SCHED_BATCH);
     if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) {
-        int save_errno = errno;
+        save_errno = errno;
         goto pthread_attr_exit;
     }
 
@@ -1773,7 +1771,7 @@ int android_logcat_run_command_thread(android_logcat_context ctx,
     context->retval = EXIT_SUCCESS;
     if (pthread_create(&context->thr, &attr,
                        (void*(*)(void*))__logcat, context)) {
-        int save_errno = errno;
+        save_errno = errno;
         goto argv_exit;
     }
     pthread_attr_destroy(&attr);
