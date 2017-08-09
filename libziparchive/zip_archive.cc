@@ -670,6 +670,22 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
       goto bail;
     }
   }
+
+  uint32_t lfh_start_bytes;
+  if (!archive->mapped_zip.ReadAtOffset(reinterpret_cast<uint8_t*>(&lfh_start_bytes),
+                                        sizeof(uint32_t), 0)) {
+    ALOGW("Zip: Unable to read header for entry at offset == 0.");
+    return -1;
+  }
+
+  if (lfh_start_bytes != LocalFileHeader::kSignature) {
+    ALOGW("Zip: Entry at offset zero has invalid LFH signature %" PRIx32, lfh_start_bytes);
+#if defined(__ANDROID__)
+    android_errorWriteLog(0x534e4554, "64211847");
+#endif
+    return -1;
+  }
+
   ALOGV("+++ zip good scan %" PRIu16 " entries", num_entries);
 
   result = 0;
