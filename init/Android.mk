@@ -51,15 +51,12 @@ LOCAL_SRC_FILES:= \
     init.cpp \
     init_first_stage.cpp \
     keychords.cpp \
-    property_service.cpp \
     reboot.cpp \
     signal_handler.cpp \
     ueventd.cpp \
     watchdogd.cpp \
 
 LOCAL_MODULE:= init
-LOCAL_C_INCLUDES += \
-    system/core/mkbootimg
 
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
