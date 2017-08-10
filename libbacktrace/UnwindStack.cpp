@@ -84,27 +84,20 @@ static bool Unwind(pid_t pid, unwindstack::Memory* memory, unwindstack::Regs* re
     }
 
     unwindstack::Elf* elf = map_info->GetElf(pid, true);
-    uint64_t rel_pc = regs->pc();
-    if (map_info != nullptr) {
-      rel_pc = elf->GetRelPc(regs->pc(), map_info);
-    }
+    uint64_t rel_pc = elf->GetRelPc(regs->pc(), map_info);
 
     bool skip_frame = num_frames == 0 && IsUnwindLibrary(map_info->name);
     if (num_ignore_frames == 0 && !skip_frame) {
       uint64_t adjusted_rel_pc = rel_pc;
-      if (map_info != nullptr && adjust_rel_pc) {
+      if (adjust_rel_pc) {
         adjusted_rel_pc = regs->GetAdjustedPc(rel_pc, elf);
       }
       frames->resize(num_frames + 1);
       backtrace_frame_data_t* frame = &frames->at(num_frames);
       frame->num = num_frames;
-      if (map_info != nullptr) {
-        // This will point to the adjusted absolute pc. regs->pc() is
-        // unaltered.
-        frame->pc = map_info->start + adjusted_rel_pc;
-      } else {
-        frame->pc = rel_pc;
-      }
+      // This will point to the adjusted absolute pc. regs->pc() is
+      // unaltered.
+      frame->pc = map_info->start + adjusted_rel_pc;
       frame->sp = regs->sp();
       frame->rel_pc = adjusted_rel_pc;
       frame->stack_size = 0;
