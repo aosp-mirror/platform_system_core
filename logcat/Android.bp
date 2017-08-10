@@ -68,4 +68,7 @@ cc_prebuilt_binary {
     srcs: ["logpersist"],
     init_rc: ["logcatd.rc"],
     symlinks: ["logpersist.stop", "logpersist.cat"],
+    strip: {
+        none: true,
+    }
 }
