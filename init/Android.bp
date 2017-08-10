@@ -162,9 +162,12 @@ cc_test {
     shared_libs: [
         "libbase",
         "libcutils",
-        "libselinux",
     ],
-    static_libs: ["libinit"],
+    static_libs: [
+        "libinit",
+        "libselinux",
+        "libcrypto",
+    ],
 }
 
 subdirs = ["*"]
