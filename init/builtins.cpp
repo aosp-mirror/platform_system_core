@@ -224,23 +224,22 @@ static int do_insmod(const std::vector<std::string>& args) {
     return insmod(filename.c_str(), options.c_str(), flags);
 }
 
+// mkdir <path> [mode] [owner] [group]
 static int do_mkdir(const std::vector<std::string>& args) {
     mode_t mode = 0755;
-    int ret;
-
-    /* mkdir <path> [mode] [owner] [group] */
-
     if (args.size() >= 3) {
         mode = std::strtoul(args[2].c_str(), 0, 8);
     }
 
-    ret = make_dir(args[1].c_str(), mode, sehandle);
-    /* chmod in case the directory already exists */
-    if (ret == -1 && errno == EEXIST) {
-        ret = fchmodat(AT_FDCWD, args[1].c_str(), mode, AT_SYMLINK_NOFOLLOW);
-    }
-    if (ret == -1) {
-        return -errno;
+    if (!make_dir(args[1], mode)) {
+        /* chmod in case the directory already exists */
+        if (errno == EEXIST) {
+            if (fchmodat(AT_FDCWD, args[1].c_str(), mode, AT_SYMLINK_NOFOLLOW) == -1) {
+                return -errno;
+            }
+        } else {
+            return -errno;
+        }
     }
 
     if (args.size() >= 4) {
@@ -265,8 +264,7 @@ static int do_mkdir(const std::vector<std::string>& args) {
 
         /* chown may have cleared S_ISUID and S_ISGID, chmod again */
         if (mode & (S_ISUID | S_ISGID)) {
-            ret = fchmodat(AT_FDCWD, args[1].c_str(), mode, AT_SYMLINK_NOFOLLOW);
-            if (ret == -1) {
+            if (fchmodat(AT_FDCWD, args[1].c_str(), mode, AT_SYMLINK_NOFOLLOW) == -1) {
                 return -errno;
             }
         }
@@ -834,17 +832,6 @@ static int do_wait_for_prop(const std::vector<std::string>& args) {
     return 0;
 }
 
-/*
- * Callback to make a directory from the ext4 code
- */
-static int do_installkeys_ensure_dir_exists(const char* dir) {
-    if (make_dir(dir, 0700, sehandle) && errno != EEXIST) {
-        return -1;
-    }
-
-    return 0;
-}
-
 static bool is_file_crypto() {
     return android::base::GetProperty("ro.crypto.type", "") == "file";
 }
@@ -854,7 +841,7 @@ static int do_installkey(const std::vector<std::string>& args) {
         return 0;
     }
     auto unencrypted_dir = args[1] + e4crypt_unencrypted_folder;
-    if (do_installkeys_ensure_dir_exists(unencrypted_dir.c_str())) {
+    if (!make_dir(unencrypted_dir, 0700) && errno != EEXIST) {
         PLOG(ERROR) << "Failed to create " << unencrypted_dir;
         return -1;
     }

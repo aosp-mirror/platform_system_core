@@ -170,7 +170,7 @@ TEST(util, is_dir) {
 TEST(util, mkdir_recursive) {
     TemporaryDir test_dir;
     std::string path = android::base::StringPrintf("%s/three/directories/deep", test_dir.path);
-    EXPECT_EQ(0, mkdir_recursive(path, 0755, nullptr));
+    EXPECT_TRUE(mkdir_recursive(path, 0755));
     std::string path1 = android::base::StringPrintf("%s/three", test_dir.path);
     EXPECT_TRUE(is_dir(path1.c_str()));
     std::string path2 = android::base::StringPrintf("%s/three/directories", test_dir.path);
@@ -182,7 +182,7 @@ TEST(util, mkdir_recursive) {
 TEST(util, mkdir_recursive_extra_slashes) {
     TemporaryDir test_dir;
     std::string path = android::base::StringPrintf("%s/three////directories/deep//", test_dir.path);
-    EXPECT_EQ(0, mkdir_recursive(path, 0755, nullptr));
+    EXPECT_TRUE(mkdir_recursive(path, 0755));
     std::string path1 = android::base::StringPrintf("%s/three", test_dir.path);
     EXPECT_TRUE(is_dir(path1.c_str()));
     std::string path2 = android::base::StringPrintf("%s/three/directories", test_dir.path);
