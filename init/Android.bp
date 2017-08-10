@@ -69,6 +69,7 @@ cc_library_static {
         "import_parser.cpp",
         "log.cpp",
         "parser.cpp",
+        "property_service.cpp",
         "service.cpp",
         "tokenizer.cpp",
         "uevent_listener.cpp",
@@ -81,7 +82,12 @@ cc_library_static {
         "libselinux",
         "liblog",
         "libprocessgroup",
+        "libfs_mgr",
     ],
+    include_dirs: [
+        "system/core/mkbootimg",
+    ],
+
 }
 
 /*
@@ -105,14 +111,10 @@ cc_binary {
         "init.cpp",
         "init_first_stage.cpp",
         "keychords.cpp",
-        "property_service.cpp",
         "reboot.cpp",
         "signal_handler.cpp",
         "ueventd.cpp",
         "watchdogd.cpp",
-    ],
-    include_dirs: [
-        "system/core/mkbootimg"
     ],
     static_libs: [
         "libinit",
