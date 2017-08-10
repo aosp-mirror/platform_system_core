@@ -68,6 +68,8 @@ static int persistent_properties_loaded = 0;
 
 static int property_set_fd = -1;
 
+static struct selabel_handle* sehandle_prop;
+
 void property_init() {
     if (__system_property_area_init()) {
         LOG(ERROR) << "Failed to initialize property area";
@@ -733,11 +735,30 @@ void load_system_props() {
     load_recovery_id_prop();
 }
 
+static int SelinuxAuditCallback(void* data, security_class_t /*cls*/, char* buf, size_t len) {
+    property_audit_data* d = reinterpret_cast<property_audit_data*>(data);
+
+    if (!d || !d->name || !d->cr) {
+        LOG(ERROR) << "AuditCallback invoked with null data arguments!";
+        return 0;
+    }
+
+    snprintf(buf, len, "property=%s pid=%d uid=%d gid=%d", d->name, d->cr->pid, d->cr->uid,
+             d->cr->gid);
+    return 0;
+}
+
 void start_property_service() {
+    sehandle_prop = selinux_android_prop_context_handle();
+
+    selinux_callback cb;
+    cb.func_audit = SelinuxAuditCallback;
+    selinux_set_callback(SELINUX_CB_AUDIT, cb);
+
     property_set("ro.property_service.version", "2");
 
     property_set_fd = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
-                                   false, 0666, 0, 0, nullptr, sehandle);
+                                   false, 0666, 0, 0, nullptr);
     if (property_set_fd == -1) {
         PLOG(ERROR) << "start_property_service socket creation failed";
         exit(1);
