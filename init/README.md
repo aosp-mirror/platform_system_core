@@ -447,6 +447,9 @@ Commands
 `rmdir <path>`
 > Calls rmdir(2) on the given path.
 
+`readahead <file|dir>`
+> Calls readahead(2) on the file or files within given directory.
+
 `setprop <name> <value>`
 > Set system property _name_ to _value_. Properties are expanded
   within _value_.
