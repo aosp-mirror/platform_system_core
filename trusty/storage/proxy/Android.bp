@@ -16,7 +16,6 @@
 
 cc_binary {
     name: "storageproxyd",
-    vendor: true,
 
     srcs: [
         "ipc.c",
