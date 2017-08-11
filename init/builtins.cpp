@@ -19,6 +19,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <fts.h>
 #include <linux/loop.h>
 #include <linux/module.h>
 #include <mntent.h>
@@ -644,7 +645,7 @@ static int do_rmdir(const std::vector<std::string>& args) {
 
 static int do_sysclktz(const std::vector<std::string>& args) {
     struct timezone tz = {};
-    if (android::base::ParseInt(args[1], &tz.tz_minuteswest) && settimeofday(NULL, &tz) != -1) {
+    if (android::base::ParseInt(args[1], &tz.tz_minuteswest) && settimeofday(nullptr, &tz) != -1) {
         return 0;
     }
     return -1;
@@ -672,6 +673,66 @@ static int do_write(const std::vector<std::string>& args) {
     std::string err;
     if (!WriteFile(args[1], args[2], &err)) {
         LOG(ERROR) << err;
+        return -1;
+    }
+    return 0;
+}
+
+static int do_readahead(const std::vector<std::string>& args) {
+    struct stat sb;
+
+    if (stat(args[1].c_str(), &sb)) {
+        PLOG(ERROR) << "Error opening " << args[1];
+        return -1;
+    }
+
+    // We will do readahead in a forked process in order not to block init
+    // since it may block while it reads the
+    // filesystem metadata needed to locate the requested blocks.  This
+    // occurs frequently with ext[234] on large files using indirect blocks
+    // instead of extents, giving the appearance that the call blocks until
+    // the requested data has been read.
+    pid_t pid = fork();
+    if (pid == 0) {
+        android::base::Timer t;
+        if (S_ISREG(sb.st_mode)) {
+            android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(args[1].c_str(), O_RDONLY)));
+            if (fd == -1) {
+                PLOG(ERROR) << "Error opening file: " << args[1];
+                _exit(EXIT_FAILURE);
+            }
+            if (readahead(fd, 0, std::numeric_limits<size_t>::max())) {
+                PLOG(ERROR) << "Error readahead file: " << args[1];
+                _exit(EXIT_FAILURE);
+            }
+        } else if (S_ISDIR(sb.st_mode)) {
+            char* paths[] = {const_cast<char*>(args[1].data()), nullptr};
+            std::unique_ptr<FTS, decltype(&fts_close)> fts(
+                fts_open(paths, FTS_PHYSICAL | FTS_NOCHDIR | FTS_XDEV, nullptr), fts_close);
+            if (!fts) {
+                PLOG(ERROR) << "Error opening directory: " << args[1];
+                _exit(EXIT_FAILURE);
+            }
+            // Traverse the entire hierarchy and do readahead
+            for (FTSENT* ftsent = fts_read(fts.get()); ftsent != nullptr;
+                 ftsent = fts_read(fts.get())) {
+                if (ftsent->fts_info & FTS_F) {
+                    android::base::unique_fd fd(
+                        TEMP_FAILURE_RETRY(open(ftsent->fts_accpath, O_RDONLY)));
+                    if (fd == -1) {
+                        PLOG(ERROR) << "Error opening file: " << args[1];
+                        continue;
+                    }
+                    if (readahead(fd, 0, std::numeric_limits<size_t>::max())) {
+                        PLOG(ERROR) << "Unable to readahead on file: " << ftsent->fts_accpath;
+                    }
+                }
+            }
+        }
+        LOG(INFO) << "Readahead " << args[1] << " took " << t;
+        _exit(0);
+    } else if (pid < 0) {
+        PLOG(ERROR) << "Fork failed";
         return -1;
     }
     return 0;
@@ -915,6 +976,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"mount_all",               {1,     kMax, do_mount_all}},
         {"mount",                   {3,     kMax, do_mount}},
         {"umount",                  {1,     1,    do_umount}},
+        {"readahead",               {1,     1,    do_readahead}},
         {"restart",                 {1,     1,    do_restart}},
         {"restorecon",              {1,     kMax, do_restorecon}},
         {"restorecon_recursive",    {1,     kMax, do_restorecon_recursive}},
