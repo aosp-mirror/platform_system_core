@@ -52,6 +52,8 @@ class DwarfMemoryTest : public ::testing::Test {
   void ReadEncodedValue_non_zero_adjust();
   template <typename AddressType>
   void ReadEncodedValue_overflow();
+  template <typename AddressType>
+  void ReadEncodedValue_high_bit_set();
 
   MemoryFake memory_;
   std::unique_ptr<DwarfMemory> dwarf_mem_;
@@ -433,6 +435,26 @@ TEST_F(DwarfMemoryTest, ReadEncodedValue_overflow_uint32_t) {
 
 TEST_F(DwarfMemoryTest, ReadEncodedValue_overflow_uint64_t) {
   ReadEncodedValue_overflow<uint64_t>();
+}
+
+template <typename AddressType>
+void DwarfMemoryTest::ReadEncodedValue_high_bit_set() {
+  uint64_t value;
+  memory_.SetData32(0, 0x15234);
+  ASSERT_FALSE(dwarf_mem_->ReadEncodedValue<AddressType>(0xc3, &value));
+
+  dwarf_mem_->set_func_offset(0x60000);
+  dwarf_mem_->set_cur_offset(0);
+  ASSERT_TRUE(dwarf_mem_->ReadEncodedValue<AddressType>(0xc3, &value));
+  ASSERT_EQ(0x75234U, value);
+}
+
+TEST_F(DwarfMemoryTest, ReadEncodedValue_high_bit_set_uint32_t) {
+  ReadEncodedValue_high_bit_set<uint32_t>();
+}
+
+TEST_F(DwarfMemoryTest, ReadEncodedValue_high_bit_set_uint64_t) {
+  ReadEncodedValue_high_bit_set<uint64_t>();
 }
 
 TEST_F(DwarfMemoryTest, AdjustEncodedValue_absptr) {
