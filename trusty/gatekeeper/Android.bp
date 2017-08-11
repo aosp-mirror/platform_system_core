@@ -22,7 +22,6 @@
 
 cc_library_shared {
     name: "gatekeeper.trusty",
-    vendor: true,
 
     relative_install_path: "hw",
 
