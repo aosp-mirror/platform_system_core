@@ -1013,7 +1013,7 @@ int main(int argc, char** argv) {
         mknod("/dev/kmsg", S_IFCHR | 0600, makedev(1, 11));
 
         if constexpr (WORLD_WRITABLE_KMSG) {
-          mknod("/dev/kmsg_debug", S_IFCHR | 0622, makedev(1, 11));
+            mknod("/dev/kmsg_debug", S_IFCHR | 0622, makedev(1, 11));
         }
 
         mknod("/dev/random", S_IFCHR | 0666, makedev(1, 8));
