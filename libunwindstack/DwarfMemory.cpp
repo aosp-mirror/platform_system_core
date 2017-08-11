@@ -235,7 +235,7 @@ bool DwarfMemory::ReadEncodedValue(uint8_t encoding, uint64_t* value) {
       return false;
   }
 
-  return AdjustEncodedValue(encoding & 0xf0, value);
+  return AdjustEncodedValue(encoding & 0x70, value);
 }
 
 // Instantiate all of the needed template functions.
