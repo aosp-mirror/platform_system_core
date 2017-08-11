@@ -18,7 +18,6 @@ subdirs = [
 
 cc_library {
     name: "libtrusty",
-    vendor: true,
 
     srcs: ["trusty.c"],
     export_include_dirs: ["include"],
