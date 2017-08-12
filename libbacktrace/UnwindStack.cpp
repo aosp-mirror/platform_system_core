@@ -29,6 +29,7 @@
 #endif
 
 #include <backtrace/Backtrace.h>
+#include <demangle.h>
 #include <unwindstack/Elf.h>
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Maps.h>
@@ -110,7 +111,9 @@ static bool Unwind(pid_t pid, unwindstack::Memory* memory, unwindstack::Regs* re
       frame->map.name = map_info->name;
 
       uint64_t func_offset = 0;
-      if (!elf->GetFunctionName(adjusted_rel_pc, &frame->func_name, &func_offset)) {
+      if (elf->GetFunctionName(adjusted_rel_pc, &frame->func_name, &func_offset)) {
+        frame->func_name = demangle(frame->func_name.c_str());
+      } else {
         frame->func_name = "";
       }
       frame->func_offset = func_offset;
