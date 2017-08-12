@@ -24,7 +24,8 @@
 // Commands
 enum keymaster_command : uint32_t {
     KEYMASTER_RESP_BIT              = 1,
-    KEYMASTER_REQ_SHIFT             = 1,
+    KEYMASTER_STOP_BIT              = 2,
+    KEYMASTER_REQ_SHIFT             = 2,
 
     KM_GENERATE_KEY                 = (0 << KEYMASTER_REQ_SHIFT),
     KM_BEGIN_OPERATION              = (1 << KEYMASTER_REQ_SHIFT),
