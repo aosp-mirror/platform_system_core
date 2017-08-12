@@ -36,7 +36,8 @@
 #include "trusty_keymaster_device.h"
 #include "trusty_keymaster_ipc.h"
 
-const uint32_t RECV_BUF_SIZE = PAGE_SIZE;
+// Maximum size of message from Trusty is 8K (for RSA attestation key and chain)
+const uint32_t RECV_BUF_SIZE = 2*PAGE_SIZE;
 const uint32_t SEND_BUF_SIZE = (PAGE_SIZE - sizeof(struct keymaster_message) - 16 /* tipc header */);
 
 const size_t kMaximumAttestationChallengeLength = 128;
@@ -770,6 +771,9 @@ keymaster_error_t TrustyKeymasterDevice::Send(uint32_t command, const Serializab
     ALOGV("Sending %d byte request\n", (int)req.SerializedSize());
     int rc = trusty_keymaster_call(command, send_buf, req_size, recv_buf, &rsp_size);
     if (rc < 0) {
+        // Reset the connection on tipc error
+        trusty_keymaster_disconnect();
+        trusty_keymaster_connect();
         ALOGE("tipc error: %d\n", rc);
         // TODO(swillden): Distinguish permanent from transient errors and set error_ appropriately.
         return translate_error(rc);
@@ -777,8 +781,7 @@ keymaster_error_t TrustyKeymasterDevice::Send(uint32_t command, const Serializab
         ALOGV("Received %d byte response\n", rsp_size);
     }
 
-    const keymaster_message* msg = (keymaster_message*)recv_buf;
-    const uint8_t* p = msg->payload;
+    const uint8_t* p = recv_buf;
     if (!rsp->Deserialize(&p, p + rsp_size)) {
         ALOGE("Error deserializing response of size %d\n", (int)rsp_size);
         return KM_ERROR_UNKNOWN_ERROR;
