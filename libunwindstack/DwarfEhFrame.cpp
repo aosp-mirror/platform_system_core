@@ -100,7 +100,7 @@ const typename DwarfEhFrame<AddressType>::FdeInfo* DwarfEhFrame<AddressType>::Ge
     fde_info_.erase(index);
     return nullptr;
   }
-  info->pc = value;
+  info->pc = value + 4;
   return info;
 }
 
@@ -175,7 +175,7 @@ bool DwarfEhFrame<AddressType>::GetFdeOffsetSequential(uint64_t pc, uint64_t* fd
       last_error_ = DWARF_ERROR_MEMORY_INVALID;
       return false;
     }
-    info->pc = value;
+    info->pc = value + 4;
 
     if (pc < info->pc) {
       if (prev_info == nullptr) {

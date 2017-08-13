@@ -495,8 +495,55 @@ __attribute__((weak)) void dump_registers(log_t* log, const ucontext_t*) {
   _LOG(log, logtype::REGISTERS, "    register dumping unimplemented on this architecture");
 }
 
-static void dump_thread(log_t* log, pid_t pid, pid_t tid, const std::string& process_name,
-                        const std::string& thread_name, BacktraceMap* map,
+static bool verify_backtraces_equal(Backtrace* back1, Backtrace* back2) {
+  if (back1->NumFrames() != back2->NumFrames()) {
+    return false;
+  }
+  std::string back1_str;
+  std::string back2_str;
+  for (size_t i = 0; i < back1->NumFrames(); i++) {
+    back1_str += back1->FormatFrameData(i);
+    back2_str += back2->FormatFrameData(i);
+  }
+  return back1_str == back2_str;
+}
+
+static void log_mismatch_data(log_t* log, Backtrace* backtrace) {
+  _LOG(log, logtype::THREAD, "MISMATCH: This unwind is different.\n");
+  if (backtrace->NumFrames() == 0) {
+    _LOG(log, logtype::THREAD, "MISMATCH: No frames in new backtrace.\n");
+    return;
+  }
+  _LOG(log, logtype::THREAD, "MISMATCH: Backtrace from new unwinder.\n");
+  for (size_t i = 0; i < backtrace->NumFrames(); i++) {
+    _LOG(log, logtype::THREAD, "MISMATCH: %s\n", backtrace->FormatFrameData(i).c_str());
+  }
+
+  // Get the stack trace up to 8192 bytes.
+  std::vector<uint64_t> buffer(8192 / sizeof(uint64_t));
+  size_t bytes =
+      backtrace->Read(backtrace->GetFrame(0)->sp, reinterpret_cast<uint8_t*>(buffer.data()),
+                      buffer.size() * sizeof(uint64_t));
+  std::string log_data;
+  for (size_t i = 0; i < bytes / sizeof(uint64_t); i++) {
+    if ((i % 4) == 0) {
+      if (!log_data.empty()) {
+        _LOG(log, logtype::THREAD, "MISMATCH: stack_data%s\n", log_data.c_str());
+        log_data = "";
+      }
+    }
+    log_data += android::base::StringPrintf(" 0x%016" PRIx64, buffer[i]);
+  }
+
+  if (!log_data.empty()) {
+    _LOG(log, logtype::THREAD, "MISMATCH: data%s\n", log_data.c_str());
+  }
+
+  // If there is any leftover (bytes % sizeof(uint64_t) != 0, ignore it for now.
+}
+
+static bool dump_thread(log_t* log, pid_t pid, pid_t tid, const std::string& process_name,
+                        const std::string& thread_name, BacktraceMap* map, BacktraceMap* map_new,
                         uintptr_t abort_msg_address, bool primary_thread) {
   log->current_tid = tid;
   if (!primary_thread) {
@@ -510,7 +557,18 @@ static void dump_thread(log_t* log, pid_t pid, pid_t tid, const std::string& pro
     dump_abort_message(backtrace.get(), log, abort_msg_address);
   }
   dump_registers(log, tid);
+  bool matches = true;
   if (backtrace->Unwind(0)) {
+    // Use the new method and verify it is the same as old.
+    std::unique_ptr<Backtrace> backtrace_new(Backtrace::CreateNew(pid, tid, map_new));
+    if (!backtrace_new->Unwind(0)) {
+      _LOG(log, logtype::THREAD, "Failed to unwind with new unwinder: %s\n",
+           backtrace_new->GetErrorString(backtrace_new->GetError()).c_str());
+      matches = false;
+    } else if (!verify_backtraces_equal(backtrace.get(), backtrace_new.get())) {
+      log_mismatch_data(log, backtrace_new.get());
+      matches = false;
+    }
     dump_backtrace_and_stack(backtrace.get(), log);
   } else {
     ALOGE("Unwind failed: pid = %d, tid = %d", pid, tid);
@@ -524,6 +582,8 @@ static void dump_thread(log_t* log, pid_t pid, pid_t tid, const std::string& pro
   }
 
   log->current_tid = log->crashed_tid;
+
+  return matches;
 }
 
 // Reads the contents of the specified log device, filters out the entries
@@ -657,9 +717,10 @@ static void dump_logs(log_t* log, pid_t pid, unsigned int tail) {
 }
 
 // Dumps all information about the specified pid to the tombstone.
-static void dump_crash(log_t* log, BacktraceMap* map, const OpenFilesList* open_files, pid_t pid,
-                       pid_t tid, const std::string& process_name,
-                       const std::map<pid_t, std::string>& threads, uintptr_t abort_msg_address) {
+static void dump_crash(log_t* log, BacktraceMap* map, BacktraceMap* map_new,
+                       const OpenFilesList* open_files, pid_t pid, pid_t tid,
+                       const std::string& process_name, const std::map<pid_t, std::string>& threads,
+                       uintptr_t abort_msg_address) {
   // don't copy log messages to tombstone unless this is a dev device
   char value[PROPERTY_VALUE_MAX];
   property_get("ro.debuggable", value, "0");
@@ -668,7 +729,8 @@ static void dump_crash(log_t* log, BacktraceMap* map, const OpenFilesList* open_
   _LOG(log, logtype::HEADER,
        "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
   dump_header_info(log);
-  dump_thread(log, pid, tid, process_name, threads.find(tid)->second, map, abort_msg_address, true);
+  bool new_unwind_matches = dump_thread(log, pid, tid, process_name, threads.find(tid)->second, map,
+                                        map_new, abort_msg_address, true);
   if (want_logs) {
     dump_logs(log, pid, 5);
   }
@@ -678,7 +740,9 @@ static void dump_crash(log_t* log, BacktraceMap* map, const OpenFilesList* open_
     const std::string& thread_name = it.second;
 
     if (thread_tid != tid) {
-      dump_thread(log, pid, thread_tid, process_name, thread_name, map, 0, false);
+      bool match =
+          dump_thread(log, pid, thread_tid, process_name, thread_name, map, map_new, 0, false);
+      new_unwind_matches = new_unwind_matches && match;
     }
   }
 
@@ -689,6 +753,14 @@ static void dump_crash(log_t* log, BacktraceMap* map, const OpenFilesList* open_
 
   if (want_logs) {
     dump_logs(log, pid, 0);
+  }
+  if (!new_unwind_matches) {
+    _LOG(log, logtype::THREAD, "MISMATCH: New and old unwinder do not agree.\n");
+    _LOG(log, logtype::THREAD, "MISMATCH: If you see this please file a bug in:\n");
+    _LOG(log, logtype::THREAD,
+         "MISMATCH: Android > Android OS & Apps > Runtime > native > tools "
+         "(debuggerd/gdb/init/simpleperf/strace/valgrind)\n");
+    _LOG(log, logtype::THREAD, "MISMATCH: and attach this tombstone.\n");
   }
 }
 
@@ -745,16 +817,16 @@ int open_tombstone(std::string* out_path) {
   return fd;
 }
 
-void engrave_tombstone(int tombstone_fd, BacktraceMap* map, const OpenFilesList* open_files,
-                       pid_t pid, pid_t tid, const std::string& process_name,
-                       const std::map<pid_t, std::string>& threads, uintptr_t abort_msg_address,
-                       std::string* amfd_data) {
+void engrave_tombstone(int tombstone_fd, BacktraceMap* map, BacktraceMap* map_new,
+                       const OpenFilesList* open_files, pid_t pid, pid_t tid,
+                       const std::string& process_name, const std::map<pid_t, std::string>& threads,
+                       uintptr_t abort_msg_address, std::string* amfd_data) {
   log_t log;
   log.current_tid = tid;
   log.crashed_tid = tid;
   log.tfd = tombstone_fd;
   log.amfd_data = amfd_data;
-  dump_crash(&log, map, open_files, pid, tid, process_name, threads, abort_msg_address);
+  dump_crash(&log, map, map_new, open_files, pid, tid, process_name, threads, abort_msg_address);
 }
 
 void engrave_tombstone_ucontext(int tombstone_fd, uintptr_t abort_msg_address, siginfo_t* siginfo,

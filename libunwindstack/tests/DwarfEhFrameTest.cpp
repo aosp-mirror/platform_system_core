@@ -124,7 +124,7 @@ TYPED_TEST_P(DwarfEhFrameTest, GetFdeInfoFromIndex_read_pcrel) {
 
   auto info = this->eh_frame_->GetFdeInfoFromIndex(2);
   ASSERT_TRUE(info != nullptr);
-  EXPECT_EQ(0x1380U, info->pc);
+  EXPECT_EQ(0x1384U, info->pc);
   EXPECT_EQ(0x1540U, info->offset);
 }
 
@@ -139,7 +139,7 @@ TYPED_TEST_P(DwarfEhFrameTest, GetFdeInfoFromIndex_read_datarel) {
 
   auto info = this->eh_frame_->GetFdeInfoFromIndex(2);
   ASSERT_TRUE(info != nullptr);
-  EXPECT_EQ(0x3340U, info->pc);
+  EXPECT_EQ(0x3344U, info->pc);
   EXPECT_EQ(0x3500U, info->offset);
 }
 
@@ -153,7 +153,7 @@ TYPED_TEST_P(DwarfEhFrameTest, GetFdeInfoFromIndex_cached) {
 
   auto info = this->eh_frame_->GetFdeInfoFromIndex(2);
   ASSERT_TRUE(info != nullptr);
-  EXPECT_EQ(0x340U, info->pc);
+  EXPECT_EQ(0x344U, info->pc);
   EXPECT_EQ(0x500U, info->offset);
 
   // Clear the memory so that this will fail if it doesn't read cached data.
@@ -161,7 +161,7 @@ TYPED_TEST_P(DwarfEhFrameTest, GetFdeInfoFromIndex_cached) {
 
   info = this->eh_frame_->GetFdeInfoFromIndex(2);
   ASSERT_TRUE(info != nullptr);
-  EXPECT_EQ(0x340U, info->pc);
+  EXPECT_EQ(0x344U, info->pc);
   EXPECT_EQ(0x500U, info->offset);
 }
 
@@ -220,18 +220,18 @@ TYPED_TEST_P(DwarfEhFrameTest, GetFdeOffsetSequential) {
 
   // Verify that if entries is zero, that it fails.
   uint64_t fde_offset;
-  ASSERT_FALSE(this->eh_frame_->GetFdeOffsetSequential(0x340, &fde_offset));
+  ASSERT_FALSE(this->eh_frame_->GetFdeOffsetSequential(0x344, &fde_offset));
   this->eh_frame_->TestSetCurEntriesOffset(0x1040);
 
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x340, &fde_offset));
+  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x344, &fde_offset));
   EXPECT_EQ(0x500U, fde_offset);
 
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x440, &fde_offset));
+  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x444, &fde_offset));
   EXPECT_EQ(0x600U, fde_offset);
 
   // Expect that the data is cached so no more memory reads will occur.
   this->memory_.Clear();
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x440, &fde_offset));
+  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x444, &fde_offset));
   EXPECT_EQ(0x600U, fde_offset);
 }
 

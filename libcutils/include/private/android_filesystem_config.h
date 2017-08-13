@@ -121,6 +121,7 @@
 #define AID_OTA_UPDATE 1061      /* resource tracking UID for OTA updates */
 #define AID_AUTOMOTIVE_EVS 1062  /* Automotive rear and surround view system */
 #define AID_LOWPAN 1063          /* LoWPAN subsystem */
+#define AID_HSM 1064             /* hardware security module subsystem */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
