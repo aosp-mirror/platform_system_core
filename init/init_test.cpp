@@ -37,7 +37,7 @@ class TestFunctionMap : public KeywordMap<BuiltinFunction> {
     void Add(const std::string& name, const BuiltinFunctionNoArgs function) {
         Add(name, 0, 0, [function](const std::vector<std::string>&) {
             function();
-            return 0;
+            return Success();
         });
     }
 
@@ -156,10 +156,9 @@ TEST(init, EventTriggerOrderMultipleFiles) {
                                "execute 3";
     // clang-format on
     // WriteFile() ensures the right mode is set
-    std::string err;
-    ASSERT_TRUE(WriteFile(std::string(dir.path) + "/a.rc", dir_a_script, &err));
+    ASSERT_TRUE(WriteFile(std::string(dir.path) + "/a.rc", dir_a_script));
 
-    ASSERT_TRUE(WriteFile(std::string(dir.path) + "/b.rc", "on boot\nexecute 5", &err));
+    ASSERT_TRUE(WriteFile(std::string(dir.path) + "/b.rc", "on boot\nexecute 5"));
 
     // clang-format off
     std::string start_script = "import " + std::string(first_import.path) + "\n"
@@ -175,7 +174,7 @@ TEST(init, EventTriggerOrderMultipleFiles) {
     auto execute_command = [&num_executed](const std::vector<std::string>& args) {
         EXPECT_EQ(2U, args.size());
         EXPECT_EQ(++num_executed, std::stoi(args[1]));
-        return 0;
+        return Success();
     };
 
     TestFunctionMap test_function_map;

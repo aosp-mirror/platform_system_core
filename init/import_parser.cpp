@@ -23,24 +23,22 @@
 namespace android {
 namespace init {
 
-bool ImportParser::ParseSection(std::vector<std::string>&& args, const std::string& filename,
-                                int line, std::string* err) {
+Result<Success> ImportParser::ParseSection(std::vector<std::string>&& args,
+                                           const std::string& filename, int line) {
     if (args.size() != 2) {
-        *err = "single argument needed for import\n";
-        return false;
+        return Error() << "single argument needed for import\n";
     }
 
     std::string conf_file;
     bool ret = expand_props(args[1], &conf_file);
     if (!ret) {
-        *err = "error while expanding import";
-        return false;
+        return Error() << "error while expanding import";
     }
 
     LOG(INFO) << "Added '" << conf_file << "' to import list";
     if (filename_.empty()) filename_ = filename;
     imports_.emplace_back(std::move(conf_file), line);
-    return true;
+    return Success();
 }
 
 void ImportParser::EndFile() {

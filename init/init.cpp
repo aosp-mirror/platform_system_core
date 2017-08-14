@@ -238,7 +238,7 @@ void handle_control_message(const std::string& msg, const std::string& name) {
     }
 }
 
-static int wait_for_coldboot_done_action(const std::vector<std::string>& args) {
+static Result<Success> wait_for_coldboot_done_action(const std::vector<std::string>& args) {
     Timer t;
 
     LOG(VERBOSE) << "Waiting for " COLDBOOT_DONE "...";
@@ -257,22 +257,20 @@ static int wait_for_coldboot_done_action(const std::vector<std::string>& args) {
     }
 
     property_set("ro.boottime.init.cold_boot_wait", std::to_string(t.duration().count()));
-    return 0;
+    return Success();
 }
 
-static int keychord_init_action(const std::vector<std::string>& args)
-{
+static Result<Success> keychord_init_action(const std::vector<std::string>& args) {
     keychord_init();
-    return 0;
+    return Success();
 }
 
-static int console_init_action(const std::vector<std::string>& args)
-{
+static Result<Success> console_init_action(const std::vector<std::string>& args) {
     std::string console = GetProperty("ro.boot.console", "");
     if (!console.empty()) {
         default_console = "/dev/" + console;
     }
-    return 0;
+    return Success();
 }
 
 static void import_kernel_nv(const std::string& key, const std::string& value, bool for_emulator) {
@@ -354,18 +352,16 @@ static void process_kernel_cmdline() {
     if (qemu[0]) import_kernel_cmdline(true, import_kernel_nv);
 }
 
-static int property_enable_triggers_action(const std::vector<std::string>& args)
-{
+static Result<Success> property_enable_triggers_action(const std::vector<std::string>& args) {
     /* Enable property triggers. */
     property_triggers_enabled = 1;
-    return 0;
+    return Success();
 }
 
-static int queue_property_triggers_action(const std::vector<std::string>& args)
-{
+static Result<Success> queue_property_triggers_action(const std::vector<std::string>& args) {
     ActionManager::GetInstance().QueueBuiltinAction(property_enable_triggers_action, "enable_property_trigger");
     ActionManager::GetInstance().QueueAllPropertyActions();
-    return 0;
+    return Success();
 }
 
 static void global_seccomp() {
