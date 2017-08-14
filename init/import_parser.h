@@ -28,8 +28,8 @@ namespace init {
 class ImportParser : public SectionParser {
   public:
     ImportParser(Parser* parser) : parser_(parser) {}
-    bool ParseSection(std::vector<std::string>&& args, const std::string& filename, int line,
-                      std::string* err) override;
+    Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
+                                 int line) override;
     void EndFile() override;
 
   private:

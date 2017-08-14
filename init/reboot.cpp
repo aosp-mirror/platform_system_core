@@ -520,7 +520,7 @@ bool HandlePowerctlMessage(const std::string& command) {
     auto shutdown_handler = [cmd, command, reboot_target,
                              run_fsck](const std::vector<std::string>&) {
         DoReboot(cmd, command, reboot_target, run_fsck);
-        return 0;
+        return Success();
     };
     ActionManager::GetInstance().QueueBuiltinAction(shutdown_handler, "shutdown_done");
 
