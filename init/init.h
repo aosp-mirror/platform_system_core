@@ -18,8 +18,7 @@
 #define _INIT_INIT_H
 
 #include <string>
-
-#include <selinux/label.h>
+#include <vector>
 
 #include "action.h"
 #include "parser.h"
@@ -33,8 +32,6 @@ namespace init {
 // TODO: Have an Init class and remove all globals.
 extern const char *ENV[32];
 extern std::string default_console;
-extern struct selabel_handle *sehandle;
-extern struct selabel_handle *sehandle_prop;
 
 extern std::vector<std::string> late_import_paths;
 

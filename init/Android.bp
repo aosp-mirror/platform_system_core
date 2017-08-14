@@ -70,6 +70,8 @@ cc_library_static {
         "log.cpp",
         "parser.cpp",
         "property_service.cpp",
+        "security.cpp",
+        "selinux.cpp",
         "service.cpp",
         "tokenizer.cpp",
         "uevent_listener.cpp",

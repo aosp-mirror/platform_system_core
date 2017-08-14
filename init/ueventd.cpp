@@ -36,6 +36,7 @@
 #include "devices.h"
 #include "firmware_handler.h"
 #include "log.h"
+#include "selinux.h"
 #include "uevent_listener.h"
 #include "ueventd_parser.h"
 #include "util.h"
@@ -257,9 +258,8 @@ int ueventd_main(int argc, char** argv) {
 
     LOG(INFO) << "ueventd started!";
 
-    selinux_callback cb;
-    cb.func_log = selinux_klog_callback;
-    selinux_set_callback(SELINUX_CB_LOG, cb);
+    SelinuxSetupKernelLogging();
+    SelabelInitialize();
 
     DeviceHandler device_handler = CreateDeviceHandler();
     UeventListener uevent_listener;
