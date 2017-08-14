@@ -22,8 +22,13 @@ cc_defaults {
 
 cc_library_shared {
     name: "libsync",
-    vendor_available: true,
     defaults: ["libsync_defaults"],
+}
+
+llndk_library {
+    name: "libsync",
+    symbol_file: "libsync.map.txt",
+    export_include_dirs: ["include"],
 }
 
 // libsync_recovery is only intended for the recovery binary.
