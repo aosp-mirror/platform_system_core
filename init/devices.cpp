@@ -30,6 +30,7 @@
 #include <selinux/android.h>
 #include <selinux/selinux.h>
 
+#include "selinux.h"
 #include "ueventd.h"
 #include "util.h"
 
@@ -224,18 +225,13 @@ void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, i
     auto[mode, uid, gid] = GetDevicePermissions(path, links);
     mode |= (block ? S_IFBLK : S_IFCHR);
 
-    char* secontext = nullptr;
-    if (sehandle_) {
-        std::vector<const char*> c_links;
-        for (const auto& link : links) {
-            c_links.emplace_back(link.c_str());
-        }
-        c_links.emplace_back(nullptr);
-        if (selabel_lookup_best_match(sehandle_, &secontext, path.c_str(), &c_links[0], mode)) {
-            PLOG(ERROR) << "Device '" << path << "' not created; cannot find SELinux label";
-            return;
-        }
-        setfscreatecon(secontext);
+    std::string secontext;
+    if (!SelabelLookupFileContextBestMatch(path, links, mode, &secontext)) {
+        PLOG(ERROR) << "Device '" << path << "' not created; cannot find SELinux label";
+        return;
+    }
+    if (!secontext.empty()) {
+        setfscreatecon(secontext.c_str());
     }
 
     dev_t dev = makedev(major, minor);
@@ -250,7 +246,7 @@ void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, i
     }
     /* If the node already exists update its SELinux label to handle cases when
      * it was created with the wrong context during coldboot procedure. */
-    if (mknod(path.c_str(), mode, dev) && (errno == EEXIST) && secontext) {
+    if (mknod(path.c_str(), mode, dev) && (errno == EEXIST) && !secontext.empty()) {
         char* fcon = nullptr;
         int rc = lgetfilecon(path.c_str(), &fcon);
         if (rc < 0) {
@@ -258,10 +254,10 @@ void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, i
             goto out;
         }
 
-        bool different = strcmp(fcon, secontext) != 0;
+        bool different = fcon != secontext;
         freecon(fcon);
 
-        if (different && lsetfilecon(path.c_str(), secontext)) {
+        if (different && lsetfilecon(path.c_str(), secontext.c_str())) {
             PLOG(ERROR) << "Cannot set '" << secontext << "' SELinux label on '" << path
                         << "' device";
         }
@@ -273,8 +269,7 @@ out:
         PLOG(FATAL) << "setegid(AID_ROOT) failed";
     }
 
-    if (secontext) {
-        freecon(secontext);
+    if (!secontext.empty()) {
         setfscreatecon(nullptr);
     }
 }
@@ -351,7 +346,7 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
     if (action == "add") {
         MakeDevice(devpath, block, major, minor, links);
         for (const auto& link : links) {
-            if (mkdir_recursive(Dirname(link), 0755, sehandle_)) {
+            if (!mkdir_recursive(Dirname(link), 0755)) {
                 PLOG(ERROR) << "Failed to create directory " << Dirname(link);
             }
 
@@ -415,7 +410,7 @@ void DeviceHandler::HandleDeviceEvent(const Uevent& uevent) {
         devpath = "/dev/" + Basename(uevent.path);
     }
 
-    mkdir_recursive(Dirname(devpath), 0755, sehandle_);
+    mkdir_recursive(Dirname(devpath), 0755);
 
     HandleDevice(uevent.action, devpath, block, uevent.major, uevent.minor, links);
 }
@@ -426,7 +421,6 @@ DeviceHandler::DeviceHandler(std::vector<Permissions> dev_permissions,
     : dev_permissions_(std::move(dev_permissions)),
       sysfs_permissions_(std::move(sysfs_permissions)),
       subsystems_(std::move(subsystems)),
-      sehandle_(selinux_android_file_context_handle()),
       skip_restorecon_(skip_restorecon),
       sysfs_mount_point_("/sys") {}
 
