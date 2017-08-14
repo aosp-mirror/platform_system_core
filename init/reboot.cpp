@@ -48,6 +48,7 @@
 #include <fs_mgr.h>
 #include <logwrap/logwrap.h>
 #include <private/android_filesystem_config.h>
+#include <selinux/selinux.h>
 
 #include "capabilities.h"
 #include "init.h"
