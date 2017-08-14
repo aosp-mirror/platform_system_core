@@ -92,13 +92,15 @@ private:
     // current io usage for next report, app name -> uid_io_usage
     std::unordered_map<std::string, struct uid_io_usage> curr_io_stats;
     // io usage records, end timestamp -> {start timestamp, vector of records}
-    std::map<uint64_t, struct uid_records> records;
+    std::map<uint64_t, struct uid_records> io_history;
     // charger ON/OFF
     charger_stat_t charger_stat;
     // protects curr_io_stats, last_uid_io_stats, records and charger_stat
     sem_t um_lock;
     // start time for IO records
     uint64_t start_ts;
+    // protobuf file for io_history
+    static const std::string io_history_proto_file;
 
     // reads from /proc/uid_io/stats
     std::unordered_map<uint32_t, struct uid_info> get_uid_io_stats_locked();
@@ -106,6 +108,10 @@ private:
     void add_records_locked(uint64_t curr_ts);
     // updates curr_io_stats and set last_uid_io_stats
     void update_curr_io_stats_locked();
+    // restores io_history from protobuf file
+    void load_io_history_from_proto();
+    // converts io_history to protobuf and writes to a file
+    void flush_io_history_to_proto();
 
 public:
     uid_monitor();

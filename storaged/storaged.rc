@@ -1,3 +1,7 @@
+on post-fs-data
+    mkdir /data/misc/storaged 0700 root root
+    restorecon /data/misc/storaged
+
 service storaged /system/bin/storaged
     class main
     priority 10

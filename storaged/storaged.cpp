@@ -243,7 +243,7 @@ void storaged_t::event(void) {
 
     if (mConfig.proc_uid_io_available && mTimer &&
             (mTimer % mConfig.periodic_chores_interval_uid_io) == 0) {
-         mUidm.report();
+        mUidm.report();
     }
 
     mTimer += mConfig.periodic_chores_interval_unit;
