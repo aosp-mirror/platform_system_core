@@ -30,61 +30,51 @@ namespace android {
 namespace init {
 
 TEST(util, ReadFile_ENOENT) {
-    std::string s("hello");
-    std::string err;
     errno = 0;
-    EXPECT_FALSE(ReadFile("/proc/does-not-exist", &s, &err));
-    EXPECT_EQ("Unable to open '/proc/does-not-exist': No such file or directory", err);
+    auto file_contents = ReadFile("/proc/does-not-exist");
     EXPECT_EQ(ENOENT, errno);
-    EXPECT_EQ("", s);  // s was cleared.
+    ASSERT_FALSE(file_contents);
+    EXPECT_EQ("open() failed: No such file or directory", file_contents.error());
 }
 
 TEST(util, ReadFileGroupWriteable) {
     std::string s("hello");
     TemporaryFile tf;
-    std::string err;
     ASSERT_TRUE(tf.fd != -1);
-    EXPECT_TRUE(WriteFile(tf.path, s, &err)) << strerror(errno);
-    EXPECT_EQ("", err);
+    EXPECT_TRUE(WriteFile(tf.path, s)) << strerror(errno);
     EXPECT_NE(-1, fchmodat(AT_FDCWD, tf.path, 0620, AT_SYMLINK_NOFOLLOW)) << strerror(errno);
-    EXPECT_FALSE(ReadFile(tf.path, &s, &err)) << strerror(errno);
-    EXPECT_EQ("Skipping insecure file '"s + tf.path + "'", err);
-    EXPECT_EQ("", s);  // s was cleared.
+    auto file_contents = ReadFile(tf.path);
+    ASSERT_FALSE(file_contents) << strerror(errno);
+    EXPECT_EQ("Skipping insecure file", file_contents.error());
 }
 
 TEST(util, ReadFileWorldWiteable) {
     std::string s("hello");
     TemporaryFile tf;
-    std::string err;
     ASSERT_TRUE(tf.fd != -1);
-    EXPECT_TRUE(WriteFile(tf.path, s, &err)) << strerror(errno);
-    EXPECT_EQ("", err);
+    EXPECT_TRUE(WriteFile(tf.path, s)) << strerror(errno);
     EXPECT_NE(-1, fchmodat(AT_FDCWD, tf.path, 0602, AT_SYMLINK_NOFOLLOW)) << strerror(errno);
-    EXPECT_FALSE(ReadFile(tf.path, &s, &err)) << strerror(errno);
-    EXPECT_EQ("Skipping insecure file '"s + tf.path + "'", err);
-    EXPECT_EQ("", s);  // s was cleared.
+    auto file_contents = ReadFile(tf.path);
+    ASSERT_FALSE(file_contents) << strerror(errno);
+    EXPECT_EQ("Skipping insecure file", file_contents.error());
 }
 
 TEST(util, ReadFileSymbolicLink) {
-    std::string s("hello");
     errno = 0;
     // lrwxrwxrwx 1 root root 13 1970-01-01 00:00 charger -> /sbin/healthd
-    std::string err;
-    EXPECT_FALSE(ReadFile("/charger", &s, &err));
-    EXPECT_EQ("Unable to open '/charger': Too many symbolic links encountered", err);
+    auto file_contents = ReadFile("/charger");
     EXPECT_EQ(ELOOP, errno);
-    EXPECT_EQ("", s);  // s was cleared.
+    ASSERT_FALSE(file_contents);
+    EXPECT_EQ("open() failed: Too many symbolic links encountered", file_contents.error());
 }
 
 TEST(util, ReadFileSuccess) {
-    std::string s("hello");
-    std::string err;
-    EXPECT_TRUE(ReadFile("/proc/version", &s, &err));
-    EXPECT_EQ("", err);
-    EXPECT_GT(s.length(), 6U);
-    EXPECT_EQ('\n', s[s.length() - 1]);
-    s[5] = 0;
-    EXPECT_STREQ("Linux", s.c_str());
+    auto file_contents = ReadFile("/proc/version");
+    ASSERT_TRUE(file_contents);
+    EXPECT_GT(file_contents->length(), 6U);
+    EXPECT_EQ('\n', file_contents->at(file_contents->length() - 1));
+    (*file_contents)[5] = 0;
+    EXPECT_STREQ("Linux", file_contents->c_str());
 }
 
 TEST(util, WriteFileBinary) {
@@ -95,29 +85,23 @@ TEST(util, WriteFileBinary) {
     ASSERT_EQ(10u, contents.size());
 
     TemporaryFile tf;
-    std::string err;
     ASSERT_TRUE(tf.fd != -1);
-    EXPECT_TRUE(WriteFile(tf.path, contents, &err)) << strerror(errno);
-    EXPECT_EQ("", err);
+    EXPECT_TRUE(WriteFile(tf.path, contents)) << strerror(errno);
 
-    std::string read_back_contents;
-    EXPECT_TRUE(ReadFile(tf.path, &read_back_contents, &err)) << strerror(errno);
-    EXPECT_EQ("", err);
-    EXPECT_EQ(contents, read_back_contents);
-    EXPECT_EQ(10u, read_back_contents.size());
+    auto read_back_contents = ReadFile(tf.path);
+    ASSERT_TRUE(read_back_contents) << strerror(errno);
+    EXPECT_EQ(contents, *read_back_contents);
+    EXPECT_EQ(10u, read_back_contents->size());
 }
 
 TEST(util, WriteFileNotExist) {
     std::string s("hello");
-    std::string s2("hello");
     TemporaryDir test_dir;
     std::string path = android::base::StringPrintf("%s/does-not-exist", test_dir.path);
-    std::string err;
-    EXPECT_TRUE(WriteFile(path, s, &err));
-    EXPECT_EQ("", err);
-    EXPECT_TRUE(ReadFile(path, &s2, &err));
-    EXPECT_EQ("", err);
-    EXPECT_EQ(s, s2);
+    EXPECT_TRUE(WriteFile(path, s));
+    auto file_contents = ReadFile(path);
+    ASSERT_TRUE(file_contents);
+    EXPECT_EQ(s, *file_contents);
     struct stat sb;
     int fd = open(path.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
     EXPECT_NE(-1, fd);
@@ -127,37 +111,30 @@ TEST(util, WriteFileNotExist) {
 }
 
 TEST(util, WriteFileExist) {
-    std::string s2("");
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
-    std::string err;
-    EXPECT_TRUE(WriteFile(tf.path, "1hello1", &err)) << strerror(errno);
-    EXPECT_EQ("", err);
-    EXPECT_TRUE(ReadFile(tf.path, &s2, &err));
-    EXPECT_EQ("", err);
-    EXPECT_STREQ("1hello1", s2.c_str());
-    EXPECT_TRUE(WriteFile(tf.path, "2ll2", &err));
-    EXPECT_EQ("", err);
-    EXPECT_TRUE(ReadFile(tf.path, &s2, &err));
-    EXPECT_EQ("", err);
-    EXPECT_STREQ("2ll2", s2.c_str());
+    EXPECT_TRUE(WriteFile(tf.path, "1hello1")) << strerror(errno);
+    auto file_contents = ReadFile(tf.path);
+    ASSERT_TRUE(file_contents);
+    EXPECT_EQ("1hello1", *file_contents);
+    EXPECT_TRUE(WriteFile(tf.path, "2ll2"));
+    file_contents = ReadFile(tf.path);
+    ASSERT_TRUE(file_contents);
+    EXPECT_EQ("2ll2", *file_contents);
 }
 
 TEST(util, DecodeUid) {
-    uid_t decoded_uid;
-    std::string err;
+    auto decoded_uid = DecodeUid("root");
+    EXPECT_TRUE(decoded_uid);
+    EXPECT_EQ(0U, *decoded_uid);
 
-    EXPECT_TRUE(DecodeUid("root", &decoded_uid, &err));
-    EXPECT_EQ("", err);
-    EXPECT_EQ(0U, decoded_uid);
+    decoded_uid = DecodeUid("toot");
+    EXPECT_FALSE(decoded_uid);
+    EXPECT_EQ("getpwnam failed: No such file or directory", decoded_uid.error());
 
-    EXPECT_FALSE(DecodeUid("toot", &decoded_uid, &err));
-    EXPECT_EQ("getpwnam failed: No such file or directory", err);
-    EXPECT_EQ(UINT_MAX, decoded_uid);
-
-    EXPECT_TRUE(DecodeUid("123", &decoded_uid, &err));
-    EXPECT_EQ("", err);
-    EXPECT_EQ(123U, decoded_uid);
+    decoded_uid = DecodeUid("123");
+    EXPECT_TRUE(decoded_uid);
+    EXPECT_EQ(123U, *decoded_uid);
 }
 
 TEST(util, is_dir) {
