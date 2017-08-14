@@ -42,6 +42,7 @@
 #include <selinux/android.h>
 
 #include "reboot.h"
+#include "selinux.h"
 
 #ifdef _INIT_INIT_H
 #error "Do not include init.h in files used by ueventd or watchdogd; it will expose init's globals"
@@ -89,7 +90,7 @@ bool DecodeUid(const std::string& name, uid_t* uid, std::string* err) {
  * variable ANDROID_SOCKET_ENV_PREFIX<name> ("ANDROID_SOCKET_foo").
  */
 int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t uid, gid_t gid,
-                 const char* socketcon, selabel_handle* sehandle) {
+                 const char* socketcon) {
     if (socketcon) {
         if (setsockcreatecon(socketcon) == -1) {
             PLOG(ERROR) << "setsockcreatecon(\"" << socketcon << "\") failed";
@@ -116,11 +117,9 @@ int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t u
         return -1;
     }
 
-    char *filecon = NULL;
-    if (sehandle) {
-        if (selabel_lookup(sehandle, &filecon, addr.sun_path, S_IFSOCK) == 0) {
-            setfscreatecon(filecon);
-        }
+    std::string secontext;
+    if (SelabelLookupFileContext(addr.sun_path, S_IFSOCK, &secontext) && !secontext.empty()) {
+        setfscreatecon(secontext.c_str());
     }
 
     if (passcred) {
@@ -134,8 +133,9 @@ int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t u
     int ret = bind(fd, (struct sockaddr *) &addr, sizeof (addr));
     int savederrno = errno;
 
-    setfscreatecon(NULL);
-    freecon(filecon);
+    if (!secontext.empty()) {
+        setfscreatecon(nullptr);
+    }
 
     if (ret) {
         errno = savederrno;
@@ -210,19 +210,19 @@ bool WriteFile(const std::string& path, const std::string& content, std::string*
     return true;
 }
 
-int mkdir_recursive(const std::string& path, mode_t mode, selabel_handle* sehandle) {
+bool mkdir_recursive(const std::string& path, mode_t mode) {
     std::string::size_type slash = 0;
     while ((slash = path.find('/', slash + 1)) != std::string::npos) {
         auto directory = path.substr(0, slash);
         struct stat info;
         if (stat(directory.c_str(), &info) != 0) {
-            auto ret = make_dir(directory.c_str(), mode, sehandle);
-            if (ret && errno != EEXIST) return ret;
+            auto ret = make_dir(directory, mode);
+            if (!ret && errno != EEXIST) return false;
         }
     }
-    auto ret = make_dir(path.c_str(), mode, sehandle);
-    if (ret && errno != EEXIST) return ret;
-    return 0;
+    auto ret = make_dir(path, mode);
+    if (!ret && errno != EEXIST) return false;
+    return true;
 }
 
 int wait_for_file(const char* filename, std::chrono::nanoseconds timeout) {
@@ -249,26 +249,21 @@ void import_kernel_cmdline(bool in_qemu,
     }
 }
 
-int make_dir(const char* path, mode_t mode, selabel_handle* sehandle) {
-    int rc;
-
-    char *secontext = NULL;
-
-    if (sehandle) {
-        selabel_lookup(sehandle, &secontext, path, mode);
-        setfscreatecon(secontext);
+bool make_dir(const std::string& path, mode_t mode) {
+    std::string secontext;
+    if (SelabelLookupFileContext(path, mode, &secontext) && !secontext.empty()) {
+        setfscreatecon(secontext.c_str());
     }
 
-    rc = mkdir(path, mode);
+    int rc = mkdir(path.c_str(), mode);
 
-    if (secontext) {
+    if (!secontext.empty()) {
         int save_errno = errno;
-        freecon(secontext);
-        setfscreatecon(NULL);
+        setfscreatecon(nullptr);
         errno = save_errno;
     }
 
-    return rc;
+    return rc == 0;
 }
 
 /*
