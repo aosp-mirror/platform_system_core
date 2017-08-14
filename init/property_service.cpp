@@ -588,14 +588,14 @@ static void load_properties(char *data, const char *filter)
 // "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
 static void load_properties_from_file(const char* filename, const char* filter) {
     Timer t;
-    std::string data;
-    std::string err;
-    if (!ReadFile(filename, &data, &err)) {
-        PLOG(WARNING) << "Couldn't load property file: " << err;
+    auto file_contents = ReadFile(filename);
+    if (!file_contents) {
+        PLOG(WARNING) << "Couldn't load property file '" << filename
+                      << "': " << file_contents.error();
         return;
     }
-    data.push_back('\n');
-    load_properties(&data[0], filter);
+    file_contents->push_back('\n');
+    load_properties(file_contents->data(), filter);
     LOG(VERBOSE) << "(Loading properties from " << filename << " took " << t << ".)";
 }
 

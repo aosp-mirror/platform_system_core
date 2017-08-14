@@ -67,9 +67,8 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
                     if (android::base::StartsWith(args[0], prefix.c_str())) {
                         if (section_parser) section_parser->EndSection();
 
-                        std::string ret_err;
-                        if (!callback(std::move(args), &ret_err)) {
-                            LOG(ERROR) << filename << ": " << state.line << ": " << ret_err;
+                        if (auto result = callback(std::move(args)); !result) {
+                            LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
                         }
                         section_parser = nullptr;
                         break;
@@ -78,16 +77,16 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
                 if (section_parsers_.count(args[0])) {
                     if (section_parser) section_parser->EndSection();
                     section_parser = section_parsers_[args[0]].get();
-                    std::string ret_err;
-                    if (!section_parser->ParseSection(std::move(args), filename, state.line,
-                                                      &ret_err)) {
-                        LOG(ERROR) << filename << ": " << state.line << ": " << ret_err;
+                    if (auto result =
+                            section_parser->ParseSection(std::move(args), filename, state.line);
+                        !result) {
+                        LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
                         section_parser = nullptr;
                     }
                 } else if (section_parser) {
-                    std::string ret_err;
-                    if (!section_parser->ParseLineSection(std::move(args), state.line, &ret_err)) {
-                        LOG(ERROR) << filename << ": " << state.line << ": " << ret_err;
+                    if (auto result = section_parser->ParseLineSection(std::move(args), state.line);
+                        !result) {
+                        LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
                     }
                 }
                 args.clear();
@@ -102,15 +101,14 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
 bool Parser::ParseConfigFile(const std::string& path) {
     LOG(INFO) << "Parsing file " << path << "...";
     android::base::Timer t;
-    std::string data;
-    std::string err;
-    if (!ReadFile(path, &data, &err)) {
-        LOG(ERROR) << err;
+    auto config_contents = ReadFile(path);
+    if (!config_contents) {
+        LOG(ERROR) << "Unable to read config file '" << path << "': " << config_contents.error();
         return false;
     }
 
-    data.push_back('\n');  // TODO: fix parse_config.
-    ParseData(path, data);
+    config_contents->push_back('\n');  // TODO: fix parse_config.
+    ParseData(path, *config_contents);
     for (const auto& [section_name, section_parser] : section_parsers_) {
         section_parser->EndFile();
     }

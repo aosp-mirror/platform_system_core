@@ -223,10 +223,10 @@ DeviceHandler CreateDeviceHandler() {
     using namespace std::placeholders;
     std::vector<SysfsPermissions> sysfs_permissions;
     std::vector<Permissions> dev_permissions;
-    parser.AddSingleLineParser(
-        "/sys/", std::bind(ParsePermissionsLine, _1, _2, &sysfs_permissions, nullptr));
+    parser.AddSingleLineParser("/sys/",
+                               std::bind(ParsePermissionsLine, _1, &sysfs_permissions, nullptr));
     parser.AddSingleLineParser("/dev/",
-                               std::bind(ParsePermissionsLine, _1, _2, nullptr, &dev_permissions));
+                               std::bind(ParsePermissionsLine, _1, nullptr, &dev_permissions));
 
     parser.ParseConfig("/ueventd.rc");
     parser.ParseConfig("/vendor/ueventd.rc");

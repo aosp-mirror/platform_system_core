@@ -23,11 +23,12 @@
 #include <vector>
 
 #include "keyword_map.h"
+#include "result.h"
 
 namespace android {
 namespace init {
 
-using BuiltinFunction = std::function<int(const std::vector<std::string>&)>;
+using BuiltinFunction = std::function<Result<Success>(const std::vector<std::string>&)>;
 class BuiltinFunctionMap : public KeywordMap<BuiltinFunction> {
   public:
     BuiltinFunctionMap() {}
