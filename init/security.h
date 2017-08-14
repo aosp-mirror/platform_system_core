@@ -20,12 +20,14 @@
 #include <string>
 #include <vector>
 
+#include "result.h"
+
 namespace android {
 namespace init {
 
-int MixHwrngIntoLinuxRngAction(const std::vector<std::string>& args);
-int SetMmapRndBitsAction(const std::vector<std::string>& args);
-int SetKptrRestrictAction(const std::vector<std::string>& args);
+Result<Success> MixHwrngIntoLinuxRngAction(const std::vector<std::string>& args);
+Result<Success> SetMmapRndBitsAction(const std::vector<std::string>& args);
+Result<Success> SetKptrRestrictAction(const std::vector<std::string>& args);
 
 }  // namespace init
 }  // namespace android
