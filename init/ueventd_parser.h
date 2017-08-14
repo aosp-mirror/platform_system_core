@@ -29,22 +29,22 @@ namespace init {
 class SubsystemParser : public SectionParser {
   public:
     SubsystemParser(std::vector<Subsystem>* subsystems) : subsystems_(subsystems) {}
-    bool ParseSection(std::vector<std::string>&& args, const std::string& filename, int line,
-                      std::string* err) override;
-    bool ParseLineSection(std::vector<std::string>&& args, int line, std::string* err) override;
+    Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
+                                 int line) override;
+    Result<Success> ParseLineSection(std::vector<std::string>&& args, int line) override;
     void EndSection() override;
 
   private:
-    bool ParseDevName(std::vector<std::string>&& args, std::string* err);
-    bool ParseDirName(std::vector<std::string>&& args, std::string* err);
+    Result<Success> ParseDevName(std::vector<std::string>&& args);
+    Result<Success> ParseDirName(std::vector<std::string>&& args);
 
     Subsystem subsystem_;
     std::vector<Subsystem>* subsystems_;
 };
 
-bool ParsePermissionsLine(std::vector<std::string>&& args, std::string* err,
-                          std::vector<SysfsPermissions>* out_sysfs_permissions,
-                          std::vector<Permissions>* out_dev_permissions);
+Result<Success> ParsePermissionsLine(std::vector<std::string>&& args,
+                                     std::vector<SysfsPermissions>* out_sysfs_permissions,
+                                     std::vector<Permissions>* out_dev_permissions);
 
 }  // namespace init
 }  // namespace android

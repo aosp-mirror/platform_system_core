@@ -159,6 +159,7 @@ cc_test {
         "devices_test.cpp",
         "init_test.cpp",
         "property_service_test.cpp",
+        "result_test.cpp",
         "service_test.cpp",
         "ueventd_test.cpp",
         "util_test.cpp",

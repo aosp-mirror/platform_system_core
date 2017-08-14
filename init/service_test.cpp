@@ -132,29 +132,29 @@ static void Test_make_temporary_oneshot_service(bool dash_dash, bool seclabel, b
         ASSERT_EQ("", svc->seclabel());
     }
     if (uid) {
-        uid_t decoded_uid;
-        std::string err;
-        ASSERT_TRUE(DecodeUid("log", &decoded_uid, &err));
-        ASSERT_EQ(decoded_uid, svc->uid());
+        auto decoded_uid = DecodeUid("log");
+        ASSERT_TRUE(decoded_uid);
+        ASSERT_EQ(*decoded_uid, svc->uid());
     } else {
         ASSERT_EQ(0U, svc->uid());
     }
     if (gid) {
-        uid_t decoded_uid;
-        std::string err;
-        ASSERT_TRUE(DecodeUid("shell", &decoded_uid, &err));
-        ASSERT_EQ(decoded_uid, svc->gid());
+        auto decoded_uid = DecodeUid("shell");
+        ASSERT_TRUE(decoded_uid);
+        ASSERT_EQ(*decoded_uid, svc->gid());
     } else {
         ASSERT_EQ(0U, svc->gid());
     }
     if (supplementary_gids) {
         ASSERT_EQ(2U, svc->supp_gids().size());
-        uid_t decoded_uid;
-        std::string err;
-        ASSERT_TRUE(DecodeUid("system", &decoded_uid, &err));
-        ASSERT_EQ(decoded_uid, svc->supp_gids()[0]);
-        ASSERT_TRUE(DecodeUid("adb", &decoded_uid, &err));
-        ASSERT_EQ(decoded_uid, svc->supp_gids()[1]);
+
+        auto decoded_uid = DecodeUid("system");
+        ASSERT_TRUE(decoded_uid);
+        ASSERT_EQ(*decoded_uid, svc->supp_gids()[0]);
+
+        decoded_uid = DecodeUid("adb");
+        ASSERT_TRUE(decoded_uid);
+        ASSERT_EQ(*decoded_uid, svc->supp_gids()[1]);
     } else {
         ASSERT_EQ(0U, svc->supp_gids().size());
     }
