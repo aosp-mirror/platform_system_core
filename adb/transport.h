@@ -233,6 +233,6 @@ void close_usb_devices(std::function<bool(const atransport*)> predicate);
 
 void send_packet(apacket* p, atransport* t);
 
-asocket* create_device_tracker(void);
+asocket* create_device_tracker(bool long_output);
 
 #endif   /* __TRANSPORT_H */

@@ -441,7 +441,9 @@ static void connect_service(int fd, void* data) {
 #if ADB_HOST
 asocket* host_service_to_socket(const char* name, const char* serial, TransportId transport_id) {
     if (!strcmp(name,"track-devices")) {
-        return create_device_tracker();
+        return create_device_tracker(false);
+    } else if (!strcmp(name, "track-devices-l")) {
+        return create_device_tracker(true);
     } else if (android::base::StartsWith(name, "wait-for-")) {
         name += strlen("wait-for-");
 

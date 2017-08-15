@@ -329,7 +329,8 @@ static fdevent transport_registration_fde;
  */
 struct device_tracker {
     asocket socket;
-    int update_needed;
+    bool update_needed;
+    bool long_output;
     device_tracker* next;
 };
 
@@ -386,15 +387,15 @@ static void device_tracker_ready(asocket* socket) {
 
     // We want to send the device list when the tracker connects
     // for the first time, even if no update occurred.
-    if (tracker->update_needed > 0) {
-        tracker->update_needed = 0;
+    if (tracker->update_needed) {
+        tracker->update_needed = false;
 
-        std::string transports = list_transports(false);
+        std::string transports = list_transports(tracker->long_output);
         device_tracker_send(tracker, transports);
     }
 }
 
-asocket* create_device_tracker(void) {
+asocket* create_device_tracker(bool long_output) {
     device_tracker* tracker = reinterpret_cast<device_tracker*>(calloc(1, sizeof(*tracker)));
     if (tracker == nullptr) fatal("cannot allocate device tracker");
 
@@ -403,7 +404,8 @@ asocket* create_device_tracker(void) {
     tracker->socket.enqueue = device_tracker_enqueue;
     tracker->socket.ready = device_tracker_ready;
     tracker->socket.close = device_tracker_close;
-    tracker->update_needed = 1;
+    tracker->update_needed = true;
+    tracker->long_output = long_output;
 
     tracker->next = device_tracker_list;
     device_tracker_list = tracker;
