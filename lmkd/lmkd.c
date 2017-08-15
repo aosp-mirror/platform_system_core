@@ -75,6 +75,7 @@ static int mpevfd[2];
 
 static int medium_oomadj;
 static int critical_oomadj;
+static int debug_process_killing;
 
 /* control socket listen and data */
 static int ctrl_lfd;
@@ -262,7 +263,9 @@ static void cmd_procprio(int pid, int uid, int oomadj) {
     } else if (oomadj >= 700) {
         soft_limit_mult = 0;
     } else if (oomadj >= 600) {
-        soft_limit_mult = 0;
+        // Launcher should be perceptible, don't kill it.
+        oomadj = 200;
+        soft_limit_mult = 1;
     } else if (oomadj >= 500) {
         soft_limit_mult = 0;
     } else if (oomadj >= 400) {
@@ -576,9 +579,7 @@ static struct proc *proc_adj_lru(int oomadj) {
 }
 
 /* Kill one process specified by procp.  Returns the size of the process killed */
-static int kill_one_process(struct proc *procp, int other_free, int other_file,
-        int minfree, int min_score_adj, bool first)
-{
+static int kill_one_process(struct proc* procp, int min_score_adj, bool is_critical) {
     int pid = procp->pid;
     uid_t uid = procp->uid;
     char *taskname;
@@ -597,12 +598,11 @@ static int kill_one_process(struct proc *procp, int other_free, int other_file,
         return -1;
     }
 
-    ALOGI("Killing '%s' (%d), uid %d, adj %d\n"
-          "   to free %ldkB because cache %s%ldkB is below limit %ldkB for oom_adj %d\n"
-          "   Free memory is %s%ldkB %s reserved",
-          taskname, pid, uid, procp->oomadj, tasksize * page_k,
-          first ? "" : "~", other_file * page_k, minfree * page_k, min_score_adj,
-          first ? "" : "~", other_free * page_k, other_free >= 0 ? "above" : "below");
+    ALOGI(
+        "Killing '%s' (%d), uid %d, adj %d\n"
+        "   to free %ldkB because system is under %s memory pressure oom_adj %d\n",
+        taskname, pid, uid, procp->oomadj, tasksize * page_k, is_critical ? "critical" : "medium",
+        min_score_adj);
     r = kill(pid, SIGKILL);
     pid_remove(pid);
 
@@ -618,10 +618,8 @@ static int kill_one_process(struct proc *procp, int other_free, int other_file,
  * Find a process to kill based on the current (possibly estimated) free memory
  * and cached memory sizes.  Returns the size of the killed processes.
  */
-static int find_and_kill_process(int other_free, int other_file, bool first, int min_score_adj)
-{
+static int find_and_kill_process(int min_score_adj, bool is_critical) {
     int i;
-    int minfree = 0;
     int killed_size = 0;
 
     for (i = OOM_SCORE_ADJ_MAX; i >= min_score_adj; i--) {
@@ -631,7 +629,7 @@ retry:
         procp = proc_adj_lru(i);
 
         if (procp) {
-            killed_size = kill_one_process(procp, other_free, other_file, minfree, min_score_adj, first);
+            killed_size = kill_one_process(procp, min_score_adj, is_critical);
             if (killed_size < 0) {
                 goto retry;
             } else {
@@ -646,7 +644,6 @@ retry:
 static void mp_event_common(bool is_critical) {
     int ret;
     unsigned long long evcount;
-    bool first = true;
     int min_adj_score = is_critical ? critical_oomadj : medium_oomadj;
     int index = is_critical ? CRITICAL_INDEX : MEDIUM_INDEX;
 
@@ -655,8 +652,10 @@ static void mp_event_common(bool is_critical) {
         ALOGE("Error reading memory pressure event fd; errno=%d",
               errno);
 
-    if (find_and_kill_process(0, 0, first, min_adj_score) == 0) {
-        ALOGI("Nothing to kill");
+    if (find_and_kill_process(min_adj_score, is_critical) == 0) {
+        if (debug_process_killing) {
+            ALOGI("Nothing to kill");
+        }
     }
 }
 
@@ -665,7 +664,6 @@ static void mp_event(uint32_t events __unused) {
 }
 
 static void mp_event_critical(uint32_t events __unused) {
-    ALOGI("Memory pressure critical");
     mp_event_common(true);
 }
 
@@ -828,6 +826,7 @@ int main(int argc __unused, char **argv __unused) {
 
     medium_oomadj = property_get_int32("ro.lmk.medium", 800);
     critical_oomadj = property_get_int32("ro.lmk.critical", 0);
+    debug_process_killing = property_get_bool("ro.lmk.debug", false);
 
     mlockall(MCL_FUTURE);
     sched_setscheduler(0, SCHED_FIFO, &param);
