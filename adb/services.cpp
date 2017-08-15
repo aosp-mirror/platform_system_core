@@ -481,11 +481,17 @@ asocket* host_service_to_socket(const char* name, const char* serial, TransportI
             return nullptr;
         }
 
-        int fd = create_service_thread(wait_for_state, sinfo.release());
+        int fd = create_service_thread(wait_for_state, sinfo.get());
+        if (fd != -1) {
+            sinfo.release();
+        }
         return create_local_socket(fd);
     } else if (!strncmp(name, "connect:", 8)) {
         char* host = strdup(name + 8);
         int fd = create_service_thread(connect_service, host);
+        if (fd == -1) {
+            free(host);
+        }
         return create_local_socket(fd);
     }
     return NULL;
