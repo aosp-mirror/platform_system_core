@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,31 +14,25 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_IMPORT_PARSER_H
-#define _INIT_IMPORT_PARSER_H
+#ifndef _INIT_SELINUX_H
+#define _INIT_SELINUX_H
 
 #include <string>
 #include <vector>
 
-#include "parser.h"
-
 namespace android {
 namespace init {
 
-class ImportParser : public SectionParser {
-  public:
-    ImportParser(Parser* parser) : parser_(parser) {}
-    Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
-                                 int line) override;
-    void EndFile() override;
+void SelinuxInitialize();
+void SelinuxRestoreContext();
 
-  private:
-    Parser* parser_;
-    // Store filename for later error reporting.
-    std::string filename_;
-    // Vector of imports and their line numbers for later error reporting.
-    std::vector<std::pair<std::string, int>> imports_;
-};
+void SelinuxSetupKernelLogging();
+
+void SelabelInitialize();
+bool SelabelLookupFileContext(const std::string& key, int type, std::string* result);
+bool SelabelLookupFileContextBestMatch(const std::string& key,
+                                       const std::vector<std::string>& aliases, int type,
+                                       std::string* result);
 
 }  // namespace init
 }  // namespace android

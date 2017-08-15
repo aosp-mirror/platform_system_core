@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,31 +14,20 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_IMPORT_PARSER_H
-#define _INIT_IMPORT_PARSER_H
+#ifndef _INIT_SECURITY_H
+#define _INIT_SECURITY_H
 
 #include <string>
 #include <vector>
 
-#include "parser.h"
+#include "result.h"
 
 namespace android {
 namespace init {
 
-class ImportParser : public SectionParser {
-  public:
-    ImportParser(Parser* parser) : parser_(parser) {}
-    Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
-                                 int line) override;
-    void EndFile() override;
-
-  private:
-    Parser* parser_;
-    // Store filename for later error reporting.
-    std::string filename_;
-    // Vector of imports and their line numbers for later error reporting.
-    std::vector<std::pair<std::string, int>> imports_;
-};
+Result<Success> MixHwrngIntoLinuxRngAction(const std::vector<std::string>& args);
+Result<Success> SetMmapRndBitsAction(const std::vector<std::string>& args);
+Result<Success> SetKptrRestrictAction(const std::vector<std::string>& args);
 
 }  // namespace init
 }  // namespace android

@@ -42,6 +42,7 @@
 #include <selinux/android.h>
 
 #include "reboot.h"
+#include "selinux.h"
 
 #ifdef _INIT_INIT_H
 #error "Do not include init.h in files used by ueventd or watchdogd; it will expose init's globals"
@@ -56,30 +57,20 @@ namespace init {
 const std::string kDefaultAndroidDtDir("/proc/device-tree/firmware/android/");
 
 // DecodeUid() - decodes and returns the given string, which can be either the
-// numeric or name representation, into the integer uid or gid. Returns
-// UINT_MAX on error.
-bool DecodeUid(const std::string& name, uid_t* uid, std::string* err) {
-    *uid = UINT_MAX;
-    *err = "";
-
+// numeric or name representation, into the integer uid or gid.
+Result<uid_t> DecodeUid(const std::string& name) {
     if (isalpha(name[0])) {
         passwd* pwd = getpwnam(name.c_str());
-        if (!pwd) {
-            *err = "getpwnam failed: "s + strerror(errno);
-            return false;
-        }
-        *uid = pwd->pw_uid;
-        return true;
+        if (!pwd) return ErrnoError() << "getpwnam failed";
+
+        return pwd->pw_uid;
     }
 
     errno = 0;
     uid_t result = static_cast<uid_t>(strtoul(name.c_str(), 0, 0));
-    if (errno) {
-        *err = "strtoul failed: "s + strerror(errno);
-        return false;
-    }
-    *uid = result;
-    return true;
+    if (errno) return ErrnoError() << "strtoul failed";
+
+    return result;
 }
 
 /*
@@ -89,7 +80,7 @@ bool DecodeUid(const std::string& name, uid_t* uid, std::string* err) {
  * variable ANDROID_SOCKET_ENV_PREFIX<name> ("ANDROID_SOCKET_foo").
  */
 int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t uid, gid_t gid,
-                 const char* socketcon, selabel_handle* sehandle) {
+                 const char* socketcon) {
     if (socketcon) {
         if (setsockcreatecon(socketcon) == -1) {
             PLOG(ERROR) << "setsockcreatecon(\"" << socketcon << "\") failed";
@@ -116,11 +107,9 @@ int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t u
         return -1;
     }
 
-    char *filecon = NULL;
-    if (sehandle) {
-        if (selabel_lookup(sehandle, &filecon, addr.sun_path, S_IFSOCK) == 0) {
-            setfscreatecon(filecon);
-        }
+    std::string secontext;
+    if (SelabelLookupFileContext(addr.sun_path, S_IFSOCK, &secontext) && !secontext.empty()) {
+        setfscreatecon(secontext.c_str());
     }
 
     if (passcred) {
@@ -134,8 +123,9 @@ int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t u
     int ret = bind(fd, (struct sockaddr *) &addr, sizeof (addr));
     int savederrno = errno;
 
-    setfscreatecon(NULL);
-    freecon(filecon);
+    if (!secontext.empty()) {
+        setfscreatecon(nullptr);
+    }
 
     if (ret) {
         errno = savederrno;
@@ -164,65 +154,55 @@ out_unlink:
     return -1;
 }
 
-bool ReadFile(const std::string& path, std::string* content, std::string* err) {
-    content->clear();
-    *err = "";
-
+Result<std::string> ReadFile(const std::string& path) {
     android::base::unique_fd fd(
         TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (fd == -1) {
-        *err = "Unable to open '" + path + "': " + strerror(errno);
-        return false;
+        return ErrnoError() << "open() failed";
     }
 
     // For security reasons, disallow world-writable
     // or group-writable files.
     struct stat sb;
     if (fstat(fd, &sb) == -1) {
-        *err = "fstat failed for '" + path + "': " + strerror(errno);
-        return false;
+        return ErrnoError() << "fstat failed()";
     }
     if ((sb.st_mode & (S_IWGRP | S_IWOTH)) != 0) {
-        *err = "Skipping insecure file '" + path + "'";
-        return false;
+        return Error() << "Skipping insecure file";
     }
 
-    if (!android::base::ReadFdToString(fd, content)) {
-        *err = "Unable to read '" + path + "': " + strerror(errno);
-        return false;
+    std::string content;
+    if (!android::base::ReadFdToString(fd, &content)) {
+        return ErrnoError() << "Unable to read file contents";
     }
-    return true;
+    return content;
 }
 
-bool WriteFile(const std::string& path, const std::string& content, std::string* err) {
-    *err = "";
-
+Result<Success> WriteFile(const std::string& path, const std::string& content) {
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(
         open(path.c_str(), O_WRONLY | O_CREAT | O_NOFOLLOW | O_TRUNC | O_CLOEXEC, 0600)));
     if (fd == -1) {
-        *err = "Unable to open '" + path + "': " + strerror(errno);
-        return false;
+        return ErrnoError() << "open() failed";
     }
     if (!android::base::WriteStringToFd(content, fd)) {
-        *err = "Unable to write to '" + path + "': " + strerror(errno);
-        return false;
+        return ErrnoError() << "Unable to write file contents";
     }
-    return true;
+    return Success();
 }
 
-int mkdir_recursive(const std::string& path, mode_t mode, selabel_handle* sehandle) {
+bool mkdir_recursive(const std::string& path, mode_t mode) {
     std::string::size_type slash = 0;
     while ((slash = path.find('/', slash + 1)) != std::string::npos) {
         auto directory = path.substr(0, slash);
         struct stat info;
         if (stat(directory.c_str(), &info) != 0) {
-            auto ret = make_dir(directory.c_str(), mode, sehandle);
-            if (ret && errno != EEXIST) return ret;
+            auto ret = make_dir(directory, mode);
+            if (!ret && errno != EEXIST) return false;
         }
     }
-    auto ret = make_dir(path.c_str(), mode, sehandle);
-    if (ret && errno != EEXIST) return ret;
-    return 0;
+    auto ret = make_dir(path, mode);
+    if (!ret && errno != EEXIST) return false;
+    return true;
 }
 
 int wait_for_file(const char* filename, std::chrono::nanoseconds timeout) {
@@ -249,26 +229,21 @@ void import_kernel_cmdline(bool in_qemu,
     }
 }
 
-int make_dir(const char* path, mode_t mode, selabel_handle* sehandle) {
-    int rc;
-
-    char *secontext = NULL;
-
-    if (sehandle) {
-        selabel_lookup(sehandle, &secontext, path, mode);
-        setfscreatecon(secontext);
+bool make_dir(const std::string& path, mode_t mode) {
+    std::string secontext;
+    if (SelabelLookupFileContext(path, mode, &secontext) && !secontext.empty()) {
+        setfscreatecon(secontext.c_str());
     }
 
-    rc = mkdir(path, mode);
+    int rc = mkdir(path.c_str(), mode);
 
-    if (secontext) {
+    if (!secontext.empty()) {
         int save_errno = errno;
-        freecon(secontext);
-        setfscreatecon(NULL);
+        setfscreatecon(nullptr);
         errno = save_errno;
     }
 
-    return rc;
+    return rc == 0;
 }
 
 /*
