@@ -2,6 +2,5 @@ subdirs = [
     "gatekeeper",
     "keymaster",
     "libtrusty",
-    "nvram",
     "storage/*",
 ]
