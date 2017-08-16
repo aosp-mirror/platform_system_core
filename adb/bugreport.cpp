@@ -102,7 +102,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
             std::vector<const char*> srcs{src_file_.c_str()};
             SetLineMessage("pulling");
             status_ =
-                br_->DoSyncPull(srcs, destination.c_str(), true, line_message_.c_str()) ? 0 : 1;
+                br_->DoSyncPull(srcs, destination.c_str(), false, line_message_.c_str()) ? 0 : 1;
             if (status_ != 0) {
                 fprintf(stderr,
                         "Bug report finished but could not be copied to '%s'.\n"
