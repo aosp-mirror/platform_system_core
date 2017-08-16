@@ -177,14 +177,14 @@ keymaster_error_t TrustyKeymasterDevice::configure(const keymaster_key_param_set
     }
 
     AuthorizationSet params_copy(*params);
-    ConfigureRequest request;
+    ConfigureRequest request(message_version_);
     if (!params_copy.GetTagValue(TAG_OS_VERSION, &request.os_version) ||
         !params_copy.GetTagValue(TAG_OS_PATCHLEVEL, &request.os_patchlevel)) {
         ALOGD("Configuration parameters must contain OS version and patch level");
         return KM_ERROR_INVALID_ARGUMENT;
     }
 
-    ConfigureResponse response;
+    ConfigureResponse response(message_version_);
     keymaster_error_t err = Send(KM_CONFIGURE, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
@@ -200,9 +200,9 @@ keymaster_error_t TrustyKeymasterDevice::add_rng_entropy(const uint8_t* data, si
         return error_;
     }
 
-    AddEntropyRequest request;
+    AddEntropyRequest request(message_version_);
     request.random_data.Reinitialize(data, data_length);
-    AddEntropyResponse response;
+    AddEntropyResponse response(message_version_);
     return Send(KM_ADD_RNG_ENTROPY, request, &response);
 }
 
@@ -261,11 +261,11 @@ keymaster_error_t TrustyKeymasterDevice::get_key_characteristics(
         return KM_ERROR_OUTPUT_PARAMETER_NULL;
     }
 
-    GetKeyCharacteristicsRequest request;
+    GetKeyCharacteristicsRequest request(message_version_);
     request.SetKeyMaterial(*key_blob);
     AddClientAndAppData(client_id, app_data, &request);
 
-    GetKeyCharacteristicsResponse response;
+    GetKeyCharacteristicsResponse response(message_version_);
     keymaster_error_t err = Send(KM_GET_KEY_CHARACTERISTICS, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
@@ -379,7 +379,7 @@ keymaster_error_t TrustyKeymasterDevice::attest_key(const keymaster_key_blob_t* 
     cert_chain->entry_count = 0;
     cert_chain->entries = nullptr;
 
-    AttestKeyRequest request;
+    AttestKeyRequest request(message_version_);
     request.SetKeyMaterial(*key_to_attest);
     request.attest_params.Reinitialize(*attest_params);
 
@@ -391,7 +391,7 @@ keymaster_error_t TrustyKeymasterDevice::attest_key(const keymaster_key_blob_t* 
         return KM_ERROR_INVALID_INPUT_LENGTH;
     }
 
-    AttestKeyResponse response;
+    AttestKeyResponse response(message_version_);
     keymaster_error_t err = Send(KM_ATTEST_KEY, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
@@ -439,11 +439,11 @@ keymaster_error_t TrustyKeymasterDevice::upgrade_key(const keymaster_key_blob_t*
         return KM_ERROR_OUTPUT_PARAMETER_NULL;
     }
 
-    UpgradeKeyRequest request;
+    UpgradeKeyRequest request(message_version_);
     request.SetKeyMaterial(*key_to_upgrade);
     request.upgrade_params.Reinitialize(*upgrade_params);
 
-    UpgradeKeyResponse response;
+    UpgradeKeyResponse response(message_version_);
     keymaster_error_t err = Send(KM_UPGRADE_KEY, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
@@ -480,12 +480,12 @@ keymaster_error_t TrustyKeymasterDevice::begin(keymaster_purpose_t purpose,
         *out_params = {};
     }
 
-    BeginOperationRequest request;
+    BeginOperationRequest request(message_version_);
     request.purpose = purpose;
     request.SetKeyMaterial(*key);
     request.additional_params.Reinitialize(*in_params);
 
-    BeginOperationResponse response;
+    BeginOperationResponse response(message_version_);
     keymaster_error_t err = Send(KM_BEGIN_OPERATION, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
@@ -528,7 +528,7 @@ keymaster_error_t TrustyKeymasterDevice::update(keymaster_operation_handle_t ope
         *output = {};
     }
 
-    UpdateOperationRequest request;
+    UpdateOperationRequest request(message_version_);
     request.op_handle = operation_handle;
     if (in_params) {
         request.additional_params.Reinitialize(*in_params);
@@ -538,7 +538,7 @@ keymaster_error_t TrustyKeymasterDevice::update(keymaster_operation_handle_t ope
         request.input.Reinitialize(input->data, std::min(input->data_length, max_input_size));
     }
 
-    UpdateOperationResponse response;
+    UpdateOperationResponse response(message_version_);
     keymaster_error_t err = Send(KM_UPDATE_OPERATION, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
@@ -589,7 +589,7 @@ keymaster_error_t TrustyKeymasterDevice::finish(keymaster_operation_handle_t ope
         *output = {};
     }
 
-    FinishOperationRequest request;
+    FinishOperationRequest request(message_version_);
     request.op_handle = operation_handle;
     if (signature && signature->data && signature->data_length > 0) {
         request.signature.Reinitialize(signature->data, signature->data_length);
@@ -601,7 +601,7 @@ keymaster_error_t TrustyKeymasterDevice::finish(keymaster_operation_handle_t ope
         request.additional_params.Reinitialize(*in_params);
     }
 
-    FinishOperationResponse response;
+    FinishOperationResponse response(message_version_);
     keymaster_error_t err = Send(KM_FINISH_OPERATION, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
@@ -634,9 +634,9 @@ keymaster_error_t TrustyKeymasterDevice::abort(keymaster_operation_handle_t oper
         return error_;
     }
 
-    AbortOperationRequest request;
+    AbortOperationRequest request(message_version_);
     request.op_handle = operation_handle;
-    AbortOperationResponse response;
+    AbortOperationResponse response(message_version_);
     return Send(KM_ABORT_OPERATION, request, &response);
 }
 
