@@ -19,7 +19,7 @@
 
 #include "SoftGateKeeper.h"
 
-#include <nativehelper/UniquePtr.h>
+#include <memory>
 
 using namespace gatekeeper;
 
@@ -68,7 +68,7 @@ public:
             const uint8_t *provided_password, uint32_t provided_password_length,
             uint8_t **auth_token, uint32_t *auth_token_length, bool *request_reenroll);
 private:
-    UniquePtr<SoftGateKeeper> impl_;
+    std::unique_ptr<SoftGateKeeper> impl_;
 };
 
 } // namespace gatekeeper
