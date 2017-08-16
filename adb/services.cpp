@@ -187,7 +187,7 @@ int reverse_service(const char* command) {
         return -1;
     }
     VLOG(SERVICES) << "service socketpair: " << s[0] << ", " << s[1];
-    if (handle_forward_request(command, kTransportAny, nullptr, s[1]) < 0) {
+    if (handle_forward_request(command, kTransportAny, nullptr, 0, s[1]) < 0) {
         SendFail(s[1], "not a reverse forwarding command");
     }
     adb_close(s[1]);
@@ -334,6 +334,7 @@ int service_to_fd(const char* name, const atransport* transport) {
 struct state_info {
     TransportType transport_type;
     std::string serial;
+    TransportId transport_id;
     ConnectionState state;
 };
 
@@ -346,7 +347,8 @@ static void wait_for_state(int fd, void* data) {
         bool is_ambiguous = false;
         std::string error = "unknown error";
         const char* serial = sinfo->serial.length() ? sinfo->serial.c_str() : NULL;
-        atransport* t = acquire_one_transport(sinfo->transport_type, serial, &is_ambiguous, &error);
+        atransport* t = acquire_one_transport(sinfo->transport_type, serial, sinfo->transport_id,
+                                              &is_ambiguous, &error);
         if (t != nullptr && (sinfo->state == kCsAny || sinfo->state == t->GetConnectionState())) {
             SendOkay(fd);
             break;
@@ -437,7 +439,7 @@ static void connect_service(int fd, void* data) {
 #endif
 
 #if ADB_HOST
-asocket* host_service_to_socket(const char* name, const char* serial) {
+asocket* host_service_to_socket(const char* name, const char* serial, TransportId transport_id) {
     if (!strcmp(name,"track-devices")) {
         return create_device_tracker();
     } else if (android::base::StartsWith(name, "wait-for-")) {
@@ -450,6 +452,7 @@ asocket* host_service_to_socket(const char* name, const char* serial) {
         }
 
         if (serial) sinfo->serial = serial;
+        sinfo->transport_id = transport_id;
 
         if (android::base::StartsWith(name, "local")) {
             name += strlen("local");

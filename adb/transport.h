@@ -54,14 +54,17 @@ extern const char* const kFeatureLibusb;
 // The server supports `push --sync`.
 extern const char* const kFeaturePushSync;
 
+TransportId NextTransportId();
+
 class atransport {
-public:
+  public:
     // TODO(danalbert): We expose waaaaaaay too much stuff because this was
     // historically just a struct, but making the whole thing a more idiomatic
     // class in one go is a very large change. Given how bad our testing is,
     // it's better to do this piece by piece.
 
-    atransport(ConnectionState state = kCsOffline) : ref_count(0), connection_state_(state) {
+    atransport(ConnectionState state = kCsOffline)
+        : id(NextTransportId()), ref_count(0), connection_state_(state) {
         transport_fde = {};
         protocol_version = A_VERSION;
         max_payload = MAX_PAYLOAD;
@@ -72,12 +75,8 @@ public:
     void (*close)(atransport* t) = nullptr;
 
     void SetWriteFunction(int (*write_func)(apacket*, atransport*)) { write_func_ = write_func; }
-    void SetKickFunction(void (*kick_func)(atransport*)) {
-        kick_func_ = kick_func;
-    }
-    bool IsKicked() {
-        return kicked_;
-    }
+    void SetKickFunction(void (*kick_func)(atransport*)) { kick_func_ = kick_func; }
+    bool IsKicked() { return kicked_; }
     int Write(apacket* p);
     void Kick();
 
@@ -85,6 +84,7 @@ public:
     ConnectionState GetConnectionState() const;
     void SetConnectionState(ConnectionState state);
 
+    const TransportId id;
     int fd = -1;
     int transport_socket = -1;
     fdevent transport_fde;
@@ -191,12 +191,14 @@ private:
 /*
  * Obtain a transport from the available transports.
  * If serial is non-null then only the device with that serial will be chosen.
+ * If transport_id is non-zero then only the device with that transport ID will be chosen.
  * If multiple devices/emulators would match, *is_ambiguous (if non-null)
  * is set to true and nullptr returned.
  * If no suitable transport is found, error is set and nullptr returned.
  */
-atransport* acquire_one_transport(TransportType type, const char* serial, bool* is_ambiguous,
-                                  std::string* error_out, bool accept_any_state = false);
+atransport* acquire_one_transport(TransportType type, const char* serial, TransportId transport_id,
+                                  bool* is_ambiguous, std::string* error_out,
+                                  bool accept_any_state = false);
 void kick_transport(atransport* t);
 void update_transports(void);
 
