@@ -81,6 +81,7 @@ namespace.sphal.link.rs.shared_libs = libRS_internal.so
 # to load the compiled *.so file and libmediandk.so can be used here.
 ###############################################################################
 namespace.rs.isolated = true
+namespace.rs.visible = true
 namespace.rs.search.paths = /vendor/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/vendor/${LIB}
 namespace.rs.permitted.paths = /vendor/${LIB}:/data
 
