@@ -686,6 +686,10 @@ static int adb_shell(int argc, const char** argv) {
 
     // Parse shell-specific command-line options.
     argv[0] = "adb shell"; // So getopt(3) error messages start "adb shell".
+#ifdef _WIN32
+    // fixes "adb shell -l" crash on Windows, b/37284906
+    __argv = const_cast<char**>(argv);
+#endif
     optind = 1; // argv[0] is always "shell", so set `optind` appropriately.
     int opt;
     while ((opt = getopt(argc, const_cast<char**>(argv), "+e:ntTx")) != -1) {
