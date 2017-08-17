@@ -17,8 +17,11 @@
 #define LOG_TAG "storaged"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <time.h>
+#include <zlib.h>
 
+#include <fstream>
 #include <string>
 #include <unordered_map>
 
@@ -34,12 +37,19 @@
 
 #include "storaged.h"
 #include "storaged_uid_monitor.h"
+#include "system/core/storaged/storaged.pb.h"
 
 using namespace android;
 using namespace android::base;
 using namespace android::content::pm;
+using namespace google::protobuf::io;
+using namespace storaged_proto;
 
 static bool refresh_uid_names;
+static const uint32_t crc_init = 0x5108A4ED; /* STORAGED */
+
+const std::string uid_monitor::io_history_proto_file =
+    "/data/misc/storaged/io_history.proto";
 
 std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats()
 {
@@ -187,11 +197,11 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_lock
 
 static const int MAX_UID_RECORDS_SIZE = 1000 * 48; // 1000 uids in 48 hours
 
-static inline int records_size(
-    const std::map<uint64_t, struct uid_records>& curr_records)
+static inline size_t history_size(
+    const std::map<uint64_t, struct uid_records>& history)
 {
-    int count = 0;
-    for (auto const& it : curr_records) {
+    size_t count = 0;
+    for (auto const& it : history) {
         count += it.second.entries.size();
     }
     return count;
@@ -201,8 +211,8 @@ void uid_monitor::add_records_locked(uint64_t curr_ts)
 {
     // remove records more than 5 days old
     if (curr_ts > 5 * DAY_TO_SEC) {
-        auto it = records.lower_bound(curr_ts - 5 * DAY_TO_SEC);
-        records.erase(records.begin(), it);
+        auto it = io_history.lower_bound(curr_ts - 5 * DAY_TO_SEC);
+        io_history.erase(io_history.begin(), it);
     }
 
     struct uid_records new_records;
@@ -227,15 +237,15 @@ void uid_monitor::add_records_locked(uint64_t curr_ts)
       return;
 
     // make some room for new records
-    int overflow = records_size(records) +
+    ssize_t overflow = history_size(io_history) +
         new_records.entries.size() - MAX_UID_RECORDS_SIZE;
-    while (overflow > 0 && records.size() > 0) {
-        auto del_it = records.begin();
+    while (overflow > 0 && io_history.size() > 0) {
+        auto del_it = io_history.begin();
         overflow -= del_it->second.entries.size();
-        records.erase(records.begin());
+        io_history.erase(io_history.begin());
     }
 
-    records[curr_ts] = new_records;
+    io_history[curr_ts] = new_records;
 }
 
 std::map<uint64_t, struct uid_records> uid_monitor::dump(
@@ -254,7 +264,7 @@ std::map<uint64_t, struct uid_records> uid_monitor::dump(
         first_ts = time(NULL) - hours * HOUR_TO_SEC;
     }
 
-    for (auto it = records.lower_bound(first_ts); it != records.end(); ++it) {
+    for (auto it = io_history.lower_bound(first_ts); it != io_history.end(); ++it) {
         const std::vector<struct uid_record>& recs = it->second.entries;
         struct uid_records filtered;
 
@@ -351,6 +361,128 @@ void uid_monitor::report()
 
     update_curr_io_stats_locked();
     add_records_locked(time(NULL));
+
+    flush_io_history_to_proto();
+}
+
+static void set_io_usage_proto(IOUsage* usage_proto, const struct io_usage& usage)
+{
+    usage_proto->set_rd_fg_chg_on(usage.bytes[READ][FOREGROUND][CHARGER_ON]);
+    usage_proto->set_rd_fg_chg_off(usage.bytes[READ][FOREGROUND][CHARGER_OFF]);
+    usage_proto->set_rd_bg_chg_on(usage.bytes[READ][BACKGROUND][CHARGER_ON]);
+    usage_proto->set_rd_bg_chg_off(usage.bytes[READ][BACKGROUND][CHARGER_OFF]);
+    usage_proto->set_wr_fg_chg_on(usage.bytes[WRITE][FOREGROUND][CHARGER_ON]);
+    usage_proto->set_wr_fg_chg_off(usage.bytes[WRITE][FOREGROUND][CHARGER_OFF]);
+    usage_proto->set_wr_bg_chg_on(usage.bytes[WRITE][BACKGROUND][CHARGER_ON]);
+    usage_proto->set_wr_bg_chg_off(usage.bytes[WRITE][BACKGROUND][CHARGER_OFF]);
+}
+
+static void get_io_usage_proto(struct io_usage* usage, const IOUsage& io_proto)
+{
+    usage->bytes[READ][FOREGROUND][CHARGER_ON] = io_proto.rd_fg_chg_on();
+    usage->bytes[READ][FOREGROUND][CHARGER_OFF] = io_proto.rd_fg_chg_off();
+    usage->bytes[READ][BACKGROUND][CHARGER_ON] = io_proto.rd_bg_chg_on();
+    usage->bytes[READ][BACKGROUND][CHARGER_OFF] = io_proto.rd_bg_chg_off();
+    usage->bytes[WRITE][FOREGROUND][CHARGER_ON] = io_proto.wr_fg_chg_on();
+    usage->bytes[WRITE][FOREGROUND][CHARGER_OFF] = io_proto.wr_fg_chg_off();
+    usage->bytes[WRITE][BACKGROUND][CHARGER_ON] = io_proto.wr_bg_chg_on();
+    usage->bytes[WRITE][BACKGROUND][CHARGER_OFF] = io_proto.wr_bg_chg_off();
+}
+
+void uid_monitor::flush_io_history_to_proto()
+{
+    UidIOHistoryProto out_proto;
+
+    for (const auto& item : io_history) {
+        const uint64_t& end_ts = item.first;
+        const struct uid_records& recs = item.second;
+
+        UidIOItem* item_proto = out_proto.add_items();
+        item_proto->set_end_ts(end_ts);
+
+        UidIORecords* recs_proto = item_proto->mutable_records();
+        recs_proto->set_start_ts(recs.start_ts);
+
+        for (const auto& entry : recs.entries) {
+            UidRecord* rec_proto = recs_proto->add_entries();
+            rec_proto->set_uid_name(entry.name);
+
+            IOUsage* uid_io_proto = rec_proto->mutable_uid_io();
+            const struct io_usage& uio_ios = entry.ios.uid_ios;
+            set_io_usage_proto(uid_io_proto, uio_ios);
+
+            for (const auto& task_io : entry.ios.task_ios) {
+                const std::string& task_name = task_io.first;
+                const struct io_usage& task_ios = task_io.second;
+
+                TaskIOUsage* task_io_proto = rec_proto->add_task_io();
+                task_io_proto->set_task_name(task_name);
+                set_io_usage_proto(task_io_proto->mutable_ios(), task_ios);
+            }
+        }
+    }
+
+    out_proto.set_crc(crc_init);
+    std::string out_proto_str = out_proto.SerializeAsString();
+    out_proto.set_crc(crc32(crc_init,
+        reinterpret_cast<const Bytef*>(out_proto_str.c_str()),
+        out_proto_str.size()));
+
+    std::string tmp_file = io_history_proto_file + "_tmp";
+    std::ofstream out(tmp_file,
+        std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
+    out << out_proto.SerializeAsString();
+    out.close();
+
+    /* Atomically replace existing proto file to reduce chance of data loss. */
+    rename(tmp_file.c_str(), io_history_proto_file.c_str());
+}
+
+void uid_monitor::load_io_history_from_proto()
+{
+    std::ifstream in(io_history_proto_file,
+        std::ofstream::in | std::ofstream::binary);
+
+    if (!in.good()) {
+        PLOG_TO(SYSTEM, INFO) << "Open " << io_history_proto_file << " failed";
+        return;
+    }
+
+    stringstream ss;
+    ss << in.rdbuf();
+    UidIOHistoryProto in_proto;
+    in_proto.ParseFromString(ss.str());
+
+    uint32_t crc = in_proto.crc();
+    in_proto.set_crc(crc_init);
+    std::string io_proto_str = in_proto.SerializeAsString();
+    uint32_t computed_crc = crc32(crc_init,
+        reinterpret_cast<const Bytef*>(io_proto_str.c_str()),
+        io_proto_str.size());
+
+    if (crc != computed_crc) {
+        LOG_TO(SYSTEM, WARNING) << "CRC mismatch in " << io_history_proto_file;
+        return;
+    }
+
+    for (const auto& item_proto : in_proto.items()) {
+        const UidIORecords& records_proto = item_proto.records();
+        struct uid_records* recs = &io_history[item_proto.end_ts()];
+
+        recs->start_ts = records_proto.start_ts();
+        for (const auto& rec_proto : records_proto.entries()) {
+            struct uid_record record;
+            record.name = rec_proto.uid_name();
+            get_io_usage_proto(&record.ios.uid_ios, rec_proto.uid_io());
+
+            for (const auto& task_io_proto : rec_proto.task_io()) {
+                get_io_usage_proto(
+                    &record.ios.task_ios[task_io_proto.task_name()],
+                    task_io_proto.ios());
+            }
+            recs->entries.push_back(record);
+        }
+    }
 }
 
 void uid_monitor::set_charger_state(charger_stat_t stat)
@@ -368,6 +500,9 @@ void uid_monitor::set_charger_state(charger_stat_t stat)
 void uid_monitor::init(charger_stat_t stat)
 {
     charger_stat = stat;
+
+    load_io_history_from_proto();
+
     start_ts = time(NULL);
     last_uid_io_stats = get_uid_io_stats();
 }
