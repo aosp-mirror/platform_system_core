@@ -55,8 +55,6 @@ std::string bytes_to_hex(const uint8_t *bytes, size_t bytes_len);
 bool is_dir(const char* pathname);
 bool expand_props(const std::string& src, std::string* dst);
 
-void panic() __attribute__((__noreturn__));
-
 // Returns the platform's Android DT directory as specified in the kernel cmdline.
 // If the platform does not configure a custom DT path, returns the standard one (based in procfs).
 const std::string& get_android_dt_dir();
