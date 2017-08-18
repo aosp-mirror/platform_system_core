@@ -191,8 +191,7 @@ static bool IsRebootCapable() {
     return value == CAP_SET;
 }
 
-static void __attribute__((noreturn))
-RebootSystem(unsigned int cmd, const std::string& rebootTarget) {
+void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string& rebootTarget) {
     LOG(INFO) << "Reboot ending, jumping to kernel";
 
     if (!IsRebootCapable()) {
@@ -216,7 +215,7 @@ RebootSystem(unsigned int cmd, const std::string& rebootTarget) {
             break;
     }
     // In normal case, reboot should not return.
-    PLOG(FATAL) << "reboot call returned";
+    PLOG(ERROR) << "reboot call returned";
     abort();
 }
 
