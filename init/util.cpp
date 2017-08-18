@@ -345,12 +345,6 @@ bool expand_props(const std::string& src, std::string* dst) {
     return true;
 }
 
-void panic() {
-    LOG(ERROR) << "panic: rebooting to bootloader";
-    // Do not queue "shutdown" trigger since we want to shutdown immediately
-    DoReboot(ANDROID_RB_RESTART2, "reboot", "bootloader", false);
-}
-
 static std::string init_android_dt_dir() {
     // Use the standard procfs-based path by default
     std::string android_dt_dir = kDefaultAndroidDtDir;
