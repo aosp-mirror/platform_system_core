@@ -327,21 +327,19 @@ void SelinuxInitialize() {
 
     LOG(INFO) << "Loading SELinux policy";
     if (!LoadPolicy()) {
-        panic();
+        LOG(FATAL) << "Unable to load SELinux policy";
     }
 
     bool kernel_enforcing = (security_getenforce() == 1);
     bool is_enforcing = IsEnforcing();
     if (kernel_enforcing != is_enforcing) {
         if (security_setenforce(is_enforcing)) {
-            PLOG(ERROR) << "security_setenforce(%s) failed" << (is_enforcing ? "true" : "false");
-            panic();
+            PLOG(FATAL) << "security_setenforce(%s) failed" << (is_enforcing ? "true" : "false");
         }
     }
 
     if (auto result = WriteFile("/sys/fs/selinux/checkreqprot", "0"); !result) {
-        LOG(ERROR) << "Unable to write to /sys/fs/selinux/checkreqprot: " << result.error();
-        panic();
+        LOG(FATAL) << "Unable to write to /sys/fs/selinux/checkreqprot: " << result.error();
     }
 
     // init's first stage can't set properties, so pass the time to the second stage.

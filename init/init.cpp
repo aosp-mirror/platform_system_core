@@ -34,6 +34,7 @@
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
+#include <cutils/android_reboot.h>
 #include <keyutils.h>
 #include <libavb/libavb.h>
 #include <private/android_filesystem_config.h>
@@ -252,8 +253,7 @@ static Result<Success> wait_for_coldboot_done_action(const std::vector<std::stri
     // because any build that slow isn't likely to boot at all, and we'd
     // rather any test lab devices fail back to the bootloader.
     if (wait_for_file(COLDBOOT_DONE, 60s) < 0) {
-        LOG(ERROR) << "Timed out waiting for " COLDBOOT_DONE;
-        panic();
+        LOG(FATAL) << "Timed out waiting for " COLDBOOT_DONE;
     }
 
     property_set("ro.boottime.init.cold_boot_wait", std::to_string(t.duration().count()));
@@ -367,8 +367,7 @@ static Result<Success> queue_property_triggers_action(const std::vector<std::str
 static void global_seccomp() {
     import_kernel_cmdline(false, [](const std::string& key, const std::string& value, bool in_qemu) {
         if (key == "androidboot.seccomp" && value == "global" && !set_global_seccomp_filter()) {
-            LOG(ERROR) << "Failed to globally enable seccomp!";
-            panic();
+            LOG(FATAL) << "Failed to globally enable seccomp!";
         }
     });
 }
@@ -398,8 +397,11 @@ static void install_reboot_signal_handlers() {
     memset(&action, 0, sizeof(action));
     sigfillset(&action.sa_mask);
     action.sa_handler = [](int) {
-        // panic() reboots to bootloader
-        panic();
+        // Calling DoReboot() or LOG(FATAL) is not a good option as this is a signal handler.
+        // RebootSystem uses syscall() which isn't actually async-signal-safe, but our only option
+        // and probably good enough given this is already an error case and only enabled for
+        // development builds.
+        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
     };
     action.sa_flags = SA_RESTART;
     sigaction(SIGABRT, &action, nullptr);
@@ -468,8 +470,7 @@ int main(int argc, char** argv) {
         LOG(INFO) << "init first stage started!";
 
         if (!DoFirstStageMount()) {
-            LOG(ERROR) << "Failed to mount required partitions early ...";
-            panic();
+            LOG(FATAL) << "Failed to mount required partitions early ...";
         }
 
         SetInitAvbVersionInRecovery();
@@ -484,8 +485,7 @@ int main(int argc, char** argv) {
         // We're in the kernel domain, so re-exec init to transition to the init domain now
         // that the SELinux policy has been loaded.
         if (selinux_android_restorecon("/init", 0) == -1) {
-            PLOG(ERROR) << "restorecon failed of /init failed";
-            panic();
+            PLOG(FATAL) << "restorecon failed of /init failed";
         }
 
         setenv("INIT_SECOND_STAGE", "true", 1);
@@ -500,8 +500,7 @@ int main(int argc, char** argv) {
 
         // execv() only returns if an error happened, in which case we
         // panic and never fall through this conditional.
-        PLOG(ERROR) << "execv(\"" << path << "\") failed";
-        panic();
+        PLOG(FATAL) << "execv(\"" << path << "\") failed";
     }
 
     // At this point we're in the second stage of init.
