@@ -306,8 +306,7 @@ void Service::Reap() {
     if ((flags_ & SVC_CRITICAL) && !(flags_ & SVC_RESTART)) {
         if (now < time_crashed_ + 4min) {
             if (++crash_count_ > 4) {
-                LOG(ERROR) << "critical process '" << name_ << "' exited 4 times in 4 minutes";
-                panic();
+                LOG(FATAL) << "critical process '" << name_ << "' exited 4 times in 4 minutes";
             }
         } else {
             time_crashed_ = now;

@@ -22,6 +22,9 @@
 namespace android {
 namespace init {
 
+// This is a wrapper around the actual reboot calls.  DoReboot() should be preferred in most cases.
+void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string& rebootTarget);
+
 /* Reboot / shutdown the system.
  * cmd ANDROID_RB_* as defined in android_reboot.h
  * reason Reason string like "reboot", "userrequested"
