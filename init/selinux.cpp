@@ -68,9 +68,9 @@ using android::base::unique_fd;
 namespace android {
 namespace init {
 
-static struct selabel_handle* sehandle = nullptr;
-
 namespace {
+
+selabel_handle* sehandle = nullptr;
 
 enum EnforcingStatus { SELINUX_PERMISSIVE, SELINUX_ENFORCING };
 
