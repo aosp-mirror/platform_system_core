@@ -277,13 +277,15 @@ bool LoadSplitPolicy() {
         return false;
     }
 
+    const std::string version_as_string = std::to_string(max_policy_version);
+
     // clang-format off
     const char* compile_args[] = {
         "/system/bin/secilc",
         plat_policy_cil_file,
         "-M", "true",
         // Target the highest policy language version supported by the kernel
-        "-c", std::to_string(max_policy_version).c_str(),
+        "-c", version_as_string.c_str(),
         "/system/etc/selinux/mapping_sepolicy.cil",
         "/vendor/etc/selinux/nonplat_sepolicy.cil",
         "-o", compiled_sepolicy,
