@@ -25,8 +25,6 @@
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 
-#include "util.h"
-
 using android::base::unique_fd;
 
 namespace android {
@@ -178,8 +176,7 @@ Result<Success> SetMmapRndBitsAction(const std::vector<std::string>& args) {
     LOG(ERROR) << "Unknown architecture";
 #endif
 
-    LOG(ERROR) << "Unable to set adequate mmap entropy value!";
-    panic();
+    LOG(FATAL) << "Unable to set adequate mmap entropy value!";
     return Error();
 }
 
@@ -194,8 +191,7 @@ Result<Success> SetKptrRestrictAction(const std::vector<std::string>& args) {
     std::string path = KPTR_RESTRICT_PATH;
 
     if (!SetHighestAvailableOptionValue(path, KPTR_RESTRICT_MINVALUE, KPTR_RESTRICT_MAXVALUE)) {
-        LOG(ERROR) << "Unable to set adequate kptr_restrict value!";
-        panic();
+        LOG(FATAL) << "Unable to set adequate kptr_restrict value!";
         return Error();
     }
     return Success();
