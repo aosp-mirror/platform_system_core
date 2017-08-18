@@ -23,23 +23,38 @@
 
 extern struct android_namespace_t* android_get_exported_namespace(const char*);
 
+static const char* namespace_name = NULL;
+
+static struct android_namespace_t* get_vendor_namespace() {
+    const char* namespace_names[] = {"sphal", "default", NULL};
+    static struct android_namespace_t* vendor_namespace = NULL;
+    if (vendor_namespace == NULL) {
+        int name_idx = 0;
+        while (namespace_names[name_idx] != NULL) {
+            vendor_namespace = android_get_exported_namespace(namespace_names[name_idx]);
+            if (vendor_namespace != NULL) {
+                namespace_name = namespace_names[name_idx];
+                break;
+            }
+            name_idx++;
+        }
+    }
+    return vendor_namespace;
+}
+
 void* android_load_sphal_library(const char* name, int flag) {
-    struct android_namespace_t* sphal_namespace = android_get_exported_namespace("sphal");
-    if (sphal_namespace != NULL) {
+    struct android_namespace_t* vendor_namespace = get_vendor_namespace();
+    if (vendor_namespace != NULL) {
         const android_dlextinfo dlextinfo = {
-            .flags = ANDROID_DLEXT_USE_NAMESPACE, .library_namespace = sphal_namespace,
+            .flags = ANDROID_DLEXT_USE_NAMESPACE, .library_namespace = vendor_namespace,
         };
         void* handle = android_dlopen_ext(name, flag, &dlextinfo);
         if (!handle) {
-            ALOGE(
-                "Could not load %s from sphal namespace: %s.",
-                name, dlerror());
+            ALOGE("Could not load %s from %s namespace: %s.", name, namespace_name, dlerror());
         }
         return handle;
     } else {
-        ALOGD(
-            "Loading %s from current namespace instead of sphal namespace.",
-            name);
+        ALOGD("Loading %s from current namespace instead of sphal namespace.", name);
         return dlopen(name, flag);
     }
 }
