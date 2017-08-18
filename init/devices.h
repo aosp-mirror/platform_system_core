@@ -72,6 +72,7 @@ class Subsystem {
     friend class SubsystemParser;
 
     Subsystem() {}
+    Subsystem(std::string name) : name_(std::move(name)) {}
 
     // Returns the full path for a uevent of a device that is a member of this subsystem,
     // according to the rules parsed from ueventd.rc

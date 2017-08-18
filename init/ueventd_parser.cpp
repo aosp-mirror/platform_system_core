@@ -82,7 +82,7 @@ Result<Success> SubsystemParser::ParseSection(std::vector<std::string>&& args,
         return Error() << "ignoring duplicate subsystem entry";
     }
 
-    subsystem_.name_ = args[1];
+    subsystem_ = Subsystem(std::move(args[1]));
 
     return Success();
 }
