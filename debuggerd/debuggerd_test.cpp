@@ -16,10 +16,11 @@
 
 #include <err.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <sys/capability.h>
 #include <sys/prctl.h>
+#include <sys/ptrace.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <chrono>
 #include <regex>
@@ -567,6 +568,40 @@ TEST_F(CrasherTest, fake_pid) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_BACKTRACE_FRAME(result, "tgkill");
+}
+
+TEST_F(CrasherTest, competing_tracer) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    while (true) {
+    }
+  });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+
+  ASSERT_EQ(0, ptrace(PTRACE_SEIZE, crasher_pid, 0, 0));
+  ASSERT_EQ(0, kill(crasher_pid, SIGABRT));
+
+  int status;
+  ASSERT_EQ(crasher_pid, waitpid(crasher_pid, &status, 0));
+  ASSERT_TRUE(WIFSTOPPED(status));
+  ASSERT_EQ(SIGABRT, WSTOPSIG(status));
+
+  ASSERT_EQ(0, ptrace(PTRACE_CONT, crasher_pid, 0, SIGABRT));
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  std::string regex = R"(failed to attach to thread \d+, already traced by )";
+  regex += std::to_string(gettid());
+  regex += R"( \(.+debuggerd_test)";
+  ASSERT_MATCH(result, regex.c_str());
+
+  ASSERT_EQ(0, ptrace(PTRACE_DETACH, crasher_pid, 0, SIGABRT));
+  AssertDeath(SIGABRT);
 }
 
 TEST(crash_dump, zombie) {
