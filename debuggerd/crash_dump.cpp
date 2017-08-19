@@ -79,9 +79,27 @@ static bool pid_contains_tid(int pid_proc_fd, pid_t tid) {
   return fstatat(pid_proc_fd, task_path.c_str(), &st, 0) == 0;
 }
 
+static pid_t get_tracer(pid_t tracee) {
+  // Check to see if the thread is being ptraced by another process.
+  android::procinfo::ProcessInfo process_info;
+  if (android::procinfo::GetProcessInfo(tracee, &process_info)) {
+    return process_info.tracer;
+  }
+  return -1;
+}
+
 // Attach to a thread, and verify that it's still a member of the given process
 static bool ptrace_seize_thread(int pid_proc_fd, pid_t tid, std::string* error) {
   if (ptrace(PTRACE_SEIZE, tid, 0, 0) != 0) {
+    if (errno == EPERM) {
+      pid_t tracer = get_tracer(tid);
+      if (tracer != -1) {
+        *error = StringPrintf("failed to attach to thread %d, already traced by %d (%s)", tid,
+                              tracer, get_process_name(tracer).c_str());
+        return false;
+      }
+    }
+
     *error = StringPrintf("failed to attach to thread %d: %s", tid, strerror(errno));
     return false;
   }
