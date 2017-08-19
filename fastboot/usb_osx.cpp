@@ -93,12 +93,9 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
     SInt32 score;
     UInt8 interfaceNumEndpoints;
 
-    // Placing the constant KIOUSBFindInterfaceDontCare into the following
-    // fields of the IOUSBFindInterfaceRequest structure will allow us to
-    // find all of the interfaces
-    request.bInterfaceClass = kIOUSBFindInterfaceDontCare;
-    request.bInterfaceSubClass = kIOUSBFindInterfaceDontCare;
-    request.bInterfaceProtocol = kIOUSBFindInterfaceDontCare;
+    request.bInterfaceClass = 0xff;
+    request.bInterfaceSubClass = 0x42;
+    request.bInterfaceProtocol = 0x03;
     request.bAlternateSetting = kIOUSBFindInterfaceDontCare;
 
     // Get an iterator for the interfaces on the device
@@ -282,7 +279,6 @@ static int try_device(io_service_t device, usb_handle *handle) {
             &plugin, &score);
 
     if ((kr != 0) || (plugin == NULL)) {
-        ERR("Unable to create a plug-in (%08x)\n", kr);
         goto error;
     }
 
@@ -436,8 +432,7 @@ static int init_usb(ifc_match_func callback, std::unique_ptr<usb_handle>* handle
 
         if (try_device(device, &h) != 0) {
             IOObjectRelease(device);
-            ret = -1;
-            break;
+            continue;
         }
 
         if (h.success) {
