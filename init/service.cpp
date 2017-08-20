@@ -201,7 +201,10 @@ void Service::NotifyStateChange(const std::string& new_state) const {
 
     if (new_state == "running") {
         uint64_t start_ns = time_started_.time_since_epoch().count();
-        property_set("ro.boottime." + name_, std::to_string(start_ns));
+        std::string boottime_property = "ro.boottime." + name_;
+        if (GetProperty(boottime_property, "").empty()) {
+            property_set(boottime_property, std::to_string(start_ns));
+        }
     }
 }
 
@@ -306,8 +309,7 @@ void Service::Reap() {
     if ((flags_ & SVC_CRITICAL) && !(flags_ & SVC_RESTART)) {
         if (now < time_crashed_ + 4min) {
             if (++crash_count_ > 4) {
-                LOG(ERROR) << "critical process '" << name_ << "' exited 4 times in 4 minutes";
-                panic();
+                LOG(FATAL) << "critical process '" << name_ << "' exited 4 times in 4 minutes";
             }
         } else {
             time_crashed_ = now;

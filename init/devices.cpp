@@ -386,26 +386,24 @@ void DeviceHandler::HandleDeviceEvent(const Uevent& uevent) {
         if (StartsWith(uevent.path, "/devices")) {
             links = GetBlockDeviceSymlinks(uevent);
         }
-    } else if (StartsWith(uevent.subsystem, "usb")) {
-        if (uevent.subsystem == "usb") {
-            if (!uevent.device_name.empty()) {
-                devpath = "/dev/" + uevent.device_name;
-            } else {
-                // This imitates the file system that would be created
-                // if we were using devfs instead.
-                // Minors are broken up into groups of 128, starting at "001"
-                int bus_id = uevent.minor / 128 + 1;
-                int device_id = uevent.minor % 128 + 1;
-                devpath = StringPrintf("/dev/bus/usb/%03d/%03d", bus_id, device_id);
-            }
-        } else {
-            // ignore other USB events
-            return;
-        }
     } else if (const auto subsystem =
                    std::find(subsystems_.cbegin(), subsystems_.cend(), uevent.subsystem);
                subsystem != subsystems_.cend()) {
         devpath = subsystem->ParseDevPath(uevent);
+    } else if (uevent.subsystem == "usb") {
+        if (!uevent.device_name.empty()) {
+            devpath = "/dev/" + uevent.device_name;
+        } else {
+            // This imitates the file system that would be created
+            // if we were using devfs instead.
+            // Minors are broken up into groups of 128, starting at "001"
+            int bus_id = uevent.minor / 128 + 1;
+            int device_id = uevent.minor % 128 + 1;
+            devpath = StringPrintf("/dev/bus/usb/%03d/%03d", bus_id, device_id);
+        }
+    } else if (StartsWith(uevent.subsystem, "usb")) {
+        // ignore other USB events
+        return;
     } else {
         devpath = "/dev/" + Basename(uevent.path);
     }

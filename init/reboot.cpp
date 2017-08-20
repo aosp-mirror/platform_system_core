@@ -191,8 +191,7 @@ static bool IsRebootCapable() {
     return value == CAP_SET;
 }
 
-static void __attribute__((noreturn))
-RebootSystem(unsigned int cmd, const std::string& rebootTarget) {
+void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string& rebootTarget) {
     LOG(INFO) << "Reboot ending, jumping to kernel";
 
     if (!IsRebootCapable()) {
@@ -216,7 +215,7 @@ RebootSystem(unsigned int cmd, const std::string& rebootTarget) {
             break;
     }
     // In normal case, reboot should not return.
-    PLOG(FATAL) << "reboot call returned";
+    PLOG(ERROR) << "reboot call returned";
     abort();
 }
 
@@ -267,8 +266,6 @@ static void DumpUmountDebuggingInfo(bool dump_all) {
 
 static UmountStat UmountPartitions(std::chrono::milliseconds timeout) {
     Timer t;
-    UmountStat stat = UMOUNT_STAT_TIMEOUT;
-    int retry = 0;
     /* data partition needs all pending writes to be completed and all emulated partitions
      * umounted.If the current waiting is not good enough, give
      * up and leave it to e2fsck after reboot to fix it.
@@ -280,25 +277,27 @@ static UmountStat UmountPartitions(std::chrono::milliseconds timeout) {
             return UMOUNT_STAT_ERROR;
         }
         if (block_devices.size() == 0) {
-            stat = UMOUNT_STAT_SUCCESS;
-            break;
+            return UMOUNT_STAT_SUCCESS;
         }
-        if ((timeout < t.duration()) && retry > 0) {  // try umount at least once
-            stat = UMOUNT_STAT_TIMEOUT;
-            break;
+        bool unmount_done = true;
+        if (emulated_devices.size() > 0) {
+            unmount_done = std::all_of(emulated_devices.begin(), emulated_devices.end(),
+                                       [](auto& entry) { return entry.Umount(); });
+            if (unmount_done) {
+                sync();
+            }
         }
-        if (emulated_devices.size() > 0 &&
-            std::all_of(emulated_devices.begin(), emulated_devices.end(),
-                        [](auto& entry) { return entry.Umount(); })) {
-            sync();
+        unmount_done = std::all_of(block_devices.begin(), block_devices.end(),
+                                   [](auto& entry) { return entry.Umount(); }) &&
+                       unmount_done;
+        if (unmount_done) {
+            return UMOUNT_STAT_SUCCESS;
         }
-        for (auto& entry : block_devices) {
-            entry.Umount();
+        if ((timeout < t.duration())) {  // try umount at least once
+            return UMOUNT_STAT_TIMEOUT;
         }
-        retry++;
         std::this_thread::sleep_for(100ms);
     }
-    return stat;
 }
 
 static void KillAllProcesses() { android::base::WriteStringToFile("i", "/proc/sysrq-trigger"); }
