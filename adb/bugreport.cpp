@@ -195,13 +195,13 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
     DISALLOW_COPY_AND_ASSIGN(BugreportStandardStreamsCallback);
 };
 
-int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, const char** argv) {
+int Bugreport::DoIt(int argc, const char** argv) {
     if (argc > 2) return syntax_error("adb bugreport [PATH]");
 
     // Gets bugreportz version.
     std::string bugz_stdout, bugz_stderr;
     DefaultStandardStreamsCallback version_callback(&bugz_stdout, &bugz_stderr);
-    int status = SendShellCommand(transport_type, serial, "bugreportz -v", false, &version_callback);
+    int status = SendShellCommand("bugreportz -v", false, &version_callback);
     std::string bugz_version = android::base::Trim(bugz_stderr);
     std::string bugz_output = android::base::Trim(bugz_stdout);
 
@@ -214,7 +214,7 @@ int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, 
             fprintf(stderr,
                     "Failed to get bugreportz version, which is only available on devices "
                     "running Android 7.0 or later.\nTrying a plain-text bug report instead.\n");
-            return SendShellCommand(transport_type, serial, "bugreport", false);
+            return SendShellCommand("bugreport", false);
         }
 
         // But if user explicitly asked for a zipped bug report, fails instead (otherwise calling
@@ -265,7 +265,7 @@ int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, 
         bugz_command = "bugreportz";
     }
     BugreportStandardStreamsCallback bugz_callback(dest_dir, dest_file, show_progress, this);
-    return SendShellCommand(transport_type, serial, bugz_command, false, &bugz_callback);
+    return SendShellCommand(bugz_command, false, &bugz_callback);
 }
 
 void Bugreport::UpdateProgress(const std::string& message, int progress_percentage) {
@@ -274,10 +274,9 @@ void Bugreport::UpdateProgress(const std::string& message, int progress_percenta
         LinePrinter::INFO);
 }
 
-int Bugreport::SendShellCommand(TransportType transport_type, const char* serial,
-                                const std::string& command, bool disable_shell_protocol,
+int Bugreport::SendShellCommand(const std::string& command, bool disable_shell_protocol,
                                 StandardStreamsCallbackInterface* callback) {
-    return send_shell_command(transport_type, serial, command, disable_shell_protocol, callback);
+    return send_shell_command(command, disable_shell_protocol, callback);
 }
 
 bool Bugreport::DoSyncPull(const std::vector<const char*>& srcs, const char* dst, bool copy_attrs,
