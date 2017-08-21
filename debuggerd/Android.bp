@@ -4,9 +4,12 @@ cc_defaults {
         "-Wall",
         "-Wextra",
         "-Werror",
+        "-Wno-unused-argument",
+        "-Wno-unused-function",
         "-Wno-nullability-completeness",
         "-Os",
     ],
+    cpp_std: "gnu++17",
 
     local_include_dirs: ["include"],
 }
@@ -73,6 +76,7 @@ cc_library_static {
 
     whole_static_libs: [
         "libasync_safe",
+        "libcutils",
         "libdebuggerd",
     ],
 
@@ -148,27 +152,6 @@ cc_library_static {
         "libdebuggerd/utility.cpp",
     ],
 
-    target: {
-        android_arm: {
-            srcs: ["libdebuggerd/arm/machine.cpp"],
-        },
-        android_arm64: {
-            srcs: ["libdebuggerd/arm64/machine.cpp"],
-        },
-        android_mips: {
-            srcs: ["libdebuggerd/mips/machine.cpp"],
-        },
-        android_mips64: {
-            srcs: ["libdebuggerd/mips64/machine.cpp"],
-        },
-        android_x86: {
-            srcs: ["libdebuggerd/x86/machine.cpp"],
-        },
-        android_x86_64: {
-            srcs: ["libdebuggerd/x86_64/machine.cpp"],
-        },
-    },
-
     local_include_dirs: ["libdebuggerd/include"],
     export_include_dirs: ["libdebuggerd/include"],
 
@@ -193,7 +176,6 @@ cc_test {
         "libdebuggerd/test/elf_fake.cpp",
         "libdebuggerd/test/log_fake.cpp",
         "libdebuggerd/test/open_files_list_test.cpp",
-        "libdebuggerd/test/ptrace_fake.cpp",
         "libdebuggerd/test/tombstone_test.cpp",
     ],
 
@@ -218,6 +200,7 @@ cc_test {
 
     static_libs: [
         "libdebuggerd",
+        "libunwindstack",
     ],
 
     local_include_dirs: [
@@ -264,6 +247,7 @@ cc_binary {
         "libbase",
         "liblog",
         "libprocinfo",
+        "libunwindstack",
     ],
 }
 

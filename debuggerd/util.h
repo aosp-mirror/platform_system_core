@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <string>
+
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
@@ -42,3 +44,6 @@ ssize_t send_fd(int sockfd, const void* _Nonnull data, size_t len, android::base
 //   plus any errors returned by the underlying recvmsg.
 ssize_t recv_fd(int sockfd, void* _Nonnull data, size_t len,
                 android::base::unique_fd* _Nullable out_fd);
+
+std::string get_process_name(pid_t pid);
+std::string get_thread_name(pid_t tid);

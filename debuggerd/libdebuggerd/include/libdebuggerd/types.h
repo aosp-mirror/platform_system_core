@@ -1,5 +1,7 @@
+#pragma once
+
 /*
- * Copyright (C) 2011 The Android Open Source Project
+ * Copyright (C) 2012 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +16,19 @@
  * limitations under the License.
  */
 
-#ifndef _DEBUGGERD_MACHINE_H
-#define _DEBUGGERD_MACHINE_H
+#include <memory>
+#include <string>
 
-#include <sys/types.h>
+#include <unwindstack/Regs.h>
 
-#include <backtrace/Backtrace.h>
+struct ThreadInfo {
+  std::unique_ptr<unwindstack::Regs> registers;
+  pid_t tid;
+  std::string thread_name;
 
-#include "utility.h"
+  pid_t pid;
+  std::string process_name;
 
-void dump_memory_and_code(log_t* log, Backtrace* backtrace);
-void dump_registers(log_t* log, pid_t tid);
-void dump_registers(log_t* log, const ucontext_t* uc);
-
-#endif // _DEBUGGERD_MACHINE_H
+  int signo = 0;
+  siginfo_t* siginfo = nullptr;
+};

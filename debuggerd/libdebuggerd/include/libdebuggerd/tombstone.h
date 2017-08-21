@@ -24,7 +24,10 @@
 #include <map>
 #include <string>
 
+#include <android-base/unique_fd.h>
+
 #include "open_files_list.h"
+#include "types.h"
 
 class BacktraceMap;
 
@@ -43,11 +46,10 @@ void engrave_tombstone(int tombstone_fd, BacktraceMap* map, const OpenFilesList*
 void engrave_tombstone_ucontext(int tombstone_fd, uintptr_t abort_msg_address, siginfo_t* siginfo,
                                 ucontext_t* ucontext);
 
-// Compatibility shim.
-__attribute__((__unused__))
-static void engrave_tombstone_ucontext(int tombstone_fd, pid_t, pid_t, uintptr_t abort_msg_address,
-                                       siginfo_t* siginfo, ucontext_t* ucontext) {
-  engrave_tombstone_ucontext(tombstone_fd, abort_msg_address, siginfo, ucontext);
-}
+void engrave_tombstone(android::base::unique_fd output_fd, BacktraceMap* map,
+                       unwindstack::Memory* process_memory,
+                       const std::map<pid_t, ThreadInfo>& thread_info, pid_t target_thread,
+                       uintptr_t abort_msg_address, OpenFilesList* open_files,
+                       std::string* amfd_data);
 
-#endif // _DEBUGGERD_TOMBSTONE_H
+#endif  // _DEBUGGERD_TOMBSTONE_H
