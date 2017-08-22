@@ -29,14 +29,13 @@ class Bugreport {
   public:
     Bugreport() : line_printer_() {
     }
-    int DoIt(TransportType transport_type, const char* serial, int argc, const char** argv);
+    int DoIt(int argc, const char** argv);
 
   protected:
     // Functions below are abstractions of external functions so they can be
     // mocked on tests.
     virtual int SendShellCommand(
-        TransportType transport_type, const char* serial, const std::string& command,
-        bool disable_shell_protocol,
+        const std::string& command, bool disable_shell_protocol,
         StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK);
 
     virtual bool DoSyncPull(const std::vector<const char*>& srcs, const char* dst, bool copy_attrs,

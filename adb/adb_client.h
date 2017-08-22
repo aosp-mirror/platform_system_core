@@ -40,7 +40,9 @@ bool adb_query(const std::string& service, std::string* _Nonnull result,
                std::string* _Nonnull error);
 
 // Set the preferred transport to connect to.
-void adb_set_transport(TransportType type, const char* _Nullable serial);
+void adb_set_transport(TransportType type, const char* _Nullable serial, TransportId transport_id);
+void adb_get_transport(TransportType* _Nullable type, const char* _Nullable* _Nullable serial,
+                       TransportId* _Nullable transport_id);
 
 // Set the socket specification for the adb server.
 // This function can only be called once, and the argument must live to the end of the process.
@@ -57,8 +59,7 @@ int adb_send_emulator_command(int argc, const char* _Nonnull* _Nonnull argv,
 bool adb_status(int fd, std::string* _Nonnull error);
 
 // Create a host command corresponding to selected transport type/serial.
-std::string format_host_command(const char* _Nonnull command, TransportType type,
-                                const char* _Nullable serial);
+std::string format_host_command(const char* _Nonnull command);
 
 // Get the feature set of the current preferred transport.
 bool adb_get_feature_set(FeatureSet* _Nonnull feature_set, std::string* _Nonnull error);
