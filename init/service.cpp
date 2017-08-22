@@ -57,22 +57,20 @@ using android::base::WriteStringToFile;
 namespace android {
 namespace init {
 
-static std::string ComputeContextFromExecutable(std::string& service_name,
-                                                const std::string& service_path) {
+static Result<std::string> ComputeContextFromExecutable(std::string& service_name,
+                                                        const std::string& service_path) {
     std::string computed_context;
 
     char* raw_con = nullptr;
     char* raw_filecon = nullptr;
 
     if (getcon(&raw_con) == -1) {
-        LOG(ERROR) << "could not get context while starting '" << service_name << "'";
-        return "";
+        return Error() << "Could not get security context";
     }
     std::unique_ptr<char> mycon(raw_con);
 
     if (getfilecon(service_path.c_str(), &raw_filecon) == -1) {
-        LOG(ERROR) << "could not get file context while starting '" << service_name << "'";
-        return "";
+        return Error() << "Could not get file context";
     }
     std::unique_ptr<char> filecon(raw_filecon);
 
@@ -84,12 +82,10 @@ static std::string ComputeContextFromExecutable(std::string& service_name,
         free(new_con);
     }
     if (rc == 0 && computed_context == mycon.get()) {
-        LOG(ERROR) << "service " << service_name << " does not have a SELinux domain defined";
-        return "";
+        return Error() << "Service does not have an SELinux domain defined";
     }
     if (rc < 0) {
-        LOG(ERROR) << "could not get context while starting '" << service_name << "'";
-        return "";
+        return Error() << "Could not get process context";
     }
     return computed_context;
 }
@@ -629,16 +625,16 @@ Result<Success> Service::ParseLine(const std::vector<std::string>& args) {
     static const OptionParserMap parser_map;
     auto parser = parser_map.FindFunction(args);
 
-    if (!parser) return Error() << parser.error();
+    if (!parser) return parser.error();
 
     return std::invoke(*parser, this, args);
 }
 
-bool Service::ExecStart() {
+Result<Success> Service::ExecStart() {
     flags_ |= SVC_ONESHOT;
 
-    if (!Start()) {
-        return false;
+    if (auto result = Start(); !result) {
+        return result;
     }
 
     flags_ |= SVC_EXEC;
@@ -648,10 +644,10 @@ bool Service::ExecStart() {
               << supp_gids_.size() << " context " << (!seclabel_.empty() ? seclabel_ : "default")
               << ") started; waiting...";
 
-    return true;
+    return Success();
 }
 
-bool Service::Start() {
+Result<Success> Service::Start() {
     // Starting a service removes it from the disabled or reset state and
     // immediately takes it out of the restarting state if it was in there.
     flags_ &= (~(SVC_DISABLED|SVC_RESTARTING|SVC_RESET|SVC_RESTART|SVC_DISABLED_START));
@@ -660,7 +656,8 @@ bool Service::Start() {
     // process of exiting, we've ensured that they will immediately restart
     // on exit, unless they are ONESHOT.
     if (flags_ & SVC_RUNNING) {
-        return false;
+        // It is not an error to try to start a service that is already running.
+        return Success();
     }
 
     bool needs_console = (flags_ & SVC_CONSOLE);
@@ -673,28 +670,27 @@ bool Service::Start() {
         // properly registered for the device node
         int console_fd = open(console_.c_str(), O_RDWR | O_CLOEXEC);
         if (console_fd < 0) {
-            PLOG(ERROR) << "service '" << name_ << "' couldn't open console '" << console_ << "'";
             flags_ |= SVC_DISABLED;
-            return false;
+            return ErrnoError() << "Couldn't open console '" << console_ << "'";
         }
         close(console_fd);
     }
 
     struct stat sb;
     if (stat(args_[0].c_str(), &sb) == -1) {
-        PLOG(ERROR) << "cannot find '" << args_[0] << "', disabling '" << name_ << "'";
         flags_ |= SVC_DISABLED;
-        return false;
+        return ErrnoError() << "Cannot find '" << args_[0] << "'";
     }
 
     std::string scon;
     if (!seclabel_.empty()) {
         scon = seclabel_;
     } else {
-        scon = ComputeContextFromExecutable(name_, args_[0]);
-        if (scon == "") {
-            return false;
+        auto result = ComputeContextFromExecutable(name_, args_[0]);
+        if (!result) {
+            return result.error();
         }
+        scon = *result;
     }
 
     LOG(INFO) << "starting service '" << name_ << "'...";
@@ -779,9 +775,8 @@ bool Service::Start() {
     }
 
     if (pid < 0) {
-        PLOG(ERROR) << "failed to fork for '" << name_ << "'";
         pid_ = 0;
-        return false;
+        return ErrnoError() << "Failed to fork";
     }
 
     if (oom_score_adjust_ != -1000) {
@@ -823,24 +818,24 @@ bool Service::Start() {
     }
 
     NotifyStateChange("running");
-    return true;
+    return Success();
 }
 
-bool Service::StartIfNotDisabled() {
+Result<Success> Service::StartIfNotDisabled() {
     if (!(flags_ & SVC_DISABLED)) {
         return Start();
     } else {
         flags_ |= SVC_DISABLED_START;
     }
-    return true;
+    return Success();
 }
 
-bool Service::Enable() {
+Result<Success> Service::Enable() {
     flags_ &= ~(SVC_DISABLED | SVC_RC_DISABLED);
     if (flags_ & SVC_DISABLED_START) {
         return Start();
     }
-    return true;
+    return Success();
 }
 
 void Service::Reset() {
@@ -866,7 +861,9 @@ void Service::Restart() {
         StopOrReset(SVC_RESTART);
     } else if (!(flags_ & SVC_RESTARTING)) {
         /* Just start the service since it's not running. */
-        Start();
+        if (auto result = Start(); !result) {
+            LOG(ERROR) << "Could not restart '" << name_ << "': " << result.error();
+        }
     } /* else: Service is restarting anyways. */
 }
 

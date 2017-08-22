@@ -70,10 +70,10 @@ class Service {
 
     bool IsRunning() { return (flags_ & SVC_RUNNING) != 0; }
     Result<Success> ParseLine(const std::vector<std::string>& args);
-    bool ExecStart();
-    bool Start();
-    bool StartIfNotDisabled();
-    bool Enable();
+    Result<Success> ExecStart();
+    Result<Success> Start();
+    Result<Success> StartIfNotDisabled();
+    Result<Success> Enable();
     void Reset();
     void Stop();
     void Terminate();
