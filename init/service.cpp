@@ -147,14 +147,6 @@ static void ExpandArgs(const std::vector<std::string>& args, std::vector<char*>*
     strs->push_back(nullptr);
 }
 
-ServiceEnvironmentInfo::ServiceEnvironmentInfo() {
-}
-
-ServiceEnvironmentInfo::ServiceEnvironmentInfo(const std::string& name,
-                                               const std::string& value)
-    : name(name), value(value) {
-}
-
 unsigned long Service::next_start_order_ = 1;
 bool Service::is_exec_service_running_ = false;
 
@@ -507,7 +499,7 @@ Result<Success> Service::ParseSeclabel(const std::vector<std::string>& args) {
 }
 
 Result<Success> Service::ParseSetenv(const std::vector<std::string>& args) {
-    envvars_.emplace_back(args[1], args[2]);
+    environment_vars_.emplace_back(args[1], args[2]);
     return Success();
 }
 
@@ -723,8 +715,8 @@ bool Service::Start() {
             SetUpPidNamespace(name_);
         }
 
-        for (const auto& ei : envvars_) {
-            add_environment(ei.name.c_str(), ei.value.c_str());
+        for (const auto& [key, value] : environment_vars_) {
+            setenv(key.c_str(), value.c_str(), 1);
         }
 
         std::for_each(descriptors_.begin(), descriptors_.end(),
@@ -779,7 +771,7 @@ bool Service::Start() {
 
         std::vector<char*> strs;
         ExpandArgs(args_, &strs);
-        if (execve(strs[0], (char**) &strs[0], (char**) ENV) < 0) {
+        if (execv(strs[0], (char**)&strs[0]) < 0) {
             PLOG(ERROR) << "cannot execve('" << strs[0] << "')";
         }
 

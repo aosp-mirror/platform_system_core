@@ -48,7 +48,6 @@
 #include "selinux.h"
 
 #include <fcntl.h>
-#include <paths.h>
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -126,8 +125,7 @@ bool ForkExecveAndWaitForCompletion(const char* filename, char* const argv[]) {
         }
         TEMP_FAILURE_RETRY(close(pipe_fds[1]));
 
-        const char* envp[] = {_PATH_DEFPATH, nullptr};
-        if (execve(filename, argv, (char**)envp) == -1) {
+        if (execv(filename, argv) == -1) {
             PLOG(ERROR) << "Failed to execve " << filename;
             return false;
         }

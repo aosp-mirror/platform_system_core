@@ -71,8 +71,6 @@ static char qemu[32];
 
 std::string default_console = "/dev/console";
 
-const char *ENV[32];
-
 static int epoll_fd = -1;
 
 static std::unique_ptr<Timer> waiting_for_prop(nullptr);
@@ -124,38 +122,6 @@ void register_epoll_handler(int fd, void (*fn)()) {
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev) == -1) {
         PLOG(ERROR) << "epoll_ctl failed";
     }
-}
-
-/* add_environment - add "key=value" to the current environment */
-int add_environment(const char *key, const char *val)
-{
-    size_t n;
-    size_t key_len = strlen(key);
-
-    /* The last environment entry is reserved to terminate the list */
-    for (n = 0; n < (arraysize(ENV) - 1); n++) {
-
-        /* Delete any existing entry for this key */
-        if (ENV[n] != NULL) {
-            size_t entry_key_len = strcspn(ENV[n], "=");
-            if ((entry_key_len == key_len) && (strncmp(ENV[n], key, entry_key_len) == 0)) {
-                free((char*)ENV[n]);
-                ENV[n] = NULL;
-            }
-        }
-
-        /* Add entry if a free slot is available */
-        if (ENV[n] == NULL) {
-            char* entry;
-            asprintf(&entry, "%s=%s", key, val);
-            ENV[n] = entry;
-            return 0;
-        }
-    }
-
-    LOG(ERROR) << "No env. room to store: '" << key << "':'" << val << "'";
-
-    return -1;
 }
 
 bool start_waiting_for_property(const char *name, const char *value)
@@ -429,8 +395,6 @@ int main(int argc, char** argv) {
         install_reboot_signal_handlers();
     }
 
-    add_environment("PATH", _PATH_DEFPATH);
-
     bool is_first_stage = (getenv("INIT_SECOND_STAGE") == nullptr);
 
     if (is_first_stage) {
@@ -439,6 +403,8 @@ int main(int argc, char** argv) {
         // Clear the umask.
         umask(0);
 
+        clearenv();
+        setenv("PATH", _PATH_DEFPATH, 1);
         // Get the basic filesystem setup we need put together in the initramdisk
         // on / and then we'll let the rc file figure out the rest.
         mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755");

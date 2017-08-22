@@ -159,8 +159,8 @@ static Result<Success> do_exec_start(const std::vector<std::string>& args) {
 }
 
 static Result<Success> do_export(const std::vector<std::string>& args) {
-    if (!add_environment(args[1].c_str(), args[2].c_str())) {
-        return Error();
+    if (setenv(args[1].c_str(), args[2].c_str(), 1) == -1) {
+        return ErrnoError() << "setenv() failed";
     }
     return Success();
 }
