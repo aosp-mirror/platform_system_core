@@ -98,7 +98,7 @@ void Action::ExecuteCommand(const Command& command) const {
 
         LOG(INFO) << "Command '" << cmd_str << "' action=" << trigger_name << " (" << filename_
                   << ":" << command.line() << ") took " << duration.count() << "ms and "
-                  << (result ? "succeeded" : "failed: " + result.error());
+                  << (result ? "succeeded" : "failed: " + result.error_string());
     }
 }
 
