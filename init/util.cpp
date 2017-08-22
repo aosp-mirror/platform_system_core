@@ -206,13 +206,16 @@ bool mkdir_recursive(const std::string& path, mode_t mode) {
 }
 
 int wait_for_file(const char* filename, std::chrono::nanoseconds timeout) {
-    boot_clock::time_point timeout_time = boot_clock::now() + timeout;
-    while (boot_clock::now() < timeout_time) {
+    android::base::Timer t;
+    while (t.duration() < timeout) {
         struct stat sb;
-        if (stat(filename, &sb) != -1) return 0;
-
+        if (stat(filename, &sb) != -1) {
+            LOG(INFO) << "wait for '" << filename << "' took " << t;
+            return 0;
+        }
         std::this_thread::sleep_for(10ms);
     }
+    LOG(WARNING) << "wait for '" << filename << "' timed out and took " << t;
     return -1;
 }
 
