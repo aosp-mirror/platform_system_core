@@ -20,6 +20,7 @@
 #include "adb_client.h"
 
 #include <errno.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -46,12 +47,20 @@
 
 static TransportType __adb_transport = kTransportAny;
 static const char* __adb_serial = NULL;
+static TransportId __adb_transport_id = 0;
 
 static const char* __adb_server_socket_spec;
 
-void adb_set_transport(TransportType type, const char* serial) {
+void adb_set_transport(TransportType type, const char* serial, TransportId transport_id) {
     __adb_transport = type;
     __adb_serial = serial;
+    __adb_transport_id = transport_id;
+}
+
+void adb_get_transport(TransportType* type, const char** serial, TransportId* transport_id) {
+    if (type) *type = __adb_transport;
+    if (serial) *serial = __adb_serial;
+    if (transport_id) *transport_id = __adb_transport_id;
 }
 
 void adb_set_socket_spec(const char* socket_spec) {
@@ -63,7 +72,10 @@ void adb_set_socket_spec(const char* socket_spec) {
 
 static int switch_socket_transport(int fd, std::string* error) {
     std::string service;
-    if (__adb_serial) {
+    if (__adb_transport_id) {
+        service += "host:transport-id:";
+        service += std::to_string(__adb_transport_id);
+    } else if (__adb_serial) {
         service += "host:transport:";
         service += __adb_serial;
     } else {
@@ -292,15 +304,18 @@ bool adb_query(const std::string& service, std::string* result, std::string* err
     return true;
 }
 
-std::string format_host_command(const char* command, TransportType type, const char* serial) {
-    if (serial) {
-        return android::base::StringPrintf("host-serial:%s:%s", serial, command);
+std::string format_host_command(const char* command) {
+    if (__adb_transport_id) {
+        return android::base::StringPrintf("host-transport-id:%" PRIu64 ":%s", __adb_transport_id,
+                                           command);
+    } else if (__adb_serial) {
+        return android::base::StringPrintf("host-serial:%s:%s", __adb_serial, command);
     }
 
     const char* prefix = "host";
-    if (type == kTransportUsb) {
+    if (__adb_transport == kTransportUsb) {
         prefix = "host-usb";
-    } else if (type == kTransportLocal) {
+    } else if (__adb_transport == kTransportLocal) {
         prefix = "host-local";
     }
     return android::base::StringPrintf("%s:%s", prefix, command);
@@ -308,7 +323,7 @@ std::string format_host_command(const char* command, TransportType type, const c
 
 bool adb_get_feature_set(FeatureSet* feature_set, std::string* error) {
     std::string result;
-    if (adb_query(format_host_command("features", __adb_transport, __adb_serial), &result, error)) {
+    if (adb_query(format_host_command("features"), &result, error)) {
         *feature_set = StringToFeatureSet(result);
         return true;
     }

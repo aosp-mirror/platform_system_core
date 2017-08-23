@@ -62,11 +62,11 @@
 #include "shell_service.h"
 #include "sysdeps/chrono.h"
 
-static int install_app(TransportType t, const char* serial, int argc, const char** argv);
-static int install_multiple_app(TransportType t, const char* serial, int argc, const char** argv);
-static int uninstall_app(TransportType t, const char* serial, int argc, const char** argv);
-static int install_app_legacy(TransportType t, const char* serial, int argc, const char** argv);
-static int uninstall_app_legacy(TransportType t, const char* serial, int argc, const char** argv);
+static int install_app(int argc, const char** argv);
+static int install_multiple_app(int argc, const char** argv);
+static int uninstall_app(int argc, const char** argv);
+static int install_app_legacy(int argc, const char** argv);
+static int uninstall_app_legacy(int argc, const char** argv);
 
 extern int gListenAll;
 
@@ -90,6 +90,7 @@ static void help() {
         " -d         use USB device (error if multiple devices connected)\n"
         " -e         use TCP/IP device (error if multiple TCP/IP devices available)\n"
         " -s SERIAL  use device with given serial (overrides $ANDROID_SERIAL)\n"
+        " -t ID      use device with given transport id\n"
         " -H         name of adb server host [default=localhost]\n"
         " -P         port of adb server [default=5037]\n"
         " -L SOCKET  listen on given socket for adb server [default=tcp:localhost:5037]\n"
@@ -990,12 +991,15 @@ static int ppp(int argc, const char** argv) {
 #endif /* !defined(_WIN32) */
 }
 
-static bool wait_for_device(const char* service, TransportType t, const char* serial) {
+static bool wait_for_device(const char* service) {
     std::vector<std::string> components = android::base::Split(service, "-");
     if (components.size() < 3 || components.size() > 4) {
         fprintf(stderr, "adb: couldn't parse 'wait-for' command: %s\n", service);
         return false;
     }
+
+    TransportType t;
+    adb_get_transport(&t, nullptr, nullptr);
 
     // Was the caller vague about what they'd like us to wait for?
     // If so, check they weren't more specific in their choice of transport type.
@@ -1023,7 +1027,7 @@ static bool wait_for_device(const char* service, TransportType t, const char* se
         return false;
     }
 
-    std::string cmd = format_host_command(android::base::Join(components, "-").c_str(), t, serial);
+    std::string cmd = format_host_command(android::base::Join(components, "-").c_str());
     return adb_command(cmd);
 }
 
@@ -1069,8 +1073,8 @@ static bool adb_root(const char* command) {
     return true;
 }
 
-int send_shell_command(TransportType transport_type, const char* serial, const std::string& command,
-                       bool disable_shell_protocol, StandardStreamsCallbackInterface* callback) {
+int send_shell_command(const std::string& command, bool disable_shell_protocol,
+                       StandardStreamsCallbackInterface* callback) {
     int fd;
     bool use_shell_protocol = false;
 
@@ -1101,7 +1105,7 @@ int send_shell_command(TransportType transport_type, const char* serial, const s
         }
 
         fprintf(stderr, "- waiting for device -\n");
-        if (!wait_for_device("wait-for-device", transport_type, serial)) {
+        if (!wait_for_device("wait-for-device")) {
             return 1;
         }
     }
@@ -1115,7 +1119,7 @@ int send_shell_command(TransportType transport_type, const char* serial, const s
     return exit_code;
 }
 
-static int logcat(TransportType transport, const char* serial, int argc, const char** argv) {
+static int logcat(int argc, const char** argv) {
     char* log_tags = getenv("ANDROID_LOG_TAGS");
     std::string quoted = escape_arg(log_tags == nullptr ? "" : log_tags);
 
@@ -1132,7 +1136,7 @@ static int logcat(TransportType transport, const char* serial, int argc, const c
     }
 
     // No need for shell protocol with logcat, always disable for simplicity.
-    return send_shell_command(transport, serial, cmd, true);
+    return send_shell_command(cmd, true);
 }
 
 static void write_zeros(int bytes, int fd) {
@@ -1344,6 +1348,7 @@ int adb_commandline(int argc, const char** argv) {
 
     // We need to check for -d and -e before we look at $ANDROID_SERIAL.
     const char* serial = nullptr;
+    TransportId transport_id = 0;
 
     while (argc > 0) {
         if (!strcmp(argv[0],"server")) {
@@ -1363,7 +1368,7 @@ int adb_commandline(int argc, const char** argv) {
                 fprintf(stderr, "adb: invalid reply fd \"%s\"\n", reply_fd_str);
                 return 1;
             }
-        } else if (argv[0][0]=='-' && argv[0][1]=='s') {
+        } else if (!strncmp(argv[0], "-s", 2)) {
             if (isdigit(argv[0][2])) {
                 serial = argv[0] + 2;
             } else {
@@ -1371,6 +1376,19 @@ int adb_commandline(int argc, const char** argv) {
                 serial = argv[1];
                 argc--;
                 argv++;
+            }
+        } else if (!strncmp(argv[0], "-t", 2)) {
+            const char* id;
+            if (isdigit(argv[0][2])) {
+                id = argv[0] + 2;
+            } else {
+                id = argv[1];
+                argc--;
+                argv++;
+            }
+            transport_id = strtoll(id, const_cast<char**>(&id), 10);
+            if (*id != '\0') {
+                return syntax_error("invalid transport id");
             }
         } else if (!strcmp(argv[0],"-d")) {
             transport_type = kTransportUsb;
@@ -1455,7 +1473,7 @@ int adb_commandline(int argc, const char** argv) {
         serial = getenv("ANDROID_SERIAL");
     }
 
-    adb_set_transport(transport_type, serial);
+    adb_set_transport(transport_type, serial, transport_id);
 
     if (is_server) {
         if (no_daemon || is_daemon) {
@@ -1482,7 +1500,7 @@ int adb_commandline(int argc, const char** argv) {
     if (!strncmp(argv[0], "wait-for-", strlen("wait-for-"))) {
         const char* service = argv[0];
 
-        if (!wait_for_device(service, transport_type, serial)) {
+        if (!wait_for_device(service)) {
             return 1;
         }
 
@@ -1593,7 +1611,7 @@ int adb_commandline(int argc, const char** argv) {
         return adb_root(argv[0]) ? 0 : 1;
     } else if (!strcmp(argv[0], "bugreport")) {
         Bugreport bugreport;
-        return bugreport.DoIt(transport_type, serial, argc, argv);
+        return bugreport.DoIt(argc, argv);
     } else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
         bool reverse = !strcmp(argv[0], "reverse");
         ++argv;
@@ -1689,20 +1707,20 @@ int adb_commandline(int argc, const char** argv) {
     else if (!strcmp(argv[0], "install")) {
         if (argc < 2) return syntax_error("install requires an argument");
         if (_use_legacy_install()) {
-            return install_app_legacy(transport_type, serial, argc, argv);
+            return install_app_legacy(argc, argv);
         }
-        return install_app(transport_type, serial, argc, argv);
+        return install_app(argc, argv);
     }
     else if (!strcmp(argv[0], "install-multiple")) {
         if (argc < 2) return syntax_error("install-multiple requires an argument");
-        return install_multiple_app(transport_type, serial, argc, argv);
+        return install_multiple_app(argc, argv);
     }
     else if (!strcmp(argv[0], "uninstall")) {
         if (argc < 2) return syntax_error("uninstall requires an argument");
         if (_use_legacy_install()) {
-            return uninstall_app_legacy(transport_type, serial, argc, argv);
+            return uninstall_app_legacy(argc, argv);
         }
-        return uninstall_app(transport_type, serial, argc, argv);
+        return uninstall_app(argc, argv);
     }
     else if (!strcmp(argv[0], "sync")) {
         std::string src;
@@ -1756,11 +1774,11 @@ int adb_commandline(int argc, const char** argv) {
         !strcmp(argv[0],"get-serialno") ||
         !strcmp(argv[0],"get-devpath"))
     {
-        return adb_query_command(format_host_command(argv[0], transport_type, serial));
+        return adb_query_command(format_host_command(argv[0]));
     }
     /* other commands */
     else if (!strcmp(argv[0],"logcat") || !strcmp(argv[0],"lolcat") || !strcmp(argv[0],"longcat")) {
-        return logcat(transport_type, serial, argc, argv);
+        return logcat(argc, argv);
     }
     else if (!strcmp(argv[0],"ppp")) {
         return ppp(argc, argv);
@@ -1823,7 +1841,7 @@ int adb_commandline(int argc, const char** argv) {
         return adb_query_command("host:host-features");
     } else if (!strcmp(argv[0], "reconnect")) {
         if (argc == 1) {
-            return adb_query_command(format_host_command(argv[0], transport_type, serial));
+            return adb_query_command(format_host_command(argv[0]));
         } else if (argc == 2) {
             if (!strcmp(argv[1], "device")) {
                 std::string err;
@@ -1842,7 +1860,7 @@ int adb_commandline(int argc, const char** argv) {
     return 1;
 }
 
-static int uninstall_app(TransportType transport, const char* serial, int argc, const char** argv) {
+static int uninstall_app(int argc, const char** argv) {
     // 'adb uninstall' takes the same arguments as 'cmd package uninstall' on device
     std::string cmd = "cmd package";
     while (argc-- > 0) {
@@ -1858,10 +1876,10 @@ static int uninstall_app(TransportType transport, const char* serial, int argc, 
         cmd += " " + escape_arg(*argv++);
     }
 
-    return send_shell_command(transport, serial, cmd, false);
+    return send_shell_command(cmd, false);
 }
 
-static int install_app(TransportType transport, const char* serial, int argc, const char** argv) {
+static int install_app(int argc, const char** argv) {
     // The last argument must be the APK file
     const char* file = argv[argc - 1];
     if (!android::base::EndsWithIgnoreCase(file, ".apk")) {
@@ -1914,9 +1932,7 @@ static int install_app(TransportType transport, const char* serial, int argc, co
     return 1;
 }
 
-static int install_multiple_app(TransportType transport, const char* serial, int argc,
-                                const char** argv)
-{
+static int install_multiple_app(int argc, const char** argv) {
     // Find all APK arguments starting at end.
     // All other arguments passed through verbatim.
     int first_apk = -1;
@@ -2041,17 +2057,17 @@ finalize_session:
     return EXIT_FAILURE;
 }
 
-static int pm_command(TransportType transport, const char* serial, int argc, const char** argv) {
+static int pm_command(int argc, const char** argv) {
     std::string cmd = "pm";
 
     while (argc-- > 0) {
         cmd += " " + escape_arg(*argv++);
     }
 
-    return send_shell_command(transport, serial, cmd, false);
+    return send_shell_command(cmd, false);
 }
 
-static int uninstall_app_legacy(TransportType transport, const char* serial, int argc, const char** argv) {
+static int uninstall_app_legacy(int argc, const char** argv) {
     /* if the user choose the -k option, we refuse to do it until devices are
        out with the option to uninstall the remaining data somehow (adb/ui) */
     int i;
@@ -2067,15 +2083,15 @@ static int uninstall_app_legacy(TransportType transport, const char* serial, int
     }
 
     /* 'adb uninstall' takes the same arguments as 'pm uninstall' on device */
-    return pm_command(transport, serial, argc, argv);
+    return pm_command(argc, argv);
 }
 
-static int delete_file(TransportType transport, const char* serial, const std::string& filename) {
+static int delete_file(const std::string& filename) {
     std::string cmd = "rm -f " + escape_arg(filename);
-    return send_shell_command(transport, serial, cmd, false);
+    return send_shell_command(cmd, false);
 }
 
-static int install_app_legacy(TransportType transport, const char* serial, int argc, const char** argv) {
+static int install_app_legacy(int argc, const char** argv) {
     static const char *const DATA_DEST = "/data/local/tmp/%s";
     static const char *const SD_DEST = "/sdcard/tmp/%s";
     const char* where = DATA_DEST;
@@ -2104,9 +2120,9 @@ static int install_app_legacy(TransportType transport, const char* serial, int a
         where, android::base::Basename(argv[last_apk]).c_str());
     if (!do_sync_push(apk_file, apk_dest.c_str(), false)) goto cleanup_apk;
     argv[last_apk] = apk_dest.c_str(); /* destination name, not source location */
-    result = pm_command(transport, serial, argc, argv);
+    result = pm_command(argc, argv);
 
 cleanup_apk:
-    delete_file(transport, serial, apk_dest);
+    delete_file(apk_dest);
     return result;
 }
