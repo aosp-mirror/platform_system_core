@@ -30,10 +30,6 @@ endif
 
 init_options += -DLOG_UEVENTS=0
 
-ifeq ($(TARGET_USER_MODE_LINUX), true)
-    init_cflags += -DUSER_MODE_LINUX
-endif
-
 init_cflags += \
     $(init_options) \
     -Wall -Wextra \
