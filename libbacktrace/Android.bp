@@ -66,6 +66,10 @@ cc_library_headers {
 cc_library {
     name: "libbacktrace",
     vendor_available: true,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
     defaults: ["libbacktrace_common"],
     host_supported: true,
 
