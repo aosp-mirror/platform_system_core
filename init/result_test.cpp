@@ -74,7 +74,8 @@ TEST(result, result_error) {
     ASSERT_FALSE(result);
     ASSERT_FALSE(result.has_value());
 
-    EXPECT_EQ("failure1", result.error());
+    EXPECT_EQ(0, result.error_errno());
+    EXPECT_EQ("failure1", result.error_string());
 }
 
 TEST(result, result_error_empty) {
@@ -82,7 +83,8 @@ TEST(result, result_error_empty) {
     ASSERT_FALSE(result);
     ASSERT_FALSE(result.has_value());
 
-    EXPECT_EQ("", result.error());
+    EXPECT_EQ(0, result.error_errno());
+    EXPECT_EQ("", result.error_string());
 }
 
 TEST(result, result_error_rvalue) {
@@ -96,7 +98,8 @@ TEST(result, result_error_rvalue) {
     ASSERT_FALSE(MakeRvalueErrorResult());
     ASSERT_FALSE(MakeRvalueErrorResult().has_value());
 
-    EXPECT_EQ("failure1", MakeRvalueErrorResult().error());
+    EXPECT_EQ(0, MakeRvalueErrorResult().error_errno());
+    EXPECT_EQ("failure1", MakeRvalueErrorResult().error_string());
 }
 
 TEST(result, result_errno_error) {
@@ -107,7 +110,72 @@ TEST(result, result_errno_error) {
     ASSERT_FALSE(result);
     ASSERT_FALSE(result.has_value());
 
-    EXPECT_EQ("failure1: "s + strerror(test_errno), result.error());
+    EXPECT_EQ(test_errno, result.error_errno());
+    EXPECT_EQ("failure1: "s + strerror(test_errno), result.error_string());
+}
+
+TEST(result, result_errno_error_no_text) {
+    constexpr int test_errno = 6;
+    errno = test_errno;
+    Result<Success> result = ErrnoError();
+
+    ASSERT_FALSE(result);
+    ASSERT_FALSE(result.has_value());
+
+    EXPECT_EQ(test_errno, result.error_errno());
+    EXPECT_EQ(strerror(test_errno), result.error_string());
+}
+
+TEST(result, result_error_from_other_result) {
+    auto error_text = "test error"s;
+    Result<Success> result = Error() << error_text;
+
+    ASSERT_FALSE(result);
+    ASSERT_FALSE(result.has_value());
+
+    Result<std::string> result2 = result.error();
+
+    ASSERT_FALSE(result2);
+    ASSERT_FALSE(result2.has_value());
+
+    EXPECT_EQ(0, result.error_errno());
+    EXPECT_EQ(error_text, result.error_string());
+}
+
+TEST(result, result_error_through_ostream) {
+    auto error_text = "test error"s;
+    Result<Success> result = Error() << error_text;
+
+    ASSERT_FALSE(result);
+    ASSERT_FALSE(result.has_value());
+
+    Result<std::string> result2 = Error() << result.error();
+
+    ASSERT_FALSE(result2);
+    ASSERT_FALSE(result2.has_value());
+
+    EXPECT_EQ(0, result.error_errno());
+    EXPECT_EQ(error_text, result.error_string());
+}
+
+TEST(result, result_errno_error_through_ostream) {
+    auto error_text = "test error"s;
+    constexpr int test_errno = 6;
+    errno = 6;
+    Result<Success> result = ErrnoError() << error_text;
+
+    errno = 0;
+
+    ASSERT_FALSE(result);
+    ASSERT_FALSE(result.has_value());
+
+    Result<std::string> result2 = Error() << result.error();
+
+    ASSERT_FALSE(result2);
+    ASSERT_FALSE(result2.has_value());
+
+    EXPECT_EQ(test_errno, result.error_errno());
+    EXPECT_EQ(error_text + ": " + strerror(test_errno), result.error_string());
 }
 
 TEST(result, constructor_forwarding) {
@@ -215,7 +283,7 @@ TEST(result, die_on_access_failed_result) {
 
 TEST(result, die_on_get_error_succesful_result) {
     Result<std::string> result = "success";
-    ASSERT_DEATH(result.error(), "");
+    ASSERT_DEATH(result.error_string(), "");
 }
 
 }  // namespace init

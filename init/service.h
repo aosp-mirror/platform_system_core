@@ -57,13 +57,6 @@
 namespace android {
 namespace init {
 
-struct ServiceEnvironmentInfo {
-    ServiceEnvironmentInfo();
-    ServiceEnvironmentInfo(const std::string& name, const std::string& value);
-    std::string name;
-    std::string value;
-};
-
 class Service {
   public:
     Service(const std::string& name, const std::vector<std::string>& args);
@@ -77,10 +70,10 @@ class Service {
 
     bool IsRunning() { return (flags_ & SVC_RUNNING) != 0; }
     Result<Success> ParseLine(const std::vector<std::string>& args);
-    bool ExecStart();
-    bool Start();
-    bool StartIfNotDisabled();
-    bool Enable();
+    Result<Success> ExecStart();
+    Result<Success> Start();
+    Result<Success> StartIfNotDisabled();
+    Result<Success> Enable();
     void Reset();
     void Stop();
     void Terminate();
@@ -178,7 +171,7 @@ class Service {
     std::string seclabel_;
 
     std::vector<std::unique_ptr<DescriptorInfo>> descriptors_;
-    std::vector<ServiceEnvironmentInfo> envvars_;
+    std::vector<std::pair<std::string, std::string>> environment_vars_;
 
     Action onrestart_;  // Commands to execute on restart.
 
