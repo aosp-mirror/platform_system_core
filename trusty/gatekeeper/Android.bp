@@ -22,6 +22,7 @@
 
 cc_library_shared {
     name: "gatekeeper.trusty",
+    vendor: true,
 
     relative_install_path: "hw",
 
@@ -43,4 +44,5 @@ cc_library_shared {
         "libcutils",
         "libtrusty",
     ],
+    header_libs: ["libhardware_headers"],
 }

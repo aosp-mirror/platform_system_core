@@ -16,5 +16,6 @@
 
 cc_library_static {
     name: "libtrustystorageinterface",
+    vendor: true,
     export_include_dirs: ["include"],
 }
