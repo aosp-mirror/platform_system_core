@@ -16,6 +16,7 @@
 
 cc_test {
     name: "secure-storage-unit-test",
+    vendor: true,
 
     cflags: [
         "-g",
@@ -29,6 +30,8 @@ cc_test {
         "libtrustystorageinterface",
         "libtrustystorage",
         "libtrusty",
+    ],
+    shared_libs: [
         "liblog",
     ],
 
