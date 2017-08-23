@@ -28,7 +28,6 @@
 #include <cutils/android_get_control_file.h>
 #include <cutils/sockets.h>
 
-#include "init.h"
 #include "util.h"
 
 namespace android {
@@ -62,7 +61,7 @@ void DescriptorInfo::CreateAndPublish(const std::string& globalContext) const {
                 [] (char& c) { c = isalnum(c) ? c : '_'; });
 
   std::string val = std::to_string(fd);
-  add_environment(publishedName.c_str(), val.c_str());
+  setenv(publishedName.c_str(), val.c_str(), 1);
 
   // make sure we don't close on exec
   fcntl(fd, F_SETFD, 0);
