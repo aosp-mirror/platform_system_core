@@ -1463,7 +1463,7 @@ static void fb_perform_format(Transport* transport,
 
     if (fs_generator_generate(gen, output.path, size, initial_dir,
             eraseBlkSize, logicalBlkSize)) {
-        fprintf(stderr, "Cannot generate image: %s\n", strerror(errno));
+        die("Cannot generate image for %s\n", partition);
         return;
     }
 
