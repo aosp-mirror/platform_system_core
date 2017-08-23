@@ -127,7 +127,9 @@ static Result<Success> do_enable(const std::vector<std::string>& args) {
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "Could not find service";
 
-    if (!svc->Enable()) return Error() << "Could not enable service";
+    if (auto result = svc->Enable(); !result) {
+        return Error() << "Could not enable service: " << result.error();
+    }
 
     return Success();
 }
@@ -137,8 +139,8 @@ static Result<Success> do_exec(const std::vector<std::string>& args) {
     if (!service) {
         return Error() << "Could not create exec service";
     }
-    if (!service->ExecStart()) {
-        return Error() << "Could not start exec service";
+    if (auto result = service->ExecStart(); !result) {
+        return Error() << "Could not start exec service: " << result.error();
     }
 
     ServiceList::GetInstance().AddService(std::move(service));
@@ -151,16 +153,16 @@ static Result<Success> do_exec_start(const std::vector<std::string>& args) {
         return Error() << "Service not found";
     }
 
-    if (!service->ExecStart()) {
-        return Error() << "Could not start Service";
+    if (auto result = service->ExecStart(); !result) {
+        return Error() << "Could not start exec service: " << result.error();
     }
 
     return Success();
 }
 
 static Result<Success> do_export(const std::vector<std::string>& args) {
-    if (!add_environment(args[1].c_str(), args[2].c_str())) {
-        return Error();
+    if (setenv(args[1].c_str(), args[2].c_str(), 1) == -1) {
+        return ErrnoError() << "setenv() failed";
     }
     return Success();
 }
@@ -602,7 +604,9 @@ static Result<Success> do_setrlimit(const std::vector<std::string>& args) {
 static Result<Success> do_start(const std::vector<std::string>& args) {
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "service " << args[1] << " not found";
-    if (!svc->Start()) return Error() << "failed to start service";
+    if (auto result = svc->Start(); !result) {
+        return Error() << "Could not start service: " << result.error();
+    }
     return Success();
 }
 
@@ -627,6 +631,11 @@ static Result<Success> do_trigger(const std::vector<std::string>& args) {
 
 static Result<Success> do_symlink(const std::vector<std::string>& args) {
     if (symlink(args[1].c_str(), args[2].c_str()) < 0) {
+        // The symlink builtin is often used to create symlinks for older devices to be backwards
+        // compatible with new paths, therefore we skip reporting this error.
+        if (errno == EEXIST && android::base::GetMinimumLogSeverity() > android::base::DEBUG) {
+            return Success();
+        }
         return ErrnoError() << "symlink() failed";
     }
     return Success();

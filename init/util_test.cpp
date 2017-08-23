@@ -34,7 +34,7 @@ TEST(util, ReadFile_ENOENT) {
     auto file_contents = ReadFile("/proc/does-not-exist");
     EXPECT_EQ(ENOENT, errno);
     ASSERT_FALSE(file_contents);
-    EXPECT_EQ("open() failed: No such file or directory", file_contents.error());
+    EXPECT_EQ("open() failed: No such file or directory", file_contents.error_string());
 }
 
 TEST(util, ReadFileGroupWriteable) {
@@ -45,7 +45,7 @@ TEST(util, ReadFileGroupWriteable) {
     EXPECT_NE(-1, fchmodat(AT_FDCWD, tf.path, 0620, AT_SYMLINK_NOFOLLOW)) << strerror(errno);
     auto file_contents = ReadFile(tf.path);
     ASSERT_FALSE(file_contents) << strerror(errno);
-    EXPECT_EQ("Skipping insecure file", file_contents.error());
+    EXPECT_EQ("Skipping insecure file", file_contents.error_string());
 }
 
 TEST(util, ReadFileWorldWiteable) {
@@ -56,7 +56,7 @@ TEST(util, ReadFileWorldWiteable) {
     EXPECT_NE(-1, fchmodat(AT_FDCWD, tf.path, 0602, AT_SYMLINK_NOFOLLOW)) << strerror(errno);
     auto file_contents = ReadFile(tf.path);
     ASSERT_FALSE(file_contents) << strerror(errno);
-    EXPECT_EQ("Skipping insecure file", file_contents.error());
+    EXPECT_EQ("Skipping insecure file", file_contents.error_string());
 }
 
 TEST(util, ReadFileSymbolicLink) {
@@ -65,7 +65,7 @@ TEST(util, ReadFileSymbolicLink) {
     auto file_contents = ReadFile("/charger");
     EXPECT_EQ(ELOOP, errno);
     ASSERT_FALSE(file_contents);
-    EXPECT_EQ("open() failed: Too many symbolic links encountered", file_contents.error());
+    EXPECT_EQ("open() failed: Too many symbolic links encountered", file_contents.error_string());
 }
 
 TEST(util, ReadFileSuccess) {
@@ -130,7 +130,7 @@ TEST(util, DecodeUid) {
 
     decoded_uid = DecodeUid("toot");
     EXPECT_FALSE(decoded_uid);
-    EXPECT_EQ("getpwnam failed: No such file or directory", decoded_uid.error());
+    EXPECT_EQ("getpwnam failed: No such file or directory", decoded_uid.error_string());
 
     decoded_uid = DecodeUid("123");
     EXPECT_TRUE(decoded_uid);
