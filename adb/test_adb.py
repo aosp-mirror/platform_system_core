@@ -60,13 +60,13 @@ class NonApiTest(unittest.TestCase):
                              stderr=subprocess.STDOUT)
         out, _ = p.communicate()
         self.assertEqual(1, p.returncode)
-        self.assertIn('help message', out)
+        self.assertIn('requires an argument', out)
 
         p = subprocess.Popen(['adb', 'tcpip', 'foo'], stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT)
         out, _ = p.communicate()
         self.assertEqual(1, p.returncode)
-        self.assertIn('error', out)
+        self.assertIn('invalid port', out)
 
     # Helper method that reads a pipe until it is closed, then sets the event.
     def _read_pipe_and_set_event(self, pipe, event):
