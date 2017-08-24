@@ -1588,9 +1588,13 @@ int adb_commandline(int argc, const char** argv) {
         } else {
             return 0;
         }
-    }
-    else if (!strcmp(argv[0], "tcpip") && argc > 1) {
-        return adb_connect_command(android::base::StringPrintf("tcpip:%s", argv[1]));
+    } else if (!strcmp(argv[0], "tcpip")) {
+        if (argc != 2) return syntax_error("tcpip requires an argument");
+        int port;
+        if (!android::base::ParseInt(argv[1], &port, 1, 65535)) {
+            return syntax_error("tcpip: invalid port: %s", argv[1]);
+        }
+        return adb_connect_command(android::base::StringPrintf("tcpip:%d", port));
     }
     else if (!strcmp(argv[0], "remount") ||
              !strcmp(argv[0], "reboot") ||
