@@ -29,6 +29,7 @@ test_src_files := \
 
 shared_libraries := \
     liblog \
+    libbase \
     libnativebridge \
     libnativebridge-dummy
 
