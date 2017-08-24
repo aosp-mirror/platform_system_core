@@ -54,6 +54,9 @@ cc_defaults {
                 "-DSHUTDOWN_ZERO_TIMEOUT=1",
             ],
         },
+        uml: {
+            cppflags: ["-DUSER_MODE_LINUX"],
+        }
     },
 }
 
