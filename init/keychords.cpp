@@ -81,8 +81,11 @@ static void handle_keychord() {
     if (adb_enabled == "running") {
         Service* svc = ServiceList::GetInstance().FindService(id, &Service::keychord_id);
         if (svc) {
-            LOG(INFO) << "Starting service " << svc->name() << " from keychord " << id;
-            svc->Start();
+            LOG(INFO) << "Starting service '" << svc->name() << "' from keychord " << id;
+            if (auto result = svc->Start(); !result) {
+                LOG(ERROR) << "Could not start service '" << svc->name() << "' from keychord " << id
+                           << ": " << result.error();
+            }
         } else {
             LOG(ERROR) << "Service for keychord " << id << " not found";
         }
