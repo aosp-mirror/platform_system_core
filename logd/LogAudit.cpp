@@ -25,7 +25,11 @@
 #include <sys/uio.h>
 #include <syslog.h>
 
+#include <fstream>
+#include <sstream>
+
 #include <android-base/macros.h>
+#include <log/log_properties.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
@@ -138,6 +142,71 @@ bool LogAudit::onDataAvailable(SocketClient* cli) {
     return true;
 }
 
+static inline bool hasMetadata(char* str, int str_len) {
+    // need to check and see if str already contains bug metadata from
+    // possibility of stuttering if log audit crashes and then reloads kernel
+    // messages. Kernel denials that contain metadata will either end in
+    // "b/[0-9]+$" or "b/[0-9]+  duplicate messages suppressed$" which will put
+    // a '/' character at either 9 or 39 indices away from the end of the str.
+    return str_len >= 39 &&
+           (str[str_len - 9] == '/' || str[str_len - 39] == '/');
+}
+
+std::map<std::string, std::string> LogAudit::populateDenialMap() {
+    std::ifstream bug_file("/system/etc/selinux/selinux_denial_metadata");
+    std::string line;
+    // allocate a map for the static map pointer in logParse to keep track of,
+    // this function only runs once
+    std::map<std::string, std::string> denial_to_bug;
+    if (bug_file.good()) {
+        std::string scontext;
+        std::string tcontext;
+        std::string tclass;
+        std::string bug_num;
+        while (std::getline(bug_file, line)) {
+            std::stringstream split_line(line);
+            split_line >> scontext >> tcontext >> tclass >> bug_num;
+            denial_to_bug.emplace(scontext + tcontext + tclass, bug_num);
+        }
+    }
+    return denial_to_bug;
+}
+
+std::string LogAudit::denialParse(const std::string& denial, char terminator,
+                                  const std::string& search_term) {
+    size_t start_index = denial.find(search_term);
+    if (start_index != std::string::npos) {
+        start_index += search_term.length();
+        return denial.substr(
+            start_index, denial.find(terminator, start_index) - start_index);
+    }
+    return "";
+}
+
+void LogAudit::logParse(const std::string& string, std::string* bug_num) {
+    if (!__android_log_is_debuggable()) {
+        bug_num->assign("");
+        return;
+    }
+    static std::map<std::string, std::string> denial_to_bug =
+        populateDenialMap();
+    std::string scontext = denialParse(string, ':', "scontext=u:object_r:");
+    std::string tcontext = denialParse(string, ':', "tcontext=u:object_r:");
+    std::string tclass = denialParse(string, ' ', "tclass=");
+    if (scontext.empty()) {
+        scontext = denialParse(string, ':', "scontext=u:r:");
+    }
+    if (tcontext.empty()) {
+        tcontext = denialParse(string, ':', "tcontext=u:r:");
+    }
+    auto search = denial_to_bug.find(scontext + tcontext + tclass);
+    if (search != denial_to_bug.end()) {
+        bug_num->assign(" b/" + search->second);
+    } else {
+        bug_num->assign("");
+    }
+}
+
 int LogAudit::logPrint(const char* fmt, ...) {
     if (fmt == NULL) {
         return -EINVAL;
@@ -153,7 +222,6 @@ int LogAudit::logPrint(const char* fmt, ...) {
     if (rc < 0) {
         return rc;
     }
-
     char* cp;
     // Work around kernels missing
     // https://github.com/torvalds/linux/commit/b8f89caafeb55fba75b74bea25adc4e4cd91be67
@@ -165,10 +233,10 @@ int LogAudit::logPrint(const char* fmt, ...) {
     while ((cp = strstr(str, "  "))) {
         memmove(cp, cp + 1, strlen(cp + 1) + 1);
     }
-
     bool info = strstr(str, " permissive=1") || strstr(str, " policy loaded ");
+    static std::string bug_metadata;
     if ((fdDmesg >= 0) && initialized) {
-        struct iovec iov[3];
+        struct iovec iov[4];
         static const char log_info[] = { KMSG_PRIORITY(LOG_INFO) };
         static const char log_warning[] = { KMSG_PRIORITY(LOG_WARNING) };
         static const char newline[] = "\n";
@@ -197,19 +265,20 @@ int LogAudit::logPrint(const char* fmt, ...) {
             }
             if (!skip) {
                 static const char resume[] = " duplicate messages suppressed\n";
-
                 iov[0].iov_base = last_info ? const_cast<char*>(log_info)
                                             : const_cast<char*>(log_warning);
                 iov[0].iov_len =
                     last_info ? sizeof(log_info) : sizeof(log_warning);
                 iov[1].iov_base = last_str;
                 iov[1].iov_len = strlen(last_str);
+                iov[2].iov_base = const_cast<char*>(bug_metadata.c_str());
+                iov[2].iov_len = bug_metadata.length();
                 if (count > 1) {
-                    iov[2].iov_base = const_cast<char*>(resume);
-                    iov[2].iov_len = strlen(resume);
+                    iov[3].iov_base = const_cast<char*>(resume);
+                    iov[3].iov_len = strlen(resume);
                 } else {
-                    iov[2].iov_base = const_cast<char*>(newline);
-                    iov[2].iov_len = strlen(newline);
+                    iov[3].iov_base = const_cast<char*>(newline);
+                    iov[3].iov_len = strlen(newline);
                 }
 
                 writev(fdDmesg, iov, arraysize(iov));
@@ -223,13 +292,16 @@ int LogAudit::logPrint(const char* fmt, ...) {
             last_info = info;
         }
         if (count == 0) {
+            logParse(str, &bug_metadata);
             iov[0].iov_base = info ? const_cast<char*>(log_info)
                                    : const_cast<char*>(log_warning);
             iov[0].iov_len = info ? sizeof(log_info) : sizeof(log_warning);
             iov[1].iov_base = str;
             iov[1].iov_len = strlen(str);
-            iov[2].iov_base = const_cast<char*>(newline);
-            iov[2].iov_len = strlen(newline);
+            iov[2].iov_base = const_cast<char*>(bug_metadata.c_str());
+            iov[2].iov_len = bug_metadata.length();
+            iov[3].iov_base = const_cast<char*>(newline);
+            iov[3].iov_len = strlen(newline);
 
             writev(fdDmesg, iov, arraysize(iov));
         }
@@ -285,24 +357,32 @@ int LogAudit::logPrint(const char* fmt, ...) {
 
     // log to events
 
-    size_t l = strnlen(str, LOGGER_ENTRY_MAX_PAYLOAD);
-    size_t n = l + sizeof(android_log_event_string_t);
+    size_t str_len = strnlen(str, LOGGER_ENTRY_MAX_PAYLOAD);
+    if (((fdDmesg < 0) || !initialized) && !hasMetadata(str, str_len))
+        logParse(str, &bug_metadata);
+    str_len = (str_len + bug_metadata.length() <= LOGGER_ENTRY_MAX_PAYLOAD)
+                  ? str_len + bug_metadata.length()
+                  : LOGGER_ENTRY_MAX_PAYLOAD;
+    size_t message_len = str_len + sizeof(android_log_event_string_t);
 
     bool notify = false;
 
     if (events) {  // begin scope for event buffer
-        uint32_t buffer[(n + sizeof(uint32_t) - 1) / sizeof(uint32_t)];
+        uint32_t buffer[(message_len + sizeof(uint32_t) - 1) / sizeof(uint32_t)];
 
         android_log_event_string_t* event =
             reinterpret_cast<android_log_event_string_t*>(buffer);
         event->header.tag = htole32(AUDITD_LOG_TAG);
         event->type = EVENT_TYPE_STRING;
-        event->length = htole32(l);
-        memcpy(event->data, str, l);
+        event->length = htole32(message_len);
+        memcpy(event->data, str, str_len - bug_metadata.length());
+        memcpy(event->data + str_len - bug_metadata.length(),
+               bug_metadata.c_str(), bug_metadata.length());
 
-        rc = logbuf->log(LOG_ID_EVENTS, now, uid, pid, tid,
-                         reinterpret_cast<char*>(event),
-                         (n <= USHRT_MAX) ? (unsigned short)n : USHRT_MAX);
+        rc = logbuf->log(
+            LOG_ID_EVENTS, now, uid, pid, tid, reinterpret_cast<char*>(event),
+            (message_len <= USHRT_MAX) ? (unsigned short)message_len
+                                       : USHRT_MAX);
         if (rc >= 0) {
             notify = true;
         }
@@ -333,28 +413,31 @@ int LogAudit::logPrint(const char* fmt, ...) {
     const char* ecomm = strchr(comm, '"');
     if (ecomm) {
         ++ecomm;
-        l = ecomm - comm;
+        str_len = ecomm - comm;
     } else {
-        l = strlen(comm) + 1;
+        str_len = strlen(comm) + 1;
         ecomm = "";
     }
-    size_t b = estr - str;
-    if (b > LOGGER_ENTRY_MAX_PAYLOAD) {
-        b = LOGGER_ENTRY_MAX_PAYLOAD;
+    size_t prefix_len = estr - str;
+    if (prefix_len > LOGGER_ENTRY_MAX_PAYLOAD) {
+        prefix_len = LOGGER_ENTRY_MAX_PAYLOAD;
     }
-    size_t e = strnlen(ecomm, LOGGER_ENTRY_MAX_PAYLOAD - b);
-    n = b + e + l + 2;
+    size_t suffix_len = strnlen(ecomm, LOGGER_ENTRY_MAX_PAYLOAD - prefix_len);
+    message_len = str_len + prefix_len + suffix_len + bug_metadata.length() + 2;
 
     if (main) {  // begin scope for main buffer
-        char newstr[n];
+        char newstr[message_len];
 
         *newstr = info ? ANDROID_LOG_INFO : ANDROID_LOG_WARN;
-        strlcpy(newstr + 1, comm, l);
-        strncpy(newstr + 1 + l, str, b);
-        strncpy(newstr + 1 + l + b, ecomm, e);
+        strlcpy(newstr + 1, comm, str_len);
+        strncpy(newstr + 1 + str_len, str, prefix_len);
+        strncpy(newstr + 1 + str_len + prefix_len, ecomm, suffix_len);
+        strncpy(newstr + 1 + str_len + prefix_len + suffix_len,
+                bug_metadata.c_str(), bug_metadata.length());
 
         rc = logbuf->log(LOG_ID_MAIN, now, uid, pid, tid, newstr,
-                         (n <= USHRT_MAX) ? (unsigned short)n : USHRT_MAX);
+                         (message_len <= USHRT_MAX) ? (unsigned short)message_len
+                                                    : USHRT_MAX);
 
         if (rc >= 0) {
             notify = true;
@@ -368,7 +451,7 @@ int LogAudit::logPrint(const char* fmt, ...) {
     if (notify) {
         reader->notifyNewLog();
         if (rc < 0) {
-            rc = n;
+            rc = message_len;
         }
     }
 
