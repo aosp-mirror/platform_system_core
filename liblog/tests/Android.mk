@@ -64,7 +64,8 @@ test_src_files := \
     log_radio_test.cpp \
     log_read_test.cpp \
     log_system_test.cpp \
-    log_time_test.cpp
+    log_time_test.cpp \
+    log_wrap_test.cpp
 
 # Build tests for the device (with .so). Run with:
 #   adb shell /data/nativetest/liblog-unit-tests/liblog-unit-tests
