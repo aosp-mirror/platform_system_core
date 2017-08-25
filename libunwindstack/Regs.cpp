@@ -56,6 +56,10 @@ bool RegsImpl<AddressType>::GetReturnAddressFromDefault(Memory* memory, uint64_t
 RegsArm::RegsArm()
     : RegsImpl<uint32_t>(ARM_REG_LAST, ARM_REG_SP, Location(LOCATION_REGISTER, ARM_REG_LR)) {}
 
+uint32_t RegsArm::MachineType() {
+  return EM_ARM;
+}
+
 uint64_t RegsArm::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
   if (!elf->valid()) {
     return rel_pc;
@@ -90,6 +94,10 @@ void RegsArm::SetFromRaw() {
 RegsArm64::RegsArm64()
     : RegsImpl<uint64_t>(ARM64_REG_LAST, ARM64_REG_SP, Location(LOCATION_REGISTER, ARM64_REG_LR)) {}
 
+uint32_t RegsArm64::MachineType() {
+  return EM_AARCH64;
+}
+
 uint64_t RegsArm64::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
   if (!elf->valid()) {
     return rel_pc;
@@ -109,6 +117,10 @@ void RegsArm64::SetFromRaw() {
 RegsX86::RegsX86()
     : RegsImpl<uint32_t>(X86_REG_LAST, X86_REG_SP, Location(LOCATION_SP_OFFSET, -4)) {}
 
+uint32_t RegsX86::MachineType() {
+  return EM_386;
+}
+
 uint64_t RegsX86::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
   if (!elf->valid()) {
     return rel_pc;
@@ -127,6 +139,10 @@ void RegsX86::SetFromRaw() {
 
 RegsX86_64::RegsX86_64()
     : RegsImpl<uint64_t>(X86_64_REG_LAST, X86_64_REG_SP, Location(LOCATION_SP_OFFSET, -8)) {}
+
+uint32_t RegsX86_64::MachineType() {
+  return EM_X86_64;
+}
 
 uint64_t RegsX86_64::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
   if (!elf->valid()) {
@@ -212,7 +228,7 @@ static Regs* ReadX86_64(void* remote_data) {
 
 // This function assumes that reg_data is already aligned to a 64 bit value.
 // If not this could crash with an unaligned access.
-Regs* Regs::RemoteGet(pid_t pid, uint32_t* machine_type) {
+Regs* Regs::RemoteGet(pid_t pid) {
   // Make the buffer large enough to contain the largest registers type.
   std::vector<uint64_t> buffer(MAX_USER_REGS_SIZE / sizeof(uint64_t));
   struct iovec io;
@@ -225,16 +241,12 @@ Regs* Regs::RemoteGet(pid_t pid, uint32_t* machine_type) {
 
   switch (io.iov_len) {
   case sizeof(x86_user_regs):
-    *machine_type = EM_386;
     return ReadX86(buffer.data());
   case sizeof(x86_64_user_regs):
-    *machine_type = EM_X86_64;
     return ReadX86_64(buffer.data());
   case sizeof(arm_user_regs):
-    *machine_type = EM_ARM;
     return ReadArm(buffer.data());
   case sizeof(arm64_user_regs):
-    *machine_type = EM_AARCH64;
     return ReadArm64(buffer.data());
   }
   return nullptr;
@@ -320,7 +332,7 @@ Regs* Regs::CreateFromUcontext(uint32_t machine_type, void* ucontext) {
   return nullptr;
 }
 
-uint32_t Regs::GetMachineType() {
+uint32_t Regs::CurrentMachineType() {
 #if defined(__arm__)
   return EM_ARM;
 #elif defined(__aarch64__)
