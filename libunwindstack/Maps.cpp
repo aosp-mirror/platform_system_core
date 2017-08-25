@@ -25,6 +25,7 @@
 
 #include <android-base/unique_fd.h>
 
+#include <cctype>
 #include <memory>
 #include <string>
 #include <vector>
@@ -55,63 +56,151 @@ MapInfo* Maps::Find(uint64_t pc) {
   return nullptr;
 }
 
-bool Maps::ParseLine(const char* line, MapInfo* map_info) {
-  char permissions[5];
-  int name_pos;
-  // Linux /proc/<pid>/maps lines:
+// Assumes that line does not end in '\n'.
+static bool InternalParseLine(const char* line, MapInfo* map_info) {
+  // Do not use a sscanf implementation since it is not performant.
+
+  // Example linux /proc/<pid>/maps lines:
   // 6f000000-6f01e000 rwxp 00000000 00:0c 16389419   /system/lib/libcomposer.so
-  if (sscanf(line, "%" SCNx64 "-%" SCNx64 " %4s %" SCNx64 " %*x:%*x %*d %n", &map_info->start,
-             &map_info->end, permissions, &map_info->offset, &name_pos) != 4) {
+  char* str;
+  const char* old_str = line;
+  map_info->start = strtoul(old_str, &str, 16);
+  if (old_str == str || *str++ != '-') {
     return false;
   }
-  map_info->flags = PROT_NONE;
-  if (permissions[0] == 'r') {
+
+  old_str = str;
+  map_info->end = strtoul(old_str, &str, 16);
+  if (old_str == str || !std::isspace(*str++)) {
+    return false;
+  }
+
+  while (std::isspace(*str)) {
+    str++;
+  }
+
+  // Parse permissions data.
+  if (*str == '\0') {
+    return false;
+  }
+  map_info->flags = 0;
+  if (*str == 'r') {
     map_info->flags |= PROT_READ;
+  } else if (*str != '-') {
+    return false;
   }
-  if (permissions[1] == 'w') {
+  str++;
+  if (*str == 'w') {
     map_info->flags |= PROT_WRITE;
+  } else if (*str != '-') {
+    return false;
   }
-  if (permissions[2] == 'x') {
+  str++;
+  if (*str == 'x') {
     map_info->flags |= PROT_EXEC;
+  } else if (*str != '-') {
+    return false;
+  }
+  str++;
+  if (*str != 'p' && *str != 's') {
+    return false;
+  }
+  str++;
+
+  if (!std::isspace(*str++)) {
+    return false;
   }
 
-  if (line[name_pos] != '\0') {
-    map_info->name = &line[name_pos];
-    size_t length = map_info->name.length() - 1;
-    if (map_info->name[length] == '\n') {
-      map_info->name.erase(length);
-    }
-
-    // Mark a device map in /dev/and not in /dev/ashmem/ specially.
-    if (map_info->name.substr(0, 5) == "/dev/" && map_info->name.substr(5, 7) != "ashmem/") {
-      map_info->flags |= MAPS_FLAGS_DEVICE_MAP;
-    }
+  old_str = str;
+  map_info->offset = strtoul(old_str, &str, 16);
+  if (old_str == str || !std::isspace(*str)) {
+    return false;
   }
 
+  // Ignore the 00:00 values.
+  old_str = str;
+  (void)strtoul(old_str, &str, 16);
+  if (old_str == str || *str++ != ':') {
+    return false;
+  }
+  if (std::isspace(*str)) {
+    return false;
+  }
+
+  // Skip the inode.
+  old_str = str;
+  (void)strtoul(str, &str, 16);
+  if (old_str == str || !std::isspace(*str++)) {
+    return false;
+  }
+
+  // Skip decimal digit.
+  old_str = str;
+  (void)strtoul(old_str, &str, 10);
+  if (old_str == str || (!std::isspace(*str) && *str != '\0')) {
+    return false;
+  }
+
+  while (std::isspace(*str)) {
+    str++;
+  }
+  if (*str == '\0') {
+    map_info->name = str;
+    return true;
+  }
+
+  // Save the name data.
+  map_info->name = str;
+
+  // Mark a device map in /dev/ and not in /dev/ashmem/ specially.
+  if (map_info->name.substr(0, 5) == "/dev/" && map_info->name.substr(5, 7) != "ashmem/") {
+    map_info->flags |= MAPS_FLAGS_DEVICE_MAP;
+  }
   return true;
 }
 
 bool Maps::Parse() {
-  std::unique_ptr<FILE, decltype(&fclose)> fp(fopen(GetMapsFile().c_str(), "re"), fclose);
-  if (!fp) {
+  int fd = open(GetMapsFile().c_str(), O_RDONLY | O_CLOEXEC);
+  if (fd == -1) {
     return false;
   }
 
-  bool valid = true;
-  char* line = nullptr;
-  size_t line_len;
-  while (getline(&line, &line_len, fp.get()) > 0) {
-    MapInfo map_info;
-    if (!ParseLine(line, &map_info)) {
-      valid = false;
+  bool return_value = true;
+  char buffer[2048];
+  size_t leftover = 0;
+  while (true) {
+    ssize_t bytes = read(fd, &buffer[leftover], 2048 - leftover);
+    if (bytes == -1) {
+      return_value = false;
       break;
     }
+    if (bytes == 0) {
+      break;
+    }
+    bytes += leftover;
+    char* line = buffer;
+    while (bytes > 0) {
+      char* newline = static_cast<char*>(memchr(line, '\n', bytes));
+      if (newline == nullptr) {
+        memmove(buffer, line, bytes);
+        break;
+      }
+      *newline = '\0';
 
-    maps_.push_back(map_info);
+      MapInfo map_info;
+      if (!InternalParseLine(line, &map_info)) {
+        return_value = false;
+        break;
+      }
+      maps_.push_back(map_info);
+
+      bytes -= newline - line + 1;
+      line = newline + 1;
+    }
+    leftover = bytes;
   }
-  free(line);
-
-  return valid;
+  close(fd);
+  return return_value;
 }
 
 Maps::~Maps() {
@@ -129,12 +218,12 @@ bool BufferMaps::Parse() {
     if (end_of_line == nullptr) {
       line = start_of_line;
     } else {
-      end_of_line++;
       line = std::string(start_of_line, end_of_line - start_of_line);
+      end_of_line++;
     }
 
     MapInfo map_info;
-    if (!ParseLine(line.c_str(), &map_info)) {
+    if (!InternalParseLine(line.c_str(), &map_info)) {
       return false;
     }
     maps_.push_back(map_info);
