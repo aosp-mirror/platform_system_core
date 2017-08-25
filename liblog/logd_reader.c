@@ -590,20 +590,30 @@ static int logdRead(struct android_log_logger_list* logger_list,
 
   memset(log_msg, 0, sizeof(*log_msg));
 
+  unsigned int new_alarm = 0;
   if (logger_list->mode & ANDROID_LOG_NONBLOCK) {
+    if ((logger_list->mode & ANDROID_LOG_WRAP) &&
+        (logger_list->start.tv_sec || logger_list->start.tv_nsec)) {
+      /* b/64143705 */
+      new_alarm = (ANDROID_LOG_WRAP_DEFAULT_TIMEOUT * 11) / 10 + 10;
+      logger_list->mode &= ~ANDROID_LOG_WRAP;
+    } else {
+      new_alarm = 30;
+    }
+
     memset(&ignore, 0, sizeof(ignore));
     ignore.sa_handler = caught_signal;
     sigemptyset(&ignore.sa_mask);
     /* particularily useful if tombstone is reporting for logd */
     sigaction(SIGALRM, &ignore, &old_sigaction);
-    old_alarm = alarm(30);
+    old_alarm = alarm(new_alarm);
   }
 
   /* NOTE: SOCK_SEQPACKET guarantees we read exactly one full entry */
   ret = recv(ret, log_msg, LOGGER_ENTRY_MAX_LEN, 0);
   e = errno;
 
-  if (logger_list->mode & ANDROID_LOG_NONBLOCK) {
+  if (new_alarm) {
     if ((ret == 0) || (e == EINTR)) {
       e = EAGAIN;
       ret = -1;
