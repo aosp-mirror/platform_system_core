@@ -43,6 +43,7 @@
 
 #include "init.h"
 #include "property_service.h"
+#include "rlimit_parser.h"
 #include "util.h"
 
 using android::base::boot_clock;
@@ -216,6 +217,12 @@ void Service::KillProcessGroup(int signal) {
 }
 
 void Service::SetProcessAttributes() {
+    for (const auto& rlimit : rlimits_) {
+        if (setrlimit(rlimit.first, &rlimit.second) == -1) {
+            LOG(FATAL) << StringPrintf("setrlimit(%d, {rlim_cur=%ld, rlim_max=%ld}) failed",
+                                       rlimit.first, rlimit.second.rlim_cur, rlimit.second.rlim_max);
+        }
+    }
     // Keep capabilites on uid change.
     if (capabilities_.any() && uid_) {
         // If Android is running in a container, some securebits might already
@@ -489,6 +496,14 @@ Result<Success> Service::ParseMemcgSoftLimitInBytes(const std::vector<std::strin
     return Success();
 }
 
+Result<Success> Service::ParseProcessRlimit(const std::vector<std::string>& args) {
+    auto rlimit = ParseRlimit(args);
+    if (!rlimit) return rlimit.error();
+
+    rlimits_.emplace_back(*rlimit);
+    return Success();
+}
+
 Result<Success> Service::ParseSeclabel(const std::vector<std::string>& args) {
     seclabel_ = args[1];
     return Success();
@@ -609,6 +624,7 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
         {"memcg.limit_in_bytes",
                         {1,     1,    &Service::ParseMemcgLimitInBytes}},
         {"namespace",   {1,     2,    &Service::ParseNamespace}},
+        {"rlimit",      {3,     3,    &Service::ParseProcessRlimit}},
         {"seclabel",    {1,     1,    &Service::ParseSeclabel}},
         {"setenv",      {2,     2,    &Service::ParseSetenv}},
         {"shutdown",    {1,     1,    &Service::ParseShutdown}},
