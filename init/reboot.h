@@ -27,7 +27,7 @@ void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string&
 
 /* Reboot / shutdown the system.
  * cmd ANDROID_RB_* as defined in android_reboot.h
- * reason Reason string like "reboot", "userrequested"
+ * reason Reason string like "reboot", "shutdown,userrequested"
  * rebootTarget Reboot target string like "bootloader". Otherwise, it should be an
  *              empty string.
  * runFsck Whether to run fsck after umount is done.
