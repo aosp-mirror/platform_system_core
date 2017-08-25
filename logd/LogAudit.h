@@ -17,6 +17,7 @@
 #ifndef _LOGD_LOG_AUDIT_H__
 #define _LOGD_LOG_AUDIT_H__
 
+#include <map>
 #include <queue>
 
 #include <sysutils/SocketListener.h>
@@ -50,6 +51,10 @@ class LogAudit : public SocketListener {
 
    private:
     static int getLogSocket();
+    std::map<std::string, std::string> populateDenialMap();
+    std::string denialParse(const std::string& denial, char terminator,
+                            const std::string& search_term);
+    void logParse(const std::string& string, std::string* bug_num);
     int logPrint(const char* fmt, ...)
         __attribute__((__format__(__printf__, 2, 3)));
 };
