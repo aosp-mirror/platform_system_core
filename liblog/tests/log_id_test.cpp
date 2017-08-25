@@ -89,12 +89,12 @@ TEST(liblog, concurrent_name(__android_log_buf_print, NUM_CONCURRENT)) {
     ASSERT_EQ(0, pthread_create(&t[i], NULL, ConcurrentPrintFn,
                                 reinterpret_cast<void*>(i)));
   }
-  int ret = 0;
+  int ret = 1;
   for (i = 0; i < NUM_CONCURRENT; i++) {
     void* result;
     ASSERT_EQ(0, pthread_join(t[i], &result));
     int this_result = reinterpret_cast<uintptr_t>(result);
-    if ((0 == ret) && (0 != this_result)) {
+    if ((0 < ret) && (ret != this_result)) {
       ret = this_result;
     }
   }
