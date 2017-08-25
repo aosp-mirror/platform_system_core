@@ -354,7 +354,7 @@ static void set_usb_controller() {
     }
 }
 
-static void install_reboot_signal_handlers() {
+static void InstallRebootSignalHandlers() {
     // Instead of panic'ing the kernel as is the default behavior when init crashes,
     // we prefer to reboot to bootloader on development builds, as this will prevent
     // boot looping bad configurations and allow both developers and test farms to easily
@@ -362,7 +362,13 @@ static void install_reboot_signal_handlers() {
     struct sigaction action;
     memset(&action, 0, sizeof(action));
     sigfillset(&action.sa_mask);
-    action.sa_handler = [](int) {
+    action.sa_handler = [](int signal) {
+        // These signal handlers are also caught for processes forked from init, however we do not
+        // want them to trigger reboot, so we directly call _exit() for children processes here.
+        if (getpid() != 1) {
+            _exit(signal);
+        }
+
         // Calling DoReboot() or LOG(FATAL) is not a good option as this is a signal handler.
         // RebootSystem uses syscall() which isn't actually async-signal-safe, but our only option
         // and probably good enough given this is already an error case and only enabled for
@@ -392,7 +398,7 @@ int main(int argc, char** argv) {
     }
 
     if (REBOOT_BOOTLOADER_ON_PANIC) {
-        install_reboot_signal_handlers();
+        InstallRebootSignalHandlers();
     }
 
     bool is_first_stage = (getenv("INIT_SECOND_STAGE") == nullptr);
