@@ -646,16 +646,20 @@ void timeout_negative(const char* command) {
                 recv(fd, msg_timeout.buf, sizeof(msg_timeout), 0) > 0;
         }
 
-        alarm_timeout =
-            alarm((old_alarm <= 0) ? old_alarm
-                                   : (old_alarm > (1 + 3 - alarm_wrap))
-                                         ? old_alarm - 3 + alarm_wrap
-                                         : 2);
+        if (old_alarm > 0) {
+            unsigned int time_spent = 3 - alarm_wrap;
+            if (old_alarm > time_spent + 1) {
+                old_alarm -= time_spent;
+            } else {
+                old_alarm = 2;
+            }
+        }
+        alarm_timeout = alarm(old_alarm);
         sigaction(SIGALRM, &old_sigaction, nullptr);
 
         close(fd);
 
-        if (!content_wrap && !alarm_wrap && content_timeout && alarm_timeout) {
+        if (content_wrap && alarm_wrap && content_timeout && alarm_timeout) {
             break;
         }
     }
@@ -710,8 +714,8 @@ TEST(logd, timeout) {
     // A few tries to get it right just in case wrap kicks in due to
     // content providers being active during the test.
     int i = 5;
-    log_time now(android_log_clockid());
-    now.tv_sec -= 30;  // reach back a moderate period of time
+    log_time start(android_log_clockid());
+    start.tv_sec -= 30;  // reach back a moderate period of time
 
     while (--i) {
         int fd = socket_local_client("logdr", ANDROID_SOCKET_NAMESPACE_RESERVED,
@@ -726,7 +730,7 @@ TEST(logd, timeout) {
         std::string ask = android::base::StringPrintf(
             "dumpAndClose lids=0,1,2,3,4,5 timeout=6 start=%" PRIu32
             ".%09" PRIu32,
-            now.tv_sec, now.tv_nsec);
+            start.tv_sec, start.tv_nsec);
 
         struct sigaction ignore, old_sigaction;
         memset(&ignore, 0, sizeof(ignore));
@@ -756,11 +760,15 @@ TEST(logd, timeout) {
                 recv(fd, msg_timeout.buf, sizeof(msg_timeout), 0) > 0;
         }
 
-        alarm_timeout =
-            alarm((old_alarm <= 0) ? old_alarm
-                                   : (old_alarm > (1 + 3 - alarm_wrap))
-                                         ? old_alarm - 3 + alarm_wrap
-                                         : 2);
+        if (old_alarm > 0) {
+            unsigned int time_spent = 3 - alarm_wrap;
+            if (old_alarm > time_spent + 1) {
+                old_alarm -= time_spent;
+            } else {
+                old_alarm = 2;
+            }
+        }
+        alarm_timeout = alarm(old_alarm);
         sigaction(SIGALRM, &old_sigaction, nullptr);
 
         close(fd);
@@ -773,23 +781,23 @@ TEST(logd, timeout) {
         // active _or_ inactive during the test.
         if (content_timeout) {
             log_time msg(msg_timeout.entry.sec, msg_timeout.entry.nsec);
-            if (msg < now) {
+            if (msg < start) {
                 fprintf(stderr, "%u.%09u < %u.%09u\n", msg_timeout.entry.sec,
-                        msg_timeout.entry.nsec, (unsigned)now.tv_sec,
-                        (unsigned)now.tv_nsec);
+                        msg_timeout.entry.nsec, (unsigned)start.tv_sec,
+                        (unsigned)start.tv_nsec);
                 _exit(-1);
             }
-            if (msg > now) {
-                now = msg;
-                now.tv_sec += 30;
-                msg = log_time(android_log_clockid());
-                if (now > msg) {
-                    now = msg;
-                    --now.tv_sec;
+            if (msg > start) {
+                start = msg;
+                start.tv_sec += 30;
+                log_time now = log_time(android_log_clockid());
+                if (start > now) {
+                    start = now;
+                    --start.tv_sec;
                 }
             }
         } else {
-            now.tv_sec -= 120;  // inactive, reach further back!
+            start.tv_sec -= 120;  // inactive, reach further back!
         }
     }
 
@@ -802,8 +810,8 @@ TEST(logd, timeout) {
     }
 
     if (content_wrap || !content_timeout) {
-        fprintf(stderr, "now=%" PRIu32 ".%09" PRIu32 "\n", now.tv_sec,
-                now.tv_nsec);
+        fprintf(stderr, "start=%" PRIu32 ".%09" PRIu32 "\n", start.tv_sec,
+                start.tv_nsec);
     }
 
     EXPECT_TRUE(written);
