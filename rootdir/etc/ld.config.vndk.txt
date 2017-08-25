@@ -132,15 +132,14 @@ additional.namespaces = system
 namespace.default.isolated = true
 namespace.default.visible = true
 
-namespace.default.search.paths = /vendor/${LIB}/hw:/vendor/${LIB}/egl:/vendor/${LIB}:/system/${LIB}/vndk:/vendor/${LIB}/vndk-sp:/system/${LIB}/vndk-sp
+namespace.default.search.paths = /vendor/${LIB}/hw:/vendor/${LIB}/egl:/vendor/${LIB}:/vendor/${LIB}/vndk:/system/${LIB}/vndk:/vendor/${LIB}/vndk-sp:/system/${LIB}/vndk-sp
 namespace.default.permitted.paths = /vendor:/system/${LIB}/vndk:/system/${LIB}/vndk-sp
 
-namespace.default.asan.search.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl:/data/asan/vendor/${LIB}:/vendor/${LIB}:/data/asan/system/${LIB}/vndk:/system/${LIB}/vndk:/data/asan/vendor/${LIB}/vndk-sp:/vendor/${LIB}/vndk-sp:/data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp
+namespace.default.asan.search.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl:/data/asan/vendor/${LIB}:/vendor/${LIB}:/data/asan/vendor/${LIB}/vndk:/vendor/${LIB}/vndk:/data/asan/system/${LIB}/vndk:/system/${LIB}/vndk:/data/asan/vendor/${LIB}/vndk-sp:/vendor/${LIB}/vndk-sp:/data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp
 namespace.default.asan.permitted.paths = /data/asan/vendor:/vendor:/data/asan/system/${LIB}/vndk:/system/${LIB}/vndk:/data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp
 
 namespace.default.links = system
-namespace.default.link.system.shared_libs = libEGL.so:libm.so:libandroid_net.so:libvndksupport.so:libc.so:libGLESv1_CM.so:liblog.so:libsync.so:libnativewindow.so:libGLESv3.so:libdl.so:libGLESv2.so:libpowermanager.so:libmedia.so:libandroid_runtime.so
-# libpowermanager.so must be removed after we have fix for libsdm-color.so (b/64732165)
+namespace.default.link.system.shared_libs = libEGL.so:libm.so:libandroid_net.so:libvndksupport.so:libc.so:libGLESv1_CM.so:liblog.so:libsync.so:libnativewindow.so:libGLESv3.so:libdl.so:libGLESv2.so:libmedia.so:libandroid_runtime.so
 # libmedia.so must be removed after we have fix for lib-dplmedia.so (b/64427765)
 # libandroid_runtime.so must be removed after we have a fix for qseeproxydaemon (b/64820887)
 
