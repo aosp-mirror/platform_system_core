@@ -35,11 +35,11 @@ int android_reboot(int cmd, int flags __unused, const char* arg) {
             restart_cmd = "shutdown";
             break;
         case ANDROID_RB_THERMOFF:
-            restart_cmd = "thermal-shutdown";
+            restart_cmd = "shutdown,thermal";
             break;
     }
     if (!restart_cmd) return -1;
-    if (arg) {
+    if (arg && arg[0]) {
         ret = asprintf(&prop_value, "%s,%s", restart_cmd, arg);
     } else {
         ret = asprintf(&prop_value, "%s", restart_cmd);
