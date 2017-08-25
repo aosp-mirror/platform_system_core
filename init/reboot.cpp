@@ -347,14 +347,10 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     Timer t;
     LOG(INFO) << "Reboot start, reason: " << reason << ", rebootTarget: " << rebootTarget;
 
-    android::base::WriteStringToFile(StringPrintf("%s\n", reason.c_str()), LAST_REBOOT_REASON_FILE,
-                                     S_IRUSR | S_IWUSR, AID_SYSTEM, AID_SYSTEM);
+    property_set(LAST_REBOOT_REASON_PROPERTY, reason.c_str());
+    sync();
 
-    bool is_thermal_shutdown = false;
-    if (cmd == ANDROID_RB_THERMOFF) {
-        is_thermal_shutdown = true;
-        runFsck = false;
-    }
+    bool is_thermal_shutdown = cmd == ANDROID_RB_THERMOFF;
 
     auto shutdown_timeout = 0ms;
     if (!SHUTDOWN_ZERO_TIMEOUT) {
@@ -476,10 +472,15 @@ bool HandlePowerctlMessage(const std::string& command) {
         command_invalid = true;
     } else if (cmd_params[0] == "shutdown") {
         cmd = ANDROID_RB_POWEROFF;
-        if (cmd_params.size() == 2 && cmd_params[1] == "userrequested") {
-            // The shutdown reason is PowerManager.SHUTDOWN_USER_REQUESTED.
-            // Run fsck once the file system is remounted in read-only mode.
-            run_fsck = true;
+        if (cmd_params.size() == 2) {
+            if (cmd_params[1] == "userrequested") {
+                // The shutdown reason is PowerManager.SHUTDOWN_USER_REQUESTED.
+                // Run fsck once the file system is remounted in read-only mode.
+                run_fsck = true;
+            } else if (cmd_params[1] == "thermal") {
+                // run_fsck is false to avoid delay
+                cmd = ANDROID_RB_THERMOFF;
+            }
         }
     } else if (cmd_params[0] == "reboot") {
         cmd = ANDROID_RB_RESTART2;
@@ -495,14 +496,11 @@ bool HandlePowerctlMessage(const std::string& command) {
                                << err;
                 }
             }
-            // If there is an additional bootloader parameter, pass it along
-            if (cmd_params.size() == 3) {
+            // If there is an additional parameter, pass it along
+            if ((cmd_params.size() == 3) && cmd_params[2].size()) {
                 reboot_target += "," + cmd_params[2];
             }
         }
-    } else if (command == "thermal-shutdown") {  // no additional parameter allowed
-        // run_fsck is false to avoid delay
-        cmd = ANDROID_RB_THERMOFF;
     } else {
         command_invalid = true;
     }
