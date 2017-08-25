@@ -38,8 +38,6 @@ class Maps {
 
   MapInfo* Find(uint64_t pc);
 
-  bool ParseLine(const char* line, MapInfo* map_info);
-
   virtual bool Parse();
 
   virtual const std::string GetMapsFile() const { return ""; }
@@ -53,6 +51,11 @@ class Maps {
   const_iterator end() const { return maps_.end(); }
 
   size_t Total() { return maps_.size(); }
+
+  MapInfo* Get(size_t index) {
+    if (index >= maps_.size()) return nullptr;
+    return &maps_[index];
+  }
 
  protected:
   std::vector<MapInfo> maps_;
