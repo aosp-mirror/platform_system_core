@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
+#include <inttypes.h>
 #include <sys/mman.h>
 
 #include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <android-base/test_utils.h>
 #include <gtest/gtest.h>
 
@@ -24,13 +26,116 @@
 
 namespace unwindstack {
 
+static void VerifyLine(std::string line, MapInfo* info) {
+  BufferMaps maps(line.c_str());
+
+  if (info == nullptr) {
+    ASSERT_FALSE(maps.Parse()) << "Failed on: " + line;
+  } else {
+    ASSERT_TRUE(maps.Parse()) << "Failed on: " + line;
+    MapInfo* element = maps.Get(0);
+    ASSERT_TRUE(element != nullptr) << "Failed on: " + line;
+    *info = *element;
+  }
+}
+
+TEST(MapsTest, verify_parse_line) {
+  MapInfo info;
+
+  VerifyLine("01-02 rwxp 03 04:05 06\n", &info);
+  EXPECT_EQ(1U, info.start);
+  EXPECT_EQ(2U, info.end);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, info.flags);
+  EXPECT_EQ(3U, info.offset);
+  EXPECT_EQ("", info.name);
+
+  VerifyLine("0a-0b ---s 0c 0d:0e 06 /fake/name\n", &info);
+  EXPECT_EQ(0xaU, info.start);
+  EXPECT_EQ(0xbU, info.end);
+  EXPECT_EQ(0U, info.flags);
+  EXPECT_EQ(0xcU, info.offset);
+  EXPECT_EQ("/fake/name", info.name);
+
+  VerifyLine("01-02   rwxp   03    04:05    06    /fake/name/again\n", &info);
+  EXPECT_EQ(1U, info.start);
+  EXPECT_EQ(2U, info.end);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, info.flags);
+  EXPECT_EQ(3U, info.offset);
+  EXPECT_EQ("/fake/name/again", info.name);
+
+  VerifyLine("-00 rwxp 00 00:00 0\n", nullptr);
+  VerifyLine("00- rwxp 00 00:00 0\n", nullptr);
+  VerifyLine("00-00 rwxp 00 :00 0\n", nullptr);
+  VerifyLine("00-00 rwxp 00 00:00 \n", nullptr);
+  VerifyLine("x-00 rwxp 00 00:00 0\n", nullptr);
+  VerifyLine("00 -00 rwxp 00 00:00 0\n", nullptr);
+  VerifyLine("00-x rwxp 00 00:00 0\n", nullptr);
+  VerifyLine("00-x rwxp 00 00:00 0\n", nullptr);
+  VerifyLine("00-00x rwxp 00 00:00 0\n", nullptr);
+  VerifyLine("00-00 rwxp0 00 00:00 0\n", nullptr);
+  VerifyLine("00-00 rwxp0 00 00:00 0\n", nullptr);
+  VerifyLine("00-00 rwp 00 00:00 0\n", nullptr);
+  VerifyLine("00-00 rwxp 0000:00 0\n", nullptr);
+  VerifyLine("00-00 rwxp 00 00 :00 0\n", nullptr);
+  VerifyLine("00-00 rwxp 00 00: 00 0\n", nullptr);
+  VerifyLine("00-00 rwxp 00 00:000\n", nullptr);
+  VerifyLine("00-00 rwxp 00 00:00 0/fake\n", nullptr);
+  VerifyLine("00-00 xxxx 00 00:00 0 /fake\n", nullptr);
+  VerifyLine("00-00 ywxp 00 00:00 0 /fake\n", nullptr);
+  VerifyLine("00-00 ryxp 00 00:00 0 /fake\n", nullptr);
+  VerifyLine("00-00 rwyp 00 00:00 0 /fake\n", nullptr);
+  VerifyLine("00-00 rwx- 00 00:00 0 /fake\n", nullptr);
+  VerifyLine("0\n", nullptr);
+  VerifyLine("00\n", nullptr);
+  VerifyLine("00-\n", nullptr);
+  VerifyLine("00-0\n", nullptr);
+  VerifyLine("00-00\n", nullptr);
+  VerifyLine("00-00 \n", nullptr);
+  VerifyLine("00-00 -\n", nullptr);
+  VerifyLine("00-00 r\n", nullptr);
+  VerifyLine("00-00 --\n", nullptr);
+  VerifyLine("00-00 rw\n", nullptr);
+  VerifyLine("00-00 ---\n", nullptr);
+  VerifyLine("00-00 rwx\n", nullptr);
+  VerifyLine("00-00 ---s\n", nullptr);
+  VerifyLine("00-00 ---p\n", nullptr);
+  VerifyLine("00-00 ---s 0\n", nullptr);
+  VerifyLine("00-00 ---p 0 \n", nullptr);
+  VerifyLine("00-00 ---p 0 0\n", nullptr);
+  VerifyLine("00-00 ---p 0 0:\n", nullptr);
+  VerifyLine("00-00 ---p 0 0:0\n", nullptr);
+  VerifyLine("00-00 ---p 0 0:0 \n", nullptr);
+
+  // Line to verify that the parser will detect a completely malformed line
+  // properly.
+  VerifyLine("7ffff7dda000-7ffff7dfd7ffff7ff3000-7ffff7ff4000 ---p 0000f000 fc:02 44171565\n",
+             nullptr);
+}
+
+TEST(MapsTest, verify_large_values) {
+  MapInfo info;
+#if defined(__LP64__)
+  VerifyLine("fabcdef012345678-f12345678abcdef8 rwxp f0b0d0f010305070 00:00 0\n", &info);
+  EXPECT_EQ(0xfabcdef012345678UL, info.start);
+  EXPECT_EQ(0xf12345678abcdef8UL, info.end);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, info.flags);
+  EXPECT_EQ(0xf0b0d0f010305070UL, info.offset);
+#else
+  VerifyLine("f2345678-fabcdef8 rwxp f0305070 00:00 0\n", &info);
+  EXPECT_EQ(0xf2345678UL, info.start);
+  EXPECT_EQ(0xfabcdef8UL, info.end);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, info.flags);
+  EXPECT_EQ(0xf0305070UL, info.offset);
+#endif
+}
+
 TEST(MapsTest, parse_permissions) {
   BufferMaps maps(
-      "1000-2000 ---- 00000000 00:00 0\n"
-      "2000-3000 r--- 00000000 00:00 0\n"
-      "3000-4000 -w-- 00000000 00:00 0\n"
-      "4000-5000 --x- 00000000 00:00 0\n"
-      "5000-6000 rwx- 00000000 00:00 0\n");
+      "1000-2000 ---s 00000000 00:00 0\n"
+      "2000-3000 r--s 00000000 00:00 0\n"
+      "3000-4000 -w-s 00000000 00:00 0\n"
+      "4000-5000 --xp 00000000 00:00 0\n"
+      "5000-6000 rwxp 00000000 00:00 0\n");
 
   ASSERT_TRUE(maps.Parse());
   ASSERT_EQ(5U, maps.Total());
@@ -70,28 +175,28 @@ TEST(MapsTest, parse_permissions) {
 
 TEST(MapsTest, parse_name) {
   BufferMaps maps(
-      "720b29b000-720b29e000 rw-p 00000000 00:00 0\n"
-      "720b29e000-720b29f000 rw-p 00000000 00:00 0 /system/lib/fake.so\n"
-      "720b29f000-720b2a0000 rw-p 00000000 00:00 0");
+      "7b29b000-7b29e000 rw-p 00000000 00:00 0\n"
+      "7b29e000-7b29f000 rw-p 00000000 00:00 0 /system/lib/fake.so\n"
+      "7b29f000-7b2a0000 rw-p 00000000 00:00 0");
 
   ASSERT_TRUE(maps.Parse());
   ASSERT_EQ(3U, maps.Total());
   auto it = maps.begin();
   ASSERT_EQ("", it->name);
-  ASSERT_EQ(0x720b29b000U, it->start);
-  ASSERT_EQ(0x720b29e000U, it->end);
+  ASSERT_EQ(0x7b29b000U, it->start);
+  ASSERT_EQ(0x7b29e000U, it->end);
   ASSERT_EQ(0U, it->offset);
   ASSERT_EQ(PROT_READ | PROT_WRITE, it->flags);
   ++it;
   ASSERT_EQ("/system/lib/fake.so", it->name);
-  ASSERT_EQ(0x720b29e000U, it->start);
-  ASSERT_EQ(0x720b29f000U, it->end);
+  ASSERT_EQ(0x7b29e000U, it->start);
+  ASSERT_EQ(0x7b29f000U, it->end);
   ASSERT_EQ(0U, it->offset);
   ASSERT_EQ(PROT_READ | PROT_WRITE, it->flags);
   ++it;
   ASSERT_EQ("", it->name);
-  ASSERT_EQ(0x720b29f000U, it->start);
-  ASSERT_EQ(0x720b2a0000U, it->end);
+  ASSERT_EQ(0x7b29f000U, it->start);
+  ASSERT_EQ(0x7b2a0000U, it->end);
   ASSERT_EQ(0U, it->offset);
   ASSERT_EQ(PROT_READ | PROT_WRITE, it->flags);
   ++it;
@@ -149,9 +254,9 @@ TEST(MapsTest, file_smoke) {
   ASSERT_TRUE(tf.fd != -1);
 
   ASSERT_TRUE(
-      android::base::WriteStringToFile("720b29b000-720b29e000 r-xp a0000000 00:00 0   /fake.so\n"
-                                       "720b2b0000-720b2e0000 r-xp b0000000 00:00 0   /fake2.so\n"
-                                       "720b2e0000-720b2f0000 r-xp c0000000 00:00 0   /fake3.so\n",
+      android::base::WriteStringToFile("7b29b000-7b29e000 r-xp a0000000 00:00 0   /fake.so\n"
+                                       "7b2b0000-7b2e0000 r-xp b0000000 00:00 0   /fake2.so\n"
+                                       "7b2e0000-7b2f0000 r-xp c0000000 00:00 0   /fake3.so\n",
                                        tf.path, 0660, getuid(), getgid()));
 
   FileMaps maps(tf.path);
@@ -159,25 +264,182 @@ TEST(MapsTest, file_smoke) {
   ASSERT_TRUE(maps.Parse());
   ASSERT_EQ(3U, maps.Total());
   auto it = maps.begin();
-  ASSERT_EQ(0x720b29b000U, it->start);
-  ASSERT_EQ(0x720b29e000U, it->end);
+  ASSERT_EQ(0x7b29b000U, it->start);
+  ASSERT_EQ(0x7b29e000U, it->end);
   ASSERT_EQ(0xa0000000U, it->offset);
   ASSERT_EQ(PROT_READ | PROT_EXEC, it->flags);
   ASSERT_EQ("/fake.so", it->name);
   ++it;
-  ASSERT_EQ(0x720b2b0000U, it->start);
-  ASSERT_EQ(0x720b2e0000U, it->end);
+  ASSERT_EQ(0x7b2b0000U, it->start);
+  ASSERT_EQ(0x7b2e0000U, it->end);
   ASSERT_EQ(0xb0000000U, it->offset);
   ASSERT_EQ(PROT_READ | PROT_EXEC, it->flags);
   ASSERT_EQ("/fake2.so", it->name);
   ++it;
-  ASSERT_EQ(0x720b2e0000U, it->start);
-  ASSERT_EQ(0x720b2f0000U, it->end);
+  ASSERT_EQ(0x7b2e0000U, it->start);
+  ASSERT_EQ(0x7b2f0000U, it->end);
   ASSERT_EQ(0xc0000000U, it->offset);
   ASSERT_EQ(PROT_READ | PROT_EXEC, it->flags);
   ASSERT_EQ("/fake3.so", it->name);
   ++it;
   ASSERT_EQ(it, maps.end());
+}
+
+TEST(MapsTest, file_no_map_name) {
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+
+  ASSERT_TRUE(
+      android::base::WriteStringToFile("7b29b000-7b29e000 r-xp a0000000 00:00 0\n"
+                                       "7b2b0000-7b2e0000 r-xp b0000000 00:00 0   /fake2.so\n"
+                                       "7b2e0000-7b2f0000 r-xp c0000000 00:00 0 \n",
+                                       tf.path, 0660, getuid(), getgid()));
+
+  FileMaps maps(tf.path);
+
+  ASSERT_TRUE(maps.Parse());
+  ASSERT_EQ(3U, maps.Total());
+  auto it = maps.begin();
+  ASSERT_EQ(0x7b29b000U, it->start);
+  ASSERT_EQ(0x7b29e000U, it->end);
+  ASSERT_EQ(0xa0000000U, it->offset);
+  ASSERT_EQ(PROT_READ | PROT_EXEC, it->flags);
+  ASSERT_EQ("", it->name);
+  ++it;
+  ASSERT_EQ(0x7b2b0000U, it->start);
+  ASSERT_EQ(0x7b2e0000U, it->end);
+  ASSERT_EQ(0xb0000000U, it->offset);
+  ASSERT_EQ(PROT_READ | PROT_EXEC, it->flags);
+  ASSERT_EQ("/fake2.so", it->name);
+  ++it;
+  ASSERT_EQ(0x7b2e0000U, it->start);
+  ASSERT_EQ(0x7b2f0000U, it->end);
+  ASSERT_EQ(0xc0000000U, it->offset);
+  ASSERT_EQ(PROT_READ | PROT_EXEC, it->flags);
+  ASSERT_EQ("", it->name);
+  ++it;
+  ASSERT_EQ(it, maps.end());
+}
+
+// Verify that a file that crosses a buffer is parsed correctly.
+static std::string CreateEntry(size_t index) {
+  return android::base::StringPrintf("%08zx-%08zx rwxp 0000 00:00 0\n", index * 4096,
+                                     (index + 1) * 4096);
+}
+
+TEST(MapsTest, file_buffer_cross) {
+  constexpr size_t kBufferSize = 2048;
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+
+  // Compute how many to add in the first buffer.
+  size_t entry_len = CreateEntry(0).size();
+  size_t index;
+  std::string file_data;
+  for (index = 0; index < kBufferSize / entry_len; index++) {
+    file_data += CreateEntry(index);
+  }
+  // Add a long name to make sure that the first buffer does not contain a
+  // complete line.
+  // Remove the last newline.
+  size_t extra = 0;
+  size_t leftover = kBufferSize % entry_len;
+  size_t overlap1_index = 0;
+  std::string overlap1_name;
+  if (leftover == 0) {
+    // Exact match, add a long name to cross over the value.
+    overlap1_name = "/fake/name/is/long/on/purpose";
+    file_data.erase(file_data.size() - 1);
+    file_data += ' ' + overlap1_name + '\n';
+    extra = entry_len + overlap1_name.size() + 1;
+    overlap1_index = index;
+  }
+
+  // Compute how many need to go in to hit the buffer boundary exactly.
+  size_t bytes_left_in_buffer = kBufferSize - extra;
+  size_t entries_to_add = bytes_left_in_buffer / entry_len + index;
+  for (; index < entries_to_add; index++) {
+    file_data += CreateEntry(index);
+  }
+
+  // Now figure out how many bytes to add to get exactly to the buffer boundary.
+  leftover = bytes_left_in_buffer % entry_len;
+  std::string overlap2_name;
+  size_t overlap2_index = 0;
+  if (leftover != 0) {
+    file_data.erase(file_data.size() - 1);
+    file_data += ' ';
+    overlap2_name = std::string(leftover - 1, 'x');
+    file_data += overlap2_name + '\n';
+    overlap2_index = index - 1;
+  }
+
+  // Now add a few entries on the next page.
+  for (size_t start = index; index < start + 10; index++) {
+    file_data += CreateEntry(index);
+  }
+
+  ASSERT_TRUE(android::base::WriteStringToFile(file_data, tf.path, 0660, getuid(), getgid()));
+
+  FileMaps maps(tf.path);
+  ASSERT_TRUE(maps.Parse());
+  EXPECT_EQ(index, maps.Total());
+  // Verify all of the maps.
+  for (size_t i = 0; i < index; i++) {
+    MapInfo* info = maps.Get(i);
+    ASSERT_TRUE(info != nullptr) << "Failed verifying index " + std::to_string(i);
+    EXPECT_EQ(i * 4096, info->start) << "Failed verifying index " + std::to_string(i);
+    EXPECT_EQ((i + 1) * 4096, info->end) << "Failed verifying index " + std::to_string(i);
+    EXPECT_EQ(0U, info->offset) << "Failed verifying index " + std::to_string(i);
+    if (overlap1_index != 0 && i == overlap1_index) {
+      EXPECT_EQ(overlap1_name, info->name) << "Failed verifying overlap1 name " + std::to_string(i);
+    } else if (overlap2_index != 0 && i == overlap2_index) {
+      EXPECT_EQ(overlap2_name, info->name) << "Failed verifying overlap2 name " + std::to_string(i);
+    } else {
+      EXPECT_EQ("", info->name) << "Failed verifying index " + std::to_string(i);
+    }
+  }
+}
+
+TEST(MapsTest, file_should_fail) {
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+
+  ASSERT_TRUE(android::base::WriteStringToFile(
+      "7ffff7dda000-7ffff7dfd7ffff7ff3000-7ffff7ff4000 ---p 0000f000 fc:02 44171565\n", tf.path,
+      0660, getuid(), getgid()));
+
+  FileMaps maps(tf.path);
+
+  ASSERT_FALSE(maps.Parse());
+}
+
+// Create a maps file that is extremely large.
+TEST(MapsTest, large_file) {
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+
+  std::string file_data;
+  uint64_t start = 0x700000;
+  for (size_t i = 0; i < 5000; i++) {
+    file_data +=
+        android::base::StringPrintf("%" PRIx64 "-%" PRIx64 " r-xp 1000 00:0 0 /fake%zu.so\n",
+                                    start + i * 4096, start + (i + 1) * 4096, i);
+  }
+
+  ASSERT_TRUE(android::base::WriteStringToFile(file_data, tf.path, 0660, getuid(), getgid()));
+
+  FileMaps maps(tf.path);
+
+  ASSERT_TRUE(maps.Parse());
+  ASSERT_EQ(5000U, maps.Total());
+  for (size_t i = 0; i < 5000; i++) {
+    MapInfo* info = maps.Get(i);
+    ASSERT_EQ(start + i * 4096, info->start) << "Failed at map " + std::to_string(i);
+    ASSERT_EQ(start + (i + 1) * 4096, info->end) << "Failed at map " + std::to_string(i);
+    std::string name = "/fake" + std::to_string(i) + ".so";
+    ASSERT_EQ(name, info->name) << "Failed at map " + std::to_string(i);
+  }
 }
 
 TEST(MapsTest, find) {
