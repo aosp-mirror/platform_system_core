@@ -86,13 +86,3 @@ ssize_t recv_fd(int sockfd, void* _Nonnull data, size_t len, unique_fd* _Nullabl
 
   return result;
 }
-
-bool Pipe(unique_fd* read, unique_fd* write) {
-  int pipefds[2];
-  if (pipe(pipefds) != 0) {
-    return false;
-  }
-  read->reset(pipefds[0]);
-  write->reset(pipefds[1]);
-  return true;
-}
