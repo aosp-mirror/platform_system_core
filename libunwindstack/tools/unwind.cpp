@@ -62,8 +62,7 @@ void DoUnwind(pid_t pid) {
     return;
   }
 
-  uint32_t machine_type;
-  unwindstack::Regs* regs = unwindstack::Regs::RemoteGet(pid, &machine_type);
+  unwindstack::Regs* regs = unwindstack::Regs::RemoteGet(pid);
   if (regs == nullptr) {
     printf("Unable to get remote reg data\n");
     return;
@@ -71,7 +70,7 @@ void DoUnwind(pid_t pid) {
 
   bool bits32 = true;
   printf("ABI: ");
-  switch (machine_type) {
+  switch (regs->MachineType()) {
     case EM_ARM:
       printf("arm");
       break;
