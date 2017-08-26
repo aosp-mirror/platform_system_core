@@ -206,8 +206,7 @@ TEST(UnwindTest, remote) {
   RemoteMaps maps(pid);
   ASSERT_TRUE(maps.Parse());
   MemoryRemote memory(pid);
-  uint32_t machine_type;
-  std::unique_ptr<Regs> regs(Regs::RemoteGet(pid, &machine_type));
+  std::unique_ptr<Regs> regs(Regs::RemoteGet(pid));
   ASSERT_TRUE(regs.get() != nullptr);
 
   VerifyUnwind(pid, &memory, &maps, regs.get(), kFunctionOrder);
@@ -254,7 +253,7 @@ TEST(UnwindTest, from_context) {
 
   LocalMaps maps;
   ASSERT_TRUE(maps.Parse());
-  std::unique_ptr<Regs> regs(Regs::CreateFromUcontext(Regs::GetMachineType(), ucontext));
+  std::unique_ptr<Regs> regs(Regs::CreateFromUcontext(Regs::CurrentMachineType(), ucontext));
   MemoryLocal memory;
 
   VerifyUnwind(tid.load(), &memory, &maps, regs.get(), kFunctionOrder);
@@ -293,8 +292,7 @@ static void RemoteThroughSignal(unsigned int sa_flags) {
   RemoteMaps maps(pid);
   ASSERT_TRUE(maps.Parse());
   MemoryRemote memory(pid);
-  uint32_t machine_type;
-  std::unique_ptr<Regs> regs(Regs::RemoteGet(pid, &machine_type));
+  std::unique_ptr<Regs> regs(Regs::RemoteGet(pid));
   ASSERT_TRUE(regs.get() != nullptr);
 
   VerifyUnwind(pid, &memory, &maps, regs.get(), kFunctionSignalOrder);
