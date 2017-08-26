@@ -31,6 +31,8 @@ class RegsFake : public RegsImpl<TypeParam> {
       : RegsImpl<TypeParam>(total_regs, sp_reg, Regs::Location(Regs::LOCATION_UNKNOWN, 0)) {}
   virtual ~RegsFake() = default;
 
+  uint32_t MachineType() override { return 0; }
+
   uint64_t GetAdjustedPc(uint64_t, Elf*) override { return 0; }
   void SetFromRaw() override {}
   bool StepIfSignalHandler(uint64_t, Elf*, Memory*) override { return false; }
