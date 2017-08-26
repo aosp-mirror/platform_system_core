@@ -49,6 +49,8 @@ class Regs {
       : total_regs_(total_regs), sp_reg_(sp_reg), return_loc_(return_loc) {}
   virtual ~Regs() = default;
 
+  virtual uint32_t MachineType() = 0;
+
   virtual void* RawData() = 0;
   virtual uint64_t pc() = 0;
   virtual uint64_t sp() = 0;
@@ -64,8 +66,8 @@ class Regs {
   uint16_t sp_reg() { return sp_reg_; }
   uint16_t total_regs() { return total_regs_; }
 
-  static uint32_t GetMachineType();
-  static Regs* RemoteGet(pid_t pid, uint32_t* machine_type);
+  static uint32_t CurrentMachineType();
+  static Regs* RemoteGet(pid_t pid);
   static Regs* CreateFromUcontext(uint32_t machine_type, void* ucontext);
   static Regs* CreateFromLocal();
 
@@ -105,6 +107,8 @@ class RegsArm : public RegsImpl<uint32_t> {
   RegsArm();
   virtual ~RegsArm() = default;
 
+  virtual uint32_t MachineType() override final;
+
   uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
 
   void SetFromRaw() override;
@@ -117,6 +121,8 @@ class RegsArm64 : public RegsImpl<uint64_t> {
   RegsArm64();
   virtual ~RegsArm64() = default;
 
+  virtual uint32_t MachineType() override final;
+
   uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
 
   void SetFromRaw() override;
@@ -128,6 +134,8 @@ class RegsX86 : public RegsImpl<uint32_t> {
  public:
   RegsX86();
   virtual ~RegsX86() = default;
+
+  virtual uint32_t MachineType() override final;
 
   uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
 
@@ -142,6 +150,8 @@ class RegsX86_64 : public RegsImpl<uint64_t> {
  public:
   RegsX86_64();
   virtual ~RegsX86_64() = default;
+
+  virtual uint32_t MachineType() override final;
 
   uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
 
