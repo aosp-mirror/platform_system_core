@@ -18,17 +18,18 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <sched.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <sys/cdefs.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <cutils/properties.h>
@@ -41,6 +42,8 @@
 #endif
 
 #define MEMCG_SYSFS_PATH "/dev/memcg/"
+#define MEMCG_MEMORY_USAGE "/dev/memcg/memory.usage_in_bytes"
+#define MEMCG_MEMORYSW_USAGE "/dev/memcg/memory.memsw.usage_in_bytes"
 #define MEMPRESSURE_WATCH_MEDIUM_LEVEL "medium"
 #define MEMPRESSURE_WATCH_CRITICAL_LEVEL "critical"
 #define ZONEINFO_PATH "/proc/zoneinfo"
@@ -75,7 +78,9 @@ static int mpevfd[2];
 
 static int medium_oomadj;
 static int critical_oomadj;
-static int debug_process_killing;
+static bool debug_process_killing;
+static bool enable_pressure_upgrade;
+static int64_t upgrade_pressure;
 
 /* control socket listen and data */
 static int ctrl_lfd;
@@ -641,16 +646,57 @@ retry:
     return 0;
 }
 
+static int64_t get_memory_usage(const char* path) {
+    int ret;
+    int64_t mem_usage;
+    char buf[32];
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd == -1) {
+        ALOGE("%s open: errno=%d", path, errno);
+        return -1;
+    }
+
+    ret = read_all(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    if (ret < 0) {
+        ALOGE("%s error: errno=%d", path, errno);
+        return -1;
+    }
+    sscanf(buf, "%" SCNd64, &mem_usage);
+    if (mem_usage == 0) {
+        ALOGE("No memory!");
+        return -1;
+    }
+    return mem_usage;
+}
+
 static void mp_event_common(bool is_critical) {
     int ret;
     unsigned long long evcount;
     int min_adj_score = is_critical ? critical_oomadj : medium_oomadj;
     int index = is_critical ? CRITICAL_INDEX : MEDIUM_INDEX;
+    int64_t mem_usage, memsw_usage;
 
     ret = read(mpevfd[index], &evcount, sizeof(evcount));
     if (ret < 0)
         ALOGE("Error reading memory pressure event fd; errno=%d",
               errno);
+
+    if (enable_pressure_upgrade && !is_critical) {
+        mem_usage = get_memory_usage(MEMCG_MEMORY_USAGE);
+        memsw_usage = get_memory_usage(MEMCG_MEMORYSW_USAGE);
+        if (memsw_usage < 0 || mem_usage < 0) {
+            find_and_kill_process(min_adj_score, is_critical);
+            return;
+        }
+
+        // We are swapping too much, calculate percent for swappinness.
+        if (((mem_usage * 100) / memsw_usage) < upgrade_pressure) {
+            ALOGI("Event upgraded to critical.");
+            min_adj_score = critical_oomadj;
+            is_critical = true;
+        }
+    }
 
     if (find_and_kill_process(min_adj_score, is_critical) == 0) {
         if (debug_process_killing) {
@@ -827,6 +873,8 @@ int main(int argc __unused, char **argv __unused) {
     medium_oomadj = property_get_int32("ro.lmk.medium", 800);
     critical_oomadj = property_get_int32("ro.lmk.critical", 0);
     debug_process_killing = property_get_bool("ro.lmk.debug", false);
+    enable_pressure_upgrade = property_get_bool("ro.lmk.critical_upgrade", false);
+    upgrade_pressure = (int64_t)property_get_int32("ro.lmk.upgrade_pressure", 50);
 
     mlockall(MCL_FUTURE);
     sched_setscheduler(0, SCHED_FIFO, &param);
