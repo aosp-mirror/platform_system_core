@@ -33,8 +33,8 @@ static int UsbReadMessage(usb_handle* h, amessage* msg) {
     D("UsbReadMessage");
 
     size_t usb_packet_size = usb_get_max_packet_size(h);
-    CHECK(usb_packet_size >= sizeof(*msg));
-    CHECK(usb_packet_size < 4096);
+    CHECK_GE(usb_packet_size, sizeof(*msg));
+    CHECK_LT(usb_packet_size, 4096ULL);
 
     char buffer[4096];
     int n = usb_read(h, buffer, usb_packet_size);
@@ -52,7 +52,7 @@ static int UsbReadPayload(usb_handle* h, apacket* p) {
     D("UsbReadPayload(%d)", p->msg.data_length);
 
     size_t usb_packet_size = usb_get_max_packet_size(h);
-    CHECK(sizeof(p->data) % usb_packet_size == 0);
+    CHECK_EQ(0ULL, sizeof(p->data) % usb_packet_size);
 
     // Round the data length up to the nearest packet size boundary.
     // The device won't send a zero packet for packet size aligned payloads,
@@ -62,7 +62,7 @@ static int UsbReadPayload(usb_handle* h, apacket* p) {
     if (rem_size) {
         len += usb_packet_size - rem_size;
     }
-    CHECK(len <= sizeof(p->data));
+    CHECK_LE(len, sizeof(p->data));
     return usb_read(h, &p->data, len);
 }
 
