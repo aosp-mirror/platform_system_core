@@ -63,6 +63,7 @@
 #include "parser.h"
 #include "property_service.h"
 #include "reboot.h"
+#include "rlimit_parser.h"
 #include "service.h"
 #include "signal_handler.h"
 #include "util.h"
@@ -563,20 +564,10 @@ static Result<Success> do_setprop(const std::vector<std::string>& args) {
 }
 
 static Result<Success> do_setrlimit(const std::vector<std::string>& args) {
-    int resource;
-    if (!android::base::ParseInt(args[1], &resource)) {
-        return Error() << "unable to parse resource, " << args[1];
-    }
+    auto rlimit = ParseRlimit(args);
+    if (!rlimit) return rlimit.error();
 
-    struct rlimit limit;
-    if (!android::base::ParseUint(args[2], &limit.rlim_cur)) {
-        return Error() << "unable to parse rlim_cur, " << args[2];
-    }
-    if (!android::base::ParseUint(args[3], &limit.rlim_max)) {
-        return Error() << "unable to parse rlim_max, " << args[3];
-    }
-
-    if (setrlimit(resource, &limit) == -1) {
+    if (setrlimit(rlimit->first, &rlimit->second) == -1) {
         return ErrnoError() << "setrlimit failed";
     }
     return Success();
