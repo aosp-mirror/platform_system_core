@@ -177,7 +177,9 @@ static std::optional<boot_clock::time_point> RestartProcesses() {
 
         auto restart_time = s->time_started() + 5s;
         if (boot_clock::now() > restart_time) {
-            s->Start();
+            if (auto result = s->Start(); !result) {
+                LOG(ERROR) << "Could not restart process '" << s->name() << "': " << result.error();
+            }
         } else {
             if (!next_process_restart_time || restart_time < *next_process_restart_time) {
                 next_process_restart_time = restart_time;
@@ -195,7 +197,9 @@ void handle_control_message(const std::string& msg, const std::string& name) {
     }
 
     if (msg == "start") {
-        svc->Start();
+        if (auto result = svc->Start(); !result) {
+            LOG(ERROR) << "Could not ctl.start service '" << name << "': " << result.error();
+        }
     } else if (msg == "stop") {
         svc->Stop();
     } else if (msg == "restart") {
