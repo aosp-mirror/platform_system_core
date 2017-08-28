@@ -28,6 +28,7 @@
 
 #include <cstring>
 
+#include <android-base/macros.h>
 #include <log/log.h>
 
 namespace android {
@@ -243,29 +244,12 @@ bool LoadNativeBridge(const char* nb_library_filename,
   }
 }
 
-#if defined(__arm__)
-static const char* kRuntimeISA = "arm";
-#elif defined(__aarch64__)
-static const char* kRuntimeISA = "arm64";
-#elif defined(__mips__) && !defined(__LP64__)
-static const char* kRuntimeISA = "mips";
-#elif defined(__mips__) && defined(__LP64__)
-static const char* kRuntimeISA = "mips64";
-#elif defined(__i386__)
-static const char* kRuntimeISA = "x86";
-#elif defined(__x86_64__)
-static const char* kRuntimeISA = "x86_64";
-#else
-static const char* kRuntimeISA = "unknown";
-#endif
-
-
 bool NeedsNativeBridge(const char* instruction_set) {
   if (instruction_set == nullptr) {
     ALOGE("Null instruction set in NeedsNativeBridge.");
     return false;
   }
-  return strncmp(instruction_set, kRuntimeISA, strlen(kRuntimeISA) + 1) != 0;
+  return strncmp(instruction_set, ABI_STRING, strlen(ABI_STRING) + 1) != 0;
 }
 
 #ifdef __APPLE__

@@ -58,6 +58,8 @@ class RegsTestImpl : public RegsImpl<TypeParam> {
       : RegsImpl<TypeParam>(total_regs, regs_sp, return_loc) {}
   virtual ~RegsTestImpl() = default;
 
+  uint32_t MachineType() override { return 0; }
+
   uint64_t GetAdjustedPc(uint64_t, Elf*) override { return 0; }
   void SetFromRaw() override {}
   bool StepIfSignalHandler(uint64_t, Elf*, Memory*) override { return false; }

@@ -160,7 +160,8 @@ bool UnwindStackCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t*
     // one extra function call appearing in the unwind.
     unwindstack::RegsGetLocal(regs.get());
   } else {
-    regs.reset(unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::GetMachineType(), ucontext));
+    regs.reset(
+        unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentMachineType(), ucontext));
   }
 
   error_ = BACKTRACE_UNWIND_NO_ERROR;
@@ -177,10 +178,10 @@ std::string UnwindStackPtrace::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offse
 bool UnwindStackPtrace::Unwind(size_t num_ignore_frames, ucontext_t* context) {
   std::unique_ptr<unwindstack::Regs> regs;
   if (context == nullptr) {
-    uint32_t machine_type;
-    regs.reset(unwindstack::Regs::RemoteGet(Tid(), &machine_type));
+    regs.reset(unwindstack::Regs::RemoteGet(Tid()));
   } else {
-    regs.reset(unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::GetMachineType(), context));
+    regs.reset(
+        unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentMachineType(), context));
   }
 
   error_ = BACKTRACE_UNWIND_NO_ERROR;
