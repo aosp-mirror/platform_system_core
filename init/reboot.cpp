@@ -374,10 +374,17 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         if (kill_after_apps.count(s->name())) {
             s->SetShutdownCritical();
         } else if (to_starts.count(s->name())) {
-            s->Start();
+            if (auto result = s->Start(); !result) {
+                LOG(ERROR) << "Could not start shutdown 'to_start' service '" << s->name()
+                           << "': " << result.error();
+            }
             s->SetShutdownCritical();
         } else if (s->IsShutdownCritical()) {
-            s->Start();  // start shutdown critical service if not started
+            // Start shutdown critical service if not started.
+            if (auto result = s->Start(); !result) {
+                LOG(ERROR) << "Could not start shutdown critical service '" << s->name()
+                           << "': " << result.error();
+            }
         }
     }
 
