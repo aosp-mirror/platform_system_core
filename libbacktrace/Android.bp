@@ -243,6 +243,13 @@ cc_test {
             static_libs: ["libutils"],
         },
     },
+
+    data: [
+        "testdata/arm/*",
+        "testdata/arm64/*",
+        "testdata/x86/*",
+        "testdata/x86_64/*",
+    ],
 }
 
 cc_benchmark {
