@@ -31,124 +31,8 @@
 #include <storaged.h>
 #include <storaged_utils.h>
 
-/* disk_stats_publisher */
-void disk_stats_publisher::publish(void) {
-    // Logging
-    struct disk_perf perf = get_disk_perf(&mAccumulate);
-    log_debug_disk_perf(&perf, "regular");
-    log_event_disk_stats(&mAccumulate, "regular");
-    // Reset global structures
-    memset(&mAccumulate, 0, sizeof(struct disk_stats));
-}
 
-void disk_stats_publisher::update(void) {
-    struct disk_stats curr;
-    if (parse_disk_stats(DISK_STATS_PATH, &curr)) {
-        struct disk_stats inc = get_inc_disk_stats(&mPrevious, &curr);
-        add_disk_stats(&inc, &mAccumulate);
-#ifdef DEBUG
-//            log_kernel_disk_stats(&mPrevious, "prev stats");
-//            log_kernel_disk_stats(&curr, "curr stats");
-//            log_kernel_disk_stats(&inc, "inc stats");
-//            log_kernel_disk_stats(&mAccumulate, "accumulated stats");
-#endif
-        mPrevious = curr;
-    }
-}
-
-/* disk_stats_monitor */
-void disk_stats_monitor::update_mean() {
-    CHECK(mValid);
-    mMean.read_perf = (uint32_t)mStats.read_perf.get_mean();
-    mMean.read_ios = (uint32_t)mStats.read_ios.get_mean();
-    mMean.write_perf = (uint32_t)mStats.write_perf.get_mean();
-    mMean.write_ios = (uint32_t)mStats.write_ios.get_mean();
-    mMean.queue = (uint32_t)mStats.queue.get_mean();
-}
-
-void disk_stats_monitor::update_std() {
-    CHECK(mValid);
-    mStd.read_perf = (uint32_t)mStats.read_perf.get_std();
-    mStd.read_ios = (uint32_t)mStats.read_ios.get_std();
-    mStd.write_perf = (uint32_t)mStats.write_perf.get_std();
-    mStd.write_ios = (uint32_t)mStats.write_ios.get_std();
-    mStd.queue = (uint32_t)mStats.queue.get_std();
-}
-
-void disk_stats_monitor::add(struct disk_perf* perf) {
-    mStats.read_perf.add(perf->read_perf);
-    mStats.read_ios.add(perf->read_ios);
-    mStats.write_perf.add(perf->write_perf);
-    mStats.write_ios.add(perf->write_ios);
-    mStats.queue.add(perf->queue);
-}
-
-void disk_stats_monitor::evict(struct disk_perf* perf) {
-    mStats.read_perf.evict(perf->read_perf);
-    mStats.read_ios.evict(perf->read_ios);
-    mStats.write_perf.evict(perf->write_perf);
-    mStats.write_ios.evict(perf->write_ios);
-    mStats.queue.evict(perf->queue);
-}
-
-bool disk_stats_monitor::detect(struct disk_perf* perf) {
-    return ((double)perf->queue >= (double)mMean.queue + mSigma * (double)mStd.queue) &&
-            ((double)perf->read_perf < (double)mMean.read_perf - mSigma * (double)mStd.read_perf) &&
-            ((double)perf->write_perf < (double)mMean.write_perf - mSigma * (double)mStd.write_perf);
-}
-
-void disk_stats_monitor::update(struct disk_stats* stats) {
-    struct disk_stats inc = get_inc_disk_stats(&mPrevious, stats);
-    struct disk_perf perf = get_disk_perf(&inc);
-    // Update internal data structures
-    if (LIKELY(mValid)) {
-        CHECK_EQ(mBuffer.size(), mWindow);
-
-        if (UNLIKELY(detect(&perf))) {
-            mStall = true;
-            add_disk_stats(&inc, &mAccumulate);
-            log_debug_disk_perf(&mMean, "stalled_mean");
-            log_debug_disk_perf(&mStd, "stalled_std");
-        } else {
-            if (mStall) {
-                struct disk_perf acc_perf = get_disk_perf(&mAccumulate);
-                log_debug_disk_perf(&acc_perf, "stalled");
-                log_event_disk_stats(&mAccumulate, "stalled");
-                mStall = false;
-                memset(&mAccumulate, 0, sizeof(mAccumulate));
-            }
-        }
-
-        evict(&mBuffer.front());
-        mBuffer.pop();
-        add(&perf);
-        mBuffer.push(perf);
-
-        update_mean();
-        update_std();
-
-    } else { /* mValid == false */
-        CHECK_LT(mBuffer.size(), mWindow);
-        add(&perf);
-        mBuffer.push(perf);
-        if (mBuffer.size() == mWindow) {
-            mValid = true;
-            update_mean();
-            update_std();
-        }
-    }
-
-    mPrevious = *stats;
-}
-
-void disk_stats_monitor::update(void) {
-    struct disk_stats curr;
-    if (LIKELY(parse_disk_stats(DISK_STATS_PATH, &curr))) {
-        update(&curr);
-    }
-}
-
-static sp<IBatteryPropertiesRegistrar> get_battery_properties_service() {
+sp<IBatteryPropertiesRegistrar> get_battery_properties_service() {
     sp<IServiceManager> sm = defaultServiceManager();
     if (sm == NULL) return NULL;
 
@@ -161,7 +45,7 @@ static sp<IBatteryPropertiesRegistrar> get_battery_properties_service() {
     return battery_properties;
 }
 
-static inline charger_stat_t is_charger_on(int64_t prop) {
+inline charger_stat_t is_charger_on(int64_t prop) {
     return (prop == BATTERY_STATUS_CHARGING || prop == BATTERY_STATUS_FULL) ?
         CHARGER_ON : CHARGER_OFF;
 }
@@ -171,7 +55,7 @@ void storaged_t::batteryPropertiesChanged(struct BatteryProperties props) {
 }
 
 void storaged_t::init_battery_service() {
-    if (!mConfig.proc_uid_io_available)
+    if (!mUidm.enabled())
         return;
 
     battery_properties = get_battery_properties_service();
@@ -206,43 +90,39 @@ void storaged_t::report_storage_info() {
 
 /* storaged_t */
 storaged_t::storaged_t(void) {
-    if (access(MMC_DISK_STATS_PATH, R_OK) < 0 && access(SDA_DISK_STATS_PATH, R_OK) < 0) {
-        mConfig.diskstats_available = false;
-    } else {
-        mConfig.diskstats_available = true;
-    }
-
-    mConfig.proc_uid_io_available = (access(UID_IO_STATS_PATH, R_OK) == 0);
-
     mConfig.periodic_chores_interval_unit =
-        property_get_int32("ro.storaged.event.interval", DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT);
+        property_get_int32("ro.storaged.event.interval",
+                           DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT);
 
     mConfig.event_time_check_usec =
         property_get_int32("ro.storaged.event.perf_check", 0);
 
     mConfig.periodic_chores_interval_disk_stats_publish =
-        property_get_int32("ro.storaged.disk_stats_pub", DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH);
+        property_get_int32("ro.storaged.disk_stats_pub",
+                           DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH);
 
     mConfig.periodic_chores_interval_uid_io =
-        property_get_int32("ro.storaged.uid_io.interval", DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO);
+        property_get_int32("ro.storaged.uid_io.interval",
+                           DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO);
 
     storage_info.reset(storage_info_t::get_storage_info());
 
     mStarttime = time(NULL);
+    mTimer = 0;
 }
 
 void storaged_t::event(void) {
-    if (mConfig.diskstats_available) {
-        mDiskStats.update();
+    storage_info->refresh();
+
+    if (mDsm.enabled()) {
         mDsm.update();
-        storage_info->refresh();
-        if (mTimer && (mTimer % mConfig.periodic_chores_interval_disk_stats_publish) == 0) {
-            mDiskStats.publish();
+        if (!(mTimer % mConfig.periodic_chores_interval_disk_stats_publish)) {
+            mDsm.publish();
         }
     }
 
-    if (mConfig.proc_uid_io_available && mTimer &&
-            (mTimer % mConfig.periodic_chores_interval_uid_io) == 0) {
+    if (mUidm.enabled() &&
+        !(mTimer % mConfig.periodic_chores_interval_uid_io)) {
         mUidm.report();
     }
 

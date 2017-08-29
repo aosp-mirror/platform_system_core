@@ -44,6 +44,7 @@ cc_library_static {
 
     srcs: [
         "storaged.cpp",
+        "storaged_diskstats.cpp",
         "storaged_info.cpp",
         "storaged_service.cpp",
         "storaged_utils.cpp",
