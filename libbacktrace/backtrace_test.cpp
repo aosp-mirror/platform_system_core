@@ -304,8 +304,10 @@ TEST(libbacktrace, local_max_trace) {
   ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, VerifyMaxBacktrace, nullptr), 0);
 }
 
-static void VerifyProcTest(pid_t pid, pid_t tid, bool share_map, bool (*ReadyFunc)(Backtrace*),
-                           void (*VerifyFunc)(Backtrace*)) {
+static void VerifyProcTest(pid_t pid, pid_t tid, bool (*ReadyFunc)(Backtrace*),
+                           void (*VerifyFunc)(Backtrace*),
+                           Backtrace* (*back_func)(pid_t, pid_t, BacktraceMap*),
+                           BacktraceMap* (*map_func)(pid_t, bool)) {
   pid_t ptrace_tid;
   if (tid < 0) {
     ptrace_tid = pid;
@@ -322,10 +324,8 @@ static void VerifyProcTest(pid_t pid, pid_t tid, bool share_map, bool (*ReadyFun
       WaitForStop(ptrace_tid);
 
       std::unique_ptr<BacktraceMap> map;
-      if (share_map) {
-        map.reset(BacktraceMap::Create(pid));
-      }
-      std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map.get()));
+      map.reset(map_func(pid, false));
+      std::unique_ptr<Backtrace> backtrace(back_func(pid, tid, map.get()));
       ASSERT_TRUE(backtrace.get() != nullptr);
       ASSERT_TRUE(backtrace->Unwind(0));
       ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
@@ -349,21 +349,22 @@ TEST(libbacktrace, ptrace_trace) {
     ASSERT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
     _exit(1);
   }
-  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, false, ReadyLevelBacktrace, VerifyLevelDump);
+  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyLevelBacktrace, VerifyLevelDump,
+                 Backtrace::Create, BacktraceMap::Create);
 
   kill(pid, SIGKILL);
   int status;
   ASSERT_EQ(waitpid(pid, &status, 0), pid);
 }
 
-TEST(libbacktrace, ptrace_trace_shared_map) {
+TEST(libbacktrace, ptrace_trace_new) {
   pid_t pid;
   if ((pid = fork()) == 0) {
     ASSERT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
     _exit(1);
   }
-
-  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, true, ReadyLevelBacktrace, VerifyLevelDump);
+  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyLevelBacktrace, VerifyLevelDump,
+                 Backtrace::CreateNew, BacktraceMap::CreateNew);
 
   kill(pid, SIGKILL);
   int status;
@@ -376,7 +377,22 @@ TEST(libbacktrace, ptrace_max_trace) {
     ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, nullptr, nullptr), 0);
     _exit(1);
   }
-  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, false, ReadyMaxBacktrace, VerifyMaxDump);
+  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyMaxBacktrace, VerifyMaxDump, Backtrace::Create,
+                 BacktraceMap::Create);
+
+  kill(pid, SIGKILL);
+  int status;
+  ASSERT_EQ(waitpid(pid, &status, 0), pid);
+}
+
+TEST(libbacktrace, ptrace_max_trace_new) {
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES + 10, nullptr, nullptr), 0);
+    _exit(1);
+  }
+  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyMaxBacktrace, VerifyMaxDump,
+                 Backtrace::CreateNew, BacktraceMap::CreateNew);
 
   kill(pid, SIGKILL);
   int status;
@@ -403,7 +419,22 @@ TEST(libbacktrace, ptrace_ignore_frames) {
     ASSERT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
     _exit(1);
   }
-  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, false, ReadyLevelBacktrace, VerifyProcessIgnoreFrames);
+  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyLevelBacktrace, VerifyProcessIgnoreFrames,
+                 Backtrace::Create, BacktraceMap::Create);
+
+  kill(pid, SIGKILL);
+  int status;
+  ASSERT_EQ(waitpid(pid, &status, 0), pid);
+}
+
+TEST(libbacktrace, ptrace_ignore_frames_new) {
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    ASSERT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
+    _exit(1);
+  }
+  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyLevelBacktrace, VerifyProcessIgnoreFrames,
+                 Backtrace::CreateNew, BacktraceMap::CreateNew);
 
   kill(pid, SIGKILL);
   int status;
@@ -466,7 +497,47 @@ TEST(libbacktrace, ptrace_threads) {
     if (pid == *it) {
       continue;
     }
-    VerifyProcTest(pid, *it, false, ReadyLevelBacktrace, VerifyLevelDump);
+    VerifyProcTest(pid, *it, ReadyLevelBacktrace, VerifyLevelDump, Backtrace::Create,
+                   BacktraceMap::Create);
+  }
+
+  FinishRemoteProcess(pid);
+}
+
+TEST(libbacktrace, ptrace_threads_new) {
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    for (size_t i = 0; i < NUM_PTRACE_THREADS; i++) {
+      pthread_attr_t attr;
+      pthread_attr_init(&attr);
+      pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+      pthread_t thread;
+      ASSERT_TRUE(pthread_create(&thread, &attr, PtraceThreadLevelRun, nullptr) == 0);
+    }
+    ASSERT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
+    _exit(1);
+  }
+
+  // Check to see that all of the threads are running before unwinding.
+  std::vector<pid_t> threads;
+  uint64_t start = NanoTime();
+  do {
+    usleep(US_PER_MSEC);
+    threads.clear();
+    GetThreads(pid, &threads);
+  } while ((threads.size() != NUM_PTRACE_THREADS + 1) && ((NanoTime() - start) <= 5 * NS_PER_SEC));
+  ASSERT_EQ(threads.size(), static_cast<size_t>(NUM_PTRACE_THREADS + 1));
+
+  ASSERT_TRUE(ptrace(PTRACE_ATTACH, pid, 0, 0) == 0);
+  WaitForStop(pid);
+  for (std::vector<int>::const_iterator it = threads.begin(); it != threads.end(); ++it) {
+    // Skip the current forked process, we only care about the threads.
+    if (pid == *it) {
+      continue;
+    }
+    VerifyProcTest(pid, *it, ReadyLevelBacktrace, VerifyLevelDump, Backtrace::CreateNew,
+                   BacktraceMap::CreateNew);
   }
 
   FinishRemoteProcess(pid);
@@ -1579,7 +1650,7 @@ TEST(libbacktrace, unwind_disallow_device_map_local) {
   munmap(device_map, DEVICE_MAP_SIZE);
 }
 
-TEST(libbacktrace, unwind_disallow_device_map_remote) {
+TEST(libbacktrace, unwind_disallow_device_map_remote_new) {
   void* device_map;
   SetupDeviceMap(&device_map);
 
@@ -1588,13 +1659,11 @@ TEST(libbacktrace, unwind_disallow_device_map_remote) {
   CreateRemoteProcess(&pid);
 
   // Now create an unwind object.
-  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, pid));
+  std::unique_ptr<BacktraceMap> map(BacktraceMap::CreateNew(pid));
+  ASSERT_TRUE(map.get() != nullptr);
+  std::unique_ptr<Backtrace> backtrace(Backtrace::CreateNew(pid, pid, map.get()));
 
-  // TODO: Currently unwind from context doesn't work on remote
-  // unwind. Keep this test because the new unwinder should support
-  // this eventually, or we can delete this test.
-  // properly with unwind from context.
-  // UnwindFromDevice(backtrace.get(), device_map);
+  UnwindFromDevice(backtrace.get(), device_map);
 
   FinishRemoteProcess(pid);
 
@@ -1633,7 +1702,9 @@ static void SetValueAndLoop(void* data) {
     ;
 }
 
-static void UnwindThroughSignal(bool use_action) {
+static void UnwindThroughSignal(bool use_action,
+                                Backtrace* (*back_func)(pid_t, pid_t, BacktraceMap*),
+                                BacktraceMap* (*map_func)(pid_t, bool)) {
   volatile int value = 0;
   pid_t pid;
   if ((pid = fork()) == 0) {
@@ -1659,7 +1730,8 @@ static void UnwindThroughSignal(bool use_action) {
 
     WaitForStop(pid);
 
-    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, pid));
+    std::unique_ptr<BacktraceMap> map(map_func(pid, false));
+    std::unique_ptr<Backtrace> backtrace(back_func(pid, pid, map.get()));
 
     size_t bytes_read = backtrace->Read(reinterpret_cast<uintptr_t>(const_cast<int*>(&value)),
                                         reinterpret_cast<uint8_t*>(&read_value), sizeof(read_value));
@@ -1677,6 +1749,7 @@ static void UnwindThroughSignal(bool use_action) {
   // Wait for the process to get to the signal handler loop.
   Backtrace::const_iterator frame_iter;
   start = NanoTime();
+  std::unique_ptr<BacktraceMap> map;
   std::unique_ptr<Backtrace> backtrace;
   while (true) {
     usleep(1000);
@@ -1685,7 +1758,9 @@ static void UnwindThroughSignal(bool use_action) {
 
     WaitForStop(pid);
 
-    backtrace.reset(Backtrace::Create(pid, pid));
+    map.reset(map_func(pid, false));
+    ASSERT_TRUE(map.get() != nullptr);
+    backtrace.reset(back_func(pid, pid, map.get()));
     ASSERT_TRUE(backtrace->Unwind(0));
     bool found = false;
     for (frame_iter = backtrace->begin(); frame_iter != backtrace->end(); ++frame_iter) {
@@ -1742,11 +1817,19 @@ static void UnwindThroughSignal(bool use_action) {
 }
 
 TEST(libbacktrace, unwind_remote_through_signal_using_handler) {
-  UnwindThroughSignal(false);
+  UnwindThroughSignal(false, Backtrace::Create, BacktraceMap::Create);
+}
+
+TEST(libbacktrace, unwind_remote_through_signal_using_handler_new) {
+  UnwindThroughSignal(false, Backtrace::CreateNew, BacktraceMap::CreateNew);
 }
 
 TEST(libbacktrace, unwind_remote_through_signal_using_action) {
-  UnwindThroughSignal(true);
+  UnwindThroughSignal(true, Backtrace::Create, BacktraceMap::Create);
+}
+
+TEST(libbacktrace, unwind_remote_through_signal_using_action_new) {
+  UnwindThroughSignal(true, Backtrace::CreateNew, BacktraceMap::CreateNew);
 }
 
 #if defined(ENABLE_PSS_TESTS)
