@@ -22,9 +22,10 @@
 #include <gtest/gtest.h>
 #include <android-base/file.h>
 
+#include "libdebuggerd/utility.h"
+
 #include "BacktraceMock.h"
 #include "log_fake.h"
-#include "utility.h"
 
 const char g_expected_full_dump[] =
 "\nmemory near r1:\n"

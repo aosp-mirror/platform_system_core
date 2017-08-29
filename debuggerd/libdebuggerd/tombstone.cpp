@@ -16,6 +16,8 @@
 
 #define LOG_TAG "DEBUG"
 
+#include "libdebuggerd/tombstone.h"
+
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -43,21 +45,17 @@
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
 
+// Needed to get DEBUGGER_SIGNAL.
 #include "debuggerd/handler.h"
 
-#include "backtrace.h"
-#include "elf_utils.h"
-#include "machine.h"
-#include "open_files_list.h"
-#include "tombstone.h"
+#include "libdebuggerd/backtrace.h"
+#include "libdebuggerd/elf_utils.h"
+#include "libdebuggerd/machine.h"
+#include "libdebuggerd/open_files_list.h"
 
 using android::base::StringPrintf;
 
 #define STACK_WORDS 16
-
-#define MAX_TOMBSTONES  10
-#define TOMBSTONE_DIR   "/data/tombstones"
-#define TOMBSTONE_TEMPLATE (TOMBSTONE_DIR"/tombstone_%02d")
 
 static bool signal_has_si_addr(int si_signo, int si_code) {
   // Manually sent signals won't have si_addr.
@@ -762,59 +760,6 @@ static void dump_crash(log_t* log, BacktraceMap* map, BacktraceMap* map_new,
          "(debuggerd/gdb/init/simpleperf/strace/valgrind)\n");
     _LOG(log, logtype::THREAD, "MISMATCH: and attach this tombstone.\n");
   }
-}
-
-// open_tombstone - find an available tombstone slot, if any, of the
-// form tombstone_XX where XX is 00 to MAX_TOMBSTONES-1, inclusive. If no
-// file is available, we reuse the least-recently-modified file.
-int open_tombstone(std::string* out_path) {
-  // In a single pass, find an available slot and, in case none
-  // exist, find and record the least-recently-modified file.
-  char path[128];
-  int fd = -1;
-  int oldest = -1;
-  struct stat oldest_sb;
-  for (int i = 0; i < MAX_TOMBSTONES; i++) {
-    snprintf(path, sizeof(path), TOMBSTONE_TEMPLATE, i);
-
-    struct stat sb;
-    if (stat(path, &sb) == 0) {
-      if (oldest < 0 || sb.st_mtime < oldest_sb.st_mtime) {
-        oldest = i;
-        oldest_sb.st_mtime = sb.st_mtime;
-      }
-      continue;
-    }
-    if (errno != ENOENT) continue;
-
-    fd = open(path, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW | O_CLOEXEC, 0600);
-    if (fd < 0) continue;  // raced ?
-
-    if (out_path) {
-      *out_path = path;
-    }
-    fchown(fd, AID_SYSTEM, AID_SYSTEM);
-    return fd;
-  }
-
-  if (oldest < 0) {
-    ALOGE("debuggerd: failed to find a valid tombstone, default to using tombstone 0.\n");
-    oldest = 0;
-  }
-
-  // we didn't find an available file, so we clobber the oldest one
-  snprintf(path, sizeof(path), TOMBSTONE_TEMPLATE, oldest);
-  fd = open(path, O_CREAT | O_TRUNC | O_WRONLY | O_NOFOLLOW | O_CLOEXEC, 0600);
-  if (fd < 0) {
-    ALOGE("debuggerd: failed to open tombstone file '%s': %s\n", path, strerror(errno));
-    return -1;
-  }
-
-  if (out_path) {
-    *out_path = path;
-  }
-  fchown(fd, AID_SYSTEM, AID_SYSTEM);
-  return fd;
 }
 
 void engrave_tombstone(int tombstone_fd, BacktraceMap* map, BacktraceMap* map_new,

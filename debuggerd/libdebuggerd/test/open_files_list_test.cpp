@@ -24,7 +24,7 @@
 
 #include "android-base/test_utils.h"
 
-#include "open_files_list.h"
+#include "libdebuggerd/open_files_list.h"
 
 // Check that we can produce a list of open files for the current process, and
 // that it includes a known open file.

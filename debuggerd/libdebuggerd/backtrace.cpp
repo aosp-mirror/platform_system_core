@@ -16,6 +16,8 @@
 
 #define LOG_TAG "DEBUG"
 
+#include "libdebuggerd/backtrace.h"
+
 #include <errno.h>
 #include <dirent.h>
 #include <limits.h>
@@ -34,9 +36,7 @@
 #include <backtrace/Backtrace.h>
 #include <log/log.h>
 
-#include "backtrace.h"
-
-#include "utility.h"
+#include "libdebuggerd/utility.h"
 
 static void dump_process_header(log_t* log, pid_t pid, const char* process_name) {
   time_t t = time(NULL);
