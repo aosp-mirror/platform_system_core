@@ -20,6 +20,17 @@
 #include <condition_variable>
 #include <mutex>
 
+#include <asyncio/AsyncIO.h>
+
+struct aio_block {
+    std::vector<struct iocb> iocb;
+    std::vector<struct iocb*> iocbs;
+    std::vector<struct io_event> events;
+    aio_context_t ctx;
+    int num_submitted;
+    int fd;
+};
+
 struct usb_handle {
     usb_handle() : kicked(false) {
     }
@@ -39,7 +50,11 @@ struct usb_handle {
     int bulk_out = -1; /* "out" from the host's perspective => source for adbd */
     int bulk_in = -1;  /* "in" from the host's perspective => sink for adbd */
 
+    // Access to these blocks is very not thread safe. Have one block for both the
+    // read and write threads.
+    struct aio_block read_aiob;
+    struct aio_block write_aiob;
+
     int max_rw;
 };
 
-bool init_functionfs(struct usb_handle* h);
