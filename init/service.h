@@ -17,6 +17,7 @@
 #ifndef _INIT_SERVICE_H
 #define _INIT_SERVICE_H
 
+#include <sys/resource.h>
 #include <sys/types.h>
 
 #include <memory>
@@ -138,6 +139,7 @@ class Service {
     Result<Success> ParseMemcgSoftLimitInBytes(const std::vector<std::string>& args);
     Result<Success> ParseMemcgSwappiness(const std::vector<std::string>& args);
     Result<Success> ParseNamespace(const std::vector<std::string>& args);
+    Result<Success> ParseProcessRlimit(const std::vector<std::string>& args);
     Result<Success> ParseSeclabel(const std::vector<std::string>& args);
     Result<Success> ParseSetenv(const std::vector<std::string>& args);
     Result<Success> ParseShutdown(const std::vector<std::string>& args);
@@ -194,6 +196,8 @@ class Service {
     bool process_cgroup_empty_ = false;
 
     unsigned long start_order_;
+
+    std::vector<std::pair<int, rlimit>> rlimits_;
 
     std::vector<std::string> args_;
 };

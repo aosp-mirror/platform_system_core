@@ -206,6 +206,12 @@ static bool handle_send_file(int s, const char* path, uid_t uid, gid_t gid, uint
     __android_log_security_bswrite(SEC_TAG_ADB_SEND_FILE, path);
 
     int fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
+
+    if (posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE | POSIX_FADV_WILLNEED) <
+        0) {
+        D("[ Failed to fadvise: %d ]", errno);
+    }
+
     if (fd < 0 && errno == ENOENT) {
         if (!secure_mkdirs(android::base::Dirname(path))) {
             SendSyncFailErrno(s, "secure_mkdirs failed");
@@ -283,25 +289,25 @@ fail:
     // reading and throwing away ID_DATA packets until the other side notices
     // that we've reported an error.
     while (true) {
-        if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) goto fail;
+        if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) break;
 
         if (msg.data.id == ID_DONE) {
-            goto abort;
+            break;
         } else if (msg.data.id != ID_DATA) {
             char id[5];
             memcpy(id, &msg.data.id, sizeof(msg.data.id));
             id[4] = '\0';
             D("handle_send_fail received unexpected id '%s' during failure", id);
-            goto abort;
+            break;
         }
 
         if (msg.data.size > buffer.size()) {
             D("handle_send_fail received oversized packet of length '%u' during failure",
               msg.data.size);
-            goto abort;
+            break;
         }
 
-        if (!ReadFdExactly(s, &buffer[0], msg.data.size)) goto abort;
+        if (!ReadFdExactly(s, &buffer[0], msg.data.size)) break;
     }
 
 abort:
@@ -413,10 +419,14 @@ static bool do_recv(int s, const char* path, std::vector<char>& buffer) {
         return false;
     }
 
+    if (posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE) < 0) {
+        D("[ Failed to fadvise: %d ]", errno);
+    }
+
     syncmsg msg;
     msg.data.id = ID_DATA;
     while (true) {
-        int r = adb_read(fd, &buffer[0], buffer.size());
+        int r = adb_read(fd, &buffer[0], buffer.size() - sizeof(msg.data));
         if (r <= 0) {
             if (r == 0) break;
             SendSyncFailErrno(s, "read failed");

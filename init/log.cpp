@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <linux/audit.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <android-base/logging.h>
 #include <cutils/android_reboot.h>
@@ -29,7 +30,14 @@
 namespace android {
 namespace init {
 
-static void RebootAborter(const char* abort_message) {
+static void InitAborter(const char* abort_message) {
+    // When init forks, it continues to use this aborter for LOG(FATAL), but we want children to
+    // simply abort instead of trying to reboot the system.
+    if (getpid() != 1) {
+        android::base::DefaultAborter(abort_message);
+        return;
+    }
+
     // DoReboot() does a lot to try to shutdown the system cleanly.  If something happens to call
     // LOG(FATAL) in the shutdown path, we want to catch this and immediately use the syscall to
     // reboot instead of recursing here.
@@ -49,7 +57,7 @@ void InitKernelLogging(char* argv[]) {
     int fd = open("/sys/fs/selinux/null", O_RDWR);
     if (fd == -1) {
         int saved_errno = errno;
-        android::base::InitLogging(argv, &android::base::KernelLogger, RebootAborter);
+        android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
         errno = saved_errno;
         PLOG(FATAL) << "Couldn't open /sys/fs/selinux/null";
     }
@@ -58,7 +66,7 @@ void InitKernelLogging(char* argv[]) {
     dup2(fd, 2);
     if (fd > 2) close(fd);
 
-    android::base::InitLogging(argv, &android::base::KernelLogger, RebootAborter);
+    android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
 }
 
 int selinux_klog_callback(int type, const char *fmt, ...) {
