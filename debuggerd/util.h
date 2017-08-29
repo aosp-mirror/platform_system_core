@@ -42,5 +42,3 @@ ssize_t send_fd(int sockfd, const void* _Nonnull data, size_t len, android::base
 //   plus any errors returned by the underlying recvmsg.
 ssize_t recv_fd(int sockfd, void* _Nonnull data, size_t len,
                 android::base::unique_fd* _Nullable out_fd);
-
-bool Pipe(android::base::unique_fd* read, android::base::unique_fd* write);

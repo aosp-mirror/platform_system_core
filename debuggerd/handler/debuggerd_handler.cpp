@@ -48,9 +48,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <android-base/unique_fd.h>
 #include <async_safe/log.h>
 
 #include "dump_type.h"
+
+using android::base::unique_fd;
 
 // see man(2) prctl, specifically the section about PR_GET_NAME
 #define MAX_TASK_NAME_LEN (16)
@@ -117,13 +120,12 @@ static void __noreturn __printflike(1, 2) fatal_errno(const char* fmt, ...) {
 }
 
 static bool get_main_thread_name(char* buf, size_t len) {
-  int fd = open("/proc/self/comm", O_RDONLY | O_CLOEXEC);
+  unique_fd fd(open("/proc/self/comm", O_RDONLY | O_CLOEXEC));
   if (fd == -1) {
     return false;
   }
 
   ssize_t rc = read(fd, buf, len);
-  close(fd);
   if (rc == -1) {
     return false;
   } else if (rc == 0) {
@@ -302,8 +304,8 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   TEMP_FAILURE_RETRY(dup2(devnull, STDOUT_FILENO));
   TEMP_FAILURE_RETRY(dup2(devnull, STDERR_FILENO));
 
-  int pipefds[2];
-  if (pipe(pipefds) != 0) {
+  unique_fd pipe_read, pipe_write;
+  if (!android::base::Pipe(&pipe_read, &pipe_write)) {
     fatal_errno("failed to create pipe");
   }
 
@@ -313,9 +315,9 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     async_safe_format_log(ANDROID_LOG_FATAL, "libc",
                           "failed to fork in debuggerd signal handler: %s", strerror(errno));
   } else if (forkpid == 0) {
-    TEMP_FAILURE_RETRY(dup2(pipefds[1], STDOUT_FILENO));
-    close(pipefds[0]);
-    close(pipefds[1]);
+    TEMP_FAILURE_RETRY(dup2(pipe_write.get(), STDOUT_FILENO));
+    pipe_write.reset();
+    pipe_read.reset();
 
     raise_caps();
 
@@ -333,9 +335,9 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
 
     fatal_errno("exec failed");
   } else {
-    close(pipefds[1]);
+    pipe_write.reset();
     char buf[4];
-    ssize_t rc = TEMP_FAILURE_RETRY(read(pipefds[0], &buf, sizeof(buf)));
+    ssize_t rc = TEMP_FAILURE_RETRY(read(pipe_read.get(), &buf, sizeof(buf)));
     if (rc == -1) {
       async_safe_format_log(ANDROID_LOG_FATAL, "libc", "read of IPC pipe failed: %s",
                             strerror(errno));
@@ -351,7 +353,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
         thread_info->crash_dump_started = true;
       }
     }
-    close(pipefds[0]);
+    pipe_read.reset();
 
     // Don't leave a zombie child.
     int status;
