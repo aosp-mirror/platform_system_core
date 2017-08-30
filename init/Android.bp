@@ -72,6 +72,7 @@ cc_library_static {
         "import_parser.cpp",
         "log.cpp",
         "parser.cpp",
+        "persistent_properties.cpp",
         "property_service.cpp",
         "security.cpp",
         "selinux.cpp",
@@ -162,6 +163,7 @@ cc_test {
     srcs: [
         "devices_test.cpp",
         "init_test.cpp",
+        "persistent_properties_test.cpp",
         "property_service_test.cpp",
         "result_test.cpp",
         "rlimit_parser_test.cpp",
