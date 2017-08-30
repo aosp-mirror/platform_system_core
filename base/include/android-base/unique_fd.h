@@ -100,9 +100,23 @@ using unique_fd = unique_fd_impl<DefaultCloser>;
 // Inline functions, so that they can be used header-only.
 inline bool Pipe(unique_fd* read, unique_fd* write) {
   int pipefd[2];
+
+#if defined(__linux__)
   if (pipe2(pipefd, O_CLOEXEC) != 0) {
     return false;
   }
+#else  // defined(__APPLE__)
+  if (pipe(pipefd) != 0) {
+    return false;
+  }
+
+  if (fcntl(pipefd[0], F_SETFD, FD_CLOEXEC) != 0 || fcntl(pipefd[1], F_SETFD, FD_CLOEXEC) != 0) {
+    close(pipefd[0]);
+    close(pipefd[1]);
+    return false;
+  }
+#endif
+
   read->reset(pipefd[0]);
   write->reset(pipefd[1]);
   return true;
