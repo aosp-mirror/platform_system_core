@@ -249,7 +249,9 @@ static void run(const char* source_path, const char* label, uid_t uid,
     global.root.uid = AID_ROOT;
     global.root.under_android = false;
 
-    strcpy(global.source_path, source_path);
+    // Clang static analyzer think strcpy potentially overwrites other fields
+    // in global. Use snprintf() to mute the false warning.
+    snprintf(global.source_path, sizeof(global.source_path), "%s", source_path);
 
     if (multi_user) {
         global.root.perm = PERM_PRE_ROOT;
