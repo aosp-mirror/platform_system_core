@@ -17,7 +17,6 @@
 #include "property_service.h"
 
 #include <ctype.h>
-#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -54,17 +53,17 @@
 #include <selinux/selinux.h>
 
 #include "init.h"
+#include "persistent_properties.h"
 #include "util.h"
 
 using android::base::Timer;
 
-#define PERSISTENT_PROPERTY_DIR  "/data/property"
 #define RECOVERY_MOUNT_POINT "/recovery"
 
 namespace android {
 namespace init {
 
-static int persistent_properties_loaded = 0;
+static bool persistent_properties_loaded = false;
 
 static int property_set_fd = -1;
 
@@ -118,29 +117,6 @@ static int check_control_mac_perms(const char *name, char *sctx, struct ucred *c
         return 0;
 
     return check_mac_perms(ctl_name, sctx, cr);
-}
-
-static void write_persistent_property(const char *name, const char *value)
-{
-    char tempPath[PATH_MAX];
-    char path[PATH_MAX];
-    int fd;
-
-    snprintf(tempPath, sizeof(tempPath), "%s/.temp.XXXXXX", PERSISTENT_PROPERTY_DIR);
-    fd = mkstemp(tempPath);
-    if (fd < 0) {
-        PLOG(ERROR) << "Unable to write persistent property to temp file " << tempPath;
-        return;
-    }
-    write(fd, value, strlen(value));
-    fsync(fd);
-    close(fd);
-
-    snprintf(path, sizeof(path), "%s/%s", PERSISTENT_PROPERTY_DIR, name);
-    if (rename(tempPath, path)) {
-        PLOG(ERROR) << "Unable to rename persistent property file " << tempPath << " to " << path;
-        unlink(tempPath);
-    }
 }
 
 bool is_legal_property_name(const std::string& name) {
@@ -204,7 +180,7 @@ static uint32_t PropertySetImpl(const std::string& name, const std::string& valu
     // Don't write properties to disk until after we have read all default
     // properties to prevent them from being overwritten by default values.
     if (persistent_properties_loaded && android::base::StartsWith(name, "persist.")) {
-        write_persistent_property(name.c_str(), value.c_str());
+        WritePersistentProperty(name, value);
     }
     property_changed(name, value);
     return PROP_SUCCESS;
@@ -599,61 +575,6 @@ static void load_properties_from_file(const char* filename, const char* filter) 
     LOG(VERBOSE) << "(Loading properties from " << filename << " took " << t << ".)";
 }
 
-static void load_persistent_properties() {
-    persistent_properties_loaded = 1;
-
-    std::unique_ptr<DIR, int(*)(DIR*)> dir(opendir(PERSISTENT_PROPERTY_DIR), closedir);
-    if (!dir) {
-        PLOG(ERROR) << "Unable to open persistent property directory \""
-                    << PERSISTENT_PROPERTY_DIR << "\"";
-        return;
-    }
-
-    struct dirent* entry;
-    while ((entry = readdir(dir.get())) != NULL) {
-        if (strncmp("persist.", entry->d_name, strlen("persist."))) {
-            continue;
-        }
-        if (entry->d_type != DT_REG) {
-            continue;
-        }
-
-        // Open the file and read the property value.
-        int fd = openat(dirfd(dir.get()), entry->d_name, O_RDONLY | O_NOFOLLOW);
-        if (fd == -1) {
-            PLOG(ERROR) << "Unable to open persistent property file \"" << entry->d_name << "\"";
-            continue;
-        }
-
-        struct stat sb;
-        if (fstat(fd, &sb) == -1) {
-            PLOG(ERROR) << "fstat on property file \"" << entry->d_name << "\" failed";
-            close(fd);
-            continue;
-        }
-
-        // File must not be accessible to others, be owned by root/root, and
-        // not be a hard link to any other file.
-        if (((sb.st_mode & (S_IRWXG | S_IRWXO)) != 0) || sb.st_uid != 0 || sb.st_gid != 0 || sb.st_nlink != 1) {
-            PLOG(ERROR) << "skipping insecure property file " << entry->d_name
-                        << " (uid=" << sb.st_uid << " gid=" << sb.st_gid
-                        << " nlink=" << sb.st_nlink << " mode=" << std::oct << sb.st_mode << ")";
-            close(fd);
-            continue;
-        }
-
-        char value[PROP_VALUE_MAX];
-        int length = read(fd, value, sizeof(value) - 1);
-        if (length >= 0) {
-            value[length] = 0;
-            property_set(entry->d_name, value);
-        } else {
-            PLOG(ERROR) << "Unable to read persistent property file " << entry->d_name;
-        }
-        close(fd);
-    }
-}
-
 // persist.sys.usb.config values can't be combined on build-time when property
 // files are split into each partition.
 // So we need to apply the same rule of build/make/tools/post_process_props.py
@@ -703,7 +624,11 @@ void load_persist_props(void) {
 
     load_override_properties();
     /* Read persistent properties after all default values have been loaded. */
-    load_persistent_properties();
+    auto persistent_properties = LoadPersistentProperties();
+    for (const auto& [name, value] : persistent_properties) {
+        property_set(name, value);
+    }
+    persistent_properties_loaded = true;
     property_set("ro.persistent_properties.ready", "true");
 }
 
