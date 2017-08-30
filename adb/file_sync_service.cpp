@@ -283,25 +283,25 @@ fail:
     // reading and throwing away ID_DATA packets until the other side notices
     // that we've reported an error.
     while (true) {
-        if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) goto fail;
+        if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) break;
 
         if (msg.data.id == ID_DONE) {
-            goto abort;
+            break;
         } else if (msg.data.id != ID_DATA) {
             char id[5];
             memcpy(id, &msg.data.id, sizeof(msg.data.id));
             id[4] = '\0';
             D("handle_send_fail received unexpected id '%s' during failure", id);
-            goto abort;
+            break;
         }
 
         if (msg.data.size > buffer.size()) {
             D("handle_send_fail received oversized packet of length '%u' during failure",
               msg.data.size);
-            goto abort;
+            break;
         }
 
-        if (!ReadFdExactly(s, &buffer[0], msg.data.size)) goto abort;
+        if (!ReadFdExactly(s, &buffer[0], msg.data.size)) break;
     }
 
 abort:
