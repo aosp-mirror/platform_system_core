@@ -27,6 +27,55 @@
 
 namespace unwindstack {
 
+Memory* MapInfo::GetFileMemory() {
+  std::unique_ptr<MemoryFileAtOffset> memory(new MemoryFileAtOffset);
+  if (offset == 0) {
+    if (memory->Init(name, 0)) {
+      return memory.release();
+    }
+    return nullptr;
+  }
+
+  // There are two possibilities when the offset is non-zero.
+  // - There is an elf file embedded in a file.
+  // - The whole file is an elf file, and the offset needs to be saved.
+  //
+  // Map in just the part of the file for the map. If this is not
+  // a valid elf, then reinit as if the whole file is an elf file.
+  // If the offset is a valid elf, then determine the size of the map
+  // and reinit to that size. This is needed because the dynamic linker
+  // only maps in a portion of the original elf, and never the symbol
+  // file data.
+  uint64_t map_size = end - start;
+  if (!memory->Init(name, offset, map_size)) {
+    return nullptr;
+  }
+
+  bool valid;
+  uint64_t max_size;
+  Elf::GetInfo(memory.get(), &valid, &max_size);
+  if (!valid) {
+    // Init as if the whole file is an elf.
+    if (memory->Init(name, 0)) {
+      elf_offset = offset;
+      return memory.release();
+    }
+    return nullptr;
+  }
+
+  if (max_size > map_size) {
+    if (memory->Init(name, offset, max_size)) {
+      return memory.release();
+    }
+    // Try to reinit using the default map_size.
+    if (memory->Init(name, offset, map_size)) {
+      return memory.release();
+    }
+    return nullptr;
+  }
+  return memory.release();
+}
+
 Memory* MapInfo::CreateMemory(pid_t pid) {
   if (end <= start) {
     return nullptr;
@@ -40,33 +89,13 @@ Memory* MapInfo::CreateMemory(pid_t pid) {
     if (flags & MAPS_FLAGS_DEVICE_MAP) {
       return nullptr;
     }
-
-    std::unique_ptr<MemoryFileAtOffset> file_memory(new MemoryFileAtOffset);
-    uint64_t map_size;
-    if (offset != 0) {
-      // Only map in a piece of the file.
-      map_size = end - start;
-    } else {
-      map_size = UINT64_MAX;
-    }
-    if (file_memory->Init(name, offset, map_size)) {
-      // It's possible that a non-zero offset might not be pointing to
-      // valid elf data. Check if this is a valid elf, and if not assume
-      // that this was meant to incorporate the entire file.
-      if (offset != 0 && !Elf::IsValidElf(file_memory.get())) {
-        // Don't bother checking the validity that will happen on the elf init.
-        if (file_memory->Init(name, 0)) {
-          elf_offset = offset;
-          return file_memory.release();
-        }
-        // Fall through if the init fails.
-      } else {
-        return file_memory.release();
-      }
+    Memory* memory = GetFileMemory();
+    if (memory != nullptr) {
+      return memory;
     }
   }
 
-  Memory* memory = nullptr;
+  Memory* memory;
   if (pid == getpid()) {
     memory = new MemoryLocal();
   } else {
