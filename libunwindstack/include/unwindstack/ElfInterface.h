@@ -102,6 +102,9 @@ class ElfInterface {
 
   virtual bool HandleType(uint64_t, uint32_t) { return false; }
 
+  template <typename EhdrType>
+  static void GetMaxSizeWithTemplate(Memory* memory, uint64_t* size);
+
   Memory* memory_;
   std::unordered_map<uint64_t, LoadInfo> pt_loads_;
   uint64_t load_bias_ = 0;
@@ -146,6 +149,10 @@ class ElfInterface32 : public ElfInterface {
   bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) override {
     return ElfInterface::GetFunctionNameWithTemplate<Elf32_Sym>(addr, name, func_offset);
   }
+
+  static void GetMaxSize(Memory* memory, uint64_t* size) {
+    GetMaxSizeWithTemplate<Elf32_Ehdr>(memory, size);
+  }
 };
 
 class ElfInterface64 : public ElfInterface {
@@ -165,6 +172,10 @@ class ElfInterface64 : public ElfInterface {
 
   bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) override {
     return ElfInterface::GetFunctionNameWithTemplate<Elf64_Sym>(addr, name, func_offset);
+  }
+
+  static void GetMaxSize(Memory* memory, uint64_t* size) {
+    GetMaxSizeWithTemplate<Elf64_Ehdr>(memory, size);
   }
 };
 
