@@ -370,6 +370,22 @@ bool ElfInterface::Step(uint64_t pc, Regs* regs, Memory* process_memory) {
   return false;
 }
 
+// This is an estimation of the size of the elf file using the location
+// of the section headers and size. This assumes that the section headers
+// are at the end of the elf file. If the elf has a load bias, the size
+// will be too large, but this is acceptable.
+template <typename EhdrType>
+void ElfInterface::GetMaxSizeWithTemplate(Memory* memory, uint64_t* size) {
+  EhdrType ehdr;
+  if (!memory->Read(0, &ehdr, sizeof(ehdr))) {
+    return;
+  }
+  if (ehdr.e_shnum == 0) {
+    return;
+  }
+  *size = ehdr.e_shoff + ehdr.e_shentsize * ehdr.e_shnum;
+}
+
 // Instantiate all of the needed template functions.
 template void ElfInterface::InitHeadersWithTemplate<uint32_t>();
 template void ElfInterface::InitHeadersWithTemplate<uint64_t>();
@@ -390,5 +406,8 @@ template bool ElfInterface::GetFunctionNameWithTemplate<Elf32_Sym>(uint64_t, std
                                                                    uint64_t*);
 template bool ElfInterface::GetFunctionNameWithTemplate<Elf64_Sym>(uint64_t, std::string*,
                                                                    uint64_t*);
+
+template void ElfInterface::GetMaxSizeWithTemplate<Elf32_Ehdr>(Memory*, uint64_t*);
+template void ElfInterface::GetMaxSizeWithTemplate<Elf64_Ehdr>(Memory*, uint64_t*);
 
 }  // namespace unwindstack
