@@ -49,23 +49,17 @@
 
 static const char* root_seclabel = nullptr;
 
-static inline bool is_device_unlocked() {
-    return "orange" == android::base::GetProperty("ro.boot.verifiedbootstate", "");
-}
-
 static void drop_capabilities_bounding_set_if_needed(struct minijail *j) {
-    if (ALLOW_ADBD_ROOT || is_device_unlocked()) {
-        if (__android_log_is_debuggable()) {
-            return;
-        }
+#if defined(ALLOW_ADBD_ROOT)
+    if (__android_log_is_debuggable()) {
+        return;
     }
+#endif
     minijail_capbset_drop(j, CAP_TO_MASK(CAP_SETUID) | CAP_TO_MASK(CAP_SETGID));
 }
 
 static bool should_drop_privileges() {
-    // "adb root" not allowed, always drop privileges.
-    if (!ALLOW_ADBD_ROOT && !is_device_unlocked()) return true;
-
+#if defined(ALLOW_ADBD_ROOT)
     // The properties that affect `adb root` and `adb unroot` are ro.secure and
     // ro.debuggable. In this context the names don't make the expected behavior
     // particularly obvious.
@@ -95,6 +89,9 @@ static bool should_drop_privileges() {
     }
 
     return drop;
+#else
+    return true; // "adb root" not allowed, always drop privileges.
+#endif // ALLOW_ADBD_ROOT
 }
 
 static void drop_privileges(int server_port) {
@@ -161,10 +158,7 @@ int adbd_main(int server_port) {
     // descriptor will always be open.
     adbd_cloexec_auth_socket();
 
-    // Respect ro.adb.secure in userdebug/eng builds (ALLOW_ADBD_NO_AUTH), or when the
-    // device is unlocked.
-    if ((ALLOW_ADBD_NO_AUTH || is_device_unlocked()) &&
-        !android::base::GetBoolProperty("ro.adb.secure", false)) {
+    if (ALLOW_ADBD_NO_AUTH && !android::base::GetBoolProperty("ro.adb.secure", false)) {
         auth_required = false;
     }
 
