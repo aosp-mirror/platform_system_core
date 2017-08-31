@@ -28,8 +28,11 @@
 #include <unwindstack/Memory.h>
 
 int main(int argc, char** argv) {
-  if (argc != 2) {
-    printf("Need to pass the name of an elf file to the program.\n");
+  if (argc != 2 && argc != 3) {
+    printf("Usage: unwind_symbols <ELF_FILE> [<FUNC_ADDRESS>]\n");
+    printf("  Dump all function symbols in ELF_FILE. If FUNC_ADDRESS is\n");
+    printf("  specified, then get the function at that address.\n");
+    printf("  FUNC_ADDRESS must be a hex number.\n");
     return 1;
   }
 
@@ -41,6 +44,16 @@ int main(int argc, char** argv) {
   if (!S_ISREG(st.st_mode)) {
     printf("%s is not a regular file.\n", argv[1]);
     return 1;
+  }
+
+  uint64_t func_addr;
+  if (argc == 3) {
+    char* name;
+    func_addr = strtoull(argv[2], &name, 16);
+    if (*name != '\0') {
+      printf("%s is not a hex number.\n", argv[2]);
+      return 1;
+    }
   }
 
   // Send all log messages to stdout.
@@ -76,9 +89,24 @@ int main(int argc, char** argv) {
       return 1;
   }
 
-  // This is a crude way to get the symbols in order.
   std::string name;
   uint64_t load_bias = elf.interface()->load_bias();
+  if (argc == 3) {
+    std::string cur_name;
+    uint64_t func_offset;
+    if (!elf.GetFunctionName(func_addr, &cur_name, &func_offset)) {
+      printf("No known function at 0x%" PRIx64 "\n", func_addr);
+      return 1;
+    }
+    printf("<0x%" PRIx64 ">", func_addr - func_offset);
+    if (func_offset != 0) {
+      printf("+%" PRId64, func_offset);
+    }
+    printf(": %s\n", cur_name.c_str());
+    return 0;
+  }
+
+  // This is a crude way to get the symbols in order.
   for (const auto& entry : elf.interface()->pt_loads()) {
     uint64_t start = entry.second.offset + load_bias;
     uint64_t end = entry.second.table_size + load_bias;

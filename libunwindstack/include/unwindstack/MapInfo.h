@@ -40,6 +40,7 @@ struct MapInfo {
   // instead of a portion of the file.
   uint64_t elf_offset;
 
+  Memory* GetFileMemory();
   Memory* CreateMemory(pid_t pid);
   // This function guarantees it will never return nullptr.
   Elf* GetElf(pid_t pid, bool init_gnu_debugdata = false);
