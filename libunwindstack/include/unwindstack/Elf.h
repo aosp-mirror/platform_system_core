@@ -70,6 +70,8 @@ class Elf {
 
   static bool IsValidElf(Memory* memory);
 
+  static void GetInfo(Memory* memory, bool* valid, uint64_t* size);
+
  protected:
   bool valid_ = false;
   std::unique_ptr<ElfInterface> interface_;
