@@ -16,6 +16,8 @@
 
 #define LOG_TAG "DEBUG"
 
+#include "libdebuggerd/machine.h"
+
 #include <errno.h>
 #include <inttypes.h>
 #include <stdint.h>
@@ -25,8 +27,7 @@
 #include <backtrace/Backtrace.h>
 #include <log/log.h>
 
-#include "machine.h"
-#include "utility.h"
+#include "libdebuggerd/utility.h"
 
 #define R(x) (static_cast<uintptr_t>(x))
 

@@ -45,8 +45,8 @@
 #include "tombstoned/tombstoned.h"
 #include "util.h"
 
-#include "backtrace.h"
-#include "tombstone.h"
+#include "libdebuggerd/backtrace.h"
+#include "libdebuggerd/tombstone.h"
 
 using android::base::unique_fd;
 

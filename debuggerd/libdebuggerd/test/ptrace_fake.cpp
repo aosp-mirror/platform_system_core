@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
+#include "ptrace_fake.h"
+
 #include <errno.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <sys/ptrace.h>
 
 #include <string>
-
-#include "ptrace_fake.h"
 
 siginfo_t g_fake_si = {.si_signo = 0};
 

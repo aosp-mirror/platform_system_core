@@ -47,13 +47,14 @@
 #define ATRACE_TAG ATRACE_TAG_BIONIC
 #include <utils/Trace.h>
 
-#include "backtrace.h"
-#include "tombstone.h"
-#include "utility.h"
+#include "libdebuggerd/backtrace.h"
+#include "libdebuggerd/tombstone.h"
+#include "libdebuggerd/utility.h"
 
 #include "debuggerd/handler.h"
-#include "protocol.h"
 #include "tombstoned/tombstoned.h"
+
+#include "protocol.h"
 #include "util.h"
 
 using android::base::unique_fd;
