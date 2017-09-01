@@ -20,6 +20,8 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include <memory>
+
 #include <backtrace/BacktraceMap.h>
 #include <unwindstack/Maps.h>
 
@@ -34,8 +36,11 @@ class UnwindStackMap : public BacktraceMap {
 
   unwindstack::Maps* stack_maps() { return stack_maps_.get(); }
 
+  const std::shared_ptr<unwindstack::Memory>& process_memory() { return process_memory_; }
+
  protected:
   std::unique_ptr<unwindstack::Maps> stack_maps_;
+  std::shared_ptr<unwindstack::Memory> process_memory_;
 };
 
 #endif  // _LIBBACKTRACE_UNWINDSTACK_MAP_H

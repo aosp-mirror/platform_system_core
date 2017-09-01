@@ -91,7 +91,7 @@ void DoUnwind(pid_t pid) {
   }
   printf("\n");
 
-  unwindstack::MemoryRemote remote_memory(pid);
+  auto process_memory = unwindstack::Memory::CreateProcessMemory(pid);
   for (size_t frame_num = 0; frame_num < 64; frame_num++) {
     if (regs->pc() == 0) {
       break;
@@ -102,7 +102,7 @@ void DoUnwind(pid_t pid) {
       break;
     }
 
-    unwindstack::Elf* elf = map_info->GetElf(pid, true);
+    unwindstack::Elf* elf = map_info->GetElf(process_memory, true);
 
     uint64_t rel_pc = elf->GetRelPc(regs->pc(), map_info);
     uint64_t adjusted_rel_pc = rel_pc;
@@ -135,7 +135,7 @@ void DoUnwind(pid_t pid) {
     }
     printf("\n");
 
-    if (!elf->Step(rel_pc + map_info->elf_offset, regs, &remote_memory)) {
+    if (!elf->Step(rel_pc + map_info->elf_offset, regs, process_memory.get())) {
       break;
     }
   }
