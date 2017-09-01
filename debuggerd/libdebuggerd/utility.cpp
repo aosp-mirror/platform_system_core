@@ -16,7 +16,7 @@
 
 #define LOG_TAG "DEBUG"
 
-#include "utility.h"
+#include "libdebuggerd/utility.h"
 
 #include <errno.h>
 #include <signal.h>
