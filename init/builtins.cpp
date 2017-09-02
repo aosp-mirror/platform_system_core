@@ -56,6 +56,7 @@
 #include <selinux/android.h>
 #include <selinux/label.h>
 #include <selinux/selinux.h>
+#include <system/thread_defs.h>
 
 #include "action.h"
 #include "bootchart.h"
@@ -689,6 +690,29 @@ static Result<Success> do_write(const std::vector<std::string>& args) {
     return Success();
 }
 
+static Result<Success> readahead_file(const std::string& filename, bool fully) {
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(filename.c_str(), O_RDONLY)));
+    if (fd == -1) {
+        return ErrnoError() << "Error opening file";
+    }
+    if (posix_fadvise(fd, 0, 0, POSIX_FADV_WILLNEED)) {
+        return ErrnoError() << "Error posix_fadvise file";
+    }
+    if (readahead(fd, 0, std::numeric_limits<size_t>::max())) {
+        return ErrnoError() << "Error readahead file";
+    }
+    if (fully) {
+        char buf[BUFSIZ];
+        ssize_t n;
+        while ((n = TEMP_FAILURE_RETRY(read(fd, &buf[0], sizeof(buf)))) > 0) {
+        }
+        if (n != 0) {
+            return ErrnoError() << "Error reading file";
+        }
+    }
+    return Success();
+}
+
 static Result<Success> do_readahead(const std::vector<std::string>& args) {
     struct stat sb;
 
@@ -696,6 +720,10 @@ static Result<Success> do_readahead(const std::vector<std::string>& args) {
         return ErrnoError() << "Error opening " << args[1];
     }
 
+    bool readfully = false;
+    if (args.size() == 3 && args[2] == "--fully") {
+        readfully = true;
+    }
     // We will do readahead in a forked process in order not to block init
     // since it may block while it reads the
     // filesystem metadata needed to locate the requested blocks.  This
@@ -704,15 +732,16 @@ static Result<Success> do_readahead(const std::vector<std::string>& args) {
     // the requested data has been read.
     pid_t pid = fork();
     if (pid == 0) {
+        if (setpriority(PRIO_PROCESS, 0, static_cast<int>(ANDROID_PRIORITY_LOWEST)) != 0) {
+            PLOG(WARNING) << "setpriority failed";
+        }
+        if (android_set_ioprio(0, IoSchedClass_IDLE, 7)) {
+            PLOG(WARNING) << "ioprio_get failed";
+        }
         android::base::Timer t;
         if (S_ISREG(sb.st_mode)) {
-            android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(args[1].c_str(), O_RDONLY)));
-            if (fd == -1) {
-                PLOG(ERROR) << "Error opening file: " << args[1];
-                _exit(EXIT_FAILURE);
-            }
-            if (readahead(fd, 0, std::numeric_limits<size_t>::max())) {
-                PLOG(ERROR) << "Error readahead file: " << args[1];
+            if (auto result = readahead_file(args[1], readfully); !result) {
+                LOG(WARNING) << "Unable to readahead '" << args[1] << "': " << result.error();
                 _exit(EXIT_FAILURE);
             }
         } else if (S_ISDIR(sb.st_mode)) {
@@ -727,19 +756,15 @@ static Result<Success> do_readahead(const std::vector<std::string>& args) {
             for (FTSENT* ftsent = fts_read(fts.get()); ftsent != nullptr;
                  ftsent = fts_read(fts.get())) {
                 if (ftsent->fts_info & FTS_F) {
-                    android::base::unique_fd fd(
-                        TEMP_FAILURE_RETRY(open(ftsent->fts_accpath, O_RDONLY)));
-                    if (fd == -1) {
-                        PLOG(ERROR) << "Error opening file: " << args[1];
-                        continue;
-                    }
-                    if (readahead(fd, 0, std::numeric_limits<size_t>::max())) {
-                        PLOG(ERROR) << "Unable to readahead on file: " << ftsent->fts_accpath;
+                    const std::string filename = ftsent->fts_accpath;
+                    if (auto result = readahead_file(filename, readfully); !result) {
+                        LOG(WARNING)
+                            << "Unable to readahead '" << filename << "': " << result.error();
                     }
                 }
             }
         }
-        LOG(INFO) << "Readahead " << args[1] << " took " << t;
+        LOG(INFO) << "Readahead " << args[1] << " took " << t << " asynchronously";
         _exit(0);
     } else if (pid < 0) {
         return ErrnoError() << "Fork failed";
@@ -968,7 +993,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"mount_all",               {1,     kMax, do_mount_all}},
         {"mount",                   {3,     kMax, do_mount}},
         {"umount",                  {1,     1,    do_umount}},
-        {"readahead",               {1,     1,    do_readahead}},
+        {"readahead",               {1,     2,    do_readahead}},
         {"restart",                 {1,     1,    do_restart}},
         {"restorecon",              {1,     kMax, do_restorecon}},
         {"restorecon_recursive",    {1,     kMax, do_restorecon_recursive}},
