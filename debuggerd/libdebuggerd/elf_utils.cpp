@@ -16,6 +16,8 @@
 
 #define LOG_TAG "DEBUG"
 
+#include "libdebuggerd/elf_utils.h"
+
 #include <elf.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -26,8 +28,6 @@
 #include <android-base/stringprintf.h>
 #include <backtrace/Backtrace.h>
 #include <log/log.h>
-
-#include "elf_utils.h"
 
 #define NOTE_ALIGN(size)  (((size) + 3) & ~3)
 

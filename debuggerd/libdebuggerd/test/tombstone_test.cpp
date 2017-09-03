@@ -22,7 +22,7 @@
 #include <gtest/gtest.h>
 #include <android-base/file.h>
 
-#include "utility.h"
+#include "libdebuggerd/utility.h"
 
 #include "BacktraceMock.h"
 #include "elf_fake.h"

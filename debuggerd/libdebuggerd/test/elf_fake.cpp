@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "elf_fake.h"
+
 #include <stdint.h>
 
 #include <string>

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "log_fake.h"
+
 #include <errno.h>
 #include <stdarg.h>
 

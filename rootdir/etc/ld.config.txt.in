@@ -23,25 +23,21 @@ additional.namespaces = sphal,vndk,rs
 ###############################################################################
 # "default" namespace
 #
-# Framework-side code runs in this namespace. Anything from /vendor partition
+# Framework-side code runs in this namespace. Libs from /vendor partition
 # can't be loaded in this namespace.
 ###############################################################################
-namespace.default.isolated = false
+namespace.default.isolated = true
+# TODO(b/63553457): remove /vendor/lib from the search path. For now, this is
+# required since the classloader namespace for vendor apks should have access
+# vendor libraries in the directory. These search paths are copied to the search
+# paths of the classloader namespace.
 namespace.default.search.paths = /system/${LIB}:/vendor/${LIB}
-namespace.default.permitted.paths = /system/${LIB}:/vendor/${LIB}
+# /vendor/app, /vendor/framework were added since libart should be able to dlopen
+# the odex files from the directory.
+namespace.default.permitted.paths = /system/${LIB}/drm:/system/${LIB}/hw:/system/framework:/system/app:/system/priv-app:/vendor/app:/vendor/framework:/oem/app:/data:/mnt/expand
 
 namespace.default.asan.search.paths = /data/asan/system/${LIB}:/system/${LIB}:/data/asan/vendor/${LIB}:/vendor/${LIB}
-namespace.default.asan.permitted.paths = /data/asan/system/${LIB}:/system/${LIB}:/data/asan/vendor/${LIB}:/vendor/${LIB}
-
-# TODO(b/37013858): remove all dependencies to /vendor/lib from system processes
-# When this is done, comment out following three lines and remove the three
-# lines above
-#namespace.default.isolated = true
-#namespace.default.search.paths = /system/${LIB}
-#namespace.default.permitted.paths = /system/${LIB}
-#
-#namespace.default.asan.search.paths = /data/asan/system/${LIB}:/system/${LIB}
-#namespace.default.asan.permitted.paths = /data/asan/system/${LIB}:/system/${LIB}
+namespace.default.asan.permitted.paths = /data:/system/${LIB}/drm:/system/${LIB}/hw:/system/framework:/system/app:/system/priv-app:/vendor/app:/vendor/framework:/oem/app:/mnt/expand
 
 ###############################################################################
 # "sphal" namespace
@@ -69,10 +65,10 @@ namespace.sphal.asan.permitted.paths = /data/asan/vendor/${LIB}:/vendor/${LIB}
 namespace.sphal.links = default,vndk,rs
 
 # WARNING: only NDK libs can be listed here.
-namespace.sphal.link.default.shared_libs = libEGL.so:libm.so:libandroid_net.so:libvndksupport.so:libc.so:libGLESv1_CM.so:liblog.so:libsync.so:libnativewindow.so:libGLESv3.so:libdl.so:libGLESv2.so
+namespace.sphal.link.default.shared_libs = %LLNDK_LIBRARIES%
 
 # WARNING: only VNDK-SP libs can be listed here. DO NOT EDIT this line.
-namespace.sphal.link.vndk.shared_libs = libhardware.so:libc++.so:libhidlbase.so:libhwbinder.so:libhidltransport.so:libbase.so:libhidlmemory.so:libRS.so:libRSDriver.so:libcutils.so:libion.so:libRSCpuRef.so:android.hardware.graphics.common@1.0.so:android.hardware.graphics.mapper@2.0.so:android.hidl.memory@1.0.so:libbcinfo.so:android.hardware.graphics.allocator@2.0.so:android.hardware.renderscript@1.0.so:libutils.so:libz.so
+namespace.sphal.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
 
 # Renderscript gets separate namespace
 namespace.sphal.link.rs.shared_libs = libRS_internal.so
@@ -94,8 +90,8 @@ namespace.rs.asan.search.paths = /data/asan/vendor/${LIB}/vndk-sp:/vendor/${LIB}
 namespace.rs.asan.permitted.paths = /data/asan/vendor/${LIB}:/vendor/${LIB}:/data
 
 namespace.rs.links = default,vndk
-namespace.rs.link.default.shared_libs = libEGL.so:libm.so:libandroid_net.so:libvndksupport.so:libc.so:libGLESv1_CM.so:liblog.so:libsync.so:libnativewindow.so:libGLESv3.so:libdl.so:libGLESv2.so:libmediandk.so:libft2.so
-namespace.rs.link.vndk.shared_libs = libhardware.so:libc++.so:libhidlbase.so:libhwbinder.so:libhidltransport.so:libbase.so:libhidlmemory.so:libRS.so:libRSDriver.so:libcutils.so:libion.so:libRSCpuRef.so:android.hardware.graphics.common@1.0.so:android.hardware.graphics.mapper@2.0.so:android.hidl.memory@1.0.so:libbcinfo.so:android.hardware.graphics.allocator@2.0.so:android.hardware.renderscript@1.0.so:libutils.so:libz.so
+namespace.rs.link.default.shared_libs = %LLNDK_LIBRARIES%
+namespace.rs.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
 
 ###############################################################################
 # "vndk" namespace
@@ -113,7 +109,7 @@ namespace.vndk.asan.permitted.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}
 # to the default namespace. This is possible since their ABI is stable across
 # Android releases.
 namespace.vndk.links = default
-namespace.vndk.link.default.shared_libs = libEGL.so:libm.so:libandroid_net.so:libvndksupport.so:libc.so:libGLESv1_CM.so:liblog.so:libsync.so:libnativewindow.so:libGLESv3.so:libdl.so:libGLESv2.so
+namespace.vndk.link.default.shared_libs = %LLNDK_LIBRARIES%
 
 ###############################################################################
 # Namespace config for vendor processes. In O, no restriction is enforced for
@@ -139,7 +135,7 @@ namespace.default.asan.search.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}
 namespace.default.asan.permitted.paths = /data/asan/vendor:/vendor:/data/asan/system/${LIB}/vndk:/system/${LIB}/vndk:/data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp
 
 namespace.default.links = system
-namespace.default.link.system.shared_libs = libEGL.so:libm.so:libandroid_net.so:libvndksupport.so:libc.so:libGLESv1_CM.so:liblog.so:libsync.so:libnativewindow.so:libGLESv3.so:libdl.so:libGLESv2.so:libmedia.so:libandroid_runtime.so
+namespace.default.link.system.shared_libs = %LLNDK_LIBRARIES%:libmedia.so:libandroid_runtime.so
 # libmedia.so must be removed after we have fix for lib-dplmedia.so (b/64427765)
 # libandroid_runtime.so must be removed after we have a fix for qseeproxydaemon (b/64820887)
 
@@ -154,4 +150,3 @@ namespace.system.permitted.paths = /system/${LIB}
 
 namespace.system.asan.search.paths = /data/asan/system/${LIB}:/system/${LIB}
 namespace.system.asan.permitted.paths = /data/asan/system/${LIB}:/system/${LIB}
-
