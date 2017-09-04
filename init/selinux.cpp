@@ -198,9 +198,18 @@ bool ReadFirstLine(const char* file, std::string* line) {
 
 bool FindPrecompiledSplitPolicy(std::string* file) {
     file->clear();
-
-    static constexpr const char precompiled_sepolicy[] = "/vendor/etc/selinux/precompiled_sepolicy";
-    if (access(precompiled_sepolicy, R_OK) == -1) {
+    // If there is an odm partition, precompiled_sepolicy will be in
+    // odm/etc/selinux. Otherwise it will be in vendor/etc/selinux.
+    static constexpr const char vendor_precompiled_sepolicy[] =
+        "/vendor/etc/selinux/precompiled_sepolicy";
+    static constexpr const char odm_precompiled_sepolicy[] =
+        "/odm/etc/selinux/precompiled_sepolicy";
+    if (access(odm_precompiled_sepolicy, R_OK) == 0) {
+        *file = odm_precompiled_sepolicy;
+    } else if (access(vendor_precompiled_sepolicy, R_OK) == 0) {
+        *file = vendor_precompiled_sepolicy;
+    } else {
+        PLOG(INFO) << "No precompiled sepolicy";
         return false;
     }
     std::string actual_plat_id;
@@ -209,19 +218,18 @@ bool FindPrecompiledSplitPolicy(std::string* file) {
                       "/system/etc/selinux/plat_and_mapping_sepolicy.cil.sha256";
         return false;
     }
+
     std::string precompiled_plat_id;
-    if (!ReadFirstLine("/vendor/etc/selinux/precompiled_sepolicy.plat_and_mapping.sha256",
-                       &precompiled_plat_id)) {
-        PLOG(INFO) << "Failed to read "
-                      "/vendor/etc/selinux/"
-                      "precompiled_sepolicy.plat_and_mapping.sha256";
+    std::string precompiled_sha256 = *file + ".plat_and_mapping.sha256";
+    if (!ReadFirstLine(precompiled_sha256.c_str(), &precompiled_plat_id)) {
+        PLOG(INFO) << "Failed to read " << precompiled_sha256;
+        file->clear();
         return false;
     }
     if ((actual_plat_id.empty()) || (actual_plat_id != precompiled_plat_id)) {
+        file->clear();
         return false;
     }
-
-    *file = precompiled_sepolicy;
     return true;
 }
 
@@ -293,24 +301,55 @@ bool LoadSplitPolicy() {
         return false;
     }
     std::string mapping_file("/system/etc/selinux/mapping/" + vend_plat_vers + ".cil");
+
+    // vendor_sepolicy.cil and nonplat_declaration.cil are the new design to replace
+    // nonplat_sepolicy.cil.
+    std::string nonplat_declaration_cil_file("/vendor/etc/selinux/nonplat_declaration.cil");
+    std::string vendor_policy_cil_file("/vendor/etc/selinux/vendor_sepolicy.cil");
+
+    if (access(vendor_policy_cil_file.c_str(), F_OK) == -1) {
+        // For backward compatibility.
+        // TODO: remove this after no device is using nonplat_sepolicy.cil.
+        vendor_policy_cil_file = "/vendor/etc/selinux/nonplat_sepolicy.cil";
+        nonplat_declaration_cil_file.clear();
+    } else if (access(nonplat_declaration_cil_file.c_str(), F_OK) == -1) {
+        LOG(ERROR) << "Missing " << nonplat_declaration_cil_file;
+        return false;
+    }
+
+    // odm_sepolicy.cil is default but optional.
+    std::string odm_policy_cil_file("/odm/etc/selinux/odm_sepolicy.cil");
+    if (access(odm_policy_cil_file.c_str(), F_OK) == -1) {
+        odm_policy_cil_file.clear();
+    }
     const std::string version_as_string = std::to_string(max_policy_version);
 
     // clang-format off
-    const char* compile_args[] = {
+    std::vector<const char*> compile_args {
         "/system/bin/secilc",
         plat_policy_cil_file,
         "-M", "true", "-G", "-N",
         // Target the highest policy language version supported by the kernel
         "-c", version_as_string.c_str(),
         mapping_file.c_str(),
-        "/vendor/etc/selinux/nonplat_sepolicy.cil",
         "-o", compiled_sepolicy,
         // We don't care about file_contexts output by the compiler
         "-f", "/sys/fs/selinux/null",  // /dev/null is not yet available
-        nullptr};
+    };
     // clang-format on
 
-    if (!ForkExecveAndWaitForCompletion(compile_args[0], (char**)compile_args)) {
+    if (!nonplat_declaration_cil_file.empty()) {
+        compile_args.push_back(nonplat_declaration_cil_file.c_str());
+    }
+    if (!vendor_policy_cil_file.empty()) {
+        compile_args.push_back(vendor_policy_cil_file.c_str());
+    }
+    if (!odm_policy_cil_file.empty()) {
+        compile_args.push_back(odm_policy_cil_file.c_str());
+    }
+    compile_args.push_back(nullptr);
+
+    if (!ForkExecveAndWaitForCompletion(compile_args[0], (char**)compile_args.data())) {
         unlink(compiled_sepolicy);
         return false;
     }
