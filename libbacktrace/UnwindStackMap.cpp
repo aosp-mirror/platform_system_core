@@ -96,6 +96,10 @@ std::string UnwindStackMap::GetFunctionName(uintptr_t pc, uintptr_t* offset) {
   return name;
 }
 
+std::shared_ptr<unwindstack::Memory> UnwindStackMap::GetProcessMemory() {
+  return process_memory_;
+}
+
 //-------------------------------------------------------------------------
 // BacktraceMap create function.
 //-------------------------------------------------------------------------
