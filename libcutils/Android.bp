@@ -34,8 +34,6 @@ cc_library_headers {
     vendor_available: true,
     host_supported: true,
     export_include_dirs: ["include"],
-    header_libs: ["liblog_headers"],
-    export_header_lib_headers: ["liblog_headers"],
     target: {
         vendor: {
             export_include_dirs: ["include_vndk"],
